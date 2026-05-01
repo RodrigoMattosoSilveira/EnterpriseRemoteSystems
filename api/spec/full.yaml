@@ -1,0 +1,1925 @@
+openapi: 3.0.3
+info:
+  title: Mining Current Account API
+  version: "1.0.0"
+servers:
+  - url: https://api.example.com/v1
+    description: Production
+  - url: https://dev.api.example.com/v1
+    description: Dev
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    UUID:
+      type: string
+      format: uuid
+    Date:
+      type: string
+      format: date
+    DateTime:
+      type: string
+      format: date-time
+    DecimalString:
+      type: string
+      description: Decimal value serialized as string to preserve precision (maps to NUMERIC in DB)
+    CurrencyCode:
+      type: string
+      enum: ["BRL","GOLD","USD"]
+    PaymentMethodCode:
+      type: string
+      enum: ["per_diem","salary","percentage","m_percentage"]
+    AvailabilityCode:
+      type: string
+      enum: ["active","time_off","leave","inactive"]
+    PeriodCode:
+      type: string
+      enum: ["day","night"]
+    Side:
+      type: string
+      enum: ["credit","debit"]
+    APIError:
+      type: object
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+        fields:
+          type: object
+          additionalProperties:
+            type: string
+    Meta:
+      type: object
+      properties:
+        page:
+          type: integer
+        pageSize:
+          type: integer
+        totalRows:
+          type: integer
+        totalPages:
+          type: integer
+    APIResponse:
+      type: object
+      properties:
+        data:
+          nullable: true
+        error:
+          $ref: "#/components/schemas/APIError"
+        meta:
+          $ref: "#/components/schemas/Meta"
+
+    Tenant:
+      type: object
+      required: [id, name, slug]
+      properties:
+        id:
+          $ref: "#/components/schemas/UUID"
+        name:
+          type: string
+        slug:
+          type: string
+        createdAt:
+          $ref: "#/components/schemas/DateTime"
+        updatedAt:
+          $ref: "#/components/schemas/DateTime"
+
+    User:
+      type: object
+      required: [id, email, roles]
+      properties:
+        id:
+          $ref: "#/components/schemas/UUID"
+        email:
+          type: string
+          format: email
+        displayName:
+          type: string
+        roles:
+          type: array
+          items:
+            type: string
+        disabled:
+          type: boolean
+        createdAt:
+          $ref: "#/components/schemas/DateTime"
+        updatedAt:
+          $ref: "#/components/schemas/DateTime"
+
+    ReferenceData:
+      type: object
+      required: [id, type, code, label, active]
+      properties:
+        id:
+          $ref: "#/components/schemas/UUID"
+        type:
+          type: string
+        code:
+          type: string
+        label:
+          type: string
+        description:
+          type: string
+          nullable: true
+        active:
+          type: boolean
+        sortOrder:
+          type: integer
+          nullable: true
+        metadata:
+          type: object
+          additionalProperties: true
+        createdAt:
+          $ref: "#/components/schemas/DateTime"
+        updatedAt:
+          $ref: "#/components/schemas/DateTime"
+
+    Person:
+      type: object
+      required: [id, name, createdAt]
+      properties:
+        id:
+          $ref: "#/components/schemas/UUID"
+        tenantId:
+          $ref: "#/components/schemas/UUID"
+        name:
+          type: string
+        address:
+          type: string
+          nullable: true
+        phone:
+          type: string
+          nullable: true
+        email:
+          type: string
+          format: email
+          nullable: true
+        cpf:
+          type: string
+          nullable: true
+        bankData:
+          type: object
+          nullable: true
+          additionalProperties: true
+        pixKey:
+          type: string
+          nullable: true
+        emergencyContact:
+          type: object
+          nullable: true
+          properties:
+            name:
+              type: string
+            phone:
+              type: string
+            notes:
+              type: string
+        statusCode:
+          $ref: "#/components/schemas/AvailabilityCode"
+        statusLabel:
+          type: string
+          nullable: true
+        notes:
+          type: string
+          nullable: true
+        createdAt:
+          $ref: "#/components/schemas/DateTime"
+        updatedAt:
+          $ref: "#/components/schemas/DateTime"
+
+    CreatePersonRequest:
+      type: object
+      required: [name, statusCode]
+      properties:
+        name:
+          type: string
+        address:
+          type: string
+        phone:
+          type: string
+        email:
+          type: string
+          format: email
+        cpf:
+          type: string
+        bankData:
+          type: object
+          additionalProperties: true
+        pixKey:
+          type: string
+        emergencyContact:
+          type: object
+          properties:
+            name:
+              type: string
+            phone:
+              type: string
+            notes:
+              type: string
+        statusCode:
+          $ref: "#/components/schemas/AvailabilityCode"
+        notes:
+          type: string
+
+    Collaborator:
+      type: object
+      required: [id, personId, journeyStartDate, paymentMethodCode, paymentValue]
+      properties:
+        id:
+          $ref: "#/components/schemas/UUID"
+        tenantId:
+          $ref: "#/components/schemas/UUID"
+        personId:
+          $ref: "#/components/schemas/UUID"
+        personName:
+          type: string
+        journeyStartDate:
+          $ref: "#/components/schemas/Date"
+        defaultEndDate:
+          $ref: "#/components/schemas/Date"
+        extensionDays:
+          type: integer
+        projectedEndDate:
+          $ref: "#/components/schemas/Date"
+        paymentMethodCode:
+          $ref: "#/components/schemas/PaymentMethodCode"
+        paymentValue:
+          $ref: "#/components/schemas/DecimalString"
+        sectorId:
+          $ref: "#/components/schemas/UUID"
+        sectorLabel:
+          type: string
+        locationId:
+          $ref: "#/components/schemas/UUID"
+        locationLabel:
+          type: string
+        taskId:
+          $ref: "#/components/schemas/UUID"
+        taskLabel:
+          type: string
+        statusCode:
+          $ref: "#/components/schemas/AvailabilityCode"
+        statusLabel:
+          type: string
+        notes:
+          type: string
+          nullable: true
+        closedAt:
+          $ref: "#/components/schemas/DateTime"
+          nullable: true
+        createdAt:
+          $ref: "#/components/schemas/DateTime"
+        updatedAt:
+          $ref: "#/components/schemas/DateTime"
+
+    CreateCollaboratorRequest:
+      type: object
+      required:
+        - personId
+        - journeyStartDate
+        - paymentMethodCode
+        - paymentValue
+        - sectorId
+        - locationId
+        - taskId
+        - statusCode
+      properties:
+        personId:
+          $ref: "#/components/schemas/UUID"
+        journeyStartDate:
+          $ref: "#/components/schemas/Date"
+        paymentMethodCode:
+          $ref: "#/components/schemas/PaymentMethodCode"
+        paymentValue:
+          $ref: "#/components/schemas/DecimalString"
+        sectorId:
+          $ref: "#/components/schemas/UUID"
+        locationId:
+          $ref: "#/components/schemas/UUID"
+        taskId:
+          $ref: "#/components/schemas/UUID"
+        statusCode:
+          $ref: "#/components/schemas/AvailabilityCode"
+        notes:
+          type: string
+        overrideWaitRule:
+          type: boolean
+          default: false
+
+    Transaction:
+      type: object
+      required: [id, txnDate, kind, amount, currency, side]
+      properties:
+        id:
+          $ref: "#/components/schemas/UUID"
+        tenantId:
+          $ref: "#/components/schemas/UUID"
+        collaboratorId:
+          $ref: "#/components/schemas/UUID"
+          nullable: true
+        personId:
+          $ref: "#/components/schemas/UUID"
+          nullable: true
+        txnDate:
+          $ref: "#/components/schemas/DateTime"
+        kind:
+          type: string
+          enum: ["income","expense","exchange","account_closure","reversal"]
+        subkind:
+          type: string
+        amount:
+          $ref: "#/components/schemas/DecimalString"
+        currency:
+          $ref: "#/components/schemas/CurrencyCode"
+        side:
+          $ref: "#/components/schemas/Side"
+        metadata:
+          type: object
+          additionalProperties: true
+        revertedEntryId:
+          $ref: "#/components/schemas/UUID"
+          nullable: true
+        createdBy:
+          $ref: "#/components/schemas/UUID"
+        createdAt:
+          $ref: "#/components/schemas/DateTime"
+
+    CreateTransactionRequest:
+      type: object
+      required: [collaboratorId, txnDate, kind, amount, currency, side]
+      properties:
+        collaboratorId:
+          $ref: "#/components/schemas/UUID"
+        txnDate:
+          $ref: "#/components/schemas/DateTime"
+        kind:
+          type: string
+          enum: ["income","expense","exchange","account_closure"]
+        subkind:
+          type: string
+        amount:
+          $ref: "#/components/schemas/DecimalString"
+        currency:
+          $ref: "#/components/schemas/CurrencyCode"
+        side:
+          $ref: "#/components/schemas/Side"
+        metadata:
+          type: object
+          additionalProperties: true
+        idempotencyKey:
+          type: string
+
+    CurrentAccountSummary:
+      type: object
+      required: [collaboratorId, journeyStartDate, projectedEndDate]
+      properties:
+        collaboratorId:
+          $ref: "#/components/schemas/UUID"
+        collaboratorName:
+          type: string
+        journeyStartDate:
+          $ref: "#/components/schemas/Date"
+        projectedEndDate:
+          $ref: "#/components/schemas/Date"
+        paymentMethodCode:
+          $ref: "#/components/schemas/PaymentMethodCode"
+        brlCredits:
+          $ref: "#/components/schemas/DecimalString"
+        brlDebits:
+          $ref: "#/components/schemas/DecimalString"
+        brlBalance:
+          $ref: "#/components/schemas/DecimalString"
+        goldCredits:
+          $ref: "#/components/schemas/DecimalString"
+        goldDebits:
+          $ref: "#/components/schemas/DecimalString"
+        goldBalance:
+          $ref: "#/components/schemas/DecimalString"
+        projectedEarningsValue:
+          $ref: "#/components/schemas/DecimalString"
+        projectedCurrencyCode:
+          $ref: "#/components/schemas/CurrencyCode"
+        projectionBasis:
+          type: string
+
+    CurrentAccountEntry:
+      type: object
+      required: [id, collaboratorId, entryDate, currencyCode, totalPrice]
+      properties:
+        id:
+          $ref: "#/components/schemas/UUID"
+        revertedEntryId:
+          $ref: "#/components/schemas/UUID"
+          nullable: true
+        collaboratorId:
+          $ref: "#/components/schemas/UUID"
+        entryDate:
+          $ref: "#/components/schemas/DateTime"
+        sourceType:
+          type: string
+        sourceId:
+          $ref: "#/components/schemas/UUID"
+          nullable: true
+        methodId:
+          $ref: "#/components/schemas/UUID"
+          nullable: true
+        currencyCode:
+          $ref: "#/components/schemas/CurrencyCode"
+        cdFlag:
+          $ref: "#/components/schemas/Side"
+        itemDescription:
+          type: string
+        quantity:
+          type: string
+        unitPrice:
+          $ref: "#/components/schemas/DecimalString"
+        totalPrice:
+          $ref: "#/components/schemas/DecimalString"
+        comments:
+          type: string
+          nullable: true
+        status:
+          type: string
+        createdBy:
+          $ref: "#/components/schemas/UUID"
+        createdAt:
+          $ref: "#/components/schemas/DateTime"
+
+    WorkPeriod:
+      type: object
+      required: [id, workDate, periodCode, status]
+      properties:
+        id:
+          $ref: "#/components/schemas/UUID"
+        workDate:
+          $ref: "#/components/schemas/Date"
+        periodCode:
+          $ref: "#/components/schemas/PeriodCode"
+        startsAt:
+          $ref: "#/components/schemas/DateTime"
+          nullable: true
+        endsAt:
+          $ref: "#/components/schemas/DateTime"
+          nullable: true
+        status:
+          type: string
+        seededFromWorkPeriodId:
+          $ref: "#/components/schemas/UUID"
+          nullable: true
+
+    PlanItem:
+      type: object
+      required: [id, workPeriodId, collaboratorId]
+      properties:
+        id:
+          $ref: "#/components/schemas/UUID"
+        workPeriodId:
+          $ref: "#/components/schemas/UUID"
+        collaboratorId:
+          $ref: "#/components/schemas/UUID"
+        collaboratorName:
+          type: string
+        includeFlag:
+          type: boolean
+        sectorId:
+          $ref: "#/components/schemas/UUID"
+        sectorLabel:
+          type: string
+        locationId:
+          $ref: "#/components/schemas/UUID"
+        locationLabel:
+          type: string
+        taskId:
+          $ref: "#/components/schemas/UUID"
+        taskLabel:
+          type: string
+        methodId:
+          $ref: "#/components/schemas/UUID"
+        methodLabel:
+          type: string
+        paymentValueSnapshot:
+          $ref: "#/components/schemas/DecimalString"
+        assignmentStatus:
+          type: string
+        substitutedForCollaboratorId:
+          $ref: "#/components/schemas/UUID"
+          nullable: true
+        exceptionType:
+          type: string
+          nullable: true
+        comments:
+          type: string
+          nullable: true
+
+    WorkPlan:
+      type: object
+      properties:
+        workPeriod:
+          $ref: "#/components/schemas/WorkPeriod"
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/PlanItem"
+
+    AccrualBatch:
+      type: object
+      properties:
+        id:
+          $ref: "#/components/schemas/UUID"
+        workPeriodId:
+          $ref: "#/components/schemas/UUID"
+        accrualStatus:
+          type: string
+          enum: ["pending","partial","posted","deferred"]
+        comments:
+          type: string
+          nullable: true
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/AccrualItem"
+
+    AccrualItem:
+      type: object
+      properties:
+        id:
+          $ref: "#/components/schemas/UUID"
+        collaboratorId:
+          $ref: "#/components/schemas/UUID"
+        collaboratorName:
+          type: string
+        methodId:
+          $ref: "#/components/schemas/UUID"
+        methodLabel:
+          type: string
+        currencyCode:
+          $ref: "#/components/schemas/CurrencyCode"
+        grossAmount:
+          $ref: "#/components/schemas/DecimalString"
+        transferAmount:
+          $ref: "#/components/schemas/DecimalString"
+        netAmount:
+          $ref: "#/components/schemas/DecimalString"
+        holdReason:
+          type: string
+          nullable: true
+        status:
+          type: string
+        comments:
+          type: string
+          nullable: true
+
+    WellProduction:
+      type: object
+      required: [id, workDate, periodCode, locationId, gramsProduced]
+      properties:
+        id:
+          $ref: "#/components/schemas/UUID"
+        tenantId:
+          $ref: "#/components/schemas/UUID"
+        workPeriodId:
+          $ref: "#/components/schemas/UUID"
+          nullable: true
+        workDate:
+          $ref: "#/components/schemas/Date"
+        periodCode:
+          $ref: "#/components/schemas/PeriodCode"
+        locationId:
+          $ref: "#/components/schemas/UUID"
+        locationLabel:
+          type: string
+        gramsProduced:
+          $ref: "#/components/schemas/DecimalString"
+        comments:
+          type: string
+          nullable: true
+        createdBy:
+          $ref: "#/components/schemas/UUID"
+        createdAt:
+          $ref: "#/components/schemas/DateTime"
+
+    CreateWellProductionRequest:
+      type: object
+      required: [workPeriodId, locationId, gramsProduced]
+      properties:
+        workPeriodId:
+          $ref: "#/components/schemas/UUID"
+        locationId:
+          $ref: "#/components/schemas/UUID"
+        gramsProduced:
+          $ref: "#/components/schemas/DecimalString"
+        comments:
+          type: string
+
+    Rate:
+      type: object
+      required: [id, rateDate]
+      properties:
+        id:
+          $ref: "#/components/schemas/UUID"
+        tenantId:
+          $ref: "#/components/schemas/UUID"
+        rateDate:
+          $ref: "#/components/schemas/Date"
+        brlUsd:
+          $ref: "#/components/schemas/DecimalString"
+        goldUsd:
+          $ref: "#/components/schemas/DecimalString"
+        goldBrl:
+          $ref: "#/components/schemas/DecimalString"
+        sourceName:
+          type: string
+          nullable: true
+        createdAt:
+          $ref: "#/components/schemas/DateTime"
+
+    CreateRateRequest:
+      type: object
+      required: [rateDate, goldBrl]
+      properties:
+        rateDate:
+          $ref: "#/components/schemas/Date"
+        brlUsd:
+          $ref: "#/components/schemas/DecimalString"
+        goldUsd:
+          $ref: "#/components/schemas/DecimalString"
+        goldBrl:
+          $ref: "#/components/schemas/DecimalString"
+        sourceName:
+          type: string
+
+    PriceListItem:
+      type: object
+      properties:
+        id:
+          $ref: "#/components/schemas/UUID"
+        code:
+          type: string
+          nullable: true
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+        categoryId:
+          $ref: "#/components/schemas/UUID"
+        priceBRL:
+          $ref: "#/components/schemas/DecimalString"
+        active:
+          type: boolean
+
+    ExpenseItem:
+      type: object
+      properties:
+        id:
+          $ref: "#/components/schemas/UUID"
+        priceListItemId:
+          $ref: "#/components/schemas/UUID"
+          nullable: true
+        itemNameSnapshot:
+          type: string
+        quantity:
+          $ref: "#/components/schemas/DecimalString"
+        unitPrice:
+          $ref: "#/components/schemas/DecimalString"
+        totalPrice:
+          $ref: "#/components/schemas/DecimalString"
+        comments:
+          type: string
+          nullable: true
+
+    ExpenseTransaction:
+      type: object
+      required: [id, collaboratorId, expenseDate, currencyCode, totalAmount]
+      properties:
+        id:
+          $ref: "#/components/schemas/UUID"
+        collaboratorId:
+          $ref: "#/components/schemas/UUID"
+        collaboratorName:
+          type: string
+        expenseDate:
+          $ref: "#/components/schemas/DateTime"
+        currencyCode:
+          $ref: "#/components/schemas/CurrencyCode"
+        totalAmount:
+          $ref: "#/components/schemas/DecimalString"
+        categoryId:
+          $ref: "#/components/schemas/UUID"
+          nullable: true
+        collaboratorAgreement:
+          type: boolean
+        comments:
+          type: string
+          nullable: true
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/ExpenseItem"
+
+    CloseJourneyPreview:
+      type: object
+      properties:
+        collaboratorId:
+          $ref: "#/components/schemas/UUID"
+        brlBalance:
+          $ref: "#/components/schemas/DecimalString"
+        goldBalance:
+          $ref: "#/components/schemas/DecimalString"
+        canClose:
+          type: boolean
+        warnings:
+          type: array
+          items:
+            type: string
+
+    Dashboard:
+      type: object
+      properties:
+        activeCollaboratorsCount:
+          type: integer
+        journeysEndingSoonCount:
+          type: integer
+        pendingAccrualsCount:
+          type: integer
+        latestGoldPriceBRLPerGram:
+          $ref: "#/components/schemas/DecimalString"
+        latestGoldPriceDate:
+          $ref: "#/components/schemas/Date"
+        todayExpensesBRL:
+          $ref: "#/components/schemas/DecimalString"
+        todayExpensesGold:
+          $ref: "#/components/schemas/DecimalString"
+        negativeBRLBalanceCount:
+          type: integer
+        negativeGoldBalanceCount:
+          type: integer
+
+paths:
+  /auth/verify-token:
+    post:
+      summary: Verify Firebase ID token and return session info
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                idToken:
+                  type: string
+      responses:
+        "200":
+          description: Session info
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/APIResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/APIResponse"
+
+  /users/me:
+    get:
+      summary: Get current user profile
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Current user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/APIResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/APIResponse"
+
+  /tenants:
+    get:
+      summary: List tenants (admin)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+        - name: pageSize
+          in: query
+          schema:
+            type: integer
+        - name: search
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Tenants list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/APIResponse"
+    post:
+      summary: Create tenant (admin)
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, slug]
+              properties:
+                name:
+                  type: string
+                slug:
+                  type: string
+      responses:
+        "201":
+          description: Tenant created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/APIResponse"
+
+  /tenants/{tenantId}:
+    get:
+      summary: Get tenant by id (admin)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: tenantId
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/UUID"
+      responses:
+        "200":
+          description: Tenant
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/APIResponse"
+    patch:
+      summary: Update tenant (admin)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: tenantId
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/UUID"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                slug:
+                  type: string
+      responses:
+        "200":
+          description: Tenant updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/APIResponse"
+    delete:
+      summary: Delete tenant (admin)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: tenantId
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/UUID"
+      responses:
+        "204":
+          description: Tenant deleted
+
+  /users:
+    get:
+      summary: List users in tenant (admin)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+        - name: pageSize
+          in: query
+          schema:
+            type: integer
+        - name: search
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Users list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/APIResponse"
+    post:
+      summary: Invite/create user in tenant (admin)
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, roles]
+              properties:
+                email:
+                  type: string
+                  format: email
+                displayName:
+                  type: string
+                roles:
+                  type: array
+                  items:
+                    type: string
+                sendInvite:
+                  type: boolean
+                  default: true
+      responses:
+        "201":
+          description: User invited/created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/APIResponse"
+
+  /users/{userId}:
+    get:
+      summary: Get user by id (admin)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/UUID"
+      responses:
+        "200":
+          description: User
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/APIResponse"
+    patch:
+      summary: Update user roles/status (admin)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/UUID"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                displayName:
+                  type: string
+                roles:
+                  type: array
+                  items:
+                    type: string
+                disabled:
+                  type: boolean
+      responses:
+        "200":
+          description: User updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/APIResponse"
+    delete:
+      summary: Remove user from tenant (admin)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/UUID"
+      responses:
+        "204":
+          description: User removed
+
+  /reference:
+    get:
+      summary: List reference data items
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: type
+          in: query
+          schema:
+            type: string
+        - name: active
+          in: query
+          schema:
+            type: boolean
+        - name: page
+          in: query
+          schema:
+            type: integer
+        - name: pageSize
+          in: query
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Reference list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/APIResponse"
+    post:
+      summary: Create reference data item
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [type, code, label]
+              properties:
+                type:
+                  type: string
+                code:
+                  type: string
+                label:
+                  type: string
+                description:
+                  type: string
+                active:
+                  type: boolean
+                  default: true
+                sortOrder:
+                  type: integer
+                metadata:
+                  type: object
+                  additionalProperties: true
+      responses:
+        "201":
+          description: Reference created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/APIResponse"
+
+  /reference/{id}:
+    get:
+      summary: Get reference data by id
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/UUID"
+      responses:
+        "200":
+          description: Reference item
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/APIResponse"
+    patch:
+      summary: Update reference data item
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/UUID"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                code:
+                  type: string
+                label:
+                  type: string
+                description:
+                  type: string
+                active:
+                  type: boolean
+                sortOrder:
+                  type: integer
+                metadata:
+                  type: object
+                  additionalProperties: true
+      responses:
+        "200":
+          description: Reference updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/APIResponse"
+    delete:
+      summary: Delete reference data item
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/UUID"
+      responses:
+        "204":
+          description: Reference deleted
+
+  /people:
+    get:
+      summary: List people
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+        - name: pageSize
+          in: query
+          schema:
+            type: integer
+        - name: search
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: People list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/APIResponse"
+    post:
+      summary: Create person
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreatePersonRequest"
+      responses:
+        "201":
+          description: Person created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/APIResponse"
+
+  /people/{id}:
+    get:
+      summary: Get person by id
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/UUID"
+      responses:
+        "200":
+          description: Person
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/APIResponse"
+    patch:
+      summary: Update person
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/UUID"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreatePersonRequest"
+      responses:
+        "200":
+          description: Person updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/APIResponse"
+    delete:
+      summary: Delete person
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/UUID"
+      responses:
+        "204":
+          description: Person deleted
+
+  /collaborators:
+    get:
+      summary: List collaborators
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: statusCode
+          in: query
+          schema:
+            $ref: "#/components/schemas/AvailabilityCode"
+        - name: locationId
+          in: query
+          schema:
+            $ref: "#/components/schemas/UUID"
+        - name: paymentMethodCode
+          in: query
+          schema:
+            $ref: "#/components/schemas/PaymentMethodCode"
+        - name: page
+          in: query
+          schema:
+            type: integer
+        - name: pageSize
+          in: query
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Collaborators list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/APIResponse"
+    post:
+      summary: Create collaborator (work journey)
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateCollaboratorRequest"
+      responses:
+        "201":
+          description: Collaborator created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/APIResponse"
+
+  /collaborators/{id}:
+    get:
+      summary: Get collaborator
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/UUID"
+      responses:
+        "200":
+          description: Collaborator
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/APIResponse"
+    patch:
+      summary: Update collaborator
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/UUID"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateCollaboratorRequest"
+      responses:
+        "200":
+          description: Collaborator updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/APIResponse"
+
+  /collaborators/{id}/close-account:
+    post:
+      summary: Close collaborator work journey (account closure)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/UUID"
+      responses:
+        "200":
+          description: Account closed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/APIResponse"
+  /workperiods:
+    get:
+      summary: List work periods (paged)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: fromDate
+          in: query
+          schema:
+            $ref: "#/components/schemas/Date"
+        - name: toDate
+          in: query
+          schema:
+            $ref: "#/components/schemas/Date"
+        - name: page
+          in: query
+          schema:
+            type: integer
+        - name: pageSize
+          in: query
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Work periods list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/APIResponse"
+    post:
+      summary: Create work period
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WorkPeriod"
+      responses:
+        "201":
+          description: Work period created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/APIResponse"
+
+  /workperiods/{id}:
+    get:
+      summary: Get work period
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/UUID"
+      responses:
+        "200":
+          description: Work period
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/APIResponse"
+    patch:
+      summary: Update work period
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/UUID"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WorkPeriod"
+      responses:
+        "200":
+          description: Work period updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/APIResponse"
+
+  /workperiods/{id}/seed:
+    post:
+      summary: Seed a work period from previous
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/UUID"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                previousWorkPeriodId:
+                  $ref: "#/components/schemas/UUID"
+      responses:
+        "200":
+          description: Work period seeded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/APIResponse"
+
+  /workplans:
+    post:
+      summary: Create or update a work plan
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WorkPlan"
+      responses:
+        "200":
+          description: Work plan saved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/APIResponse"
+
+  /workplans/{workPeriodId}:
+    get:
+      summary: Get work plan for a work period
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: workPeriodId
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/UUID"
+      responses:
+        "200":
+          description: Work plan
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/APIResponse"
+
+  /workplans/{workPeriodId}/inform:
+    post:
+      summary: Generate printable schedule (PDF) for work period
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: workPeriodId
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/UUID"
+      responses:
+        "200":
+          description: PDF generated
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+
+  /workplans/{workPeriodId}/accrue:
+    post:
+      summary: Accrue earnings for work period (Contabilizar)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: workPeriodId
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/UUID"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                comments:
+                  type: string
+      responses:
+        "200":
+          description: Accrual batch result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/APIResponse"
+
+  /wells/{locationId}/production:
+    post:
+      summary: Create or update well production for a location/workPeriod
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: locationId
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/UUID"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateWellProductionRequest"
+      responses:
+        "201":
+          description: Production recorded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/APIResponse"
+
+  /expenses:
+    get:
+      summary: List expenses
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: collaboratorId
+          in: query
+          schema:
+            $ref: "#/components/schemas/UUID"
+        - name: fromDate
+          in: query
+          schema:
+            $ref: "#/components/schemas/Date"
+        - name: toDate
+          in: query
+          schema:
+            $ref: "#/components/schemas/Date"
+      responses:
+        "200":
+          description: Expenses list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/APIResponse"
+    post:
+      summary: Create expense transaction
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ExpenseTransaction"
+      responses:
+        "201":
+          description: Expense recorded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/APIResponse"
+
+  /transactions:
+    get:
+      summary: List transactions
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: collaboratorId
+          in: query
+          schema:
+            $ref: "#/components/schemas/UUID"
+        - name: fromDate
+          in: query
+          schema:
+            $ref: "#/components/schemas/Date"
+        - name: toDate
+          in: query
+          schema:
+            $ref: "#/components/schemas/Date"
+      responses:
+        "200":
+          description: Transactions list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/APIResponse"
+    post:
+      summary: Create generic transaction
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateTransactionRequest"
+      responses:
+        "201":
+          description: Transaction created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/APIResponse"
+
+  /accounts/{collaboratorId}/summary:
+    get:
+      summary: Get current account summary for collaborator
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: collaboratorId
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/UUID"
+      responses:
+        "200":
+          description: Account summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/APIResponse"
+
+  /accounts/{collaboratorId}/entries:
+    get:
+      summary: Get current account entries for collaborator
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: collaboratorId
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/UUID"
+        - name: fromDate
+          in: query
+          schema:
+            $ref: "#/components/schemas/Date"
+        - name: toDate
+          in: query
+          schema:
+            $ref: "#/components/schemas/Date"
+      responses:
+        "200":
+          description: Account entries
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/APIResponse"
+
+  /accounts/{collaboratorId}/close-preview:
+    get:
+      summary: Preview account closure for collaborator
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: collaboratorId
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/UUID"
+      responses:
+        "200":
+          description: Close preview
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/APIResponse"
+
+  /accounts/{collaboratorId}/close:
+    post:
+      summary: Close work journey and post settlement
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: collaboratorId
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/UUID"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                closeDate:
+                  $ref: "#/components/schemas/Date"
+                comments:
+                  type: string
+      responses:
+        "200":
+          description: Account closed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/APIResponse"
+
+  /rates:
+    get:
+      summary: List rates
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: date
+          in: query
+          schema:
+            $ref: "#/components/schemas/Date"
+      responses:
+        "200":
+          description: Rates
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/APIResponse"
+    post:
+      summary: Create/update rate
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateRateRequest"
+      responses:
+        "201":
+          description: Rate created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/APIResponse"
+
+  /pricelist/items:
+    get:
+      summary: List price list items
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: categoryId
+          in: query
+          schema:
+            $ref: "#/components/schemas/UUID"
+      responses:
+        "200":
+          description: Price list items
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/APIResponse"
+    post:
+      summary: Create price list item
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PriceListItem"
+      responses:
+        "201":
+          description: Price list item created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/APIResponse"
+
+  /pricelist/items/{id}:
+    get:
+      summary: Get price list item
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/UUID"
+      responses:
+        "200":
+          description: Price list item
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/APIResponse"
+    patch:
+      summary: Update price list item
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/UUID"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PriceListItem"
+      responses:
+        "200":
+          description: Price list item updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/APIResponse"
+    delete:
+      summary: Delete price list item
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/UUID"
+      responses:
+        "204":
+          description: Price list item deleted
+
+  /reports/dashboard:
+    get:
+      summary: Get dashboard metrics
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Dashboard
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/APIResponse"
