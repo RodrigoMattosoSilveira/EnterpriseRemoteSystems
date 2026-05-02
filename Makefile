@@ -1,4 +1,5 @@
-.PHONY: ddev bedev fedev dev backend frontend test build tidy migrate-up
+.PHONY: ddev bedev fedev dev backend frontend test build tidy migrate-up generate-backend-api openapi bundle generate-fe generate-be generate-api tidy test
+
 
 getntw:
 	./scripts/getntw.sh
@@ -33,3 +34,19 @@ build:
 
 migrate-up:
 	cd backend && go run ./cmd/server --migrate-only
+
+openapi: bundle generate-fe generate-be tidy
+
+bundle:
+	npx @redocly/cli bundle contracts/openapi.yaml -o contracts/openapi.bundle.yaml
+
+generate-fe: bundle
+	cd frontend && npx openapi-typescript ../contracts/openapi.bundle.yaml -o src/api/generated/schema.ts
+
+generate-be: bundle
+	cd backend && oapi-codegen -config ../contracts/oapi-codegen.yaml ../contracts/openapi.bundle.yaml
+
+generate-api: openapi
+
+generate-backend-api:
+	cd backend && oapi-codegen -config ../contracts/oapi-codegen.yaml ../contracts/openapi.yaml
