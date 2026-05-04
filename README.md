@@ -4,26 +4,27 @@ Production-oriented monorepo for a mobile-first collaborator accounting app.
 
 ## Stack
 
-- Backend: Go 1.25, Fiber v3 (`github.com/gofiber/fiber/v3`), GORM (`gorm.io/gorm`)
-- Database: SQLite 3 through GORM's SQLite driver (`gorm.io/driver/sqlite`, CGO-backed by `github.com/mattn/go-sqlite3`)
-- Frontend: React, TypeScript, Vite
+- Frontend: Cloud Run static/Nginx container, or Firebase Hosting later; React, TypeScript;
+- Backend: Cloud Run service
+- Database: Cloud SQL for PostgreSQL
+- Secrets: Secret Manager
+- Images: Artifact Registry
+- Migrations: Cloud Build step or Cloud Run Job
+- Contract: OpenAPI bundle generates FE + BE types
 
-## SQLite 3 build requirement
-
-This repo intentionally uses the SQLite 3 / CGO-backed GORM driver, not the pure-Go SQLite driver.
-
-Local requirements:
-
-- macOS: Xcode Command Line Tools are usually enough
-- Ubuntu/Debian: `gcc`, `libc6-dev`, `sqlite3`, `libsqlite3-dev`
 
 # Daily Workflow
-## Terminal 1:
+## Build API (if necessary)
+```bash
+make openapi
+```
+
+## Terminal 1 (launch backend):
 ```bash
 cd backend
 air
 ```
-## Terminal 2:
+## Terminal 2 (launch fronten d):
 ```bash
 cd frontend
 npm run dev
