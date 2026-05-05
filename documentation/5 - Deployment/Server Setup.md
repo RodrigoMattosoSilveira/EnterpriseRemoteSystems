@@ -88,17 +88,17 @@ docker ps
 
 4. Create app folders
 ```bash
-sudo mkdir -p /opt/collaborator-accounting/{dev,tst,prd}
+sudo mkdir -p /opt/enterpriseremotesystems/{dev,tst,prd}
 sudo mkdir -p /opt/reverse-proxy
-sudo chown -R deploy:deploy /opt/collaborator-accounting /opt/reverse-proxy
+sudo chown -R deploy:deploy /opt/enterpriseremotesystems /opt/reverse-proxy
 ```
 
 Create per-environment folders:
 
 ```bash
-mkdir -p /opt/collaborator-accounting/dev/{data,backups}
-mkdir -p /opt/collaborator-accounting/tst/{data,backups}
-mkdir -p /opt/collaborator-accounting/prd/{data,backups}
+mkdir -p /opt/enterpriseremotesystems/dev/{data,backups}
+mkdir -p /opt/enterpriseremotesystems/tst/{data,backups}
+mkdir -p /opt/enterpriseremotesystems/prd/{data,backups}
 ```
 # 5. Create reverse proxy with Caddy
 
@@ -114,7 +114,7 @@ Paste:
 services:
   caddy:
     image: caddy:2
-    container_name: collaborator-caddy
+    container_name: enterpriseremotesystems-caddy
     ports:
       - "80:80"
       - "443:443"
@@ -158,7 +158,7 @@ docker compose up -d
 
 Create:
 ```bash
-$ nano /opt/collaborator-accounting/dev/docker-compose.yml
+$ nano /opt/enterpriseremotesystems/dev/docker-compose.yml
 ```
 
 Paste:
@@ -167,7 +167,7 @@ Paste:
 services:
   app:
     image: ghcr.io/YOUR_GITHUB_USER/YOUR_REPO:${APP_VERSION}
-    container_name: collaborator-accounting-${APP_ENV}
+    container_name: enterpriseremotesystems-${APP_ENV}
     environment:
       APP_ENV: ${APP_ENV}
       HTTP_ADDR: ":8080"
@@ -184,13 +184,13 @@ services:
 Copy to TST/PRD:
 
 ```bash
-cp /opt/collaborator-accounting/dev/docker-compose.yml /opt/collaborator-accounting/tst/docker-compose.yml
-cp /opt/collaborator-accounting/dev/docker-compose.yml /opt/collaborator-accounting/prd/docker-compose.yml
+cp /opt/enterpriseremotesystems/dev/docker-compose.yml /opt/enterpriseremotesystems/tst/docker-compose.yml
+cp /opt/enterpriseremotesystems/dev/docker-compose.yml /opt/enterpriseremotesystems/prd/docker-compose.yml
 ```
 
 Create .env files.
 
-`/opt/collaborator-accounting/dev/.env`
+`/opt/enterpriseremotesystems/dev/.env`
 ```bash
 APP_ENV=dev
 APP_PORT=18081
@@ -198,7 +198,7 @@ APP_VERSION=development-latest
 JWT_SECRET=replace-with-long-random-dev-secret
 ```
 
-`/opt/collaborator-accounting/tst/.env`
+`/opt/enterpriseremotesystems/tst/.env`
 ```bash
 APP_ENV=tst
 APP_PORT=18082
@@ -206,7 +206,7 @@ APP_VERSION=test-latest
 JWT_SECRET=replace-with-long-random-tst-secret
 ```
 
-`/opt/collaborator-accounting/prd/.env`
+`/opt/enterpriseremotesystems/prd/.env`
 ```bash
 APP_ENV=prd
 APP_PORT=18083
@@ -285,7 +285,7 @@ docker compose down
 ```bash
 docker ps
 ```
-You should not see collaborator-caddy.
+You should not see enterpriseremotesystems-caddy.
 
 ## Edit your Caddy domains
 ```bash

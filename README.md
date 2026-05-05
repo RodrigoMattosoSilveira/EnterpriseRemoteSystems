@@ -1,6 +1,6 @@
-# CollaboratorAccounting
+# Enterprise Remote System
 
-Production-oriented monorepo for a mobile-first collaborator accounting app.
+Production-oriented monorepo for a mobile-first Enterprise Remote System app.
 
 ## Stack
 
