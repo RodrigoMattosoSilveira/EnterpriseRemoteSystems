@@ -1,6 +1,6 @@
 # Backend
 
-Go/Fiber API for the mining collaborator accounting system.
+Go/Fiber API for the Enterprise Remote Systems collaborator accounting system.
 
 ## Stack
 

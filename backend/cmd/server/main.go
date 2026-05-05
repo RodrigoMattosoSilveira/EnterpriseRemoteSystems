@@ -4,7 +4,7 @@ import (
 	"flag"
 	"log"
 
-	"mining-app/backend/internal/app"
+	"enterpriseremotesystems/backend/internal/app"
 )
 
 func main() {

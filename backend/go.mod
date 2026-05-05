@@ -1,4 +1,4 @@
-module mining-app/backend
+module enterpriseremotesystems/backend
 
 go 1.25.0
 

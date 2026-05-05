@@ -29,7 +29,7 @@ test:
 	cd frontend && npm test -- --run
 
 build:
-	cd backend && go build -o bin/mining-app ./cmd/server
+	cd backend && go build -o bin/enterpriseremotesystems ./cmd/server
 	cd frontend && npm install && npm run build
 
 migrate-up:

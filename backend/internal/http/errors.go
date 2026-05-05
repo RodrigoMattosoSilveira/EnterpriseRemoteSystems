@@ -6,7 +6,7 @@ import (
 	"github.com/gofiber/fiber/v3"
 	"gorm.io/gorm"
 
-	"mining-app/backend/internal/people"
+	"enterpriseremotesystems/backend/internal/people"
 )
 
 type APIError struct {

@@ -66,26 +66,6 @@ http://localhost:3000
 ```
 
 # Development launch flow
-## Unzip and enter repo
-```bash
-unzip mining-collaborator-accounting-fiber3-sqlite3-gorm.zip
-cd mining-collaborator-accounting
-```
-
-## Create environment file
-```bash
-cp .env.example .env
-```
-
-### Expected Values
-```env
-APP_ENV=development
-HTTP_ADDR=:8080
-DB_PATH=/data/app.db
-JWT_SECRET=dev-only-change-me
-VITE_API_BASE_URL=http://localhost:8080/api/v1
-```
-
 ## Build and start with Docker Compose
 ### Production-like local
 ```bash

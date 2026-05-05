@@ -2,7 +2,7 @@ package routes
 
 import (
 	"github.com/gofiber/fiber/v3"
-	"mining-app/backend/internal/health"
+	"enterpriseremotesystems/backend/internal/health"
 )
 
 func RegisterHealthRoutes(server *fiber.App) {
