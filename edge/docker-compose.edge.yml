@@ -1,0 +1,28 @@
+services:
+  edge-caddy:
+    image: caddy:2.8-alpine
+    container_name: ers-edge-caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - edge-caddy-data:/data
+      - edge-caddy-config:/config
+    networks:
+      - ers-dev_default
+      - ers-tst_default
+      - ers-prd_default
+
+volumes:
+  edge-caddy-data:
+  edge-caddy-config:
+
+networks:
+  ers-dev_default:
+    external: true
+  ers-tst_default:
+    external: true
+  ers-prd_default:
+    external: true
