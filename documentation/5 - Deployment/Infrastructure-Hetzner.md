@@ -287,7 +287,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY backend/go.mod backend/go.sum ./
 RUN go mod download
 COPY backend .
-ENV CGO_ENABLED=1
+ENV CGO_ENABLED=0
 RUN go build -o /out/server ./cmd/server
 
 # runtime
