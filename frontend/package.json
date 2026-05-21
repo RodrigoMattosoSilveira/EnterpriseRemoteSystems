@@ -7,7 +7,9 @@
     "dev": "vite --host 0.0.0.0",
     "build": "tsc && vite build",
     "preview": "vite preview",
+    "check": "tsc -b",
     "test": "vitest",
+    "test:run": "vitest run",
     "generate:api": "openapi-typescript ../contracts/openapi.yaml -o src/api/generated/schema.ts",
     "bundle:openapi": "redocly bundle ../contracts/openapi.yaml -o ../contracts/openapi.bundle.yaml"
   },
