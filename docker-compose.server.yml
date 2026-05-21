@@ -1,0 +1,71 @@
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: "${CONTAINER_PREFIX}-backend"
+    restart: unless-stopped
+    environment:
+      PORT: "8080"
+      DATABASE_PATH: "/app/data/app.db"
+
+      JWT_SECRET: "${JWT_SECRET}"
+      JWT_ISSUER: "${JWT_ISSUER}"
+      JWT_EXPIRATION_MINUTES: "${JWT_EXPIRATION_MINUTES:-480}"
+
+      DEV_SEED_ADMIN: "${DEV_SEED_ADMIN:-false}"
+      DEV_ADMIN_EMAIL: "${DEV_ADMIN_EMAIL:-}"
+      DEV_ADMIN_PASSWORD: "${DEV_ADMIN_PASSWORD:-}"
+      DEV_ADMIN_NAME: "${DEV_ADMIN_NAME:-}"
+
+      LLM_COACHING_ENABLED: "${LLM_COACHING_ENABLED:-false}"
+      OPENAI_API_KEY: "${OPENAI_API_KEY:-}"
+      OPENAI_MODEL: "${OPENAI_MODEL:-gpt-5.1-mini}"
+      OPENAI_BASE_URL: "${OPENAI_BASE_URL:-https://api.openai.com/v1}"
+      OPENAI_TIMEOUT_SECONDS: "${OPENAI_TIMEOUT_SECONDS:-20}"
+
+      CORS_ALLOW_ORIGINS: "${CORS_ALLOW_ORIGINS}"
+    volumes:
+      - backend-data:/app/data
+    expose:
+      - "8080"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8080/api/v1/healthz"]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_API_BASE_URL: "/api/v1"
+    container_name: "${CONTAINER_PREFIX}-frontend"
+    restart: unless-stopped
+    expose:
+      - "80"
+    depends_on:
+      backend:
+        condition: service_healthy
+
+  caddy:
+    image: caddy:2.8-alpine
+    container_name: "${CONTAINER_PREFIX}-caddy"
+    restart: unless-stopped
+    environment:
+      APP_DOMAIN: "${APP_DOMAIN}"
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    expose:
+      - "80"
+    depends_on:
+      - frontend
+      - backend
+
+volumes:
+  backend-data:
+  caddy-data:
+  caddy-config:
