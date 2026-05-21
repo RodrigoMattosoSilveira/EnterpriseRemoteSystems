@@ -1,0 +1,41 @@
+openapi: 3.0.3
+info:
+  title: Collaborator Accounting API
+  version: 1.0.0
+
+servers:
+  - url: /api/v1
+
+paths:
+  /people:
+    $ref: "./paths/people.yaml#/people"
+  /people/{id}:
+    $ref: "./paths/people.yaml#/personById"
+
+components:
+  parameters:
+    PersonID:
+      $ref: "./components/parameters.yaml#/PersonID"
+
+  responses:
+    ValidationError:
+      $ref: "./components/responses.yaml#/ValidationError"
+    NotFound:
+      $ref: "./components/responses.yaml#/NotFound"
+
+  schemas:
+    ErrorResponse:
+      $ref: "./components/schemas/common.yaml#/ErrorResponse"
+    APIError:
+      $ref: "./components/schemas/common.yaml#/APIError"
+
+    Person:
+      $ref: "./components/schemas/person.yaml#/Person"
+    PeopleListResponse:
+      $ref: "./components/schemas/person.yaml#/PeopleListResponse"
+    PersonResponse:
+      $ref: "./components/schemas/person.yaml#/PersonResponse"
+    CreatePersonRequest:
+      $ref: "./components/schemas/person.yaml#/CreatePersonRequest"
+    UpdatePersonRequest:
+      $ref: "./components/schemas/person.yaml#/UpdatePersonRequest"

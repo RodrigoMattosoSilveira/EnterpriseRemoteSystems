@@ -1,0 +1,181 @@
+openapi: 3.0.3
+info:
+  title: Collaborator Accounting API
+  version: 1.0.0
+servers:
+  - url: /api/v1
+paths:
+  /people:
+    get:
+      operationId: listPeople
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PeopleListResponse'
+    post:
+      operationId: createPerson
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreatePersonRequest'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PersonResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+  /people/{id}:
+    get:
+      operationId: getPerson
+      parameters:
+        - $ref: '#/components/parameters/PersonID'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PersonResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    put:
+      operationId: updatePerson
+      parameters:
+        - $ref: '#/components/parameters/PersonID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdatePersonRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PersonResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '404':
+          $ref: '#/components/responses/NotFound'
+components:
+  parameters:
+    PersonID:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+  responses:
+    ValidationError:
+      description: Validation failed
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    NotFound:
+      description: Not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+  schemas:
+    ErrorResponse:
+      type: object
+      required:
+        - error
+      properties:
+        error:
+          $ref: '#/components/schemas/APIError'
+    APIError:
+      type: object
+      required:
+        - code
+        - message
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+        fields:
+          type: object
+          additionalProperties:
+            type: string
+    Person:
+      type: object
+      properties:
+        id:
+          type: string
+        firstName:
+          type: string
+        lastName:
+          type: string
+        nickname:
+          type: string
+        cpf:
+          type: string
+        rg:
+          type: string
+        cellular:
+          type: string
+        email:
+          type: string
+        statusId:
+          type: string
+    PeopleListResponse:
+      type: object
+      properties:
+        data:
+          type: object
+          properties:
+            items:
+              type: array
+              items:
+                $ref: '#/components/schemas/Person'
+            total:
+              type: integer
+    PersonResponse:
+      type: object
+      properties:
+        data:
+          $ref: '#/components/schemas/Person'
+    CreatePersonRequest:
+      type: object
+      required:
+        - firstName
+        - lastName
+        - nickname
+        - cpf
+        - rg
+        - cellular
+        - email
+        - statusId
+      properties:
+        firstName:
+          type: string
+        lastName:
+          type: string
+        nickname:
+          type: string
+        cpf:
+          type: string
+        rg:
+          type: string
+        cellular:
+          type: string
+        email:
+          type: string
+        statusId:
+          type: string
+    UpdatePersonRequest:
+      allOf:
+        - $ref: '#/components/schemas/CreatePersonRequest'

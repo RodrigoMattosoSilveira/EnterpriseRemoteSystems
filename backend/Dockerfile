@@ -15,7 +15,7 @@ RUN go mod download
 COPY . .
 
 ENV CGO_ENABLED=1
-RUN go build -o /out/mining-api ./cmd/server
+RUN go build -o /out/ers-api ./cmd/server
 
 FROM debian:bookworm-slim
 
@@ -27,9 +27,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-COPY --from=builder /out/mining-api /app/mining-api
+COPY --from=builder /out/ers-api /app/ers-api
 COPY migrations /app/migrations
 
 EXPOSE 8080
 
-CMD ["/app/mining-api"]
+CMD ["/app/ers-api"]

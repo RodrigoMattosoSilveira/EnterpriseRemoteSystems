@@ -4,11 +4,11 @@ import (
 	"log"
 
 	"github.com/gofiber/fiber/v3"
-	"mining-app/backend/internal/db"
-	httpserver "mining-app/backend/internal/http"
-	"mining-app/backend/internal/http/routes"
-	"mining-app/backend/internal/people"
-	"mining-app/backend/internal/referencedata"
+	"enterpriseremotesystems/backend/internal/db"
+	httpserver "enterpriseremotesystems/backend/internal/http"
+	"enterpriseremotesystems/backend/internal/http/routes"
+	"enterpriseremotesystems/backend/internal/people"
+	"enterpriseremotesystems/backend/internal/referencedata"
 )
 
 func Bootstrap(cfg Config) (*fiber.App, func(), error) {

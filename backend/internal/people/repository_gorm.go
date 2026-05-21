@@ -5,7 +5,7 @@ import (
 
 	"gorm.io/gorm"
 
-	db "mining-app/backend/internal/db"
+	db "enterpriseremotesystems/backend/internal/db"
 )
 
 type gormRepository struct {

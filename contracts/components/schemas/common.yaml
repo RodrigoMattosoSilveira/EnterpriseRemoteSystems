@@ -1,0 +1,22 @@
+APIError:
+  type: object
+  required:
+    - code
+    - message
+  properties:
+    code:
+      type: string
+    message:
+      type: string
+    fields:
+      type: object
+      additionalProperties:
+        type: string
+
+ErrorResponse:
+  type: object
+  required:
+    - error
+  properties:
+    error:
+      $ref: "#/APIError"

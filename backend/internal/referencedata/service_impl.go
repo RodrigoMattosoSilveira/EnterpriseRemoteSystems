@@ -2,8 +2,8 @@ package referencedata
 
 import (
 	"context"
-	"mining-app/backend/internal/db"
-	"mining-app/backend/internal/shared/ids"
+	"enterpriseremotesystems/backend/internal/db"
+	"enterpriseremotesystems/backend/internal/shared/ids"
 	"time"
 )
 

@@ -3,7 +3,7 @@ package referencedata
 import (
 	"context"
 	"gorm.io/gorm"
-	"mining-app/backend/internal/db"
+	"enterpriseremotesystems/backend/internal/db"
 )
 
 type gormRepository struct{ database *gorm.DB }

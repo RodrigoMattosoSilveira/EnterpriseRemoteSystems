@@ -1,6 +1,6 @@
 # Frontend
 
-React/Vite frontend for the mining collaborator accounting system.
+React/Vite frontend for the Enterprise Remote System.
 
 ## Stack
 
