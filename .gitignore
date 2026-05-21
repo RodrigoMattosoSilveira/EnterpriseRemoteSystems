@@ -149,3 +149,4 @@ credentials/
 # =========================================================
 frontend/dist/
 backend/public/
+.env.development
