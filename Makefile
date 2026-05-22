@@ -5,8 +5,8 @@ SHELL := /usr/bin/env bash
 # Call It Cure It - Root Makefile
 # ==============================================================================
 
-SERVER_ROOT ?= /opt/EnterpriseRemoteSystems/development
-REPO_URL ?= git@github.com:RodrigoMattosoSilveira/EnterpriseRemoteSystems/development.git
+SERVER_ROOT ?= /opt/EnterpriseRemoteSystems
+REPO_URL ?= git@github.com:RodrigoMattosoSilveira/EnterpriseRemoteSystems.git
 LAN_HOST ?= 5.78.208.230
 
 ENV ?= development
