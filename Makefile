@@ -2,11 +2,11 @@ SHELL := /usr/bin/env bash
 .DEFAULT_GOAL := help
 
 # ==============================================================================
-# Enterprise Remote Systems - Root Makefile
+# Call It Cure It - Root Makefile
 # ==============================================================================
 
-SERVER_ROOT ?= /opt/EnterpriseRemoteSystems
-REPO_URL ?= git@github.com:RodrigoMattosoSilveira/EnterpriseRemoteSystems.git
+SERVER_ROOT ?= /opt/CallItCureIt
+REPO_URL ?= git@github.com:RodrigoMattosoSilveira/CallItCureIt.git
 LAN_HOST ?= 5.78.208.230
 
 ENV ?= development
@@ -14,28 +14,28 @@ ENV ?= development
 ifeq ($(ENV),development)
   ENV_DIR := $(SERVER_ROOT)/development
   ENV_FILE := .env.development
-  COMPOSE_PROJECT := ers-dev
+  COMPOSE_PROJECT := callitcureit-dev
   BRANCH := development
-  DOMAIN := dev.enterpriseremotesystems.com
-  CONTAINER_PREFIX := ers-dev
+  DOMAIN := dev.callitcureit.com
+  CONTAINER_PREFIX := callitcureit-dev
 endif
 
 ifeq ($(ENV),test)
   ENV_DIR := $(SERVER_ROOT)/test
   ENV_FILE := .env.test
-  COMPOSE_PROJECT := ers-tst
+  COMPOSE_PROJECT := callitcureit-tst
   BRANCH := test
-  DOMAIN := tst.enterpriseremotesystems.com
-  CONTAINER_PREFIX := ers-tst
+  DOMAIN := tst.callitcureit.com
+  CONTAINER_PREFIX := callitcureit-tst
 endif
 
 ifeq ($(ENV),production)
   ENV_DIR := $(SERVER_ROOT)/production
   ENV_FILE := .env.production
-  COMPOSE_PROJECT := ers-prd
+  COMPOSE_PROJECT := callitcureit-prd
   BRANCH := production
-  DOMAIN := app.enterpriseremotesystems.com
-  CONTAINER_PREFIX := ers-prd
+  DOMAIN := app.callitcureit.com
+  CONTAINER_PREFIX := callitcureit-prd
 endif
 
 EDGE_DIR := $(SERVER_ROOT)/edge
@@ -46,7 +46,7 @@ EDGE_DIR := $(SERVER_ROOT)/edge
 
 .PHONY: help
 help:
-	@echo "Enterprise Remote Systems Makefile"
+	@echo "Call It Cure It Makefile"
 	@echo
 	@echo "Local development:"
 	@echo "  make doctor"
@@ -635,7 +635,7 @@ edge-down:
 
 .PHONY: edge-reload
 edge-reload:
-	docker exec ers-edge-caddy caddy reload --config /etc/caddy/Caddyfile
+	docker exec callitcureit-edge-caddy caddy reload --config /etc/caddy/Caddyfile
 
 .PHONY: edge-restart
 edge-restart:
@@ -643,7 +643,7 @@ edge-restart:
 
 .PHONY: edge-logs
 edge-logs:
-	docker logs -f --tail=200 ers-edge-caddy
+	docker logs -f --tail=200 callitcureit-edge-caddy
 
 .PHONY: edge-deploy
 edge-deploy: edge-sync edge-up edge-reload
@@ -651,17 +651,17 @@ edge-deploy: edge-sync edge-up edge-reload
 
 .PHONY: edge-cert-check-dev
 edge-cert-check-dev:
-	echo | openssl s_client -connect dev.enterpriseremotesystems.com:443 -servername dev.enterpriseremotesystems.com -showcerts 2>/dev/null \
+	echo | openssl s_client -connect dev.callitcureit.com:443 -servername dev.callitcureit.com -showcerts 2>/dev/null \
 		| openssl x509 -noout -subject -issuer -dates -ext subjectAltName
 
 .PHONY: edge-cert-check-test
 edge-cert-check-test:
-	echo | openssl s_client -connect tst.enterpriseremotesystems.com:443 -servername tst.enterpriseremotesystems.com -showcerts 2>/dev/null \
+	echo | openssl s_client -connect tst.callitcureit.com:443 -servername tst.callitcureit.com -showcerts 2>/dev/null \
 		| openssl x509 -noout -subject -issuer -dates -ext subjectAltName
 
 .PHONY: edge-cert-check-prod
 edge-cert-check-prod:
-	echo | openssl s_client -connect app.enterpriseremotesystems.com:443 -servername app.enterpriseremotesystems.com -showcerts 2>/dev/null \
+	echo | openssl s_client -connect app.callitcureit.com:443 -servername app.callitcureit.com -showcerts 2>/dev/null \
 		| openssl x509 -noout -subject -issuer -dates -ext subjectAltName
 
 # ==============================================================================
@@ -682,7 +682,7 @@ docker-df:
 
 .PHONY: docker-networks
 docker-networks:
-	docker network ls | grep ers || true
+	docker network ls | grep callitcureit || true
 
 .PHONY: docker-prune-build-cache
 docker-prune-build-cache:
