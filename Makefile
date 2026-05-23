@@ -14,28 +14,28 @@ ENV ?= development
 ifeq ($(ENV),development)
   ENV_DIR := $(SERVER_ROOT)/development
   ENV_FILE := .env.development
-  COMPOSE_PROJECT := enterpriseremotesystems-dev
+  COMPOSE_PROJECT := ers-dev
   BRANCH := development
   DOMAIN := dev.enterpriseremotesystems.com
-  CONTAINER_PREFIX := enterpriseremotesystems-dev
+  CONTAINER_PREFIX := ers-dev
 endif
 
 ifeq ($(ENV),test)
   ENV_DIR := $(SERVER_ROOT)/test
   ENV_FILE := .env.test
-  COMPOSE_PROJECT := enterpriseremotesystems-tst
+  COMPOSE_PROJECT := ers-tst
   BRANCH := test
   DOMAIN := tst.enterpriseremotesystems.com
-  CONTAINER_PREFIX := enterpriseremotesystems-tst
+  CONTAINER_PREFIX := ers-tst
 endif
 
 ifeq ($(ENV),production)
   ENV_DIR := $(SERVER_ROOT)/production
   ENV_FILE := .env.production
-  COMPOSE_PROJECT := enterpriseremotesystems-prd
+  COMPOSE_PROJECT := ers-prd
   BRANCH := production
   DOMAIN := app.enterpriseremotesystems.com
-  CONTAINER_PREFIX := enterpriseremotesystems-prd
+  CONTAINER_PREFIX := ers-prd
 endif
 
 EDGE_DIR := $(SERVER_ROOT)/edge
