@@ -1,0 +1,13 @@
+ValidationError:
+  description: Validation failed
+  content:
+    application/json:
+      schema:
+        $ref: "../openapi.yaml#/components/schemas/ErrorResponse"
+
+NotFound:
+  description: Not found
+  content:
+    application/json:
+      schema:
+        $ref: "../openapi.yaml#/components/schemas/ErrorResponse"

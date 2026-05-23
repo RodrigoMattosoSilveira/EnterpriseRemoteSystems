@@ -1,8 +1,8 @@
-# Mining Collaborator Accounting System — Master Architecture Package
+# Enterprise Remote Systems — Master Architecture Package
 
 ## 1. Executive Summary
 
-This application is a mobile-first business system for managing collaborators working for a mining company in remote operations. It tracks:
+This application is a mobile-first business system for managing collaborators working for a company with remote operations. It tracks:
 
 - people under contract or eligible to return,
 - collaborator work journeys,
@@ -4894,7 +4894,7 @@ package auth
 
 import (
 	"context"
-	"mining-app/internal/db/models"
+	"enterpriseremotesystems/internal/db/models"
 )
 
 type UserRepository interface {
@@ -4914,7 +4914,7 @@ package people
 
 import (
 	"context"
-	"mining-app/internal/db/models"
+	"enterpriseremotesystems/internal/db/models"
 )
 
 type Repository interface {
@@ -4936,7 +4936,7 @@ package collaborators
 
 import (
 	"context"
-	"mining-app/internal/db/models"
+	"enterpriseremotesystems/internal/db/models"
 )
 
 type Repository interface {
@@ -4959,7 +4959,7 @@ package referencedata
 
 import (
 	"context"
-	"mining-app/internal/db/models"
+	"enterpriseremotesystems/internal/db/models"
 )
 
 type Repository interface {
@@ -4982,7 +4982,7 @@ package workperiods
 
 import (
 	"context"
-	"mining-app/internal/db/models"
+	"enterpriseremotesystems/internal/db/models"
 )
 
 type Repository interface {
@@ -5004,7 +5004,7 @@ package planning
 
 import (
 	"context"
-	"mining-app/internal/db/models"
+	"enterpriseremotesystems/internal/db/models"
 )
 
 type Repository interface {
@@ -5027,7 +5027,7 @@ package mineproduction
 
 import (
 	"context"
-	"mining-app/internal/db/models"
+	"enterpriseremotesystems/internal/db/models"
 )
 
 type Repository interface {
@@ -5048,7 +5048,7 @@ package goldprices
 
 import (
 	"context"
-	"mining-app/internal/db/models"
+	"enterpriseremotesystems/internal/db/models"
 )
 
 type Repository interface {
@@ -5070,7 +5070,7 @@ package pricelist
 
 import (
 	"context"
-	"mining-app/internal/db/models"
+	"enterpriseremotesystems/internal/db/models"
 )
 
 type Repository interface {
@@ -5091,7 +5091,7 @@ package expenses
 
 import (
 	"context"
-	"mining-app/internal/db/models"
+	"enterpriseremotesystems/internal/db/models"
 )
 
 type Repository interface {
@@ -5112,7 +5112,7 @@ package currentaccounts
 
 import (
 	"context"
-	"mining-app/internal/db/models"
+	"enterpriseremotesystems/internal/db/models"
 )
 
 type BalanceRow struct {
@@ -5143,7 +5143,7 @@ package audit
 
 import (
 	"context"
-	"mining-app/internal/db/models"
+	"enterpriseremotesystems/internal/db/models"
 )
 
 type Repository interface {
@@ -5165,7 +5165,7 @@ package people
 
 import (
 	"github.com/gofiber/fiber/v2"
-	"mining-app/internal/shared/httpx"
+	"enterpriseremotesystems/internal/shared/httpx"
 )
 
 type Handler struct {
@@ -5221,7 +5221,7 @@ package httpx
 
 import (
 	"github.com/gofiber/fiber/v2"
-	"mining-app/internal/shared/dto"
+	"enterpriseremotesystems/internal/shared/dto"
 )
 
 func OK[T any](c *fiber.Ctx, data T) error {
@@ -5289,7 +5289,7 @@ Important adjustments during coding:
 Recommended repository name:
 
 ```text
-mining-collaborator-accounting/
+enterpriseremotesystems/
 ```
 
 This is a full-stack monorepo containing:
@@ -5308,7 +5308,7 @@ This is a full-stack monorepo containing:
 ## 51.1 Top-Level Monorepo Layout
 
 ```text
-mining-collaborator-accounting/
+enterpriseremotesystems/
 ├── README.md
 ├── Makefile
 ├── .gitignore
@@ -5962,9 +5962,9 @@ release.sh             Build production artifact/container
 ```text
 deployments/
 ├── nginx/
-│   └── mining-app.conf
+│   └── enterpriseremotesystems.conf
 ├── systemd/
-│   └── mining-app.service
+│   └── enterpriseremotesystems.service
 ├── docker/
 │   ├── Dockerfile.backend
 │   ├── Dockerfile.frontend
@@ -6052,7 +6052,7 @@ Recommended production deployment:
 Production runtime shape:
 
 ```text
-/app/mining-app-server
+/app/enterpriseremotesystems-server
 /app/public/
 /data/app.db
 /data/backups/
@@ -6184,7 +6184,7 @@ backend/internal/http/routes/health.go
 ## 52.1 `backend/go.mod`
 
 ```go
-module mining-app/backend
+module enterpriseremotesystems/backend
 
 // Use the latest stable Go version available in your environment.
 // If your local toolchain is older, change this to your installed version.
@@ -6213,7 +6213,7 @@ package main
 import (
 	"log"
 
-	"mining-app/backend/internal/app"
+	"enterpriseremotesystems/backend/internal/app"
 )
 
 func main() {
@@ -6308,9 +6308,9 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 
-	"mining-app/backend/internal/db"
-	httpserver "mining-app/backend/internal/http"
-	"mining-app/backend/internal/http/routes"
+	"enterpriseremotesystems/backend/internal/db"
+	httpserver "enterpriseremotesystems/backend/internal/http"
+	"enterpriseremotesystems/backend/internal/http/routes"
 )
 
 func Bootstrap(cfg Config) (*fiber.App, func(), error) {
@@ -6404,14 +6404,14 @@ import (
 	"github.com/gofiber/fiber/v2/middleware/cors"
 	"github.com/gofiber/fiber/v2/middleware/recover"
 
-	"mining-app/backend/internal/app"
-	"mining-app/backend/internal/http/routes"
+	"enterpriseremotesystems/backend/internal/app"
+	"enterpriseremotesystems/backend/internal/http/routes"
 )
 
 func NewServer(cfg app.Config, deps routes.Dependencies) *fiber.App {
 	server := fiber.New(fiber.Config{
-		AppName:      "Mining Collaborator Accounting API",
-		ServerHeader: "mining-app",
+		AppName:      "Enterprise Remote Systems API",
+		ServerHeader: "enterpriseremotesystems",
 	})
 
 	server.Use(recover.New())
@@ -6544,7 +6544,7 @@ package routes
 import (
 	"github.com/gofiber/fiber/v2"
 
-	"mining-app/backend/internal/health"
+	"enterpriseremotesystems/backend/internal/health"
 )
 
 func RegisterHealthRoutes(server *fiber.App) {

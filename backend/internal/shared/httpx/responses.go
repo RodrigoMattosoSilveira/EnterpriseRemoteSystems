@@ -2,7 +2,7 @@ package httpx
 
 import (
 	"github.com/gofiber/fiber/v3"
-	"mining-app/backend/internal/shared/dto"
+	"enterpriseremotesystems/backend/internal/shared/dto"
 )
 
 func OK[T any](c fiber.Ctx, data T) error {

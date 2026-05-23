@@ -5,8 +5,8 @@ import (
 	"strings"
 	"time"
 
-	"mining-app/backend/internal/db"
-	"mining-app/backend/internal/shared/ids"
+	"enterpriseremotesystems/backend/internal/db"
+	"enterpriseremotesystems/backend/internal/shared/ids"
 )
 
 type service struct {

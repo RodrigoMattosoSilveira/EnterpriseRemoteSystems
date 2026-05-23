@@ -5,13 +5,13 @@ import (
 	"github.com/gofiber/fiber/v3/middleware/cors"
 	"github.com/gofiber/fiber/v3/middleware/recover"
 
-	"mining-app/backend/internal/http/routes"
+	"enterpriseremotesystems/backend/internal/http/routes"
 )
 
 func NewServer(deps routes.Dependencies) *fiber.App {
 	server := fiber.New(fiber.Config{
-		AppName:      "Mining Collaborator Accounting API",
-		ServerHeader: "mining-app",
+		AppName:      "Enterprise Remote Systems API",
+		ServerHeader: "enterpriseremotesystems",
 	})
 
 	server.Use(recover.New())

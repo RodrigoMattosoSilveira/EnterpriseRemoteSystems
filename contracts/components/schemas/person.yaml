@@ -1,0 +1,73 @@
+Person:
+  type: object
+  properties:
+    id:
+      type: string
+    firstName:
+      type: string
+    lastName:
+      type: string
+    nickname:
+      type: string
+    cpf:
+      type: string
+    rg:
+      type: string
+    cellular:
+      type: string
+    email:
+      type: string
+    statusId:
+      type: string
+
+CreatePersonRequest:
+  type: object
+  required:
+    - firstName
+    - lastName
+    - nickname
+    - cpf
+    - rg
+    - cellular
+    - email
+    - statusId
+  properties:
+    firstName:
+      type: string
+    lastName:
+      type: string
+    nickname:
+      type: string
+    cpf:
+      type: string
+    rg:
+      type: string
+    cellular:
+      type: string
+    email:
+      type: string
+    statusId:
+      type: string
+
+UpdatePersonRequest:
+  allOf:
+    - $ref: "#/CreatePersonRequest"
+
+PeopleListResponse:
+  type: object
+  properties:
+    data:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/Person"
+        total:
+          type: integer
+
+PersonResponse:
+  type: object
+  properties:
+    data:
+      $ref: "#/Person"

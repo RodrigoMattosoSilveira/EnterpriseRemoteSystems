@@ -1,6 +1,6 @@
 # Problem Domain
 
-Please build a mobile first app, that can run on a desktop, backend based on a - Go / Fiber / Postgress / GORM, and fronteend based on React / Typescript / TailCSS /Vite, to track the earnings and expenses of business collaborators working for a mining company, many working at a remote location and buying goods and services at the business mercantile. 
+Please build a mobile first app, that can run on a desktop, backend based on a - Go / Fiber / Postgress / GORM, and fronteend based on React / Typescript / TailCSS /Vite, to track the earnings and expenses of business collaborators working for a company with remote locations, many working at remote locations and buying goods and services at the business mercantile. 
 
 # Domain
 

@@ -3,7 +3,7 @@ package people
 import (
 	"time"
 
-	"mining-app/backend/internal/db"
+	"enterpriseremotesystems/backend/internal/db"
 )
 
 func ToDTO(person db.Person) PersonDTO {
