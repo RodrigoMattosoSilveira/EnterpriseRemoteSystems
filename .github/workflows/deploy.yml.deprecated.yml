@@ -1,0 +1,331 @@
+name: Deploy Enterprise Remote Systems
+
+run-name: Deploy ${{ github.event_name == 'workflow_dispatch' && inputs.environment || github.ref_name }}
+
+on:
+  push:
+    branches:
+      - development
+      - test
+      - production
+
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Environment to deploy"
+        required: true
+        type: choice
+        options:
+          - development
+          - test
+          - production
+
+      deploy_edge:
+        description: "Also sync/reload the edge proxy from this branch"
+        required: false
+        default: false
+        type: boolean
+
+      run_deployed_playwright:
+        description: "Run Playwright against deployed environment. Ignored for production."
+        required: false
+        default: true
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-${{ github.event_name == 'workflow_dispatch' && inputs.environment || github.ref_name }}
+  cancel-in-progress: false
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
+jobs:
+  quality-gate:
+    name: Quality gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: "1.26"
+          cache-dependency-path: backend/go.sum
+
+      - name: Run backend tests
+        working-directory: backend
+        run: |
+          go mod download
+          go test ./...
+
+      - name: Set up Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Run frontend checks
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run check
+
+  deploy:
+    name: Deploy environment
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    needs:
+      - quality-gate
+
+    environment: ${{ github.event_name == 'workflow_dispatch' && inputs.environment || github.ref_name }}
+
+    env:
+      SERVER_ROOT: /opt/EnterpriseRemoteSystems
+      DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+      DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+
+    outputs:
+      env_name: ${{ steps.target.outputs.env_name }}
+      branch: ${{ steps.target.outputs.branch }}
+      domain: ${{ steps.target.outputs.domain }}
+      env_dir: ${{ steps.target.outputs.env_dir }}
+      make_prefix: ${{ steps.target.outputs.make_prefix }}
+      run_playwright_post_deploy: ${{ steps.target.outputs.run_playwright_post_deploy }}
+
+    steps:
+      - name: Resolve deployment target
+        id: target
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            TARGET_ENV="${{ inputs.environment }}"
+            MANUAL_EDGE="${{ inputs.deploy_edge }}"
+            MANUAL_PLAYWRIGHT="${{ inputs.run_deployed_playwright }}"
+          else
+            TARGET_ENV="${GITHUB_REF_NAME}"
+            MANUAL_EDGE="false"
+            MANUAL_PLAYWRIGHT="true"
+          fi
+
+          case "$TARGET_ENV" in
+            development)
+              echo "env_name=development" >> "$GITHUB_OUTPUT"
+              echo "branch=development" >> "$GITHUB_OUTPUT"
+              echo "env_dir=${SERVER_ROOT}/development" >> "$GITHUB_OUTPUT"
+              echo "make_prefix=server-dev" >> "$GITHUB_OUTPUT"
+              echo "domain=dev.enterpriseremotesystems.com" >> "$GITHUB_OUTPUT"
+              echo "deploy_edge=${MANUAL_EDGE}" >> "$GITHUB_OUTPUT"
+              echo "run_playwright_post_deploy=${MANUAL_PLAYWRIGHT}" >> "$GITHUB_OUTPUT"
+              ;;
+
+            test)
+              echo "env_name=test" >> "$GITHUB_OUTPUT"
+              echo "branch=test" >> "$GITHUB_OUTPUT"
+              echo "env_dir=${SERVER_ROOT}/test" >> "$GITHUB_OUTPUT"
+              echo "make_prefix=server-test" >> "$GITHUB_OUTPUT"
+              echo "domain=tst.enterpriseremotesystems.com" >> "$GITHUB_OUTPUT"
+              echo "deploy_edge=${MANUAL_EDGE}" >> "$GITHUB_OUTPUT"
+              echo "run_playwright_post_deploy=${MANUAL_PLAYWRIGHT}" >> "$GITHUB_OUTPUT"
+              ;;
+
+            production)
+              echo "env_name=production" >> "$GITHUB_OUTPUT"
+              echo "branch=production" >> "$GITHUB_OUTPUT"
+              echo "env_dir=${SERVER_ROOT}/production" >> "$GITHUB_OUTPUT"
+              echo "make_prefix=server-prod" >> "$GITHUB_OUTPUT"
+              echo "domain=app.enterpriseremotesystems.com" >> "$GITHUB_OUTPUT"
+
+              # Production is the canonical branch for edge deployment.
+              echo "deploy_edge=true" >> "$GITHUB_OUTPUT"
+
+              # Do not run deployed Playwright against production.
+              echo "run_playwright_post_deploy=false" >> "$GITHUB_OUTPUT"
+              ;;
+
+            *)
+              echo "Unsupported target environment: $TARGET_ENV"
+              exit 1
+              ;;
+          esac
+
+      - name: Configure SSH
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+
+          cat > ~/.ssh/id_ed25519 <<'EOF'
+          ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
+          EOF
+
+          chmod 600 ~/.ssh/id_ed25519
+
+          cat > ~/.ssh/known_hosts <<'EOF'
+          ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+          EOF
+
+          chmod 644 ~/.ssh/known_hosts
+
+      - name: Preflight server checks
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          ssh -i ~/.ssh/id_ed25519 \
+            "${DEPLOY_USER}@${DEPLOY_HOST}" \
+            "set -euo pipefail
+             test -d '${{ steps.target.outputs.env_dir }}'
+             test -f '${{ steps.target.outputs.env_dir }}/Makefile'
+             test -f '${{ steps.target.outputs.env_dir }}/docker-compose.server.yml'
+             test -f '${{ steps.target.outputs.env_dir }}/deploy/Caddyfile'
+             test -f '${{ steps.target.outputs.env_dir }}/scripts/init-server-env.sh'
+             echo 'Preflight checks passed for ${{ steps.target.outputs.env_name }}'
+            "
+
+      - name: Deploy app stack
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          ssh -i ~/.ssh/id_ed25519 \
+            "${DEPLOY_USER}@${DEPLOY_HOST}" \
+            "set -euo pipefail
+
+             cd '${{ steps.target.outputs.env_dir }}'
+
+             echo 'Deploying ${{ steps.target.outputs.env_name }} from branch ${{ steps.target.outputs.branch }}'
+
+             git fetch origin '${{ steps.target.outputs.branch }}'
+             git checkout -B '${{ steps.target.outputs.branch }}' 'origin/${{ steps.target.outputs.branch }}'
+
+             make ${{ steps.target.outputs.make_prefix }}-build
+             make ${{ steps.target.outputs.make_prefix }}-up
+             make ${{ steps.target.outputs.make_prefix }}-backend-health
+             make ${{ steps.target.outputs.make_prefix }}-env-caddy-health
+            "
+
+      - name: Deploy edge proxy when required
+        if: ${{ steps.target.outputs.deploy_edge == 'true' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          ssh -i ~/.ssh/id_ed25519 \
+            "${DEPLOY_USER}@${DEPLOY_HOST}" \
+            "set -euo pipefail
+
+             cd '${{ steps.target.outputs.env_dir }}'
+
+             echo 'Deploying edge proxy from ${{ steps.target.outputs.branch }} branch'
+
+             make edge-sync
+             make edge-up
+             make edge-reload
+            "
+
+      - name: Public smoke and admin-read tests
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          ssh -i ~/.ssh/id_ed25519 \
+            "${DEPLOY_USER}@${DEPLOY_HOST}" \
+            "set -euo pipefail
+
+             cd '${{ steps.target.outputs.env_dir }}'
+
+             echo 'Running public smoke tests for ${{ steps.target.outputs.domain }}'
+             make ${{ steps.target.outputs.make_prefix }}-smoke
+             make ${{ steps.target.outputs.make_prefix }}-admin-test
+            "
+
+      - name: Deployment summary
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo "## Deployment Summary"
+            echo
+            echo "| Item | Value |"
+            echo "|---|---|"
+            echo "| Environment | ${{ steps.target.outputs.env_name }} |"
+            echo "| Branch | ${{ steps.target.outputs.branch }} |"
+            echo "| Domain | ${{ steps.target.outputs.domain }} |"
+            echo "| Server folder | ${{ steps.target.outputs.env_dir }} |"
+            echo "| Make prefix | ${{ steps.target.outputs.make_prefix }} |"
+            echo "| Edge deployed | ${{ steps.target.outputs.deploy_edge }} |"
+            echo "| Deployed Playwright | ${{ steps.target.outputs.run_playwright_post_deploy }} |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  deployed-playwright:
+    name: Deployed Playwright E2E
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs:
+      - deploy
+
+    if: ${{ needs.deploy.outputs.run_playwright_post_deploy == 'true' }}
+
+    env:
+      PLAYWRIGHT_BASE_URL: https://${{ needs.deploy.outputs.domain }}
+      PLAYWRIGHT_SKIP_WEBSERVER: "true"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.deploy.outputs.branch }}
+
+      - name: Show deployed Playwright target
+        run: |
+          echo "PLAYWRIGHT_BASE_URL=${PLAYWRIGHT_BASE_URL}"
+          echo "PLAYWRIGHT_SKIP_WEBSERVER=${PLAYWRIGHT_SKIP_WEBSERVER}"
+
+      - name: Set up Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Install Playwright browsers
+        working-directory: frontend
+        run: npx playwright install --with-deps
+
+      - name: Run Playwright against deployed environment
+        working-directory: frontend
+        env:
+          PLAYWRIGHT_BASE_URL: ${{ env.PLAYWRIGHT_BASE_URL }}
+          PLAYWRIGHT_SKIP_WEBSERVER: "true"
+        run: npx playwright test
+
+      - name: Upload deployed Playwright report
+        if: always()
+        uses: actions/upload-artifact@v5
+        with:
+          name: deployed-playwright-report-${{ needs.deploy.outputs.env_name }}
+          path: frontend/playwright-report/
+          if-no-files-found: ignore
+
+      - name: Upload deployed Playwright test results
+        if: always()
+        uses: actions/upload-artifact@v5
+        with:
+          name: deployed-playwright-test-results-${{ needs.deploy.outputs.env_name }}
+          path: frontend/test-results/
+          if-no-files-found: ignore

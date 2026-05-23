@@ -1,5 +1,5 @@
 {
-  "name": "mining-collaborator-accounting-frontend",
+  "name": "enterpriseremotesystems-frontend",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -7,23 +7,32 @@
     "dev": "vite --host 0.0.0.0",
     "build": "tsc && vite build",
     "preview": "vite preview",
-    "test": "vitest"
+    "check": "tsc -b",
+    "test": "vitest",
+    "test:run": "vitest run",
+    "generate:api": "openapi-typescript ../contracts/openapi.yaml -o src/api/generated/schema.ts",
+    "bundle:openapi": "redocly bundle ../contracts/openapi.yaml -o ../contracts/openapi.bundle.yaml"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.100.5",
     "@vitejs/plugin-react": "latest",
     "axios": "^1.15.2",
+    "openapi-fetch": "^0.17.0",
     "react": "latest",
     "react-dom": "latest",
     "react-router-dom": "^7.14.2"
   },
   "devDependencies": {
+    "@redocly/cli": "^2.30.3",
     "@tailwindcss/vite": "^4.2.4",
+    "@testing-library/jest-dom": "^6.9.1",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
+    "jsdom": "^29.1.1",
     "tailwindcss": "^4.2.4",
     "typescript": "^6.0.3",
     "vite": "^8.0.10",
-    "vitest": "latest"
+    "vitest": "^4.1.7",
+    "yaml": "^2.8.4"
   }
 }

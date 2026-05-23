@@ -1,0 +1,14 @@
+dev.enterpriseremotesystems.com {
+	encode gzip zstd
+	reverse_proxy ers-dev-caddy:80
+}
+
+tst.enterpriseremotesystems.com {
+	encode gzip zstd
+	reverse_proxy ers-tst-caddy:80
+}
+
+app.enterpriseremotesystems.com {
+	encode gzip zstd
+	reverse_proxy ers-prd-caddy:80
+}

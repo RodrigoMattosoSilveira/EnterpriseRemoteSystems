@@ -1,0 +1,65 @@
+people:
+  get:
+    operationId: listPeople
+    responses:
+      "200":
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: "../openapi.yaml#/components/schemas/PeopleListResponse"
+
+  post:
+    operationId: createPerson
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "../openapi.yaml#/components/schemas/CreatePersonRequest"
+    responses:
+      "201":
+        description: Created
+        content:
+          application/json:
+            schema:
+              $ref: "../openapi.yaml#/components/schemas/PersonResponse"
+      "400":
+        $ref: "../openapi.yaml#/components/responses/ValidationError"
+
+personById:
+  get:
+    operationId: getPerson
+    parameters:
+      - $ref: "../openapi.yaml#/components/parameters/PersonID"
+    responses:
+      "200":
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: "../openapi.yaml#/components/schemas/PersonResponse"
+      "404":
+        $ref: "../openapi.yaml#/components/responses/NotFound"
+
+  put:
+    operationId: updatePerson
+    parameters:
+      - $ref: "../openapi.yaml#/components/parameters/PersonID"
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "../openapi.yaml#/components/schemas/UpdatePersonRequest"
+    responses:
+      "200":
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: "../openapi.yaml#/components/schemas/PersonResponse"
+      "400":
+        $ref: "../openapi.yaml#/components/responses/ValidationError"
+      "404":
+        $ref: "../openapi.yaml#/components/responses/NotFound"

@@ -2,8 +2,8 @@ package routes
 
 import (
 	"gorm.io/gorm"
-	"mining-app/backend/internal/people"
-	"mining-app/backend/internal/referencedata"
+	"enterpriseremotesystems/backend/internal/people"
+	"enterpriseremotesystems/backend/internal/referencedata"
 )
 
 type Dependencies struct {

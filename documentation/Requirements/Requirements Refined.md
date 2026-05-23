@@ -4,7 +4,7 @@ Owner: Rodrigo Silveira
 
 # Problem Domain
 
-Please build a mobile first app, that can run on a desktop, based on a Golang / Fiber backend, a SQLLite database using GORM, and a React Front End to track the earnings and expenses of business collaborators working for a mining company, many working at a remote location and buying goods and services at the business mercantile. 
+Please build a mobile first app, that can run on a desktop, based on a Golang / Fiber backend, a SQLLite database using GORM, and a React Front End to track the earnings and expenses of business collaborators working for a company with remote locations, many working at a remote location and buying goods and services at the business mercantile. 
 
 # Domain
 

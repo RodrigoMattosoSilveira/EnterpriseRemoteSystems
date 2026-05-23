@@ -3,7 +3,7 @@ package people
 import (
 	"github.com/gofiber/fiber/v3"
 
-	"mining-app/backend/internal/shared/httpx"
+	"enterpriseremotesystems/backend/internal/shared/httpx"
 )
 
 type Handler struct {

@@ -3,7 +3,7 @@ package people
 import (
 	"context"
 
-	"mining-app/backend/internal/db"
+	"enterpriseremotesystems/backend/internal/db"
 )
 
 type Repository interface {
