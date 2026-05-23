@@ -7,5 +7,7 @@ import (
 
 func RegisterHealthRoutes(server *fiber.App) {
 	h := health.NewHandler()
+
 	server.Get("/healthz", h.Healthz)
+	server.Get("/api/v1/healthz", h.Healthz)
 }

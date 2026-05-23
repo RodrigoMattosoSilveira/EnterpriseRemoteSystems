@@ -12,7 +12,7 @@ COPY backend/go.mod backend/go.sum* ./
 RUN go mod download
 COPY backend ./
 COPY --from=frontend /src/frontend/dist ./public
-RUN CGO_ENABLED=1 go build -o /out/enterpriseremotesystems ./cmd/server
+RUN CGO_ENABLED=0 go build -o /out/enterpriseremotesystems ./cmd/server
 
 FROM debian:bookworm-slim
 WORKDIR /app

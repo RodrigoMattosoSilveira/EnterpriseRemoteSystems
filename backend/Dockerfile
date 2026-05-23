@@ -1,35 +1,25 @@
-FROM golang:1.25-bookworm AS builder
+# syntax=docker/dockerfile:1
 
+FROM golang:1.26-bookworm AS builder
 WORKDIR /src
-
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    gcc \
-    libc6-dev \
-    sqlite3 \
-    libsqlite3-dev \
-    && rm -rf /var/lib/apt/lists/*
-
 COPY go.mod go.sum ./
 RUN go mod download
-
 COPY . .
+RUN CGO_ENABLED=0 GOOS=linux \
+    go build -o /out/enterprise-remote-systems-api ./cmd/api
 
-ENV CGO_ENABLED=1
-RUN go build -o /out/ers-api ./cmd/server
-
-FROM debian:bookworm-slim
-
-WORKDIR /app
-
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    sqlite3 \
-    libsqlite3-0 \
-    ca-certificates \
+FROM debian:bookworm-slim AS runtime
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates sqlite3 curl \
     && rm -rf /var/lib/apt/lists/*
-
-COPY --from=builder /out/ers-api /app/ers-api
+WORKDIR /app
+COPY --from=builder /out/enterprise-remote-systems-api /app/enterprise-remote-systems-api
 COPY migrations /app/migrations
-
+COPY docker-entrypoint.sh /app/docker-entrypoint.sh
+RUN chmod +x /app/docker-entrypoint.sh \
+    && mkdir -p /app/data
+ENV PORT=8080
+ENV DATABASE_PATH=/app/data/app.db
+ENV LLM_COACHING_ENABLED=false
 EXPOSE 8080
-
-CMD ["/app/ers-api"]
+ENTRYPOINT ["/app/docker-entrypoint.sh"]
