@@ -213,13 +213,13 @@ local-frontend:
 local-smoke:
 	curl -fsS http://localhost:8080/api/v1/healthz >/dev/null
 	curl -fsS http://localhost:5173/api/v1/healthz >/dev/null
-	curl -fsS http://localhost:5173/api/v1/scenarios >/dev/null
+	curl -fsS http://localhost:5173/api/v1/people >/dev/null
 	@echo "Local smoke tests passed."
 
 .PHONY: local-lan-smoke
 local-lan-smoke:
 	curl -fsS http://$(LAN_HOST):5173/api/v1/healthz >/dev/null
-	curl -fsS http://$(LAN_HOST):5173/api/v1/scenarios >/dev/null
+	curl -fsS http://$(LAN_HOST):5173/api/v1/people >/dev/null
 	@echo "LAN smoke test passed for $(LAN_HOST)."
 
 .PHONY: local-login-test
@@ -233,7 +233,7 @@ local-admin-test:
 	TOKEN=$$(curl -fsS -X POST http://localhost:5173/api/v1/auth/login \
 		-H "Content-Type: application/json" \
 		-d '{"email":"admin@example.com","password":"admin123"}' | jq -r '.data.token'); \
-	curl -fsS http://localhost:5173/api/v1/admin/scenarios \
+	curl -fsS http://localhost:5173/api/v1/admin/people \
 		-H "Authorization: Bearer $$TOKEN" | jq .
 
 # ==============================================================================
@@ -325,7 +325,7 @@ server-env-caddy-health:
 .PHONY: server-smoke
 server-smoke:
 	curl -fsS https://$(DOMAIN)/api/v1/healthz >/dev/null
-	curl -fsS https://$(DOMAIN)/api/v1/scenarios >/dev/null
+	curl -fsS https://$(DOMAIN)/api/v1/people >/dev/null
 	@echo "$(DOMAIN) smoke tests passed."
 
 .PHONY: server-admin-test
@@ -336,7 +336,7 @@ server-admin-test:
 	TOKEN=$$(curl -fsS -X POST https://$(DOMAIN)/api/v1/auth/login \
 		-H "Content-Type: application/json" \
 		-d "$$(printf '{"email":"%s","password":"%s"}' "$$ADMIN_EMAIL" "$$ADMIN_PASSWORD")" | jq -r '.data.token'); \
-	curl -fsS https://$(DOMAIN)/api/v1/admin/scenarios \
+	curl -fsS https://$(DOMAIN)/api/v1/admin/people \
 		-H "Authorization: Bearer $$TOKEN" | jq .
 
 .PHONY: server-dns-check
