@@ -2,7 +2,7 @@
 set -euo pipefail
 
 BACKUP_DIR="${BACKUP_DIR:-backups}"
-CONTAINER="${CONTAINER:-callitcureit-backend}"
+CONTAINER="${CONTAINER:-ers-backend}"
 DB_PATH="${DB_PATH:-/app/data/app.db}"
 
 mkdir -p "$BACKUP_DIR"

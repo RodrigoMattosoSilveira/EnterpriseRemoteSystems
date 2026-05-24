@@ -150,3 +150,5 @@ credentials/
 frontend/dist/
 backend/public/
 .env.development
+frontend/playwright-report/index.html
+frontend/test-results/.last-run.json

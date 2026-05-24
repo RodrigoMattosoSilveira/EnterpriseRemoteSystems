@@ -32,15 +32,15 @@ on:
         default: true
         type: boolean
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+  
 permissions:
   contents: read
 
 concurrency:
   group: deploy-${{ github.event_name == 'workflow_dispatch' && inputs.environment || github.ref_name }}
   cancel-in-progress: false
-
-env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
 
 jobs:
   quality-gate:
@@ -122,7 +122,7 @@ jobs:
               echo "branch=development" >> "$GITHUB_OUTPUT"
               echo "env_dir=${SERVER_ROOT}/development" >> "$GITHUB_OUTPUT"
               echo "make_prefix=server-dev" >> "$GITHUB_OUTPUT"
-              echo "domain=dev.enterpriseremotesystems.com" >> "$GITHUB_OUTPUT"
+              echo "domain=dev.callitcureit.com" >> "$GITHUB_OUTPUT"
               echo "deploy_edge=${MANUAL_EDGE}" >> "$GITHUB_OUTPUT"
               echo "run_playwright_post_deploy=${MANUAL_PLAYWRIGHT}" >> "$GITHUB_OUTPUT"
               ;;
@@ -132,7 +132,7 @@ jobs:
               echo "branch=test" >> "$GITHUB_OUTPUT"
               echo "env_dir=${SERVER_ROOT}/test" >> "$GITHUB_OUTPUT"
               echo "make_prefix=server-test" >> "$GITHUB_OUTPUT"
-              echo "domain=tst.enterpriseremotesystems.com" >> "$GITHUB_OUTPUT"
+              echo "domain=tst.callitcureit.com" >> "$GITHUB_OUTPUT"
               echo "deploy_edge=${MANUAL_EDGE}" >> "$GITHUB_OUTPUT"
               echo "run_playwright_post_deploy=${MANUAL_PLAYWRIGHT}" >> "$GITHUB_OUTPUT"
               ;;
@@ -142,7 +142,7 @@ jobs:
               echo "branch=production" >> "$GITHUB_OUTPUT"
               echo "env_dir=${SERVER_ROOT}/production" >> "$GITHUB_OUTPUT"
               echo "make_prefix=server-prod" >> "$GITHUB_OUTPUT"
-              echo "domain=app.enterpriseremotesystems.com" >> "$GITHUB_OUTPUT"
+              echo "domain=app.callitcureit.com" >> "$GITHUB_OUTPUT"
 
               # Production is the canonical branch for edge deployment.
               echo "deploy_edge=true" >> "$GITHUB_OUTPUT"
