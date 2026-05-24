@@ -149,8 +149,8 @@ jobs:
         run: |
           set -euo pipefail
 
-          go run ./cmd/api > /tmp/callitcureit-backend.log 2>&1 &
-          echo $! > /tmp/callitcureit-backend.pid
+          go run ./cmd/api > /tmp/ers-backend.log 2>&1 &
+          echo $! > /tmp/ers-backend.pid
 
       - name: Wait for backend
         shell: bash
@@ -168,7 +168,7 @@ jobs:
           done
 
           echo "Backend failed to start"
-          cat /tmp/callitcureit-backend.log
+          cat /tmp/ers-backend.log
           exit 1
 
       - name: Start frontend
@@ -179,8 +179,8 @@ jobs:
         run: |
           set -euo pipefail
 
-          npm run dev -- --host 0.0.0.0 --port 5173 > /tmp/callitcureit-frontend.log 2>&1 &
-          echo $! > /tmp/callitcureit-frontend.pid
+          npm run dev -- --host 0.0.0.0 --port 5173 > /tmp/ers-frontend.log 2>&1 &
+          echo $! > /tmp/ers-frontend.pid
 
       - name: Wait for frontend
         shell: bash
@@ -198,7 +198,7 @@ jobs:
           done
 
           echo "Frontend failed to start"
-          cat /tmp/callitcureit-frontend.log
+          cat /tmp/ers-frontend.log
           exit 1
 
       - name: Run Playwright tests
@@ -231,7 +231,7 @@ jobs:
         uses: actions/upload-artifact@v5
         with:
           name: backend-log
-          path: /tmp/callitcureit-backend.log
+          path: /tmp/ers-backend.log
           if-no-files-found: ignore
 
       - name: Upload frontend log
@@ -239,5 +239,5 @@ jobs:
         uses: actions/upload-artifact@v5
         with:
           name: frontend-log
-          path: /tmp/callitcureit-frontend.log
+          path: /tmp/ers-frontend.log
           if-no-files-found: ignore
