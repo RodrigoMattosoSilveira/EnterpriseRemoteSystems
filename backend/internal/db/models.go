@@ -38,10 +38,10 @@ type Person struct {
 	City    string `gorm:"type:text" json:"city,omitempty"`
 	Country string `gorm:"type:text;not null;default:Brasil" json:"country"`
 
-	BankName        string `gorm:"type:text" json:"bankName,omitempty"`
-	BankNumber      string `gorm:"type:text" json:"bankNumber,omitempty"`
-	CheckingAccount string `gorm:"type:text" json:"checkingAccount,omitempty"`
-	PIXKey          string `gorm:"column:pix_key;type:text;uniqueIndex" json:"pixKey,omitempty"`
+	BankName        string  `gorm:"type:text" json:"bankName,omitempty"`
+	BankNumber      string  `gorm:"type:text" json:"bankNumber,omitempty"`
+	CheckingAccount string  `gorm:"type:text" json:"checkingAccount,omitempty"`
+	PIXKey          *string `gorm:"column:pix_key;type:text;uniqueIndex" json:"pixKey,omitempty"`
 
 	EmergencyName     string `gorm:"type:text" json:"emergencyName,omitempty"`
 	EmergencyCellular string `gorm:"type:text" json:"emergencyCellular,omitempty"`
@@ -53,6 +53,6 @@ type Person struct {
 	StatusID string `gorm:"type:text;not null;index" json:"statusId"`
 	Notes    string `gorm:"type:text" json:"notes,omitempty"`
 
-	Status   ReferenceData         `gorm:"foreignKey:StatusID;constraint:OnUpdate:Restrict,OnDelete:Restrict;" json:"status,omitempty"`
+	Status ReferenceData `gorm:"foreignKey:StatusID;constraint:OnUpdate:Restrict,OnDelete:Restrict;" json:"status,omitempty"`
 	// Journeys []CollaboratorJourney `gorm:"foreignKey:PersonID" json:"journeys,omitempty"`
 }

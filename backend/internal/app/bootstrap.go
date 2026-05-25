@@ -3,12 +3,12 @@ package app
 import (
 	"log"
 
-	"github.com/gofiber/fiber/v3"
 	"enterpriseremotesystems/backend/internal/db"
 	httpserver "enterpriseremotesystems/backend/internal/http"
 	"enterpriseremotesystems/backend/internal/http/routes"
 	"enterpriseremotesystems/backend/internal/people"
 	"enterpriseremotesystems/backend/internal/referencedata"
+	"github.com/gofiber/fiber/v3"
 )
 
 func Bootstrap(cfg Config) (*fiber.App, func(), error) {
@@ -17,6 +17,9 @@ func Bootstrap(cfg Config) (*fiber.App, func(), error) {
 		return nil, nil, err
 	}
 	if err := db.AutoMigrate(database); err != nil {
+		return nil, nil, err
+	}
+	if err := db.SeedReferenceData(database); err != nil {
 		return nil, nil, err
 	}
 

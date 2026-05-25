@@ -21,7 +21,7 @@ func ToDTO(person db.Person) PersonDTO {
 		BankName:          person.BankName,
 		BankNumber:        person.BankNumber,
 		CheckingAccount:   person.CheckingAccount,
-		PIXKey:            person.PIXKey,
+		PIXKey:            stringValue(person.PIXKey),
 		EmergencyName:     person.EmergencyName,
 		EmergencyCellular: person.EmergencyCellular,
 		EmergencyEmail:    person.EmergencyEmail,
@@ -49,7 +49,7 @@ func ToDTO(person db.Person) PersonDTO {
 		BankName:        person.BankName,
 		BankNumber:      person.BankNumber,
 		CheckingAccount: person.CheckingAccount,
-		PIXKey:          person.PIXKey,
+		PIXKey:          stringValue(person.PIXKey),
 
 		EmergencyName:     person.EmergencyName,
 		EmergencyCellular: person.EmergencyCellular,
@@ -81,4 +81,10 @@ func formatTime(value time.Time) string {
 		return ""
 	}
 	return value.UTC().Format(time.RFC3339)
+}
+func stringValue(value *string) string {
+	if value == nil {
+		return ""
+	}
+	return *value
 }
