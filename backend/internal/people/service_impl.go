@@ -35,7 +35,7 @@ func (s *service) Create(ctx context.Context, req CreatePersonRequest, actorUser
 		return nil, err
 	}
 
-	exists, err := s.repo.ExistsByUniqueFields(
+	conflicts, err := s.repo.UniqueConflicts(
 		ctx,
 		NormalizeDigits(req.CPF),
 		strings.TrimSpace(req.RG),
@@ -47,12 +47,8 @@ func (s *service) Create(ctx context.Context, req CreatePersonRequest, actorUser
 	if err != nil {
 		return nil, err
 	}
-	if exists {
-		return nil, ValidationError{
-			Fields: map[string]string{
-				"person": "CPF, RG, cellular, email, or PIX already exists",
-			},
-		}
+	if len(conflicts) > 0 {
+		return nil, uniqueConflictValidationError(conflicts)
 	}
 
 	completion := ComputeCompletion(completionInput{})
@@ -124,7 +120,7 @@ func (s *service) Update(ctx context.Context, id string, req UpdatePersonRequest
 		pixKey = ""
 	}
 
-	exists, err := s.repo.ExistsByUniqueFields(
+	conflicts, err := s.repo.UniqueConflicts(
 		ctx,
 		NormalizeDigits(req.CPF),
 		strings.TrimSpace(req.RG),
@@ -136,12 +132,8 @@ func (s *service) Update(ctx context.Context, id string, req UpdatePersonRequest
 	if err != nil {
 		return nil, err
 	}
-	if exists {
-		return nil, ValidationError{
-			Fields: map[string]string{
-				"person": "CPF, RG, cellular, email, or PIX already exists",
-			},
-		}
+	if len(conflicts) > 0 {
+		return nil, uniqueConflictValidationError(conflicts)
 	}
 
 	country := defaultCountry(req.Country)
@@ -239,4 +231,24 @@ func (s *service) validatePersonStatus(ctx context.Context, statusID string) err
 			"statusId": "Status must be an active person status",
 		},
 	}
+}
+
+func uniqueConflictValidationError(conflicts map[string]bool) ValidationError {
+	fields := map[string]string{}
+
+	messages := map[string]string{
+		"cpf":      "CPF already exists",
+		"rg":       "RG already exists",
+		"cellular": "Cellular already exists",
+		"email":    "Email already exists",
+		"pixKey":   "PIX key already exists",
+	}
+
+	for field, message := range messages {
+		if conflicts[field] {
+			fields[field] = message
+		}
+	}
+
+	return ValidationError{Fields: fields}
 }
