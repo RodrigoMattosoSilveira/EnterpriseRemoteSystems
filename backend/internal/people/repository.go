@@ -11,8 +11,9 @@ type Repository interface {
 	Create(ctx context.Context, person *db.Person) error
 	FindByID(ctx context.Context, id string) (*db.Person, error)
 	Update(ctx context.Context, person *db.Person) error
+	ExistsActivePersonStatus(ctx context.Context, statusID string) (bool, error)
 
-	ExistsByUniqueFields(
+	UniqueConflicts(
 		ctx context.Context,
 		cpf string,
 		rg string,
@@ -20,5 +21,5 @@ type Repository interface {
 		email string,
 		pixKey *string,
 		excludeID *string,
-	) (bool, error)
+	) (map[string]bool, error)
 }
