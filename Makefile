@@ -2,12 +2,12 @@ SHELL := /usr/bin/env bash
 .DEFAULT_GOAL := help
 
 # ==============================================================================
-# Call It Cure It - Root Makefile
+# Enterprise Remote Systems - Root Makefile
 # ==============================================================================
 
 SERVER_ROOT ?= /opt/EnterpriseRemoteSystems
 REPO_URL ?= git@github.com:RodrigoMattosoSilveira/EnterpriseRemoteSystems.git
-LAN_HOST ?= 5.78.208.230
+LAN_HOST ?= 178.105.46.193
 
 ENV ?= development
 
@@ -46,7 +46,7 @@ EDGE_DIR := $(SERVER_ROOT)/edge
 
 .PHONY: help
 help:
-	@echo "Call It Cure It Makefile"
+	@echo "Enterprise Remote Systems Makefile"
 	@echo
 	@echo "Local development:"
 	@echo "  make doctor"
@@ -61,7 +61,7 @@ help:
 	@echo "  make local-backend"
 	@echo "  make local-frontend"
 	@echo "  make local-smoke"
-	@echo "  make local-lan-smoke LAN_HOST=LAN_HOST"
+	@echo "  make local-lan-smoke LAN_HOST=$(ipconfig getifaddr en0)"
 	@echo "  make local-login-test"
 	@echo "  make local-admin-test"
 	@echo
@@ -222,11 +222,14 @@ local-lan-smoke:
 	curl -fsS http://$(LAN_HOST):5173/api/v1/people >/dev/null
 	@echo "LAN smoke test passed for $(LAN_HOST)."
 
-.PHONY: local-login-test
-local-login-test:
-	curl -fsS -X POST http://localhost:5173/api/v1/auth/login \
+.PHONY: local-people-create-test
+local-people-create-test:
+	curl -sS -X POST http://localhost:5173/api/v1/people/ \
 		-H "Content-Type: application/json" \
-		-d '{"email":"admin@example.com","password":"admin123"}' | jq .
+		-d '{"firstName":"Maria","lastName":"Silva","nickname":"Mari","cpf":"52998224725","rg":"123456789","cellular":"11987654321","email":"maria.silva@example.com","statusId":1}' | jq .
+
+.PHONY: local-login-test
+local-login-test: local-people-create-test
 
 .PHONY: local-admin-test
 local-admin-test:

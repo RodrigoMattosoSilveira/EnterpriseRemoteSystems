@@ -11,7 +11,8 @@
     "test": "vitest",
     "test:run": "vitest run",
     "generate:api": "openapi-typescript ../contracts/openapi.yaml -o src/api/generated/schema.ts",
-    "bundle:openapi": "redocly bundle ../contracts/openapi.yaml -o ../contracts/openapi.bundle.yaml"
+    "bundle:openapi": "redocly bundle ../contracts/openapi.yaml -o ../contracts/openapi.bundle.yaml",
+    "test:e2e": "playwright test"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.100.5",

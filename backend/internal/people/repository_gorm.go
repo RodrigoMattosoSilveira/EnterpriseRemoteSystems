@@ -80,7 +80,7 @@ func (r *gormRepository) Create(ctx context.Context, person *db.Person) error {
 }
 func (r *gormRepository) FindByID(ctx context.Context, id string) (*db.Person, error) {
 	var row db.Person
-	err := r.db.WithContext(ctx).First(&row, "id = ?", id).Error
+	err := r.db.WithContext(ctx).Preload("Status").First(&row, "id = ?", id).Error
 	if err != nil {
 		return nil, err
 	}
@@ -89,6 +89,19 @@ func (r *gormRepository) FindByID(ctx context.Context, id string) (*db.Person, e
 func (r *gormRepository) Update(ctx context.Context, person *db.Person) error {
 	return r.db.WithContext(ctx).Save(person).Error
 }
+
+func (r *gormRepository) ExistsActivePersonStatus(ctx context.Context, statusID string) (bool, error) {
+	var count int64
+	err := r.db.WithContext(ctx).
+		Model(&db.ReferenceData{}).
+		Where("id = ? AND type = ? AND active = ?", statusID, "person_status", true).
+		Count(&count).Error
+	if err != nil {
+		return false, err
+	}
+	return count > 0, nil
+}
+
 func (r *gormRepository) ExistsByUniqueFields(
 	ctx context.Context,
 	cpf string,

@@ -31,6 +31,10 @@ func (s *service) Create(ctx context.Context, req CreatePersonRequest, actorUser
 		return nil, err
 	}
 
+	if err := s.validatePersonStatus(ctx, req.StatusID); err != nil {
+		return nil, err
+	}
+
 	exists, err := s.repo.ExistsByUniqueFields(
 		ctx,
 		NormalizeDigits(req.CPF),
@@ -106,6 +110,10 @@ func (s *service) Update(ctx context.Context, id string, req UpdatePersonRequest
 		return nil, err
 	}
 
+	if err := s.validatePersonStatus(ctx, req.StatusID); err != nil {
+		return nil, err
+	}
+
 	person, err := s.repo.FindByID(ctx, id)
 	if err != nil {
 		return nil, err
@@ -172,7 +180,7 @@ func (s *service) Update(ctx context.Context, id string, req UpdatePersonRequest
 	person.BankName = strings.TrimSpace(req.BankName)
 	person.BankNumber = strings.TrimSpace(req.BankNumber)
 	person.CheckingAccount = strings.TrimSpace(req.CheckingAccount)
-	person.PIXKey = pixKey
+	person.PIXKey = emptyToNil(pixKey)
 
 	person.EmergencyName = strings.TrimSpace(req.EmergencyName)
 	person.EmergencyCellular = NormalizeDigits(req.EmergencyCellular)
@@ -217,4 +225,18 @@ func emptyToNil(value string) *string {
 
 func ptr[T any](value T) *T {
 	return &value
+}
+func (s *service) validatePersonStatus(ctx context.Context, statusID string) error {
+	exists, err := s.repo.ExistsActivePersonStatus(ctx, strings.TrimSpace(statusID))
+	if err != nil {
+		return err
+	}
+	if exists {
+		return nil
+	}
+	return ValidationError{
+		Fields: map[string]string{
+			"statusId": "Status must be an active person status",
+		},
+	}
 }

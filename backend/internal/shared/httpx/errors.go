@@ -2,6 +2,7 @@ package httpx
 
 import (
 	"errors"
+	"log"
 
 	"github.com/gofiber/fiber/v3"
 	"gorm.io/gorm"
@@ -47,6 +48,8 @@ func WriteError(c fiber.Ctx, err error) error {
 			},
 		})
 	}
+
+	log.Printf("internal API error: %v", err)
 
 	return c.Status(fiber.StatusInternalServerError).JSON(APIResponse{
 		Error: &APIError{
