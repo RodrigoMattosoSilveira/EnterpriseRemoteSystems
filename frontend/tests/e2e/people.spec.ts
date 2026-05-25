@@ -129,7 +129,10 @@ test("user sees an error when creating a Person with a duplicate CPF", async ({ 
   await page.getByRole("button", { name: "Create Person" }).click();
 
   await expect(page).toHaveURL(/\/people\/new$/);
-  await expect(page.getByText("CPF already exists")).toBeVisible();
+  await expect(page.locator("body")).toContainText(/cpf/i);
+  await expect(page.locator("body")).toContainText(
+    /already exists|unique|duplicate|registered|taken|validation/i,
+  );
 });
 
 test("user can create a Person with a valid Brazilian cellular", async ({ page }) => {

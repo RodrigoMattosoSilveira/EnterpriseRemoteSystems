@@ -64,6 +64,7 @@ help:
 	@echo "  make local-lan-smoke LAN_HOST=$(ipconfig getifaddr en0)"
 	@echo "  make local-login-test"
 	@echo "  make local-admin-test"
+	@echo "  make local-check"
 	@echo
 	@echo "Generic server targets:"
 	@echo "  make server-init-env ENV=development|test|production"
@@ -235,6 +236,13 @@ local-login-test: local-people-create-test
 local-admin-test:
 	@echo "No local admin API test is currently defined for Enterprise Remote Systems."
 
+.PHONY: local-check
+local-check:
+	cd backend && go test ./...
+	cd frontend && npm run test:run
+	cd frontend && npx playwright test
+	cd frontend && npm run build
+	
 # ==============================================================================
 # Generic server environment targets
 # ==============================================================================
