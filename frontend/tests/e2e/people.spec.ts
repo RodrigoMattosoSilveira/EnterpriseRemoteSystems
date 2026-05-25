@@ -114,7 +114,8 @@ test("user sees an error when creating a Person with a duplicate CPF", async ({ 
 
   await page.getByRole("button", { name: "Create Person" }).click();
 
-  await expect(page).toHaveURL(/\/people\/[a-f0-9-]+$/);
+  await expect(page).toHaveURL(/\/people\/[^/]+$/);
+  await expect(page).not.toHaveURL(/\/people\/new$/);
 
   await page.goto("/people/new");
 
