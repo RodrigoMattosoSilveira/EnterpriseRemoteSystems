@@ -80,7 +80,7 @@ func (r *gormRepository) Create(ctx context.Context, person *db.Person) error {
 }
 func (r *gormRepository) FindByID(ctx context.Context, id string) (*db.Person, error) {
 	var row db.Person
-	err := r.db.WithContext(ctx).First(&row, "id = ?", id).Error
+	err := r.db.WithContext(ctx).Preload("Status").First(&row, "id = ?", id).Error
 	if err != nil {
 		return nil, err
 	}
@@ -89,7 +89,20 @@ func (r *gormRepository) FindByID(ctx context.Context, id string) (*db.Person, e
 func (r *gormRepository) Update(ctx context.Context, person *db.Person) error {
 	return r.db.WithContext(ctx).Save(person).Error
 }
-func (r *gormRepository) ExistsByUniqueFields(
+
+func (r *gormRepository) ExistsActivePersonStatus(ctx context.Context, statusID string) (bool, error) {
+	var count int64
+	err := r.db.WithContext(ctx).
+		Model(&db.ReferenceData{}).
+		Where("id = ? AND type = ? AND active = ?", statusID, "person_status", true).
+		Count(&count).Error
+	if err != nil {
+		return false, err
+	}
+	return count > 0, nil
+}
+
+func (r *gormRepository) UniqueConflicts(
 	ctx context.Context,
 	cpf string,
 	rg string,
@@ -97,28 +110,42 @@ func (r *gormRepository) ExistsByUniqueFields(
 	email string,
 	pixKey *string,
 	excludeID *string,
-) (bool, error) {
-	var count int64
+) (map[string]bool, error) {
+	conflicts := map[string]bool{}
 
-	query := r.db.WithContext(ctx).Model(&db.Person{})
-
-	if excludeID != nil && *excludeID != "" {
-		query = query.Where("id <> ?", *excludeID)
+	checks := []struct {
+		field  string
+		column string
+		value  string
+	}{
+		{field: "cpf", column: "cpf", value: cpf},
+		{field: "rg", column: "rg", value: rg},
+		{field: "cellular", column: "cellular", value: cellular},
+		{field: "email", column: "email", value: email},
 	}
-
-	conditions := r.db.
-		Where("cpf = ?", cpf).
-		Or("rg = ?", rg).
-		Or("cellular = ?", cellular).
-		Or("email = ?", email)
 
 	if pixKey != nil && *pixKey != "" {
-		conditions = conditions.Or("pix_key = ?", *pixKey)
+		checks = append(checks, struct {
+			field  string
+			column string
+			value  string
+		}{field: "pixKey", column: "pix_key", value: *pixKey})
 	}
 
-	if err := query.Where(conditions).Count(&count).Error; err != nil {
-		return false, err
+	for _, check := range checks {
+		query := r.db.WithContext(ctx).Model(&db.Person{}).Where(check.column+" = ?", check.value)
+		if excludeID != nil && *excludeID != "" {
+			query = query.Where("id <> ?", *excludeID)
+		}
+
+		var count int64
+		if err := query.Count(&count).Error; err != nil {
+			return nil, err
+		}
+		if count > 0 {
+			conflicts[check.field] = true
+		}
 	}
 
-	return count > 0, nil
+	return conflicts, nil
 }

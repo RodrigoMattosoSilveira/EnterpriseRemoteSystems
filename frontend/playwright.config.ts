@@ -54,11 +54,18 @@ export default defineConfig({
   ],
 
   webServer: skipWebServer
-    ? undefined
-    : {
+  ? undefined
+  : [
+      {
+        command: "cd .. && make local-backend",
+        url: "http://localhost:8080/healthz",
+        reuseExistingServer: !isCI,
+        timeout: 120_000,
+      },
+      {
         command: "npm run dev -- --host 0.0.0.0 --port 5173",
         url: "http://localhost:5173",
         reuseExistingServer: !isCI,
         timeout: 120_000,
       },
-});
+    ],});

@@ -31,7 +31,11 @@ func (s *service) Create(ctx context.Context, req CreatePersonRequest, actorUser
 		return nil, err
 	}
 
-	exists, err := s.repo.ExistsByUniqueFields(
+	if err := s.validatePersonStatus(ctx, req.StatusID); err != nil {
+		return nil, err
+	}
+
+	conflicts, err := s.repo.UniqueConflicts(
 		ctx,
 		NormalizeDigits(req.CPF),
 		strings.TrimSpace(req.RG),
@@ -43,12 +47,8 @@ func (s *service) Create(ctx context.Context, req CreatePersonRequest, actorUser
 	if err != nil {
 		return nil, err
 	}
-	if exists {
-		return nil, ValidationError{
-			Fields: map[string]string{
-				"person": "CPF, RG, cellular, email, or PIX already exists",
-			},
-		}
+	if len(conflicts) > 0 {
+		return nil, uniqueConflictValidationError(conflicts)
 	}
 
 	completion := ComputeCompletion(completionInput{})
@@ -106,6 +106,10 @@ func (s *service) Update(ctx context.Context, id string, req UpdatePersonRequest
 		return nil, err
 	}
 
+	if err := s.validatePersonStatus(ctx, req.StatusID); err != nil {
+		return nil, err
+	}
+
 	person, err := s.repo.FindByID(ctx, id)
 	if err != nil {
 		return nil, err
@@ -116,7 +120,7 @@ func (s *service) Update(ctx context.Context, id string, req UpdatePersonRequest
 		pixKey = ""
 	}
 
-	exists, err := s.repo.ExistsByUniqueFields(
+	conflicts, err := s.repo.UniqueConflicts(
 		ctx,
 		NormalizeDigits(req.CPF),
 		strings.TrimSpace(req.RG),
@@ -128,12 +132,8 @@ func (s *service) Update(ctx context.Context, id string, req UpdatePersonRequest
 	if err != nil {
 		return nil, err
 	}
-	if exists {
-		return nil, ValidationError{
-			Fields: map[string]string{
-				"person": "CPF, RG, cellular, email, or PIX already exists",
-			},
-		}
+	if len(conflicts) > 0 {
+		return nil, uniqueConflictValidationError(conflicts)
 	}
 
 	country := defaultCountry(req.Country)
@@ -172,7 +172,7 @@ func (s *service) Update(ctx context.Context, id string, req UpdatePersonRequest
 	person.BankName = strings.TrimSpace(req.BankName)
 	person.BankNumber = strings.TrimSpace(req.BankNumber)
 	person.CheckingAccount = strings.TrimSpace(req.CheckingAccount)
-	person.PIXKey = pixKey
+	person.PIXKey = emptyToNil(pixKey)
 
 	person.EmergencyName = strings.TrimSpace(req.EmergencyName)
 	person.EmergencyCellular = NormalizeDigits(req.EmergencyCellular)
@@ -217,4 +217,38 @@ func emptyToNil(value string) *string {
 
 func ptr[T any](value T) *T {
 	return &value
+}
+func (s *service) validatePersonStatus(ctx context.Context, statusID string) error {
+	exists, err := s.repo.ExistsActivePersonStatus(ctx, strings.TrimSpace(statusID))
+	if err != nil {
+		return err
+	}
+	if exists {
+		return nil
+	}
+	return ValidationError{
+		Fields: map[string]string{
+			"statusId": "Status must be an active person status",
+		},
+	}
+}
+
+func uniqueConflictValidationError(conflicts map[string]bool) ValidationError {
+	fields := map[string]string{}
+
+	messages := map[string]string{
+		"cpf":      "CPF already exists",
+		"rg":       "RG already exists",
+		"cellular": "Cellular already exists",
+		"email":    "Email already exists",
+		"pixKey":   "PIX key already exists",
+	}
+
+	for field, message := range messages {
+		if conflicts[field] {
+			fields[field] = message
+		}
+	}
+
+	return ValidationError{Fields: fields}
 }

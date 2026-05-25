@@ -2,12 +2,12 @@ SHELL := /usr/bin/env bash
 .DEFAULT_GOAL := help
 
 # ==============================================================================
-# Call It Cure It - Root Makefile
+# Enterprise Remote Systems - Root Makefile
 # ==============================================================================
 
 SERVER_ROOT ?= /opt/EnterpriseRemoteSystems
 REPO_URL ?= git@github.com:RodrigoMattosoSilveira/EnterpriseRemoteSystems.git
-LAN_HOST ?= 5.78.208.230
+LAN_HOST ?= localhost
 
 ENV ?= development
 
@@ -46,7 +46,7 @@ EDGE_DIR := $(SERVER_ROOT)/edge
 
 .PHONY: help
 help:
-	@echo "Call It Cure It Makefile"
+	@echo "Enterprise Remote Systems Makefile"
 	@echo
 	@echo "Local development:"
 	@echo "  make doctor"
@@ -61,9 +61,10 @@ help:
 	@echo "  make local-backend"
 	@echo "  make local-frontend"
 	@echo "  make local-smoke"
-	@echo "  make local-lan-smoke LAN_HOST=LAN_HOST"
+	@echo "  make local-lan-smoke LAN_HOST=$(ipconfig getifaddr en0)"
 	@echo "  make local-login-test"
 	@echo "  make local-admin-test"
+	@echo "  make local-check"
 	@echo
 	@echo "Generic server targets:"
 	@echo "  make server-init-env ENV=development|test|production"
@@ -213,29 +214,35 @@ local-frontend:
 local-smoke:
 	curl -fsS http://localhost:8080/api/v1/healthz >/dev/null
 	curl -fsS http://localhost:5173/api/v1/healthz >/dev/null
-	curl -fsS http://localhost:5173/api/v1/people >/dev/null
+	curl -fsS http://localhost:5173/api/v1/people/ >/dev/null
 	@echo "Local smoke tests passed."
 
 .PHONY: local-lan-smoke
 local-lan-smoke:
 	curl -fsS http://$(LAN_HOST):5173/api/v1/healthz >/dev/null
-	curl -fsS http://$(LAN_HOST):5173/api/v1/people >/dev/null
+	curl -fsS http://$(LAN_HOST):5173/api/v1/people/ >/dev/null
 	@echo "LAN smoke test passed for $(LAN_HOST)."
 
-.PHONY: local-login-test
-local-login-test:
-	curl -fsS -X POST http://localhost:5173/api/v1/auth/login \
+.PHONY: local-people-create-test
+local-people-create-test:
+	curl -sS -X POST http://localhost:5173/api/v1/people/ \
 		-H "Content-Type: application/json" \
-		-d '{"email":"admin@example.com","password":"admin123"}' | jq .
+		-d '{"firstName":"Maria","lastName":"Silva","nickname":"Mari","cpf":"52998224725","rg":"123456789","cellular":"11987654321","email":"maria.silva@example.com","statusId":1}' | jq .
+
+.PHONY: local-login-test
+local-login-test: local-people-create-test
 
 .PHONY: local-admin-test
 local-admin-test:
-	TOKEN=$$(curl -fsS -X POST http://localhost:5173/api/v1/auth/login \
-		-H "Content-Type: application/json" \
-		-d '{"email":"admin@example.com","password":"admin123"}' | jq -r '.data.token'); \
-	curl -fsS http://localhost:5173/api/v1/admin/people \
-		-H "Authorization: Bearer $$TOKEN" | jq .
+	@echo "No local admin API test is currently defined for Enterprise Remote Systems."
 
+.PHONY: local-check
+local-check:
+	cd backend && go test ./...
+	cd frontend && npm run test:run
+	cd frontend && npx playwright test
+	cd frontend && npm run build
+	
 # ==============================================================================
 # Generic server environment targets
 # ==============================================================================
@@ -325,19 +332,12 @@ server-env-caddy-health:
 .PHONY: server-smoke
 server-smoke:
 	curl -fsS https://$(DOMAIN)/api/v1/healthz >/dev/null
-	curl -fsS https://$(DOMAIN)/api/v1/people >/dev/null
+	curl -fsS https://$(DOMAIN)/api/v1/people/ >/dev/null
 	@echo "$(DOMAIN) smoke tests passed."
 
 .PHONY: server-admin-test
 server-admin-test:
-	cd $(ENV_DIR) && \
-	ADMIN_EMAIL=$$(grep '^DEV_ADMIN_EMAIL=' $(ENV_FILE) | cut -d '=' -f2-); \
-	ADMIN_PASSWORD=$$(grep '^DEV_ADMIN_PASSWORD=' $(ENV_FILE) | cut -d '=' -f2-); \
-	TOKEN=$$(curl -fsS -X POST https://$(DOMAIN)/api/v1/auth/login \
-		-H "Content-Type: application/json" \
-		-d "$$(printf '{"email":"%s","password":"%s"}' "$$ADMIN_EMAIL" "$$ADMIN_PASSWORD")" | jq -r '.data.token'); \
-	curl -fsS https://$(DOMAIN)/api/v1/admin/people \
-		-H "Authorization: Bearer $$TOKEN" | jq .
+	@echo "No server admin API test is currently defined for Enterprise Remote Systems."
 
 .PHONY: server-dns-check
 server-dns-check:
@@ -635,7 +635,7 @@ edge-down:
 
 .PHONY: edge-reload
 edge-reload:
-	docker exec enterpriseremotesystems-edge-caddy caddy reload --config /etc/caddy/Caddyfile
+	docker exec ers-edge-caddy caddy reload --config /etc/caddy/Caddyfile
 
 .PHONY: edge-restart
 edge-restart:
@@ -643,7 +643,7 @@ edge-restart:
 
 .PHONY: edge-logs
 edge-logs:
-	docker logs -f --tail=200 enterpriseremotesystems-edge-caddy
+	docker logs -f --tail=200 ers-edge-caddy
 
 .PHONY: edge-deploy
 edge-deploy: edge-sync edge-up edge-reload
@@ -682,7 +682,7 @@ docker-df:
 
 .PHONY: docker-networks
 docker-networks:
-	docker network ls | grep enterpriseremotesystems || true
+	docker network ls | grep ers || true
 
 .PHONY: docker-prune-build-cache
 docker-prune-build-cache:

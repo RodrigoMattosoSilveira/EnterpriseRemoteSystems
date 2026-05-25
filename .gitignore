@@ -148,5 +148,12 @@ credentials/
 # Optional generated frontend assets if served by Go backend
 # =========================================================
 frontend/dist/
+frontend/test-results/
+frontend/playwright-report/
 backend/public/
+backend/data/
 .env.development
+frontend/playwright-report/index.html
+frontend/test-results/.last-run.json
+backend/data/app.db?_foreign_keys=on&_journal_mode=WAL&_busy_timeout=5000
+backend/data/app.db?_foreign_keys=on&_journal_mode=WAL&_busy_timeout=5000

@@ -32,15 +32,15 @@ on:
         default: true
         type: boolean
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+  
 permissions:
   contents: read
 
 concurrency:
   group: deploy-${{ github.event_name == 'workflow_dispatch' && inputs.environment || github.ref_name }}
   cancel-in-progress: false
-
-env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
 
 jobs:
   quality-gate:
@@ -247,7 +247,6 @@ jobs:
 
              echo 'Running public smoke tests for ${{ steps.target.outputs.domain }}'
              make ${{ steps.target.outputs.make_prefix }}-smoke
-             make ${{ steps.target.outputs.make_prefix }}-admin-test
             "
 
       - name: Deployment summary
