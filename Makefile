@@ -120,6 +120,10 @@ help:
 	@echo "  make docker-ps"
 	@echo "  make docker-df"
 	@echo "  make docker-prune-build-cache"
+	@echo
+	@echo "Import people from CSV:"
+	@echo "  make import-people-dry-run file=backend/imports/people.csv"
+	@echo "  make import-people file=backend/imports/people.csv"
 
 # ==============================================================================
 # Local validation
@@ -195,10 +199,6 @@ backend-check:
 .PHONY: frontend-check
 frontend-check:
 	cd frontend && npm install && npm run check
-
-.PHONY: local-check
-local-check: check-repo backend-check frontend-check
-	@echo "Local checks passed."
 
 .PHONY: local-backend
 local-backend:
@@ -689,3 +689,13 @@ docker-prune-build-cache:
 	docker builder prune -f
 	docker image prune -f
 	docker container prune -f
+
+.PHONY: import-people-dry-run
+import-people-dry-run:
+	@test -n "$(file)" || (echo "Usage: make import-people-dry-run file=backend/imports/people.csv" && exit 2)
+	cd backend && go run ./cmd/import-people -db data/app.db -file ../$(file) -dry-run
+
+.PHONY: import-people
+import-people:
+	@test -n "$(file)" || (echo "Usage: make import-people file=backend/imports/people.csv" && exit 2)
+	cd backend && go run ./cmd/import-people -db data/app.db -file ../$(file)
