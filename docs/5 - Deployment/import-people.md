@@ -475,9 +475,58 @@ Before running the real production import:
 # Testing it locally
 ```bash
 cd /Users/rodrigosilveira/projects/EnterpriseRemoteSystems
-
+```
 rm -f backend/data/app.db
 make local-db-init
 
 make import-people-dry-run file=backend/imports/people.example.csv
 make import-people file=backend/imports/people.example.csv
+
+# Environemnt testing
+For each environment, use the same safe pattern:
+
+## 1. Copy CSV to server
+```bash
+scp people-production.csv rodrigo@<server-ip>:/tmp/people-production.csv
+```
+
+## 2. Copy CSV into backend container
+```bash
+docker cp /tmp/people-production.csv <backend-container-name>:/tmp/people-production.csv
+```
+
+## 3. Dry run first
+```bash
+docker exec -it <backend-container-name> /app/import-people \
+  -db /app/data/app.db \
+  -file /tmp/people-production.csv \
+  -dry-run
+```
+
+## 4. Real import only if Errors: 0
+```bash
+docker exec -it <backend-container-name> /app/import-people \
+  -db /app/data/app.db \
+  -file /tmp/people-production.csv
+```
+
+## 5. Verify
+```bash
+docker exec -it <backend-container-name> sqlite3 /app/data/app.db \
+  "select count(*) from people;"
+```
+
+## 6. Cleanup
+```bash
+rm -f /tmp/people-production.csv
+docker exec -it <backend-container-name> rm -f /tmp/people-production.csv
+```
+
+Also verify the bad DB filename does not appear in containers:
+
+```bash
+docker exec -it <backend-container-name> find /app -name "*app.db*" -print
+```
+Expected only the real database path, not:
+
+`app.db?_foreign_keys=on&_journal_mode=WAL&_busy_timeout=5000`
