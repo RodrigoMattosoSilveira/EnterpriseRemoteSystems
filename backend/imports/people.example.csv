@@ -1,3 +1,3 @@
-firstName,lastName,nickname,cpf,rg,cellular,email,statusId,notes
-Joao,Silva,Joao,39053344705,RG-12345,11998765432,joao@example.com,ref-person-status-active,Example import row
-Maria,Souza,Maria,93541134780,RG-67890,21998765432,maria@example.com,ref-person-status-active,
+firstName,lastName,nickname,cpf,rg,cellular,email,statusId,pixKey
+Valdinei,Barbosa,Barbosa,968.390.742-34,401321,968.390.742-34,barbosavaldineibarbosa854@gmail.com,ref-person-status-active,(96) 99165-0383
+Jarbison,Silva Campos,Bibi,025.167.882-23,593632,(93) 98127-3317,xininhogostoso@gmail.com,ref-person-status-active,025.167.882-23

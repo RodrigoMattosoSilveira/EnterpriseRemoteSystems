@@ -25,6 +25,7 @@ var requiredHeaders = []string{
 	"cellular",
 	"email",
 	"statusId",
+	"pixKey",
 }
 
 var optionalHeaders = []string{
@@ -226,7 +227,7 @@ func requestFromRecord(record []string, indexes map[string]int, defaultStatusID 
 		Cellular:  csvValue(record, indexes, "cellular"),
 		Email:     csvValue(record, indexes, "email"),
 		StatusID:  statusID,
-		Notes:     csvValue(record, indexes, "notes"),
+		PIXKey:    csvValue(record, indexes, "pixKey"),
 	}
 }
 

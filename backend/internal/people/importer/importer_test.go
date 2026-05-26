@@ -13,9 +13,9 @@ import (
 
 func TestRunDryRunValidatesRowsWithoutInserting(t *testing.T) {
 	database := newTestDB(t)
-	csvData := `firstName,lastName,nickname,cpf,rg,cellular,email,statusId,notes
-Joao,Silva,Joao,39053344705,RG-12345,11998765432,joao@example.com,ref-person-status-active,Imported from test
-Maria,Souza,Maria,93541134780,RG-67890,21998765432,maria@example.com,ref-person-status-active,
+	csvData := `firstName,lastName,nickname,cpf,rg,cellular,email,statusId,pixKey
+Joao,Silva,Joao,39053344705,RG-12345,11998765432,joao@example.com,ref-person-status-active,
+Maria,Souza,Maria,93541134780,RG-67890,21998765432,maria@example.com,ref-person-status-active,maria-pix@example.com
 `
 
 	report, err := importer.Run(context.Background(), database, strings.NewReader(csvData), importer.Options{DryRun: true})
@@ -44,9 +44,9 @@ Maria,Souza,Maria,93541134780,RG-67890,21998765432,maria@example.com,ref-person-
 
 func TestRunImportsValidRows(t *testing.T) {
 	database := newTestDB(t)
-	csvData := `firstName,lastName,nickname,cpf,rg,cellular,email,statusId
-Joao,Silva,Joao,39053344705,RG-12345,11998765432,joao@example.com,ref-person-status-active
-Maria,Souza,Maria,93541134780,RG-67890,21998765432,maria@example.com,ref-person-status-active
+	csvData := `firstName,lastName,nickname,cpf,rg,cellular,email,statusId,pixKey
+Joao,Silva,Joao,39053344705,RG-12345,11998765432,joao@example.com,ref-person-status-active,
+Maria,Souza,Maria,93541134780,RG-67890,21998765432,maria@example.com,ref-person-status-active,maria-pix@example.com
 `
 
 	report, err := importer.Run(context.Background(), database, strings.NewReader(csvData), importer.Options{})
@@ -69,9 +69,9 @@ Maria,Souza,Maria,93541134780,RG-67890,21998765432,maria@example.com,ref-person-
 
 func TestRunRollsBackWhenAnyRowIsInvalid(t *testing.T) {
 	database := newTestDB(t)
-	csvData := `firstName,lastName,nickname,cpf,rg,cellular,email,statusId
-Joao,Silva,Joao,39053344705,RG-12345,11998765432,joao@example.com,ref-person-status-active
-Bad,Phone,BadPhone,93541134780,RG-67890,1133334444,bad-phone@example.com,ref-person-status-active
+	csvData := `firstName,lastName,nickname,cpf,rg,cellular,email,statusId,pixKey
+Joao,Silva,Joao,39053344705,RG-12345,11998765432,joao@example.com,ref-person-status-active,
+Bad,Phone,BadPhone,93541134780,RG-67890,1133334444,bad-phone@example.com,ref-person-status-active,maria-pix@example.com
 `
 
 	report, err := importer.Run(context.Background(), database, strings.NewReader(csvData), importer.Options{})
@@ -97,8 +97,8 @@ Bad,Phone,BadPhone,93541134780,RG-67890,1133334444,bad-phone@example.com,ref-per
 func TestRunDetectsDuplicateCPFWithinCSV(t *testing.T) {
 	database := newTestDB(t)
 	csvData := `firstName,lastName,nickname,cpf,rg,cellular,email,statusId
-Joao,Silva,Joao,39053344705,RG-12345,11998765432,joao@example.com,ref-person-status-active
-Jose,Santos,Jose,39053344705,RG-67890,21998765432,jose@example.com,ref-person-status-active
+Joao,Silva,Joao,39053344705,RG-12345,11998765432,joao@example.com,ref-person-status-active,
+Jose,Santos,Jose,39053344705,RG-67890,21998765432,jose@example.com,ref-person-status-active,maria-pix@example.com
 `
 
 	report, err := importer.Run(context.Background(), database, strings.NewReader(csvData), importer.Options{})
@@ -147,4 +147,68 @@ func newTestDB(t *testing.T) *gorm.DB {
 	}
 
 	return database
+}
+
+func TestRunRejectsMissingPIXKeyHeader(t *testing.T) {
+	database := newTestDB(t)
+	csvData := `firstName,lastName,nickname,cpf,rg,cellular,email,statusId
+Joao,Silva,Joao,39053344705,RG-12345,11998765432,joao@example.com,ref-person-status-active
+`
+
+	report, err := importer.Run(context.Background(), database, strings.NewReader(csvData), importer.Options{})
+	if err == nil {
+		t.Fatalf("expected import to fail")
+	}
+
+	found := false
+	for _, rowErr := range report.Errors {
+		if rowErr.Row == 1 && rowErr.Field == "pixKey" && rowErr.Message == "missing required CSV header" {
+			found = true
+		}
+	}
+
+	if !found {
+		t.Fatalf("expected missing pixKey header error, got %+v", report.Errors)
+	}
+}
+
+func TestRunImportsPIXKey(t *testing.T) {
+	database := newTestDB(t)
+	csvData := `firstName,lastName,nickname,cpf,rg,cellular,email,statusId,pixKey
+Pix,Person,Pix,52998224725,RG-PIX01,31998765432,pix-person@example.com,ref-person-status-active,pix-person@example.com
+`
+
+	report, err := importer.Run(context.Background(), database, strings.NewReader(csvData), importer.Options{})
+	if err != nil {
+		t.Fatalf("expected import to succeed, got %v with report %+v", err, report)
+	}
+
+	if report.RowsInserted != 1 {
+		t.Fatalf("expected 1 inserted row, got %d", report.RowsInserted)
+	}
+
+	var person db.Person
+	if err := database.Where("email = ?", "pix-person@example.com").First(&person).Error; err != nil {
+		t.Fatalf("find imported person: %v", err)
+	}
+
+	if person.PIXKey == nil {
+		t.Fatal("expected PIXKey to be set")
+	}
+
+	if *person.PIXKey != "pix-person@example.com" {
+		t.Fatalf("expected PIXKey %q, got %q", "pix-person@example.com", *person.PIXKey)
+	}
+}
+
+func assertHeaderError(t *testing.T, report importer.Report, field string) {
+	t.Helper()
+
+	for _, rowErr := range report.Errors {
+		if rowErr.Row == 1 && rowErr.Field == field && rowErr.Message == "missing required CSV header" {
+			return
+		}
+	}
+
+	t.Fatalf("expected missing %s header error, got %+v", field, report.Errors)
 }

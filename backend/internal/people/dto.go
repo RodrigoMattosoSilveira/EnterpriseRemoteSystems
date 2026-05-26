@@ -30,7 +30,7 @@ type PersonDTO struct {
 
 	ProfileCompletionStatus string   `json:"profileCompletionStatus"`
 	CanCreateCollaborator   bool     `json:"canCreateCollaborator"`
-	MissingSections          []string `json:"missingSections,omitempty"`
+	MissingSections         []string `json:"missingSections,omitempty"`
 
 	StatusID    string `json:"statusId"`
 	StatusLabel string `json:"statusLabel,omitempty"`
@@ -51,7 +51,7 @@ type CreatePersonRequest struct {
 	Email    string `json:"email"`
 
 	StatusID string `json:"statusId"`
-	Notes    string `json:"notes,omitempty"`
+	PIXKey   string `json:"pixKey"`
 }
 
 type UpdatePersonRequest struct {
@@ -85,10 +85,10 @@ type UpdatePersonRequest struct {
 }
 
 type PersonListFilter struct {
-	Search                      string `query:"search"`
-	StatusID                    string `query:"statusId"`
-	ProfileCompletionStatus     string `query:"profileCompletionStatus"`
-	CanCreateCollaborator       *bool  `query:"canCreateCollaborator"`
-	Page                        int    `query:"page"`
-	PageSize                    int    `query:"pageSize"`
+	Search                  string `query:"search"`
+	StatusID                string `query:"statusId"`
+	ProfileCompletionStatus string `query:"profileCompletionStatus"`
+	CanCreateCollaborator   *bool  `query:"canCreateCollaborator"`
+	Page                    int    `query:"page"`
+	PageSize                int    `query:"pageSize"`
 }

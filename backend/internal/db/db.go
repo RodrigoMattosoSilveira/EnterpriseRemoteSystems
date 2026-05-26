@@ -15,14 +15,15 @@ func Open(path string) (*gorm.DB, error) {
 	if err := ensureDir(path); err != nil {
 		return nil, err
 	}
-	dsn := fmt.Sprintf("%s?_foreign_keys=on&_journal_mode=WAL&_busy_timeout=5000", path)
+
+	dsn := fmt.Sprintf("file:%s?mode=rwc&_foreign_keys=on&_journal_mode=WAL&_busy_timeout=5000", path)
+
 	database, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{Logger: logger.Default.LogMode(logger.Warn)})
 	if err != nil {
 		return nil, fmt.Errorf("open sqlite3 database with gorm: %w", err)
 	}
 
-	// Configure the underlying sql.DB for better performance with SQLite
-	// ChatGPT suggests these settings for SQLite in Go:
+	// Configure the underlying sql.DB for better performance with SQLite.
 	sqlDB, err := database.DB()
 	if err != nil {
 		return nil, fmt.Errorf("get sql database: %w", err)

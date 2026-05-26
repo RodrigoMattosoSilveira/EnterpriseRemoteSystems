@@ -77,7 +77,7 @@ func (s *service) Create(ctx context.Context, req CreatePersonRequest, actorUser
 		CanCreateCollaborator:   completion.CanCreateCollaborator,
 
 		StatusID: req.StatusID,
-		Notes:    strings.TrimSpace(req.Notes),
+		PIXKey:   stringPtrOrNil(req.PIXKey),
 	}
 
 	if err := s.repo.Create(ctx, person); err != nil {
@@ -115,10 +115,7 @@ func (s *service) Update(ctx context.Context, id string, req UpdatePersonRequest
 		return nil, err
 	}
 
-	pixKey := NormalizeDigits(req.PIXKey)
-	if strings.TrimSpace(req.PIXKey) == "" {
-		pixKey = ""
-	}
+	pixKey := strings.TrimSpace(req.PIXKey)
 
 	conflicts, err := s.repo.UniqueConflicts(
 		ctx,
@@ -251,4 +248,12 @@ func uniqueConflictValidationError(conflicts map[string]bool) ValidationError {
 	}
 
 	return ValidationError{Fields: fields}
+}
+
+func stringPtrOrNil(value string) *string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return nil
+	}
+	return &value
 }

@@ -198,7 +198,7 @@ backend-check:
 
 .PHONY: frontend-check
 frontend-check:
-	cd frontend && npm install && npm run check
+	cd frontend && npm install && npm run checkcd 
 
 .PHONY: local-backend
 local-backend:
