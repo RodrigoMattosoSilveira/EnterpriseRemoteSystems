@@ -15,8 +15,8 @@ type PersonDTO struct {
 	Street1 string `json:"street1,omitempty"`
 	Street2 string `json:"street2,omitempty"`
 	State   string `json:"state,omitempty"`
-	CEP     string `json:"cep,omitempty"`
 	City    string `json:"city,omitempty"`
+	CEP     string `json:"cep,omitempty"`
 	Country string `json:"country"`
 
 	BankName        string `json:"bankName,omitempty"`

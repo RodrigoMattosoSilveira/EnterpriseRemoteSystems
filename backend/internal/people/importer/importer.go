@@ -253,8 +253,8 @@ func requestFromRecord(record []string, indexes map[string]int, defaultStatusID 
 		Street1: csvValue(record, indexes, "street1"),
 		Street2: csvValue(record, indexes, "street2"),
 		State:   csvValue(record, indexes, "state"),
-		CEP:     csvValue(record, indexes, "cep"),
 		City:    csvValue(record, indexes, "city"),
+		CEP:     csvValue(record, indexes, "cep"),
 		Country: csvValue(record, indexes, "country"),
 
 		BankName:        csvValue(record, indexes, "bankName"),
