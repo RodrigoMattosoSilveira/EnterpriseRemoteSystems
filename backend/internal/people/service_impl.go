@@ -51,8 +51,6 @@ func (s *service) Create(ctx context.Context, req CreatePersonRequest, actorUser
 		return nil, uniqueConflictValidationError(conflicts)
 	}
 
-	completion := ComputeCompletion(completionInput{})
-
 	now := time.Now().UTC()
 
 	person := &db.Person{
@@ -89,10 +87,25 @@ func (s *service) Create(ctx context.Context, req CreatePersonRequest, actorUser
 
 		StatusID: strings.TrimSpace(req.StatusID),
 		Notes:    strings.TrimSpace(req.Notes),
-
-		ProfileCompletionStatus: completion.Status,
-		CanCreateCollaborator:   completion.CanCreateCollaborator,
 	}
+
+	completion := ComputeCompletion(completionInput{
+		Street1:           person.Street1,
+		State:             person.State,
+		CEP:               person.CEP,
+		City:              person.City,
+		Country:           person.Country,
+		BankName:          person.BankName,
+		BankNumber:        person.BankNumber,
+		CheckingAccount:   person.CheckingAccount,
+		PIXKey:            stringValue(person.PIXKey),
+		EmergencyName:     person.EmergencyName,
+		EmergencyCellular: person.EmergencyCellular,
+		EmergencyEmail:    person.EmergencyEmail,
+	})
+
+	person.ProfileCompletionStatus = completion.Status
+	person.CanCreateCollaborator = completion.CanCreateCollaborator
 
 	if err := s.repo.Create(ctx, person); err != nil {
 		return nil, err

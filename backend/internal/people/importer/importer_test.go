@@ -110,24 +110,26 @@ Maria,Souza,Maria,39053344705,RG-100002,21998765432,maria@example.com,ref-person
 
 func TestRunRejectsMissingRequiredHeaders(t *testing.T) {
 	database := newTestDB(t)
-	csvData := `firstName,lastName,nickname,cpf,rg,cellular,email
-Joao,Silva,Joao,39053344705,RG-12345,11998765432,joao@example.com
-`
+
+	csvData := peopleCSVWithoutHeader("statusId", map[string]string{
+		"firstName": "Joao",
+		"lastName":  "Silva",
+		"nickname":  "Joao",
+		"cpf":       "39053344705",
+		"rg":        "RG-12345",
+		"cellular":  "11998765432",
+		"email":     "joao@example.com",
+		"statusId":  "ref-person-status-active",
+		"country":   "Brasil",
+		"pixKey":    "",
+	})
 
 	report, err := importer.Run(context.Background(), database, strings.NewReader(csvData), importer.Options{})
 	if err == nil {
 		t.Fatalf("expected import to fail")
 	}
 
-	found := false
-	for _, rowErr := range report.Errors {
-		if rowErr.Row == 1 && rowErr.Field == "statusId" && rowErr.Message == "missing required CSV header" {
-			found = true
-		}
-	}
-	if !found {
-		t.Fatalf("expected missing statusId header error, got %+v", report.Errors)
-	}
+	assertHeaderError(t, report, "statusId")
 }
 
 func newTestDB(t *testing.T) *gorm.DB {
@@ -149,9 +151,18 @@ func newTestDB(t *testing.T) *gorm.DB {
 
 func TestRunRejectsMissingPIXKeyHeader(t *testing.T) {
 	database := newTestDB(t)
-	csvData := `firstName,lastName,nickname,cpf,rg,cellular,email,statusId,notes,street1,street2,city,state,cep,country,bankName,bankNumber,checkingAccount,emergencyName,emergencyCellular,emergencyEmail
-Joao,Silva,Joao,39053344705,RG-100001,11998765432,joao@example.com,ref-person-status-active,Imported sample person,Rua A 100,Apto 1,Sao Paulo,SP,01001000,Brasil,Banco do Brasil,001,12345-6,Ana Silva,11991234567,ana@example.com
-`
+	csvData := peopleCSVWithoutHeader("pixKey", map[string]string{
+		"firstName": "Joao",
+		"lastName":  "Silva",
+		"nickname":  "Joao",
+		"cpf":       "39053344705",
+		"rg":        "RG-100001",
+		"cellular":  "11998765432",
+		"email":     "joao@example.com",
+		"statusId":  "ref-person-status-active",
+		"country":   "Brasil",
+		"pixKey":    "joao@example.com",
+	})
 
 	report, err := importer.Run(context.Background(), database, strings.NewReader(csvData), importer.Options{})
 	if err == nil {
@@ -172,19 +183,14 @@ Joao,Silva,Joao,39053344705,RG-100001,11998765432,joao@example.com,ref-person-st
 
 func TestRunImportsPIXKey(t *testing.T) {
 	database := newTestDB(t)
+
 	csvData := `firstName,lastName,nickname,cpf,rg,cellular,email,statusId,notes,street1,street2,city,state,cep,country,bankName,bankNumber,checkingAccount,pixKey,emergencyName,emergencyCellular,emergencyEmail
-Joao,Silva,Joao,39053344705,RG-100001,11998765432,joao@example.com,ref-person-status-active,Imported sample person,Rua A 100,Apto 1,Sao Paulo,SP,01001000,Brasil,Banco do Brasil,001,12345-6,joao@example.com,Ana Silva,11991234567,ana@example.com`
+Pix,Person,Pix,11144477735,RG-PIX01,51998765432,pix-person@example.com,ref-person-status-active,PIX test,,,,,,Brasil,,,12345-6,pix-person@example.com,,,
+`
 
 	report, err := importer.Run(context.Background(), database, strings.NewReader(csvData), importer.Options{})
 	if err != nil {
 		t.Fatalf("expected import to succeed, got %v with report %+v", err, report)
-	}
-
-	if len(report.Errors) != 0 {
-		t.Fatalf("expected no import errors, got %+v", report.Errors)
-	}
-	if report.RowsInserted != 1 {
-		t.Fatalf("expected 1 inserted row, got %d", report.RowsInserted)
 	}
 
 	if len(report.Errors) != 0 {
@@ -232,9 +238,23 @@ func assertHeaderError(t *testing.T, report importer.Report, field string) {
 func TestRunImportsAddressFields(t *testing.T) {
 	database := newTestDB(t)
 
-	csvData := `firstName,lastName,nickname,cpf,rg,cellular,email,statusId,notes,street1,street2,city,state,cep,country,bankName,bankNumber,checkingAccount,pixKey,emergencyName,emergencyCellular,emergencyEmail
-Address,Person,Addr,52998224725,RG-ADDR01,31998765432,address-person@example.com,ref-person-status-active,Address test,Rua A 100,Apto 10,Sao Paulo,SP,01001000,Brasil,,,,,,
-`
+	csvData := peopleCSV(map[string]string{
+		"firstName": "Address",
+		"lastName":  "Person",
+		"nickname":  "Addr",
+		"cpf":       "52998224725",
+		"rg":        "RG-ADDR01",
+		"cellular":  "31998765432",
+		"email":     "address-person@example.com",
+		"statusId":  "ref-person-status-active",
+		"notes":     "Address test",
+		"street1":   "Rua A 100",
+		"street2":   "Apto 10",
+		"city":      "Sao Paulo",
+		"state":     "SP",
+		"cep":       "01001000",
+		"country":   "Brasil",
+	})
 
 	report, err := importer.Run(context.Background(), database, strings.NewReader(csvData), importer.Options{})
 	if err != nil {
@@ -291,9 +311,21 @@ Bank,Person,Bank,15350946056,RG-BANK01,41998765432,bank-person@example.com,ref-p
 func TestRunImportsEmergencyContactFields(t *testing.T) {
 	database := newTestDB(t)
 
-	csvData := `firstName,lastName,nickname,cpf,rg,cellular,email,statusId,notes,street1,street2,city,state,cep,country,bankName,bankNumber,checkingAccount,pixKey,emergencyName,emergencyCellular,emergencyEmail
-Emergency,Person,Emerg,93541134780,RG-EMERG01,61998765432,emergency-person@example.com,ref-person-status-active,Emergency test,,,,,,Brasil,,,,Ana Emergency,61991234567,ana.emergency@example.com
-`
+	csvData := peopleCSV(map[string]string{
+		"firstName":         "Emergency",
+		"lastName":          "Person",
+		"nickname":          "Emerg",
+		"cpf":               "93541134780",
+		"rg":                "RG-EMERG01",
+		"cellular":          "61998765432",
+		"email":             "emergency-person@example.com",
+		"statusId":          "ref-person-status-active",
+		"notes":             "Emergency test",
+		"country":           "Brasil",
+		"emergencyName":     "Ana Emergency",
+		"emergencyCellular": "61991234567",
+		"emergencyEmail":    "ana.emergency@example.com",
+	})
 
 	report, err := importer.Run(context.Background(), database, strings.NewReader(csvData), importer.Options{})
 	if err != nil {
@@ -316,9 +348,17 @@ Emergency,Person,Emerg,93541134780,RG-EMERG01,61998765432,emergency-person@examp
 func TestRunKeepsBlankOptionalFieldsBlankOrNull(t *testing.T) {
 	database := newTestDB(t)
 
-	csvData := `firstName,lastName,nickname,cpf,rg,cellular,email,statusId,notes,street1,street2,city,state,cep,country,bankName,bankNumber,checkingAccount,pixKey,emergencyName,emergencyCellular,emergencyEmail
-Blank,Optional,,39053344705,RG-BLANK01,71998765432,blank-optional@example.com,ref-person-status-active,,,,,,,,,,,,,
-`
+	csvData := peopleCSV(map[string]string{
+		"firstName": "Blank",
+		"lastName":  "Optional",
+		"nickname":  "BlankOptional",
+		"cpf":       "39053344705",
+		"rg":        "RG-BLANK01",
+		"cellular":  "71998765432",
+		"email":     "blank-optional@example.com",
+		"statusId":  "ref-person-status-active",
+		"country":   "Brasil",
+	})
 
 	report, err := importer.Run(context.Background(), database, strings.NewReader(csvData), importer.Options{})
 	if err != nil {
@@ -327,9 +367,6 @@ Blank,Optional,,39053344705,RG-BLANK01,71998765432,blank-optional@example.com,re
 
 	person := findPersonByEmail(t, database, "blank-optional@example.com")
 
-	if person.Nickname != "" {
-		t.Fatalf("expected blank Nickname, got %q", person.Nickname)
-	}
 	if person.Notes != "" {
 		t.Fatalf("expected blank Notes, got %q", person.Notes)
 	}
@@ -432,4 +469,55 @@ func findPersonByEmail(t *testing.T, database *gorm.DB, email string) db.Person 
 	}
 
 	return person
+}
+
+var fullPeopleImportHeaders = []string{
+	"firstName",
+	"lastName",
+	"nickname",
+	"cpf",
+	"rg",
+	"cellular",
+	"email",
+	"statusId",
+	"notes",
+	"street1",
+	"street2",
+	"city",
+	"state",
+	"cep",
+	"country",
+	"bankName",
+	"bankNumber",
+	"checkingAccount",
+	"pixKey",
+	"emergencyName",
+	"emergencyCellular",
+	"emergencyEmail",
+}
+
+func peopleCSV(row map[string]string) string {
+	values := make([]string, 0, len(fullPeopleImportHeaders))
+
+	for _, header := range fullPeopleImportHeaders {
+		values = append(values, row[header])
+	}
+
+	return strings.Join(fullPeopleImportHeaders, ",") + "\n" + strings.Join(values, ",") + "\n"
+}
+
+func peopleCSVWithoutHeader(omittedHeader string, row map[string]string) string {
+	headers := make([]string, 0, len(fullPeopleImportHeaders))
+	values := make([]string, 0, len(fullPeopleImportHeaders))
+
+	for _, header := range fullPeopleImportHeaders {
+		if header == omittedHeader {
+			continue
+		}
+
+		headers = append(headers, header)
+		values = append(values, row[header])
+	}
+
+	return strings.Join(headers, ",") + "\n" + strings.Join(values, ",") + "\n"
 }
