@@ -1,3 +1,0 @@
-firstName,lastName,nickname,cpf,rg,cellular,email,statusId,notes,street1,street2,city,state,cep,country,bankName,bankNumber,checkingAccount,pixKey,emergencyName,emergencyCellular,emergencyEmail
-Joao,Silva,Joao,39053344705,RG-100001,11998765432,joao@example.com,ref-person-status-active,Imported sample person,Rua A 100,Apto 1,Sao Paulo,SP,01001000,Brasil,Banco do Brasil,001,12345-6,joao@example.com,Ana Silva,11991234567,ana@example.com
-Maria,Souza,Maria,93541134780,RG-100002,21998765432,maria@example.com,ref-person-status-active,Imported sample person,Rua B 200,,Rio de Janeiro,RJ,20040002,Brasil,Itau,341,98765-4,maria@example.com,Carlos Souza,21991234567,carlos@example.com
