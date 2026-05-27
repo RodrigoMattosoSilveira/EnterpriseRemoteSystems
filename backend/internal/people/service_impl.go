@@ -51,8 +51,6 @@ func (s *service) Create(ctx context.Context, req CreatePersonRequest, actorUser
 		return nil, uniqueConflictValidationError(conflicts)
 	}
 
-	completion := ComputeCompletion(completionInput{})
-
 	now := time.Now().UTC()
 
 	person := &db.Person{
@@ -71,14 +69,44 @@ func (s *service) Create(ctx context.Context, req CreatePersonRequest, actorUser
 		Cellular: NormalizeDigits(req.Cellular),
 		Email:    strings.TrimSpace(strings.ToLower(req.Email)),
 
-		Country: "Brasil",
+		Street1: strings.TrimSpace(req.Street1),
+		Street2: strings.TrimSpace(req.Street2),
+		City:    strings.TrimSpace(req.City),
+		State:   strings.TrimSpace(req.State),
+		CEP:     NormalizeDigits(req.CEP),
+		Country: defaultCountry(req.Country),
 
-		ProfileCompletionStatus: completion.Status,
-		CanCreateCollaborator:   completion.CanCreateCollaborator,
+		BankName:        strings.TrimSpace(req.BankName),
+		BankNumber:      strings.TrimSpace(req.BankNumber),
+		CheckingAccount: strings.TrimSpace(req.CheckingAccount),
+		PIXKey:          stringPtrOrNil(req.PIXKey),
 
-		StatusID: req.StatusID,
+		EmergencyName:     strings.TrimSpace(req.EmergencyName),
+		EmergencyCellular: NormalizeDigits(req.EmergencyCellular),
+		EmergencyEmail:    strings.TrimSpace(strings.ToLower(req.EmergencyEmail)),
+
+		StatusID: strings.TrimSpace(req.StatusID),
 		Notes:    strings.TrimSpace(req.Notes),
 	}
+
+	completion := ComputeCompletion(completionInput{
+		Street1:           person.Street1,
+		Street2:           person.Street2,
+		City:              person.City,
+		State:             person.State,
+		CEP:               person.CEP,
+		Country:           person.Country,
+		BankName:          person.BankName,
+		BankNumber:        person.BankNumber,
+		CheckingAccount:   person.CheckingAccount,
+		PIXKey:            stringValue(person.PIXKey),
+		EmergencyName:     person.EmergencyName,
+		EmergencyCellular: person.EmergencyCellular,
+		EmergencyEmail:    person.EmergencyEmail,
+	})
+
+	person.ProfileCompletionStatus = completion.Status
+	person.CanCreateCollaborator = completion.CanCreateCollaborator
 
 	if err := s.repo.Create(ctx, person); err != nil {
 		return nil, err
@@ -115,10 +143,7 @@ func (s *service) Update(ctx context.Context, id string, req UpdatePersonRequest
 		return nil, err
 	}
 
-	pixKey := NormalizeDigits(req.PIXKey)
-	if strings.TrimSpace(req.PIXKey) == "" {
-		pixKey = ""
-	}
+	pixKey := strings.TrimSpace(req.PIXKey)
 
 	conflicts, err := s.repo.UniqueConflicts(
 		ctx,
@@ -140,9 +165,10 @@ func (s *service) Update(ctx context.Context, id string, req UpdatePersonRequest
 
 	completion := ComputeCompletion(completionInput{
 		Street1:           req.Street1,
+		Street2:           req.Street2,
+		City:              req.City,
 		State:             req.State,
 		CEP:               NormalizeDigits(req.CEP),
-		City:              req.City,
 		Country:           country,
 		BankName:          req.BankName,
 		BankNumber:        req.BankNumber,
@@ -164,9 +190,9 @@ func (s *service) Update(ctx context.Context, id string, req UpdatePersonRequest
 
 	person.Street1 = strings.TrimSpace(req.Street1)
 	person.Street2 = strings.TrimSpace(req.Street2)
+	person.City = strings.TrimSpace(req.City)
 	person.State = strings.TrimSpace(req.State)
 	person.CEP = NormalizeDigits(req.CEP)
-	person.City = strings.TrimSpace(req.City)
 	person.Country = country
 
 	person.BankName = strings.TrimSpace(req.BankName)
@@ -251,4 +277,12 @@ func uniqueConflictValidationError(conflicts map[string]bool) ValidationError {
 	}
 
 	return ValidationError{Fields: fields}
+}
+
+func stringPtrOrNil(value string) *string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return nil
+	}
+	return &value
 }

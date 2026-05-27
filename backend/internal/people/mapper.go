@@ -15,9 +15,9 @@ func ToDTO(person db.Person) PersonDTO {
 	missing := ComputeCompletion(completionInput{
 		Street1:           person.Street1,
 		State:             person.State,
-		CEP:               person.CEP,
 		City:              person.City,
 		Country:           person.Country,
+		CEP:               person.CEP,
 		BankName:          person.BankName,
 		BankNumber:        person.BankNumber,
 		CheckingAccount:   person.CheckingAccount,
