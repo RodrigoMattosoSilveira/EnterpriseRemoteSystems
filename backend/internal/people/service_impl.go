@@ -71,13 +71,27 @@ func (s *service) Create(ctx context.Context, req CreatePersonRequest, actorUser
 		Cellular: NormalizeDigits(req.Cellular),
 		Email:    strings.TrimSpace(strings.ToLower(req.Email)),
 
-		Country: "Brasil",
+		Street1: strings.TrimSpace(req.Street1),
+		Street2: strings.TrimSpace(req.Street2),
+		State:   strings.TrimSpace(req.State),
+		CEP:     NormalizeDigits(req.CEP),
+		City:    strings.TrimSpace(req.City),
+		Country: defaultCountry(req.Country),
+
+		BankName:        strings.TrimSpace(req.BankName),
+		BankNumber:      strings.TrimSpace(req.BankNumber),
+		CheckingAccount: strings.TrimSpace(req.CheckingAccount),
+		PIXKey:          stringPtrOrNil(req.PIXKey),
+
+		EmergencyName:     strings.TrimSpace(req.EmergencyName),
+		EmergencyCellular: NormalizeDigits(req.EmergencyCellular),
+		EmergencyEmail:    strings.TrimSpace(strings.ToLower(req.EmergencyEmail)),
+
+		StatusID: strings.TrimSpace(req.StatusID),
+		Notes:    strings.TrimSpace(req.Notes),
 
 		ProfileCompletionStatus: completion.Status,
 		CanCreateCollaborator:   completion.CanCreateCollaborator,
-
-		StatusID: req.StatusID,
-		PIXKey:   stringPtrOrNil(req.PIXKey),
 	}
 
 	if err := s.repo.Create(ctx, person); err != nil {

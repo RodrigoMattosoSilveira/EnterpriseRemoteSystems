@@ -25,7 +25,23 @@ var requiredHeaders = []string{
 	"cellular",
 	"email",
 	"statusId",
+	"notes",
+
+	"street1",
+	"street2",
+	"city",
+	"state",
+	"cep",
+	"country",
+
+	"bankName",
+	"bankNumber",
+	"checkingAccount",
 	"pixKey",
+
+	"emergencyName",
+	"emergencyCellular",
+	"emergencyEmail",
 }
 
 var optionalHeaders = []string{
@@ -126,7 +142,13 @@ func Run(ctx context.Context, database *gorm.DB, reader io.Reader, opts Options)
 				continue
 			}
 
+			if widthErrors := validateRecordWidth(record, headers, rowNumber); len(widthErrors) > 0 {
+				report.Errors = append(report.Errors, widthErrors...)
+				continue
+			}
+
 			req := requestFromRecord(record, indexes, opts.DefaultStatusID)
+
 			_, err := svc.Create(ctx, req, actorUserID)
 			if err != nil {
 				report.Errors = append(report.Errors, rowErrorsFromError(rowNumber, err)...)
@@ -222,12 +244,30 @@ func requestFromRecord(record []string, indexes map[string]int, defaultStatusID 
 		FirstName: csvValue(record, indexes, "firstName"),
 		LastName:  csvValue(record, indexes, "lastName"),
 		Nickname:  csvValue(record, indexes, "nickname"),
-		CPF:       csvValue(record, indexes, "cpf"),
-		RG:        csvValue(record, indexes, "rg"),
-		Cellular:  csvValue(record, indexes, "cellular"),
-		Email:     csvValue(record, indexes, "email"),
-		StatusID:  statusID,
-		PIXKey:    csvValue(record, indexes, "pixKey"),
+
+		CPF:      csvValue(record, indexes, "cpf"),
+		RG:       csvValue(record, indexes, "rg"),
+		Cellular: csvValue(record, indexes, "cellular"),
+		Email:    csvValue(record, indexes, "email"),
+
+		Street1: csvValue(record, indexes, "street1"),
+		Street2: csvValue(record, indexes, "street2"),
+		State:   csvValue(record, indexes, "state"),
+		CEP:     csvValue(record, indexes, "cep"),
+		City:    csvValue(record, indexes, "city"),
+		Country: csvValue(record, indexes, "country"),
+
+		BankName:        csvValue(record, indexes, "bankName"),
+		BankNumber:      csvValue(record, indexes, "bankNumber"),
+		CheckingAccount: csvValue(record, indexes, "checkingAccount"),
+		PIXKey:          csvValue(record, indexes, "pixKey"),
+
+		EmergencyName:     csvValue(record, indexes, "emergencyName"),
+		EmergencyCellular: csvValue(record, indexes, "emergencyCellular"),
+		EmergencyEmail:    csvValue(record, indexes, "emergencyEmail"),
+
+		StatusID: statusID,
+		Notes:    csvValue(record, indexes, "notes"),
 	}
 }
 
@@ -276,4 +316,18 @@ func buildAllowedHeaders() map[string]struct{} {
 		allowed[header] = struct{}{}
 	}
 	return allowed
+}
+
+func validateRecordWidth(record []string, headers []string, rowNumber int) []RowError {
+	if len(record) == len(headers) {
+		return nil
+	}
+
+	return []RowError{
+		{
+			Row:     rowNumber,
+			Field:   "csv",
+			Message: fmt.Sprintf("expected %d columns, got %d", len(headers), len(record)),
+		},
+	}
 }

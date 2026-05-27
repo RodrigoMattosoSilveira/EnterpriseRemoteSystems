@@ -50,8 +50,24 @@ type CreatePersonRequest struct {
 	Cellular string `json:"cellular"`
 	Email    string `json:"email"`
 
+	Street1 string `json:"street1"`
+	Street2 string `json:"street2"`
+	State   string `json:"state"`
+	CEP     string `json:"cep"`
+	City    string `json:"city"`
+	Country string `json:"country"`
+
+	BankName        string `json:"bankName"`
+	BankNumber      string `json:"bankNumber"`
+	CheckingAccount string `json:"checkingAccount"`
+	PIXKey          string `json:"pixKey"`
+
+	EmergencyName     string `json:"emergencyName"`
+	EmergencyCellular string `json:"emergencyCellular"`
+	EmergencyEmail    string `json:"emergencyEmail"`
+
 	StatusID string `json:"statusId"`
-	PIXKey   string `json:"pixKey"`
+	Notes    string `json:"notes"`
 }
 
 type UpdatePersonRequest struct {
