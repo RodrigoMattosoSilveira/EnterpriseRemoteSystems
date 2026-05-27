@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"regexp"
 	"sort"
 	"strings"
 
@@ -49,6 +50,44 @@ var optionalHeaders = []string{
 }
 
 var allowedHeaders = buildAllowedHeaders()
+
+var (
+	reEmailLike      = regexp.MustCompile(`^[^@\s]+@[^@\s]+\.[^@\s]+$`)
+	reCEPPlain       = regexp.MustCompile(`^[0-9]{8}$`)
+	reCEPDashed      = regexp.MustCompile(`^[0-9]{5}-[0-9]{3}$`)
+	reBrazilCellular = regexp.MustCompile(`^\+?55?[1-9]{2}9[0-9]{8}$|^[1-9]{2}9[0-9]{8}$`)
+	reStateUF        = regexp.MustCompile(`^[A-Z]{2}$`)
+)
+
+var validBrazilianUFs = map[string]struct{}{
+	"AC": {},
+	"AL": {},
+	"AM": {},
+	"AP": {},
+	"BA": {},
+	"CE": {},
+	"DF": {},
+	"ES": {},
+	"GO": {},
+	"MA": {},
+	"MG": {},
+	"MS": {},
+	"MT": {},
+	"PA": {},
+	"PB": {},
+	"PE": {},
+	"PI": {},
+	"PR": {},
+	"RJ": {},
+	"RN": {},
+	"RO": {},
+	"RR": {},
+	"RS": {},
+	"SC": {},
+	"SE": {},
+	"SP": {},
+	"TO": {},
+}
 
 // Options controls a People CSV import run.
 type Options struct {
@@ -148,6 +187,11 @@ func Run(ctx context.Context, database *gorm.DB, reader io.Reader, opts Options)
 			}
 
 			req := requestFromRecord(record, indexes, opts.DefaultStatusID)
+
+			if semanticErrors := semanticCSVErrors(rowNumber, req); len(semanticErrors) > 0 {
+				report.Errors = append(report.Errors, semanticErrors...)
+				continue
+			}
 
 			_, err := svc.Create(ctx, req, actorUserID)
 			if err != nil {
@@ -330,4 +374,72 @@ func validateRecordWidth(record []string, headers []string, rowNumber int) []Row
 			Message: fmt.Sprintf("expected %d columns, got %d", len(headers), len(record)),
 		},
 	}
+}
+
+func semanticCSVErrors(rowNumber int, req people.CreatePersonRequest) []RowError {
+	var errs []RowError
+
+	cep := strings.TrimSpace(req.CEP)
+	if cep != "" && !isValidImportCEP(cep) {
+		errs = append(errs, RowError{
+			Row:     rowNumber,
+			Field:   "cep",
+			Message: "CEP must contain 8 digits or be formatted as 00000-000",
+		})
+	}
+
+	state := strings.TrimSpace(req.State)
+	if state != "" && !isValidBrazilianUF(state) {
+		errs = append(errs, RowError{
+			Row:     rowNumber,
+			Field:   "state",
+			Message: "state must be a valid 2-letter Brazilian UF",
+		})
+	}
+
+	country := strings.TrimSpace(req.Country)
+	if country != "" && country != "Brasil" {
+		errs = append(errs, RowError{
+			Row:     rowNumber,
+			Field:   "country",
+			Message: "country must be Brasil",
+		})
+	}
+
+	email := strings.TrimSpace(req.Email)
+	if email != "" && !reEmailLike.MatchString(email) {
+		errs = append(errs, RowError{
+			Row:     rowNumber,
+			Field:   "email",
+			Message: "email must contain a valid email address",
+		})
+	}
+
+	cellular := strings.TrimSpace(req.Cellular)
+	if cellular != "" {
+		normalizedCellular := people.NormalizeDigits(cellular)
+		if !reBrazilCellular.MatchString(normalizedCellular) {
+			errs = append(errs, RowError{
+				Row:     rowNumber,
+				Field:   "cellular",
+				Message: "cellular must be a valid Brazilian mobile number",
+			})
+		}
+	}
+
+	return errs
+}
+func isValidImportCEP(value string) bool {
+	value = strings.TrimSpace(value)
+	return reCEPPlain.MatchString(value) || reCEPDashed.MatchString(value)
+}
+
+func isValidBrazilianUF(value string) bool {
+	value = strings.TrimSpace(value)
+	if !reStateUF.MatchString(value) {
+		return false
+	}
+
+	_, ok := validBrazilianUFs[value]
+	return ok
 }

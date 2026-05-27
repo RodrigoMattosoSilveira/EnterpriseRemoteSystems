@@ -521,3 +521,193 @@ func peopleCSVWithoutHeader(omittedHeader string, row map[string]string) string 
 
 	return strings.Join(headers, ",") + "\n" + strings.Join(values, ",") + "\n"
 }
+
+func TestRunRejectsSuspiciousEmail(t *testing.T) {
+	database := newTestDB(t)
+
+	csvData := peopleCSV(map[string]string{
+		"firstName": "Bad",
+		"lastName":  "Email",
+		"nickname":  "BadEmail",
+		"cpf":       "15350946056",
+		"rg":        "RG-BADEMAIL",
+		"cellular":  "11998765432",
+		"email":     "11998765432",
+		"statusId":  "ref-person-status-active",
+		"country":   "Brasil",
+	})
+
+	report, err := importer.Run(context.Background(), database, strings.NewReader(csvData), importer.Options{})
+	if err == nil {
+		t.Fatalf("expected import to fail")
+	}
+
+	assertRowError(t, report, 2, "email", "email must contain a valid email address")
+}
+
+func TestRunRejectsInvalidBrazilianCellular(t *testing.T) {
+	database := newTestDB(t)
+
+	csvData := peopleCSV(map[string]string{
+		"firstName": "Bad",
+		"lastName":  "Cellular",
+		"nickname":  "BadCell",
+		"cpf":       "93541134780",
+		"rg":        "RG-BADCELL",
+		"cellular":  "bad-phone",
+		"email":     "bad-cell@example.com",
+		"statusId":  "ref-person-status-active",
+		"country":   "Brasil",
+	})
+
+	report, err := importer.Run(context.Background(), database, strings.NewReader(csvData), importer.Options{})
+	if err == nil {
+		t.Fatalf("expected import to fail")
+	}
+
+	assertRowError(t, report, 2, "cellular", "cellular must be a valid Brazilian mobile number")
+}
+
+func assertRowError(t *testing.T, report importer.Report, row int, field string, message string) {
+	t.Helper()
+
+	for _, rowErr := range report.Errors {
+		if rowErr.Row == row && rowErr.Field == field && rowErr.Message == message {
+			return
+		}
+	}
+
+	t.Fatalf("expected row %d field %q error %q, got %+v", row, field, message, report.Errors)
+}
+
+func TestRunAcceptsPlainDigitCEP(t *testing.T) {
+	database := newTestDB(t)
+
+	csvData := peopleCSV(map[string]string{
+		"firstName": "Plain",
+		"lastName":  "CEP",
+		"nickname":  "PlainCEP",
+		"cpf":       "11144477735",
+		"rg":        "RG-PLAINCEP",
+		"cellular":  "11998765432",
+		"email":     "plain-cep@example.com",
+		"statusId":  "ref-person-status-active",
+		"street1":   "Rua A 100",
+		"city":      "Sao Paulo",
+		"state":     "SP",
+		"cep":       "01001000",
+		"country":   "Brasil",
+	})
+
+	report, err := importer.Run(context.Background(), database, strings.NewReader(csvData), importer.Options{})
+	if err != nil {
+		t.Fatalf("expected import to succeed, got %v with report %+v", err, report)
+	}
+
+	person := findPersonByEmail(t, database, "plain-cep@example.com")
+	if person.CEP != "01001000" {
+		t.Fatalf("expected CEP %q, got %q", "01001000", person.CEP)
+	}
+}
+
+func TestRunAcceptsDashedCEP(t *testing.T) {
+	database := newTestDB(t)
+
+	csvData := peopleCSV(map[string]string{
+		"firstName": "Dashed",
+		"lastName":  "CEP",
+		"nickname":  "DashedCEP",
+		"cpf":       "39053344705",
+		"rg":        "RG-DASHCEP",
+		"cellular":  "21998765432",
+		"email":     "dashed-cep@example.com",
+		"statusId":  "ref-person-status-active",
+		"street1":   "Rua B 200",
+		"city":      "Rio de Janeiro",
+		"state":     "RJ",
+		"cep":       "20040-002",
+		"country":   "Brasil",
+	})
+
+	report, err := importer.Run(context.Background(), database, strings.NewReader(csvData), importer.Options{})
+	if err != nil {
+		t.Fatalf("expected import to succeed, got %v with report %+v", err, report)
+	}
+
+	person := findPersonByEmail(t, database, "dashed-cep@example.com")
+	if person.CEP != "20040002" {
+		t.Fatalf("expected normalized CEP %q, got %q", "20040002", person.CEP)
+	}
+}
+
+func TestRunRejectsSuspiciousCEP(t *testing.T) {
+	database := newTestDB(t)
+
+	csvData := peopleCSV(map[string]string{
+		"firstName": "Bad",
+		"lastName":  "CEP",
+		"nickname":  "BadCEP",
+		"cpf":       "52998224725",
+		"rg":        "RG-BADCEP",
+		"cellular":  "11998765432",
+		"email":     "bad-cep@example.com",
+		"statusId":  "ref-person-status-active",
+		"cep":       "Sao Paulo",
+		"country":   "Brasil",
+	})
+
+	report, err := importer.Run(context.Background(), database, strings.NewReader(csvData), importer.Options{})
+	if err == nil {
+		t.Fatalf("expected import to fail")
+	}
+
+	assertRowError(t, report, 2, "cep", "CEP must contain 8 digits or be formatted as 00000-000")
+}
+
+func TestRunRejectsInvalidStateUF(t *testing.T) {
+	database := newTestDB(t)
+
+	csvData := peopleCSV(map[string]string{
+		"firstName": "Bad",
+		"lastName":  "State",
+		"nickname":  "BadState",
+		"cpf":       "15350946056",
+		"rg":        "RG-BADSTATE",
+		"cellular":  "11998765432",
+		"email":     "bad-state@example.com",
+		"statusId":  "ref-person-status-active",
+		"state":     "XX",
+		"country":   "Brasil",
+	})
+
+	report, err := importer.Run(context.Background(), database, strings.NewReader(csvData), importer.Options{})
+	if err == nil {
+		t.Fatalf("expected import to fail")
+	}
+
+	assertRowError(t, report, 2, "state", "state must be a valid 2-letter Brazilian UF")
+}
+
+func TestRunRejectsCityInStateColumn(t *testing.T) {
+	database := newTestDB(t)
+
+	csvData := peopleCSV(map[string]string{
+		"firstName": "Bad",
+		"lastName":  "StateCity",
+		"nickname":  "BadStateCity",
+		"cpf":       "93541134780",
+		"rg":        "RG-BADSTATECITY",
+		"cellular":  "11998765432",
+		"email":     "bad-state-city@example.com",
+		"statusId":  "ref-person-status-active",
+		"state":     "Sao Paulo",
+		"country":   "Brasil",
+	})
+
+	report, err := importer.Run(context.Background(), database, strings.NewReader(csvData), importer.Options{})
+	if err == nil {
+		t.Fatalf("expected import to fail")
+	}
+
+	assertRowError(t, report, 2, "state", "state must be a valid 2-letter Brazilian UF")
+}
