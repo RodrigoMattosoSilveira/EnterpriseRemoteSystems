@@ -75,7 +75,9 @@ export function PersonDetailPage() {
           onSubmit={async (input) => {
             try {
               await mutation.mutateAsync(input);
-              navigate("/people");
+              navigate("/people", {
+                state: { flash: "Person updated successfully." },
+              });
             } catch {
               // The mutation state renders the API error above the form.
             }

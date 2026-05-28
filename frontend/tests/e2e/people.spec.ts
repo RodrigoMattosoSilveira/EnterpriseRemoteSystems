@@ -70,13 +70,17 @@ test("user can create a Person from the React frontend", async ({ page }) => {
   await page.getByRole("button", { name: "Create Person" }).click();
 
   await expect(page).toHaveURL(/\/people\/[a-f0-9-]+$/);
-  await expect(page.getByRole("heading", { name: `${firstName} ${lastName}` })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: `${firstName} ${lastName}` })
+  ).toBeVisible();
   await expect(page.getByText(nickname)).toBeVisible();
   await expect(page.locator("header").getByText("Incomplete")).toBeVisible();
 
   await page.getByRole("link", { name: "Back to People" }).click();
   await expect(page.getByRole("heading", { name: "People" })).toBeVisible();
-  await expect(page.getByRole("heading", { name: `${firstName} ${lastName}` })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: `${firstName} ${lastName}` })
+  ).toBeVisible();
   await expect(page.getByText(`Nickname: ${nickname}`)).toBeVisible();
 });
 
@@ -134,6 +138,70 @@ test("user sees an error when creating a Person with a duplicate CPF", async ({ 
   await expect(page.locator("body")).toContainText(
     /already exists|unique|duplicate|registered|taken|validation/i,
   );
+});
+
+test("user can edit a Person from the React frontend", async ({ page }) => {
+  const suffix = uniqueSuffix();
+
+  const firstName = `Editable${suffix}`;
+  const lastName = "Person";
+  const nickname = `Edit${suffix}`;
+  const cpf = validCPF(suffix + 100);
+  const rg = validRG(suffix + 100);
+  const cellular = validBrazilianCellular(suffix + 100);
+  const email = `editable-${suffix}@example.com`;
+
+  const updatedFirstName = `Edited${suffix}`;
+  const updatedEmail = `edited-${suffix}@example.com`;
+
+  await page.goto("/people/new");
+
+  await expect(page.getByRole("heading", { name: "New Person" })).toBeVisible();
+
+  await page.getByLabel("First Name *").fill(firstName);
+  await page.getByLabel("Last Name *").fill(lastName);
+  await page.getByLabel("Nickname *").fill(nickname);
+  await page.getByLabel("CPF *").fill(cpf);
+  await page.getByLabel("RG *").fill(rg);
+  await page.getByLabel("Cellular *").fill(cellular);
+  await page.getByLabel("Email *").fill(email);
+  await page.getByLabel("Status *").selectOption(ACTIVE_STATUS_ID);
+
+  await page.getByRole("button", { name: "Create Person" }).click();
+
+  await expect(page).toHaveURL(/\/people\/[a-f0-9-]+$/);
+  await expect(
+    page.getByRole("heading", { name: `${firstName} ${lastName}` })
+  ).toBeVisible();
+
+  await expect(page.getByLabel("First Name *")).toHaveValue(firstName);
+  await expect(page.getByLabel("Last Name *")).toHaveValue(lastName);
+  await expect(page.getByLabel("Nickname *")).toHaveValue(nickname);
+  await expect(page.getByLabel("CPF *")).toHaveValue(cpf);
+  await expect(page.getByLabel("RG *")).toHaveValue(rg);
+  await expect(page.getByLabel("Cellular *")).toHaveValue(cellular);
+  await expect(page.getByLabel("Email *")).toHaveValue(email);
+
+  await page.getByLabel("First Name *").fill(updatedFirstName);
+  await page.getByLabel("Email *").fill(updatedEmail);
+
+  await page.getByRole("button", { name: "Save Changes" }).click();
+
+  await expect(page).toHaveURL(/\/people$/);
+  await expect(page.getByRole("status")).toContainText(
+    "Person updated successfully."
+  );
+  await expect(
+    page.getByRole("heading", { name: `${updatedFirstName} ${lastName}` })
+  ).toBeVisible();
+  await expect(page.getByText(updatedEmail)).toBeVisible();
+
+  await page.reload();
+
+  await expect(
+    page.getByRole("heading", { name: `${updatedFirstName} ${lastName}` })
+  ).toBeVisible();
+  await expect(page.getByText(updatedEmail)).toBeVisible();
 });
 
 test("user can create a Person with a valid Brazilian cellular", async ({ page }) => {
