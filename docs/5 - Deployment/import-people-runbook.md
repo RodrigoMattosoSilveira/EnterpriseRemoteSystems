@@ -793,3 +793,62 @@ docker exec -it <backend-container-name> find /app -name "*app.db*" -print
 Expected only the real database path, not:
 
 `app.db?_foreign_keys=on&_journal_mode=WAL&_busy_timeout=5000`
+
+# Summary
+## Local 
+```bash
+scp backend/imports/people.csv deploy@178.105.46.193:/tmp/people.csv
+```
+
+## Devel
+```bash
+
+docker cp /tmp/people.csv ers-dev-backend:/tmp/people.csv
+
+docker exec -it ers-dev-backend ls -l /app/import-people
+
+docker exec -it ers-dev-backend sh -lc 'ls -lh /tmp/people.csv && wc -l /tmp/people.csv && head -3 /tmp/people.csv'
+
+docker exec -it ers-dev-backend /app/import-people \
+  -db /app/data/app.db \
+  -file /tmp/people.csv \
+  -dry-run
+
+docker exec -it ers-dev-backend /app/import-people \
+  -db /app/data/app.db \
+  -file /tmp/people.csv
+```
+
+## Test
+```bash
+docker cp /tmp/people.csv ers-tst-backend:/tmp/people.csv
+
+docker exec -it ers-tst-backend ls -l /app/import-people
+
+docker exec -it ers-tst-backend sh -lc 'ls -lh /tmp/people.csv && wc -l /tmp/people.csv && head -3 /tmp/people.csv'
+
+docker exec -it ers-tst-backend /app/import-people \
+  -db /app/data/app.db \
+  -file /tmp/people.csv \
+  -dry-run
+
+docker exec -it ers-tst-backend /app/import-people \
+  -db /app/data/app.db \
+  -file /tmp/people.csv
+```
+
+## Production
+```bash
+docker cp /tmp/people.csv ers-prd-backend:/tmp/people.csv
+
+docker exec -it ers-prd-backend ls -l /app/import-people
+
+docker exec -it ers-prd-backend /app/import-people \
+  -db /app/data/app.db \
+  -file /tmp/people.csv \
+  -dry-run
+
+docker exec -it ers-prd-backend /app/import-people \
+  -db /app/data/app.db \
+  -file /tmp/people.csv
+```
