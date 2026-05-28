@@ -151,7 +151,15 @@ test("user can create a Person with a valid Brazilian cellular", async ({ page }
   await page.getByLabel("Email").fill(`formatted-phone-${suffix}@example.com`);
 
   await page.getByRole("button", { name: "Create Person" }).click();
+  
+  await page.getByRole("button", { name: "Create Person" }).click();
 
+  if (page.url().endsWith("/people/new")) {
+    console.log("People create failed; page text:");
+    console.log(await page.locator("body").innerText());
+  }
+
+await expect(page).toHaveURL(/\/people\/[a-f0-9-]+$/);
   await expect(page).toHaveURL(/\/people\/[a-f0-9-]+$/);
   await expect(page.getByRole("heading", { name: /Formatted.*Phone/ })).toBeVisible();
 });
