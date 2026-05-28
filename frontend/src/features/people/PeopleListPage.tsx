@@ -1,9 +1,17 @@
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import { usePeople } from "./usePeople";
 
 export function PeopleListPage() {
   const { data, isLoading, error } = usePeople();
+  const location = useLocation();
   const people = Array.isArray(data) ? data : [];
+  const flash =
+    typeof location.state === "object" &&
+    location.state !== null &&
+    "flash" in location.state &&
+    typeof location.state.flash === "string"
+      ? location.state.flash
+      : "";
 
   return (
     <main className="min-h-screen bg-gray-50">
@@ -26,6 +34,15 @@ export function PeopleListPage() {
       </header>
 
       <section className="mx-auto max-w-4xl space-y-4 p-4">
+        {flash && (
+          <div
+            role="status"
+            className="rounded-2xl border border-green-200 bg-green-50 p-4 text-sm font-medium text-green-800"
+          >
+            {flash}
+          </div>
+        )}
+
         {isLoading && (
           <div className="rounded-2xl border bg-white p-5 shadow-sm">
             Loading people...
