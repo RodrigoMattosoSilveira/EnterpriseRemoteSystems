@@ -40,10 +40,10 @@ type CollaboratorJourney struct {
 
 type ReferenceData struct {
 	BaseModel
-	TenantID     string `gorm:"type:text;not null;default:default;uniqueIndex:ux_reference_tenant_type_code,priority:1;index:idx_reference_tenant_type_active_sort,priority:1" json:"tenantId"`
-	Type         string `gorm:"type:text;not null;uniqueIndex:ux_reference_tenant_type_code,priority:2;index:idx_reference_tenant_type_active_sort,priority:2" json:"type"`
+	TenantID     string `gorm:"type:text;not null;default:default;uniqueIndex:ux_reference_tenant_type_code,priority:1;uniqueIndex:ux_reference_tenant_type_label,priority:1;index:idx_reference_tenant_type_active_sort,priority:1" json:"tenantId"`
+	Type         string `gorm:"type:text;not null;uniqueIndex:ux_reference_tenant_type_code,priority:2;uniqueIndex:ux_reference_tenant_type_label,priority:2;index:idx_reference_tenant_type_active_sort,priority:2" json:"type"`
 	Code         string `gorm:"type:text;not null;uniqueIndex:ux_reference_tenant_type_code,priority:3" json:"code"`
-	Label        string `gorm:"type:text;not null" json:"label"`
+	Label        string `gorm:"type:text;not null;uniqueIndex:ux_reference_tenant_type_label,priority:3" json:"label"`
 	Description  string `gorm:"type:text" json:"description,omitempty"`
 	Active       bool   `gorm:"not null;default:true;index:idx_reference_tenant_type_active_sort,priority:3" json:"active"`
 	SortOrder    int    `gorm:"not null;default:0;index:idx_reference_tenant_type_active_sort,priority:4" json:"sortOrder"`

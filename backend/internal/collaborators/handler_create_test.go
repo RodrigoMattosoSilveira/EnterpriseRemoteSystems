@@ -134,6 +134,24 @@ func TestCreateCollaboratorRejectsDuplicateActiveJourneyForPerson(t *testing.T) 
 	assertValidationError(t, res, "personId", "Person already has an active collaborator journey")
 }
 
+func TestCreateCollaboratorRejectsInactiveReferenceData(t *testing.T) {
+	server, cleanup := newTestServer(t)
+	defer cleanup()
+
+	person := createPerson(t, server, validCompletePersonPayload(1, nil))
+
+	res := postJSON(t, server, http.MethodPatch, "/api/v1/reference-data/method/ref-method-daily/deactivate", map[string]any{})
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("expected deactivate reference data status %d, got %d", http.StatusOK, res.StatusCode)
+	}
+
+	res = postCollaborator(t, server, validCollaboratorPayload(person.Data.ID, nil))
+	defer res.Body.Close()
+
+	assertValidationError(t, res, "paymentMethodId", "Payment method must be active reference data of type method")
+}
+
 func TestCreateCollaboratorRejectsInvalidReferenceData(t *testing.T) {
 	server, cleanup := newTestServer(t)
 	defer cleanup()
