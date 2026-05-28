@@ -23,7 +23,7 @@ func (s *service) ListByType(ctx context.Context, typ string) ([]ReferenceDataDT
 }
 func (s *service) Create(ctx context.Context, typ string, req CreateReferenceDataRequest) (*ReferenceDataDTO, error) {
 	now := time.Now().UTC()
-	row := &db.ReferenceData{BaseModel: db.BaseModel{ID: ids.New(), CreatedAt: now, UpdatedAt: now}, Type: typ, Code: req.Code, Label: req.Label, Description: req.Description, Active: req.Active, SortOrder: req.SortOrder, MetadataJSON: req.MetadataJSON}
+	row := &db.ReferenceData{BaseModel: db.BaseModel{ID: ids.New(), CreatedAt: now, UpdatedAt: now}, TenantID: "default", Type: typ, Code: req.Code, Label: req.Label, Description: req.Description, Active: req.Active, SortOrder: req.SortOrder, MetadataJSON: req.MetadataJSON}
 	if err := s.repo.Create(ctx, row); err != nil {
 		return nil, err
 	}
@@ -31,5 +31,5 @@ func (s *service) Create(ctx context.Context, typ string, req CreateReferenceDat
 	return &dto, nil
 }
 func mapRef(r db.ReferenceData) ReferenceDataDTO {
-	return ReferenceDataDTO{ID: r.ID, Type: r.Type, Code: r.Code, Label: r.Label, Description: r.Description, Active: r.Active, SortOrder: r.SortOrder, MetadataJSON: r.MetadataJSON}
+	return ReferenceDataDTO{ID: r.ID, TenantID: r.TenantID, Type: r.Type, Code: r.Code, Label: r.Label, Description: r.Description, Active: r.Active, SortOrder: r.SortOrder, MetadataJSON: r.MetadataJSON}
 }
