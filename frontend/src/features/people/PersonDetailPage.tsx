@@ -73,8 +73,12 @@ export function PersonDetailPage() {
           defaultStatusId={ACTIVE_STATUS_ID}
           submitting={mutation.isPending}
           onSubmit={async (input) => {
-            await mutation.mutateAsync(input);
-            navigate("/people");
+            try {
+              await mutation.mutateAsync(input);
+              navigate("/people");
+            } catch {
+              // The mutation state renders the API error above the form.
+            }
           }}
         />
       </section>
