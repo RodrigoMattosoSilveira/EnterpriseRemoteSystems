@@ -154,6 +154,10 @@ test("user can create a Person with a valid Brazilian cellular", async ({ page }
 
   await expect(page).toHaveURL(/\/people\/[a-f0-9-]+$/);
   await expect(page.getByRole("heading", { name: /Formatted.*Phone/ })).toBeVisible();
+
+  // await expect(page).toHaveURL(/\/people\/[a-f0-9-]+$/);
+  // await expect(page).toHaveURL(/\/people\/[a-f0-9-]+$/);
+  // await expect(page.getByRole("heading", { name: /Formatted.*Phone/ })).toBeVisible();
 });
 
 function generateCPF(seed: string): string {

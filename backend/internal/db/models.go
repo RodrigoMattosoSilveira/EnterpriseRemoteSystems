@@ -34,8 +34,8 @@ type Person struct {
 	Street1 string `gorm:"type:text" json:"street1,omitempty"`
 	Street2 string `gorm:"type:text" json:"street2,omitempty"`
 	State   string `gorm:"type:text" json:"state,omitempty"`
-	CEP     string `gorm:"column:cep;type:text" json:"cep,omitempty"`
 	City    string `gorm:"type:text" json:"city,omitempty"`
+	CEP     string `gorm:"column:cep;type:text" json:"cep,omitempty"`
 	Country string `gorm:"type:text;not null;default:Brasil" json:"country"`
 
 	BankName        string  `gorm:"type:text" json:"bankName,omitempty"`
