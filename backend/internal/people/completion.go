@@ -16,9 +16,10 @@ type CompletionResult struct {
 
 type completionInput struct {
 	Street1 string
+	Street2 string
 	State   string
-	CEP     string
 	City    string
+	CEP     string
 	Country string
 
 	BankName        string
