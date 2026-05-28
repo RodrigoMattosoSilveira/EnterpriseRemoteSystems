@@ -207,7 +207,7 @@ func (s *service) Update(ctx context.Context, id string, req UpdatePersonRequest
 	person.ProfileCompletionStatus = completion.Status
 	person.CanCreateCollaborator = completion.CanCreateCollaborator
 
-	person.StatusID = req.StatusID
+	person.StatusID = strings.TrimSpace(req.StatusID)
 	person.Notes = strings.TrimSpace(req.Notes)
 	person.UpdatedAt = time.Now().UTC()
 
