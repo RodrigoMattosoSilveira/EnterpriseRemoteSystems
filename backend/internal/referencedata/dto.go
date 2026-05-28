@@ -2,6 +2,7 @@ package referencedata
 
 type ReferenceDataDTO struct {
 	ID           string `json:"id"`
+	TenantID     string `json:"tenantId"`
 	Type         string `json:"type"`
 	Code         string `json:"code"`
 	Label        string `json:"label"`
