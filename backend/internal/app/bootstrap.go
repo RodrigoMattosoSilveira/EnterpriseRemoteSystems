@@ -3,6 +3,7 @@ package app
 import (
 	"log"
 
+	"enterpriseremotesystems/backend/internal/collaborators"
 	"enterpriseremotesystems/backend/internal/db"
 	httpserver "enterpriseremotesystems/backend/internal/http"
 	"enterpriseremotesystems/backend/internal/http/routes"
@@ -31,9 +32,14 @@ func Bootstrap(cfg Config) (*fiber.App, func(), error) {
 	peopleSvc := people.NewService(peopleRepo)
 	peopleHandler := people.NewHandler(peopleSvc)
 
+	collaboratorRepo := collaborators.NewRepository(database)
+	collaboratorSvc := collaborators.NewService(collaboratorRepo)
+	collaboratorHandler := collaborators.NewHandler(collaboratorSvc)
+
 	deps := routes.Dependencies{
 		DB:                   database,
 		PeopleHandler:        peopleHandler,
+		CollaboratorHandler:  collaboratorHandler,
 		ReferenceDataHandler: refHandler,
 	}
 

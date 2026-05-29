@@ -24,12 +24,20 @@ export function PeopleListPage() {
             </p>
           </div>
 
-          <Link
-            to="/people/new"
-            className="rounded-xl bg-gray-950 px-4 py-2 text-sm font-semibold text-white shadow-sm"
-          >
-            Add
-          </Link>
+          <div className="flex items-center gap-2">
+            <Link
+              to="/admin/reference-data"
+              className="rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 shadow-sm"
+            >
+              Admin
+            </Link>
+            <Link
+              to="/people/new"
+              className="rounded-xl bg-gray-950 px-4 py-2 text-sm font-semibold text-white shadow-sm"
+            >
+              Add
+            </Link>
+          </div>
         </div>
       </header>
 
