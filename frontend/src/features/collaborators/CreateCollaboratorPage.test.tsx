@@ -320,6 +320,92 @@ describe("CreateCollaboratorPage", () => {
     });
   });
 
+  it("shows backend validation errors from the create endpoint", async () => {
+    mockCreateCollaboratorFetch({
+      createResponse: jsonResponse(
+        {
+          error: {
+            code: "validation_failed",
+            message: "Validation failed",
+            fields: {
+              statusId: "Collaborator status is required",
+              paymentValue: "Payment value must be greater than zero",
+              sectorId: "Sector is inactive or does not exist",
+            },
+          },
+        },
+        { status: 400 },
+      ),
+    });
+
+    renderCreateCollaboratorPage();
+
+    await waitForText("Ana Silva (Ana)");
+
+    await changeSelect("Complete Person", "person-complete-1");
+    await changeInput("Journey Start Date", "2026-05-29");
+    await changeSelect("Status", "ref-collaborator-status-active");
+    await changeSelect("Sector", "ref-sector-mining");
+    await changeSelect("Location", "ref-location-carara");
+    await changeSelect("Task", "ref-task-operator");
+    await changeSelect("Payment Method", "ref-method-daily");
+    await changeInput("Payment Value", "125.50");
+    await clickButton("Create Collaborator");
+
+    await waitForText("Validation failed");
+    await waitForText("Status: 400 · Code: validation_failed");
+    await waitForText("statusId:");
+    await waitForText("Collaborator status is required");
+    await waitForText("paymentValue:");
+    await waitForText("Payment value must be greater than zero");
+    await waitForText("sectorId:");
+    await waitForText("Sector is inactive or does not exist");
+
+    expect(textNode("Collaborators route reached")).toBeFalsy();
+    expect(textNode("This Person already has an active Collaborator journey.")).toBeFalsy();
+  });
+
+  it("shows backend incomplete Person validation errors if server rejects the selected Person", async () => {
+    mockCreateCollaboratorFetch({
+      createResponse: jsonResponse(
+        {
+          error: {
+            code: "validation_failed",
+            message: "Validation failed",
+            fields: {
+              personId:
+                "Person profile is incomplete. Missing sections: Bank, Emergency.",
+            },
+          },
+        },
+        { status: 400 },
+      ),
+    });
+
+    renderCreateCollaboratorPage();
+
+    await waitForText("Ana Silva (Ana)");
+
+    await changeSelect("Complete Person", "person-complete-1");
+    await changeInput("Journey Start Date", "2026-05-29");
+    await changeSelect("Status", "ref-collaborator-status-active");
+    await changeSelect("Sector", "ref-sector-mining");
+    await changeSelect("Location", "ref-location-carara");
+    await changeSelect("Task", "ref-task-operator");
+    await changeSelect("Payment Method", "ref-method-daily");
+    await changeInput("Payment Value", "125.50");
+    await clickButton("Create Collaborator");
+
+    await waitForText("Validation failed");
+    await waitForText("personId:");
+    await waitForText(
+      "Person profile is incomplete. Missing sections: Bank, Emergency.",
+    );
+
+    expect(textNode("Collaborators route reached")).toBeFalsy();
+    expect(textNode("This Person already has an active Collaborator journey.")).toBeFalsy();
+  });
+
   it("shows a useful duplicate active Collaborator error", async () => {
     mockCreateCollaboratorFetch({
       createResponse: jsonResponse(
