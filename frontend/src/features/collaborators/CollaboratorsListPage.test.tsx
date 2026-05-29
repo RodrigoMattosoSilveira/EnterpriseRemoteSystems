@@ -1,0 +1,189 @@
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { act } from "react";
+import { createRoot, type Root } from "react-dom/client";
+import { createMemoryRouter, RouterProvider } from "react-router-dom";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { CollaboratorsListPage } from "./CollaboratorsListPage";
+import type { Collaborator } from "../../types/collaborators";
+
+const collaborators: Collaborator[] = [
+  {
+    id: "collab-1",
+    tenantId: "default",
+    personId: "person-1",
+    personName: "Ana Silva (Ana)",
+    journeyStartDate: "2026-05-01",
+    defaultEndDate: "2026-07-30",
+    extensionDays: 0,
+    projectedEndDate: "2026-07-30",
+    paymentMethodId: "ref-method-daily",
+    paymentMethodLabel: "Daily Rate",
+    paymentValue: 125,
+    sectorId: "ref-sector-mining",
+    sectorLabel: "Mining",
+    locationId: "ref-location-carara",
+    locationLabel: "Mina Carara",
+    taskId: "ref-task-operator",
+    taskLabel: "Operator",
+    statusId: "ref-collaborator-active",
+    statusLabel: "Active",
+    createdAt: "2026-05-01T00:00:00Z",
+    updatedAt: "2026-05-01T00:00:00Z",
+  },
+];
+
+let container: HTMLDivElement;
+let root: Root | null;
+
+beforeEach(() => {
+  container = document.createElement("div");
+  document.body.appendChild(container);
+  root = null;
+});
+
+afterEach(async () => {
+  if (root) {
+    await act(async () => {
+      root?.unmount();
+    });
+  }
+  document.body.removeChild(container);
+  vi.restoreAllMocks();
+});
+
+describe("CollaboratorsListPage", () => {
+  it("lists collaborator journeys", async () => {
+    mockFetch(async (url) => {
+      if (url === "/api/v1/collaborators") {
+        return jsonResponse({ data: { items: collaborators, total: 1 } });
+      }
+
+      throw new Error(`Unhandled request: ${url}`);
+    });
+
+    renderCollaboratorsListPage();
+
+    await waitForText("Ana Silva (Ana)");
+    expect(textNode("Collaborator Journeys")).toBeTruthy();
+    expect(textNode("Operator")).toBeTruthy();
+    expect(textNode("Mining · Mina Carara")).toBeTruthy();
+    expect(textNode("Daily Rate")).toBeTruthy();
+    expect(textNode("$125.00")).toBeTruthy();
+    expect(textNode("Active")).toBeTruthy();
+  });
+
+  it("shows an empty state", async () => {
+    mockFetch(async (url) => {
+      if (url === "/api/v1/collaborators") {
+        return jsonResponse({ data: { items: [], total: 0 } });
+      }
+
+      throw new Error(`Unhandled request: ${url}`);
+    });
+
+    renderCollaboratorsListPage();
+
+    await waitForText("No collaborators yet");
+    expect(textNode("Create a Collaborator after the related Person profile is complete.")).toBeTruthy();
+  });
+
+  it("shows backend errors", async () => {
+    mockFetch(async (url) => {
+      if (url === "/api/v1/collaborators") {
+        return jsonResponse(
+          {
+            error: {
+              code: "internal_error",
+              message: "Could not list collaborators",
+            },
+          },
+          { status: 500 }
+        );
+      }
+
+      throw new Error(`Unhandled request: ${url}`);
+    });
+
+    renderCollaboratorsListPage();
+
+    await waitForText("Could not list collaborators");
+    expect(textNode("Status: 500 · Code: internal_error")).toBeTruthy();
+  });
+});
+
+function renderCollaboratorsListPage() {
+  const queryClient = new QueryClient({
+    defaultOptions: {
+      queries: { retry: false },
+      mutations: { retry: false },
+    },
+  });
+
+  const router = createMemoryRouter(
+    [{ path: "/collaborators", element: <CollaboratorsListPage /> }],
+    { initialEntries: ["/collaborators"] }
+  );
+
+  root = createRoot(container);
+
+  act(() => {
+    root?.render(
+      <QueryClientProvider client={queryClient}>
+        <RouterProvider router={router} />
+      </QueryClientProvider>
+    );
+  });
+}
+
+function mockFetch(
+  handler: (url: string, init?: RequestInit) => Promise<Response>
+) {
+  vi.spyOn(globalThis, "fetch").mockImplementation(
+    async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === "string" ? input : input.toString();
+      return handler(url, init);
+    }
+  );
+}
+
+function jsonResponse(body: unknown, init: ResponseInit = {}) {
+  return new Response(JSON.stringify(body), {
+    status: init.status ?? 200,
+    headers: { "Content-Type": "application/json", ...(init.headers ?? {}) },
+  });
+}
+
+async function waitForText(text: string) {
+  await waitFor(() => Boolean(textNode(text)));
+}
+
+async function waitFor(assertion: () => boolean) {
+  const timeoutAt = Date.now() + 1500;
+  let lastError: unknown;
+
+  while (Date.now() < timeoutAt) {
+    try {
+      let passed = false;
+      await act(async () => {
+        passed = assertion();
+      });
+      if (passed) return;
+    } catch (error) {
+      lastError = error;
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+
+  if (lastError) {
+    throw lastError;
+  }
+
+  throw new Error("Timed out waiting for assertion");
+}
+
+function textNode(text: string) {
+  return Array.from(container.querySelectorAll("*")).find((element) =>
+    element.textContent?.includes(text)
+  );
+}
