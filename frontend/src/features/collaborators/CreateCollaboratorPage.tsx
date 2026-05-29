@@ -59,7 +59,15 @@ export function CreateCollaboratorPage() {
     [people],
   );
 
-  const incompletePeopleCount = people.length - completePeople.length;
+  const incompletePeople = useMemo(
+    () =>
+      people
+        .filter((person) => !person.canCreateCollaborator)
+        .sort((a, b) => personLabel(a).localeCompare(personLabel(b))),
+    [people],
+  );
+
+  const incompletePeopleCount = incompletePeople.length;
 
   const visibleCompletePeople = useMemo(() => {
     const query = personSearch.trim().toLowerCase();
@@ -183,7 +191,7 @@ export function CreateCollaboratorPage() {
 
     if (!selectedPerson) {
       setClientValidationError(
-        "Select a complete Person before creating a Collaborator.",
+        "Select a complete Person before creating a Collaborator. Incomplete People must be completed first.",
       );
       return;
     }
@@ -322,6 +330,10 @@ export function CreateCollaboratorPage() {
               </div>
 
               {selectedPerson && <SelectedPersonCard person={selectedPerson} />}
+
+              {incompletePeople.length > 0 && (
+                <IncompletePeoplePanel people={incompletePeople} />
+              )}
 
               {completePeople.length === 0 && (
                 <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
@@ -535,6 +547,40 @@ function ReferenceDataSetupSummary({
   );
 }
 
+function IncompletePeoplePanel({ people }: { people: Person[] }) {
+  return (
+    <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+      <p className="font-semibold">Incomplete People are blocked.</p>
+      <p className="mt-1">
+        These People cannot become Collaborators until their missing profile
+        sections are completed. They are intentionally excluded from the
+        complete Person selector above.
+      </p>
+
+      <ul className="mt-3 space-y-3">
+        {people.map((person) => (
+          <li
+            key={person.id}
+            className="rounded-lg border border-amber-200 bg-white/70 p-3"
+          >
+            <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+              <div>
+                <p className="font-semibold">{personLabel(person)}</p>
+                <p className="mt-1 text-xs uppercase tracking-wide text-amber-700">
+                  Missing: {missingSectionsLabel(person)}
+                </p>
+              </div>
+              <Link className="font-semibold underline" to={`/people/${person.id}`}>
+                Complete Person
+              </Link>
+            </div>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 function SelectedPersonCard({ person }: { person: Person }) {
   return (
     <div className="mt-4 rounded-xl border border-green-200 bg-green-50 p-4 text-sm text-green-900">
@@ -686,6 +732,11 @@ function personSearchText(person: Person) {
     .filter(Boolean)
     .join(" ")
     .toLowerCase();
+}
+
+function missingSectionsLabel(person: Person) {
+  const sections = person.missingSections?.filter(Boolean) ?? [];
+  return sections.length > 0 ? sections.join(", ") : "profile details";
 }
 
 function personLabel(person: Person) {

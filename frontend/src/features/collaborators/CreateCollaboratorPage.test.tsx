@@ -137,7 +137,7 @@ afterEach(async () => {
 });
 
 describe("CreateCollaboratorPage", () => {
-  it("loads only complete people into the create form and hides incomplete people", async () => {
+  it("loads only complete people into the create form and explains incomplete people are blocked", async () => {
     mockCreateCollaboratorFetch();
 
     renderCreateCollaboratorPage();
@@ -151,7 +151,17 @@ describe("CreateCollaboratorPage", () => {
       "Ana Silva (Ana)",
       "Carla Moura (Carla)",
     ]);
-    expect(textNode("Bruno Costa")).toBeFalsy();
+    expect(textNode("Incomplete People are blocked.")).toBeTruthy();
+    expect(textNode("Bruno Costa (Bruno)")).toBeTruthy();
+    expect(textNode("Missing: Bank")).toBeTruthy();
+
+    const completePersonLink = Array.from(container.querySelectorAll("a")).find(
+      (node) => node.textContent?.trim() === "Complete Person",
+    );
+    expect(completePersonLink?.getAttribute("href")).toBe(
+      "/people/person-incomplete-1",
+    );
+
     expect(textNode("Active reference data")).toBeTruthy();
     expect(
       textNode("Only active reference data values are available"),
@@ -353,6 +363,47 @@ describe("CreateCollaboratorPage", () => {
     await waitForText("Validation failed");
     await waitForText("personId:");
     await waitForText("Person already has an active collaborator journey");
+  });
+
+  it("shows a useful backend error when the selected Person becomes incomplete before submit", async () => {
+    mockCreateCollaboratorFetch({
+      createResponse: jsonResponse(
+        {
+          error: {
+            code: "validation_failed",
+            message: "Person profile is incomplete",
+            fields: {
+              personId:
+                "Complete the Person profile before creating a Collaborator",
+              missingSections: "Bank, Emergency",
+            },
+          },
+        },
+        { status: 400 },
+      ),
+    });
+
+    renderCreateCollaboratorPage();
+
+    await waitForText("Ana Silva (Ana)");
+
+    await changeSelect("Complete Person", "person-complete-1");
+    await changeInput("Journey Start Date", "2026-05-29");
+    await changeSelect("Status", "ref-collaborator-status-active");
+    await changeSelect("Sector", "ref-sector-mining");
+    await changeSelect("Location", "ref-location-carara");
+    await changeSelect("Task", "ref-task-operator");
+    await changeSelect("Payment Method", "ref-method-daily");
+    await changeInput("Payment Value", "125.50");
+    await clickButton("Create Collaborator");
+
+    await waitForText("Person profile is incomplete");
+    await waitForText("personId:");
+    await waitForText(
+      "Complete the Person profile before creating a Collaborator",
+    );
+    await waitForText("missingSections:");
+    await waitForText("Bank, Emergency");
   });
 });
 
