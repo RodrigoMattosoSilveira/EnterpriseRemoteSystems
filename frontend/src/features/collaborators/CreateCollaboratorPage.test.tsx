@@ -320,7 +320,7 @@ describe("CreateCollaboratorPage", () => {
     });
   });
 
-  it("shows backend validation errors from create collaborator", async () => {
+  it("shows a useful duplicate active Collaborator error", async () => {
     mockCreateCollaboratorFetch({
       createResponse: jsonResponse(
         {
@@ -350,9 +350,23 @@ describe("CreateCollaboratorPage", () => {
     await changeInput("Payment Value", "125.50");
     await clickButton("Create Collaborator");
 
-    await waitForText("Validation failed");
-    await waitForText("personId:");
+    await waitForText(
+      "This Person already has an active Collaborator journey.",
+    );
     await waitForText("Person already has an active collaborator journey");
+    await waitForText("Selected Person:");
+    await waitForText("Ana Silva (Ana)");
+
+    const collaboratorsLink = Array.from(container.querySelectorAll("a")).find(
+      (node) => node.textContent?.trim() === "View Collaborators",
+    );
+    expect(collaboratorsLink?.getAttribute("href")).toBe("/collaborators");
+
+    const personLink = Array.from(container.querySelectorAll("a")).find(
+      (node) => node.textContent?.trim() === "View Person",
+    );
+    expect(personLink?.getAttribute("href")).toBe("/people/person-complete-1");
+    expect(textNode("personId:")).toBeFalsy();
   });
 });
 
