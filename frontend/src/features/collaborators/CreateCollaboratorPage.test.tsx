@@ -153,7 +153,9 @@ describe("CreateCollaboratorPage", () => {
     ]);
     expect(textNode("Bruno Costa")).toBeFalsy();
     expect(textNode("Active reference data")).toBeTruthy();
-    expect(textNode("Only active reference data values are available")).toBeTruthy();
+    expect(
+      textNode("Only active reference data values are available"),
+    ).toBeTruthy();
     expect(textNode("1 active · 1 inactive")).toBeTruthy();
     expect(textNode("Daily Rate")).toBeTruthy();
     expect(textNode("Old Method")).toBeFalsy();
@@ -186,7 +188,9 @@ describe("CreateCollaboratorPage", () => {
 
     renderCreateCollaboratorPage();
 
-    await waitForText("Active reference data is required before creating a Collaborator.");
+    await waitForText(
+      "Active reference data is required before creating a Collaborator.",
+    );
     await waitForText("Configure active values for: Payment Methods.");
 
     expect(selectOptions("Payment Method")).toEqual([
@@ -242,6 +246,28 @@ describe("CreateCollaboratorPage", () => {
       (node) => node.textContent?.trim() === "View Person",
     );
     expect(viewLink?.getAttribute("href")).toBe("/people/person-complete-1");
+  });
+
+  it("requires a complete Person and all required Collaborator fields before enabling submit", async () => {
+    mockCreateCollaboratorFetch();
+
+    renderCreateCollaboratorPage();
+
+    await waitForText("Ana Silva (Ana)");
+
+    expect(submitButton().hasAttribute("disabled")).toBe(true);
+
+    await changeSelect("Complete Person", "person-complete-1");
+    expect(submitButton().hasAttribute("disabled")).toBe(true);
+
+    await changeSelect("Status", "ref-collaborator-status-active");
+    await changeSelect("Sector", "ref-sector-mining");
+    await changeSelect("Location", "ref-location-carara");
+    await changeSelect("Task", "ref-task-operator");
+    await changeSelect("Payment Method", "ref-method-daily");
+    await changeInput("Payment Value", "125.50");
+
+    expect(submitButton().hasAttribute("disabled")).toBe(false);
   });
 
   it("shows an empty eligible-Person state when all People are incomplete", async () => {
@@ -571,6 +597,14 @@ async function clickButton(name: string) {
   await act(async () => {
     button.dispatchEvent(new MouseEvent("click", { bubbles: true }));
   });
+}
+
+function submitButton() {
+  const button = Array.from(container.querySelectorAll("button")).find(
+    (node) => node.textContent?.trim() === "Create Collaborator",
+  );
+  if (!button) throw new Error("Could not find Create Collaborator button");
+  return button;
 }
 
 function controlByLabel<T extends HTMLElement>(

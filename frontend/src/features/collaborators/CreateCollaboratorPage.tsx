@@ -44,6 +44,7 @@ export function CreateCollaboratorPage() {
 
   const [form, setForm] = useState<FormState>(initialForm);
   const [personSearch, setPersonSearch] = useState("");
+  const [clientValidationError, setClientValidationError] = useState("");
 
   const people = useMemo(
     () => (Array.isArray(peopleQuery.data) ? peopleQuery.data : []),
@@ -128,6 +129,19 @@ export function CreateCollaboratorPage() {
 
   const hasMissingActiveReferenceData = missingActiveReferenceData.length > 0;
 
+  const paymentValue = Number(form.paymentValue);
+  const canSubmit =
+    Boolean(selectedPerson) &&
+    Boolean(form.journeyStartDate) &&
+    Boolean(form.statusId) &&
+    Boolean(form.sectorId) &&
+    Boolean(form.locationId) &&
+    Boolean(form.taskId) &&
+    Boolean(form.paymentMethodId) &&
+    Number.isFinite(paymentValue) &&
+    paymentValue > 0 &&
+    !hasMissingActiveReferenceData;
+
   const isLoading =
     peopleQuery.isLoading ||
     paymentMethodsQuery.isLoading ||
@@ -145,6 +159,7 @@ export function CreateCollaboratorPage() {
     statusesQuery.error;
 
   function update<K extends keyof FormState>(key: K, value: FormState[K]) {
+    setClientValidationError("");
     setForm((prev) => ({ ...prev, [key]: value }));
   }
 
@@ -166,16 +181,30 @@ export function CreateCollaboratorPage() {
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
+    if (!selectedPerson) {
+      setClientValidationError(
+        "Select a complete Person before creating a Collaborator.",
+      );
+      return;
+    }
+
+    if (!canSubmit) {
+      setClientValidationError(
+        "Complete all required Collaborator fields before submitting.",
+      );
+      return;
+    }
+
     const input: CreateCollaboratorInput = {
-      personId: form.personId,
+      personId: selectedPerson.id,
       journeyStartDate: form.journeyStartDate,
       paymentMethodId: form.paymentMethodId,
-      paymentValue: Number(form.paymentValue),
+      paymentValue,
       sectorId: form.sectorId,
       locationId: form.locationId,
       taskId: form.taskId,
       statusId: form.statusId,
-      notes: form.notes,
+      notes: form.notes.trim(),
     };
 
     try {
@@ -216,6 +245,12 @@ export function CreateCollaboratorPage() {
         <ApiErrorPanel error={loadError} />
         <ApiErrorPanel error={createMutation.error} />
 
+        {clientValidationError && (
+          <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm font-medium text-red-800">
+            {clientValidationError}
+          </div>
+        )}
+
         {!isLoading && !loadError && (
           <ReferenceDataSetupSummary groups={referenceDataGroups} />
         )}
@@ -226,9 +261,13 @@ export function CreateCollaboratorPage() {
               Active reference data is required before creating a Collaborator.
             </p>
             <p className="mt-1">
-              Configure active values for: {missingActiveReferenceData.join(", ")}.
+              Configure active values for:{" "}
+              {missingActiveReferenceData.join(", ")}.
             </p>
-            <Link className="mt-2 inline-block underline" to="/admin/reference-data">
+            <Link
+              className="mt-2 inline-block underline"
+              to="/admin/reference-data"
+            >
               Manage reference data
             </Link>
           </div>
@@ -325,7 +364,11 @@ export function CreateCollaboratorPage() {
                   value={form.statusId}
                   onChange={(value) => update("statusId", value)}
                   options={statusOptions}
-                  placeholder={referencePlaceholder("status", statusOptions, "statuses")}
+                  placeholder={referencePlaceholder(
+                    "status",
+                    statusOptions,
+                    "statuses",
+                  )}
                   disabled={statusOptions.length === 0}
                 />
               </div>
@@ -351,7 +394,10 @@ export function CreateCollaboratorPage() {
                   value={form.locationId}
                   onChange={(value) => update("locationId", value)}
                   options={locationOptions}
-                  placeholder={referencePlaceholder("location", locationOptions)}
+                  placeholder={referencePlaceholder(
+                    "location",
+                    locationOptions,
+                  )}
                   disabled={locationOptions.length === 0}
                 />
                 <Select
@@ -375,14 +421,17 @@ export function CreateCollaboratorPage() {
                   value={form.paymentMethodId}
                   onChange={(value) => update("paymentMethodId", value)}
                   options={paymentMethodOptions}
-                  placeholder={referencePlaceholder("payment method", paymentMethodOptions)}
+                  placeholder={referencePlaceholder(
+                    "payment method",
+                    paymentMethodOptions,
+                  )}
                   disabled={paymentMethodOptions.length === 0}
                 />
                 <Input
                   label="Payment Value"
                   required
                   type="number"
-                  min="0"
+                  min="0.01"
                   step="0.01"
                   value={form.paymentValue}
                   onChange={(value) => update("paymentValue", value)}
@@ -412,12 +461,7 @@ export function CreateCollaboratorPage() {
                 </Link>
                 <button
                   type="submit"
-                  disabled={
-                    createMutation.isPending ||
-                    completePeople.length === 0 ||
-                    !form.personId ||
-                    hasMissingActiveReferenceData
-                  }
+                  disabled={createMutation.isPending || !canSubmit}
                   className="rounded-xl bg-gray-950 px-5 py-3 text-sm font-semibold text-white shadow-sm disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   {createMutation.isPending
@@ -436,7 +480,11 @@ export function CreateCollaboratorPage() {
 function ReferenceDataSetupSummary({
   groups,
 }: {
-  groups: { label: string; options: { value: string; label: string }[]; total: number }[];
+  groups: {
+    label: string;
+    options: { value: string; label: string }[];
+    total: number;
+  }[];
 }) {
   return (
     <section className="rounded-2xl border bg-white p-5 shadow-sm">
@@ -473,7 +521,10 @@ function ReferenceDataSetupSummary({
                 </span>{" "}
                 active
                 {inactiveCount > 0 && (
-                  <span className="text-gray-500"> · {inactiveCount} inactive</span>
+                  <span className="text-gray-500">
+                    {" "}
+                    · {inactiveCount} inactive
+                  </span>
                 )}
               </dd>
             </div>
