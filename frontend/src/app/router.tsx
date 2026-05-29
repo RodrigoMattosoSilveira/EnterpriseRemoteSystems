@@ -9,6 +9,7 @@ import { CreatePersonPage } from "../features/people/CreatePersonPage";
 import { PersonDetailPage } from "../features/people/PersonDetailPage";
 import { ReferenceDataAdminPage } from "../features/reference-data/ReferenceDataAdminPage";
 import { CollaboratorsListPage } from "../features/collaborators/CollaboratorsListPage";
+import { CreateCollaboratorPage } from "../features/collaborators/CreateCollaboratorPage";
 
 function RouteErrorPage() {
   const error = useRouteError();
@@ -55,6 +56,7 @@ export const router = createBrowserRouter([
       { path: "people/new", element: <CreatePersonPage /> },
       { path: "people/:id", element: <PersonDetailPage /> },
       { path: "collaborators", element: <CollaboratorsListPage /> },
+      { path: "collaborators/new", element: <CreateCollaboratorPage /> },
       { path: "admin/reference-data", element: <ReferenceDataAdminPage /> },
       { path: "*", element: <NotFoundPage /> },
     ],
