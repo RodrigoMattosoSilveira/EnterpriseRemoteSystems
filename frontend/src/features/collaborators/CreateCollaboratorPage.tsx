@@ -1,5 +1,6 @@
 import { useMemo, useState, type FormEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import { ApiError } from "../../api/client";
 import { ApiErrorPanel } from "../../components/ApiErrorPanel";
 import type { CreateCollaboratorInput } from "../../types/collaborators";
 import type { Person } from "../../types/people";
@@ -129,6 +130,10 @@ export function CreateCollaboratorPage() {
 
   const hasMissingActiveReferenceData = missingActiveReferenceData.length > 0;
 
+  const duplicateActiveCollaboratorError = getDuplicateActiveCollaboratorError(
+    createMutation.error,
+  );
+
   const paymentValue = Number(form.paymentValue);
   const canSubmit =
     Boolean(selectedPerson) &&
@@ -243,7 +248,14 @@ export function CreateCollaboratorPage() {
         )}
 
         <ApiErrorPanel error={loadError} />
-        <ApiErrorPanel error={createMutation.error} />
+        {duplicateActiveCollaboratorError ? (
+          <DuplicateActiveCollaboratorPanel
+            person={selectedPerson}
+            message={duplicateActiveCollaboratorError}
+          />
+        ) : (
+          <ApiErrorPanel error={createMutation.error} />
+        )}
 
         {clientValidationError && (
           <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm font-medium text-red-800">
@@ -475,6 +487,50 @@ export function CreateCollaboratorPage() {
       </section>
     </main>
   );
+}
+
+function DuplicateActiveCollaboratorPanel({
+  person,
+  message,
+}: {
+  person?: Person;
+  message: string;
+}) {
+  return (
+    <div className="mb-4 rounded-2xl border border-amber-200 bg-amber-50 p-5 text-amber-900 shadow-sm">
+      <p className="text-base font-semibold">
+        This Person already has an active Collaborator journey.
+      </p>
+      <p className="mt-1 text-sm">{message}</p>
+      {person && (
+        <p className="mt-2 text-sm">
+          Selected Person:{" "}
+          <span className="font-semibold">{personLabel(person)}</span>
+        </p>
+      )}
+      <div className="mt-3 flex flex-wrap gap-3 text-sm font-semibold">
+        <Link className="underline" to="/collaborators">
+          View Collaborators
+        </Link>
+        {person && (
+          <Link className="underline" to={`/people/${person.id}`}>
+            View Person
+          </Link>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function getDuplicateActiveCollaboratorError(error: unknown) {
+  if (!(error instanceof ApiError)) return "";
+
+  const personMessage = error.fields?.personId ?? "";
+  if (!personMessage.toLowerCase().includes("active collaborator")) {
+    return "";
+  }
+
+  return personMessage;
 }
 
 function ReferenceDataSetupSummary({
