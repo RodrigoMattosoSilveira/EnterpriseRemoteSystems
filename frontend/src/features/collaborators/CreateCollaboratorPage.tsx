@@ -48,7 +48,6 @@ export function CreateCollaboratorPage() {
   const createMutation = useCreateCollaborator();
 
   const [form, setForm] = useState<FormState>(initialForm);
-  const [personSearch, setPersonSearch] = useState("");
   const [clientValidationError, setClientValidationError] = useState("");
 
   const people = useMemo(
@@ -94,15 +93,6 @@ export function CreateCollaboratorPage() {
   );
 
   const incompletePeopleCount = people.length - completePeople.length;
-
-  const visibleEligiblePeople = useMemo(() => {
-    const query = personSearch.trim().toLowerCase();
-    if (!query) return eligiblePeople;
-
-    return eligiblePeople.filter((person) =>
-      personSearchText(person).includes(query),
-    );
-  }, [eligiblePeople, personSearch]);
 
   const selectedPerson = eligiblePeople.find(
     (person) => person.id === form.personId,
@@ -168,17 +158,30 @@ export function CreateCollaboratorPage() {
   );
 
   const paymentValue = Number(form.paymentValue);
-  const canSubmit =
-    Boolean(selectedPerson) &&
-    Boolean(form.journeyStartDate) &&
-    Boolean(form.statusId) &&
-    Boolean(form.sectorId) &&
-    Boolean(form.locationId) &&
-    Boolean(form.taskId) &&
-    Boolean(form.paymentMethodId) &&
-    Number.isFinite(paymentValue) &&
-    paymentValue > 0 &&
-    !hasMissingActiveReferenceData;
+  const submitRequirements = [
+    { met: Boolean(selectedPerson), label: "Select an eligible Person" },
+    {
+      met: Boolean(form.journeyStartDate),
+      label: "Enter a journey start date",
+    },
+    { met: Boolean(form.statusId), label: "Select a status" },
+    { met: Boolean(form.sectorId), label: "Select a sector" },
+    { met: Boolean(form.locationId), label: "Select a location" },
+    { met: Boolean(form.taskId), label: "Select a task" },
+    { met: Boolean(form.paymentMethodId), label: "Select a payment method" },
+    {
+      met: Number.isFinite(paymentValue) && paymentValue > 0,
+      label: "Enter a payment value greater than zero",
+    },
+    {
+      met: !hasMissingActiveReferenceData,
+      label: "Configure active reference data for all required dropdowns",
+    },
+  ];
+  const missingSubmitRequirements = submitRequirements
+    .filter((requirement) => !requirement.met)
+    .map((requirement) => requirement.label);
+  const canSubmit = missingSubmitRequirements.length === 0;
 
   const isLoading =
     peopleQuery.isLoading ||
@@ -201,21 +204,6 @@ export function CreateCollaboratorPage() {
   function update<K extends keyof FormState>(key: K, value: FormState[K]) {
     setClientValidationError("");
     setForm((prev) => ({ ...prev, [key]: value }));
-  }
-
-  function updatePersonSearch(value: string) {
-    setPersonSearch(value);
-
-    if (
-      form.personId &&
-      !eligiblePeople.some(
-        (person) =>
-          person.id === form.personId &&
-          personSearchText(person).includes(value.trim().toLowerCase()),
-      )
-    ) {
-      update("personId", "");
-    }
   }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -349,29 +337,18 @@ export function CreateCollaboratorPage() {
                 </div>
               </div>
 
-              <div className="mt-4 grid gap-4 md:grid-cols-[1fr_1.4fr]">
-                <Input
-                  label="Search eligible People"
-                  value={personSearch}
-                  onChange={updatePersonSearch}
-                  placeholder="Search by name, nickname, CPF, or email"
-                />
-
+              <div className="mt-4">
                 <Select
                   label="Eligible Person"
                   required
                   value={form.personId}
                   onChange={(value) => update("personId", value)}
-                  options={visibleEligiblePeople.map((person) => ({
+                  options={eligiblePeople.map((person) => ({
                     value: person.id,
                     label: personLabel(person),
                   }))}
-                  placeholder={personSelectPlaceholder(
-                    eligiblePeople.length,
-                    visibleEligiblePeople.length,
-                    personSearch,
-                  )}
-                  disabled={visibleEligiblePeople.length === 0}
+                  placeholder={personSelectPlaceholder(eligiblePeople.length)}
+                  disabled={eligiblePeople.length === 0}
                 />
               </div>
 
@@ -391,14 +368,6 @@ export function CreateCollaboratorPage() {
                   </Link>
                 </div>
               )}
-
-              {eligiblePeople.length > 0 &&
-                visibleEligiblePeople.length === 0 && (
-                  <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
-                    No eligible People match your search. Clear the search to
-                    see all eligible People.
-                  </div>
-                )}
 
               {completePeopleWithActiveCollaborator.length > 0 && (
                 <AlreadyCollaboratorsPanel
@@ -512,22 +481,42 @@ export function CreateCollaboratorPage() {
             </section>
 
             <div className="fixed inset-x-0 bottom-0 border-t bg-white/95 p-4 shadow-lg backdrop-blur">
-              <div className="mx-auto flex max-w-4xl justify-end gap-3">
-                <Link
-                  to="/collaborators"
-                  className="rounded-xl border border-gray-300 bg-white px-5 py-3 text-sm font-semibold text-gray-700 shadow-sm"
-                >
-                  Cancel
-                </Link>
-                <button
-                  type="submit"
-                  disabled={createMutation.isPending || !canSubmit}
-                  className="rounded-xl bg-gray-950 px-5 py-3 text-sm font-semibold text-white shadow-sm disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  {createMutation.isPending
-                    ? "Creating..."
-                    : "Create Collaborator"}
-                </button>
+              <div className="mx-auto max-w-4xl space-y-3">
+                {missingSubmitRequirements.length > 0 && (
+                  <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                    <p className="font-semibold">
+                      Complete these fields to enable Create Collaborator:
+                    </p>
+                    <ul className="mt-1 list-disc pl-5">
+                      {missingSubmitRequirements.map((requirement) => (
+                        <li key={requirement}>{requirement}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                <div className="flex justify-end gap-3">
+                  <Link
+                    to="/collaborators"
+                    className="rounded-xl border border-gray-300 bg-white px-5 py-3 text-sm font-semibold text-gray-700 shadow-sm"
+                  >
+                    Cancel
+                  </Link>
+                  <button
+                    type="submit"
+                    disabled={createMutation.isPending || !canSubmit}
+                    title={
+                      canSubmit
+                        ? "Create Collaborator"
+                        : `Missing: ${missingSubmitRequirements.join(", ")}`
+                    }
+                    className="rounded-xl bg-gray-950 px-5 py-3 text-sm font-semibold text-white shadow-sm disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {createMutation.isPending
+                      ? "Creating..."
+                      : "Create Collaborator"}
+                  </button>
+                </div>
               </div>
             </div>
           </form>
@@ -798,34 +787,14 @@ function activeOptions(items: ReferenceDataItem[] = []) {
     .map((item) => ({ value: item.id, label: item.label }));
 }
 
-function personSelectPlaceholder(
-  eligiblePeopleCount: number,
-  visiblePeopleCount: number,
-  search: string,
-) {
-  if (eligiblePeopleCount === 0) return "No eligible People available";
-  if (visiblePeopleCount === 0 && search.trim())
-    return "No eligible People match search";
-  return "Select an eligible Person";
+function personSelectPlaceholder(eligiblePeopleCount: number) {
+  return eligiblePeopleCount === 0
+    ? "No eligible People available"
+    : "Select an eligible Person";
 }
 
 function isActiveCollaborator(collaborator: Collaborator) {
   return !collaborator.closedAt;
-}
-
-function personSearchText(person: Person) {
-  return [
-    person.firstName,
-    person.lastName,
-    person.nickname,
-    person.email,
-    person.cpf,
-    person.rg,
-    person.cellular,
-  ]
-    .filter(Boolean)
-    .join(" ")
-    .toLowerCase();
 }
 
 function personLabel(person: Person) {

@@ -209,13 +209,18 @@ describe("CreateCollaboratorPage", () => {
       "Select an eligible Person",
       "Ana Silva (Ana)",
     ]);
-    await waitForText("Already active Collaborators are hidden from the dropdown.");
+    expect(textNode("Search eligible People")).toBeFalsy();
+    await waitForText(
+      "Already active Collaborators are hidden from the dropdown.",
+    );
     await waitForText("Carla Moura (Carla)");
 
     const carlaLinks = Array.from(container.querySelectorAll("a")).filter(
       (node) => node.textContent?.trim() === "Carla Moura (Carla)",
     );
-    expect(carlaLinks[0]?.getAttribute("href")).toBe("/people/person-complete-2");
+    expect(carlaLinks[0]?.getAttribute("href")).toBe(
+      "/people/person-complete-2",
+    );
   });
 
   it("shows a setup warning and disables submission when a dropdown has no active reference data", async () => {
@@ -253,29 +258,6 @@ describe("CreateCollaboratorPage", () => {
     expect(submit?.hasAttribute("disabled")).toBe(true);
   });
 
-  it("filters eligible people by search text before selection", async () => {
-    mockCreateCollaboratorFetch();
-
-    renderCreateCollaboratorPage();
-
-    await waitForText("Ana Silva (Ana)");
-
-    await changeInput("Search eligible People", "carla");
-
-    expect(selectOptions("Eligible Person")).toEqual([
-      "Select an eligible Person",
-      "Carla Moura (Carla)",
-    ]);
-    expect(textNode("Ana Silva (Ana)")).toBeFalsy();
-
-    await changeInput("Search eligible People", "no-match");
-
-    expect(selectOptions("Eligible Person")).toEqual([
-      "No eligible People match search",
-    ]);
-    await waitForText("No eligible People match your search");
-  });
-
   it("shows selected complete Person details and a link to the Person", async () => {
     mockCreateCollaboratorFetch();
 
@@ -308,6 +290,13 @@ describe("CreateCollaboratorPage", () => {
 
     await changeSelect("Eligible Person", "person-complete-1");
     expect(submitButton().hasAttribute("disabled")).toBe(true);
+    await waitForText("Complete these fields to enable Create Collaborator:");
+    await waitForText("Select a status");
+    await waitForText("Select a sector");
+    await waitForText("Select a location");
+    await waitForText("Select a task");
+    await waitForText("Select a payment method");
+    await waitForText("Enter a payment value greater than zero");
 
     await changeSelect("Status", "ref-collaborator-status-active");
     await changeSelect("Sector", "ref-sector-mining");
@@ -317,6 +306,9 @@ describe("CreateCollaboratorPage", () => {
     await changeInput("Payment Value", "125.50");
 
     expect(submitButton().hasAttribute("disabled")).toBe(false);
+    expect(
+      textNode("Complete these fields to enable Create Collaborator:"),
+    ).toBeFalsy();
   });
 
   it("shows an empty eligible-Person state when all People are incomplete", async () => {
@@ -411,7 +403,9 @@ describe("CreateCollaboratorPage", () => {
     await waitForText("Sector is inactive or does not exist");
 
     expect(textNode("Collaborators route reached")).toBeFalsy();
-    expect(textNode("This Person already has an active Collaborator journey.")).toBeFalsy();
+    expect(
+      textNode("This Person already has an active Collaborator journey."),
+    ).toBeFalsy();
   });
 
   it("shows backend incomplete Person validation errors if server rejects the selected Person", async () => {
@@ -452,7 +446,9 @@ describe("CreateCollaboratorPage", () => {
     );
 
     expect(textNode("Collaborators route reached")).toBeFalsy();
-    expect(textNode("This Person already has an active Collaborator journey.")).toBeFalsy();
+    expect(
+      textNode("This Person already has an active Collaborator journey."),
+    ).toBeFalsy();
   });
 
   it("shows a useful duplicate active Collaborator error", async () => {
