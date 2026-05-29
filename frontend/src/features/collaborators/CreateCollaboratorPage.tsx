@@ -73,6 +73,61 @@ export function CreateCollaboratorPage() {
     (person) => person.id === form.personId,
   );
 
+  const paymentMethodOptions = useMemo(
+    () => activeOptions(paymentMethodsQuery.data),
+    [paymentMethodsQuery.data],
+  );
+  const sectorOptions = useMemo(
+    () => activeOptions(sectorsQuery.data),
+    [sectorsQuery.data],
+  );
+  const locationOptions = useMemo(
+    () => activeOptions(locationsQuery.data),
+    [locationsQuery.data],
+  );
+  const taskOptions = useMemo(
+    () => activeOptions(tasksQuery.data),
+    [tasksQuery.data],
+  );
+  const statusOptions = useMemo(
+    () => activeOptions(statusesQuery.data),
+    [statusesQuery.data],
+  );
+
+  const referenceDataGroups = [
+    {
+      label: "Payment Methods",
+      options: paymentMethodOptions,
+      total: paymentMethodsQuery.data?.length ?? 0,
+    },
+    {
+      label: "Sectors",
+      options: sectorOptions,
+      total: sectorsQuery.data?.length ?? 0,
+    },
+    {
+      label: "Locations",
+      options: locationOptions,
+      total: locationsQuery.data?.length ?? 0,
+    },
+    {
+      label: "Tasks",
+      options: taskOptions,
+      total: tasksQuery.data?.length ?? 0,
+    },
+    {
+      label: "Collaborator Statuses",
+      options: statusOptions,
+      total: statusesQuery.data?.length ?? 0,
+    },
+  ];
+
+  const missingActiveReferenceData = referenceDataGroups
+    .filter((group) => group.options.length === 0)
+    .map((group) => group.label);
+
+  const hasMissingActiveReferenceData = missingActiveReferenceData.length > 0;
+
   const isLoading =
     peopleQuery.isLoading ||
     paymentMethodsQuery.isLoading ||
@@ -160,6 +215,24 @@ export function CreateCollaboratorPage() {
 
         <ApiErrorPanel error={loadError} />
         <ApiErrorPanel error={createMutation.error} />
+
+        {!isLoading && !loadError && (
+          <ReferenceDataSetupSummary groups={referenceDataGroups} />
+        )}
+
+        {!isLoading && !loadError && hasMissingActiveReferenceData && (
+          <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5 text-sm text-amber-900 shadow-sm">
+            <p className="font-semibold">
+              Active reference data is required before creating a Collaborator.
+            </p>
+            <p className="mt-1">
+              Configure active values for: {missingActiveReferenceData.join(", ")}.
+            </p>
+            <Link className="mt-2 inline-block underline" to="/admin/reference-data">
+              Manage reference data
+            </Link>
+          </div>
+        )}
 
         {!isLoading && !loadError && (
           <form onSubmit={submit} className="space-y-5 pb-28">
@@ -251,8 +324,9 @@ export function CreateCollaboratorPage() {
                   required
                   value={form.statusId}
                   onChange={(value) => update("statusId", value)}
-                  options={activeOptions(statusesQuery.data)}
-                  placeholder="Select a status"
+                  options={statusOptions}
+                  placeholder={referencePlaceholder("status", statusOptions, "statuses")}
+                  disabled={statusOptions.length === 0}
                 />
               </div>
             </section>
@@ -267,24 +341,27 @@ export function CreateCollaboratorPage() {
                   required
                   value={form.sectorId}
                   onChange={(value) => update("sectorId", value)}
-                  options={activeOptions(sectorsQuery.data)}
-                  placeholder="Select a sector"
+                  options={sectorOptions}
+                  placeholder={referencePlaceholder("sector", sectorOptions)}
+                  disabled={sectorOptions.length === 0}
                 />
                 <Select
                   label="Location"
                   required
                   value={form.locationId}
                   onChange={(value) => update("locationId", value)}
-                  options={activeOptions(locationsQuery.data)}
-                  placeholder="Select a location"
+                  options={locationOptions}
+                  placeholder={referencePlaceholder("location", locationOptions)}
+                  disabled={locationOptions.length === 0}
                 />
                 <Select
                   label="Task"
                   required
                   value={form.taskId}
                   onChange={(value) => update("taskId", value)}
-                  options={activeOptions(tasksQuery.data)}
-                  placeholder="Select a task"
+                  options={taskOptions}
+                  placeholder={referencePlaceholder("task", taskOptions)}
+                  disabled={taskOptions.length === 0}
                 />
               </div>
             </section>
@@ -297,8 +374,9 @@ export function CreateCollaboratorPage() {
                   required
                   value={form.paymentMethodId}
                   onChange={(value) => update("paymentMethodId", value)}
-                  options={activeOptions(paymentMethodsQuery.data)}
-                  placeholder="Select a payment method"
+                  options={paymentMethodOptions}
+                  placeholder={referencePlaceholder("payment method", paymentMethodOptions)}
+                  disabled={paymentMethodOptions.length === 0}
                 />
                 <Input
                   label="Payment Value"
@@ -337,7 +415,8 @@ export function CreateCollaboratorPage() {
                   disabled={
                     createMutation.isPending ||
                     completePeople.length === 0 ||
-                    !form.personId
+                    !form.personId ||
+                    hasMissingActiveReferenceData
                   }
                   className="rounded-xl bg-gray-950 px-5 py-3 text-sm font-semibold text-white shadow-sm disabled:cursor-not-allowed disabled:opacity-60"
                 >
@@ -351,6 +430,57 @@ export function CreateCollaboratorPage() {
         )}
       </section>
     </main>
+  );
+}
+
+function ReferenceDataSetupSummary({
+  groups,
+}: {
+  groups: { label: string; options: { value: string; label: string }[]; total: number }[];
+}) {
+  return (
+    <section className="rounded-2xl border bg-white p-5 shadow-sm">
+      <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+        <div>
+          <h2 className="text-lg font-semibold text-gray-950">
+            Active reference data
+          </h2>
+          <p className="mt-1 text-sm text-gray-500">
+            Only active reference data values are available in Collaborator
+            dropdowns. Inactive values are hidden.
+          </p>
+        </div>
+        <Link
+          className="text-sm font-semibold text-gray-700 underline"
+          to="/admin/reference-data"
+        >
+          Manage reference data
+        </Link>
+      </div>
+
+      <dl className="mt-4 grid gap-3 md:grid-cols-5">
+        {groups.map((group) => {
+          const inactiveCount = Math.max(group.total - group.options.length, 0);
+
+          return (
+            <div key={group.label} className="rounded-xl bg-gray-50 p-3">
+              <dt className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+                {group.label}
+              </dt>
+              <dd className="mt-1 text-sm text-gray-800">
+                <span className="font-semibold text-gray-950">
+                  {group.options.length}
+                </span>{" "}
+                active
+                {inactiveCount > 0 && (
+                  <span className="text-gray-500"> · {inactiveCount} inactive</span>
+                )}
+              </dd>
+            </div>
+          );
+        })}
+      </dl>
+    </section>
   );
 }
 
@@ -462,6 +592,16 @@ function Input({
       />
     </label>
   );
+}
+
+function referencePlaceholder(
+  label: string,
+  options: { value: string; label: string }[],
+  pluralLabel = `${label}s`,
+) {
+  return options.length === 0
+    ? `No active ${pluralLabel} available`
+    : `Select a ${label}`;
 }
 
 function activeOptions(items: ReferenceDataItem[] = []) {
