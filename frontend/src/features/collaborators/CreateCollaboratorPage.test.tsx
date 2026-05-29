@@ -152,12 +152,52 @@ describe("CreateCollaboratorPage", () => {
       "Carla Moura (Carla)",
     ]);
     expect(textNode("Bruno Costa")).toBeFalsy();
+    expect(textNode("Active reference data")).toBeTruthy();
+    expect(textNode("Only active reference data values are available")).toBeTruthy();
+    expect(textNode("1 active · 1 inactive")).toBeTruthy();
     expect(textNode("Daily Rate")).toBeTruthy();
     expect(textNode("Old Method")).toBeFalsy();
+    expect(selectOptions("Payment Method")).toEqual([
+      "Select a payment method",
+      "Daily Rate",
+    ]);
     expect(textNode("Mining")).toBeTruthy();
     expect(textNode("Mina Carara")).toBeTruthy();
     expect(textNode("Operator")).toBeTruthy();
     expect(textNode("Active")).toBeTruthy();
+  });
+
+  it("shows a setup warning and disables submission when a dropdown has no active reference data", async () => {
+    mockCreateCollaboratorFetch({
+      referenceData: {
+        ...referenceRows,
+        method: [
+          referenceItem(
+            "ref-method-inactive",
+            "method",
+            "OLD",
+            "Old Method",
+            false,
+            20,
+          ),
+        ],
+      },
+    });
+
+    renderCreateCollaboratorPage();
+
+    await waitForText("Active reference data is required before creating a Collaborator.");
+    await waitForText("Configure active values for: Payment Methods.");
+
+    expect(selectOptions("Payment Method")).toEqual([
+      "No active payment methods available",
+    ]);
+    expect(textNode("Old Method")).toBeFalsy();
+
+    const submit = Array.from(container.querySelectorAll("button")).find(
+      (node) => node.textContent?.trim() === "Create Collaborator",
+    );
+    expect(submit?.hasAttribute("disabled")).toBe(true);
   });
 
   it("filters complete people by search text before selection", async () => {
@@ -323,9 +363,11 @@ function renderCreateCollaboratorPage() {
 function mockCreateCollaboratorFetch({
   createResponse,
   people = [completePerson, secondCompletePerson, incompletePerson],
+  referenceData = referenceRows,
 }: {
   createResponse?: Response;
   people?: Person[];
+  referenceData?: Record<string, ReferenceDataItem[]>;
 } = {}) {
   mockFetch(async (url, init) => {
     recordFetchCall(url, init);
@@ -334,7 +376,7 @@ function mockCreateCollaboratorFetch({
       return jsonResponse({ data: { items: people, total: people.length } });
     }
 
-    for (const [type, rows] of Object.entries(referenceRows)) {
+    for (const [type, rows] of Object.entries(referenceData)) {
       if (url === `/api/v1/reference-data/${type}`) {
         return jsonResponse({ data: rows });
       }
