@@ -29,6 +29,22 @@ const completePerson: Person = {
   statusId: "ref-person-status-active",
 };
 
+const secondCompletePerson: Person = {
+  id: "person-complete-2",
+  firstName: "Carla",
+  lastName: "Moura",
+  nickname: "Carla",
+  cpf: "14671029880",
+  rg: "RG-3",
+  cellular: "13987654321",
+  email: "carla@example.com",
+  country: "Brasil",
+  profileCompletionStatus: "COMPLETE",
+  canCreateCollaborator: true,
+  missingSections: [],
+  statusId: "ref-person-status-active",
+};
+
 const incompletePerson: Person = {
   id: "person-incomplete-1",
   firstName: "Bruno",
@@ -47,12 +63,46 @@ const incompletePerson: Person = {
 
 const referenceRows: Record<string, ReferenceDataItem[]> = {
   method: [
-    referenceItem("ref-method-daily", "method", "DAILY", "Daily Rate", true, 10),
-    referenceItem("ref-method-inactive", "method", "OLD", "Old Method", false, 20),
+    referenceItem(
+      "ref-method-daily",
+      "method",
+      "DAILY",
+      "Daily Rate",
+      true,
+      10,
+    ),
+    referenceItem(
+      "ref-method-inactive",
+      "method",
+      "OLD",
+      "Old Method",
+      false,
+      20,
+    ),
   ],
-  sector: [referenceItem("ref-sector-mining", "sector", "MINING", "Mining", true, 10)],
-  location: [referenceItem("ref-location-carara", "location", "CARARA", "Mina Carara", true, 10)],
-  task: [referenceItem("ref-task-operator", "task", "OPERATOR", "Operator", true, 10)],
+  sector: [
+    referenceItem("ref-sector-mining", "sector", "MINING", "Mining", true, 10),
+  ],
+  location: [
+    referenceItem(
+      "ref-location-carara",
+      "location",
+      "CARARA",
+      "Mina Carara",
+      true,
+      10,
+    ),
+  ],
+  task: [
+    referenceItem(
+      "ref-task-operator",
+      "task",
+      "OPERATOR",
+      "Operator",
+      true,
+      10,
+    ),
+  ],
   collaborator_status: [
     referenceItem(
       "ref-collaborator-status-active",
@@ -60,7 +110,7 @@ const referenceRows: Record<string, ReferenceDataItem[]> = {
       "ACTIVE",
       "Active",
       true,
-      10
+      10,
     ),
   ],
 };
@@ -87,12 +137,20 @@ afterEach(async () => {
 });
 
 describe("CreateCollaboratorPage", () => {
-  it("loads complete people and active reference data into the create form", async () => {
+  it("loads only complete people into the create form and hides incomplete people", async () => {
     mockCreateCollaboratorFetch();
 
     renderCreateCollaboratorPage();
 
     await waitForText("Ana Silva (Ana)");
+    expect(textNode("Carla Moura (Carla)")).toBeTruthy();
+    expect(textNode("2 eligible")).toBeTruthy();
+    expect(textNode("1 incomplete")).toBeTruthy();
+    expect(selectOptions("Complete Person")).toEqual([
+      "Select a complete Person",
+      "Ana Silva (Ana)",
+      "Carla Moura (Carla)",
+    ]);
     expect(textNode("Bruno Costa")).toBeFalsy();
     expect(textNode("Daily Rate")).toBeTruthy();
     expect(textNode("Old Method")).toBeFalsy();
@@ -102,6 +160,65 @@ describe("CreateCollaboratorPage", () => {
     expect(textNode("Active")).toBeTruthy();
   });
 
+  it("filters complete people by search text before selection", async () => {
+    mockCreateCollaboratorFetch();
+
+    renderCreateCollaboratorPage();
+
+    await waitForText("Ana Silva (Ana)");
+
+    await changeInput("Search complete People", "carla");
+
+    expect(selectOptions("Complete Person")).toEqual([
+      "Select a complete Person",
+      "Carla Moura (Carla)",
+    ]);
+    expect(textNode("Ana Silva (Ana)")).toBeFalsy();
+
+    await changeInput("Search complete People", "no-match");
+
+    expect(selectOptions("Complete Person")).toEqual([
+      "No complete People match search",
+    ]);
+    await waitForText("No complete People match your search");
+  });
+
+  it("shows selected complete Person details and a link to the Person", async () => {
+    mockCreateCollaboratorFetch();
+
+    renderCreateCollaboratorPage();
+
+    await waitForText("Ana Silva (Ana)");
+
+    await changeSelect("Complete Person", "person-complete-1");
+
+    await waitForText("Selected Person is complete.");
+    await waitForText("ana@example.com");
+    await waitForText("11987654321");
+    await waitForText("93541134780");
+    await waitForText("COMPLETE");
+
+    const viewLink = Array.from(container.querySelectorAll("a")).find(
+      (node) => node.textContent?.trim() === "View Person",
+    );
+    expect(viewLink?.getAttribute("href")).toBe("/people/person-complete-1");
+  });
+
+  it("shows an empty eligible-Person state when all People are incomplete", async () => {
+    mockCreateCollaboratorFetch({ people: [incompletePerson] });
+
+    renderCreateCollaboratorPage();
+
+    await waitForText("No complete People are available.");
+    await waitForText("0 eligible");
+    await waitForText("1 incomplete");
+
+    const submit = Array.from(container.querySelectorAll("button")).find(
+      (node) => node.textContent?.trim() === "Create Collaborator",
+    );
+    expect(submit?.hasAttribute("disabled")).toBe(true);
+  });
+
   it("submits the collaborator create payload and navigates back to the list", async () => {
     mockCreateCollaboratorFetch();
 
@@ -109,7 +226,7 @@ describe("CreateCollaboratorPage", () => {
 
     await waitForText("Ana Silva (Ana)");
 
-    await changeSelect("Person", "person-complete-1");
+    await changeSelect("Complete Person", "person-complete-1");
     await changeInput("Journey Start Date", "2026-05-29");
     await changeSelect("Status", "ref-collaborator-status-active");
     await changeSelect("Sector", "ref-sector-mining");
@@ -149,7 +266,7 @@ describe("CreateCollaboratorPage", () => {
             },
           },
         },
-        { status: 400 }
+        { status: 400 },
       ),
     });
 
@@ -157,7 +274,7 @@ describe("CreateCollaboratorPage", () => {
 
     await waitForText("Ana Silva (Ana)");
 
-    await changeSelect("Person", "person-complete-1");
+    await changeSelect("Complete Person", "person-complete-1");
     await changeInput("Journey Start Date", "2026-05-29");
     await changeSelect("Status", "ref-collaborator-status-active");
     await changeSelect("Sector", "ref-sector-mining");
@@ -184,9 +301,12 @@ function renderCreateCollaboratorPage() {
   const router = createMemoryRouter(
     [
       { path: "/collaborators/new", element: <CreateCollaboratorPage /> },
-      { path: "/collaborators", element: <main>Collaborators route reached</main> },
+      {
+        path: "/collaborators",
+        element: <main>Collaborators route reached</main>,
+      },
     ],
-    { initialEntries: ["/collaborators/new"] }
+    { initialEntries: ["/collaborators/new"] },
   );
 
   root = createRoot(container);
@@ -195,21 +315,23 @@ function renderCreateCollaboratorPage() {
     root?.render(
       <QueryClientProvider client={queryClient}>
         <RouterProvider router={router} />
-      </QueryClientProvider>
+      </QueryClientProvider>,
     );
   });
 }
 
 function mockCreateCollaboratorFetch({
   createResponse,
+  people = [completePerson, secondCompletePerson, incompletePerson],
 }: {
   createResponse?: Response;
+  people?: Person[];
 } = {}) {
   mockFetch(async (url, init) => {
     recordFetchCall(url, init);
 
     if (url === "/api/v1/people") {
-      return jsonResponse({ data: { items: [completePerson, incompletePerson], total: 2 } });
+      return jsonResponse({ data: { items: people, total: people.length } });
     }
 
     for (const [type, rows] of Object.entries(referenceRows)) {
@@ -248,7 +370,7 @@ function mockCreateCollaboratorFetch({
               updatedAt: "2026-05-29T00:00:00Z",
             },
           },
-          { status: 201 }
+          { status: 201 },
         )
       );
     }
@@ -258,13 +380,13 @@ function mockCreateCollaboratorFetch({
 }
 
 function mockFetch(
-  handler: (url: string, init?: RequestInit) => Promise<Response>
+  handler: (url: string, init?: RequestInit) => Promise<Response>,
 ) {
   vi.spyOn(globalThis, "fetch").mockImplementation(
     async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = typeof input === "string" ? input : input.toString();
       return handler(url, init);
-    }
+    },
   );
 }
 
@@ -303,7 +425,7 @@ function referenceItem(
   code: string,
   label: string,
   active: boolean,
-  sortOrder: number
+  sortOrder: number,
 ): ReferenceDataItem {
   return {
     id,
@@ -347,15 +469,20 @@ async function waitFor(assertion: () => boolean) {
 
 function textNode(text: string) {
   return Array.from(container.querySelectorAll("*")).find((element) =>
-    element.textContent?.includes(text)
+    element.textContent?.includes(text),
   );
+}
+
+function selectOptions(labelText: string) {
+  const select = controlByLabel<HTMLSelectElement>(labelText, "select");
+  return Array.from(select.options).map((option) => option.textContent ?? "");
 }
 
 async function changeSelect(labelText: string, value: string) {
   const select = controlByLabel<HTMLSelectElement>(labelText, "select");
   const valueSetter = Object.getOwnPropertyDescriptor(
     HTMLSelectElement.prototype,
-    "value"
+    "value",
   )?.set;
 
   await act(async () => {
@@ -369,7 +496,7 @@ async function changeInput(labelText: string, value: string) {
   const input = controlByLabel<HTMLInputElement>(labelText, "input");
   const valueSetter = Object.getOwnPropertyDescriptor(
     HTMLInputElement.prototype,
-    "value"
+    "value",
   )?.set;
 
   await act(async () => {
@@ -383,7 +510,7 @@ async function changeTextarea(labelText: string, value: string) {
   const textarea = controlByLabel<HTMLTextAreaElement>(labelText, "textarea");
   const valueSetter = Object.getOwnPropertyDescriptor(
     HTMLTextAreaElement.prototype,
-    "value"
+    "value",
   )?.set;
 
   await act(async () => {
@@ -395,7 +522,7 @@ async function changeTextarea(labelText: string, value: string) {
 
 async function clickButton(name: string) {
   const button = Array.from(container.querySelectorAll("button")).find(
-    (node) => node.textContent?.trim() === name
+    (node) => node.textContent?.trim() === name,
   );
   if (!button) throw new Error(`Could not find button ${name}`);
 
@@ -406,10 +533,10 @@ async function clickButton(name: string) {
 
 function controlByLabel<T extends HTMLElement>(
   labelText: string,
-  selector: "input" | "select" | "textarea"
+  selector: "input" | "select" | "textarea",
 ): T {
   const label = Array.from(container.querySelectorAll("label")).find((node) =>
-    node.textContent?.includes(labelText)
+    node.textContent?.includes(labelText),
   );
 
   const control = label?.querySelector(selector);
