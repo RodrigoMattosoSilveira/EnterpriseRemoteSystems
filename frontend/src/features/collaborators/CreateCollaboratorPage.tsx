@@ -2,12 +2,15 @@ import { useMemo, useState, type FormEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { ApiError } from "../../api/client";
 import { ApiErrorPanel } from "../../components/ApiErrorPanel";
-import type { CreateCollaboratorInput } from "../../types/collaborators";
+import type {
+  Collaborator,
+  CreateCollaboratorInput,
+} from "../../types/collaborators";
 import type { Person } from "../../types/people";
 import type { ReferenceDataItem } from "../../types/referenceData";
 import { usePeople } from "../people/usePeople";
 import { useReferenceDataByType } from "../reference-data/useReferenceData";
-import { useCreateCollaborator } from "./useCollaborators";
+import { useCollaborators, useCreateCollaborator } from "./useCollaborators";
 
 type FormState = {
   personId: string;
@@ -41,6 +44,7 @@ export function CreateCollaboratorPage() {
   const locationsQuery = useReferenceDataByType("location");
   const tasksQuery = useReferenceDataByType("task");
   const statusesQuery = useReferenceDataByType("collaborator_status");
+  const collaboratorsQuery = useCollaborators();
   const createMutation = useCreateCollaborator();
 
   const [form, setForm] = useState<FormState>(initialForm);
@@ -52,6 +56,19 @@ export function CreateCollaboratorPage() {
     [peopleQuery.data],
   );
 
+  const collaborators = useMemo(
+    () => collaboratorsQuery.data?.items ?? [],
+    [collaboratorsQuery.data],
+  );
+
+  const activeCollaboratorPersonIds = useMemo(
+    () =>
+      new Set(
+        collaborators.filter(isActiveCollaborator).map((row) => row.personId),
+      ),
+    [collaborators],
+  );
+
   const completePeople = useMemo(
     () =>
       people
@@ -60,18 +77,34 @@ export function CreateCollaboratorPage() {
     [people],
   );
 
+  const eligiblePeople = useMemo(
+    () =>
+      completePeople.filter(
+        (person) => !activeCollaboratorPersonIds.has(person.id),
+      ),
+    [activeCollaboratorPersonIds, completePeople],
+  );
+
+  const completePeopleWithActiveCollaborator = useMemo(
+    () =>
+      completePeople.filter((person) =>
+        activeCollaboratorPersonIds.has(person.id),
+      ),
+    [activeCollaboratorPersonIds, completePeople],
+  );
+
   const incompletePeopleCount = people.length - completePeople.length;
 
-  const visibleCompletePeople = useMemo(() => {
+  const visibleEligiblePeople = useMemo(() => {
     const query = personSearch.trim().toLowerCase();
-    if (!query) return completePeople;
+    if (!query) return eligiblePeople;
 
-    return completePeople.filter((person) =>
+    return eligiblePeople.filter((person) =>
       personSearchText(person).includes(query),
     );
-  }, [completePeople, personSearch]);
+  }, [eligiblePeople, personSearch]);
 
-  const selectedPerson = completePeople.find(
+  const selectedPerson = eligiblePeople.find(
     (person) => person.id === form.personId,
   );
 
@@ -149,6 +182,7 @@ export function CreateCollaboratorPage() {
 
   const isLoading =
     peopleQuery.isLoading ||
+    collaboratorsQuery.isLoading ||
     paymentMethodsQuery.isLoading ||
     sectorsQuery.isLoading ||
     locationsQuery.isLoading ||
@@ -157,6 +191,7 @@ export function CreateCollaboratorPage() {
 
   const loadError =
     peopleQuery.error ||
+    collaboratorsQuery.error ||
     paymentMethodsQuery.error ||
     sectorsQuery.error ||
     locationsQuery.error ||
@@ -173,7 +208,7 @@ export function CreateCollaboratorPage() {
 
     if (
       form.personId &&
-      !completePeople.some(
+      !eligiblePeople.some(
         (person) =>
           person.id === form.personId &&
           personSearchText(person).includes(value.trim().toLowerCase()),
@@ -188,7 +223,7 @@ export function CreateCollaboratorPage() {
 
     if (!selectedPerson) {
       setClientValidationError(
-        "Select a complete Person before creating a Collaborator.",
+        "Select an eligible Person before creating a Collaborator.",
       );
       return;
     }
@@ -291,16 +326,23 @@ export function CreateCollaboratorPage() {
               <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
                 <div>
                   <h2 className="text-lg font-semibold text-gray-950">
-                    Select a complete Person
+                    Select an eligible Person
                   </h2>
                   <p className="mt-1 text-sm text-gray-500">
-                    Only People with complete Address, Bank, and Emergency
-                    sections can become Collaborators.
+                    Only complete People who do not already have an active
+                    Collaborator journey are eligible.
                   </p>
                 </div>
                 <div className="rounded-xl bg-gray-100 px-3 py-2 text-sm text-gray-700">
-                  <span className="font-semibold">{completePeople.length}</span>{" "}
+                  <span className="font-semibold">{eligiblePeople.length}</span>{" "}
                   eligible
+                  {completePeopleWithActiveCollaborator.length > 0 && (
+                    <span>
+                      {" "}
+                      · {completePeopleWithActiveCollaborator.length} already
+                      collaborators
+                    </span>
+                  )}
                   {incompletePeopleCount > 0 && (
                     <span> · {incompletePeopleCount} incomplete</span>
                   )}
@@ -309,40 +351,40 @@ export function CreateCollaboratorPage() {
 
               <div className="mt-4 grid gap-4 md:grid-cols-[1fr_1.4fr]">
                 <Input
-                  label="Search complete People"
+                  label="Search eligible People"
                   value={personSearch}
                   onChange={updatePersonSearch}
                   placeholder="Search by name, nickname, CPF, or email"
                 />
 
                 <Select
-                  label="Complete Person"
+                  label="Eligible Person"
                   required
                   value={form.personId}
                   onChange={(value) => update("personId", value)}
-                  options={visibleCompletePeople.map((person) => ({
+                  options={visibleEligiblePeople.map((person) => ({
                     value: person.id,
                     label: personLabel(person),
                   }))}
                   placeholder={personSelectPlaceholder(
-                    completePeople.length,
-                    visibleCompletePeople.length,
+                    eligiblePeople.length,
+                    visibleEligiblePeople.length,
                     personSearch,
                   )}
-                  disabled={visibleCompletePeople.length === 0}
+                  disabled={visibleEligiblePeople.length === 0}
                 />
               </div>
 
               {selectedPerson && <SelectedPersonCard person={selectedPerson} />}
 
-              {completePeople.length === 0 && (
+              {eligiblePeople.length === 0 && (
                 <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
                   <p className="font-semibold">
-                    No complete People are available.
+                    No eligible People are available.
                   </p>
                   <p className="mt-1">
-                    Complete the Address, Bank, and Emergency sections on a
-                    Person before creating a Collaborator.
+                    A Person must be complete and must not already have an
+                    active Collaborator journey before you can select them here.
                   </p>
                   <Link className="mt-2 inline-block underline" to="/people">
                     Go to People
@@ -350,13 +392,19 @@ export function CreateCollaboratorPage() {
                 </div>
               )}
 
-              {completePeople.length > 0 &&
-                visibleCompletePeople.length === 0 && (
+              {eligiblePeople.length > 0 &&
+                visibleEligiblePeople.length === 0 && (
                   <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
-                    No complete People match your search. Clear the search to
+                    No eligible People match your search. Clear the search to
                     see all eligible People.
                   </div>
                 )}
+
+              {completePeopleWithActiveCollaborator.length > 0 && (
+                <AlreadyCollaboratorsPanel
+                  people={completePeopleWithActiveCollaborator}
+                />
+              )}
             </section>
 
             <section className="rounded-2xl border bg-white p-5 shadow-sm">
@@ -486,6 +534,38 @@ export function CreateCollaboratorPage() {
         )}
       </section>
     </main>
+  );
+}
+
+function AlreadyCollaboratorsPanel({ people }: { people: Person[] }) {
+  return (
+    <div className="mt-4 rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-900">
+      <p className="font-semibold">
+        Already active Collaborators are hidden from the dropdown.
+      </p>
+      <p className="mt-1">
+        These complete People already have an active Collaborator journey and
+        cannot be selected again.
+      </p>
+      <ul className="mt-3 list-disc space-y-1 pl-5">
+        {people.map((person) => (
+          <li key={person.id}>
+            <Link
+              className="font-semibold underline"
+              to={`/people/${person.id}`}
+            >
+              {personLabel(person)}
+            </Link>
+          </li>
+        ))}
+      </ul>
+      <Link
+        className="mt-3 inline-block font-semibold underline"
+        to="/collaborators"
+      >
+        View Collaborators
+      </Link>
+    </div>
   );
 }
 
@@ -719,14 +799,18 @@ function activeOptions(items: ReferenceDataItem[] = []) {
 }
 
 function personSelectPlaceholder(
-  completePeopleCount: number,
+  eligiblePeopleCount: number,
   visiblePeopleCount: number,
   search: string,
 ) {
-  if (completePeopleCount === 0) return "No complete People available";
+  if (eligiblePeopleCount === 0) return "No eligible People available";
   if (visiblePeopleCount === 0 && search.trim())
-    return "No complete People match search";
-  return "Select a complete Person";
+    return "No eligible People match search";
+  return "Select an eligible Person";
+}
+
+function isActiveCollaborator(collaborator: Collaborator) {
+  return !collaborator.closedAt;
 }
 
 function personSearchText(person: Person) {
