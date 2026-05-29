@@ -2,6 +2,7 @@ package referencedata
 
 type ReferenceDataDTO struct {
 	ID           string `json:"id"`
+	TenantID     string `json:"tenantId"`
 	Type         string `json:"type"`
 	Code         string `json:"code"`
 	Label        string `json:"label"`
@@ -10,11 +11,21 @@ type ReferenceDataDTO struct {
 	SortOrder    int    `json:"sortOrder"`
 	MetadataJSON string `json:"metadataJson,omitempty"`
 }
+
 type CreateReferenceDataRequest struct {
 	Code         string `json:"code"`
 	Label        string `json:"label"`
 	Description  string `json:"description,omitempty"`
-	Active       bool   `json:"active"`
+	Active       *bool  `json:"active,omitempty"`
+	SortOrder    int    `json:"sortOrder"`
+	MetadataJSON string `json:"metadataJson,omitempty"`
+}
+
+type UpdateReferenceDataRequest struct {
+	Code         string `json:"code"`
+	Label        string `json:"label"`
+	Description  string `json:"description,omitempty"`
+	Active       *bool  `json:"active,omitempty"`
 	SortOrder    int    `json:"sortOrder"`
 	MetadataJSON string `json:"metadataJson,omitempty"`
 }
