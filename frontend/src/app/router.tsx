@@ -4,12 +4,13 @@ import {
   Link,
   useRouteError,
 } from "react-router-dom";
-import { PeopleListPage }   from "../features/people/PeopleListPage";
+import { PeopleListPage } from "../features/people/PeopleListPage";
 import { CreatePersonPage } from "../features/people/CreatePersonPage";
 import { PersonDetailPage } from "../features/people/PersonDetailPage";
 import { ReferenceDataAdminPage } from "../features/reference-data/ReferenceDataAdminPage";
 import { CollaboratorsListPage } from "../features/collaborators/CollaboratorsListPage";
 import { CreateCollaboratorPage } from "../features/collaborators/CreateCollaboratorPage";
+import { CollaboratorDetailPage } from "../features/collaborators/CollaboratorDetailPage";
 
 function RouteErrorPage() {
   const error = useRouteError();
@@ -57,6 +58,7 @@ export const router = createBrowserRouter([
       { path: "people/:id", element: <PersonDetailPage /> },
       { path: "collaborators", element: <CollaboratorsListPage /> },
       { path: "collaborators/new", element: <CreateCollaboratorPage /> },
+      { path: "collaborators/:id", element: <CollaboratorDetailPage /> },
       { path: "admin/reference-data", element: <ReferenceDataAdminPage /> },
       { path: "*", element: <NotFoundPage /> },
     ],
