@@ -2,12 +2,15 @@ import { useMemo, useState, type FormEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { ApiError } from "../../api/client";
 import { ApiErrorPanel } from "../../components/ApiErrorPanel";
-import type { CreateCollaboratorInput } from "../../types/collaborators";
+import type {
+  Collaborator,
+  CreateCollaboratorInput,
+} from "../../types/collaborators";
 import type { Person } from "../../types/people";
 import type { ReferenceDataItem } from "../../types/referenceData";
 import { usePeople } from "../people/usePeople";
 import { useReferenceDataByType } from "../reference-data/useReferenceData";
-import { useCreateCollaborator } from "./useCollaborators";
+import { useCollaborators, useCreateCollaborator } from "./useCollaborators";
 
 type FormState = {
   personId: string;
@@ -41,15 +44,28 @@ export function CreateCollaboratorPage() {
   const locationsQuery = useReferenceDataByType("location");
   const tasksQuery = useReferenceDataByType("task");
   const statusesQuery = useReferenceDataByType("collaborator_status");
+  const collaboratorsQuery = useCollaborators();
   const createMutation = useCreateCollaborator();
 
   const [form, setForm] = useState<FormState>(initialForm);
-  const [personSearch, setPersonSearch] = useState("");
   const [clientValidationError, setClientValidationError] = useState("");
 
   const people = useMemo(
     () => (Array.isArray(peopleQuery.data) ? peopleQuery.data : []),
     [peopleQuery.data],
+  );
+
+  const collaborators = useMemo(
+    () => collaboratorsQuery.data?.items ?? [],
+    [collaboratorsQuery.data],
+  );
+
+  const activeCollaboratorPersonIds = useMemo(
+    () =>
+      new Set(
+        collaborators.filter(isActiveCollaborator).map((row) => row.personId),
+      ),
+    [collaborators],
   );
 
   const completePeople = useMemo(
@@ -60,26 +76,25 @@ export function CreateCollaboratorPage() {
     [people],
   );
 
-  const incompletePeople = useMemo(
+  const eligiblePeople = useMemo(
     () =>
-      people
-        .filter((person) => !person.canCreateCollaborator)
-        .sort((a, b) => personLabel(a).localeCompare(personLabel(b))),
-    [people],
+      completePeople.filter(
+        (person) => !activeCollaboratorPersonIds.has(person.id),
+      ),
+    [activeCollaboratorPersonIds, completePeople],
   );
 
-  const incompletePeopleCount = incompletePeople.length;
+  const completePeopleWithActiveCollaborator = useMemo(
+    () =>
+      completePeople.filter((person) =>
+        activeCollaboratorPersonIds.has(person.id),
+      ),
+    [activeCollaboratorPersonIds, completePeople],
+  );
 
-  const visibleCompletePeople = useMemo(() => {
-    const query = personSearch.trim().toLowerCase();
-    if (!query) return completePeople;
+  const incompletePeopleCount = people.length - completePeople.length;
 
-    return completePeople.filter((person) =>
-      personSearchText(person).includes(query),
-    );
-  }, [completePeople, personSearch]);
-
-  const selectedPerson = completePeople.find(
+  const selectedPerson = eligiblePeople.find(
     (person) => person.id === form.personId,
   );
 
@@ -143,20 +158,34 @@ export function CreateCollaboratorPage() {
   );
 
   const paymentValue = Number(form.paymentValue);
-  const canSubmit =
-    Boolean(selectedPerson) &&
-    Boolean(form.journeyStartDate) &&
-    Boolean(form.statusId) &&
-    Boolean(form.sectorId) &&
-    Boolean(form.locationId) &&
-    Boolean(form.taskId) &&
-    Boolean(form.paymentMethodId) &&
-    Number.isFinite(paymentValue) &&
-    paymentValue > 0 &&
-    !hasMissingActiveReferenceData;
+  const submitRequirements = [
+    { met: Boolean(selectedPerson), label: "Select an eligible Person" },
+    {
+      met: Boolean(form.journeyStartDate),
+      label: "Enter a journey start date",
+    },
+    { met: Boolean(form.statusId), label: "Select a status" },
+    { met: Boolean(form.sectorId), label: "Select a sector" },
+    { met: Boolean(form.locationId), label: "Select a location" },
+    { met: Boolean(form.taskId), label: "Select a task" },
+    { met: Boolean(form.paymentMethodId), label: "Select a payment method" },
+    {
+      met: Number.isFinite(paymentValue) && paymentValue > 0,
+      label: "Enter a payment value greater than zero",
+    },
+    {
+      met: !hasMissingActiveReferenceData,
+      label: "Configure active reference data for all required dropdowns",
+    },
+  ];
+  const missingSubmitRequirements = submitRequirements
+    .filter((requirement) => !requirement.met)
+    .map((requirement) => requirement.label);
+  const canSubmit = missingSubmitRequirements.length === 0;
 
   const isLoading =
     peopleQuery.isLoading ||
+    collaboratorsQuery.isLoading ||
     paymentMethodsQuery.isLoading ||
     sectorsQuery.isLoading ||
     locationsQuery.isLoading ||
@@ -165,6 +194,7 @@ export function CreateCollaboratorPage() {
 
   const loadError =
     peopleQuery.error ||
+    collaboratorsQuery.error ||
     paymentMethodsQuery.error ||
     sectorsQuery.error ||
     locationsQuery.error ||
@@ -176,27 +206,12 @@ export function CreateCollaboratorPage() {
     setForm((prev) => ({ ...prev, [key]: value }));
   }
 
-  function updatePersonSearch(value: string) {
-    setPersonSearch(value);
-
-    if (
-      form.personId &&
-      !completePeople.some(
-        (person) =>
-          person.id === form.personId &&
-          personSearchText(person).includes(value.trim().toLowerCase()),
-      )
-    ) {
-      update("personId", "");
-    }
-  }
-
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
     if (!selectedPerson) {
       setClientValidationError(
-        "Select a complete Person before creating a Collaborator. Incomplete People must be completed first.",
+        "Select an eligible Person before creating a Collaborator.",
       );
       return;
     }
@@ -224,7 +239,7 @@ export function CreateCollaboratorPage() {
       const created = await createMutation.mutateAsync(input);
       navigate("/collaborators", {
         state: {
-          flash: `Collaborator created for ${created.personName || "selected person"}.`,
+          flash: `Collaborator created for ${created.personNickname || created.personName || "selected person"}.`,
         },
       });
     } catch {
@@ -299,62 +314,54 @@ export function CreateCollaboratorPage() {
               <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
                 <div>
                   <h2 className="text-lg font-semibold text-gray-950">
-                    Select a complete Person
+                    Select an eligible Person
                   </h2>
                   <p className="mt-1 text-sm text-gray-500">
-                    Only People with complete Address, Bank, and Emergency
-                    sections can become Collaborators.
+                    Only complete People who do not already have an active
+                    Collaborator journey are eligible.
                   </p>
                 </div>
                 <div className="rounded-xl bg-gray-100 px-3 py-2 text-sm text-gray-700">
-                  <span className="font-semibold">{completePeople.length}</span>{" "}
+                  <span className="font-semibold">{eligiblePeople.length}</span>{" "}
                   eligible
+                  {completePeopleWithActiveCollaborator.length > 0 && (
+                    <span>
+                      {" "}
+                      · {completePeopleWithActiveCollaborator.length} already
+                      collaborators
+                    </span>
+                  )}
                   {incompletePeopleCount > 0 && (
                     <span> · {incompletePeopleCount} incomplete</span>
                   )}
                 </div>
               </div>
 
-              <div className="mt-4 grid gap-4 md:grid-cols-[1fr_1.4fr]">
-                <Input
-                  label="Search complete People"
-                  value={personSearch}
-                  onChange={updatePersonSearch}
-                  placeholder="Search by name, nickname, CPF, or email"
-                />
-
+              <div className="mt-4">
                 <Select
-                  label="Complete Person"
+                  label="Eligible Person"
                   required
                   value={form.personId}
                   onChange={(value) => update("personId", value)}
-                  options={visibleCompletePeople.map((person) => ({
+                  options={eligiblePeople.map((person) => ({
                     value: person.id,
                     label: personLabel(person),
                   }))}
-                  placeholder={personSelectPlaceholder(
-                    completePeople.length,
-                    visibleCompletePeople.length,
-                    personSearch,
-                  )}
-                  disabled={visibleCompletePeople.length === 0}
+                  placeholder={personSelectPlaceholder(eligiblePeople.length)}
+                  disabled={eligiblePeople.length === 0}
                 />
               </div>
 
               {selectedPerson && <SelectedPersonCard person={selectedPerson} />}
 
-              {incompletePeople.length > 0 && (
-                <IncompletePeoplePanel people={incompletePeople} />
-              )}
-
-              {completePeople.length === 0 && (
+              {eligiblePeople.length === 0 && (
                 <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
                   <p className="font-semibold">
-                    No complete People are available.
+                    No eligible People are available.
                   </p>
                   <p className="mt-1">
-                    Complete the Address, Bank, and Emergency sections on a
-                    Person before creating a Collaborator.
+                    A Person must be complete and must not already have an
+                    active Collaborator journey before you can select them here.
                   </p>
                   <Link className="mt-2 inline-block underline" to="/people">
                     Go to People
@@ -362,13 +369,11 @@ export function CreateCollaboratorPage() {
                 </div>
               )}
 
-              {completePeople.length > 0 &&
-                visibleCompletePeople.length === 0 && (
-                  <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
-                    No complete People match your search. Clear the search to
-                    see all eligible People.
-                  </div>
-                )}
+              {completePeopleWithActiveCollaborator.length > 0 && (
+                <AlreadyCollaboratorsPanel
+                  people={completePeopleWithActiveCollaborator}
+                />
+              )}
             </section>
 
             <section className="rounded-2xl border bg-white p-5 shadow-sm">
@@ -476,28 +481,80 @@ export function CreateCollaboratorPage() {
             </section>
 
             <div className="fixed inset-x-0 bottom-0 border-t bg-white/95 p-4 shadow-lg backdrop-blur">
-              <div className="mx-auto flex max-w-4xl justify-end gap-3">
-                <Link
-                  to="/collaborators"
-                  className="rounded-xl border border-gray-300 bg-white px-5 py-3 text-sm font-semibold text-gray-700 shadow-sm"
-                >
-                  Cancel
-                </Link>
-                <button
-                  type="submit"
-                  disabled={createMutation.isPending || !canSubmit}
-                  className="rounded-xl bg-gray-950 px-5 py-3 text-sm font-semibold text-white shadow-sm disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  {createMutation.isPending
-                    ? "Creating..."
-                    : "Create Collaborator"}
-                </button>
+              <div className="mx-auto max-w-4xl space-y-3">
+                {missingSubmitRequirements.length > 0 && (
+                  <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                    <p className="font-semibold">
+                      Complete these fields to enable Create Collaborator:
+                    </p>
+                    <ul className="mt-1 list-disc pl-5">
+                      {missingSubmitRequirements.map((requirement) => (
+                        <li key={requirement}>{requirement}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                <div className="flex justify-end gap-3">
+                  <Link
+                    to="/collaborators"
+                    className="rounded-xl border border-gray-300 bg-white px-5 py-3 text-sm font-semibold text-gray-700 shadow-sm"
+                  >
+                    Cancel
+                  </Link>
+                  <button
+                    type="submit"
+                    disabled={createMutation.isPending || !canSubmit}
+                    title={
+                      canSubmit
+                        ? "Create Collaborator"
+                        : `Missing: ${missingSubmitRequirements.join(", ")}`
+                    }
+                    className="rounded-xl bg-gray-950 px-5 py-3 text-sm font-semibold text-white shadow-sm disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {createMutation.isPending
+                      ? "Creating..."
+                      : "Create Collaborator"}
+                  </button>
+                </div>
               </div>
             </div>
           </form>
         )}
       </section>
     </main>
+  );
+}
+
+function AlreadyCollaboratorsPanel({ people }: { people: Person[] }) {
+  return (
+    <div className="mt-4 rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-900">
+      <p className="font-semibold">
+        Already active Collaborators are hidden from the dropdown.
+      </p>
+      <p className="mt-1">
+        These complete People already have an active Collaborator journey and
+        cannot be selected again.
+      </p>
+      <ul className="mt-3 list-disc space-y-1 pl-5">
+        {people.map((person) => (
+          <li key={person.id}>
+            <Link
+              className="font-semibold underline"
+              to={`/people/${person.id}`}
+            >
+              {personLabel(person)}
+            </Link>
+          </li>
+        ))}
+      </ul>
+      <Link
+        className="mt-3 inline-block font-semibold underline"
+        to="/collaborators"
+      >
+        View Collaborators
+      </Link>
+    </div>
   );
 }
 
@@ -600,40 +657,6 @@ function ReferenceDataSetupSummary({
         })}
       </dl>
     </section>
-  );
-}
-
-function IncompletePeoplePanel({ people }: { people: Person[] }) {
-  return (
-    <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
-      <p className="font-semibold">Incomplete People are blocked.</p>
-      <p className="mt-1">
-        These People cannot become Collaborators until their missing profile
-        sections are completed. They are intentionally excluded from the
-        complete Person selector above.
-      </p>
-
-      <ul className="mt-3 space-y-3">
-        {people.map((person) => (
-          <li
-            key={person.id}
-            className="rounded-lg border border-amber-200 bg-white/70 p-3"
-          >
-            <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
-              <div>
-                <p className="font-semibold">{personLabel(person)}</p>
-                <p className="mt-1 text-xs uppercase tracking-wide text-amber-700">
-                  Missing: {missingSectionsLabel(person)}
-                </p>
-              </div>
-              <Link className="font-semibold underline" to={`/people/${person.id}`}>
-                Complete Person
-              </Link>
-            </div>
-          </li>
-        ))}
-      </ul>
-    </div>
   );
 }
 
@@ -764,35 +787,14 @@ function activeOptions(items: ReferenceDataItem[] = []) {
     .map((item) => ({ value: item.id, label: item.label }));
 }
 
-function personSelectPlaceholder(
-  completePeopleCount: number,
-  visiblePeopleCount: number,
-  search: string,
-) {
-  if (completePeopleCount === 0) return "No complete People available";
-  if (visiblePeopleCount === 0 && search.trim())
-    return "No complete People match search";
-  return "Select a complete Person";
+function personSelectPlaceholder(eligiblePeopleCount: number) {
+  return eligiblePeopleCount === 0
+    ? "No eligible People available"
+    : "Select an eligible Person";
 }
 
-function personSearchText(person: Person) {
-  return [
-    person.firstName,
-    person.lastName,
-    person.nickname,
-    person.email,
-    person.cpf,
-    person.rg,
-    person.cellular,
-  ]
-    .filter(Boolean)
-    .join(" ")
-    .toLowerCase();
-}
-
-function missingSectionsLabel(person: Person) {
-  const sections = person.missingSections?.filter(Boolean) ?? [];
-  return sections.length > 0 ? sections.join(", ") : "profile details";
+function isActiveCollaborator(collaborator: Collaborator) {
+  return !collaborator.closedAt;
 }
 
 function personLabel(person: Person) {

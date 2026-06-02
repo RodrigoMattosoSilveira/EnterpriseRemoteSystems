@@ -11,7 +11,8 @@ const collaborators: Collaborator[] = [
     id: "collab-1",
     tenantId: "default",
     personId: "person-1",
-    personName: "Ana Silva (Ana)",
+    personName: "Ana Silva",
+    personNickname: "Ana",
     journeyStartDate: "2026-05-01",
     defaultEndDate: "2026-07-30",
     extensionDays: 0,
@@ -63,7 +64,8 @@ describe("CollaboratorsListPage", () => {
 
     renderCollaboratorsListPage();
 
-    await waitForText("Ana Silva (Ana)");
+    await waitForText("Ana");
+    expect(textNode("Ana Silva")).toBeTruthy();
     expect(textNode("Collaborator Journeys")).toBeTruthy();
     expect(textNode("Operator")).toBeTruthy();
     expect(textNode("Mining · Mina Carara")).toBeTruthy();

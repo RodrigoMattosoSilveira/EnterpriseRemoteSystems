@@ -15,6 +15,7 @@ func ToDTO(row db.CollaboratorJourney) CollaboratorDTO {
 		TenantID:           row.TenantID,
 		PersonID:           row.PersonID,
 		PersonName:         personName(row.Person),
+		PersonNickname:     strings.TrimSpace(row.Person.Nickname),
 		JourneyStartDate:   formatDate(row.JourneyStartDate),
 		DefaultEndDate:     formatDate(row.DefaultEndDate),
 		ExtensionDays:      row.ExtensionDays,
@@ -46,11 +47,7 @@ func ToDTOList(rows []db.CollaboratorJourney) []CollaboratorDTO {
 }
 
 func personName(person db.Person) string {
-	name := strings.TrimSpace(strings.Join([]string{person.FirstName, person.LastName}, " "))
-	if person.Nickname == "" {
-		return name
-	}
-	return strings.TrimSpace(name + " (" + person.Nickname + ")")
+	return strings.TrimSpace(strings.Join([]string{person.FirstName, person.LastName}, " "))
 }
 
 func parseDate(value string) (time.Time, error) {
