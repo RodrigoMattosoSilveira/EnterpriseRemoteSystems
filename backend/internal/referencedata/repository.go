@@ -13,4 +13,5 @@ type Repository interface {
 	Update(ctx context.Context, item *db.ReferenceData) error
 	ExistsByTenantTypeCode(ctx context.Context, tenantID string, typ string, code string, excludeID string) (bool, error)
 	ExistsByTenantTypeLabel(ctx context.Context, tenantID string, typ string, label string, excludeID string) (bool, error)
+	ExistsActiveTenantByID(ctx context.Context, tenantID string) (bool, error)
 }

@@ -7,9 +7,10 @@ import (
 
 	"enterpriseremotesystems/backend/internal/db"
 	"enterpriseremotesystems/backend/internal/shared/ids"
+	"enterpriseremotesystems/backend/internal/tenants"
 )
 
-const defaultTenantID = "default"
+const defaultTenantID = tenants.DefaultTenantID
 
 type service struct{ repo Repository }
 

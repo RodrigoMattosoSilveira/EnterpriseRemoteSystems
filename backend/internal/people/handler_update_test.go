@@ -15,6 +15,7 @@ const peopleUpdateURLPrefix = "/api/v1/people/"
 type apiUpdatedPersonResponse struct {
 	Data struct {
 		ID                      string   `json:"id"`
+		TenantID                string   `json:"tenantId"`
 		FirstName               string   `json:"firstName"`
 		LastName                string   `json:"lastName"`
 		Nickname                string   `json:"nickname"`
@@ -85,6 +86,9 @@ func TestUpdatePersonReturnsUpdatedPerson(t *testing.T) {
 
 	if body.Data.ID != created.Data.ID {
 		t.Fatalf("expected id %q, got %q", created.Data.ID, body.Data.ID)
+	}
+	if body.Data.TenantID != "default" {
+		t.Fatalf("expected tenantId default, got %q", body.Data.TenantID)
 	}
 	if body.Data.FirstName != "Updated" {
 		t.Fatalf("expected updated firstName, got %q", body.Data.FirstName)

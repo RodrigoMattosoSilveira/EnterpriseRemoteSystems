@@ -4,6 +4,7 @@ import (
 	"enterpriseremotesystems/backend/internal/collaborators"
 	"enterpriseremotesystems/backend/internal/people"
 	"enterpriseremotesystems/backend/internal/referencedata"
+	"enterpriseremotesystems/backend/internal/tenants"
 	"gorm.io/gorm"
 )
 
@@ -12,4 +13,5 @@ type Dependencies struct {
 	PeopleHandler        *people.Handler
 	CollaboratorHandler  *collaborators.Handler
 	ReferenceDataHandler *referencedata.Handler
+	TenantHandler        *tenants.Handler
 }

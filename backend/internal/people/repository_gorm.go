@@ -24,6 +24,7 @@ func (r *gormRepository) List(
 
 	q := r.db.WithContext(ctx).
 		Model(&db.Person{}).
+		Where("tenant_id = ?", defaultTenantID).
 		Preload("Status")
 
 	if filter.Search != "" {
@@ -80,7 +81,7 @@ func (r *gormRepository) Create(ctx context.Context, person *db.Person) error {
 }
 func (r *gormRepository) FindByID(ctx context.Context, id string) (*db.Person, error) {
 	var row db.Person
-	err := r.db.WithContext(ctx).Preload("Status").First(&row, "id = ?", id).Error
+	err := r.db.WithContext(ctx).Preload("Status").First(&row, "id = ? AND tenant_id = ?", id, defaultTenantID).Error
 	if err != nil {
 		return nil, err
 	}
@@ -90,11 +91,11 @@ func (r *gormRepository) Update(ctx context.Context, person *db.Person) error {
 	return r.db.WithContext(ctx).Save(person).Error
 }
 
-func (r *gormRepository) ExistsActivePersonStatus(ctx context.Context, statusID string) (bool, error) {
+func (r *gormRepository) ExistsActivePersonStatus(ctx context.Context, tenantID string, statusID string) (bool, error) {
 	var count int64
 	err := r.db.WithContext(ctx).
 		Model(&db.ReferenceData{}).
-		Where("id = ? AND type = ? AND active = ?", statusID, "person_status", true).
+		Where("id = ? AND tenant_id = ? AND type = ? AND active = ?", statusID, tenantID, "person_status", true).
 		Count(&count).Error
 	if err != nil {
 		return false, err
@@ -104,6 +105,7 @@ func (r *gormRepository) ExistsActivePersonStatus(ctx context.Context, statusID 
 
 func (r *gormRepository) UniqueConflicts(
 	ctx context.Context,
+	tenantID string,
 	cpf string,
 	rg string,
 	cellular string,
@@ -133,7 +135,7 @@ func (r *gormRepository) UniqueConflicts(
 	}
 
 	for _, check := range checks {
-		query := r.db.WithContext(ctx).Model(&db.Person{}).Where(check.column+" = ?", check.value)
+		query := r.db.WithContext(ctx).Model(&db.Person{}).Where("tenant_id = ?", tenantID).Where(check.column+" = ?", check.value)
 		if excludeID != nil && *excludeID != "" {
 			query = query.Where("id <> ?", *excludeID)
 		}

@@ -9,4 +9,5 @@ func Register(server *fiber.App, deps Dependencies) {
 	RegisterPeopleRoutes(v1, deps)
 	RegisterCollaboratorRoutes(v1, deps)
 	RegisterReferenceDataRoutes(v1, deps)
+	RegisterTenantRoutes(v1, deps)
 }
