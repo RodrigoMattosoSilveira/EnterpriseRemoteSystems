@@ -9,6 +9,7 @@ import (
 	"enterpriseremotesystems/backend/internal/http/routes"
 	"enterpriseremotesystems/backend/internal/people"
 	"enterpriseremotesystems/backend/internal/referencedata"
+	"enterpriseremotesystems/backend/internal/tenants"
 	"github.com/gofiber/fiber/v3"
 )
 
@@ -20,9 +21,16 @@ func Bootstrap(cfg Config) (*fiber.App, func(), error) {
 	if err := db.AutoMigrate(database); err != nil {
 		return nil, nil, err
 	}
+	if err := db.SeedTenants(database); err != nil {
+		return nil, nil, err
+	}
 	if err := db.SeedReferenceData(database); err != nil {
 		return nil, nil, err
 	}
+
+	tenantRepo := tenants.NewRepository(database)
+	tenantSvc := tenants.NewService(tenantRepo)
+	tenantHandler := tenants.NewHandler(tenantSvc)
 
 	refRepo := referencedata.NewGormRepository(database)
 	refSvc := referencedata.NewService(refRepo)
@@ -41,6 +49,7 @@ func Bootstrap(cfg Config) (*fiber.App, func(), error) {
 		PeopleHandler:        peopleHandler,
 		CollaboratorHandler:  collaboratorHandler,
 		ReferenceDataHandler: refHandler,
+		TenantHandler:        tenantHandler,
 	}
 
 	server := httpserver.NewServer(deps)

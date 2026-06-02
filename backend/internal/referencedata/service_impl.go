@@ -7,9 +7,10 @@ import (
 
 	"enterpriseremotesystems/backend/internal/db"
 	"enterpriseremotesystems/backend/internal/shared/ids"
+	"enterpriseremotesystems/backend/internal/tenants"
 )
 
-const defaultTenantID = "default"
+const defaultTenantID = tenants.DefaultTenantID
 
 type ValidationError struct {
 	Fields map[string]string
@@ -155,6 +156,15 @@ func (s *service) validateReferenceData(ctx context.Context, typ string, code st
 		fields["label"] = "Required"
 	}
 	if len(fields) > 0 {
+		return ValidationError{Fields: fields}
+	}
+
+	tenantExists, err := s.repo.ExistsActiveTenantByID(ctx, defaultTenantID)
+	if err != nil {
+		return err
+	}
+	if !tenantExists {
+		fields["tenantId"] = "Default tenant must exist and be active"
 		return ValidationError{Fields: fields}
 	}
 
