@@ -108,8 +108,13 @@ export function CollaboratorsListPage() {
                           to={`/collaborators/${collaborator.id}`}
                           className="font-semibold text-gray-950 underline-offset-2 hover:underline"
                         >
-                          {collaborator.personName || collaborator.personId}
+                          {personDisplayName(collaborator)}
                         </Link>
+                        {personSecondaryLabel(collaborator) && (
+                          <div className="text-xs text-gray-500">
+                            {personSecondaryLabel(collaborator)}
+                          </div>
+                        )}
                       </td>
                       <td className="p-3 text-gray-700">
                         <div>{formatDate(collaborator.journeyStartDate)}</div>
@@ -156,8 +161,13 @@ function CollaboratorCard({ collaborator }: { collaborator: Collaborator }) {
       <div className="flex items-start justify-between gap-3">
         <div>
           <h2 className="font-semibold text-gray-950">
-            {collaborator.personName || collaborator.personId}
+            {personDisplayName(collaborator)}
           </h2>
+          {personSecondaryLabel(collaborator) && (
+            <p className="text-xs text-gray-500">
+              {personSecondaryLabel(collaborator)}
+            </p>
+          )}
           <p className="text-sm text-gray-500">
             {collaborator.taskLabel || "—"} · {collaborator.locationLabel || "—"}
           </p>
@@ -173,6 +183,25 @@ function CollaboratorCard({ collaborator }: { collaborator: Collaborator }) {
       </div>
     </Link>
   );
+}
+
+function personDisplayName(collaborator: Collaborator) {
+  return (
+    collaborator.personNickname?.trim() ||
+    collaborator.personName?.trim() ||
+    "Person unavailable"
+  );
+}
+
+function personSecondaryLabel(collaborator: Collaborator) {
+  const nickname = collaborator.personNickname?.trim();
+  const name = collaborator.personName?.trim();
+
+  if (!nickname || !name || name === nickname) {
+    return "";
+  }
+
+  return name;
 }
 
 function StatusBadge({ label }: { label: string }) {

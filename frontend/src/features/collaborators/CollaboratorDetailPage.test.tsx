@@ -10,7 +10,8 @@ const collaborator: Collaborator = {
   id: "collab-1",
   tenantId: "default",
   personId: "person-1",
-  personName: "Ana Silva (Ana)",
+  personName: "Ana Silva",
+  personNickname: "Ana",
   journeyStartDate: "2026-05-01",
   defaultEndDate: "2026-07-30",
   extensionDays: 5,
@@ -62,10 +63,13 @@ describe("CollaboratorDetailPage", () => {
 
     renderCollaboratorDetailPage("/collaborators/collab-1");
 
-    await waitForText("Ana Silva (Ana)");
+    await waitForText("Ana");
 
     expect(textNode("Collaborator Journey")).toBeTruthy();
     expect(textNode("Person Summary")).toBeTruthy();
+    expect(textNode("Nickname")).toBeTruthy();
+    expect(textNode("Legal Name")).toBeTruthy();
+    expect(textNode("Ana Silva")).toBeTruthy();
     expect(linkByText("View Person")?.getAttribute("href")).toBe(
       "/people/person-1",
     );

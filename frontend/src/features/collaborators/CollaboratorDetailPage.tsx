@@ -101,7 +101,8 @@ export function CollaboratorDetailPage() {
           </div>
 
           <dl className="mt-5 grid gap-3 text-sm">
-            <Info label="Person" value={displayPersonName(collaborator)} />
+            <Info label="Nickname" value={personDisplayName(collaborator)} />
+            <Info label="Legal Name" value={personLegalName(collaborator)} />
             <Info label="Person ID" value={collaborator.personId} />
           </dl>
         </section>
@@ -219,7 +220,19 @@ function Info({ label, value }: { label: string; value: string }) {
 }
 
 function displayPersonName(collaborator: Collaborator) {
-  return collaborator.personName || collaborator.personId;
+  return personDisplayName(collaborator);
+}
+
+function personDisplayName(collaborator: Collaborator) {
+  return (
+    collaborator.personNickname?.trim() ||
+    collaborator.personName?.trim() ||
+    "Person unavailable"
+  );
+}
+
+function personLegalName(collaborator: Collaborator) {
+  return collaborator.personName?.trim() || "—";
 }
 
 function formatDate(value?: string) {

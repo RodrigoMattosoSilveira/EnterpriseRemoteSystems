@@ -66,21 +66,18 @@ test("user can create a Collaborator from an eligible complete Person", async ({
 
   await expect(page).toHaveURL(/\/collaborators$/);
 
-  await expect(page.getByRole("status")).toContainText(
-    "Collaborator created for",
-  );
-
-  await expect(page.getByRole("status")).toContainText(personName);
-  await expect(page.getByRole("status")).toContainText(personNickname);
+await expect(page.getByRole("status")).toContainText(
+  `Collaborator created for ${personNickname}.`,
+);
 
   await expect(
     page.getByRole("heading", { name: "Collaborators" }),
   ).toBeVisible();
 
   await expect(
-    page.getByRole("link", { name: new RegExp(`${personName} Pessoa`) }),
+    page.getByRole("link", { name: new RegExp(personNickname) }),
   ).toBeVisible();
-  
+
   await expect(page.getByText("Miner").first()).toBeVisible();
   await expect(page.getByText("Daily wage").first()).toBeVisible();
 

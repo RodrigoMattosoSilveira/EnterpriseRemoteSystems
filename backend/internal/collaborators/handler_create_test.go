@@ -41,6 +41,7 @@ type apiCollaboratorResponse struct {
 		TenantID         string  `json:"tenantId"`
 		PersonID         string  `json:"personId"`
 		PersonName       string  `json:"personName"`
+		PersonNickname   string  `json:"personNickname"`
 		JourneyStartDate string  `json:"journeyStartDate"`
 		DefaultEndDate   string  `json:"defaultEndDate"`
 		ExtensionDays    int     `json:"extensionDays"`
@@ -83,6 +84,12 @@ func TestCreateCollaboratorFromCompletePersonReturnsCreated(t *testing.T) {
 	}
 	if body.Data.PersonID != person.Data.ID {
 		t.Fatalf("expected personId %q, got %q", person.Data.ID, body.Data.PersonID)
+	}
+	if body.Data.PersonName != "Person1 Silva" {
+		t.Fatalf("expected personName %q, got %q", "Person1 Silva", body.Data.PersonName)
+	}
+	if body.Data.PersonNickname != "P1" {
+		t.Fatalf("expected personNickname %q, got %q", "P1", body.Data.PersonNickname)
 	}
 	if body.Data.JourneyStartDate != "2026-06-01" {
 		t.Fatalf("expected journey start date, got %q", body.Data.JourneyStartDate)

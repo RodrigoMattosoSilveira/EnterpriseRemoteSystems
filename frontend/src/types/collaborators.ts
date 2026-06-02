@@ -4,6 +4,7 @@ export type Collaborator = {
 
   personId: string;
   personName?: string;
+  personNickname?: string;
 
   journeyStartDate: string;
   defaultEndDate: string;
