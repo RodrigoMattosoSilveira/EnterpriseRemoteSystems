@@ -239,7 +239,7 @@ export function CreateCollaboratorPage() {
       const created = await createMutation.mutateAsync(input);
       navigate("/collaborators", {
         state: {
-          flash: `Collaborator created for ${created.personName || "selected person"}.`,
+          flash: `Collaborator created for ${created.personNickname || created.personName || "selected person"}.`,
         },
       });
     } catch {
