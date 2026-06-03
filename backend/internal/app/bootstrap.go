@@ -18,11 +18,10 @@ func Bootstrap(cfg Config) (*fiber.App, func(), error) {
 	if err != nil {
 		return nil, nil, err
 	}
-	if err := db.AutoMigrate(database); err != nil {
-		return nil, nil, err
-	}
-	if err := db.SeedTenants(database); err != nil {
-		return nil, nil, err
+	if cfg.AutoMigrate || cfg.Env == "test" {
+		if err := db.AutoMigrate(database); err != nil {
+			return nil, nil, err
+		}
 	}
 	if err := db.SeedReferenceData(database); err != nil {
 		return nil, nil, err
