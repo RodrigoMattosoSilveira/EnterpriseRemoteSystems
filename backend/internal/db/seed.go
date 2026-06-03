@@ -9,6 +9,10 @@ import (
 const DefaultTenantID = "default"
 
 func SeedTenants(database *gorm.DB) error {
+	if err := database.AutoMigrate(&Tenant{}); err != nil {
+		return err
+	}
+
 	now := time.Now().UTC()
 	tenant := Tenant{
 		BaseModel:   BaseModel{ID: DefaultTenantID, CreatedAt: now, UpdatedAt: now},
@@ -22,6 +26,9 @@ func SeedTenants(database *gorm.DB) error {
 
 func SeedReferenceData(database *gorm.DB) error {
 	if err := SeedTenants(database); err != nil {
+		return err
+	}
+	if err := database.AutoMigrate(&ReferenceData{}); err != nil {
 		return err
 	}
 
