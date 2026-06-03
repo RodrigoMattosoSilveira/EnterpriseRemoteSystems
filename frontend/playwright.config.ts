@@ -57,7 +57,7 @@ export default defineConfig({
   ? undefined
   : [
       {
-        command: "cd .. && make local-backend",
+        command: "cd .. && ERS_DATABASE_PATH=data/app-e2e.db ERS_RESET_DATABASE=true make local-backend",
         url: "http://localhost:8080/healthz",
         reuseExistingServer: !isCI,
         timeout: 120_000,

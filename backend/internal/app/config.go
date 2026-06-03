@@ -21,7 +21,7 @@ func LoadConfig() (Config, error) {
 	cfg := Config{
 		Env:         getEnv("APP_ENV", "development"),
 		HTTPAddr:    getEnv("HTTP_ADDR", ":8080"),
-		DBPath:      getEnv("DB_PATH", "./data/app.db"),
+		DBPath:      getEnv("DB_PATH", getEnv("DATABASE_PATH", "./data/app.db")),
 		JWTSecret:   getEnv("JWT_SECRET", "dev-only-change-me"),
 		AutoMigrate: getEnvBool("APP_AUTO_MIGRATE", false),
 	}
