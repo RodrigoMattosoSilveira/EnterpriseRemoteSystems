@@ -8,6 +8,8 @@ type BaseModel struct {
 	UpdatedAt time.Time `gorm:"not null" json:"updatedAt"`
 }
 
+const DefaultTenantID = "default"
+
 type Tenant struct {
 	BaseModel
 

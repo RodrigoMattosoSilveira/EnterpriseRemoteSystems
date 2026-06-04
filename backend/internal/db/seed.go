@@ -6,21 +6,25 @@ import (
 	"gorm.io/gorm"
 )
 
-const DefaultTenantID = "default"
-
 func SeedTenants(database *gorm.DB) error {
 	if err := database.AutoMigrate(&Tenant{}); err != nil {
 		return err
 	}
 
 	now := time.Now().UTC()
+
 	tenant := Tenant{
-		BaseModel:   BaseModel{ID: DefaultTenantID, CreatedAt: now, UpdatedAt: now},
+		BaseModel: BaseModel{
+			ID:        DefaultTenantID,
+			CreatedAt: now,
+			UpdatedAt: now,
+		},
 		Code:        "DEFAULT",
 		Name:        "Default Tenant",
 		Description: "Default tenant used until tenant selection is introduced",
 		Active:      true,
 	}
+
 	return database.Where("id = ?", tenant.ID).FirstOrCreate(&tenant).Error
 }
 
@@ -33,6 +37,7 @@ func SeedReferenceData(database *gorm.DB) error {
 	}
 
 	now := time.Now().UTC()
+
 	rows := []ReferenceData{
 		{
 			BaseModel: BaseModel{ID: "ref-person-status-active", CreatedAt: now, UpdatedAt: now},
