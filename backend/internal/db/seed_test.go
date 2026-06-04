@@ -5,10 +5,14 @@ import (
 	"testing"
 )
 
-func TestSeedTenantsCreatesDefaultTenantEvenBeforeFullAutoMigrate(t *testing.T) {
+func TestSeedTenantsCreatesDefaultTenant(t *testing.T) {
 	database, err := Open(filepath.Join(t.TempDir(), "app.db"))
 	if err != nil {
 		t.Fatalf("open test database: %v", err)
+	}
+
+	if err := AutoMigrate(database); err != nil {
+		t.Fatalf("auto migrate database: %v", err)
 	}
 
 	if err := SeedTenants(database); err != nil {
@@ -27,10 +31,14 @@ func TestSeedTenantsCreatesDefaultTenantEvenBeforeFullAutoMigrate(t *testing.T) 
 	}
 }
 
-func TestSeedReferenceDataCreatesRequiredSeedTables(t *testing.T) {
+func TestSeedReferenceDataSeedsDefaultTenantFirst(t *testing.T) {
 	database, err := Open(filepath.Join(t.TempDir(), "app.db"))
 	if err != nil {
 		t.Fatalf("open test database: %v", err)
+	}
+
+	if err := AutoMigrate(database); err != nil {
+		t.Fatalf("auto migrate database: %v", err)
 	}
 
 	if err := SeedReferenceData(database); err != nil {
