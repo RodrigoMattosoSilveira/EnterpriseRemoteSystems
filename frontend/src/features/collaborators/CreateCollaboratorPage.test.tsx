@@ -545,7 +545,7 @@ function mockCreateCollaboratorFetch({
   mockFetch(async (url, init) => {
     recordFetchCall(url, init);
 
-    if (url === "/api/v1/people") {
+    if (url.startsWith("/api/v1/people")) {
       return jsonResponse({ data: { items: people, total: people.length } });
     }
 

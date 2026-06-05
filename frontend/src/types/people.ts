@@ -93,3 +93,12 @@ export type PeopleListResponse = {
   items: Person[];
   total: number;
 };
+
+export type PeopleListFilter = {
+  search?: string;
+  statusId?: string;
+  profileCompletionStatus?: ProfileCompletionStatus;
+  canCreateCollaborator?: boolean;
+  page?: number;
+  pageSize?: number;
+};
