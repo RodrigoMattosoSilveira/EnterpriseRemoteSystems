@@ -11,6 +11,9 @@ import { ReferenceDataAdminPage } from "../features/reference-data/ReferenceData
 import { CollaboratorsListPage } from "../features/collaborators/CollaboratorsListPage";
 import { CreateCollaboratorPage } from "../features/collaborators/CreateCollaboratorPage";
 import { CollaboratorDetailPage } from "../features/collaborators/CollaboratorDetailPage";
+import { ExpensesPage } from "../features/expenses/ExpensesPage";
+import { CreateExpensePage } from "../features/expenses/CreateExpensePage";
+import { ExpenseDetailPage } from "../features/expenses/ExpenseDetailPage";
 
 function RouteErrorPage() {
   const error = useRouteError();
@@ -59,6 +62,9 @@ export const router = createBrowserRouter([
       { path: "collaborators", element: <CollaboratorsListPage /> },
       { path: "collaborators/new", element: <CreateCollaboratorPage /> },
       { path: "collaborators/:id", element: <CollaboratorDetailPage /> },
+      { path: "expenses", element: <ExpensesPage /> },
+      { path: "expenses/new", element: <CreateExpensePage /> },
+      { path: "expenses/:id", element: <ExpenseDetailPage /> },
       { path: "admin/reference-data", element: <ReferenceDataAdminPage /> },
       { path: "*", element: <NotFoundPage /> },
     ],
