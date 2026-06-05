@@ -55,23 +55,47 @@ func (r *gormRepository) List(ctx context.Context, filter normalizedExpenseListF
 }
 
 func (r *gormRepository) Create(ctx context.Context, expense *db.Expense) error {
-	return r.db.WithContext(ctx).Create(expense).Error
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.Create(expense).Error; err != nil {
+			return err
+		}
+		return tx.Create(expenseLedgerEntry(expense)).Error
+	})
 }
 
 func (r *gormRepository) Update(ctx context.Context, expense *db.Expense) error {
-	return r.db.WithContext(ctx).
-		Model(&db.Expense{}).
-		Where("id = ? AND tenant_id = ?", expense.ID, defaultTenantID).
-		Updates(map[string]any{
-			"collaborator_id":     expense.CollaboratorID,
-			"expense_category_id": expense.ExpenseCategoryID,
-			"value_unit_id":       expense.ValueUnitID,
-			"amount":              expense.Amount,
-			"expense_date":        expense.ExpenseDate,
-			"description":         expense.Description,
-			"active":              expense.Active,
-			"updated_at":          expense.UpdatedAt,
-		}).Error
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.
+			Model(&db.Expense{}).
+			Where("id = ? AND tenant_id = ?", expense.ID, defaultTenantID).
+			Updates(map[string]any{
+				"collaborator_id":     expense.CollaboratorID,
+				"expense_category_id": expense.ExpenseCategoryID,
+				"value_unit_id":       expense.ValueUnitID,
+				"amount":              expense.Amount,
+				"expense_date":        expense.ExpenseDate,
+				"description":         expense.Description,
+				"active":              expense.Active,
+				"updated_at":          expense.UpdatedAt,
+			}).Error; err != nil {
+			return err
+		}
+
+		entry := expenseLedgerEntry(expense)
+		return tx.Model(&db.LedgerEntry{}).
+			Where("tenant_id = ? AND source_type = ? AND source_id = ?", expense.TenantID, "EXPENSE", expense.ID).
+			Updates(map[string]any{
+				"collaborator_id": expense.CollaboratorID,
+				"value_unit_id":   expense.ValueUnitID,
+				"entry_type":      entry.EntryType,
+				"direction":       entry.Direction,
+				"amount":          entry.Amount,
+				"effective_date":  entry.EffectiveDate,
+				"description":     entry.Description,
+				"active":          entry.Active,
+				"updated_at":      entry.UpdatedAt,
+			}).Error
+	})
 }
 
 func (r *gormRepository) FindByID(ctx context.Context, id string) (*db.Expense, error) {
@@ -113,4 +137,25 @@ func (r *gormRepository) ExistsActiveReference(ctx context.Context, id string, t
 
 func formatDateForQuery(value time.Time) string {
 	return value.Format(dateLayout)
+}
+
+func expenseLedgerEntry(expense *db.Expense) *db.LedgerEntry {
+	return &db.LedgerEntry{
+		BaseModel: db.BaseModel{
+			ID:        "ledger-expense-" + expense.ID,
+			CreatedAt: expense.CreatedAt,
+			UpdatedAt: expense.UpdatedAt,
+		},
+		TenantID:       expense.TenantID,
+		CollaboratorID: expense.CollaboratorID,
+		ValueUnitID:    expense.ValueUnitID,
+		EntryType:      "EXPENSE_DEDUCTION",
+		Direction:      "DEBIT",
+		Amount:         expense.Amount,
+		EffectiveDate:  expense.ExpenseDate,
+		SourceType:     "EXPENSE",
+		SourceID:       expense.ID,
+		Description:    expense.Description,
+		Active:         expense.Active,
+	}
 }

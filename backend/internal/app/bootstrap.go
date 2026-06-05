@@ -4,6 +4,7 @@ import (
 	"log"
 
 	"enterpriseremotesystems/backend/internal/collaborators"
+	"enterpriseremotesystems/backend/internal/currentaccounts"
 	"enterpriseremotesystems/backend/internal/db"
 	"enterpriseremotesystems/backend/internal/expenses"
 	httpserver "enterpriseremotesystems/backend/internal/http"
@@ -48,13 +49,18 @@ func Bootstrap(cfg Config) (*fiber.App, func(), error) {
 	expenseSvc := expenses.NewService(expenseRepo)
 	expenseHandler := expenses.NewHandler(expenseSvc)
 
+	currentAccountRepo := currentaccounts.NewRepository(database)
+	currentAccountSvc := currentaccounts.NewService(currentAccountRepo)
+	currentAccountHandler := currentaccounts.NewHandler(currentAccountSvc)
+
 	deps := routes.Dependencies{
-		DB:                   database,
-		PeopleHandler:        peopleHandler,
-		CollaboratorHandler:  collaboratorHandler,
-		ExpenseHandler:       expenseHandler,
-		ReferenceDataHandler: refHandler,
-		TenantHandler:        tenantHandler,
+		DB:                    database,
+		PeopleHandler:         peopleHandler,
+		CollaboratorHandler:   collaboratorHandler,
+		ExpenseHandler:        expenseHandler,
+		CurrentAccountHandler: currentAccountHandler,
+		ReferenceDataHandler:  refHandler,
+		TenantHandler:         tenantHandler,
 	}
 
 	server := httpserver.NewServer(deps)
