@@ -7,7 +7,10 @@ const SECTOR_MINING_ID = "ref-sector-mining";
 const LOCATION_MAIN_MINE_ID = "ref-location-main-mine";
 const TASK_MINER_ID = "ref-task-miner";
 const EXPENSE_CATEGORY_CANTEEN_ID = "ref-expense-category-canteen";
+const EXPENSE_CATEGORY_FLIGHT_ID = "ref-expense-category-flight";
+const EXPENSE_CATEGORY_CARGO_ID = "ref-expense-category-cargo";
 const VALUE_UNIT_BRL_ID = "ref-value-unit-brl";
+const VALUE_UNIT_GOLD_GRAM_ID = "ref-value-unit-gold-gram";
 
 const EXPENSE_AMOUNT = "123.45";
 
@@ -27,14 +30,20 @@ test("user can create an Expense for an active Collaborator", async ({
 
   await page.goto("/expenses/new");
 
-  await expect(page.getByRole("heading", { name: "New Expense" })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "New Expense" }),
+  ).toBeVisible();
 
   await expect(page.getByLabel("Collaborator *")).toContainText(personNickname);
   await page.getByLabel("Collaborator *").selectOption(collaborator.id);
-  await page.getByLabel("Expense Category *").selectOption(EXPENSE_CATEGORY_CANTEEN_ID);
+  await page
+    .getByLabel("Expense Category *")
+    .selectOption(EXPENSE_CATEGORY_CANTEEN_ID);
   await page.getByLabel("Value Unit *").selectOption(VALUE_UNIT_BRL_ID);
   await page.getByLabel("Amount *").fill(EXPENSE_AMOUNT);
-  await page.getByLabel("Description").fill("Created by Playwright expense flow");
+  await page
+    .getByLabel("Description")
+    .fill("Created by Playwright expense flow");
 
   await page.getByRole("button", { name: "Create Expense" }).click();
 
@@ -43,9 +52,228 @@ test("user can create an Expense for an active Collaborator", async ({
     `Expense created for ${personNickname}.`,
   );
   await expect(page.getByRole("heading", { name: "Expenses" })).toBeVisible();
-  await expect(page.getByRole("link", { name: new RegExp(personNickname) })).toBeVisible();
+  await expect(
+    page.getByRole("link", { name: new RegExp(personNickname) }),
+  ).toBeVisible();
   await expect(page.getByText("Canteen").first()).toBeVisible();
-  await expect(page.getByText("Created by Playwright expense flow").first()).toBeVisible();
+  await expect(
+    page.getByText("Created by Playwright expense flow").first(),
+  ).toBeVisible();
+});
+
+test("user can open an Expense detail from the list", async ({
+  page,
+  request,
+}) => {
+  const suffix = uniqueSuffix();
+  const personNickname = `ExpenseDetail${suffix}`;
+  const person = await createCompletePerson(request, {
+    suffix,
+    firstName: `ExpenseDetailE2E${suffix}`,
+    nickname: personNickname,
+  });
+  const collaborator = await createCollaborator(request, person.id);
+  const expense = await createExpense(request, {
+    collaboratorId: collaborator.id,
+    expenseCategoryId: EXPENSE_CATEGORY_FLIGHT_ID,
+    valueUnitId: VALUE_UNIT_GOLD_GRAM_ID,
+    amount: 2.75,
+    expenseDate: "2099-06-02",
+    description: `Gold-denominated flight expense ${suffix}`,
+  });
+
+  await page.goto("/expenses");
+
+  await page.getByRole("link", { name: new RegExp(personNickname) }).click();
+
+  await expect(page).toHaveURL(new RegExp(`/expenses/${expense.id}$`));
+  await expect(page.getByRole("heading", { name: "Flight" })).toBeVisible();
+  await expect(page.getByText(personNickname, { exact: true })).toBeVisible();
+  await expect(page.getByText(`Gold-denominated flight expense ${suffix}`)).toBeVisible();
+  await expect(page.getByText("Gold Gram")).toBeVisible();
+});
+
+test("expenses API supports filters and pagination from the browser test flow", async ({
+  request,
+}) => {
+  const suffix = uniqueSuffix();
+  const person = await createCompletePerson(request, {
+    suffix,
+    firstName: `ExpenseFilterE2E${suffix}`,
+    nickname: `ExpenseFilter${suffix}`,
+  });
+  const collaborator = await createCollaborator(request, person.id);
+
+  const canteen = await createExpense(request, {
+    collaboratorId: collaborator.id,
+    expenseCategoryId: EXPENSE_CATEGORY_CANTEEN_ID,
+    valueUnitId: VALUE_UNIT_BRL_ID,
+    amount: 10,
+    expenseDate: "2026-06-01",
+    description: `Filter canteen ${suffix}`,
+  });
+  const flight = await createExpense(request, {
+    collaboratorId: collaborator.id,
+    expenseCategoryId: EXPENSE_CATEGORY_FLIGHT_ID,
+    valueUnitId: VALUE_UNIT_GOLD_GRAM_ID,
+    amount: 2.5,
+    expenseDate: "2026-06-02",
+    description: `Filter flight ${suffix}`,
+  });
+  await createExpense(request, {
+    collaboratorId: collaborator.id,
+    expenseCategoryId: EXPENSE_CATEGORY_CARGO_ID,
+    valueUnitId: VALUE_UNIT_BRL_ID,
+    amount: 30,
+    expenseDate: "2026-06-10",
+    description: `Filter cargo ${suffix}`,
+  });
+
+  const categoryResponse = await request.get(
+    `/api/v1/expenses?collaboratorId=${collaborator.id}&expenseCategoryId=${EXPENSE_CATEGORY_FLIGHT_ID}&valueUnitId=${VALUE_UNIT_GOLD_GRAM_ID}`,
+  );
+  expect(categoryResponse.ok()).toBeTruthy();
+  const categoryBody =
+    (await categoryResponse.json()) as ApiEnvelope<ExpenseListResponse>;
+  expect(categoryBody.data?.total).toBe(1);
+  expect(categoryBody.data?.items).toHaveLength(1);
+  expect(categoryBody.data?.items[0]?.id).toBe(flight.id);
+
+  const dateResponse = await request.get(
+    `/api/v1/expenses?collaboratorId=${collaborator.id}&dateFrom=2026-06-01&dateTo=2026-06-01`,
+  );
+  expect(dateResponse.ok()).toBeTruthy();
+  const dateBody =
+    (await dateResponse.json()) as ApiEnvelope<ExpenseListResponse>;
+  expect(dateBody.data?.total).toBe(1);
+  expect(dateBody.data?.items[0]?.id).toBe(canteen.id);
+
+  const pageOneResponse = await request.get(
+    `/api/v1/expenses?collaboratorId=${collaborator.id}&page=1&pageSize=2`,
+  );
+  expect(pageOneResponse.ok()).toBeTruthy();
+  const pageOneBody =
+    (await pageOneResponse.json()) as ApiEnvelope<ExpenseListResponse>;
+  expect(pageOneBody.data?.total).toBe(3);
+  expect(pageOneBody.data?.page).toBe(1);
+  expect(pageOneBody.data?.pageSize).toBe(2);
+  expect(pageOneBody.data?.items).toHaveLength(2);
+
+  const pageTwoResponse = await request.get(
+    `/api/v1/expenses?collaboratorId=${collaborator.id}&page=2&pageSize=2`,
+  );
+  expect(pageTwoResponse.ok()).toBeTruthy();
+  const pageTwoBody =
+    (await pageTwoResponse.json()) as ApiEnvelope<ExpenseListResponse>;
+  expect(pageTwoBody.data?.total).toBe(3);
+  expect(pageTwoBody.data?.page).toBe(2);
+  expect(pageTwoBody.data?.items).toHaveLength(1);
+});
+
+test("expenses API supports update and soft delete from the browser test flow", async ({
+  request,
+}) => {
+  const suffix = uniqueSuffix();
+  const person = await createCompletePerson(request, {
+    suffix,
+    firstName: `ExpenseUpdateE2E${suffix}`,
+    nickname: `ExpenseUpdate${suffix}`,
+  });
+  const collaborator = await createCollaborator(request, person.id);
+  const expense = await createExpense(request, {
+    collaboratorId: collaborator.id,
+    expenseCategoryId: EXPENSE_CATEGORY_CANTEEN_ID,
+    valueUnitId: VALUE_UNIT_BRL_ID,
+    amount: 15,
+    expenseDate: "2026-06-03",
+    description: `Original expense ${suffix}`,
+  });
+
+  const updateResponse = await request.patch(`/api/v1/expenses/${expense.id}`, {
+    data: {
+      collaboratorId: collaborator.id,
+      expenseCategoryId: EXPENSE_CATEGORY_FLIGHT_ID,
+      valueUnitId: VALUE_UNIT_GOLD_GRAM_ID,
+      amount: 3.75,
+      expenseDate: "2026-06-04",
+      description: `Updated expense ${suffix}`,
+    },
+  });
+  expect(updateResponse.ok()).toBeTruthy();
+  const updateBody = (await updateResponse.json()) as ApiEnvelope<Expense>;
+  expect(updateBody.data?.expenseCategoryId).toBe(EXPENSE_CATEGORY_FLIGHT_ID);
+  expect(updateBody.data?.valueUnitId).toBe(VALUE_UNIT_GOLD_GRAM_ID);
+  expect(updateBody.data?.amount).toBe(3.75);
+  expect(updateBody.data?.expenseDate).toBe("2026-06-04");
+
+  const deleteResponse = await request.delete(`/api/v1/expenses/${expense.id}`);
+  expect(deleteResponse.status()).toBe(204);
+
+  const defaultListResponse = await request.get(
+    `/api/v1/expenses?collaboratorId=${collaborator.id}`,
+  );
+  expect(defaultListResponse.ok()).toBeTruthy();
+  const defaultListBody =
+    (await defaultListResponse.json()) as ApiEnvelope<ExpenseListResponse>;
+  expect(
+    defaultListBody.data?.items.some((item) => item.id === expense.id),
+  ).toBe(false);
+
+  const inactiveListResponse = await request.get(
+    `/api/v1/expenses?collaboratorId=${collaborator.id}&includeInactive=true`,
+  );
+  expect(inactiveListResponse.ok()).toBeTruthy();
+  const inactiveListBody =
+    (await inactiveListResponse.json()) as ApiEnvelope<ExpenseListResponse>;
+  const inactiveExpense = inactiveListBody.data?.items.find(
+    (item) => item.id === expense.id,
+  );
+  expect(inactiveExpense?.active).toBe(false);
+});
+
+test("expenses API rejects expenses for non-active Collaborators", async ({
+  request,
+}) => {
+  const suffix = uniqueSuffix();
+  const person = await createCompletePerson(request, {
+    suffix,
+    firstName: `ExpenseClosedE2E${suffix}`,
+    nickname: `ExpenseClosed${suffix}`,
+  });
+  const collaborator = await createCollaborator(request, person.id, {
+    statusId: "ref-collaborator-status-finished",
+  });
+
+  const response = await request.post("/api/v1/expenses", {
+    data: {
+      collaboratorId: collaborator.id,
+      expenseCategoryId: EXPENSE_CATEGORY_CANTEEN_ID,
+      valueUnitId: VALUE_UNIT_BRL_ID,
+      amount: 12.5,
+      expenseDate: "2026-06-05",
+      description: "Should be rejected for finished Collaborator",
+    },
+  });
+
+  expect(response.status()).toBe(400);
+  const body = (await response.json()) as ApiEnvelope<unknown>;
+  expect(body.error?.fields?.collaboratorId).toMatch(/active and open/i);
+});
+
+test("user sees client-side validation on the create Expense form", async ({
+  page,
+}) => {
+  await page.goto("/expenses/new");
+
+  await expect(
+    page.getByRole("heading", { name: "New Expense" }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Create Expense" }).click();
+
+  await expect(page).toHaveURL(/\/expenses\/new$/);
+  await expect(page.locator("body")).toContainText(
+    /select an active collaborator/i,
+  );
 });
 
 type ApiEnvelope<T> = {
@@ -65,6 +293,33 @@ type CreatedPerson = {
 
 type CreatedCollaborator = {
   id: string;
+};
+
+type Expense = {
+  id: string;
+  collaboratorId: string;
+  expenseCategoryId: string;
+  valueUnitId: string;
+  amount: number;
+  expenseDate: string;
+  description?: string;
+  active: boolean;
+};
+
+type ExpenseListResponse = {
+  items: Expense[];
+  total: number;
+  page: number;
+  pageSize: number;
+};
+
+type ExpensePayload = {
+  collaboratorId: string;
+  expenseCategoryId: string;
+  valueUnitId: string;
+  amount: number;
+  expenseDate: string;
+  description: string;
 };
 
 async function createCompletePerson(
@@ -91,6 +346,7 @@ async function createCompletePerson(
 async function createCollaborator(
   api: APIRequestContext,
   personId: string,
+  overrides: Partial<{ statusId: string }> = {},
 ): Promise<CreatedCollaborator> {
   const response = await api.post("/api/v1/collaborators", {
     data: {
@@ -101,7 +357,7 @@ async function createCollaborator(
       sectorId: SECTOR_MINING_ID,
       locationId: LOCATION_MAIN_MINE_ID,
       taskId: TASK_MINER_ID,
-      statusId: COLLABORATOR_STATUS_ACTIVE_ID,
+      statusId: overrides.statusId ?? COLLABORATOR_STATUS_ACTIVE_ID,
       notes: "Created by Playwright expense setup",
     },
   });
@@ -114,7 +370,28 @@ async function createCollaborator(
 
   const body = (await response.json()) as ApiEnvelope<CreatedCollaborator>;
   if (!body.data) {
-    throw new Error("Create Collaborator failed: response did not include data");
+    throw new Error(
+      "Create Collaborator failed: response did not include data",
+    );
+  }
+  return body.data;
+}
+
+async function createExpense(
+  api: APIRequestContext,
+  payload: ExpensePayload,
+): Promise<Expense> {
+  const response = await api.post("/api/v1/expenses", { data: payload });
+
+  if (!response.ok()) {
+    throw new Error(
+      `Create Expense failed at ${response.url()}: ${response.status()} ${await response.text()}`,
+    );
+  }
+
+  const body = (await response.json()) as ApiEnvelope<Expense>;
+  if (!body.data) {
+    throw new Error("Create Expense failed: response did not include data");
   }
   return body.data;
 }
@@ -173,7 +450,10 @@ function validRG(seed: number): string {
 }
 
 function validBrazilianCellular(seed: number): string {
-  const uniqueDigits = String(seed).replace(/\D/g, "").padStart(8, "0").slice(-8);
+  const uniqueDigits = String(seed)
+    .replace(/\D/g, "")
+    .padStart(8, "0")
+    .slice(-8);
   return `11${`9${uniqueDigits}`.slice(0, 9)}`;
 }
 

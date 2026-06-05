@@ -346,7 +346,9 @@ async function waitFor(assertion: () => boolean) {
       lastError = error;
     }
 
-    await new Promise((resolve) => setTimeout(resolve, 10));
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    });
   }
 
   if (lastError) {
