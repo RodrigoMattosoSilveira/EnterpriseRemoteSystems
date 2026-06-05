@@ -120,6 +120,7 @@ type Expense struct {
 	Amount            float64   `gorm:"not null" json:"amount"`
 	ExpenseDate       time.Time `gorm:"type:date;not null;index" json:"expenseDate"`
 	Description       string    `gorm:"type:text" json:"description,omitempty"`
+	Active            bool      `gorm:"not null;default:true;index" json:"active"`
 
 	Tenant          Tenant              `gorm:"foreignKey:TenantID;constraint:OnUpdate:Restrict,OnDelete:Restrict;" json:"tenant,omitempty"`
 	Collaborator    CollaboratorJourney `gorm:"foreignKey:CollaboratorID;constraint:OnUpdate:Restrict,OnDelete:Restrict;" json:"collaborator,omitempty"`

@@ -22,6 +22,7 @@ func ToDTO(row db.Expense) ExpenseDTO {
 		Amount:               row.Amount,
 		ExpenseDate:          formatDate(row.ExpenseDate),
 		Description:          row.Description,
+		Active:               row.Active,
 		CreatedAt:            row.CreatedAt.UTC().Format(time.RFC3339),
 		UpdatedAt:            row.UpdatedAt.UTC().Format(time.RFC3339),
 	}
