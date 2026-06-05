@@ -39,7 +39,11 @@ func (r *gormRepository) List(ctx context.Context, filter normalizedExpenseListF
 		q = q.Where("expense_date >= ?", formatDateForQuery(*filter.DateFrom))
 	}
 	if filter.DateTo != nil {
-		q = q.Where("expense_date <= ?", formatDateForQuery(*filter.DateTo))
+		// Use an exclusive next-day upper bound instead of <= YYYY-MM-DD.
+		// GORM/SQLite can persist date values with a midnight time component,
+		// and lexical comparison against the bare date string can exclude
+		// same-day rows in runtime/CI databases.
+		q = q.Where("expense_date < ?", formatDateForQuery(filter.DateTo.AddDate(0, 0, 1)))
 	}
 
 	if err := q.Count(&total).Error; err != nil {

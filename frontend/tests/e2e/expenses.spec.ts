@@ -78,8 +78,8 @@ test("user can open an Expense detail from the list", async ({
     expenseCategoryId: EXPENSE_CATEGORY_FLIGHT_ID,
     valueUnitId: VALUE_UNIT_GOLD_GRAM_ID,
     amount: 2.75,
-    expenseDate: "2026-06-02",
-    description: "Gold-denominated flight expense",
+    expenseDate: "2099-06-02",
+    description: `Gold-denominated flight expense ${suffix}`,
   });
 
   await page.goto("/expenses");
@@ -88,8 +88,8 @@ test("user can open an Expense detail from the list", async ({
 
   await expect(page).toHaveURL(new RegExp(`/expenses/${expense.id}$`));
   await expect(page.getByRole("heading", { name: "Flight" })).toBeVisible();
-  await expect(page.getByText(personNickname)).toBeVisible();
-  await expect(page.getByText("Gold-denominated flight expense")).toBeVisible();
+  await expect(page.getByText(personNickname, { exact: true })).toBeVisible();
+  await expect(page.getByText(`Gold-denominated flight expense ${suffix}`)).toBeVisible();
   await expect(page.getByText("Gold Gram")).toBeVisible();
 });
 
