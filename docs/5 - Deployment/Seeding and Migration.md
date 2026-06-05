@@ -1,0 +1,4 @@
+- Runtime schema creation is owned by SQL migrations.
+- Seed functions only insert/update seed data.
+- GORM AutoMigrate is allowed only in tests/helper databases.
+- DEV/TST/PRD must never run GORM AutoMigrate at API startup.

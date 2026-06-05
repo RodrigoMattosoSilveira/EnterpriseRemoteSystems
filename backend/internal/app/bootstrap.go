@@ -5,6 +5,7 @@ import (
 
 	"enterpriseremotesystems/backend/internal/collaborators"
 	"enterpriseremotesystems/backend/internal/db"
+	"enterpriseremotesystems/backend/internal/expenses"
 	httpserver "enterpriseremotesystems/backend/internal/http"
 	"enterpriseremotesystems/backend/internal/http/routes"
 	"enterpriseremotesystems/backend/internal/people"
@@ -43,10 +44,15 @@ func Bootstrap(cfg Config) (*fiber.App, func(), error) {
 	collaboratorSvc := collaborators.NewService(collaboratorRepo)
 	collaboratorHandler := collaborators.NewHandler(collaboratorSvc)
 
+	expenseRepo := expenses.NewRepository(database)
+	expenseSvc := expenses.NewService(expenseRepo)
+	expenseHandler := expenses.NewHandler(expenseSvc)
+
 	deps := routes.Dependencies{
 		DB:                   database,
 		PeopleHandler:        peopleHandler,
 		CollaboratorHandler:  collaboratorHandler,
+		ExpenseHandler:       expenseHandler,
 		ReferenceDataHandler: refHandler,
 		TenantHandler:        tenantHandler,
 	}
