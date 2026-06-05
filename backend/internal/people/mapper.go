@@ -28,7 +28,8 @@ func ToDTO(person db.Person) PersonDTO {
 	}).MissingSections
 
 	return PersonDTO{
-		ID: person.ID,
+		ID:       person.ID,
+		TenantID: person.TenantID,
 
 		FirstName: person.FirstName,
 		LastName:  person.LastName,

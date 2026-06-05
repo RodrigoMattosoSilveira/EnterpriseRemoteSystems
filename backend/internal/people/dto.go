@@ -1,7 +1,8 @@
 package people
 
 type PersonDTO struct {
-	ID string `json:"id"`
+	ID       string `json:"id"`
+	TenantID string `json:"tenantId"`
 
 	FirstName string `json:"firstName"`
 	LastName  string `json:"lastName"`

@@ -8,6 +8,23 @@ type BaseModel struct {
 	UpdatedAt time.Time `gorm:"not null" json:"updatedAt"`
 }
 
+const DefaultTenantID = "default"
+
+type Tenant struct {
+	BaseModel
+
+	Code        string `gorm:"type:text;not null;uniqueIndex" json:"code"`
+	Name        string `gorm:"type:text;not null" json:"name"`
+	Description string `gorm:"type:text" json:"description,omitempty"`
+	Active      bool   `gorm:"not null;default:true;index" json:"active"`
+
+	ReferenceData []ReferenceData       `gorm:"foreignKey:TenantID" json:"referenceData,omitempty"`
+	People        []Person              `gorm:"foreignKey:TenantID" json:"people,omitempty"`
+	Collaborators []CollaboratorJourney `gorm:"foreignKey:TenantID" json:"collaborators,omitempty"`
+	Expenses      []Expense             `gorm:"foreignKey:TenantID" json:"expenses,omitempty"`
+	LedgerEntries []LedgerEntry         `gorm:"foreignKey:TenantID" json:"ledgerEntries,omitempty"`
+}
+
 type CollaboratorJourney struct {
 	BaseModel
 
@@ -30,6 +47,7 @@ type CollaboratorJourney struct {
 	Notes    string     `gorm:"type:text" json:"notes,omitempty"`
 	ClosedAt *time.Time `json:"closedAt,omitempty"`
 
+	Tenant        Tenant        `gorm:"foreignKey:TenantID;constraint:OnUpdate:Restrict,OnDelete:Restrict;" json:"tenant,omitempty"`
 	Person        Person        `gorm:"foreignKey:PersonID;constraint:OnUpdate:Restrict,OnDelete:Restrict;" json:"person,omitempty"`
 	PaymentMethod ReferenceData `gorm:"foreignKey:PaymentMethodID;constraint:OnUpdate:Restrict,OnDelete:Restrict;" json:"paymentMethod,omitempty"`
 	Sector        ReferenceData `gorm:"foreignKey:SectorID;constraint:OnUpdate:Restrict,OnDelete:Restrict;" json:"sector,omitempty"`
@@ -48,19 +66,23 @@ type ReferenceData struct {
 	Active       bool   `gorm:"not null;default:true;index:idx_reference_tenant_type_active_sort,priority:3" json:"active"`
 	SortOrder    int    `gorm:"not null;default:0;index:idx_reference_tenant_type_active_sort,priority:4" json:"sortOrder"`
 	MetadataJSON string `gorm:"type:text" json:"metadataJson,omitempty"`
+
+	Tenant Tenant `gorm:"foreignKey:TenantID;constraint:OnUpdate:Restrict,OnDelete:Restrict;" json:"tenant,omitempty"`
 }
 
 type Person struct {
 	BaseModel
 
+	TenantID string `gorm:"type:text;not null;default:default;uniqueIndex:ux_people_tenant_cpf,priority:1;uniqueIndex:ux_people_tenant_rg,priority:1;uniqueIndex:ux_people_tenant_cellular,priority:1;uniqueIndex:ux_people_tenant_email,priority:1;uniqueIndex:ux_people_tenant_pix_key,priority:1;index" json:"tenantId"`
+
 	FirstName string `gorm:"type:text;not null" json:"firstName"`
 	LastName  string `gorm:"type:text;not null" json:"lastName"`
 	Nickname  string `gorm:"type:text;not null" json:"nickname"`
 
-	CPF      string `gorm:"column:cpf;type:text;not null;uniqueIndex" json:"cpf"`
-	RG       string `gorm:"column:rg;type:text;not null;uniqueIndex" json:"rg"`
-	Cellular string `gorm:"type:text;not null;uniqueIndex" json:"cellular"`
-	Email    string `gorm:"type:text;not null;uniqueIndex" json:"email"`
+	CPF      string `gorm:"column:cpf;type:text;not null;uniqueIndex:ux_people_tenant_cpf,priority:2" json:"cpf"`
+	RG       string `gorm:"column:rg;type:text;not null;uniqueIndex:ux_people_tenant_rg,priority:2" json:"rg"`
+	Cellular string `gorm:"type:text;not null;uniqueIndex:ux_people_tenant_cellular,priority:2" json:"cellular"`
+	Email    string `gorm:"type:text;not null;uniqueIndex:ux_people_tenant_email,priority:2" json:"email"`
 
 	Street1 string `gorm:"type:text" json:"street1,omitempty"`
 	Street2 string `gorm:"type:text" json:"street2,omitempty"`
@@ -72,7 +94,7 @@ type Person struct {
 	BankName        string  `gorm:"type:text" json:"bankName,omitempty"`
 	BankNumber      string  `gorm:"type:text" json:"bankNumber,omitempty"`
 	CheckingAccount string  `gorm:"type:text" json:"checkingAccount,omitempty"`
-	PIXKey          *string `gorm:"column:pix_key;type:text;uniqueIndex" json:"pixKey,omitempty"`
+	PIXKey          *string `gorm:"column:pix_key;type:text;uniqueIndex:ux_people_tenant_pix_key,priority:2" json:"pixKey,omitempty"`
 
 	EmergencyName     string `gorm:"type:text" json:"emergencyName,omitempty"`
 	EmergencyCellular string `gorm:"type:text" json:"emergencyCellular,omitempty"`
@@ -84,6 +106,45 @@ type Person struct {
 	StatusID string `gorm:"type:text;not null;index" json:"statusId"`
 	Notes    string `gorm:"type:text" json:"notes,omitempty"`
 
+	Tenant   Tenant                `gorm:"foreignKey:TenantID;constraint:OnUpdate:Restrict,OnDelete:Restrict;" json:"tenant,omitempty"`
 	Status   ReferenceData         `gorm:"foreignKey:StatusID;constraint:OnUpdate:Restrict,OnDelete:Restrict;" json:"status,omitempty"`
 	Journeys []CollaboratorJourney `gorm:"foreignKey:PersonID" json:"journeys,omitempty"`
+}
+
+type Expense struct {
+	BaseModel
+
+	TenantID          string    `gorm:"type:text;not null;default:default;index" json:"tenantId"`
+	CollaboratorID    string    `gorm:"type:text;not null;index" json:"collaboratorId"`
+	ExpenseCategoryID string    `gorm:"type:text;not null;index" json:"expenseCategoryId"`
+	ValueUnitID       string    `gorm:"type:text;not null;index" json:"valueUnitId"`
+	Amount            float64   `gorm:"not null" json:"amount"`
+	ExpenseDate       time.Time `gorm:"type:date;not null;index" json:"expenseDate"`
+	Description       string    `gorm:"type:text" json:"description,omitempty"`
+	Active            bool      `gorm:"not null;default:true;index" json:"active"`
+
+	Tenant          Tenant              `gorm:"foreignKey:TenantID;constraint:OnUpdate:Restrict,OnDelete:Restrict;" json:"tenant,omitempty"`
+	Collaborator    CollaboratorJourney `gorm:"foreignKey:CollaboratorID;constraint:OnUpdate:Restrict,OnDelete:Restrict;" json:"collaborator,omitempty"`
+	ExpenseCategory ReferenceData       `gorm:"foreignKey:ExpenseCategoryID;constraint:OnUpdate:Restrict,OnDelete:Restrict;" json:"expenseCategory,omitempty"`
+	ValueUnit       ReferenceData       `gorm:"foreignKey:ValueUnitID;constraint:OnUpdate:Restrict,OnDelete:Restrict;" json:"valueUnit,omitempty"`
+}
+
+type LedgerEntry struct {
+	BaseModel
+
+	TenantID       string    `gorm:"type:text;not null;default:default;uniqueIndex:ux_ledger_tenant_source_unit_direction,priority:1;index" json:"tenantId"`
+	CollaboratorID string    `gorm:"type:text;not null;index" json:"collaboratorId"`
+	ValueUnitID    string    `gorm:"type:text;not null;uniqueIndex:ux_ledger_tenant_source_unit_direction,priority:4;index" json:"valueUnitId"`
+	EntryType      string    `gorm:"type:text;not null;index" json:"entryType"`
+	Direction      string    `gorm:"type:text;not null;uniqueIndex:ux_ledger_tenant_source_unit_direction,priority:5;index" json:"direction"`
+	Amount         float64   `gorm:"not null" json:"amount"`
+	EffectiveDate  time.Time `gorm:"type:date;not null;index" json:"effectiveDate"`
+	SourceType     string    `gorm:"type:text;not null;uniqueIndex:ux_ledger_tenant_source_unit_direction,priority:2;index" json:"sourceType"`
+	SourceID       string    `gorm:"type:text;not null;uniqueIndex:ux_ledger_tenant_source_unit_direction,priority:3;index" json:"sourceId"`
+	Description    string    `gorm:"type:text" json:"description,omitempty"`
+	Active         bool      `gorm:"not null;default:true;index" json:"active"`
+
+	Tenant       Tenant              `gorm:"foreignKey:TenantID;constraint:OnUpdate:Restrict,OnDelete:Restrict;" json:"tenant,omitempty"`
+	Collaborator CollaboratorJourney `gorm:"foreignKey:CollaboratorID;constraint:OnUpdate:Restrict,OnDelete:Restrict;" json:"collaborator,omitempty"`
+	ValueUnit    ReferenceData       `gorm:"foreignKey:ValueUnitID;constraint:OnUpdate:Restrict,OnDelete:Restrict;" json:"valueUnit,omitempty"`
 }

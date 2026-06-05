@@ -32,6 +32,12 @@ export function CollaboratorsListPage() {
               People
             </Link>
             <Link
+              to="/expenses"
+              className="rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 shadow-sm"
+            >
+              Expenses
+            </Link>
+            <Link
               to="/collaborators/new"
               className="rounded-xl bg-gray-950 px-4 py-2 text-sm font-semibold text-white shadow-sm"
             >
@@ -78,6 +84,12 @@ export function CollaboratorsListPage() {
             <p className="mt-2 text-sm text-gray-500">
               Create a Collaborator after the related Person profile is complete.
             </p>
+            <Link
+              to="/expenses"
+              className="rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 shadow-sm"
+            >
+              Expenses
+            </Link>
             <Link
               to="/collaborators/new"
               className="mt-5 inline-block rounded-xl bg-gray-950 px-5 py-3 text-sm font-semibold text-white"

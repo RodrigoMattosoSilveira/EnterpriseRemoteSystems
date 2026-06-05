@@ -57,3 +57,15 @@ func (r *gormRepository) exists(ctx context.Context, tenantID string, typ string
 	}
 	return count > 0, nil
 }
+
+func (r *gormRepository) ExistsActiveTenantByID(ctx context.Context, tenantID string) (bool, error) {
+	var count int64
+	err := r.database.WithContext(ctx).
+		Model(&db.Tenant{}).
+		Where("id = ? AND active = ?", tenantID, true).
+		Count(&count).Error
+	if err != nil {
+		return false, err
+	}
+	return count > 0, nil
+}

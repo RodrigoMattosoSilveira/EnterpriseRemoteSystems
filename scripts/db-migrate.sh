@@ -2,8 +2,8 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-DB_PATH="${DB_PATH:-${ROOT_DIR}/backend/data/app.db}"
-MIGRATIONS_DIR="${ROOT_DIR}/backend/migrations"
+DB_PATH="${DB_PATH:-${DATABASE_PATH:-${ROOT_DIR}/backend/data/app.db}}"
+MIGRATIONS_DIR="${MIGRATIONS_DIR:-${ROOT_DIR}/backend/migrations}"
 
 mkdir -p "$(dirname "$DB_PATH")"
 
@@ -12,34 +12,46 @@ if ! command -v sqlite3 >/dev/null 2>&1; then
   exit 1
 fi
 
+if [[ ! -d "$MIGRATIONS_DIR" ]]; then
+  echo "❌ Missing migrations directory: $MIGRATIONS_DIR"
+  exit 1
+fi
+
 echo "Applying migrations to: $DB_PATH"
 echo
 
-migrations=(
-  "000001_init_schema.up.sql"
-  "000002_seed_reference_data.up.sql"
-  "000003_create_sessions.up.sql"
-  "000004_create_trainee_actions.up.sql"
-  "000005_create_action_evaluations.up.sql"
-  "000006_create_session_scores.up.sql"
-  "000007_create_users.up.sql"
-  "000008_seed_more_scenarios.up.sql"
-)
+sqlite3 "$DB_PATH" "
+  PRAGMA foreign_keys = ON;
+  CREATE TABLE IF NOT EXISTS schema_migrations (
+    filename TEXT PRIMARY KEY,
+    applied_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+"
 
-for migration in "${migrations[@]}"; do
-  path="${MIGRATIONS_DIR}/${migration}"
+shopt -s nullglob
+migrations=("$MIGRATIONS_DIR"/*.up.sql)
+shopt -u nullglob
 
-  if [[ ! -f "$path" ]]; then
-    echo "❌ Missing migration: $path"
-    exit 1
+if [[ ${#migrations[@]} -eq 0 ]]; then
+  echo "❌ No .up.sql migrations found in: $MIGRATIONS_DIR"
+  exit 1
+fi
+
+for path in "${migrations[@]}"; do
+  filename="$(basename "$path")"
+  already_applied="$(sqlite3 "$DB_PATH" "SELECT COUNT(*) FROM schema_migrations WHERE filename = '$filename';")"
+
+  if [[ "$already_applied" == "1" ]]; then
+    echo "Skipping already applied migration: $filename"
+    continue
   fi
 
-  echo "→ Applying $migration"
+  echo "Applying migration: $filename"
   sqlite3 "$DB_PATH" < "$path"
+  sqlite3 "$DB_PATH" "INSERT INTO schema_migrations (filename) VALUES ('$filename');"
 done
 
 echo
 echo "✅ Migrations applied."
 echo
-echo "Tables:"
 sqlite3 "$DB_PATH" ".tables"

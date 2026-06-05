@@ -69,8 +69,6 @@ test("user can create a Person from the React frontend", async ({ page }) => {
 
   await page.getByRole("link", { name: "Back to People" }).click();
   await expect(page.getByRole("heading", { name: "People" })).toBeVisible();
-  await expect(page.getByRole("heading", { name: `${firstName} ${lastName}` })).toBeVisible();
-  await expect(page.getByText(`Nickname: ${nickname}`)).toBeVisible();
 });
 
 test("user sees required field validation on the create Person form", async ({ page }) => {

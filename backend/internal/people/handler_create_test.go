@@ -28,6 +28,7 @@ type apiErrorResponse struct {
 type apiPersonResponse struct {
 	Data struct {
 		ID       string `json:"id"`
+		TenantID string `json:"tenantId"`
 		CPF      string `json:"cpf"`
 		RG       string `json:"rg"`
 		Cellular string `json:"cellular"`
@@ -52,6 +53,9 @@ func TestCreatePersonReturnsCreated(t *testing.T) {
 
 	if body.Data.ID == "" {
 		t.Fatal("expected created person id")
+	}
+	if body.Data.TenantID != "default" {
+		t.Fatalf("expected tenantId default, got %q", body.Data.TenantID)
 	}
 	if body.Data.StatusID != "ref-person-status-active" {
 		t.Fatalf("expected active status id, got %q", body.Data.StatusID)
