@@ -8,10 +8,13 @@ import (
 	"net/http/httptest"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/gofiber/fiber/v3"
+	"gorm.io/gorm"
 
 	apppkg "enterpriseremotesystems/backend/internal/app"
+	dbpkg "enterpriseremotesystems/backend/internal/db"
 )
 
 const (
@@ -54,17 +57,24 @@ type apiExpenseResponse struct {
 		Amount               float64 `json:"amount"`
 		ExpenseDate          string  `json:"expenseDate"`
 		Description          string  `json:"description"`
+		Active               bool    `json:"active"`
 	} `json:"data"`
 }
 
 type apiExpenseListResponse struct {
 	Data struct {
 		Items []struct {
-			ID             string  `json:"id"`
-			CollaboratorID string  `json:"collaboratorId"`
-			Amount         float64 `json:"amount"`
+			ID                string  `json:"id"`
+			CollaboratorID    string  `json:"collaboratorId"`
+			ExpenseCategoryID string  `json:"expenseCategoryId"`
+			ValueUnitID       string  `json:"valueUnitId"`
+			Amount            float64 `json:"amount"`
+			ExpenseDate       string  `json:"expenseDate"`
+			Active            bool    `json:"active"`
 		} `json:"items"`
-		Total int `json:"total"`
+		Total    int `json:"total"`
+		Page     int `json:"page"`
+		PageSize int `json:"pageSize"`
 	} `json:"data"`
 }
 
@@ -119,6 +129,9 @@ func TestCreateExpenseReturnsCreated(t *testing.T) {
 	if body.Data.Description != "Lunch at canteen" {
 		t.Fatalf("expected description, got %q", body.Data.Description)
 	}
+	if !body.Data.Active {
+		t.Fatal("expected created expense to be active")
+	}
 }
 
 func TestListAndGetExpenseReturnCreatedExpense(t *testing.T) {
@@ -152,6 +165,187 @@ func TestListAndGetExpenseReturnCreatedExpense(t *testing.T) {
 	if getBody.Data.ID != expense.Data.ID {
 		t.Fatalf("expected expense id %q, got %q", expense.Data.ID, getBody.Data.ID)
 	}
+}
+
+func TestListExpenseFiltersAndPagination(t *testing.T) {
+	server, cleanup := newTestServer(t)
+	defer cleanup()
+
+	collaboratorOne := createActiveCollaborator(t, server, 1)
+	collaboratorTwo := createActiveCollaborator(t, server, 2)
+
+	first := createExpense(t, server, validExpensePayload(collaboratorOne.Data.ID, map[string]any{
+		"expenseCategoryId": "ref-expense-category-canteen",
+		"valueUnitId":       "ref-value-unit-brl",
+		"amount":            10.0,
+		"expenseDate":       "2026-06-01",
+	}))
+	second := createExpense(t, server, validExpensePayload(collaboratorTwo.Data.ID, map[string]any{
+		"expenseCategoryId": "ref-expense-category-flight",
+		"valueUnitId":       "ref-value-unit-gold-gram",
+		"amount":            2.5,
+		"expenseDate":       "2026-06-02",
+	}))
+	createExpense(t, server, validExpensePayload(collaboratorOne.Data.ID, map[string]any{
+		"expenseCategoryId": "ref-expense-category-cargo",
+		"valueUnitId":       "ref-value-unit-brl",
+		"amount":            30.0,
+		"expenseDate":       "2026-06-10",
+	}))
+
+	res := getJSON(t, server, expensesURL+"?collaboratorId="+collaboratorOne.Data.ID+"&dateFrom=2026-06-01&dateTo=2026-06-02")
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("expected list filter status %d, got %d", http.StatusOK, res.StatusCode)
+	}
+	var filtered apiExpenseListResponse
+	decodeJSON(t, res, &filtered)
+	if filtered.Data.Total != 1 || len(filtered.Data.Items) != 1 || filtered.Data.Items[0].ID != first.Data.ID {
+		t.Fatalf("expected only first expense after collaborator/date filter, got total=%d items=%+v", filtered.Data.Total, filtered.Data.Items)
+	}
+
+	res = getJSON(t, server, expensesURL+"?expenseCategoryId=ref-expense-category-flight&valueUnitId=ref-value-unit-gold-gram")
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("expected category/value-unit filter status %d, got %d", http.StatusOK, res.StatusCode)
+	}
+	decodeJSON(t, res, &filtered)
+	if filtered.Data.Total != 1 || len(filtered.Data.Items) != 1 || filtered.Data.Items[0].ID != second.Data.ID {
+		t.Fatalf("expected only second expense after category/value-unit filter, got total=%d items=%+v", filtered.Data.Total, filtered.Data.Items)
+	}
+
+	res = getJSON(t, server, expensesURL+"?page=2&pageSize=1")
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("expected paginated list status %d, got %d", http.StatusOK, res.StatusCode)
+	}
+	decodeJSON(t, res, &filtered)
+	if filtered.Data.Total != 3 || filtered.Data.Page != 2 || filtered.Data.PageSize != 1 || len(filtered.Data.Items) != 1 {
+		t.Fatalf("expected page 2 with one item over total 3, got %+v", filtered.Data)
+	}
+}
+
+func TestUpdateExpenseReturnsUpdatedExpense(t *testing.T) {
+	server, cleanup := newTestServer(t)
+	defer cleanup()
+
+	collaborator := createActiveCollaborator(t, server, 1)
+	expense := createExpense(t, server, validExpensePayload(collaborator.Data.ID, nil))
+
+	res := postJSON(t, server, http.MethodPatch, expensesURL+expense.Data.ID, validExpensePayload(collaborator.Data.ID, map[string]any{
+		"expenseCategoryId": "ref-expense-category-flight",
+		"valueUnitId":       "ref-value-unit-gold-gram",
+		"amount":            3.75,
+		"expenseDate":       "2026-06-04",
+		"description":       "Updated flight expense",
+	}))
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		var body apiErrorResponse
+		decodeJSON(t, res, &body)
+		t.Fatalf("expected update status %d, got %d with error %+v", http.StatusOK, res.StatusCode, body.Error)
+	}
+	var body apiExpenseResponse
+	decodeJSON(t, res, &body)
+	if body.Data.ExpenseCategoryID != "ref-expense-category-flight" || body.Data.ValueUnitID != "ref-value-unit-gold-gram" || body.Data.Amount != 3.75 || body.Data.ExpenseDate != "2026-06-04" {
+		t.Fatalf("unexpected updated expense: %+v", body.Data)
+	}
+}
+
+func TestDeactivateAndDeleteExpenseHideItFromDefaultList(t *testing.T) {
+	server, cleanup := newTestServer(t)
+	defer cleanup()
+
+	collaborator := createActiveCollaborator(t, server, 1)
+	expense := createExpense(t, server, validExpensePayload(collaborator.Data.ID, nil))
+
+	res := postJSON(t, server, http.MethodPatch, expensesURL+expense.Data.ID+"/deactivate", map[string]any{})
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("expected deactivate status %d, got %d", http.StatusOK, res.StatusCode)
+	}
+	var deactivated apiExpenseResponse
+	decodeJSON(t, res, &deactivated)
+	if deactivated.Data.Active {
+		t.Fatal("expected deactivated expense to be inactive")
+	}
+
+	res = getJSON(t, server, expensesURL)
+	defer res.Body.Close()
+	var list apiExpenseListResponse
+	decodeJSON(t, res, &list)
+	if list.Data.Total != 0 || len(list.Data.Items) != 0 {
+		t.Fatalf("expected inactive expense hidden from default list, got %+v", list.Data)
+	}
+
+	res = getJSON(t, server, expensesURL+"?includeInactive=true")
+	defer res.Body.Close()
+	decodeJSON(t, res, &list)
+	if list.Data.Total != 1 || len(list.Data.Items) != 1 || list.Data.Items[0].Active {
+		t.Fatalf("expected inactive expense shown only when requested, got %+v", list.Data)
+	}
+
+	res = postJSON(t, server, http.MethodDelete, expensesURL+expense.Data.ID, map[string]any{})
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusNoContent {
+		t.Fatalf("expected delete status %d, got %d", http.StatusNoContent, res.StatusCode)
+	}
+}
+
+func TestUpdateExpenseRejectsInactiveExpense(t *testing.T) {
+	server, cleanup := newTestServer(t)
+	defer cleanup()
+
+	collaborator := createActiveCollaborator(t, server, 1)
+	expense := createExpense(t, server, validExpensePayload(collaborator.Data.ID, nil))
+	res := postJSON(t, server, http.MethodPatch, expensesURL+expense.Data.ID+"/deactivate", map[string]any{})
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("expected deactivate status %d, got %d", http.StatusOK, res.StatusCode)
+	}
+
+	res = postJSON(t, server, http.MethodPatch, expensesURL+expense.Data.ID, validExpensePayload(collaborator.Data.ID, nil))
+	defer res.Body.Close()
+	assertValidationError(t, res, "id", "Inactive expenses cannot be updated")
+}
+
+func TestExpensesAreScopedToDefaultTenant(t *testing.T) {
+	server, database, cleanup := newTestServerWithDatabase(t)
+	defer cleanup()
+
+	collaborator := createActiveCollaborator(t, server, 1)
+	expense := createExpense(t, server, validExpensePayload(collaborator.Data.ID, nil))
+
+	createOtherTenantExpense(t, database, expense.Data.ID)
+
+	res := getJSON(t, server, expensesURL+"other-tenant-expense")
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusNotFound {
+		t.Fatalf("expected other-tenant expense get status %d, got %d", http.StatusNotFound, res.StatusCode)
+	}
+
+	res = getJSON(t, server, expensesURL+"?includeInactive=true")
+	defer res.Body.Close()
+	var list apiExpenseListResponse
+	decodeJSON(t, res, &list)
+	if list.Data.Total != 1 || len(list.Data.Items) != 1 || list.Data.Items[0].ID != expense.Data.ID {
+		t.Fatalf("expected only default-tenant expense in list, got %+v", list.Data)
+	}
+}
+
+func TestCreateExpenseRejectsClosedCollaborator(t *testing.T) {
+	server, database, cleanup := newTestServerWithDatabase(t)
+	defer cleanup()
+
+	collaborator := createActiveCollaborator(t, server, 1)
+	now := time.Now().UTC()
+	if err := database.Model(&dbpkg.CollaboratorJourney{}).Where("id = ?", collaborator.Data.ID).Update("closed_at", now).Error; err != nil {
+		t.Fatalf("close collaborator: %v", err)
+	}
+
+	res := postJSON(t, server, http.MethodPost, expensesURL, validExpensePayload(collaborator.Data.ID, nil))
+	defer res.Body.Close()
+	assertValidationError(t, res, "collaboratorId", "Collaborator must be active and open")
 }
 
 func TestCreateExpenseRejectsMissingRequiredFields(t *testing.T) {
@@ -195,7 +389,7 @@ func TestCreateExpenseRejectsInactiveCollaborator(t *testing.T) {
 	res := postJSON(t, server, http.MethodPost, expensesURL, validExpensePayload(collaborator.Data.ID, nil))
 	defer res.Body.Close()
 
-	assertValidationError(t, res, "collaboratorId", "Collaborator must be active")
+	assertValidationError(t, res, "collaboratorId", "Collaborator must be active and open")
 }
 
 func TestCreateExpenseRejectsInvalidExpenseCategory(t *testing.T) {
@@ -239,6 +433,12 @@ func TestCreateExpenseRejectsInvalidValueUnit(t *testing.T) {
 
 func newTestServer(t *testing.T) (*fiber.App, func()) {
 	t.Helper()
+	server, _, cleanup := newTestServerWithDatabase(t)
+	return server, cleanup
+}
+
+func newTestServerWithDatabase(t *testing.T) (*fiber.App, *gorm.DB, func()) {
+	t.Helper()
 
 	dbPath := filepath.Join(t.TempDir(), "app.db")
 	server, cleanup, err := apppkg.Bootstrap(apppkg.Config{
@@ -251,7 +451,21 @@ func newTestServer(t *testing.T) (*fiber.App, func()) {
 		t.Fatalf("bootstrap test server: %v", err)
 	}
 
-	return server, cleanup
+	database, err := dbpkg.Open(dbPath)
+	if err != nil {
+		cleanup()
+		t.Fatalf("open test database for assertions: %v", err)
+	}
+
+	wrappedCleanup := func() {
+		sqlDB, err := database.DB()
+		if err == nil {
+			_ = sqlDB.Close()
+		}
+		cleanup()
+	}
+
+	return server, database, wrappedCleanup
 }
 
 func createActiveCollaborator(t *testing.T, server *fiber.App, seq int) apiCollaboratorResponse {
@@ -403,6 +617,36 @@ func cpfForSeq(seq int) string {
 
 func cellularForSeq(seq int) string {
 	return fmt.Sprintf("11%d%08d", 9, 98765000+seq)
+}
+
+func createOtherTenantExpense(t *testing.T, database *gorm.DB, sourceExpenseID string) {
+	t.Helper()
+	now := time.Now().UTC()
+
+	otherTenant := dbpkg.Tenant{
+		BaseModel:   dbpkg.BaseModel{ID: "other-tenant", CreatedAt: now, UpdatedAt: now},
+		Code:        "OTHER",
+		Name:        "Other Tenant",
+		Description: "Other tenant for tenant-scope tests",
+		Active:      true,
+	}
+	if err := database.Create(&otherTenant).Error; err != nil {
+		t.Fatalf("create other tenant: %v", err)
+	}
+
+	var source dbpkg.Expense
+	if err := database.First(&source, "id = ?", sourceExpenseID).Error; err != nil {
+		t.Fatalf("load source expense: %v", err)
+	}
+
+	otherExpense := source
+	otherExpense.ID = "other-tenant-expense"
+	otherExpense.TenantID = otherTenant.ID
+	otherExpense.CreatedAt = now
+	otherExpense.UpdatedAt = now
+	if err := database.Create(&otherExpense).Error; err != nil {
+		t.Fatalf("create other-tenant expense: %v", err)
+	}
 }
 
 func assertValidationError(t *testing.T, res *http.Response, field string, message string) {

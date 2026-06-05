@@ -7,4 +7,7 @@ func RegisterExpenseRoutes(v1 fiber.Router, deps Dependencies) {
 	r.Get("/", deps.ExpenseHandler.List)
 	r.Post("/", deps.ExpenseHandler.Create)
 	r.Get("/:id", deps.ExpenseHandler.GetByID)
+	r.Patch("/:id", deps.ExpenseHandler.Update)
+	r.Patch("/:id/deactivate", deps.ExpenseHandler.Deactivate)
+	r.Delete("/:id", deps.ExpenseHandler.Delete)
 }

@@ -10,19 +10,51 @@ func (e ValidationError) Error() string                       { return "validati
 func (e ValidationError) ValidationFields() map[string]string { return e.Fields }
 
 func ValidateCreateExpense(req CreateExpenseRequest) error {
-	fields := map[string]string{}
-	requireString(fields, "collaboratorId", req.CollaboratorID)
-	requireString(fields, "expenseCategoryId", req.ExpenseCategoryID)
-	requireString(fields, "valueUnitId", req.ValueUnitID)
-	requireString(fields, "expenseDate", req.ExpenseDate)
+	return validateExpenseFields(req.CollaboratorID, req.ExpenseCategoryID, req.ValueUnitID, req.Amount, req.ExpenseDate)
+}
 
-	if strings.TrimSpace(req.ExpenseDate) != "" {
-		if _, err := parseDate(req.ExpenseDate); err != nil {
+func ValidateUpdateExpense(req UpdateExpenseRequest) error {
+	return validateExpenseFields(req.CollaboratorID, req.ExpenseCategoryID, req.ValueUnitID, req.Amount, req.ExpenseDate)
+}
+
+func ValidateListFilter(filter ExpenseListFilter) error {
+	fields := map[string]string{}
+	if strings.TrimSpace(filter.DateFrom) != "" {
+		if _, err := parseDate(filter.DateFrom); err != nil {
+			fields["dateFrom"] = "Date from must be YYYY-MM-DD"
+		}
+	}
+	if strings.TrimSpace(filter.DateTo) != "" {
+		if _, err := parseDate(filter.DateTo); err != nil {
+			fields["dateTo"] = "Date to must be YYYY-MM-DD"
+		}
+	}
+	if filter.Page < 0 {
+		fields["page"] = "Page must be greater than zero"
+	}
+	if filter.PageSize < 0 {
+		fields["pageSize"] = "Page size must be greater than zero"
+	}
+	if len(fields) > 0 {
+		return ValidationError{Fields: fields}
+	}
+	return nil
+}
+
+func validateExpenseFields(collaboratorID string, expenseCategoryID string, valueUnitID string, amount float64, expenseDate string) error {
+	fields := map[string]string{}
+	requireString(fields, "collaboratorId", collaboratorID)
+	requireString(fields, "expenseCategoryId", expenseCategoryID)
+	requireString(fields, "valueUnitId", valueUnitID)
+	requireString(fields, "expenseDate", expenseDate)
+
+	if strings.TrimSpace(expenseDate) != "" {
+		if _, err := parseDate(expenseDate); err != nil {
 			fields["expenseDate"] = "Expense date must be YYYY-MM-DD"
 		}
 	}
 
-	if req.Amount <= 0 {
+	if amount <= 0 {
 		fields["amount"] = "Amount must be greater than zero"
 	}
 
