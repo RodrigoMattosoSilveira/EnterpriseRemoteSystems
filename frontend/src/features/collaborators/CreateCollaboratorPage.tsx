@@ -38,7 +38,7 @@ const initialForm: FormState = {
 
 export function CreateCollaboratorPage() {
   const navigate = useNavigate();
-  const peopleQuery = usePeople();
+  const peopleQuery = usePeople({ canCreateCollaborator: true, pageSize: 1000 });
   const paymentMethodsQuery = useReferenceDataByType("method");
   const sectorsQuery = useReferenceDataByType("sector");
   const locationsQuery = useReferenceDataByType("location");

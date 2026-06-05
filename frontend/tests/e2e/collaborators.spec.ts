@@ -13,12 +13,14 @@ test("user can create a Collaborator from an eligible complete Person", async ({
 }) => {
   const suffix = uniqueSuffix();
   const personName = `CollabE2E${suffix}`;
+  const personLastName = firstPageSortLastName(suffix);
   const personNickname = `Eligible${suffix}`;
-  const personDisplayName = `${personName} Pessoa (${personNickname})`;
+  const personDisplayName = `${personName} ${personLastName} (${personNickname})`;
 
   const person = await createCompletePerson(request, {
     suffix,
     firstName: personName,
+    lastName: personLastName,
     nickname: personNickname,
   });
 
@@ -111,7 +113,12 @@ type ApiEnvelope<T> = {
 
 async function createCompletePerson(
   api: APIRequestContext,
-  input: { suffix: number; firstName: string; nickname: string },
+  input: {
+    suffix: number;
+    firstName: string;
+    lastName: string;
+    nickname: string;
+  },
 ): Promise<CreatedPerson> {
   const response = await api.post("/api/v1/people", {
     data: completePersonPayload(input),
@@ -135,17 +142,19 @@ async function createCompletePerson(
 function completePersonPayload({
   suffix,
   firstName,
+  lastName,
   nickname,
 }: {
   suffix: number;
   firstName: string;
+  lastName: string;
   nickname: string;
 }) {
   const emailLocal = String(suffix).replace(/\D/g, "");
 
   return {
     firstName,
-    lastName: "Pessoa",
+    lastName,
     nickname,
     cpf: validCPF(suffix),
     rg: validRG(suffix),
@@ -175,6 +184,15 @@ function completePersonPayload({
 
 function uniqueSuffix(): number {
   return Date.now() + Math.floor(Math.random() * 1000);
+}
+
+function firstPageSortLastName(seed: number): string {
+  const reverseTimestamp = String(Number.MAX_SAFE_INTEGER - seed).padStart(
+    16,
+    "0",
+  );
+
+  return `!${reverseTimestamp}Pessoa`;
 }
 
 function validRG(seed: number): string {
