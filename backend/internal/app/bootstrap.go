@@ -4,11 +4,14 @@ import (
 	"log"
 
 	"enterpriseremotesystems/backend/internal/collaborators"
+	"enterpriseremotesystems/backend/internal/currentaccounts"
 	"enterpriseremotesystems/backend/internal/db"
+	"enterpriseremotesystems/backend/internal/expenses"
 	httpserver "enterpriseremotesystems/backend/internal/http"
 	"enterpriseremotesystems/backend/internal/http/routes"
 	"enterpriseremotesystems/backend/internal/people"
 	"enterpriseremotesystems/backend/internal/referencedata"
+	"enterpriseremotesystems/backend/internal/tenants"
 	"github.com/gofiber/fiber/v3"
 )
 
@@ -17,12 +20,18 @@ func Bootstrap(cfg Config) (*fiber.App, func(), error) {
 	if err != nil {
 		return nil, nil, err
 	}
-	if err := db.AutoMigrate(database); err != nil {
-		return nil, nil, err
+	if cfg.AutoMigrate || (cfg.Env == "test" && !cfg.AutoMigrateConfigured) {
+		if err := db.AutoMigrate(database); err != nil {
+			return nil, nil, err
+		}
 	}
 	if err := db.SeedReferenceData(database); err != nil {
 		return nil, nil, err
 	}
+
+	tenantRepo := tenants.NewRepository(database)
+	tenantSvc := tenants.NewService(tenantRepo)
+	tenantHandler := tenants.NewHandler(tenantSvc)
 
 	refRepo := referencedata.NewGormRepository(database)
 	refSvc := referencedata.NewService(refRepo)
@@ -36,11 +45,22 @@ func Bootstrap(cfg Config) (*fiber.App, func(), error) {
 	collaboratorSvc := collaborators.NewService(collaboratorRepo)
 	collaboratorHandler := collaborators.NewHandler(collaboratorSvc)
 
+	expenseRepo := expenses.NewRepository(database)
+	expenseSvc := expenses.NewService(expenseRepo)
+	expenseHandler := expenses.NewHandler(expenseSvc)
+
+	currentAccountRepo := currentaccounts.NewRepository(database)
+	currentAccountSvc := currentaccounts.NewService(currentAccountRepo)
+	currentAccountHandler := currentaccounts.NewHandler(currentAccountSvc)
+
 	deps := routes.Dependencies{
-		DB:                   database,
-		PeopleHandler:        peopleHandler,
-		CollaboratorHandler:  collaboratorHandler,
-		ReferenceDataHandler: refHandler,
+		DB:                    database,
+		PeopleHandler:         peopleHandler,
+		CollaboratorHandler:   collaboratorHandler,
+		ExpenseHandler:        expenseHandler,
+		CurrentAccountHandler: currentAccountHandler,
+		ReferenceDataHandler:  refHandler,
+		TenantHandler:         tenantHandler,
 	}
 
 	server := httpserver.NewServer(deps)

@@ -1,8 +1,8 @@
 package httpx
 
 import (
-	"github.com/gofiber/fiber/v3"
 	"enterpriseremotesystems/backend/internal/shared/dto"
+	"github.com/gofiber/fiber/v3"
 )
 
 func OK[T any](c fiber.Ctx, data T) error {

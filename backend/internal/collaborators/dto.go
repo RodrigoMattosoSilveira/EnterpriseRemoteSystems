@@ -5,6 +5,7 @@ type CollaboratorDTO struct {
 	TenantID           string  `json:"tenantId"`
 	PersonID           string  `json:"personId"`
 	PersonName         string  `json:"personName,omitempty"`
+	PersonNickname     string  `json:"personNickname,omitempty"`
 	JourneyStartDate   string  `json:"journeyStartDate"`
 	DefaultEndDate     string  `json:"defaultEndDate"`
 	ExtensionDays      int     `json:"extensionDays"`

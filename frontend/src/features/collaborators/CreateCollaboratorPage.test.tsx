@@ -5,6 +5,7 @@ import { createMemoryRouter, RouterProvider } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CreateCollaboratorPage } from "./CreateCollaboratorPage";
 import type { Person } from "../../types/people";
+import type { Collaborator } from "../../types/collaborators";
 import type { ReferenceDataItem } from "../../types/referenceData";
 
 type FetchCall = {
@@ -59,6 +60,30 @@ const incompletePerson: Person = {
   canCreateCollaborator: false,
   missingSections: ["Bank"],
   statusId: "ref-person-status-active",
+};
+
+const activeCollaboratorForSecondPerson: Collaborator = {
+  id: "collab-active-1",
+  tenantId: "default",
+  personId: "person-complete-2",
+  personName: "Carla Moura (Carla)",
+  journeyStartDate: "2026-05-01",
+  defaultEndDate: "2026-07-30",
+  extensionDays: 0,
+  projectedEndDate: "2026-07-30",
+  paymentMethodId: "ref-method-daily",
+  paymentMethodLabel: "Daily Rate",
+  paymentValue: 125.5,
+  sectorId: "ref-sector-mining",
+  sectorLabel: "Mining",
+  locationId: "ref-location-carara",
+  locationLabel: "Mina Carara",
+  taskId: "ref-task-operator",
+  taskLabel: "Operator",
+  statusId: "ref-collaborator-status-active",
+  statusLabel: "Active",
+  createdAt: "2026-05-01T00:00:00Z",
+  updatedAt: "2026-05-01T00:00:00Z",
 };
 
 const referenceRows: Record<string, ReferenceDataItem[]> = {
@@ -137,7 +162,7 @@ afterEach(async () => {
 });
 
 describe("CreateCollaboratorPage", () => {
-  it("loads only complete people into the create form and hides incomplete people", async () => {
+  it("loads only eligible people into the create form and hides incomplete people", async () => {
     mockCreateCollaboratorFetch();
 
     renderCreateCollaboratorPage();
@@ -146,8 +171,8 @@ describe("CreateCollaboratorPage", () => {
     expect(textNode("Carla Moura (Carla)")).toBeTruthy();
     expect(textNode("2 eligible")).toBeTruthy();
     expect(textNode("1 incomplete")).toBeTruthy();
-    expect(selectOptions("Complete Person")).toEqual([
-      "Select a complete Person",
+    expect(selectOptions("Eligible Person")).toEqual([
+      "Select an eligible Person",
       "Ana Silva (Ana)",
       "Carla Moura (Carla)",
     ]);
@@ -167,6 +192,35 @@ describe("CreateCollaboratorPage", () => {
     expect(textNode("Mina Carara")).toBeTruthy();
     expect(textNode("Operator")).toBeTruthy();
     expect(textNode("Active")).toBeTruthy();
+  });
+
+  it("excludes complete People who already have an active Collaborator", async () => {
+    mockCreateCollaboratorFetch({
+      collaborators: [activeCollaboratorForSecondPerson],
+    });
+
+    renderCreateCollaboratorPage();
+
+    await waitForText("Ana Silva (Ana)");
+
+    expect(textNode("1 eligible")).toBeTruthy();
+    expect(textNode("1 already collaborators")).toBeTruthy();
+    expect(selectOptions("Eligible Person")).toEqual([
+      "Select an eligible Person",
+      "Ana Silva (Ana)",
+    ]);
+    expect(textNode("Search eligible People")).toBeFalsy();
+    await waitForText(
+      "Already active Collaborators are hidden from the dropdown.",
+    );
+    await waitForText("Carla Moura (Carla)");
+
+    const carlaLinks = Array.from(container.querySelectorAll("a")).filter(
+      (node) => node.textContent?.trim() === "Carla Moura (Carla)",
+    );
+    expect(carlaLinks[0]?.getAttribute("href")).toBe(
+      "/people/person-complete-2",
+    );
   });
 
   it("shows a setup warning and disables submission when a dropdown has no active reference data", async () => {
@@ -204,29 +258,6 @@ describe("CreateCollaboratorPage", () => {
     expect(submit?.hasAttribute("disabled")).toBe(true);
   });
 
-  it("filters complete people by search text before selection", async () => {
-    mockCreateCollaboratorFetch();
-
-    renderCreateCollaboratorPage();
-
-    await waitForText("Ana Silva (Ana)");
-
-    await changeInput("Search complete People", "carla");
-
-    expect(selectOptions("Complete Person")).toEqual([
-      "Select a complete Person",
-      "Carla Moura (Carla)",
-    ]);
-    expect(textNode("Ana Silva (Ana)")).toBeFalsy();
-
-    await changeInput("Search complete People", "no-match");
-
-    expect(selectOptions("Complete Person")).toEqual([
-      "No complete People match search",
-    ]);
-    await waitForText("No complete People match your search");
-  });
-
   it("shows selected complete Person details and a link to the Person", async () => {
     mockCreateCollaboratorFetch();
 
@@ -234,7 +265,7 @@ describe("CreateCollaboratorPage", () => {
 
     await waitForText("Ana Silva (Ana)");
 
-    await changeSelect("Complete Person", "person-complete-1");
+    await changeSelect("Eligible Person", "person-complete-1");
 
     await waitForText("Selected Person is complete.");
     await waitForText("ana@example.com");
@@ -257,8 +288,15 @@ describe("CreateCollaboratorPage", () => {
 
     expect(submitButton().hasAttribute("disabled")).toBe(true);
 
-    await changeSelect("Complete Person", "person-complete-1");
+    await changeSelect("Eligible Person", "person-complete-1");
     expect(submitButton().hasAttribute("disabled")).toBe(true);
+    await waitForText("Complete these fields to enable Create Collaborator:");
+    await waitForText("Select a status");
+    await waitForText("Select a sector");
+    await waitForText("Select a location");
+    await waitForText("Select a task");
+    await waitForText("Select a payment method");
+    await waitForText("Enter a payment value greater than zero");
 
     await changeSelect("Status", "ref-collaborator-status-active");
     await changeSelect("Sector", "ref-sector-mining");
@@ -268,6 +306,9 @@ describe("CreateCollaboratorPage", () => {
     await changeInput("Payment Value", "125.50");
 
     expect(submitButton().hasAttribute("disabled")).toBe(false);
+    expect(
+      textNode("Complete these fields to enable Create Collaborator:"),
+    ).toBeFalsy();
   });
 
   it("shows an empty eligible-Person state when all People are incomplete", async () => {
@@ -275,7 +316,7 @@ describe("CreateCollaboratorPage", () => {
 
     renderCreateCollaboratorPage();
 
-    await waitForText("No complete People are available.");
+    await waitForText("No eligible People are available.");
     await waitForText("0 eligible");
     await waitForText("1 incomplete");
 
@@ -292,7 +333,7 @@ describe("CreateCollaboratorPage", () => {
 
     await waitForText("Ana Silva (Ana)");
 
-    await changeSelect("Complete Person", "person-complete-1");
+    await changeSelect("Eligible Person", "person-complete-1");
     await changeInput("Journey Start Date", "2026-05-29");
     await changeSelect("Status", "ref-collaborator-status-active");
     await changeSelect("Sector", "ref-sector-mining");
@@ -320,6 +361,96 @@ describe("CreateCollaboratorPage", () => {
     });
   });
 
+  it("shows backend validation errors from the create endpoint", async () => {
+    mockCreateCollaboratorFetch({
+      createResponse: jsonResponse(
+        {
+          error: {
+            code: "validation_failed",
+            message: "Validation failed",
+            fields: {
+              statusId: "Collaborator status is required",
+              paymentValue: "Payment value must be greater than zero",
+              sectorId: "Sector is inactive or does not exist",
+            },
+          },
+        },
+        { status: 400 },
+      ),
+    });
+
+    renderCreateCollaboratorPage();
+
+    await waitForText("Ana Silva (Ana)");
+
+    await changeSelect("Eligible Person", "person-complete-1");
+    await changeInput("Journey Start Date", "2026-05-29");
+    await changeSelect("Status", "ref-collaborator-status-active");
+    await changeSelect("Sector", "ref-sector-mining");
+    await changeSelect("Location", "ref-location-carara");
+    await changeSelect("Task", "ref-task-operator");
+    await changeSelect("Payment Method", "ref-method-daily");
+    await changeInput("Payment Value", "125.50");
+    await clickButton("Create Collaborator");
+
+    await waitForText("Validation failed");
+    await waitForText("Status: 400 · Code: validation_failed");
+    await waitForText("statusId:");
+    await waitForText("Collaborator status is required");
+    await waitForText("paymentValue:");
+    await waitForText("Payment value must be greater than zero");
+    await waitForText("sectorId:");
+    await waitForText("Sector is inactive or does not exist");
+
+    expect(textNode("Collaborators route reached")).toBeFalsy();
+    expect(
+      textNode("This Person already has an active Collaborator journey."),
+    ).toBeFalsy();
+  });
+
+  it("shows backend incomplete Person validation errors if server rejects the selected Person", async () => {
+    mockCreateCollaboratorFetch({
+      createResponse: jsonResponse(
+        {
+          error: {
+            code: "validation_failed",
+            message: "Validation failed",
+            fields: {
+              personId:
+                "Person profile is incomplete. Missing sections: Bank, Emergency.",
+            },
+          },
+        },
+        { status: 400 },
+      ),
+    });
+
+    renderCreateCollaboratorPage();
+
+    await waitForText("Ana Silva (Ana)");
+
+    await changeSelect("Eligible Person", "person-complete-1");
+    await changeInput("Journey Start Date", "2026-05-29");
+    await changeSelect("Status", "ref-collaborator-status-active");
+    await changeSelect("Sector", "ref-sector-mining");
+    await changeSelect("Location", "ref-location-carara");
+    await changeSelect("Task", "ref-task-operator");
+    await changeSelect("Payment Method", "ref-method-daily");
+    await changeInput("Payment Value", "125.50");
+    await clickButton("Create Collaborator");
+
+    await waitForText("Validation failed");
+    await waitForText("personId:");
+    await waitForText(
+      "Person profile is incomplete. Missing sections: Bank, Emergency.",
+    );
+
+    expect(textNode("Collaborators route reached")).toBeFalsy();
+    expect(
+      textNode("This Person already has an active Collaborator journey."),
+    ).toBeFalsy();
+  });
+
   it("shows a useful duplicate active Collaborator error", async () => {
     mockCreateCollaboratorFetch({
       createResponse: jsonResponse(
@@ -340,7 +471,7 @@ describe("CreateCollaboratorPage", () => {
 
     await waitForText("Ana Silva (Ana)");
 
-    await changeSelect("Complete Person", "person-complete-1");
+    await changeSelect("Eligible Person", "person-complete-1");
     await changeInput("Journey Start Date", "2026-05-29");
     await changeSelect("Status", "ref-collaborator-status-active");
     await changeSelect("Sector", "ref-sector-mining");
@@ -404,16 +535,24 @@ function mockCreateCollaboratorFetch({
   createResponse,
   people = [completePerson, secondCompletePerson, incompletePerson],
   referenceData = referenceRows,
+  collaborators = [],
 }: {
   createResponse?: Response;
   people?: Person[];
   referenceData?: Record<string, ReferenceDataItem[]>;
+  collaborators?: Collaborator[];
 } = {}) {
   mockFetch(async (url, init) => {
     recordFetchCall(url, init);
 
-    if (url === "/api/v1/people") {
+    if (url.startsWith("/api/v1/people")) {
       return jsonResponse({ data: { items: people, total: people.length } });
+    }
+
+    if (url === "/api/v1/collaborators" && methodOf(init) === "GET") {
+      return jsonResponse({
+        data: { items: collaborators, total: collaborators.length },
+      });
     }
 
     for (const [type, rows] of Object.entries(referenceData)) {
@@ -539,7 +678,9 @@ async function waitFor(assertion: () => boolean) {
       lastError = error;
     }
 
-    await new Promise((resolve) => setTimeout(resolve, 10));
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    });
   }
 
   if (lastError) {

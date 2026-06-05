@@ -32,6 +32,12 @@ export function CollaboratorsListPage() {
               People
             </Link>
             <Link
+              to="/expenses"
+              className="rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 shadow-sm"
+            >
+              Expenses
+            </Link>
+            <Link
               to="/collaborators/new"
               className="rounded-xl bg-gray-950 px-4 py-2 text-sm font-semibold text-white shadow-sm"
             >
@@ -79,6 +85,12 @@ export function CollaboratorsListPage() {
               Create a Collaborator after the related Person profile is complete.
             </p>
             <Link
+              to="/expenses"
+              className="rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 shadow-sm"
+            >
+              Expenses
+            </Link>
+            <Link
               to="/collaborators/new"
               className="mt-5 inline-block rounded-xl bg-gray-950 px-5 py-3 text-sm font-semibold text-white"
             >
@@ -108,8 +120,13 @@ export function CollaboratorsListPage() {
                           to={`/collaborators/${collaborator.id}`}
                           className="font-semibold text-gray-950 underline-offset-2 hover:underline"
                         >
-                          {collaborator.personName || collaborator.personId}
+                          {personDisplayName(collaborator)}
                         </Link>
+                        {personSecondaryLabel(collaborator) && (
+                          <div className="text-xs text-gray-500">
+                            {personSecondaryLabel(collaborator)}
+                          </div>
+                        )}
                       </td>
                       <td className="p-3 text-gray-700">
                         <div>{formatDate(collaborator.journeyStartDate)}</div>
@@ -156,8 +173,13 @@ function CollaboratorCard({ collaborator }: { collaborator: Collaborator }) {
       <div className="flex items-start justify-between gap-3">
         <div>
           <h2 className="font-semibold text-gray-950">
-            {collaborator.personName || collaborator.personId}
+            {personDisplayName(collaborator)}
           </h2>
+          {personSecondaryLabel(collaborator) && (
+            <p className="text-xs text-gray-500">
+              {personSecondaryLabel(collaborator)}
+            </p>
+          )}
           <p className="text-sm text-gray-500">
             {collaborator.taskLabel || "—"} · {collaborator.locationLabel || "—"}
           </p>
@@ -173,6 +195,25 @@ function CollaboratorCard({ collaborator }: { collaborator: Collaborator }) {
       </div>
     </Link>
   );
+}
+
+function personDisplayName(collaborator: Collaborator) {
+  return (
+    collaborator.personNickname?.trim() ||
+    collaborator.personName?.trim() ||
+    "Person unavailable"
+  );
+}
+
+function personSecondaryLabel(collaborator: Collaborator) {
+  const nickname = collaborator.personNickname?.trim();
+  const name = collaborator.personName?.trim();
+
+  if (!nickname || !name || name === nickname) {
+    return "";
+  }
+
+  return name;
 }
 
 function StatusBadge({ label }: { label: string }) {

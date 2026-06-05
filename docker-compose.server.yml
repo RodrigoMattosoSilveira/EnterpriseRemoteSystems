@@ -7,6 +7,8 @@ services:
     restart: unless-stopped
     environment:
       PORT: "8080"
+      APP_ENV: "${APP_ENV:-development}"
+      APP_AUTO_MIGRATE: "${APP_AUTO_MIGRATE:-false}"
       DATABASE_PATH: "/app/data/app.db"
 
       JWT_SECRET: "${JWT_SECRET}"

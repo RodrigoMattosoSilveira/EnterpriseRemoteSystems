@@ -1,0 +1,229 @@
+import { expect, test, type APIRequestContext } from "@playwright/test";
+
+const PERSON_STATUS_ACTIVE_ID = "ref-person-status-active";
+const COLLABORATOR_STATUS_ACTIVE_ID = "ref-collaborator-status-active";
+const PAYMENT_METHOD_DAILY_ID = "ref-method-daily";
+const SECTOR_MINING_ID = "ref-sector-mining";
+const LOCATION_MAIN_MINE_ID = "ref-location-main-mine";
+const TASK_MINER_ID = "ref-task-miner";
+
+test("user can create a Collaborator from an eligible complete Person", async ({
+  page,
+  request,
+}) => {
+  const suffix = uniqueSuffix();
+  const personName = `CollabE2E${suffix}`;
+  const personLastName = firstPageSortLastName(suffix);
+  const personNickname = `Eligible${suffix}`;
+  const personDisplayName = `${personName} ${personLastName} (${personNickname})`;
+
+  const person = await createCompletePerson(request, {
+    suffix,
+    firstName: personName,
+    lastName: personLastName,
+    nickname: personNickname,
+  });
+
+  await page.goto("/collaborators/new");
+
+  await expect(
+    page.getByRole("heading", { name: "New Collaborator" }),
+  ).toBeVisible();
+
+  await expect(
+    page.getByRole("heading", { name: "Select an eligible Person" }),
+  ).toBeVisible();
+
+  const personSelect = page.getByLabel("Eligible Person *");
+  await expect(personSelect).toBeEnabled();
+  await expect(personSelect).toContainText(personDisplayName);
+
+  await personSelect.selectOption(person.id);
+
+  await expect(page.getByText("Selected Person is complete.")).toBeVisible();
+
+  await expect(
+    page.getByRole("paragraph").filter({ hasText: personDisplayName }),
+  ).toBeVisible();
+
+  await page.getByLabel("Status *").selectOption(COLLABORATOR_STATUS_ACTIVE_ID);
+  await page.getByLabel("Sector *").selectOption(SECTOR_MINING_ID);
+  await page.getByLabel("Location *").selectOption(LOCATION_MAIN_MINE_ID);
+  await page.getByLabel("Task *").selectOption(TASK_MINER_ID);
+  await page
+    .getByLabel("Payment Method *")
+    .selectOption(PAYMENT_METHOD_DAILY_ID);
+  await page.getByLabel("Payment Value *").fill("250.75");
+
+  await page
+    .getByLabel("Notes")
+    .fill("Created by Playwright create-collaborator flow");
+
+  const createButton = page.getByRole("button", {
+    name: "Create Collaborator",
+  });
+
+  await expect(createButton).toBeEnabled();
+  await createButton.click();
+
+  await expect(page).toHaveURL(/\/collaborators$/);
+
+await expect(page.getByRole("status")).toContainText(
+  `Collaborator created for ${personNickname}.`,
+);
+
+  await expect(
+    page.getByRole("heading", { name: "Collaborators" }),
+  ).toBeVisible();
+
+  await expect(
+    page.getByRole("link", { name: new RegExp(personNickname) }),
+  ).toBeVisible();
+
+  await expect(page.getByText("Miner").first()).toBeVisible();
+  await expect(page.getByText("Daily wage").first()).toBeVisible();
+
+  await page.goto("/collaborators/new");
+
+  await expect(
+    page.getByText("Already active Collaborators are hidden from the dropdown."),
+  ).toBeVisible();
+
+  await expect(page.getByText(personDisplayName)).toHaveCount(1);
+
+  const refreshedPersonSelect = page.getByLabel("Eligible Person *");
+
+  await expect(refreshedPersonSelect).not.toContainText(personDisplayName);
+});
+
+type CreatedPerson = {
+  id: string;
+  firstName: string;
+  lastName: string;
+  nickname: string;
+};
+
+type ApiEnvelope<T> = {
+  data?: T;
+  error?: {
+    message?: string;
+    fields?: Record<string, string>;
+  };
+};
+
+async function createCompletePerson(
+  api: APIRequestContext,
+  input: {
+    suffix: number;
+    firstName: string;
+    lastName: string;
+    nickname: string;
+  },
+): Promise<CreatedPerson> {
+  const response = await api.post("/api/v1/people", {
+    data: completePersonPayload(input),
+  });
+
+  if (!response.ok()) {
+    throw new Error(
+      `Create Person failed at ${response.url()}: ${response.status()} ${await response.text()}`,
+    );
+  }
+
+  const body = (await response.json()) as ApiEnvelope<CreatedPerson>;
+
+  if (!body.data) {
+    throw new Error("Create Person failed: response did not include data");
+  }
+
+  return body.data;
+}
+
+function completePersonPayload({
+  suffix,
+  firstName,
+  lastName,
+  nickname,
+}: {
+  suffix: number;
+  firstName: string;
+  lastName: string;
+  nickname: string;
+}) {
+  const emailLocal = String(suffix).replace(/\D/g, "");
+
+  return {
+    firstName,
+    lastName,
+    nickname,
+    cpf: validCPF(suffix),
+    rg: validRG(suffix),
+    cellular: validBrazilianCellular(suffix),
+    email: `collaborator-e2e-${emailLocal}@example.com`,
+
+    street1: "Rua Playwright 123",
+    street2: "Apto E2E",
+    city: "Sao Paulo",
+    state: "SP",
+    cep: "01001000",
+    country: "Brasil",
+
+    bankName: "Banco E2E",
+    bankNumber: "001",
+    checkingAccount: `12345-${String(suffix).slice(-1)}`,
+    pixKey: `pix-collaborator-e2e-${emailLocal}@example.com`,
+
+    emergencyName: "Contato Emergencia",
+    emergencyCellular: validBrazilianCellular(suffix + 1),
+    emergencyEmail: `emergency-collaborator-e2e-${emailLocal}@example.com`,
+
+    statusId: PERSON_STATUS_ACTIVE_ID,
+    notes: "Complete Person created by Playwright setup",
+  };
+}
+
+function uniqueSuffix(): number {
+  return Date.now() + Math.floor(Math.random() * 1000);
+}
+
+function firstPageSortLastName(seed: number): string {
+  const reverseTimestamp = String(Number.MAX_SAFE_INTEGER - seed).padStart(
+    16,
+    "0",
+  );
+
+  return `!${reverseTimestamp}Pessoa`;
+}
+
+function validRG(seed: number): string {
+  return `RG-E2E-${String(seed).slice(-8)}`;
+}
+
+function validBrazilianCellular(seed: number): string {
+  const uniqueDigits = String(seed)
+    .replace(/\D/g, "")
+    .padStart(8, "0")
+    .slice(-8);
+
+  return `11${`9${uniqueDigits}`.slice(0, 9)}`;
+}
+
+function validCPF(seed: number): string {
+  const base = String(seed).replace(/\D/g, "").padStart(9, "0").slice(-9);
+  const digits = base.split("").map(Number);
+  const d1 = cpfCheckDigit(digits);
+  const d2 = cpfCheckDigit([...digits, d1]);
+
+  return `${base}${d1}${d2}`;
+}
+
+function cpfCheckDigit(numbers: number[]): number {
+  const weightStart = numbers.length + 1;
+  const sum = numbers.reduce(
+    (acc, digit, index) => acc + digit * (weightStart - index),
+    0,
+  );
+  const remainder = sum % 11;
+
+  return remainder < 2 ? 0 : 11 - remainder;
+}

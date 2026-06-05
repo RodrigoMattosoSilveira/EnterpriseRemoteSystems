@@ -7,7 +7,10 @@ import (
 
 	"enterpriseremotesystems/backend/internal/db"
 	"enterpriseremotesystems/backend/internal/shared/ids"
+	"enterpriseremotesystems/backend/internal/tenants"
 )
+
+const defaultTenantID = tenants.DefaultTenantID
 
 type service struct {
 	repo Repository
@@ -31,12 +34,13 @@ func (s *service) Create(ctx context.Context, req CreatePersonRequest, actorUser
 		return nil, err
 	}
 
-	if err := s.validatePersonStatus(ctx, req.StatusID); err != nil {
+	if err := s.validatePersonStatus(ctx, defaultTenantID, req.StatusID); err != nil {
 		return nil, err
 	}
 
 	conflicts, err := s.repo.UniqueConflicts(
 		ctx,
+		defaultTenantID,
 		NormalizeDigits(req.CPF),
 		strings.TrimSpace(req.RG),
 		NormalizeDigits(req.Cellular),
@@ -59,6 +63,7 @@ func (s *service) Create(ctx context.Context, req CreatePersonRequest, actorUser
 			CreatedAt: now,
 			UpdatedAt: now,
 		},
+		TenantID: defaultTenantID,
 
 		FirstName: strings.TrimSpace(req.FirstName),
 		LastName:  strings.TrimSpace(req.LastName),
@@ -134,12 +139,12 @@ func (s *service) Update(ctx context.Context, id string, req UpdatePersonRequest
 		return nil, err
 	}
 
-	if err := s.validatePersonStatus(ctx, req.StatusID); err != nil {
+	person, err := s.repo.FindByID(ctx, id)
+	if err != nil {
 		return nil, err
 	}
 
-	person, err := s.repo.FindByID(ctx, id)
-	if err != nil {
+	if err := s.validatePersonStatus(ctx, person.TenantID, req.StatusID); err != nil {
 		return nil, err
 	}
 
@@ -147,6 +152,7 @@ func (s *service) Update(ctx context.Context, id string, req UpdatePersonRequest
 
 	conflicts, err := s.repo.UniqueConflicts(
 		ctx,
+		person.TenantID,
 		NormalizeDigits(req.CPF),
 		strings.TrimSpace(req.RG),
 		NormalizeDigits(req.Cellular),
@@ -244,8 +250,8 @@ func emptyToNil(value string) *string {
 func ptr[T any](value T) *T {
 	return &value
 }
-func (s *service) validatePersonStatus(ctx context.Context, statusID string) error {
-	exists, err := s.repo.ExistsActivePersonStatus(ctx, strings.TrimSpace(statusID))
+func (s *service) validatePersonStatus(ctx context.Context, tenantID string, statusID string) error {
+	exists, err := s.repo.ExistsActivePersonStatus(ctx, tenantID, strings.TrimSpace(statusID))
 	if err != nil {
 		return err
 	}

@@ -5,12 +5,12 @@ import {
   listPeople,
   updatePerson,
 } from "../../api/people.api";
-import type { PersonInput } from "../../types/people";
+import type { PeopleListFilter, PersonInput } from "../../types/people";
 
-export function usePeople() {
+export function usePeople(filter: PeopleListFilter = {}) {
   return useQuery({
-    queryKey: ["people"],
-    queryFn: listPeople,
+    queryKey: ["people", filter],
+    queryFn: () => listPeople(filter),
   });
 }
 
