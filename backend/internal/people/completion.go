@@ -4,14 +4,14 @@ import "strings"
 
 const (
 	ProfilePersonalOnly = "PERSONAL_ONLY"
-	ProfileIncomplete  = "INCOMPLETE"
-	ProfileComplete    = "COMPLETE"
+	ProfileIncomplete   = "INCOMPLETE"
+	ProfileComplete     = "COMPLETE"
 )
 
 type CompletionResult struct {
-	Status                  string
-	CanCreateCollaborator  bool
-	MissingSections         []string
+	Status                string
+	CanCreateCollaborator bool
+	MissingSections       []string
 }
 
 type completionInput struct {
@@ -49,24 +49,24 @@ func ComputeCompletion(input completionInput) CompletionResult {
 
 	if len(missing) == 3 {
 		return CompletionResult{
-			Status:                 ProfilePersonalOnly,
+			Status:                ProfilePersonalOnly,
 			CanCreateCollaborator: false,
-			MissingSections:        missing,
+			MissingSections:       missing,
 		}
 	}
 
 	if len(missing) > 0 {
 		return CompletionResult{
-			Status:                 ProfileIncomplete,
+			Status:                ProfileIncomplete,
 			CanCreateCollaborator: false,
-			MissingSections:        missing,
+			MissingSections:       missing,
 		}
 	}
 
 	return CompletionResult{
-		Status:                 ProfileComplete,
+		Status:                ProfileComplete,
 		CanCreateCollaborator: true,
-		MissingSections:        nil,
+		MissingSections:       nil,
 	}
 }
 

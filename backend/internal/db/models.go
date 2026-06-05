@@ -21,6 +21,7 @@ type Tenant struct {
 	ReferenceData []ReferenceData       `gorm:"foreignKey:TenantID" json:"referenceData,omitempty"`
 	People        []Person              `gorm:"foreignKey:TenantID" json:"people,omitempty"`
 	Collaborators []CollaboratorJourney `gorm:"foreignKey:TenantID" json:"collaborators,omitempty"`
+	Expenses      []Expense             `gorm:"foreignKey:TenantID" json:"expenses,omitempty"`
 }
 
 type CollaboratorJourney struct {
@@ -107,4 +108,21 @@ type Person struct {
 	Tenant   Tenant                `gorm:"foreignKey:TenantID;constraint:OnUpdate:Restrict,OnDelete:Restrict;" json:"tenant,omitempty"`
 	Status   ReferenceData         `gorm:"foreignKey:StatusID;constraint:OnUpdate:Restrict,OnDelete:Restrict;" json:"status,omitempty"`
 	Journeys []CollaboratorJourney `gorm:"foreignKey:PersonID" json:"journeys,omitempty"`
+}
+
+type Expense struct {
+	BaseModel
+
+	TenantID          string    `gorm:"type:text;not null;default:default;index" json:"tenantId"`
+	CollaboratorID    string    `gorm:"type:text;not null;index" json:"collaboratorId"`
+	ExpenseCategoryID string    `gorm:"type:text;not null;index" json:"expenseCategoryId"`
+	ValueUnitID       string    `gorm:"type:text;not null;index" json:"valueUnitId"`
+	Amount            float64   `gorm:"not null" json:"amount"`
+	ExpenseDate       time.Time `gorm:"type:date;not null;index" json:"expenseDate"`
+	Description       string    `gorm:"type:text" json:"description,omitempty"`
+
+	Tenant          Tenant              `gorm:"foreignKey:TenantID;constraint:OnUpdate:Restrict,OnDelete:Restrict;" json:"tenant,omitempty"`
+	Collaborator    CollaboratorJourney `gorm:"foreignKey:CollaboratorID;constraint:OnUpdate:Restrict,OnDelete:Restrict;" json:"collaborator,omitempty"`
+	ExpenseCategory ReferenceData       `gorm:"foreignKey:ExpenseCategoryID;constraint:OnUpdate:Restrict,OnDelete:Restrict;" json:"expenseCategory,omitempty"`
+	ValueUnit       ReferenceData       `gorm:"foreignKey:ValueUnitID;constraint:OnUpdate:Restrict,OnDelete:Restrict;" json:"valueUnit,omitempty"`
 }

@@ -7,7 +7,7 @@ import (
 )
 
 var (
-	reDigitsOnly      = regexp.MustCompile(`\D`)
+	reDigitsOnly     = regexp.MustCompile(`\D`)
 	reEmail          = regexp.MustCompile(`^[^\s@]+@[^\s@]+\.[^\s@]+$`)
 	reBrazilCellular = regexp.MustCompile(`^\+?55?[1-9]{2}9[0-9]{8}$|^[1-9]{2}9[0-9]{8}$`)
 	reRG             = regexp.MustCompile(`^[A-Za-z0-9.\-]{5,20}$`)
