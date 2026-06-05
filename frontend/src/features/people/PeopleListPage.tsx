@@ -32,6 +32,12 @@ export function PeopleListPage() {
               Collaborators
             </Link>
             <Link
+              to="/expenses"
+              className="rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 shadow-sm"
+            >
+              Expenses
+            </Link>
+            <Link
               to="/admin/reference-data"
               className="rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 shadow-sm"
             >

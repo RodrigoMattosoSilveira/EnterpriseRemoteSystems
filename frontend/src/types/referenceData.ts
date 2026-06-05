@@ -5,6 +5,8 @@ export const REFERENCE_DATA_TYPES = [
   { value: "sector", label: "Sectors" },
   { value: "location", label: "Locations" },
   { value: "task", label: "Tasks" },
+  { value: "expense_category", label: "Expense Categories" },
+  { value: "value_unit", label: "Value Units" },
 ] as const;
 
 export type ReferenceDataType = (typeof REFERENCE_DATA_TYPES)[number]["value"];
