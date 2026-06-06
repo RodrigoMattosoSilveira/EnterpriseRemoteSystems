@@ -18,12 +18,13 @@ type Tenant struct {
 	Description string `gorm:"type:text" json:"description,omitempty"`
 	Active      bool   `gorm:"not null;default:true;index" json:"active"`
 
-	ReferenceData []ReferenceData       `gorm:"foreignKey:TenantID" json:"referenceData,omitempty"`
-	People        []Person              `gorm:"foreignKey:TenantID" json:"people,omitempty"`
-	Collaborators []CollaboratorJourney `gorm:"foreignKey:TenantID" json:"collaborators,omitempty"`
-	Expenses      []Expense             `gorm:"foreignKey:TenantID" json:"expenses,omitempty"`
-	WorkPeriods   []WorkPeriod          `gorm:"foreignKey:TenantID" json:"workPeriods,omitempty"`
-	LedgerEntries []LedgerEntry         `gorm:"foreignKey:TenantID" json:"ledgerEntries,omitempty"`
+	ReferenceData         []ReferenceData        `gorm:"foreignKey:TenantID" json:"referenceData,omitempty"`
+	People                []Person               `gorm:"foreignKey:TenantID" json:"people,omitempty"`
+	Collaborators         []CollaboratorJourney  `gorm:"foreignKey:TenantID" json:"collaborators,omitempty"`
+	Expenses              []Expense              `gorm:"foreignKey:TenantID" json:"expenses,omitempty"`
+	WorkPeriods           []WorkPeriod           `gorm:"foreignKey:TenantID" json:"workPeriods,omitempty"`
+	WorkPeriodAssignments []WorkPeriodAssignment `gorm:"foreignKey:TenantID" json:"workPeriodAssignments,omitempty"`
+	LedgerEntries         []LedgerEntry          `gorm:"foreignKey:TenantID" json:"ledgerEntries,omitempty"`
 }
 
 type CollaboratorJourney struct {
@@ -144,7 +145,31 @@ type WorkPeriod struct {
 	AccrualOpenedAt *time.Time `json:"accrualOpenedAt,omitempty"`
 	ClosedAt        *time.Time `json:"closedAt,omitempty"`
 
-	Tenant Tenant `gorm:"foreignKey:TenantID;constraint:OnUpdate:Restrict,OnDelete:Restrict;" json:"tenant,omitempty"`
+	Tenant      Tenant                 `gorm:"foreignKey:TenantID;constraint:OnUpdate:Restrict,OnDelete:Restrict;" json:"tenant,omitempty"`
+	Assignments []WorkPeriodAssignment `gorm:"foreignKey:WorkPeriodID" json:"assignments,omitempty"`
+}
+
+type WorkPeriodAssignment struct {
+	BaseModel
+
+	TenantID                   string  `gorm:"type:text;not null;default:default;uniqueIndex:ux_work_period_assignments_active_collaborator,priority:1;index" json:"tenantId"`
+	WorkPeriodID               string  `gorm:"type:text;not null;uniqueIndex:ux_work_period_assignments_active_collaborator,priority:2;index" json:"workPeriodId"`
+	CollaboratorID             string  `gorm:"type:text;not null;uniqueIndex:ux_work_period_assignments_active_collaborator,priority:3;index" json:"collaboratorId"`
+	PlannedStatus              string  `gorm:"type:text;not null;index" json:"plannedStatus"`
+	ActualStatus               *string `gorm:"type:text" json:"actualStatus,omitempty"`
+	ReplacementForAssignmentID *string `gorm:"type:text;index" json:"replacementForAssignmentId,omitempty"`
+	SectorID                   string  `gorm:"type:text;not null;index" json:"sectorId"`
+	LocationID                 string  `gorm:"type:text;not null;index" json:"locationId"`
+	TaskID                     string  `gorm:"type:text;not null;index" json:"taskId"`
+	Active                     bool    `gorm:"not null;default:true;uniqueIndex:ux_work_period_assignments_active_collaborator,priority:4;index" json:"active"`
+
+	Tenant                   Tenant                `gorm:"foreignKey:TenantID;constraint:OnUpdate:Restrict,OnDelete:Restrict;" json:"tenant,omitempty"`
+	WorkPeriod               WorkPeriod            `gorm:"foreignKey:WorkPeriodID;constraint:OnUpdate:Restrict,OnDelete:Restrict;" json:"workPeriod,omitempty"`
+	Collaborator             CollaboratorJourney   `gorm:"foreignKey:CollaboratorID;constraint:OnUpdate:Restrict,OnDelete:Restrict;" json:"collaborator,omitempty"`
+	ReplacementForAssignment *WorkPeriodAssignment `gorm:"foreignKey:ReplacementForAssignmentID;constraint:OnUpdate:Restrict,OnDelete:Restrict;" json:"replacementForAssignment,omitempty"`
+	Sector                   ReferenceData         `gorm:"foreignKey:SectorID;constraint:OnUpdate:Restrict,OnDelete:Restrict;" json:"sector,omitempty"`
+	Location                 ReferenceData         `gorm:"foreignKey:LocationID;constraint:OnUpdate:Restrict,OnDelete:Restrict;" json:"location,omitempty"`
+	Task                     ReferenceData         `gorm:"foreignKey:TaskID;constraint:OnUpdate:Restrict,OnDelete:Restrict;" json:"task,omitempty"`
 }
 
 type LedgerEntry struct {
