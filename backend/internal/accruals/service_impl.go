@@ -106,6 +106,50 @@ func (s *service) RecalculateRun(ctx context.Context, id string, actorUserID str
 	return s.GetRunByID(ctx, run.ID)
 }
 
+func (s *service) PostRun(ctx context.Context, id string, actorUserID string) (*AccrualRunDTO, error) {
+	run, err := s.repo.FindRunByID(ctx, strings.TrimSpace(id))
+	if err != nil {
+		return nil, err
+	}
+	if run.Status == RunStatusPosted {
+		return s.GetRunByID(ctx, run.ID)
+	}
+	if run.Status == RunStatusVoided {
+		return nil, ValidationError{Fields: map[string]string{"status": "Voided accrual runs cannot be posted"}}
+	}
+	if run.WorkPeriod.Status == workperiods.StatusClosed {
+		return nil, ValidationError{Fields: map[string]string{"workPeriodId": "Closed work periods cannot be posted"}}
+	}
+	readyItems, err := s.repo.ListReadyItemsByRun(ctx, run.ID)
+	if err != nil {
+		return nil, err
+	}
+	if len(readyItems) == 0 {
+		return nil, ValidationError{Fields: map[string]string{"status": "No READY accrual items are available to post"}}
+	}
+	entries, err := s.ledgerEntriesForReadyItems(ctx, *run, readyItems)
+	if err != nil {
+		return nil, err
+	}
+	if len(entries) == 0 {
+		return nil, ValidationError{Fields: map[string]string{"items": "READY accrual items do not contain positive BRL or gold amounts"}}
+	}
+	pendingCount, err := s.repo.PendingItemCountByRun(ctx, run.ID)
+	if err != nil {
+		return nil, err
+	}
+	workPeriodStatus := workperiods.StatusFullyPosted
+	if pendingCount > 0 {
+		workPeriodStatus = workperiods.StatusPartiallyPosted
+	}
+	run.Status = RunStatusPosted
+	run.UpdatedAt = time.Now().UTC()
+	if err := s.repo.PostReadyItems(ctx, run, readyItems, entries, workPeriodStatus); err != nil {
+		return nil, err
+	}
+	return s.GetRunByID(ctx, run.ID)
+}
+
 func (s *service) ListItemsByRun(ctx context.Context, runID string, filter AccrualItemListFilter) (*AccrualItemListResult, error) {
 	if _, err := s.repo.FindRunByID(ctx, strings.TrimSpace(runID)); err != nil {
 		return nil, err
@@ -126,9 +170,16 @@ func (s *service) calculateItems(ctx context.Context, run db.AccrualRun) ([]db.A
 	if err != nil {
 		return nil, err
 	}
+	postedAssignmentIDs, err := s.repo.PostedAssignmentIDsForWorkPeriod(ctx, run.WorkPeriodID)
+	if err != nil {
+		return nil, err
+	}
 	now := time.Now().UTC()
 	items := make([]db.AccrualItem, 0, len(assignments))
 	for _, assignment := range assignments {
+		if postedAssignmentIDs[assignment.ID] {
+			continue
+		}
 		assignmentID := assignment.ID
 		item := db.AccrualItem{BaseModel: db.BaseModel{ID: ids.New(), CreatedAt: now, UpdatedAt: now}, TenantID: defaultTenantID, AccrualRunID: run.ID, WorkPeriodID: run.WorkPeriodID, WorkPeriodAssignmentID: &assignmentID, CollaboratorID: assignment.CollaboratorID, Direction: DirectionCredit}
 		status := strings.TrimSpace(stringValue(assignment.ActualStatus))
@@ -216,6 +267,53 @@ func (s *service) calculatePaymentItem(ctx context.Context, run db.AccrualRun, a
 		return item, nil
 	default:
 		return pendingPaymentConfig(item, "UNKNOWN_PAYMENT_METHOD", "Unknown payment method"), nil
+	}
+}
+
+func (s *service) ledgerEntriesForReadyItems(ctx context.Context, run db.AccrualRun, items []db.AccrualItem) ([]db.LedgerEntry, error) {
+	brlUnit, err := s.repo.FindValueUnitByCode(ctx, ValueUnitCodeBRL)
+	if err != nil {
+		return nil, err
+	}
+	goldUnit, err := s.repo.FindValueUnitByCode(ctx, ValueUnitCodeGoldGram)
+	if err != nil {
+		return nil, err
+	}
+	now := time.Now().UTC()
+	entries := make([]db.LedgerEntry, 0, len(items)*2)
+	for _, item := range items {
+		direction := strings.TrimSpace(item.Direction)
+		if direction == "" {
+			direction = DirectionCredit
+		}
+		if item.BRLAmount != nil && *item.BRLAmount > 0 {
+			entries = append(entries, accrualLedgerEntry(item, *brlUnit, direction, *item.BRLAmount, run.AccrualDate, now, "brl"))
+		}
+		if item.GoldGramAmount != nil && *item.GoldGramAmount > 0 {
+			entries = append(entries, accrualLedgerEntry(item, *goldUnit, direction, *item.GoldGramAmount, run.AccrualDate, now, "gold"))
+		}
+	}
+	return entries, nil
+}
+
+func accrualLedgerEntry(item db.AccrualItem, valueUnit db.ReferenceData, direction string, amount float64, effectiveDate time.Time, now time.Time, suffix string) db.LedgerEntry {
+	return db.LedgerEntry{
+		BaseModel: db.BaseModel{
+			ID:        "ledger-accrual-" + suffix + "-" + item.ID,
+			CreatedAt: now,
+			UpdatedAt: now,
+		},
+		TenantID:       item.TenantID,
+		CollaboratorID: item.CollaboratorID,
+		ValueUnitID:    valueUnit.ID,
+		EntryType:      LedgerEntryTypeEarningCredit,
+		Direction:      direction,
+		Amount:         amount,
+		EffectiveDate:  effectiveDate,
+		SourceType:     LedgerSourceTypeAccrualItem,
+		SourceID:       item.ID,
+		Description:    item.Description,
+		Active:         true,
 	}
 }
 

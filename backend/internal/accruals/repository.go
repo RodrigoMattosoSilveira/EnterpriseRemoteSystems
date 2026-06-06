@@ -17,6 +17,11 @@ type Repository interface {
 	SummariesForRuns(ctx context.Context, runIDs []string) (map[string]AccrualSummaryDTO, error)
 	ListAssignmentsForCalculation(ctx context.Context, workPeriodID string) ([]db.WorkPeriodAssignment, error)
 	FindGoldProduction(ctx context.Context, workPeriodID string, locationID string) (*db.GoldProductionEntry, error)
+	FindValueUnitByCode(ctx context.Context, code string) (*db.ReferenceData, error)
+	ListReadyItemsByRun(ctx context.Context, runID string) ([]db.AccrualItem, error)
+	PendingItemCountByRun(ctx context.Context, runID string) (int64, error)
+	PostedAssignmentIDsForWorkPeriod(ctx context.Context, workPeriodID string) (map[string]bool, error)
+	PostReadyItems(ctx context.Context, run *db.AccrualRun, readyItems []db.AccrualItem, entries []db.LedgerEntry, workPeriodStatus string) error
 }
 
 type normalizedAccrualRunListFilter struct {
