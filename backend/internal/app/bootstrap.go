@@ -7,6 +7,7 @@ import (
 	"enterpriseremotesystems/backend/internal/currentaccounts"
 	"enterpriseremotesystems/backend/internal/db"
 	"enterpriseremotesystems/backend/internal/expenses"
+	"enterpriseremotesystems/backend/internal/goldproduction"
 	httpserver "enterpriseremotesystems/backend/internal/http"
 	"enterpriseremotesystems/backend/internal/http/routes"
 	"enterpriseremotesystems/backend/internal/people"
@@ -63,6 +64,10 @@ func Bootstrap(cfg Config) (*fiber.App, func(), error) {
 	workPeriodAssignmentSvc := workperiodassignments.NewService(workPeriodAssignmentRepo)
 	workPeriodAssignmentHandler := workperiodassignments.NewHandler(workPeriodAssignmentSvc)
 
+	goldProductionRepo := goldproduction.NewRepository(database)
+	goldProductionSvc := goldproduction.NewService(goldProductionRepo)
+	goldProductionHandler := goldproduction.NewHandler(goldProductionSvc)
+
 	deps := routes.Dependencies{
 		DB:                          database,
 		PeopleHandler:               peopleHandler,
@@ -71,6 +76,7 @@ func Bootstrap(cfg Config) (*fiber.App, func(), error) {
 		CurrentAccountHandler:       currentAccountHandler,
 		WorkPeriodHandler:           workPeriodHandler,
 		WorkPeriodAssignmentHandler: workPeriodAssignmentHandler,
+		GoldProductionHandler:       goldProductionHandler,
 		ReferenceDataHandler:        refHandler,
 		TenantHandler:               tenantHandler,
 	}
