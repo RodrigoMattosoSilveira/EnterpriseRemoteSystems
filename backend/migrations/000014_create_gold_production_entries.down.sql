@@ -1,0 +1,4 @@
+DROP INDEX IF EXISTS idx_gold_production_entries_tenant_location_date;
+DROP INDEX IF EXISTS idx_gold_production_entries_tenant_work_period;
+DROP INDEX IF EXISTS ux_gold_production_entries_active_period_location_date;
+DROP TABLE IF EXISTS gold_production_entries;
