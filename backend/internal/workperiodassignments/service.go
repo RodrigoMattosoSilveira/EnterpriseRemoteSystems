@@ -7,6 +7,7 @@ type Service interface {
 	Create(ctx context.Context, workPeriodID string, req CreateWorkPeriodAssignmentRequest, actorUserID string) (*WorkPeriodAssignmentDTO, error)
 	GetByID(ctx context.Context, id string) (*WorkPeriodAssignmentDTO, error)
 	Update(ctx context.Context, id string, req UpdateWorkPeriodAssignmentRequest, actorUserID string) (*WorkPeriodAssignmentDTO, error)
+	MarkActualOutcome(ctx context.Context, id string, req MarkActualOutcomeRequest, actorUserID string) (*WorkPeriodAssignmentDTO, error)
 	Deactivate(ctx context.Context, id string, actorUserID string) (*WorkPeriodAssignmentDTO, error)
 	Delete(ctx context.Context, id string, actorUserID string) error
 }
