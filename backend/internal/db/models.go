@@ -25,6 +25,8 @@ type Tenant struct {
 	WorkPeriods           []WorkPeriod           `gorm:"foreignKey:TenantID" json:"workPeriods,omitempty"`
 	WorkPeriodAssignments []WorkPeriodAssignment `gorm:"foreignKey:TenantID" json:"workPeriodAssignments,omitempty"`
 	GoldProductionEntries []GoldProductionEntry  `gorm:"foreignKey:TenantID" json:"goldProductionEntries,omitempty"`
+	AccrualRuns           []AccrualRun           `gorm:"foreignKey:TenantID" json:"accrualRuns,omitempty"`
+	AccrualItems          []AccrualItem          `gorm:"foreignKey:TenantID" json:"accrualItems,omitempty"`
 	LedgerEntries         []LedgerEntry          `gorm:"foreignKey:TenantID" json:"ledgerEntries,omitempty"`
 }
 
@@ -153,6 +155,7 @@ type WorkPeriod struct {
 
 	Tenant      Tenant                 `gorm:"foreignKey:TenantID;constraint:OnUpdate:Restrict,OnDelete:Restrict;" json:"tenant,omitempty"`
 	Assignments []WorkPeriodAssignment `gorm:"foreignKey:WorkPeriodID" json:"assignments,omitempty"`
+	AccrualRuns []AccrualRun           `gorm:"foreignKey:WorkPeriodID" json:"accrualRuns,omitempty"`
 }
 
 type WorkPeriodAssignment struct {
@@ -192,6 +195,43 @@ type GoldProductionEntry struct {
 	Tenant     Tenant        `gorm:"foreignKey:TenantID;constraint:OnUpdate:Restrict,OnDelete:Restrict;" json:"tenant,omitempty"`
 	WorkPeriod WorkPeriod    `gorm:"foreignKey:WorkPeriodID;constraint:OnUpdate:Restrict,OnDelete:Restrict;" json:"workPeriod,omitempty"`
 	Location   ReferenceData `gorm:"foreignKey:LocationID;constraint:OnUpdate:Restrict,OnDelete:Restrict;" json:"location,omitempty"`
+}
+
+type AccrualRun struct {
+	BaseModel
+
+	TenantID     string    `gorm:"type:text;not null;default:default;index" json:"tenantId"`
+	WorkPeriodID string    `gorm:"type:text;not null;index" json:"workPeriodId"`
+	Status       string    `gorm:"type:text;not null;index" json:"status"`
+	AccrualDate  time.Time `gorm:"type:date;not null;index" json:"accrualDate"`
+	Notes        string    `gorm:"type:text" json:"notes,omitempty"`
+
+	Tenant     Tenant        `gorm:"foreignKey:TenantID;constraint:OnUpdate:Restrict,OnDelete:Restrict;" json:"tenant,omitempty"`
+	WorkPeriod WorkPeriod    `gorm:"foreignKey:WorkPeriodID;constraint:OnUpdate:Restrict,OnDelete:Restrict;" json:"workPeriod,omitempty"`
+	Items      []AccrualItem `gorm:"foreignKey:AccrualRunID" json:"items,omitempty"`
+}
+
+type AccrualItem struct {
+	BaseModel
+
+	TenantID               string   `gorm:"type:text;not null;default:default;index" json:"tenantId"`
+	AccrualRunID           string   `gorm:"type:text;not null;index" json:"accrualRunId"`
+	WorkPeriodID           string   `gorm:"type:text;not null;index" json:"workPeriodId"`
+	WorkPeriodAssignmentID *string  `gorm:"type:text;index" json:"workPeriodAssignmentId,omitempty"`
+	CollaboratorID         string   `gorm:"type:text;not null;index" json:"collaboratorId"`
+	CalculationType        string   `gorm:"type:text;not null;index" json:"calculationType"`
+	Direction              string   `gorm:"type:text;not null;default:CREDIT;index" json:"direction"`
+	BRLAmount              *float64 `gorm:"column:brl_amount" json:"brlAmount,omitempty"`
+	GoldGramAmount         *float64 `gorm:"column:gold_gram_amount" json:"goldGramAmount,omitempty"`
+	Status                 string   `gorm:"type:text;not null;index" json:"status"`
+	PendingReason          string   `gorm:"type:text;index" json:"pendingReason,omitempty"`
+	Description            string   `gorm:"type:text" json:"description,omitempty"`
+
+	Tenant               Tenant                `gorm:"foreignKey:TenantID;constraint:OnUpdate:Restrict,OnDelete:Restrict;" json:"tenant,omitempty"`
+	AccrualRun           AccrualRun            `gorm:"foreignKey:AccrualRunID;constraint:OnUpdate:Restrict,OnDelete:Cascade;" json:"accrualRun,omitempty"`
+	WorkPeriod           WorkPeriod            `gorm:"foreignKey:WorkPeriodID;constraint:OnUpdate:Restrict,OnDelete:Restrict;" json:"workPeriod,omitempty"`
+	WorkPeriodAssignment *WorkPeriodAssignment `gorm:"foreignKey:WorkPeriodAssignmentID;constraint:OnUpdate:Restrict,OnDelete:SET NULL;" json:"workPeriodAssignment,omitempty"`
+	Collaborator         CollaboratorJourney   `gorm:"foreignKey:CollaboratorID;constraint:OnUpdate:Restrict,OnDelete:Restrict;" json:"collaborator,omitempty"`
 }
 
 type LedgerEntry struct {
