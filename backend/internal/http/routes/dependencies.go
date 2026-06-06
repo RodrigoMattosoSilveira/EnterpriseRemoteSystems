@@ -1,6 +1,7 @@
 package routes
 
 import (
+	"enterpriseremotesystems/backend/internal/accruals"
 	"enterpriseremotesystems/backend/internal/collaborators"
 	"enterpriseremotesystems/backend/internal/currentaccounts"
 	"enterpriseremotesystems/backend/internal/expenses"
@@ -22,6 +23,7 @@ type Dependencies struct {
 	WorkPeriodHandler           *workperiods.Handler
 	WorkPeriodAssignmentHandler *workperiodassignments.Handler
 	GoldProductionHandler       *goldproduction.Handler
+	AccrualHandler              *accruals.Handler
 	ReferenceDataHandler        *referencedata.Handler
 	TenantHandler               *tenants.Handler
 }

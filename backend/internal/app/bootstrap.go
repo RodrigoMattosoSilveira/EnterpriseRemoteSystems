@@ -3,6 +3,7 @@ package app
 import (
 	"log"
 
+	"enterpriseremotesystems/backend/internal/accruals"
 	"enterpriseremotesystems/backend/internal/collaborators"
 	"enterpriseremotesystems/backend/internal/currentaccounts"
 	"enterpriseremotesystems/backend/internal/db"
@@ -68,6 +69,10 @@ func Bootstrap(cfg Config) (*fiber.App, func(), error) {
 	goldProductionSvc := goldproduction.NewService(goldProductionRepo)
 	goldProductionHandler := goldproduction.NewHandler(goldProductionSvc)
 
+	accrualRepo := accruals.NewRepository(database)
+	accrualSvc := accruals.NewService(accrualRepo)
+	accrualHandler := accruals.NewHandler(accrualSvc)
+
 	deps := routes.Dependencies{
 		DB:                          database,
 		PeopleHandler:               peopleHandler,
@@ -77,6 +82,7 @@ func Bootstrap(cfg Config) (*fiber.App, func(), error) {
 		WorkPeriodHandler:           workPeriodHandler,
 		WorkPeriodAssignmentHandler: workPeriodAssignmentHandler,
 		GoldProductionHandler:       goldProductionHandler,
+		AccrualHandler:              accrualHandler,
 		ReferenceDataHandler:        refHandler,
 		TenantHandler:               tenantHandler,
 	}
