@@ -22,6 +22,7 @@ type Tenant struct {
 	People        []Person              `gorm:"foreignKey:TenantID" json:"people,omitempty"`
 	Collaborators []CollaboratorJourney `gorm:"foreignKey:TenantID" json:"collaborators,omitempty"`
 	Expenses      []Expense             `gorm:"foreignKey:TenantID" json:"expenses,omitempty"`
+	WorkPeriods   []WorkPeriod          `gorm:"foreignKey:TenantID" json:"workPeriods,omitempty"`
 	LedgerEntries []LedgerEntry         `gorm:"foreignKey:TenantID" json:"ledgerEntries,omitempty"`
 }
 
@@ -127,6 +128,23 @@ type Expense struct {
 	Collaborator    CollaboratorJourney `gorm:"foreignKey:CollaboratorID;constraint:OnUpdate:Restrict,OnDelete:Restrict;" json:"collaborator,omitempty"`
 	ExpenseCategory ReferenceData       `gorm:"foreignKey:ExpenseCategoryID;constraint:OnUpdate:Restrict,OnDelete:Restrict;" json:"expenseCategory,omitempty"`
 	ValueUnit       ReferenceData       `gorm:"foreignKey:ValueUnitID;constraint:OnUpdate:Restrict,OnDelete:Restrict;" json:"valueUnit,omitempty"`
+}
+
+type WorkPeriod struct {
+	BaseModel
+
+	TenantID        string     `gorm:"type:text;not null;default:default;uniqueIndex:ux_work_period_tenant_date_code,priority:1;index" json:"tenantId"`
+	WorkDate        time.Time  `gorm:"type:date;not null;uniqueIndex:ux_work_period_tenant_date_code,priority:2;index" json:"workDate"`
+	PeriodCode      string     `gorm:"type:text;not null;uniqueIndex:ux_work_period_tenant_date_code,priority:3;index" json:"periodCode"`
+	Name            string     `gorm:"type:text;not null" json:"name"`
+	StartsAt        time.Time  `gorm:"not null;index" json:"startsAt"`
+	EndsAt          time.Time  `gorm:"not null;index" json:"endsAt"`
+	Status          string     `gorm:"type:text;not null;default:PLANNING;index" json:"status"`
+	InformedAt      *time.Time `json:"informedAt,omitempty"`
+	AccrualOpenedAt *time.Time `json:"accrualOpenedAt,omitempty"`
+	ClosedAt        *time.Time `json:"closedAt,omitempty"`
+
+	Tenant Tenant `gorm:"foreignKey:TenantID;constraint:OnUpdate:Restrict,OnDelete:Restrict;" json:"tenant,omitempty"`
 }
 
 type LedgerEntry struct {

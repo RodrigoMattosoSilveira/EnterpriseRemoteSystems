@@ -12,6 +12,7 @@ import (
 	"enterpriseremotesystems/backend/internal/people"
 	"enterpriseremotesystems/backend/internal/referencedata"
 	"enterpriseremotesystems/backend/internal/tenants"
+	"enterpriseremotesystems/backend/internal/workperiods"
 	"github.com/gofiber/fiber/v3"
 )
 
@@ -53,12 +54,17 @@ func Bootstrap(cfg Config) (*fiber.App, func(), error) {
 	currentAccountSvc := currentaccounts.NewService(currentAccountRepo)
 	currentAccountHandler := currentaccounts.NewHandler(currentAccountSvc)
 
+	workPeriodRepo := workperiods.NewRepository(database)
+	workPeriodSvc := workperiods.NewService(workPeriodRepo)
+	workPeriodHandler := workperiods.NewHandler(workPeriodSvc)
+
 	deps := routes.Dependencies{
 		DB:                    database,
 		PeopleHandler:         peopleHandler,
 		CollaboratorHandler:   collaboratorHandler,
 		ExpenseHandler:        expenseHandler,
 		CurrentAccountHandler: currentAccountHandler,
+		WorkPeriodHandler:     workPeriodHandler,
 		ReferenceDataHandler:  refHandler,
 		TenantHandler:         tenantHandler,
 	}
