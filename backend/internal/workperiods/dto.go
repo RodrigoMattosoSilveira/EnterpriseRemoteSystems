@@ -38,3 +38,29 @@ type WorkPeriodListResult struct {
 	Page     int             `json:"page"`
 	PageSize int             `json:"pageSize"`
 }
+
+type WorkPlanRosterDTO struct {
+	WorkPeriodID string              `json:"workPeriodId"`
+	WorkDate     string              `json:"workDate"`
+	DisplayDate  string              `json:"displayDate"`
+	PeriodCode   string              `json:"periodCode"`
+	PeriodName   string              `json:"periodName"`
+	Title        string              `json:"title"`
+	Subtitle     string              `json:"subtitle"`
+	Status       string              `json:"status"`
+	Rows         []WorkPlanRosterRow `json:"rows"`
+}
+
+type WorkPlanRosterRow struct {
+	AssignmentID     string `json:"assignmentId"`
+	CollaboratorID   string `json:"collaboratorId"`
+	Name             string `json:"name"`
+	Nickname         string `json:"nickname,omitempty"`
+	SectorID         string `json:"sectorId"`
+	SectorLabel      string `json:"sectorLabel"`
+	LocationID       string `json:"locationId"`
+	LocationLabel    string `json:"locationLabel"`
+	TaskID           string `json:"taskId"`
+	TaskLabel        string `json:"taskLabel"`
+	ReplacementForID string `json:"replacementForAssignmentId,omitempty"`
+}
