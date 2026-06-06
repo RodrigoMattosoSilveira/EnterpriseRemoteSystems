@@ -5,6 +5,7 @@ import (
 
 	"enterpriseremotesystems/backend/internal/db"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 type gormRepository struct{ db *gorm.DB }
@@ -134,4 +135,69 @@ func (r *gormRepository) FindGoldProduction(ctx context.Context, workPeriodID st
 		return nil, err
 	}
 	return &row, nil
+}
+
+func (r *gormRepository) FindValueUnitByCode(ctx context.Context, code string) (*db.ReferenceData, error) {
+	var row db.ReferenceData
+	err := r.db.WithContext(ctx).First(&row, "tenant_id = ? AND type = ? AND code = ? AND active = ?", defaultTenantID, "value_unit", code, true).Error
+	if err != nil {
+		return nil, err
+	}
+	return &row, nil
+}
+
+func (r *gormRepository) ListReadyItemsByRun(ctx context.Context, runID string) ([]db.AccrualItem, error) {
+	var rows []db.AccrualItem
+	err := r.db.WithContext(ctx).Where("tenant_id = ? AND accrual_run_id = ? AND status = ?", defaultTenantID, runID, ItemStatusReady).Order("created_at ASC").Find(&rows).Error
+	return rows, err
+}
+
+func (r *gormRepository) PendingItemCountByRun(ctx context.Context, runID string) (int64, error) {
+	var count int64
+	err := r.db.WithContext(ctx).Model(&db.AccrualItem{}).Where("tenant_id = ? AND accrual_run_id = ? AND status = ?", defaultTenantID, runID, ItemStatusPending).Count(&count).Error
+	return count, err
+}
+
+func (r *gormRepository) PostedAssignmentIDsForWorkPeriod(ctx context.Context, workPeriodID string) (map[string]bool, error) {
+	var ids []string
+	err := r.db.WithContext(ctx).Model(&db.AccrualItem{}).
+		Where("tenant_id = ? AND work_period_id = ? AND status = ? AND work_period_assignment_id IS NOT NULL", defaultTenantID, workPeriodID, ItemStatusPosted).
+		Pluck("work_period_assignment_id", &ids).Error
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[string]bool, len(ids))
+	for _, id := range ids {
+		out[id] = true
+	}
+	return out, nil
+}
+
+func (r *gormRepository) PostReadyItems(ctx context.Context, run *db.AccrualRun, readyItems []db.AccrualItem, entries []db.LedgerEntry, workPeriodStatus string) error {
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if len(entries) > 0 {
+			if err := tx.Clauses(clause.OnConflict{DoNothing: true}).Create(&entries).Error; err != nil {
+				return err
+			}
+		}
+		ids := make([]string, 0, len(readyItems))
+		for _, item := range readyItems {
+			ids = append(ids, item.ID)
+		}
+		if len(ids) > 0 {
+			if err := tx.Model(&db.AccrualItem{}).
+				Where("tenant_id = ? AND accrual_run_id = ? AND id IN ? AND status = ?", defaultTenantID, run.ID, ids, ItemStatusReady).
+				Updates(map[string]any{"status": ItemStatusPosted, "updated_at": run.UpdatedAt}).Error; err != nil {
+				return err
+			}
+		}
+		if err := tx.Model(&db.AccrualRun{}).
+			Where("id = ? AND tenant_id = ?", run.ID, defaultTenantID).
+			Updates(map[string]any{"status": run.Status, "updated_at": run.UpdatedAt}).Error; err != nil {
+			return err
+		}
+		return tx.Model(&db.WorkPeriod{}).
+			Where("id = ? AND tenant_id = ?", run.WorkPeriodID, defaultTenantID).
+			Updates(map[string]any{"status": workPeriodStatus, "updated_at": run.UpdatedAt}).Error
+	})
 }

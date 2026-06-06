@@ -50,6 +50,14 @@ func (h *Handler) RecalculateRun(c fiber.Ctx) error {
 	return c.JSON(httpx.APIResponse{Data: run})
 }
 
+func (h *Handler) PostRun(c fiber.Ctx) error {
+	run, err := h.service.PostRun(c.Context(), c.Params("runId"), actorUserID(c))
+	if err != nil {
+		return httpx.WriteError(c, err)
+	}
+	return c.JSON(httpx.APIResponse{Data: run})
+}
+
 func (h *Handler) ListItemsByRun(c fiber.Ctx) error {
 	var filter AccrualItemListFilter
 	if err := c.Bind().Query(&filter); err != nil {
