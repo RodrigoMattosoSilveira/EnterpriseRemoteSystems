@@ -1,0 +1,6 @@
+DROP INDEX IF EXISTS ux_work_period_assignments_active_collaborator;
+DROP INDEX IF EXISTS idx_work_period_assignments_replacement_for;
+DROP INDEX IF EXISTS idx_work_period_assignments_tenant_active;
+DROP INDEX IF EXISTS idx_work_period_assignments_tenant_collaborator;
+DROP INDEX IF EXISTS idx_work_period_assignments_tenant_period;
+DROP TABLE IF EXISTS work_period_assignments;
