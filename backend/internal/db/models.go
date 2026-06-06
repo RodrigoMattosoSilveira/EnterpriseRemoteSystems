@@ -38,8 +38,13 @@ type CollaboratorJourney struct {
 	ExtensionDays    int       `gorm:"not null;default:0" json:"extensionDays"`
 	ProjectedEndDate time.Time `gorm:"type:date;not null;index" json:"projectedEndDate"`
 
-	PaymentMethodID string  `gorm:"type:text;not null;index" json:"paymentMethodId"`
-	PaymentValue    float64 `gorm:"not null" json:"paymentValue"`
+	PaymentMethodID                string   `gorm:"type:text;not null;index" json:"paymentMethodId"`
+	PaymentValue                   float64  `gorm:"not null" json:"paymentValue"` // Deprecated compatibility field. Use the explicit payment amount fields below.
+	FixedMonthlyBRLAmount          *float64 `gorm:"column:fixed_monthly_brl_amount" json:"fixedMonthlyBrlAmount,omitempty"`
+	DailyBRLAmount                 *float64 `gorm:"column:daily_brl_amount" json:"dailyBrlAmount,omitempty"`
+	GoldCommissionPercent          *float64 `gorm:"column:gold_commission_percent" json:"goldCommissionPercent,omitempty"`
+	TimeOffGoldSplitPercent        *float64 `gorm:"column:time_off_gold_split_percent" json:"timeOffGoldSplitPercent,omitempty"`
+	SickDayOffReplacementGoldGrams *float64 `gorm:"column:sick_day_off_replacement_gold_grams" json:"sickDayOffReplacementGoldGrams,omitempty"`
 
 	SectorID   string `gorm:"type:text;not null;index" json:"sectorId"`
 	LocationID string `gorm:"type:text;not null;index" json:"locationId"`

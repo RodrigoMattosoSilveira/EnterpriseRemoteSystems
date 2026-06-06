@@ -55,6 +55,7 @@ type apiAssignmentResponse struct {
 		CollaboratorID             string `json:"collaboratorId"`
 		CollaboratorName           string `json:"collaboratorName"`
 		PlannedStatus              string `json:"plannedStatus"`
+		ActualStatus               string `json:"actualStatus"`
 		ReplacementForAssignmentID string `json:"replacementForAssignmentId"`
 		SectorID                   string `json:"sectorId"`
 		SectorLabel                string `json:"sectorLabel"`
@@ -72,6 +73,7 @@ type apiAssignmentListResponse struct {
 			ID             string `json:"id"`
 			CollaboratorID string `json:"collaboratorId"`
 			PlannedStatus  string `json:"plannedStatus"`
+			ActualStatus   string `json:"actualStatus"`
 			Active         bool   `json:"active"`
 		} `json:"items"`
 		Total    int `json:"total"`
@@ -162,6 +164,66 @@ func TestListGetUpdateAndDeactivateWorkPeriodAssignment(t *testing.T) {
 	if deactivateBody.Data.Active {
 		t.Fatal("expected assignment to be inactive")
 	}
+}
+
+func TestMarkActualOutcomeReturnsUpdatedAssignment(t *testing.T) {
+	server, cleanup := newTestServer(t)
+	defer cleanup()
+
+	workPeriod := createWorkPeriod(t, server, nil)
+	collaborator := createActiveCollaborator(t, server, 1)
+	assignment := createAssignment(t, server, workPeriod.Data.ID, validAssignmentPayload(collaborator.Data.ID, nil))
+
+	res := postJSON(t, server, http.MethodPatch, assignmentsURL+assignment.Data.ID+"/outcome", map[string]any{"actualStatus": "worked"})
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		var body apiErrorResponse
+		decodeJSON(t, res, &body)
+		t.Fatalf("expected status %d, got %d with error %+v", http.StatusOK, res.StatusCode, body.Error)
+	}
+
+	var body apiAssignmentResponse
+	decodeJSON(t, res, &body)
+	if body.Data.ActualStatus != "WORKED" {
+		t.Fatalf("expected actual status WORKED, got %q", body.Data.ActualStatus)
+	}
+
+	listRes := getJSON(t, server, workPeriodsURL+workPeriod.Data.ID+"/assignments?actualStatus=WORKED")
+	defer listRes.Body.Close()
+	if listRes.StatusCode != http.StatusOK {
+		t.Fatalf("expected list status %d, got %d", http.StatusOK, listRes.StatusCode)
+	}
+	var listBody apiAssignmentListResponse
+	decodeJSON(t, listRes, &listBody)
+	if listBody.Data.Total != 1 || listBody.Data.Items[0].ActualStatus != "WORKED" {
+		t.Fatalf("expected WORKED assignment in filtered list, got total=%d status=%q", listBody.Data.Total, listBody.Data.Items[0].ActualStatus)
+	}
+}
+
+func TestMarkActualOutcomeRejectsInvalidStatus(t *testing.T) {
+	server, cleanup := newTestServer(t)
+	defer cleanup()
+
+	workPeriod := createWorkPeriod(t, server, nil)
+	collaborator := createActiveCollaborator(t, server, 1)
+	assignment := createAssignment(t, server, workPeriod.Data.ID, validAssignmentPayload(collaborator.Data.ID, nil))
+
+	res := postJSON(t, server, http.MethodPatch, assignmentsURL+assignment.Data.ID+"/outcome", map[string]any{"actualStatus": "VACATION"})
+	defer res.Body.Close()
+	assertValidationError(t, res, "actualStatus", "Actual status must be WORKED, ABSENT, SICK_DAY_OFF, TIME_OFF, REPLACED, or CANCELLED")
+}
+
+func TestMarkActualOutcomeRejectsExcludedAssignment(t *testing.T) {
+	server, cleanup := newTestServer(t)
+	defer cleanup()
+
+	workPeriod := createWorkPeriod(t, server, nil)
+	collaborator := createActiveCollaborator(t, server, 1)
+	assignment := createAssignment(t, server, workPeriod.Data.ID, validAssignmentPayload(collaborator.Data.ID, map[string]any{"plannedStatus": "EXCLUDED"}))
+
+	res := postJSON(t, server, http.MethodPatch, assignmentsURL+assignment.Data.ID+"/outcome", map[string]any{"actualStatus": "WORKED"})
+	defer res.Body.Close()
+	assertValidationError(t, res, "plannedStatus", "Only included assignments can receive actual outcomes")
 }
 
 func TestCreateWorkPeriodAssignmentRejectsDuplicateActiveCollaboratorInSameWorkPeriod(t *testing.T) {

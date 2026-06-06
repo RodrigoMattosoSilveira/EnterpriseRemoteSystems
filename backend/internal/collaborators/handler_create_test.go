@@ -37,21 +37,24 @@ type apiPersonResponse struct {
 
 type apiCollaboratorResponse struct {
 	Data struct {
-		ID               string  `json:"id"`
-		TenantID         string  `json:"tenantId"`
-		PersonID         string  `json:"personId"`
-		PersonName       string  `json:"personName"`
-		PersonNickname   string  `json:"personNickname"`
-		JourneyStartDate string  `json:"journeyStartDate"`
-		DefaultEndDate   string  `json:"defaultEndDate"`
-		ExtensionDays    int     `json:"extensionDays"`
-		ProjectedEndDate string  `json:"projectedEndDate"`
-		PaymentMethodID  string  `json:"paymentMethodId"`
-		PaymentValue     float64 `json:"paymentValue"`
-		SectorID         string  `json:"sectorId"`
-		LocationID       string  `json:"locationId"`
-		TaskID           string  `json:"taskId"`
-		StatusID         string  `json:"statusId"`
+		ID                             string   `json:"id"`
+		TenantID                       string   `json:"tenantId"`
+		PersonID                       string   `json:"personId"`
+		PersonName                     string   `json:"personName"`
+		PersonNickname                 string   `json:"personNickname"`
+		JourneyStartDate               string   `json:"journeyStartDate"`
+		DefaultEndDate                 string   `json:"defaultEndDate"`
+		ExtensionDays                  int      `json:"extensionDays"`
+		ProjectedEndDate               string   `json:"projectedEndDate"`
+		PaymentMethodID                string   `json:"paymentMethodId"`
+		PaymentValue                   float64  `json:"paymentValue"`
+		GoldCommissionPercent          *float64 `json:"goldCommissionPercent"`
+		TimeOffGoldSplitPercent        *float64 `json:"timeOffGoldSplitPercent"`
+		SickDayOffReplacementGoldGrams *float64 `json:"sickDayOffReplacementGoldGrams"`
+		SectorID                       string   `json:"sectorId"`
+		LocationID                     string   `json:"locationId"`
+		TaskID                         string   `json:"taskId"`
+		StatusID                       string   `json:"statusId"`
 	} `json:"data"`
 }
 
@@ -111,6 +114,71 @@ func TestCreateCollaboratorFromCompletePersonReturnsCreated(t *testing.T) {
 	}
 	if body.Data.StatusID != "ref-collaborator-status-active" {
 		t.Fatalf("expected active collaborator status id, got %q", body.Data.StatusID)
+	}
+}
+
+func TestCreateGoldCommissionCollaboratorDefaultsReplacementRules(t *testing.T) {
+	server, cleanup := newTestServer(t)
+	defer cleanup()
+
+	person := createPerson(t, server, validCompletePersonPayload(1, nil))
+
+	res := postCollaborator(t, server, validCollaboratorPayload(person.Data.ID, map[string]any{
+		"paymentMethodId":       "ref-method-commission",
+		"paymentValue":          7.5,
+		"goldCommissionPercent": 7.5,
+	}))
+	defer res.Body.Close()
+
+	if res.StatusCode != http.StatusCreated {
+		var body apiErrorResponse
+		decodeJSON(t, res, &body)
+		t.Fatalf("expected status %d, got %d with error %+v", http.StatusCreated, res.StatusCode, body.Error)
+	}
+
+	var body apiCollaboratorResponse
+	decodeJSON(t, res, &body)
+
+	if body.Data.GoldCommissionPercent == nil || *body.Data.GoldCommissionPercent != 7.5 {
+		t.Fatalf("expected goldCommissionPercent 7.5, got %#v", body.Data.GoldCommissionPercent)
+	}
+	if body.Data.TimeOffGoldSplitPercent == nil || *body.Data.TimeOffGoldSplitPercent != 50.0 {
+		t.Fatalf("expected default timeOffGoldSplitPercent 50.0, got %#v", body.Data.TimeOffGoldSplitPercent)
+	}
+	if body.Data.SickDayOffReplacementGoldGrams == nil || *body.Data.SickDayOffReplacementGoldGrams != 1.0 {
+		t.Fatalf("expected default sickDayOffReplacementGoldGrams 1.0, got %#v", body.Data.SickDayOffReplacementGoldGrams)
+	}
+}
+
+func TestCreateGoldCommissionCollaboratorAcceptsCustomReplacementRules(t *testing.T) {
+	server, cleanup := newTestServer(t)
+	defer cleanup()
+
+	person := createPerson(t, server, validCompletePersonPayload(1, nil))
+
+	res := postCollaborator(t, server, validCollaboratorPayload(person.Data.ID, map[string]any{
+		"paymentMethodId":                "ref-method-commission",
+		"paymentValue":                   8.25,
+		"goldCommissionPercent":          8.25,
+		"timeOffGoldSplitPercent":        40.0,
+		"sickDayOffReplacementGoldGrams": 1.25,
+	}))
+	defer res.Body.Close()
+
+	if res.StatusCode != http.StatusCreated {
+		var body apiErrorResponse
+		decodeJSON(t, res, &body)
+		t.Fatalf("expected status %d, got %d with error %+v", http.StatusCreated, res.StatusCode, body.Error)
+	}
+
+	var body apiCollaboratorResponse
+	decodeJSON(t, res, &body)
+
+	if body.Data.TimeOffGoldSplitPercent == nil || *body.Data.TimeOffGoldSplitPercent != 40.0 {
+		t.Fatalf("expected timeOffGoldSplitPercent 40.0, got %#v", body.Data.TimeOffGoldSplitPercent)
+	}
+	if body.Data.SickDayOffReplacementGoldGrams == nil || *body.Data.SickDayOffReplacementGoldGrams != 1.25 {
+		t.Fatalf("expected sickDayOffReplacementGoldGrams 1.25, got %#v", body.Data.SickDayOffReplacementGoldGrams)
 	}
 }
 

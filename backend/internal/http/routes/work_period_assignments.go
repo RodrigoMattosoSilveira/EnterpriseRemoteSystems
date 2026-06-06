@@ -10,6 +10,7 @@ func RegisterWorkPeriodAssignmentRoutes(v1 fiber.Router, deps Dependencies) {
 	assignments := v1.Group("/work-period-assignments")
 	assignments.Get("/:assignmentId", deps.WorkPeriodAssignmentHandler.GetByID)
 	assignments.Patch("/:assignmentId", deps.WorkPeriodAssignmentHandler.Update)
+	assignments.Patch("/:assignmentId/outcome", deps.WorkPeriodAssignmentHandler.MarkActualOutcome)
 	assignments.Patch("/:assignmentId/deactivate", deps.WorkPeriodAssignmentHandler.Deactivate)
 	assignments.Delete("/:assignmentId", deps.WorkPeriodAssignmentHandler.Delete)
 }
