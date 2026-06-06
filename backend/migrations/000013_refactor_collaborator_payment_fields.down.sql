@@ -1,0 +1,2 @@
+-- SQLite cannot safely drop columns on older versions without rebuilding the table.
+-- This migration is intentionally non-destructive.
