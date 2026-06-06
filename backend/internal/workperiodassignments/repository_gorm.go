@@ -29,6 +29,9 @@ func (r *gormRepository) ListByWorkPeriod(ctx context.Context, workPeriodID stri
 	if filter.PlannedStatus != "" {
 		q = q.Where("planned_status = ?", filter.PlannedStatus)
 	}
+	if filter.ActualStatus != "" {
+		q = q.Where("actual_status = ?", filter.ActualStatus)
+	}
 	if filter.CollaboratorID != "" {
 		q = q.Where("collaborator_id = ?", filter.CollaboratorID)
 	}

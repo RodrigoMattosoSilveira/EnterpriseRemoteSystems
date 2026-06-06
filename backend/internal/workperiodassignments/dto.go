@@ -39,8 +39,13 @@ type UpdateWorkPeriodAssignmentRequest struct {
 	TaskID                     string `json:"taskId"`
 }
 
+type MarkActualOutcomeRequest struct {
+	ActualStatus string `json:"actualStatus"`
+}
+
 type WorkPeriodAssignmentListFilter struct {
 	PlannedStatus   string `query:"plannedStatus"`
+	ActualStatus    string `query:"actualStatus"`
 	CollaboratorID  string `query:"collaboratorId"`
 	IncludeInactive bool   `query:"includeInactive"`
 	Page            int    `query:"page"`

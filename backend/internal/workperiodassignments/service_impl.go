@@ -159,6 +159,39 @@ func (s *service) Update(ctx context.Context, id string, req UpdateWorkPeriodAss
 	return ptr(ToDTO(*updated)), nil
 }
 
+func (s *service) MarkActualOutcome(ctx context.Context, id string, req MarkActualOutcomeRequest, actorUserID string) (*WorkPeriodAssignmentDTO, error) {
+	if err := ValidateMarkActualOutcome(req); err != nil {
+		return nil, err
+	}
+
+	existing, err := s.repo.FindByID(ctx, strings.TrimSpace(id))
+	if err != nil {
+		return nil, err
+	}
+	if !existing.Active {
+		return nil, ValidationError{Fields: map[string]string{"id": "Inactive work period assignments cannot be updated"}}
+	}
+	if existing.PlannedStatus != PlannedStatusIncluded {
+		return nil, ValidationError{Fields: map[string]string{"plannedStatus": "Only included assignments can receive actual outcomes"}}
+	}
+	if err := ensureEditableWorkPeriod(existing.WorkPeriod); err != nil {
+		return nil, err
+	}
+
+	status := strings.ToUpper(strings.TrimSpace(req.ActualStatus))
+	existing.ActualStatus = &status
+	existing.UpdatedAt = time.Now().UTC()
+
+	if err := s.repo.Update(ctx, existing); err != nil {
+		return nil, err
+	}
+	updated, err := s.repo.FindByID(ctx, existing.ID)
+	if err != nil {
+		return nil, err
+	}
+	return ptr(ToDTO(*updated)), nil
+}
+
 func (s *service) Deactivate(ctx context.Context, id string, actorUserID string) (*WorkPeriodAssignmentDTO, error) {
 	existing, err := s.repo.FindByID(ctx, strings.TrimSpace(id))
 	if err != nil {
@@ -252,6 +285,7 @@ func normalizeListFilter(filter WorkPeriodAssignmentListFilter) (normalizedWorkP
 
 	out := normalizedWorkPeriodAssignmentListFilter{
 		PlannedStatus:   strings.ToUpper(strings.TrimSpace(filter.PlannedStatus)),
+		ActualStatus:    strings.ToUpper(strings.TrimSpace(filter.ActualStatus)),
 		CollaboratorID:  strings.TrimSpace(filter.CollaboratorID),
 		IncludeInactive: filter.IncludeInactive,
 		Page:            page,

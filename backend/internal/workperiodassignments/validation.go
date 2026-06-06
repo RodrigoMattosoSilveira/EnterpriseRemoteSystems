@@ -49,9 +49,20 @@ func ValidateUpdateWorkPeriodAssignment(req UpdateWorkPeriodAssignmentRequest) e
 	return nil
 }
 
+func ValidateMarkActualOutcome(req MarkActualOutcomeRequest) error {
+	fields := map[string]string{}
+	requireString(fields, "actualStatus", req.ActualStatus)
+	validateActualStatus(fields, req.ActualStatus)
+	if len(fields) > 0 {
+		return ValidationError{Fields: fields}
+	}
+	return nil
+}
+
 func ValidateListFilter(filter WorkPeriodAssignmentListFilter) error {
 	fields := map[string]string{}
 	validatePlannedStatus(fields, filter.PlannedStatus)
+	validateActualStatus(fields, filter.ActualStatus)
 	if filter.Page < 0 {
 		fields["page"] = "Page must be greater than zero"
 	}
@@ -80,9 +91,28 @@ func validatePlannedStatus(fields map[string]string, value string) {
 	}
 }
 
+func validateActualStatus(fields map[string]string, value string) {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
+		return
+	}
+	if !isKnownActualStatus(strings.ToUpper(trimmed)) {
+		fields["actualStatus"] = "Actual status must be WORKED, ABSENT, SICK_DAY_OFF, TIME_OFF, REPLACED, or CANCELLED"
+	}
+}
+
 func isKnownPlannedStatus(status string) bool {
 	switch status {
 	case PlannedStatusIncluded, PlannedStatusExcluded:
+		return true
+	default:
+		return false
+	}
+}
+
+func isKnownActualStatus(status string) bool {
+	switch status {
+	case ActualStatusWorked, ActualStatusAbsent, ActualStatusSickDayOff, ActualStatusTimeOff, ActualStatusReplaced, ActualStatusCancelled:
 		return true
 	default:
 		return false
