@@ -14,11 +14,12 @@ import (
 )
 
 const (
-	peopleURL        = "/api/v1/people/"
-	collaboratorsURL = "/api/v1/collaborators/"
-	workPeriodsURL   = "/api/v1/work-periods/"
-	assignmentsURL   = "/api/v1/work-period-assignments/"
-	accrualRunsURL   = "/api/v1/accrual-runs/"
+	peopleURL          = "/api/v1/people/"
+	collaboratorsURL   = "/api/v1/collaborators/"
+	workPeriodsURL     = "/api/v1/work-periods/"
+	assignmentsURL     = "/api/v1/work-period-assignments/"
+	accrualRunsURL     = "/api/v1/accrual-runs/"
+	currentAccountsURL = "/api/v1/current-accounts/"
 )
 
 type apiErrorResponse struct {
@@ -61,6 +62,7 @@ type apiAccrualRunResponse struct {
 			ReadyItems   int `json:"readyItems"`
 			PendingItems int `json:"pendingItems"`
 			SkippedItems int `json:"skippedItems"`
+			PostedItems  int `json:"postedItems"`
 		} `json:"summary"`
 	} `json:"data"`
 }
@@ -75,6 +77,23 @@ type apiAccrualItemListResponse struct {
 			GoldGramAmount  *float64 `json:"goldGramAmount"`
 			Status          string   `json:"status"`
 			PendingReason   string   `json:"pendingReason"`
+		} `json:"items"`
+		Total int `json:"total"`
+	} `json:"data"`
+}
+
+type apiLedgerEntryListResponse struct {
+	Data struct {
+		Items []struct {
+			ID            string  `json:"id"`
+			ValueUnitCode string  `json:"valueUnitCode"`
+			EntryType     string  `json:"entryType"`
+			Direction     string  `json:"direction"`
+			Amount        float64 `json:"amount"`
+			SignedAmount  float64 `json:"signedAmount"`
+			SourceType    string  `json:"sourceType"`
+			SourceID      string  `json:"sourceId"`
+			EffectiveDate string  `json:"effectiveDate"`
 		} `json:"items"`
 		Total int `json:"total"`
 	} `json:"data"`
@@ -149,6 +168,72 @@ func TestRecalculateAccrualRunUsesGoldProduction(t *testing.T) {
 	items := listAccrualItems(t, server, run.Data.ID, "status=READY")
 	if items.Data.Total != 1 || items.Data.Items[0].GoldGramAmount == nil || *items.Data.Items[0].GoldGramAmount != 5.0 {
 		t.Fatalf("expected 5g ready item, got %+v", items.Data.Items)
+	}
+}
+
+func TestPostAccrualRunCreatesLedgerEntryAndMarksItemPosted(t *testing.T) {
+	server, cleanup := newTestServer(t)
+	defer cleanup()
+	workPeriod := createWorkPeriod(t, server, nil)
+	collaborator := createActiveCollaborator(t, server, 1, validCollaboratorPayload("", map[string]any{"paymentMethodId": "ref-method-daily", "paymentValue": 150.0, "dailyBrlAmount": 150.0}))
+	assignment := createAssignment(t, server, workPeriod.Data.ID, validAssignmentPayload(collaborator.Data.ID, nil))
+	markOutcome(t, server, assignment.Data.ID, "WORKED")
+	run := createAccrualRun(t, server, workPeriod.Data.ID, map[string]any{})
+
+	posted := postAccrualRun(t, server, run.Data.ID)
+	if posted.Data.Status != "POSTED" || posted.Data.Summary.PostedItems != 1 {
+		t.Fatalf("expected posted run with one posted item, got %+v", posted.Data)
+	}
+	items := listAccrualItems(t, server, run.Data.ID, "status=POSTED")
+	if items.Data.Total != 1 {
+		t.Fatalf("expected one posted item, got %d", items.Data.Total)
+	}
+	entries := listLedgerEntries(t, server, collaborator.Data.ID, "sourceType=ACCRUAL_ITEM")
+	if entries.Data.Total != 1 {
+		t.Fatalf("expected one ledger entry, got %d", entries.Data.Total)
+	}
+	entry := entries.Data.Items[0]
+	if entry.EntryType != "EARNING_CREDIT" || entry.Direction != "CREDIT" || entry.ValueUnitCode != "BRL" || entry.Amount != 150.0 || entry.SourceID != items.Data.Items[0].ID {
+		t.Fatalf("unexpected accrual ledger entry: %+v", entry)
+	}
+}
+
+func TestPostAccrualRunIsIdempotent(t *testing.T) {
+	server, cleanup := newTestServer(t)
+	defer cleanup()
+	workPeriod := createWorkPeriod(t, server, nil)
+	collaborator := createActiveCollaborator(t, server, 1, validCollaboratorPayload("", map[string]any{"paymentMethodId": "ref-method-daily", "paymentValue": 150.0, "dailyBrlAmount": 150.0}))
+	assignment := createAssignment(t, server, workPeriod.Data.ID, validAssignmentPayload(collaborator.Data.ID, nil))
+	markOutcome(t, server, assignment.Data.ID, "WORKED")
+	run := createAccrualRun(t, server, workPeriod.Data.ID, map[string]any{})
+
+	postAccrualRun(t, server, run.Data.ID)
+	postAccrualRun(t, server, run.Data.ID)
+	entries := listLedgerEntries(t, server, collaborator.Data.ID, "sourceType=ACCRUAL_ITEM")
+	if entries.Data.Total != 1 {
+		t.Fatalf("expected idempotent single ledger entry, got %d", entries.Data.Total)
+	}
+}
+
+func TestPostAccrualRunLeavesPendingItemsOutstanding(t *testing.T) {
+	server, cleanup := newTestServer(t)
+	defer cleanup()
+	workPeriod := createWorkPeriod(t, server, nil)
+	daily := createActiveCollaborator(t, server, 1, validCollaboratorPayload("", map[string]any{"paymentMethodId": "ref-method-daily", "paymentValue": 150.0, "dailyBrlAmount": 150.0}))
+	commission := createActiveCollaborator(t, server, 2, validCollaboratorPayload("", map[string]any{"paymentMethodId": "ref-method-commission", "paymentValue": 5.0, "goldCommissionPercent": 5.0}))
+	dailyAssignment := createAssignment(t, server, workPeriod.Data.ID, validAssignmentPayload(daily.Data.ID, nil))
+	commissionAssignment := createAssignment(t, server, workPeriod.Data.ID, validAssignmentPayload(commission.Data.ID, nil))
+	markOutcome(t, server, dailyAssignment.Data.ID, "WORKED")
+	markOutcome(t, server, commissionAssignment.Data.ID, "WORKED")
+	run := createAccrualRun(t, server, workPeriod.Data.ID, map[string]any{})
+
+	posted := postAccrualRun(t, server, run.Data.ID)
+	if posted.Data.Status != "POSTED" || posted.Data.Summary.PostedItems != 1 || posted.Data.Summary.PendingItems != 1 {
+		t.Fatalf("expected one posted and one pending item, got %+v", posted.Data.Summary)
+	}
+	pending := listAccrualItems(t, server, run.Data.ID, "status=PENDING")
+	if pending.Data.Total != 1 || pending.Data.Items[0].PendingReason != "GOLD_PRODUCTION_MISSING" {
+		t.Fatalf("expected pending gold production item, got %+v", pending.Data.Items)
 	}
 }
 
@@ -242,6 +327,20 @@ func createAccrualRun(t *testing.T, server *fiber.App, workPeriodID string, payl
 	decodeJSON(t, res, &body)
 	return body
 }
+func postAccrualRun(t *testing.T, server *fiber.App, runID string) apiAccrualRunResponse {
+	t.Helper()
+	res := postJSON(t, server, http.MethodPost, accrualRunsURL+runID+"/post", map[string]any{})
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		var body apiErrorResponse
+		decodeJSON(t, res, &body)
+		t.Fatalf("post accrual run: expected status %d, got %d with error %+v", http.StatusOK, res.StatusCode, body.Error)
+	}
+	var body apiAccrualRunResponse
+	decodeJSON(t, res, &body)
+	return body
+}
+
 func listAccrualItems(t *testing.T, server *fiber.App, runID string, query string) apiAccrualItemListResponse {
 	t.Helper()
 	url := accrualRunsURL + runID + "/items"
@@ -257,6 +356,22 @@ func listAccrualItems(t *testing.T, server *fiber.App, runID string, query strin
 	decodeJSON(t, res, &body)
 	return body
 }
+func listLedgerEntries(t *testing.T, server *fiber.App, collaboratorID string, query string) apiLedgerEntryListResponse {
+	t.Helper()
+	url := currentAccountsURL + collaboratorID + "/ledger-entries"
+	if query != "" {
+		url += "?" + query
+	}
+	res := getJSON(t, server, url)
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("expected list ledger entries status %d, got %d", http.StatusOK, res.StatusCode)
+	}
+	var body apiLedgerEntryListResponse
+	decodeJSON(t, res, &body)
+	return body
+}
+
 func createGoldProductionEntry(t *testing.T, server *fiber.App, workPeriodID string, payload map[string]any) {
 	t.Helper()
 	res := postJSON(t, server, http.MethodPost, workPeriodsURL+workPeriodID+"/gold-production-entries", payload)

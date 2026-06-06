@@ -10,5 +10,6 @@ func RegisterAccrualRoutes(v1 fiber.Router, deps Dependencies) {
 	runs := v1.Group("/accrual-runs")
 	runs.Get("/:runId", deps.AccrualHandler.GetRunByID)
 	runs.Post("/:runId/recalculate", deps.AccrualHandler.RecalculateRun)
+	runs.Post("/:runId/post", deps.AccrualHandler.PostRun)
 	runs.Get("/:runId/items", deps.AccrualHandler.ListItemsByRun)
 }
