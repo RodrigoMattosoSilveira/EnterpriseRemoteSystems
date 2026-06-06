@@ -54,6 +54,14 @@ func (h *Handler) Inform(c fiber.Ctx) error {
 	return c.JSON(httpx.APIResponse{Data: updated})
 }
 
+func (h *Handler) PrintRoster(c fiber.Ctx) error {
+	roster, err := h.service.PrintRoster(c.Context(), c.Params("id"))
+	if err != nil {
+		return httpx.WriteError(c, err)
+	}
+	return c.JSON(httpx.APIResponse{Data: roster})
+}
+
 func actorUserID(c fiber.Ctx) string {
 	value := c.Locals("userID")
 	if userID, ok := value.(string); ok {

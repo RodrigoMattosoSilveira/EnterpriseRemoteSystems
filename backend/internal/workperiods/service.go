@@ -7,4 +7,5 @@ type Service interface {
 	Create(ctx context.Context, req CreateWorkPeriodRequest, actorUserID string) (*WorkPeriodDTO, error)
 	GetByID(ctx context.Context, id string) (*WorkPeriodDTO, error)
 	Inform(ctx context.Context, id string, actorUserID string) (*WorkPeriodDTO, error)
+	PrintRoster(ctx context.Context, id string) (*WorkPlanRosterDTO, error)
 }

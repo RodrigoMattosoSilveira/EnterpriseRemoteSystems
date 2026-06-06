@@ -72,3 +72,17 @@ func (r *gormRepository) FindByID(ctx context.Context, id string) (*db.WorkPerio
 func formatDateForQuery(value time.Time) string {
 	return value.Format(dateLayout)
 }
+
+func (r *gormRepository) ListIncludedAssignmentsForRoster(ctx context.Context, workPeriodID string) ([]db.WorkPeriodAssignment, error) {
+	var rows []db.WorkPeriodAssignment
+	err := r.db.WithContext(ctx).
+		Model(&db.WorkPeriodAssignment{}).
+		Where("tenant_id = ? AND work_period_id = ? AND active = ? AND planned_status = ?", defaultTenantID, workPeriodID, true, "INCLUDED").
+		Preload("Collaborator.Person").
+		Preload("Sector").
+		Preload("Location").
+		Preload("Task").
+		Order("collaborator_id ASC").
+		Find(&rows).Error
+	return rows, err
+}

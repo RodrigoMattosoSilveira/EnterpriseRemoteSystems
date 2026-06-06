@@ -1,6 +1,8 @@
 package workperiods
 
 import (
+	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -62,4 +64,60 @@ func formatOptionalTime(value *time.Time) string {
 		return ""
 	}
 	return value.UTC().Format(time.RFC3339)
+}
+
+func ToRosterDTO(workPeriod db.WorkPeriod, assignments []db.WorkPeriodAssignment) WorkPlanRosterDTO {
+	rows := make([]WorkPlanRosterRow, 0, len(assignments))
+	sort.SliceStable(assignments, func(i, j int) bool {
+		return strings.ToLower(collaboratorDisplayName(assignments[i])) < strings.ToLower(collaboratorDisplayName(assignments[j]))
+	})
+
+	for _, assignment := range assignments {
+		row := WorkPlanRosterRow{
+			AssignmentID:   assignment.ID,
+			CollaboratorID: assignment.CollaboratorID,
+			Name:           collaboratorDisplayName(assignment),
+			Nickname:       assignment.Collaborator.Person.Nickname,
+			SectorID:       assignment.SectorID,
+			SectorLabel:    assignment.Sector.Label,
+			LocationID:     assignment.LocationID,
+			LocationLabel:  assignment.Location.Label,
+			TaskID:         assignment.TaskID,
+			TaskLabel:      assignment.Task.Label,
+		}
+		if assignment.ReplacementForAssignmentID != nil {
+			row.ReplacementForID = *assignment.ReplacementForAssignmentID
+		}
+		rows = append(rows, row)
+	}
+
+	displayDate := formatDisplayDate(workPeriod.WorkDate)
+	periodName := workPeriod.Name
+	return WorkPlanRosterDTO{
+		WorkPeriodID: workPeriod.ID,
+		WorkDate:     formatDate(workPeriod.WorkDate),
+		DisplayDate:  displayDate,
+		PeriodCode:   workPeriod.PeriodCode,
+		PeriodName:   periodName,
+		Title:        "Work Plan",
+		Subtitle:     fmt.Sprintf("%s — %s", displayDate, periodName),
+		Status:       workPeriod.Status,
+		Rows:         rows,
+	}
+}
+
+func collaboratorDisplayName(assignment db.WorkPeriodAssignment) string {
+	person := assignment.Collaborator.Person
+	name := strings.TrimSpace(strings.TrimSpace(person.FirstName) + " " + strings.TrimSpace(person.LastName))
+	if name != "" {
+		return name
+	}
+	return assignment.CollaboratorID
+}
+
+func formatDisplayDate(value time.Time) string {
+	if value.IsZero() {
+		return ""
+	}
+	return value.Format("01/02/2006")
 }
