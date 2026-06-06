@@ -22,6 +22,11 @@ const (
 	DirectionCredit = "CREDIT"
 	DirectionDebit  = "DEBIT"
 
+	LedgerEntryTypeEarningCredit = "EARNING_CREDIT"
+	LedgerSourceTypeAccrualItem  = "ACCRUAL_ITEM"
+	ValueUnitCodeBRL             = "BRL"
+	ValueUnitCodeGoldGram        = "GOLD_GRAM"
+
 	PendingReasonActualOutcomeMissing        = "ACTUAL_OUTCOME_MISSING"
 	PendingReasonGoldProductionMissing       = "GOLD_PRODUCTION_MISSING"
 	PendingReasonPaymentConfigurationMissing = "PAYMENT_CONFIGURATION_MISSING"
