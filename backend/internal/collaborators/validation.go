@@ -25,10 +25,6 @@ func ValidateCreateCollaborator(req CreateCollaboratorRequest) error {
 		}
 	}
 
-	if req.PaymentValue <= 0 {
-		fields["paymentValue"] = "Payment value must be greater than zero"
-	}
-
 	if len(fields) > 0 {
 		return ValidationError{Fields: fields}
 	}

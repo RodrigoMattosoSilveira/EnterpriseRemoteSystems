@@ -81,6 +81,16 @@ func (r *gormRepository) FindPersonByID(ctx context.Context, personID string) (*
 	return &row, nil
 }
 
+func (r *gormRepository) FindActiveReference(ctx context.Context, id string, typ string) (*db.ReferenceData, error) {
+	var row db.ReferenceData
+	err := r.db.WithContext(ctx).
+		First(&row, "id = ? AND tenant_id = ? AND type = ? AND active = ?", id, defaultTenantID, typ, true).Error
+	if err != nil {
+		return nil, err
+	}
+	return &row, nil
+}
+
 func (r *gormRepository) ExistsActiveReference(ctx context.Context, id string, typ string) (bool, error) {
 	var count int64
 	err := r.db.WithContext(ctx).

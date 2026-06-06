@@ -20,6 +20,7 @@ type Repository interface {
 
 type normalizedWorkPeriodAssignmentListFilter struct {
 	PlannedStatus   string
+	ActualStatus    string
 	CollaboratorID  string
 	IncludeInactive bool
 	Page            int
