@@ -101,6 +101,18 @@ func (s *service) Inform(ctx context.Context, id string, actorUserID string) (*W
 	return ptr(ToDTO(*updated)), nil
 }
 
+func (s *service) PrintRoster(ctx context.Context, id string) (*WorkPlanRosterDTO, error) {
+	workPeriod, err := s.repo.FindByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	assignments, err := s.repo.ListIncludedAssignmentsForRoster(ctx, workPeriod.ID)
+	if err != nil {
+		return nil, err
+	}
+	return ptr(ToRosterDTO(*workPeriod, assignments)), nil
+}
+
 func normalizeListFilter(filter WorkPeriodListFilter) (normalizedWorkPeriodListFilter, error) {
 	if err := ValidateListFilter(filter); err != nil {
 		return normalizedWorkPeriodListFilter{}, err

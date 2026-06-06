@@ -12,6 +12,7 @@ type Repository interface {
 	Create(ctx context.Context, workPeriod *db.WorkPeriod) error
 	Update(ctx context.Context, workPeriod *db.WorkPeriod) error
 	FindByID(ctx context.Context, id string) (*db.WorkPeriod, error)
+	ListIncludedAssignmentsForRoster(ctx context.Context, workPeriodID string) ([]db.WorkPeriodAssignment, error)
 }
 
 type normalizedWorkPeriodListFilter struct {
