@@ -27,6 +27,11 @@ func ToLedgerEntryDTO(row db.LedgerEntry) LedgerEntryDTO {
 		SourceID:          row.SourceID,
 		Description:       row.Description,
 		Active:            row.Active,
+		CorrectionType:    row.CorrectionType,
+		RelatedEntryID:    stringPtrValue(row.RelatedEntryID),
+		CorrectionReason:  row.CorrectionReason,
+		AuthorizedBy:      row.AuthorizedBy,
+		AuthorizedAt:      formatOptionalTime(row.AuthorizedAt),
 		CreatedAt:         row.CreatedAt.UTC().Format(time.RFC3339),
 		UpdatedAt:         row.UpdatedAt.UTC().Format(time.RFC3339),
 	}
@@ -82,4 +87,18 @@ func formatDate(value time.Time) string {
 		return ""
 	}
 	return value.Format(dateLayout)
+}
+
+func stringPtrValue(value *string) string {
+	if value == nil {
+		return ""
+	}
+	return strings.TrimSpace(*value)
+}
+
+func formatOptionalTime(value *time.Time) string {
+	if value == nil || value.IsZero() {
+		return ""
+	}
+	return value.UTC().Format(time.RFC3339)
 }
