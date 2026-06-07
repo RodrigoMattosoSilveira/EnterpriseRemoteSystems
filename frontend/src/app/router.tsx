@@ -14,6 +14,8 @@ import { CollaboratorDetailPage } from "../features/collaborators/CollaboratorDe
 import { ExpensesPage } from "../features/expenses/ExpensesPage";
 import { CreateExpensePage } from "../features/expenses/CreateExpensePage";
 import { ExpenseDetailPage } from "../features/expenses/ExpenseDetailPage";
+import { WorkPeriodsPage } from "../features/planning/WorkPeriodsPage";
+import { WorkPeriodDetailPage } from "../features/planning/WorkPeriodDetailPage";
 
 function RouteErrorPage() {
   const error = useRouteError();
@@ -65,6 +67,8 @@ export const router = createBrowserRouter([
       { path: "expenses", element: <ExpensesPage /> },
       { path: "expenses/new", element: <CreateExpensePage /> },
       { path: "expenses/:id", element: <ExpenseDetailPage /> },
+      { path: "work-periods", element: <WorkPeriodsPage /> },
+      { path: "work-periods/:id", element: <WorkPeriodDetailPage /> },
       { path: "admin/reference-data", element: <ReferenceDataAdminPage /> },
       { path: "*", element: <NotFoundPage /> },
     ],
