@@ -14,6 +14,39 @@ type service struct{ repo Repository }
 
 func NewService(repo Repository) Service { return &service{repo: repo} }
 
+func (s *service) GetDetail(ctx context.Context, collaboratorID string, filter LedgerEntryListFilter) (*CurrentAccountDetailDTO, error) {
+	collaboratorID = strings.TrimSpace(collaboratorID)
+	collaborator, err := s.repo.FindCollaboratorByID(ctx, collaboratorID)
+	if err != nil {
+		return nil, err
+	}
+
+	normalized, err := normalizeListFilter(filter)
+	if err != nil {
+		return nil, err
+	}
+	entries, total, err := s.repo.ListEntries(ctx, collaboratorID, normalized)
+	if err != nil {
+		return nil, err
+	}
+	balances, err := s.repo.ListBalances(ctx, collaboratorID)
+	if err != nil {
+		return nil, err
+	}
+
+	return &CurrentAccountDetailDTO{
+		CollaboratorID:    collaborator.ID,
+		CollaboratorLabel: collaboratorLabel(collaborator.Person),
+		Balances:          ToBalanceDTOList(balances),
+		LedgerEntries: LedgerEntryListResult{
+			Items:    ToLedgerEntryDTOList(entries),
+			Total:    total,
+			Page:     normalized.Page,
+			PageSize: normalized.PageSize,
+		},
+	}, nil
+}
+
 func (s *service) ListEntries(ctx context.Context, collaboratorID string, filter LedgerEntryListFilter) (*LedgerEntryListResult, error) {
 	collaboratorID = strings.TrimSpace(collaboratorID)
 	if _, err := s.repo.FindCollaboratorByID(ctx, collaboratorID); err != nil {
