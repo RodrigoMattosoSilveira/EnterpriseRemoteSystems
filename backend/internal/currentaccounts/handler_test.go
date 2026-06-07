@@ -90,6 +90,155 @@ type apiBalancesResponse struct {
 	} `json:"data"`
 }
 
+func TestAuthorizedLedgerReverseCreatesOppositeImmutableEntry(t *testing.T) {
+	server, cleanup := newTestServer(t)
+	defer cleanup()
+
+	collaborator := createActiveCollaborator(t, server, 1)
+	createExpense(t, server, validExpensePayload(collaborator.Data.ID, nil))
+
+	entries := listLedgerEntries(t, server, collaborator.Data.ID)
+	original := entries.Data.Items[0]
+
+	res := postAuthorizedJSON(t, server, http.MethodPost, "/api/v1/ledger-entries/"+original.ID+"/reverse", map[string]any{
+		"reason":        "Correct duplicate expense posting",
+		"effectiveDate": "2026-06-07",
+	})
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		var body apiErrorResponse
+		decodeJSON(t, res, &body)
+		t.Fatalf("expected reverse status %d, got %d error=%+v", http.StatusOK, res.StatusCode, body.Error)
+	}
+
+	entries = listLedgerEntries(t, server, collaborator.Data.ID)
+	if entries.Data.Total != 2 {
+		t.Fatalf("expected original and reversal, got %+v", entries.Data.Items)
+	}
+	var reversalFound bool
+	for _, entry := range entries.Data.Items {
+		if entry.CorrectionType == "REVERSAL" {
+			reversalFound = true
+			if entry.RelatedEntryID != original.ID || entry.Direction != "CREDIT" || entry.Amount != original.Amount {
+				t.Fatalf("unexpected reversal: %+v", entry)
+			}
+		}
+	}
+	if !reversalFound {
+		t.Fatalf("expected reversal entry, got %+v", entries.Data.Items)
+	}
+
+	balances := listBalances(t, server, collaborator.Data.ID)
+	if len(balances.Data) != 0 {
+		t.Fatalf("expected zero balance after reversal, got %+v", balances.Data)
+	}
+}
+
+func TestAuthorizedLedgerReplaceCreatesReversalAndReplacement(t *testing.T) {
+	server, cleanup := newTestServer(t)
+	defer cleanup()
+
+	collaborator := createActiveCollaborator(t, server, 1)
+	createExpense(t, server, validExpensePayload(collaborator.Data.ID, nil))
+	original := listLedgerEntries(t, server, collaborator.Data.ID).Data.Items[0]
+
+	res := postAuthorizedJSON(t, server, http.MethodPost, "/api/v1/ledger-entries/"+original.ID+"/replace", map[string]any{
+		"reason":        "Correct expense value",
+		"valueUnitId":   "ref-value-unit-brl",
+		"entryType":     "EXPENSE_DEDUCTION",
+		"direction":     "DEBIT",
+		"amount":        50.0,
+		"effectiveDate": "2026-06-07",
+		"description":   "Corrected canteen expense",
+	})
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		var body apiErrorResponse
+		decodeJSON(t, res, &body)
+		t.Fatalf("expected replace status %d, got %d error=%+v", http.StatusOK, res.StatusCode, body.Error)
+	}
+
+	entries := listLedgerEntries(t, server, collaborator.Data.ID)
+	if entries.Data.Total != 3 {
+		t.Fatalf("expected original, reversal, replacement, got %+v", entries.Data.Items)
+	}
+	balances := listBalances(t, server, collaborator.Data.ID)
+	if len(balances.Data) != 1 || balances.Data[0].Balance != -50.0 {
+		t.Fatalf("expected corrected BRL balance -50, got %+v", balances.Data)
+	}
+}
+
+func TestLedgerCorrectionRejectsMissingAuthorization(t *testing.T) {
+	server, cleanup := newTestServer(t)
+	defer cleanup()
+
+	collaborator := createActiveCollaborator(t, server, 1)
+	createExpense(t, server, validExpensePayload(collaborator.Data.ID, nil))
+	original := listLedgerEntries(t, server, collaborator.Data.ID).Data.Items[0]
+
+	res := postJSON(t, server, http.MethodPost, "/api/v1/ledger-entries/"+original.ID+"/reverse", map[string]any{
+		"reason":        "Unauthorized attempt",
+		"effectiveDate": "2026-06-07",
+	})
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusForbidden {
+		t.Fatalf("expected forbidden status %d, got %d", http.StatusForbidden, res.StatusCode)
+	}
+}
+
+func TestLedgerCorrectionRejectsSecondReversal(t *testing.T) {
+	server, cleanup := newTestServer(t)
+	defer cleanup()
+
+	collaborator := createActiveCollaborator(t, server, 1)
+	createExpense(t, server, validExpensePayload(collaborator.Data.ID, nil))
+	original := listLedgerEntries(t, server, collaborator.Data.ID).Data.Items[0]
+	payload := map[string]any{"reason": "Correction", "effectiveDate": "2026-06-07"}
+
+	first := postAuthorizedJSON(t, server, http.MethodPost, "/api/v1/ledger-entries/"+original.ID+"/reverse", payload)
+	first.Body.Close()
+	second := postAuthorizedJSON(t, server, http.MethodPost, "/api/v1/ledger-entries/"+original.ID+"/reverse", payload)
+	defer second.Body.Close()
+	if second.StatusCode != http.StatusConflict {
+		t.Fatalf("expected conflict status %d, got %d", http.StatusConflict, second.StatusCode)
+	}
+}
+
+func postAuthorizedJSON(t *testing.T, server *fiber.App, method, url string, payload map[string]any) *http.Response {
+	t.Helper()
+	body, err := json.Marshal(payload)
+	if err != nil {
+		t.Fatalf("marshal payload: %v", err)
+	}
+	req := httptest.NewRequest(method, url, bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Ledger-Correction-Key", "test-ledger-correction-key")
+	req.Header.Set("X-Authorized-By", "ledger-admin@example.com")
+	res, err := server.Test(req, fiber.TestConfig{Timeout: 0, FailOnTimeout: false})
+	if err != nil {
+		t.Fatalf("%s %s: %v", method, url, err)
+	}
+	return res
+}
+
+func listLedgerEntries(t *testing.T, server *fiber.App, collaboratorID string) apiLedgerEntryListResponse {
+	t.Helper()
+	res := getJSON(t, server, currentAccountsURL+collaboratorID+"/ledger-entries")
+	defer res.Body.Close()
+	var body apiLedgerEntryListResponse
+	decodeJSON(t, res, &body)
+	return body
+}
+
+func listBalances(t *testing.T, server *fiber.App, collaboratorID string) apiBalancesResponse {
+	t.Helper()
+	res := getJSON(t, server, currentAccountsURL+collaboratorID+"/balances")
+	defer res.Body.Close()
+	var body apiBalancesResponse
+	decodeJSON(t, res, &body)
+	return body
+}
+
 func TestExpenseCreatesDebitLedgerEntryAndNegativeCurrentAccountBalance(t *testing.T) {
 	server, cleanup := newTestServer(t)
 	defer cleanup()
@@ -323,10 +472,11 @@ func newTestServer(t *testing.T) (*fiber.App, func()) {
 	t.Helper()
 	dbPath := filepath.Join(t.TempDir(), "app.db")
 	server, cleanup, err := apppkg.Bootstrap(apppkg.Config{
-		Env:       "test",
-		HTTPAddr:  ":0",
-		DBPath:    dbPath,
-		JWTSecret: "test-secret",
+		Env:                 "test",
+		HTTPAddr:            ":0",
+		DBPath:              dbPath,
+		JWTSecret:           "test-secret",
+		LedgerCorrectionKey: "test-ledger-correction-key",
 	})
 	if err != nil {
 		t.Fatalf("bootstrap test server: %v", err)
