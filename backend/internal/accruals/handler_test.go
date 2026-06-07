@@ -237,6 +237,87 @@ func TestPostAccrualRunLeavesPendingItemsOutstanding(t *testing.T) {
 	}
 }
 
+func TestSickDayOffGoldCommissionCreatesReplacementTransferItems(t *testing.T) {
+	server, cleanup := newTestServer(t)
+	defer cleanup()
+	workPeriod := createWorkPeriod(t, server, nil)
+	original := createActiveCollaborator(t, server, 1, validCollaboratorPayload("", map[string]any{"paymentMethodId": "ref-method-commission", "paymentValue": 5.0, "goldCommissionPercent": 5.0, "sickDayOffReplacementGoldGrams": 1.25}))
+	replacement := createActiveCollaborator(t, server, 2, validCollaboratorPayload("", map[string]any{"paymentMethodId": "ref-method-daily", "paymentValue": 150.0, "dailyBrlAmount": 150.0}))
+	originalAssignment := createAssignment(t, server, workPeriod.Data.ID, validAssignmentPayload(original.Data.ID, nil))
+	replacementAssignment := createAssignment(t, server, workPeriod.Data.ID, validAssignmentPayload(replacement.Data.ID, map[string]any{"replacementForAssignmentId": originalAssignment.Data.ID}))
+	markOutcome(t, server, originalAssignment.Data.ID, "SICK_DAY_OFF")
+	markOutcome(t, server, replacementAssignment.Data.ID, "WORKED")
+	createGoldProductionEntry(t, server, workPeriod.Data.ID, map[string]any{"locationId": "ref-location-main-mine", "productionDate": "2026-06-05", "goldGramsProduced": 100.0})
+
+	run := createAccrualRun(t, server, workPeriod.Data.ID, map[string]any{})
+	if run.Data.Status != "READY_TO_POST" || run.Data.Summary.ReadyItems != 4 {
+		t.Fatalf("expected four ready items, got status %q summary %+v", run.Data.Status, run.Data.Summary)
+	}
+	items := listAccrualItems(t, server, run.Data.ID, "status=READY&pageSize=20")
+	assertAccrualItem(t, items, original.Data.ID, "GOLD_COMMISSION", "CREDIT", nil, floatPtr(5.0))
+	assertAccrualItem(t, items, original.Data.ID, "SICK_DAY_OFF_REPLACEMENT_GOLD_DEBIT", "DEBIT", nil, floatPtr(1.25))
+	assertAccrualItem(t, items, replacement.Data.ID, "DAILY_BRL", "CREDIT", floatPtr(150.0), nil)
+	assertAccrualItem(t, items, replacement.Data.ID, "SICK_DAY_OFF_REPLACEMENT_GOLD_CREDIT", "CREDIT", nil, floatPtr(1.25))
+
+	postAccrualRun(t, server, run.Data.ID)
+	originalEntries := listLedgerEntries(t, server, original.Data.ID, "sourceType=ACCRUAL_ITEM&pageSize=20")
+	assertLedgerEntry(t, originalEntries, "EARNING_CREDIT", "CREDIT", "GOLD_GRAM", 5.0)
+	assertLedgerEntry(t, originalEntries, "REPLACEMENT_TRANSFER", "DEBIT", "GOLD_GRAM", 1.25)
+	replacementEntries := listLedgerEntries(t, server, replacement.Data.ID, "sourceType=ACCRUAL_ITEM&pageSize=20")
+	assertLedgerEntry(t, replacementEntries, "EARNING_CREDIT", "CREDIT", "BRL", 150.0)
+	assertLedgerEntry(t, replacementEntries, "REPLACEMENT_TRANSFER", "CREDIT", "GOLD_GRAM", 1.25)
+}
+
+func TestTimeOffGoldCommissionCreatesConfigurableSplitItems(t *testing.T) {
+	server, cleanup := newTestServer(t)
+	defer cleanup()
+	workPeriod := createWorkPeriod(t, server, nil)
+	original := createActiveCollaborator(t, server, 1, validCollaboratorPayload("", map[string]any{"paymentMethodId": "ref-method-commission", "paymentValue": 10.0, "goldCommissionPercent": 10.0, "timeOffGoldSplitPercent": 40.0}))
+	replacement := createActiveCollaborator(t, server, 2, validCollaboratorPayload("", map[string]any{"paymentMethodId": "ref-method-daily", "paymentValue": 150.0, "dailyBrlAmount": 150.0}))
+	originalAssignment := createAssignment(t, server, workPeriod.Data.ID, validAssignmentPayload(original.Data.ID, nil))
+	replacementAssignment := createAssignment(t, server, workPeriod.Data.ID, validAssignmentPayload(replacement.Data.ID, map[string]any{"replacementForAssignmentId": originalAssignment.Data.ID}))
+	markOutcome(t, server, originalAssignment.Data.ID, "TIME_OFF")
+	markOutcome(t, server, replacementAssignment.Data.ID, "WORKED")
+	createGoldProductionEntry(t, server, workPeriod.Data.ID, map[string]any{"locationId": "ref-location-main-mine", "productionDate": "2026-06-05", "goldGramsProduced": 100.0})
+
+	run := createAccrualRun(t, server, workPeriod.Data.ID, map[string]any{})
+	if run.Data.Status != "READY_TO_POST" || run.Data.Summary.ReadyItems != 2 {
+		t.Fatalf("expected two ready items, got status %q summary %+v", run.Data.Status, run.Data.Summary)
+	}
+	items := listAccrualItems(t, server, run.Data.ID, "status=READY&pageSize=20")
+	if items.Data.Total != 2 {
+		t.Fatalf("expected two ready items and no replacement daily BRL item, got %+v", items.Data.Items)
+	}
+	assertAccrualItem(t, items, original.Data.ID, "TIME_OFF_GOLD_COMMISSION_RETAINED", "CREDIT", nil, floatPtr(6.0))
+	assertAccrualItem(t, items, replacement.Data.ID, "TIME_OFF_REPLACEMENT_GOLD_CREDIT", "CREDIT", nil, floatPtr(4.0))
+}
+
+func TestReplacementGoldItemsWaitForProduction(t *testing.T) {
+	server, cleanup := newTestServer(t)
+	defer cleanup()
+	workPeriod := createWorkPeriod(t, server, nil)
+	original := createActiveCollaborator(t, server, 1, validCollaboratorPayload("", map[string]any{"paymentMethodId": "ref-method-commission", "paymentValue": 5.0, "goldCommissionPercent": 5.0}))
+	replacement := createActiveCollaborator(t, server, 2, validCollaboratorPayload("", map[string]any{"paymentMethodId": "ref-method-daily", "paymentValue": 150.0, "dailyBrlAmount": 150.0}))
+	originalAssignment := createAssignment(t, server, workPeriod.Data.ID, validAssignmentPayload(original.Data.ID, nil))
+	replacementAssignment := createAssignment(t, server, workPeriod.Data.ID, validAssignmentPayload(replacement.Data.ID, map[string]any{"replacementForAssignmentId": originalAssignment.Data.ID}))
+	markOutcome(t, server, originalAssignment.Data.ID, "SICK_DAY_OFF")
+	markOutcome(t, server, replacementAssignment.Data.ID, "WORKED")
+
+	run := createAccrualRun(t, server, workPeriod.Data.ID, map[string]any{})
+	if run.Data.Status != "PENDING_INPUT" || run.Data.Summary.PendingItems != 3 || run.Data.Summary.ReadyItems != 1 {
+		t.Fatalf("expected pending production items and ready daily item, got status %q summary %+v", run.Data.Status, run.Data.Summary)
+	}
+	pending := listAccrualItems(t, server, run.Data.ID, "status=PENDING&pageSize=20")
+	if pending.Data.Total != 3 {
+		t.Fatalf("expected three pending items, got %d", pending.Data.Total)
+	}
+	for _, item := range pending.Data.Items {
+		if item.PendingReason != "GOLD_PRODUCTION_MISSING" {
+			t.Fatalf("expected GOLD_PRODUCTION_MISSING, got %+v", item)
+		}
+	}
+}
+
 func newTestServer(t *testing.T) (*fiber.App, func()) {
 	t.Helper()
 	dbPath := filepath.Join(t.TempDir(), "app.db")
@@ -416,6 +497,39 @@ func cpfForSeq(seq int) string {
 	return cpfs[(seq-1)%len(cpfs)]
 }
 func cellularForSeq(seq int) string { return fmt.Sprintf("11%d%08d", 9, 98865000+seq) }
+func assertAccrualItem(t *testing.T, list apiAccrualItemListResponse, collaboratorID string, calculationType string, direction string, brlAmount *float64, goldAmount *float64) {
+	t.Helper()
+	for _, item := range list.Data.Items {
+		if item.CollaboratorID != collaboratorID || item.CalculationType != calculationType || item.Direction != direction {
+			continue
+		}
+		if !optionalFloatEqual(item.BRLAmount, brlAmount) || !optionalFloatEqual(item.GoldGramAmount, goldAmount) {
+			t.Fatalf("found item %s/%s but amounts were unexpected: %+v", calculationType, direction, item)
+		}
+		return
+	}
+	t.Fatalf("expected accrual item collaborator=%s calculationType=%s direction=%s in %+v", collaboratorID, calculationType, direction, list.Data.Items)
+}
+
+func assertLedgerEntry(t *testing.T, list apiLedgerEntryListResponse, entryType string, direction string, valueUnitCode string, amount float64) {
+	t.Helper()
+	for _, item := range list.Data.Items {
+		if item.EntryType == entryType && item.Direction == direction && item.ValueUnitCode == valueUnitCode && item.Amount == amount {
+			return
+		}
+	}
+	t.Fatalf("expected ledger entry type=%s direction=%s unit=%s amount=%v in %+v", entryType, direction, valueUnitCode, amount, list.Data.Items)
+}
+
+func optionalFloatEqual(got *float64, want *float64) bool {
+	if got == nil || want == nil {
+		return got == nil && want == nil
+	}
+	return *got == *want
+}
+
+func floatPtr(value float64) *float64 { return &value }
+
 func postJSON(t *testing.T, server *fiber.App, method string, url string, payload map[string]any) *http.Response {
 	t.Helper()
 	body, err := json.Marshal(payload)
