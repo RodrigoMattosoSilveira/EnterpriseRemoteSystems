@@ -38,6 +38,12 @@ export function CollaboratorsListPage() {
               Expenses
             </Link>
             <Link
+              to="/work-periods"
+              className="rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 shadow-sm"
+            >
+              Work Periods
+            </Link>
+            <Link
               to="/collaborators/new"
               className="rounded-xl bg-gray-950 px-4 py-2 text-sm font-semibold text-white shadow-sm"
             >
