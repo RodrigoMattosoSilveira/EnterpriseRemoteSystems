@@ -66,6 +66,7 @@ func (r *gormRepository) ListBalances(ctx context.Context, collaboratorID string
 		Joins("JOIN reference_data ru ON ru.id = le.value_unit_id AND ru.tenant_id = le.tenant_id").
 		Where("le.tenant_id = ? AND le.collaborator_id = ? AND le.active = ?", defaultTenantID, collaboratorID, true).
 		Group("le.collaborator_id, p.nickname, p.first_name, p.last_name, le.value_unit_id, ru.code, ru.label, ru.sort_order").
+		Having("ABS(SUM(CASE WHEN le.direction = 'CREDIT' THEN le.amount ELSE -le.amount END)) > 0.00000001").
 		Order("ru.sort_order ASC, ru.label ASC").
 		Scan(&rows).Error
 	return rows, err

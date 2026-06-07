@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"enterpriseremotesystems/backend/internal/db"
+	"enterpriseremotesystems/backend/internal/shared/ids"
 	"gorm.io/gorm"
 )
 
@@ -65,6 +66,11 @@ func (r *gormRepository) Create(ctx context.Context, expense *db.Expense) error 
 
 func (r *gormRepository) Update(ctx context.Context, expense *db.Expense) error {
 	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		previous, err := latestExpenseLedgerEntry(tx, expense.TenantID, expense.ID)
+		if err != nil {
+			return err
+		}
+
 		if err := tx.
 			Model(&db.Expense{}).
 			Where("id = ? AND tenant_id = ?", expense.ID, defaultTenantID).
@@ -81,20 +87,21 @@ func (r *gormRepository) Update(ctx context.Context, expense *db.Expense) error 
 			return err
 		}
 
-		entry := expenseLedgerEntry(expense)
-		return tx.Model(&db.LedgerEntry{}).
-			Where("tenant_id = ? AND source_type = ? AND source_id = ?", expense.TenantID, "EXPENSE", expense.ID).
-			Updates(map[string]any{
-				"collaborator_id": expense.CollaboratorID,
-				"value_unit_id":   expense.ValueUnitID,
-				"entry_type":      entry.EntryType,
-				"direction":       entry.Direction,
-				"amount":          entry.Amount,
-				"effective_date":  entry.EffectiveDate,
-				"description":     entry.Description,
-				"active":          entry.Active,
-				"updated_at":      entry.UpdatedAt,
-			}).Error
+		now := expense.UpdatedAt
+		if now.IsZero() {
+			now = time.Now().UTC()
+		}
+		if previous != nil {
+			reversal := reversalLedgerEntry(*previous, now, "Expense ledger correction")
+			if err := tx.Create(&reversal).Error; err != nil {
+				return err
+			}
+		}
+		if expense.Active {
+			replacement := replacementExpenseLedgerEntry(expense, previous, now)
+			return tx.Create(&replacement).Error
+		}
+		return nil
 	})
 }
 
@@ -139,6 +146,26 @@ func formatDateForQuery(value time.Time) string {
 	return value.Format(dateLayout)
 }
 
+func latestExpenseLedgerEntry(tx *gorm.DB, tenantID string, expenseID string) (*db.LedgerEntry, error) {
+	var row db.LedgerEntry
+	err := tx.
+		Where("tenant_id = ? AND correction_type IN (?, ?) AND ((source_type = ? AND source_id = ?) OR (source_type = ? AND source_id LIKE ?))",
+			tenantID,
+			"ORIGINAL", "REPLACEMENT",
+			"EXPENSE", expenseID,
+			"EXPENSE_REPLACEMENT", expenseID+":%",
+		).
+		Order("created_at DESC").
+		First(&row).Error
+	if err == nil {
+		return &row, nil
+	}
+	if err == gorm.ErrRecordNotFound {
+		return nil, nil
+	}
+	return nil, err
+}
+
 func expenseLedgerEntry(expense *db.Expense) *db.LedgerEntry {
 	return &db.LedgerEntry{
 		BaseModel: db.BaseModel{
@@ -156,6 +183,67 @@ func expenseLedgerEntry(expense *db.Expense) *db.LedgerEntry {
 		SourceType:     "EXPENSE",
 		SourceID:       expense.ID,
 		Description:    expense.Description,
-		Active:         expense.Active,
+		Active:         true,
+		CorrectionType: "ORIGINAL",
 	}
+}
+
+func reversalLedgerEntry(original db.LedgerEntry, now time.Time, reason string) db.LedgerEntry {
+	return db.LedgerEntry{
+		BaseModel: db.BaseModel{
+			ID:        "ledger-reversal-" + ids.New(),
+			CreatedAt: now,
+			UpdatedAt: now,
+		},
+		TenantID:         original.TenantID,
+		CollaboratorID:   original.CollaboratorID,
+		ValueUnitID:      original.ValueUnitID,
+		EntryType:        original.EntryType,
+		Direction:        oppositeDirection(original.Direction),
+		Amount:           original.Amount,
+		EffectiveDate:    now,
+		SourceType:       "LEDGER_CORRECTION",
+		SourceID:         "ledger-reversal-" + original.ID + "-" + ids.New(),
+		Description:      "Reversal of ledger entry " + original.ID,
+		Active:           true,
+		CorrectionType:   "REVERSAL",
+		RelatedEntryID:   &original.ID,
+		CorrectionReason: reason,
+	}
+}
+
+func replacementExpenseLedgerEntry(expense *db.Expense, original *db.LedgerEntry, now time.Time) db.LedgerEntry {
+	var relatedID *string
+	if original != nil {
+		id := original.ID
+		relatedID = &id
+	}
+	return db.LedgerEntry{
+		BaseModel: db.BaseModel{
+			ID:        "ledger-expense-replacement-" + ids.New(),
+			CreatedAt: now,
+			UpdatedAt: now,
+		},
+		TenantID:         expense.TenantID,
+		CollaboratorID:   expense.CollaboratorID,
+		ValueUnitID:      expense.ValueUnitID,
+		EntryType:        "EXPENSE_DEDUCTION",
+		Direction:        "DEBIT",
+		Amount:           expense.Amount,
+		EffectiveDate:    expense.ExpenseDate,
+		SourceType:       "EXPENSE_REPLACEMENT",
+		SourceID:         expense.ID + ":" + ids.New(),
+		Description:      expense.Description,
+		Active:           true,
+		CorrectionType:   "REPLACEMENT",
+		RelatedEntryID:   relatedID,
+		CorrectionReason: "Expense replacement for " + expense.ID,
+	}
+}
+
+func oppositeDirection(direction string) string {
+	if direction == "CREDIT" {
+		return "DEBIT"
+	}
+	return "CREDIT"
 }

@@ -314,6 +314,7 @@ func accrualLedgerEntry(item db.AccrualItem, valueUnit db.ReferenceData, directi
 		SourceID:       item.ID,
 		Description:    item.Description,
 		Active:         true,
+		CorrectionType: "ORIGINAL",
 	}
 }
 

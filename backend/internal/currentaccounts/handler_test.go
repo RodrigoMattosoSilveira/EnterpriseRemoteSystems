@@ -69,6 +69,9 @@ type apiLedgerEntryListResponse struct {
 			SourceType        string  `json:"sourceType"`
 			SourceID          string  `json:"sourceId"`
 			Active            bool    `json:"active"`
+			CorrectionType    string  `json:"correctionType"`
+			RelatedEntryID    string  `json:"relatedEntryId"`
+			CorrectionReason  string  `json:"correctionReason"`
 		} `json:"items"`
 		Total    int `json:"total"`
 		Page     int `json:"page"`
@@ -164,7 +167,7 @@ func TestCurrentAccountKeepsSeparateBalancesByValueUnit(t *testing.T) {
 	}
 }
 
-func TestExpenseUpdateAndDeactivateUpdateLedgerAndBalances(t *testing.T) {
+func TestExpenseUpdateAndDeactivateUseImmutableLedgerCorrections(t *testing.T) {
 	server, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -186,11 +189,11 @@ func TestExpenseUpdateAndDeactivateUpdateLedgerAndBalances(t *testing.T) {
 	var entries apiLedgerEntryListResponse
 	decodeJSON(t, res, &entries)
 	if entries.Data.Total != 1 || len(entries.Data.Items) != 1 {
-		t.Fatalf("expected one updated gold ledger entry, got %+v", entries.Data)
+		t.Fatalf("expected one replacement gold ledger entry, got %+v", entries.Data)
 	}
 	entry := entries.Data.Items[0]
-	if entry.ValueUnitCode != "GOLD_GRAM" || entry.Amount != 3.75 || entry.SignedAmount != -3.75 || entry.EffectiveDate != "2026-06-04" {
-		t.Fatalf("unexpected updated ledger entry: %+v", entry)
+	if entry.ValueUnitCode != "GOLD_GRAM" || entry.Amount != 3.75 || entry.SignedAmount != -3.75 || entry.EffectiveDate != "2026-06-04" || entry.CorrectionType != "REPLACEMENT" {
+		t.Fatalf("unexpected replacement ledger entry: %+v", entry)
 	}
 
 	res = postJSON(t, server, http.MethodPatch, expensesURL+expense.Data.ID+"/deactivate", map[string]any{})
@@ -204,14 +207,24 @@ func TestExpenseUpdateAndDeactivateUpdateLedgerAndBalances(t *testing.T) {
 	var balances apiBalancesResponse
 	decodeJSON(t, res, &balances)
 	if len(balances.Data) != 0 {
-		t.Fatalf("expected no active balances after deactivation, got %+v", balances.Data)
+		t.Fatalf("expected no non-zero balances after deactivation, got %+v", balances.Data)
 	}
 
-	res = getJSON(t, server, currentAccountsURL+collaborator.Data.ID+"/ledger-entries?includeInactive=true")
+	res = getJSON(t, server, currentAccountsURL+collaborator.Data.ID+"/ledger-entries")
 	defer res.Body.Close()
 	decodeJSON(t, res, &entries)
-	if entries.Data.Total != 1 || len(entries.Data.Items) != 1 || entries.Data.Items[0].Active {
-		t.Fatalf("expected one inactive ledger entry when requested, got %+v", entries.Data)
+	if entries.Data.Total != 4 || len(entries.Data.Items) != 4 {
+		t.Fatalf("expected original, reversal, replacement, and final reversal entries, got %+v", entries.Data)
+	}
+	byCorrection := map[string]int{}
+	for _, item := range entries.Data.Items {
+		if !item.Active {
+			t.Fatalf("immutable correction entries should remain active, got %+v", item)
+		}
+		byCorrection[item.CorrectionType]++
+	}
+	if byCorrection["ORIGINAL"] != 1 || byCorrection["REVERSAL"] != 2 || byCorrection["REPLACEMENT"] != 1 {
+		t.Fatalf("unexpected correction type counts: %+v entries=%+v", byCorrection, entries.Data.Items)
 	}
 }
 
