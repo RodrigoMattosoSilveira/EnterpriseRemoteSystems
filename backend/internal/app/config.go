@@ -15,6 +15,7 @@ type Config struct {
 	JWTSecret             string
 	AutoMigrate           bool
 	AutoMigrateConfigured bool
+	LedgerCorrectionKey   string
 }
 
 func LoadConfig() (Config, error) {
@@ -26,6 +27,7 @@ func LoadConfig() (Config, error) {
 		JWTSecret:             getEnv("JWT_SECRET", "dev-only-change-me"),
 		AutoMigrate:           getEnvBool("APP_AUTO_MIGRATE", false),
 		AutoMigrateConfigured: hasEnv("APP_AUTO_MIGRATE"),
+		LedgerCorrectionKey:   getEnv("LEDGER_CORRECTION_KEY", ""),
 	}
 	if cfg.JWTSecret == "" {
 		return Config{}, fmt.Errorf("JWT_SECRET is required")

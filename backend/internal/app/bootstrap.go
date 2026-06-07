@@ -54,7 +54,7 @@ func Bootstrap(cfg Config) (*fiber.App, func(), error) {
 	expenseHandler := expenses.NewHandler(expenseSvc)
 
 	currentAccountRepo := currentaccounts.NewRepository(database)
-	currentAccountSvc := currentaccounts.NewService(currentAccountRepo)
+	currentAccountSvc := currentaccounts.NewService(currentAccountRepo, cfg.LedgerCorrectionKey)
 	currentAccountHandler := currentaccounts.NewHandler(currentAccountSvc)
 
 	workPeriodRepo := workperiods.NewRepository(database)

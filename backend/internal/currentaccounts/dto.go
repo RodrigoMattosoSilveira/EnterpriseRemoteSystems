@@ -59,3 +59,24 @@ type LedgerEntryListResult struct {
 	Page     int              `json:"page"`
 	PageSize int              `json:"pageSize"`
 }
+
+type ReverseLedgerEntryRequest struct {
+	Reason        string `json:"reason"`
+	EffectiveDate string `json:"effectiveDate"`
+}
+
+type ReplaceLedgerEntryRequest struct {
+	Reason        string  `json:"reason"`
+	ValueUnitID   string  `json:"valueUnitId"`
+	EntryType     string  `json:"entryType"`
+	Direction     string  `json:"direction"`
+	Amount        float64 `json:"amount"`
+	EffectiveDate string  `json:"effectiveDate"`
+	Description   string  `json:"description"`
+}
+
+type LedgerCorrectionResult struct {
+	Original    LedgerEntryDTO  `json:"original"`
+	Reversal    LedgerEntryDTO  `json:"reversal"`
+	Replacement *LedgerEntryDTO `json:"replacement,omitempty"`
+}

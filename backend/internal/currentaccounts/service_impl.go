@@ -10,9 +10,14 @@ const (
 	maxPageSize     = 200
 )
 
-type service struct{ repo Repository }
+type service struct {
+	repo                Repository
+	ledgerCorrectionKey string
+}
 
-func NewService(repo Repository) Service { return &service{repo: repo} }
+func NewService(repo Repository, ledgerCorrectionKey string) Service {
+	return &service{repo: repo, ledgerCorrectionKey: strings.TrimSpace(ledgerCorrectionKey)}
+}
 
 func (s *service) GetDetail(ctx context.Context, collaboratorID string, filter LedgerEntryListFilter) (*CurrentAccountDetailDTO, error) {
 	collaboratorID = strings.TrimSpace(collaboratorID)
