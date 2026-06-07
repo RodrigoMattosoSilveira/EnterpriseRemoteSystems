@@ -17,6 +17,11 @@ type LedgerEntryDTO struct {
 	SourceID          string  `json:"sourceId"`
 	Description       string  `json:"description,omitempty"`
 	Active            bool    `json:"active"`
+	CorrectionType    string  `json:"correctionType"`
+	RelatedEntryID    string  `json:"relatedEntryId,omitempty"`
+	CorrectionReason  string  `json:"correctionReason,omitempty"`
+	AuthorizedBy      string  `json:"authorizedBy,omitempty"`
+	AuthorizedAt      string  `json:"authorizedAt,omitempty"`
 	CreatedAt         string  `json:"createdAt"`
 	UpdatedAt         string  `json:"updatedAt"`
 }

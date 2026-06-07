@@ -237,17 +237,22 @@ type AccrualItem struct {
 type LedgerEntry struct {
 	BaseModel
 
-	TenantID       string    `gorm:"type:text;not null;default:default;uniqueIndex:ux_ledger_tenant_source_unit_direction,priority:1;index" json:"tenantId"`
-	CollaboratorID string    `gorm:"type:text;not null;index" json:"collaboratorId"`
-	ValueUnitID    string    `gorm:"type:text;not null;uniqueIndex:ux_ledger_tenant_source_unit_direction,priority:4;index" json:"valueUnitId"`
-	EntryType      string    `gorm:"type:text;not null;index" json:"entryType"`
-	Direction      string    `gorm:"type:text;not null;uniqueIndex:ux_ledger_tenant_source_unit_direction,priority:5;index" json:"direction"`
-	Amount         float64   `gorm:"not null" json:"amount"`
-	EffectiveDate  time.Time `gorm:"type:date;not null;index" json:"effectiveDate"`
-	SourceType     string    `gorm:"type:text;not null;uniqueIndex:ux_ledger_tenant_source_unit_direction,priority:2;index" json:"sourceType"`
-	SourceID       string    `gorm:"type:text;not null;uniqueIndex:ux_ledger_tenant_source_unit_direction,priority:3;index" json:"sourceId"`
-	Description    string    `gorm:"type:text" json:"description,omitempty"`
-	Active         bool      `gorm:"not null;default:true;index" json:"active"`
+	TenantID         string     `gorm:"type:text;not null;default:default;uniqueIndex:ux_ledger_tenant_source_unit_direction,priority:1;index" json:"tenantId"`
+	CollaboratorID   string     `gorm:"type:text;not null;index" json:"collaboratorId"`
+	ValueUnitID      string     `gorm:"type:text;not null;uniqueIndex:ux_ledger_tenant_source_unit_direction,priority:4;index" json:"valueUnitId"`
+	EntryType        string     `gorm:"type:text;not null;index" json:"entryType"`
+	Direction        string     `gorm:"type:text;not null;uniqueIndex:ux_ledger_tenant_source_unit_direction,priority:5;index" json:"direction"`
+	Amount           float64    `gorm:"not null" json:"amount"`
+	EffectiveDate    time.Time  `gorm:"type:date;not null;index" json:"effectiveDate"`
+	SourceType       string     `gorm:"type:text;not null;uniqueIndex:ux_ledger_tenant_source_unit_direction,priority:2;index" json:"sourceType"`
+	SourceID         string     `gorm:"type:text;not null;uniqueIndex:ux_ledger_tenant_source_unit_direction,priority:3;index" json:"sourceId"`
+	Description      string     `gorm:"type:text" json:"description,omitempty"`
+	Active           bool       `gorm:"not null;default:true;index" json:"active"`
+	CorrectionType   string     `gorm:"type:text;not null;default:ORIGINAL;index" json:"correctionType"`
+	RelatedEntryID   *string    `gorm:"type:text;index" json:"relatedEntryId,omitempty"`
+	CorrectionReason string     `gorm:"type:text" json:"correctionReason,omitempty"`
+	AuthorizedBy     string     `gorm:"type:text;index" json:"authorizedBy,omitempty"`
+	AuthorizedAt     *time.Time `json:"authorizedAt,omitempty"`
 
 	Tenant       Tenant              `gorm:"foreignKey:TenantID;constraint:OnUpdate:Restrict,OnDelete:Restrict;" json:"tenant,omitempty"`
 	Collaborator CollaboratorJourney `gorm:"foreignKey:CollaboratorID;constraint:OnUpdate:Restrict,OnDelete:Restrict;" json:"collaborator,omitempty"`
