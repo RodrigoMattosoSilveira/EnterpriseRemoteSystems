@@ -22,15 +22,17 @@ const (
 	DirectionCredit = "CREDIT"
 	DirectionDebit  = "DEBIT"
 
-	LedgerEntryTypeEarningCredit = "EARNING_CREDIT"
-	LedgerSourceTypeAccrualItem  = "ACCRUAL_ITEM"
-	ValueUnitCodeBRL             = "BRL"
-	ValueUnitCodeGoldGram        = "GOLD_GRAM"
+	LedgerEntryTypeEarningCredit       = "EARNING_CREDIT"
+	LedgerEntryTypeReplacementTransfer = "REPLACEMENT_TRANSFER"
+	LedgerSourceTypeAccrualItem        = "ACCRUAL_ITEM"
+	ValueUnitCodeBRL                   = "BRL"
+	ValueUnitCodeGoldGram              = "GOLD_GRAM"
 
-	PendingReasonActualOutcomeMissing        = "ACTUAL_OUTCOME_MISSING"
-	PendingReasonGoldProductionMissing       = "GOLD_PRODUCTION_MISSING"
-	PendingReasonPaymentConfigurationMissing = "PAYMENT_CONFIGURATION_MISSING"
-	PendingReasonReplacementRuleDeferred     = "REPLACEMENT_RULE_DEFERRED"
+	PendingReasonActualOutcomeMissing         = "ACTUAL_OUTCOME_MISSING"
+	PendingReasonGoldProductionMissing        = "GOLD_PRODUCTION_MISSING"
+	PendingReasonPaymentConfigurationMissing  = "PAYMENT_CONFIGURATION_MISSING"
+	PendingReasonReplacementRuleDeferred      = "REPLACEMENT_RULE_DEFERRED"
+	PendingReasonReplacementAssignmentMissing = "REPLACEMENT_ASSIGNMENT_MISSING"
 )
 
 const dateLayout = "2006-01-02"
