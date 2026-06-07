@@ -3,8 +3,12 @@ import { Link, useParams } from "react-router-dom";
 import { ApiErrorPanel } from "../../components/ApiErrorPanel";
 import { useCollaborators } from "../collaborators/useCollaborators";
 import { useReferenceDataByType } from "../reference-data/useReferenceData";
-import type { ActualStatus, SaveWorkPeriodAssignmentInput } from "../../types/planning";
+import type {
+  ActualStatus,
+  SaveWorkPeriodAssignmentInput,
+} from "../../types/planning";
 import { ACTUAL_STATUSES, humanizePlanningCode } from "./planningSchemas";
+import { AccrualTab } from "./AccrualTab";
 import { InformTab } from "./InformTab";
 import { PlanTab } from "./PlanTab";
 import {
@@ -18,7 +22,7 @@ import {
   useWorkPlanRoster,
 } from "./usePlanning";
 
-type Tab = "plan" | "inform" | "outcomes";
+type Tab = "plan" | "inform" | "outcomes" | "accrual";
 
 export function WorkPeriodDetailPage() {
   const { id = "" } = useParams();
@@ -36,25 +40,181 @@ export function WorkPeriodDetailPage() {
   const outcomeMutation = useMarkOutcome(id);
   const informMutation = useInformWorkPeriod(id);
 
-  const assignments = useMemo(() => assignmentsQuery.data?.items ?? [], [assignmentsQuery.data]);
+  const assignments = useMemo(
+    () => assignmentsQuery.data?.items ?? [],
+    [assignmentsQuery.data],
+  );
   const period = periodQuery.data;
-  const error = periodQuery.error || assignmentsQuery.error || collaboratorsQuery.error || sectorsQuery.error || locationsQuery.error || tasksQuery.error || rosterQuery.error || createMutation.error || updateMutation.error || deactivateMutation.error || outcomeMutation.error || informMutation.error;
-  const pending = createMutation.isPending || updateMutation.isPending || deactivateMutation.isPending;
+  const error =
+    periodQuery.error ||
+    assignmentsQuery.error ||
+    collaboratorsQuery.error ||
+    sectorsQuery.error ||
+    locationsQuery.error ||
+    tasksQuery.error ||
+    rosterQuery.error ||
+    createMutation.error ||
+    updateMutation.error ||
+    deactivateMutation.error ||
+    outcomeMutation.error ||
+    informMutation.error;
+  const pending =
+    createMutation.isPending ||
+    updateMutation.isPending ||
+    deactivateMutation.isPending;
 
-  if (periodQuery.isLoading || !period) return <main className="min-h-screen bg-gray-50 p-6">Loading work period...</main>;
+  if (periodQuery.isLoading || !period)
+    return (
+      <main className="min-h-screen bg-gray-50 p-6">
+        Loading work period...
+      </main>
+    );
   const editable = period.status !== "CLOSED";
-  const included = assignments.filter((row) => row.active && row.plannedStatus === "INCLUDED");
+  const included = assignments.filter(
+    (row) => row.active && row.plannedStatus === "INCLUDED",
+  );
 
-  return <main className="min-h-screen bg-gray-50">
-    <header className="sticky top-0 z-10 border-b bg-white/95 px-4 py-4 backdrop-blur print:hidden"><div className="mx-auto max-w-6xl"><Link to="/work-periods" className="text-sm font-semibold text-gray-600 underline">Back to Work Periods</Link><div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between"><div><p className="text-xs font-semibold uppercase tracking-wide text-gray-500">{period.workDate} · {period.periodCode}</p><h1 className="text-2xl font-bold">{period.name}</h1><p className="text-sm text-gray-500">{formatDateTime(period.startsAt)} to {formatDateTime(period.endsAt)}</p></div><span className="w-fit rounded-full bg-gray-100 px-3 py-1 text-xs font-semibold">{humanizePlanningCode(period.status)}</span></div></div></header>
-    <section className="mx-auto max-w-6xl space-y-4 p-4 print:max-w-none print:p-0">
-      <ApiErrorPanel error={error} />
-      <nav className="flex gap-2 overflow-x-auto rounded-2xl border bg-white p-2 shadow-sm print:hidden">{(["plan", "inform", "outcomes"] as Tab[]).map((value) => <button key={value} onClick={() => setTab(value)} className={`rounded-xl px-4 py-2 text-sm font-semibold ${tab === value ? "bg-gray-950 text-white" : "text-gray-600"}`}>{value === "plan" ? "Plan" : value === "inform" ? "Inform / Print" : "Actual Outcomes"}</button>)}</nav>
-      {tab === "plan" && <PlanTab assignments={assignments} collaborators={collaboratorsQuery.data?.items ?? []} sectors={sectorsQuery.data ?? []} locations={locationsQuery.data ?? []} tasks={tasksQuery.data ?? []} editable={editable} pending={pending} onCreate={(input) => createMutation.mutate(input)} onUpdate={(assignmentId, input) => updateMutation.mutate({ assignmentId, input })} onDeactivate={(assignmentId) => deactivateMutation.mutate(assignmentId)} />}
-      {tab === "inform" && <InformTab workPeriod={period} roster={rosterQuery.data} loading={rosterQuery.isLoading} pending={informMutation.isPending} onInform={() => informMutation.mutate()} />}
-      {tab === "outcomes" && <section className="space-y-4"><div><h2 className="text-lg font-semibold">Actual Outcomes</h2><p className="text-sm text-gray-500">Record what actually happened for each included collaborator.</p></div>{included.length === 0 && <div className="rounded-2xl border bg-white p-6 text-center text-sm text-gray-500">No included assignments.</div>}{included.map((row) => <article key={row.id} className="flex flex-col gap-3 rounded-2xl border bg-white p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between"><div><h3 className="font-semibold">{row.collaboratorName || row.collaboratorNickname || row.collaboratorId}</h3><p className="text-sm text-gray-500">{row.sectorLabel} · {row.locationLabel} · {row.taskLabel}</p></div><label className="text-sm font-medium text-gray-700">Outcome<select value={row.actualStatus ?? ""} disabled={!editable || outcomeMutation.isPending} onChange={(event) => event.target.value && outcomeMutation.mutate({ assignmentId: row.id, actualStatus: event.target.value as ActualStatus })} className="ml-3 rounded-xl border bg-white px-3 py-2"><option value="">Not marked</option>{ACTUAL_STATUSES.map((status) => <option key={status} value={status}>{humanizePlanningCode(status)}</option>)}</select></label></article>)}</section>}
-    </section>
-  </main>;
+  return (
+    <main className="min-h-screen bg-gray-50">
+      <header className="sticky top-0 z-10 border-b bg-white/95 px-4 py-4 backdrop-blur print:hidden">
+        <div className="mx-auto max-w-6xl">
+          <Link
+            to="/work-periods"
+            className="text-sm font-semibold text-gray-600 underline"
+          >
+            Back to Work Periods
+          </Link>
+          <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+                {period.workDate} · {period.periodCode}
+              </p>
+              <h1 className="text-2xl font-bold">{period.name}</h1>
+              <p className="text-sm text-gray-500">
+                {formatDateTime(period.startsAt)} to{" "}
+                {formatDateTime(period.endsAt)}
+              </p>
+            </div>
+            <span className="w-fit rounded-full bg-gray-100 px-3 py-1 text-xs font-semibold">
+              {humanizePlanningCode(period.status)}
+            </span>
+          </div>
+        </div>
+      </header>
+      <section className="mx-auto max-w-6xl space-y-4 p-4 print:max-w-none print:p-0">
+        <ApiErrorPanel error={error} />
+        <nav className="flex gap-2 overflow-x-auto rounded-2xl border bg-white p-2 shadow-sm print:hidden">
+          {(["plan", "inform", "outcomes", "accrual"] as Tab[]).map((value) => (
+            <button
+              key={value}
+              onClick={() => setTab(value)}
+              className={`rounded-xl px-4 py-2 text-sm font-semibold ${tab === value ? "bg-gray-950 text-white" : "text-gray-600"}`}
+            >
+              {value === "plan"
+                ? "Plan"
+                : value === "inform"
+                  ? "Inform / Print"
+                  : value === "outcomes"
+                    ? "Actual Outcomes"
+                    : "Accrual"}
+            </button>
+          ))}
+        </nav>
+        {tab === "plan" && (
+          <PlanTab
+            assignments={assignments}
+            collaborators={collaboratorsQuery.data?.items ?? []}
+            sectors={sectorsQuery.data ?? []}
+            locations={locationsQuery.data ?? []}
+            tasks={tasksQuery.data ?? []}
+            editable={editable}
+            pending={pending}
+            onCreate={(input) => createMutation.mutate(input)}
+            onUpdate={(assignmentId, input) =>
+              updateMutation.mutate({ assignmentId, input })
+            }
+            onDeactivate={(assignmentId) =>
+              deactivateMutation.mutate(assignmentId)
+            }
+          />
+        )}
+        {tab === "inform" && (
+          <InformTab
+            workPeriod={period}
+            roster={rosterQuery.data}
+            loading={rosterQuery.isLoading}
+            pending={informMutation.isPending}
+            onInform={() => informMutation.mutate()}
+          />
+        )}
+        {tab === "outcomes" && (
+          <section className="space-y-4">
+            <div>
+              <h2 className="text-lg font-semibold">Actual Outcomes</h2>
+              <p className="text-sm text-gray-500">
+                Record what actually happened for each included collaborator.
+              </p>
+            </div>
+            {included.length === 0 && (
+              <div className="rounded-2xl border bg-white p-6 text-center text-sm text-gray-500">
+                No included assignments.
+              </div>
+            )}
+            {included.map((row) => (
+              <article
+                key={row.id}
+                className="flex flex-col gap-3 rounded-2xl border bg-white p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between"
+              >
+                <div>
+                  <h3 className="font-semibold">
+                    {row.collaboratorName ||
+                      row.collaboratorNickname ||
+                      row.collaboratorId}
+                  </h3>
+                  <p className="text-sm text-gray-500">
+                    {row.sectorLabel} · {row.locationLabel} · {row.taskLabel}
+                  </p>
+                </div>
+                <label className="text-sm font-medium text-gray-700">
+                  Outcome
+                  <select
+                    value={row.actualStatus ?? ""}
+                    disabled={!editable || outcomeMutation.isPending}
+                    onChange={(event) =>
+                      event.target.value &&
+                      outcomeMutation.mutate({
+                        assignmentId: row.id,
+                        actualStatus: event.target.value as ActualStatus,
+                      })
+                    }
+                    className="ml-3 rounded-xl border bg-white px-3 py-2"
+                  >
+                    <option value="">Not marked</option>
+                    {ACTUAL_STATUSES.map((status) => (
+                      <option key={status} value={status}>
+                        {humanizePlanningCode(status)}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </article>
+            ))}
+          </section>
+        )}
+        {tab === "accrual" && (
+          <AccrualTab
+            workPeriod={period}
+            locations={locationsQuery.data ?? []}
+          />
+        )}
+      </section>
+    </main>
+  );
 }
 
-function formatDateTime(value: string) { return new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(new Date(value)); }
+function formatDateTime(value: string) {
+  return new Intl.DateTimeFormat(undefined, {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(new Date(value));
+}

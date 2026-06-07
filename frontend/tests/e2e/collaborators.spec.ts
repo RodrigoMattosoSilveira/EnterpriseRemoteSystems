@@ -73,7 +73,10 @@ await expect(page.getByRole("status")).toContainText(
 );
 
   await expect(
-    page.getByRole("heading", { name: "Collaborators" }),
+    page.getByRole("heading", {
+      name: "Collaborators",
+      exact: true,
+    }),
   ).toBeVisible();
 
   await expect(
