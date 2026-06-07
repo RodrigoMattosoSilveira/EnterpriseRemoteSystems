@@ -28,6 +28,7 @@ type Tenant struct {
 	AccrualRuns           []AccrualRun           `gorm:"foreignKey:TenantID" json:"accrualRuns,omitempty"`
 	AccrualItems          []AccrualItem          `gorm:"foreignKey:TenantID" json:"accrualItems,omitempty"`
 	LedgerEntries         []LedgerEntry          `gorm:"foreignKey:TenantID" json:"ledgerEntries,omitempty"`
+	JourneySettlements    []JourneySettlement    `gorm:"foreignKey:TenantID" json:"journeySettlements,omitempty"`
 }
 
 type CollaboratorJourney struct {
@@ -57,13 +58,14 @@ type CollaboratorJourney struct {
 	Notes    string     `gorm:"type:text" json:"notes,omitempty"`
 	ClosedAt *time.Time `json:"closedAt,omitempty"`
 
-	Tenant        Tenant        `gorm:"foreignKey:TenantID;constraint:OnUpdate:Restrict,OnDelete:Restrict;" json:"tenant,omitempty"`
-	Person        Person        `gorm:"foreignKey:PersonID;constraint:OnUpdate:Restrict,OnDelete:Restrict;" json:"person,omitempty"`
-	PaymentMethod ReferenceData `gorm:"foreignKey:PaymentMethodID;constraint:OnUpdate:Restrict,OnDelete:Restrict;" json:"paymentMethod,omitempty"`
-	Sector        ReferenceData `gorm:"foreignKey:SectorID;constraint:OnUpdate:Restrict,OnDelete:Restrict;" json:"sector,omitempty"`
-	Location      ReferenceData `gorm:"foreignKey:LocationID;constraint:OnUpdate:Restrict,OnDelete:Restrict;" json:"location,omitempty"`
-	Task          ReferenceData `gorm:"foreignKey:TaskID;constraint:OnUpdate:Restrict,OnDelete:Restrict;" json:"task,omitempty"`
-	Status        ReferenceData `gorm:"foreignKey:StatusID;constraint:OnUpdate:Restrict,OnDelete:Restrict;" json:"status,omitempty"`
+	Tenant             Tenant              `gorm:"foreignKey:TenantID;constraint:OnUpdate:Restrict,OnDelete:Restrict;" json:"tenant,omitempty"`
+	Person             Person              `gorm:"foreignKey:PersonID;constraint:OnUpdate:Restrict,OnDelete:Restrict;" json:"person,omitempty"`
+	PaymentMethod      ReferenceData       `gorm:"foreignKey:PaymentMethodID;constraint:OnUpdate:Restrict,OnDelete:Restrict;" json:"paymentMethod,omitempty"`
+	Sector             ReferenceData       `gorm:"foreignKey:SectorID;constraint:OnUpdate:Restrict,OnDelete:Restrict;" json:"sector,omitempty"`
+	Location           ReferenceData       `gorm:"foreignKey:LocationID;constraint:OnUpdate:Restrict,OnDelete:Restrict;" json:"location,omitempty"`
+	Task               ReferenceData       `gorm:"foreignKey:TaskID;constraint:OnUpdate:Restrict,OnDelete:Restrict;" json:"task,omitempty"`
+	Status             ReferenceData       `gorm:"foreignKey:StatusID;constraint:OnUpdate:Restrict,OnDelete:Restrict;" json:"status,omitempty"`
+	JourneySettlements []JourneySettlement `gorm:"foreignKey:CollaboratorID" json:"journeySettlements,omitempty"`
 }
 
 type ReferenceData struct {
@@ -137,6 +139,25 @@ type Expense struct {
 	Collaborator    CollaboratorJourney `gorm:"foreignKey:CollaboratorID;constraint:OnUpdate:Restrict,OnDelete:Restrict;" json:"collaborator,omitempty"`
 	ExpenseCategory ReferenceData       `gorm:"foreignKey:ExpenseCategoryID;constraint:OnUpdate:Restrict,OnDelete:Restrict;" json:"expenseCategory,omitempty"`
 	ValueUnit       ReferenceData       `gorm:"foreignKey:ValueUnitID;constraint:OnUpdate:Restrict,OnDelete:Restrict;" json:"valueUnit,omitempty"`
+}
+
+type JourneySettlement struct {
+	BaseModel
+
+	TenantID       string     `gorm:"type:text;not null;default:default;uniqueIndex:ux_journey_settlements_request,priority:1;index" json:"tenantId"`
+	CollaboratorID string     `gorm:"type:text;not null;uniqueIndex:ux_journey_settlements_request,priority:2;index" json:"collaboratorId"`
+	SettlementType string     `gorm:"type:text;not null;index" json:"settlementType"`
+	RequestID      string     `gorm:"type:text;not null;uniqueIndex:ux_journey_settlements_request,priority:3" json:"requestId"`
+	Status         string     `gorm:"type:text;not null;default:POSTED;index" json:"status"`
+	EffectiveDate  time.Time  `gorm:"type:date;not null;index" json:"effectiveDate"`
+	BRLAmount      float64    `gorm:"column:brl_amount;not null;default:0" json:"brlAmount"`
+	GoldGramAmount float64    `gorm:"column:gold_gram_amount;not null;default:0" json:"goldGramAmount"`
+	Notes          string     `gorm:"type:text" json:"notes,omitempty"`
+	AuthorizedBy   string     `gorm:"type:text;index" json:"authorizedBy,omitempty"`
+	AuthorizedAt   *time.Time `json:"authorizedAt,omitempty"`
+
+	Tenant       Tenant              `gorm:"foreignKey:TenantID;constraint:OnUpdate:Restrict,OnDelete:Restrict;" json:"tenant,omitempty"`
+	Collaborator CollaboratorJourney `gorm:"foreignKey:CollaboratorID;constraint:OnUpdate:Restrict,OnDelete:Restrict;" json:"collaborator,omitempty"`
 }
 
 type WorkPeriod struct {
