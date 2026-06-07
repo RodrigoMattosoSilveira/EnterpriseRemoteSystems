@@ -158,17 +158,23 @@ func (r *gormRepository) PendingItemCountByRun(ctx context.Context, runID string
 	return count, err
 }
 
-func (r *gormRepository) PostedAssignmentIDsForWorkPeriod(ctx context.Context, workPeriodID string) (map[string]bool, error) {
-	var ids []string
+func (r *gormRepository) PostedItemKeysForWorkPeriod(ctx context.Context, workPeriodID string) (map[string]bool, error) {
+	type row struct {
+		WorkPeriodAssignmentID string
+		CalculationType        string
+		Direction              string
+	}
+	var rows []row
 	err := r.db.WithContext(ctx).Model(&db.AccrualItem{}).
+		Select("work_period_assignment_id, calculation_type, direction").
 		Where("tenant_id = ? AND work_period_id = ? AND status = ? AND work_period_assignment_id IS NOT NULL", defaultTenantID, workPeriodID, ItemStatusPosted).
-		Pluck("work_period_assignment_id", &ids).Error
+		Scan(&rows).Error
 	if err != nil {
 		return nil, err
 	}
-	out := make(map[string]bool, len(ids))
-	for _, id := range ids {
-		out[id] = true
+	out := make(map[string]bool, len(rows))
+	for _, row := range rows {
+		out[itemKey(row.WorkPeriodAssignmentID, row.CalculationType, row.Direction)] = true
 	}
 	return out, nil
 }
