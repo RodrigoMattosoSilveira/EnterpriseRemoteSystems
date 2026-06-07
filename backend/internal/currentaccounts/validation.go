@@ -30,3 +30,50 @@ func ValidateLedgerEntryListFilter(filter LedgerEntryListFilter) error {
 	}
 	return nil
 }
+
+func ValidateReverseLedgerEntryRequest(req ReverseLedgerEntryRequest, authorizedBy string) error {
+	fields := map[string]string{}
+	if strings.TrimSpace(authorizedBy) == "" {
+		fields["authorizedBy"] = "Required"
+	}
+	if strings.TrimSpace(req.Reason) == "" {
+		fields["reason"] = "Required"
+	}
+	if _, err := parseDate(req.EffectiveDate); err != nil {
+		fields["effectiveDate"] = "Effective date must be YYYY-MM-DD"
+	}
+	if len(fields) > 0 {
+		return ValidationError{Fields: fields}
+	}
+	return nil
+}
+
+func ValidateReplaceLedgerEntryRequest(req ReplaceLedgerEntryRequest, authorizedBy string) error {
+	fields := map[string]string{}
+	if strings.TrimSpace(authorizedBy) == "" {
+		fields["authorizedBy"] = "Required"
+	}
+	if strings.TrimSpace(req.Reason) == "" {
+		fields["reason"] = "Required"
+	}
+	if strings.TrimSpace(req.ValueUnitID) == "" {
+		fields["valueUnitId"] = "Required"
+	}
+	if strings.TrimSpace(req.EntryType) == "" {
+		fields["entryType"] = "Required"
+	}
+	direction := strings.ToUpper(strings.TrimSpace(req.Direction))
+	if direction != "CREDIT" && direction != "DEBIT" {
+		fields["direction"] = "Direction must be CREDIT or DEBIT"
+	}
+	if req.Amount <= 0 {
+		fields["amount"] = "Amount must be greater than zero"
+	}
+	if _, err := parseDate(req.EffectiveDate); err != nil {
+		fields["effectiveDate"] = "Effective date must be YYYY-MM-DD"
+	}
+	if len(fields) > 0 {
+		return ValidationError{Fields: fields}
+	}
+	return nil
+}
