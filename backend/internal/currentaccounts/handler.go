@@ -1,6 +1,8 @@
 package currentaccounts
 
 import (
+	"errors"
+
 	"github.com/gofiber/fiber/v3"
 
 	"enterpriseremotesystems/backend/internal/shared/httpx"
@@ -40,4 +42,48 @@ func (h *Handler) ListBalances(c fiber.Ctx) error {
 		return httpx.WriteError(c, err)
 	}
 	return c.JSON(httpx.APIResponse{Data: result})
+}
+
+func (h *Handler) ReverseEntry(c fiber.Ctx) error {
+	if err := h.service.AuthorizeCorrection(c.Get("X-Ledger-Correction-Key")); err != nil {
+		return writeCorrectionAuthorizationError(c, err)
+	}
+	var req ReverseLedgerEntryRequest
+	if err := c.Bind().Body(&req); err != nil {
+		return httpx.WriteError(c, err)
+	}
+	result, err := h.service.ReverseEntry(c.Context(), c.Params("entryId"), c.Get("X-Authorized-By"), req)
+	if err != nil {
+		return writeCorrectionError(c, err)
+	}
+	return c.JSON(httpx.APIResponse{Data: result})
+}
+
+func (h *Handler) ReplaceEntry(c fiber.Ctx) error {
+	if err := h.service.AuthorizeCorrection(c.Get("X-Ledger-Correction-Key")); err != nil {
+		return writeCorrectionAuthorizationError(c, err)
+	}
+	var req ReplaceLedgerEntryRequest
+	if err := c.Bind().Body(&req); err != nil {
+		return httpx.WriteError(c, err)
+	}
+	result, err := h.service.ReplaceEntry(c.Context(), c.Params("entryId"), c.Get("X-Authorized-By"), req)
+	if err != nil {
+		return writeCorrectionError(c, err)
+	}
+	return c.JSON(httpx.APIResponse{Data: result})
+}
+
+func writeCorrectionAuthorizationError(c fiber.Ctx, err error) error {
+	if errors.Is(err, ErrLedgerCorrectionDisabled) {
+		return c.Status(fiber.StatusServiceUnavailable).JSON(httpx.APIResponse{Error: &httpx.APIError{Code: "ledger_correction_disabled", Message: "Ledger correction authorization is not configured"}})
+	}
+	return c.Status(fiber.StatusForbidden).JSON(httpx.APIResponse{Error: &httpx.APIError{Code: "forbidden", Message: "Ledger correction authorization failed"}})
+}
+
+func writeCorrectionError(c fiber.Ctx, err error) error {
+	if errors.Is(err, ErrLedgerEntryAlreadyReversed) || errors.Is(err, ErrLedgerEntryNotCorrectable) {
+		return c.Status(fiber.StatusConflict).JSON(httpx.APIResponse{Error: &httpx.APIError{Code: "ledger_correction_conflict", Message: err.Error()}})
+	}
+	return httpx.WriteError(c, err)
 }

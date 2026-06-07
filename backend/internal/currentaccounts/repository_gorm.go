@@ -84,3 +84,45 @@ func (r *gormRepository) FindCollaboratorByID(ctx context.Context, collaboratorI
 }
 
 func formatDateForQuery(value time.Time) string { return value.Format(dateLayout) }
+
+func (r *gormRepository) FindEntryByID(ctx context.Context, entryID string) (*db.LedgerEntry, error) {
+	var row db.LedgerEntry
+	err := r.db.WithContext(ctx).
+		Preload("Collaborator.Person").
+		Preload("ValueUnit").
+		First(&row, "id = ? AND tenant_id = ?", entryID, defaultTenantID).Error
+	if err != nil {
+		return nil, err
+	}
+	return &row, nil
+}
+
+func (r *gormRepository) FindValueUnitByID(ctx context.Context, valueUnitID string) (*db.ReferenceData, error) {
+	var row db.ReferenceData
+	err := r.db.WithContext(ctx).
+		First(&row, "id = ? AND tenant_id = ? AND type = ? AND active = ?", valueUnitID, defaultTenantID, "value_unit", true).Error
+	if err != nil {
+		return nil, err
+	}
+	return &row, nil
+}
+
+func (r *gormRepository) HasReversal(ctx context.Context, entryID string) (bool, error) {
+	var count int64
+	err := r.db.WithContext(ctx).
+		Model(&db.LedgerEntry{}).
+		Where("tenant_id = ? AND correction_type = ? AND related_entry_id = ?", defaultTenantID, "REVERSAL", entryID).
+		Count(&count).Error
+	return count > 0, err
+}
+
+func (r *gormRepository) CreateCorrectionEntries(ctx context.Context, entries ...*db.LedgerEntry) error {
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		for _, entry := range entries {
+			if err := tx.Create(entry).Error; err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+}
