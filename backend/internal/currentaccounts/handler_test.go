@@ -228,6 +228,86 @@ func TestExpenseUpdateAndDeactivateUseImmutableLedgerCorrections(t *testing.T) {
 	}
 }
 
+func TestCollaboratorCurrentAccountDetailIncludesBalancesAndLedgerEntries(t *testing.T) {
+	server, cleanup := newTestServer(t)
+	defer cleanup()
+
+	collaborator := createActiveCollaborator(t, server, 1)
+	createExpense(t, server, validExpensePayload(collaborator.Data.ID, map[string]any{
+		"valueUnitId": "ref-value-unit-brl",
+		"amount":      12.25,
+	}))
+
+	res := getJSON(t, server, "/api/v1/collaborators/"+collaborator.Data.ID+"/current-account")
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("expected current account detail status %d, got %d", http.StatusOK, res.StatusCode)
+	}
+
+	var body struct {
+		Data struct {
+			CollaboratorID    string `json:"collaboratorId"`
+			CollaboratorLabel string `json:"collaboratorLabel"`
+			Balances          []struct {
+				ValueUnitCode string  `json:"valueUnitCode"`
+				Balance       float64 `json:"balance"`
+			} `json:"balances"`
+			LedgerEntries struct {
+				Items []struct {
+					EntryType      string  `json:"entryType"`
+					Direction      string  `json:"direction"`
+					ValueUnitCode  string  `json:"valueUnitCode"`
+					Amount         float64 `json:"amount"`
+					SignedAmount   float64 `json:"signedAmount"`
+					CorrectionType string  `json:"correctionType"`
+				} `json:"items"`
+				Total int `json:"total"`
+			} `json:"ledgerEntries"`
+		} `json:"data"`
+	}
+	decodeJSON(t, res, &body)
+
+	if body.Data.CollaboratorID != collaborator.Data.ID || body.Data.CollaboratorLabel != "P1" {
+		t.Fatalf("unexpected collaborator detail: %+v", body.Data)
+	}
+	if len(body.Data.Balances) != 1 || body.Data.Balances[0].ValueUnitCode != "BRL" || body.Data.Balances[0].Balance != -12.25 {
+		t.Fatalf("unexpected balances: %+v", body.Data.Balances)
+	}
+	if body.Data.LedgerEntries.Total != 1 || len(body.Data.LedgerEntries.Items) != 1 {
+		t.Fatalf("unexpected ledger entries: %+v", body.Data.LedgerEntries)
+	}
+	entry := body.Data.LedgerEntries.Items[0]
+	if entry.EntryType != "EXPENSE_DEDUCTION" || entry.Direction != "DEBIT" || entry.ValueUnitCode != "BRL" || entry.Amount != 12.25 || entry.SignedAmount != -12.25 || entry.CorrectionType != "ORIGINAL" {
+		t.Fatalf("unexpected ledger entry: %+v", entry)
+	}
+}
+
+func TestCollaboratorLedgerEntriesAliasSupportsFilters(t *testing.T) {
+	server, cleanup := newTestServer(t)
+	defer cleanup()
+
+	collaborator := createActiveCollaborator(t, server, 1)
+	createExpense(t, server, validExpensePayload(collaborator.Data.ID, map[string]any{
+		"valueUnitId": "ref-value-unit-brl",
+		"amount":      10.0,
+	}))
+	createExpense(t, server, validExpensePayload(collaborator.Data.ID, map[string]any{
+		"valueUnitId": "ref-value-unit-gold-gram",
+		"amount":      1.5,
+	}))
+
+	res := getJSON(t, server, "/api/v1/collaborators/"+collaborator.Data.ID+"/ledger-entries?valueUnitId=ref-value-unit-gold-gram")
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("expected ledger entries alias status %d, got %d", http.StatusOK, res.StatusCode)
+	}
+	var entries apiLedgerEntryListResponse
+	decodeJSON(t, res, &entries)
+	if entries.Data.Total != 1 || len(entries.Data.Items) != 1 || entries.Data.Items[0].ValueUnitCode != "GOLD_GRAM" {
+		t.Fatalf("expected one GOLD_GRAM entry through collaborator alias, got %+v", entries.Data)
+	}
+}
+
 func TestCurrentAccountRejectsMissingCollaborator(t *testing.T) {
 	server, cleanup := newTestServer(t)
 	defer cleanup()

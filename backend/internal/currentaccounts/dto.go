@@ -35,6 +35,13 @@ type CurrentAccountBalanceDTO struct {
 	Balance           float64 `json:"balance"`
 }
 
+type CurrentAccountDetailDTO struct {
+	CollaboratorID    string                     `json:"collaboratorId"`
+	CollaboratorLabel string                     `json:"collaboratorLabel,omitempty"`
+	Balances          []CurrentAccountBalanceDTO `json:"balances"`
+	LedgerEntries     LedgerEntryListResult      `json:"ledgerEntries"`
+}
+
 type LedgerEntryListFilter struct {
 	ValueUnitID     string `query:"valueUnitId"`
 	EntryType       string `query:"entryType"`

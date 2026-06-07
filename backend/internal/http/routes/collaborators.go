@@ -7,4 +7,6 @@ func RegisterCollaboratorRoutes(v1 fiber.Router, deps Dependencies) {
 	r.Get("/", deps.CollaboratorHandler.List)
 	r.Post("/", deps.CollaboratorHandler.Create)
 	r.Get("/:id", deps.CollaboratorHandler.GetByID)
+	r.Get("/:collaboratorId/current-account", deps.CurrentAccountHandler.GetDetail)
+	r.Get("/:collaboratorId/ledger-entries", deps.CurrentAccountHandler.ListEntries)
 }
