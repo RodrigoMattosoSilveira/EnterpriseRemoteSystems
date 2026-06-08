@@ -51,14 +51,43 @@ test("user can create an Expense for an active Collaborator", async ({
   await expect(page.getByRole("status")).toContainText(
     `Expense created for ${personNickname}.`,
   );
-  await expect(page.getByRole("heading", { name: "Expenses" })).toBeVisible();
-  await expect(
-    page.getByRole("link", { name: new RegExp(personNickname) }),
-  ).toBeVisible();
-  await expect(page.getByText("Canteen").first()).toBeVisible();
-  await expect(
-    page.getByText("Created by Playwright expense flow").first(),
-  ).toBeVisible();
+ await expect(
+  page.getByRole("heading", {
+    name: "Expenses",
+    exact: true,
+  }),
+).toBeVisible();
+
+const expensesResponse = await request.get(
+  `/api/v1/expenses?collaboratorId=${encodeURIComponent(collaborator.id)}&pageSize=100`,
+);
+
+expect(expensesResponse.ok()).toBeTruthy();
+
+const expensesBody =
+  (await expensesResponse.json()) as ApiEnvelope<ExpenseListResponse>;
+
+const createdExpense = expensesBody.data?.items.find(
+  (expense) =>
+    expense.description === "Created by Playwright expense flow",
+);
+
+expect(createdExpense).toBeDefined();
+
+await page.goto(`/expenses/${createdExpense!.id}`);
+
+await expect(page.getByText(personNickname, { exact: true })).toBeVisible();
+await expect(
+  page.getByRole("heading", {
+    name: "Canteen",
+    exact: true,
+  }),
+).toBeVisible();
+await expect(
+  page.getByText("Created by Playwright expense flow", {
+    exact: true,
+  }),
+).toBeVisible();
 });
 
 test("user can open an Expense detail from the list", async ({

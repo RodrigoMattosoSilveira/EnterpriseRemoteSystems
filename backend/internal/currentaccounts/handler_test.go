@@ -624,6 +624,154 @@ func TestZeroGoldRejectsMissingPositiveBalance(t *testing.T) {
 	}
 }
 
+func TestAuthorizedPartialPayoutPostsSelectedBalancesAndIsIdempotent(t *testing.T) {
+	server, cleanup := newTestServer(t)
+	defer cleanup()
+
+	collaborator := createActiveCollaborator(t, server, 1)
+	firstExpense := createExpense(t, server, validExpensePayload(collaborator.Data.ID, nil))
+	secondExpense := createExpense(t, server, validExpensePayload(collaborator.Data.ID, map[string]any{
+		"description": "Second seed expense",
+	}))
+	entries := listLedgerEntries(t, server, collaborator.Data.ID)
+	if len(entries.Data.Items) != 2 {
+		t.Fatalf("expected two seed ledger entries, got %+v", entries.Data.Items)
+	}
+
+	seedByDescription := map[string]struct {
+		ID string
+	}{}
+	for _, item := range entries.Data.Items {
+		seedByDescription[item.SourceID] = struct{ ID string }{ID: item.ID}
+	}
+	brlSeed, ok := seedByDescription[firstExpense.Data.ID]
+	if !ok {
+		t.Fatalf("missing first expense ledger entry: %+v", entries.Data.Items)
+	}
+	goldSeed, ok := seedByDescription[secondExpense.Data.ID]
+	if !ok {
+		t.Fatalf("missing second expense ledger entry: %+v", entries.Data.Items)
+	}
+
+	res := postAuthorizedJSON(t, server, http.MethodPost, "/api/v1/ledger-entries/"+brlSeed.ID+"/replace", map[string]any{
+		"reason":        "Seed positive BRL for partial payout",
+		"valueUnitId":   "ref-value-unit-brl",
+		"entryType":     "EARNING_CREDIT",
+		"direction":     "CREDIT",
+		"amount":        100.0,
+		"effectiveDate": "2026-06-07",
+		"description":   "Positive BRL balance",
+	})
+	res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("expected BRL seed replace status %d, got %d", http.StatusOK, res.StatusCode)
+	}
+
+	res = postAuthorizedJSON(t, server, http.MethodPost, "/api/v1/ledger-entries/"+goldSeed.ID+"/replace", map[string]any{
+		"reason":        "Seed positive gold for partial payout",
+		"valueUnitId":   "ref-value-unit-gold-gram",
+		"entryType":     "EARNING_CREDIT",
+		"direction":     "CREDIT",
+		"amount":        5.0,
+		"effectiveDate": "2026-06-07",
+		"description":   "Positive gold balance",
+	})
+	res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("expected gold seed replace status %d, got %d", http.StatusOK, res.StatusCode)
+	}
+
+	payload := map[string]any{
+		"requestId":      "partial-payout-test-001",
+		"effectiveDate":  "2026-06-08",
+		"brlAmount":      40.0,
+		"goldGramAmount": 1.25,
+		"notes":          "Partial collaborator payout",
+	}
+	first := postSettlementJSON(t, server, "/api/v1/collaborators/"+collaborator.Data.ID+"/payout", payload)
+	defer first.Body.Close()
+	if first.StatusCode != http.StatusOK {
+		var body apiErrorResponse
+		decodeJSON(t, first, &body)
+		t.Fatalf("expected payout status %d, got %d error=%+v", http.StatusOK, first.StatusCode, body.Error)
+	}
+	var firstBody struct {
+		Data struct {
+			Settlement struct {
+				ID             string  `json:"id"`
+				BRLAmount      float64 `json:"brlAmount"`
+				GoldGramAmount float64 `json:"goldGramAmount"`
+			} `json:"settlement"`
+			LedgerEntries []struct {
+				ID            string  `json:"id"`
+				Direction     string  `json:"direction"`
+				Amount        float64 `json:"amount"`
+				ValueUnitCode string  `json:"valueUnitCode"`
+				EntryType     string  `json:"entryType"`
+			} `json:"ledgerEntries"`
+		} `json:"data"`
+	}
+	decodeJSON(t, first, &firstBody)
+	if firstBody.Data.Settlement.BRLAmount != 40 || firstBody.Data.Settlement.GoldGramAmount != 1.25 || len(firstBody.Data.LedgerEntries) != 2 {
+		t.Fatalf("unexpected payout result: %+v", firstBody.Data)
+	}
+	byUnit := map[string]float64{}
+	for _, entry := range firstBody.Data.LedgerEntries {
+		if entry.Direction != "DEBIT" || entry.EntryType != "PAYOUT" {
+			t.Fatalf("unexpected payout ledger entry: %+v", entry)
+		}
+		byUnit[entry.ValueUnitCode] = entry.Amount
+	}
+	if byUnit["BRL"] != 40 || byUnit["GOLD_GRAM"] != 1.25 {
+		t.Fatalf("unexpected payout entries by unit: %+v", byUnit)
+	}
+
+	balances := listBalances(t, server, collaborator.Data.ID)
+	byBalance := map[string]float64{}
+	for _, balance := range balances.Data {
+		byBalance[balance.ValueUnitCode] = balance.Balance
+	}
+	if byBalance["BRL"] != 60 || byBalance["GOLD_GRAM"] != 3.75 {
+		t.Fatalf("unexpected balances after partial payout: %+v", byBalance)
+	}
+
+	second := postSettlementJSON(t, server, "/api/v1/collaborators/"+collaborator.Data.ID+"/payout", payload)
+	defer second.Body.Close()
+	if second.StatusCode != http.StatusOK {
+		t.Fatalf("expected idempotent payout status %d, got %d", http.StatusOK, second.StatusCode)
+	}
+	var secondBody struct {
+		Data struct {
+			Settlement struct {
+				ID string `json:"id"`
+			} `json:"settlement"`
+			LedgerEntries []struct {
+				ID string `json:"id"`
+			} `json:"ledgerEntries"`
+		} `json:"data"`
+	}
+	decodeJSON(t, second, &secondBody)
+	if secondBody.Data.Settlement.ID != firstBody.Data.Settlement.ID || len(secondBody.Data.LedgerEntries) != 2 {
+		t.Fatalf("expected idempotent payout result, first=%+v second=%+v", firstBody.Data, secondBody.Data)
+	}
+}
+
+func TestPartialPayoutRejectsAmountAboveAvailableBalance(t *testing.T) {
+	server, cleanup := newTestServer(t)
+	defer cleanup()
+
+	collaborator := createActiveCollaborator(t, server, 1)
+	res := postSettlementJSON(t, server, "/api/v1/collaborators/"+collaborator.Data.ID+"/payout", map[string]any{
+		"requestId":     "partial-payout-too-large-001",
+		"effectiveDate": "2026-06-08",
+		"brlAmount":     1.0,
+	})
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusConflict {
+		t.Fatalf("expected payout conflict status %d, got %d", http.StatusConflict, res.StatusCode)
+	}
+}
+
 func TestCurrentAccountRejectsMissingCollaborator(t *testing.T) {
 	server, cleanup := newTestServer(t)
 	defer cleanup()
