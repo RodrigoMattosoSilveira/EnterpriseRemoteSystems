@@ -2,6 +2,7 @@ package currentaccounts
 
 import (
 	"context"
+	"math"
 	"strings"
 )
 
@@ -17,6 +18,61 @@ type service struct {
 
 func NewService(repo Repository, ledgerCorrectionKey string) Service {
 	return &service{repo: repo, ledgerCorrectionKey: strings.TrimSpace(ledgerCorrectionKey)}
+}
+
+func (s *service) SettlementPreview(ctx context.Context, collaboratorID string) (*SettlementPreviewDTO, error) {
+	collaboratorID = strings.TrimSpace(collaboratorID)
+	collaborator, err := s.repo.FindCollaboratorByID(ctx, collaboratorID)
+	if err != nil {
+		return nil, err
+	}
+
+	balances, err := s.repo.ListBalances(ctx, collaboratorID)
+	if err != nil {
+		return nil, err
+	}
+	pendingAccrualItems, err := s.repo.CountPendingAccrualItems(ctx, collaboratorID)
+	if err != nil {
+		return nil, err
+	}
+
+	preview := &SettlementPreviewDTO{
+		CollaboratorID:      collaborator.ID,
+		CollaboratorLabel:   collaboratorLabel(collaborator.Person),
+		JourneyStatusCode:   collaborator.Status.Code,
+		PendingAccrualItems: pendingAccrualItems,
+		BlockingReasons:     []string{},
+	}
+	for _, balance := range balances {
+		switch balance.ValueUnitCode {
+		case "BRL":
+			preview.BRLBalance = balance.Balance
+		case "GOLD_GRAM":
+			preview.GoldGramBalance = balance.Balance
+		}
+	}
+
+	if strings.EqualFold(collaborator.Status.Code, "FINISHED") || collaborator.ClosedAt != nil {
+		preview.BlockingReasons = append(preview.BlockingReasons, SettlementBlockerJourneyAlreadyClosed)
+	}
+	if preview.BRLBalance < -0.00000001 || preview.GoldGramBalance < -0.00000001 {
+		preview.BlockingReasons = append(preview.BlockingReasons, SettlementBlockerNegativeBalance)
+	}
+	if pendingAccrualItems > 0 {
+		preview.BlockingReasons = append(preview.BlockingReasons, SettlementBlockerPendingAccruals)
+	}
+
+	preview.BRLBalance = normalizedZero(preview.BRLBalance)
+	preview.GoldGramBalance = normalizedZero(preview.GoldGramBalance)
+	preview.CanClose = len(preview.BlockingReasons) == 0
+	return preview, nil
+}
+
+func normalizedZero(value float64) float64 {
+	if math.Abs(value) <= 0.00000001 {
+		return 0
+	}
+	return value
 }
 
 func (s *service) GetDetail(ctx context.Context, collaboratorID string, filter LedgerEntryListFilter) (*CurrentAccountDetailDTO, error) {

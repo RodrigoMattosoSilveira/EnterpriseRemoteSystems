@@ -80,3 +80,20 @@ type LedgerCorrectionResult struct {
 	Reversal    LedgerEntryDTO  `json:"reversal"`
 	Replacement *LedgerEntryDTO `json:"replacement,omitempty"`
 }
+
+const (
+	SettlementBlockerJourneyAlreadyClosed = "JOURNEY_ALREADY_CLOSED"
+	SettlementBlockerNegativeBalance      = "NEGATIVE_BALANCE"
+	SettlementBlockerPendingAccruals      = "PENDING_ACCRUALS"
+)
+
+type SettlementPreviewDTO struct {
+	CollaboratorID      string   `json:"collaboratorId"`
+	CollaboratorLabel   string   `json:"collaboratorLabel,omitempty"`
+	JourneyStatusCode   string   `json:"journeyStatusCode,omitempty"`
+	BRLBalance          float64  `json:"brlBalance"`
+	GoldGramBalance     float64  `json:"goldGramBalance"`
+	PendingAccrualItems int64    `json:"pendingAccrualItems"`
+	CanClose            bool     `json:"canClose"`
+	BlockingReasons     []string `json:"blockingReasons"`
+}

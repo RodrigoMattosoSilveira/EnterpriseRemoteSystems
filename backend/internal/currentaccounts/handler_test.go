@@ -457,6 +457,57 @@ func TestCollaboratorLedgerEntriesAliasSupportsFilters(t *testing.T) {
 	}
 }
 
+func TestSettlementPreviewAllowsCloseWithoutBlockers(t *testing.T) {
+	server, cleanup := newTestServer(t)
+	defer cleanup()
+
+	collaborator := createActiveCollaborator(t, server, 1)
+	res := getJSON(t, server, "/api/v1/collaborators/"+collaborator.Data.ID+"/settlement-preview")
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("expected settlement preview status %d, got %d", http.StatusOK, res.StatusCode)
+	}
+
+	var body struct {
+		Data struct {
+			CollaboratorID      string   `json:"collaboratorId"`
+			BRLBalance          float64  `json:"brlBalance"`
+			GoldGramBalance     float64  `json:"goldGramBalance"`
+			PendingAccrualItems int64    `json:"pendingAccrualItems"`
+			CanClose            bool     `json:"canClose"`
+			BlockingReasons     []string `json:"blockingReasons"`
+		} `json:"data"`
+	}
+	decodeJSON(t, res, &body)
+
+	if body.Data.CollaboratorID != collaborator.Data.ID || body.Data.BRLBalance != 0 || body.Data.GoldGramBalance != 0 || body.Data.PendingAccrualItems != 0 || !body.Data.CanClose || len(body.Data.BlockingReasons) != 0 {
+		t.Fatalf("unexpected settlement preview: %+v", body.Data)
+	}
+}
+
+func TestSettlementPreviewBlocksNegativeBalance(t *testing.T) {
+	server, cleanup := newTestServer(t)
+	defer cleanup()
+
+	collaborator := createActiveCollaborator(t, server, 1)
+	createExpense(t, server, validExpensePayload(collaborator.Data.ID, nil))
+
+	res := getJSON(t, server, "/api/v1/collaborators/"+collaborator.Data.ID+"/settlement-preview")
+	defer res.Body.Close()
+	var body struct {
+		Data struct {
+			BRLBalance      float64  `json:"brlBalance"`
+			CanClose        bool     `json:"canClose"`
+			BlockingReasons []string `json:"blockingReasons"`
+		} `json:"data"`
+	}
+	decodeJSON(t, res, &body)
+
+	if body.Data.BRLBalance != -42.5 || body.Data.CanClose || len(body.Data.BlockingReasons) != 1 || body.Data.BlockingReasons[0] != "NEGATIVE_BALANCE" {
+		t.Fatalf("unexpected blocked settlement preview: %+v", body.Data)
+	}
+}
+
 func TestCurrentAccountRejectsMissingCollaborator(t *testing.T) {
 	server, cleanup := newTestServer(t)
 	defer cleanup()
