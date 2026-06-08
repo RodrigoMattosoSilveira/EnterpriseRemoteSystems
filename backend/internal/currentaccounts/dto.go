@@ -122,3 +122,17 @@ type ZeroGoldResult struct {
 	Settlement  JourneySettlementDTO `json:"settlement"`
 	LedgerEntry LedgerEntryDTO       `json:"ledgerEntry"`
 }
+
+// PartialPayoutRequest pays selected positive BRL and/or GOLD_GRAM balances.
+type PartialPayoutRequest struct {
+	RequestID      string  `json:"requestId"`
+	EffectiveDate  string  `json:"effectiveDate"`
+	BRLAmount      float64 `json:"brlAmount"`
+	GoldGramAmount float64 `json:"goldGramAmount"`
+	Notes          string  `json:"notes"`
+}
+
+type PartialPayoutResult struct {
+	Settlement    JourneySettlementDTO `json:"settlement"`
+	LedgerEntries []LedgerEntryDTO     `json:"ledgerEntries"`
+}

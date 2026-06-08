@@ -169,6 +169,17 @@ func (r *gormRepository) FindLedgerEntryBySource(ctx context.Context, sourceType
 	return &row, nil
 }
 
+func (r *gormRepository) FindLedgerEntriesBySource(ctx context.Context, sourceType, sourceID string) ([]db.LedgerEntry, error) {
+	var rows []db.LedgerEntry
+	err := r.db.WithContext(ctx).
+		Preload("Collaborator.Person").
+		Preload("ValueUnit").
+		Where("tenant_id = ? AND source_type = ? AND source_id = ?", defaultTenantID, sourceType, sourceID).
+		Order("created_at ASC, id ASC").
+		Find(&rows).Error
+	return rows, err
+}
+
 func (r *gormRepository) CreateSettlementWithEntries(ctx context.Context, settlement *db.JourneySettlement, entries ...*db.LedgerEntry) error {
 	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		if err := tx.Create(settlement).Error; err != nil {
