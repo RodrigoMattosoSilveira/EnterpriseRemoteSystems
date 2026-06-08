@@ -76,11 +76,21 @@ func (r *gormRepository) FindCollaboratorByID(ctx context.Context, collaboratorI
 	var row db.CollaboratorJourney
 	err := r.db.WithContext(ctx).
 		Preload("Person").
+		Preload("Status").
 		First(&row, "id = ? AND tenant_id = ?", collaboratorID, defaultTenantID).Error
 	if err != nil {
 		return nil, err
 	}
 	return &row, nil
+}
+
+func (r *gormRepository) CountPendingAccrualItems(ctx context.Context, collaboratorID string) (int64, error) {
+	var count int64
+	err := r.db.WithContext(ctx).
+		Model(&db.AccrualItem{}).
+		Where("tenant_id = ? AND collaborator_id = ? AND status = ?", defaultTenantID, collaboratorID, "PENDING").
+		Count(&count).Error
+	return count, err
 }
 
 func formatDateForQuery(value time.Time) string { return value.Format(dateLayout) }

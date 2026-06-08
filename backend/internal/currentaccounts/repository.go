@@ -11,6 +11,7 @@ type Repository interface {
 	ListEntries(ctx context.Context, collaboratorID string, filter normalizedLedgerEntryListFilter) ([]db.LedgerEntry, int64, error)
 	ListBalances(ctx context.Context, collaboratorID string) ([]BalanceRow, error)
 	FindCollaboratorByID(ctx context.Context, collaboratorID string) (*db.CollaboratorJourney, error)
+	CountPendingAccrualItems(ctx context.Context, collaboratorID string) (int64, error)
 	FindEntryByID(ctx context.Context, entryID string) (*db.LedgerEntry, error)
 	FindValueUnitByID(ctx context.Context, valueUnitID string) (*db.ReferenceData, error)
 	HasReversal(ctx context.Context, entryID string) (bool, error)

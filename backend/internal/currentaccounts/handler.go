@@ -12,6 +12,14 @@ type Handler struct{ service Service }
 
 func NewHandler(service Service) *Handler { return &Handler{service: service} }
 
+func (h *Handler) SettlementPreview(c fiber.Ctx) error {
+	result, err := h.service.SettlementPreview(c.Context(), c.Params("collaboratorId"))
+	if err != nil {
+		return httpx.WriteError(c, err)
+	}
+	return c.JSON(httpx.APIResponse{Data: result})
+}
+
 func (h *Handler) GetDetail(c fiber.Ctx) error {
 	var filter LedgerEntryListFilter
 	if err := c.Bind().Query(&filter); err != nil {
