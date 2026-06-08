@@ -19,6 +19,7 @@ type Repository interface {
 	FindValueUnitByCode(ctx context.Context, code string) (*db.ReferenceData, error)
 	FindSettlementByRequestID(ctx context.Context, collaboratorID, requestID string) (*db.JourneySettlement, error)
 	FindLedgerEntryBySource(ctx context.Context, sourceType, sourceID string) (*db.LedgerEntry, error)
+	FindLedgerEntriesBySource(ctx context.Context, sourceType, sourceID string) ([]db.LedgerEntry, error)
 	CreateSettlementWithEntries(ctx context.Context, settlement *db.JourneySettlement, entries ...*db.LedgerEntry) error
 }
 

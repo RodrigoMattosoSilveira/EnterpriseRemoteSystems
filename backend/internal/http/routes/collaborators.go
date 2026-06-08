@@ -9,6 +9,7 @@ func RegisterCollaboratorRoutes(v1 fiber.Router, deps Dependencies) {
 	r.Get("/:id", deps.CollaboratorHandler.GetByID)
 	r.Get("/:collaboratorId/settlement-preview", deps.CurrentAccountHandler.SettlementPreview)
 	r.Post("/:collaboratorId/zero-gold", deps.CurrentAccountHandler.ZeroGold)
+	r.Post("/:collaboratorId/payout", deps.CurrentAccountHandler.PartialPayout)
 	r.Get("/:collaboratorId/current-account", deps.CurrentAccountHandler.GetDetail)
 	r.Get("/:collaboratorId/ledger-entries", deps.CurrentAccountHandler.ListEntries)
 }

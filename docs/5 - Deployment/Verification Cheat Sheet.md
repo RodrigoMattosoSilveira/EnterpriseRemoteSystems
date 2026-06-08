@@ -27,7 +27,7 @@ cd /opt/EnterpriseRemoteSystems/development
 docker logs ers-dev-backend --since=5m --tail=200
 docker logs -f ers-dev-backend
 docker inspect ers-dev-backend \
-  --format 'Status={{.State.Status}} Health={{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}'
+  --format 'Time={{.Created}} Status={{.State.Status}} Health={{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}'
 docker exec ers-dev-backend curl -i http://localhost:8080/api/v1/healthz
 
 ## Verify migration:
@@ -61,7 +61,7 @@ cd /opt/EnterpriseRemoteSystems/test
 docker logs ers-tst-backend --since=5m --tail=200
 docker logs -f ers-tst-backend
 docker inspect ers-tst-backend \
-  --format 'Status={{.State.Status}} Health={{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}'
+  --format 'Time={{.Created}} Status={{.State.Status}} Health={{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}'
 docker exec ers-tst-backend curl -i http://localhost:8080/api/v1/healthz
 ```
 
@@ -99,7 +99,7 @@ cd /opt/EnterpriseRemoteSystems/production
 docker logs ers-prd-backend --since=5m --tail=200
 docker logs -f ers-prd-backend
 docker inspect ers-prd-backend \
-  --format 'Status={{.State.Status}} Health={{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}'
+  --format 'Time={{.Created}} Status={{.State.Status}} Health={{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}'
 docker exec ers-prd-backend curl -i http://localhost:8080/api/v1/healthz
 ```
 

@@ -30,6 +30,24 @@ func (h *Handler) ZeroGold(c fiber.Ctx) error {
 	return c.JSON(httpx.APIResponse{Data: result})
 }
 
+func (h *Handler) PartialPayout(c fiber.Ctx) error {
+	if err := h.service.AuthorizeSettlement(c.Get("X-Ledger-Settlement-Key")); err != nil {
+		return writeSettlementAuthorizationError(c, err)
+	}
+	var req PartialPayoutRequest
+	if err := c.Bind().Body(&req); err != nil {
+		return httpx.WriteError(c, err)
+	}
+	result, err := h.service.PartialPayout(c.Context(), c.Params("collaboratorId"), c.Get("X-Authorized-By"), req)
+	if err != nil {
+		if errors.Is(err, ErrPayoutExceedsAvailableBalance) {
+			return c.Status(fiber.StatusConflict).JSON(httpx.APIResponse{Error: &httpx.APIError{Code: "payout_exceeds_available_balance", Message: err.Error()}})
+		}
+		return httpx.WriteError(c, err)
+	}
+	return c.JSON(httpx.APIResponse{Data: result})
+}
+
 func writeSettlementAuthorizationError(c fiber.Ctx, err error) error {
 	if errors.Is(err, ErrLedgerSettlementDisabled) {
 		return c.Status(fiber.StatusServiceUnavailable).JSON(httpx.APIResponse{Error: &httpx.APIError{Code: "ledger_settlement_disabled", Message: "Ledger settlement authorization is not configured"}})
