@@ -193,3 +193,36 @@ func (r *gormRepository) CreateSettlementWithEntries(ctx context.Context, settle
 		return nil
 	})
 }
+
+func (r *gormRepository) FindCollaboratorStatusByCode(ctx context.Context, code string) (*db.ReferenceData, error) {
+	var row db.ReferenceData
+	err := r.db.WithContext(ctx).
+		First(&row, "tenant_id = ? AND type = ? AND code = ? AND active = ?", defaultTenantID, "collaborator_status", code, true).Error
+	if err != nil {
+		return nil, err
+	}
+	return &row, nil
+}
+
+func (r *gormRepository) CloseJourneyWithSettlement(ctx context.Context, collaboratorID, finishedStatusID string, closedAt time.Time, settlement *db.JourneySettlement, entries ...*db.LedgerEntry) error {
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		result := tx.Model(&db.CollaboratorJourney{}).
+			Where("id = ? AND tenant_id = ? AND closed_at IS NULL", collaboratorID, defaultTenantID).
+			Updates(map[string]any{"status_id": finishedStatusID, "closed_at": closedAt, "updated_at": closedAt})
+		if result.Error != nil {
+			return result.Error
+		}
+		if result.RowsAffected != 1 {
+			return ErrJourneyAlreadyClosed
+		}
+		if err := tx.Create(settlement).Error; err != nil {
+			return err
+		}
+		for _, entry := range entries {
+			if err := tx.Create(entry).Error; err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+}
