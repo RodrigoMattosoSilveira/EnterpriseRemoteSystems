@@ -12,6 +12,31 @@ type Handler struct{ service Service }
 
 func NewHandler(service Service) *Handler { return &Handler{service: service} }
 
+func (h *Handler) ZeroGold(c fiber.Ctx) error {
+	if err := h.service.AuthorizeSettlement(c.Get("X-Ledger-Settlement-Key")); err != nil {
+		return writeSettlementAuthorizationError(c, err)
+	}
+	var req ZeroGoldRequest
+	if err := c.Bind().Body(&req); err != nil {
+		return httpx.WriteError(c, err)
+	}
+	result, err := h.service.ZeroGold(c.Context(), c.Params("collaboratorId"), c.Get("X-Authorized-By"), req)
+	if err != nil {
+		if errors.Is(err, ErrNoPositiveGoldBalance) {
+			return c.Status(fiber.StatusConflict).JSON(httpx.APIResponse{Error: &httpx.APIError{Code: "no_positive_gold_balance", Message: err.Error()}})
+		}
+		return httpx.WriteError(c, err)
+	}
+	return c.JSON(httpx.APIResponse{Data: result})
+}
+
+func writeSettlementAuthorizationError(c fiber.Ctx, err error) error {
+	if errors.Is(err, ErrLedgerSettlementDisabled) {
+		return c.Status(fiber.StatusServiceUnavailable).JSON(httpx.APIResponse{Error: &httpx.APIError{Code: "ledger_settlement_disabled", Message: "Ledger settlement authorization is not configured"}})
+	}
+	return c.Status(fiber.StatusForbidden).JSON(httpx.APIResponse{Error: &httpx.APIError{Code: "forbidden", Message: "Ledger settlement authorization failed"}})
+}
+
 func (h *Handler) SettlementPreview(c fiber.Ctx) error {
 	result, err := h.service.SettlementPreview(c.Context(), c.Params("collaboratorId"))
 	if err != nil {

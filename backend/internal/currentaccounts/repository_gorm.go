@@ -136,3 +136,49 @@ func (r *gormRepository) CreateCorrectionEntries(ctx context.Context, entries ..
 		return nil
 	})
 }
+
+func (r *gormRepository) FindValueUnitByCode(ctx context.Context, code string) (*db.ReferenceData, error) {
+	var row db.ReferenceData
+	err := r.db.WithContext(ctx).
+		First(&row, "tenant_id = ? AND type = ? AND code = ? AND active = ?", defaultTenantID, "value_unit", code, true).Error
+	if err != nil {
+		return nil, err
+	}
+	return &row, nil
+}
+
+func (r *gormRepository) FindSettlementByRequestID(ctx context.Context, collaboratorID, requestID string) (*db.JourneySettlement, error) {
+	var row db.JourneySettlement
+	err := r.db.WithContext(ctx).
+		First(&row, "tenant_id = ? AND collaborator_id = ? AND request_id = ?", defaultTenantID, collaboratorID, requestID).Error
+	if err != nil {
+		return nil, err
+	}
+	return &row, nil
+}
+
+func (r *gormRepository) FindLedgerEntryBySource(ctx context.Context, sourceType, sourceID string) (*db.LedgerEntry, error) {
+	var row db.LedgerEntry
+	err := r.db.WithContext(ctx).
+		Preload("Collaborator.Person").
+		Preload("ValueUnit").
+		First(&row, "tenant_id = ? AND source_type = ? AND source_id = ?", defaultTenantID, sourceType, sourceID).Error
+	if err != nil {
+		return nil, err
+	}
+	return &row, nil
+}
+
+func (r *gormRepository) CreateSettlementWithEntries(ctx context.Context, settlement *db.JourneySettlement, entries ...*db.LedgerEntry) error {
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.Create(settlement).Error; err != nil {
+			return err
+		}
+		for _, entry := range entries {
+			if err := tx.Create(entry).Error; err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+}

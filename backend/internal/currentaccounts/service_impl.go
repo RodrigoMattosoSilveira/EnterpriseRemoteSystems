@@ -14,10 +14,15 @@ const (
 type service struct {
 	repo                Repository
 	ledgerCorrectionKey string
+	ledgerSettlementKey string
 }
 
-func NewService(repo Repository, ledgerCorrectionKey string) Service {
-	return &service{repo: repo, ledgerCorrectionKey: strings.TrimSpace(ledgerCorrectionKey)}
+func NewService(repo Repository, ledgerCorrectionKey, ledgerSettlementKey string) Service {
+	return &service{
+		repo:                repo,
+		ledgerCorrectionKey: strings.TrimSpace(ledgerCorrectionKey),
+		ledgerSettlementKey: strings.TrimSpace(ledgerSettlementKey),
+	}
 }
 
 func (s *service) SettlementPreview(ctx context.Context, collaboratorID string) (*SettlementPreviewDTO, error) {
