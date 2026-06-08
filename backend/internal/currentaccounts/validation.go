@@ -136,3 +136,22 @@ func hasAtMostDecimalPlaces(value float64, places int) bool {
 	scaled := value * scale
 	return math.Abs(scaled-math.Round(scaled)) < 0.0000001
 }
+func ValidateCloseJourneyRequest(req CloseJourneyRequest, authorizedBy string) error {
+	fields := map[string]string{}
+	if strings.TrimSpace(authorizedBy) == "" {
+		fields["authorizedBy"] = "Required"
+	}
+	if strings.TrimSpace(req.RequestID) == "" {
+		fields["requestId"] = "Required"
+	}
+	if _, err := parseDate(req.EffectiveDate); err != nil {
+		fields["effectiveDate"] = "Effective date must be YYYY-MM-DD"
+	}
+	if !req.Confirm {
+		fields["confirm"] = "Confirmation is required"
+	}
+	if len(fields) > 0 {
+		return ValidationError{Fields: fields}
+	}
+	return nil
+}

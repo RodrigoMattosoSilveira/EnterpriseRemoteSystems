@@ -21,6 +21,8 @@ type Repository interface {
 	FindLedgerEntryBySource(ctx context.Context, sourceType, sourceID string) (*db.LedgerEntry, error)
 	FindLedgerEntriesBySource(ctx context.Context, sourceType, sourceID string) ([]db.LedgerEntry, error)
 	CreateSettlementWithEntries(ctx context.Context, settlement *db.JourneySettlement, entries ...*db.LedgerEntry) error
+	FindCollaboratorStatusByCode(ctx context.Context, code string) (*db.ReferenceData, error)
+	CloseJourneyWithSettlement(ctx context.Context, collaboratorID, finishedStatusID string, closedAt time.Time, settlement *db.JourneySettlement, entries ...*db.LedgerEntry) error
 }
 
 type normalizedLedgerEntryListFilter struct {

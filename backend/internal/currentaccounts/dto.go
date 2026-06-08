@@ -136,3 +136,18 @@ type PartialPayoutResult struct {
 	Settlement    JourneySettlementDTO `json:"settlement"`
 	LedgerEntries []LedgerEntryDTO     `json:"ledgerEntries"`
 }
+
+// CloseJourneyRequest confirms final settlement and closes the Collaborator Journey.
+type CloseJourneyRequest struct {
+	RequestID     string `json:"requestId"`
+	EffectiveDate string `json:"effectiveDate"`
+	Confirm       bool   `json:"confirm"`
+	Notes         string `json:"notes"`
+}
+
+type CloseJourneyResult struct {
+	Settlement    JourneySettlementDTO `json:"settlement"`
+	LedgerEntries []LedgerEntryDTO     `json:"ledgerEntries"`
+	JourneyStatus string               `json:"journeyStatus"`
+	ClosedAt      string               `json:"closedAt"`
+}
