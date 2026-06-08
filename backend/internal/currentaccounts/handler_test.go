@@ -221,6 +221,23 @@ func postAuthorizedJSON(t *testing.T, server *fiber.App, method, url string, pay
 	return res
 }
 
+func postSettlementJSON(t *testing.T, server *fiber.App, url string, payload map[string]any) *http.Response {
+	t.Helper()
+	body, err := json.Marshal(payload)
+	if err != nil {
+		t.Fatalf("marshal payload: %v", err)
+	}
+	req := httptest.NewRequest(http.MethodPost, url, bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Ledger-Settlement-Key", "test-ledger-settlement-key")
+	req.Header.Set("X-Authorized-By", "settlement-admin@example.com")
+	res, err := server.Test(req, fiber.TestConfig{Timeout: 0, FailOnTimeout: false})
+	if err != nil {
+		t.Fatalf("POST %s: %v", url, err)
+	}
+	return res
+}
+
 func listLedgerEntries(t *testing.T, server *fiber.App, collaboratorID string) apiLedgerEntryListResponse {
 	t.Helper()
 	res := getJSON(t, server, currentAccountsURL+collaboratorID+"/ledger-entries")
@@ -508,6 +525,105 @@ func TestSettlementPreviewBlocksNegativeBalance(t *testing.T) {
 	}
 }
 
+func TestAuthorizedZeroGoldPostsFullGoldBalanceAndIsIdempotent(t *testing.T) {
+	server, cleanup := newTestServer(t)
+	defer cleanup()
+
+	collaborator := createActiveCollaborator(t, server, 1)
+	expense := createExpense(t, server, validExpensePayload(collaborator.Data.ID, nil))
+	entries := listLedgerEntries(t, server, collaborator.Data.ID)
+	if len(entries.Data.Items) != 1 {
+		t.Fatalf("expected one expense ledger entry, got %+v", entries.Data.Items)
+	}
+	original := entries.Data.Items[0]
+
+	replace := postAuthorizedJSON(t, server, http.MethodPost, "/api/v1/ledger-entries/"+original.ID+"/replace", map[string]any{
+		"reason":        "Seed positive gold for zero-gold test",
+		"valueUnitId":   "ref-value-unit-gold-gram",
+		"entryType":     "EARNING_CREDIT",
+		"direction":     "CREDIT",
+		"amount":        3.75,
+		"effectiveDate": "2026-06-07",
+		"description":   expense.Data.ID,
+	})
+	replace.Body.Close()
+	if replace.StatusCode != http.StatusOK {
+		t.Fatalf("expected replace status %d, got %d", http.StatusOK, replace.StatusCode)
+	}
+
+	payload := map[string]any{
+		"requestId":     "zero-gold-test-001",
+		"effectiveDate": "2026-06-08",
+		"notes":         "Gold payout",
+	}
+	first := postSettlementJSON(t, server, "/api/v1/collaborators/"+collaborator.Data.ID+"/zero-gold", payload)
+	defer first.Body.Close()
+	if first.StatusCode != http.StatusOK {
+		var body apiErrorResponse
+		decodeJSON(t, first, &body)
+		t.Fatalf("expected zero-gold status %d, got %d error=%+v", http.StatusOK, first.StatusCode, body.Error)
+	}
+	var firstBody struct {
+		Data struct {
+			Settlement struct {
+				ID             string  `json:"id"`
+				GoldGramAmount float64 `json:"goldGramAmount"`
+			} `json:"settlement"`
+			LedgerEntry struct {
+				ID            string  `json:"id"`
+				Direction     string  `json:"direction"`
+				Amount        float64 `json:"amount"`
+				ValueUnitCode string  `json:"valueUnitCode"`
+				EntryType     string  `json:"entryType"`
+			} `json:"ledgerEntry"`
+		} `json:"data"`
+	}
+	decodeJSON(t, first, &firstBody)
+	if firstBody.Data.Settlement.GoldGramAmount != 3.75 || firstBody.Data.LedgerEntry.Direction != "DEBIT" || firstBody.Data.LedgerEntry.Amount != 3.75 || firstBody.Data.LedgerEntry.ValueUnitCode != "GOLD_GRAM" || firstBody.Data.LedgerEntry.EntryType != "PAYOUT" {
+		t.Fatalf("unexpected zero-gold result: %+v", firstBody.Data)
+	}
+
+	balances := listBalances(t, server, collaborator.Data.ID)
+	if len(balances.Data) != 0 {
+		t.Fatalf("expected zero balance after zero-gold, got %+v", balances.Data)
+	}
+
+	second := postSettlementJSON(t, server, "/api/v1/collaborators/"+collaborator.Data.ID+"/zero-gold", payload)
+	defer second.Body.Close()
+	if second.StatusCode != http.StatusOK {
+		t.Fatalf("expected idempotent zero-gold status %d, got %d", http.StatusOK, second.StatusCode)
+	}
+	var secondBody struct {
+		Data struct {
+			Settlement struct {
+				ID string `json:"id"`
+			} `json:"settlement"`
+			LedgerEntry struct {
+				ID string `json:"id"`
+			} `json:"ledgerEntry"`
+		} `json:"data"`
+	}
+	decodeJSON(t, second, &secondBody)
+	if secondBody.Data.Settlement.ID != firstBody.Data.Settlement.ID || secondBody.Data.LedgerEntry.ID != firstBody.Data.LedgerEntry.ID {
+		t.Fatalf("expected idempotent result, first=%+v second=%+v", firstBody.Data, secondBody.Data)
+	}
+}
+
+func TestZeroGoldRejectsMissingPositiveBalance(t *testing.T) {
+	server, cleanup := newTestServer(t)
+	defer cleanup()
+
+	collaborator := createActiveCollaborator(t, server, 1)
+	res := postSettlementJSON(t, server, "/api/v1/collaborators/"+collaborator.Data.ID+"/zero-gold", map[string]any{
+		"requestId":     "zero-gold-empty-001",
+		"effectiveDate": "2026-06-08",
+	})
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusConflict {
+		t.Fatalf("expected no-positive-gold conflict %d, got %d", http.StatusConflict, res.StatusCode)
+	}
+}
+
 func TestCurrentAccountRejectsMissingCollaborator(t *testing.T) {
 	server, cleanup := newTestServer(t)
 	defer cleanup()
@@ -528,6 +644,7 @@ func newTestServer(t *testing.T) (*fiber.App, func()) {
 		DBPath:              dbPath,
 		JWTSecret:           "test-secret",
 		LedgerCorrectionKey: "test-ledger-correction-key",
+		LedgerSettlementKey: "test-ledger-settlement-key",
 	})
 	if err != nil {
 		t.Fatalf("bootstrap test server: %v", err)
