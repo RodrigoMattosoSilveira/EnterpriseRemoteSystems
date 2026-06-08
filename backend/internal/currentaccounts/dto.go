@@ -97,3 +97,28 @@ type SettlementPreviewDTO struct {
 	CanClose            bool     `json:"canClose"`
 	BlockingReasons     []string `json:"blockingReasons"`
 }
+
+type ZeroGoldRequest struct {
+	RequestID     string `json:"requestId"`
+	EffectiveDate string `json:"effectiveDate"`
+	Notes         string `json:"notes"`
+}
+
+type JourneySettlementDTO struct {
+	ID             string  `json:"id"`
+	CollaboratorID string  `json:"collaboratorId"`
+	SettlementType string  `json:"settlementType"`
+	RequestID      string  `json:"requestId"`
+	Status         string  `json:"status"`
+	EffectiveDate  string  `json:"effectiveDate"`
+	BRLAmount      float64 `json:"brlAmount"`
+	GoldGramAmount float64 `json:"goldGramAmount"`
+	Notes          string  `json:"notes,omitempty"`
+	AuthorizedBy   string  `json:"authorizedBy,omitempty"`
+	AuthorizedAt   string  `json:"authorizedAt,omitempty"`
+}
+
+type ZeroGoldResult struct {
+	Settlement  JourneySettlementDTO `json:"settlement"`
+	LedgerEntry LedgerEntryDTO       `json:"ledgerEntry"`
+}

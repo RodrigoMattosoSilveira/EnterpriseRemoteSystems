@@ -16,6 +16,10 @@ type Repository interface {
 	FindValueUnitByID(ctx context.Context, valueUnitID string) (*db.ReferenceData, error)
 	HasReversal(ctx context.Context, entryID string) (bool, error)
 	CreateCorrectionEntries(ctx context.Context, entries ...*db.LedgerEntry) error
+	FindValueUnitByCode(ctx context.Context, code string) (*db.ReferenceData, error)
+	FindSettlementByRequestID(ctx context.Context, collaboratorID, requestID string) (*db.JourneySettlement, error)
+	FindLedgerEntryBySource(ctx context.Context, sourceType, sourceID string) (*db.LedgerEntry, error)
+	CreateSettlementWithEntries(ctx context.Context, settlement *db.JourneySettlement, entries ...*db.LedgerEntry) error
 }
 
 type normalizedLedgerEntryListFilter struct {

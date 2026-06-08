@@ -77,3 +77,20 @@ func ValidateReplaceLedgerEntryRequest(req ReplaceLedgerEntryRequest, authorized
 	}
 	return nil
 }
+
+func ValidateZeroGoldRequest(req ZeroGoldRequest, authorizedBy string) error {
+	fields := map[string]string{}
+	if strings.TrimSpace(authorizedBy) == "" {
+		fields["authorizedBy"] = "Required"
+	}
+	if strings.TrimSpace(req.RequestID) == "" {
+		fields["requestId"] = "Required"
+	}
+	if _, err := parseDate(req.EffectiveDate); err != nil {
+		fields["effectiveDate"] = "Effective date must be YYYY-MM-DD"
+	}
+	if len(fields) > 0 {
+		return ValidationError{Fields: fields}
+	}
+	return nil
+}
