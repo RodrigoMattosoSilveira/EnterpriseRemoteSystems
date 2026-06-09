@@ -73,6 +73,14 @@ func writeSettlementAuthorizationError(c fiber.Ctx, err error) error {
 	return c.Status(fiber.StatusForbidden).JSON(httpx.APIResponse{Error: &httpx.APIError{Code: "forbidden", Message: "Ledger settlement authorization failed"}})
 }
 
+func (h *Handler) FinancialProjection(c fiber.Ctx) error {
+	result, err := h.service.FinancialProjection(c.Context(), c.Params("collaboratorId"))
+	if err != nil {
+		return httpx.WriteError(c, err)
+	}
+	return c.JSON(httpx.APIResponse{Data: result})
+}
+
 func (h *Handler) SettlementPreview(c fiber.Ctx) error {
 	result, err := h.service.SettlementPreview(c.Context(), c.Params("collaboratorId"))
 	if err != nil {
