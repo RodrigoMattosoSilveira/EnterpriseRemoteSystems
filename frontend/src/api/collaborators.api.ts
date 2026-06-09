@@ -1,4 +1,5 @@
 import { apiFetch } from "./client";
+import type { FinancialProjection } from "../types/financialProjection";
 import type {
   Collaborator,
   CollaboratorListFilter,
@@ -53,4 +54,12 @@ export function createCollaborator(
     method: "POST",
     body: JSON.stringify(input),
   });
+}
+
+export function getCollaboratorFinancialProjection(
+  collaboratorId: string,
+): Promise<FinancialProjection> {
+  return apiFetch<FinancialProjection>(
+    `/collaborators/${encodeURIComponent(collaboratorId)}/financial-projection`,
+  );
 }
