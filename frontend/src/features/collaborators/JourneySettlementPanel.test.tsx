@@ -58,7 +58,10 @@ function renderPanel() {
   act(() =>
     root?.render(
       <QueryClientProvider client={client}>
-        <JourneySettlementPanel collaboratorId="collab-1" />
+        <JourneySettlementPanel
+          collaboratorId="collab-1"
+          projectedEndDate="2099-12-31"
+        />
       </QueryClientProvider>,
     ),
   );

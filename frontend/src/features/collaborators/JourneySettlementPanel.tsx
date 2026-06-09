@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { ApiErrorPanel } from "../../components/ApiErrorPanel";
+import { JourneyDaysRemaining } from "../../components/JourneyDaysRemaining";
 import type { SettlementPreview } from "../../types/settlements";
 import {
   useCloseJourney,
@@ -12,8 +13,10 @@ type Action = "ZERO_GOLD" | "PARTIAL_PAYOUT" | "CLOSE_JOURNEY";
 
 export function JourneySettlementPanel({
   collaboratorId,
+  projectedEndDate,
 }: {
   collaboratorId: string;
+  projectedEndDate: string;
 }) {
   const preview = useSettlementPreview(collaboratorId);
   const [action, setAction] = useState<Action | null>(null);
@@ -29,6 +32,10 @@ export function JourneySettlementPanel({
           <p className="mt-1 text-sm text-gray-500">
             Preview balances, pay outstanding credits, or close the Journey.
           </p>
+          <JourneyDaysRemaining
+            projectedEndDate={projectedEndDate}
+            className="mt-1 block text-sm"
+          />
         </div>
         <button
           type="button"
