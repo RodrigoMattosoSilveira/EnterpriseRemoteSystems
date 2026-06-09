@@ -7,6 +7,7 @@ import type { ReferenceDataItem } from "../../types/referenceData";
 import { useCollaborators } from "../collaborators/useCollaborators";
 import { useReferenceDataByType } from "../reference-data/useReferenceData";
 import { useCreateExpense } from "./useExpenses";
+import { CurrentAndFutureEarningsModal } from "./CurrentAndFutureEarningsModal";
 
 type FormState = {
   collaboratorId: string;
@@ -35,6 +36,7 @@ export function CreateExpensePage() {
 
   const [form, setForm] = useState<FormState>(initialForm);
   const [clientValidationError, setClientValidationError] = useState("");
+  const [showEarningsModal, setShowEarningsModal] = useState(false);
 
   const collaborators = useMemo(
     () => collaboratorsQuery.data?.items ?? [],
@@ -178,6 +180,16 @@ export function CreateExpensePage() {
               </select>
             </label>
 
+            {form.collaboratorId && (
+              <button
+                className="text-left text-sm font-semibold text-gray-700 underline"
+                type="button"
+                onClick={() => setShowEarningsModal(true)}
+              >
+                View current and future earnings
+              </button>
+            )}
+
             <label className="block text-sm font-medium text-gray-700">
               Expense Category *
               <select
@@ -263,6 +275,13 @@ export function CreateExpensePage() {
           </form>
         )}
       </section>
+
+      {showEarningsModal && form.collaboratorId && (
+        <CurrentAndFutureEarningsModal
+          collaboratorId={form.collaboratorId}
+          onClose={() => setShowEarningsModal(false)}
+        />
+      )}
     </main>
   );
 }
