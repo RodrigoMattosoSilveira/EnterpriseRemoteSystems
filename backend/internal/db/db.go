@@ -37,7 +37,7 @@ func Open(path string) (*gorm.DB, error) {
 }
 
 func AutoMigrate(database *gorm.DB) error {
-	return database.AutoMigrate(&Tenant{}, &ReferenceData{}, &Person{}, &CollaboratorJourney{}, &Expense{}, &LedgerEntry{}, &JourneySettlement{}, &WorkPeriod{}, &WorkPeriodAssignment{}, &GoldProductionEntry{}, &AccrualRun{}, &AccrualItem{})
+	return database.AutoMigrate(&Tenant{}, &ReferenceData{}, &Person{}, &CollaboratorJourney{}, &Expense{}, &LedgerEntry{}, &JourneySettlement{}, &LedgerReceipt{}, &WorkPeriod{}, &WorkPeriodAssignment{}, &GoldProductionEntry{}, &AccrualRun{}, &AccrualItem{})
 }
 
 func ensureDir(path string) error {
