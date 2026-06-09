@@ -11,6 +11,7 @@ type Repository interface {
 	ListEntries(ctx context.Context, collaboratorID string, filter normalizedLedgerEntryListFilter) ([]db.LedgerEntry, int64, error)
 	ListBalances(ctx context.Context, collaboratorID string) ([]BalanceRow, error)
 	FindCollaboratorByID(ctx context.Context, collaboratorID string) (*db.CollaboratorJourney, error)
+	ListRecentDailyGoldProduction(ctx context.Context, locationID string, limit int) ([]DailyGoldProductionRow, error)
 	CountPendingAccrualItems(ctx context.Context, collaboratorID string) (int64, error)
 	FindEntryByID(ctx context.Context, entryID string) (*db.LedgerEntry, error)
 	FindValueUnitByID(ctx context.Context, valueUnitID string) (*db.ReferenceData, error)
@@ -43,4 +44,9 @@ type BalanceRow struct {
 	ValueUnitCode     string
 	ValueUnitLabel    string
 	Balance           float64
+}
+
+type DailyGoldProductionRow struct {
+	ProductionDate time.Time
+	GoldGrams      float64
 }

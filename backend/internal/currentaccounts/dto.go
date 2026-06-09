@@ -151,3 +151,40 @@ type CloseJourneyResult struct {
 	JourneyStatus string               `json:"journeyStatus"`
 	ClosedAt      string               `json:"closedAt"`
 }
+
+const (
+	ProjectionMethodFixedBRL                  = "FIXED_BRL"
+	ProjectionMethodDailyBRL                  = "DAILY_BRL"
+	ProjectionMethodGoldCommission            = "GOLD_COMMISSION"
+	ProjectionMethodDiscreteLowerMedianLast10 = "DISCRETE_LOWER_MEDIAN_LAST_10_RECORDED_DATES"
+	ProjectionMethodMostRecentNonZero         = "MOST_RECENT_NON_ZERO"
+	ProjectionWarningNoGoldProductionHistory  = "NO_GOLD_PRODUCTION_HISTORY"
+)
+
+type ProjectionAmountsDTO struct {
+	BRLAmount      *float64 `json:"brlAmount"`
+	GoldGramAmount *float64 `json:"goldGramAmount"`
+}
+
+type FinancialProjectionBasisDTO struct {
+	ProjectionDate           string   `json:"projectionDate"`
+	JourneyEndDate           string   `json:"journeyEndDate"`
+	PeriodsPerDay            int      `json:"periodsPerDay"`
+	RemainingWorkPeriods     int      `json:"remainingWorkPeriods"`
+	LocationID               string   `json:"locationId,omitempty"`
+	LocationLabel            string   `json:"locationLabel,omitempty"`
+	ProductionMethod         string   `json:"productionMethod,omitempty"`
+	ProductionDatesAvailable int      `json:"productionDatesAvailable"`
+	ProductionValueUsed      *float64 `json:"productionValueUsed,omitempty"`
+	Warning                  string   `json:"warning,omitempty"`
+}
+
+type FinancialProjectionDTO struct {
+	CollaboratorID         string                      `json:"collaboratorId"`
+	CollaboratorLabel      string                      `json:"collaboratorLabel,omitempty"`
+	PaymentMethodCode      string                      `json:"paymentMethodCode"`
+	CurrentBalances        ProjectionAmountsDTO        `json:"currentBalances"`
+	ProjectedEarnings      ProjectionAmountsDTO        `json:"projectedEarnings"`
+	ProjectedFinalBalances ProjectionAmountsDTO        `json:"projectedFinalBalances"`
+	Projection             FinancialProjectionBasisDTO `json:"projection"`
+}

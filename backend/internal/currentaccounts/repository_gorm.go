@@ -77,11 +77,29 @@ func (r *gormRepository) FindCollaboratorByID(ctx context.Context, collaboratorI
 	err := r.db.WithContext(ctx).
 		Preload("Person").
 		Preload("Status").
+		Preload("PaymentMethod").
+		Preload("Location").
 		First(&row, "id = ? AND tenant_id = ?", collaboratorID, defaultTenantID).Error
 	if err != nil {
 		return nil, err
 	}
 	return &row, nil
+}
+
+func (r *gormRepository) ListRecentDailyGoldProduction(ctx context.Context, locationID string, limit int) ([]DailyGoldProductionRow, error) {
+	if limit <= 0 {
+		return []DailyGoldProductionRow{}, nil
+	}
+	var rows []DailyGoldProductionRow
+	err := r.db.WithContext(ctx).
+		Table("gold_production_entries").
+		Select("production_date, SUM(gold_grams_produced) AS gold_grams").
+		Where("tenant_id = ? AND location_id = ? AND active = ?", defaultTenantID, locationID, true).
+		Group("production_date").
+		Order("production_date DESC").
+		Limit(limit).
+		Scan(&rows).Error
+	return rows, err
 }
 
 func (r *gormRepository) CountPendingAccrualItems(ctx context.Context, collaboratorID string) (int64, error) {
