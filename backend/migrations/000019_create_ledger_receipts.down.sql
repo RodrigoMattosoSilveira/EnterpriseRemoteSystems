@@ -1,0 +1,9 @@
+DROP INDEX IF EXISTS idx_ledger_receipts_tenant_collaborator_status;
+DROP INDEX IF EXISTS idx_ledger_receipts_cancelled_by;
+DROP INDEX IF EXISTS idx_ledger_receipts_received_by;
+DROP INDEX IF EXISTS idx_ledger_receipts_issued_by;
+DROP INDEX IF EXISTS idx_ledger_receipts_receipt_type;
+DROP INDEX IF EXISTS idx_ledger_receipts_status;
+DROP INDEX IF EXISTS idx_ledger_receipts_collaborator_id;
+DROP INDEX IF EXISTS idx_ledger_receipts_tenant_id;
+DROP TABLE IF EXISTS ledger_receipts;

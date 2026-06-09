@@ -29,6 +29,7 @@ type Tenant struct {
 	AccrualItems          []AccrualItem          `gorm:"foreignKey:TenantID" json:"accrualItems,omitempty"`
 	LedgerEntries         []LedgerEntry          `gorm:"foreignKey:TenantID" json:"ledgerEntries,omitempty"`
 	JourneySettlements    []JourneySettlement    `gorm:"foreignKey:TenantID" json:"journeySettlements,omitempty"`
+	LedgerReceipts        []LedgerReceipt        `gorm:"foreignKey:TenantID" json:"ledgerReceipts,omitempty"`
 }
 
 type CollaboratorJourney struct {
@@ -66,6 +67,7 @@ type CollaboratorJourney struct {
 	Task               ReferenceData       `gorm:"foreignKey:TaskID;constraint:OnUpdate:Restrict,OnDelete:Restrict;" json:"task,omitempty"`
 	Status             ReferenceData       `gorm:"foreignKey:StatusID;constraint:OnUpdate:Restrict,OnDelete:Restrict;" json:"status,omitempty"`
 	JourneySettlements []JourneySettlement `gorm:"foreignKey:CollaboratorID" json:"journeySettlements,omitempty"`
+	LedgerReceipts     []LedgerReceipt     `gorm:"foreignKey:CollaboratorID" json:"ledgerReceipts,omitempty"`
 }
 
 type ReferenceData struct {
@@ -158,6 +160,32 @@ type JourneySettlement struct {
 
 	Tenant       Tenant              `gorm:"foreignKey:TenantID;constraint:OnUpdate:Restrict,OnDelete:Restrict;" json:"tenant,omitempty"`
 	Collaborator CollaboratorJourney `gorm:"foreignKey:CollaboratorID;constraint:OnUpdate:Restrict,OnDelete:Restrict;" json:"collaborator,omitempty"`
+}
+
+type LedgerReceipt struct {
+	BaseModel
+
+	TenantID           string     `gorm:"type:text;not null;default:default;uniqueIndex:ux_ledger_receipts_tenant_number,priority:1;index" json:"tenantId"`
+	CollaboratorID     string     `gorm:"type:text;not null;index" json:"collaboratorId"`
+	LedgerEntryID      string     `gorm:"type:text;not null;uniqueIndex" json:"ledgerEntryId"`
+	ReceiptNumber      *string    `gorm:"type:text;uniqueIndex:ux_ledger_receipts_tenant_number,priority:2" json:"receiptNumber,omitempty"`
+	ReceiptType        string     `gorm:"type:text;not null;default:LEDGER_DEBIT;index" json:"receiptType"`
+	Status             string     `gorm:"type:text;not null;default:PENDING_ISSUE;index" json:"status"`
+	IssuedAt           *time.Time `json:"issuedAt,omitempty"`
+	IssuedBy           string     `gorm:"type:text;index" json:"issuedBy,omitempty"`
+	PrintedAt          *time.Time `json:"printedAt,omitempty"`
+	SignedAt           *time.Time `json:"signedAt,omitempty"`
+	ReturnedAt         *time.Time `json:"returnedAt,omitempty"`
+	ReceivedBy         string     `gorm:"type:text;index" json:"receivedBy,omitempty"`
+	SignedDocumentRef  string     `gorm:"type:text" json:"signedDocumentRef,omitempty"`
+	CancelledAt        *time.Time `json:"cancelledAt,omitempty"`
+	CancelledBy        string     `gorm:"type:text;index" json:"cancelledBy,omitempty"`
+	CancellationReason string     `gorm:"type:text" json:"cancellationReason,omitempty"`
+	Notes              string     `gorm:"type:text" json:"notes,omitempty"`
+
+	Tenant       Tenant              `gorm:"foreignKey:TenantID;constraint:OnUpdate:Restrict,OnDelete:Restrict;" json:"tenant,omitempty"`
+	Collaborator CollaboratorJourney `gorm:"foreignKey:CollaboratorID;constraint:OnUpdate:Restrict,OnDelete:Restrict;" json:"collaborator,omitempty"`
+	LedgerEntry  LedgerEntry         `gorm:"foreignKey:LedgerEntryID;constraint:OnUpdate:Restrict,OnDelete:Restrict;" json:"ledgerEntry,omitempty"`
 }
 
 type WorkPeriod struct {
@@ -278,4 +306,5 @@ type LedgerEntry struct {
 	Tenant       Tenant              `gorm:"foreignKey:TenantID;constraint:OnUpdate:Restrict,OnDelete:Restrict;" json:"tenant,omitempty"`
 	Collaborator CollaboratorJourney `gorm:"foreignKey:CollaboratorID;constraint:OnUpdate:Restrict,OnDelete:Restrict;" json:"collaborator,omitempty"`
 	ValueUnit    ReferenceData       `gorm:"foreignKey:ValueUnitID;constraint:OnUpdate:Restrict,OnDelete:Restrict;" json:"valueUnit,omitempty"`
+	Receipt      *LedgerReceipt      `gorm:"foreignKey:LedgerEntryID" json:"receipt,omitempty"`
 }
