@@ -1,5 +1,6 @@
 import { Link, useLocation } from "react-router-dom";
 import { ApiErrorPanel } from "../../components/ApiErrorPanel";
+import { JourneyDaysRemaining } from "../../components/JourneyDaysRemaining";
 import type { Collaborator } from "../../types/collaborators";
 import { useCollaborators } from "./useCollaborators";
 
@@ -88,7 +89,8 @@ export function CollaboratorsListPage() {
           <div className="rounded-2xl border bg-white p-8 text-center shadow-sm">
             <h2 className="text-lg font-semibold">No collaborators yet</h2>
             <p className="mt-2 text-sm text-gray-500">
-              Create a Collaborator after the related Person profile is complete.
+              Create a Collaborator after the related Person profile is
+              complete.
             </p>
             <Link
               to="/expenses"
@@ -137,13 +139,19 @@ export function CollaboratorsListPage() {
                       <td className="p-3 text-gray-700">
                         <div>{formatDate(collaborator.journeyStartDate)}</div>
                         <div className="text-xs text-gray-500">
-                          Projected end: {formatDate(collaborator.projectedEndDate)}
+                          Projected end:{" "}
+                          {formatDate(collaborator.projectedEndDate)}
                         </div>
+                        <JourneyDaysRemaining
+                          projectedEndDate={collaborator.projectedEndDate}
+                          className="mt-1 block text-xs"
+                        />
                       </td>
                       <td className="p-3 text-gray-700">
                         <div>{collaborator.taskLabel || "—"}</div>
                         <div className="text-xs text-gray-500">
-                          {collaborator.sectorLabel || "—"} · {collaborator.locationLabel || "—"}
+                          {collaborator.sectorLabel || "—"} ·{" "}
+                          {collaborator.locationLabel || "—"}
                         </div>
                       </td>
                       <td className="p-3 text-gray-700">
@@ -153,7 +161,11 @@ export function CollaboratorsListPage() {
                         </div>
                       </td>
                       <td className="p-3">
-                        <StatusBadge label={collaborator.statusLabel || collaborator.statusId} />
+                        <StatusBadge
+                          label={
+                            collaborator.statusLabel || collaborator.statusId
+                          }
+                        />
                       </td>
                     </tr>
                   ))}
@@ -163,7 +175,10 @@ export function CollaboratorsListPage() {
 
             <div className="divide-y md:hidden">
               {collaborators.map((collaborator) => (
-                <CollaboratorCard key={collaborator.id} collaborator={collaborator} />
+                <CollaboratorCard
+                  key={collaborator.id}
+                  collaborator={collaborator}
+                />
               ))}
             </div>
           </div>
@@ -187,15 +202,25 @@ function CollaboratorCard({ collaborator }: { collaborator: Collaborator }) {
             </p>
           )}
           <p className="text-sm text-gray-500">
-            {collaborator.taskLabel || "—"} · {collaborator.locationLabel || "—"}
+            {collaborator.taskLabel || "—"} ·{" "}
+            {collaborator.locationLabel || "—"}
           </p>
         </div>
-        <StatusBadge label={collaborator.statusLabel || collaborator.statusId} />
+        <StatusBadge
+          label={collaborator.statusLabel || collaborator.statusId}
+        />
       </div>
 
       <div className="mt-4 grid gap-2 text-sm text-gray-700">
         <Info label="Start" value={formatDate(collaborator.journeyStartDate)} />
-        <Info label="Projected End" value={formatDate(collaborator.projectedEndDate)} />
+        <Info
+          label="Projected End"
+          value={formatDate(collaborator.projectedEndDate)}
+        />
+        <JourneyDaysRemaining
+          projectedEndDate={collaborator.projectedEndDate}
+          className="text-right text-sm"
+        />
         <Info label="Payment" value={formatMoney(collaborator.paymentValue)} />
         <Info label="Method" value={collaborator.paymentMethodLabel || "—"} />
       </div>
