@@ -1,6 +1,7 @@
 import { useMemo, useState, type FormEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { ApiErrorPanel } from "../../components/ApiErrorPanel";
+import { JourneyDaysRemaining } from "../../components/JourneyDaysRemaining";
 import type { Collaborator } from "../../types/collaborators";
 import type { CreateExpenseInput } from "../../types/expenses";
 import type { ReferenceDataItem } from "../../types/referenceData";
@@ -57,12 +58,22 @@ export function CreateExpensePage() {
   );
 
   const isLoading =
-    collaboratorsQuery.isLoading || categoriesQuery.isLoading || valueUnitsQuery.isLoading;
-  const loadError = collaboratorsQuery.error || categoriesQuery.error || valueUnitsQuery.error;
+    collaboratorsQuery.isLoading ||
+    categoriesQuery.isLoading ||
+    valueUnitsQuery.isLoading;
+  const loadError =
+    collaboratorsQuery.error || categoriesQuery.error || valueUnitsQuery.error;
   const hasMissingSetup =
-    activeCollaborators.length === 0 || categories.length === 0 || valueUnits.length === 0;
+    activeCollaborators.length === 0 ||
+    categories.length === 0 ||
+    valueUnits.length === 0;
 
-  const selectedValueUnit = valueUnits.find((row) => row.id === form.valueUnitId);
+  const selectedCollaborator = activeCollaborators.find(
+    (row) => row.id === form.collaboratorId,
+  );
+  const selectedValueUnit = valueUnits.find(
+    (row) => row.id === form.valueUnitId,
+  );
 
   const submit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -114,7 +125,10 @@ export function CreateExpensePage() {
     <main className="min-h-screen bg-gray-50">
       <header className="sticky top-0 z-10 border-b bg-white/95 px-4 py-4 backdrop-blur">
         <div className="mx-auto max-w-3xl">
-          <Link className="text-sm font-semibold text-gray-600 underline" to="/expenses">
+          <Link
+            className="text-sm font-semibold text-gray-600 underline"
+            to="/expenses"
+          >
             Back to Expenses
           </Link>
           <div className="mt-4">
@@ -154,13 +168,17 @@ export function CreateExpensePage() {
         )}
 
         {!isLoading && !loadError && !hasMissingSetup && (
-          <form onSubmit={submit} className="space-y-4 rounded-2xl border bg-white p-5 shadow-sm">
+          <form
+            onSubmit={submit}
+            className="space-y-4 rounded-2xl border bg-white p-5 shadow-sm"
+          >
             <section>
               <h2 className="text-lg font-semibold text-gray-950">
                 Expense Details
               </h2>
               <p className="mt-1 text-sm text-gray-500">
-                Pick the active Collaborator and how this deduction is denominated.
+                Pick the active Collaborator and how this deduction is
+                denominated.
               </p>
             </section>
 
@@ -169,7 +187,12 @@ export function CreateExpensePage() {
               <select
                 className="mt-1 w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-gray-950 shadow-sm"
                 value={form.collaboratorId}
-                onChange={(event) => setForm((current) => ({ ...current, collaboratorId: event.target.value }))}
+                onChange={(event) =>
+                  setForm((current) => ({
+                    ...current,
+                    collaboratorId: event.target.value,
+                  }))
+                }
               >
                 <option value="">Select a Collaborator</option>
                 {activeCollaborators.map((collaborator) => (
@@ -180,14 +203,20 @@ export function CreateExpensePage() {
               </select>
             </label>
 
-            {form.collaboratorId && (
-              <button
-                className="text-left text-sm font-semibold text-gray-700 underline"
-                type="button"
-                onClick={() => setShowEarningsModal(true)}
-              >
-                View current and future earnings
-              </button>
+            {selectedCollaborator && (
+              <div className="flex flex-col items-start gap-1">
+                <JourneyDaysRemaining
+                  projectedEndDate={selectedCollaborator.projectedEndDate}
+                  className="text-sm"
+                />
+                <button
+                  className="text-left text-sm font-semibold text-gray-700 underline"
+                  type="button"
+                  onClick={() => setShowEarningsModal(true)}
+                >
+                  View current and future earnings
+                </button>
+              </div>
             )}
 
             <label className="block text-sm font-medium text-gray-700">
@@ -195,7 +224,12 @@ export function CreateExpensePage() {
               <select
                 className="mt-1 w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-gray-950 shadow-sm"
                 value={form.expenseCategoryId}
-                onChange={(event) => setForm((current) => ({ ...current, expenseCategoryId: event.target.value }))}
+                onChange={(event) =>
+                  setForm((current) => ({
+                    ...current,
+                    expenseCategoryId: event.target.value,
+                  }))
+                }
               >
                 <option value="">Select a category</option>
                 {categories.map((category) => (
@@ -211,7 +245,12 @@ export function CreateExpensePage() {
               <select
                 className="mt-1 w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-gray-950 shadow-sm"
                 value={form.valueUnitId}
-                onChange={(event) => setForm((current) => ({ ...current, valueUnitId: event.target.value }))}
+                onChange={(event) =>
+                  setForm((current) => ({
+                    ...current,
+                    valueUnitId: event.target.value,
+                  }))
+                }
               >
                 <option value="">Select Real or Gold Gram</option>
                 {valueUnits.map((unit) => (
@@ -229,10 +268,19 @@ export function CreateExpensePage() {
                   className="mt-1 w-full rounded-xl border border-gray-300 px-3 py-2 text-gray-950 shadow-sm"
                   type="number"
                   min="0.01"
-                  step={selectedValueUnit?.code === "GOLD_GRAM" ? "0.001" : "0.01"}
+                  step={
+                    selectedValueUnit?.code === "GOLD_GRAM" ? "0.001" : "0.01"
+                  }
                   value={form.amount}
-                  onChange={(event) => setForm((current) => ({ ...current, amount: event.target.value }))}
-                  placeholder={selectedValueUnit?.code === "GOLD_GRAM" ? "1.250" : "100.00"}
+                  onChange={(event) =>
+                    setForm((current) => ({
+                      ...current,
+                      amount: event.target.value,
+                    }))
+                  }
+                  placeholder={
+                    selectedValueUnit?.code === "GOLD_GRAM" ? "1.250" : "100.00"
+                  }
                 />
               </label>
 
@@ -242,7 +290,12 @@ export function CreateExpensePage() {
                   className="mt-1 w-full rounded-xl border border-gray-300 px-3 py-2 text-gray-950 shadow-sm"
                   type="date"
                   value={form.expenseDate}
-                  onChange={(event) => setForm((current) => ({ ...current, expenseDate: event.target.value }))}
+                  onChange={(event) =>
+                    setForm((current) => ({
+                      ...current,
+                      expenseDate: event.target.value,
+                    }))
+                  }
                 />
               </label>
             </div>
@@ -252,7 +305,12 @@ export function CreateExpensePage() {
               <textarea
                 className="mt-1 min-h-24 w-full rounded-xl border border-gray-300 px-3 py-2 text-gray-950 shadow-sm"
                 value={form.description}
-                onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))}
+                onChange={(event) =>
+                  setForm((current) => ({
+                    ...current,
+                    description: event.target.value,
+                  }))
+                }
                 placeholder="Optional note about this expense"
               />
             </label>
@@ -312,11 +370,16 @@ function SetupWarning({
 function activeReferenceRows(rows: ReferenceDataItem[]) {
   return rows
     .filter((row) => row.active)
-    .sort((a, b) => a.sortOrder - b.sortOrder || a.label.localeCompare(b.label));
+    .sort(
+      (a, b) => a.sortOrder - b.sortOrder || a.label.localeCompare(b.label),
+    );
 }
 
 function isActiveCollaborator(collaborator: Collaborator) {
-  return !collaborator.closedAt && collaborator.statusId === "ref-collaborator-status-active";
+  return (
+    !collaborator.closedAt &&
+    collaborator.statusId === "ref-collaborator-status-active"
+  );
 }
 
 function compareCollaborators(a: Collaborator, b: Collaborator) {
@@ -324,7 +387,10 @@ function compareCollaborators(a: Collaborator, b: Collaborator) {
 }
 
 function collaboratorLabel(collaborator: Collaborator) {
-  const primary = collaborator.personNickname?.trim() || collaborator.personName?.trim() || "Collaborator";
+  const primary =
+    collaborator.personNickname?.trim() ||
+    collaborator.personName?.trim() ||
+    "Collaborator";
   const secondary = collaborator.personName?.trim();
   if (secondary && secondary !== primary) {
     return `${primary} (${secondary})`;
