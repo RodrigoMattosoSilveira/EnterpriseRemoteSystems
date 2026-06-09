@@ -6,6 +6,7 @@ type Service interface {
 	SettlementPreview(ctx context.Context, collaboratorID string) (*SettlementPreviewDTO, error)
 	ZeroGold(ctx context.Context, collaboratorID, authorizedBy string, req ZeroGoldRequest) (*ZeroGoldResult, error)
 	PartialPayout(ctx context.Context, collaboratorID, authorizedBy string, req PartialPayoutRequest) (*PartialPayoutResult, error)
+	CloseJourney(ctx context.Context, collaboratorID, authorizedBy string, req CloseJourneyRequest) (*CloseJourneyResult, error)
 	AuthorizeSettlement(providedKey string) error
 	GetDetail(ctx context.Context, collaboratorID string, filter LedgerEntryListFilter) (*CurrentAccountDetailDTO, error)
 	ListEntries(ctx context.Context, collaboratorID string, filter LedgerEntryListFilter) (*LedgerEntryListResult, error)
