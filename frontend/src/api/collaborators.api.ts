@@ -1,6 +1,16 @@
 import { apiFetch } from "./client";
 import type { FinancialProjection } from "../types/financialProjection";
 import type {
+  CloseJourneyInput,
+  CloseJourneyResult,
+  PartialPayoutInput,
+  PartialPayoutResult,
+  SettlementPreview,
+  ZeroGoldInput,
+  ZeroGoldResult,
+} from "../types/settlements";
+
+import type {
   Collaborator,
   CollaboratorListFilter,
   CollaboratorListResponse,
@@ -8,7 +18,7 @@ import type {
 } from "../types/collaborators";
 
 export async function listCollaborators(
-  filter: CollaboratorListFilter = {}
+  filter: CollaboratorListFilter = {},
 ): Promise<CollaboratorListResponse> {
   const searchParams = new URLSearchParams();
 
@@ -30,7 +40,7 @@ export async function listCollaborators(
 
   const query = searchParams.toString();
   const response = await apiFetch<CollaboratorListResponse | Collaborator[]>(
-    `/collaborators${query ? `?${query}` : ""}`
+    `/collaborators${query ? `?${query}` : ""}`,
   );
 
   if (Array.isArray(response)) {
@@ -48,7 +58,7 @@ export function getCollaborator(id: string): Promise<Collaborator> {
 }
 
 export function createCollaborator(
-  input: CreateCollaboratorInput
+  input: CreateCollaboratorInput,
 ): Promise<Collaborator> {
   return apiFetch<Collaborator>("/collaborators", {
     method: "POST",
@@ -62,4 +72,64 @@ export function getCollaboratorFinancialProjection(
   return apiFetch<FinancialProjection>(
     `/collaborators/${encodeURIComponent(collaboratorId)}/financial-projection`,
   );
+}
+
+export function getSettlementPreview(
+  collaboratorId: string,
+): Promise<SettlementPreview> {
+  return apiFetch<SettlementPreview>(
+    `/collaborators/${encodeURIComponent(collaboratorId)}/settlement-preview`,
+  );
+}
+
+export function zeroGold(
+  collaboratorId: string,
+  input: ZeroGoldInput,
+): Promise<ZeroGoldResult> {
+  const { settlementKey, authorizedBy, ...body } = input;
+  return apiFetch<ZeroGoldResult>(
+    `/collaborators/${encodeURIComponent(collaboratorId)}/zero-gold`,
+    {
+      method: "POST",
+      headers: settlementHeaders(settlementKey, authorizedBy),
+      body: JSON.stringify(body),
+    },
+  );
+}
+
+export function partialPayout(
+  collaboratorId: string,
+  input: PartialPayoutInput,
+): Promise<PartialPayoutResult> {
+  const { settlementKey, authorizedBy, ...body } = input;
+  return apiFetch<PartialPayoutResult>(
+    `/collaborators/${encodeURIComponent(collaboratorId)}/payout`,
+    {
+      method: "POST",
+      headers: settlementHeaders(settlementKey, authorizedBy),
+      body: JSON.stringify(body),
+    },
+  );
+}
+
+export function closeJourney(
+  collaboratorId: string,
+  input: CloseJourneyInput,
+): Promise<CloseJourneyResult> {
+  const { settlementKey, authorizedBy, ...body } = input;
+  return apiFetch<CloseJourneyResult>(
+    `/collaborators/${encodeURIComponent(collaboratorId)}/close`,
+    {
+      method: "POST",
+      headers: settlementHeaders(settlementKey, authorizedBy),
+      body: JSON.stringify(body),
+    },
+  );
+}
+
+function settlementHeaders(settlementKey: string, authorizedBy: string) {
+  return {
+    "X-Ledger-Settlement-Key": settlementKey,
+    "X-Authorized-By": authorizedBy,
+  };
 }

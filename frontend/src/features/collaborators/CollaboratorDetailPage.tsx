@@ -1,6 +1,7 @@
 import { Link, useParams } from "react-router-dom";
 import { ApiErrorPanel } from "../../components/ApiErrorPanel";
 import type { Collaborator } from "../../types/collaborators";
+import { JourneySettlementPanel } from "./JourneySettlementPanel";
 import { useCollaborator } from "./useCollaborators";
 
 export function CollaboratorDetailPage() {
@@ -181,6 +182,8 @@ export function CollaboratorDetailPage() {
             />
           </dl>
         </section>
+
+        <JourneySettlementPanel collaboratorId={collaborator.id} />
 
         <section className="rounded-2xl border bg-white p-5 shadow-sm lg:col-span-2">
           <h2 className="text-lg font-semibold text-gray-950">Notes</h2>
