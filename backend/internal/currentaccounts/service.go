@@ -3,6 +3,7 @@ package currentaccounts
 import "context"
 
 type Service interface {
+	FinancialProjection(ctx context.Context, collaboratorID string) (*FinancialProjectionDTO, error)
 	SettlementPreview(ctx context.Context, collaboratorID string) (*SettlementPreviewDTO, error)
 	ZeroGold(ctx context.Context, collaboratorID, authorizedBy string, req ZeroGoldRequest) (*ZeroGoldResult, error)
 	PartialPayout(ctx context.Context, collaboratorID, authorizedBy string, req PartialPayoutRequest) (*PartialPayoutResult, error)
