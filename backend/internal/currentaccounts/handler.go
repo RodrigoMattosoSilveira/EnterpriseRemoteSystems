@@ -164,3 +164,22 @@ func writeCorrectionError(c fiber.Ctx, err error) error {
 	}
 	return httpx.WriteError(c, err)
 }
+
+func (h *Handler) GetPrintableReceipt(c fiber.Ctx) error {
+	result, err := h.service.GetPrintableReceipt(c.Context(), c.Params("entryId"))
+	if err != nil {
+		return httpx.WriteError(c, err)
+	}
+	return c.JSON(httpx.APIResponse{Data: result})
+}
+
+func (h *Handler) PrintReceipt(c fiber.Ctx) error {
+	result, err := h.service.PrintReceipt(c.Context(), c.Params("entryId"), c.Get("X-Authorized-By"))
+	if err != nil {
+		if errors.Is(err, ErrReceiptCancelled) {
+			return c.Status(fiber.StatusConflict).JSON(httpx.APIResponse{Error: &httpx.APIError{Code: "receipt_cancelled", Message: err.Error()}})
+		}
+		return httpx.WriteError(c, err)
+	}
+	return c.JSON(httpx.APIResponse{Data: result})
+}
