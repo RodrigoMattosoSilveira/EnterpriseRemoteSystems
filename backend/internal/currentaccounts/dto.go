@@ -188,3 +188,25 @@ type FinancialProjectionDTO struct {
 	ProjectedFinalBalances ProjectionAmountsDTO        `json:"projectedFinalBalances"`
 	Projection             FinancialProjectionBasisDTO `json:"projection"`
 }
+
+type PrintableReceiptDTO struct {
+	ID                    string  `json:"id"`
+	ReceiptNumber         string  `json:"receiptNumber"`
+	ReceiptType           string  `json:"receiptType"`
+	Status                string  `json:"status"`
+	IssuedAt              string  `json:"issuedAt,omitempty"`
+	IssuedBy              string  `json:"issuedBy,omitempty"`
+	PrintedAt             string  `json:"printedAt,omitempty"`
+	LedgerEntryID         string  `json:"ledgerEntryId"`
+	EntryType             string  `json:"entryType"`
+	EffectiveDate         string  `json:"effectiveDate"`
+	ValueUnitCode         string  `json:"valueUnitCode"`
+	ValueUnitLabel        string  `json:"valueUnitLabel"`
+	Amount                float64 `json:"amount"`
+	Description           string  `json:"description,omitempty"`
+	CollaboratorID        string  `json:"collaboratorId"`
+	CollaboratorLabel     string  `json:"collaboratorLabel"`
+	CollaboratorLegalName string  `json:"collaboratorLegalName"`
+	CollaboratorCPF       string  `json:"collaboratorCpf"`
+	CreatedAt             string  `json:"createdAt"`
+}
