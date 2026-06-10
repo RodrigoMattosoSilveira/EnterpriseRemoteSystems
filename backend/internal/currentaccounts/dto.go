@@ -197,6 +197,11 @@ type PrintableReceiptDTO struct {
 	IssuedAt              string  `json:"issuedAt,omitempty"`
 	IssuedBy              string  `json:"issuedBy,omitempty"`
 	PrintedAt             string  `json:"printedAt,omitempty"`
+	SignedAt              string  `json:"signedAt,omitempty"`
+	ReturnedAt            string  `json:"returnedAt,omitempty"`
+	ReceivedBy            string  `json:"receivedBy,omitempty"`
+	SignedDocumentRef     string  `json:"signedDocumentRef,omitempty"`
+	Notes                 string  `json:"notes,omitempty"`
 	LedgerEntryID         string  `json:"ledgerEntryId"`
 	EntryType             string  `json:"entryType"`
 	EffectiveDate         string  `json:"effectiveDate"`
@@ -209,4 +214,9 @@ type PrintableReceiptDTO struct {
 	CollaboratorLegalName string  `json:"collaboratorLegalName"`
 	CollaboratorCPF       string  `json:"collaboratorCpf"`
 	CreatedAt             string  `json:"createdAt"`
+}
+
+type ReturnReceiptRequest struct {
+	SignedDocumentRef string `json:"signedDocumentRef"`
+	Notes             string `json:"notes"`
 }
