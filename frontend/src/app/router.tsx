@@ -16,6 +16,7 @@ import { CreateExpensePage } from "../features/expenses/CreateExpensePage";
 import { ExpenseDetailPage } from "../features/expenses/ExpenseDetailPage";
 import { WorkPeriodsPage } from "../features/planning/WorkPeriodsPage";
 import { WorkPeriodDetailPage } from "../features/planning/WorkPeriodDetailPage";
+import { PrintableReceiptPage } from "../features/receipts/PrintableReceiptPage";
 
 function RouteErrorPage() {
   const error = useRouteError();
@@ -69,6 +70,7 @@ export const router = createBrowserRouter([
       { path: "expenses/:id", element: <ExpenseDetailPage /> },
       { path: "work-periods", element: <WorkPeriodsPage /> },
       { path: "work-periods/:id", element: <WorkPeriodDetailPage /> },
+      { path: "ledger-entries/:entryId/receipt", element: <PrintableReceiptPage /> },
       { path: "admin/reference-data", element: <ReferenceDataAdminPage /> },
       { path: "*", element: <NotFoundPage /> },
     ],
