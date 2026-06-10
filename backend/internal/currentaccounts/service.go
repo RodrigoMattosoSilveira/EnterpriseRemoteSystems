@@ -5,6 +5,7 @@ import "context"
 type Service interface {
 	GetPrintableReceipt(ctx context.Context, ledgerEntryID string) (*PrintableReceiptDTO, error)
 	PrintReceipt(ctx context.Context, ledgerEntryID, printedBy string) (*PrintableReceiptDTO, error)
+	ReturnReceipt(ctx context.Context, ledgerEntryID, receivedBy string, req ReturnReceiptRequest) (*PrintableReceiptDTO, error)
 	FinancialProjection(ctx context.Context, collaboratorID string) (*FinancialProjectionDTO, error)
 	SettlementPreview(ctx context.Context, collaboratorID string) (*SettlementPreviewDTO, error)
 	ZeroGold(ctx context.Context, collaboratorID, authorizedBy string, req ZeroGoldRequest) (*ZeroGoldResult, error)

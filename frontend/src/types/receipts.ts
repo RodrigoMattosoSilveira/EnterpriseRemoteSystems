@@ -6,6 +6,11 @@ export type PrintableReceipt = {
   issuedAt?: string;
   issuedBy?: string;
   printedAt?: string;
+  signedAt?: string;
+  returnedAt?: string;
+  receivedBy?: string;
+  signedDocumentRef?: string;
+  notes?: string;
   ledgerEntryId: string;
   entryType: string;
   effectiveDate: string;
@@ -18,4 +23,9 @@ export type PrintableReceipt = {
   collaboratorLegalName: string;
   collaboratorCpf: string;
   createdAt: string;
+};
+
+export type ReturnReceiptRequest = {
+  signedDocumentRef: string;
+  notes: string;
 };

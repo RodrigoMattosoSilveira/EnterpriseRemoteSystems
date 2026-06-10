@@ -90,6 +90,24 @@ type apiBalancesResponse struct {
 	} `json:"data"`
 }
 
+type apiPrintableReceiptResponse struct {
+	Data struct {
+		ID                string `json:"id"`
+		ReceiptNumber     string `json:"receiptNumber"`
+		Status            string `json:"status"`
+		IssuedAt          string `json:"issuedAt"`
+		IssuedBy          string `json:"issuedBy"`
+		PrintedAt         string `json:"printedAt"`
+		SignedAt          string `json:"signedAt"`
+		ReturnedAt        string `json:"returnedAt"`
+		ReceivedBy        string `json:"receivedBy"`
+		SignedDocumentRef string `json:"signedDocumentRef"`
+		Notes             string `json:"notes"`
+		LedgerEntryID     string `json:"ledgerEntryId"`
+		CollaboratorID    string `json:"collaboratorId"`
+	} `json:"data"`
+}
+
 func TestAuthorizedLedgerReverseCreatesOppositeImmutableEntry(t *testing.T) {
 	server, cleanup := newTestServer(t)
 	defer cleanup()
@@ -238,6 +256,22 @@ func postSettlementJSON(t *testing.T, server *fiber.App, url string, payload map
 	return res
 }
 
+func postReceiptJSON(t *testing.T, server *fiber.App, url, authorizedBy string, payload map[string]any) *http.Response {
+	t.Helper()
+	body, err := json.Marshal(payload)
+	if err != nil {
+		t.Fatalf("marshal payload: %v", err)
+	}
+	req := httptest.NewRequest(http.MethodPost, url, bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Authorized-By", authorizedBy)
+	res, err := server.Test(req, fiber.TestConfig{Timeout: 0, FailOnTimeout: false})
+	if err != nil {
+		t.Fatalf("POST %s: %v", url, err)
+	}
+	return res
+}
+
 func listLedgerEntries(t *testing.T, server *fiber.App, collaboratorID string) apiLedgerEntryListResponse {
 	t.Helper()
 	res := getJSON(t, server, currentAccountsURL+collaboratorID+"/ledger-entries")
@@ -300,6 +334,64 @@ func TestExpenseCreatesDebitLedgerEntryAndNegativeCurrentAccountBalance(t *testi
 	balance := balances.Data[0]
 	if balance.CollaboratorID != collaborator.Data.ID || balance.CollaboratorLabel != "P1" || balance.ValueUnitCode != "BRL" || balance.Balance != -42.5 {
 		t.Fatalf("unexpected balance: %+v", balance)
+	}
+}
+
+func TestReceiptReturnRecordsSignedReturnedMetadata(t *testing.T) {
+	server, cleanup := newTestServer(t)
+	defer cleanup()
+
+	collaborator := createActiveCollaborator(t, server, 1)
+	createExpense(t, server, validExpensePayload(collaborator.Data.ID, nil))
+	entry := listLedgerEntries(t, server, collaborator.Data.ID).Data.Items[0]
+
+	printRes := postReceiptJSON(t, server, "/api/v1/ledger-entries/"+entry.ID+"/receipt/print", "office-admin@example.com", map[string]any{})
+	printRes.Body.Close()
+	if printRes.StatusCode != http.StatusOK {
+		t.Fatalf("expected print status %d, got %d", http.StatusOK, printRes.StatusCode)
+	}
+
+	returnRes := postReceiptJSON(t, server, "/api/v1/ledger-entries/"+entry.ID+"/receipt/return", "receiver@example.com", map[string]any{
+		"signedDocumentRef": "receipt-scans/RCP-001.pdf",
+		"notes":             "Returned by collaborator after signature.",
+	})
+	defer returnRes.Body.Close()
+	if returnRes.StatusCode != http.StatusOK {
+		var body apiErrorResponse
+		decodeJSON(t, returnRes, &body)
+		t.Fatalf("expected return status %d, got %d error=%+v", http.StatusOK, returnRes.StatusCode, body.Error)
+	}
+	var body apiPrintableReceiptResponse
+	decodeJSON(t, returnRes, &body)
+	if body.Data.Status != "RETURNED" || body.Data.ReceivedBy != "receiver@example.com" || body.Data.SignedDocumentRef != "receipt-scans/RCP-001.pdf" {
+		t.Fatalf("unexpected returned receipt: %+v", body.Data)
+	}
+	if body.Data.SignedAt == "" || body.Data.ReturnedAt == "" || body.Data.PrintedAt == "" {
+		t.Fatalf("expected signed, returned, and printed timestamps, got %+v", body.Data)
+	}
+	if body.Data.Notes != "Returned by collaborator after signature." {
+		t.Fatalf("unexpected receipt notes: %+v", body.Data)
+	}
+}
+
+func TestReceiptReturnRejectsSecondReturn(t *testing.T) {
+	server, cleanup := newTestServer(t)
+	defer cleanup()
+
+	collaborator := createActiveCollaborator(t, server, 1)
+	createExpense(t, server, validExpensePayload(collaborator.Data.ID, nil))
+	entry := listLedgerEntries(t, server, collaborator.Data.ID).Data.Items[0]
+
+	first := postReceiptJSON(t, server, "/api/v1/ledger-entries/"+entry.ID+"/receipt/return", "receiver@example.com", map[string]any{})
+	first.Body.Close()
+	if first.StatusCode != http.StatusOK {
+		t.Fatalf("expected first return status %d, got %d", http.StatusOK, first.StatusCode)
+	}
+
+	second := postReceiptJSON(t, server, "/api/v1/ledger-entries/"+entry.ID+"/receipt/return", "receiver@example.com", map[string]any{})
+	defer second.Body.Close()
+	if second.StatusCode != http.StatusConflict {
+		t.Fatalf("expected second return conflict status %d, got %d", http.StatusConflict, second.StatusCode)
 	}
 }
 

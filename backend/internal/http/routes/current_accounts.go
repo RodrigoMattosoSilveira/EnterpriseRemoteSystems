@@ -10,6 +10,7 @@ func RegisterCurrentAccountRoutes(v1 fiber.Router, deps Dependencies) {
 	ledger := v1.Group("/ledger-entries")
 	ledger.Get("/:entryId/receipt", deps.CurrentAccountHandler.GetPrintableReceipt)
 	ledger.Post("/:entryId/receipt/print", deps.CurrentAccountHandler.PrintReceipt)
+	ledger.Post("/:entryId/receipt/return", deps.CurrentAccountHandler.ReturnReceipt)
 	ledger.Post("/:entryId/reverse", deps.CurrentAccountHandler.ReverseEntry)
 	ledger.Post("/:entryId/replace", deps.CurrentAccountHandler.ReplaceEntry)
 }
