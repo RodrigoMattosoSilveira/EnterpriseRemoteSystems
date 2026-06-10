@@ -31,17 +31,19 @@ docker exec ers-dev-backend curl -i http://localhost:8080/api/v1/healthz
 
 ## Verify migration:
 
+```bash
 docker compose \
   -p ers-dev \
   --env-file .env.development \
   -f docker-compose.server.yml \
   run --rm --no-deps --entrypoint sh backend -lc '
-sqlite3 /app/data/app.db "
-SELECT filename
-FROM schema_migrations
-WHERE filename = \"000015_create_accrual_runs_and_items.up.sql\";
-"
+sqlite3 /app/data/app.db ".schema ledger_receipts"
 '
+
+docker exec ers-dev-backend \
+  sqlite3 /app/data/app.db \
+  'SELECT filename FROM schema_migrations WHERE filename = "000019_create_ledger_receipts.up.sql";'
+```
 
 # 2. Promote development to test
 ```bash
@@ -71,12 +73,12 @@ docker compose \
   --env-file .env.test \
   -f docker-compose.server.yml \
   run --rm --no-deps --entrypoint sh backend -lc '
-sqlite3 /app/data/app.db "
-SELECT filename
-FROM schema_migrations
-WHERE filename = \"000015_create_accrual_runs_and_items.up.sql\";
-"
+sqlite3 /app/data/app.db ".schema ledger_receipts"
 '
+
+docker exec ers-tst-backend \
+  sqlite3 /app/data/app.db \
+  'SELECT filename FROM schema_migrations WHERE filename = "000019_create_ledger_receipts.up.sql";'
 ```
 
 # 3. Promote test to production
@@ -108,10 +110,10 @@ docker compose \
   --env-file .env.production \
   -f docker-compose.server.yml \
   run --rm --no-deps --entrypoint sh backend -lc '
-sqlite3 /app/data/app.db "
-SELECT filename
-FROM schema_migrations
-WHERE filename = \"000015_create_accrual_runs_and_items.up.sql\";
-"
+sqlite3 /app/data/app.db ".schema ledger_receipts"
 '
-```bash
+
+docker exec ers-prd-backend \
+  sqlite3 /app/data/app.db \
+  'SELECT filename FROM schema_migrations WHERE filename = "000019_create_ledger_receipts.up.sql";'
+```
