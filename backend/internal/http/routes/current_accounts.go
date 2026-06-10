@@ -8,6 +8,8 @@ func RegisterCurrentAccountRoutes(v1 fiber.Router, deps Dependencies) {
 	r.Get("/:collaboratorId/ledger-entries", deps.CurrentAccountHandler.ListEntries)
 
 	ledger := v1.Group("/ledger-entries")
+	ledger.Get("/:entryId/receipt", deps.CurrentAccountHandler.GetPrintableReceipt)
+	ledger.Post("/:entryId/receipt/print", deps.CurrentAccountHandler.PrintReceipt)
 	ledger.Post("/:entryId/reverse", deps.CurrentAccountHandler.ReverseEntry)
 	ledger.Post("/:entryId/replace", deps.CurrentAccountHandler.ReplaceEntry)
 }

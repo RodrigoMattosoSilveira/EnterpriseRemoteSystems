@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { ApiErrorPanel } from "../../components/ApiErrorPanel";
 import { JourneyDaysRemaining } from "../../components/JourneyDaysRemaining";
 import type { SettlementPreview } from "../../types/settlements";
@@ -21,6 +22,7 @@ export function JourneySettlementPanel({
   const preview = useSettlementPreview(collaboratorId);
   const [action, setAction] = useState<Action | null>(null);
   const [message, setMessage] = useState("");
+  const [receiptEntryIds, setReceiptEntryIds] = useState<string[]>([]);
 
   return (
     <section className="rounded-2xl border bg-white p-5 shadow-sm lg:col-span-2">
@@ -64,6 +66,15 @@ export function JourneySettlementPanel({
           {message}
         </p>
       ) : null}
+      {receiptEntryIds.length > 0 ? (
+        <div className="mt-3 flex flex-wrap gap-3">
+          {receiptEntryIds.map((entryId, index) => (
+            <Link key={entryId} className="text-sm font-semibold text-gray-800 underline" target="_blank" to={`/ledger-entries/${entryId}/receipt`}>
+              Print receipt{receiptEntryIds.length > 1 ? ` ${index + 1}` : ""}
+            </Link>
+          ))}
+        </div>
+      ) : null}
 
       {preview.data ? (
         <>
@@ -106,8 +117,9 @@ export function JourneySettlementPanel({
           collaboratorId={collaboratorId}
           preview={preview.data}
           onClose={() => setAction(null)}
-          onSuccess={(text) => {
+          onSuccess={(text, entryIds) => {
             setMessage(text);
+            setReceiptEntryIds(entryIds);
             setAction(null);
           }}
         />
@@ -161,7 +173,7 @@ function SettlementDialog({
   collaboratorId: string;
   preview: SettlementPreview;
   onClose: () => void;
-  onSuccess: (message: string) => void;
+  onSuccess: (message: string, ledgerEntryIds: string[]) => void;
 }) {
   const zeroGold = useZeroGold(collaboratorId);
   const payout = usePartialPayout(collaboratorId);
@@ -196,21 +208,21 @@ function SettlementDialog({
       requestId: crypto.randomUUID(),
     };
     if (action === "ZERO_GOLD") {
-      await zeroGold.mutateAsync(base);
-      onSuccess("Gold payout posted successfully.");
+      const result = await zeroGold.mutateAsync(base);
+      onSuccess("Gold payout posted successfully.", [result.ledgerEntry.id]);
       return;
     }
     if (action === "PARTIAL_PAYOUT") {
-      await payout.mutateAsync({
+      const result = await payout.mutateAsync({
         ...base,
         brlAmount: Number(brlAmount || 0),
         goldGramAmount: Number(goldAmount || 0),
       });
-      onSuccess("Partial payout posted successfully.");
+      onSuccess("Partial payout posted successfully.", result.ledgerEntries.map((entry) => entry.id));
       return;
     }
-    await closeJourney.mutateAsync({ ...base, confirm: true });
-    onSuccess("Journey closed successfully.");
+    const result = await closeJourney.mutateAsync({ ...base, confirm: true });
+    onSuccess("Journey closed successfully.", result.ledgerEntries.map((entry) => entry.id));
   }
 
   return (

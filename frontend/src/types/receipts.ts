@@ -1,0 +1,21 @@
+export type PrintableReceipt = {
+  id: string;
+  receiptNumber: string;
+  receiptType: string;
+  status: string;
+  issuedAt?: string;
+  issuedBy?: string;
+  printedAt?: string;
+  ledgerEntryId: string;
+  entryType: string;
+  effectiveDate: string;
+  valueUnitCode: string;
+  valueUnitLabel: string;
+  amount: number;
+  description?: string;
+  collaboratorId: string;
+  collaboratorLabel: string;
+  collaboratorLegalName: string;
+  collaboratorCpf: string;
+  createdAt: string;
+};

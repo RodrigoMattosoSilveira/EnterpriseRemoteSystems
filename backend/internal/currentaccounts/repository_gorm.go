@@ -244,3 +244,55 @@ func (r *gormRepository) CloseJourneyWithSettlement(ctx context.Context, collabo
 		return nil
 	})
 }
+
+func (r *gormRepository) FindReceiptByLedgerEntryID(ctx context.Context, ledgerEntryID string) (*db.LedgerReceipt, error) {
+	var row db.LedgerReceipt
+	err := r.db.WithContext(ctx).
+		Preload("LedgerEntry.ValueUnit").
+		Preload("Collaborator.Person").
+		First(&row, "ledger_entry_id = ? AND tenant_id = ?", ledgerEntryID, defaultTenantID).Error
+	if err != nil {
+		return nil, err
+	}
+	return &row, nil
+}
+
+func (r *gormRepository) MarkReceiptPrinted(ctx context.Context, receiptID, printedBy string, printedAt time.Time) (*db.LedgerReceipt, error) {
+	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var row db.LedgerReceipt
+		if err := tx.First(&row, "id = ? AND tenant_id = ?", receiptID, defaultTenantID).Error; err != nil {
+			return err
+		}
+		if row.Status == "CANCELLED" {
+			return ErrReceiptCancelled
+		}
+		updates := map[string]any{
+			"printed_at": printedAt,
+			"updated_at": printedAt,
+		}
+		if row.IssuedAt == nil {
+			updates["issued_at"] = printedAt
+			updates["issued_by"] = printedBy
+		}
+		if row.Status == "PENDING_ISSUE" || row.Status == "ISSUED" || row.Status == "PRINTED" {
+			updates["status"] = "PRINTED"
+		}
+		return tx.Model(&db.LedgerReceipt{}).Where("id = ? AND tenant_id = ?", receiptID, defaultTenantID).Updates(updates).Error
+	})
+	if err != nil {
+		return nil, err
+	}
+	return r.FindReceiptByID(ctx, receiptID)
+}
+
+func (r *gormRepository) FindReceiptByID(ctx context.Context, receiptID string) (*db.LedgerReceipt, error) {
+	var row db.LedgerReceipt
+	err := r.db.WithContext(ctx).
+		Preload("LedgerEntry.ValueUnit").
+		Preload("Collaborator.Person").
+		First(&row, "id = ? AND tenant_id = ?", receiptID, defaultTenantID).Error
+	if err != nil {
+		return nil, err
+	}
+	return &row, nil
+}
