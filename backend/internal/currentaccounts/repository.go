@@ -8,6 +8,10 @@ import (
 )
 
 type Repository interface {
+	CountDebitLedgerEntries(ctx context.Context) (int64, error)
+	CountDebitLedgerEntriesWithReceipts(ctx context.Context) (int64, error)
+	ListDebitLedgerEntriesMissingReceipts(ctx context.Context) ([]db.LedgerEntry, error)
+	CreateLedgerReceipts(ctx context.Context, receipts ...*db.LedgerReceipt) error
 	ListOutstandingReceipts(ctx context.Context, filter normalizedReceiptListFilter) ([]db.LedgerReceipt, int64, error)
 	CountOutstandingReceiptsByStatus(ctx context.Context) (map[string]int64, error)
 	FindReceiptByLedgerEntryID(ctx context.Context, ledgerEntryID string) (*db.LedgerReceipt, error)

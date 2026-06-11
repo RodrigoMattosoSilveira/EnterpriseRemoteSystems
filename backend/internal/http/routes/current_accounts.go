@@ -5,6 +5,7 @@ import "github.com/gofiber/fiber/v3"
 func RegisterCurrentAccountRoutes(v1 fiber.Router, deps Dependencies) {
 	receipts := v1.Group("/receipts")
 	receipts.Get("/outstanding", deps.CurrentAccountHandler.ListOutstandingReceipts)
+	receipts.Post("/backfill-debit-ledger-entries", deps.CurrentAccountHandler.BackfillDebitLedgerReceipts)
 
 	r := v1.Group("/current-accounts")
 	r.Get("/:collaboratorId/balances", deps.CurrentAccountHandler.ListBalances)
