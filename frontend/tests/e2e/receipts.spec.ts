@@ -35,9 +35,9 @@ test("outstanding receipt appears, can be opened, and disappears after signed re
     collaborator.id,
     description,
   );
-  const outstanding = await listOutstandingReceipts(request);
-  const receipt = outstanding.items.find(
-    (item) => item.ledgerEntryId === ledgerEntry.id,
+  const receipt = await findOutstandingReceiptByLedgerEntryId(
+    request,
+    ledgerEntry.id,
   );
   expect(receipt).toBeDefined();
   expect(receipt?.status).toBe("PENDING_ISSUE");
@@ -66,10 +66,11 @@ test("outstanding receipt appears, can be opened, and disappears after signed re
   expect(returnedReceipt.status).toBe("RETURNED");
   expect(returnedReceipt.receivedBy).toBe("receipt-e2e@example.com");
 
-  const refreshedOutstanding = await listOutstandingReceipts(request);
-  expect(
-    refreshedOutstanding.items.some((item) => item.ledgerEntryId === ledgerEntry.id),
-  ).toBe(false);
+  const refreshedReceipt = await findOutstandingReceiptByLedgerEntryId(
+    request,
+    ledgerEntry.id,
+  );
+  expect(refreshedReceipt).toBeUndefined();
 });
 
 type ApiEnvelope<T> = {
@@ -174,12 +175,32 @@ async function findLedgerEntryForDescription(
   return entry;
 }
 
-async function listOutstandingReceipts(api: APIRequestContext): Promise<OutstandingReceiptListResult> {
-  const response = await api.get("/api/v1/receipts/outstanding?pageSize=200");
+async function listOutstandingReceipts(api: APIRequestContext, page = 1): Promise<OutstandingReceiptListResult> {
+  const response = await api.get(`/api/v1/receipts/outstanding?pageSize=200&page=${page}`);
   expect(response.ok()).toBeTruthy();
   const body = (await response.json()) as ApiEnvelope<OutstandingReceiptListResult>;
   if (!body.data) throw new Error("Outstanding receipts response did not include data");
   return body.data;
+}
+
+async function findOutstandingReceiptByLedgerEntryId(
+  api: APIRequestContext,
+  ledgerEntryId: string,
+): Promise<PrintableReceipt | undefined> {
+  let page = 1;
+  let searched = 0;
+
+  while (true) {
+    const outstanding = await listOutstandingReceipts(api, page);
+    const receipt = outstanding.items.find((item) => item.ledgerEntryId === ledgerEntryId);
+    if (receipt) return receipt;
+
+    searched += outstanding.items.length;
+    if (searched >= outstanding.total || outstanding.items.length === 0) {
+      return undefined;
+    }
+    page += 1;
+  }
 }
 
 async function getPrintableReceipt(api: APIRequestContext, ledgerEntryId: string): Promise<PrintableReceipt> {
