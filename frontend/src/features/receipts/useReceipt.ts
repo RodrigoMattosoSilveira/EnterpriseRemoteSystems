@@ -1,6 +1,19 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { getPrintableReceipt, markReceiptPrinted, markReceiptReturned } from "../../api/receipts.api";
-import type { ReturnReceiptRequest } from "../../types/receipts";
+import {
+  getPrintableReceipt,
+  listOutstandingReceipts,
+  markReceiptPrinted,
+  markReceiptReturned,
+} from "../../api/receipts.api";
+import type { OutstandingReceiptListFilter, ReturnReceiptRequest } from "../../types/receipts";
+
+
+export function useOutstandingReceipts(filter: OutstandingReceiptListFilter) {
+  return useQuery({
+    queryKey: ["outstanding-receipts", filter],
+    queryFn: () => listOutstandingReceipts(filter),
+  });
+}
 
 export function usePrintableReceipt(ledgerEntryId: string) {
   return useQuery({

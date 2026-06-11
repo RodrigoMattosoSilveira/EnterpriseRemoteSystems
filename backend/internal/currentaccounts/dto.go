@@ -189,6 +189,55 @@ type FinancialProjectionDTO struct {
 	Projection             FinancialProjectionBasisDTO `json:"projection"`
 }
 
+type ReceiptListFilter struct {
+	Status   string `query:"status"`
+	Page     int    `query:"page"`
+	PageSize int    `query:"pageSize"`
+}
+
+type OutstandingReceiptDTO struct {
+	ID                    string  `json:"id"`
+	ReceiptNumber         string  `json:"receiptNumber"`
+	ReceiptType           string  `json:"receiptType"`
+	Status                string  `json:"status"`
+	IssuedAt              string  `json:"issuedAt,omitempty"`
+	IssuedBy              string  `json:"issuedBy,omitempty"`
+	PrintedAt             string  `json:"printedAt,omitempty"`
+	SignedAt              string  `json:"signedAt,omitempty"`
+	ReturnedAt            string  `json:"returnedAt,omitempty"`
+	ReceivedBy            string  `json:"receivedBy,omitempty"`
+	SignedDocumentRef     string  `json:"signedDocumentRef,omitempty"`
+	Notes                 string  `json:"notes,omitempty"`
+	LedgerEntryID         string  `json:"ledgerEntryId"`
+	EntryType             string  `json:"entryType"`
+	EffectiveDate         string  `json:"effectiveDate"`
+	ValueUnitCode         string  `json:"valueUnitCode"`
+	ValueUnitLabel        string  `json:"valueUnitLabel"`
+	Amount                float64 `json:"amount"`
+	Description           string  `json:"description,omitempty"`
+	CollaboratorID        string  `json:"collaboratorId"`
+	CollaboratorLabel     string  `json:"collaboratorLabel"`
+	CollaboratorLegalName string  `json:"collaboratorLegalName"`
+	CollaboratorCPF       string  `json:"collaboratorCpf"`
+	CreatedAt             string  `json:"createdAt"`
+}
+
+type ReceiptStatusSummaryDTO struct {
+	PendingIssue int64 `json:"pendingIssue"`
+	Issued       int64 `json:"issued"`
+	Printed      int64 `json:"printed"`
+	Signed       int64 `json:"signed"`
+	Total        int64 `json:"total"`
+}
+
+type OutstandingReceiptListResult struct {
+	Items    []OutstandingReceiptDTO `json:"items"`
+	Total    int64                   `json:"total"`
+	Page     int                     `json:"page"`
+	PageSize int                     `json:"pageSize"`
+	Summary  ReceiptStatusSummaryDTO `json:"summary"`
+}
+
 type PrintableReceiptDTO struct {
 	ID                    string  `json:"id"`
 	ReceiptNumber         string  `json:"receiptNumber"`

@@ -337,6 +337,32 @@ func TestExpenseCreatesDebitLedgerEntryAndNegativeCurrentAccountBalance(t *testi
 	}
 }
 
+type apiOutstandingReceiptListResponse struct {
+	Data struct {
+		Items []struct {
+			ID                string  `json:"id"`
+			ReceiptNumber     string  `json:"receiptNumber"`
+			Status            string  `json:"status"`
+			LedgerEntryID     string  `json:"ledgerEntryId"`
+			CollaboratorID    string  `json:"collaboratorId"`
+			CollaboratorLabel string  `json:"collaboratorLabel"`
+			EntryType         string  `json:"entryType"`
+			ValueUnitCode     string  `json:"valueUnitCode"`
+			Amount            float64 `json:"amount"`
+		} `json:"items"`
+		Total    int `json:"total"`
+		Page     int `json:"page"`
+		PageSize int `json:"pageSize"`
+		Summary  struct {
+			PendingIssue int `json:"pendingIssue"`
+			Issued       int `json:"issued"`
+			Printed      int `json:"printed"`
+			Signed       int `json:"signed"`
+			Total        int `json:"total"`
+		} `json:"summary"`
+	} `json:"data"`
+}
+
 func TestReceiptReturnRecordsSignedReturnedMetadata(t *testing.T) {
 	server, cleanup := newTestServer(t)
 	defer cleanup()
@@ -392,6 +418,62 @@ func TestReceiptReturnRejectsSecondReturn(t *testing.T) {
 	defer second.Body.Close()
 	if second.StatusCode != http.StatusConflict {
 		t.Fatalf("expected second return conflict status %d, got %d", http.StatusConflict, second.StatusCode)
+	}
+}
+
+func TestOutstandingReceiptsListsOnlyUnreturnedActionItems(t *testing.T) {
+	server, cleanup := newTestServer(t)
+	defer cleanup()
+
+	collaborator := createActiveCollaborator(t, server, 1)
+	createExpense(t, server, validExpensePayload(collaborator.Data.ID, map[string]any{
+		"description": "First receipt remains outstanding",
+		"amount":      10.0,
+	}))
+	createExpense(t, server, validExpensePayload(collaborator.Data.ID, map[string]any{
+		"description": "Second receipt is returned",
+		"amount":      20.0,
+	}))
+	entries := listLedgerEntries(t, server, collaborator.Data.ID).Data.Items
+	if len(entries) != 2 {
+		t.Fatalf("expected two ledger entries, got %+v", entries)
+	}
+
+	returnRes := postReceiptJSON(t, server, "/api/v1/ledger-entries/"+entries[0].ID+"/receipt/return", "receiver@example.com", map[string]any{
+		"signedDocumentRef": "returned.pdf",
+	})
+	returnRes.Body.Close()
+	if returnRes.StatusCode != http.StatusOK {
+		t.Fatalf("expected return status %d, got %d", http.StatusOK, returnRes.StatusCode)
+	}
+
+	res := getJSON(t, server, "/api/v1/receipts/outstanding")
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("expected outstanding receipt status %d, got %d", http.StatusOK, res.StatusCode)
+	}
+	var body apiOutstandingReceiptListResponse
+	decodeJSON(t, res, &body)
+	if body.Data.Total != 1 || len(body.Data.Items) != 1 {
+		t.Fatalf("expected one outstanding receipt, got %+v", body.Data)
+	}
+	item := body.Data.Items[0]
+	if item.Status != "PENDING_ISSUE" || item.LedgerEntryID == entries[0].ID || item.CollaboratorID != collaborator.Data.ID || item.ValueUnitCode != "BRL" || item.Amount != 10.0 {
+		t.Fatalf("unexpected outstanding receipt: %+v", item)
+	}
+	if body.Data.Summary.PendingIssue != 1 || body.Data.Summary.Total != 1 {
+		t.Fatalf("unexpected outstanding summary: %+v", body.Data.Summary)
+	}
+
+	printedRes := getJSON(t, server, "/api/v1/receipts/outstanding?status=PRINTED")
+	defer printedRes.Body.Close()
+	if printedRes.StatusCode != http.StatusOK {
+		t.Fatalf("expected printed filter status %d, got %d", http.StatusOK, printedRes.StatusCode)
+	}
+	var printedBody apiOutstandingReceiptListResponse
+	decodeJSON(t, printedRes, &printedBody)
+	if printedBody.Data.Total != 0 || len(printedBody.Data.Items) != 0 {
+		t.Fatalf("expected no printed receipts, got %+v", printedBody.Data)
 	}
 }
 
