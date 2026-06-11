@@ -269,3 +269,12 @@ type ReturnReceiptRequest struct {
 	SignedDocumentRef string `json:"signedDocumentRef"`
 	Notes             string `json:"notes"`
 }
+
+type ReceiptBackfillResult struct {
+	EligibleDebitEntries int64  `json:"eligibleDebitEntries"`
+	ExistingReceipts     int64  `json:"existingReceipts"`
+	MissingReceipts      int64  `json:"missingReceipts"`
+	CreatedReceipts      int64  `json:"createdReceipts"`
+	DryRun               bool   `json:"dryRun"`
+	RequestedBy          string `json:"requestedBy"`
+}
