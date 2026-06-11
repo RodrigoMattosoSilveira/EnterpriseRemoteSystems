@@ -29,3 +29,27 @@ export type ReturnReceiptRequest = {
   signedDocumentRef: string;
   notes: string;
 };
+
+export type OutstandingReceipt = PrintableReceipt;
+
+export type ReceiptStatusSummary = {
+  pendingIssue: number;
+  issued: number;
+  printed: number;
+  signed: number;
+  total: number;
+};
+
+export type OutstandingReceiptListResult = {
+  items: OutstandingReceipt[];
+  total: number;
+  page: number;
+  pageSize: number;
+  summary: ReceiptStatusSummary;
+};
+
+export type OutstandingReceiptListFilter = {
+  status?: string;
+  page?: number;
+  pageSize?: number;
+};

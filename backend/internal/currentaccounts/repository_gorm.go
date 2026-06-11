@@ -16,6 +16,63 @@ type gormRepository struct{ db *gorm.DB }
 
 func NewRepository(database *gorm.DB) Repository { return &gormRepository{db: database} }
 
+func (r *gormRepository) ListOutstandingReceipts(ctx context.Context, filter normalizedReceiptListFilter) ([]db.LedgerReceipt, int64, error) {
+	var rows []db.LedgerReceipt
+	var total int64
+	statuses := []string{"PENDING_ISSUE", "ISSUED", "PRINTED", "SIGNED"}
+
+	q := r.db.WithContext(ctx).
+		Model(&db.LedgerReceipt{}).
+		Where("tenant_id = ?", defaultTenantID).
+		Preload("LedgerEntry.ValueUnit").
+		Preload("Collaborator.Person")
+
+	if filter.Status != "" {
+		q = q.Where("status = ?", filter.Status)
+	} else {
+		q = q.Where("status IN ?", statuses)
+	}
+
+	if err := q.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+	err := q.
+		Order(`CASE status
+			WHEN 'PENDING_ISSUE' THEN 1
+			WHEN 'ISSUED' THEN 2
+			WHEN 'PRINTED' THEN 3
+			WHEN 'SIGNED' THEN 4
+			ELSE 9
+		END ASC`).
+		Order("created_at ASC, id ASC").
+		Limit(filter.PageSize).
+		Offset((filter.Page - 1) * filter.PageSize).
+		Find(&rows).Error
+	return rows, total, err
+}
+
+func (r *gormRepository) CountOutstandingReceiptsByStatus(ctx context.Context) (map[string]int64, error) {
+	type statusCount struct {
+		Status string
+		Count  int64
+	}
+	var rows []statusCount
+	err := r.db.WithContext(ctx).
+		Model(&db.LedgerReceipt{}).
+		Select("status, COUNT(*) AS count").
+		Where("tenant_id = ? AND status IN ?", defaultTenantID, []string{"PENDING_ISSUE", "ISSUED", "PRINTED", "SIGNED"}).
+		Group("status").
+		Scan(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+	out := map[string]int64{"PENDING_ISSUE": 0, "ISSUED": 0, "PRINTED": 0, "SIGNED": 0}
+	for _, row := range rows {
+		out[row.Status] = row.Count
+	}
+	return out, nil
+}
+
 func (r *gormRepository) ListEntries(ctx context.Context, collaboratorID string, filter normalizedLedgerEntryListFilter) ([]db.LedgerEntry, int64, error) {
 	var rows []db.LedgerEntry
 	var total int64

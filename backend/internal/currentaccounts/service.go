@@ -3,6 +3,7 @@ package currentaccounts
 import "context"
 
 type Service interface {
+	ListOutstandingReceipts(ctx context.Context, filter ReceiptListFilter) (*OutstandingReceiptListResult, error)
 	GetPrintableReceipt(ctx context.Context, ledgerEntryID string) (*PrintableReceiptDTO, error)
 	PrintReceipt(ctx context.Context, ledgerEntryID, printedBy string) (*PrintableReceiptDTO, error)
 	ReturnReceipt(ctx context.Context, ledgerEntryID, receivedBy string, req ReturnReceiptRequest) (*PrintableReceiptDTO, error)
