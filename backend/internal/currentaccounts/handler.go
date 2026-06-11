@@ -2,6 +2,7 @@ package currentaccounts
 
 import (
 	"errors"
+	"strings"
 
 	"github.com/gofiber/fiber/v3"
 
@@ -208,6 +209,14 @@ func (h *Handler) ListOutstandingReceipts(c fiber.Ctx) error {
 		return httpx.WriteError(c, err)
 	}
 	result, err := h.service.ListOutstandingReceipts(c.Context(), filter)
+	if err != nil {
+		return httpx.WriteError(c, err)
+	}
+	return c.JSON(httpx.APIResponse{Data: result})
+}
+func (h *Handler) BackfillDebitLedgerReceipts(c fiber.Ctx) error {
+	dryRun := strings.EqualFold(strings.TrimSpace(c.Query("dryRun")), "true")
+	result, err := h.service.BackfillDebitLedgerReceipts(c.Context(), c.Get("X-Authorized-By"), dryRun)
 	if err != nil {
 		return httpx.WriteError(c, err)
 	}
