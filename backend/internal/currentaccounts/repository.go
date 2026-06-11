@@ -8,6 +8,8 @@ import (
 )
 
 type Repository interface {
+	ListOutstandingReceipts(ctx context.Context, filter normalizedReceiptListFilter) ([]db.LedgerReceipt, int64, error)
+	CountOutstandingReceiptsByStatus(ctx context.Context) (map[string]int64, error)
 	FindReceiptByLedgerEntryID(ctx context.Context, ledgerEntryID string) (*db.LedgerReceipt, error)
 	MarkReceiptPrinted(ctx context.Context, receiptID, printedBy string, printedAt time.Time) (*db.LedgerReceipt, error)
 	MarkReceiptReturned(ctx context.Context, receiptID, receivedBy, signedDocumentRef, notes string, returnedAt time.Time) (*db.LedgerReceipt, error)
@@ -27,6 +29,12 @@ type Repository interface {
 	CreateSettlementWithEntries(ctx context.Context, settlement *db.JourneySettlement, entries ...*db.LedgerEntry) error
 	FindCollaboratorStatusByCode(ctx context.Context, code string) (*db.ReferenceData, error)
 	CloseJourneyWithSettlement(ctx context.Context, collaboratorID, finishedStatusID string, closedAt time.Time, settlement *db.JourneySettlement, entries ...*db.LedgerEntry) error
+}
+
+type normalizedReceiptListFilter struct {
+	Status   string
+	Page     int
+	PageSize int
 }
 
 type normalizedLedgerEntryListFilter struct {

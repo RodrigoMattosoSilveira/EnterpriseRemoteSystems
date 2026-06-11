@@ -3,6 +3,9 @@ package routes
 import "github.com/gofiber/fiber/v3"
 
 func RegisterCurrentAccountRoutes(v1 fiber.Router, deps Dependencies) {
+	receipts := v1.Group("/receipts")
+	receipts.Get("/outstanding", deps.CurrentAccountHandler.ListOutstandingReceipts)
+
 	r := v1.Group("/current-accounts")
 	r.Get("/:collaboratorId/balances", deps.CurrentAccountHandler.ListBalances)
 	r.Get("/:collaboratorId/ledger-entries", deps.CurrentAccountHandler.ListEntries)

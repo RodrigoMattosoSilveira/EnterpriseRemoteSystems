@@ -201,3 +201,15 @@ func (h *Handler) ReturnReceipt(c fiber.Ctx) error {
 	}
 	return c.JSON(httpx.APIResponse{Data: result})
 }
+
+func (h *Handler) ListOutstandingReceipts(c fiber.Ctx) error {
+	var filter ReceiptListFilter
+	if err := c.Bind().Query(&filter); err != nil {
+		return httpx.WriteError(c, err)
+	}
+	result, err := h.service.ListOutstandingReceipts(c.Context(), filter)
+	if err != nil {
+		return httpx.WriteError(c, err)
+	}
+	return c.JSON(httpx.APIResponse{Data: result})
+}
