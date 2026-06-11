@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { getPrintableReceipt, markReceiptPrinted } from "../../api/receipts.api";
+import { getPrintableReceipt, markReceiptPrinted, markReceiptReturned } from "../../api/receipts.api";
+import type { ReturnReceiptRequest } from "../../types/receipts";
 
 export function usePrintableReceipt(ledgerEntryId: string) {
   return useQuery({
@@ -13,6 +14,15 @@ export function usePrintReceipt(ledgerEntryId: string) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (authorizedBy: string) => markReceiptPrinted(ledgerEntryId, authorizedBy),
+    onSuccess: (receipt) => queryClient.setQueryData(["ledger-receipt", ledgerEntryId], receipt),
+  });
+}
+
+export function useReturnReceipt(ledgerEntryId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ authorizedBy, payload }: { authorizedBy: string; payload: ReturnReceiptRequest }) =>
+      markReceiptReturned(ledgerEntryId, authorizedBy, payload),
     onSuccess: (receipt) => queryClient.setQueryData(["ledger-receipt", ledgerEntryId], receipt),
   });
 }

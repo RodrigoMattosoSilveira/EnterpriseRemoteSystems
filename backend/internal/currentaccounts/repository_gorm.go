@@ -2,6 +2,7 @@ package currentaccounts
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	"enterpriseremotesystems/backend/internal/db"
@@ -276,6 +277,45 @@ func (r *gormRepository) MarkReceiptPrinted(ctx context.Context, receiptID, prin
 		}
 		if row.Status == "PENDING_ISSUE" || row.Status == "ISSUED" || row.Status == "PRINTED" {
 			updates["status"] = "PRINTED"
+		}
+		return tx.Model(&db.LedgerReceipt{}).Where("id = ? AND tenant_id = ?", receiptID, defaultTenantID).Updates(updates).Error
+	})
+	if err != nil {
+		return nil, err
+	}
+	return r.FindReceiptByID(ctx, receiptID)
+}
+
+func (r *gormRepository) MarkReceiptReturned(ctx context.Context, receiptID, receivedBy, signedDocumentRef, notes string, returnedAt time.Time) (*db.LedgerReceipt, error) {
+	receivedBy = strings.TrimSpace(receivedBy)
+	signedDocumentRef = strings.TrimSpace(signedDocumentRef)
+	notes = strings.TrimSpace(notes)
+	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var row db.LedgerReceipt
+		if err := tx.First(&row, "id = ? AND tenant_id = ?", receiptID, defaultTenantID).Error; err != nil {
+			return err
+		}
+		if row.Status == "CANCELLED" {
+			return ErrReceiptCancelled
+		}
+		if row.Status == "RETURNED" {
+			return ErrReceiptAlreadyReturned
+		}
+		updates := map[string]any{
+			"signed_at":           returnedAt,
+			"returned_at":         returnedAt,
+			"received_by":         receivedBy,
+			"signed_document_ref": signedDocumentRef,
+			"notes":               notes,
+			"status":              "RETURNED",
+			"updated_at":          returnedAt,
+		}
+		if row.IssuedAt == nil {
+			updates["issued_at"] = returnedAt
+			updates["issued_by"] = receivedBy
+		}
+		if row.PrintedAt == nil {
+			updates["printed_at"] = returnedAt
 		}
 		return tx.Model(&db.LedgerReceipt{}).Where("id = ? AND tenant_id = ?", receiptID, defaultTenantID).Updates(updates).Error
 	})
