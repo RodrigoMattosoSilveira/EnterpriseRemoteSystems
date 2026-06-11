@@ -183,3 +183,21 @@ func (h *Handler) PrintReceipt(c fiber.Ctx) error {
 	}
 	return c.JSON(httpx.APIResponse{Data: result})
 }
+
+func (h *Handler) ReturnReceipt(c fiber.Ctx) error {
+	var req ReturnReceiptRequest
+	if err := c.Bind().Body(&req); err != nil {
+		return httpx.WriteError(c, err)
+	}
+	result, err := h.service.ReturnReceipt(c.Context(), c.Params("entryId"), c.Get("X-Authorized-By"), req)
+	if err != nil {
+		if errors.Is(err, ErrReceiptCancelled) {
+			return c.Status(fiber.StatusConflict).JSON(httpx.APIResponse{Error: &httpx.APIError{Code: "receipt_cancelled", Message: err.Error()}})
+		}
+		if errors.Is(err, ErrReceiptAlreadyReturned) {
+			return c.Status(fiber.StatusConflict).JSON(httpx.APIResponse{Error: &httpx.APIError{Code: "receipt_already_returned", Message: err.Error()}})
+		}
+		return httpx.WriteError(c, err)
+	}
+	return c.JSON(httpx.APIResponse{Data: result})
+}

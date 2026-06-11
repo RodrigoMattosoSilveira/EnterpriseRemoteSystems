@@ -9,7 +9,10 @@ import (
 	"enterpriseremotesystems/backend/internal/db"
 )
 
-var ErrReceiptCancelled = errors.New("receipt is cancelled")
+var (
+	ErrReceiptCancelled       = errors.New("receipt is cancelled")
+	ErrReceiptAlreadyReturned = errors.New("receipt is already returned")
+)
 
 func (s *service) GetPrintableReceipt(ctx context.Context, ledgerEntryID string) (*PrintableReceiptDTO, error) {
 	receipt, err := s.repo.FindReceiptByLedgerEntryID(ctx, strings.TrimSpace(ledgerEntryID))
@@ -35,11 +38,29 @@ func (s *service) PrintReceipt(ctx context.Context, ledgerEntryID, printedBy str
 	return toPrintableReceiptDTO(*receipt), nil
 }
 
+func (s *service) ReturnReceipt(ctx context.Context, ledgerEntryID, receivedBy string, req ReturnReceiptRequest) (*PrintableReceiptDTO, error) {
+	receivedBy = strings.TrimSpace(receivedBy)
+	if receivedBy == "" {
+		return nil, ValidationError{Fields: map[string]string{"authorizedBy": "Authorized by is required"}}
+	}
+	receipt, err := s.repo.FindReceiptByLedgerEntryID(ctx, strings.TrimSpace(ledgerEntryID))
+	if err != nil {
+		return nil, err
+	}
+	receipt, err = s.repo.MarkReceiptReturned(ctx, receipt.ID, receivedBy, req.SignedDocumentRef, req.Notes, time.Now().UTC())
+	if err != nil {
+		return nil, err
+	}
+	return toPrintableReceiptDTO(*receipt), nil
+}
+
 func toPrintableReceiptDTO(row db.LedgerReceipt) *PrintableReceiptDTO {
 	person := row.Collaborator.Person
 	return &PrintableReceiptDTO{
 		ID: row.ID, ReceiptNumber: stringPtrValue(row.ReceiptNumber), ReceiptType: row.ReceiptType, Status: row.Status,
 		IssuedAt: formatOptionalTime(row.IssuedAt), IssuedBy: row.IssuedBy, PrintedAt: formatOptionalTime(row.PrintedAt),
+		SignedAt: formatOptionalTime(row.SignedAt), ReturnedAt: formatOptionalTime(row.ReturnedAt), ReceivedBy: row.ReceivedBy,
+		SignedDocumentRef: row.SignedDocumentRef, Notes: row.Notes,
 		LedgerEntryID: row.LedgerEntryID, EntryType: row.LedgerEntry.EntryType, EffectiveDate: formatDate(row.LedgerEntry.EffectiveDate),
 		ValueUnitCode: row.LedgerEntry.ValueUnit.Code, ValueUnitLabel: row.LedgerEntry.ValueUnit.Label, Amount: row.LedgerEntry.Amount, Description: row.LedgerEntry.Description,
 		CollaboratorID: row.CollaboratorID, CollaboratorLabel: collaboratorLabel(person),
