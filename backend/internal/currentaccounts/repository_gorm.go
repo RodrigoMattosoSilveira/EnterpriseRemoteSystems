@@ -393,3 +393,44 @@ func (r *gormRepository) FindReceiptByID(ctx context.Context, receiptID string) 
 	}
 	return &row, nil
 }
+
+func (r *gormRepository) CountDebitLedgerEntries(ctx context.Context) (int64, error) {
+	var count int64
+	err := r.db.WithContext(ctx).
+		Model(&db.LedgerEntry{}).
+		Where("tenant_id = ? AND direction = ?", defaultTenantID, ledgerDirectionDebit).
+		Count(&count).Error
+	return count, err
+}
+
+func (r *gormRepository) CountDebitLedgerEntriesWithReceipts(ctx context.Context) (int64, error) {
+	var count int64
+	err := r.db.WithContext(ctx).
+		Table("ledger_entries AS le").
+		Joins("JOIN ledger_receipts AS lr ON lr.ledger_entry_id = le.id AND lr.tenant_id = le.tenant_id").
+		Where("le.tenant_id = ? AND le.direction = ?", defaultTenantID, ledgerDirectionDebit).
+		Count(&count).Error
+	return count, err
+}
+
+func (r *gormRepository) ListDebitLedgerEntriesMissingReceipts(ctx context.Context) ([]db.LedgerEntry, error) {
+	var rows []db.LedgerEntry
+	err := r.db.WithContext(ctx).
+		Model(&db.LedgerEntry{}).
+		Joins("LEFT JOIN ledger_receipts AS lr ON lr.ledger_entry_id = ledger_entries.id AND lr.tenant_id = ledger_entries.tenant_id").
+		Where("ledger_entries.tenant_id = ? AND ledger_entries.direction = ? AND lr.id IS NULL", defaultTenantID, ledgerDirectionDebit).
+		Order("ledger_entries.created_at ASC, ledger_entries.id ASC").
+		Find(&rows).Error
+	return rows, err
+}
+
+func (r *gormRepository) CreateLedgerReceipts(ctx context.Context, receipts ...*db.LedgerReceipt) error {
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		for _, receipt := range receipts {
+			if err := tx.Create(receipt).Error; err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+}
