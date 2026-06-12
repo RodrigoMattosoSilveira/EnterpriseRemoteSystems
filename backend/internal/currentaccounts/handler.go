@@ -6,6 +6,7 @@ import (
 
 	"github.com/gofiber/fiber/v3"
 
+	"enterpriseremotesystems/backend/internal/authz"
 	"enterpriseremotesystems/backend/internal/shared/httpx"
 )
 
@@ -175,7 +176,14 @@ func (h *Handler) GetPrintableReceipt(c fiber.Ctx) error {
 }
 
 func (h *Handler) PrintReceipt(c fiber.Ctx) error {
-	result, err := h.service.PrintReceipt(c.Context(), c.Params("entryId"), c.Get("X-Authorized-By"))
+	actor, authorized, err := requireReceiptPermission(c, authz.PermissionLedgerReceiptsPrint)
+	if err != nil {
+		return err
+	}
+	if !authorized {
+		return nil
+	}
+	result, err := h.service.PrintReceipt(c.Context(), c.Params("entryId"), actor.ID)
 	if err != nil {
 		if errors.Is(err, ErrReceiptCancelled) {
 			return c.Status(fiber.StatusConflict).JSON(httpx.APIResponse{Error: &httpx.APIError{Code: "receipt_cancelled", Message: err.Error()}})
@@ -186,11 +194,18 @@ func (h *Handler) PrintReceipt(c fiber.Ctx) error {
 }
 
 func (h *Handler) ReturnReceipt(c fiber.Ctx) error {
+	actor, authorized, err := requireReceiptPermission(c, authz.PermissionLedgerReceiptsReturn)
+	if err != nil {
+		return err
+	}
+	if !authorized {
+		return nil
+	}
 	var req ReturnReceiptRequest
 	if err := c.Bind().Body(&req); err != nil {
 		return httpx.WriteError(c, err)
 	}
-	result, err := h.service.ReturnReceipt(c.Context(), c.Params("entryId"), c.Get("X-Authorized-By"), req)
+	result, err := h.service.ReturnReceipt(c.Context(), c.Params("entryId"), actor.ID, req)
 	if err != nil {
 		if errors.Is(err, ErrReceiptCancelled) {
 			return c.Status(fiber.StatusConflict).JSON(httpx.APIResponse{Error: &httpx.APIError{Code: "receipt_cancelled", Message: err.Error()}})
@@ -201,6 +216,27 @@ func (h *Handler) ReturnReceipt(c fiber.Ctx) error {
 		return httpx.WriteError(c, err)
 	}
 	return c.JSON(httpx.APIResponse{Data: result})
+}
+
+func requireReceiptPermission(c fiber.Ctx, permission authz.Permission) (*authz.Actor, bool, error) {
+	actor, err := authz.ExtractActor(func(name string) string { return c.Get(name) })
+	if err != nil {
+		return nil, false, writeAuthorizationError(c, err)
+	}
+	if err := authz.RequirePermission(actor, permission, authz.WithLegacyAuthorizedByCompatibility()); err != nil {
+		return nil, false, writeAuthorizationError(c, err)
+	}
+	return actor, true, nil
+}
+
+func writeAuthorizationError(c fiber.Ctx, err error) error {
+	if errors.Is(err, authz.ErrMissingActor) {
+		return c.Status(fiber.StatusUnauthorized).JSON(httpx.APIResponse{Error: &httpx.APIError{Code: "missing_actor", Message: "Authorization actor is required"}})
+	}
+	if errors.Is(err, authz.ErrForbidden) {
+		return c.Status(fiber.StatusForbidden).JSON(httpx.APIResponse{Error: &httpx.APIError{Code: "forbidden", Message: "Actor is not permitted to perform this operation"}})
+	}
+	return httpx.WriteError(c, err)
 }
 
 func (h *Handler) ListOutstandingReceipts(c fiber.Ctx) error {
@@ -215,8 +251,15 @@ func (h *Handler) ListOutstandingReceipts(c fiber.Ctx) error {
 	return c.JSON(httpx.APIResponse{Data: result})
 }
 func (h *Handler) BackfillDebitLedgerReceipts(c fiber.Ctx) error {
+	actor, authorized, err := requireReceiptPermission(c, authz.PermissionLedgerReceiptsBackfill)
+	if err != nil {
+		return err
+	}
+	if !authorized {
+		return nil
+	}
 	dryRun := strings.EqualFold(strings.TrimSpace(c.Query("dryRun")), "true")
-	result, err := h.service.BackfillDebitLedgerReceipts(c.Context(), c.Get("X-Authorized-By"), dryRun)
+	result, err := h.service.BackfillDebitLedgerReceipts(c.Context(), actor.ID, dryRun)
 	if err != nil {
 		return httpx.WriteError(c, err)
 	}
