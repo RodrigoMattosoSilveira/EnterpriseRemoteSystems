@@ -29,9 +29,53 @@ const (
 type Permission string
 
 const (
+	PermissionAll Permission = "*"
+
+	PermissionTenantsRead   Permission = "tenants.read"
+	PermissionTenantsCreate Permission = "tenants.create"
+	PermissionTenantsUpdate Permission = "tenants.update"
+
+	PermissionPeopleRead       Permission = "people.read"
+	PermissionPeopleCreate     Permission = "people.create"
+	PermissionPeopleUpdate     Permission = "people.update"
+	PermissionPeopleSelfRead   Permission = "people.self.read"
+	PermissionPeopleSelfUpdate Permission = "people.self.update"
+
+	PermissionCollaboratorsRead     Permission = "collaborators.read"
+	PermissionCollaboratorsCreate   Permission = "collaborators.create"
+	PermissionCollaboratorsUpdate   Permission = "collaborators.update"
+	PermissionCollaboratorsSelfRead Permission = "collaborators.self.read"
+
+	PermissionPlanningRead   Permission = "planning.read"
+	PermissionPlanningCreate Permission = "planning.create"
+	PermissionPlanningUpdate Permission = "planning.update"
+
+	PermissionEarningsRead   Permission = "earnings.read"
+	PermissionEarningsCreate Permission = "earnings.create"
+	PermissionEarningsUpdate Permission = "earnings.update"
+
+	PermissionPriceListsRead   Permission = "price_lists.read"
+	PermissionPriceListsCreate Permission = "price_lists.create"
+	PermissionPriceListsUpdate Permission = "price_lists.update"
+
+	PermissionExpensesRead   Permission = "expenses.read"
+	PermissionExpensesCreate Permission = "expenses.create"
+	PermissionExpensesUpdate Permission = "expenses.update"
+
+	PermissionCurrentAccountsSummaryRead     Permission = "current_accounts.summary.read"
+	PermissionCurrentAccountsLedgerRead      Permission = "current_accounts.ledger.read"
+	PermissionCurrentAccountsLedgerCreate    Permission = "current_accounts.ledger.create"
+	PermissionCurrentAccountsSelfSummaryRead Permission = "current_accounts.self.summary.read"
+	PermissionCurrentAccountsSelfLedgerRead  Permission = "current_accounts.self.ledger.read"
+
+	PermissionAssignmentsSelfCurrentRead Permission = "assignments.self.current.read"
+
+	PermissionLedgerReceiptsRead     Permission = "ledger.receipts.read"
+	PermissionLedgerReceiptsCreate   Permission = "ledger.receipts.create"
 	PermissionLedgerReceiptsPrint    Permission = "ledger.receipts.print"
 	PermissionLedgerReceiptsReturn   Permission = "ledger.receipts.return"
 	PermissionLedgerReceiptsBackfill Permission = "ledger.receipts.backfill"
+	PermissionLedgerReceiptsSelfRead Permission = "ledger.receipts.self.read"
 
 	PermissionLedgerCorrectionsCreate         Permission = "ledger.corrections.create"
 	PermissionJourneySettlementsPreview       Permission = "journey.settlements.preview"
@@ -45,13 +89,31 @@ type ActorSource string
 const (
 	ActorSourceHeaderAuthorizedBy ActorSource = "x_authorized_by"
 	ActorSourceHeaderActorID      ActorSource = "x_actor_id"
+	ActorSourcePersisted          ActorSource = "persisted"
+)
+
+type ActorScope string
+
+const (
+	ActorScopeLegacy      ActorScope = "LEGACY"
+	ActorScopeApplication ActorScope = "APPLICATION"
+	ActorScopeTenant      ActorScope = "TENANT"
+	ActorScopeSelf        ActorScope = "SELF"
 )
 
 type Actor struct {
-	ID          string
-	TenantID    string
-	Source      ActorSource
-	Permissions map[Permission]struct{}
+	// ID is the stable external actor key used by the request/authentication layer.
+	ID string
+	// RecordID is the persisted authz_actors primary key when the actor was loaded
+	// from the authorization store.
+	RecordID       string
+	TenantID       string
+	PersonID       string
+	CollaboratorID string
+	Source         ActorSource
+	Scope          ActorScope
+	RoleCodes      []string
+	Permissions    map[Permission]struct{}
 }
 
 var (
@@ -76,12 +138,16 @@ func ExtractActor(get HeaderGetter) (*Actor, error) {
 		return nil, ErrMissingActor
 	}
 
-	return &Actor{
+	actor := &Actor{
 		ID:          id,
 		TenantID:    strings.TrimSpace(get(HeaderTenantID)),
 		Source:      source,
 		Permissions: ParsePermissions(get(HeaderActorPermissions)),
-	}, nil
+	}
+	if source == ActorSourceHeaderAuthorizedBy {
+		actor.Scope = ActorScopeLegacy
+	}
+	return actor, nil
 }
 
 func ParsePermissions(raw string) map[Permission]struct{} {
@@ -99,6 +165,9 @@ func ParsePermissions(raw string) map[Permission]struct{} {
 func (a *Actor) HasPermission(permission Permission) bool {
 	if a == nil || strings.TrimSpace(a.ID) == "" || permission == "" {
 		return false
+	}
+	if _, ok := a.Permissions[PermissionAll]; ok {
+		return true
 	}
 	_, ok := a.Permissions[permission]
 	return ok
@@ -137,6 +206,22 @@ func RequirePermission(actor *Actor, permission Permission, opts ...RequireOptio
 		return nil
 	}
 	if options.allowLegacyAuthorizedBy && actor.Source == ActorSourceHeaderAuthorizedBy {
+		return nil
+	}
+	return ErrForbidden
+}
+
+func RequireTenantScope(actor *Actor, tenantID string) error {
+	if actor == nil || strings.TrimSpace(actor.ID) == "" {
+		return ErrMissingActor
+	}
+	if strings.TrimSpace(tenantID) == "" {
+		return ErrForbidden
+	}
+	if actor.Scope == ActorScopeApplication {
+		return nil
+	}
+	if strings.TrimSpace(actor.TenantID) == strings.TrimSpace(tenantID) {
 		return nil
 	}
 	return ErrForbidden
