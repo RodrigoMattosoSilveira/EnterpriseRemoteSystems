@@ -1,0 +1,191 @@
+Proposed top-level authorization profiles
+APPLICATION_ADMIN
+
+Global scope.
+
+Can create, read, and update records across all tenants.
+
+This should be rare and probably reserved for system operators or super-admins.
+
+TENANT_ADMIN
+
+Tenant scope.
+
+Can create, read, and update all records inside their own tenant only.
+
+This is the main tenant owner/admin role.
+
+EARNINGS_OPERATOR
+
+Tenant scope.
+
+Can work with collaborator visibility, planning, and earning-posting workflows, but should not automatically get broad expense or settlement authority.
+
+EXPENSE_OPERATOR
+
+Tenant scope.
+
+Can work with collaborator visibility, price lists, current account summaries, expenses, and receipt workflows, but should not automatically get planning or earning-posting authority.
+
+Suggested permission groups
+
+I would model the permissions something like this:
+
+tenants.read
+tenants.create
+tenants.update
+
+people.read
+people.create
+people.update
+
+collaborators.read
+collaborators.create
+collaborators.update
+
+planning.read
+planning.create
+planning.update
+
+earnings.read
+earnings.create
+earnings.update
+
+price_lists.read
+price_lists.create
+price_lists.update
+
+expenses.read
+expenses.create
+expenses.update
+
+current_accounts.summary.read
+current_accounts.ledger.read
+current_accounts.ledger.create
+
+ledger.receipts.read
+ledger.receipts.create
+ledger.receipts.print
+ledger.receipts.return
+ledger.receipts.backfill
+
+Then later settlement/correction permissions remain separate:
+
+ledger.corrections.create
+journey.settlements.preview
+journey.settlements.zero_gold
+journey.settlements.partial_payout
+journey.settlements.close
+
+That separation matters because “current account summary read” is much safer than “create ledger movement” or “close journey.”
+
+Role-to-permission mapping
+
+A first draft mapping could be:
+
+Profile	Scope	Grants
+APPLICATION_ADMIN	all tenants	all permissions
+TENANT_ADMIN	own tenant	all tenant-scoped permissions
+EARNINGS_OPERATOR	own tenant	collaborators.read, planning.read/create/update, earnings.read/create, maybe current_accounts.summary.read
+EXPENSE_OPERATOR	own tenant	collaborators.read, price_lists.read/create/update, current_accounts.summary.read, expenses.read/create, ledger.receipts.read/create/print/return
+
+I would be cautious with this one:
+
+Expenses can CR his tenant collaborators' receipts
+
+For receipt operations, I’d split it into:
+
+ledger.receipts.read
+ledger.receipts.create
+ledger.receipts.print
+ledger.receipts.return
+ledger.receipts.backfill
+
+The reason is that backfill is operationally powerful and should probably belong to TENANT_ADMIN or APPLICATION_ADMIN, not a normal expense operator.
+
+Important clarification: tenant scoping must be mandatory
+
+For every non-application actor, authorization has two checks:
+
+1. Does the actor have the required permission?
+2. Is the target record inside the actor’s tenant?
+
+So EXPENSE_OPERATOR with expenses.create can create an expense only for a collaborator in their own tenant.
+
+That means the future authorization service should not stop at:
+
+RequirePermission(actor, PermissionExpensesCreate)
+
+It will also need tenant-aware checks like:
+
+RequireTenantAccess(actor, targetTenantID)
+
+or a combined form later:
+
+Authorize(ctx, actor, PermissionExpensesCreate, Resource{
+    TenantID: expenseTenantID,
+})
+
+PERSON
+
+Scope: own records only.
+
+A PERSON actor can read only data that belongs to them directly, or to their linked collaborator/current journey.
+
+Suggested permissions:
+
+people.self.read
+people.self.update
+
+collaborators.self.read
+
+current_accounts.self.summary.read
+current_accounts.self.ledger.read
+
+assignments.self.current.read
+
+ledger.receipts.self.read
+
+For your exact requirements:
+
+Requirement	Suggested permission
+RU his Person record	people.self.read, people.self.update
+R his Collaborator record	collaborators.self.read
+R his current account records and summary	current_accounts.self.summary.read, current_accounts.self.ledger.read
+R his current assignment	assignments.self.current.read
+R his current receipts	ledger.receipts.self.read
+
+Important distinction: these are self-scoped permissions, not tenant-wide permissions.
+
+So this actor should not get:
+
+people.read
+collaborators.read
+current_accounts.summary.read
+ledger.receipts.read
+
+Those imply broader tenant visibility.
+
+The eventual authorization check should be something like:
+
+RequirePermission(actor, authz.PermissionPeopleSelfRead)
+RequireSelfPersonAccess(actor, personID)
+
+or later as one combined resource-aware check:
+
+Authorize(actor, authz.PermissionPeopleSelfRead, authz.Resource{
+    TenantID: tenantID,
+    PersonID: personID,
+})
+
+For receipts, the check should prove that the receipt belongs to the person’s own linked collaborator journey before allowing read access.
+
+I would add these permission constants in the next authorization-model bite, before persisted roles:
+
+PermissionPeopleSelfRead
+PermissionPeopleSelfUpdate
+PermissionCollaboratorsSelfRead
+PermissionCurrentAccountsSelfSummaryRead
+PermissionCurrentAccountsSelfLedgerRead
+PermissionAssignmentsSelfCurrentRead
+PermissionLedgerReceiptsSelfRead

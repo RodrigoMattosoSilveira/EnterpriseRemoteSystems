@@ -122,3 +122,32 @@ func headerGetter(headers map[string]string) HeaderGetter {
 		return headers[name]
 	}
 }
+
+func TestRequirePermissionAllowsWildcardPermission(t *testing.T) {
+	actor := &Actor{
+		ID: "tenant-admin@example.com",
+		Permissions: map[Permission]struct{}{
+			PermissionAll: {},
+		},
+	}
+
+	if err := RequirePermission(actor, PermissionLedgerReceiptsBackfill); err != nil {
+		t.Fatalf("expected wildcard permission to allow receipt backfill, got %v", err)
+	}
+}
+
+func TestRequireTenantScopeAllowsApplicationActor(t *testing.T) {
+	actor := &Actor{ID: "app-admin@example.com", Scope: ActorScopeApplication}
+
+	if err := RequireTenantScope(actor, "tenant-1"); err != nil {
+		t.Fatalf("expected application actor to access tenant, got %v", err)
+	}
+}
+
+func TestRequireTenantScopeRejectsDifferentTenant(t *testing.T) {
+	actor := &Actor{ID: "tenant-admin@example.com", TenantID: "tenant-1", Scope: ActorScopeTenant}
+
+	if err := RequireTenantScope(actor, "tenant-2"); !errors.Is(err, ErrForbidden) {
+		t.Fatalf("expected ErrForbidden, got %v", err)
+	}
+}
