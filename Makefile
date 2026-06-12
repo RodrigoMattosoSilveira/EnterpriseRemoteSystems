@@ -40,6 +40,10 @@ endif
 
 EDGE_DIR := $(SERVER_ROOT)/edge
 
+SERVER_COMPOSE = docker compose -p $(COMPOSE_PROJECT) --env-file $(ENV_FILE) -f docker-compose.server.yml
+SERVER_COMPOSE_BUILD = BUILDX_NO_DEFAULT_ATTESTATIONS=1 $(SERVER_COMPOSE) --progress plain
+SERVER_SERVICE_CONTAINERS = $(CONTAINER_PREFIX)-backend $(CONTAINER_PREFIX)-frontend $(CONTAINER_PREFIX)-caddy
+
 # ==============================================================================
 # Help
 # ==============================================================================
@@ -258,54 +262,41 @@ server-pull:
 
 .PHONY: server-build
 server-build:
-	cd $(ENV_DIR) && BUILDX_NO_DEFAULT_ATTESTATIONS=1 docker compose \
-		--progress plain \
-		-p $(COMPOSE_PROJECT) \
-		--env-file $(ENV_FILE) \
-		-f docker-compose.server.yml \
-		build
+	cd $(ENV_DIR) && $(SERVER_COMPOSE_BUILD) build
+
+.PHONY: server-remove-stale-containers
+server-remove-stale-containers:
+	@for container in $(SERVER_SERVICE_CONTAINERS); do \
+		if docker ps -a --format '{{.Names}}' | grep -qx "$$container"; then \
+			project="$$(docker inspect "$$container" --format '{{ index .Config.Labels "com.docker.compose.project" }}' 2>/dev/null || true)"; \
+			if [[ "$$project" != "$(COMPOSE_PROJECT)" ]]; then \
+				echo "Removing stale container $$container from compose project '$$project' before starting $(COMPOSE_PROJECT)"; \
+				docker rm -f "$$container"; \
+			fi; \
+		fi; \
+	done
 
 .PHONY: server-up
-server-up:
-	cd $(ENV_DIR) && docker compose \
-		-p $(COMPOSE_PROJECT) \
-		--env-file $(ENV_FILE) \
-		-f docker-compose.server.yml \
-		up -d
+server-up: server-remove-stale-containers
+	cd $(ENV_DIR) && $(SERVER_COMPOSE) up -d --build --force-recreate --remove-orphans
 
 .PHONY: server-down
 server-down:
-	cd $(ENV_DIR) && docker compose \
-		-p $(COMPOSE_PROJECT) \
-		--env-file $(ENV_FILE) \
-		-f docker-compose.server.yml \
-		down
+	cd $(ENV_DIR) && $(SERVER_COMPOSE) down
 
 .PHONY: server-down-volumes
 server-down-volumes:
 	@echo "WARNING: this deletes the $(ENV) SQLite Docker volume."
 	@echo "Use only for development/test resets or after a backup."
-	cd $(ENV_DIR) && docker compose \
-		-p $(COMPOSE_PROJECT) \
-		--env-file $(ENV_FILE) \
-		-f docker-compose.server.yml \
-		down -v
+	cd $(ENV_DIR) && $(SERVER_COMPOSE) down -v
 
 .PHONY: server-ps
 server-ps:
-	cd $(ENV_DIR) && docker compose \
-		-p $(COMPOSE_PROJECT) \
-		--env-file $(ENV_FILE) \
-		-f docker-compose.server.yml \
-		ps -a
+	cd $(ENV_DIR) && $(SERVER_COMPOSE) ps -a
 
 .PHONY: server-logs
 server-logs:
-	cd $(ENV_DIR) && docker compose \
-		-p $(COMPOSE_PROJECT) \
-		--env-file $(ENV_FILE) \
-		-f docker-compose.server.yml \
-		logs -f --tail=200
+	cd $(ENV_DIR) && $(SERVER_COMPOSE) logs -f --tail=200
 
 .PHONY: server-backend-logs
 server-backend-logs:

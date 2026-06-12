@@ -12,6 +12,7 @@ import (
 	"github.com/gofiber/fiber/v3"
 
 	apppkg "enterpriseremotesystems/backend/internal/app"
+	"enterpriseremotesystems/backend/internal/authz"
 )
 
 const (
@@ -272,6 +273,23 @@ func postReceiptJSON(t *testing.T, server *fiber.App, url, authorizedBy string, 
 	return res
 }
 
+func postReceiptActorJSON(t *testing.T, server *fiber.App, url, actorID, permissions string, payload map[string]any) *http.Response {
+	t.Helper()
+	body, err := json.Marshal(payload)
+	if err != nil {
+		t.Fatalf("marshal payload: %v", err)
+	}
+	req := httptest.NewRequest(http.MethodPost, url, bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set(authz.HeaderActorID, actorID)
+	req.Header.Set(authz.HeaderActorPermissions, permissions)
+	res, err := server.Test(req, fiber.TestConfig{Timeout: 0, FailOnTimeout: false})
+	if err != nil {
+		t.Fatalf("POST %s: %v", url, err)
+	}
+	return res
+}
+
 func listLedgerEntries(t *testing.T, server *fiber.App, collaboratorID string) apiLedgerEntryListResponse {
 	t.Helper()
 	res := getJSON(t, server, currentAccountsURL+collaboratorID+"/ledger-entries")
@@ -361,6 +379,128 @@ type apiOutstandingReceiptListResponse struct {
 			Total        int `json:"total"`
 		} `json:"summary"`
 	} `json:"data"`
+}
+
+func TestReceiptPrintAuthorization(t *testing.T) {
+	server, cleanup := newTestServer(t)
+	defer cleanup()
+
+	collaborator := createActiveCollaborator(t, server, 1)
+	createExpense(t, server, validExpensePayload(collaborator.Data.ID, nil))
+	entry := listLedgerEntries(t, server, collaborator.Data.ID).Data.Items[0]
+	url := "/api/v1/ledger-entries/" + entry.ID + "/receipt/print"
+
+	missing := postJSON(t, server, http.MethodPost, url, map[string]any{})
+	missing.Body.Close()
+	if missing.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("expected missing actor status %d, got %d", http.StatusUnauthorized, missing.StatusCode)
+	}
+
+	forbidden := postReceiptActorJSON(t, server, url, "receipt-viewer@example.com", "ledger.receipts.return", map[string]any{})
+	forbidden.Body.Close()
+	if forbidden.StatusCode != http.StatusForbidden {
+		t.Fatalf("expected forbidden status %d, got %d", http.StatusForbidden, forbidden.StatusCode)
+	}
+
+	permitted := postReceiptActorJSON(t, server, url, "receipt-printer@example.com", string(authz.PermissionLedgerReceiptsPrint), map[string]any{})
+	defer permitted.Body.Close()
+	if permitted.StatusCode != http.StatusOK {
+		var body apiErrorResponse
+		decodeJSON(t, permitted, &body)
+		t.Fatalf("expected permitted print status %d, got %d error=%+v", http.StatusOK, permitted.StatusCode, body.Error)
+	}
+	var body apiPrintableReceiptResponse
+	decodeJSON(t, permitted, &body)
+	if body.Data.Status != "PRINTED" || body.Data.IssuedBy != "receipt-printer@example.com" {
+		t.Fatalf("unexpected printed receipt: %+v", body.Data)
+	}
+}
+
+func TestReceiptReturnAuthorization(t *testing.T) {
+	server, cleanup := newTestServer(t)
+	defer cleanup()
+
+	collaborator := createActiveCollaborator(t, server, 1)
+	createExpense(t, server, validExpensePayload(collaborator.Data.ID, nil))
+	entry := listLedgerEntries(t, server, collaborator.Data.ID).Data.Items[0]
+	url := "/api/v1/ledger-entries/" + entry.ID + "/receipt/return"
+
+	missing := postJSON(t, server, http.MethodPost, url, map[string]any{})
+	missing.Body.Close()
+	if missing.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("expected missing actor status %d, got %d", http.StatusUnauthorized, missing.StatusCode)
+	}
+
+	forbidden := postReceiptActorJSON(t, server, url, "receipt-viewer@example.com", "ledger.receipts.print", map[string]any{})
+	forbidden.Body.Close()
+	if forbidden.StatusCode != http.StatusForbidden {
+		t.Fatalf("expected forbidden status %d, got %d", http.StatusForbidden, forbidden.StatusCode)
+	}
+
+	permitted := postReceiptActorJSON(t, server, url, "receipt-returner@example.com", string(authz.PermissionLedgerReceiptsReturn), map[string]any{
+		"signedDocumentRef": "receipt-scans/authorized-return.pdf",
+	})
+	defer permitted.Body.Close()
+	if permitted.StatusCode != http.StatusOK {
+		var body apiErrorResponse
+		decodeJSON(t, permitted, &body)
+		t.Fatalf("expected permitted return status %d, got %d error=%+v", http.StatusOK, permitted.StatusCode, body.Error)
+	}
+	var body apiPrintableReceiptResponse
+	decodeJSON(t, permitted, &body)
+	if body.Data.Status != "RETURNED" || body.Data.ReceivedBy != "receipt-returner@example.com" {
+		t.Fatalf("unexpected returned receipt: %+v", body.Data)
+	}
+}
+
+func TestReceiptBackfillAuthorization(t *testing.T) {
+	server, cleanup := newTestServer(t)
+	defer cleanup()
+
+	url := "/api/v1/receipts/backfill-debit-ledger-entries?dryRun=true"
+
+	missing := postJSON(t, server, http.MethodPost, url, map[string]any{})
+	missing.Body.Close()
+	if missing.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("expected missing actor status %d, got %d", http.StatusUnauthorized, missing.StatusCode)
+	}
+
+	forbidden := postReceiptActorJSON(t, server, url, "receipt-viewer@example.com", "ledger.receipts.print", map[string]any{})
+	forbidden.Body.Close()
+	if forbidden.StatusCode != http.StatusForbidden {
+		t.Fatalf("expected forbidden status %d, got %d", http.StatusForbidden, forbidden.StatusCode)
+	}
+
+	permitted := postReceiptActorJSON(t, server, url, "receipt-backfiller@example.com", string(authz.PermissionLedgerReceiptsBackfill), map[string]any{})
+	defer permitted.Body.Close()
+	if permitted.StatusCode != http.StatusOK {
+		var body apiErrorResponse
+		decodeJSON(t, permitted, &body)
+		t.Fatalf("expected permitted backfill status %d, got %d error=%+v", http.StatusOK, permitted.StatusCode, body.Error)
+	}
+	var body struct {
+		Data struct {
+			DryRun      bool   `json:"dryRun"`
+			RequestedBy string `json:"requestedBy"`
+		} `json:"data"`
+	}
+	decodeJSON(t, permitted, &body)
+	if !body.Data.DryRun || body.Data.RequestedBy != "receipt-backfiller@example.com" {
+		t.Fatalf("unexpected backfill result: %+v", body.Data)
+	}
+}
+
+func TestReceiptBackfillAllowsLegacyAuthorizedByCompatibility(t *testing.T) {
+	server, cleanup := newTestServer(t)
+	defer cleanup()
+
+	res := postReceiptJSON(t, server, "/api/v1/receipts/backfill-debit-ledger-entries?dryRun=true", "legacy-backfill@example.com", map[string]any{})
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		var body apiErrorResponse
+		decodeJSON(t, res, &body)
+		t.Fatalf("expected legacy authorized backfill status %d, got %d error=%+v", http.StatusOK, res.StatusCode, body.Error)
+	}
 }
 
 func TestReceiptReturnRecordsSignedReturnedMetadata(t *testing.T) {
