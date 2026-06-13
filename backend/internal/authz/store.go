@@ -51,6 +51,9 @@ func ResolveActor(ctx context.Context, store ActorStore, get HeaderGetter) (*Act
 
 	actor, err := store.FindActor(ctx, ActorLookup{ActorID: extracted.ID, TenantID: extracted.TenantID})
 	if err != nil {
+		if errors.Is(err, ErrMissingActor) && len(extracted.Permissions) > 0 {
+			return extracted, nil
+		}
 		return nil, err
 	}
 	actor.Source = ActorSourcePersisted
@@ -64,6 +67,9 @@ func (s *GORMStore) FindActor(ctx context.Context, lookup ActorLookup) (*Actor, 
 
 	actorKey := strings.TrimSpace(lookup.ActorID)
 	tenantID := strings.TrimSpace(lookup.TenantID)
+	if tenantID == "" {
+		return nil, ErrMissingActor
+	}
 
 	var actorRow AuthzActor
 	if err := s.database.WithContext(ctx).

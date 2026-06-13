@@ -10,9 +10,28 @@ import (
 	"enterpriseremotesystems/backend/internal/shared/httpx"
 )
 
-type Handler struct{ service Service }
+type Handler struct {
+	service    Service
+	actorStore authz.ActorStore
+}
 
-func NewHandler(service Service) *Handler { return &Handler{service: service} }
+type HandlerOption func(*Handler)
+
+func WithActorStore(store authz.ActorStore) HandlerOption {
+	return func(h *Handler) {
+		h.actorStore = store
+	}
+}
+
+func NewHandler(service Service, opts ...HandlerOption) *Handler {
+	h := &Handler{service: service}
+	for _, opt := range opts {
+		if opt != nil {
+			opt(h)
+		}
+	}
+	return h
+}
 
 func (h *Handler) ZeroGold(c fiber.Ctx) error {
 	if err := h.service.AuthorizeSettlement(c.Get("X-Ledger-Settlement-Key")); err != nil {
@@ -176,7 +195,7 @@ func (h *Handler) GetPrintableReceipt(c fiber.Ctx) error {
 }
 
 func (h *Handler) PrintReceipt(c fiber.Ctx) error {
-	actor, authorized, err := requireReceiptPermission(c, authz.PermissionLedgerReceiptsPrint)
+	actor, authorized, err := h.requireReceiptPermission(c, authz.PermissionLedgerReceiptsPrint)
 	if err != nil {
 		return err
 	}
@@ -194,7 +213,7 @@ func (h *Handler) PrintReceipt(c fiber.Ctx) error {
 }
 
 func (h *Handler) ReturnReceipt(c fiber.Ctx) error {
-	actor, authorized, err := requireReceiptPermission(c, authz.PermissionLedgerReceiptsReturn)
+	actor, authorized, err := h.requireReceiptPermission(c, authz.PermissionLedgerReceiptsReturn)
 	if err != nil {
 		return err
 	}
@@ -218,8 +237,8 @@ func (h *Handler) ReturnReceipt(c fiber.Ctx) error {
 	return c.JSON(httpx.APIResponse{Data: result})
 }
 
-func requireReceiptPermission(c fiber.Ctx, permission authz.Permission) (*authz.Actor, bool, error) {
-	actor, err := authz.ExtractActor(func(name string) string { return c.Get(name) })
+func (h *Handler) requireReceiptPermission(c fiber.Ctx, permission authz.Permission) (*authz.Actor, bool, error) {
+	actor, err := authz.ResolveActor(c.Context(), h.actorStore, func(name string) string { return c.Get(name) })
 	if err != nil {
 		return nil, false, writeAuthorizationError(c, err)
 	}
@@ -251,7 +270,7 @@ func (h *Handler) ListOutstandingReceipts(c fiber.Ctx) error {
 	return c.JSON(httpx.APIResponse{Data: result})
 }
 func (h *Handler) BackfillDebitLedgerReceipts(c fiber.Ctx) error {
-	actor, authorized, err := requireReceiptPermission(c, authz.PermissionLedgerReceiptsBackfill)
+	actor, authorized, err := h.requireReceiptPermission(c, authz.PermissionLedgerReceiptsBackfill)
 	if err != nil {
 		return err
 	}

@@ -4,6 +4,7 @@ import (
 	"log"
 
 	"enterpriseremotesystems/backend/internal/accruals"
+	"enterpriseremotesystems/backend/internal/authz"
 	"enterpriseremotesystems/backend/internal/collaborators"
 	"enterpriseremotesystems/backend/internal/currentaccounts"
 	"enterpriseremotesystems/backend/internal/db"
@@ -32,6 +33,14 @@ func Bootstrap(cfg Config) (*fiber.App, func(), error) {
 	if err := db.SeedReferenceData(database); err != nil {
 		return nil, nil, err
 	}
+	if cfg.AutoMigrate || (cfg.Env == "test" && !cfg.AutoMigrateConfigured) {
+		if err := authz.AutoMigrate(database); err != nil {
+			return nil, nil, err
+		}
+	}
+	if err := authz.SeedAuthorizationCatalog(database); err != nil {
+		return nil, nil, err
+	}
 
 	tenantRepo := tenants.NewRepository(database)
 	tenantSvc := tenants.NewService(tenantRepo)
@@ -55,7 +64,8 @@ func Bootstrap(cfg Config) (*fiber.App, func(), error) {
 
 	currentAccountRepo := currentaccounts.NewRepository(database)
 	currentAccountSvc := currentaccounts.NewService(currentAccountRepo, cfg.LedgerCorrectionKey, cfg.LedgerSettlementKey)
-	currentAccountHandler := currentaccounts.NewHandler(currentAccountSvc)
+	actorStore := authz.NewGORMStore(database)
+	currentAccountHandler := currentaccounts.NewHandler(currentAccountSvc, currentaccounts.WithActorStore(actorStore))
 
 	workPeriodRepo := workperiods.NewRepository(database)
 	workPeriodSvc := workperiods.NewService(workPeriodRepo)
