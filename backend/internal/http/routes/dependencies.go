@@ -2,6 +2,7 @@ package routes
 
 import (
 	"enterpriseremotesystems/backend/internal/accruals"
+	"enterpriseremotesystems/backend/internal/authz"
 	"enterpriseremotesystems/backend/internal/collaborators"
 	"enterpriseremotesystems/backend/internal/currentaccounts"
 	"enterpriseremotesystems/backend/internal/expenses"
@@ -16,6 +17,7 @@ import (
 
 type Dependencies struct {
 	DB                          *gorm.DB
+	AuthzHandler                *authz.Handler
 	PeopleHandler               *people.Handler
 	CollaboratorHandler         *collaborators.Handler
 	ExpenseHandler              *expenses.Handler
