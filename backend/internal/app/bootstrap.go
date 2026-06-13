@@ -65,6 +65,7 @@ func Bootstrap(cfg Config) (*fiber.App, func(), error) {
 	currentAccountRepo := currentaccounts.NewRepository(database)
 	currentAccountSvc := currentaccounts.NewService(currentAccountRepo, cfg.LedgerCorrectionKey, cfg.LedgerSettlementKey)
 	actorStore := authz.NewGORMStore(database)
+	authzHandler := authz.NewHandler(actorStore)
 	currentAccountHandler := currentaccounts.NewHandler(currentAccountSvc, currentaccounts.WithActorStore(actorStore))
 
 	workPeriodRepo := workperiods.NewRepository(database)
@@ -85,6 +86,7 @@ func Bootstrap(cfg Config) (*fiber.App, func(), error) {
 
 	deps := routes.Dependencies{
 		DB:                          database,
+		AuthzHandler:                authzHandler,
 		PeopleHandler:               peopleHandler,
 		CollaboratorHandler:         collaboratorHandler,
 		ExpenseHandler:              expenseHandler,

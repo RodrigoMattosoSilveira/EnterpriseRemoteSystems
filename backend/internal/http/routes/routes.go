@@ -16,4 +16,5 @@ func Register(server *fiber.App, deps Dependencies) {
 	RegisterAccrualRoutes(v1, deps)
 	RegisterReferenceDataRoutes(v1, deps)
 	RegisterTenantRoutes(v1, deps)
+	RegisterAuthzRoutes(v1, deps)
 }
