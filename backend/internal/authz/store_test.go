@@ -171,6 +171,82 @@ func TestResolveActorPreservesLegacyHeaderCompatibility(t *testing.T) {
 	}
 }
 
+func TestResolveActorRequiresTenantScopeForPersistedActorLookup(t *testing.T) {
+	database := newAuthzTestDB(t)
+	actorID := createAuthzActor(t, database, "tenant-admin-no-scope@example.com", nil, nil)
+	grantAuthzRole(t, database, actorID, RoleTenantAdmin, "tenant-a")
+
+	actor, err := ResolveActor(context.Background(), NewGORMStore(database), headerGetter(map[string]string{
+		HeaderActorID: "tenant-admin-no-scope@example.com",
+	}))
+	if actor != nil {
+		t.Fatalf("expected no actor, got %#v", actor)
+	}
+	if !errors.Is(err, ErrMissingActor) {
+		t.Fatalf("expected ErrMissingActor, got %v", err)
+	}
+}
+
+func TestResolveActorPrefersPersistedGrantsOverHeaderPermissions(t *testing.T) {
+	database := newAuthzTestDB(t)
+	actorID := createAuthzActor(t, database, "expense-operator-override@example.com", nil, nil)
+	grantAuthzRole(t, database, actorID, RoleExpenseOperator, "tenant-a")
+
+	actor, err := ResolveActor(context.Background(), NewGORMStore(database), headerGetter(map[string]string{
+		HeaderActorID:          "expense-operator-override@example.com",
+		HeaderTenantID:         "tenant-a",
+		HeaderActorPermissions: string(PermissionLedgerReceiptsBackfill),
+	}))
+	if err != nil {
+		t.Fatalf("resolve actor: %v", err)
+	}
+
+	if actor.Source != ActorSourcePersisted {
+		t.Fatalf("expected persisted actor source, got %q", actor.Source)
+	}
+	if actor.HasPermission(PermissionLedgerReceiptsBackfill) {
+		t.Fatalf("persisted grants must override header-supplied permissions")
+	}
+	if !actor.HasPermission(PermissionLedgerReceiptsReturn) {
+		t.Fatalf("expected persisted expense operator receipt return permission")
+	}
+}
+
+func TestResolveActorRejectsUnknownPersistedActorWithoutTemporaryPermissions(t *testing.T) {
+	database := newAuthzTestDB(t)
+
+	actor, err := ResolveActor(context.Background(), NewGORMStore(database), headerGetter(map[string]string{
+		HeaderActorID:  "missing-persisted@example.com",
+		HeaderTenantID: "tenant-a",
+	}))
+	if actor != nil {
+		t.Fatalf("expected no actor, got %#v", actor)
+	}
+	if !errors.Is(err, ErrMissingActor) {
+		t.Fatalf("expected ErrMissingActor, got %v", err)
+	}
+}
+
+func TestResolveActorKeepsTemporaryHeaderPermissionsForUnpersistedActors(t *testing.T) {
+	database := newAuthzTestDB(t)
+
+	actor, err := ResolveActor(context.Background(), NewGORMStore(database), headerGetter(map[string]string{
+		HeaderActorID:          "temporary-tests@example.com",
+		HeaderTenantID:         "tenant-a",
+		HeaderActorPermissions: string(PermissionLedgerReceiptsPrint),
+	}))
+	if err != nil {
+		t.Fatalf("resolve actor: %v", err)
+	}
+
+	if actor.Source != ActorSourceHeaderActorID {
+		t.Fatalf("expected temporary header actor source, got %q", actor.Source)
+	}
+	if !actor.HasPermission(PermissionLedgerReceiptsPrint) {
+		t.Fatalf("expected temporary header permission")
+	}
+}
+
 func TestGORMStoreFindActorRejectsMissingPersistedActor(t *testing.T) {
 	database := newAuthzTestDB(t)
 
