@@ -241,6 +241,8 @@ type PermissionCatalogEntry struct {
 func PermissionCatalog() []PermissionCatalogEntry {
 	return []PermissionCatalogEntry{
 		{PermissionAll, "All permissions", "Wildcard permission for application and tenant administrators."},
+		{PermissionAuthzRead, "Read authorization administration", "Read authorization actors, roles, permissions, and grants."},
+		{PermissionAuthzManage, "Manage authorization administration", "Create authorization actors and manage role grants."},
 		{PermissionTenantsRead, "Read tenants", "Read tenant records."},
 		{PermissionTenantsCreate, "Create tenants", "Create tenant records."},
 		{PermissionTenantsUpdate, "Update tenants", "Update tenant records."},
