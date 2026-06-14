@@ -57,7 +57,7 @@ export default defineConfig({
   ? undefined
   : [
       {
-        command: "cd .. && ERS_DATABASE_PATH=data/app-e2e.db ERS_RESET_DATABASE=true make local-backend",
+        command: "cd .. && ERS_DATABASE_PATH=data/app-e2e.db ERS_RESET_DATABASE=true AUTHZ_BOOTSTRAP_ENABLED=true AUTHZ_BOOTSTRAP_ACTOR_KEY=bootstrap-admin AUTHZ_BOOTSTRAP_DISPLAY_NAME='Bootstrap Admin' AUTHZ_BOOTSTRAP_ROLE_CODE=APPLICATION_ADMIN AUTHZ_BOOTSTRAP_TENANT_ID=* make local-backend",
         url: "http://localhost:8080/healthz",
         reuseExistingServer: !isCI,
         timeout: 120_000,
