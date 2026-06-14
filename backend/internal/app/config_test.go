@@ -2,33 +2,44 @@ package app
 
 import "testing"
 
-func TestLoadConfigSupportsDatabasePathAlias(t *testing.T) {
-	t.Setenv("APP_ENV", "ci")
+func TestLoadConfigReadsAuthzBootstrapSettings(t *testing.T) {
 	t.Setenv("JWT_SECRET", "test-secret")
-	t.Setenv("DATABASE_PATH", "data/app-ci.db")
+	t.Setenv("AUTHZ_BOOTSTRAP_ENABLED", "true")
+	t.Setenv("AUTHZ_BOOTSTRAP_ACTOR_KEY", "bootstrap-admin")
+	t.Setenv("AUTHZ_BOOTSTRAP_DISPLAY_NAME", "Bootstrap Admin")
+	t.Setenv("AUTHZ_BOOTSTRAP_ROLE_CODE", "TENANT_ADMIN")
+	t.Setenv("AUTHZ_BOOTSTRAP_TENANT_ID", "tenant-a")
+	t.Setenv("AUTHZ_BOOTSTRAP_REQUIRE_EMPTY_ACTOR_TABLE", "true")
 
 	cfg, err := LoadConfig()
 	if err != nil {
 		t.Fatalf("load config: %v", err)
 	}
-
-	if cfg.DBPath != "data/app-ci.db" {
-		t.Fatalf("expected DATABASE_PATH fallback to be used, got %q", cfg.DBPath)
+	if !cfg.AuthzBootstrapEnabled {
+		t.Fatalf("expected authz bootstrap enabled")
+	}
+	if cfg.AuthzBootstrapActorKey != "bootstrap-admin" || cfg.AuthzBootstrapDisplayName != "Bootstrap Admin" {
+		t.Fatalf("unexpected bootstrap actor config: %#v", cfg)
+	}
+	if cfg.AuthzBootstrapRoleCode != "TENANT_ADMIN" || cfg.AuthzBootstrapTenantID != "tenant-a" {
+		t.Fatalf("unexpected bootstrap role config: %#v", cfg)
+	}
+	if !cfg.AuthzBootstrapRequireEmptyActors {
+		t.Fatalf("expected require-empty-actor-table flag")
 	}
 }
 
-func TestLoadConfigPrefersDBPathOverDatabasePathAlias(t *testing.T) {
-	t.Setenv("APP_ENV", "ci")
+func TestLoadConfigDefaultsAuthzBootstrapDisabled(t *testing.T) {
 	t.Setenv("JWT_SECRET", "test-secret")
-	t.Setenv("DB_PATH", "data/app-db-path.db")
-	t.Setenv("DATABASE_PATH", "data/app-ci.db")
 
 	cfg, err := LoadConfig()
 	if err != nil {
 		t.Fatalf("load config: %v", err)
 	}
-
-	if cfg.DBPath != "data/app-db-path.db" {
-		t.Fatalf("expected DB_PATH to win over DATABASE_PATH, got %q", cfg.DBPath)
+	if cfg.AuthzBootstrapEnabled {
+		t.Fatalf("expected authz bootstrap disabled by default")
+	}
+	if cfg.AuthzBootstrapRoleCode != "APPLICATION_ADMIN" || cfg.AuthzBootstrapTenantID != "*" {
+		t.Fatalf("unexpected bootstrap defaults: %#v", cfg)
 	}
 }
