@@ -86,6 +86,13 @@ set_or_update_env "OPENAI_TIMEOUT_SECONDS" "20"
 
 set_or_update_env "CORS_ALLOW_ORIGINS" "https://${APP_DOMAIN}"
 
+set_or_update_env "AUTHZ_BOOTSTRAP_ENABLED" "false"
+set_or_update_env "AUTHZ_BOOTSTRAP_ACTOR_KEY" ""
+set_or_update_env "AUTHZ_BOOTSTRAP_DISPLAY_NAME" ""
+set_or_update_env "AUTHZ_BOOTSTRAP_ROLE_CODE" "APPLICATION_ADMIN"
+set_or_update_env "AUTHZ_BOOTSTRAP_TENANT_ID" "*"
+set_or_update_env "AUTHZ_BOOTSTRAP_REQUIRE_EMPTY_ACTOR_TABLE" "false"
+
 rm -f "${ENV_FILE}.bak"
 
 echo "Created/updated ${ENV_FILE}"

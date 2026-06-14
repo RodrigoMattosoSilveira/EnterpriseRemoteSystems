@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"log"
 
 	"enterpriseremotesystems/backend/internal/accruals"
@@ -40,6 +41,20 @@ func Bootstrap(cfg Config) (*fiber.App, func(), error) {
 	}
 	if err := authz.SeedAuthorizationCatalog(database); err != nil {
 		return nil, nil, err
+	}
+	bootstrapResult, err := authz.EnsureBootstrapActor(context.Background(), database, authz.BootstrapConfig{
+		Enabled:                cfg.AuthzBootstrapEnabled,
+		ActorKey:               cfg.AuthzBootstrapActorKey,
+		DisplayName:            cfg.AuthzBootstrapDisplayName,
+		RoleCode:               authz.RoleCode(cfg.AuthzBootstrapRoleCode),
+		TenantID:               cfg.AuthzBootstrapTenantID,
+		RequireEmptyActorTable: cfg.AuthzBootstrapRequireEmptyActors,
+	})
+	if err != nil {
+		return nil, nil, err
+	}
+	if bootstrapResult.Enabled {
+		log.Printf("authorization bootstrap ensured actor_key=%s role=%s tenant=%s actor_created=%t grant_created=%t", bootstrapResult.ActorKey, bootstrapResult.RoleCode, bootstrapResult.TenantID, bootstrapResult.ActorCreated, bootstrapResult.GrantCreated)
 	}
 
 	tenantRepo := tenants.NewRepository(database)
