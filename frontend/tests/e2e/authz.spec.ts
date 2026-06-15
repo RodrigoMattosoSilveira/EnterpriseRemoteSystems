@@ -62,16 +62,31 @@ test("authorization admin page shows backend authorization errors", async ({ pag
 });
 
 async function expectAuthzAdminAvailable(api: APIRequestContext) {
-  const response = await api.get("/api/v1/authz/roles", {
-    headers: {
-      "X-Actor-ID": ADMIN_ACTOR_ID,
-      "X-Tenant-ID": ADMIN_TENANT_ID,
-    },
-  });
+  const deadline = Date.now() + 30_000;
+  let lastStatus = 0;
+  let lastBody = "";
+
+  while (Date.now() < deadline) {
+    const response = await api.get("/api/v1/authz/roles", {
+      headers: {
+        "X-Actor-ID": ADMIN_ACTOR_ID,
+        "X-Tenant-ID": ADMIN_TENANT_ID,
+      },
+    });
+
+    lastStatus = response.status();
+    lastBody = await response.text();
+
+    if (response.ok()) {
+      return;
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 1_000));
+  }
 
   expect(
-    response.ok(),
-    `Authz admin actor ${ADMIN_ACTOR_ID} must be bootstrapped before authz admin E2E tests run. Response: ${response.status()} ${await response.text()}`,
+    false,
+    `Authz admin actor ${ADMIN_ACTOR_ID} must be bootstrapped before authz admin E2E tests run. Last response: ${lastStatus} ${lastBody}`,
   ).toBeTruthy();
 }
 
