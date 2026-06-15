@@ -1,14 +1,10 @@
-import { expect, test, type APIRequestContext } from "@playwright/test";
+import { expect, test } from "@playwright/test";
 
 const ADMIN_ACTOR_ID = process.env.PLAYWRIGHT_AUTHZ_ADMIN_ACTOR_ID ?? "bootstrap-admin";
 const ADMIN_TENANT_ID = process.env.PLAYWRIGHT_AUTHZ_ADMIN_TENANT_ID ?? "default";
 const ROLE_TO_GRANT = "EXPENSE_OPERATOR";
 
-test("admin can create an authorization actor and manage role grants", async ({
-  page,
-  request,
-}) => {
-  await expectAuthzAdminAvailable(request);
+test("admin can create an authorization actor and manage role grants", async ({ page }) => {
 
   const actorKey = `authz-e2e-${uniqueSuffix()}`;
   const displayName = `Authz E2E ${actorKey}`;
@@ -45,9 +41,7 @@ test("admin can create an authorization actor and manage role grants", async ({
   await expect(page.getByRole("status")).toContainText(`${ROLE_TO_GRANT} revoked.`);
 });
 
-test("authorization admin page shows backend authorization errors", async ({ page, request }) => {
-  await expectAuthzAdminAvailable(request);
-
+test("authorization admin page shows backend authorization errors", async ({ page }) => {
   await page.goto("/admin/authorization");
 
   await expect(page.getByRole("heading", { name: "APPLICATION_ADMIN", exact: true })).toBeVisible();
@@ -60,35 +54,6 @@ test("authorization admin page shows backend authorization errors", async ({ pag
   await expect(page.getByText("Authorization actor is required", { exact: true })).toBeVisible();
   await expect(page.getByText(/Status: 401 · Code: missing_actor/i)).toBeVisible();
 });
-
-async function expectAuthzAdminAvailable(api: APIRequestContext) {
-  const deadline = Date.now() + 30_000;
-  let lastStatus = 0;
-  let lastBody = "";
-
-  while (Date.now() < deadline) {
-    const response = await api.get("/api/v1/authz/roles", {
-      headers: {
-        "X-Actor-ID": ADMIN_ACTOR_ID,
-        "X-Tenant-ID": ADMIN_TENANT_ID,
-      },
-    });
-
-    lastStatus = response.status();
-    lastBody = await response.text();
-
-    if (response.ok()) {
-      return;
-    }
-
-    await new Promise((resolve) => setTimeout(resolve, 1_000));
-  }
-
-  expect(
-    false,
-    `Authz admin actor ${ADMIN_ACTOR_ID} must be bootstrapped before authz admin E2E tests run. Last response: ${lastStatus} ${lastBody}`,
-  ).toBeTruthy();
-}
 
 function uniqueSuffix() {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
