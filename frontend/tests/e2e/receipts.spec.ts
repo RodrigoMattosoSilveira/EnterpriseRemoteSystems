@@ -8,6 +8,7 @@ const LOCATION_MAIN_MINE_ID = "ref-location-main-mine";
 const TASK_MINER_ID = "ref-task-miner";
 const EXPENSE_CATEGORY_CANTEEN_ID = "ref-expense-category-canteen";
 const VALUE_UNIT_BRL_ID = "ref-value-unit-brl";
+const ADMIN_ACTOR_ID = "bootstrap-admin";
 
 test("outstanding receipt appears, can be opened, and disappears after signed return", async ({
   page,
@@ -64,7 +65,7 @@ test("outstanding receipt appears, can be opened, and disappears after signed re
 
   const returnedReceipt = await getPrintableReceipt(request, ledgerEntry.id);
   expect(returnedReceipt.status).toBe("RETURNED");
-  expect(returnedReceipt.receivedBy).toBe("receipt-e2e@example.com");
+  expect(returnedReceipt.receivedBy).toBe(ADMIN_ACTOR_ID);
 
   const refreshedReceipt = await findOutstandingReceiptByLedgerEntryId(
     request,
