@@ -27,12 +27,18 @@ func (s fakeActorStore) FindActor(context.Context, authz.ActorLookup) (*authz.Ac
 }
 
 type recordingReceiptService struct {
-	printedBy       string
-	zeroGoldBy      string
-	partialPayoutBy string
-	closeJourneyBy  string
-	reverseEntryBy  string
-	replaceEntryBy  string
+	printedBy            string
+	zeroGoldBy           string
+	partialPayoutBy      string
+	closeJourneyBy       string
+	reverseEntryBy       string
+	replaceEntryBy       string
+	collaboratorTenantID string
+	ledgerEntryTenantID  string
+}
+
+func newRecordingReceiptService() *recordingReceiptService {
+	return &recordingReceiptService{collaboratorTenantID: "tenant-a", ledgerEntryTenantID: "tenant-a"}
 }
 
 func (s *recordingReceiptService) PrintReceipt(_ context.Context, _ string, printedBy string) (*PrintableReceiptDTO, error) {
@@ -41,7 +47,7 @@ func (s *recordingReceiptService) PrintReceipt(_ context.Context, _ string, prin
 }
 
 func TestReceiptHandlerResolvesPersistedActorFromRequestHeaders(t *testing.T) {
-	service := &recordingReceiptService{}
+	service := newRecordingReceiptService()
 	store := fakeActorStore{actor: &authz.Actor{
 		ID:          "expense-operator@example.com",
 		TenantID:    "tenant-a",
@@ -81,7 +87,7 @@ func TestReceiptHandlerResolvesPersistedActorFromRequestHeaders(t *testing.T) {
 }
 
 func TestReceiptHandlerRejectsMissingPersistedActor(t *testing.T) {
-	service := &recordingReceiptService{}
+	service := newRecordingReceiptService()
 	store := fakeActorStore{err: authz.ErrMissingActor}
 
 	app := fiber.New()
@@ -127,7 +133,7 @@ func TestCurrentAccountHandlerProtectsLedgerCorrectionOperations(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name+" permits persisted actor", func(t *testing.T) {
-			service := &recordingReceiptService{}
+			service := newRecordingReceiptService()
 			store := fakeActorStore{actor: &authz.Actor{
 				ID:          "correction-operator@example.com",
 				TenantID:    "tenant-a",
@@ -160,7 +166,7 @@ func TestCurrentAccountHandlerProtectsLedgerCorrectionOperations(t *testing.T) {
 		})
 
 		t.Run(tc.name+" rejects missing actor", func(t *testing.T) {
-			service := &recordingReceiptService{}
+			service := newRecordingReceiptService()
 			store := fakeActorStore{err: authz.ErrMissingActor}
 
 			app := fiber.New()
@@ -179,7 +185,7 @@ func TestCurrentAccountHandlerProtectsLedgerCorrectionOperations(t *testing.T) {
 		})
 
 		t.Run(tc.name+" rejects actor without permission", func(t *testing.T) {
-			service := &recordingReceiptService{}
+			service := newRecordingReceiptService()
 			store := fakeActorStore{actor: &authz.Actor{
 				ID:          "read-only@example.com",
 				TenantID:    "tenant-a",
@@ -234,7 +240,7 @@ func TestCurrentAccountHandlerProtectsSettlementOperations(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name+" permits only specific persisted permission", func(t *testing.T) {
-			service := &recordingReceiptService{}
+			service := newRecordingReceiptService()
 			store := fakeActorStore{actor: &authz.Actor{
 				ID:          "settlement-operator@example.com",
 				TenantID:    "tenant-a",
@@ -267,7 +273,7 @@ func TestCurrentAccountHandlerProtectsSettlementOperations(t *testing.T) {
 		})
 
 		t.Run(tc.name+" rejects actor without permission", func(t *testing.T) {
-			service := &recordingReceiptService{}
+			service := newRecordingReceiptService()
 			store := fakeActorStore{actor: &authz.Actor{
 				ID:          "read-only@example.com",
 				TenantID:    "tenant-a",
@@ -291,6 +297,62 @@ func TestCurrentAccountHandlerProtectsSettlementOperations(t *testing.T) {
 				t.Fatalf("service must not be called when actor is forbidden, got %q", got)
 			}
 		})
+	}
+}
+
+func TestCurrentAccountHandlerEnforcesLedgerCorrectionTenantOwnership(t *testing.T) {
+	service := newRecordingReceiptService()
+	service.ledgerEntryTenantID = "tenant-b"
+	store := fakeActorStore{actor: &authz.Actor{
+		ID:          "correction-operator@example.com",
+		TenantID:    "tenant-a",
+		Source:      authz.ActorSourcePersisted,
+		Scope:       authz.ActorScopeTenant,
+		Permissions: map[authz.Permission]struct{}{authz.PermissionLedgerCorrectionsCreate: {}},
+	}}
+
+	app := fiber.New()
+	app.Post("/ledger-entries/:entryId/reverse", NewHandler(service, WithActorStore(store)).ReverseEntry)
+
+	res := postAuthzJSON(t, app, "/ledger-entries/entry-1/reverse", map[string]any{
+		"reason":        "cross tenant correction",
+		"effectiveDate": "2026-06-15",
+	}, "correction-operator@example.com", "tenant-a")
+	defer res.Body.Close()
+
+	if res.StatusCode != http.StatusForbidden {
+		t.Fatalf("expected status %d, got %d", http.StatusForbidden, res.StatusCode)
+	}
+	if service.reverseEntryBy != "" {
+		t.Fatalf("service must not be called for cross-tenant ledger correction, got %q", service.reverseEntryBy)
+	}
+}
+
+func TestCurrentAccountHandlerEnforcesSettlementTenantOwnership(t *testing.T) {
+	service := newRecordingReceiptService()
+	service.collaboratorTenantID = "tenant-b"
+	store := fakeActorStore{actor: &authz.Actor{
+		ID:          "settlement-operator@example.com",
+		TenantID:    "tenant-a",
+		Source:      authz.ActorSourcePersisted,
+		Scope:       authz.ActorScopeTenant,
+		Permissions: map[authz.Permission]struct{}{authz.PermissionJourneySettlementsZeroGold: {}},
+	}}
+
+	app := fiber.New()
+	app.Post("/collaborators/:collaboratorId/zero-gold", NewHandler(service, WithActorStore(store)).ZeroGold)
+
+	res := postAuthzJSON(t, app, "/collaborators/collab-1/zero-gold", map[string]any{
+		"requestId":     "request-1",
+		"effectiveDate": "2026-06-15",
+	}, "settlement-operator@example.com", "tenant-a")
+	defer res.Body.Close()
+
+	if res.StatusCode != http.StatusForbidden {
+		t.Fatalf("expected status %d, got %d", http.StatusForbidden, res.StatusCode)
+	}
+	if service.zeroGoldBy != "" {
+		t.Fatalf("service must not be called for cross-tenant settlement, got %q", service.zeroGoldBy)
 	}
 }
 
@@ -323,6 +385,12 @@ func (s *recordingReceiptService) PartialPayout(_ context.Context, _ string, aut
 func (s *recordingReceiptService) CloseJourney(_ context.Context, _ string, authorizedBy string, _ CloseJourneyRequest) (*CloseJourneyResult, error) {
 	s.closeJourneyBy = authorizedBy
 	return &CloseJourneyResult{Settlement: JourneySettlementDTO{ID: "settlement-1", AuthorizedBy: authorizedBy}}, nil
+}
+func (s *recordingReceiptService) CollaboratorTenantID(context.Context, string) (string, error) {
+	return s.collaboratorTenantID, nil
+}
+func (s *recordingReceiptService) LedgerEntryTenantID(context.Context, string) (string, error) {
+	return s.ledgerEntryTenantID, nil
 }
 func (s *recordingReceiptService) AuthorizeSettlement(string) error { return nil }
 func (s *recordingReceiptService) GetDetail(context.Context, string, LedgerEntryListFilter) (*CurrentAccountDetailDTO, error) {

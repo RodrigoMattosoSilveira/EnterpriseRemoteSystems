@@ -41,6 +41,9 @@ func (h *Handler) ZeroGold(c fiber.Ctx) error {
 	if !authorized {
 		return nil
 	}
+	if ok, err := h.requireCollaboratorTenantScope(c, actor, c.Params("collaboratorId")); err != nil || !ok {
+		return err
+	}
 	var req ZeroGoldRequest
 	if err := c.Bind().Body(&req); err != nil {
 		return httpx.WriteError(c, err)
@@ -63,6 +66,9 @@ func (h *Handler) PartialPayout(c fiber.Ctx) error {
 	if !authorized {
 		return nil
 	}
+	if ok, err := h.requireCollaboratorTenantScope(c, actor, c.Params("collaboratorId")); err != nil || !ok {
+		return err
+	}
 	var req PartialPayoutRequest
 	if err := c.Bind().Body(&req); err != nil {
 		return httpx.WriteError(c, err)
@@ -84,6 +90,9 @@ func (h *Handler) CloseJourney(c fiber.Ctx) error {
 	}
 	if !authorized {
 		return nil
+	}
+	if ok, err := h.requireCollaboratorTenantScope(c, actor, c.Params("collaboratorId")); err != nil || !ok {
+		return err
 	}
 	var req CloseJourneyRequest
 	if err := c.Bind().Body(&req); err != nil {
@@ -162,6 +171,9 @@ func (h *Handler) ReverseEntry(c fiber.Ctx) error {
 	if !authorized {
 		return nil
 	}
+	if ok, err := h.requireLedgerEntryTenantScope(c, actor, c.Params("entryId")); err != nil || !ok {
+		return err
+	}
 	var req ReverseLedgerEntryRequest
 	if err := c.Bind().Body(&req); err != nil {
 		return httpx.WriteError(c, err)
@@ -180,6 +192,9 @@ func (h *Handler) ReplaceEntry(c fiber.Ctx) error {
 	}
 	if !authorized {
 		return nil
+	}
+	if ok, err := h.requireLedgerEntryTenantScope(c, actor, c.Params("entryId")); err != nil || !ok {
+		return err
 	}
 	var req ReplaceLedgerEntryRequest
 	if err := c.Bind().Body(&req); err != nil {
@@ -270,6 +285,29 @@ func (h *Handler) requireCurrentAccountPermission(c fiber.Ctx, permission authz.
 		return nil, false, writeAuthorizationError(c, err)
 	}
 	return actor, true, nil
+}
+
+func (h *Handler) requireCollaboratorTenantScope(c fiber.Ctx, actor *authz.Actor, collaboratorID string) (bool, error) {
+	tenantID, err := h.service.CollaboratorTenantID(c.Context(), collaboratorID)
+	if err != nil {
+		return false, httpx.WriteError(c, err)
+	}
+	return h.requireActorTenantScope(c, actor, tenantID)
+}
+
+func (h *Handler) requireLedgerEntryTenantScope(c fiber.Ctx, actor *authz.Actor, entryID string) (bool, error) {
+	tenantID, err := h.service.LedgerEntryTenantID(c.Context(), entryID)
+	if err != nil {
+		return false, httpx.WriteError(c, err)
+	}
+	return h.requireActorTenantScope(c, actor, tenantID)
+}
+
+func (h *Handler) requireActorTenantScope(c fiber.Ctx, actor *authz.Actor, tenantID string) (bool, error) {
+	if err := authz.RequireTenantScope(actor, tenantID); err != nil {
+		return false, writeAuthorizationError(c, err)
+	}
+	return true, nil
 }
 
 func writeAuthorizationError(c fiber.Ctx, err error) error {
