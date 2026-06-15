@@ -181,3 +181,11 @@ func normalizeListFilter(filter LedgerEntryListFilter) (normalizedLedgerEntryLis
 	}
 	return out, nil
 }
+
+func (s *service) CollaboratorTenantID(ctx context.Context, collaboratorID string) (string, error) {
+	return s.repo.FindCollaboratorTenantID(ctx, strings.TrimSpace(collaboratorID))
+}
+
+func (s *service) LedgerEntryTenantID(ctx context.Context, entryID string) (string, error) {
+	return s.repo.FindLedgerEntryTenantID(ctx, strings.TrimSpace(entryID))
+}

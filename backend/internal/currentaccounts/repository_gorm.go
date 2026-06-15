@@ -434,3 +434,19 @@ func (r *gormRepository) CreateLedgerReceipts(ctx context.Context, receipts ...*
 		return nil
 	})
 }
+
+func (r *gormRepository) FindCollaboratorTenantID(ctx context.Context, collaboratorID string) (string, error) {
+	var row db.CollaboratorJourney
+	if err := r.db.WithContext(ctx).Select("tenant_id").First(&row, "id = ?", collaboratorID).Error; err != nil {
+		return "", err
+	}
+	return row.TenantID, nil
+}
+
+func (r *gormRepository) FindLedgerEntryTenantID(ctx context.Context, entryID string) (string, error) {
+	var row db.LedgerEntry
+	if err := r.db.WithContext(ctx).Select("tenant_id").First(&row, "id = ?", entryID).Error; err != nil {
+		return "", err
+	}
+	return row.TenantID, nil
+}
