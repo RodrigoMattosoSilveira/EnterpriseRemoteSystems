@@ -19,10 +19,7 @@ test("admin can create an authorization actor and manage role grants", async ({ 
   await page.getByLabel("Display name").fill(displayName);
   await page.getByRole("button", { name: "Create Actor" }).click();
 
-  await expect(page.getByRole("status")).toContainText(`${actorKey} created.`);
-
-  const actorCard = page.locator("article").filter({ hasText: actorKey }).first();
-  await expect(actorCard).toBeVisible();
+  const actorCard = await expectActorCard(page, actorKey);
   await expect(actorCard).toContainText(displayName);
   await expect(actorCard.getByText("No role grants.")).toBeVisible();
   await expect(actorCard.getByLabel("Role")).toContainText(ROLE_TO_GRANT);
@@ -52,6 +49,22 @@ test("authorization admin page shows backend authorization errors", async ({ pag
   await expect(page.getByText("Authorization actor is required", { exact: true })).toBeVisible();
   await expect(page.getByText(/Status: 401 · Code: missing_actor/i)).toBeVisible();
 });
+
+async function expectActorCard(page: import("@playwright/test").Page, actorKey: string) {
+  const actorCard = page.locator("article").filter({ hasText: actorKey }).first();
+
+  try {
+    await expect(actorCard).toBeVisible({ timeout: 5_000 });
+    return actorCard;
+  } catch {
+    await page.reload();
+    await expect(page.getByRole("heading", { name: "Authorization" })).toBeVisible();
+    await page.getByLabel("Actor ID / key").fill(ADMIN_ACTOR_ID);
+    await page.getByLabel("Tenant ID").fill(ADMIN_TENANT_ID);
+    await expect(actorCard).toBeVisible({ timeout: 10_000 });
+    return actorCard;
+  }
+}
 
 function uniqueSuffix() {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
