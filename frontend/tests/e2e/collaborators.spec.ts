@@ -1,5 +1,5 @@
 import { expect, test, type APIRequestContext } from "@playwright/test";
-import { authzHeaders, seedBrowserAuthz } from "./support/authz";
+import { authzHeaders, e2eApiUrl, seedBrowserAuthz } from "./support/authz";
 
 const PERSON_STATUS_ACTIVE_ID = "ref-person-status-active";
 const COLLABORATOR_STATUS_ACTIVE_ID = "ref-collaborator-status-active";
@@ -128,7 +128,7 @@ async function createCompletePerson(
     nickname: string;
   },
 ): Promise<CreatedPerson> {
-  const response = await api.post("/api/v1/people", {
+  const response = await api.post(e2eApiUrl("/api/v1/people"), {
     headers: authzHeaders(),
     data: completePersonPayload(input),
   });
