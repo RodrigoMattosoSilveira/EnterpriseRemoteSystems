@@ -20,9 +20,11 @@ type Repository interface {
 	ListEntries(ctx context.Context, collaboratorID string, filter normalizedLedgerEntryListFilter) ([]db.LedgerEntry, int64, error)
 	ListBalances(ctx context.Context, collaboratorID string) ([]BalanceRow, error)
 	FindCollaboratorByID(ctx context.Context, collaboratorID string) (*db.CollaboratorJourney, error)
+	FindCollaboratorTenantID(ctx context.Context, collaboratorID string) (string, error)
 	ListRecentDailyGoldProduction(ctx context.Context, locationID string, limit int) ([]DailyGoldProductionRow, error)
 	CountPendingAccrualItems(ctx context.Context, collaboratorID string) (int64, error)
 	FindEntryByID(ctx context.Context, entryID string) (*db.LedgerEntry, error)
+	FindLedgerEntryTenantID(ctx context.Context, entryID string) (string, error)
 	FindValueUnitByID(ctx context.Context, valueUnitID string) (*db.ReferenceData, error)
 	HasReversal(ctx context.Context, entryID string) (bool, error)
 	CreateCorrectionEntries(ctx context.Context, entries ...*db.LedgerEntry) error
