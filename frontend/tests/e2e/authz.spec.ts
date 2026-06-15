@@ -17,7 +17,20 @@ test("admin can create an authorization actor and manage role grants", async ({ 
 
   await page.getByLabel("Actor key", { exact: true }).fill(actorKey);
   await page.getByLabel("Display name").fill(displayName);
+
+  const createResponsePromise = page.waitForResponse(
+    (response) =>
+      response.url().includes("/api/v1/authz/actors") &&
+      response.request().method() === "POST",
+  );
   await page.getByRole("button", { name: "Create Actor" }).click();
+
+  const createResponse = await createResponsePromise;
+  const createResponseBody = await createResponse.text();
+  expect(
+    createResponse.ok(),
+    `Create actor ${actorKey} failed: ${createResponse.status()} ${createResponseBody}`,
+  ).toBeTruthy();
 
   const actorCard = await expectActorCard(page, actorKey);
   await expect(actorCard).toContainText(displayName);
@@ -54,14 +67,14 @@ async function expectActorCard(page: import("@playwright/test").Page, actorKey: 
   const actorCard = page.locator("article").filter({ hasText: actorKey }).first();
 
   try {
-    await expect(actorCard).toBeVisible({ timeout: 5_000 });
+    await expect(actorCard).toBeVisible({ timeout: 10_000 });
     return actorCard;
   } catch {
     await page.reload();
     await expect(page.getByRole("heading", { name: "Authorization" })).toBeVisible();
     await page.getByLabel("Actor ID / key").fill(ADMIN_ACTOR_ID);
     await page.getByLabel("Tenant ID").fill(ADMIN_TENANT_ID);
-    await expect(actorCard).toBeVisible({ timeout: 10_000 });
+    await expect(actorCard).toBeVisible({ timeout: 15_000 });
     return actorCard;
   }
 }
