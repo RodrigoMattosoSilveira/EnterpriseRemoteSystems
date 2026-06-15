@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/gofiber/fiber/v3"
@@ -26,7 +27,12 @@ func (s fakeActorStore) FindActor(context.Context, authz.ActorLookup) (*authz.Ac
 }
 
 type recordingReceiptService struct {
-	printedBy string
+	printedBy       string
+	zeroGoldBy      string
+	partialPayoutBy string
+	closeJourneyBy  string
+	reverseEntryBy  string
+	replaceEntryBy  string
 }
 
 func (s *recordingReceiptService) PrintReceipt(_ context.Context, _ string, printedBy string) (*PrintableReceiptDTO, error) {
@@ -98,6 +104,196 @@ func TestReceiptHandlerRejectsMissingPersistedActor(t *testing.T) {
 	}
 }
 
+func TestCurrentAccountHandlerProtectsLedgerCorrectionOperations(t *testing.T) {
+	cases := []struct {
+		name       string
+		path       string
+		permission authz.Permission
+		wantCalled func(*recordingReceiptService) string
+	}{
+		{
+			name:       "reverse entry",
+			path:       "/ledger-entries/entry-1/reverse",
+			permission: authz.PermissionLedgerCorrectionsCreate,
+			wantCalled: func(s *recordingReceiptService) string { return s.reverseEntryBy },
+		},
+		{
+			name:       "replace entry",
+			path:       "/ledger-entries/entry-1/replace",
+			permission: authz.PermissionLedgerCorrectionsCreate,
+			wantCalled: func(s *recordingReceiptService) string { return s.replaceEntryBy },
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name+" permits persisted actor", func(t *testing.T) {
+			service := &recordingReceiptService{}
+			store := fakeActorStore{actor: &authz.Actor{
+				ID:          "correction-operator@example.com",
+				TenantID:    "tenant-a",
+				Source:      authz.ActorSourcePersisted,
+				Scope:       authz.ActorScopeTenant,
+				Permissions: map[authz.Permission]struct{}{tc.permission: {}},
+			}}
+
+			app := fiber.New()
+			app.Post("/ledger-entries/:entryId/reverse", NewHandler(service, WithActorStore(store)).ReverseEntry)
+			app.Post("/ledger-entries/:entryId/replace", NewHandler(service, WithActorStore(store)).ReplaceEntry)
+
+			res := postAuthzJSON(t, app, tc.path, map[string]any{
+				"reason":        "authorized correction",
+				"effectiveDate": "2026-06-15",
+				"valueUnitId":   "unit-brl",
+				"entryType":     "ADJUSTMENT",
+				"direction":     "CREDIT",
+				"amount":        10,
+				"description":   "replacement entry",
+			}, "correction-operator@example.com", "tenant-a")
+			defer res.Body.Close()
+
+			if res.StatusCode != http.StatusOK {
+				t.Fatalf("expected status %d, got %d", http.StatusOK, res.StatusCode)
+			}
+			if got := tc.wantCalled(service); got != "correction-operator@example.com" {
+				t.Fatalf("expected service authorizedBy to use persisted actor id, got %q", got)
+			}
+		})
+
+		t.Run(tc.name+" rejects missing actor", func(t *testing.T) {
+			service := &recordingReceiptService{}
+			store := fakeActorStore{err: authz.ErrMissingActor}
+
+			app := fiber.New()
+			app.Post("/ledger-entries/:entryId/reverse", NewHandler(service, WithActorStore(store)).ReverseEntry)
+			app.Post("/ledger-entries/:entryId/replace", NewHandler(service, WithActorStore(store)).ReplaceEntry)
+
+			res := postAuthzJSON(t, app, tc.path, map[string]any{"reason": "authorized correction"}, "missing@example.com", "tenant-a")
+			defer res.Body.Close()
+
+			if res.StatusCode != http.StatusUnauthorized {
+				t.Fatalf("expected status %d, got %d", http.StatusUnauthorized, res.StatusCode)
+			}
+			if got := tc.wantCalled(service); got != "" {
+				t.Fatalf("service must not be called when actor is missing, got %q", got)
+			}
+		})
+
+		t.Run(tc.name+" rejects actor without permission", func(t *testing.T) {
+			service := &recordingReceiptService{}
+			store := fakeActorStore{actor: &authz.Actor{
+				ID:          "read-only@example.com",
+				TenantID:    "tenant-a",
+				Source:      authz.ActorSourcePersisted,
+				Scope:       authz.ActorScopeTenant,
+				Permissions: map[authz.Permission]struct{}{},
+			}}
+
+			app := fiber.New()
+			app.Post("/ledger-entries/:entryId/reverse", NewHandler(service, WithActorStore(store)).ReverseEntry)
+			app.Post("/ledger-entries/:entryId/replace", NewHandler(service, WithActorStore(store)).ReplaceEntry)
+
+			res := postAuthzJSON(t, app, tc.path, map[string]any{"reason": "authorized correction"}, "read-only@example.com", "tenant-a")
+			defer res.Body.Close()
+
+			if res.StatusCode != http.StatusForbidden {
+				t.Fatalf("expected status %d, got %d", http.StatusForbidden, res.StatusCode)
+			}
+			if got := tc.wantCalled(service); got != "" {
+				t.Fatalf("service must not be called when actor is forbidden, got %q", got)
+			}
+		})
+	}
+}
+
+func TestCurrentAccountHandlerProtectsSettlementOperations(t *testing.T) {
+	cases := []struct {
+		name       string
+		path       string
+		permission authz.Permission
+		wantCalled func(*recordingReceiptService) string
+	}{
+		{
+			name:       "zero gold",
+			path:       "/collaborators/collab-1/zero-gold",
+			permission: authz.PermissionJourneySettlementsZeroGold,
+			wantCalled: func(s *recordingReceiptService) string { return s.zeroGoldBy },
+		},
+		{
+			name:       "partial payout",
+			path:       "/collaborators/collab-1/payout",
+			permission: authz.PermissionJourneySettlementsPartialPayout,
+			wantCalled: func(s *recordingReceiptService) string { return s.partialPayoutBy },
+		},
+		{
+			name:       "close journey",
+			path:       "/collaborators/collab-1/close",
+			permission: authz.PermissionJourneySettlementsClose,
+			wantCalled: func(s *recordingReceiptService) string { return s.closeJourneyBy },
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name+" permits only specific persisted permission", func(t *testing.T) {
+			service := &recordingReceiptService{}
+			store := fakeActorStore{actor: &authz.Actor{
+				ID:          "settlement-operator@example.com",
+				TenantID:    "tenant-a",
+				Source:      authz.ActorSourcePersisted,
+				Scope:       authz.ActorScopeTenant,
+				Permissions: map[authz.Permission]struct{}{tc.permission: {}},
+			}}
+
+			app := fiber.New()
+			app.Post("/collaborators/:collaboratorId/zero-gold", NewHandler(service, WithActorStore(store)).ZeroGold)
+			app.Post("/collaborators/:collaboratorId/payout", NewHandler(service, WithActorStore(store)).PartialPayout)
+			app.Post("/collaborators/:collaboratorId/close", NewHandler(service, WithActorStore(store)).CloseJourney)
+
+			res := postAuthzJSON(t, app, tc.path, map[string]any{
+				"requestId":      "request-1",
+				"effectiveDate":  "2026-06-15",
+				"notes":          "authorized settlement",
+				"brlAmount":      10,
+				"goldGramAmount": 1,
+				"confirm":        true,
+			}, "settlement-operator@example.com", "tenant-a")
+			defer res.Body.Close()
+
+			if res.StatusCode != http.StatusOK {
+				t.Fatalf("expected status %d, got %d", http.StatusOK, res.StatusCode)
+			}
+			if got := tc.wantCalled(service); got != "settlement-operator@example.com" {
+				t.Fatalf("expected service authorizedBy to use persisted actor id, got %q", got)
+			}
+		})
+
+		t.Run(tc.name+" rejects actor without permission", func(t *testing.T) {
+			service := &recordingReceiptService{}
+			store := fakeActorStore{actor: &authz.Actor{
+				ID:          "read-only@example.com",
+				TenantID:    "tenant-a",
+				Source:      authz.ActorSourcePersisted,
+				Scope:       authz.ActorScopeTenant,
+				Permissions: map[authz.Permission]struct{}{},
+			}}
+
+			app := fiber.New()
+			app.Post("/collaborators/:collaboratorId/zero-gold", NewHandler(service, WithActorStore(store)).ZeroGold)
+			app.Post("/collaborators/:collaboratorId/payout", NewHandler(service, WithActorStore(store)).PartialPayout)
+			app.Post("/collaborators/:collaboratorId/close", NewHandler(service, WithActorStore(store)).CloseJourney)
+
+			res := postAuthzJSON(t, app, tc.path, map[string]any{"requestId": "request-1"}, "read-only@example.com", "tenant-a")
+			defer res.Body.Close()
+
+			if res.StatusCode != http.StatusForbidden {
+				t.Fatalf("expected status %d, got %d", http.StatusForbidden, res.StatusCode)
+			}
+			if got := tc.wantCalled(service); got != "" {
+				t.Fatalf("service must not be called when actor is forbidden, got %q", got)
+			}
+		})
+	}
+}
+
 func (s *recordingReceiptService) BackfillDebitLedgerReceipts(context.Context, string, bool) (*ReceiptBackfillResult, error) {
 	return nil, errors.New("not implemented")
 }
@@ -116,14 +312,17 @@ func (s *recordingReceiptService) FinancialProjection(context.Context, string) (
 func (s *recordingReceiptService) SettlementPreview(context.Context, string) (*SettlementPreviewDTO, error) {
 	return nil, errors.New("not implemented")
 }
-func (s *recordingReceiptService) ZeroGold(context.Context, string, string, ZeroGoldRequest) (*ZeroGoldResult, error) {
-	return nil, errors.New("not implemented")
+func (s *recordingReceiptService) ZeroGold(_ context.Context, _ string, authorizedBy string, _ ZeroGoldRequest) (*ZeroGoldResult, error) {
+	s.zeroGoldBy = authorizedBy
+	return &ZeroGoldResult{Settlement: JourneySettlementDTO{ID: "settlement-1", AuthorizedBy: authorizedBy}}, nil
 }
-func (s *recordingReceiptService) PartialPayout(context.Context, string, string, PartialPayoutRequest) (*PartialPayoutResult, error) {
-	return nil, errors.New("not implemented")
+func (s *recordingReceiptService) PartialPayout(_ context.Context, _ string, authorizedBy string, _ PartialPayoutRequest) (*PartialPayoutResult, error) {
+	s.partialPayoutBy = authorizedBy
+	return &PartialPayoutResult{Settlement: JourneySettlementDTO{ID: "settlement-1", AuthorizedBy: authorizedBy}}, nil
 }
-func (s *recordingReceiptService) CloseJourney(context.Context, string, string, CloseJourneyRequest) (*CloseJourneyResult, error) {
-	return nil, errors.New("not implemented")
+func (s *recordingReceiptService) CloseJourney(_ context.Context, _ string, authorizedBy string, _ CloseJourneyRequest) (*CloseJourneyResult, error) {
+	s.closeJourneyBy = authorizedBy
+	return &CloseJourneyResult{Settlement: JourneySettlementDTO{ID: "settlement-1", AuthorizedBy: authorizedBy}}, nil
 }
 func (s *recordingReceiptService) AuthorizeSettlement(string) error { return nil }
 func (s *recordingReceiptService) GetDetail(context.Context, string, LedgerEntryListFilter) (*CurrentAccountDetailDTO, error) {
@@ -135,10 +334,29 @@ func (s *recordingReceiptService) ListEntries(context.Context, string, LedgerEnt
 func (s *recordingReceiptService) ListBalances(context.Context, string) ([]CurrentAccountBalanceDTO, error) {
 	return nil, errors.New("not implemented")
 }
-func (s *recordingReceiptService) ReverseEntry(context.Context, string, string, ReverseLedgerEntryRequest) (*LedgerCorrectionResult, error) {
-	return nil, errors.New("not implemented")
+func (s *recordingReceiptService) ReverseEntry(_ context.Context, _ string, authorizedBy string, _ ReverseLedgerEntryRequest) (*LedgerCorrectionResult, error) {
+	s.reverseEntryBy = authorizedBy
+	return &LedgerCorrectionResult{Reversal: LedgerEntryDTO{ID: "reversal-1", AuthorizedBy: authorizedBy}}, nil
 }
-func (s *recordingReceiptService) ReplaceEntry(context.Context, string, string, ReplaceLedgerEntryRequest) (*LedgerCorrectionResult, error) {
-	return nil, errors.New("not implemented")
+func (s *recordingReceiptService) ReplaceEntry(_ context.Context, _ string, authorizedBy string, _ ReplaceLedgerEntryRequest) (*LedgerCorrectionResult, error) {
+	s.replaceEntryBy = authorizedBy
+	return &LedgerCorrectionResult{Reversal: LedgerEntryDTO{ID: "reversal-1", AuthorizedBy: authorizedBy}, Replacement: &LedgerEntryDTO{ID: "replacement-1", AuthorizedBy: authorizedBy}}, nil
 }
 func (s *recordingReceiptService) AuthorizeCorrection(string) error { return nil }
+
+func postAuthzJSON(t *testing.T, app *fiber.App, path string, body map[string]any, actorID, tenantID string) *http.Response {
+	t.Helper()
+	payload, err := json.Marshal(body)
+	if err != nil {
+		t.Fatalf("marshal request: %v", err)
+	}
+	req := httptest.NewRequest(http.MethodPost, path, strings.NewReader(string(payload)))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set(authz.HeaderActorID, actorID)
+	req.Header.Set(authz.HeaderTenantID, tenantID)
+	res, err := app.Test(req, fiber.TestConfig{Timeout: 0, FailOnTimeout: false})
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	return res
+}
