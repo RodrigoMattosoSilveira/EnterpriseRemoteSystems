@@ -1,5 +1,5 @@
 import { expect, test, type APIRequestContext } from "@playwright/test";
-import { authzHeaders, seedBrowserAuthz } from "./support/authz";
+import { authzHeaders, e2eApiUrl, seedBrowserAuthz } from "./support/authz";
 
 const PERSON_STATUS_ACTIVE_ID = "ref-person-status-active";
 const COLLABORATOR_STATUS_ACTIVE_ID = "ref-collaborator-status-active";
@@ -114,7 +114,7 @@ async function createCompletePerson(
   api: APIRequestContext,
   input: { suffix: number; firstName: string; nickname: string },
 ): Promise<CreatedPerson> {
-  const response = await api.post("/api/v1/people", {
+  const response = await api.post(e2eApiUrl("/api/v1/people"), {
     headers: authzHeaders(),
     data: completePersonPayload(input),
   });
@@ -132,7 +132,7 @@ async function createCollaborator(
   api: APIRequestContext,
   personId: string,
 ): Promise<CreatedCollaborator> {
-  const response = await api.post("/api/v1/collaborators", {
+  const response = await api.post(e2eApiUrl("/api/v1/collaborators"), {
     headers: authzHeaders(),
     data: {
       personId,
@@ -157,7 +157,7 @@ async function createCollaborator(
 }
 
 async function createExpense(api: APIRequestContext, payload: ExpensePayload): Promise<Expense> {
-  const response = await api.post("/api/v1/expenses", {
+  const response = await api.post(e2eApiUrl("/api/v1/expenses"), {
     headers: authzHeaders(),
     data: payload,
   });
@@ -177,7 +177,7 @@ async function findLedgerEntryForDescription(
   description: string,
 ): Promise<LedgerEntry> {
   const response = await api.get(
-    `/api/v1/current-accounts/${encodeURIComponent(collaboratorId)}/ledger-entries?pageSize=100`,
+    e2eApiUrl(`/api/v1/current-accounts/${encodeURIComponent(collaboratorId)}/ledger-entries?pageSize=100`),
     { headers: authzHeaders() },
   );
   expect(response.ok()).toBeTruthy();
@@ -188,7 +188,7 @@ async function findLedgerEntryForDescription(
 }
 
 async function listOutstandingReceipts(api: APIRequestContext, page = 1): Promise<OutstandingReceiptListResult> {
-  const response = await api.get(`/api/v1/receipts/outstanding?pageSize=200&page=${page}`, {
+  const response = await api.get(e2eApiUrl(`/api/v1/receipts/outstanding?pageSize=200&page=${page}`), {
     headers: authzHeaders(),
   });
   expect(response.ok()).toBeTruthy();
@@ -219,7 +219,7 @@ async function findOutstandingReceiptByLedgerEntryId(
 
 async function getPrintableReceipt(api: APIRequestContext, ledgerEntryId: string): Promise<PrintableReceipt> {
   const response = await api.get(
-    `/api/v1/ledger-entries/${encodeURIComponent(ledgerEntryId)}/receipt`,
+    e2eApiUrl(`/api/v1/ledger-entries/${encodeURIComponent(ledgerEntryId)}/receipt`),
     { headers: authzHeaders() },
   );
   expect(response.ok()).toBeTruthy();
