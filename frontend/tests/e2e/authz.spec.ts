@@ -15,8 +15,8 @@ test("admin can create an authorization actor and manage role grants", async ({ 
   await page.getByLabel("Actor ID / key").fill(ADMIN_ACTOR_ID);
   await page.getByLabel("Tenant ID").fill(ADMIN_TENANT_ID);
 
-  await expect(page.getByRole("heading", { name: "APPLICATION_ADMIN", exact: true })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "authz.manage", exact: true })).toBeVisible();
+  await expect(page.locator("article").filter({ hasText: ADMIN_ACTOR_ID }).first()).toBeVisible();
+  await expect(page.getByLabel("Role").first()).toContainText(ROLE_TO_GRANT);
 
   await page.getByLabel("Actor key", { exact: true }).fill(actorKey);
   await page.getByLabel("Display name").fill(displayName);
@@ -28,6 +28,7 @@ test("admin can create an authorization actor and manage role grants", async ({ 
   await expect(actorCard).toBeVisible();
   await expect(actorCard).toContainText(displayName);
   await expect(actorCard.getByText("No role grants.")).toBeVisible();
+  await expect(actorCard.getByLabel("Role")).toContainText(ROLE_TO_GRANT);
 
   await actorCard.getByLabel("Role").selectOption(ROLE_TO_GRANT);
   await actorCard.getByLabel("Grant tenant").fill(ADMIN_TENANT_ID);
@@ -44,7 +45,7 @@ test("admin can create an authorization actor and manage role grants", async ({ 
 test("authorization admin page shows backend authorization errors", async ({ page }) => {
   await page.goto("/admin/authorization");
 
-  await expect(page.getByRole("heading", { name: "APPLICATION_ADMIN", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Authorization" })).toBeVisible();
   await page.getByLabel("Actor ID / key").fill(`missing-${uniqueSuffix()}`);
   await page.getByLabel("Tenant ID").fill(ADMIN_TENANT_ID);
 
