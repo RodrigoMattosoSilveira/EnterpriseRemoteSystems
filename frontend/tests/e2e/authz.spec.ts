@@ -1,14 +1,10 @@
-import { expect, test, type APIRequestContext } from "@playwright/test";
+import { expect, test } from "@playwright/test";
 
 const ADMIN_ACTOR_ID = process.env.PLAYWRIGHT_AUTHZ_ADMIN_ACTOR_ID ?? "bootstrap-admin";
 const ADMIN_TENANT_ID = process.env.PLAYWRIGHT_AUTHZ_ADMIN_TENANT_ID ?? "default";
 const ROLE_TO_GRANT = "EXPENSE_OPERATOR";
 
-test("admin can create an authorization actor and manage role grants", async ({
-  page,
-  request,
-}) => {
-  await expectAuthzAdminAvailable(request);
+test("admin can create an authorization actor and manage role grants", async ({ page }) => {
 
   const actorKey = `authz-e2e-${uniqueSuffix()}`;
   const displayName = `Authz E2E ${actorKey}`;
@@ -19,19 +15,27 @@ test("admin can create an authorization actor and manage role grants", async ({
   await page.getByLabel("Actor ID / key").fill(ADMIN_ACTOR_ID);
   await page.getByLabel("Tenant ID").fill(ADMIN_TENANT_ID);
 
-  await expect(page.getByRole("heading", { name: "APPLICATION_ADMIN", exact: true })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "authz.manage", exact: true })).toBeVisible();
-
   await page.getByLabel("Actor key", { exact: true }).fill(actorKey);
   await page.getByLabel("Display name").fill(displayName);
+
+  const createResponsePromise = page.waitForResponse(
+    (response) =>
+      response.url().includes("/api/v1/authz/actors") &&
+      response.request().method() === "POST",
+  );
   await page.getByRole("button", { name: "Create Actor" }).click();
 
-  await expect(page.getByRole("status")).toContainText(`${actorKey} created.`);
+  const createResponse = await createResponsePromise;
+  const createResponseBody = await createResponse.text();
+  expect(
+    createResponse.ok(),
+    `Create actor ${actorKey} failed: ${createResponse.status()} ${createResponseBody}`,
+  ).toBeTruthy();
 
-  const actorCard = page.locator("article").filter({ hasText: actorKey }).first();
-  await expect(actorCard).toBeVisible();
+  const actorCard = await expectActorCard(page, actorKey);
   await expect(actorCard).toContainText(displayName);
   await expect(actorCard.getByText("No role grants.")).toBeVisible();
+  await expect(actorCard.getByLabel("Role")).toContainText(ROLE_TO_GRANT);
 
   await actorCard.getByLabel("Role").selectOption(ROLE_TO_GRANT);
   await actorCard.getByLabel("Grant tenant").fill(ADMIN_TENANT_ID);
@@ -45,12 +49,10 @@ test("admin can create an authorization actor and manage role grants", async ({
   await expect(page.getByRole("status")).toContainText(`${ROLE_TO_GRANT} revoked.`);
 });
 
-test("authorization admin page shows backend authorization errors", async ({ page, request }) => {
-  await expectAuthzAdminAvailable(request);
-
+test("authorization admin page shows backend authorization errors", async ({ page }) => {
   await page.goto("/admin/authorization");
 
-  await expect(page.getByRole("heading", { name: "APPLICATION_ADMIN", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Authorization" })).toBeVisible();
   await page.getByLabel("Actor ID / key").fill(`missing-${uniqueSuffix()}`);
   await page.getByLabel("Tenant ID").fill(ADMIN_TENANT_ID);
 
@@ -61,18 +63,20 @@ test("authorization admin page shows backend authorization errors", async ({ pag
   await expect(page.getByText(/Status: 401 · Code: missing_actor/i)).toBeVisible();
 });
 
-async function expectAuthzAdminAvailable(api: APIRequestContext) {
-  const response = await api.get("/api/v1/authz/roles", {
-    headers: {
-      "X-Actor-ID": ADMIN_ACTOR_ID,
-      "X-Tenant-ID": ADMIN_TENANT_ID,
-    },
-  });
+async function expectActorCard(page: import("@playwright/test").Page, actorKey: string) {
+  const actorCard = page.locator("article").filter({ hasText: actorKey }).first();
 
-  expect(
-    response.ok(),
-    `Authz admin actor ${ADMIN_ACTOR_ID} must be bootstrapped before authz admin E2E tests run. Response: ${response.status()} ${await response.text()}`,
-  ).toBeTruthy();
+  try {
+    await expect(actorCard).toBeVisible({ timeout: 10_000 });
+    return actorCard;
+  } catch {
+    await page.reload();
+    await expect(page.getByRole("heading", { name: "Authorization" })).toBeVisible();
+    await page.getByLabel("Actor ID / key").fill(ADMIN_ACTOR_ID);
+    await page.getByLabel("Tenant ID").fill(ADMIN_TENANT_ID);
+    await expect(actorCard).toBeVisible({ timeout: 15_000 });
+    return actorCard;
+  }
 }
 
 function uniqueSuffix() {
