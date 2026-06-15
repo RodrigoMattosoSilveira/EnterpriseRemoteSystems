@@ -233,6 +233,7 @@ func postAuthorizedJSON(t *testing.T, server *fiber.App, method, url string, pay
 	req := httptest.NewRequest(method, url, bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set(authz.HeaderActorID, "ledger-admin@example.com")
+	req.Header.Set(authz.HeaderTenantID, "default")
 	req.Header.Set(authz.HeaderActorPermissions, string(authz.PermissionLedgerCorrectionsCreate))
 	res, err := server.Test(req, fiber.TestConfig{Timeout: 0, FailOnTimeout: false})
 	if err != nil {
@@ -250,6 +251,7 @@ func postSettlementJSON(t *testing.T, server *fiber.App, url string, payload map
 	req := httptest.NewRequest(http.MethodPost, url, bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set(authz.HeaderActorID, "settlement-admin@example.com")
+	req.Header.Set(authz.HeaderTenantID, "default")
 	req.Header.Set(authz.HeaderActorPermissions, strings.Join([]string{
 		string(authz.PermissionJourneySettlementsZeroGold),
 		string(authz.PermissionJourneySettlementsPartialPayout),
