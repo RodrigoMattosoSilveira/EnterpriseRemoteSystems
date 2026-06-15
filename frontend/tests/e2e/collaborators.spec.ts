@@ -1,4 +1,5 @@
 import { expect, test, type APIRequestContext } from "@playwright/test";
+import { authzHeaders, seedBrowserAuthz } from "./support/authz";
 
 const PERSON_STATUS_ACTIVE_ID = "ref-person-status-active";
 const COLLABORATOR_STATUS_ACTIVE_ID = "ref-collaborator-status-active";
@@ -6,6 +7,10 @@ const PAYMENT_METHOD_DAILY_ID = "ref-method-daily";
 const SECTOR_MINING_ID = "ref-sector-mining";
 const LOCATION_MAIN_MINE_ID = "ref-location-main-mine";
 const TASK_MINER_ID = "ref-task-miner";
+
+test.beforeEach(async ({ page }) => {
+  await seedBrowserAuthz(page);
+});
 
 test("user can create a Collaborator from an eligible complete Person", async ({
   page,
@@ -124,6 +129,7 @@ async function createCompletePerson(
   },
 ): Promise<CreatedPerson> {
   const response = await api.post("/api/v1/people", {
+    headers: authzHeaders(),
     data: completePersonPayload(input),
   });
 
