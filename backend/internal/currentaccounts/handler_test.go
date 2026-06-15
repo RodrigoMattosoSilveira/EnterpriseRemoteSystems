@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/gofiber/fiber/v3"
@@ -200,8 +201,8 @@ func TestLedgerCorrectionRejectsMissingAuthorization(t *testing.T) {
 		"effectiveDate": "2026-06-07",
 	})
 	defer res.Body.Close()
-	if res.StatusCode != http.StatusForbidden {
-		t.Fatalf("expected forbidden status %d, got %d", http.StatusForbidden, res.StatusCode)
+	if res.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("expected unauthorized status %d, got %d", http.StatusUnauthorized, res.StatusCode)
 	}
 }
 
@@ -231,8 +232,8 @@ func postAuthorizedJSON(t *testing.T, server *fiber.App, method, url string, pay
 	}
 	req := httptest.NewRequest(method, url, bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-Ledger-Correction-Key", "test-ledger-correction-key")
-	req.Header.Set("X-Authorized-By", "ledger-admin@example.com")
+	req.Header.Set(authz.HeaderActorID, "ledger-admin@example.com")
+	req.Header.Set(authz.HeaderActorPermissions, string(authz.PermissionLedgerCorrectionsCreate))
 	res, err := server.Test(req, fiber.TestConfig{Timeout: 0, FailOnTimeout: false})
 	if err != nil {
 		t.Fatalf("%s %s: %v", method, url, err)
@@ -248,8 +249,12 @@ func postSettlementJSON(t *testing.T, server *fiber.App, url string, payload map
 	}
 	req := httptest.NewRequest(http.MethodPost, url, bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-Ledger-Settlement-Key", "test-ledger-settlement-key")
-	req.Header.Set("X-Authorized-By", "settlement-admin@example.com")
+	req.Header.Set(authz.HeaderActorID, "settlement-admin@example.com")
+	req.Header.Set(authz.HeaderActorPermissions, strings.Join([]string{
+		string(authz.PermissionJourneySettlementsZeroGold),
+		string(authz.PermissionJourneySettlementsPartialPayout),
+		string(authz.PermissionJourneySettlementsClose),
+	}, ","))
 	res, err := server.Test(req, fiber.TestConfig{Timeout: 0, FailOnTimeout: false})
 	if err != nil {
 		t.Fatalf("POST %s: %v", url, err)
