@@ -72,7 +72,8 @@ export default defineConfig({
           timeout: 120_000,
         },
         {
-          command: "npm run dev -- --host 0.0.0.0 --port 5173",
+          command:
+            "ERS_E2E_AUTHZ_PROXY=true PLAYWRIGHT_AUTHZ_ACTOR_ID=bootstrap-admin PLAYWRIGHT_AUTHZ_TENANT_ID=default npm run dev -- --host 0.0.0.0 --port 5173",
           url: "http://localhost:5173",
           reuseExistingServer: !isCI,
           timeout: 120_000,
