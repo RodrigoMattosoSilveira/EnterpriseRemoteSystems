@@ -17,6 +17,7 @@ import (
 
 type Dependencies struct {
 	DB                          *gorm.DB
+	DisableRouteAuthorization   bool
 	AuthzHandler                *authz.Handler
 	ActorStore                  authz.ActorStore
 	PeopleHandler               *people.Handler

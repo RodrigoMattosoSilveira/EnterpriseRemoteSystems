@@ -11,6 +11,10 @@ import (
 
 func requirePermission(deps Dependencies, permission authz.Permission) fiber.Handler {
 	return func(c fiber.Ctx) error {
+		if deps.DisableRouteAuthorization {
+			return c.Next()
+		}
+
 		actor, err := authz.ResolveActor(c.Context(), deps.ActorStore, func(name string) string { return c.Get(name) })
 		if err != nil {
 			return writeAuthorizationError(c, err)

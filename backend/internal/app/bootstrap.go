@@ -101,6 +101,7 @@ func Bootstrap(cfg Config) (*fiber.App, func(), error) {
 
 	deps := routes.Dependencies{
 		DB:                          database,
+		DisableRouteAuthorization:   cfg.Env == "test",
 		AuthzHandler:                authzHandler,
 		ActorStore:                  actorStore,
 		PeopleHandler:               peopleHandler,
