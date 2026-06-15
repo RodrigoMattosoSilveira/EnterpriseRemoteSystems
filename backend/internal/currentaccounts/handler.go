@@ -34,14 +34,18 @@ func NewHandler(service Service, opts ...HandlerOption) *Handler {
 }
 
 func (h *Handler) ZeroGold(c fiber.Ctx) error {
-	if err := h.service.AuthorizeSettlement(c.Get("X-Ledger-Settlement-Key")); err != nil {
-		return writeSettlementAuthorizationError(c, err)
+	actor, authorized, err := h.requireCurrentAccountPermission(c, authz.PermissionJourneySettlementsZeroGold)
+	if err != nil {
+		return err
+	}
+	if !authorized {
+		return nil
 	}
 	var req ZeroGoldRequest
 	if err := c.Bind().Body(&req); err != nil {
 		return httpx.WriteError(c, err)
 	}
-	result, err := h.service.ZeroGold(c.Context(), c.Params("collaboratorId"), c.Get("X-Authorized-By"), req)
+	result, err := h.service.ZeroGold(c.Context(), c.Params("collaboratorId"), actor.ID, req)
 	if err != nil {
 		if errors.Is(err, ErrNoPositiveGoldBalance) {
 			return c.Status(fiber.StatusConflict).JSON(httpx.APIResponse{Error: &httpx.APIError{Code: "no_positive_gold_balance", Message: err.Error()}})
@@ -52,14 +56,18 @@ func (h *Handler) ZeroGold(c fiber.Ctx) error {
 }
 
 func (h *Handler) PartialPayout(c fiber.Ctx) error {
-	if err := h.service.AuthorizeSettlement(c.Get("X-Ledger-Settlement-Key")); err != nil {
-		return writeSettlementAuthorizationError(c, err)
+	actor, authorized, err := h.requireCurrentAccountPermission(c, authz.PermissionJourneySettlementsPartialPayout)
+	if err != nil {
+		return err
+	}
+	if !authorized {
+		return nil
 	}
 	var req PartialPayoutRequest
 	if err := c.Bind().Body(&req); err != nil {
 		return httpx.WriteError(c, err)
 	}
-	result, err := h.service.PartialPayout(c.Context(), c.Params("collaboratorId"), c.Get("X-Authorized-By"), req)
+	result, err := h.service.PartialPayout(c.Context(), c.Params("collaboratorId"), actor.ID, req)
 	if err != nil {
 		if errors.Is(err, ErrPayoutExceedsAvailableBalance) {
 			return c.Status(fiber.StatusConflict).JSON(httpx.APIResponse{Error: &httpx.APIError{Code: "payout_exceeds_available_balance", Message: err.Error()}})
@@ -70,14 +78,18 @@ func (h *Handler) PartialPayout(c fiber.Ctx) error {
 }
 
 func (h *Handler) CloseJourney(c fiber.Ctx) error {
-	if err := h.service.AuthorizeSettlement(c.Get("X-Ledger-Settlement-Key")); err != nil {
-		return writeSettlementAuthorizationError(c, err)
+	actor, authorized, err := h.requireCurrentAccountPermission(c, authz.PermissionJourneySettlementsClose)
+	if err != nil {
+		return err
+	}
+	if !authorized {
+		return nil
 	}
 	var req CloseJourneyRequest
 	if err := c.Bind().Body(&req); err != nil {
 		return httpx.WriteError(c, err)
 	}
-	result, err := h.service.CloseJourney(c.Context(), c.Params("collaboratorId"), c.Get("X-Authorized-By"), req)
+	result, err := h.service.CloseJourney(c.Context(), c.Params("collaboratorId"), actor.ID, req)
 	if err != nil {
 		if errors.Is(err, ErrJourneyAlreadyClosed) || errors.Is(err, ErrJourneyCloseBlocked) {
 			return c.Status(fiber.StatusConflict).JSON(httpx.APIResponse{Error: &httpx.APIError{Code: "journey_close_conflict", Message: err.Error()}})
@@ -143,14 +155,18 @@ func (h *Handler) ListBalances(c fiber.Ctx) error {
 }
 
 func (h *Handler) ReverseEntry(c fiber.Ctx) error {
-	if err := h.service.AuthorizeCorrection(c.Get("X-Ledger-Correction-Key")); err != nil {
-		return writeCorrectionAuthorizationError(c, err)
+	actor, authorized, err := h.requireCurrentAccountPermission(c, authz.PermissionLedgerCorrectionsCreate)
+	if err != nil {
+		return err
+	}
+	if !authorized {
+		return nil
 	}
 	var req ReverseLedgerEntryRequest
 	if err := c.Bind().Body(&req); err != nil {
 		return httpx.WriteError(c, err)
 	}
-	result, err := h.service.ReverseEntry(c.Context(), c.Params("entryId"), c.Get("X-Authorized-By"), req)
+	result, err := h.service.ReverseEntry(c.Context(), c.Params("entryId"), actor.ID, req)
 	if err != nil {
 		return writeCorrectionError(c, err)
 	}
@@ -158,14 +174,18 @@ func (h *Handler) ReverseEntry(c fiber.Ctx) error {
 }
 
 func (h *Handler) ReplaceEntry(c fiber.Ctx) error {
-	if err := h.service.AuthorizeCorrection(c.Get("X-Ledger-Correction-Key")); err != nil {
-		return writeCorrectionAuthorizationError(c, err)
+	actor, authorized, err := h.requireCurrentAccountPermission(c, authz.PermissionLedgerCorrectionsCreate)
+	if err != nil {
+		return err
+	}
+	if !authorized {
+		return nil
 	}
 	var req ReplaceLedgerEntryRequest
 	if err := c.Bind().Body(&req); err != nil {
 		return httpx.WriteError(c, err)
 	}
-	result, err := h.service.ReplaceEntry(c.Context(), c.Params("entryId"), c.Get("X-Authorized-By"), req)
+	result, err := h.service.ReplaceEntry(c.Context(), c.Params("entryId"), actor.ID, req)
 	if err != nil {
 		return writeCorrectionError(c, err)
 	}
@@ -238,11 +258,15 @@ func (h *Handler) ReturnReceipt(c fiber.Ctx) error {
 }
 
 func (h *Handler) requireReceiptPermission(c fiber.Ctx, permission authz.Permission) (*authz.Actor, bool, error) {
+	return h.requireCurrentAccountPermission(c, permission, authz.WithLegacyAuthorizedByCompatibility())
+}
+
+func (h *Handler) requireCurrentAccountPermission(c fiber.Ctx, permission authz.Permission, opts ...authz.RequireOption) (*authz.Actor, bool, error) {
 	actor, err := authz.ResolveActor(c.Context(), h.actorStore, func(name string) string { return c.Get(name) })
 	if err != nil {
 		return nil, false, writeAuthorizationError(c, err)
 	}
-	if err := authz.RequirePermission(actor, permission, authz.WithLegacyAuthorizedByCompatibility()); err != nil {
+	if err := authz.RequirePermission(actor, permission, opts...); err != nil {
 		return nil, false, writeAuthorizationError(c, err)
 	}
 	return actor, true, nil
