@@ -37,16 +37,31 @@ export default defineConfig({
     ["list"],
   ],
 
-  use: {
-    baseURL,
-    trace: "on-first-retry",
-    screenshot: "only-on-failure",
-    video: "retain-on-failure",
-    extraHTTPHeaders: {
-      "X-Actor-ID": "bootstrap-admin",
-      "X-Tenant-ID": "default",
-    },
+use: {
+  baseURL: "http://localhost:5173",
+  trace: "on-first-retry",
+  extraHTTPHeaders: {
+    "X-Actor-ID": "bootstrap-admin",
+    "X-Tenant-ID": "default",
   },
+  storageState: {
+    cookies: [],
+    origins: [
+      {
+        origin: "http://localhost:5173",
+        localStorage: [
+          {
+            name: "ers.authzAdmin.requestActor",
+            value: JSON.stringify({
+              actorId: "bootstrap-admin",
+              tenantId: "default",
+            }),
+          },
+        ],
+      },
+    ],
+  },
+},
 
   projects: [
     {
