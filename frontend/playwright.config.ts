@@ -42,6 +42,10 @@ export default defineConfig({
     trace: "on-first-retry",
     screenshot: "only-on-failure",
     video: "retain-on-failure",
+    extraHTTPHeaders: {
+      "X-Actor-ID": "bootstrap-admin",
+      "X-Tenant-ID": "default",
+    },
   },
 
   projects: [

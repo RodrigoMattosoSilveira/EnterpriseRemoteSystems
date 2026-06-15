@@ -1,0 +1,106 @@
+package routes
+
+import (
+	"context"
+	"net/http/httptest"
+	"testing"
+
+	"github.com/gofiber/fiber/v3"
+
+	"enterpriseremotesystems/backend/internal/authz"
+)
+
+type fakeActorStore struct {
+	actor *authz.Actor
+	err   error
+}
+
+func (s fakeActorStore) FindActor(ctx context.Context, lookup authz.ActorLookup) (*authz.Actor, error) {
+	if s.err != nil {
+		return nil, s.err
+	}
+	if s.actor == nil {
+		return nil, authz.ErrMissingActor
+	}
+	return s.actor, nil
+}
+
+func TestRequirePermissionRejectsMissingActor(t *testing.T) {
+	app := fiber.New()
+	app.Get("/protected", requirePermission(Dependencies{}, authz.PermissionPeopleRead), func(c fiber.Ctx) error {
+		return c.SendStatus(fiber.StatusNoContent)
+	})
+
+	resp, err := app.Test(httptest.NewRequest(fiber.MethodGet, "/protected", nil))
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	if resp.StatusCode != fiber.StatusUnauthorized {
+		t.Fatalf("expected 401, got %d", resp.StatusCode)
+	}
+}
+
+func TestRequirePermissionRejectsForbiddenActor(t *testing.T) {
+	app := fiber.New()
+	app.Get("/protected", requirePermission(Dependencies{}, authz.PermissionPeopleRead), func(c fiber.Ctx) error {
+		return c.SendStatus(fiber.StatusNoContent)
+	})
+
+	req := httptest.NewRequest(fiber.MethodGet, "/protected", nil)
+	req.Header.Set(authz.HeaderActorID, "actor")
+	req.Header.Set(authz.HeaderTenantID, "default")
+	req.Header.Set(authz.HeaderActorPermissions, string(authz.PermissionExpensesRead))
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	if resp.StatusCode != fiber.StatusForbidden {
+		t.Fatalf("expected 403, got %d", resp.StatusCode)
+	}
+}
+
+func TestRequirePermissionAllowsHeaderPermissionActor(t *testing.T) {
+	app := fiber.New()
+	app.Get("/protected", requirePermission(Dependencies{}, authz.PermissionPeopleRead), func(c fiber.Ctx) error {
+		return c.SendStatus(fiber.StatusNoContent)
+	})
+
+	req := httptest.NewRequest(fiber.MethodGet, "/protected", nil)
+	req.Header.Set(authz.HeaderActorID, "actor")
+	req.Header.Set(authz.HeaderTenantID, "default")
+	req.Header.Set(authz.HeaderActorPermissions, string(authz.PermissionPeopleRead))
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	if resp.StatusCode != fiber.StatusNoContent {
+		t.Fatalf("expected 204, got %d", resp.StatusCode)
+	}
+}
+
+func TestRequirePermissionAllowsPersistedActor(t *testing.T) {
+	store := fakeActorStore{actor: &authz.Actor{
+		ID:       "actor",
+		TenantID: "default",
+		Scope:    authz.ActorScopeTenant,
+		Permissions: map[authz.Permission]struct{}{
+			authz.PermissionPeopleRead: {},
+		},
+	}}
+
+	app := fiber.New()
+	app.Get("/protected", requirePermission(Dependencies{ActorStore: store}, authz.PermissionPeopleRead), func(c fiber.Ctx) error {
+		return c.SendStatus(fiber.StatusNoContent)
+	})
+
+	req := httptest.NewRequest(fiber.MethodGet, "/protected", nil)
+	req.Header.Set(authz.HeaderActorID, "actor")
+	req.Header.Set(authz.HeaderTenantID, "default")
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	if resp.StatusCode != fiber.StatusNoContent {
+		t.Fatalf("expected 204, got %d", resp.StatusCode)
+	}
+}

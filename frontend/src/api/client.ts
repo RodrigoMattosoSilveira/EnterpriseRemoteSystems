@@ -1,4 +1,5 @@
 const API_BASE_URL = "/api/v1";
+const AUTHZ_REQUEST_ACTOR_STORAGE_KEY = "ers.authzAdmin.requestActor";
 
 type ApiEnvelope<T> = {
   data?: T;
@@ -7,6 +8,11 @@ type ApiEnvelope<T> = {
     message?: string;
     fields?: Record<string, string>;
   };
+};
+
+type StoredRequestActor = {
+  actorId?: string;
+  tenantId?: string;
 };
 
 export class ApiError extends Error {
@@ -47,6 +53,7 @@ export async function apiFetch<T>(
       ...options,
       headers: {
         "Content-Type": "application/json",
+        ...temporaryAuthzHeaders(),
         ...(options.headers ?? {}),
       },
     });
@@ -88,4 +95,26 @@ export async function apiFetch<T>(
   }
 
   return json as T;
+}
+
+function temporaryAuthzHeaders(): Record<string, string> {
+  if (typeof window === "undefined") return {};
+
+  const storage = window.localStorage;
+  if (typeof storage?.getItem !== "function") return {};
+
+  try {
+    const stored = storage.getItem(AUTHZ_REQUEST_ACTOR_STORAGE_KEY);
+    if (!stored) return {};
+    const parsed = JSON.parse(stored) as StoredRequestActor;
+    const actorId = typeof parsed.actorId === "string" ? parsed.actorId.trim() : "";
+    const tenantId = typeof parsed.tenantId === "string" ? parsed.tenantId.trim() : "";
+    if (!actorId || !tenantId) return {};
+    return {
+      "X-Actor-ID": actorId,
+      "X-Tenant-ID": tenantId,
+    };
+  } catch {
+    return {};
+  }
 }
