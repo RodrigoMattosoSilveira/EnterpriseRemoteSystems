@@ -1,6 +1,11 @@
 import { expect, test } from "@playwright/test";
+import { seedBrowserAuthz } from "./support/authz";
 
 const ACTIVE_STATUS_ID = "ref-person-status-active";
+
+test.beforeEach(async ({ page }) => {
+  await seedBrowserAuthz(page);
+});
 
 function cpfCheckDigit(numbers: number[]): number {
   const weightStart = numbers.length + 1;

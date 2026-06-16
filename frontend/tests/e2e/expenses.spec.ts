@@ -1,4 +1,5 @@
 import { expect, test, type APIRequestContext } from "@playwright/test";
+import { authzHeaders, e2eApiUrl, seedBrowserAuthz } from "./support/authz";
 
 const PERSON_STATUS_ACTIVE_ID = "ref-person-status-active";
 const COLLABORATOR_STATUS_ACTIVE_ID = "ref-collaborator-status-active";
@@ -13,6 +14,10 @@ const VALUE_UNIT_BRL_ID = "ref-value-unit-brl";
 const VALUE_UNIT_GOLD_GRAM_ID = "ref-value-unit-gold-gram";
 
 const EXPENSE_AMOUNT = "123.45";
+
+test.beforeEach(async ({ page }) => {
+  await seedBrowserAuthz(page);
+});
 
 test("user can create an Expense for an active Collaborator", async ({
   page,
@@ -59,7 +64,8 @@ test("user can create an Expense for an active Collaborator", async ({
 ).toBeVisible();
 
 const expensesResponse = await request.get(
-  `/api/v1/expenses?collaboratorId=${encodeURIComponent(collaborator.id)}&pageSize=100`,
+  e2eApiUrl(`/api/v1/expenses?collaboratorId=${encodeURIComponent(collaborator.id)}&pageSize=100`),
+  { headers: authzHeaders() },
 );
 
 expect(expensesResponse.ok()).toBeTruthy();
@@ -159,7 +165,8 @@ test("expenses API supports filters and pagination from the browser test flow", 
   });
 
   const categoryResponse = await request.get(
-    `/api/v1/expenses?collaboratorId=${collaborator.id}&expenseCategoryId=${EXPENSE_CATEGORY_FLIGHT_ID}&valueUnitId=${VALUE_UNIT_GOLD_GRAM_ID}`,
+    e2eApiUrl(`/api/v1/expenses?collaboratorId=${collaborator.id}&expenseCategoryId=${EXPENSE_CATEGORY_FLIGHT_ID}&valueUnitId=${VALUE_UNIT_GOLD_GRAM_ID}`),
+  { headers: authzHeaders() },
   );
   expect(categoryResponse.ok()).toBeTruthy();
   const categoryBody =
@@ -169,7 +176,8 @@ test("expenses API supports filters and pagination from the browser test flow", 
   expect(categoryBody.data?.items[0]?.id).toBe(flight.id);
 
   const dateResponse = await request.get(
-    `/api/v1/expenses?collaboratorId=${collaborator.id}&dateFrom=2026-06-01&dateTo=2026-06-01`,
+    e2eApiUrl(`/api/v1/expenses?collaboratorId=${collaborator.id}&dateFrom=2026-06-01&dateTo=2026-06-01`),
+  { headers: authzHeaders() },
   );
   expect(dateResponse.ok()).toBeTruthy();
   const dateBody =
@@ -178,7 +186,8 @@ test("expenses API supports filters and pagination from the browser test flow", 
   expect(dateBody.data?.items[0]?.id).toBe(canteen.id);
 
   const pageOneResponse = await request.get(
-    `/api/v1/expenses?collaboratorId=${collaborator.id}&page=1&pageSize=2`,
+    e2eApiUrl(`/api/v1/expenses?collaboratorId=${collaborator.id}&page=1&pageSize=2`),
+  { headers: authzHeaders() },
   );
   expect(pageOneResponse.ok()).toBeTruthy();
   const pageOneBody =
@@ -189,7 +198,8 @@ test("expenses API supports filters and pagination from the browser test flow", 
   expect(pageOneBody.data?.items).toHaveLength(2);
 
   const pageTwoResponse = await request.get(
-    `/api/v1/expenses?collaboratorId=${collaborator.id}&page=2&pageSize=2`,
+    e2eApiUrl(`/api/v1/expenses?collaboratorId=${collaborator.id}&page=2&pageSize=2`),
+  { headers: authzHeaders() },
   );
   expect(pageTwoResponse.ok()).toBeTruthy();
   const pageTwoBody =
@@ -218,7 +228,8 @@ test("expenses API supports update and soft delete from the browser test flow", 
     description: `Original expense ${suffix}`,
   });
 
-  const updateResponse = await request.patch(`/api/v1/expenses/${expense.id}`, {
+  const updateResponse = await request.patch(e2eApiUrl(`/api/v1/expenses/${expense.id}`), {
+    headers: authzHeaders(),
     data: {
       collaboratorId: collaborator.id,
       expenseCategoryId: EXPENSE_CATEGORY_FLIGHT_ID,
@@ -235,11 +246,14 @@ test("expenses API supports update and soft delete from the browser test flow", 
   expect(updateBody.data?.amount).toBe(3.75);
   expect(updateBody.data?.expenseDate).toBe("2026-06-04");
 
-  const deleteResponse = await request.delete(`/api/v1/expenses/${expense.id}`);
+  const deleteResponse = await request.delete(e2eApiUrl(`/api/v1/expenses/${expense.id}`), {
+    headers: authzHeaders(),
+  });
   expect(deleteResponse.status()).toBe(204);
 
   const defaultListResponse = await request.get(
-    `/api/v1/expenses?collaboratorId=${collaborator.id}`,
+    e2eApiUrl(`/api/v1/expenses?collaboratorId=${collaborator.id}`),
+  { headers: authzHeaders() },
   );
   expect(defaultListResponse.ok()).toBeTruthy();
   const defaultListBody =
@@ -249,7 +263,8 @@ test("expenses API supports update and soft delete from the browser test flow", 
   ).toBe(false);
 
   const inactiveListResponse = await request.get(
-    `/api/v1/expenses?collaboratorId=${collaborator.id}&includeInactive=true`,
+    e2eApiUrl(`/api/v1/expenses?collaboratorId=${collaborator.id}&includeInactive=true`),
+  { headers: authzHeaders() },
   );
   expect(inactiveListResponse.ok()).toBeTruthy();
   const inactiveListBody =
@@ -273,7 +288,8 @@ test("expenses API rejects expenses for non-active Collaborators", async ({
     statusId: "ref-collaborator-status-finished",
   });
 
-  const response = await request.post("/api/v1/expenses", {
+  const response = await request.post(e2eApiUrl("/api/v1/expenses"), {
+    headers: authzHeaders(),
     data: {
       collaboratorId: collaborator.id,
       expenseCategoryId: EXPENSE_CATEGORY_CANTEEN_ID,
@@ -355,7 +371,8 @@ async function createCompletePerson(
   api: APIRequestContext,
   input: { suffix: number; firstName: string; nickname: string },
 ): Promise<CreatedPerson> {
-  const response = await api.post("/api/v1/people", {
+  const response = await api.post(e2eApiUrl("/api/v1/people"), {
+    headers: authzHeaders(),
     data: completePersonPayload(input),
   });
 
@@ -377,7 +394,8 @@ async function createCollaborator(
   personId: string,
   overrides: Partial<{ statusId: string }> = {},
 ): Promise<CreatedCollaborator> {
-  const response = await api.post("/api/v1/collaborators", {
+  const response = await api.post(e2eApiUrl("/api/v1/collaborators"), {
+    headers: authzHeaders(),
     data: {
       personId,
       journeyStartDate: todayISODate(),
@@ -410,7 +428,10 @@ async function createExpense(
   api: APIRequestContext,
   payload: ExpensePayload,
 ): Promise<Expense> {
-  const response = await api.post("/api/v1/expenses", { data: payload });
+  const response = await api.post(e2eApiUrl("/api/v1/expenses"), {
+    headers: authzHeaders(),
+    data: payload,
+  });
 
   if (!response.ok()) {
     throw new Error(

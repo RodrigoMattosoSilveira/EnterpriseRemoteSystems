@@ -1,4 +1,5 @@
 import { expect, test, type APIRequestContext } from "@playwright/test";
+import { authzHeaders, e2eApiUrl, seedBrowserAuthz } from "./support/authz";
 
 const PERSON_STATUS_ACTIVE_ID = "ref-person-status-active";
 const COLLABORATOR_STATUS_ACTIVE_ID = "ref-collaborator-status-active";
@@ -8,6 +9,11 @@ const LOCATION_MAIN_MINE_ID = "ref-location-main-mine";
 const TASK_MINER_ID = "ref-task-miner";
 const EXPENSE_CATEGORY_CANTEEN_ID = "ref-expense-category-canteen";
 const VALUE_UNIT_BRL_ID = "ref-value-unit-brl";
+const ADMIN_ACTOR_ID = "bootstrap-admin";
+
+test.beforeEach(async ({ page }) => {
+  await seedBrowserAuthz(page);
+});
 
 test("outstanding receipt appears, can be opened, and disappears after signed return", async ({
   page,
@@ -64,7 +70,7 @@ test("outstanding receipt appears, can be opened, and disappears after signed re
 
   const returnedReceipt = await getPrintableReceipt(request, ledgerEntry.id);
   expect(returnedReceipt.status).toBe("RETURNED");
-  expect(returnedReceipt.receivedBy).toBe("receipt-e2e@example.com");
+  expect(returnedReceipt.receivedBy).toBe(ADMIN_ACTOR_ID);
 
   const refreshedReceipt = await findOutstandingReceiptByLedgerEntryId(
     request,
@@ -108,7 +114,8 @@ async function createCompletePerson(
   api: APIRequestContext,
   input: { suffix: number; firstName: string; nickname: string },
 ): Promise<CreatedPerson> {
-  const response = await api.post("/api/v1/people", {
+  const response = await api.post(e2eApiUrl("/api/v1/people"), {
+    headers: authzHeaders(),
     data: completePersonPayload(input),
   });
   if (!response.ok()) {
@@ -125,7 +132,8 @@ async function createCollaborator(
   api: APIRequestContext,
   personId: string,
 ): Promise<CreatedCollaborator> {
-  const response = await api.post("/api/v1/collaborators", {
+  const response = await api.post(e2eApiUrl("/api/v1/collaborators"), {
+    headers: authzHeaders(),
     data: {
       personId,
       journeyStartDate: todayISODate(),
@@ -149,7 +157,10 @@ async function createCollaborator(
 }
 
 async function createExpense(api: APIRequestContext, payload: ExpensePayload): Promise<Expense> {
-  const response = await api.post("/api/v1/expenses", { data: payload });
+  const response = await api.post(e2eApiUrl("/api/v1/expenses"), {
+    headers: authzHeaders(),
+    data: payload,
+  });
   if (!response.ok()) {
     throw new Error(
       `Create Expense failed at ${response.url()}: ${response.status()} ${await response.text()}`,
@@ -166,7 +177,8 @@ async function findLedgerEntryForDescription(
   description: string,
 ): Promise<LedgerEntry> {
   const response = await api.get(
-    `/api/v1/current-accounts/${encodeURIComponent(collaboratorId)}/ledger-entries?pageSize=100`,
+    e2eApiUrl(`/api/v1/current-accounts/${encodeURIComponent(collaboratorId)}/ledger-entries?pageSize=100`),
+    { headers: authzHeaders() },
   );
   expect(response.ok()).toBeTruthy();
   const body = (await response.json()) as ApiEnvelope<LedgerEntryListResult>;
@@ -176,7 +188,9 @@ async function findLedgerEntryForDescription(
 }
 
 async function listOutstandingReceipts(api: APIRequestContext, page = 1): Promise<OutstandingReceiptListResult> {
-  const response = await api.get(`/api/v1/receipts/outstanding?pageSize=200&page=${page}`);
+  const response = await api.get(e2eApiUrl(`/api/v1/receipts/outstanding?pageSize=200&page=${page}`), {
+    headers: authzHeaders(),
+  });
   expect(response.ok()).toBeTruthy();
   const body = (await response.json()) as ApiEnvelope<OutstandingReceiptListResult>;
   if (!body.data) throw new Error("Outstanding receipts response did not include data");
@@ -205,7 +219,8 @@ async function findOutstandingReceiptByLedgerEntryId(
 
 async function getPrintableReceipt(api: APIRequestContext, ledgerEntryId: string): Promise<PrintableReceipt> {
   const response = await api.get(
-    `/api/v1/ledger-entries/${encodeURIComponent(ledgerEntryId)}/receipt`,
+    e2eApiUrl(`/api/v1/ledger-entries/${encodeURIComponent(ledgerEntryId)}/receipt`),
+    { headers: authzHeaders() },
   );
   expect(response.ok()).toBeTruthy();
   const body = (await response.json()) as ApiEnvelope<PrintableReceipt>;

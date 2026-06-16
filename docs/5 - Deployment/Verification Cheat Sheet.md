@@ -22,7 +22,7 @@ git push origin development
 
 ## Verify DEV:
 
-cd /opt/EnterpriseRemoteSystems/development
+cd /opt/EnterpriseRemocd ../t teSystems/development
 
 docker logs ers-dev-backend --since=5m --tail=200
 docker logs -f ers-dev-backend
