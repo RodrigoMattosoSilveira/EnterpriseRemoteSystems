@@ -390,7 +390,7 @@ func (s *GORMStore) grantsForActor(ctx context.Context, actorID string) ([]Actor
 	if err := s.database.WithContext(ctx).
 		Model(&AuthzActorRoleGrant{}).
 		Joins("JOIN authz_roles ON authz_roles.id = authz_actor_role_grants.role_id").
-		Where("authz_actor_role_grants.actor_id = ?", actorID).
+		Where("authz_actor_role_grants.actor_id = ? AND authz_actor_role_grants.active = ?", actorID, true).
 		Order("authz_roles.code ASC, authz_actor_role_grants.tenant_id ASC").
 		Select("authz_actor_role_grants.id AS id, authz_actor_role_grants.actor_id AS actor_id, authz_actor_role_grants.role_id AS role_id, authz_roles.code AS role_code, authz_actor_role_grants.tenant_id AS tenant_id, authz_roles.scope_type AS scope_type, authz_actor_role_grants.active AS active").
 		Scan(&rows).Error; err != nil {
