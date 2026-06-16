@@ -323,7 +323,19 @@ server-env-caddy-health:
 .PHONY: server-smoke
 server-smoke:
 	curl -fsS https://$(DOMAIN)/api/v1/healthz >/dev/null
-	curl -fsS https://$(DOMAIN)/api/v1/people/ >/dev/null
+	@authz_actor_id="$$(grep -E '^AUTHZ_BOOTSTRAP_ACTOR_KEY=' "$(ENV_DIR)/$(ENV_FILE)" | tail -n 1 | cut -d= -f2- | sed -e 's/^"//' -e 's/"$$//' -e "s/^'//" -e "s/'$$//")"; \
+	authz_tenant_id="$$(grep -E '^AUTHZ_BOOTSTRAP_TENANT_ID=' "$(ENV_DIR)/$(ENV_FILE)" | tail -n 1 | cut -d= -f2- | sed -e 's/^"//' -e 's/"$$//' -e "s/^'//" -e "s/'$$//")"; \
+	if [ -z "$$authz_actor_id" ]; then \
+		echo "AUTHZ_BOOTSTRAP_ACTOR_KEY is required for protected API smoke checks in $(ENV_DIR)/$(ENV_FILE)"; \
+		exit 2; \
+	fi; \
+	if [ -z "$$authz_tenant_id" ] || [ "$$authz_tenant_id" = "*" ]; then \
+		authz_tenant_id="default"; \
+	fi; \
+	curl -fsS \
+		-H "X-Actor-ID: $$authz_actor_id" \
+		-H "X-Tenant-ID: $$authz_tenant_id" \
+		https://$(DOMAIN)/api/v1/people/ >/dev/null
 	@echo "$(DOMAIN) smoke tests passed."
 
 .PHONY: server-admin-test

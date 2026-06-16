@@ -279,6 +279,8 @@ jobs:
     env:
       PLAYWRIGHT_BASE_URL: https://${{ needs.deploy.outputs.domain }}
       PLAYWRIGHT_SKIP_WEBSERVER: "true"
+      PLAYWRIGHT_AUTHZ_ACTOR_ID: bootstrap-admin
+      PLAYWRIGHT_AUTHZ_TENANT_ID: default
 
     steps:
       - name: Checkout
@@ -311,6 +313,8 @@ jobs:
         env:
           PLAYWRIGHT_BASE_URL: ${{ env.PLAYWRIGHT_BASE_URL }}
           PLAYWRIGHT_SKIP_WEBSERVER: "true"
+          PLAYWRIGHT_AUTHZ_ACTOR_ID: bootstrap-admin
+          PLAYWRIGHT_AUTHZ_TENANT_ID: default
         run: npx playwright test
 
       - name: Upload deployed Playwright report
