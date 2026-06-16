@@ -362,7 +362,7 @@ function ActorCard({
   }
 
   return (
-    <article className="rounded-xl border p-4">
+    <article data-testid="authz-actor-card" className="rounded-xl border p-4">
       <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
         <div>
           <h3 className="font-semibold text-gray-950">{actor.actorKey}</h3>
