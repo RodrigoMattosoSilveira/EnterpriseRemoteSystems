@@ -9,13 +9,59 @@ import (
 	"enterpriseremotesystems/backend/internal/shared/httpx"
 )
 
-func requirePermission(deps Dependencies, permission authz.Permission) fiber.Handler {
+const (
+	authorizationActorLocalKey = "ers.authz.actor"
+	authorizationErrorLocalKey = "ers.authz.error"
+)
+
+// authorizationMiddleware resolves the request actor once for the /api/v1 route
+// group and stores the result in Fiber locals for downstream route guards. It is
+// intentionally non-blocking: individual route guards still decide whether an
+// actor is required and which permission must be satisfied.
+func authorizationMiddleware(deps Dependencies) fiber.Handler {
 	return func(c fiber.Ctx) error {
 		if deps.DisableRouteAuthorization {
 			return c.Next()
 		}
 
 		actor, err := authz.ResolveActor(c.Context(), deps.ActorStore, func(name string) string { return c.Get(name) })
+		if err != nil {
+			c.Locals(authorizationErrorLocalKey, err)
+			return c.Next()
+		}
+		c.Locals(authorizationActorLocalKey, actor)
+		return c.Next()
+	}
+}
+
+func requestActor(c fiber.Ctx, deps Dependencies) (*authz.Actor, error) {
+	if errValue := c.Locals(authorizationErrorLocalKey); errValue != nil {
+		if err, ok := errValue.(error); ok {
+			return nil, err
+		}
+	}
+	if actorValue := c.Locals(authorizationActorLocalKey); actorValue != nil {
+		if actor, ok := actorValue.(*authz.Actor); ok {
+			return actor, nil
+		}
+	}
+
+	actor, err := authz.ResolveActor(c.Context(), deps.ActorStore, func(name string) string { return c.Get(name) })
+	if err != nil {
+		c.Locals(authorizationErrorLocalKey, err)
+		return nil, err
+	}
+	c.Locals(authorizationActorLocalKey, actor)
+	return actor, nil
+}
+
+func requirePermission(deps Dependencies, permission authz.Permission) fiber.Handler {
+	return func(c fiber.Ctx) error {
+		if deps.DisableRouteAuthorization {
+			return c.Next()
+		}
+
+		actor, err := requestActor(c, deps)
 		if err != nil {
 			return writeAuthorizationError(c, err)
 		}
@@ -32,7 +78,7 @@ func requirePermissionOrSelfPerson(deps Dependencies, permission authz.Permissio
 			return c.Next()
 		}
 
-		actor, err := authz.ResolveActor(c.Context(), deps.ActorStore, func(name string) string { return c.Get(name) })
+		actor, err := requestActor(c, deps)
 		if err != nil {
 			return writeAuthorizationError(c, err)
 		}

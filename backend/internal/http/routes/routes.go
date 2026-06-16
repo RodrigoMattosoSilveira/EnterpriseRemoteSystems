@@ -6,6 +6,7 @@ func Register(server *fiber.App, deps Dependencies) {
 	RegisterHealthRoutes(server)
 	api := server.Group("/api")
 	v1 := api.Group("/v1")
+	v1.Use(authorizationMiddleware(deps))
 	RegisterPeopleRoutes(v1, deps)
 	RegisterCollaboratorRoutes(v1, deps)
 	RegisterExpenseRoutes(v1, deps)

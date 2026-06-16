@@ -13,9 +13,13 @@ import (
 type fakeActorStore struct {
 	actor *authz.Actor
 	err   error
+	calls *int
 }
 
 func (s fakeActorStore) FindActor(ctx context.Context, lookup authz.ActorLookup) (*authz.Actor, error) {
+	if s.calls != nil {
+		*s.calls = *s.calls + 1
+	}
 	if s.err != nil {
 		return nil, s.err
 	}
@@ -212,5 +216,80 @@ func TestRequirePermissionOrSelfPersonRejectsSelfPermissionWithoutLinkedPerson(t
 	}
 	if resp.StatusCode != fiber.StatusForbidden {
 		t.Fatalf("expected 403, got %d", resp.StatusCode)
+	}
+}
+
+func TestAuthorizationMiddlewareCachesResolvedActorForRouteGuards(t *testing.T) {
+	calls := 0
+	store := fakeActorStore{
+		calls: &calls,
+		actor: &authz.Actor{
+			ID:       "actor",
+			TenantID: "default",
+			Scope:    authz.ActorScopeTenant,
+			Permissions: map[authz.Permission]struct{}{
+				authz.PermissionPeopleRead:   {},
+				authz.PermissionExpensesRead: {},
+			},
+		},
+	}
+
+	app := fiber.New()
+	app.Use(authorizationMiddleware(Dependencies{ActorStore: store}))
+	app.Get(
+		"/protected",
+		requirePermission(Dependencies{ActorStore: store}, authz.PermissionPeopleRead),
+		requirePermission(Dependencies{ActorStore: store}, authz.PermissionExpensesRead),
+		func(c fiber.Ctx) error {
+			return c.SendStatus(fiber.StatusNoContent)
+		},
+	)
+
+	req := httptest.NewRequest(fiber.MethodGet, "/protected", nil)
+	req.Header.Set(authz.HeaderActorID, "actor")
+	req.Header.Set(authz.HeaderTenantID, "default")
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	if resp.StatusCode != fiber.StatusNoContent {
+		t.Fatalf("expected 204, got %d", resp.StatusCode)
+	}
+	if calls != 1 {
+		t.Fatalf("expected actor store to be called once, got %d", calls)
+	}
+}
+
+func TestRequirePermissionFallsBackWhenMiddlewareIsNotInstalled(t *testing.T) {
+	calls := 0
+	store := fakeActorStore{
+		calls: &calls,
+		actor: &authz.Actor{
+			ID:       "actor",
+			TenantID: "default",
+			Scope:    authz.ActorScopeTenant,
+			Permissions: map[authz.Permission]struct{}{
+				authz.PermissionPeopleRead: {},
+			},
+		},
+	}
+
+	app := fiber.New()
+	app.Get("/protected", requirePermission(Dependencies{ActorStore: store}, authz.PermissionPeopleRead), func(c fiber.Ctx) error {
+		return c.SendStatus(fiber.StatusNoContent)
+	})
+
+	req := httptest.NewRequest(fiber.MethodGet, "/protected", nil)
+	req.Header.Set(authz.HeaderActorID, "actor")
+	req.Header.Set(authz.HeaderTenantID, "default")
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	if resp.StatusCode != fiber.StatusNoContent {
+		t.Fatalf("expected 204, got %d", resp.StatusCode)
+	}
+	if calls != 1 {
+		t.Fatalf("expected actor store to be called once, got %d", calls)
 	}
 }
