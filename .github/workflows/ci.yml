@@ -146,6 +146,13 @@ jobs:
           OPENAI_TIMEOUT_SECONDS: "20"
 
           CORS_ALLOW_ORIGINS: http://localhost:5173
+
+          AUTHZ_BOOTSTRAP_ENABLED: "true"
+          AUTHZ_BOOTSTRAP_ACTOR_KEY: bootstrap-admin
+          AUTHZ_BOOTSTRAP_DISPLAY_NAME: Bootstrap Admin
+          AUTHZ_BOOTSTRAP_ROLE_CODE: APPLICATION_ADMIN
+          AUTHZ_BOOTSTRAP_TENANT_ID: "*"
+          AUTHZ_BOOTSTRAP_REQUIRE_EMPTY_ACTOR_TABLE: "false"
         run: |
           set -euo pipefail
 
@@ -176,6 +183,9 @@ jobs:
         shell: bash
         env:
           VITE_API_BASE_URL: /api/v1
+          ERS_E2E_AUTHZ_PROXY: "true"
+          PLAYWRIGHT_AUTHZ_ACTOR_ID: bootstrap-admin
+          PLAYWRIGHT_AUTHZ_TENANT_ID: default
         run: |
           set -euo pipefail
 
@@ -206,6 +216,8 @@ jobs:
         env:
           PLAYWRIGHT_BASE_URL: http://localhost:5173
           PLAYWRIGHT_SKIP_WEBSERVER: "true"
+          PLAYWRIGHT_AUTHZ_ACTOR_ID: bootstrap-admin
+          PLAYWRIGHT_AUTHZ_TENANT_ID: default
           E2E_ADMIN_EMAIL: admin@example.com
           E2E_ADMIN_PASSWORD: admin123
         run: npx playwright test
