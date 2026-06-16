@@ -26,6 +26,26 @@ func requirePermission(deps Dependencies, permission authz.Permission) fiber.Han
 	}
 }
 
+func requirePermissionOrSelfPerson(deps Dependencies, permission authz.Permission, selfPermission authz.Permission, personIDParam string) fiber.Handler {
+	return func(c fiber.Ctx) error {
+		if deps.DisableRouteAuthorization {
+			return c.Next()
+		}
+
+		actor, err := authz.ResolveActor(c.Context(), deps.ActorStore, func(name string) string { return c.Get(name) })
+		if err != nil {
+			return writeAuthorizationError(c, err)
+		}
+		if authz.RequirePermission(actor, permission) == nil {
+			return c.Next()
+		}
+		if actor.HasPermission(selfPermission) && actor.PersonID != "" && actor.PersonID == c.Params(personIDParam) {
+			return c.Next()
+		}
+		return writeAuthorizationError(c, authz.ErrForbidden)
+	}
+}
+
 func writeAuthorizationError(c fiber.Ctx, err error) error {
 	if errors.Is(err, authz.ErrMissingActor) {
 		return c.Status(fiber.StatusUnauthorized).JSON(httpx.APIResponse{Error: &httpx.APIError{Code: "missing_actor", Message: "Authorization actor is required"}})
