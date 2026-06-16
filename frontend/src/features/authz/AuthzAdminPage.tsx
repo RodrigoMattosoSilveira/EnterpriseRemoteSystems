@@ -228,7 +228,7 @@ export function AuthzAdminPage() {
         </section>
 
         <section className="grid gap-4 lg:grid-cols-2">
-          <section className="rounded-2xl border bg-white p-4 shadow-sm">
+          <section data-testid="authz-roles-section" className="rounded-2xl border bg-white p-4 shadow-sm">
             <h2 className="text-lg font-semibold text-gray-950">Roles</h2>
             <p className="mt-1 text-sm text-gray-500">
               Role bundles available for actor grants.
@@ -257,7 +257,7 @@ export function AuthzAdminPage() {
             </div>
           </section>
 
-          <section className="rounded-2xl border bg-white p-4 shadow-sm">
+          <section data-testid="authz-permissions-section" className="rounded-2xl border bg-white p-4 shadow-sm">
             <h2 className="text-lg font-semibold text-gray-950">Permissions</h2>
             <p className="mt-1 text-sm text-gray-500">
               Fine-grained operations that roles can grant.

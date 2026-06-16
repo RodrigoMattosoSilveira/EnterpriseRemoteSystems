@@ -30,9 +30,15 @@ test("admin can create an authorization actor, grant a role, and revoke it", asy
   await expect(
     page.getByRole("heading", { name: "Actors", exact: true }),
   ).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Roles" })).toBeVisible();
-  await expect(page.getByText("APPLICATION_ADMIN").first()).toBeVisible();
-  await expect(page.getByText("authz.manage").first()).toBeVisible();
+  const rolesSection = page.getByTestId("authz-roles-section");
+  const permissionsSection = page.getByTestId("authz-permissions-section");
+
+  await expect(rolesSection).toBeVisible();
+  await expect(
+    rolesSection.getByRole("heading", { name: "APPLICATION_ADMIN", exact: true }),
+  ).toBeVisible();
+  await expect(permissionsSection).toBeVisible();
+  await expect(permissionsSection.getByText("authz.manage").first()).toBeVisible();
 
   await page.getByLabel("Actor key").fill(actorKey);
   await page.getByLabel("Display name").fill(displayName);
