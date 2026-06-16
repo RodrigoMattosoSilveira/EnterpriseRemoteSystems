@@ -13,6 +13,7 @@ import (
 type Handler struct {
 	service    Service
 	actorStore authz.ActorStore
+	auditStore authz.AuditLogStore
 }
 
 type HandlerOption func(*Handler)
@@ -20,6 +21,12 @@ type HandlerOption func(*Handler)
 func WithActorStore(store authz.ActorStore) HandlerOption {
 	return func(h *Handler) {
 		h.actorStore = store
+	}
+}
+
+func WithAuthorizationAudit(store authz.AuditLogStore) HandlerOption {
+	return func(h *Handler) {
+		h.auditStore = store
 	}
 }
 
@@ -34,7 +41,7 @@ func NewHandler(service Service, opts ...HandlerOption) *Handler {
 }
 
 func (h *Handler) ZeroGold(c fiber.Ctx) error {
-	actor, authorized, err := h.requireCurrentAccountPermission(c, authz.PermissionJourneySettlementsZeroGold)
+	actor, authorized, err := h.authorizeSensitiveOperation(c, authz.PermissionJourneySettlementsZeroGold, "current_accounts.zero_gold", "collaborator", c.Params("collaboratorId"))
 	if err != nil {
 		return err
 	}
@@ -59,7 +66,7 @@ func (h *Handler) ZeroGold(c fiber.Ctx) error {
 }
 
 func (h *Handler) PartialPayout(c fiber.Ctx) error {
-	actor, authorized, err := h.requireCurrentAccountPermission(c, authz.PermissionJourneySettlementsPartialPayout)
+	actor, authorized, err := h.authorizeSensitiveOperation(c, authz.PermissionJourneySettlementsPartialPayout, "current_accounts.partial_payout", "collaborator", c.Params("collaboratorId"))
 	if err != nil {
 		return err
 	}
@@ -84,7 +91,7 @@ func (h *Handler) PartialPayout(c fiber.Ctx) error {
 }
 
 func (h *Handler) CloseJourney(c fiber.Ctx) error {
-	actor, authorized, err := h.requireCurrentAccountPermission(c, authz.PermissionJourneySettlementsClose)
+	actor, authorized, err := h.authorizeSensitiveOperation(c, authz.PermissionJourneySettlementsClose, "current_accounts.close_journey", "collaborator", c.Params("collaboratorId"))
 	if err != nil {
 		return err
 	}
@@ -164,7 +171,7 @@ func (h *Handler) ListBalances(c fiber.Ctx) error {
 }
 
 func (h *Handler) ReverseEntry(c fiber.Ctx) error {
-	actor, authorized, err := h.requireCurrentAccountPermission(c, authz.PermissionLedgerCorrectionsCreate)
+	actor, authorized, err := h.authorizeSensitiveOperation(c, authz.PermissionLedgerCorrectionsCreate, "ledger_entries.reverse", "ledger_entry", c.Params("entryId"))
 	if err != nil {
 		return err
 	}
@@ -186,7 +193,7 @@ func (h *Handler) ReverseEntry(c fiber.Ctx) error {
 }
 
 func (h *Handler) ReplaceEntry(c fiber.Ctx) error {
-	actor, authorized, err := h.requireCurrentAccountPermission(c, authz.PermissionLedgerCorrectionsCreate)
+	actor, authorized, err := h.authorizeSensitiveOperation(c, authz.PermissionLedgerCorrectionsCreate, "ledger_entries.replace", "ledger_entry", c.Params("entryId"))
 	if err != nil {
 		return err
 	}
@@ -230,7 +237,7 @@ func (h *Handler) GetPrintableReceipt(c fiber.Ctx) error {
 }
 
 func (h *Handler) PrintReceipt(c fiber.Ctx) error {
-	actor, authorized, err := h.requireReceiptPermission(c, authz.PermissionLedgerReceiptsPrint)
+	actor, authorized, err := h.authorizeSensitiveOperation(c, authz.PermissionLedgerReceiptsPrint, "ledger_receipts.print", "ledger_entry", c.Params("entryId"), authz.WithLegacyAuthorizedByCompatibility())
 	if err != nil {
 		return err
 	}
@@ -248,7 +255,7 @@ func (h *Handler) PrintReceipt(c fiber.Ctx) error {
 }
 
 func (h *Handler) ReturnReceipt(c fiber.Ctx) error {
-	actor, authorized, err := h.requireReceiptPermission(c, authz.PermissionLedgerReceiptsReturn)
+	actor, authorized, err := h.authorizeSensitiveOperation(c, authz.PermissionLedgerReceiptsReturn, "ledger_receipts.return", "ledger_entry", c.Params("entryId"), authz.WithLegacyAuthorizedByCompatibility())
 	if err != nil {
 		return err
 	}
@@ -273,18 +280,49 @@ func (h *Handler) ReturnReceipt(c fiber.Ctx) error {
 }
 
 func (h *Handler) requireReceiptPermission(c fiber.Ctx, permission authz.Permission) (*authz.Actor, bool, error) {
-	return h.requireCurrentAccountPermission(c, permission, authz.WithLegacyAuthorizedByCompatibility())
+	return h.authorizeSensitiveOperation(c, permission, "ledger_receipts.operation", "ledger_receipt", c.Params("entryId"), authz.WithLegacyAuthorizedByCompatibility())
 }
 
 func (h *Handler) requireCurrentAccountPermission(c fiber.Ctx, permission authz.Permission, opts ...authz.RequireOption) (*authz.Actor, bool, error) {
+	return h.authorizeSensitiveOperation(c, permission, "current_accounts.operation", "", "", opts...)
+}
+
+func (h *Handler) authorizeSensitiveOperation(c fiber.Ctx, permission authz.Permission, operation, targetType, targetID string, opts ...authz.RequireOption) (*authz.Actor, bool, error) {
+	fallbackActorID := c.Get(authz.HeaderActorID)
+	if strings.TrimSpace(fallbackActorID) == "" {
+		fallbackActorID = c.Get(authz.HeaderAuthorizedBy)
+	}
+	tenantID := c.Get(authz.HeaderTenantID)
 	actor, err := authz.ResolveActor(c.Context(), h.actorStore, func(name string) string { return c.Get(name) })
 	if err != nil {
+		h.recordAuthorizationAudit(c, nil, fallbackActorID, tenantID, permission, operation, targetType, targetID, authz.AuditDecisionDenied, err.Error())
 		return nil, false, writeAuthorizationError(c, err)
 	}
 	if err := authz.RequirePermission(actor, permission, opts...); err != nil {
+		h.recordAuthorizationAudit(c, actor, fallbackActorID, tenantID, permission, operation, targetType, targetID, authz.AuditDecisionDenied, err.Error())
 		return nil, false, writeAuthorizationError(c, err)
 	}
+	h.recordAuthorizationAudit(c, actor, fallbackActorID, tenantID, permission, operation, targetType, targetID, authz.AuditDecisionAuthorized, "")
 	return actor, true, nil
+}
+
+func (h *Handler) recordAuthorizationAudit(c fiber.Ctx, actor *authz.Actor, fallbackActorID string, tenantID string, permission authz.Permission, operation, targetType, targetID string, decision string, reason string) {
+	if h.auditStore == nil {
+		return
+	}
+	_ = h.auditStore.RecordAuthorizationAudit(c.Context(), authz.AuthorizationAuditEntry{
+		Actor:           actor,
+		FallbackActorID: fallbackActorID,
+		TenantID:        tenantID,
+		Permission:      permission,
+		Operation:       operation,
+		TargetType:      targetType,
+		TargetID:        targetID,
+		Decision:        decision,
+		Reason:          reason,
+		RequestMethod:   c.Method(),
+		RequestPath:     c.Path(),
+	})
 }
 
 func (h *Handler) requireCollaboratorTenantScope(c fiber.Ctx, actor *authz.Actor, collaboratorID string) (bool, error) {
@@ -332,7 +370,7 @@ func (h *Handler) ListOutstandingReceipts(c fiber.Ctx) error {
 	return c.JSON(httpx.APIResponse{Data: result})
 }
 func (h *Handler) BackfillDebitLedgerReceipts(c fiber.Ctx) error {
-	actor, authorized, err := h.requireReceiptPermission(c, authz.PermissionLedgerReceiptsBackfill)
+	actor, authorized, err := h.authorizeSensitiveOperation(c, authz.PermissionLedgerReceiptsBackfill, "ledger_receipts.backfill_debit_entries", "ledger_receipts", "debit-ledger-entries", authz.WithLegacyAuthorizedByCompatibility())
 	if err != nil {
 		return err
 	}

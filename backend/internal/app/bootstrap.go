@@ -81,7 +81,7 @@ func Bootstrap(cfg Config) (*fiber.App, func(), error) {
 	currentAccountSvc := currentaccounts.NewService(currentAccountRepo, cfg.LedgerCorrectionKey, cfg.LedgerSettlementKey)
 	actorStore := authz.NewGORMStore(database)
 	authzHandler := authz.NewHandler(actorStore)
-	currentAccountHandler := currentaccounts.NewHandler(currentAccountSvc, currentaccounts.WithActorStore(actorStore))
+	currentAccountHandler := currentaccounts.NewHandler(currentAccountSvc, currentaccounts.WithActorStore(actorStore), currentaccounts.WithAuthorizationAudit(actorStore))
 
 	workPeriodRepo := workperiods.NewRepository(database)
 	workPeriodSvc := workperiods.NewService(workPeriodRepo)
