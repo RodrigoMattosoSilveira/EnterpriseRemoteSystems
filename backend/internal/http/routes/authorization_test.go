@@ -104,3 +104,113 @@ func TestRequirePermissionAllowsPersistedActor(t *testing.T) {
 		t.Fatalf("expected 204, got %d", resp.StatusCode)
 	}
 }
+
+func TestRequirePermissionOrSelfPersonAllowsFullPermissionActor(t *testing.T) {
+	store := fakeActorStore{actor: &authz.Actor{
+		ID:       "admin",
+		TenantID: "default",
+		Scope:    authz.ActorScopeTenant,
+		Permissions: map[authz.Permission]struct{}{
+			authz.PermissionPeopleRead: {},
+		},
+	}}
+
+	app := fiber.New()
+	app.Get("/people/:id", requirePermissionOrSelfPerson(Dependencies{ActorStore: store}, authz.PermissionPeopleRead, authz.PermissionPeopleSelfRead, "id"), func(c fiber.Ctx) error {
+		return c.SendStatus(fiber.StatusNoContent)
+	})
+
+	req := httptest.NewRequest(fiber.MethodGet, "/people/person-other", nil)
+	req.Header.Set(authz.HeaderActorID, "admin")
+	req.Header.Set(authz.HeaderTenantID, "default")
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	if resp.StatusCode != fiber.StatusNoContent {
+		t.Fatalf("expected 204, got %d", resp.StatusCode)
+	}
+}
+
+func TestRequirePermissionOrSelfPersonAllowsMatchingSelfActor(t *testing.T) {
+	store := fakeActorStore{actor: &authz.Actor{
+		ID:       "person-actor",
+		TenantID: "default",
+		PersonID: "person-self",
+		Scope:    authz.ActorScopeSelf,
+		Permissions: map[authz.Permission]struct{}{
+			authz.PermissionPeopleSelfRead: {},
+		},
+	}}
+
+	app := fiber.New()
+	app.Get("/people/:id", requirePermissionOrSelfPerson(Dependencies{ActorStore: store}, authz.PermissionPeopleRead, authz.PermissionPeopleSelfRead, "id"), func(c fiber.Ctx) error {
+		return c.SendStatus(fiber.StatusNoContent)
+	})
+
+	req := httptest.NewRequest(fiber.MethodGet, "/people/person-self", nil)
+	req.Header.Set(authz.HeaderActorID, "person-actor")
+	req.Header.Set(authz.HeaderTenantID, "default")
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	if resp.StatusCode != fiber.StatusNoContent {
+		t.Fatalf("expected 204, got %d", resp.StatusCode)
+	}
+}
+
+func TestRequirePermissionOrSelfPersonRejectsDifferentPerson(t *testing.T) {
+	store := fakeActorStore{actor: &authz.Actor{
+		ID:       "person-actor",
+		TenantID: "default",
+		PersonID: "person-self",
+		Scope:    authz.ActorScopeSelf,
+		Permissions: map[authz.Permission]struct{}{
+			authz.PermissionPeopleSelfRead: {},
+		},
+	}}
+
+	app := fiber.New()
+	app.Get("/people/:id", requirePermissionOrSelfPerson(Dependencies{ActorStore: store}, authz.PermissionPeopleRead, authz.PermissionPeopleSelfRead, "id"), func(c fiber.Ctx) error {
+		return c.SendStatus(fiber.StatusNoContent)
+	})
+
+	req := httptest.NewRequest(fiber.MethodGet, "/people/person-other", nil)
+	req.Header.Set(authz.HeaderActorID, "person-actor")
+	req.Header.Set(authz.HeaderTenantID, "default")
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	if resp.StatusCode != fiber.StatusForbidden {
+		t.Fatalf("expected 403, got %d", resp.StatusCode)
+	}
+}
+
+func TestRequirePermissionOrSelfPersonRejectsSelfPermissionWithoutLinkedPerson(t *testing.T) {
+	store := fakeActorStore{actor: &authz.Actor{
+		ID:       "person-actor",
+		TenantID: "default",
+		Scope:    authz.ActorScopeSelf,
+		Permissions: map[authz.Permission]struct{}{
+			authz.PermissionPeopleSelfRead: {},
+		},
+	}}
+
+	app := fiber.New()
+	app.Get("/people/:id", requirePermissionOrSelfPerson(Dependencies{ActorStore: store}, authz.PermissionPeopleRead, authz.PermissionPeopleSelfRead, "id"), func(c fiber.Ctx) error {
+		return c.SendStatus(fiber.StatusNoContent)
+	})
+
+	req := httptest.NewRequest(fiber.MethodGet, "/people/person-self", nil)
+	req.Header.Set(authz.HeaderActorID, "person-actor")
+	req.Header.Set(authz.HeaderTenantID, "default")
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	if resp.StatusCode != fiber.StatusForbidden {
+		t.Fatalf("expected 403, got %d", resp.StatusCode)
+	}
+}
