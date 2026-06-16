@@ -290,3 +290,34 @@ func grantAuthzRole(t *testing.T, database *gorm.DB, actorID string, role RoleCo
 		t.Fatalf("grant role %s: %v", role, err)
 	}
 }
+
+func TestGORMStoreRecordsAndListsAuthorizationAuditLogs(t *testing.T) {
+	database := newAuthzTestDB(t)
+	store := NewGORMStore(database)
+
+	actor := &Actor{ID: "auditor@example.com", RecordID: "authz-actor-auditor", TenantID: "tenant-a"}
+	if err := store.RecordAuthorizationAudit(context.Background(), AuthorizationAuditEntry{
+		Actor:         actor,
+		Permission:    PermissionLedgerCorrectionsCreate,
+		Operation:     "ledger_entries.reverse",
+		TargetType:    "ledger_entry",
+		TargetID:      "entry-1",
+		Decision:      AuditDecisionAuthorized,
+		RequestMethod: "POST",
+		RequestPath:   "/api/v1/ledger-entries/entry-1/reverse",
+	}); err != nil {
+		t.Fatalf("record audit log: %v", err)
+	}
+
+	logs, err := store.ListAuthorizationAuditLogs(context.Background(), AuditLogFilter{ActorID: "auditor@example.com"})
+	if err != nil {
+		t.Fatalf("list audit logs: %v", err)
+	}
+	if len(logs) != 1 {
+		t.Fatalf("expected 1 audit log, got %#v", logs)
+	}
+	got := logs[0]
+	if got.ActorID != "auditor@example.com" || got.PermissionCode != string(PermissionLedgerCorrectionsCreate) || got.Operation != "ledger_entries.reverse" || got.TargetID != "entry-1" || got.Decision != AuditDecisionAuthorized {
+		t.Fatalf("unexpected audit log: %#v", got)
+	}
+}

@@ -50,6 +50,21 @@ func (h *Handler) ListActors(c fiber.Ctx) error {
 	return httpx.OK(c, actors)
 }
 
+func (h *Handler) ListAuditLogs(c fiber.Ctx) error {
+	if ok, err := h.requirePermission(c, PermissionAuthzRead); err != nil || !ok {
+		return err
+	}
+	var filter AuditLogFilter
+	if err := c.Bind().Query(&filter); err != nil {
+		return httpx.BadRequest(c, "invalid_query", "Invalid query parameters")
+	}
+	logs, err := h.store.ListAuthorizationAuditLogs(c.Context(), filter)
+	if err != nil {
+		return httpx.WriteError(c, err)
+	}
+	return httpx.OK(c, logs)
+}
+
 func (h *Handler) CreateActor(c fiber.Ctx) error {
 	if ok, err := h.requirePermission(c, PermissionAuthzManage); err != nil || !ok {
 		return err
@@ -62,6 +77,7 @@ func (h *Handler) CreateActor(c fiber.Ctx) error {
 	if err != nil {
 		return h.writeError(c, err)
 	}
+	h.recordAdminAudit(c, PermissionAuthzManage, "authz.actors.create", "authz_actor", actor.ID)
 	return httpx.Created(c, actor)
 }
 
@@ -77,6 +93,7 @@ func (h *Handler) GrantActorRole(c fiber.Ctx) error {
 	if err != nil {
 		return h.writeError(c, err)
 	}
+	h.recordAdminAudit(c, PermissionAuthzManage, "authz.role_grants.create", "authz_actor_role_grant", grant.ID)
 	return httpx.Created(c, grant)
 }
 
@@ -88,7 +105,27 @@ func (h *Handler) RevokeActorRoleGrant(c fiber.Ctx) error {
 	if err != nil {
 		return h.writeError(c, err)
 	}
+	h.recordAdminAudit(c, PermissionAuthzManage, "authz.role_grants.revoke", "authz_actor_role_grant", grant.ID)
 	return httpx.OK(c, grant)
+}
+
+func (h *Handler) recordAdminAudit(c fiber.Ctx, permission Permission, operation, targetType, targetID string) {
+	if h.store == nil {
+		return
+	}
+	actor, _ := ResolveActor(c.Context(), h.actorStore, func(name string) string { return c.Get(name) })
+	_ = h.store.RecordAuthorizationAudit(c.Context(), AuthorizationAuditEntry{
+		Actor:           actor,
+		FallbackActorID: c.Get(HeaderActorID),
+		TenantID:        c.Get(HeaderTenantID),
+		Permission:      permission,
+		Operation:       operation,
+		TargetType:      targetType,
+		TargetID:        targetID,
+		Decision:        AuditDecisionAuthorized,
+		RequestMethod:   c.Method(),
+		RequestPath:     c.Path(),
+	})
 }
 
 func (h *Handler) requirePermission(c fiber.Ctx, permission Permission) (bool, error) {
