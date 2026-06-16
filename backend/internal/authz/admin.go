@@ -2,14 +2,12 @@ package authz
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"sort"
 	"strings"
 	"time"
 
 	"enterpriseremotesystems/backend/internal/shared/ids"
-	"gorm.io/gorm"
 )
 
 type ActorAdminStore interface {
@@ -306,16 +304,17 @@ func (s *GORMStore) GrantActorRole(ctx context.Context, actorID string, req Gran
 
 	now := time.Now().UTC()
 	var grant AuthzActorRoleGrant
-	err := s.database.WithContext(ctx).
+	grantResult := s.database.WithContext(ctx).
 		Where("actor_id = ? AND role_id = ? AND tenant_id = ?", actorID, role.ID, tenantID).
-		First(&grant).Error
-	if errors.Is(err, gorm.ErrRecordNotFound) {
+		Find(&grant)
+	if grantResult.Error != nil {
+		return ActorGrantResponse{}, fmt.Errorf("find authorization role grant: %w", grantResult.Error)
+	}
+	if grantResult.RowsAffected == 0 {
 		grant = AuthzActorRoleGrant{ID: ids.New(), ActorID: actorID, RoleID: role.ID, TenantID: tenantID, Active: true, CreatedAt: now, UpdatedAt: now}
 		if err := s.database.WithContext(ctx).Create(&grant).Error; err != nil {
 			return ActorGrantResponse{}, fmt.Errorf("grant authorization role: %w", err)
 		}
-	} else if err != nil {
-		return ActorGrantResponse{}, fmt.Errorf("find authorization role grant: %w", err)
 	} else if !grant.Active {
 		grant.Active = true
 		grant.UpdatedAt = now
