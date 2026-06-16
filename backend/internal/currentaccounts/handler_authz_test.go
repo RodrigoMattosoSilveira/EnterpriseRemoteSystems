@@ -26,6 +26,15 @@ func (s fakeActorStore) FindActor(context.Context, authz.ActorLookup) (*authz.Ac
 	return s.actor, nil
 }
 
+type recordingAuditStore struct {
+	entries []authz.AuthorizationAuditEntry
+}
+
+func (s *recordingAuditStore) RecordAuthorizationAudit(_ context.Context, entry authz.AuthorizationAuditEntry) error {
+	s.entries = append(s.entries, entry)
+	return nil
+}
+
 type recordingReceiptService struct {
 	printedBy            string
 	zeroGoldBy           string
@@ -48,6 +57,7 @@ func (s *recordingReceiptService) PrintReceipt(_ context.Context, _ string, prin
 
 func TestReceiptHandlerResolvesPersistedActorFromRequestHeaders(t *testing.T) {
 	service := newRecordingReceiptService()
+	audit := &recordingAuditStore{}
 	store := fakeActorStore{actor: &authz.Actor{
 		ID:          "expense-operator@example.com",
 		TenantID:    "tenant-a",
@@ -57,7 +67,7 @@ func TestReceiptHandlerResolvesPersistedActorFromRequestHeaders(t *testing.T) {
 	}}
 
 	app := fiber.New()
-	app.Post("/ledger-entries/:entryId/receipt/print", NewHandler(service, WithActorStore(store)).PrintReceipt)
+	app.Post("/ledger-entries/:entryId/receipt/print", NewHandler(service, WithActorStore(store), WithAuthorizationAudit(audit)).PrintReceipt)
 
 	req := httptest.NewRequest(http.MethodPost, "/ledger-entries/entry-1/receipt/print", nil)
 	req.Header.Set(authz.HeaderActorID, "expense-operator@example.com")
@@ -73,6 +83,12 @@ func TestReceiptHandlerResolvesPersistedActorFromRequestHeaders(t *testing.T) {
 	}
 	if service.printedBy != "expense-operator@example.com" {
 		t.Fatalf("expected persisted actor id passed to service, got %q", service.printedBy)
+	}
+	if len(audit.entries) != 1 {
+		t.Fatalf("expected 1 audit entry, got %#v", audit.entries)
+	}
+	if got := audit.entries[0]; got.Operation != "ledger_receipts.print" || got.Decision != authz.AuditDecisionAuthorized || got.Permission != authz.PermissionLedgerReceiptsPrint || got.TargetID != "entry-1" {
+		t.Fatalf("unexpected audit entry: %#v", got)
 	}
 
 	var body struct {
@@ -107,6 +123,40 @@ func TestReceiptHandlerRejectsMissingPersistedActor(t *testing.T) {
 	}
 	if service.printedBy != "" {
 		t.Fatalf("service must not be called when persisted actor is missing")
+	}
+}
+
+func TestReceiptHandlerAuditsDeniedAuthorization(t *testing.T) {
+	service := newRecordingReceiptService()
+	audit := &recordingAuditStore{}
+	store := fakeActorStore{actor: &authz.Actor{
+		ID:          "read-only@example.com",
+		TenantID:    "tenant-a",
+		Source:      authz.ActorSourcePersisted,
+		Scope:       authz.ActorScopeTenant,
+		Permissions: map[authz.Permission]struct{}{},
+	}}
+
+	app := fiber.New()
+	app.Post("/ledger-entries/:entryId/receipt/print", NewHandler(service, WithActorStore(store), WithAuthorizationAudit(audit)).PrintReceipt)
+
+	req := httptest.NewRequest(http.MethodPost, "/ledger-entries/entry-1/receipt/print", nil)
+	req.Header.Set(authz.HeaderActorID, "read-only@example.com")
+	req.Header.Set(authz.HeaderTenantID, "tenant-a")
+	res, err := app.Test(req, fiber.TestConfig{Timeout: 0, FailOnTimeout: false})
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer res.Body.Close()
+
+	if res.StatusCode != http.StatusForbidden {
+		t.Fatalf("expected status %d, got %d", http.StatusForbidden, res.StatusCode)
+	}
+	if len(audit.entries) != 1 {
+		t.Fatalf("expected 1 audit entry, got %#v", audit.entries)
+	}
+	if got := audit.entries[0]; got.Operation != "ledger_receipts.print" || got.Decision != authz.AuditDecisionDenied || got.Permission != authz.PermissionLedgerReceiptsPrint {
+		t.Fatalf("unexpected denied audit entry: %#v", got)
 	}
 }
 

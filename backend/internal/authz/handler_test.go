@@ -52,6 +52,15 @@ func TestAuthzAdminCanCreateActorGrantRoleAndRevokeGrant(t *testing.T) {
 		t.Fatalf("unexpected created actor: %#v", created)
 	}
 
+	auditResp := doAuthzRequest(t, app, http.MethodGet, "/api/v1/authz/audit-logs?operation=authz.actors.create", nil, headers)
+	if auditResp.StatusCode != http.StatusOK {
+		t.Fatalf("expected audit log status 200, got %d", auditResp.StatusCode)
+	}
+	auditLogs := decodeData[[]AuditLogResponse](t, auditResp)
+	if len(auditLogs) == 0 || auditLogs[0].Operation != "authz.actors.create" || auditLogs[0].TargetID != created.ID || auditLogs[0].Decision != AuditDecisionAuthorized {
+		t.Fatalf("expected actor create audit log, got %#v", auditLogs)
+	}
+
 	grantBody := map[string]any{"roleCode": string(RoleExpenseOperator), "tenantId": "tenant-a"}
 	grantResp := doAuthzRequest(t, app, http.MethodPost, "/api/v1/authz/actors/"+created.ID+"/role-grants", grantBody, headers)
 	if grantResp.StatusCode != http.StatusCreated {
@@ -133,6 +142,7 @@ func newAuthzTestApp(database *gorm.DB) *fiber.App {
 	authzGroup.Get("/roles", h.ListRoles)
 	authzGroup.Get("/permissions", h.ListPermissions)
 	authzGroup.Get("/actors", h.ListActors)
+	authzGroup.Get("/audit-logs", h.ListAuditLogs)
 	authzGroup.Post("/actors", h.CreateActor)
 	authzGroup.Post("/actors/:id/role-grants", h.GrantActorRole)
 	authzGroup.Delete("/actors/:id/role-grants/:grantId", h.RevokeActorRoleGrant)
