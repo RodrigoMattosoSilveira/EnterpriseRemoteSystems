@@ -19,6 +19,8 @@ type ActorAdminStore interface {
 	CreateActor(ctx context.Context, req CreateActorRequest) (ActorResponse, error)
 	GrantActorRole(ctx context.Context, actorID string, req GrantActorRoleRequest) (ActorGrantResponse, error)
 	RevokeActorRoleGrant(ctx context.Context, actorID string, grantID string) (ActorGrantResponse, error)
+	ListAuthorizationAuditLogs(ctx context.Context, filter AuditLogFilter) ([]AuditLogResponse, error)
+	RecordAuthorizationAudit(ctx context.Context, entry AuthorizationAuditEntry) error
 }
 
 type RoleResponse struct {
@@ -70,6 +72,32 @@ type GrantActorRoleRequest struct {
 	TenantID string `json:"tenantId"`
 }
 
+type AuditLogFilter struct {
+	ActorID    string `query:"actorId"`
+	TenantID   string `query:"tenantId"`
+	Operation  string `query:"operation"`
+	TargetType string `query:"targetType"`
+	TargetID   string `query:"targetId"`
+	Decision   string `query:"decision"`
+	Limit      int    `query:"limit"`
+}
+
+type AuditLogResponse struct {
+	ID             string `json:"id"`
+	OccurredAt     string `json:"occurredAt"`
+	ActorID        string `json:"actorId,omitempty"`
+	ActorRecordID  string `json:"actorRecordId,omitempty"`
+	TenantID       string `json:"tenantId,omitempty"`
+	PermissionCode string `json:"permissionCode,omitempty"`
+	Operation      string `json:"operation"`
+	TargetType     string `json:"targetType,omitempty"`
+	TargetID       string `json:"targetId,omitempty"`
+	Decision       string `json:"decision"`
+	Reason         string `json:"reason,omitempty"`
+	RequestMethod  string `json:"requestMethod,omitempty"`
+	RequestPath    string `json:"requestPath,omitempty"`
+}
+
 type ValidationError struct {
 	fields map[string]string
 }
@@ -90,6 +118,61 @@ func NewValidationError(fields map[string]string) error {
 		return nil
 	}
 	return ValidationError{fields: cleaned}
+}
+
+func (s *GORMStore) ListAuthorizationAuditLogs(ctx context.Context, filter AuditLogFilter) ([]AuditLogResponse, error) {
+	if s == nil || s.database == nil {
+		return nil, ErrMissingActor
+	}
+	limit := filter.Limit
+	if limit <= 0 {
+		limit = 100
+	}
+	if limit > 500 {
+		limit = 500
+	}
+	query := s.database.WithContext(ctx).Model(&AuthzAuditLog{})
+	if strings.TrimSpace(filter.ActorID) != "" {
+		query = query.Where("actor_id = ?", strings.TrimSpace(filter.ActorID))
+	}
+	if strings.TrimSpace(filter.TenantID) != "" {
+		query = query.Where("tenant_id = ?", strings.TrimSpace(filter.TenantID))
+	}
+	if strings.TrimSpace(filter.Operation) != "" {
+		query = query.Where("operation = ?", strings.TrimSpace(filter.Operation))
+	}
+	if strings.TrimSpace(filter.TargetType) != "" {
+		query = query.Where("target_type = ?", strings.TrimSpace(filter.TargetType))
+	}
+	if strings.TrimSpace(filter.TargetID) != "" {
+		query = query.Where("target_id = ?", strings.TrimSpace(filter.TargetID))
+	}
+	if strings.TrimSpace(filter.Decision) != "" {
+		query = query.Where("decision = ?", strings.ToUpper(strings.TrimSpace(filter.Decision)))
+	}
+	var rows []AuthzAuditLog
+	if err := query.Order("occurred_at DESC").Limit(limit).Find(&rows).Error; err != nil {
+		return nil, fmt.Errorf("list authorization audit logs: %w", err)
+	}
+	responses := make([]AuditLogResponse, 0, len(rows))
+	for _, row := range rows {
+		responses = append(responses, AuditLogResponse{
+			ID:             row.ID,
+			OccurredAt:     row.OccurredAt.Format(time.RFC3339),
+			ActorID:        row.ActorID,
+			ActorRecordID:  row.ActorRecordID,
+			TenantID:       row.TenantID,
+			PermissionCode: row.PermissionCode,
+			Operation:      row.Operation,
+			TargetType:     row.TargetType,
+			TargetID:       row.TargetID,
+			Decision:       row.Decision,
+			Reason:         row.Reason,
+			RequestMethod:  row.RequestMethod,
+			RequestPath:    row.RequestPath,
+		})
+	}
+	return responses, nil
 }
 
 func (s *GORMStore) ListRoles(ctx context.Context) ([]RoleResponse, error) {

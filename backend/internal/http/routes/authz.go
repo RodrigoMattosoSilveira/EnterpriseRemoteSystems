@@ -10,6 +10,7 @@ func RegisterAuthzRoutes(router fiber.Router, deps Dependencies) {
 	authz.Get("/roles", deps.AuthzHandler.ListRoles)
 	authz.Get("/permissions", deps.AuthzHandler.ListPermissions)
 	authz.Get("/actors", deps.AuthzHandler.ListActors)
+	authz.Get("/audit-logs", deps.AuthzHandler.ListAuditLogs)
 	authz.Post("/actors", deps.AuthzHandler.CreateActor)
 	authz.Post("/actors/:id/role-grants", deps.AuthzHandler.GrantActorRole)
 	authz.Delete("/actors/:id/role-grants/:grantId", deps.AuthzHandler.RevokeActorRoleGrant)
