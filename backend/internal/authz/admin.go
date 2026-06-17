@@ -92,6 +92,7 @@ type AuditLogResponse struct {
 	TargetID       string `json:"targetId,omitempty"`
 	Decision       string `json:"decision"`
 	Reason         string `json:"reason,omitempty"`
+	MetadataJSON   string `json:"metadataJson,omitempty"`
 	RequestMethod  string `json:"requestMethod,omitempty"`
 	RequestPath    string `json:"requestPath,omitempty"`
 }
@@ -166,6 +167,7 @@ func (s *GORMStore) ListAuthorizationAuditLogs(ctx context.Context, filter Audit
 			TargetID:       row.TargetID,
 			Decision:       row.Decision,
 			Reason:         row.Reason,
+			MetadataJSON:   row.MetadataJSON,
 			RequestMethod:  row.RequestMethod,
 			RequestPath:    row.RequestPath,
 		})

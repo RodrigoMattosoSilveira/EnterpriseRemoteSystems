@@ -3,7 +3,7 @@ package currentaccounts
 import "context"
 
 type Service interface {
-	BackfillDebitLedgerReceipts(ctx context.Context, authorizedBy string, dryRun bool) (*ReceiptBackfillResult, error)
+	BackfillDebitLedgerReceipts(ctx context.Context, authorizedBy string, dryRun bool, req ReceiptBackfillRequest) (*ReceiptBackfillResult, error)
 	ListOutstandingReceipts(ctx context.Context, filter ReceiptListFilter) (*OutstandingReceiptListResult, error)
 	GetPrintableReceipt(ctx context.Context, ledgerEntryID string) (*PrintableReceiptDTO, error)
 	PrintReceipt(ctx context.Context, ledgerEntryID, printedBy string) (*PrintableReceiptDTO, error)

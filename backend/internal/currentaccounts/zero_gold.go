@@ -81,6 +81,7 @@ func (s *service) ZeroGold(ctx context.Context, collaboratorID, authorizedBy str
 	effectiveDate, _ := parseDate(req.EffectiveDate)
 	now := time.Now().UTC()
 	actor := strings.TrimSpace(authorizedBy)
+	reasonCode, reasonText := normalizedCorrectionReason(req.CorrectionReasonRequest)
 	settlement := db.JourneySettlement{
 		BaseModel:      db.BaseModel{ID: "journey-settlement-" + ids.New(), CreatedAt: now, UpdatedAt: now},
 		TenantID:       defaultTenantID,
@@ -91,25 +92,30 @@ func (s *service) ZeroGold(ctx context.Context, collaboratorID, authorizedBy str
 		EffectiveDate:  effectiveDate,
 		GoldGramAmount: goldBalance,
 		Notes:          strings.TrimSpace(req.Notes),
+		ReasonCode:     reasonCode,
+		ReasonText:     reasonText,
 		AuthorizedBy:   actor,
 		AuthorizedAt:   &now,
 	}
 	entry := db.LedgerEntry{
-		BaseModel:      db.BaseModel{ID: "ledger-settlement-" + ids.New(), CreatedAt: now, UpdatedAt: now},
-		TenantID:       defaultTenantID,
-		CollaboratorID: collaboratorID,
-		ValueUnitID:    valueUnit.ID,
-		EntryType:      ledgerEntryTypePayout,
-		Direction:      "DEBIT",
-		Amount:         goldBalance,
-		EffectiveDate:  effectiveDate,
-		SourceType:     ledgerSourceSettlement,
-		SourceID:       settlement.ID,
-		Description:    strings.TrimSpace(req.Notes),
-		Active:         true,
-		CorrectionType: "ORIGINAL",
-		AuthorizedBy:   actor,
-		AuthorizedAt:   &now,
+		BaseModel:            db.BaseModel{ID: "ledger-settlement-" + ids.New(), CreatedAt: now, UpdatedAt: now},
+		TenantID:             defaultTenantID,
+		CollaboratorID:       collaboratorID,
+		ValueUnitID:          valueUnit.ID,
+		EntryType:            ledgerEntryTypePayout,
+		Direction:            "DEBIT",
+		Amount:               goldBalance,
+		EffectiveDate:        effectiveDate,
+		SourceType:           ledgerSourceSettlement,
+		SourceID:             settlement.ID,
+		Description:          strings.TrimSpace(req.Notes),
+		Active:               true,
+		CorrectionReason:     reasonText,
+		CorrectionReasonCode: reasonCode,
+		CorrectionReasonText: reasonText,
+		CorrectionType:       "ORIGINAL",
+		AuthorizedBy:         actor,
+		AuthorizedAt:         &now,
 	}
 	if err := s.repo.CreateSettlementWithEntries(ctx, &settlement, &entry); err != nil {
 		return nil, err
@@ -130,6 +136,8 @@ func zeroGoldResult(settlement db.JourneySettlement, entry db.LedgerEntry) *Zero
 			BRLAmount:      settlement.BRLAmount,
 			GoldGramAmount: settlement.GoldGramAmount,
 			Notes:          settlement.Notes,
+			ReasonCode:     settlement.ReasonCode,
+			ReasonText:     settlement.ReasonText,
 			AuthorizedBy:   settlement.AuthorizedBy,
 			AuthorizedAt:   formatOptionalTime(settlement.AuthorizedAt),
 		},

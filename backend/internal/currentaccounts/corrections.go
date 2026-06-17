@@ -41,7 +41,8 @@ func (s *service) ReverseEntry(ctx context.Context, entryID, authorizedBy string
 	}
 	effectiveDate, _ := parseDate(req.EffectiveDate)
 	now := time.Now().UTC()
-	reversal := newCorrectionEntry(*original, oppositeDirection(original.Direction), original.ValueUnitID, original.EntryType, original.Amount, effectiveDate, original.Description, "REVERSAL", strings.TrimSpace(req.Reason), strings.TrimSpace(authorizedBy), now)
+	reasonCode, reasonText := normalizedCorrectionReason(req.CorrectionReasonRequest)
+	reversal := newCorrectionEntry(*original, oppositeDirection(original.Direction), original.ValueUnitID, original.EntryType, original.Amount, effectiveDate, original.Description, "REVERSAL", reasonCode, reasonText, strings.TrimSpace(authorizedBy), now)
 	if err := s.repo.CreateCorrectionEntries(ctx, &reversal); err != nil {
 		return nil, err
 	}
@@ -62,10 +63,10 @@ func (s *service) ReplaceEntry(ctx context.Context, entryID, authorizedBy string
 	}
 	effectiveDate, _ := parseDate(req.EffectiveDate)
 	now := time.Now().UTC()
-	reason := strings.TrimSpace(req.Reason)
+	reasonCode, reasonText := normalizedCorrectionReason(req.CorrectionReasonRequest)
 	actor := strings.TrimSpace(authorizedBy)
-	reversal := newCorrectionEntry(*original, oppositeDirection(original.Direction), original.ValueUnitID, original.EntryType, original.Amount, effectiveDate, original.Description, "REVERSAL", reason, actor, now)
-	replacement := newCorrectionEntry(*original, strings.ToUpper(strings.TrimSpace(req.Direction)), strings.TrimSpace(req.ValueUnitID), strings.TrimSpace(req.EntryType), req.Amount, effectiveDate, strings.TrimSpace(req.Description), "REPLACEMENT", reason, actor, now)
+	reversal := newCorrectionEntry(*original, oppositeDirection(original.Direction), original.ValueUnitID, original.EntryType, original.Amount, effectiveDate, original.Description, "REVERSAL", reasonCode, reasonText, actor, now)
+	replacement := newCorrectionEntry(*original, strings.ToUpper(strings.TrimSpace(req.Direction)), strings.TrimSpace(req.ValueUnitID), strings.TrimSpace(req.EntryType), req.Amount, effectiveDate, strings.TrimSpace(req.Description), "REPLACEMENT", reasonCode, reasonText, actor, now)
 	if err := s.repo.CreateCorrectionEntries(ctx, &reversal, &replacement); err != nil {
 		return nil, err
 	}
@@ -90,26 +91,28 @@ func (s *service) requireCorrectableEntry(ctx context.Context, entryID string) (
 	return entry, nil
 }
 
-func newCorrectionEntry(original db.LedgerEntry, direction, valueUnitID, entryType string, amount float64, effectiveDate time.Time, description, correctionType, reason, authorizedBy string, now time.Time) db.LedgerEntry {
+func newCorrectionEntry(original db.LedgerEntry, direction, valueUnitID, entryType string, amount float64, effectiveDate time.Time, description, correctionType, reasonCode, reasonText, authorizedBy string, now time.Time) db.LedgerEntry {
 	originalID := original.ID
 	return db.LedgerEntry{
-		BaseModel:        db.BaseModel{ID: "ledger-correction-" + ids.New(), CreatedAt: now, UpdatedAt: now},
-		TenantID:         original.TenantID,
-		CollaboratorID:   original.CollaboratorID,
-		ValueUnitID:      valueUnitID,
-		EntryType:        entryType,
-		Direction:        direction,
-		Amount:           amount,
-		EffectiveDate:    effectiveDate,
-		SourceType:       "LEDGER_CORRECTION",
-		SourceID:         ids.New(),
-		Description:      description,
-		Active:           true,
-		CorrectionType:   correctionType,
-		RelatedEntryID:   &originalID,
-		CorrectionReason: reason,
-		AuthorizedBy:     authorizedBy,
-		AuthorizedAt:     &now,
+		BaseModel:            db.BaseModel{ID: "ledger-correction-" + ids.New(), CreatedAt: now, UpdatedAt: now},
+		TenantID:             original.TenantID,
+		CollaboratorID:       original.CollaboratorID,
+		ValueUnitID:          valueUnitID,
+		EntryType:            entryType,
+		Direction:            direction,
+		Amount:               amount,
+		EffectiveDate:        effectiveDate,
+		SourceType:           "LEDGER_CORRECTION",
+		SourceID:             ids.New(),
+		Description:          description,
+		Active:               true,
+		CorrectionType:       correctionType,
+		RelatedEntryID:       &originalID,
+		CorrectionReason:     reasonText,
+		CorrectionReasonCode: reasonCode,
+		CorrectionReasonText: reasonText,
+		AuthorizedBy:         authorizedBy,
+		AuthorizedAt:         &now,
 	}
 }
 
