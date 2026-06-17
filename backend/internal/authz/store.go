@@ -139,7 +139,34 @@ func (s *GORMStore) FindActor(ctx context.Context, lookup ActorLookup) (*Actor, 
 }
 
 func AutoMigrate(database *gorm.DB) error {
-	return database.AutoMigrate(&AuthzActor{}, &AuthzRole{}, &AuthzPermission{}, &AuthzRolePermission{}, &AuthzActorRoleGrant{}, &AuthzAuditLog{})
+	if err := database.AutoMigrate(&AuthzActor{}, &AuthzRole{}, &AuthzPermission{}, &AuthzRolePermission{}, &AuthzActorRoleGrant{}, &AuthzAuditLog{}); err != nil {
+		return err
+	}
+	return EnsureAuditLogImmutability(database)
+}
+
+func EnsureAuditLogImmutability(database *gorm.DB) error {
+	if database == nil {
+		return nil
+	}
+	statements := []string{
+		`CREATE TRIGGER IF NOT EXISTS trg_authz_audit_logs_no_update
+BEFORE UPDATE ON authz_audit_logs
+BEGIN
+  SELECT RAISE(ABORT, 'authz_audit_logs are immutable; append a new audit event instead');
+END`,
+		`CREATE TRIGGER IF NOT EXISTS trg_authz_audit_logs_no_delete
+BEFORE DELETE ON authz_audit_logs
+BEGIN
+  SELECT RAISE(ABORT, 'authz_audit_logs are immutable; append a new audit event instead');
+END`,
+	}
+	for _, statement := range statements {
+		if err := database.Exec(statement).Error; err != nil {
+			return fmt.Errorf("install authorization audit immutability guard: %w", err)
+		}
+	}
+	return nil
 }
 
 func SeedAuthorizationCatalog(database *gorm.DB) error {
