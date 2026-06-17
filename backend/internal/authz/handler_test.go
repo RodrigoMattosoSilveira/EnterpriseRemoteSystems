@@ -95,6 +95,22 @@ func TestAuthzAdminCanCreateActorGrantRoleAndRevokeGrant(t *testing.T) {
 	if actor.HasPermission(PermissionLedgerReceiptsReturn) {
 		t.Fatalf("expected revoked actor to lose expense operator permissions")
 	}
+
+	actorsResp := doAuthzRequest(t, app, http.MethodGet, "/api/v1/authz/actors", nil, headers)
+	if actorsResp.StatusCode != http.StatusOK {
+		t.Fatalf("expected actors status 200 after revoke, got %d", actorsResp.StatusCode)
+	}
+	actors := decodeData[[]ActorResponse](t, actorsResp)
+	for _, listedActor := range actors {
+		if listedActor.ID != created.ID {
+			continue
+		}
+		if len(listedActor.RoleGrants) != 0 {
+			t.Fatalf("expected revoked grant to be hidden from actor list, got %#v", listedActor.RoleGrants)
+		}
+		return
+	}
+	t.Fatalf("expected created actor in actor list after revoke")
 }
 
 func TestAuthzAdminListsRolesPermissionsAndActors(t *testing.T) {
