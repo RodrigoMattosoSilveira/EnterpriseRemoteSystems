@@ -390,6 +390,53 @@ func TestCurrentAccountHandlerAuditsCorrectionReasonMetadata(t *testing.T) {
 	}
 }
 
+func TestCurrentAccountHandlerAuditsOptionalSecondApprovalMetadata(t *testing.T) {
+	service := newRecordingReceiptService()
+	audit := &recordingAuditStore{}
+	store := fakeActorStore{actor: &authz.Actor{
+		ID:          "correction-operator@example.com",
+		TenantID:    "tenant-a",
+		Source:      authz.ActorSourcePersisted,
+		Scope:       authz.ActorScopeTenant,
+		Permissions: map[authz.Permission]struct{}{authz.PermissionLedgerCorrectionsCreate: {}},
+	}}
+
+	app := fiber.New()
+	app.Post("/ledger-entries/:entryId/reverse", NewHandler(service, WithActorStore(store), WithAuthorizationAudit(audit)).ReverseEntry)
+
+	res := postAuthzJSON(t, app, "/ledger-entries/entry-1/reverse", map[string]any{
+		"reasonCode":    "DUPLICATE_POSTING",
+		"reasonText":    "Correct duplicate expense posting",
+		"effectiveDate": "2026-06-15",
+		"secondApproval": map[string]any{
+			"approvedBy": "tenant-admin@example.com",
+			"notes":      "Reviewed and approved",
+		},
+	}, "correction-operator@example.com", "tenant-a")
+	defer res.Body.Close()
+
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("expected status %d, got %d", http.StatusOK, res.StatusCode)
+	}
+	if len(audit.entries) != 1 {
+		t.Fatalf("expected 1 audit entry, got %#v", audit.entries)
+	}
+	var metadata struct {
+		ReasonCode     string `json:"reasonCode"`
+		ReasonText     string `json:"reasonText"`
+		SecondApproval struct {
+			ApprovedBy string `json:"approvedBy"`
+			Notes      string `json:"notes"`
+		} `json:"secondApproval"`
+	}
+	if err := json.Unmarshal([]byte(audit.entries[0].MetadataJSON), &metadata); err != nil {
+		t.Fatalf("decode audit metadata: %v", err)
+	}
+	if metadata.SecondApproval.ApprovedBy != "tenant-admin@example.com" || metadata.SecondApproval.Notes != "Reviewed and approved" {
+		t.Fatalf("unexpected second approval audit metadata: %+v", metadata)
+	}
+}
+
 func TestCurrentAccountHandlerEnforcesLedgerCorrectionTenantOwnership(t *testing.T) {
 	service := newRecordingReceiptService()
 	service.ledgerEntryTenantID = "tenant-b"
@@ -446,6 +493,12 @@ func TestCurrentAccountHandlerEnforcesSettlementTenantOwnership(t *testing.T) {
 	}
 }
 
+func (s *recordingReceiptService) GetSecondPersonApprovalPolicy(context.Context, string) (*SecondPersonApprovalPolicyDTO, error) {
+	return &SecondPersonApprovalPolicyDTO{TenantID: "tenant-a", Required: false}, nil
+}
+func (s *recordingReceiptService) UpdateSecondPersonApprovalPolicy(context.Context, string, string, UpdateSecondPersonApprovalPolicyRequest) (*SecondPersonApprovalPolicyDTO, error) {
+	return &SecondPersonApprovalPolicyDTO{TenantID: "tenant-a", Required: true}, nil
+}
 func (s *recordingReceiptService) BackfillDebitLedgerReceipts(context.Context, string, bool, ReceiptBackfillRequest) (*ReceiptBackfillResult, error) {
 	return nil, errors.New("not implemented")
 }

@@ -297,6 +297,8 @@ func PermissionCatalog() []PermissionCatalogEntry {
 		{PermissionCurrentAccountsSummaryRead, "Read current account summary", "Read tenant collaborator current account summaries."},
 		{PermissionCurrentAccountsLedgerRead, "Read current account ledger", "Read tenant collaborator current account ledger records."},
 		{PermissionCurrentAccountsLedgerCreate, "Create current account ledger", "Create tenant current account ledger records."},
+		{PermissionCurrentAccountsSettingsRead, "Read current account settings", "Read tenant current account policy settings."},
+		{PermissionCurrentAccountsSettingsUpdate, "Update current account settings", "Update tenant current account policy settings."},
 		{PermissionCurrentAccountsSelfSummaryRead, "Read own current account summary", "Read the actor's own current account summary."},
 		{PermissionCurrentAccountsSelfLedgerRead, "Read own current account ledger", "Read the actor's own current account ledger records."},
 		{PermissionAssignmentsSelfCurrentRead, "Read own current assignment", "Read the actor's current assignment."},
