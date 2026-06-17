@@ -5,6 +5,7 @@ import (
 	"errors"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -319,5 +320,78 @@ func TestGORMStoreRecordsAndListsAuthorizationAuditLogs(t *testing.T) {
 	got := logs[0]
 	if got.ActorID != "auditor@example.com" || got.PermissionCode != string(PermissionLedgerCorrectionsCreate) || got.Operation != "ledger_entries.reverse" || got.TargetID != "entry-1" || got.Decision != AuditDecisionAuthorized {
 		t.Fatalf("unexpected audit log: %#v", got)
+	}
+}
+
+func TestAuthorizationAuditLogsAreAppendOnly(t *testing.T) {
+	database := newAuthzTestDB(t)
+	store := NewGORMStore(database)
+
+	if err := store.RecordAuthorizationAudit(context.Background(), AuthorizationAuditEntry{
+		FallbackActorID: "audit-admin@example.com",
+		TenantID:        "tenant-a",
+		Permission:      PermissionAuthzManage,
+		Operation:       "authz.actors.create",
+		TargetType:      "authz_actor",
+		TargetID:        "actor-1",
+		Decision:        AuditDecisionAuthorized,
+	}); err != nil {
+		t.Fatalf("record audit log: %v", err)
+	}
+
+	var row AuthzAuditLog
+	if err := database.Where("operation = ?", "authz.actors.create").First(&row).Error; err != nil {
+		t.Fatalf("load audit log: %v", err)
+	}
+
+	if err := database.Exec("UPDATE authz_audit_logs SET decision = ? WHERE id = ?", AuditDecisionDenied, row.ID).Error; err == nil {
+		t.Fatalf("expected raw SQL update to be rejected")
+	} else if !strings.Contains(err.Error(), "immutable") {
+		t.Fatalf("expected immutable update error, got %v", err)
+	}
+
+	if err := database.Exec("DELETE FROM authz_audit_logs WHERE id = ?", row.ID).Error; err == nil {
+		t.Fatalf("expected raw SQL delete to be rejected")
+	} else if !strings.Contains(err.Error(), "immutable") {
+		t.Fatalf("expected immutable delete error, got %v", err)
+	}
+
+	var after AuthzAuditLog
+	if err := database.First(&after, "id = ?", row.ID).Error; err != nil {
+		t.Fatalf("audit log must remain after rejected delete: %v", err)
+	}
+	if after.Decision != AuditDecisionAuthorized {
+		t.Fatalf("audit log decision changed despite rejected update: got %q", after.Decision)
+	}
+}
+
+func TestAuthorizationAuditLogModelRejectsORMMutation(t *testing.T) {
+	database := newAuthzTestDB(t)
+	store := NewGORMStore(database)
+
+	if err := store.RecordAuthorizationAudit(context.Background(), AuthorizationAuditEntry{
+		FallbackActorID: "audit-admin@example.com",
+		TenantID:        "tenant-a",
+		Permission:      PermissionAuthzManage,
+		Operation:       "authz.role_grants.create",
+		TargetType:      "authz_actor_role_grant",
+		TargetID:        "grant-1",
+		Decision:        AuditDecisionAuthorized,
+	}); err != nil {
+		t.Fatalf("record audit log: %v", err)
+	}
+
+	var row AuthzAuditLog
+	if err := database.Where("operation = ?", "authz.role_grants.create").First(&row).Error; err != nil {
+		t.Fatalf("load audit log: %v", err)
+	}
+
+	row.Decision = AuditDecisionDenied
+	if err := database.Save(&row).Error; !errors.Is(err, ErrImmutableAuditLog) {
+		t.Fatalf("expected ErrImmutableAuditLog for ORM update, got %v", err)
+	}
+
+	if err := database.Delete(&row).Error; !errors.Is(err, ErrImmutableAuditLog) {
+		t.Fatalf("expected ErrImmutableAuditLog for ORM delete, got %v", err)
 	}
 }
