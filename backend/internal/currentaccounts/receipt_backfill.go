@@ -16,10 +16,10 @@ const (
 	ledgerDirectionDebit      = "DEBIT"
 )
 
-func (s *service) BackfillDebitLedgerReceipts(ctx context.Context, authorizedBy string, dryRun bool) (*ReceiptBackfillResult, error) {
+func (s *service) BackfillDebitLedgerReceipts(ctx context.Context, authorizedBy string, dryRun bool, req ReceiptBackfillRequest) (*ReceiptBackfillResult, error) {
 	authorizedBy = strings.TrimSpace(authorizedBy)
-	if authorizedBy == "" {
-		return nil, ValidationError{Fields: map[string]string{"authorizedBy": "Authorized by is required"}}
+	if err := ValidateReceiptBackfillRequest(req, authorizedBy); err != nil {
+		return nil, err
 	}
 
 	eligible, err := s.repo.CountDebitLedgerEntries(ctx)

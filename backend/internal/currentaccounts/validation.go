@@ -34,14 +34,34 @@ func ValidateLedgerEntryListFilter(filter LedgerEntryListFilter) error {
 	return nil
 }
 
+func normalizedCorrectionReason(req CorrectionReasonRequest) (string, string) {
+	code := strings.ToUpper(strings.TrimSpace(req.ReasonCode))
+	text := strings.TrimSpace(req.ReasonText)
+	if text == "" {
+		text = strings.TrimSpace(req.Reason)
+	}
+	if code == "" && text != "" {
+		code = "MANUAL_CORRECTION"
+	}
+	return code, text
+}
+
+func validateCorrectionReason(fields map[string]string, req CorrectionReasonRequest) {
+	code, text := normalizedCorrectionReason(req)
+	if code == "" {
+		fields["reasonCode"] = "Required"
+	}
+	if text == "" {
+		fields["reasonText"] = "Required"
+	}
+}
+
 func ValidateReverseLedgerEntryRequest(req ReverseLedgerEntryRequest, authorizedBy string) error {
 	fields := map[string]string{}
 	if strings.TrimSpace(authorizedBy) == "" {
 		fields["authorizedBy"] = "Required"
 	}
-	if strings.TrimSpace(req.Reason) == "" {
-		fields["reason"] = "Required"
-	}
+	validateCorrectionReason(fields, req.CorrectionReasonRequest)
 	if _, err := parseDate(req.EffectiveDate); err != nil {
 		fields["effectiveDate"] = "Effective date must be YYYY-MM-DD"
 	}
@@ -56,9 +76,7 @@ func ValidateReplaceLedgerEntryRequest(req ReplaceLedgerEntryRequest, authorized
 	if strings.TrimSpace(authorizedBy) == "" {
 		fields["authorizedBy"] = "Required"
 	}
-	if strings.TrimSpace(req.Reason) == "" {
-		fields["reason"] = "Required"
-	}
+	validateCorrectionReason(fields, req.CorrectionReasonRequest)
 	if strings.TrimSpace(req.ValueUnitID) == "" {
 		fields["valueUnitId"] = "Required"
 	}
@@ -89,6 +107,7 @@ func ValidateZeroGoldRequest(req ZeroGoldRequest, authorizedBy string) error {
 	if strings.TrimSpace(req.RequestID) == "" {
 		fields["requestId"] = "Required"
 	}
+	validateCorrectionReason(fields, req.CorrectionReasonRequest)
 	if _, err := parseDate(req.EffectiveDate); err != nil {
 		fields["effectiveDate"] = "Effective date must be YYYY-MM-DD"
 	}
@@ -106,6 +125,7 @@ func ValidatePartialPayoutRequest(req PartialPayoutRequest, authorizedBy string)
 	if strings.TrimSpace(req.RequestID) == "" {
 		fields["requestId"] = "Required"
 	}
+	validateCorrectionReason(fields, req.CorrectionReasonRequest)
 	if _, err := parseDate(req.EffectiveDate); err != nil {
 		fields["effectiveDate"] = "Effective date must be YYYY-MM-DD"
 	}
@@ -144,12 +164,25 @@ func ValidateCloseJourneyRequest(req CloseJourneyRequest, authorizedBy string) e
 	if strings.TrimSpace(req.RequestID) == "" {
 		fields["requestId"] = "Required"
 	}
+	validateCorrectionReason(fields, req.CorrectionReasonRequest)
 	if _, err := parseDate(req.EffectiveDate); err != nil {
 		fields["effectiveDate"] = "Effective date must be YYYY-MM-DD"
 	}
 	if !req.Confirm {
 		fields["confirm"] = "Confirmation is required"
 	}
+	if len(fields) > 0 {
+		return ValidationError{Fields: fields}
+	}
+	return nil
+}
+
+func ValidateReceiptBackfillRequest(req ReceiptBackfillRequest, authorizedBy string) error {
+	fields := map[string]string{}
+	if strings.TrimSpace(authorizedBy) == "" {
+		fields["authorizedBy"] = "Required"
+	}
+	validateCorrectionReason(fields, req.CorrectionReasonRequest)
 	if len(fields) > 0 {
 		return ValidationError{Fields: fields}
 	}

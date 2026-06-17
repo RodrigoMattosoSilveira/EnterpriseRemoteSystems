@@ -59,6 +59,7 @@ func (s *service) CloseJourney(ctx context.Context, collaboratorID, authorizedBy
 	effectiveDate, _ := parseDate(req.EffectiveDate)
 	now := time.Now().UTC()
 	actor := strings.TrimSpace(authorizedBy)
+	reasonCode, reasonText := normalizedCorrectionReason(req.CorrectionReasonRequest)
 	settlement := db.JourneySettlement{
 		BaseModel:      db.BaseModel{ID: "journey-settlement-" + ids.New(), CreatedAt: now, UpdatedAt: now},
 		TenantID:       defaultTenantID,
@@ -70,6 +71,8 @@ func (s *service) CloseJourney(ctx context.Context, collaboratorID, authorizedBy
 		BRLAmount:      maxPositive(preview.BRLBalance),
 		GoldGramAmount: maxPositive(preview.GoldGramBalance),
 		Notes:          strings.TrimSpace(req.Notes),
+		ReasonCode:     reasonCode,
+		ReasonText:     reasonText,
 		AuthorizedBy:   actor,
 		AuthorizedAt:   &now,
 	}
@@ -124,6 +127,8 @@ func closeJourneyResult(settlement db.JourneySettlement, entries []db.LedgerEntr
 			BRLAmount:      settlement.BRLAmount,
 			GoldGramAmount: settlement.GoldGramAmount,
 			Notes:          settlement.Notes,
+			ReasonCode:     settlement.ReasonCode,
+			ReasonText:     settlement.ReasonText,
 			AuthorizedBy:   settlement.AuthorizedBy,
 			AuthorizedAt:   formatOptionalTime(settlement.AuthorizedAt),
 		},

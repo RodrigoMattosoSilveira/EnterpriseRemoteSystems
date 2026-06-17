@@ -58,6 +58,7 @@ func (s *service) PartialPayout(ctx context.Context, collaboratorID, authorizedB
 	effectiveDate, _ := parseDate(req.EffectiveDate)
 	now := time.Now().UTC()
 	actor := strings.TrimSpace(authorizedBy)
+	reasonCode, reasonText := normalizedCorrectionReason(req.CorrectionReasonRequest)
 	settlement := db.JourneySettlement{
 		BaseModel:      db.BaseModel{ID: "journey-settlement-" + ids.New(), CreatedAt: now, UpdatedAt: now},
 		TenantID:       defaultTenantID,
@@ -69,6 +70,8 @@ func (s *service) PartialPayout(ctx context.Context, collaboratorID, authorizedB
 		BRLAmount:      req.BRLAmount,
 		GoldGramAmount: req.GoldGramAmount,
 		Notes:          strings.TrimSpace(req.Notes),
+		ReasonCode:     reasonCode,
+		ReasonText:     reasonText,
 		AuthorizedBy:   actor,
 		AuthorizedAt:   &now,
 	}
@@ -100,22 +103,25 @@ func (s *service) PartialPayout(ctx context.Context, collaboratorID, authorizedB
 
 func payoutLedgerEntry(settlement db.JourneySettlement, valueUnit db.ReferenceData, amount float64, actor string, effectiveDate, now time.Time) *db.LedgerEntry {
 	return &db.LedgerEntry{
-		BaseModel:      db.BaseModel{ID: "ledger-settlement-" + ids.New(), CreatedAt: now, UpdatedAt: now},
-		TenantID:       settlement.TenantID,
-		CollaboratorID: settlement.CollaboratorID,
-		ValueUnitID:    valueUnit.ID,
-		ValueUnit:      valueUnit,
-		EntryType:      ledgerEntryTypePayout,
-		Direction:      "DEBIT",
-		Amount:         amount,
-		EffectiveDate:  effectiveDate,
-		SourceType:     ledgerSourceSettlement,
-		SourceID:       settlement.ID,
-		Description:    settlement.Notes,
-		Active:         true,
-		CorrectionType: "ORIGINAL",
-		AuthorizedBy:   actor,
-		AuthorizedAt:   &now,
+		BaseModel:            db.BaseModel{ID: "ledger-settlement-" + ids.New(), CreatedAt: now, UpdatedAt: now},
+		TenantID:             settlement.TenantID,
+		CollaboratorID:       settlement.CollaboratorID,
+		ValueUnitID:          valueUnit.ID,
+		ValueUnit:            valueUnit,
+		EntryType:            ledgerEntryTypePayout,
+		Direction:            "DEBIT",
+		Amount:               amount,
+		EffectiveDate:        effectiveDate,
+		SourceType:           ledgerSourceSettlement,
+		SourceID:             settlement.ID,
+		Description:          settlement.Notes,
+		Active:               true,
+		CorrectionReason:     settlement.ReasonText,
+		CorrectionReasonCode: settlement.ReasonCode,
+		CorrectionReasonText: settlement.ReasonText,
+		CorrectionType:       "ORIGINAL",
+		AuthorizedBy:         actor,
+		AuthorizedAt:         &now,
 	}
 }
 
@@ -131,6 +137,8 @@ func partialPayoutResult(settlement db.JourneySettlement, entries []db.LedgerEnt
 			BRLAmount:      settlement.BRLAmount,
 			GoldGramAmount: settlement.GoldGramAmount,
 			Notes:          settlement.Notes,
+			ReasonCode:     settlement.ReasonCode,
+			ReasonText:     settlement.ReasonText,
 			AuthorizedBy:   settlement.AuthorizedBy,
 			AuthorizedAt:   formatOptionalTime(settlement.AuthorizedAt),
 		},

@@ -1,6 +1,7 @@
 package currentaccounts
 
 import (
+	"encoding/json"
 	"errors"
 	"strings"
 
@@ -41,7 +42,11 @@ func NewHandler(service Service, opts ...HandlerOption) *Handler {
 }
 
 func (h *Handler) ZeroGold(c fiber.Ctx) error {
-	actor, authorized, err := h.authorizeSensitiveOperation(c, authz.PermissionJourneySettlementsZeroGold, "current_accounts.zero_gold", "collaborator", c.Params("collaboratorId"))
+	var req ZeroGoldRequest
+	if err := c.Bind().Body(&req); err != nil {
+		return httpx.WriteError(c, err)
+	}
+	actor, authorized, err := h.authorizeSensitiveOperationWithMetadata(c, authz.PermissionJourneySettlementsZeroGold, "current_accounts.zero_gold", "collaborator", c.Params("collaboratorId"), correctionReasonAuditMetadata(req.CorrectionReasonRequest))
 	if err != nil {
 		return err
 	}
@@ -50,10 +55,6 @@ func (h *Handler) ZeroGold(c fiber.Ctx) error {
 	}
 	if ok, err := h.requireCollaboratorTenantScope(c, actor, c.Params("collaboratorId")); err != nil || !ok {
 		return err
-	}
-	var req ZeroGoldRequest
-	if err := c.Bind().Body(&req); err != nil {
-		return httpx.WriteError(c, err)
 	}
 	result, err := h.service.ZeroGold(c.Context(), c.Params("collaboratorId"), actor.ID, req)
 	if err != nil {
@@ -66,7 +67,11 @@ func (h *Handler) ZeroGold(c fiber.Ctx) error {
 }
 
 func (h *Handler) PartialPayout(c fiber.Ctx) error {
-	actor, authorized, err := h.authorizeSensitiveOperation(c, authz.PermissionJourneySettlementsPartialPayout, "current_accounts.partial_payout", "collaborator", c.Params("collaboratorId"))
+	var req PartialPayoutRequest
+	if err := c.Bind().Body(&req); err != nil {
+		return httpx.WriteError(c, err)
+	}
+	actor, authorized, err := h.authorizeSensitiveOperationWithMetadata(c, authz.PermissionJourneySettlementsPartialPayout, "current_accounts.partial_payout", "collaborator", c.Params("collaboratorId"), correctionReasonAuditMetadata(req.CorrectionReasonRequest))
 	if err != nil {
 		return err
 	}
@@ -75,10 +80,6 @@ func (h *Handler) PartialPayout(c fiber.Ctx) error {
 	}
 	if ok, err := h.requireCollaboratorTenantScope(c, actor, c.Params("collaboratorId")); err != nil || !ok {
 		return err
-	}
-	var req PartialPayoutRequest
-	if err := c.Bind().Body(&req); err != nil {
-		return httpx.WriteError(c, err)
 	}
 	result, err := h.service.PartialPayout(c.Context(), c.Params("collaboratorId"), actor.ID, req)
 	if err != nil {
@@ -91,7 +92,11 @@ func (h *Handler) PartialPayout(c fiber.Ctx) error {
 }
 
 func (h *Handler) CloseJourney(c fiber.Ctx) error {
-	actor, authorized, err := h.authorizeSensitiveOperation(c, authz.PermissionJourneySettlementsClose, "current_accounts.close_journey", "collaborator", c.Params("collaboratorId"))
+	var req CloseJourneyRequest
+	if err := c.Bind().Body(&req); err != nil {
+		return httpx.WriteError(c, err)
+	}
+	actor, authorized, err := h.authorizeSensitiveOperationWithMetadata(c, authz.PermissionJourneySettlementsClose, "current_accounts.close_journey", "collaborator", c.Params("collaboratorId"), correctionReasonAuditMetadata(req.CorrectionReasonRequest))
 	if err != nil {
 		return err
 	}
@@ -100,10 +105,6 @@ func (h *Handler) CloseJourney(c fiber.Ctx) error {
 	}
 	if ok, err := h.requireCollaboratorTenantScope(c, actor, c.Params("collaboratorId")); err != nil || !ok {
 		return err
-	}
-	var req CloseJourneyRequest
-	if err := c.Bind().Body(&req); err != nil {
-		return httpx.WriteError(c, err)
 	}
 	result, err := h.service.CloseJourney(c.Context(), c.Params("collaboratorId"), actor.ID, req)
 	if err != nil {
@@ -171,7 +172,11 @@ func (h *Handler) ListBalances(c fiber.Ctx) error {
 }
 
 func (h *Handler) ReverseEntry(c fiber.Ctx) error {
-	actor, authorized, err := h.authorizeSensitiveOperation(c, authz.PermissionLedgerCorrectionsCreate, "ledger_entries.reverse", "ledger_entry", c.Params("entryId"))
+	var req ReverseLedgerEntryRequest
+	if err := c.Bind().Body(&req); err != nil {
+		return httpx.WriteError(c, err)
+	}
+	actor, authorized, err := h.authorizeSensitiveOperationWithMetadata(c, authz.PermissionLedgerCorrectionsCreate, "ledger_entries.reverse", "ledger_entry", c.Params("entryId"), correctionReasonAuditMetadata(req.CorrectionReasonRequest))
 	if err != nil {
 		return err
 	}
@@ -180,10 +185,6 @@ func (h *Handler) ReverseEntry(c fiber.Ctx) error {
 	}
 	if ok, err := h.requireLedgerEntryTenantScope(c, actor, c.Params("entryId")); err != nil || !ok {
 		return err
-	}
-	var req ReverseLedgerEntryRequest
-	if err := c.Bind().Body(&req); err != nil {
-		return httpx.WriteError(c, err)
 	}
 	result, err := h.service.ReverseEntry(c.Context(), c.Params("entryId"), actor.ID, req)
 	if err != nil {
@@ -193,7 +194,11 @@ func (h *Handler) ReverseEntry(c fiber.Ctx) error {
 }
 
 func (h *Handler) ReplaceEntry(c fiber.Ctx) error {
-	actor, authorized, err := h.authorizeSensitiveOperation(c, authz.PermissionLedgerCorrectionsCreate, "ledger_entries.replace", "ledger_entry", c.Params("entryId"))
+	var req ReplaceLedgerEntryRequest
+	if err := c.Bind().Body(&req); err != nil {
+		return httpx.WriteError(c, err)
+	}
+	actor, authorized, err := h.authorizeSensitiveOperationWithMetadata(c, authz.PermissionLedgerCorrectionsCreate, "ledger_entries.replace", "ledger_entry", c.Params("entryId"), correctionReasonAuditMetadata(req.CorrectionReasonRequest))
 	if err != nil {
 		return err
 	}
@@ -202,10 +207,6 @@ func (h *Handler) ReplaceEntry(c fiber.Ctx) error {
 	}
 	if ok, err := h.requireLedgerEntryTenantScope(c, actor, c.Params("entryId")); err != nil || !ok {
 		return err
-	}
-	var req ReplaceLedgerEntryRequest
-	if err := c.Bind().Body(&req); err != nil {
-		return httpx.WriteError(c, err)
 	}
 	result, err := h.service.ReplaceEntry(c.Context(), c.Params("entryId"), actor.ID, req)
 	if err != nil {
@@ -288,6 +289,10 @@ func (h *Handler) requireCurrentAccountPermission(c fiber.Ctx, permission authz.
 }
 
 func (h *Handler) authorizeSensitiveOperation(c fiber.Ctx, permission authz.Permission, operation, targetType, targetID string, opts ...authz.RequireOption) (*authz.Actor, bool, error) {
+	return h.authorizeSensitiveOperationWithMetadata(c, permission, operation, targetType, targetID, "", opts...)
+}
+
+func (h *Handler) authorizeSensitiveOperationWithMetadata(c fiber.Ctx, permission authz.Permission, operation, targetType, targetID string, metadataJSON string, opts ...authz.RequireOption) (*authz.Actor, bool, error) {
 	fallbackActorID := c.Get(authz.HeaderActorID)
 	if strings.TrimSpace(fallbackActorID) == "" {
 		fallbackActorID = c.Get(authz.HeaderAuthorizedBy)
@@ -295,18 +300,18 @@ func (h *Handler) authorizeSensitiveOperation(c fiber.Ctx, permission authz.Perm
 	tenantID := c.Get(authz.HeaderTenantID)
 	actor, err := authz.ResolveActor(c.Context(), h.actorStore, func(name string) string { return c.Get(name) })
 	if err != nil {
-		h.recordAuthorizationAudit(c, nil, fallbackActorID, tenantID, permission, operation, targetType, targetID, authz.AuditDecisionDenied, err.Error())
+		h.recordAuthorizationAudit(c, nil, fallbackActorID, tenantID, permission, operation, targetType, targetID, authz.AuditDecisionDenied, err.Error(), metadataJSON)
 		return nil, false, writeAuthorizationError(c, err)
 	}
 	if err := authz.RequirePermission(actor, permission, opts...); err != nil {
-		h.recordAuthorizationAudit(c, actor, fallbackActorID, tenantID, permission, operation, targetType, targetID, authz.AuditDecisionDenied, err.Error())
+		h.recordAuthorizationAudit(c, actor, fallbackActorID, tenantID, permission, operation, targetType, targetID, authz.AuditDecisionDenied, err.Error(), metadataJSON)
 		return nil, false, writeAuthorizationError(c, err)
 	}
-	h.recordAuthorizationAudit(c, actor, fallbackActorID, tenantID, permission, operation, targetType, targetID, authz.AuditDecisionAuthorized, "")
+	h.recordAuthorizationAudit(c, actor, fallbackActorID, tenantID, permission, operation, targetType, targetID, authz.AuditDecisionAuthorized, "", metadataJSON)
 	return actor, true, nil
 }
 
-func (h *Handler) recordAuthorizationAudit(c fiber.Ctx, actor *authz.Actor, fallbackActorID string, tenantID string, permission authz.Permission, operation, targetType, targetID string, decision string, reason string) {
+func (h *Handler) recordAuthorizationAudit(c fiber.Ctx, actor *authz.Actor, fallbackActorID string, tenantID string, permission authz.Permission, operation, targetType, targetID string, decision string, reason string, metadataJSON string) {
 	if h.auditStore == nil {
 		return
 	}
@@ -320,6 +325,7 @@ func (h *Handler) recordAuthorizationAudit(c fiber.Ctx, actor *authz.Actor, fall
 		TargetID:        targetID,
 		Decision:        decision,
 		Reason:          reason,
+		MetadataJSON:    metadataJSON,
 		RequestMethod:   c.Method(),
 		RequestPath:     c.Path(),
 	})
@@ -358,6 +364,22 @@ func writeAuthorizationError(c fiber.Ctx, err error) error {
 	return httpx.WriteError(c, err)
 }
 
+func correctionReasonAuditMetadata(req CorrectionReasonRequest) string {
+	code, text := normalizedCorrectionReason(req)
+	if code == "" && text == "" {
+		return ""
+	}
+	payload := map[string]string{
+		"reasonCode": code,
+		"reasonText": text,
+	}
+	encoded, err := json.Marshal(payload)
+	if err != nil {
+		return ""
+	}
+	return string(encoded)
+}
+
 func (h *Handler) ListOutstandingReceipts(c fiber.Ctx) error {
 	var filter ReceiptListFilter
 	if err := c.Bind().Query(&filter); err != nil {
@@ -370,7 +392,11 @@ func (h *Handler) ListOutstandingReceipts(c fiber.Ctx) error {
 	return c.JSON(httpx.APIResponse{Data: result})
 }
 func (h *Handler) BackfillDebitLedgerReceipts(c fiber.Ctx) error {
-	actor, authorized, err := h.authorizeSensitiveOperation(c, authz.PermissionLedgerReceiptsBackfill, "ledger_receipts.backfill_debit_entries", "ledger_receipts", "debit-ledger-entries", authz.WithLegacyAuthorizedByCompatibility())
+	var req ReceiptBackfillRequest
+	if err := c.Bind().Body(&req); err != nil {
+		return httpx.WriteError(c, err)
+	}
+	actor, authorized, err := h.authorizeSensitiveOperationWithMetadata(c, authz.PermissionLedgerReceiptsBackfill, "ledger_receipts.backfill_debit_entries", "ledger_receipts", "debit-ledger-entries", correctionReasonAuditMetadata(req.CorrectionReasonRequest), authz.WithLegacyAuthorizedByCompatibility())
 	if err != nil {
 		return err
 	}
@@ -378,7 +404,7 @@ func (h *Handler) BackfillDebitLedgerReceipts(c fiber.Ctx) error {
 		return nil
 	}
 	dryRun := strings.EqualFold(strings.TrimSpace(c.Query("dryRun")), "true")
-	result, err := h.service.BackfillDebitLedgerReceipts(c.Context(), actor.ID, dryRun)
+	result, err := h.service.BackfillDebitLedgerReceipts(c.Context(), actor.ID, dryRun, req)
 	if err != nil {
 		return httpx.WriteError(c, err)
 	}

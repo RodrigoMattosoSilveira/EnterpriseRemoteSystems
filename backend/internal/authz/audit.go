@@ -28,6 +28,7 @@ type AuthorizationAuditEntry struct {
 	TargetID        string
 	Decision        string
 	Reason          string
+	MetadataJSON    string
 	RequestMethod   string
 	RequestPath     string
 }
@@ -73,6 +74,7 @@ func (s *GORMStore) RecordAuthorizationAudit(ctx context.Context, entry Authoriz
 		TargetID:       strings.TrimSpace(entry.TargetID),
 		Decision:       decision,
 		Reason:         strings.TrimSpace(entry.Reason),
+		MetadataJSON:   strings.TrimSpace(entry.MetadataJSON),
 		RequestMethod:  strings.TrimSpace(entry.RequestMethod),
 		RequestPath:    strings.TrimSpace(entry.RequestPath),
 		CreatedAt:      now,

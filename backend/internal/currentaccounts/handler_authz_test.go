@@ -350,6 +350,46 @@ func TestCurrentAccountHandlerProtectsSettlementOperations(t *testing.T) {
 	}
 }
 
+func TestCurrentAccountHandlerAuditsCorrectionReasonMetadata(t *testing.T) {
+	service := newRecordingReceiptService()
+	audit := &recordingAuditStore{}
+	store := fakeActorStore{actor: &authz.Actor{
+		ID:          "correction-operator@example.com",
+		TenantID:    "tenant-a",
+		Source:      authz.ActorSourcePersisted,
+		Scope:       authz.ActorScopeTenant,
+		Permissions: map[authz.Permission]struct{}{authz.PermissionLedgerCorrectionsCreate: {}},
+	}}
+
+	app := fiber.New()
+	app.Post("/ledger-entries/:entryId/reverse", NewHandler(service, WithActorStore(store), WithAuthorizationAudit(audit)).ReverseEntry)
+
+	res := postAuthzJSON(t, app, "/ledger-entries/entry-1/reverse", map[string]any{
+		"reasonCode":    "DUPLICATE_POSTING",
+		"reasonText":    "Correct duplicate expense posting",
+		"effectiveDate": "2026-06-15",
+	}, "correction-operator@example.com", "tenant-a")
+	defer res.Body.Close()
+
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("expected status %d, got %d", http.StatusOK, res.StatusCode)
+	}
+	if len(audit.entries) != 1 {
+		t.Fatalf("expected 1 audit entry, got %#v", audit.entries)
+	}
+	got := audit.entries[0]
+	if got.Operation != "ledger_entries.reverse" || got.Decision != authz.AuditDecisionAuthorized || got.MetadataJSON == "" {
+		t.Fatalf("unexpected audit entry: %#v", got)
+	}
+	var metadata map[string]string
+	if err := json.Unmarshal([]byte(got.MetadataJSON), &metadata); err != nil {
+		t.Fatalf("decode audit metadata: %v", err)
+	}
+	if metadata["reasonCode"] != "DUPLICATE_POSTING" || metadata["reasonText"] != "Correct duplicate expense posting" {
+		t.Fatalf("unexpected audit metadata: %+v", metadata)
+	}
+}
+
 func TestCurrentAccountHandlerEnforcesLedgerCorrectionTenantOwnership(t *testing.T) {
 	service := newRecordingReceiptService()
 	service.ledgerEntryTenantID = "tenant-b"
@@ -406,7 +446,7 @@ func TestCurrentAccountHandlerEnforcesSettlementTenantOwnership(t *testing.T) {
 	}
 }
 
-func (s *recordingReceiptService) BackfillDebitLedgerReceipts(context.Context, string, bool) (*ReceiptBackfillResult, error) {
+func (s *recordingReceiptService) BackfillDebitLedgerReceipts(context.Context, string, bool, ReceiptBackfillRequest) (*ReceiptBackfillResult, error) {
 	return nil, errors.New("not implemented")
 }
 func (s *recordingReceiptService) ListOutstandingReceipts(context.Context, ReceiptListFilter) (*OutstandingReceiptListResult, error) {
