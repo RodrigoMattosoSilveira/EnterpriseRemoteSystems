@@ -1,29 +1,31 @@
 package currentaccounts
 
 type LedgerEntryDTO struct {
-	ID                string  `json:"id"`
-	TenantID          string  `json:"tenantId"`
-	CollaboratorID    string  `json:"collaboratorId"`
-	CollaboratorLabel string  `json:"collaboratorLabel,omitempty"`
-	ValueUnitID       string  `json:"valueUnitId"`
-	ValueUnitLabel    string  `json:"valueUnitLabel,omitempty"`
-	ValueUnitCode     string  `json:"valueUnitCode,omitempty"`
-	EntryType         string  `json:"entryType"`
-	Direction         string  `json:"direction"`
-	Amount            float64 `json:"amount"`
-	SignedAmount      float64 `json:"signedAmount"`
-	EffectiveDate     string  `json:"effectiveDate"`
-	SourceType        string  `json:"sourceType"`
-	SourceID          string  `json:"sourceId"`
-	Description       string  `json:"description,omitempty"`
-	Active            bool    `json:"active"`
-	CorrectionType    string  `json:"correctionType"`
-	RelatedEntryID    string  `json:"relatedEntryId,omitempty"`
-	CorrectionReason  string  `json:"correctionReason,omitempty"`
-	AuthorizedBy      string  `json:"authorizedBy,omitempty"`
-	AuthorizedAt      string  `json:"authorizedAt,omitempty"`
-	CreatedAt         string  `json:"createdAt"`
-	UpdatedAt         string  `json:"updatedAt"`
+	ID                   string  `json:"id"`
+	TenantID             string  `json:"tenantId"`
+	CollaboratorID       string  `json:"collaboratorId"`
+	CollaboratorLabel    string  `json:"collaboratorLabel,omitempty"`
+	ValueUnitID          string  `json:"valueUnitId"`
+	ValueUnitLabel       string  `json:"valueUnitLabel,omitempty"`
+	ValueUnitCode        string  `json:"valueUnitCode,omitempty"`
+	EntryType            string  `json:"entryType"`
+	Direction            string  `json:"direction"`
+	Amount               float64 `json:"amount"`
+	SignedAmount         float64 `json:"signedAmount"`
+	EffectiveDate        string  `json:"effectiveDate"`
+	SourceType           string  `json:"sourceType"`
+	SourceID             string  `json:"sourceId"`
+	Description          string  `json:"description,omitempty"`
+	Active               bool    `json:"active"`
+	CorrectionType       string  `json:"correctionType"`
+	RelatedEntryID       string  `json:"relatedEntryId,omitempty"`
+	CorrectionReason     string  `json:"correctionReason,omitempty"`
+	CorrectionReasonCode string  `json:"correctionReasonCode,omitempty"`
+	CorrectionReasonText string  `json:"correctionReasonText,omitempty"`
+	AuthorizedBy         string  `json:"authorizedBy,omitempty"`
+	AuthorizedAt         string  `json:"authorizedAt,omitempty"`
+	CreatedAt            string  `json:"createdAt"`
+	UpdatedAt            string  `json:"updatedAt"`
 }
 
 type CurrentAccountBalanceDTO struct {
@@ -60,13 +62,20 @@ type LedgerEntryListResult struct {
 	PageSize int              `json:"pageSize"`
 }
 
+type CorrectionReasonRequest struct {
+	ReasonCode string `json:"reasonCode"`
+	ReasonText string `json:"reasonText"`
+	// Reason is kept as a backwards-compatible alias for reasonText.
+	Reason string `json:"reason"`
+}
+
 type ReverseLedgerEntryRequest struct {
-	Reason        string `json:"reason"`
+	CorrectionReasonRequest
 	EffectiveDate string `json:"effectiveDate"`
 }
 
 type ReplaceLedgerEntryRequest struct {
-	Reason        string  `json:"reason"`
+	CorrectionReasonRequest
 	ValueUnitID   string  `json:"valueUnitId"`
 	EntryType     string  `json:"entryType"`
 	Direction     string  `json:"direction"`
@@ -99,6 +108,7 @@ type SettlementPreviewDTO struct {
 }
 
 type ZeroGoldRequest struct {
+	CorrectionReasonRequest
 	RequestID     string `json:"requestId"`
 	EffectiveDate string `json:"effectiveDate"`
 	Notes         string `json:"notes"`
@@ -114,6 +124,8 @@ type JourneySettlementDTO struct {
 	BRLAmount      float64 `json:"brlAmount"`
 	GoldGramAmount float64 `json:"goldGramAmount"`
 	Notes          string  `json:"notes,omitempty"`
+	ReasonCode     string  `json:"reasonCode,omitempty"`
+	ReasonText     string  `json:"reasonText,omitempty"`
 	AuthorizedBy   string  `json:"authorizedBy,omitempty"`
 	AuthorizedAt   string  `json:"authorizedAt,omitempty"`
 }
@@ -125,6 +137,7 @@ type ZeroGoldResult struct {
 
 // PartialPayoutRequest pays selected positive BRL and/or GOLD_GRAM balances.
 type PartialPayoutRequest struct {
+	CorrectionReasonRequest
 	RequestID      string  `json:"requestId"`
 	EffectiveDate  string  `json:"effectiveDate"`
 	BRLAmount      float64 `json:"brlAmount"`
@@ -139,6 +152,7 @@ type PartialPayoutResult struct {
 
 // CloseJourneyRequest confirms final settlement and closes the Collaborator Journey.
 type CloseJourneyRequest struct {
+	CorrectionReasonRequest
 	RequestID     string `json:"requestId"`
 	EffectiveDate string `json:"effectiveDate"`
 	Confirm       bool   `json:"confirm"`
@@ -268,6 +282,10 @@ type PrintableReceiptDTO struct {
 type ReturnReceiptRequest struct {
 	SignedDocumentRef string `json:"signedDocumentRef"`
 	Notes             string `json:"notes"`
+}
+
+type ReceiptBackfillRequest struct {
+	CorrectionReasonRequest
 }
 
 type ReceiptBackfillResult struct {

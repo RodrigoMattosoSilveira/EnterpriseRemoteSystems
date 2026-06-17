@@ -70,6 +70,7 @@ type AuthzAuditLog struct {
 	TargetID       string    `gorm:"type:text;index:idx_authz_audit_target,priority:2"`
 	Decision       string    `gorm:"type:text;not null;index"`
 	Reason         string    `gorm:"type:text"`
+	MetadataJSON   string    `gorm:"type:text"`
 	RequestMethod  string    `gorm:"type:text"`
 	RequestPath    string    `gorm:"type:text"`
 	CreatedAt      time.Time `gorm:"not null"`

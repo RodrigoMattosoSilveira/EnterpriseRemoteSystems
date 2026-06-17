@@ -58,22 +58,24 @@ type apiExpenseResponse struct {
 type apiLedgerEntryListResponse struct {
 	Data struct {
 		Items []struct {
-			ID                string  `json:"id"`
-			CollaboratorID    string  `json:"collaboratorId"`
-			CollaboratorLabel string  `json:"collaboratorLabel"`
-			ValueUnitID       string  `json:"valueUnitId"`
-			ValueUnitCode     string  `json:"valueUnitCode"`
-			EntryType         string  `json:"entryType"`
-			Direction         string  `json:"direction"`
-			Amount            float64 `json:"amount"`
-			SignedAmount      float64 `json:"signedAmount"`
-			EffectiveDate     string  `json:"effectiveDate"`
-			SourceType        string  `json:"sourceType"`
-			SourceID          string  `json:"sourceId"`
-			Active            bool    `json:"active"`
-			CorrectionType    string  `json:"correctionType"`
-			RelatedEntryID    string  `json:"relatedEntryId"`
-			CorrectionReason  string  `json:"correctionReason"`
+			ID                   string  `json:"id"`
+			CollaboratorID       string  `json:"collaboratorId"`
+			CollaboratorLabel    string  `json:"collaboratorLabel"`
+			ValueUnitID          string  `json:"valueUnitId"`
+			ValueUnitCode        string  `json:"valueUnitCode"`
+			EntryType            string  `json:"entryType"`
+			Direction            string  `json:"direction"`
+			Amount               float64 `json:"amount"`
+			SignedAmount         float64 `json:"signedAmount"`
+			EffectiveDate        string  `json:"effectiveDate"`
+			SourceType           string  `json:"sourceType"`
+			SourceID             string  `json:"sourceId"`
+			Active               bool    `json:"active"`
+			CorrectionType       string  `json:"correctionType"`
+			RelatedEntryID       string  `json:"relatedEntryId"`
+			CorrectionReason     string  `json:"correctionReason"`
+			CorrectionReasonCode string  `json:"correctionReasonCode"`
+			CorrectionReasonText string  `json:"correctionReasonText"`
 		} `json:"items"`
 		Total    int `json:"total"`
 		Page     int `json:"page"`
@@ -121,7 +123,8 @@ func TestAuthorizedLedgerReverseCreatesOppositeImmutableEntry(t *testing.T) {
 	original := entries.Data.Items[0]
 
 	res := postAuthorizedJSON(t, server, http.MethodPost, "/api/v1/ledger-entries/"+original.ID+"/reverse", map[string]any{
-		"reason":        "Correct duplicate expense posting",
+		"reasonCode":    "DUPLICATE_POSTING",
+		"reasonText":    "Correct duplicate expense posting",
 		"effectiveDate": "2026-06-07",
 	})
 	defer res.Body.Close()
@@ -141,6 +144,9 @@ func TestAuthorizedLedgerReverseCreatesOppositeImmutableEntry(t *testing.T) {
 			reversalFound = true
 			if entry.RelatedEntryID != original.ID || entry.Direction != "CREDIT" || entry.Amount != original.Amount {
 				t.Fatalf("unexpected reversal: %+v", entry)
+			}
+			if entry.CorrectionReasonCode != "DUPLICATE_POSTING" || entry.CorrectionReasonText != "Correct duplicate expense posting" || entry.CorrectionReason != "Correct duplicate expense posting" {
+				t.Fatalf("expected structured correction reason on reversal, got %+v", entry)
 			}
 		}
 	}
@@ -163,7 +169,8 @@ func TestAuthorizedLedgerReplaceCreatesReversalAndReplacement(t *testing.T) {
 	original := listLedgerEntries(t, server, collaborator.Data.ID).Data.Items[0]
 
 	res := postAuthorizedJSON(t, server, http.MethodPost, "/api/v1/ledger-entries/"+original.ID+"/replace", map[string]any{
-		"reason":        "Correct expense value",
+		"reasonCode":    "AMOUNT_CORRECTION",
+		"reasonText":    "Correct expense value",
 		"valueUnitId":   "ref-value-unit-brl",
 		"entryType":     "EXPENSE_DEDUCTION",
 		"direction":     "DEBIT",
@@ -185,6 +192,52 @@ func TestAuthorizedLedgerReplaceCreatesReversalAndReplacement(t *testing.T) {
 	balances := listBalances(t, server, collaborator.Data.ID)
 	if len(balances.Data) != 1 || balances.Data[0].Balance != -50.0 {
 		t.Fatalf("expected corrected BRL balance -50, got %+v", balances.Data)
+	}
+}
+
+func TestLedgerCorrectionRejectsMissingReason(t *testing.T) {
+	server, cleanup := newTestServer(t)
+	defer cleanup()
+
+	collaborator := createActiveCollaborator(t, server, 1)
+	createExpense(t, server, validExpensePayload(collaborator.Data.ID, nil))
+	original := listLedgerEntries(t, server, collaborator.Data.ID).Data.Items[0]
+
+	res := postAuthorizedJSON(t, server, http.MethodPost, "/api/v1/ledger-entries/"+original.ID+"/reverse", map[string]any{
+		"effectiveDate": "2026-06-07",
+	})
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusBadRequest {
+		t.Fatalf("expected bad request status %d, got %d", http.StatusBadRequest, res.StatusCode)
+	}
+	var body apiErrorResponse
+	decodeJSON(t, res, &body)
+	if body.Error == nil || body.Error.Fields["reasonCode"] == "" || body.Error.Fields["reasonText"] == "" {
+		t.Fatalf("expected reason validation fields, got %+v", body.Error)
+	}
+}
+
+func TestLedgerCorrectionRejectsBlankReasonText(t *testing.T) {
+	server, cleanup := newTestServer(t)
+	defer cleanup()
+
+	collaborator := createActiveCollaborator(t, server, 1)
+	createExpense(t, server, validExpensePayload(collaborator.Data.ID, nil))
+	original := listLedgerEntries(t, server, collaborator.Data.ID).Data.Items[0]
+
+	res := postAuthorizedJSON(t, server, http.MethodPost, "/api/v1/ledger-entries/"+original.ID+"/reverse", map[string]any{
+		"reasonCode":    "DUPLICATE_POSTING",
+		"reasonText":    "   ",
+		"effectiveDate": "2026-06-07",
+	})
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusBadRequest {
+		t.Fatalf("expected bad request status %d, got %d", http.StatusBadRequest, res.StatusCode)
+	}
+	var body apiErrorResponse
+	decodeJSON(t, res, &body)
+	if body.Error == nil || body.Error.Fields["reasonText"] == "" {
+		t.Fatalf("expected reasonText validation field, got %+v", body.Error)
 	}
 }
 
@@ -478,7 +531,10 @@ func TestReceiptBackfillAuthorization(t *testing.T) {
 		t.Fatalf("expected forbidden status %d, got %d", http.StatusForbidden, forbidden.StatusCode)
 	}
 
-	permitted := postReceiptActorJSON(t, server, url, "receipt-backfiller@example.com", string(authz.PermissionLedgerReceiptsBackfill), map[string]any{})
+	permitted := postReceiptActorJSON(t, server, url, "receipt-backfiller@example.com", string(authz.PermissionLedgerReceiptsBackfill), map[string]any{
+		"reasonCode": "RECEIPT_BACKFILL",
+		"reasonText": "Backfill historical debit ledger receipts",
+	})
 	defer permitted.Body.Close()
 	if permitted.StatusCode != http.StatusOK {
 		var body apiErrorResponse
@@ -501,7 +557,10 @@ func TestReceiptBackfillAllowsLegacyAuthorizedByCompatibility(t *testing.T) {
 	server, cleanup := newTestServer(t)
 	defer cleanup()
 
-	res := postReceiptJSON(t, server, "/api/v1/receipts/backfill-debit-ledger-entries?dryRun=true", "legacy-backfill@example.com", map[string]any{})
+	res := postReceiptJSON(t, server, "/api/v1/receipts/backfill-debit-ledger-entries?dryRun=true", "legacy-backfill@example.com", map[string]any{
+		"reasonCode": "RECEIPT_BACKFILL",
+		"reasonText": "Legacy backfill dry run",
+	})
 	defer res.Body.Close()
 	if res.StatusCode != http.StatusOK {
 		var body apiErrorResponse
@@ -874,6 +933,8 @@ func TestAuthorizedZeroGoldPostsFullGoldBalanceAndIsIdempotent(t *testing.T) {
 
 	payload := map[string]any{
 		"requestId":     "zero-gold-test-001",
+		"reasonCode":    "GOLD_ZEROING_CORRECTION",
+		"reasonText":    "Zero out paid gold balance",
 		"effectiveDate": "2026-06-08",
 		"notes":         "Gold payout",
 	}
@@ -937,6 +998,8 @@ func TestZeroGoldRejectsMissingPositiveBalance(t *testing.T) {
 	collaborator := createActiveCollaborator(t, server, 1)
 	res := postSettlementJSON(t, server, "/api/v1/collaborators/"+collaborator.Data.ID+"/zero-gold", map[string]any{
 		"requestId":     "zero-gold-empty-001",
+		"reasonCode":    "GOLD_ZEROING_CORRECTION",
+		"reasonText":    "Attempt zero gold balance",
 		"effectiveDate": "2026-06-08",
 	})
 	defer res.Body.Close()
@@ -1004,6 +1067,8 @@ func TestAuthorizedPartialPayoutPostsSelectedBalancesAndIsIdempotent(t *testing.
 
 	payload := map[string]any{
 		"requestId":      "partial-payout-test-001",
+		"reasonCode":     "PAYOUT_CORRECTION",
+		"reasonText":     "Pay selected balances",
 		"effectiveDate":  "2026-06-08",
 		"brlAmount":      40.0,
 		"goldGramAmount": 1.25,
@@ -1084,6 +1149,8 @@ func TestPartialPayoutRejectsAmountAboveAvailableBalance(t *testing.T) {
 	collaborator := createActiveCollaborator(t, server, 1)
 	res := postSettlementJSON(t, server, "/api/v1/collaborators/"+collaborator.Data.ID+"/payout", map[string]any{
 		"requestId":     "partial-payout-too-large-001",
+		"reasonCode":    "PAYOUT_CORRECTION",
+		"reasonText":    "Attempt oversized payout",
 		"effectiveDate": "2026-06-08",
 		"brlAmount":     1.0,
 	})
