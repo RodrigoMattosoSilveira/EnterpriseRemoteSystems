@@ -30,6 +30,19 @@ type Tenant struct {
 	LedgerEntries         []LedgerEntry          `gorm:"foreignKey:TenantID" json:"ledgerEntries,omitempty"`
 	JourneySettlements    []JourneySettlement    `gorm:"foreignKey:TenantID" json:"journeySettlements,omitempty"`
 	LedgerReceipts        []LedgerReceipt        `gorm:"foreignKey:TenantID" json:"ledgerReceipts,omitempty"`
+	TenantSettings        []TenantSetting        `gorm:"foreignKey:TenantID" json:"tenantSettings,omitempty"`
+}
+
+type TenantSetting struct {
+	BaseModel
+
+	TenantID    string `gorm:"type:text;not null;default:default;uniqueIndex:ux_tenant_settings_tenant_key,priority:1;index" json:"tenantId"`
+	Key         string `gorm:"type:text;not null;uniqueIndex:ux_tenant_settings_tenant_key,priority:2" json:"key"`
+	Value       string `gorm:"type:text;not null" json:"value"`
+	Description string `gorm:"type:text" json:"description,omitempty"`
+	UpdatedBy   string `gorm:"type:text;not null" json:"updatedBy"`
+
+	Tenant Tenant `gorm:"foreignKey:TenantID;constraint:OnUpdate:Restrict,OnDelete:Restrict;" json:"tenant,omitempty"`
 }
 
 type CollaboratorJourney struct {
@@ -146,19 +159,22 @@ type Expense struct {
 type JourneySettlement struct {
 	BaseModel
 
-	TenantID       string     `gorm:"type:text;not null;default:default;uniqueIndex:ux_journey_settlements_request,priority:1;index" json:"tenantId"`
-	CollaboratorID string     `gorm:"type:text;not null;uniqueIndex:ux_journey_settlements_request,priority:2;index" json:"collaboratorId"`
-	SettlementType string     `gorm:"type:text;not null;index" json:"settlementType"`
-	RequestID      string     `gorm:"type:text;not null;uniqueIndex:ux_journey_settlements_request,priority:3" json:"requestId"`
-	Status         string     `gorm:"type:text;not null;default:POSTED;index" json:"status"`
-	EffectiveDate  time.Time  `gorm:"type:date;not null;index" json:"effectiveDate"`
-	BRLAmount      float64    `gorm:"column:brl_amount;not null;default:0" json:"brlAmount"`
-	GoldGramAmount float64    `gorm:"column:gold_gram_amount;not null;default:0" json:"goldGramAmount"`
-	Notes          string     `gorm:"type:text" json:"notes,omitempty"`
-	ReasonCode     string     `gorm:"type:text;index" json:"reasonCode,omitempty"`
-	ReasonText     string     `gorm:"type:text" json:"reasonText,omitempty"`
-	AuthorizedBy   string     `gorm:"type:text;index" json:"authorizedBy,omitempty"`
-	AuthorizedAt   *time.Time `json:"authorizedAt,omitempty"`
+	TenantID            string     `gorm:"type:text;not null;default:default;uniqueIndex:ux_journey_settlements_request,priority:1;index" json:"tenantId"`
+	CollaboratorID      string     `gorm:"type:text;not null;uniqueIndex:ux_journey_settlements_request,priority:2;index" json:"collaboratorId"`
+	SettlementType      string     `gorm:"type:text;not null;index" json:"settlementType"`
+	RequestID           string     `gorm:"type:text;not null;uniqueIndex:ux_journey_settlements_request,priority:3" json:"requestId"`
+	Status              string     `gorm:"type:text;not null;default:POSTED;index" json:"status"`
+	EffectiveDate       time.Time  `gorm:"type:date;not null;index" json:"effectiveDate"`
+	BRLAmount           float64    `gorm:"column:brl_amount;not null;default:0" json:"brlAmount"`
+	GoldGramAmount      float64    `gorm:"column:gold_gram_amount;not null;default:0" json:"goldGramAmount"`
+	Notes               string     `gorm:"type:text" json:"notes,omitempty"`
+	ReasonCode          string     `gorm:"type:text;index" json:"reasonCode,omitempty"`
+	ReasonText          string     `gorm:"type:text" json:"reasonText,omitempty"`
+	AuthorizedBy        string     `gorm:"type:text;index" json:"authorizedBy,omitempty"`
+	AuthorizedAt        *time.Time `json:"authorizedAt,omitempty"`
+	SecondApprovedBy    string     `gorm:"type:text;index" json:"secondApprovedBy,omitempty"`
+	SecondApprovedAt    *time.Time `json:"secondApprovedAt,omitempty"`
+	SecondApprovalNotes string     `gorm:"type:text" json:"secondApprovalNotes,omitempty"`
 
 	Tenant       Tenant              `gorm:"foreignKey:TenantID;constraint:OnUpdate:Restrict,OnDelete:Restrict;" json:"tenant,omitempty"`
 	Collaborator CollaboratorJourney `gorm:"foreignKey:CollaboratorID;constraint:OnUpdate:Restrict,OnDelete:Restrict;" json:"collaborator,omitempty"`
@@ -306,6 +322,9 @@ type LedgerEntry struct {
 	CorrectionReasonText string     `gorm:"type:text" json:"correctionReasonText,omitempty"`
 	AuthorizedBy         string     `gorm:"type:text;index" json:"authorizedBy,omitempty"`
 	AuthorizedAt         *time.Time `json:"authorizedAt,omitempty"`
+	SecondApprovedBy     string     `gorm:"type:text;index" json:"secondApprovedBy,omitempty"`
+	SecondApprovedAt     *time.Time `json:"secondApprovedAt,omitempty"`
+	SecondApprovalNotes  string     `gorm:"type:text" json:"secondApprovalNotes,omitempty"`
 
 	Tenant       Tenant              `gorm:"foreignKey:TenantID;constraint:OnUpdate:Restrict,OnDelete:Restrict;" json:"tenant,omitempty"`
 	Collaborator CollaboratorJourney `gorm:"foreignKey:CollaboratorID;constraint:OnUpdate:Restrict,OnDelete:Restrict;" json:"collaborator,omitempty"`

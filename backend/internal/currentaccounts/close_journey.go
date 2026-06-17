@@ -24,6 +24,9 @@ func (s *service) CloseJourney(ctx context.Context, collaboratorID, authorizedBy
 	if err := ValidateCloseJourneyRequest(req, authorizedBy); err != nil {
 		return nil, err
 	}
+	if err := s.requireSecondApprovalWhenConfigured(ctx, defaultTenantID, req.CorrectionReasonRequest, authorizedBy); err != nil {
+		return nil, err
+	}
 
 	if existing, err := s.repo.FindSettlementByRequestID(ctx, collaboratorID, requestID); err == nil {
 		entries, entryErr := s.repo.FindLedgerEntriesBySource(ctx, ledgerSourceSettlement, existing.ID)
@@ -60,21 +63,26 @@ func (s *service) CloseJourney(ctx context.Context, collaboratorID, authorizedBy
 	now := time.Now().UTC()
 	actor := strings.TrimSpace(authorizedBy)
 	reasonCode, reasonText := normalizedCorrectionReason(req.CorrectionReasonRequest)
+	secondApprovedBy, secondApprovalNotes := normalizedSecondApproval(req.CorrectionReasonRequest)
+	secondApprovedAt := optionalApprovalTime(secondApprovedBy, now)
 	settlement := db.JourneySettlement{
-		BaseModel:      db.BaseModel{ID: "journey-settlement-" + ids.New(), CreatedAt: now, UpdatedAt: now},
-		TenantID:       defaultTenantID,
-		CollaboratorID: collaboratorID,
-		SettlementType: settlementTypeCloseJourney,
-		RequestID:      requestID,
-		Status:         settlementStatusPosted,
-		EffectiveDate:  effectiveDate,
-		BRLAmount:      maxPositive(preview.BRLBalance),
-		GoldGramAmount: maxPositive(preview.GoldGramBalance),
-		Notes:          strings.TrimSpace(req.Notes),
-		ReasonCode:     reasonCode,
-		ReasonText:     reasonText,
-		AuthorizedBy:   actor,
-		AuthorizedAt:   &now,
+		BaseModel:           db.BaseModel{ID: "journey-settlement-" + ids.New(), CreatedAt: now, UpdatedAt: now},
+		TenantID:            defaultTenantID,
+		CollaboratorID:      collaboratorID,
+		SettlementType:      settlementTypeCloseJourney,
+		RequestID:           requestID,
+		Status:              settlementStatusPosted,
+		EffectiveDate:       effectiveDate,
+		BRLAmount:           maxPositive(preview.BRLBalance),
+		GoldGramAmount:      maxPositive(preview.GoldGramBalance),
+		Notes:               strings.TrimSpace(req.Notes),
+		ReasonCode:          reasonCode,
+		ReasonText:          reasonText,
+		AuthorizedBy:        actor,
+		AuthorizedAt:        &now,
+		SecondApprovedBy:    secondApprovedBy,
+		SecondApprovedAt:    secondApprovedAt,
+		SecondApprovalNotes: secondApprovalNotes,
 	}
 
 	entries := make([]*db.LedgerEntry, 0, 2)
@@ -118,19 +126,22 @@ func maxPositive(value float64) float64 {
 func closeJourneyResult(settlement db.JourneySettlement, entries []db.LedgerEntry, collaborator db.CollaboratorJourney) *CloseJourneyResult {
 	return &CloseJourneyResult{
 		Settlement: JourneySettlementDTO{
-			ID:             settlement.ID,
-			CollaboratorID: settlement.CollaboratorID,
-			SettlementType: settlement.SettlementType,
-			RequestID:      settlement.RequestID,
-			Status:         settlement.Status,
-			EffectiveDate:  settlement.EffectiveDate.Format(dateLayout),
-			BRLAmount:      settlement.BRLAmount,
-			GoldGramAmount: settlement.GoldGramAmount,
-			Notes:          settlement.Notes,
-			ReasonCode:     settlement.ReasonCode,
-			ReasonText:     settlement.ReasonText,
-			AuthorizedBy:   settlement.AuthorizedBy,
-			AuthorizedAt:   formatOptionalTime(settlement.AuthorizedAt),
+			ID:                  settlement.ID,
+			CollaboratorID:      settlement.CollaboratorID,
+			SettlementType:      settlement.SettlementType,
+			RequestID:           settlement.RequestID,
+			Status:              settlement.Status,
+			EffectiveDate:       settlement.EffectiveDate.Format(dateLayout),
+			BRLAmount:           settlement.BRLAmount,
+			GoldGramAmount:      settlement.GoldGramAmount,
+			Notes:               settlement.Notes,
+			ReasonCode:          settlement.ReasonCode,
+			ReasonText:          settlement.ReasonText,
+			AuthorizedBy:        settlement.AuthorizedBy,
+			AuthorizedAt:        formatOptionalTime(settlement.AuthorizedAt),
+			SecondApprovedBy:    settlement.SecondApprovedBy,
+			SecondApprovedAt:    formatOptionalTime(settlement.SecondApprovedAt),
+			SecondApprovalNotes: settlement.SecondApprovalNotes,
 		},
 		LedgerEntries: ToLedgerEntryDTOList(entries),
 		JourneyStatus: collaborator.Status.Code,

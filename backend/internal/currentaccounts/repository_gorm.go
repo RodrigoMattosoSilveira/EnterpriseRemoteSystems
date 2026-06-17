@@ -2,10 +2,12 @@ package currentaccounts
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"time"
 
 	"enterpriseremotesystems/backend/internal/db"
+	"enterpriseremotesystems/backend/internal/shared/ids"
 	"enterpriseremotesystems/backend/internal/tenants"
 	"gorm.io/gorm"
 )
@@ -449,4 +451,66 @@ func (r *gormRepository) FindLedgerEntryTenantID(ctx context.Context, entryID st
 		return "", err
 	}
 	return row.TenantID, nil
+}
+
+func (r *gormRepository) GetTenantSetting(ctx context.Context, tenantID, key string) (string, error) {
+	setting, err := r.GetTenantSettingRow(ctx, tenantID, key)
+	if err != nil {
+		return "", err
+	}
+	return setting.Value, nil
+}
+
+func (r *gormRepository) GetTenantSettingRow(ctx context.Context, tenantID, key string) (*db.TenantSetting, error) {
+	tenantID = strings.TrimSpace(tenantID)
+	if tenantID == "" {
+		tenantID = defaultTenantID
+	}
+	var row db.TenantSetting
+	err := r.db.WithContext(ctx).
+		First(&row, "tenant_id = ? AND key = ?", tenantID, strings.TrimSpace(key)).Error
+	if err != nil {
+		return nil, err
+	}
+	return &row, nil
+}
+
+func (r *gormRepository) UpsertTenantSetting(ctx context.Context, tenantID, key, value, description, updatedBy string) (*db.TenantSetting, error) {
+	tenantID = strings.TrimSpace(tenantID)
+	if tenantID == "" {
+		tenantID = defaultTenantID
+	}
+	now := time.Now().UTC()
+	key = strings.TrimSpace(key)
+	value = strings.TrimSpace(value)
+	description = strings.TrimSpace(description)
+	updatedBy = strings.TrimSpace(updatedBy)
+
+	var row db.TenantSetting
+	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		err := tx.First(&row, "tenant_id = ? AND key = ?", tenantID, key).Error
+		if err != nil {
+			if !errors.Is(err, gorm.ErrRecordNotFound) {
+				return err
+			}
+			row = db.TenantSetting{
+				BaseModel:   db.BaseModel{ID: "tenant-setting-" + ids.New(), CreatedAt: now, UpdatedAt: now},
+				TenantID:    tenantID,
+				Key:         key,
+				Value:       value,
+				Description: description,
+				UpdatedBy:   updatedBy,
+			}
+			return tx.Create(&row).Error
+		}
+		row.Value = value
+		row.Description = description
+		row.UpdatedBy = updatedBy
+		row.UpdatedAt = now
+		return tx.Save(&row).Error
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &row, nil
 }

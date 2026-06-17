@@ -41,6 +41,48 @@ func NewHandler(service Service, opts ...HandlerOption) *Handler {
 	return h
 }
 
+func (h *Handler) GetSecondPersonApprovalPolicy(c fiber.Ctx) error {
+	actor, authorized, err := h.authorizeSensitiveOperation(c, authz.PermissionCurrentAccountsSettingsRead, "current_accounts.second_person_approval_policy.read", "tenant_setting", SecondPersonApprovalPolicyKey)
+	if err != nil {
+		return err
+	}
+	if !authorized {
+		return nil
+	}
+	tenantID := tenantIDForPolicyRequest(c, actor)
+	if ok, err := h.requireActorTenantScope(c, actor, tenantID); err != nil || !ok {
+		return err
+	}
+	result, err := h.service.GetSecondPersonApprovalPolicy(c.Context(), tenantID)
+	if err != nil {
+		return httpx.WriteError(c, err)
+	}
+	return c.JSON(httpx.APIResponse{Data: result})
+}
+
+func (h *Handler) UpdateSecondPersonApprovalPolicy(c fiber.Ctx) error {
+	var req UpdateSecondPersonApprovalPolicyRequest
+	if err := c.Bind().Body(&req); err != nil {
+		return httpx.WriteError(c, err)
+	}
+	actor, authorized, err := h.authorizeSensitiveOperationWithMetadata(c, authz.PermissionCurrentAccountsSettingsUpdate, "current_accounts.second_person_approval_policy.update", "tenant_setting", SecondPersonApprovalPolicyKey, secondPersonApprovalPolicyAuditMetadata(req))
+	if err != nil {
+		return err
+	}
+	if !authorized {
+		return nil
+	}
+	tenantID := tenantIDForPolicyRequest(c, actor)
+	if ok, err := h.requireActorTenantScope(c, actor, tenantID); err != nil || !ok {
+		return err
+	}
+	result, err := h.service.UpdateSecondPersonApprovalPolicy(c.Context(), tenantID, actor.ID, req)
+	if err != nil {
+		return httpx.WriteError(c, err)
+	}
+	return c.JSON(httpx.APIResponse{Data: result})
+}
+
 func (h *Handler) ZeroGold(c fiber.Ctx) error {
 	var req ZeroGoldRequest
 	if err := c.Bind().Body(&req); err != nil {
@@ -331,6 +373,24 @@ func (h *Handler) recordAuthorizationAudit(c fiber.Ctx, actor *authz.Actor, fall
 	})
 }
 
+func tenantIDForPolicyRequest(c fiber.Ctx, actor *authz.Actor) string {
+	if actor != nil && actor.Scope == authz.ActorScopeTenant && strings.TrimSpace(actor.TenantID) != "" {
+		return strings.TrimSpace(actor.TenantID)
+	}
+	if tenantID := strings.TrimSpace(c.Get(authz.HeaderTenantID)); tenantID != "" {
+		return tenantID
+	}
+	return defaultTenantID
+}
+
+func secondPersonApprovalPolicyAuditMetadata(req UpdateSecondPersonApprovalPolicyRequest) string {
+	encoded, err := json.Marshal(map[string]any{"required": req.Required})
+	if err != nil {
+		return ""
+	}
+	return string(encoded)
+}
+
 func (h *Handler) requireCollaboratorTenantScope(c fiber.Ctx, actor *authz.Actor, collaboratorID string) (bool, error) {
 	tenantID, err := h.service.CollaboratorTenantID(c.Context(), collaboratorID)
 	if err != nil {
@@ -365,13 +425,21 @@ func writeAuthorizationError(c fiber.Ctx, err error) error {
 }
 
 func correctionReasonAuditMetadata(req CorrectionReasonRequest) string {
+	payload := map[string]any{}
 	code, text := normalizedCorrectionReason(req)
-	if code == "" && text == "" {
-		return ""
+	if code != "" || text != "" {
+		payload["reasonCode"] = code
+		payload["reasonText"] = text
 	}
-	payload := map[string]string{
-		"reasonCode": code,
-		"reasonText": text,
+	approvedBy, notes := normalizedSecondApproval(req)
+	if approvedBy != "" || notes != "" {
+		payload["secondApproval"] = map[string]string{
+			"approvedBy": approvedBy,
+			"notes":      notes,
+		}
+	}
+	if len(payload) == 0 {
+		return ""
 	}
 	encoded, err := json.Marshal(payload)
 	if err != nil {
