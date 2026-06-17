@@ -160,3 +160,52 @@ func seedReceiptBackfillDependencies(t *testing.T, database *gorm.DB) (string, s
 	}
 	return collaborator.ID, "ref-value-unit-brl"
 }
+
+func TestSecondPersonApprovalPolicyDefaultsToOptionalAndCanBeUpdated(t *testing.T) {
+	database := newReceiptBackfillTestDB(t)
+	now := time.Now().UTC()
+	if err := database.Create(&db.Tenant{BaseModel: db.BaseModel{ID: defaultTenantID, CreatedAt: now, UpdatedAt: now}, Code: "DEFAULT", Name: "Default Tenant", Active: true}).Error; err != nil {
+		t.Fatalf("create tenant: %v", err)
+	}
+	svc := NewService(NewRepository(database), "", "")
+
+	initial, err := svc.GetSecondPersonApprovalPolicy(context.Background(), defaultTenantID)
+	if err != nil {
+		t.Fatalf("get initial policy: %v", err)
+	}
+	if initial.Required {
+		t.Fatalf("expected initial policy to be optional, got %+v", initial)
+	}
+
+	updated, err := svc.UpdateSecondPersonApprovalPolicy(context.Background(), defaultTenantID, "tenant-admin@example.com", UpdateSecondPersonApprovalPolicyRequest{Required: true})
+	if err != nil {
+		t.Fatalf("update policy: %v", err)
+	}
+	if !updated.Required || updated.UpdatedBy != "tenant-admin@example.com" {
+		t.Fatalf("expected policy to require second approval, got %+v", updated)
+	}
+}
+
+func TestBackfillDebitLedgerReceiptsRequiresSecondApprovalWhenConfigured(t *testing.T) {
+	database := newReceiptBackfillTestDB(t)
+	now := time.Now().UTC()
+	if err := database.Create(&db.Tenant{BaseModel: db.BaseModel{ID: defaultTenantID, CreatedAt: now, UpdatedAt: now}, Code: "DEFAULT", Name: "Default Tenant", Active: true}).Error; err != nil {
+		t.Fatalf("create tenant: %v", err)
+	}
+	svc := NewService(NewRepository(database), "", "")
+	if _, err := svc.UpdateSecondPersonApprovalPolicy(context.Background(), defaultTenantID, "tenant-admin@example.com", UpdateSecondPersonApprovalPolicyRequest{Required: true}); err != nil {
+		t.Fatalf("enable policy: %v", err)
+	}
+
+	reason := ReceiptBackfillRequest{CorrectionReasonRequest: CorrectionReasonRequest{ReasonCode: "RECEIPT_BACKFILL", ReasonText: "Backfill historical debit ledger receipts"}}
+	_, err := svc.BackfillDebitLedgerReceipts(context.Background(), "receipt-admin@example.com", true, reason)
+	validation, ok := err.(ValidationError)
+	if !ok || validation.Fields["secondApproval.approvedBy"] == "" {
+		t.Fatalf("expected second approval validation field, got %#v", err)
+	}
+
+	reason.SecondApproval = &SecondApprovalRequest{ApprovedBy: "tenant-admin@example.com", Notes: "Reviewed backfill request"}
+	if _, err := svc.BackfillDebitLedgerReceipts(context.Background(), "receipt-admin@example.com", true, reason); err != nil {
+		t.Fatalf("expected valid second approval to pass: %v", err)
+	}
+}

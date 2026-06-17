@@ -44,6 +44,9 @@ func (s *service) ZeroGold(ctx context.Context, collaboratorID, authorizedBy str
 	if err := ValidateZeroGoldRequest(req, authorizedBy); err != nil {
 		return nil, err
 	}
+	if err := s.requireSecondApprovalWhenConfigured(ctx, defaultTenantID, req.CorrectionReasonRequest, authorizedBy); err != nil {
+		return nil, err
+	}
 	if _, err := s.repo.FindCollaboratorByID(ctx, collaboratorID); err != nil {
 		return nil, err
 	}
@@ -82,20 +85,25 @@ func (s *service) ZeroGold(ctx context.Context, collaboratorID, authorizedBy str
 	now := time.Now().UTC()
 	actor := strings.TrimSpace(authorizedBy)
 	reasonCode, reasonText := normalizedCorrectionReason(req.CorrectionReasonRequest)
+	secondApprovedBy, secondApprovalNotes := normalizedSecondApproval(req.CorrectionReasonRequest)
+	secondApprovedAt := optionalApprovalTime(secondApprovedBy, now)
 	settlement := db.JourneySettlement{
-		BaseModel:      db.BaseModel{ID: "journey-settlement-" + ids.New(), CreatedAt: now, UpdatedAt: now},
-		TenantID:       defaultTenantID,
-		CollaboratorID: collaboratorID,
-		SettlementType: settlementTypeZeroGold,
-		RequestID:      requestID,
-		Status:         settlementStatusPosted,
-		EffectiveDate:  effectiveDate,
-		GoldGramAmount: goldBalance,
-		Notes:          strings.TrimSpace(req.Notes),
-		ReasonCode:     reasonCode,
-		ReasonText:     reasonText,
-		AuthorizedBy:   actor,
-		AuthorizedAt:   &now,
+		BaseModel:           db.BaseModel{ID: "journey-settlement-" + ids.New(), CreatedAt: now, UpdatedAt: now},
+		TenantID:            defaultTenantID,
+		CollaboratorID:      collaboratorID,
+		SettlementType:      settlementTypeZeroGold,
+		RequestID:           requestID,
+		Status:              settlementStatusPosted,
+		EffectiveDate:       effectiveDate,
+		GoldGramAmount:      goldBalance,
+		Notes:               strings.TrimSpace(req.Notes),
+		ReasonCode:          reasonCode,
+		ReasonText:          reasonText,
+		AuthorizedBy:        actor,
+		AuthorizedAt:        &now,
+		SecondApprovedBy:    secondApprovedBy,
+		SecondApprovedAt:    secondApprovedAt,
+		SecondApprovalNotes: secondApprovalNotes,
 	}
 	entry := db.LedgerEntry{
 		BaseModel:            db.BaseModel{ID: "ledger-settlement-" + ids.New(), CreatedAt: now, UpdatedAt: now},
@@ -116,6 +124,9 @@ func (s *service) ZeroGold(ctx context.Context, collaboratorID, authorizedBy str
 		CorrectionType:       "ORIGINAL",
 		AuthorizedBy:         actor,
 		AuthorizedAt:         &now,
+		SecondApprovedBy:     secondApprovedBy,
+		SecondApprovedAt:     secondApprovedAt,
+		SecondApprovalNotes:  secondApprovalNotes,
 	}
 	if err := s.repo.CreateSettlementWithEntries(ctx, &settlement, &entry); err != nil {
 		return nil, err
@@ -127,19 +138,22 @@ func (s *service) ZeroGold(ctx context.Context, collaboratorID, authorizedBy str
 func zeroGoldResult(settlement db.JourneySettlement, entry db.LedgerEntry) *ZeroGoldResult {
 	return &ZeroGoldResult{
 		Settlement: JourneySettlementDTO{
-			ID:             settlement.ID,
-			CollaboratorID: settlement.CollaboratorID,
-			SettlementType: settlement.SettlementType,
-			RequestID:      settlement.RequestID,
-			Status:         settlement.Status,
-			EffectiveDate:  settlement.EffectiveDate.Format(dateLayout),
-			BRLAmount:      settlement.BRLAmount,
-			GoldGramAmount: settlement.GoldGramAmount,
-			Notes:          settlement.Notes,
-			ReasonCode:     settlement.ReasonCode,
-			ReasonText:     settlement.ReasonText,
-			AuthorizedBy:   settlement.AuthorizedBy,
-			AuthorizedAt:   formatOptionalTime(settlement.AuthorizedAt),
+			ID:                  settlement.ID,
+			CollaboratorID:      settlement.CollaboratorID,
+			SettlementType:      settlement.SettlementType,
+			RequestID:           settlement.RequestID,
+			Status:              settlement.Status,
+			EffectiveDate:       settlement.EffectiveDate.Format(dateLayout),
+			BRLAmount:           settlement.BRLAmount,
+			GoldGramAmount:      settlement.GoldGramAmount,
+			Notes:               settlement.Notes,
+			ReasonCode:          settlement.ReasonCode,
+			ReasonText:          settlement.ReasonText,
+			AuthorizedBy:        settlement.AuthorizedBy,
+			AuthorizedAt:        formatOptionalTime(settlement.AuthorizedAt),
+			SecondApprovedBy:    settlement.SecondApprovedBy,
+			SecondApprovedAt:    formatOptionalTime(settlement.SecondApprovedAt),
+			SecondApprovalNotes: settlement.SecondApprovalNotes,
 		},
 		LedgerEntry: ToLedgerEntryDTO(entry),
 	}

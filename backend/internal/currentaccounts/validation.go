@@ -56,12 +56,42 @@ func validateCorrectionReason(fields map[string]string, req CorrectionReasonRequ
 	}
 }
 
+func normalizedSecondApproval(req CorrectionReasonRequest) (string, string) {
+	if req.SecondApproval == nil {
+		return "", ""
+	}
+	return strings.TrimSpace(req.SecondApproval.ApprovedBy), strings.TrimSpace(req.SecondApproval.Notes)
+}
+
+func validateRequiredSecondApproval(fields map[string]string, req CorrectionReasonRequest, authorizedBy string) {
+	if req.SecondApproval == nil {
+		fields["secondApproval.approvedBy"] = "Required when second-person approval is configured for sensitive operations"
+		return
+	}
+	validateOptionalSecondApproval(fields, req, authorizedBy)
+}
+
+func validateOptionalSecondApproval(fields map[string]string, req CorrectionReasonRequest, authorizedBy string) {
+	approvedBy, _ := normalizedSecondApproval(req)
+	if req.SecondApproval == nil {
+		return
+	}
+	if approvedBy == "" {
+		fields["secondApproval.approvedBy"] = "Required"
+		return
+	}
+	if strings.EqualFold(approvedBy, strings.TrimSpace(authorizedBy)) {
+		fields["secondApproval.approvedBy"] = "Second approver must be different from the authorizing actor"
+	}
+}
+
 func ValidateReverseLedgerEntryRequest(req ReverseLedgerEntryRequest, authorizedBy string) error {
 	fields := map[string]string{}
 	if strings.TrimSpace(authorizedBy) == "" {
 		fields["authorizedBy"] = "Required"
 	}
 	validateCorrectionReason(fields, req.CorrectionReasonRequest)
+	validateOptionalSecondApproval(fields, req.CorrectionReasonRequest, authorizedBy)
 	if _, err := parseDate(req.EffectiveDate); err != nil {
 		fields["effectiveDate"] = "Effective date must be YYYY-MM-DD"
 	}
@@ -77,6 +107,7 @@ func ValidateReplaceLedgerEntryRequest(req ReplaceLedgerEntryRequest, authorized
 		fields["authorizedBy"] = "Required"
 	}
 	validateCorrectionReason(fields, req.CorrectionReasonRequest)
+	validateOptionalSecondApproval(fields, req.CorrectionReasonRequest, authorizedBy)
 	if strings.TrimSpace(req.ValueUnitID) == "" {
 		fields["valueUnitId"] = "Required"
 	}
@@ -108,6 +139,7 @@ func ValidateZeroGoldRequest(req ZeroGoldRequest, authorizedBy string) error {
 		fields["requestId"] = "Required"
 	}
 	validateCorrectionReason(fields, req.CorrectionReasonRequest)
+	validateOptionalSecondApproval(fields, req.CorrectionReasonRequest, authorizedBy)
 	if _, err := parseDate(req.EffectiveDate); err != nil {
 		fields["effectiveDate"] = "Effective date must be YYYY-MM-DD"
 	}
@@ -126,6 +158,7 @@ func ValidatePartialPayoutRequest(req PartialPayoutRequest, authorizedBy string)
 		fields["requestId"] = "Required"
 	}
 	validateCorrectionReason(fields, req.CorrectionReasonRequest)
+	validateOptionalSecondApproval(fields, req.CorrectionReasonRequest, authorizedBy)
 	if _, err := parseDate(req.EffectiveDate); err != nil {
 		fields["effectiveDate"] = "Effective date must be YYYY-MM-DD"
 	}
@@ -165,6 +198,7 @@ func ValidateCloseJourneyRequest(req CloseJourneyRequest, authorizedBy string) e
 		fields["requestId"] = "Required"
 	}
 	validateCorrectionReason(fields, req.CorrectionReasonRequest)
+	validateOptionalSecondApproval(fields, req.CorrectionReasonRequest, authorizedBy)
 	if _, err := parseDate(req.EffectiveDate); err != nil {
 		fields["effectiveDate"] = "Effective date must be YYYY-MM-DD"
 	}
@@ -183,6 +217,7 @@ func ValidateReceiptBackfillRequest(req ReceiptBackfillRequest, authorizedBy str
 		fields["authorizedBy"] = "Required"
 	}
 	validateCorrectionReason(fields, req.CorrectionReasonRequest)
+	validateOptionalSecondApproval(fields, req.CorrectionReasonRequest, authorizedBy)
 	if len(fields) > 0 {
 		return ValidationError{Fields: fields}
 	}

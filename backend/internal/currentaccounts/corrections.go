@@ -35,6 +35,9 @@ func (s *service) ReverseEntry(ctx context.Context, entryID, authorizedBy string
 	if err := ValidateReverseLedgerEntryRequest(req, authorizedBy); err != nil {
 		return nil, err
 	}
+	if err := s.requireSecondApprovalWhenConfigured(ctx, defaultTenantID, req.CorrectionReasonRequest, authorizedBy); err != nil {
+		return nil, err
+	}
 	original, err := s.requireCorrectableEntry(ctx, entryID)
 	if err != nil {
 		return nil, err
@@ -42,7 +45,8 @@ func (s *service) ReverseEntry(ctx context.Context, entryID, authorizedBy string
 	effectiveDate, _ := parseDate(req.EffectiveDate)
 	now := time.Now().UTC()
 	reasonCode, reasonText := normalizedCorrectionReason(req.CorrectionReasonRequest)
-	reversal := newCorrectionEntry(*original, oppositeDirection(original.Direction), original.ValueUnitID, original.EntryType, original.Amount, effectiveDate, original.Description, "REVERSAL", reasonCode, reasonText, strings.TrimSpace(authorizedBy), now)
+	secondApprovedBy, secondApprovalNotes := normalizedSecondApproval(req.CorrectionReasonRequest)
+	reversal := newCorrectionEntry(*original, oppositeDirection(original.Direction), original.ValueUnitID, original.EntryType, original.Amount, effectiveDate, original.Description, "REVERSAL", reasonCode, reasonText, strings.TrimSpace(authorizedBy), secondApprovedBy, secondApprovalNotes, now)
 	if err := s.repo.CreateCorrectionEntries(ctx, &reversal); err != nil {
 		return nil, err
 	}
@@ -52,6 +56,9 @@ func (s *service) ReverseEntry(ctx context.Context, entryID, authorizedBy string
 func (s *service) ReplaceEntry(ctx context.Context, entryID, authorizedBy string, req ReplaceLedgerEntryRequest) (*LedgerCorrectionResult, error) {
 	entryID = strings.TrimSpace(entryID)
 	if err := ValidateReplaceLedgerEntryRequest(req, authorizedBy); err != nil {
+		return nil, err
+	}
+	if err := s.requireSecondApprovalWhenConfigured(ctx, defaultTenantID, req.CorrectionReasonRequest, authorizedBy); err != nil {
 		return nil, err
 	}
 	original, err := s.requireCorrectableEntry(ctx, entryID)
@@ -64,9 +71,10 @@ func (s *service) ReplaceEntry(ctx context.Context, entryID, authorizedBy string
 	effectiveDate, _ := parseDate(req.EffectiveDate)
 	now := time.Now().UTC()
 	reasonCode, reasonText := normalizedCorrectionReason(req.CorrectionReasonRequest)
+	secondApprovedBy, secondApprovalNotes := normalizedSecondApproval(req.CorrectionReasonRequest)
 	actor := strings.TrimSpace(authorizedBy)
-	reversal := newCorrectionEntry(*original, oppositeDirection(original.Direction), original.ValueUnitID, original.EntryType, original.Amount, effectiveDate, original.Description, "REVERSAL", reasonCode, reasonText, actor, now)
-	replacement := newCorrectionEntry(*original, strings.ToUpper(strings.TrimSpace(req.Direction)), strings.TrimSpace(req.ValueUnitID), strings.TrimSpace(req.EntryType), req.Amount, effectiveDate, strings.TrimSpace(req.Description), "REPLACEMENT", reasonCode, reasonText, actor, now)
+	reversal := newCorrectionEntry(*original, oppositeDirection(original.Direction), original.ValueUnitID, original.EntryType, original.Amount, effectiveDate, original.Description, "REVERSAL", reasonCode, reasonText, actor, secondApprovedBy, secondApprovalNotes, now)
+	replacement := newCorrectionEntry(*original, strings.ToUpper(strings.TrimSpace(req.Direction)), strings.TrimSpace(req.ValueUnitID), strings.TrimSpace(req.EntryType), req.Amount, effectiveDate, strings.TrimSpace(req.Description), "REPLACEMENT", reasonCode, reasonText, actor, secondApprovedBy, secondApprovalNotes, now)
 	if err := s.repo.CreateCorrectionEntries(ctx, &reversal, &replacement); err != nil {
 		return nil, err
 	}
@@ -91,8 +99,9 @@ func (s *service) requireCorrectableEntry(ctx context.Context, entryID string) (
 	return entry, nil
 }
 
-func newCorrectionEntry(original db.LedgerEntry, direction, valueUnitID, entryType string, amount float64, effectiveDate time.Time, description, correctionType, reasonCode, reasonText, authorizedBy string, now time.Time) db.LedgerEntry {
+func newCorrectionEntry(original db.LedgerEntry, direction, valueUnitID, entryType string, amount float64, effectiveDate time.Time, description, correctionType, reasonCode, reasonText, authorizedBy, secondApprovedBy, secondApprovalNotes string, now time.Time) db.LedgerEntry {
 	originalID := original.ID
+	secondApprovedAt := optionalApprovalTime(secondApprovedBy, now)
 	return db.LedgerEntry{
 		BaseModel:            db.BaseModel{ID: "ledger-correction-" + ids.New(), CreatedAt: now, UpdatedAt: now},
 		TenantID:             original.TenantID,
@@ -113,6 +122,9 @@ func newCorrectionEntry(original db.LedgerEntry, direction, valueUnitID, entryTy
 		CorrectionReasonText: reasonText,
 		AuthorizedBy:         authorizedBy,
 		AuthorizedAt:         &now,
+		SecondApprovedBy:     secondApprovedBy,
+		SecondApprovedAt:     secondApprovedAt,
+		SecondApprovalNotes:  secondApprovalNotes,
 	}
 }
 
