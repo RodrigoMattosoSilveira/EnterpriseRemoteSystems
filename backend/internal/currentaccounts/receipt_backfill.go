@@ -21,6 +21,9 @@ func (s *service) BackfillDebitLedgerReceipts(ctx context.Context, authorizedBy 
 	if err := ValidateReceiptBackfillRequest(req, authorizedBy); err != nil {
 		return nil, err
 	}
+	if err := s.requireSecondApprovalWhenConfigured(ctx, defaultTenantID, req.CorrectionReasonRequest, authorizedBy); err != nil {
+		return nil, err
+	}
 
 	eligible, err := s.repo.CountDebitLedgerEntries(ctx)
 	if err != nil {

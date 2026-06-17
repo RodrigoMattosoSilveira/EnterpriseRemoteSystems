@@ -1,5 +1,16 @@
 package currentaccounts
 
+type SecondPersonApprovalPolicyDTO struct {
+	TenantID  string `json:"tenantId"`
+	Required  bool   `json:"required"`
+	UpdatedBy string `json:"updatedBy,omitempty"`
+	UpdatedAt string `json:"updatedAt,omitempty"`
+}
+
+type UpdateSecondPersonApprovalPolicyRequest struct {
+	Required bool `json:"required"`
+}
+
 type LedgerEntryDTO struct {
 	ID                   string  `json:"id"`
 	TenantID             string  `json:"tenantId"`
@@ -24,6 +35,9 @@ type LedgerEntryDTO struct {
 	CorrectionReasonText string  `json:"correctionReasonText,omitempty"`
 	AuthorizedBy         string  `json:"authorizedBy,omitempty"`
 	AuthorizedAt         string  `json:"authorizedAt,omitempty"`
+	SecondApprovedBy     string  `json:"secondApprovedBy,omitempty"`
+	SecondApprovedAt     string  `json:"secondApprovedAt,omitempty"`
+	SecondApprovalNotes  string  `json:"secondApprovalNotes,omitempty"`
 	CreatedAt            string  `json:"createdAt"`
 	UpdatedAt            string  `json:"updatedAt"`
 }
@@ -62,11 +76,19 @@ type LedgerEntryListResult struct {
 	PageSize int              `json:"pageSize"`
 }
 
+type SecondApprovalRequest struct {
+	ApprovedBy string `json:"approvedBy"`
+	Notes      string `json:"notes"`
+}
+
 type CorrectionReasonRequest struct {
 	ReasonCode string `json:"reasonCode"`
 	ReasonText string `json:"reasonText"`
 	// Reason is kept as a backwards-compatible alias for reasonText.
 	Reason string `json:"reason"`
+	// SecondApproval is optional. When supplied, it records that a second person
+	// reviewed and approved the sensitive correction operation.
+	SecondApproval *SecondApprovalRequest `json:"secondApproval,omitempty"`
 }
 
 type ReverseLedgerEntryRequest struct {
@@ -115,19 +137,22 @@ type ZeroGoldRequest struct {
 }
 
 type JourneySettlementDTO struct {
-	ID             string  `json:"id"`
-	CollaboratorID string  `json:"collaboratorId"`
-	SettlementType string  `json:"settlementType"`
-	RequestID      string  `json:"requestId"`
-	Status         string  `json:"status"`
-	EffectiveDate  string  `json:"effectiveDate"`
-	BRLAmount      float64 `json:"brlAmount"`
-	GoldGramAmount float64 `json:"goldGramAmount"`
-	Notes          string  `json:"notes,omitempty"`
-	ReasonCode     string  `json:"reasonCode,omitempty"`
-	ReasonText     string  `json:"reasonText,omitempty"`
-	AuthorizedBy   string  `json:"authorizedBy,omitempty"`
-	AuthorizedAt   string  `json:"authorizedAt,omitempty"`
+	ID                  string  `json:"id"`
+	CollaboratorID      string  `json:"collaboratorId"`
+	SettlementType      string  `json:"settlementType"`
+	RequestID           string  `json:"requestId"`
+	Status              string  `json:"status"`
+	EffectiveDate       string  `json:"effectiveDate"`
+	BRLAmount           float64 `json:"brlAmount"`
+	GoldGramAmount      float64 `json:"goldGramAmount"`
+	Notes               string  `json:"notes,omitempty"`
+	ReasonCode          string  `json:"reasonCode,omitempty"`
+	ReasonText          string  `json:"reasonText,omitempty"`
+	AuthorizedBy        string  `json:"authorizedBy,omitempty"`
+	AuthorizedAt        string  `json:"authorizedAt,omitempty"`
+	SecondApprovedBy    string  `json:"secondApprovedBy,omitempty"`
+	SecondApprovedAt    string  `json:"secondApprovedAt,omitempty"`
+	SecondApprovalNotes string  `json:"secondApprovalNotes,omitempty"`
 }
 
 type ZeroGoldResult struct {

@@ -68,6 +68,8 @@ const (
 	PermissionCurrentAccountsSummaryRead     Permission = "current_accounts.summary.read"
 	PermissionCurrentAccountsLedgerRead      Permission = "current_accounts.ledger.read"
 	PermissionCurrentAccountsLedgerCreate    Permission = "current_accounts.ledger.create"
+	PermissionCurrentAccountsSettingsRead    Permission = "current_accounts.settings.read"
+	PermissionCurrentAccountsSettingsUpdate  Permission = "current_accounts.settings.update"
 	PermissionCurrentAccountsSelfSummaryRead Permission = "current_accounts.self.summary.read"
 	PermissionCurrentAccountsSelfLedgerRead  Permission = "current_accounts.self.ledger.read"
 

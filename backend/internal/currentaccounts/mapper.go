@@ -34,6 +34,9 @@ func ToLedgerEntryDTO(row db.LedgerEntry) LedgerEntryDTO {
 		CorrectionReasonText: row.CorrectionReasonText,
 		AuthorizedBy:         row.AuthorizedBy,
 		AuthorizedAt:         formatOptionalTime(row.AuthorizedAt),
+		SecondApprovedBy:     row.SecondApprovedBy,
+		SecondApprovedAt:     formatOptionalTime(row.SecondApprovedAt),
+		SecondApprovalNotes:  row.SecondApprovalNotes,
 		CreatedAt:            row.CreatedAt.UTC().Format(time.RFC3339),
 		UpdatedAt:            row.UpdatedAt.UTC().Format(time.RFC3339),
 	}

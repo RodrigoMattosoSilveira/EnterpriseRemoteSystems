@@ -8,6 +8,8 @@ func RegisterCurrentAccountRoutes(v1 fiber.Router, deps Dependencies) {
 	receipts.Post("/backfill-debit-ledger-entries", deps.CurrentAccountHandler.BackfillDebitLedgerReceipts)
 
 	r := v1.Group("/current-accounts")
+	r.Get("/settings/second-person-approval", deps.CurrentAccountHandler.GetSecondPersonApprovalPolicy)
+	r.Put("/settings/second-person-approval", deps.CurrentAccountHandler.UpdateSecondPersonApprovalPolicy)
 	r.Get("/:collaboratorId/balances", deps.CurrentAccountHandler.ListBalances)
 	r.Get("/:collaboratorId/ledger-entries", deps.CurrentAccountHandler.ListEntries)
 

@@ -76,6 +76,9 @@ type apiLedgerEntryListResponse struct {
 			CorrectionReason     string  `json:"correctionReason"`
 			CorrectionReasonCode string  `json:"correctionReasonCode"`
 			CorrectionReasonText string  `json:"correctionReasonText"`
+			SecondApprovedBy     string  `json:"secondApprovedBy"`
+			SecondApprovedAt     string  `json:"secondApprovedAt"`
+			SecondApprovalNotes  string  `json:"secondApprovalNotes"`
 		} `json:"items"`
 		Total    int `json:"total"`
 		Page     int `json:"page"`
@@ -238,6 +241,69 @@ func TestLedgerCorrectionRejectsBlankReasonText(t *testing.T) {
 	decodeJSON(t, res, &body)
 	if body.Error == nil || body.Error.Fields["reasonText"] == "" {
 		t.Fatalf("expected reasonText validation field, got %+v", body.Error)
+	}
+}
+
+func TestLedgerCorrectionPersistsOptionalSecondApproval(t *testing.T) {
+	server, cleanup := newTestServer(t)
+	defer cleanup()
+
+	collaborator := createActiveCollaborator(t, server, 1)
+	createExpense(t, server, validExpensePayload(collaborator.Data.ID, nil))
+	original := listLedgerEntries(t, server, collaborator.Data.ID).Data.Items[0]
+
+	res := postAuthorizedJSON(t, server, http.MethodPost, "/api/v1/ledger-entries/"+original.ID+"/reverse", map[string]any{
+		"reasonCode":    "DUPLICATE_POSTING",
+		"reasonText":    "Correct duplicate expense posting",
+		"effectiveDate": "2026-06-07",
+		"secondApproval": map[string]any{
+			"approvedBy": "tenant-admin@example.com",
+			"notes":      "Reviewed original receipt and approved reversal",
+		},
+	})
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		var body apiErrorResponse
+		decodeJSON(t, res, &body)
+		t.Fatalf("expected reverse status %d, got %d error=%+v", http.StatusOK, res.StatusCode, body.Error)
+	}
+
+	entries := listLedgerEntries(t, server, collaborator.Data.ID)
+	for _, entry := range entries.Data.Items {
+		if entry.CorrectionType == "REVERSAL" {
+			if entry.SecondApprovedBy != "tenant-admin@example.com" || entry.SecondApprovedAt == "" || entry.SecondApprovalNotes != "Reviewed original receipt and approved reversal" {
+				t.Fatalf("expected optional second approval metadata on reversal, got %+v", entry)
+			}
+			return
+		}
+	}
+	t.Fatalf("expected reversal entry, got %+v", entries.Data.Items)
+}
+
+func TestLedgerCorrectionRejectsSecondApprovalBySameActor(t *testing.T) {
+	server, cleanup := newTestServer(t)
+	defer cleanup()
+
+	collaborator := createActiveCollaborator(t, server, 1)
+	createExpense(t, server, validExpensePayload(collaborator.Data.ID, nil))
+	original := listLedgerEntries(t, server, collaborator.Data.ID).Data.Items[0]
+
+	res := postAuthorizedJSON(t, server, http.MethodPost, "/api/v1/ledger-entries/"+original.ID+"/reverse", map[string]any{
+		"reasonCode":    "DUPLICATE_POSTING",
+		"reasonText":    "Correct duplicate expense posting",
+		"effectiveDate": "2026-06-07",
+		"secondApproval": map[string]any{
+			"approvedBy": "ledger-admin@example.com",
+		},
+	})
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusBadRequest {
+		t.Fatalf("expected bad request status %d, got %d", http.StatusBadRequest, res.StatusCode)
+	}
+	var body apiErrorResponse
+	decodeJSON(t, res, &body)
+	if body.Error == nil || body.Error.Fields["secondApproval.approvedBy"] == "" {
+		t.Fatalf("expected secondApproval.approvedBy validation field, got %+v", body.Error)
 	}
 }
 
