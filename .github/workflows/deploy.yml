@@ -270,6 +270,8 @@ jobs:
   deployed-playwright:
     name: Deployed Playwright E2E
     runs-on: ubuntu-latest
+    container:
+      image: mcr.microsoft.com/playwright:v1.60.0-noble
     timeout-minutes: 30
     needs:
       - deploy
@@ -304,9 +306,6 @@ jobs:
         working-directory: frontend
         run: npm ci
 
-      - name: Install Playwright browsers
-        working-directory: frontend
-        run: npx playwright install --with-deps
 
       - name: Run Playwright against deployed environment
         working-directory: frontend
