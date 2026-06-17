@@ -57,7 +57,8 @@ func TestBackfillDebitLedgerReceiptsCreatesOnlyMissingReceipts(t *testing.T) {
 	}
 
 	svc := NewService(NewRepository(database), "", "")
-	dryRun, err := svc.BackfillDebitLedgerReceipts(context.Background(), "receipt-admin@example.com", true)
+	reason := ReceiptBackfillRequest{CorrectionReasonRequest: CorrectionReasonRequest{ReasonCode: "RECEIPT_BACKFILL", ReasonText: "Backfill historical debit ledger receipts"}}
+	dryRun, err := svc.BackfillDebitLedgerReceipts(context.Background(), "receipt-admin@example.com", true, reason)
 	if err != nil {
 		t.Fatalf("dry-run backfill: %v", err)
 	}
@@ -65,7 +66,7 @@ func TestBackfillDebitLedgerReceiptsCreatesOnlyMissingReceipts(t *testing.T) {
 		t.Fatalf("unexpected dry-run result: %+v", dryRun)
 	}
 
-	result, err := svc.BackfillDebitLedgerReceipts(context.Background(), "receipt-admin@example.com", false)
+	result, err := svc.BackfillDebitLedgerReceipts(context.Background(), "receipt-admin@example.com", false, reason)
 	if err != nil {
 		t.Fatalf("backfill: %v", err)
 	}
@@ -81,7 +82,7 @@ func TestBackfillDebitLedgerReceiptsCreatesOnlyMissingReceipts(t *testing.T) {
 		t.Fatalf("unexpected generated receipt: %+v", generated)
 	}
 
-	second, err := svc.BackfillDebitLedgerReceipts(context.Background(), "receipt-admin@example.com", false)
+	second, err := svc.BackfillDebitLedgerReceipts(context.Background(), "receipt-admin@example.com", false, reason)
 	if err != nil {
 		t.Fatalf("second backfill: %v", err)
 	}
@@ -93,9 +94,23 @@ func TestBackfillDebitLedgerReceiptsCreatesOnlyMissingReceipts(t *testing.T) {
 func TestBackfillDebitLedgerReceiptsRequiresAuthorizedBy(t *testing.T) {
 	database := newReceiptBackfillTestDB(t)
 	svc := NewService(NewRepository(database), "", "")
-	_, err := svc.BackfillDebitLedgerReceipts(context.Background(), "   ", false)
+	reason := ReceiptBackfillRequest{CorrectionReasonRequest: CorrectionReasonRequest{ReasonCode: "RECEIPT_BACKFILL", ReasonText: "Backfill historical debit ledger receipts"}}
+	_, err := svc.BackfillDebitLedgerReceipts(context.Background(), "   ", false, reason)
 	if err == nil {
 		t.Fatal("expected validation error")
+	}
+}
+
+func TestBackfillDebitLedgerReceiptsRequiresReason(t *testing.T) {
+	database := newReceiptBackfillTestDB(t)
+	svc := NewService(NewRepository(database), "", "")
+	_, err := svc.BackfillDebitLedgerReceipts(context.Background(), "receipt-admin@example.com", false, ReceiptBackfillRequest{})
+	if err == nil {
+		t.Fatal("expected validation error")
+	}
+	validation, ok := err.(ValidationError)
+	if !ok || validation.Fields["reasonCode"] == "" || validation.Fields["reasonText"] == "" {
+		t.Fatalf("expected reason validation fields, got %#v", err)
 	}
 }
 
