@@ -1,6 +1,11 @@
 package authz
 
-import "time"
+import (
+	"errors"
+	"time"
+
+	"gorm.io/gorm"
+)
 
 type AuthzActor struct {
 	ID             string    `gorm:"type:text;primaryKey"`
@@ -76,4 +81,14 @@ type AuthzAuditLog struct {
 	CreatedAt      time.Time `gorm:"not null"`
 }
 
+var ErrImmutableAuditLog = errors.New("authorization audit logs are immutable")
+
 func (AuthzAuditLog) TableName() string { return "authz_audit_logs" }
+
+func (AuthzAuditLog) BeforeUpdate(tx *gorm.DB) error {
+	return ErrImmutableAuditLog
+}
+
+func (AuthzAuditLog) BeforeDelete(tx *gorm.DB) error {
+	return ErrImmutableAuditLog
+}
