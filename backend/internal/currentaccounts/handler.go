@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"strings"
+	"time"
 
 	"github.com/gofiber/fiber/v3"
 
@@ -88,7 +89,7 @@ func (h *Handler) ZeroGold(c fiber.Ctx) error {
 	if err := c.Bind().Body(&req); err != nil {
 		return httpx.WriteError(c, err)
 	}
-	actor, authorized, err := h.authorizeSensitiveOperationWithMetadata(c, authz.PermissionJourneySettlementsZeroGold, "current_accounts.zero_gold", "collaborator", c.Params("collaboratorId"), correctionReasonAuditMetadata(req.CorrectionReasonRequest))
+	actor, authorized, err := h.authorizeRecentlyReauthenticatedSensitiveOperationWithMetadata(c, authz.PermissionJourneySettlementsZeroGold, "current_accounts.zero_gold", "collaborator", c.Params("collaboratorId"), correctionReasonAuditMetadata(req.CorrectionReasonRequest))
 	if err != nil {
 		return err
 	}
@@ -113,7 +114,7 @@ func (h *Handler) PartialPayout(c fiber.Ctx) error {
 	if err := c.Bind().Body(&req); err != nil {
 		return httpx.WriteError(c, err)
 	}
-	actor, authorized, err := h.authorizeSensitiveOperationWithMetadata(c, authz.PermissionJourneySettlementsPartialPayout, "current_accounts.partial_payout", "collaborator", c.Params("collaboratorId"), correctionReasonAuditMetadata(req.CorrectionReasonRequest))
+	actor, authorized, err := h.authorizeRecentlyReauthenticatedSensitiveOperationWithMetadata(c, authz.PermissionJourneySettlementsPartialPayout, "current_accounts.partial_payout", "collaborator", c.Params("collaboratorId"), correctionReasonAuditMetadata(req.CorrectionReasonRequest))
 	if err != nil {
 		return err
 	}
@@ -138,7 +139,7 @@ func (h *Handler) CloseJourney(c fiber.Ctx) error {
 	if err := c.Bind().Body(&req); err != nil {
 		return httpx.WriteError(c, err)
 	}
-	actor, authorized, err := h.authorizeSensitiveOperationWithMetadata(c, authz.PermissionJourneySettlementsClose, "current_accounts.close_journey", "collaborator", c.Params("collaboratorId"), correctionReasonAuditMetadata(req.CorrectionReasonRequest))
+	actor, authorized, err := h.authorizeRecentlyReauthenticatedSensitiveOperationWithMetadata(c, authz.PermissionJourneySettlementsClose, "current_accounts.close_journey", "collaborator", c.Params("collaboratorId"), correctionReasonAuditMetadata(req.CorrectionReasonRequest))
 	if err != nil {
 		return err
 	}
@@ -218,7 +219,7 @@ func (h *Handler) ReverseEntry(c fiber.Ctx) error {
 	if err := c.Bind().Body(&req); err != nil {
 		return httpx.WriteError(c, err)
 	}
-	actor, authorized, err := h.authorizeSensitiveOperationWithMetadata(c, authz.PermissionLedgerCorrectionsCreate, "ledger_entries.reverse", "ledger_entry", c.Params("entryId"), correctionReasonAuditMetadata(req.CorrectionReasonRequest))
+	actor, authorized, err := h.authorizeRecentlyReauthenticatedSensitiveOperationWithMetadata(c, authz.PermissionLedgerCorrectionsCreate, "ledger_entries.reverse", "ledger_entry", c.Params("entryId"), correctionReasonAuditMetadata(req.CorrectionReasonRequest))
 	if err != nil {
 		return err
 	}
@@ -240,7 +241,7 @@ func (h *Handler) ReplaceEntry(c fiber.Ctx) error {
 	if err := c.Bind().Body(&req); err != nil {
 		return httpx.WriteError(c, err)
 	}
-	actor, authorized, err := h.authorizeSensitiveOperationWithMetadata(c, authz.PermissionLedgerCorrectionsCreate, "ledger_entries.replace", "ledger_entry", c.Params("entryId"), correctionReasonAuditMetadata(req.CorrectionReasonRequest))
+	actor, authorized, err := h.authorizeRecentlyReauthenticatedSensitiveOperationWithMetadata(c, authz.PermissionLedgerCorrectionsCreate, "ledger_entries.replace", "ledger_entry", c.Params("entryId"), correctionReasonAuditMetadata(req.CorrectionReasonRequest))
 	if err != nil {
 		return err
 	}
@@ -335,6 +336,14 @@ func (h *Handler) authorizeSensitiveOperation(c fiber.Ctx, permission authz.Perm
 }
 
 func (h *Handler) authorizeSensitiveOperationWithMetadata(c fiber.Ctx, permission authz.Permission, operation, targetType, targetID string, metadataJSON string, opts ...authz.RequireOption) (*authz.Actor, bool, error) {
+	return h.authorizeSensitiveOperationInternal(c, permission, operation, targetType, targetID, metadataJSON, false, opts...)
+}
+
+func (h *Handler) authorizeRecentlyReauthenticatedSensitiveOperationWithMetadata(c fiber.Ctx, permission authz.Permission, operation, targetType, targetID string, metadataJSON string, opts ...authz.RequireOption) (*authz.Actor, bool, error) {
+	return h.authorizeSensitiveOperationInternal(c, permission, operation, targetType, targetID, metadataJSON, true, opts...)
+}
+
+func (h *Handler) authorizeSensitiveOperationInternal(c fiber.Ctx, permission authz.Permission, operation, targetType, targetID string, metadataJSON string, requireRecentReauth bool, opts ...authz.RequireOption) (*authz.Actor, bool, error) {
 	fallbackActorID := c.Get(authz.HeaderActorID)
 	if strings.TrimSpace(fallbackActorID) == "" {
 		fallbackActorID = c.Get(authz.HeaderAuthorizedBy)
@@ -348,6 +357,14 @@ func (h *Handler) authorizeSensitiveOperationWithMetadata(c fiber.Ctx, permissio
 	if err := authz.RequirePermission(actor, permission, opts...); err != nil {
 		h.recordAuthorizationAudit(c, actor, fallbackActorID, tenantID, permission, operation, targetType, targetID, authz.AuditDecisionDenied, err.Error(), metadataJSON)
 		return nil, false, writeAuthorizationError(c, err)
+	}
+	if requireRecentReauth {
+		reauth, err := authz.RequireRecentReauthentication(func(name string) string { return c.Get(name) }, time.Now().UTC())
+		if err != nil {
+			h.recordAuthorizationAudit(c, actor, fallbackActorID, tenantID, permission, operation, targetType, targetID, authz.AuditDecisionDenied, err.Error(), metadataJSON)
+			return nil, false, writeRecentReauthenticationError(c, err)
+		}
+		metadataJSON = mergeRecentReauthenticationAuditMetadata(metadataJSON, reauth)
 	}
 	h.recordAuthorizationAudit(c, actor, fallbackActorID, tenantID, permission, operation, targetType, targetID, authz.AuditDecisionAuthorized, "", metadataJSON)
 	return actor, true, nil
@@ -371,6 +388,31 @@ func (h *Handler) recordAuthorizationAudit(c fiber.Ctx, actor *authz.Actor, fall
 		RequestMethod:   c.Method(),
 		RequestPath:     c.Path(),
 	})
+}
+
+func writeRecentReauthenticationError(c fiber.Ctx, err error) error {
+	if errors.Is(err, authz.ErrRecentReauthenticationRequired) || errors.Is(err, authz.ErrRecentReauthenticationInvalid) || errors.Is(err, authz.ErrRecentReauthenticationStale) {
+		return c.Status(fiber.StatusUnauthorized).JSON(httpx.APIResponse{Error: &httpx.APIError{Code: "recent_reauthentication_required", Message: "Recent reauthentication is required for this sensitive operation"}})
+	}
+	return httpx.WriteError(c, err)
+}
+
+func mergeRecentReauthenticationAuditMetadata(metadataJSON string, reauth *authz.RecentReauthentication) string {
+	payload := map[string]any{}
+	if strings.TrimSpace(metadataJSON) != "" {
+		_ = json.Unmarshal([]byte(metadataJSON), &payload)
+	}
+	if reauth != nil {
+		payload["recentReauthentication"] = map[string]string{
+			"authenticatedAt": reauth.AuthenticatedAt.UTC().Format(time.RFC3339),
+			"method":          reauth.Method,
+		}
+	}
+	encoded, err := json.Marshal(payload)
+	if err != nil {
+		return metadataJSON
+	}
+	return string(encoded)
 }
 
 func tenantIDForPolicyRequest(c fiber.Ctx, actor *authz.Actor) string {
@@ -464,7 +506,7 @@ func (h *Handler) BackfillDebitLedgerReceipts(c fiber.Ctx) error {
 	if err := c.Bind().Body(&req); err != nil {
 		return httpx.WriteError(c, err)
 	}
-	actor, authorized, err := h.authorizeSensitiveOperationWithMetadata(c, authz.PermissionLedgerReceiptsBackfill, "ledger_receipts.backfill_debit_entries", "ledger_receipts", "debit-ledger-entries", correctionReasonAuditMetadata(req.CorrectionReasonRequest), authz.WithLegacyAuthorizedByCompatibility())
+	actor, authorized, err := h.authorizeRecentlyReauthenticatedSensitiveOperationWithMetadata(c, authz.PermissionLedgerReceiptsBackfill, "ledger_receipts.backfill_debit_entries", "ledger_receipts", "debit-ledger-entries", correctionReasonAuditMetadata(req.CorrectionReasonRequest), authz.WithLegacyAuthorizedByCompatibility())
 	if err != nil {
 		return err
 	}
