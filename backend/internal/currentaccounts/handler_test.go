@@ -714,13 +714,17 @@ func TestReceiptReturnRejectsSecondReturn(t *testing.T) {
 	createExpense(t, server, validExpensePayload(collaborator.Data.ID, nil))
 	entry := listLedgerEntries(t, server, collaborator.Data.ID).Data.Items[0]
 
-	first := postReceiptJSON(t, server, "/api/v1/ledger-entries/"+entry.ID+"/receipt/return", "receiver@example.com", map[string]any{})
+	first := postReceiptJSON(t, server, "/api/v1/ledger-entries/"+entry.ID+"/receipt/return", "receiver@example.com", map[string]any{
+		"signedDocumentRef": "receipt-scans/first-return.pdf",
+	})
 	first.Body.Close()
 	if first.StatusCode != http.StatusOK {
 		t.Fatalf("expected first return status %d, got %d", http.StatusOK, first.StatusCode)
 	}
 
-	second := postReceiptJSON(t, server, "/api/v1/ledger-entries/"+entry.ID+"/receipt/return", "receiver@example.com", map[string]any{})
+	second := postReceiptJSON(t, server, "/api/v1/ledger-entries/"+entry.ID+"/receipt/return", "receiver@example.com", map[string]any{
+		"signedDocumentRef": "receipt-scans/second-return.pdf",
+	})
 	defer second.Body.Close()
 	if second.StatusCode != http.StatusConflict {
 		t.Fatalf("expected second return conflict status %d, got %d", http.StatusConflict, second.StatusCode)
