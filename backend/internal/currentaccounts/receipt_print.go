@@ -10,8 +10,9 @@ import (
 )
 
 var (
-	ErrReceiptCancelled       = errors.New("receipt is cancelled")
-	ErrReceiptAlreadyReturned = errors.New("receipt is already returned")
+	ErrReceiptCancelled              = errors.New("receipt is cancelled")
+	ErrReceiptAlreadyReturned        = errors.New("receipt is already returned")
+	ErrReceiptSignedDocumentRequired = errors.New("signed document reference is required to return a receipt")
 )
 
 func (s *service) GetPrintableReceipt(ctx context.Context, ledgerEntryID string) (*PrintableReceiptDTO, error) {
@@ -42,6 +43,9 @@ func (s *service) ReturnReceipt(ctx context.Context, ledgerEntryID, receivedBy s
 	receivedBy = strings.TrimSpace(receivedBy)
 	if receivedBy == "" {
 		return nil, ValidationError{Fields: map[string]string{"authorizedBy": "Authorized by is required"}}
+	}
+	if strings.TrimSpace(req.SignedDocumentRef) == "" {
+		return nil, ValidationError{Fields: map[string]string{"signedDocumentRef": ErrReceiptSignedDocumentRequired.Error()}}
 	}
 	receipt, err := s.repo.FindReceiptByLedgerEntryID(ctx, strings.TrimSpace(ledgerEntryID))
 	if err != nil {
