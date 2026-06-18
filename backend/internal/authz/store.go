@@ -72,13 +72,15 @@ func (s *GORMStore) FindActor(ctx context.Context, lookup ActorLookup) (*Actor, 
 	}
 
 	var actorRow AuthzActor
-	if err := s.database.WithContext(ctx).
+	result := s.database.WithContext(ctx).
 		Where("actor_key = ? AND active = ?", actorKey, true).
-		First(&actorRow).Error; err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, ErrMissingActor
-		}
-		return nil, fmt.Errorf("find authorization actor: %w", err)
+		Limit(1).
+		Find(&actorRow)
+	if result.Error != nil {
+		return nil, fmt.Errorf("find authorization actor: %w", result.Error)
+	}
+	if result.RowsAffected == 0 {
+		return nil, ErrMissingActor
 	}
 
 	grantQuery := s.database.WithContext(ctx).
