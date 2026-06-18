@@ -1,0 +1,2 @@
+DROP TRIGGER IF EXISTS trg_ledger_receipts_status_update_guard;
+DROP TRIGGER IF EXISTS trg_ledger_receipts_status_insert_guard;
