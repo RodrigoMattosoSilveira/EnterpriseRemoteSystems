@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/gofiber/fiber/v3"
 
@@ -381,12 +382,97 @@ func TestCurrentAccountHandlerAuditsCorrectionReasonMetadata(t *testing.T) {
 	if got.Operation != "ledger_entries.reverse" || got.Decision != authz.AuditDecisionAuthorized || got.MetadataJSON == "" {
 		t.Fatalf("unexpected audit entry: %#v", got)
 	}
-	var metadata map[string]string
+	var metadata map[string]any
 	if err := json.Unmarshal([]byte(got.MetadataJSON), &metadata); err != nil {
 		t.Fatalf("decode audit metadata: %v", err)
 	}
 	if metadata["reasonCode"] != "DUPLICATE_POSTING" || metadata["reasonText"] != "Correct duplicate expense posting" {
 		t.Fatalf("unexpected audit metadata: %+v", metadata)
+	}
+}
+
+func TestCurrentAccountHandlerRequiresRecentReauthenticationForLedgerCorrection(t *testing.T) {
+	service := newRecordingReceiptService()
+	audit := &recordingAuditStore{}
+	store := fakeActorStore{actor: &authz.Actor{
+		ID:          "correction-operator@example.com",
+		TenantID:    "tenant-a",
+		Source:      authz.ActorSourcePersisted,
+		Scope:       authz.ActorScopeTenant,
+		Permissions: map[authz.Permission]struct{}{authz.PermissionLedgerCorrectionsCreate: {}},
+	}}
+
+	app := fiber.New()
+	app.Post("/ledger-entries/:entryId/reverse", NewHandler(service, WithActorStore(store), WithAuthorizationAudit(audit)).ReverseEntry)
+
+	payload, err := json.Marshal(map[string]any{
+		"reasonCode":    "DUPLICATE_POSTING",
+		"reasonText":    "Correct duplicate posting",
+		"effectiveDate": "2026-06-15",
+	})
+	if err != nil {
+		t.Fatalf("marshal request: %v", err)
+	}
+	req := httptest.NewRequest(http.MethodPost, "/ledger-entries/entry-1/reverse", strings.NewReader(string(payload)))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set(authz.HeaderActorID, "correction-operator@example.com")
+	req.Header.Set(authz.HeaderTenantID, "tenant-a")
+
+	res, err := app.Test(req, fiber.TestConfig{Timeout: 0, FailOnTimeout: false})
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer res.Body.Close()
+
+	if res.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("expected status %d, got %d", http.StatusUnauthorized, res.StatusCode)
+	}
+	if service.reverseEntryBy != "" {
+		t.Fatalf("service must not be called without recent reauthentication, got %q", service.reverseEntryBy)
+	}
+	if len(audit.entries) != 1 || audit.entries[0].Decision != authz.AuditDecisionDenied || !strings.Contains(audit.entries[0].Reason, "recent reauthentication") {
+		t.Fatalf("expected denied reauthentication audit event, got %#v", audit.entries)
+	}
+}
+
+func TestCurrentAccountHandlerRejectsStaleRecentReauthentication(t *testing.T) {
+	service := newRecordingReceiptService()
+	store := fakeActorStore{actor: &authz.Actor{
+		ID:          "correction-operator@example.com",
+		TenantID:    "tenant-a",
+		Source:      authz.ActorSourcePersisted,
+		Scope:       authz.ActorScopeTenant,
+		Permissions: map[authz.Permission]struct{}{authz.PermissionLedgerCorrectionsCreate: {}},
+	}}
+
+	app := fiber.New()
+	app.Post("/ledger-entries/:entryId/reverse", NewHandler(service, WithActorStore(store)).ReverseEntry)
+
+	payload, err := json.Marshal(map[string]any{
+		"reasonCode":    "DUPLICATE_POSTING",
+		"reasonText":    "Correct duplicate posting",
+		"effectiveDate": "2026-06-15",
+	})
+	if err != nil {
+		t.Fatalf("marshal request: %v", err)
+	}
+	req := httptest.NewRequest(http.MethodPost, "/ledger-entries/entry-1/reverse", strings.NewReader(string(payload)))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set(authz.HeaderActorID, "correction-operator@example.com")
+	req.Header.Set(authz.HeaderTenantID, "tenant-a")
+	req.Header.Set(authz.HeaderReauthenticatedAt, time.Now().UTC().Add(-authz.RecentReauthenticationWindow-time.Minute).Format(time.RFC3339))
+
+	res, err := app.Test(req, fiber.TestConfig{Timeout: 0, FailOnTimeout: false})
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer res.Body.Close()
+
+	if res.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("expected status %d, got %d", http.StatusUnauthorized, res.StatusCode)
+	}
+	if service.reverseEntryBy != "" {
+		t.Fatalf("service must not be called with stale reauthentication, got %q", service.reverseEntryBy)
 	}
 }
 
@@ -565,6 +651,8 @@ func postAuthzJSON(t *testing.T, app *fiber.App, path string, body map[string]an
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set(authz.HeaderActorID, actorID)
 	req.Header.Set(authz.HeaderTenantID, tenantID)
+	req.Header.Set(authz.HeaderReauthenticatedAt, time.Now().UTC().Format(time.RFC3339))
+	req.Header.Set(authz.HeaderReauthenticationMethod, "password")
 	res, err := app.Test(req, fiber.TestConfig{Timeout: 0, FailOnTimeout: false})
 	if err != nil {
 		t.Fatalf("request: %v", err)
