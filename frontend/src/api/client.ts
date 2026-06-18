@@ -1,5 +1,6 @@
 const API_BASE_URL = "/api/v1";
 const AUTHZ_REQUEST_ACTOR_STORAGE_KEY = "ers.authzAdmin.requestActor";
+const LOCAL_DEV_DEFAULT_ACTOR = { actorId: "bootstrap-admin", tenantId: "default" } as const;
 
 type ApiEnvelope<T> = {
   data?: T;
@@ -105,8 +106,9 @@ function temporaryAuthzHeaders(): Record<string, string> {
 
   try {
     const stored = storage.getItem(AUTHZ_REQUEST_ACTOR_STORAGE_KEY);
-    if (!stored) return {};
-    const parsed = JSON.parse(stored) as StoredRequestActor;
+    const parsed = stored
+      ? (JSON.parse(stored) as StoredRequestActor)
+      : localDevelopmentDefaultActor();
     const actorId = typeof parsed.actorId === "string" ? parsed.actorId.trim() : "";
     const tenantId = typeof parsed.tenantId === "string" ? parsed.tenantId.trim() : "";
     if (!actorId || !tenantId) return {};
@@ -117,4 +119,8 @@ function temporaryAuthzHeaders(): Record<string, string> {
   } catch {
     return {};
   }
+}
+
+function localDevelopmentDefaultActor(): StoredRequestActor {
+  return import.meta.env.DEV ? LOCAL_DEV_DEFAULT_ACTOR : {};
 }
