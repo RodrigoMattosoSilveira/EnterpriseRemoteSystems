@@ -39,6 +39,17 @@ mkdir -p data
 # local experiments.
 export APP_AUTO_MIGRATE="${APP_AUTO_MIGRATE:-false}"
 
+# Local browser development uses the temporary authz request actor until the
+# real authenticated session layer is wired in. Ensure the matching bootstrap
+# actor exists for `make local-backend` without requiring every developer to
+# remember extra AUTHZ_BOOTSTRAP_* environment variables.
+export AUTHZ_BOOTSTRAP_ENABLED="${AUTHZ_BOOTSTRAP_ENABLED:-true}"
+export AUTHZ_BOOTSTRAP_ACTOR_KEY="${AUTHZ_BOOTSTRAP_ACTOR_KEY:-bootstrap-admin}"
+export AUTHZ_BOOTSTRAP_DISPLAY_NAME="${AUTHZ_BOOTSTRAP_DISPLAY_NAME:-Bootstrap Admin}"
+export AUTHZ_BOOTSTRAP_ROLE_CODE="${AUTHZ_BOOTSTRAP_ROLE_CODE:-APPLICATION_ADMIN}"
+export AUTHZ_BOOTSTRAP_TENANT_ID="${AUTHZ_BOOTSTRAP_TENANT_ID:-*}"
+export AUTHZ_BOOTSTRAP_REQUIRE_EMPTY_ACTOR_TABLE="${AUTHZ_BOOTSTRAP_REQUIRE_EMPTY_ACTOR_TABLE:-false}"
+
 echo "Starting backend..."
 echo "APP_ENV=${APP_ENV:-dev}"
 echo "PORT=${PORT:-8080}"
