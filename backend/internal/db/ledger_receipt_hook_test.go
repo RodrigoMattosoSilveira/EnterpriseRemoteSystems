@@ -120,3 +120,73 @@ func seedLedgerReceiptTestDependencies(t *testing.T, database *gorm.DB) (string,
 	}
 	return collaborator.ID, "ref-value-unit-brl"
 }
+
+func TestLedgerReceiptStatusGuardsRejectReturnedWithoutSignedDocument(t *testing.T) {
+	database := newLedgerReceiptTestDB(t)
+	collaboratorID, valueUnitID := seedLedgerReceiptTestDependencies(t, database)
+	now := time.Now().UTC()
+	entry := LedgerEntry{
+		BaseModel: BaseModel{ID: ids.New(), CreatedAt: now, UpdatedAt: now},
+		TenantID:  DefaultTenantID, CollaboratorID: collaboratorID,
+		ValueUnitID: valueUnitID, EntryType: "EXPENSE_DEDUCTION",
+		Direction: "DEBIT", Amount: 125, EffectiveDate: now,
+		SourceType: "EXPENSE", SourceID: ids.New(), Active: true,
+		CorrectionType: "ORIGINAL",
+	}
+	if err := database.Create(&entry).Error; err != nil {
+		t.Fatalf("create debit ledger entry: %v", err)
+	}
+
+	err := database.Model(&LedgerReceipt{}).
+		Where("ledger_entry_id = ?", entry.ID).
+		Updates(map[string]any{
+			"status":      "RETURNED",
+			"signed_at":   now,
+			"returned_at": now,
+			"received_by": "receipt-admin@example.com",
+			"updated_at":  now,
+		}).Error
+	if err == nil || !strings.Contains(err.Error(), "signed_document_ref") {
+		t.Fatalf("expected signed document status guard, got %v", err)
+	}
+}
+
+func TestLedgerReceiptStatusGuardsMakeReturnedTerminal(t *testing.T) {
+	database := newLedgerReceiptTestDB(t)
+	collaboratorID, valueUnitID := seedLedgerReceiptTestDependencies(t, database)
+	now := time.Now().UTC()
+	entry := LedgerEntry{
+		BaseModel: BaseModel{ID: ids.New(), CreatedAt: now, UpdatedAt: now},
+		TenantID:  DefaultTenantID, CollaboratorID: collaboratorID,
+		ValueUnitID: valueUnitID, EntryType: "EXPENSE_DEDUCTION",
+		Direction: "DEBIT", Amount: 125, EffectiveDate: now,
+		SourceType: "EXPENSE", SourceID: ids.New(), Active: true,
+		CorrectionType: "ORIGINAL",
+	}
+	if err := database.Create(&entry).Error; err != nil {
+		t.Fatalf("create debit ledger entry: %v", err)
+	}
+
+	if err := database.Model(&LedgerReceipt{}).
+		Where("ledger_entry_id = ?", entry.ID).
+		Updates(map[string]any{
+			"status":              "RETURNED",
+			"issued_at":           now,
+			"issued_by":           "receipt-admin@example.com",
+			"printed_at":          now,
+			"signed_at":           now,
+			"returned_at":         now,
+			"received_by":         "receipt-admin@example.com",
+			"signed_document_ref": "receipt-scans/returned.pdf",
+			"updated_at":          now,
+		}).Error; err != nil {
+		t.Fatalf("mark receipt returned: %v", err)
+	}
+
+	err := database.Model(&LedgerReceipt{}).
+		Where("ledger_entry_id = ?", entry.ID).
+		Updates(map[string]any{"status": "PRINTED", "updated_at": now}).Error
+	if err == nil || !strings.Contains(err.Error(), "RETURNED status is terminal") {
+		t.Fatalf("expected terminal returned status guard, got %v", err)
+	}
+}

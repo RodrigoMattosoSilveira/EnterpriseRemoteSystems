@@ -681,6 +681,31 @@ func TestReceiptReturnRecordsSignedReturnedMetadata(t *testing.T) {
 	}
 }
 
+func TestReceiptReturnRejectsBlankSignedDocumentRef(t *testing.T) {
+	server, cleanup := newTestServer(t)
+	defer cleanup()
+
+	collaborator := createActiveCollaborator(t, server, 1)
+	createExpense(t, server, validExpensePayload(collaborator.Data.ID, nil))
+	entry := listLedgerEntries(t, server, collaborator.Data.ID).Data.Items[0]
+
+	res := postReceiptJSON(t, server, "/api/v1/ledger-entries/"+entry.ID+"/receipt/return", "receiver@example.com", map[string]any{
+		"signedDocumentRef": "   ",
+		"notes":             "Missing signed scan should be rejected.",
+	})
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusBadRequest {
+		var body apiErrorResponse
+		decodeJSON(t, res, &body)
+		t.Fatalf("expected bad request status %d, got %d error=%+v", http.StatusBadRequest, res.StatusCode, body.Error)
+	}
+	var body apiErrorResponse
+	decodeJSON(t, res, &body)
+	if body.Error == nil || body.Error.Fields["signedDocumentRef"] == "" {
+		t.Fatalf("expected signedDocumentRef validation field, got %+v", body.Error)
+	}
+}
+
 func TestReceiptReturnRejectsSecondReturn(t *testing.T) {
 	server, cleanup := newTestServer(t)
 	defer cleanup()
