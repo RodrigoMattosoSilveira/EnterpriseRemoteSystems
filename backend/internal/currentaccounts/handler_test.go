@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/gofiber/fiber/v3"
 
@@ -354,6 +355,8 @@ func postAuthorizedJSON(t *testing.T, server *fiber.App, method, url string, pay
 	req.Header.Set(authz.HeaderActorID, "ledger-admin@example.com")
 	req.Header.Set(authz.HeaderTenantID, "default")
 	req.Header.Set(authz.HeaderActorPermissions, string(authz.PermissionLedgerCorrectionsCreate))
+	req.Header.Set(authz.HeaderReauthenticatedAt, time.Now().UTC().Format(time.RFC3339))
+	req.Header.Set(authz.HeaderReauthenticationMethod, "password")
 	res, err := server.Test(req, fiber.TestConfig{Timeout: 0, FailOnTimeout: false})
 	if err != nil {
 		t.Fatalf("%s %s: %v", method, url, err)
@@ -376,6 +379,8 @@ func postSettlementJSON(t *testing.T, server *fiber.App, url string, payload map
 		string(authz.PermissionJourneySettlementsPartialPayout),
 		string(authz.PermissionJourneySettlementsClose),
 	}, ","))
+	req.Header.Set(authz.HeaderReauthenticatedAt, time.Now().UTC().Format(time.RFC3339))
+	req.Header.Set(authz.HeaderReauthenticationMethod, "password")
 	res, err := server.Test(req, fiber.TestConfig{Timeout: 0, FailOnTimeout: false})
 	if err != nil {
 		t.Fatalf("POST %s: %v", url, err)
@@ -392,6 +397,8 @@ func postReceiptJSON(t *testing.T, server *fiber.App, url, authorizedBy string, 
 	req := httptest.NewRequest(http.MethodPost, url, bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-Authorized-By", authorizedBy)
+	req.Header.Set(authz.HeaderReauthenticatedAt, time.Now().UTC().Format(time.RFC3339))
+	req.Header.Set(authz.HeaderReauthenticationMethod, "password")
 	res, err := server.Test(req, fiber.TestConfig{Timeout: 0, FailOnTimeout: false})
 	if err != nil {
 		t.Fatalf("POST %s: %v", url, err)
@@ -409,6 +416,8 @@ func postReceiptActorJSON(t *testing.T, server *fiber.App, url, actorID, permiss
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set(authz.HeaderActorID, actorID)
 	req.Header.Set(authz.HeaderActorPermissions, permissions)
+	req.Header.Set(authz.HeaderReauthenticatedAt, time.Now().UTC().Format(time.RFC3339))
+	req.Header.Set(authz.HeaderReauthenticationMethod, "password")
 	res, err := server.Test(req, fiber.TestConfig{Timeout: 0, FailOnTimeout: false})
 	if err != nil {
 		t.Fatalf("POST %s: %v", url, err)
