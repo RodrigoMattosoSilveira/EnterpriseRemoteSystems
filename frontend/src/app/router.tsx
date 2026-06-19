@@ -19,6 +19,7 @@ import { WorkPeriodDetailPage } from "../features/planning/WorkPeriodDetailPage"
 import { PrintableReceiptPage } from "../features/receipts/PrintableReceiptPage";
 import { OutstandingReceiptsPage } from "../features/receipts/OutstandingReceiptsPage";
 import { AuthzAdminPage } from "../features/authz/AuthzAdminPage";
+import { SecondPersonApprovalSettingsPage } from "../features/current-accounts/SecondPersonApprovalSettingsPage";
 
 function RouteErrorPage() {
   const error = useRouteError();
@@ -76,6 +77,7 @@ export const router = createBrowserRouter([
       { path: "receipts/outstanding", element: <OutstandingReceiptsPage /> },
       { path: "admin/reference-data", element: <ReferenceDataAdminPage /> },
       { path: "admin/authorization", element: <AuthzAdminPage /> },
+      { path: "admin/current-account-settings", element: <SecondPersonApprovalSettingsPage /> },
       { path: "*", element: <NotFoundPage /> },
     ],
   },
