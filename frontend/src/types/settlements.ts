@@ -37,36 +37,44 @@ export type SettlementAuthorization = {
   authorizedBy: string;
 };
 
-export type ZeroGoldInput = SettlementAuthorization & {
-  requestId: string;
-  effectiveDate: string;
-  notes?: string;
+export type CorrectionReasonInput = {
+  reasonCode: string;
+  reasonText: string;
 };
+
+export type ZeroGoldInput = SettlementAuthorization &
+  CorrectionReasonInput & {
+    requestId: string;
+    effectiveDate: string;
+    notes?: string;
+  };
 
 export type ZeroGoldResult = {
   settlement: JourneySettlement;
   ledgerEntry: SettlementLedgerEntry;
 };
 
-export type PartialPayoutInput = SettlementAuthorization & {
-  requestId: string;
-  effectiveDate: string;
-  brlAmount: number;
-  goldGramAmount: number;
-  notes?: string;
-};
+export type PartialPayoutInput = SettlementAuthorization &
+  CorrectionReasonInput & {
+    requestId: string;
+    effectiveDate: string;
+    brlAmount: number;
+    goldGramAmount: number;
+    notes?: string;
+  };
 
 export type PartialPayoutResult = {
   settlement: JourneySettlement;
   ledgerEntries: SettlementLedgerEntry[];
 };
 
-export type CloseJourneyInput = SettlementAuthorization & {
-  requestId: string;
-  effectiveDate: string;
-  confirm: boolean;
-  notes?: string;
-};
+export type CloseJourneyInput = SettlementAuthorization &
+  CorrectionReasonInput & {
+    requestId: string;
+    effectiveDate: string;
+    confirm: boolean;
+    notes?: string;
+  };
 
 export type CloseJourneyResult = {
   settlement: JourneySettlement;

@@ -12,6 +12,33 @@ import {
 
 type Action = "ZERO_GOLD" | "PARTIAL_PAYOUT" | "CLOSE_JOURNEY";
 
+const correctionReasonOptions = [
+  {
+    value: "GOLD_ZEROING_CORRECTION",
+    label: "Gold zeroing correction",
+    actions: ["ZERO_GOLD"] satisfies Action[],
+  },
+  {
+    value: "PAYOUT_CORRECTION",
+    label: "Payout correction",
+    actions: ["PARTIAL_PAYOUT", "CLOSE_JOURNEY"] satisfies Action[],
+  },
+  {
+    value: "JOURNEY_SETTLEMENT_ADJUSTMENT",
+    label: "Journey settlement adjustment",
+    actions: ["CLOSE_JOURNEY"] satisfies Action[],
+  },
+  {
+    value: "MANUAL_CORRECTION",
+    label: "Manual correction",
+    actions: [
+      "ZERO_GOLD",
+      "PARTIAL_PAYOUT",
+      "CLOSE_JOURNEY",
+    ] satisfies Action[],
+  },
+];
+
 export function JourneySettlementPanel({
   collaboratorId,
   projectedEndDate,
@@ -69,7 +96,12 @@ export function JourneySettlementPanel({
       {receiptEntryIds.length > 0 ? (
         <div className="mt-3 flex flex-wrap gap-3">
           {receiptEntryIds.map((entryId, index) => (
-            <Link key={entryId} className="text-sm font-semibold text-gray-800 underline" target="_blank" to={`/ledger-entries/${entryId}/receipt`}>
+            <Link
+              key={entryId}
+              className="text-sm font-semibold text-gray-800 underline"
+              target="_blank"
+              to={`/ledger-entries/${entryId}/receipt`}
+            >
               Print receipt{receiptEntryIds.length > 1 ? ` ${index + 1}` : ""}
             </Link>
           ))}
@@ -183,6 +215,8 @@ function SettlementDialog({
   const [effectiveDate, setEffectiveDate] = useState(today());
   const [brlAmount, setBrlAmount] = useState("");
   const [goldAmount, setGoldAmount] = useState("");
+  const [reasonCode, setReasonCode] = useState("");
+  const [reasonText, setReasonText] = useState("");
   const [notes, setNotes] = useState("");
   const mutation =
     action === "ZERO_GOLD"
@@ -204,6 +238,8 @@ function SettlementDialog({
       settlementKey,
       authorizedBy,
       effectiveDate,
+      reasonCode,
+      reasonText,
       notes,
       requestId: crypto.randomUUID(),
     };
@@ -218,11 +254,17 @@ function SettlementDialog({
         brlAmount: Number(brlAmount || 0),
         goldGramAmount: Number(goldAmount || 0),
       });
-      onSuccess("Partial payout posted successfully.", result.ledgerEntries.map((entry) => entry.id));
+      onSuccess(
+        "Partial payout posted successfully.",
+        result.ledgerEntries.map((entry) => entry.id),
+      );
       return;
     }
     const result = await closeJourney.mutateAsync({ ...base, confirm: true });
-    onSuccess("Journey closed successfully.", result.ledgerEntries.map((entry) => entry.id));
+    onSuccess(
+      "Journey closed successfully.",
+      result.ledgerEntries.map((entry) => entry.id),
+    );
   }
 
   return (
@@ -307,6 +349,40 @@ function SettlementDialog({
               autoComplete="off"
               value={settlementKey}
               onChange={(event) => setSettlementKey(event.target.value)}
+            />
+          </Field>
+          <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+            <p className="font-semibold">Correction reason required</p>
+            <p className="mt-1">
+              Sensitive settlement operations must capture a structured reason
+              code and a human-readable reason before they can be submitted.
+            </p>
+          </div>
+          <Field label="Reason code">
+            <select
+              required
+              className={inputClass}
+              value={reasonCode}
+              onChange={(event) => setReasonCode(event.target.value)}
+            >
+              <option value="">Select a reason code</option>
+              {correctionReasonOptions
+                .filter((option) => option.actions.includes(action))
+                .map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+            </select>
+          </Field>
+          <Field label="Reason text">
+            <textarea
+              required
+              className={inputClass}
+              rows={3}
+              value={reasonText}
+              onChange={(event) => setReasonText(event.target.value)}
+              placeholder="Explain why this sensitive correction is needed."
             />
           </Field>
           <Field label="Notes">
