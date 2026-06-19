@@ -137,8 +137,8 @@ export function JourneySettlementPanel({
             </button>
           </div>
           <p className="mt-4 text-xs text-gray-500">
-            Settlement actions currently use the interim settlement key.
-            Role-based authorization remains a go-live requirement.
+            Settlement actions use the current authorization actor selected in
+            Authz Admin. Operators should not handle backend settlement secrets.
           </p>
         </>
       ) : null}
@@ -210,8 +210,6 @@ function SettlementDialog({
   const zeroGold = useZeroGold(collaboratorId);
   const payout = usePartialPayout(collaboratorId);
   const closeJourney = useCloseJourney(collaboratorId);
-  const [settlementKey, setSettlementKey] = useState("");
-  const [authorizedBy, setAuthorizedBy] = useState("");
   const [effectiveDate, setEffectiveDate] = useState(today());
   const [brlAmount, setBrlAmount] = useState("");
   const [goldAmount, setGoldAmount] = useState("");
@@ -235,8 +233,6 @@ function SettlementDialog({
   async function submit(event: React.FormEvent) {
     event.preventDefault();
     const base = {
-      settlementKey,
-      authorizedBy,
       effectiveDate,
       reasonCode,
       reasonText,
@@ -333,24 +329,13 @@ function SettlementDialog({
               onChange={(event) => setEffectiveDate(event.target.value)}
             />
           </Field>
-          <Field label="Authorized by">
-            <input
-              required
-              className={inputClass}
-              value={authorizedBy}
-              onChange={(event) => setAuthorizedBy(event.target.value)}
-            />
-          </Field>
-          <Field label="Settlement key">
-            <input
-              required
-              className={inputClass}
-              type="password"
-              autoComplete="off"
-              value={settlementKey}
-              onChange={(event) => setSettlementKey(event.target.value)}
-            />
-          </Field>
+          <div className="rounded-xl border border-blue-200 bg-blue-50 p-3 text-sm text-blue-900">
+            <p className="font-semibold">Authorization actor</p>
+            <p className="mt-1">
+              This action uses the current request actor selected in Authz Admin.
+              Backend settlement keys are not entered by operators or testers.
+            </p>
+          </div>
           <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
             <p className="font-semibold">Correction reason required</p>
             <p className="mt-1">

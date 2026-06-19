@@ -47,7 +47,9 @@ describe("JourneySettlementPanel", () => {
     );
     await act(async () => button?.click());
     expect(container.querySelector('[role="dialog"]')).toBeTruthy();
-    expect(textNode("Settlement key")).toBeTruthy();
+    expect(textNode("Settlement key")).toBeFalsy();
+    expect(textNode("Authorized by")).toBeFalsy();
+    expect(textNode("Authorization actor")).toBeTruthy();
     expect(textNode("Reason code")).toBeTruthy();
     expect(textNode("Reason text")).toBeTruthy();
     expect(textNode("Correction reason required")).toBeTruthy();
@@ -98,8 +100,6 @@ describe("JourneySettlementPanel", () => {
 
     await clickButton("Partial Payout");
     await setFieldValue("BRL amount", "25.50");
-    await setFieldValue("Authorized by", "admin@example.com");
-    await setFieldValue("Settlement key", "local-settlement-key");
     await setFieldValue("Reason code", "PAYOUT_CORRECTION");
     await setFieldValue("Reason text", "Pay selected BRL balance.");
 
@@ -116,6 +116,34 @@ describe("JourneySettlementPanel", () => {
       reasonCode: "PAYOUT_CORRECTION",
       reasonText: "Pay selected BRL balance.",
     });
+    expect(payoutRequest?.body).not.toHaveProperty("settlementKey");
+    expect(payoutRequest?.body).not.toHaveProperty("authorizedBy");
+  });
+
+  it("does not expose backend settlement secrets to operators", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          data: {
+            collaboratorId: "collab-1",
+            brlBalance: 900,
+            goldGramBalance: 2.5,
+            pendingAccrualItems: 0,
+            canClose: true,
+            blockingReasons: [],
+          },
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+
+    renderPanel();
+    await waitForText("R$ 900,00");
+    await clickButton("Partial Payout");
+
+    expect(textNode("Settlement key")).toBeFalsy();
+    expect(textNode("Authorized by")).toBeFalsy();
+    expect(textNode("Backend settlement keys are not entered")).toBeTruthy();
   });
 });
 
