@@ -9,6 +9,7 @@ let container: HTMLDivElement;
 let root: Root | null;
 
 beforeEach(() => {
+  window.localStorage.clear();
   container = document.createElement("div");
   document.body.appendChild(container);
   root = null;
@@ -18,6 +19,7 @@ afterEach(async () => {
   if (root) await act(async () => root?.unmount());
   document.body.removeChild(container);
   vi.restoreAllMocks();
+  window.localStorage.clear();
 });
 
 describe("JourneySettlementPanel", () => {
@@ -53,6 +55,8 @@ describe("JourneySettlementPanel", () => {
     expect(textNode("Reason code")).toBeTruthy();
     expect(textNode("Reason text")).toBeTruthy();
     expect(textNode("Correction reason required")).toBeTruthy();
+    expect(textNode("Recent reauthentication required")).toBeTruthy();
+    expect(textNode("Confirm reauthentication first")).toBeTruthy();
   });
 
   it("submits structured correction reason metadata with sensitive settlement actions", async () => {
@@ -102,6 +106,7 @@ describe("JourneySettlementPanel", () => {
     await setFieldValue("BRL amount", "25.50");
     await setFieldValue("Reason code", "PAYOUT_CORRECTION");
     await setFieldValue("Reason text", "Pay selected BRL balance.");
+    await clickButton("Confirm reauthentication");
 
     await clickButton("Post Payout");
     await waitForText("Partial payout posted successfully.");
@@ -118,6 +123,14 @@ describe("JourneySettlementPanel", () => {
     });
     expect(payoutRequest?.body).not.toHaveProperty("settlementKey");
     expect(payoutRequest?.body).not.toHaveProperty("authorizedBy");
+    expect(payoutRequest?.init?.headers).toMatchObject({
+      "X-Reauthentication-Method": "password",
+    });
+    expect(
+      (payoutRequest?.init?.headers as Record<string, string>)?.[
+        "X-Reauthenticated-At"
+      ],
+    ).toBeTruthy();
   });
 
   it("does not expose backend settlement secrets to operators", async () => {

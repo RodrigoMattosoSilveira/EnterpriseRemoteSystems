@@ -1,3 +1,4 @@
+import { loadRecentReauthentication } from "../app/reauthStore";
 import { apiFetch } from "./client";
 import type { FinancialProjection } from "../types/financialProjection";
 import type {
@@ -90,6 +91,7 @@ export function zeroGold(
     `/collaborators/${encodeURIComponent(collaboratorId)}/zero-gold`,
     {
       method: "POST",
+      headers: recentReauthenticationHeaders(),
       body: JSON.stringify(input),
     },
   );
@@ -103,6 +105,7 @@ export function partialPayout(
     `/collaborators/${encodeURIComponent(collaboratorId)}/payout`,
     {
       method: "POST",
+      headers: recentReauthenticationHeaders(),
       body: JSON.stringify(input),
     },
   );
@@ -116,7 +119,18 @@ export function closeJourney(
     `/collaborators/${encodeURIComponent(collaboratorId)}/close`,
     {
       method: "POST",
+      headers: recentReauthenticationHeaders(),
       body: JSON.stringify(input),
     },
   );
+}
+
+function recentReauthenticationHeaders(): Record<string, string> {
+  const recent = loadRecentReauthentication();
+  if (!recent) return {};
+
+  return {
+    "X-Reauthenticated-At": recent.reauthenticatedAt,
+    "X-Reauthentication-Method": recent.method,
+  };
 }

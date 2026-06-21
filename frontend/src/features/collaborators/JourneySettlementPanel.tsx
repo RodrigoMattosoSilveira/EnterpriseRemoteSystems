@@ -1,5 +1,10 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
+import {
+  confirmRecentReauthentication,
+  loadRecentReauthentication,
+  type RecentReauthentication,
+} from "../../app/reauthStore";
 import { ApiErrorPanel } from "../../components/ApiErrorPanel";
 import { JourneyDaysRemaining } from "../../components/JourneyDaysRemaining";
 import type { SettlementPreview } from "../../types/settlements";
@@ -216,6 +221,8 @@ function SettlementDialog({
   const [reasonCode, setReasonCode] = useState("");
   const [reasonText, setReasonText] = useState("");
   const [notes, setNotes] = useState("");
+  const [reauthentication, setReauthentication] =
+    useState<RecentReauthentication | null>(() => loadRecentReauthentication());
   const mutation =
     action === "ZERO_GOLD"
       ? zeroGold
@@ -232,6 +239,10 @@ function SettlementDialog({
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
+    const recentReauthentication = loadRecentReauthentication();
+    setReauthentication(recentReauthentication);
+    if (!recentReauthentication) return;
+
     const base = {
       effectiveDate,
       reasonCode,
@@ -343,6 +354,35 @@ function SettlementDialog({
               code and a human-readable reason before they can be submitted.
             </p>
           </div>
+
+          <div className="rounded-xl border border-purple-200 bg-purple-50 p-3 text-sm text-purple-900">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="font-semibold">Recent reauthentication required</p>
+                <p className="mt-1">
+                  Confirm the operator has recently reauthenticated before
+                  submitting this sensitive operation. This development control
+                  supplies the required backend reauthentication headers.
+                </p>
+                {reauthentication ? (
+                  <p className="mt-2 text-xs font-semibold">
+                    Confirmed at {formatDateTime(reauthentication.reauthenticatedAt)}
+                  </p>
+                ) : (
+                  <p className="mt-2 text-xs font-semibold">
+                    Not confirmed for this browser session.
+                  </p>
+                )}
+              </div>
+              <button
+                type="button"
+                className="rounded-xl bg-purple-900 px-3 py-2 text-sm font-semibold text-white"
+                onClick={() => setReauthentication(confirmRecentReauthentication())}
+              >
+                Confirm reauthentication
+              </button>
+            </div>
+          </div>
           <Field label="Reason code">
             <select
               required
@@ -389,10 +429,14 @@ function SettlementDialog({
             </button>
             <button
               type="submit"
-              disabled={mutation.isPending}
+              disabled={mutation.isPending || !reauthentication}
               className="rounded-xl bg-gray-900 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
             >
-              {mutation.isPending ? "Processing..." : actionButton(action)}
+              {mutation.isPending
+                ? "Processing..."
+                : !reauthentication
+                  ? "Confirm reauthentication first"
+                  : actionButton(action)}
             </button>
           </div>
         </form>
@@ -449,6 +493,12 @@ function formatBRL(value: number) {
 }
 function formatGold(value: number) {
   return value.toFixed(8);
+}
+function formatDateTime(value: string) {
+  return new Intl.DateTimeFormat(undefined, {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(new Date(value));
 }
 function today() {
   return new Date().toISOString().slice(0, 10);
