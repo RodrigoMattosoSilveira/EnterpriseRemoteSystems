@@ -1,3 +1,4 @@
+import { loadRecentReauthentication } from "../app/reauthStore";
 import { apiFetch } from "./client";
 import type { FinancialProjection } from "../types/financialProjection";
 import type {
@@ -86,13 +87,12 @@ export function zeroGold(
   collaboratorId: string,
   input: ZeroGoldInput,
 ): Promise<ZeroGoldResult> {
-  const { settlementKey, authorizedBy, ...body } = input;
   return apiFetch<ZeroGoldResult>(
     `/collaborators/${encodeURIComponent(collaboratorId)}/zero-gold`,
     {
       method: "POST",
-      headers: settlementHeaders(settlementKey, authorizedBy),
-      body: JSON.stringify(body),
+      headers: recentReauthenticationHeaders(),
+      body: JSON.stringify(input),
     },
   );
 }
@@ -101,13 +101,12 @@ export function partialPayout(
   collaboratorId: string,
   input: PartialPayoutInput,
 ): Promise<PartialPayoutResult> {
-  const { settlementKey, authorizedBy, ...body } = input;
   return apiFetch<PartialPayoutResult>(
     `/collaborators/${encodeURIComponent(collaboratorId)}/payout`,
     {
       method: "POST",
-      headers: settlementHeaders(settlementKey, authorizedBy),
-      body: JSON.stringify(body),
+      headers: recentReauthenticationHeaders(),
+      body: JSON.stringify(input),
     },
   );
 }
@@ -116,20 +115,22 @@ export function closeJourney(
   collaboratorId: string,
   input: CloseJourneyInput,
 ): Promise<CloseJourneyResult> {
-  const { settlementKey, authorizedBy, ...body } = input;
   return apiFetch<CloseJourneyResult>(
     `/collaborators/${encodeURIComponent(collaboratorId)}/close`,
     {
       method: "POST",
-      headers: settlementHeaders(settlementKey, authorizedBy),
-      body: JSON.stringify(body),
+      headers: recentReauthenticationHeaders(),
+      body: JSON.stringify(input),
     },
   );
 }
 
-function settlementHeaders(settlementKey: string, authorizedBy: string) {
+function recentReauthenticationHeaders(): Record<string, string> {
+  const recent = loadRecentReauthentication();
+  if (!recent) return {};
+
   return {
-    "X-Ledger-Settlement-Key": settlementKey,
-    "X-Authorized-By": authorizedBy,
+    "X-Reauthenticated-At": recent.reauthenticatedAt,
+    "X-Reauthentication-Method": recent.method,
   };
 }

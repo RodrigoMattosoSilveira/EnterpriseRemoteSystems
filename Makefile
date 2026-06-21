@@ -58,6 +58,7 @@ help:
 	@echo "  make local-init-env"
 	@echo "  make local-db-init"
 	@echo "  make local-db-reset"
+	@echo "  make testdata-local-reset"
 	@echo "  make local-admin-reset"
 	@echo "  make backend-check"
 	@echo "  make frontend-check"
@@ -87,6 +88,7 @@ help:
 	@echo "  make server-dns-check ENV=development|test|production"
 	@echo "  make server-cert-check ENV=development|test|production"
 	@echo "  make server-backup ENV=development|test|production"
+	@echo "  make testdata-server-reset ENV=development|test"
 	@echo
 	@echo "Development aliases:"
 	@echo "  make server-dev-pull"
@@ -702,3 +704,17 @@ import-people-dry-run:
 import-people:
 	@test -n "$(file)" || (echo "Usage: make import-people file=backend/imports/people.csv" && exit 2)
 	cd backend && go run ./cmd/import-people -db data/app.db -file ../$(file)
+
+# ==============================================================================
+# Resettable test data
+# ==============================================================================
+
+.PHONY: testdata-local-reset
+testdata-local-reset:
+	chmod +x scripts/testdata-reset.sh
+	./scripts/testdata-reset.sh local
+
+.PHONY: testdata-server-reset
+testdata-server-reset:
+	chmod +x scripts/testdata-reset.sh
+	ENV=$(ENV) ./scripts/testdata-reset.sh server
