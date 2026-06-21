@@ -29,9 +29,12 @@ func main() {
 		log.Fatalf("open database: %v", err)
 	}
 
-	if err := db.AutoMigrate(database); err != nil {
-		log.Fatalf("auto migrate database: %v", err)
-	}
+	// The importer must not run GORM AutoMigrate against an existing ERS
+	// database. SQL migrations own schema changes; AutoMigrate can attempt
+	// table rebuilds that violate existing foreign-key relationships (for
+	// example, rebuilding tenants while people/reference data already point at
+	// it). The target database should already be migrated by scripts/db-migrate.sh
+	// or backend startup before importing CSV rows.
 	if err := db.SeedReferenceData(database); err != nil {
 		log.Fatalf("seed reference data: %v", err)
 	}

@@ -1,6 +1,10 @@
 const API_BASE_URL = "/api/v1";
 const AUTHZ_REQUEST_ACTOR_STORAGE_KEY = "ers.authzAdmin.requestActor";
-const LOCAL_DEV_DEFAULT_ACTOR = { actorId: "bootstrap-admin", tenantId: "default" } as const;
+const LOCAL_DEV_DEFAULT_ACTOR = {
+  actorId: "bootstrap-admin",
+  tenantId: "default",
+  actorPermissions: "*",
+} as const;
 
 type ApiEnvelope<T> = {
   data?: T;
@@ -14,6 +18,7 @@ type ApiEnvelope<T> = {
 type StoredRequestActor = {
   actorId?: string;
   tenantId?: string;
+  actorPermissions?: string;
 };
 
 export class ApiError extends Error {
@@ -102,23 +107,57 @@ function temporaryAuthzHeaders(): Record<string, string> {
   if (typeof window === "undefined") return {};
 
   const storage = window.localStorage;
-  if (typeof storage?.getItem !== "function") return {};
+  const stored = typeof storage?.getItem === "function"
+    ? storage.getItem(AUTHZ_REQUEST_ACTOR_STORAGE_KEY)
+    : null;
+  const parsed = withLocalDevelopmentDefaults(parseStoredRequestActor(stored));
+  const actorId = typeof parsed.actorId === "string" ? parsed.actorId.trim() : "";
+  const tenantId = typeof parsed.tenantId === "string" ? parsed.tenantId.trim() : "";
+  if (!actorId || !tenantId) return {};
+
+  const headers: Record<string, string> = {
+    "X-Actor-ID": actorId,
+    "X-Authorized-By": actorId,
+    "X-Tenant-ID": tenantId,
+  };
+
+  const actorPermissions = typeof parsed.actorPermissions === "string"
+    ? parsed.actorPermissions.trim()
+    : "";
+  if (actorPermissions) {
+    headers["X-Actor-Permissions"] = actorPermissions;
+  }
+
+  return headers;
+}
+
+function parseStoredRequestActor(stored: string | null): StoredRequestActor {
+  if (!stored || !stored.trim()) {
+    return localDevelopmentDefaultActor();
+  }
 
   try {
-    const stored = storage.getItem(AUTHZ_REQUEST_ACTOR_STORAGE_KEY);
-    const parsed = stored
-      ? (JSON.parse(stored) as StoredRequestActor)
-      : localDevelopmentDefaultActor();
-    const actorId = typeof parsed.actorId === "string" ? parsed.actorId.trim() : "";
-    const tenantId = typeof parsed.tenantId === "string" ? parsed.tenantId.trim() : "";
-    if (!actorId || !tenantId) return {};
-    return {
-      "X-Actor-ID": actorId,
-      "X-Tenant-ID": tenantId,
-    };
+    const parsed = JSON.parse(stored) as StoredRequestActor;
+    if (parsed && typeof parsed === "object") {
+      return parsed;
+    }
   } catch {
-    return {};
+    // Fall through to the local development default below. A blank or malformed
+    // localStorage value should not break the local app before the Authz helper
+    // can be opened.
   }
+
+  return localDevelopmentDefaultActor();
+}
+
+function withLocalDevelopmentDefaults(actor: StoredRequestActor): StoredRequestActor {
+  if (!import.meta.env.DEV) return actor;
+
+  return {
+    actorId: actor.actorId || LOCAL_DEV_DEFAULT_ACTOR.actorId,
+    tenantId: actor.tenantId || LOCAL_DEV_DEFAULT_ACTOR.tenantId,
+    actorPermissions: actor.actorPermissions || LOCAL_DEV_DEFAULT_ACTOR.actorPermissions,
+  };
 }
 
 function localDevelopmentDefaultActor(): StoredRequestActor {
