@@ -32,18 +32,12 @@ export type SettlementLedgerEntry = {
   effectiveDate: string;
 };
 
-export type SettlementAuthorization = {
-  settlementKey: string;
-  authorizedBy: string;
-};
-
 export type CorrectionReasonInput = {
   reasonCode: string;
   reasonText: string;
 };
 
-export type ZeroGoldInput = SettlementAuthorization &
-  CorrectionReasonInput & {
+export type ZeroGoldInput = CorrectionReasonInput & {
     requestId: string;
     effectiveDate: string;
     notes?: string;
@@ -54,8 +48,7 @@ export type ZeroGoldResult = {
   ledgerEntry: SettlementLedgerEntry;
 };
 
-export type PartialPayoutInput = SettlementAuthorization &
-  CorrectionReasonInput & {
+export type PartialPayoutInput = CorrectionReasonInput & {
     requestId: string;
     effectiveDate: string;
     brlAmount: number;
@@ -68,8 +61,7 @@ export type PartialPayoutResult = {
   ledgerEntries: SettlementLedgerEntry[];
 };
 
-export type CloseJourneyInput = SettlementAuthorization &
-  CorrectionReasonInput & {
+export type CloseJourneyInput = CorrectionReasonInput & {
     requestId: string;
     effectiveDate: string;
     confirm: boolean;
