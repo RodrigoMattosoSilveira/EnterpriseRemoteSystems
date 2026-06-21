@@ -12,20 +12,7 @@ func ToDTO(person db.Person) PersonDTO {
 		statusLabel = person.Status.Label
 	}
 
-	missing := ComputeCompletion(completionInput{
-		Street1:           person.Street1,
-		State:             person.State,
-		City:              person.City,
-		Country:           person.Country,
-		CEP:               person.CEP,
-		BankName:          person.BankName,
-		BankNumber:        person.BankNumber,
-		CheckingAccount:   person.CheckingAccount,
-		PIXKey:            stringValue(person.PIXKey),
-		EmergencyName:     person.EmergencyName,
-		EmergencyCellular: person.EmergencyCellular,
-		EmergencyEmail:    person.EmergencyEmail,
-	}).MissingSections
+	completion := computeCompletionForPerson(person)
 
 	return PersonDTO{
 		ID:       person.ID,
@@ -56,9 +43,9 @@ func ToDTO(person db.Person) PersonDTO {
 		EmergencyCellular: person.EmergencyCellular,
 		EmergencyEmail:    person.EmergencyEmail,
 
-		ProfileCompletionStatus: person.ProfileCompletionStatus,
-		CanCreateCollaborator:   person.CanCreateCollaborator,
-		MissingSections:         missing,
+		ProfileCompletionStatus: completion.Status,
+		CanCreateCollaborator:   completion.CanCreateCollaborator,
+		MissingSections:         completion.MissingSections,
 
 		StatusID:    person.StatusID,
 		StatusLabel: statusLabel,
@@ -75,6 +62,23 @@ func ToDTOList(people []db.Person) []PersonDTO {
 		items = append(items, ToDTO(person))
 	}
 	return items
+}
+
+func computeCompletionForPerson(person db.Person) CompletionResult {
+	return ComputeCompletion(completionInput{
+		Street1:           person.Street1,
+		State:             person.State,
+		City:              person.City,
+		Country:           person.Country,
+		CEP:               person.CEP,
+		BankName:          person.BankName,
+		BankNumber:        person.BankNumber,
+		CheckingAccount:   person.CheckingAccount,
+		PIXKey:            stringValue(person.PIXKey),
+		EmergencyName:     person.EmergencyName,
+		EmergencyCellular: person.EmergencyCellular,
+		EmergencyEmail:    person.EmergencyEmail,
+	})
 }
 
 func formatTime(value time.Time) string {
