@@ -264,7 +264,7 @@ function SettlementActionPanel({
       const result = await payout.mutateAsync({
         ...base,
         brlAmount: Number(brlAmount || 0),
-        goldGramAmount: Number(goldAmount || 0),
+        goldGramAmount: parseGoldInputAmount(goldAmount),
       });
       onSuccess(
         "Partial payout posted successfully.",
@@ -325,9 +325,13 @@ function SettlementActionPanel({
                   className={inputClass}
                   type="number"
                   min="0"
-                  step="0.00000001"
+                  step="0.01"
+                  inputMode="decimal"
                   value={goldAmount}
                   onChange={(event) => setGoldAmount(event.target.value)}
+                  onBlur={(event) =>
+                    setGoldAmount(formatGoldInputValue(event.target.value))
+                  }
                 />
               </Field>
             </div>
@@ -493,7 +497,20 @@ function formatBRL(value: number) {
   }).format(value);
 }
 function formatGold(value: number) {
-  return value.toFixed(8);
+  return value.toFixed(2);
+}
+function formatGoldInputValue(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed) return "";
+  const parsed = Number(trimmed);
+  return Number.isFinite(parsed) ? parsed.toFixed(2) : value;
+}
+function parseGoldInputAmount(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed) return 0;
+  const parsed = Number(trimmed);
+  if (!Number.isFinite(parsed)) return 0;
+  return Math.round(parsed * 100) / 100;
 }
 function formatDateTime(value: string) {
   return new Intl.DateTimeFormat(undefined, {
