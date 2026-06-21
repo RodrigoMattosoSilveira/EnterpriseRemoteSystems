@@ -42,7 +42,7 @@ describe("JourneySettlementPanel", () => {
 
     renderPanel();
     await waitForText("R$ 900,00");
-    expect(textNode("2.50000000 g")).toBeTruthy();
+    expect(textNode("2.50 g")).toBeTruthy();
 
     const button = Array.from(container.querySelectorAll("button")).find(
       (node) => node.textContent?.includes("Partial Payout"),
@@ -51,7 +51,7 @@ describe("JourneySettlementPanel", () => {
     expect(container.querySelector('[role="region"]')).toBeTruthy();
     expect(textNode("Journey Settlement")).toBeTruthy();
     expect(textNode("Gold balance")).toBeTruthy();
-    expect(textNode("2.50000000 g")).toBeTruthy();
+    expect(textNode("2.50 g")).toBeTruthy();
     expect(textNode("Settlement key")).toBeFalsy();
     expect(textNode("Authorized by")).toBeFalsy();
     expect(textNode("Authorization actor")).toBeTruthy();
@@ -62,6 +62,37 @@ describe("JourneySettlementPanel", () => {
     expect(textNode("Confirm reauthentication first")).toBeTruthy();
   });
 
+
+
+  it("formats partial payout gold grams with two decimals", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          data: {
+            collaboratorId: "collab-1",
+            brlBalance: 900,
+            goldGramBalance: 2.55555555,
+            pendingAccrualItems: 0,
+            canClose: true,
+            blockingReasons: [],
+          },
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+
+    renderPanel();
+    await waitForText("2.56 g");
+    await clickButton("Partial Payout");
+
+    const goldInput = fieldControl("Gold grams") as HTMLInputElement;
+    expect(goldInput.step).toBe("0.01");
+
+    await setFieldValue("Gold grams", "1.23456789");
+    await blurField("Gold grams");
+
+    expect(goldInput.value).toBe("1.23");
+  });
 
   it("shows payout reasons instead of correction reasons for partial payouts", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue(
@@ -228,7 +259,8 @@ async function clickButton(text: string) {
   await act(async () => button.click());
 }
 
-async function setFieldValue(label: string, value: string) {
+
+function fieldControl(label: string) {
   const field = Array.from(container.querySelectorAll("label")).find((node) =>
     node.textContent?.includes(label),
   );
@@ -238,6 +270,18 @@ async function setFieldValue(label: string, value: string) {
     | HTMLTextAreaElement
     | null;
   if (!control) throw new Error(`Field not found: ${label}`);
+  return control;
+}
+
+async function blurField(label: string) {
+  const control = fieldControl(label);
+  await act(async () => {
+    control.dispatchEvent(new FocusEvent("blur", { bubbles: true }));
+    control.dispatchEvent(new FocusEvent("focusout", { bubbles: true }));
+  });
+}
+async function setFieldValue(label: string, value: string) {
+  const control = fieldControl(label);
 
   await act(async () => {
     setNativeValue(control, value);
