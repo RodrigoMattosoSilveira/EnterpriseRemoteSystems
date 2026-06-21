@@ -23,7 +23,7 @@ afterEach(async () => {
 });
 
 describe("JourneySettlementPanel", () => {
-  it("shows balances and opens the partial payout dialog", async () => {
+  it("shows balances and opens the inline partial payout form", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue(
       new Response(
         JSON.stringify({
@@ -48,7 +48,10 @@ describe("JourneySettlementPanel", () => {
       (node) => node.textContent?.includes("Partial Payout"),
     );
     await act(async () => button?.click());
-    expect(container.querySelector('[role="dialog"]')).toBeTruthy();
+    expect(container.querySelector('[role="region"]')).toBeTruthy();
+    expect(textNode("Journey Settlement")).toBeTruthy();
+    expect(textNode("Gold balance")).toBeTruthy();
+    expect(textNode("2.50000000 g")).toBeTruthy();
     expect(textNode("Settlement key")).toBeFalsy();
     expect(textNode("Authorized by")).toBeFalsy();
     expect(textNode("Authorization actor")).toBeTruthy();

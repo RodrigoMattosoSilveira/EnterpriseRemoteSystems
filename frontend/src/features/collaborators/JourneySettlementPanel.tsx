@@ -149,7 +149,7 @@ export function JourneySettlementPanel({
       ) : null}
 
       {action && preview.data ? (
-        <SettlementDialog
+        <SettlementActionPanel
           action={action}
           collaboratorId={collaboratorId}
           preview={preview.data}
@@ -199,7 +199,7 @@ function Summary({ label, value }: { label: string; value: string }) {
   );
 }
 
-function SettlementDialog({
+function SettlementActionPanel({
   action,
   collaboratorId,
   preview,
@@ -276,19 +276,15 @@ function SettlementDialog({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
-      onMouseDown={(event) => event.target === event.currentTarget && onClose()}
+      role="region"
+      aria-labelledby="settlement-action-panel-title"
+      className="mt-5 rounded-2xl border border-gray-200 bg-gray-50 p-4 shadow-inner"
     >
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="settlement-dialog-title"
-        className="w-full max-w-lg rounded-2xl bg-white p-5 shadow-xl"
-      >
+      <div className="rounded-2xl bg-white p-5 shadow-sm">
         <div className="flex items-start justify-between gap-4">
           <div>
             <h3
-              id="settlement-dialog-title"
+              id="settlement-action-panel-title"
               className="text-lg font-bold text-gray-950"
             >
               {actionTitle(action)}
