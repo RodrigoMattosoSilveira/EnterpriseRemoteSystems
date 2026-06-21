@@ -17,30 +17,35 @@ import {
 
 type Action = "ZERO_GOLD" | "PARTIAL_PAYOUT" | "CLOSE_JOURNEY";
 
-const correctionReasonOptions = [
+const settlementReasonOptions: Array<{
+  value: string;
+  label: string;
+  actions: Action[];
+}> = [
   {
-    value: "GOLD_ZEROING_CORRECTION",
-    label: "Gold zeroing correction",
+    value: "GOLD_BALANCE_PAYOUT",
+    label: "Gold balance payout",
     actions: ["ZERO_GOLD"] satisfies Action[],
   },
   {
-    value: "PAYOUT_CORRECTION",
-    label: "Payout correction",
-    actions: ["PARTIAL_PAYOUT", "CLOSE_JOURNEY"] satisfies Action[],
+    value: "COLLABORATOR_REQUESTED_PAYOUT",
+    label: "Collaborator requested payout",
+    actions: ["PARTIAL_PAYOUT"] satisfies Action[],
   },
   {
-    value: "JOURNEY_SETTLEMENT_ADJUSTMENT",
-    label: "Journey settlement adjustment",
+    value: "SCHEDULED_PAYOUT",
+    label: "Scheduled payout",
+    actions: ["PARTIAL_PAYOUT"] satisfies Action[],
+  },
+  {
+    value: "END_OF_JOURNEY_SETTLEMENT",
+    label: "End-of-journey settlement",
     actions: ["CLOSE_JOURNEY"] satisfies Action[],
   },
   {
-    value: "MANUAL_CORRECTION",
-    label: "Manual correction",
-    actions: [
-      "ZERO_GOLD",
-      "PARTIAL_PAYOUT",
-      "CLOSE_JOURNEY",
-    ] satisfies Action[],
+    value: "FINAL_BALANCE_PAYOUT",
+    label: "Final balance payout",
+    actions: ["CLOSE_JOURNEY"] satisfies Action[],
   },
 ];
 
@@ -344,10 +349,10 @@ function SettlementActionPanel({
             </p>
           </div>
           <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
-            <p className="font-semibold">Correction reason required</p>
+            <p className="font-semibold">Settlement reason required</p>
             <p className="mt-1">
-              Sensitive settlement operations must capture a structured reason
-              code and a human-readable reason before they can be submitted.
+              Sensitive settlement operations must capture an action-specific
+              reason code and a human-readable reason before they can be submitted.
             </p>
           </div>
 
@@ -387,7 +392,7 @@ function SettlementActionPanel({
               onChange={(event) => setReasonCode(event.target.value)}
             >
               <option value="">Select a reason code</option>
-              {correctionReasonOptions
+              {settlementReasonOptions
                 .filter((option) => option.actions.includes(action))
                 .map((option) => (
                   <option key={option.value} value={option.value}>
@@ -403,7 +408,7 @@ function SettlementActionPanel({
               rows={3}
               value={reasonText}
               onChange={(event) => setReasonText(event.target.value)}
-              placeholder="Explain why this sensitive correction is needed."
+              placeholder="Explain why this payout or settlement action is needed."
             />
           </Field>
           <Field label="Notes">

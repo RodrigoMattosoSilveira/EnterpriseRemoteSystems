@@ -57,9 +57,41 @@ describe("JourneySettlementPanel", () => {
     expect(textNode("Authorization actor")).toBeTruthy();
     expect(textNode("Reason code")).toBeTruthy();
     expect(textNode("Reason text")).toBeTruthy();
-    expect(textNode("Correction reason required")).toBeTruthy();
+    expect(textNode("Settlement reason required")).toBeTruthy();
     expect(textNode("Recent reauthentication required")).toBeTruthy();
     expect(textNode("Confirm reauthentication first")).toBeTruthy();
+  });
+
+
+  it("shows payout reasons instead of correction reasons for partial payouts", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          data: {
+            collaboratorId: "collab-1",
+            brlBalance: 900,
+            goldGramBalance: 2.5,
+            pendingAccrualItems: 0,
+            canClose: true,
+            blockingReasons: [],
+          },
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+
+    renderPanel();
+    await waitForText("R$ 900,00");
+    await clickButton("Partial Payout");
+
+    const reasonOptions = Array.from(
+      container.querySelectorAll('label select option'),
+    ).map((option) => option.textContent ?? "");
+
+    expect(reasonOptions).toContain("Collaborator requested payout");
+    expect(reasonOptions).toContain("Scheduled payout");
+    expect(reasonOptions).not.toContain("Payout correction");
+    expect(reasonOptions).not.toContain("Manual correction");
   });
 
   it("submits structured correction reason metadata with sensitive settlement actions", async () => {
@@ -107,7 +139,7 @@ describe("JourneySettlementPanel", () => {
 
     await clickButton("Partial Payout");
     await setFieldValue("BRL amount", "25.50");
-    await setFieldValue("Reason code", "PAYOUT_CORRECTION");
+    await setFieldValue("Reason code", "COLLABORATOR_REQUESTED_PAYOUT");
     await setFieldValue("Reason text", "Pay selected BRL balance.");
     await clickButton("Confirm reauthentication");
 
@@ -121,7 +153,7 @@ describe("JourneySettlementPanel", () => {
       requestId: "request-20b",
       brlAmount: 25.5,
       goldGramAmount: 0,
-      reasonCode: "PAYOUT_CORRECTION",
+      reasonCode: "COLLABORATOR_REQUESTED_PAYOUT",
       reasonText: "Pay selected BRL balance.",
     });
     expect(payoutRequest?.body).not.toHaveProperty("settlementKey");
