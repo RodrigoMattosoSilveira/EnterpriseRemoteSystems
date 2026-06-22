@@ -7,7 +7,10 @@ import {
 } from "../../app/reauthStore";
 import { ApiErrorPanel } from "../../components/ApiErrorPanel";
 import { JourneyDaysRemaining } from "../../components/JourneyDaysRemaining";
-import type { SettlementPreview } from "../../types/settlements";
+import type { AuthzActor, AuthzAdminRequestActor } from "../../types/authz";
+import type { SettlementPreview, SecondApprovalInput } from "../../types/settlements";
+import { useAuthzActors } from "../authz/useAuthzAdmin";
+import { useSecondPersonApprovalPolicy } from "../current-accounts/useSecondPersonApprovalPolicy";
 import {
   useCloseJourney,
   usePartialPayout,
@@ -17,39 +20,53 @@ import {
 
 type Action = "ZERO_GOLD" | "PARTIAL_PAYOUT" | "CLOSE_JOURNEY";
 
-const correctionReasonOptions = [
+const AUTHZ_REQUEST_ACTOR_STORAGE_KEY = "ers.authzAdmin.requestActor";
+
+const defaultRequestActor: AuthzAdminRequestActor = {
+  actorId: "bootstrap-admin",
+  tenantId: "default",
+};
+
+const settlementReasonOptions: Array<{
+  value: string;
+  label: string;
+  actions: Action[];
+}> = [
   {
-    value: "GOLD_ZEROING_CORRECTION",
-    label: "Gold zeroing correction",
+    value: "GOLD_BALANCE_PAYOUT",
+    label: "Gold balance payout",
     actions: ["ZERO_GOLD"] satisfies Action[],
   },
   {
-    value: "PAYOUT_CORRECTION",
-    label: "Payout correction",
-    actions: ["PARTIAL_PAYOUT", "CLOSE_JOURNEY"] satisfies Action[],
+    value: "COLLABORATOR_REQUESTED_PAYOUT",
+    label: "Collaborator requested payout",
+    actions: ["PARTIAL_PAYOUT"] satisfies Action[],
   },
   {
-    value: "JOURNEY_SETTLEMENT_ADJUSTMENT",
-    label: "Journey settlement adjustment",
+    value: "SCHEDULED_PAYOUT",
+    label: "Scheduled payout",
+    actions: ["PARTIAL_PAYOUT"] satisfies Action[],
+  },
+  {
+    value: "END_OF_JOURNEY_SETTLEMENT",
+    label: "End-of-journey settlement",
     actions: ["CLOSE_JOURNEY"] satisfies Action[],
   },
   {
-    value: "MANUAL_CORRECTION",
-    label: "Manual correction",
-    actions: [
-      "ZERO_GOLD",
-      "PARTIAL_PAYOUT",
-      "CLOSE_JOURNEY",
-    ] satisfies Action[],
+    value: "FINAL_BALANCE_PAYOUT",
+    label: "Final balance payout",
+    actions: ["CLOSE_JOURNEY"] satisfies Action[],
   },
 ];
 
 export function JourneySettlementPanel({
   collaboratorId,
   projectedEndDate,
+  closedAt = "",
 }: {
   collaboratorId: string;
   projectedEndDate: string;
+  closedAt?: string;
 }) {
   const preview = useSettlementPreview(collaboratorId);
   const [action, setAction] = useState<Action | null>(null);
@@ -68,6 +85,7 @@ export function JourneySettlementPanel({
           </p>
           <JourneyDaysRemaining
             projectedEndDate={projectedEndDate}
+            closedAt={closedAt}
             className="mt-1 block text-sm"
           />
         </div>
@@ -149,7 +167,7 @@ export function JourneySettlementPanel({
       ) : null}
 
       {action && preview.data ? (
-        <SettlementDialog
+        <SettlementActionPanel
           action={action}
           collaboratorId={collaboratorId}
           preview={preview.data}
@@ -199,7 +217,7 @@ function Summary({ label, value }: { label: string; value: string }) {
   );
 }
 
-function SettlementDialog({
+function SettlementActionPanel({
   action,
   collaboratorId,
   preview,
@@ -223,6 +241,21 @@ function SettlementDialog({
   const [notes, setNotes] = useState("");
   const [reauthentication, setReauthentication] =
     useState<RecentReauthentication | null>(() => loadRecentReauthentication());
+  const [requestActor] = useState<AuthzAdminRequestActor>(() =>
+    loadRequestActor(),
+  );
+  const secondApprovalPolicy = useSecondPersonApprovalPolicy(requestActor);
+  const actorsQuery = useAuthzActors(requestActor);
+  const [captureOptionalSecondApproval, setCaptureOptionalSecondApproval] =
+    useState(false);
+  const [secondApprovedBy, setSecondApprovedBy] = useState("");
+  const [secondApprovalNotes, setSecondApprovalNotes] = useState("");
+  const secondApprovalRequired = Boolean(secondApprovalPolicy.data?.required);
+  const secondApprovalEnabled =
+    secondApprovalRequired || captureOptionalSecondApproval;
+  const eligibleSecondApprovers = (actorsQuery.data ?? []).filter((actor) =>
+    isEligibleSecondApprover(actor, requestActor.actorId),
+  );
   const mutation =
     action === "ZERO_GOLD"
       ? zeroGold
@@ -243,12 +276,20 @@ function SettlementDialog({
     setReauthentication(recentReauthentication);
     if (!recentReauthentication) return;
 
+    const secondApproval = buildSecondApproval(
+      secondApprovalEnabled,
+      secondApprovedBy,
+      secondApprovalNotes,
+    );
+    if (secondApprovalEnabled && !secondApproval) return;
+
     const base = {
       effectiveDate,
       reasonCode,
       reasonText,
       notes,
       requestId: crypto.randomUUID(),
+      ...(secondApproval ? { secondApproval } : {}),
     };
     if (action === "ZERO_GOLD") {
       const result = await zeroGold.mutateAsync(base);
@@ -259,7 +300,7 @@ function SettlementDialog({
       const result = await payout.mutateAsync({
         ...base,
         brlAmount: Number(brlAmount || 0),
-        goldGramAmount: Number(goldAmount || 0),
+        goldGramAmount: parseGoldInputAmount(goldAmount),
       });
       onSuccess(
         "Partial payout posted successfully.",
@@ -276,19 +317,15 @@ function SettlementDialog({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
-      onMouseDown={(event) => event.target === event.currentTarget && onClose()}
+      role="region"
+      aria-labelledby="settlement-action-panel-title"
+      className="mt-5 rounded-2xl border border-gray-200 bg-gray-50 p-4 shadow-inner"
     >
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="settlement-dialog-title"
-        className="w-full max-w-lg rounded-2xl bg-white p-5 shadow-xl"
-      >
+      <div className="rounded-2xl bg-white p-5 shadow-sm">
         <div className="flex items-start justify-between gap-4">
           <div>
             <h3
-              id="settlement-dialog-title"
+              id="settlement-action-panel-title"
               className="text-lg font-bold text-gray-950"
             >
               {actionTitle(action)}
@@ -324,9 +361,13 @@ function SettlementDialog({
                   className={inputClass}
                   type="number"
                   min="0"
-                  step="0.00000001"
+                  step="0.01"
+                  inputMode="decimal"
                   value={goldAmount}
                   onChange={(event) => setGoldAmount(event.target.value)}
+                  onBlur={(event) =>
+                    setGoldAmount(formatGoldInputValue(event.target.value))
+                  }
                 />
               </Field>
             </div>
@@ -348,10 +389,10 @@ function SettlementDialog({
             </p>
           </div>
           <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
-            <p className="font-semibold">Correction reason required</p>
+            <p className="font-semibold">Settlement reason required</p>
             <p className="mt-1">
-              Sensitive settlement operations must capture a structured reason
-              code and a human-readable reason before they can be submitted.
+              Sensitive settlement operations must capture an action-specific
+              reason code and a human-readable reason before they can be submitted.
             </p>
           </div>
 
@@ -383,6 +424,26 @@ function SettlementDialog({
               </button>
             </div>
           </div>
+          <SecondApprovalCapture
+            actor={requestActor}
+            actors={eligibleSecondApprovers}
+            isLoadingPolicy={secondApprovalPolicy.isLoading}
+            isLoadingActors={actorsQuery.isLoading}
+            policyRequired={secondApprovalRequired}
+            captureOptional={captureOptionalSecondApproval}
+            approvedBy={secondApprovedBy}
+            notes={secondApprovalNotes}
+            onToggleOptional={(checked) => {
+              setCaptureOptionalSecondApproval(checked);
+              if (!checked && !secondApprovalRequired) {
+                setSecondApprovedBy("");
+                setSecondApprovalNotes("");
+              }
+            }}
+            onApprovedByChange={setSecondApprovedBy}
+            onNotesChange={setSecondApprovalNotes}
+          />
+
           <Field label="Reason code">
             <select
               required
@@ -391,7 +452,7 @@ function SettlementDialog({
               onChange={(event) => setReasonCode(event.target.value)}
             >
               <option value="">Select a reason code</option>
-              {correctionReasonOptions
+              {settlementReasonOptions
                 .filter((option) => option.actions.includes(action))
                 .map((option) => (
                   <option key={option.value} value={option.value}>
@@ -407,7 +468,7 @@ function SettlementDialog({
               rows={3}
               value={reasonText}
               onChange={(event) => setReasonText(event.target.value)}
-              placeholder="Explain why this sensitive correction is needed."
+              placeholder="Explain why this payout or settlement action is needed."
             />
           </Field>
           <Field label="Notes">
@@ -429,18 +490,132 @@ function SettlementDialog({
             </button>
             <button
               type="submit"
-              disabled={mutation.isPending || !reauthentication}
+              disabled={
+                mutation.isPending ||
+                !reauthentication ||
+                (secondApprovalEnabled && !secondApprovedBy.trim())
+              }
               className="rounded-xl bg-gray-900 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
             >
               {mutation.isPending
                 ? "Processing..."
                 : !reauthentication
                   ? "Confirm reauthentication first"
-                  : actionButton(action)}
+                  : secondApprovalEnabled && !secondApprovedBy.trim()
+                    ? "Select second approver first"
+                    : actionButton(action)}
             </button>
           </div>
         </form>
       </div>
+    </div>
+  );
+}
+
+function SecondApprovalCapture({
+  actor,
+  actors,
+  isLoadingPolicy,
+  isLoadingActors,
+  policyRequired,
+  captureOptional,
+  approvedBy,
+  notes,
+  onToggleOptional,
+  onApprovedByChange,
+  onNotesChange,
+}: {
+  actor: AuthzAdminRequestActor;
+  actors: AuthzActor[];
+  isLoadingPolicy: boolean;
+  isLoadingActors: boolean;
+  policyRequired: boolean;
+  captureOptional: boolean;
+  approvedBy: string;
+  notes: string;
+  onToggleOptional: (checked: boolean) => void;
+  onApprovedByChange: (value: string) => void;
+  onNotesChange: (value: string) => void;
+}) {
+  const captureEnabled = policyRequired || captureOptional;
+
+  return (
+    <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <p className="font-semibold">
+            {policyRequired
+              ? "Second-person approval required"
+              : "Second-person approval optional"}
+          </p>
+          <p className="mt-1">
+            {policyRequired
+              ? "This tenant requires a different approver before sensitive current-account operations can be submitted."
+              : "Record a second approver when another authorized person reviewed this operation."}
+          </p>
+          <p className="mt-1 text-xs font-semibold">
+            Primary actor: {actor.actorId || "—"}
+          </p>
+        </div>
+        {!policyRequired ? (
+          <label className="flex items-center gap-2 text-xs font-semibold text-emerald-950">
+            <input
+              type="checkbox"
+              checked={captureOptional}
+              onChange={(event) => onToggleOptional(event.target.checked)}
+            />
+            Record approval
+          </label>
+        ) : null}
+      </div>
+
+      {isLoadingPolicy ? (
+        <p className="mt-3 text-xs font-semibold">Loading approval policy...</p>
+      ) : null}
+
+      {captureEnabled ? (
+        <div className="mt-3 grid gap-3">
+          <Field label="Second approver">
+            <select
+              required={policyRequired}
+              className={inputClass}
+              disabled={isLoadingActors || actors.length === 0}
+              value={approvedBy}
+              onChange={(event) => onApprovedByChange(event.target.value)}
+            >
+              <option value="">
+                {isLoadingActors
+                  ? "Loading approvers..."
+                  : actors.length === 0
+                    ? "No eligible second approver found"
+                    : "Select a second approver"}
+              </option>
+              {actors.map((approver) => (
+                <option key={approver.id} value={approver.actorKey}>
+                  {approver.displayName
+                    ? `${approver.displayName} (${approver.actorKey})`
+                    : approver.actorKey}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <Field label="Second approval notes">
+            <textarea
+              className={inputClass}
+              rows={2}
+              value={notes}
+              onChange={(event) => onNotesChange(event.target.value)}
+              placeholder="Optional review notes from the second approver."
+            />
+          </Field>
+          {actors.length === 0 && !isLoadingActors ? (
+            <p className="text-xs font-semibold text-amber-900">
+              Add or activate another authorization actor in Authz Admin before
+              posting this operation.
+            </p>
+          ) : null}
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -492,7 +667,20 @@ function formatBRL(value: number) {
   }).format(value);
 }
 function formatGold(value: number) {
-  return value.toFixed(8);
+  return value.toFixed(2);
+}
+function formatGoldInputValue(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed) return "";
+  const parsed = Number(trimmed);
+  return Number.isFinite(parsed) ? parsed.toFixed(2) : value;
+}
+function parseGoldInputAmount(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed) return 0;
+  const parsed = Number(trimmed);
+  if (!Number.isFinite(parsed)) return 0;
+  return Math.round(parsed * 100) / 100;
 }
 function formatDateTime(value: string) {
   return new Intl.DateTimeFormat(undefined, {
@@ -500,6 +688,50 @@ function formatDateTime(value: string) {
     timeStyle: "short",
   }).format(new Date(value));
 }
+function loadRequestActor(): AuthzAdminRequestActor {
+  if (typeof window === "undefined") return defaultRequestActor;
+
+  const storage = window.localStorage;
+  if (typeof storage?.getItem !== "function") return defaultRequestActor;
+
+  try {
+    const stored = storage.getItem(AUTHZ_REQUEST_ACTOR_STORAGE_KEY);
+    if (!stored) return defaultRequestActor;
+    const parsed = JSON.parse(stored) as Partial<AuthzAdminRequestActor>;
+    const actorId = typeof parsed.actorId === "string" ? parsed.actorId.trim() : "";
+    const tenantId = typeof parsed.tenantId === "string" ? parsed.tenantId.trim() : "";
+    return {
+      actorId: actorId || defaultRequestActor.actorId,
+      tenantId: tenantId || defaultRequestActor.tenantId,
+    };
+  } catch {
+    return defaultRequestActor;
+  }
+}
+
+function isEligibleSecondApprover(actor: AuthzActor, primaryActorId: string) {
+  const actorKey = actor.actorKey.trim();
+  if (!actor.active || !actorKey) return false;
+  return actorKey.toLowerCase() !== primaryActorId.trim().toLowerCase();
+}
+
+function buildSecondApproval(
+  enabled: boolean,
+  approvedBy: string,
+  notes: string,
+): SecondApprovalInput | undefined {
+  if (!enabled) return undefined;
+
+  const normalizedApprovedBy = approvedBy.trim();
+  if (!normalizedApprovedBy) return undefined;
+
+  const normalizedNotes = notes.trim();
+  return {
+    approvedBy: normalizedApprovedBy,
+    ...(normalizedNotes ? { notes: normalizedNotes } : {}),
+  };
+}
+
 function today() {
   return new Date().toISOString().slice(0, 10);
 }

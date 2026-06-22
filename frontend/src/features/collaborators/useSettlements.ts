@@ -60,6 +60,9 @@ function useSettlementMutation<TInput, TResult>(
         queryClient.invalidateQueries({
           queryKey: collaboratorQueryKeys.detail(collaboratorId),
         }),
+        queryClient.invalidateQueries({
+          queryKey: collaboratorQueryKeys.lists(),
+        }),
       ]);
     },
   });

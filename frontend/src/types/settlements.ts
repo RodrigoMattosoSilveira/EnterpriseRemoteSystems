@@ -32,9 +32,15 @@ export type SettlementLedgerEntry = {
   effectiveDate: string;
 };
 
+export type SecondApprovalInput = {
+  approvedBy: string;
+  notes?: string;
+};
+
 export type CorrectionReasonInput = {
   reasonCode: string;
   reasonText: string;
+  secondApproval?: SecondApprovalInput;
 };
 
 export type ZeroGoldInput = CorrectionReasonInput & {
