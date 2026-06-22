@@ -2,6 +2,7 @@ const millisecondsPerDay = 24 * 60 * 60 * 1000;
 
 type JourneyDaysRemainingProps = {
   projectedEndDate: string;
+  closedAt?: string;
   className?: string;
 };
 
@@ -14,7 +15,16 @@ type JourneyDaysPresentation = {
 export function getJourneyDaysPresentation(
   projectedEndDate: string,
   now = new Date(),
+  closedAt = "",
 ): JourneyDaysPresentation | null {
+  if (closedAt.trim()) {
+    return {
+      daysRemaining: 0,
+      label: "0 days remaining",
+      colorClass: "text-red-700",
+    };
+  }
+
   const endDate = parseDateOnly(projectedEndDate);
 
   if (!endDate) {
@@ -59,9 +69,14 @@ export function getJourneyDaysPresentation(
 
 export function JourneyDaysRemaining({
   projectedEndDate,
+  closedAt = "",
   className = "",
 }: JourneyDaysRemainingProps) {
-  const presentation = getJourneyDaysPresentation(projectedEndDate);
+  const presentation = getJourneyDaysPresentation(
+    projectedEndDate,
+    new Date(),
+    closedAt,
+  );
 
   if (!presentation) {
     return null;

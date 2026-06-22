@@ -12,7 +12,7 @@ import (
 )
 
 const (
-	settlementTypePartialPayout = "PARTIAL_PAYOUT"
+	settlementTypePartialPayout = "PAYOUT"
 	valueUnitBRL                = "BRL"
 )
 

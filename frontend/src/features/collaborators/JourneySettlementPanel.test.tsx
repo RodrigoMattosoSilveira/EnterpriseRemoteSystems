@@ -3,6 +3,8 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { AuthzActor } from "../../types/authz";
+import type { SettlementPreview } from "../../types/settlements";
 import { JourneySettlementPanel } from "./JourneySettlementPanel";
 
 let container: HTMLDivElement;
@@ -24,90 +26,76 @@ afterEach(async () => {
 
 describe("JourneySettlementPanel", () => {
   it("shows balances and opens the inline partial payout form", async () => {
-    vi.spyOn(globalThis, "fetch").mockResolvedValue(
-      new Response(
-        JSON.stringify({
-          data: {
-            collaboratorId: "collab-1",
-            brlBalance: 900,
-            goldGramBalance: 2.5,
-            pendingAccrualItems: 0,
-            canClose: true,
-            blockingReasons: [],
-          },
-        }),
-        { status: 200, headers: { "Content-Type": "application/json" } },
-      ),
-    );
+    mockSettlementFetch();
 
     renderPanel();
     await waitForText("R$ 900,00");
-    expect(textNode("2.50000000 g")).toBeTruthy();
+    expect(textNode("2.50 g")).toBeTruthy();
 
-    const button = Array.from(container.querySelectorAll("button")).find(
-      (node) => node.textContent?.includes("Partial Payout"),
-    );
-    await act(async () => button?.click());
+    await clickButton("Partial Payout");
     expect(container.querySelector('[role="region"]')).toBeTruthy();
     expect(textNode("Journey Settlement")).toBeTruthy();
     expect(textNode("Gold balance")).toBeTruthy();
-    expect(textNode("2.50000000 g")).toBeTruthy();
+    expect(textNode("2.50 g")).toBeTruthy();
     expect(textNode("Settlement key")).toBeFalsy();
     expect(textNode("Authorized by")).toBeFalsy();
     expect(textNode("Authorization actor")).toBeTruthy();
     expect(textNode("Reason code")).toBeTruthy();
     expect(textNode("Reason text")).toBeTruthy();
-    expect(textNode("Correction reason required")).toBeTruthy();
+    expect(textNode("Settlement reason required")).toBeTruthy();
     expect(textNode("Recent reauthentication required")).toBeTruthy();
+    expect(textNode("Second-person approval optional")).toBeTruthy();
     expect(textNode("Confirm reauthentication first")).toBeTruthy();
   });
 
-  it("submits structured correction reason metadata with sensitive settlement actions", async () => {
+  it("formats partial payout gold grams with two decimals", async () => {
+    mockSettlementFetch({ preview: { goldGramBalance: 2.55555555 } });
+
+    renderPanel();
+    await waitForText("2.56 g");
+    await clickButton("Partial Payout");
+
+    const goldInput = fieldControl("Gold grams") as HTMLInputElement;
+    expect(goldInput.step).toBe("0.01");
+
+    await setFieldValue("Gold grams", "1.23456789");
+    await blurField("Gold grams");
+
+    expect(goldInput.value).toBe("1.23");
+  });
+
+  it("shows payout reasons instead of correction reasons for partial payouts", async () => {
+    mockSettlementFetch();
+
+    renderPanel();
+    await waitForText("R$ 900,00");
+    await clickButton("Partial Payout");
+
+    const reasonOptions = Array.from(
+      container.querySelectorAll('label select option'),
+    ).map((option) => option.textContent ?? "");
+
+    expect(reasonOptions).toContain("Collaborator requested payout");
+    expect(reasonOptions).toContain("Scheduled payout");
+    expect(reasonOptions).not.toContain("Payout correction");
+    expect(reasonOptions).not.toContain("Manual correction");
+  });
+
+  it("submits structured reason metadata with sensitive settlement actions", async () => {
     const requests: Array<{ url: string; init?: RequestInit; body?: unknown }> =
       [];
 
     vi.spyOn(globalThis.crypto, "randomUUID").mockReturnValue(
       "request-20b" as ReturnType<Crypto["randomUUID"]>,
     );
-    vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
-      const url = String(input);
-      const body =
-        typeof init?.body === "string" ? JSON.parse(init.body) : undefined;
-      requests.push({ url, init, body });
-
-      if (url.includes("/payout")) {
-        return new Response(
-          JSON.stringify({
-            data: {
-              settlement: { id: "settlement-1" },
-              ledgerEntries: [{ id: "ledger-1" }],
-            },
-          }),
-          { status: 200, headers: { "Content-Type": "application/json" } },
-        );
-      }
-
-      return new Response(
-        JSON.stringify({
-          data: {
-            collaboratorId: "collab-1",
-            brlBalance: 900,
-            goldGramBalance: 2.5,
-            pendingAccrualItems: 0,
-            canClose: true,
-            blockingReasons: [],
-          },
-        }),
-        { status: 200, headers: { "Content-Type": "application/json" } },
-      );
-    });
+    mockSettlementFetch({ onRequest: (request) => requests.push(request) });
 
     renderPanel();
     await waitForText("R$ 900,00");
 
     await clickButton("Partial Payout");
     await setFieldValue("BRL amount", "25.50");
-    await setFieldValue("Reason code", "PAYOUT_CORRECTION");
+    await setFieldValue("Reason code", "COLLABORATOR_REQUESTED_PAYOUT");
     await setFieldValue("Reason text", "Pay selected BRL balance.");
     await clickButton("Confirm reauthentication");
 
@@ -121,11 +109,12 @@ describe("JourneySettlementPanel", () => {
       requestId: "request-20b",
       brlAmount: 25.5,
       goldGramAmount: 0,
-      reasonCode: "PAYOUT_CORRECTION",
+      reasonCode: "COLLABORATOR_REQUESTED_PAYOUT",
       reasonText: "Pay selected BRL balance.",
     });
     expect(payoutRequest?.body).not.toHaveProperty("settlementKey");
     expect(payoutRequest?.body).not.toHaveProperty("authorizedBy");
+    expect(payoutRequest?.body).not.toHaveProperty("secondApproval");
     expect(payoutRequest?.init?.headers).toMatchObject({
       "X-Reauthentication-Method": "password",
     });
@@ -136,22 +125,53 @@ describe("JourneySettlementPanel", () => {
     ).toBeTruthy();
   });
 
-  it("does not expose backend settlement secrets to operators", async () => {
-    vi.spyOn(globalThis, "fetch").mockResolvedValue(
-      new Response(
-        JSON.stringify({
-          data: {
-            collaboratorId: "collab-1",
-            brlBalance: 900,
-            goldGramBalance: 2.5,
-            pendingAccrualItems: 0,
-            canClose: true,
-            blockingReasons: [],
-          },
-        }),
-        { status: 200, headers: { "Content-Type": "application/json" } },
-      ),
+  it("requires and submits a different second approver when the tenant policy requires it", async () => {
+    const requests: Array<{ url: string; init?: RequestInit; body?: unknown }> =
+      [];
+
+    vi.spyOn(globalThis.crypto, "randomUUID").mockReturnValue(
+      "request-20d" as ReturnType<Crypto["randomUUID"]>,
     );
+    mockSettlementFetch({
+      policyRequired: true,
+      onRequest: (request) => requests.push(request),
+    });
+
+    renderPanel();
+    await waitForText("R$ 900,00");
+    await clickButton("Partial Payout");
+    await waitForText("Second-person approval required");
+
+    const approverOptions = Array.from(
+      (fieldControl("Second approver") as HTMLSelectElement).options,
+    ).map((option) => option.value);
+    expect(approverOptions).toContain("tenant-approver@example.com");
+    expect(approverOptions).not.toContain("bootstrap-admin");
+
+    await setFieldValue("BRL amount", "25.50");
+    await setFieldValue("Reason code", "COLLABORATOR_REQUESTED_PAYOUT");
+    await setFieldValue("Reason text", "Pay selected BRL balance.");
+    await setFieldValue("Second approver", "tenant-approver@example.com");
+    await setFieldValue("Second approval notes", "Reviewed balance and approved.");
+    await clickButton("Confirm reauthentication");
+
+    await clickButton("Post Payout");
+    await waitForText("Partial payout posted successfully.");
+
+    const payoutRequest = requests.find((request) =>
+      request.url.includes("/payout"),
+    );
+    expect(payoutRequest?.body).toMatchObject({
+      requestId: "request-20d",
+      secondApproval: {
+        approvedBy: "tenant-approver@example.com",
+        notes: "Reviewed balance and approved.",
+      },
+    });
+  });
+
+  it("does not expose backend settlement secrets to operators", async () => {
+    mockSettlementFetch();
 
     renderPanel();
     await waitForText("R$ 900,00");
@@ -162,6 +182,82 @@ describe("JourneySettlementPanel", () => {
     expect(textNode("Backend settlement keys are not entered")).toBeTruthy();
   });
 });
+
+type MockSettlementFetchOptions = {
+  preview?: Partial<SettlementPreview>;
+  policyRequired?: boolean;
+  actors?: AuthzActor[];
+  onRequest?: (request: { url: string; init?: RequestInit; body?: unknown }) => void;
+};
+
+function mockSettlementFetch(options: MockSettlementFetchOptions = {}) {
+  const preview = {
+    collaboratorId: "collab-1",
+    brlBalance: 900,
+    goldGramBalance: 2.5,
+    pendingAccrualItems: 0,
+    canClose: true,
+    blockingReasons: [],
+    ...options.preview,
+  } satisfies SettlementPreview;
+  const actors = options.actors ?? [
+    {
+      id: "actor-primary",
+      actorKey: "bootstrap-admin",
+      displayName: "Bootstrap Admin",
+      active: true,
+      roleGrants: [],
+    },
+    {
+      id: "actor-second",
+      actorKey: "tenant-approver@example.com",
+      displayName: "Tenant Approver",
+      active: true,
+      roleGrants: [],
+    },
+    {
+      id: "actor-inactive",
+      actorKey: "inactive-approver@example.com",
+      displayName: "Inactive Approver",
+      active: false,
+      roleGrants: [],
+    },
+  ];
+
+  vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+    const url = String(input);
+    const body =
+      typeof init?.body === "string" ? JSON.parse(init.body) : undefined;
+    options.onRequest?.({ url, init, body });
+
+    if (url.includes("/current-accounts/settings/second-person-approval")) {
+      return jsonResponse({
+        tenantId: "default",
+        required: Boolean(options.policyRequired),
+      });
+    }
+
+    if (url.includes("/authz/actors")) {
+      return jsonResponse(actors);
+    }
+
+    if (url.includes("/payout")) {
+      return jsonResponse({
+        settlement: { id: "settlement-1" },
+        ledgerEntries: [{ id: "ledger-1" }],
+      });
+    }
+
+    return jsonResponse(preview);
+  });
+}
+
+function jsonResponse(data: unknown) {
+  return new Response(JSON.stringify({ data }), {
+    status: 200,
+    headers: { "Content-Type": "application/json" },
+  });
+}
 
 function renderPanel() {
   const client = new QueryClient({
@@ -196,7 +292,7 @@ async function clickButton(text: string) {
   await act(async () => button.click());
 }
 
-async function setFieldValue(label: string, value: string) {
+function fieldControl(label: string) {
   const field = Array.from(container.querySelectorAll("label")).find((node) =>
     node.textContent?.includes(label),
   );
@@ -206,6 +302,18 @@ async function setFieldValue(label: string, value: string) {
     | HTMLTextAreaElement
     | null;
   if (!control) throw new Error(`Field not found: ${label}`);
+  return control;
+}
+
+async function blurField(label: string) {
+  const control = fieldControl(label);
+  await act(async () => {
+    control.dispatchEvent(new FocusEvent("blur", { bubbles: true }));
+    control.dispatchEvent(new FocusEvent("focusout", { bubbles: true }));
+  });
+}
+async function setFieldValue(label: string, value: string) {
+  const control = fieldControl(label);
 
   await act(async () => {
     setNativeValue(control, value);
