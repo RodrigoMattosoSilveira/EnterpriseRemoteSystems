@@ -7,7 +7,10 @@ import {
 } from "../../app/reauthStore";
 import { ApiErrorPanel } from "../../components/ApiErrorPanel";
 import { JourneyDaysRemaining } from "../../components/JourneyDaysRemaining";
-import type { SettlementPreview } from "../../types/settlements";
+import type { AuthzActor, AuthzAdminRequestActor } from "../../types/authz";
+import type { SettlementPreview, SecondApprovalInput } from "../../types/settlements";
+import { useAuthzActors } from "../authz/useAuthzAdmin";
+import { useSecondPersonApprovalPolicy } from "../current-accounts/useSecondPersonApprovalPolicy";
 import {
   useCloseJourney,
   usePartialPayout,
@@ -16,6 +19,13 @@ import {
 } from "./useSettlements";
 
 type Action = "ZERO_GOLD" | "PARTIAL_PAYOUT" | "CLOSE_JOURNEY";
+
+const AUTHZ_REQUEST_ACTOR_STORAGE_KEY = "ers.authzAdmin.requestActor";
+
+const defaultRequestActor: AuthzAdminRequestActor = {
+  actorId: "bootstrap-admin",
+  tenantId: "default",
+};
 
 const settlementReasonOptions: Array<{
   value: string;
@@ -231,6 +241,21 @@ function SettlementActionPanel({
   const [notes, setNotes] = useState("");
   const [reauthentication, setReauthentication] =
     useState<RecentReauthentication | null>(() => loadRecentReauthentication());
+  const [requestActor] = useState<AuthzAdminRequestActor>(() =>
+    loadRequestActor(),
+  );
+  const secondApprovalPolicy = useSecondPersonApprovalPolicy(requestActor);
+  const actorsQuery = useAuthzActors(requestActor);
+  const [captureOptionalSecondApproval, setCaptureOptionalSecondApproval] =
+    useState(false);
+  const [secondApprovedBy, setSecondApprovedBy] = useState("");
+  const [secondApprovalNotes, setSecondApprovalNotes] = useState("");
+  const secondApprovalRequired = Boolean(secondApprovalPolicy.data?.required);
+  const secondApprovalEnabled =
+    secondApprovalRequired || captureOptionalSecondApproval;
+  const eligibleSecondApprovers = (actorsQuery.data ?? []).filter((actor) =>
+    isEligibleSecondApprover(actor, requestActor.actorId),
+  );
   const mutation =
     action === "ZERO_GOLD"
       ? zeroGold
@@ -251,12 +276,20 @@ function SettlementActionPanel({
     setReauthentication(recentReauthentication);
     if (!recentReauthentication) return;
 
+    const secondApproval = buildSecondApproval(
+      secondApprovalEnabled,
+      secondApprovedBy,
+      secondApprovalNotes,
+    );
+    if (secondApprovalEnabled && !secondApproval) return;
+
     const base = {
       effectiveDate,
       reasonCode,
       reasonText,
       notes,
       requestId: crypto.randomUUID(),
+      ...(secondApproval ? { secondApproval } : {}),
     };
     if (action === "ZERO_GOLD") {
       const result = await zeroGold.mutateAsync(base);
@@ -391,6 +424,26 @@ function SettlementActionPanel({
               </button>
             </div>
           </div>
+          <SecondApprovalCapture
+            actor={requestActor}
+            actors={eligibleSecondApprovers}
+            isLoadingPolicy={secondApprovalPolicy.isLoading}
+            isLoadingActors={actorsQuery.isLoading}
+            policyRequired={secondApprovalRequired}
+            captureOptional={captureOptionalSecondApproval}
+            approvedBy={secondApprovedBy}
+            notes={secondApprovalNotes}
+            onToggleOptional={(checked) => {
+              setCaptureOptionalSecondApproval(checked);
+              if (!checked && !secondApprovalRequired) {
+                setSecondApprovedBy("");
+                setSecondApprovalNotes("");
+              }
+            }}
+            onApprovedByChange={setSecondApprovedBy}
+            onNotesChange={setSecondApprovalNotes}
+          />
+
           <Field label="Reason code">
             <select
               required
@@ -437,18 +490,132 @@ function SettlementActionPanel({
             </button>
             <button
               type="submit"
-              disabled={mutation.isPending || !reauthentication}
+              disabled={
+                mutation.isPending ||
+                !reauthentication ||
+                (secondApprovalEnabled && !secondApprovedBy.trim())
+              }
               className="rounded-xl bg-gray-900 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
             >
               {mutation.isPending
                 ? "Processing..."
                 : !reauthentication
                   ? "Confirm reauthentication first"
-                  : actionButton(action)}
+                  : secondApprovalEnabled && !secondApprovedBy.trim()
+                    ? "Select second approver first"
+                    : actionButton(action)}
             </button>
           </div>
         </form>
       </div>
+    </div>
+  );
+}
+
+function SecondApprovalCapture({
+  actor,
+  actors,
+  isLoadingPolicy,
+  isLoadingActors,
+  policyRequired,
+  captureOptional,
+  approvedBy,
+  notes,
+  onToggleOptional,
+  onApprovedByChange,
+  onNotesChange,
+}: {
+  actor: AuthzAdminRequestActor;
+  actors: AuthzActor[];
+  isLoadingPolicy: boolean;
+  isLoadingActors: boolean;
+  policyRequired: boolean;
+  captureOptional: boolean;
+  approvedBy: string;
+  notes: string;
+  onToggleOptional: (checked: boolean) => void;
+  onApprovedByChange: (value: string) => void;
+  onNotesChange: (value: string) => void;
+}) {
+  const captureEnabled = policyRequired || captureOptional;
+
+  return (
+    <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <p className="font-semibold">
+            {policyRequired
+              ? "Second-person approval required"
+              : "Second-person approval optional"}
+          </p>
+          <p className="mt-1">
+            {policyRequired
+              ? "This tenant requires a different approver before sensitive current-account operations can be submitted."
+              : "Record a second approver when another authorized person reviewed this operation."}
+          </p>
+          <p className="mt-1 text-xs font-semibold">
+            Primary actor: {actor.actorId || "—"}
+          </p>
+        </div>
+        {!policyRequired ? (
+          <label className="flex items-center gap-2 text-xs font-semibold text-emerald-950">
+            <input
+              type="checkbox"
+              checked={captureOptional}
+              onChange={(event) => onToggleOptional(event.target.checked)}
+            />
+            Record approval
+          </label>
+        ) : null}
+      </div>
+
+      {isLoadingPolicy ? (
+        <p className="mt-3 text-xs font-semibold">Loading approval policy...</p>
+      ) : null}
+
+      {captureEnabled ? (
+        <div className="mt-3 grid gap-3">
+          <Field label="Second approver">
+            <select
+              required={policyRequired}
+              className={inputClass}
+              disabled={isLoadingActors || actors.length === 0}
+              value={approvedBy}
+              onChange={(event) => onApprovedByChange(event.target.value)}
+            >
+              <option value="">
+                {isLoadingActors
+                  ? "Loading approvers..."
+                  : actors.length === 0
+                    ? "No eligible second approver found"
+                    : "Select a second approver"}
+              </option>
+              {actors.map((approver) => (
+                <option key={approver.id} value={approver.actorKey}>
+                  {approver.displayName
+                    ? `${approver.displayName} (${approver.actorKey})`
+                    : approver.actorKey}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <Field label="Second approval notes">
+            <textarea
+              className={inputClass}
+              rows={2}
+              value={notes}
+              onChange={(event) => onNotesChange(event.target.value)}
+              placeholder="Optional review notes from the second approver."
+            />
+          </Field>
+          {actors.length === 0 && !isLoadingActors ? (
+            <p className="text-xs font-semibold text-amber-900">
+              Add or activate another authorization actor in Authz Admin before
+              posting this operation.
+            </p>
+          ) : null}
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -521,6 +688,50 @@ function formatDateTime(value: string) {
     timeStyle: "short",
   }).format(new Date(value));
 }
+function loadRequestActor(): AuthzAdminRequestActor {
+  if (typeof window === "undefined") return defaultRequestActor;
+
+  const storage = window.localStorage;
+  if (typeof storage?.getItem !== "function") return defaultRequestActor;
+
+  try {
+    const stored = storage.getItem(AUTHZ_REQUEST_ACTOR_STORAGE_KEY);
+    if (!stored) return defaultRequestActor;
+    const parsed = JSON.parse(stored) as Partial<AuthzAdminRequestActor>;
+    const actorId = typeof parsed.actorId === "string" ? parsed.actorId.trim() : "";
+    const tenantId = typeof parsed.tenantId === "string" ? parsed.tenantId.trim() : "";
+    return {
+      actorId: actorId || defaultRequestActor.actorId,
+      tenantId: tenantId || defaultRequestActor.tenantId,
+    };
+  } catch {
+    return defaultRequestActor;
+  }
+}
+
+function isEligibleSecondApprover(actor: AuthzActor, primaryActorId: string) {
+  const actorKey = actor.actorKey.trim();
+  if (!actor.active || !actorKey) return false;
+  return actorKey.toLowerCase() !== primaryActorId.trim().toLowerCase();
+}
+
+function buildSecondApproval(
+  enabled: boolean,
+  approvedBy: string,
+  notes: string,
+): SecondApprovalInput | undefined {
+  if (!enabled) return undefined;
+
+  const normalizedApprovedBy = approvedBy.trim();
+  if (!normalizedApprovedBy) return undefined;
+
+  const normalizedNotes = notes.trim();
+  return {
+    approvedBy: normalizedApprovedBy,
+    ...(normalizedNotes ? { notes: normalizedNotes } : {}),
+  };
+}
+
 function today() {
   return new Date().toISOString().slice(0, 10);
 }
