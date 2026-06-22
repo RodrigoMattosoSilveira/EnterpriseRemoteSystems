@@ -18,6 +18,7 @@ func (r *gormRepository) List(ctx context.Context, filter CollaboratorListFilter
 	q := r.db.WithContext(ctx).
 		Model(&db.CollaboratorJourney{}).
 		Where("tenant_id = ?", defaultTenantID).
+		Where("closed_at IS NULL").
 		Preload("Person").
 		Preload("PaymentMethod").
 		Preload("Sector").
