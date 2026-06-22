@@ -1189,6 +1189,7 @@ func TestAuthorizedPartialPayoutPostsSelectedBalancesAndIsIdempotent(t *testing.
 		Data struct {
 			Settlement struct {
 				ID             string  `json:"id"`
+				SettlementType string  `json:"settlementType"`
 				BRLAmount      float64 `json:"brlAmount"`
 				GoldGramAmount float64 `json:"goldGramAmount"`
 			} `json:"settlement"`
@@ -1202,6 +1203,9 @@ func TestAuthorizedPartialPayoutPostsSelectedBalancesAndIsIdempotent(t *testing.
 		} `json:"data"`
 	}
 	decodeJSON(t, first, &firstBody)
+	if firstBody.Data.Settlement.SettlementType != "PAYOUT" {
+		t.Fatalf("expected payout settlement type, got %+v", firstBody.Data.Settlement)
+	}
 	if firstBody.Data.Settlement.BRLAmount != 40 || firstBody.Data.Settlement.GoldGramAmount != 1.25 || len(firstBody.Data.LedgerEntries) != 2 {
 		t.Fatalf("unexpected payout result: %+v", firstBody.Data)
 	}
