@@ -52,9 +52,11 @@ const settlementReasonOptions: Array<{
 export function JourneySettlementPanel({
   collaboratorId,
   projectedEndDate,
+  closedAt = "",
 }: {
   collaboratorId: string;
   projectedEndDate: string;
+  closedAt?: string;
 }) {
   const preview = useSettlementPreview(collaboratorId);
   const [action, setAction] = useState<Action | null>(null);
@@ -73,6 +75,7 @@ export function JourneySettlementPanel({
           </p>
           <JourneyDaysRemaining
             projectedEndDate={projectedEndDate}
+            closedAt={closedAt}
             className="mt-1 block text-sm"
           />
         </div>

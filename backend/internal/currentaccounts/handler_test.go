@@ -45,6 +45,16 @@ type apiCollaboratorResponse struct {
 	} `json:"data"`
 }
 
+type apiCollaboratorListResponse struct {
+	Data struct {
+		Items []struct {
+			ID       string `json:"id"`
+			ClosedAt string `json:"closedAt"`
+		} `json:"items"`
+		Total int `json:"total"`
+	} `json:"data"`
+}
+
 type apiExpenseResponse struct {
 	Data struct {
 		ID             string  `json:"id"`
@@ -1006,6 +1016,49 @@ func TestSettlementPreviewBlocksNegativeBalance(t *testing.T) {
 
 	if body.Data.BRLBalance != -42.5 || body.Data.CanClose || len(body.Data.BlockingReasons) != 1 || body.Data.BlockingReasons[0] != "NEGATIVE_BALANCE" {
 		t.Fatalf("unexpected blocked settlement preview: %+v", body.Data)
+	}
+}
+
+func TestCloseJourneyRemovesCollaboratorFromDefaultList(t *testing.T) {
+	server, cleanup := newTestServer(t)
+	defer cleanup()
+
+	collaborator := createActiveCollaborator(t, server, 1)
+
+	before := getJSON(t, server, collaboratorsURL)
+	defer before.Body.Close()
+	if before.StatusCode != http.StatusOK {
+		t.Fatalf("expected collaborator list status %d before close, got %d", http.StatusOK, before.StatusCode)
+	}
+	var beforeBody apiCollaboratorListResponse
+	decodeJSON(t, before, &beforeBody)
+	if beforeBody.Data.Total != 1 || len(beforeBody.Data.Items) != 1 || beforeBody.Data.Items[0].ID != collaborator.Data.ID {
+		t.Fatalf("expected active collaborator before close, got %+v", beforeBody.Data)
+	}
+
+	closeRes := postSettlementJSON(t, server, "/api/v1/collaborators/"+collaborator.Data.ID+"/close", map[string]any{
+		"requestId":     "close-journey-list-test-001",
+		"reasonCode":    "END_OF_JOURNEY_SETTLEMENT",
+		"reasonText":    "End of journey settlement completed",
+		"effectiveDate": "2026-06-21",
+		"confirm":       true,
+	})
+	defer closeRes.Body.Close()
+	if closeRes.StatusCode != http.StatusOK {
+		var body apiErrorResponse
+		decodeJSON(t, closeRes, &body)
+		t.Fatalf("expected close journey status %d, got %d with error %+v", http.StatusOK, closeRes.StatusCode, body.Error)
+	}
+
+	after := getJSON(t, server, collaboratorsURL)
+	defer after.Body.Close()
+	if after.StatusCode != http.StatusOK {
+		t.Fatalf("expected collaborator list status %d after close, got %d", http.StatusOK, after.StatusCode)
+	}
+	var afterBody apiCollaboratorListResponse
+	decodeJSON(t, after, &afterBody)
+	if afterBody.Data.Total != 0 || len(afterBody.Data.Items) != 0 {
+		t.Fatalf("expected closed collaborator to be hidden from default list, got %+v", afterBody.Data)
 	}
 }
 

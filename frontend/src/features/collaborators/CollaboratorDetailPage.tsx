@@ -78,6 +78,7 @@ export function CollaboratorDetailPage() {
               </p>
               <JourneyDaysRemaining
                 projectedEndDate={collaborator.projectedEndDate}
+                closedAt={collaborator.closedAt}
                 className="mt-1 block text-sm"
               />
             </div>
@@ -191,6 +192,7 @@ export function CollaboratorDetailPage() {
         <JourneySettlementPanel
           collaboratorId={collaborator.id}
           projectedEndDate={collaborator.projectedEndDate}
+          closedAt={collaborator.closedAt}
         />
 
         <section className="rounded-2xl border bg-white p-5 shadow-sm lg:col-span-2">
