@@ -111,6 +111,7 @@ describe("CollaboratorDetailPage", () => {
 
     await waitForText("Closed");
     expect(textNode("2026-06-15T10:00:00Z")).toBeTruthy();
+    expect(textNode("0 days remaining")).toBeTruthy();
   });
 
   it("shows backend errors", async () => {

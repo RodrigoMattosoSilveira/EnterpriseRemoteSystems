@@ -144,6 +144,7 @@ export function CollaboratorsListPage() {
                         </div>
                         <JourneyDaysRemaining
                           projectedEndDate={collaborator.projectedEndDate}
+                          closedAt={collaborator.closedAt}
                           className="mt-1 block text-xs"
                         />
                       </td>
@@ -219,6 +220,7 @@ function CollaboratorCard({ collaborator }: { collaborator: Collaborator }) {
         />
         <JourneyDaysRemaining
           projectedEndDate={collaborator.projectedEndDate}
+          closedAt={collaborator.closedAt}
           className="text-right text-sm"
         />
         <Info label="Payment" value={formatMoney(collaborator.paymentValue)} />

@@ -35,6 +35,21 @@ describe("getJourneyDaysPresentation", () => {
     });
   });
 
+
+  it("shows zero days remaining for closed journeys regardless of projected end", () => {
+    expect(
+      getJourneyDaysPresentation(
+        "2026-08-04",
+        now,
+        "2026-06-21T23:30:00Z",
+      ),
+    ).toMatchObject({
+      daysRemaining: 0,
+      label: "0 days remaining",
+      colorClass: "text-red-700",
+    });
+  });
+
   it("uses red and overdue wording for past dates", () => {
     expect(getJourneyDaysPresentation("2026-06-04", now)).toMatchObject({
       daysRemaining: -5,
