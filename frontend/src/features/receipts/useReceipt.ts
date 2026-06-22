@@ -26,16 +26,22 @@ export function usePrintableReceipt(ledgerEntryId: string) {
 export function usePrintReceipt(ledgerEntryId: string) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (authorizedBy: string) => markReceiptPrinted(ledgerEntryId, authorizedBy),
-    onSuccess: (receipt) => queryClient.setQueryData(["ledger-receipt", ledgerEntryId], receipt),
+    mutationFn: () => markReceiptPrinted(ledgerEntryId),
+    onSuccess: (receipt) => {
+      queryClient.setQueryData(["ledger-receipt", ledgerEntryId], receipt);
+      void queryClient.invalidateQueries({ queryKey: ["outstanding-receipts"] });
+    },
   });
 }
 
 export function useReturnReceipt(ledgerEntryId: string) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ authorizedBy, payload }: { authorizedBy: string; payload: ReturnReceiptRequest }) =>
-      markReceiptReturned(ledgerEntryId, authorizedBy, payload),
-    onSuccess: (receipt) => queryClient.setQueryData(["ledger-receipt", ledgerEntryId], receipt),
+    mutationFn: (payload: ReturnReceiptRequest) =>
+      markReceiptReturned(ledgerEntryId, payload),
+    onSuccess: (receipt) => {
+      queryClient.setQueryData(["ledger-receipt", ledgerEntryId], receipt);
+      void queryClient.invalidateQueries({ queryKey: ["outstanding-receipts"] });
+    },
   });
 }

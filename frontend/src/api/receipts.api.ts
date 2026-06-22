@@ -22,23 +22,21 @@ export function getPrintableReceipt(ledgerEntryId: string) {
   );
 }
 
-export function markReceiptPrinted(ledgerEntryId: string, authorizedBy: string) {
+export function markReceiptPrinted(ledgerEntryId: string) {
   return apiFetch<PrintableReceipt>(
     `/ledger-entries/${encodeURIComponent(ledgerEntryId)}/receipt/print`,
-    { method: "POST", headers: { "X-Authorized-By": authorizedBy } },
+    { method: "POST" },
   );
 }
 
 export function markReceiptReturned(
   ledgerEntryId: string,
-  authorizedBy: string,
   payload: ReturnReceiptRequest,
 ) {
   return apiFetch<PrintableReceipt>(
     `/ledger-entries/${encodeURIComponent(ledgerEntryId)}/receipt/return`,
     {
       method: "POST",
-      headers: { "X-Authorized-By": authorizedBy },
       body: JSON.stringify(payload),
     },
   );

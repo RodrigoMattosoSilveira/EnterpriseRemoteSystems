@@ -1,6 +1,7 @@
 import { Link, useSearchParams } from "react-router-dom";
 import { ApiErrorPanel } from "../../components/ApiErrorPanel";
 import type { OutstandingReceipt } from "../../types/receipts";
+import { nextReceiptAction, receiptStatusLabel, receiptStatusTone } from "./receiptLifecycle";
 import { useOutstandingReceipts } from "./useReceipt";
 
 const statuses = [
@@ -116,13 +117,15 @@ function ReceiptRow({ receipt }: { receipt: OutstandingReceipt }) {
       <div>
         <div className="flex flex-wrap items-center gap-2">
           <h2 className="font-bold text-gray-900">{receipt.receiptNumber}</h2>
-          <span className="rounded-full bg-amber-100 px-2 py-1 text-xs font-semibold text-amber-800">{humanize(receipt.status)}</span>
+          <span className={`rounded-full px-2 py-1 text-xs font-semibold ${receiptStatusTone(receipt.status)}`}>{receiptStatusLabel(receipt.status)}</span>
         </div>
         <p className="mt-1 text-sm text-gray-700">{receipt.collaboratorLabel} · {receipt.collaboratorLegalName}</p>
         <p className="mt-1 text-sm text-gray-600">
           {humanize(receipt.entryType)} · {formatAmount(receipt.amount, receipt.valueUnitCode)} · Effective {receipt.effectiveDate}
         </p>
         {receipt.printedAt ? <p className="mt-1 text-xs text-gray-500">Printed {formatDateTime(receipt.printedAt)}</p> : null}
+        <p className="mt-1 text-xs font-semibold text-gray-600">Next action: {nextReceiptAction(receipt)}</p>
+        {receipt.signedDocumentRef ? <p className="mt-1 text-xs text-gray-500">Signed document: {receipt.signedDocumentRef}</p> : null}
       </div>
       <div className="flex flex-wrap gap-2 sm:justify-end">
         <Link className="rounded-xl border px-4 py-2 text-sm font-semibold" to={`/collaborators/${receipt.collaboratorId}`}>Collaborator</Link>
@@ -133,5 +136,5 @@ function ReceiptRow({ receipt }: { receipt: OutstandingReceipt }) {
 }
 
 function humanize(value: string) { return value.toLowerCase().replaceAll("_", " "); }
-function formatAmount(value: number, unit: string) { return unit === "BRL" ? new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value) : `${value.toFixed(8)} g`; }
+function formatAmount(value: number, unit: string) { return unit === "BRL" ? new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value) : `${value.toFixed(2)} g`; }
 function formatDateTime(value: string) { return new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeStyle: "short" }).format(new Date(value)); }
