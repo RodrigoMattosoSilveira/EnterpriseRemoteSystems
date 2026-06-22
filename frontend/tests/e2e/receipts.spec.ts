@@ -58,14 +58,14 @@ test("outstanding receipt appears, can be opened, and disappears after signed re
   await expect(page.getByText(receipt!.receiptNumber)).toBeVisible();
   await expect(page.getByText(description)).toBeVisible();
 
-  await page.getByLabel("Received by").fill("receipt-e2e@example.com");
   await page
     .getByLabel("Signed document reference")
     .fill(`receipt-scan-${suffix}.pdf`);
   await page.getByLabel("Notes").fill("Returned by Playwright E2E test.");
   await page.getByRole("button", { name: "Record signed return" }).click();
 
-  await expect(page.getByText("returned", { exact: true })).toBeVisible();
+  await expect(page.getByText("Returned", { exact: true }).first()).toBeVisible();
+  await expect(page.getByText("Receipt lifecycle")).toBeVisible();
   await expect(page.getByText("receipt-scan-", { exact: false })).toBeVisible();
 
   const returnedReceipt = await getPrintableReceipt(request, ledgerEntry.id);
@@ -77,6 +77,77 @@ test("outstanding receipt appears, can be opened, and disappears after signed re
     ledgerEntry.id,
   );
   expect(refreshedReceipt).toBeUndefined();
+});
+
+
+test("receipt return action requires a signed document reference", async ({
+  page,
+  request,
+}) => {
+  const { ledgerEntry, receipt, suffix } = await createReceiptScenario(request, {
+    descriptionPrefix: "Receipt E2E required signed ref",
+    firstNamePrefix: "ReceiptRefE2E",
+    nicknamePrefix: "ReceiptRef",
+  });
+
+  await page.goto(`/ledger-entries/${ledgerEntry.id}/receipt`);
+  await expect(page.getByRole("heading", { name: "Receipt", exact: true })).toBeVisible();
+  await expect(page.getByText(receipt.receiptNumber)).toBeVisible();
+  await expect(page.getByText("Receipt lifecycle")).toBeVisible();
+
+  const blockedReturn = page.getByRole("button", {
+    name: "Enter signed document reference first",
+  });
+  await expect(blockedReturn).toBeDisabled();
+
+  await page.getByLabel("Notes").fill("Notes alone must not enable receipt return.");
+  await expect(blockedReturn).toBeDisabled();
+
+  await page
+    .getByLabel("Signed document reference")
+    .fill(`receipt-scan-required-${suffix}.pdf`);
+  await expect(
+    page.getByRole("button", { name: "Record signed return" }),
+  ).toBeEnabled();
+});
+
+test("returned receipt locks lifecycle actions", async ({ page, request }) => {
+  const { ledgerEntry, receipt, suffix } = await createReceiptScenario(request, {
+    descriptionPrefix: "Receipt E2E terminal lock",
+    firstNamePrefix: "ReceiptLockE2E",
+    nicknamePrefix: "ReceiptLock",
+  });
+  const signedDocumentRef = `receipt-scan-returned-${suffix}.pdf`;
+
+  const response = await request.post(
+    e2eApiUrl(`/api/v1/ledger-entries/${encodeURIComponent(ledgerEntry.id)}/receipt/return`),
+    {
+      headers: authzHeaders(),
+      data: {
+        signedDocumentRef,
+        notes: "Returned before opening the receipt lifecycle page.",
+      },
+    },
+  );
+  if (!response.ok()) {
+    throw new Error(
+      `Return Receipt failed at ${response.url()}: ${response.status()} ${await response.text()}`,
+    );
+  }
+
+  await page.goto(`/ledger-entries/${ledgerEntry.id}/receipt`);
+  await expect(page.getByRole("heading", { name: "Receipt", exact: true })).toBeVisible();
+  await expect(page.getByText(receipt.receiptNumber)).toBeVisible();
+  await expect(page.getByText("Terminal status: no further lifecycle mutations are allowed.")).toBeVisible();
+  await expect(page.getByText("Return details are locked.")).toBeVisible();
+  await expect(page.getByText(signedDocumentRef)).toBeVisible();
+
+  const lockedButtons = page.getByRole("button", { name: "Receipt returned" });
+  await expect(lockedButtons).toHaveCount(2);
+  await expect(lockedButtons.first()).toBeDisabled();
+  await expect(lockedButtons.nth(1)).toBeDisabled();
+  await expect(page.getByLabel("Signed document reference")).toBeDisabled();
+  await expect(page.getByLabel("Notes")).toBeDisabled();
 });
 
 type ApiEnvelope<T> = {
@@ -109,6 +180,45 @@ type ExpensePayload = {
   expenseDate: string;
   description: string;
 };
+
+type ReceiptScenario = {
+  collaborator: CreatedCollaborator;
+  ledgerEntry: LedgerEntry;
+  receipt: PrintableReceipt;
+  suffix: number;
+};
+
+async function createReceiptScenario(
+  api: APIRequestContext,
+  input: { descriptionPrefix: string; firstNamePrefix: string; nicknamePrefix: string },
+): Promise<ReceiptScenario> {
+  const suffix = uniqueSuffix();
+  const description = `${input.descriptionPrefix} ${suffix}`;
+  const person = await createCompletePerson(api, {
+    suffix,
+    firstName: `${input.firstNamePrefix}${suffix}`,
+    nickname: `${input.nicknamePrefix}${suffix}`,
+  });
+  const collaborator = await createCollaborator(api, person.id);
+  await createExpense(api, {
+    collaboratorId: collaborator.id,
+    expenseCategoryId: EXPENSE_CATEGORY_CANTEEN_ID,
+    valueUnitId: VALUE_UNIT_BRL_ID,
+    amount: 12.34,
+    expenseDate: todayISODate(),
+    description,
+  });
+
+  const ledgerEntry = await findLedgerEntryForDescription(
+    api,
+    collaborator.id,
+    description,
+  );
+  const receipt = await findOutstandingReceiptByLedgerEntryId(api, ledgerEntry.id);
+  if (!receipt) throw new Error(`Could not find outstanding receipt for ${description}`);
+
+  return { collaborator, ledgerEntry, receipt, suffix };
+}
 
 async function createCompletePerson(
   api: APIRequestContext,
