@@ -3,6 +3,8 @@ import type {
   AuthzActor,
   AuthzActorRoleGrant,
   AuthzAdminRequestActor,
+  AuthzAuditLog,
+  AuthzAuditLogFilters,
   AuthzPermission,
   AuthzRole,
   CreateAuthzActorInput,
@@ -32,6 +34,38 @@ export function listAuthzActors(actor: AuthzAdminRequestActor): Promise<AuthzAct
   return apiFetch<AuthzActor[]>("/authz/actors", {
     headers: authzHeaders(actor),
   });
+}
+
+
+export function listAuthzAuditLogs(
+  actor: AuthzAdminRequestActor,
+  filters: AuthzAuditLogFilters = {},
+): Promise<AuthzAuditLog[]> {
+  const query = auditLogQuery(filters);
+  return apiFetch<AuthzAuditLog[]>(`/authz/audit-logs${query}`, {
+    headers: authzHeaders(actor),
+  });
+}
+
+function auditLogQuery(filters: AuthzAuditLogFilters): string {
+  const params = new URLSearchParams();
+
+  for (const [key, value] of Object.entries(filters)) {
+    if (typeof value === "number") {
+      if (Number.isFinite(value) && value > 0) {
+        params.set(key, String(value));
+      }
+      continue;
+    }
+
+    const trimmed = typeof value === "string" ? value.trim() : "";
+    if (trimmed) {
+      params.set(key, trimmed);
+    }
+  }
+
+  const encoded = params.toString();
+  return encoded ? `?${encoded}` : "";
 }
 
 export function createAuthzActor(

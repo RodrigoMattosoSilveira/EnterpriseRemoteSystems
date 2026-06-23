@@ -4,6 +4,7 @@ import { JourneyDaysRemaining } from "../../components/JourneyDaysRemaining";
 import type { Collaborator } from "../../types/collaborators";
 import { JourneySettlementPanel } from "./JourneySettlementPanel";
 import { useCollaborator } from "./useCollaborators";
+import { useSettlementPreview } from "./useSettlements";
 
 export function CollaboratorDetailPage() {
   const { id = "" } = useParams();
@@ -195,15 +196,52 @@ export function CollaboratorDetailPage() {
           closedAt={collaborator.closedAt}
         />
 
-        <section className="rounded-2xl border bg-white p-5 shadow-sm lg:col-span-2">
-          <h2 className="text-lg font-semibold text-gray-950">Notes</h2>
-          <p className="mt-3 whitespace-pre-wrap text-sm text-gray-700">
-            {collaborator.notes?.trim() || "No notes recorded."}
-          </p>
-        </section>
+        <CollaboratorNotes collaborator={collaborator} />
       </section>
     </main>
   );
+}
+
+function CollaboratorNotes({ collaborator }: { collaborator: Collaborator }) {
+  const rawNotes = collaborator.notes?.trim() ?? "";
+  const refreshGoldBalance = hasStoredGoldBalanceNote(rawNotes);
+  const preview = useSettlementPreview(
+    refreshGoldBalance ? collaborator.id : "",
+  );
+  const displayedNotes = refreshGoldBalance
+    ? notesWithCurrentGoldBalance(rawNotes, preview.data?.goldGramBalance)
+    : rawNotes || "No notes recorded.";
+
+  return (
+    <section className="rounded-2xl border bg-white p-5 shadow-sm lg:col-span-2">
+      <h2 className="text-lg font-semibold text-gray-950">Notes</h2>
+      <p className="mt-3 whitespace-pre-wrap text-sm text-gray-700">
+        {displayedNotes}
+      </p>
+    </section>
+  );
+}
+
+const storedGoldBalanceNotePattern =
+  /Gold balance starts at\s+[-+]?\d+(?:\.\d+)?\s+grams\./i;
+
+function hasStoredGoldBalanceNote(notes: string) {
+  return storedGoldBalanceNotePattern.test(notes);
+}
+
+function notesWithCurrentGoldBalance(notes: string, goldGramBalance?: number) {
+  if (goldGramBalance === undefined || !Number.isFinite(goldGramBalance)) {
+    return notes || "No notes recorded.";
+  }
+
+  return notes.replace(
+    storedGoldBalanceNotePattern,
+    `Gold balance starts at ${formatGoldGramsForNotes(goldGramBalance)} grams.`,
+  );
+}
+
+function formatGoldGramsForNotes(value: number) {
+  return value.toFixed(3);
 }
 
 function StatusBadge({ collaborator }: { collaborator: Collaborator }) {
