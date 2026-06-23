@@ -73,6 +73,9 @@ export function SecondPersonApprovalSettingsPage() {
             <Link className="text-sm font-semibold text-gray-700 underline" to="/admin/authorization">
               Authorization
             </Link>
+            <Link className="text-sm font-semibold text-gray-700 underline" to="/admin/audit-logs">
+              Audit Logs
+            </Link>
             <Link className="text-sm font-semibold text-gray-700 underline" to="/admin/reference-data">
               Reference Data
             </Link>

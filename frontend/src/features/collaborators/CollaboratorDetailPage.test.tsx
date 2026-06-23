@@ -92,6 +92,40 @@ describe("CollaboratorDetailPage", () => {
     expect(textNode("Primary mine operator.")).toBeTruthy();
   });
 
+  it("refreshes seeded gold balance notes from the current settlement preview", async () => {
+    mockFetch(async (url) => {
+      if (url === "/api/v1/collaborators/collab-1") {
+        return jsonResponse({
+          data: {
+            ...collaborator,
+            notes:
+              "Manual test data: use Zero Gold. Gold balance starts at 8.500 grams.",
+          },
+        });
+      }
+      if (url === "/api/v1/collaborators/collab-1/settlement-preview") {
+        return jsonResponse({
+          data: {
+            collaboratorId: "collab-1",
+            brlBalance: 0,
+            goldGramBalance: 6.5,
+            pendingAccrualItems: 0,
+            canClose: true,
+            blockingReasons: [],
+          },
+        });
+      }
+
+      throw new Error(`Unhandled request: ${url}`);
+    });
+
+    renderCollaboratorDetailPage("/collaborators/collab-1");
+
+    await waitForText("Gold balance starts at 6.500 grams.");
+
+    expect(textNode("Gold balance starts at 8.500 grams.")).toBeFalsy();
+  });
+
   it("shows closed lifecycle state", async () => {
     mockFetch(async (url) => {
       if (url === "/api/v1/collaborators/collab-closed") {
