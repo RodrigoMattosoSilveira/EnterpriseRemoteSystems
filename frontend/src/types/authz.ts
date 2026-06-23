@@ -51,3 +51,30 @@ export type GrantAuthzActorRoleInput = {
   roleCode: string;
   tenantId: string;
 };
+
+export type AuthzAuditLog = {
+  id: string;
+  occurredAt: string;
+  actorId?: string;
+  actorRecordId?: string;
+  tenantId?: string;
+  permissionCode?: string;
+  operation: string;
+  targetType?: string;
+  targetId?: string;
+  decision: string;
+  reason?: string;
+  metadataJson?: string;
+  requestMethod?: string;
+  requestPath?: string;
+};
+
+export type AuthzAuditLogFilters = {
+  actorId?: string;
+  tenantId?: string;
+  operation?: string;
+  targetType?: string;
+  targetId?: string;
+  decision?: string;
+  limit?: number;
+};
