@@ -22,6 +22,8 @@ type Tenant struct {
 	People                []Person               `gorm:"foreignKey:TenantID" json:"people,omitempty"`
 	Collaborators         []CollaboratorJourney  `gorm:"foreignKey:TenantID" json:"collaborators,omitempty"`
 	Expenses              []Expense              `gorm:"foreignKey:TenantID" json:"expenses,omitempty"`
+	ExpensePriceListItems []ExpensePriceListItem `gorm:"foreignKey:TenantID" json:"expensePriceListItems,omitempty"`
+	GoldPrices            []GoldPrice            `gorm:"foreignKey:TenantID" json:"goldPrices,omitempty"`
 	WorkPeriods           []WorkPeriod           `gorm:"foreignKey:TenantID" json:"workPeriods,omitempty"`
 	WorkPeriodAssignments []WorkPeriodAssignment `gorm:"foreignKey:TenantID" json:"workPeriodAssignments,omitempty"`
 	GoldProductionEntries []GoldProductionEntry  `gorm:"foreignKey:TenantID" json:"goldProductionEntries,omitempty"`
@@ -138,6 +140,35 @@ type Person struct {
 	Journeys []CollaboratorJourney `gorm:"foreignKey:PersonID" json:"journeys,omitempty"`
 }
 
+type ExpensePriceListItem struct {
+	BaseModel
+
+	TenantID     string  `gorm:"type:text;not null;default:default;uniqueIndex:ux_expense_price_list_items_tenant_type_code,priority:1;index:idx_expense_price_list_items_tenant_type_active_sort,priority:1" json:"tenantId"`
+	ItemType     string  `gorm:"type:text;not null;uniqueIndex:ux_expense_price_list_items_tenant_type_code,priority:2;index:idx_expense_price_list_items_tenant_type_active_sort,priority:2" json:"itemType"`
+	Code         string  `gorm:"type:text;not null;uniqueIndex:ux_expense_price_list_items_tenant_type_code,priority:3" json:"code"`
+	Description  string  `gorm:"type:text;not null" json:"description"`
+	UnitPriceBRL float64 `gorm:"column:unit_price_brl;not null" json:"unitPriceBrl"`
+	Active       bool    `gorm:"not null;default:true;index:idx_expense_price_list_items_tenant_type_active_sort,priority:3" json:"active"`
+	SortOrder    int     `gorm:"not null;default:0;index:idx_expense_price_list_items_tenant_type_active_sort,priority:4" json:"sortOrder"`
+
+	Tenant   Tenant    `gorm:"foreignKey:TenantID;constraint:OnUpdate:Restrict,OnDelete:Restrict;" json:"tenant,omitempty"`
+	Expenses []Expense `gorm:"foreignKey:PriceListItemID" json:"expenses,omitempty"`
+}
+
+type GoldPrice struct {
+	BaseModel
+
+	TenantID   string    `gorm:"type:text;not null;default:default;uniqueIndex:ux_gold_prices_tenant_price_date,priority:1;index:idx_gold_prices_tenant_active_date,priority:1" json:"tenantId"`
+	PriceDate  time.Time `gorm:"type:date;not null;uniqueIndex:ux_gold_prices_tenant_price_date,priority:2;index:idx_gold_prices_tenant_active_date,priority:3" json:"priceDate"`
+	BRLPerGram float64   `gorm:"column:brl_per_gram;not null" json:"brlPerGram"`
+	RecordedBy string    `gorm:"type:text;not null" json:"recordedBy"`
+	Notes      string    `gorm:"type:text" json:"notes,omitempty"`
+	Active     bool      `gorm:"not null;default:true;index:idx_gold_prices_tenant_active_date,priority:2" json:"active"`
+
+	Tenant   Tenant    `gorm:"foreignKey:TenantID;constraint:OnUpdate:Restrict,OnDelete:Restrict;" json:"tenant,omitempty"`
+	Expenses []Expense `gorm:"foreignKey:GoldPriceID" json:"expenses,omitempty"`
+}
+
 type Expense struct {
 	BaseModel
 
@@ -150,10 +181,24 @@ type Expense struct {
 	Description       string    `gorm:"type:text" json:"description,omitempty"`
 	Active            bool      `gorm:"not null;default:true;index" json:"active"`
 
-	Tenant          Tenant              `gorm:"foreignKey:TenantID;constraint:OnUpdate:Restrict,OnDelete:Restrict;" json:"tenant,omitempty"`
-	Collaborator    CollaboratorJourney `gorm:"foreignKey:CollaboratorID;constraint:OnUpdate:Restrict,OnDelete:Restrict;" json:"collaborator,omitempty"`
-	ExpenseCategory ReferenceData       `gorm:"foreignKey:ExpenseCategoryID;constraint:OnUpdate:Restrict,OnDelete:Restrict;" json:"expenseCategory,omitempty"`
-	ValueUnit       ReferenceData       `gorm:"foreignKey:ValueUnitID;constraint:OnUpdate:Restrict,OnDelete:Restrict;" json:"valueUnit,omitempty"`
+	PriceListItemID        *string  `gorm:"type:text;index" json:"priceListItemId,omitempty"`
+	ItemType               string   `gorm:"type:text;index" json:"itemType,omitempty"`
+	ItemDescription        string   `gorm:"type:text" json:"itemDescription,omitempty"`
+	Quantity               *float64 `json:"quantity,omitempty"`
+	UnitPriceBRL           *float64 `gorm:"column:unit_price_brl" json:"unitPriceBrl,omitempty"`
+	CurrencyCode           string   `gorm:"type:text;index" json:"currencyCode,omitempty"`
+	GoldPriceID            *string  `gorm:"type:text;index" json:"goldPriceId,omitempty"`
+	GoldBRLPerGram         *float64 `gorm:"column:gold_brl_per_gram" json:"goldBrlPerGram,omitempty"`
+	UnitPriceAmount        *float64 `json:"unitPriceAmount,omitempty"`
+	TotalAmount            *float64 `json:"totalAmount,omitempty"`
+	CalculationDetailsJSON string   `gorm:"type:text" json:"calculationDetailsJson,omitempty"`
+
+	Tenant          Tenant                `gorm:"foreignKey:TenantID;constraint:OnUpdate:Restrict,OnDelete:Restrict;" json:"tenant,omitempty"`
+	Collaborator    CollaboratorJourney   `gorm:"foreignKey:CollaboratorID;constraint:OnUpdate:Restrict,OnDelete:Restrict;" json:"collaborator,omitempty"`
+	ExpenseCategory ReferenceData         `gorm:"foreignKey:ExpenseCategoryID;constraint:OnUpdate:Restrict,OnDelete:Restrict;" json:"expenseCategory,omitempty"`
+	ValueUnit       ReferenceData         `gorm:"foreignKey:ValueUnitID;constraint:OnUpdate:Restrict,OnDelete:Restrict;" json:"valueUnit,omitempty"`
+	PriceListItem   *ExpensePriceListItem `gorm:"foreignKey:PriceListItemID;constraint:OnUpdate:Restrict,OnDelete:Restrict;" json:"priceListItem,omitempty"`
+	GoldPrice       *GoldPrice            `gorm:"foreignKey:GoldPriceID;constraint:OnUpdate:Restrict,OnDelete:Restrict;" json:"goldPrice,omitempty"`
 }
 
 type JourneySettlement struct {

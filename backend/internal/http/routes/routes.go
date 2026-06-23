@@ -10,6 +10,7 @@ func Register(server *fiber.App, deps Dependencies) {
 	RegisterPeopleRoutes(v1, deps)
 	RegisterCollaboratorRoutes(v1, deps)
 	RegisterExpenseRoutes(v1, deps)
+	RegisterPriceListRoutes(v1, deps)
 	RegisterCurrentAccountRoutes(v1, deps)
 	RegisterWorkPeriodRoutes(v1, deps)
 	RegisterWorkPeriodAssignmentRoutes(v1, deps)

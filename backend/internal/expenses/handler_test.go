@@ -18,9 +18,11 @@ import (
 )
 
 const (
-	peopleURL        = "/api/v1/people/"
-	collaboratorsURL = "/api/v1/collaborators/"
-	expensesURL      = "/api/v1/expenses/"
+	peopleURL         = "/api/v1/people/"
+	collaboratorsURL  = "/api/v1/collaborators/"
+	expensesURL       = "/api/v1/expenses/"
+	priceListItemsURL = "/api/v1/price-list-items/"
+	goldPricesURL     = "/api/v1/gold-prices/"
 )
 
 type apiErrorResponse struct {
@@ -46,18 +48,29 @@ type apiCollaboratorResponse struct {
 
 type apiExpenseResponse struct {
 	Data struct {
-		ID                   string  `json:"id"`
-		TenantID             string  `json:"tenantId"`
-		CollaboratorID       string  `json:"collaboratorId"`
-		CollaboratorLabel    string  `json:"collaboratorLabel"`
-		ExpenseCategoryID    string  `json:"expenseCategoryId"`
-		ExpenseCategoryLabel string  `json:"expenseCategoryLabel"`
-		ValueUnitID          string  `json:"valueUnitId"`
-		ValueUnitLabel       string  `json:"valueUnitLabel"`
-		Amount               float64 `json:"amount"`
-		ExpenseDate          string  `json:"expenseDate"`
-		Description          string  `json:"description"`
-		Active               bool    `json:"active"`
+		ID                     string   `json:"id"`
+		TenantID               string   `json:"tenantId"`
+		CollaboratorID         string   `json:"collaboratorId"`
+		CollaboratorLabel      string   `json:"collaboratorLabel"`
+		ExpenseCategoryID      string   `json:"expenseCategoryId"`
+		ExpenseCategoryLabel   string   `json:"expenseCategoryLabel"`
+		ValueUnitID            string   `json:"valueUnitId"`
+		ValueUnitLabel         string   `json:"valueUnitLabel"`
+		Amount                 float64  `json:"amount"`
+		ExpenseDate            string   `json:"expenseDate"`
+		Description            string   `json:"description"`
+		Active                 bool     `json:"active"`
+		PriceListItemID        *string  `json:"priceListItemId"`
+		ItemType               string   `json:"itemType"`
+		ItemDescription        string   `json:"itemDescription"`
+		Quantity               *float64 `json:"quantity"`
+		UnitPriceBRL           *float64 `json:"unitPriceBrl"`
+		CurrencyCode           string   `json:"currencyCode"`
+		GoldPriceID            *string  `json:"goldPriceId"`
+		GoldBRLPerGram         *float64 `json:"goldBrlPerGram"`
+		UnitPriceAmount        *float64 `json:"unitPriceAmount"`
+		TotalAmount            *float64 `json:"totalAmount"`
+		CalculationDetailsJSON string   `json:"calculationDetailsJson"`
 	} `json:"data"`
 }
 
@@ -75,6 +88,24 @@ type apiExpenseListResponse struct {
 		Total    int `json:"total"`
 		Page     int `json:"page"`
 		PageSize int `json:"pageSize"`
+	} `json:"data"`
+}
+
+type apiPriceListItemResponse struct {
+	Data struct {
+		ID           string  `json:"id"`
+		ItemType     string  `json:"itemType"`
+		Code         string  `json:"code"`
+		Description  string  `json:"description"`
+		UnitPriceBRL float64 `json:"unitPriceBrl"`
+	} `json:"data"`
+}
+
+type apiGoldPriceResponse struct {
+	Data struct {
+		ID         string  `json:"id"`
+		PriceDate  string  `json:"priceDate"`
+		BRLPerGram float64 `json:"brlPerGram"`
 	} `json:"data"`
 }
 
@@ -132,6 +163,108 @@ func TestCreateExpenseReturnsCreated(t *testing.T) {
 	if !body.Data.Active {
 		t.Fatal("expected created expense to be active")
 	}
+}
+
+func TestCreatePriceListExpenseInBRLCalculatesAndStoresAuditFields(t *testing.T) {
+	server, cleanup := newTestServer(t)
+	defer cleanup()
+
+	collaborator := createActiveCollaborator(t, server, 1)
+	item := createPriceListItem(t, server, validPriceListItemPayload(map[string]any{
+		"itemType":     "CANTEEN",
+		"code":         "LUNCH",
+		"description":  "Lunch plate",
+		"unitPriceBrl": 25.0,
+	}))
+
+	expense := createExpense(t, server, map[string]any{
+		"collaboratorId":  collaborator.Data.ID,
+		"priceListItemId": item.Data.ID,
+		"currencyCode":    "BRL",
+		"quantity":        3.0,
+		"expenseDate":     "2026-06-03",
+	})
+
+	if expense.Data.ExpenseCategoryID != "ref-expense-category-canteen" {
+		t.Fatalf("expected canteen category, got %q", expense.Data.ExpenseCategoryID)
+	}
+	if expense.Data.ValueUnitID != "ref-value-unit-brl" || expense.Data.CurrencyCode != "BRL" {
+		t.Fatalf("expected BRL value unit/currency, got valueUnit=%q currency=%q", expense.Data.ValueUnitID, expense.Data.CurrencyCode)
+	}
+	if expense.Data.PriceListItemID == nil || *expense.Data.PriceListItemID != item.Data.ID {
+		t.Fatalf("expected price list item id %q, got %#v", item.Data.ID, expense.Data.PriceListItemID)
+	}
+	if expense.Data.ItemType != "CANTEEN" || expense.Data.ItemDescription != "Lunch plate" {
+		t.Fatalf("expected item snapshot, got type=%q description=%q", expense.Data.ItemType, expense.Data.ItemDescription)
+	}
+	assertFloatPointer(t, expense.Data.Quantity, 3.0, "quantity")
+	assertFloatPointer(t, expense.Data.UnitPriceBRL, 25.0, "unitPriceBrl")
+	assertFloatPointer(t, expense.Data.UnitPriceAmount, 25.0, "unitPriceAmount")
+	assertFloatPointer(t, expense.Data.TotalAmount, 75.0, "totalAmount")
+	if expense.Data.Amount != 75.0 {
+		t.Fatalf("expected ledger amount 75.0, got %f", expense.Data.Amount)
+	}
+	if expense.Data.CalculationDetailsJSON == "" {
+		t.Fatal("expected calculation details JSON")
+	}
+}
+
+func TestCreatePriceListExpenseInGoldUsesLatestGoldPrice(t *testing.T) {
+	server, cleanup := newTestServer(t)
+	defer cleanup()
+
+	collaborator := createActiveCollaborator(t, server, 1)
+	item := createPriceListItem(t, server, validPriceListItemPayload(map[string]any{
+		"itemType":     "ADMINISTRATIVE",
+		"code":         "BOOTS",
+		"description":  "Work boots",
+		"unitPriceBrl": 100.0,
+	}))
+	createGoldPrice(t, server, validGoldPricePayload(map[string]any{"priceDate": "2026-06-01", "brlPerGram": 400.0}))
+	gold := createGoldPrice(t, server, validGoldPricePayload(map[string]any{"priceDate": "2026-06-02", "brlPerGram": 500.0}))
+
+	expense := createExpense(t, server, map[string]any{
+		"collaboratorId":  collaborator.Data.ID,
+		"priceListItemId": item.Data.ID,
+		"currencyCode":    "GOLD_GRAM",
+		"quantity":        2.0,
+		"expenseDate":     "2026-06-03",
+	})
+
+	if expense.Data.ExpenseCategoryID != "ref-expense-category-administrative" {
+		t.Fatalf("expected administrative category, got %q", expense.Data.ExpenseCategoryID)
+	}
+	if expense.Data.ValueUnitID != "ref-value-unit-gold-gram" || expense.Data.CurrencyCode != "GOLD_GRAM" {
+		t.Fatalf("expected gold value unit/currency, got valueUnit=%q currency=%q", expense.Data.ValueUnitID, expense.Data.CurrencyCode)
+	}
+	if expense.Data.GoldPriceID == nil || *expense.Data.GoldPriceID != gold.Data.ID {
+		t.Fatalf("expected latest gold price id %q, got %#v", gold.Data.ID, expense.Data.GoldPriceID)
+	}
+	assertFloatPointer(t, expense.Data.GoldBRLPerGram, 500.0, "goldBrlPerGram")
+	assertFloatPointer(t, expense.Data.UnitPriceAmount, 0.2, "unitPriceAmount")
+	assertFloatPointer(t, expense.Data.TotalAmount, 0.4, "totalAmount")
+	if expense.Data.Amount != 0.4 {
+		t.Fatalf("expected ledger amount 0.4 grams, got %f", expense.Data.Amount)
+	}
+}
+
+func TestCreatePriceListGoldExpenseRequiresGoldPrice(t *testing.T) {
+	server, cleanup := newTestServer(t)
+	defer cleanup()
+
+	collaborator := createActiveCollaborator(t, server, 1)
+	item := createPriceListItem(t, server, validPriceListItemPayload(nil))
+
+	res := postJSON(t, server, http.MethodPost, expensesURL, map[string]any{
+		"collaboratorId":  collaborator.Data.ID,
+		"priceListItemId": item.Data.ID,
+		"currencyCode":    "GOLD_GRAM",
+		"quantity":        1.0,
+		"expenseDate":     "2026-06-03",
+	})
+	defer res.Body.Close()
+
+	assertValidationError(t, res, "currencyCode", "A current gold price is required for GOLD_GRAM expenses")
 }
 
 func TestListAndGetExpenseReturnCreatedExpense(t *testing.T) {
@@ -522,6 +655,34 @@ func createExpense(t *testing.T, server *fiber.App, payload map[string]any) apiE
 	return body
 }
 
+func createPriceListItem(t *testing.T, server *fiber.App, payload map[string]any) apiPriceListItemResponse {
+	t.Helper()
+	res := postJSON(t, server, http.MethodPost, priceListItemsURL, payload)
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusCreated {
+		var body apiErrorResponse
+		decodeJSON(t, res, &body)
+		t.Fatalf("expected create price list item status %d, got %d with error %+v", http.StatusCreated, res.StatusCode, body.Error)
+	}
+	var body apiPriceListItemResponse
+	decodeJSON(t, res, &body)
+	return body
+}
+
+func createGoldPrice(t *testing.T, server *fiber.App, payload map[string]any) apiGoldPriceResponse {
+	t.Helper()
+	res := postJSON(t, server, http.MethodPost, goldPricesURL, payload)
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusCreated {
+		var body apiErrorResponse
+		decodeJSON(t, res, &body)
+		t.Fatalf("expected create gold price status %d, got %d with error %+v", http.StatusCreated, res.StatusCode, body.Error)
+	}
+	var body apiGoldPriceResponse
+	decodeJSON(t, res, &body)
+	return body
+}
+
 func postJSON(t *testing.T, server *fiber.App, method string, url string, payload map[string]any) *http.Response {
 	t.Helper()
 	body, err := json.Marshal(payload)
@@ -545,6 +706,33 @@ func getJSON(t *testing.T, server *fiber.App, url string) *http.Response {
 		t.Fatalf("GET %s: %v", url, err)
 	}
 	return res
+}
+
+func validPriceListItemPayload(overrides map[string]any) map[string]any {
+	payload := map[string]any{
+		"itemType":     "CANTEEN",
+		"code":         "LUNCH",
+		"description":  "Lunch",
+		"unitPriceBrl": 42.5,
+		"sortOrder":    10,
+	}
+	for key, value := range overrides {
+		payload[key] = value
+	}
+	return payload
+}
+
+func validGoldPricePayload(overrides map[string]any) map[string]any {
+	payload := map[string]any{
+		"priceDate":  "2026-06-01",
+		"brlPerGram": 500.0,
+		"recordedBy": "admin-user",
+		"notes":      "Daily admin rate",
+	}
+	for key, value := range overrides {
+		payload[key] = value
+	}
+	return payload
 }
 
 func validExpensePayload(collaboratorID string, overrides map[string]any) map[string]any {
@@ -646,6 +834,16 @@ func createOtherTenantExpense(t *testing.T, database *gorm.DB, sourceExpenseID s
 	otherExpense.UpdatedAt = now
 	if err := database.Create(&otherExpense).Error; err != nil {
 		t.Fatalf("create other-tenant expense: %v", err)
+	}
+}
+
+func assertFloatPointer(t *testing.T, actual *float64, expected float64, field string) {
+	t.Helper()
+	if actual == nil {
+		t.Fatalf("expected %s to be set", field)
+	}
+	if *actual != expected {
+		t.Fatalf("expected %s %f, got %f", field, expected, *actual)
 	}
 }
 

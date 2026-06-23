@@ -22,7 +22,9 @@ func (r *gormRepository) List(ctx context.Context, filter normalizedExpenseListF
 		Where("tenant_id = ?", defaultTenantID).
 		Preload("Collaborator.Person").
 		Preload("ExpenseCategory").
-		Preload("ValueUnit")
+		Preload("ValueUnit").
+		Preload("PriceListItem").
+		Preload("GoldPrice")
 
 	if !filter.IncludeInactive {
 		q = q.Where("active = ?", true)
@@ -35,6 +37,15 @@ func (r *gormRepository) List(ctx context.Context, filter normalizedExpenseListF
 	}
 	if filter.ValueUnitID != "" {
 		q = q.Where("value_unit_id = ?", filter.ValueUnitID)
+	}
+	if filter.ItemType != "" {
+		q = q.Where("item_type = ?", filter.ItemType)
+	}
+	if filter.PriceListItemID != "" {
+		q = q.Where("price_list_item_id = ?", filter.PriceListItemID)
+	}
+	if filter.CurrencyCode != "" {
+		q = q.Where("currency_code = ?", filter.CurrencyCode)
 	}
 	if filter.DateFrom != nil {
 		q = q.Where("expense_date >= ?", formatDateForQuery(*filter.DateFrom))
@@ -75,14 +86,25 @@ func (r *gormRepository) Update(ctx context.Context, expense *db.Expense) error 
 			Model(&db.Expense{}).
 			Where("id = ? AND tenant_id = ?", expense.ID, defaultTenantID).
 			Updates(map[string]any{
-				"collaborator_id":     expense.CollaboratorID,
-				"expense_category_id": expense.ExpenseCategoryID,
-				"value_unit_id":       expense.ValueUnitID,
-				"amount":              expense.Amount,
-				"expense_date":        expense.ExpenseDate,
-				"description":         expense.Description,
-				"active":              expense.Active,
-				"updated_at":          expense.UpdatedAt,
+				"collaborator_id":          expense.CollaboratorID,
+				"expense_category_id":      expense.ExpenseCategoryID,
+				"value_unit_id":            expense.ValueUnitID,
+				"amount":                   expense.Amount,
+				"expense_date":             expense.ExpenseDate,
+				"description":              expense.Description,
+				"active":                   expense.Active,
+				"price_list_item_id":       expense.PriceListItemID,
+				"item_type":                expense.ItemType,
+				"item_description":         expense.ItemDescription,
+				"quantity":                 expense.Quantity,
+				"unit_price_brl":           expense.UnitPriceBRL,
+				"currency_code":            expense.CurrencyCode,
+				"gold_price_id":            expense.GoldPriceID,
+				"gold_brl_per_gram":        expense.GoldBRLPerGram,
+				"unit_price_amount":        expense.UnitPriceAmount,
+				"total_amount":             expense.TotalAmount,
+				"calculation_details_json": expense.CalculationDetailsJSON,
+				"updated_at":               expense.UpdatedAt,
 			}).Error; err != nil {
 			return err
 		}
@@ -112,6 +134,8 @@ func (r *gormRepository) FindByID(ctx context.Context, id string) (*db.Expense, 
 		Preload("Collaborator.Status").
 		Preload("ExpenseCategory").
 		Preload("ValueUnit").
+		Preload("PriceListItem").
+		Preload("GoldPrice").
 		First(&row, "id = ? AND tenant_id = ?", id, defaultTenantID).Error
 	if err != nil {
 		return nil, err
@@ -140,6 +164,38 @@ func (r *gormRepository) ExistsActiveReference(ctx context.Context, id string, t
 		return false, err
 	}
 	return count > 0, nil
+}
+
+func (r *gormRepository) FindActiveReferenceByCode(ctx context.Context, typ string, code string) (*db.ReferenceData, error) {
+	var row db.ReferenceData
+	err := r.db.WithContext(ctx).
+		First(&row, "tenant_id = ? AND type = ? AND code = ? AND active = ?", defaultTenantID, typ, code, true).Error
+	if err != nil {
+		return nil, err
+	}
+	return &row, nil
+}
+
+func (r *gormRepository) FindActivePriceListItemByID(ctx context.Context, id string) (*db.ExpensePriceListItem, error) {
+	var row db.ExpensePriceListItem
+	err := r.db.WithContext(ctx).
+		First(&row, "id = ? AND tenant_id = ? AND active = ?", id, defaultTenantID, true).Error
+	if err != nil {
+		return nil, err
+	}
+	return &row, nil
+}
+
+func (r *gormRepository) FindLatestActiveGoldPrice(ctx context.Context) (*db.GoldPrice, error) {
+	var row db.GoldPrice
+	err := r.db.WithContext(ctx).
+		Where("tenant_id = ? AND active = ?", defaultTenantID, true).
+		Order("price_date DESC, created_at DESC").
+		First(&row).Error
+	if err != nil {
+		return nil, err
+	}
+	return &row, nil
 }
 
 func formatDateForQuery(value time.Time) string {

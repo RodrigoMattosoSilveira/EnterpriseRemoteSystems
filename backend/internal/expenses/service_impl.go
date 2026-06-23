@@ -2,12 +2,15 @@ package expenses
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"strings"
 	"time"
 
 	"enterpriseremotesystems/backend/internal/db"
 	"enterpriseremotesystems/backend/internal/shared/ids"
 	"enterpriseremotesystems/backend/internal/tenants"
+	"gorm.io/gorm"
 )
 
 const defaultTenantID = tenants.DefaultTenantID
@@ -39,32 +42,30 @@ func (s *service) Create(ctx context.Context, req CreateExpenseRequest, actorUse
 		return nil, err
 	}
 
-	expenseDate, err := parseDate(req.ExpenseDate)
+	expenseDate, err := parseExpenseDate(req.ExpenseDate)
 	if err != nil {
-		return nil, ValidationError{Fields: map[string]string{"expenseDate": "Expense date must be YYYY-MM-DD"}}
+		return nil, err
 	}
-
 	if err := s.validateCollaborator(ctx, req.CollaboratorID); err != nil {
-		return nil, err
-	}
-	if err := s.validateReference(ctx, "expenseCategoryId", req.ExpenseCategoryID, "expense_category", "Expense category must be active reference data of type expense_category"); err != nil {
-		return nil, err
-	}
-	if err := s.validateReference(ctx, "valueUnitId", req.ValueUnitID, "value_unit", "Value unit must be active reference data of type value_unit"); err != nil {
 		return nil, err
 	}
 
 	now := time.Now().UTC()
 	expense := &db.Expense{
-		BaseModel:         db.BaseModel{ID: ids.New(), CreatedAt: now, UpdatedAt: now},
-		TenantID:          defaultTenantID,
-		CollaboratorID:    strings.TrimSpace(req.CollaboratorID),
-		ExpenseCategoryID: strings.TrimSpace(req.ExpenseCategoryID),
-		ValueUnitID:       strings.TrimSpace(req.ValueUnitID),
-		Amount:            req.Amount,
-		ExpenseDate:       expenseDate,
-		Description:       strings.TrimSpace(req.Description),
-		Active:            true,
+		BaseModel:      db.BaseModel{ID: ids.New(), CreatedAt: now, UpdatedAt: now},
+		TenantID:       defaultTenantID,
+		CollaboratorID: strings.TrimSpace(req.CollaboratorID),
+		ExpenseDate:    expenseDate,
+		Description:    strings.TrimSpace(req.Description),
+		Active:         true,
+	}
+
+	if usesPriceListCalculation(req.PriceListItemID, req.CurrencyCode, req.Quantity) {
+		if err := s.applyPriceListCalculation(ctx, expense, req.PriceListItemID, req.CurrencyCode, req.Quantity); err != nil {
+			return nil, err
+		}
+	} else if err := s.applyLegacyExpenseFields(ctx, expense, req.ExpenseCategoryID, req.ValueUnitID, req.Amount); err != nil {
+		return nil, err
 	}
 
 	if err := s.repo.Create(ctx, expense); err != nil {
@@ -99,28 +100,28 @@ func (s *service) Update(ctx context.Context, id string, req UpdateExpenseReques
 		return nil, ValidationError{Fields: map[string]string{"id": "Inactive expenses cannot be updated"}}
 	}
 
-	expenseDate, err := parseDate(req.ExpenseDate)
+	expenseDate, err := parseExpenseDate(req.ExpenseDate)
 	if err != nil {
-		return nil, ValidationError{Fields: map[string]string{"expenseDate": "Expense date must be YYYY-MM-DD"}}
+		return nil, err
 	}
 
 	if err := s.validateCollaborator(ctx, req.CollaboratorID); err != nil {
 		return nil, err
 	}
-	if err := s.validateReference(ctx, "expenseCategoryId", req.ExpenseCategoryID, "expense_category", "Expense category must be active reference data of type expense_category"); err != nil {
-		return nil, err
-	}
-	if err := s.validateReference(ctx, "valueUnitId", req.ValueUnitID, "value_unit", "Value unit must be active reference data of type value_unit"); err != nil {
-		return nil, err
-	}
 
 	existing.CollaboratorID = strings.TrimSpace(req.CollaboratorID)
-	existing.ExpenseCategoryID = strings.TrimSpace(req.ExpenseCategoryID)
-	existing.ValueUnitID = strings.TrimSpace(req.ValueUnitID)
-	existing.Amount = req.Amount
 	existing.ExpenseDate = expenseDate
 	existing.Description = strings.TrimSpace(req.Description)
 	existing.UpdatedAt = time.Now().UTC()
+	clearPriceListCalculation(existing)
+
+	if usesPriceListCalculation(req.PriceListItemID, req.CurrencyCode, req.Quantity) {
+		if err := s.applyPriceListCalculation(ctx, existing, req.PriceListItemID, req.CurrencyCode, req.Quantity); err != nil {
+			return nil, err
+		}
+	} else if err := s.applyLegacyExpenseFields(ctx, existing, req.ExpenseCategoryID, req.ValueUnitID, req.Amount); err != nil {
+		return nil, err
+	}
 
 	if err := s.repo.Update(ctx, existing); err != nil {
 		return nil, err
@@ -155,6 +156,131 @@ func (s *service) Deactivate(ctx context.Context, id string, actorUserID string)
 func (s *service) Delete(ctx context.Context, id string, actorUserID string) error {
 	_, err := s.Deactivate(ctx, id, actorUserID)
 	return err
+}
+
+func (s *service) applyLegacyExpenseFields(ctx context.Context, expense *db.Expense, expenseCategoryID string, valueUnitID string, amount float64) error {
+	if err := s.validateReference(ctx, "expenseCategoryId", expenseCategoryID, "expense_category", "Expense category must be active reference data of type expense_category"); err != nil {
+		return err
+	}
+	if err := s.validateReference(ctx, "valueUnitId", valueUnitID, "value_unit", "Value unit must be active reference data of type value_unit"); err != nil {
+		return err
+	}
+	expense.ExpenseCategoryID = strings.TrimSpace(expenseCategoryID)
+	expense.ValueUnitID = strings.TrimSpace(valueUnitID)
+	expense.Amount = amount
+	return nil
+}
+
+func (s *service) applyPriceListCalculation(ctx context.Context, expense *db.Expense, priceListItemID string, currencyCode string, quantity float64) error {
+	item, err := s.repo.FindActivePriceListItemByID(ctx, strings.TrimSpace(priceListItemID))
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return ValidationError{Fields: map[string]string{"priceListItemId": "Price list item must be active"}}
+		}
+		return err
+	}
+
+	categoryCode := "ADMINISTRATIVE"
+	if item.ItemType == itemTypeCanteen {
+		categoryCode = "CANTEEN"
+	}
+	category, err := s.repo.FindActiveReferenceByCode(ctx, "expense_category", categoryCode)
+	if err != nil {
+		return err
+	}
+
+	currency := normalizeCurrencyCode(currencyCode)
+	valueUnitCode := "BRL"
+	if currency == CurrencyCodeGoldGram {
+		valueUnitCode = "GOLD_GRAM"
+	}
+	valueUnit, err := s.repo.FindActiveReferenceByCode(ctx, "value_unit", valueUnitCode)
+	if err != nil {
+		return err
+	}
+
+	unitPriceAmount := item.UnitPriceBRL
+	var goldPriceID *string
+	var goldBRLPerGram *float64
+	var goldPriceDate string
+	if currency == CurrencyCodeGoldGram {
+		goldPrice, err := s.repo.FindLatestActiveGoldPrice(ctx)
+		if err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return ValidationError{Fields: map[string]string{"currencyCode": "A current gold price is required for GOLD_GRAM expenses"}}
+			}
+			return err
+		}
+		unitPriceAmount = item.UnitPriceBRL / goldPrice.BRLPerGram
+		goldPriceID = &goldPrice.ID
+		goldBRLPerGram = &goldPrice.BRLPerGram
+		goldPriceDate = formatDate(goldPrice.PriceDate)
+	}
+
+	totalAmount := unitPriceAmount * quantity
+	details, err := calculationDetailsJSON(item, currency, quantity, unitPriceAmount, totalAmount, goldPriceID, goldBRLPerGram, goldPriceDate)
+	if err != nil {
+		return err
+	}
+
+	itemID := item.ID
+	unitPriceBRL := item.UnitPriceBRL
+	expense.ExpenseCategoryID = category.ID
+	expense.ValueUnitID = valueUnit.ID
+	expense.Amount = totalAmount
+	expense.PriceListItemID = &itemID
+	expense.ItemType = item.ItemType
+	expense.ItemDescription = item.Description
+	expense.Quantity = &quantity
+	expense.UnitPriceBRL = &unitPriceBRL
+	expense.CurrencyCode = currency
+	expense.GoldPriceID = goldPriceID
+	expense.GoldBRLPerGram = goldBRLPerGram
+	expense.UnitPriceAmount = &unitPriceAmount
+	expense.TotalAmount = &totalAmount
+	expense.CalculationDetailsJSON = details
+	if strings.TrimSpace(expense.Description) == "" {
+		expense.Description = item.Description
+	}
+	return nil
+}
+
+func calculationDetailsJSON(item *db.ExpensePriceListItem, currency string, quantity float64, unitPriceAmount float64, totalAmount float64, goldPriceID *string, goldBRLPerGram *float64, goldPriceDate string) (string, error) {
+	details := map[string]any{
+		"priceListItemId": item.ID,
+		"itemType":        item.ItemType,
+		"itemCode":        item.Code,
+		"itemDescription": item.Description,
+		"unitPriceBrl":    item.UnitPriceBRL,
+		"currencyCode":    currency,
+		"quantity":        quantity,
+		"unitPriceAmount": unitPriceAmount,
+		"totalAmount":     totalAmount,
+	}
+	if goldPriceID != nil && goldBRLPerGram != nil {
+		details["goldPriceId"] = *goldPriceID
+		details["goldBrlPerGram"] = *goldBRLPerGram
+		details["goldPriceDate"] = goldPriceDate
+	}
+	payload, err := json.Marshal(details)
+	if err != nil {
+		return "", err
+	}
+	return string(payload), nil
+}
+
+func clearPriceListCalculation(expense *db.Expense) {
+	expense.PriceListItemID = nil
+	expense.ItemType = ""
+	expense.ItemDescription = ""
+	expense.Quantity = nil
+	expense.UnitPriceBRL = nil
+	expense.CurrencyCode = ""
+	expense.GoldPriceID = nil
+	expense.GoldBRLPerGram = nil
+	expense.UnitPriceAmount = nil
+	expense.TotalAmount = nil
+	expense.CalculationDetailsJSON = ""
 }
 
 func (s *service) validateCollaborator(ctx context.Context, collaboratorID string) error {
@@ -200,6 +326,9 @@ func normalizeListFilter(filter ExpenseListFilter) (normalizedExpenseListFilter,
 		CollaboratorID:    strings.TrimSpace(filter.CollaboratorID),
 		ExpenseCategoryID: strings.TrimSpace(filter.ExpenseCategoryID),
 		ValueUnitID:       strings.TrimSpace(filter.ValueUnitID),
+		ItemType:          normalizeItemType(filter.ItemType),
+		PriceListItemID:   strings.TrimSpace(filter.PriceListItemID),
+		CurrencyCode:      normalizeCurrencyCode(filter.CurrencyCode),
 		IncludeInactive:   filter.IncludeInactive,
 		Page:              page,
 		PageSize:          pageSize,
@@ -220,6 +349,14 @@ func normalizeListFilter(filter ExpenseListFilter) (normalizedExpenseListFilter,
 		out.DateTo = &value
 	}
 	return out, nil
+}
+
+func parseExpenseDate(value string) (time.Time, error) {
+	expenseDate, err := parseDate(value)
+	if err != nil {
+		return time.Time{}, ValidationError{Fields: map[string]string{"expenseDate": "Expense date must be YYYY-MM-DD"}}
+	}
+	return expenseDate, nil
 }
 
 func isActiveCollaborator(row db.CollaboratorJourney) bool {
