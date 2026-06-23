@@ -123,6 +123,14 @@ func SeedReferenceData(database *gorm.DB) error {
 			Description: "Cargo expense", Active: true, SortOrder: 30,
 		},
 		{
+			BaseModel:   BaseModel{ID: "ref-expense-category-administrative", CreatedAt: now, UpdatedAt: now},
+			TenantID:    DefaultTenantID,
+			Type:        "expense_category",
+			Code:        "ADMINISTRATIVE",
+			Label:       "Administrative",
+			Description: "Administrative price-list expense", Active: true, SortOrder: 35,
+		},
+		{
 			BaseModel:   BaseModel{ID: "ref-expense-category-other", CreatedAt: now, UpdatedAt: now},
 			TenantID:    DefaultTenantID,
 			Type:        "expense_category",

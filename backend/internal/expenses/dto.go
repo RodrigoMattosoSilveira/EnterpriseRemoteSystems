@@ -1,20 +1,31 @@
 package expenses
 
 type ExpenseDTO struct {
-	ID                   string  `json:"id"`
-	TenantID             string  `json:"tenantId"`
-	CollaboratorID       string  `json:"collaboratorId"`
-	CollaboratorLabel    string  `json:"collaboratorLabel,omitempty"`
-	ExpenseCategoryID    string  `json:"expenseCategoryId"`
-	ExpenseCategoryLabel string  `json:"expenseCategoryLabel,omitempty"`
-	ValueUnitID          string  `json:"valueUnitId"`
-	ValueUnitLabel       string  `json:"valueUnitLabel,omitempty"`
-	Amount               float64 `json:"amount"`
-	ExpenseDate          string  `json:"expenseDate"`
-	Description          string  `json:"description,omitempty"`
-	Active               bool    `json:"active"`
-	CreatedAt            string  `json:"createdAt"`
-	UpdatedAt            string  `json:"updatedAt"`
+	ID                     string   `json:"id"`
+	TenantID               string   `json:"tenantId"`
+	CollaboratorID         string   `json:"collaboratorId"`
+	CollaboratorLabel      string   `json:"collaboratorLabel,omitempty"`
+	ExpenseCategoryID      string   `json:"expenseCategoryId"`
+	ExpenseCategoryLabel   string   `json:"expenseCategoryLabel,omitempty"`
+	ValueUnitID            string   `json:"valueUnitId"`
+	ValueUnitLabel         string   `json:"valueUnitLabel,omitempty"`
+	Amount                 float64  `json:"amount"`
+	ExpenseDate            string   `json:"expenseDate"`
+	Description            string   `json:"description,omitempty"`
+	Active                 bool     `json:"active"`
+	PriceListItemID        *string  `json:"priceListItemId,omitempty"`
+	ItemType               string   `json:"itemType,omitempty"`
+	ItemDescription        string   `json:"itemDescription,omitempty"`
+	Quantity               *float64 `json:"quantity,omitempty"`
+	UnitPriceBRL           *float64 `json:"unitPriceBrl,omitempty"`
+	CurrencyCode           string   `json:"currencyCode,omitempty"`
+	GoldPriceID            *string  `json:"goldPriceId,omitempty"`
+	GoldBRLPerGram         *float64 `json:"goldBrlPerGram,omitempty"`
+	UnitPriceAmount        *float64 `json:"unitPriceAmount,omitempty"`
+	TotalAmount            *float64 `json:"totalAmount,omitempty"`
+	CalculationDetailsJSON string   `json:"calculationDetailsJson,omitempty"`
+	CreatedAt              string   `json:"createdAt"`
+	UpdatedAt              string   `json:"updatedAt"`
 }
 
 type CreateExpenseRequest struct {
@@ -24,6 +35,9 @@ type CreateExpenseRequest struct {
 	Amount            float64 `json:"amount"`
 	ExpenseDate       string  `json:"expenseDate"`
 	Description       string  `json:"description"`
+	PriceListItemID   string  `json:"priceListItemId"`
+	CurrencyCode      string  `json:"currencyCode"`
+	Quantity          float64 `json:"quantity"`
 }
 
 type UpdateExpenseRequest struct {
@@ -33,12 +47,18 @@ type UpdateExpenseRequest struct {
 	Amount            float64 `json:"amount"`
 	ExpenseDate       string  `json:"expenseDate"`
 	Description       string  `json:"description"`
+	PriceListItemID   string  `json:"priceListItemId"`
+	CurrencyCode      string  `json:"currencyCode"`
+	Quantity          float64 `json:"quantity"`
 }
 
 type ExpenseListFilter struct {
 	CollaboratorID    string `query:"collaboratorId"`
 	ExpenseCategoryID string `query:"expenseCategoryId"`
 	ValueUnitID       string `query:"valueUnitId"`
+	ItemType          string `query:"itemType"`
+	PriceListItemID   string `query:"priceListItemId"`
+	CurrencyCode      string `query:"currencyCode"`
 	DateFrom          string `query:"dateFrom"`
 	DateTo            string `query:"dateTo"`
 	IncludeInactive   bool   `query:"includeInactive"`
