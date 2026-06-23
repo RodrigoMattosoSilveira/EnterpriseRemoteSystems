@@ -14,6 +14,7 @@ import (
 	httpserver "enterpriseremotesystems/backend/internal/http"
 	"enterpriseremotesystems/backend/internal/http/routes"
 	"enterpriseremotesystems/backend/internal/people"
+	"enterpriseremotesystems/backend/internal/pricelists"
 	"enterpriseremotesystems/backend/internal/referencedata"
 	"enterpriseremotesystems/backend/internal/tenants"
 	"enterpriseremotesystems/backend/internal/workperiodassignments"
@@ -77,6 +78,10 @@ func Bootstrap(cfg Config) (*fiber.App, func(), error) {
 	expenseSvc := expenses.NewService(expenseRepo)
 	expenseHandler := expenses.NewHandler(expenseSvc)
 
+	priceListRepo := pricelists.NewRepository(database)
+	priceListSvc := pricelists.NewService(priceListRepo)
+	priceListHandler := pricelists.NewHandler(priceListSvc)
+
 	currentAccountRepo := currentaccounts.NewRepository(database)
 	currentAccountSvc := currentaccounts.NewService(currentAccountRepo, cfg.LedgerCorrectionKey, cfg.LedgerSettlementKey)
 	actorStore := authz.NewGORMStore(database)
@@ -107,6 +112,7 @@ func Bootstrap(cfg Config) (*fiber.App, func(), error) {
 		PeopleHandler:               peopleHandler,
 		CollaboratorHandler:         collaboratorHandler,
 		ExpenseHandler:              expenseHandler,
+		PriceListHandler:            priceListHandler,
 		CurrentAccountHandler:       currentAccountHandler,
 		WorkPeriodHandler:           workPeriodHandler,
 		WorkPeriodAssignmentHandler: workPeriodAssignmentHandler,

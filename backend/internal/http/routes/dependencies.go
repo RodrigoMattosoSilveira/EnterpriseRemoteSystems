@@ -8,6 +8,7 @@ import (
 	"enterpriseremotesystems/backend/internal/expenses"
 	"enterpriseremotesystems/backend/internal/goldproduction"
 	"enterpriseremotesystems/backend/internal/people"
+	"enterpriseremotesystems/backend/internal/pricelists"
 	"enterpriseremotesystems/backend/internal/referencedata"
 	"enterpriseremotesystems/backend/internal/tenants"
 	"enterpriseremotesystems/backend/internal/workperiodassignments"
@@ -23,6 +24,7 @@ type Dependencies struct {
 	PeopleHandler               *people.Handler
 	CollaboratorHandler         *collaborators.Handler
 	ExpenseHandler              *expenses.Handler
+	PriceListHandler            *pricelists.Handler
 	CurrentAccountHandler       *currentaccounts.Handler
 	WorkPeriodHandler           *workperiods.Handler
 	WorkPeriodAssignmentHandler *workperiodassignments.Handler
