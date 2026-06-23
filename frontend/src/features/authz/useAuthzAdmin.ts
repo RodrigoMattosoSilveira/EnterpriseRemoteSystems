@@ -3,12 +3,14 @@ import {
   createAuthzActor,
   grantAuthzActorRole,
   listAuthzActors,
+  listAuthzAuditLogs,
   listAuthzPermissions,
   listAuthzRoles,
   revokeAuthzActorRoleGrant,
 } from "../../api/authz.api";
 import type {
   AuthzAdminRequestActor,
+  AuthzAuditLogFilters,
   CreateAuthzActorInput,
   GrantAuthzActorRoleInput,
 } from "../../types/authz";
@@ -33,6 +35,18 @@ export function useAuthzPermissions(actor: AuthzAdminRequestActor) {
   return useQuery({
     queryKey: [...authzQueryKey(actor), "permissions"],
     queryFn: () => listAuthzPermissions(actor),
+    enabled: enabled(actor),
+  });
+}
+
+
+export function useAuthzAuditLogs(
+  actor: AuthzAdminRequestActor,
+  filters: AuthzAuditLogFilters,
+) {
+  return useQuery({
+    queryKey: [...authzQueryKey(actor), "audit-logs", filters],
+    queryFn: () => listAuthzAuditLogs(actor, filters),
     enabled: enabled(actor),
   });
 }
