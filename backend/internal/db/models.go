@@ -158,12 +158,12 @@ type ExpensePriceListItem struct {
 type GoldPrice struct {
 	BaseModel
 
-	TenantID   string    `gorm:"type:text;not null;default:default;uniqueIndex:ux_gold_prices_tenant_price_date,priority:1;index:idx_gold_prices_tenant_active_date,priority:1" json:"tenantId"`
-	PriceDate  time.Time `gorm:"type:date;not null;uniqueIndex:ux_gold_prices_tenant_price_date,priority:2;index:idx_gold_prices_tenant_active_date,priority:3" json:"priceDate"`
-	BRLPerGram float64   `gorm:"column:brl_per_gram;not null" json:"brlPerGram"`
-	RecordedBy string    `gorm:"type:text;not null" json:"recordedBy"`
-	Notes      string    `gorm:"type:text" json:"notes,omitempty"`
-	Active     bool      `gorm:"not null;default:true;index:idx_gold_prices_tenant_active_date,priority:2" json:"active"`
+	TenantID   string  `gorm:"type:text;not null;default:default;index:idx_gold_prices_tenant_active_date,priority:1" json:"tenantId"`
+	PriceDate  string  `gorm:"type:date;not null;index:idx_gold_prices_tenant_active_date,priority:3" json:"priceDate"`
+	BRLPerGram float64 `gorm:"column:brl_per_gram;not null" json:"brlPerGram"`
+	RecordedBy string  `gorm:"type:text;not null" json:"recordedBy"`
+	Notes      string  `gorm:"type:text" json:"notes,omitempty"`
+	Active     bool    `gorm:"not null;default:true;index:idx_gold_prices_tenant_active_date,priority:2" json:"active"`
 
 	Tenant   Tenant    `gorm:"foreignKey:TenantID;constraint:OnUpdate:Restrict,OnDelete:Restrict;" json:"tenant,omitempty"`
 	Expenses []Expense `gorm:"foreignKey:GoldPriceID" json:"expenses,omitempty"`

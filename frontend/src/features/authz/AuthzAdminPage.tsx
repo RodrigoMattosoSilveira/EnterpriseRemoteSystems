@@ -134,6 +134,9 @@ export function AuthzAdminPage() {
             <Link className="text-sm font-semibold text-gray-700 underline" to="/admin/reference-data">
               Reference Data
             </Link>
+            <Link className="text-sm font-semibold text-gray-700 underline" to="/admin/gold-prices">
+              Gold Prices
+            </Link>
             <Link className="text-sm font-semibold text-gray-700 underline" to="/people">
               Back to People
             </Link>

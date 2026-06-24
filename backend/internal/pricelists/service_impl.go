@@ -2,11 +2,13 @@ package pricelists
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"time"
 
 	"enterpriseremotesystems/backend/internal/db"
 	"enterpriseremotesystems/backend/internal/shared/ids"
+	"gorm.io/gorm"
 )
 
 type service struct{ repo Repository }
@@ -106,20 +108,36 @@ func (s *service) CreateGoldPrice(ctx context.Context, req CreateGoldPriceReques
 	if err != nil {
 		return nil, ValidationError{Fields: map[string]string{"priceDate": "Price date must be YYYY-MM-DD"}}
 	}
+	storedPriceDate := formatDate(priceDate)
 	now := time.Now().UTC()
 	price := &db.GoldPrice{
 		BaseModel:  db.BaseModel{ID: ids.New(), CreatedAt: now, UpdatedAt: now},
 		TenantID:   defaultTenantID,
-		PriceDate:  priceDate,
+		PriceDate:  storedPriceDate,
 		BRLPerGram: req.BRLPerGram,
 		RecordedBy: strings.TrimSpace(req.RecordedBy),
 		Notes:      strings.TrimSpace(req.Notes),
 		Active:     true,
 	}
-	if err := s.repo.CreateGoldPrice(ctx, price); err != nil {
+
+	existing, err := s.repo.FindActiveGoldPriceByDate(ctx, storedPriceDate)
+	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, err
 	}
-	return ptr(ToGoldPriceDTO(*price)), nil
+	if existing == nil {
+		if err := s.repo.CreateGoldPrice(ctx, price); err != nil {
+			return nil, err
+		}
+		return ptr(ToGoldPriceDTO(*price)), nil
+	}
+
+	existing.UpdatedAt = now
+	if err := s.repo.ReplaceActiveGoldPrice(ctx, existing, price); err != nil {
+		return nil, err
+	}
+	dto := ToGoldPriceDTO(*price)
+	dto.SupersededGoldPriceID = existing.ID
+	return &dto, nil
 }
 
 func (s *service) LatestGoldPrice(ctx context.Context) (*GoldPriceDTO, error) {

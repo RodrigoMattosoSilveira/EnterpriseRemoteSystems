@@ -70,6 +70,43 @@ func (r *gormRepository) CreateGoldPrice(ctx context.Context, price *db.GoldPric
 	return r.db.WithContext(ctx).Create(price).Error
 }
 
+func (r *gormRepository) FindActiveGoldPriceByDate(ctx context.Context, priceDate string) (*db.GoldPrice, error) {
+	var row db.GoldPrice
+	result := r.db.WithContext(ctx).
+		Where("tenant_id = ? AND price_date = ? AND active = ?", defaultTenantID, strings.TrimSpace(priceDate), true).
+		Order("created_at DESC").
+		Limit(1).
+		Find(&row)
+	if result.Error != nil {
+		return nil, result.Error
+	}
+	if result.RowsAffected == 0 {
+		return nil, gorm.ErrRecordNotFound
+	}
+	return &row, nil
+}
+
+func (r *gormRepository) ReplaceActiveGoldPrice(ctx context.Context, _ *db.GoldPrice, replacement *db.GoldPrice) error {
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		// Preserve audit history by retaining the superseded rows, but satisfy the
+		// one-active-price-per-tenant/date constraint by deactivating current rows
+		// before inserting the replacement active row. Deactivate by tenant/date so
+		// old test/dev databases with more than one active row for that date are
+		// repaired by the same operation.
+		if err := tx.Model(&db.GoldPrice{}).
+			Where("tenant_id = ? AND price_date = ? AND active = ?", defaultTenantID, replacement.PriceDate, true).
+			Updates(map[string]any{
+				"active":     false,
+				"updated_at": replacement.UpdatedAt,
+			}).Error; err != nil {
+			return err
+		}
+
+		replacement.Active = true
+		return tx.Create(replacement).Error
+	})
+}
+
 func (r *gormRepository) FindGoldPriceByID(ctx context.Context, id string) (*db.GoldPrice, error) {
 	var row db.GoldPrice
 	err := r.db.WithContext(ctx).First(&row, "id = ? AND tenant_id = ?", strings.TrimSpace(id), defaultTenantID).Error

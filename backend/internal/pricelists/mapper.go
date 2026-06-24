@@ -36,7 +36,7 @@ func ToGoldPriceDTO(row db.GoldPrice) GoldPriceDTO {
 	return GoldPriceDTO{
 		ID:         row.ID,
 		TenantID:   row.TenantID,
-		PriceDate:  formatDate(row.PriceDate),
+		PriceDate:  formatStoredDate(row.PriceDate),
 		BRLPerGram: row.BRLPerGram,
 		RecordedBy: row.RecordedBy,
 		Notes:      row.Notes,
@@ -63,4 +63,21 @@ func formatDate(value time.Time) string {
 		return ""
 	}
 	return value.Format(dateLayout)
+}
+
+func formatStoredDate(value string) string {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
+		return ""
+	}
+	if parsed, err := time.Parse(dateLayout, trimmed); err == nil {
+		return parsed.Format(dateLayout)
+	}
+	if len(trimmed) >= len(dateLayout) {
+		prefix := trimmed[:len(dateLayout)]
+		if parsed, err := time.Parse(dateLayout, prefix); err == nil {
+			return parsed.Format(dateLayout)
+		}
+	}
+	return trimmed
 }

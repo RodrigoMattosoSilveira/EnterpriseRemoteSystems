@@ -21,6 +21,7 @@ import { OutstandingReceiptsPage } from "../features/receipts/OutstandingReceipt
 import { AuthzAdminPage } from "../features/authz/AuthzAdminPage";
 import { AuditLogViewerPage } from "../features/authz/AuditLogViewerPage";
 import { SecondPersonApprovalSettingsPage } from "../features/current-accounts/SecondPersonApprovalSettingsPage";
+import { GoldPricesPage } from "../features/gold-prices/GoldPricesPage";
 
 function RouteErrorPage() {
   const error = useRouteError();
@@ -80,6 +81,7 @@ export const router = createBrowserRouter([
       { path: "admin/authorization", element: <AuthzAdminPage /> },
       { path: "admin/audit-logs", element: <AuditLogViewerPage /> },
       { path: "admin/current-account-settings", element: <SecondPersonApprovalSettingsPage /> },
+      { path: "admin/gold-prices", element: <GoldPricesPage /> },
       { path: "*", element: <NotFoundPage /> },
     ],
   },
