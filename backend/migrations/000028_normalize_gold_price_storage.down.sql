@@ -1,0 +1,1 @@
+-- No-op. The up migration only normalizes stored values to the API's canonical shape.
