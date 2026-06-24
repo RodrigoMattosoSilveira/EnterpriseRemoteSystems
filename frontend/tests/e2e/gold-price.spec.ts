@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 
 test('user can navigate to gold price recording & record a new gold price', async ({ page }) => {
-  await page.goto('http://localhost:5173/');
+  await page.goto('/people');
   await expect(page.getByText('Permanent identity records')).toBeVisible();
   await expect(page.getByRole('link', { name: 'Admin' })).toBeVisible();
   await page.getByRole('link', { name: 'Admin' }).click();
