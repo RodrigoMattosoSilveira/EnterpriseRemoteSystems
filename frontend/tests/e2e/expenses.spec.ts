@@ -13,7 +13,7 @@ const EXPENSE_CATEGORY_CARGO_ID = "ref-expense-category-cargo";
 const VALUE_UNIT_BRL_ID = "ref-value-unit-brl";
 const VALUE_UNIT_GOLD_GRAM_ID = "ref-value-unit-gold-gram";
 
-const EXPENSE_AMOUNT = "123.45";
+const EXPENSE_QUANTITY = "3";
 
 test.beforeEach(async ({ page }) => {
   await seedBrowserAuthz(page);
@@ -32,6 +32,12 @@ test("user can create an Expense for an active Collaborator", async ({
   });
 
   const collaborator = await createCollaborator(request, person.id);
+  const item = await createPriceListItem(request, {
+    itemType: "CANTEEN",
+    code: `E2E_CANTEEN_${suffix}`,
+    description: `E2E canteen snack ${suffix}`,
+    unitPriceBrl: 12.25,
+  });
 
   await page.goto("/expenses/new");
 
@@ -41,14 +47,15 @@ test("user can create an Expense for an active Collaborator", async ({
 
   await expect(page.getByLabel("Collaborator *")).toContainText(personNickname);
   await page.getByLabel("Collaborator *").selectOption(collaborator.id);
+  await page.getByLabel("Category *").selectOption("CANTEEN");
+  await page.getByLabel("Item Description *").selectOption(item.id);
+  await page.getByLabel("Currency *").selectOption("BRL");
+  await page.getByLabel("Quantity *").fill(EXPENSE_QUANTITY);
+  await expect(page.getByText("Calculation preview")).toBeVisible();
+  await expect(page.getByText("BRL price list").first()).toBeVisible();
   await page
-    .getByLabel("Expense Category *")
-    .selectOption(EXPENSE_CATEGORY_CANTEEN_ID);
-  await page.getByLabel("Value Unit *").selectOption(VALUE_UNIT_BRL_ID);
-  await page.getByLabel("Amount *").fill(EXPENSE_AMOUNT);
-  await page
-    .getByLabel("Description")
-    .fill("Created by Playwright expense flow");
+    .getByLabel("Notes")
+    .fill("Created by Playwright price-list expense flow");
 
   await page.getByRole("button", { name: "Create Expense" }).click();
 
@@ -56,44 +63,116 @@ test("user can create an Expense for an active Collaborator", async ({
   await expect(page.getByRole("status")).toContainText(
     `Expense created for ${personNickname}.`,
   );
- await expect(
-  page.getByRole("heading", {
-    name: "Expenses",
-    exact: true,
-  }),
-).toBeVisible();
+  await expect(
+    page.getByRole("heading", {
+      name: "Expenses",
+      exact: true,
+    }),
+  ).toBeVisible();
 
-const expensesResponse = await request.get(
-  e2eApiUrl(`/api/v1/expenses?collaboratorId=${encodeURIComponent(collaborator.id)}&pageSize=100`),
-  { headers: authzHeaders() },
-);
+  const expensesResponse = await request.get(
+    e2eApiUrl(
+      `/api/v1/expenses?collaboratorId=${encodeURIComponent(collaborator.id)}&pageSize=100`,
+    ),
+    { headers: authzHeaders() },
+  );
 
-expect(expensesResponse.ok()).toBeTruthy();
+  expect(expensesResponse.ok()).toBeTruthy();
 
-const expensesBody =
-  (await expensesResponse.json()) as ApiEnvelope<ExpenseListResponse>;
+  const expensesBody =
+    (await expensesResponse.json()) as ApiEnvelope<ExpenseListResponse>;
 
-const createdExpense = expensesBody.data?.items.find(
-  (expense) =>
-    expense.description === "Created by Playwright expense flow",
-);
+  const createdExpense = expensesBody.data?.items.find(
+    (expense) =>
+      expense.description === "Created by Playwright price-list expense flow",
+  );
 
-expect(createdExpense).toBeDefined();
+  expect(createdExpense).toBeDefined();
 
-await page.goto(`/expenses/${createdExpense!.id}`);
+  await page.goto(`/expenses/${createdExpense!.id}`);
 
-await expect(page.getByText(personNickname, { exact: true })).toBeVisible();
-await expect(
-  page.getByRole("heading", {
-    name: "Canteen",
-    exact: true,
-  }),
-).toBeVisible();
-await expect(
-  page.getByText("Created by Playwright expense flow", {
-    exact: true,
-  }),
-).toBeVisible();
+  await expect(page.getByText(personNickname, { exact: true })).toBeVisible();
+  await expect(
+    page.getByRole("heading", {
+      name: "Canteen",
+      exact: true,
+    }),
+  ).toBeVisible();
+  await expect(
+    page.getByText("Created by Playwright price-list expense flow", {
+      exact: true,
+    }),
+  ).toBeVisible();
+  expect(createdExpense?.priceListItemId).toBe(item.id);
+  expect(createdExpense?.itemDescription).toBe(item.description);
+  expect(createdExpense?.quantity).toBe(Number(EXPENSE_QUANTITY));
+  expect(createdExpense?.currencyCode).toBe("BRL");
+});
+
+test("user can create a grams-of-gold Expense from the latest gold price", async ({
+  page,
+  request,
+}) => {
+  const suffix = uniqueSuffix();
+  const personNickname = `GoldExpense${suffix}`;
+  const person = await createCompletePerson(request, {
+    suffix,
+    firstName: `GoldExpenseE2E${suffix}`,
+    nickname: personNickname,
+  });
+  const collaborator = await createCollaborator(request, person.id);
+  const item = await createPriceListItem(request, {
+    itemType: "ADMINISTRATIVE",
+    code: `E2E_ADMIN_${suffix}`,
+    description: `E2E admin supply ${suffix}`,
+    unitPriceBrl: 137.28,
+  });
+  await createGoldPrice(request, {
+    priceDate: "2099-06-25",
+    brlPerGram: 137.28,
+    recordedBy: "bootstrap-admin",
+    notes: "E2E latest gold price for expense conversion",
+  });
+
+  await page.goto("/expenses/new");
+
+  await page.getByLabel("Collaborator *").selectOption(collaborator.id);
+  await page.getByLabel("Category *").selectOption("ADMINISTRATIVE");
+  await page.getByLabel("Item Description *").selectOption(item.id);
+  await page.getByLabel("Currency *").selectOption("GOLD_GRAM");
+  await page.getByLabel("Quantity *").fill("2");
+  await expect(page.getByText("Latest gold price source")).toContainText(
+    "137,28",
+  );
+  await expect(page.getByText("2 g gold")).toBeVisible();
+  await page
+    .getByLabel("Notes")
+    .fill("Gold conversion expense from Playwright");
+
+  await page.getByRole("button", { name: "Create Expense" }).click();
+
+  await expect(page).toHaveURL(/\/expenses$/);
+
+  const expensesResponse = await request.get(
+    e2eApiUrl(
+      `/api/v1/expenses?collaboratorId=${encodeURIComponent(collaborator.id)}&pageSize=100`,
+    ),
+    { headers: authzHeaders() },
+  );
+  expect(expensesResponse.ok()).toBeTruthy();
+  const expensesBody =
+    (await expensesResponse.json()) as ApiEnvelope<ExpenseListResponse>;
+  const createdExpense = expensesBody.data?.items.find(
+    (expense) =>
+      expense.description === "Gold conversion expense from Playwright",
+  );
+
+  expect(createdExpense).toBeDefined();
+  expect(createdExpense?.priceListItemId).toBe(item.id);
+  expect(createdExpense?.currencyCode).toBe("GOLD_GRAM");
+  expect(createdExpense?.goldBrlPerGram).toBe(137.28);
+  expect(createdExpense?.unitPriceAmount).toBe(1);
+  expect(createdExpense?.totalAmount).toBe(2);
 });
 
 test("user can open an Expense detail from the list", async ({
@@ -124,7 +203,9 @@ test("user can open an Expense detail from the list", async ({
   await expect(page).toHaveURL(new RegExp(`/expenses/${expense.id}$`));
   await expect(page.getByRole("heading", { name: "Flight" })).toBeVisible();
   await expect(page.getByText(personNickname, { exact: true })).toBeVisible();
-  await expect(page.getByText(`Gold-denominated flight expense ${suffix}`)).toBeVisible();
+  await expect(
+    page.getByText(`Gold-denominated flight expense ${suffix}`),
+  ).toBeVisible();
   await expect(page.getByText("Gold Gram")).toBeVisible();
 });
 
@@ -165,8 +246,10 @@ test("expenses API supports filters and pagination from the browser test flow", 
   });
 
   const categoryResponse = await request.get(
-    e2eApiUrl(`/api/v1/expenses?collaboratorId=${collaborator.id}&expenseCategoryId=${EXPENSE_CATEGORY_FLIGHT_ID}&valueUnitId=${VALUE_UNIT_GOLD_GRAM_ID}`),
-  { headers: authzHeaders() },
+    e2eApiUrl(
+      `/api/v1/expenses?collaboratorId=${collaborator.id}&expenseCategoryId=${EXPENSE_CATEGORY_FLIGHT_ID}&valueUnitId=${VALUE_UNIT_GOLD_GRAM_ID}`,
+    ),
+    { headers: authzHeaders() },
   );
   expect(categoryResponse.ok()).toBeTruthy();
   const categoryBody =
@@ -176,8 +259,10 @@ test("expenses API supports filters and pagination from the browser test flow", 
   expect(categoryBody.data?.items[0]?.id).toBe(flight.id);
 
   const dateResponse = await request.get(
-    e2eApiUrl(`/api/v1/expenses?collaboratorId=${collaborator.id}&dateFrom=2026-06-01&dateTo=2026-06-01`),
-  { headers: authzHeaders() },
+    e2eApiUrl(
+      `/api/v1/expenses?collaboratorId=${collaborator.id}&dateFrom=2026-06-01&dateTo=2026-06-01`,
+    ),
+    { headers: authzHeaders() },
   );
   expect(dateResponse.ok()).toBeTruthy();
   const dateBody =
@@ -186,8 +271,10 @@ test("expenses API supports filters and pagination from the browser test flow", 
   expect(dateBody.data?.items[0]?.id).toBe(canteen.id);
 
   const pageOneResponse = await request.get(
-    e2eApiUrl(`/api/v1/expenses?collaboratorId=${collaborator.id}&page=1&pageSize=2`),
-  { headers: authzHeaders() },
+    e2eApiUrl(
+      `/api/v1/expenses?collaboratorId=${collaborator.id}&page=1&pageSize=2`,
+    ),
+    { headers: authzHeaders() },
   );
   expect(pageOneResponse.ok()).toBeTruthy();
   const pageOneBody =
@@ -198,8 +285,10 @@ test("expenses API supports filters and pagination from the browser test flow", 
   expect(pageOneBody.data?.items).toHaveLength(2);
 
   const pageTwoResponse = await request.get(
-    e2eApiUrl(`/api/v1/expenses?collaboratorId=${collaborator.id}&page=2&pageSize=2`),
-  { headers: authzHeaders() },
+    e2eApiUrl(
+      `/api/v1/expenses?collaboratorId=${collaborator.id}&page=2&pageSize=2`,
+    ),
+    { headers: authzHeaders() },
   );
   expect(pageTwoResponse.ok()).toBeTruthy();
   const pageTwoBody =
@@ -228,17 +317,20 @@ test("expenses API supports update and soft delete from the browser test flow", 
     description: `Original expense ${suffix}`,
   });
 
-  const updateResponse = await request.patch(e2eApiUrl(`/api/v1/expenses/${expense.id}`), {
-    headers: authzHeaders(),
-    data: {
-      collaboratorId: collaborator.id,
-      expenseCategoryId: EXPENSE_CATEGORY_FLIGHT_ID,
-      valueUnitId: VALUE_UNIT_GOLD_GRAM_ID,
-      amount: 3.75,
-      expenseDate: "2026-06-04",
-      description: `Updated expense ${suffix}`,
+  const updateResponse = await request.patch(
+    e2eApiUrl(`/api/v1/expenses/${expense.id}`),
+    {
+      headers: authzHeaders(),
+      data: {
+        collaboratorId: collaborator.id,
+        expenseCategoryId: EXPENSE_CATEGORY_FLIGHT_ID,
+        valueUnitId: VALUE_UNIT_GOLD_GRAM_ID,
+        amount: 3.75,
+        expenseDate: "2026-06-04",
+        description: `Updated expense ${suffix}`,
+      },
     },
-  });
+  );
   expect(updateResponse.ok()).toBeTruthy();
   const updateBody = (await updateResponse.json()) as ApiEnvelope<Expense>;
   expect(updateBody.data?.expenseCategoryId).toBe(EXPENSE_CATEGORY_FLIGHT_ID);
@@ -246,14 +338,17 @@ test("expenses API supports update and soft delete from the browser test flow", 
   expect(updateBody.data?.amount).toBe(3.75);
   expect(updateBody.data?.expenseDate).toBe("2026-06-04");
 
-  const deleteResponse = await request.delete(e2eApiUrl(`/api/v1/expenses/${expense.id}`), {
-    headers: authzHeaders(),
-  });
+  const deleteResponse = await request.delete(
+    e2eApiUrl(`/api/v1/expenses/${expense.id}`),
+    {
+      headers: authzHeaders(),
+    },
+  );
   expect(deleteResponse.status()).toBe(204);
 
   const defaultListResponse = await request.get(
     e2eApiUrl(`/api/v1/expenses?collaboratorId=${collaborator.id}`),
-  { headers: authzHeaders() },
+    { headers: authzHeaders() },
   );
   expect(defaultListResponse.ok()).toBeTruthy();
   const defaultListBody =
@@ -263,8 +358,10 @@ test("expenses API supports update and soft delete from the browser test flow", 
   ).toBe(false);
 
   const inactiveListResponse = await request.get(
-    e2eApiUrl(`/api/v1/expenses?collaboratorId=${collaborator.id}&includeInactive=true`),
-  { headers: authzHeaders() },
+    e2eApiUrl(
+      `/api/v1/expenses?collaboratorId=${collaborator.id}&includeInactive=true`,
+    ),
+    { headers: authzHeaders() },
   );
   expect(inactiveListResponse.ok()).toBeTruthy();
   const inactiveListBody =
@@ -349,6 +446,13 @@ type Expense = {
   expenseDate: string;
   description?: string;
   active: boolean;
+  priceListItemId?: string;
+  itemDescription?: string;
+  currencyCode?: string;
+  quantity?: number;
+  goldBrlPerGram?: number;
+  unitPriceAmount?: number;
+  totalAmount?: number;
 };
 
 type ExpenseListResponse = {
@@ -365,6 +469,24 @@ type ExpensePayload = {
   amount: number;
   expenseDate: string;
   description: string;
+};
+
+type PriceListItemPayload = {
+  itemType: "CANTEEN" | "ADMINISTRATIVE";
+  code: string;
+  description: string;
+  unitPriceBrl: number;
+};
+
+type PriceListItem = PriceListItemPayload & {
+  id: string;
+};
+
+type GoldPricePayload = {
+  priceDate: string;
+  brlPerGram: number;
+  recordedBy: string;
+  notes: string;
 };
 
 async function createCompletePerson(
@@ -422,6 +544,49 @@ async function createCollaborator(
     );
   }
   return body.data;
+}
+
+async function createPriceListItem(
+  api: APIRequestContext,
+  payload: PriceListItemPayload,
+): Promise<PriceListItem> {
+  const response = await api.post(e2eApiUrl("/api/v1/price-list-items"), {
+    headers: authzHeaders(),
+    data: {
+      ...payload,
+      sortOrder: 10,
+    },
+  });
+
+  if (!response.ok()) {
+    throw new Error(
+      `Create Price List Item failed at ${response.url()}: ${response.status()} ${await response.text()}`,
+    );
+  }
+
+  const body = (await response.json()) as ApiEnvelope<PriceListItem>;
+  if (!body.data) {
+    throw new Error(
+      "Create Price List Item failed: response did not include data",
+    );
+  }
+  return body.data;
+}
+
+async function createGoldPrice(
+  api: APIRequestContext,
+  payload: GoldPricePayload,
+) {
+  const response = await api.post(e2eApiUrl("/api/v1/gold-prices"), {
+    headers: authzHeaders(),
+    data: payload,
+  });
+
+  if (!response.ok()) {
+    throw new Error(
+      `Create Gold Price failed at ${response.url()}: ${response.status()} ${await response.text()}`,
+    );
+  }
 }
 
 async function createExpense(
