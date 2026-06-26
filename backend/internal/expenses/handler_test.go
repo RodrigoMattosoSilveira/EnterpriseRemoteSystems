@@ -170,6 +170,21 @@ func TestCreateExpenseReturnsCreated(t *testing.T) {
 	if !body.Data.Active {
 		t.Fatal("expected created expense to be active")
 	}
+	if body.Data.CalculationMethod != "LEGACY_DIRECT_ENTRY" {
+		t.Fatalf("expected legacy calculation method, got %q", body.Data.CalculationMethod)
+	}
+	if body.Data.PriceListItemID != nil {
+		t.Fatalf("expected legacy expense not to invent a price-list item id, got %#v", body.Data.PriceListItemID)
+	}
+	if body.Data.PriceListItemCode != "LEGACY_CANTEEN_DIRECT_ENTRY" || body.Data.ItemType != "CANTEEN" {
+		t.Fatalf("expected legacy canteen snapshot, got code=%q itemType=%q", body.Data.PriceListItemCode, body.Data.ItemType)
+	}
+	assertFloatPointer(t, body.Data.Quantity, 1.0, "quantity")
+	assertFloatPointer(t, body.Data.UnitPriceBRL, 42.5, "unitPriceBrl")
+	assertFloatPointer(t, body.Data.UnitPriceAmount, 42.5, "unitPriceAmount")
+	assertFloatPointer(t, body.Data.TotalAmount, 42.5, "totalAmount")
+	assertCalculationDetail(t, body.Data.CalculationDetailsJSON, "source", "legacy_direct_entry_api")
+	assertCalculationDetail(t, body.Data.CalculationDetailsJSON, "legacyExpenseCategoryCode", "CANTEEN")
 }
 
 func TestCreatePriceListExpenseInBRLCalculatesAndStoresAuditFields(t *testing.T) {
@@ -464,6 +479,54 @@ func TestListExpenseFiltersByItemTypeIncludesPriceListAndLegacyCanteenRows(t *te
 	}
 	if ids[legacyFlight.Data.ID] || ids[priceListAdmin.Data.ID] {
 		t.Fatalf("expected CANTEEN filter to exclude non-canteen rows, got ids=%v", ids)
+	}
+}
+
+func TestListExpenseFiltersByItemTypeIncludesBackfilledLegacyAdministrativeRows(t *testing.T) {
+	server, database, cleanup := newTestServerWithDatabase(t)
+	defer cleanup()
+
+	collaborator := createActiveCollaborator(t, server, 1)
+	legacyFlight := createExpense(t, server, validExpensePayload(collaborator.Data.ID, map[string]any{
+		"expenseCategoryId": "ref-expense-category-flight",
+		"valueUnitId":       "ref-value-unit-brl",
+		"amount":            199.0,
+		"expenseDate":       "2026-06-05",
+		"description":       "Backfilled flight row",
+	}))
+	legacyCargo := createExpense(t, server, validExpensePayload(collaborator.Data.ID, map[string]any{
+		"expenseCategoryId": "ref-expense-category-cargo",
+		"valueUnitId":       "ref-value-unit-brl",
+		"amount":            35.0,
+		"expenseDate":       "2026-06-06",
+		"description":       "Backfilled cargo row",
+	}))
+	legacyCanteen := createExpense(t, server, validExpensePayload(collaborator.Data.ID, map[string]any{
+		"expenseCategoryId": "ref-expense-category-canteen",
+		"valueUnitId":       "ref-value-unit-brl",
+		"amount":            12.0,
+		"expenseDate":       "2026-06-07",
+		"description":       "Backfilled canteen row",
+	}))
+
+	if err := dbpkg.BackfillLegacyExpenseAuditSnapshots(database); err != nil {
+		t.Fatalf("backfill legacy expense snapshots: %v", err)
+	}
+
+	res := getJSON(t, server, expensesURL+"?itemType=ADMINISTRATIVE&pageSize=50")
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("expected item-type filter status %d, got %d", http.StatusOK, res.StatusCode)
+	}
+	var filtered apiExpenseListResponse
+	decodeJSON(t, res, &filtered)
+
+	ids := expenseIDs(filtered.Data.Items)
+	if filtered.Data.Total != 2 || !ids[legacyFlight.Data.ID] || !ids[legacyCargo.Data.ID] {
+		t.Fatalf("expected administrative filter to include backfilled flight/cargo rows, got total=%d ids=%v", filtered.Data.Total, ids)
+	}
+	if ids[legacyCanteen.Data.ID] {
+		t.Fatalf("expected administrative filter to exclude canteen row, got ids=%v", ids)
 	}
 }
 

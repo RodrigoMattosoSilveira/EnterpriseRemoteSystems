@@ -14,6 +14,7 @@ type Repository interface {
 	FindByID(ctx context.Context, id string) (*db.Expense, error)
 	FindCollaboratorByID(ctx context.Context, collaboratorID string) (*db.CollaboratorJourney, error)
 	ExistsActiveReference(ctx context.Context, id string, typ string) (bool, error)
+	FindActiveReferenceByID(ctx context.Context, id string, typ string) (*db.ReferenceData, error)
 	FindActiveReferenceByCode(ctx context.Context, typ string, code string) (*db.ReferenceData, error)
 	FindActivePriceListItemByID(ctx context.Context, id string) (*db.ExpensePriceListItem, error)
 	FindLatestActiveGoldPrice(ctx context.Context) (*db.GoldPrice, error)
