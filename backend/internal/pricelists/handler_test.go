@@ -7,10 +7,12 @@ import (
 	"net/http/httptest"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/gofiber/fiber/v3"
 
 	apppkg "enterpriseremotesystems/backend/internal/app"
+	dbpkg "enterpriseremotesystems/backend/internal/db"
 )
 
 const (
@@ -55,13 +57,14 @@ type apiPriceListItemListResponse struct {
 
 type apiGoldPriceResponse struct {
 	Data struct {
-		ID         string  `json:"id"`
-		TenantID   string  `json:"tenantId"`
-		PriceDate  string  `json:"priceDate"`
-		BRLPerGram float64 `json:"brlPerGram"`
-		RecordedBy string  `json:"recordedBy"`
-		Notes      string  `json:"notes"`
-		Active     bool    `json:"active"`
+		ID                    string  `json:"id"`
+		TenantID              string  `json:"tenantId"`
+		PriceDate             string  `json:"priceDate"`
+		BRLPerGram            float64 `json:"brlPerGram"`
+		RecordedBy            string  `json:"recordedBy"`
+		Notes                 string  `json:"notes"`
+		Active                bool    `json:"active"`
+		SupersededGoldPriceID string  `json:"supersededGoldPriceId"`
 	} `json:"data"`
 }
 
@@ -139,6 +142,24 @@ func TestUpdateAndDeactivatePriceListItem(t *testing.T) {
 	}
 }
 
+func TestListGoldPricesStartsEmpty(t *testing.T) {
+	server, cleanup := newTestServer(t)
+	defer cleanup()
+
+	res := getJSON(t, server, goldPricesURL)
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		var body apiErrorResponse
+		decodeJSON(t, res, &body)
+		t.Fatalf("expected list gold prices status %d, got %d with error %+v", http.StatusOK, res.StatusCode, body.Error)
+	}
+	var body apiGoldPriceListResponse
+	decodeJSON(t, res, &body)
+	if len(body.Data) != 0 {
+		t.Fatalf("expected empty gold price list, got %+v", body.Data)
+	}
+}
+
 func TestCreateGoldPriceAndLatestUsesMostRecentActiveDate(t *testing.T) {
 	server, cleanup := newTestServer(t)
 	defer cleanup()
@@ -155,6 +176,122 @@ func TestCreateGoldPriceAndLatestUsesMostRecentActiveDate(t *testing.T) {
 	decodeJSON(t, res, &body)
 	if body.Data.ID != latest.Data.ID || body.Data.BRLPerGram != 550.0 || body.Data.PriceDate != "2026-06-02" {
 		t.Fatalf("expected newest active gold price, got %+v", body.Data)
+	}
+
+	res = getJSON(t, server, goldPricesURL)
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		var errorBody apiErrorResponse
+		decodeJSON(t, res, &errorBody)
+		t.Fatalf("expected list gold prices status %d, got %d with error %+v", http.StatusOK, res.StatusCode, errorBody.Error)
+	}
+	var list apiGoldPriceListResponse
+	decodeJSON(t, res, &list)
+	if len(list.Data) != 2 || list.Data[0].PriceDate != "2026-06-02" || list.Data[1].PriceDate != "2026-06-01" {
+		t.Fatalf("expected gold price list ordered by newest date, got %+v", list.Data)
+	}
+}
+
+func TestCreateGoldPriceForExistingDateSupersedesExistingActivePrice(t *testing.T) {
+	server, cleanup := newTestServer(t)
+	defer cleanup()
+
+	original := createGoldPrice(t, server, validGoldPricePayload(map[string]any{
+		"priceDate":  "2026-06-03",
+		"brlPerGram": 500.0,
+		"notes":      "Original daily rate",
+	}))
+	replacement := createGoldPrice(t, server, validGoldPricePayload(map[string]any{
+		"priceDate":  "2026-06-03",
+		"brlPerGram": 525.25,
+		"notes":      "Corrected daily rate",
+	}))
+
+	if replacement.Data.ID == original.Data.ID {
+		t.Fatalf("expected replacement to create a new audit record, got same id %q", replacement.Data.ID)
+	}
+	if replacement.Data.SupersededGoldPriceID != original.Data.ID {
+		t.Fatalf("expected replacement to report superseded id %q, got %q", original.Data.ID, replacement.Data.SupersededGoldPriceID)
+	}
+
+	res := getJSON(t, server, goldPricesURL+"latest")
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("expected latest status %d, got %d", http.StatusOK, res.StatusCode)
+	}
+	var latest apiGoldPriceResponse
+	decodeJSON(t, res, &latest)
+	if latest.Data.ID != replacement.Data.ID || latest.Data.BRLPerGram != 525.25 || !latest.Data.Active {
+		t.Fatalf("expected replacement to be latest active gold price, got %+v", latest.Data)
+	}
+
+	res = getJSON(t, server, goldPricesURL)
+	defer res.Body.Close()
+	var activeList apiGoldPriceListResponse
+	decodeJSON(t, res, &activeList)
+	if len(activeList.Data) != 1 || activeList.Data[0].ID != replacement.Data.ID || !activeList.Data[0].Active {
+		t.Fatalf("expected default list to include only replacement active record, got %+v", activeList.Data)
+	}
+
+	res = getJSON(t, server, goldPricesURL+"?includeInactive=true")
+	defer res.Body.Close()
+	var historyList apiGoldPriceListResponse
+	decodeJSON(t, res, &historyList)
+	if len(historyList.Data) != 2 {
+		t.Fatalf("expected includeInactive list to preserve both audit records, got %+v", historyList.Data)
+	}
+	if historyList.Data[0].ID != replacement.Data.ID || !historyList.Data[0].Active {
+		t.Fatalf("expected replacement to be first active history row, got %+v", historyList.Data)
+	}
+	if historyList.Data[1].ID != original.Data.ID || historyList.Data[1].Active {
+		t.Fatalf("expected original row to be retained inactive, got %+v", historyList.Data)
+	}
+}
+
+func TestGoldPriceDatabaseAllowsOnlyOneActivePricePerTenantDate(t *testing.T) {
+	database, err := dbpkg.Open(filepath.Join(t.TempDir(), "app.db"))
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	if err := dbpkg.AutoMigrate(database); err != nil {
+		t.Fatalf("auto migrate: %v", err)
+	}
+	if err := dbpkg.SeedReferenceData(database); err != nil {
+		t.Fatalf("seed reference data: %v", err)
+	}
+
+	now := time.Now().UTC()
+	first := dbpkg.GoldPrice{
+		BaseModel:  dbpkg.BaseModel{ID: "gold-price-db-original", CreatedAt: now, UpdatedAt: now},
+		TenantID:   dbpkg.DefaultTenantID,
+		PriceDate:  "2026-06-04",
+		BRLPerGram: 500,
+		RecordedBy: "admin-user",
+		Active:     true,
+	}
+	if err := database.Create(&first).Error; err != nil {
+		t.Fatalf("create first active gold price: %v", err)
+	}
+
+	second := dbpkg.GoldPrice{
+		BaseModel:  dbpkg.BaseModel{ID: "gold-price-db-conflict", CreatedAt: now, UpdatedAt: now},
+		TenantID:   dbpkg.DefaultTenantID,
+		PriceDate:  "2026-06-04",
+		BRLPerGram: 525,
+		RecordedBy: "admin-user",
+		Active:     true,
+	}
+	if err := database.Create(&second).Error; err == nil {
+		t.Fatal("expected database to reject two active gold prices for the same tenant/date")
+	}
+
+	if err := database.Model(&dbpkg.GoldPrice{}).
+		Where("id = ?", first.ID).
+		Update("active", false).Error; err != nil {
+		t.Fatalf("deactivate first gold price: %v", err)
+	}
+	if err := database.Create(&second).Error; err != nil {
+		t.Fatalf("expected database to allow inactive history plus one active replacement: %v", err)
 	}
 }
 

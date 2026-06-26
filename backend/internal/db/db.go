@@ -40,7 +40,10 @@ func AutoMigrate(database *gorm.DB) error {
 	if err := database.AutoMigrate(&Tenant{}, &TenantSetting{}, &ReferenceData{}, &Person{}, &CollaboratorJourney{}, &ExpensePriceListItem{}, &GoldPrice{}, &Expense{}, &LedgerEntry{}, &JourneySettlement{}, &LedgerReceipt{}, &WorkPeriod{}, &WorkPeriodAssignment{}, &GoldProductionEntry{}, &AccrualRun{}, &AccrualItem{}); err != nil {
 		return err
 	}
-	return InstallLedgerReceiptStatusGuards(database)
+	if err := InstallLedgerReceiptStatusGuards(database); err != nil {
+		return err
+	}
+	return InstallGoldPriceActiveDateConstraint(database)
 }
 
 func ensureDir(path string) error {

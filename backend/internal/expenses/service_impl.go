@@ -214,7 +214,7 @@ func (s *service) applyPriceListCalculation(ctx context.Context, expense *db.Exp
 		unitPriceAmount = item.UnitPriceBRL / goldPrice.BRLPerGram
 		goldPriceID = &goldPrice.ID
 		goldBRLPerGram = &goldPrice.BRLPerGram
-		goldPriceDate = formatDate(goldPrice.PriceDate)
+		goldPriceDate = normalizeStoredGoldPriceDate(goldPrice.PriceDate)
 	}
 
 	totalAmount := unitPriceAmount * quantity
@@ -243,6 +243,14 @@ func (s *service) applyPriceListCalculation(ctx context.Context, expense *db.Exp
 		expense.Description = item.Description
 	}
 	return nil
+}
+
+func normalizeStoredGoldPriceDate(value string) string {
+	trimmed := strings.TrimSpace(value)
+	if len(trimmed) >= len(dateLayout) {
+		return trimmed[:len(dateLayout)]
+	}
+	return trimmed
 }
 
 func calculationDetailsJSON(item *db.ExpensePriceListItem, currency string, quantity float64, unitPriceAmount float64, totalAmount float64, goldPriceID *string, goldBRLPerGram *float64, goldPriceDate string) (string, error) {
