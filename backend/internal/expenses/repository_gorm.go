@@ -39,7 +39,7 @@ func (r *gormRepository) List(ctx context.Context, filter normalizedExpenseListF
 		q = q.Where("value_unit_id = ?", filter.ValueUnitID)
 	}
 	if filter.ItemType != "" {
-		q = q.Where("item_type = ?", filter.ItemType)
+		q = applyItemTypeFilter(q, filter.ItemType)
 	}
 	if filter.PriceListItemID != "" {
 		q = q.Where("price_list_item_id = ?", filter.PriceListItemID)
@@ -64,6 +64,36 @@ func (r *gormRepository) List(ctx context.Context, filter normalizedExpenseListF
 
 	err := q.Order("expense_date DESC, created_at DESC").Limit(filter.PageSize).Offset((filter.Page - 1) * filter.PageSize).Find(&rows).Error
 	return rows, total, err
+}
+
+func applyItemTypeFilter(q *gorm.DB, itemType string) *gorm.DB {
+	// Canonical price-list expenses store the selected item type as an audit
+	// snapshot on expenses.item_type. During the Bite 21 transition, some rows
+	// may only be classifiable by their linked price-list item, and legacy
+	// Canteen expenses may only have the expense category. Keep the filter useful
+	// for all of those records while still using the canonical snapshot when it
+	// is present.
+	return q.Where(
+		`(
+			UPPER(TRIM(expenses.item_type)) = ?
+			OR EXISTS (
+				SELECT 1
+				FROM expense_price_list_items AS item_type_filter_items
+				WHERE item_type_filter_items.id = expenses.price_list_item_id
+				  AND item_type_filter_items.tenant_id = expenses.tenant_id
+				  AND UPPER(TRIM(item_type_filter_items.item_type)) = ?
+			)
+			OR EXISTS (
+				SELECT 1
+				FROM reference_data AS item_type_filter_categories
+				WHERE item_type_filter_categories.id = expenses.expense_category_id
+				  AND item_type_filter_categories.tenant_id = expenses.tenant_id
+				  AND item_type_filter_categories.type = 'expense_category'
+				  AND UPPER(TRIM(item_type_filter_categories.code)) = ?
+			)
+		)`,
+		itemType, itemType, itemType,
+	)
 }
 
 func (r *gormRepository) Create(ctx context.Context, expense *db.Expense) error {
@@ -94,6 +124,7 @@ func (r *gormRepository) Update(ctx context.Context, expense *db.Expense) error 
 				"description":              expense.Description,
 				"active":                   expense.Active,
 				"price_list_item_id":       expense.PriceListItemID,
+				"price_list_item_code":     expense.PriceListItemCode,
 				"item_type":                expense.ItemType,
 				"item_description":         expense.ItemDescription,
 				"quantity":                 expense.Quantity,
@@ -101,8 +132,10 @@ func (r *gormRepository) Update(ctx context.Context, expense *db.Expense) error 
 				"currency_code":            expense.CurrencyCode,
 				"gold_price_id":            expense.GoldPriceID,
 				"gold_brl_per_gram":        expense.GoldBRLPerGram,
+				"gold_price_date":          expense.GoldPriceDate,
 				"unit_price_amount":        expense.UnitPriceAmount,
 				"total_amount":             expense.TotalAmount,
+				"calculation_method":       expense.CalculationMethod,
 				"calculation_details_json": expense.CalculationDetailsJSON,
 				"updated_at":               expense.UpdatedAt,
 			}).Error; err != nil {

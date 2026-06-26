@@ -182,6 +182,7 @@ type Expense struct {
 	Active            bool      `gorm:"not null;default:true;index" json:"active"`
 
 	PriceListItemID        *string  `gorm:"type:text;index" json:"priceListItemId,omitempty"`
+	PriceListItemCode      string   `gorm:"type:text;index" json:"priceListItemCode,omitempty"`
 	ItemType               string   `gorm:"type:text;index" json:"itemType,omitempty"`
 	ItemDescription        string   `gorm:"type:text" json:"itemDescription,omitempty"`
 	Quantity               *float64 `json:"quantity,omitempty"`
@@ -189,8 +190,10 @@ type Expense struct {
 	CurrencyCode           string   `gorm:"type:text;index" json:"currencyCode,omitempty"`
 	GoldPriceID            *string  `gorm:"type:text;index" json:"goldPriceId,omitempty"`
 	GoldBRLPerGram         *float64 `gorm:"column:gold_brl_per_gram" json:"goldBrlPerGram,omitempty"`
+	GoldPriceDate          string   `gorm:"type:date" json:"goldPriceDate,omitempty"`
 	UnitPriceAmount        *float64 `json:"unitPriceAmount,omitempty"`
 	TotalAmount            *float64 `json:"totalAmount,omitempty"`
+	CalculationMethod      string   `gorm:"type:text" json:"calculationMethod,omitempty"`
 	CalculationDetailsJSON string   `gorm:"type:text" json:"calculationDetailsJson,omitempty"`
 
 	Tenant          Tenant                `gorm:"foreignKey:TenantID;constraint:OnUpdate:Restrict,OnDelete:Restrict;" json:"tenant,omitempty"`

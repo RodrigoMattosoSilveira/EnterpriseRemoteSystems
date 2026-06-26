@@ -61,6 +61,7 @@ type apiExpenseResponse struct {
 		Description            string   `json:"description"`
 		Active                 bool     `json:"active"`
 		PriceListItemID        *string  `json:"priceListItemId"`
+		PriceListItemCode      string   `json:"priceListItemCode"`
 		ItemType               string   `json:"itemType"`
 		ItemDescription        string   `json:"itemDescription"`
 		Quantity               *float64 `json:"quantity"`
@@ -68,26 +69,32 @@ type apiExpenseResponse struct {
 		CurrencyCode           string   `json:"currencyCode"`
 		GoldPriceID            *string  `json:"goldPriceId"`
 		GoldBRLPerGram         *float64 `json:"goldBrlPerGram"`
+		GoldPriceDate          string   `json:"goldPriceDate"`
 		UnitPriceAmount        *float64 `json:"unitPriceAmount"`
 		TotalAmount            *float64 `json:"totalAmount"`
+		CalculationMethod      string   `json:"calculationMethod"`
 		CalculationDetailsJSON string   `json:"calculationDetailsJson"`
 	} `json:"data"`
 }
 
+type apiExpenseListItem struct {
+	ID                string  `json:"id"`
+	CollaboratorID    string  `json:"collaboratorId"`
+	ExpenseCategoryID string  `json:"expenseCategoryId"`
+	ValueUnitID       string  `json:"valueUnitId"`
+	Amount            float64 `json:"amount"`
+	ExpenseDate       string  `json:"expenseDate"`
+	Active            bool    `json:"active"`
+	PriceListItemCode string  `json:"priceListItemCode"`
+	CalculationMethod string  `json:"calculationMethod"`
+}
+
 type apiExpenseListResponse struct {
 	Data struct {
-		Items []struct {
-			ID                string  `json:"id"`
-			CollaboratorID    string  `json:"collaboratorId"`
-			ExpenseCategoryID string  `json:"expenseCategoryId"`
-			ValueUnitID       string  `json:"valueUnitId"`
-			Amount            float64 `json:"amount"`
-			ExpenseDate       string  `json:"expenseDate"`
-			Active            bool    `json:"active"`
-		} `json:"items"`
-		Total    int `json:"total"`
-		Page     int `json:"page"`
-		PageSize int `json:"pageSize"`
+		Items    []apiExpenseListItem `json:"items"`
+		Total    int                  `json:"total"`
+		Page     int                  `json:"page"`
+		PageSize int                  `json:"pageSize"`
 	} `json:"data"`
 }
 
@@ -194,8 +201,11 @@ func TestCreatePriceListExpenseInBRLCalculatesAndStoresAuditFields(t *testing.T)
 	if expense.Data.PriceListItemID == nil || *expense.Data.PriceListItemID != item.Data.ID {
 		t.Fatalf("expected price list item id %q, got %#v", item.Data.ID, expense.Data.PriceListItemID)
 	}
-	if expense.Data.ItemType != "CANTEEN" || expense.Data.ItemDescription != "Lunch plate" {
-		t.Fatalf("expected item snapshot, got type=%q description=%q", expense.Data.ItemType, expense.Data.ItemDescription)
+	if expense.Data.PriceListItemCode != "LUNCH" || expense.Data.ItemType != "CANTEEN" || expense.Data.ItemDescription != "Lunch plate" {
+		t.Fatalf("expected item snapshot, got code=%q type=%q description=%q", expense.Data.PriceListItemCode, expense.Data.ItemType, expense.Data.ItemDescription)
+	}
+	if expense.Data.CalculationMethod != "BRL_PRICE_LIST" {
+		t.Fatalf("expected BRL calculation method, got %q", expense.Data.CalculationMethod)
 	}
 	assertFloatPointer(t, expense.Data.Quantity, 3.0, "quantity")
 	assertFloatPointer(t, expense.Data.UnitPriceBRL, 25.0, "unitPriceBrl")
@@ -204,9 +214,8 @@ func TestCreatePriceListExpenseInBRLCalculatesAndStoresAuditFields(t *testing.T)
 	if expense.Data.Amount != 75.0 {
 		t.Fatalf("expected ledger amount 75.0, got %f", expense.Data.Amount)
 	}
-	if expense.Data.CalculationDetailsJSON == "" {
-		t.Fatal("expected calculation details JSON")
-	}
+	assertCalculationDetail(t, expense.Data.CalculationDetailsJSON, "itemCode", "LUNCH")
+	assertCalculationDetail(t, expense.Data.CalculationDetailsJSON, "calculationMethod", "BRL_PRICE_LIST")
 }
 
 func TestCreatePriceListExpenseInGoldUsesLatestGoldPrice(t *testing.T) {
@@ -241,11 +250,41 @@ func TestCreatePriceListExpenseInGoldUsesLatestGoldPrice(t *testing.T) {
 		t.Fatalf("expected latest gold price id %q, got %#v", gold.Data.ID, expense.Data.GoldPriceID)
 	}
 	assertFloatPointer(t, expense.Data.GoldBRLPerGram, 500.0, "goldBrlPerGram")
+	if expense.Data.GoldPriceDate != "2026-06-02" {
+		t.Fatalf("expected gold price date snapshot 2026-06-02, got %q", expense.Data.GoldPriceDate)
+	}
+	if expense.Data.CalculationMethod != "BRL_TO_GOLD_GRAM_LATEST_PRICE" {
+		t.Fatalf("expected gold calculation method, got %q", expense.Data.CalculationMethod)
+	}
 	assertFloatPointer(t, expense.Data.UnitPriceAmount, 0.2, "unitPriceAmount")
 	assertFloatPointer(t, expense.Data.TotalAmount, 0.4, "totalAmount")
 	if expense.Data.Amount != 0.4 {
 		t.Fatalf("expected ledger amount 0.4 grams, got %f", expense.Data.Amount)
 	}
+	assertCalculationDetail(t, expense.Data.CalculationDetailsJSON, "goldPriceDate", "2026-06-02")
+	assertCalculationDetail(t, expense.Data.CalculationDetailsJSON, "calculationMethod", "BRL_TO_GOLD_GRAM_LATEST_PRICE")
+}
+
+func TestCreatePriceListExpenseRejectsDerivedLegacyFields(t *testing.T) {
+	server, cleanup := newTestServer(t)
+	defer cleanup()
+
+	collaborator := createActiveCollaborator(t, server, 1)
+	item := createPriceListItem(t, server, validPriceListItemPayload(nil))
+
+	res := postJSON(t, server, http.MethodPost, expensesURL, map[string]any{
+		"collaboratorId":    collaborator.Data.ID,
+		"priceListItemId":   item.Data.ID,
+		"currencyCode":      "BRL",
+		"quantity":          1.0,
+		"expenseDate":       "2026-06-03",
+		"expenseCategoryId": "ref-expense-category-canteen",
+		"valueUnitId":       "ref-value-unit-brl",
+		"amount":            42.5,
+	})
+	defer res.Body.Close()
+
+	assertValidationError(t, res, "expenseCategoryId", "Expense category is derived from the price list item")
 }
 
 func TestCreatePriceListGoldExpenseRequiresGoldPrice(t *testing.T) {
@@ -355,6 +394,76 @@ func TestListExpenseFiltersAndPagination(t *testing.T) {
 	decodeJSON(t, res, &filtered)
 	if filtered.Data.Total != 3 || filtered.Data.Page != 2 || filtered.Data.PageSize != 1 || len(filtered.Data.Items) != 1 {
 		t.Fatalf("expected page 2 with one item over total 3, got %+v", filtered.Data)
+	}
+}
+
+func TestListExpenseFiltersByItemTypeIncludesPriceListAndLegacyCanteenRows(t *testing.T) {
+	server, cleanup := newTestServer(t)
+	defer cleanup()
+
+	collaborator := createActiveCollaborator(t, server, 1)
+	legacyCanteen := createExpense(t, server, validExpensePayload(collaborator.Data.ID, map[string]any{
+		"expenseCategoryId": "ref-expense-category-canteen",
+		"valueUnitId":       "ref-value-unit-brl",
+		"amount":            12.0,
+		"expenseDate":       "2026-06-01",
+		"description":       "Legacy canteen row",
+	}))
+	legacyFlight := createExpense(t, server, validExpensePayload(collaborator.Data.ID, map[string]any{
+		"expenseCategoryId": "ref-expense-category-flight",
+		"valueUnitId":       "ref-value-unit-brl",
+		"amount":            99.0,
+		"expenseDate":       "2026-06-01",
+		"description":       "Legacy flight row",
+	}))
+
+	canteenItem := createPriceListItem(t, server, validPriceListItemPayload(map[string]any{
+		"itemType":     "CANTEEN",
+		"code":         "FILTER_CANTEEN",
+		"description":  "Filter canteen item",
+		"unitPriceBrl": 10.0,
+	}))
+	priceListCanteen := createExpense(t, server, map[string]any{
+		"collaboratorId":  collaborator.Data.ID,
+		"priceListItemId": canteenItem.Data.ID,
+		"currencyCode":    "BRL",
+		"quantity":        1.0,
+		"expenseDate":     "2026-06-02",
+		"description":     "Price-list canteen row",
+	})
+
+	adminItem := createPriceListItem(t, server, validPriceListItemPayload(map[string]any{
+		"itemType":     "ADMINISTRATIVE",
+		"code":         "FILTER_ADMIN",
+		"description":  "Filter administrative item",
+		"unitPriceBrl": 25.0,
+	}))
+	priceListAdmin := createExpense(t, server, map[string]any{
+		"collaboratorId":  collaborator.Data.ID,
+		"priceListItemId": adminItem.Data.ID,
+		"currencyCode":    "BRL",
+		"quantity":        1.0,
+		"expenseDate":     "2026-06-03",
+		"description":     "Price-list administrative row",
+	})
+
+	res := getJSON(t, server, expensesURL+"?itemType=CANTEEN&pageSize=50")
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("expected item-type filter status %d, got %d", http.StatusOK, res.StatusCode)
+	}
+	var filtered apiExpenseListResponse
+	decodeJSON(t, res, &filtered)
+
+	if filtered.Data.Total != 2 || len(filtered.Data.Items) != 2 {
+		t.Fatalf("expected two CANTEEN expenses, got total=%d items=%+v", filtered.Data.Total, filtered.Data.Items)
+	}
+	ids := expenseIDs(filtered.Data.Items)
+	if !ids[legacyCanteen.Data.ID] || !ids[priceListCanteen.Data.ID] {
+		t.Fatalf("expected CANTEEN filter to include legacy category and price-list rows, got ids=%v", ids)
+	}
+	if ids[legacyFlight.Data.ID] || ids[priceListAdmin.Data.ID] {
+		t.Fatalf("expected CANTEEN filter to exclude non-canteen rows, got ids=%v", ids)
 	}
 }
 
@@ -601,6 +710,14 @@ func newTestServerWithDatabase(t *testing.T) (*fiber.App, *gorm.DB, func()) {
 	return server, database, wrappedCleanup
 }
 
+func expenseIDs(items []apiExpenseListItem) map[string]bool {
+	out := make(map[string]bool, len(items))
+	for _, item := range items {
+		out[item.ID] = true
+	}
+	return out
+}
+
 func createActiveCollaborator(t *testing.T, server *fiber.App, seq int) apiCollaboratorResponse {
 	t.Helper()
 	person := createPerson(t, server, validCompletePersonPayload(seq, nil))
@@ -834,6 +951,24 @@ func createOtherTenantExpense(t *testing.T, database *gorm.DB, sourceExpenseID s
 	otherExpense.UpdatedAt = now
 	if err := database.Create(&otherExpense).Error; err != nil {
 		t.Fatalf("create other-tenant expense: %v", err)
+	}
+}
+
+func assertCalculationDetail(t *testing.T, raw string, key string, expected string) {
+	t.Helper()
+	if raw == "" {
+		t.Fatal("expected calculation details JSON")
+	}
+	var details map[string]any
+	if err := json.Unmarshal([]byte(raw), &details); err != nil {
+		t.Fatalf("unmarshal calculation details: %v", err)
+	}
+	actual, ok := details[key]
+	if !ok {
+		t.Fatalf("expected calculation details key %q in %+v", key, details)
+	}
+	if actual != expected {
+		t.Fatalf("expected calculation detail %q to be %q, got %#v", key, expected, actual)
 	}
 }
 

@@ -14,6 +14,7 @@ type ExpenseDTO struct {
 	Description            string   `json:"description,omitempty"`
 	Active                 bool     `json:"active"`
 	PriceListItemID        *string  `json:"priceListItemId,omitempty"`
+	PriceListItemCode      string   `json:"priceListItemCode,omitempty"`
 	ItemType               string   `json:"itemType,omitempty"`
 	ItemDescription        string   `json:"itemDescription,omitempty"`
 	Quantity               *float64 `json:"quantity,omitempty"`
@@ -21,8 +22,10 @@ type ExpenseDTO struct {
 	CurrencyCode           string   `json:"currencyCode,omitempty"`
 	GoldPriceID            *string  `json:"goldPriceId,omitempty"`
 	GoldBRLPerGram         *float64 `json:"goldBrlPerGram,omitempty"`
+	GoldPriceDate          string   `json:"goldPriceDate,omitempty"`
 	UnitPriceAmount        *float64 `json:"unitPriceAmount,omitempty"`
 	TotalAmount            *float64 `json:"totalAmount,omitempty"`
+	CalculationMethod      string   `json:"calculationMethod,omitempty"`
 	CalculationDetailsJSON string   `json:"calculationDetailsJson,omitempty"`
 	CreatedAt              string   `json:"createdAt"`
 	UpdatedAt              string   `json:"updatedAt"`

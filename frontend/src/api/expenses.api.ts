@@ -20,6 +20,21 @@ export async function listExpenses(
   if (filter.valueUnitId) {
     searchParams.set("valueUnitId", filter.valueUnitId);
   }
+  if (filter.itemType) {
+    searchParams.set("itemType", filter.itemType);
+  }
+  if (filter.priceListItemId) {
+    searchParams.set("priceListItemId", filter.priceListItemId);
+  }
+  if (filter.currencyCode) {
+    searchParams.set("currencyCode", filter.currencyCode);
+  }
+  if (filter.dateFrom) {
+    searchParams.set("dateFrom", filter.dateFrom);
+  }
+  if (filter.dateTo) {
+    searchParams.set("dateTo", filter.dateTo);
+  }
   if (filter.page !== undefined) {
     searchParams.set("page", String(filter.page));
   }
@@ -39,6 +54,8 @@ export async function listExpenses(
   return {
     items: response.items ?? [],
     total: response.total ?? 0,
+    page: response.page,
+    pageSize: response.pageSize,
   };
 }
 
