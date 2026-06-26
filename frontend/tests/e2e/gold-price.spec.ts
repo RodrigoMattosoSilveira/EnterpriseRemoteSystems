@@ -12,8 +12,9 @@ test('user can navigate to gold price recording & record a new gold price', asyn
   await expect(page.getByText('Permanent identity records')).toBeVisible();
 
   // Navigate to Admin
-  await expect(page.getByRole('link', { name: 'Admin' })).toBeVisible();
-  await page.getByRole('link', { name: 'Admin' }).click();
+  const adminLink = page.getByRole('link', { name: 'Admin', exact: true });
+  await expect(adminLink).toBeVisible();
+  await adminLink.click();
   await expect(page.getByText('Manage tenant-ready')).toBeVisible();
 
   // Navigate to Gold Prices
