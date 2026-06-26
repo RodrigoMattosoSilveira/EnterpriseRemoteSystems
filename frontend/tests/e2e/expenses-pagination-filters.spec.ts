@@ -28,6 +28,8 @@ test("user can navigate additional Expenses pages", async ({
   await expect(
     page.getByRole("heading", { name: "Expenses", exact: true }),
   ).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Filters" })).toBeVisible();
+  await expect(page.getByText("Filter expense records by collaborator, category, or item.")).toBeVisible();
   await expect(
     page.getByText(/Showing 50 of \d+ expense records\./),
   ).toBeVisible();
@@ -136,7 +138,7 @@ test("user can filter Expenses by item", async ({ page, request }) => {
 
   await page.goto("/expenses?page=2");
 
-  const itemTypeSelect = page.getByLabel("Item type");
+  const itemTypeSelect = page.getByLabel("Category");
   const itemSelect = page
     .locator("select")
     .filter({ has: page.locator("option", { hasText: "All items" }) });
