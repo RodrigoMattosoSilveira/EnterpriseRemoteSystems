@@ -147,7 +147,7 @@ export function GoldPricesPage() {
 
           {!goldPricesQuery.isLoading && rows.length > 0 && (
             <div className="mt-4 overflow-hidden rounded-xl border">
-              <table className="w-full text-left text-sm">
+              <table className="w-full text-left text-sm" data-testid="gold-prices-table">
                 <thead className="bg-gray-50 text-xs uppercase tracking-wide text-gray-500">
                   <tr>
                     <th className="p-3">Date</th>
