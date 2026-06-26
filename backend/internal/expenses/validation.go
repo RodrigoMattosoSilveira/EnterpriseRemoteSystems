@@ -16,14 +16,32 @@ const (
 
 func ValidateCreateExpense(req CreateExpenseRequest) error {
 	if usesPriceListCalculation(req.PriceListItemID, req.CurrencyCode, req.Quantity) {
-		return validatePriceListExpenseFields(req.CollaboratorID, req.PriceListItemID, req.CurrencyCode, req.Quantity, req.ExpenseDate)
+		return validatePriceListExpenseFields(
+			req.CollaboratorID,
+			req.PriceListItemID,
+			req.CurrencyCode,
+			req.Quantity,
+			req.ExpenseDate,
+			req.ExpenseCategoryID,
+			req.ValueUnitID,
+			req.Amount,
+		)
 	}
 	return validateLegacyExpenseFields(req.CollaboratorID, req.ExpenseCategoryID, req.ValueUnitID, req.Amount, req.ExpenseDate)
 }
 
 func ValidateUpdateExpense(req UpdateExpenseRequest) error {
 	if usesPriceListCalculation(req.PriceListItemID, req.CurrencyCode, req.Quantity) {
-		return validatePriceListExpenseFields(req.CollaboratorID, req.PriceListItemID, req.CurrencyCode, req.Quantity, req.ExpenseDate)
+		return validatePriceListExpenseFields(
+			req.CollaboratorID,
+			req.PriceListItemID,
+			req.CurrencyCode,
+			req.Quantity,
+			req.ExpenseDate,
+			req.ExpenseCategoryID,
+			req.ValueUnitID,
+			req.Amount,
+		)
 	}
 	return validateLegacyExpenseFields(req.CollaboratorID, req.ExpenseCategoryID, req.ValueUnitID, req.Amount, req.ExpenseDate)
 }
@@ -90,7 +108,7 @@ func validateLegacyExpenseFields(collaboratorID string, expenseCategoryID string
 	return nil
 }
 
-func validatePriceListExpenseFields(collaboratorID string, priceListItemID string, currencyCode string, quantity float64, expenseDate string) error {
+func validatePriceListExpenseFields(collaboratorID string, priceListItemID string, currencyCode string, quantity float64, expenseDate string, expenseCategoryID string, valueUnitID string, amount float64) error {
 	fields := map[string]string{}
 	requireString(fields, "collaboratorId", collaboratorID)
 	requireString(fields, "priceListItemId", priceListItemID)
@@ -109,6 +127,15 @@ func validatePriceListExpenseFields(collaboratorID string, priceListItemID strin
 	}
 	if quantity <= 0 {
 		fields["quantity"] = "Quantity must be greater than zero"
+	}
+	if strings.TrimSpace(expenseCategoryID) != "" {
+		fields["expenseCategoryId"] = "Expense category is derived from the price list item"
+	}
+	if strings.TrimSpace(valueUnitID) != "" {
+		fields["valueUnitId"] = "Value unit is derived from the selected currency"
+	}
+	if amount > 0 {
+		fields["amount"] = "Amount is calculated from unit price and quantity"
 	}
 	if len(fields) > 0 {
 		return ValidationError{Fields: fields}

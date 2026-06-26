@@ -20,6 +20,15 @@ export async function listExpenses(
   if (filter.valueUnitId) {
     searchParams.set("valueUnitId", filter.valueUnitId);
   }
+  if (filter.itemType) {
+    searchParams.set("itemType", filter.itemType);
+  }
+  if (filter.priceListItemId) {
+    searchParams.set("priceListItemId", filter.priceListItemId);
+  }
+  if (filter.currencyCode) {
+    searchParams.set("currencyCode", filter.currencyCode);
+  }
   if (filter.page !== undefined) {
     searchParams.set("page", String(filter.page));
   }
