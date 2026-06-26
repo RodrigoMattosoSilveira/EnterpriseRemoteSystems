@@ -55,6 +55,8 @@ export type ExpenseListFilter = {
   itemType?: "CANTEEN" | "ADMINISTRATIVE" | string;
   priceListItemId?: string;
   currencyCode?: "BRL" | "GOLD_GRAM" | string;
+  dateFrom?: string;
+  dateTo?: string;
   page?: number;
   pageSize?: number;
 };
@@ -62,4 +64,6 @@ export type ExpenseListFilter = {
 export type ExpenseListResponse = {
   items: Expense[];
   total: number;
+  page?: number;
+  pageSize?: number;
 };

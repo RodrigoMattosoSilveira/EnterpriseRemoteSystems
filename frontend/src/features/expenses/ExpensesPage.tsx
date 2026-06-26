@@ -1,14 +1,84 @@
-import { Link, useLocation } from "react-router-dom";
+import { useMemo, type ChangeEvent } from "react";
+import { Link, useLocation, useSearchParams } from "react-router-dom";
 import { ApiErrorPanel } from "../../components/ApiErrorPanel";
-import type { Expense } from "../../types/expenses";
+import type { Collaborator } from "../../types/collaborators";
+import type { Expense, ExpenseListFilter } from "../../types/expenses";
+import type { PriceListItem } from "../../types/priceList";
+import { useCollaborators } from "../collaborators/useCollaborators";
+import { usePriceListItems } from "../price-list/usePriceList";
 import { useExpenses } from "./useExpenses";
 
+const EXPENSE_PAGE_SIZE = 50;
+const FILTER_OPTION_PAGE_SIZE = 200;
+
 export function ExpensesPage() {
-  const { data, isLoading, error } = useExpenses();
+  const [searchParams, setSearchParams] = useSearchParams();
   const location = useLocation();
+  const page = parsePositiveInt(searchParams.get("page"), 1);
+  const collaboratorId = searchParams.get("collaboratorId") ?? "";
+  const itemType = searchParams.get("itemType") ?? "";
+  const priceListItemId = searchParams.get("priceListItemId") ?? "";
+
+  const expenseFilter = useMemo<ExpenseListFilter>(
+    () => ({
+      collaboratorId: collaboratorId || undefined,
+      itemType: itemType || undefined,
+      priceListItemId: priceListItemId || undefined,
+      page,
+      pageSize: EXPENSE_PAGE_SIZE,
+    }),
+    [collaboratorId, itemType, page, priceListItemId],
+  );
+
+  const { data, isLoading, error } = useExpenses(expenseFilter);
+  const { data: collaboratorData } = useCollaborators({
+    page: 1,
+    pageSize: FILTER_OPTION_PAGE_SIZE,
+  });
+  const { data: priceListItems = [] } = usePriceListItems({ includeInactive: true });
+
   const expenses = data?.items ?? [];
   const total = data?.total ?? expenses.length;
+  const responsePageSize = data?.pageSize ?? EXPENSE_PAGE_SIZE;
+  const currentPage = data?.page ?? page;
+  const totalPages = Math.max(1, Math.ceil(total / responsePageSize));
   const flash = readFlash(location.state);
+  const collaboratorOptions = collaboratorData?.items ?? [];
+  const filteredItemOptions = itemType
+    ? priceListItems.filter((item) => item.itemType === itemType)
+    : priceListItems;
+  const selectedPriceListItem = priceListItemId
+    ? priceListItems.find((item) => item.id === priceListItemId)
+    : undefined;
+  const hasActiveFilters = Boolean(collaboratorId || itemType || priceListItemId);
+
+  function setFilter(key: "collaboratorId" | "itemType" | "priceListItemId", value: string) {
+    const next = new URLSearchParams(searchParams);
+    if (value) {
+      next.set(key, value);
+    } else {
+      next.delete(key);
+    }
+    if (key === "itemType") {
+      next.delete("priceListItemId");
+    }
+    next.delete("page");
+    setSearchParams(next);
+  }
+
+  function setPage(nextPage: number) {
+    const next = new URLSearchParams(searchParams);
+    if (nextPage <= 1) {
+      next.delete("page");
+    } else {
+      next.set("page", String(nextPage));
+    }
+    setSearchParams(next);
+  }
+
+  function clearFilters() {
+    setSearchParams(new URLSearchParams());
+  }
 
   return (
     <main className="min-h-screen bg-gray-50">
@@ -54,7 +124,7 @@ export function ExpensesPage() {
         <ApiErrorPanel error={error} />
 
         <section className="rounded-2xl border bg-white p-4 shadow-sm">
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
             <div>
               <h2 className="text-lg font-semibold text-gray-950">
                 Expense Records
@@ -63,7 +133,88 @@ export function ExpensesPage() {
                 Showing {expenses.length} of {total} expense records.
               </p>
             </div>
+
+            <PaginationControls
+              currentPage={currentPage}
+              totalPages={totalPages}
+              isLoading={isLoading}
+              onPageChange={setPage}
+            />
           </div>
+        </section>
+
+        <section className="rounded-2xl border bg-white p-4 shadow-sm">
+          <div className="mb-4">
+            <h2 className="text-lg font-semibold text-gray-950">Filters</h2>
+            <p className="text-sm text-gray-500">Filter expense records by collaborator, category, or item.</p>
+          </div>
+
+          <div className="grid min-w-0 items-start gap-4 md:grid-cols-3">
+            <label className="grid min-w-0 gap-1 text-sm font-medium text-gray-700">
+              Collaborator
+              <select
+                value={collaboratorId}
+                onChange={(event: ChangeEvent<HTMLSelectElement>) => setFilter("collaboratorId", event.target.value)}
+                className="w-full min-w-0 rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm"
+              >
+                <option value="">All collaborators</option>
+                {collaboratorOptions.map((collaborator) => (
+                  <option key={collaborator.id} value={collaborator.id}>
+                    {collaboratorDisplayName(collaborator)}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label className="grid min-w-0 gap-1 text-sm font-medium text-gray-700">
+              Category
+              <select
+                value={itemType}
+                onChange={(event: ChangeEvent<HTMLSelectElement>) => setFilter("itemType", event.target.value)}
+                className="w-full min-w-0 rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm"
+              >
+                <option value="">All categories</option>
+                <option value="CANTEEN">Canteen</option>
+                <option value="ADMINISTRATIVE">Administrative</option>
+              </select>
+            </label>
+
+            <label className="grid min-w-0 gap-1 text-sm font-medium text-gray-700">
+              Item
+              <select
+                value={priceListItemId}
+                onChange={(event: ChangeEvent<HTMLSelectElement>) => setFilter("priceListItemId", event.target.value)}
+                aria-describedby={selectedPriceListItem ? "selected-expense-item-filter-label" : undefined}
+                className="w-full min-w-0 rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm"
+              >
+                <option value="">All items</option>
+                {filteredItemOptions.map((item) => (
+                  <option key={item.id} value={item.id}>
+                    {priceListItemLabel(item)}
+                  </option>
+                ))}
+              </select>
+              {selectedPriceListItem && (
+                <span
+                  id="selected-expense-item-filter-label"
+                  data-testid="selected-expense-item-filter-label"
+                  className="block max-w-full break-words rounded-xl bg-gray-50 px-3 py-2 text-xs font-medium leading-snug text-gray-600"
+                >
+                  {priceListItemLabel(selectedPriceListItem)}
+                </span>
+              )}
+            </label>
+          </div>
+
+          {hasActiveFilters && (
+            <button
+              type="button"
+              onClick={clearFilters}
+              className="mt-4 rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 shadow-sm"
+            >
+              Clear filters
+            </button>
+          )}
         </section>
 
         {isLoading && (
@@ -74,16 +225,20 @@ export function ExpensesPage() {
 
         {!isLoading && !error && expenses.length === 0 && (
           <div className="rounded-2xl border bg-white p-8 text-center shadow-sm">
-            <h2 className="text-lg font-semibold">No expenses yet</h2>
+            <h2 className="text-lg font-semibold">No expenses found</h2>
             <p className="mt-2 text-sm text-gray-500">
-              Record a Collaborator expense after an active Collaborator exists.
+              {hasActiveFilters
+                ? "Adjust the collaborator or item filters to find more expense records."
+                : "Record a Collaborator expense after an active Collaborator exists."}
             </p>
-            <Link
-              to="/expenses/new"
-              className="mt-5 inline-block rounded-xl bg-gray-950 px-5 py-3 text-sm font-semibold text-white"
-            >
-              Create Expense
-            </Link>
+            {!hasActiveFilters && (
+              <Link
+                to="/expenses/new"
+                className="mt-5 inline-block rounded-xl bg-gray-950 px-5 py-3 text-sm font-semibold text-white"
+              >
+                Create Expense
+              </Link>
+            )}
           </div>
         )}
 
@@ -96,6 +251,7 @@ export function ExpensesPage() {
                     <th className="p-3">Date</th>
                     <th className="p-3">Collaborator</th>
                     <th className="p-3">Category</th>
+                    <th className="p-3">Item</th>
                     <th className="p-3 text-right">Amount</th>
                     <th className="p-3">Description</th>
                   </tr>
@@ -117,6 +273,9 @@ export function ExpensesPage() {
                       <td className="p-3 text-gray-700">
                         {expense.expenseCategoryLabel || expense.expenseCategoryId}
                       </td>
+                      <td className="p-3 text-gray-700">
+                        {expenseItemLabel(expense)}
+                      </td>
                       <td className="p-3 text-right font-semibold text-gray-950">
                         {formatExpenseAmount(expense)}
                       </td>
@@ -136,8 +295,55 @@ export function ExpensesPage() {
             </div>
           </div>
         )}
+
+        {!isLoading && total > responsePageSize && (
+          <section className="rounded-2xl border bg-white p-4 shadow-sm">
+            <PaginationControls
+              currentPage={currentPage}
+              totalPages={totalPages}
+              isLoading={isLoading}
+              onPageChange={setPage}
+            />
+          </section>
+        )}
       </section>
     </main>
+  );
+}
+
+function PaginationControls({
+  currentPage,
+  totalPages,
+  isLoading,
+  onPageChange,
+}: {
+  currentPage: number;
+  totalPages: number;
+  isLoading: boolean;
+  onPageChange: (page: number) => void;
+}) {
+  return (
+    <nav className="flex flex-wrap items-center gap-3" aria-label="Expense pages">
+      <button
+        type="button"
+        onClick={() => onPageChange(currentPage - 1)}
+        disabled={isLoading || currentPage <= 1}
+        className="rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 shadow-sm disabled:cursor-not-allowed disabled:opacity-50"
+      >
+        Previous
+      </button>
+      <span className="text-sm font-medium text-gray-700">
+        Page {currentPage} of {totalPages}
+      </span>
+      <button
+        type="button"
+        onClick={() => onPageChange(currentPage + 1)}
+        disabled={isLoading || currentPage >= totalPages}
+        className="rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 shadow-sm disabled:cursor-not-allowed disabled:opacity-50"
+      >
+        Next
+      </button>
+    </nav>
   );
 }
 
@@ -159,6 +365,7 @@ function ExpenseCard({ expense }: { expense: Expense }) {
       </div>
 
       <div className="mt-4 grid gap-2 text-sm text-gray-700">
+        <Info label="Item" value={expenseItemLabel(expense)} />
         <Info label="Amount" value={formatExpenseAmount(expense)} />
         <Info label="Description" value={expense.description || "—"} />
       </div>
@@ -176,14 +383,15 @@ function Info({ label, value }: { label: string; value: string }) {
 }
 
 function formatExpenseAmount(expense: Expense) {
-  const unitCode = expense.valueUnitId.toUpperCase();
+  const amount = expense.totalAmount ?? expense.amount;
+  const unitCode = `${expense.currencyCode || ""} ${expense.valueUnitId || ""} ${expense.valueUnitLabel || ""}`.toUpperCase();
   if (unitCode.includes("GOLD")) {
-    return `${formatNumber(expense.amount)} g gold`;
+    return `${formatNumber(amount)} g gold`;
   }
   return new Intl.NumberFormat("pt-BR", {
     style: "currency",
     currency: "BRL",
-  }).format(expense.amount);
+  }).format(amount);
 }
 
 function formatNumber(value: number) {
@@ -207,4 +415,28 @@ function readFlash(state: unknown) {
     return state.flash;
   }
   return "";
+}
+
+function parsePositiveInt(value: string | null, fallback: number) {
+  if (!value) return fallback;
+  const parsed = Number.parseInt(value, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function collaboratorDisplayName(collaborator: Collaborator) {
+  return collaborator.personNickname || collaborator.personName || collaborator.id;
+}
+
+function priceListItemLabel(item: PriceListItem) {
+  const inactiveSuffix = item.active ? "" : " (inactive)";
+  return `${item.description} · ${item.code}${inactiveSuffix}`;
+}
+
+function expenseItemLabel(expense: Expense) {
+  if (expense.itemDescription) {
+    return expense.priceListItemCode
+      ? `${expense.itemDescription} · ${expense.priceListItemCode}`
+      : expense.itemDescription;
+  }
+  return "—";
 }

@@ -224,18 +224,28 @@ async function createCompletePerson(
   api: APIRequestContext,
   input: { suffix: number; firstName: string; nickname: string },
 ): Promise<CreatedPerson> {
-  const response = await api.post(e2eApiUrl("/api/v1/people"), {
-    headers: authzHeaders(),
-    data: completePersonPayload(input),
-  });
-  if (!response.ok()) {
-    throw new Error(
-      `Create Person failed at ${response.url()}: ${response.status()} ${await response.text()}`,
-    );
+  let lastFailure = "";
+
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    const suffix = attempt === 0 ? input.suffix : uniqueSuffix();
+    const response = await api.post(e2eApiUrl("/api/v1/people"), {
+      headers: authzHeaders(),
+      data: completePersonPayload({ ...input, suffix }),
+    });
+
+    if (response.ok()) {
+      const body = (await response.json()) as ApiEnvelope<CreatedPerson>;
+      if (!body.data) throw new Error("Create Person failed: response did not include data");
+      return body.data;
+    }
+
+    lastFailure = `${response.status()} ${await response.text()}`;
+    if (response.status() !== 400 || !isRetryablePersonIdentifierCollision(lastFailure)) {
+      throw new Error(`Create Person failed at ${response.url()}: ${lastFailure}`);
+    }
   }
-  const body = (await response.json()) as ApiEnvelope<CreatedPerson>;
-  if (!body.data) throw new Error("Create Person failed: response did not include data");
-  return body.data;
+
+  throw new Error(`Create Person failed after retrying unique identifiers: ${lastFailure}`);
 }
 
 async function createCollaborator(
@@ -366,7 +376,19 @@ function completePersonPayload({ suffix, firstName, nickname }: { suffix: number
   };
 }
 
-function uniqueSuffix(): number { return Date.now() + Math.floor(Math.random() * 1000); }
+let uniqueSuffixCounter = 0;
+
+function uniqueSuffix(): number {
+  uniqueSuffixCounter += 1;
+  const timePrefix = Date.now() % 1_000_000;
+  const randomTail = Math.floor(10_000_000 + Math.random() * 90_000_000);
+  return Number(`${timePrefix}${randomTail}`) + uniqueSuffixCounter;
+}
+
+function isRetryablePersonIdentifierCollision(errorText: string): boolean {
+  return /CPF already exists|Cellular already exists|Email already exists|PIX key already exists/i.test(errorText);
+}
+
 function todayISODate() { return new Date().toISOString().slice(0, 10); }
 function validRG(seed: number): string { return `RG-RCP-${String(seed).slice(-8)}`; }
 function validBrazilianCellular(seed: number): string {
