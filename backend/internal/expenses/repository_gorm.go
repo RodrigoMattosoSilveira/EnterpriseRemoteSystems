@@ -2,6 +2,7 @@ package expenses
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	"enterpriseremotesystems/backend/internal/db"
@@ -197,6 +198,16 @@ func (r *gormRepository) ExistsActiveReference(ctx context.Context, id string, t
 		return false, err
 	}
 	return count > 0, nil
+}
+
+func (r *gormRepository) FindActiveReferenceByID(ctx context.Context, id string, typ string) (*db.ReferenceData, error) {
+	var row db.ReferenceData
+	err := r.db.WithContext(ctx).
+		First(&row, "id = ? AND tenant_id = ? AND type = ? AND active = ?", strings.TrimSpace(id), defaultTenantID, typ, true).Error
+	if err != nil {
+		return nil, err
+	}
+	return &row, nil
 }
 
 func (r *gormRepository) FindActiveReferenceByCode(ctx context.Context, typ string, code string) (*db.ReferenceData, error) {

@@ -46,7 +46,10 @@ func AutoMigrate(database *gorm.DB) error {
 	if err := InstallGoldPriceActiveDateConstraint(database); err != nil {
 		return err
 	}
-	return InstallExpensePriceListAuditGuards(database)
+	if err := InstallExpensePriceListAuditGuards(database); err != nil {
+		return err
+	}
+	return BackfillLegacyExpenseAuditSnapshots(database)
 }
 
 func ensureDir(path string) error {
