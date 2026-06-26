@@ -23,6 +23,7 @@ const (
 const (
 	calculationMethodBRLPriceList         = "BRL_PRICE_LIST"
 	calculationMethodLatestGoldConversion = "BRL_TO_GOLD_GRAM_LATEST_PRICE"
+	calculationMethodLegacyDirectEntry    = "LEGACY_DIRECT_ENTRY"
 )
 
 type service struct{ repo Repository }
@@ -164,15 +165,46 @@ func (s *service) Delete(ctx context.Context, id string, actorUserID string) err
 }
 
 func (s *service) applyLegacyExpenseFields(ctx context.Context, expense *db.Expense, expenseCategoryID string, valueUnitID string, amount float64) error {
-	if err := s.validateReference(ctx, "expenseCategoryId", expenseCategoryID, "expense_category", "Expense category must be active reference data of type expense_category"); err != nil {
+	category, err := s.findActiveReference(ctx, "expenseCategoryId", expenseCategoryID, "expense_category", "Expense category must be active reference data of type expense_category")
+	if err != nil {
 		return err
 	}
-	if err := s.validateReference(ctx, "valueUnitId", valueUnitID, "value_unit", "Value unit must be active reference data of type value_unit"); err != nil {
+	valueUnit, err := s.findActiveReference(ctx, "valueUnitId", valueUnitID, "value_unit", "Value unit must be active reference data of type value_unit")
+	if err != nil {
 		return err
 	}
+
+	itemType := legacyItemTypeForCategory(category.Code)
+	currency := normalizeCurrencyCode(valueUnit.Code)
+	quantity := 1.0
+	unitPriceAmount := amount
+	totalAmount := amount
+	var unitPriceBRL *float64
+	if currency == CurrencyCodeBRL {
+		unitPriceBRL = &amount
+	}
+	itemDescription := strings.TrimSpace(expense.Description)
+	if itemDescription == "" {
+		itemDescription = strings.TrimSpace(category.Label + " legacy expense")
+	}
+	details, err := legacyCalculationDetailsJSON(category, valueUnit, itemType, itemDescription, amount)
+	if err != nil {
+		return err
+	}
+
 	expense.ExpenseCategoryID = strings.TrimSpace(expenseCategoryID)
 	expense.ValueUnitID = strings.TrimSpace(valueUnitID)
 	expense.Amount = amount
+	expense.PriceListItemCode = legacyPriceListItemCode(itemType)
+	expense.ItemType = itemType
+	expense.ItemDescription = itemDescription
+	expense.Quantity = &quantity
+	expense.UnitPriceBRL = unitPriceBRL
+	expense.CurrencyCode = currency
+	expense.UnitPriceAmount = &unitPriceAmount
+	expense.TotalAmount = &totalAmount
+	expense.CalculationMethod = calculationMethodLegacyDirectEntry
+	expense.CalculationDetailsJSON = details
 	return nil
 }
 
@@ -263,6 +295,43 @@ func normalizeStoredGoldPriceDate(value string) string {
 	return trimmed
 }
 
+func legacyItemTypeForCategory(categoryCode string) string {
+	if normalizeItemType(categoryCode) == itemTypeCanteen {
+		return itemTypeCanteen
+	}
+	return itemTypeAdministrative
+}
+
+func legacyPriceListItemCode(itemType string) string {
+	if itemType == itemTypeCanteen {
+		return "LEGACY_CANTEEN_DIRECT_ENTRY"
+	}
+	return "LEGACY_ADMINISTRATIVE_DIRECT_ENTRY"
+}
+
+func legacyCalculationDetailsJSON(category *db.ReferenceData, valueUnit *db.ReferenceData, itemType string, itemDescription string, amount float64) (string, error) {
+	details := map[string]any{
+		"calculationVersion":        1,
+		"calculationMethod":         calculationMethodLegacyDirectEntry,
+		"source":                    "legacy_direct_entry_api",
+		"legacyExpenseCategoryId":   category.ID,
+		"legacyExpenseCategoryCode": normalizeItemType(category.Code),
+		"legacyExpenseCategory":     category.Label,
+		"legacyValueUnitId":         valueUnit.ID,
+		"currencyCode":              normalizeCurrencyCode(valueUnit.Code),
+		"itemType":                  itemType,
+		"itemDescription":           itemDescription,
+		"quantity":                  1,
+		"unitPriceAmount":           amount,
+		"totalAmount":               amount,
+	}
+	payload, err := json.Marshal(details)
+	if err != nil {
+		return "", err
+	}
+	return string(payload), nil
+}
+
 func calculationDetailsJSON(item *db.ExpensePriceListItem, currency string, quantity float64, unitPriceAmount float64, totalAmount float64, goldPriceID *string, goldBRLPerGram *float64, goldPriceDate string, calculationMethod string) (string, error) {
 	details := map[string]any{
 		"priceListItemId":    item.ID,
@@ -318,14 +387,19 @@ func (s *service) validateCollaborator(ctx context.Context, collaboratorID strin
 }
 
 func (s *service) validateReference(ctx context.Context, field string, id string, typ string, message string) error {
-	exists, err := s.repo.ExistsActiveReference(ctx, strings.TrimSpace(id), typ)
-	if err != nil {
-		return err
+	_, err := s.findActiveReference(ctx, field, id, typ, message)
+	return err
+}
+
+func (s *service) findActiveReference(ctx context.Context, field string, id string, typ string, message string) (*db.ReferenceData, error) {
+	row, err := s.repo.FindActiveReferenceByID(ctx, strings.TrimSpace(id), typ)
+	if err == nil {
+		return row, nil
 	}
-	if exists {
-		return nil
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, ValidationError{Fields: map[string]string{field: message}}
 	}
-	return ValidationError{Fields: map[string]string{field: message}}
+	return nil, err
 }
 
 func normalizeListFilter(filter ExpenseListFilter) (normalizedExpenseListFilter, error) {

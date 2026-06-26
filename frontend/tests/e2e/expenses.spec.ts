@@ -201,10 +201,10 @@ test("user can open an Expense detail from the list", async ({
   await page.getByRole("link", { name: new RegExp(personNickname) }).click();
 
   await expect(page).toHaveURL(new RegExp(`/expenses/${expense.id}$`));
-  await expect(page.getByRole("heading", { name: "Flight" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Administrative" })).toBeVisible();
   await expect(page.getByText(personNickname, { exact: true })).toBeVisible();
   await expect(
-    page.getByText(`Gold-denominated flight expense ${suffix}`),
+    page.getByText(`Gold-denominated flight expense ${suffix}`, { exact: true }),
   ).toBeVisible();
   await expect(page.getByText("Gold Gram")).toBeVisible();
 });

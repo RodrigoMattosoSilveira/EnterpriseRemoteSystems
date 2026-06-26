@@ -271,7 +271,7 @@ export function ExpensesPage() {
                         </Link>
                       </td>
                       <td className="p-3 text-gray-700">
-                        {expense.expenseCategoryLabel || expense.expenseCategoryId}
+                        {displayExpenseCategory(expense)}
                       </td>
                       <td className="p-3 text-gray-700">
                         {expenseItemLabel(expense)}
@@ -356,7 +356,7 @@ function ExpenseCard({ expense }: { expense: Expense }) {
             {expense.collaboratorLabel || "Collaborator"}
           </h2>
           <p className="text-sm text-gray-500">
-            {expense.expenseCategoryLabel || expense.expenseCategoryId} · {formatDate(expense.expenseDate)}
+            {displayExpenseCategory(expense)} · {formatDate(expense.expenseDate)}
           </p>
         </div>
         <span className="rounded-full bg-gray-100 px-3 py-1 text-xs font-semibold text-gray-800">
@@ -430,6 +430,16 @@ function collaboratorDisplayName(collaborator: Collaborator) {
 function priceListItemLabel(item: PriceListItem) {
   const inactiveSuffix = item.active ? "" : " (inactive)";
   return `${item.description} · ${item.code}${inactiveSuffix}`;
+}
+
+function displayExpenseCategory(expense: Expense) {
+  if (expense.itemType === "CANTEEN") {
+    return "Canteen";
+  }
+  if (expense.itemType === "ADMINISTRATIVE") {
+    return "Administrative";
+  }
+  return expense.expenseCategoryLabel || expense.expenseCategoryId;
 }
 
 function expenseItemLabel(expense: Expense) {
