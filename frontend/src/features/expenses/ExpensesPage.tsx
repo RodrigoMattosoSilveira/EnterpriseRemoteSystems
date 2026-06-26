@@ -144,6 +144,11 @@ export function ExpensesPage() {
         </section>
 
         <section className="rounded-2xl border bg-white p-4 shadow-sm">
+          <div className="mb-4">
+            <h2 className="text-lg font-semibold text-gray-950">Filters</h2>
+            <p className="text-sm text-gray-500">Filter expense records by collaborator, category, or item.</p>
+          </div>
+
           <div className="grid min-w-0 items-start gap-4 md:grid-cols-3">
             <label className="grid min-w-0 gap-1 text-sm font-medium text-gray-700">
               Collaborator
@@ -162,13 +167,13 @@ export function ExpensesPage() {
             </label>
 
             <label className="grid min-w-0 gap-1 text-sm font-medium text-gray-700">
-              Item type
+              Category
               <select
                 value={itemType}
                 onChange={(event: ChangeEvent<HTMLSelectElement>) => setFilter("itemType", event.target.value)}
                 className="w-full min-w-0 rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm"
               >
-                <option value="">All item types</option>
+                <option value="">All categories</option>
                 <option value="CANTEEN">Canteen</option>
                 <option value="ADMINISTRATIVE">Administrative</option>
               </select>

@@ -58,6 +58,8 @@ describe("ExpensesPage", () => {
     renderExpensesPage("/expenses");
 
     await waitForText("Showing 50 of 520 expense records.");
+    await waitForText("Filters");
+    await waitForText("Filter expense records by collaborator, category, or item.");
     await waitForText("Page 1 of 11");
 
     await clickButton("Next");
@@ -83,13 +85,13 @@ describe("ExpensesPage", () => {
     expect(fetchCalls.some((call) => call.url === "/api/v1/expenses?collaboratorId=collab-2&priceListItemId=item-2&page=1&pageSize=50")).toBe(true);
   });
 
-  it("filters expense pages by item type without requiring a specific item", async () => {
+  it("filters expense pages by category without requiring a specific item", async () => {
     mockExpensePageFetch();
 
     renderExpensesPage("/expenses?page=2");
 
     await waitForText("Showing 50 of 520 expense records.");
-    await changeSelect("Item type", "CANTEEN");
+    await changeSelect("Category", "CANTEEN");
 
     await waitForText("Showing 2 of 2 expense records.");
     await waitForText("Water · WATER");
