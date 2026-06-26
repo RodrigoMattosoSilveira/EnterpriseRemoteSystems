@@ -156,6 +156,13 @@ test("user can filter Expenses by item", async ({ page, request }) => {
     .poll(() => new URL(page.url()).searchParams.get("page"))
     .toBeNull();
 
+  const itemTypeFilteredRow = page
+    .getByRole("row")
+    .filter({ hasText: item.description })
+    .first();
+  await expect(itemTypeFilteredRow).toBeVisible();
+  await expect(itemTypeFilteredRow).toContainText(description);
+
   const itemResponse = page.waitForResponse(
     (response) =>
       response.url().includes("/api/v1/expenses") &&

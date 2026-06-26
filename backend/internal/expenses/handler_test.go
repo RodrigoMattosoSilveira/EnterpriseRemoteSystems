@@ -77,22 +77,24 @@ type apiExpenseResponse struct {
 	} `json:"data"`
 }
 
+type apiExpenseListItem struct {
+	ID                string  `json:"id"`
+	CollaboratorID    string  `json:"collaboratorId"`
+	ExpenseCategoryID string  `json:"expenseCategoryId"`
+	ValueUnitID       string  `json:"valueUnitId"`
+	Amount            float64 `json:"amount"`
+	ExpenseDate       string  `json:"expenseDate"`
+	Active            bool    `json:"active"`
+	PriceListItemCode string  `json:"priceListItemCode"`
+	CalculationMethod string  `json:"calculationMethod"`
+}
+
 type apiExpenseListResponse struct {
 	Data struct {
-		Items []struct {
-			ID                string  `json:"id"`
-			CollaboratorID    string  `json:"collaboratorId"`
-			ExpenseCategoryID string  `json:"expenseCategoryId"`
-			ValueUnitID       string  `json:"valueUnitId"`
-			Amount            float64 `json:"amount"`
-			ExpenseDate       string  `json:"expenseDate"`
-			Active            bool    `json:"active"`
-			PriceListItemCode string  `json:"priceListItemCode"`
-			CalculationMethod string  `json:"calculationMethod"`
-		} `json:"items"`
-		Total    int `json:"total"`
-		Page     int `json:"page"`
-		PageSize int `json:"pageSize"`
+		Items    []apiExpenseListItem `json:"items"`
+		Total    int                  `json:"total"`
+		Page     int                  `json:"page"`
+		PageSize int                  `json:"pageSize"`
 	} `json:"data"`
 }
 
@@ -395,6 +397,76 @@ func TestListExpenseFiltersAndPagination(t *testing.T) {
 	}
 }
 
+func TestListExpenseFiltersByItemTypeIncludesPriceListAndLegacyCanteenRows(t *testing.T) {
+	server, cleanup := newTestServer(t)
+	defer cleanup()
+
+	collaborator := createActiveCollaborator(t, server, 1)
+	legacyCanteen := createExpense(t, server, validExpensePayload(collaborator.Data.ID, map[string]any{
+		"expenseCategoryId": "ref-expense-category-canteen",
+		"valueUnitId":       "ref-value-unit-brl",
+		"amount":            12.0,
+		"expenseDate":       "2026-06-01",
+		"description":       "Legacy canteen row",
+	}))
+	legacyFlight := createExpense(t, server, validExpensePayload(collaborator.Data.ID, map[string]any{
+		"expenseCategoryId": "ref-expense-category-flight",
+		"valueUnitId":       "ref-value-unit-brl",
+		"amount":            99.0,
+		"expenseDate":       "2026-06-01",
+		"description":       "Legacy flight row",
+	}))
+
+	canteenItem := createPriceListItem(t, server, validPriceListItemPayload(map[string]any{
+		"itemType":     "CANTEEN",
+		"code":         "FILTER_CANTEEN",
+		"description":  "Filter canteen item",
+		"unitPriceBrl": 10.0,
+	}))
+	priceListCanteen := createExpense(t, server, map[string]any{
+		"collaboratorId":  collaborator.Data.ID,
+		"priceListItemId": canteenItem.Data.ID,
+		"currencyCode":    "BRL",
+		"quantity":        1.0,
+		"expenseDate":     "2026-06-02",
+		"description":     "Price-list canteen row",
+	})
+
+	adminItem := createPriceListItem(t, server, validPriceListItemPayload(map[string]any{
+		"itemType":     "ADMINISTRATIVE",
+		"code":         "FILTER_ADMIN",
+		"description":  "Filter administrative item",
+		"unitPriceBrl": 25.0,
+	}))
+	priceListAdmin := createExpense(t, server, map[string]any{
+		"collaboratorId":  collaborator.Data.ID,
+		"priceListItemId": adminItem.Data.ID,
+		"currencyCode":    "BRL",
+		"quantity":        1.0,
+		"expenseDate":     "2026-06-03",
+		"description":     "Price-list administrative row",
+	})
+
+	res := getJSON(t, server, expensesURL+"?itemType=CANTEEN&pageSize=50")
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("expected item-type filter status %d, got %d", http.StatusOK, res.StatusCode)
+	}
+	var filtered apiExpenseListResponse
+	decodeJSON(t, res, &filtered)
+
+	if filtered.Data.Total != 2 || len(filtered.Data.Items) != 2 {
+		t.Fatalf("expected two CANTEEN expenses, got total=%d items=%+v", filtered.Data.Total, filtered.Data.Items)
+	}
+	ids := expenseIDs(filtered.Data.Items)
+	if !ids[legacyCanteen.Data.ID] || !ids[priceListCanteen.Data.ID] {
+		t.Fatalf("expected CANTEEN filter to include legacy category and price-list rows, got ids=%v", ids)
+	}
+	if ids[legacyFlight.Data.ID] || ids[priceListAdmin.Data.ID] {
+		t.Fatalf("expected CANTEEN filter to exclude non-canteen rows, got ids=%v", ids)
+	}
+}
+
 func TestUpdateExpenseReturnsUpdatedExpense(t *testing.T) {
 	server, cleanup := newTestServer(t)
 	defer cleanup()
@@ -636,6 +708,14 @@ func newTestServerWithDatabase(t *testing.T) (*fiber.App, *gorm.DB, func()) {
 	}
 
 	return server, database, wrappedCleanup
+}
+
+func expenseIDs(items []apiExpenseListItem) map[string]bool {
+	out := make(map[string]bool, len(items))
+	for _, item := range items {
+		out[item.ID] = true
+	}
+	return out
 }
 
 func createActiveCollaborator(t *testing.T, server *fiber.App, seq int) apiCollaboratorResponse {

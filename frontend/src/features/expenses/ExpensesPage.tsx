@@ -47,6 +47,9 @@ export function ExpensesPage() {
   const filteredItemOptions = itemType
     ? priceListItems.filter((item) => item.itemType === itemType)
     : priceListItems;
+  const selectedPriceListItem = priceListItemId
+    ? priceListItems.find((item) => item.id === priceListItemId)
+    : undefined;
   const hasActiveFilters = Boolean(collaboratorId || itemType || priceListItemId);
 
   function setFilter(key: "collaboratorId" | "itemType" | "priceListItemId", value: string) {
@@ -141,13 +144,13 @@ export function ExpensesPage() {
         </section>
 
         <section className="rounded-2xl border bg-white p-4 shadow-sm">
-          <div className="grid gap-4 md:grid-cols-3">
-            <label className="grid gap-1 text-sm font-medium text-gray-700">
+          <div className="grid min-w-0 items-start gap-4 md:grid-cols-3">
+            <label className="grid min-w-0 gap-1 text-sm font-medium text-gray-700">
               Collaborator
               <select
                 value={collaboratorId}
                 onChange={(event: ChangeEvent<HTMLSelectElement>) => setFilter("collaboratorId", event.target.value)}
-                className="rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm"
+                className="w-full min-w-0 rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm"
               >
                 <option value="">All collaborators</option>
                 {collaboratorOptions.map((collaborator) => (
@@ -158,12 +161,12 @@ export function ExpensesPage() {
               </select>
             </label>
 
-            <label className="grid gap-1 text-sm font-medium text-gray-700">
+            <label className="grid min-w-0 gap-1 text-sm font-medium text-gray-700">
               Item type
               <select
                 value={itemType}
                 onChange={(event: ChangeEvent<HTMLSelectElement>) => setFilter("itemType", event.target.value)}
-                className="rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm"
+                className="w-full min-w-0 rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm"
               >
                 <option value="">All item types</option>
                 <option value="CANTEEN">Canteen</option>
@@ -171,12 +174,13 @@ export function ExpensesPage() {
               </select>
             </label>
 
-            <label className="grid gap-1 text-sm font-medium text-gray-700">
+            <label className="grid min-w-0 gap-1 text-sm font-medium text-gray-700">
               Item
               <select
                 value={priceListItemId}
                 onChange={(event: ChangeEvent<HTMLSelectElement>) => setFilter("priceListItemId", event.target.value)}
-                className="rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm"
+                aria-describedby={selectedPriceListItem ? "selected-expense-item-filter-label" : undefined}
+                className="w-full min-w-0 rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm"
               >
                 <option value="">All items</option>
                 {filteredItemOptions.map((item) => (
@@ -185,6 +189,15 @@ export function ExpensesPage() {
                   </option>
                 ))}
               </select>
+              {selectedPriceListItem && (
+                <span
+                  id="selected-expense-item-filter-label"
+                  data-testid="selected-expense-item-filter-label"
+                  className="block max-w-full break-words rounded-xl bg-gray-50 px-3 py-2 text-xs font-medium leading-snug text-gray-600"
+                >
+                  {priceListItemLabel(selectedPriceListItem)}
+                </span>
+              )}
             </label>
           </div>
 

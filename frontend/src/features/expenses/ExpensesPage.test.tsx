@@ -19,9 +19,14 @@ const collaborators: Collaborator[] = [
   collaborator("collab-2", "João"),
 ];
 
+const longItemDescription = "DEV Smoke Test Water With A Long Display Name";
+const longItemCode = "DEV_SMOKE_WATER_1782258281";
+const longItemLabel = `${longItemDescription} · ${longItemCode}`;
+
 const priceListItems: PriceListItem[] = [
   priceListItem("item-1", "CANTEEN", "WATER", "Water"),
   priceListItem("item-2", "ADMINISTRATIVE", "FLIGHT", "Flight"),
+  priceListItem("item-long", "CANTEEN", longItemCode, longItemDescription),
 ];
 
 let container: HTMLDivElement;
@@ -77,6 +82,36 @@ describe("ExpensesPage", () => {
     await waitForText("Flight · FLIGHT");
     expect(fetchCalls.some((call) => call.url === "/api/v1/expenses?collaboratorId=collab-2&priceListItemId=item-2&page=1&pageSize=50")).toBe(true);
   });
+
+  it("filters expense pages by item type without requiring a specific item", async () => {
+    mockExpensePageFetch();
+
+    renderExpensesPage("/expenses?page=2");
+
+    await waitForText("Showing 50 of 520 expense records.");
+    await changeSelect("Item type", "CANTEEN");
+
+    await waitForText("Showing 2 of 2 expense records.");
+    await waitForText("Water · WATER");
+    expect(fetchCalls.some((call) => call.url === "/api/v1/expenses?itemType=CANTEEN&page=1&pageSize=50")).toBe(true);
+  });
+
+  it("keeps long selected item labels inside the filter form", async () => {
+    mockExpensePageFetch();
+
+    renderExpensesPage("/expenses?itemType=CANTEEN&priceListItemId=item-long");
+
+    await waitForText(longItemLabel);
+
+    const selectedItemLabel = container.querySelector(
+      '[data-testid="selected-expense-item-filter-label"]',
+    );
+
+    expect(selectedItemLabel?.textContent?.trim()).toBe(longItemLabel);
+    expect(selectedItemLabel?.className).toContain("max-w-full");
+    expect(selectedItemLabel?.className).toContain("break-words");
+    expect(controlByLabel<HTMLSelectElement>("Item", "select").className).toContain("min-w-0");
+  });
 });
 
 function mockExpensePageFetch() {
@@ -104,6 +139,19 @@ function expenseResponse(url: string): ExpenseListResponse {
   const page = Number(params.get("page") ?? "1");
   const collaboratorId = params.get("collaboratorId");
   const priceListItemId = params.get("priceListItemId");
+  const itemType = params.get("itemType");
+
+  if (itemType === "CANTEEN") {
+    return {
+      items: [
+        expense("expense-filtered-canteen-1", "collab-1", "Maria", "item-1", "Water", "WATER"),
+        expense("expense-filtered-canteen-2", "collab-1", "Maria", "item-long", longItemDescription, longItemCode),
+      ],
+      total: 2,
+      page,
+      pageSize: 50,
+    };
+  }
 
   if (collaboratorId === "collab-2" && priceListItemId === "item-2") {
     return {
