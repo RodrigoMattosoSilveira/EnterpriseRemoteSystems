@@ -94,6 +94,7 @@ func (r *gormRepository) Update(ctx context.Context, expense *db.Expense) error 
 				"description":              expense.Description,
 				"active":                   expense.Active,
 				"price_list_item_id":       expense.PriceListItemID,
+				"price_list_item_code":     expense.PriceListItemCode,
 				"item_type":                expense.ItemType,
 				"item_description":         expense.ItemDescription,
 				"quantity":                 expense.Quantity,
@@ -101,8 +102,10 @@ func (r *gormRepository) Update(ctx context.Context, expense *db.Expense) error 
 				"currency_code":            expense.CurrencyCode,
 				"gold_price_id":            expense.GoldPriceID,
 				"gold_brl_per_gram":        expense.GoldBRLPerGram,
+				"gold_price_date":          expense.GoldPriceDate,
 				"unit_price_amount":        expense.UnitPriceAmount,
 				"total_amount":             expense.TotalAmount,
+				"calculation_method":       expense.CalculationMethod,
 				"calculation_details_json": expense.CalculationDetailsJSON,
 				"updated_at":               expense.UpdatedAt,
 			}).Error; err != nil {
