@@ -61,6 +61,7 @@ type apiExpenseResponse struct {
 		Description            string   `json:"description"`
 		Active                 bool     `json:"active"`
 		PriceListItemID        *string  `json:"priceListItemId"`
+		PriceListItemCode      string   `json:"priceListItemCode"`
 		ItemType               string   `json:"itemType"`
 		ItemDescription        string   `json:"itemDescription"`
 		Quantity               *float64 `json:"quantity"`
@@ -68,8 +69,10 @@ type apiExpenseResponse struct {
 		CurrencyCode           string   `json:"currencyCode"`
 		GoldPriceID            *string  `json:"goldPriceId"`
 		GoldBRLPerGram         *float64 `json:"goldBrlPerGram"`
+		GoldPriceDate          string   `json:"goldPriceDate"`
 		UnitPriceAmount        *float64 `json:"unitPriceAmount"`
 		TotalAmount            *float64 `json:"totalAmount"`
+		CalculationMethod      string   `json:"calculationMethod"`
 		CalculationDetailsJSON string   `json:"calculationDetailsJson"`
 	} `json:"data"`
 }
@@ -84,6 +87,8 @@ type apiExpenseListResponse struct {
 			Amount            float64 `json:"amount"`
 			ExpenseDate       string  `json:"expenseDate"`
 			Active            bool    `json:"active"`
+			PriceListItemCode string  `json:"priceListItemCode"`
+			CalculationMethod string  `json:"calculationMethod"`
 		} `json:"items"`
 		Total    int `json:"total"`
 		Page     int `json:"page"`
@@ -194,8 +199,11 @@ func TestCreatePriceListExpenseInBRLCalculatesAndStoresAuditFields(t *testing.T)
 	if expense.Data.PriceListItemID == nil || *expense.Data.PriceListItemID != item.Data.ID {
 		t.Fatalf("expected price list item id %q, got %#v", item.Data.ID, expense.Data.PriceListItemID)
 	}
-	if expense.Data.ItemType != "CANTEEN" || expense.Data.ItemDescription != "Lunch plate" {
-		t.Fatalf("expected item snapshot, got type=%q description=%q", expense.Data.ItemType, expense.Data.ItemDescription)
+	if expense.Data.PriceListItemCode != "LUNCH" || expense.Data.ItemType != "CANTEEN" || expense.Data.ItemDescription != "Lunch plate" {
+		t.Fatalf("expected item snapshot, got code=%q type=%q description=%q", expense.Data.PriceListItemCode, expense.Data.ItemType, expense.Data.ItemDescription)
+	}
+	if expense.Data.CalculationMethod != "BRL_PRICE_LIST" {
+		t.Fatalf("expected BRL calculation method, got %q", expense.Data.CalculationMethod)
 	}
 	assertFloatPointer(t, expense.Data.Quantity, 3.0, "quantity")
 	assertFloatPointer(t, expense.Data.UnitPriceBRL, 25.0, "unitPriceBrl")
@@ -204,9 +212,8 @@ func TestCreatePriceListExpenseInBRLCalculatesAndStoresAuditFields(t *testing.T)
 	if expense.Data.Amount != 75.0 {
 		t.Fatalf("expected ledger amount 75.0, got %f", expense.Data.Amount)
 	}
-	if expense.Data.CalculationDetailsJSON == "" {
-		t.Fatal("expected calculation details JSON")
-	}
+	assertCalculationDetail(t, expense.Data.CalculationDetailsJSON, "itemCode", "LUNCH")
+	assertCalculationDetail(t, expense.Data.CalculationDetailsJSON, "calculationMethod", "BRL_PRICE_LIST")
 }
 
 func TestCreatePriceListExpenseInGoldUsesLatestGoldPrice(t *testing.T) {
@@ -241,11 +248,41 @@ func TestCreatePriceListExpenseInGoldUsesLatestGoldPrice(t *testing.T) {
 		t.Fatalf("expected latest gold price id %q, got %#v", gold.Data.ID, expense.Data.GoldPriceID)
 	}
 	assertFloatPointer(t, expense.Data.GoldBRLPerGram, 500.0, "goldBrlPerGram")
+	if expense.Data.GoldPriceDate != "2026-06-02" {
+		t.Fatalf("expected gold price date snapshot 2026-06-02, got %q", expense.Data.GoldPriceDate)
+	}
+	if expense.Data.CalculationMethod != "BRL_TO_GOLD_GRAM_LATEST_PRICE" {
+		t.Fatalf("expected gold calculation method, got %q", expense.Data.CalculationMethod)
+	}
 	assertFloatPointer(t, expense.Data.UnitPriceAmount, 0.2, "unitPriceAmount")
 	assertFloatPointer(t, expense.Data.TotalAmount, 0.4, "totalAmount")
 	if expense.Data.Amount != 0.4 {
 		t.Fatalf("expected ledger amount 0.4 grams, got %f", expense.Data.Amount)
 	}
+	assertCalculationDetail(t, expense.Data.CalculationDetailsJSON, "goldPriceDate", "2026-06-02")
+	assertCalculationDetail(t, expense.Data.CalculationDetailsJSON, "calculationMethod", "BRL_TO_GOLD_GRAM_LATEST_PRICE")
+}
+
+func TestCreatePriceListExpenseRejectsDerivedLegacyFields(t *testing.T) {
+	server, cleanup := newTestServer(t)
+	defer cleanup()
+
+	collaborator := createActiveCollaborator(t, server, 1)
+	item := createPriceListItem(t, server, validPriceListItemPayload(nil))
+
+	res := postJSON(t, server, http.MethodPost, expensesURL, map[string]any{
+		"collaboratorId":    collaborator.Data.ID,
+		"priceListItemId":   item.Data.ID,
+		"currencyCode":      "BRL",
+		"quantity":          1.0,
+		"expenseDate":       "2026-06-03",
+		"expenseCategoryId": "ref-expense-category-canteen",
+		"valueUnitId":       "ref-value-unit-brl",
+		"amount":            42.5,
+	})
+	defer res.Body.Close()
+
+	assertValidationError(t, res, "expenseCategoryId", "Expense category is derived from the price list item")
 }
 
 func TestCreatePriceListGoldExpenseRequiresGoldPrice(t *testing.T) {
@@ -834,6 +871,24 @@ func createOtherTenantExpense(t *testing.T, database *gorm.DB, sourceExpenseID s
 	otherExpense.UpdatedAt = now
 	if err := database.Create(&otherExpense).Error; err != nil {
 		t.Fatalf("create other-tenant expense: %v", err)
+	}
+}
+
+func assertCalculationDetail(t *testing.T, raw string, key string, expected string) {
+	t.Helper()
+	if raw == "" {
+		t.Fatal("expected calculation details JSON")
+	}
+	var details map[string]any
+	if err := json.Unmarshal([]byte(raw), &details); err != nil {
+		t.Fatalf("unmarshal calculation details: %v", err)
+	}
+	actual, ok := details[key]
+	if !ok {
+		t.Fatalf("expected calculation details key %q in %+v", key, details)
+	}
+	if actual != expected {
+		t.Fatalf("expected calculation detail %q to be %q, got %#v", key, expected, actual)
 	}
 }
 

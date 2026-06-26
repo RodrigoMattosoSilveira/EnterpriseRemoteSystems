@@ -20,6 +20,11 @@ const (
 	maxPageSize     = 200
 )
 
+const (
+	calculationMethodBRLPriceList         = "BRL_PRICE_LIST"
+	calculationMethodLatestGoldConversion = "BRL_TO_GOLD_GRAM_LATEST_PRICE"
+)
+
 type service struct{ repo Repository }
 
 func NewService(repo Repository) Service { return &service{repo: repo} }
@@ -200,6 +205,7 @@ func (s *service) applyPriceListCalculation(ctx context.Context, expense *db.Exp
 	}
 
 	unitPriceAmount := item.UnitPriceBRL
+	calculationMethod := calculationMethodBRLPriceList
 	var goldPriceID *string
 	var goldBRLPerGram *float64
 	var goldPriceDate string
@@ -212,13 +218,14 @@ func (s *service) applyPriceListCalculation(ctx context.Context, expense *db.Exp
 			return err
 		}
 		unitPriceAmount = item.UnitPriceBRL / goldPrice.BRLPerGram
+		calculationMethod = calculationMethodLatestGoldConversion
 		goldPriceID = &goldPrice.ID
 		goldBRLPerGram = &goldPrice.BRLPerGram
 		goldPriceDate = normalizeStoredGoldPriceDate(goldPrice.PriceDate)
 	}
 
 	totalAmount := unitPriceAmount * quantity
-	details, err := calculationDetailsJSON(item, currency, quantity, unitPriceAmount, totalAmount, goldPriceID, goldBRLPerGram, goldPriceDate)
+	details, err := calculationDetailsJSON(item, currency, quantity, unitPriceAmount, totalAmount, goldPriceID, goldBRLPerGram, goldPriceDate, calculationMethod)
 	if err != nil {
 		return err
 	}
@@ -229,6 +236,7 @@ func (s *service) applyPriceListCalculation(ctx context.Context, expense *db.Exp
 	expense.ValueUnitID = valueUnit.ID
 	expense.Amount = totalAmount
 	expense.PriceListItemID = &itemID
+	expense.PriceListItemCode = item.Code
 	expense.ItemType = item.ItemType
 	expense.ItemDescription = item.Description
 	expense.Quantity = &quantity
@@ -236,8 +244,10 @@ func (s *service) applyPriceListCalculation(ctx context.Context, expense *db.Exp
 	expense.CurrencyCode = currency
 	expense.GoldPriceID = goldPriceID
 	expense.GoldBRLPerGram = goldBRLPerGram
+	expense.GoldPriceDate = goldPriceDate
 	expense.UnitPriceAmount = &unitPriceAmount
 	expense.TotalAmount = &totalAmount
+	expense.CalculationMethod = calculationMethod
 	expense.CalculationDetailsJSON = details
 	if strings.TrimSpace(expense.Description) == "" {
 		expense.Description = item.Description
@@ -253,17 +263,19 @@ func normalizeStoredGoldPriceDate(value string) string {
 	return trimmed
 }
 
-func calculationDetailsJSON(item *db.ExpensePriceListItem, currency string, quantity float64, unitPriceAmount float64, totalAmount float64, goldPriceID *string, goldBRLPerGram *float64, goldPriceDate string) (string, error) {
+func calculationDetailsJSON(item *db.ExpensePriceListItem, currency string, quantity float64, unitPriceAmount float64, totalAmount float64, goldPriceID *string, goldBRLPerGram *float64, goldPriceDate string, calculationMethod string) (string, error) {
 	details := map[string]any{
-		"priceListItemId": item.ID,
-		"itemType":        item.ItemType,
-		"itemCode":        item.Code,
-		"itemDescription": item.Description,
-		"unitPriceBrl":    item.UnitPriceBRL,
-		"currencyCode":    currency,
-		"quantity":        quantity,
-		"unitPriceAmount": unitPriceAmount,
-		"totalAmount":     totalAmount,
+		"priceListItemId":    item.ID,
+		"itemType":           item.ItemType,
+		"itemCode":           item.Code,
+		"itemDescription":    item.Description,
+		"unitPriceBrl":       item.UnitPriceBRL,
+		"currencyCode":       currency,
+		"quantity":           quantity,
+		"unitPriceAmount":    unitPriceAmount,
+		"totalAmount":        totalAmount,
+		"calculationMethod":  calculationMethod,
+		"calculationVersion": 1,
 	}
 	if goldPriceID != nil && goldBRLPerGram != nil {
 		details["goldPriceId"] = *goldPriceID
@@ -279,6 +291,7 @@ func calculationDetailsJSON(item *db.ExpensePriceListItem, currency string, quan
 
 func clearPriceListCalculation(expense *db.Expense) {
 	expense.PriceListItemID = nil
+	expense.PriceListItemCode = ""
 	expense.ItemType = ""
 	expense.ItemDescription = ""
 	expense.Quantity = nil
@@ -286,8 +299,10 @@ func clearPriceListCalculation(expense *db.Expense) {
 	expense.CurrencyCode = ""
 	expense.GoldPriceID = nil
 	expense.GoldBRLPerGram = nil
+	expense.GoldPriceDate = ""
 	expense.UnitPriceAmount = nil
 	expense.TotalAmount = nil
+	expense.CalculationMethod = ""
 	expense.CalculationDetailsJSON = ""
 }
 
