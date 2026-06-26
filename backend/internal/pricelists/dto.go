@@ -35,15 +35,16 @@ type PriceListItemListFilter struct {
 }
 
 type GoldPriceDTO struct {
-	ID         string  `json:"id"`
-	TenantID   string  `json:"tenantId"`
-	PriceDate  string  `json:"priceDate"`
-	BRLPerGram float64 `json:"brlPerGram"`
-	RecordedBy string  `json:"recordedBy"`
-	Notes      string  `json:"notes,omitempty"`
-	Active     bool    `json:"active"`
-	CreatedAt  string  `json:"createdAt"`
-	UpdatedAt  string  `json:"updatedAt"`
+	ID                    string  `json:"id"`
+	TenantID              string  `json:"tenantId"`
+	PriceDate             string  `json:"priceDate"`
+	BRLPerGram            float64 `json:"brlPerGram"`
+	RecordedBy            string  `json:"recordedBy"`
+	Notes                 string  `json:"notes,omitempty"`
+	Active                bool    `json:"active"`
+	CreatedAt             string  `json:"createdAt"`
+	UpdatedAt             string  `json:"updatedAt"`
+	SupersededGoldPriceID string  `json:"supersededGoldPriceId,omitempty"`
 }
 
 type CreateGoldPriceRequest struct {
