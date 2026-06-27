@@ -1,0 +1,244 @@
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { act } from "react";
+import { createRoot, type Root } from "react-dom/client";
+import { createMemoryRouter, RouterProvider } from "react-router-dom";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { PeopleListPage } from "./PeopleListPage";
+import type { Person } from "../../types/people";
+
+let container: HTMLDivElement;
+let root: Root | null;
+let fetchCalls: string[];
+
+beforeEach(() => {
+  container = document.createElement("div");
+  document.body.appendChild(container);
+  root = null;
+  fetchCalls = [];
+});
+
+afterEach(async () => {
+  if (root) {
+    await act(async () => {
+      root?.unmount();
+    });
+  }
+  document.body.removeChild(container);
+  vi.restoreAllMocks();
+});
+
+describe("PeopleListPage", () => {
+  it("loads the first paginated People page and renders filter controls", async () => {
+    mockPeopleFetch({ items: [personFixture("person-1", "Maria")], total: 1 });
+
+    renderPeopleListRoute();
+
+    await waitForText("Maria Pessoa");
+
+    expect(fetchCalls[0]).toBe("/api/v1/people?page=1&pageSize=10");
+    expect(textNode("Filters")).toBeTruthy();
+    expect(inputByLabel("Filter people")).toBeTruthy();
+    expect(selectByLabel("People per page").value).toBe("10");
+    expect(textNode("Showing 1-1 of 1 people")).toBeTruthy();
+  });
+
+  it("applies filters and requests the next page", async () => {
+    mockPeopleFetch({ items: [personFixture("person-1", "Maria")], total: 12 });
+
+    renderPeopleListRoute();
+    await waitForText("Maria Pessoa");
+
+    await changeInput("Filter people", "Maria");
+    await submitFilterForm();
+
+    await waitFor(() =>
+      fetchCalls.includes("/api/v1/people?search=Maria&page=1&pageSize=10"),
+    );
+    await waitForText("Page 1 of 2");
+
+    await clickButton("Next");
+
+    await waitFor(() =>
+      fetchCalls.includes("/api/v1/people?search=Maria&page=2&pageSize=10"),
+    );
+  });
+
+  it("clears filters and returns to the first People page", async () => {
+    mockPeopleFetch({ items: [], total: 0 });
+
+    renderPeopleListRoute();
+    await waitForText("Showing 0-0 of 0 people");
+
+    await changeInput("Filter people", "NoMatch");
+    await submitFilterForm();
+    await waitForText("No people match these filters");
+
+    await clickButton("Clear filters");
+
+    await waitFor(() =>
+      fetchCalls.filter((url) => url === "/api/v1/people?page=1&pageSize=10")
+        .length >= 2,
+    );
+  });
+});
+
+function renderPeopleListRoute() {
+  const queryClient = new QueryClient({
+    defaultOptions: {
+      queries: { retry: false },
+      mutations: { retry: false },
+    },
+  });
+
+  const router = createMemoryRouter(
+    [{ path: "/people", element: <PeopleListPage /> }],
+    { initialEntries: ["/people"] },
+  );
+
+  root = createRoot(container);
+
+  act(() => {
+    root?.render(
+      <QueryClientProvider client={queryClient}>
+        <RouterProvider router={router} />
+      </QueryClientProvider>,
+    );
+  });
+}
+
+function mockPeopleFetch(response: { items: Person[]; total: number }) {
+  vi.spyOn(globalThis, "fetch").mockImplementation(
+    async (input: RequestInfo | URL) => {
+      const url = typeof input === "string" ? input : input.toString();
+      fetchCalls.push(url);
+
+      if (url.startsWith("/api/v1/people")) {
+        return jsonResponse({ data: response });
+      }
+
+      throw new Error(`Unhandled request: ${url}`);
+    },
+  );
+}
+
+function personFixture(id: string, firstName: string): Person {
+  return {
+    id,
+    firstName,
+    lastName: "Pessoa",
+    nickname: firstName,
+    cpf: `${id}-cpf`,
+    rg: `${id}-rg`,
+    cellular: "11987654321",
+    email: `${id}@example.com`,
+    country: "Brasil",
+    profileCompletionStatus: "INCOMPLETE",
+    canCreateCollaborator: false,
+    missingSections: ["Address", "Bank", "Emergency"],
+    statusId: "ref-person-status-active",
+    statusLabel: "Active",
+  };
+}
+
+function jsonResponse(body: unknown, init: ResponseInit = {}) {
+  return new Response(JSON.stringify(body), {
+    status: init.status ?? 200,
+    headers: { "Content-Type": "application/json", ...(init.headers ?? {}) },
+  });
+}
+
+async function waitForText(text: string) {
+  await waitFor(() => Boolean(textNode(text)));
+}
+
+async function waitFor(assertion: () => boolean) {
+  const timeoutAt = Date.now() + 1000;
+  let lastError: unknown;
+
+  while (Date.now() < timeoutAt) {
+    try {
+      let passed = false;
+      await act(async () => {
+        passed = assertion();
+      });
+      if (passed) return;
+    } catch (error) {
+      lastError = error;
+    }
+
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    });
+  }
+
+  if (lastError) {
+    throw lastError;
+  }
+
+  throw new Error("Timed out waiting for assertion");
+}
+
+function textNode(text: string) {
+  return Array.from(container.querySelectorAll("*")).find((element) =>
+    element.textContent?.includes(text),
+  );
+}
+
+function inputByLabel(labelText: string) {
+  return controlByLabel<HTMLInputElement>(labelText, "input");
+}
+
+function selectByLabel(labelText: string) {
+  return controlByLabel<HTMLSelectElement>(labelText, "select");
+}
+
+function controlByLabel<T extends HTMLInputElement | HTMLSelectElement>(
+  labelText: string,
+  selector: "input" | "select",
+): T {
+  const labels = Array.from(container.querySelectorAll("label"));
+  const label = labels.find((node) => node.textContent?.includes(labelText));
+
+  const control = label?.querySelector(selector);
+  if (!control) {
+    throw new Error(`Could not find ${selector} for label ${labelText}`);
+  }
+
+  return control as T;
+}
+
+async function changeInput(labelText: string, value: string) {
+  const input = inputByLabel(labelText);
+  const valueSetter = Object.getOwnPropertyDescriptor(
+    HTMLInputElement.prototype,
+    "value",
+  )?.set;
+
+  await act(async () => {
+    valueSetter?.call(input, value);
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+}
+
+async function submitFilterForm() {
+  const form = container.querySelector("form");
+  if (!form) throw new Error("Could not find filter form");
+
+  await act(async () => {
+    form.dispatchEvent(
+      new SubmitEvent("submit", { bubbles: true, cancelable: true }),
+    );
+  });
+}
+
+async function clickButton(name: string) {
+  const button = Array.from(container.querySelectorAll("button")).find(
+    (node) => node.textContent?.trim() === name,
+  );
+  if (!button) throw new Error(`Could not find button ${name}`);
+
+  await act(async () => {
+    button.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+  });
+}
