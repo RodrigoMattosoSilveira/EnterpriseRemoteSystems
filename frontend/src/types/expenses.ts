@@ -1,3 +1,22 @@
+export type ExpenseFinancialPosting = {
+  ledgerEntryId: string;
+  direction: string;
+  entryType: string;
+  amount: number;
+  signedAmount: number;
+  effectiveDate: string;
+  valueUnitId: string;
+  valueUnitCode?: string;
+  valueUnitLabel?: string;
+  sourceType: string;
+  sourceId: string;
+  correctionType: string;
+  receiptId: string;
+  receiptNumber?: string;
+  receiptStatus: string;
+  outstandingReceipt: boolean;
+};
+
 export type Expense = {
   id: string;
   tenantId: string;
@@ -25,6 +44,7 @@ export type Expense = {
   totalAmount?: number;
   calculationMethod?: string;
   calculationDetailsJson?: string;
+  financialPosting?: ExpenseFinancialPosting;
   createdAt: string;
   updatedAt: string;
 };

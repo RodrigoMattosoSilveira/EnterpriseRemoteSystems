@@ -171,6 +171,15 @@ func (r *gormRepository) CountPendingAccrualItems(ctx context.Context, collabora
 	return count, err
 }
 
+func (r *gormRepository) CountOutstandingReceiptsForCollaborator(ctx context.Context, collaboratorID string) (int64, error) {
+	var count int64
+	err := r.db.WithContext(ctx).
+		Model(&db.LedgerReceipt{}).
+		Where("tenant_id = ? AND collaborator_id = ? AND status IN ?", defaultTenantID, strings.TrimSpace(collaboratorID), []string{"PENDING_ISSUE", "ISSUED", "PRINTED", "SIGNED"}).
+		Count(&count).Error
+	return count, err
+}
+
 func formatDateForQuery(value time.Time) string { return value.Format(dateLayout) }
 
 func (r *gormRepository) FindEntryByID(ctx context.Context, entryID string) (*db.LedgerEntry, error) {

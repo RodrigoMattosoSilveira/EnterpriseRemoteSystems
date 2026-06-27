@@ -40,12 +40,17 @@ func (s *service) SettlementPreview(ctx context.Context, collaboratorID string) 
 	if err != nil {
 		return nil, err
 	}
+	outstandingReceipts, err := s.repo.CountOutstandingReceiptsForCollaborator(ctx, collaboratorID)
+	if err != nil {
+		return nil, err
+	}
 
 	preview := &SettlementPreviewDTO{
 		CollaboratorID:      collaborator.ID,
 		CollaboratorLabel:   collaboratorLabel(collaborator.Person),
 		JourneyStatusCode:   collaborator.Status.Code,
 		PendingAccrualItems: pendingAccrualItems,
+		OutstandingReceipts: outstandingReceipts,
 		BlockingReasons:     []string{},
 	}
 	for _, balance := range balances {
@@ -65,6 +70,9 @@ func (s *service) SettlementPreview(ctx context.Context, collaboratorID string) 
 	}
 	if pendingAccrualItems > 0 {
 		preview.BlockingReasons = append(preview.BlockingReasons, SettlementBlockerPendingAccruals)
+	}
+	if outstandingReceipts > 0 {
+		preview.BlockingReasons = append(preview.BlockingReasons, SettlementBlockerOutstandingReceipts)
 	}
 
 	preview.BRLBalance = normalizedZero(preview.BRLBalance)

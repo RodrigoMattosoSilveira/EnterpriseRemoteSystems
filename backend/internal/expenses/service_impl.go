@@ -26,6 +26,8 @@ const (
 	calculationMethodLegacyDirectEntry    = "LEGACY_DIRECT_ENTRY"
 )
 
+var ErrExpenseReceiptObligationMissing = errors.New("expense ledger debit receipt obligation was not generated")
+
 type service struct{ repo Repository }
 
 func NewService(repo Repository) Service { return &service{repo: repo} }
@@ -82,7 +84,7 @@ func (s *service) Create(ctx context.Context, req CreateExpenseRequest, actorUse
 	if err != nil {
 		return nil, err
 	}
-	return ptr(ToDTO(*created)), nil
+	return s.expenseDTOWithPosting(ctx, *created)
 }
 
 func (s *service) GetByID(ctx context.Context, id string) (*ExpenseDTO, error) {
@@ -90,7 +92,7 @@ func (s *service) GetByID(ctx context.Context, id string) (*ExpenseDTO, error) {
 	if err != nil {
 		return nil, err
 	}
-	return ptr(ToDTO(*row)), nil
+	return s.expenseDTOWithPosting(ctx, *row)
 }
 
 func (s *service) Update(ctx context.Context, id string, req UpdateExpenseRequest, actorUserID string) (*ExpenseDTO, error) {
@@ -136,7 +138,7 @@ func (s *service) Update(ctx context.Context, id string, req UpdateExpenseReques
 	if err != nil {
 		return nil, err
 	}
-	return ptr(ToDTO(*updated)), nil
+	return s.expenseDTOWithPosting(ctx, *updated)
 }
 
 func (s *service) Deactivate(ctx context.Context, id string, actorUserID string) (*ExpenseDTO, error) {
@@ -156,12 +158,23 @@ func (s *service) Deactivate(ctx context.Context, id string, actorUserID string)
 	if err != nil {
 		return nil, err
 	}
-	return ptr(ToDTO(*updated)), nil
+	return s.expenseDTOWithPosting(ctx, *updated)
 }
 
 func (s *service) Delete(ctx context.Context, id string, actorUserID string) error {
 	_, err := s.Deactivate(ctx, id, actorUserID)
 	return err
+}
+
+func (s *service) expenseDTOWithPosting(ctx context.Context, expense db.Expense) (*ExpenseDTO, error) {
+	posting, err := s.repo.FindFinancialPostingByExpenseID(ctx, expense.ID)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return ptr(ToDTO(expense)), nil
+		}
+		return nil, err
+	}
+	return ptr(ToDTOWithFinancialPosting(expense, posting)), nil
 }
 
 func (s *service) applyLegacyExpenseFields(ctx context.Context, expense *db.Expense, expenseCategoryID string, valueUnitID string, amount float64) error {
