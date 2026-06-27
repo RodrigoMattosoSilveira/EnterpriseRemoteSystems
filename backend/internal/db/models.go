@@ -143,13 +143,14 @@ type Person struct {
 type ExpensePriceListItem struct {
 	BaseModel
 
-	TenantID     string  `gorm:"type:text;not null;default:default;uniqueIndex:ux_expense_price_list_items_tenant_type_code,priority:1;index:idx_expense_price_list_items_tenant_type_active_sort,priority:1" json:"tenantId"`
-	ItemType     string  `gorm:"type:text;not null;uniqueIndex:ux_expense_price_list_items_tenant_type_code,priority:2;index:idx_expense_price_list_items_tenant_type_active_sort,priority:2" json:"itemType"`
-	Code         string  `gorm:"type:text;not null;uniqueIndex:ux_expense_price_list_items_tenant_type_code,priority:3" json:"code"`
-	Description  string  `gorm:"type:text;not null" json:"description"`
-	UnitPriceBRL float64 `gorm:"column:unit_price_brl;not null" json:"unitPriceBrl"`
-	Active       bool    `gorm:"not null;default:true;index:idx_expense_price_list_items_tenant_type_active_sort,priority:3" json:"active"`
-	SortOrder    int     `gorm:"not null;default:0;index:idx_expense_price_list_items_tenant_type_active_sort,priority:4" json:"sortOrder"`
+	TenantID                  string  `gorm:"type:text;not null;default:default;index:idx_expense_price_list_items_tenant_type_active_sort,priority:1" json:"tenantId"`
+	ItemType                  string  `gorm:"type:text;not null;index:idx_expense_price_list_items_tenant_type_active_sort,priority:2" json:"itemType"`
+	Code                      string  `gorm:"type:text;not null" json:"code"`
+	Description               string  `gorm:"type:text;not null" json:"description"`
+	UnitPriceBRL              float64 `gorm:"column:unit_price_brl;not null" json:"unitPriceBrl"`
+	Active                    bool    `gorm:"not null;default:true;index:idx_expense_price_list_items_tenant_type_active_sort,priority:3" json:"active"`
+	SortOrder                 int     `gorm:"not null;default:0;index:idx_expense_price_list_items_tenant_type_active_sort,priority:4" json:"sortOrder"`
+	SupersededPriceListItemID *string `gorm:"type:text;index" json:"supersededPriceListItemId,omitempty"`
 
 	Tenant   Tenant    `gorm:"foreignKey:TenantID;constraint:OnUpdate:Restrict,OnDelete:Restrict;" json:"tenant,omitempty"`
 	Expenses []Expense `gorm:"foreignKey:PriceListItemID" json:"expenses,omitempty"`

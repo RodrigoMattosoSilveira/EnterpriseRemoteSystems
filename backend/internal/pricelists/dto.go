@@ -1,16 +1,17 @@
 package pricelists
 
 type PriceListItemDTO struct {
-	ID           string  `json:"id"`
-	TenantID     string  `json:"tenantId"`
-	ItemType     string  `json:"itemType"`
-	Code         string  `json:"code"`
-	Description  string  `json:"description"`
-	UnitPriceBRL float64 `json:"unitPriceBrl"`
-	Active       bool    `json:"active"`
-	SortOrder    int     `json:"sortOrder"`
-	CreatedAt    string  `json:"createdAt"`
-	UpdatedAt    string  `json:"updatedAt"`
+	ID                        string  `json:"id"`
+	TenantID                  string  `json:"tenantId"`
+	ItemType                  string  `json:"itemType"`
+	Code                      string  `json:"code"`
+	Description               string  `json:"description"`
+	UnitPriceBRL              float64 `json:"unitPriceBrl"`
+	Active                    bool    `json:"active"`
+	SortOrder                 int     `json:"sortOrder"`
+	SupersededPriceListItemID string  `json:"supersededPriceListItemId,omitempty"`
+	CreatedAt                 string  `json:"createdAt"`
+	UpdatedAt                 string  `json:"updatedAt"`
 }
 
 type CreatePriceListItemRequest struct {

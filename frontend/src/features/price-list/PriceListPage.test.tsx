@@ -137,7 +137,7 @@ describe("PriceListPage", () => {
     await changeInputInForm("Edit Document copy", "BRL Unit Price", "6.25");
     await submitFormByHeading("Edit Document copy");
 
-    await waitForText("Updated price-list item: Document copy updated.");
+    await waitForText("Updated price-list item: Document copy updated. The previous version was retained as inactive history.");
     await waitForText("6,25");
 
     const updateCall = fetchCalls.find((call) => call.method === "PATCH" && call.url === "/api/v1/price-list-items/price-admin-copy");
@@ -209,6 +209,8 @@ function mockPriceListFetch() {
     const updateMatch = path.match(/^\/price-list-items\/([^/]+)$/);
     if (updateMatch && method === "PATCH") {
       const id = decodeURIComponent(updateMatch[1]);
+      const existing = rows.find((row) => row.id === id);
+      if (!existing) return jsonResponse({ error: { message: "Not found" } }, { status: 404 });
       const body = parseBody(init?.body) as {
         itemType: string;
         code: string;
@@ -216,19 +218,22 @@ function mockPriceListFetch() {
         unitPriceBrl: number;
         sortOrder: number;
       };
-      rows = rows.map((row) =>
-        row.id === id
-          ? {
-              ...row,
-              itemType: body.itemType,
-              code: body.code.toUpperCase(),
-              description: body.description,
-              unitPriceBrl: body.unitPriceBrl,
-              sortOrder: body.sortOrder,
-            }
-          : row,
-      );
-      return jsonResponse({ data: rows.find((row) => row.id === id) });
+      const replacement: PriceListItem = {
+        ...existing,
+        id: `${id}-revision`,
+        itemType: body.itemType,
+        code: body.code.toUpperCase(),
+        description: body.description,
+        unitPriceBrl: body.unitPriceBrl,
+        sortOrder: body.sortOrder,
+        active: true,
+        supersededPriceListItemId: id,
+        createdAt: "2026-06-23T12:00:00Z",
+        updatedAt: "2026-06-23T12:00:00Z",
+      };
+      rows = rows.map((row) => (row.id === id ? { ...row, active: false } : row));
+      rows = [replacement, ...rows];
+      return jsonResponse({ data: replacement });
     }
 
     const deactivateMatch = path.match(/^\/price-list-items\/([^/]+)\/deactivate$/);
@@ -241,7 +246,13 @@ function mockPriceListFetch() {
     const reactivateMatch = path.match(/^\/price-list-items\/([^/]+)\/reactivate$/);
     if (reactivateMatch && method === "PATCH") {
       const id = decodeURIComponent(reactivateMatch[1]);
-      rows = rows.map((row) => (row.id === id ? { ...row, active: true } : row));
+      const target = rows.find((row) => row.id === id);
+      if (!target) return jsonResponse({ error: { message: "Not found" } }, { status: 404 });
+      rows = rows.map((row) =>
+        row.itemType === target.itemType && row.code === target.code
+          ? { ...row, active: row.id === id }
+          : row,
+      );
       return jsonResponse({ data: rows.find((row) => row.id === id) });
     }
 

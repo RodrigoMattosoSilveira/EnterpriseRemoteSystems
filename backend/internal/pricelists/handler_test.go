@@ -31,27 +31,29 @@ type apiErrorResponse struct {
 
 type apiPriceListItemResponse struct {
 	Data struct {
-		ID           string  `json:"id"`
-		TenantID     string  `json:"tenantId"`
-		ItemType     string  `json:"itemType"`
-		Code         string  `json:"code"`
-		Description  string  `json:"description"`
-		UnitPriceBRL float64 `json:"unitPriceBrl"`
-		Active       bool    `json:"active"`
-		SortOrder    int     `json:"sortOrder"`
+		ID                        string  `json:"id"`
+		TenantID                  string  `json:"tenantId"`
+		ItemType                  string  `json:"itemType"`
+		Code                      string  `json:"code"`
+		Description               string  `json:"description"`
+		UnitPriceBRL              float64 `json:"unitPriceBrl"`
+		Active                    bool    `json:"active"`
+		SortOrder                 int     `json:"sortOrder"`
+		SupersededPriceListItemID string  `json:"supersededPriceListItemId"`
 	} `json:"data"`
 }
 
 type apiPriceListItemListResponse struct {
 	Data []struct {
-		ID           string  `json:"id"`
-		TenantID     string  `json:"tenantId"`
-		ItemType     string  `json:"itemType"`
-		Code         string  `json:"code"`
-		Description  string  `json:"description"`
-		UnitPriceBRL float64 `json:"unitPriceBrl"`
-		Active       bool    `json:"active"`
-		SortOrder    int     `json:"sortOrder"`
+		ID                        string  `json:"id"`
+		TenantID                  string  `json:"tenantId"`
+		ItemType                  string  `json:"itemType"`
+		Code                      string  `json:"code"`
+		Description               string  `json:"description"`
+		UnitPriceBRL              float64 `json:"unitPriceBrl"`
+		Active                    bool    `json:"active"`
+		SortOrder                 int     `json:"sortOrder"`
+		SupersededPriceListItemID string  `json:"supersededPriceListItemId"`
 	} `json:"data"`
 }
 
@@ -119,11 +121,17 @@ func TestUpdateDeactivateAndReactivatePriceListItem(t *testing.T) {
 	}
 	var updated apiPriceListItemResponse
 	decodeJSON(t, res, &updated)
-	if updated.Data.Description != "Dinner" || updated.Data.UnitPriceBRL != 55.0 || updated.Data.SortOrder != 20 {
+	if updated.Data.ID == created.Data.ID {
+		t.Fatalf("expected update to create a replacement audit record, got same id %q", updated.Data.ID)
+	}
+	if updated.Data.SupersededPriceListItemID != created.Data.ID {
+		t.Fatalf("expected update to report superseded id %q, got %q", created.Data.ID, updated.Data.SupersededPriceListItemID)
+	}
+	if updated.Data.Description != "Dinner" || updated.Data.UnitPriceBRL != 55.0 || updated.Data.SortOrder != 20 || !updated.Data.Active {
 		t.Fatalf("unexpected updated item: %+v", updated.Data)
 	}
 
-	res = postJSON(t, server, http.MethodPatch, priceListItemsURL+created.Data.ID+"/deactivate", map[string]any{})
+	res = postJSON(t, server, http.MethodPatch, priceListItemsURL+updated.Data.ID+"/deactivate", map[string]any{})
 	defer res.Body.Close()
 	if res.StatusCode != http.StatusOK {
 		t.Fatalf("expected deactivate status %d, got %d", http.StatusOK, res.StatusCode)
@@ -144,11 +152,11 @@ func TestUpdateDeactivateAndReactivatePriceListItem(t *testing.T) {
 	res = getJSON(t, server, priceListItemsURL+"?includeInactive=true")
 	defer res.Body.Close()
 	decodeJSON(t, res, &list)
-	if len(list.Data) != 1 || list.Data[0].ID != created.Data.ID || list.Data[0].Active {
-		t.Fatalf("expected inactive item visible when requested, got %+v", list.Data)
+	if len(list.Data) != 2 {
+		t.Fatalf("expected superseded and inactive replacement history visible when requested, got %+v", list.Data)
 	}
 
-	res = postJSON(t, server, http.MethodPatch, priceListItemsURL+created.Data.ID+"/reactivate", map[string]any{})
+	res = postJSON(t, server, http.MethodPatch, priceListItemsURL+updated.Data.ID+"/reactivate", map[string]any{})
 	defer res.Body.Close()
 	if res.StatusCode != http.StatusOK {
 		t.Fatalf("expected reactivate status %d, got %d", http.StatusOK, res.StatusCode)
@@ -161,8 +169,50 @@ func TestUpdateDeactivateAndReactivatePriceListItem(t *testing.T) {
 	res = getJSON(t, server, priceListItemsURL)
 	defer res.Body.Close()
 	decodeJSON(t, res, &list)
-	if len(list.Data) != 1 || list.Data[0].ID != created.Data.ID || !list.Data[0].Active {
+	if len(list.Data) != 1 || list.Data[0].ID != updated.Data.ID || !list.Data[0].Active {
 		t.Fatalf("expected reactivated item visible from default list, got %+v", list.Data)
+	}
+}
+
+func TestUpdatePriceListItemSupersedesOriginalAndKeepsExpenseSnapshotsStable(t *testing.T) {
+	server, cleanup := newTestServer(t)
+	defer cleanup()
+
+	original := createPriceListItem(t, server, validPriceListItemPayload(map[string]any{
+		"code":         "canteen_history",
+		"description":  "Original snack",
+		"unitPriceBrl": 10.0,
+	}))
+	replacement := updatePriceListItem(t, server, original.Data.ID, validPriceListItemPayload(map[string]any{
+		"code":         "canteen_history",
+		"description":  "Updated snack",
+		"unitPriceBrl": 12.5,
+	}))
+
+	if replacement.Data.ID == original.Data.ID {
+		t.Fatalf("expected replacement row, got original id %q", replacement.Data.ID)
+	}
+	if replacement.Data.SupersededPriceListItemID != original.Data.ID {
+		t.Fatalf("expected superseded id %q, got %q", original.Data.ID, replacement.Data.SupersededPriceListItemID)
+	}
+
+	res := getJSON(t, server, priceListItemsURL)
+	defer res.Body.Close()
+	var activeList apiPriceListItemListResponse
+	decodeJSON(t, res, &activeList)
+	if len(activeList.Data) != 1 || activeList.Data[0].ID != replacement.Data.ID || !activeList.Data[0].Active {
+		t.Fatalf("expected default list to include only active replacement, got %+v", activeList.Data)
+	}
+
+	res = getJSON(t, server, priceListItemsURL+"?includeInactive=true")
+	defer res.Body.Close()
+	var historyList apiPriceListItemListResponse
+	decodeJSON(t, res, &historyList)
+	if len(historyList.Data) != 2 {
+		t.Fatalf("expected includeInactive list to preserve both audit records, got %+v", historyList.Data)
+	}
+	if !containsPriceListItem(historyList.Data, replacement.Data.ID, true) || !containsPriceListItem(historyList.Data, original.Data.ID, false) {
+		t.Fatalf("expected replacement active and original inactive, got %+v", historyList.Data)
 	}
 }
 
@@ -272,6 +322,69 @@ func TestCreateGoldPriceForExistingDateSupersedesExistingActivePrice(t *testing.
 	}
 }
 
+func TestPriceListItemDatabaseAllowsHistoryButOnlyOneActiveItemPerCode(t *testing.T) {
+	database, err := dbpkg.Open(filepath.Join(t.TempDir(), "app.db"))
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	if err := dbpkg.AutoMigrate(database); err != nil {
+		t.Fatalf("auto migrate: %v", err)
+	}
+	if err := dbpkg.SeedReferenceData(database); err != nil {
+		t.Fatalf("seed reference data: %v", err)
+	}
+
+	now := time.Now().UTC()
+	first := dbpkg.ExpensePriceListItem{
+		BaseModel:    dbpkg.BaseModel{ID: "price-item-db-original", CreatedAt: now, UpdatedAt: now},
+		TenantID:     dbpkg.DefaultTenantID,
+		ItemType:     "CANTEEN",
+		Code:         "DB_HISTORY_SNACK",
+		Description:  "Original snack",
+		UnitPriceBRL: 10,
+		Active:       true,
+		SortOrder:    10,
+	}
+	if err := database.Create(&first).Error; err != nil {
+		t.Fatalf("create first price-list item: %v", err)
+	}
+
+	conflict := dbpkg.ExpensePriceListItem{
+		BaseModel:    dbpkg.BaseModel{ID: "price-item-db-conflict", CreatedAt: now.Add(time.Second), UpdatedAt: now.Add(time.Second)},
+		TenantID:     dbpkg.DefaultTenantID,
+		ItemType:     "CANTEEN",
+		Code:         "DB_HISTORY_SNACK",
+		Description:  "Conflicting active snack",
+		UnitPriceBRL: 11,
+		Active:       true,
+		SortOrder:    20,
+	}
+	if err := database.Create(&conflict).Error; err == nil {
+		t.Fatal("expected database to reject two active price-list items for the same tenant/type/code")
+	}
+
+	supersededID := first.ID
+	replacement := dbpkg.ExpensePriceListItem{
+		BaseModel:                 dbpkg.BaseModel{ID: "price-item-db-replacement", CreatedAt: now.Add(2 * time.Second), UpdatedAt: now.Add(2 * time.Second)},
+		TenantID:                  dbpkg.DefaultTenantID,
+		ItemType:                  "CANTEEN",
+		Code:                      "DB_HISTORY_SNACK",
+		Description:               "Replacement snack",
+		UnitPriceBRL:              12,
+		Active:                    true,
+		SortOrder:                 10,
+		SupersededPriceListItemID: &supersededID,
+	}
+	if err := database.Model(&dbpkg.ExpensePriceListItem{}).
+		Where("id = ?", first.ID).
+		Update("active", false).Error; err != nil {
+		t.Fatalf("deactivate first price-list item: %v", err)
+	}
+	if err := database.Create(&replacement).Error; err != nil {
+		t.Fatalf("expected database to allow inactive history plus one active replacement: %v", err)
+	}
+}
+
 func TestGoldPriceDatabaseAllowsOnlyOneActivePricePerTenantDate(t *testing.T) {
 	database, err := dbpkg.Open(filepath.Join(t.TempDir(), "app.db"))
 	if err != nil {
@@ -355,6 +468,39 @@ func createPriceListItem(t *testing.T, server *fiber.App, payload map[string]any
 	var body apiPriceListItemResponse
 	decodeJSON(t, res, &body)
 	return body
+}
+
+func updatePriceListItem(t *testing.T, server *fiber.App, id string, payload map[string]any) apiPriceListItemResponse {
+	t.Helper()
+	res := postJSON(t, server, http.MethodPatch, priceListItemsURL+id, payload)
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		var body apiErrorResponse
+		decodeJSON(t, res, &body)
+		t.Fatalf("expected update item status %d, got %d with error %+v", http.StatusOK, res.StatusCode, body.Error)
+	}
+	var body apiPriceListItemResponse
+	decodeJSON(t, res, &body)
+	return body
+}
+
+func containsPriceListItem(rows []struct {
+	ID                        string  `json:"id"`
+	TenantID                  string  `json:"tenantId"`
+	ItemType                  string  `json:"itemType"`
+	Code                      string  `json:"code"`
+	Description               string  `json:"description"`
+	UnitPriceBRL              float64 `json:"unitPriceBrl"`
+	Active                    bool    `json:"active"`
+	SortOrder                 int     `json:"sortOrder"`
+	SupersededPriceListItemID string  `json:"supersededPriceListItemId"`
+}, id string, active bool) bool {
+	for _, row := range rows {
+		if row.ID == id && row.Active == active {
+			return true
+		}
+	}
+	return false
 }
 
 func createGoldPrice(t *testing.T, server *fiber.App, payload map[string]any) apiGoldPriceResponse {
