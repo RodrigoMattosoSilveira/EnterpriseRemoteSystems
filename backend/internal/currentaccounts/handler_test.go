@@ -985,13 +985,14 @@ func TestSettlementPreviewAllowsCloseWithoutBlockers(t *testing.T) {
 			BRLBalance          float64  `json:"brlBalance"`
 			GoldGramBalance     float64  `json:"goldGramBalance"`
 			PendingAccrualItems int64    `json:"pendingAccrualItems"`
+			OutstandingReceipts int64    `json:"outstandingReceipts"`
 			CanClose            bool     `json:"canClose"`
 			BlockingReasons     []string `json:"blockingReasons"`
 		} `json:"data"`
 	}
 	decodeJSON(t, res, &body)
 
-	if body.Data.CollaboratorID != collaborator.Data.ID || body.Data.BRLBalance != 0 || body.Data.GoldGramBalance != 0 || body.Data.PendingAccrualItems != 0 || !body.Data.CanClose || len(body.Data.BlockingReasons) != 0 {
+	if body.Data.CollaboratorID != collaborator.Data.ID || body.Data.BRLBalance != 0 || body.Data.GoldGramBalance != 0 || body.Data.PendingAccrualItems != 0 || body.Data.OutstandingReceipts != 0 || !body.Data.CanClose || len(body.Data.BlockingReasons) != 0 {
 		t.Fatalf("unexpected settlement preview: %+v", body.Data)
 	}
 }
@@ -1007,15 +1008,62 @@ func TestSettlementPreviewBlocksNegativeBalance(t *testing.T) {
 	defer res.Body.Close()
 	var body struct {
 		Data struct {
-			BRLBalance      float64  `json:"brlBalance"`
-			CanClose        bool     `json:"canClose"`
-			BlockingReasons []string `json:"blockingReasons"`
+			BRLBalance          float64  `json:"brlBalance"`
+			OutstandingReceipts int64    `json:"outstandingReceipts"`
+			CanClose            bool     `json:"canClose"`
+			BlockingReasons     []string `json:"blockingReasons"`
 		} `json:"data"`
 	}
 	decodeJSON(t, res, &body)
 
-	if body.Data.BRLBalance != -42.5 || body.Data.CanClose || len(body.Data.BlockingReasons) != 1 || body.Data.BlockingReasons[0] != "NEGATIVE_BALANCE" {
+	if body.Data.BRLBalance != -42.5 || body.Data.OutstandingReceipts != 1 || body.Data.CanClose || !containsString(body.Data.BlockingReasons, "NEGATIVE_BALANCE") || !containsString(body.Data.BlockingReasons, "OUTSTANDING_RECEIPTS") {
 		t.Fatalf("unexpected blocked settlement preview: %+v", body.Data)
+	}
+}
+
+func TestSettlementPreviewBlocksOutstandingReceiptsAfterBalanceCorrection(t *testing.T) {
+	server, cleanup := newTestServer(t)
+	defer cleanup()
+
+	collaborator := createActiveCollaborator(t, server, 1)
+	expense := createExpense(t, server, validExpensePayload(collaborator.Data.ID, nil))
+	entries := listLedgerEntries(t, server, collaborator.Data.ID).Data.Items
+	if len(entries) != 1 {
+		t.Fatalf("expected one expense ledger entry, got %+v", entries)
+	}
+
+	replace := postAuthorizedJSON(t, server, http.MethodPost, "/api/v1/ledger-entries/"+entries[0].ID+"/replace", map[string]any{
+		"reasonCode":    "BALANCE_TEST",
+		"reasonText":    "Create positive balance while original receipt remains outstanding",
+		"valueUnitId":   "ref-value-unit-brl",
+		"entryType":     "EARNING_CREDIT",
+		"direction":     "CREDIT",
+		"amount":        42.5,
+		"effectiveDate": "2026-06-07",
+		"description":   expense.Data.ID,
+	})
+	replace.Body.Close()
+	if replace.StatusCode != http.StatusOK {
+		t.Fatalf("expected balance correction replace status %d, got %d", http.StatusOK, replace.StatusCode)
+	}
+
+	res := getJSON(t, server, "/api/v1/collaborators/"+collaborator.Data.ID+"/settlement-preview")
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("expected settlement preview status %d, got %d", http.StatusOK, res.StatusCode)
+	}
+	var body struct {
+		Data struct {
+			BRLBalance          float64  `json:"brlBalance"`
+			OutstandingReceipts int64    `json:"outstandingReceipts"`
+			CanClose            bool     `json:"canClose"`
+			BlockingReasons     []string `json:"blockingReasons"`
+		} `json:"data"`
+	}
+	decodeJSON(t, res, &body)
+
+	if body.Data.BRLBalance <= 0 || body.Data.OutstandingReceipts != 1 || body.Data.CanClose || !containsString(body.Data.BlockingReasons, "OUTSTANDING_RECEIPTS") || containsString(body.Data.BlockingReasons, "NEGATIVE_BALANCE") {
+		t.Fatalf("expected outstanding receipt to block close independently of balance, got %+v", body.Data)
 	}
 }
 
@@ -1347,6 +1395,15 @@ func newTestServer(t *testing.T) (*fiber.App, func()) {
 		t.Fatalf("bootstrap test server: %v", err)
 	}
 	return server, cleanup
+}
+
+func containsString(values []string, expected string) bool {
+	for _, value := range values {
+		if value == expected {
+			return true
+		}
+	}
+	return false
 }
 
 func createActiveCollaborator(t *testing.T, server *fiber.App, seq int) apiCollaboratorResponse {

@@ -116,6 +116,7 @@ const (
 	SettlementBlockerJourneyAlreadyClosed = "JOURNEY_ALREADY_CLOSED"
 	SettlementBlockerNegativeBalance      = "NEGATIVE_BALANCE"
 	SettlementBlockerPendingAccruals      = "PENDING_ACCRUALS"
+	SettlementBlockerOutstandingReceipts  = "OUTSTANDING_RECEIPTS"
 )
 
 type SettlementPreviewDTO struct {
@@ -125,6 +126,7 @@ type SettlementPreviewDTO struct {
 	BRLBalance          float64  `json:"brlBalance"`
 	GoldGramBalance     float64  `json:"goldGramBalance"`
 	PendingAccrualItems int64    `json:"pendingAccrualItems"`
+	OutstandingReceipts int64    `json:"outstandingReceipts"`
 	CanClose            bool     `json:"canClose"`
 	BlockingReasons     []string `json:"blockingReasons"`
 }
