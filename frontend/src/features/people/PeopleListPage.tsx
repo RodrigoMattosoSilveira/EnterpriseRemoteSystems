@@ -1,17 +1,23 @@
 import { Link, useLocation } from "react-router-dom";
 import { usePeople } from "./usePeople";
+import type { Person } from "../../types/people";
+
+type PeopleListState = {
+  flash: string;
+  createdPersonId: string;
+  createdPerson?: Person;
+};
 
 export function PeopleListPage() {
   const { data, isLoading, error } = usePeople();
   const location = useLocation();
   const people = Array.isArray(data) ? data : [];
-  const flash =
-    typeof location.state === "object" &&
-    location.state !== null &&
-    "flash" in location.state &&
-    typeof location.state.flash === "string"
-      ? location.state.flash
-      : "";
+  const listState = readPeopleListState(location.state);
+  const displayedPeople = pinCreatedPerson(
+    people,
+    listState.createdPersonId,
+    listState.createdPerson,
+  );
 
   return (
     <main className="min-h-screen bg-gray-50">
@@ -60,12 +66,12 @@ export function PeopleListPage() {
       </header>
 
       <section className="mx-auto max-w-4xl space-y-4 p-4">
-        {flash && (
+        {listState.flash && (
           <div
             role="status"
             className="rounded-2xl border border-green-200 bg-green-50 p-4 text-sm font-medium text-green-800"
           >
-            {flash}
+            {listState.flash}
           </div>
         )}
 
@@ -86,7 +92,7 @@ export function PeopleListPage() {
           </pre>
         )}
 
-        {!isLoading && !error && people.length === 0 && (
+        {!isLoading && !error && displayedPeople.length === 0 && (
           <div className="rounded-2xl border bg-white p-8 text-center shadow-sm">
             <h2 className="text-lg font-semibold">No people yet</h2>
             <p className="mt-2 text-sm text-gray-500">
@@ -101,52 +107,118 @@ export function PeopleListPage() {
           </div>
         )}
 
-        {people.map((person) => (
-          <Link
-            key={person.id}
-            to={`/people/${person.id}`}
-            className="block rounded-2xl border bg-white p-5 shadow-sm transition hover:shadow-md"
-          >
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <h2 className="text-lg font-semibold text-gray-950">
-                  {person.firstName} {person.lastName}
-                </h2>
-                <p className="text-sm text-gray-500">
-                  Nickname: {person.nickname || "—"}
-                </p>
+        {displayedPeople.map((person) => {
+          const wasJustCreated = person.id === listState.createdPersonId;
+
+          return (
+            <Link
+              key={person.id}
+              to={`/people/${person.id}`}
+              className={`block rounded-2xl border p-5 shadow-sm transition hover:shadow-md ${
+                wasJustCreated
+                  ? "border-green-300 bg-green-50 ring-2 ring-green-100"
+                  : "bg-white"
+              }`}
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h2 className="text-lg font-semibold text-gray-950">
+                      {person.firstName} {person.lastName}
+                    </h2>
+                    {wasJustCreated && (
+                      <span className="rounded-full bg-green-100 px-3 py-1 text-xs font-semibold text-green-800">
+                        Just added
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-sm text-gray-500">
+                    Nickname: {person.nickname || "—"}
+                  </p>
+                </div>
+
+                <StatusBadge complete={person.canCreateCollaborator}>
+                  {person.canCreateCollaborator ? "Complete" : "Incomplete"}
+                </StatusBadge>
               </div>
 
-              <StatusBadge complete={person.canCreateCollaborator}>
-                {person.canCreateCollaborator ? "Complete" : "Incomplete"}
-              </StatusBadge>
-            </div>
+              <div className="mt-4 grid gap-2 text-sm text-gray-700">
+                <Info label="CPF" value={person.cpf} />
+                <Info label="RG" value={person.rg} />
+                <Info label="Cellular" value={person.cellular} />
+                <Info label="Email" value={person.email} />
+              </div>
 
-            <div className="mt-4 grid gap-2 text-sm text-gray-700">
-              <Info label="CPF" value={person.cpf} />
-              <Info label="RG" value={person.rg} />
-              <Info label="Cellular" value={person.cellular} />
-              <Info label="Email" value={person.email} />
-            </div>
-
-            {!person.canCreateCollaborator &&
-              person.missingSections &&
-              person.missingSections.length > 0 && (
-                <div className="mt-4 flex flex-wrap gap-2">
-                  {person.missingSections.map((section) => (
-                    <span
-                      key={section}
-                      className="rounded-full bg-amber-100 px-3 py-1 text-xs font-medium text-amber-800"
-                    >
-                      Missing {section}
-                    </span>
-                  ))}
-                </div>
-              )}
-          </Link>
-        ))}
+              {!person.canCreateCollaborator &&
+                person.missingSections &&
+                person.missingSections.length > 0 && (
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    {person.missingSections.map((section) => (
+                      <span
+                        key={section}
+                        className="rounded-full bg-amber-100 px-3 py-1 text-xs font-medium text-amber-800"
+                      >
+                        Missing {section}
+                      </span>
+                    ))}
+                  </div>
+                )}
+            </Link>
+          );
+        })}
       </section>
     </main>
+  );
+}
+
+function readPeopleListState(state: unknown): PeopleListState {
+  if (typeof state !== "object" || state === null) {
+    return { flash: "", createdPersonId: "" };
+  }
+
+  const record = state as Record<string, unknown>;
+  const createdPerson = isPerson(record.createdPerson)
+    ? record.createdPerson
+    : undefined;
+
+  return {
+    flash: typeof record.flash === "string" ? record.flash : "",
+    createdPersonId:
+      typeof record.createdPersonId === "string" ? record.createdPersonId : "",
+    createdPerson,
+  };
+}
+
+function pinCreatedPerson(
+  people: Person[],
+  createdPersonId: string,
+  createdPerson?: Person,
+) {
+  if (!createdPersonId) return people;
+
+  const matched = people.find((person) => person.id === createdPersonId);
+  const pinnedPerson = matched ?? createdPerson;
+  if (!pinnedPerson) return people;
+
+  return [
+    pinnedPerson,
+    ...people.filter((person) => person.id !== createdPersonId),
+  ];
+}
+
+function isPerson(value: unknown): value is Person {
+  if (typeof value !== "object" || value === null) return false;
+
+  const record = value as Record<string, unknown>;
+  return (
+    typeof record.id === "string" &&
+    typeof record.firstName === "string" &&
+    typeof record.lastName === "string" &&
+    typeof record.nickname === "string" &&
+    typeof record.cpf === "string" &&
+    typeof record.rg === "string" &&
+    typeof record.cellular === "string" &&
+    typeof record.email === "string"
   );
 }
 
