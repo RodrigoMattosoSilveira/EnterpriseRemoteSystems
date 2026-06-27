@@ -42,7 +42,21 @@ func (s *service) List(ctx context.Context, filter ExpenseListFilter) (*ExpenseL
 	if err != nil {
 		return nil, err
 	}
-	return &ExpenseListResult{Items: ToDTOList(rows), Total: total, Page: normalized.Page, PageSize: normalized.PageSize}, nil
+
+	postings, err := s.repo.FindFinancialPostingsByExpenseIDs(ctx, expenseIDs(rows))
+	if err != nil {
+		return nil, err
+	}
+
+	return &ExpenseListResult{Items: ToDTOListWithFinancialPostings(rows, postings), Total: total, Page: normalized.Page, PageSize: normalized.PageSize}, nil
+}
+
+func expenseIDs(rows []db.Expense) []string {
+	ids := make([]string, 0, len(rows))
+	for _, row := range rows {
+		ids = append(ids, row.ID)
+	}
+	return ids
 }
 
 func (s *service) Create(ctx context.Context, req CreateExpenseRequest, actorUserID string) (*ExpenseDTO, error) {

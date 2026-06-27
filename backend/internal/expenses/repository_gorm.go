@@ -204,6 +204,60 @@ func (r *gormRepository) FindFinancialPostingByExpenseID(ctx context.Context, ex
 	return &row, nil
 }
 
+func (r *gormRepository) FindFinancialPostingsByExpenseIDs(ctx context.Context, expenseIDs []string) (map[string]*db.LedgerEntry, error) {
+	out := make(map[string]*db.LedgerEntry, len(expenseIDs))
+	if len(expenseIDs) == 0 {
+		return out, nil
+	}
+
+	replacementScope := r.db.Where("1 = 0")
+	for _, expenseID := range expenseIDs {
+		replacementScope = replacementScope.Or("source_type = ? AND source_id LIKE ?", ledgerSourceTypeExpenseReplace, strings.TrimSpace(expenseID)+":%")
+	}
+
+	var rows []db.LedgerEntry
+	if err := r.db.WithContext(ctx).
+		Preload("ValueUnit").
+		Preload("Receipt").
+		Where("tenant_id = ? AND direction = ? AND correction_type IN (?, ?)",
+			defaultTenantID,
+			ledgerDirectionDebit,
+			ledgerCorrectionTypeOriginal, ledgerCorrectionTypeReplacement,
+		).
+		Where(r.db.Where("source_type = ? AND source_id IN ?", ledgerSourceTypeExpense, expenseIDs).Or(replacementScope)).
+		Order("created_at DESC, id DESC").
+		Find(&rows).Error; err != nil {
+		return nil, err
+	}
+
+	for i := range rows {
+		expenseID := expenseIDForPosting(rows[i])
+		if expenseID == "" {
+			continue
+		}
+		if _, exists := out[expenseID]; exists {
+			continue
+		}
+		row := rows[i]
+		out[expenseID] = &row
+	}
+
+	return out, nil
+}
+
+func expenseIDForPosting(row db.LedgerEntry) string {
+	if row.SourceType == ledgerSourceTypeExpense {
+		return strings.TrimSpace(row.SourceID)
+	}
+	if row.SourceType == ledgerSourceTypeExpenseReplace {
+		expenseID, _, ok := strings.Cut(row.SourceID, ":")
+		if ok {
+			return strings.TrimSpace(expenseID)
+		}
+	}
+	return ""
+}
+
 func (r *gormRepository) FindCollaboratorByID(ctx context.Context, collaboratorID string) (*db.CollaboratorJourney, error) {
 	var row db.CollaboratorJourney
 	err := r.db.WithContext(ctx).
