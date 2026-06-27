@@ -102,7 +102,11 @@ func (r *gormRepository) Create(ctx context.Context, expense *db.Expense) error 
 		if err := tx.Create(expense).Error; err != nil {
 			return err
 		}
-		return tx.Create(expenseLedgerEntry(expense)).Error
+		entry := expenseLedgerEntry(expense)
+		if err := tx.Create(entry).Error; err != nil {
+			return err
+		}
+		return ensureReceiptObligation(tx, entry.ID)
 	})
 }
 
@@ -155,7 +159,10 @@ func (r *gormRepository) Update(ctx context.Context, expense *db.Expense) error 
 		}
 		if expense.Active {
 			replacement := replacementExpenseLedgerEntry(expense, previous, now)
-			return tx.Create(&replacement).Error
+			if err := tx.Create(&replacement).Error; err != nil {
+				return err
+			}
+			return ensureReceiptObligation(tx, replacement.ID)
 		}
 		return nil
 	})
@@ -171,6 +178,26 @@ func (r *gormRepository) FindByID(ctx context.Context, id string) (*db.Expense, 
 		Preload("PriceListItem").
 		Preload("GoldPrice").
 		First(&row, "id = ? AND tenant_id = ?", id, defaultTenantID).Error
+	if err != nil {
+		return nil, err
+	}
+	return &row, nil
+}
+
+func (r *gormRepository) FindFinancialPostingByExpenseID(ctx context.Context, expenseID string) (*db.LedgerEntry, error) {
+	var row db.LedgerEntry
+	err := r.db.WithContext(ctx).
+		Preload("ValueUnit").
+		Preload("Receipt").
+		Where("tenant_id = ? AND direction = ? AND correction_type IN (?, ?) AND ((source_type = ? AND source_id = ?) OR (source_type = ? AND source_id LIKE ?))",
+			defaultTenantID,
+			ledgerDirectionDebit,
+			ledgerCorrectionTypeOriginal, ledgerCorrectionTypeReplacement,
+			ledgerSourceTypeExpense, expenseID,
+			ledgerSourceTypeExpenseReplace, expenseID+":%",
+		).
+		Order("created_at DESC, id DESC").
+		First(&row).Error
 	if err != nil {
 		return nil, err
 	}
@@ -244,6 +271,17 @@ func (r *gormRepository) FindLatestActiveGoldPrice(ctx context.Context) (*db.Gol
 
 func formatDateForQuery(value time.Time) string {
 	return value.Format(dateLayout)
+}
+
+func ensureReceiptObligation(tx *gorm.DB, ledgerEntryID string) error {
+	var count int64
+	if err := tx.Model(&db.LedgerReceipt{}).Where("ledger_entry_id = ? AND tenant_id = ?", ledgerEntryID, defaultTenantID).Count(&count).Error; err != nil {
+		return err
+	}
+	if count != 1 {
+		return ErrExpenseReceiptObligationMissing
+	}
+	return nil
 }
 
 func latestExpenseLedgerEntry(tx *gorm.DB, tenantID string, expenseID string) (*db.LedgerEntry, error) {
