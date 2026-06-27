@@ -1,0 +1,3 @@
+-- This migration is intentionally not reversed. Removing generated expense
+-- ledger postings or receipt obligations would corrupt current-account audit
+-- history once environments have processed financial data.

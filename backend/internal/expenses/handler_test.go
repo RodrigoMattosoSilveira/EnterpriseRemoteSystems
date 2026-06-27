@@ -188,7 +188,7 @@ func TestCreateExpenseReturnsCreated(t *testing.T) {
 }
 
 func TestCreatePriceListExpenseInBRLCalculatesAndStoresAuditFields(t *testing.T) {
-	server, cleanup := newTestServer(t)
+	server, database, cleanup := newTestServerWithDatabase(t)
 	defer cleanup()
 
 	collaborator := createActiveCollaborator(t, server, 1)
@@ -231,10 +231,11 @@ func TestCreatePriceListExpenseInBRLCalculatesAndStoresAuditFields(t *testing.T)
 	}
 	assertCalculationDetail(t, expense.Data.CalculationDetailsJSON, "itemCode", "LUNCH")
 	assertCalculationDetail(t, expense.Data.CalculationDetailsJSON, "calculationMethod", "BRL_PRICE_LIST")
+	assertExpenseLedgerPosting(t, database, expense.Data.ID, collaborator.Data.ID, "ref-value-unit-brl", 75.0, "2026-06-03")
 }
 
 func TestCreatePriceListExpenseInGoldUsesLatestGoldPrice(t *testing.T) {
-	server, cleanup := newTestServer(t)
+	server, database, cleanup := newTestServerWithDatabase(t)
 	defer cleanup()
 
 	collaborator := createActiveCollaborator(t, server, 1)
@@ -278,6 +279,7 @@ func TestCreatePriceListExpenseInGoldUsesLatestGoldPrice(t *testing.T) {
 	}
 	assertCalculationDetail(t, expense.Data.CalculationDetailsJSON, "goldPriceDate", "2026-06-02")
 	assertCalculationDetail(t, expense.Data.CalculationDetailsJSON, "calculationMethod", "BRL_TO_GOLD_GRAM_LATEST_PRICE")
+	assertExpenseLedgerPosting(t, database, expense.Data.ID, collaborator.Data.ID, "ref-value-unit-gold-gram", 0.4, "2026-06-03")
 }
 
 func TestCreatePriceListExpenseRejectsDerivedLegacyFields(t *testing.T) {
@@ -771,6 +773,42 @@ func newTestServerWithDatabase(t *testing.T) (*fiber.App, *gorm.DB, func()) {
 	}
 
 	return server, database, wrappedCleanup
+}
+
+func assertExpenseLedgerPosting(t *testing.T, database *gorm.DB, expenseID string, collaboratorID string, valueUnitID string, amount float64, effectiveDate string) {
+	t.Helper()
+
+	var entries []dbpkg.LedgerEntry
+	if err := database.
+		Preload("ValueUnit").
+		Where("tenant_id = ? AND source_type = ? AND source_id = ?", "default", "EXPENSE", expenseID).
+		Find(&entries).Error; err != nil {
+		t.Fatalf("find expense ledger postings: %v", err)
+	}
+	if len(entries) != 1 {
+		t.Fatalf("expected exactly one expense ledger posting, got %d: %+v", len(entries), entries)
+	}
+	entry := entries[0]
+	if entry.ID != "ledger-expense-"+expenseID {
+		t.Fatalf("expected deterministic ledger id for idempotent posting, got %q", entry.ID)
+	}
+	if entry.CollaboratorID != collaboratorID || entry.ValueUnitID != valueUnitID {
+		t.Fatalf("unexpected ledger collaborator/value unit: %+v", entry)
+	}
+	if entry.EntryType != "EXPENSE_DEDUCTION" || entry.Direction != "DEBIT" || entry.CorrectionType != "ORIGINAL" {
+		t.Fatalf("unexpected ledger classification: %+v", entry)
+	}
+	if entry.Amount != amount || entry.EffectiveDate.Format(dateLayout) != effectiveDate || !entry.Active {
+		t.Fatalf("unexpected ledger amount/date/active: %+v", entry)
+	}
+
+	var receipt dbpkg.LedgerReceipt
+	if err := database.First(&receipt, "ledger_entry_id = ?", entry.ID).Error; err != nil {
+		t.Fatalf("find generated receipt obligation: %v", err)
+	}
+	if receipt.CollaboratorID != collaboratorID || receipt.Status != "PENDING_ISSUE" || receipt.ReceiptType != "LEDGER_DEBIT" {
+		t.Fatalf("unexpected generated receipt obligation: %+v", receipt)
+	}
 }
 
 func expenseIDs(items []apiExpenseListItem) map[string]bool {
