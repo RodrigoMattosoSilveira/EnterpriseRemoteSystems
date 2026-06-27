@@ -12,6 +12,7 @@ func RegisterPriceListRoutes(v1 fiber.Router, deps Dependencies) {
 	items.Post("/", requirePermission(deps, authz.PermissionPriceListsCreate), deps.PriceListHandler.CreateItem)
 	items.Patch("/:id", requirePermission(deps, authz.PermissionPriceListsUpdate), deps.PriceListHandler.UpdateItem)
 	items.Patch("/:id/deactivate", requirePermission(deps, authz.PermissionPriceListsUpdate), deps.PriceListHandler.DeactivateItem)
+	items.Patch("/:id/reactivate", requirePermission(deps, authz.PermissionPriceListsUpdate), deps.PriceListHandler.ReactivateItem)
 
 	goldPrices := v1.Group("/gold-prices")
 	goldPrices.Get("/", requirePermission(deps, authz.PermissionPriceListsRead), deps.PriceListHandler.ListGoldPrices)

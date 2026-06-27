@@ -84,6 +84,9 @@ export function GoldPricesPage() {
             <Link className="text-sm font-semibold text-gray-700 underline" to="/admin/reference-data">
               Reference Data
             </Link>
+            <Link className="text-sm font-semibold text-gray-700 underline" to="/admin/price-list-items">
+              Price List
+            </Link>
             <Link className="text-sm font-semibold text-gray-700 underline" to="/people">
               Back to People
             </Link>
