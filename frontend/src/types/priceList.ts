@@ -9,6 +9,7 @@ export type PriceListItem = {
   unitPriceBrl: number;
   active: boolean;
   sortOrder: number;
+  supersededPriceListItemId?: string;
   createdAt: string;
   updatedAt: string;
 };

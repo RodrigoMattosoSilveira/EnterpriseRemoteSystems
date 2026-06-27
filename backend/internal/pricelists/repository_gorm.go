@@ -37,19 +37,73 @@ func (r *gormRepository) UpdateItem(ctx context.Context, item *db.ExpensePriceLi
 		Model(&db.ExpensePriceListItem{}).
 		Where("id = ? AND tenant_id = ?", item.ID, defaultTenantID).
 		Updates(map[string]any{
-			"item_type":      item.ItemType,
-			"code":           item.Code,
-			"description":    item.Description,
-			"unit_price_brl": item.UnitPriceBRL,
-			"active":         item.Active,
-			"sort_order":     item.SortOrder,
-			"updated_at":     item.UpdatedAt,
+			"item_type":                     item.ItemType,
+			"code":                          item.Code,
+			"description":                   item.Description,
+			"unit_price_brl":                item.UnitPriceBRL,
+			"active":                        item.Active,
+			"sort_order":                    item.SortOrder,
+			"superseded_price_list_item_id": item.SupersededPriceListItemID,
+			"updated_at":                    item.UpdatedAt,
 		}).Error
+}
+
+func (r *gormRepository) ReplaceItemWithRevision(ctx context.Context, existing *db.ExpensePriceListItem, replacement *db.ExpensePriceListItem) error {
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		deactivate := tx.Model(&db.ExpensePriceListItem{}).
+			Where("id = ? AND tenant_id = ?", existing.ID, defaultTenantID)
+		if existing.ItemType == replacement.ItemType && existing.Code == replacement.Code {
+			deactivate = tx.Model(&db.ExpensePriceListItem{}).
+				Where("tenant_id = ? AND item_type = ? AND code = ? AND active = ?", defaultTenantID, existing.ItemType, existing.Code, true)
+		}
+		if err := deactivate.Updates(map[string]any{
+			"active":     false,
+			"updated_at": replacement.UpdatedAt,
+		}).Error; err != nil {
+			return err
+		}
+
+		replacement.Active = true
+		return tx.Create(replacement).Error
+	})
+}
+
+func (r *gormRepository) SetItemActive(ctx context.Context, item *db.ExpensePriceListItem) error {
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if item.Active {
+			if err := tx.Model(&db.ExpensePriceListItem{}).
+				Where("tenant_id = ? AND item_type = ? AND code = ? AND active = ? AND id <> ?", defaultTenantID, item.ItemType, item.Code, true, item.ID).
+				Updates(map[string]any{
+					"active":     false,
+					"updated_at": item.UpdatedAt,
+				}).Error; err != nil {
+				return err
+			}
+		}
+		return tx.Model(&db.ExpensePriceListItem{}).
+			Where("id = ? AND tenant_id = ?", item.ID, defaultTenantID).
+			Updates(map[string]any{
+				"active":     item.Active,
+				"updated_at": item.UpdatedAt,
+			}).Error
+	})
 }
 
 func (r *gormRepository) FindItemByID(ctx context.Context, id string) (*db.ExpensePriceListItem, error) {
 	var row db.ExpensePriceListItem
 	err := r.db.WithContext(ctx).First(&row, "id = ? AND tenant_id = ?", strings.TrimSpace(id), defaultTenantID).Error
+	if err != nil {
+		return nil, err
+	}
+	return &row, nil
+}
+
+func (r *gormRepository) FindActiveItemByKey(ctx context.Context, itemType string, code string) (*db.ExpensePriceListItem, error) {
+	var row db.ExpensePriceListItem
+	err := r.db.WithContext(ctx).
+		Where("tenant_id = ? AND item_type = ? AND code = ? AND active = ?", defaultTenantID, normalizeItemType(itemType), normalizeCode(code), true).
+		Order("created_at DESC").
+		First(&row).Error
 	if err != nil {
 		return nil, err
 	}

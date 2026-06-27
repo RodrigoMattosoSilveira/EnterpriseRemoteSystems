@@ -34,12 +34,18 @@ func (s *service) CreateItem(ctx context.Context, req CreatePriceListItemRequest
 	if err := ValidateCreatePriceListItem(req); err != nil {
 		return nil, err
 	}
+	itemType := normalizeItemType(req.ItemType)
+	code := normalizeCode(req.Code)
+	if err := s.ensureNoActiveItemCodeConflict(ctx, "code", itemType, code, ""); err != nil {
+		return nil, err
+	}
+
 	now := time.Now().UTC()
 	item := &db.ExpensePriceListItem{
 		BaseModel:    db.BaseModel{ID: ids.New(), CreatedAt: now, UpdatedAt: now},
 		TenantID:     defaultTenantID,
-		ItemType:     normalizeItemType(req.ItemType),
-		Code:         normalizeCode(req.Code),
+		ItemType:     itemType,
+		Code:         code,
 		Description:  strings.TrimSpace(req.Description),
 		UnitPriceBRL: req.UnitPriceBRL,
 		Active:       true,
@@ -55,24 +61,40 @@ func (s *service) UpdateItem(ctx context.Context, id string, req UpdatePriceList
 	if err := ValidateUpdatePriceListItem(req); err != nil {
 		return nil, err
 	}
-	item, err := s.repo.FindItemByID(ctx, id)
+	existing, err := s.repo.FindItemByID(ctx, id)
 	if err != nil {
 		return nil, err
 	}
-	item.ItemType = normalizeItemType(req.ItemType)
-	item.Code = normalizeCode(req.Code)
-	item.Description = strings.TrimSpace(req.Description)
-	item.UnitPriceBRL = req.UnitPriceBRL
-	item.SortOrder = req.SortOrder
-	item.UpdatedAt = time.Now().UTC()
-	if err := s.repo.UpdateItem(ctx, item); err != nil {
+	if !existing.Active {
+		return nil, ValidationError{Fields: map[string]string{"id": "Inactive price-list items cannot be edited; reactivate the item before editing it"}}
+	}
+
+	itemType := normalizeItemType(req.ItemType)
+	code := normalizeCode(req.Code)
+	if err := s.ensureNoActiveItemCodeConflict(ctx, "code", itemType, code, existing.ID); err != nil {
 		return nil, err
 	}
-	updated, err := s.repo.FindItemByID(ctx, item.ID)
-	if err != nil {
+
+	now := time.Now().UTC()
+	supersededID := existing.ID
+	replacement := &db.ExpensePriceListItem{
+		BaseModel:                 db.BaseModel{ID: ids.New(), CreatedAt: now, UpdatedAt: now},
+		TenantID:                  existing.TenantID,
+		ItemType:                  itemType,
+		Code:                      code,
+		Description:               strings.TrimSpace(req.Description),
+		UnitPriceBRL:              req.UnitPriceBRL,
+		Active:                    true,
+		SortOrder:                 req.SortOrder,
+		SupersededPriceListItemID: &supersededID,
+	}
+	existing.UpdatedAt = now
+	if err := s.repo.ReplaceItemWithRevision(ctx, existing, replacement); err != nil {
 		return nil, err
 	}
-	return ptr(ToPriceListItemDTO(*updated)), nil
+	dto := ToPriceListItemDTO(*replacement)
+	dto.SupersededPriceListItemID = existing.ID
+	return &dto, nil
 }
 
 func (s *service) DeactivateItem(ctx context.Context, id string) (*PriceListItemDTO, error) {
@@ -90,7 +112,7 @@ func (s *service) setItemActive(ctx context.Context, id string, active bool) (*P
 	}
 	item.Active = active
 	item.UpdatedAt = time.Now().UTC()
-	if err := s.repo.UpdateItem(ctx, item); err != nil {
+	if err := s.repo.SetItemActive(ctx, item); err != nil {
 		return nil, err
 	}
 	updated, err := s.repo.FindItemByID(ctx, item.ID)
@@ -98,6 +120,20 @@ func (s *service) setItemActive(ctx context.Context, id string, active bool) (*P
 		return nil, err
 	}
 	return ptr(ToPriceListItemDTO(*updated)), nil
+}
+
+func (s *service) ensureNoActiveItemCodeConflict(ctx context.Context, field string, itemType string, code string, allowedID string) error {
+	existing, err := s.repo.FindActiveItemByKey(ctx, itemType, code)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil
+		}
+		return err
+	}
+	if existing.ID == strings.TrimSpace(allowedID) {
+		return nil
+	}
+	return ValidationError{Fields: map[string]string{field: "An active price-list item already uses this code for this category"}}
 }
 
 func (s *service) ListGoldPrices(ctx context.Context, filter GoldPriceListFilter) ([]GoldPriceDTO, error) {

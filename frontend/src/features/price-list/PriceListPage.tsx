@@ -90,7 +90,7 @@ export function PriceListPage() {
     try {
       const updated = await updateMutation.mutateAsync({ id: editing.id, input });
       setEditing(null);
-      setSuccessMessage(`Updated price-list item: ${updated.description}.`);
+      setSuccessMessage(`Updated price-list item: ${updated.description}. The previous version was retained as inactive history.`);
     } catch {
       // Existing mutation error state is rendered by ApiErrorPanel.
     }
@@ -193,7 +193,7 @@ export function PriceListPage() {
             <div>
               <h2 className="text-lg font-semibold text-gray-950">Price List Administration</h2>
               <p className="text-sm text-gray-500">
-                Add a new Canteen or Administrative item using the expanded panel above the list.
+                Add new items here. Editing an active item creates a new version and keeps the previous version for audit history.
               </p>
             </div>
             <button
@@ -227,7 +227,7 @@ export function PriceListPage() {
             <div>
               <h2 className="text-lg font-semibold text-gray-950">Price List</h2>
               <p className="text-sm text-gray-500">
-                Active items appear in /expenses/new. Inactive items are retained here for operational reference.
+                Active items appear in /expenses/new. Inactive items are retained here as price history and remain linked to any existing expense snapshots.
               </p>
             </div>
             <span className="rounded-full bg-gray-100 px-3 py-1 text-xs font-semibold text-gray-700">
@@ -295,13 +295,15 @@ export function PriceListPage() {
                       </td>
                       <td className="p-3">
                         <div className="flex justify-end gap-2">
-                          <button
-                            className="rounded-lg border px-3 py-1 text-xs font-semibold"
-                            onClick={() => startEditing(item)}
-                            type="button"
-                          >
-                            Edit
-                          </button>
+                          {item.active && (
+                            <button
+                              className="rounded-lg border px-3 py-1 text-xs font-semibold"
+                              onClick={() => startEditing(item)}
+                              type="button"
+                            >
+                              Edit
+                            </button>
+                          )}
                           {item.active ? (
                             <button
                               className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-800"
@@ -332,7 +334,7 @@ export function PriceListPage() {
         {editing && (
           <PriceListItemForm
             title={`Edit ${editing.description}`}
-            description="Update the item metadata and BRL unit price. Current Bite 22 behavior updates the record in place."
+            description="Update the item metadata and BRL unit price. Saving creates a new active version and keeps this version inactive for audit history."
             value={editForm}
             isPending={updateMutation.isPending}
             submitLabel="Save Changes"
