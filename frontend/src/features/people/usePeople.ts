@@ -3,6 +3,7 @@ import {
   createPerson,
   getPerson,
   listPeople,
+  listPeoplePage,
   updatePerson,
 } from "../../api/people.api";
 import type { PeopleListFilter, PersonInput } from "../../types/people";
@@ -11,6 +12,14 @@ export function usePeople(filter: PeopleListFilter = {}) {
   return useQuery({
     queryKey: ["people", filter],
     queryFn: () => listPeople(filter),
+  });
+}
+
+
+export function usePeoplePage(filter: PeopleListFilter = {}) {
+  return useQuery({
+    queryKey: ["people", "page", filter],
+    queryFn: () => listPeoplePage(filter),
   });
 }
 
