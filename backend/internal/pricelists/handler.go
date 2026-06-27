@@ -54,6 +54,14 @@ func (h *Handler) DeactivateItem(c fiber.Ctx) error {
 	return c.JSON(httpx.APIResponse{Data: updated})
 }
 
+func (h *Handler) ReactivateItem(c fiber.Ctx) error {
+	updated, err := h.service.ReactivateItem(c.Context(), c.Params("id"))
+	if err != nil {
+		return httpx.WriteError(c, err)
+	}
+	return c.JSON(httpx.APIResponse{Data: updated})
+}
+
 func (h *Handler) ListGoldPrices(c fiber.Ctx) error {
 	var filter GoldPriceListFilter
 	if err := c.Bind().Query(&filter); err != nil {

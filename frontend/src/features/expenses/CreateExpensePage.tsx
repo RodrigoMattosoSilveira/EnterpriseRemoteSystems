@@ -504,6 +504,14 @@ function SetupWarning({
     <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5 text-sm text-amber-900 shadow-sm">
       <p className="font-semibold">Expense setup is incomplete.</p>
       <p className="mt-1">Configure or create: {missing.join(", ")}.</p>
+      {!hasPriceListItems && (
+        <Link
+          className="mt-3 inline-block font-semibold underline"
+          to="/admin/price-list-items"
+        >
+          Manage Price List Items
+        </Link>
+      )}
     </div>
   );
 }
