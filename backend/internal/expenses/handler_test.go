@@ -23,6 +23,7 @@ const (
 	expensesURL       = "/api/v1/expenses/"
 	priceListItemsURL = "/api/v1/price-list-items/"
 	goldPricesURL     = "/api/v1/gold-prices/"
+	testDateLayout    = "2006-01-02"
 )
 
 type apiErrorResponse struct {
@@ -798,7 +799,7 @@ func assertExpenseLedgerPosting(t *testing.T, database *gorm.DB, expenseID strin
 	if entry.EntryType != "EXPENSE_DEDUCTION" || entry.Direction != "DEBIT" || entry.CorrectionType != "ORIGINAL" {
 		t.Fatalf("unexpected ledger classification: %+v", entry)
 	}
-	if entry.Amount != amount || entry.EffectiveDate.Format(dateLayout) != effectiveDate || !entry.Active {
+	if entry.Amount != amount || entry.EffectiveDate.Format(testDateLayout) != effectiveDate || !entry.Active {
 		t.Fatalf("unexpected ledger amount/date/active: %+v", entry)
 	}
 
