@@ -159,14 +159,18 @@ function FinancialPostingSection({ expense }: { expense: Expense }) {
         <Info label="Ledger entry" value={posting.ledgerEntryId} />
         <Info label="Direction" value={posting.direction} />
         <Info label="Entry type" value={posting.entryType} />
-        <Info label="Amount" value={formatPostingAmount(posting.amount, posting.valueUnitCode || posting.valueUnitLabel)} />
+        <Info label="Debit amount" value={formatPostingAmount(posting.amount, posting.valueUnitCode || posting.valueUnitLabel)} />
+        <Info label="Signed amount" value={formatPostingAmount(posting.signedAmount, posting.valueUnitCode || posting.valueUnitLabel)} />
         <Info label="Effective date" value={posting.effectiveDate} />
         <Info label="Receipt" value={posting.receiptNumber || posting.receiptId || "—"} />
+        <Info label="Receipt status" value={receiptStatusLabel(posting.receiptStatus)} />
+        <Info label="Receipt control" value={posting.outstandingReceipt ? "Outstanding" : "Complete"} />
+        <Info label="Ledger source" value={`${posting.sourceType} · ${posting.sourceId}`} />
       </dl>
 
       <div className="mt-5 flex flex-wrap gap-3">
         <Link className="rounded-xl bg-gray-900 px-4 py-2 text-sm font-semibold text-white" to={`/ledger-entries/${posting.ledgerEntryId}/receipt`}>
-          Open receipt workflow
+          Print or return receipt
         </Link>
         {posting.outstandingReceipt ? (
           <Link className="rounded-xl border bg-white px-4 py-2 text-sm font-semibold" to="/receipts/outstanding">

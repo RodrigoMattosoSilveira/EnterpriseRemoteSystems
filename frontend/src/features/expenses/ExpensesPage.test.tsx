@@ -114,6 +114,16 @@ describe("ExpensesPage", () => {
     expect(selectedItemLabel?.className).toContain("break-words");
     expect(controlByLabel<HTMLSelectElement>("Item", "select").className).toContain("min-w-0");
   });
+
+  it("shows receipt visibility for each expense", async () => {
+    mockExpensePageFetch();
+
+    renderExpensesPage("/expenses?collaboratorId=collab-2");
+
+    await waitForText("Outstanding · Pending issue");
+    expect(container.textContent).toContain("Receipt");
+    expect(container.querySelector('a[href="/ledger-entries/ledger-expense-filtered-collaborator/receipt"]')).not.toBeNull();
+  });
 });
 
 function mockExpensePageFetch() {
@@ -214,6 +224,24 @@ function expense(
     unitPriceAmount: 7.5,
     totalAmount: 7.5,
     calculationMethod: "BRL_PRICE_LIST",
+    financialPosting: {
+      ledgerEntryId: `ledger-${id}`,
+      direction: "DEBIT",
+      entryType: "EXPENSE_DEDUCTION",
+      amount: 7.5,
+      signedAmount: -7.5,
+      effectiveDate: "2026-06-25",
+      valueUnitId: "BRL",
+      valueUnitCode: "BRL",
+      valueUnitLabel: "Brazilian Real",
+      sourceType: "EXPENSE",
+      sourceId: id,
+      correctionType: "ORIGINAL",
+      receiptId: `receipt-${id}`,
+      receiptNumber: `REC-${id}`,
+      receiptStatus: "PENDING_ISSUE",
+      outstandingReceipt: true,
+    },
     createdAt: "2026-06-25T12:00:00Z",
     updatedAt: "2026-06-25T12:00:00Z",
   };

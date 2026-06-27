@@ -106,6 +106,24 @@ type apiExpenseListItem struct {
 	Active            bool    `json:"active"`
 	PriceListItemCode string  `json:"priceListItemCode"`
 	CalculationMethod string  `json:"calculationMethod"`
+	FinancialPosting  *struct {
+		LedgerEntryID      string  `json:"ledgerEntryId"`
+		Direction          string  `json:"direction"`
+		EntryType          string  `json:"entryType"`
+		Amount             float64 `json:"amount"`
+		SignedAmount       float64 `json:"signedAmount"`
+		EffectiveDate      string  `json:"effectiveDate"`
+		ValueUnitID        string  `json:"valueUnitId"`
+		ValueUnitCode      string  `json:"valueUnitCode"`
+		ValueUnitLabel     string  `json:"valueUnitLabel"`
+		SourceType         string  `json:"sourceType"`
+		SourceID           string  `json:"sourceId"`
+		CorrectionType     string  `json:"correctionType"`
+		ReceiptID          string  `json:"receiptId"`
+		ReceiptNumber      string  `json:"receiptNumber"`
+		ReceiptStatus      string  `json:"receiptStatus"`
+		OutstandingReceipt bool    `json:"outstandingReceipt"`
+	} `json:"financialPosting"`
 }
 
 type apiExpenseListResponse struct {
@@ -362,6 +380,9 @@ func TestListAndGetExpenseReturnCreatedExpense(t *testing.T) {
 	}
 	if listBody.Data.Items[0].ID != expense.Data.ID {
 		t.Fatalf("expected listed expense id %q, got %q", expense.Data.ID, listBody.Data.Items[0].ID)
+	}
+	if listBody.Data.Items[0].FinancialPosting == nil || listBody.Data.Items[0].FinancialPosting.ReceiptStatus != "PENDING_ISSUE" {
+		t.Fatalf("expected list expense to include pending receipt posting, got %+v", listBody.Data.Items[0].FinancialPosting)
 	}
 
 	res = getJSON(t, server, expensesURL+expense.Data.ID)

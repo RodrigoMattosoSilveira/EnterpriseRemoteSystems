@@ -55,6 +55,18 @@ func ToDTOList(rows []db.Expense) []ExpenseDTO {
 	return out
 }
 
+func ToDTOListWithFinancialPostings(rows []db.Expense, postings map[string]*db.LedgerEntry) []ExpenseDTO {
+	out := make([]ExpenseDTO, 0, len(rows))
+	for _, row := range rows {
+		dto := ToDTO(row)
+		if posting := postings[row.ID]; posting != nil {
+			dto.FinancialPosting = toFinancialPostingDTO(*posting)
+		}
+		out = append(out, dto)
+	}
+	return out
+}
+
 func collaboratorLabel(person db.Person) string {
 	if nickname := strings.TrimSpace(person.Nickname); nickname != "" {
 		return nickname

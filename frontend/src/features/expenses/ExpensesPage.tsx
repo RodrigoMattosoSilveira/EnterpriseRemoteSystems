@@ -6,6 +6,7 @@ import type { Expense, ExpenseListFilter } from "../../types/expenses";
 import type { PriceListItem } from "../../types/priceList";
 import { useCollaborators } from "../collaborators/useCollaborators";
 import { usePriceListItems } from "../price-list/usePriceList";
+import { receiptStatusLabel, receiptStatusTone } from "../receipts/receiptLifecycle";
 import { useExpenses } from "./useExpenses";
 
 const EXPENSE_PAGE_SIZE = 50;
@@ -253,6 +254,7 @@ export function ExpensesPage() {
                     <th className="p-3">Category</th>
                     <th className="p-3">Item</th>
                     <th className="p-3 text-right">Amount</th>
+                    <th className="p-3">Receipt</th>
                     <th className="p-3">Description</th>
                   </tr>
                 </thead>
@@ -278,6 +280,9 @@ export function ExpensesPage() {
                       </td>
                       <td className="p-3 text-right font-semibold text-gray-950">
                         {formatExpenseAmount(expense)}
+                      </td>
+                      <td className="p-3 text-gray-700">
+                        <ExpenseReceiptStatus expense={expense} />
                       </td>
                       <td className="p-3 text-gray-700">
                         {expense.description || "—"}
@@ -367,10 +372,42 @@ function ExpenseCard({ expense }: { expense: Expense }) {
       <div className="mt-4 grid gap-2 text-sm text-gray-700">
         <Info label="Item" value={expenseItemLabel(expense)} />
         <Info label="Amount" value={formatExpenseAmount(expense)} />
+        <Info label="Receipt" value={expenseReceiptSummary(expense)} />
         <Info label="Description" value={expense.description || "—"} />
       </div>
     </Link>
   );
+}
+
+function ExpenseReceiptStatus({ expense }: { expense: Expense }) {
+  const posting = expense.financialPosting;
+  if (!posting) {
+    return (
+      <span className="inline-flex rounded-full bg-red-100 px-3 py-1 text-xs font-semibold text-red-800">
+        Missing posting
+      </span>
+    );
+  }
+
+  const label = posting.outstandingReceipt
+    ? `Outstanding · ${receiptStatusLabel(posting.receiptStatus)}`
+    : receiptStatusLabel(posting.receiptStatus);
+
+  return (
+    <Link
+      to={`/ledger-entries/${posting.ledgerEntryId}/receipt`}
+      className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold underline-offset-2 hover:underline ${receiptStatusTone(posting.receiptStatus)}`}
+    >
+      {label}
+    </Link>
+  );
+}
+
+function expenseReceiptSummary(expense: Expense) {
+  const posting = expense.financialPosting;
+  if (!posting) return "Missing posting";
+  const label = receiptStatusLabel(posting.receiptStatus);
+  return posting.outstandingReceipt ? `Outstanding · ${label}` : label;
 }
 
 function Info({ label, value }: { label: string; value: string }) {

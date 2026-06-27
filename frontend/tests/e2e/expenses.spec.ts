@@ -88,6 +88,15 @@ test("user can create an Expense for an active Collaborator", async ({
   );
 
   expect(createdExpense).toBeDefined();
+  expect(createdExpense?.financialPosting?.direction).toBe("DEBIT");
+  expect(createdExpense?.financialPosting?.entryType).toBe("EXPENSE_DEDUCTION");
+  expect(createdExpense?.financialPosting?.receiptStatus).toBe("PENDING_ISSUE");
+  expect(createdExpense?.financialPosting?.outstandingReceipt).toBe(true);
+
+  await page.goto(`/expenses?collaboratorId=${encodeURIComponent(collaborator.id)}`);
+  await expect(
+    page.getByRole("link", { name: /Outstanding · Pending issue/ }).first(),
+  ).toBeVisible();
 
   await page.goto(`/expenses/${createdExpense!.id}`);
 
@@ -103,6 +112,12 @@ test("user can create an Expense for an active Collaborator", async ({
       exact: true,
     }),
   ).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Financial Posting" })).toBeVisible();
+  await expect(page.getByText("Outstanding receipt:")).toBeVisible();
+  await expect(page.locator("body")).toContainText("Receipt control");
+  await expect(page.locator("body")).toContainText("Outstanding");
+  await expect(page.getByRole("link", { name: "Print or return receipt" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "View outstanding receipts" })).toBeVisible();
   expect(createdExpense?.priceListItemId).toBe(item.id);
   expect(createdExpense?.itemDescription).toBe(item.description);
   expect(createdExpense?.quantity).toBe(Number(EXPENSE_QUANTITY));
@@ -453,6 +468,13 @@ type Expense = {
   goldBrlPerGram?: number;
   unitPriceAmount?: number;
   totalAmount?: number;
+  financialPosting?: {
+    ledgerEntryId: string;
+    direction: string;
+    entryType: string;
+    receiptStatus: string;
+    outstandingReceipt: boolean;
+  };
 };
 
 type ExpenseListResponse = {
