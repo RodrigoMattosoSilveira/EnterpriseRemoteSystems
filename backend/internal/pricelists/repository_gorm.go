@@ -100,12 +100,16 @@ func (r *gormRepository) FindItemByID(ctx context.Context, id string) (*db.Expen
 
 func (r *gormRepository) FindActiveItemByKey(ctx context.Context, itemType string, code string) (*db.ExpensePriceListItem, error) {
 	var row db.ExpensePriceListItem
-	err := r.db.WithContext(ctx).
+	result := r.db.WithContext(ctx).
 		Where("tenant_id = ? AND item_type = ? AND code = ? AND active = ?", defaultTenantID, normalizeItemType(itemType), normalizeCode(code), true).
 		Order("created_at DESC").
-		First(&row).Error
-	if err != nil {
-		return nil, err
+		Limit(1).
+		Find(&row)
+	if result.Error != nil {
+		return nil, result.Error
+	}
+	if result.RowsAffected == 0 {
+		return nil, gorm.ErrRecordNotFound
 	}
 	return &row, nil
 }
