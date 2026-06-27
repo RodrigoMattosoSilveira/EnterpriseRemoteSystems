@@ -158,12 +158,13 @@ test("user can filter Expenses by item", async ({ page, request }) => {
     .poll(() => new URL(page.url()).searchParams.get("page"))
     .toBeNull();
 
-  const itemTypeFilteredRow = page
-    .getByRole("row")
-    .filter({ hasText: item.description })
-    .first();
-  await expect(itemTypeFilteredRow).toBeVisible();
-  await expect(itemTypeFilteredRow).toContainText(description);
+  // Development/test data may already contain more than one page of Canteen
+  // expenses. After selecting only the Category filter, assert that filtered
+  // rows are visible, but wait until the specific Item filter is selected
+  // before asserting the newly seeded item appears on the current page.
+  const firstCategoryFilteredRow = page.locator("tbody tr").first();
+  await expect(firstCategoryFilteredRow).toBeVisible();
+  await expect(firstCategoryFilteredRow).toContainText("Canteen");
 
   const itemResponse = page.waitForResponse(
     (response) =>
