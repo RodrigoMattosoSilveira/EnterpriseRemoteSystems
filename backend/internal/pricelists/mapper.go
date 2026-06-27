@@ -10,7 +10,7 @@ import (
 const dateLayout = "2006-01-02"
 
 func ToPriceListItemDTO(row db.ExpensePriceListItem) PriceListItemDTO {
-	return PriceListItemDTO{
+	dto := PriceListItemDTO{
 		ID:           row.ID,
 		TenantID:     row.TenantID,
 		ItemType:     row.ItemType,
@@ -22,6 +22,10 @@ func ToPriceListItemDTO(row db.ExpensePriceListItem) PriceListItemDTO {
 		CreatedAt:    row.CreatedAt.UTC().Format(time.RFC3339),
 		UpdatedAt:    row.UpdatedAt.UTC().Format(time.RFC3339),
 	}
+	if row.SupersededPriceListItemID != nil {
+		dto.SupersededPriceListItemID = *row.SupersededPriceListItemID
+	}
+	return dto
 }
 
 func ToPriceListItemDTOList(rows []db.ExpensePriceListItem) []PriceListItemDTO {
