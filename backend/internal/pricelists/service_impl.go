@@ -76,11 +76,19 @@ func (s *service) UpdateItem(ctx context.Context, id string, req UpdatePriceList
 }
 
 func (s *service) DeactivateItem(ctx context.Context, id string) (*PriceListItemDTO, error) {
+	return s.setItemActive(ctx, id, false)
+}
+
+func (s *service) ReactivateItem(ctx context.Context, id string) (*PriceListItemDTO, error) {
+	return s.setItemActive(ctx, id, true)
+}
+
+func (s *service) setItemActive(ctx context.Context, id string, active bool) (*PriceListItemDTO, error) {
 	item, err := s.repo.FindItemByID(ctx, id)
 	if err != nil {
 		return nil, err
 	}
-	item.Active = false
+	item.Active = active
 	item.UpdatedAt = time.Now().UTC()
 	if err := s.repo.UpdateItem(ctx, item); err != nil {
 		return nil, err
