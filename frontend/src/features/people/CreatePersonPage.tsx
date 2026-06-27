@@ -41,7 +41,13 @@ export function CreatePersonPage() {
           submitting={mutation.isPending}
           onSubmit={async (input) => {
             const created = await mutation.mutateAsync(input);
-            navigate(`/people/${created.id}`);
+            navigate("/people", {
+              state: {
+                flash: `Person record added: ${created.firstName} ${created.lastName}.`,
+                createdPersonId: created.id,
+                createdPerson: created,
+              },
+            });
           }}
         />
       </section>

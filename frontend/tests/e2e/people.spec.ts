@@ -67,13 +67,17 @@ test("user can create a Person from the React frontend", async ({ page }) => {
 
   await page.getByRole("button", { name: "Create Person" }).click();
 
-  await expect(page).toHaveURL(/\/people\/[a-f0-9-]+$/);
-  await expect(page.getByRole("heading", { name: `${firstName} ${lastName}` })).toBeVisible();
-  await expect(page.getByText(nickname)).toBeVisible();
-  await expect(page.locator("header").getByText("Incomplete")).toBeVisible();
-
-  await page.getByRole("link", { name: "Back to People" }).click();
+  await expect(page).toHaveURL(/\/people$/);
   await expect(page.getByRole("heading", { name: "People" })).toBeVisible();
+  await expect(page.getByRole("status")).toContainText(
+    `Person record added: ${firstName} ${lastName}.`,
+  );
+
+  const firstPersonCard = page.locator('main section a[href^="/people/"]').first();
+  await expect(firstPersonCard).toContainText(`${firstName} ${lastName}`);
+  await expect(firstPersonCard).toContainText(nickname);
+  await expect(firstPersonCard).toContainText("Just added");
+  await expect(firstPersonCard).toContainText("Incomplete");
 });
 
 test("user sees required field validation on the create Person form", async ({ page }) => {
@@ -110,8 +114,7 @@ test("user sees an error when creating a Person with a duplicate CPF", async ({ 
 
   await page.getByRole("button", { name: "Create Person" }).click();
 
-  await expect(page).toHaveURL(/\/people\/[^/]+$/);
-  await expect(page).not.toHaveURL(/\/people\/new$/);
+  await expect(page).toHaveURL(/\/people$/);
 
   await page.goto("/people/new");
 
@@ -148,8 +151,10 @@ test("user can create a Person with a valid Brazilian cellular", async ({ page }
 
   await page.getByRole("button", { name: "Create Person" }).click();
 
-  await expect(page).toHaveURL(/\/people\/[^/]+$/);
-  await expect(page.getByRole("heading", { name: /Formatted.*Phone/ })).toBeVisible();
+  await expect(page).toHaveURL(/\/people$/);
+  const firstPersonCard = page.locator('main section a[href^="/people/"]').first();
+  await expect(firstPersonCard).toContainText(/Formatted.*Phone/);
+  await expect(firstPersonCard).toContainText("Just added");
 });
 
 function validBrazilianCellular(seed: number | string): string {
