@@ -251,9 +251,9 @@ func latestExpenseLedgerEntry(tx *gorm.DB, tenantID string, expenseID string) (*
 	err := tx.
 		Where("tenant_id = ? AND correction_type IN (?, ?) AND ((source_type = ? AND source_id = ?) OR (source_type = ? AND source_id LIKE ?))",
 			tenantID,
-			"ORIGINAL", "REPLACEMENT",
-			"EXPENSE", expenseID,
-			"EXPENSE_REPLACEMENT", expenseID+":%",
+			ledgerCorrectionTypeOriginal, ledgerCorrectionTypeReplacement,
+			ledgerSourceTypeExpense, expenseID,
+			ledgerSourceTypeExpenseReplace, expenseID+":%",
 		).
 		Order("created_at DESC").
 		First(&row).Error
@@ -266,6 +266,16 @@ func latestExpenseLedgerEntry(tx *gorm.DB, tenantID string, expenseID string) (*
 	return nil, err
 }
 
+const (
+	ledgerEntryTypeExpenseDeduction = "EXPENSE_DEDUCTION"
+	ledgerDirectionDebit            = "DEBIT"
+	ledgerSourceTypeExpense         = "EXPENSE"
+	ledgerSourceTypeExpenseReplace  = "EXPENSE_REPLACEMENT"
+	ledgerCorrectionTypeOriginal    = "ORIGINAL"
+	ledgerCorrectionTypeReversal    = "REVERSAL"
+	ledgerCorrectionTypeReplacement = "REPLACEMENT"
+)
+
 func expenseLedgerEntry(expense *db.Expense) *db.LedgerEntry {
 	return &db.LedgerEntry{
 		BaseModel: db.BaseModel{
@@ -276,15 +286,15 @@ func expenseLedgerEntry(expense *db.Expense) *db.LedgerEntry {
 		TenantID:       expense.TenantID,
 		CollaboratorID: expense.CollaboratorID,
 		ValueUnitID:    expense.ValueUnitID,
-		EntryType:      "EXPENSE_DEDUCTION",
-		Direction:      "DEBIT",
+		EntryType:      ledgerEntryTypeExpenseDeduction,
+		Direction:      ledgerDirectionDebit,
 		Amount:         expense.Amount,
 		EffectiveDate:  expense.ExpenseDate,
-		SourceType:     "EXPENSE",
+		SourceType:     ledgerSourceTypeExpense,
 		SourceID:       expense.ID,
 		Description:    expense.Description,
 		Active:         true,
-		CorrectionType: "ORIGINAL",
+		CorrectionType: ledgerCorrectionTypeOriginal,
 	}
 }
 
@@ -306,7 +316,7 @@ func reversalLedgerEntry(original db.LedgerEntry, now time.Time, reason string) 
 		SourceID:         "ledger-reversal-" + original.ID + "-" + ids.New(),
 		Description:      "Reversal of ledger entry " + original.ID,
 		Active:           true,
-		CorrectionType:   "REVERSAL",
+		CorrectionType:   ledgerCorrectionTypeReversal,
 		RelatedEntryID:   &original.ID,
 		CorrectionReason: reason,
 	}
@@ -327,15 +337,15 @@ func replacementExpenseLedgerEntry(expense *db.Expense, original *db.LedgerEntry
 		TenantID:         expense.TenantID,
 		CollaboratorID:   expense.CollaboratorID,
 		ValueUnitID:      expense.ValueUnitID,
-		EntryType:        "EXPENSE_DEDUCTION",
-		Direction:        "DEBIT",
+		EntryType:        ledgerEntryTypeExpenseDeduction,
+		Direction:        ledgerDirectionDebit,
 		Amount:           expense.Amount,
 		EffectiveDate:    expense.ExpenseDate,
-		SourceType:       "EXPENSE_REPLACEMENT",
+		SourceType:       ledgerSourceTypeExpenseReplace,
 		SourceID:         expense.ID + ":" + ids.New(),
 		Description:      expense.Description,
 		Active:           true,
-		CorrectionType:   "REPLACEMENT",
+		CorrectionType:   ledgerCorrectionTypeReplacement,
 		RelatedEntryID:   relatedID,
 		CorrectionReason: "Expense replacement for " + expense.ID,
 	}
