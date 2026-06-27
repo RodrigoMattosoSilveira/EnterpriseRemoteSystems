@@ -10,6 +10,51 @@ import type {
 export async function listPeople(
   filter: PeopleListFilter = {},
 ): Promise<Person[]> {
+  const response = await listPeoplePage(filter);
+  return response.items;
+}
+
+export async function listPeoplePage(
+  filter: PeopleListFilter = {},
+): Promise<PeopleListResponse> {
+  const searchParams = peopleListSearchParams(filter);
+  const queryString = searchParams.toString();
+  const response = await apiFetch<PeopleListResponse | Person[]>(
+    queryString ? `/people?${queryString}` : "/people",
+  );
+
+  if (Array.isArray(response)) {
+    return { items: response, total: response.length };
+  }
+
+  return {
+    items: response.items ?? [],
+    total: Number(response.total ?? response.items?.length ?? 0),
+  };
+}
+
+export function getPerson(id: string): Promise<Person> {
+  return apiFetch<Person>(`/people/${id}`);
+}
+
+export function createPerson(input: CreatePersonInput): Promise<Person> {
+  return apiFetch<Person>("/people", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export function updatePerson(
+  id: string,
+  input: UpdatePersonInput,
+): Promise<Person> {
+  return apiFetch<Person>(`/people/${id}`, {
+    method: "PUT",
+    body: JSON.stringify(input),
+  });
+}
+
+function peopleListSearchParams(filter: PeopleListFilter) {
   const searchParams = new URLSearchParams();
 
   if (filter.search) {
@@ -37,35 +82,5 @@ export async function listPeople(
     searchParams.set("pageSize", String(filter.pageSize));
   }
 
-  const queryString = searchParams.toString();
-  const response = await apiFetch<PeopleListResponse | Person[]>(
-    queryString ? `/people?${queryString}` : "/people",
-  );
-
-  if (Array.isArray(response)) {
-    return response;
-  }
-
-  return response.items ?? [];
-}
-
-export function getPerson(id: string): Promise<Person> {
-  return apiFetch<Person>(`/people/${id}`);
-}
-
-export function createPerson(input: CreatePersonInput): Promise<Person> {
-  return apiFetch<Person>("/people", {
-    method: "POST",
-    body: JSON.stringify(input),
-  });
-}
-
-export function updatePerson(
-  id: string,
-  input: UpdatePersonInput
-): Promise<Person> {
-  return apiFetch<Person>(`/people/${id}`, {
-    method: "PUT",
-    body: JSON.stringify(input),
-  });
+  return searchParams;
 }

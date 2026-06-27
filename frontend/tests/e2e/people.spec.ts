@@ -1,5 +1,5 @@
-import { expect, test } from "@playwright/test";
-import { seedBrowserAuthz } from "./support/authz";
+import { expect, test, type APIRequestContext } from "@playwright/test";
+import { authzHeaders, e2eApiUrl, seedBrowserAuthz } from "./support/authz";
 
 const ACTIVE_STATUS_ID = "ref-person-status-active";
 
@@ -80,6 +80,39 @@ test("user can create a Person from the React frontend", async ({ page }) => {
   await expect(firstPersonCard).toContainText("Incomplete");
 });
 
+
+
+test("user can filter and paginate the People page", async ({ page, request }) => {
+  const suffix = uniqueSuffix();
+  const filterLastName = `PeopleFilter${suffix}`;
+
+  for (let index = 0; index < 11; index += 1) {
+    await createPersonViaApi(request, {
+      seed: suffix + index,
+      firstName: `Page${String(index).padStart(2, "0")}`,
+      lastName: filterLastName,
+    });
+  }
+
+  await page.goto("/people");
+
+  await page.getByLabel("Filter people").fill(filterLastName);
+  await page.getByRole("button", { name: "Apply filter" }).click();
+
+  await expect(page.getByText("Showing 1-10 of 11 people").first()).toBeVisible();
+  await expect(page.getByText("Page 1 of 2").first()).toBeVisible();
+  await expect(page.getByRole("link", { name: /Page00/ })).toBeVisible();
+
+  await page.getByRole("button", { name: "Next" }).last().click();
+
+  await expect(page.getByText("Showing 11-11 of 11 people").first()).toBeVisible();
+  await expect(page.getByText("Page 2 of 2").first()).toBeVisible();
+  await expect(page.getByRole("link", { name: /Page10/ })).toBeVisible();
+
+  await page.getByRole("button", { name: "Previous" }).last().click();
+  await expect(page.getByText("Page 1 of 2").first()).toBeVisible();
+});
+
 test("user sees required field validation on the create Person form", async ({ page }) => {
   await page.goto("/people/new");
 
@@ -156,6 +189,28 @@ test("user can create a Person with a valid Brazilian cellular", async ({ page }
   await expect(firstPersonCard).toContainText(/Formatted.*Phone/);
   await expect(firstPersonCard).toContainText("Just added");
 });
+
+
+async function createPersonViaApi(
+  request: APIRequestContext,
+  input: { seed: number; firstName: string; lastName: string },
+) {
+  const response = await request.post(e2eApiUrl("/api/v1/people"), {
+    headers: authzHeaders(),
+    data: {
+      firstName: input.firstName,
+      lastName: input.lastName,
+      nickname: input.firstName,
+      cpf: validCPF(input.seed),
+      rg: validRG(input.seed),
+      cellular: validBrazilianCellular(input.seed),
+      email: `people-filter-${input.seed}@example.com`,
+      statusId: ACTIVE_STATUS_ID,
+    },
+  });
+
+  expect(response.ok()).toBeTruthy();
+}
 
 function validBrazilianCellular(seed: number | string): string {
   const uniqueDigits = String(seed)

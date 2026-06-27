@@ -1,6 +1,11 @@
+import { useMemo, useState, type FormEvent } from "react";
 import { Link, useLocation } from "react-router-dom";
-import { usePeople } from "./usePeople";
-import type { Person } from "../../types/people";
+import { usePeoplePage } from "./usePeople";
+import type {
+  PeopleListFilter,
+  Person,
+  ProfileCompletionStatus,
+} from "../../types/people";
 
 type PeopleListState = {
   flash: string;
@@ -8,16 +13,66 @@ type PeopleListState = {
   createdPerson?: Person;
 };
 
+type CollaboratorEligibilityFilter = "all" | "true" | "false";
+
+const DEFAULT_PAGE_SIZE = 10;
+const PAGE_SIZE_OPTIONS = [10, 25, 50];
+
 export function PeopleListPage() {
-  const { data, isLoading, error } = usePeople();
   const location = useLocation();
-  const people = Array.isArray(data) ? data : [];
   const listState = readPeopleListState(location.state);
+
+  const [searchDraft, setSearchDraft] = useState("");
+  const [search, setSearch] = useState("");
+  const [profileCompletionStatus, setProfileCompletionStatus] =
+    useState<ProfileCompletionStatus | "">("");
+  const [canCreateCollaborator, setCanCreateCollaborator] =
+    useState<CollaboratorEligibilityFilter>("all");
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
+
+  const filter = useMemo<PeopleListFilter>(
+    () => ({
+      search: search || undefined,
+      profileCompletionStatus: profileCompletionStatus || undefined,
+      canCreateCollaborator:
+        canCreateCollaborator === "all"
+          ? undefined
+          : canCreateCollaborator === "true",
+      page,
+      pageSize,
+    }),
+    [canCreateCollaborator, page, pageSize, profileCompletionStatus, search],
+  );
+
+  const { data, isLoading, error } = usePeoplePage(filter);
+  const people = data?.items ?? [];
+  const total = data?.total ?? 0;
   const displayedPeople = pinCreatedPerson(
     people,
     listState.createdPersonId,
     listState.createdPerson,
   );
+  const hasActiveFilters = Boolean(
+    search || profileCompletionStatus || canCreateCollaborator !== "all",
+  );
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  const pageStart = total === 0 ? 0 : (page - 1) * pageSize + 1;
+  const pageEnd = total === 0 ? 0 : Math.min(total, page * pageSize);
+
+  function applySearch(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setSearch(searchDraft.trim());
+    setPage(1);
+  }
+
+  function clearFilters() {
+    setSearchDraft("");
+    setSearch("");
+    setProfileCompletionStatus("");
+    setCanCreateCollaborator("all");
+    setPage(1);
+  }
 
   return (
     <main className="min-h-screen bg-gray-50">
@@ -75,6 +130,107 @@ export function PeopleListPage() {
           </div>
         )}
 
+        <section
+          aria-label="Search and filter controls"
+          className="rounded-2xl border bg-white p-5 shadow-sm"
+        >
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h2 className="text-lg font-semibold text-gray-950">Filters</h2>
+              <p className="mt-1 text-sm text-gray-500">
+                Search by name, nickname, CPF, RG, cellular, or email.
+              </p>
+            </div>
+            {hasActiveFilters && (
+              <button
+                type="button"
+                onClick={clearFilters}
+                className="rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 shadow-sm"
+              >
+                Clear filters
+              </button>
+            )}
+          </div>
+
+          <form
+            onSubmit={applySearch}
+            className="mt-4 grid gap-4 md:grid-cols-[minmax(0,1fr)_auto] md:items-end"
+          >
+            <label className="grid gap-1 text-sm font-medium text-gray-700">
+              Filter people
+              <input
+                value={searchDraft}
+                onChange={(event) => setSearchDraft(event.target.value)}
+                placeholder="Name, nickname, CPF, RG, cellular, or email"
+                className="rounded-xl border border-gray-300 px-3 py-2 text-sm shadow-sm"
+              />
+            </label>
+            <button
+              type="submit"
+              className="rounded-xl bg-gray-950 px-4 py-2 text-sm font-semibold text-white shadow-sm"
+            >
+              Apply filter
+            </button>
+          </form>
+
+          <div className="mt-4 grid gap-4 md:grid-cols-3">
+            <label className="grid gap-1 text-sm font-medium text-gray-700">
+              Profile completion
+              <select
+                value={profileCompletionStatus}
+                onChange={(event) => {
+                  setProfileCompletionStatus(
+                    event.target.value as ProfileCompletionStatus | "",
+                  );
+                  setPage(1);
+                }}
+                className="rounded-xl border border-gray-300 px-3 py-2 text-sm shadow-sm"
+              >
+                <option value="">All completion statuses</option>
+                <option value="COMPLETE">Complete</option>
+                <option value="INCOMPLETE">Incomplete</option>
+                <option value="PERSONAL_ONLY">Personal only</option>
+              </select>
+            </label>
+
+            <label className="grid gap-1 text-sm font-medium text-gray-700">
+              Collaborator eligibility
+              <select
+                value={canCreateCollaborator}
+                onChange={(event) => {
+                  setCanCreateCollaborator(
+                    event.target.value as CollaboratorEligibilityFilter,
+                  );
+                  setPage(1);
+                }}
+                className="rounded-xl border border-gray-300 px-3 py-2 text-sm shadow-sm"
+              >
+                <option value="all">All people</option>
+                <option value="true">Can create collaborator</option>
+                <option value="false">Cannot create collaborator</option>
+              </select>
+            </label>
+
+            <label className="grid gap-1 text-sm font-medium text-gray-700">
+              People per page
+              <select
+                value={pageSize}
+                onChange={(event) => {
+                  setPageSize(Number(event.target.value));
+                  setPage(1);
+                }}
+                className="rounded-xl border border-gray-300 px-3 py-2 text-sm shadow-sm"
+              >
+                {PAGE_SIZE_OPTIONS.map((option) => (
+                  <option key={option} value={option}>
+                    {option}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+        </section>
+
         {isLoading && (
           <div className="rounded-2xl border bg-white p-5 shadow-sm">
             Loading people...
@@ -92,18 +248,46 @@ export function PeopleListPage() {
           </pre>
         )}
 
+        {!isLoading && !error && (
+          <PaginationSummary
+            page={page}
+            totalPages={totalPages}
+            pageStart={pageStart}
+            pageEnd={pageEnd}
+            total={total}
+            onPrevious={() => setPage((current) => Math.max(1, current - 1))}
+            onNext={() =>
+              setPage((current) => Math.min(totalPages, current + 1))
+            }
+          />
+        )}
+
         {!isLoading && !error && displayedPeople.length === 0 && (
           <div className="rounded-2xl border bg-white p-8 text-center shadow-sm">
-            <h2 className="text-lg font-semibold">No people yet</h2>
+            <h2 className="text-lg font-semibold">
+              {hasActiveFilters ? "No people match these filters" : "No people yet"}
+            </h2>
             <p className="mt-2 text-sm text-gray-500">
-              Create the first Person record before creating collaborators.
+              {hasActiveFilters
+                ? "Adjust or clear the filters to widen the People list."
+                : "Create the first Person record before creating collaborators."}
             </p>
-            <Link
-              to="/people/new"
-              className="mt-5 inline-block rounded-xl bg-gray-950 px-5 py-3 text-sm font-semibold text-white"
-            >
-              Create Person
-            </Link>
+            {hasActiveFilters ? (
+              <button
+                type="button"
+                onClick={clearFilters}
+                className="mt-5 inline-block rounded-xl bg-gray-950 px-5 py-3 text-sm font-semibold text-white"
+              >
+                Clear filters
+              </button>
+            ) : (
+              <Link
+                to="/people/new"
+                className="mt-5 inline-block rounded-xl bg-gray-950 px-5 py-3 text-sm font-semibold text-white"
+              >
+                Create Person
+              </Link>
+            )}
           </div>
         )}
 
@@ -166,8 +350,69 @@ export function PeopleListPage() {
             </Link>
           );
         })}
+
+        {!isLoading && !error && displayedPeople.length > 0 && (
+          <PaginationSummary
+            page={page}
+            totalPages={totalPages}
+            pageStart={pageStart}
+            pageEnd={pageEnd}
+            total={total}
+            onPrevious={() => setPage((current) => Math.max(1, current - 1))}
+            onNext={() =>
+              setPage((current) => Math.min(totalPages, current + 1))
+            }
+          />
+        )}
       </section>
     </main>
+  );
+}
+
+function PaginationSummary({
+  page,
+  totalPages,
+  pageStart,
+  pageEnd,
+  total,
+  onPrevious,
+  onNext,
+}: {
+  page: number;
+  totalPages: number;
+  pageStart: number;
+  pageEnd: number;
+  total: number;
+  onPrevious: () => void;
+  onNext: () => void;
+}) {
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border bg-white p-4 text-sm shadow-sm">
+      <p className="font-medium text-gray-700" aria-live="polite">
+        Showing {pageStart}-{pageEnd} of {total} people
+      </p>
+      <div className="flex items-center gap-3">
+        <button
+          type="button"
+          onClick={onPrevious}
+          disabled={page <= 1}
+          className="rounded-xl border border-gray-300 bg-white px-4 py-2 font-semibold text-gray-700 shadow-sm disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          Previous
+        </button>
+        <span className="text-gray-500">
+          Page {page} of {totalPages}
+        </span>
+        <button
+          type="button"
+          onClick={onNext}
+          disabled={page >= totalPages || total === 0}
+          className="rounded-xl border border-gray-300 bg-white px-4 py-2 font-semibold text-gray-700 shadow-sm disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          Next
+        </button>
+      </div>
+    </div>
   );
 }
 
