@@ -102,7 +102,7 @@ func TestCreateAndListPriceListItems(t *testing.T) {
 	}
 }
 
-func TestUpdateAndDeactivatePriceListItem(t *testing.T) {
+func TestUpdateDeactivateAndReactivatePriceListItem(t *testing.T) {
 	server, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -139,6 +139,30 @@ func TestUpdateAndDeactivatePriceListItem(t *testing.T) {
 	decodeJSON(t, res, &list)
 	if len(list.Data) != 0 {
 		t.Fatalf("expected inactive item hidden from default list, got %+v", list.Data)
+	}
+
+	res = getJSON(t, server, priceListItemsURL+"?includeInactive=true")
+	defer res.Body.Close()
+	decodeJSON(t, res, &list)
+	if len(list.Data) != 1 || list.Data[0].ID != created.Data.ID || list.Data[0].Active {
+		t.Fatalf("expected inactive item visible when requested, got %+v", list.Data)
+	}
+
+	res = postJSON(t, server, http.MethodPatch, priceListItemsURL+created.Data.ID+"/reactivate", map[string]any{})
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("expected reactivate status %d, got %d", http.StatusOK, res.StatusCode)
+	}
+	decodeJSON(t, res, &updated)
+	if !updated.Data.Active {
+		t.Fatalf("expected item to be active after reactivation: %+v", updated.Data)
+	}
+
+	res = getJSON(t, server, priceListItemsURL)
+	defer res.Body.Close()
+	decodeJSON(t, res, &list)
+	if len(list.Data) != 1 || list.Data[0].ID != created.Data.ID || !list.Data[0].Active {
+		t.Fatalf("expected reactivated item visible from default list, got %+v", list.Data)
 	}
 }
 

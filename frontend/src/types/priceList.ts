@@ -17,3 +17,11 @@ export type PriceListItemListFilter = {
   itemType?: PriceListItemType;
   includeInactive?: boolean;
 };
+
+export type PriceListItemInput = {
+  itemType: PriceListItemType;
+  code: string;
+  description: string;
+  unitPriceBrl: number;
+  sortOrder: number;
+};

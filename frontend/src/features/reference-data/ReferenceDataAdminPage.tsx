@@ -145,6 +145,9 @@ export function ReferenceDataAdminPage() {
             <Link className="text-sm font-semibold text-gray-700 underline" to="/admin/gold-prices">
               Gold Prices
             </Link>
+            <Link className="text-sm font-semibold text-gray-700 underline" to="/admin/price-list-items">
+              Price List
+            </Link>
             <Link className="text-sm font-semibold text-gray-700 underline" to="/people">
               Back to People
             </Link>
