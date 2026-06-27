@@ -23,6 +23,7 @@ type Repository interface {
 	FindCollaboratorTenantID(ctx context.Context, collaboratorID string) (string, error)
 	ListRecentDailyGoldProduction(ctx context.Context, locationID string, limit int) ([]DailyGoldProductionRow, error)
 	CountPendingAccrualItems(ctx context.Context, collaboratorID string) (int64, error)
+	CountOutstandingReceiptsForCollaborator(ctx context.Context, collaboratorID string) (int64, error)
 	FindEntryByID(ctx context.Context, entryID string) (*db.LedgerEntry, error)
 	FindLedgerEntryTenantID(ctx context.Context, entryID string) (string, error)
 	FindValueUnitByID(ctx context.Context, valueUnitID string) (*db.ReferenceData, error)

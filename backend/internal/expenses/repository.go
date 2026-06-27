@@ -12,6 +12,7 @@ type Repository interface {
 	Create(ctx context.Context, expense *db.Expense) error
 	Update(ctx context.Context, expense *db.Expense) error
 	FindByID(ctx context.Context, id string) (*db.Expense, error)
+	FindFinancialPostingByExpenseID(ctx context.Context, expenseID string) (*db.LedgerEntry, error)
 	FindCollaboratorByID(ctx context.Context, collaboratorID string) (*db.CollaboratorJourney, error)
 	ExistsActiveReference(ctx context.Context, id string, typ string) (bool, error)
 	FindActiveReferenceByID(ctx context.Context, id string, typ string) (*db.ReferenceData, error)

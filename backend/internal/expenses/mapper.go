@@ -80,3 +80,68 @@ func normalizeCurrencyCode(value string) string {
 func normalizeItemType(value string) string {
 	return strings.ToUpper(strings.TrimSpace(value))
 }
+
+func ToDTOWithFinancialPosting(row db.Expense, posting *db.LedgerEntry) ExpenseDTO {
+	dto := ToDTO(row)
+	if posting != nil {
+		dto.FinancialPosting = toFinancialPostingDTO(*posting)
+	}
+	return dto
+}
+
+func toFinancialPostingDTO(row db.LedgerEntry) *ExpenseFinancialPostingDTO {
+	return &ExpenseFinancialPostingDTO{
+		LedgerEntryID:      row.ID,
+		Direction:          row.Direction,
+		EntryType:          row.EntryType,
+		Amount:             row.Amount,
+		SignedAmount:       signedAmount(row.Direction, row.Amount),
+		EffectiveDate:      formatDate(row.EffectiveDate),
+		ValueUnitID:        row.ValueUnitID,
+		ValueUnitCode:      row.ValueUnit.Code,
+		ValueUnitLabel:     row.ValueUnit.Label,
+		SourceType:         row.SourceType,
+		SourceID:           row.SourceID,
+		CorrectionType:     row.CorrectionType,
+		ReceiptID:          receiptID(row.Receipt),
+		ReceiptNumber:      receiptNumber(row.Receipt),
+		ReceiptStatus:      receiptStatus(row.Receipt),
+		OutstandingReceipt: receiptOutstanding(row.Receipt),
+	}
+}
+
+func signedAmount(direction string, amount float64) float64 {
+	if strings.EqualFold(direction, "DEBIT") {
+		return -amount
+	}
+	return amount
+}
+
+func receiptID(receipt *db.LedgerReceipt) string {
+	if receipt == nil {
+		return ""
+	}
+	return receipt.ID
+}
+
+func receiptNumber(receipt *db.LedgerReceipt) string {
+	if receipt == nil || receipt.ReceiptNumber == nil {
+		return ""
+	}
+	return strings.TrimSpace(*receipt.ReceiptNumber)
+}
+
+func receiptStatus(receipt *db.LedgerReceipt) string {
+	if receipt == nil {
+		return "MISSING"
+	}
+	return strings.TrimSpace(receipt.Status)
+}
+
+func receiptOutstanding(receipt *db.LedgerReceipt) bool {
+	if receipt == nil {
+		return true
+	}
+	status := strings.ToUpper(strings.TrimSpace(receipt.Status))
+	return status == "PENDING_ISSUE" || status == "ISSUED" || status == "PRINTED" || status == "SIGNED"
+}

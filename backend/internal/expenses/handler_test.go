@@ -75,6 +75,24 @@ type apiExpenseResponse struct {
 		TotalAmount            *float64 `json:"totalAmount"`
 		CalculationMethod      string   `json:"calculationMethod"`
 		CalculationDetailsJSON string   `json:"calculationDetailsJson"`
+		FinancialPosting       *struct {
+			LedgerEntryID      string  `json:"ledgerEntryId"`
+			Direction          string  `json:"direction"`
+			EntryType          string  `json:"entryType"`
+			Amount             float64 `json:"amount"`
+			SignedAmount       float64 `json:"signedAmount"`
+			EffectiveDate      string  `json:"effectiveDate"`
+			ValueUnitID        string  `json:"valueUnitId"`
+			ValueUnitCode      string  `json:"valueUnitCode"`
+			ValueUnitLabel     string  `json:"valueUnitLabel"`
+			SourceType         string  `json:"sourceType"`
+			SourceID           string  `json:"sourceId"`
+			CorrectionType     string  `json:"correctionType"`
+			ReceiptID          string  `json:"receiptId"`
+			ReceiptNumber      string  `json:"receiptNumber"`
+			ReceiptStatus      string  `json:"receiptStatus"`
+			OutstandingReceipt bool    `json:"outstandingReceipt"`
+		} `json:"financialPosting"`
 	} `json:"data"`
 }
 
@@ -233,6 +251,7 @@ func TestCreatePriceListExpenseInBRLCalculatesAndStoresAuditFields(t *testing.T)
 	assertCalculationDetail(t, expense.Data.CalculationDetailsJSON, "itemCode", "LUNCH")
 	assertCalculationDetail(t, expense.Data.CalculationDetailsJSON, "calculationMethod", "BRL_PRICE_LIST")
 	assertExpenseLedgerPosting(t, database, expense.Data.ID, collaborator.Data.ID, "ref-value-unit-brl", 75.0, "2026-06-03")
+	assertExpenseFinancialPosting(t, expense, collaborator.Data.ID, "ref-value-unit-brl", "BRL", 75.0, "2026-06-03")
 }
 
 func TestCreatePriceListExpenseInGoldUsesLatestGoldPrice(t *testing.T) {
@@ -354,6 +373,9 @@ func TestListAndGetExpenseReturnCreatedExpense(t *testing.T) {
 	decodeJSON(t, res, &getBody)
 	if getBody.Data.ID != expense.Data.ID {
 		t.Fatalf("expected expense id %q, got %q", expense.Data.ID, getBody.Data.ID)
+	}
+	if getBody.Data.FinancialPosting == nil || getBody.Data.FinancialPosting.ReceiptStatus != "PENDING_ISSUE" {
+		t.Fatalf("expected get expense to include pending receipt posting, got %+v", getBody.Data.FinancialPosting)
 	}
 }
 
@@ -809,6 +831,35 @@ func assertExpenseLedgerPosting(t *testing.T, database *gorm.DB, expenseID strin
 	}
 	if receipt.CollaboratorID != collaboratorID || receipt.Status != "PENDING_ISSUE" || receipt.ReceiptType != "LEDGER_DEBIT" {
 		t.Fatalf("unexpected generated receipt obligation: %+v", receipt)
+	}
+}
+
+func assertExpenseFinancialPosting(t *testing.T, expense apiExpenseResponse, collaboratorID string, valueUnitID string, valueUnitCode string, amount float64, effectiveDate string) {
+	t.Helper()
+	posting := expense.Data.FinancialPosting
+	if posting == nil {
+		t.Fatal("expected financial posting in expense response")
+	}
+	if posting.LedgerEntryID != "ledger-expense-"+expense.Data.ID {
+		t.Fatalf("expected deterministic ledger entry id, got %+v", posting)
+	}
+	if posting.Direction != "DEBIT" || posting.EntryType != "EXPENSE_DEDUCTION" || posting.CorrectionType != "ORIGINAL" {
+		t.Fatalf("unexpected financial posting classification: %+v", posting)
+	}
+	if posting.Amount != amount || posting.SignedAmount != -amount || posting.EffectiveDate != effectiveDate {
+		t.Fatalf("unexpected financial posting amount/date: %+v", posting)
+	}
+	if posting.ValueUnitID != valueUnitID || posting.ValueUnitCode != valueUnitCode {
+		t.Fatalf("unexpected financial posting value unit: %+v", posting)
+	}
+	if posting.SourceType != "EXPENSE" || posting.SourceID != expense.Data.ID {
+		t.Fatalf("unexpected financial posting source: %+v", posting)
+	}
+	if posting.ReceiptID == "" || posting.ReceiptNumber == "" || posting.ReceiptStatus != "PENDING_ISSUE" || !posting.OutstandingReceipt {
+		t.Fatalf("expected pending outstanding receipt obligation, got %+v", posting)
+	}
+	if collaboratorID != "" && expense.Data.CollaboratorID != collaboratorID {
+		t.Fatalf("unexpected expense collaborator id: %+v", expense.Data)
 	}
 }
 
