@@ -11,35 +11,46 @@ type UpdateSecondPersonApprovalPolicyRequest struct {
 	Required bool `json:"required"`
 }
 
+type LedgerEntryReceiptDTO struct {
+	ID                string `json:"id"`
+	ReceiptNumber     string `json:"receiptNumber,omitempty"`
+	Status            string `json:"status"`
+	Outstanding       bool   `json:"outstanding"`
+	PrintedAt         string `json:"printedAt,omitempty"`
+	ReturnedAt        string `json:"returnedAt,omitempty"`
+	SignedDocumentRef string `json:"signedDocumentRef,omitempty"`
+}
+
 type LedgerEntryDTO struct {
-	ID                   string  `json:"id"`
-	TenantID             string  `json:"tenantId"`
-	CollaboratorID       string  `json:"collaboratorId"`
-	CollaboratorLabel    string  `json:"collaboratorLabel,omitempty"`
-	ValueUnitID          string  `json:"valueUnitId"`
-	ValueUnitLabel       string  `json:"valueUnitLabel,omitempty"`
-	ValueUnitCode        string  `json:"valueUnitCode,omitempty"`
-	EntryType            string  `json:"entryType"`
-	Direction            string  `json:"direction"`
-	Amount               float64 `json:"amount"`
-	SignedAmount         float64 `json:"signedAmount"`
-	EffectiveDate        string  `json:"effectiveDate"`
-	SourceType           string  `json:"sourceType"`
-	SourceID             string  `json:"sourceId"`
-	Description          string  `json:"description,omitempty"`
-	Active               bool    `json:"active"`
-	CorrectionType       string  `json:"correctionType"`
-	RelatedEntryID       string  `json:"relatedEntryId,omitempty"`
-	CorrectionReason     string  `json:"correctionReason,omitempty"`
-	CorrectionReasonCode string  `json:"correctionReasonCode,omitempty"`
-	CorrectionReasonText string  `json:"correctionReasonText,omitempty"`
-	AuthorizedBy         string  `json:"authorizedBy,omitempty"`
-	AuthorizedAt         string  `json:"authorizedAt,omitempty"`
-	SecondApprovedBy     string  `json:"secondApprovedBy,omitempty"`
-	SecondApprovedAt     string  `json:"secondApprovedAt,omitempty"`
-	SecondApprovalNotes  string  `json:"secondApprovalNotes,omitempty"`
-	CreatedAt            string  `json:"createdAt"`
-	UpdatedAt            string  `json:"updatedAt"`
+	ID                   string                 `json:"id"`
+	TenantID             string                 `json:"tenantId"`
+	CollaboratorID       string                 `json:"collaboratorId"`
+	CollaboratorLabel    string                 `json:"collaboratorLabel,omitempty"`
+	ValueUnitID          string                 `json:"valueUnitId"`
+	ValueUnitLabel       string                 `json:"valueUnitLabel,omitempty"`
+	ValueUnitCode        string                 `json:"valueUnitCode,omitempty"`
+	EntryType            string                 `json:"entryType"`
+	Direction            string                 `json:"direction"`
+	Amount               float64                `json:"amount"`
+	SignedAmount         float64                `json:"signedAmount"`
+	EffectiveDate        string                 `json:"effectiveDate"`
+	SourceType           string                 `json:"sourceType"`
+	SourceID             string                 `json:"sourceId"`
+	Description          string                 `json:"description,omitempty"`
+	Active               bool                   `json:"active"`
+	CorrectionType       string                 `json:"correctionType"`
+	RelatedEntryID       string                 `json:"relatedEntryId,omitempty"`
+	CorrectionReason     string                 `json:"correctionReason,omitempty"`
+	CorrectionReasonCode string                 `json:"correctionReasonCode,omitempty"`
+	CorrectionReasonText string                 `json:"correctionReasonText,omitempty"`
+	AuthorizedBy         string                 `json:"authorizedBy,omitempty"`
+	AuthorizedAt         string                 `json:"authorizedAt,omitempty"`
+	SecondApprovedBy     string                 `json:"secondApprovedBy,omitempty"`
+	SecondApprovedAt     string                 `json:"secondApprovedAt,omitempty"`
+	SecondApprovalNotes  string                 `json:"secondApprovalNotes,omitempty"`
+	CreatedAt            string                 `json:"createdAt"`
+	UpdatedAt            string                 `json:"updatedAt"`
+	Receipt              *LedgerEntryReceiptDTO `json:"receipt,omitempty"`
 }
 
 type CurrentAccountBalanceDTO struct {
@@ -59,14 +70,16 @@ type CurrentAccountDetailDTO struct {
 }
 
 type LedgerEntryListFilter struct {
-	ValueUnitID     string `query:"valueUnitId"`
-	EntryType       string `query:"entryType"`
-	SourceType      string `query:"sourceType"`
-	DateFrom        string `query:"dateFrom"`
-	DateTo          string `query:"dateTo"`
-	IncludeInactive bool   `query:"includeInactive"`
-	Page            int    `query:"page"`
-	PageSize        int    `query:"pageSize"`
+	ValueUnitID         string `query:"valueUnitId"`
+	EntryType           string `query:"entryType"`
+	Direction           string `query:"direction"`
+	SourceType          string `query:"sourceType"`
+	OutstandingReceipts bool   `query:"outstandingReceipts"`
+	DateFrom            string `query:"dateFrom"`
+	DateTo              string `query:"dateTo"`
+	IncludeInactive     bool   `query:"includeInactive"`
+	Page                int    `query:"page"`
+	PageSize            int    `query:"pageSize"`
 }
 
 type LedgerEntryListResult struct {

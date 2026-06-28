@@ -100,6 +100,13 @@ export function CollaboratorDetailPage() {
 
             <div className="flex flex-col items-start gap-3 sm:items-end">
               <StatusBadge collaborator={collaborator} />
+              <div className="flex flex-wrap gap-2 sm:justify-end">
+                <Link
+                  className="rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 shadow-sm"
+                  to={`/collaborators/${collaborator.id}/current-account`}
+                >
+                  Current Account
+                </Link>
               <button
                 type="button"
                 className="rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 shadow-sm"
@@ -110,6 +117,7 @@ export function CollaboratorDetailPage() {
               >
                 Edit Collaborator
               </button>
+              </div>
             </div>
           </div>
         </div>

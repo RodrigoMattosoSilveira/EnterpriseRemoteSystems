@@ -920,6 +920,11 @@ func TestCollaboratorCurrentAccountDetailIncludesBalancesAndLedgerEntries(t *tes
 					Amount         float64 `json:"amount"`
 					SignedAmount   float64 `json:"signedAmount"`
 					CorrectionType string  `json:"correctionType"`
+					Receipt        *struct {
+						ID          string `json:"id"`
+						Status      string `json:"status"`
+						Outstanding bool   `json:"outstanding"`
+					} `json:"receipt"`
 				} `json:"items"`
 				Total int `json:"total"`
 			} `json:"ledgerEntries"`
@@ -939,6 +944,32 @@ func TestCollaboratorCurrentAccountDetailIncludesBalancesAndLedgerEntries(t *tes
 	entry := body.Data.LedgerEntries.Items[0]
 	if entry.EntryType != "EXPENSE_DEDUCTION" || entry.Direction != "DEBIT" || entry.ValueUnitCode != "BRL" || entry.Amount != 12.25 || entry.SignedAmount != -12.25 || entry.CorrectionType != "ORIGINAL" {
 		t.Fatalf("unexpected ledger entry: %+v", entry)
+	}
+	if entry.Receipt == nil || entry.Receipt.ID == "" || entry.Receipt.Status != "PENDING_ISSUE" || !entry.Receipt.Outstanding {
+		t.Fatalf("expected pending receipt on ledger entry, got %+v", entry.Receipt)
+	}
+
+	filtered := getJSON(t, server, "/api/v1/collaborators/"+collaborator.Data.ID+"/current-account?direction=DEBIT&outstandingReceipts=true")
+	defer filtered.Body.Close()
+	if filtered.StatusCode != http.StatusOK {
+		t.Fatalf("expected filtered current account status %d, got %d", http.StatusOK, filtered.StatusCode)
+	}
+	var filteredBody struct {
+		Data struct {
+			LedgerEntries struct {
+				Items []struct {
+					Direction string `json:"direction"`
+					Receipt   *struct {
+						Outstanding bool `json:"outstanding"`
+					} `json:"receipt"`
+				} `json:"items"`
+				Total int `json:"total"`
+			} `json:"ledgerEntries"`
+		} `json:"data"`
+	}
+	decodeJSON(t, filtered, &filteredBody)
+	if filteredBody.Data.LedgerEntries.Total != 1 || len(filteredBody.Data.LedgerEntries.Items) != 1 || filteredBody.Data.LedgerEntries.Items[0].Direction != "DEBIT" || filteredBody.Data.LedgerEntries.Items[0].Receipt == nil || !filteredBody.Data.LedgerEntries.Items[0].Receipt.Outstanding {
+		t.Fatalf("unexpected filtered outstanding receipt entries: %+v", filteredBody.Data.LedgerEntries)
 	}
 }
 
