@@ -2,6 +2,7 @@ package collaborators
 
 import (
 	"context"
+	"math"
 	"strings"
 	"time"
 
@@ -15,6 +16,8 @@ const defaultTenantID = tenants.DefaultTenantID
 const (
 	defaultTimeOffGoldSplitPercent        = 50.0
 	defaultSickDayOffReplacementGoldGrams = 1.0
+	brlPaymentDecimalPlaces               = 2
+	goldCommissionDecimalPlaces           = 8
 )
 
 type service struct{ repo Repository }
@@ -112,6 +115,68 @@ func (s *service) Create(ctx context.Context, req CreateCollaboratorRequest, act
 	return ptr(ToDTO(*created)), nil
 }
 
+func (s *service) Update(ctx context.Context, id string, req UpdateCollaboratorRequest, actorUserID string) (*CollaboratorDTO, error) {
+	_ = actorUserID
+	if err := ValidateUpdateCollaborator(req); err != nil {
+		return nil, err
+	}
+
+	row, err := s.repo.FindByID(ctx, strings.TrimSpace(id))
+	if err != nil {
+		return nil, err
+	}
+
+	paymentMethod, err := s.validatePaymentMethod(ctx, req.PaymentMethodID)
+	if err != nil {
+		return nil, err
+	}
+	paymentConfig, err := paymentConfigFromRequest(CreateCollaboratorRequest{
+		PaymentMethodID:                req.PaymentMethodID,
+		PaymentValue:                   req.PaymentValue,
+		FixedMonthlyBRLAmount:          req.FixedMonthlyBRLAmount,
+		DailyBRLAmount:                 req.DailyBRLAmount,
+		GoldCommissionPercent:          req.GoldCommissionPercent,
+		TimeOffGoldSplitPercent:        req.TimeOffGoldSplitPercent,
+		SickDayOffReplacementGoldGrams: req.SickDayOffReplacementGoldGrams,
+	}, paymentMethod.Code)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.validateReference(ctx, "sectorId", req.SectorID, "sector", "Sector must be active reference data of type sector"); err != nil {
+		return nil, err
+	}
+	if err := s.validateReference(ctx, "locationId", req.LocationID, "location", "Location must be active reference data of type location"); err != nil {
+		return nil, err
+	}
+	if err := s.validateReference(ctx, "taskId", req.TaskID, "task", "Task must be active reference data of type task"); err != nil {
+		return nil, err
+	}
+
+	row.UpdatedAt = time.Now().UTC()
+	row.ExtensionDays = req.ExtensionDays
+	row.ProjectedEndDate = row.DefaultEndDate.AddDate(0, 0, req.ExtensionDays)
+	row.PaymentMethodID = strings.TrimSpace(req.PaymentMethodID)
+	row.PaymentValue = paymentConfig.compatibilityValue()
+	row.FixedMonthlyBRLAmount = paymentConfig.FixedMonthlyBRLAmount
+	row.DailyBRLAmount = paymentConfig.DailyBRLAmount
+	row.GoldCommissionPercent = paymentConfig.GoldCommissionPercent
+	row.TimeOffGoldSplitPercent = paymentConfig.TimeOffGoldSplitPercent
+	row.SickDayOffReplacementGoldGrams = paymentConfig.SickDayOffReplacementGoldGrams
+	row.SectorID = strings.TrimSpace(req.SectorID)
+	row.LocationID = strings.TrimSpace(req.LocationID)
+	row.TaskID = strings.TrimSpace(req.TaskID)
+
+	if err := s.repo.Update(ctx, row); err != nil {
+		return nil, err
+	}
+
+	updated, err := s.repo.FindByID(ctx, row.ID)
+	if err != nil {
+		return nil, err
+	}
+	return ptr(ToDTO(*updated)), nil
+}
+
 func (s *service) GetByID(ctx context.Context, id string) (*CollaboratorDTO, error) {
 	row, err := s.repo.FindByID(ctx, id)
 	if err != nil {
@@ -167,38 +232,35 @@ func paymentConfigFromRequest(req CreateCollaboratorRequest, paymentMethodCode s
 
 	switch method {
 	case "DAILY_BRL":
-		amount := req.DailyBRLAmount
-		if amount == nil && req.PaymentValue > 0 {
-			amount = &req.PaymentValue
-		}
+		amount, field := paymentAmountFromRequest(req.DailyBRLAmount, req.PaymentValue, "dailyBrlAmount")
 		if amount == nil {
-			fields["dailyBrlAmount"] = "Daily BRL amount is required for DAILY_BRL payment method"
+			fields[field] = "Daily BRL amount is required for DAILY_BRL payment method"
 		} else if *amount <= 0 {
-			fields["dailyBrlAmount"] = "Daily BRL amount must be greater than zero"
+			fields[field] = "Daily BRL amount must be greater than zero"
+		} else if !hasAtMostDecimalPlaces(*amount, brlPaymentDecimalPlaces) {
+			fields[field] = "Daily BRL amount can have at most two decimal places"
 		} else {
 			cfg.DailyBRLAmount = amount
 		}
 	case "FIXED_BRL":
-		amount := req.FixedMonthlyBRLAmount
-		if amount == nil && req.PaymentValue > 0 {
-			amount = &req.PaymentValue
-		}
+		amount, field := paymentAmountFromRequest(req.FixedMonthlyBRLAmount, req.PaymentValue, "fixedMonthlyBrlAmount")
 		if amount == nil {
-			fields["fixedMonthlyBrlAmount"] = "Fixed monthly BRL amount is required for FIXED_BRL payment method"
+			fields[field] = "Fixed monthly BRL amount is required for FIXED_BRL payment method"
 		} else if *amount <= 0 {
-			fields["fixedMonthlyBrlAmount"] = "Fixed monthly BRL amount must be greater than zero"
+			fields[field] = "Fixed monthly BRL amount must be greater than zero"
+		} else if !hasAtMostDecimalPlaces(*amount, brlPaymentDecimalPlaces) {
+			fields[field] = "Fixed monthly BRL amount can have at most two decimal places"
 		} else {
 			cfg.FixedMonthlyBRLAmount = amount
 		}
 	case "GOLD_COMMISSION":
-		percent := req.GoldCommissionPercent
-		if percent == nil && req.PaymentValue > 0 {
-			percent = &req.PaymentValue
-		}
+		percent, field := paymentAmountFromRequest(req.GoldCommissionPercent, req.PaymentValue, "goldCommissionPercent")
 		if percent == nil {
-			fields["goldCommissionPercent"] = "Gold commission percent is required for GOLD_COMMISSION payment method"
+			fields[field] = "Gold commission percent is required for GOLD_COMMISSION payment method"
 		} else if *percent <= 0 || *percent > 100 {
-			fields["goldCommissionPercent"] = "Gold commission percent must be greater than zero and at most 100"
+			fields[field] = "Gold commission percent must be greater than zero and at most 100"
+		} else if !hasAtMostDecimalPlaces(*percent, goldCommissionDecimalPlaces) {
+			fields[field] = "Gold commission percent can have at most eight decimal places"
 		} else {
 			cfg.GoldCommissionPercent = percent
 		}
@@ -232,6 +294,21 @@ func paymentConfigFromRequest(req CreateCollaboratorRequest, paymentMethodCode s
 		return paymentConfig{}, ValidationError{Fields: fields}
 	}
 	return cfg, nil
+}
+
+func paymentAmountFromRequest(specific *float64, paymentValue float64, specificField string) (*float64, string) {
+	if specific != nil {
+		return specific, specificField
+	}
+	if paymentValue > 0 {
+		return &paymentValue, "paymentValue"
+	}
+	return nil, specificField
+}
+
+func hasAtMostDecimalPlaces(value float64, places int) bool {
+	factor := math.Pow10(places)
+	return math.Abs(value*factor-math.Round(value*factor)) < 0.000001
 }
 
 func normalizePaymentMethodCode(code string) string {

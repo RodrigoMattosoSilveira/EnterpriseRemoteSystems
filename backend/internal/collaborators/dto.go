@@ -49,6 +49,20 @@ type CreateCollaboratorRequest struct {
 	Notes                          string   `json:"notes"`
 }
 
+type UpdateCollaboratorRequest struct {
+	PaymentMethodID                string   `json:"paymentMethodId"`
+	PaymentValue                   float64  `json:"paymentValue"`
+	FixedMonthlyBRLAmount          *float64 `json:"fixedMonthlyBrlAmount"`
+	DailyBRLAmount                 *float64 `json:"dailyBrlAmount"`
+	GoldCommissionPercent          *float64 `json:"goldCommissionPercent"`
+	TimeOffGoldSplitPercent        *float64 `json:"timeOffGoldSplitPercent"`
+	SickDayOffReplacementGoldGrams *float64 `json:"sickDayOffReplacementGoldGrams"`
+	SectorID                       string   `json:"sectorId"`
+	LocationID                     string   `json:"locationId"`
+	TaskID                         string   `json:"taskId"`
+	ExtensionDays                  int      `json:"extensionDays"`
+}
+
 type CollaboratorListFilter struct {
 	StatusID        string `query:"statusId"`
 	LocationID      string `query:"locationId"`

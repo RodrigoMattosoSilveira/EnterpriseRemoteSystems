@@ -16,6 +16,7 @@ import type {
   CollaboratorListFilter,
   CollaboratorListResponse,
   CreateCollaboratorInput,
+  UpdateCollaboratorInput,
 } from "../types/collaborators";
 
 export async function listCollaborators(
@@ -63,6 +64,16 @@ export function createCollaborator(
 ): Promise<Collaborator> {
   return apiFetch<Collaborator>("/collaborators", {
     method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export function updateCollaborator(
+  id: string,
+  input: UpdateCollaboratorInput,
+): Promise<Collaborator> {
+  return apiFetch<Collaborator>(`/collaborators/${encodeURIComponent(id)}`, {
+    method: "PUT",
     body: JSON.stringify(input),
   });
 }

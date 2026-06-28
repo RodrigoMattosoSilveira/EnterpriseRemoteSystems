@@ -3,10 +3,12 @@ import {
   createCollaborator,
   getCollaborator,
   listCollaborators,
+  updateCollaborator,
 } from "../../api/collaborators.api";
 import type {
   CollaboratorListFilter,
   CreateCollaboratorInput,
+  UpdateCollaboratorInput,
 } from "../../types/collaborators";
 
 export const collaboratorQueryKeys = {
@@ -39,10 +41,30 @@ export function useCreateCollaborator() {
   return useMutation({
     mutationFn: (input: CreateCollaboratorInput) => createCollaborator(input),
     onSuccess: (collaborator) => {
-      queryClient.invalidateQueries({ queryKey: collaboratorQueryKeys.lists() });
+      queryClient.invalidateQueries({
+        queryKey: collaboratorQueryKeys.lists(),
+      });
       queryClient.setQueryData(
         collaboratorQueryKeys.detail(collaborator.id),
-        collaborator
+        collaborator,
+      );
+    },
+  });
+}
+
+export function useUpdateCollaborator(id: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (input: UpdateCollaboratorInput) =>
+      updateCollaborator(id, input),
+    onSuccess: (collaborator) => {
+      queryClient.invalidateQueries({
+        queryKey: collaboratorQueryKeys.lists(),
+      });
+      queryClient.setQueryData(
+        collaboratorQueryKeys.detail(collaborator.id),
+        collaborator,
       );
     },
   });
