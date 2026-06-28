@@ -52,6 +52,20 @@ afterEach(async () => {
 });
 
 describe("ExpensesPage", () => {
+  it("shows a navigation link back to People", async () => {
+    mockExpensePageFetch();
+
+    renderExpensesPage("/expenses");
+
+    await waitForText("Showing 50 of 520 expense records.");
+
+    const peopleLink = Array.from(container.querySelectorAll("a")).find(
+      (candidate) => candidate.textContent?.trim() === "People",
+    );
+
+    expect(peopleLink?.getAttribute("href")).toBe("/people");
+  });
+
   it("navigates expense pages", async () => {
     mockExpensePageFetch();
 

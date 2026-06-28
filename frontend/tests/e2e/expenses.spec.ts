@@ -190,6 +190,15 @@ test("user can create a grams-of-gold Expense from the latest gold price", async
   expect(createdExpense?.totalAmount).toBe(2);
 });
 
+test("user can return from Expenses to People", async ({ page }) => {
+  await page.goto("/expenses");
+
+  await page.getByRole("link", { name: "People" }).click();
+
+  await expect(page).toHaveURL(/\/people$/);
+  await expect(page.getByRole("heading", { name: "People", exact: true })).toBeVisible();
+});
+
 test("user can open an Expense detail from the list", async ({
   page,
   request,
