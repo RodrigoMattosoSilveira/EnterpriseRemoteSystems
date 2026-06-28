@@ -8,6 +8,11 @@ export type FinancialProjectionBasis = {
   journeyEndDate: string;
   periodsPerDay: number;
   remainingWorkPeriods: number;
+  calendarWorkPeriods: number;
+  postedWorkPeriods: number;
+  readyAccrualWorkPeriods: number;
+  estimatedFutureWorkPeriods: number;
+  pendingAccrualItems: number;
   locationId?: string;
   locationLabel?: string;
   productionMethod?: string;
@@ -21,6 +26,8 @@ export type FinancialProjection = {
   collaboratorLabel?: string;
   paymentMethodCode: string;
   currentBalances: ProjectionAmounts;
+  unpostedReadyEarnings: ProjectionAmounts;
+  estimatedFutureEarnings: ProjectionAmounts;
   projectedEarnings: ProjectionAmounts;
   projectedFinalBalances: ProjectionAmounts;
   projection: FinancialProjectionBasis;

@@ -22,6 +22,8 @@ type Repository interface {
 	FindCollaboratorByID(ctx context.Context, collaboratorID string) (*db.CollaboratorJourney, error)
 	FindCollaboratorTenantID(ctx context.Context, collaboratorID string) (string, error)
 	ListRecentDailyGoldProduction(ctx context.Context, locationID string, limit int) ([]DailyGoldProductionRow, error)
+	AccrualProjectionForCollaborator(ctx context.Context, collaboratorID string, startDate time.Time, endDate time.Time) (AccrualProjectionRow, error)
+	CountPostedEarningWorkPeriodDates(ctx context.Context, collaboratorID string, startDate time.Time, endDate time.Time) (int, error)
 	CountPendingAccrualItems(ctx context.Context, collaboratorID string) (int64, error)
 	CountOutstandingReceiptsForCollaborator(ctx context.Context, collaboratorID string) (int64, error)
 	FindEntryByID(ctx context.Context, entryID string) (*db.LedgerEntry, error)
@@ -74,4 +76,11 @@ type BalanceRow struct {
 type DailyGoldProductionRow struct {
 	ProductionDate time.Time
 	GoldGrams      float64
+}
+
+type AccrualProjectionRow struct {
+	BRLAmount       float64
+	GoldGramAmount  float64
+	WorkPeriodDates int
+	PendingItems    int64
 }

@@ -25,8 +25,24 @@ func (s *service) FinancialProjection(ctx context.Context, collaboratorID string
 	currentBRL, currentGold := projectionBalances(balances)
 	today := dateOnlyUTC(time.Now().UTC())
 	journeyEnd := dateOnlyUTC(collaborator.ProjectedEndDate)
-	remainingPeriods := remainingProjectionPeriods(today, journeyEnd)
+	calendarPeriods := remainingProjectionPeriods(today, journeyEnd)
 	methodCode := canonicalProjectionPaymentMethod(collaborator.PaymentMethod.Code)
+
+	accrualPreview := AccrualProjectionRow{}
+	postedPeriods := 0
+	if calendarPeriods > 0 {
+		accrualPreview, err = s.repo.AccrualProjectionForCollaborator(ctx, collaboratorID, today, journeyEnd)
+		if err != nil {
+			return nil, err
+		}
+		postedPeriods, err = s.repo.CountPostedEarningWorkPeriodDates(ctx, collaboratorID, today, journeyEnd)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	readyPeriods := clampProjectionPeriodCount(accrualPreview.WorkPeriodDates, calendarPeriods-postedPeriods)
+	estimatedPeriods := clampProjectionPeriodCount(calendarPeriods-postedPeriods-readyPeriods, calendarPeriods)
 
 	result := &FinancialProjectionDTO{
 		CollaboratorID:    collaborator.ID,
@@ -36,29 +52,39 @@ func (s *service) FinancialProjection(ctx context.Context, collaboratorID string
 			BRLAmount:      projectionFloat64Ptr(currentBRL),
 			GoldGramAmount: projectionFloat64Ptr(currentGold),
 		},
-		Projection: FinancialProjectionBasisDTO{
-			ProjectionDate:       today.Format(dateLayout),
-			JourneyEndDate:       journeyEnd.Format(dateLayout),
-			PeriodsPerDay:        projectionPeriodsPerDay,
-			RemainingWorkPeriods: remainingPeriods,
-			LocationID:           collaborator.LocationID,
-			LocationLabel:        collaborator.Location.Label,
+		UnpostedReadyEarnings: ProjectionAmountsDTO{
+			BRLAmount:      projectionFloat64Ptr(roundBRL(accrualPreview.BRLAmount)),
+			GoldGramAmount: projectionFloat64Ptr(roundGold(accrualPreview.GoldGramAmount)),
 		},
+		Projection: FinancialProjectionBasisDTO{
+			ProjectionDate:             today.Format(dateLayout),
+			JourneyEndDate:             journeyEnd.Format(dateLayout),
+			PeriodsPerDay:              projectionPeriodsPerDay,
+			RemainingWorkPeriods:       estimatedPeriods,
+			CalendarWorkPeriods:        calendarPeriods,
+			PostedWorkPeriods:          clampProjectionPeriodCount(postedPeriods, calendarPeriods),
+			ReadyAccrualWorkPeriods:    readyPeriods,
+			EstimatedFutureWorkPeriods: estimatedPeriods,
+			PendingAccrualItems:        accrualPreview.PendingItems,
+			LocationID:                 collaborator.LocationID,
+			LocationLabel:              collaborator.Location.Label,
+		},
+	}
+	if accrualPreview.PendingItems > 0 {
+		result.Projection.Warning = ProjectionWarningPendingAccrualInputs
 	}
 
 	switch methodCode {
 	case ProjectionMethodFixedBRL:
 		monthly := projectionValueOrFallback(collaborator.FixedMonthlyBRLAmount, collaborator.PaymentValue)
-		projected := roundBRL(monthly / 30.0 * float64(remainingPeriods))
-		result.ProjectedEarnings = ProjectionAmountsDTO{BRLAmount: projectionFloat64Ptr(projected), GoldGramAmount: projectionFloat64Ptr(0)}
-		result.ProjectedFinalBalances = ProjectionAmountsDTO{BRLAmount: projectionFloat64Ptr(roundBRL(currentBRL + projected)), GoldGramAmount: projectionFloat64Ptr(currentGold)}
+		estimated := roundBRL(monthly / 30.0 * float64(estimatedPeriods))
 		result.Projection.ProductionMethod = ProjectionMethodFixedBRL
+		setProjectionBRL(result, currentBRL, accrualPreview.BRLAmount, currentGold, accrualPreview.GoldGramAmount, estimated)
 	case ProjectionMethodDailyBRL:
 		daily := projectionValueOrFallback(collaborator.DailyBRLAmount, collaborator.PaymentValue)
-		projected := roundBRL(daily * float64(remainingPeriods))
-		result.ProjectedEarnings = ProjectionAmountsDTO{BRLAmount: projectionFloat64Ptr(projected), GoldGramAmount: projectionFloat64Ptr(0)}
-		result.ProjectedFinalBalances = ProjectionAmountsDTO{BRLAmount: projectionFloat64Ptr(roundBRL(currentBRL + projected)), GoldGramAmount: projectionFloat64Ptr(currentGold)}
+		estimated := roundBRL(daily * float64(estimatedPeriods))
 		result.Projection.ProductionMethod = ProjectionMethodDailyBRL
+		setProjectionBRL(result, currentBRL, accrualPreview.BRLAmount, currentGold, accrualPreview.GoldGramAmount, estimated)
 	case ProjectionMethodGoldCommission:
 		rows, err := s.repo.ListRecentDailyGoldProduction(ctx, collaborator.LocationID, 10)
 		if err != nil {
@@ -68,22 +94,40 @@ func (s *service) FinancialProjection(ctx context.Context, collaboratorID string
 		productionValue, method, available := projectionProductionValue(rows)
 		result.Projection.ProductionMethod = method
 		if !available {
-			result.Projection.Warning = ProjectionWarningNoGoldProductionHistory
-			result.ProjectedEarnings = ProjectionAmountsDTO{BRLAmount: projectionFloat64Ptr(0), GoldGramAmount: nil}
-			result.ProjectedFinalBalances = ProjectionAmountsDTO{BRLAmount: projectionFloat64Ptr(currentBRL), GoldGramAmount: nil}
+			if result.Projection.Warning == "" {
+				result.Projection.Warning = ProjectionWarningNoGoldProductionHistory
+			}
+			result.EstimatedFutureEarnings = ProjectionAmountsDTO{BRLAmount: projectionFloat64Ptr(0), GoldGramAmount: nil}
+			result.ProjectedEarnings = ProjectionAmountsDTO{BRLAmount: projectionFloat64Ptr(roundBRL(accrualPreview.BRLAmount)), GoldGramAmount: nil}
+			result.ProjectedFinalBalances = ProjectionAmountsDTO{BRLAmount: projectionFloat64Ptr(roundBRL(currentBRL + accrualPreview.BRLAmount)), GoldGramAmount: nil}
 			return result, nil
 		}
 		result.Projection.ProductionValueUsed = projectionFloat64Ptr(roundGold(productionValue))
 		commissionPercent := projectionValueOrFallback(collaborator.GoldCommissionPercent, collaborator.PaymentValue)
-		projected := roundGold(productionValue * commissionPercent / 100.0 * float64(remainingPeriods))
-		result.ProjectedEarnings = ProjectionAmountsDTO{BRLAmount: projectionFloat64Ptr(0), GoldGramAmount: projectionFloat64Ptr(projected)}
-		result.ProjectedFinalBalances = ProjectionAmountsDTO{BRLAmount: projectionFloat64Ptr(currentBRL), GoldGramAmount: projectionFloat64Ptr(roundGold(currentGold + projected))}
+		estimated := roundGold(productionValue * commissionPercent / 100.0 * float64(estimatedPeriods))
+		setProjectionGold(result, currentBRL, accrualPreview.BRLAmount, currentGold, accrualPreview.GoldGramAmount, estimated)
 	default:
-		result.ProjectedEarnings = ProjectionAmountsDTO{BRLAmount: projectionFloat64Ptr(0), GoldGramAmount: projectionFloat64Ptr(0)}
-		result.ProjectedFinalBalances = ProjectionAmountsDTO{BRLAmount: projectionFloat64Ptr(currentBRL), GoldGramAmount: projectionFloat64Ptr(currentGold)}
+		result.EstimatedFutureEarnings = ProjectionAmountsDTO{BRLAmount: projectionFloat64Ptr(0), GoldGramAmount: projectionFloat64Ptr(0)}
+		result.ProjectedEarnings = ProjectionAmountsDTO{BRLAmount: projectionFloat64Ptr(roundBRL(accrualPreview.BRLAmount)), GoldGramAmount: projectionFloat64Ptr(roundGold(accrualPreview.GoldGramAmount))}
+		result.ProjectedFinalBalances = ProjectionAmountsDTO{
+			BRLAmount:      projectionFloat64Ptr(roundBRL(currentBRL + accrualPreview.BRLAmount)),
+			GoldGramAmount: projectionFloat64Ptr(roundGold(currentGold + accrualPreview.GoldGramAmount)),
+		}
 	}
 
 	return result, nil
+}
+
+func setProjectionBRL(result *FinancialProjectionDTO, currentBRL float64, readyBRL float64, currentGold float64, readyGold float64, estimatedBRL float64) {
+	result.EstimatedFutureEarnings = ProjectionAmountsDTO{BRLAmount: projectionFloat64Ptr(estimatedBRL), GoldGramAmount: projectionFloat64Ptr(0)}
+	result.ProjectedEarnings = ProjectionAmountsDTO{BRLAmount: projectionFloat64Ptr(roundBRL(readyBRL + estimatedBRL)), GoldGramAmount: projectionFloat64Ptr(roundGold(readyGold))}
+	result.ProjectedFinalBalances = ProjectionAmountsDTO{BRLAmount: projectionFloat64Ptr(roundBRL(currentBRL + readyBRL + estimatedBRL)), GoldGramAmount: projectionFloat64Ptr(roundGold(currentGold + readyGold))}
+}
+
+func setProjectionGold(result *FinancialProjectionDTO, currentBRL float64, readyBRL float64, currentGold float64, readyGold float64, estimatedGold float64) {
+	result.EstimatedFutureEarnings = ProjectionAmountsDTO{BRLAmount: projectionFloat64Ptr(0), GoldGramAmount: projectionFloat64Ptr(estimatedGold)}
+	result.ProjectedEarnings = ProjectionAmountsDTO{BRLAmount: projectionFloat64Ptr(roundBRL(readyBRL)), GoldGramAmount: projectionFloat64Ptr(roundGold(readyGold + estimatedGold))}
+	result.ProjectedFinalBalances = ProjectionAmountsDTO{BRLAmount: projectionFloat64Ptr(roundBRL(currentBRL + readyBRL)), GoldGramAmount: projectionFloat64Ptr(roundGold(currentGold + readyGold + estimatedGold))}
 }
 
 func projectionBalances(rows []BalanceRow) (float64, float64) {
@@ -137,6 +181,16 @@ func remainingProjectionPeriods(start, end time.Time) int {
 		return 0
 	}
 	return int(end.Sub(start).Hours()/24) + 1
+}
+
+func clampProjectionPeriodCount(value int, max int) int {
+	if value < 0 || max <= 0 {
+		return 0
+	}
+	if value > max {
+		return max
+	}
+	return value
 }
 
 func dateOnlyUTC(value time.Time) time.Time {

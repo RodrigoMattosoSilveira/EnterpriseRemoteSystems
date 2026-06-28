@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"math"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -105,6 +106,67 @@ type apiBalancesResponse struct {
 		ValueUnitCode     string  `json:"valueUnitCode"`
 		ValueUnitLabel    string  `json:"valueUnitLabel"`
 		Balance           float64 `json:"balance"`
+	} `json:"data"`
+}
+
+type apiWorkPeriodResponse struct {
+	Data struct {
+		ID       string `json:"id"`
+		WorkDate string `json:"workDate"`
+		Status   string `json:"status"`
+	} `json:"data"`
+}
+
+type apiWorkPeriodAssignmentResponse struct {
+	Data struct {
+		ID             string `json:"id"`
+		WorkPeriodID   string `json:"workPeriodId"`
+		CollaboratorID string `json:"collaboratorId"`
+		ActualStatus   string `json:"actualStatus"`
+	} `json:"data"`
+}
+
+type apiAccrualRunResponse struct {
+	Data struct {
+		ID      string `json:"id"`
+		Status  string `json:"status"`
+		Summary struct {
+			ReadyItems  int `json:"readyItems"`
+			PostedItems int `json:"postedItems"`
+		} `json:"summary"`
+	} `json:"data"`
+}
+
+type apiFinancialProjectionResponse struct {
+	Data struct {
+		CurrentBalances struct {
+			BRLAmount      *float64 `json:"brlAmount"`
+			GoldGramAmount *float64 `json:"goldGramAmount"`
+		} `json:"currentBalances"`
+		UnpostedReadyEarnings struct {
+			BRLAmount      *float64 `json:"brlAmount"`
+			GoldGramAmount *float64 `json:"goldGramAmount"`
+		} `json:"unpostedReadyEarnings"`
+		EstimatedFutureEarnings struct {
+			BRLAmount      *float64 `json:"brlAmount"`
+			GoldGramAmount *float64 `json:"goldGramAmount"`
+		} `json:"estimatedFutureEarnings"`
+		ProjectedEarnings struct {
+			BRLAmount      *float64 `json:"brlAmount"`
+			GoldGramAmount *float64 `json:"goldGramAmount"`
+		} `json:"projectedEarnings"`
+		ProjectedFinalBalances struct {
+			BRLAmount      *float64 `json:"brlAmount"`
+			GoldGramAmount *float64 `json:"goldGramAmount"`
+		} `json:"projectedFinalBalances"`
+		Projection struct {
+			CalendarWorkPeriods        int   `json:"calendarWorkPeriods"`
+			PostedWorkPeriods          int   `json:"postedWorkPeriods"`
+			ReadyAccrualWorkPeriods    int   `json:"readyAccrualWorkPeriods"`
+			EstimatedFutureWorkPeriods int   `json:"estimatedFutureWorkPeriods"`
+			RemainingWorkPeriods       int   `json:"remainingWorkPeriods"`
+			PendingAccrualItems        int64 `json:"pendingAccrualItems"`
+		} `json:"projection"`
 	} `json:"data"`
 }
 
@@ -451,6 +513,51 @@ func listBalances(t *testing.T, server *fiber.App, collaboratorID string) apiBal
 	var body apiBalancesResponse
 	decodeJSON(t, res, &body)
 	return body
+}
+
+func TestFinancialProjectionSeparatesPostedReadyAndEstimatedDailyEarnings(t *testing.T) {
+	server, cleanup := newTestServer(t)
+	defer cleanup()
+
+	today := testDateOnly(time.Now().UTC())
+	journeyStart := today.AddDate(0, 0, -86)
+	person := createPerson(t, server, validCompletePersonPayload(1, nil))
+	collaborator := createCollaborator(t, server, validCollaboratorPayload(person.Data.ID, map[string]any{
+		"journeyStartDate": journeyStart.Format("2006-01-02"),
+		"paymentValue":     100.0,
+		"dailyBrlAmount":   100.0,
+	}))
+
+	postedPeriod := createWorkPeriod(t, server, today, "DAY")
+	postedAssignment := createAssignment(t, server, postedPeriod.Data.ID, collaborator.Data.ID)
+	markAssignmentWorked(t, server, postedAssignment.Data.ID)
+	postedRun := createAccrualRun(t, server, postedPeriod.Data.ID, today)
+	if postedRun.Data.Summary.ReadyItems != 1 {
+		t.Fatalf("expected one ready item before posting, got %+v", postedRun.Data.Summary)
+	}
+	postAccrualRun(t, server, postedRun.Data.ID)
+
+	readyDate := today.AddDate(0, 0, 1)
+	readyPeriod := createWorkPeriod(t, server, readyDate, "DAY")
+	readyAssignment := createAssignment(t, server, readyPeriod.Data.ID, collaborator.Data.ID)
+	markAssignmentWorked(t, server, readyAssignment.Data.ID)
+	readyRun := createAccrualRun(t, server, readyPeriod.Data.ID, readyDate)
+	if readyRun.Data.Summary.ReadyItems != 1 {
+		t.Fatalf("expected one ready item left unposted, got %+v", readyRun.Data.Summary)
+	}
+
+	projection := getFinancialProjection(t, server, collaborator.Data.ID)
+	if projection.Data.Projection.CalendarWorkPeriods != 5 {
+		t.Fatalf("expected 5 calendar work periods through journey end, got %+v", projection.Data.Projection)
+	}
+	if projection.Data.Projection.PostedWorkPeriods != 1 || projection.Data.Projection.ReadyAccrualWorkPeriods != 1 || projection.Data.Projection.EstimatedFutureWorkPeriods != 3 || projection.Data.Projection.RemainingWorkPeriods != 3 {
+		t.Fatalf("expected posted=1 ready=1 estimated=3, got %+v", projection.Data.Projection)
+	}
+	assertFloatPtr(t, projection.Data.CurrentBalances.BRLAmount, 100.0, "current BRL balance")
+	assertFloatPtr(t, projection.Data.UnpostedReadyEarnings.BRLAmount, 100.0, "unposted ready BRL earnings")
+	assertFloatPtr(t, projection.Data.EstimatedFutureEarnings.BRLAmount, 300.0, "estimated future BRL earnings")
+	assertFloatPtr(t, projection.Data.ProjectedEarnings.BRLAmount, 400.0, "projected BRL earnings")
+	assertFloatPtr(t, projection.Data.ProjectedFinalBalances.BRLAmount, 500.0, "projected final BRL balance")
 }
 
 func TestExpenseCreatesDebitLedgerEntryAndNegativeCurrentAccountBalance(t *testing.T) {
@@ -1473,6 +1580,124 @@ func containsString(values []string, expected string) bool {
 		}
 	}
 	return false
+}
+
+func createWorkPeriod(t *testing.T, server *fiber.App, workDate time.Time, periodCode string) apiWorkPeriodResponse {
+	t.Helper()
+	date := testDateOnly(workDate)
+	payload := map[string]any{
+		"workDate":   date.Format("2006-01-02"),
+		"periodCode": periodCode,
+		"name":       "Day shift",
+		"startsAt":   date.Add(8 * time.Hour).Format(time.RFC3339),
+		"endsAt":     date.Add(16 * time.Hour).Format(time.RFC3339),
+	}
+	res := postJSON(t, server, http.MethodPost, "/api/v1/work-periods/", payload)
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusCreated {
+		var body apiErrorResponse
+		decodeJSON(t, res, &body)
+		t.Fatalf("expected create work period status %d, got %d with error %+v", http.StatusCreated, res.StatusCode, body.Error)
+	}
+	var body apiWorkPeriodResponse
+	decodeJSON(t, res, &body)
+	return body
+}
+
+func createAssignment(t *testing.T, server *fiber.App, workPeriodID string, collaboratorID string) apiWorkPeriodAssignmentResponse {
+	t.Helper()
+	res := postJSON(t, server, http.MethodPost, "/api/v1/work-periods/"+workPeriodID+"/assignments", map[string]any{
+		"collaboratorId": collaboratorID,
+		"plannedStatus":  "INCLUDED",
+		"sectorId":       "ref-sector-mining",
+		"locationId":     "ref-location-main-mine",
+		"taskId":         "ref-task-miner",
+	})
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusCreated {
+		var body apiErrorResponse
+		decodeJSON(t, res, &body)
+		t.Fatalf("expected create assignment status %d, got %d with error %+v", http.StatusCreated, res.StatusCode, body.Error)
+	}
+	var body apiWorkPeriodAssignmentResponse
+	decodeJSON(t, res, &body)
+	return body
+}
+
+func markAssignmentWorked(t *testing.T, server *fiber.App, assignmentID string) apiWorkPeriodAssignmentResponse {
+	t.Helper()
+	res := postJSON(t, server, http.MethodPatch, "/api/v1/work-period-assignments/"+assignmentID+"/outcome", map[string]any{
+		"actualStatus": "WORKED",
+	})
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		var body apiErrorResponse
+		decodeJSON(t, res, &body)
+		t.Fatalf("expected mark assignment outcome status %d, got %d with error %+v", http.StatusOK, res.StatusCode, body.Error)
+	}
+	var body apiWorkPeriodAssignmentResponse
+	decodeJSON(t, res, &body)
+	return body
+}
+
+func createAccrualRun(t *testing.T, server *fiber.App, workPeriodID string, accrualDate time.Time) apiAccrualRunResponse {
+	t.Helper()
+	res := postJSON(t, server, http.MethodPost, "/api/v1/work-periods/"+workPeriodID+"/accrual-runs", map[string]any{
+		"accrualDate": testDateOnly(accrualDate).Format("2006-01-02"),
+		"notes":       "projection test",
+	})
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusCreated {
+		var body apiErrorResponse
+		decodeJSON(t, res, &body)
+		t.Fatalf("expected create accrual run status %d, got %d with error %+v", http.StatusCreated, res.StatusCode, body.Error)
+	}
+	var body apiAccrualRunResponse
+	decodeJSON(t, res, &body)
+	return body
+}
+
+func postAccrualRun(t *testing.T, server *fiber.App, runID string) apiAccrualRunResponse {
+	t.Helper()
+	res := postJSON(t, server, http.MethodPost, "/api/v1/accrual-runs/"+runID+"/post", map[string]any{})
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		var body apiErrorResponse
+		decodeJSON(t, res, &body)
+		t.Fatalf("expected post accrual run status %d, got %d with error %+v", http.StatusOK, res.StatusCode, body.Error)
+	}
+	var body apiAccrualRunResponse
+	decodeJSON(t, res, &body)
+	return body
+}
+
+func getFinancialProjection(t *testing.T, server *fiber.App, collaboratorID string) apiFinancialProjectionResponse {
+	t.Helper()
+	res := getJSON(t, server, collaboratorsURL+collaboratorID+"/financial-projection")
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		var body apiErrorResponse
+		decodeJSON(t, res, &body)
+		t.Fatalf("expected financial projection status %d, got %d with error %+v", http.StatusOK, res.StatusCode, body.Error)
+	}
+	var body apiFinancialProjectionResponse
+	decodeJSON(t, res, &body)
+	return body
+}
+
+func testDateOnly(value time.Time) time.Time {
+	value = value.UTC()
+	return time.Date(value.Year(), value.Month(), value.Day(), 0, 0, 0, 0, time.UTC)
+}
+
+func assertFloatPtr(t *testing.T, actual *float64, expected float64, label string) {
+	t.Helper()
+	if actual == nil {
+		t.Fatalf("expected %s %.8f, got nil", label, expected)
+	}
+	if math.Abs(*actual-expected) > 0.00000001 {
+		t.Fatalf("expected %s %.8f, got %.8f", label, expected, *actual)
+	}
 }
 
 func createActiveCollaborator(t *testing.T, server *fiber.App, seq int) apiCollaboratorResponse {
