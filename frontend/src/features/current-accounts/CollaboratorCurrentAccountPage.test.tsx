@@ -46,6 +46,23 @@ describe("CollaboratorCurrentAccountPage", () => {
     expect(container.querySelector('a[href="/ledger-entries/ledger-1/receipt"]')).not.toBeNull();
   });
 
+  it("filters to work-period assignment earnings", async () => {
+    mockCurrentAccountFetch();
+
+    renderCurrentAccountPage("/collaborators/collab-1/current-account");
+
+    await waitForText("Ledger Entries");
+    await changeSelect("Filter ledger entries", "earnings");
+
+    expect(
+      fetchCalls.some(
+        (call) =>
+          call.url ===
+          "/api/v1/collaborators/collab-1/current-account?sourceType=WORK_PERIOD_ASSIGNMENT&page=1&pageSize=25",
+      ),
+    ).toBe(true);
+  });
+
   it("filters to outstanding receipt ledger entries", async () => {
     mockCurrentAccountFetch();
 

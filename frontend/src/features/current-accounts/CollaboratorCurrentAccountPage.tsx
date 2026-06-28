@@ -18,6 +18,11 @@ const ledgerFilters: LedgerFilterOption[] = [
   { value: "all", label: "All entries", apiFilter: {} },
   { value: "credits", label: "Credits", apiFilter: { direction: "CREDIT" } },
   { value: "debits", label: "Debits", apiFilter: { direction: "DEBIT" } },
+  {
+    value: "earnings",
+    label: "Earnings",
+    apiFilter: { sourceType: "WORK_PERIOD_ASSIGNMENT" },
+  },
   { value: "expenses", label: "Expenses", apiFilter: { sourceType: "EXPENSE" } },
   {
     value: "outstanding-receipts",
