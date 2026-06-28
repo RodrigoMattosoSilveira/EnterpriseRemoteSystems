@@ -20,28 +20,42 @@ afterEach(async () => {
 });
 
 describe("CurrentAndFutureEarningsModal", () => {
-  it("shows current and projected earnings and closes with Escape", async () => {
-    vi.stubGlobal("fetch", vi.fn(async () => response({
-      collaboratorId: "c-1",
-      collaboratorLabel: "Maria",
-      paymentMethodCode: "GOLD_COMMISSION",
-      currentBalances: { brlAmount: 450, goldGramAmount: 3.25 },
-      projectedEarnings: { brlAmount: 0, goldGramAmount: 8.725 },
-      projectedFinalBalances: { brlAmount: 450, goldGramAmount: 11.975 },
-      projection: {
-        projectionDate: "2026-06-08",
-        journeyEndDate: "2026-06-15",
-        periodsPerDay: 1,
-        remainingWorkPeriods: 8,
-        locationId: "well-1",
-        locationLabel: "Well 1",
-        productionMethod: "DISCRETE_LOWER_MEDIAN_LAST_10_RECORDED_DATES",
-        productionDatesAvailable: 10,
-        productionValueUsed: 17.45,
-      },
-    })));
+  it("shows current, ready, future, and projected earnings and closes with Escape", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        response({
+          collaboratorId: "c-1",
+          collaboratorLabel: "Maria",
+          paymentMethodCode: "GOLD_COMMISSION",
+          currentBalances: { brlAmount: 450, goldGramAmount: 3.25 },
+          unpostedReadyEarnings: { brlAmount: 0, goldGramAmount: 1.5 },
+          estimatedFutureEarnings: { brlAmount: 0, goldGramAmount: 7.225 },
+          projectedEarnings: { brlAmount: 0, goldGramAmount: 8.725 },
+          projectedFinalBalances: { brlAmount: 450, goldGramAmount: 11.975 },
+          projection: {
+            projectionDate: "2026-06-08",
+            journeyEndDate: "2026-06-15",
+            periodsPerDay: 1,
+            remainingWorkPeriods: 6,
+            calendarWorkPeriods: 8,
+            postedWorkPeriods: 1,
+            readyAccrualWorkPeriods: 1,
+            estimatedFutureWorkPeriods: 6,
+            pendingAccrualItems: 0,
+            locationId: "well-1",
+            locationLabel: "Well 1",
+            productionMethod: "DISCRETE_LOWER_MEDIAN_LAST_10_RECORDED_DATES",
+            productionDatesAvailable: 10,
+            productionValueUsed: 17.45,
+          },
+        }),
+      ),
+    );
     const onClose = vi.fn();
-    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
 
     await act(async () => {
       root = createRoot(container);
@@ -53,8 +67,18 @@ describe("CurrentAndFutureEarningsModal", () => {
     });
 
     await waitForText("Projected Journey-End Balances");
-    expect(container.textContent).toContain("R$ 450,00");
+    expect(container.textContent).toContain(
+      "Ready Accrual Earnings Not Yet Posted",
+    );
+    expect(container.textContent).toContain("Estimated Future Earnings");
+    expect(container.textContent).toContain("1.50000000 g");
+    expect(container.textContent).toContain("7.22500000 g");
     expect(container.textContent).toContain("11.97500000 g");
+    expect(container.textContent).toContain("Calendar work periods");
+    expect(container.textContent).toContain("Posted work periods");
+    expect(container.textContent).toContain("Ready accrual work periods");
+    expect(container.textContent).toContain("Estimated future work periods");
+    expect(container.textContent).toContain("Pending accrual items");
     expect(container.textContent).toContain("Well 1");
 
     window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
@@ -63,16 +87,20 @@ describe("CurrentAndFutureEarningsModal", () => {
 });
 
 function response(data: unknown) {
-  return Promise.resolve(new Response(JSON.stringify({ data }), {
-    status: 200,
-    headers: { "Content-Type": "application/json" },
-  }));
+  return Promise.resolve(
+    new Response(JSON.stringify({ data }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    }),
+  );
 }
 
 async function waitForText(text: string) {
   for (let i = 0; i < 40; i += 1) {
     if (container.textContent?.includes(text)) return;
-    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 10)); });
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    });
   }
   throw new Error(`Missing text: ${text}`);
 }
