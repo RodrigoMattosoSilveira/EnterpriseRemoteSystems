@@ -449,21 +449,28 @@ func (s *service) ledgerEntriesForReadyItems(ctx context.Context, run db.Accrual
 }
 
 func accrualLedgerEntry(item db.AccrualItem, valueUnit db.ReferenceData, direction string, amount float64, effectiveDate time.Time, now time.Time, suffix string) db.LedgerEntry {
+	entryType := ledgerEntryTypeForAccrualItem(item)
+	sourceType, sourceID := ledgerSourceForAccrualItem(item, entryType)
+	entryID := "ledger-accrual-" + suffix + "-" + item.ID
+	if sourceType == LedgerSourceTypeWorkPeriodAssignment {
+		entryID = "ledger-work-period-assignment-" + suffix + "-" + strings.ToLower(strings.TrimSpace(direction)) + "-" + sourceID
+	}
+
 	return db.LedgerEntry{
 		BaseModel: db.BaseModel{
-			ID:        "ledger-accrual-" + suffix + "-" + item.ID,
+			ID:        entryID,
 			CreatedAt: now,
 			UpdatedAt: now,
 		},
 		TenantID:       item.TenantID,
 		CollaboratorID: item.CollaboratorID,
 		ValueUnitID:    valueUnit.ID,
-		EntryType:      ledgerEntryTypeForAccrualItem(item),
+		EntryType:      entryType,
 		Direction:      direction,
 		Amount:         amount,
 		EffectiveDate:  effectiveDate,
-		SourceType:     LedgerSourceTypeAccrualItem,
-		SourceID:       item.ID,
+		SourceType:     sourceType,
+		SourceID:       sourceID,
 		Description:    item.Description,
 		Active:         true,
 		CorrectionType: "ORIGINAL",
@@ -476,6 +483,16 @@ func ledgerEntryTypeForAccrualItem(item db.AccrualItem) string {
 		return LedgerEntryTypeReplacementTransfer
 	}
 	return LedgerEntryTypeEarningCredit
+}
+
+func ledgerSourceForAccrualItem(item db.AccrualItem, entryType string) (string, string) {
+	if entryType == LedgerEntryTypeEarningCredit && item.WorkPeriodAssignmentID != nil {
+		assignmentID := strings.TrimSpace(*item.WorkPeriodAssignmentID)
+		if assignmentID != "" {
+			return LedgerSourceTypeWorkPeriodAssignment, assignmentID
+		}
+	}
+	return LedgerSourceTypeAccrualItem, item.ID
 }
 
 func pendingPaymentConfig(item db.AccrualItem, calculationType string, description string) db.AccrualItem {
