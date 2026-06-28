@@ -30,7 +30,10 @@ export type ReturnReceiptRequest = {
   notes: string;
 };
 
-export type OutstandingReceipt = PrintableReceipt;
+export type OutstandingReceipt = PrintableReceipt & {
+  sourceType: string;
+  sourceId: string;
+};
 
 export type ReceiptStatusSummary = {
   pendingIssue: number;
@@ -50,6 +53,8 @@ export type OutstandingReceiptListResult = {
 
 export type OutstandingReceiptListFilter = {
   status?: string;
+  collaborator?: string;
+  sourceType?: string;
   page?: number;
   pageSize?: number;
 };

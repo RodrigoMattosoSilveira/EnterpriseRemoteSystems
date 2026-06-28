@@ -244,9 +244,11 @@ type FinancialProjectionDTO struct {
 }
 
 type ReceiptListFilter struct {
-	Status   string `query:"status"`
-	Page     int    `query:"page"`
-	PageSize int    `query:"pageSize"`
+	Status       string `query:"status"`
+	Collaborator string `query:"collaborator"`
+	SourceType   string `query:"sourceType"`
+	Page         int    `query:"page"`
+	PageSize     int    `query:"pageSize"`
 }
 
 type OutstandingReceiptDTO struct {
@@ -269,6 +271,8 @@ type OutstandingReceiptDTO struct {
 	ValueUnitLabel        string  `json:"valueUnitLabel"`
 	Amount                float64 `json:"amount"`
 	Description           string  `json:"description,omitempty"`
+	SourceType            string  `json:"sourceType"`
+	SourceID              string  `json:"sourceId"`
 	CollaboratorID        string  `json:"collaboratorId"`
 	CollaboratorLabel     string  `json:"collaboratorLabel"`
 	CollaboratorLegalName string  `json:"collaboratorLegalName"`
