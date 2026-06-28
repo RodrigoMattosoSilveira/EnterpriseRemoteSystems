@@ -166,12 +166,14 @@ func normalizeListFilter(filter LedgerEntryListFilter) (normalizedLedgerEntryLis
 		pageSize = maxPageSize
 	}
 	out := normalizedLedgerEntryListFilter{
-		ValueUnitID:     strings.TrimSpace(filter.ValueUnitID),
-		EntryType:       strings.TrimSpace(filter.EntryType),
-		SourceType:      strings.TrimSpace(filter.SourceType),
-		IncludeInactive: filter.IncludeInactive,
-		Page:            page,
-		PageSize:        pageSize,
+		ValueUnitID:         strings.TrimSpace(filter.ValueUnitID),
+		EntryType:           strings.TrimSpace(filter.EntryType),
+		Direction:           strings.ToUpper(strings.TrimSpace(filter.Direction)),
+		SourceType:          strings.TrimSpace(filter.SourceType),
+		OutstandingReceipts: filter.OutstandingReceipts,
+		IncludeInactive:     filter.IncludeInactive,
+		Page:                page,
+		PageSize:            pageSize,
 	}
 	if strings.TrimSpace(filter.DateFrom) != "" {
 		value, err := parseDate(filter.DateFrom)

@@ -20,6 +20,7 @@ import { PrintableReceiptPage } from "../features/receipts/PrintableReceiptPage"
 import { OutstandingReceiptsPage } from "../features/receipts/OutstandingReceiptsPage";
 import { AuthzAdminPage } from "../features/authz/AuthzAdminPage";
 import { AuditLogViewerPage } from "../features/authz/AuditLogViewerPage";
+import { CollaboratorCurrentAccountPage } from "../features/current-accounts/CollaboratorCurrentAccountPage";
 import { SecondPersonApprovalSettingsPage } from "../features/current-accounts/SecondPersonApprovalSettingsPage";
 import { GoldPricesPage } from "../features/gold-prices/GoldPricesPage";
 import { PriceListPage } from "../features/price-list/PriceListPage";
@@ -71,6 +72,7 @@ export const router = createBrowserRouter([
       { path: "collaborators", element: <CollaboratorsListPage /> },
       { path: "collaborators/new", element: <CreateCollaboratorPage /> },
       { path: "collaborators/:id", element: <CollaboratorDetailPage /> },
+      { path: "collaborators/:id/current-account", element: <CollaboratorCurrentAccountPage /> },
       { path: "expenses", element: <ExpensesPage /> },
       { path: "expenses/new", element: <CreateExpensePage /> },
       { path: "expenses/:id", element: <ExpenseDetailPage /> },

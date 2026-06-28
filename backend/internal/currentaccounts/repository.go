@@ -48,14 +48,16 @@ type normalizedReceiptListFilter struct {
 }
 
 type normalizedLedgerEntryListFilter struct {
-	ValueUnitID     string
-	EntryType       string
-	SourceType      string
-	DateFrom        *time.Time
-	DateTo          *time.Time
-	IncludeInactive bool
-	Page            int
-	PageSize        int
+	ValueUnitID         string
+	EntryType           string
+	Direction           string
+	SourceType          string
+	OutstandingReceipts bool
+	DateFrom            *time.Time
+	DateTo              *time.Time
+	IncludeInactive     bool
+	Page                int
+	PageSize            int
 }
 
 type BalanceRow struct {

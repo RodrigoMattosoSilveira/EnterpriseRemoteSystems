@@ -177,6 +177,62 @@ test("user can edit Collaborator assignment payment and extension days", async (
   await expect(page.getByText("2026-09-11").first()).toBeVisible();
 });
 
+
+
+test("user can inspect Collaborator current account ledger and receipt status", async ({
+  page,
+  request,
+}) => {
+  const suffix = uniqueSuffix();
+  const person = await createCompletePerson(request, {
+    suffix,
+    firstName: `AccountCollab${suffix}`,
+    lastName: firstPageSortLastName(suffix),
+    nickname: `AcctC${suffix}`,
+  });
+  const collaborator = await createCollaborator(request, {
+    personId: person.id,
+    journeyStartDate: "2026-06-01",
+    paymentMethodId: PAYMENT_METHOD_DAILY_ID,
+    paymentValue: 150,
+    dailyBrlAmount: 150,
+    sectorId: SECTOR_MINING_ID,
+    locationId: LOCATION_MAIN_MINE_ID,
+    taskId: TASK_MINER_ID,
+    statusId: COLLABORATOR_STATUS_ACTIVE_ID,
+    notes: "Current account E2E setup",
+  });
+  const expense = await createExpense(request, {
+    collaboratorId: collaborator.id,
+    expenseCategoryId: "ref-expense-category-canteen",
+    valueUnitId: "ref-value-unit-brl",
+    amount: 42.5,
+    expenseDate: "2026-06-27",
+    description: `Current account expense ${suffix}`,
+  });
+
+  await page.goto(`/collaborators/${collaborator.id}`);
+
+  await page.getByRole("link", { name: "Current Account" }).click();
+
+  await expect(page).toHaveURL(
+    new RegExp(`/collaborators/${collaborator.id}/current-account$`),
+  );
+  await expect(
+    page.getByRole("heading", { name: `AcctC${suffix}` }),
+  ).toBeVisible();
+  await expect(page.getByText(/-R\$\s*42,50/).first()).toBeVisible();
+  await expect(page.getByText("expense deduction").first()).toBeVisible();
+  await expect(page.getByText("Receipt: Pending issue").first()).toBeVisible();
+  await expect(page.getByText("Outstanding receipt:").first()).toBeVisible();
+
+  await page.getByLabel("Filter ledger entries").selectOption("outstanding-receipts");
+  await expect(page.getByText("Showing page 1 of 1 · 1 ledger entry")).toBeVisible();
+
+  await page.getByRole("link", { name: "Open source" }).click();
+  await expect(page).toHaveURL(new RegExp(`/expenses/${expense.id}$`));
+});
+
 type CreatedPerson = {
   id: string;
   firstName: string;
@@ -191,6 +247,10 @@ type CreatedCollaborator = {
 type CreatedReferenceData = {
   id: string;
   label: string;
+};
+
+type CreatedExpense = {
+  id: string;
 };
 
 type ApiEnvelope<T> = {
@@ -222,6 +282,31 @@ async function createCollaborator(
     throw new Error(
       "Create Collaborator failed: response did not include data",
     );
+  }
+
+  return body.data;
+}
+
+
+async function createExpense(
+  api: APIRequestContext,
+  data: Record<string, unknown>,
+): Promise<CreatedExpense> {
+  const response = await api.post(e2eApiUrl("/api/v1/expenses"), {
+    headers: authzHeaders(),
+    data,
+  });
+
+  if (!response.ok()) {
+    throw new Error(
+      `Create Expense failed at ${response.url()}: ${response.status()} ${await response.text()}`,
+    );
+  }
+
+  const body = (await response.json()) as ApiEnvelope<CreatedExpense>;
+
+  if (!body.data) {
+    throw new Error("Create Expense failed: response did not include data");
   }
 
   return body.data;
