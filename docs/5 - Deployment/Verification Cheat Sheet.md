@@ -15,13 +15,15 @@ npm run test:e2e
 ```
 
 # 1. Commit and push to development
+```bash
 git status
 git add backend
 git commit -m "Add accrual runs and accrual items foundation"
 git push origin development
+```
 
 ## Verify DEV:
-```
+```bash
 cd /opt/EnterpriseRemocd ../t teSystems/development
 
 docker logs ers-dev-backend --since=5m --tail=200
