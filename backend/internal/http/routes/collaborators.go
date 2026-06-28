@@ -11,6 +11,7 @@ func RegisterCollaboratorRoutes(v1 fiber.Router, deps Dependencies) {
 	r.Get("/", requirePermission(deps, authz.PermissionCollaboratorsRead), deps.CollaboratorHandler.List)
 	r.Post("/", requirePermission(deps, authz.PermissionCollaboratorsCreate), deps.CollaboratorHandler.Create)
 	r.Get("/:id", requirePermission(deps, authz.PermissionCollaboratorsRead), deps.CollaboratorHandler.GetByID)
+	r.Put("/:id", requirePermission(deps, authz.PermissionCollaboratorsUpdate), deps.CollaboratorHandler.Update)
 	r.Get("/:collaboratorId/financial-projection", requirePermission(deps, authz.PermissionCurrentAccountsSummaryRead), deps.CurrentAccountHandler.FinancialProjection)
 	r.Get("/:collaboratorId/settlement-preview", requirePermission(deps, authz.PermissionJourneySettlementsPreview), deps.CurrentAccountHandler.SettlementPreview)
 	r.Post("/:collaboratorId/zero-gold", deps.CurrentAccountHandler.ZeroGold)

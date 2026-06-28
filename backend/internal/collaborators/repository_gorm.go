@@ -57,6 +57,27 @@ func (r *gormRepository) Create(ctx context.Context, collaborator *db.Collaborat
 	return r.db.WithContext(ctx).Create(collaborator).Error
 }
 
+func (r *gormRepository) Update(ctx context.Context, collaborator *db.CollaboratorJourney) error {
+	return r.db.WithContext(ctx).
+		Model(&db.CollaboratorJourney{}).
+		Where("id = ? AND tenant_id = ?", collaborator.ID, defaultTenantID).
+		Updates(map[string]any{
+			"updated_at":                          collaborator.UpdatedAt,
+			"extension_days":                      collaborator.ExtensionDays,
+			"projected_end_date":                  collaborator.ProjectedEndDate,
+			"payment_method_id":                   collaborator.PaymentMethodID,
+			"payment_value":                       collaborator.PaymentValue,
+			"fixed_monthly_brl_amount":            collaborator.FixedMonthlyBRLAmount,
+			"daily_brl_amount":                    collaborator.DailyBRLAmount,
+			"gold_commission_percent":             collaborator.GoldCommissionPercent,
+			"time_off_gold_split_percent":         collaborator.TimeOffGoldSplitPercent,
+			"sick_day_off_replacement_gold_grams": collaborator.SickDayOffReplacementGoldGrams,
+			"sector_id":                           collaborator.SectorID,
+			"location_id":                         collaborator.LocationID,
+			"task_id":                             collaborator.TaskID,
+		}).Error
+}
+
 func (r *gormRepository) FindByID(ctx context.Context, id string) (*db.CollaboratorJourney, error) {
 	var row db.CollaboratorJourney
 	err := r.db.WithContext(ctx).

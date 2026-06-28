@@ -32,6 +32,24 @@ func ValidateCreateCollaborator(req CreateCollaboratorRequest) error {
 	return nil
 }
 
+func ValidateUpdateCollaborator(req UpdateCollaboratorRequest) error {
+	fields := map[string]string{}
+	requireString(fields, "paymentMethodId", req.PaymentMethodID)
+	requireString(fields, "sectorId", req.SectorID)
+	requireString(fields, "locationId", req.LocationID)
+	requireString(fields, "taskId", req.TaskID)
+
+	if req.ExtensionDays < 0 {
+		fields["extensionDays"] = "Extension days must be zero or greater"
+	}
+
+	if len(fields) > 0 {
+		return ValidationError{Fields: fields}
+	}
+
+	return nil
+}
+
 func requireString(fields map[string]string, key string, value string) {
 	if strings.TrimSpace(value) == "" {
 		fields[key] = "Required"
