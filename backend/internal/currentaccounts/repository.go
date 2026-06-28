@@ -13,7 +13,7 @@ type Repository interface {
 	ListDebitLedgerEntriesMissingReceipts(ctx context.Context) ([]db.LedgerEntry, error)
 	CreateLedgerReceipts(ctx context.Context, receipts ...*db.LedgerReceipt) error
 	ListOutstandingReceipts(ctx context.Context, filter normalizedReceiptListFilter) ([]db.LedgerReceipt, int64, error)
-	CountOutstandingReceiptsByStatus(ctx context.Context) (map[string]int64, error)
+	CountOutstandingReceiptsByStatus(ctx context.Context, filter normalizedReceiptListFilter) (map[string]int64, error)
 	FindReceiptByLedgerEntryID(ctx context.Context, ledgerEntryID string) (*db.LedgerReceipt, error)
 	MarkReceiptPrinted(ctx context.Context, receiptID, printedBy string, printedAt time.Time) (*db.LedgerReceipt, error)
 	MarkReceiptReturned(ctx context.Context, receiptID, receivedBy, signedDocumentRef, notes string, returnedAt time.Time) (*db.LedgerReceipt, error)
@@ -42,9 +42,11 @@ type Repository interface {
 }
 
 type normalizedReceiptListFilter struct {
-	Status   string
-	Page     int
-	PageSize int
+	Status             string
+	CollaboratorSearch string
+	SourceType         string
+	Page               int
+	PageSize           int
 }
 
 type normalizedLedgerEntryListFilter struct {
