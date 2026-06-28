@@ -48,6 +48,8 @@ type apiCollaboratorResponse struct {
 		ProjectedEndDate               string   `json:"projectedEndDate"`
 		PaymentMethodID                string   `json:"paymentMethodId"`
 		PaymentValue                   float64  `json:"paymentValue"`
+		FixedMonthlyBRLAmount          *float64 `json:"fixedMonthlyBrlAmount"`
+		DailyBRLAmount                 *float64 `json:"dailyBrlAmount"`
 		GoldCommissionPercent          *float64 `json:"goldCommissionPercent"`
 		TimeOffGoldSplitPercent        *float64 `json:"timeOffGoldSplitPercent"`
 		SickDayOffReplacementGoldGrams *float64 `json:"sickDayOffReplacementGoldGrams"`
@@ -55,6 +57,12 @@ type apiCollaboratorResponse struct {
 		LocationID                     string   `json:"locationId"`
 		TaskID                         string   `json:"taskId"`
 		StatusID                       string   `json:"statusId"`
+	} `json:"data"`
+}
+
+type apiReferenceDataResponse struct {
+	Data struct {
+		ID string `json:"id"`
 	} `json:"data"`
 }
 
@@ -182,6 +190,144 @@ func TestCreateGoldCommissionCollaboratorAcceptsCustomReplacementRules(t *testin
 	}
 }
 
+func TestCreateGoldCommissionCollaboratorAcceptsEightDecimalPercent(t *testing.T) {
+	server, cleanup := newTestServer(t)
+	defer cleanup()
+
+	person := createPerson(t, server, validCompletePersonPayload(1, nil))
+
+	res := postCollaborator(t, server, validCollaboratorPayload(person.Data.ID, map[string]any{
+		"paymentMethodId":       "ref-method-commission",
+		"paymentValue":          7.12345678,
+		"goldCommissionPercent": 7.12345678,
+	}))
+	defer res.Body.Close()
+
+	if res.StatusCode != http.StatusCreated {
+		var body apiErrorResponse
+		decodeJSON(t, res, &body)
+		t.Fatalf("expected status %d, got %d with error %+v", http.StatusCreated, res.StatusCode, body.Error)
+	}
+
+	var body apiCollaboratorResponse
+	decodeJSON(t, res, &body)
+
+	if body.Data.GoldCommissionPercent == nil || *body.Data.GoldCommissionPercent != 7.12345678 {
+		t.Fatalf("expected goldCommissionPercent 7.12345678, got %#v", body.Data.GoldCommissionPercent)
+	}
+}
+
+func TestCreateGoldCommissionCollaboratorRejectsTooManyPercentDecimals(t *testing.T) {
+	server, cleanup := newTestServer(t)
+	defer cleanup()
+
+	person := createPerson(t, server, validCompletePersonPayload(1, nil))
+
+	res := postCollaborator(t, server, validCollaboratorPayload(person.Data.ID, map[string]any{
+		"paymentMethodId":       "ref-method-commission",
+		"paymentValue":          7.123456789,
+		"goldCommissionPercent": 7.123456789,
+	}))
+	defer res.Body.Close()
+
+	assertValidationError(t, res, "goldCommissionPercent", "Gold commission percent can have at most eight decimal places")
+}
+
+func TestCreateDailyBRLCollaboratorRejectsTooManyAmountDecimals(t *testing.T) {
+	server, cleanup := newTestServer(t)
+	defer cleanup()
+
+	person := createPerson(t, server, validCompletePersonPayload(1, nil))
+
+	res := postCollaborator(t, server, validCollaboratorPayload(person.Data.ID, map[string]any{
+		"paymentValue":   150.123,
+		"dailyBrlAmount": 150.123,
+	}))
+	defer res.Body.Close()
+
+	assertValidationError(t, res, "dailyBrlAmount", "Daily BRL amount can have at most two decimal places")
+}
+
+func TestUpdateCollaboratorEditsAssignmentPaymentAndExtensionDays(t *testing.T) {
+	server, cleanup := newTestServer(t)
+	defer cleanup()
+
+	person := createPerson(t, server, validCompletePersonPayload(1, nil))
+	created := createCollaborator(t, server, validCollaboratorPayload(person.Data.ID, nil))
+	sector := createReferenceData(t, server, "sector", map[string]any{"code": "PROCESSING", "label": "Processing", "sortOrder": 20})
+	location := createReferenceData(t, server, "location", map[string]any{"code": "NORTH_PIT", "label": "North Pit", "sortOrder": 20})
+	task := createReferenceData(t, server, "task", map[string]any{"code": "SUPERVISOR", "label": "Supervisor", "sortOrder": 20})
+
+	res := postJSON(t, server, http.MethodPut, collaboratorsURL+created.Data.ID, map[string]any{
+		"sectorId":              sector.Data.ID,
+		"locationId":            location.Data.ID,
+		"taskId":                task.Data.ID,
+		"paymentMethodId":       "ref-method-salary",
+		"paymentValue":          2400.0,
+		"fixedMonthlyBrlAmount": 2400.0,
+		"extensionDays":         12,
+	})
+	defer res.Body.Close()
+
+	if res.StatusCode != http.StatusOK {
+		var body apiErrorResponse
+		decodeJSON(t, res, &body)
+		t.Fatalf("expected update collaborator status %d, got %d with error %+v", http.StatusOK, res.StatusCode, body.Error)
+	}
+
+	var body apiCollaboratorResponse
+	decodeJSON(t, res, &body)
+
+	if body.Data.SectorID != sector.Data.ID {
+		t.Fatalf("expected sectorId %q, got %q", sector.Data.ID, body.Data.SectorID)
+	}
+	if body.Data.LocationID != location.Data.ID {
+		t.Fatalf("expected locationId %q, got %q", location.Data.ID, body.Data.LocationID)
+	}
+	if body.Data.TaskID != task.Data.ID {
+		t.Fatalf("expected taskId %q, got %q", task.Data.ID, body.Data.TaskID)
+	}
+	if body.Data.PaymentMethodID != "ref-method-salary" {
+		t.Fatalf("expected salary payment method, got %q", body.Data.PaymentMethodID)
+	}
+	if body.Data.PaymentValue != 2400 {
+		t.Fatalf("expected payment value 2400, got %f", body.Data.PaymentValue)
+	}
+	if body.Data.FixedMonthlyBRLAmount == nil || *body.Data.FixedMonthlyBRLAmount != 2400 {
+		t.Fatalf("expected fixedMonthlyBrlAmount 2400, got %#v", body.Data.FixedMonthlyBRLAmount)
+	}
+	if body.Data.DailyBRLAmount != nil {
+		t.Fatalf("expected dailyBrlAmount to be cleared, got %#v", body.Data.DailyBRLAmount)
+	}
+	if body.Data.ExtensionDays != 12 {
+		t.Fatalf("expected extensionDays 12, got %d", body.Data.ExtensionDays)
+	}
+	if body.Data.ProjectedEndDate != "2026-09-11" {
+		t.Fatalf("expected projected end date with 12 extension days, got %q", body.Data.ProjectedEndDate)
+	}
+}
+
+func TestUpdateCollaboratorRejectsNegativeExtensionDays(t *testing.T) {
+	server, cleanup := newTestServer(t)
+	defer cleanup()
+
+	person := createPerson(t, server, validCompletePersonPayload(1, nil))
+	created := createCollaborator(t, server, validCollaboratorPayload(person.Data.ID, nil))
+
+	res := postJSON(t, server, http.MethodPut, collaboratorsURL+created.Data.ID, map[string]any{
+		"sectorId":        "ref-sector-mining",
+		"locationId":      "ref-location-main-mine",
+		"taskId":          "ref-task-miner",
+		"paymentMethodId": "ref-method-daily",
+		"paymentValue":    150.0,
+		"dailyBrlAmount":  150.0,
+		"extensionDays":   -1,
+	})
+	defer res.Body.Close()
+
+	assertValidationError(t, res, "extensionDays", "Extension days must be zero or greater")
+}
+
 func TestCreateCollaboratorRejectsIncompletePerson(t *testing.T) {
 	server, cleanup := newTestServer(t)
 	defer cleanup()
@@ -281,6 +427,23 @@ func createPerson(t *testing.T, server *fiber.App, payload map[string]any) apiPe
 	}
 
 	var body apiPersonResponse
+	decodeJSON(t, res, &body)
+	return body
+}
+
+func createReferenceData(t *testing.T, server *fiber.App, typ string, payload map[string]any) apiReferenceDataResponse {
+	t.Helper()
+
+	res := postJSON(t, server, http.MethodPost, "/api/v1/reference-data/"+typ, payload)
+	defer res.Body.Close()
+
+	if res.StatusCode != http.StatusCreated {
+		var body apiErrorResponse
+		decodeJSON(t, res, &body)
+		t.Fatalf("expected create reference data status %d, got %d with error %+v", http.StatusCreated, res.StatusCode, body.Error)
+	}
+
+	var body apiReferenceDataResponse
 	decodeJSON(t, res, &body)
 	return body
 }

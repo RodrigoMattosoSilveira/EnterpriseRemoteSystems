@@ -73,9 +73,9 @@ test("user can create a Collaborator from an eligible complete Person", async ({
 
   await expect(page).toHaveURL(/\/collaborators$/);
 
-await expect(page.getByRole("status")).toContainText(
-  `Collaborator created for ${personNickname}.`,
-);
+  await expect(page.getByRole("status")).toContainText(
+    `Collaborator created for ${personNickname}.`,
+  );
 
   await expect(
     page.getByRole("heading", {
@@ -94,7 +94,9 @@ await expect(page.getByRole("status")).toContainText(
   await page.goto("/collaborators/new");
 
   await expect(
-    page.getByText("Already active Collaborators are hidden from the dropdown."),
+    page.getByText(
+      "Already active Collaborators are hidden from the dropdown.",
+    ),
   ).toBeVisible();
 
   await expect(page.getByText(personDisplayName)).toHaveCount(1);
@@ -104,11 +106,91 @@ await expect(page.getByRole("status")).toContainText(
   await expect(refreshedPersonSelect).not.toContainText(personDisplayName);
 });
 
+test("user can edit Collaborator assignment payment and extension days", async ({
+  page,
+  request,
+}) => {
+  const suffix = uniqueSuffix();
+  const person = await createCompletePerson(request, {
+    suffix,
+    firstName: `EditCollab${suffix}`,
+    lastName: firstPageSortLastName(suffix),
+    nickname: `EditC${suffix}`,
+  });
+  const sector = await createReferenceData(request, "sector", {
+    code: `E2E_SECTOR_${suffix}`,
+    label: `E2E Sector ${suffix}`,
+    sortOrder: 100,
+  });
+  const location = await createReferenceData(request, "location", {
+    code: `E2E_LOCATION_${suffix}`,
+    label: `E2E Location ${suffix}`,
+    sortOrder: 100,
+  });
+  const task = await createReferenceData(request, "task", {
+    code: `E2E_TASK_${suffix}`,
+    label: `E2E Task ${suffix}`,
+    sortOrder: 100,
+  });
+  const collaborator = await createCollaborator(request, {
+    personId: person.id,
+    journeyStartDate: "2026-06-01",
+    paymentMethodId: PAYMENT_METHOD_DAILY_ID,
+    paymentValue: 150,
+    dailyBrlAmount: 150,
+    sectorId: SECTOR_MINING_ID,
+    locationId: LOCATION_MAIN_MINE_ID,
+    taskId: TASK_MINER_ID,
+    statusId: COLLABORATOR_STATUS_ACTIVE_ID,
+    notes: "Collaborator edit E2E setup",
+  });
+
+  await page.goto(`/collaborators/${collaborator.id}`);
+
+  await expect(
+    page.getByRole("heading", { name: `EditC${suffix}` }),
+  ).toBeVisible();
+
+  await page.getByRole("button", { name: "Edit Collaborator" }).click();
+
+  await expect(
+    page.getByRole("heading", { name: "Edit Collaborator" }),
+  ).toBeVisible();
+
+  await page.getByLabel("Sector *").selectOption(sector.id);
+  await page.getByLabel("Location *").selectOption(location.id);
+  await page.getByLabel("Task *").selectOption(task.id);
+  await page.getByLabel("Payment Method *").selectOption("ref-method-salary");
+  await page.getByLabel("Payment Value *").fill("2400");
+  await page.getByLabel("Extension Days *").fill("12");
+
+  await page.getByRole("button", { name: "Save Collaborator" }).click();
+
+  await expect(page.getByRole("status")).toContainText(
+    `Collaborator updated for EditC${suffix}.`,
+  );
+  await expect(page.getByText(sector.label).first()).toBeVisible();
+  await expect(page.getByText(location.label).first()).toBeVisible();
+  await expect(page.getByText(task.label).first()).toBeVisible();
+  await expect(page.getByText("Salary").first()).toBeVisible();
+  await expect(page.getByText(/R\$\s*2\.400,00/).first()).toBeVisible();
+  await expect(page.getByText("2026-09-11").first()).toBeVisible();
+});
+
 type CreatedPerson = {
   id: string;
   firstName: string;
   lastName: string;
   nickname: string;
+};
+
+type CreatedCollaborator = {
+  id: string;
+};
+
+type CreatedReferenceData = {
+  id: string;
+  label: string;
 };
 
 type ApiEnvelope<T> = {
@@ -118,6 +200,59 @@ type ApiEnvelope<T> = {
     fields?: Record<string, string>;
   };
 };
+
+async function createCollaborator(
+  api: APIRequestContext,
+  data: Record<string, unknown>,
+): Promise<CreatedCollaborator> {
+  const response = await api.post(e2eApiUrl("/api/v1/collaborators"), {
+    headers: authzHeaders(),
+    data,
+  });
+
+  if (!response.ok()) {
+    throw new Error(
+      `Create Collaborator failed at ${response.url()}: ${response.status()} ${await response.text()}`,
+    );
+  }
+
+  const body = (await response.json()) as ApiEnvelope<CreatedCollaborator>;
+
+  if (!body.data) {
+    throw new Error(
+      "Create Collaborator failed: response did not include data",
+    );
+  }
+
+  return body.data;
+}
+
+async function createReferenceData(
+  api: APIRequestContext,
+  type: string,
+  data: { code: string; label: string; sortOrder: number },
+): Promise<CreatedReferenceData> {
+  const response = await api.post(e2eApiUrl(`/api/v1/reference-data/${type}`), {
+    headers: authzHeaders(),
+    data,
+  });
+
+  if (!response.ok()) {
+    throw new Error(
+      `Create reference data failed at ${response.url()}: ${response.status()} ${await response.text()}`,
+    );
+  }
+
+  const body = (await response.json()) as ApiEnvelope<CreatedReferenceData>;
+
+  if (!body.data) {
+    throw new Error(
+      "Create reference data failed: response did not include data",
+    );
+  }
+
+  return body.data;
+}
 
 async function createCompletePerson(
   api: APIRequestContext,

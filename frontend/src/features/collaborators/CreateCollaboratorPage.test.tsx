@@ -296,7 +296,7 @@ describe("CreateCollaboratorPage", () => {
     await waitForText("Select a location");
     await waitForText("Select a task");
     await waitForText("Select a payment method");
-    await waitForText("Enter a payment value greater than zero");
+    await waitForText("Payment value is required.");
 
     await changeSelect("Status", "ref-collaborator-status-active");
     await changeSelect("Sector", "ref-sector-mining");
