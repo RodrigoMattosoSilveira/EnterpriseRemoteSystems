@@ -86,15 +86,19 @@ type apiAccrualItemListResponse struct {
 type apiLedgerEntryListResponse struct {
 	Data struct {
 		Items []struct {
-			ID            string  `json:"id"`
-			ValueUnitCode string  `json:"valueUnitCode"`
-			EntryType     string  `json:"entryType"`
-			Direction     string  `json:"direction"`
-			Amount        float64 `json:"amount"`
-			SignedAmount  float64 `json:"signedAmount"`
-			SourceType    string  `json:"sourceType"`
-			SourceID      string  `json:"sourceId"`
-			EffectiveDate string  `json:"effectiveDate"`
+			ID                   string  `json:"id"`
+			ValueUnitCode        string  `json:"valueUnitCode"`
+			EntryType            string  `json:"entryType"`
+			Direction            string  `json:"direction"`
+			Amount               float64 `json:"amount"`
+			SignedAmount         float64 `json:"signedAmount"`
+			SourceType           string  `json:"sourceType"`
+			SourceID             string  `json:"sourceId"`
+			SourceLabel          string  `json:"sourceLabel"`
+			SourceWorkPeriodID   string  `json:"sourceWorkPeriodId"`
+			SourceWorkDate       string  `json:"sourceWorkDate"`
+			SourceWorkPeriodName string  `json:"sourceWorkPeriodName"`
+			EffectiveDate        string  `json:"effectiveDate"`
 		} `json:"items"`
 		Total int `json:"total"`
 	} `json:"data"`
@@ -109,12 +113,16 @@ type apiCurrentAccountDetailResponse struct {
 		} `json:"balances"`
 		LedgerEntries struct {
 			Items []struct {
-				ValueUnitCode string  `json:"valueUnitCode"`
-				EntryType     string  `json:"entryType"`
-				Direction     string  `json:"direction"`
-				Amount        float64 `json:"amount"`
-				SourceType    string  `json:"sourceType"`
-				SourceID      string  `json:"sourceId"`
+				ValueUnitCode        string  `json:"valueUnitCode"`
+				EntryType            string  `json:"entryType"`
+				Direction            string  `json:"direction"`
+				Amount               float64 `json:"amount"`
+				SourceType           string  `json:"sourceType"`
+				SourceID             string  `json:"sourceId"`
+				SourceLabel          string  `json:"sourceLabel"`
+				SourceWorkPeriodID   string  `json:"sourceWorkPeriodId"`
+				SourceWorkDate       string  `json:"sourceWorkDate"`
+				SourceWorkPeriodName string  `json:"sourceWorkPeriodName"`
 			} `json:"items"`
 			Total int `json:"total"`
 		} `json:"ledgerEntries"`
@@ -221,6 +229,9 @@ func TestPostAccrualRunCreatesAssignmentSourcedBRLLedgerCreditAndMarksItemPosted
 	if entry.EntryType != "EARNING_CREDIT" || entry.Direction != "CREDIT" || entry.ValueUnitCode != "BRL" || entry.Amount != 150.0 || entry.SourceID != assignment.Data.ID {
 		t.Fatalf("unexpected assignment-sourced BRL ledger entry: %+v", entry)
 	}
+	if entry.SourceWorkPeriodID != workPeriod.Data.ID || entry.SourceWorkDate != "2026-06-05" || entry.SourceWorkPeriodName != "06:00-18:00" || entry.SourceLabel != "Work Period 2026-06-05 · 06:00-18:00" {
+		t.Fatalf("expected assignment source details for BRL earning credit, got %+v", entry)
+	}
 }
 
 func TestPostGoldCommissionAccrualRunCreatesGoldLedgerCreditVisibleInCurrentAccount(t *testing.T) {
@@ -245,6 +256,9 @@ func TestPostGoldCommissionAccrualRunCreatesGoldLedgerCreditVisibleInCurrentAcco
 	entry := detail.Data.LedgerEntries.Items[0]
 	if entry.EntryType != "EARNING_CREDIT" || entry.Direction != "CREDIT" || entry.ValueUnitCode != "GOLD_GRAM" || entry.Amount != 5.0 || entry.SourceID != assignment.Data.ID {
 		t.Fatalf("unexpected assignment-sourced gold ledger entry: %+v", entry)
+	}
+	if entry.SourceWorkPeriodID != workPeriod.Data.ID || entry.SourceWorkDate != "2026-06-05" || entry.SourceLabel != "Work Period 2026-06-05 · 06:00-18:00" {
+		t.Fatalf("expected assignment source details in current-account detail, got %+v", entry)
 	}
 	assertCurrentAccountBalance(t, detail, "GOLD_GRAM", 5.0)
 }

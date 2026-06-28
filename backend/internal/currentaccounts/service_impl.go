@@ -4,11 +4,14 @@ import (
 	"context"
 	"math"
 	"strings"
+
+	"enterpriseremotesystems/backend/internal/db"
 )
 
 const (
-	defaultPageSize = 50
-	maxPageSize     = 200
+	defaultPageSize                      = 50
+	maxPageSize                          = 200
+	ledgerSourceTypeWorkPeriodAssignment = "WORK_PERIOD_ASSIGNMENT"
 )
 
 type service struct {
@@ -108,12 +111,17 @@ func (s *service) GetDetail(ctx context.Context, collaboratorID string, filter L
 		return nil, err
 	}
 
+	dtos, err := s.ledgerEntryDTOsWithSourceDetails(ctx, entries)
+	if err != nil {
+		return nil, err
+	}
+
 	return &CurrentAccountDetailDTO{
 		CollaboratorID:    collaborator.ID,
 		CollaboratorLabel: collaboratorLabel(collaborator.Person),
 		Balances:          ToBalanceDTOList(balances),
 		LedgerEntries: LedgerEntryListResult{
-			Items:    ToLedgerEntryDTOList(entries),
+			Items:    dtos,
 			Total:    total,
 			Page:     normalized.Page,
 			PageSize: normalized.PageSize,
@@ -135,7 +143,55 @@ func (s *service) ListEntries(ctx context.Context, collaboratorID string, filter
 	if err != nil {
 		return nil, err
 	}
-	return &LedgerEntryListResult{Items: ToLedgerEntryDTOList(rows), Total: total, Page: normalized.Page, PageSize: normalized.PageSize}, nil
+	dtos, err := s.ledgerEntryDTOsWithSourceDetails(ctx, rows)
+	if err != nil {
+		return nil, err
+	}
+	return &LedgerEntryListResult{Items: dtos, Total: total, Page: normalized.Page, PageSize: normalized.PageSize}, nil
+}
+
+func (s *service) ledgerEntryDTOsWithSourceDetails(ctx context.Context, rows []db.LedgerEntry) ([]LedgerEntryDTO, error) {
+	dtos := ToLedgerEntryDTOList(rows)
+	assignmentIDs := make([]string, 0, len(rows))
+	for _, row := range rows {
+		if strings.EqualFold(strings.TrimSpace(row.SourceType), ledgerSourceTypeWorkPeriodAssignment) && strings.TrimSpace(row.SourceID) != "" {
+			assignmentIDs = append(assignmentIDs, row.SourceID)
+		}
+	}
+	if len(assignmentIDs) == 0 {
+		return dtos, nil
+	}
+	details, err := s.repo.FindWorkPeriodAssignmentSourceDetails(ctx, assignmentIDs)
+	if err != nil {
+		return nil, err
+	}
+	for i := range dtos {
+		if !strings.EqualFold(strings.TrimSpace(dtos[i].SourceType), ledgerSourceTypeWorkPeriodAssignment) {
+			continue
+		}
+		detail, ok := details[dtos[i].SourceID]
+		if !ok {
+			continue
+		}
+		dtos[i].SourceWorkPeriodID = detail.WorkPeriodID
+		dtos[i].SourceWorkDate = formatDate(detail.WorkDate)
+		dtos[i].SourceWorkPeriodName = strings.TrimSpace(detail.WorkPeriodName)
+		dtos[i].SourceLabel = workPeriodAssignmentSourceLabel(detail)
+	}
+	return dtos, nil
+}
+
+func workPeriodAssignmentSourceLabel(detail WorkPeriodAssignmentSourceDetail) string {
+	date := formatDate(detail.WorkDate)
+	name := strings.TrimSpace(detail.WorkPeriodName)
+	periodCode := strings.TrimSpace(detail.PeriodCode)
+	if name != "" {
+		return strings.TrimSpace("Work Period " + date + " · " + name)
+	}
+	if periodCode != "" {
+		return strings.TrimSpace("Work Period " + date + " · " + periodCode)
+	}
+	return strings.TrimSpace("Work Period " + date)
 }
 
 func (s *service) ListBalances(ctx context.Context, collaboratorID string) ([]CurrentAccountBalanceDTO, error) {

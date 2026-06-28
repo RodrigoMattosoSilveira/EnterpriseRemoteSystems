@@ -136,6 +136,42 @@ func (r *gormRepository) ListEntries(ctx context.Context, collaboratorID string,
 	return rows, total, err
 }
 
+func (r *gormRepository) FindWorkPeriodAssignmentSourceDetails(ctx context.Context, assignmentIDs []string) (map[string]WorkPeriodAssignmentSourceDetail, error) {
+	uniqueIDs := make([]string, 0, len(assignmentIDs))
+	seen := map[string]bool{}
+	for _, id := range assignmentIDs {
+		id = strings.TrimSpace(id)
+		if id == "" || seen[id] {
+			continue
+		}
+		seen[id] = true
+		uniqueIDs = append(uniqueIDs, id)
+	}
+	if len(uniqueIDs) == 0 {
+		return map[string]WorkPeriodAssignmentSourceDetail{}, nil
+	}
+
+	var rows []WorkPeriodAssignmentSourceDetail
+	err := r.db.WithContext(ctx).
+		Table("work_period_assignments AS wpa").
+		Select(`wpa.id AS assignment_id,
+			wp.id AS work_period_id,
+			wp.work_date AS work_date,
+			wp.period_code AS period_code,
+			wp.name AS work_period_name`).
+		Joins("JOIN work_periods AS wp ON wp.id = wpa.work_period_id AND wp.tenant_id = wpa.tenant_id").
+		Where("wpa.tenant_id = ? AND wpa.id IN ?", defaultTenantID, uniqueIDs).
+		Scan(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[string]WorkPeriodAssignmentSourceDetail, len(rows))
+	for _, row := range rows {
+		out[row.AssignmentID] = row
+	}
+	return out, nil
+}
+
 func (r *gormRepository) ListBalances(ctx context.Context, collaboratorID string) ([]BalanceRow, error) {
 	var rows []BalanceRow
 	err := r.db.WithContext(ctx).
