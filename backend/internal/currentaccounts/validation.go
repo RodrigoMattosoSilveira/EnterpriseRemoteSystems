@@ -22,6 +22,10 @@ func ValidateLedgerEntryListFilter(filter LedgerEntryListFilter) error {
 			fields["dateTo"] = "Date to must be YYYY-MM-DD"
 		}
 	}
+	direction := strings.ToUpper(strings.TrimSpace(filter.Direction))
+	if direction != "" && direction != "CREDIT" && direction != "DEBIT" {
+		fields["direction"] = "Direction must be CREDIT or DEBIT"
+	}
 	if filter.Page < 0 {
 		fields["page"] = "Page must be greater than zero"
 	}

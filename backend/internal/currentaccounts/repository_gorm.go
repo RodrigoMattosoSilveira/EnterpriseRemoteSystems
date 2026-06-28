@@ -81,33 +81,40 @@ func (r *gormRepository) ListEntries(ctx context.Context, collaboratorID string,
 
 	q := r.db.WithContext(ctx).
 		Model(&db.LedgerEntry{}).
-		Where("tenant_id = ? AND collaborator_id = ?", defaultTenantID, collaboratorID).
+		Where("ledger_entries.tenant_id = ? AND ledger_entries.collaborator_id = ?", defaultTenantID, collaboratorID).
 		Preload("Collaborator.Person").
-		Preload("ValueUnit")
+		Preload("ValueUnit").
+		Preload("Receipt")
 
 	if !filter.IncludeInactive {
-		q = q.Where("active = ?", true)
+		q = q.Where("ledger_entries.active = ?", true)
 	}
 	if filter.ValueUnitID != "" {
-		q = q.Where("value_unit_id = ?", filter.ValueUnitID)
+		q = q.Where("ledger_entries.value_unit_id = ?", filter.ValueUnitID)
 	}
 	if filter.EntryType != "" {
-		q = q.Where("entry_type = ?", filter.EntryType)
+		q = q.Where("ledger_entries.entry_type = ?", filter.EntryType)
+	}
+	if filter.Direction != "" {
+		q = q.Where("ledger_entries.direction = ?", filter.Direction)
 	}
 	if filter.SourceType != "" {
-		q = q.Where("source_type = ?", filter.SourceType)
+		q = q.Where("ledger_entries.source_type = ?", filter.SourceType)
+	}
+	if filter.OutstandingReceipts {
+		q = q.Joins("JOIN ledger_receipts AS receipt_filter ON receipt_filter.ledger_entry_id = ledger_entries.id AND receipt_filter.tenant_id = ledger_entries.tenant_id AND receipt_filter.status IN ?", []string{"PENDING_ISSUE", "ISSUED", "PRINTED", "SIGNED"})
 	}
 	if filter.DateFrom != nil {
-		q = q.Where("effective_date >= ?", formatDateForQuery(*filter.DateFrom))
+		q = q.Where("ledger_entries.effective_date >= ?", formatDateForQuery(*filter.DateFrom))
 	}
 	if filter.DateTo != nil {
-		q = q.Where("effective_date < ?", formatDateForQuery(filter.DateTo.AddDate(0, 0, 1)))
+		q = q.Where("ledger_entries.effective_date < ?", formatDateForQuery(filter.DateTo.AddDate(0, 0, 1)))
 	}
 
 	if err := q.Count(&total).Error; err != nil {
 		return nil, 0, err
 	}
-	err := q.Order("effective_date DESC, created_at DESC").Limit(filter.PageSize).Offset((filter.Page - 1) * filter.PageSize).Find(&rows).Error
+	err := q.Order("ledger_entries.effective_date DESC, ledger_entries.created_at DESC").Limit(filter.PageSize).Offset((filter.Page - 1) * filter.PageSize).Find(&rows).Error
 	return rows, total, err
 }
 
@@ -187,6 +194,7 @@ func (r *gormRepository) FindEntryByID(ctx context.Context, entryID string) (*db
 	err := r.db.WithContext(ctx).
 		Preload("Collaborator.Person").
 		Preload("ValueUnit").
+		Preload("Receipt").
 		First(&row, "id = ? AND tenant_id = ?", entryID, defaultTenantID).Error
 	if err != nil {
 		return nil, err
