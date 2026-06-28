@@ -150,6 +150,35 @@ test("returned receipt locks lifecycle actions", async ({ page, request }) => {
   await expect(page.getByLabel("Notes")).toBeDisabled();
 });
 
+test("outstanding receipts workbench filters by collaborator and source and links to source", async ({
+  page,
+  request,
+}) => {
+  const { collaborator, receipt, suffix } = await createReceiptScenario(request, {
+    descriptionPrefix: "Receipt E2E workbench source",
+    firstNamePrefix: "ReceiptWorkbenchE2E",
+    nicknamePrefix: "ReceiptWorkbench",
+  });
+
+  await page.goto("/receipts/outstanding");
+  await expect(page.getByRole("heading", { name: "Outstanding receipts" })).toBeVisible();
+
+  await page.getByLabel("Source type").selectOption("EXPENSE");
+  await page.getByLabel("Collaborator").fill(`ReceiptWorkbench${suffix}`);
+  await page.getByRole("button", { name: "Apply filters" }).click();
+
+  await expect(page.getByText(receipt.receiptNumber)).toBeVisible();
+  await expect(page.getByText("Source: expense", { exact: false }).first()).toBeVisible();
+  await expect(page.getByText("Showing page 1 of 1 · 1 receipt")).toBeVisible();
+  await expect(page.getByRole("link", { name: "Current account" })).toHaveAttribute(
+    "href",
+    `/collaborators/${collaborator.id}/current-account`,
+  );
+
+  await page.getByRole("link", { name: "Open source" }).click();
+  await expect(page).toHaveURL(/\/expenses\//);
+});
+
 type ApiEnvelope<T> = {
   data?: T;
   error?: { message?: string; fields?: Record<string, string> };

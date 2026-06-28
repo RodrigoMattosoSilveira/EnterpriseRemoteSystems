@@ -29,7 +29,10 @@ function validCPF(seed: number): string {
 }
 
 function uniqueSuffix(): number {
-  return Date.now() + Math.floor(Math.random() * 1000);
+  const timestampDigits = Date.now() % 1_000_000;
+  const randomDigits = Math.floor(Math.random() * 1000);
+
+  return timestampDigits * 1000 + randomDigits;
 }
 
 function validRG(seed: number): string {
@@ -197,21 +200,38 @@ async function createPersonViaApi(
   request: APIRequestContext,
   input: { seed: number; firstName: string; lastName: string },
 ) {
-  const response = await request.post(e2eApiUrl("/api/v1/people"), {
-    headers: authzHeaders(),
-    data: {
-      firstName: input.firstName,
-      lastName: input.lastName,
-      nickname: input.firstName,
-      cpf: validCPF(input.seed),
-      rg: validRG(input.seed),
-      cellular: validBrazilianCellular(input.seed),
-      email: `people-filter-${input.seed}@example.com`,
-      statusId: ACTIVE_STATUS_ID,
-    },
-  });
+  const attempts = 3;
+  let lastStatus = 0;
+  let lastBody = "";
 
-  expect(response.ok()).toBeTruthy();
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    const seed = input.seed + attempt * 100_000;
+    const response = await request.post(e2eApiUrl("/api/v1/people"), {
+      headers: authzHeaders(),
+      data: {
+        firstName: input.firstName,
+        lastName: input.lastName,
+        nickname: `${input.firstName}-${seed}`,
+        cpf: validCPF(seed),
+        rg: validRG(seed),
+        cellular: validBrazilianCellular(seed),
+        email: `people-filter-${seed}@example.com`,
+        statusId: ACTIVE_STATUS_ID,
+      },
+    });
+
+    if (response.ok()) {
+      return;
+    }
+
+    lastStatus = response.status();
+    lastBody = await response.text();
+  }
+
+  expect(
+    false,
+    `Failed to create E2E Person ${input.firstName} ${input.lastName}. Last API status: ${lastStatus}. Last body: ${lastBody}`,
+  ).toBeTruthy();
 }
 
 function validBrazilianCellular(seed: number | string): string {
