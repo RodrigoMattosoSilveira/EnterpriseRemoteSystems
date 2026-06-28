@@ -187,6 +187,60 @@ func (r *gormRepository) ListRecentDailyGoldProduction(ctx context.Context, loca
 	return rows, err
 }
 
+func (r *gormRepository) AccrualProjectionForCollaborator(ctx context.Context, collaboratorID string, startDate time.Time, endDate time.Time) (AccrualProjectionRow, error) {
+	type row struct {
+		BRLAmount       float64
+		GoldGramAmount  float64
+		WorkPeriodDates int
+		PendingItems    int64
+	}
+	var result row
+	err := r.db.WithContext(ctx).
+		Table("accrual_items AS ai").
+		Select(`COALESCE(SUM(CASE WHEN ai.status = 'READY' AND ai.direction = 'CREDIT' THEN COALESCE(ai.brl_amount, 0)
+			WHEN ai.status = 'READY' AND ai.direction = 'DEBIT' THEN -COALESCE(ai.brl_amount, 0)
+			ELSE 0 END), 0) AS brl_amount,
+			COALESCE(SUM(CASE WHEN ai.status = 'READY' AND ai.direction = 'CREDIT' THEN COALESCE(ai.gold_gram_amount, 0)
+			WHEN ai.status = 'READY' AND ai.direction = 'DEBIT' THEN -COALESCE(ai.gold_gram_amount, 0)
+			ELSE 0 END), 0) AS gold_gram_amount,
+			COUNT(DISTINCT CASE WHEN ai.status = 'READY' AND ai.work_period_assignment_id IS NOT NULL THEN wp.work_date END) AS work_period_dates,
+			COALESCE(SUM(CASE WHEN ai.status = 'PENDING' THEN 1 ELSE 0 END), 0) AS pending_items`).
+		Joins("JOIN work_periods AS wp ON wp.id = ai.work_period_id AND wp.tenant_id = ai.tenant_id").
+		Joins("JOIN accrual_runs AS ar ON ar.id = ai.accrual_run_id AND ar.tenant_id = ai.tenant_id").
+		Where("ai.tenant_id = ? AND ai.collaborator_id = ? AND wp.work_date >= ? AND wp.work_date <= ? AND ai.status IN ?", defaultTenantID, collaboratorID, formatDateForQuery(startDate), formatDateForQuery(endDate), []string{"READY", "PENDING"}).
+		Where(`ar.id = (
+			SELECT latest_ar.id
+			FROM accrual_runs AS latest_ar
+			WHERE latest_ar.tenant_id = ai.tenant_id
+			  AND latest_ar.work_period_id = ai.work_period_id
+			  AND latest_ar.status <> 'VOIDED'
+			ORDER BY latest_ar.created_at DESC, latest_ar.id DESC
+			LIMIT 1
+		)`).
+		Scan(&result).Error
+	if err != nil {
+		return AccrualProjectionRow{}, err
+	}
+	return AccrualProjectionRow{
+		BRLAmount:       result.BRLAmount,
+		GoldGramAmount:  result.GoldGramAmount,
+		WorkPeriodDates: result.WorkPeriodDates,
+		PendingItems:    result.PendingItems,
+	}, nil
+}
+
+func (r *gormRepository) CountPostedEarningWorkPeriodDates(ctx context.Context, collaboratorID string, startDate time.Time, endDate time.Time) (int, error) {
+	var count int
+	err := r.db.WithContext(ctx).
+		Table("ledger_entries AS le").
+		Select("COUNT(DISTINCT wp.work_date)").
+		Joins("JOIN work_period_assignments AS wpa ON wpa.id = le.source_id AND wpa.tenant_id = le.tenant_id").
+		Joins("JOIN work_periods AS wp ON wp.id = wpa.work_period_id AND wp.tenant_id = le.tenant_id").
+		Where("le.tenant_id = ? AND le.collaborator_id = ? AND le.active = ? AND le.entry_type = ? AND le.direction = ? AND le.source_type = ? AND wp.work_date >= ? AND wp.work_date <= ?", defaultTenantID, collaboratorID, true, "EARNING_CREDIT", "CREDIT", "WORK_PERIOD_ASSIGNMENT", formatDateForQuery(startDate), formatDateForQuery(endDate)).
+		Scan(&count).Error
+	return count, err
+}
+
 func (r *gormRepository) CountPendingAccrualItems(ctx context.Context, collaboratorID string) (int64, error) {
 	var count int64
 	err := r.db.WithContext(ctx).
