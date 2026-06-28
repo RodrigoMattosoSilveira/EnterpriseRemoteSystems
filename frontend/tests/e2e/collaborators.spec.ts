@@ -177,8 +177,6 @@ test("user can edit Collaborator assignment payment and extension days", async (
   await expect(page.getByText("2026-09-11").first()).toBeVisible();
 });
 
-
-
 test("user can inspect Collaborator current account ledger and receipt status", async ({
   page,
   request,
@@ -226,11 +224,102 @@ test("user can inspect Collaborator current account ledger and receipt status", 
   await expect(page.getByText("Receipt: Pending issue").first()).toBeVisible();
   await expect(page.getByText("Outstanding receipt:").first()).toBeVisible();
 
-  await page.getByLabel("Filter ledger entries").selectOption("outstanding-receipts");
-  await expect(page.getByText("Showing page 1 of 1 · 1 ledger entry")).toBeVisible();
+  await page
+    .getByLabel("Filter ledger entries")
+    .selectOption("outstanding-receipts");
+  await expect(
+    page.getByText("Showing page 1 of 1 · 1 ledger entry"),
+  ).toBeVisible();
 
   await page.getByRole("link", { name: "Open source" }).click();
   await expect(page).toHaveURL(new RegExp(`/expenses/${expense.id}$`));
+});
+
+test("current account updates after receipt signed return", async ({
+  page,
+  request,
+}) => {
+  const suffix = uniqueSuffix();
+  const person = await createCompletePerson(request, {
+    suffix,
+    firstName: `ReturnAcct${suffix}`,
+    lastName: firstPageSortLastName(suffix),
+    nickname: `RetAcct${suffix}`,
+  });
+  const collaborator = await createCollaborator(request, {
+    personId: person.id,
+    journeyStartDate: "2026-06-01",
+    paymentMethodId: PAYMENT_METHOD_DAILY_ID,
+    paymentValue: 150,
+    dailyBrlAmount: 150,
+    sectorId: SECTOR_MINING_ID,
+    locationId: LOCATION_MAIN_MINE_ID,
+    taskId: TASK_MINER_ID,
+    statusId: COLLABORATOR_STATUS_ACTIVE_ID,
+    notes: "Current account returned receipt E2E setup",
+  });
+  const expense = await createExpense(request, {
+    collaboratorId: collaborator.id,
+    expenseCategoryId: "ref-expense-category-canteen",
+    valueUnitId: "ref-value-unit-brl",
+    amount: 19.75,
+    expenseDate: "2026-06-27",
+    description: `Current account returned receipt ${suffix}`,
+  });
+  const currentAccountUrl = `/collaborators/${collaborator.id}/current-account`;
+
+  await page.goto(currentAccountUrl);
+
+  await expect(page.getByText(/-R\$\s*19,75/).first()).toBeVisible();
+  await expect(page.getByText("Receipt: Pending issue").first()).toBeVisible();
+  await expect(page.getByText("Outstanding receipt:").first()).toBeVisible();
+
+  await page.getByRole("link", { name: "Print or return receipt" }).click();
+  await expect(
+    page.getByRole("heading", { name: "Receipt", exact: true }),
+  ).toBeVisible();
+
+  await page
+    .getByLabel("Signed document reference")
+    .fill(`current-account-return-${suffix}.pdf`);
+  await page
+    .getByLabel("Notes")
+    .fill("Returned from Current Account E2E flow.");
+  await page.getByRole("button", { name: "Record signed return" }).click();
+
+  await expect(
+    page.getByText("Returned", { exact: true }).first(),
+  ).toBeVisible();
+
+  await page.goto(currentAccountUrl);
+  await expect(page.getByText("Receipt: Returned").first()).toBeVisible();
+  await expect(
+    page.getByText("Receipt returned or closed.").first(),
+  ).toBeVisible();
+  await expect(page.getByRole("link", { name: "Open source" })).toHaveAttribute(
+    "href",
+    `/expenses/${expense.id}`,
+  );
+
+  await page
+    .getByLabel("Filter ledger entries")
+    .selectOption("outstanding-receipts");
+  await expect(
+    page.getByText("No ledger entries in this filter"),
+  ).toBeVisible();
+  await expect(
+    page.getByText("Showing page 1 of 1 · 0 ledger entries"),
+  ).toBeVisible();
+
+  await page.goto("/receipts/outstanding");
+  await page.getByLabel("Source type").selectOption("EXPENSE");
+  await page.getByLabel("Collaborator").fill(`RetAcct${suffix}`);
+  await page.getByRole("button", { name: "Apply filters" }).click();
+
+  await expect(page.getByText("No outstanding receipts")).toBeVisible();
+  await expect(
+    page.getByText("Showing page 1 of 1 · 0 receipts"),
+  ).toBeVisible();
 });
 
 type CreatedPerson = {
@@ -286,7 +375,6 @@ async function createCollaborator(
 
   return body.data;
 }
-
 
 async function createExpense(
   api: APIRequestContext,
