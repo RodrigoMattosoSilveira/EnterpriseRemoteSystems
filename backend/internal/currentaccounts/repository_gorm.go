@@ -25,46 +25,48 @@ func (r *gormRepository) ListOutstandingReceipts(ctx context.Context, filter nor
 
 	q := r.db.WithContext(ctx).
 		Model(&db.LedgerReceipt{}).
-		Where("tenant_id = ?", defaultTenantID).
+		Where("ledger_receipts.tenant_id = ?", defaultTenantID).
 		Preload("LedgerEntry.ValueUnit").
 		Preload("Collaborator.Person")
 
+	q = applyOutstandingReceiptWorkbenchFilters(q, filter)
+
 	if filter.Status != "" {
-		q = q.Where("status = ?", filter.Status)
+		q = q.Where("ledger_receipts.status = ?", filter.Status)
 	} else {
-		q = q.Where("status IN ?", statuses)
+		q = q.Where("ledger_receipts.status IN ?", statuses)
 	}
 
 	if err := q.Count(&total).Error; err != nil {
 		return nil, 0, err
 	}
 	err := q.
-		Order(`CASE status
+		Order(`CASE ledger_receipts.status
 			WHEN 'PENDING_ISSUE' THEN 1
 			WHEN 'ISSUED' THEN 2
 			WHEN 'PRINTED' THEN 3
 			WHEN 'SIGNED' THEN 4
 			ELSE 9
 		END ASC`).
-		Order("created_at ASC, id ASC").
+		Order("ledger_receipts.created_at ASC, ledger_receipts.id ASC").
 		Limit(filter.PageSize).
 		Offset((filter.Page - 1) * filter.PageSize).
 		Find(&rows).Error
 	return rows, total, err
 }
 
-func (r *gormRepository) CountOutstandingReceiptsByStatus(ctx context.Context) (map[string]int64, error) {
+func (r *gormRepository) CountOutstandingReceiptsByStatus(ctx context.Context, filter normalizedReceiptListFilter) (map[string]int64, error) {
 	type statusCount struct {
 		Status string
 		Count  int64
 	}
 	var rows []statusCount
-	err := r.db.WithContext(ctx).
+	q := r.db.WithContext(ctx).
 		Model(&db.LedgerReceipt{}).
-		Select("status, COUNT(*) AS count").
-		Where("tenant_id = ? AND status IN ?", defaultTenantID, []string{"PENDING_ISSUE", "ISSUED", "PRINTED", "SIGNED"}).
-		Group("status").
-		Scan(&rows).Error
+		Select("ledger_receipts.status, COUNT(*) AS count").
+		Where("ledger_receipts.tenant_id = ? AND ledger_receipts.status IN ?", defaultTenantID, []string{"PENDING_ISSUE", "ISSUED", "PRINTED", "SIGNED"})
+	q = applyOutstandingReceiptWorkbenchFilters(q, filter)
+	err := q.Group("ledger_receipts.status").Scan(&rows).Error
 	if err != nil {
 		return nil, err
 	}
@@ -75,39 +77,62 @@ func (r *gormRepository) CountOutstandingReceiptsByStatus(ctx context.Context) (
 	return out, nil
 }
 
+func applyOutstandingReceiptWorkbenchFilters(q *gorm.DB, filter normalizedReceiptListFilter) *gorm.DB {
+	if filter.SourceType != "" {
+		q = q.Joins("JOIN ledger_entries AS receipt_source_filter ON receipt_source_filter.id = ledger_receipts.ledger_entry_id AND receipt_source_filter.tenant_id = ledger_receipts.tenant_id").
+			Where("receipt_source_filter.source_type = ?", filter.SourceType)
+	}
+	if strings.TrimSpace(filter.CollaboratorSearch) != "" {
+		needle := "%" + strings.ToLower(strings.TrimSpace(filter.CollaboratorSearch)) + "%"
+		q = q.Joins("JOIN collaborator_journeys AS receipt_collaborator_filter ON receipt_collaborator_filter.id = ledger_receipts.collaborator_id AND receipt_collaborator_filter.tenant_id = ledger_receipts.tenant_id").
+			Joins("JOIN people AS receipt_person_filter ON receipt_person_filter.id = receipt_collaborator_filter.person_id AND receipt_person_filter.tenant_id = ledger_receipts.tenant_id").
+			Where(`LOWER(receipt_person_filter.nickname) LIKE ?
+				OR LOWER(receipt_person_filter.first_name || ' ' || receipt_person_filter.last_name) LIKE ?
+				OR LOWER(receipt_person_filter.cpf) LIKE ?`, needle, needle, needle)
+	}
+	return q
+}
+
 func (r *gormRepository) ListEntries(ctx context.Context, collaboratorID string, filter normalizedLedgerEntryListFilter) ([]db.LedgerEntry, int64, error) {
 	var rows []db.LedgerEntry
 	var total int64
 
 	q := r.db.WithContext(ctx).
 		Model(&db.LedgerEntry{}).
-		Where("tenant_id = ? AND collaborator_id = ?", defaultTenantID, collaboratorID).
+		Where("ledger_entries.tenant_id = ? AND ledger_entries.collaborator_id = ?", defaultTenantID, collaboratorID).
 		Preload("Collaborator.Person").
-		Preload("ValueUnit")
+		Preload("ValueUnit").
+		Preload("Receipt")
 
 	if !filter.IncludeInactive {
-		q = q.Where("active = ?", true)
+		q = q.Where("ledger_entries.active = ?", true)
 	}
 	if filter.ValueUnitID != "" {
-		q = q.Where("value_unit_id = ?", filter.ValueUnitID)
+		q = q.Where("ledger_entries.value_unit_id = ?", filter.ValueUnitID)
 	}
 	if filter.EntryType != "" {
-		q = q.Where("entry_type = ?", filter.EntryType)
+		q = q.Where("ledger_entries.entry_type = ?", filter.EntryType)
+	}
+	if filter.Direction != "" {
+		q = q.Where("ledger_entries.direction = ?", filter.Direction)
 	}
 	if filter.SourceType != "" {
-		q = q.Where("source_type = ?", filter.SourceType)
+		q = q.Where("ledger_entries.source_type = ?", filter.SourceType)
+	}
+	if filter.OutstandingReceipts {
+		q = q.Joins("JOIN ledger_receipts AS receipt_filter ON receipt_filter.ledger_entry_id = ledger_entries.id AND receipt_filter.tenant_id = ledger_entries.tenant_id AND receipt_filter.status IN ?", []string{"PENDING_ISSUE", "ISSUED", "PRINTED", "SIGNED"})
 	}
 	if filter.DateFrom != nil {
-		q = q.Where("effective_date >= ?", formatDateForQuery(*filter.DateFrom))
+		q = q.Where("ledger_entries.effective_date >= ?", formatDateForQuery(*filter.DateFrom))
 	}
 	if filter.DateTo != nil {
-		q = q.Where("effective_date < ?", formatDateForQuery(filter.DateTo.AddDate(0, 0, 1)))
+		q = q.Where("ledger_entries.effective_date < ?", formatDateForQuery(filter.DateTo.AddDate(0, 0, 1)))
 	}
 
 	if err := q.Count(&total).Error; err != nil {
 		return nil, 0, err
 	}
-	err := q.Order("effective_date DESC, created_at DESC").Limit(filter.PageSize).Offset((filter.Page - 1) * filter.PageSize).Find(&rows).Error
+	err := q.Order("ledger_entries.effective_date DESC, ledger_entries.created_at DESC").Limit(filter.PageSize).Offset((filter.Page - 1) * filter.PageSize).Find(&rows).Error
 	return rows, total, err
 }
 
@@ -187,6 +212,7 @@ func (r *gormRepository) FindEntryByID(ctx context.Context, entryID string) (*db
 	err := r.db.WithContext(ctx).
 		Preload("Collaborator.Person").
 		Preload("ValueUnit").
+		Preload("Receipt").
 		First(&row, "id = ? AND tenant_id = ?", entryID, defaultTenantID).Error
 	if err != nil {
 		return nil, err

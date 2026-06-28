@@ -512,6 +512,8 @@ type apiOutstandingReceiptListResponse struct {
 			EntryType         string  `json:"entryType"`
 			ValueUnitCode     string  `json:"valueUnitCode"`
 			Amount            float64 `json:"amount"`
+			SourceType        string  `json:"sourceType"`
+			SourceID          string  `json:"sourceId"`
 		} `json:"items"`
 		Total    int `json:"total"`
 		Page     int `json:"page"`
@@ -795,6 +797,42 @@ func TestOutstandingReceiptsListsOnlyUnreturnedActionItems(t *testing.T) {
 	if printedBody.Data.Total != 0 || len(printedBody.Data.Items) != 0 {
 		t.Fatalf("expected no printed receipts, got %+v", printedBody.Data)
 	}
+
+	sourceRes := getJSON(t, server, "/api/v1/receipts/outstanding?sourceType=EXPENSE")
+	defer sourceRes.Body.Close()
+	if sourceRes.StatusCode != http.StatusOK {
+		t.Fatalf("expected source filter status %d, got %d", http.StatusOK, sourceRes.StatusCode)
+	}
+	var sourceBody apiOutstandingReceiptListResponse
+	decodeJSON(t, sourceRes, &sourceBody)
+	if sourceBody.Data.Total != 1 || len(sourceBody.Data.Items) != 1 || sourceBody.Data.Items[0].SourceType != "EXPENSE" || sourceBody.Data.Items[0].SourceID == "" {
+		t.Fatalf("expected one source-filtered expense receipt, got %+v", sourceBody.Data)
+	}
+	if sourceBody.Data.Summary.Total != 1 || sourceBody.Data.Summary.PendingIssue != 1 {
+		t.Fatalf("expected source-scoped summary, got %+v", sourceBody.Data.Summary)
+	}
+
+	collaboratorRes := getJSON(t, server, "/api/v1/receipts/outstanding?collaborator=P1")
+	defer collaboratorRes.Body.Close()
+	if collaboratorRes.StatusCode != http.StatusOK {
+		t.Fatalf("expected collaborator filter status %d, got %d", http.StatusOK, collaboratorRes.StatusCode)
+	}
+	var collaboratorBody apiOutstandingReceiptListResponse
+	decodeJSON(t, collaboratorRes, &collaboratorBody)
+	if collaboratorBody.Data.Total != 1 || len(collaboratorBody.Data.Items) != 1 || collaboratorBody.Data.Items[0].CollaboratorID != collaborator.Data.ID {
+		t.Fatalf("expected collaborator-filtered receipt, got %+v", collaboratorBody.Data)
+	}
+
+	missingCollaboratorRes := getJSON(t, server, "/api/v1/receipts/outstanding?collaborator=no-such-collaborator")
+	defer missingCollaboratorRes.Body.Close()
+	if missingCollaboratorRes.StatusCode != http.StatusOK {
+		t.Fatalf("expected missing collaborator filter status %d, got %d", http.StatusOK, missingCollaboratorRes.StatusCode)
+	}
+	var missingCollaboratorBody apiOutstandingReceiptListResponse
+	decodeJSON(t, missingCollaboratorRes, &missingCollaboratorBody)
+	if missingCollaboratorBody.Data.Total != 0 || missingCollaboratorBody.Data.Summary.Total != 0 {
+		t.Fatalf("expected no collaborator-filtered receipts, got %+v", missingCollaboratorBody.Data)
+	}
 }
 
 func TestCurrentAccountKeepsSeparateBalancesByValueUnit(t *testing.T) {
@@ -920,6 +958,11 @@ func TestCollaboratorCurrentAccountDetailIncludesBalancesAndLedgerEntries(t *tes
 					Amount         float64 `json:"amount"`
 					SignedAmount   float64 `json:"signedAmount"`
 					CorrectionType string  `json:"correctionType"`
+					Receipt        *struct {
+						ID          string `json:"id"`
+						Status      string `json:"status"`
+						Outstanding bool   `json:"outstanding"`
+					} `json:"receipt"`
 				} `json:"items"`
 				Total int `json:"total"`
 			} `json:"ledgerEntries"`
@@ -939,6 +982,32 @@ func TestCollaboratorCurrentAccountDetailIncludesBalancesAndLedgerEntries(t *tes
 	entry := body.Data.LedgerEntries.Items[0]
 	if entry.EntryType != "EXPENSE_DEDUCTION" || entry.Direction != "DEBIT" || entry.ValueUnitCode != "BRL" || entry.Amount != 12.25 || entry.SignedAmount != -12.25 || entry.CorrectionType != "ORIGINAL" {
 		t.Fatalf("unexpected ledger entry: %+v", entry)
+	}
+	if entry.Receipt == nil || entry.Receipt.ID == "" || entry.Receipt.Status != "PENDING_ISSUE" || !entry.Receipt.Outstanding {
+		t.Fatalf("expected pending receipt on ledger entry, got %+v", entry.Receipt)
+	}
+
+	filtered := getJSON(t, server, "/api/v1/collaborators/"+collaborator.Data.ID+"/current-account?direction=DEBIT&outstandingReceipts=true")
+	defer filtered.Body.Close()
+	if filtered.StatusCode != http.StatusOK {
+		t.Fatalf("expected filtered current account status %d, got %d", http.StatusOK, filtered.StatusCode)
+	}
+	var filteredBody struct {
+		Data struct {
+			LedgerEntries struct {
+				Items []struct {
+					Direction string `json:"direction"`
+					Receipt   *struct {
+						Outstanding bool `json:"outstanding"`
+					} `json:"receipt"`
+				} `json:"items"`
+				Total int `json:"total"`
+			} `json:"ledgerEntries"`
+		} `json:"data"`
+	}
+	decodeJSON(t, filtered, &filteredBody)
+	if filteredBody.Data.LedgerEntries.Total != 1 || len(filteredBody.Data.LedgerEntries.Items) != 1 || filteredBody.Data.LedgerEntries.Items[0].Direction != "DEBIT" || filteredBody.Data.LedgerEntries.Items[0].Receipt == nil || !filteredBody.Data.LedgerEntries.Items[0].Receipt.Outstanding {
+		t.Fatalf("unexpected filtered outstanding receipt entries: %+v", filteredBody.Data.LedgerEntries)
 	}
 }
 

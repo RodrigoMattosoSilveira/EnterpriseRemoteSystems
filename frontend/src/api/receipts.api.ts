@@ -10,6 +10,8 @@ import type {
 export function listOutstandingReceipts(filter: OutstandingReceiptListFilter = {}) {
   const params = new URLSearchParams();
   if (filter.status) params.set("status", filter.status);
+  if (filter.collaborator) params.set("collaborator", filter.collaborator);
+  if (filter.sourceType) params.set("sourceType", filter.sourceType);
   if (filter.page) params.set("page", String(filter.page));
   if (filter.pageSize) params.set("pageSize", String(filter.pageSize));
   const query = params.toString();

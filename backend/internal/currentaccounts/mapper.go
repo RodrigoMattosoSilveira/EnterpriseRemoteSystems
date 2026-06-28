@@ -10,7 +10,7 @@ import (
 const dateLayout = "2006-01-02"
 
 func ToLedgerEntryDTO(row db.LedgerEntry) LedgerEntryDTO {
-	return LedgerEntryDTO{
+	dto := LedgerEntryDTO{
 		ID:                   row.ID,
 		TenantID:             row.TenantID,
 		CollaboratorID:       row.CollaboratorID,
@@ -39,6 +39,22 @@ func ToLedgerEntryDTO(row db.LedgerEntry) LedgerEntryDTO {
 		SecondApprovalNotes:  row.SecondApprovalNotes,
 		CreatedAt:            row.CreatedAt.UTC().Format(time.RFC3339),
 		UpdatedAt:            row.UpdatedAt.UTC().Format(time.RFC3339),
+	}
+	if row.Receipt != nil {
+		dto.Receipt = ToLedgerEntryReceiptDTO(*row.Receipt)
+	}
+	return dto
+}
+
+func ToLedgerEntryReceiptDTO(row db.LedgerReceipt) *LedgerEntryReceiptDTO {
+	return &LedgerEntryReceiptDTO{
+		ID:                row.ID,
+		ReceiptNumber:     receiptNumber(row.ReceiptNumber),
+		Status:            strings.TrimSpace(row.Status),
+		Outstanding:       receiptOutstanding(row.Status),
+		PrintedAt:         formatOptionalTime(row.PrintedAt),
+		ReturnedAt:        formatOptionalTime(row.ReturnedAt),
+		SignedDocumentRef: strings.TrimSpace(row.SignedDocumentRef),
 	}
 }
 
@@ -92,6 +108,22 @@ func formatDate(value time.Time) string {
 		return ""
 	}
 	return value.Format(dateLayout)
+}
+
+func receiptNumber(value *string) string {
+	if value == nil {
+		return ""
+	}
+	return strings.TrimSpace(*value)
+}
+
+func receiptOutstanding(status string) bool {
+	switch strings.ToUpper(strings.TrimSpace(status)) {
+	case "PENDING_ISSUE", "ISSUED", "PRINTED", "SIGNED":
+		return true
+	default:
+		return false
+	}
 }
 
 func stringPtrValue(value *string) string {
