@@ -144,6 +144,7 @@ test("user sees an error when creating a Person with a duplicate CPF", async ({ 
   await page.getByLabel("RG").fill(validRG(suffix));
   await page.getByLabel("Cellular").fill(validBrazilianCellular(suffix));
   await page.getByLabel("Email").fill(`duplicate-${suffix}@example.com`);
+  await page.getByLabel("Status *").selectOption(ACTIVE_STATUS_ID);
 
   await page.getByRole("button", { name: "Create Person" }).click();
 
@@ -158,6 +159,7 @@ test("user sees an error when creating a Person with a duplicate CPF", async ({ 
   await page.getByLabel("RG").fill(`RG-DUP-${suffix}`);
   await page.getByLabel("Cellular").fill(secondCellular);
   await page.getByLabel("Email").fill(`duplicate-again-${suffix}@example.com`);
+  await page.getByLabel("Status *").selectOption(ACTIVE_STATUS_ID);
 
   await page.getByRole("button", { name: "Create Person" }).click();
 
