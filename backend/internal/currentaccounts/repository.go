@@ -18,6 +18,7 @@ type Repository interface {
 	MarkReceiptPrinted(ctx context.Context, receiptID, printedBy string, printedAt time.Time) (*db.LedgerReceipt, error)
 	MarkReceiptReturned(ctx context.Context, receiptID, receivedBy, signedDocumentRef, notes string, returnedAt time.Time) (*db.LedgerReceipt, error)
 	ListEntries(ctx context.Context, collaboratorID string, filter normalizedLedgerEntryListFilter) ([]db.LedgerEntry, int64, error)
+	FindWorkPeriodAssignmentSourceDetails(ctx context.Context, assignmentIDs []string) (map[string]WorkPeriodAssignmentSourceDetail, error)
 	ListBalances(ctx context.Context, collaboratorID string) ([]BalanceRow, error)
 	FindCollaboratorByID(ctx context.Context, collaboratorID string) (*db.CollaboratorJourney, error)
 	FindCollaboratorTenantID(ctx context.Context, collaboratorID string) (string, error)
@@ -83,4 +84,12 @@ type AccrualProjectionRow struct {
 	GoldGramAmount  float64
 	WorkPeriodDates int
 	PendingItems    int64
+}
+
+type WorkPeriodAssignmentSourceDetail struct {
+	AssignmentID   string
+	WorkPeriodID   string
+	WorkDate       time.Time
+	PeriodCode     string
+	WorkPeriodName string
 }

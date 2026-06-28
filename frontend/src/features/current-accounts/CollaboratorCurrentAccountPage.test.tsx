@@ -63,6 +63,18 @@ describe("CollaboratorCurrentAccountPage", () => {
     ).toBe(true);
   });
 
+  it("shows earning source details and links back to the Work Period", async () => {
+    mockCurrentAccountFetch();
+
+    renderCurrentAccountPage("/collaborators/collab-1/current-account?filter=earnings");
+
+    await waitForText("earning credit");
+    await waitForText("Work Period 2026-06-05 · 06:00-18:00 · Assignment assign-1");
+
+    expect(container.querySelector('a[href="/work-periods/wp-1"]')).not.toBeNull();
+    expect(container.textContent).toContain("Open Work Period");
+  });
+
   it("filters to outstanding receipt ledger entries", async () => {
     mockCurrentAccountFetch();
 
@@ -87,58 +99,93 @@ function mockCurrentAccountFetch() {
     fetchCalls.push({ url, method: methodOf(init) });
 
     if (url.startsWith("/api/v1/collaborators/collab-1/current-account")) {
-      return jsonResponse({ data: currentAccountDetail });
+      if (url.includes("sourceType=WORK_PERIOD_ASSIGNMENT")) {
+        return jsonResponse({ data: currentAccountDetailWith([earningEntry]) });
+      }
+      if (url.includes("outstandingReceipts=true")) {
+        return jsonResponse({ data: currentAccountDetailWith([expenseEntry]) });
+      }
+      return jsonResponse({ data: currentAccountDetailWith([expenseEntry, earningEntry]) });
     }
 
     throw new Error(`Unhandled request: ${methodOf(init)} ${url}`);
   });
 }
 
-const currentAccountDetail: CurrentAccountDetail = {
-  collaboratorId: "collab-1",
-  collaboratorLabel: "Maria",
-  balances: [
-    {
-      collaboratorId: "collab-1",
-      collaboratorLabel: "Maria",
-      valueUnitId: "ref-value-unit-brl",
-      valueUnitCode: "BRL",
-      valueUnitLabel: "Brazilian Real",
-      balance: -42.5,
-    },
-  ],
-  ledgerEntries: {
-    items: [
+function currentAccountDetailWith(
+  items: CurrentAccountDetail["ledgerEntries"]["items"],
+): CurrentAccountDetail {
+  return {
+    collaboratorId: "collab-1",
+    collaboratorLabel: "Maria",
+    balances: [
       {
-        id: "ledger-1",
-        tenantId: "default",
         collaboratorId: "collab-1",
+        collaboratorLabel: "Maria",
         valueUnitId: "ref-value-unit-brl",
         valueUnitCode: "BRL",
         valueUnitLabel: "Brazilian Real",
-        entryType: "EXPENSE_DEDUCTION",
-        direction: "DEBIT",
-        amount: 42.5,
-        signedAmount: -42.5,
-        effectiveDate: "2026-06-27",
-        sourceType: "EXPENSE",
-        sourceId: "expense-1",
-        active: true,
-        correctionType: "ORIGINAL",
-        createdAt: "2026-06-27T00:00:00Z",
-        updatedAt: "2026-06-27T00:00:00Z",
-        receipt: {
-          id: "receipt-1",
-          receiptNumber: "R-1",
-          status: "PENDING_ISSUE",
-          outstanding: true,
-        },
+        balance: -42.5,
       },
     ],
-    total: 1,
-    page: 1,
-    pageSize: 25,
+    ledgerEntries: {
+      items,
+      total: items.length,
+      page: 1,
+      pageSize: 25,
+    },
+  };
+}
+
+const expenseEntry: CurrentAccountDetail["ledgerEntries"]["items"][number] = {
+  id: "ledger-1",
+  tenantId: "default",
+  collaboratorId: "collab-1",
+  valueUnitId: "ref-value-unit-brl",
+  valueUnitCode: "BRL",
+  valueUnitLabel: "Brazilian Real",
+  entryType: "EXPENSE_DEDUCTION",
+  direction: "DEBIT",
+  amount: 42.5,
+  signedAmount: -42.5,
+  effectiveDate: "2026-06-27",
+  sourceType: "EXPENSE",
+  sourceId: "expense-1",
+  active: true,
+  correctionType: "ORIGINAL",
+  createdAt: "2026-06-27T00:00:00Z",
+  updatedAt: "2026-06-27T00:00:00Z",
+  receipt: {
+    id: "receipt-1",
+    receiptNumber: "R-1",
+    status: "PENDING_ISSUE",
+    outstanding: true,
   },
+};
+
+const earningEntry: CurrentAccountDetail["ledgerEntries"]["items"][number] = {
+  id: "ledger-earning-1",
+  tenantId: "default",
+  collaboratorId: "collab-1",
+  valueUnitId: "ref-value-unit-brl",
+  valueUnitCode: "BRL",
+  valueUnitLabel: "Brazilian Real",
+  entryType: "EARNING_CREDIT",
+  direction: "CREDIT",
+  amount: 150,
+  signedAmount: 150,
+  effectiveDate: "2026-06-05",
+  sourceType: "WORK_PERIOD_ASSIGNMENT",
+  sourceId: "assign-1",
+  sourceLabel: "Work Period 2026-06-05 · 06:00-18:00",
+  sourceWorkPeriodId: "wp-1",
+  sourceWorkDate: "2026-06-05",
+  sourceWorkPeriodName: "06:00-18:00",
+  description: "Daily BRL earning for Maria",
+  active: true,
+  correctionType: "ORIGINAL",
+  createdAt: "2026-06-05T00:00:00Z",
+  updatedAt: "2026-06-05T00:00:00Z",
 };
 
 function renderCurrentAccountPage(initialEntry: string) {
