@@ -117,6 +117,86 @@ describe("AccrualTab", () => {
     expect(container.textContent).toContain("Run Accrual");
     expect(container.textContent).toContain("Maria");
   });
+
+  it("shows posted accrual items as visible in Current Account earnings", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url.includes("gold-production-entries"))
+          return response({ items: [], total: 0, page: 1, pageSize: 100 });
+        if (url.includes("/work-periods/wp-1/accrual-runs"))
+          return response({
+            items: [
+              {
+                id: "run-posted-1",
+                tenantId: "default",
+                workPeriodId: "wp-1",
+                status: "POSTED",
+                accrualDate: "2026-06-07",
+                summary: {
+                  totalItems: 1,
+                  readyItems: 0,
+                  pendingItems: 0,
+                  skippedItems: 0,
+                  postedItems: 1,
+                },
+                createdAt: "x",
+                updatedAt: "x",
+              },
+            ],
+            total: 1,
+            page: 1,
+            pageSize: 100,
+          });
+        if (url.includes("/accrual-runs/run-posted-1/items"))
+          return response({
+            items: [
+              {
+                id: "item-posted-1",
+                tenantId: "default",
+                accrualRunId: "run-posted-1",
+                workPeriodId: "wp-1",
+                workPeriodAssignmentId: "assign-1",
+                collaboratorId: "collab-1",
+                collaboratorName: "Maria",
+                calculationType: "DAILY_BRL",
+                direction: "CREDIT",
+                brlAmount: 150,
+                status: "POSTED",
+                createdAt: "x",
+                updatedAt: "x",
+              },
+            ],
+            total: 1,
+            page: 1,
+            pageSize: 500,
+          });
+        throw new Error(`Unhandled request ${url}`);
+      }),
+    );
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    await act(async () => {
+      root = createRoot(container);
+      root.render(
+        <QueryClientProvider client={queryClient}>
+          <AccrualTab workPeriod={period} locations={locations} />
+        </QueryClientProvider>,
+      );
+    });
+
+    await waitForText("Posted items are now visible in Current Accounts.");
+    await waitForText("Posted earning credit");
+    await waitForText("View in Current Account");
+
+    const link = container.querySelector<HTMLAnchorElement>(
+      'a[href="/collaborators/collab-1/current-account?filter=earnings"]',
+    );
+    expect(link).not.toBeNull();
+  });
+
 });
 
 function response(data: unknown) {

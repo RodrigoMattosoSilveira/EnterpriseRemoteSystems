@@ -306,6 +306,13 @@ function AccrualRunPanel({
             <Summary label="Posted" value={selectedRun.summary.postedItems} />
             <Summary label="Skipped" value={selectedRun.summary.skippedItems} />
           </div>
+          {selectedRun.summary.postedItems > 0 ? (
+            <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900">
+              <strong>Posted items are now visible in Current Accounts.</strong>{" "}
+              Use the row links below to verify each posted earning credit or
+              transfer in the collaborator ledger.
+            </div>
+          ) : null}
           <div className="flex flex-wrap gap-2">
             <button
               onClick={() => onRecalculate(selectedRun.id)}
@@ -365,6 +372,7 @@ function AccrualItemsTable({ items }: { items: AccrualItem[] }) {
             <th className="px-2 py-3">Gold</th>
             <th className="px-2 py-3">Status</th>
             <th className="px-2 py-3">Pending reason</th>
+            <th className="px-2 py-3">Ledger visibility</th>
           </tr>
         </thead>
         <tbody>
@@ -395,10 +403,49 @@ function AccrualItemsTable({ items }: { items: AccrualItem[] }) {
                   ? humanizePlanningCode(item.pendingReason)
                   : "—"}
               </td>
+              <td className="px-2 py-3">
+                <div className="flex flex-col gap-1">
+                  <span className="text-xs font-semibold text-gray-600">
+                    {ledgerVisibilityLabel(item)}
+                  </span>
+                  <a
+                    className="text-sm font-semibold text-gray-900 underline"
+                    href={currentAccountHref(item)}
+                  >
+                    {item.status === "POSTED"
+                      ? "View in Current Account"
+                      : "Open Current Account"}
+                  </a>
+                </div>
+              </td>
             </tr>
           ))}
         </tbody>
       </table>
     </div>
+  );
+}
+
+function currentAccountHref(item: AccrualItem) {
+  const base = `/collaborators/${encodeURIComponent(item.collaboratorId)}/current-account`;
+  return isAssignmentEarning(item) ? `${base}?filter=earnings` : base;
+}
+
+function ledgerVisibilityLabel(item: AccrualItem) {
+  if (item.status === "POSTED") {
+    return isAssignmentEarning(item)
+      ? "Posted earning credit"
+      : "Posted ledger entry";
+  }
+  if (item.status === "READY") return "Ready to post";
+  if (item.status === "PENDING") return "Waiting for input";
+  return humanizePlanningCode(item.status);
+}
+
+function isAssignmentEarning(item: AccrualItem) {
+  return (
+    item.direction === "CREDIT" &&
+    Boolean(item.workPeriodAssignmentId) &&
+    !item.calculationType.toUpperCase().includes("REPLACEMENT")
   );
 }

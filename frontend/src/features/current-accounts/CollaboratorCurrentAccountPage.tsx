@@ -245,7 +245,7 @@ function LedgerEntryRow({ entry }: { entry: LedgerEntry }) {
           {formatAmount(entry.signedAmount, entry.valueUnitCode || entry.valueUnitLabel)} · Effective {entry.effectiveDate}
         </p>
         <p className="mt-1 text-xs text-gray-500">
-          Source: {entry.sourceType} · {entry.sourceId}
+          Source: {sourceLabel(entry)}
         </p>
         {entry.description ? (
           <p className="mt-1 text-sm text-gray-600">{entry.description}</p>
@@ -263,7 +263,7 @@ function LedgerEntryRow({ entry }: { entry: LedgerEntry }) {
       <div className="flex flex-wrap gap-2 md:justify-end">
         {sourceLink(entry) ? (
           <Link className="rounded-xl border px-4 py-2 text-sm font-semibold" to={sourceLink(entry)!}>
-            Open source
+            {sourceActionLabel(entry)}
           </Link>
         ) : null}
         {receipt || entry.direction === "DEBIT" ? (
@@ -280,7 +280,29 @@ function sourceLink(entry: LedgerEntry) {
   if (entry.sourceType === "EXPENSE" && entry.sourceId) {
     return `/expenses/${entry.sourceId}`;
   }
+  if (entry.sourceType === "WORK_PERIOD_ASSIGNMENT" && entry.sourceWorkPeriodId) {
+    return `/work-periods/${entry.sourceWorkPeriodId}`;
+  }
   return "";
+}
+
+function sourceActionLabel(entry: LedgerEntry) {
+  if (entry.sourceType === "WORK_PERIOD_ASSIGNMENT") {
+    return "Open Work Period";
+  }
+  return "Open source";
+}
+
+function sourceLabel(entry: LedgerEntry) {
+  if (entry.sourceLabel) {
+    return `${entry.sourceLabel} · Assignment ${shortId(entry.sourceId)}`;
+  }
+  return `${entry.sourceType} · ${entry.sourceId}`;
+}
+
+function shortId(value: string) {
+  if (!value) return "—";
+  return value.length <= 12 ? value : `${value.slice(0, 8)}…`;
 }
 
 function formatAmount(value: number, unit?: string) {

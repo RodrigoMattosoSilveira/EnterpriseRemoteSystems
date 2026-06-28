@@ -36,6 +36,10 @@ type LedgerEntryDTO struct {
 	EffectiveDate        string                 `json:"effectiveDate"`
 	SourceType           string                 `json:"sourceType"`
 	SourceID             string                 `json:"sourceId"`
+	SourceLabel          string                 `json:"sourceLabel,omitempty"`
+	SourceWorkPeriodID   string                 `json:"sourceWorkPeriodId,omitempty"`
+	SourceWorkDate       string                 `json:"sourceWorkDate,omitempty"`
+	SourceWorkPeriodName string                 `json:"sourceWorkPeriodName,omitempty"`
 	Description          string                 `json:"description,omitempty"`
 	Active               bool                   `json:"active"`
 	CorrectionType       string                 `json:"correctionType"`
