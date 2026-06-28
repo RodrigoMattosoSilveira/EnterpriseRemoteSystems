@@ -10,6 +10,10 @@ import type { Person } from "../../types/people";
 import type { ReferenceDataItem } from "../../types/referenceData";
 import { usePeople } from "../people/usePeople";
 import { useReferenceDataByType } from "../reference-data/useReferenceData";
+import {
+  paymentValueInputConfig,
+  validatePaymentValueInput,
+} from "./paymentValue";
 import { useCollaborators, useCreateCollaborator } from "./useCollaborators";
 
 type FormState = {
@@ -38,7 +42,10 @@ const initialForm: FormState = {
 
 export function CreateCollaboratorPage() {
   const navigate = useNavigate();
-  const peopleQuery = usePeople({ canCreateCollaborator: true, pageSize: 1000 });
+  const peopleQuery = usePeople({
+    canCreateCollaborator: true,
+    pageSize: 1000,
+  });
   const paymentMethodsQuery = useReferenceDataByType("method");
   const sectorsQuery = useReferenceDataByType("sector");
   const locationsQuery = useReferenceDataByType("location");
@@ -102,6 +109,16 @@ export function CreateCollaboratorPage() {
     () => activeOptions(paymentMethodsQuery.data),
     [paymentMethodsQuery.data],
   );
+  const selectedPaymentMethod = paymentMethodsQuery.data?.find(
+    (item) => item.id === form.paymentMethodId,
+  );
+  const paymentValueConfig = paymentValueInputConfig(
+    selectedPaymentMethod?.code,
+  );
+  const paymentValueValidation = validatePaymentValueInput(
+    form.paymentValue,
+    paymentValueConfig,
+  );
   const sectorOptions = useMemo(
     () => activeOptions(sectorsQuery.data),
     [sectorsQuery.data],
@@ -157,7 +174,7 @@ export function CreateCollaboratorPage() {
     createMutation.error,
   );
 
-  const paymentValue = Number(form.paymentValue);
+  const paymentValue = paymentValueValidation.value;
   const submitRequirements = [
     { met: Boolean(selectedPerson), label: "Select an eligible Person" },
     {
@@ -170,8 +187,8 @@ export function CreateCollaboratorPage() {
     { met: Boolean(form.taskId), label: "Select a task" },
     { met: Boolean(form.paymentMethodId), label: "Select a payment method" },
     {
-      met: Number.isFinite(paymentValue) && paymentValue > 0,
-      label: "Enter a payment value greater than zero",
+      met: paymentValueValidation.valid,
+      label: paymentValueValidation.message || "Enter a valid payment value",
     },
     {
       met: !hasMissingActiveReferenceData,
@@ -459,9 +476,11 @@ export function CreateCollaboratorPage() {
                 <Input
                   label="Payment Value"
                   required
-                  type="number"
-                  min="0.01"
-                  step="0.01"
+                  type="text"
+                  inputMode="decimal"
+                  pattern={paymentValueConfig.pattern}
+                  placeholder={paymentValueConfig.placeholder}
+                  helperText={paymentValueConfig.helperText}
                   value={form.paymentValue}
                   onChange={(value) => update("paymentValue", value)}
                 />
@@ -742,6 +761,9 @@ function Input({
   min,
   step,
   placeholder,
+  inputMode,
+  pattern,
+  helperText,
 }: {
   label: string;
   value: string;
@@ -751,6 +773,9 @@ function Input({
   min?: string;
   step?: string;
   placeholder?: string;
+  inputMode?: "decimal" | "numeric" | "text";
+  pattern?: string;
+  helperText?: string;
 }) {
   return (
     <label className="block text-sm font-medium text-gray-700">
@@ -762,10 +787,17 @@ function Input({
         min={min}
         step={step}
         placeholder={placeholder}
+        inputMode={inputMode}
+        pattern={pattern}
         value={value}
         onChange={(event) => onChange(event.target.value)}
         className="mt-1 w-full rounded-xl border border-gray-300 px-3 py-2 shadow-sm focus:border-gray-900 focus:outline-none focus:ring-2 focus:ring-gray-900/10"
       />
+      {helperText && (
+        <span className="mt-1 block text-xs font-normal text-gray-500">
+          {helperText}
+        </span>
+      )}
     </label>
   );
 }

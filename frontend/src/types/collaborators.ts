@@ -14,6 +14,11 @@ export type Collaborator = {
   paymentMethodId: string;
   paymentMethodLabel?: string;
   paymentValue: number;
+  fixedMonthlyBrlAmount?: number;
+  dailyBrlAmount?: number;
+  goldCommissionPercent?: number;
+  timeOffGoldSplitPercent?: number;
+  sickDayOffReplacementGoldGrams?: number;
 
   sectorId: string;
   sectorLabel?: string;
@@ -38,11 +43,30 @@ export type CreateCollaboratorInput = {
   journeyStartDate: string;
   paymentMethodId: string;
   paymentValue: number;
+  fixedMonthlyBrlAmount?: number;
+  dailyBrlAmount?: number;
+  goldCommissionPercent?: number;
+  timeOffGoldSplitPercent?: number;
+  sickDayOffReplacementGoldGrams?: number;
   sectorId: string;
   locationId: string;
   taskId: string;
   statusId: string;
   notes?: string;
+};
+
+export type UpdateCollaboratorInput = {
+  paymentMethodId: string;
+  paymentValue: number;
+  fixedMonthlyBrlAmount?: number;
+  dailyBrlAmount?: number;
+  goldCommissionPercent?: number;
+  timeOffGoldSplitPercent?: number;
+  sickDayOffReplacementGoldGrams?: number;
+  sectorId: string;
+  locationId: string;
+  taskId: string;
+  extensionDays: number;
 };
 
 export type CollaboratorListFilter = {
