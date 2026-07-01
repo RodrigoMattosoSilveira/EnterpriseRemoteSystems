@@ -1,6 +1,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
+import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AccrualTab } from "./AccrualTab";
 import type { WorkPeriod } from "../../types/planning";
@@ -107,13 +108,19 @@ describe("AccrualTab", () => {
     await act(async () => {
       root = createRoot(container);
       root.render(
-        <QueryClientProvider client={queryClient}>
-          <AccrualTab workPeriod={period} locations={locations} />
-        </QueryClientProvider>,
+        <MemoryRouter>
+          <QueryClientProvider client={queryClient}>
+            <AccrualTab workPeriod={period} locations={locations} />
+          </QueryClientProvider>
+        </MemoryRouter>,
       );
     });
     await waitForText("Gold Production Missing");
-    expect(container.textContent).toContain("Add Production");
+    expect(container.textContent).toContain(
+      "Gold Produced is read-only in Accrual",
+    );
+    expect(container.textContent).toContain("Open Gold Production");
+    expect(container.textContent).not.toContain("Add Production");
     expect(container.textContent).toContain("Run Accrual");
     expect(container.textContent).toContain("Maria");
   });
@@ -181,9 +188,11 @@ describe("AccrualTab", () => {
     await act(async () => {
       root = createRoot(container);
       root.render(
-        <QueryClientProvider client={queryClient}>
-          <AccrualTab workPeriod={period} locations={locations} />
-        </QueryClientProvider>,
+        <MemoryRouter>
+          <QueryClientProvider client={queryClient}>
+            <AccrualTab workPeriod={period} locations={locations} />
+          </QueryClientProvider>
+        </MemoryRouter>,
       );
     });
 
@@ -196,7 +205,6 @@ describe("AccrualTab", () => {
     );
     expect(link).not.toBeNull();
   });
-
 });
 
 function response(data: unknown) {

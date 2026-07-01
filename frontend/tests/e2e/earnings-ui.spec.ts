@@ -136,8 +136,11 @@ test("posted gold commission earnings are visible as gold-gram Current Account c
   });
   await markAssignmentOutcome(request, assignment.id, "WORKED");
 
-  await page.goto(`/work-periods/${workPeriod.id}`);
-  await page.getByRole("button", { name: "Accrual" }).click();
+  await page.goto(`/gold-production?workPeriodId=${workPeriod.id}`);
+  await expect(
+    page.getByRole("heading", { name: "Gold Production", exact: true }),
+  ).toBeVisible();
+  await expect(page.getByLabel("Production date")).toHaveValue(workDate);
 
   await page.getByLabel("Well / Location *").selectOption(LOCATION_MAIN_MINE_ID);
   await page.getByLabel("Gold produced (grams) *").fill("80");
@@ -146,10 +149,16 @@ test("posted gold commission earnings are visible as gold-gram Current Account c
       response.url().includes(`/api/v1/work-periods/${workPeriod.id}/gold-production-entries`) &&
       response.request().method() === "POST",
   );
-  await page.getByRole("button", { name: "Add Production" }).click();
+  await page.getByRole("button", { name: "Record Production" }).click();
   await productionResponse;
 
   await expect(page.getByText("80.00000000 g")).toBeVisible();
+
+  await page.getByRole("link", { name: "Open Accrual" }).click();
+  await expect(page).toHaveURL(`/work-periods/${workPeriod.id}`);
+  await page.getByRole("button", { name: "Accrual" }).click();
+  await expect(page.getByText("Gold Produced is read-only in Accrual.")).toBeVisible();
+  await expect(page.getByText("80.00000000 g").first()).toBeVisible();
 
   await page.getByLabel("Accrual notes").fill(`Gold E2E accrual ${suffix}`);
   const createRunResponse = page.waitForResponse(
