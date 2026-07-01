@@ -58,6 +58,7 @@ export function WorkPeriodsPage() {
           </div>
           <div className="flex gap-2">
             <Link to="/collaborators" className="rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 shadow-sm">Collaborators</Link>
+            <Link to="/gold-production" className="rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 shadow-sm">Gold Production</Link>
             <button onClick={() => setShowCreate((value) => !value)} className="rounded-xl bg-gray-950 px-4 py-2 text-sm font-semibold text-white shadow-sm">{showCreate ? "Close" : "Add Work Period"}</button>
           </div>
         </div>

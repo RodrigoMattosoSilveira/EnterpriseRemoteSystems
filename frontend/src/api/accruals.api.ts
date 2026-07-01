@@ -7,6 +7,7 @@ import type {
   CreateGoldProductionEntryInput,
   GoldProductionEntry,
   GoldProductionEntryListResponse,
+  UpdateGoldProductionEntryInput,
 } from "../types/accruals";
 
 export function listAccrualRuns(
@@ -68,5 +69,15 @@ export function createGoldProductionEntry(
   return apiFetch<GoldProductionEntry>(
     `/work-periods/${encodeURIComponent(workPeriodId)}/gold-production-entries`,
     { method: "POST", body: JSON.stringify(input) },
+  );
+}
+
+export function updateGoldProductionEntry(
+  entryId: string,
+  input: UpdateGoldProductionEntryInput,
+): Promise<GoldProductionEntry> {
+  return apiFetch<GoldProductionEntry>(
+    `/gold-production-entries/${encodeURIComponent(entryId)}`,
+    { method: "PATCH", body: JSON.stringify(input) },
   );
 }
