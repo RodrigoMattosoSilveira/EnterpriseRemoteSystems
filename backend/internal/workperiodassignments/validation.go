@@ -1,6 +1,9 @@
 package workperiodassignments
 
-import "strings"
+import (
+	"fmt"
+	"strings"
+)
 
 type ValidationError struct {
 	Fields map[string]string
@@ -43,6 +46,29 @@ func ValidateUpdateWorkPeriodAssignment(req UpdateWorkPeriodAssignmentRequest) e
 	requireString(fields, "locationId", req.LocationID)
 	requireString(fields, "taskId", req.TaskID)
 	validatePlannedStatus(fields, req.PlannedStatus)
+	if len(fields) > 0 {
+		return ValidationError{Fields: fields}
+	}
+	return nil
+}
+
+func ValidateBulkPlanWorkPeriodAssignments(req BulkPlanWorkPeriodAssignmentsRequest) error {
+	fields := map[string]string{}
+	seen := map[string]bool{}
+	for index, row := range req.Rows {
+		if strings.TrimSpace(row.CollaboratorID) == "" {
+			fields[fmt.Sprintf("rows[%d].collaboratorId", index)] = "Required"
+		} else if seen[strings.TrimSpace(row.CollaboratorID)] {
+			fields[fmt.Sprintf("rows[%d].collaboratorId", index)] = "Collaborator can only appear once"
+		}
+		seen[strings.TrimSpace(row.CollaboratorID)] = true
+
+		if row.Selected {
+			requireString(fields, fmt.Sprintf("rows[%d].sectorId", index), row.SectorID)
+			requireString(fields, fmt.Sprintf("rows[%d].locationId", index), row.LocationID)
+			requireString(fields, fmt.Sprintf("rows[%d].taskId", index), row.TaskID)
+		}
+	}
 	if len(fields) > 0 {
 		return ValidationError{Fields: fields}
 	}

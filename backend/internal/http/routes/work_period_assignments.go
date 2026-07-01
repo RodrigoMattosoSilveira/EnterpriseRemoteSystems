@@ -9,7 +9,9 @@ import (
 func RegisterWorkPeriodAssignmentRoutes(v1 fiber.Router, deps Dependencies) {
 	workPeriods := v1.Group("/work-periods")
 	workPeriods.Get("/:id/assignments", requirePermission(deps, authz.PermissionPlanningRead), deps.WorkPeriodAssignmentHandler.ListByWorkPeriod)
+	workPeriods.Get("/:id/assignments/planning-template", requirePermission(deps, authz.PermissionPlanningRead), deps.WorkPeriodAssignmentHandler.GetPlanningTemplate)
 	workPeriods.Post("/:id/assignments", requirePermission(deps, authz.PermissionPlanningCreate), deps.WorkPeriodAssignmentHandler.Create)
+	workPeriods.Post("/:id/assignments/bulk-plan", requirePermission(deps, authz.PermissionPlanningUpdate), deps.WorkPeriodAssignmentHandler.BulkPlan)
 
 	assignments := v1.Group("/work-period-assignments")
 	assignments.Get("/:assignmentId", requirePermission(deps, authz.PermissionPlanningRead), deps.WorkPeriodAssignmentHandler.GetByID)

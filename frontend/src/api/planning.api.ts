@@ -1,9 +1,12 @@
 import { apiFetch } from "./client";
 import type {
   ActualStatus,
+  BulkPlanWorkPeriodAssignmentsInput,
+  BulkPlanWorkPeriodAssignmentsResult,
   SaveWorkPeriodAssignmentInput,
   WorkPeriodAssignment,
   WorkPeriodAssignmentListResponse,
+  WorkPeriodPlanningTemplate,
 } from "../types/planning";
 
 export function listWorkPeriodAssignments(
@@ -50,5 +53,23 @@ export function deactivateWorkPeriodAssignment(
   return apiFetch<WorkPeriodAssignment>(
     `/work-period-assignments/${encodeURIComponent(assignmentId)}/deactivate`,
     { method: "PATCH" },
+  );
+}
+
+export function getWorkPeriodPlanningTemplate(
+  workPeriodId: string,
+): Promise<WorkPeriodPlanningTemplate> {
+  return apiFetch<WorkPeriodPlanningTemplate>(
+    `/work-periods/${encodeURIComponent(workPeriodId)}/assignments/planning-template`,
+  );
+}
+
+export function bulkPlanWorkPeriodAssignments(
+  workPeriodId: string,
+  input: BulkPlanWorkPeriodAssignmentsInput,
+): Promise<BulkPlanWorkPeriodAssignmentsResult> {
+  return apiFetch<BulkPlanWorkPeriodAssignmentsResult>(
+    `/work-periods/${encodeURIComponent(workPeriodId)}/assignments/bulk-plan`,
+    { method: "POST", body: JSON.stringify(input) },
   );
 }
