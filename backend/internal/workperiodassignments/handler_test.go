@@ -82,6 +82,140 @@ type apiAssignmentListResponse struct {
 	} `json:"data"`
 }
 
+type apiPlanningTemplateRow struct {
+	AssignmentID         string `json:"assignmentId"`
+	TemplateAssignmentID string `json:"templateAssignmentId"`
+	CollaboratorID       string `json:"collaboratorId"`
+	CollaboratorName     string `json:"collaboratorName"`
+	CollaboratorNickname string `json:"collaboratorNickname"`
+	ProjectedEndDate     string `json:"projectedEndDate"`
+	Selected             bool   `json:"selected"`
+	SectorID             string `json:"sectorId"`
+	LocationID           string `json:"locationId"`
+	TaskID               string `json:"taskId"`
+}
+
+type apiPlanningTemplateResponse struct {
+	Data struct {
+		WorkPeriodID       string                   `json:"workPeriodId"`
+		SourceWorkPeriodID string                   `json:"sourceWorkPeriodId"`
+		SourceWorkDate     string                   `json:"sourceWorkDate"`
+		SourcePeriodName   string                   `json:"sourcePeriodName"`
+		Rows               []apiPlanningTemplateRow `json:"rows"`
+	} `json:"data"`
+}
+
+type apiBulkPlanResponse struct {
+	Data struct {
+		SelectedCount int `json:"selectedCount"`
+		Assignments   []struct {
+			ID             string `json:"id"`
+			CollaboratorID string `json:"collaboratorId"`
+			PlannedStatus  string `json:"plannedStatus"`
+			SectorID       string `json:"sectorId"`
+			LocationID     string `json:"locationId"`
+			TaskID         string `json:"taskId"`
+			Active         bool   `json:"active"`
+		} `json:"assignments"`
+	} `json:"data"`
+}
+
+func TestPlanningTemplateUsesMostRecentPriorSamePeriod(t *testing.T) {
+	server, cleanup := newTestServer(t)
+	defer cleanup()
+
+	previous := createWorkPeriod(t, server, map[string]any{
+		"workDate": "2026-06-04",
+		"startsAt": "2026-06-04T06:00:00Z",
+		"endsAt":   "2026-06-04T18:00:00Z",
+	})
+	current := createWorkPeriod(t, server, map[string]any{
+		"workDate": "2026-06-05",
+		"startsAt": "2026-06-05T06:00:00Z",
+		"endsAt":   "2026-06-05T18:00:00Z",
+	})
+	selectedCollaborator := createActiveCollaborator(t, server, 1)
+	unselectedCollaborator := createActiveCollaborator(t, server, 2)
+	previousAssignment := createAssignment(t, server, previous.Data.ID, validAssignmentPayload(selectedCollaborator.Data.ID, map[string]any{"locationId": "ref-location-main-mine"}))
+
+	res := getJSON(t, server, workPeriodsURL+current.Data.ID+"/assignments/planning-template")
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		var body apiErrorResponse
+		decodeJSON(t, res, &body)
+		t.Fatalf("expected template status %d, got %d with error %+v", http.StatusOK, res.StatusCode, body.Error)
+	}
+
+	var body apiPlanningTemplateResponse
+	decodeJSON(t, res, &body)
+	if body.Data.SourceWorkPeriodID != previous.Data.ID || body.Data.SourceWorkDate != "2026-06-04" {
+		t.Fatalf("expected previous period as source, got id=%q date=%q", body.Data.SourceWorkPeriodID, body.Data.SourceWorkDate)
+	}
+	selectedRow := findTemplateRow(body, selectedCollaborator.Data.ID)
+	if selectedRow == nil || !selectedRow.Selected || selectedRow.TemplateAssignmentID != previousAssignment.Data.ID {
+		t.Fatalf("expected selected collaborator templated from previous assignment, got %+v", selectedRow)
+	}
+	unselectedRow := findTemplateRow(body, unselectedCollaborator.Data.ID)
+	if unselectedRow == nil || unselectedRow.Selected {
+		t.Fatalf("expected other active collaborator to be present and unselected, got %+v", unselectedRow)
+	}
+}
+
+func TestBulkPlanSavesSelectedCollaboratorsOnlyAndIgnoresUnselectedRows(t *testing.T) {
+	server, cleanup := newTestServer(t)
+	defer cleanup()
+
+	workPeriod := createWorkPeriod(t, server, nil)
+	first := createActiveCollaborator(t, server, 1)
+	second := createActiveCollaborator(t, server, 2)
+	createAssignment(t, server, workPeriod.Data.ID, validAssignmentPayload(first.Data.ID, nil))
+
+	res := postJSON(t, server, http.MethodPost, workPeriodsURL+workPeriod.Data.ID+"/assignments/bulk-plan", map[string]any{
+		"rows": []map[string]any{
+			{
+				"collaboratorId": first.Data.ID,
+				"selected":       false,
+			},
+			{
+				"collaboratorId": second.Data.ID,
+				"selected":       true,
+				"sectorId":       "ref-sector-mining",
+				"locationId":     "ref-location-main-mine",
+				"taskId":         "ref-task-miner",
+			},
+		},
+	})
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		var body apiErrorResponse
+		decodeJSON(t, res, &body)
+		t.Fatalf("expected bulk-plan status %d, got %d with error %+v", http.StatusOK, res.StatusCode, body.Error)
+	}
+	var body apiBulkPlanResponse
+	decodeJSON(t, res, &body)
+	if body.Data.SelectedCount != 1 || len(body.Data.Assignments) != 1 {
+		t.Fatalf("expected one saved selected assignment, got selected=%d assignments=%d", body.Data.SelectedCount, len(body.Data.Assignments))
+	}
+	if body.Data.Assignments[0].CollaboratorID != second.Data.ID || body.Data.Assignments[0].PlannedStatus != "INCLUDED" || !body.Data.Assignments[0].Active {
+		t.Fatalf("expected active included assignment for second collaborator, got %+v", body.Data.Assignments[0])
+	}
+
+	listRes := getJSON(t, server, workPeriodsURL+workPeriod.Data.ID+"/assignments?plannedStatus=INCLUDED")
+	defer listRes.Body.Close()
+	var listBody apiAssignmentListResponse
+	decodeJSON(t, listRes, &listBody)
+	if listBody.Data.Total != 2 {
+		t.Fatalf("expected original current assignment to remain active while selected row is saved, got total=%d items=%+v", listBody.Data.Total, listBody.Data.Items)
+	}
+	activeByCollaborator := map[string]bool{}
+	for _, item := range listBody.Data.Items {
+		activeByCollaborator[item.CollaboratorID] = item.Active
+	}
+	if !activeByCollaborator[first.Data.ID] || !activeByCollaborator[second.Data.ID] {
+		t.Fatalf("expected both original and selected collaborators to remain active, got %+v", listBody.Data.Items)
+	}
+}
+
 func TestCreateWorkPeriodAssignmentReturnsCreated(t *testing.T) {
 	server, cleanup := newTestServer(t)
 	defer cleanup()
@@ -484,6 +618,15 @@ func assertValidationError(t *testing.T, res *http.Response, field string, messa
 	if body.Error.Fields[field] != message {
 		t.Fatalf("expected field %q to be %q, got %q", field, message, body.Error.Fields[field])
 	}
+}
+
+func findTemplateRow(body apiPlanningTemplateResponse, collaboratorID string) *apiPlanningTemplateRow {
+	for index := range body.Data.Rows {
+		if body.Data.Rows[index].CollaboratorID == collaboratorID {
+			return &body.Data.Rows[index]
+		}
+	}
+	return nil
 }
 
 func decodeJSON(t *testing.T, res *http.Response, target any) {

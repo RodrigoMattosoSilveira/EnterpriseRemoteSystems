@@ -8,6 +8,9 @@ import (
 
 type Repository interface {
 	ListByWorkPeriod(ctx context.Context, workPeriodID string, filter normalizedWorkPeriodAssignmentListFilter) ([]db.WorkPeriodAssignment, int64, error)
+	ListActiveAssignmentsForWorkPeriod(ctx context.Context, workPeriodID string) ([]db.WorkPeriodAssignment, error)
+	ListActiveCollaboratorsForPlanning(ctx context.Context) ([]db.CollaboratorJourney, error)
+	FindMostRecentPriorWorkPeriodByCode(ctx context.Context, workPeriod db.WorkPeriod) (*db.WorkPeriod, error)
 	Create(ctx context.Context, assignment *db.WorkPeriodAssignment) error
 	Update(ctx context.Context, assignment *db.WorkPeriodAssignment) error
 	FindByID(ctx context.Context, id string) (*db.WorkPeriodAssignment, error)

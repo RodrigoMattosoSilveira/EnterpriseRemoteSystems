@@ -39,6 +39,177 @@ func (s *service) ListByWorkPeriod(ctx context.Context, workPeriodID string, fil
 	return &WorkPeriodAssignmentListResult{Items: ToDTOList(rows), Total: total, Page: normalized.Page, PageSize: normalized.PageSize}, nil
 }
 
+func (s *service) GetPlanningTemplate(ctx context.Context, workPeriodID string) (*WorkPeriodPlanningTemplateDTO, error) {
+	workPeriod, err := s.repo.FindWorkPeriodByID(ctx, strings.TrimSpace(workPeriodID))
+	if err != nil {
+		return nil, err
+	}
+
+	collaborators, err := s.repo.ListActiveCollaboratorsForPlanning(ctx)
+	if err != nil {
+		return nil, err
+	}
+	currentAssignments, err := s.repo.ListActiveAssignmentsForWorkPeriod(ctx, workPeriod.ID)
+	if err != nil {
+		return nil, err
+	}
+
+	var sourceWorkPeriod *db.WorkPeriod
+	var templateAssignments []db.WorkPeriodAssignment
+	if len(currentAssignments) == 0 {
+		sourceWorkPeriod, err = s.repo.FindMostRecentPriorWorkPeriodByCode(ctx, *workPeriod)
+		if err != nil {
+			return nil, err
+		}
+		if sourceWorkPeriod != nil {
+			templateAssignments, err = s.repo.ListActiveAssignmentsForWorkPeriod(ctx, sourceWorkPeriod.ID)
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+
+	currentByCollaborator := map[string]db.WorkPeriodAssignment{}
+	for _, row := range currentAssignments {
+		currentByCollaborator[row.CollaboratorID] = row
+	}
+	templateByCollaborator := map[string]db.WorkPeriodAssignment{}
+	for _, row := range templateAssignments {
+		templateByCollaborator[row.CollaboratorID] = row
+	}
+
+	rows := make([]WorkPeriodPlanningTemplateRow, 0, len(collaborators))
+	for _, collaborator := range collaborators {
+		planningRow := WorkPeriodPlanningTemplateRow{
+			CollaboratorID:       collaborator.ID,
+			CollaboratorName:     collaboratorName(collaborator),
+			CollaboratorNickname: collaborator.Person.Nickname,
+			ProjectedEndDate:     formatDate(collaborator.ProjectedEndDate),
+			SectorID:             collaborator.SectorID,
+			SectorLabel:          collaborator.Sector.Label,
+			LocationID:           collaborator.LocationID,
+			LocationLabel:        collaborator.Location.Label,
+			TaskID:               collaborator.TaskID,
+			TaskLabel:            collaborator.Task.Label,
+		}
+		if current, ok := currentByCollaborator[collaborator.ID]; ok {
+			planningRow.AssignmentID = current.ID
+			planningRow.Selected = current.PlannedStatus == PlannedStatusIncluded
+			planningRow.SectorID = current.SectorID
+			planningRow.SectorLabel = current.Sector.Label
+			planningRow.LocationID = current.LocationID
+			planningRow.LocationLabel = current.Location.Label
+			planningRow.TaskID = current.TaskID
+			planningRow.TaskLabel = current.Task.Label
+		} else if template, ok := templateByCollaborator[collaborator.ID]; ok {
+			planningRow.TemplateAssignmentID = template.ID
+			planningRow.Selected = template.PlannedStatus == PlannedStatusIncluded
+			planningRow.SectorID = template.SectorID
+			planningRow.SectorLabel = template.Sector.Label
+			planningRow.LocationID = template.LocationID
+			planningRow.LocationLabel = template.Location.Label
+			planningRow.TaskID = template.TaskID
+			planningRow.TaskLabel = template.Task.Label
+		}
+		rows = append(rows, planningRow)
+	}
+
+	result := WorkPeriodPlanningTemplateDTO{
+		WorkPeriodID: workPeriod.ID,
+		Rows:         rows,
+	}
+	if sourceWorkPeriod != nil {
+		result.SourceWorkPeriodID = sourceWorkPeriod.ID
+		result.SourceWorkDate = formatDate(sourceWorkPeriod.WorkDate)
+		result.SourcePeriodName = sourceWorkPeriod.Name
+	}
+	return ptr(result), nil
+}
+
+func (s *service) BulkPlan(ctx context.Context, workPeriodID string, req BulkPlanWorkPeriodAssignmentsRequest, actorUserID string) (*BulkPlanWorkPeriodAssignmentsResult, error) {
+	if err := ValidateBulkPlanWorkPeriodAssignments(req); err != nil {
+		return nil, err
+	}
+	workPeriod, err := s.repo.FindWorkPeriodByID(ctx, strings.TrimSpace(workPeriodID))
+	if err != nil {
+		return nil, err
+	}
+	if err := ensureEditableWorkPeriod(*workPeriod); err != nil {
+		return nil, err
+	}
+	currentAssignments, err := s.repo.ListActiveAssignmentsForWorkPeriod(ctx, workPeriod.ID)
+	if err != nil {
+		return nil, err
+	}
+	currentByCollaborator := map[string]db.WorkPeriodAssignment{}
+	for _, row := range currentAssignments {
+		currentByCollaborator[row.CollaboratorID] = row
+	}
+
+	now := time.Now().UTC()
+	savedAssignments := []db.WorkPeriodAssignment{}
+	selectedCount := 0
+	for _, row := range req.Rows {
+		collaboratorID := strings.TrimSpace(row.CollaboratorID)
+		if !row.Selected {
+			continue
+		}
+		selectedCount++
+		if err := s.validateCollaborator(ctx, collaboratorID); err != nil {
+			return nil, err
+		}
+		if err := s.validateReplacementAssignment(ctx, strings.TrimSpace(row.ReplacementForAssignmentID), ""); err != nil {
+			return nil, err
+		}
+		if err := s.validateReference(ctx, "sectorId", row.SectorID, "sector", "Sector must be active reference data of type sector"); err != nil {
+			return nil, err
+		}
+		if err := s.validateReference(ctx, "locationId", row.LocationID, "location", "Location must be active reference data of type location"); err != nil {
+			return nil, err
+		}
+		if err := s.validateReference(ctx, "taskId", row.TaskID, "task", "Task must be active reference data of type task"); err != nil {
+			return nil, err
+		}
+
+		if existing, ok := currentByCollaborator[collaboratorID]; ok {
+			existing.PlannedStatus = PlannedStatusIncluded
+			existing.ReplacementForAssignmentID = stringPtrOrNil(row.ReplacementForAssignmentID)
+			existing.SectorID = strings.TrimSpace(row.SectorID)
+			existing.LocationID = strings.TrimSpace(row.LocationID)
+			existing.TaskID = strings.TrimSpace(row.TaskID)
+			existing.Active = true
+			existing.UpdatedAt = now
+			if err := s.repo.Update(ctx, &existing); err != nil {
+				return nil, err
+			}
+			savedAssignments = append(savedAssignments, existing)
+			continue
+		}
+
+		assignment := &db.WorkPeriodAssignment{
+			BaseModel:                  db.BaseModel{ID: ids.New(), CreatedAt: now, UpdatedAt: now},
+			TenantID:                   defaultTenantID,
+			WorkPeriodID:               workPeriod.ID,
+			CollaboratorID:             collaboratorID,
+			PlannedStatus:              PlannedStatusIncluded,
+			ReplacementForAssignmentID: stringPtrOrNil(row.ReplacementForAssignmentID),
+			SectorID:                   strings.TrimSpace(row.SectorID),
+			LocationID:                 strings.TrimSpace(row.LocationID),
+			TaskID:                     strings.TrimSpace(row.TaskID),
+			Active:                     true,
+		}
+		if err := s.repo.Create(ctx, assignment); err != nil {
+			return nil, err
+		}
+		savedAssignments = append(savedAssignments, *assignment)
+	}
+
+	return ptr(BulkPlanWorkPeriodAssignmentsResult{
+		Assignments:   ToDTOList(savedAssignments),
+		SelectedCount: selectedCount,
+	}), nil
+}
+
 func (s *service) Create(ctx context.Context, workPeriodID string, req CreateWorkPeriodAssignmentRequest, actorUserID string) (*WorkPeriodAssignmentDTO, error) {
 	if err := ValidateCreateWorkPeriodAssignment(req); err != nil {
 		return nil, err
@@ -314,6 +485,13 @@ func stringPtrOrNil(value string) *string {
 		return nil
 	}
 	return &trimmed
+}
+
+func formatDate(value time.Time) string {
+	if value.IsZero() {
+		return ""
+	}
+	return value.UTC().Format("2006-01-02")
 }
 
 func ptr[T any](value T) *T { return &value }
