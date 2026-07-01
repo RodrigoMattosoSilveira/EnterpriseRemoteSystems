@@ -76,17 +76,18 @@ type UpdateExpenseRequest struct {
 }
 
 type ExpenseListFilter struct {
-	CollaboratorID    string `query:"collaboratorId"`
-	ExpenseCategoryID string `query:"expenseCategoryId"`
-	ValueUnitID       string `query:"valueUnitId"`
-	ItemType          string `query:"itemType"`
-	PriceListItemID   string `query:"priceListItemId"`
-	CurrencyCode      string `query:"currencyCode"`
-	DateFrom          string `query:"dateFrom"`
-	DateTo            string `query:"dateTo"`
-	IncludeInactive   bool   `query:"includeInactive"`
-	Page              int    `query:"page"`
-	PageSize          int    `query:"pageSize"`
+	CollaboratorID     string `query:"collaboratorId"`
+	CollaboratorSearch string `query:"collaboratorSearch"`
+	ExpenseCategoryID  string `query:"expenseCategoryId"`
+	ValueUnitID        string `query:"valueUnitId"`
+	ItemType           string `query:"itemType"`
+	PriceListItemID    string `query:"priceListItemId"`
+	CurrencyCode       string `query:"currencyCode"`
+	DateFrom           string `query:"dateFrom"`
+	DateTo             string `query:"dateTo"`
+	IncludeInactive    bool   `query:"includeInactive"`
+	Page               int    `query:"page"`
+	PageSize           int    `query:"pageSize"`
 }
 
 type ExpenseListResult struct {

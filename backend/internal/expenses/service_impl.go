@@ -447,15 +447,16 @@ func normalizeListFilter(filter ExpenseListFilter) (normalizedExpenseListFilter,
 	}
 
 	out := normalizedExpenseListFilter{
-		CollaboratorID:    strings.TrimSpace(filter.CollaboratorID),
-		ExpenseCategoryID: strings.TrimSpace(filter.ExpenseCategoryID),
-		ValueUnitID:       strings.TrimSpace(filter.ValueUnitID),
-		ItemType:          normalizeItemType(filter.ItemType),
-		PriceListItemID:   strings.TrimSpace(filter.PriceListItemID),
-		CurrencyCode:      normalizeCurrencyCode(filter.CurrencyCode),
-		IncludeInactive:   filter.IncludeInactive,
-		Page:              page,
-		PageSize:          pageSize,
+		CollaboratorID:     strings.TrimSpace(filter.CollaboratorID),
+		CollaboratorSearch: strings.TrimSpace(filter.CollaboratorSearch),
+		ExpenseCategoryID:  strings.TrimSpace(filter.ExpenseCategoryID),
+		ValueUnitID:        strings.TrimSpace(filter.ValueUnitID),
+		ItemType:           normalizeItemType(filter.ItemType),
+		PriceListItemID:    strings.TrimSpace(filter.PriceListItemID),
+		CurrencyCode:       normalizeCurrencyCode(filter.CurrencyCode),
+		IncludeInactive:    filter.IncludeInactive,
+		Page:               page,
+		PageSize:           pageSize,
 	}
 
 	if strings.TrimSpace(filter.DateFrom) != "" {

@@ -20,7 +20,7 @@ func (r *gormRepository) List(ctx context.Context, filter normalizedExpenseListF
 
 	q := r.db.WithContext(ctx).
 		Model(&db.Expense{}).
-		Where("tenant_id = ?", defaultTenantID).
+		Where("expenses.tenant_id = ?", defaultTenantID).
 		Preload("Collaborator.Person").
 		Preload("ExpenseCategory").
 		Preload("ValueUnit").
@@ -28,43 +28,68 @@ func (r *gormRepository) List(ctx context.Context, filter normalizedExpenseListF
 		Preload("GoldPrice")
 
 	if !filter.IncludeInactive {
-		q = q.Where("active = ?", true)
+		q = q.Where("expenses.active = ?", true)
 	}
 	if filter.CollaboratorID != "" {
-		q = q.Where("collaborator_id = ?", filter.CollaboratorID)
+		q = q.Where("expenses.collaborator_id = ?", filter.CollaboratorID)
+	}
+	if filter.CollaboratorSearch != "" {
+		q = applyCollaboratorSearchFilter(q, filter.CollaboratorSearch)
 	}
 	if filter.ExpenseCategoryID != "" {
-		q = q.Where("expense_category_id = ?", filter.ExpenseCategoryID)
+		q = q.Where("expenses.expense_category_id = ?", filter.ExpenseCategoryID)
 	}
 	if filter.ValueUnitID != "" {
-		q = q.Where("value_unit_id = ?", filter.ValueUnitID)
+		q = q.Where("expenses.value_unit_id = ?", filter.ValueUnitID)
 	}
 	if filter.ItemType != "" {
 		q = applyItemTypeFilter(q, filter.ItemType)
 	}
 	if filter.PriceListItemID != "" {
-		q = q.Where("price_list_item_id = ?", filter.PriceListItemID)
+		q = q.Where("expenses.price_list_item_id = ?", filter.PriceListItemID)
 	}
 	if filter.CurrencyCode != "" {
-		q = q.Where("currency_code = ?", filter.CurrencyCode)
+		q = q.Where("expenses.currency_code = ?", filter.CurrencyCode)
 	}
 	if filter.DateFrom != nil {
-		q = q.Where("expense_date >= ?", formatDateForQuery(*filter.DateFrom))
+		q = q.Where("expenses.expense_date >= ?", formatDateForQuery(*filter.DateFrom))
 	}
 	if filter.DateTo != nil {
 		// Use an exclusive next-day upper bound instead of <= YYYY-MM-DD.
 		// GORM/SQLite can persist date values with a midnight time component,
 		// and lexical comparison against the bare date string can exclude
 		// same-day rows in runtime/CI databases.
-		q = q.Where("expense_date < ?", formatDateForQuery(filter.DateTo.AddDate(0, 0, 1)))
+		q = q.Where("expenses.expense_date < ?", formatDateForQuery(filter.DateTo.AddDate(0, 0, 1)))
 	}
 
 	if err := q.Count(&total).Error; err != nil {
 		return nil, 0, err
 	}
 
-	err := q.Order("expense_date DESC, created_at DESC").Limit(filter.PageSize).Offset((filter.Page - 1) * filter.PageSize).Find(&rows).Error
+	err := q.Order("expenses.expense_date DESC, expenses.created_at DESC").Limit(filter.PageSize).Offset((filter.Page - 1) * filter.PageSize).Find(&rows).Error
 	return rows, total, err
+}
+
+func applyCollaboratorSearchFilter(q *gorm.DB, search string) *gorm.DB {
+	like := strings.ToLower(strings.TrimSpace(search)) + "%"
+	return q.Where(
+		`EXISTS (
+			SELECT 1
+			FROM collaborator_journeys AS collaborator_search_journeys
+			JOIN people AS collaborator_search_people
+			  ON collaborator_search_people.id = collaborator_search_journeys.person_id
+			 AND collaborator_search_people.tenant_id = collaborator_search_journeys.tenant_id
+			WHERE collaborator_search_journeys.id = expenses.collaborator_id
+			  AND collaborator_search_journeys.tenant_id = expenses.tenant_id
+			  AND (
+				LOWER(COALESCE(collaborator_search_people.first_name, '')) LIKE ?
+				OR LOWER(COALESCE(collaborator_search_people.last_name, '')) LIKE ?
+				OR LOWER(COALESCE(collaborator_search_people.nickname, '')) LIKE ?
+				OR LOWER(COALESCE(collaborator_search_people.first_name, '') || ' ' || COALESCE(collaborator_search_people.last_name, '')) LIKE ?
+			  )
+		)`,
+		like, like, like, like,
+	)
 }
 
 func applyItemTypeFilter(q *gorm.DB, itemType string) *gorm.DB {

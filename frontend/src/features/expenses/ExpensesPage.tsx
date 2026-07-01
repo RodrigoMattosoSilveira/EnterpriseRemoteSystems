@@ -17,18 +17,20 @@ export function ExpensesPage() {
   const location = useLocation();
   const page = parsePositiveInt(searchParams.get("page"), 1);
   const collaboratorId = searchParams.get("collaboratorId") ?? "";
+  const collaboratorSearch = searchParams.get("collaboratorSearch") ?? "";
   const itemType = searchParams.get("itemType") ?? "";
   const priceListItemId = searchParams.get("priceListItemId") ?? "";
 
   const expenseFilter = useMemo<ExpenseListFilter>(
     () => ({
       collaboratorId: collaboratorId || undefined,
+      collaboratorSearch: collaboratorSearch || undefined,
       itemType: itemType || undefined,
       priceListItemId: priceListItemId || undefined,
       page,
       pageSize: EXPENSE_PAGE_SIZE,
     }),
-    [collaboratorId, itemType, page, priceListItemId],
+    [collaboratorId, collaboratorSearch, itemType, page, priceListItemId],
   );
 
   const { data, isLoading, error } = useExpenses(expenseFilter);
@@ -45,15 +47,19 @@ export function ExpensesPage() {
   const totalPages = Math.max(1, Math.ceil(total / responsePageSize));
   const flash = readFlash(location.state);
   const collaboratorOptions = collaboratorData?.items ?? [];
+  const visibleCollaboratorOptions = useMemo(
+    () => filterCollaboratorOptions(collaboratorOptions, collaboratorSearch, collaboratorId),
+    [collaboratorId, collaboratorOptions, collaboratorSearch],
+  );
   const filteredItemOptions = itemType
     ? priceListItems.filter((item) => item.itemType === itemType)
     : priceListItems;
   const selectedPriceListItem = priceListItemId
     ? priceListItems.find((item) => item.id === priceListItemId)
     : undefined;
-  const hasActiveFilters = Boolean(collaboratorId || itemType || priceListItemId);
+  const hasActiveFilters = Boolean(collaboratorId || collaboratorSearch || itemType || priceListItemId);
 
-  function setFilter(key: "collaboratorId" | "itemType" | "priceListItemId", value: string) {
+  function setFilter(key: "collaboratorId" | "collaboratorSearch" | "itemType" | "priceListItemId", value: string) {
     const next = new URLSearchParams(searchParams);
     if (value) {
       next.set(key, value);
@@ -62,6 +68,12 @@ export function ExpensesPage() {
     }
     if (key === "itemType") {
       next.delete("priceListItemId");
+    }
+    if (key === "collaboratorSearch" && value) {
+      next.delete("collaboratorId");
+    }
+    if (key === "collaboratorId" && value) {
+      next.delete("collaboratorSearch");
     }
     next.delete("page");
     setSearchParams(next);
@@ -153,10 +165,25 @@ export function ExpensesPage() {
         <section className="rounded-2xl border bg-white p-4 shadow-sm">
           <div className="mb-4">
             <h2 className="text-lg font-semibold text-gray-950">Filters</h2>
-            <p className="text-sm text-gray-500">Filter expense records by collaborator, category, or item.</p>
+            <p className="text-sm text-gray-500">Filter expense records by collaborator name, nickname, category, or item.</p>
+            <p className="mt-1 text-xs text-gray-500">
+              Start typing a collaborator first name, last name, full name, or nickname to narrow both the expense list and collaborator choices.
+            </p>
           </div>
 
-          <div className="grid min-w-0 items-start gap-4 md:grid-cols-3">
+          <div className="grid min-w-0 items-start gap-4 md:grid-cols-2 lg:grid-cols-4">
+            <label className="grid min-w-0 gap-1 text-sm font-medium text-gray-700">
+              Collaborator name or nickname
+              <input
+                id="expense-collaborator-search"
+                type="search"
+                value={collaboratorSearch}
+                onChange={(event: ChangeEvent<HTMLInputElement>) => setFilter("collaboratorSearch", event.target.value)}
+                placeholder="Search by name or nickname"
+                className="w-full min-w-0 rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm"
+              />
+            </label>
+
             <label className="grid min-w-0 gap-1 text-sm font-medium text-gray-700">
               Collaborator
               <select
@@ -165,7 +192,7 @@ export function ExpensesPage() {
                 className="w-full min-w-0 rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm"
               >
                 <option value="">All collaborators</option>
-                {collaboratorOptions.map((collaborator) => (
+                {visibleCollaboratorOptions.map((collaborator) => (
                   <option key={collaborator.id} value={collaborator.id}>
                     {collaboratorDisplayName(collaborator)}
                   </option>
@@ -235,7 +262,7 @@ export function ExpensesPage() {
             <h2 className="text-lg font-semibold">No expenses found</h2>
             <p className="mt-2 text-sm text-gray-500">
               {hasActiveFilters
-                ? "Adjust the collaborator or item filters to find more expense records."
+                ? "Adjust the collaborator name, collaborator, or item filters to find more expense records."
                 : "Record a Collaborator expense after an active Collaborator exists."}
             </p>
             {!hasActiveFilters && (
@@ -467,7 +494,44 @@ function parsePositiveInt(value: string | null, fallback: number) {
 }
 
 function collaboratorDisplayName(collaborator: Collaborator) {
-  return collaborator.personNickname || collaborator.personName || collaborator.id;
+  const nickname = collaborator.personNickname?.trim() ?? "";
+  const legalName = collaborator.personName?.trim() ?? "";
+
+  if (nickname && legalName && nickname !== legalName) {
+    return `${nickname} · ${legalName}`;
+  }
+  return nickname || legalName || collaborator.id;
+}
+
+function filterCollaboratorOptions(
+  collaborators: Collaborator[],
+  search: string,
+  selectedCollaboratorId: string,
+) {
+  const normalizedSearch = normalizeSearch(search);
+  if (!normalizedSearch) return collaborators;
+
+  return collaborators.filter(
+    (collaborator) =>
+      collaborator.id === selectedCollaboratorId ||
+      collaboratorMatchesSearchPrefix(collaborator, normalizedSearch),
+  );
+}
+
+function collaboratorMatchesSearchPrefix(collaborator: Collaborator, normalizedSearch: string) {
+  const candidates = [
+    collaborator.personNickname,
+    collaborator.personName,
+    ...(collaborator.personName?.split(/\s+/) ?? []),
+  ];
+
+  return candidates.some((candidate) =>
+    normalizeSearch(candidate ?? "").startsWith(normalizedSearch),
+  );
+}
+
+function normalizeSearch(value: string) {
+  return value.trim().toLowerCase();
 }
 
 function priceListItemLabel(item: PriceListItem) {
