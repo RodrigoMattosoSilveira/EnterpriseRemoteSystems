@@ -70,6 +70,7 @@ export type CreateExpenseInput = {
 
 export type ExpenseListFilter = {
   collaboratorId?: string;
+  collaboratorSearch?: string;
   expenseCategoryId?: string;
   valueUnitId?: string;
   itemType?: "CANTEEN" | "ADMINISTRATIVE" | string;
