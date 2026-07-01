@@ -14,6 +14,9 @@ export async function listExpenses(
   if (filter.collaboratorId) {
     searchParams.set("collaboratorId", filter.collaboratorId);
   }
+  if (filter.collaboratorSearch) {
+    searchParams.set("collaboratorSearch", filter.collaboratorSearch);
+  }
   if (filter.expenseCategoryId) {
     searchParams.set("expenseCategoryId", filter.expenseCategoryId);
   }

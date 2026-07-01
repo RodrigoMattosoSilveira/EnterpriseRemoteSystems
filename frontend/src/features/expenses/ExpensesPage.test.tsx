@@ -15,8 +15,9 @@ type FetchCall = {
 };
 
 const collaborators: Collaborator[] = [
-  collaborator("collab-1", "Maria"),
-  collaborator("collab-2", "João"),
+  collaborator("collab-1", "Maria", "Maria Silva"),
+  collaborator("collab-2", "João", "João Santos"),
+  collaborator("collab-3", "Mineiro", "Bruno Costa"),
 ];
 
 const longItemDescription = "DEV Smoke Test Water With A Long Display Name";
@@ -73,13 +74,32 @@ describe("ExpensesPage", () => {
 
     await waitForText("Showing 50 of 520 expense records.");
     await waitForText("Filters");
-    await waitForText("Filter expense records by collaborator, category, or item.");
+    await waitForText("Filter expense records by collaborator name, nickname, category, or item.");
     await waitForText("Page 1 of 11");
 
     await clickButton("Next");
 
     await waitForText("Page 2 of 11");
     expect(fetchCalls.some((call) => call.url === "/api/v1/expenses?page=2&pageSize=50")).toBe(true);
+  });
+
+  it("filters expense pages by collaborator name or nickname", async () => {
+    mockExpensePageFetch();
+
+    renderExpensesPage("/expenses?page=2");
+
+    await waitForText("Showing 50 of 520 expense records.");
+    await changeInput("Collaborator name or nickname", "mineiro");
+
+    await waitForFetchUrl("/api/v1/expenses?collaboratorSearch=mineiro&page=1&pageSize=50");
+    await waitForText("Bruno Mineiro");
+    expect(controlByLabel<HTMLInputElement>("Collaborator name or nickname", "input").value).toBe("mineiro");
+
+    const collaboratorSelectOptions = Array.from(
+      controlByLabel<HTMLSelectElement>("Collaborator", "select").options,
+    ).map((option) => option.textContent?.trim());
+    expect(collaboratorSelectOptions).toContain("Mineiro · Bruno Costa");
+    expect(collaboratorSelectOptions).not.toContain("Maria · Maria Silva");
   });
 
   it("filters expense pages by collaborator and item", async () => {
@@ -164,8 +184,18 @@ function expenseResponse(url: string): ExpenseListResponse {
   const params = new URLSearchParams(url.split("?")[1] ?? "");
   const page = Number(params.get("page") ?? "1");
   const collaboratorId = params.get("collaboratorId");
+  const collaboratorSearch = params.get("collaboratorSearch")?.toLowerCase() ?? "";
   const priceListItemId = params.get("priceListItemId");
   const itemType = params.get("itemType");
+
+  if (collaboratorSearch === "mineiro") {
+    return {
+      items: [expense("expense-filtered-collaborator-search", "collab-3", "Bruno Mineiro", "item-1", "Water", "WATER")],
+      total: 1,
+      page,
+      pageSize: 50,
+    };
+  }
 
   if (itemType === "CANTEEN") {
     return {
@@ -261,11 +291,12 @@ function expense(
   };
 }
 
-function collaborator(id: string, name: string): Collaborator {
+function collaborator(id: string, name: string, personName = name): Collaborator {
   return {
     id,
     tenantId: "default",
     personId: `person-${id}`,
+    personName,
     personNickname: name,
     journeyStartDate: "2026-06-01",
     defaultEndDate: "2026-08-30",
@@ -366,6 +397,16 @@ async function waitForText(text: string) {
   throw new Error(`Missing text: ${text}`);
 }
 
+async function waitForFetchUrl(expectedUrl: string) {
+  for (let i = 0; i < 60; i += 1) {
+    if (fetchCalls.some((call) => call.url === expectedUrl)) return;
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    });
+  }
+  throw new Error(`Missing fetch URL: ${expectedUrl}`);
+}
+
 async function clickButton(name: string) {
   await act(async () => {
     const button = Array.from(container.querySelectorAll("button")).find(
@@ -373,6 +414,24 @@ async function clickButton(name: string) {
     );
     if (!button) throw new Error(`Button not found: ${name}`);
     button.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+  });
+}
+
+async function changeInput(label: string, value: string) {
+  await act(async () => {
+    const input = controlByLabel<HTMLInputElement>(label, "input");
+    const valueSetter = Object.getOwnPropertyDescriptor(
+      window.HTMLInputElement.prototype,
+      "value",
+    )?.set;
+
+    if (valueSetter) {
+      valueSetter.call(input, value);
+    } else {
+      input.value = value;
+    }
+
+    input.dispatchEvent(new Event("input", { bubbles: true }));
   });
 }
 
