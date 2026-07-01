@@ -2,6 +2,7 @@ package workperiodassignments
 
 import (
 	"context"
+	"errors"
 
 	"enterpriseremotesystems/backend/internal/db"
 	"gorm.io/gorm"
@@ -42,6 +43,54 @@ func (r *gormRepository) ListByWorkPeriod(ctx context.Context, workPeriodID stri
 
 	err := q.Order("planned_status ASC, created_at ASC").Limit(filter.PageSize).Offset((filter.Page - 1) * filter.PageSize).Find(&rows).Error
 	return rows, total, err
+}
+
+func (r *gormRepository) ListActiveAssignmentsForWorkPeriod(ctx context.Context, workPeriodID string) ([]db.WorkPeriodAssignment, error) {
+	var rows []db.WorkPeriodAssignment
+	err := r.db.WithContext(ctx).
+		Model(&db.WorkPeriodAssignment{}).
+		Where("tenant_id = ? AND work_period_id = ? AND active = ?", defaultTenantID, workPeriodID, true).
+		Preload("Collaborator.Person").
+		Preload("Sector").
+		Preload("Location").
+		Preload("Task").
+		Order("created_at ASC").
+		Find(&rows).Error
+	return rows, err
+}
+
+func (r *gormRepository) ListActiveCollaboratorsForPlanning(ctx context.Context) ([]db.CollaboratorJourney, error) {
+	var rows []db.CollaboratorJourney
+	err := r.db.WithContext(ctx).
+		Model(&db.CollaboratorJourney{}).
+		Joins("JOIN people ON people.id = collaborator_journeys.person_id").
+		Joins("JOIN reference_data statuses ON statuses.id = collaborator_journeys.status_id").
+		Where("collaborator_journeys.tenant_id = ? AND collaborator_journeys.closed_at IS NULL", defaultTenantID).
+		Where("statuses.tenant_id = ? AND statuses.type = ? AND statuses.code = ? AND statuses.active = ?", defaultTenantID, "collaborator_status", "ACTIVE", true).
+		Preload("Person").
+		Preload("Status").
+		Preload("Sector").
+		Preload("Location").
+		Preload("Task").
+		Order("LOWER(people.nickname) ASC, LOWER(people.first_name) ASC, LOWER(people.last_name) ASC").
+		Find(&rows).Error
+	return rows, err
+}
+
+func (r *gormRepository) FindMostRecentPriorWorkPeriodByCode(ctx context.Context, workPeriod db.WorkPeriod) (*db.WorkPeriod, error) {
+	var row db.WorkPeriod
+	err := r.db.WithContext(ctx).
+		Model(&db.WorkPeriod{}).
+		Where("tenant_id = ? AND id <> ? AND period_code = ? AND work_date < ?", defaultTenantID, workPeriod.ID, workPeriod.PeriodCode, workPeriod.WorkDate).
+		Order("work_date DESC, starts_at DESC, created_at DESC").
+		First(&row).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &row, nil
 }
 
 func (r *gormRepository) Create(ctx context.Context, assignment *db.WorkPeriodAssignment) error {

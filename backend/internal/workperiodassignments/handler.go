@@ -24,6 +24,26 @@ func (h *Handler) ListByWorkPeriod(c fiber.Ctx) error {
 	return c.JSON(httpx.APIResponse{Data: result})
 }
 
+func (h *Handler) GetPlanningTemplate(c fiber.Ctx) error {
+	result, err := h.service.GetPlanningTemplate(c.Context(), c.Params("id"))
+	if err != nil {
+		return httpx.WriteError(c, err)
+	}
+	return c.JSON(httpx.APIResponse{Data: result})
+}
+
+func (h *Handler) BulkPlan(c fiber.Ctx) error {
+	var req BulkPlanWorkPeriodAssignmentsRequest
+	if err := c.Bind().Body(&req); err != nil {
+		return httpx.WriteError(c, err)
+	}
+	result, err := h.service.BulkPlan(c.Context(), c.Params("id"), req, actorUserID(c))
+	if err != nil {
+		return httpx.WriteError(c, err)
+	}
+	return c.JSON(httpx.APIResponse{Data: result})
+}
+
 func (h *Handler) Create(c fiber.Ctx) error {
 	var req CreateWorkPeriodAssignmentRequest
 	if err := c.Bind().Body(&req); err != nil {

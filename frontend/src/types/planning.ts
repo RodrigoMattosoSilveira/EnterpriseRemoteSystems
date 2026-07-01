@@ -47,12 +47,7 @@ export type WorkPeriodListResponse = {
 
 export type PlannedStatus = "INCLUDED" | "EXCLUDED";
 export type ActualStatus =
-  | "WORKED"
-  | "ABSENT"
-  | "SICK_DAY_OFF"
-  | "TIME_OFF"
-  | "REPLACED"
-  | "CANCELLED";
+  "WORKED" | "ABSENT" | "SICK_DAY_OFF" | "TIME_OFF" | "REPLACED" | "CANCELLED";
 
 export type WorkPeriodAssignment = {
   id: string;
@@ -115,4 +110,46 @@ export type WorkPlanRoster = {
   subtitle: string;
   status: string;
   rows: WorkPlanRosterRow[];
+};
+
+export type WorkPeriodPlanningTemplateRow = {
+  assignmentId?: string;
+  templateAssignmentId?: string;
+  collaboratorId: string;
+  collaboratorName?: string;
+  collaboratorNickname?: string;
+  projectedEndDate?: string;
+  selected: boolean;
+  sectorId: string;
+  sectorLabel?: string;
+  locationId: string;
+  locationLabel?: string;
+  taskId: string;
+  taskLabel?: string;
+};
+
+export type WorkPeriodPlanningTemplate = {
+  workPeriodId: string;
+  sourceWorkPeriodId?: string;
+  sourceWorkDate?: string;
+  sourcePeriodName?: string;
+  rows: WorkPeriodPlanningTemplateRow[];
+};
+
+export type BulkPlanWorkPeriodAssignmentRow = {
+  collaboratorId: string;
+  selected: boolean;
+  sectorId: string;
+  locationId: string;
+  taskId: string;
+  replacementForAssignmentId?: string;
+};
+
+export type BulkPlanWorkPeriodAssignmentsInput = {
+  rows: BulkPlanWorkPeriodAssignmentRow[];
+};
+
+export type BulkPlanWorkPeriodAssignmentsResult = {
+  assignments: WorkPeriodAssignment[];
+  selectedCount: number;
 };
