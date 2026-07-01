@@ -39,6 +39,48 @@ type UpdateWorkPeriodAssignmentRequest struct {
 	TaskID                     string `json:"taskId"`
 }
 
+type BulkPlanWorkPeriodAssignmentsRequest struct {
+	Rows []BulkPlanWorkPeriodAssignmentRow `json:"rows"`
+}
+
+type BulkPlanWorkPeriodAssignmentRow struct {
+	CollaboratorID             string `json:"collaboratorId"`
+	Selected                   bool   `json:"selected"`
+	SectorID                   string `json:"sectorId"`
+	LocationID                 string `json:"locationId"`
+	TaskID                     string `json:"taskId"`
+	ReplacementForAssignmentID string `json:"replacementForAssignmentId"`
+}
+
+type BulkPlanWorkPeriodAssignmentsResult struct {
+	Assignments   []WorkPeriodAssignmentDTO `json:"assignments"`
+	SelectedCount int                       `json:"selectedCount"`
+}
+
+type WorkPeriodPlanningTemplateDTO struct {
+	WorkPeriodID       string                          `json:"workPeriodId"`
+	SourceWorkPeriodID string                          `json:"sourceWorkPeriodId,omitempty"`
+	SourceWorkDate     string                          `json:"sourceWorkDate,omitempty"`
+	SourcePeriodName   string                          `json:"sourcePeriodName,omitempty"`
+	Rows               []WorkPeriodPlanningTemplateRow `json:"rows"`
+}
+
+type WorkPeriodPlanningTemplateRow struct {
+	AssignmentID         string `json:"assignmentId,omitempty"`
+	TemplateAssignmentID string `json:"templateAssignmentId,omitempty"`
+	CollaboratorID       string `json:"collaboratorId"`
+	CollaboratorName     string `json:"collaboratorName,omitempty"`
+	CollaboratorNickname string `json:"collaboratorNickname,omitempty"`
+	ProjectedEndDate     string `json:"projectedEndDate,omitempty"`
+	Selected             bool   `json:"selected"`
+	SectorID             string `json:"sectorId"`
+	SectorLabel          string `json:"sectorLabel,omitempty"`
+	LocationID           string `json:"locationId"`
+	LocationLabel        string `json:"locationLabel,omitempty"`
+	TaskID               string `json:"taskId"`
+	TaskLabel            string `json:"taskLabel,omitempty"`
+}
+
 type MarkActualOutcomeRequest struct {
 	ActualStatus string `json:"actualStatus"`
 }
