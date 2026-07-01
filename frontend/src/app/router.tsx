@@ -24,6 +24,7 @@ import { CollaboratorCurrentAccountPage } from "../features/current-accounts/Col
 import { SecondPersonApprovalSettingsPage } from "../features/current-accounts/SecondPersonApprovalSettingsPage";
 import { GoldPricesPage } from "../features/gold-prices/GoldPricesPage";
 import { PriceListPage } from "../features/price-list/PriceListPage";
+import { MineProductionPage } from "../features/production/MineProductionPage";
 
 function RouteErrorPage() {
   const error = useRouteError();
@@ -78,6 +79,7 @@ export const router = createBrowserRouter([
       { path: "expenses/:id", element: <ExpenseDetailPage /> },
       { path: "work-periods", element: <WorkPeriodsPage /> },
       { path: "work-periods/:id", element: <WorkPeriodDetailPage /> },
+      { path: "gold-production", element: <MineProductionPage /> },
       { path: "ledger-entries/:entryId/receipt", element: <PrintableReceiptPage /> },
       { path: "receipts/outstanding", element: <OutstandingReceiptsPage /> },
       { path: "admin/reference-data", element: <ReferenceDataAdminPage /> },
