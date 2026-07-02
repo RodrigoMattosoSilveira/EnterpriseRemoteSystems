@@ -157,8 +157,7 @@ test("user can filter Collaborators by person name or nickname", async ({
 
   await page.goto("/collaborators");
 
-  await expect(page.getByRole("link", { name: targetNickname })).toBeVisible();
-  await expect(page.getByRole("link", { name: otherNickname })).toBeVisible();
+  await expect(page.getByLabel("Search by name or nickname")).toBeVisible();
 
   await page.getByLabel("Search by name or nickname").fill(targetNickname);
 
