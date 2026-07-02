@@ -16,6 +16,8 @@ type Repository interface {
 	FindByID(ctx context.Context, id string) (*db.WorkPeriodAssignment, error)
 	FindWorkPeriodByID(ctx context.Context, id string) (*db.WorkPeriod, error)
 	FindCollaboratorByID(ctx context.Context, id string) (*db.CollaboratorJourney, error)
+	FindReferenceByID(ctx context.Context, id string) (*db.ReferenceData, error)
+	UpdateCollaboratorPlanningDefaults(ctx context.Context, collaboratorID string, sectorID string, locationID string, taskID string) error
 	FindReplacementAssignmentByID(ctx context.Context, id string) (*db.WorkPeriodAssignment, error)
 	ExistsActiveReference(ctx context.Context, id string, typ string) (bool, error)
 	ExistsActiveAssignmentForCollaborator(ctx context.Context, workPeriodID string, collaboratorID string, excludeID string) (bool, error)

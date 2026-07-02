@@ -13,6 +13,7 @@ import {
   useInformWorkPeriod,
   useMarkOutcome,
   usePlanningTemplate,
+  useRefinePlanAssignment,
   useWorkPeriod,
   useWorkPlanRoster,
 } from "./usePlanning";
@@ -30,6 +31,7 @@ export function WorkPeriodDetailPage() {
   const rosterQuery = useWorkPlanRoster(id, tab === "inform");
   const planningTemplateQuery = usePlanningTemplate(id);
   const bulkPlanMutation = useBulkPlanAssignments(id);
+  const refinePlanMutation = useRefinePlanAssignment(id);
   const outcomeMutation = useMarkOutcome(id);
   const informMutation = useInformWorkPeriod(id);
 
@@ -47,9 +49,10 @@ export function WorkPeriodDetailPage() {
     rosterQuery.error ||
     planningTemplateQuery.error ||
     bulkPlanMutation.error ||
+    refinePlanMutation.error ||
     outcomeMutation.error ||
     informMutation.error;
-  const pending = bulkPlanMutation.isPending;
+  const pending = bulkPlanMutation.isPending || refinePlanMutation.isPending;
 
   if (periodQuery.isLoading || !period)
     return (
@@ -123,6 +126,7 @@ export function WorkPeriodDetailPage() {
             }
             pending={pending}
             onBulkPlan={(input) => bulkPlanMutation.mutate(input)}
+            onRefineAssignment={(input) => refinePlanMutation.mutateAsync(input)}
           />
         )}
         {tab === "inform" && (

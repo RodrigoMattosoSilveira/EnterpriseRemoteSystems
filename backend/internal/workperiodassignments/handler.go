@@ -44,6 +44,18 @@ func (h *Handler) BulkPlan(c fiber.Ctx) error {
 	return c.JSON(httpx.APIResponse{Data: result})
 }
 
+func (h *Handler) RefinePlanAssignment(c fiber.Ctx) error {
+	var req PlanAssignmentRefinementRequest
+	if err := c.Bind().Body(&req); err != nil {
+		return httpx.WriteError(c, err)
+	}
+	result, err := h.service.RefinePlanAssignment(c.Context(), c.Params("id"), req, actorUserID(c))
+	if err != nil {
+		return httpx.WriteError(c, err)
+	}
+	return c.JSON(httpx.APIResponse{Data: result})
+}
+
 func (h *Handler) Create(c fiber.Ctx) error {
 	var req CreateWorkPeriodAssignmentRequest
 	if err := c.Bind().Body(&req); err != nil {
