@@ -210,6 +210,57 @@ func (s *service) BulkPlan(ctx context.Context, workPeriodID string, req BulkPla
 	}), nil
 }
 
+func (s *service) RefinePlanAssignment(ctx context.Context, workPeriodID string, req PlanAssignmentRefinementRequest, actorUserID string) (*PlanAssignmentRefinementResult, error) {
+	if err := ValidatePlanAssignmentRefinement(req); err != nil {
+		return nil, err
+	}
+
+	workPeriod, err := s.repo.FindWorkPeriodByID(ctx, strings.TrimSpace(workPeriodID))
+	if err != nil {
+		return nil, err
+	}
+	if err := ensureEditableWorkPeriod(*workPeriod); err != nil {
+		return nil, err
+	}
+
+	collaboratorID := strings.TrimSpace(req.CollaboratorID)
+	if err := s.validateCollaborator(ctx, collaboratorID); err != nil {
+		return nil, err
+	}
+	sector, err := s.validateAndLoadReference(ctx, "sectorId", req.SectorID, "sector", "Sector must be active reference data of type sector")
+	if err != nil {
+		return nil, err
+	}
+	location, err := s.validateAndLoadReference(ctx, "locationId", req.LocationID, "location", "Location must be active reference data of type location")
+	if err != nil {
+		return nil, err
+	}
+	task, err := s.validateAndLoadReference(ctx, "taskId", req.TaskID, "task", "Task must be active reference data of type task")
+	if err != nil {
+		return nil, err
+	}
+
+	futureDefaultsUpdated := false
+	if req.ApplyToFutureDefaults {
+		if err := s.repo.UpdateCollaboratorPlanningDefaults(ctx, collaboratorID, strings.TrimSpace(req.SectorID), strings.TrimSpace(req.LocationID), strings.TrimSpace(req.TaskID)); err != nil {
+			return nil, err
+		}
+		futureDefaultsUpdated = true
+	}
+
+	return ptr(PlanAssignmentRefinementResult{
+		CollaboratorID:        collaboratorID,
+		SectorID:              strings.TrimSpace(req.SectorID),
+		SectorLabel:           sector.Label,
+		LocationID:            strings.TrimSpace(req.LocationID),
+		LocationLabel:         location.Label,
+		TaskID:                strings.TrimSpace(req.TaskID),
+		TaskLabel:             task.Label,
+		ApplyToFutureDefaults: req.ApplyToFutureDefaults,
+		FutureDefaultsUpdated: futureDefaultsUpdated,
+	}), nil
+}
+
 func (s *service) Create(ctx context.Context, workPeriodID string, req CreateWorkPeriodAssignmentRequest, actorUserID string) (*WorkPeriodAssignmentDTO, error) {
 	if err := ValidateCreateWorkPeriodAssignment(req); err != nil {
 		return nil, err
@@ -424,6 +475,17 @@ func (s *service) validateReplacementAssignment(ctx context.Context, replacement
 		return err
 	}
 	return nil
+}
+
+func (s *service) validateAndLoadReference(ctx context.Context, field string, id string, typ string, message string) (*db.ReferenceData, error) {
+	if err := s.validateReference(ctx, field, id, typ, message); err != nil {
+		return nil, err
+	}
+	row, err := s.repo.FindReferenceByID(ctx, strings.TrimSpace(id))
+	if err != nil {
+		return nil, err
+	}
+	return row, nil
 }
 
 func (s *service) validateReference(ctx context.Context, field string, id string, typ string, message string) error {

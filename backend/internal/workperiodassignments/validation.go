@@ -52,6 +52,18 @@ func ValidateUpdateWorkPeriodAssignment(req UpdateWorkPeriodAssignmentRequest) e
 	return nil
 }
 
+func ValidatePlanAssignmentRefinement(req PlanAssignmentRefinementRequest) error {
+	fields := map[string]string{}
+	requireString(fields, "collaboratorId", req.CollaboratorID)
+	requireString(fields, "sectorId", req.SectorID)
+	requireString(fields, "locationId", req.LocationID)
+	requireString(fields, "taskId", req.TaskID)
+	if len(fields) > 0 {
+		return ValidationError{Fields: fields}
+	}
+	return nil
+}
+
 func ValidateBulkPlanWorkPeriodAssignments(req BulkPlanWorkPeriodAssignmentsRequest) error {
 	fields := map[string]string{}
 	seen := map[string]bool{}

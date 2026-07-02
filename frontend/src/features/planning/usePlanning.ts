@@ -13,12 +13,14 @@ import {
   getWorkPeriodPlanningTemplate,
   listWorkPeriodAssignments,
   markWorkPeriodAssignmentOutcome,
+  refineWorkPeriodPlanAssignment,
   updateWorkPeriodAssignment,
 } from "../../api/planning.api";
 import type {
   ActualStatus,
   BulkPlanWorkPeriodAssignmentsInput,
   CreateWorkPeriodInput,
+  PlanAssignmentRefinementInput,
   SaveWorkPeriodAssignmentInput,
   WorkPeriodListFilter,
 } from "../../types/planning";
@@ -92,6 +94,13 @@ export function useBulkPlanAssignments(workPeriodId: string) {
         queryKey: workPeriodKeys.roster(workPeriodId),
       });
     },
+  });
+}
+
+export function useRefinePlanAssignment(workPeriodId: string) {
+  return useMutation({
+    mutationFn: (input: PlanAssignmentRefinementInput) =>
+      refineWorkPeriodPlanAssignment(workPeriodId, input),
   });
 }
 

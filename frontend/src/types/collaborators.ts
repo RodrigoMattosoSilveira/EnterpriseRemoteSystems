@@ -70,6 +70,7 @@ export type UpdateCollaboratorInput = {
 };
 
 export type CollaboratorListFilter = {
+  search?: string;
   statusId?: string;
   locationId?: string;
   paymentMethodId?: string;

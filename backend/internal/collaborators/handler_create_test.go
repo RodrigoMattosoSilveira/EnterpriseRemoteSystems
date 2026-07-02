@@ -66,6 +66,17 @@ type apiReferenceDataResponse struct {
 	} `json:"data"`
 }
 
+type apiCollaboratorListResponse struct {
+	Data struct {
+		Items []struct {
+			ID             string `json:"id"`
+			PersonName     string `json:"personName"`
+			PersonNickname string `json:"personNickname"`
+		} `json:"items"`
+		Total int64 `json:"total"`
+	} `json:"data"`
+}
+
 func TestCreateCollaboratorFromCompletePersonReturnsCreated(t *testing.T) {
 	server, cleanup := newTestServer(t)
 	defer cleanup()
@@ -307,6 +318,51 @@ func TestUpdateCollaboratorEditsAssignmentPaymentAndExtensionDays(t *testing.T) 
 	}
 }
 
+func TestListCollaboratorsFiltersByPersonNameAndNickname(t *testing.T) {
+	server, cleanup := newTestServer(t)
+	defer cleanup()
+
+	firstPerson := createPerson(t, server, validCompletePersonPayload(1, map[string]any{
+		"firstName": "Joao",
+		"lastName":  "Garimpo",
+		"nickname":  "Jota",
+	}))
+	secondPerson := createPerson(t, server, validCompletePersonPayload(2, map[string]any{
+		"firstName": "Maria",
+		"lastName":  "Serra",
+		"nickname":  "Mina",
+	}))
+
+	firstCollaborator := createCollaborator(t, server, validCollaboratorPayload(firstPerson.Data.ID, nil))
+	createCollaborator(t, server, validCollaboratorPayload(secondPerson.Data.ID, map[string]any{
+		"journeyStartDate": "2026-06-02",
+	}))
+
+	byName := listCollaborators(t, server, "search=garimpo")
+	if byName.Data.Total != 1 {
+		t.Fatalf("expected one collaborator by legal name prefix search, got %d", byName.Data.Total)
+	}
+	if got := byName.Data.Items[0].ID; got != firstCollaborator.Data.ID {
+		t.Fatalf("expected collaborator %q by legal name prefix search, got %q", firstCollaborator.Data.ID, got)
+	}
+	if got := byName.Data.Items[0].PersonName; got != "Joao Garimpo" {
+		t.Fatalf("expected personName %q, got %q", "Joao Garimpo", got)
+	}
+
+	byNickname := listCollaborators(t, server, "search=Mina")
+	if byNickname.Data.Total != 1 {
+		t.Fatalf("expected one collaborator by nickname prefix search, got %d", byNickname.Data.Total)
+	}
+	if got := byNickname.Data.Items[0].PersonNickname; got != "Mina" {
+		t.Fatalf("expected personNickname %q, got %q", "Mina", got)
+	}
+
+	byMiddleSubstring := listCollaborators(t, server, "search=arimpo")
+	if byMiddleSubstring.Data.Total != 0 {
+		t.Fatalf("expected no collaborators for middle-substring search, got %d", byMiddleSubstring.Data.Total)
+	}
+}
+
 func TestUpdateCollaboratorRejectsNegativeExtensionDays(t *testing.T) {
 	server, cleanup := newTestServer(t)
 	defer cleanup()
@@ -461,6 +517,32 @@ func createCollaborator(t *testing.T, server *fiber.App, payload map[string]any)
 	}
 
 	var body apiCollaboratorResponse
+	decodeJSON(t, res, &body)
+	return body
+}
+
+func listCollaborators(t *testing.T, server *fiber.App, query string) apiCollaboratorListResponse {
+	t.Helper()
+
+	url := collaboratorsURL
+	if query != "" {
+		url += "?" + query
+	}
+
+	req := httptest.NewRequest(http.MethodGet, url, nil)
+	res, err := server.Test(req, fiber.TestConfig{Timeout: 0, FailOnTimeout: false})
+	if err != nil {
+		t.Fatalf("GET %s: %v", url, err)
+	}
+	defer res.Body.Close()
+
+	if res.StatusCode != http.StatusOK {
+		var body apiErrorResponse
+		decodeJSON(t, res, &body)
+		t.Fatalf("expected list collaborators status %d, got %d with error %+v", http.StatusOK, res.StatusCode, body.Error)
+	}
+
+	var body apiCollaboratorListResponse
 	decodeJSON(t, res, &body)
 	return body
 }

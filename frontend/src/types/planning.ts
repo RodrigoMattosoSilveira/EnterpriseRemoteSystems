@@ -153,3 +153,23 @@ export type BulkPlanWorkPeriodAssignmentsResult = {
   assignments: WorkPeriodAssignment[];
   selectedCount: number;
 };
+
+export type PlanAssignmentRefinementInput = {
+  collaboratorId: string;
+  sectorId: string;
+  locationId: string;
+  taskId: string;
+  applyToFutureDefaults: boolean;
+};
+
+export type PlanAssignmentRefinementResult = {
+  collaboratorId: string;
+  sectorId: string;
+  sectorLabel?: string;
+  locationId: string;
+  locationLabel?: string;
+  taskId: string;
+  taskLabel?: string;
+  applyToFutureDefaults: boolean;
+  futureDefaultsUpdated: boolean;
+};
