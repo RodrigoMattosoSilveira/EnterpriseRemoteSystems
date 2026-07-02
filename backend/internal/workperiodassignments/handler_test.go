@@ -37,7 +37,17 @@ type apiPersonResponse struct {
 
 type apiCollaboratorResponse struct {
 	Data struct {
-		ID string `json:"id"`
+		ID         string `json:"id"`
+		SectorID   string `json:"sectorId"`
+		LocationID string `json:"locationId"`
+		TaskID     string `json:"taskId"`
+	} `json:"data"`
+}
+
+type apiReferenceDataResponse struct {
+	Data struct {
+		ID    string `json:"id"`
+		Label string `json:"label"`
 	} `json:"data"`
 }
 
@@ -117,6 +127,20 @@ type apiBulkPlanResponse struct {
 			TaskID         string `json:"taskId"`
 			Active         bool   `json:"active"`
 		} `json:"assignments"`
+	} `json:"data"`
+}
+
+type apiPlanAssignmentRefinementResponse struct {
+	Data struct {
+		CollaboratorID        string `json:"collaboratorId"`
+		SectorID              string `json:"sectorId"`
+		SectorLabel           string `json:"sectorLabel"`
+		LocationID            string `json:"locationId"`
+		LocationLabel         string `json:"locationLabel"`
+		TaskID                string `json:"taskId"`
+		TaskLabel             string `json:"taskLabel"`
+		ApplyToFutureDefaults bool   `json:"applyToFutureDefaults"`
+		FutureDefaultsUpdated bool   `json:"futureDefaultsUpdated"`
 	} `json:"data"`
 }
 
@@ -213,6 +237,67 @@ func TestBulkPlanSavesSelectedCollaboratorsOnlyAndIgnoresUnselectedRows(t *testi
 	}
 	if !activeByCollaborator[first.Data.ID] || !activeByCollaborator[second.Data.ID] {
 		t.Fatalf("expected both original and selected collaborators to remain active, got %+v", listBody.Data.Items)
+	}
+}
+
+func TestPlanAssignmentRefinementUpdatesFutureDefaultsWithoutSavingAssignment(t *testing.T) {
+	server, cleanup := newTestServer(t)
+	defer cleanup()
+
+	workPeriod := createWorkPeriod(t, server, nil)
+	collaborator := createActiveCollaborator(t, server, 1)
+	sector := createReferenceData(t, server, "sector", map[string]any{
+		"code":        "PLANNING_REFINEMENT_SECTOR",
+		"label":       "Planning Refinement Sector",
+		"description": "Sector for refinement tests",
+		"sortOrder":   41,
+	})
+	location := createReferenceData(t, server, "location", map[string]any{
+		"code":        "PLANNING_REFINEMENT_LOCATION",
+		"label":       "Planning Refinement Location",
+		"description": "Location for refinement tests",
+		"sortOrder":   42,
+	})
+	task := createReferenceData(t, server, "task", map[string]any{
+		"code":        "PLANNING_REFINEMENT_TASK",
+		"label":       "Planning Refinement Task",
+		"description": "Task for refinement tests",
+		"sortOrder":   43,
+	})
+
+	res := postJSON(t, server, http.MethodPost, workPeriodsURL+workPeriod.Data.ID+"/assignments/plan-refinement", map[string]any{
+		"collaboratorId":        collaborator.Data.ID,
+		"sectorId":              sector.Data.ID,
+		"locationId":            location.Data.ID,
+		"taskId":                task.Data.ID,
+		"applyToFutureDefaults": true,
+	})
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		var body apiErrorResponse
+		decodeJSON(t, res, &body)
+		t.Fatalf("expected refinement status %d, got %d with error %+v", http.StatusOK, res.StatusCode, body.Error)
+	}
+	var body apiPlanAssignmentRefinementResponse
+	decodeJSON(t, res, &body)
+	if !body.Data.FutureDefaultsUpdated || body.Data.SectorLabel != sector.Data.Label || body.Data.LocationLabel != location.Data.Label || body.Data.TaskLabel != task.Data.Label {
+		t.Fatalf("expected future defaults update and labels, got %+v", body.Data)
+	}
+
+	collaboratorRes := getJSON(t, server, collaboratorsURL+collaborator.Data.ID)
+	defer collaboratorRes.Body.Close()
+	var collaboratorBody apiCollaboratorResponse
+	decodeJSON(t, collaboratorRes, &collaboratorBody)
+	if collaboratorBody.Data.SectorID != sector.Data.ID || collaboratorBody.Data.LocationID != location.Data.ID || collaboratorBody.Data.TaskID != task.Data.ID {
+		t.Fatalf("expected collaborator future defaults to change, got sector=%q location=%q task=%q", collaboratorBody.Data.SectorID, collaboratorBody.Data.LocationID, collaboratorBody.Data.TaskID)
+	}
+
+	assignmentsRes := getJSON(t, server, workPeriodsURL+workPeriod.Data.ID+"/assignments")
+	defer assignmentsRes.Body.Close()
+	var assignmentsBody apiAssignmentListResponse
+	decodeJSON(t, assignmentsRes, &assignmentsBody)
+	if assignmentsBody.Data.Total != 0 {
+		t.Fatalf("expected refinement not to save a Work Period assignment before Plan button, got total=%d", assignmentsBody.Data.Total)
 	}
 }
 
@@ -477,6 +562,20 @@ func createPerson(t *testing.T, server *fiber.App, payload map[string]any) apiPe
 		t.Fatalf("create person: expected status %d, got %d with error %+v", http.StatusCreated, res.StatusCode, body.Error)
 	}
 	var body apiPersonResponse
+	decodeJSON(t, res, &body)
+	return body
+}
+
+func createReferenceData(t *testing.T, server *fiber.App, typ string, payload map[string]any) apiReferenceDataResponse {
+	t.Helper()
+	res := postJSON(t, server, http.MethodPost, "/api/v1/reference-data/"+typ, payload)
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusCreated {
+		var body apiErrorResponse
+		decodeJSON(t, res, &body)
+		t.Fatalf("create reference data: expected status %d, got %d with error %+v", http.StatusCreated, res.StatusCode, body.Error)
+	}
+	var body apiReferenceDataResponse
 	decodeJSON(t, res, &body)
 	return body
 }

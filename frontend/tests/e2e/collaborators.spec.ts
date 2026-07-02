@@ -106,6 +106,86 @@ test("user can create a Collaborator from an eligible complete Person", async ({
   await expect(refreshedPersonSelect).not.toContainText(personDisplayName);
 });
 
+test("user can filter Collaborators by person name or nickname", async ({
+  page,
+  request,
+}) => {
+  const suffix = uniqueSuffix();
+  const otherSuffix = suffix + 10000;
+  const targetNickname = `FindMe${suffix}`;
+  const otherNickname = `SkipMe${suffix}`;
+  const otherFirstName = `LegalFind${suffix}`;
+  const otherLastName = firstPageSortLastName(otherSuffix);
+
+  const targetPerson = await createCompletePerson(request, {
+    suffix,
+    firstName: `TargetCollab${suffix}`,
+    lastName: firstPageSortLastName(suffix),
+    nickname: targetNickname,
+  });
+  const otherPerson = await createCompletePerson(request, {
+    suffix: otherSuffix,
+    firstName: otherFirstName,
+    lastName: otherLastName,
+    nickname: otherNickname,
+  });
+
+  await createCollaborator(request, {
+    personId: targetPerson.id,
+    journeyStartDate: "2026-06-01",
+    paymentMethodId: PAYMENT_METHOD_DAILY_ID,
+    paymentValue: 150,
+    dailyBrlAmount: 150,
+    sectorId: SECTOR_MINING_ID,
+    locationId: LOCATION_MAIN_MINE_ID,
+    taskId: TASK_MINER_ID,
+    statusId: COLLABORATOR_STATUS_ACTIVE_ID,
+    notes: "Collaborator filter E2E target",
+  });
+  await createCollaborator(request, {
+    personId: otherPerson.id,
+    journeyStartDate: "2026-06-02",
+    paymentMethodId: PAYMENT_METHOD_DAILY_ID,
+    paymentValue: 150,
+    dailyBrlAmount: 150,
+    sectorId: SECTOR_MINING_ID,
+    locationId: LOCATION_MAIN_MINE_ID,
+    taskId: TASK_MINER_ID,
+    statusId: COLLABORATOR_STATUS_ACTIVE_ID,
+    notes: "Collaborator filter E2E non-target",
+  });
+
+  await page.goto("/collaborators");
+
+  await expect(page.getByRole("link", { name: targetNickname })).toBeVisible();
+  await expect(page.getByRole("link", { name: otherNickname })).toBeVisible();
+
+  await page.getByLabel("Search by name or nickname").fill(targetNickname);
+
+  await expect(page).toHaveURL(/\/collaborators\?search=/);
+  await expect(
+    page.getByText(`Filtering by “${targetNickname}”.`),
+  ).toBeVisible();
+  await expect(page.getByRole("link", { name: targetNickname })).toBeVisible();
+  await expect(page.getByRole("link", { name: otherNickname })).toHaveCount(0);
+
+  await page.getByRole("button", { name: "Clear" }).click();
+  await expect(page).toHaveURL(/\/collaborators$/);
+
+  await page.getByLabel("Search by name or nickname").fill(otherFirstName);
+
+  await expect(page.getByRole("link", { name: otherNickname })).toBeVisible();
+  await expect(
+    page
+      .getByRole("table")
+      .getByText(`${otherFirstName} ${otherLastName}`, { exact: true }),
+  ).toBeVisible();
+  await expect(page.getByRole("link", { name: targetNickname })).toHaveCount(0);
+
+  await page.getByLabel("Search by name or nickname").fill(otherFirstName.slice(1));
+  await expect(page.getByRole("link", { name: otherNickname })).toHaveCount(0);
+});
+
 test("user can edit Collaborator assignment payment and extension days", async ({
   page,
   request,

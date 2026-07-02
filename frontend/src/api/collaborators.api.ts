@@ -24,6 +24,9 @@ export async function listCollaborators(
 ): Promise<CollaboratorListResponse> {
   const searchParams = new URLSearchParams();
 
+  if (filter.search) {
+    searchParams.set("search", filter.search);
+  }
   if (filter.statusId) {
     searchParams.set("statusId", filter.statusId);
   }

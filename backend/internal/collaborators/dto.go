@@ -64,6 +64,7 @@ type UpdateCollaboratorRequest struct {
 }
 
 type CollaboratorListFilter struct {
+	Search          string `query:"search"`
 	StatusID        string `query:"statusId"`
 	LocationID      string `query:"locationId"`
 	PaymentMethodID string `query:"paymentMethodId"`

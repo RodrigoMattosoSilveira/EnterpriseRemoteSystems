@@ -142,12 +142,37 @@ func (r *gormRepository) FindWorkPeriodByID(ctx context.Context, id string) (*db
 func (r *gormRepository) FindCollaboratorByID(ctx context.Context, id string) (*db.CollaboratorJourney, error) {
 	var row db.CollaboratorJourney
 	err := r.db.WithContext(ctx).
+		Preload("Person").
 		Preload("Status").
+		Preload("Sector").
+		Preload("Location").
+		Preload("Task").
 		First(&row, "id = ? AND tenant_id = ?", id, defaultTenantID).Error
 	if err != nil {
 		return nil, err
 	}
 	return &row, nil
+}
+
+func (r *gormRepository) FindReferenceByID(ctx context.Context, id string) (*db.ReferenceData, error) {
+	var row db.ReferenceData
+	err := r.db.WithContext(ctx).First(&row, "id = ? AND tenant_id = ?", id, defaultTenantID).Error
+	if err != nil {
+		return nil, err
+	}
+	return &row, nil
+}
+
+func (r *gormRepository) UpdateCollaboratorPlanningDefaults(ctx context.Context, collaboratorID string, sectorID string, locationID string, taskID string) error {
+	return r.db.WithContext(ctx).
+		Model(&db.CollaboratorJourney{}).
+		Where("id = ? AND tenant_id = ?", collaboratorID, defaultTenantID).
+		Updates(map[string]any{
+			"sector_id":   sectorID,
+			"location_id": locationID,
+			"task_id":     taskID,
+			"updated_at":  gorm.Expr("CURRENT_TIMESTAMP"),
+		}).Error
 }
 
 func (r *gormRepository) FindReplacementAssignmentByID(ctx context.Context, id string) (*db.WorkPeriodAssignment, error) {

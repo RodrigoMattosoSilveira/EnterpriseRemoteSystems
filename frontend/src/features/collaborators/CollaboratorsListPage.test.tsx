@@ -33,6 +33,16 @@ const collaborators: Collaborator[] = [
   },
 ];
 
+const filteredCollaborators: Collaborator[] = [
+  {
+    ...collaborators[0],
+    id: "collab-filtered",
+    personId: "person-filtered",
+    personName: "Bruno Costa",
+    personNickname: "Mineiro",
+  },
+];
+
 let container: HTMLDivElement;
 let root: Root | null;
 
@@ -74,6 +84,45 @@ describe("CollaboratorsListPage", () => {
     expect(textNode("Active")).toBeTruthy();
   });
 
+  it("requests filtered collaborator journeys from the URL search term", async () => {
+    const urls: string[] = [];
+    mockFetch(async (url) => {
+      urls.push(url);
+      if (url === "/api/v1/collaborators?search=Mineiro") {
+        return jsonResponse({
+          data: { items: filteredCollaborators, total: 1 },
+        });
+      }
+
+      throw new Error(`Unhandled request: ${url}`);
+    });
+
+    renderCollaboratorsListPage("/collaborators?search=Mineiro");
+
+    await waitForText("Bruno Costa");
+    expect(urls).toContain("/api/v1/collaborators?search=Mineiro");
+    expect(textNode("Filtering by “Mineiro”.")).toBeTruthy();
+    expect(textNode("Mineiro")).toBeTruthy();
+    expect(
+      container.querySelector<HTMLInputElement>("#collaborator-search")?.value,
+    ).toBe("Mineiro");
+  });
+
+  it("shows a filtered empty state", async () => {
+    mockFetch(async (url) => {
+      if (url === "/api/v1/collaborators?search=Missing") {
+        return jsonResponse({ data: { items: [], total: 0 } });
+      }
+
+      throw new Error(`Unhandled request: ${url}`);
+    });
+
+    renderCollaboratorsListPage("/collaborators?search=Missing");
+
+    await waitForText("No collaborators match this filter");
+    expect(textNode("Try another name or nickname.")).toBeTruthy();
+  });
+
   it("shows an empty state", async () => {
     mockFetch(async (url) => {
       if (url === "/api/v1/collaborators") {
@@ -113,7 +162,7 @@ describe("CollaboratorsListPage", () => {
   });
 });
 
-function renderCollaboratorsListPage() {
+function renderCollaboratorsListPage(initialEntry = "/collaborators") {
   const queryClient = new QueryClient({
     defaultOptions: {
       queries: { retry: false },
@@ -123,7 +172,7 @@ function renderCollaboratorsListPage() {
 
   const router = createMemoryRouter(
     [{ path: "/collaborators", element: <CollaboratorsListPage /> }],
-    { initialEntries: ["/collaborators"] }
+    { initialEntries: [initialEntry] }
   );
 
   root = createRoot(container);

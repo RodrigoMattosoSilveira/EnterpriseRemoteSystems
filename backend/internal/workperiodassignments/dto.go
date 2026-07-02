@@ -57,6 +57,29 @@ type BulkPlanWorkPeriodAssignmentsResult struct {
 	SelectedCount int                       `json:"selectedCount"`
 }
 
+// PlanAssignmentRefinementRequest captures a focused planning refinement for a single
+// collaborator row. The current Work Period assignment is still saved through bulk-plan;
+// ApplyToFutureDefaults explicitly updates the collaborator Journey planning defaults.
+type PlanAssignmentRefinementRequest struct {
+	CollaboratorID        string `json:"collaboratorId"`
+	SectorID              string `json:"sectorId"`
+	LocationID            string `json:"locationId"`
+	TaskID                string `json:"taskId"`
+	ApplyToFutureDefaults bool   `json:"applyToFutureDefaults"`
+}
+
+type PlanAssignmentRefinementResult struct {
+	CollaboratorID        string `json:"collaboratorId"`
+	SectorID              string `json:"sectorId"`
+	SectorLabel           string `json:"sectorLabel,omitempty"`
+	LocationID            string `json:"locationId"`
+	LocationLabel         string `json:"locationLabel,omitempty"`
+	TaskID                string `json:"taskId"`
+	TaskLabel             string `json:"taskLabel,omitempty"`
+	ApplyToFutureDefaults bool   `json:"applyToFutureDefaults"`
+	FutureDefaultsUpdated bool   `json:"futureDefaultsUpdated"`
+}
+
 type WorkPeriodPlanningTemplateDTO struct {
 	WorkPeriodID       string                          `json:"workPeriodId"`
 	SourceWorkPeriodID string                          `json:"sourceWorkPeriodId,omitempty"`

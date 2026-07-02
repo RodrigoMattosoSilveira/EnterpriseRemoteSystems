@@ -3,6 +3,8 @@ import type {
   ActualStatus,
   BulkPlanWorkPeriodAssignmentsInput,
   BulkPlanWorkPeriodAssignmentsResult,
+  PlanAssignmentRefinementInput,
+  PlanAssignmentRefinementResult,
   SaveWorkPeriodAssignmentInput,
   WorkPeriodAssignment,
   WorkPeriodAssignmentListResponse,
@@ -70,6 +72,16 @@ export function bulkPlanWorkPeriodAssignments(
 ): Promise<BulkPlanWorkPeriodAssignmentsResult> {
   return apiFetch<BulkPlanWorkPeriodAssignmentsResult>(
     `/work-periods/${encodeURIComponent(workPeriodId)}/assignments/bulk-plan`,
+    { method: "POST", body: JSON.stringify(input) },
+  );
+}
+
+export function refineWorkPeriodPlanAssignment(
+  workPeriodId: string,
+  input: PlanAssignmentRefinementInput,
+): Promise<PlanAssignmentRefinementResult> {
+  return apiFetch<PlanAssignmentRefinementResult>(
+    `/work-periods/${encodeURIComponent(workPeriodId)}/assignments/plan-refinement`,
     { method: "POST", body: JSON.stringify(input) },
   );
 }
