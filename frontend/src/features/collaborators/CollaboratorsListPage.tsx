@@ -1,15 +1,45 @@
-import { Link, useLocation } from "react-router-dom";
+import { useEffect, useMemo, useState } from "react";
+import { Link, useLocation, useSearchParams } from "react-router-dom";
 import { ApiErrorPanel } from "../../components/ApiErrorPanel";
 import { JourneyDaysRemaining } from "../../components/JourneyDaysRemaining";
 import type { Collaborator } from "../../types/collaborators";
 import { useCollaborators } from "./useCollaborators";
 
 export function CollaboratorsListPage() {
-  const { data, isLoading, error } = useCollaborators();
   const location = useLocation();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const search = searchParams.get("search")?.trim() ?? "";
+  const [searchDraft, setSearchDraft] = useState(search);
+  const filter = useMemo(() => (search ? { search } : {}), [search]);
+  const { data, isLoading, error } = useCollaborators(filter);
   const collaborators = data?.items ?? [];
   const total = data?.total ?? collaborators.length;
   const flash = readFlash(location.state);
+  const hasSearch = search.length > 0;
+
+  useEffect(() => {
+    setSearchDraft(search);
+  }, [search]);
+
+  function updateSearch(nextValue: string) {
+    setSearchDraft(nextValue);
+
+    const next = new URLSearchParams(searchParams);
+    const normalizedSearch = nextValue.trim();
+    if (normalizedSearch) {
+      next.set("search", normalizedSearch);
+    } else {
+      next.delete("search");
+    }
+    setSearchParams(next, { replace: true });
+  }
+
+  function clearFilter() {
+    const next = new URLSearchParams(searchParams);
+    next.delete("search");
+    setSearchDraft("");
+    setSearchParams(next, { replace: true });
+  }
 
   return (
     <main className="min-h-screen bg-gray-50">
@@ -67,7 +97,7 @@ export function CollaboratorsListPage() {
         <ApiErrorPanel error={error} />
 
         <section className="rounded-2xl border bg-white p-4 shadow-sm">
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
             <div>
               <h2 className="text-lg font-semibold text-gray-950">
                 Collaborator Journeys
@@ -75,6 +105,40 @@ export function CollaboratorsListPage() {
               <p className="text-sm text-gray-500">
                 Showing {collaborators.length} of {total} collaborator records.
               </p>
+              {hasSearch && (
+                <p className="mt-1 text-xs font-medium text-gray-600">
+                  Filtering by “{search}”.
+                </p>
+              )}
+            </div>
+
+            <div className="flex w-full flex-col gap-2 sm:flex-row lg:max-w-xl">
+              <div className="min-w-0 flex-1">
+                <label
+                  htmlFor="collaborator-search"
+                  className="text-xs font-semibold uppercase tracking-wide text-gray-500"
+                >
+                  Search by name or nickname
+                </label>
+                <input
+                  id="collaborator-search"
+                  value={searchDraft}
+                  onChange={(event) => updateSearch(event.target.value)}
+                  placeholder="Type the start of a name or nickname"
+                  className="mt-1 w-full rounded-xl border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-gray-950 focus:outline-none focus:ring-1 focus:ring-gray-950"
+                />
+              </div>
+              <div className="flex items-end gap-2">
+                {hasSearch && (
+                  <button
+                    type="button"
+                    onClick={clearFilter}
+                    className="rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 shadow-sm"
+                  >
+                    Clear
+                  </button>
+                )}
+              </div>
             </div>
           </div>
         </section>
@@ -87,23 +151,30 @@ export function CollaboratorsListPage() {
 
         {!isLoading && !error && collaborators.length === 0 && (
           <div className="rounded-2xl border bg-white p-8 text-center shadow-sm">
-            <h2 className="text-lg font-semibold">No collaborators yet</h2>
+            <h2 className="text-lg font-semibold">
+              {hasSearch ? "No collaborators match this filter" : "No collaborators yet"}
+            </h2>
             <p className="mt-2 text-sm text-gray-500">
-              Create a Collaborator after the related Person profile is
-              complete.
+              {hasSearch
+                ? "Try another name or nickname."
+                : "Create a Collaborator after the related Person profile is complete."}
             </p>
-            <Link
-              to="/expenses"
-              className="rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 shadow-sm"
-            >
-              Expenses
-            </Link>
-            <Link
-              to="/collaborators/new"
-              className="mt-5 inline-block rounded-xl bg-gray-950 px-5 py-3 text-sm font-semibold text-white"
-            >
-              Create Collaborator
-            </Link>
+            {!hasSearch && (
+              <>
+                <Link
+                  to="/expenses"
+                  className="rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 shadow-sm"
+                >
+                  Expenses
+                </Link>
+                <Link
+                  to="/collaborators/new"
+                  className="mt-5 inline-block rounded-xl bg-gray-950 px-5 py-3 text-sm font-semibold text-white"
+                >
+                  Create Collaborator
+                </Link>
+              </>
+            )}
           </div>
         )}
 

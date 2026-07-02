@@ -2,6 +2,7 @@ package collaborators
 
 import (
 	"context"
+	"strings"
 
 	"enterpriseremotesystems/backend/internal/db"
 	"gorm.io/gorm"
@@ -17,8 +18,8 @@ func (r *gormRepository) List(ctx context.Context, filter CollaboratorListFilter
 
 	q := r.db.WithContext(ctx).
 		Model(&db.CollaboratorJourney{}).
-		Where("tenant_id = ?", defaultTenantID).
-		Where("closed_at IS NULL").
+		Where("collaborator_journeys.tenant_id = ?", defaultTenantID).
+		Where("collaborator_journeys.closed_at IS NULL").
 		Preload("Person").
 		Preload("PaymentMethod").
 		Preload("Sector").
@@ -26,14 +27,24 @@ func (r *gormRepository) List(ctx context.Context, filter CollaboratorListFilter
 		Preload("Task").
 		Preload("Status")
 
+	if search := strings.TrimSpace(filter.Search); search != "" {
+		like := strings.ToLower(search) + "%"
+		q = q.Joins("JOIN people ON people.id = collaborator_journeys.person_id AND people.tenant_id = collaborator_journeys.tenant_id").
+			Where(`(
+				LOWER(COALESCE(people.first_name, '')) LIKE ? OR
+				LOWER(COALESCE(people.last_name, '')) LIKE ? OR
+				LOWER(COALESCE(people.nickname, '')) LIKE ? OR
+				LOWER(TRIM(COALESCE(people.first_name, '') || ' ' || COALESCE(people.last_name, ''))) LIKE ?
+			)`, like, like, like, like)
+	}
 	if filter.StatusID != "" {
-		q = q.Where("status_id = ?", filter.StatusID)
+		q = q.Where("collaborator_journeys.status_id = ?", filter.StatusID)
 	}
 	if filter.LocationID != "" {
-		q = q.Where("location_id = ?", filter.LocationID)
+		q = q.Where("collaborator_journeys.location_id = ?", filter.LocationID)
 	}
 	if filter.PaymentMethodID != "" {
-		q = q.Where("payment_method_id = ?", filter.PaymentMethodID)
+		q = q.Where("collaborator_journeys.payment_method_id = ?", filter.PaymentMethodID)
 	}
 
 	if err := q.Count(&total).Error; err != nil {
@@ -49,7 +60,7 @@ func (r *gormRepository) List(ctx context.Context, filter CollaboratorListFilter
 		pageSize = 50
 	}
 
-	err := q.Order("journey_start_date DESC, created_at DESC").Limit(pageSize).Offset((page - 1) * pageSize).Find(&rows).Error
+	err := q.Order("collaborator_journeys.journey_start_date DESC, collaborator_journeys.created_at DESC").Limit(pageSize).Offset((page - 1) * pageSize).Find(&rows).Error
 	return rows, total, err
 }
 
