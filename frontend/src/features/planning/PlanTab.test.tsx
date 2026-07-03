@@ -52,7 +52,7 @@ describe("PlanTab", () => {
       "Assignment refinement applied to this Work Period plan",
     );
 
-    await clickButton("Plan selected collaborators (2)");
+    await clickButton("Save plan (2 selected)");
 
     expect(onBulkPlan).toHaveBeenCalledWith({
       rows: [
@@ -62,6 +62,8 @@ describe("PlanTab", () => {
           sectorId: "sector-mining",
           locationId: "location-main",
           taskId: "task-miner",
+          planningAvailability: "ACTIVE",
+          availabilityChanged: false,
         },
         {
           collaboratorId: "collab-mineiro",
@@ -69,6 +71,8 @@ describe("PlanTab", () => {
           sectorId: "sector-processing",
           locationId: "location-yard",
           taskId: "task-loader",
+          planningAvailability: "ACTIVE",
+          availabilityChanged: false,
         },
       ],
     });
@@ -107,9 +111,82 @@ describe("PlanTab", () => {
       taskId: "task-loader",
       applyToFutureDefaults: true,
     });
-    expect(container.textContent).toContain(
-      "future planning defaults updated",
+    expect(container.textContent).toContain("future planning defaults updated");
+  });
+
+  it("saves changed availability for an unselected collaborator snapshot", async () => {
+    const onBulkPlan = vi.fn();
+
+    await renderPlanTab({
+      onBulkPlan,
+      onRefineAssignment: vi.fn(),
+    });
+
+    await changeTableSelect("Availability for Mineiro", "LEAVE_OF_ABSENCE");
+    await clickButton("Save plan (1 selected)");
+
+    expect(onBulkPlan).toHaveBeenCalledWith({
+      rows: [
+        {
+          collaboratorId: "collab-selected",
+          selected: true,
+          sectorId: "sector-mining",
+          locationId: "location-main",
+          taskId: "task-miner",
+          planningAvailability: "ACTIVE",
+          availabilityChanged: false,
+        },
+        {
+          collaboratorId: "collab-mineiro",
+          selected: false,
+          sectorId: "sector-mining",
+          locationId: "location-main",
+          taskId: "task-miner",
+          planningAvailability: "LEAVE_OF_ABSENCE",
+          availabilityChanged: true,
+        },
+      ],
+    });
+  });
+
+
+  it("uses compact planning table controls so Task remains visible", async () => {
+    await renderPlanTab({
+      onBulkPlan: vi.fn(),
+      onRefineAssignment: vi.fn(),
+    });
+
+    const headerText = Array.from(container.querySelectorAll("thead th"))
+      .map((header) => header.textContent?.trim())
+      .join("|");
+
+    expect(headerText).toContain("✓");
+    expect(headerText).toContain("Nick");
+    expect(headerText).toContain("D Left");
+    expect(headerText).toContain("Avail.");
+    expect(headerText).toContain("Task");
+    expect(headerText).not.toContain("Projected Journey End");
+    expect(headerText).not.toContain("Availability");
+    expect(headerText).not.toContain("Journey");
+
+    const firstBodyRow = container.querySelector("tbody tr");
+    if (!firstBodyRow) throw new Error("Missing planning row");
+
+    expect(firstBodyRow.textContent).not.toContain("Selected");
+    expect(firstBodyRow.textContent).not.toContain("Not selected");
+    expect(firstBodyRow.textContent).toContain("D");
+    const availabilitySelect = firstBodyRow.querySelector<HTMLSelectElement>(
+      'select[aria-label^="Availability for"]',
     );
+    expect(availabilitySelect).toBeTruthy();
+    expect(
+      Array.from(availabilitySelect?.options ?? []).map((option) =>
+        option.text.trim(),
+      ),
+    ).toEqual(["A", "D", "L"]);
+    expect(
+      firstBodyRow.querySelector('select[aria-label^="Task for"]'),
+    ).toBeTruthy();
   });
 
   it("does not offer inactive sector, local, or task values as planning choices", async () => {
@@ -118,8 +195,12 @@ describe("PlanTab", () => {
       onRefineAssignment: vi.fn(),
     });
 
-    expect(container.querySelector('option[value="sector-retired"]')).toBeNull();
-    expect(container.querySelector('option[value="location-retired"]')).toBeNull();
+    expect(
+      container.querySelector('option[value="sector-retired"]'),
+    ).toBeNull();
+    expect(
+      container.querySelector('option[value="location-retired"]'),
+    ).toBeNull();
     expect(container.querySelector('option[value="task-retired"]')).toBeNull();
 
     await clickRowButton("Mineiro", "Plan Assignment");
@@ -130,7 +211,6 @@ describe("PlanTab", () => {
     expect(dialog.querySelector('option[value="location-retired"]')).toBeNull();
     expect(dialog.querySelector('option[value="task-retired"]')).toBeNull();
   });
-
 });
 
 async function renderPlanTab(props: {
@@ -168,6 +248,7 @@ const template: WorkPeriodPlanningTemplate = {
       collaboratorNickname: "Aline",
       collaboratorName: "Aline Silva",
       projectedEndDate: "2026-09-01",
+      planningAvailability: "ACTIVE",
       selected: true,
       sectorId: "sector-mining",
       sectorLabel: "Mining",
@@ -181,6 +262,7 @@ const template: WorkPeriodPlanningTemplate = {
       collaboratorNickname: "Mineiro",
       collaboratorName: "Bruno Costa",
       projectedEndDate: "2026-09-02",
+      planningAvailability: "ACTIVE",
       selected: false,
       sectorId: "sector-mining",
       sectorLabel: "Mining",
@@ -250,11 +332,22 @@ async function clickButton(text: string) {
   });
 }
 
+async function changeTableSelect(labelText: string, value: string) {
+  const select = Array.from(container.querySelectorAll("select")).find(
+    (item) => item.getAttribute("aria-label") === labelText,
+  );
+  if (!select) throw new Error(`Missing table select ${labelText}`);
+  await act(async () => {
+    select.value = value;
+    select.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+}
+
 async function changeVisibleSelect(labelText: string, value: string) {
   const dialog = container.querySelector('[role="dialog"]');
   if (!dialog) throw new Error("Missing refinement dialog");
-  const label = Array.from(dialog.querySelectorAll("label")).find(
-    (item) => item.textContent?.trim().startsWith(labelText),
+  const label = Array.from(dialog.querySelectorAll("label")).find((item) =>
+    item.textContent?.trim().startsWith(labelText),
   );
   const select = label?.querySelector("select");
   if (!select) throw new Error(`Missing select ${labelText}`);
@@ -270,7 +363,9 @@ async function changeCheckbox(labelText: string, checked: boolean) {
   const label = Array.from(dialog.querySelectorAll("label")).find((item) =>
     item.textContent?.includes(labelText),
   );
-  const checkbox = label?.querySelector<HTMLInputElement>('input[type="checkbox"]');
+  const checkbox = label?.querySelector<HTMLInputElement>(
+    'input[type="checkbox"]',
+  );
   if (!checkbox) throw new Error(`Missing checkbox ${labelText}`);
   await act(async () => {
     if (checkbox.checked !== checked) {

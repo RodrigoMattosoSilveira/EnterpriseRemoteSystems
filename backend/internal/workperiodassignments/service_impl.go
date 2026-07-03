@@ -85,6 +85,7 @@ func (s *service) GetPlanningTemplate(ctx context.Context, workPeriodID string) 
 			CollaboratorName:     collaboratorName(collaborator),
 			CollaboratorNickname: collaborator.Person.Nickname,
 			ProjectedEndDate:     formatDate(collaborator.ProjectedEndDate),
+			PlanningAvailability: PlanningAvailabilityActive,
 			SectorID:             collaborator.SectorID,
 			SectorLabel:          collaborator.Sector.Label,
 			LocationID:           collaborator.LocationID,
@@ -95,6 +96,7 @@ func (s *service) GetPlanningTemplate(ctx context.Context, workPeriodID string) 
 		if current, ok := currentByCollaborator[collaborator.ID]; ok {
 			planningRow.AssignmentID = current.ID
 			planningRow.Selected = current.PlannedStatus == PlannedStatusIncluded
+			planningRow.PlanningAvailability = normalizePlanningAvailability(current.PlanningAvailability)
 			planningRow.SectorID = current.SectorID
 			planningRow.SectorLabel = current.Sector.Label
 			planningRow.LocationID = current.LocationID
@@ -104,6 +106,7 @@ func (s *service) GetPlanningTemplate(ctx context.Context, workPeriodID string) 
 		} else if template, ok := templateByCollaborator[collaborator.ID]; ok {
 			planningRow.TemplateAssignmentID = template.ID
 			planningRow.Selected = template.PlannedStatus == PlannedStatusIncluded
+			planningRow.PlanningAvailability = normalizePlanningAvailability(template.PlanningAvailability)
 			planningRow.SectorID = template.SectorID
 			planningRow.SectorLabel = template.Sector.Label
 			planningRow.LocationID = template.LocationID
@@ -151,32 +154,52 @@ func (s *service) BulkPlan(ctx context.Context, workPeriodID string, req BulkPla
 	selectedCount := 0
 	for _, row := range req.Rows {
 		collaboratorID := strings.TrimSpace(row.CollaboratorID)
-		if !row.Selected {
+		shouldSave := row.Selected || row.AvailabilityChanged
+		if !shouldSave {
 			continue
 		}
-		selectedCount++
-		if err := s.validateCollaborator(ctx, collaboratorID); err != nil {
+
+		plannedStatus := PlannedStatusExcluded
+		if row.Selected {
+			plannedStatus = PlannedStatusIncluded
+			selectedCount++
+		}
+		planningAvailability := normalizePlanningAvailability(row.PlanningAvailability)
+
+		collaborator, err := s.loadActiveCollaborator(ctx, collaboratorID)
+		if err != nil {
 			return nil, err
 		}
 		if err := s.validateReplacementAssignment(ctx, strings.TrimSpace(row.ReplacementForAssignmentID), ""); err != nil {
 			return nil, err
 		}
-		if err := s.validateReference(ctx, "sectorId", row.SectorID, "sector", "Sector must be active reference data of type sector"); err != nil {
-			return nil, err
-		}
-		if err := s.validateReference(ctx, "locationId", row.LocationID, "location", "Location must be active reference data of type location"); err != nil {
-			return nil, err
-		}
-		if err := s.validateReference(ctx, "taskId", row.TaskID, "task", "Task must be active reference data of type task"); err != nil {
+
+		existing, hasExisting := currentByCollaborator[collaboratorID]
+		effectiveSectorID := effectivePlanningReferenceID(row.SectorID, existing.SectorID, collaborator.SectorID)
+		effectiveLocationID := effectivePlanningReferenceID(row.LocationID, existing.LocationID, collaborator.LocationID)
+		effectiveTaskID := effectivePlanningReferenceID(row.TaskID, existing.TaskID, collaborator.TaskID)
+
+		if row.Selected {
+			if err := s.validateReference(ctx, "sectorId", effectiveSectorID, "sector", "Sector must be active reference data of type sector"); err != nil {
+				return nil, err
+			}
+			if err := s.validateReference(ctx, "locationId", effectiveLocationID, "location", "Location must be active reference data of type location"); err != nil {
+				return nil, err
+			}
+			if err := s.validateReference(ctx, "taskId", effectiveTaskID, "task", "Task must be active reference data of type task"); err != nil {
+				return nil, err
+			}
+		} else if err := requirePlanningReferenceFallbacks(effectiveSectorID, effectiveLocationID, effectiveTaskID); err != nil {
 			return nil, err
 		}
 
-		if existing, ok := currentByCollaborator[collaboratorID]; ok {
-			existing.PlannedStatus = PlannedStatusIncluded
+		if hasExisting {
+			existing.PlannedStatus = plannedStatus
+			existing.PlanningAvailability = planningAvailability
 			existing.ReplacementForAssignmentID = stringPtrOrNil(row.ReplacementForAssignmentID)
-			existing.SectorID = strings.TrimSpace(row.SectorID)
-			existing.LocationID = strings.TrimSpace(row.LocationID)
-			existing.TaskID = strings.TrimSpace(row.TaskID)
+			existing.SectorID = effectiveSectorID
+			existing.LocationID = effectiveLocationID
+			existing.TaskID = effectiveTaskID
 			existing.Active = true
 			existing.UpdatedAt = now
 			if err := s.repo.Update(ctx, &existing); err != nil {
@@ -191,11 +214,12 @@ func (s *service) BulkPlan(ctx context.Context, workPeriodID string, req BulkPla
 			TenantID:                   defaultTenantID,
 			WorkPeriodID:               workPeriod.ID,
 			CollaboratorID:             collaboratorID,
-			PlannedStatus:              PlannedStatusIncluded,
+			PlannedStatus:              plannedStatus,
+			PlanningAvailability:       planningAvailability,
 			ReplacementForAssignmentID: stringPtrOrNil(row.ReplacementForAssignmentID),
-			SectorID:                   strings.TrimSpace(row.SectorID),
-			LocationID:                 strings.TrimSpace(row.LocationID),
-			TaskID:                     strings.TrimSpace(row.TaskID),
+			SectorID:                   effectiveSectorID,
+			LocationID:                 effectiveLocationID,
+			TaskID:                     effectiveTaskID,
 			Active:                     true,
 		}
 		if err := s.repo.Create(ctx, assignment); err != nil {
@@ -301,6 +325,7 @@ func (s *service) Create(ctx context.Context, workPeriodID string, req CreateWor
 		WorkPeriodID:               workPeriod.ID,
 		CollaboratorID:             collaboratorID,
 		PlannedStatus:              strings.ToUpper(strings.TrimSpace(req.PlannedStatus)),
+		PlanningAvailability:       normalizePlanningAvailability(req.PlanningAvailability),
 		ReplacementForAssignmentID: stringPtrOrNil(req.ReplacementForAssignmentID),
 		SectorID:                   strings.TrimSpace(req.SectorID),
 		LocationID:                 strings.TrimSpace(req.LocationID),
@@ -363,8 +388,14 @@ func (s *service) Update(ctx context.Context, id string, req UpdateWorkPeriodAss
 		return nil, err
 	}
 
+	planningAvailability := normalizePlanningAvailability(req.PlanningAvailability)
+	if strings.TrimSpace(req.PlanningAvailability) == "" {
+		planningAvailability = normalizePlanningAvailability(existing.PlanningAvailability)
+	}
+
 	existing.CollaboratorID = collaboratorID
 	existing.PlannedStatus = strings.ToUpper(strings.TrimSpace(req.PlannedStatus))
+	existing.PlanningAvailability = planningAvailability
 	existing.ReplacementForAssignmentID = stringPtrOrNil(req.ReplacementForAssignmentID)
 	existing.SectorID = strings.TrimSpace(req.SectorID)
 	existing.LocationID = strings.TrimSpace(req.LocationID)
@@ -497,6 +528,38 @@ func (s *service) validateReference(ctx context.Context, field string, id string
 		return nil
 	}
 	return ValidationError{Fields: map[string]string{field: message}}
+}
+
+func (s *service) loadActiveCollaborator(ctx context.Context, collaboratorID string) (*db.CollaboratorJourney, error) {
+	collaborator, err := s.repo.FindCollaboratorByID(ctx, collaboratorID)
+	if err != nil {
+		return nil, err
+	}
+	if !isActiveCollaborator(*collaborator) {
+		return nil, ValidationError{Fields: map[string]string{"collaboratorId": "Collaborator must be active"}}
+	}
+	return collaborator, nil
+}
+
+func effectivePlanningReferenceID(requested string, existing string, fallback string) string {
+	if trimmed := strings.TrimSpace(requested); trimmed != "" {
+		return trimmed
+	}
+	if trimmed := strings.TrimSpace(existing); trimmed != "" {
+		return trimmed
+	}
+	return strings.TrimSpace(fallback)
+}
+
+func requirePlanningReferenceFallbacks(sectorID string, locationID string, taskID string) error {
+	fields := map[string]string{}
+	requireString(fields, "sectorId", sectorID)
+	requireString(fields, "locationId", locationID)
+	requireString(fields, "taskId", taskID)
+	if len(fields) > 0 {
+		return ValidationError{Fields: fields}
+	}
+	return nil
 }
 
 func normalizeListFilter(filter WorkPeriodAssignmentListFilter) (normalizedWorkPeriodAssignmentListFilter, error) {

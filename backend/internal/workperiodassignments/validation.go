@@ -22,6 +22,10 @@ const (
 	ActualStatusTimeOff    = "TIME_OFF"
 	ActualStatusReplaced   = "REPLACED"
 	ActualStatusCancelled  = "CANCELLED"
+
+	PlanningAvailabilityActive         = "ACTIVE"
+	PlanningAvailabilityDayOff         = "DAY_OFF"
+	PlanningAvailabilityLeaveOfAbsence = "LEAVE_OF_ABSENCE"
 )
 
 func ValidateCreateWorkPeriodAssignment(req CreateWorkPeriodAssignmentRequest) error {
@@ -32,6 +36,7 @@ func ValidateCreateWorkPeriodAssignment(req CreateWorkPeriodAssignmentRequest) e
 	requireString(fields, "locationId", req.LocationID)
 	requireString(fields, "taskId", req.TaskID)
 	validatePlannedStatus(fields, req.PlannedStatus)
+	validatePlanningAvailability(fields, "planningAvailability", req.PlanningAvailability)
 	if len(fields) > 0 {
 		return ValidationError{Fields: fields}
 	}
@@ -46,6 +51,7 @@ func ValidateUpdateWorkPeriodAssignment(req UpdateWorkPeriodAssignmentRequest) e
 	requireString(fields, "locationId", req.LocationID)
 	requireString(fields, "taskId", req.TaskID)
 	validatePlannedStatus(fields, req.PlannedStatus)
+	validatePlanningAvailability(fields, "planningAvailability", req.PlanningAvailability)
 	if len(fields) > 0 {
 		return ValidationError{Fields: fields}
 	}
@@ -75,11 +81,12 @@ func ValidateBulkPlanWorkPeriodAssignments(req BulkPlanWorkPeriodAssignmentsRequ
 		}
 		seen[strings.TrimSpace(row.CollaboratorID)] = true
 
-		if row.Selected {
-			requireString(fields, fmt.Sprintf("rows[%d].sectorId", index), row.SectorID)
-			requireString(fields, fmt.Sprintf("rows[%d].locationId", index), row.LocationID)
-			requireString(fields, fmt.Sprintf("rows[%d].taskId", index), row.TaskID)
-		}
+		validatePlanningAvailability(fields, fmt.Sprintf("rows[%d].planningAvailability", index), row.PlanningAvailability)
+
+		// Bulk planning can update availability on an already-planned selected row
+		// without re-sending sector/location/task values. The service resolves
+		// effective planning references from request values, an existing assignment,
+		// or collaborator planning defaults before validating them.
 	}
 	if len(fields) > 0 {
 		return ValidationError{Fields: fields}
@@ -129,6 +136,16 @@ func validatePlannedStatus(fields map[string]string, value string) {
 	}
 }
 
+func validatePlanningAvailability(fields map[string]string, key string, value string) {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
+		return
+	}
+	if !isKnownPlanningAvailability(strings.ToUpper(trimmed)) {
+		fields[key] = "Planning availability must be ACTIVE, DAY_OFF, or LEAVE_OF_ABSENCE"
+	}
+}
+
 func validateActualStatus(fields map[string]string, value string) {
 	trimmed := strings.TrimSpace(value)
 	if trimmed == "" {
@@ -146,6 +163,23 @@ func isKnownPlannedStatus(status string) bool {
 	default:
 		return false
 	}
+}
+
+func isKnownPlanningAvailability(value string) bool {
+	switch value {
+	case PlanningAvailabilityActive, PlanningAvailabilityDayOff, PlanningAvailabilityLeaveOfAbsence:
+		return true
+	default:
+		return false
+	}
+}
+
+func normalizePlanningAvailability(value string) string {
+	trimmed := strings.ToUpper(strings.TrimSpace(value))
+	if isKnownPlanningAvailability(trimmed) {
+		return trimmed
+	}
+	return PlanningAvailabilityActive
 }
 
 func isKnownActualStatus(status string) bool {

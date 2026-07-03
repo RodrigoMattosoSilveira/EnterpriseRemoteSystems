@@ -15,6 +15,7 @@ func ToDTO(row db.WorkPeriodAssignment) WorkPeriodAssignmentDTO {
 		CollaboratorName:           collaboratorName(row.Collaborator),
 		CollaboratorNickname:       row.Collaborator.Person.Nickname,
 		PlannedStatus:              row.PlannedStatus,
+		PlanningAvailability:       normalizePlanningAvailability(row.PlanningAvailability),
 		ActualStatus:               nilString(row.ActualStatus),
 		ReplacementForAssignmentID: nilString(row.ReplacementForAssignmentID),
 		SectorID:                   row.SectorID,
