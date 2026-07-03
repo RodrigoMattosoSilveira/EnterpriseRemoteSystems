@@ -211,6 +211,42 @@ describe("PlanTab", () => {
     expect(visibleBodyRows()).toHaveLength(2);
   });
 
+  it("marks replacement candidates locally without saving assignment data", async () => {
+    const onBulkPlan = vi.fn();
+
+    await renderPlanTab({
+      onBulkPlan,
+      onRefineAssignment: vi.fn(),
+    });
+
+    await changeTableCheckbox("Replacement candidate for Mineiro", true);
+
+    expect(container.textContent).toContain("1 candidate");
+    expect(visibleBodyRows()[1].textContent).toContain("Candidate");
+
+    await changeFilterSelect("Candidate", "CANDIDATES");
+
+    expect(container.textContent).toContain("Showing 1 of 2");
+    expect(visibleBodyRows()).toHaveLength(1);
+    expect(visibleBodyRows()[0].textContent).toContain("Mineiro");
+
+    await clickButton("Save plan (1 selected)");
+
+    expect(onBulkPlan).toHaveBeenCalledWith({
+      rows: [
+        {
+          collaboratorId: "collab-selected",
+          selected: true,
+          sectorId: "sector-mining",
+          locationId: "location-main",
+          taskId: "task-miner",
+          planningAvailability: "ACTIVE",
+          availabilityChanged: false,
+        },
+      ],
+    });
+  });
+
   it("uses compact planning table controls so Task remains visible", async () => {
     await renderPlanTab({
       onBulkPlan: vi.fn(),
@@ -222,6 +258,7 @@ describe("PlanTab", () => {
       .join("|");
 
     expect(headerText).toContain("✓");
+    expect(headerText).toContain("Cand.");
     expect(headerText).toContain("Nick");
     expect(headerText).toContain("D Left");
     expect(headerText).toContain("Avail.");
@@ -429,6 +466,18 @@ async function clickButton(text: string) {
   if (!button) throw new Error(`Missing button ${text}`);
   await act(async () => {
     button.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+  });
+}
+
+async function changeTableCheckbox(labelText: string, checked: boolean) {
+  const checkbox = Array.from(
+    container.querySelectorAll<HTMLInputElement>('input[type="checkbox"]'),
+  ).find((item) => item.getAttribute("aria-label") === labelText);
+  if (!checkbox) throw new Error(`Missing table checkbox ${labelText}`);
+  await act(async () => {
+    if (checkbox.checked !== checked) {
+      checkbox.click();
+    }
   });
 }
 
