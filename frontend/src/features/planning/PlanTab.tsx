@@ -13,6 +13,25 @@ import type {
 type SortKey =
   "selected" | "nickname" | "availability" | "sector" | "location" | "task";
 type SortDirection = "asc" | "desc";
+type SelectionFilter = "ALL" | "SELECTED" | "UNSELECTED";
+type PlanningAvailabilityFilter = "ALL" | PlanningAvailability;
+type PlanningTableFilters = {
+  search: string;
+  selection: SelectionFilter;
+  availability: PlanningAvailabilityFilter;
+  sectorId: string;
+  locationId: string;
+  taskId: string;
+};
+
+const emptyPlanningTableFilters: PlanningTableFilters = {
+  search: "",
+  selection: "ALL",
+  availability: "ALL",
+  sectorId: "",
+  locationId: "",
+  taskId: "",
+};
 
 type SelectableReferenceDataItem = ReferenceDataItem & {
   inactiveCurrent?: boolean;
@@ -43,6 +62,9 @@ export function PlanTab(props: {
   ) => Promise<PlanAssignmentRefinementResult>;
 }) {
   const [rows, setRows] = useState<LocalRow[]>([]);
+  const [filters, setFilters] = useState<PlanningTableFilters>(
+    emptyPlanningTableFilters,
+  );
   const [sort, setSort] = useState<{
     key: SortKey;
     direction: SortDirection;
@@ -83,6 +105,11 @@ export function PlanTab(props: {
       return sort.direction === "asc" ? result : -result;
     });
   }, [rows, sort]);
+  const filteredRows = useMemo(
+    () => sortedRows.filter((row) => rowMatchesFilters(row, filters)),
+    [sortedRows, filters],
+  );
+  const filtersActive = !planningFiltersAreEmpty(filters);
 
   function updateRow(collaboratorId: string, patch: Partial<LocalRow>) {
     setRows((current) =>
@@ -90,6 +117,10 @@ export function PlanTab(props: {
         row.collaboratorId === collaboratorId ? { ...row, ...patch } : row,
       ),
     );
+  }
+
+  function updateFilters(patch: Partial<PlanningTableFilters>) {
+    setFilters((current) => ({ ...current, ...patch }));
   }
 
   function toggleSort(key: SortKey) {
@@ -247,6 +278,19 @@ export function PlanTab(props: {
 
       {rows.length > 0 && (
         <div className="overflow-hidden rounded-2xl border bg-white shadow-sm">
+          <PlanningTableFiltersPanel
+            filters={filters}
+            sectors={props.sectors}
+            locations={props.locations}
+            tasks={props.tasks}
+            visibleCount={filteredRows.length}
+            totalCount={rows.length}
+            selectedCount={selectedCount}
+            disabled={props.loading || props.pending}
+            filtersActive={filtersActive}
+            onChange={updateFilters}
+            onClear={() => setFilters(emptyPlanningTableFilters)}
+          />
           <div className="overflow-x-auto">
             <table className="w-full min-w-[46rem] table-fixed divide-y divide-gray-200 text-sm">
               <colgroup>
@@ -310,7 +354,17 @@ export function PlanTab(props: {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {sortedRows.map((row) => (
+                {filteredRows.length === 0 && (
+                  <tr>
+                    <td
+                      colSpan={7}
+                      className="px-4 py-8 text-center text-sm text-gray-500"
+                    >
+                      No collaborators match the current planning filters.
+                    </td>
+                  </tr>
+                )}
+                {filteredRows.map((row) => (
                   <tr
                     key={row.collaboratorId}
                     className={row.selected ? "bg-white" : "bg-gray-50/70"}
@@ -451,6 +505,146 @@ export function PlanTab(props: {
         />
       )}
     </section>
+  );
+}
+
+function PlanningTableFiltersPanel(props: {
+  filters: PlanningTableFilters;
+  sectors: ReferenceDataItem[];
+  locations: ReferenceDataItem[];
+  tasks: ReferenceDataItem[];
+  visibleCount: number;
+  totalCount: number;
+  selectedCount: number;
+  disabled: boolean;
+  filtersActive: boolean;
+  onChange: (patch: Partial<PlanningTableFilters>) => void;
+  onClear: () => void;
+}) {
+  return (
+    <div className="space-y-3 border-b bg-gray-50/80 p-4">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h3 className="text-sm font-semibold text-gray-950">
+            Planning table filters
+          </h3>
+          <p className="text-xs text-gray-500">
+            Filters only change which rows are visible. Save plan still includes
+            selected rows and changed availability rows.
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2 text-xs font-medium text-gray-600">
+          <span>
+            Showing {props.visibleCount} of {props.totalCount}
+          </span>
+          <span>·</span>
+          <span>{props.selectedCount} selected</span>
+          <button
+            type="button"
+            onClick={props.onClear}
+            disabled={props.disabled || !props.filtersActive}
+            className="rounded-lg border border-gray-300 bg-white px-2 py-1 font-semibold text-gray-700 shadow-sm disabled:bg-gray-100 disabled:text-gray-400"
+          >
+            Clear filters
+          </button>
+        </div>
+      </div>
+
+      <div className="grid gap-3 md:grid-cols-3 xl:grid-cols-6">
+        <label className="text-xs font-semibold uppercase tracking-wide text-gray-500 md:col-span-3 xl:col-span-1">
+          Search collaborators
+          <input
+            type="search"
+            value={props.filters.search}
+            disabled={props.disabled}
+            onChange={(event) => props.onChange({ search: event.target.value })}
+            placeholder="Nick or name"
+            className="mt-1 w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm font-normal normal-case tracking-normal text-gray-900 shadow-sm disabled:bg-gray-100 disabled:text-gray-500"
+          />
+        </label>
+
+        <FilterSelect
+          label="Selection"
+          value={props.filters.selection}
+          disabled={props.disabled}
+          onChange={(selection) =>
+            props.onChange({ selection: selection as SelectionFilter })
+          }
+          options={[
+            { value: "ALL", label: "All rows" },
+            { value: "SELECTED", label: "Selected only" },
+            { value: "UNSELECTED", label: "Unselected only" },
+          ]}
+        />
+
+        <FilterSelect
+          label="Avail."
+          value={props.filters.availability}
+          disabled={props.disabled}
+          onChange={(availability) =>
+            props.onChange({
+              availability: availability as PlanningAvailabilityFilter,
+            })
+          }
+          options={[
+            { value: "ALL", label: "All availability" },
+            { value: "ACTIVE", label: "A" },
+            { value: "DAY_OFF", label: "D" },
+            { value: "LEAVE_OF_ABSENCE", label: "L" },
+          ]}
+        />
+
+        <FilterSelect
+          label="Sector"
+          value={props.filters.sectorId}
+          disabled={props.disabled}
+          onChange={(sectorId) => props.onChange({ sectorId })}
+          options={referenceFilterOptions(props.sectors, "All sectors")}
+        />
+
+        <FilterSelect
+          label="Local"
+          value={props.filters.locationId}
+          disabled={props.disabled}
+          onChange={(locationId) => props.onChange({ locationId })}
+          options={referenceFilterOptions(props.locations, "All locals")}
+        />
+
+        <FilterSelect
+          label="Task"
+          value={props.filters.taskId}
+          disabled={props.disabled}
+          onChange={(taskId) => props.onChange({ taskId })}
+          options={referenceFilterOptions(props.tasks, "All tasks")}
+        />
+      </div>
+    </div>
+  );
+}
+
+function FilterSelect(props: {
+  label: string;
+  value: string;
+  disabled: boolean;
+  options: { value: string; label: string }[];
+  onChange: (value: string) => void;
+}) {
+  return (
+    <label className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+      {props.label}
+      <select
+        value={props.value}
+        disabled={props.disabled}
+        onChange={(event) => props.onChange(event.target.value)}
+        className="mt-1 w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm font-normal normal-case tracking-normal text-gray-900 shadow-sm disabled:bg-gray-100 disabled:text-gray-500"
+      >
+        {props.options.map((option) => (
+          <option key={option.value} value={option.value}>
+            {option.label}
+          </option>
+        ))}
+      </select>
+    </label>
   );
 }
 
@@ -636,9 +830,15 @@ function AvailabilitySelect(props: {
         title={availabilityLabel(props.value)}
         className="w-10 rounded-xl border border-gray-300 bg-white px-1 py-2 text-sm text-gray-900 shadow-sm disabled:bg-gray-100 disabled:text-gray-500"
       >
-        <option value="ACTIVE" title="A — Active">A</option>
-        <option value="DAY_OFF" title="D — Day Off">D</option>
-        <option value="LEAVE_OF_ABSENCE" title="L — Leave of Absence">L</option>
+        <option value="ACTIVE" title="A — Active">
+          A
+        </option>
+        <option value="DAY_OFF" title="D — Day Off">
+          D
+        </option>
+        <option value="LEAVE_OF_ABSENCE" title="L — Leave of Absence">
+          L
+        </option>
       </select>
     </label>
   );
@@ -753,6 +953,65 @@ function referenceSelectTitle(
 ) {
   const current = options.find((option) => option.id === currentValue);
   return current ? referenceOptionLabel(current) : "";
+}
+
+function referenceFilterOptions(
+  options: ReferenceDataItem[],
+  allLabel: string,
+): { value: string; label: string }[] {
+  return [
+    { value: "", label: allLabel },
+    ...options
+      .filter((option) => option.active)
+      .sort(bySortOrderThenLabel)
+      .map((option) => ({ value: option.id, label: option.label })),
+  ];
+}
+
+function planningFiltersAreEmpty(filters: PlanningTableFilters) {
+  return (
+    filters.search.trim() === "" &&
+    filters.selection === "ALL" &&
+    filters.availability === "ALL" &&
+    filters.sectorId === "" &&
+    filters.locationId === "" &&
+    filters.taskId === ""
+  );
+}
+
+function rowMatchesFilters(row: LocalRow, filters: PlanningTableFilters) {
+  const search = filters.search.trim().toLocaleLowerCase();
+  if (search) {
+    const haystack = [
+      row.collaboratorNickname,
+      row.collaboratorName,
+      row.collaboratorId,
+      row.sectorLabel,
+      row.locationLabel,
+      row.taskLabel,
+    ]
+      .filter(Boolean)
+      .join(" ")
+      .toLocaleLowerCase();
+    if (!haystack.includes(search)) return false;
+  }
+
+  if (filters.selection === "SELECTED" && !row.selected) return false;
+  if (filters.selection === "UNSELECTED" && row.selected) return false;
+
+  if (
+    filters.availability !== "ALL" &&
+    normalizePlanningAvailability(row.planningAvailability) !==
+      filters.availability
+  ) {
+    return false;
+  }
+
+  if (filters.sectorId && row.sectorId !== filters.sectorId) return false;
+  if (filters.locationId && row.locationId !== filters.locationId) return false;
+  if (filters.taskId && row.taskId !== filters.taskId) return false;
+
+  return true;
 }
 
 function defaultCompareRows(left: LocalRow, right: LocalRow) {

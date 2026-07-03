@@ -149,6 +149,67 @@ describe("PlanTab", () => {
     });
   });
 
+  it("filters planning rows without changing the save payload", async () => {
+    const onBulkPlan = vi.fn();
+
+    await renderPlanTab({
+      onBulkPlan,
+      onRefineAssignment: vi.fn(),
+    });
+
+    await changeFilterInput("Search collaborators", "Mineiro");
+
+    expect(container.textContent).toContain("Showing 1 of 2");
+    expect(visibleBodyRows()).toHaveLength(1);
+    expect(visibleBodyRows()[0].textContent).toContain("Mineiro");
+    expect(visibleBodyRows()[0].textContent).not.toContain("Aline");
+
+    await clickButton("Save plan (1 selected)");
+
+    expect(onBulkPlan).toHaveBeenCalledWith({
+      rows: [
+        {
+          collaboratorId: "collab-selected",
+          selected: true,
+          sectorId: "sector-mining",
+          locationId: "location-main",
+          taskId: "task-miner",
+          planningAvailability: "ACTIVE",
+          availabilityChanged: false,
+        },
+      ],
+    });
+  });
+
+  it("filters by selection, availability, and reference values", async () => {
+    await renderPlanTab({
+      onBulkPlan: vi.fn(),
+      onRefineAssignment: vi.fn(),
+    });
+
+    await changeTableSelect("Availability for Mineiro", "DAY_OFF");
+    await changeFilterSelect("Selection", "UNSELECTED");
+    await changeFilterSelect("Avail.", "DAY_OFF");
+    await changeFilterSelect("Sector", "sector-mining");
+    await changeFilterSelect("Local", "location-main");
+    await changeFilterSelect("Task", "task-miner");
+
+    expect(container.textContent).toContain("Showing 1 of 2");
+    expect(visibleBodyRows()).toHaveLength(1);
+    expect(visibleBodyRows()[0].textContent).toContain("Mineiro");
+
+    await changeFilterSelect("Task", "task-loader");
+
+    expect(container.textContent).toContain("Showing 0 of 2");
+    expect(container.textContent).toContain(
+      "No collaborators match the current planning filters",
+    );
+
+    await clickButton("Clear filters");
+
+    expect(container.textContent).toContain("Showing 2 of 2");
+    expect(visibleBodyRows()).toHaveLength(2);
+  });
 
   it("uses compact planning table controls so Task remains visible", async () => {
     await renderPlanTab({
@@ -306,6 +367,45 @@ function referenceItem(
     active,
     sortOrder: 10,
   };
+}
+
+function visibleBodyRows() {
+  return Array.from(container.querySelectorAll("tbody tr"));
+}
+
+async function changeFilterInput(labelText: string, value: string) {
+  const label = findFilterLabel(labelText);
+  const input = label.querySelector<HTMLInputElement>("input");
+  if (!input) throw new Error(`Missing filter input ${labelText}`);
+  await act(async () => {
+    const valueSetter = Object.getOwnPropertyDescriptor(
+      HTMLInputElement.prototype,
+      "value",
+    )?.set;
+    valueSetter?.call(input, value);
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+}
+
+async function changeFilterSelect(labelText: string, value: string) {
+  const label = findFilterLabel(labelText);
+  const select = label.querySelector<HTMLSelectElement>("select");
+  if (!select) throw new Error(`Missing filter select ${labelText}`);
+  await act(async () => {
+    select.value = value;
+    select.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+}
+
+function findFilterLabel(labelText: string) {
+  const labels = Array.from(container.querySelectorAll("label")).filter(
+    (item) => !item.closest('[role="dialog"]'),
+  );
+  const label = labels.find((item) =>
+    item.textContent?.trim().startsWith(labelText),
+  );
+  if (!label) throw new Error(`Missing filter label ${labelText}`);
+  return label;
 }
 
 async function clickRowButton(rowText: string, buttonText: string) {
