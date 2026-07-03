@@ -104,6 +104,7 @@ func (r *gormRepository) Update(ctx context.Context, assignment *db.WorkPeriodAs
 		Updates(map[string]any{
 			"collaborator_id":               assignment.CollaboratorID,
 			"planned_status":                assignment.PlannedStatus,
+			"planning_availability":         normalizePlanningAvailability(assignment.PlanningAvailability),
 			"actual_status":                 assignment.ActualStatus,
 			"replacement_for_assignment_id": assignment.ReplacementForAssignmentID,
 			"sector_id":                     assignment.SectorID,

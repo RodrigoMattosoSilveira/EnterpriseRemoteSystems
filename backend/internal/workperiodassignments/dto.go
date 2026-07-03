@@ -8,6 +8,7 @@ type WorkPeriodAssignmentDTO struct {
 	CollaboratorName           string `json:"collaboratorName,omitempty"`
 	CollaboratorNickname       string `json:"collaboratorNickname,omitempty"`
 	PlannedStatus              string `json:"plannedStatus"`
+	PlanningAvailability       string `json:"planningAvailability"`
 	ActualStatus               string `json:"actualStatus,omitempty"`
 	ReplacementForAssignmentID string `json:"replacementForAssignmentId,omitempty"`
 	SectorID                   string `json:"sectorId"`
@@ -24,6 +25,7 @@ type WorkPeriodAssignmentDTO struct {
 type CreateWorkPeriodAssignmentRequest struct {
 	CollaboratorID             string `json:"collaboratorId"`
 	PlannedStatus              string `json:"plannedStatus"`
+	PlanningAvailability       string `json:"planningAvailability"`
 	ReplacementForAssignmentID string `json:"replacementForAssignmentId"`
 	SectorID                   string `json:"sectorId"`
 	LocationID                 string `json:"locationId"`
@@ -33,6 +35,7 @@ type CreateWorkPeriodAssignmentRequest struct {
 type UpdateWorkPeriodAssignmentRequest struct {
 	CollaboratorID             string `json:"collaboratorId"`
 	PlannedStatus              string `json:"plannedStatus"`
+	PlanningAvailability       string `json:"planningAvailability"`
 	ReplacementForAssignmentID string `json:"replacementForAssignmentId"`
 	SectorID                   string `json:"sectorId"`
 	LocationID                 string `json:"locationId"`
@@ -49,6 +52,8 @@ type BulkPlanWorkPeriodAssignmentRow struct {
 	SectorID                   string `json:"sectorId"`
 	LocationID                 string `json:"locationId"`
 	TaskID                     string `json:"taskId"`
+	PlanningAvailability       string `json:"planningAvailability"`
+	AvailabilityChanged        bool   `json:"availabilityChanged"`
 	ReplacementForAssignmentID string `json:"replacementForAssignmentId"`
 }
 
@@ -95,6 +100,7 @@ type WorkPeriodPlanningTemplateRow struct {
 	CollaboratorName     string `json:"collaboratorName,omitempty"`
 	CollaboratorNickname string `json:"collaboratorNickname,omitempty"`
 	ProjectedEndDate     string `json:"projectedEndDate,omitempty"`
+	PlanningAvailability string `json:"planningAvailability"`
 	Selected             bool   `json:"selected"`
 	SectorID             string `json:"sectorId"`
 	SectorLabel          string `json:"sectorLabel,omitempty"`
