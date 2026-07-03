@@ -11,14 +11,22 @@ import type {
 } from "../../types/planning";
 
 type SortKey =
-  "selected" | "nickname" | "availability" | "sector" | "location" | "task";
+  | "selected"
+  | "replacementCandidate"
+  | "nickname"
+  | "availability"
+  | "sector"
+  | "location"
+  | "task";
 type SortDirection = "asc" | "desc";
 type SelectionFilter = "ALL" | "SELECTED" | "UNSELECTED";
 type PlanningAvailabilityFilter = "ALL" | PlanningAvailability;
+type ReplacementCandidateFilter = "ALL" | "CANDIDATES" | "NON_CANDIDATES";
 type PlanningTableFilters = {
   search: string;
   selection: SelectionFilter;
   availability: PlanningAvailabilityFilter;
+  replacementCandidate: ReplacementCandidateFilter;
   sectorId: string;
   locationId: string;
   taskId: string;
@@ -28,6 +36,7 @@ const emptyPlanningTableFilters: PlanningTableFilters = {
   search: "",
   selection: "ALL",
   availability: "ALL",
+  replacementCandidate: "ALL",
   sectorId: "",
   locationId: "",
   taskId: "",
@@ -40,6 +49,7 @@ type SelectableReferenceDataItem = ReferenceDataItem & {
 type LocalRow = WorkPeriodPlanningTemplateRow & {
   originalPlanningAvailability?: PlanningAvailability;
   availabilityChanged?: boolean;
+  replacementCandidate?: boolean;
 };
 type RefinementDraft = {
   sectorId: string;
@@ -86,6 +96,7 @@ export function PlanTab(props: {
           planningAvailability,
           originalPlanningAvailability: planningAvailability,
           availabilityChanged: false,
+          replacementCandidate: false,
         };
       }),
     );
@@ -94,6 +105,9 @@ export function PlanTab(props: {
   const selectedCount = rows.filter((row) => row.selected).length;
   const availabilityChangeCount = rows.filter(
     (row) => row.availabilityChanged,
+  ).length;
+  const replacementCandidateCount = rows.filter(
+    (row) => row.replacementCandidate,
   ).length;
   const sortedRows = useMemo(() => {
     const copy = [...rows];
@@ -217,7 +231,9 @@ export function PlanTab(props: {
           </p>
           <p className="mt-2 text-sm text-gray-500">
             Use Plan Assignment to refine a collaborator&apos;s sector, local,
-            and task before saving the Work Period plan. Future defaults are
+            and task before saving the Work Period plan. Use Cand. to mark
+            possible replacement candidates for review; candidate marks are
+            local planning aids only and are not saved yet. Future defaults are
             updated only when explicitly selected in that refinement workflow.
           </p>
           {props.template?.sourceWorkPeriodId && (
@@ -286,15 +302,17 @@ export function PlanTab(props: {
             visibleCount={filteredRows.length}
             totalCount={rows.length}
             selectedCount={selectedCount}
+            replacementCandidateCount={replacementCandidateCount}
             disabled={props.loading || props.pending}
             filtersActive={filtersActive}
             onChange={updateFilters}
             onClear={() => setFilters(emptyPlanningTableFilters)}
           />
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[46rem] table-fixed divide-y divide-gray-200 text-sm">
+            <table className="w-full min-w-[50rem] table-fixed divide-y divide-gray-200 text-sm">
               <colgroup>
                 <col className="w-12" />
+                <col className="w-14" />
                 <col className="w-36" />
                 <col className="w-16" />
                 <col className="w-14" />
@@ -311,6 +329,14 @@ export function PlanTab(props: {
                     direction={sort?.direction}
                     onClick={() => toggleSort("selected")}
                     className="text-right"
+                  />
+                  <SortableHeader
+                    label="Cand."
+                    title="Replacement candidate"
+                    active={sort?.key === "replacementCandidate"}
+                    direction={sort?.direction}
+                    onClick={() => toggleSort("replacementCandidate")}
+                    className="px-1 text-center whitespace-nowrap"
                   />
                   <SortableHeader
                     label="Nick"
@@ -357,7 +383,7 @@ export function PlanTab(props: {
                 {filteredRows.length === 0 && (
                   <tr>
                     <td
-                      colSpan={7}
+                      colSpan={8}
                       className="px-4 py-8 text-center text-sm text-gray-500"
                     >
                       No collaborators match the current planning filters.
@@ -367,7 +393,13 @@ export function PlanTab(props: {
                 {filteredRows.map((row) => (
                   <tr
                     key={row.collaboratorId}
-                    className={row.selected ? "bg-white" : "bg-gray-50/70"}
+                    className={
+                      row.replacementCandidate
+                        ? "bg-amber-50"
+                        : row.selected
+                          ? "bg-white"
+                          : "bg-gray-50/70"
+                    }
                   >
                     <td className="px-2 py-3 text-right align-top">
                       <label className="inline-flex items-center justify-end">
@@ -389,6 +421,18 @@ export function PlanTab(props: {
                         />
                       </label>
                     </td>
+                    <td className="px-1 py-3 text-center align-top">
+                      <ReplacementCandidateToggle
+                        label={`Replacement candidate for ${row.collaboratorNickname || row.collaboratorName || row.collaboratorId}`}
+                        checked={Boolean(row.replacementCandidate)}
+                        disabled={!props.editable || props.pending}
+                        onChange={(replacementCandidate) =>
+                          updateRow(row.collaboratorId, {
+                            replacementCandidate,
+                          })
+                        }
+                      />
+                    </td>
                     <td className="px-2 py-3 align-top">
                       <div
                         className="truncate font-semibold text-gray-950"
@@ -402,6 +446,11 @@ export function PlanTab(props: {
                           row.collaboratorName ||
                           row.collaboratorId}
                       </div>
+                      {row.replacementCandidate && (
+                        <span className="mt-1 inline-flex rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-800">
+                          Candidate
+                        </span>
+                      )}
                       <button
                         type="button"
                         disabled={!props.editable || props.pending}
@@ -516,6 +565,7 @@ function PlanningTableFiltersPanel(props: {
   visibleCount: number;
   totalCount: number;
   selectedCount: number;
+  replacementCandidateCount: number;
   disabled: boolean;
   filtersActive: boolean;
   onChange: (patch: Partial<PlanningTableFilters>) => void;
@@ -529,7 +579,8 @@ function PlanningTableFiltersPanel(props: {
             Planning table filters
           </h3>
           <p className="text-xs text-gray-500">
-            Filters only change which rows are visible. Save plan still includes
+            Filters only change which rows are visible. Candidate marks help
+            review possible replacements locally; Save plan still includes only
             selected rows and changed availability rows.
           </p>
         </div>
@@ -539,6 +590,8 @@ function PlanningTableFiltersPanel(props: {
           </span>
           <span>·</span>
           <span>{props.selectedCount} selected</span>
+          <span>·</span>
+          <span>{props.replacementCandidateCount} candidate</span>
           <button
             type="button"
             onClick={props.onClear}
@@ -550,7 +603,7 @@ function PlanningTableFiltersPanel(props: {
         </div>
       </div>
 
-      <div className="grid gap-3 md:grid-cols-3 xl:grid-cols-6">
+      <div className="grid gap-3 md:grid-cols-3 xl:grid-cols-7">
         <label className="text-xs font-semibold uppercase tracking-wide text-gray-500 md:col-span-3 xl:col-span-1">
           Search collaborators
           <input
@@ -591,6 +644,23 @@ function PlanningTableFiltersPanel(props: {
             { value: "ACTIVE", label: "A" },
             { value: "DAY_OFF", label: "D" },
             { value: "LEAVE_OF_ABSENCE", label: "L" },
+          ]}
+        />
+
+        <FilterSelect
+          label="Candidate"
+          value={props.filters.replacementCandidate}
+          disabled={props.disabled}
+          onChange={(replacementCandidate) =>
+            props.onChange({
+              replacementCandidate:
+                replacementCandidate as ReplacementCandidateFilter,
+            })
+          }
+          options={[
+            { value: "ALL", label: "All rows" },
+            { value: "CANDIDATES", label: "Candidates only" },
+            { value: "NON_CANDIDATES", label: "Non-candidates only" },
           ]}
         />
 
@@ -811,6 +881,34 @@ function CompactJourneyDaysRemaining(props: {
   );
 }
 
+function ReplacementCandidateToggle(props: {
+  label: string;
+  checked: boolean;
+  disabled: boolean;
+  onChange: (checked: boolean) => void;
+}) {
+  return (
+    <label
+      className="inline-flex items-center justify-center"
+      title={
+        props.checked
+          ? "Marked as a replacement candidate. This mark is not saved yet."
+          : "Mark as a replacement candidate for local planning review."
+      }
+    >
+      <span className="sr-only">{props.label}</span>
+      <input
+        type="checkbox"
+        aria-label={props.label}
+        checked={props.checked}
+        disabled={props.disabled}
+        onChange={(event) => props.onChange(event.target.checked)}
+        className="h-4 w-4 rounded border-gray-300 text-gray-950 disabled:bg-gray-100"
+      />
+    </label>
+  );
+}
+
 function AvailabilitySelect(props: {
   label: string;
   value: PlanningAvailability;
@@ -973,6 +1071,7 @@ function planningFiltersAreEmpty(filters: PlanningTableFilters) {
     filters.search.trim() === "" &&
     filters.selection === "ALL" &&
     filters.availability === "ALL" &&
+    filters.replacementCandidate === "ALL" &&
     filters.sectorId === "" &&
     filters.locationId === "" &&
     filters.taskId === ""
@@ -1007,6 +1106,19 @@ function rowMatchesFilters(row: LocalRow, filters: PlanningTableFilters) {
     return false;
   }
 
+  if (
+    filters.replacementCandidate === "CANDIDATES" &&
+    !row.replacementCandidate
+  ) {
+    return false;
+  }
+  if (
+    filters.replacementCandidate === "NON_CANDIDATES" &&
+    row.replacementCandidate
+  ) {
+    return false;
+  }
+
   if (filters.sectorId && row.sectorId !== filters.sectorId) return false;
   if (filters.locationId && row.locationId !== filters.locationId) return false;
   if (filters.taskId && row.taskId !== filters.taskId) return false;
@@ -1017,6 +1129,10 @@ function rowMatchesFilters(row: LocalRow, filters: PlanningTableFilters) {
 function defaultCompareRows(left: LocalRow, right: LocalRow) {
   return (
     compareBooleanDesc(left.selected, right.selected) ||
+    compareBooleanDesc(
+      Boolean(left.replacementCandidate),
+      Boolean(right.replacementCandidate),
+    ) ||
     compareText(rowNickname(left), rowNickname(right)) ||
     compareText(
       left.sectorLabel || left.sectorId,
@@ -1036,6 +1152,13 @@ function compareForKey(left: LocalRow, right: LocalRow, key: SortKey) {
       return (
         compareBooleanDesc(left.selected, right.selected) ||
         defaultCompareRows(left, right)
+      );
+    case "replacementCandidate":
+      return (
+        compareBooleanDesc(
+          Boolean(left.replacementCandidate),
+          Boolean(right.replacementCandidate),
+        ) || defaultCompareRows(left, right)
       );
     case "nickname":
       return compareText(rowNickname(left), rowNickname(right));
