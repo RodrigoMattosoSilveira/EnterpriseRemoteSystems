@@ -1,20 +1,27 @@
 import { useEffect, useMemo, useState } from "react";
-import { JourneyDaysRemaining } from "../../components/JourneyDaysRemaining";
+import { getJourneyDaysPresentation } from "../../components/JourneyDaysRemaining";
 import type { ReferenceDataItem } from "../../types/referenceData";
 import type {
   BulkPlanWorkPeriodAssignmentsInput,
   PlanAssignmentRefinementInput,
   PlanAssignmentRefinementResult,
+  PlanningAvailability,
   WorkPeriodPlanningTemplate,
   WorkPeriodPlanningTemplateRow,
 } from "../../types/planning";
 
-type SortKey = "selected" | "nickname" | "sector" | "location" | "task";
+type SortKey =
+  "selected" | "nickname" | "availability" | "sector" | "location" | "task";
 type SortDirection = "asc" | "desc";
 
-type SelectableReferenceDataItem = ReferenceDataItem & { inactiveCurrent?: boolean };
+type SelectableReferenceDataItem = ReferenceDataItem & {
+  inactiveCurrent?: boolean;
+};
 
-type LocalRow = WorkPeriodPlanningTemplateRow;
+type LocalRow = WorkPeriodPlanningTemplateRow & {
+  originalPlanningAvailability?: PlanningAvailability;
+  availabilityChanged?: boolean;
+};
 type RefinementDraft = {
   sectorId: string;
   locationId: string;
@@ -41,17 +48,31 @@ export function PlanTab(props: {
     direction: SortDirection;
   } | null>(null);
   const [refiningRow, setRefiningRow] = useState<LocalRow | null>(null);
-  const [refinementDraft, setRefinementDraft] = useState<RefinementDraft | null>(
-    null,
-  );
+  const [refinementDraft, setRefinementDraft] =
+    useState<RefinementDraft | null>(null);
   const [refinementPending, setRefinementPending] = useState(false);
   const [refinementMessage, setRefinementMessage] = useState("");
 
   useEffect(() => {
-    setRows(props.template?.rows ?? []);
+    setRows(
+      (props.template?.rows ?? []).map((row) => {
+        const planningAvailability = normalizePlanningAvailability(
+          row.planningAvailability,
+        );
+        return {
+          ...row,
+          planningAvailability,
+          originalPlanningAvailability: planningAvailability,
+          availabilityChanged: false,
+        };
+      }),
+    );
   }, [props.template]);
 
   const selectedCount = rows.filter((row) => row.selected).length;
+  const availabilityChangeCount = rows.filter(
+    (row) => row.availabilityChanged,
+  ).length;
   const sortedRows = useMemo(() => {
     const copy = [...rows];
     if (!sort) {
@@ -82,13 +103,17 @@ export function PlanTab(props: {
   function submitPlan() {
     props.onBulkPlan({
       rows: rows
-        .filter((row) => row.selected)
+        .filter((row) => row.selected || row.availabilityChanged)
         .map((row) => ({
           collaboratorId: row.collaboratorId,
-          selected: true,
+          selected: row.selected,
           sectorId: row.sectorId,
           locationId: row.locationId,
           taskId: row.taskId,
+          planningAvailability: normalizePlanningAvailability(
+            row.planningAvailability,
+          ),
+          availabilityChanged: Boolean(row.availabilityChanged),
         })),
     });
   }
@@ -133,7 +158,8 @@ export function PlanTab(props: {
           labelFor(props.locations, refinementDraft.locationId),
         taskId: refinementResult?.taskId ?? refinementDraft.taskId,
         taskLabel:
-          refinementResult?.taskLabel ?? labelFor(props.tasks, refinementDraft.taskId),
+          refinementResult?.taskLabel ??
+          labelFor(props.tasks, refinementDraft.taskId),
       });
       setRefiningRow(null);
       setRefinementDraft(null);
@@ -155,12 +181,13 @@ export function PlanTab(props: {
           <p className="text-sm text-gray-500">
             Select collaborators for this Work Period. New plans start from the
             most recent Work Period with the same period code. Saving applies
-            the selected rows only; unselected rows are ignored.
+            the selected rows only; unselected rows are ignored unless their
+            Availability was changed for inheritance by the next plan.
           </p>
           <p className="mt-2 text-sm text-gray-500">
-            Use Plan Assignment to refine a collaborator&apos;s sector, local, and
-            task before saving the Work Period plan. Future defaults are updated
-            only when explicitly selected in that refinement workflow.
+            Use Plan Assignment to refine a collaborator&apos;s sector, local,
+            and task before saving the Work Period plan. Future defaults are
+            updated only when explicitly selected in that refinement workflow.
           </p>
           {props.template?.sourceWorkPeriodId && (
             <p className="mt-2 text-sm font-medium text-gray-700">
@@ -196,13 +223,13 @@ export function PlanTab(props: {
               props.pending ||
               refinementPending ||
               props.loading ||
-              selectedCount === 0
+              (selectedCount === 0 && availabilityChangeCount === 0)
             }
             className="rounded-xl bg-gray-950 px-4 py-2 text-sm font-semibold text-white shadow-sm disabled:bg-gray-400"
           >
             {props.pending
               ? "Saving plan..."
-              : `Plan selected collaborators (${selectedCount})`}
+              : `Save plan (${selectedCount} selected)`}
           </button>
         </div>
       </div>
@@ -221,22 +248,47 @@ export function PlanTab(props: {
       {rows.length > 0 && (
         <div className="overflow-hidden rounded-2xl border bg-white shadow-sm">
           <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200 text-sm">
+            <table className="w-full min-w-[46rem] table-fixed divide-y divide-gray-200 text-sm">
+              <colgroup>
+                <col className="w-12" />
+                <col className="w-36" />
+                <col className="w-16" />
+                <col className="w-14" />
+                <col className="w-32" />
+                <col className="w-32" />
+                <col className="w-44" />
+              </colgroup>
               <thead className="bg-gray-50 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
                 <tr>
                   <SortableHeader
-                    label="Selected"
+                    label="✓"
+                    title="Selected"
                     active={sort?.key === "selected"}
                     direction={sort?.direction}
                     onClick={() => toggleSort("selected")}
+                    className="text-right"
                   />
                   <SortableHeader
-                    label="Nickname"
+                    label="Nick"
+                    title="Nickname"
                     active={sort?.key === "nickname"}
                     direction={sort?.direction}
                     onClick={() => toggleSort("nickname")}
                   />
-                  <th className="px-4 py-3">Projected Journey End</th>
+                  <th
+                    className="px-1 py-3 text-center whitespace-nowrap"
+                    title="Days left until projected Journey end"
+                  >
+                    D Left
+                  </th>
+                  <SortableHeader
+                    label="Avail."
+                    title="Availability"
+                    active={sort?.key === "availability"}
+                    direction={sort?.direction}
+                    onClick={() => toggleSort("availability")}
+                    className="px-1 text-center whitespace-nowrap"
+                  />
                   <SortableHeader
                     label="Sector"
                     active={sort?.key === "sector"}
@@ -263,8 +315,13 @@ export function PlanTab(props: {
                     key={row.collaboratorId}
                     className={row.selected ? "bg-white" : "bg-gray-50/70"}
                   >
-                    <td className="px-4 py-3 align-top">
-                      <label className="inline-flex items-center gap-2 font-medium text-gray-700">
+                    <td className="px-2 py-3 text-right align-top">
+                      <label className="inline-flex items-center justify-end">
+                        <span className="sr-only">
+                          {row.selected
+                            ? `Unselect ${row.collaboratorNickname || row.collaboratorName || row.collaboratorId}`
+                            : `Select ${row.collaboratorNickname || row.collaboratorName || row.collaboratorId}`}
+                        </span>
                         <input
                           type="checkbox"
                           checked={row.selected}
@@ -276,41 +333,59 @@ export function PlanTab(props: {
                           }
                           className="h-4 w-4 rounded border-gray-300"
                         />
-                        {row.selected ? "Selected" : "Not selected"}
                       </label>
                     </td>
-                    <td className="px-4 py-3 align-top">
-                      <div className="font-semibold text-gray-950">
+                    <td className="px-2 py-3 align-top">
+                      <div
+                        className="truncate font-semibold text-gray-950"
+                        title={
+                          row.collaboratorNickname ||
+                          row.collaboratorName ||
+                          row.collaboratorId
+                        }
+                      >
                         {row.collaboratorNickname ||
                           row.collaboratorName ||
                           row.collaboratorId}
                       </div>
-                      {row.collaboratorName &&
-                        row.collaboratorName !== row.collaboratorNickname && (
-                          <div className="text-xs text-gray-500">
-                            {row.collaboratorName}
-                          </div>
-                        )}
                       <button
                         type="button"
                         disabled={!props.editable || props.pending}
                         onClick={() => openRefinement(row)}
-                        className="mt-2 inline-flex rounded-xl border border-gray-300 bg-white px-3 py-2 text-xs font-semibold text-gray-700 shadow-sm hover:bg-gray-50 disabled:bg-gray-100 disabled:text-gray-400"
+                        className="mt-2 inline-flex rounded-lg border border-gray-300 bg-white px-2 py-1 text-[11px] font-semibold text-gray-700 shadow-sm hover:bg-gray-50 disabled:bg-gray-100 disabled:text-gray-400"
                       >
                         Plan Assignment
                       </button>
                     </td>
-                    <td className="px-4 py-3 align-top">
-                      <JourneyDaysRemaining
+                    <td className="px-1 py-3 text-center align-top">
+                      <CompactJourneyDaysRemaining
                         projectedEndDate={row.projectedEndDate || ""}
                         className="text-xs"
                       />
                     </td>
-                    <td className="px-4 py-3 align-top">
+                    <td className="px-1 py-3 text-center align-top">
+                      <AvailabilitySelect
+                        label={`Availability for ${row.collaboratorNickname || row.collaboratorName || row.collaboratorId}`}
+                        value={normalizePlanningAvailability(
+                          row.planningAvailability,
+                        )}
+                        disabled={!props.editable || props.pending}
+                        onChange={(planningAvailability) =>
+                          updateRow(row.collaboratorId, {
+                            planningAvailability,
+                            availabilityChanged:
+                              planningAvailability !==
+                              row.originalPlanningAvailability,
+                          })
+                        }
+                      />
+                    </td>
+                    <td className="px-2 py-3 align-top">
                       <ReferenceSelect
                         label={`Sector for ${row.collaboratorNickname || row.collaboratorName || row.collaboratorId}`}
                         value={row.sectorId}
                         options={props.sectors}
+                        widthClassName="w-32"
                         disabled={
                           !props.editable || props.pending || !row.selected
                         }
@@ -319,11 +394,12 @@ export function PlanTab(props: {
                         }
                       />
                     </td>
-                    <td className="px-4 py-3 align-top">
+                    <td className="px-2 py-3 align-top">
                       <ReferenceSelect
                         label={`Local for ${row.collaboratorNickname || row.collaboratorName || row.collaboratorId}`}
                         value={row.locationId}
                         options={props.locations}
+                        widthClassName="w-32"
                         disabled={
                           !props.editable || props.pending || !row.selected
                         }
@@ -332,11 +408,12 @@ export function PlanTab(props: {
                         }
                       />
                     </td>
-                    <td className="px-4 py-3 align-top">
+                    <td className="px-2 py-3 align-top">
                       <ReferenceSelect
                         label={`Task for ${row.collaboratorNickname || row.collaboratorName || row.collaboratorId}`}
                         value={row.taskId}
                         options={props.tasks}
+                        widthClassName="w-44"
                         disabled={
                           !props.editable || props.pending || !row.selected
                         }
@@ -382,9 +459,14 @@ function SortableHeader(props: {
   active: boolean;
   direction?: SortDirection;
   onClick: () => void;
+  title?: string;
+  className?: string;
 }) {
   return (
-    <th className="px-4 py-3">
+    <th
+      className={["px-2 py-3", props.className].filter(Boolean).join(" ")}
+      title={props.title ?? props.label}
+    >
       <button
         type="button"
         onClick={props.onClick}
@@ -510,12 +592,65 @@ function PlanAssignmentRefinementDialog(props: {
   );
 }
 
+function CompactJourneyDaysRemaining(props: {
+  projectedEndDate: string;
+  className?: string;
+}) {
+  const presentation = getJourneyDaysPresentation(
+    props.projectedEndDate,
+    new Date(),
+  );
+
+  if (!presentation) {
+    return null;
+  }
+
+  return (
+    <span
+      className={["font-bold", presentation.colorClass, props.className]
+        .filter(Boolean)
+        .join(" ")}
+      title={presentation.label}
+    >
+      {presentation.daysRemaining} D
+    </span>
+  );
+}
+
+function AvailabilitySelect(props: {
+  label: string;
+  value: PlanningAvailability;
+  disabled: boolean;
+  onChange: (value: PlanningAvailability) => void;
+}) {
+  return (
+    <label>
+      <span className="sr-only">{props.label}</span>
+      <select
+        aria-label={props.label}
+        value={props.value}
+        disabled={props.disabled}
+        onChange={(event) =>
+          props.onChange(normalizePlanningAvailability(event.target.value))
+        }
+        title={availabilityLabel(props.value)}
+        className="w-10 rounded-xl border border-gray-300 bg-white px-1 py-2 text-sm text-gray-900 shadow-sm disabled:bg-gray-100 disabled:text-gray-500"
+      >
+        <option value="ACTIVE" title="A — Active">A</option>
+        <option value="DAY_OFF" title="D — Day Off">D</option>
+        <option value="LEAVE_OF_ABSENCE" title="L — Leave of Absence">L</option>
+      </select>
+    </label>
+  );
+}
+
 function ReferenceSelect(props: {
   label: string;
   value: string;
   options: ReferenceDataItem[];
   disabled: boolean;
   onChange: (value: string) => void;
+  widthClassName?: string;
 }) {
   const options = selectableReferenceOptions(props.options, props.value);
 
@@ -527,7 +662,8 @@ function ReferenceSelect(props: {
         value={props.value}
         disabled={props.disabled}
         onChange={(event) => props.onChange(event.target.value)}
-        className="w-44 rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm disabled:bg-gray-100 disabled:text-gray-500"
+        title={referenceSelectTitle(options, props.value)}
+        className={`${props.widthClassName ?? "w-36"} min-w-0 truncate rounded-xl border border-gray-300 bg-white px-2 py-2 text-sm text-gray-900 shadow-sm disabled:bg-gray-100 disabled:text-gray-500`}
       >
         {options.map((option) => (
           <option
@@ -583,7 +719,10 @@ function selectableReferenceOptions(
     .filter((option) => option.active)
     .sort(bySortOrderThenLabel);
 
-  if (!currentValue || activeOptions.some((option) => option.id === currentValue)) {
+  if (
+    !currentValue ||
+    activeOptions.some((option) => option.id === currentValue)
+  ) {
     return activeOptions;
   }
 
@@ -595,12 +734,25 @@ function selectableReferenceOptions(
   return [{ ...currentInactive, inactiveCurrent: true }, ...activeOptions];
 }
 
-function bySortOrderThenLabel(left: ReferenceDataItem, right: ReferenceDataItem) {
-  return left.sortOrder - right.sortOrder || left.label.localeCompare(right.label);
+function bySortOrderThenLabel(
+  left: ReferenceDataItem,
+  right: ReferenceDataItem,
+) {
+  return (
+    left.sortOrder - right.sortOrder || left.label.localeCompare(right.label)
+  );
 }
 
 function referenceOptionLabel(option: SelectableReferenceDataItem) {
   return option.inactiveCurrent ? `${option.label} (inactive)` : option.label;
+}
+
+function referenceSelectTitle(
+  options: SelectableReferenceDataItem[],
+  currentValue: string,
+) {
+  const current = options.find((option) => option.id === currentValue);
+  return current ? referenceOptionLabel(current) : "";
 }
 
 function defaultCompareRows(left: LocalRow, right: LocalRow) {
@@ -628,6 +780,11 @@ function compareForKey(left: LocalRow, right: LocalRow, key: SortKey) {
       );
     case "nickname":
       return compareText(rowNickname(left), rowNickname(right));
+    case "availability":
+      return compareText(
+        availabilityLabel(left.planningAvailability),
+        availabilityLabel(right.planningAvailability),
+      );
     case "sector":
       return compareText(
         left.sectorLabel || left.sectorId,
@@ -659,6 +816,30 @@ function compareText(left: string | undefined, right: string | undefined) {
 
 function rowNickname(row: LocalRow) {
   return row.collaboratorNickname || row.collaboratorName || row.collaboratorId;
+}
+
+function normalizePlanningAvailability(
+  value: string | undefined,
+): PlanningAvailability {
+  switch (value) {
+    case "DAY_OFF":
+    case "LEAVE_OF_ABSENCE":
+    case "ACTIVE":
+      return value;
+    default:
+      return "ACTIVE";
+  }
+}
+
+function availabilityLabel(value: string | undefined) {
+  switch (normalizePlanningAvailability(value)) {
+    case "DAY_OFF":
+      return "D — Day Off";
+    case "LEAVE_OF_ABSENCE":
+      return "L — Leave of Absence";
+    case "ACTIVE":
+      return "A — Active";
+  }
 }
 
 function labelFor(options: ReferenceDataItem[], id: string) {
