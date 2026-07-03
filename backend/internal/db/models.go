@@ -281,6 +281,7 @@ type WorkPeriodAssignment struct {
 	WorkPeriodID               string  `gorm:"type:text;not null;uniqueIndex:ux_work_period_assignments_active_collaborator,priority:2;index" json:"workPeriodId"`
 	CollaboratorID             string  `gorm:"type:text;not null;uniqueIndex:ux_work_period_assignments_active_collaborator,priority:3;index" json:"collaboratorId"`
 	PlannedStatus              string  `gorm:"type:text;not null;index" json:"plannedStatus"`
+	PlanningAvailability       string  `gorm:"type:text;not null;default:ACTIVE;index" json:"planningAvailability"`
 	ActualStatus               *string `gorm:"type:text" json:"actualStatus,omitempty"`
 	ReplacementForAssignmentID *string `gorm:"type:text;index" json:"replacementForAssignmentId,omitempty"`
 	SectorID                   string  `gorm:"type:text;not null;index" json:"sectorId"`

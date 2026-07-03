@@ -46,6 +46,7 @@ export type WorkPeriodListResponse = {
 };
 
 export type PlannedStatus = "INCLUDED" | "EXCLUDED";
+export type PlanningAvailability = "ACTIVE" | "DAY_OFF" | "LEAVE_OF_ABSENCE";
 export type ActualStatus =
   "WORKED" | "ABSENT" | "SICK_DAY_OFF" | "TIME_OFF" | "REPLACED" | "CANCELLED";
 
@@ -57,6 +58,7 @@ export type WorkPeriodAssignment = {
   collaboratorName?: string;
   collaboratorNickname?: string;
   plannedStatus: PlannedStatus;
+  planningAvailability: PlanningAvailability;
   actualStatus?: ActualStatus;
   replacementForAssignmentId?: string;
   sectorId: string;
@@ -73,6 +75,7 @@ export type WorkPeriodAssignment = {
 export type SaveWorkPeriodAssignmentInput = {
   collaboratorId: string;
   plannedStatus: PlannedStatus;
+  planningAvailability?: PlanningAvailability;
   replacementForAssignmentId?: string;
   sectorId: string;
   locationId: string;
@@ -119,6 +122,7 @@ export type WorkPeriodPlanningTemplateRow = {
   collaboratorName?: string;
   collaboratorNickname?: string;
   projectedEndDate?: string;
+  planningAvailability: PlanningAvailability;
   selected: boolean;
   sectorId: string;
   sectorLabel?: string;
@@ -142,6 +146,8 @@ export type BulkPlanWorkPeriodAssignmentRow = {
   sectorId: string;
   locationId: string;
   taskId: string;
+  planningAvailability: PlanningAvailability;
+  availabilityChanged?: boolean;
   replacementForAssignmentId?: string;
 };
 
