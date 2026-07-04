@@ -118,6 +118,7 @@ export type WorkPlanRoster = {
 export type WorkPeriodPlanningTemplateRow = {
   assignmentId?: string;
   templateAssignmentId?: string;
+  replacementForAssignmentId?: string;
   collaboratorId: string;
   collaboratorName?: string;
   collaboratorNickname?: string;
@@ -149,6 +150,7 @@ export type BulkPlanWorkPeriodAssignmentRow = {
   planningAvailability: PlanningAvailability;
   availabilityChanged?: boolean;
   replacementForAssignmentId?: string;
+  temporaryReplacementForCollaboratorId?: string;
 };
 
 export type BulkPlanWorkPeriodAssignmentsInput = {

@@ -95,17 +95,18 @@ type apiAssignmentListResponse struct {
 }
 
 type apiPlanningTemplateRow struct {
-	AssignmentID         string `json:"assignmentId"`
-	TemplateAssignmentID string `json:"templateAssignmentId"`
-	CollaboratorID       string `json:"collaboratorId"`
-	CollaboratorName     string `json:"collaboratorName"`
-	CollaboratorNickname string `json:"collaboratorNickname"`
-	ProjectedEndDate     string `json:"projectedEndDate"`
-	PlanningAvailability string `json:"planningAvailability"`
-	Selected             bool   `json:"selected"`
-	SectorID             string `json:"sectorId"`
-	LocationID           string `json:"locationId"`
-	TaskID               string `json:"taskId"`
+	AssignmentID               string `json:"assignmentId"`
+	TemplateAssignmentID       string `json:"templateAssignmentId"`
+	ReplacementForAssignmentID string `json:"replacementForAssignmentId"`
+	CollaboratorID             string `json:"collaboratorId"`
+	CollaboratorName           string `json:"collaboratorName"`
+	CollaboratorNickname       string `json:"collaboratorNickname"`
+	ProjectedEndDate           string `json:"projectedEndDate"`
+	PlanningAvailability       string `json:"planningAvailability"`
+	Selected                   bool   `json:"selected"`
+	SectorID                   string `json:"sectorId"`
+	LocationID                 string `json:"locationId"`
+	TaskID                     string `json:"taskId"`
 }
 
 type apiPlanningTemplateResponse struct {
@@ -122,14 +123,15 @@ type apiBulkPlanResponse struct {
 	Data struct {
 		SelectedCount int `json:"selectedCount"`
 		Assignments   []struct {
-			ID                   string `json:"id"`
-			CollaboratorID       string `json:"collaboratorId"`
-			PlannedStatus        string `json:"plannedStatus"`
-			PlanningAvailability string `json:"planningAvailability"`
-			SectorID             string `json:"sectorId"`
-			LocationID           string `json:"locationId"`
-			TaskID               string `json:"taskId"`
-			Active               bool   `json:"active"`
+			ID                         string `json:"id"`
+			CollaboratorID             string `json:"collaboratorId"`
+			PlannedStatus              string `json:"plannedStatus"`
+			PlanningAvailability       string `json:"planningAvailability"`
+			ReplacementForAssignmentID string `json:"replacementForAssignmentId"`
+			SectorID                   string `json:"sectorId"`
+			LocationID                 string `json:"locationId"`
+			TaskID                     string `json:"taskId"`
+			Active                     bool   `json:"active"`
 		} `json:"assignments"`
 	} `json:"data"`
 }
@@ -339,6 +341,85 @@ func TestBulkPlanUpdatesSelectedAvailabilitySnapshotWithoutAssignmentRefs(t *tes
 	}
 	if assignment.SectorID == "" || assignment.LocationID == "" || assignment.TaskID == "" {
 		t.Fatalf("expected assignment refs to be preserved from the existing assignment, got %+v", assignment)
+	}
+}
+
+func TestBulkPlanSavesTemporaryReplacementForCurrentWorkPeriod(t *testing.T) {
+	server, cleanup := newTestServer(t)
+	defer cleanup()
+
+	workPeriod := createWorkPeriod(t, server, nil)
+	original := createActiveCollaborator(t, server, 1)
+	replacement := createActiveCollaborator(t, server, 2)
+
+	res := postJSON(t, server, http.MethodPost, workPeriodsURL+workPeriod.Data.ID+"/assignments/bulk-plan", map[string]any{
+		"rows": []map[string]any{
+			{
+				"collaboratorId":       original.Data.ID,
+				"selected":             false,
+				"planningAvailability": "DAY_OFF",
+				"availabilityChanged":  true,
+				"sectorId":             "ref-sector-mining",
+				"locationId":           "ref-location-main-mine",
+				"taskId":               "ref-task-miner",
+			},
+			{
+				"collaboratorId":                        replacement.Data.ID,
+				"selected":                              true,
+				"planningAvailability":                  "ACTIVE",
+				"sectorId":                              "ref-sector-mining",
+				"locationId":                            "ref-location-main-mine",
+				"taskId":                                "ref-task-miner",
+				"temporaryReplacementForCollaboratorId": original.Data.ID,
+			},
+		},
+	})
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		var body apiErrorResponse
+		decodeJSON(t, res, &body)
+		t.Fatalf("expected bulk-plan status %d, got %d with error %+v", http.StatusOK, res.StatusCode, body.Error)
+	}
+
+	var body apiBulkPlanResponse
+	decodeJSON(t, res, &body)
+	if body.Data.SelectedCount != 1 || len(body.Data.Assignments) != 2 {
+		t.Fatalf("expected original snapshot and selected replacement, got selected=%d assignments=%d", body.Data.SelectedCount, len(body.Data.Assignments))
+	}
+	assignmentByCollaborator := map[string]struct {
+		ID                         string
+		PlannedStatus              string
+		PlanningAvailability       string
+		ReplacementForAssignmentID string
+	}{}
+	for _, assignment := range body.Data.Assignments {
+		assignmentByCollaborator[assignment.CollaboratorID] = struct {
+			ID                         string
+			PlannedStatus              string
+			PlanningAvailability       string
+			ReplacementForAssignmentID string
+		}{
+			ID:                         assignment.ID,
+			PlannedStatus:              assignment.PlannedStatus,
+			PlanningAvailability:       assignment.PlanningAvailability,
+			ReplacementForAssignmentID: assignment.ReplacementForAssignmentID,
+		}
+	}
+	originalAssignment := assignmentByCollaborator[original.Data.ID]
+	replacementAssignment := assignmentByCollaborator[replacement.Data.ID]
+	if originalAssignment.ID == "" || originalAssignment.PlannedStatus != "EXCLUDED" || originalAssignment.PlanningAvailability != "DAY_OFF" {
+		t.Fatalf("expected original day-off snapshot, got %+v", originalAssignment)
+	}
+	if replacementAssignment.ID == "" || replacementAssignment.PlannedStatus != "INCLUDED" || replacementAssignment.ReplacementForAssignmentID != originalAssignment.ID {
+		t.Fatalf("expected replacement to reference original assignment %q, got %+v", originalAssignment.ID, replacementAssignment)
+	}
+
+	listRes := getJSON(t, server, workPeriodsURL+workPeriod.Data.ID+"/assignments")
+	defer listRes.Body.Close()
+	var listBody apiAssignmentListResponse
+	decodeJSON(t, listRes, &listBody)
+	if listBody.Data.Total != 2 {
+		t.Fatalf("expected replacement to stay scoped to this Work Period only, got total=%d", listBody.Data.Total)
 	}
 }
 
