@@ -95,6 +95,7 @@ func (s *service) GetPlanningTemplate(ctx context.Context, workPeriodID string) 
 		}
 		if current, ok := currentByCollaborator[collaborator.ID]; ok {
 			planningRow.AssignmentID = current.ID
+			planningRow.ReplacementForAssignmentID = nilString(current.ReplacementForAssignmentID)
 			planningRow.Selected = current.PlannedStatus == PlannedStatusIncluded
 			planningRow.PlanningAvailability = normalizePlanningAvailability(current.PlanningAvailability)
 			planningRow.SectorID = current.SectorID
@@ -151,12 +152,17 @@ func (s *service) BulkPlan(ctx context.Context, workPeriodID string, req BulkPla
 
 	now := time.Now().UTC()
 	savedAssignments := []db.WorkPeriodAssignment{}
+	savedByCollaborator := map[string]db.WorkPeriodAssignment{}
 	selectedCount := 0
 	for _, row := range req.Rows {
 		collaboratorID := strings.TrimSpace(row.CollaboratorID)
-		shouldSave := row.Selected || row.AvailabilityChanged
+		temporaryReplacementForCollaboratorID := strings.TrimSpace(row.TemporaryReplacementForCollaboratorID)
+		shouldSave := row.Selected || row.AvailabilityChanged || temporaryReplacementForCollaboratorID != "" || strings.TrimSpace(row.ReplacementForAssignmentID) != ""
 		if !shouldSave {
 			continue
+		}
+		if temporaryReplacementForCollaboratorID != "" && temporaryReplacementForCollaboratorID == collaboratorID {
+			return nil, ValidationError{Fields: map[string]string{"temporaryReplacementForCollaboratorId": "Replacement collaborator cannot replace themselves"}}
 		}
 
 		plannedStatus := PlannedStatusExcluded
@@ -206,6 +212,7 @@ func (s *service) BulkPlan(ctx context.Context, workPeriodID string, req BulkPla
 				return nil, err
 			}
 			savedAssignments = append(savedAssignments, existing)
+			savedByCollaborator[collaboratorID] = existing
 			continue
 		}
 
@@ -226,6 +233,49 @@ func (s *service) BulkPlan(ctx context.Context, workPeriodID string, req BulkPla
 			return nil, err
 		}
 		savedAssignments = append(savedAssignments, *assignment)
+		savedByCollaborator[collaboratorID] = *assignment
+	}
+
+	for _, row := range req.Rows {
+		collaboratorID := strings.TrimSpace(row.CollaboratorID)
+		temporaryReplacementForCollaboratorID := strings.TrimSpace(row.TemporaryReplacementForCollaboratorID)
+		if temporaryReplacementForCollaboratorID == "" {
+			continue
+		}
+
+		replacementAssignment, ok := savedByCollaborator[collaboratorID]
+		if !ok {
+			return nil, ValidationError{Fields: map[string]string{"collaboratorId": "Replacement collaborator must be saved in this Work Period plan"}}
+		}
+		replacedAssignment, ok := savedByCollaborator[temporaryReplacementForCollaboratorID]
+		if !ok {
+			if existing, hasExisting := currentByCollaborator[temporaryReplacementForCollaboratorID]; hasExisting {
+				replacedAssignment = existing
+				ok = true
+			}
+		}
+		if !ok {
+			return nil, ValidationError{Fields: map[string]string{"temporaryReplacementForCollaboratorId": "Replacement target collaborator must be part of this Work Period plan"}}
+		}
+		if replacementAssignment.ID == replacedAssignment.ID {
+			return nil, ValidationError{Fields: map[string]string{"temporaryReplacementForCollaboratorId": "Replacement assignment cannot replace itself"}}
+		}
+		if replacementAssignment.WorkPeriodID != workPeriod.ID || replacedAssignment.WorkPeriodID != workPeriod.ID {
+			return nil, ValidationError{Fields: map[string]string{"temporaryReplacementForCollaboratorId": "Temporary replacements must stay within this Work Period"}}
+		}
+
+		replacementAssignment.ReplacementForAssignmentID = &replacedAssignment.ID
+		replacementAssignment.UpdatedAt = now
+		if err := s.repo.Update(ctx, &replacementAssignment); err != nil {
+			return nil, err
+		}
+		savedByCollaborator[collaboratorID] = replacementAssignment
+		for index := range savedAssignments {
+			if savedAssignments[index].ID == replacementAssignment.ID {
+				savedAssignments[index] = replacementAssignment
+				break
+			}
+		}
 	}
 
 	return ptr(BulkPlanWorkPeriodAssignmentsResult{

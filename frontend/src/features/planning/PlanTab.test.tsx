@@ -161,8 +161,8 @@ describe("PlanTab", () => {
 
     expect(container.textContent).toContain("Showing 1 of 2");
     expect(visibleBodyRows()).toHaveLength(1);
-    expect(visibleBodyRows()[0].textContent).toContain("Mineiro");
-    expect(visibleBodyRows()[0].textContent).not.toContain("Aline");
+    expect(rowNicknameCellText(visibleBodyRows()[0])).toContain("Mineiro");
+    expect(rowNicknameCellText(visibleBodyRows()[0])).not.toContain("Aline");
 
     await clickButton("Save plan (1 selected)");
 
@@ -196,7 +196,7 @@ describe("PlanTab", () => {
 
     expect(container.textContent).toContain("Showing 1 of 2");
     expect(visibleBodyRows()).toHaveLength(1);
-    expect(visibleBodyRows()[0].textContent).toContain("Mineiro");
+    expect(rowNicknameCellText(visibleBodyRows()[0])).toContain("Mineiro");
 
     await changeFilterSelect("Task", "task-loader");
 
@@ -209,6 +209,42 @@ describe("PlanTab", () => {
 
     expect(container.textContent).toContain("Showing 2 of 2");
     expect(visibleBodyRows()).toHaveLength(2);
+  });
+
+  it("keeps visible row order stable when a collaborator is selected", async () => {
+    const stableOrderTemplate: WorkPeriodPlanningTemplate = {
+      ...template,
+      rows: [
+        planningRow("collab-aline", "Aline"),
+        planningRow("collab-bruno", "Bruno"),
+        planningRow("collab-camila", "Camila"),
+        planningRow("collab-davi", "Davi"),
+      ],
+    };
+
+    await renderPlanTab({
+      onBulkPlan: vi.fn(),
+      onRefineAssignment: vi.fn(),
+      templateOverride: stableOrderTemplate,
+    });
+
+    expect(visibleRowNicknames()).toEqual([
+      "Aline",
+      "Bruno",
+      "Camila",
+      "Davi",
+    ]);
+
+    await changeSelectionCheckboxForRow("Davi", true);
+
+    expect(visibleRowNicknames()).toEqual([
+      "Aline",
+      "Bruno",
+      "Camila",
+      "Davi",
+    ]);
+    expect(selectionCheckboxForRow("Davi").checked).toBe(true);
+    expect(selectionCheckboxForRow("Bruno").checked).toBe(false);
   });
 
   it("marks replacement candidates locally without saving assignment data", async () => {
@@ -228,7 +264,7 @@ describe("PlanTab", () => {
 
     expect(container.textContent).toContain("Showing 1 of 2");
     expect(visibleBodyRows()).toHaveLength(1);
-    expect(visibleBodyRows()[0].textContent).toContain("Mineiro");
+    expect(rowNicknameCellText(visibleBodyRows()[0])).toContain("Mineiro");
 
     await clickButton("Save plan (1 selected)");
 
@@ -247,6 +283,78 @@ describe("PlanTab", () => {
     });
   });
 
+  it("offers only unassigned day-off or leave rows as temporary replacement targets", async () => {
+    const onBulkPlan = vi.fn();
+    const replacementTargetTemplate: WorkPeriodPlanningTemplate = {
+      ...template,
+      rows: [
+        { ...planningRow("collab-selected", "Aline"), selected: true },
+        planningRow("collab-mineiro", "Mineiro"),
+        planningRow("collab-camila", "Camila"),
+      ],
+    };
+
+    await renderPlanTab({
+      onBulkPlan,
+      onRefineAssignment: vi.fn(),
+      templateOverride: replacementTargetTemplate,
+    });
+
+    await changeTableCheckbox("Replacement candidate for Mineiro", true);
+
+    expect(
+      tableSelectOptionLabels("Temporary replacement target for Mineiro"),
+    ).toEqual(["No temporary replacement"]);
+
+    await changeTableSelect("Availability for Aline", "DAY_OFF");
+
+    expect(
+      tableSelectOptionLabels("Temporary replacement target for Mineiro"),
+    ).toEqual(["No temporary replacement", "Aline · D · selected"]);
+
+    await changeTableSelect(
+      "Temporary replacement target for Mineiro",
+      "collab-selected",
+    );
+
+    expect(container.textContent).toContain("1 temporary replacement");
+    expect(
+      tableSelectOptionLabels("Temporary replacement target for Mineiro"),
+    ).toEqual(["No temporary replacement", "Aline · D · selected"]);
+
+    await changeTableCheckbox("Replacement candidate for Camila", true);
+
+    expect(
+      tableSelectOptionLabels("Temporary replacement target for Camila"),
+    ).toEqual(["No temporary replacement"]);
+
+    await clickButton("Save plan (2 selected)");
+
+    expect(onBulkPlan).toHaveBeenCalledWith({
+      rows: [
+        {
+          collaboratorId: "collab-selected",
+          selected: true,
+          sectorId: "sector-mining",
+          locationId: "location-main",
+          taskId: "task-miner",
+          planningAvailability: "DAY_OFF",
+          availabilityChanged: true,
+        },
+        {
+          collaboratorId: "collab-mineiro",
+          selected: true,
+          sectorId: "sector-mining",
+          locationId: "location-main",
+          taskId: "task-miner",
+          planningAvailability: "ACTIVE",
+          availabilityChanged: false,
+          temporaryReplacementForCollaboratorId: "collab-selected",
+        },
+      ],
+    });
+  });
+
   it("uses compact planning table controls so Task remains visible", async () => {
     await renderPlanTab({
       onBulkPlan: vi.fn(),
@@ -259,6 +367,7 @@ describe("PlanTab", () => {
 
     expect(headerText).toContain("✓");
     expect(headerText).toContain("Cand.");
+    expect(headerText).toContain("Repl.");
     expect(headerText).toContain("Nick");
     expect(headerText).toContain("D Left");
     expect(headerText).toContain("Avail.");
@@ -316,12 +425,13 @@ async function renderPlanTab(props: {
   onRefineAssignment: (
     input: PlanAssignmentRefinementInput,
   ) => Promise<PlanAssignmentRefinementResult>;
+  templateOverride?: WorkPeriodPlanningTemplate;
 }) {
   await act(async () => {
     root = createRoot(container);
     root.render(
       <PlanTab
-        template={template}
+        template={props.templateOverride ?? template}
         sectors={sectors}
         locations={locations}
         tasks={tasks}
@@ -406,8 +516,62 @@ function referenceItem(
   };
 }
 
+function planningRow(
+  collaboratorId: string,
+  collaboratorNickname: string,
+): WorkPeriodPlanningTemplate["rows"][number] {
+  return {
+    collaboratorId,
+    collaboratorNickname,
+    collaboratorName: `${collaboratorNickname} Silva`,
+    projectedEndDate: "2026-09-01",
+    planningAvailability: "ACTIVE",
+    selected: false,
+    sectorId: "sector-mining",
+    sectorLabel: "Mining",
+    locationId: "location-main",
+    locationLabel: "Main Mine",
+    taskId: "task-miner",
+    taskLabel: "Miner",
+  };
+}
+
 function visibleBodyRows() {
   return Array.from(container.querySelectorAll("tbody tr"));
+}
+
+function visibleRowNicknames() {
+  return visibleBodyRows().map((row) => rowNicknameCellText(row).trim());
+}
+
+function selectionCheckboxForRow(rowText: string) {
+  const row = Array.from(container.querySelectorAll("tbody tr")).find((item) =>
+    rowNicknameCellText(item).includes(rowText),
+  );
+  if (!row) throw new Error(`Missing row ${rowText}`);
+  const checkbox = row.querySelector<HTMLInputElement>(
+    'td:first-child input[type="checkbox"]',
+  );
+  if (!checkbox) throw new Error(`Missing selection checkbox for ${rowText}`);
+  return checkbox;
+}
+
+async function changeSelectionCheckboxForRow(
+  rowText: string,
+  checked: boolean,
+) {
+  const checkbox = selectionCheckboxForRow(rowText);
+  await act(async () => {
+    if (checkbox.checked !== checked) {
+      checkbox.click();
+    }
+  });
+}
+
+function rowNicknameCellText(row: Element) {
+  return (
+    row.querySelector("td:nth-child(4) > div[title]")?.textContent ?? ""
+  );
 }
 
 async function changeFilterInput(labelText: string, value: string) {
@@ -447,7 +611,7 @@ function findFilterLabel(labelText: string) {
 
 async function clickRowButton(rowText: string, buttonText: string) {
   const row = Array.from(container.querySelectorAll("tbody tr")).find((item) =>
-    item.textContent?.includes(rowText),
+    rowNicknameCellText(item).includes(rowText),
   );
   if (!row) throw new Error(`Missing row ${rowText}`);
   const button = Array.from(row.querySelectorAll("button")).find(
@@ -479,6 +643,14 @@ async function changeTableCheckbox(labelText: string, checked: boolean) {
       checkbox.click();
     }
   });
+}
+
+function tableSelectOptionLabels(labelText: string) {
+  const select = Array.from(container.querySelectorAll("select")).find(
+    (item) => item.getAttribute("aria-label") === labelText,
+  );
+  if (!select) throw new Error(`Missing table select ${labelText}`);
+  return Array.from(select.options).map((option) => option.text.trim());
 }
 
 async function changeTableSelect(labelText: string, value: string) {
