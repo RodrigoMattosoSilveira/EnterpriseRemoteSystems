@@ -13,6 +13,7 @@ import type {
 type SortKey =
   | "selected"
   | "replacementCandidate"
+  | "temporaryReplacement"
   | "nickname"
   | "availability"
   | "sector"
@@ -47,9 +48,11 @@ type SelectableReferenceDataItem = ReferenceDataItem & {
 };
 
 type LocalRow = WorkPeriodPlanningTemplateRow & {
+  planningOrder: number;
   originalPlanningAvailability?: PlanningAvailability;
   availabilityChanged?: boolean;
   replacementCandidate?: boolean;
+  temporaryReplacementForCollaboratorId?: string;
 };
 type RefinementDraft = {
   sectorId: string;
@@ -86,19 +89,31 @@ export function PlanTab(props: {
   const [refinementMessage, setRefinementMessage] = useState("");
 
   useEffect(() => {
+    const nextRows = (props.template?.rows ?? []).map((row, planningOrder) => {
+      const planningAvailability = normalizePlanningAvailability(
+        row.planningAvailability,
+      );
+      return {
+        ...row,
+        planningOrder,
+        planningAvailability,
+        originalPlanningAvailability: planningAvailability,
+        availabilityChanged: false,
+        replacementCandidate: Boolean(row.replacementForAssignmentId),
+        temporaryReplacementForCollaboratorId: "",
+      };
+    });
+    const collaboratorByAssignmentId = new Map(
+      nextRows
+        .filter((row) => row.assignmentId)
+        .map((row) => [row.assignmentId, row.collaboratorId]),
+    );
     setRows(
-      (props.template?.rows ?? []).map((row) => {
-        const planningAvailability = normalizePlanningAvailability(
-          row.planningAvailability,
-        );
-        return {
-          ...row,
-          planningAvailability,
-          originalPlanningAvailability: planningAvailability,
-          availabilityChanged: false,
-          replacementCandidate: false,
-        };
-      }),
+      nextRows.map((row) => ({
+        ...row,
+        temporaryReplacementForCollaboratorId:
+          collaboratorByAssignmentId.get(row.replacementForAssignmentId) ?? "",
+      })),
     );
   }, [props.template]);
 
@@ -108,6 +123,9 @@ export function PlanTab(props: {
   ).length;
   const replacementCandidateCount = rows.filter(
     (row) => row.replacementCandidate,
+  ).length;
+  const temporaryReplacementCount = rows.filter(
+    (row) => row.temporaryReplacementForCollaboratorId,
   ).length;
   const sortedRows = useMemo(() => {
     const copy = [...rows];
@@ -133,6 +151,36 @@ export function PlanTab(props: {
     );
   }
 
+  function updatePlanningAvailability(
+    collaboratorId: string,
+    planningAvailability: PlanningAvailability,
+  ) {
+    setRows((current) =>
+      current.map((row) => {
+        if (row.collaboratorId === collaboratorId) {
+          return {
+            ...row,
+            planningAvailability,
+            availabilityChanged:
+              planningAvailability !== row.originalPlanningAvailability,
+          };
+        }
+
+        if (
+          row.temporaryReplacementForCollaboratorId === collaboratorId &&
+          !isTemporaryReplacementTargetAvailability(planningAvailability)
+        ) {
+          return {
+            ...row,
+            temporaryReplacementForCollaboratorId: "",
+          };
+        }
+
+        return row;
+      }),
+    );
+  }
+
   function updateFilters(patch: Partial<PlanningTableFilters>) {
     setFilters((current) => ({ ...current, ...patch }));
   }
@@ -146,20 +194,41 @@ export function PlanTab(props: {
   }
 
   function submitPlan() {
+    const temporaryReplacementTargetIds = new Set(
+      rows
+        .map((row) => row.temporaryReplacementForCollaboratorId?.trim())
+        .filter(Boolean),
+    );
+
     props.onBulkPlan({
       rows: rows
-        .filter((row) => row.selected || row.availabilityChanged)
-        .map((row) => ({
-          collaboratorId: row.collaboratorId,
-          selected: row.selected,
-          sectorId: row.sectorId,
-          locationId: row.locationId,
-          taskId: row.taskId,
-          planningAvailability: normalizePlanningAvailability(
-            row.planningAvailability,
-          ),
-          availabilityChanged: Boolean(row.availabilityChanged),
-        })),
+        .filter(
+          (row) =>
+            row.selected ||
+            row.availabilityChanged ||
+            Boolean(row.temporaryReplacementForCollaboratorId) ||
+            temporaryReplacementTargetIds.has(row.collaboratorId),
+        )
+        .map((row) => {
+          const payload = {
+            collaboratorId: row.collaboratorId,
+            selected: row.selected,
+            sectorId: row.sectorId,
+            locationId: row.locationId,
+            taskId: row.taskId,
+            planningAvailability: normalizePlanningAvailability(
+              row.planningAvailability,
+            ),
+            availabilityChanged: Boolean(row.availabilityChanged),
+          };
+          return row.temporaryReplacementForCollaboratorId
+            ? {
+                ...payload,
+                temporaryReplacementForCollaboratorId:
+                  row.temporaryReplacementForCollaboratorId,
+              }
+            : payload;
+        }),
     });
   }
 
@@ -231,10 +300,10 @@ export function PlanTab(props: {
           </p>
           <p className="mt-2 text-sm text-gray-500">
             Use Plan Assignment to refine a collaborator&apos;s sector, local,
-            and task before saving the Work Period plan. Use Cand. to mark
-            possible replacement candidates for review; candidate marks are
-            local planning aids only and are not saved yet. Future defaults are
-            updated only when explicitly selected in that refinement workflow.
+            and task before saving the Work Period plan. Use Cand. and Repl.
+            to mark temporary replacements for this Work Period only. Future
+            defaults are updated only when explicitly selected in that
+            refinement workflow.
           </p>
           {props.template?.sourceWorkPeriodId && (
             <p className="mt-2 text-sm font-medium text-gray-700">
@@ -270,7 +339,9 @@ export function PlanTab(props: {
               props.pending ||
               refinementPending ||
               props.loading ||
-              (selectedCount === 0 && availabilityChangeCount === 0)
+              selectedCount === 0 &&
+              availabilityChangeCount === 0 &&
+              temporaryReplacementCount === 0
             }
             className="rounded-xl bg-gray-950 px-4 py-2 text-sm font-semibold text-white shadow-sm disabled:bg-gray-400"
           >
@@ -303,6 +374,7 @@ export function PlanTab(props: {
             totalCount={rows.length}
             selectedCount={selectedCount}
             replacementCandidateCount={replacementCandidateCount}
+            temporaryReplacementCount={temporaryReplacementCount}
             disabled={props.loading || props.pending}
             filtersActive={filtersActive}
             onChange={updateFilters}
@@ -313,6 +385,7 @@ export function PlanTab(props: {
               <colgroup>
                 <col className="w-12" />
                 <col className="w-14" />
+                <col className="w-40" />
                 <col className="w-36" />
                 <col className="w-16" />
                 <col className="w-14" />
@@ -336,6 +409,14 @@ export function PlanTab(props: {
                     active={sort?.key === "replacementCandidate"}
                     direction={sort?.direction}
                     onClick={() => toggleSort("replacementCandidate")}
+                    className="px-1 text-center whitespace-nowrap"
+                  />
+                  <SortableHeader
+                    label="Repl."
+                    title="Temporary replacement target"
+                    active={sort?.key === "temporaryReplacement"}
+                    direction={sort?.direction}
+                    onClick={() => toggleSort("temporaryReplacement")}
                     className="px-1 text-center whitespace-nowrap"
                   />
                   <SortableHeader
@@ -383,7 +464,7 @@ export function PlanTab(props: {
                 {filteredRows.length === 0 && (
                   <tr>
                     <td
-                      colSpan={8}
+                      colSpan={9}
                       className="px-4 py-8 text-center text-sm text-gray-500"
                     >
                       No collaborators match the current planning filters.
@@ -429,6 +510,34 @@ export function PlanTab(props: {
                         onChange={(replacementCandidate) =>
                           updateRow(row.collaboratorId, {
                             replacementCandidate,
+                            temporaryReplacementForCollaboratorId:
+                              replacementCandidate
+                                ? row.temporaryReplacementForCollaboratorId
+                                : "",
+                          })
+                        }
+                      />
+                    </td>
+                    <td className="px-1 py-3 align-top">
+                      <TemporaryReplacementSelect
+                        label={`Temporary replacement target for ${row.collaboratorNickname || row.collaboratorName || row.collaboratorId}`}
+                        value={row.temporaryReplacementForCollaboratorId || ""}
+                        row={row}
+                        rows={rows}
+                        disabled={
+                          !props.editable ||
+                          props.pending ||
+                          !row.replacementCandidate
+                        }
+                        onChange={(temporaryReplacementForCollaboratorId) =>
+                          updateRow(row.collaboratorId, {
+                            temporaryReplacementForCollaboratorId,
+                            replacementCandidate:
+                              Boolean(temporaryReplacementForCollaboratorId) ||
+                              Boolean(row.replacementCandidate),
+                            selected:
+                              row.selected ||
+                              Boolean(temporaryReplacementForCollaboratorId),
                           })
                         }
                       />
@@ -474,12 +583,10 @@ export function PlanTab(props: {
                         )}
                         disabled={!props.editable || props.pending}
                         onChange={(planningAvailability) =>
-                          updateRow(row.collaboratorId, {
+                          updatePlanningAvailability(
+                            row.collaboratorId,
                             planningAvailability,
-                            availabilityChanged:
-                              planningAvailability !==
-                              row.originalPlanningAvailability,
-                          })
+                          )
                         }
                       />
                     </td>
@@ -566,6 +673,7 @@ function PlanningTableFiltersPanel(props: {
   totalCount: number;
   selectedCount: number;
   replacementCandidateCount: number;
+  temporaryReplacementCount: number;
   disabled: boolean;
   filtersActive: boolean;
   onChange: (patch: Partial<PlanningTableFilters>) => void;
@@ -579,9 +687,9 @@ function PlanningTableFiltersPanel(props: {
             Planning table filters
           </h3>
           <p className="text-xs text-gray-500">
-            Filters only change which rows are visible. Candidate marks help
-            review possible replacements locally; Save plan still includes only
-            selected rows and changed availability rows.
+            Filters only change which rows are visible. Temporary replacement
+            choices are saved only for this Work Period; they do not update
+            future planning defaults.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2 text-xs font-medium text-gray-600">
@@ -592,6 +700,8 @@ function PlanningTableFiltersPanel(props: {
           <span>{props.selectedCount} selected</span>
           <span>·</span>
           <span>{props.replacementCandidateCount} candidate</span>
+          <span>·</span>
+          <span>{props.temporaryReplacementCount} temporary replacement</span>
           <button
             type="button"
             onClick={props.onClear}
@@ -892,8 +1002,8 @@ function ReplacementCandidateToggle(props: {
       className="inline-flex items-center justify-center"
       title={
         props.checked
-          ? "Marked as a replacement candidate. This mark is not saved yet."
-          : "Mark as a replacement candidate for local planning review."
+          ? "Marked as a replacement candidate for this Work Period."
+          : "Mark as a replacement candidate for this Work Period."
       }
     >
       <span className="sr-only">{props.label}</span>
@@ -905,6 +1015,46 @@ function ReplacementCandidateToggle(props: {
         onChange={(event) => props.onChange(event.target.checked)}
         className="h-4 w-4 rounded border-gray-300 text-gray-950 disabled:bg-gray-100"
       />
+    </label>
+  );
+}
+
+function TemporaryReplacementSelect(props: {
+  label: string;
+  value: string;
+  row: LocalRow;
+  rows: LocalRow[];
+  disabled: boolean;
+  onChange: (value: string) => void;
+}) {
+  const options = props.rows
+    .filter((row) =>
+      isTemporaryReplacementTargetAvailableForRow(
+        row,
+        props.rows,
+        props.row.collaboratorId,
+      ),
+    )
+    .sort(defaultCompareRows);
+
+  return (
+    <label>
+      <span className="sr-only">{props.label}</span>
+      <select
+        aria-label={props.label}
+        value={props.value}
+        disabled={props.disabled}
+        onChange={(event) => props.onChange(event.target.value)}
+        title={temporaryReplacementTargetTitle(props.value, props.rows)}
+        className="w-40 rounded-xl border border-gray-300 bg-white px-2 py-2 text-xs text-gray-900 shadow-sm disabled:bg-gray-100 disabled:text-gray-500"
+      >
+        <option value="">No temporary replacement</option>
+        {options.map((option) => (
+          <option key={option.collaboratorId} value={option.collaboratorId}>
+            {temporaryReplacementOptionLabel(option)}
+          </option>
+        ))}
+      </select>
     </label>
   );
 }
@@ -1128,11 +1278,7 @@ function rowMatchesFilters(row: LocalRow, filters: PlanningTableFilters) {
 
 function defaultCompareRows(left: LocalRow, right: LocalRow) {
   return (
-    compareBooleanDesc(left.selected, right.selected) ||
-    compareBooleanDesc(
-      Boolean(left.replacementCandidate),
-      Boolean(right.replacementCandidate),
-    ) ||
+    compareNumber(left.planningOrder, right.planningOrder) ||
     compareText(rowNickname(left), rowNickname(right)) ||
     compareText(
       left.sectorLabel || left.sectorId,
@@ -1158,6 +1304,13 @@ function compareForKey(left: LocalRow, right: LocalRow, key: SortKey) {
         compareBooleanDesc(
           Boolean(left.replacementCandidate),
           Boolean(right.replacementCandidate),
+        ) || defaultCompareRows(left, right)
+      );
+    case "temporaryReplacement":
+      return (
+        compareText(
+          temporaryReplacementTargetLabel(left),
+          temporaryReplacementTargetLabel(right),
         ) || defaultCompareRows(left, right)
       );
     case "nickname":
@@ -1190,6 +1343,10 @@ function compareBooleanDesc(left: boolean, right: boolean) {
   return left ? -1 : 1;
 }
 
+function compareNumber(left: number | undefined, right: number | undefined) {
+  return (left ?? 0) - (right ?? 0);
+}
+
 function compareText(left: string | undefined, right: string | undefined) {
   return (left || "").localeCompare(right || "", undefined, {
     sensitivity: "base",
@@ -1198,6 +1355,53 @@ function compareText(left: string | undefined, right: string | undefined) {
 
 function rowNickname(row: LocalRow) {
   return row.collaboratorNickname || row.collaboratorName || row.collaboratorId;
+}
+
+function temporaryReplacementTargetLabel(row: LocalRow) {
+  return row.temporaryReplacementForCollaboratorId || "";
+}
+
+function isTemporaryReplacementTargetAvailableForRow(
+  candidate: LocalRow,
+  rows: LocalRow[],
+  replacementCollaboratorId: string,
+) {
+  if (candidate.collaboratorId === replacementCollaboratorId) {
+    return false;
+  }
+  if (!isTemporaryReplacementTargetCandidate(candidate)) {
+    return false;
+  }
+
+  return !rows.some(
+    (row) =>
+      row.collaboratorId !== replacementCollaboratorId &&
+      row.temporaryReplacementForCollaboratorId === candidate.collaboratorId,
+  );
+}
+
+function isTemporaryReplacementTargetCandidate(row: LocalRow) {
+  return isTemporaryReplacementTargetAvailability(row.planningAvailability);
+}
+
+function isTemporaryReplacementTargetAvailability(
+  value: string | undefined,
+): boolean {
+  const availability = normalizePlanningAvailability(value);
+  return availability === "DAY_OFF" || availability === "LEAVE_OF_ABSENCE";
+}
+
+function temporaryReplacementOptionLabel(row: LocalRow) {
+  const availability = availabilityLabel(row.planningAvailability).slice(0, 1);
+  const selection = row.selected ? "selected" : "not selected";
+  return `${rowNickname(row)} · ${availability} · ${selection}`;
+}
+
+function temporaryReplacementTargetTitle(value: string, rows: LocalRow[]) {
+  const target = rows.find((row) => row.collaboratorId === value);
+  return target
+    ? `Temporarily replacing ${temporaryReplacementOptionLabel(target)}`
+    : "";
 }
 
 function normalizePlanningAvailability(

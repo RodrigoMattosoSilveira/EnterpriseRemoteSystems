@@ -129,9 +129,10 @@ This is the most important regression test.
 4. Reload the page.
 ```
 
-Expected result:
-
+**Expected result**:
+```
 Both selected collaborators are saved, including the one hidden by the filter.
+```
 
 This confirms filters are display-only and do not accidentally limit the save payload.
 
@@ -187,9 +188,10 @@ No unexpected internal API errors.
 Mark candidate
 Unmark candidate
 Mark several candidates
-`````````
+```
 
 **Expected result**:
+
 ```
 Candidate marker toggles immediately.
 Candidate count updates.
@@ -319,4 +321,193 @@ replacement
 No 500 errors.
 No replacement assignment persistence errors.
 No planning_availability schema errors.
+```
+
+# Validating Time Off Logic
+
+## Basic planning table regression
+
+Go to:
+
+```
+Working Periods → open a Planning State Work Period
+```
+
+**Confirm**:
+
+```
+Planning table loads.
+Avail. column appears.
+Cand. column appears.
+Repl. column appears.
+Filters still appear.
+No console errors.
+No backend errors.
+```
+
+## Row selection no longer jumps
+
+## Mark original collaborator as Day Off and select replacement
+
+**Steps**:
+
+```
+1. Identify the collaborator taking time off.
+2. Set their Avail. to D.
+3. Identify the replacement collaborator.
+4. Check the replacement collaborator.
+5. Check Cand. for the replacement collaborator.
+6. Open the replacement collaborator’s Repl. dropdown.
+```
+
+**Expected**:
+
+```
+The Repl. dropdown lists the D collaborator.
+The Repl. dropdown does not list normal A collaborators.
+You can select the D collaborator as the replacement target.
+```
+
+**Then click Save plan, reload the Work Period, and confirm**:
+
+```
+Original collaborator remains D.
+Replacement collaborator remains selected.
+Replacement relationship still appears.
+```
+
+## Repeat the same workflow with Leave of Absence
+
+**Steps**:
+
+```
+1. Set another original collaborator’s Avail. to L.
+2. Select a different replacement collaborator.
+3. Mark the replacement as Cand.
+4. Open Repl.
+5. Choose the L collaborator.
+6. Save and reload.
+```
+
+**Expected**:
+
+```
+L collaborator appears as a valid Repl. target.
+Relationship saves.
+Reload preserves the relationship.
+```
+
+## Confirm active collaborators are not offered as replacement targets
+
+
+**Steps**:
+
+1. Leave several collaborators as A.
+2. Open a replacement collaborator’s Repl. dropdown.
+
+**Expected**:
+
+```
+Only D and L collaborators appear.
+A collaborators do not appear.
+The replacement row itself does not appear as its own target.
+```
+
+6. Confirm stale replacement target is cleared
+
+**Steps**:
+
+```
+1. Set Maria to D.
+2. Set João as replacement for Maria.
+3. Change Maria back from D to A.
+```
+
+**Expected**:
+
+```
+Maria is no longer a valid Repl. target.
+João’s replacement selection is cleared or no longer saved as replacing Maria.
+```
+
+Then save and reload.
+
+**Expected**:
+
+```
+No invalid replacement relationship remains.
+No backend error.
+```
+
+## Confirm replacement is Work Period only
+
+**Steps**:
+
+```
+1. Save a replacement relationship on Work Period A.
+2. Open another Work Period B.
+```
+
+**Expected**:
+
+```
+The replacement relationship does not automatically appear in Work Period B.
+```
+
+The relationship must be temporary for the selected Work Period only.
+
+## Confirm save still includes hidden rows
+
+Test this:
+
+```
+1. Set an original collaborator to D or L.
+2. Select a replacement and choose Repl.
+3. Apply a filter that hides either the original collaborator or the replacement collaborator.
+4. Click Save plan.
+5. Reload.
+```
+
+**Expected**:
+
+```
+The replacement relationship still saves correctly.
+Filtering affects visibility only, not save behavior.
+```
+
+## Confirm normal selected assignment still works
+
+**Steps**:
+
+```
+1. Select a normal A collaborator.
+2. Do not mark Cand.
+3. Do not choose Repl.
+4. Save and reload.
+```
+
+**Expected**:
+
+```
+Normal assignment saves as before.
+No replacement relationship is created.
+```
+
+## Backend log check
+
+**After the smoke tests, check for**:
+
+```
+/assignments/bulk-plan
+internal API error
+replacement_for_assignment_id
+planning_availability
+```
+
+**Expected**:
+
+```
+No 500 errors.
+No planning_availability schema errors.
+No replacement persistence errors.
 ```
