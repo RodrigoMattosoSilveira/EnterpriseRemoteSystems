@@ -65,6 +65,9 @@ help:
 	@echo "  make local-db-init"
 	@echo "  make local-db-reset"
 	@echo "  make testdata-local-reset"
+	@echo "  make manual-testdata-local-reset"
+	@echo "  make manual-testdata-local-seed"
+	@echo "  make manual-testdata-local-reset-with-work-periods"
 	@echo "  make local-admin-reset"
 	@echo "  make backend-check"
 	@echo "  make frontend-check"
@@ -758,6 +761,30 @@ import-people:
 # ==============================================================================
 # Resettable test data
 # ==============================================================================
+
+
+.PHONY: manual-testdata-local-seed
+manual-testdata-local-seed:
+	chmod +x scripts/seed-manual-testdata.py
+	./scripts/seed-manual-testdata.py --with-work-periods
+
+.PHONY: manual-testdata-local-reset
+manual-testdata-local-reset:
+	@echo "Resetting local manual-test database: backend/data/app.db"
+	rm -f backend/data/app.db
+	mkdir -p backend/data
+	DB_PATH=backend/data/app.db ./scripts/db-migrate.sh
+	chmod +x scripts/seed-manual-testdata.py
+	./scripts/seed-manual-testdata.py --with-work-periods
+
+.PHONY: manual-testdata-local-reset-with-work-periods
+manual-testdata-local-reset-with-work-periods:
+	@echo "Resetting local manual-test database with recent Work Periods: backend/data/app.db"
+	rm -f backend/data/app.db
+	mkdir -p backend/data
+	DB_PATH=backend/data/app.db ./scripts/db-migrate.sh
+	chmod +x scripts/seed-manual-testdata.py
+	./scripts/seed-manual-testdata.py --with-work-periods
 
 .PHONY: testdata-local-reset
 testdata-local-reset:
