@@ -614,18 +614,22 @@ def seed_current_account_ledger(conn: sqlite3.Connection) -> None:
 
 def seed_work_periods(conn: sqlite3.Connection, days: int) -> None:
     now = datetime.now(timezone.utc).isoformat(timespec="seconds")
-    for offset in range(days - 1, -1, -1):
+    for period_index, offset in enumerate(range(days - 1, -1, -1), start=1):
         work_date = TODAY - timedelta(days=offset)
+        status = "FULLY_POSTED" if period_index <= 12 else "ACCRUAL_OPEN"
         conn.execute(
             """
             INSERT INTO work_periods (
               id, tenant_id, work_date, period_code, name, starts_at, ends_at,
-              status, created_at, updated_at
-            ) VALUES (?, ?, ?, 'DAY', ?, ?, ?, 'PLANNING', ?, ?)
+              status, informed_at, accrual_opened_at, created_at, updated_at
+            ) VALUES (?, ?, ?, 'DAY', ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(tenant_id, work_date, period_code) DO UPDATE SET
               name = excluded.name,
               starts_at = excluded.starts_at,
               ends_at = excluded.ends_at,
+              status = excluded.status,
+              informed_at = excluded.informed_at,
+              accrual_opened_at = excluded.accrual_opened_at,
               updated_at = excluded.updated_at
             """,
             (
@@ -634,6 +638,9 @@ def seed_work_periods(conn: sqlite3.Connection, days: int) -> None:
                 work_date.isoformat(),
                 f"Manual Work Period {work_date.isoformat()}",
                 f"{work_date.isoformat()} 07:00:00",
+                f"{work_date.isoformat()} 17:00:00",
+                status,
+                f"{work_date.isoformat()} 06:00:00" if status == "FULLY_POSTED" else None,
                 f"{work_date.isoformat()} 17:00:00",
                 now,
                 now,
@@ -651,8 +658,10 @@ def seed_gold_production(conn: sqlite3.Connection, rng: random.Random) -> int:
         SELECT id, work_date
         FROM work_periods
         WHERE tenant_id = ?
-        ORDER BY work_date DESC
-        LIMIT 31
+          AND id LIKE 'manual-work-period-%'
+          AND status = 'FULLY_POSTED'
+        ORDER BY work_date ASC
+        LIMIT 12
         """,
         (TENANT_ID,),
     ).fetchall()
@@ -682,6 +691,40 @@ def seed_gold_production(conn: sqlite3.Connection, rng: random.Random) -> int:
     return inserted
 
 
+def seed_manual_accrual_runs(conn: sqlite3.Connection) -> None:
+    tables = {row["name"] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+    if "accrual_runs" not in tables or "work_periods" not in tables:
+        return
+
+    now = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    work_periods = conn.execute(
+        """
+        SELECT id, work_date, status
+        FROM work_periods
+        WHERE id LIKE 'manual-work-period-%'
+        ORDER BY work_date ASC
+        """
+    ).fetchall()
+    for period_index, period in enumerate(work_periods, start=1):
+        posted = period_index <= 12
+        run_status = "POSTED" if posted else "PENDING_INPUT"
+        notes = "Manual seed: posted accruals." if posted else "Manual seed: waiting for gold production."
+        upsert_filtered_row(
+            conn,
+            "accrual_runs",
+            {
+                "id": f"manual-accrual-run-{period_index:02d}",
+                "tenant_id": TENANT_ID,
+                "work_period_id": period["id"],
+                "status": run_status,
+                "accrual_date": period["work_date"],
+                "notes": notes,
+                "created_at": now,
+                "updated_at": now,
+            },
+        )
+
+
 def manual_seed_counts(conn: sqlite3.Connection) -> dict[str, int]:
     table_names = {row["name"] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
     return {
@@ -701,11 +744,24 @@ def assert_manual_seed_counts(conn: sqlite3.Connection, expect_work_periods: boo
     counts = manual_seed_counts(conn)
     expected = {"people": 70, "collaborators": 40, "expenses": 80, "expense_ledger": 80, "pix_ledger": 15}
     if expect_work_periods:
-        expected.update({"work_periods": 14, "gold_production": 28, "earning_ledger": 480})
+        expected.update({"work_periods": 14, "gold_production": 24, "earning_ledger": 480})
     for label, count in expected.items():
         if counts[label] != count:
             raise SystemExit(
                 f"Manual seed verification failed for {label}: expected {count}, got {counts[label]}."
+            )
+
+    if expect_work_periods and "accrual_runs" in {row["name"] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}:
+        posted = conn.execute(
+            "SELECT COUNT(*) FROM accrual_runs WHERE id LIKE 'manual-accrual-run-%' AND status = 'POSTED'"
+        ).fetchone()[0]
+        pending = conn.execute(
+            "SELECT COUNT(*) FROM accrual_runs WHERE id LIKE 'manual-accrual-run-%' AND status = 'PENDING_INPUT'"
+        ).fetchone()[0]
+        if posted != 12 or pending != 2:
+            raise SystemExit(
+                "Manual seed verification failed for accrual runs: "
+                f"expected posted=12 and pending=2, got posted={posted} and pending={pending}."
             )
 
 
@@ -754,6 +810,8 @@ def main() -> None:
             if args.with_work_periods:
                 seed_work_periods(conn, args.work_period_days)
             production_rows = seed_gold_production(conn, rng)
+            if args.with_work_periods:
+                seed_manual_accrual_runs(conn)
             seed_current_account_ledger(conn)
             assert_manual_seed_counts(conn, args.with_work_periods)
         print_summary(conn, production_rows)

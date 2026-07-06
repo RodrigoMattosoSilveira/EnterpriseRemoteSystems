@@ -258,6 +258,21 @@ func (s *service) BulkPlan(ctx context.Context, workPeriodID string, req BulkPla
 		savedByCollaborator[collaboratorID] = *assignment
 	}
 
+	effectiveAssignmentByID := map[string]db.WorkPeriodAssignment{}
+	for _, assignment := range currentAssignments {
+		effectiveAssignmentByID[assignment.ID] = assignment
+	}
+	for _, assignment := range savedByCollaborator {
+		effectiveAssignmentByID[assignment.ID] = assignment
+	}
+	replacementOwnerByTargetAssignmentID := map[string]string{}
+	for _, assignment := range effectiveAssignmentByID {
+		if assignment.ReplacementForAssignmentID == nil || strings.TrimSpace(*assignment.ReplacementForAssignmentID) == "" {
+			continue
+		}
+		replacementOwnerByTargetAssignmentID[strings.TrimSpace(*assignment.ReplacementForAssignmentID)] = assignment.CollaboratorID
+	}
+
 	for _, row := range req.Rows {
 		collaboratorID := strings.TrimSpace(row.CollaboratorID)
 		temporaryReplacementForCollaboratorID := strings.TrimSpace(row.TemporaryReplacementForCollaboratorID)
@@ -269,6 +284,13 @@ func (s *service) BulkPlan(ctx context.Context, workPeriodID string, req BulkPla
 		if !ok {
 			return nil, ValidationError{Fields: map[string]string{"collaboratorId": "Replacement collaborator must be saved in this Work Period plan"}}
 		}
+		if replacementAssignment.PlannedStatus != PlannedStatusIncluded {
+			return nil, ValidationError{Fields: map[string]string{"temporaryReplacementForCollaboratorId": "Replacement collaborator must be selected in this Work Period plan"}}
+		}
+		if normalizePlanningAvailability(replacementAssignment.PlanningAvailability) != PlanningAvailabilityActive {
+			return nil, ValidationError{Fields: map[string]string{"temporaryReplacementForCollaboratorId": "Replacement collaborator must be available to work"}}
+		}
+
 		replacedAssignment, ok := savedByCollaborator[temporaryReplacementForCollaboratorID]
 		if !ok {
 			if existing, hasExisting := currentByCollaborator[temporaryReplacementForCollaboratorID]; hasExisting {
@@ -285,6 +307,18 @@ func (s *service) BulkPlan(ctx context.Context, workPeriodID string, req BulkPla
 		if replacementAssignment.WorkPeriodID != workPeriod.ID || replacedAssignment.WorkPeriodID != workPeriod.ID {
 			return nil, ValidationError{Fields: map[string]string{"temporaryReplacementForCollaboratorId": "Temporary replacements must stay within this Work Period"}}
 		}
+		if !isTemporaryReplacementTargetAvailability(replacedAssignment.PlanningAvailability) {
+			return nil, ValidationError{Fields: map[string]string{"temporaryReplacementForCollaboratorId": "Replacement target collaborator must have DAY_OFF or LEAVE_OF_ABSENCE availability"}}
+		}
+		if replacedAssignment.ReplacementForAssignmentID != nil && strings.TrimSpace(*replacedAssignment.ReplacementForAssignmentID) != "" {
+			return nil, ValidationError{Fields: map[string]string{"temporaryReplacementForCollaboratorId": "Replacement target collaborator cannot also be a replacement"}}
+		}
+		if replacementAssignment.ReplacementForAssignmentID != nil {
+			delete(replacementOwnerByTargetAssignmentID, strings.TrimSpace(*replacementAssignment.ReplacementForAssignmentID))
+		}
+		if existingOwner, used := replacementOwnerByTargetAssignmentID[replacedAssignment.ID]; used && existingOwner != collaboratorID {
+			return nil, ValidationError{Fields: map[string]string{"temporaryReplacementForCollaboratorId": "Replacement target collaborator already has a replacement"}}
+		}
 
 		previousReplacementForAssignmentID := nilString(replacementAssignment.ReplacementForAssignmentID)
 		replacementAssignment.ReplacementForAssignmentID = &replacedAssignment.ID
@@ -293,6 +327,7 @@ func (s *service) BulkPlan(ctx context.Context, workPeriodID string, req BulkPla
 			return nil, err
 		}
 		s.recordReplacementAudit(ctx, actorUserID, workPeriod.ID, replacementAssignment, replacedAssignment, previousReplacementForAssignmentID)
+		replacementOwnerByTargetAssignmentID[replacedAssignment.ID] = collaboratorID
 		savedByCollaborator[collaboratorID] = replacementAssignment
 		for index := range savedAssignments {
 			if savedAssignments[index].ID == replacementAssignment.ID {
@@ -676,6 +711,11 @@ func isActiveCollaborator(row db.CollaboratorJourney) bool {
 		return false
 	}
 	return row.TenantID == defaultTenantID && row.Status.Type == "collaborator_status" && row.Status.Code == "ACTIVE" && row.Status.Active
+}
+
+func isTemporaryReplacementTargetAvailability(value string) bool {
+	availability := normalizePlanningAvailability(value)
+	return availability == PlanningAvailabilityDayOff || availability == PlanningAvailabilityLeaveOfAbsence
 }
 
 func stringPtrOrNil(value string) *string {
