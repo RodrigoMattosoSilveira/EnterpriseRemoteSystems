@@ -44,6 +44,12 @@ SERVER_COMPOSE = docker compose -p $(COMPOSE_PROJECT) --env-file $(ENV_FILE) -f 
 SERVER_COMPOSE_BUILD = BUILDX_NO_DEFAULT_ATTESTATIONS=1 $(SERVER_COMPOSE) --progress plain
 SERVER_SERVICE_CONTAINERS = $(CONTAINER_PREFIX)-backend $(CONTAINER_PREFIX)-frontend $(CONTAINER_PREFIX)-caddy
 
+LOCAL_DOCKER_GO_IMAGE ?= golang:1.26.2-bookworm
+LOCAL_DOCKER_PLAYWRIGHT_IMAGE ?= mcr.microsoft.com/playwright:v1.57.0-noble
+LOCAL_DOCKER_CHECK_IMAGE ?= ers-local-check:latest
+LOCAL_DOCKER_WORKDIR ?= /workspace
+LOCAL_DOCKER ?= docker
+
 # ==============================================================================
 # Help
 # ==============================================================================
@@ -63,13 +69,14 @@ help:
 	@echo "  make backend-check"
 	@echo "  make frontend-check"
 	@echo "  make local-check"
+	@echo "  make local-docker-check"
 	@echo "  make local-backend"
 	@echo "  make local-frontend"
 	@echo "  make local-smoke"
 	@echo "  make local-lan-smoke LAN_HOST=$(ipconfig getifaddr en0)"
 	@echo "  make local-login-test"
 	@echo "  make local-admin-test"
-	@echo "  make local-check"
+	@echo "  make verify"
 	@echo
 	@echo "Generic server targets:"
 	@echo "  make server-init-env ENV=development|test|production"
@@ -244,11 +251,54 @@ local-admin-test:
 
 .PHONY: local-check
 local-check:
-	cd backend && go test ./...
+	cd backend && go clean -testcache && go test ./...
 	cd frontend && npm run test:run
 	cd frontend && npx playwright test
 	cd frontend && npm run build
-	
+
+.PHONY: local-docker-doctor
+local-docker-doctor:
+	@command -v $(LOCAL_DOCKER) >/dev/null || (echo "docker not found" && exit 1)
+	@if ! $(LOCAL_DOCKER) info >/dev/null 2>&1; then \
+		echo "Docker daemon is not reachable."; \
+		echo; \
+		echo "Current Docker context:"; \
+		$(LOCAL_DOCKER) context show 2>/dev/null || true; \
+		echo; \
+		echo "On macOS, open Docker Desktop and wait until it reports that it is running."; \
+		echo "If Docker Desktop is already running, check for a stale Docker host/context:"; \
+		echo "  unset DOCKER_HOST"; \
+		echo "  docker context ls"; \
+		echo "  docker context use desktop-linux"; \
+		echo; \
+		echo "Then rerun: make local-docker-check"; \
+		exit 1; \
+	fi
+
+.PHONY: local-docker-check-image
+local-docker-check-image: local-docker-doctor
+	@printf '%s\n' \
+		'FROM $(LOCAL_DOCKER_GO_IMAGE) AS go' \
+		'FROM $(LOCAL_DOCKER_PLAYWRIGHT_IMAGE)' \
+		'USER root' \
+		'COPY --from=go /usr/local/go /usr/local/go' \
+		'ENV PATH="/usr/local/go/bin:$${PATH}"' \
+		'RUN apt-get update && apt-get install -y --no-install-recommends build-essential ca-certificates curl git jq pkg-config sqlite3 && rm -rf /var/lib/apt/lists/*' \
+	| $(LOCAL_DOCKER) build -t $(LOCAL_DOCKER_CHECK_IMAGE) -
+
+.PHONY: local-docker-check
+local-docker-check: local-docker-check-image
+	$(LOCAL_DOCKER) run --rm -t --ipc=host \
+		-v "$(CURDIR):$(LOCAL_DOCKER_WORKDIR)" \
+		-w "$(LOCAL_DOCKER_WORKDIR)" \
+		--user "$$(id -u):$$(id -g)" \
+		-e HOME=/tmp \
+		-e GOCACHE=/tmp/go-build \
+		-e GOMODCACHE=/tmp/gomod \
+		-e NPM_CONFIG_CACHE=/tmp/npm-cache \
+		$(LOCAL_DOCKER_CHECK_IMAGE) \
+		bash -lc 'set -euo pipefail; cd backend && go clean -testcache && go test ./...; cd ../frontend && npm ci && npm run test:run && npx playwright install chromium && npx playwright test && npm run build'
+
 # ==============================================================================
 # Generic server environment targets
 # ==============================================================================

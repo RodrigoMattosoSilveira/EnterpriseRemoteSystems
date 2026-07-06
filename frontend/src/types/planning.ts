@@ -119,6 +119,7 @@ export type WorkPeriodPlanningTemplateRow = {
   assignmentId?: string;
   templateAssignmentId?: string;
   replacementForAssignmentId?: string;
+  temporaryReplacementForCollaboratorId?: string;
   collaboratorId: string;
   collaboratorName?: string;
   collaboratorNickname?: string;

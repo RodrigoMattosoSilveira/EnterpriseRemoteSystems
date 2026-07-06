@@ -28,6 +28,7 @@ func ToDTO(row db.CollaboratorJourney) CollaboratorDTO {
 		GoldCommissionPercent:          row.GoldCommissionPercent,
 		TimeOffGoldSplitPercent:        row.TimeOffGoldSplitPercent,
 		SickDayOffReplacementGoldGrams: row.SickDayOffReplacementGoldGrams,
+		PlanningAvailability:           normalizePlanningAvailability(row.PlanningAvailability),
 		SectorID:                       row.SectorID,
 		SectorLabel:                    row.Sector.Label,
 		LocationID:                     row.LocationID,

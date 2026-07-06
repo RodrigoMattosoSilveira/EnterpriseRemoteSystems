@@ -53,6 +53,7 @@ type apiCollaboratorResponse struct {
 		GoldCommissionPercent          *float64 `json:"goldCommissionPercent"`
 		TimeOffGoldSplitPercent        *float64 `json:"timeOffGoldSplitPercent"`
 		SickDayOffReplacementGoldGrams *float64 `json:"sickDayOffReplacementGoldGrams"`
+		PlanningAvailability           string   `json:"planningAvailability"`
 		SectorID                       string   `json:"sectorId"`
 		LocationID                     string   `json:"locationId"`
 		TaskID                         string   `json:"taskId"`
@@ -315,6 +316,61 @@ func TestUpdateCollaboratorEditsAssignmentPaymentAndExtensionDays(t *testing.T) 
 	}
 	if body.Data.ProjectedEndDate != "2026-09-11" {
 		t.Fatalf("expected projected end date with 12 extension days, got %q", body.Data.ProjectedEndDate)
+	}
+}
+
+func TestUpdateCollaboratorSavesPlanningAvailability(t *testing.T) {
+	server, cleanup := newTestServer(t)
+	defer cleanup()
+
+	person := createPerson(t, server, validCompletePersonPayload(1, nil))
+	created := createCollaborator(t, server, validCollaboratorPayload(person.Data.ID, nil))
+
+	res := postJSON(t, server, http.MethodPut, collaboratorsURL+created.Data.ID, map[string]any{
+		"sectorId":             "ref-sector-mining",
+		"locationId":           "ref-location-main-mine",
+		"taskId":               "ref-task-miner",
+		"paymentMethodId":      "ref-method-daily",
+		"paymentValue":         150.0,
+		"dailyBrlAmount":       150.0,
+		"extensionDays":        0,
+		"planningAvailability": "DAY_OFF",
+	})
+	defer res.Body.Close()
+
+	if res.StatusCode != http.StatusOK {
+		var body apiErrorResponse
+		decodeJSON(t, res, &body)
+		t.Fatalf("expected update collaborator status %d, got %d with error %+v", http.StatusOK, res.StatusCode, body.Error)
+	}
+
+	var body apiCollaboratorResponse
+	decodeJSON(t, res, &body)
+	if body.Data.PlanningAvailability != "DAY_OFF" {
+		t.Fatalf("expected planningAvailability DAY_OFF, got %q", body.Data.PlanningAvailability)
+	}
+
+	res = postJSON(t, server, http.MethodPut, collaboratorsURL+created.Data.ID, map[string]any{
+		"sectorId":             "ref-sector-mining",
+		"locationId":           "ref-location-main-mine",
+		"taskId":               "ref-task-miner",
+		"paymentMethodId":      "ref-method-daily",
+		"paymentValue":         150.0,
+		"dailyBrlAmount":       150.0,
+		"extensionDays":        0,
+		"planningAvailability": "ACTIVE",
+	})
+	defer res.Body.Close()
+
+	if res.StatusCode != http.StatusOK {
+		var body apiErrorResponse
+		decodeJSON(t, res, &body)
+		t.Fatalf("expected update collaborator status %d, got %d with error %+v", http.StatusOK, res.StatusCode, body.Error)
+	}
+
+	decodeJSON(t, res, &body)
+	if body.Data.PlanningAvailability != "ACTIVE" {
+		t.Fatalf("expected planningAvailability ACTIVE, got %q", body.Data.PlanningAvailability)
 	}
 }
 

@@ -65,6 +65,7 @@ type CollaboratorJourney struct {
 	GoldCommissionPercent          *float64 `gorm:"column:gold_commission_percent" json:"goldCommissionPercent,omitempty"`
 	TimeOffGoldSplitPercent        *float64 `gorm:"column:time_off_gold_split_percent" json:"timeOffGoldSplitPercent,omitempty"`
 	SickDayOffReplacementGoldGrams *float64 `gorm:"column:sick_day_off_replacement_gold_grams" json:"sickDayOffReplacementGoldGrams,omitempty"`
+	PlanningAvailability           string   `gorm:"column:planning_availability;type:text;not null;default:ACTIVE;index" json:"planningAvailability"`
 
 	SectorID   string `gorm:"type:text;not null;index" json:"sectorId"`
 	LocationID string `gorm:"type:text;not null;index" json:"locationId"`

@@ -93,7 +93,7 @@ func Bootstrap(cfg Config) (*fiber.App, func(), error) {
 	workPeriodHandler := workperiods.NewHandler(workPeriodSvc)
 
 	workPeriodAssignmentRepo := workperiodassignments.NewRepository(database)
-	workPeriodAssignmentSvc := workperiodassignments.NewService(workPeriodAssignmentRepo)
+	workPeriodAssignmentSvc := workperiodassignments.NewService(workPeriodAssignmentRepo, actorStore)
 	workPeriodAssignmentHandler := workperiodassignments.NewHandler(workPeriodAssignmentSvc)
 
 	goldProductionRepo := goldproduction.NewRepository(database)
