@@ -2,9 +2,11 @@ package workperiodassignments
 
 import (
 	"context"
+	"encoding/json"
 	"strings"
 	"time"
 
+	"enterpriseremotesystems/backend/internal/authz"
 	"enterpriseremotesystems/backend/internal/db"
 	"enterpriseremotesystems/backend/internal/shared/ids"
 	"enterpriseremotesystems/backend/internal/tenants"
@@ -18,9 +20,18 @@ const (
 	maxPageSize     = 200
 )
 
-type service struct{ repo Repository }
+type service struct {
+	repo       Repository
+	auditStore authz.AuditLogStore
+}
 
-func NewService(repo Repository) Service { return &service{repo: repo} }
+func NewService(repo Repository, auditStores ...authz.AuditLogStore) Service {
+	var auditStore authz.AuditLogStore
+	if len(auditStores) > 0 {
+		auditStore = auditStores[0]
+	}
+	return &service{repo: repo, auditStore: auditStore}
+}
 
 func (s *service) ListByWorkPeriod(ctx context.Context, workPeriodID string, filter WorkPeriodAssignmentListFilter) (*WorkPeriodAssignmentListResult, error) {
 	if _, err := s.repo.FindWorkPeriodByID(ctx, strings.TrimSpace(workPeriodID)); err != nil {
@@ -74,8 +85,14 @@ func (s *service) GetPlanningTemplate(ctx context.Context, workPeriodID string) 
 		currentByCollaborator[row.CollaboratorID] = row
 	}
 	templateByCollaborator := map[string]db.WorkPeriodAssignment{}
+	templateCollaboratorByAssignmentID := map[string]string{}
 	for _, row := range templateAssignments {
 		templateByCollaborator[row.CollaboratorID] = row
+		templateCollaboratorByAssignmentID[row.ID] = row.CollaboratorID
+	}
+	currentCollaboratorByAssignmentID := map[string]string{}
+	for _, row := range currentAssignments {
+		currentCollaboratorByAssignmentID[row.ID] = row.CollaboratorID
 	}
 
 	rows := make([]WorkPeriodPlanningTemplateRow, 0, len(collaborators))
@@ -85,7 +102,7 @@ func (s *service) GetPlanningTemplate(ctx context.Context, workPeriodID string) 
 			CollaboratorName:     collaboratorName(collaborator),
 			CollaboratorNickname: collaborator.Person.Nickname,
 			ProjectedEndDate:     formatDate(collaborator.ProjectedEndDate),
-			PlanningAvailability: PlanningAvailabilityActive,
+			PlanningAvailability: normalizePlanningAvailability(collaborator.PlanningAvailability),
 			SectorID:             collaborator.SectorID,
 			SectorLabel:          collaborator.Sector.Label,
 			LocationID:           collaborator.LocationID,
@@ -96,6 +113,7 @@ func (s *service) GetPlanningTemplate(ctx context.Context, workPeriodID string) 
 		if current, ok := currentByCollaborator[collaborator.ID]; ok {
 			planningRow.AssignmentID = current.ID
 			planningRow.ReplacementForAssignmentID = nilString(current.ReplacementForAssignmentID)
+			planningRow.TemporaryReplacementForCollaboratorID = collaboratorIDForAssignmentID(currentCollaboratorByAssignmentID, current.ReplacementForAssignmentID)
 			planningRow.Selected = current.PlannedStatus == PlannedStatusIncluded
 			planningRow.PlanningAvailability = normalizePlanningAvailability(current.PlanningAvailability)
 			planningRow.SectorID = current.SectorID
@@ -106,8 +124,12 @@ func (s *service) GetPlanningTemplate(ctx context.Context, workPeriodID string) 
 			planningRow.TaskLabel = current.Task.Label
 		} else if template, ok := templateByCollaborator[collaborator.ID]; ok {
 			planningRow.TemplateAssignmentID = template.ID
+			planningRow.ReplacementForAssignmentID = nilString(template.ReplacementForAssignmentID)
+			planningRow.TemporaryReplacementForCollaboratorID = collaboratorIDForAssignmentID(templateCollaboratorByAssignmentID, template.ReplacementForAssignmentID)
 			planningRow.Selected = template.PlannedStatus == PlannedStatusIncluded
-			planningRow.PlanningAvailability = normalizePlanningAvailability(template.PlanningAvailability)
+			if !planningRow.Selected {
+				planningRow.PlanningAvailability = normalizePlanningAvailability(template.PlanningAvailability)
+			}
 			planningRow.SectorID = template.SectorID
 			planningRow.SectorLabel = template.Sector.Label
 			planningRow.LocationID = template.LocationID
@@ -264,11 +286,13 @@ func (s *service) BulkPlan(ctx context.Context, workPeriodID string, req BulkPla
 			return nil, ValidationError{Fields: map[string]string{"temporaryReplacementForCollaboratorId": "Temporary replacements must stay within this Work Period"}}
 		}
 
+		previousReplacementForAssignmentID := nilString(replacementAssignment.ReplacementForAssignmentID)
 		replacementAssignment.ReplacementForAssignmentID = &replacedAssignment.ID
 		replacementAssignment.UpdatedAt = now
 		if err := s.repo.Update(ctx, &replacementAssignment); err != nil {
 			return nil, err
 		}
+		s.recordReplacementAudit(ctx, actorUserID, workPeriod.ID, replacementAssignment, replacedAssignment, previousReplacementForAssignmentID)
 		savedByCollaborator[collaboratorID] = replacementAssignment
 		for index := range savedAssignments {
 			if savedAssignments[index].ID == replacementAssignment.ID {
@@ -670,3 +694,39 @@ func formatDate(value time.Time) string {
 }
 
 func ptr[T any](value T) *T { return &value }
+
+func collaboratorIDForAssignmentID(index map[string]string, assignmentID *string) string {
+	if assignmentID == nil {
+		return ""
+	}
+	return index[strings.TrimSpace(*assignmentID)]
+}
+
+func (s *service) recordReplacementAudit(ctx context.Context, actorUserID string, workPeriodID string, replacementAssignment db.WorkPeriodAssignment, replacedAssignment db.WorkPeriodAssignment, previousReplacementForAssignmentID string) {
+	if s.auditStore == nil {
+		return
+	}
+	if strings.TrimSpace(previousReplacementForAssignmentID) == strings.TrimSpace(replacedAssignment.ID) {
+		return
+	}
+	metadata := map[string]string{
+		"workPeriodId":                       workPeriodID,
+		"replacementAssignmentId":            replacementAssignment.ID,
+		"replacementCollaboratorId":          replacementAssignment.CollaboratorID,
+		"replacedAssignmentId":               replacedAssignment.ID,
+		"replacedCollaboratorId":             replacedAssignment.CollaboratorID,
+		"previousReplacementForAssignmentId": previousReplacementForAssignmentID,
+	}
+	metadataJSON, _ := json.Marshal(metadata)
+	_ = s.auditStore.RecordAuthorizationAudit(ctx, authz.AuthorizationAuditEntry{
+		FallbackActorID: actorUserID,
+		TenantID:        defaultTenantID,
+		Permission:      authz.PermissionPlanningUpdate,
+		Operation:       "work_period_assignment_replacement_set",
+		TargetType:      "work_period_assignment",
+		TargetID:        replacementAssignment.ID,
+		Decision:        authz.AuditDecisionAuthorized,
+		Reason:          "Temporary replacement saved for Work Period planning",
+		MetadataJSON:    string(metadataJSON),
+	})
+}

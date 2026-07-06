@@ -100,19 +100,24 @@ export function PlanTab(props: {
         originalPlanningAvailability: planningAvailability,
         availabilityChanged: false,
         replacementCandidate: Boolean(row.replacementForAssignmentId),
-        temporaryReplacementForCollaboratorId: "",
+        temporaryReplacementForCollaboratorId:
+          row.temporaryReplacementForCollaboratorId ?? "",
       };
     });
     const collaboratorByAssignmentId = new Map(
-      nextRows
-        .filter((row) => row.assignmentId)
-        .map((row) => [row.assignmentId, row.collaboratorId]),
+      nextRows.flatMap((row) =>
+        [row.assignmentId, row.templateAssignmentId]
+          .filter(Boolean)
+          .map((assignmentId) => [assignmentId, row.collaboratorId] as const),
+      ),
     );
     setRows(
       nextRows.map((row) => ({
         ...row,
         temporaryReplacementForCollaboratorId:
-          collaboratorByAssignmentId.get(row.replacementForAssignmentId) ?? "",
+          row.temporaryReplacementForCollaboratorId ||
+          collaboratorByAssignmentId.get(row.replacementForAssignmentId) ||
+          "",
       })),
     );
   }, [props.template]);
@@ -300,8 +305,8 @@ export function PlanTab(props: {
           </p>
           <p className="mt-2 text-sm text-gray-500">
             Use Plan Assignment to refine a collaborator&apos;s sector, local,
-            and task before saving the Work Period plan. Use Cand. and Repl.
-            to mark temporary replacements for this Work Period only. Future
+            and task before saving the Work Period plan. Use Cand. and Repl. to
+            mark temporary replacements for this Work Period only. Future
             defaults are updated only when explicitly selected in that
             refinement workflow.
           </p>
@@ -339,9 +344,9 @@ export function PlanTab(props: {
               props.pending ||
               refinementPending ||
               props.loading ||
-              selectedCount === 0 &&
-              availabilityChangeCount === 0 &&
-              temporaryReplacementCount === 0
+              (selectedCount === 0 &&
+                availabilityChangeCount === 0 &&
+                temporaryReplacementCount === 0)
             }
             className="rounded-xl bg-gray-950 px-4 py-2 text-sm font-semibold text-white shadow-sm disabled:bg-gray-400"
           >

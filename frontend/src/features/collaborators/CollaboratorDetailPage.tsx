@@ -107,16 +107,16 @@ export function CollaboratorDetailPage() {
                 >
                   Current Account
                 </Link>
-              <button
-                type="button"
-                className="rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 shadow-sm"
-                onClick={() => {
-                  setFlash("");
-                  setEditing(true);
-                }}
-              >
-                Edit Collaborator
-              </button>
+                <button
+                  type="button"
+                  className="rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 shadow-sm"
+                  onClick={() => {
+                    setFlash("");
+                    setEditing(true);
+                  }}
+                >
+                  Edit Collaborator
+                </button>
               </div>
             </div>
           </div>
@@ -181,6 +181,12 @@ export function CollaboratorDetailPage() {
             <Info
               label="Status"
               value={collaborator.statusLabel || collaborator.statusId}
+            />
+            <Info
+              label="Avail."
+              value={planningAvailabilityLabel(
+                collaborator.planningAvailability,
+              )}
             />
             <Info
               label="Journey Start"
@@ -259,6 +265,7 @@ export function CollaboratorDetailPage() {
 }
 
 type EditFormState = {
+  planningAvailability: string;
   sectorId: string;
   locationId: string;
   taskId: string;
@@ -344,13 +351,14 @@ function CollaboratorEditPanel({
     const extensionDays = Number(form.extensionDays);
 
     if (
+      !form.planningAvailability ||
       !form.sectorId ||
       !form.locationId ||
       !form.taskId ||
       !form.paymentMethodId
     ) {
       setClientError(
-        "Select sector, location, task, and payment method before saving.",
+        "Select availability, sector, location, task, and payment method before saving.",
       );
       return;
     }
@@ -419,7 +427,15 @@ function CollaboratorEditPanel({
 
       {!isLoading && !loadError && (
         <form onSubmit={submit} className="mt-5 space-y-5">
-          <div className="grid gap-4 md:grid-cols-3">
+          <div className="grid gap-4 md:grid-cols-4">
+            <Select
+              label="Avail."
+              required
+              value={form.planningAvailability}
+              onChange={(value) => update("planningAvailability", value)}
+              options={planningAvailabilityOptions}
+              placeholder="Select availability"
+            />
             <Select
               label="Sector"
               required
@@ -501,6 +517,7 @@ function CollaboratorEditPanel({
 
 function editFormFromCollaborator(collaborator: Collaborator): EditFormState {
   return {
+    planningAvailability: collaborator.planningAvailability || "ACTIVE",
     sectorId: collaborator.sectorId,
     locationId: collaborator.locationId,
     taskId: collaborator.taskId,
@@ -518,6 +535,8 @@ function collaboratorUpdateInput(
   collaborator: Collaborator,
 ): UpdateCollaboratorInput {
   const input: UpdateCollaboratorInput = {
+    planningAvailability:
+      form.planningAvailability as UpdateCollaboratorInput["planningAvailability"],
     sectorId: form.sectorId,
     locationId: form.locationId,
     taskId: form.taskId,
@@ -543,6 +562,23 @@ function collaboratorUpdateInput(
   }
 
   return input;
+}
+
+const planningAvailabilityOptions = [
+  { value: "ACTIVE", label: "A — Active" },
+  { value: "DAY_OFF", label: "D — Day Off" },
+  { value: "LEAVE_OF_ABSENCE", label: "L — Leave of Absence" },
+];
+
+function planningAvailabilityLabel(value?: string) {
+  switch (value) {
+    case "DAY_OFF":
+      return "D — Day Off";
+    case "LEAVE_OF_ABSENCE":
+      return "L — Leave of Absence";
+    default:
+      return "A — Active";
+  }
 }
 
 function activeOptionsWithCurrent(

@@ -511,3 +511,297 @@ No 500 errors.
 No planning_availability schema errors.
 No replacement persistence errors.
 ```
+
+# Replacement Refinements
+
+
+## Backend log check
+
+After each smoke test, check backend logs for:
+
+**Expected result**:
+
+```
+No 500 errors.
+No schema errors.
+No replacement persistence errors.
+No projection errors.
+```
+
+## Migration/schema smoke
+
+**Confirm the collaborator-level availability column exists**:
+
+```bash
+sqlite3 backend/data/app.db "PRAGMA table_info(collaborator_journeys);"
+```
+
+**Expected result**:
+
+```
+planning_availability
+```
+Also confirm the latest migration was recorded:
+
+```bash
+sqlite3 backend/data/app.db "SELECT * FROM schema_migrations ORDER BY version DESC LIMIT 10;"
+```
+
+## Collaborator detail Avail. field
+
+Open a collaborator detail/edit screen.
+
+**Test**:
+
+```
+A → D
+D → L
+L → A
+```
+
+**Expected result**:
+
+```
+The Avail. value saves on the collaborator record.
+Reloading the collaborator detail page preserves the value.
+No unrelated collaborator payment/default fields are changed.
+```
+
+This confirms the app can persist the collaborator-level “time off” state.
+
+## New planning template copies collaborator Avail.
+
+**Set one collaborator’s record to**:
+
+```
+D = Day Off
+```
+
+**Set another collaborator’s record to**:
+
+```
+L = Leave of Absence
+```
+
+```
+Create or open the next new Work Period planning template.
+```
+
+**Expected result**:
+
+```
+The D collaborator appears with Avail. = D.
+The L collaborator appears with Avail. = L.
+Normal collaborators appear with Avail. = A.
+```
+
+This confirms the collaborator-level Avail. is copied into new Work Period plans.
+
+## Planner can refine replacements per Work Period
+
+**In a planning-state Work Period**:
+
+```
+1. Choose an absentee with Avail. D or L.
+2. Select a replacement collaborator.
+3. Mark the replacement as Cand.
+4. Set Repl. to the absentee.
+5. Save plan.
+6. Reload the same Work Period.
+```
+
+**Expected result**:
+
+```
+The absentee remains D or L.
+The replacement remains selected.
+The replacement relationship remains visible.
+The relationship is for this Work Period only.
+```
+
+## Most recent replacement carries into the next planning cycle
+
+This is very important.
+
+**Work Period 1**:
+
+```
+Maria = D
+João replaces Maria
+Save plan
+```
+
+Then open or create the next Work Period planning template.
+
+**Expected result**:
+
+```
+Maria appears as D, if her collaborator record is still D.
+João is preselected as Maria’s replacement.
+The planner can change the replacement before saving.
+```
+
+**Then change the replacement in Work Period 2**:
+```
+Maria = D
+Carlos replaces Maria instead of João
+Save plan
+```
+
+Open Work Period 3.
+
+**Expected result**:
+
+```
+Carlos is now carried forward as Maria’s replacement.
+João is not carried forward anymore.
+```
+This confirms the app uses the most recent Work Period replacement, not a permanent replacement record.
+
+## No collaborator records are updated by replacement planning
+
+This is central to your refined requirement.
+
+After saving a replacement relationship, check both collaborator records:
+
+Absentee collaborator record
+Replacement collaborator record
+
+**Expected result**:
+
+```
+The absentee’s collaborator-level Avail. is unchanged except when explicitly edited on the collaborator record.
+The replacement collaborator’s record is not changed.
+No permanent replacement field is written to either collaborator record.
+```
+
+The replacement relationship should live on the Work Period assignment only.
+
+## Inform / Print warning for unreplaced absentees
+
+**Create a plan with**:
+
+```
+At least one D or L collaborator with no replacement.
+Go to the Inform/Print step.
+```
+
+**Expected result**:
+
+```
+The app shows a warning for time-off collaborators without replacements.
+The warning is visible before Inform/Print.
+The warning is non-blocking unless we intentionally decide to make it blocking later.
+```
+
+Then add a replacement for the absentee and revisit Inform/Print.
+
+**Expected result**:
+
+```
+The warning disappears or no longer lists that absentee.
+```
+
+## Replacement target dropdown remains constrained
+
+Verify the existing refinements still work:
+
+```
+Repl. dropdown only lists D/L collaborators.
+It does not list A collaborators.
+It does not list D/L collaborators who already have another replacement.
+It still shows the current selected target for the row that already owns that replacement.
+```
+
+## Projection behavior for commissioned absentees
+
+Pick or create a commissioned/gold-commission collaborator.
+
+**Set their collaborator-level Avail. to**:
+
+```
+D or L
+```
+
+Open the current/future earnings projection.
+
+**Expected result**:
+
+```
+Commissioned absentee future projection uses half commission.
+Daily BRL/fixed wage collaborators still project full wages according to their collaborator record.
+```
+
+**Also test returning the collaborator to**:
+
+```
+A
+```
+
+**Expected result**:
+
+```
+Projected commission returns to normal full projection.
+```
+
+
+## Replacement audit logging
+
+```
+Save a replacement relationship.
+Then check the audit log viewer or backend audit records.
+```
+
+**Expected result**:
+
+```
+Replacement relationship save is audit logged.
+The audit event identifies the Work Period assignment replacement change.
+The actor/authorized-by context is present according to existing audit conventions.
+```
+
+```
+Also change a replacement from one replacement collaborator to another.
+```
+
+**Expected result**:
+
+```
+The replacement change is audit logged.
+```
+
+## Regression check for prior 26C behavior
+
+**Quickly verify**:
+
+```
+Avail. A/D/L still saves on the planning row.
+Planning table filters still work.
+Candidate marking still works.
+Row selection no longer jumps.
+Temporary replacement remains Work Period only.
+Hidden selected rows still save.
+Hidden availability changes still save.
+```
+
+## Backend log check
+
+After smoke test, check backend logs for:
+
+```
+/assignments/bulk-plan
+internal API error
+planning_availability
+replacement_for_assignment_id
+audit
+projection
+```
+
+**Expected result**:
+
+```
+No 500 errors.
+No schema errors.
+No replacement persistence errors.
+No projection errors.
+```
