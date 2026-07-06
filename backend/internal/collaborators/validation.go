@@ -2,6 +2,12 @@ package collaborators
 
 import "strings"
 
+const (
+	PlanningAvailabilityActive         = "ACTIVE"
+	PlanningAvailabilityDayOff         = "DAY_OFF"
+	PlanningAvailabilityLeaveOfAbsence = "LEAVE_OF_ABSENCE"
+)
+
 type ValidationError struct {
 	Fields map[string]string
 }
@@ -24,6 +30,7 @@ func ValidateCreateCollaborator(req CreateCollaboratorRequest) error {
 			fields["journeyStartDate"] = "Journey start date must be YYYY-MM-DD"
 		}
 	}
+	validatePlanningAvailability(fields, req.PlanningAvailability)
 
 	if len(fields) > 0 {
 		return ValidationError{Fields: fields}
@@ -42,6 +49,7 @@ func ValidateUpdateCollaborator(req UpdateCollaboratorRequest) error {
 	if req.ExtensionDays < 0 {
 		fields["extensionDays"] = "Extension days must be zero or greater"
 	}
+	validatePlanningAvailability(fields, req.PlanningAvailability)
 
 	if len(fields) > 0 {
 		return ValidationError{Fields: fields}
@@ -53,5 +61,32 @@ func ValidateUpdateCollaborator(req UpdateCollaboratorRequest) error {
 func requireString(fields map[string]string, key string, value string) {
 	if strings.TrimSpace(value) == "" {
 		fields[key] = "Required"
+	}
+}
+
+func validatePlanningAvailability(fields map[string]string, value string) {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
+		return
+	}
+	if !isKnownPlanningAvailability(strings.ToUpper(trimmed)) {
+		fields["planningAvailability"] = "Planning availability must be ACTIVE, DAY_OFF, or LEAVE_OF_ABSENCE"
+	}
+}
+
+func normalizePlanningAvailability(value string) string {
+	trimmed := strings.ToUpper(strings.TrimSpace(value))
+	if isKnownPlanningAvailability(trimmed) {
+		return trimmed
+	}
+	return PlanningAvailabilityActive
+}
+
+func isKnownPlanningAvailability(value string) bool {
+	switch value {
+	case PlanningAvailabilityActive, PlanningAvailabilityDayOff, PlanningAvailabilityLeaveOfAbsence:
+		return true
+	default:
+		return false
 	}
 }

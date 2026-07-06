@@ -25,6 +25,7 @@ const activeCollaborator: Collaborator = {
   paymentMethodId: "payment-brl",
   paymentMethodLabel: "BRL",
   paymentValue: 100,
+  planningAvailability: "ACTIVE",
   sectorId: "sector-mining",
   sectorLabel: "Mining",
   locationId: "location-1",

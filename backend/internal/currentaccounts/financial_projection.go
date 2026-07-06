@@ -104,7 +104,7 @@ func (s *service) FinancialProjection(ctx context.Context, collaboratorID string
 		}
 		result.Projection.ProductionValueUsed = projectionFloat64Ptr(roundGold(productionValue))
 		commissionPercent := projectionValueOrFallback(collaborator.GoldCommissionPercent, collaborator.PaymentValue)
-		estimated := roundGold(productionValue * commissionPercent / 100.0 * float64(estimatedPeriods))
+		estimated := roundGold(productionValue * commissionPercent / 100.0 * float64(estimatedPeriods) * projectedCommissionAvailabilityFactor(collaborator.PlanningAvailability))
 		setProjectionGold(result, currentBRL, accrualPreview.BRLAmount, currentGold, accrualPreview.GoldGramAmount, estimated)
 	default:
 		result.EstimatedFutureEarnings = ProjectionAmountsDTO{BRLAmount: projectionFloat64Ptr(0), GoldGramAmount: projectionFloat64Ptr(0)}
@@ -215,3 +215,12 @@ func projectionNormalizedZero(value float64) float64 {
 func projectionFloat64Ptr(value float64) *float64 { return &value }
 func roundBRL(value float64) float64              { return math.Round(value*100) / 100 }
 func roundGold(value float64) float64             { return math.Round(value*100000000) / 100000000 }
+
+func projectedCommissionAvailabilityFactor(planningAvailability string) float64 {
+	switch strings.ToUpper(strings.TrimSpace(planningAvailability)) {
+	case "DAY_OFF", "LEAVE_OF_ABSENCE":
+		return 0.5
+	default:
+		return 1.0
+	}
+}

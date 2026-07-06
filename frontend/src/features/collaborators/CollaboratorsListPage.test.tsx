@@ -20,6 +20,7 @@ const collaborators: Collaborator[] = [
     paymentMethodId: "ref-method-daily",
     paymentMethodLabel: "Daily Rate",
     paymentValue: 125,
+    planningAvailability: "ACTIVE",
     sectorId: "ref-sector-mining",
     sectorLabel: "Mining",
     locationId: "ref-location-carara",

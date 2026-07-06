@@ -74,6 +74,7 @@ const activeCollaboratorForSecondPerson: Collaborator = {
   paymentMethodId: "ref-method-daily",
   paymentMethodLabel: "Daily Rate",
   paymentValue: 125.5,
+  planningAvailability: "ACTIVE",
   sectorId: "ref-sector-mining",
   sectorLabel: "Mining",
   locationId: "ref-location-carara",

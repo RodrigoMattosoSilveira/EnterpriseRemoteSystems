@@ -37,10 +37,11 @@ type apiPersonResponse struct {
 
 type apiCollaboratorResponse struct {
 	Data struct {
-		ID         string `json:"id"`
-		SectorID   string `json:"sectorId"`
-		LocationID string `json:"locationId"`
-		TaskID     string `json:"taskId"`
+		ID                   string `json:"id"`
+		SectorID             string `json:"sectorId"`
+		LocationID           string `json:"locationId"`
+		TaskID               string `json:"taskId"`
+		PlanningAvailability string `json:"planningAvailability"`
 	} `json:"data"`
 }
 
@@ -95,18 +96,19 @@ type apiAssignmentListResponse struct {
 }
 
 type apiPlanningTemplateRow struct {
-	AssignmentID               string `json:"assignmentId"`
-	TemplateAssignmentID       string `json:"templateAssignmentId"`
-	ReplacementForAssignmentID string `json:"replacementForAssignmentId"`
-	CollaboratorID             string `json:"collaboratorId"`
-	CollaboratorName           string `json:"collaboratorName"`
-	CollaboratorNickname       string `json:"collaboratorNickname"`
-	ProjectedEndDate           string `json:"projectedEndDate"`
-	PlanningAvailability       string `json:"planningAvailability"`
-	Selected                   bool   `json:"selected"`
-	SectorID                   string `json:"sectorId"`
-	LocationID                 string `json:"locationId"`
-	TaskID                     string `json:"taskId"`
+	AssignmentID                          string `json:"assignmentId"`
+	TemplateAssignmentID                  string `json:"templateAssignmentId"`
+	ReplacementForAssignmentID            string `json:"replacementForAssignmentId"`
+	TemporaryReplacementForCollaboratorID string `json:"temporaryReplacementForCollaboratorId"`
+	CollaboratorID                        string `json:"collaboratorId"`
+	CollaboratorName                      string `json:"collaboratorName"`
+	CollaboratorNickname                  string `json:"collaboratorNickname"`
+	ProjectedEndDate                      string `json:"projectedEndDate"`
+	PlanningAvailability                  string `json:"planningAvailability"`
+	Selected                              bool   `json:"selected"`
+	SectorID                              string `json:"sectorId"`
+	LocationID                            string `json:"locationId"`
+	TaskID                                string `json:"taskId"`
 }
 
 type apiPlanningTemplateResponse struct {
@@ -182,12 +184,58 @@ func TestPlanningTemplateUsesMostRecentPriorSamePeriod(t *testing.T) {
 		t.Fatalf("expected previous period as source, got id=%q date=%q", body.Data.SourceWorkPeriodID, body.Data.SourceWorkDate)
 	}
 	selectedRow := findTemplateRow(body, selectedCollaborator.Data.ID)
-	if selectedRow == nil || !selectedRow.Selected || selectedRow.TemplateAssignmentID != previousAssignment.Data.ID || selectedRow.PlanningAvailability != "DAY_OFF" {
-		t.Fatalf("expected selected collaborator templated from previous assignment with availability, got %+v", selectedRow)
+	if selectedRow == nil || !selectedRow.Selected || selectedRow.TemplateAssignmentID != previousAssignment.Data.ID || selectedRow.PlanningAvailability != "ACTIVE" {
+		t.Fatalf("expected selected collaborator templated from previous assignment while copying collaborator availability, got %+v", selectedRow)
 	}
 	unselectedRow := findTemplateRow(body, unselectedCollaborator.Data.ID)
 	if unselectedRow == nil || unselectedRow.Selected {
 		t.Fatalf("expected other active collaborator to be present and unselected, got %+v", unselectedRow)
+	}
+}
+
+func TestPlanningTemplateUsesCollaboratorAvailabilityAndMostRecentReplacement(t *testing.T) {
+	server, cleanup := newTestServer(t)
+	defer cleanup()
+
+	previous := createWorkPeriod(t, server, map[string]any{
+		"workDate": "2026-06-04",
+		"startsAt": "2026-06-04T06:00:00Z",
+		"endsAt":   "2026-06-04T18:00:00Z",
+	})
+	current := createWorkPeriod(t, server, map[string]any{
+		"workDate": "2026-06-05",
+		"startsAt": "2026-06-05T06:00:00Z",
+		"endsAt":   "2026-06-05T18:00:00Z",
+	})
+	absentee := createActiveCollaborator(t, server, 1)
+	replacement := createActiveCollaborator(t, server, 2)
+	updateCollaboratorAvailability(t, server, absentee.Data.ID, "LEAVE_OF_ABSENCE")
+
+	originalAssignment := createAssignment(t, server, previous.Data.ID, validAssignmentPayload(absentee.Data.ID, map[string]any{
+		"plannedStatus":        "EXCLUDED",
+		"planningAvailability": "LEAVE_OF_ABSENCE",
+	}))
+	createAssignment(t, server, previous.Data.ID, validAssignmentPayload(replacement.Data.ID, map[string]any{
+		"replacementForAssignmentId": originalAssignment.Data.ID,
+	}))
+
+	res := getJSON(t, server, workPeriodsURL+current.Data.ID+"/assignments/planning-template")
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		var body apiErrorResponse
+		decodeJSON(t, res, &body)
+		t.Fatalf("expected template status %d, got %d with error %+v", http.StatusOK, res.StatusCode, body.Error)
+	}
+
+	var body apiPlanningTemplateResponse
+	decodeJSON(t, res, &body)
+	absenteeRow := findTemplateRow(body, absentee.Data.ID)
+	if absenteeRow == nil || absenteeRow.PlanningAvailability != "LEAVE_OF_ABSENCE" {
+		t.Fatalf("expected absentee row to copy collaborator availability, got %+v", absenteeRow)
+	}
+	replacementRow := findTemplateRow(body, replacement.Data.ID)
+	if replacementRow == nil || replacementRow.TemporaryReplacementForCollaboratorID != absentee.Data.ID {
+		t.Fatalf("expected replacement row to inherit most recent replacement target, got %+v", replacementRow)
 	}
 }
 
@@ -809,6 +857,29 @@ func createCollaborator(t *testing.T, server *fiber.App, payload map[string]any)
 		var body apiErrorResponse
 		decodeJSON(t, res, &body)
 		t.Fatalf("create collaborator: expected status %d, got %d with error %+v", http.StatusCreated, res.StatusCode, body.Error)
+	}
+	var body apiCollaboratorResponse
+	decodeJSON(t, res, &body)
+	return body
+}
+
+func updateCollaboratorAvailability(t *testing.T, server *fiber.App, collaboratorID string, availability string) apiCollaboratorResponse {
+	t.Helper()
+	res := postJSON(t, server, http.MethodPut, collaboratorsURL+collaboratorID, map[string]any{
+		"paymentMethodId":      "ref-method-daily",
+		"paymentValue":         150.0,
+		"dailyBrlAmount":       150.0,
+		"planningAvailability": availability,
+		"sectorId":             "ref-sector-mining",
+		"locationId":           "ref-location-main-mine",
+		"taskId":               "ref-task-miner",
+		"extensionDays":        0,
+	})
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		var body apiErrorResponse
+		decodeJSON(t, res, &body)
+		t.Fatalf("update collaborator availability: expected status %d, got %d with error %+v", http.StatusOK, res.StatusCode, body.Error)
 	}
 	var body apiCollaboratorResponse
 	decodeJSON(t, res, &body)

@@ -51,6 +51,22 @@ for path in "${migrations[@]}"; do
   sqlite3 "$DB_PATH" "INSERT INTO schema_migrations (filename) VALUES ('$filename');"
 done
 
+collaborator_availability_count="$(sqlite3 "$DB_PATH" "SELECT COUNT(*) FROM pragma_table_info('collaborator_journeys') WHERE name = 'planning_availability';")"
+if [[ "$collaborator_availability_count" == "0" ]]; then
+  echo "Repairing missing collaborator_journeys.planning_availability column..."
+  sqlite3 "$DB_PATH" "
+    ALTER TABLE collaborator_journeys
+      ADD COLUMN planning_availability TEXT NOT NULL DEFAULT 'ACTIVE'
+      CHECK (planning_availability IN ('ACTIVE', 'DAY_OFF', 'LEAVE_OF_ABSENCE'));
+  "
+fi
+
+sqlite3 "$DB_PATH" "
+  UPDATE collaborator_journeys
+     SET planning_availability = 'ACTIVE'
+   WHERE planning_availability IS NULL OR planning_availability = '';
+"
+
 echo
 echo "✅ Migrations applied."
 echo

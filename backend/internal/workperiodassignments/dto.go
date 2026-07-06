@@ -95,21 +95,22 @@ type WorkPeriodPlanningTemplateDTO struct {
 }
 
 type WorkPeriodPlanningTemplateRow struct {
-	AssignmentID               string `json:"assignmentId,omitempty"`
-	TemplateAssignmentID       string `json:"templateAssignmentId,omitempty"`
-	ReplacementForAssignmentID string `json:"replacementForAssignmentId,omitempty"`
-	CollaboratorID             string `json:"collaboratorId"`
-	CollaboratorName           string `json:"collaboratorName,omitempty"`
-	CollaboratorNickname       string `json:"collaboratorNickname,omitempty"`
-	ProjectedEndDate           string `json:"projectedEndDate,omitempty"`
-	PlanningAvailability       string `json:"planningAvailability"`
-	Selected                   bool   `json:"selected"`
-	SectorID                   string `json:"sectorId"`
-	SectorLabel                string `json:"sectorLabel,omitempty"`
-	LocationID                 string `json:"locationId"`
-	LocationLabel              string `json:"locationLabel,omitempty"`
-	TaskID                     string `json:"taskId"`
-	TaskLabel                  string `json:"taskLabel,omitempty"`
+	AssignmentID                          string `json:"assignmentId,omitempty"`
+	TemplateAssignmentID                  string `json:"templateAssignmentId,omitempty"`
+	ReplacementForAssignmentID            string `json:"replacementForAssignmentId,omitempty"`
+	TemporaryReplacementForCollaboratorID string `json:"temporaryReplacementForCollaboratorId,omitempty"`
+	CollaboratorID                        string `json:"collaboratorId"`
+	CollaboratorName                      string `json:"collaboratorName,omitempty"`
+	CollaboratorNickname                  string `json:"collaboratorNickname,omitempty"`
+	ProjectedEndDate                      string `json:"projectedEndDate,omitempty"`
+	PlanningAvailability                  string `json:"planningAvailability"`
+	Selected                              bool   `json:"selected"`
+	SectorID                              string `json:"sectorId"`
+	SectorLabel                           string `json:"sectorLabel,omitempty"`
+	LocationID                            string `json:"locationId"`
+	LocationLabel                         string `json:"locationLabel,omitempty"`
+	TaskID                                string `json:"taskId"`
+	TaskLabel                             string `json:"taskLabel,omitempty"`
 }
 
 type MarkActualOutcomeRequest struct {
