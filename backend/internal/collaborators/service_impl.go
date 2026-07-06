@@ -97,6 +97,7 @@ func (s *service) Create(ctx context.Context, req CreateCollaboratorRequest, act
 		GoldCommissionPercent:          paymentConfig.GoldCommissionPercent,
 		TimeOffGoldSplitPercent:        paymentConfig.TimeOffGoldSplitPercent,
 		SickDayOffReplacementGoldGrams: paymentConfig.SickDayOffReplacementGoldGrams,
+		PlanningAvailability:           normalizePlanningAvailability(req.PlanningAvailability),
 		SectorID:                       strings.TrimSpace(req.SectorID),
 		LocationID:                     strings.TrimSpace(req.LocationID),
 		TaskID:                         strings.TrimSpace(req.TaskID),
@@ -162,6 +163,9 @@ func (s *service) Update(ctx context.Context, id string, req UpdateCollaboratorR
 	row.GoldCommissionPercent = paymentConfig.GoldCommissionPercent
 	row.TimeOffGoldSplitPercent = paymentConfig.TimeOffGoldSplitPercent
 	row.SickDayOffReplacementGoldGrams = paymentConfig.SickDayOffReplacementGoldGrams
+	if strings.TrimSpace(req.PlanningAvailability) != "" {
+		row.PlanningAvailability = normalizePlanningAvailability(req.PlanningAvailability)
+	}
 	row.SectorID = strings.TrimSpace(req.SectorID)
 	row.LocationID = strings.TrimSpace(req.LocationID)
 	row.TaskID = strings.TrimSpace(req.TaskID)

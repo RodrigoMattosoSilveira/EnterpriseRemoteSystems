@@ -1,0 +1,4 @@
+-- SQLite cannot safely drop a column without rebuilding the table.
+-- This migration is intentionally non-destructive.
+--
+-- planning_availability remains on collaborator_journeys.

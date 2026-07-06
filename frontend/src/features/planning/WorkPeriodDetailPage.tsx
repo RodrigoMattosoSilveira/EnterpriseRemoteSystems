@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { ApiErrorPanel } from "../../components/ApiErrorPanel";
 import { useReferenceDataByType } from "../reference-data/useReferenceData";
-import type { ActualStatus } from "../../types/planning";
+import type { ActualStatus, WorkPeriodAssignment } from "../../types/planning";
 import { ACTUAL_STATUSES, humanizePlanningCode } from "./planningSchemas";
 import { AccrualTab } from "./AccrualTab";
 import { InformTab } from "./InformTab";
@@ -53,6 +53,10 @@ export function WorkPeriodDetailPage() {
     outcomeMutation.error ||
     informMutation.error;
   const pending = bulkPlanMutation.isPending || refinePlanMutation.isPending;
+  const unreplacedAbsentees = useMemo(
+    () => unreplacedAbsenteeAssignments(assignments),
+    [assignments],
+  );
 
   if (periodQuery.isLoading || !period)
     return (
@@ -126,7 +130,9 @@ export function WorkPeriodDetailPage() {
             }
             pending={pending}
             onBulkPlan={(input) => bulkPlanMutation.mutate(input)}
-            onRefineAssignment={(input) => refinePlanMutation.mutateAsync(input)}
+            onRefineAssignment={(input) =>
+              refinePlanMutation.mutateAsync(input)
+            }
           />
         )}
         {tab === "inform" && (
@@ -135,6 +141,7 @@ export function WorkPeriodDetailPage() {
             roster={rosterQuery.data}
             loading={rosterQuery.isLoading}
             pending={informMutation.isPending}
+            unreplacedAbsentees={unreplacedAbsentees}
             onInform={() => informMutation.mutate()}
           />
         )}
@@ -208,4 +215,19 @@ function formatDateTime(value: string) {
     dateStyle: "medium",
     timeStyle: "short",
   }).format(new Date(value));
+}
+
+function unreplacedAbsenteeAssignments(assignments: WorkPeriodAssignment[]) {
+  const replacedAssignmentIds = new Set(
+    assignments
+      .map((row) => row.replacementForAssignmentId?.trim())
+      .filter(Boolean),
+  );
+  return assignments.filter(
+    (row) =>
+      row.active &&
+      (row.planningAvailability === "DAY_OFF" ||
+        row.planningAvailability === "LEAVE_OF_ABSENCE") &&
+      !replacedAssignmentIds.has(row.id),
+  );
 }

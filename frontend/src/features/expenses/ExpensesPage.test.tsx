@@ -305,6 +305,7 @@ function collaborator(id: string, name: string, personName = name): Collaborator
     paymentMethodId: "payment-brl",
     paymentMethodLabel: "BRL",
     paymentValue: 100,
+    planningAvailability: "ACTIVE",
     sectorId: "sector-mining",
     sectorLabel: "Mining",
     locationId: "location-1",

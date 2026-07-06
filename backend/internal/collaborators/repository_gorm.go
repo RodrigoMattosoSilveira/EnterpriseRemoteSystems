@@ -83,6 +83,7 @@ func (r *gormRepository) Update(ctx context.Context, collaborator *db.Collaborat
 			"gold_commission_percent":             collaborator.GoldCommissionPercent,
 			"time_off_gold_split_percent":         collaborator.TimeOffGoldSplitPercent,
 			"sick_day_off_replacement_gold_grams": collaborator.SickDayOffReplacementGoldGrams,
+			"planning_availability":               normalizePlanningAvailability(collaborator.PlanningAvailability),
 			"sector_id":                           collaborator.SectorID,
 			"location_id":                         collaborator.LocationID,
 			"task_id":                             collaborator.TaskID,
