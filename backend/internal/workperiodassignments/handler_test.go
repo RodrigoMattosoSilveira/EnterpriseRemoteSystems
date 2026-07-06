@@ -471,6 +471,120 @@ func TestBulkPlanSavesTemporaryReplacementForCurrentWorkPeriod(t *testing.T) {
 	}
 }
 
+func TestBulkPlanRejectsTemporaryReplacementForActiveTarget(t *testing.T) {
+	server, cleanup := newTestServer(t)
+	defer cleanup()
+
+	workPeriod := createWorkPeriod(t, server, nil)
+	activeTarget := createActiveCollaborator(t, server, 1)
+	replacement := createActiveCollaborator(t, server, 2)
+
+	res := postJSON(t, server, http.MethodPost, workPeriodsURL+workPeriod.Data.ID+"/assignments/bulk-plan", map[string]any{
+		"rows": []map[string]any{
+			{
+				"collaboratorId":       activeTarget.Data.ID,
+				"selected":             true,
+				"planningAvailability": "ACTIVE",
+				"sectorId":             "ref-sector-mining",
+				"locationId":           "ref-location-main-mine",
+				"taskId":               "ref-task-miner",
+			},
+			{
+				"collaboratorId":                        replacement.Data.ID,
+				"selected":                              true,
+				"planningAvailability":                  "ACTIVE",
+				"sectorId":                              "ref-sector-mining",
+				"locationId":                            "ref-location-main-mine",
+				"taskId":                                "ref-task-miner",
+				"temporaryReplacementForCollaboratorId": activeTarget.Data.ID,
+			},
+		},
+	})
+	defer res.Body.Close()
+
+	assertValidationError(t, res, "temporaryReplacementForCollaboratorId", "Replacement target collaborator must have DAY_OFF or LEAVE_OF_ABSENCE availability")
+}
+
+func TestBulkPlanRejectsTimeOffTemporaryReplacementWorker(t *testing.T) {
+	server, cleanup := newTestServer(t)
+	defer cleanup()
+
+	workPeriod := createWorkPeriod(t, server, nil)
+	absentee := createActiveCollaborator(t, server, 1)
+	replacement := createActiveCollaborator(t, server, 2)
+
+	res := postJSON(t, server, http.MethodPost, workPeriodsURL+workPeriod.Data.ID+"/assignments/bulk-plan", map[string]any{
+		"rows": []map[string]any{
+			{
+				"collaboratorId":       absentee.Data.ID,
+				"selected":             false,
+				"planningAvailability": "LEAVE_OF_ABSENCE",
+				"availabilityChanged":  true,
+				"sectorId":             "ref-sector-mining",
+				"locationId":           "ref-location-main-mine",
+				"taskId":               "ref-task-miner",
+			},
+			{
+				"collaboratorId":                        replacement.Data.ID,
+				"selected":                              true,
+				"planningAvailability":                  "DAY_OFF",
+				"sectorId":                              "ref-sector-mining",
+				"locationId":                            "ref-location-main-mine",
+				"taskId":                                "ref-task-miner",
+				"temporaryReplacementForCollaboratorId": absentee.Data.ID,
+			},
+		},
+	})
+	defer res.Body.Close()
+
+	assertValidationError(t, res, "temporaryReplacementForCollaboratorId", "Replacement collaborator must be available to work")
+}
+
+func TestBulkPlanRejectsDuplicateTemporaryReplacementTarget(t *testing.T) {
+	server, cleanup := newTestServer(t)
+	defer cleanup()
+
+	workPeriod := createWorkPeriod(t, server, nil)
+	absentee := createActiveCollaborator(t, server, 1)
+	firstReplacement := createActiveCollaborator(t, server, 2)
+	secondReplacement := createActiveCollaborator(t, server, 3)
+
+	res := postJSON(t, server, http.MethodPost, workPeriodsURL+workPeriod.Data.ID+"/assignments/bulk-plan", map[string]any{
+		"rows": []map[string]any{
+			{
+				"collaboratorId":       absentee.Data.ID,
+				"selected":             false,
+				"planningAvailability": "DAY_OFF",
+				"availabilityChanged":  true,
+				"sectorId":             "ref-sector-mining",
+				"locationId":           "ref-location-main-mine",
+				"taskId":               "ref-task-miner",
+			},
+			{
+				"collaboratorId":                        firstReplacement.Data.ID,
+				"selected":                              true,
+				"planningAvailability":                  "ACTIVE",
+				"sectorId":                              "ref-sector-mining",
+				"locationId":                            "ref-location-main-mine",
+				"taskId":                                "ref-task-miner",
+				"temporaryReplacementForCollaboratorId": absentee.Data.ID,
+			},
+			{
+				"collaboratorId":                        secondReplacement.Data.ID,
+				"selected":                              true,
+				"planningAvailability":                  "ACTIVE",
+				"sectorId":                              "ref-sector-mining",
+				"locationId":                            "ref-location-main-mine",
+				"taskId":                                "ref-task-miner",
+				"temporaryReplacementForCollaboratorId": absentee.Data.ID,
+			},
+		},
+	})
+	defer res.Body.Close()
+
+	assertValidationError(t, res, "temporaryReplacementForCollaboratorId", "Replacement target collaborator already has a replacement")
+}
+
 func TestBulkPlanSavesUnselectedAvailabilitySnapshotWithoutAssignmentRefs(t *testing.T) {
 	server, cleanup := newTestServer(t)
 	defer cleanup()
