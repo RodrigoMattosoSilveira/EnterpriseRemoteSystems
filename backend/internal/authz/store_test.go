@@ -45,6 +45,29 @@ func TestSeedAuthorizationCatalogCreatesCoreRolesAndGrants(t *testing.T) {
 	if expenseReceiptReturn != 1 {
 		t.Fatalf("expected expense operator to receive receipt return permission, got %d", expenseReceiptReturn)
 	}
+
+	for _, tc := range []struct {
+		role       RoleCode
+		permission Permission
+	}{
+		{RoleEarningsOperator, PermissionTenantsRead},
+		{RoleEarningsOperator, PermissionReferenceDataRead},
+		{RoleExpenseOperator, PermissionTenantsRead},
+		{RoleExpenseOperator, PermissionReferenceDataRead},
+		{RolePerson, PermissionTenantsRead},
+		{RolePerson, PermissionReferenceDataRead},
+	} {
+		var count int64
+		if err := database.Model(&AuthzRolePermission{}).
+			Joins("JOIN authz_roles ON authz_roles.id = authz_role_permissions.role_id").
+			Where("authz_roles.code = ? AND permission_code = ?", string(tc.role), string(tc.permission)).
+			Count(&count).Error; err != nil {
+			t.Fatalf("count %s permission for %s: %v", tc.permission, tc.role, err)
+		}
+		if count != 1 {
+			t.Fatalf("expected %s to receive %s, got %d grants", tc.role, tc.permission, count)
+		}
+	}
 }
 
 func TestGORMStoreFindActorLoadsTenantScopedRolePermissions(t *testing.T) {
