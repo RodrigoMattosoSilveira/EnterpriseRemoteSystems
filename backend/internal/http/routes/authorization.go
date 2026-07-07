@@ -55,6 +55,16 @@ func requestActor(c fiber.Ctx, deps Dependencies) (*authz.Actor, error) {
 	return actor, nil
 }
 
+// authorizationHandledByHandler marks routes whose handlers perform the full
+// authorization decision themselves. These handlers must retain control so
+// denied sensitive operations are recorded in the authorization audit log.
+// The route coverage test restricts this marker to an explicit allowlist.
+func authorizationHandledByHandler() fiber.Handler {
+	return func(c fiber.Ctx) error {
+		return c.Next()
+	}
+}
+
 func requirePermission(deps Dependencies, permission authz.Permission) fiber.Handler {
 	return func(c fiber.Ctx) error {
 		if deps.DisableRouteAuthorization {

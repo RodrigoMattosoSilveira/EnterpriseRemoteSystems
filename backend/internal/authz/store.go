@@ -199,12 +199,14 @@ func SeedAuthorizationCatalog(database *gorm.DB) error {
 		RoleApplicationAdmin: {PermissionAll},
 		RoleTenantAdmin:      {PermissionAll},
 		RoleEarningsOperator: {
+			PermissionTenantsRead, PermissionReferenceDataRead,
 			PermissionCollaboratorsRead,
 			PermissionPlanningRead, PermissionPlanningCreate, PermissionPlanningUpdate,
 			PermissionEarningsRead, PermissionEarningsCreate,
 			PermissionCurrentAccountsSummaryRead,
 		},
 		RoleExpenseOperator: {
+			PermissionTenantsRead, PermissionReferenceDataRead,
 			PermissionCollaboratorsRead,
 			PermissionPriceListsRead, PermissionPriceListsCreate, PermissionPriceListsUpdate,
 			PermissionCurrentAccountsSummaryRead,
@@ -212,6 +214,7 @@ func SeedAuthorizationCatalog(database *gorm.DB) error {
 			PermissionLedgerReceiptsRead, PermissionLedgerReceiptsCreate, PermissionLedgerReceiptsPrint, PermissionLedgerReceiptsReturn,
 		},
 		RolePerson: {
+			PermissionTenantsRead, PermissionReferenceDataRead,
 			PermissionPeopleSelfRead, PermissionPeopleSelfUpdate,
 			PermissionCollaboratorsSelfRead,
 			PermissionCurrentAccountsSelfSummaryRead, PermissionCurrentAccountsSelfLedgerRead,
@@ -293,6 +296,8 @@ func PermissionCatalog() []PermissionCatalogEntry {
 		{PermissionPriceListsRead, "Read price lists", "Read tenant price list records."},
 		{PermissionPriceListsCreate, "Create price lists", "Create tenant price list records."},
 		{PermissionPriceListsUpdate, "Update price lists", "Update tenant price list records."},
+		{PermissionReferenceDataRead, "Read reference data", "Read tenant reference data records."},
+		{PermissionReferenceDataManage, "Manage reference data", "Create, update, deactivate, and reactivate tenant reference data records."},
 		{PermissionExpensesRead, "Read expenses", "Read tenant expense records."},
 		{PermissionExpensesCreate, "Create expenses", "Create tenant expense records."},
 		{PermissionExpensesUpdate, "Update expenses", "Update tenant expense records."},

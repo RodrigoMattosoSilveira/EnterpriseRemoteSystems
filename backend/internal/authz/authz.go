@@ -61,6 +61,9 @@ const (
 	PermissionPriceListsCreate Permission = "price_lists.create"
 	PermissionPriceListsUpdate Permission = "price_lists.update"
 
+	PermissionReferenceDataRead   Permission = "reference_data.read"
+	PermissionReferenceDataManage Permission = "reference_data.manage"
+
 	PermissionExpensesRead   Permission = "expenses.read"
 	PermissionExpensesCreate Permission = "expenses.create"
 	PermissionExpensesUpdate Permission = "expenses.update"
