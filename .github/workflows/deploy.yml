@@ -312,6 +312,11 @@ jobs:
         with:
           ref: ${{ needs.deploy.outputs.revision }}
 
+      - name: Trust checked-out repository
+        shell: bash
+        run: |
+          git config --global --add safe.directory "${GITHUB_WORKSPACE}"
+
       - name: Show deployed Playwright target
         run: |
           echo "PLAYWRIGHT_BASE_URL=${PLAYWRIGHT_BASE_URL}"
