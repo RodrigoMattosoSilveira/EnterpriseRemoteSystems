@@ -239,6 +239,35 @@ func TestPlanningTemplateUsesCollaboratorAvailabilityAndMostRecentReplacement(t 
 	}
 }
 
+func TestPlanningTemplateOnlyIncludesCollaboratorsActiveForWorkDate(t *testing.T) {
+	server, cleanup := newTestServer(t)
+	defer cleanup()
+
+	workPeriod := createWorkPeriod(t, server, nil)
+	activeForDate := createActiveCollaborator(t, server, 1)
+	endedBeforeDate := createCollaborator(t, server, validCollaboratorPayload(
+		createPerson(t, server, validCompletePersonPayload(3, nil)).Data.ID,
+		map[string]any{"journeyStartDate": "2025-01-01"},
+	))
+
+	res := getJSON(t, server, workPeriodsURL+workPeriod.Data.ID+"/assignments/planning-template")
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		var body apiErrorResponse
+		decodeJSON(t, res, &body)
+		t.Fatalf("expected template status %d, got %d with error %+v", http.StatusOK, res.StatusCode, body.Error)
+	}
+
+	var body apiPlanningTemplateResponse
+	decodeJSON(t, res, &body)
+	if findTemplateRow(body, activeForDate.Data.ID) == nil {
+		t.Fatalf("expected collaborator active on work date to be present")
+	}
+	if row := findTemplateRow(body, endedBeforeDate.Data.ID); row != nil {
+		t.Fatalf("expected collaborator outside journey dates to be excluded, got %+v", row)
+	}
+}
+
 func TestBulkPlanSavesSelectedCollaboratorsOnlyAndIgnoresUnselectedRows(t *testing.T) {
 	server, cleanup := newTestServer(t)
 	defer cleanup()

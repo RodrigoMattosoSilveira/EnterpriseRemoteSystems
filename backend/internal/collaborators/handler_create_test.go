@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/gofiber/fiber/v3"
 
@@ -371,6 +372,34 @@ func TestUpdateCollaboratorSavesPlanningAvailability(t *testing.T) {
 	decodeJSON(t, res, &body)
 	if body.Data.PlanningAvailability != "ACTIVE" {
 		t.Fatalf("expected planningAvailability ACTIVE, got %q", body.Data.PlanningAvailability)
+	}
+}
+
+func TestListCollaboratorsOrdersNewestCreatedFirst(t *testing.T) {
+	server, cleanup := newTestServer(t)
+	defer cleanup()
+
+	olderPerson := createPerson(t, server, validCompletePersonPayload(1, nil))
+	createCollaborator(t, server, validCollaboratorPayload(olderPerson.Data.ID, map[string]any{
+		"journeyStartDate": "2099-01-01",
+	}))
+
+	time.Sleep(time.Millisecond)
+
+	newerPerson := createPerson(t, server, validCompletePersonPayload(2, nil))
+	newerCollaborator := createCollaborator(t, server, validCollaboratorPayload(newerPerson.Data.ID, map[string]any{
+		"journeyStartDate": "2026-06-01",
+	}))
+
+	listed := listCollaborators(t, server, "page=1&pageSize=1")
+	if listed.Data.Total != 2 {
+		t.Fatalf("expected two collaborators, got %d", listed.Data.Total)
+	}
+	if len(listed.Data.Items) != 1 {
+		t.Fatalf("expected one collaborator on the first page, got %d", len(listed.Data.Items))
+	}
+	if got := listed.Data.Items[0].ID; got != newerCollaborator.Data.ID {
+		t.Fatalf("expected newest collaborator %q first, got %q", newerCollaborator.Data.ID, got)
 	}
 }
 
