@@ -3,6 +3,7 @@ package workperiodassignments
 import (
 	"context"
 	"errors"
+	"time"
 
 	"enterpriseremotesystems/backend/internal/db"
 	"gorm.io/gorm"
@@ -59,13 +60,15 @@ func (r *gormRepository) ListActiveAssignmentsForWorkPeriod(ctx context.Context,
 	return rows, err
 }
 
-func (r *gormRepository) ListActiveCollaboratorsForPlanning(ctx context.Context) ([]db.CollaboratorJourney, error) {
+func (r *gormRepository) ListActiveCollaboratorsForPlanning(ctx context.Context, workDate time.Time) ([]db.CollaboratorJourney, error) {
 	var rows []db.CollaboratorJourney
 	err := r.db.WithContext(ctx).
 		Model(&db.CollaboratorJourney{}).
 		Joins("JOIN people ON people.id = collaborator_journeys.person_id").
 		Joins("JOIN reference_data statuses ON statuses.id = collaborator_journeys.status_id").
 		Where("collaborator_journeys.tenant_id = ? AND collaborator_journeys.closed_at IS NULL", defaultTenantID).
+		Where("date(collaborator_journeys.journey_start_date) <= ?", formatDateForPlanningQuery(workDate)).
+		Where("date(collaborator_journeys.projected_end_date) >= ?", formatDateForPlanningQuery(workDate)).
 		Where("statuses.tenant_id = ? AND statuses.type = ? AND statuses.code = ? AND statuses.active = ?", defaultTenantID, "collaborator_status", "ACTIVE", true).
 		Preload("Person").
 		Preload("Status").
@@ -75,6 +78,10 @@ func (r *gormRepository) ListActiveCollaboratorsForPlanning(ctx context.Context)
 		Order("LOWER(people.nickname) ASC, LOWER(people.first_name) ASC, LOWER(people.last_name) ASC").
 		Find(&rows).Error
 	return rows, err
+}
+
+func formatDateForPlanningQuery(value time.Time) string {
+	return value.Format("2006-01-02")
 }
 
 func (r *gormRepository) FindMostRecentPriorWorkPeriodByCode(ctx context.Context, workPeriod db.WorkPeriod) (*db.WorkPeriod, error) {

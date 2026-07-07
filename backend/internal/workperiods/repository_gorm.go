@@ -42,6 +42,18 @@ func (r *gormRepository) Create(ctx context.Context, workPeriod *db.WorkPeriod) 
 	return r.db.WithContext(ctx).Create(workPeriod).Error
 }
 
+func (r *gormRepository) ExistsByDateAndCode(ctx context.Context, workDate time.Time, periodCode string) (bool, error) {
+	var count int64
+	err := r.db.WithContext(ctx).
+		Model(&db.WorkPeriod{}).
+		Where("tenant_id = ? AND date(work_date) = ? AND period_code = ?", defaultTenantID, formatDateForQuery(workDate), periodCode).
+		Count(&count).Error
+	if err != nil {
+		return false, err
+	}
+	return count > 0, nil
+}
+
 func (r *gormRepository) Update(ctx context.Context, workPeriod *db.WorkPeriod) error {
 	return r.db.WithContext(ctx).
 		Model(&db.WorkPeriod{}).

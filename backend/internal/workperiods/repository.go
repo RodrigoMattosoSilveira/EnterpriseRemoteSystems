@@ -10,6 +10,7 @@ import (
 type Repository interface {
 	List(ctx context.Context, filter normalizedWorkPeriodListFilter) ([]db.WorkPeriod, int64, error)
 	Create(ctx context.Context, workPeriod *db.WorkPeriod) error
+	ExistsByDateAndCode(ctx context.Context, workDate time.Time, periodCode string) (bool, error)
 	Update(ctx context.Context, workPeriod *db.WorkPeriod) error
 	FindByID(ctx context.Context, id string) (*db.WorkPeriod, error)
 	ListIncludedAssignmentsForRoster(ctx context.Context, workPeriodID string) ([]db.WorkPeriodAssignment, error)
