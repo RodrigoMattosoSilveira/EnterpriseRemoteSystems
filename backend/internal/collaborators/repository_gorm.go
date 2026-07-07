@@ -60,7 +60,7 @@ func (r *gormRepository) List(ctx context.Context, filter CollaboratorListFilter
 		pageSize = 50
 	}
 
-	err := q.Order("collaborator_journeys.journey_start_date DESC, collaborator_journeys.created_at DESC").Limit(pageSize).Offset((page - 1) * pageSize).Find(&rows).Error
+	err := q.Order("collaborator_journeys.created_at DESC, collaborator_journeys.journey_start_date DESC").Limit(pageSize).Offset((page - 1) * pageSize).Find(&rows).Error
 	return rows, total, err
 }
 
