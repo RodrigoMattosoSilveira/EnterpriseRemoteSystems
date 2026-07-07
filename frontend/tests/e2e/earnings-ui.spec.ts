@@ -462,8 +462,20 @@ function uniqueSuffix(): number {
 
 function e2eWorkDate(seed: number): string {
   const date = new Date(Date.UTC(2099, 0, 1));
-  date.setUTCDate(date.getUTCDate() + (Math.abs(seed) % 2000));
+  date.setUTCDate(date.getUTCDate() + e2eWorkDateOffset(seed));
   return date.toISOString().slice(0, 10);
+}
+
+function e2eWorkDateOffset(seed: number): number {
+  const runSalt =
+    process.env.GITHUB_RUN_ID || process.env.GITHUB_RUN_ATTEMPT || "local";
+  const input = `${runSalt}:${seed}`;
+  let hash = 2166136261;
+  for (const char of input) {
+    hash ^= char.charCodeAt(0);
+    hash = Math.imul(hash, 16777619);
+  }
+  return Math.abs(hash) % 2_500_000;
 }
 
 function firstPageSortLastName(seed: number): string {

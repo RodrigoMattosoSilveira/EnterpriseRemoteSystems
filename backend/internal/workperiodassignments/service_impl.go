@@ -56,7 +56,7 @@ func (s *service) GetPlanningTemplate(ctx context.Context, workPeriodID string) 
 		return nil, err
 	}
 
-	collaborators, err := s.repo.ListActiveCollaboratorsForPlanning(ctx)
+	collaborators, err := s.repo.ListActiveCollaboratorsForPlanning(ctx, workPeriod.WorkDate)
 	if err != nil {
 		return nil, err
 	}
