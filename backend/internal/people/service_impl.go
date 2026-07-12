@@ -2,6 +2,7 @@ package people
 
 import (
 	"context"
+	"log"
 	"strings"
 	"time"
 
@@ -217,6 +218,9 @@ func (s *service) Update(ctx context.Context, id string, req UpdatePersonRequest
 	person.Notes = strings.TrimSpace(req.Notes)
 	person.UpdatedAt = time.Now().UTC()
 
+	log.Printf("UpdatePerson %s: requested statusId=%q", id, req.StatusID)
+	log.Printf("UpdatePerson %s: saving statusId=%q", id, person.StatusID)
+
 	if err := s.repo.Update(ctx, person); err != nil {
 		return nil, err
 	}
@@ -225,6 +229,7 @@ func (s *service) Update(ctx context.Context, id string, req UpdatePersonRequest
 	if err != nil {
 		return nil, err
 	}
+	log.Printf("UpdatePerson %s: returned statusId=%q", id, updated.StatusID)
 
 	return ptr(ToDTO(*updated)), nil
 }
