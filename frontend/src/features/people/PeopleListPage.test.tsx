@@ -70,6 +70,34 @@ describe("PeopleListPage", () => {
     expect(inputByLabel("Filter people").value).toBe("");
   });
 
+  it("applies active/inactive filter immediately", async () => {
+    mockPeopleFetch({ items: [personFixture("person-1", "Maria")], total: 1 });
+
+    renderPeopleListRoute();
+    await waitForText("Maria Pessoa");
+
+    await changeSelect("Status", "Active");
+
+    await waitFor(() =>
+      fetchCalls.includes(
+        "/api/v1/people?statusId=ref-person-status-active&page=1&pageSize=10",
+      ),
+    );
+  });
+
+  it("clears status filter when All is selected", async () => {
+    mockPeopleFetch({ items: [personFixture("person-1", "Maria")], total: 1 });
+
+    renderPeopleListRoute();
+    await waitForText("Maria Pessoa");
+
+    await changeSelect("Status", "All");
+
+    await waitFor(() =>
+      fetchCalls.includes("/api/v1/people?page=1&pageSize=10"),
+    );
+  });
+
   /*
 
     it("debounces search input and fires API request after delay", async () => {
@@ -251,6 +279,19 @@ async function changeInput(labelText: string, value: string) {
     valueSetter?.call(input, value);
     input.dispatchEvent(new Event("input", { bubbles: true }));
     input.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+}
+
+async function changeSelect(labelText: string, value: string) {
+  const select = selectByLabel(labelText);
+  const valueSetter = Object.getOwnPropertyDescriptor(
+    HTMLSelectElement.prototype,
+    "value",
+  )?.set;
+
+  await act(async () => {
+    valueSetter?.call(select, value);
+    select.dispatchEvent(new Event("change", { bubbles: true }));
   });
 }
 
