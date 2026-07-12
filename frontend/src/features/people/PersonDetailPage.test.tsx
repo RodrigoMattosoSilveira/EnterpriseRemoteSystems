@@ -142,6 +142,47 @@ describe("PersonDetailPage", () => {
     await waitForText("People");
   });
 
+  it("submits status changes when editing a person", async () => {
+    mockFetch(async (url, init) => {
+      recordFetchCall(url, init);
+
+      if (url === `/api/v1/people/${PERSON_ID}` && methodOf(init) === "GET") {
+        return jsonResponse({ data: existingPerson });
+      }
+
+      if (url === `/api/v1/people/${PERSON_ID}` && methodOf(init) === "PUT") {
+        return jsonResponse({
+          data: {
+            ...existingPerson,
+            statusId: "ref-person-status-inactive",
+            statusLabel: "Inactive",
+          },
+        });
+      }
+
+      if (url === "/api/v1/people" && methodOf(init) === "GET") {
+        return jsonResponse({ items: [], total: 0 });
+      }
+
+      throw new Error(`Unhandled request: ${url}`);
+    });
+
+    renderPersonDetailRoute();
+    await waitForText("Maria Silva");
+
+    await changeSelect("Status", "ref-person-status-inactive");
+    await submitForm();
+
+    await waitFor(() => fetchCalls.some((call) => call.method === "PUT"));
+
+    const updateCall = fetchCalls.find((call) => call.method === "PUT");
+    expect(updateCall?.body).toMatchObject({
+      statusId: "ref-person-status-inactive",
+    });
+
+    await waitForText("People");
+  });
+
   it("shows update validation errors returned by the API", async () => {
     mockFetch(async (url, init) => {
       recordFetchCall(url, init);
@@ -323,6 +364,20 @@ async function changeInput(labelText: string, value: string) {
     valueSetter?.call(input, value);
     input.dispatchEvent(new Event("input", { bubbles: true }));
     input.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+}
+
+async function changeSelect(labelText: string, value: string) {
+  const select = selectByLabel(labelText);
+  const valueSetter = Object.getOwnPropertyDescriptor(
+    HTMLSelectElement.prototype,
+    "value"
+  )?.set;
+
+  await act(async () => {
+    valueSetter?.call(select, value);
+    select.dispatchEvent(new Event("input", { bubbles: true }));
+    select.dispatchEvent(new Event("change", { bubbles: true }));
   });
 }
 
