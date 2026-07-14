@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { usePeoplePage } from "./usePeople";
 import type {
   PeopleListFilter,
@@ -86,15 +87,15 @@ export function PeopleListPage() {
     setPage(1);
   }
 
+  const { t } = useTranslation("people");
+
   return (
     <main className="min-h-screen bg-gray-50">
       <header className="sticky top-0 z-10 border-b bg-white/95 px-4 py-4 backdrop-blur">
         <div className="mx-auto flex max-w-4xl items-center justify-between gap-3">
           <div>
-            <h1 className="text-xl font-bold text-gray-950">People</h1>
-            <p className="text-sm text-gray-500">
-              Permanent identity records
-            </p>
+            <h1 className="text-xl font-bold text-gray-950">{t("title")}</h1>
+            <p className="text-sm text-gray-500">{t("subtitle")}</p>
           </div>
 
           <div className="flex items-center gap-2">
@@ -102,31 +103,31 @@ export function PeopleListPage() {
               to="/collaborators"
               className="rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 shadow-sm"
             >
-              Collaborators
+              {t("collaboratorsLink")}
             </Link>
             <Link
               to="/expenses"
               className="rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 shadow-sm"
             >
-              Expenses
+              {t("expensesLink")}
             </Link>
             <Link
               to="/admin/reference-data"
               className="rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 shadow-sm"
             >
-              Admin
+              {t("adminLink")}
             </Link>
             <Link
               to="/admin/authorization"
               className="rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 shadow-sm"
             >
-              Authz
+              {t("authzLink")}
             </Link>
             <Link
               to="/people/new"
               className="rounded-xl bg-gray-950 px-4 py-2 text-sm font-semibold text-white shadow-sm"
             >
-              Add
+              {t("addButton")}
             </Link>
           </div>
         </div>
@@ -143,15 +144,13 @@ export function PeopleListPage() {
         )}
 
         <section
-          aria-label="Search and filter controls"
+          aria-label={t("filtersTitle")}
           className="rounded-2xl border bg-white p-5 shadow-sm"
         >
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
-              <h2 className="text-lg font-semibold text-gray-950">Filters</h2>
-              <p className="mt-1 text-sm text-gray-500">
-                Search by name, nickname, CPF, RG, cellular, or email.
-              </p>
+              <h2 className="text-lg font-semibold text-gray-950">{t("filtersTitle")}</h2>
+              <p className="mt-1 text-sm text-gray-500">{t("filtersDescription")}</p>
             </div>
             {hasActiveFilters && (
               <button
@@ -159,19 +158,19 @@ export function PeopleListPage() {
                 onClick={clearFilters}
                 className="rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 shadow-sm"
               >
-                Clear filters
+                {t("clearFilters")}
               </button>
             )}
           </div>
 
           <div className="mt-4">
             <label className="grid gap-1 text-sm font-medium text-gray-700">
-              Filter people
+              {t("filterPeople")}
               <input
                 type="search"
                 value={search}
                 onChange={(event) => setSearch(event.target.value)}
-                placeholder="Name, nickname, CPF, RG, cellular, or email"
+                placeholder={t("searchPlaceholder")}
                 className="rounded-xl border border-gray-300 px-3 py-2 text-sm shadow-sm"
               />
             </label>
@@ -179,7 +178,7 @@ export function PeopleListPage() {
 
           <div className="mt-4 grid gap-4 md:grid-cols-4 justify-items-start">
             <label className="grid gap-1 text-sm font-medium text-gray-700 min-w-0">
-              Profile completion
+              {t("profileCompletion")}
               <select
                 value={profileCompletionStatus}
                 onChange={(event) => {
@@ -190,15 +189,15 @@ export function PeopleListPage() {
                 }}
                 className="w-full rounded-xl border border-gray-300 px-3 py-2 text-sm shadow-sm"
               >
-                <option value="">All completion statuses</option>
-                <option value="COMPLETE">Complete</option>
-                <option value="INCOMPLETE">Incomplete</option>
-                <option value="PERSONAL_ONLY">Personal only</option>
+                <option value="">{t("allCompletionStatuses")}</option>
+                <option value="COMPLETE">{t("complete")}</option>
+                <option value="INCOMPLETE">{t("incomplete")}</option>
+                <option value="PERSONAL_ONLY">{t("personalOnly")}</option>
               </select>
             </label>
 
             <label className="grid gap-1 text-sm font-medium text-gray-700 min-w-0">
-              Collaborator eligibility
+              {t("collaboratorEligibility")}
               <select
                 value={canCreateCollaborator}
                 onChange={(event) => {
@@ -209,14 +208,14 @@ export function PeopleListPage() {
                 }}
                 className="w-full rounded-xl border border-gray-300 px-3 py-2 text-sm shadow-sm"
               >
-                <option value="all">All people</option>
-                <option value="true">Can create collaborator</option>
-                <option value="false">Cannot create collaborator</option>
+                <option value="all">{t("allPeople")}</option>
+                <option value="true">{t("canCreateCollaborator")}</option>
+                <option value="false">{t("cannotCreateCollaborator")}</option>
               </select>
             </label>
 
             <label className="grid gap-1 text-sm font-medium text-gray-700 min-w-0">
-              Status
+              {t("status")}
               <select
                 value={peopleStatus}
                 onChange={(event) => {
@@ -226,14 +225,14 @@ export function PeopleListPage() {
                   setPage(1);
                 }}
                 className="w-full rounded-xl border border-gray-300 px-3 py-2 text-sm shadow-sm">
-                <option value="All">All</option>
-                <option value="Active">Active</option>
-                <option value="InActive">InActive</option>
+                <option value="All">{t("all")}</option>
+                <option value="Active">{t("active")}</option>
+                <option value="InActive">{t("inactive")}</option>
               </select>
             </label>
 
-            <label className="grid gap-1 text-sm font-medium text-gray-700 min-w-0 md:max-w-[10rem]">  
-              People per page
+            <label className="grid gap-1 text-sm font-medium text-gray-700 min-w-0 md:max-w-[10rem]">
+              {t("peoplePerPage")}
               <select
                 value={pageSize}
                 onChange={(event) => {
@@ -254,7 +253,7 @@ export function PeopleListPage() {
 
         {isLoading && (
           <div className="rounded-2xl border bg-white p-5 shadow-sm">
-            Loading people...
+            {t("loading")}
           </div>
         )}
 
@@ -265,8 +264,7 @@ export function PeopleListPage() {
         )}
 
         {!isLoading && !error && (
-          <PaginationSummary
-            page={page}
+          <PaginationSummary            t={t}            page={page}
             totalPages={totalPages}
             pageStart={pageStart}
             pageEnd={pageEnd}
@@ -281,12 +279,10 @@ export function PeopleListPage() {
         {!isLoading && !error && displayedPeople.length === 0 && (
           <div className="rounded-2xl border bg-white p-8 text-center shadow-sm">
             <h2 className="text-lg font-semibold">
-              {hasActiveFilters ? "No people match these filters" : "No people yet"}
+              {hasActiveFilters ? t("noMatchFilters") : t("noPeopleYet")}
             </h2>
             <p className="mt-2 text-sm text-gray-500">
-              {hasActiveFilters
-                ? "Adjust or clear the filters to widen the People list."
-                : "Create the first Person record before creating collaborators."}
+              {hasActiveFilters ? t("adjustClearFilters") : t("createFirstPerson")}
             </p>
             {hasActiveFilters ? (
               <button
@@ -294,14 +290,14 @@ export function PeopleListPage() {
                 onClick={clearFilters}
                 className="mt-5 inline-block rounded-xl bg-gray-950 px-5 py-3 text-sm font-semibold text-white"
               >
-                Clear filters
+                {t("clearFilters")}
               </button>
             ) : (
               <Link
                 to="/people/new"
                 className="mt-5 inline-block rounded-xl bg-gray-950 px-5 py-3 text-sm font-semibold text-white"
               >
-                Create Person
+                {t("createPerson")}
               </Link>
             )}
           </div>
@@ -328,25 +324,25 @@ export function PeopleListPage() {
                     </h2>
                     {wasJustCreated && (
                       <span className="rounded-full bg-green-100 px-3 py-1 text-xs font-semibold text-green-800">
-                        Just added
+                        {t("justAdded")}
                       </span>
                     )}
                   </div>
                   <p className="text-sm text-gray-500">
-                    Nickname: {person.nickname || "—"}
+                    {t("nickname")}: {person.nickname || t("emptyValue")}
                   </p>
                 </div>
 
                 <StatusBadge complete={person.canCreateCollaborator}>
-                  {person.canCreateCollaborator ? "Complete" : "Incomplete"}
+                  {person.canCreateCollaborator ? t("complete") : t("incomplete")}
                 </StatusBadge>
               </div>
 
               <div className="mt-4 grid gap-2 text-sm text-gray-700">
-                <Info label="CPF" value={person.cpf} />
-                <Info label="RG" value={person.rg} />
-                <Info label="Cellular" value={person.cellular} />
-                <Info label="Email" value={person.email} />
+                <Info label={t("cpf")} value={person.cpf} />
+                <Info label={t("rg")} value={person.rg} />
+                <Info label={t("cellular")} value={person.cellular} />
+                <Info label={t("email")} value={person.email} />
               </div>
 
               {!person.canCreateCollaborator &&
@@ -358,7 +354,7 @@ export function PeopleListPage() {
                         key={section}
                         className="rounded-full bg-amber-100 px-3 py-1 text-xs font-medium text-amber-800"
                       >
-                        Missing {section}
+                        {t("missing", { section })}
                       </span>
                     ))}
                   </div>
@@ -369,6 +365,7 @@ export function PeopleListPage() {
 
         {!isLoading && !error && displayedPeople.length > 0 && (
           <PaginationSummary
+            t={t}
             page={page}
             totalPages={totalPages}
             pageStart={pageStart}
@@ -386,6 +383,7 @@ export function PeopleListPage() {
 }
 
 function PaginationSummary({
+  t,
   page,
   totalPages,
   pageStart,
@@ -394,6 +392,7 @@ function PaginationSummary({
   onPrevious,
   onNext,
 }: {
+  t: (key: string, options?: Record<string, string | number>) => string;
   page: number;
   totalPages: number;
   pageStart: number;
@@ -405,7 +404,7 @@ function PaginationSummary({
   return (
     <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border bg-white p-4 text-sm shadow-sm">
       <p className="font-medium text-gray-700" aria-live="polite">
-        Showing {pageStart}-{pageEnd} of {total} people
+        {t("showing", { pageStart, pageEnd, total })}
       </p>
       <div className="flex items-center gap-3">
         <button
@@ -414,10 +413,10 @@ function PaginationSummary({
           disabled={page <= 1}
           className="rounded-xl border border-gray-300 bg-white px-4 py-2 font-semibold text-gray-700 shadow-sm disabled:cursor-not-allowed disabled:opacity-50"
         >
-          Previous
+          {t("previous")}
         </button>
         <span className="text-gray-500">
-          Page {page} of {totalPages}
+          {t("pageOf", { page, totalPages })}
         </span>
         <button
           type="button"
@@ -425,7 +424,7 @@ function PaginationSummary({
           disabled={page >= totalPages || total === 0}
           className="rounded-xl border border-gray-300 bg-white px-4 py-2 font-semibold text-gray-700 shadow-sm disabled:cursor-not-allowed disabled:opacity-50"
         >
-          Next
+          {t("next")}
         </button>
       </div>
     </div>

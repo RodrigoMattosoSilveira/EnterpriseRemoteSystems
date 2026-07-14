@@ -1,4 +1,5 @@
 import { Link, useNavigate, useParams } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { PersonForm } from "./PersonForm";
 import { usePerson, useUpdatePerson } from "./usePeople";
 import { ApiErrorPanel } from "../../components/ApiErrorPanel";
@@ -7,13 +8,14 @@ const ACTIVE_STATUS_ID = "ref-person-status-active";
 
 export function PersonDetailPage() {
   const { id = "" } = useParams();
+  const { t } = useTranslation("people");
   const navigate = useNavigate();
 
   const personQuery = usePerson(id);
   const mutation = useUpdatePerson(id);
 
   if (personQuery.isLoading) {
-    return <main className="p-4">Loading person...</main>;
+    return <main className="p-4">{t("loadingPerson")}</main>;
   }
 
   if (personQuery.error) {
@@ -25,7 +27,7 @@ export function PersonDetailPage() {
   }
 
   if (!personQuery.data) {
-    return <main className="p-4">Person not found.</main>;
+    return <main className="p-4">{t("personNotFound")}</main>;
   }
 
   return (
@@ -33,7 +35,7 @@ export function PersonDetailPage() {
       <header className="sticky top-0 z-10 border-b bg-white/95 px-4 py-4 backdrop-blur">
         <div className="mx-auto max-w-4xl">
           <Link className="text-sm text-gray-500 underline" to="/people">
-            Back to People
+            {t("backToPeople")}
           </Link>
 
           <div className="mt-3 flex items-start justify-between gap-3">
@@ -53,7 +55,7 @@ export function PersonDetailPage() {
                   : "bg-amber-100 text-amber-800"
               }`}
             >
-              {personQuery.data.canCreateCollaborator ? "Complete" : "Incomplete"}
+              {t(personQuery.data.canCreateCollaborator ? "complete" : "incomplete")}
             </span>
           </div>
         </div>

@@ -1,0 +1,17 @@
+{
+  "appName": "Sistemas Remotos",
+  "language": "Idioma",
+  "pageNotFound": "Página não encontrada",
+  "goToPeople": "Ir para Pessoas",
+  "somethingWentWrong": "Algo deu errado",
+  "unexpectedError": "Ocorreu um erro inesperado.",
+  "returnToPeople": "Voltar para Pessoas",
+  "people": "Pessoas",
+  "collaborators": "Colaboradores",
+  "expenses": "Despesas",
+  "planning": "Planejamento",
+  "receipts": "Recibos",
+  "admin": "Administração",
+  "referenceData": "Dados de Referência",
+  "authorization": "Autorização"
+}

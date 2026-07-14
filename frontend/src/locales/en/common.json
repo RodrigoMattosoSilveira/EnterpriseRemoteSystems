@@ -1,0 +1,17 @@
+{
+  "appName": "Remote Systems",
+  "language": "Language",
+  "pageNotFound": "Page not found",
+  "goToPeople": "Go to People",
+  "somethingWentWrong": "Something went wrong",
+  "unexpectedError": "An unexpected error occurred.",
+  "returnToPeople": "Return to People",
+  "people": "People",
+  "collaborators": "Collaborators",
+  "expenses": "Expenses",
+  "planning": "Planning",
+  "receipts": "Receipts",
+  "admin": "Admin",
+  "referenceData": "Reference Data",
+  "authorization": "Authorization"
+}

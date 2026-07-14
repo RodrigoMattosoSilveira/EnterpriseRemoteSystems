@@ -61,9 +61,12 @@ function NotFoundPage() {
   );
 }
 
+import { RootLayout } from "./RootLayout";
+
 export const router = createBrowserRouter([
   {
     path: "/",
+    element: <RootLayout />,
     errorElement: <RouteErrorPage />,
     children: [
       { index: true, element: <PeopleListPage /> },
