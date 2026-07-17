@@ -39,10 +39,9 @@ mkdir -p data
 # local experiments.
 export APP_AUTO_MIGRATE="${APP_AUTO_MIGRATE:-false}"
 
-# Local browser development uses the temporary authz request actor until the
-# real authenticated session layer is wired in. Ensure the matching bootstrap
-# actor exists for `make local-backend` without requiring every developer to
-# remember extra AUTHZ_BOOTSTRAP_* environment variables.
+# Local browser development uses a persisted bootstrap actor until the real
+# authenticated session layer is wired in. The frontend sends only the actor
+# key and tenant; permissions are always loaded from persisted role grants.
 export AUTHZ_BOOTSTRAP_ENABLED="${AUTHZ_BOOTSTRAP_ENABLED:-true}"
 export AUTHZ_BOOTSTRAP_ACTOR_KEY="${AUTHZ_BOOTSTRAP_ACTOR_KEY:-bootstrap-admin}"
 export AUTHZ_BOOTSTRAP_DISPLAY_NAME="${AUTHZ_BOOTSTRAP_DISPLAY_NAME:-Bootstrap Admin}"

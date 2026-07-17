@@ -1,12 +1,14 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   createAuthzActor,
+  getCurrentAuthzActor,
   grantAuthzActorRole,
   listAuthzActors,
   listAuthzAuditLogs,
   listAuthzPermissions,
   listAuthzRoles,
   revokeAuthzActorRoleGrant,
+  setAuthzActorActive,
 } from "../../api/authz.api";
 import type {
   AuthzAdminRequestActor,
@@ -21,6 +23,14 @@ function enabled(actor: AuthzAdminRequestActor) {
 
 function authzQueryKey(actor: AuthzAdminRequestActor) {
   return ["authz-admin", actor.actorId, actor.tenantId] as const;
+}
+
+export function useCurrentAuthzActor(actor: AuthzAdminRequestActor) {
+  return useQuery({
+    queryKey: [...authzQueryKey(actor), "current-actor"],
+    queryFn: () => getCurrentAuthzActor(actor),
+    enabled: enabled(actor),
+  });
 }
 
 export function useAuthzRoles(actor: AuthzAdminRequestActor) {
@@ -65,6 +75,18 @@ export function useCreateAuthzActor(actor: AuthzAdminRequestActor) {
     mutationFn: (input: CreateAuthzActorInput) => createAuthzActor(actor, input),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [...authzQueryKey(actor), "actors"] });
+    },
+  });
+}
+
+export function useSetAuthzActorActive(actor: AuthzAdminRequestActor) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ targetActorId, active }: { targetActorId: string; active: boolean }) =>
+      setAuthzActorActive(actor, targetActorId, { active }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [...authzQueryKey(actor), "actors"] });
+      queryClient.invalidateQueries({ queryKey: [...authzQueryKey(actor), "current-actor"] });
     },
   });
 }

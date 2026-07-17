@@ -17,9 +17,9 @@ const (
 	// temporary transport shape until ERS has authenticated users/sessions.
 	HeaderActorID = "X-Actor-ID"
 
-	// HeaderActorPermissions is a comma-separated temporary permissions header.
-	// It lets backend tests and transitional clients exercise authorization
-	// decisions before tenant-scoped roles are backed by persisted users.
+	// HeaderActorPermissions is retained only for isolated authorization tests
+	// that do not configure an ActorStore. When a persisted store is available,
+	// header-supplied permissions never replace persisted role grants.
 	HeaderActorPermissions = "X-Actor-Permissions"
 
 	// HeaderTenantID is the forward-compatible tenant scope header for an actor.
@@ -31,8 +31,9 @@ type Permission string
 const (
 	PermissionAll Permission = "*"
 
-	PermissionAuthzRead   Permission = "authz.read"
-	PermissionAuthzManage Permission = "authz.manage"
+	PermissionAuthzSelfRead Permission = "authz.self.read"
+	PermissionAuthzRead     Permission = "authz.read"
+	PermissionAuthzManage   Permission = "authz.manage"
 
 	PermissionTenantsRead   Permission = "tenants.read"
 	PermissionTenantsCreate Permission = "tenants.create"

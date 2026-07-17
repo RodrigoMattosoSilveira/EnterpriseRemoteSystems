@@ -1,6 +1,9 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
+import { useCollaborators } from "../collaborators/useCollaborators";
+import { ApiError } from "../../api/client";
 import { ApiErrorPanel } from "../../components/ApiErrorPanel";
+import type { Collaborator } from "../../types/collaborators";
 import type {
   AuthzActor,
   AuthzActorRoleGrant,
@@ -10,11 +13,13 @@ import type {
 } from "../../types/authz";
 import {
   useAuthzActors,
+  useCurrentAuthzActor,
   useAuthzPermissions,
   useAuthzRoles,
   useCreateAuthzActor,
   useGrantAuthzActorRole,
   useRevokeAuthzActorRoleGrant,
+  useSetAuthzActorActive,
 } from "./useAuthzAdmin";
 
 const SESSION_STORAGE_KEY = "ers.authzAdmin.requestActor";
@@ -43,12 +48,15 @@ export function AuthzAdminPage() {
     saveRequestActor(requestActor);
   }, [requestActor]);
 
+  const currentActorQuery = useCurrentAuthzActor(requestActor);
   const rolesQuery = useAuthzRoles(requestActor);
   const permissionsQuery = useAuthzPermissions(requestActor);
   const actorsQuery = useAuthzActors(requestActor);
+  const collaboratorsQuery = useCollaborators({ page: 1, pageSize: 500 });
   const createActorMutation = useCreateAuthzActor(requestActor);
   const grantRoleMutation = useGrantAuthzActorRole(requestActor);
   const revokeGrantMutation = useRevokeAuthzActorRoleGrant(requestActor);
+  const setActorActiveMutation = useSetAuthzActorActive(requestActor);
 
   const roles = useMemo(() => [...(rolesQuery.data ?? [])].sort(byCode), [rolesQuery.data]);
   const permissions = useMemo(
@@ -59,14 +67,36 @@ export function AuthzAdminPage() {
     () => [...(actorsQuery.data ?? [])].sort((a, b) => a.actorKey.localeCompare(b.actorKey)),
     [actorsQuery.data],
   );
+  const collaborators = useMemo(
+    () => [...(collaboratorsQuery.data?.items ?? [])].sort(byCollaboratorName),
+    [collaboratorsQuery.data?.items],
+  );
 
-  const actionError = createActorMutation.error ?? grantRoleMutation.error ?? revokeGrantMutation.error;
-  const queryError = rolesQuery.error ?? permissionsQuery.error ?? actorsQuery.error;
+  const actionError =
+    createActorMutation.error ??
+    grantRoleMutation.error ??
+    revokeGrantMutation.error ??
+    setActorActiveMutation.error;
+  const rolesForbidden = isForbiddenApiError(rolesQuery.error);
+  const permissionsForbidden = isForbiddenApiError(permissionsQuery.error);
+  const actorsForbidden = isForbiddenApiError(actorsQuery.error);
+  const collaboratorsForbidden = isForbiddenApiError(collaboratorsQuery.error);
+  const hasLimitedAuthorization =
+    rolesForbidden || permissionsForbidden || actorsForbidden || collaboratorsForbidden;
+  const queryError = firstNonForbiddenError([
+    currentActorQuery.error,
+    rolesQuery.error,
+    permissionsQuery.error,
+    actorsQuery.error,
+    collaboratorsQuery.error,
+  ]);
 
   async function handleCreateActor(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setSuccessMessage("");
     createActorMutation.reset();
+
+    if (!actorForm.collaboratorId || !actorForm.personId || !actorForm.actorKey) return;
 
     try {
       const created = await createActorMutation.mutateAsync({
@@ -74,7 +104,7 @@ export function AuthzAdminPage() {
         displayName: actorForm.displayName.trim(),
         personId: normalizeOptional(actorForm.personId),
         collaboratorId: normalizeOptional(actorForm.collaboratorId),
-        active: actorForm.active,
+        active: true,
       });
       setActorForm(emptyActorForm);
       setSuccessMessage(`${created.actorKey} created.`);
@@ -108,6 +138,25 @@ export function AuthzAdminPage() {
     } catch {
       // Mutation error is rendered by ApiErrorPanel.
     }
+  }
+
+  async function handleSetActorActive(targetActorId: string, actorKey: string, active: boolean) {
+    setSuccessMessage("");
+    setActorActiveMutation.reset();
+
+    try {
+      await setActorActiveMutation.mutateAsync({ targetActorId, active });
+      setSuccessMessage(`${actorKey} ${active ? "activated" : "deactivated"}.`);
+    } catch {
+      // Mutation error is rendered by ApiErrorPanel.
+    }
+  }
+
+  function handleUseActor(actor: AuthzActor) {
+    if (!actor.active) return;
+    const tenantId = preferredTenant(actor, requestActor.tenantId);
+    setRequestActor({ actorId: actor.actorKey, tenantId });
+    setSuccessMessage(`${actor.actorKey} selected as the operating actor.`);
   }
 
   return (
@@ -156,10 +205,12 @@ export function AuthzAdminPage() {
 
         <ApiErrorPanel error={queryError ?? actionError} />
 
+        {hasLimitedAuthorization && <LimitedAuthorizationNotice />}
+
         <section className="rounded-2xl border bg-white p-4 shadow-sm">
           <h2 className="text-lg font-semibold text-gray-950">Admin request actor</h2>
           <p className="mt-1 text-sm text-gray-500">
-            These headers are sent to the backend authz admin endpoints. Use a persisted actor with authz.read/authz.manage.
+            ERS sends only this persisted actor key and tenant. Effective permissions are loaded from active role grants in the database.
           </p>
           <div className="mt-4 grid gap-3 md:grid-cols-2">
             <label className="block text-sm font-semibold text-gray-700">
@@ -183,6 +234,36 @@ export function AuthzAdminPage() {
               />
             </label>
           </div>
+          {currentActorQuery.data && (
+            <div className="mt-4 rounded-xl border border-green-200 bg-green-50 p-4 text-sm text-green-900">
+              <p className="font-semibold">Persisted operating actor verified</p>
+              <p className="mt-1">
+                {currentActorQuery.data.actorKey} · {currentActorQuery.data.tenantId} · {currentActorQuery.data.scope}
+              </p>
+              <p className="mt-1 text-xs">
+                Roles: {currentActorQuery.data.roleCodes.join(", ") || "No active roles"}
+              </p>
+              <p className="mt-1 text-xs">
+                Effective permissions: {currentActorQuery.data.permissions.join(", ") || "None"}
+              </p>
+            </div>
+          )}
+
+          <div className="mt-4 rounded-xl border border-gray-200 bg-gray-950 p-4 text-sm text-gray-100">
+            <div className="flex flex-col gap-1 md:flex-row md:items-center md:justify-between">
+              <p className="font-semibold">Current actor curl</p>
+              <p className="text-xs text-gray-300">Uses the operating actor shown above.</p>
+            </div>
+            <pre
+              aria-label="Current actor curl command"
+              className="mt-3 overflow-x-auto whitespace-pre-wrap rounded-lg bg-black/30 p-3 text-xs leading-5"
+            >
+              {currentActorCurlCommand(requestActor)}
+            </pre>
+            <p className="mt-2 text-xs text-gray-300">
+              A curl command that explicitly sends bootstrap-admin will verify bootstrap-admin. Use this generated command after switching actors.
+            </p>
+          </div>
         </section>
 
         <section className="grid gap-4 lg:grid-cols-[1fr_2fr]">
@@ -192,11 +273,20 @@ export function AuthzAdminPage() {
               Create a security actor, then grant one or more roles below.
             </p>
 
-            <ActorFields value={actorForm} onChange={setActorForm} />
+            {collaboratorsForbidden ? (
+              <CardPermissionNotice cardName="Create actor" />
+            ) : (
+              <ActorFields
+                value={actorForm}
+                collaborators={collaborators}
+                collaboratorsLoading={collaboratorsQuery.isLoading}
+                onChange={setActorForm}
+              />
+            )}
 
             <button
               className="mt-4 w-full rounded-xl bg-gray-950 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
-              disabled={createActorMutation.isPending}
+              disabled={createActorMutation.isPending || collaboratorsForbidden || !actorForm.collaboratorId}
               type="submit"
             >
               {createActorMutation.isPending ? "Creating..." : "Create Actor"}
@@ -217,24 +307,37 @@ export function AuthzAdminPage() {
                 </span>
               </div>
 
-              {actorsQuery.isLoading && <p className="mt-4 text-sm text-gray-500">Loading actors...</p>}
-              {!actorsQuery.isLoading && actors.length === 0 && (
-                <p className="mt-4 rounded-xl border border-dashed p-4 text-center text-sm text-gray-500">
-                  No authorization actors found.
-                </p>
+              {actorsForbidden ? (
+                <CardPermissionNotice cardName="Actors" />
+              ) : (
+                <>
+                  {actorsQuery.isLoading && <p className="mt-4 text-sm text-gray-500">Loading actors...</p>}
+                  {!actorsQuery.isLoading && actors.length === 0 && (
+                    <p className="mt-4 rounded-xl border border-dashed p-4 text-center text-sm text-gray-500">
+                      No authorization actors found.
+                    </p>
+                  )}
+                  <div className="mt-4 space-y-3">
+                    {actors.map((actor) => (
+                      <ActorCard
+                        key={actor.id}
+                        actor={actor}
+                        roles={roles}
+                        currentActorKey={currentActorQuery.data?.actorKey ?? requestActor.actorId}
+                        isMutating={
+                          grantRoleMutation.isPending ||
+                          revokeGrantMutation.isPending ||
+                          setActorActiveMutation.isPending
+                        }
+                        onGrantRole={handleGrantRole}
+                        onRevokeGrant={handleRevokeGrant}
+                        onSetActive={handleSetActorActive}
+                        onUseActor={handleUseActor}
+                      />
+                    ))}
+                  </div>
+                </>
               )}
-              <div className="mt-4 space-y-3">
-                {actors.map((actor) => (
-                  <ActorCard
-                    key={actor.id}
-                    actor={actor}
-                    roles={roles}
-                    isMutating={grantRoleMutation.isPending || revokeGrantMutation.isPending}
-                    onGrantRole={handleGrantRole}
-                    onRevokeGrant={handleRevokeGrant}
-                  />
-                ))}
-              </div>
             </section>
           </section>
         </section>
@@ -245,28 +348,34 @@ export function AuthzAdminPage() {
             <p className="mt-1 text-sm text-gray-500">
               Role bundles available for actor grants.
             </p>
-            {rolesQuery.isLoading && <p className="mt-4 text-sm text-gray-500">Loading roles...</p>}
-            <div className="mt-4 space-y-3">
-              {roles.map((role) => (
-                <article key={role.id} className="rounded-xl border p-3">
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <h3 className="font-semibold text-gray-950">{role.code}</h3>
-                      <p className="text-sm text-gray-600">{role.label}</p>
-                      {role.description && <p className="mt-1 text-xs text-gray-500">{role.description}</p>}
-                    </div>
-                    <span className="rounded-full bg-gray-100 px-2 py-1 text-xs font-semibold text-gray-700">
-                      {role.scopeType}
-                    </span>
-                  </div>
-                  {role.permissions && role.permissions.length > 0 && (
-                    <p className="mt-2 text-xs text-gray-500">
-                      {role.permissions.map((permission) => permission.code).join(", ")}
-                    </p>
-                  )}
-                </article>
-              ))}
-            </div>
+            {rolesForbidden ? (
+              <CardPermissionNotice cardName="Roles" />
+            ) : (
+              <>
+                {rolesQuery.isLoading && <p className="mt-4 text-sm text-gray-500">Loading roles...</p>}
+                <div className="mt-4 space-y-3">
+                  {roles.map((role) => (
+                    <article key={role.id} className="rounded-xl border p-3">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <h3 className="font-semibold text-gray-950">{role.code}</h3>
+                          <p className="text-sm text-gray-600">{role.label}</p>
+                          {role.description && <p className="mt-1 text-xs text-gray-500">{role.description}</p>}
+                        </div>
+                        <span className="rounded-full bg-gray-100 px-2 py-1 text-xs font-semibold text-gray-700">
+                          {role.scopeType}
+                        </span>
+                      </div>
+                      {role.permissions && role.permissions.length > 0 && (
+                        <p className="mt-2 text-xs text-gray-500">
+                          {role.permissions.map((permission) => permission.code).join(", ")}
+                        </p>
+                      )}
+                    </article>
+                  ))}
+                </div>
+              </>
+            )}
           </section>
 
           <section data-testid="authz-permissions-section" className="rounded-2xl border bg-white p-4 shadow-sm">
@@ -274,16 +383,22 @@ export function AuthzAdminPage() {
             <p className="mt-1 text-sm text-gray-500">
               Fine-grained operations that roles can grant.
             </p>
-            {permissionsQuery.isLoading && <p className="mt-4 text-sm text-gray-500">Loading permissions...</p>}
-            <div className="mt-4 max-h-[34rem] space-y-2 overflow-auto pr-2">
-              {permissions.map((permission) => (
-                <article key={permission.code} className="rounded-xl border p-3">
-                  <h3 className="font-semibold text-gray-950">{permission.code}</h3>
-                  <p className="text-sm text-gray-600">{permission.label}</p>
-                  {permission.description && <p className="mt-1 text-xs text-gray-500">{permission.description}</p>}
-                </article>
-              ))}
-            </div>
+            {permissionsForbidden ? (
+              <CardPermissionNotice cardName="Permissions" />
+            ) : (
+              <>
+                {permissionsQuery.isLoading && <p className="mt-4 text-sm text-gray-500">Loading permissions...</p>}
+                <div className="mt-4 max-h-[34rem] space-y-2 overflow-auto pr-2">
+                  {permissions.map((permission) => (
+                    <article key={permission.code} className="rounded-xl border p-3">
+                      <h3 className="font-semibold text-gray-950">{permission.code}</h3>
+                      <p className="text-sm text-gray-600">{permission.label}</p>
+                      {permission.description && <p className="mt-1 text-xs text-gray-500">{permission.description}</p>}
+                    </article>
+                  ))}
+                </div>
+              </>
+            )}
           </section>
         </section>
       </section>
@@ -291,56 +406,88 @@ export function AuthzAdminPage() {
   );
 }
 
+function LimitedAuthorizationNotice() {
+  return (
+    <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+      <p className="font-semibold">Selected actor has limited authorization</p>
+      <p className="mt-1">
+        This actor is valid, but it does not have permission to read or manage authorization administration data.
+        Cards that require authorization administration permissions are shown with limited-access guidance instead of a raw API error.
+      </p>
+      <p className="mt-1 text-xs">
+        Switch to an actor with authz.read or authz.manage to create actors, grant roles, or inspect role and permission catalogs.
+      </p>
+    </div>
+  );
+}
+
+function CardPermissionNotice({ cardName }: { cardName: string }) {
+  return (
+    <div className="mt-4 rounded-xl border border-dashed border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">
+      <p className="font-semibold">{cardName} unavailable for this actor</p>
+      <p className="mt-1">
+        The selected operating actor does not have permission to use this card.
+      </p>
+    </div>
+  );
+}
+
 function ActorFields({
   value,
+  collaborators,
+  collaboratorsLoading,
   onChange,
 }: {
   value: CreateAuthzActorInput;
+  collaborators: Collaborator[];
+  collaboratorsLoading: boolean;
   onChange: (value: CreateAuthzActorInput) => void;
 }) {
+  const selectedCollaborator = collaborators.find(
+    (collaborator) => collaborator.id === value.collaboratorId,
+  );
+
+  function handleCollaboratorChange(collaboratorId: string) {
+    const collaborator = collaborators.find((item) => item.id === collaboratorId);
+
+    onChange({
+      ...value,
+      collaboratorId: collaborator?.id ?? "",
+      personId: collaborator?.personId ?? "",
+      actorKey: defaultActorKey(collaborator),
+      displayName: collaboratorDisplayName(collaborator),
+    });
+  }
+
   return (
     <div className="mt-4 space-y-3">
       <label className="block text-sm font-semibold text-gray-700">
-        Actor key
-        <input
-          className="mt-2 block w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm"
+        Collaborator
+        <select
+          className="mt-2 block w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-base leading-6 text-gray-950"
           required
-          value={value.actorKey}
-          onChange={(event) => onChange({ ...value, actorKey: event.target.value })}
-        />
-      </label>
-      <label className="block text-sm font-semibold text-gray-700">
-        Display name
-        <input
-          className="mt-2 block w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm"
-          value={value.displayName}
-          onChange={(event) => onChange({ ...value, displayName: event.target.value })}
-        />
-      </label>
-      <label className="block text-sm font-semibold text-gray-700">
-        Person ID
-        <input
-          className="mt-2 block w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm"
-          value={value.personId ?? ""}
-          onChange={(event) => onChange({ ...value, personId: event.target.value })}
-        />
-      </label>
-      <label className="block text-sm font-semibold text-gray-700">
-        Collaborator ID
-        <input
-          className="mt-2 block w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm"
           value={value.collaboratorId ?? ""}
-          onChange={(event) => onChange({ ...value, collaboratorId: event.target.value })}
-        />
+          onChange={(event) => handleCollaboratorChange(event.target.value)}
+        >
+          <option className="text-base text-gray-950" value="">
+            {collaboratorsLoading ? "Loading collaborators..." : "Select a collaborator"}
+          </option>
+          {collaborators.map((collaborator) => (
+            <option className="text-base text-gray-950" key={collaborator.id} value={collaborator.id}>
+              {collaboratorOptionLabel(collaborator)}
+            </option>
+          ))}
+        </select>
       </label>
-      <label className="flex items-center gap-2 text-sm font-semibold text-gray-700">
-        <input
-          checked={value.active}
-          type="checkbox"
-          onChange={(event) => onChange({ ...value, active: event.target.checked })}
-        />
-        Active
-      </label>
+
+      {selectedCollaborator && (
+        <div className="rounded-xl border border-blue-100 bg-blue-50 p-3 text-xs text-blue-900">
+          <p className="font-semibold">Derived actor identity</p>
+          <p className="mt-1">Actor key: {value.actorKey}</p>
+          <p>Display name: {value.displayName || collaboratorDisplayName(selectedCollaborator)}</p>
+          <p>Person ID and Collaborator ID will be derived from the selected collaborator.</p>
+        </div>
+      )}
     </div>
   );
 }
@@ -348,15 +495,21 @@ function ActorFields({
 function ActorCard({
   actor,
   roles,
+  currentActorKey,
   isMutating,
   onGrantRole,
   onRevokeGrant,
+  onSetActive,
+  onUseActor,
 }: {
   actor: AuthzActor;
   roles: AuthzRole[];
+  currentActorKey: string;
   isMutating: boolean;
   onGrantRole: (targetActorId: string, roleCode: string, tenantId: string) => Promise<void>;
   onRevokeGrant: (targetActorId: string, grant: AuthzActorRoleGrant) => Promise<void>;
+  onSetActive: (targetActorId: string, actorKey: string, active: boolean) => Promise<void>;
+  onUseActor: (actor: AuthzActor) => void;
 }) {
   const [roleCode, setRoleCode] = useState(roles[0]?.code ?? "");
   const [tenantId, setTenantId] = useState("default");
@@ -385,6 +538,24 @@ function ActorCard({
             {actor.collaboratorId ? ` · Collaborator ${actor.collaboratorId}` : ""}
           </p>
         </div>
+        <div className="flex flex-wrap gap-2">
+          <button
+            className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700 disabled:border-gray-200 disabled:bg-white disabled:text-gray-500 disabled:opacity-60"
+            disabled={isMutating || !actor.active || actor.actorKey === currentActorKey}
+            type="button"
+            onClick={() => onUseActor(actor)}
+          >
+            {actor.actorKey === currentActorKey ? "Operating Actor" : "Use Actor"}
+          </button>
+          <button
+            className="rounded-lg border bg-white px-3 py-1 text-xs font-semibold text-gray-700 disabled:opacity-60"
+            disabled={isMutating || actor.actorKey === currentActorKey}
+            type="button"
+            onClick={() => onSetActive(actor.id, actor.actorKey, !actor.active)}
+          >
+            {actor.active ? "Deactivate" : "Activate"}
+          </button>
+        </div>
       </div>
 
       <div className="mt-3 space-y-2">
@@ -399,7 +570,7 @@ function ActorCard({
             </div>
             <button
               className="rounded-lg border border-red-200 bg-white px-3 py-1 text-xs font-semibold text-red-700 disabled:opacity-60"
-              disabled={isMutating}
+              disabled={isMutating || actor.actorKey === currentActorKey}
               type="button"
               onClick={() => onRevokeGrant(actor.id, grant)}
             >
@@ -434,7 +605,7 @@ function ActorCard({
         </label>
         <button
           className="self-end rounded-xl bg-gray-950 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
-          disabled={isMutating || !roleCode}
+          disabled={isMutating || !actor.active || !roleCode}
           type="submit"
         >
           Grant Role
@@ -442,6 +613,26 @@ function ActorCard({
       </form>
     </article>
   );
+}
+
+function firstNonForbiddenError(errors: unknown[]) {
+  return errors.find((error) => error && !isForbiddenApiError(error));
+}
+
+function isForbiddenApiError(error: unknown): boolean {
+  return error instanceof ApiError && (error.status === 403 || error.code === "forbidden");
+}
+
+function currentActorCurlCommand(requestActor: AuthzAdminRequestActor) {
+  const actorId = requestActor.actorId.trim() || defaultRequestActor.actorId;
+  const tenantId = requestActor.tenantId.trim() || defaultRequestActor.tenantId;
+
+  return [
+    "curl -sS \\",
+    `  -H "X-Actor-ID: ${actorId}" \\`,
+    `  -H "X-Tenant-ID: ${tenantId}" \\`,
+    "  http://localhost:8080/api/v1/authz/current-actor | python3 -m json.tool",
+  ].join("\n");
 }
 
 function saveRequestActor(requestActor: AuthzAdminRequestActor) {
@@ -476,6 +667,11 @@ function loadRequestActor(): AuthzAdminRequestActor {
   }
 }
 
+function preferredTenant(actor: AuthzActor, fallback: string) {
+  const tenantGrant = (actor.roleGrants ?? []).find((grant) => grant.tenantId !== "*");
+  return tenantGrant?.tenantId || fallback || "default";
+}
+
 function normalizeOptional(value: string | null | undefined) {
   const normalized = value?.trim();
   return normalized ? normalized : null;
@@ -483,4 +679,30 @@ function normalizeOptional(value: string | null | undefined) {
 
 function byCode<T extends { code: string }>(a: T, b: T) {
   return a.code.localeCompare(b.code);
+}
+
+function byCollaboratorName(a: Collaborator, b: Collaborator) {
+  return collaboratorDisplayName(a).localeCompare(collaboratorDisplayName(b));
+}
+
+function collaboratorDisplayName(collaborator: Collaborator | undefined) {
+  if (!collaborator) return "";
+  return (
+    collaborator.personNickname?.trim() ||
+    collaborator.personName?.trim() ||
+    collaborator.id
+  );
+}
+
+function collaboratorOptionLabel(collaborator: Collaborator) {
+  const name = collaboratorDisplayName(collaborator);
+  const status = collaborator.statusLabel ? ` · ${collaborator.statusLabel}` : "";
+  const location = collaborator.locationLabel ? ` · ${collaborator.locationLabel}` : "";
+  return `${name}${status}${location}`;
+}
+
+function defaultActorKey(collaborator: Collaborator | undefined) {
+  if (!collaborator) return "";
+
+  return `collaborator-${collaborator.id}`;
 }

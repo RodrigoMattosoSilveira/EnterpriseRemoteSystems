@@ -2,7 +2,6 @@ package authz
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -51,9 +50,6 @@ func ResolveActor(ctx context.Context, store ActorStore, get HeaderGetter) (*Act
 
 	actor, err := store.FindActor(ctx, ActorLookup{ActorID: extracted.ID, TenantID: extracted.TenantID})
 	if err != nil {
-		if errors.Is(err, ErrMissingActor) && len(extracted.Permissions) > 0 {
-			return extracted, nil
-		}
 		return nil, err
 	}
 	actor.Source = ActorSourcePersisted
@@ -199,14 +195,14 @@ func SeedAuthorizationCatalog(database *gorm.DB) error {
 		RoleApplicationAdmin: {PermissionAll},
 		RoleTenantAdmin:      {PermissionAll},
 		RoleEarningsOperator: {
-			PermissionTenantsRead, PermissionReferenceDataRead,
+			PermissionAuthzSelfRead, PermissionTenantsRead, PermissionReferenceDataRead,
 			PermissionCollaboratorsRead,
 			PermissionPlanningRead, PermissionPlanningCreate, PermissionPlanningUpdate,
 			PermissionEarningsRead, PermissionEarningsCreate,
 			PermissionCurrentAccountsSummaryRead,
 		},
 		RoleExpenseOperator: {
-			PermissionTenantsRead, PermissionReferenceDataRead,
+			PermissionAuthzSelfRead, PermissionTenantsRead, PermissionReferenceDataRead,
 			PermissionCollaboratorsRead,
 			PermissionPriceListsRead, PermissionPriceListsCreate, PermissionPriceListsUpdate,
 			PermissionCurrentAccountsSummaryRead,
@@ -214,7 +210,7 @@ func SeedAuthorizationCatalog(database *gorm.DB) error {
 			PermissionLedgerReceiptsRead, PermissionLedgerReceiptsCreate, PermissionLedgerReceiptsPrint, PermissionLedgerReceiptsReturn,
 		},
 		RolePerson: {
-			PermissionTenantsRead, PermissionReferenceDataRead,
+			PermissionAuthzSelfRead, PermissionTenantsRead, PermissionReferenceDataRead,
 			PermissionPeopleSelfRead, PermissionPeopleSelfUpdate,
 			PermissionCollaboratorsSelfRead,
 			PermissionCurrentAccountsSelfSummaryRead, PermissionCurrentAccountsSelfLedgerRead,
@@ -273,6 +269,7 @@ type PermissionCatalogEntry struct {
 func PermissionCatalog() []PermissionCatalogEntry {
 	return []PermissionCatalogEntry{
 		{PermissionAll, "All permissions", "Wildcard permission for application and tenant administrators."},
+		{PermissionAuthzSelfRead, "Read own authorization context", "Read the current persisted actor, effective roles, scope, and permissions."},
 		{PermissionAuthzRead, "Read authorization administration", "Read authorization actors, roles, permissions, and grants."},
 		{PermissionAuthzManage, "Manage authorization administration", "Create authorization actors and manage role grants."},
 		{PermissionTenantsRead, "Read tenants", "Read tenant records."},
