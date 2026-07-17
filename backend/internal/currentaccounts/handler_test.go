@@ -2,13 +2,13 @@ package currentaccounts_test
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"math"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
-	"strings"
 	"testing"
 	"time"
 
@@ -16,6 +16,7 @@ import (
 
 	apppkg "enterpriseremotesystems/backend/internal/app"
 	"enterpriseremotesystems/backend/internal/authz"
+	"enterpriseremotesystems/backend/internal/db"
 )
 
 const (
@@ -426,7 +427,6 @@ func postAuthorizedJSON(t *testing.T, server *fiber.App, method, url string, pay
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set(authz.HeaderActorID, "ledger-admin@example.com")
 	req.Header.Set(authz.HeaderTenantID, "default")
-	req.Header.Set(authz.HeaderActorPermissions, string(authz.PermissionLedgerCorrectionsCreate))
 	req.Header.Set(authz.HeaderReauthenticatedAt, time.Now().UTC().Format(time.RFC3339))
 	req.Header.Set(authz.HeaderReauthenticationMethod, "password")
 	res, err := server.Test(req, fiber.TestConfig{Timeout: 0, FailOnTimeout: false})
@@ -446,11 +446,6 @@ func postSettlementJSON(t *testing.T, server *fiber.App, url string, payload map
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set(authz.HeaderActorID, "settlement-admin@example.com")
 	req.Header.Set(authz.HeaderTenantID, "default")
-	req.Header.Set(authz.HeaderActorPermissions, strings.Join([]string{
-		string(authz.PermissionJourneySettlementsZeroGold),
-		string(authz.PermissionJourneySettlementsPartialPayout),
-		string(authz.PermissionJourneySettlementsClose),
-	}, ","))
 	req.Header.Set(authz.HeaderReauthenticatedAt, time.Now().UTC().Format(time.RFC3339))
 	req.Header.Set(authz.HeaderReauthenticationMethod, "password")
 	res, err := server.Test(req, fiber.TestConfig{Timeout: 0, FailOnTimeout: false})
@@ -478,7 +473,7 @@ func postReceiptJSON(t *testing.T, server *fiber.App, url, authorizedBy string, 
 	return res
 }
 
-func postReceiptActorJSON(t *testing.T, server *fiber.App, url, actorID, permissions string, payload map[string]any) *http.Response {
+func postReceiptActorJSON(t *testing.T, server *fiber.App, url, actorID string, payload map[string]any) *http.Response {
 	t.Helper()
 	body, err := json.Marshal(payload)
 	if err != nil {
@@ -487,7 +482,7 @@ func postReceiptActorJSON(t *testing.T, server *fiber.App, url, actorID, permiss
 	req := httptest.NewRequest(http.MethodPost, url, bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set(authz.HeaderActorID, actorID)
-	req.Header.Set(authz.HeaderActorPermissions, permissions)
+	req.Header.Set(authz.HeaderTenantID, "default")
 	req.Header.Set(authz.HeaderReauthenticatedAt, time.Now().UTC().Format(time.RFC3339))
 	req.Header.Set(authz.HeaderReauthenticationMethod, "password")
 	res, err := server.Test(req, fiber.TestConfig{Timeout: 0, FailOnTimeout: false})
@@ -650,13 +645,13 @@ func TestReceiptPrintAuthorization(t *testing.T) {
 		t.Fatalf("expected missing actor status %d, got %d", http.StatusUnauthorized, missing.StatusCode)
 	}
 
-	forbidden := postReceiptActorJSON(t, server, url, "receipt-viewer@example.com", "ledger.receipts.return", map[string]any{})
+	forbidden := postReceiptActorJSON(t, server, url, "receipt-viewer@example.com", map[string]any{})
 	forbidden.Body.Close()
 	if forbidden.StatusCode != http.StatusForbidden {
 		t.Fatalf("expected forbidden status %d, got %d", http.StatusForbidden, forbidden.StatusCode)
 	}
 
-	permitted := postReceiptActorJSON(t, server, url, "receipt-printer@example.com", string(authz.PermissionLedgerReceiptsPrint), map[string]any{})
+	permitted := postReceiptActorJSON(t, server, url, "receipt-printer@example.com", map[string]any{})
 	defer permitted.Body.Close()
 	if permitted.StatusCode != http.StatusOK {
 		var body apiErrorResponse
@@ -685,13 +680,13 @@ func TestReceiptReturnAuthorization(t *testing.T) {
 		t.Fatalf("expected missing actor status %d, got %d", http.StatusUnauthorized, missing.StatusCode)
 	}
 
-	forbidden := postReceiptActorJSON(t, server, url, "receipt-viewer@example.com", "ledger.receipts.print", map[string]any{})
+	forbidden := postReceiptActorJSON(t, server, url, "receipt-viewer@example.com", map[string]any{})
 	forbidden.Body.Close()
 	if forbidden.StatusCode != http.StatusForbidden {
 		t.Fatalf("expected forbidden status %d, got %d", http.StatusForbidden, forbidden.StatusCode)
 	}
 
-	permitted := postReceiptActorJSON(t, server, url, "receipt-returner@example.com", string(authz.PermissionLedgerReceiptsReturn), map[string]any{
+	permitted := postReceiptActorJSON(t, server, url, "receipt-returner@example.com", map[string]any{
 		"signedDocumentRef": "receipt-scans/authorized-return.pdf",
 	})
 	defer permitted.Body.Close()
@@ -719,13 +714,13 @@ func TestReceiptBackfillAuthorization(t *testing.T) {
 		t.Fatalf("expected missing actor status %d, got %d", http.StatusUnauthorized, missing.StatusCode)
 	}
 
-	forbidden := postReceiptActorJSON(t, server, url, "receipt-viewer@example.com", "ledger.receipts.print", map[string]any{})
+	forbidden := postReceiptActorJSON(t, server, url, "receipt-viewer@example.com", map[string]any{})
 	forbidden.Body.Close()
 	if forbidden.StatusCode != http.StatusForbidden {
 		t.Fatalf("expected forbidden status %d, got %d", http.StatusForbidden, forbidden.StatusCode)
 	}
 
-	permitted := postReceiptActorJSON(t, server, url, "receipt-backfiller@example.com", string(authz.PermissionLedgerReceiptsBackfill), map[string]any{
+	permitted := postReceiptActorJSON(t, server, url, "receipt-backfiller@example.com", map[string]any{
 		"reasonCode": "RECEIPT_BACKFILL",
 		"reasonText": "Backfill historical debit ledger receipts",
 	})
@@ -1570,7 +1565,45 @@ func newTestServer(t *testing.T) (*fiber.App, func()) {
 	if err != nil {
 		t.Fatalf("bootstrap test server: %v", err)
 	}
+	seedCurrentAccountTestActors(t, dbPath)
 	return server, cleanup
+}
+
+func seedCurrentAccountTestActors(t *testing.T, dbPath string) {
+	t.Helper()
+	database, err := db.Open(dbPath)
+	if err != nil {
+		t.Fatalf("open current account test database for actor seeding: %v", err)
+	}
+	sqlDB, err := database.DB()
+	if err != nil {
+		t.Fatalf("access current account test database handle: %v", err)
+	}
+	defer sqlDB.Close()
+
+	testActors := []struct {
+		actorKey string
+		role     authz.RoleCode
+		tenantID string
+	}{
+		{actorKey: "ledger-admin@example.com", role: authz.RoleApplicationAdmin, tenantID: authz.GlobalTenantScope},
+		{actorKey: "settlement-admin@example.com", role: authz.RoleApplicationAdmin, tenantID: authz.GlobalTenantScope},
+		{actorKey: "receipt-viewer@example.com", role: authz.RolePerson, tenantID: "default"},
+		{actorKey: "receipt-printer@example.com", role: authz.RoleExpenseOperator, tenantID: "default"},
+		{actorKey: "receipt-returner@example.com", role: authz.RoleExpenseOperator, tenantID: "default"},
+		{actorKey: "receipt-backfiller@example.com", role: authz.RoleTenantAdmin, tenantID: "default"},
+	}
+	for _, testActor := range testActors {
+		if _, err := authz.EnsureBootstrapActor(context.Background(), database, authz.BootstrapConfig{
+			Enabled:     true,
+			ActorKey:    testActor.actorKey,
+			DisplayName: testActor.actorKey,
+			RoleCode:    testActor.role,
+			TenantID:    testActor.tenantID,
+		}); err != nil {
+			t.Fatalf("seed persisted actor %s: %v", testActor.actorKey, err)
+		}
+	}
 }
 
 func containsString(values []string, expected string) bool {

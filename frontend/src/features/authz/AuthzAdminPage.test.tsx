@@ -31,6 +31,34 @@ const permissions = [
   { code: "authz.manage", label: "Manage Authorization", description: "Manage authz data" },
 ];
 
+const collaborators = [
+  {
+    id: "collaborator-expense-admin",
+    tenantId: "default",
+    personId: "person-expense-admin",
+    personName: "Expense Admin",
+    personNickname: "Expense Admin",
+    journeyStartDate: "2026-01-01",
+    defaultEndDate: "2026-04-01",
+    extensionDays: 0,
+    projectedEndDate: "2026-04-01",
+    paymentMethodId: "payment-method-fixed",
+    paymentMethodLabel: "Fixed",
+    paymentValue: 0,
+    planningAvailability: "ACTIVE",
+    sectorId: "sector-operations",
+    sectorLabel: "Operations",
+    locationId: "location-main",
+    locationLabel: "Main Mine",
+    taskId: "task-expenses",
+    taskLabel: "Expenses",
+    statusId: "status-active",
+    statusLabel: "Active",
+    createdAt: "2026-01-01T00:00:00Z",
+    updatedAt: "2026-01-01T00:00:00Z",
+  },
+];
+
 let actors = [
   {
     id: "actor-bootstrap-admin",
@@ -108,7 +136,9 @@ describe("AuthzAdminPage", () => {
     await waitForText("APPLICATION_ADMIN");
     await waitForText("authz.manage");
     await waitForText("Bootstrap Admin");
+    await waitForText("Persisted operating actor verified");
 
+    expect(fetchCalls.some((call) => call.url === "/api/v1/authz/current-actor")).toBe(true);
     expect(fetchCalls.some((call) => call.url === "/api/v1/authz/roles")).toBe(true);
     expect(fetchCalls.some((call) => call.url === "/api/v1/authz/permissions")).toBe(true);
     expect(fetchCalls.some((call) => call.url === "/api/v1/authz/actors")).toBe(true);
@@ -121,18 +151,20 @@ describe("AuthzAdminPage", () => {
 
     renderAuthzAdminPage();
     await waitForText("Bootstrap Admin");
+    await waitForText("Expense Admin · Active · Main Mine");
 
-    await changeInputInForm("Create actor", "Actor key", "expense-admin");
-    await changeInputInForm("Create actor", "Display name", "Expense Admin");
+    await changeSelectInForm("Create actor", "Collaborator", "collaborator-expense-admin");
     await submitFormByHeading("Create actor");
 
-    await waitForText("expense-admin created.");
+    await waitForText("collaborator-collaborator-expense-admin created.");
 
     const createCall = fetchCalls.find((call) => call.url === "/api/v1/authz/actors" && call.method === "POST");
     expect(createCall?.body).toMatchObject({
-      actorKey: "expense-admin",
+      actorKey: "collaborator-collaborator-expense-admin",
       displayName: "Expense Admin",
       active: true,
+      personId: "person-expense-admin",
+      collaboratorId: "collaborator-expense-admin",
     });
   });
 
@@ -174,23 +206,126 @@ describe("AuthzAdminPage", () => {
     ).toBe(true);
   });
 
-  it("shows backend authorization errors", async () => {
+  it("deactivates a non-operating persisted actor", async () => {
+    actors.push({
+      id: "actor-expense-admin",
+      actorKey: "expense-admin",
+      displayName: "Expense Admin",
+      active: true,
+      roleGrants: [],
+    });
+    mockAuthzFetch();
+
+    renderAuthzAdminPage();
+    await waitForText("Expense Admin");
+    await clickButtonInArticle("expense-admin", "Deactivate");
+    await waitForText("expense-admin deactivated.");
+
+    expect(
+      fetchCalls.some(
+        (call) =>
+          call.url === "/api/v1/authz/actors/actor-expense-admin/active" &&
+          call.method === "PATCH" &&
+          (call.body as { active?: boolean }).active === false,
+      ),
+    ).toBe(true);
+  });
+
+  it("switches the operating actor from the actor list", async () => {
+    actors.push({
+      id: "actor-bite27b-tenant-admin",
+      actorKey: "bite27b-tenant-admin",
+      displayName: "Bite 27B Tenant Admin",
+      active: true,
+      roleGrants: [
+        {
+          id: "grant-bite27b-tenant-admin",
+          actorId: "actor-bite27b-tenant-admin",
+          roleId: "authz-role-tenant-admin",
+          roleCode: "TENANT_ADMIN",
+          tenantId: "default",
+          scopeType: "tenant",
+          active: true,
+        },
+      ],
+    });
+    mockAuthzFetch();
+
+    renderAuthzAdminPage();
+    await waitForText("bite27b-tenant-admin");
+
+    await clickButtonInArticle("bite27b-tenant-admin", "Use Actor");
+    await waitForText("bite27b-tenant-admin selected as the operating actor.");
+    await waitForText("Operating Actor");
+
+    expect(controlByLabel<HTMLInputElement>(container, "Actor ID / key", "input").value).toBe(
+      "bite27b-tenant-admin",
+    );
+    expect(controlByLabel<HTMLInputElement>(container, "Tenant ID", "input").value).toBe("default");
+
+    const currentActorCurl = container.querySelector(
+      '[aria-label="Current actor curl command"]',
+    );
+    expect(currentActorCurl?.textContent).toContain(
+      'X-Actor-ID: bite27b-tenant-admin',
+    );
+    expect(currentActorCurl?.textContent).toContain('X-Tenant-ID: default');
+    expect(currentActorCurl?.textContent).not.toContain('X-Actor-ID: bootstrap-admin');
+    expect(
+      fetchCalls.some(
+        (call) =>
+          call.url === "/api/v1/authz/current-actor" &&
+          call.headers["X-Actor-ID"] === "bite27b-tenant-admin" &&
+          call.headers["X-Tenant-ID"] === "default",
+      ),
+    ).toBe(true);
+  });
+
+  it("shows limited-access guidance instead of raw forbidden query errors", async () => {
+    window.localStorage.setItem(
+      "ers.authzAdmin.requestActor",
+      JSON.stringify({ actorId: "expense-admin", tenantId: "default" }),
+    );
     mockFetch(async (url, init) => {
       recordFetchCall(url, init);
-      return jsonResponse(
-        {
-          error: {
-            code: "forbidden",
-            message: "Actor is not permitted to perform this operation",
+      const method = methodOf(init);
+
+      if (url === "/api/v1/authz/current-actor" && method === "GET") {
+        return jsonResponse({
+          data: {
+            actorKey: "expense-admin",
+            actorRecordId: "actor-expense-admin",
+            tenantId: "default",
+            scope: "TENANT",
+            roleCodes: ["EXPENSE_OPERATOR"],
+            permissions: ["expenses.create"],
           },
-        },
-        { status: 403 },
-      );
+        });
+      }
+
+      if (
+        method === "GET" &&
+        (url === "/api/v1/authz/roles" ||
+          url === "/api/v1/authz/permissions" ||
+          url === "/api/v1/authz/actors" ||
+          url === "/api/v1/collaborators?page=1&pageSize=500")
+      ) {
+        return forbiddenResponse();
+      }
+
+      throw new Error(`Unhandled request: ${method} ${url}`);
     });
 
     renderAuthzAdminPage();
 
-    await waitForText("Actor is not permitted to perform this operation");
+    await waitForText("Selected actor has limited authorization");
+    await waitForText("Create actor unavailable for this actor");
+    await waitForText("Actors unavailable for this actor");
+    await waitForText("Roles unavailable for this actor");
+    await waitForText("Permissions unavailable for this actor");
+
+    expect(textNode("Actor is not permitted to perform this operation")).toBeUndefined();
+    expect(textNode("URL: /api/v1/authz/roles")).toBeUndefined();
   });
 });
 
@@ -212,6 +347,30 @@ function mockAuthzFetch() {
     recordFetchCall(url, init);
     const method = methodOf(init);
 
+    if (url === "/api/v1/authz/current-actor" && method === "GET") {
+      const headers = headersOf(init);
+      const requestedActorKey = headers["X-Actor-ID"] || "bootstrap-admin";
+      const requestedTenantId = headers["X-Tenant-ID"] || "default";
+      const actor = actors.find((item) => item.actorKey === requestedActorKey) ?? actors[0];
+      const roleCodes = (actor.roleGrants ?? [])
+        .filter((grant) => grant.active)
+        .map((grant) => grant.roleCode);
+
+      return jsonResponse({
+        data: {
+          actorKey: actor.actorKey,
+          actorRecordId: actor.id,
+          tenantId: requestedTenantId,
+          scope: roleCodes.includes("APPLICATION_ADMIN") ? "APPLICATION" : "TENANT",
+          roleCodes,
+          permissions: roleCodes.some(
+            (roleCode) => roleCode === "APPLICATION_ADMIN" || roleCode === "TENANT_ADMIN",
+          )
+            ? ["*"]
+            : [],
+        },
+      });
+    }
     if (url === "/api/v1/authz/roles" && method === "GET") {
       return jsonResponse({ data: roles });
     }
@@ -220,6 +379,9 @@ function mockAuthzFetch() {
     }
     if (url === "/api/v1/authz/actors" && method === "GET") {
       return jsonResponse({ data: actors });
+    }
+    if (url === "/api/v1/collaborators?page=1&pageSize=500" && method === "GET") {
+      return jsonResponse({ data: { items: collaborators, total: collaborators.length } });
     }
     if (url === "/api/v1/authz/actors" && method === "POST") {
       const body = parseBody(init?.body) as { actorKey: string; displayName: string; active: boolean };
@@ -232,6 +394,15 @@ function mockAuthzFetch() {
       };
       actors = [...actors, created];
       return jsonResponse({ data: created }, { status: 201 });
+    }
+    if (url === "/api/v1/authz/actors/actor-expense-admin/active" && method === "PATCH") {
+      const body = parseBody(init?.body) as { active: boolean };
+      const updated = actors.find((actor) => actor.id === "actor-expense-admin");
+      if (!updated) return jsonResponse({ error: { message: "Actor not found" } }, { status: 404 });
+      actors = actors.map((actor) =>
+        actor.id === "actor-expense-admin" ? { ...actor, active: body.active } : actor,
+      );
+      return jsonResponse({ data: { ...updated, active: body.active } });
     }
     if (url === "/api/v1/authz/actors/actor-expense-admin/role-grants" && method === "POST") {
       const body = parseBody(init?.body) as { roleCode: string; tenantId: string };
@@ -337,6 +508,18 @@ function jsonResponse(body: unknown, init: ResponseInit = {}) {
   });
 }
 
+function forbiddenResponse() {
+  return jsonResponse(
+    {
+      error: {
+        code: "forbidden",
+        message: "Actor is not permitted to perform this operation",
+      },
+    },
+    { status: 403 },
+  );
+}
+
 async function waitForText(text: string) {
   await waitFor(() => Boolean(textNode(text)));
 }
@@ -380,6 +563,13 @@ async function changeInputInForm(headingText: string, labelText: string, value: 
   await setInputValue(input, value);
 }
 
+
+async function changeSelectInForm(headingText: string, labelText: string, value: string) {
+  const form = formByHeading(headingText);
+  const select = controlByLabel<HTMLSelectElement>(form, labelText, "select");
+  await setSelectValue(select, value);
+}
+
 async function changeInputInArticle(articleText: string, labelText: string, value: string) {
   const article = articleByText(articleText);
   const input = controlByLabel<HTMLInputElement>(article, labelText, "input");
@@ -389,6 +579,10 @@ async function changeInputInArticle(articleText: string, labelText: string, valu
 async function changeSelectInArticle(articleText: string, labelText: string, value: string) {
   const article = articleByText(articleText);
   const select = controlByLabel<HTMLSelectElement>(article, labelText, "select");
+  await setSelectValue(select, value);
+}
+
+async function setSelectValue(select: HTMLSelectElement, value: string) {
   const valueSetter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value")?.set;
 
   await act(async () => {

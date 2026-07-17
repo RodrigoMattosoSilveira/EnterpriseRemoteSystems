@@ -9,7 +9,6 @@ declare const process: {
 const e2eAuthzProxyEnabled = process.env.ERS_E2E_AUTHZ_PROXY === "true";
 const e2eAuthzActorId = process.env.PLAYWRIGHT_AUTHZ_ACTOR_ID ?? "bootstrap-admin";
 const e2eAuthzTenantId = process.env.PLAYWRIGHT_AUTHZ_TENANT_ID ?? "default";
-const e2eAuthzPermissions = process.env.PLAYWRIGHT_AUTHZ_PERMISSIONS ?? "*";
 
 export default defineConfig({
   plugins: [react(), tailwindcss()],
@@ -25,9 +24,7 @@ export default defineConfig({
 
           proxy.on("proxyReq", (proxyReq) => {
             proxyReq.setHeader("X-Actor-ID", e2eAuthzActorId);
-            proxyReq.setHeader("X-Authorized-By", e2eAuthzActorId);
             proxyReq.setHeader("X-Tenant-ID", e2eAuthzTenantId);
-            proxyReq.setHeader("X-Actor-Permissions", e2eAuthzPermissions);
           });
         },
       },
