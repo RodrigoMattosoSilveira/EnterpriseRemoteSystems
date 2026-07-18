@@ -83,12 +83,15 @@ func applyOutstandingReceiptWorkbenchFilters(q *gorm.DB, filter normalizedReceip
 			Where("receipt_source_filter.source_type = ?", filter.SourceType)
 	}
 	if strings.TrimSpace(filter.CollaboratorSearch) != "" {
-		needle := "%" + strings.ToLower(strings.TrimSpace(filter.CollaboratorSearch)) + "%"
+		search := strings.TrimSpace(filter.CollaboratorSearch)
+		needle := "%" + strings.ToLower(search) + "%"
 		q = q.Joins("JOIN collaborator_journeys AS receipt_collaborator_filter ON receipt_collaborator_filter.id = ledger_receipts.collaborator_id AND receipt_collaborator_filter.tenant_id = ledger_receipts.tenant_id").
 			Joins("JOIN people AS receipt_person_filter ON receipt_person_filter.id = receipt_collaborator_filter.person_id AND receipt_person_filter.tenant_id = ledger_receipts.tenant_id").
-			Where(`(LOWER(receipt_person_filter.nickname) LIKE ?
+			Where(`(ledger_receipts.collaborator_id = ?
+				OR LOWER(receipt_collaborator_filter.id) LIKE ?
+				OR LOWER(receipt_person_filter.nickname) LIKE ?
 				OR LOWER(receipt_person_filter.first_name || ' ' || receipt_person_filter.last_name) LIKE ?
-				OR LOWER(receipt_person_filter.cpf) LIKE ?)`, needle, needle, needle)
+				OR LOWER(receipt_person_filter.cpf) LIKE ?)`, search, needle, needle, needle, needle)
 	}
 	return q
 }
@@ -336,7 +339,7 @@ func (r *gormRepository) CreateCorrectionEntries(ctx context.Context, entries ..
 				return err
 			}
 		}
-		return nil
+		return ensureDebitLedgerReceiptObligations(tx, entries...)
 	})
 }
 
@@ -365,6 +368,7 @@ func (r *gormRepository) FindLedgerEntryBySource(ctx context.Context, sourceType
 	err := r.db.WithContext(ctx).
 		Preload("Collaborator.Person").
 		Preload("ValueUnit").
+		Preload("Receipt").
 		First(&row, "tenant_id = ? AND source_type = ? AND source_id = ?", defaultTenantID, sourceType, sourceID).Error
 	if err != nil {
 		return nil, err
@@ -377,6 +381,7 @@ func (r *gormRepository) FindLedgerEntriesBySource(ctx context.Context, sourceTy
 	err := r.db.WithContext(ctx).
 		Preload("Collaborator.Person").
 		Preload("ValueUnit").
+		Preload("Receipt").
 		Where("tenant_id = ? AND source_type = ? AND source_id = ?", defaultTenantID, sourceType, sourceID).
 		Order("created_at ASC, id ASC").
 		Find(&rows).Error
@@ -393,7 +398,7 @@ func (r *gormRepository) CreateSettlementWithEntries(ctx context.Context, settle
 				return err
 			}
 		}
-		return nil
+		return ensureDebitLedgerReceiptObligations(tx, entries...)
 	})
 }
 
@@ -426,7 +431,7 @@ func (r *gormRepository) CloseJourneyWithSettlement(ctx context.Context, collabo
 				return err
 			}
 		}
-		return nil
+		return ensureDebitLedgerReceiptObligations(tx, entries...)
 	})
 }
 
@@ -560,6 +565,24 @@ func (r *gormRepository) CreateLedgerReceipts(ctx context.Context, receipts ...*
 		}
 		return nil
 	})
+}
+
+func ensureDebitLedgerReceiptObligations(tx *gorm.DB, entries ...*db.LedgerEntry) error {
+	for _, entry := range entries {
+		if entry == nil || !strings.EqualFold(strings.TrimSpace(entry.Direction), ledgerDirectionDebit) {
+			continue
+		}
+		var count int64
+		if err := tx.Model(&db.LedgerReceipt{}).
+			Where("tenant_id = ? AND ledger_entry_id = ?", entry.TenantID, entry.ID).
+			Count(&count).Error; err != nil {
+			return err
+		}
+		if count != 1 {
+			return ErrDebitReceiptObligationMissing
+		}
+	}
+	return nil
 }
 
 func (r *gormRepository) FindCollaboratorTenantID(ctx context.Context, collaboratorID string) (string, error) {

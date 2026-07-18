@@ -50,7 +50,11 @@ func (s *service) ReverseEntry(ctx context.Context, entryID, authorizedBy string
 	if err := s.repo.CreateCorrectionEntries(ctx, &reversal); err != nil {
 		return nil, err
 	}
-	return correctionResult(*original, reversal, nil), nil
+	reloadedReversal, err := s.repo.FindEntryByID(ctx, reversal.ID)
+	if err != nil {
+		return nil, err
+	}
+	return correctionResult(*original, *reloadedReversal, nil), nil
 }
 
 func (s *service) ReplaceEntry(ctx context.Context, entryID, authorizedBy string, req ReplaceLedgerEntryRequest) (*LedgerCorrectionResult, error) {
@@ -78,7 +82,15 @@ func (s *service) ReplaceEntry(ctx context.Context, entryID, authorizedBy string
 	if err := s.repo.CreateCorrectionEntries(ctx, &reversal, &replacement); err != nil {
 		return nil, err
 	}
-	return correctionResult(*original, reversal, &replacement), nil
+	reloadedReversal, err := s.repo.FindEntryByID(ctx, reversal.ID)
+	if err != nil {
+		return nil, err
+	}
+	reloadedReplacement, err := s.repo.FindEntryByID(ctx, replacement.ID)
+	if err != nil {
+		return nil, err
+	}
+	return correctionResult(*original, *reloadedReversal, reloadedReplacement), nil
 }
 
 func (s *service) requireCorrectableEntry(ctx context.Context, entryID string) (*db.LedgerEntry, error) {
