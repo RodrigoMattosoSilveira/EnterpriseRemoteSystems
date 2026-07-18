@@ -8,6 +8,7 @@ import (
 	"math"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"path/filepath"
 	"testing"
 	"time"
@@ -68,30 +69,38 @@ type apiExpenseResponse struct {
 	} `json:"data"`
 }
 
+type apiLedgerEntryReceiptResponse struct {
+	ID            string `json:"id"`
+	ReceiptNumber string `json:"receiptNumber"`
+	Status        string `json:"status"`
+	Outstanding   bool   `json:"outstanding"`
+}
+
 type apiLedgerEntryListResponse struct {
 	Data struct {
 		Items []struct {
-			ID                   string  `json:"id"`
-			CollaboratorID       string  `json:"collaboratorId"`
-			CollaboratorLabel    string  `json:"collaboratorLabel"`
-			ValueUnitID          string  `json:"valueUnitId"`
-			ValueUnitCode        string  `json:"valueUnitCode"`
-			EntryType            string  `json:"entryType"`
-			Direction            string  `json:"direction"`
-			Amount               float64 `json:"amount"`
-			SignedAmount         float64 `json:"signedAmount"`
-			EffectiveDate        string  `json:"effectiveDate"`
-			SourceType           string  `json:"sourceType"`
-			SourceID             string  `json:"sourceId"`
-			Active               bool    `json:"active"`
-			CorrectionType       string  `json:"correctionType"`
-			RelatedEntryID       string  `json:"relatedEntryId"`
-			CorrectionReason     string  `json:"correctionReason"`
-			CorrectionReasonCode string  `json:"correctionReasonCode"`
-			CorrectionReasonText string  `json:"correctionReasonText"`
-			SecondApprovedBy     string  `json:"secondApprovedBy"`
-			SecondApprovedAt     string  `json:"secondApprovedAt"`
-			SecondApprovalNotes  string  `json:"secondApprovalNotes"`
+			ID                   string                         `json:"id"`
+			CollaboratorID       string                         `json:"collaboratorId"`
+			CollaboratorLabel    string                         `json:"collaboratorLabel"`
+			ValueUnitID          string                         `json:"valueUnitId"`
+			ValueUnitCode        string                         `json:"valueUnitCode"`
+			EntryType            string                         `json:"entryType"`
+			Direction            string                         `json:"direction"`
+			Amount               float64                        `json:"amount"`
+			SignedAmount         float64                        `json:"signedAmount"`
+			EffectiveDate        string                         `json:"effectiveDate"`
+			SourceType           string                         `json:"sourceType"`
+			SourceID             string                         `json:"sourceId"`
+			Active               bool                           `json:"active"`
+			CorrectionType       string                         `json:"correctionType"`
+			RelatedEntryID       string                         `json:"relatedEntryId"`
+			CorrectionReason     string                         `json:"correctionReason"`
+			CorrectionReasonCode string                         `json:"correctionReasonCode"`
+			CorrectionReasonText string                         `json:"correctionReasonText"`
+			SecondApprovedBy     string                         `json:"secondApprovedBy"`
+			SecondApprovedAt     string                         `json:"secondApprovedAt"`
+			SecondApprovalNotes  string                         `json:"secondApprovalNotes"`
+			Receipt              *apiLedgerEntryReceiptResponse `json:"receipt"`
 		} `json:"items"`
 		Total    int `json:"total"`
 		Page     int `json:"page"`
@@ -189,6 +198,16 @@ type apiPrintableReceiptResponse struct {
 	} `json:"data"`
 }
 
+func assertPendingDebitReceipt(t *testing.T, receipt *apiLedgerEntryReceiptResponse, context string) {
+	t.Helper()
+	if receipt == nil {
+		t.Fatalf("expected pending receipt on %s", context)
+	}
+	if receipt.ID == "" || receipt.ReceiptNumber == "" || receipt.Status != "PENDING_ISSUE" || !receipt.Outstanding {
+		t.Fatalf("unexpected receipt on %s: %+v", context, *receipt)
+	}
+}
+
 func TestAuthorizedLedgerReverseCreatesOppositeImmutableEntry(t *testing.T) {
 	server, cleanup := newTestServer(t)
 	defer cleanup()
@@ -261,10 +280,34 @@ func TestAuthorizedLedgerReplaceCreatesReversalAndReplacement(t *testing.T) {
 		decodeJSON(t, res, &body)
 		t.Fatalf("expected replace status %d, got %d error=%+v", http.StatusOK, res.StatusCode, body.Error)
 	}
+	var correctionBody struct {
+		Data struct {
+			Replacement *struct {
+				ID        string                         `json:"id"`
+				Direction string                         `json:"direction"`
+				Receipt   *apiLedgerEntryReceiptResponse `json:"receipt"`
+			} `json:"replacement"`
+		} `json:"data"`
+	}
+	decodeJSON(t, res, &correctionBody)
+	if correctionBody.Data.Replacement == nil || correctionBody.Data.Replacement.Direction != "DEBIT" {
+		t.Fatalf("expected debit replacement result, got %+v", correctionBody.Data.Replacement)
+	}
+	assertPendingDebitReceipt(t, correctionBody.Data.Replacement.Receipt, "debit replacement result")
 
 	entries := listLedgerEntries(t, server, collaborator.Data.ID)
 	if entries.Data.Total != 3 {
 		t.Fatalf("expected original, reversal, replacement, got %+v", entries.Data.Items)
+	}
+	var replacementListed bool
+	for _, entry := range entries.Data.Items {
+		if entry.CorrectionType == "REPLACEMENT" && entry.Direction == "DEBIT" {
+			replacementListed = true
+			assertPendingDebitReceipt(t, entry.Receipt, "debit replacement ledger list item")
+		}
+	}
+	if !replacementListed {
+		t.Fatalf("expected replacement debit in ledger list, got %+v", entries.Data.Items)
 	}
 	balances := listBalances(t, server, collaborator.Data.ID)
 	if len(balances.Data) != 1 || balances.Data[0].Balance != -50.0 {
@@ -925,6 +968,17 @@ func TestOutstandingReceiptsListsOnlyUnreturnedActionItems(t *testing.T) {
 		t.Fatalf("expected collaborator-filtered receipt, got %+v", collaboratorBody.Data)
 	}
 
+	collaboratorIDRes := getJSON(t, server, "/api/v1/receipts/outstanding?collaborator="+url.QueryEscape(collaborator.Data.ID))
+	defer collaboratorIDRes.Body.Close()
+	if collaboratorIDRes.StatusCode != http.StatusOK {
+		t.Fatalf("expected collaborator ID filter status %d, got %d", http.StatusOK, collaboratorIDRes.StatusCode)
+	}
+	var collaboratorIDBody apiOutstandingReceiptListResponse
+	decodeJSON(t, collaboratorIDRes, &collaboratorIDBody)
+	if collaboratorIDBody.Data.Total != 1 || len(collaboratorIDBody.Data.Items) != 1 || collaboratorIDBody.Data.Items[0].CollaboratorID != collaborator.Data.ID {
+		t.Fatalf("expected collaborator ID-filtered receipt, got %+v", collaboratorIDBody.Data)
+	}
+
 	missingCollaboratorRes := getJSON(t, server, "/api/v1/receipts/outstanding?collaborator=no-such-collaborator")
 	defer missingCollaboratorRes.Body.Close()
 	if missingCollaboratorRes.StatusCode != http.StatusOK {
@@ -1328,11 +1382,12 @@ func TestAuthorizedZeroGoldPostsFullGoldBalanceAndIsIdempotent(t *testing.T) {
 				GoldGramAmount float64 `json:"goldGramAmount"`
 			} `json:"settlement"`
 			LedgerEntry struct {
-				ID            string  `json:"id"`
-				Direction     string  `json:"direction"`
-				Amount        float64 `json:"amount"`
-				ValueUnitCode string  `json:"valueUnitCode"`
-				EntryType     string  `json:"entryType"`
+				ID            string                         `json:"id"`
+				Direction     string                         `json:"direction"`
+				Amount        float64                        `json:"amount"`
+				ValueUnitCode string                         `json:"valueUnitCode"`
+				EntryType     string                         `json:"entryType"`
+				Receipt       *apiLedgerEntryReceiptResponse `json:"receipt"`
 			} `json:"ledgerEntry"`
 		} `json:"data"`
 	}
@@ -1340,6 +1395,7 @@ func TestAuthorizedZeroGoldPostsFullGoldBalanceAndIsIdempotent(t *testing.T) {
 	if firstBody.Data.Settlement.GoldGramAmount != 3.75 || firstBody.Data.LedgerEntry.Direction != "DEBIT" || firstBody.Data.LedgerEntry.Amount != 3.75 || firstBody.Data.LedgerEntry.ValueUnitCode != "GOLD_GRAM" || firstBody.Data.LedgerEntry.EntryType != "PAYOUT" {
 		t.Fatalf("unexpected zero-gold result: %+v", firstBody.Data)
 	}
+	assertPendingDebitReceipt(t, firstBody.Data.LedgerEntry.Receipt, "zero-gold payout")
 
 	balances := listBalances(t, server, collaborator.Data.ID)
 	if len(balances.Data) != 0 {
@@ -1466,11 +1522,12 @@ func TestAuthorizedPartialPayoutPostsSelectedBalancesAndIsIdempotent(t *testing.
 				GoldGramAmount float64 `json:"goldGramAmount"`
 			} `json:"settlement"`
 			LedgerEntries []struct {
-				ID            string  `json:"id"`
-				Direction     string  `json:"direction"`
-				Amount        float64 `json:"amount"`
-				ValueUnitCode string  `json:"valueUnitCode"`
-				EntryType     string  `json:"entryType"`
+				ID            string                         `json:"id"`
+				Direction     string                         `json:"direction"`
+				Amount        float64                        `json:"amount"`
+				ValueUnitCode string                         `json:"valueUnitCode"`
+				EntryType     string                         `json:"entryType"`
+				Receipt       *apiLedgerEntryReceiptResponse `json:"receipt"`
 			} `json:"ledgerEntries"`
 		} `json:"data"`
 	}
@@ -1486,6 +1543,7 @@ func TestAuthorizedPartialPayoutPostsSelectedBalancesAndIsIdempotent(t *testing.
 		if entry.Direction != "DEBIT" || entry.EntryType != "PAYOUT" {
 			t.Fatalf("unexpected payout ledger entry: %+v", entry)
 		}
+		assertPendingDebitReceipt(t, entry.Receipt, "partial payout "+entry.ValueUnitCode)
 		byUnit[entry.ValueUnitCode] = entry.Amount
 	}
 	if byUnit["BRL"] != 40 || byUnit["GOLD_GRAM"] != 1.25 {

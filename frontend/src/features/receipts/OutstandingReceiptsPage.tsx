@@ -123,7 +123,7 @@ export function OutstandingReceiptsPage() {
               <span>Collaborator</span>
               <input
                 className="rounded-xl border px-3 py-2"
-                placeholder="Nickname, legal name, or CPF"
+                placeholder="Nickname, legal name, CPF, or collaborator ID"
                 value={collaboratorDraft}
                 onChange={(event) => setCollaboratorDraft(event.target.value)}
               />

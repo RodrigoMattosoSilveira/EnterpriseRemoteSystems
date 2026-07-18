@@ -131,8 +131,11 @@ func (s *service) ZeroGold(ctx context.Context, collaboratorID, authorizedBy str
 	if err := s.repo.CreateSettlementWithEntries(ctx, &settlement, &entry); err != nil {
 		return nil, err
 	}
-	entry.ValueUnit = *valueUnit
-	return zeroGoldResult(settlement, entry), nil
+	reloadedEntry, err := s.repo.FindLedgerEntryBySource(ctx, ledgerSourceSettlement, settlement.ID)
+	if err != nil {
+		return nil, err
+	}
+	return zeroGoldResult(settlement, *reloadedEntry), nil
 }
 
 func zeroGoldResult(settlement db.JourneySettlement, entry db.LedgerEntry) *ZeroGoldResult {
