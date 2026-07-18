@@ -79,9 +79,8 @@ The base dataset disables the second-person approval setting so Bite 20B can foc
 3. In the Authz helper, use:
 
 ```text
-X-Authorized-By: tenant-admin@test.ers
+X-Actor-ID: tenant-admin@test.ers
 X-Tenant-ID: default
-X-Actor-Permissions: *
 ```
 
 For sensitive operations, use a fresh reauthentication timestamp:

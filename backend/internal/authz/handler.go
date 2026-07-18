@@ -17,9 +17,26 @@ func NewHandler(store *GORMStore) *Handler {
 	return &Handler{store: store, actorStore: store}
 }
 
+func (h *Handler) CurrentActor(c fiber.Ctx) error {
+	actor, err := h.resolveRequiredActor(c, PermissionAuthzSelfRead)
+	if err != nil {
+		return writeAuthorizationHTTPError(c, err)
+	}
+	return httpx.OK(c, CurrentActorResponse{
+		ActorKey:       actor.ID,
+		ActorRecordID:  actor.RecordID,
+		TenantID:       actor.TenantID,
+		Scope:          string(actor.Scope),
+		PersonID:       actor.PersonID,
+		CollaboratorID: actor.CollaboratorID,
+		RoleCodes:      append([]string(nil), actor.RoleCodes...),
+		Permissions:    PermissionNames(actor.Permissions),
+	})
+}
+
 func (h *Handler) ListRoles(c fiber.Ctx) error {
-	if ok, err := h.requirePermission(c, PermissionAuthzRead); err != nil || !ok {
-		return err
+	if _, err := h.resolveRequiredActor(c, PermissionAuthzRead); err != nil {
+		return writeAuthorizationHTTPError(c, err)
 	}
 	roles, err := h.store.ListRoles(c.Context())
 	if err != nil {
@@ -29,8 +46,8 @@ func (h *Handler) ListRoles(c fiber.Ctx) error {
 }
 
 func (h *Handler) ListPermissions(c fiber.Ctx) error {
-	if ok, err := h.requirePermission(c, PermissionAuthzRead); err != nil || !ok {
-		return err
+	if _, err := h.resolveRequiredActor(c, PermissionAuthzRead); err != nil {
+		return writeAuthorizationHTTPError(c, err)
 	}
 	permissions, err := h.store.ListPermissions(c.Context())
 	if err != nil {
@@ -40,8 +57,8 @@ func (h *Handler) ListPermissions(c fiber.Ctx) error {
 }
 
 func (h *Handler) ListActors(c fiber.Ctx) error {
-	if ok, err := h.requirePermission(c, PermissionAuthzRead); err != nil || !ok {
-		return err
+	if _, err := h.resolveRequiredActor(c, PermissionAuthzRead); err != nil {
+		return writeAuthorizationHTTPError(c, err)
 	}
 	actors, err := h.store.ListActors(c.Context())
 	if err != nil {
@@ -51,8 +68,8 @@ func (h *Handler) ListActors(c fiber.Ctx) error {
 }
 
 func (h *Handler) ListAuditLogs(c fiber.Ctx) error {
-	if ok, err := h.requirePermission(c, PermissionAuthzRead); err != nil || !ok {
-		return err
+	if _, err := h.resolveRequiredActor(c, PermissionAuthzRead); err != nil {
+		return writeAuthorizationHTTPError(c, err)
 	}
 	var filter AuditLogFilter
 	if err := c.Bind().Query(&filter); err != nil {
@@ -66,8 +83,8 @@ func (h *Handler) ListAuditLogs(c fiber.Ctx) error {
 }
 
 func (h *Handler) CreateActor(c fiber.Ctx) error {
-	if ok, err := h.requirePermission(c, PermissionAuthzManage); err != nil || !ok {
-		return err
+	if _, err := h.resolveRequiredActor(c, PermissionAuthzManage); err != nil {
+		return writeAuthorizationHTTPError(c, err)
 	}
 	var req CreateActorRequest
 	if err := c.Bind().Body(&req); err != nil {
@@ -81,9 +98,36 @@ func (h *Handler) CreateActor(c fiber.Ctx) error {
 	return httpx.Created(c, actor)
 }
 
+func (h *Handler) SetActorActive(c fiber.Ctx) error {
+	actor, err := h.resolveRequiredActor(c, PermissionAuthzManage)
+	if err != nil {
+		return writeAuthorizationHTTPError(c, err)
+	}
+	var req SetActorActiveRequest
+	if err := c.Bind().Body(&req); err != nil {
+		return httpx.BadRequest(c, "invalid_body", "Invalid request body")
+	}
+	if req.Active == nil {
+		return httpx.BadRequest(c, "validation_error", "Active state is required")
+	}
+	if actor.RecordID != "" && actor.RecordID == c.Params("id") && !*req.Active {
+		return writeAuthorizationHTTPError(c, ErrForbidden)
+	}
+	updated, err := h.store.SetActorActive(c.Context(), c.Params("id"), *req.Active)
+	if err != nil {
+		return h.writeError(c, err)
+	}
+	operation := "authz.actors.activate"
+	if !*req.Active {
+		operation = "authz.actors.deactivate"
+	}
+	h.recordAdminAudit(c, PermissionAuthzManage, operation, "authz_actor", updated.ID)
+	return httpx.OK(c, updated)
+}
+
 func (h *Handler) GrantActorRole(c fiber.Ctx) error {
-	if ok, err := h.requirePermission(c, PermissionAuthzManage); err != nil || !ok {
-		return err
+	if _, err := h.resolveRequiredActor(c, PermissionAuthzManage); err != nil {
+		return writeAuthorizationHTTPError(c, err)
 	}
 	var req GrantActorRoleRequest
 	if err := c.Bind().Body(&req); err != nil {
@@ -98,8 +142,12 @@ func (h *Handler) GrantActorRole(c fiber.Ctx) error {
 }
 
 func (h *Handler) RevokeActorRoleGrant(c fiber.Ctx) error {
-	if ok, err := h.requirePermission(c, PermissionAuthzManage); err != nil || !ok {
-		return err
+	actor, err := h.resolveRequiredActor(c, PermissionAuthzManage)
+	if err != nil {
+		return writeAuthorizationHTTPError(c, err)
+	}
+	if actor.RecordID != "" && actor.RecordID == c.Params("id") {
+		return writeAuthorizationHTTPError(c, ErrForbidden)
 	}
 	grant, err := h.store.RevokeActorRoleGrant(c.Context(), c.Params("id"), c.Params("grantId"))
 	if err != nil {
@@ -128,15 +176,15 @@ func (h *Handler) recordAdminAudit(c fiber.Ctx, permission Permission, operation
 	})
 }
 
-func (h *Handler) requirePermission(c fiber.Ctx, permission Permission) (bool, error) {
+func (h *Handler) resolveRequiredActor(c fiber.Ctx, permission Permission) (*Actor, error) {
 	actor, err := ResolveActor(c.Context(), h.actorStore, func(name string) string { return c.Get(name) })
 	if err != nil {
-		return false, writeAuthorizationHTTPError(c, err)
+		return nil, err
 	}
 	if err := RequirePermission(actor, permission); err != nil {
-		return false, writeAuthorizationHTTPError(c, err)
+		return nil, err
 	}
-	return true, nil
+	return actor, nil
 }
 
 func (h *Handler) writeError(c fiber.Ctx, err error) error {

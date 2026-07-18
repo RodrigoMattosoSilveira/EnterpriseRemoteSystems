@@ -27,8 +27,10 @@ type Config struct {
 
 func LoadConfig() (Config, error) {
 	_ = godotenv.Load()
+	env := getEnv("APP_ENV", "development")
+	authzBootstrapDefault := localAuthzBootstrapDefault(env)
 	cfg := Config{
-		Env:                              getEnv("APP_ENV", "development"),
+		Env:                              env,
 		HTTPAddr:                         getEnv("HTTP_ADDR", ":8080"),
 		DBPath:                           getEnv("DB_PATH", getEnv("DATABASE_PATH", "./data/app.db")),
 		JWTSecret:                        getEnv("JWT_SECRET", "dev-only-change-me"),
@@ -36,9 +38,9 @@ func LoadConfig() (Config, error) {
 		AutoMigrateConfigured:            hasEnv("APP_AUTO_MIGRATE"),
 		LedgerCorrectionKey:              getEnv("LEDGER_CORRECTION_KEY", ""),
 		LedgerSettlementKey:              getEnv("LEDGER_SETTLEMENT_KEY", ""),
-		AuthzBootstrapEnabled:            getEnvBool("AUTHZ_BOOTSTRAP_ENABLED", false),
-		AuthzBootstrapActorKey:           getEnv("AUTHZ_BOOTSTRAP_ACTOR_KEY", ""),
-		AuthzBootstrapDisplayName:        getEnv("AUTHZ_BOOTSTRAP_DISPLAY_NAME", ""),
+		AuthzBootstrapEnabled:            getEnvBool("AUTHZ_BOOTSTRAP_ENABLED", authzBootstrapDefault.Enabled),
+		AuthzBootstrapActorKey:           getEnv("AUTHZ_BOOTSTRAP_ACTOR_KEY", authzBootstrapDefault.ActorKey),
+		AuthzBootstrapDisplayName:        getEnv("AUTHZ_BOOTSTRAP_DISPLAY_NAME", authzBootstrapDefault.DisplayName),
 		AuthzBootstrapRoleCode:           getEnv("AUTHZ_BOOTSTRAP_ROLE_CODE", "APPLICATION_ADMIN"),
 		AuthzBootstrapTenantID:           getEnv("AUTHZ_BOOTSTRAP_TENANT_ID", "*"),
 		AuthzBootstrapRequireEmptyActors: getEnvBool("AUTHZ_BOOTSTRAP_REQUIRE_EMPTY_ACTOR_TABLE", false),
@@ -47,6 +49,21 @@ func LoadConfig() (Config, error) {
 		return Config{}, fmt.Errorf("JWT_SECRET is required")
 	}
 	return cfg, nil
+}
+
+type localBootstrapDefaults struct {
+	Enabled     bool
+	ActorKey    string
+	DisplayName string
+}
+
+func localAuthzBootstrapDefault(env string) localBootstrapDefaults {
+	switch strings.ToLower(strings.TrimSpace(env)) {
+	case "local", "dev", "development":
+		return localBootstrapDefaults{Enabled: true, ActorKey: "bootstrap-admin", DisplayName: "Bootstrap Admin"}
+	default:
+		return localBootstrapDefaults{}
+	}
 }
 
 func getEnv(key, fallback string) string {

@@ -100,7 +100,7 @@ test("user can filter and paginate the People page", async ({ page, request }) =
   await page.goto("/people");
 
   await page.getByLabel("Filter people").fill(filterLastName);
-  await page.getByRole("button", { name: "Apply filter" }).click();
+  //await page.getByRole("button", { name: "Apply filter" }).click();
 
   await expect(page.getByText("Showing 1-10 of 11 people").first()).toBeVisible();
   await expect(page.getByText("Page 1 of 2").first()).toBeVisible();

@@ -3,6 +3,17 @@ export type AuthzAdminRequestActor = {
   tenantId: string;
 };
 
+export type AuthzCurrentActor = {
+  actorKey: string;
+  actorRecordId: string;
+  tenantId: string;
+  scope: string;
+  personId?: string;
+  collaboratorId?: string;
+  roleCodes: string[];
+  permissions: string[];
+};
+
 export type AuthzPermission = {
   code: string;
   label: string;
@@ -44,6 +55,10 @@ export type CreateAuthzActorInput = {
   displayName: string;
   personId?: string | null;
   collaboratorId?: string | null;
+  active: boolean;
+};
+
+export type SetAuthzActorActiveInput = {
   active: boolean;
 };
 

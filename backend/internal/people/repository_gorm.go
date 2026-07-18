@@ -88,7 +88,36 @@ func (r *gormRepository) FindByID(ctx context.Context, id string) (*db.Person, e
 	return &row, nil
 }
 func (r *gormRepository) Update(ctx context.Context, person *db.Person) error {
-	return r.db.WithContext(ctx).Save(person).Error
+	return r.db.WithContext(ctx).
+		Model(&db.Person{}).
+		Where("id = ? AND tenant_id = ?", person.ID, defaultTenantID).
+		Updates(map[string]any{
+			"first_name":                person.FirstName,
+			"last_name":                 person.LastName,
+			"nickname":                  person.Nickname,
+			"cpf":                       person.CPF,
+			"rg":                        person.RG,
+			"cellular":                  person.Cellular,
+			"email":                     person.Email,
+			"street1":                   person.Street1,
+			"street2":                   person.Street2,
+			"city":                      person.City,
+			"state":                     person.State,
+			"cep":                       person.CEP,
+			"country":                   person.Country,
+			"bank_name":                 person.BankName,
+			"bank_number":               person.BankNumber,
+			"checking_account":          person.CheckingAccount,
+			"pix_key":                   person.PIXKey,
+			"emergency_name":            person.EmergencyName,
+			"emergency_cellular":        person.EmergencyCellular,
+			"emergency_email":           person.EmergencyEmail,
+			"profile_completion_status": person.ProfileCompletionStatus,
+			"can_create_collaborator":   person.CanCreateCollaborator,
+			"status_id":                 person.StatusID,
+			"notes":                     person.Notes,
+			"updated_at":                person.UpdatedAt,
+		}).Error
 }
 
 func (r *gormRepository) ExistsActivePersonStatus(ctx context.Context, tenantID string, statusID string) (bool, error) {

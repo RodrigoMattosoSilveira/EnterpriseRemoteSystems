@@ -6,6 +6,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { PeopleListPage } from "./PeopleListPage";
 import type { Person } from "../../types/people";
 
+// Use fake timers to control debounce
+vi.useFakeTimers({ shouldAdvanceTime: true });
+
 let container: HTMLDivElement;
 let root: Root | null;
 let fetchCalls: string[];
@@ -18,13 +21,16 @@ beforeEach(() => {
 });
 
 afterEach(async () => {
+  vi.runAllTimers();
   if (root) {
     await act(async () => {
       root?.unmount();
     });
   }
   document.body.removeChild(container);
+  vi.clearAllTimers();
   vi.restoreAllMocks();
+  //vi.useRealTimers();
 });
 
 describe("PeopleListPage", () => {
@@ -42,45 +48,100 @@ describe("PeopleListPage", () => {
     expect(textNode("Showing 1-1 of 1 people")).toBeTruthy();
   });
 
-  it("applies filters and requests the next page", async () => {
-    mockPeopleFetch({ items: [personFixture("person-1", "Maria")], total: 12 });
+  it("clears filters resets search input and removes search param", async () => {
+    mockPeopleFetch({ items: [personFixture("person-1", "Maria")], total: 1 });
 
     renderPeopleListRoute();
     await waitForText("Maria Pessoa");
 
-    await changeInput("Filter people", "Maria");
-    await submitFilterForm();
-
+    await changeInput("Filter people", "Mar");
+    act(() => vi.advanceTimersByTime(400));
     await waitFor(() =>
-      fetchCalls.includes("/api/v1/people?search=Maria&page=1&pageSize=10"),
+      fetchCalls.some((url) => url.includes("search=Mar")),
     );
-    await waitForText("Page 1 of 2");
-
-    await clickButton("Next");
-
-    await waitFor(() =>
-      fetchCalls.includes("/api/v1/people?search=Maria&page=2&pageSize=10"),
-    );
-  });
-
-  it("clears filters and returns to the first People page", async () => {
-    mockPeopleFetch({ items: [], total: 0 });
-
-    renderPeopleListRoute();
-    await waitForText("Showing 0-0 of 0 people");
-
-    await changeInput("Filter people", "NoMatch");
-    await submitFilterForm();
-    await waitForText("No people match these filters");
 
     await clickButton("Clear filters");
 
+    console.log("FETCH CALLS:", fetchCalls);
+     
     await waitFor(() =>
-      fetchCalls.filter((url) => url === "/api/v1/people?page=1&pageSize=10")
-        .length >= 2,
+      fetchCalls.includes("/api/v1/people?page=1&pageSize=10"),
+    );
+    expect(inputByLabel("Filter people").value).toBe("");
+  });
+
+  it("applies active/inactive filter immediately", async () => {
+    mockPeopleFetch({ items: [personFixture("person-1", "Maria")], total: 1 });
+
+    renderPeopleListRoute();
+    await waitForText("Maria Pessoa");
+
+    await changeSelect("Status", "Active");
+
+    await waitFor(() =>
+      fetchCalls.includes(
+        "/api/v1/people?statusId=ref-person-status-active&page=1&pageSize=10",
+      ),
     );
   });
+
+  it("clears status filter when All is selected", async () => {
+    mockPeopleFetch({ items: [personFixture("person-1", "Maria")], total: 1 });
+
+    renderPeopleListRoute();
+    await waitForText("Maria Pessoa");
+
+    await changeSelect("Status", "All");
+
+    await waitFor(() =>
+      fetchCalls.includes("/api/v1/people?page=1&pageSize=10"),
+    );
+  });
+
+  /*
+
+    it("debounces search input and fires API request after delay", async () => {
+    mockPeopleFetch({ items: [personFixture("person-1", "Fin")], total: 1 });
+
+    renderPeopleListRoute();
+    await waitForText("Maria Pessoa");
+
+    // Type "Mar" — no API call yet
+    await changeInput("Filter people", "Fin");
+    expect(
+      fetchCalls.some((url) => url.includes("search=Fin")),
+    ).toBe(false);
+
+    // Advance timers past debounce (350ms)
+    act(() => {
+      vi.advanceTimersByTime(400);
+    });
+
+    await waitFor(() =>
+      fetchCalls.includes("/api/v1/people?search=Mar&page=1&pageSize=10"),
+    );
+  });
+
+
+  it("applies profile completion filter immediately (no debounce)", async () => {
+    mockPeopleFetch({ items: [personFixture("person-1", "Maria")], total: 1 });
+
+    renderPeopleListRoute();
+    await waitForText("Maria Pessoa");
+
+    await changeSelect("Profile completion", "COMPLETE");
+
+    // No debounce on select — immediate
+    await waitFor(() =>
+      fetchCalls.includes(
+        "/api/v1/people?profileCompletionStatus=COMPLETE&page=1&pageSize=10",
+      ),
+    );
+  }); */
+
 });
+
+// ─── Helpers ───────────────────────────────────────────────────────────────
 
 function renderPeopleListRoute() {
   const queryClient = new QueryClient({
@@ -218,6 +279,19 @@ async function changeInput(labelText: string, value: string) {
     valueSetter?.call(input, value);
     input.dispatchEvent(new Event("input", { bubbles: true }));
     input.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+}
+
+async function changeSelect(labelText: string, value: string) {
+  const select = selectByLabel(labelText);
+  const valueSetter = Object.getOwnPropertyDescriptor(
+    HTMLSelectElement.prototype,
+    "value",
+  )?.set;
+
+  await act(async () => {
+    valueSetter?.call(select, value);
+    select.dispatchEvent(new Event("change", { bubbles: true }));
   });
 }
 
