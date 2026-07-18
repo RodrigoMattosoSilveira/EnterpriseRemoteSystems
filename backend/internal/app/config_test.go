@@ -63,3 +63,29 @@ func TestLoadConfigDefaultsAuthzBootstrapDisabledOutsideLocalDevelopment(t *test
 		t.Fatalf("unexpected bootstrap defaults: %#v", cfg)
 	}
 }
+
+func TestLoadConfigDoesNotDisableRouteAuthorizationForServerTestEnvironment(t *testing.T) {
+	t.Setenv("JWT_SECRET", "test-secret")
+	t.Setenv("APP_ENV", "test")
+
+	cfg, err := LoadConfig()
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	if cfg.DisableRouteAuthorization {
+		t.Fatalf("expected route authorization enabled by default for deployed test environment")
+	}
+}
+
+func TestLoadConfigReadsExplicitRouteAuthorizationDisableFlag(t *testing.T) {
+	t.Setenv("JWT_SECRET", "test-secret")
+	t.Setenv("AUTHZ_DISABLE_ROUTE_AUTHORIZATION", "true")
+
+	cfg, err := LoadConfig()
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	if !cfg.DisableRouteAuthorization {
+		t.Fatalf("expected explicit route authorization disable flag")
+	}
+}
