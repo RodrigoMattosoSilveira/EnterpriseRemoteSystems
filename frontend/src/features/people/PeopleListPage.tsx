@@ -1,4 +1,4 @@
-import { useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { usePeoplePage } from "./usePeople";
 import type {
@@ -17,23 +17,35 @@ type CollaboratorEligibilityFilter = "all" | "true" | "false";
 
 const DEFAULT_PAGE_SIZE = 10;
 const PAGE_SIZE_OPTIONS = [10, 25, 50];
-
+const SEARCH_DEBOUNCE_MS = 350;
+  
 export function PeopleListPage() {
   const location = useLocation();
   const listState = readPeopleListState(location.state);
 
-  const [searchDraft, setSearchDraft] = useState("");
   const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [profileCompletionStatus, setProfileCompletionStatus] =
     useState<ProfileCompletionStatus | "">("");
   const [canCreateCollaborator, setCanCreateCollaborator] =
     useState<CollaboratorEligibilityFilter>("all");
+  const [peopleStatus, setPeopleStatus] = 
+    useState<"All" | "Active" | "InActive">("All");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
 
+  // Debounce search input
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(search.trim());
+      setPage(1);
+    }, SEARCH_DEBOUNCE_MS);
+    return () => clearTimeout(timer);
+  }, [search]);
+
   const filter = useMemo<PeopleListFilter>(
     () => ({
-      search: search || undefined,
+      search: debouncedSearch || undefined,
       profileCompletionStatus: profileCompletionStatus || undefined,
       canCreateCollaborator:
         canCreateCollaborator === "all"
@@ -41,8 +53,14 @@ export function PeopleListPage() {
           : canCreateCollaborator === "true",
       page,
       pageSize,
+      statusId:
+        peopleStatus === "Active"
+          ? "ref-person-status-active"
+          : peopleStatus === "InActive"
+          ? "ref-person-status-inactive"
+          : undefined,
     }),
-    [canCreateCollaborator, page, pageSize, profileCompletionStatus, search],
+    [canCreateCollaborator, page, pageSize, profileCompletionStatus, peopleStatus, debouncedSearch],
   );
 
   const { data, isLoading, error } = usePeoplePage(filter);
@@ -54,21 +72,15 @@ export function PeopleListPage() {
     listState.createdPerson,
   );
   const hasActiveFilters = Boolean(
-    search || profileCompletionStatus || canCreateCollaborator !== "all",
+    debouncedSearch || profileCompletionStatus || canCreateCollaborator !== "all",
   );
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
   const pageStart = total === 0 ? 0 : (page - 1) * pageSize + 1;
   const pageEnd = total === 0 ? 0 : Math.min(total, page * pageSize);
 
-  function applySearch(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setSearch(searchDraft.trim());
-    setPage(1);
-  }
-
   function clearFilters() {
-    setSearchDraft("");
     setSearch("");
+    setDebouncedSearch("");
     setProfileCompletionStatus("");
     setCanCreateCollaborator("all");
     setPage(1);
@@ -152,29 +164,21 @@ export function PeopleListPage() {
             )}
           </div>
 
-          <form
-            onSubmit={applySearch}
-            className="mt-4 grid gap-4 md:grid-cols-[minmax(0,1fr)_auto] md:items-end"
-          >
+          <div className="mt-4">
             <label className="grid gap-1 text-sm font-medium text-gray-700">
               Filter people
               <input
-                value={searchDraft}
-                onChange={(event) => setSearchDraft(event.target.value)}
+                type="search"
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
                 placeholder="Name, nickname, CPF, RG, cellular, or email"
                 className="rounded-xl border border-gray-300 px-3 py-2 text-sm shadow-sm"
               />
             </label>
-            <button
-              type="submit"
-              className="rounded-xl bg-gray-950 px-4 py-2 text-sm font-semibold text-white shadow-sm"
-            >
-              Apply filter
-            </button>
-          </form>
+          </div>
 
-          <div className="mt-4 grid gap-4 md:grid-cols-3">
-            <label className="grid gap-1 text-sm font-medium text-gray-700">
+          <div className="mt-4 grid gap-4 md:grid-cols-4 justify-items-start">
+            <label className="grid gap-1 text-sm font-medium text-gray-700 min-w-0">
               Profile completion
               <select
                 value={profileCompletionStatus}
@@ -184,7 +188,7 @@ export function PeopleListPage() {
                   );
                   setPage(1);
                 }}
-                className="rounded-xl border border-gray-300 px-3 py-2 text-sm shadow-sm"
+                className="w-full rounded-xl border border-gray-300 px-3 py-2 text-sm shadow-sm"
               >
                 <option value="">All completion statuses</option>
                 <option value="COMPLETE">Complete</option>
@@ -193,7 +197,7 @@ export function PeopleListPage() {
               </select>
             </label>
 
-            <label className="grid gap-1 text-sm font-medium text-gray-700">
+            <label className="grid gap-1 text-sm font-medium text-gray-700 min-w-0">
               Collaborator eligibility
               <select
                 value={canCreateCollaborator}
@@ -203,7 +207,7 @@ export function PeopleListPage() {
                   );
                   setPage(1);
                 }}
-                className="rounded-xl border border-gray-300 px-3 py-2 text-sm shadow-sm"
+                className="w-full rounded-xl border border-gray-300 px-3 py-2 text-sm shadow-sm"
               >
                 <option value="all">All people</option>
                 <option value="true">Can create collaborator</option>
@@ -211,7 +215,24 @@ export function PeopleListPage() {
               </select>
             </label>
 
-            <label className="grid gap-1 text-sm font-medium text-gray-700">
+            <label className="grid gap-1 text-sm font-medium text-gray-700 min-w-0">
+              Status
+              <select
+                value={peopleStatus}
+                onChange={(event) => {
+                  setPeopleStatus(
+                    event.target.value as "All" | "Active" | "InActive",
+                  );
+                  setPage(1);
+                }}
+                className="w-full rounded-xl border border-gray-300 px-3 py-2 text-sm shadow-sm">
+                <option value="All">All</option>
+                <option value="Active">Active</option>
+                <option value="InActive">InActive</option>
+              </select>
+            </label>
+
+            <label className="grid gap-1 text-sm font-medium text-gray-700 min-w-0 md:max-w-[10rem]">  
               People per page
               <select
                 value={pageSize}
@@ -219,7 +240,7 @@ export function PeopleListPage() {
                   setPageSize(Number(event.target.value));
                   setPage(1);
                 }}
-                className="rounded-xl border border-gray-300 px-3 py-2 text-sm shadow-sm"
+                className="w-full rounded-xl border border-gray-300 px-3 py-2 text-sm shadow-sm"
               >
                 {PAGE_SIZE_OPTIONS.map((option) => (
                   <option key={option} value={option}>
@@ -237,11 +258,6 @@ export function PeopleListPage() {
           </div>
         )}
 
-        {/* {error && (
-          <div className="rounded-2xl border border-red-200 bg-red-50 p-5 text-red-800">
-            {(error as Error).message}
-          </div>
-        )} */}
         {error && (
           <pre className="rounded bg-red-50 p-4 text-xs text-red-800">
             {JSON.stringify(error, Object.getOwnPropertyNames(error), 2)}

@@ -13,7 +13,6 @@ const storageOrigin = new URL(baseURL).origin;
 
 const authzActorId = runtimeEnv.PLAYWRIGHT_AUTHZ_ACTOR_ID ?? "bootstrap-admin";
 const authzTenantId = runtimeEnv.PLAYWRIGHT_AUTHZ_TENANT_ID ?? "default";
-const authzPermissions = runtimeEnv.PLAYWRIGHT_AUTHZ_PERMISSIONS ?? "*";
 
 export default defineConfig({
   testDir: "./tests/e2e",
@@ -34,9 +33,7 @@ export default defineConfig({
     video: "retain-on-failure",
     extraHTTPHeaders: {
       "X-Actor-ID": authzActorId,
-      "X-Authorized-By": authzActorId,
       "X-Tenant-ID": authzTenantId,
-      "X-Actor-Permissions": authzPermissions,
     },
     storageState: {
       cookies: [],
@@ -76,7 +73,7 @@ export default defineConfig({
         },
         {
           command:
-            "ERS_E2E_AUTHZ_PROXY=true PLAYWRIGHT_AUTHZ_ACTOR_ID=bootstrap-admin PLAYWRIGHT_AUTHZ_TENANT_ID=default PLAYWRIGHT_AUTHZ_PERMISSIONS='*' npm run dev -- --host 0.0.0.0 --port 5173",
+            "ERS_E2E_AUTHZ_PROXY=true PLAYWRIGHT_AUTHZ_ACTOR_ID=bootstrap-admin PLAYWRIGHT_AUTHZ_TENANT_ID=default npm run dev -- --host 0.0.0.0 --port 5173",
           url: "http://localhost:5173",
           reuseExistingServer: !isCI,
           timeout: 120_000,

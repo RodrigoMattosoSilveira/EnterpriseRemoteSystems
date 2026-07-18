@@ -1,5 +1,5 @@
-import { expect, test } from "@playwright/test";
-import { seedBrowserAuthz } from "./support/authz";
+import { expect, test, type APIRequestContext } from "@playwright/test";
+import { authzHeaders, e2eApiUrl, seedBrowserAuthz } from "./support/authz";
 
 test.beforeEach(async ({ page }) => {
   await seedBrowserAuthz(page);
@@ -7,10 +7,18 @@ test.beforeEach(async ({ page }) => {
 
 test("admin can create an authorization actor, grant a role, and revoke it", async ({
   page,
+  request,
 }) => {
   const suffix = uniqueSuffix();
-  const actorKey = `authz-e2e-${suffix}`;
-  const displayName = `Authz E2E ${suffix}`;
+  const actorNickname = `AuthzE2E${suffix}`;
+  const person = await createCompletePerson(request, {
+    suffix,
+    firstName: `Authz${suffix}`,
+    nickname: actorNickname,
+  });
+  const collaborator = await createCollaborator(request, person.id);
+  const actorKey = `collaborator-${collaborator.id}`;
+  const displayName = actorNickname;
   const grantedRole = "EXPENSE_OPERATOR";
   const grantTenant = "default";
 
@@ -40,8 +48,12 @@ test("admin can create an authorization actor, grant a role, and revoke it", asy
   await expect(permissionsSection).toBeVisible();
   await expect(permissionsSection.getByText("authz.manage").first()).toBeVisible();
 
-  await page.getByLabel("Actor key").fill(actorKey);
-  await page.getByLabel("Display name").fill(displayName);
+  const collaboratorSelect = page.getByLabel("Collaborator");
+  await expect(collaboratorSelect).toContainText(actorNickname);
+  await collaboratorSelect.selectOption(collaborator.id);
+  await expect(page.getByText(`Actor key: ${actorKey}`)).toBeVisible();
+  await expect(page.getByText(`Display name: ${displayName}`)).toBeVisible();
+
   await page.getByRole("button", { name: "Create Actor" }).click();
 
   await expect(page.getByRole("status")).toContainText(`${actorKey} created.`);
@@ -76,6 +88,145 @@ test("admin can create an authorization actor, grant a role, and revoke it", asy
   await expect(actorCard).toContainText("No role grants.");
 });
 
-function uniqueSuffix(): string {
-  return `${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+const PERSON_STATUS_ACTIVE_ID = "ref-person-status-active";
+const COLLABORATOR_STATUS_ACTIVE_ID = "ref-collaborator-status-active";
+const PAYMENT_METHOD_DAILY_ID = "ref-method-daily";
+const SECTOR_MINING_ID = "ref-sector-mining";
+const LOCATION_MAIN_MINE_ID = "ref-location-main-mine";
+const TASK_MINER_ID = "ref-task-miner";
+
+type ApiEnvelope<T> = {
+  data?: T;
+};
+
+type CreatedPerson = {
+  id: string;
+};
+
+type CreatedCollaborator = {
+  id: string;
+};
+
+async function createCompletePerson(
+  api: APIRequestContext,
+  input: { suffix: number; firstName: string; nickname: string },
+): Promise<CreatedPerson> {
+  const response = await api.post(e2eApiUrl("/api/v1/people"), {
+    headers: authzHeaders(),
+    data: completePersonPayload(input),
+  });
+
+  if (!response.ok()) {
+    throw new Error(
+      `Create Person failed at ${response.url()}: ${response.status()} ${await response.text()}`,
+    );
+  }
+
+  const body = (await response.json()) as ApiEnvelope<CreatedPerson>;
+  if (!body.data) throw new Error("Create Person failed: response did not include data");
+  return body.data;
+}
+
+async function createCollaborator(
+  api: APIRequestContext,
+  personId: string,
+): Promise<CreatedCollaborator> {
+  const response = await api.post(e2eApiUrl("/api/v1/collaborators"), {
+    headers: authzHeaders(),
+    data: {
+      personId,
+      journeyStartDate: todayISODate(),
+      paymentMethodId: PAYMENT_METHOD_DAILY_ID,
+      paymentValue: 250.75,
+      sectorId: SECTOR_MINING_ID,
+      locationId: LOCATION_MAIN_MINE_ID,
+      taskId: TASK_MINER_ID,
+      statusId: COLLABORATOR_STATUS_ACTIVE_ID,
+      notes: "Created by Playwright authorization actor setup",
+    },
+  });
+
+  if (!response.ok()) {
+    throw new Error(
+      `Create Collaborator failed at ${response.url()}: ${response.status()} ${await response.text()}`,
+    );
+  }
+
+  const body = (await response.json()) as ApiEnvelope<CreatedCollaborator>;
+  if (!body.data) {
+    throw new Error("Create Collaborator failed: response did not include data");
+  }
+  return body.data;
+}
+
+function completePersonPayload({
+  suffix,
+  firstName,
+  nickname,
+}: {
+  suffix: number;
+  firstName: string;
+  nickname: string;
+}) {
+  const emailLocal = String(suffix).replace(/\D/g, "");
+
+  return {
+    firstName,
+    lastName: "Pessoa",
+    nickname,
+    cpf: validCPF(suffix),
+    rg: validRG(suffix),
+    cellular: validBrazilianCellular(suffix),
+    email: `authz-e2e-${emailLocal}@example.com`,
+    street1: "Rua Playwright 123",
+    street2: "Apto E2E",
+    city: "Sao Paulo",
+    state: "SP",
+    cep: "01001000",
+    country: "Brasil",
+    bankName: "Banco E2E",
+    bankNumber: "001",
+    checkingAccount: `12345-${String(suffix).slice(-1)}`,
+    pixKey: `pix-authz-e2e-${emailLocal}@example.com`,
+    emergencyName: "Contato Emergencia",
+    emergencyCellular: validBrazilianCellular(suffix + 1),
+    emergencyEmail: `emergency-authz-e2e-${emailLocal}@example.com`,
+    statusId: PERSON_STATUS_ACTIVE_ID,
+    notes: "Complete Person created by Playwright authorization setup",
+  };
+}
+
+function todayISODate() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function validRG(seed: number): string {
+  return `RG-AUTHZ-${String(seed).slice(-8)}`;
+}
+
+function validBrazilianCellular(seed: number): string {
+  const uniqueDigits = String(seed).replace(/\D/g, "").padStart(8, "0").slice(-8);
+  return `11${`9${uniqueDigits}`.slice(0, 9)}`;
+}
+
+function validCPF(seed: number): string {
+  const base = String(seed).replace(/\D/g, "").padStart(9, "0").slice(-9);
+  const digits = base.split("").map(Number);
+  const d1 = cpfCheckDigit(digits);
+  const d2 = cpfCheckDigit([...digits, d1]);
+  return `${base}${d1}${d2}`;
+}
+
+function cpfCheckDigit(numbers: number[]): number {
+  const weightStart = numbers.length + 1;
+  const sum = numbers.reduce(
+    (acc, digit, index) => acc + digit * (weightStart - index),
+    0,
+  );
+  const remainder = sum % 11;
+  return remainder < 2 ? 0 : 11 - remainder;
+}
+
+function uniqueSuffix(): number {
+  return Date.now() + Math.floor(Math.random() * 1000);
 }

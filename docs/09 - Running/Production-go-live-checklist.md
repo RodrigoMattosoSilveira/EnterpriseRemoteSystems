@@ -141,9 +141,8 @@ TENANT_ID="default"
 
 ADMIN_HEADERS=(
   -H "Content-Type: application/json"
-  -H "X-Authorized-By: ${ACTOR}"
+  -H "X-Actor-ID: ${ACTOR}"
   -H "X-Tenant-ID: ${TENANT_ID}"
-  -H "X-Actor-Permissions: *"
 )
 ```
 

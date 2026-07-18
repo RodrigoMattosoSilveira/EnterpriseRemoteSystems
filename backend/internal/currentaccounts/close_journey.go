@@ -108,9 +108,9 @@ func (s *service) CloseJourney(ctx context.Context, collaboratorID, authorizedBy
 	if err != nil {
 		return nil, err
 	}
-	rows := make([]db.LedgerEntry, 0, len(entries))
-	for _, entry := range entries {
-		rows = append(rows, *entry)
+	rows, err := s.repo.FindLedgerEntriesBySource(ctx, ledgerSourceSettlement, settlement.ID)
+	if err != nil {
+		return nil, err
 	}
 	return closeJourneyResult(settlement, rows, *collaborator), nil
 }

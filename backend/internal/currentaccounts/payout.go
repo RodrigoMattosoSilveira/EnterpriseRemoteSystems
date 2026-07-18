@@ -102,9 +102,9 @@ func (s *service) PartialPayout(ctx context.Context, collaboratorID, authorizedB
 	if err := s.repo.CreateSettlementWithEntries(ctx, &settlement, entries...); err != nil {
 		return nil, err
 	}
-	rows := make([]db.LedgerEntry, 0, len(entries))
-	for _, entry := range entries {
-		rows = append(rows, *entry)
+	rows, err := s.repo.FindLedgerEntriesBySource(ctx, ledgerSourceSettlement, settlement.ID)
+	if err != nil {
+		return nil, err
 	}
 	return partialPayoutResult(settlement, rows), nil
 }

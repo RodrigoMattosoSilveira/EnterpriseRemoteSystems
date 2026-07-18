@@ -50,6 +50,9 @@ func TestSeedAuthorizationCatalogCreatesCoreRolesAndGrants(t *testing.T) {
 		role       RoleCode
 		permission Permission
 	}{
+		{RoleEarningsOperator, PermissionAuthzSelfRead},
+		{RoleExpenseOperator, PermissionAuthzSelfRead},
+		{RolePerson, PermissionAuthzSelfRead},
 		{RoleEarningsOperator, PermissionTenantsRead},
 		{RoleEarningsOperator, PermissionReferenceDataRead},
 		{RoleExpenseOperator, PermissionTenantsRead},
@@ -251,7 +254,7 @@ func TestResolveActorRejectsUnknownPersistedActorWithoutTemporaryPermissions(t *
 	}
 }
 
-func TestResolveActorKeepsTemporaryHeaderPermissionsForUnpersistedActors(t *testing.T) {
+func TestResolveActorRejectsTemporaryHeaderPermissionsForUnpersistedActors(t *testing.T) {
 	database := newAuthzTestDB(t)
 
 	actor, err := ResolveActor(context.Background(), NewGORMStore(database), headerGetter(map[string]string{
@@ -259,15 +262,11 @@ func TestResolveActorKeepsTemporaryHeaderPermissionsForUnpersistedActors(t *test
 		HeaderTenantID:         "tenant-a",
 		HeaderActorPermissions: string(PermissionLedgerReceiptsPrint),
 	}))
-	if err != nil {
-		t.Fatalf("resolve actor: %v", err)
+	if actor != nil {
+		t.Fatalf("expected no actor, got %#v", actor)
 	}
-
-	if actor.Source != ActorSourceHeaderActorID {
-		t.Fatalf("expected temporary header actor source, got %q", actor.Source)
-	}
-	if !actor.HasPermission(PermissionLedgerReceiptsPrint) {
-		t.Fatalf("expected temporary header permission")
+	if !errors.Is(err, ErrMissingActor) {
+		t.Fatalf("expected persisted actor lookup to reject header permissions, got %v", err)
 	}
 }
 
@@ -280,6 +279,95 @@ func TestGORMStoreFindActorRejectsMissingPersistedActor(t *testing.T) {
 	}
 	if !errors.Is(err, ErrMissingActor) {
 		t.Fatalf("expected ErrMissingActor, got %v", err)
+	}
+}
+
+func TestGORMStoreValidatesRoleGrantScope(t *testing.T) {
+	database := newAuthzTestDB(t)
+	actorID := createAuthzActor(t, database, "scope-validation@example.com", nil, nil)
+	store := NewGORMStore(database)
+
+	_, err := store.GrantActorRole(context.Background(), actorID, GrantActorRoleRequest{
+		RoleCode: string(RoleApplicationAdmin),
+		TenantID: "tenant-a",
+	})
+	var validation ValidationError
+	if !errors.As(err, &validation) || validation.ValidationFields()["tenantId"] == "" {
+		t.Fatalf("expected application role tenant validation, got %T %v", err, err)
+	}
+
+	_, err = store.GrantActorRole(context.Background(), actorID, GrantActorRoleRequest{
+		RoleCode: string(RoleExpenseOperator),
+		TenantID: GlobalTenantScope,
+	})
+	if !errors.As(err, &validation) || validation.ValidationFields()["tenantId"] == "" {
+		t.Fatalf("expected tenant role scope validation, got %T %v", err, err)
+	}
+}
+
+func TestGORMStoreAllowsDeactivatingNonAdministratorWhenOnlyOneApplicationAdministratorExists(t *testing.T) {
+	database := newAuthzTestDB(t)
+	adminID := createAuthzActor(t, database, "remaining-app-admin@example.com", nil, nil)
+	grantAuthzRole(t, database, adminID, RoleApplicationAdmin, GlobalTenantScope)
+	operatorID := createAuthzActor(t, database, "operator@example.com", nil, nil)
+	grantAuthzRole(t, database, operatorID, RoleExpenseOperator, "default")
+
+	updated, err := NewGORMStore(database).SetActorActive(context.Background(), operatorID, false)
+	if err != nil {
+		t.Fatalf("deactivate non-admin actor: %v", err)
+	}
+	if updated.Active {
+		t.Fatalf("expected non-admin actor to be inactive")
+	}
+}
+
+func TestGORMStorePreventsDeactivatingLastApplicationAdministrator(t *testing.T) {
+	database := newAuthzTestDB(t)
+	actorID := createAuthzActor(t, database, "only-app-admin@example.com", nil, nil)
+	grantAuthzRole(t, database, actorID, RoleApplicationAdmin, GlobalTenantScope)
+
+	_, err := NewGORMStore(database).SetActorActive(context.Background(), actorID, false)
+	if err == nil {
+		t.Fatalf("expected last application administrator deactivation to be rejected")
+	}
+	var validation ValidationError
+	if !errors.As(err, &validation) || validation.ValidationFields()["active"] == "" {
+		t.Fatalf("expected active validation error, got %T %v", err, err)
+	}
+}
+
+func TestGORMStoreAllowsDeactivatingApplicationAdministratorWhenAnotherRemains(t *testing.T) {
+	database := newAuthzTestDB(t)
+	firstID := createAuthzActor(t, database, "first-app-admin@example.com", nil, nil)
+	secondID := createAuthzActor(t, database, "second-app-admin@example.com", nil, nil)
+	grantAuthzRole(t, database, firstID, RoleApplicationAdmin, GlobalTenantScope)
+	grantAuthzRole(t, database, secondID, RoleApplicationAdmin, GlobalTenantScope)
+
+	updated, err := NewGORMStore(database).SetActorActive(context.Background(), firstID, false)
+	if err != nil {
+		t.Fatalf("deactivate application administrator: %v", err)
+	}
+	if updated.Active {
+		t.Fatalf("expected actor to be inactive: %#v", updated)
+	}
+}
+
+func TestGORMStorePreventsRevokingLastApplicationAdministratorGrant(t *testing.T) {
+	database := newAuthzTestDB(t)
+	actorID := createAuthzActor(t, database, "only-granted-app-admin@example.com", nil, nil)
+	grantAuthzRole(t, database, actorID, RoleApplicationAdmin, GlobalTenantScope)
+
+	var grant AuthzActorRoleGrant
+	if err := database.Where("actor_id = ? AND active = ?", actorID, true).First(&grant).Error; err != nil {
+		t.Fatalf("find application administrator grant: %v", err)
+	}
+	_, err := NewGORMStore(database).RevokeActorRoleGrant(context.Background(), actorID, grant.ID)
+	if err == nil {
+		t.Fatalf("expected last application administrator grant revocation to be rejected")
+	}
+	var validation ValidationError
+	if !errors.As(err, &validation) || validation.ValidationFields()["grantId"] == "" {
+		t.Fatalf("expected grantId validation error, got %T %v", err, err)
 	}
 }
 

@@ -6,7 +6,6 @@ declare const process: {
 
 export const E2E_ACTOR_ID = process.env.PLAYWRIGHT_AUTHZ_ACTOR_ID ?? "bootstrap-admin";
 export const E2E_TENANT_ID = process.env.PLAYWRIGHT_AUTHZ_TENANT_ID ?? "default";
-export const E2E_ACTOR_PERMISSIONS = process.env.PLAYWRIGHT_AUTHZ_PERMISSIONS ?? "*";
 
 const e2eFrontendBaseURL = process.env.PLAYWRIGHT_BASE_URL ?? "http://localhost:5173";
 const e2eApiBaseURL = process.env.PLAYWRIGHT_E2E_API_BASE_URL ?? defaultE2EApiBaseURL(e2eFrontendBaseURL);
@@ -18,9 +17,7 @@ export function e2eApiUrl(path: string): string {
 export function authzHeaders(): Record<string, string> {
   return {
     "X-Actor-ID": E2E_ACTOR_ID,
-    "X-Authorized-By": E2E_ACTOR_ID,
     "X-Tenant-ID": E2E_TENANT_ID,
-    "X-Actor-Permissions": E2E_ACTOR_PERMISSIONS,
   };
 }
 

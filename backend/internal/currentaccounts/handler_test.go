@@ -2,13 +2,14 @@ package currentaccounts_test
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"math"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"path/filepath"
-	"strings"
 	"testing"
 	"time"
 
@@ -16,6 +17,7 @@ import (
 
 	apppkg "enterpriseremotesystems/backend/internal/app"
 	"enterpriseremotesystems/backend/internal/authz"
+	"enterpriseremotesystems/backend/internal/db"
 )
 
 const (
@@ -67,30 +69,38 @@ type apiExpenseResponse struct {
 	} `json:"data"`
 }
 
+type apiLedgerEntryReceiptResponse struct {
+	ID            string `json:"id"`
+	ReceiptNumber string `json:"receiptNumber"`
+	Status        string `json:"status"`
+	Outstanding   bool   `json:"outstanding"`
+}
+
 type apiLedgerEntryListResponse struct {
 	Data struct {
 		Items []struct {
-			ID                   string  `json:"id"`
-			CollaboratorID       string  `json:"collaboratorId"`
-			CollaboratorLabel    string  `json:"collaboratorLabel"`
-			ValueUnitID          string  `json:"valueUnitId"`
-			ValueUnitCode        string  `json:"valueUnitCode"`
-			EntryType            string  `json:"entryType"`
-			Direction            string  `json:"direction"`
-			Amount               float64 `json:"amount"`
-			SignedAmount         float64 `json:"signedAmount"`
-			EffectiveDate        string  `json:"effectiveDate"`
-			SourceType           string  `json:"sourceType"`
-			SourceID             string  `json:"sourceId"`
-			Active               bool    `json:"active"`
-			CorrectionType       string  `json:"correctionType"`
-			RelatedEntryID       string  `json:"relatedEntryId"`
-			CorrectionReason     string  `json:"correctionReason"`
-			CorrectionReasonCode string  `json:"correctionReasonCode"`
-			CorrectionReasonText string  `json:"correctionReasonText"`
-			SecondApprovedBy     string  `json:"secondApprovedBy"`
-			SecondApprovedAt     string  `json:"secondApprovedAt"`
-			SecondApprovalNotes  string  `json:"secondApprovalNotes"`
+			ID                   string                         `json:"id"`
+			CollaboratorID       string                         `json:"collaboratorId"`
+			CollaboratorLabel    string                         `json:"collaboratorLabel"`
+			ValueUnitID          string                         `json:"valueUnitId"`
+			ValueUnitCode        string                         `json:"valueUnitCode"`
+			EntryType            string                         `json:"entryType"`
+			Direction            string                         `json:"direction"`
+			Amount               float64                        `json:"amount"`
+			SignedAmount         float64                        `json:"signedAmount"`
+			EffectiveDate        string                         `json:"effectiveDate"`
+			SourceType           string                         `json:"sourceType"`
+			SourceID             string                         `json:"sourceId"`
+			Active               bool                           `json:"active"`
+			CorrectionType       string                         `json:"correctionType"`
+			RelatedEntryID       string                         `json:"relatedEntryId"`
+			CorrectionReason     string                         `json:"correctionReason"`
+			CorrectionReasonCode string                         `json:"correctionReasonCode"`
+			CorrectionReasonText string                         `json:"correctionReasonText"`
+			SecondApprovedBy     string                         `json:"secondApprovedBy"`
+			SecondApprovedAt     string                         `json:"secondApprovedAt"`
+			SecondApprovalNotes  string                         `json:"secondApprovalNotes"`
+			Receipt              *apiLedgerEntryReceiptResponse `json:"receipt"`
 		} `json:"items"`
 		Total    int `json:"total"`
 		Page     int `json:"page"`
@@ -188,6 +198,16 @@ type apiPrintableReceiptResponse struct {
 	} `json:"data"`
 }
 
+func assertPendingDebitReceipt(t *testing.T, receipt *apiLedgerEntryReceiptResponse, context string) {
+	t.Helper()
+	if receipt == nil {
+		t.Fatalf("expected pending receipt on %s", context)
+	}
+	if receipt.ID == "" || receipt.ReceiptNumber == "" || receipt.Status != "PENDING_ISSUE" || !receipt.Outstanding {
+		t.Fatalf("unexpected receipt on %s: %+v", context, *receipt)
+	}
+}
+
 func TestAuthorizedLedgerReverseCreatesOppositeImmutableEntry(t *testing.T) {
 	server, cleanup := newTestServer(t)
 	defer cleanup()
@@ -260,10 +280,34 @@ func TestAuthorizedLedgerReplaceCreatesReversalAndReplacement(t *testing.T) {
 		decodeJSON(t, res, &body)
 		t.Fatalf("expected replace status %d, got %d error=%+v", http.StatusOK, res.StatusCode, body.Error)
 	}
+	var correctionBody struct {
+		Data struct {
+			Replacement *struct {
+				ID        string                         `json:"id"`
+				Direction string                         `json:"direction"`
+				Receipt   *apiLedgerEntryReceiptResponse `json:"receipt"`
+			} `json:"replacement"`
+		} `json:"data"`
+	}
+	decodeJSON(t, res, &correctionBody)
+	if correctionBody.Data.Replacement == nil || correctionBody.Data.Replacement.Direction != "DEBIT" {
+		t.Fatalf("expected debit replacement result, got %+v", correctionBody.Data.Replacement)
+	}
+	assertPendingDebitReceipt(t, correctionBody.Data.Replacement.Receipt, "debit replacement result")
 
 	entries := listLedgerEntries(t, server, collaborator.Data.ID)
 	if entries.Data.Total != 3 {
 		t.Fatalf("expected original, reversal, replacement, got %+v", entries.Data.Items)
+	}
+	var replacementListed bool
+	for _, entry := range entries.Data.Items {
+		if entry.CorrectionType == "REPLACEMENT" && entry.Direction == "DEBIT" {
+			replacementListed = true
+			assertPendingDebitReceipt(t, entry.Receipt, "debit replacement ledger list item")
+		}
+	}
+	if !replacementListed {
+		t.Fatalf("expected replacement debit in ledger list, got %+v", entries.Data.Items)
 	}
 	balances := listBalances(t, server, collaborator.Data.ID)
 	if len(balances.Data) != 1 || balances.Data[0].Balance != -50.0 {
@@ -426,7 +470,6 @@ func postAuthorizedJSON(t *testing.T, server *fiber.App, method, url string, pay
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set(authz.HeaderActorID, "ledger-admin@example.com")
 	req.Header.Set(authz.HeaderTenantID, "default")
-	req.Header.Set(authz.HeaderActorPermissions, string(authz.PermissionLedgerCorrectionsCreate))
 	req.Header.Set(authz.HeaderReauthenticatedAt, time.Now().UTC().Format(time.RFC3339))
 	req.Header.Set(authz.HeaderReauthenticationMethod, "password")
 	res, err := server.Test(req, fiber.TestConfig{Timeout: 0, FailOnTimeout: false})
@@ -446,11 +489,6 @@ func postSettlementJSON(t *testing.T, server *fiber.App, url string, payload map
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set(authz.HeaderActorID, "settlement-admin@example.com")
 	req.Header.Set(authz.HeaderTenantID, "default")
-	req.Header.Set(authz.HeaderActorPermissions, strings.Join([]string{
-		string(authz.PermissionJourneySettlementsZeroGold),
-		string(authz.PermissionJourneySettlementsPartialPayout),
-		string(authz.PermissionJourneySettlementsClose),
-	}, ","))
 	req.Header.Set(authz.HeaderReauthenticatedAt, time.Now().UTC().Format(time.RFC3339))
 	req.Header.Set(authz.HeaderReauthenticationMethod, "password")
 	res, err := server.Test(req, fiber.TestConfig{Timeout: 0, FailOnTimeout: false})
@@ -478,7 +516,7 @@ func postReceiptJSON(t *testing.T, server *fiber.App, url, authorizedBy string, 
 	return res
 }
 
-func postReceiptActorJSON(t *testing.T, server *fiber.App, url, actorID, permissions string, payload map[string]any) *http.Response {
+func postReceiptActorJSON(t *testing.T, server *fiber.App, url, actorID string, payload map[string]any) *http.Response {
 	t.Helper()
 	body, err := json.Marshal(payload)
 	if err != nil {
@@ -487,7 +525,7 @@ func postReceiptActorJSON(t *testing.T, server *fiber.App, url, actorID, permiss
 	req := httptest.NewRequest(http.MethodPost, url, bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set(authz.HeaderActorID, actorID)
-	req.Header.Set(authz.HeaderActorPermissions, permissions)
+	req.Header.Set(authz.HeaderTenantID, "default")
 	req.Header.Set(authz.HeaderReauthenticatedAt, time.Now().UTC().Format(time.RFC3339))
 	req.Header.Set(authz.HeaderReauthenticationMethod, "password")
 	res, err := server.Test(req, fiber.TestConfig{Timeout: 0, FailOnTimeout: false})
@@ -650,13 +688,13 @@ func TestReceiptPrintAuthorization(t *testing.T) {
 		t.Fatalf("expected missing actor status %d, got %d", http.StatusUnauthorized, missing.StatusCode)
 	}
 
-	forbidden := postReceiptActorJSON(t, server, url, "receipt-viewer@example.com", "ledger.receipts.return", map[string]any{})
+	forbidden := postReceiptActorJSON(t, server, url, "receipt-viewer@example.com", map[string]any{})
 	forbidden.Body.Close()
 	if forbidden.StatusCode != http.StatusForbidden {
 		t.Fatalf("expected forbidden status %d, got %d", http.StatusForbidden, forbidden.StatusCode)
 	}
 
-	permitted := postReceiptActorJSON(t, server, url, "receipt-printer@example.com", string(authz.PermissionLedgerReceiptsPrint), map[string]any{})
+	permitted := postReceiptActorJSON(t, server, url, "receipt-printer@example.com", map[string]any{})
 	defer permitted.Body.Close()
 	if permitted.StatusCode != http.StatusOK {
 		var body apiErrorResponse
@@ -685,13 +723,13 @@ func TestReceiptReturnAuthorization(t *testing.T) {
 		t.Fatalf("expected missing actor status %d, got %d", http.StatusUnauthorized, missing.StatusCode)
 	}
 
-	forbidden := postReceiptActorJSON(t, server, url, "receipt-viewer@example.com", "ledger.receipts.print", map[string]any{})
+	forbidden := postReceiptActorJSON(t, server, url, "receipt-viewer@example.com", map[string]any{})
 	forbidden.Body.Close()
 	if forbidden.StatusCode != http.StatusForbidden {
 		t.Fatalf("expected forbidden status %d, got %d", http.StatusForbidden, forbidden.StatusCode)
 	}
 
-	permitted := postReceiptActorJSON(t, server, url, "receipt-returner@example.com", string(authz.PermissionLedgerReceiptsReturn), map[string]any{
+	permitted := postReceiptActorJSON(t, server, url, "receipt-returner@example.com", map[string]any{
 		"signedDocumentRef": "receipt-scans/authorized-return.pdf",
 	})
 	defer permitted.Body.Close()
@@ -719,13 +757,13 @@ func TestReceiptBackfillAuthorization(t *testing.T) {
 		t.Fatalf("expected missing actor status %d, got %d", http.StatusUnauthorized, missing.StatusCode)
 	}
 
-	forbidden := postReceiptActorJSON(t, server, url, "receipt-viewer@example.com", "ledger.receipts.print", map[string]any{})
+	forbidden := postReceiptActorJSON(t, server, url, "receipt-viewer@example.com", map[string]any{})
 	forbidden.Body.Close()
 	if forbidden.StatusCode != http.StatusForbidden {
 		t.Fatalf("expected forbidden status %d, got %d", http.StatusForbidden, forbidden.StatusCode)
 	}
 
-	permitted := postReceiptActorJSON(t, server, url, "receipt-backfiller@example.com", string(authz.PermissionLedgerReceiptsBackfill), map[string]any{
+	permitted := postReceiptActorJSON(t, server, url, "receipt-backfiller@example.com", map[string]any{
 		"reasonCode": "RECEIPT_BACKFILL",
 		"reasonText": "Backfill historical debit ledger receipts",
 	})
@@ -928,6 +966,17 @@ func TestOutstandingReceiptsListsOnlyUnreturnedActionItems(t *testing.T) {
 	decodeJSON(t, collaboratorRes, &collaboratorBody)
 	if collaboratorBody.Data.Total != 1 || len(collaboratorBody.Data.Items) != 1 || collaboratorBody.Data.Items[0].CollaboratorID != collaborator.Data.ID {
 		t.Fatalf("expected collaborator-filtered receipt, got %+v", collaboratorBody.Data)
+	}
+
+	collaboratorIDRes := getJSON(t, server, "/api/v1/receipts/outstanding?collaborator="+url.QueryEscape(collaborator.Data.ID))
+	defer collaboratorIDRes.Body.Close()
+	if collaboratorIDRes.StatusCode != http.StatusOK {
+		t.Fatalf("expected collaborator ID filter status %d, got %d", http.StatusOK, collaboratorIDRes.StatusCode)
+	}
+	var collaboratorIDBody apiOutstandingReceiptListResponse
+	decodeJSON(t, collaboratorIDRes, &collaboratorIDBody)
+	if collaboratorIDBody.Data.Total != 1 || len(collaboratorIDBody.Data.Items) != 1 || collaboratorIDBody.Data.Items[0].CollaboratorID != collaborator.Data.ID {
+		t.Fatalf("expected collaborator ID-filtered receipt, got %+v", collaboratorIDBody.Data)
 	}
 
 	missingCollaboratorRes := getJSON(t, server, "/api/v1/receipts/outstanding?collaborator=no-such-collaborator")
@@ -1333,11 +1382,12 @@ func TestAuthorizedZeroGoldPostsFullGoldBalanceAndIsIdempotent(t *testing.T) {
 				GoldGramAmount float64 `json:"goldGramAmount"`
 			} `json:"settlement"`
 			LedgerEntry struct {
-				ID            string  `json:"id"`
-				Direction     string  `json:"direction"`
-				Amount        float64 `json:"amount"`
-				ValueUnitCode string  `json:"valueUnitCode"`
-				EntryType     string  `json:"entryType"`
+				ID            string                         `json:"id"`
+				Direction     string                         `json:"direction"`
+				Amount        float64                        `json:"amount"`
+				ValueUnitCode string                         `json:"valueUnitCode"`
+				EntryType     string                         `json:"entryType"`
+				Receipt       *apiLedgerEntryReceiptResponse `json:"receipt"`
 			} `json:"ledgerEntry"`
 		} `json:"data"`
 	}
@@ -1345,6 +1395,7 @@ func TestAuthorizedZeroGoldPostsFullGoldBalanceAndIsIdempotent(t *testing.T) {
 	if firstBody.Data.Settlement.GoldGramAmount != 3.75 || firstBody.Data.LedgerEntry.Direction != "DEBIT" || firstBody.Data.LedgerEntry.Amount != 3.75 || firstBody.Data.LedgerEntry.ValueUnitCode != "GOLD_GRAM" || firstBody.Data.LedgerEntry.EntryType != "PAYOUT" {
 		t.Fatalf("unexpected zero-gold result: %+v", firstBody.Data)
 	}
+	assertPendingDebitReceipt(t, firstBody.Data.LedgerEntry.Receipt, "zero-gold payout")
 
 	balances := listBalances(t, server, collaborator.Data.ID)
 	if len(balances.Data) != 0 {
@@ -1471,11 +1522,12 @@ func TestAuthorizedPartialPayoutPostsSelectedBalancesAndIsIdempotent(t *testing.
 				GoldGramAmount float64 `json:"goldGramAmount"`
 			} `json:"settlement"`
 			LedgerEntries []struct {
-				ID            string  `json:"id"`
-				Direction     string  `json:"direction"`
-				Amount        float64 `json:"amount"`
-				ValueUnitCode string  `json:"valueUnitCode"`
-				EntryType     string  `json:"entryType"`
+				ID            string                         `json:"id"`
+				Direction     string                         `json:"direction"`
+				Amount        float64                        `json:"amount"`
+				ValueUnitCode string                         `json:"valueUnitCode"`
+				EntryType     string                         `json:"entryType"`
+				Receipt       *apiLedgerEntryReceiptResponse `json:"receipt"`
 			} `json:"ledgerEntries"`
 		} `json:"data"`
 	}
@@ -1491,6 +1543,7 @@ func TestAuthorizedPartialPayoutPostsSelectedBalancesAndIsIdempotent(t *testing.
 		if entry.Direction != "DEBIT" || entry.EntryType != "PAYOUT" {
 			t.Fatalf("unexpected payout ledger entry: %+v", entry)
 		}
+		assertPendingDebitReceipt(t, entry.Receipt, "partial payout "+entry.ValueUnitCode)
 		byUnit[entry.ValueUnitCode] = entry.Amount
 	}
 	if byUnit["BRL"] != 40 || byUnit["GOLD_GRAM"] != 1.25 {
@@ -1570,7 +1623,45 @@ func newTestServer(t *testing.T) (*fiber.App, func()) {
 	if err != nil {
 		t.Fatalf("bootstrap test server: %v", err)
 	}
+	seedCurrentAccountTestActors(t, dbPath)
 	return server, cleanup
+}
+
+func seedCurrentAccountTestActors(t *testing.T, dbPath string) {
+	t.Helper()
+	database, err := db.Open(dbPath)
+	if err != nil {
+		t.Fatalf("open current account test database for actor seeding: %v", err)
+	}
+	sqlDB, err := database.DB()
+	if err != nil {
+		t.Fatalf("access current account test database handle: %v", err)
+	}
+	defer sqlDB.Close()
+
+	testActors := []struct {
+		actorKey string
+		role     authz.RoleCode
+		tenantID string
+	}{
+		{actorKey: "ledger-admin@example.com", role: authz.RoleApplicationAdmin, tenantID: authz.GlobalTenantScope},
+		{actorKey: "settlement-admin@example.com", role: authz.RoleApplicationAdmin, tenantID: authz.GlobalTenantScope},
+		{actorKey: "receipt-viewer@example.com", role: authz.RolePerson, tenantID: "default"},
+		{actorKey: "receipt-printer@example.com", role: authz.RoleExpenseOperator, tenantID: "default"},
+		{actorKey: "receipt-returner@example.com", role: authz.RoleExpenseOperator, tenantID: "default"},
+		{actorKey: "receipt-backfiller@example.com", role: authz.RoleTenantAdmin, tenantID: "default"},
+	}
+	for _, testActor := range testActors {
+		if _, err := authz.EnsureBootstrapActor(context.Background(), database, authz.BootstrapConfig{
+			Enabled:     true,
+			ActorKey:    testActor.actorKey,
+			DisplayName: testActor.actorKey,
+			RoleCode:    testActor.role,
+			TenantID:    testActor.tenantID,
+		}); err != nil {
+			t.Fatalf("seed persisted actor %s: %v", testActor.actorKey, err)
+		}
+	}
 }
 
 func containsString(values []string, expected string) bool {

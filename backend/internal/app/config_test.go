@@ -29,15 +29,35 @@ func TestLoadConfigReadsAuthzBootstrapSettings(t *testing.T) {
 	}
 }
 
-func TestLoadConfigDefaultsAuthzBootstrapDisabled(t *testing.T) {
+func TestLoadConfigDefaultsAuthzBootstrapEnabledForLocalDevelopment(t *testing.T) {
 	t.Setenv("JWT_SECRET", "test-secret")
+	t.Setenv("APP_ENV", "local")
+
+	cfg, err := LoadConfig()
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	if !cfg.AuthzBootstrapEnabled {
+		t.Fatalf("expected authz bootstrap enabled for local development")
+	}
+	if cfg.AuthzBootstrapActorKey != "bootstrap-admin" || cfg.AuthzBootstrapDisplayName != "Bootstrap Admin" {
+		t.Fatalf("unexpected local bootstrap defaults: %#v", cfg)
+	}
+	if cfg.AuthzBootstrapRoleCode != "APPLICATION_ADMIN" || cfg.AuthzBootstrapTenantID != "*" {
+		t.Fatalf("unexpected bootstrap role defaults: %#v", cfg)
+	}
+}
+
+func TestLoadConfigDefaultsAuthzBootstrapDisabledOutsideLocalDevelopment(t *testing.T) {
+	t.Setenv("JWT_SECRET", "test-secret")
+	t.Setenv("APP_ENV", "production")
 
 	cfg, err := LoadConfig()
 	if err != nil {
 		t.Fatalf("load config: %v", err)
 	}
 	if cfg.AuthzBootstrapEnabled {
-		t.Fatalf("expected authz bootstrap disabled by default")
+		t.Fatalf("expected authz bootstrap disabled outside local development by default")
 	}
 	if cfg.AuthzBootstrapRoleCode != "APPLICATION_ADMIN" || cfg.AuthzBootstrapTenantID != "*" {
 		t.Fatalf("unexpected bootstrap defaults: %#v", cfg)
