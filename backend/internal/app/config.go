@@ -23,6 +23,7 @@ type Config struct {
 	AuthzBootstrapRoleCode           string
 	AuthzBootstrapTenantID           string
 	AuthzBootstrapRequireEmptyActors bool
+	DisableRouteAuthorization        bool
 }
 
 func LoadConfig() (Config, error) {
@@ -44,6 +45,7 @@ func LoadConfig() (Config, error) {
 		AuthzBootstrapRoleCode:           getEnv("AUTHZ_BOOTSTRAP_ROLE_CODE", "APPLICATION_ADMIN"),
 		AuthzBootstrapTenantID:           getEnv("AUTHZ_BOOTSTRAP_TENANT_ID", "*"),
 		AuthzBootstrapRequireEmptyActors: getEnvBool("AUTHZ_BOOTSTRAP_REQUIRE_EMPTY_ACTOR_TABLE", false),
+		DisableRouteAuthorization:        getEnvBool("AUTHZ_DISABLE_ROUTE_AUTHORIZATION", false),
 	}
 	if cfg.JWTSecret == "" {
 		return Config{}, fmt.Errorf("JWT_SECRET is required")
