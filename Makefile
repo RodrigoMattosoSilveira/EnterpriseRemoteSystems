@@ -367,17 +367,17 @@ server-caddy-logs:
 
 .PHONY: server-backend-health
 server-backend-health:
-	docker exec $(CONTAINER_PREFIX)-backend curl -fsS http://localhost:8080/api/v1/healthz
+	docker exec $(CONTAINER_PREFIX)-backend curl -fsS http://localhost:8080/healthz
 	@echo "$(CONTAINER_PREFIX)-backend health check passed."
 
 .PHONY: server-env-caddy-health
 server-env-caddy-health:
-	docker exec $(CONTAINER_PREFIX)-caddy wget -q -O- http://localhost:80/api/v1/healthz >/dev/null
+	docker exec $(CONTAINER_PREFIX)-caddy wget -q -O- http://localhost:80/healthz >/dev/null
 	@echo "$(CONTAINER_PREFIX)-caddy internal health check passed."
 
 .PHONY: server-smoke
 server-smoke:
-	curl -fsS https://$(DOMAIN)/api/v1/healthz >/dev/null
+	curl -fsS https://$(DOMAIN)/healthz >/dev/null
 	@authz_actor_id="$$(grep -E '^AUTHZ_BOOTSTRAP_ACTOR_KEY=' "$(ENV_DIR)/$(ENV_FILE)" | tail -n 1 | cut -d= -f2- | sed -e 's/^"//' -e 's/"$$//' -e "s/^'//" -e "s/'$$//")"; \
 	authz_tenant_id="$$(grep -E '^AUTHZ_BOOTSTRAP_TENANT_ID=' "$(ENV_DIR)/$(ENV_FILE)" | tail -n 1 | cut -d= -f2- | sed -e 's/^"//' -e 's/"$$//' -e "s/^'//" -e "s/'$$//")"; \
 	if [ -z "$$authz_actor_id" ]; then \
