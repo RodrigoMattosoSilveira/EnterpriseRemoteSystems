@@ -3,6 +3,7 @@ package routes
 import "github.com/gofiber/fiber/v3"
 
 func Register(server *fiber.App, deps Dependencies) {
+	RegisterPublicHealthFastPath(server)
 	RegisterHealthRoutes(server)
 	api := server.Group("/api")
 	v1 := api.Group("/v1")
