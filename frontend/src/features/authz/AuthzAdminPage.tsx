@@ -180,6 +180,9 @@ export function AuthzAdminPage() {
             <Link className="text-sm font-semibold text-gray-700 underline" to="/admin/audit-logs">
               Audit Logs
             </Link>
+            <Link className="text-sm font-semibold text-gray-700 underline" to="/admin/tenants">
+              Tenants
+            </Link>
             <Link className="text-sm font-semibold text-gray-700 underline" to="/admin/reference-data">
               Reference Data
             </Link>

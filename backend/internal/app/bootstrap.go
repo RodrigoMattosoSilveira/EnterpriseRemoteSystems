@@ -58,9 +58,11 @@ func Bootstrap(cfg Config) (*fiber.App, func(), error) {
 		log.Printf("authorization bootstrap ensured actor_key=%s role=%s tenant=%s actor_created=%t grant_created=%t", bootstrapResult.ActorKey, bootstrapResult.RoleCode, bootstrapResult.TenantID, bootstrapResult.ActorCreated, bootstrapResult.GrantCreated)
 	}
 
+	actorStore := authz.NewGORMStore(database)
+
 	tenantRepo := tenants.NewRepository(database)
 	tenantSvc := tenants.NewService(tenantRepo)
-	tenantHandler := tenants.NewHandler(tenantSvc)
+	tenantHandler := tenants.NewHandler(tenantSvc, actorStore, actorStore)
 
 	refRepo := referencedata.NewGormRepository(database)
 	refSvc := referencedata.NewService(refRepo)
@@ -84,7 +86,6 @@ func Bootstrap(cfg Config) (*fiber.App, func(), error) {
 
 	currentAccountRepo := currentaccounts.NewRepository(database)
 	currentAccountSvc := currentaccounts.NewService(currentAccountRepo, cfg.LedgerCorrectionKey, cfg.LedgerSettlementKey)
-	actorStore := authz.NewGORMStore(database)
 	authzHandler := authz.NewHandler(actorStore)
 	currentAccountHandler := currentaccounts.NewHandler(currentAccountSvc, currentaccounts.WithActorStore(actorStore), currentaccounts.WithAuthorizationAudit(actorStore))
 
@@ -120,6 +121,7 @@ func Bootstrap(cfg Config) (*fiber.App, func(), error) {
 		AccrualHandler:              accrualHandler,
 		ReferenceDataHandler:        refHandler,
 		TenantHandler:               tenantHandler,
+		TenantService:               tenantSvc,
 	}
 
 	server := httpserver.NewServer(deps)

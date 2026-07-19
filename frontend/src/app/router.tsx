@@ -25,6 +25,8 @@ import { SecondPersonApprovalSettingsPage } from "../features/current-accounts/S
 import { GoldPricesPage } from "../features/gold-prices/GoldPricesPage";
 import { PriceListPage } from "../features/price-list/PriceListPage";
 import { MineProductionPage } from "../features/production/MineProductionPage";
+import { TenantsAdminPage } from "../features/tenants/TenantsAdminPage";
+import { TenantDetailPage } from "../features/tenants/TenantDetailPage";
 
 function RouteErrorPage() {
   const error = useRouteError();
@@ -82,6 +84,8 @@ export const router = createBrowserRouter([
       { path: "gold-production", element: <MineProductionPage /> },
       { path: "ledger-entries/:entryId/receipt", element: <PrintableReceiptPage /> },
       { path: "receipts/outstanding", element: <OutstandingReceiptsPage /> },
+      { path: "admin/tenants", element: <TenantsAdminPage /> },
+      { path: "admin/tenants/:id", element: <TenantDetailPage /> },
       { path: "admin/reference-data", element: <ReferenceDataAdminPage /> },
       { path: "admin/authorization", element: <AuthzAdminPage /> },
       { path: "admin/audit-logs", element: <AuditLogViewerPage /> },

@@ -142,6 +142,9 @@ export function ReferenceDataAdminPage() {
           </div>
 
           <div className="flex flex-wrap items-center justify-end gap-2">
+            <Link className="text-sm font-semibold text-gray-700 underline" to="/admin/tenants">
+              Tenants
+            </Link>
             <Link className="text-sm font-semibold text-gray-700 underline" to="/admin/gold-prices">
               Gold Prices
             </Link>
