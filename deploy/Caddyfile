@@ -1,6 +1,10 @@
 http://{$APP_DOMAIN} {
 	encode gzip zstd
 
+	handle /healthz* {
+		reverse_proxy backend:8080
+	}
+
 	handle /api/* {
 		reverse_proxy backend:8080
 	}

@@ -34,7 +34,7 @@ services:
     expose:
       - "8080"
     healthcheck:
-      test: ["CMD", "curl", "-fsS", "http://localhost:8080/api/v1/healthz"]
+      test: ["CMD", "curl", "-fsS", "http://localhost:8080/healthz"]
       interval: 20s
       timeout: 5s
       retries: 5
