@@ -255,7 +255,7 @@ jobs:
              make edge-reload
             "
 
-      - name: Public smoke and admin-read tests
+      - name: Public smoke tests
         shell: bash
         run: |
           set -euo pipefail

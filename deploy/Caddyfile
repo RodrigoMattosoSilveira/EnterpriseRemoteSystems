@@ -1,6 +1,13 @@
 http://{$APP_DOMAIN} {
 	encode gzip zstd
 
+	# Public edge smoke checks must not depend on backend API authorization.
+	# Backend readiness is still checked directly by Docker health and by the
+	# authenticated /api/v1/people smoke probe.
+	handle /healthz* {
+		reverse_proxy frontend:80
+	}
+
 	handle /api/* {
 		reverse_proxy backend:8080
 	}

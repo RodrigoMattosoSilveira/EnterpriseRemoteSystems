@@ -862,10 +862,11 @@ func newTestServerWithDatabase(t *testing.T) (*fiber.App, *gorm.DB, func()) {
 
 	dbPath := filepath.Join(t.TempDir(), "app.db")
 	server, cleanup, err := apppkg.Bootstrap(apppkg.Config{
-		Env:       "test",
-		HTTPAddr:  ":0",
-		DBPath:    dbPath,
-		JWTSecret: "test-secret",
+		Env:                       "test",
+		HTTPAddr:                  ":0",
+		DBPath:                    dbPath,
+		JWTSecret:                 "test-secret",
+		DisableRouteAuthorization: true,
 	})
 	if err != nil {
 		t.Fatalf("bootstrap test server: %v", err)

@@ -20,7 +20,7 @@ const (
 // actor is required and which permission must be satisfied.
 func authorizationMiddleware(deps Dependencies) fiber.Handler {
 	return func(c fiber.Ctx) error {
-		if deps.DisableRouteAuthorization {
+		if deps.DisableRouteAuthorization || isPublicHealthPath(c.Path()) {
 			return c.Next()
 		}
 
@@ -31,6 +31,15 @@ func authorizationMiddleware(deps Dependencies) fiber.Handler {
 		}
 		c.Locals(authorizationActorLocalKey, actor)
 		return c.Next()
+	}
+}
+
+func isPublicHealthPath(path string) bool {
+	switch path {
+	case "/healthz", "/api/v1/healthz":
+		return true
+	default:
+		return false
 	}
 }
 
