@@ -94,6 +94,7 @@ help:
 	@echo "  make server-caddy-logs ENV=development|test|production"
 	@echo "  make server-backend-health ENV=development|test|production"
 	@echo "  make server-smoke ENV=development|test|production"
+	@echo "  make server-protected-api-smoke ENV=development|test|production"
 	@echo "  make server-admin-test ENV=development|test|production"
 	@echo "  make server-dns-check ENV=development|test|production"
 	@echo "  make server-cert-check ENV=development|test|production"
@@ -105,6 +106,7 @@ help:
 	@echo "  make server-dev-build"
 	@echo "  make server-dev-up"
 	@echo "  make server-dev-smoke"
+	@echo "  make server-dev-protected-api-smoke"
 	@echo "  make server-dev-admin-test"
 	@echo
 	@echo "Test aliases:"
@@ -112,6 +114,7 @@ help:
 	@echo "  make server-test-build"
 	@echo "  make server-test-up"
 	@echo "  make server-test-smoke"
+	@echo "  make server-test-protected-api-smoke"
 	@echo "  make server-test-admin-test"
 	@echo
 	@echo "Production aliases:"
@@ -119,6 +122,7 @@ help:
 	@echo "  make server-prod-build"
 	@echo "  make server-prod-up"
 	@echo "  make server-prod-smoke"
+	@echo "  make server-prod-protected-api-smoke"
 	@echo "  make server-prod-admin-test"
 	@echo
 	@echo "Edge proxy:"
@@ -378,6 +382,10 @@ server-env-caddy-health:
 .PHONY: server-smoke
 server-smoke:
 	curl -fsS https://$(DOMAIN)/healthz >/dev/null
+	@echo "$(DOMAIN) public smoke tests passed."
+
+.PHONY: server-protected-api-smoke
+server-protected-api-smoke:
 	@authz_actor_id="$$(grep -E '^AUTHZ_BOOTSTRAP_ACTOR_KEY=' "$(ENV_DIR)/$(ENV_FILE)" | tail -n 1 | cut -d= -f2- | sed -e 's/^"//' -e 's/"$$//' -e "s/^'//" -e "s/'$$//")"; \
 	authz_tenant_id="$$(grep -E '^AUTHZ_BOOTSTRAP_TENANT_ID=' "$(ENV_DIR)/$(ENV_FILE)" | tail -n 1 | cut -d= -f2- | sed -e 's/^"//' -e 's/"$$//' -e "s/^'//" -e "s/'$$//")"; \
 	if [ -z "$$authz_actor_id" ]; then \
@@ -387,11 +395,12 @@ server-smoke:
 	if [ -z "$$authz_tenant_id" ] || [ "$$authz_tenant_id" = "*" ]; then \
 		authz_tenant_id="default"; \
 	fi; \
+	echo "Running protected API smoke check for $(DOMAIN) as actor $$authz_actor_id tenant $$authz_tenant_id"; \
 	curl -fsS \
 		-H "X-Actor-ID: $$authz_actor_id" \
 		-H "X-Tenant-ID: $$authz_tenant_id" \
 		https://$(DOMAIN)/api/v1/people/ >/dev/null
-	@echo "$(DOMAIN) smoke tests passed."
+	@echo "$(DOMAIN) protected API smoke tests passed."
 
 .PHONY: server-admin-test
 server-admin-test:
@@ -486,6 +495,10 @@ server-dev-env-caddy-health:
 server-dev-smoke:
 	$(MAKE) server-smoke ENV=development
 
+.PHONY: server-dev-protected-api-smoke
+server-dev-protected-api-smoke:
+	$(MAKE) server-protected-api-smoke ENV=development
+
 .PHONY: server-dev-admin-test
 server-dev-admin-test:
 	$(MAKE) server-admin-test ENV=development
@@ -566,6 +579,10 @@ server-test-env-caddy-health:
 server-test-smoke:
 	$(MAKE) server-smoke ENV=test
 
+.PHONY: server-test-protected-api-smoke
+server-test-protected-api-smoke:
+	$(MAKE) server-protected-api-smoke ENV=test
+
 .PHONY: server-test-admin-test
 server-test-admin-test:
 	$(MAKE) server-admin-test ENV=test
@@ -641,6 +658,10 @@ server-prod-env-caddy-health:
 .PHONY: server-prod-smoke
 server-prod-smoke:
 	$(MAKE) server-smoke ENV=production
+
+.PHONY: server-prod-protected-api-smoke
+server-prod-protected-api-smoke:
+	$(MAKE) server-protected-api-smoke ENV=production
 
 .PHONY: server-prod-admin-test
 server-prod-admin-test:
