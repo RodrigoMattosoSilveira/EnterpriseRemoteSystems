@@ -180,6 +180,9 @@ export function AuthzAdminPage() {
             <Link className="text-sm font-semibold text-gray-700 underline" to="/admin/audit-logs">
               Audit Logs
             </Link>
+            <Link className="text-sm font-semibold text-gray-700 underline" to="/admin/tenants">
+              Tenants
+            </Link>
             <Link className="text-sm font-semibold text-gray-700 underline" to="/admin/reference-data">
               Reference Data
             </Link>
@@ -704,5 +707,10 @@ function collaboratorOptionLabel(collaborator: Collaborator) {
 function defaultActorKey(collaborator: Collaborator | undefined) {
   if (!collaborator) return "";
 
-  return `collaborator-${collaborator.id}`;
+  const collaboratorId = collaborator.id.trim();
+  if (!collaboratorId) return "";
+
+  return collaboratorId.startsWith("collaborator-")
+    ? collaboratorId
+    : `collaborator-${collaboratorId}`;
 }

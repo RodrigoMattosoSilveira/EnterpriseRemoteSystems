@@ -313,3 +313,84 @@ func TestAuthorizationMiddlewareLeavesHealthzPublic(t *testing.T) {
 		t.Fatalf("health checks should not resolve an authorization actor, got %d calls", calls)
 	}
 }
+
+func TestRequireApplicationPermissionRejectsTenantScopedWildcardActor(t *testing.T) {
+	store := fakeActorStore{actor: &authz.Actor{
+		ID:       "tenant-admin",
+		TenantID: "default",
+		Scope:    authz.ActorScopeTenant,
+		Permissions: map[authz.Permission]struct{}{
+			authz.PermissionAll: {},
+		},
+	}}
+
+	app := fiber.New()
+	app.Post("/tenants", requireApplicationPermission(Dependencies{ActorStore: store}, authz.PermissionTenantsCreate), func(c fiber.Ctx) error {
+		return c.SendStatus(fiber.StatusNoContent)
+	})
+
+	req := httptest.NewRequest(fiber.MethodPost, "/tenants", nil)
+	req.Header.Set(authz.HeaderActorID, "tenant-admin")
+	req.Header.Set(authz.HeaderTenantID, "default")
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	if resp.StatusCode != fiber.StatusForbidden {
+		t.Fatalf("expected 403, got %d", resp.StatusCode)
+	}
+}
+
+func TestRequireApplicationPermissionAllowsApplicationScopedActor(t *testing.T) {
+	store := fakeActorStore{actor: &authz.Actor{
+		ID:       "application-admin",
+		TenantID: "default",
+		Scope:    authz.ActorScopeApplication,
+		Permissions: map[authz.Permission]struct{}{
+			authz.PermissionAll: {},
+		},
+	}}
+
+	app := fiber.New()
+	app.Post("/tenants", requireApplicationPermission(Dependencies{ActorStore: store}, authz.PermissionTenantsCreate), func(c fiber.Ctx) error {
+		return c.SendStatus(fiber.StatusNoContent)
+	})
+
+	req := httptest.NewRequest(fiber.MethodPost, "/tenants", nil)
+	req.Header.Set(authz.HeaderActorID, "application-admin")
+	req.Header.Set(authz.HeaderTenantID, "default")
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	if resp.StatusCode != fiber.StatusNoContent {
+		t.Fatalf("expected 204, got %d", resp.StatusCode)
+	}
+}
+
+func TestRequireTenantPermissionRejectsDifferentTenant(t *testing.T) {
+	store := fakeActorStore{actor: &authz.Actor{
+		ID:       "tenant-admin",
+		TenantID: "tenant-a",
+		Scope:    authz.ActorScopeTenant,
+		Permissions: map[authz.Permission]struct{}{
+			authz.PermissionTenantsRead: {},
+		},
+	}}
+
+	app := fiber.New()
+	app.Get("/tenants/:id", requireTenantPermission(Dependencies{ActorStore: store}, authz.PermissionTenantsRead, "id"), func(c fiber.Ctx) error {
+		return c.SendStatus(fiber.StatusNoContent)
+	})
+
+	req := httptest.NewRequest(fiber.MethodGet, "/tenants/tenant-b", nil)
+	req.Header.Set(authz.HeaderActorID, "tenant-admin")
+	req.Header.Set(authz.HeaderTenantID, "tenant-a")
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	if resp.StatusCode != fiber.StatusForbidden {
+		t.Fatalf("expected 403, got %d", resp.StatusCode)
+	}
+}
