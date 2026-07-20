@@ -28,6 +28,8 @@ func TestEveryRegisteredAPIRouteHasAuthorizationCoverage(t *testing.T) {
 
 	allowedGuards := map[string]struct{}{
 		"requirePermission":             {},
+		"requireApplicationPermission":  {},
+		"requireTenantPermission":       {},
 		"requirePermissionOrSelfPerson": {},
 		"authorizationHandledByHandler": {},
 	}
