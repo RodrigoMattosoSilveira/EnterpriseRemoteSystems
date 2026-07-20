@@ -707,5 +707,10 @@ function collaboratorOptionLabel(collaborator: Collaborator) {
 function defaultActorKey(collaborator: Collaborator | undefined) {
   if (!collaborator) return "";
 
-  return `collaborator-${collaborator.id}`;
+  const collaboratorId = collaborator.id.trim();
+  if (!collaboratorId) return "";
+
+  return collaboratorId.startsWith("collaborator-")
+    ? collaboratorId
+    : `collaborator-${collaboratorId}`;
 }

@@ -133,10 +133,23 @@ export function TenantDetailPage() {
                 </div>
                 <OperationalStatusBadge status={tenant.operationalStatus} />
               </div>
-              <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl bg-gray-50 p-4">
-                <div className="text-sm text-gray-700">
-                  <span className="font-semibold">{tenant.tenantAdminCount}</span> active tenant administrator{tenant.tenantAdminCount === 1 ? "" : "s"}
-                </div>
+              <div className="mt-4 grid gap-3 rounded-xl bg-gray-50 p-4 md:grid-cols-[1fr_auto] md:items-center">
+                <dl className="grid gap-2 text-sm text-gray-700 sm:grid-cols-3">
+                  <div>
+                    <dt className="font-semibold text-gray-950">Tenant ID</dt>
+                    <dd className="break-all font-mono text-xs">{tenant.id}</dd>
+                  </div>
+                  <div>
+                    <dt className="font-semibold text-gray-950">Tenant code</dt>
+                    <dd className="break-all font-mono text-xs">{tenant.code}</dd>
+                  </div>
+                  <div>
+                    <dt className="font-semibold text-gray-950">Tenant administrators</dt>
+                    <dd>
+                      <span className="font-semibold">{tenant.tenantAdminCount}</span> active
+                    </dd>
+                  </div>
+                </dl>
                 <button
                   className={`rounded-xl px-4 py-2 text-sm font-semibold ${tenant.active ? "border border-amber-200 bg-amber-50 text-amber-800" : "bg-gray-950 text-white"}`}
                   disabled={activeMutation.isPending}
@@ -200,7 +213,12 @@ export function TenantDetailPage() {
                   <article className="flex flex-wrap items-center justify-between gap-3 rounded-xl border p-3" key={candidate.actorId}>
                     <div>
                       <p className="font-semibold text-gray-950">{candidate.displayName || candidate.actorKey}</p>
-                      <p className="font-mono text-xs text-gray-500">{candidate.actorKey}</p>
+                      <p className="mt-1 text-xs text-gray-500">
+                        Actor key: <code className="break-all font-mono text-gray-700">{candidate.actorKey}</code>
+                      </p>
+                      <p className="text-xs text-gray-500">
+                        Actor record ID: <code className="break-all font-mono text-gray-700">{candidate.actorId}</code>
+                      </p>
                       {!candidate.active && <p className="mt-1 text-xs font-semibold text-amber-700">Inactive actor</p>}
                     </div>
                     <button className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-800 disabled:opacity-60" disabled={revokeMutation.isPending} onClick={() => handleRevoke(candidate.actorId)} type="button">
@@ -209,10 +227,48 @@ export function TenantDetailPage() {
                   </article>
                 ))}
               </div>
+
+              {assignedAdmins.length > 0 && (
+                <section
+                  aria-label="Tenant access verification"
+                  className="mt-5 rounded-xl border border-blue-200 bg-blue-50 p-4"
+                >
+                  <h3 className="font-semibold text-blue-950">Tenant access verification</h3>
+                  <p className="mt-1 text-sm text-blue-900">
+                    Use the exact persisted actor key and immutable Tenant ID shown below. Do not
+                    prepend another <code className="font-mono">collaborator-</code> segment, use
+                    the actor record ID, or substitute the tenant code.
+                  </p>
+                  <div className="mt-3 space-y-3">
+                    {assignedAdmins.map((candidate) => (
+                      <div className="rounded-lg border border-blue-200 bg-white p-3" key={candidate.actorId}>
+                        <p className="text-sm font-semibold text-gray-950">
+                          {candidate.displayName || candidate.actorKey}
+                        </p>
+                        <pre
+                          aria-label={`Tenant access curl command for ${candidate.actorKey}`}
+                          className="mt-2 overflow-x-auto whitespace-pre-wrap break-all rounded-lg bg-gray-950 p-3 text-xs text-white"
+                        >
+                          {tenantAccessCurlCommand(candidate.actorKey, tenant.id)}
+                        </pre>
+                      </div>
+                    ))}
+                  </div>
+                </section>
+              )}
             </section>
           </>
         )}
       </section>
     </main>
   );
+}
+
+function tenantAccessCurlCommand(actorKey: string, tenantId: string) {
+  return [
+    "curl -i \\",
+    `  -H "X-Actor-ID: ${actorKey}" \\`,
+    `  -H "X-Tenant-ID: ${tenantId}" \\`,
+    `  "http://localhost:8080/api/v1/tenants/${tenantId}"`,
+  ].join("\n");
 }

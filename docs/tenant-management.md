@@ -38,3 +38,12 @@ The tenant detail page lists persisted authorization actors. Assigning an actor 
 ## Scope boundary
 
 Bite 28A manages tenant lifecycle and access grants. The browser still transports `X-Actor-ID` and `X-Tenant-ID`. Bite 28B and Bite 28C will replace that transport with login-backed sessions and derive actor identity from authentication.
+
+## Tenant and actor identifiers
+
+Tenant access requests must use two persisted identifiers rather than values reconstructed from labels:
+
+- `X-Actor-ID` uses the actor's exact `actorKey`. The actor key is not the authorization actor record ID and must not receive an additional `collaborator-` prefix.
+- `X-Tenant-ID` and `/tenants/:id` use the tenant's immutable `id`. The human-readable tenant `code` is not an API scope identifier.
+
+After a tenant administrator is assigned, `/admin/tenants/:id` displays both identifiers and generates the complete tenant-access verification command. This command is the authoritative manual-test source for the temporary header transport used before Bite 28C.

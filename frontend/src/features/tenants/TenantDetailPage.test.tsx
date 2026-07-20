@@ -72,6 +72,19 @@ describe("TenantDetailPage", () => {
     await waitForText("North Admin assigned as tenant administrator.");
     expect(calls.find((call) => call.url.endsWith("/admins") && call.method === "POST")?.body).toEqual({ actorId: candidate.actorId });
 
+    await waitForText("Tenant access verification");
+    expect(container.textContent).toContain("Tenant IDnorth");
+    expect(container.textContent).toContain("Tenant codeNORTH");
+    expect(container.textContent).toContain("Actor key: north-admin@example.com");
+    expect(container.textContent).toContain("Do not");
+    const verificationCommand = container.querySelector(
+      '[aria-label="Tenant access curl command for north-admin@example.com"]',
+    );
+    expect(verificationCommand?.textContent).toContain('X-Actor-ID: north-admin@example.com');
+    expect(verificationCommand?.textContent).toContain('X-Tenant-ID: north');
+    expect(verificationCommand?.textContent).toContain('/api/v1/tenants/north');
+    expect(verificationCommand?.textContent).not.toContain('X-Tenant-ID: NORTH');
+
     await click("Deactivate Tenant");
     await waitForText("North Site deactivated.");
     expect(calls.some((call) => call.url.endsWith("/active") && call.method === "PATCH")).toBe(true);
