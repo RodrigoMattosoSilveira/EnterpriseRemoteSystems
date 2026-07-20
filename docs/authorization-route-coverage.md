@@ -14,7 +14,8 @@ Bite 27A makes route authorization explicit for every `/api/v1` endpoint except 
 | Route group | Read permission | Write permission |
 |---|---|---|
 | `/api/v1/reference-data` | `reference_data.read` | `reference_data.manage` |
-| `/api/v1/tenants/current` | `tenants.read` | Not applicable |
+| `/api/v1/tenants/current` and `/api/v1/tenants/{id}` | `tenants.read` with tenant-scope enforcement | Not applicable |
+| `/api/v1/tenants` administration | Application-scoped `tenants.read` | Application-scoped `tenants.create` or `tenants.update` |
 | `/api/v1/authz` | `authz.read` | `authz.manage` |
 | `/api/v1/current-accounts` | Current-account summary, ledger, or settings permission matching the operation | Current-account settings permission matching the operation |
 | `/api/v1/receipts` | `ledger.receipts.read` | `ledger.receipts.backfill` |
@@ -24,3 +25,8 @@ Bite 27A makes route authorization explicit for every `/api/v1` endpoint except 
 ## Operational role support
 
 The authorization catalog grants `tenants.read` to earnings operators, expense operators, and person self-service actors. Earnings operators, expense operators, and person self-service actors also receive `reference_data.read`, allowing their existing workflows to continue after reference-data routes become protected. Reference-data mutation remains administrator-only through wildcard administrator permissions or an explicit `reference_data.manage` grant.
+
+
+## Tenant lifecycle enforcement
+
+Bite 28A adds application-scope guards for tenant catalog mutation and a selected-tenant status guard for normal API mutations. Tenant-scoped actors can read only their own tenant record. Inactive tenants keep read access for audit while normal writes return `tenant_inactive`.

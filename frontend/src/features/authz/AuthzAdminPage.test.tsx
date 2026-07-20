@@ -156,11 +156,11 @@ describe("AuthzAdminPage", () => {
     await changeSelectInForm("Create actor", "Collaborator", "collaborator-expense-admin");
     await submitFormByHeading("Create actor");
 
-    await waitForText("collaborator-collaborator-expense-admin created.");
+    await waitForText("collaborator-expense-admin created.");
 
     const createCall = fetchCalls.find((call) => call.url === "/api/v1/authz/actors" && call.method === "POST");
     expect(createCall?.body).toMatchObject({
-      actorKey: "collaborator-collaborator-expense-admin",
+      actorKey: "collaborator-expense-admin",
       displayName: "Expense Admin",
       active: true,
       personId: "person-expense-admin",

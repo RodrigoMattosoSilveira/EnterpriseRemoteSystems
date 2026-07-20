@@ -32,4 +32,5 @@ type Dependencies struct {
 	AccrualHandler              *accruals.Handler
 	ReferenceDataHandler        *referencedata.Handler
 	TenantHandler               *tenants.Handler
+	TenantService               tenants.Service
 }

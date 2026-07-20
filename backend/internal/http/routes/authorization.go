@@ -2,11 +2,13 @@ package routes
 
 import (
 	"errors"
+	"strings"
 
 	"github.com/gofiber/fiber/v3"
 
 	"enterpriseremotesystems/backend/internal/authz"
 	"enterpriseremotesystems/backend/internal/shared/httpx"
+	"enterpriseremotesystems/backend/internal/tenants"
 )
 
 const (
@@ -89,6 +91,95 @@ func requirePermission(deps Dependencies, permission authz.Permission) fiber.Han
 		}
 		return c.Next()
 	}
+}
+
+func requireApplicationPermission(deps Dependencies, permission authz.Permission) fiber.Handler {
+	return func(c fiber.Ctx) error {
+		if deps.DisableRouteAuthorization {
+			return c.Next()
+		}
+
+		actor, err := requestActor(c, deps)
+		if err != nil {
+			return writeAuthorizationError(c, err)
+		}
+		if err := authz.RequirePermission(actor, permission); err != nil {
+			return writeAuthorizationError(c, err)
+		}
+		if actor.Scope != authz.ActorScopeApplication {
+			return writeAuthorizationError(c, authz.ErrForbidden)
+		}
+		return c.Next()
+	}
+}
+
+func requireTenantPermission(deps Dependencies, permission authz.Permission, tenantIDParam string) fiber.Handler {
+	return func(c fiber.Ctx) error {
+		if deps.DisableRouteAuthorization {
+			return c.Next()
+		}
+
+		actor, err := requestActor(c, deps)
+		if err != nil {
+			return writeAuthorizationError(c, err)
+		}
+		if err := authz.RequirePermission(actor, permission); err != nil {
+			return writeAuthorizationError(c, err)
+		}
+		if err := authz.RequireTenantScope(actor, c.Params(tenantIDParam)); err != nil {
+			return writeAuthorizationError(c, err)
+		}
+		return c.Next()
+	}
+}
+
+func requireActiveTenantForMutations(deps Dependencies) fiber.Handler {
+	return func(c fiber.Ctx) error {
+		if deps.DisableRouteAuthorization || deps.TenantService == nil || !isTenantScopedMutation(c.Method(), c.Path()) {
+			return c.Next()
+		}
+
+		actor, err := requestActor(c, deps)
+		if err != nil {
+			// Route-level authorization produces the canonical missing-actor or
+			// forbidden response for the endpoint.
+			return c.Next()
+		}
+		tenantID := strings.TrimSpace(actor.TenantID)
+		if tenantID == "" {
+			// Preserve the existing single-tenant request behavior for legacy
+			// X-Authorized-By operations until Bite 28C replaces request headers
+			// with an authenticated session and explicit tenant selection.
+			tenantID = tenants.DefaultTenantID
+		}
+		if tenantID == authz.GlobalTenantScope {
+			return c.Status(fiber.StatusForbidden).JSON(httpx.APIResponse{Error: &httpx.APIError{
+				Code:    "tenant_selection_required",
+				Message: "A specific tenant must be selected for this operation",
+			}})
+		}
+		if err := deps.TenantService.RequireActive(c.Context(), tenantID); err != nil {
+			if errors.Is(err, tenants.ErrTenantInactive) {
+				return c.Status(fiber.StatusLocked).JSON(httpx.APIResponse{Error: &httpx.APIError{
+					Code:    "tenant_inactive",
+					Message: "The selected tenant is inactive; historical records remain readable, but tenant operations are blocked",
+				}})
+			}
+			return httpx.WriteError(c, err)
+		}
+		return c.Next()
+	}
+}
+
+func isTenantScopedMutation(method string, path string) bool {
+	switch method {
+	case fiber.MethodGet, fiber.MethodHead, fiber.MethodOptions:
+		return false
+	}
+	if strings.HasPrefix(path, "/api/v1/tenants") || strings.HasPrefix(path, "/api/v1/authz") {
+		return false
+	}
+	return true
 }
 
 func requirePermissionOrSelfPerson(deps Dependencies, permission authz.Permission, selfPermission authz.Permission, personIDParam string) fiber.Handler {
