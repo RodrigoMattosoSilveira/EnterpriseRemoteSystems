@@ -15,7 +15,6 @@ export function usePeople(filter: PeopleListFilter = {}) {
   });
 }
 
-
 export function usePeoplePage(filter: PeopleListFilter = {}) {
   return useQuery({
     queryKey: ["people", "page", filter],
@@ -38,6 +37,9 @@ export function useCreatePerson() {
     mutationFn: (input: PersonInput) => createPerson(input),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["people"] });
+      queryClient.invalidateQueries({
+        queryKey: ["collaborators", "candidates"],
+      });
     },
   });
 }
@@ -47,9 +49,20 @@ export function useUpdatePerson(id: string) {
 
   return useMutation({
     mutationFn: (input: PersonInput) => updatePerson(id, input),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["people"] });
-      queryClient.invalidateQueries({ queryKey: ["people", id] });
+    onSuccess: (updatedPerson) => {
+      queryClient.setQueryData(["people", id], updatedPerson);
+      queryClient.invalidateQueries({
+        predicate: (query) => {
+          const [resource, scope] = query.queryKey;
+          return (
+            resource === "people" &&
+            (scope === "page" || (typeof scope === "object" && scope !== null))
+          );
+        },
+      });
+      queryClient.invalidateQueries({
+        queryKey: ["collaborators", "candidates"],
+      });
     },
   });
 }

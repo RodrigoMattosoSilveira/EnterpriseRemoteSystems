@@ -106,7 +106,7 @@ test("user can create a Collaborator from an eligible complete Person", async ({
   await expect(refreshedPersonSelect).not.toContainText(personDisplayName);
 });
 
-test("user can filter Collaborators by person name or nickname", async ({
+test("user can filter Collaborators by any part of person name or nickname", async ({
   page,
   request,
 }) => {
@@ -181,7 +181,20 @@ test("user can filter Collaborators by person name or nickname", async ({
   ).toBeVisible();
   await expect(page.getByRole("link", { name: targetNickname })).toHaveCount(0);
 
-  await page.getByLabel("Search by name or nickname").fill(otherFirstName.slice(1));
+  const partialFirstName = otherFirstName.slice(1);
+  await page.getByLabel("Search by name or nickname").fill(partialFirstName);
+
+  await expect(
+    page.getByText(`Filtering by “${partialFirstName}”.`),
+  ).toBeVisible();
+  await expect(page.getByRole("link", { name: otherNickname })).toBeVisible();
+
+  const missingSearch = `MissingCollaborator${suffix}`;
+  await page.getByLabel("Search by name or nickname").fill(missingSearch);
+
+  await expect(
+    page.getByText(`Filtering by “${missingSearch}”.`),
+  ).toBeVisible();
   await expect(page.getByRole("link", { name: otherNickname })).toHaveCount(0);
 });
 

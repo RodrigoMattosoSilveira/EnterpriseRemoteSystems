@@ -62,6 +62,33 @@ const incompletePerson: Person = {
   statusId: "ref-person-status-active",
 };
 
+const justCompletedPerson: Person = {
+  id: "person-just-completed",
+  firstName: "Joao",
+  lastName: "Novo",
+  nickname: "Joao",
+  cpf: "39053344705",
+  rg: "RG-NEW-1",
+  cellular: "11976543210",
+  email: "joao.novo@example.com",
+  street1: "Rua Jasmin, 198",
+  city: "Laranjal do Jari",
+  state: "Amapa",
+  cep: "68920000",
+  country: "Brasil",
+  bankName: "Banco Teste",
+  bankNumber: "001",
+  checkingAccount: "12345-6",
+  pixKey: "joao.novo@example.com",
+  emergencyName: "Maria Novo",
+  emergencyCellular: "11912345678",
+  emergencyEmail: "maria.novo@example.com",
+  profileCompletionStatus: "COMPLETE",
+  canCreateCollaborator: true,
+  missingSections: [],
+  statusId: "ref-person-status-active",
+};
+
 const activeCollaboratorForSecondPerson: Collaborator = {
   id: "collab-active-1",
   tenantId: "default",
@@ -193,6 +220,29 @@ describe("CreateCollaboratorPage", () => {
     expect(textNode("Mina Carara")).toBeTruthy();
     expect(textNode("Operator")).toBeTruthy();
     expect(textNode("Active")).toBeTruthy();
+  });
+
+  it("includes a newly completed Person from the authoritative candidate endpoint", async () => {
+    mockCreateCollaboratorFetch({
+      people: [{ ...justCompletedPerson, canCreateCollaborator: false }],
+      candidates: [justCompletedPerson],
+    });
+
+    renderCreateCollaboratorPage();
+
+    await waitForText("Joao Novo (Joao)");
+
+    expect(selectOptions("Eligible Person")).toEqual([
+      "Select an eligible Person",
+      "Joao Novo (Joao)",
+    ]);
+
+    const candidateCall = fetchCalls.find(
+      (call) =>
+        call.method === "GET" &&
+        call.url === "/api/v1/collaborators/candidates",
+    );
+    expect(candidateCall).toBeTruthy();
   });
 
   it("excludes complete People who already have an active Collaborator", async () => {
@@ -537,17 +587,35 @@ function mockCreateCollaboratorFetch({
   people = [completePerson, secondCompletePerson, incompletePerson],
   referenceData = referenceRows,
   collaborators = [],
+  candidates,
 }: {
   createResponse?: Response;
   people?: Person[];
   referenceData?: Record<string, ReferenceDataItem[]>;
   collaborators?: Collaborator[];
+  candidates?: Person[];
 } = {}) {
+  const activePersonIds = new Set(
+    collaborators.filter((row) => !row.closedAt).map((row) => row.personId),
+  );
+  const candidateRows =
+    candidates ??
+    people.filter(
+      (person) =>
+        person.canCreateCollaborator && !activePersonIds.has(person.id),
+    );
   mockFetch(async (url, init) => {
     recordFetchCall(url, init);
 
     if (url.startsWith("/api/v1/people")) {
       return jsonResponse({ data: { items: people, total: people.length } });
+    }
+
+    if (
+      url === "/api/v1/collaborators/candidates" &&
+      methodOf(init) === "GET"
+    ) {
+      return jsonResponse({ data: candidateRows });
     }
 
     if (url === "/api/v1/collaborators" && methodOf(init) === "GET") {

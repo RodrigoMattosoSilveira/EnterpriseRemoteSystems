@@ -5,7 +5,7 @@ import { JourneyDaysRemaining } from "../../components/JourneyDaysRemaining";
 import type { Collaborator } from "../../types/collaborators";
 import type { CreateExpenseInput } from "../../types/expenses";
 import type { PriceListItem, PriceListItemType } from "../../types/priceList";
-import { useCollaborators } from "../collaborators/useCollaborators";
+import { useExpenseCollaborators } from "../collaborators/useCollaborators";
 import { useLatestGoldPrice } from "../gold-prices/useGoldPrices";
 import { usePriceListItems } from "../price-list/usePriceList";
 import { useCreateExpense } from "./useExpenses";
@@ -36,7 +36,7 @@ const initialForm: FormState = {
 
 export function CreateExpensePage() {
   const navigate = useNavigate();
-  const collaboratorsQuery = useCollaborators();
+  const collaboratorsQuery = useExpenseCollaborators();
   const priceListItemsQuery = usePriceListItems();
   const latestGoldPriceQuery = useLatestGoldPrice();
   const createMutation = useCreateExpenseWithPriceList();
@@ -46,7 +46,7 @@ export function CreateExpensePage() {
   const [showEarningsModal, setShowEarningsModal] = useState(false);
 
   const collaborators = useMemo(
-    () => collaboratorsQuery.data?.items ?? [],
+    () => collaboratorsQuery.data ?? [],
     [collaboratorsQuery.data],
   );
   const activeCollaborators = useMemo(
@@ -521,10 +521,13 @@ function useCreateExpenseWithPriceList() {
 }
 
 function isActiveCollaborator(collaborator: Collaborator) {
-  return (
-    !collaborator.closedAt &&
-    collaborator.statusId === "ref-collaborator-status-active"
-  );
+  if (collaborator.closedAt) return false;
+
+  const statusCode = collaborator.statusCode?.trim().toUpperCase();
+  if (statusCode) return statusCode === "ACTIVE";
+
+  // Compatibility fallback for older API responses and stored test fixtures.
+  return collaborator.statusId === "ref-collaborator-status-active";
 }
 
 function compareCollaborators(a: Collaborator, b: Collaborator) {

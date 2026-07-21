@@ -2,7 +2,10 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   createCollaborator,
   getCollaborator,
+  listAllCollaborators,
+  listCollaboratorCandidates,
   listCollaborators,
+  listExpenseCollaborators,
   updateCollaborator,
 } from "../../api/collaborators.api";
 import type {
@@ -16,14 +19,39 @@ export const collaboratorQueryKeys = {
   lists: () => [...collaboratorQueryKeys.all, "list"] as const,
   list: (filter: CollaboratorListFilter = {}) =>
     [...collaboratorQueryKeys.lists(), filter] as const,
+  catalog: () => [...collaboratorQueryKeys.lists(), "catalog"] as const,
+  candidates: () => [...collaboratorQueryKeys.all, "candidates"] as const,
+  expenseCandidates: () =>
+    [...collaboratorQueryKeys.lists(), "expense-candidates"] as const,
   details: () => [...collaboratorQueryKeys.all, "detail"] as const,
   detail: (id: string) => [...collaboratorQueryKeys.details(), id] as const,
 };
+
+export function useCollaboratorCandidates() {
+  return useQuery({
+    queryKey: collaboratorQueryKeys.candidates(),
+    queryFn: listCollaboratorCandidates,
+  });
+}
 
 export function useCollaborators(filter: CollaboratorListFilter = {}) {
   return useQuery({
     queryKey: collaboratorQueryKeys.list(filter),
     queryFn: () => listCollaborators(filter),
+  });
+}
+
+export function useCollaboratorCatalog() {
+  return useQuery({
+    queryKey: collaboratorQueryKeys.catalog(),
+    queryFn: listAllCollaborators,
+  });
+}
+
+export function useExpenseCollaborators() {
+  return useQuery({
+    queryKey: collaboratorQueryKeys.expenseCandidates(),
+    queryFn: listExpenseCollaborators,
   });
 }
 
@@ -43,6 +71,9 @@ export function useCreateCollaborator() {
     onSuccess: (collaborator) => {
       queryClient.invalidateQueries({
         queryKey: collaboratorQueryKeys.lists(),
+      });
+      queryClient.invalidateQueries({
+        queryKey: collaboratorQueryKeys.candidates(),
       });
       queryClient.setQueryData(
         collaboratorQueryKeys.detail(collaborator.id),

@@ -83,10 +83,30 @@ test("user can filter Expenses by collaborator", async ({ page, request }) => {
 
   await page.goto("/expenses?page=2");
 
-  const collaboratorSelect = page.locator("select").filter({
-    has: page.locator(`option[value="${collaborator.id}"]`),
+  const searchInput = page.getByLabel("Collaborator name or nickname");
+  const searchResponse = page.waitForResponse(
+    (response) =>
+      response.url().includes("/api/v1/expenses") &&
+      new URL(response.url()).searchParams.get("collaboratorSearch") ===
+        personNickname &&
+      response.request().method() === "GET",
+  );
+  const optionsResponse = page.waitForResponse(
+    (response) =>
+      response.url().includes("/api/v1/collaborators") &&
+      new URL(response.url()).searchParams.get("search") === personNickname &&
+      response.request().method() === "GET",
+  );
+  await searchInput.fill(personNickname);
+  await Promise.all([searchResponse, optionsResponse]);
+
+  const collaboratorSuggestions = page.getByRole("listbox", {
+    name: "Matching collaborators",
   });
-  await expect(collaboratorSelect).toContainText(personNickname);
+  const collaboratorOption = collaboratorSuggestions.getByRole("option", {
+    name: new RegExp(personNickname),
+  });
+  await expect(collaboratorOption).toBeVisible();
 
   const listResponse = page.waitForResponse(
     (response) =>
@@ -96,7 +116,7 @@ test("user can filter Expenses by collaborator", async ({ page, request }) => {
         .includes(`collaboratorId=${encodeURIComponent(collaborator.id)}`) &&
       response.request().method() === "GET",
   );
-  await collaboratorSelect.selectOption(collaborator.id);
+  await collaboratorOption.click();
   await listResponse;
 
   await expect
@@ -105,7 +125,12 @@ test("user can filter Expenses by collaborator", async ({ page, request }) => {
   await expect
     .poll(() => new URL(page.url()).searchParams.get("collaboratorId"))
     .toBe(collaborator.id);
-  await expect(collaboratorSelect).toHaveValue(collaborator.id);
+  await expect
+    .poll(() => new URL(page.url()).searchParams.get("collaboratorSearch"))
+    .toBeNull();
+  await expect(
+    page.getByRole("status", { name: "Selected collaborator filter" }),
+  ).toContainText(personNickname);
   await expect(page.getByText(/Page 1 of \d+/).first()).toBeVisible();
   const matchingRow = page
     .getByRole("row")
@@ -168,8 +193,25 @@ test("user can filter Expenses by collaborator name or nickname", async ({
         targetNickname &&
       response.request().method() === "GET",
   );
+  const nicknameOptionsResponse = page.waitForResponse(
+    (response) =>
+      response.url().includes("/api/v1/collaborators") &&
+      new URL(response.url()).searchParams.get("search") === targetNickname &&
+      response.request().method() === "GET",
+  );
   await searchInput.fill(targetNickname);
-  await nicknameResponse;
+  await Promise.all([nicknameResponse, nicknameOptionsResponse]);
+
+  await expect(page.getByLabel("Collaborator", { exact: true })).toHaveCount(0);
+
+  const collaboratorSuggestions = page.getByRole("listbox", {
+    name: "Matching collaborators",
+  });
+  await expect(collaboratorSuggestions).toBeVisible();
+  const targetSuggestion = collaboratorSuggestions.getByRole("option", {
+    name: new RegExp(targetNickname),
+  });
+  await expect(targetSuggestion).toBeVisible();
 
   await expect
     .poll(() => new URL(page.url()).searchParams.get("page"))
@@ -184,7 +226,28 @@ test("user can filter Expenses by collaborator name or nickname", async ({
     .first();
   await expect(nicknameRow).toBeVisible();
   await expect(nicknameRow).toContainText(targetNickname);
-  await expect(page.getByRole("row").filter({ hasText: otherDescription })).toHaveCount(0);
+  await expect(
+    page.getByRole("row").filter({ hasText: otherDescription }),
+  ).toHaveCount(0);
+
+  const collaboratorIdResponse = page.waitForResponse(
+    (response) =>
+      response.url().includes("/api/v1/expenses") &&
+      new URL(response.url()).searchParams.get("collaboratorId") ===
+        targetCollaborator.id &&
+      response.request().method() === "GET",
+  );
+  await targetSuggestion.click();
+  await collaboratorIdResponse;
+  await expect
+    .poll(() => new URL(page.url()).searchParams.get("collaboratorId"))
+    .toBe(targetCollaborator.id);
+  await expect
+    .poll(() => new URL(page.url()).searchParams.get("collaboratorSearch"))
+    .toBeNull();
+  await expect(
+    page.getByRole("status", { name: "Selected collaborator filter" }),
+  ).toContainText(targetNickname);
 
   const legalNameResponse = page.waitForResponse(
     (response) =>
@@ -193,8 +256,19 @@ test("user can filter Expenses by collaborator name or nickname", async ({
         otherFirstName &&
       response.request().method() === "GET",
   );
+  const legalNameOptionsResponse = page.waitForResponse(
+    (response) =>
+      response.url().includes("/api/v1/collaborators") &&
+      new URL(response.url()).searchParams.get("search") === otherFirstName &&
+      response.request().method() === "GET",
+  );
   await searchInput.fill(otherFirstName);
-  await legalNameResponse;
+  await Promise.all([legalNameResponse, legalNameOptionsResponse]);
+  await expect(
+    collaboratorSuggestions.getByRole("option", {
+      name: new RegExp(otherNickname),
+    }),
+  ).toBeVisible();
 
   await expect
     .poll(() => new URL(page.url()).searchParams.get("collaboratorSearch"))

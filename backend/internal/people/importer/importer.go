@@ -53,8 +53,6 @@ var allowedHeaders = buildAllowedHeaders()
 
 var (
 	reEmailLike      = regexp.MustCompile(`^[^@\s]+@[^@\s]+\.[^@\s]+$`)
-	reCEPPlain       = regexp.MustCompile(`^[0-9]{8}$`)
-	reCEPDashed      = regexp.MustCompile(`^[0-9]{5}-[0-9]{3}$`)
 	reBrazilCellular = regexp.MustCompile(`^\+?55?[1-9]{2}9[0-9]{8}$|^[1-9]{2}9[0-9]{8}$`)
 	reStateUF        = regexp.MustCompile(`^[A-Z]{2}$`)
 )
@@ -384,7 +382,7 @@ func semanticCSVErrors(rowNumber int, req people.CreatePersonRequest) []RowError
 		errs = append(errs, RowError{
 			Row:     rowNumber,
 			Field:   "cep",
-			Message: "CEP must contain 8 digits or be formatted as 00000-000",
+			Message: "CEP must contain 8 digits; common spaces, dots, and dash characters are accepted",
 		})
 	}
 
@@ -430,8 +428,7 @@ func semanticCSVErrors(rowNumber int, req people.CreatePersonRequest) []RowError
 	return errs
 }
 func isValidImportCEP(value string) bool {
-	value = strings.TrimSpace(value)
-	return reCEPPlain.MatchString(value) || reCEPDashed.MatchString(value)
+	return people.IsValidCEP(value)
 }
 
 func isValidBrazilianUF(value string) bool {

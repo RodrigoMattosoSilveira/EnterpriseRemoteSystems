@@ -6,14 +6,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { PeopleListPage } from "./PeopleListPage";
 import type { Person } from "../../types/people";
 
-// Use fake timers to control debounce
-vi.useFakeTimers({ shouldAdvanceTime: true });
-
 let container: HTMLDivElement;
 let root: Root | null;
 let fetchCalls: string[];
 
 beforeEach(() => {
+  vi.useFakeTimers({ shouldAdvanceTime: true });
   container = document.createElement("div");
   document.body.appendChild(container);
   root = null;
@@ -21,7 +19,10 @@ beforeEach(() => {
 });
 
 afterEach(async () => {
-  vi.runAllTimers();
+  await act(async () => {
+    vi.runAllTimers();
+    await Promise.resolve();
+  });
   if (root) {
     await act(async () => {
       root?.unmount();
@@ -29,8 +30,8 @@ afterEach(async () => {
   }
   document.body.removeChild(container);
   vi.clearAllTimers();
+  vi.useRealTimers();
   vi.restoreAllMocks();
-  //vi.useRealTimers();
 });
 
 describe("PeopleListPage", () => {
@@ -62,8 +63,6 @@ describe("PeopleListPage", () => {
 
     await clickButton("Clear filters");
 
-    console.log("FETCH CALLS:", fetchCalls);
-     
     await waitFor(() =>
       fetchCalls.includes("/api/v1/people?page=1&pageSize=10"),
     );

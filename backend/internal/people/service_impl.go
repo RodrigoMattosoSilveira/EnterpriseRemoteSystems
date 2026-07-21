@@ -79,7 +79,7 @@ func (s *service) Create(ctx context.Context, req CreatePersonRequest, actorUser
 		Street2: strings.TrimSpace(req.Street2),
 		City:    strings.TrimSpace(req.City),
 		State:   strings.TrimSpace(req.State),
-		CEP:     NormalizeDigits(req.CEP),
+		CEP:     NormalizeCEP(req.CEP),
 		Country: defaultCountry(req.Country),
 
 		BankName:        strings.TrimSpace(req.BankName),
@@ -175,7 +175,7 @@ func (s *service) Update(ctx context.Context, id string, req UpdatePersonRequest
 		Street2:           req.Street2,
 		City:              req.City,
 		State:             req.State,
-		CEP:               NormalizeDigits(req.CEP),
+		CEP:               NormalizeCEP(req.CEP),
 		Country:           country,
 		BankName:          req.BankName,
 		BankNumber:        req.BankNumber,
@@ -199,7 +199,7 @@ func (s *service) Update(ctx context.Context, id string, req UpdatePersonRequest
 	person.Street2 = strings.TrimSpace(req.Street2)
 	person.City = strings.TrimSpace(req.City)
 	person.State = strings.TrimSpace(req.State)
-	person.CEP = NormalizeDigits(req.CEP)
+	person.CEP = NormalizeCEP(req.CEP)
 	person.Country = country
 
 	person.BankName = strings.TrimSpace(req.BankName)
