@@ -10,6 +10,15 @@ type Handler struct{ service Service }
 
 func NewHandler(service Service) *Handler { return &Handler{service: service} }
 
+func (h *Handler) ListCandidates(c fiber.Ctx) error {
+	items, err := h.service.ListCandidates(c.Context())
+	if err != nil {
+		return httpx.WriteError(c, err)
+	}
+
+	return c.JSON(httpx.APIResponse{Data: items})
+}
+
 func (h *Handler) List(c fiber.Ctx) error {
 	var filter CollaboratorListFilter
 	if err := c.Bind().Query(&filter); err != nil {

@@ -26,6 +26,7 @@ type CollaboratorDTO struct {
 	TaskID                         string   `json:"taskId"`
 	TaskLabel                      string   `json:"taskLabel,omitempty"`
 	StatusID                       string   `json:"statusId"`
+	StatusCode                     string   `json:"statusCode,omitempty"`
 	StatusLabel                    string   `json:"statusLabel,omitempty"`
 	Notes                          string   `json:"notes,omitempty"`
 	ClosedAt                       string   `json:"closedAt,omitempty"`

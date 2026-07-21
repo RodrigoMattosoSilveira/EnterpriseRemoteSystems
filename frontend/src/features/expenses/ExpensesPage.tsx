@@ -4,7 +4,10 @@ import { ApiErrorPanel } from "../../components/ApiErrorPanel";
 import type { Collaborator } from "../../types/collaborators";
 import type { Expense, ExpenseListFilter } from "../../types/expenses";
 import type { PriceListItem } from "../../types/priceList";
-import { useCollaborators } from "../collaborators/useCollaborators";
+import {
+  useCollaborator,
+  useCollaborators,
+} from "../collaborators/useCollaborators";
 import { usePriceListItems } from "../price-list/usePriceList";
 import { receiptStatusLabel, receiptStatusTone } from "../receipts/receiptLifecycle";
 import { useExpenses } from "./useExpenses";
@@ -34,10 +37,17 @@ export function ExpensesPage() {
   );
 
   const { data, isLoading, error } = useExpenses(expenseFilter);
-  const { data: collaboratorData } = useCollaborators({
-    page: 1,
-    pageSize: FILTER_OPTION_PAGE_SIZE,
-  });
+  const collaboratorOptionFilter = useMemo(
+    () => ({
+      search: collaboratorSearch || undefined,
+      page: 1,
+      pageSize: FILTER_OPTION_PAGE_SIZE,
+    }),
+    [collaboratorSearch],
+  );
+  const { data: collaboratorData, isFetching: collaboratorOptionsLoading } =
+    useCollaborators(collaboratorOptionFilter);
+  const { data: selectedCollaborator } = useCollaborator(collaboratorId);
   const { data: priceListItems = [] } = usePriceListItems({ includeInactive: true });
 
   const expenses = data?.items ?? [];
@@ -47,10 +57,7 @@ export function ExpensesPage() {
   const totalPages = Math.max(1, Math.ceil(total / responsePageSize));
   const flash = readFlash(location.state);
   const collaboratorOptions = collaboratorData?.items ?? [];
-  const visibleCollaboratorOptions = useMemo(
-    () => filterCollaboratorOptions(collaboratorOptions, collaboratorSearch, collaboratorId),
-    [collaboratorId, collaboratorOptions, collaboratorSearch],
-  );
+  const showCollaboratorSuggestions = Boolean(collaboratorSearch.trim());
   const filteredItemOptions = itemType
     ? priceListItems.filter((item) => item.itemType === itemType)
     : priceListItems;
@@ -167,38 +174,88 @@ export function ExpensesPage() {
             <h2 className="text-lg font-semibold text-gray-950">Filters</h2>
             <p className="text-sm text-gray-500">Filter expense records by collaborator name, nickname, category, or item.</p>
             <p className="mt-1 text-xs text-gray-500">
-              Start typing a collaborator first name, last name, full name, or nickname to narrow both the expense list and collaborator choices.
+              Start typing a collaborator first name, last name, full name, or nickname, then select a matching collaborator when you need an exact filter.
             </p>
           </div>
 
-          <div className="grid min-w-0 items-start gap-4 md:grid-cols-2 lg:grid-cols-4">
-            <label className="grid min-w-0 gap-1 text-sm font-medium text-gray-700">
-              Collaborator name or nickname
-              <input
-                id="expense-collaborator-search"
-                type="search"
-                value={collaboratorSearch}
-                onChange={(event: ChangeEvent<HTMLInputElement>) => setFilter("collaboratorSearch", event.target.value)}
-                placeholder="Search by name or nickname"
-                className="w-full min-w-0 rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm"
-              />
-            </label>
-
-            <label className="grid min-w-0 gap-1 text-sm font-medium text-gray-700">
-              Collaborator
-              <select
-                value={collaboratorId}
-                onChange={(event: ChangeEvent<HTMLSelectElement>) => setFilter("collaboratorId", event.target.value)}
-                className="w-full min-w-0 rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm"
-              >
-                <option value="">All collaborators</option>
-                {visibleCollaboratorOptions.map((collaborator) => (
-                  <option key={collaborator.id} value={collaborator.id}>
-                    {collaboratorDisplayName(collaborator)}
-                  </option>
-                ))}
-              </select>
-            </label>
+          <div className="grid min-w-0 items-start gap-4 md:grid-cols-2 lg:grid-cols-3">
+            <div className="relative min-w-0">
+              <label className="grid min-w-0 gap-1 text-sm font-medium text-gray-700">
+                Collaborator name or nickname
+                <input
+                  id="expense-collaborator-search"
+                  type="search"
+                  role="combobox"
+                  aria-autocomplete="list"
+                  aria-controls={
+                    showCollaboratorSuggestions
+                      ? "expense-collaborator-suggestions"
+                      : undefined
+                  }
+                  aria-expanded={showCollaboratorSuggestions}
+                  value={collaboratorSearch}
+                  onChange={(event: ChangeEvent<HTMLInputElement>) =>
+                    setFilter("collaboratorSearch", event.target.value)
+                  }
+                  placeholder="Search by name or nickname"
+                  className="w-full min-w-0 rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm"
+                />
+              </label>
+              {showCollaboratorSuggestions && (
+                <div
+                  id="expense-collaborator-suggestions"
+                  role="listbox"
+                  aria-label="Matching collaborators"
+                  className="absolute left-0 right-0 top-full z-20 mt-1 max-h-60 overflow-y-auto rounded-xl border border-gray-200 bg-white p-1 shadow-lg"
+                >
+                  {collaboratorOptionsLoading ? (
+                    <p className="px-3 py-2 text-sm text-gray-500">
+                      Loading matching collaborators…
+                    </p>
+                  ) : collaboratorOptions.length === 0 ? (
+                    <p className="px-3 py-2 text-sm text-gray-500">
+                      No matching collaborators
+                    </p>
+                  ) : (
+                    collaboratorOptions.map((collaborator) => (
+                      <button
+                        key={collaborator.id}
+                        type="button"
+                        role="option"
+                        aria-selected={collaborator.id === collaboratorId}
+                        onClick={() => setFilter("collaboratorId", collaborator.id)}
+                        className="block w-full rounded-lg px-3 py-2 text-left text-sm font-medium text-gray-800 hover:bg-gray-100 focus:bg-gray-100 focus:outline-none"
+                      >
+                        {collaboratorDisplayName(collaborator)}
+                      </button>
+                    ))
+                  )}
+                </div>
+              )}
+              {collaboratorId && (
+                <div
+                  role="status"
+                  aria-label="Selected collaborator filter"
+                  className="mt-2 flex min-w-0 items-center justify-between gap-2 rounded-xl bg-gray-100 px-3 py-2 text-xs text-gray-700"
+                >
+                  <span className="min-w-0">
+                    <span className="font-semibold">Selected:</span>{" "}
+                    <span className="break-words">
+                      {selectedCollaborator
+                        ? collaboratorDisplayName(selectedCollaborator)
+                        : "Loading collaborator…"}
+                    </span>
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setFilter("collaboratorId", "")}
+                    className="shrink-0 rounded-lg border border-gray-300 bg-white px-2 py-1 font-semibold text-gray-700"
+                  >
+                    Remove
+                  </button>
+                </div>
+              )}
+            </div>
 
             <label className="grid min-w-0 gap-1 text-sm font-medium text-gray-700">
               Category
@@ -262,7 +319,7 @@ export function ExpensesPage() {
             <h2 className="text-lg font-semibold">No expenses found</h2>
             <p className="mt-2 text-sm text-gray-500">
               {hasActiveFilters
-                ? "Adjust the collaborator name, collaborator, or item filters to find more expense records."
+                ? "Adjust the collaborator name, category, or item filters to find more expense records."
                 : "Record a Collaborator expense after an active Collaborator exists."}
             </p>
             {!hasActiveFilters && (
@@ -501,37 +558,6 @@ function collaboratorDisplayName(collaborator: Collaborator) {
     return `${nickname} · ${legalName}`;
   }
   return nickname || legalName || collaborator.id;
-}
-
-function filterCollaboratorOptions(
-  collaborators: Collaborator[],
-  search: string,
-  selectedCollaboratorId: string,
-) {
-  const normalizedSearch = normalizeSearch(search);
-  if (!normalizedSearch) return collaborators;
-
-  return collaborators.filter(
-    (collaborator) =>
-      collaborator.id === selectedCollaboratorId ||
-      collaboratorMatchesSearchPrefix(collaborator, normalizedSearch),
-  );
-}
-
-function collaboratorMatchesSearchPrefix(collaborator: Collaborator, normalizedSearch: string) {
-  const candidates = [
-    collaborator.personNickname,
-    collaborator.personName,
-    ...(collaborator.personName?.split(/\s+/) ?? []),
-  ];
-
-  return candidates.some((candidate) =>
-    normalizeSearch(candidate ?? "").startsWith(normalizedSearch),
-  );
-}
-
-function normalizeSearch(value: string) {
-  return value.trim().toLowerCase();
 }
 
 function priceListItemLabel(item: PriceListItem) {

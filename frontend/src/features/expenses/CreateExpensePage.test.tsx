@@ -32,10 +32,19 @@ const activeCollaborator: Collaborator = {
   locationLabel: "Mine 1",
   taskId: "task-1",
   taskLabel: "General",
-  statusId: "ref-collaborator-status-active",
+  statusId: "tenant-scoped-collaborator-status-active",
+  statusCode: "ACTIVE",
   statusLabel: "Active",
   createdAt: "2026-06-01T12:00:00Z",
   updatedAt: "2026-06-01T12:00:00Z",
+};
+
+const closedCollaborator: Collaborator = {
+  ...activeCollaborator,
+  id: "collab-closed",
+  personId: "person-closed",
+  personNickname: "Closed",
+  closedAt: "2026-06-30T12:00:00Z",
 };
 
 const canteenItem = priceListItem(
@@ -134,6 +143,27 @@ describe("CreateExpensePage", () => {
     await waitForText("Expenses landing");
   });
 
+  it("loads an active Collaborator from a later result page", async () => {
+    mockCreateExpenseFetch([[closedCollaborator], [activeCollaborator]]);
+    renderCreateExpensePage();
+
+    const select = await waitForControlByLabel<HTMLSelectElement>(
+      "Collaborator *",
+      "select",
+    );
+
+    expect(
+      Array.from(select.options).some(
+        (option) => option.value === activeCollaborator.id,
+      ),
+    ).toBe(true);
+    expect(
+      fetchCalls.filter((call) =>
+        call.url.startsWith("/api/v1/collaborators?"),
+      ),
+    ).toHaveLength(2);
+  });
+
   it("requires a price-list item before submitting", async () => {
     mockCreateExpenseFetch();
     renderCreateExpensePage();
@@ -151,12 +181,25 @@ describe("CreateExpensePage", () => {
   });
 });
 
-function mockCreateExpenseFetch() {
+function mockCreateExpenseFetch(
+  collaboratorPages: Collaborator[][] = [[activeCollaborator]],
+) {
   mockFetch(async (url, init) => {
     recordFetchCall(url, init);
 
-    if (url === "/api/v1/collaborators") {
-      return jsonResponse({ data: { items: [activeCollaborator], total: 1 } });
+    if (url.startsWith("/api/v1/collaborators?")) {
+      const page = Number(
+        new URL(url, "http://localhost").searchParams.get("page"),
+      );
+      return jsonResponse({
+        data: {
+          items: collaboratorPages[page - 1] ?? [],
+          total: collaboratorPages.reduce(
+            (count, items) => count + items.length,
+            0,
+          ),
+        },
+      });
     }
     if (url === "/api/v1/price-list-items") {
       return jsonResponse({ data: [canteenItem, administrativeItem] });
