@@ -122,6 +122,66 @@ func TestUpdatePersonReturnsUpdatedPerson(t *testing.T) {
 	}
 }
 
+func TestUpdatePersonAcceptsCEPWithCommonFormatting(t *testing.T) {
+	server, cleanup := newTestServer(t)
+	defer cleanup()
+
+	created := createPerson(t, server, validPersonPayload(1, nil))
+
+	payload := validPersonPayload(1, map[string]any{
+		"street1": "Praça da Sé, 1",
+		"city":    "São Paulo",
+		"state":   "SP",
+		"cep":     "01.001‑000",
+		"country": "Brasil",
+	})
+
+	res := putPerson(t, server, created.Data.ID, payload)
+	defer res.Body.Close()
+
+	if res.StatusCode != http.StatusOK {
+		var body apiErrorResponse
+		decodeJSON(t, res, &body)
+		t.Fatalf("expected status %d, got %d with error %+v", http.StatusOK, res.StatusCode, body.Error)
+	}
+
+	var body apiUpdatedPersonResponse
+	decodeJSON(t, res, &body)
+	if body.Data.CEP != "01001000" {
+		t.Fatalf("expected normalized CEP %q, got %q", "01001000", body.Data.CEP)
+	}
+}
+
+func TestUpdatePersonAcceptsFiveDigitMunicipalityCEP(t *testing.T) {
+	server, cleanup := newTestServer(t)
+	defer cleanup()
+
+	created := createPerson(t, server, validPersonPayload(1, nil))
+
+	payload := validPersonPayload(1, map[string]any{
+		"street1": "Rua Jasmin, 198",
+		"state":   "Amapa",
+		"city":    "Laranjal do Jari",
+		"cep":     "68920",
+		"country": "Brasil",
+	})
+
+	res := putPerson(t, server, created.Data.ID, payload)
+	defer res.Body.Close()
+
+	if res.StatusCode != http.StatusOK {
+		var body apiErrorResponse
+		decodeJSON(t, res, &body)
+		t.Fatalf("expected status %d, got %d with error %+v", http.StatusOK, res.StatusCode, body.Error)
+	}
+
+	var body apiUpdatedPersonResponse
+	decodeJSON(t, res, &body)
+	if body.Data.CEP != "68920000" {
+		t.Fatalf("expected normalized CEP %q, got %q", "68920000", body.Data.CEP)
+	}
+}
+
 func TestUpdatePersonRejectsMissingRequiredPersonalFields(t *testing.T) {
 	server, cleanup := newTestServer(t)
 	defer cleanup()

@@ -13,11 +13,13 @@ import (
 	"github.com/gofiber/fiber/v3"
 
 	apppkg "enterpriseremotesystems/backend/internal/app"
+	"enterpriseremotesystems/backend/internal/db"
 )
 
 const (
-	peopleURL        = "/api/v1/people/"
-	collaboratorsURL = "/api/v1/collaborators/"
+	peopleURL                 = "/api/v1/people/"
+	collaboratorsURL          = "/api/v1/collaborators/"
+	collaboratorCandidatesURL = "/api/v1/collaborators/candidates"
 )
 
 type apiErrorResponse struct {
@@ -77,6 +79,66 @@ type apiCollaboratorListResponse struct {
 		} `json:"items"`
 		Total int64 `json:"total"`
 	} `json:"data"`
+}
+
+type apiCollaboratorCandidatesResponse struct {
+	Data []struct {
+		ID                    string `json:"id"`
+		CanCreateCollaborator bool   `json:"canCreateCollaborator"`
+	} `json:"data"`
+}
+
+func TestListCandidatesRecomputesCompletionAndExcludesActiveJourney(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "app.db")
+	server, cleanup, err := apppkg.Bootstrap(apppkg.Config{
+		Env:                       "test",
+		HTTPAddr:                  ":0",
+		DBPath:                    dbPath,
+		JWTSecret:                 "test-secret",
+		DisableRouteAuthorization: true,
+	})
+	if err != nil {
+		t.Fatalf("bootstrap test server: %v", err)
+	}
+	defer cleanup()
+
+	database, err := db.Open(dbPath)
+	if err != nil {
+		t.Fatalf("open test database: %v", err)
+	}
+	sqlDB, err := database.DB()
+	if err != nil {
+		t.Fatalf("get test sql database: %v", err)
+	}
+	defer sqlDB.Close()
+
+	person := createPerson(t, server, validCompletePersonPayload(1, nil))
+	if err := database.Model(&db.Person{}).
+		Where("id = ?", person.Data.ID).
+		Update("can_create_collaborator", false).Error; err != nil {
+		t.Fatalf("make persisted eligibility stale: %v", err)
+	}
+
+	candidates := listCollaboratorCandidates(t, server)
+	if len(candidates.Data) != 1 {
+		t.Fatalf("expected one candidate, got %+v", candidates.Data)
+	}
+	if candidates.Data[0].ID != person.Data.ID {
+		t.Fatalf("expected candidate %q, got %q", person.Data.ID, candidates.Data[0].ID)
+	}
+	if !candidates.Data[0].CanCreateCollaborator {
+		t.Fatal("expected candidate completion to be recomputed from current Person data")
+	}
+
+	created := createCollaborator(t, server, validCollaboratorPayload(person.Data.ID, nil))
+	if created.Data.PersonID != person.Data.ID {
+		t.Fatalf("expected collaborator for person %q, got %q", person.Data.ID, created.Data.PersonID)
+	}
+
+	candidates = listCollaboratorCandidates(t, server)
+	if len(candidates.Data) != 0 {
+		t.Fatalf("expected active collaborator Person to be removed from candidates, got %+v", candidates.Data)
+	}
 }
 
 func TestCreateCollaboratorFromCompletePersonReturnsCreated(t *testing.T) {
@@ -629,6 +691,27 @@ func listCollaborators(t *testing.T, server *fiber.App, query string) apiCollabo
 	}
 
 	var body apiCollaboratorListResponse
+	decodeJSON(t, res, &body)
+	return body
+}
+
+func listCollaboratorCandidates(t *testing.T, server *fiber.App) apiCollaboratorCandidatesResponse {
+	t.Helper()
+
+	req := httptest.NewRequest(http.MethodGet, collaboratorCandidatesURL, nil)
+	res, err := server.Test(req, fiber.TestConfig{Timeout: 0, FailOnTimeout: false})
+	if err != nil {
+		t.Fatalf("GET %s: %v", collaboratorCandidatesURL, err)
+	}
+	defer res.Body.Close()
+
+	if res.StatusCode != http.StatusOK {
+		var body apiErrorResponse
+		decodeJSON(t, res, &body)
+		t.Fatalf("expected list candidates status %d, got %d with error %+v", http.StatusOK, res.StatusCode, body.Error)
+	}
+
+	var body apiCollaboratorCandidatesResponse
 	decodeJSON(t, res, &body)
 	return body
 }

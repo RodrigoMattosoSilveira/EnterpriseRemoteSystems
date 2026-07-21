@@ -58,7 +58,15 @@ func (r *gormRepository) CodeExists(ctx context.Context, code string, excludeID 
 }
 
 func (r *gormRepository) Create(ctx context.Context, tenant *db.Tenant) error {
-	return r.database.WithContext(ctx).Create(tenant).Error
+	return r.database.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.Create(tenant).Error; err != nil {
+			return err
+		}
+		if err := db.SeedTenantData(tx, tenant.ID); err != nil {
+			return fmt.Errorf("provision tenant seed data: %w", err)
+		}
+		return nil
+	})
 }
 
 func (r *gormRepository) Update(ctx context.Context, tenant *db.Tenant) error {

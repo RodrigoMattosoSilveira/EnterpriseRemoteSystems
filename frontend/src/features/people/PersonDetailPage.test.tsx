@@ -110,14 +110,10 @@ describe("PersonDetailPage", () => {
         });
       }
 
-      if (url === "/api/v1/people" && methodOf(init) === "GET") {
-        return jsonResponse({ items: [], total: 0 });
-      }
-
       throw new Error(`Unhandled request: ${url}`);
     });
 
-    renderPersonDetailRoute();
+    const router = renderPersonDetailRoute();
     await waitForText("Maria Silva");
 
     await changeInput("First Name", "Mariana");
@@ -139,7 +135,9 @@ describe("PersonDetailPage", () => {
       statusId: "ref-person-status-active",
     });
 
-    await waitForText("People");
+    await waitForText("Person updated successfully.");
+    await waitForText("Mariana Silva");
+    expect(router.state.location.pathname).toBe(`/people/${PERSON_ID}`);
   });
 
   it("submits status changes when editing a person", async () => {
@@ -160,14 +158,10 @@ describe("PersonDetailPage", () => {
         });
       }
 
-      if (url === "/api/v1/people" && methodOf(init) === "GET") {
-        return jsonResponse({ items: [], total: 0 });
-      }
-
       throw new Error(`Unhandled request: ${url}`);
     });
 
-    renderPersonDetailRoute();
+    const router = renderPersonDetailRoute();
     await waitForText("Maria Silva");
 
     await changeSelect("Status", "ref-person-status-inactive");
@@ -180,7 +174,71 @@ describe("PersonDetailPage", () => {
       statusId: "ref-person-status-inactive",
     });
 
-    await waitForText("People");
+    await waitForText("Person updated successfully.");
+    expect(router.state.location.pathname).toBe(`/people/${PERSON_ID}`);
+  });
+
+  it("keeps the Address tab open and refreshes remaining sections after save", async () => {
+    const incompletePerson: Person = {
+      ...existingPerson,
+      street1: "",
+      street2: "",
+      state: "",
+      cep: "",
+      city: "",
+      bankName: "",
+      bankNumber: "",
+      checkingAccount: "",
+      pixKey: "",
+      emergencyName: "",
+      emergencyCellular: "",
+      emergencyEmail: "",
+      profileCompletionStatus: "INCOMPLETE",
+      canCreateCollaborator: false,
+      missingSections: ["Address", "Bank", "Emergency"],
+    };
+
+    mockFetch(async (url, init) => {
+      recordFetchCall(url, init);
+
+      if (url === `/api/v1/people/${PERSON_ID}` && methodOf(init) === "GET") {
+        return jsonResponse({ data: incompletePerson });
+      }
+
+      if (url === `/api/v1/people/${PERSON_ID}` && methodOf(init) === "PUT") {
+        return jsonResponse({
+          data: {
+            ...incompletePerson,
+            street1: "Rua Jasmin, 198",
+            state: "Amapa",
+            city: "Laranjal do Jari",
+            cep: "68920000",
+            country: "Brasil",
+            missingSections: ["Bank", "Emergency"],
+          },
+        });
+      }
+
+      throw new Error(`Unhandled request: ${url}`);
+    });
+
+    const router = renderPersonDetailRoute();
+    await waitForText("Maria Silva");
+
+    await clickButton("Address");
+    await changeInput("Street 1", "Rua Jasmin, 198");
+    await changeInput("State", "Amapa");
+    await changeInput("City", "Laranjal do Jari");
+    await changeInput("CEP", "68920");
+    await submitForm();
+
+    await waitForText("Person updated successfully.");
+
+    expect(router.state.location.pathname).toBe(`/people/${PERSON_ID}`);
+    expect(buttonByText("Address").getAttribute("aria-pressed")).toBe("true");
+    expect(textNode("Missing: Address")).toBeUndefined();
+    expect(textNode("Missing: Bank")).toBeDefined();
+    expect(textNode("Missing: Emergency")).toBeDefined();
   });
 
   it("shows update validation errors returned by the API", async () => {
@@ -250,6 +308,8 @@ function renderPersonDetailRoute() {
       </QueryClientProvider>
     );
   });
+
+  return router;
 }
 
 function mockFetch(
@@ -378,6 +438,26 @@ async function changeSelect(labelText: string, value: string) {
     valueSetter?.call(select, value);
     select.dispatchEvent(new Event("input", { bubbles: true }));
     select.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+}
+
+function buttonByText(text: string) {
+  const button = Array.from(container.querySelectorAll("button")).find(
+    (candidate) => candidate.textContent?.trim().startsWith(text)
+  );
+
+  if (!button) {
+    throw new Error(`Could not find button ${text}`);
+  }
+
+  return button;
+}
+
+async function clickButton(text: string) {
+  const button = buttonByText(text);
+
+  await act(async () => {
+    button.dispatchEvent(new MouseEvent("click", { bubbles: true }));
   });
 }
 

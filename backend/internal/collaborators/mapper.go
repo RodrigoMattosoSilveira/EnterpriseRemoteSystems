@@ -36,6 +36,7 @@ func ToDTO(row db.CollaboratorJourney) CollaboratorDTO {
 		TaskID:                         row.TaskID,
 		TaskLabel:                      row.Task.Label,
 		StatusID:                       row.StatusID,
+		StatusCode:                     row.Status.Code,
 		StatusLabel:                    row.Status.Label,
 		Notes:                          row.Notes,
 		ClosedAt:                       formatDateTimePtr(row.ClosedAt),

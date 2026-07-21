@@ -87,12 +87,34 @@ func TestCurrentTenantReturnsSeededDefaultTenant(t *testing.T) {
 }
 
 func TestTenantLifecycleCreatesUpdatesDeactivatesAndPreservesHistory(t *testing.T) {
-	server, _, cleanup := newTestServer(t, true)
+	server, dbPath, cleanup := newTestServer(t, true)
 	defer cleanup()
 
 	created := createTenant(t, server, " north-site ", "North Site")
 	if created.Code != "NORTH-SITE" || !created.Active {
 		t.Fatalf("unexpected created tenant: %+v", created)
+	}
+
+	database, err := dbpkg.Open(dbPath)
+	if err != nil {
+		t.Fatalf("open tenant database: %v", err)
+	}
+	var referenceCount int64
+	if err := database.Model(&dbpkg.ReferenceData{}).Where("tenant_id = ?", created.ID).Count(&referenceCount).Error; err != nil {
+		closeDatabase(t, database)
+		t.Fatalf("count tenant reference data: %v", err)
+	}
+	var priceListCount int64
+	if err := database.Model(&dbpkg.ExpensePriceListItem{}).Where("tenant_id = ? AND active = ?", created.ID, true).Count(&priceListCount).Error; err != nil {
+		closeDatabase(t, database)
+		t.Fatalf("count tenant price-list data: %v", err)
+	}
+	closeDatabase(t, database)
+	if referenceCount < 30 {
+		t.Fatalf("expected complete tenant reference baseline, got %d rows", referenceCount)
+	}
+	if priceListCount != 5 {
+		t.Fatalf("expected five starter price-list rows, got %d", priceListCount)
 	}
 
 	res := requestJSON(t, server, http.MethodPut, "/api/v1/tenants/"+created.ID, map[string]any{
