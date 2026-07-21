@@ -8,6 +8,7 @@ import (
 
 type Repository interface {
 	List(ctx context.Context, filter CollaboratorListFilter) ([]db.CollaboratorJourney, int64, error)
+	ListCandidatePeople(ctx context.Context) ([]db.Person, error)
 	Create(ctx context.Context, collaborator *db.CollaboratorJourney) error
 	Update(ctx context.Context, collaborator *db.CollaboratorJourney) error
 	FindByID(ctx context.Context, id string) (*db.CollaboratorJourney, error)

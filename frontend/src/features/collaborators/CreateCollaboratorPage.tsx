@@ -14,7 +14,11 @@ import {
   paymentValueInputConfig,
   validatePaymentValueInput,
 } from "./paymentValue";
-import { useCollaborators, useCreateCollaborator } from "./useCollaborators";
+import {
+  useCollaboratorCandidates,
+  useCollaborators,
+  useCreateCollaborator,
+} from "./useCollaborators";
 
 type FormState = {
   personId: string;
@@ -43,9 +47,9 @@ const initialForm: FormState = {
 export function CreateCollaboratorPage() {
   const navigate = useNavigate();
   const peopleQuery = usePeople({
-    canCreateCollaborator: true,
     pageSize: 1000,
   });
+  const candidatesQuery = useCollaboratorCandidates();
   const paymentMethodsQuery = useReferenceDataByType("method");
   const sectorsQuery = useReferenceDataByType("sector");
   const locationsQuery = useReferenceDataByType("location");
@@ -85,10 +89,10 @@ export function CreateCollaboratorPage() {
 
   const eligiblePeople = useMemo(
     () =>
-      completePeople.filter(
-        (person) => !activeCollaboratorPersonIds.has(person.id),
+      (Array.isArray(candidatesQuery.data) ? candidatesQuery.data : []).sort(
+        (a, b) => personLabel(a).localeCompare(personLabel(b)),
       ),
-    [activeCollaboratorPersonIds, completePeople],
+    [candidatesQuery.data],
   );
 
   const completePeopleWithActiveCollaborator = useMemo(
@@ -202,6 +206,7 @@ export function CreateCollaboratorPage() {
 
   const isLoading =
     peopleQuery.isLoading ||
+    candidatesQuery.isLoading ||
     collaboratorsQuery.isLoading ||
     paymentMethodsQuery.isLoading ||
     sectorsQuery.isLoading ||
@@ -211,6 +216,7 @@ export function CreateCollaboratorPage() {
 
   const loadError =
     peopleQuery.error ||
+    candidatesQuery.error ||
     collaboratorsQuery.error ||
     paymentMethodsQuery.error ||
     sectorsQuery.error ||

@@ -31,6 +31,7 @@ export type Collaborator = {
   taskLabel?: string;
 
   statusId: string;
+  statusCode?: string;
   statusLabel?: string;
 
   notes?: string;

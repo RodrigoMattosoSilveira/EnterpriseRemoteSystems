@@ -64,6 +64,24 @@ func (r *gormRepository) List(ctx context.Context, filter CollaboratorListFilter
 	return rows, total, err
 }
 
+func (r *gormRepository) ListCandidatePeople(ctx context.Context) ([]db.Person, error) {
+	var rows []db.Person
+	err := r.db.WithContext(ctx).
+		Model(&db.Person{}).
+		Where("people.tenant_id = ?", defaultTenantID).
+		Where(`NOT EXISTS (
+			SELECT 1
+			FROM collaborator_journeys
+			WHERE collaborator_journeys.tenant_id = people.tenant_id
+			  AND collaborator_journeys.person_id = people.id
+			  AND collaborator_journeys.closed_at IS NULL
+		)`).
+		Preload("Status").
+		Order("people.last_name ASC, people.first_name ASC").
+		Find(&rows).Error
+	return rows, err
+}
+
 func (r *gormRepository) Create(ctx context.Context, collaborator *db.CollaboratorJourney) error {
 	return r.db.WithContext(ctx).Create(collaborator).Error
 }

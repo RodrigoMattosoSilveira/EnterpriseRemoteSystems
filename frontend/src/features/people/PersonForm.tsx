@@ -453,6 +453,7 @@ function TabButton({
     <button
       type="button"
       disabled={disabled}
+      aria-pressed={active}
       onClick={onClick}
       className={`rounded-xl px-4 py-2 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-40 ${
         active ? "bg-gray-950 text-white" : "bg-gray-100 text-gray-700"

@@ -37,10 +37,17 @@ const collaborators: Collaborator[] = [
 const filteredCollaborators: Collaborator[] = [
   {
     ...collaborators[0],
-    id: "collab-filtered",
-    personId: "person-filtered",
-    personName: "Bruno Costa",
-    personNickname: "Mineiro",
+    id: "collab-filtered-zulu",
+    personId: "person-filtered-zulu",
+    personName: "Zuleica Filger",
+    personNickname: "Zulu",
+  },
+  {
+    ...collaborators[0],
+    id: "collab-filtered-ana",
+    personId: "person-filtered-ana",
+    personName: "Ana Filger",
+    personNickname: "Ana",
   },
 ];
 
@@ -66,7 +73,7 @@ afterEach(async () => {
 describe("CollaboratorsListPage", () => {
   it("lists collaborator journeys", async () => {
     mockFetch(async (url) => {
-      if (url === "/api/v1/collaborators") {
+      if (url === "/api/v1/collaborators?page=1&pageSize=100") {
         return jsonResponse({ data: { items: collaborators, total: 1 } });
       }
 
@@ -85,33 +92,45 @@ describe("CollaboratorsListPage", () => {
     expect(textNode("Active")).toBeTruthy();
   });
 
-  it("requests filtered collaborator journeys from the URL search term", async () => {
+  it("matches any part of a name across pages and sorts the filtered results", async () => {
     const urls: string[] = [];
     mockFetch(async (url) => {
       urls.push(url);
-      if (url === "/api/v1/collaborators?search=Mineiro") {
+      if (url === "/api/v1/collaborators?page=1&pageSize=100") {
         return jsonResponse({
-          data: { items: filteredCollaborators, total: 1 },
+          data: { items: [filteredCollaborators[0]], total: 2 },
+        });
+      }
+      if (url === "/api/v1/collaborators?page=2&pageSize=100") {
+        return jsonResponse({
+          data: { items: [filteredCollaborators[1]], total: 2 },
         });
       }
 
       throw new Error(`Unhandled request: ${url}`);
     });
 
-    renderCollaboratorsListPage("/collaborators?search=Mineiro");
+    renderCollaboratorsListPage("/collaborators?search=Filger");
 
-    await waitForText("Bruno Costa");
-    expect(urls).toContain("/api/v1/collaborators?search=Mineiro");
-    expect(textNode("Filtering by “Mineiro”.")).toBeTruthy();
-    expect(textNode("Mineiro")).toBeTruthy();
+    await waitForText("Ana Filger");
+    expect(urls).toEqual([
+      "/api/v1/collaborators?page=1&pageSize=100",
+      "/api/v1/collaborators?page=2&pageSize=100",
+    ]);
+    expect(textNode("Filtering by “Filger”.")).toBeTruthy();
     expect(
       container.querySelector<HTMLInputElement>("#collaborator-search")?.value,
-    ).toBe("Mineiro");
+    ).toBe("Filger");
+
+    const displayedNames = Array.from(
+      container.querySelectorAll<HTMLAnchorElement>("tbody a"),
+    ).map((link) => link.textContent?.trim());
+    expect(displayedNames).toEqual(["Ana", "Zulu"]);
   });
 
   it("shows a filtered empty state", async () => {
     mockFetch(async (url) => {
-      if (url === "/api/v1/collaborators?search=Missing") {
+      if (url === "/api/v1/collaborators?page=1&pageSize=100") {
         return jsonResponse({ data: { items: [], total: 0 } });
       }
 
@@ -126,7 +145,7 @@ describe("CollaboratorsListPage", () => {
 
   it("shows an empty state", async () => {
     mockFetch(async (url) => {
-      if (url === "/api/v1/collaborators") {
+      if (url === "/api/v1/collaborators?page=1&pageSize=100") {
         return jsonResponse({ data: { items: [], total: 0 } });
       }
 
@@ -136,12 +155,16 @@ describe("CollaboratorsListPage", () => {
     renderCollaboratorsListPage();
 
     await waitForText("No collaborators yet");
-    expect(textNode("Create a Collaborator after the related Person profile is complete.")).toBeTruthy();
+    expect(
+      textNode(
+        "Create a Collaborator after the related Person profile is complete.",
+      ),
+    ).toBeTruthy();
   });
 
   it("shows backend errors", async () => {
     mockFetch(async (url) => {
-      if (url === "/api/v1/collaborators") {
+      if (url === "/api/v1/collaborators?page=1&pageSize=100") {
         return jsonResponse(
           {
             error: {
@@ -149,7 +172,7 @@ describe("CollaboratorsListPage", () => {
               message: "Could not list collaborators",
             },
           },
-          { status: 500 }
+          { status: 500 },
         );
       }
 
@@ -173,7 +196,7 @@ function renderCollaboratorsListPage(initialEntry = "/collaborators") {
 
   const router = createMemoryRouter(
     [{ path: "/collaborators", element: <CollaboratorsListPage /> }],
-    { initialEntries: [initialEntry] }
+    { initialEntries: [initialEntry] },
   );
 
   root = createRoot(container);
@@ -182,19 +205,19 @@ function renderCollaboratorsListPage(initialEntry = "/collaborators") {
     root?.render(
       <QueryClientProvider client={queryClient}>
         <RouterProvider router={router} />
-      </QueryClientProvider>
+      </QueryClientProvider>,
     );
   });
 }
 
 function mockFetch(
-  handler: (url: string, init?: RequestInit) => Promise<Response>
+  handler: (url: string, init?: RequestInit) => Promise<Response>,
 ) {
   vi.spyOn(globalThis, "fetch").mockImplementation(
     async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = typeof input === "string" ? input : input.toString();
       return handler(url, init);
-    }
+    },
   );
 }
 
@@ -238,6 +261,6 @@ async function waitFor(assertion: () => boolean) {
 
 function textNode(text: string) {
   return Array.from(container.querySelectorAll("*")).find((element) =>
-    element.textContent?.includes(text)
+    element.textContent?.includes(text),
   );
 }

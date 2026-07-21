@@ -3,17 +3,20 @@ import { Link, useLocation, useSearchParams } from "react-router-dom";
 import { ApiErrorPanel } from "../../components/ApiErrorPanel";
 import { JourneyDaysRemaining } from "../../components/JourneyDaysRemaining";
 import type { Collaborator } from "../../types/collaborators";
-import { useCollaborators } from "./useCollaborators";
+import { useCollaboratorCatalog } from "./useCollaborators";
 
 export function CollaboratorsListPage() {
   const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
   const search = searchParams.get("search")?.trim() ?? "";
   const [searchDraft, setSearchDraft] = useState(search);
-  const filter = useMemo(() => (search ? { search } : {}), [search]);
-  const { data, isLoading, error } = useCollaborators(filter);
-  const collaborators = data?.items ?? [];
-  const total = data?.total ?? collaborators.length;
+  const { data, isLoading, error } = useCollaboratorCatalog();
+  const allCollaborators = data ?? [];
+  const collaborators = useMemo(
+    () => filterAndSortCollaborators(allCollaborators, search),
+    [allCollaborators, search],
+  );
+  const total = allCollaborators.length;
   const flash = readFlash(location.state);
   const hasSearch = search.length > 0;
 
@@ -124,7 +127,7 @@ export function CollaboratorsListPage() {
                   id="collaborator-search"
                   value={searchDraft}
                   onChange={(event) => updateSearch(event.target.value)}
-                  placeholder="Type the start of a name or nickname"
+                  placeholder="Type any part of a name or nickname"
                   className="mt-1 w-full rounded-xl border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-gray-950 focus:outline-none focus:ring-1 focus:ring-gray-950"
                 />
               </div>
@@ -152,7 +155,9 @@ export function CollaboratorsListPage() {
         {!isLoading && !error && collaborators.length === 0 && (
           <div className="rounded-2xl border bg-white p-8 text-center shadow-sm">
             <h2 className="text-lg font-semibold">
-              {hasSearch ? "No collaborators match this filter" : "No collaborators yet"}
+              {hasSearch
+                ? "No collaborators match this filter"
+                : "No collaborators yet"}
             </h2>
             <p className="mt-2 text-sm text-gray-500">
               {hasSearch
@@ -258,6 +263,50 @@ export function CollaboratorsListPage() {
       </section>
     </main>
   );
+}
+
+const collaboratorNameCollator = new Intl.Collator(undefined, {
+  sensitivity: "base",
+  numeric: true,
+});
+
+function filterAndSortCollaborators(
+  collaborators: Collaborator[],
+  search: string,
+) {
+  const normalizedSearch = normalizeSearchText(search);
+
+  return collaborators
+    .filter((collaborator) => {
+      if (!normalizedSearch) return true;
+
+      return [collaborator.personName, collaborator.personNickname].some(
+        (value) => normalizeSearchText(value).includes(normalizedSearch),
+      );
+    })
+    .sort((left, right) => {
+      const displayComparison = collaboratorNameCollator.compare(
+        personDisplayName(left),
+        personDisplayName(right),
+      );
+      if (displayComparison !== 0) return displayComparison;
+
+      const legalNameComparison = collaboratorNameCollator.compare(
+        left.personName?.trim() ?? "",
+        right.personName?.trim() ?? "",
+      );
+      if (legalNameComparison !== 0) return legalNameComparison;
+
+      return collaboratorNameCollator.compare(left.id, right.id);
+    });
+}
+
+function normalizeSearchText(value?: string) {
+  return (value ?? "")
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "")
+    .trim()
+    .toLocaleLowerCase();
 }
 
 function CollaboratorCard({ collaborator }: { collaborator: Collaborator }) {

@@ -1,4 +1,6 @@
 import "@testing-library/jest-dom/vitest";
+import { notifyManager } from "@tanstack/react-query";
+import { act } from "react";
 import { beforeEach } from "vitest";
 
 function installCompleteLocalStorageWhenNeeded(): void {
@@ -43,6 +45,12 @@ function installCompleteLocalStorageWhenNeeded(): void {
 }
 
 installCompleteLocalStorageWhenNeeded();
+notifyManager.setNotifyFunction((callback) => {
+  act(() => {
+    callback();
+  });
+});
+
 beforeEach(() => {
   installCompleteLocalStorageWhenNeeded();
 });

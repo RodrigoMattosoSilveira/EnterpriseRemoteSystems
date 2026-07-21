@@ -19,6 +19,11 @@ const collaborators: Collaborator[] = [
   collaborator("collab-2", "João", "João Santos"),
   collaborator("collab-3", "Mineiro", "Bruno Costa"),
 ];
+const recentlyCreatedCollaborator = collaborator(
+  "collab-recent",
+  "NovoMineiro",
+  "Carlos Recente",
+);
 
 const longItemDescription = "DEV Smoke Test Water With A Long Display Name";
 const longItemCode = "DEV_SMOKE_WATER_1782258281";
@@ -83,23 +88,48 @@ describe("ExpensesPage", () => {
     expect(fetchCalls.some((call) => call.url === "/api/v1/expenses?page=2&pageSize=50")).toBe(true);
   });
 
-  it("filters expense pages by collaborator name or nickname", async () => {
+  it("loads matching collaborator dropdown options from the server", async () => {
     mockExpensePageFetch();
 
     renderExpensesPage("/expenses?page=2");
 
     await waitForText("Showing 50 of 520 expense records.");
-    await changeInput("Collaborator name or nickname", "mineiro");
+    await changeInput("Collaborator name or nickname", "ovomin");
 
-    await waitForFetchUrl("/api/v1/expenses?collaboratorSearch=mineiro&page=1&pageSize=50");
-    await waitForText("Bruno Mineiro");
-    expect(controlByLabel<HTMLInputElement>("Collaborator name or nickname", "input").value).toBe("mineiro");
+    await waitForFetchCall((call) => {
+      const url = new URL(call.url, "http://localhost");
+      return (
+        url.pathname === "/api/v1/collaborators" &&
+        url.searchParams.get("search") === "ovomin" &&
+        url.searchParams.get("page") === "1" &&
+        url.searchParams.get("pageSize") === "200"
+      );
+    });
+    await waitForFetchCall((call) => {
+      const url = new URL(call.url, "http://localhost");
+      return (
+        url.pathname === "/api/v1/expenses" &&
+        url.searchParams.get("collaboratorSearch") === "ovomin" &&
+        url.searchParams.get("page") === "1" &&
+        url.searchParams.get("pageSize") === "50"
+      );
+    });
+    expect(
+      controlByLabel<HTMLInputElement>(
+        "Collaborator name or nickname",
+        "input",
+      ).value,
+    ).toBe("ovomin");
 
-    const collaboratorSelectOptions = Array.from(
-      controlByLabel<HTMLSelectElement>("Collaborator", "select").options,
-    ).map((option) => option.textContent?.trim());
-    expect(collaboratorSelectOptions).toContain("Mineiro · Bruno Costa");
-    expect(collaboratorSelectOptions).not.toContain("Maria · Maria Silva");
+    await waitForText("NovoMineiro · Carlos Recente");
+
+    expect(container.querySelector("#expense-collaborator-filter")).toBeNull();
+
+    const suggestions = container.querySelector(
+      '[role="listbox"][aria-label="Matching collaborators"]',
+    );
+    expect(suggestions?.textContent).toContain("NovoMineiro · Carlos Recente");
+    expect(suggestions?.textContent).not.toContain("Maria · Maria Silva");
   });
 
   it("filters expense pages by collaborator and item", async () => {
@@ -108,10 +138,14 @@ describe("ExpensesPage", () => {
     renderExpensesPage("/expenses");
 
     await waitForText("Showing 50 of 520 expense records.");
-    await changeSelect("Collaborator", "collab-2");
+    await changeInput("Collaborator name or nickname", "João");
+    await waitForText("João · João Santos");
+    await clickOption("João · João Santos");
 
     await waitForText("Showing 1 of 1 expense records.");
+    await waitForText("Selected: João · João Santos");
     expect(fetchCalls.some((call) => call.url === "/api/v1/expenses?collaboratorId=collab-2&page=1&pageSize=50")).toBe(true);
+    expect(container.querySelector("#expense-collaborator-filter")).toBeNull();
 
     await changeSelect("Item", "item-2");
 
@@ -164,8 +198,24 @@ function mockExpensePageFetch() {
   mockFetch(async (url, init) => {
     recordFetchCall(url, init);
 
-    if (url === "/api/v1/collaborators?page=1&pageSize=200") {
-      return jsonResponse({ data: { items: collaborators, total: collaborators.length } });
+    if (url.startsWith("/api/v1/collaborators/")) {
+      const collaboratorId = decodeURIComponent(url.split("/").at(-1) ?? "");
+      const selectedCollaborator = [
+        ...collaborators,
+        recentlyCreatedCollaborator,
+      ].find((candidate) => candidate.id === collaboratorId);
+      if (!selectedCollaborator) {
+        throw new Error(`Unknown collaborator detail request: ${url}`);
+      }
+      return jsonResponse({ data: selectedCollaborator });
+    }
+
+    if (url.startsWith("/api/v1/collaborators")) {
+      const params = new URLSearchParams(url.split("?")[1] ?? "");
+      const search = params.get("search")?.toLowerCase() ?? "";
+      const items =
+        search === "ovomin" ? [recentlyCreatedCollaborator] : collaborators;
+      return jsonResponse({ data: { items, total: items.length } });
     }
 
     if (url === "/api/v1/price-list-items?includeInactive=true") {
@@ -408,6 +458,16 @@ async function waitForFetchUrl(expectedUrl: string) {
   throw new Error(`Missing fetch URL: ${expectedUrl}`);
 }
 
+async function waitForFetchCall(predicate: (call: FetchCall) => boolean) {
+  for (let i = 0; i < 60; i += 1) {
+    if (fetchCalls.some(predicate)) return;
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    });
+  }
+  throw new Error("Missing matching fetch call");
+}
+
 async function clickButton(name: string) {
   await act(async () => {
     const button = Array.from(container.querySelectorAll("button")).find(
@@ -415,6 +475,16 @@ async function clickButton(name: string) {
     );
     if (!button) throw new Error(`Button not found: ${name}`);
     button.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+  });
+}
+
+async function clickOption(name: string) {
+  await act(async () => {
+    const option = Array.from(
+      container.querySelectorAll<HTMLButtonElement>('[role="option"]'),
+    ).find((candidate) => candidate.textContent?.trim() === name);
+    if (!option) throw new Error(`Option not found: ${name}`);
+    option.dispatchEvent(new MouseEvent("click", { bubbles: true }));
   });
 }
 
@@ -448,11 +518,13 @@ function controlByLabel<T extends HTMLElement>(label: string, selector: string):
   const labelNode = Array.from(container.querySelectorAll("label")).find(
     (candidate) => labelCaption(candidate) === label,
   );
-  const control = labelNode?.querySelector(selector);
-  if (!(control instanceof HTMLElement)) {
+  const associatedControl = labelNode?.htmlFor
+    ? container.querySelector(`#${CSS.escape(labelNode.htmlFor)}`)
+    : labelNode?.querySelector(selector);
+  if (!(associatedControl instanceof HTMLElement) || !associatedControl.matches(selector)) {
     throw new Error(`Control not found for ${label}`);
   }
-  return control as unknown as T;
+  return associatedControl as unknown as T;
 }
 
 function labelCaption(label: HTMLLabelElement) {
