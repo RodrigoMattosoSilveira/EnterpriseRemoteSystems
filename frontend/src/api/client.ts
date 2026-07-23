@@ -96,6 +96,7 @@ async function performApiFetch<T>(
   try {
     response = await fetch(url, {
       ...options,
+      credentials: options.credentials ?? "same-origin",
       headers: {
         "Content-Type": "application/json",
         ...temporaryAuthzHeaders(),

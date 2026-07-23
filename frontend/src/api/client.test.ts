@@ -32,6 +32,7 @@ describe("apiFetch persisted actor headers", () => {
   it("uses the local development bootstrap actor when no actor is stored", async () => {
     await apiFetch<{ ok: boolean }>("/people");
 
+    expect(fetchCalls[0]?.init?.credentials).toBe("same-origin");
     const headers = fetchCalls[0]?.init?.headers as Record<string, string>;
     expect(headers["X-Actor-ID"]).toBe("bootstrap-admin");
     expect(headers["X-Tenant-ID"]).toBe("default");

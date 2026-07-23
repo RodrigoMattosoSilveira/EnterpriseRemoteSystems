@@ -1,6 +1,9 @@
 package app
 
-import "testing"
+import (
+	"testing"
+	"time"
+)
 
 func TestLoadConfigReadsAuthzBootstrapSettings(t *testing.T) {
 	t.Setenv("JWT_SECRET", "test-secret")
@@ -87,5 +90,43 @@ func TestLoadConfigReadsExplicitRouteAuthorizationDisableFlag(t *testing.T) {
 	}
 	if !cfg.DisableRouteAuthorization {
 		t.Fatalf("expected explicit route authorization disable flag")
+	}
+}
+
+func TestLoadConfigReadsAuthenticationSessionSettings(t *testing.T) {
+	t.Setenv("JWT_SECRET", "test-secret")
+	t.Setenv("APP_ENV", "production")
+	t.Setenv("AUTH_SESSION_TTL_MINUTES", "90")
+	t.Setenv("AUTH_PASSWORD_RESET_TTL_MINUTES", "15")
+	t.Setenv("AUTH_PASSWORD_HASH_COST", "10")
+	t.Setenv("AUTH_SESSION_COOKIE_NAME", "ers_prd_session")
+	t.Setenv("AUTH_SESSION_COOKIE_SECURE", "false")
+	t.Setenv("AUTH_SESSION_COOKIE_SAME_SITE", "Strict")
+
+	cfg, err := LoadConfig()
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	if cfg.AuthSessionTTL != 90*time.Minute || cfg.AuthPasswordResetTTL != 15*time.Minute {
+		t.Fatalf("unexpected authentication durations: %#v", cfg)
+	}
+	if cfg.AuthPasswordHashCost != 10 || cfg.AuthSessionCookieName != "ers_prd_session" {
+		t.Fatalf("unexpected authentication settings: %#v", cfg)
+	}
+	if cfg.AuthSessionCookieSecure || cfg.AuthSessionCookieSameSite != "Strict" {
+		t.Fatalf("unexpected authentication cookie settings: %#v", cfg)
+	}
+}
+
+func TestLoadConfigDefaultsSecureAuthenticationCookiesOutsideLocalDevelopment(t *testing.T) {
+	t.Setenv("JWT_SECRET", "test-secret")
+	t.Setenv("APP_ENV", "production")
+
+	cfg, err := LoadConfig()
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	if !cfg.AuthSessionCookieSecure {
+		t.Fatal("expected secure authentication cookies in production")
 	}
 }

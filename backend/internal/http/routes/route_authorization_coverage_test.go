@@ -32,6 +32,8 @@ func TestEveryRegisteredAPIRouteHasAuthorizationCoverage(t *testing.T) {
 		"requireTenantPermission":       {},
 		"requirePermissionOrSelfPerson": {},
 		"authorizationHandledByHandler": {},
+		"authenticationPublic":          {},
+		"requireAuthenticatedSession":   {},
 	}
 	handlerAuthorizedMethods := map[string]struct{}{
 		"BackfillDebitLedgerReceipts":      {},
@@ -136,4 +138,54 @@ func handlerMethodAllowed(args []ast.Expr, allowed map[string]struct{}) bool {
 	}
 	_, ok = allowed[selector.Sel.Name]
 	return ok
+}
+
+func TestAuthenticationAccountRoutesRequireApplicationScope(t *testing.T) {
+	t.Parallel()
+
+	_, currentFile, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("resolve route test directory")
+	}
+	contents, err := os.ReadFile(filepath.Join(filepath.Dir(currentFile), "authentication.go"))
+	if err != nil {
+		t.Fatalf("read authentication routes: %v", err)
+	}
+	source := string(contents)
+	for _, route := range []string{
+		`r.Get("/accounts", requireApplicationPermission`,
+		`r.Post("/accounts", requireApplicationPermission`,
+		`r.Patch("/accounts/:id/active", requireApplicationPermission`,
+		`r.Post("/accounts/:id/password-reset-tokens", requireApplicationPermission`,
+	} {
+		if !strings.Contains(source, route) {
+			t.Fatalf("authentication account administration route must require application scope: %s", route)
+		}
+	}
+}
+
+func TestAuthenticationSessionMiddlewareIsScopedToAuthenticationRoutes(t *testing.T) {
+	t.Parallel()
+
+	_, currentFile, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("resolve route test directory")
+	}
+	dir := filepath.Dir(currentFile)
+
+	routesContents, err := os.ReadFile(filepath.Join(dir, "routes.go"))
+	if err != nil {
+		t.Fatalf("read root routes: %v", err)
+	}
+	if strings.Contains(string(routesContents), "v1.Use(authenticationMiddleware(deps))") {
+		t.Fatal("Bite 28B must not resolve authentication sessions for every business API route")
+	}
+
+	authenticationContents, err := os.ReadFile(filepath.Join(dir, "authentication.go"))
+	if err != nil {
+		t.Fatalf("read authentication routes: %v", err)
+	}
+	if !strings.Contains(string(authenticationContents), `r.Use(authenticationMiddleware(deps))`) {
+		t.Fatal("authentication routes must resolve the session cookie before session-protected handlers")
+	}
 }
