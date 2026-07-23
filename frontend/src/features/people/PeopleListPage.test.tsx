@@ -48,8 +48,31 @@ describe("PeopleListPage", () => {
     expect(fetchCalls[0]).toBe("/api/v1/people?page=1&pageSize=10");
     expect(textNode("Filters")).toBeTruthy();
     expect(inputByLabel("Filter people")).toBeTruthy();
+    expect(buttonByName("Card view").getAttribute("aria-pressed")).toBe("true");
     expect(selectByLabel("People per page").value).toBe("10");
     expect(textNode("Showing 1-1 of 1 people")).toBeTruthy();
+  });
+
+  it("switches between card view and list view", async () => {
+    mockPeopleFetch({ items: [personFixture("person-1", "Maria")], total: 1 });
+
+    renderPeopleListRoute();
+    await waitForText("Maria Pessoa");
+
+    await clickButton("List view");
+    await waitForText("Maria Pessoa");
+
+    expect(buttonByName("List view").getAttribute("aria-pressed")).toBe("true");
+    expect(buttonByName("Card view").getAttribute("aria-pressed")).toBe("false");
+    expect(container.querySelector("table")).toBeTruthy();
+    expect(container.querySelector("tbody tr")).toBeTruthy();
+
+    await clickButton("Card view");
+    await waitForText("Maria Pessoa");
+
+    expect(buttonByName("Card view").getAttribute("aria-pressed")).toBe("true");
+    expect(container.querySelector("table")).toBeFalsy();
+    expect(container.querySelectorAll('main section a[href^="/people/"]').length).toBeGreaterThan(0);
   });
 
   it("clears filters resets search input and removes search param", async () => {
@@ -87,6 +110,21 @@ describe("PeopleListPage", () => {
     );
   });
 
+  it("applies discontinued status filter immediately", async () => {
+    mockPeopleFetch({ items: [personFixture("person-1", "Maria")], total: 1 });
+
+    renderPeopleListRoute();
+    await waitForText("Maria Pessoa");
+
+    await changeSelect("Status", "Discontinued");
+
+    await waitFor(() =>
+      fetchCalls.includes(
+        "/api/v1/people?statusId=ref-person-status-discontinued&page=1&pageSize=10",
+      ),
+    );
+  });
+
   it("clears status filter when All is selected", async () => {
     mockPeopleFetch({ items: [personFixture("person-1", "Maria")], total: 1 });
 
@@ -113,6 +151,26 @@ describe("PeopleListPage", () => {
     expect(textNode("restricted-actor")).toBeTruthy();
     expect(textNode("Use bootstrap-admin and reload")).toBeTruthy();
     expect(container.querySelector("pre")).toBeNull();
+  });
+  it("resets to first page when status changes to Discontinued", async () => {
+    mockPeopleFetch({ items: Array.from({ length: 10 }, (_, index) => personFixture(`person-${index + 1}`, `Maria${index + 1}`)), total: 25 });
+
+    renderPeopleListRoute();
+    await waitForText("Maria1 Pessoa");
+
+    await clickButton("Next");
+
+    await waitFor(() =>
+      fetchCalls.includes("/api/v1/people?page=2&pageSize=10"),
+    );
+
+    await changeSelect("Status", "Discontinued");
+
+    await waitFor(() =>
+      fetchCalls.includes(
+        "/api/v1/people?statusId=ref-person-status-discontinued&page=1&pageSize=10",
+      ),
+    );
   });
 
   /*
@@ -348,11 +406,23 @@ async function submitFilterForm() {
 
 async function clickButton(name: string) {
   const button = Array.from(container.querySelectorAll("button")).find(
-    (node) => node.textContent?.trim() === name,
+    (node) =>
+      node.getAttribute("aria-label") === name ||
+      node.title === name ||
+      node.textContent?.trim() === name,
   );
   if (!button) throw new Error(`Could not find button ${name}`);
 
   await act(async () => {
     button.dispatchEvent(new MouseEvent("click", { bubbles: true }));
   });
+}
+
+function buttonByName(name: string) {
+  const button = Array.from(container.querySelectorAll("button")).find((node) => {
+    return node.getAttribute("aria-label") === name || node.title === name;
+  });
+  if (!button) throw new Error(`Could not find button ${name}`);
+
+  return button;
 }
