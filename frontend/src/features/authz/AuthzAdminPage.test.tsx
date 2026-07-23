@@ -221,6 +221,13 @@ describe("AuthzAdminPage", () => {
     await setInputValue(collaboratorSearch, "pense");
 
     await waitForText("Expense Admin · Active · Main Mine");
+    expect(
+      fetchCalls.some(
+        (call) =>
+          call.url ===
+          "/api/v1/collaborators?search=pense&page=1&pageSize=25",
+      ),
+    ).toBe(true);
     expect(createActorSuggestionLabels()).toEqual([
       "Expense Admin · Active · Main Mine",
     ]);
@@ -484,6 +491,14 @@ function mockAuthzFetch() {
     if (url === "/api/v1/collaborators?page=1&pageSize=100" && method === "GET") {
       return jsonResponse({ data: { items: collaborators, total: collaborators.length } });
     }
+    if (url.startsWith("/api/v1/collaborators?search=") && method === "GET") {
+      const search = new URL(url, "http://localhost").searchParams.get("search") ?? "";
+      const normalizedSearch = normalizeTestSearch(search);
+      const matches = collaborators.filter((collaborator) =>
+        normalizeTestSearch(collaborator.personNickname).includes(normalizedSearch),
+      );
+      return jsonResponse({ data: { items: matches, total: matches.length } });
+    }
     if (url === "/api/v1/authz/actors" && method === "POST") {
       const body = parseBody(init?.body) as { actorKey: string; displayName: string; active: boolean };
       const created = {
@@ -607,6 +622,14 @@ function jsonResponse(body: unknown, init: ResponseInit = {}) {
     status: init.status ?? 200,
     headers: { "Content-Type": "application/json", ...(init.headers ?? {}) },
   });
+}
+
+function normalizeTestSearch(value?: string) {
+  return (value ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim()
+    .toLocaleLowerCase();
 }
 
 function forbiddenResponse() {
