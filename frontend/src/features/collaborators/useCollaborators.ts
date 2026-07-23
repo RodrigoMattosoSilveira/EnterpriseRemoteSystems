@@ -9,6 +9,7 @@ import {
   updateCollaborator,
 } from "../../api/collaborators.api";
 import type {
+  Collaborator,
   CollaboratorListFilter,
   CreateCollaboratorInput,
   UpdateCollaboratorInput,
@@ -20,6 +21,8 @@ export const collaboratorQueryKeys = {
   list: (filter: CollaboratorListFilter = {}) =>
     [...collaboratorQueryKeys.lists(), filter] as const,
   catalog: () => [...collaboratorQueryKeys.lists(), "catalog"] as const,
+  search: (search: string) =>
+    [...collaboratorQueryKeys.lists(), "search", search] as const,
   candidates: () => [...collaboratorQueryKeys.all, "candidates"] as const,
   expenseCandidates: () =>
     [...collaboratorQueryKeys.lists(), "expense-candidates"] as const,
@@ -45,6 +48,21 @@ export function useCollaboratorCatalog() {
   return useQuery({
     queryKey: collaboratorQueryKeys.catalog(),
     queryFn: listAllCollaborators,
+  });
+}
+
+export function useCollaboratorSearch(search: string) {
+  const normalizedSearch = search.trim();
+
+  return useQuery({
+    queryKey: collaboratorQueryKeys.search(normalizedSearch),
+    queryFn: () =>
+      listCollaborators({
+        search: normalizedSearch,
+        page: 1,
+        pageSize: 25,
+      }),
+    enabled: normalizedSearch.length > 0,
   });
 }
 
@@ -76,6 +94,11 @@ export function useCreateCollaborator() {
         queryKey: collaboratorQueryKeys.candidates(),
       });
       queryClient.setQueryData(
+        collaboratorQueryKeys.catalog(),
+        (current: Collaborator[] | undefined) =>
+          mergeCollaboratorIntoCatalog(current, collaborator),
+      );
+      queryClient.setQueryData(
         collaboratorQueryKeys.detail(collaborator.id),
         collaborator,
       );
@@ -99,4 +122,14 @@ export function useUpdateCollaborator(id: string) {
       );
     },
   });
+}
+
+function mergeCollaboratorIntoCatalog(
+  current: Collaborator[] | undefined,
+  collaborator: Collaborator,
+) {
+  return [
+    collaborator,
+    ...(current ?? []).filter((item) => item.id !== collaborator.id),
+  ];
 }

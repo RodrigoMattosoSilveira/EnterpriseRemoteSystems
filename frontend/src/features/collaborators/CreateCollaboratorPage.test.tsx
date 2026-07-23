@@ -171,12 +171,14 @@ const referenceRows: Record<string, ReferenceDataItem[]> = {
 let container: HTMLDivElement;
 let root: Root | null;
 let fetchCalls: FetchCall[];
+let testQueryClient: QueryClient | null;
 
 beforeEach(() => {
   container = document.createElement("div");
   document.body.appendChild(container);
   root = null;
   fetchCalls = [];
+  testQueryClient = null;
 });
 
 afterEach(async () => {
@@ -456,6 +458,15 @@ describe("CreateCollaboratorPage", () => {
       paymentValue: 125.5,
       notes: "First collaborator journey",
     });
+
+    const cachedCatalog = testQueryClient
+      ? testQueryClient.getQueryData<Collaborator[]>([
+          "collaborators",
+          "list",
+          "catalog",
+        ])
+      : undefined;
+    expect(cachedCatalog?.[0]?.id).toBe("collab-1");
   });
 
   it("shows backend validation errors from the create endpoint", async () => {
@@ -605,6 +616,7 @@ function renderCreateCollaboratorPage() {
       mutations: { retry: false },
     },
   });
+  testQueryClient = queryClient;
 
   const router = createMemoryRouter(
     [
