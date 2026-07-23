@@ -90,7 +90,7 @@ describe("CreateExpensePage", () => {
     renderCreateExpensePage();
 
     await waitForText("New Expense");
-    await changeSelect("Collaborator *", activeCollaborator.id);
+    await selectCollaborator("Maria", "Maria");
     await changeSelect("Category *", "CANTEEN");
     await changeSelect("Item Description *", canteenItem.id);
     await changeSelect("Currency *", "BRL");
@@ -119,7 +119,7 @@ describe("CreateExpensePage", () => {
     renderCreateExpensePage();
 
     await waitForText("New Expense");
-    await changeSelect("Collaborator *", activeCollaborator.id);
+    await selectCollaborator("Maria", "Maria");
     await changeSelect("Category *", "ADMINISTRATIVE");
     await changeSelect("Item Description *", administrativeItem.id);
     await changeSelect("Currency *", "GOLD_GRAM");
@@ -143,25 +143,30 @@ describe("CreateExpensePage", () => {
     await waitForText("Expenses landing");
   });
 
-  it("loads an active Collaborator from a later result page", async () => {
-    mockCreateExpenseFetch([[closedCollaborator], [activeCollaborator]]);
+  it("loads a newly created active Collaborator with targeted server search", async () => {
+    mockCreateExpenseFetch([closedCollaborator, activeCollaborator]);
     renderCreateExpensePage();
 
-    const select = await waitForControlByLabel<HTMLSelectElement>(
-      "Collaborator *",
-      "select",
-    );
+    await changeInput("Collaborator *", "ari");
+    await waitForText("Maria");
+    await clickOption("Maria");
+    await waitForText("Selected: Maria");
 
+    const searchCall = fetchCalls.find((call) => {
+      const url = new URL(call.url, "http://localhost");
+      return (
+        url.pathname === "/api/v1/collaborators" &&
+        url.searchParams.get("search") === "ari" &&
+        url.searchParams.get("page") === "1" &&
+        url.searchParams.get("pageSize") === "25"
+      );
+    });
+    expect(searchCall).toBeDefined();
     expect(
-      Array.from(select.options).some(
-        (option) => option.value === activeCollaborator.id,
+      fetchCalls.some((call) =>
+        call.url.includes("/api/v1/collaborators?page=2"),
       ),
-    ).toBe(true);
-    expect(
-      fetchCalls.filter((call) =>
-        call.url.startsWith("/api/v1/collaborators?"),
-      ),
-    ).toHaveLength(2);
+    ).toBe(false);
   });
 
   it("requires a price-list item before submitting", async () => {
@@ -169,7 +174,7 @@ describe("CreateExpensePage", () => {
     renderCreateExpensePage();
 
     await waitForText("New Expense");
-    await changeSelect("Collaborator *", activeCollaborator.id);
+    await selectCollaborator("Maria", "Maria");
     await clickButton("Create Expense");
 
     await waitForText("Select an item description from the price list.");
@@ -182,22 +187,24 @@ describe("CreateExpensePage", () => {
 });
 
 function mockCreateExpenseFetch(
-  collaboratorPages: Collaborator[][] = [[activeCollaborator]],
+  collaborators: Collaborator[] = [activeCollaborator],
 ) {
   mockFetch(async (url, init) => {
     recordFetchCall(url, init);
 
     if (url.startsWith("/api/v1/collaborators?")) {
-      const page = Number(
-        new URL(url, "http://localhost").searchParams.get("page"),
+      const search = normalizeSearch(
+        new URL(url, "http://localhost").searchParams.get("search") ?? "",
+      );
+      const items = collaborators.filter((collaborator) =>
+        normalizeSearch(
+          `${collaborator.personNickname ?? ""} ${collaborator.personName ?? ""}`,
+        ).includes(search),
       );
       return jsonResponse({
         data: {
-          items: collaboratorPages[page - 1] ?? [],
-          total: collaboratorPages.reduce(
-            (count, items) => count + items.length,
-            0,
-          ),
+          items,
+          total: items.length,
         },
       });
     }
@@ -371,6 +378,30 @@ async function changeInput(label: string, value: string) {
     input.dispatchEvent(new Event("input", { bubbles: true }));
     input.dispatchEvent(new Event("change", { bubbles: true }));
   });
+}
+
+async function selectCollaborator(search: string, optionName: string) {
+  await changeInput("Collaborator *", search);
+  await waitForText(optionName);
+  await clickOption(optionName);
+}
+
+async function clickOption(name: string) {
+  await act(async () => {
+    const option = Array.from(
+      container.querySelectorAll<HTMLElement>('[role="option"]'),
+    ).find((candidate) => candidate.textContent?.trim() === name);
+    if (!option) throw new Error(`Option not found: ${name}`);
+    option.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+  });
+}
+
+function normalizeSearch(value: string) {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim()
+    .toLowerCase();
 }
 
 function setControlValue(

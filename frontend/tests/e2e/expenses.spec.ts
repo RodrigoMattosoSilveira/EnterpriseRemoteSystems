@@ -1,4 +1,9 @@
-import { expect, test, type APIRequestContext } from "@playwright/test";
+import {
+  expect,
+  test,
+  type APIRequestContext,
+  type Page,
+} from "@playwright/test";
 import { authzHeaders, e2eApiUrl, seedBrowserAuthz } from "./support/authz";
 
 const PERSON_STATUS_ACTIVE_ID = "ref-person-status-active";
@@ -45,8 +50,7 @@ test("user can create an Expense for an active Collaborator", async ({
     page.getByRole("heading", { name: "New Expense" }),
   ).toBeVisible();
 
-  await expect(page.getByLabel("Collaborator *")).toContainText(personNickname);
-  await page.getByLabel("Collaborator *").selectOption(collaborator.id);
+  await selectExpenseCollaborator(page, personNickname);
   await page.getByLabel("Category *").selectOption("CANTEEN");
   await page.getByLabel("Item Description *").selectOption(item.id);
   await page.getByLabel("Currency *").selectOption("BRL");
@@ -151,7 +155,7 @@ test("user can create a grams-of-gold Expense from the latest gold price", async
 
   await page.goto("/expenses/new");
 
-  await page.getByLabel("Collaborator *").selectOption(collaborator.id);
+  await selectExpenseCollaborator(page, personNickname);
   await page.getByLabel("Category *").selectOption("ADMINISTRATIVE");
   await page.getByLabel("Item Description *").selectOption(item.id);
   await page.getByLabel("Currency *").selectOption("GOLD_GRAM");
@@ -519,6 +523,23 @@ type GoldPricePayload = {
   recordedBy: string;
   notes: string;
 };
+
+async function selectExpenseCollaborator(page: Page, nickname: string) {
+  const collaboratorSearch = page.getByRole("combobox", {
+    name: "Collaborator *",
+  });
+  await collaboratorSearch.fill(nickname);
+
+  const collaboratorOption = page
+    .getByRole("listbox", { name: "Matching active collaborators" })
+    .getByRole("option", { name: new RegExp(nickname) });
+
+  await expect(collaboratorOption).toBeVisible();
+  await collaboratorOption.click();
+  await expect(
+    page.getByRole("status", { name: "Selected expense Collaborator" }),
+  ).toContainText(nickname);
+}
 
 async function createCompletePerson(
   api: APIRequestContext,
