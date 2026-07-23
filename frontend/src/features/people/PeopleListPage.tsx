@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link, useLocation } from "react-router-dom";
+import { Link, useLocation, useSearchParams } from "react-router-dom";
 import { usePeoplePage } from "./usePeople";
+
 import {
   CardViewIcon,
   ListViewIcon,
@@ -36,9 +37,18 @@ export function PeopleListPage() {
     useState<CollaboratorEligibilityFilter>("all");
   const [peopleStatus, setPeopleStatus] = 
     useState<"All" | "Active" | "InActive" | "Discontinued">("All");
-  const [viewMode, setViewMode] = useState<"cards" | "list">("cards");
+  
+  const [searchParams, setSearchParams] = useSearchParams();
+  const initialView = (searchParams.get("view") as "cards" | "list") || "cards";
+  const [viewMode, setViewMode] = useState<"cards" | "list">(initialView);
+
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
+
+  const handleChange = (mode: "cards" | "list") => {
+    setViewMode(mode);
+    setSearchParams({ view: mode });
+  };
 
   // Debounce search input
   useEffect(() => {
@@ -173,7 +183,7 @@ export function PeopleListPage() {
               <SegmentedOptionToggle
                 ariaLabel="People view mode"
                 value={viewMode}
-                onChange={setViewMode}
+                onChange={handleChange}
                 showLabels={false}
                 options={[
                   { value: "cards", label: "Card view", icon: <CardViewIcon /> },
@@ -341,11 +351,12 @@ export function PeopleListPage() {
             {displayedPeople.map((person) => {
               const wasJustCreated = person.id === listState.createdPersonId;
 
+
               return (
                 <Link
                   key={person.id}
-                  to={`/people/${person.id}`}
-                  className={`block rounded-2xl border p-5 shadow-sm transition hover:shadow-md ${
+                  to={`/people/${person.id}?view=${viewMode}`}
+                  className={`block rounded-2xl border p-5 shadow-sm transition hover:underline ${
                     wasJustCreated
                       ? "border-green-300 bg-green-50 ring-2 ring-green-100"
                       : "bg-white"
@@ -423,7 +434,7 @@ export function PeopleListPage() {
                       >
                         <td className="p-3 align-top">
                           <Link
-                            to={`/people/${person.id}`}
+                            to={`/people/${person.id}?view=${viewMode}`}
                             className="font-semibold text-gray-950 underline-offset-2 hover:underline"
                           >
                             {person.firstName} {person.lastName}

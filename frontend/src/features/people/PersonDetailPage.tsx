@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useParams, useSearchParams } from "react-router-dom";
 import { PersonForm } from "./PersonForm";
 import { usePerson, useUpdatePerson } from "./usePeople";
 import { ApiErrorPanel } from "../../components/ApiErrorPanel";
@@ -12,6 +12,9 @@ export function PersonDetailPage() {
 
   const personQuery = usePerson(id);
   const mutation = useUpdatePerson(id);
+
+  const [searchParams] = useSearchParams();
+  const view = searchParams.get("view") || "cards";
 
   if (personQuery.isLoading) {
     return <main className="p-4">Loading person...</main>;
@@ -33,7 +36,7 @@ export function PersonDetailPage() {
     <main className="mx-auto max-w-3xl p-4">
       <header className="sticky top-0 z-10 border-b bg-white/95 px-4 py-4 backdrop-blur">
         <div className="mx-auto max-w-4xl">
-          <Link className="text-sm text-gray-500 underline" to="/people">
+          <Link className="text-sm text-gray-500 underline" to={`/people?view=${view}`}>
             Back to People
           </Link>
 
