@@ -406,10 +406,10 @@ export function PeopleListPage() {
                   <tr>
                     <th className="p-3">Name</th>
                     <th className="p-3">Nickname</th>
-                    <th className="p-3">CPF</th>
-                    <th className="p-3">Cellular</th>
+                    <th className="p-3">ID</th>
+                    <th className="p-3">Contact</th>
                     <th className="p-3">Status</th>
-                    <th className="p-3">Missing</th>
+                    {/* <th className="p-3">Missing1</th> */}
                   </tr>
                 </thead>
                 <tbody className="divide-y">
@@ -440,16 +440,19 @@ export function PeopleListPage() {
                           {person.nickname || "—"}
                         </td>
                         <td className="p-3 align-top text-gray-700">
-                          {person.cpf || "—"}
+                          <div><span className="font-light">CPF:</span> {person.cpf || "—"}</div>
+                          <div><span className="font-light">RG:</span> {person.rg || "—"}</div>
                         </td>
                         <td className="p-3 align-top text-gray-700">
-                          {person.cellular || "—"}
+                          <div><span className="font-light">Cellular:</span> {person.cellular || "—"}</div>
+                          <div><span className="font-light">Email:</span> {person.email || "—"}</div>
                         </td>
                         <td className="p-3 align-top">
                           <StatusBadge complete={person.canCreateCollaborator}>
                             {person.canCreateCollaborator ? "Complete" : "Incomplete"}
                           </StatusBadge>
                         </td>
+                        {/*
                         <td className="p-3 align-top">
                           {person.canCreateCollaborator || !person.missingSections || person.missingSections.length === 0 ? (
                             <span className="text-gray-400">—</span>
@@ -466,6 +469,7 @@ export function PeopleListPage() {
                             </div>
                           )}
                         </td>
+                        */}
                       </tr>
                     );
                   })}
