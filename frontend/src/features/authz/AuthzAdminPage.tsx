@@ -1,6 +1,9 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { useCollaboratorCatalog } from "../collaborators/useCollaborators";
+import {
+  useCollaboratorCatalog,
+  useCollaboratorSearch,
+} from "../collaborators/useCollaborators";
 import { ApiError } from "../../api/client";
 import { ApiErrorPanel } from "../../components/ApiErrorPanel";
 import type { Collaborator } from "../../types/collaborators";
@@ -287,8 +290,6 @@ export function AuthzAdminPage() {
             ) : (
               <ActorFields
                 value={actorForm}
-                collaborators={collaborators}
-                collaboratorsLoading={collaboratorsQuery.isLoading}
                 onChange={setActorForm}
               />
             )}
@@ -480,30 +481,26 @@ function CardPermissionNotice({ cardName }: { cardName: string }) {
 
 function ActorFields({
   value,
-  collaborators,
-  collaboratorsLoading,
   onChange,
 }: {
   value: CreateAuthzActorInput;
-  collaborators: Collaborator[];
-  collaboratorsLoading: boolean;
   onChange: (value: CreateAuthzActorInput) => void;
 }) {
   const [collaboratorSearch, setCollaboratorSearch] = useState("");
-  const selectedCollaborator = collaborators.find(
-    (collaborator) => collaborator.id === value.collaboratorId,
-  );
-  const matchingCollaborators = useMemo(
-    () =>
-      filterCollaboratorsByPersonNickname(
-        collaborators,
-        collaboratorSearch,
-      ),
-    [collaborators, collaboratorSearch],
-  );
+  const [selectedCollaborator, setSelectedCollaborator] =
+    useState<Collaborator | null>(null);
+  const collaboratorSearchQuery = useCollaboratorSearch(collaboratorSearch);
+  const matchingCollaborators = collaboratorSearchQuery.data?.items ?? [];
   const showCollaboratorSuggestions = collaboratorSearch.trim().length > 0;
 
+  useEffect(() => {
+    if (!value.collaboratorId) {
+      setSelectedCollaborator(null);
+    }
+  }, [value.collaboratorId]);
+
   function selectCollaborator(collaborator: Collaborator) {
+    setSelectedCollaborator(collaborator);
     onChange({
       ...value,
       collaboratorId: collaborator.id,
@@ -515,6 +512,7 @@ function ActorFields({
   }
 
   function clearCollaboratorSelection() {
+    setSelectedCollaborator(null);
     onChange({
       ...value,
       collaboratorId: "",
@@ -558,9 +556,14 @@ function ActorFields({
             aria-label="Matching collaborators for actor creation"
             className="absolute left-0 right-0 top-full z-20 mt-1 max-h-60 overflow-y-auto rounded-xl border border-gray-200 bg-white p-1 shadow-lg"
           >
-            {collaboratorsLoading ? (
+            {collaboratorSearchQuery.isLoading ||
+            collaboratorSearchQuery.isFetching ? (
               <p className="px-3 py-2 text-sm text-gray-500">
                 Loading matching collaborators…
+              </p>
+            ) : collaboratorSearchQuery.error ? (
+              <p className="px-3 py-2 text-sm text-red-700">
+                Could not load matching collaborators.
               </p>
             ) : matchingCollaborators.length === 0 ? (
               <p className="px-3 py-2 text-sm text-gray-500">
@@ -731,20 +734,6 @@ function ActorCard({
       </form>
     </article>
   );
-}
-
-function filterCollaboratorsByPersonNickname(
-  collaborators: Collaborator[],
-  filter: string,
-) {
-  const normalizedFilter = normalizeActorNickname(filter);
-  if (!normalizedFilter) return [];
-
-  return collaborators.filter((collaborator) => {
-    const nickname =
-      collaborator.personNickname?.trim() || collaboratorDisplayName(collaborator);
-    return normalizeActorNickname(nickname).includes(normalizedFilter);
-  });
 }
 
 function filterActorsByPersonNickname(

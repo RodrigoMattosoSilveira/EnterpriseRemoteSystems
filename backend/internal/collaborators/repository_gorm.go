@@ -27,16 +27,6 @@ func (r *gormRepository) List(ctx context.Context, filter CollaboratorListFilter
 		Preload("Task").
 		Preload("Status")
 
-	if search := strings.TrimSpace(filter.Search); search != "" {
-		like := strings.ToLower(search) + "%"
-		q = q.Joins("JOIN people ON people.id = collaborator_journeys.person_id AND people.tenant_id = collaborator_journeys.tenant_id").
-			Where(`(
-				LOWER(COALESCE(people.first_name, '')) LIKE ? OR
-				LOWER(COALESCE(people.last_name, '')) LIKE ? OR
-				LOWER(COALESCE(people.nickname, '')) LIKE ? OR
-				LOWER(TRIM(COALESCE(people.first_name, '') || ' ' || COALESCE(people.last_name, ''))) LIKE ?
-			)`, like, like, like, like)
-	}
 	if filter.StatusID != "" {
 		q = q.Where("collaborator_journeys.status_id = ?", filter.StatusID)
 	}
@@ -47,21 +37,83 @@ func (r *gormRepository) List(ctx context.Context, filter CollaboratorListFilter
 		q = q.Where("collaborator_journeys.payment_method_id = ?", filter.PaymentMethodID)
 	}
 
+	page, pageSize := normalizedPage(filter.Page, filter.PageSize)
+	search := normalizeCollaboratorSearch(filter.Search)
+	if search != "" {
+		var candidates []db.CollaboratorJourney
+		if err := q.
+			Order("collaborator_journeys.created_at DESC, collaborator_journeys.journey_start_date DESC").
+			Find(&candidates).Error; err != nil {
+			return nil, 0, err
+		}
+
+		filtered := make([]db.CollaboratorJourney, 0, len(candidates))
+		for _, candidate := range candidates {
+			if collaboratorMatchesSearch(candidate, search) {
+				filtered = append(filtered, candidate)
+			}
+		}
+
+		total = int64(len(filtered))
+		start := (page - 1) * pageSize
+		if start >= len(filtered) {
+			return []db.CollaboratorJourney{}, total, nil
+		}
+		end := start + pageSize
+		if end > len(filtered) {
+			end = len(filtered)
+		}
+		return filtered[start:end], total, nil
+	}
+
 	if err := q.Count(&total).Error; err != nil {
 		return nil, 0, err
 	}
 
-	page := filter.Page
-	pageSize := filter.PageSize
+	err := q.
+		Order("collaborator_journeys.created_at DESC, collaborator_journeys.journey_start_date DESC").
+		Limit(pageSize).
+		Offset((page - 1) * pageSize).
+		Find(&rows).Error
+	return rows, total, err
+}
+
+func normalizedPage(page, pageSize int) (int, int) {
 	if page <= 0 {
 		page = 1
 	}
 	if pageSize <= 0 {
 		pageSize = 50
 	}
+	return page, pageSize
+}
 
-	err := q.Order("collaborator_journeys.created_at DESC, collaborator_journeys.journey_start_date DESC").Limit(pageSize).Offset((page - 1) * pageSize).Find(&rows).Error
-	return rows, total, err
+func collaboratorMatchesSearch(row db.CollaboratorJourney, normalizedSearch string) bool {
+	fullName := strings.TrimSpace(strings.Join([]string{row.Person.FirstName, row.Person.LastName}, " "))
+	for _, value := range []string{
+		row.Person.FirstName,
+		row.Person.LastName,
+		row.Person.Nickname,
+		fullName,
+	} {
+		if strings.Contains(normalizeCollaboratorSearch(value), normalizedSearch) {
+			return true
+		}
+	}
+	return false
+}
+
+var collaboratorSearchReplacer = strings.NewReplacer(
+	"á", "a", "à", "a", "â", "a", "ã", "a", "ä", "a",
+	"é", "e", "è", "e", "ê", "e", "ë", "e",
+	"í", "i", "ì", "i", "î", "i", "ï", "i",
+	"ó", "o", "ò", "o", "ô", "o", "õ", "o", "ö", "o",
+	"ú", "u", "ù", "u", "û", "u", "ü", "u",
+	"ç", "c",
+)
+
+func normalizeCollaboratorSearch(value string) string {
+	return collaboratorSearchReplacer.Replace(strings.ToLower(strings.TrimSpace(value)))
 }
 
 func (r *gormRepository) ListCandidatePeople(ctx context.Context) ([]db.Person, error) {
