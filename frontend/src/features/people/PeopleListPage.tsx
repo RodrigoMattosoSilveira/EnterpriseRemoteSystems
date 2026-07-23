@@ -30,7 +30,7 @@ export function PeopleListPage() {
   const [canCreateCollaborator, setCanCreateCollaborator] =
     useState<CollaboratorEligibilityFilter>("all");
   const [peopleStatus, setPeopleStatus] = 
-    useState<"All" | "Active" | "InActive">("All");
+    useState<"All" | "Active" | "InActive" | "Discontinued">("All");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
 
@@ -58,6 +58,8 @@ export function PeopleListPage() {
           ? "ref-person-status-active"
           : peopleStatus === "InActive"
           ? "ref-person-status-inactive"
+          : peopleStatus === "Discontinued"
+          ? "ref-person-status-discontinued"
           : undefined,
     }),
     [canCreateCollaborator, page, pageSize, profileCompletionStatus, peopleStatus, debouncedSearch],
@@ -227,7 +229,7 @@ export function PeopleListPage() {
                 value={peopleStatus}
                 onChange={(event) => {
                   setPeopleStatus(
-                    event.target.value as "All" | "Active" | "InActive",
+                    event.target.value as "All" | "Active" | "InActive" | "Discontinued",
                   );
                   setPage(1);
                 }}
@@ -235,6 +237,7 @@ export function PeopleListPage() {
                 <option value="All">All</option>
                 <option value="Active">Active</option>
                 <option value="InActive">InActive</option>
+                <option value="Discontinued">Discontinued</option>
               </select>
             </label>
 

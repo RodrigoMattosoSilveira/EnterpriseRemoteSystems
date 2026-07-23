@@ -2,6 +2,7 @@ import { expect, test, type APIRequestContext } from "@playwright/test";
 import { authzHeaders, e2eApiUrl, seedBrowserAuthz } from "./support/authz";
 
 const ACTIVE_STATUS_ID = "ref-person-status-active";
+const DISCONTINUED_STATUS_ID = "ref-person-status-discontinued";
 
 test.beforeEach(async ({ page }) => {
   await seedBrowserAuthz(page);
@@ -116,6 +117,34 @@ test("user can filter and paginate the People page", async ({ page, request }) =
   await expect(page.getByText("Page 1 of 2").first()).toBeVisible();
 });
 
+test("user can filter People by Discontinued status", async ({ page, request }) => {
+  const suffix = uniqueSuffix();
+  const filterLastName = `PeopleDiscontinued${suffix}`;
+
+  await createPersonViaApi(request, {
+    seed: suffix,
+    firstName: `Active${suffix}`,
+    lastName: filterLastName,
+    statusId: ACTIVE_STATUS_ID,
+  });
+
+  await createPersonViaApi(request, {
+    seed: suffix + 1,
+    firstName: `Discontinued${suffix}`,
+    lastName: filterLastName,
+    statusId: DISCONTINUED_STATUS_ID,
+  });
+
+  await page.goto("/people");
+
+  await page.getByLabel("Filter people").fill(filterLastName);
+  await page.getByRole("combobox", { name: /^Status$/ }).selectOption("Discontinued");
+
+  await expect(page.getByText("Showing 1-1 of 1 people").first()).toBeVisible();
+  await expect(page.getByRole("link", { name: new RegExp(`Discontinued${suffix}`) })).toBeVisible();
+  await expect(page.getByRole("link", { name: new RegExp(`Active${suffix}`) })).toHaveCount(0);
+});
+
 test("user sees required field validation on the create Person form", async ({ page }) => {
   await page.goto("/people/new");
 
@@ -198,7 +227,12 @@ test("user can create a Person with a valid Brazilian cellular", async ({ page }
 
 async function createPersonViaApi(
   request: APIRequestContext,
-  input: { seed: number; firstName: string; lastName: string },
+  input: {
+    seed: number;
+    firstName: string;
+    lastName: string;
+    statusId?: string;
+  },
 ) {
   const attempts = 3;
   let lastStatus = 0;
@@ -216,7 +250,7 @@ async function createPersonViaApi(
         rg: validRG(seed),
         cellular: validBrazilianCellular(seed),
         email: `people-filter-${seed}@example.com`,
-        statusId: ACTIVE_STATUS_ID,
+        statusId: input.statusId ?? ACTIVE_STATUS_ID,
       },
     });
 

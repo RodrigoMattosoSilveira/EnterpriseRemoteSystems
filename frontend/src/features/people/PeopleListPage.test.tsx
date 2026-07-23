@@ -84,6 +84,21 @@ describe("PeopleListPage", () => {
     );
   });
 
+  it("applies discontinued status filter immediately", async () => {
+    mockPeopleFetch({ items: [personFixture("person-1", "Maria")], total: 1 });
+
+    renderPeopleListRoute();
+    await waitForText("Maria Pessoa");
+
+    await changeSelect("Status", "Discontinued");
+
+    await waitFor(() =>
+      fetchCalls.includes(
+        "/api/v1/people?statusId=ref-person-status-discontinued&page=1&pageSize=10",
+      ),
+    );
+  });
+
   it("clears status filter when All is selected", async () => {
     mockPeopleFetch({ items: [personFixture("person-1", "Maria")], total: 1 });
 
@@ -94,6 +109,27 @@ describe("PeopleListPage", () => {
 
     await waitFor(() =>
       fetchCalls.includes("/api/v1/people?page=1&pageSize=10"),
+    );
+  });
+
+  it("resets to first page when status changes to Discontinued", async () => {
+    mockPeopleFetch({ items: Array.from({ length: 10 }, (_, index) => personFixture(`person-${index + 1}`, `Maria${index + 1}`)), total: 25 });
+
+    renderPeopleListRoute();
+    await waitForText("Maria1 Pessoa");
+
+    await clickButton("Next");
+
+    await waitFor(() =>
+      fetchCalls.includes("/api/v1/people?page=2&pageSize=10"),
+    );
+
+    await changeSelect("Status", "Discontinued");
+
+    await waitFor(() =>
+      fetchCalls.includes(
+        "/api/v1/people?statusId=ref-person-status-discontinued&page=1&pageSize=10",
+      ),
     );
   });
 
