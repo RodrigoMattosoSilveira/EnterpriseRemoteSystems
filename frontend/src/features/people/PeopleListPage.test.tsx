@@ -3,6 +3,7 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { AUTHZ_REQUEST_ACTOR_STORAGE_KEY } from "../../api/requestActorBootstrap";
 import { PeopleListPage } from "./PeopleListPage";
 import type { Person } from "../../types/people";
 
@@ -11,6 +12,7 @@ let root: Root | null;
 let fetchCalls: string[];
 
 beforeEach(() => {
+  window.localStorage.clear();
   vi.useFakeTimers({ shouldAdvanceTime: true });
   container = document.createElement("div");
   document.body.appendChild(container);
@@ -29,6 +31,7 @@ afterEach(async () => {
     });
   }
   document.body.removeChild(container);
+  window.localStorage.clear();
   vi.clearAllTimers();
   vi.useRealTimers();
   vi.restoreAllMocks();
@@ -135,6 +138,20 @@ describe("PeopleListPage", () => {
     );
   });
 
+  it("offers the shared local actor recovery when People access is forbidden", async () => {
+    window.localStorage.setItem(
+      AUTHZ_REQUEST_ACTOR_STORAGE_KEY,
+      JSON.stringify({ actorId: "restricted-actor", tenantId: "default" }),
+    );
+    mockPeopleForbidden();
+
+    renderPeopleListRoute();
+
+    await waitForText("Actor is not permitted to perform this operation");
+    expect(textNode("restricted-actor")).toBeTruthy();
+    expect(textNode("Use bootstrap-admin and reload")).toBeTruthy();
+    expect(container.querySelector("pre")).toBeNull();
+  });
   it("resets to first page when status changes to Discontinued", async () => {
     mockPeopleFetch({ items: Array.from({ length: 10 }, (_, index) => personFixture(`person-${index + 1}`, `Maria${index + 1}`)), total: 25 });
 
@@ -233,6 +250,29 @@ function mockPeopleFetch(response: { items: Person[]; total: number }) {
 
       if (url.startsWith("/api/v1/people")) {
         return jsonResponse({ data: response });
+      }
+
+      throw new Error(`Unhandled request: ${url}`);
+    },
+  );
+}
+
+function mockPeopleForbidden() {
+  vi.spyOn(globalThis, "fetch").mockImplementation(
+    async (input: RequestInfo | URL) => {
+      const url = typeof input === "string" ? input : input.toString();
+      fetchCalls.push(url);
+
+      if (url.startsWith("/api/v1/people")) {
+        return jsonResponse(
+          {
+            error: {
+              code: "forbidden",
+              message: "Actor is not permitted to perform this operation",
+            },
+          },
+          { status: 403 },
+        );
       }
 
       throw new Error(`Unhandled request: ${url}`);

@@ -1,0 +1,22 @@
+DROP TRIGGER IF EXISTS trg_auth_password_reset_token_hash_immutable;
+DROP TRIGGER IF EXISTS trg_auth_password_reset_token_hash_required_insert;
+DROP TRIGGER IF EXISTS trg_auth_password_reset_account_id_immutable;
+DROP TRIGGER IF EXISTS trg_auth_sessions_token_hash_immutable;
+DROP TRIGGER IF EXISTS trg_auth_sessions_token_hash_required_insert;
+DROP TRIGGER IF EXISTS trg_auth_sessions_account_id_immutable;
+DROP TRIGGER IF EXISTS trg_auth_user_accounts_password_hash_required_update;
+DROP TRIGGER IF EXISTS trg_auth_user_accounts_password_hash_required_insert;
+DROP TRIGGER IF EXISTS trg_auth_user_accounts_login_normalized_update;
+DROP TRIGGER IF EXISTS trg_auth_user_accounts_login_normalized_insert;
+DROP TRIGGER IF EXISTS trg_auth_user_accounts_actor_id_immutable;
+DROP TRIGGER IF EXISTS trg_auth_user_accounts_delete_prohibited;
+
+DROP INDEX IF EXISTS idx_auth_password_reset_account_active;
+DROP TABLE IF EXISTS auth_password_reset_tokens;
+
+DROP INDEX IF EXISTS idx_auth_sessions_expires_at;
+DROP INDEX IF EXISTS idx_auth_sessions_account_active;
+DROP TABLE IF EXISTS auth_sessions;
+
+DROP INDEX IF EXISTS idx_auth_user_accounts_active;
+DROP TABLE IF EXISTS auth_user_accounts;

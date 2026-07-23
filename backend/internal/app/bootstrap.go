@@ -5,6 +5,7 @@ import (
 	"log"
 
 	"enterpriseremotesystems/backend/internal/accruals"
+	"enterpriseremotesystems/backend/internal/authentication"
 	"enterpriseremotesystems/backend/internal/authz"
 	"enterpriseremotesystems/backend/internal/collaborators"
 	"enterpriseremotesystems/backend/internal/currentaccounts"
@@ -40,6 +41,11 @@ func Bootstrap(cfg Config) (*fiber.App, func(), error) {
 			return nil, nil, err
 		}
 	}
+	if cfg.AutoMigrate || (cfg.Env == "test" && !cfg.AutoMigrateConfigured) {
+		if err := authentication.AutoMigrate(database); err != nil {
+			return nil, nil, err
+		}
+	}
 	if err := authz.SeedAuthorizationCatalog(database); err != nil {
 		return nil, nil, err
 	}
@@ -59,6 +65,19 @@ func Bootstrap(cfg Config) (*fiber.App, func(), error) {
 	}
 
 	actorStore := authz.NewGORMStore(database)
+
+	authenticationRepo := authentication.NewRepository(database)
+	authenticationSvc := authentication.NewService(authenticationRepo, authentication.ServiceConfig{
+		SessionTTL:       cfg.AuthSessionTTL,
+		PasswordResetTTL: cfg.AuthPasswordResetTTL,
+		PasswordHashCost: cfg.AuthPasswordHashCost,
+	})
+	authenticationHandler := authentication.NewHandler(authenticationSvc, authentication.CookieConfig{
+		Name:     cfg.AuthSessionCookieName,
+		Secure:   cfg.AuthSessionCookieSecure,
+		SameSite: cfg.AuthSessionCookieSameSite,
+		TTL:      cfg.AuthSessionTTL,
+	}, actorStore, actorStore)
 
 	tenantRepo := tenants.NewRepository(database)
 	tenantSvc := tenants.NewService(tenantRepo)
@@ -107,6 +126,7 @@ func Bootstrap(cfg Config) (*fiber.App, func(), error) {
 
 	deps := routes.Dependencies{
 		DB:                          database,
+		AuthenticationHandler:       authenticationHandler,
 		DisableRouteAuthorization:   cfg.DisableRouteAuthorization,
 		AuthzHandler:                authzHandler,
 		ActorStore:                  actorStore,

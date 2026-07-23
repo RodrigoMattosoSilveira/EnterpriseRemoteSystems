@@ -39,11 +39,19 @@ test("user can create a Collaborator from an eligible complete Person", async ({
     page.getByRole("heading", { name: "Select an eligible Person" }),
   ).toBeVisible();
 
-  const personSelect = page.getByLabel("Eligible Person *");
-  await expect(personSelect).toBeEnabled();
-  await expect(personSelect).toContainText(personDisplayName);
+  const personSearch = page.getByLabel(
+    "Find eligible Person by nickname *",
+  );
+  await expect(personSearch).toBeEnabled();
+  await personSearch.fill(personNickname.slice(1));
 
-  await personSelect.selectOption(person.id);
+  const eligibleSuggestions = page.getByRole("listbox", {
+    name: "Matching eligible People",
+  });
+  await expect(eligibleSuggestions).toBeVisible();
+  await eligibleSuggestions
+    .getByRole("option", { name: personDisplayName })
+    .click();
 
   await expect(page.getByText("Selected Person is complete.")).toBeVisible();
 
@@ -95,15 +103,25 @@ test("user can create a Collaborator from an eligible complete Person", async ({
 
   await expect(
     page.getByText(
-      "Already active Collaborators are hidden from the dropdown.",
+      "Already active Collaborators are hidden from eligible Person suggestions.",
     ),
   ).toBeVisible();
 
   await expect(page.getByText(personDisplayName)).toHaveCount(1);
 
-  const refreshedPersonSelect = page.getByLabel("Eligible Person *");
-
-  await expect(refreshedPersonSelect).not.toContainText(personDisplayName);
+  const refreshedPersonSearch = page.getByLabel(
+    "Find eligible Person by nickname *",
+  );
+  if (await refreshedPersonSearch.isEnabled()) {
+    await refreshedPersonSearch.fill(personNickname.slice(1));
+    await expect(
+      page.getByRole("listbox", { name: "Matching eligible People" }),
+    ).toContainText("No matching eligible People");
+  } else {
+    await expect(
+      page.getByText("No eligible People are available."),
+    ).toBeVisible();
+  }
 });
 
 test("user can filter Collaborators by any part of person name or nickname", async ({

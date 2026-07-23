@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { ensureDefaultRequestActorStored } from "./requestActorBootstrap";
+import {
+  ensureDefaultRequestActorStored,
+  readRequestActorSelection,
+  resetDefaultRequestActorStored,
+} from "./requestActorBootstrap";
 
 const STORAGE_KEY = "ers.authzAdmin.requestActor";
 
@@ -64,6 +68,24 @@ describe("ensureDefaultRequestActorStored", () => {
     ensureDefaultRequestActorStored(storage);
 
     expect(JSON.parse(storage.getItem(STORAGE_KEY) ?? "{}")).toEqual({
+      actorId: "bootstrap-admin",
+      tenantId: "default",
+    });
+  });
+
+  it("reads and explicitly resets a restricted local operating actor", () => {
+    const storage = memoryStorage(
+      JSON.stringify({ actorId: "restricted-actor", tenantId: "tenant-a" }),
+    );
+
+    expect(readRequestActorSelection(storage)).toEqual({
+      actorId: "restricted-actor",
+      tenantId: "tenant-a",
+    });
+
+    resetDefaultRequestActorStored(storage);
+
+    expect(readRequestActorSelection(storage)).toEqual({
       actorId: "bootstrap-admin",
       tenantId: "default",
     });

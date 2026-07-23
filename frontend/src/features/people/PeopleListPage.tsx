@@ -1,5 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
+
 import { Link, useLocation, useSearchParams } from "react-router-dom";
+import { ApiErrorPanel } from "../../components/ApiErrorPanel";
+
 import { usePeoplePage } from "./usePeople";
 
 import {
@@ -297,11 +300,7 @@ export function PeopleListPage() {
           </div>
         )}
 
-        {error && (
-          <pre className="rounded bg-red-50 p-4 text-xs text-red-800">
-            {JSON.stringify(error, Object.getOwnPropertyNames(error), 2)}
-          </pre>
-        )}
+        {error && <ApiErrorPanel error={error} />}
 
         {!isLoading && !error && (
           <PaginationSummary
