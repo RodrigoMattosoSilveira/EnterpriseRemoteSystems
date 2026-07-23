@@ -48,9 +48,22 @@ test("admin can create an authorization actor, grant a role, and revoke it", asy
   await expect(permissionsSection).toBeVisible();
   await expect(permissionsSection.getByText("authz.manage").first()).toBeVisible();
 
-  const collaboratorSelect = page.getByLabel("Collaborator");
-  await expect(collaboratorSelect).toContainText(actorNickname);
-  await collaboratorSelect.selectOption(collaborator.id);
+  const collaboratorSearch = page.getByLabel(
+    "Find collaborator by person nickname",
+  );
+  await collaboratorSearch.fill(actorNickname.slice(2));
+
+  const collaboratorSuggestions = page.getByRole("listbox", {
+    name: "Matching collaborators for actor creation",
+  });
+  const collaboratorOption = collaboratorSuggestions.getByRole("option", {
+    name: new RegExp(actorNickname),
+  });
+  await expect(collaboratorOption).toBeVisible();
+  await collaboratorOption.click();
+
+  await expect(collaboratorSearch).toHaveValue("");
+  await expect(collaboratorSuggestions).toHaveCount(0);
   await expect(page.getByText(`Actor key: ${actorKey}`)).toBeVisible();
   await expect(page.getByText(`Display name: ${displayName}`)).toBeVisible();
 
@@ -67,6 +80,34 @@ test("admin can create an authorization actor, grant a role, and revoke it", asy
   await expect(actorCard).toBeVisible();
   await expect(actorCard).toContainText(displayName);
   await expect(actorCard).toContainText("No role grants.");
+
+  const actorNicknameFilter = page.getByLabel(
+    "Filter actors by person nickname",
+  );
+  await actorNicknameFilter.fill(actorNickname.slice(2));
+  await expect(actorCard).toBeVisible();
+  await expect(
+    page
+      .getByTestId("authz-actor-card")
+      .filter({
+        has: page.getByRole("heading", {
+          name: "bootstrap-admin",
+          exact: true,
+        }),
+      }),
+  ).toHaveCount(0);
+
+  await page.getByRole("button", { name: "Clear" }).click();
+  await expect(
+    page
+      .getByTestId("authz-actor-card")
+      .filter({
+        has: page.getByRole("heading", {
+          name: "bootstrap-admin",
+          exact: true,
+        }),
+      }),
+  ).toBeVisible();
 
   await actorCard.getByLabel("Role").selectOption(grantedRole);
   await actorCard.getByLabel("Grant tenant").fill(grantTenant);

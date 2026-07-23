@@ -2,6 +2,7 @@ package routes
 
 import (
 	"enterpriseremotesystems/backend/internal/accruals"
+	"enterpriseremotesystems/backend/internal/authentication"
 	"enterpriseremotesystems/backend/internal/authz"
 	"enterpriseremotesystems/backend/internal/collaborators"
 	"enterpriseremotesystems/backend/internal/currentaccounts"
@@ -18,6 +19,7 @@ import (
 
 type Dependencies struct {
 	DB                          *gorm.DB
+	AuthenticationHandler       *authentication.Handler
 	DisableRouteAuthorization   bool
 	AuthzHandler                *authz.Handler
 	ActorStore                  authz.ActorStore

@@ -190,21 +190,28 @@ afterEach(async () => {
 });
 
 describe("CreateCollaboratorPage", () => {
-  it("loads only eligible people into the create form and hides incomplete people", async () => {
+  it("filters eligible People progressively by Person nickname", async () => {
     mockCreateCollaboratorFetch();
 
     renderCreateCollaboratorPage();
 
-    await waitForText("Ana Silva (Ana)");
-    expect(textNode("Carla Moura (Carla)")).toBeTruthy();
-    expect(textNode("2 eligible")).toBeTruthy();
+    await waitForText("2 eligible");
     expect(textNode("1 incomplete")).toBeTruthy();
-    expect(selectOptions("Eligible Person")).toEqual([
-      "Select an eligible Person",
+    expect(() => selectOptions("Eligible Person")).toThrow();
+
+    await changeInput("Find eligible Person by nickname", "an");
+    await waitForListboxOptions("Matching eligible People", [
       "Ana Silva (Ana)",
+    ]);
+
+    await changeInput("Find eligible Person by nickname", "arl");
+    await waitForListboxOptions("Matching eligible People", [
       "Carla Moura (Carla)",
     ]);
-    expect(textNode("Bruno Costa")).toBeFalsy();
+
+    await changeInput("Find eligible Person by nickname", "bruno");
+    await waitForText("No matching eligible People");
+
     expect(textNode("Active reference data")).toBeTruthy();
     expect(
       textNode("Only active reference data values are available"),
@@ -230,10 +237,9 @@ describe("CreateCollaboratorPage", () => {
 
     renderCreateCollaboratorPage();
 
-    await waitForText("Joao Novo (Joao)");
-
-    expect(selectOptions("Eligible Person")).toEqual([
-      "Select an eligible Person",
+    await waitForText("1 eligible");
+    await changeInput("Find eligible Person by nickname", "oa");
+    await waitForListboxOptions("Matching eligible People", [
       "Joao Novo (Joao)",
     ]);
 
@@ -245,6 +251,32 @@ describe("CreateCollaboratorPage", () => {
     expect(candidateCall).toBeTruthy();
   });
 
+  it("matches eligible People by an accent-insensitive nickname substring", async () => {
+    const accentedPerson: Person = {
+      ...completePerson,
+      id: "person-accented",
+      firstName: "Aurelia",
+      lastName: "Souza",
+      nickname: "Áurea",
+      cpf: "52998224725",
+      rg: "RG-ACCENT",
+      cellular: "11911112222",
+      email: "aurea@example.com",
+    };
+    mockCreateCollaboratorFetch({
+      people: [accentedPerson],
+      candidates: [accentedPerson],
+    });
+
+    renderCreateCollaboratorPage();
+
+    await waitForText("1 eligible");
+    await changeInput("Find eligible Person by nickname", "ure");
+    await waitForListboxOptions("Matching eligible People", [
+      "Aurelia Souza (Áurea)",
+    ]);
+  });
+
   it("excludes complete People who already have an active Collaborator", async () => {
     mockCreateCollaboratorFetch({
       collaborators: [activeCollaboratorForSecondPerson],
@@ -252,17 +284,15 @@ describe("CreateCollaboratorPage", () => {
 
     renderCreateCollaboratorPage();
 
-    await waitForText("Ana Silva (Ana)");
+    await waitForText("1 eligible");
 
-    expect(textNode("1 eligible")).toBeTruthy();
     expect(textNode("1 already collaborators")).toBeTruthy();
-    expect(selectOptions("Eligible Person")).toEqual([
-      "Select an eligible Person",
+    await changeInput("Find eligible Person by nickname", "a");
+    await waitForListboxOptions("Matching eligible People", [
       "Ana Silva (Ana)",
     ]);
-    expect(textNode("Search eligible People")).toBeFalsy();
     await waitForText(
-      "Already active Collaborators are hidden from the dropdown.",
+      "Already active Collaborators are hidden from eligible Person suggestions.",
     );
     await waitForText("Carla Moura (Carla)");
 
@@ -314,9 +344,9 @@ describe("CreateCollaboratorPage", () => {
 
     renderCreateCollaboratorPage();
 
-    await waitForText("Ana Silva (Ana)");
+    await waitForText("2 eligible");
 
-    await changeSelect("Eligible Person", "person-complete-1");
+    await selectEligiblePerson("na", "Ana Silva (Ana)");
 
     await waitForText("Selected Person is complete.");
     await waitForText("ana@example.com");
@@ -328,6 +358,15 @@ describe("CreateCollaboratorPage", () => {
       (node) => node.textContent?.trim() === "View Person",
     );
     expect(viewLink?.getAttribute("href")).toBe("/people/person-complete-1");
+
+    await clickButton("Change Person");
+    expect(
+      controlByLabel<HTMLInputElement>(
+        "Find eligible Person by nickname",
+        "input",
+      ),
+    ).toBeTruthy();
+    expect(submitButton().hasAttribute("disabled")).toBe(true);
   });
 
   it("requires a complete Person and all required Collaborator fields before enabling submit", async () => {
@@ -335,11 +374,11 @@ describe("CreateCollaboratorPage", () => {
 
     renderCreateCollaboratorPage();
 
-    await waitForText("Ana Silva (Ana)");
+    await waitForText("2 eligible");
 
     expect(submitButton().hasAttribute("disabled")).toBe(true);
 
-    await changeSelect("Eligible Person", "person-complete-1");
+    await selectEligiblePerson("na", "Ana Silva (Ana)");
     expect(submitButton().hasAttribute("disabled")).toBe(true);
     await waitForText("Complete these fields to enable Create Collaborator:");
     await waitForText("Select a status");
@@ -371,6 +410,13 @@ describe("CreateCollaboratorPage", () => {
     await waitForText("0 eligible");
     await waitForText("1 incomplete");
 
+    const personSearch = controlByLabel<HTMLInputElement>(
+      "Find eligible Person by nickname",
+      "input",
+    );
+    expect(personSearch.disabled).toBe(true);
+    expect(personSearch.placeholder).toBe("No eligible People available");
+
     const submit = Array.from(container.querySelectorAll("button")).find(
       (node) => node.textContent?.trim() === "Create Collaborator",
     );
@@ -382,9 +428,9 @@ describe("CreateCollaboratorPage", () => {
 
     renderCreateCollaboratorPage();
 
-    await waitForText("Ana Silva (Ana)");
+    await waitForText("2 eligible");
 
-    await changeSelect("Eligible Person", "person-complete-1");
+    await selectEligiblePerson("na", "Ana Silva (Ana)");
     await changeInput("Journey Start Date", "2026-05-29");
     await changeSelect("Status", "ref-collaborator-status-active");
     await changeSelect("Sector", "ref-sector-mining");
@@ -432,9 +478,9 @@ describe("CreateCollaboratorPage", () => {
 
     renderCreateCollaboratorPage();
 
-    await waitForText("Ana Silva (Ana)");
+    await waitForText("2 eligible");
 
-    await changeSelect("Eligible Person", "person-complete-1");
+    await selectEligiblePerson("na", "Ana Silva (Ana)");
     await changeInput("Journey Start Date", "2026-05-29");
     await changeSelect("Status", "ref-collaborator-status-active");
     await changeSelect("Sector", "ref-sector-mining");
@@ -478,9 +524,9 @@ describe("CreateCollaboratorPage", () => {
 
     renderCreateCollaboratorPage();
 
-    await waitForText("Ana Silva (Ana)");
+    await waitForText("2 eligible");
 
-    await changeSelect("Eligible Person", "person-complete-1");
+    await selectEligiblePerson("na", "Ana Silva (Ana)");
     await changeInput("Journey Start Date", "2026-05-29");
     await changeSelect("Status", "ref-collaborator-status-active");
     await changeSelect("Sector", "ref-sector-mining");
@@ -520,9 +566,9 @@ describe("CreateCollaboratorPage", () => {
 
     renderCreateCollaboratorPage();
 
-    await waitForText("Ana Silva (Ana)");
+    await waitForText("2 eligible");
 
-    await changeSelect("Eligible Person", "person-complete-1");
+    await selectEligiblePerson("na", "Ana Silva (Ana)");
     await changeInput("Journey Start Date", "2026-05-29");
     await changeSelect("Status", "ref-collaborator-status-active");
     await changeSelect("Sector", "ref-sector-mining");
@@ -763,6 +809,43 @@ function textNode(text: string) {
   return Array.from(container.querySelectorAll("*")).find((element) =>
     element.textContent?.includes(text),
   );
+}
+
+async function selectEligiblePerson(search: string, optionLabel: string) {
+  await changeInput("Find eligible Person by nickname", search);
+  await waitForListboxOptions("Matching eligible People", [optionLabel]);
+  await clickListboxOption("Matching eligible People", optionLabel);
+}
+
+async function waitForListboxOptions(label: string, expected: string[]) {
+  await waitFor(() => {
+    const listbox = container.querySelector(
+      `[role="listbox"][aria-label="${label}"]`,
+    );
+    if (!listbox) return false;
+
+    const labels = Array.from(listbox.querySelectorAll('[role="option"]')).map(
+      (option) => option.textContent?.trim() ?? "",
+    );
+    return JSON.stringify(labels) === JSON.stringify(expected);
+  });
+}
+
+async function clickListboxOption(label: string, optionLabel: string) {
+  const listbox = container.querySelector(
+    `[role="listbox"][aria-label="${label}"]`,
+  );
+  const option = Array.from(
+    listbox?.querySelectorAll<HTMLButtonElement>('[role="option"]') ?? [],
+  ).find((node) => node.textContent?.trim() === optionLabel);
+
+  if (!option) {
+    throw new Error(`Could not find ${optionLabel} in ${label}`);
+  }
+
+  await act(async () => {
+    option.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+  });
 }
 
 function selectOptions(labelText: string) {
