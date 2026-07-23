@@ -1,6 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { usePeoplePage } from "./usePeople";
+import {
+  CardViewIcon,
+  ListViewIcon,
+  SegmentedOptionToggle,
+} from "../../components/options/SegmentedOptionToggle";
 import type {
   PeopleListFilter,
   Person,
@@ -18,7 +23,7 @@ type CollaboratorEligibilityFilter = "all" | "true" | "false";
 const DEFAULT_PAGE_SIZE = 10;
 const PAGE_SIZE_OPTIONS = [10, 25, 50];
 const SEARCH_DEBOUNCE_MS = 350;
-  
+
 export function PeopleListPage() {
   const location = useLocation();
   const listState = readPeopleListState(location.state);
@@ -31,6 +36,7 @@ export function PeopleListPage() {
     useState<CollaboratorEligibilityFilter>("all");
   const [peopleStatus, setPeopleStatus] = 
     useState<"All" | "Active" | "InActive" | "Discontinued">("All");
+  const [viewMode, setViewMode] = useState<"cards" | "list">("cards");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
 
@@ -155,11 +161,25 @@ export function PeopleListPage() {
           className="rounded-2xl border bg-white p-5 shadow-sm"
         >
           <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <h2 className="text-lg font-semibold text-gray-950">Filters</h2>
-              <p className="mt-1 text-sm text-gray-500">
-                Search by name, nickname, CPF, RG, cellular, or email.
-              </p>
+            <div className="min-w-0 flex-1">
+              <div>
+                <h2 className="text-lg font-semibold text-gray-950">Filters</h2>
+                <p className="mt-1 text-sm text-gray-500">
+                  Search by name, nickname, CPF, RG, cellular, or email.
+                </p>
+              </div>
+            </div>
+            <div className="flex flex-wrap items-center gap-3">
+              <SegmentedOptionToggle
+                ariaLabel="People view mode"
+                value={viewMode}
+                onChange={setViewMode}
+                showLabels={false}
+                options={[
+                  { value: "cards", label: "Card view", icon: <CardViewIcon /> },
+                  { value: "list", label: "List view", icon: <ListViewIcon /> },
+                ]}
+              />
             </div>
             {hasActiveFilters && (
               <button
@@ -316,65 +336,144 @@ export function PeopleListPage() {
           </div>
         )}
 
-        {displayedPeople.map((person) => {
-          const wasJustCreated = person.id === listState.createdPersonId;
+        {viewMode === "cards" ? (
+          <div className="grid gap-4 md:grid-cols-2">
+            {displayedPeople.map((person) => {
+              const wasJustCreated = person.id === listState.createdPersonId;
 
-          return (
-            <Link
-              key={person.id}
-              to={`/people/${person.id}`}
-              className={`block rounded-2xl border p-5 shadow-sm transition hover:shadow-md ${
-                wasJustCreated
-                  ? "border-green-300 bg-green-50 ring-2 ring-green-100"
-                  : "bg-white"
-              }`}
-            >
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <h2 className="text-lg font-semibold text-gray-950">
-                      {person.firstName} {person.lastName}
-                    </h2>
-                    {wasJustCreated && (
-                      <span className="rounded-full bg-green-100 px-3 py-1 text-xs font-semibold text-green-800">
-                        Just added
-                      </span>
+              return (
+                <Link
+                  key={person.id}
+                  to={`/people/${person.id}`}
+                  className={`block rounded-2xl border p-5 shadow-sm transition hover:shadow-md ${
+                    wasJustCreated
+                      ? "border-green-300 bg-green-50 ring-2 ring-green-100"
+                      : "bg-white"
+                  }`}
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <h2 className="text-lg font-semibold text-gray-950">
+                          {person.firstName} {person.lastName}
+                        </h2>
+                        {wasJustCreated && (
+                          <span className="rounded-full bg-green-100 px-3 py-1 text-xs font-semibold text-green-800">
+                            Just added
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-sm text-gray-500">
+                        Nickname: {person.nickname || "—"}
+                      </p>
+                    </div>
+
+                    <StatusBadge complete={person.canCreateCollaborator}>
+                      {person.canCreateCollaborator ? "Complete" : "Incomplete"}
+                    </StatusBadge>
+                  </div>
+
+                  <div className="mt-4 grid gap-2 text-sm text-gray-700">
+                    <Info label="CPF" value={person.cpf} />
+                    <Info label="RG" value={person.rg} />
+                    <Info label="Cellular" value={person.cellular} />
+                    <Info label="Email" value={person.email} />
+                  </div>
+
+                  {!person.canCreateCollaborator &&
+                    person.missingSections &&
+                    person.missingSections.length > 0 && (
+                      <div className="mt-4 flex flex-wrap gap-2">
+                        {person.missingSections.map((section) => (
+                          <span
+                            key={section}
+                            className="rounded-full bg-amber-100 px-3 py-1 text-xs font-medium text-amber-800"
+                          >
+                            Missing {section}
+                          </span>
+                        ))}
+                      </div>
                     )}
-                  </div>
-                  <p className="text-sm text-gray-500">
-                    Nickname: {person.nickname || "—"}
-                  </p>
-                </div>
+                </Link>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="overflow-hidden rounded-2xl border bg-white shadow-sm">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-sm">
+                <thead className="bg-gray-50 text-xs uppercase tracking-wide text-gray-500">
+                  <tr>
+                    <th className="p-3">Name</th>
+                    <th className="p-3">Nickname</th>
+                    <th className="p-3">CPF</th>
+                    <th className="p-3">Cellular</th>
+                    <th className="p-3">Status</th>
+                    <th className="p-3">Missing</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y">
+                  {displayedPeople.map((person) => {
+                    const wasJustCreated = person.id === listState.createdPersonId;
 
-                <StatusBadge complete={person.canCreateCollaborator}>
-                  {person.canCreateCollaborator ? "Complete" : "Incomplete"}
-                </StatusBadge>
-              </div>
-
-              <div className="mt-4 grid gap-2 text-sm text-gray-700">
-                <Info label="CPF" value={person.cpf} />
-                <Info label="RG" value={person.rg} />
-                <Info label="Cellular" value={person.cellular} />
-                <Info label="Email" value={person.email} />
-              </div>
-
-              {!person.canCreateCollaborator &&
-                person.missingSections &&
-                person.missingSections.length > 0 && (
-                  <div className="mt-4 flex flex-wrap gap-2">
-                    {person.missingSections.map((section) => (
-                      <span
-                        key={section}
-                        className="rounded-full bg-amber-100 px-3 py-1 text-xs font-medium text-amber-800"
+                    return (
+                      <tr
+                        key={person.id}
+                        className={wasJustCreated ? "bg-green-50" : "bg-white"}
                       >
-                        Missing {section}
-                      </span>
-                    ))}
-                  </div>
-                )}
-            </Link>
-          );
-        })}
+                        <td className="p-3 align-top">
+                          <Link
+                            to={`/people/${person.id}`}
+                            className="font-semibold text-gray-950 underline-offset-2 hover:underline"
+                          >
+                            {person.firstName} {person.lastName}
+                          </Link>
+                          {wasJustCreated && (
+                            <div className="mt-1">
+                              <span className="rounded-full bg-green-100 px-3 py-1 text-xs font-semibold text-green-800">
+                                Just added
+                              </span>
+                            </div>
+                          )}
+                        </td>
+                        <td className="p-3 align-top text-gray-700">
+                          {person.nickname || "—"}
+                        </td>
+                        <td className="p-3 align-top text-gray-700">
+                          {person.cpf || "—"}
+                        </td>
+                        <td className="p-3 align-top text-gray-700">
+                          {person.cellular || "—"}
+                        </td>
+                        <td className="p-3 align-top">
+                          <StatusBadge complete={person.canCreateCollaborator}>
+                            {person.canCreateCollaborator ? "Complete" : "Incomplete"}
+                          </StatusBadge>
+                        </td>
+                        <td className="p-3 align-top">
+                          {person.canCreateCollaborator || !person.missingSections || person.missingSections.length === 0 ? (
+                            <span className="text-gray-400">—</span>
+                          ) : (
+                            <div className="flex flex-wrap gap-2">
+                              {person.missingSections.map((section) => (
+                                <span
+                                  key={section}
+                                  className="rounded-full bg-amber-100 px-3 py-1 text-xs font-medium text-amber-800"
+                                >
+                                  Missing {section}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
 
         {!isLoading && !error && displayedPeople.length > 0 && (
           <PaginationSummary

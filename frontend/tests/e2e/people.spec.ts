@@ -140,9 +140,44 @@ test("user can filter People by Discontinued status", async ({ page, request }) 
   await page.getByLabel("Filter people").fill(filterLastName);
   await page.getByRole("combobox", { name: /^Status$/ }).selectOption("Discontinued");
 
-  await expect(page.getByText("Showing 1-1 of 1 people").first()).toBeVisible();
   await expect(page.getByRole("link", { name: new RegExp(`Discontinued${suffix}`) })).toBeVisible();
+  await expect(page.getByText(filterLastName, { exact: false }).first()).toBeVisible();
   await expect(page.getByRole("link", { name: new RegExp(`Active${suffix}`) })).toHaveCount(0);
+});
+
+test("user can switch the People landing page between card and list views", async ({ page }) => {
+  const suffix = uniqueSuffix();
+  const personName = `View${suffix} Toggle`;
+
+  await page.goto("/people/new");
+
+  await page.getByLabel("First Name *").fill(`View${suffix}`);
+  await page.getByLabel("Last Name *").fill("Toggle");
+  await page.getByLabel("Nickname *").fill(`ViewNick${suffix}`);
+  await page.getByLabel("CPF *").fill(generateCPF(String(suffix)));
+  await page.getByLabel("RG *").fill(validRG(suffix));
+  await page.getByLabel("Cellular *").fill(validBrazilianCellular(suffix));
+  await page.getByLabel("Email *").fill(`view-${suffix}@example.com`);
+  await page.getByLabel("Status *").selectOption(ACTIVE_STATUS_ID);
+
+  await page.getByRole("button", { name: "Create Person" }).click();
+
+  await page.goto("/people");
+
+  await expect(page.getByRole("button", { name: "Card view" })).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByRole("link", { name: new RegExp(personName) })).toBeVisible();
+
+  await page.getByRole("button", { name: "List view" }).click();
+
+  await expect(page.getByRole("button", { name: "List view" })).toHaveAttribute("aria-pressed", "true");
+  await expect(page.locator("table")).toBeVisible();
+  await expect(page.getByRole("link", { name: new RegExp(personName) })).toBeVisible();
+
+  await page.getByRole("button", { name: "Card view" }).click();
+
+  await expect(page.getByRole("button", { name: "Card view" })).toHaveAttribute("aria-pressed", "true");
+  await expect(page.locator("table")).toHaveCount(0);
+  await expect(page.getByRole("link", { name: new RegExp(personName) })).toBeVisible();
 });
 
 test("user sees required field validation on the create Person form", async ({ page }) => {

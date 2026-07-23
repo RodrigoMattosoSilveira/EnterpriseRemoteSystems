@@ -45,8 +45,31 @@ describe("PeopleListPage", () => {
     expect(fetchCalls[0]).toBe("/api/v1/people?page=1&pageSize=10");
     expect(textNode("Filters")).toBeTruthy();
     expect(inputByLabel("Filter people")).toBeTruthy();
+    expect(buttonByName("Card view").getAttribute("aria-pressed")).toBe("true");
     expect(selectByLabel("People per page").value).toBe("10");
     expect(textNode("Showing 1-1 of 1 people")).toBeTruthy();
+  });
+
+  it("switches between card view and list view", async () => {
+    mockPeopleFetch({ items: [personFixture("person-1", "Maria")], total: 1 });
+
+    renderPeopleListRoute();
+    await waitForText("Maria Pessoa");
+
+    await clickButton("List view");
+    await waitForText("Maria Pessoa");
+
+    expect(buttonByName("List view").getAttribute("aria-pressed")).toBe("true");
+    expect(buttonByName("Card view").getAttribute("aria-pressed")).toBe("false");
+    expect(container.querySelector("table")).toBeTruthy();
+    expect(container.querySelector("tbody tr")).toBeTruthy();
+
+    await clickButton("Card view");
+    await waitForText("Maria Pessoa");
+
+    expect(buttonByName("Card view").getAttribute("aria-pressed")).toBe("true");
+    expect(container.querySelector("table")).toBeFalsy();
+    expect(container.querySelectorAll('main section a[href^="/people/"]').length).toBeGreaterThan(0);
   });
 
   it("clears filters resets search input and removes search param", async () => {
@@ -343,11 +366,23 @@ async function submitFilterForm() {
 
 async function clickButton(name: string) {
   const button = Array.from(container.querySelectorAll("button")).find(
-    (node) => node.textContent?.trim() === name,
+    (node) =>
+      node.getAttribute("aria-label") === name ||
+      node.title === name ||
+      node.textContent?.trim() === name,
   );
   if (!button) throw new Error(`Could not find button ${name}`);
 
   await act(async () => {
     button.dispatchEvent(new MouseEvent("click", { bubbles: true }));
   });
+}
+
+function buttonByName(name: string) {
+  const button = Array.from(container.querySelectorAll("button")).find((node) => {
+    return node.getAttribute("aria-label") === name || node.title === name;
+  });
+  if (!button) throw new Error(`Could not find button ${name}`);
+
+  return button;
 }
