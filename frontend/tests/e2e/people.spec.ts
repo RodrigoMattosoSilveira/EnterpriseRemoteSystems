@@ -162,7 +162,11 @@ test("user can switch the People landing page between card and list views", asyn
 
   await page.getByRole("button", { name: "Create Person" }).click();
 
-  await page.goto("/people");
+  // Stay on the navigation triggered by Create Person so the router keeps the
+  // location.state that pins the newly created person to the top of the list.
+  // A fresh page.goto("/people") would lose that state and the new person
+  // might not be on the first unfiltered page.
+  await expect(page).toHaveURL(/\/people$/);
 
   await expect(page.getByRole("button", { name: "Card view" })).toHaveAttribute("aria-pressed", "true");
   await expect(page.getByRole("link", { name: new RegExp(personName) })).toBeVisible();
