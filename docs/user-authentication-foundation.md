@@ -62,7 +62,7 @@ Successful login and current-session responses expose the account login in
 `data.login`. The value is normalized to lowercase; there is no separate
 `normalizedLogin` response property.
 
-Header-authorized administration endpoints, pending Bite 28C:
+Application-scoped administration endpoints:
 
 - `GET /api/v1/auth/accounts` — application-scoped `authz.read`
 - `POST /api/v1/auth/accounts` — application-scoped `authz.manage`
@@ -112,10 +112,9 @@ Configuration:
 - Password changes require the current password and invalidate every session.
 - Password-reset tokens are short-lived and single-use.
 
-## Bite boundary
+## Bite 28C cutover
 
-Bite 28B makes session identity available from `/auth/session`, but existing
-business requests still resolve authorization from `X-Actor-ID` and
-`X-Tenant-ID`. Bite 28C will derive the authorization actor from the session,
-introduce tenant selection for multi-tenant actors, and restrict test/bootstrap
-headers to explicit non-production use.
+Bite 28C now derives protected-route actor identity from the authentication
+session. `X-Tenant-ID` remains only a tenant-selection hint whose grants are
+validated for the session actor. Actor headers are restricted to explicit local
+bootstrap and isolated test modes. See `authenticated-authorization-cutover.md`.

@@ -9,7 +9,6 @@ import type {
 
 function requestActorHeaders(actor: AuthzAdminRequestActor) {
   return {
-    "X-Actor-ID": actor.actorId,
     "X-Tenant-ID": actor.tenantId,
   };
 }

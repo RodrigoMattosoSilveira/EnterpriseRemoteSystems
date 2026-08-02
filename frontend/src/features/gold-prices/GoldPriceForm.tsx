@@ -45,11 +45,15 @@ export function GoldPriceForm({ value, isPending = false, onChange, onSubmit }: 
         <label className="block text-sm font-semibold text-gray-700">
           Recorded By
           <input
-            className="mt-2 block w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm"
+            className="mt-2 block w-full rounded-xl border border-gray-300 bg-gray-50 px-3 py-2 text-sm text-gray-700"
+            readOnly
             required
             value={value.recordedBy}
-            onChange={(event) => onChange({ ...value, recordedBy: event.target.value })}
+            placeholder="Loading authenticated actor…"
           />
+          <span className="mt-1 block text-xs font-normal text-gray-500">
+            Derived from the authenticated session and enforced by the server.
+          </span>
         </label>
 
         <label className="block text-sm font-semibold text-gray-700 md:col-span-2">

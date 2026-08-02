@@ -8,6 +8,8 @@ func Register(server *fiber.App, deps Dependencies) {
 	api := server.Group("/api")
 	v1 := api.Group("/v1")
 	RegisterAuthenticationRoutes(v1, deps)
+	v1.Use(authenticationMiddleware(deps))
+	v1.Use(rejectInvalidAuthenticationSession(deps))
 	v1.Use(authorizationMiddleware(deps))
 	RegisterAuthenticationAdministrationRoutes(v1, deps)
 	v1.Use(requireActiveTenantForMutations(deps))
