@@ -7,7 +7,11 @@ declare const process: {
 export const E2E_ACTOR_ID = process.env.PLAYWRIGHT_AUTHZ_ACTOR_ID ?? "bootstrap-admin";
 export const E2E_TENANT_ID = process.env.PLAYWRIGHT_AUTHZ_TENANT_ID ?? "default";
 
-const e2eFrontendBaseURL = process.env.PLAYWRIGHT_BASE_URL ?? "http://localhost:5173";
+// Local Playwright starts its isolated frontend on 15173. CI and deployed
+// runs provide PLAYWRIGHT_BASE_URL explicitly, so they retain their configured
+// origin while local direct API setup calls stay on the isolated backend.
+const e2eFrontendBaseURL =
+  process.env.PLAYWRIGHT_BASE_URL ?? "http://localhost:15173";
 const e2eApiBaseURL = process.env.PLAYWRIGHT_E2E_API_BASE_URL ?? defaultE2EApiBaseURL(e2eFrontendBaseURL);
 
 export function e2eApiUrl(path: string): string {
@@ -42,11 +46,14 @@ export async function seedBrowserAuthz(page: Page): Promise<void> {
 function defaultE2EApiBaseURL(frontendBaseURL: string): string {
   try {
     const url = new URL(frontendBaseURL);
-    const isLocalVite =
-      (url.hostname === "localhost" || url.hostname === "127.0.0.1") &&
-      url.port === "5173";
+    const isLocalHost =
+      url.hostname === "localhost" || url.hostname === "127.0.0.1";
 
-    if (isLocalVite) {
+    if (isLocalHost && url.port === "15173") {
+      return "http://localhost:18080";
+    }
+
+    if (isLocalHost && url.port === "5173") {
       return "http://localhost:8080";
     }
   } catch {

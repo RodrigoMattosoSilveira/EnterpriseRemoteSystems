@@ -31,7 +31,7 @@ func authorizationMiddleware(deps Dependencies) fiber.Handler {
 		if session, ok := authentication.SessionFromContext(c); ok {
 			actor, err := resolveAuthenticatedActor(c, deps, session)
 			if err != nil {
-				authz.SetRequestActorError(c, err)
+				authz.SetRequestActorError(c, authenticationBoundaryError(err))
 				return c.Next()
 			}
 			authz.SetRequestActor(c, actor)
@@ -40,12 +40,23 @@ func authorizationMiddleware(deps Dependencies) fiber.Handler {
 
 		actor, err := resolveConfiguredHeaderActor(c, deps)
 		if err != nil {
-			authz.SetRequestActorError(c, err)
+			authz.SetRequestActorError(c, authenticationBoundaryError(err))
 			return c.Next()
 		}
 		authz.SetRequestActor(c, actor)
 		return c.Next()
 	}
+}
+
+// authenticationBoundaryError converts an unresolved request identity into the
+// public authentication contract. ErrMissingActor remains useful inside the
+// authorization package and isolated handler tests, but normal HTTP traffic
+// must not expose whether an actor key is absent from the persisted store.
+func authenticationBoundaryError(err error) error {
+	if errors.Is(err, authz.ErrMissingActor) {
+		return authz.ErrAuthenticationRequired
+	}
+	return err
 }
 
 func rejectInvalidAuthenticationSession(deps Dependencies) fiber.Handler {
