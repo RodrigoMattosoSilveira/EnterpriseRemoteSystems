@@ -11,6 +11,7 @@ const e2eAuthzActorId = process.env.PLAYWRIGHT_AUTHZ_ACTOR_ID ?? "bootstrap-admi
 const e2eAuthzTenantId = process.env.PLAYWRIGHT_AUTHZ_TENANT_ID ?? "default";
 const localBootstrapProxyEnabled = process.env.ERS_LOCAL_AUTHZ_BOOTSTRAP !== "false";
 const localBootstrapActorId = process.env.ERS_LOCAL_AUTHZ_ACTOR_ID ?? "bootstrap-admin";
+const apiProxyTarget = process.env.ERS_API_PROXY_TARGET ?? "http://127.0.0.1:8080";
 
 export default defineConfig({
   plugins: [react(), tailwindcss()],
@@ -19,7 +20,7 @@ export default defineConfig({
     port: 5173,
     proxy: {
       "/api": {
-        target: "http://127.0.0.1:8080",
+        target: apiProxyTarget,
         changeOrigin: true,
         configure: (proxy) => {
           proxy.on("proxyReq", (proxyReq) => {

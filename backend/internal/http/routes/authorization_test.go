@@ -2,6 +2,7 @@ package routes
 
 import (
 	"context"
+	"encoding/json"
 	"net/http/httptest"
 	"testing"
 
@@ -510,6 +511,48 @@ func TestBootstrapActorHeaderModeAllowsOnlyConfiguredBootstrapActor(t *testing.T
 		if resp.StatusCode != test.status {
 			t.Fatalf("actor %q: expected %d, got %d", test.actorKey, test.status, resp.StatusCode)
 		}
+	}
+}
+
+func TestTestActorHeaderModeReportsUnknownPersistedActorAsAuthenticationRequired(t *testing.T) {
+	deps := Dependencies{
+		ActorStore:      fakeActorStore{err: authz.ErrMissingActor},
+		ActorHeaderMode: actorHeaderModeTest,
+	}
+	app := fiber.New()
+	app.Use(authorizationMiddleware(deps))
+	app.Get("/protected", requirePermission(deps, authz.PermissionPeopleRead), func(c fiber.Ctx) error {
+		return c.SendStatus(fiber.StatusNoContent)
+	})
+
+	req := httptest.NewRequest(fiber.MethodGet, "/protected", nil)
+	req.Header.Set(authz.HeaderActorID, "unknown@example.com")
+	req.Header.Set(authz.HeaderTenantID, "default")
+	req.Header.Set(authz.HeaderActorPermissions, string(authz.PermissionAll))
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	if resp.StatusCode != fiber.StatusUnauthorized {
+		t.Fatalf("expected 401, got %d", resp.StatusCode)
+	}
+
+	var body struct {
+		Error struct {
+			Code string `json:"code"`
+		} `json:"error"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if body.Error.Code != "authentication_required" {
+		t.Fatalf("expected authentication_required, got %q", body.Error.Code)
+	}
+}
+
+func TestAuthenticationBoundaryErrorPreservesNonIdentityFailures(t *testing.T) {
+	if got := authenticationBoundaryError(authz.ErrTenantSelectionRequired); got != authz.ErrTenantSelectionRequired {
+		t.Fatalf("expected tenant selection error to be preserved, got %v", got)
 	}
 }
 
