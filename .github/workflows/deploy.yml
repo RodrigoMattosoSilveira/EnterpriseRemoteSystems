@@ -302,12 +302,13 @@ jobs:
     if: ${{ needs.deploy.outputs.run_playwright_post_deploy == 'true' }}
 
     env:
+      DEPLOYMENT_ENVIRONMENT: ${{ needs.deploy.outputs.env_name }}
       PLAYWRIGHT_BASE_URL: https://${{ needs.deploy.outputs.domain }}
       PLAYWRIGHT_SKIP_WEBSERVER: "true"
       PLAYWRIGHT_AUTH_MODE: session
       PLAYWRIGHT_AUTHZ_TENANT_ID: default
-      E2E_ADMIN_EMAIL: ${{ secrets.E2E_ADMIN_EMAIL }}
-      E2E_ADMIN_PASSWORD: ${{ secrets.E2E_ADMIN_PASSWORD }}
+      E2E_ADMIN_EMAIL: ${{ secrets.E2E_ADMIN_EMAIL || vars.E2E_ADMIN_EMAIL || secrets.DEV_ADMIN_EMAIL || vars.DEV_ADMIN_EMAIL }}
+      E2E_ADMIN_PASSWORD: ${{ secrets.E2E_ADMIN_PASSWORD || secrets.DEV_ADMIN_PASSWORD }}
 
     steps:
       - name: Checkout deployed revision
@@ -321,12 +322,16 @@ jobs:
           git config --global --add safe.directory "${GITHUB_WORKSPACE}"
 
       - name: Show deployed Playwright target
+        shell: bash
         run: |
+          set -euo pipefail
+
+          echo "DEPLOYMENT_ENVIRONMENT=${DEPLOYMENT_ENVIRONMENT}"
           echo "PLAYWRIGHT_BASE_URL=${PLAYWRIGHT_BASE_URL}"
           echo "PLAYWRIGHT_SKIP_WEBSERVER=${PLAYWRIGHT_SKIP_WEBSERVER}"
           echo "PLAYWRIGHT_AUTH_MODE=${PLAYWRIGHT_AUTH_MODE}"
           if [[ -z "${E2E_ADMIN_EMAIL:-}" || -z "${E2E_ADMIN_PASSWORD:-}" ]]; then
-            echo "::error::E2E_ADMIN_EMAIL and E2E_ADMIN_PASSWORD environment secrets are required for deployed Playwright"
+            echo "::error title=Missing deployed Playwright credentials::Configure an administrator login for the '${DEPLOYMENT_ENVIRONMENT}' GitHub environment. Email may come from E2E_ADMIN_EMAIL or DEV_ADMIN_EMAIL (secret or environment variable); password must come from E2E_ADMIN_PASSWORD or DEV_ADMIN_PASSWORD (secret)."
             exit 1
           fi
           echo "Deployed Playwright administrator credentials are configured"
@@ -356,8 +361,6 @@ jobs:
           PLAYWRIGHT_SKIP_WEBSERVER: "true"
           PLAYWRIGHT_AUTH_MODE: session
           PLAYWRIGHT_AUTHZ_TENANT_ID: default
-          E2E_ADMIN_EMAIL: ${{ env.E2E_ADMIN_EMAIL }}
-          E2E_ADMIN_PASSWORD: ${{ env.E2E_ADMIN_PASSWORD }}
         run: npx playwright test
 
       - name: Upload deployed Playwright report

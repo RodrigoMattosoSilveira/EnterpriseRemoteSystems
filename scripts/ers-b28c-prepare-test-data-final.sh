@@ -654,3 +654,4 @@ printf 'Disposable Actor login: %s\n' "$DISPOSABLE_LOGIN"
 printf 'Grant/Revoke Actor login: %s\n' "$GRANT_REVOKE_LOGIN"
 printf '\nStop the Development backend, restart Bite 28C, then run:\n'
 printf 'source %q\n' "$ENV_FILE"
+
