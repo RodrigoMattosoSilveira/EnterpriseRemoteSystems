@@ -1,22 +1,10 @@
 import { ApiError } from "../api/client";
-import {
-  isDefaultRequestActor,
-  isLocalRequestActorRuntime,
-  readRequestActorSelection,
-  resetDefaultRequestActorStored,
-} from "../api/requestActorBootstrap";
 
 export function ApiErrorPanel({ error }: { error: unknown }) {
   if (!error) return null;
 
   const message = error instanceof Error ? error.message : "Unexpected error";
-  const recovery = localForbiddenActorRecovery(error);
-
-  function restoreLocalBootstrapActor() {
-    if (typeof window === "undefined") return;
-    resetDefaultRequestActorStored(window.localStorage);
-    window.location.reload();
-  }
+  const authenticationHint = authenticationRecoveryHint(error);
 
   return (
     <div className="mb-4 rounded-2xl border border-red-200 bg-red-50 p-4 text-red-800">
@@ -25,9 +13,7 @@ export function ApiErrorPanel({ error }: { error: unknown }) {
       {error instanceof ApiError && (
         <>
           {error.url && (
-            <p className="mt-1 text-xs text-red-700">
-              URL: {error.url}
-            </p>
+            <p className="mt-1 text-xs text-red-700">URL: {error.url}</p>
           )}
 
           <p className="mt-1 text-xs text-red-700">
@@ -37,9 +23,9 @@ export function ApiErrorPanel({ error }: { error: unknown }) {
 
           {error.fields && (
             <ul className="mt-2 list-disc pl-5 text-sm">
-              {Object.entries(error.fields).map(([field, message]) => (
+              {Object.entries(error.fields).map(([field, fieldMessage]) => (
                 <li key={field}>
-                  <span className="font-medium">{field}:</span> {message}
+                  <span className="font-medium">{field}:</span> {fieldMessage}
                 </li>
               ))}
             </ul>
@@ -47,41 +33,33 @@ export function ApiErrorPanel({ error }: { error: unknown }) {
         </>
       )}
 
-      {recovery && (
-        <div className="mt-3 rounded-xl border border-red-300 bg-white/70 p-3 text-sm text-red-900">
-          <p>
-            Local ERS is currently operating as{" "}
-            <code className="font-semibold">{recovery.actorId}</code> for tenant{" "}
-            <code className="font-semibold">{recovery.tenantId}</code>. That persisted
-            actor does not have permission for this page.
-          </p>
-          <p className="mt-1 text-xs text-red-700">
-            Switching is explicit so authorization tests are never silently elevated.
-          </p>
-          <button
-            type="button"
-            onClick={restoreLocalBootstrapActor}
-            className="mt-3 rounded-xl bg-red-900 px-3 py-2 text-sm font-semibold text-white shadow-sm"
-          >
-            Use bootstrap-admin and reload
-          </button>
-        </div>
+      {authenticationHint && (
+        <p className="mt-3 rounded-xl border border-red-300 bg-white/70 p-3 text-sm text-red-900">
+          {authenticationHint}
+        </p>
       )}
     </div>
   );
 }
 
-function localForbiddenActorRecovery(error: unknown) {
+function authenticationRecoveryHint(error: unknown): string | null {
+  if (!(error instanceof ApiError)) return null;
+
   if (
-    !(error instanceof ApiError) ||
-    error.status !== 403 ||
-    error.code !== "forbidden" ||
-    typeof window === "undefined" ||
-    !isLocalRequestActorRuntime()
+    error.status === 401 &&
+    [
+      "authentication_required",
+      "session_expired",
+      "account_inactive",
+      "actor_inactive",
+    ].includes(error.code ?? "")
   ) {
-    return null;
+    return "An authenticated user session is required. Sign in again before retrying this operation.";
   }
 
-  const actor = readRequestActorSelection(window.localStorage);
-  return isDefaultRequestActor(actor) ? null : actor;
+  if (error.code === "tenant_selection_required") {
+    return "Select a tenant that is granted to the authenticated user before retrying this operation.";
+  }
+
+  return null;
 }

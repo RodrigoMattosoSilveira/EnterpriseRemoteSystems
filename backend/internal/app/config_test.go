@@ -130,3 +130,40 @@ func TestLoadConfigDefaultsSecureAuthenticationCookiesOutsideLocalDevelopment(t 
 		t.Fatal("expected secure authentication cookies in production")
 	}
 }
+
+func TestLoadConfigDefaultsActorHeaderModeByEnvironment(t *testing.T) {
+	tests := []struct {
+		env      string
+		expected string
+	}{
+		{env: "development", expected: "bootstrap"},
+		{env: "ci", expected: "test"},
+		{env: "test", expected: "test"},
+		{env: "production", expected: "disabled"},
+	}
+	for _, test := range tests {
+		t.Run(test.env, func(t *testing.T) {
+			t.Setenv("JWT_SECRET", "test-secret")
+			t.Setenv("APP_ENV", test.env)
+			t.Setenv("AUTHZ_ACTOR_HEADER_MODE", "")
+
+			cfg, err := LoadConfig()
+			if err != nil {
+				t.Fatalf("load config: %v", err)
+			}
+			if cfg.AuthzActorHeaderMode != test.expected {
+				t.Fatalf("expected actor header mode %q, got %q", test.expected, cfg.AuthzActorHeaderMode)
+			}
+		})
+	}
+}
+
+func TestLoadConfigRejectsTestActorHeadersOutsideTestEnvironment(t *testing.T) {
+	t.Setenv("JWT_SECRET", "test-secret")
+	t.Setenv("APP_ENV", "production")
+	t.Setenv("AUTHZ_ACTOR_HEADER_MODE", "test")
+
+	if _, err := LoadConfig(); err == nil {
+		t.Fatal("expected test actor-header mode to be rejected in production")
+	}
+}

@@ -84,7 +84,6 @@ describe("GoldPricesPage", () => {
     await waitForText("Daily admin rate");
     await changeInputInForm("Record Gold Price", "Price Date", "2026-06-22");
     await changeInputInForm("Record Gold Price", "BRL per Gram", "525.75");
-    await changeInputInForm("Record Gold Price", "Recorded By", "expense-admin");
     await changeTextAreaInForm("Record Gold Price", "Notes", "Manual admin quote");
     await submitFormByHeading("Record Gold Price");
 
@@ -95,7 +94,7 @@ describe("GoldPricesPage", () => {
     expect(createCall?.body).toMatchObject({
       priceDate: "2026-06-22",
       brlPerGram: 525.75,
-      recordedBy: "expense-admin",
+      recordedBy: "bootstrap-admin",
       notes: "Manual admin quote",
     });
   });
@@ -108,7 +107,6 @@ describe("GoldPricesPage", () => {
     await waitForText("Daily admin rate");
     await changeInputInForm("Record Gold Price", "Price Date", "2026-06-21");
     await changeInputInForm("Record Gold Price", "BRL per Gram", "501.25");
-    await changeInputInForm("Record Gold Price", "Recorded By", "expense-admin");
     await changeTextAreaInForm("Record Gold Price", "Notes", "Corrected daily quote");
     await submitFormByHeading("Record Gold Price");
 
@@ -144,6 +142,19 @@ function mockGoldPriceFetch() {
   mockFetch(async (url, init) => {
     recordFetchCall(url, init);
     const method = methodOf(init);
+
+    if (url === "/api/v1/authz/current-actor" && method === "GET") {
+      return jsonResponse({
+        data: {
+          actorKey: "bootstrap-admin",
+          actorRecordId: "actor-bootstrap-admin",
+          tenantId: "default",
+          scope: "APPLICATION",
+          roleCodes: ["APPLICATION_ADMIN"],
+          permissions: ["*"],
+        },
+      });
+    }
 
     if (url === "/api/v1/gold-prices/latest" && method === "GET") {
       const latest = latestActiveGoldPrice();
@@ -341,5 +352,5 @@ function controlByLabel<T extends HTMLElement>(
 }
 
 function resetLocalStorage() {
-  window.localStorage.removeItem("ers.authzAdmin.requestActor");
+  window.localStorage.removeItem("ers.auth.selectedTenantId");
 }

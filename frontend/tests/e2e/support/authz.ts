@@ -32,13 +32,10 @@ export async function seedBrowserAuthz(page: Page): Promise<void> {
   });
 
   await page.addInitScript(
-    ({ actorId, tenantId }) => {
-      window.localStorage.setItem(
-        "ers.authzAdmin.requestActor",
-        JSON.stringify({ actorId, tenantId }),
-      );
+    ({ tenantId }) => {
+      window.localStorage.setItem("ers.auth.selectedTenantId", tenantId);
     },
-    { actorId: E2E_ACTOR_ID, tenantId: E2E_TENANT_ID },
+    { tenantId: E2E_TENANT_ID },
   );
 }
 

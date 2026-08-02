@@ -63,12 +63,10 @@ test("admin can view and filter sensitive audit logs", async ({ page }) => {
   await page.goto("/admin/audit-logs");
 
   await expect(page.getByRole("heading", { name: "Audit Log Viewer", exact: true })).toBeVisible();
-  await expect(page.getByRole("textbox", { name: "Actor ID / key" }).first()).toHaveValue(
-    "bootstrap-admin",
-  );
-  await expect(page.getByRole("textbox", { name: "Tenant ID" }).first()).toHaveValue(
-    "default",
-  );
+  await expect(
+    page.getByRole("heading", { name: "Authenticated authorization context" }),
+  ).toBeVisible();
+  await expect(page.getByLabel("Selected Tenant ID")).toHaveValue("default");
   const authorizedPayoutRow = page
     .getByTestId("audit-log-row")
     .filter({ hasText: "Partial payout" })

@@ -154,7 +154,7 @@ afterEach(async () => {
 });
 
 describe("AuthzAdminPage", () => {
-  it("lists roles, permissions, and actors using persisted actor headers", async () => {
+  it("lists roles, permissions, and actors using the authenticated session context", async () => {
     mockAuthzFetch();
 
     renderAuthzAdminPage();
@@ -162,13 +162,13 @@ describe("AuthzAdminPage", () => {
     await waitForText("APPLICATION_ADMIN");
     await waitForText("authz.manage");
     await waitForText("Bootstrap Admin");
-    await waitForText("Persisted operating actor verified");
+    await waitForText("Authenticated actor verified");
 
     expect(fetchCalls.some((call) => call.url === "/api/v1/authz/current-actor")).toBe(true);
     expect(fetchCalls.some((call) => call.url === "/api/v1/authz/roles")).toBe(true);
     expect(fetchCalls.some((call) => call.url === "/api/v1/authz/permissions")).toBe(true);
     expect(fetchCalls.some((call) => call.url === "/api/v1/authz/actors")).toBe(true);
-    expect(fetchCalls.every((call) => call.headers["X-Actor-ID"] === "bootstrap-admin")).toBe(true);
+    expect(fetchCalls.every((call) => call.headers["X-Actor-ID"] === undefined)).toBe(true);
     expect(fetchCalls.every((call) => call.headers["X-Tenant-ID"] === "default")).toBe(true);
   });
 
@@ -339,61 +339,39 @@ describe("AuthzAdminPage", () => {
     ).toBe(true);
   });
 
-  it("switches the operating actor from the actor list", async () => {
-    actors.push({
-      id: "actor-bite27b-tenant-admin",
-      actorKey: "bite27b-tenant-admin",
-      displayName: "Bite 27B Tenant Admin",
-      active: true,
-      roleGrants: [
-        {
-          id: "grant-bite27b-tenant-admin",
-          actorId: "actor-bite27b-tenant-admin",
-          roleId: "authz-role-tenant-admin",
-          roleCode: "TENANT_ADMIN",
-          tenantId: "default",
-          scopeType: "tenant",
-          active: true,
-        },
-      ],
-    });
+  it("changes the selected tenant without allowing actor impersonation", async () => {
     mockAuthzFetch();
 
     renderAuthzAdminPage();
-    await waitForText("bite27b-tenant-admin");
+    await waitForText("Authenticated actor verified");
 
-    await clickButtonInArticle("bite27b-tenant-admin", "Use Actor");
-    await waitForText("bite27b-tenant-admin selected as the operating actor.");
-    await waitForText("Operating Actor");
-
-    expect(controlByLabel<HTMLInputElement>(container, "Actor ID / key", "input").value).toBe(
-      "bite27b-tenant-admin",
+    const tenantInput = controlByLabel<HTMLInputElement>(
+      container,
+      "Selected Tenant ID",
+      "input",
     );
-    expect(controlByLabel<HTMLInputElement>(container, "Tenant ID", "input").value).toBe("default");
+    await setInputValue(tenantInput, "tenant-b");
+
+    await waitFor(() =>
+      fetchCalls.some(
+        (call) =>
+          call.url === "/api/v1/authz/current-actor" &&
+          call.headers["X-Tenant-ID"] === "tenant-b",
+      ),
+    );
 
     const currentActorCurl = container.querySelector(
       '[aria-label="Current actor curl command"]',
     );
-    expect(currentActorCurl?.textContent).toContain(
-      'X-Actor-ID: bite27b-tenant-admin',
-    );
-    expect(currentActorCurl?.textContent).toContain('X-Tenant-ID: default');
-    expect(currentActorCurl?.textContent).not.toContain('X-Actor-ID: bootstrap-admin');
+    expect(currentActorCurl?.textContent).toContain("-b /tmp/ers-session.cookies");
+    expect(currentActorCurl?.textContent).toContain('X-Tenant-ID: tenant-b');
+    expect(currentActorCurl?.textContent).not.toContain("X-Actor-ID");
     expect(
-      fetchCalls.some(
-        (call) =>
-          call.url === "/api/v1/authz/current-actor" &&
-          call.headers["X-Actor-ID"] === "bite27b-tenant-admin" &&
-          call.headers["X-Tenant-ID"] === "default",
-      ),
+      fetchCalls.every((call) => call.headers["X-Actor-ID"] === undefined),
     ).toBe(true);
   });
 
   it("shows limited-access guidance instead of raw forbidden query errors", async () => {
-    window.localStorage.setItem(
-      "ers.authzAdmin.requestActor",
-      JSON.stringify({ actorId: "expense-admin", tenantId: "default" }),
-    );
     mockFetch(async (url, init) => {
       recordFetchCall(url, init);
       const method = methodOf(init);
@@ -441,12 +419,12 @@ function resetAuthzAdminLocalStorage() {
   const storage = window.localStorage as Storage & { clear?: () => void };
 
   if (typeof storage.removeItem === "function") {
-    storage.removeItem("ers.authzAdmin.requestActor");
+    storage.removeItem("ers.auth.selectedTenantId");
     return;
   }
 
   if (typeof storage.setItem === "function") {
-    storage.setItem("ers.authzAdmin.requestActor", "");
+    storage.setItem("ers.auth.selectedTenantId", "");
   }
 }
 
@@ -457,9 +435,8 @@ function mockAuthzFetch() {
 
     if (url === "/api/v1/authz/current-actor" && method === "GET") {
       const headers = headersOf(init);
-      const requestedActorKey = headers["X-Actor-ID"] || "bootstrap-admin";
       const requestedTenantId = headers["X-Tenant-ID"] || "default";
-      const actor = actors.find((item) => item.actorKey === requestedActorKey) ?? actors[0];
+      const actor = actors[0];
       const roleCodes = (actor.roleGrants ?? [])
         .filter((grant) => grant.active)
         .map((grant) => grant.roleCode);

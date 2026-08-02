@@ -75,16 +75,13 @@ In a second terminal, verify health:
 curl -fsS http://localhost:8080/healthz
 ```
 
-Then verify a protected endpoint using the actor headers:
+Then verify the backend health endpoint directly:
 
 ```bash
-curl -i \
-  -H "X-Actor-ID: bootstrap-admin" \
-  -H "X-Tenant-ID: default" \
-  http://localhost:8080/api/v1/people/
+curl -fsS http://localhost:8080/api/v1/healthz
 ```
 
-Expected result: not 401 missing_actor. A 200 is ideal. If there is a different validation or data response, that is fine; the key is that authorization is wired.
+Protected business APIs require an authenticated session in normal deployed traffic. During local development before Bite 28D's login UX, use the Vite frontend proxy described below; it supplies only the configured persisted bootstrap actor while the backend is explicitly in `AUTHZ_ACTOR_HEADER_MODE=bootstrap`.
 
 # 6. Start frontend locally
 
@@ -101,15 +98,12 @@ Open:
 http://localhost:5173
 ```
 
-Because the temporary auth mechanism is header/localStorage-based until real login exists, the easiest developer workflow is to use the Authorization Admin UI or seed localStorage manually.
+Before Bite 28D supplies the login UX, the local Vite proxy provides the explicit bootstrap compatibility path. The browser API client itself does not store or send actor identity. It stores only the selected tenant under `ers.auth.selectedTenantId`.
 
-In browser devtools console, seed:
+The default local tenant is `default`. To change it manually in browser developer tools:
 
-```bash
-localStorage.setItem(
-  "ers.authzAdmin.requestActor",
-  JSON.stringify({ actorId: "bootstrap-admin", tenantId: "default" })
-);
+```javascript
+localStorage.setItem("ers.auth.selectedTenantId", "default");
 location.reload();
 ```
 
@@ -169,45 +163,26 @@ npm run dev -- --host 0.0.0.0 --port 5173
 # Terminal 3
 curl -fsS http://localhost:8080/healthz
 
-curl -i \
-  -H "X-Actor-ID: bootstrap-admin" \
-  -H "X-Tenant-ID: default" \
-  http://localhost:8080/api/v1/people/
+curl -fsS http://localhost:8080/api/v1/healthz
 
 cd frontend
 npm run check
 npm run test:e2e
 ```
 
-# Common Bite 18J onboarding mistakes
+# Common authorization onboarding mistakes
 
-The most common failure will be:
+A normal protected request without a login session returns:
 
 ```json
-{"error":{"code":"missing_actor","message":"Authorization actor is required"}}
+{"error":{"code":"authentication_required","message":"An authenticated session is required"}}
 ```
 
-That means the request reached the backend but did not include an actor. Fix by ensuring one of these is true:
+Before Bite 28D's login UX, make sure local backend and frontend were started through the project-root `make local-backend` and `make local-frontend` targets. The backend should use `AUTHZ_ACTOR_HEADER_MODE=bootstrap`, and the Vite proxy supplies only the configured `bootstrap-admin` actor.
 
-```
-API/curl request includes:
-X-Actor-ID: bootstrap-admin
-X-Tenant-ID: default
+A `tenant_selection_required` response means the browser has no selected tenant. Store the tenant ID under `ers.auth.selectedTenantId` or select it in an administration page.
 
-Browser localStorage includes:
-ers.authzAdmin.requestActor = {"actorId":"bootstrap-admin","tenantId":"default"}
-
-E2E setup has authz helper/proxy enabled.
-Backend was started with AUTHZ_BOOTSTRAP_ENABLED=true.
-```
-
-The second common failure is:
-
-```
-actor exists but forbidden
-```
-
-That usually means the actor exists but lacks the needed role/grant. For initial local setup, use bootstrap-admin with APPLICATION_ADMIN.
+A `forbidden` response means the authenticated or explicit local-bootstrap actor exists but lacks the required persisted grant for the selected tenant.
 
 # My recommendation
 

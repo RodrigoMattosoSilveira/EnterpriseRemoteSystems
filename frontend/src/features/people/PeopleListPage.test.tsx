@@ -3,7 +3,6 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { AUTHZ_REQUEST_ACTOR_STORAGE_KEY } from "../../api/requestActorBootstrap";
 import { PeopleListPage } from "./PeopleListPage";
 import type { Person } from "../../types/people";
 
@@ -138,18 +137,13 @@ describe("PeopleListPage", () => {
     );
   });
 
-  it("offers the shared local actor recovery when People access is forbidden", async () => {
-    window.localStorage.setItem(
-      AUTHZ_REQUEST_ACTOR_STORAGE_KEY,
-      JSON.stringify({ actorId: "restricted-actor", tenantId: "default" }),
-    );
+  it("renders forbidden access without offering actor impersonation", async () => {
     mockPeopleForbidden();
 
     renderPeopleListRoute();
 
     await waitForText("Actor is not permitted to perform this operation");
-    expect(textNode("restricted-actor")).toBeTruthy();
-    expect(textNode("Use bootstrap-admin and reload")).toBeTruthy();
+    expect(textNode("Use bootstrap-admin and reload")).toBeFalsy();
     expect(container.querySelector("pre")).toBeNull();
   });
   it("resets to first page when status changes to Discontinued", async () => {

@@ -21,6 +21,8 @@ type Dependencies struct {
 	DB                          *gorm.DB
 	AuthenticationHandler       *authentication.Handler
 	DisableRouteAuthorization   bool
+	ActorHeaderMode             string
+	BootstrapActorKey           string
 	AuthzHandler                *authz.Handler
 	ActorStore                  authz.ActorStore
 	PeopleHandler               *people.Handler

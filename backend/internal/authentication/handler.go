@@ -53,7 +53,7 @@ func (h *Handler) SessionMiddleware() fiber.Handler {
 			c.Locals(sessionErrorLocalKey, err)
 			return c.Next()
 		}
-		c.Locals(sessionLocalKey, session)
+		SetSessionContext(c, session)
 		return c.Next()
 	}
 }
@@ -154,7 +154,7 @@ func (h *Handler) SetAccountActive(c fiber.Ctx) error {
 		return httpx.BadRequest(c, "validation_failed", "Active state is required")
 	}
 	if !*req.Active {
-		requestActor, err := authz.ResolveActor(c.Context(), h.actorStore, func(name string) string { return c.Get(name) })
+		requestActor, err := authz.ResolveRequestActor(c, h.actorStore)
 		if err == nil && requestActor.RecordID != "" {
 			target, findErr := h.service.GetAccount(c.Context(), c.Params("id"))
 			if findErr != nil {
@@ -194,7 +194,7 @@ func (h *Handler) recordAdminAudit(c fiber.Ctx, operation string, targetID strin
 	if h.auditStore == nil {
 		return
 	}
-	actor, err := authz.ResolveActor(c.Context(), h.actorStore, func(name string) string { return c.Get(name) })
+	actor, err := authz.ResolveRequestActor(c, h.actorStore)
 	if err != nil && !errors.Is(err, authz.ErrMissingActor) {
 		return
 	}
@@ -210,6 +210,14 @@ func (h *Handler) recordAdminAudit(c fiber.Ctx, operation string, targetID strin
 		RequestMethod:   c.Method(),
 		RequestPath:     c.Path(),
 	})
+}
+
+// SetSessionContext stores an already verified session for downstream
+// authorization middleware. It is exported so route integration tests can
+// model the same request boundary without manufacturing raw session cookies.
+func SetSessionContext(c fiber.Ctx, session SessionResponse) {
+	c.Locals(sessionLocalKey, session)
+	c.Locals(sessionErrorLocalKey, nil)
 }
 
 func SessionFromContext(c fiber.Ctx) (SessionResponse, bool) {
@@ -236,7 +244,7 @@ func (h *Handler) currentSession(c fiber.Ctx) (SessionResponse, error) {
 		c.Locals(sessionErrorLocalKey, err)
 		return SessionResponse{}, err
 	}
-	c.Locals(sessionLocalKey, session)
+	SetSessionContext(c, session)
 	return session, nil
 }
 
@@ -273,6 +281,14 @@ func (h *Handler) clearSessionCookie(c fiber.Ctx) {
 func setNoStore(c fiber.Ctx) {
 	c.Set(fiber.HeaderCacheControl, "no-store")
 	c.Set("Pragma", "no-cache")
+}
+
+// WriteSessionError exposes the canonical authentication error response to the
+// Bite 28C business-route middleware. Invalid session cookies are rejected
+// before authorization and receive the same cookie-clearing behavior as the
+// authentication endpoints.
+func (h *Handler) WriteSessionError(c fiber.Ctx, err error) error {
+	return h.writeError(c, err)
 }
 
 func (h *Handler) writeError(c fiber.Ctx, err error) error {

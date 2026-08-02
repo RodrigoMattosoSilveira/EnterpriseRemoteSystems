@@ -1,15 +1,13 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { ApiErrorPanel } from "../../components/ApiErrorPanel";
-import type { AuthzAdminRequestActor, AuthzAuditLog, AuthzAuditLogFilters } from "../../types/authz";
+import {
+  authorizationRequestContext,
+  readSelectedTenantId,
+  setSelectedTenantId,
+} from "../../api/tenantSelection";
+import type { AuthzAuditLog, AuthzAuditLogFilters } from "../../types/authz";
 import { useAuthzAuditLogs } from "./useAuthzAdmin";
-
-const SESSION_STORAGE_KEY = "ers.authzAdmin.requestActor";
-
-const defaultRequestActor: AuthzAdminRequestActor = {
-  actorId: "bootstrap-admin",
-  tenantId: "default",
-};
 
 const defaultFilters: Required<Pick<AuthzAuditLogFilters, "operation" | "decision" | "actorId" | "targetType" | "targetId">> & { limit: number } = {
   operation: "",
@@ -38,13 +36,18 @@ const sensitiveOperationOptions = [
 const operationLabels = new Map(sensitiveOperationOptions.map((option) => [option.value, option.label]));
 
 export function AuditLogViewerPage() {
-  const [requestActor, setRequestActor] = useState<AuthzAdminRequestActor>(() => loadRequestActor());
+  const [tenantId, setTenantId] = useState(() =>
+    typeof window === "undefined" ? "default" : readSelectedTenantId(window.localStorage),
+  );
+  const requestActor = useMemo(() => authorizationRequestContext(tenantId), [tenantId]);
   const [draftFilters, setDraftFilters] = useState(defaultFilters);
   const [filters, setFilters] = useState<AuthzAuditLogFilters>({ limit: defaultFilters.limit });
 
   useEffect(() => {
-    saveRequestActor(requestActor);
-  }, [requestActor]);
+    if (typeof window !== "undefined") {
+      setSelectedTenantId(window.localStorage, tenantId);
+    }
+  }, [tenantId]);
 
   const auditQuery = useAuthzAuditLogs(requestActor, filters);
   const logs = useMemo(() => auditQuery.data ?? [], [auditQuery.data]);
@@ -97,32 +100,18 @@ export function AuditLogViewerPage() {
         <ApiErrorPanel error={auditQuery.error} />
 
         <section className="rounded-2xl border bg-white p-4 shadow-sm">
-          <h2 className="text-lg font-semibold text-gray-950">Admin request actor</h2>
+          <h2 className="text-lg font-semibold text-gray-950">Authenticated authorization context</h2>
           <p className="mt-1 text-sm text-gray-500">
-            These headers are sent to the audit-log endpoint. Use an actor with authorization read permission.
+            The session identifies the actor. Audit-log access uses the selected tenant only after the server validates that tenant against the actor&apos;s persisted grants.
           </p>
-          <div className="mt-4 grid gap-3 md:grid-cols-2">
-            <label className="block text-sm font-semibold text-gray-700">
-              Actor ID / key
-              <input
-                className="mt-2 block w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm"
-                value={requestActor.actorId}
-                onChange={(event) =>
-                  setRequestActor((current) => ({ ...current, actorId: event.target.value }))
-                }
-              />
-            </label>
-            <label className="block text-sm font-semibold text-gray-700">
-              Tenant ID
-              <input
-                className="mt-2 block w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm"
-                value={requestActor.tenantId}
-                onChange={(event) =>
-                  setRequestActor((current) => ({ ...current, tenantId: event.target.value }))
-                }
-              />
-            </label>
-          </div>
+          <label className="mt-4 block max-w-md text-sm font-semibold text-gray-700">
+            Selected Tenant ID
+            <input
+              className="mt-2 block w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm"
+              value={tenantId}
+              onChange={(event) => setTenantId(event.target.value)}
+            />
+          </label>
         </section>
 
         <form className="rounded-2xl border bg-white p-4 shadow-sm" onSubmit={handleSubmit}>
@@ -446,36 +435,4 @@ function formatDateTime(value: string | undefined): string {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
   return date.toLocaleString();
-}
-
-function saveRequestActor(requestActor: AuthzAdminRequestActor) {
-  if (typeof window === "undefined") return;
-
-  const storage = window.localStorage;
-  if (typeof storage?.setItem !== "function") return;
-
-  try {
-    storage.setItem(SESSION_STORAGE_KEY, JSON.stringify(requestActor));
-  } catch {
-    // localStorage may be unavailable in some test/runtime contexts.
-  }
-}
-
-function loadRequestActor(): AuthzAdminRequestActor {
-  if (typeof window === "undefined") return defaultRequestActor;
-
-  const storage = window.localStorage;
-  if (typeof storage?.getItem !== "function") return defaultRequestActor;
-
-  try {
-    const stored = storage.getItem(SESSION_STORAGE_KEY);
-    if (!stored) return defaultRequestActor;
-    const parsed = JSON.parse(stored) as Partial<AuthzAdminRequestActor>;
-    return {
-      actorId: typeof parsed.actorId === "string" && parsed.actorId.trim() ? parsed.actorId : defaultRequestActor.actorId,
-      tenantId: typeof parsed.tenantId === "string" && parsed.tenantId.trim() ? parsed.tenantId : defaultRequestActor.tenantId,
-    };
-  } catch {
-    return defaultRequestActor;
-  }
 }

@@ -3,6 +3,7 @@ package goldproduction
 import (
 	"github.com/gofiber/fiber/v3"
 
+	"enterpriseremotesystems/backend/internal/authz"
 	"enterpriseremotesystems/backend/internal/shared/httpx"
 )
 
@@ -74,8 +75,8 @@ func (h *Handler) Delete(c fiber.Ctx) error {
 
 func actorUserID(c fiber.Ctx) string {
 	value := c.Locals("userID")
-	if userID, ok := value.(string); ok {
-		return userID
+	if userID, ok := value.(string); ok && userID != "" {
+		return authz.RequestActorID(c, userID)
 	}
-	return "system"
+	return authz.RequestActorID(c, "system")
 }
