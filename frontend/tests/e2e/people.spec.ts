@@ -140,9 +140,17 @@ test("user can filter People by Discontinued status", async ({ page, request }) 
   await page.getByLabel("Filter people").fill(filterLastName);
   await page.getByRole("combobox", { name: /^Status$/ }).selectOption("Discontinued");
 
-  await expect(page.getByRole("link", { name: new RegExp(`Discontinued${suffix}`) })).toBeVisible();
+  await expect(
+    page.getByRole("link", {
+      name: new RegExp(`^Discontinued${suffix}\\s+${filterLastName}\\b`),
+    }),
+  ).toBeVisible();
   await expect(page.getByText(filterLastName, { exact: false }).first()).toBeVisible();
-  await expect(page.getByRole("link", { name: new RegExp(`Active${suffix}`) })).toHaveCount(0);
+  await expect(
+    page.getByRole("link", {
+      name: new RegExp(`^Active${suffix}\\s+${filterLastName}\\b`),
+    }),
+  ).toHaveCount(0);
 });
 
 /*
