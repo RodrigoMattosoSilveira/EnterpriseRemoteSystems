@@ -1,4 +1,7 @@
 import { defineConfig, devices } from "@playwright/test";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { resolveE2EAuthMode } from "./tests/e2e/support/runtime";
 
 declare const process: {
   env: Record<string, string | undefined>;
@@ -17,11 +20,19 @@ const localE2EBackendURL = `http://localhost:${LOCAL_E2E_BACKEND_PORT}`;
 
 const baseURL = runtimeEnv.PLAYWRIGHT_BASE_URL ?? localE2EFrontendURL;
 const storageOrigin = new URL(baseURL).origin;
+const authMode = resolveE2EAuthMode(baseURL, runtimeEnv.PLAYWRIGHT_AUTH_MODE);
+const authenticatedStorageStatePath = join(
+  fileURLToPath(new URL(".", import.meta.url)),
+  "test-results",
+  ".auth",
+  "admin.json",
+);
 
 const authzActorId = runtimeEnv.PLAYWRIGHT_AUTHZ_ACTOR_ID ?? "bootstrap-admin";
 const authzTenantId = runtimeEnv.PLAYWRIGHT_AUTHZ_TENANT_ID ?? "default";
 
 export default defineConfig({
+  globalSetup: authMode === "session" ? "./tests/e2e/global-setup.ts" : undefined,
   testDir: "./tests/e2e",
   timeout: 30_000,
   expect: {
@@ -38,24 +49,30 @@ export default defineConfig({
     trace: "on-first-retry",
     screenshot: "only-on-failure",
     video: "retain-on-failure",
-    extraHTTPHeaders: {
-      "X-Actor-ID": authzActorId,
-      "X-Tenant-ID": authzTenantId,
-    },
-    storageState: {
-      cookies: [],
-      origins: [
-        {
-          origin: storageOrigin,
-          localStorage: [
-            {
-              name: "ers.auth.selectedTenantId",
-              value: authzTenantId,
-            },
-          ],
-        },
-      ],
-    },
+    extraHTTPHeaders:
+      authMode === "session"
+        ? { "X-Tenant-ID": authzTenantId }
+        : {
+            "X-Actor-ID": authzActorId,
+            "X-Tenant-ID": authzTenantId,
+          },
+    storageState:
+      authMode === "session"
+        ? authenticatedStorageStatePath
+        : {
+            cookies: [],
+            origins: [
+              {
+                origin: storageOrigin,
+                localStorage: [
+                  {
+                    name: "ers.auth.selectedTenantId",
+                    value: authzTenantId,
+                  },
+                ],
+              },
+            ],
+          },
   },
 
   projects: [

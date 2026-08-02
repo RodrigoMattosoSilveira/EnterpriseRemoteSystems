@@ -1,4 +1,5 @@
 import type { Page } from "@playwright/test";
+import { resolveE2EAuthMode } from "./runtime";
 
 declare const process: {
   env: Record<string, string | undefined>;
@@ -13,12 +14,20 @@ export const E2E_TENANT_ID = process.env.PLAYWRIGHT_AUTHZ_TENANT_ID ?? "default"
 const e2eFrontendBaseURL =
   process.env.PLAYWRIGHT_BASE_URL ?? "http://localhost:15173";
 const e2eApiBaseURL = process.env.PLAYWRIGHT_E2E_API_BASE_URL ?? defaultE2EApiBaseURL(e2eFrontendBaseURL);
+const e2eAuthMode = resolveE2EAuthMode(
+  e2eFrontendBaseURL,
+  process.env.PLAYWRIGHT_AUTH_MODE,
+);
 
 export function e2eApiUrl(path: string): string {
   return new URL(path, e2eApiBaseURL).toString();
 }
 
 export function authzHeaders(): Record<string, string> {
+  if (e2eAuthMode === "session") {
+    return { "X-Tenant-ID": E2E_TENANT_ID };
+  }
+
   return {
     "X-Actor-ID": E2E_ACTOR_ID,
     "X-Tenant-ID": E2E_TENANT_ID,
