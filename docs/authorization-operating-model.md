@@ -1,10 +1,10 @@
 # Persisted authorization actor operating model
 
-ERS currently transports an actor key and tenant ID in request headers until authenticated user sessions are introduced. Those headers identify the requester; they do not grant permissions.
+ERS uses the login-backed HTTP session as the authoritative actor identity for protected application requests. The browser sends only the HTTP-only session cookie and an optional selected-tenant hint; it does not choose its authorization actor.
 
 ## Authoritative permissions
 
-For normal application requests, the backend resolves `X-Actor-ID` against `authz_actors` and loads active role grants from `authz_actor_role_grants`. Effective permissions come only from active persisted roles and permissions.
+For normal application requests, the backend resolves the session to its persisted `authz_actors` record and loads active role grants from `authz_actor_role_grants` for the selected tenant. Effective permissions come only from active persisted roles and permissions.
 
 `X-Actor-Permissions` is no longer accepted as a fallback when the authorization store is available. This prevents a browser, proxy, or API client from granting itself wildcard permissions.
 
@@ -20,7 +20,7 @@ The response includes the persisted actor record ID, selected tenant, effective 
 
 `AUTHZ_BOOTSTRAP_*` remains a controlled environment-repair mechanism. It is intended to create or restore the first administrator in an environment, not to replace normal actor administration.
 
-Local development and Playwright create a persisted `bootstrap-admin` actor with an `APPLICATION_ADMIN` grant. The frontend and tests send only the actor key and tenant; the backend loads the persisted wildcard grant.
+Local development and Playwright create a persisted `bootstrap-admin` actor with an `APPLICATION_ADMIN` grant. Before Bite 28D supplies the login UX, the Vite development proxy may send only that configured bootstrap actor in explicit `bootstrap` mode. Playwright uses explicit `test` mode. Neither compatibility path grants permissions; the backend still loads the persisted wildcard grant.
 
 Production and long-lived environments should keep `AUTHZ_BOOTSTRAP_ENABLED=false` after a valid administrator exists, except during an intentional recovery operation.
 
@@ -37,4 +37,4 @@ Create a second application administrator and verify it before retiring or chang
 
 ## Tenant selection
 
-The same actor may have grants for more than one tenant. `X-Tenant-ID` selects the tenant context for a request. Global application-administrator grants apply to every tenant; tenant-scoped grants apply only to their persisted tenant.
+The same authenticated actor may have grants for more than one tenant. `X-Tenant-ID` is retained only as a tenant-selection hint. The backend validates that selection against the session actor's persisted grants. Global application-administrator grants apply to every tenant; tenant-scoped grants apply only to their persisted tenant.

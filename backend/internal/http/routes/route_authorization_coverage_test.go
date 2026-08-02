@@ -164,7 +164,7 @@ func TestAuthenticationAccountRoutesRequireApplicationScope(t *testing.T) {
 	}
 }
 
-func TestAuthenticationSessionMiddlewareIsScopedToAuthenticationRoutes(t *testing.T) {
+func TestAuthenticationSessionMiddlewareCoversBusinessRoutesAfterCutover(t *testing.T) {
 	t.Parallel()
 
 	_, currentFile, _, ok := runtime.Caller(0)
@@ -177,8 +177,18 @@ func TestAuthenticationSessionMiddlewareIsScopedToAuthenticationRoutes(t *testin
 	if err != nil {
 		t.Fatalf("read root routes: %v", err)
 	}
-	if strings.Contains(string(routesContents), "v1.Use(authenticationMiddleware(deps))") {
-		t.Fatal("Bite 28B must not resolve authentication sessions for every business API route")
+	routesSource := string(routesContents)
+	for _, required := range []string{
+		"v1.Use(authenticationMiddleware(deps))",
+		"v1.Use(rejectInvalidAuthenticationSession(deps))",
+		"v1.Use(authorizationMiddleware(deps))",
+	} {
+		if !strings.Contains(routesSource, required) {
+			t.Fatalf("Bite 28C requires global session-backed authorization middleware: %s", required)
+		}
+	}
+	if strings.Index(routesSource, "v1.Use(authenticationMiddleware(deps))") > strings.Index(routesSource, "v1.Use(authorizationMiddleware(deps))") {
+		t.Fatal("authentication session resolution must run before authorization actor resolution")
 	}
 
 	authenticationContents, err := os.ReadFile(filepath.Join(dir, "authentication.go"))
@@ -186,6 +196,6 @@ func TestAuthenticationSessionMiddlewareIsScopedToAuthenticationRoutes(t *testin
 		t.Fatalf("read authentication routes: %v", err)
 	}
 	if !strings.Contains(string(authenticationContents), `r.Use(authenticationMiddleware(deps))`) {
-		t.Fatal("authentication routes must resolve the session cookie before session-protected handlers")
+		t.Fatal("authentication routes must continue resolving their own session cookie before session-protected handlers")
 	}
 }

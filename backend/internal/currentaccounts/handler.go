@@ -349,7 +349,7 @@ func (h *Handler) authorizeSensitiveOperationInternal(c fiber.Ctx, permission au
 		fallbackActorID = c.Get(authz.HeaderAuthorizedBy)
 	}
 	tenantID := c.Get(authz.HeaderTenantID)
-	actor, err := authz.ResolveActor(c.Context(), h.actorStore, func(name string) string { return c.Get(name) })
+	actor, err := authz.ResolveRequestActor(c, h.actorStore)
 	if err != nil {
 		h.recordAuthorizationAudit(c, nil, fallbackActorID, tenantID, permission, operation, targetType, targetID, authz.AuditDecisionDenied, err.Error(), metadataJSON)
 		return nil, false, writeAuthorizationError(c, err)
@@ -457,6 +457,12 @@ func (h *Handler) requireActorTenantScope(c fiber.Ctx, actor *authz.Actor, tenan
 }
 
 func writeAuthorizationError(c fiber.Ctx, err error) error {
+	if errors.Is(err, authz.ErrAuthenticationRequired) {
+		return c.Status(fiber.StatusUnauthorized).JSON(httpx.APIResponse{Error: &httpx.APIError{Code: "authentication_required", Message: "An authenticated session is required"}})
+	}
+	if errors.Is(err, authz.ErrTenantSelectionRequired) {
+		return c.Status(fiber.StatusForbidden).JSON(httpx.APIResponse{Error: &httpx.APIError{Code: "tenant_selection_required", Message: "A specific tenant must be selected for this operation"}})
+	}
 	if errors.Is(err, authz.ErrMissingActor) {
 		return c.Status(fiber.StatusUnauthorized).JSON(httpx.APIResponse{Error: &httpx.APIError{Code: "missing_actor", Message: "Authorization actor is required"}})
 	}

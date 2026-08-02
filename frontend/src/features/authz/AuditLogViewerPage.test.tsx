@@ -64,7 +64,7 @@ beforeEach(() => {
   document.body.appendChild(container);
   root = null;
   fetchCalls = [];
-  resetAuthzAdminLocalStorage();
+  window.localStorage.clear();
 });
 
 afterEach(async () => {
@@ -78,7 +78,7 @@ afterEach(async () => {
 });
 
 describe("AuditLogViewerPage", () => {
-  it("loads sensitive audit events with request actor headers", async () => {
+  it("loads sensitive audit events with the selected tenant and session credentials", async () => {
     mockAuditFetch(auditLogs);
 
     renderPage();
@@ -91,7 +91,7 @@ describe("AuditLogViewerPage", () => {
     await waitForText("recent reauthentication is required");
 
     const getCall = fetchCalls.find((call) => call.url.startsWith("/api/v1/authz/audit-logs"));
-    expect(getCall?.headers["X-Actor-ID"]).toBe("bootstrap-admin");
+    expect(getCall?.headers["X-Actor-ID"]).toBeUndefined();
     expect(getCall?.headers["X-Tenant-ID"]).toBe("default");
   });
 
@@ -221,17 +221,4 @@ async function clickButton(name: string) {
   await act(async () => {
     button.click();
   });
-}
-
-function resetAuthzAdminLocalStorage() {
-  const storage = window.localStorage as Storage & { clear?: () => void };
-
-  if (typeof storage.removeItem === "function") {
-    storage.removeItem("ers.authzAdmin.requestActor");
-    return;
-  }
-
-  if (typeof storage.setItem === "function") {
-    storage.setItem("ers.authzAdmin.requestActor", "");
-  }
 }

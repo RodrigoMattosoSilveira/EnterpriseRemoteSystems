@@ -1,29 +1,29 @@
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { ApiErrorPanel } from "../../components/ApiErrorPanel";
-import type { AuthzAdminRequestActor } from "../../types/authz";
+import {
+  authorizationRequestContext,
+  readSelectedTenantId,
+  setSelectedTenantId,
+} from "../../api/tenantSelection";
 import {
   useSecondPersonApprovalPolicy,
   useUpdateSecondPersonApprovalPolicy,
 } from "./useSecondPersonApprovalPolicy";
 
-const SESSION_STORAGE_KEY = "ers.authzAdmin.requestActor";
-
-const defaultRequestActor: AuthzAdminRequestActor = {
-  actorId: "bootstrap-admin",
-  tenantId: "default",
-};
-
 export function SecondPersonApprovalSettingsPage() {
-  const [requestActor, setRequestActor] = useState<AuthzAdminRequestActor>(() =>
-    loadRequestActor(),
+  const [tenantId, setTenantId] = useState(() =>
+    typeof window === "undefined" ? "default" : readSelectedTenantId(window.localStorage),
   );
+  const requestActor = useMemo(() => authorizationRequestContext(tenantId), [tenantId]);
   const [required, setRequired] = useState(false);
   const [successMessage, setSuccessMessage] = useState("");
 
   useEffect(() => {
-    saveRequestActor(requestActor);
-  }, [requestActor]);
+    if (typeof window !== "undefined") {
+      setSelectedTenantId(window.localStorage, tenantId);
+    }
+  }, [tenantId]);
 
   const policyQuery = useSecondPersonApprovalPolicy(requestActor);
   const updatePolicy = useUpdateSecondPersonApprovalPolicy(requestActor);
@@ -102,32 +102,18 @@ export function SecondPersonApprovalSettingsPage() {
         <ApiErrorPanel error={queryError ?? actionError} />
 
         <section className="rounded-2xl border bg-white p-4 shadow-sm">
-          <h2 className="text-lg font-semibold text-gray-950">Admin request actor</h2>
+          <h2 className="text-lg font-semibold text-gray-950">Authenticated authorization context</h2>
           <p className="mt-1 text-sm text-gray-500">
-            These headers are sent to the settings endpoints. Use an actor with current_accounts.settings.read and current_accounts.settings.update.
+            The session identifies the actor. The selected tenant is sent as a scope hint and validated against that actor&apos;s persisted grants.
           </p>
-          <div className="mt-4 grid gap-3 md:grid-cols-2">
-            <label className="block text-sm font-semibold text-gray-700">
-              Actor ID / key
-              <input
-                className="mt-2 block w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm"
-                value={requestActor.actorId}
-                onChange={(event) =>
-                  setRequestActor((current) => ({ ...current, actorId: event.target.value }))
-                }
-              />
-            </label>
-            <label className="block text-sm font-semibold text-gray-700">
-              Tenant ID
-              <input
-                className="mt-2 block w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm"
-                value={requestActor.tenantId}
-                onChange={(event) =>
-                  setRequestActor((current) => ({ ...current, tenantId: event.target.value }))
-                }
-              />
-            </label>
-          </div>
+          <label className="mt-4 block max-w-md text-sm font-semibold text-gray-700">
+            Selected Tenant ID
+            <input
+              className="mt-2 block w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm"
+              value={tenantId}
+              onChange={(event) => setTenantId(event.target.value)}
+            />
+          </label>
         </section>
 
         <form className="rounded-2xl border bg-white p-4 shadow-sm" onSubmit={handleSubmit}>
@@ -169,7 +155,7 @@ export function SecondPersonApprovalSettingsPage() {
           <dl className="mt-4 grid gap-3 rounded-2xl bg-gray-50 p-4 text-sm md:grid-cols-3">
             <div>
               <dt className="font-semibold text-gray-700">Tenant</dt>
-              <dd className="mt-1 text-gray-600">{policyQuery.data?.tenantId ?? requestActor.tenantId}</dd>
+              <dd className="mt-1 text-gray-600">{policyQuery.data?.tenantId ?? tenantId}</dd>
             </div>
             <div>
               <dt className="font-semibold text-gray-700">Last updated by</dt>
@@ -218,38 +204,6 @@ function PolicyStatus({ required, isLoading }: { required?: boolean; isLoading: 
       {required ? "Required" : "Optional"}
     </span>
   );
-}
-
-function saveRequestActor(requestActor: AuthzAdminRequestActor) {
-  if (typeof window === "undefined") return;
-
-  const storage = window.localStorage;
-  if (typeof storage?.setItem !== "function") return;
-
-  try {
-    storage.setItem(SESSION_STORAGE_KEY, JSON.stringify(requestActor));
-  } catch {
-    // Persisting this convenience preference is best-effort only.
-  }
-}
-
-function loadRequestActor(): AuthzAdminRequestActor {
-  if (typeof window === "undefined") return defaultRequestActor;
-
-  const storage = window.localStorage;
-  if (typeof storage?.getItem !== "function") return defaultRequestActor;
-
-  try {
-    const stored = storage.getItem(SESSION_STORAGE_KEY);
-    if (!stored) return defaultRequestActor;
-    const parsed = JSON.parse(stored) as Partial<AuthzAdminRequestActor>;
-    return {
-      actorId: typeof parsed.actorId === "string" && parsed.actorId ? parsed.actorId : defaultRequestActor.actorId,
-      tenantId: typeof parsed.tenantId === "string" && parsed.tenantId ? parsed.tenantId : defaultRequestActor.tenantId,
-    };
-  } catch {
-    return defaultRequestActor;
-  }
 }
 
 function formatDateTime(value: string | undefined) {

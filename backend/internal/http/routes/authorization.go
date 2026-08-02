@@ -6,33 +6,107 @@ import (
 
 	"github.com/gofiber/fiber/v3"
 
+	"enterpriseremotesystems/backend/internal/authentication"
 	"enterpriseremotesystems/backend/internal/authz"
 	"enterpriseremotesystems/backend/internal/shared/httpx"
 	"enterpriseremotesystems/backend/internal/tenants"
 )
 
 const (
-	authorizationActorLocalKey = "ers.authz.actor"
-	authorizationErrorLocalKey = "ers.authz.error"
+	actorHeaderModeDisabled  = "disabled"
+	actorHeaderModeBootstrap = "bootstrap"
+	actorHeaderModeTest      = "test"
 )
 
-// authorizationMiddleware resolves the request actor once for the /api/v1 route
-// group and stores the result in Fiber locals for downstream route guards. It is
-// intentionally non-blocking: individual route guards still decide whether an
-// actor is required and which permission must be satisfied.
+// authorizationMiddleware resolves one authoritative actor for the request.
+// A valid authenticated session always wins over every actor identity header.
+// Header identity remains available only through the explicitly configured
+// bootstrap or isolated-test modes.
 func authorizationMiddleware(deps Dependencies) fiber.Handler {
 	return func(c fiber.Ctx) error {
 		if deps.DisableRouteAuthorization || isPublicHealthPath(c.Path()) {
 			return c.Next()
 		}
 
-		actor, err := authz.ResolveActor(c.Context(), deps.ActorStore, func(name string) string { return c.Get(name) })
-		if err != nil {
-			c.Locals(authorizationErrorLocalKey, err)
+		if session, ok := authentication.SessionFromContext(c); ok {
+			actor, err := resolveAuthenticatedActor(c, deps, session)
+			if err != nil {
+				authz.SetRequestActorError(c, err)
+				return c.Next()
+			}
+			authz.SetRequestActor(c, actor)
 			return c.Next()
 		}
-		c.Locals(authorizationActorLocalKey, actor)
+
+		actor, err := resolveConfiguredHeaderActor(c, deps)
+		if err != nil {
+			authz.SetRequestActorError(c, err)
+			return c.Next()
+		}
+		authz.SetRequestActor(c, actor)
 		return c.Next()
+	}
+}
+
+func rejectInvalidAuthenticationSession(deps Dependencies) fiber.Handler {
+	return func(c fiber.Ctx) error {
+		if deps.AuthenticationHandler == nil {
+			return c.Next()
+		}
+		if err := authentication.SessionErrorFromContext(c); err != nil {
+			return deps.AuthenticationHandler.WriteSessionError(c, err)
+		}
+		return c.Next()
+	}
+}
+
+func resolveAuthenticatedActor(c fiber.Ctx, deps Dependencies, session authentication.SessionResponse) (*authz.Actor, error) {
+	if deps.ActorStore == nil || strings.TrimSpace(session.ActorKey) == "" || strings.TrimSpace(session.ActorID) == "" {
+		return nil, authz.ErrAuthenticationRequired
+	}
+	tenantID := strings.TrimSpace(c.Get(authz.HeaderTenantID))
+	if tenantID == "" {
+		return nil, authz.ErrTenantSelectionRequired
+	}
+	actor, err := deps.ActorStore.FindActor(c.Context(), authz.ActorLookup{
+		ActorID:  session.ActorKey,
+		TenantID: tenantID,
+	})
+	if err != nil {
+		return nil, err
+	}
+	if actor.RecordID == "" || actor.RecordID != session.ActorID {
+		return nil, authz.ErrAuthenticationRequired
+	}
+	actor.Source = authz.ActorSourceAuthenticatedSession
+	return actor, nil
+}
+
+func resolveConfiguredHeaderActor(c fiber.Ctx, deps Dependencies) (*authz.Actor, error) {
+	mode := strings.ToLower(strings.TrimSpace(deps.ActorHeaderMode))
+	if mode == "" {
+		// Isolated route and handler tests historically construct Dependencies
+		// directly. Treat an omitted mode there as test compatibility; Bootstrap
+		// always supplies an explicit configured mode in a running server.
+		mode = actorHeaderModeTest
+	}
+
+	switch mode {
+	case actorHeaderModeDisabled:
+		return nil, authz.ErrAuthenticationRequired
+	case actorHeaderModeBootstrap:
+		actorKey := strings.TrimSpace(c.Get(authz.HeaderActorID))
+		if actorKey == "" || actorKey != strings.TrimSpace(deps.BootstrapActorKey) {
+			return nil, authz.ErrAuthenticationRequired
+		}
+		if strings.TrimSpace(c.Get(authz.HeaderAuthorizedBy)) != "" || strings.TrimSpace(c.Get(authz.HeaderActorPermissions)) != "" {
+			return nil, authz.ErrAuthenticationRequired
+		}
+		return authz.ResolveActor(c.Context(), deps.ActorStore, func(name string) string { return c.Get(name) })
+	case actorHeaderModeTest:
+		return authz.ResolveActor(c.Context(), deps.ActorStore, func(name string) string { return c.Get(name) })
+	default:
+		return nil, authz.ErrAuthenticationRequired
 	}
 }
 
@@ -46,23 +120,20 @@ func isPublicHealthPath(path string) bool {
 }
 
 func requestActor(c fiber.Ctx, deps Dependencies) (*authz.Actor, error) {
-	if errValue := c.Locals(authorizationErrorLocalKey); errValue != nil {
-		if err, ok := errValue.(error); ok {
-			return nil, err
-		}
+	actor, err := authz.RequestActorFromContext(c)
+	if err == nil {
+		return actor, nil
 	}
-	if actorValue := c.Locals(authorizationActorLocalKey); actorValue != nil {
-		if actor, ok := actorValue.(*authz.Actor); ok {
-			return actor, nil
-		}
-	}
-
-	actor, err := authz.ResolveActor(c.Context(), deps.ActorStore, func(name string) string { return c.Get(name) })
-	if err != nil {
-		c.Locals(authorizationErrorLocalKey, err)
+	if !errors.Is(err, authz.ErrMissingActor) {
 		return nil, err
 	}
-	c.Locals(authorizationActorLocalKey, actor)
+
+	actor, err = resolveConfiguredHeaderActor(c, deps)
+	if err != nil {
+		authz.SetRequestActorError(c, err)
+		return nil, err
+	}
+	authz.SetRequestActor(c, actor)
 	return actor, nil
 }
 
@@ -147,9 +218,6 @@ func requireActiveTenantForMutations(deps Dependencies) fiber.Handler {
 		}
 		tenantID := strings.TrimSpace(actor.TenantID)
 		if tenantID == "" {
-			// Preserve the existing single-tenant request behavior for legacy
-			// X-Authorized-By operations until Bite 28C replaces request headers
-			// with an authenticated session and explicit tenant selection.
 			tenantID = tenants.DefaultTenantID
 		}
 		if tenantID == authz.GlobalTenantScope {
@@ -203,6 +271,12 @@ func requirePermissionOrSelfPerson(deps Dependencies, permission authz.Permissio
 }
 
 func writeAuthorizationError(c fiber.Ctx, err error) error {
+	if errors.Is(err, authz.ErrAuthenticationRequired) {
+		return c.Status(fiber.StatusUnauthorized).JSON(httpx.APIResponse{Error: &httpx.APIError{Code: "authentication_required", Message: "An authenticated session is required"}})
+	}
+	if errors.Is(err, authz.ErrTenantSelectionRequired) {
+		return c.Status(fiber.StatusForbidden).JSON(httpx.APIResponse{Error: &httpx.APIError{Code: "tenant_selection_required", Message: "A specific tenant must be selected for this operation"}})
+	}
 	if errors.Is(err, authz.ErrMissingActor) {
 		return c.Status(fiber.StatusUnauthorized).JSON(httpx.APIResponse{Error: &httpx.APIError{Code: "missing_actor", Message: "Authorization actor is required"}})
 	}

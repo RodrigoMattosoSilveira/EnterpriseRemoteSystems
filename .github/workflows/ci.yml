@@ -152,6 +152,7 @@ jobs:
           AUTHZ_BOOTSTRAP_ROLE_CODE: APPLICATION_ADMIN
           AUTHZ_BOOTSTRAP_TENANT_ID: "*"
           AUTHZ_BOOTSTRAP_REQUIRE_EMPTY_ACTOR_TABLE: "false"
+          AUTHZ_ACTOR_HEADER_MODE: test
         run: |
           set -euo pipefail
 

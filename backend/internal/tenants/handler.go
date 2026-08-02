@@ -132,7 +132,7 @@ func (h *Handler) recordAudit(c fiber.Ctx, permission authz.Permission, operatio
 	if h.auditStore == nil {
 		return
 	}
-	actor, err := authz.ResolveActor(c.Context(), h.actorStore, func(name string) string { return c.Get(name) })
+	actor, err := authz.ResolveRequestActor(c, h.actorStore)
 	if err != nil && !errors.Is(err, authz.ErrMissingActor) {
 		return
 	}

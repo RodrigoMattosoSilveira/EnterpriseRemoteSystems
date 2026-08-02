@@ -1,10 +1,12 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App";
-import { ensureDefaultRequestActorStored } from "./api/requestActorBootstrap";
+import { ensureSelectedTenantStored } from "./api/tenantSelection";
+import { initializeAuthSession } from "./app/authStore";
 import "./styles/index.css";
 
-ensureDefaultRequestActorStored(window.localStorage);
+ensureSelectedTenantStored(window.localStorage);
+void initializeAuthSession();
 
 const root = document.getElementById("root");
 

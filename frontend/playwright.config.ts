@@ -42,11 +42,8 @@ export default defineConfig({
           origin: storageOrigin,
           localStorage: [
             {
-              name: "ers.authzAdmin.requestActor",
-              value: JSON.stringify({
-                actorId: authzActorId,
-                tenantId: authzTenantId,
-              }),
+              name: "ers.auth.selectedTenantId",
+              value: authzTenantId,
             },
           ],
         },
@@ -66,7 +63,7 @@ export default defineConfig({
     : [
         {
           command:
-            "cd .. && ERS_DATABASE_PATH=data/app-e2e.db ERS_RESET_DATABASE=true AUTHZ_BOOTSTRAP_ENABLED=true AUTHZ_BOOTSTRAP_ACTOR_KEY=bootstrap-admin AUTHZ_BOOTSTRAP_DISPLAY_NAME='Bootstrap Admin' AUTHZ_BOOTSTRAP_ROLE_CODE=APPLICATION_ADMIN AUTHZ_BOOTSTRAP_TENANT_ID='*' AUTHZ_BOOTSTRAP_REQUIRE_EMPTY_ACTOR_TABLE=false make local-backend",
+            "cd .. && ERS_DATABASE_PATH=data/app-e2e.db ERS_RESET_DATABASE=true APP_ENV=ci AUTHZ_ACTOR_HEADER_MODE=test AUTHZ_BOOTSTRAP_ENABLED=true AUTHZ_BOOTSTRAP_ACTOR_KEY=bootstrap-admin AUTHZ_BOOTSTRAP_DISPLAY_NAME='Bootstrap Admin' AUTHZ_BOOTSTRAP_ROLE_CODE=APPLICATION_ADMIN AUTHZ_BOOTSTRAP_TENANT_ID='*' AUTHZ_BOOTSTRAP_REQUIRE_EMPTY_ACTOR_TABLE=false make local-backend",
           url: "http://localhost:8080/healthz",
           reuseExistingServer: !isCI,
           timeout: 120_000,

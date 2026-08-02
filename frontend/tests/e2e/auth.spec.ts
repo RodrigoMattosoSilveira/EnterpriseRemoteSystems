@@ -28,12 +28,10 @@ test("admin can create an authorization actor, grant a role, and revoke it", asy
     page.getByRole("heading", { name: "Authorization", exact: true }),
   ).toBeVisible();
   await expect(
-    page.getByRole("heading", { name: "Admin request actor" }),
+    page.getByRole("heading", { name: "Authenticated authorization context" }),
   ).toBeVisible();
-  await expect(page.getByLabel("Actor ID / key")).toHaveValue(
-    "bootstrap-admin",
-  );
-  await expect(page.getByLabel("Tenant ID")).toHaveValue("default");
+  await expect(page.getByLabel("Selected Tenant ID")).toHaveValue("default");
+  await expect(page.getByText("Authenticated actor verified")).toBeVisible();
 
   await expect(
     page.getByRole("heading", { name: "Actors", exact: true }),
