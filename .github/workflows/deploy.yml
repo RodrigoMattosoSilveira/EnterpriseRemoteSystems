@@ -307,6 +307,10 @@ jobs:
       PLAYWRIGHT_SKIP_WEBSERVER: "true"
       PLAYWRIGHT_AUTH_MODE: session
       PLAYWRIGHT_AUTHZ_TENANT_ID: default
+      DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+      DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+      SERVER_ENV_DIR: ${{ needs.deploy.outputs.env_dir }}
+      SERVER_ENV_FILE: .env.${{ needs.deploy.outputs.env_name }}
       E2E_ADMIN_EMAIL: ${{ secrets.E2E_ADMIN_EMAIL || vars.E2E_ADMIN_EMAIL || secrets.DEV_ADMIN_EMAIL || vars.DEV_ADMIN_EMAIL }}
       E2E_ADMIN_PASSWORD: ${{ secrets.E2E_ADMIN_PASSWORD || secrets.DEV_ADMIN_PASSWORD }}
 
@@ -321,6 +325,78 @@ jobs:
         run: |
           git config --global --add safe.directory "${GITHUB_WORKSPACE}"
 
+      - name: Configure SSH for deployed credential fallback
+        if: ${{ env.E2E_ADMIN_EMAIL == '' || env.E2E_ADMIN_PASSWORD == '' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+
+          cat > ~/.ssh/id_ed25519 <<'EOF'
+          ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
+          EOF
+          chmod 600 ~/.ssh/id_ed25519
+
+          cat > ~/.ssh/known_hosts <<'EOF'
+          ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+          EOF
+          chmod 644 ~/.ssh/known_hosts
+
+      - name: Resolve deployed Playwright credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          email="${E2E_ADMIN_EMAIL:-}"
+          password="${E2E_ADMIN_PASSWORD:-}"
+          credential_source="GitHub environment configuration"
+
+          if [[ -z "$email" || -z "$password" ]]; then
+            if [[ -z "${DEPLOY_HOST:-}" || -z "${DEPLOY_USER:-}" ]]; then
+              echo "::error title=Missing deployment SSH configuration::DEPLOY_HOST and DEPLOY_USER are required to read the deployed administrator fallback."
+              exit 1
+            fi
+
+            remote_email_b64="$(
+              ssh -i ~/.ssh/id_ed25519 \
+                "${DEPLOY_USER}@${DEPLOY_HOST}" \
+                "cd '${SERVER_ENV_DIR}' && ./scripts/read-env-value.sh '${SERVER_ENV_FILE}' DEV_ADMIN_EMAIL | base64 | tr -d '\n'"
+            )"
+            remote_password_b64="$(
+              ssh -i ~/.ssh/id_ed25519 \
+                "${DEPLOY_USER}@${DEPLOY_HOST}" \
+                "cd '${SERVER_ENV_DIR}' && ./scripts/read-env-value.sh '${SERVER_ENV_FILE}' DEV_ADMIN_PASSWORD | base64 | tr -d '\n'"
+            )"
+
+            remote_email="$(printf '%s' "$remote_email_b64" | base64 --decode)"
+            remote_password="$(printf '%s' "$remote_password_b64" | base64 --decode)"
+
+            email="$remote_email"
+            password="$remote_password"
+            credential_source="deployed ${SERVER_ENV_FILE} fallback"
+          fi
+
+          if [[ -z "$email" || -z "$password" ]]; then
+            echo "::error title=Missing deployed Playwright credentials::Configure E2E_ADMIN_EMAIL/E2E_ADMIN_PASSWORD in the '${DEPLOYMENT_ENVIRONMENT}' GitHub environment or set DEV_ADMIN_EMAIL/DEV_ADMIN_PASSWORD in ${SERVER_ENV_DIR}/${SERVER_ENV_FILE}."
+            exit 1
+          fi
+          if [[ "$password" == "change-this-password-immediately" ]]; then
+            echo "::error title=Placeholder administrator password::Replace DEV_ADMIN_PASSWORD in ${SERVER_ENV_DIR}/${SERVER_ENV_FILE} or configure E2E_ADMIN_PASSWORD in the '${DEPLOYMENT_ENVIRONMENT}' GitHub environment."
+            exit 1
+          fi
+          if [[ "$email" == *$'\n'* || "$email" == *$'\r'* || "$password" == *$'\n'* || "$password" == *$'\r'* ]]; then
+            echo "::error title=Invalid deployed Playwright credentials::Administrator credentials must not contain newline characters."
+            exit 1
+          fi
+
+          echo "::add-mask::$email"
+          echo "::add-mask::$password"
+          printf 'E2E_ADMIN_EMAIL=%s\n' "$email" >> "$GITHUB_ENV"
+          printf 'E2E_ADMIN_PASSWORD=%s\n' "$password" >> "$GITHUB_ENV"
+          printf 'E2E_CREDENTIAL_SOURCE=%s\n' "$credential_source" >> "$GITHUB_ENV"
+
       - name: Show deployed Playwright target
         shell: bash
         run: |
@@ -330,10 +406,7 @@ jobs:
           echo "PLAYWRIGHT_BASE_URL=${PLAYWRIGHT_BASE_URL}"
           echo "PLAYWRIGHT_SKIP_WEBSERVER=${PLAYWRIGHT_SKIP_WEBSERVER}"
           echo "PLAYWRIGHT_AUTH_MODE=${PLAYWRIGHT_AUTH_MODE}"
-          if [[ -z "${E2E_ADMIN_EMAIL:-}" || -z "${E2E_ADMIN_PASSWORD:-}" ]]; then
-            echo "::error title=Missing deployed Playwright credentials::Configure an administrator login for the '${DEPLOYMENT_ENVIRONMENT}' GitHub environment. Email may come from E2E_ADMIN_EMAIL or DEV_ADMIN_EMAIL (secret or environment variable); password must come from E2E_ADMIN_PASSWORD or DEV_ADMIN_PASSWORD (secret)."
-            exit 1
-          fi
+          echo "E2E_CREDENTIAL_SOURCE=${E2E_CREDENTIAL_SOURCE}"
           echo "Deployed Playwright administrator credentials are configured"
           echo "DEPLOYED_REVISION=${{ needs.deploy.outputs.revision }}"
           echo "CHECKED_OUT_REVISION=$(git rev-parse HEAD)"
