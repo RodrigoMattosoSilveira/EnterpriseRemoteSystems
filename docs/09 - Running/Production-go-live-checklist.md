@@ -128,29 +128,17 @@ second_approval_notes
 
 Column names should match the final schema in the repository migrations.
 
-## Authorization and actor checks
+## Authentication and authorization checks
 
-For smoke testing protected endpoints, use the same actor headers used by the current ERS transitional authorization model.
-
-Example dev-only header setup:
-
-```bash
-BASE_URL="https://dev.enterpriseremotesystems.com"
-ACTOR="admin-dev@enterpriseremotesystems.com"
-TENANT_ID="default"
-
-ADMIN_HEADERS=(
-  -H "Content-Type: application/json"
-  -H "X-Actor-ID: ${ACTOR}"
-  -H "X-Tenant-ID: ${TENANT_ID}"
-)
-```
+For deployed smoke testing, log in through `/api/v1/auth/login`, retain the returned HTTP-only session cookie, and send the intended tenant ID as the tenant-selection hint. Do not send `X-Actor-ID`; deployed environments must use `AUTHZ_ACTOR_HEADER_MODE=disabled`.
 
 Expected protected-endpoint behavior:
 
-- missing actor is rejected
-- unauthorized actor is rejected
-- authorized actor succeeds
+- missing or expired session is rejected with `authentication_required`
+- missing tenant selection is rejected with `tenant_selection_required`
+- a tenant outside the session actor's persisted grants is rejected
+- an authorized session actor succeeds
+- actor-spoofing headers do not change a valid session identity
 - denied attempts are audited when the operation reaches the authorization/audit path
 
 ## Second-person approval policy checks

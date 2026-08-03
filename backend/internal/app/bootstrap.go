@@ -128,6 +128,8 @@ func Bootstrap(cfg Config) (*fiber.App, func(), error) {
 		DB:                          database,
 		AuthenticationHandler:       authenticationHandler,
 		DisableRouteAuthorization:   cfg.DisableRouteAuthorization,
+		ActorHeaderMode:             cfg.AuthzActorHeaderMode,
+		BootstrapActorKey:           cfg.AuthzBootstrapActorKey,
 		AuthzHandler:                authzHandler,
 		ActorStore:                  actorStore,
 		PeopleHandler:               peopleHandler,

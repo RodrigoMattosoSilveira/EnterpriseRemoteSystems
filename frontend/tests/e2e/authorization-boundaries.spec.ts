@@ -60,7 +60,7 @@ test.describe("authorization role boundaries", () => {
         401,
         "unknown actor current-actor lookup should be rejected",
       );
-      await expectErrorCode(currentActorResponse, "missing_actor");
+      await expectErrorCode(currentActorResponse, "authentication_required");
 
       const authzAdminResponse = await api.get(e2eApiUrl("/api/v1/authz/actors"), {
         headers: forgedHeaders,
@@ -70,19 +70,22 @@ test.describe("authorization role boundaries", () => {
         401,
         "unknown actor must not become an authorization administrator",
       );
-      await expectErrorCode(authzAdminResponse, "missing_actor");
+      await expectErrorCode(authzAdminResponse, "authentication_required");
     } finally {
       await api.dispose();
     }
   });
 
-  test("expense operators can perform expense work but cannot administer authorization or settings", async () => {
-    const api = await newIsolatedApi();
+  test("expense operators can perform expense work but cannot administer authorization or settings", async ({
+    request: adminApi,
+  }) => {
+    let actorApi: APIRequestContext | undefined;
     try {
-      const actor = await createActorWithRole(api, "expense", "EXPENSE_OPERATOR");
-      const headers = actorHeaders(actor.actorKey);
+      const actor = await createActorWithRole(adminApi, "expense", "EXPENSE_OPERATOR");
+      actorApi = await createActorAccountAndLogin(adminApi, actor);
+      const headers = tenantHeaders();
 
-      const currentActor = await getCurrentActor(api, headers);
+      const currentActor = await getCurrentActor(actorApi, headers);
       expect(currentActor.actorKey).toBe(actor.actorKey);
       expect(currentActor.tenantId).toBe(DEFAULT_TENANT_ID);
       expect(currentActor.roleCodes).toContain("EXPENSE_OPERATOR");
@@ -91,13 +94,13 @@ test.describe("authorization role boundaries", () => {
       expect(currentActor.permissions).not.toContain("authz.manage");
 
       await expectStatus(
-        await api.get(e2eApiUrl("/api/v1/reference-data/sector"), { headers }),
+        await actorApi.get(e2eApiUrl("/api/v1/reference-data/sector"), { headers }),
         200,
         "expense operators should read reference data needed by expense forms",
       );
 
       await expectStatus(
-        await api.post(e2eApiUrl("/api/v1/expenses"), {
+        await actorApi.post(e2eApiUrl("/api/v1/expenses"), {
           headers,
           data: {},
         }),
@@ -106,13 +109,13 @@ test.describe("authorization role boundaries", () => {
       );
 
       await expectStatus(
-        await api.get(e2eApiUrl("/api/v1/authz/actors"), { headers }),
+        await actorApi.get(e2eApiUrl("/api/v1/authz/actors"), { headers }),
         403,
         "expense operators must not administer authorization actors",
       );
 
       await expectStatus(
-        await api.put(
+        await actorApi.put(
           e2eApiUrl("/api/v1/current-accounts/settings/second-person-approval"),
           {
             headers,
@@ -123,17 +126,20 @@ test.describe("authorization role boundaries", () => {
         "expense operators must not update second-person approval settings",
       );
     } finally {
-      await api.dispose();
+      await actorApi?.dispose();
     }
   });
 
-  test("earnings operators can perform planning work but cannot create expenses or price-list records", async () => {
-    const api = await newIsolatedApi();
+  test("earnings operators can perform planning work but cannot create expenses or price-list records", async ({
+    request: adminApi,
+  }) => {
+    let actorApi: APIRequestContext | undefined;
     try {
-      const actor = await createActorWithRole(api, "earnings", "EARNINGS_OPERATOR");
-      const headers = actorHeaders(actor.actorKey);
+      const actor = await createActorWithRole(adminApi, "earnings", "EARNINGS_OPERATOR");
+      actorApi = await createActorAccountAndLogin(adminApi, actor);
+      const headers = tenantHeaders();
 
-      const currentActor = await getCurrentActor(api, headers);
+      const currentActor = await getCurrentActor(actorApi, headers);
       expect(currentActor.actorKey).toBe(actor.actorKey);
       expect(currentActor.roleCodes).toContain("EARNINGS_OPERATOR");
       expect(currentActor.permissions).toContain("planning.create");
@@ -142,13 +148,13 @@ test.describe("authorization role boundaries", () => {
       expect(currentActor.permissions).not.toContain("price_lists.create");
 
       await expectStatus(
-        await api.get(e2eApiUrl("/api/v1/work-periods?pageSize=1"), { headers }),
+        await actorApi.get(e2eApiUrl("/api/v1/work-periods?pageSize=1"), { headers }),
         200,
         "earnings operators should read planning work periods",
       );
 
       await expectStatus(
-        await api.post(e2eApiUrl("/api/v1/work-periods"), {
+        await actorApi.post(e2eApiUrl("/api/v1/work-periods"), {
           headers,
           data: {},
         }),
@@ -157,7 +163,7 @@ test.describe("authorization role boundaries", () => {
       );
 
       await expectStatus(
-        await api.post(e2eApiUrl("/api/v1/expenses"), {
+        await actorApi.post(e2eApiUrl("/api/v1/expenses"), {
           headers,
           data: {},
         }),
@@ -166,7 +172,7 @@ test.describe("authorization role boundaries", () => {
       );
 
       await expectStatus(
-        await api.post(e2eApiUrl("/api/v1/price-list-items"), {
+        await actorApi.post(e2eApiUrl("/api/v1/price-list-items"), {
           headers,
           data: {},
         }),
@@ -174,67 +180,82 @@ test.describe("authorization role boundaries", () => {
         "earnings operators must not create price-list items",
       );
     } finally {
-      await api.dispose();
+      await actorApi?.dispose();
     }
   });
 
-  test("inactive persisted actors are rejected", async () => {
-    const api = await newIsolatedApi();
+  test("inactive persisted actors are rejected", async ({ request: adminApi }) => {
+    let actorApi: APIRequestContext | undefined;
     try {
-      const actor = await createActorWithRole(api, "inactive", "EXPENSE_OPERATOR");
+      const actor = await createActorWithRole(adminApi, "inactive", "EXPENSE_OPERATOR");
+      actorApi = await createActorAccountAndLogin(adminApi, actor);
 
-      await setActorActive(api, actor.id, false);
+      await setActorActive(adminApi, actor.id, false);
 
-      const response = await api.get(e2eApiUrl("/api/v1/authz/current-actor"), {
-        headers: actorHeaders(actor.actorKey),
+      const response = await actorApi.get(e2eApiUrl("/api/v1/authz/current-actor"), {
+        headers: tenantHeaders(),
       });
       await expectStatus(response, 401, "inactive actors should be rejected");
-      await expectErrorCode(response, "missing_actor");
+      await expectErrorCode(response, "actor_inactive");
     } finally {
-      await api.dispose();
+      await actorApi?.dispose();
     }
   });
 
-  test("role grants enforce application and tenant scope rules", async () => {
-    const api = await newIsolatedApi();
-    try {
-      const actor = await createAuthzActor(api, `scope-rules-${uniqueSuffix()}`);
+  test("role grants enforce application and tenant scope rules", async ({ request: adminApi }) => {
+    const actor = await createAuthzActor(adminApi, `scope-rules-${uniqueSuffix()}`);
 
-      const invalidApplicationGrant = await api.post(
-        e2eApiUrl(`/api/v1/authz/actors/${encodeURIComponent(actor.id)}/role-grants`),
-        {
-          headers: authzHeaders(),
-          data: { roleCode: "APPLICATION_ADMIN", tenantId: DEFAULT_TENANT_ID },
-        },
-      );
-      await expectStatus(
-        invalidApplicationGrant,
-        400,
-        "application administrator grants must use global tenant scope",
-      );
-      await expectValidationField(invalidApplicationGrant, "tenantId");
+    const invalidApplicationGrant = await adminApi.post(
+      e2eApiUrl(`/api/v1/authz/actors/${encodeURIComponent(actor.id)}/role-grants`),
+      {
+        headers: authzHeaders(),
+        data: { roleCode: "APPLICATION_ADMIN", tenantId: DEFAULT_TENANT_ID },
+      },
+    );
+    await expectStatus(
+      invalidApplicationGrant,
+      400,
+      "application administrator grants must use global tenant scope",
+    );
+    await expectValidationField(invalidApplicationGrant, "tenantId");
 
-      const invalidTenantGrant = await api.post(
-        e2eApiUrl(`/api/v1/authz/actors/${encodeURIComponent(actor.id)}/role-grants`),
-        {
-          headers: authzHeaders(),
-          data: { roleCode: "EXPENSE_OPERATOR", tenantId: "*" },
-        },
-      );
-      await expectStatus(
-        invalidTenantGrant,
-        400,
-        "tenant-scoped operational grants must not use global tenant scope",
-      );
-      await expectValidationField(invalidTenantGrant, "tenantId");
-    } finally {
-      await api.dispose();
-    }
+    const invalidTenantGrant = await adminApi.post(
+      e2eApiUrl(`/api/v1/authz/actors/${encodeURIComponent(actor.id)}/role-grants`),
+      {
+        headers: authzHeaders(),
+        data: { roleCode: "EXPENSE_OPERATOR", tenantId: "*" },
+      },
+    );
+    await expectStatus(
+      invalidTenantGrant,
+      400,
+      "tenant-scoped operational grants must not use global tenant scope",
+    );
+    await expectValidationField(invalidTenantGrant, "tenantId");
   });
 });
 
 async function newIsolatedApi(): Promise<APIRequestContext> {
-  return playwrightRequest.newContext();
+  return playwrightRequest.newContext({
+    storageState: { cookies: [], origins: [] },
+  });
+}
+
+async function loginIsolatedApi(
+  login: string,
+  password: string,
+): Promise<APIRequestContext> {
+  const api = await newIsolatedApi();
+  const response = await api.post(e2eApiUrl("/api/v1/auth/login"), {
+    data: { login, password },
+  });
+  try {
+    await expectStatus(response, 200, `authenticate ${login}`);
+  } catch (error) {
+    await api.dispose();
+    throw error;
+  }
+  return api;
 }
 
 function actorHeaders(actorKey: string, tenantId = DEFAULT_TENANT_ID): Record<string, string> {
@@ -242,6 +263,28 @@ function actorHeaders(actorKey: string, tenantId = DEFAULT_TENANT_ID): Record<st
     "X-Actor-ID": actorKey,
     "X-Tenant-ID": tenantId,
   };
+}
+
+function tenantHeaders(tenantId = DEFAULT_TENANT_ID): Record<string, string> {
+  return { "X-Tenant-ID": tenantId };
+}
+
+async function createActorAccountAndLogin(
+  adminApi: APIRequestContext,
+  actor: AuthzActor,
+): Promise<APIRequestContext> {
+  const temporaryPassword = `E2E-${uniqueSuffix()}-Password!`;
+  const response = await adminApi.post(e2eApiUrl("/api/v1/auth/accounts"), {
+    headers: authzHeaders(),
+    data: {
+      actorId: actor.id,
+      login: actor.actorKey,
+      temporaryPassword,
+      mustChangePassword: false,
+    },
+  });
+  await expectStatus(response, 201, `create authentication account for ${actor.actorKey}`);
+  return loginIsolatedApi(actor.actorKey, temporaryPassword);
 }
 
 async function createActorWithRole(

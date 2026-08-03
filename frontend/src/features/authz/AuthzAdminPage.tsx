@@ -6,6 +6,7 @@ import {
 } from "../collaborators/useCollaborators";
 import { ApiError } from "../../api/client";
 import { ApiErrorPanel } from "../../components/ApiErrorPanel";
+import { readSelectedTenantId, setSelectedTenantId } from "../../api/tenantSelection";
 import type { Collaborator } from "../../types/collaborators";
 import type {
   AuthzActor,
@@ -25,10 +26,8 @@ import {
   useSetAuthzActorActive,
 } from "./useAuthzAdmin";
 
-const SESSION_STORAGE_KEY = "ers.authzAdmin.requestActor";
-
 const defaultRequestActor: AuthzAdminRequestActor = {
-  actorId: "bootstrap-admin",
+  actorId: "authenticated-session",
   tenantId: "default",
 };
 
@@ -161,13 +160,6 @@ export function AuthzAdminPage() {
     }
   }
 
-  function handleUseActor(actor: AuthzActor) {
-    if (!actor.active) return;
-    const tenantId = preferredTenant(actor, requestActor.tenantId);
-    setRequestActor({ actorId: actor.actorKey, tenantId });
-    setSuccessMessage(`${actor.actorKey} selected as the operating actor.`);
-  }
-
   return (
     <main className="min-h-screen bg-gray-50">
       <header className="sticky top-0 z-10 border-b bg-white/95 px-4 py-4 backdrop-blur">
@@ -220,35 +212,30 @@ export function AuthzAdminPage() {
         {hasLimitedAuthorization && <LimitedAuthorizationNotice />}
 
         <section className="rounded-2xl border bg-white p-4 shadow-sm">
-          <h2 className="text-lg font-semibold text-gray-950">Admin request actor</h2>
+          <h2 className="text-lg font-semibold text-gray-950">
+            Authenticated authorization context
+          </h2>
           <p className="mt-1 text-sm text-gray-500">
-            ERS sends only this persisted actor key and tenant. Effective permissions are loaded from active role grants in the database.
+            The session cookie identifies the actor. The tenant value is only a selection hint and is validated against that actor&apos;s persisted grants.
           </p>
-          <div className="mt-4 grid gap-3 md:grid-cols-2">
+          <div className="mt-4 max-w-md">
             <label className="block text-sm font-semibold text-gray-700">
-              Actor ID / key
-              <input
-                className="mt-2 block w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm"
-                value={requestActor.actorId}
-                onChange={(event) =>
-                  setRequestActor((current) => ({ ...current, actorId: event.target.value }))
-                }
-              />
-            </label>
-            <label className="block text-sm font-semibold text-gray-700">
-              Tenant ID
+              Selected Tenant ID
               <input
                 className="mt-2 block w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm"
                 value={requestActor.tenantId}
                 onChange={(event) =>
-                  setRequestActor((current) => ({ ...current, tenantId: event.target.value }))
+                  setRequestActor((current) => ({
+                    ...current,
+                    tenantId: event.target.value,
+                  }))
                 }
               />
             </label>
           </div>
           {currentActorQuery.data && (
             <div className="mt-4 rounded-xl border border-green-200 bg-green-50 p-4 text-sm text-green-900">
-              <p className="font-semibold">Persisted operating actor verified</p>
+              <p className="font-semibold">Authenticated actor verified</p>
               <p className="mt-1">
                 {currentActorQuery.data.actorKey} · {currentActorQuery.data.tenantId} · {currentActorQuery.data.scope}
               </p>
@@ -264,7 +251,7 @@ export function AuthzAdminPage() {
           <div className="mt-4 rounded-xl border border-gray-200 bg-gray-950 p-4 text-sm text-gray-100">
             <div className="flex flex-col gap-1 md:flex-row md:items-center md:justify-between">
               <p className="font-semibold">Current actor curl</p>
-              <p className="text-xs text-gray-300">Uses the operating actor shown above.</p>
+              <p className="text-xs text-gray-300">Uses an authenticated session cookie.</p>
             </div>
             <pre
               aria-label="Current actor curl command"
@@ -273,7 +260,7 @@ export function AuthzAdminPage() {
               {currentActorCurlCommand(requestActor)}
             </pre>
             <p className="mt-2 text-xs text-gray-300">
-              A curl command that explicitly sends bootstrap-admin will verify bootstrap-admin. Use this generated command after switching actors.
+              Actor headers are ignored during normal application traffic. The server derives identity from the session and validates the selected tenant.
             </p>
           </div>
         </section>
@@ -370,7 +357,7 @@ export function AuthzAdminPage() {
                         key={actor.id}
                         actor={actor}
                         roles={roles}
-                        currentActorKey={currentActorQuery.data?.actorKey ?? requestActor.actorId}
+                        currentActorKey={currentActorQuery.data?.actorKey ?? ""}
                         isMutating={
                           grantRoleMutation.isPending ||
                           revokeGrantMutation.isPending ||
@@ -379,7 +366,6 @@ export function AuthzAdminPage() {
                         onGrantRole={handleGrantRole}
                         onRevokeGrant={handleRevokeGrant}
                         onSetActive={handleSetActorActive}
-                        onUseActor={handleUseActor}
                       />
                     ))}
                   </div>
@@ -621,7 +607,6 @@ function ActorCard({
   onGrantRole,
   onRevokeGrant,
   onSetActive,
-  onUseActor,
 }: {
   actor: AuthzActor;
   roles: AuthzRole[];
@@ -630,7 +615,6 @@ function ActorCard({
   onGrantRole: (targetActorId: string, roleCode: string, tenantId: string) => Promise<void>;
   onRevokeGrant: (targetActorId: string, grant: AuthzActorRoleGrant) => Promise<void>;
   onSetActive: (targetActorId: string, actorKey: string, active: boolean) => Promise<void>;
-  onUseActor: (actor: AuthzActor) => void;
 }) {
   const [roleCode, setRoleCode] = useState(roles[0]?.code ?? "");
   const [tenantId, setTenantId] = useState("default");
@@ -660,14 +644,6 @@ function ActorCard({
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <button
-            className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700 disabled:border-gray-200 disabled:bg-white disabled:text-gray-500 disabled:opacity-60"
-            disabled={isMutating || !actor.active || actor.actorKey === currentActorKey}
-            type="button"
-            onClick={() => onUseActor(actor)}
-          >
-            {actor.actorKey === currentActorKey ? "Operating Actor" : "Use Actor"}
-          </button>
           <button
             className="rounded-lg border bg-white px-3 py-1 text-xs font-semibold text-gray-700 disabled:opacity-60"
             disabled={isMutating || actor.actorKey === currentActorKey}
@@ -776,12 +752,11 @@ function isForbiddenApiError(error: unknown): boolean {
 }
 
 function currentActorCurlCommand(requestActor: AuthzAdminRequestActor) {
-  const actorId = requestActor.actorId.trim() || defaultRequestActor.actorId;
   const tenantId = requestActor.tenantId.trim() || defaultRequestActor.tenantId;
 
   return [
     "curl -sS \\",
-    `  -H "X-Actor-ID: ${actorId}" \\`,
+    "  -b /tmp/ers-session.cookies \\",
     `  -H "X-Tenant-ID: ${tenantId}" \\`,
     "  http://localhost:8080/api/v1/authz/current-actor | python3 -m json.tool",
   ].join("\n");
@@ -789,39 +764,17 @@ function currentActorCurlCommand(requestActor: AuthzAdminRequestActor) {
 
 function saveRequestActor(requestActor: AuthzAdminRequestActor) {
   if (typeof window === "undefined") return;
-
-  const storage = window.localStorage;
-  if (typeof storage?.setItem !== "function") return;
-
-  try {
-    storage.setItem(SESSION_STORAGE_KEY, JSON.stringify(requestActor));
-  } catch {
-    // Persisting this convenience preference is best-effort only.
-  }
+  setSelectedTenantId(window.localStorage, requestActor.tenantId);
 }
 
 function loadRequestActor(): AuthzAdminRequestActor {
   if (typeof window === "undefined") return defaultRequestActor;
 
-  const storage = window.localStorage;
-  if (typeof storage?.getItem !== "function") return defaultRequestActor;
-
-  try {
-    const stored = storage.getItem(SESSION_STORAGE_KEY);
-    if (!stored) return defaultRequestActor;
-    const parsed = JSON.parse(stored) as Partial<AuthzAdminRequestActor>;
-    return {
-      actorId: typeof parsed.actorId === "string" && parsed.actorId ? parsed.actorId : defaultRequestActor.actorId,
-      tenantId: typeof parsed.tenantId === "string" && parsed.tenantId ? parsed.tenantId : defaultRequestActor.tenantId,
-    };
-  } catch {
-    return defaultRequestActor;
-  }
-}
-
-function preferredTenant(actor: AuthzActor, fallback: string) {
-  const tenantGrant = (actor.roleGrants ?? []).find((grant) => grant.tenantId !== "*");
-  return tenantGrant?.tenantId || fallback || "default";
+  return {
+    actorId: defaultRequestActor.actorId,
+    tenantId:
+      readSelectedTenantId(window.localStorage) || defaultRequestActor.tenantId,
+  };
 }
 
 function normalizeOptional(value: string | null | undefined) {

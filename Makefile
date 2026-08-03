@@ -93,6 +93,7 @@ help:
 	@echo "  make server-frontend-logs ENV=development|test|production"
 	@echo "  make server-caddy-logs ENV=development|test|production"
 	@echo "  make server-backend-health ENV=development|test|production"
+	@echo "  make server-provision-e2e-admin ENV=development|test|production < provision.json"
 	@echo "  make server-smoke ENV=development|test|production"
 	@echo "  make server-protected-api-smoke ENV=development|test|production"
 	@echo "  make server-admin-test ENV=development|test|production"
@@ -108,6 +109,7 @@ help:
 	@echo "  make server-dev-smoke"
 	@echo "  make server-dev-protected-api-smoke"
 	@echo "  make server-dev-admin-test"
+	@echo "  make server-dev-provision-e2e-admin < provision.json"
 	@echo
 	@echo "Test aliases:"
 	@echo "  make server-test-pull"
@@ -116,6 +118,7 @@ help:
 	@echo "  make server-test-smoke"
 	@echo "  make server-test-protected-api-smoke"
 	@echo "  make server-test-admin-test"
+	@echo "  make server-test-provision-e2e-admin < provision.json"
 	@echo
 	@echo "Production aliases:"
 	@echo "  make server-prod-pull"
@@ -124,6 +127,7 @@ help:
 	@echo "  make server-prod-smoke"
 	@echo "  make server-prod-protected-api-smoke"
 	@echo "  make server-prod-admin-test"
+	@echo "  make server-prod-provision-e2e-admin < provision.json"
 	@echo
 	@echo "Edge proxy:"
 	@echo "  make edge-init"
@@ -167,6 +171,7 @@ doctor:
 check-repo:
 	@test -f backend/Dockerfile || (echo "Missing backend/Dockerfile" && exit 1)
 	@test -f backend/docker-entrypoint.sh || (echo "Missing backend/docker-entrypoint.sh" && exit 1)
+	@test -f backend/cmd/provision-e2e-admin/main.go || (echo "Missing backend/cmd/provision-e2e-admin/main.go" && exit 1)
 	@test -d backend/migrations || (echo "Missing backend/migrations" && exit 1)
 	@test -f frontend/Dockerfile || (echo "Missing frontend/Dockerfile" && exit 1)
 	@test -f frontend/nginx.conf || (echo "Missing frontend/nginx.conf" && exit 1)
@@ -379,6 +384,10 @@ server-env-caddy-health:
 	docker exec $(CONTAINER_PREFIX)-caddy wget -q -O- http://localhost:80/healthz >/dev/null
 	@echo "$(CONTAINER_PREFIX)-caddy internal health check passed."
 
+.PHONY: server-provision-e2e-admin
+server-provision-e2e-admin:
+	cd $(ENV_DIR) && $(SERVER_COMPOSE) exec -T backend /app/provision-e2e-admin $(if $(filter production,$(ENV)),--allow-production,)
+
 .PHONY: server-smoke
 server-smoke:
 	curl -fsS https://$(DOMAIN)/healthz >/dev/null
@@ -503,6 +512,10 @@ server-dev-protected-api-smoke:
 server-dev-admin-test:
 	$(MAKE) server-admin-test ENV=development
 
+.PHONY: server-dev-provision-e2e-admin
+server-dev-provision-e2e-admin:
+	$(MAKE) server-provision-e2e-admin ENV=development
+
 .PHONY: server-dev-dns-check
 server-dev-dns-check:
 	$(MAKE) server-dns-check ENV=development
@@ -587,6 +600,10 @@ server-test-protected-api-smoke:
 server-test-admin-test:
 	$(MAKE) server-admin-test ENV=test
 
+.PHONY: server-test-provision-e2e-admin
+server-test-provision-e2e-admin:
+	$(MAKE) server-provision-e2e-admin ENV=test
+
 .PHONY: server-test-dns-check
 server-test-dns-check:
 	$(MAKE) server-dns-check ENV=test
@@ -666,6 +683,10 @@ server-prod-protected-api-smoke:
 .PHONY: server-prod-admin-test
 server-prod-admin-test:
 	$(MAKE) server-admin-test ENV=production
+
+.PHONY: server-prod-provision-e2e-admin
+server-prod-provision-e2e-admin:
+	$(MAKE) server-provision-e2e-admin ENV=production
 
 .PHONY: server-prod-dns-check
 server-prod-dns-check:

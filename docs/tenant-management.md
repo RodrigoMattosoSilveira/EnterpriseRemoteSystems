@@ -1,6 +1,6 @@
 # Bite 28A — Tenant Management
 
-Bite 28A introduces an application-admin tenant lifecycle and tenant-administrator assignment workflow while preserving the temporary request-actor headers used before authenticated sessions are introduced.
+Bite 28A introduced the application-admin tenant lifecycle and tenant-administrator assignment workflow. Bite 28C now derives actor identity from the authenticated session while retaining the tenant ID only as a server-validated selection hint.
 
 ## Administration pages
 
@@ -35,15 +35,8 @@ For an inactive selected tenant:
 
 The tenant detail page lists persisted authorization actors. Assigning an actor creates or reactivates a tenant-scoped `TENANT_ADMIN` role grant. Inactive actors cannot be assigned. Revocation deactivates only that tenant role grant; it does not delete or deactivate the actor.
 
-## Scope boundary
+## Authenticated scope boundary
 
-Bite 28A manages tenant lifecycle and access grants. The browser still transports `X-Actor-ID` and `X-Tenant-ID`. Bite 28B and Bite 28C will replace that transport with login-backed sessions and derive actor identity from authentication.
+The browser no longer transports actor identity. The HTTP-only authentication session identifies the persisted authorization actor. `X-Tenant-ID` remains only as a selected-tenant hint, and the server resolves the session actor's active grants for that immutable tenant ID.
 
-## Tenant and actor identifiers
-
-Tenant access requests must use two persisted identifiers rather than values reconstructed from labels:
-
-- `X-Actor-ID` uses the actor's exact `actorKey`. The actor key is not the authorization actor record ID and must not receive an additional `collaborator-` prefix.
-- `X-Tenant-ID` and `/tenants/:id` use the tenant's immutable `id`. The human-readable tenant `code` is not an API scope identifier.
-
-After a tenant administrator is assigned, `/admin/tenants/:id` displays both identifiers and generates the complete tenant-access verification command. This command is the authoritative manual-test source for the temporary header transport used before Bite 28C.
+Tenant URLs and tenant-selection requests must use the tenant's immutable `id`; the human-readable tenant `code` is not an API scope identifier. `/admin/tenants/:id` continues to display the tenant identifier for administrative and diagnostic use.

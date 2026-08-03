@@ -1,5 +1,10 @@
 import { expect, test, type APIRequestContext } from "@playwright/test";
-import { authzHeaders, e2eApiUrl, seedBrowserAuthz } from "./support/authz";
+import {
+  E2E_ACTOR_ID,
+  authzHeaders,
+  e2eApiUrl,
+  seedBrowserAuthz,
+} from "./support/authz";
 
 const PERSON_STATUS_ACTIVE_ID = "ref-person-status-active";
 const COLLABORATOR_STATUS_ACTIVE_ID = "ref-collaborator-status-active";
@@ -9,7 +14,6 @@ const LOCATION_MAIN_MINE_ID = "ref-location-main-mine";
 const TASK_MINER_ID = "ref-task-miner";
 const EXPENSE_CATEGORY_CANTEEN_ID = "ref-expense-category-canteen";
 const VALUE_UNIT_BRL_ID = "ref-value-unit-brl";
-const ADMIN_ACTOR_ID = "bootstrap-admin";
 
 test.beforeEach(async ({ page }) => {
   await seedBrowserAuthz(page);
@@ -70,7 +74,7 @@ test("outstanding receipt appears, can be opened, and disappears after signed re
 
   const returnedReceipt = await getPrintableReceipt(request, ledgerEntry.id);
   expect(returnedReceipt.status).toBe("RETURNED");
-  expect(returnedReceipt.receivedBy).toBe(ADMIN_ACTOR_ID);
+  expect(returnedReceipt.receivedBy).toBe(E2E_ACTOR_ID);
 
   const refreshedReceipt = await findOutstandingReceiptByLedgerEntryId(
     request,
