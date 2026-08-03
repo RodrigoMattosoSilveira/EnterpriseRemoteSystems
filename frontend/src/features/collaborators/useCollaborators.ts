@@ -44,10 +44,11 @@ export function useCollaborators(filter: CollaboratorListFilter = {}) {
   });
 }
 
-export function useCollaboratorCatalog() {
+export function useCollaboratorCatalog(enabled = true) {
   return useQuery({
     queryKey: collaboratorQueryKeys.catalog(),
     queryFn: listAllCollaborators,
+    enabled,
   });
 }
 

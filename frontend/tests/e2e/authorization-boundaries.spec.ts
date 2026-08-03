@@ -236,7 +236,9 @@ test.describe("authorization role boundaries", () => {
 });
 
 async function newIsolatedApi(): Promise<APIRequestContext> {
-  return playwrightRequest.newContext();
+  return playwrightRequest.newContext({
+    storageState: { cookies: [], origins: [] },
+  });
 }
 
 async function loginIsolatedApi(

@@ -4,6 +4,7 @@ import { dirname } from "node:path";
 
 type CurrentActorEnvelope = {
   data?: {
+    actorKey?: string;
     scope?: string;
     permissions?: string[];
   };
@@ -27,6 +28,7 @@ export default async function globalSetup(config: FullConfig): Promise<void> {
 
   const login = process.env.E2E_ADMIN_EMAIL?.trim();
   const password = process.env.E2E_ADMIN_PASSWORD;
+  const expectedActorKey = process.env.PLAYWRIGHT_AUTHZ_ACTOR_ID?.trim();
   const tenantId = process.env.PLAYWRIGHT_AUTHZ_TENANT_ID?.trim() || "default";
 
   if (!login || !password) {
@@ -57,6 +59,11 @@ export default async function globalSetup(config: FullConfig): Promise<void> {
     ) {
       throw new Error(
         "The deployed E2E account must resolve to an application-scoped authorization administrator",
+      );
+    }
+    if (expectedActorKey && actorPayload.data?.actorKey !== expectedActorKey) {
+      throw new Error(
+        `The deployed E2E account resolved to actor ${actorPayload.data?.actorKey ?? "<missing>"}; expected ${expectedActorKey}`,
       );
     }
 
