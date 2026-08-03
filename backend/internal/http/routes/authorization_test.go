@@ -2,23 +2,29 @@ package routes
 
 import (
 	"context"
+	"encoding/json"
 	"net/http/httptest"
 	"testing"
 
 	"github.com/gofiber/fiber/v3"
 
+	"enterpriseremotesystems/backend/internal/authentication"
 	"enterpriseremotesystems/backend/internal/authz"
 )
 
 type fakeActorStore struct {
-	actor *authz.Actor
-	err   error
-	calls *int
+	actor  *authz.Actor
+	err    error
+	calls  *int
+	lookup *authz.ActorLookup
 }
 
 func (s fakeActorStore) FindActor(ctx context.Context, lookup authz.ActorLookup) (*authz.Actor, error) {
 	if s.calls != nil {
 		*s.calls = *s.calls + 1
+	}
+	if s.lookup != nil {
+		*s.lookup = lookup
 	}
 	if s.err != nil {
 		return nil, s.err
@@ -387,6 +393,222 @@ func TestRequireTenantPermissionRejectsDifferentTenant(t *testing.T) {
 	req.Header.Set(authz.HeaderActorID, "tenant-admin")
 	req.Header.Set(authz.HeaderTenantID, "tenant-a")
 	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	if resp.StatusCode != fiber.StatusForbidden {
+		t.Fatalf("expected 403, got %d", resp.StatusCode)
+	}
+}
+
+func TestAuthenticatedSessionOverridesSpoofedActorHeader(t *testing.T) {
+	lookup := authz.ActorLookup{}
+	store := fakeActorStore{
+		lookup: &lookup,
+		actor: &authz.Actor{
+			ID:       "session-actor",
+			RecordID: "actor-record-1",
+			TenantID: "default",
+			Scope:    authz.ActorScopeTenant,
+			Permissions: map[authz.Permission]struct{}{
+				authz.PermissionPeopleRead: {},
+			},
+		},
+	}
+	deps := Dependencies{ActorStore: store, ActorHeaderMode: actorHeaderModeDisabled}
+
+	app := fiber.New()
+	app.Use(func(c fiber.Ctx) error {
+		authentication.SetSessionContext(c, authentication.SessionResponse{
+			ActorID:  "actor-record-1",
+			ActorKey: "session-actor",
+		})
+		return c.Next()
+	})
+	app.Use(authorizationMiddleware(deps))
+	app.Get("/protected", requirePermission(deps, authz.PermissionPeopleRead), func(c fiber.Ctx) error {
+		actor, err := authz.RequestActorFromContext(c)
+		if err != nil {
+			return err
+		}
+		if actor.ID != "session-actor" || actor.Source != authz.ActorSourceAuthenticatedSession {
+			t.Fatalf("unexpected authoritative actor: %#v", actor)
+		}
+		return c.SendStatus(fiber.StatusNoContent)
+	})
+
+	req := httptest.NewRequest(fiber.MethodGet, "/protected", nil)
+	req.Header.Set(authz.HeaderActorID, "spoofed-application-admin")
+	req.Header.Set(authz.HeaderActorPermissions, "*")
+	req.Header.Set(authz.HeaderTenantID, "default")
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	if resp.StatusCode != fiber.StatusNoContent {
+		t.Fatalf("expected 204, got %d", resp.StatusCode)
+	}
+	if lookup.ActorID != "session-actor" || lookup.TenantID != "default" {
+		t.Fatalf("expected session lookup, got %#v", lookup)
+	}
+}
+
+func TestDisabledActorHeadersRequireAuthentication(t *testing.T) {
+	deps := Dependencies{ActorHeaderMode: actorHeaderModeDisabled}
+	app := fiber.New()
+	app.Use(authorizationMiddleware(deps))
+	app.Get("/protected", requirePermission(deps, authz.PermissionPeopleRead), func(c fiber.Ctx) error {
+		return c.SendStatus(fiber.StatusNoContent)
+	})
+
+	req := httptest.NewRequest(fiber.MethodGet, "/protected", nil)
+	req.Header.Set(authz.HeaderActorID, "bootstrap-admin")
+	req.Header.Set(authz.HeaderTenantID, "default")
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	if resp.StatusCode != fiber.StatusUnauthorized {
+		t.Fatalf("expected 401, got %d", resp.StatusCode)
+	}
+}
+
+func TestBootstrapActorHeaderModeAllowsOnlyConfiguredBootstrapActor(t *testing.T) {
+	store := fakeActorStore{actor: &authz.Actor{
+		ID:       "bootstrap-admin",
+		RecordID: "bootstrap-record",
+		TenantID: "default",
+		Scope:    authz.ActorScopeApplication,
+		Permissions: map[authz.Permission]struct{}{
+			authz.PermissionAll: {},
+		},
+	}}
+	deps := Dependencies{
+		ActorStore:        store,
+		ActorHeaderMode:   actorHeaderModeBootstrap,
+		BootstrapActorKey: "bootstrap-admin",
+	}
+	app := fiber.New()
+	app.Use(authorizationMiddleware(deps))
+	app.Get("/protected", requirePermission(deps, authz.PermissionPeopleRead), func(c fiber.Ctx) error {
+		return c.SendStatus(fiber.StatusNoContent)
+	})
+
+	for _, test := range []struct {
+		actorKey string
+		status   int
+	}{
+		{actorKey: "bootstrap-admin", status: fiber.StatusNoContent},
+		{actorKey: "other-actor", status: fiber.StatusUnauthorized},
+	} {
+		req := httptest.NewRequest(fiber.MethodGet, "/protected", nil)
+		req.Header.Set(authz.HeaderActorID, test.actorKey)
+		req.Header.Set(authz.HeaderTenantID, "default")
+		resp, err := app.Test(req)
+		if err != nil {
+			t.Fatalf("request failed: %v", err)
+		}
+		if resp.StatusCode != test.status {
+			t.Fatalf("actor %q: expected %d, got %d", test.actorKey, test.status, resp.StatusCode)
+		}
+	}
+}
+
+func TestTestActorHeaderModeReportsUnknownPersistedActorAsAuthenticationRequired(t *testing.T) {
+	deps := Dependencies{
+		ActorStore:      fakeActorStore{err: authz.ErrMissingActor},
+		ActorHeaderMode: actorHeaderModeTest,
+	}
+	app := fiber.New()
+	app.Use(authorizationMiddleware(deps))
+	app.Get("/protected", requirePermission(deps, authz.PermissionPeopleRead), func(c fiber.Ctx) error {
+		return c.SendStatus(fiber.StatusNoContent)
+	})
+
+	req := httptest.NewRequest(fiber.MethodGet, "/protected", nil)
+	req.Header.Set(authz.HeaderActorID, "unknown@example.com")
+	req.Header.Set(authz.HeaderTenantID, "default")
+	req.Header.Set(authz.HeaderActorPermissions, string(authz.PermissionAll))
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	if resp.StatusCode != fiber.StatusUnauthorized {
+		t.Fatalf("expected 401, got %d", resp.StatusCode)
+	}
+
+	var body struct {
+		Error struct {
+			Code string `json:"code"`
+		} `json:"error"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if body.Error.Code != "authentication_required" {
+		t.Fatalf("expected authentication_required, got %q", body.Error.Code)
+	}
+}
+
+func TestAuthenticationBoundaryErrorPreservesNonIdentityFailures(t *testing.T) {
+	if got := authenticationBoundaryError(authz.ErrTenantSelectionRequired); got != authz.ErrTenantSelectionRequired {
+		t.Fatalf("expected tenant selection error to be preserved, got %v", got)
+	}
+}
+
+func TestBootstrapActorHeaderModeRejectsIdentityEscalationHeaders(t *testing.T) {
+	store := fakeActorStore{actor: &authz.Actor{
+		ID:       "bootstrap-admin",
+		RecordID: "bootstrap-record",
+		TenantID: "default",
+		Scope:    authz.ActorScopeApplication,
+		Permissions: map[authz.Permission]struct{}{
+			authz.PermissionAll: {},
+		},
+	}}
+	deps := Dependencies{
+		ActorStore:        store,
+		ActorHeaderMode:   actorHeaderModeBootstrap,
+		BootstrapActorKey: "bootstrap-admin",
+	}
+
+	for _, header := range []string{authz.HeaderAuthorizedBy, authz.HeaderActorPermissions} {
+		app := fiber.New()
+		app.Use(authorizationMiddleware(deps))
+		app.Get("/protected", requirePermission(deps, authz.PermissionPeopleRead), func(c fiber.Ctx) error {
+			return c.SendStatus(fiber.StatusNoContent)
+		})
+
+		req := httptest.NewRequest(fiber.MethodGet, "/protected", nil)
+		req.Header.Set(authz.HeaderActorID, "bootstrap-admin")
+		req.Header.Set(authz.HeaderTenantID, "default")
+		req.Header.Set(header, "*")
+		resp, err := app.Test(req)
+		if err != nil {
+			t.Fatalf("%s request failed: %v", header, err)
+		}
+		if resp.StatusCode != fiber.StatusUnauthorized {
+			t.Fatalf("%s: expected 401, got %d", header, resp.StatusCode)
+		}
+	}
+}
+
+func TestAuthenticatedSessionRequiresTenantSelection(t *testing.T) {
+	deps := Dependencies{ActorStore: fakeActorStore{}, ActorHeaderMode: actorHeaderModeDisabled}
+	app := fiber.New()
+	app.Use(func(c fiber.Ctx) error {
+		authentication.SetSessionContext(c, authentication.SessionResponse{
+			ActorID:  "actor-record-1",
+			ActorKey: "session-actor",
+		})
+		return c.Next()
+	})
+	app.Use(authorizationMiddleware(deps))
+	app.Get("/protected", requirePermission(deps, authz.PermissionPeopleRead), func(c fiber.Ctx) error {
+		return c.SendStatus(fiber.StatusNoContent)
+	})
+
+	resp, err := app.Test(httptest.NewRequest(fiber.MethodGet, "/protected", nil))
 	if err != nil {
 		t.Fatalf("request failed: %v", err)
 	}

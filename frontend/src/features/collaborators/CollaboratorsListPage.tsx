@@ -3,22 +3,32 @@ import { Link, useLocation, useSearchParams } from "react-router-dom";
 import { ApiErrorPanel } from "../../components/ApiErrorPanel";
 import { JourneyDaysRemaining } from "../../components/JourneyDaysRemaining";
 import type { Collaborator } from "../../types/collaborators";
-import { useCollaboratorCatalog } from "./useCollaborators";
+import {
+  useCollaboratorCatalog,
+  useCollaboratorSearch,
+} from "./useCollaborators";
 
 export function CollaboratorsListPage() {
   const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
   const search = searchParams.get("search")?.trim() ?? "";
   const [searchDraft, setSearchDraft] = useState(search);
-  const { data, isLoading, error } = useCollaboratorCatalog();
-  const allCollaborators = data ?? [];
-  const collaborators = useMemo(
-    () => filterAndSortCollaborators(allCollaborators, search),
-    [allCollaborators, search],
-  );
-  const total = allCollaborators.length;
-  const flash = readFlash(location.state);
   const hasSearch = search.length > 0;
+  const catalogQuery = useCollaboratorCatalog(!hasSearch);
+  const searchQuery = useCollaboratorSearch(search);
+  const allCollaborators = catalogQuery.data ?? [];
+  const searchResult = searchQuery.data;
+  const collaborators = useMemo(
+    () =>
+      sortCollaborators(
+        hasSearch ? searchResult?.items ?? [] : allCollaborators,
+      ),
+    [allCollaborators, hasSearch, searchResult?.items],
+  );
+  const total = hasSearch ? searchResult?.total ?? 0 : allCollaborators.length;
+  const isLoading = hasSearch ? searchQuery.isLoading : catalogQuery.isLoading;
+  const error = hasSearch ? searchQuery.error : catalogQuery.error;
+  const flash = readFlash(location.state);
 
   useEffect(() => {
     setSearchDraft(search);
@@ -270,43 +280,22 @@ const collaboratorNameCollator = new Intl.Collator(undefined, {
   numeric: true,
 });
 
-function filterAndSortCollaborators(
-  collaborators: Collaborator[],
-  search: string,
-) {
-  const normalizedSearch = normalizeSearchText(search);
+function sortCollaborators(collaborators: Collaborator[]) {
+  return [...collaborators].sort((left, right) => {
+    const displayComparison = collaboratorNameCollator.compare(
+      personDisplayName(left),
+      personDisplayName(right),
+    );
+    if (displayComparison !== 0) return displayComparison;
 
-  return collaborators
-    .filter((collaborator) => {
-      if (!normalizedSearch) return true;
+    const legalNameComparison = collaboratorNameCollator.compare(
+      left.personName?.trim() ?? "",
+      right.personName?.trim() ?? "",
+    );
+    if (legalNameComparison !== 0) return legalNameComparison;
 
-      return [collaborator.personName, collaborator.personNickname].some(
-        (value) => normalizeSearchText(value).includes(normalizedSearch),
-      );
-    })
-    .sort((left, right) => {
-      const displayComparison = collaboratorNameCollator.compare(
-        personDisplayName(left),
-        personDisplayName(right),
-      );
-      if (displayComparison !== 0) return displayComparison;
-
-      const legalNameComparison = collaboratorNameCollator.compare(
-        left.personName?.trim() ?? "",
-        right.personName?.trim() ?? "",
-      );
-      if (legalNameComparison !== 0) return legalNameComparison;
-
-      return collaboratorNameCollator.compare(left.id, right.id);
-    });
-}
-
-function normalizeSearchText(value?: string) {
-  return (value ?? "")
-    .normalize("NFD")
-    .replace(/\p{Diacritic}/gu, "")
-    .trim()
-    .toLocaleLowerCase();
+    return collaboratorNameCollator.compare(left.id, right.id);
+  });
 }
 
 function CollaboratorCard({ collaborator }: { collaborator: Collaborator }) {

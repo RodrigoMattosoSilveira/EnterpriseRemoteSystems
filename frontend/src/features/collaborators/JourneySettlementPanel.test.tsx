@@ -237,6 +237,17 @@ function mockSettlementFetch(options: MockSettlementFetchOptions = {}) {
       });
     }
 
+    if (url.includes("/authz/current-actor")) {
+      return jsonResponse({
+        actorKey: "bootstrap-admin",
+        actorRecordId: "actor-primary",
+        tenantId: "default",
+        scope: "APPLICATION",
+        roleCodes: ["APPLICATION_ADMIN"],
+        permissions: ["*"],
+      });
+    }
+
     if (url.includes("/authz/actors")) {
       return jsonResponse(actors);
     }

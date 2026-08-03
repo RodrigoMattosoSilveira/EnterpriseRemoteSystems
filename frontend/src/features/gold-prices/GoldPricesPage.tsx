@@ -1,8 +1,13 @@
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { ApiErrorPanel } from "../../components/ApiErrorPanel";
+import {
+  authorizationRequestContext,
+  readSelectedTenantId,
+} from "../../api/tenantSelection";
 import type { CreateGoldPriceInput, GoldPrice } from "../../types/goldPrices";
 import { GoldPriceForm } from "./GoldPriceForm";
+import { useCurrentAuthzActor } from "../authz/useAuthzAdmin";
 import {
   useCreateGoldPrice,
   useDeactivateGoldPrice,
@@ -10,12 +15,16 @@ import {
   useLatestGoldPrice,
 } from "./useGoldPrices";
 
-const AUTHZ_REQUEST_ACTOR_STORAGE_KEY = "ers.authzAdmin.requestActor";
 
 export function GoldPricesPage() {
   const [includeInactive, setIncludeInactive] = useState(false);
   const [successMessage, setSuccessMessage] = useState("");
   const [form, setForm] = useState<CreateGoldPriceInput>(() => emptyForm());
+  const [tenantId] = useState(() =>
+    typeof window === "undefined" ? "default" : readSelectedTenantId(window.localStorage),
+  );
+  const requestActor = useMemo(() => authorizationRequestContext(tenantId), [tenantId]);
+  const currentActorQuery = useCurrentAuthzActor(requestActor);
 
   const goldPricesQuery = useGoldPrices(includeInactive);
   const latestGoldPriceQuery = useLatestGoldPrice();
@@ -27,8 +36,16 @@ export function GoldPricesPage() {
     [goldPricesQuery.data],
   );
   const actionError = createMutation.error ?? deactivateMutation.error;
-  const queryError = goldPricesQuery.error;
+  const queryError = goldPricesQuery.error ?? currentActorQuery.error;
   const latestError = latestGoldPriceQuery.error;
+
+  useEffect(() => {
+    const actorKey = currentActorQuery.data?.actorKey?.trim();
+    if (!actorKey) return;
+    setForm((current) =>
+      current.recordedBy === actorKey ? current : { ...current, recordedBy: actorKey },
+    );
+  }, [currentActorQuery.data?.actorKey]);
 
   async function handleCreate(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -39,7 +56,7 @@ export function GoldPricesPage() {
       const created = await createMutation.mutateAsync({
         priceDate: form.priceDate,
         brlPerGram: form.brlPerGram,
-        recordedBy: form.recordedBy.trim(),
+        recordedBy: currentActorQuery.data?.actorKey?.trim() || form.recordedBy.trim(),
         notes: form.notes?.trim() ?? "",
       });
       setForm(emptyForm());
@@ -266,25 +283,13 @@ function emptyForm(): CreateGoldPriceInput {
   return {
     priceDate: todayISODate(),
     brlPerGram: 0,
-    recordedBy: currentActorId(),
+    recordedBy: "",
     notes: "",
   };
 }
 
 function todayISODate() {
   return new Date().toISOString().slice(0, 10);
-}
-
-function currentActorId() {
-  if (typeof window === "undefined") return "bootstrap-admin";
-  const stored = window.localStorage.getItem(AUTHZ_REQUEST_ACTOR_STORAGE_KEY);
-  if (!stored) return "bootstrap-admin";
-  try {
-    const parsed = JSON.parse(stored) as { actorId?: string };
-    return parsed.actorId?.trim() || "bootstrap-admin";
-  } catch {
-    return "bootstrap-admin";
-  }
 }
 
 function byPriceDateThenCreatedAt(a: GoldPrice, b: GoldPrice) {

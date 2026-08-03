@@ -93,6 +93,14 @@ set_or_update_env "AUTHZ_BOOTSTRAP_ROLE_CODE" "APPLICATION_ADMIN"
 set_or_update_env "AUTHZ_BOOTSTRAP_TENANT_ID" "*"
 set_or_update_env "AUTHZ_BOOTSTRAP_REQUIRE_EMPTY_ACTOR_TABLE" "false"
 
+AUTHZ_ACTOR_HEADER_MODE="disabled"
+if [[ "$APP_ENV" == "development" ]]; then
+    AUTHZ_ACTOR_HEADER_MODE="bootstrap"
+elif [[ "$APP_ENV" == "test" ]]; then
+    AUTHZ_ACTOR_HEADER_MODE="test"
+fi
+set_or_update_env "AUTHZ_ACTOR_HEADER_MODE" "$AUTHZ_ACTOR_HEADER_MODE"
+
 rm -f "${ENV_FILE}.bak"
 
 echo "Created/updated ${ENV_FILE}"

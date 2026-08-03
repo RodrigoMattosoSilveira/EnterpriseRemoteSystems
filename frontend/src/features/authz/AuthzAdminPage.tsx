@@ -1,8 +1,12 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { useCollaborators } from "../collaborators/useCollaborators";
+import {
+  useCollaboratorCatalog,
+  useCollaboratorSearch,
+} from "../collaborators/useCollaborators";
 import { ApiError } from "../../api/client";
 import { ApiErrorPanel } from "../../components/ApiErrorPanel";
+import { readSelectedTenantId, setSelectedTenantId } from "../../api/tenantSelection";
 import type { Collaborator } from "../../types/collaborators";
 import type {
   AuthzActor,
@@ -22,10 +26,8 @@ import {
   useSetAuthzActorActive,
 } from "./useAuthzAdmin";
 
-const SESSION_STORAGE_KEY = "ers.authzAdmin.requestActor";
-
 const defaultRequestActor: AuthzAdminRequestActor = {
-  actorId: "bootstrap-admin",
+  actorId: "authenticated-session",
   tenantId: "default",
 };
 
@@ -42,6 +44,7 @@ export function AuthzAdminPage() {
     loadRequestActor(),
   );
   const [actorForm, setActorForm] = useState<CreateAuthzActorInput>(emptyActorForm);
+  const [actorNicknameFilter, setActorNicknameFilter] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
 
   useEffect(() => {
@@ -52,7 +55,7 @@ export function AuthzAdminPage() {
   const rolesQuery = useAuthzRoles(requestActor);
   const permissionsQuery = useAuthzPermissions(requestActor);
   const actorsQuery = useAuthzActors(requestActor);
-  const collaboratorsQuery = useCollaborators({ page: 1, pageSize: 500 });
+  const collaboratorsQuery = useCollaboratorCatalog();
   const createActorMutation = useCreateAuthzActor(requestActor);
   const grantRoleMutation = useGrantAuthzActorRole(requestActor);
   const revokeGrantMutation = useRevokeAuthzActorRoleGrant(requestActor);
@@ -68,9 +71,14 @@ export function AuthzAdminPage() {
     [actorsQuery.data],
   );
   const collaborators = useMemo(
-    () => [...(collaboratorsQuery.data?.items ?? [])].sort(byCollaboratorName),
-    [collaboratorsQuery.data?.items],
+    () => [...(collaboratorsQuery.data ?? [])].sort(byCollaboratorName),
+    [collaboratorsQuery.data],
   );
+  const filteredActors = useMemo(
+    () => filterActorsByPersonNickname(actors, collaborators, actorNicknameFilter),
+    [actors, collaborators, actorNicknameFilter],
+  );
+  const hasActorNicknameFilter = actorNicknameFilter.trim().length > 0;
 
   const actionError =
     createActorMutation.error ??
@@ -152,13 +160,6 @@ export function AuthzAdminPage() {
     }
   }
 
-  function handleUseActor(actor: AuthzActor) {
-    if (!actor.active) return;
-    const tenantId = preferredTenant(actor, requestActor.tenantId);
-    setRequestActor({ actorId: actor.actorKey, tenantId });
-    setSuccessMessage(`${actor.actorKey} selected as the operating actor.`);
-  }
-
   return (
     <main className="min-h-screen bg-gray-50">
       <header className="sticky top-0 z-10 border-b bg-white/95 px-4 py-4 backdrop-blur">
@@ -211,35 +212,30 @@ export function AuthzAdminPage() {
         {hasLimitedAuthorization && <LimitedAuthorizationNotice />}
 
         <section className="rounded-2xl border bg-white p-4 shadow-sm">
-          <h2 className="text-lg font-semibold text-gray-950">Admin request actor</h2>
+          <h2 className="text-lg font-semibold text-gray-950">
+            Authenticated authorization context
+          </h2>
           <p className="mt-1 text-sm text-gray-500">
-            ERS sends only this persisted actor key and tenant. Effective permissions are loaded from active role grants in the database.
+            The session cookie identifies the actor. The tenant value is only a selection hint and is validated against that actor&apos;s persisted grants.
           </p>
-          <div className="mt-4 grid gap-3 md:grid-cols-2">
+          <div className="mt-4 max-w-md">
             <label className="block text-sm font-semibold text-gray-700">
-              Actor ID / key
-              <input
-                className="mt-2 block w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm"
-                value={requestActor.actorId}
-                onChange={(event) =>
-                  setRequestActor((current) => ({ ...current, actorId: event.target.value }))
-                }
-              />
-            </label>
-            <label className="block text-sm font-semibold text-gray-700">
-              Tenant ID
+              Selected Tenant ID
               <input
                 className="mt-2 block w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm"
                 value={requestActor.tenantId}
                 onChange={(event) =>
-                  setRequestActor((current) => ({ ...current, tenantId: event.target.value }))
+                  setRequestActor((current) => ({
+                    ...current,
+                    tenantId: event.target.value,
+                  }))
                 }
               />
             </label>
           </div>
           {currentActorQuery.data && (
             <div className="mt-4 rounded-xl border border-green-200 bg-green-50 p-4 text-sm text-green-900">
-              <p className="font-semibold">Persisted operating actor verified</p>
+              <p className="font-semibold">Authenticated actor verified</p>
               <p className="mt-1">
                 {currentActorQuery.data.actorKey} · {currentActorQuery.data.tenantId} · {currentActorQuery.data.scope}
               </p>
@@ -255,7 +251,7 @@ export function AuthzAdminPage() {
           <div className="mt-4 rounded-xl border border-gray-200 bg-gray-950 p-4 text-sm text-gray-100">
             <div className="flex flex-col gap-1 md:flex-row md:items-center md:justify-between">
               <p className="font-semibold">Current actor curl</p>
-              <p className="text-xs text-gray-300">Uses the operating actor shown above.</p>
+              <p className="text-xs text-gray-300">Uses an authenticated session cookie.</p>
             </div>
             <pre
               aria-label="Current actor curl command"
@@ -264,7 +260,7 @@ export function AuthzAdminPage() {
               {currentActorCurlCommand(requestActor)}
             </pre>
             <p className="mt-2 text-xs text-gray-300">
-              A curl command that explicitly sends bootstrap-admin will verify bootstrap-admin. Use this generated command after switching actors.
+              Actor headers are ignored during normal application traffic. The server derives identity from the session and validates the selected tenant.
             </p>
           </div>
         </section>
@@ -281,8 +277,6 @@ export function AuthzAdminPage() {
             ) : (
               <ActorFields
                 value={actorForm}
-                collaborators={collaborators}
-                collaboratorsLoading={collaboratorsQuery.isLoading}
                 onChange={setActorForm}
               />
             )}
@@ -298,16 +292,48 @@ export function AuthzAdminPage() {
 
           <section className="space-y-4">
             <section className="rounded-2xl border bg-white p-4 shadow-sm">
-              <div className="flex items-center justify-between gap-3">
+              <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
                 <div>
                   <h2 className="text-lg font-semibold text-gray-950">Actors</h2>
                   <p className="text-sm text-gray-500">
                     Grant tenant-scoped roles with a tenant ID, or global roles with *.
                   </p>
+                  <p className="mt-1 text-xs text-gray-500">
+                    Showing {filteredActors.length} of {actors.length} actor records.
+                  </p>
                 </div>
-                <span className="rounded-full bg-gray-100 px-3 py-1 text-xs font-semibold text-gray-700">
-                  {actors.length} actors
-                </span>
+
+                {!actorsForbidden && (
+                  <div className="flex w-full flex-col gap-2 sm:flex-row lg:max-w-xl">
+                    <div className="min-w-0 flex-1">
+                      <label
+                        htmlFor="authz-actor-nickname-filter"
+                        className="text-xs font-semibold uppercase tracking-wide text-gray-500"
+                      >
+                        Filter actors by person nickname
+                      </label>
+                      <input
+                        id="authz-actor-nickname-filter"
+                        type="search"
+                        value={actorNicknameFilter}
+                        onChange={(event) => setActorNicknameFilter(event.target.value)}
+                        placeholder="Type any part of a person nickname"
+                        className="mt-1 w-full rounded-xl border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-gray-950 focus:outline-none focus:ring-1 focus:ring-gray-950"
+                      />
+                    </div>
+                    {hasActorNicknameFilter && (
+                      <div className="flex items-end">
+                        <button
+                          type="button"
+                          onClick={() => setActorNicknameFilter("")}
+                          className="rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 shadow-sm"
+                        >
+                          Clear
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
 
               {actorsForbidden ? (
@@ -320,13 +346,18 @@ export function AuthzAdminPage() {
                       No authorization actors found.
                     </p>
                   )}
+                  {!actorsQuery.isLoading && actors.length > 0 && filteredActors.length === 0 && (
+                    <p className="mt-4 rounded-xl border border-dashed p-4 text-center text-sm text-gray-500">
+                      No actors match this person nickname.
+                    </p>
+                  )}
                   <div className="mt-4 space-y-3">
-                    {actors.map((actor) => (
+                    {filteredActors.map((actor) => (
                       <ActorCard
                         key={actor.id}
                         actor={actor}
                         roles={roles}
-                        currentActorKey={currentActorQuery.data?.actorKey ?? requestActor.actorId}
+                        currentActorKey={currentActorQuery.data?.actorKey ?? ""}
                         isMutating={
                           grantRoleMutation.isPending ||
                           revokeGrantMutation.isPending ||
@@ -335,7 +366,6 @@ export function AuthzAdminPage() {
                         onGrantRole={handleGrantRole}
                         onRevokeGrant={handleRevokeGrant}
                         onSetActive={handleSetActorActive}
-                        onUseActor={handleUseActor}
                       />
                     ))}
                   </div>
@@ -437,58 +467,132 @@ function CardPermissionNotice({ cardName }: { cardName: string }) {
 
 function ActorFields({
   value,
-  collaborators,
-  collaboratorsLoading,
   onChange,
 }: {
   value: CreateAuthzActorInput;
-  collaborators: Collaborator[];
-  collaboratorsLoading: boolean;
   onChange: (value: CreateAuthzActorInput) => void;
 }) {
-  const selectedCollaborator = collaborators.find(
-    (collaborator) => collaborator.id === value.collaboratorId,
-  );
+  const [collaboratorSearch, setCollaboratorSearch] = useState("");
+  const [selectedCollaborator, setSelectedCollaborator] =
+    useState<Collaborator | null>(null);
+  const collaboratorSearchQuery = useCollaboratorSearch(collaboratorSearch);
+  const matchingCollaborators = collaboratorSearchQuery.data?.items ?? [];
+  const showCollaboratorSuggestions = collaboratorSearch.trim().length > 0;
 
-  function handleCollaboratorChange(collaboratorId: string) {
-    const collaborator = collaborators.find((item) => item.id === collaboratorId);
+  useEffect(() => {
+    if (!value.collaboratorId) {
+      setSelectedCollaborator(null);
+    }
+  }, [value.collaboratorId]);
 
+  function selectCollaborator(collaborator: Collaborator) {
+    setSelectedCollaborator(collaborator);
     onChange({
       ...value,
-      collaboratorId: collaborator?.id ?? "",
-      personId: collaborator?.personId ?? "",
+      collaboratorId: collaborator.id,
+      personId: collaborator.personId,
       actorKey: defaultActorKey(collaborator),
       displayName: collaboratorDisplayName(collaborator),
     });
+    setCollaboratorSearch("");
+  }
+
+  function clearCollaboratorSelection() {
+    setSelectedCollaborator(null);
+    onChange({
+      ...value,
+      collaboratorId: "",
+      personId: "",
+      actorKey: "",
+      displayName: "",
+    });
+    setCollaboratorSearch("");
   }
 
   return (
     <div className="mt-4 space-y-3">
-      <label className="block text-sm font-semibold text-gray-700">
-        Collaborator
-        <select
-          className="mt-2 block w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-base leading-6 text-gray-950"
-          required
-          value={value.collaboratorId ?? ""}
-          onChange={(event) => handleCollaboratorChange(event.target.value)}
+      <div className="relative">
+        <label
+          htmlFor="authz-create-actor-collaborator-search"
+          className="block text-sm font-semibold text-gray-700"
         >
-          <option className="text-base text-gray-950" value="">
-            {collaboratorsLoading ? "Loading collaborators..." : "Select a collaborator"}
-          </option>
-          {collaborators.map((collaborator) => (
-            <option className="text-base text-gray-950" key={collaborator.id} value={collaborator.id}>
-              {collaboratorOptionLabel(collaborator)}
-            </option>
-          ))}
-        </select>
-      </label>
+          Find collaborator by person nickname
+        </label>
+        <input
+          id="authz-create-actor-collaborator-search"
+          type="search"
+          role="combobox"
+          aria-autocomplete="list"
+          aria-controls={
+            showCollaboratorSuggestions
+              ? "authz-create-actor-collaborator-suggestions"
+              : undefined
+          }
+          aria-expanded={showCollaboratorSuggestions}
+          value={collaboratorSearch}
+          onChange={(event) => setCollaboratorSearch(event.target.value)}
+          placeholder="Type any part of a person nickname"
+          className="mt-2 block w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-base leading-6 text-gray-950"
+        />
+
+        {showCollaboratorSuggestions && (
+          <div
+            id="authz-create-actor-collaborator-suggestions"
+            role="listbox"
+            aria-label="Matching collaborators for actor creation"
+            className="absolute left-0 right-0 top-full z-20 mt-1 max-h-60 overflow-y-auto rounded-xl border border-gray-200 bg-white p-1 shadow-lg"
+          >
+            {collaboratorSearchQuery.isLoading ||
+            collaboratorSearchQuery.isFetching ? (
+              <p className="px-3 py-2 text-sm text-gray-500">
+                Loading matching collaborators…
+              </p>
+            ) : collaboratorSearchQuery.error ? (
+              <p className="px-3 py-2 text-sm text-red-700">
+                Could not load matching collaborators.
+              </p>
+            ) : matchingCollaborators.length === 0 ? (
+              <p className="px-3 py-2 text-sm text-gray-500">
+                No matching collaborators
+              </p>
+            ) : (
+              matchingCollaborators.map((collaborator) => (
+                <button
+                  key={collaborator.id}
+                  type="button"
+                  role="option"
+                  aria-selected={collaborator.id === value.collaboratorId}
+                  onClick={() => selectCollaborator(collaborator)}
+                  className="block w-full rounded-lg px-3 py-2 text-left text-sm font-medium text-gray-800 hover:bg-gray-100 focus:bg-gray-100 focus:outline-none"
+                >
+                  {collaboratorOptionLabel(collaborator)}
+                </button>
+              ))
+            )}
+          </div>
+        )}
+      </div>
 
       {selectedCollaborator && (
         <div className="rounded-xl border border-blue-100 bg-blue-50 p-3 text-xs text-blue-900">
-          <p className="font-semibold">Derived actor identity</p>
-          <p className="mt-1">Actor key: {value.actorKey}</p>
-          <p>Display name: {value.displayName || collaboratorDisplayName(selectedCollaborator)}</p>
-          <p>Person ID and Collaborator ID will be derived from the selected collaborator.</p>
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="font-semibold">Derived actor identity</p>
+              <p className="mt-1">Actor key: {value.actorKey}</p>
+              <p>
+                Display name:{" "}
+                {value.displayName || collaboratorDisplayName(selectedCollaborator)}
+              </p>
+              <p>Person ID and Collaborator ID will be derived from the selected collaborator.</p>
+            </div>
+            <button
+              type="button"
+              onClick={clearCollaboratorSelection}
+              className="shrink-0 rounded-lg border border-blue-200 bg-white px-2 py-1 font-semibold text-blue-800"
+            >
+              Change
+            </button>
+          </div>
         </div>
       )}
     </div>
@@ -503,7 +607,6 @@ function ActorCard({
   onGrantRole,
   onRevokeGrant,
   onSetActive,
-  onUseActor,
 }: {
   actor: AuthzActor;
   roles: AuthzRole[];
@@ -512,7 +615,6 @@ function ActorCard({
   onGrantRole: (targetActorId: string, roleCode: string, tenantId: string) => Promise<void>;
   onRevokeGrant: (targetActorId: string, grant: AuthzActorRoleGrant) => Promise<void>;
   onSetActive: (targetActorId: string, actorKey: string, active: boolean) => Promise<void>;
-  onUseActor: (actor: AuthzActor) => void;
 }) {
   const [roleCode, setRoleCode] = useState(roles[0]?.code ?? "");
   const [tenantId, setTenantId] = useState("default");
@@ -542,14 +644,6 @@ function ActorCard({
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <button
-            className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700 disabled:border-gray-200 disabled:bg-white disabled:text-gray-500 disabled:opacity-60"
-            disabled={isMutating || !actor.active || actor.actorKey === currentActorKey}
-            type="button"
-            onClick={() => onUseActor(actor)}
-          >
-            {actor.actorKey === currentActorKey ? "Operating Actor" : "Use Actor"}
-          </button>
           <button
             className="rounded-lg border bg-white px-3 py-1 text-xs font-semibold text-gray-700 disabled:opacity-60"
             disabled={isMutating || actor.actorKey === currentActorKey}
@@ -618,6 +712,37 @@ function ActorCard({
   );
 }
 
+function filterActorsByPersonNickname(
+  actors: AuthzActor[],
+  collaborators: Collaborator[],
+  filter: string,
+) {
+  const normalizedFilter = normalizeActorNickname(filter);
+  if (!normalizedFilter) return actors;
+
+  const collaboratorsById = new Map(
+    collaborators.map((collaborator) => [collaborator.id, collaborator]),
+  );
+
+  return actors.filter((actor) => {
+    const collaborator = actor.collaboratorId
+      ? collaboratorsById.get(actor.collaboratorId)
+      : undefined;
+    const nickname =
+      collaborator?.personNickname?.trim() || actor.displayName.trim();
+
+    return normalizeActorNickname(nickname).includes(normalizedFilter);
+  });
+}
+
+function normalizeActorNickname(value: string) {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim()
+    .toLocaleLowerCase();
+}
+
 function firstNonForbiddenError(errors: unknown[]) {
   return errors.find((error) => error && !isForbiddenApiError(error));
 }
@@ -627,12 +752,11 @@ function isForbiddenApiError(error: unknown): boolean {
 }
 
 function currentActorCurlCommand(requestActor: AuthzAdminRequestActor) {
-  const actorId = requestActor.actorId.trim() || defaultRequestActor.actorId;
   const tenantId = requestActor.tenantId.trim() || defaultRequestActor.tenantId;
 
   return [
     "curl -sS \\",
-    `  -H "X-Actor-ID: ${actorId}" \\`,
+    "  -b /tmp/ers-session.cookies \\",
     `  -H "X-Tenant-ID: ${tenantId}" \\`,
     "  http://localhost:8080/api/v1/authz/current-actor | python3 -m json.tool",
   ].join("\n");
@@ -640,39 +764,17 @@ function currentActorCurlCommand(requestActor: AuthzAdminRequestActor) {
 
 function saveRequestActor(requestActor: AuthzAdminRequestActor) {
   if (typeof window === "undefined") return;
-
-  const storage = window.localStorage;
-  if (typeof storage?.setItem !== "function") return;
-
-  try {
-    storage.setItem(SESSION_STORAGE_KEY, JSON.stringify(requestActor));
-  } catch {
-    // Persisting this convenience preference is best-effort only.
-  }
+  setSelectedTenantId(window.localStorage, requestActor.tenantId);
 }
 
 function loadRequestActor(): AuthzAdminRequestActor {
   if (typeof window === "undefined") return defaultRequestActor;
 
-  const storage = window.localStorage;
-  if (typeof storage?.getItem !== "function") return defaultRequestActor;
-
-  try {
-    const stored = storage.getItem(SESSION_STORAGE_KEY);
-    if (!stored) return defaultRequestActor;
-    const parsed = JSON.parse(stored) as Partial<AuthzAdminRequestActor>;
-    return {
-      actorId: typeof parsed.actorId === "string" && parsed.actorId ? parsed.actorId : defaultRequestActor.actorId,
-      tenantId: typeof parsed.tenantId === "string" && parsed.tenantId ? parsed.tenantId : defaultRequestActor.tenantId,
-    };
-  } catch {
-    return defaultRequestActor;
-  }
-}
-
-function preferredTenant(actor: AuthzActor, fallback: string) {
-  const tenantGrant = (actor.roleGrants ?? []).find((grant) => grant.tenantId !== "*");
-  return tenantGrant?.tenantId || fallback || "default";
+  return {
+    actorId: defaultRequestActor.actorId,
+    tenantId:
+      readSelectedTenantId(window.localStorage) || defaultRequestActor.tenantId,
+  };
 }
 
 function normalizeOptional(value: string | null | undefined) {

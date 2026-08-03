@@ -3,6 +3,7 @@ package pricelists
 import (
 	"github.com/gofiber/fiber/v3"
 
+	"enterpriseremotesystems/backend/internal/authz"
 	"enterpriseremotesystems/backend/internal/shared/httpx"
 )
 
@@ -79,6 +80,7 @@ func (h *Handler) CreateGoldPrice(c fiber.Ctx) error {
 	if err := c.Bind().Body(&req); err != nil {
 		return httpx.WriteError(c, err)
 	}
+	req.RecordedBy = authz.RequestActorID(c, req.RecordedBy)
 	created, err := h.service.CreateGoldPrice(c.Context(), req)
 	if err != nil {
 		return httpx.WriteError(c, err)

@@ -3,6 +3,7 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { AuthzActor } from "../../types/authz";
 import { AuthzAdminPage } from "./AuthzAdminPage";
 
 const roles = [
@@ -57,9 +58,34 @@ const collaborators = [
     createdAt: "2026-01-01T00:00:00Z",
     updatedAt: "2026-01-01T00:00:00Z",
   },
+  {
+    id: "collaborator-aurea",
+    tenantId: "default",
+    personId: "person-aurea",
+    personName: "Aurea de Souza",
+    personNickname: "Áurea",
+    journeyStartDate: "2026-01-02",
+    defaultEndDate: "2026-04-02",
+    extensionDays: 0,
+    projectedEndDate: "2026-04-02",
+    paymentMethodId: "payment-method-fixed",
+    paymentMethodLabel: "Fixed",
+    paymentValue: 0,
+    planningAvailability: "ACTIVE",
+    sectorId: "sector-operations",
+    sectorLabel: "Operations",
+    locationId: "location-main",
+    locationLabel: "Main Mine",
+    taskId: "task-expenses",
+    taskLabel: "Expenses",
+    statusId: "status-active",
+    statusLabel: "Active",
+    createdAt: "2026-01-02T00:00:00Z",
+    updatedAt: "2026-01-02T00:00:00Z",
+  },
 ];
 
-let actors = [
+let actors: AuthzActor[] = [
   {
     id: "actor-bootstrap-admin",
     actorKey: "bootstrap-admin",
@@ -128,7 +154,7 @@ afterEach(async () => {
 });
 
 describe("AuthzAdminPage", () => {
-  it("lists roles, permissions, and actors using persisted actor headers", async () => {
+  it("lists roles, permissions, and actors using the authenticated session context", async () => {
     mockAuthzFetch();
 
     renderAuthzAdminPage();
@@ -136,29 +162,88 @@ describe("AuthzAdminPage", () => {
     await waitForText("APPLICATION_ADMIN");
     await waitForText("authz.manage");
     await waitForText("Bootstrap Admin");
-    await waitForText("Persisted operating actor verified");
+    await waitForText("Authenticated actor verified");
 
     expect(fetchCalls.some((call) => call.url === "/api/v1/authz/current-actor")).toBe(true);
     expect(fetchCalls.some((call) => call.url === "/api/v1/authz/roles")).toBe(true);
     expect(fetchCalls.some((call) => call.url === "/api/v1/authz/permissions")).toBe(true);
     expect(fetchCalls.some((call) => call.url === "/api/v1/authz/actors")).toBe(true);
-    expect(fetchCalls.every((call) => call.headers["X-Actor-ID"] === "bootstrap-admin")).toBe(true);
+    expect(fetchCalls.every((call) => call.headers["X-Actor-ID"] === undefined)).toBe(true);
     expect(fetchCalls.every((call) => call.headers["X-Tenant-ID"] === "default")).toBe(true);
   });
 
-  it("creates an actor", async () => {
+  it("filters actor cards progressively by the linked Person nickname", async () => {
+    actors.push({
+      id: "actor-aurea",
+      actorKey: "collaborator-aurea",
+      displayName: "Historical Actor Label",
+      personId: "person-aurea",
+      collaboratorId: "collaborator-aurea",
+      active: true,
+      roleGrants: [],
+    });
+    mockAuthzFetch();
+
+    renderAuthzAdminPage();
+    await waitForText("Historical Actor Label");
+
+    const filter = controlByLabel<HTMLInputElement>(
+      container,
+      "Filter actors by person nickname",
+      "input",
+    );
+    await setInputValue(filter, "aure");
+
+    await waitFor(() => actorCardKeys().length === 1);
+    expect(actorCardKeys()).toEqual(["collaborator-aurea"]);
+    expect(container.textContent).toContain("Showing 1 of 2 actor records.");
+
+    await setInputValue(filter, "nickname-that-does-not-exist");
+    await waitForText("No actors match this person nickname.");
+    expect(actorCardKeys()).toEqual([]);
+
+    await clickButtonByName("Clear");
+    await waitFor(() => actorCardKeys().length === 2);
+    expect(actorCardKeys()).toEqual(["bootstrap-admin", "collaborator-aurea"]);
+  });
+
+  it("filters collaborators progressively and creates an actor from the selected match", async () => {
     mockAuthzFetch();
 
     renderAuthzAdminPage();
     await waitForText("Bootstrap Admin");
-    await waitForText("Expense Admin · Active · Main Mine");
 
-    await changeSelectInForm("Create actor", "Collaborator", "collaborator-expense-admin");
+    const collaboratorSearch = controlByLabel<HTMLInputElement>(
+      formByHeading("Create actor"),
+      "Find collaborator by person nickname",
+      "input",
+    );
+    await setInputValue(collaboratorSearch, "pense");
+
+    await waitForText("Expense Admin · Active · Main Mine");
+    expect(
+      fetchCalls.some(
+        (call) =>
+          call.url ===
+          "/api/v1/collaborators?search=pense&page=1&pageSize=25",
+      ),
+    ).toBe(true);
+    expect(createActorSuggestionLabels()).toEqual([
+      "Expense Admin · Active · Main Mine",
+    ]);
+
+    await clickCreateActorSuggestion("Expense Admin · Active · Main Mine");
+    await waitForText("Actor key: collaborator-expense-admin");
+    expect(collaboratorSearch.value).toBe("");
+    expect(createActorSuggestionLabels()).toEqual([]);
+
     await submitFormByHeading("Create actor");
 
     await waitForText("collaborator-expense-admin created.");
 
-    const createCall = fetchCalls.find((call) => call.url === "/api/v1/authz/actors" && call.method === "POST");
+    const createCall = fetchCalls.find(
+      (call) => call.url === "/api/v1/authz/actors" && call.method === "POST",
+    );
     expect(createCall?.body).toMatchObject({
       actorKey: "collaborator-expense-admin",
       displayName: "Expense Admin",
@@ -166,6 +251,29 @@ describe("AuthzAdminPage", () => {
       personId: "person-expense-admin",
       collaboratorId: "collaborator-expense-admin",
     });
+  });
+
+  it("matches Create actor collaborators by any accent-insensitive nickname substring", async () => {
+    mockAuthzFetch();
+
+    renderAuthzAdminPage();
+    await waitForText("Bootstrap Admin");
+
+    const collaboratorSearch = controlByLabel<HTMLInputElement>(
+      formByHeading("Create actor"),
+      "Find collaborator by person nickname",
+      "input",
+    );
+    await setInputValue(collaboratorSearch, "aure");
+
+    await waitForText("Áurea · Active · Main Mine");
+    expect(createActorSuggestionLabels()).toEqual([
+      "Áurea · Active · Main Mine",
+    ]);
+
+    await setInputValue(collaboratorSearch, "nickname-that-does-not-exist");
+    await waitForText("No matching collaborators");
+    expect(createActorSuggestionLabels()).toEqual([]);
   });
 
   it("grants and revokes actor roles", async () => {
@@ -231,61 +339,39 @@ describe("AuthzAdminPage", () => {
     ).toBe(true);
   });
 
-  it("switches the operating actor from the actor list", async () => {
-    actors.push({
-      id: "actor-bite27b-tenant-admin",
-      actorKey: "bite27b-tenant-admin",
-      displayName: "Bite 27B Tenant Admin",
-      active: true,
-      roleGrants: [
-        {
-          id: "grant-bite27b-tenant-admin",
-          actorId: "actor-bite27b-tenant-admin",
-          roleId: "authz-role-tenant-admin",
-          roleCode: "TENANT_ADMIN",
-          tenantId: "default",
-          scopeType: "tenant",
-          active: true,
-        },
-      ],
-    });
+  it("changes the selected tenant without allowing actor impersonation", async () => {
     mockAuthzFetch();
 
     renderAuthzAdminPage();
-    await waitForText("bite27b-tenant-admin");
+    await waitForText("Authenticated actor verified");
 
-    await clickButtonInArticle("bite27b-tenant-admin", "Use Actor");
-    await waitForText("bite27b-tenant-admin selected as the operating actor.");
-    await waitForText("Operating Actor");
-
-    expect(controlByLabel<HTMLInputElement>(container, "Actor ID / key", "input").value).toBe(
-      "bite27b-tenant-admin",
+    const tenantInput = controlByLabel<HTMLInputElement>(
+      container,
+      "Selected Tenant ID",
+      "input",
     );
-    expect(controlByLabel<HTMLInputElement>(container, "Tenant ID", "input").value).toBe("default");
+    await setInputValue(tenantInput, "tenant-b");
+
+    await waitFor(() =>
+      fetchCalls.some(
+        (call) =>
+          call.url === "/api/v1/authz/current-actor" &&
+          call.headers["X-Tenant-ID"] === "tenant-b",
+      ),
+    );
 
     const currentActorCurl = container.querySelector(
       '[aria-label="Current actor curl command"]',
     );
-    expect(currentActorCurl?.textContent).toContain(
-      'X-Actor-ID: bite27b-tenant-admin',
-    );
-    expect(currentActorCurl?.textContent).toContain('X-Tenant-ID: default');
-    expect(currentActorCurl?.textContent).not.toContain('X-Actor-ID: bootstrap-admin');
+    expect(currentActorCurl?.textContent).toContain("-b /tmp/ers-session.cookies");
+    expect(currentActorCurl?.textContent).toContain('X-Tenant-ID: tenant-b');
+    expect(currentActorCurl?.textContent).not.toContain("X-Actor-ID");
     expect(
-      fetchCalls.some(
-        (call) =>
-          call.url === "/api/v1/authz/current-actor" &&
-          call.headers["X-Actor-ID"] === "bite27b-tenant-admin" &&
-          call.headers["X-Tenant-ID"] === "default",
-      ),
+      fetchCalls.every((call) => call.headers["X-Actor-ID"] === undefined),
     ).toBe(true);
   });
 
   it("shows limited-access guidance instead of raw forbidden query errors", async () => {
-    window.localStorage.setItem(
-      "ers.authzAdmin.requestActor",
-      JSON.stringify({ actorId: "expense-admin", tenantId: "default" }),
-    );
     mockFetch(async (url, init) => {
       recordFetchCall(url, init);
       const method = methodOf(init);
@@ -308,7 +394,7 @@ describe("AuthzAdminPage", () => {
         (url === "/api/v1/authz/roles" ||
           url === "/api/v1/authz/permissions" ||
           url === "/api/v1/authz/actors" ||
-          url === "/api/v1/collaborators?page=1&pageSize=500")
+          url === "/api/v1/collaborators?page=1&pageSize=100")
       ) {
         return forbiddenResponse();
       }
@@ -333,12 +419,12 @@ function resetAuthzAdminLocalStorage() {
   const storage = window.localStorage as Storage & { clear?: () => void };
 
   if (typeof storage.removeItem === "function") {
-    storage.removeItem("ers.authzAdmin.requestActor");
+    storage.removeItem("ers.auth.selectedTenantId");
     return;
   }
 
   if (typeof storage.setItem === "function") {
-    storage.setItem("ers.authzAdmin.requestActor", "");
+    storage.setItem("ers.auth.selectedTenantId", "");
   }
 }
 
@@ -349,9 +435,8 @@ function mockAuthzFetch() {
 
     if (url === "/api/v1/authz/current-actor" && method === "GET") {
       const headers = headersOf(init);
-      const requestedActorKey = headers["X-Actor-ID"] || "bootstrap-admin";
       const requestedTenantId = headers["X-Tenant-ID"] || "default";
-      const actor = actors.find((item) => item.actorKey === requestedActorKey) ?? actors[0];
+      const actor = actors[0];
       const roleCodes = (actor.roleGrants ?? [])
         .filter((grant) => grant.active)
         .map((grant) => grant.roleCode);
@@ -380,8 +465,16 @@ function mockAuthzFetch() {
     if (url === "/api/v1/authz/actors" && method === "GET") {
       return jsonResponse({ data: actors });
     }
-    if (url === "/api/v1/collaborators?page=1&pageSize=500" && method === "GET") {
+    if (url === "/api/v1/collaborators?page=1&pageSize=100" && method === "GET") {
       return jsonResponse({ data: { items: collaborators, total: collaborators.length } });
+    }
+    if (url.startsWith("/api/v1/collaborators?search=") && method === "GET") {
+      const search = new URL(url, "http://localhost").searchParams.get("search") ?? "";
+      const normalizedSearch = normalizeTestSearch(search);
+      const matches = collaborators.filter((collaborator) =>
+        normalizeTestSearch(collaborator.personNickname).includes(normalizedSearch),
+      );
+      return jsonResponse({ data: { items: matches, total: matches.length } });
     }
     if (url === "/api/v1/authz/actors" && method === "POST") {
       const body = parseBody(init?.body) as { actorKey: string; displayName: string; active: boolean };
@@ -426,7 +519,7 @@ function mockAuthzFetch() {
       url === "/api/v1/authz/actors/actor-expense-admin/role-grants/grant-expense-admin" &&
       method === "DELETE"
     ) {
-      const grant = actors.find((actor) => actor.id === "actor-expense-admin")?.roleGrants[0];
+      const grant = actors.find((actor) => actor.id === "actor-expense-admin")?.roleGrants?.[0];
       actors = actors.map((actor) =>
         actor.id === "actor-expense-admin" ? { ...actor, roleGrants: [] } : actor,
       );
@@ -508,6 +601,14 @@ function jsonResponse(body: unknown, init: ResponseInit = {}) {
   });
 }
 
+function normalizeTestSearch(value?: string) {
+  return (value ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim()
+    .toLocaleLowerCase();
+}
+
 function forbiddenResponse() {
   return jsonResponse(
     {
@@ -564,12 +665,6 @@ async function changeInputInForm(headingText: string, labelText: string, value: 
 }
 
 
-async function changeSelectInForm(headingText: string, labelText: string, value: string) {
-  const form = formByHeading(headingText);
-  const select = controlByLabel<HTMLSelectElement>(form, labelText, "select");
-  await setSelectValue(select, value);
-}
-
 async function changeInputInArticle(articleText: string, labelText: string, value: string) {
   const article = articleByText(articleText);
   const input = controlByLabel<HTMLInputElement>(article, labelText, "input");
@@ -622,6 +717,48 @@ async function clickButtonInArticle(articleText: string, name: string) {
   });
 }
 
+async function clickButtonByName(name: string) {
+  const button = Array.from(container.querySelectorAll("button")).find(
+    (node) => node.textContent?.trim() === name,
+  );
+  if (!button) throw new Error(`Could not find button ${name}`);
+
+  await act(async () => {
+    button.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+  });
+}
+
+function createActorSuggestionLabels() {
+  const listbox = container.querySelector(
+    '[role="listbox"][aria-label="Matching collaborators for actor creation"]',
+  );
+  if (!listbox) return [];
+
+  return Array.from(listbox.querySelectorAll('[role="option"]')).map(
+    (option) => option.textContent?.trim() ?? "",
+  );
+}
+
+async function clickCreateActorSuggestion(name: string) {
+  const listbox = container.querySelector(
+    '[role="listbox"][aria-label="Matching collaborators for actor creation"]',
+  );
+  const option = Array.from(listbox?.querySelectorAll('button[role="option"]') ?? []).find(
+    (node) => node.textContent?.trim() === name,
+  );
+  if (!option) throw new Error(`Could not find Create actor collaborator option ${name}`);
+
+  await act(async () => {
+    option.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+  });
+}
+
+function actorCardKeys() {
+  return Array.from(
+    container.querySelectorAll('[data-testid="authz-actor-card"] h3'),
+  ).map((heading) => heading.textContent?.trim() ?? "");
+}
+
 function formByHeading(headingText: string) {
   const heading = Array.from(container.querySelectorAll("h2")).find((node) =>
     node.textContent?.includes(headingText),
@@ -640,12 +777,37 @@ function articleByText(text: string) {
   return article;
 }
 
-function controlByLabel<T extends HTMLElement>(rootElement: ParentNode, labelText: string, selector: string) {
+function controlByLabel<T extends HTMLElement>(
+  rootElement: ParentNode,
+  labelText: string,
+  selector: string,
+) {
   const label = Array.from(rootElement.querySelectorAll("label")).find((node) =>
     node.textContent?.includes(labelText),
   );
   if (!label) throw new Error(`Could not find label ${labelText}`);
-  const control = label.querySelector(selector) as T | null;
-  if (!control) throw new Error(`Could not find ${selector} for ${labelText}`);
-  return control;
+
+  const nestedControl = label.querySelector(selector);
+  if (nestedControl instanceof HTMLElement) {
+    return nestedControl as T;
+  }
+
+  const controlId = label.htmlFor.trim();
+  const associatedControl = controlId
+    ? label.ownerDocument.getElementById(controlId)
+    : null;
+  const controlIsWithinRoot =
+    associatedControl !== null &&
+    (rootElement === label.ownerDocument ||
+      (rootElement instanceof Node && rootElement.contains(associatedControl)));
+
+  if (
+    associatedControl instanceof HTMLElement &&
+    controlIsWithinRoot &&
+    associatedControl.matches(selector)
+  ) {
+    return associatedControl as T;
+  }
+
+  throw new Error(`Could not find ${selector} for ${labelText}`);
 }

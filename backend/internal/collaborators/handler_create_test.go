@@ -14,6 +14,7 @@ import (
 
 	apppkg "enterpriseremotesystems/backend/internal/app"
 	"enterpriseremotesystems/backend/internal/db"
+	peoplepkg "enterpriseremotesystems/backend/internal/people"
 )
 
 const (
@@ -487,10 +488,10 @@ func TestListCollaboratorsFiltersByPersonNameAndNickname(t *testing.T) {
 
 	byName := listCollaborators(t, server, "search=garimpo")
 	if byName.Data.Total != 1 {
-		t.Fatalf("expected one collaborator by legal name prefix search, got %d", byName.Data.Total)
+		t.Fatalf("expected one collaborator by legal-name substring search, got %d", byName.Data.Total)
 	}
 	if got := byName.Data.Items[0].ID; got != firstCollaborator.Data.ID {
-		t.Fatalf("expected collaborator %q by legal name prefix search, got %q", firstCollaborator.Data.ID, got)
+		t.Fatalf("expected collaborator %q by legal-name substring search, got %q", firstCollaborator.Data.ID, got)
 	}
 	if got := byName.Data.Items[0].PersonName; got != "Joao Garimpo" {
 		t.Fatalf("expected personName %q, got %q", "Joao Garimpo", got)
@@ -498,15 +499,35 @@ func TestListCollaboratorsFiltersByPersonNameAndNickname(t *testing.T) {
 
 	byNickname := listCollaborators(t, server, "search=Mina")
 	if byNickname.Data.Total != 1 {
-		t.Fatalf("expected one collaborator by nickname prefix search, got %d", byNickname.Data.Total)
+		t.Fatalf("expected one collaborator by nickname substring search, got %d", byNickname.Data.Total)
 	}
 	if got := byNickname.Data.Items[0].PersonNickname; got != "Mina" {
 		t.Fatalf("expected personNickname %q, got %q", "Mina", got)
 	}
 
 	byMiddleSubstring := listCollaborators(t, server, "search=arimpo")
-	if byMiddleSubstring.Data.Total != 0 {
-		t.Fatalf("expected no collaborators for middle-substring search, got %d", byMiddleSubstring.Data.Total)
+	if byMiddleSubstring.Data.Total != 1 {
+		t.Fatalf("expected one collaborator for middle-substring search, got %d", byMiddleSubstring.Data.Total)
+	}
+	if got := byMiddleSubstring.Data.Items[0].ID; got != firstCollaborator.Data.ID {
+		t.Fatalf("expected collaborator %q by middle-substring search, got %q", firstCollaborator.Data.ID, got)
+	}
+
+	accentedPerson := createPerson(t, server, validCompletePersonPayload(3, map[string]any{
+		"firstName": "Aurelio",
+		"lastName":  "Costa",
+		"nickname":  "Áurea",
+	}))
+	accentedCollaborator := createCollaborator(t, server, validCollaboratorPayload(accentedPerson.Data.ID, map[string]any{
+		"journeyStartDate": "2026-06-03",
+	}))
+
+	byAccentInsensitiveNickname := listCollaborators(t, server, "search=aure")
+	if byAccentInsensitiveNickname.Data.Total != 1 {
+		t.Fatalf("expected one collaborator for accent-insensitive nickname search, got %d", byAccentInsensitiveNickname.Data.Total)
+	}
+	if got := byAccentInsensitiveNickname.Data.Items[0].ID; got != accentedCollaborator.Data.ID {
+		t.Fatalf("expected accented collaborator %q, got %q", accentedCollaborator.Data.ID, got)
 	}
 }
 
@@ -798,8 +819,22 @@ func validCompletePersonPayload(seq int, overrides map[string]any) map[string]an
 }
 
 func cpfForSeq(seq int) string {
-	cpfs := []string{"39053344705", "93541134780", "35711002844", "12345678909"}
+	cpfs := []string{"39053344705", "93541134780", "52998224725", "12345678909"}
 	return cpfs[(seq-1)%len(cpfs)]
+}
+
+func TestCPFForSeqReturnsValidUniqueFixtureValues(t *testing.T) {
+	seen := make(map[string]struct{}, 4)
+	for seq := 1; seq <= 4; seq++ {
+		cpf := cpfForSeq(seq)
+		if !peoplepkg.IsValidCPF(cpf) {
+			t.Fatalf("expected CPF fixture %q for sequence %d to be valid", cpf, seq)
+		}
+		if _, exists := seen[cpf]; exists {
+			t.Fatalf("expected CPF fixture %q for sequence %d to be unique", cpf, seq)
+		}
+		seen[cpf] = struct{}{}
+	}
 }
 
 func cellularForSeq(seq int) string {

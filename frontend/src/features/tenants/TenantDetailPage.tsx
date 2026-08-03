@@ -249,7 +249,7 @@ export function TenantDetailPage() {
                           aria-label={`Tenant access curl command for ${candidate.actorKey}`}
                           className="mt-2 overflow-x-auto whitespace-pre-wrap break-all rounded-lg bg-gray-950 p-3 text-xs text-white"
                         >
-                          {tenantAccessCurlCommand(candidate.actorKey, tenant.id)}
+                          {tenantAccessCurlCommand(tenant.id)}
                         </pre>
                       </div>
                     ))}
@@ -264,10 +264,10 @@ export function TenantDetailPage() {
   );
 }
 
-function tenantAccessCurlCommand(actorKey: string, tenantId: string) {
+function tenantAccessCurlCommand(tenantId: string) {
   return [
     "curl -i \\",
-    `  -H "X-Actor-ID: ${actorKey}" \\`,
+    "  -b /tmp/ers-session.cookies \\",
     `  -H "X-Tenant-ID: ${tenantId}" \\`,
     `  "http://localhost:8080/api/v1/tenants/${tenantId}"`,
   ].join("\n");

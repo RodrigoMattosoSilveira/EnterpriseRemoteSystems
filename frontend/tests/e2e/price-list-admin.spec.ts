@@ -17,7 +17,8 @@ test("admin can create Canteen and Administrative items and use them on New Expe
   request,
 }) => {
   const suffix = uniqueSuffix();
-  const collaborator = await createActiveCollaborator(request, suffix);
+  await createActiveCollaborator(request, suffix);
+  const collaboratorNickname = `PriceListAdmin${suffix}`;
   const canteenDescription = `E2E admin canteen item ${suffix}`;
   const administrativeDescription = `E2E admin administrative item ${suffix}`;
 
@@ -43,7 +44,7 @@ test("admin can create Canteen and Administrative items and use them on New Expe
 
   await page.goto("/expenses/new");
   await expect(page.getByRole("heading", { name: "New Expense" })).toBeVisible();
-  await page.getByLabel("Collaborator *").selectOption(collaborator.id);
+  await selectExpenseCollaborator(page, collaboratorNickname);
 
   await page.getByLabel("Category *").selectOption("CANTEEN");
   await expectPriceListOption(page, canteenDescription, 1);
@@ -196,6 +197,23 @@ async function expectPriceListOption(page: Page, description: string, count: num
   await expect(
     page.getByLabel("Item Description *").locator("option", { hasText: description }),
   ).toHaveCount(count);
+}
+
+async function selectExpenseCollaborator(page: Page, nickname: string) {
+  const collaboratorSearch = page.getByRole("combobox", {
+    name: "Collaborator *",
+  });
+  await collaboratorSearch.fill(nickname);
+
+  const collaboratorOption = page
+    .getByRole("listbox", { name: "Matching active collaborators" })
+    .getByRole("option", { name: new RegExp(nickname) });
+
+  await expect(collaboratorOption).toBeVisible();
+  await collaboratorOption.click();
+  await expect(
+    page.getByRole("status", { name: "Selected expense Collaborator" }),
+  ).toContainText(nickname);
 }
 
 async function createActiveCollaborator(

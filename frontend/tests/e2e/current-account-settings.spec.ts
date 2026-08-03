@@ -22,8 +22,10 @@ test("admin can view and update second-person approval policy", async ({ page, r
       page.getByRole("heading", { name: "Current Account Settings", exact: true }),
     ).toBeVisible();
     await expect(page.getByText("Operational warning")).toBeVisible();
-    await expect(page.getByLabel("Actor ID / key")).toHaveValue("bootstrap-admin");
-    await expect(page.getByLabel("Tenant ID")).toHaveValue("default");
+    await expect(
+      page.getByRole("heading", { name: "Authenticated authorization context" }),
+    ).toBeVisible();
+    await expect(page.getByLabel("Selected Tenant ID")).toHaveValue("default");
 
     const policyToggle = page.getByLabel(
       "Require second-person approval for sensitive current-account operations",

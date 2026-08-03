@@ -1,0 +1,38 @@
+package authentication
+
+import (
+	"context"
+	"time"
+)
+
+type AccountRecord struct {
+	Account
+	ActorKey       string
+	DisplayName    string
+	PersonID       string
+	CollaboratorID string
+	ActorActive    bool
+}
+
+type SessionRecord struct {
+	Session
+	AccountRecord
+}
+
+type Repository interface {
+	ListAccounts(ctx context.Context) ([]AccountRecord, error)
+	FindAccountByID(ctx context.Context, id string) (AccountRecord, error)
+	FindAccountByLogin(ctx context.Context, login string) (AccountRecord, error)
+	CreateAccount(ctx context.Context, account Account) (AccountRecord, error)
+	SetAccountActive(ctx context.Context, id string, active bool, now time.Time) (AccountRecord, error)
+	UpdateLastLogin(ctx context.Context, id string, now time.Time) error
+	UpdatePasswordAndRevokeSessions(ctx context.Context, id string, passwordHash string, mustChangePassword bool, now time.Time) error
+	CreateSession(ctx context.Context, session Session) error
+	FindSessionByTokenHash(ctx context.Context, tokenHash string) (SessionRecord, error)
+	RevokeSession(ctx context.Context, id string, now time.Time) error
+	RevokeSessionsForAccount(ctx context.Context, accountID string, now time.Time) error
+	TouchSession(ctx context.Context, id string, now time.Time) error
+	CreatePasswordResetToken(ctx context.Context, token PasswordResetToken, now time.Time) error
+	FindPasswordResetToken(ctx context.Context, tokenHash string) (PasswordResetToken, error)
+	ConsumePasswordResetToken(ctx context.Context, tokenID string, passwordHash string, now time.Time) error
+}

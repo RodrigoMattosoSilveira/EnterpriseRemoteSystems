@@ -7,14 +7,13 @@ import (
 )
 
 const (
-	// HeaderAuthorizedBy is the temporary legacy actor header used by existing
-	// financial operation endpoints. New endpoint wiring should use ExtractActor
-	// so this compatibility path stays centralized while authenticated actors are
-	// introduced in future bites.
+	// HeaderAuthorizedBy is the legacy operation-actor header. Bite 28C accepts it
+	// only when the server is explicitly running in isolated test mode.
 	HeaderAuthorizedBy = "X-Authorized-By"
 
-	// HeaderActorID is the forward-compatible actor identity header. It is a
-	// temporary transport shape until ERS has authenticated users/sessions.
+	// HeaderActorID is the legacy actor-identity header. Authenticated sessions are
+	// authoritative in normal traffic; this header is restricted to explicit
+	// bootstrap and isolated-test modes.
 	HeaderActorID = "X-Actor-ID"
 
 	// HeaderActorPermissions is retained only for isolated authorization tests
@@ -96,9 +95,10 @@ const (
 type ActorSource string
 
 const (
-	ActorSourceHeaderAuthorizedBy ActorSource = "x_authorized_by"
-	ActorSourceHeaderActorID      ActorSource = "x_actor_id"
-	ActorSourcePersisted          ActorSource = "persisted"
+	ActorSourceHeaderAuthorizedBy   ActorSource = "x_authorized_by"
+	ActorSourceHeaderActorID        ActorSource = "x_actor_id"
+	ActorSourcePersisted            ActorSource = "persisted"
+	ActorSourceAuthenticatedSession ActorSource = "authenticated_session"
 )
 
 type ActorScope string
@@ -126,8 +126,10 @@ type Actor struct {
 }
 
 var (
-	ErrMissingActor = errors.New("authorization actor is required")
-	ErrForbidden    = errors.New("actor is not permitted")
+	ErrMissingActor            = errors.New("authorization actor is required")
+	ErrAuthenticationRequired  = errors.New("authenticated session is required")
+	ErrTenantSelectionRequired = errors.New("a tenant selection is required")
+	ErrForbidden               = errors.New("actor is not permitted")
 )
 
 type HeaderGetter func(name string) string

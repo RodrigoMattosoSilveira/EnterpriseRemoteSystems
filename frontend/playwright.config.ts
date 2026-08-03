@@ -1,4 +1,7 @@
 import { defineConfig, devices } from "@playwright/test";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { resolveE2EAuthMode } from "./tests/e2e/support/runtime";
 
 declare const process: {
   env: Record<string, string | undefined>;
@@ -8,13 +11,28 @@ const runtimeEnv = process.env;
 const isCI = runtimeEnv.CI === "true";
 const skipWebServer = runtimeEnv.PLAYWRIGHT_SKIP_WEBSERVER === "true";
 
-const baseURL = runtimeEnv.PLAYWRIGHT_BASE_URL ?? "http://localhost:5173";
+// Local E2E uses dedicated ports and never reuses development servers. That
+// guarantees the suite exercises the checked-out branch and reset E2E database.
+const LOCAL_E2E_FRONTEND_PORT = 15_173;
+const LOCAL_E2E_BACKEND_PORT = 18_080;
+const localE2EFrontendURL = `http://localhost:${LOCAL_E2E_FRONTEND_PORT}`;
+const localE2EBackendURL = `http://localhost:${LOCAL_E2E_BACKEND_PORT}`;
+
+const baseURL = runtimeEnv.PLAYWRIGHT_BASE_URL ?? localE2EFrontendURL;
 const storageOrigin = new URL(baseURL).origin;
+const authMode = resolveE2EAuthMode(baseURL, runtimeEnv.PLAYWRIGHT_AUTH_MODE);
+const authenticatedStorageStatePath = join(
+  fileURLToPath(new URL(".", import.meta.url)),
+  "test-results",
+  ".auth",
+  "admin.json",
+);
 
 const authzActorId = runtimeEnv.PLAYWRIGHT_AUTHZ_ACTOR_ID ?? "bootstrap-admin";
 const authzTenantId = runtimeEnv.PLAYWRIGHT_AUTHZ_TENANT_ID ?? "default";
 
 export default defineConfig({
+  globalSetup: authMode === "session" ? "./tests/e2e/global-setup.ts" : undefined,
   testDir: "./tests/e2e",
   timeout: 30_000,
   expect: {
@@ -31,27 +49,30 @@ export default defineConfig({
     trace: "on-first-retry",
     screenshot: "only-on-failure",
     video: "retain-on-failure",
-    extraHTTPHeaders: {
-      "X-Actor-ID": authzActorId,
-      "X-Tenant-ID": authzTenantId,
-    },
-    storageState: {
-      cookies: [],
-      origins: [
-        {
-          origin: storageOrigin,
-          localStorage: [
-            {
-              name: "ers.authzAdmin.requestActor",
-              value: JSON.stringify({
-                actorId: authzActorId,
-                tenantId: authzTenantId,
-              }),
-            },
-          ],
-        },
-      ],
-    },
+    extraHTTPHeaders:
+      authMode === "session"
+        ? { "X-Tenant-ID": authzTenantId }
+        : {
+            "X-Actor-ID": authzActorId,
+            "X-Tenant-ID": authzTenantId,
+          },
+    storageState:
+      authMode === "session"
+        ? authenticatedStorageStatePath
+        : {
+            cookies: [],
+            origins: [
+              {
+                origin: storageOrigin,
+                localStorage: [
+                  {
+                    name: "ers.auth.selectedTenantId",
+                    value: authzTenantId,
+                  },
+                ],
+              },
+            ],
+          },
   },
 
   projects: [
@@ -66,16 +87,16 @@ export default defineConfig({
     : [
         {
           command:
-            "cd .. && ERS_DATABASE_PATH=data/app-e2e.db ERS_RESET_DATABASE=true AUTHZ_BOOTSTRAP_ENABLED=true AUTHZ_BOOTSTRAP_ACTOR_KEY=bootstrap-admin AUTHZ_BOOTSTRAP_DISPLAY_NAME='Bootstrap Admin' AUTHZ_BOOTSTRAP_ROLE_CODE=APPLICATION_ADMIN AUTHZ_BOOTSTRAP_TENANT_ID='*' AUTHZ_BOOTSTRAP_REQUIRE_EMPTY_ACTOR_TABLE=false make local-backend",
-          url: "http://localhost:8080/healthz",
-          reuseExistingServer: !isCI,
+            `cd .. && HTTP_ADDR=:${LOCAL_E2E_BACKEND_PORT} ERS_DATABASE_PATH=data/app-e2e.db ERS_RESET_DATABASE=true APP_ENV=ci AUTHZ_ACTOR_HEADER_MODE=test AUTHZ_BOOTSTRAP_ENABLED=true AUTHZ_BOOTSTRAP_ACTOR_KEY=bootstrap-admin AUTHZ_BOOTSTRAP_DISPLAY_NAME='Bootstrap Admin' AUTHZ_BOOTSTRAP_ROLE_CODE=APPLICATION_ADMIN AUTHZ_BOOTSTRAP_TENANT_ID='*' AUTHZ_BOOTSTRAP_REQUIRE_EMPTY_ACTOR_TABLE=false make local-backend`,
+          url: `${localE2EBackendURL}/healthz`,
+          reuseExistingServer: false,
           timeout: 120_000,
         },
         {
           command:
-            "ERS_E2E_AUTHZ_PROXY=true PLAYWRIGHT_AUTHZ_ACTOR_ID=bootstrap-admin PLAYWRIGHT_AUTHZ_TENANT_ID=default npm run dev -- --host 0.0.0.0 --port 5173",
-          url: "http://localhost:5173",
-          reuseExistingServer: !isCI,
+            `ERS_API_PROXY_TARGET=http://127.0.0.1:${LOCAL_E2E_BACKEND_PORT} ERS_E2E_AUTHZ_PROXY=true PLAYWRIGHT_AUTHZ_ACTOR_ID=bootstrap-admin PLAYWRIGHT_AUTHZ_TENANT_ID=default npm run dev -- --host 0.0.0.0 --port ${LOCAL_E2E_FRONTEND_PORT}`,
+          url: localE2EFrontendURL,
+          reuseExistingServer: false,
           timeout: 120_000,
         },
       ],
