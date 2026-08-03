@@ -92,18 +92,16 @@ describe("CollaboratorsListPage", () => {
     expect(textNode("Active")).toBeTruthy();
   });
 
-  it("matches any part of a name across pages and sorts the filtered results", async () => {
+  it("uses server-side name search and sorts the returned results", async () => {
     const urls: string[] = [];
     mockFetch(async (url) => {
       urls.push(url);
-      if (url === "/api/v1/collaborators?page=1&pageSize=100") {
+      if (
+        url ===
+        "/api/v1/collaborators?search=Filger&page=1&pageSize=25"
+      ) {
         return jsonResponse({
-          data: { items: [filteredCollaborators[0]], total: 2 },
-        });
-      }
-      if (url === "/api/v1/collaborators?page=2&pageSize=100") {
-        return jsonResponse({
-          data: { items: [filteredCollaborators[1]], total: 2 },
+          data: { items: filteredCollaborators, total: 2 },
         });
       }
 
@@ -114,8 +112,7 @@ describe("CollaboratorsListPage", () => {
 
     await waitForText("Ana Filger");
     expect(urls).toEqual([
-      "/api/v1/collaborators?page=1&pageSize=100",
-      "/api/v1/collaborators?page=2&pageSize=100",
+      "/api/v1/collaborators?search=Filger&page=1&pageSize=25",
     ]);
     expect(textNode("Filtering by “Filger”.")).toBeTruthy();
     expect(
@@ -130,7 +127,10 @@ describe("CollaboratorsListPage", () => {
 
   it("shows a filtered empty state", async () => {
     mockFetch(async (url) => {
-      if (url === "/api/v1/collaborators?page=1&pageSize=100") {
+      if (
+        url ===
+        "/api/v1/collaborators?search=Missing&page=1&pageSize=25"
+      ) {
         return jsonResponse({ data: { items: [], total: 0 } });
       }
 

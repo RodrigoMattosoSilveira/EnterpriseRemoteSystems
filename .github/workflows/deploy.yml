@@ -374,6 +374,7 @@ jobs:
       PLAYWRIGHT_BASE_URL: https://${{ needs.deploy.outputs.domain }}
       PLAYWRIGHT_SKIP_WEBSERVER: "true"
       PLAYWRIGHT_AUTH_MODE: session
+      PLAYWRIGHT_AUTHZ_ACTOR_ID: e2e-application-admin
       PLAYWRIGHT_AUTHZ_TENANT_ID: default
       E2E_ADMIN_EMAIL: ${{ needs.deploy.outputs.e2e_admin_email }}
       E2E_ADMIN_PASSWORD: ${{ secrets.E2E_ADMIN_PASSWORD }}
@@ -400,6 +401,7 @@ jobs:
           echo "PLAYWRIGHT_BASE_URL=${PLAYWRIGHT_BASE_URL}"
           echo "PLAYWRIGHT_SKIP_WEBSERVER=${PLAYWRIGHT_SKIP_WEBSERVER}"
           echo "PLAYWRIGHT_AUTH_MODE=${PLAYWRIGHT_AUTH_MODE}"
+          echo "PLAYWRIGHT_AUTHZ_ACTOR_ID=${PLAYWRIGHT_AUTHZ_ACTOR_ID}"
           echo "E2E_ADMIN_EMAIL_SOURCE=${E2E_ADMIN_EMAIL_SOURCE}"
           echo "E2E_ADMIN_PASSWORD_CONFIGURED=${E2E_ADMIN_PASSWORD_CONFIGURED}"
           if [[ -z "${E2E_ADMIN_EMAIL:-}" || -z "${E2E_ADMIN_PASSWORD:-}" ]]; then
