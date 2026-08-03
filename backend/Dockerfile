@@ -7,7 +7,8 @@ RUN go mod download
 COPY . .
 RUN CGO_ENABLED=0 GOOS=linux \
     go build -o /out/enterprise-remote-systems-api ./cmd/api && \
-    go build -o /out/import-people ./cmd/import-people
+    go build -o /out/import-people ./cmd/import-people && \
+    go build -o /out/provision-e2e-admin ./cmd/provision-e2e-admin
 
 FROM debian:bookworm-slim AS runtime
 RUN apt-get update \
@@ -16,6 +17,7 @@ RUN apt-get update \
 WORKDIR /app
 COPY --from=builder /out/enterprise-remote-systems-api /app/enterprise-remote-systems-api
 COPY --from=builder /out/import-people /app/import-people
+COPY --from=builder /out/provision-e2e-admin /app/provision-e2e-admin
 COPY migrations /app/migrations
 COPY docker-entrypoint.sh /app/docker-entrypoint.sh
 RUN chmod +x /app/docker-entrypoint.sh \
