@@ -486,7 +486,7 @@ function Input({
   const { t: tc } = useTranslation("common");
 
   function handleInvalid(e: React.InvalidEvent<HTMLInputElement>) {
-    const input = e.target;
+    const input = e.currentTarget;
     if (input.validity.valueMissing) {
       input.setCustomValidity(tc("fieldErrors.required"));
     } else if (input.validity.typeMismatch) {
@@ -508,7 +508,7 @@ function Input({
         placeholder={placeholder}
         onInvalid={handleInvalid}
         onChange={(event) => {
-          event.target.setCustomValidity("");
+          event.currentTarget.setCustomValidity("");
           onChange(event.target.value);
         }}
         className="w-full rounded-xl border border-gray-300 bg-white p-3 text-base outline-none focus:border-gray-900 focus:ring-2 focus:ring-gray-200 disabled:bg-gray-100"
