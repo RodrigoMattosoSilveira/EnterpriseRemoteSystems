@@ -1,4 +1,5 @@
 import { Link, useNavigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { PersonForm } from "./PersonForm";
 import { useCreatePerson } from "./usePeople";
 import { ApiError } from "../../api/client";
@@ -7,6 +8,7 @@ import { ApiErrorPanel } from "../../components/ApiErrorPanel";
 const ACTIVE_STATUS_ID = "ref-person-status-active";
 
 export function CreatePersonPage() {
+  const { t } = useTranslation("people");
   const navigate = useNavigate();
   const mutation = useCreatePerson();
 
@@ -15,14 +17,13 @@ export function CreatePersonPage() {
       <header className="sticky top-0 z-10 border-b bg-white/95 px-4 py-4 backdrop-blur">
         <div className="mx-auto max-w-4xl">
           <Link className="text-sm text-gray-500 underline" to="/people">
-            Back to People
+            {t("backToPeople")}
           </Link>
           <h1 className="mt-3 text-2xl font-bold text-gray-950">
-            New Person
+            {t("newPersonTitle")}
           </h1>
           <p className="text-sm text-gray-500">
-            Complete the Personal section first. Other sections can be filled
-            later.
+            {t("newPersonDescription")}
           </p>
         </div>
       </header>
@@ -43,7 +44,7 @@ export function CreatePersonPage() {
             const created = await mutation.mutateAsync(input);
             navigate("/people", {
               state: {
-                flash: `Person record added: ${created.firstName} ${created.lastName}.`,
+                flash: t("personCreatedFlash", { firstName: created.firstName, lastName: created.lastName }),
                 createdPersonId: created.id,
                 createdPerson: created,
               },

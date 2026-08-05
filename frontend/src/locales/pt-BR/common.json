@@ -1,0 +1,25 @@
+{
+  "language": "Idioma",
+  "apiErrors": {
+    "unexpected": "Ocorreu um erro inesperado.",
+    "forbidden": "Você não tem permissão para realizar esta operação.",
+    "authenticationRequired": "Uma sessão autenticada é necessária.",
+    "notFound": "O recurso solicitado não foi encontrado.",
+    "validationFailed": "Os dados enviados são inválidos.",
+    "hints": {
+      "signInAgain": "Uma sessão de usuário autenticado é necessária. Faça login novamente antes de tentar esta operação.",
+      "selectTenant": "Selecione um inquilino concedido ao usuário autenticado antes de tentar esta operação."
+    }
+  },
+  "fieldErrors": {
+    "required": "Obrigatório",
+    "cpfInvalid": "CPF inválido",
+    "rgInvalid": "RG inválido",
+    "cellularInvalid": "O celular deve ser um número móvel brasileiro válido",
+    "emailInvalid": "E-mail inválido",
+    "cepInvalid": "CEP inválido",
+    "emergencyCellularInvalid": "O celular de emergência deve ser um número móvel brasileiro válido",
+    "emergencyEmailInvalid": "E-mail de emergência inválido",
+    "countryInvalid": "O país deve ser Brasil"
+  }
+}

@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { PersonForm } from "./PersonForm";
 import { usePerson, useUpdatePerson } from "./usePeople";
 import { ApiErrorPanel } from "../../components/ApiErrorPanel";
@@ -8,6 +9,7 @@ const ACTIVE_STATUS_ID = "ref-person-status-active";
 
 export function PersonDetailPage() {
   const { id = "" } = useParams();
+  const { t } = useTranslation("people");
   const [successMessage, setSuccessMessage] = useState("");
 
   const personQuery = usePerson(id);
@@ -17,7 +19,7 @@ export function PersonDetailPage() {
   const view = searchParams.get("view") || "cards";
 
   if (personQuery.isLoading) {
-    return <main className="p-4">Loading person...</main>;
+    return <main className="p-4">{t("loadingPerson")}</main>;
   }
 
   if (personQuery.error) {
@@ -29,7 +31,7 @@ export function PersonDetailPage() {
   }
 
   if (!personQuery.data) {
-    return <main className="p-4">Person not found.</main>;
+    return <main className="p-4">{t("personNotFound")}</main>;
   }
 
   return (
@@ -37,7 +39,7 @@ export function PersonDetailPage() {
       <header className="sticky top-0 z-10 border-b bg-white/95 px-4 py-4 backdrop-blur">
         <div className="mx-auto max-w-4xl">
           <Link className="text-sm text-gray-500 underline" to={`/people?view=${view}`}>
-            Back to People
+            {t("backToPeople")}
           </Link>
 
           <div className="mt-3 flex items-start justify-between gap-3">
@@ -57,7 +59,7 @@ export function PersonDetailPage() {
                   : "bg-amber-100 text-amber-800"
               }`}
             >
-              {personQuery.data.canCreateCollaborator ? "Complete" : "Incomplete"}
+              {personQuery.data.canCreateCollaborator ? t("complete") : t("incomplete")}
             </span>
           </div>
         </div>
@@ -90,7 +92,7 @@ export function PersonDetailPage() {
 
             try {
               await mutation.mutateAsync(input);
-              setSuccessMessage("Person updated successfully.");
+              setSuccessMessage(t("personUpdated"));
             } catch {
               // The mutation state renders the API error above the form.
             }

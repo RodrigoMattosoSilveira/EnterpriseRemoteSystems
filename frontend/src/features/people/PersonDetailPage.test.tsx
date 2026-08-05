@@ -2,7 +2,9 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
+import { I18nextProvider } from "react-i18next";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import i18n from "../../app/i18n";
 import { PeopleListPage } from "./PeopleListPage";
 import { PersonDetailPage } from "./PersonDetailPage";
 import type { Person } from "../../types/people";
@@ -303,9 +305,11 @@ function renderPersonDetailRoute() {
 
   act(() => {
     root?.render(
-      <QueryClientProvider client={queryClient}>
-        <RouterProvider router={router} />
-      </QueryClientProvider>
+      <I18nextProvider i18n={i18n}>
+        <QueryClientProvider client={queryClient}>
+          <RouterProvider router={router} />
+        </QueryClientProvider>
+      </I18nextProvider>
     );
   });
 

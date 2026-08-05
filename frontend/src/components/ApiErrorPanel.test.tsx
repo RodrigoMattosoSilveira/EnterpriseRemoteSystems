@@ -1,6 +1,8 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
+import { I18nextProvider } from "react-i18next";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import i18n from "../app/i18n";
 import { ApiError } from "../api/client";
 import { ApiErrorPanel } from "./ApiErrorPanel";
 
@@ -22,16 +24,18 @@ describe("ApiErrorPanel authentication guidance", () => {
   it("explains that an authenticated session is required", () => {
     act(() => {
       root.render(
-        <ApiErrorPanel
-          error={
-            new ApiError({
-              status: 401,
-              code: "authentication_required",
-              message: "An authenticated session is required",
-              url: "/api/v1/people",
-            })
-          }
-        />,
+        <I18nextProvider i18n={i18n}>
+          <ApiErrorPanel
+            error={
+              new ApiError({
+                status: 401,
+                code: "authentication_required",
+                message: "An authenticated session is required",
+                url: "/api/v1/people",
+              })
+            }
+          />
+        </I18nextProvider>,
       );
     });
 
@@ -42,15 +46,17 @@ describe("ApiErrorPanel authentication guidance", () => {
   it("explains when tenant selection is required", () => {
     act(() => {
       root.render(
-        <ApiErrorPanel
-          error={
-            new ApiError({
-              status: 403,
-              code: "tenant_selection_required",
-              message: "A specific tenant must be selected",
-            })
-          }
-        />,
+        <I18nextProvider i18n={i18n}>
+          <ApiErrorPanel
+            error={
+              new ApiError({
+                status: 403,
+                code: "tenant_selection_required",
+                message: "A specific tenant must be selected",
+              })
+            }
+          />
+        </I18nextProvider>,
       );
     });
 

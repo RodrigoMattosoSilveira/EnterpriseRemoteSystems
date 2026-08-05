@@ -2,7 +2,9 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
+import { I18nextProvider } from "react-i18next";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import i18n from "../../app/i18n";
 import { PeopleListPage } from "./PeopleListPage";
 import type { Person } from "../../types/people";
 
@@ -142,7 +144,7 @@ describe("PeopleListPage", () => {
 
     renderPeopleListRoute();
 
-    await waitForText("Actor is not permitted to perform this operation");
+    await waitForText("You are not permitted to perform this operation.");
     expect(textNode("Use bootstrap-admin and reload")).toBeFalsy();
     expect(container.querySelector("pre")).toBeNull();
   });
@@ -229,9 +231,11 @@ function renderPeopleListRoute() {
 
   act(() => {
     root?.render(
-      <QueryClientProvider client={queryClient}>
-        <RouterProvider router={router} />
-      </QueryClientProvider>,
+      <I18nextProvider i18n={i18n}>
+        <QueryClientProvider client={queryClient}>
+          <RouterProvider router={router} />
+        </QueryClientProvider>
+      </I18nextProvider>,
     );
   });
 }

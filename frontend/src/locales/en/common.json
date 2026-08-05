@@ -1,0 +1,25 @@
+{
+  "language": "Language",
+  "apiErrors": {
+    "unexpected": "An unexpected error occurred.",
+    "forbidden": "You are not permitted to perform this operation.",
+    "authenticationRequired": "An authenticated session is required.",
+    "notFound": "The requested resource could not be found.",
+    "validationFailed": "The submitted data is invalid.",
+    "hints": {
+      "signInAgain": "An authenticated user session is required. Sign in again before retrying this operation.",
+      "selectTenant": "Select a tenant that is granted to the authenticated user before retrying this operation."
+    }
+  },
+  "fieldErrors": {
+    "required": "Required",
+    "cpfInvalid": "CPF is invalid",
+    "rgInvalid": "RG is invalid",
+    "cellularInvalid": "Cellular must be a valid Brazilian mobile number",
+    "emailInvalid": "Email is invalid",
+    "cepInvalid": "CEP is invalid",
+    "emergencyCellularInvalid": "Emergency cellular must be a valid Brazilian mobile number",
+    "emergencyEmailInvalid": "Emergency email is invalid",
+    "countryInvalid": "Country must be Brasil"
+  }
+}
