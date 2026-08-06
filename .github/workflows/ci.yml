@@ -196,8 +196,8 @@ jobs:
         shell: bash
         env:
           VITE_API_BASE_URL: /api/v1
-          ERS_E2E_AUTHZ_PROXY: "true"
-          PLAYWRIGHT_AUTHZ_ACTOR_ID: bootstrap-admin
+          ERS_LOCAL_AUTHZ_BOOTSTRAP: "false"
+          PLAYWRIGHT_AUTHZ_ACTOR_ID: e2e-application-admin
           PLAYWRIGHT_AUTHZ_TENANT_ID: default
         run: |
           set -euo pipefail
@@ -229,7 +229,8 @@ jobs:
         env:
           PLAYWRIGHT_BASE_URL: http://localhost:5173
           PLAYWRIGHT_SKIP_WEBSERVER: "true"
-          PLAYWRIGHT_AUTHZ_ACTOR_ID: bootstrap-admin
+          PLAYWRIGHT_AUTH_MODE: session
+          PLAYWRIGHT_AUTHZ_ACTOR_ID: e2e-application-admin
           PLAYWRIGHT_AUTHZ_TENANT_ID: default
           E2E_ADMIN_EMAIL: admin@example.com
           E2E_ADMIN_PASSWORD: CI-Administrator-Password-28C!

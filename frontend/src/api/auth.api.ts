@@ -2,9 +2,11 @@ import { apiFetch } from "./client";
 import type {
   AuthAccount,
   AuthSession,
+  AuthTenantOption,
   ChangePasswordRequest,
   CreateAuthAccountRequest,
   LoginRequest,
+  PasswordResetResult,
   PasswordResetToken,
   ResetPasswordRequest,
 } from "../types/auth";
@@ -24,6 +26,43 @@ export function loadAuthSession(): Promise<AuthSession> {
   return apiFetch<AuthSession>("/auth/session");
 }
 
+export async function loadAuthTenantOptions(): Promise<AuthTenantOption[]> {
+  const payload = await apiFetch<unknown>("/auth/tenant-options");
+  return normalizeAuthTenantOptions(payload);
+}
+
+export function normalizeAuthTenantOptions(
+  payload: unknown,
+): AuthTenantOption[] {
+  const options = Array.isArray(payload)
+    ? payload
+    : isRecord(payload) && Array.isArray(payload.items)
+      ? payload.items
+      : [];
+
+  return options.filter(isAuthTenantOption).map((option) => ({
+    id: option.id,
+    code: option.code,
+    name: option.name,
+    roleCodes: Array.isArray(option.roleCodes)
+      ? option.roleCodes.filter((role): role is string => typeof role === "string")
+      : [],
+  }));
+}
+
+function isAuthTenantOption(value: unknown): value is AuthTenantOption {
+  return (
+    isRecord(value) &&
+    typeof value.id === "string" &&
+    typeof value.code === "string" &&
+    typeof value.name === "string"
+  );
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
 export function changePassword(request: ChangePasswordRequest): Promise<void> {
   return apiFetch<void>("/auth/password/change", {
     method: "POST",
@@ -31,8 +70,10 @@ export function changePassword(request: ChangePasswordRequest): Promise<void> {
   });
 }
 
-export function resetPassword(request: ResetPasswordRequest): Promise<void> {
-  return apiFetch<void>("/auth/password/reset", {
+export function resetPassword(
+  request: ResetPasswordRequest,
+): Promise<PasswordResetResult> {
+  return apiFetch<PasswordResetResult>("/auth/password/reset", {
     method: "POST",
     body: JSON.stringify(request),
   });

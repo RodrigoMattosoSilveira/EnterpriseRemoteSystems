@@ -423,7 +423,7 @@ test("current account updates after receipt signed return", async ({
 
   await page.goto("/receipts/outstanding");
   await page.getByLabel("Source type").selectOption("EXPENSE");
-  await page.getByLabel("Collaborator").fill(`RetAcct${suffix}`);
+  await page.getByRole("textbox", { name: "Collaborator", exact: true }).fill(`RetAcct${suffix}`);
   await page.getByRole("button", { name: "Apply filters" }).click();
 
   await expect(page.getByText("No outstanding receipts")).toBeVisible();

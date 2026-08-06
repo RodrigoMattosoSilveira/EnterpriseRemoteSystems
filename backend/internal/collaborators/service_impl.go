@@ -9,6 +9,7 @@ import (
 	"enterpriseremotesystems/backend/internal/db"
 	peoplepkg "enterpriseremotesystems/backend/internal/people"
 	"enterpriseremotesystems/backend/internal/shared/ids"
+	"enterpriseremotesystems/backend/internal/shared/tenantctx"
 	"enterpriseremotesystems/backend/internal/tenants"
 )
 
@@ -102,7 +103,7 @@ func (s *service) Create(ctx context.Context, req CreateCollaboratorRequest, act
 
 	collaborator := &db.CollaboratorJourney{
 		BaseModel:                      db.BaseModel{ID: ids.New(), CreatedAt: now, UpdatedAt: now},
-		TenantID:                       defaultTenantID,
+		TenantID:                       tenantctx.TenantID(ctx),
 		PersonID:                       strings.TrimSpace(req.PersonID),
 		JourneyStartDate:               startDate,
 		DefaultEndDate:                 defaultEnd,

@@ -139,13 +139,6 @@ func (s *service) ResolveSession(ctx context.Context, rawToken string) (SessionR
 		return SessionResponse{}, err
 	}
 	now := s.clock().UTC()
-	if record.RevokedAt != nil {
-		return SessionResponse{}, ErrAuthenticationRequired
-	}
-	if !record.ExpiresAt.After(now) {
-		_ = s.repository.RevokeSession(ctx, record.Session.ID, now)
-		return SessionResponse{}, ErrSessionExpired
-	}
 	if !record.Account.Active {
 		_ = s.repository.RevokeSession(ctx, record.Session.ID, now)
 		return SessionResponse{}, ErrAccountInactive
@@ -153,6 +146,13 @@ func (s *service) ResolveSession(ctx context.Context, rawToken string) (SessionR
 	if !record.ActorActive {
 		_ = s.repository.RevokeSession(ctx, record.Session.ID, now)
 		return SessionResponse{}, ErrActorInactive
+	}
+	if record.RevokedAt != nil {
+		return SessionResponse{}, ErrAuthenticationRequired
+	}
+	if !record.ExpiresAt.After(now) {
+		_ = s.repository.RevokeSession(ctx, record.Session.ID, now)
+		return SessionResponse{}, ErrSessionExpired
 	}
 	if now.Sub(record.LastSeenAt) >= 5*time.Minute {
 		if err := s.repository.TouchSession(ctx, record.Session.ID, now); err != nil {
@@ -207,35 +207,62 @@ func (s *service) ChangePassword(ctx context.Context, rawToken string, req Chang
 	return s.repository.UpdatePasswordAndRevokeSessions(ctx, record.Account.ID, passwordHash, false, s.clock().UTC())
 }
 
-func (s *service) ResetPassword(ctx context.Context, req ResetPasswordRequest) error {
+func (s *service) ResetPassword(ctx context.Context, req ResetPasswordRequest) (PasswordResetResult, error) {
 	if strings.TrimSpace(req.Token) == "" {
-		return &ValidationError{Fields: map[string]string{"token": "Password reset token is required"}}
+		return PasswordResetResult{}, &ValidationError{Fields: map[string]string{"token": "Password reset token is required"}}
 	}
 	if err := validateNewPassword(req.NewPassword); err != nil {
-		return err
+		return PasswordResetResult{}, err
 	}
 	token, err := s.repository.FindPasswordResetToken(ctx, hashToken(strings.TrimSpace(req.Token)))
 	if err != nil {
 		if isNotFound(err) {
-			return ErrResetTokenInvalid
+			return PasswordResetResult{}, ErrResetTokenInvalid
 		}
-		return err
+		return PasswordResetResult{}, err
+	}
+	account, err := s.repository.FindAccountByID(ctx, token.AccountID)
+	if err != nil {
+		if isNotFound(err) {
+			return PasswordResetResult{}, ErrResetTokenInvalid
+		}
+		return PasswordResetResult{}, err
+	}
+	if !account.Active {
+		return PasswordResetResult{}, ErrAccountInactive
+	}
+	if !account.ActorActive {
+		return PasswordResetResult{}, ErrActorInactive
 	}
 	now := s.clock().UTC()
 	if !token.ExpiresAt.After(now) {
-		return ErrResetTokenExpired
+		return PasswordResetResult{}, ErrResetTokenExpired
 	}
 	passwordHash, err := s.hashPassword(req.NewPassword)
 	if err != nil {
-		return err
+		return PasswordResetResult{}, err
 	}
 	if err := s.repository.ConsumePasswordResetToken(ctx, token.ID, passwordHash, now); err != nil {
 		if isNotFound(err) {
-			return ErrResetTokenInvalid
+			return PasswordResetResult{}, ErrResetTokenInvalid
 		}
-		return err
+		return PasswordResetResult{}, err
 	}
-	return nil
+	updated, err := s.repository.FindAccountByID(ctx, token.AccountID)
+	if err != nil {
+		return PasswordResetResult{}, err
+	}
+	if err := bcrypt.CompareHashAndPassword([]byte(updated.PasswordHash), []byte(req.NewPassword)); err != nil {
+		return PasswordResetResult{}, fmt.Errorf("verify persisted authentication password: %w", err)
+	}
+	if updated.PasswordChangedAt == nil {
+		return PasswordResetResult{}, fmt.Errorf("verify persisted authentication password timestamp")
+	}
+	return PasswordResetResult{
+		AccountID:         updated.ID,
+		Login:             normalizeLogin(updated.Login),
+		PasswordChangedAt: *updated.PasswordChangedAt,
+	}, nil
 }
 
 func (s *service) ListAccounts(ctx context.Context) ([]AccountResponse, error) {
@@ -273,6 +300,15 @@ func (s *service) CreateAccount(ctx context.Context, req CreateAccountRequest) (
 	if err := validatePasswordValue(req.TemporaryPassword, "temporaryPassword"); err != nil {
 		for key, value := range err.ValidationFields() {
 			fields[key] = value
+		}
+	}
+	if len(fields) == 0 {
+		hasTenantAccess, err := s.repository.ActorHasActiveTenantAccess(ctx, actorID)
+		if err != nil {
+			return AccountResponse{}, err
+		}
+		if !hasTenantAccess {
+			fields["actorId"] = "Authorization actor must have at least one active role grant for an active tenant"
 		}
 	}
 	if len(fields) > 0 {
@@ -317,8 +353,19 @@ func (s *service) IssuePasswordResetToken(ctx context.Context, accountID string)
 	if accountID == "" {
 		return PasswordResetTokenResponse{}, &ValidationError{Fields: map[string]string{"accountId": "Authentication account is required"}}
 	}
-	if _, err := s.repository.FindAccountByID(ctx, accountID); err != nil {
+	account, err := s.repository.FindAccountByID(ctx, accountID)
+	if err != nil {
 		return PasswordResetTokenResponse{}, err
+	}
+	if !account.Active {
+		return PasswordResetTokenResponse{}, &ValidationError{Fields: map[string]string{
+			"accountId": "Password reset tokens can only be issued for active authentication accounts",
+		}}
+	}
+	if !account.ActorActive {
+		return PasswordResetTokenResponse{}, &ValidationError{Fields: map[string]string{
+			"accountId": "Password reset tokens can only be issued when the linked authorization actor is active",
+		}}
 	}
 	rawToken, tokenHash, err := s.newToken("ers_pr_")
 	if err != nil {
@@ -335,7 +382,7 @@ func (s *service) IssuePasswordResetToken(ctx context.Context, accountID string)
 	}, now); err != nil {
 		return PasswordResetTokenResponse{}, err
 	}
-	return PasswordResetTokenResponse{Token: rawToken, ExpiresAt: expiresAt}, nil
+	return PasswordResetTokenResponse{AccountID: account.ID, Login: normalizeLogin(account.Login), Token: rawToken, ExpiresAt: expiresAt}, nil
 }
 
 func (s *service) hashPassword(password string) (string, error) {

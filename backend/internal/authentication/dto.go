@@ -61,6 +61,14 @@ type LoginResult struct {
 }
 
 type PasswordResetTokenResponse struct {
+	AccountID string    `json:"accountId"`
+	Login     string    `json:"login"`
 	Token     string    `json:"token"`
 	ExpiresAt time.Time `json:"expiresAt"`
+}
+
+type PasswordResetResult struct {
+	AccountID         string    `json:"accountId"`
+	Login             string    `json:"login"`
+	PasswordChangedAt time.Time `json:"passwordChangedAt"`
 }

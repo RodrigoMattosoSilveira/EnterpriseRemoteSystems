@@ -18,8 +18,8 @@ test('user can navigate to gold price recording & record a new gold price', asyn
   await expect(page.getByText('Manage tenant-ready')).toBeVisible();
 
   // Navigate to Gold Prices
-  await expect(page.getByRole('link', { name: 'Gold Prices' })).toBeVisible();
-  await page.getByRole('link', { name: 'Gold Prices' }).click();
+  await expect(page.getByRole('link', { name: 'Gold Prices', exact: true })).toBeVisible();
+  await page.getByRole('link', { name: 'Gold Prices', exact: true }).click();
   await expect(page.getByText('Record the tenant gold-price')).toBeVisible();
 
   // Get the date

@@ -1,9 +1,13 @@
 package people
 
 import (
+	"strings"
+
 	"github.com/gofiber/fiber/v3"
 
+	"enterpriseremotesystems/backend/internal/authz"
 	"enterpriseremotesystems/backend/internal/shared/httpx"
+	"enterpriseremotesystems/backend/internal/tenants"
 )
 
 type Handler struct {
@@ -20,7 +24,7 @@ func (h *Handler) List(c fiber.Ctx) error {
 		return httpx.WriteError(c, err)
 	}
 
-	items, total, err := h.service.List(c.Context(), filter)
+	items, total, err := h.service.List(c.Context(), requestTenantID(c), filter)
 	if err != nil {
 		return httpx.WriteError(c, err)
 	}
@@ -39,7 +43,7 @@ func (h *Handler) Create(c fiber.Ctx) error {
 		return httpx.WriteError(c, err)
 	}
 
-	created, err := h.service.Create(c.Context(), req, actorUserID(c))
+	created, err := h.service.Create(c.Context(), requestTenantID(c), req, actorUserID(c))
 	if err != nil {
 		return httpx.WriteError(c, err)
 	}
@@ -52,7 +56,7 @@ func (h *Handler) Create(c fiber.Ctx) error {
 func (h *Handler) GetByID(c fiber.Ctx) error {
 	id := c.Params("id")
 
-	item, err := h.service.GetByID(c.Context(), id)
+	item, err := h.service.GetByID(c.Context(), requestTenantID(c), id)
 	if err != nil {
 		return httpx.WriteError(c, err)
 	}
@@ -70,7 +74,7 @@ func (h *Handler) Update(c fiber.Ctx) error {
 		return httpx.WriteError(c, err)
 	}
 
-	updated, err := h.service.Update(c.Context(), id, req, actorUserID(c))
+	updated, err := h.service.Update(c.Context(), requestTenantID(c), id, req, actorUserID(c))
 	if err != nil {
 		return httpx.WriteError(c, err)
 	}
@@ -78,6 +82,22 @@ func (h *Handler) Update(c fiber.Ctx) error {
 	return c.JSON(httpx.APIResponse{
 		Data: updated,
 	})
+}
+
+func requestTenantID(c fiber.Ctx) string {
+	if actor, err := authz.RequestActorFromContext(c); err == nil && actor != nil {
+		tenantID := strings.TrimSpace(actor.TenantID)
+		if tenantID != "" && tenantID != authz.GlobalTenantScope {
+			return tenantID
+		}
+	}
+
+	// Route-disabled handler tests do not install an authoritative actor. Honor
+	// their explicit tenant header while retaining the historic default fallback.
+	if tenantID := strings.TrimSpace(c.Get(authz.HeaderTenantID)); tenantID != "" {
+		return tenantID
+	}
+	return tenants.DefaultTenantID
 }
 
 func actorUserID(c fiber.Ctx) string {

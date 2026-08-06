@@ -78,7 +78,7 @@ func TestAuthenticationLoginSessionLogoutAndPasswordChange(t *testing.T) {
 	if _, err := service.ResolveSession(context.Background(), login.Token); err != ErrAuthenticationRequired {
 		t.Fatalf("expected password change to revoke session, got %v", err)
 	}
-	if err := service.ResetPassword(context.Background(), ResetPasswordRequest{
+	if _, err := service.ResetPassword(context.Background(), ResetPasswordRequest{
 		Token: pendingReset.Token, NewPassword: "Unexpected-Password-3",
 	}); err != ErrResetTokenInvalid {
 		t.Fatalf("expected password change to invalidate pending reset tokens, got %v", err)
@@ -122,10 +122,10 @@ func TestAuthenticationRejectsInactiveAccountAndActor(t *testing.T) {
 	if _, err := service.SetAccountActive(context.Background(), account.ID, false); err != nil {
 		t.Fatalf("deactivate account: %v", err)
 	}
-	if _, err := service.ResolveSession(context.Background(), activeLogin.Token); err != ErrAuthenticationRequired {
-		t.Fatalf("expected account deactivation to revoke sessions, got %v", err)
+	if _, err := service.ResolveSession(context.Background(), activeLogin.Token); err != ErrAccountInactive {
+		t.Fatalf("expected account deactivation to invalidate the active session, got %v", err)
 	}
-	if err := service.ResetPassword(context.Background(), ResetPasswordRequest{
+	if _, err := service.ResetPassword(context.Background(), ResetPasswordRequest{
 		Token: pendingReset.Token, NewPassword: "Unexpected-Password-2",
 	}); err != ErrResetTokenInvalid {
 		t.Fatalf("expected account deactivation to invalidate pending reset tokens, got %v", err)
@@ -136,11 +136,48 @@ func TestAuthenticationRejectsInactiveAccountAndActor(t *testing.T) {
 	if _, err := service.SetAccountActive(context.Background(), account.ID, true); err != nil {
 		t.Fatalf("reactivate account: %v", err)
 	}
+	reactivatedLogin, err := service.Login(context.Background(), LoginRequest{Login: account.Login, Password: "Operator-Password-1"}, "", "")
+	if err != nil {
+		t.Fatalf("expected reactivated account login to succeed: %v", err)
+	}
+	if err := service.Logout(context.Background(), reactivatedLogin.Token); err != nil {
+		t.Fatalf("logout reactivated account: %v", err)
+	}
 	if err := database.Model(&authz.AuthzActor{}).Where("id = ?", actor.ID).Update("active", false).Error; err != nil {
 		t.Fatalf("deactivate actor: %v", err)
 	}
 	if _, err := service.Login(context.Background(), LoginRequest{Login: account.Login, Password: "Operator-Password-1"}, "", ""); err != ErrInvalidCredentials {
 		t.Fatalf("expected inactive actor login rejection, got %v", err)
+	}
+}
+
+func TestAuthenticationRejectsResetTokenIssuanceForInactiveTargetAsValidation(t *testing.T) {
+	database, _, service, actor := authenticationTestService(t)
+	account, err := service.CreateAccount(context.Background(), CreateAccountRequest{
+		ActorID: actor.ID, Login: "inactive-reset-target@example.com", TemporaryPassword: "Inactive-Reset-Target-1",
+	})
+	if err != nil {
+		t.Fatalf("create account: %v", err)
+	}
+	if _, err := service.SetAccountActive(context.Background(), account.ID, false); err != nil {
+		t.Fatalf("deactivate account: %v", err)
+	}
+	_, err = service.IssuePasswordResetToken(context.Background(), account.ID)
+	var validation *ValidationError
+	if !errors.As(err, &validation) || validation.ValidationFields()["accountId"] == "" {
+		t.Fatalf("expected inactive target account validation, got %v", err)
+	}
+
+	if _, err := service.SetAccountActive(context.Background(), account.ID, true); err != nil {
+		t.Fatalf("reactivate account: %v", err)
+	}
+	if err := database.Model(&authz.AuthzActor{}).Where("id = ?", actor.ID).Update("active", false).Error; err != nil {
+		t.Fatalf("deactivate actor: %v", err)
+	}
+	_, err = service.IssuePasswordResetToken(context.Background(), account.ID)
+	validation = nil
+	if !errors.As(err, &validation) || validation.ValidationFields()["accountId"] == "" {
+		t.Fatalf("expected inactive target actor validation, got %v", err)
 	}
 }
 
@@ -163,6 +200,9 @@ func TestAuthenticationPasswordResetTokenIsOneTimeAndRevokesSessions(t *testing.
 	if reset.Token == "" {
 		t.Fatal("expected raw reset token to be returned once")
 	}
+	if reset.AccountID != account.ID || reset.Login != account.Login {
+		t.Fatalf("unexpected reset token identity: %#v", reset)
+	}
 	var persistedToken PasswordResetToken
 	if err := database.First(&persistedToken, "account_id = ?", account.ID).Error; err != nil {
 		t.Fatalf("find persisted reset token: %v", err)
@@ -170,16 +210,20 @@ func TestAuthenticationPasswordResetTokenIsOneTimeAndRevokesSessions(t *testing.
 	if persistedToken.TokenHash == reset.Token || persistedToken.TokenHash != hashToken(reset.Token) {
 		t.Fatal("password reset must persist only the hash of the raw token")
 	}
-	if err := service.ResetPassword(context.Background(), ResetPasswordRequest{Token: reset.Token, NewPassword: "Reset-Password-2"}); err != nil {
+	resetResult, err := service.ResetPassword(context.Background(), ResetPasswordRequest{Token: reset.Token, NewPassword: "%3oU1^Z!Gf6WEj8u"})
+	if err != nil {
 		t.Fatalf("reset password: %v", err)
+	}
+	if resetResult.AccountID != account.ID || resetResult.Login != account.Login || resetResult.PasswordChangedAt.IsZero() {
+		t.Fatalf("unexpected reset result: %#v", resetResult)
 	}
 	if _, err := service.ResolveSession(context.Background(), login.Token); err != ErrAuthenticationRequired {
 		t.Fatalf("expected reset to revoke existing sessions, got %v", err)
 	}
-	if err := service.ResetPassword(context.Background(), ResetPasswordRequest{Token: reset.Token, NewPassword: "Another-Password-3"}); err != ErrResetTokenInvalid {
+	if _, err := service.ResetPassword(context.Background(), ResetPasswordRequest{Token: reset.Token, NewPassword: "Another-Password-3"}); err != ErrResetTokenInvalid {
 		t.Fatalf("expected reset token to be single-use, got %v", err)
 	}
-	if _, err := service.Login(context.Background(), LoginRequest{Login: account.Login, Password: "Reset-Password-2"}, "", ""); err != nil {
+	if _, err := service.Login(context.Background(), LoginRequest{Login: account.Login, Password: "%3oU1^Z!Gf6WEj8u"}, "", ""); err != nil {
 		t.Fatalf("login with reset password: %v", err)
 	}
 }
@@ -244,6 +288,18 @@ func authenticationTestService(t *testing.T) (*gorm.DB, *GORMRepository, Service
 func createAuthenticationTestActor(t *testing.T, database *gorm.DB) authz.AuthzActor {
 	t.Helper()
 	now := time.Now().UTC()
+	if err := authz.SeedAuthorizationCatalog(database); err != nil {
+		t.Fatalf("seed authorization catalog: %v", err)
+	}
+	tenant := appdb.Tenant{
+		BaseModel: appdb.BaseModel{ID: appdb.DefaultTenantID, CreatedAt: now, UpdatedAt: now},
+		Code:      "DEFAULT",
+		Name:      "Default Tenant",
+		Active:    true,
+	}
+	if err := database.Where("id = ?", tenant.ID).FirstOrCreate(&tenant).Error; err != nil {
+		t.Fatalf("create default tenant: %v", err)
+	}
 	actor := authz.AuthzActor{
 		ID: "auth-test-actor", ActorKey: "auth-test-actor@example.com", DisplayName: "Authentication Test Actor",
 		Active: true, CreatedAt: now, UpdatedAt: now,
@@ -251,7 +307,37 @@ func createAuthenticationTestActor(t *testing.T, database *gorm.DB) authz.AuthzA
 	if err := database.Create(&actor).Error; err != nil {
 		t.Fatalf("create authorization actor: %v", err)
 	}
+	if err := authz.GrantRole(database, actor.ID, authz.RoleExpenseOperator, tenant.ID); err != nil {
+		t.Fatalf("grant test actor tenant access: %v", err)
+	}
 	return actor
+}
+
+func TestAuthenticationRejectsAccountForActorWithoutActiveTenantAccess(t *testing.T) {
+	database, _, service, _ := authenticationTestService(t)
+	now := time.Now().UTC()
+	actor := authz.AuthzActor{
+		ID:          "auth-test-actor-without-access",
+		ActorKey:    "auth-test-actor-without-access@example.com",
+		DisplayName: "Actor Without Access",
+		Active:      true,
+		CreatedAt:   now,
+		UpdatedAt:   now,
+	}
+	if err := database.Create(&actor).Error; err != nil {
+		t.Fatalf("create actor without access: %v", err)
+	}
+
+	_, err := service.CreateAccount(context.Background(), CreateAccountRequest{
+		ActorID: actor.ID, Login: "no-access@example.com", TemporaryPassword: "No-Access-Password-1",
+	})
+	var validation *ValidationError
+	if !errors.As(err, &validation) {
+		t.Fatalf("expected validation error, got %v", err)
+	}
+	if got := validation.ValidationFields()["actorId"]; got != "Authorization actor must have at least one active role grant for an active tenant" {
+		t.Fatalf("unexpected actor validation: %q", got)
+	}
 }
 
 func TestAuthenticationRejectsDuplicateLoginAndActorAccount(t *testing.T) {
@@ -268,6 +354,9 @@ func TestAuthenticationRejectsDuplicateLoginAndActorAccount(t *testing.T) {
 	}
 	if err := database.Create(&secondActor).Error; err != nil {
 		t.Fatalf("create second actor: %v", err)
+	}
+	if err := authz.GrantRole(database, secondActor.ID, authz.RoleExpenseOperator, appdb.DefaultTenantID); err != nil {
+		t.Fatalf("grant second actor tenant access: %v", err)
 	}
 	if _, err := service.CreateAccount(context.Background(), CreateAccountRequest{
 		ActorID: secondActor.ID, Login: "DUPLICATE@example.com", TemporaryPassword: "Duplicate-Password-2",
@@ -310,7 +399,7 @@ func TestAuthenticationRejectsExpiredPasswordResetToken(t *testing.T) {
 		Update("expires_at", time.Now().UTC().Add(-time.Minute)).Error; err != nil {
 		t.Fatalf("expire reset token: %v", err)
 	}
-	if err := service.ResetPassword(context.Background(), ResetPasswordRequest{
+	if _, err := service.ResetPassword(context.Background(), ResetPasswordRequest{
 		Token: reset.Token, NewPassword: "Replacement-Password-2",
 	}); err != ErrResetTokenExpired {
 		t.Fatalf("expected expired reset token rejection, got %v", err)

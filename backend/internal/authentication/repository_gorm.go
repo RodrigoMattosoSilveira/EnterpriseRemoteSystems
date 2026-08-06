@@ -81,6 +81,17 @@ func (r *GORMRepository) FindAccountByLogin(ctx context.Context, login string) (
 	return mapAccountProjection(row), nil
 }
 
+func (r *GORMRepository) ActorHasActiveTenantAccess(ctx context.Context, actorID string) (bool, error) {
+	options, err := authz.NewGORMStore(r.database).ListActorTenantOptions(ctx, strings.TrimSpace(actorID))
+	if err != nil {
+		if errors.Is(err, authz.ErrAuthenticationRequired) {
+			return false, nil
+		}
+		return false, fmt.Errorf("verify authorization actor tenant access: %w", err)
+	}
+	return len(options) > 0, nil
+}
+
 func (r *GORMRepository) CreateAccount(ctx context.Context, account Account) (AccountRecord, error) {
 	err := r.database.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		var actorCount int64

@@ -15,6 +15,7 @@ func RegisterAuthenticationRoutes(router fiber.Router, deps Dependencies) {
 	r.Post("/login", authenticationPublic(), deps.AuthenticationHandler.Login)
 	r.Post("/logout", authenticationPublic(), deps.AuthenticationHandler.Logout)
 	r.Get("/session", requireAuthenticatedSession(deps), deps.AuthenticationHandler.CurrentSession)
+	r.Get("/tenant-options", requireAuthenticatedSession(deps), deps.AuthenticationHandler.TenantOptions)
 	r.Post("/password/change", requireAuthenticatedSession(deps), deps.AuthenticationHandler.ChangePassword)
 	r.Post("/password/reset", authenticationPublic(), deps.AuthenticationHandler.ResetPassword)
 }

@@ -109,6 +109,20 @@ test.describe("authorization role boundaries", () => {
       );
 
       await expectStatus(
+        await actorApi.post(e2eApiUrl("/api/v1/reference-data/task"), {
+          headers,
+          data: {
+            code: `FORBIDDEN_${uniqueSuffix()}`,
+            label: "Expense Operator Must Not Manage Reference Data",
+            active: true,
+            sortOrder: 9999,
+          },
+        }),
+        403,
+        "expense operators may read operational reference data but must not manage it",
+      );
+
+      await expectStatus(
         await actorApi.get(e2eApiUrl("/api/v1/authz/actors"), { headers }),
         403,
         "expense operators must not administer authorization actors",

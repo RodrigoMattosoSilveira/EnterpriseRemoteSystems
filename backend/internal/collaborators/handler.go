@@ -4,6 +4,7 @@ import (
 	"github.com/gofiber/fiber/v3"
 
 	"enterpriseremotesystems/backend/internal/shared/httpx"
+	"enterpriseremotesystems/backend/internal/shared/requesttenant"
 )
 
 type Handler struct{ service Service }
@@ -11,7 +12,7 @@ type Handler struct{ service Service }
 func NewHandler(service Service) *Handler { return &Handler{service: service} }
 
 func (h *Handler) ListCandidates(c fiber.Ctx) error {
-	items, err := h.service.ListCandidates(c.Context())
+	items, err := h.service.ListCandidates(requesttenant.Context(c))
 	if err != nil {
 		return httpx.WriteError(c, err)
 	}
@@ -25,7 +26,7 @@ func (h *Handler) List(c fiber.Ctx) error {
 		return httpx.WriteError(c, err)
 	}
 
-	items, total, err := h.service.List(c.Context(), filter)
+	items, total, err := h.service.List(requesttenant.Context(c), filter)
 	if err != nil {
 		return httpx.WriteError(c, err)
 	}
@@ -39,7 +40,7 @@ func (h *Handler) Create(c fiber.Ctx) error {
 		return httpx.WriteError(c, err)
 	}
 
-	created, err := h.service.Create(c.Context(), req, actorUserID(c))
+	created, err := h.service.Create(requesttenant.Context(c), req, actorUserID(c))
 	if err != nil {
 		return httpx.WriteError(c, err)
 	}
@@ -48,7 +49,7 @@ func (h *Handler) Create(c fiber.Ctx) error {
 }
 
 func (h *Handler) GetByID(c fiber.Ctx) error {
-	item, err := h.service.GetByID(c.Context(), c.Params("id"))
+	item, err := h.service.GetByID(requesttenant.Context(c), c.Params("id"))
 	if err != nil {
 		return httpx.WriteError(c, err)
 	}
@@ -61,7 +62,7 @@ func (h *Handler) Update(c fiber.Ctx) error {
 		return httpx.WriteError(c, err)
 	}
 
-	updated, err := h.service.Update(c.Context(), c.Params("id"), req, actorUserID(c))
+	updated, err := h.service.Update(requesttenant.Context(c), c.Params("id"), req, actorUserID(c))
 	if err != nil {
 		return httpx.WriteError(c, err)
 	}

@@ -9,6 +9,7 @@ import (
 
 	"enterpriseremotesystems/backend/internal/db"
 	"enterpriseremotesystems/backend/internal/shared/ids"
+	"enterpriseremotesystems/backend/internal/shared/tenantctx"
 	"gorm.io/gorm"
 )
 
@@ -44,7 +45,7 @@ func (s *service) ZeroGold(ctx context.Context, collaboratorID, authorizedBy str
 	if err := ValidateZeroGoldRequest(req, authorizedBy); err != nil {
 		return nil, err
 	}
-	if err := s.requireSecondApprovalWhenConfigured(ctx, defaultTenantID, req.CorrectionReasonRequest, authorizedBy); err != nil {
+	if err := s.requireSecondApprovalWhenConfigured(ctx, tenantctx.TenantID(ctx), req.CorrectionReasonRequest, authorizedBy); err != nil {
 		return nil, err
 	}
 	if _, err := s.repo.FindCollaboratorByID(ctx, collaboratorID); err != nil {
@@ -89,7 +90,7 @@ func (s *service) ZeroGold(ctx context.Context, collaboratorID, authorizedBy str
 	secondApprovedAt := optionalApprovalTime(secondApprovedBy, now)
 	settlement := db.JourneySettlement{
 		BaseModel:           db.BaseModel{ID: "journey-settlement-" + ids.New(), CreatedAt: now, UpdatedAt: now},
-		TenantID:            defaultTenantID,
+		TenantID:            tenantctx.TenantID(ctx),
 		CollaboratorID:      collaboratorID,
 		SettlementType:      settlementTypeZeroGold,
 		RequestID:           requestID,
@@ -107,7 +108,7 @@ func (s *service) ZeroGold(ctx context.Context, collaboratorID, authorizedBy str
 	}
 	entry := db.LedgerEntry{
 		BaseModel:            db.BaseModel{ID: "ledger-settlement-" + ids.New(), CreatedAt: now, UpdatedAt: now},
-		TenantID:             defaultTenantID,
+		TenantID:             tenantctx.TenantID(ctx),
 		CollaboratorID:       collaboratorID,
 		ValueUnitID:          valueUnit.ID,
 		EntryType:            ledgerEntryTypePayout,

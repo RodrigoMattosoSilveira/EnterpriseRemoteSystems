@@ -10,6 +10,7 @@ import (
 
 	"enterpriseremotesystems/backend/internal/authz"
 	"enterpriseremotesystems/backend/internal/shared/httpx"
+	"enterpriseremotesystems/backend/internal/shared/requesttenant"
 )
 
 type Handler struct {
@@ -54,7 +55,7 @@ func (h *Handler) GetSecondPersonApprovalPolicy(c fiber.Ctx) error {
 	if ok, err := h.requireActorTenantScope(c, actor, tenantID); err != nil || !ok {
 		return err
 	}
-	result, err := h.service.GetSecondPersonApprovalPolicy(c.Context(), tenantID)
+	result, err := h.service.GetSecondPersonApprovalPolicy(requesttenant.Context(c), tenantID)
 	if err != nil {
 		return httpx.WriteError(c, err)
 	}
@@ -77,7 +78,7 @@ func (h *Handler) UpdateSecondPersonApprovalPolicy(c fiber.Ctx) error {
 	if ok, err := h.requireActorTenantScope(c, actor, tenantID); err != nil || !ok {
 		return err
 	}
-	result, err := h.service.UpdateSecondPersonApprovalPolicy(c.Context(), tenantID, actor.ID, req)
+	result, err := h.service.UpdateSecondPersonApprovalPolicy(requesttenant.Context(c), tenantID, actor.ID, req)
 	if err != nil {
 		return httpx.WriteError(c, err)
 	}
@@ -99,7 +100,7 @@ func (h *Handler) ZeroGold(c fiber.Ctx) error {
 	if ok, err := h.requireCollaboratorTenantScope(c, actor, c.Params("collaboratorId")); err != nil || !ok {
 		return err
 	}
-	result, err := h.service.ZeroGold(c.Context(), c.Params("collaboratorId"), actor.ID, req)
+	result, err := h.service.ZeroGold(requesttenant.Context(c), c.Params("collaboratorId"), actor.ID, req)
 	if err != nil {
 		if errors.Is(err, ErrNoPositiveGoldBalance) {
 			return c.Status(fiber.StatusConflict).JSON(httpx.APIResponse{Error: &httpx.APIError{Code: "no_positive_gold_balance", Message: err.Error()}})
@@ -124,7 +125,7 @@ func (h *Handler) PartialPayout(c fiber.Ctx) error {
 	if ok, err := h.requireCollaboratorTenantScope(c, actor, c.Params("collaboratorId")); err != nil || !ok {
 		return err
 	}
-	result, err := h.service.PartialPayout(c.Context(), c.Params("collaboratorId"), actor.ID, req)
+	result, err := h.service.PartialPayout(requesttenant.Context(c), c.Params("collaboratorId"), actor.ID, req)
 	if err != nil {
 		if errors.Is(err, ErrPayoutExceedsAvailableBalance) {
 			return c.Status(fiber.StatusConflict).JSON(httpx.APIResponse{Error: &httpx.APIError{Code: "payout_exceeds_available_balance", Message: err.Error()}})
@@ -149,7 +150,7 @@ func (h *Handler) CloseJourney(c fiber.Ctx) error {
 	if ok, err := h.requireCollaboratorTenantScope(c, actor, c.Params("collaboratorId")); err != nil || !ok {
 		return err
 	}
-	result, err := h.service.CloseJourney(c.Context(), c.Params("collaboratorId"), actor.ID, req)
+	result, err := h.service.CloseJourney(requesttenant.Context(c), c.Params("collaboratorId"), actor.ID, req)
 	if err != nil {
 		if errors.Is(err, ErrJourneyAlreadyClosed) || errors.Is(err, ErrJourneyCloseBlocked) {
 			return c.Status(fiber.StatusConflict).JSON(httpx.APIResponse{Error: &httpx.APIError{Code: "journey_close_conflict", Message: err.Error()}})
@@ -167,7 +168,7 @@ func writeSettlementAuthorizationError(c fiber.Ctx, err error) error {
 }
 
 func (h *Handler) FinancialProjection(c fiber.Ctx) error {
-	result, err := h.service.FinancialProjection(c.Context(), c.Params("collaboratorId"))
+	result, err := h.service.FinancialProjection(requesttenant.Context(c), c.Params("collaboratorId"))
 	if err != nil {
 		return httpx.WriteError(c, err)
 	}
@@ -175,7 +176,7 @@ func (h *Handler) FinancialProjection(c fiber.Ctx) error {
 }
 
 func (h *Handler) SettlementPreview(c fiber.Ctx) error {
-	result, err := h.service.SettlementPreview(c.Context(), c.Params("collaboratorId"))
+	result, err := h.service.SettlementPreview(requesttenant.Context(c), c.Params("collaboratorId"))
 	if err != nil {
 		return httpx.WriteError(c, err)
 	}
@@ -187,7 +188,7 @@ func (h *Handler) GetDetail(c fiber.Ctx) error {
 	if err := c.Bind().Query(&filter); err != nil {
 		return httpx.WriteError(c, err)
 	}
-	result, err := h.service.GetDetail(c.Context(), c.Params("collaboratorId"), filter)
+	result, err := h.service.GetDetail(requesttenant.Context(c), c.Params("collaboratorId"), filter)
 	if err != nil {
 		return httpx.WriteError(c, err)
 	}
@@ -199,7 +200,7 @@ func (h *Handler) ListEntries(c fiber.Ctx) error {
 	if err := c.Bind().Query(&filter); err != nil {
 		return httpx.WriteError(c, err)
 	}
-	result, err := h.service.ListEntries(c.Context(), c.Params("collaboratorId"), filter)
+	result, err := h.service.ListEntries(requesttenant.Context(c), c.Params("collaboratorId"), filter)
 	if err != nil {
 		return httpx.WriteError(c, err)
 	}
@@ -207,7 +208,7 @@ func (h *Handler) ListEntries(c fiber.Ctx) error {
 }
 
 func (h *Handler) ListBalances(c fiber.Ctx) error {
-	result, err := h.service.ListBalances(c.Context(), c.Params("collaboratorId"))
+	result, err := h.service.ListBalances(requesttenant.Context(c), c.Params("collaboratorId"))
 	if err != nil {
 		return httpx.WriteError(c, err)
 	}
@@ -229,7 +230,7 @@ func (h *Handler) ReverseEntry(c fiber.Ctx) error {
 	if ok, err := h.requireLedgerEntryTenantScope(c, actor, c.Params("entryId")); err != nil || !ok {
 		return err
 	}
-	result, err := h.service.ReverseEntry(c.Context(), c.Params("entryId"), actor.ID, req)
+	result, err := h.service.ReverseEntry(requesttenant.Context(c), c.Params("entryId"), actor.ID, req)
 	if err != nil {
 		return writeCorrectionError(c, err)
 	}
@@ -251,7 +252,7 @@ func (h *Handler) ReplaceEntry(c fiber.Ctx) error {
 	if ok, err := h.requireLedgerEntryTenantScope(c, actor, c.Params("entryId")); err != nil || !ok {
 		return err
 	}
-	result, err := h.service.ReplaceEntry(c.Context(), c.Params("entryId"), actor.ID, req)
+	result, err := h.service.ReplaceEntry(requesttenant.Context(c), c.Params("entryId"), actor.ID, req)
 	if err != nil {
 		return writeCorrectionError(c, err)
 	}
@@ -273,7 +274,7 @@ func writeCorrectionError(c fiber.Ctx, err error) error {
 }
 
 func (h *Handler) GetPrintableReceipt(c fiber.Ctx) error {
-	result, err := h.service.GetPrintableReceipt(c.Context(), c.Params("entryId"))
+	result, err := h.service.GetPrintableReceipt(requesttenant.Context(c), c.Params("entryId"))
 	if err != nil {
 		return httpx.WriteError(c, err)
 	}
@@ -288,7 +289,7 @@ func (h *Handler) PrintReceipt(c fiber.Ctx) error {
 	if !authorized {
 		return nil
 	}
-	result, err := h.service.PrintReceipt(c.Context(), c.Params("entryId"), actor.ID)
+	result, err := h.service.PrintReceipt(requesttenant.Context(c), c.Params("entryId"), actor.ID)
 	if err != nil {
 		if errors.Is(err, ErrReceiptCancelled) {
 			return c.Status(fiber.StatusConflict).JSON(httpx.APIResponse{Error: &httpx.APIError{Code: "receipt_cancelled", Message: err.Error()}})
@@ -310,7 +311,7 @@ func (h *Handler) ReturnReceipt(c fiber.Ctx) error {
 	if err := c.Bind().Body(&req); err != nil {
 		return httpx.WriteError(c, err)
 	}
-	result, err := h.service.ReturnReceipt(c.Context(), c.Params("entryId"), actor.ID, req)
+	result, err := h.service.ReturnReceipt(requesttenant.Context(c), c.Params("entryId"), actor.ID, req)
 	if err != nil {
 		if errors.Is(err, ErrReceiptCancelled) {
 			return c.Status(fiber.StatusConflict).JSON(httpx.APIResponse{Error: &httpx.APIError{Code: "receipt_cancelled", Message: err.Error()}})
@@ -374,7 +375,7 @@ func (h *Handler) recordAuthorizationAudit(c fiber.Ctx, actor *authz.Actor, fall
 	if h.auditStore == nil {
 		return
 	}
-	_ = h.auditStore.RecordAuthorizationAudit(c.Context(), authz.AuthorizationAuditEntry{
+	_ = h.auditStore.RecordAuthorizationAudit(requesttenant.Context(c), authz.AuthorizationAuditEntry{
 		Actor:           actor,
 		FallbackActorID: fallbackActorID,
 		TenantID:        tenantID,
@@ -434,7 +435,7 @@ func secondPersonApprovalPolicyAuditMetadata(req UpdateSecondPersonApprovalPolic
 }
 
 func (h *Handler) requireCollaboratorTenantScope(c fiber.Ctx, actor *authz.Actor, collaboratorID string) (bool, error) {
-	tenantID, err := h.service.CollaboratorTenantID(c.Context(), collaboratorID)
+	tenantID, err := h.service.CollaboratorTenantID(requesttenant.Context(c), collaboratorID)
 	if err != nil {
 		return false, httpx.WriteError(c, err)
 	}
@@ -442,7 +443,7 @@ func (h *Handler) requireCollaboratorTenantScope(c fiber.Ctx, actor *authz.Actor
 }
 
 func (h *Handler) requireLedgerEntryTenantScope(c fiber.Ctx, actor *authz.Actor, entryID string) (bool, error) {
-	tenantID, err := h.service.LedgerEntryTenantID(c.Context(), entryID)
+	tenantID, err := h.service.LedgerEntryTenantID(requesttenant.Context(c), entryID)
 	if err != nil {
 		return false, httpx.WriteError(c, err)
 	}
@@ -501,7 +502,7 @@ func (h *Handler) ListOutstandingReceipts(c fiber.Ctx) error {
 	if err := c.Bind().Query(&filter); err != nil {
 		return httpx.WriteError(c, err)
 	}
-	result, err := h.service.ListOutstandingReceipts(c.Context(), filter)
+	result, err := h.service.ListOutstandingReceipts(requesttenant.Context(c), filter)
 	if err != nil {
 		return httpx.WriteError(c, err)
 	}
@@ -520,7 +521,7 @@ func (h *Handler) BackfillDebitLedgerReceipts(c fiber.Ctx) error {
 		return nil
 	}
 	dryRun := strings.EqualFold(strings.TrimSpace(c.Query("dryRun")), "true")
-	result, err := h.service.BackfillDebitLedgerReceipts(c.Context(), actor.ID, dryRun, req)
+	result, err := h.service.BackfillDebitLedgerReceipts(requesttenant.Context(c), actor.ID, dryRun, req)
 	if err != nil {
 		return httpx.WriteError(c, err)
 	}

@@ -8,6 +8,7 @@ import (
 
 	"enterpriseremotesystems/backend/internal/db"
 	"enterpriseremotesystems/backend/internal/shared/ids"
+	"enterpriseremotesystems/backend/internal/shared/tenantctx"
 	"gorm.io/gorm"
 )
 
@@ -24,7 +25,7 @@ func (s *service) CloseJourney(ctx context.Context, collaboratorID, authorizedBy
 	if err := ValidateCloseJourneyRequest(req, authorizedBy); err != nil {
 		return nil, err
 	}
-	if err := s.requireSecondApprovalWhenConfigured(ctx, defaultTenantID, req.CorrectionReasonRequest, authorizedBy); err != nil {
+	if err := s.requireSecondApprovalWhenConfigured(ctx, tenantctx.TenantID(ctx), req.CorrectionReasonRequest, authorizedBy); err != nil {
 		return nil, err
 	}
 
@@ -67,7 +68,7 @@ func (s *service) CloseJourney(ctx context.Context, collaboratorID, authorizedBy
 	secondApprovedAt := optionalApprovalTime(secondApprovedBy, now)
 	settlement := db.JourneySettlement{
 		BaseModel:           db.BaseModel{ID: "journey-settlement-" + ids.New(), CreatedAt: now, UpdatedAt: now},
-		TenantID:            defaultTenantID,
+		TenantID:            tenantctx.TenantID(ctx),
 		CollaboratorID:      collaboratorID,
 		SettlementType:      settlementTypeCloseJourney,
 		RequestID:           requestID,

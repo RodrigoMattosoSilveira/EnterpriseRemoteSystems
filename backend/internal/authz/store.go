@@ -339,3 +339,105 @@ func strongestScope(current, next ActorScope) ActorScope {
 	}
 	return next
 }
+
+// TenantOption describes an active tenant in which an authenticated actor has
+// at least one active role grant. Application-scoped grants apply to every
+// active tenant.
+type TenantOption struct {
+	ID        string   `json:"id"`
+	Code      string   `json:"code"`
+	Name      string   `json:"name"`
+	RoleCodes []string `json:"roleCodes"`
+}
+
+type TenantOptionStore interface {
+	ListActorTenantOptions(ctx context.Context, actorRecordID string) ([]TenantOption, error)
+}
+
+func (s *GORMStore) ListActorTenantOptions(ctx context.Context, actorRecordID string) ([]TenantOption, error) {
+	actorRecordID = strings.TrimSpace(actorRecordID)
+	if s == nil || s.database == nil || actorRecordID == "" {
+		return nil, ErrAuthenticationRequired
+	}
+
+	var actor AuthzActor
+	result := s.database.WithContext(ctx).
+		Where("id = ? AND active = ?", actorRecordID, true).
+		Limit(1).
+		Find(&actor)
+	if result.Error != nil {
+		return nil, fmt.Errorf("find tenant-option actor: %w", result.Error)
+	}
+	if result.RowsAffected == 0 {
+		return nil, ErrAuthenticationRequired
+	}
+
+	type grantProjection struct {
+		TenantID string
+		RoleCode string
+	}
+	var grants []grantProjection
+	if err := s.database.WithContext(ctx).
+		Model(&AuthzActorRoleGrant{}).
+		Select("authz_actor_role_grants.tenant_id AS tenant_id, authz_roles.code AS role_code").
+		Joins("JOIN authz_roles ON authz_roles.id = authz_actor_role_grants.role_id AND authz_roles.active = ?", true).
+		Where("authz_actor_role_grants.actor_id = ? AND authz_actor_role_grants.active = ?", actorRecordID, true).
+		Scan(&grants).Error; err != nil {
+		return nil, fmt.Errorf("find tenant-option grants: %w", err)
+	}
+
+	globalRoles := map[string]struct{}{}
+	tenantRoles := map[string]map[string]struct{}{}
+	for _, grant := range grants {
+		if grant.TenantID == GlobalTenantScope {
+			globalRoles[grant.RoleCode] = struct{}{}
+			continue
+		}
+		if tenantRoles[grant.TenantID] == nil {
+			tenantRoles[grant.TenantID] = map[string]struct{}{}
+		}
+		tenantRoles[grant.TenantID][grant.RoleCode] = struct{}{}
+	}
+
+	type tenantProjection struct {
+		ID   string
+		Code string
+		Name string
+	}
+	var tenants []tenantProjection
+	query := s.database.WithContext(ctx).
+		Table("tenants").
+		Select("id, code, name").
+		Where("active = ?", true)
+	if len(globalRoles) == 0 {
+		ids := make([]string, 0, len(tenantRoles))
+		for tenantID := range tenantRoles {
+			ids = append(ids, tenantID)
+		}
+		if len(ids) == 0 {
+			return []TenantOption{}, nil
+		}
+		query = query.Where("id IN ?", ids)
+	}
+	if err := query.Order("name ASC, code ASC, id ASC").Scan(&tenants).Error; err != nil {
+		return nil, fmt.Errorf("find tenant options: %w", err)
+	}
+
+	options := make([]TenantOption, 0, len(tenants))
+	for _, tenant := range tenants {
+		roles := map[string]struct{}{}
+		for role := range globalRoles {
+			roles[role] = struct{}{}
+		}
+		for role := range tenantRoles[tenant.ID] {
+			roles[role] = struct{}{}
+		}
+		roleCodes := make([]string, 0, len(roles))
+		for role := range roles {
+			roleCodes = append(roleCodes, role)
+		}
+		sort.Strings(roleCodes)
+		options = append(options, TenantOption{ID: tenant.ID, Code: tenant.Code, Name: tenant.Name, RoleCodes: roleCodes})
+	}
+	return options, nil
+}

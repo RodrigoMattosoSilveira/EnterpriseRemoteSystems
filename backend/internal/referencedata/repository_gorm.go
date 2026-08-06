@@ -20,9 +20,9 @@ func (r *gormRepository) ListByType(ctx context.Context, tenantID string, typ st
 	return rows, err
 }
 
-func (r *gormRepository) FindByID(ctx context.Context, id string) (*db.ReferenceData, error) {
+func (r *gormRepository) FindByID(ctx context.Context, tenantID string, id string) (*db.ReferenceData, error) {
 	var row db.ReferenceData
-	if err := r.database.WithContext(ctx).First(&row, "id = ?", id).Error; err != nil {
+	if err := r.database.WithContext(ctx).Where("tenant_id = ?", tenantID).First(&row, "id = ?", id).Error; err != nil {
 		return nil, err
 	}
 	return &row, nil

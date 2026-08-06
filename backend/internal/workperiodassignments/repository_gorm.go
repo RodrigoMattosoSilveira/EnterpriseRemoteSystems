@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"enterpriseremotesystems/backend/internal/db"
+	"enterpriseremotesystems/backend/internal/shared/tenantctx"
 	"gorm.io/gorm"
 )
 
@@ -19,7 +20,7 @@ func (r *gormRepository) ListByWorkPeriod(ctx context.Context, workPeriodID stri
 
 	q := r.db.WithContext(ctx).
 		Model(&db.WorkPeriodAssignment{}).
-		Where("tenant_id = ? AND work_period_id = ?", defaultTenantID, workPeriodID).
+		Where("tenant_id = ? AND work_period_id = ?", tenantctx.TenantID(ctx), workPeriodID).
 		Preload("Collaborator.Person").
 		Preload("Sector").
 		Preload("Location").
@@ -50,7 +51,7 @@ func (r *gormRepository) ListActiveAssignmentsForWorkPeriod(ctx context.Context,
 	var rows []db.WorkPeriodAssignment
 	err := r.db.WithContext(ctx).
 		Model(&db.WorkPeriodAssignment{}).
-		Where("tenant_id = ? AND work_period_id = ? AND active = ?", defaultTenantID, workPeriodID, true).
+		Where("tenant_id = ? AND work_period_id = ? AND active = ?", tenantctx.TenantID(ctx), workPeriodID, true).
 		Preload("Collaborator.Person").
 		Preload("Sector").
 		Preload("Location").
@@ -66,10 +67,10 @@ func (r *gormRepository) ListActiveCollaboratorsForPlanning(ctx context.Context,
 		Model(&db.CollaboratorJourney{}).
 		Joins("JOIN people ON people.id = collaborator_journeys.person_id").
 		Joins("JOIN reference_data statuses ON statuses.id = collaborator_journeys.status_id").
-		Where("collaborator_journeys.tenant_id = ? AND collaborator_journeys.closed_at IS NULL", defaultTenantID).
+		Where("collaborator_journeys.tenant_id = ? AND collaborator_journeys.closed_at IS NULL", tenantctx.TenantID(ctx)).
 		Where("date(collaborator_journeys.journey_start_date) <= ?", formatDateForPlanningQuery(workDate)).
 		Where("date(collaborator_journeys.projected_end_date) >= ?", formatDateForPlanningQuery(workDate)).
-		Where("statuses.tenant_id = ? AND statuses.type = ? AND statuses.code = ? AND statuses.active = ?", defaultTenantID, "collaborator_status", "ACTIVE", true).
+		Where("statuses.tenant_id = ? AND statuses.type = ? AND statuses.code = ? AND statuses.active = ?", tenantctx.TenantID(ctx), "collaborator_status", "ACTIVE", true).
 		Preload("Person").
 		Preload("Status").
 		Preload("Sector").
@@ -88,7 +89,7 @@ func (r *gormRepository) FindMostRecentPriorWorkPeriodByCode(ctx context.Context
 	var row db.WorkPeriod
 	err := r.db.WithContext(ctx).
 		Model(&db.WorkPeriod{}).
-		Where("tenant_id = ? AND id <> ? AND period_code = ? AND work_date < ?", defaultTenantID, workPeriod.ID, workPeriod.PeriodCode, workPeriod.WorkDate).
+		Where("tenant_id = ? AND id <> ? AND period_code = ? AND work_date < ?", tenantctx.TenantID(ctx), workPeriod.ID, workPeriod.PeriodCode, workPeriod.WorkDate).
 		Order("work_date DESC, starts_at DESC, created_at DESC").
 		First(&row).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -107,7 +108,7 @@ func (r *gormRepository) Create(ctx context.Context, assignment *db.WorkPeriodAs
 func (r *gormRepository) Update(ctx context.Context, assignment *db.WorkPeriodAssignment) error {
 	return r.db.WithContext(ctx).
 		Model(&db.WorkPeriodAssignment{}).
-		Where("id = ? AND tenant_id = ?", assignment.ID, defaultTenantID).
+		Where("id = ? AND tenant_id = ?", assignment.ID, tenantctx.TenantID(ctx)).
 		Updates(map[string]any{
 			"collaborator_id":               assignment.CollaboratorID,
 			"planned_status":                assignment.PlannedStatus,
@@ -131,7 +132,7 @@ func (r *gormRepository) FindByID(ctx context.Context, id string) (*db.WorkPerio
 		Preload("Sector").
 		Preload("Location").
 		Preload("Task").
-		First(&row, "id = ? AND tenant_id = ?", id, defaultTenantID).Error
+		First(&row, "id = ? AND tenant_id = ?", id, tenantctx.TenantID(ctx)).Error
 	if err != nil {
 		return nil, err
 	}
@@ -140,7 +141,7 @@ func (r *gormRepository) FindByID(ctx context.Context, id string) (*db.WorkPerio
 
 func (r *gormRepository) FindWorkPeriodByID(ctx context.Context, id string) (*db.WorkPeriod, error) {
 	var row db.WorkPeriod
-	err := r.db.WithContext(ctx).First(&row, "id = ? AND tenant_id = ?", id, defaultTenantID).Error
+	err := r.db.WithContext(ctx).First(&row, "id = ? AND tenant_id = ?", id, tenantctx.TenantID(ctx)).Error
 	if err != nil {
 		return nil, err
 	}
@@ -155,7 +156,7 @@ func (r *gormRepository) FindCollaboratorByID(ctx context.Context, id string) (*
 		Preload("Sector").
 		Preload("Location").
 		Preload("Task").
-		First(&row, "id = ? AND tenant_id = ?", id, defaultTenantID).Error
+		First(&row, "id = ? AND tenant_id = ?", id, tenantctx.TenantID(ctx)).Error
 	if err != nil {
 		return nil, err
 	}
@@ -164,7 +165,7 @@ func (r *gormRepository) FindCollaboratorByID(ctx context.Context, id string) (*
 
 func (r *gormRepository) FindReferenceByID(ctx context.Context, id string) (*db.ReferenceData, error) {
 	var row db.ReferenceData
-	err := r.db.WithContext(ctx).First(&row, "id = ? AND tenant_id = ?", id, defaultTenantID).Error
+	err := r.db.WithContext(ctx).First(&row, "id = ? AND tenant_id = ?", id, tenantctx.TenantID(ctx)).Error
 	if err != nil {
 		return nil, err
 	}
@@ -174,7 +175,7 @@ func (r *gormRepository) FindReferenceByID(ctx context.Context, id string) (*db.
 func (r *gormRepository) UpdateCollaboratorPlanningDefaults(ctx context.Context, collaboratorID string, sectorID string, locationID string, taskID string) error {
 	return r.db.WithContext(ctx).
 		Model(&db.CollaboratorJourney{}).
-		Where("id = ? AND tenant_id = ?", collaboratorID, defaultTenantID).
+		Where("id = ? AND tenant_id = ?", collaboratorID, tenantctx.TenantID(ctx)).
 		Updates(map[string]any{
 			"sector_id":   sectorID,
 			"location_id": locationID,
@@ -185,7 +186,7 @@ func (r *gormRepository) UpdateCollaboratorPlanningDefaults(ctx context.Context,
 
 func (r *gormRepository) FindReplacementAssignmentByID(ctx context.Context, id string) (*db.WorkPeriodAssignment, error) {
 	var row db.WorkPeriodAssignment
-	err := r.db.WithContext(ctx).First(&row, "id = ? AND tenant_id = ? AND active = ?", id, defaultTenantID, true).Error
+	err := r.db.WithContext(ctx).First(&row, "id = ? AND tenant_id = ? AND active = ?", id, tenantctx.TenantID(ctx), true).Error
 	if err != nil {
 		return nil, err
 	}
@@ -196,7 +197,7 @@ func (r *gormRepository) ExistsActiveReference(ctx context.Context, id string, t
 	var count int64
 	err := r.db.WithContext(ctx).
 		Model(&db.ReferenceData{}).
-		Where("id = ? AND tenant_id = ? AND type = ? AND active = ?", id, defaultTenantID, typ, true).
+		Where("id = ? AND tenant_id = ? AND type = ? AND active = ?", id, tenantctx.TenantID(ctx), typ, true).
 		Count(&count).Error
 	if err != nil {
 		return false, err
@@ -208,7 +209,7 @@ func (r *gormRepository) ExistsActiveAssignmentForCollaborator(ctx context.Conte
 	var count int64
 	q := r.db.WithContext(ctx).
 		Model(&db.WorkPeriodAssignment{}).
-		Where("tenant_id = ? AND work_period_id = ? AND collaborator_id = ? AND active = ?", defaultTenantID, workPeriodID, collaboratorID, true)
+		Where("tenant_id = ? AND work_period_id = ? AND collaborator_id = ? AND active = ?", tenantctx.TenantID(ctx), workPeriodID, collaboratorID, true)
 	if excludeID != "" {
 		q = q.Where("id <> ?", excludeID)
 	}

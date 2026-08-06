@@ -7,6 +7,7 @@ import (
 
 	"enterpriseremotesystems/backend/internal/db"
 	"enterpriseremotesystems/backend/internal/shared/ids"
+	"enterpriseremotesystems/backend/internal/shared/tenantctx"
 	"gorm.io/gorm"
 )
 
@@ -20,7 +21,7 @@ func (r *gormRepository) List(ctx context.Context, filter normalizedExpenseListF
 
 	q := r.db.WithContext(ctx).
 		Model(&db.Expense{}).
-		Where("expenses.tenant_id = ?", defaultTenantID).
+		Where("expenses.tenant_id = ?", tenantctx.TenantID(ctx)).
 		Preload("Collaborator.Person").
 		Preload("ExpenseCategory").
 		Preload("ValueUnit").
@@ -131,7 +132,7 @@ func (r *gormRepository) Create(ctx context.Context, expense *db.Expense) error 
 		if err := tx.Create(entry).Error; err != nil {
 			return err
 		}
-		return ensureReceiptObligation(tx, entry.ID)
+		return ensureReceiptObligation(tx, entry.TenantID, entry.ID)
 	})
 }
 
@@ -144,7 +145,7 @@ func (r *gormRepository) Update(ctx context.Context, expense *db.Expense) error 
 
 		if err := tx.
 			Model(&db.Expense{}).
-			Where("id = ? AND tenant_id = ?", expense.ID, defaultTenantID).
+			Where("id = ? AND tenant_id = ?", expense.ID, tenantctx.TenantID(ctx)).
 			Updates(map[string]any{
 				"collaborator_id":          expense.CollaboratorID,
 				"expense_category_id":      expense.ExpenseCategoryID,
@@ -187,7 +188,7 @@ func (r *gormRepository) Update(ctx context.Context, expense *db.Expense) error 
 			if err := tx.Create(&replacement).Error; err != nil {
 				return err
 			}
-			return ensureReceiptObligation(tx, replacement.ID)
+			return ensureReceiptObligation(tx, replacement.TenantID, replacement.ID)
 		}
 		return nil
 	})
@@ -202,7 +203,7 @@ func (r *gormRepository) FindByID(ctx context.Context, id string) (*db.Expense, 
 		Preload("ValueUnit").
 		Preload("PriceListItem").
 		Preload("GoldPrice").
-		First(&row, "id = ? AND tenant_id = ?", id, defaultTenantID).Error
+		First(&row, "id = ? AND tenant_id = ?", id, tenantctx.TenantID(ctx)).Error
 	if err != nil {
 		return nil, err
 	}
@@ -215,7 +216,7 @@ func (r *gormRepository) FindFinancialPostingByExpenseID(ctx context.Context, ex
 		Preload("ValueUnit").
 		Preload("Receipt").
 		Where("tenant_id = ? AND direction = ? AND correction_type IN (?, ?) AND ((source_type = ? AND source_id = ?) OR (source_type = ? AND source_id LIKE ?))",
-			defaultTenantID,
+			tenantctx.TenantID(ctx),
 			ledgerDirectionDebit,
 			ledgerCorrectionTypeOriginal, ledgerCorrectionTypeReplacement,
 			ledgerSourceTypeExpense, expenseID,
@@ -245,7 +246,7 @@ func (r *gormRepository) FindFinancialPostingsByExpenseIDs(ctx context.Context, 
 		Preload("ValueUnit").
 		Preload("Receipt").
 		Where("tenant_id = ? AND direction = ? AND correction_type IN (?, ?)",
-			defaultTenantID,
+			tenantctx.TenantID(ctx),
 			ledgerDirectionDebit,
 			ledgerCorrectionTypeOriginal, ledgerCorrectionTypeReplacement,
 		).
@@ -287,7 +288,7 @@ func (r *gormRepository) FindCollaboratorByID(ctx context.Context, collaboratorI
 	var row db.CollaboratorJourney
 	err := r.db.WithContext(ctx).
 		Preload("Status").
-		First(&row, "id = ? AND tenant_id = ?", collaboratorID, defaultTenantID).Error
+		First(&row, "id = ? AND tenant_id = ?", collaboratorID, tenantctx.TenantID(ctx)).Error
 	if err != nil {
 		return nil, err
 	}
@@ -298,7 +299,7 @@ func (r *gormRepository) ExistsActiveReference(ctx context.Context, id string, t
 	var count int64
 	err := r.db.WithContext(ctx).
 		Model(&db.ReferenceData{}).
-		Where("id = ? AND tenant_id = ? AND type = ? AND active = ?", id, defaultTenantID, typ, true).
+		Where("id = ? AND tenant_id = ? AND type = ? AND active = ?", id, tenantctx.TenantID(ctx), typ, true).
 		Count(&count).Error
 	if err != nil {
 		return false, err
@@ -309,7 +310,7 @@ func (r *gormRepository) ExistsActiveReference(ctx context.Context, id string, t
 func (r *gormRepository) FindActiveReferenceByID(ctx context.Context, id string, typ string) (*db.ReferenceData, error) {
 	var row db.ReferenceData
 	err := r.db.WithContext(ctx).
-		First(&row, "id = ? AND tenant_id = ? AND type = ? AND active = ?", strings.TrimSpace(id), defaultTenantID, typ, true).Error
+		First(&row, "id = ? AND tenant_id = ? AND type = ? AND active = ?", strings.TrimSpace(id), tenantctx.TenantID(ctx), typ, true).Error
 	if err != nil {
 		return nil, err
 	}
@@ -319,7 +320,7 @@ func (r *gormRepository) FindActiveReferenceByID(ctx context.Context, id string,
 func (r *gormRepository) FindActiveReferenceByCode(ctx context.Context, typ string, code string) (*db.ReferenceData, error) {
 	var row db.ReferenceData
 	err := r.db.WithContext(ctx).
-		First(&row, "tenant_id = ? AND type = ? AND code = ? AND active = ?", defaultTenantID, typ, code, true).Error
+		First(&row, "tenant_id = ? AND type = ? AND code = ? AND active = ?", tenantctx.TenantID(ctx), typ, code, true).Error
 	if err != nil {
 		return nil, err
 	}
@@ -329,7 +330,7 @@ func (r *gormRepository) FindActiveReferenceByCode(ctx context.Context, typ stri
 func (r *gormRepository) FindActivePriceListItemByID(ctx context.Context, id string) (*db.ExpensePriceListItem, error) {
 	var row db.ExpensePriceListItem
 	err := r.db.WithContext(ctx).
-		First(&row, "id = ? AND tenant_id = ? AND active = ?", id, defaultTenantID, true).Error
+		First(&row, "id = ? AND tenant_id = ? AND active = ?", id, tenantctx.TenantID(ctx), true).Error
 	if err != nil {
 		return nil, err
 	}
@@ -339,7 +340,7 @@ func (r *gormRepository) FindActivePriceListItemByID(ctx context.Context, id str
 func (r *gormRepository) FindLatestActiveGoldPrice(ctx context.Context) (*db.GoldPrice, error) {
 	var row db.GoldPrice
 	err := r.db.WithContext(ctx).
-		Where("tenant_id = ? AND active = ?", defaultTenantID, true).
+		Where("tenant_id = ? AND active = ?", tenantctx.TenantID(ctx), true).
 		Order("price_date DESC, created_at DESC").
 		First(&row).Error
 	if err != nil {
@@ -352,9 +353,9 @@ func formatDateForQuery(value time.Time) string {
 	return value.Format(dateLayout)
 }
 
-func ensureReceiptObligation(tx *gorm.DB, ledgerEntryID string) error {
+func ensureReceiptObligation(tx *gorm.DB, tenantID, ledgerEntryID string) error {
 	var count int64
-	if err := tx.Model(&db.LedgerReceipt{}).Where("ledger_entry_id = ? AND tenant_id = ?", ledgerEntryID, defaultTenantID).Count(&count).Error; err != nil {
+	if err := tx.Model(&db.LedgerReceipt{}).Where("ledger_entry_id = ? AND tenant_id = ?", ledgerEntryID, tenantID).Count(&count).Error; err != nil {
 		return err
 	}
 	if count != 1 {

@@ -10,6 +10,7 @@ import (
 	"gorm.io/gorm"
 
 	"enterpriseremotesystems/backend/internal/db"
+	"enterpriseremotesystems/backend/internal/shared/tenantctx"
 )
 
 const SecondPersonApprovalPolicyKey = "current_accounts.require_second_person_approval_for_sensitive_operations"
@@ -34,7 +35,7 @@ func formatBoolSetting(value bool) string {
 }
 
 func (s *service) GetSecondPersonApprovalPolicy(ctx context.Context, tenantID string) (*SecondPersonApprovalPolicyDTO, error) {
-	tenantID = normalizedTenantID(tenantID)
+	tenantID = normalizedTenantID(ctx, tenantID)
 	row, err := s.repo.GetTenantSettingRow(ctx, tenantID, SecondPersonApprovalPolicyKey)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -42,21 +43,21 @@ func (s *service) GetSecondPersonApprovalPolicy(ctx context.Context, tenantID st
 		}
 		return nil, err
 	}
-	return mapSecondPersonApprovalPolicy(row), nil
+	return mapSecondPersonApprovalPolicy(ctx, row), nil
 }
 
 func (s *service) UpdateSecondPersonApprovalPolicy(ctx context.Context, tenantID, updatedBy string, req UpdateSecondPersonApprovalPolicyRequest) (*SecondPersonApprovalPolicyDTO, error) {
-	tenantID = normalizedTenantID(tenantID)
+	tenantID = normalizedTenantID(ctx, tenantID)
 	row, err := s.repo.UpsertTenantSetting(ctx, tenantID, SecondPersonApprovalPolicyKey, formatBoolSetting(req.Required), "Require second-person approval for sensitive current-account operations", updatedBy)
 	if err != nil {
 		return nil, err
 	}
-	return mapSecondPersonApprovalPolicy(row), nil
+	return mapSecondPersonApprovalPolicy(ctx, row), nil
 }
 
-func mapSecondPersonApprovalPolicy(row *db.TenantSetting) *SecondPersonApprovalPolicyDTO {
+func mapSecondPersonApprovalPolicy(ctx context.Context, row *db.TenantSetting) *SecondPersonApprovalPolicyDTO {
 	if row == nil {
-		return &SecondPersonApprovalPolicyDTO{TenantID: defaultTenantID, Required: false}
+		return &SecondPersonApprovalPolicyDTO{TenantID: tenantctx.TenantID(ctx), Required: false}
 	}
 	result := &SecondPersonApprovalPolicyDTO{
 		TenantID:  row.TenantID,
@@ -96,10 +97,10 @@ func (s *service) requireSecondApprovalWhenConfigured(ctx context.Context, tenan
 	return nil
 }
 
-func normalizedTenantID(tenantID string) string {
+func normalizedTenantID(ctx context.Context, tenantID string) string {
 	tenantID = strings.TrimSpace(tenantID)
 	if tenantID == "" {
-		return defaultTenantID
+		return tenantctx.TenantID(ctx)
 	}
 	return tenantID
 }

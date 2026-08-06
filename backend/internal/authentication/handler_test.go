@@ -103,6 +103,100 @@ func TestAuthenticationHandlerIssuesReadsAndClearsSessionCookie(t *testing.T) {
 	if revokedResponse.StatusCode != http.StatusUnauthorized {
 		t.Fatalf("expected revoked session status 401, got %d", revokedResponse.StatusCode)
 	}
+	revokedCookies := revokedResponse.Cookies()
+	if len(revokedCookies) != 1 || revokedCookies[0].Name != "ers_test_session" || revokedCookies[0].MaxAge >= 0 {
+		t.Fatalf("expected rejected session request to clear the stale cookie, got %#v", revokedCookies)
+	}
+}
+
+func TestAuthenticationHandlerResetReturnsVerifiedAccountIdentity(t *testing.T) {
+	_, _, service, actor := authenticationTestService(t)
+	account, err := service.CreateAccount(t.Context(), CreateAccountRequest{
+		ActorID: actor.ID, Login: "reset-target@example.com", TemporaryPassword: "Original-Password-1",
+	})
+	if err != nil {
+		t.Fatalf("create account: %v", err)
+	}
+	resetToken, err := service.IssuePasswordResetToken(t.Context(), account.ID)
+	if err != nil {
+		t.Fatalf("issue reset token: %v", err)
+	}
+
+	handler := NewHandler(service, CookieConfig{Name: "ers_test_session"}, nil, nil)
+	app := fiber.New()
+	app.Post("/password/reset", handler.ResetPassword)
+
+	body, _ := json.Marshal(ResetPasswordRequest{
+		Token: resetToken.Token, NewPassword: "%3oU1^Z!Gf6WEj8u",
+	})
+	request := httptest.NewRequest(http.MethodPost, "/password/reset", bytes.NewReader(body))
+	request.Header.Set("Content-Type", "application/json")
+	response, err := app.Test(request)
+	if err != nil {
+		t.Fatalf("reset password request: %v", err)
+	}
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("expected reset status 200, got %d", response.StatusCode)
+	}
+	if response.Header.Get("Cache-Control") != "no-store" {
+		t.Fatalf("expected reset response to disable caching, got %q", response.Header.Get("Cache-Control"))
+	}
+	var payload struct {
+		Data PasswordResetResult `json:"data"`
+	}
+	if err := json.NewDecoder(response.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode reset response: %v", err)
+	}
+	if payload.Data.AccountID != account.ID || payload.Data.Login != account.Login || payload.Data.PasswordChangedAt.IsZero() {
+		t.Fatalf("unexpected reset response: %#v", payload.Data)
+	}
+	if _, err := service.Login(t.Context(), LoginRequest{
+		Login: account.Login, Password: "%3oU1^Z!Gf6WEj8u",
+	}, "", ""); err != nil {
+		t.Fatalf("login with reset password: %v", err)
+	}
+}
+
+func TestAuthenticationHandlerInactiveResetTargetDoesNotClearCallerCookie(t *testing.T) {
+	_, _, service, actor := authenticationTestService(t)
+	account, err := service.CreateAccount(t.Context(), CreateAccountRequest{
+		ActorID: actor.ID, Login: "inactive-reset-handler@example.com", TemporaryPassword: "Inactive-Reset-Handler-1",
+	})
+	if err != nil {
+		t.Fatalf("create account: %v", err)
+	}
+	if _, err := service.SetAccountActive(t.Context(), account.ID, false); err != nil {
+		t.Fatalf("deactivate account: %v", err)
+	}
+
+	handler := NewHandler(service, CookieConfig{Name: "ers_test_session"}, nil, nil)
+	app := fiber.New()
+	app.Post("/accounts/:id/password-reset-tokens", handler.IssuePasswordResetToken)
+
+	request := httptest.NewRequest(http.MethodPost, "/accounts/"+account.ID+"/password-reset-tokens", nil)
+	request.AddCookie(&http.Cookie{Name: "ers_test_session", Value: "caller-session"})
+	response, err := app.Test(request)
+	if err != nil {
+		t.Fatalf("issue reset token request: %v", err)
+	}
+	if response.StatusCode != http.StatusBadRequest {
+		t.Fatalf("expected inactive target status 400, got %d", response.StatusCode)
+	}
+	if cookies := response.Cookies(); len(cookies) != 0 {
+		t.Fatalf("target validation must not clear the caller session cookie, got %#v", cookies)
+	}
+	var payload struct {
+		Error struct {
+			Code   string            `json:"code"`
+			Fields map[string]string `json:"fields"`
+		} `json:"error"`
+	}
+	if err := json.NewDecoder(response.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode inactive target response: %v", err)
+	}
+	if payload.Error.Code != "validation_failed" || payload.Error.Fields["accountId"] == "" {
+		t.Fatalf("unexpected inactive target response: %#v", payload)
+	}
 }
 
 type fixedAuthenticationActorStore struct {
@@ -194,3 +288,67 @@ func TestAuthenticationHandlerPreventsSelfAccountDeactivation(t *testing.T) {
 }
 
 func boolPointer(value bool) *bool { return &value }
+
+type tenantOptionAuthenticationActorStore struct {
+	actorRecordID string
+	options       []authz.TenantOption
+}
+
+func (s *tenantOptionAuthenticationActorStore) FindActor(context.Context, authz.ActorLookup) (*authz.Actor, error) {
+	return nil, authz.ErrMissingActor
+}
+
+func (s *tenantOptionAuthenticationActorStore) ListActorTenantOptions(_ context.Context, actorRecordID string) ([]authz.TenantOption, error) {
+	s.actorRecordID = actorRecordID
+	return s.options, nil
+}
+
+func TestAuthenticationHandlerListsGrantedTenantOptions(t *testing.T) {
+	_, _, service, actor := authenticationTestService(t)
+	account, err := service.CreateAccount(t.Context(), CreateAccountRequest{
+		ActorID: actor.ID, Login: "tenant-options@example.com", TemporaryPassword: "Tenant-Options-Password-1",
+	})
+	if err != nil {
+		t.Fatalf("create account: %v", err)
+	}
+
+	store := &tenantOptionAuthenticationActorStore{options: []authz.TenantOption{{
+		ID: "tenant-a", Code: "A", Name: "Alpha", RoleCodes: []string{"TENANT_ADMIN"},
+	}}}
+	handler := NewHandler(service, CookieConfig{Name: "ers_test_session", TTL: time.Hour}, store, nil)
+	app := fiber.New()
+	app.Use(handler.SessionMiddleware())
+	app.Post("/login", handler.Login)
+	app.Get("/tenant-options", handler.RequireSession, handler.TenantOptions)
+
+	body, _ := json.Marshal(LoginRequest{Login: account.Login, Password: "Tenant-Options-Password-1"})
+	loginRequest := httptest.NewRequest(http.MethodPost, "/login", bytes.NewReader(body))
+	loginRequest.Header.Set("Content-Type", "application/json")
+	loginResponse, err := app.Test(loginRequest)
+	if err != nil {
+		t.Fatalf("login request: %v", err)
+	}
+	cookie := loginResponse.Cookies()[0]
+
+	optionsRequest := httptest.NewRequest(http.MethodGet, "/tenant-options", nil)
+	optionsRequest.AddCookie(cookie)
+	optionsResponse, err := app.Test(optionsRequest)
+	if err != nil {
+		t.Fatalf("tenant-options request: %v", err)
+	}
+	if optionsResponse.StatusCode != http.StatusOK {
+		t.Fatalf("expected tenant-options status 200, got %d", optionsResponse.StatusCode)
+	}
+	if store.actorRecordID != actor.ID {
+		t.Fatalf("tenant options resolved actor %q, want %q", store.actorRecordID, actor.ID)
+	}
+	var payload struct {
+		Data []authz.TenantOption `json:"data"`
+	}
+	if err := json.NewDecoder(optionsResponse.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode tenant options: %v", err)
+	}
+	if len(payload.Data) != 1 || payload.Data[0].ID != "tenant-a" {
+		t.Fatalf("unexpected tenant options: %#v", payload.Data)
+	}
+}

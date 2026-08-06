@@ -23,10 +23,11 @@ type CookieConfig struct {
 }
 
 type Handler struct {
-	service    Service
-	cookie     CookieConfig
-	actorStore authz.ActorStore
-	auditStore authz.AuditLogStore
+	service           Service
+	cookie            CookieConfig
+	actorStore        authz.ActorStore
+	auditStore        authz.AuditLogStore
+	tenantOptionStore authz.TenantOptionStore
 }
 
 func NewHandler(service Service, cookie CookieConfig, actorStore authz.ActorStore, auditStore authz.AuditLogStore) *Handler {
@@ -39,7 +40,11 @@ func NewHandler(service Service, cookie CookieConfig, actorStore authz.ActorStor
 	if cookie.TTL <= 0 {
 		cookie.TTL = defaultSessionTTL
 	}
-	return &Handler{service: service, cookie: cookie, actorStore: actorStore, auditStore: auditStore}
+	handler := &Handler{service: service, cookie: cookie, actorStore: actorStore, auditStore: auditStore}
+	if store, ok := actorStore.(authz.TenantOptionStore); ok {
+		handler.tenantOptionStore = store
+	}
+	return handler
 }
 
 func (h *Handler) SessionMiddleware() fiber.Handler {
@@ -97,6 +102,22 @@ func (h *Handler) CurrentSession(c fiber.Ctx) error {
 	return httpx.OK(c, session)
 }
 
+func (h *Handler) TenantOptions(c fiber.Ctx) error {
+	session, err := h.currentSession(c)
+	if err != nil {
+		return h.writeError(c, err)
+	}
+	if h.tenantOptionStore == nil {
+		return httpx.WriteError(c, errors.New("tenant options are unavailable"))
+	}
+	options, err := h.tenantOptionStore.ListActorTenantOptions(c.Context(), session.ActorID)
+	if err != nil {
+		return h.writeError(c, err)
+	}
+	setNoStore(c)
+	return httpx.OK(c, options)
+}
+
 func (h *Handler) ChangePassword(c fiber.Ctx) error {
 	if _, err := h.currentSession(c); err != nil {
 		return h.writeError(c, err)
@@ -117,11 +138,13 @@ func (h *Handler) ResetPassword(c fiber.Ctx) error {
 	if err := c.Bind().Body(&req); err != nil {
 		return httpx.BadRequest(c, "invalid_body", "Invalid request body")
 	}
-	if err := h.service.ResetPassword(c.Context(), req); err != nil {
+	result, err := h.service.ResetPassword(c.Context(), req)
+	if err != nil {
 		return h.writeError(c, err)
 	}
 	h.clearSessionCookie(c)
-	return c.SendStatus(fiber.StatusNoContent)
+	setNoStore(c)
+	return httpx.OK(c, result)
 }
 
 func (h *Handler) ListAccounts(c fiber.Ctx) error {
@@ -296,6 +319,7 @@ func (h *Handler) writeError(c fiber.Ctx, err error) error {
 	case errors.Is(err, ErrInvalidCredentials):
 		return c.Status(fiber.StatusUnauthorized).JSON(httpx.APIResponse{Error: &httpx.APIError{Code: "invalid_credentials", Message: "Login or password is invalid"}})
 	case errors.Is(err, ErrAuthenticationRequired):
+		h.clearSessionCookie(c)
 		return c.Status(fiber.StatusUnauthorized).JSON(httpx.APIResponse{Error: &httpx.APIError{Code: "authentication_required", Message: "An authenticated session is required"}})
 	case errors.Is(err, ErrSessionExpired):
 		h.clearSessionCookie(c)

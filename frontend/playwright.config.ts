@@ -28,7 +28,7 @@ const authenticatedStorageStatePath = join(
   "admin.json",
 );
 
-const authzActorId = runtimeEnv.PLAYWRIGHT_AUTHZ_ACTOR_ID ?? "bootstrap-admin";
+const authzActorId = runtimeEnv.PLAYWRIGHT_AUTHZ_ACTOR_ID ?? (authMode === "session" ? "e2e-application-admin" : "bootstrap-admin");
 const authzTenantId = runtimeEnv.PLAYWRIGHT_AUTHZ_TENANT_ID ?? "default";
 
 export default defineConfig({
@@ -49,13 +49,17 @@ export default defineConfig({
     trace: "on-first-retry",
     screenshot: "only-on-failure",
     video: "retain-on-failure",
+    // Header mode deliberately fixes the actor and tenant for isolated
+    // authorization tests. Session mode must not install a context-wide tenant
+    // header: the application sends the tenant selected in localStorage, and a
+    // fixed Playwright header would override browser tenant switching.
     extraHTTPHeaders:
-      authMode === "session"
-        ? { "X-Tenant-ID": authzTenantId }
-        : {
+      authMode === "headers"
+        ? {
             "X-Actor-ID": authzActorId,
             "X-Tenant-ID": authzTenantId,
-          },
+          }
+        : undefined,
     storageState:
       authMode === "session"
         ? authenticatedStorageStatePath
@@ -87,14 +91,14 @@ export default defineConfig({
     : [
         {
           command:
-            `cd .. && HTTP_ADDR=:${LOCAL_E2E_BACKEND_PORT} ERS_DATABASE_PATH=data/app-e2e.db ERS_RESET_DATABASE=true APP_ENV=ci AUTHZ_ACTOR_HEADER_MODE=test AUTHZ_BOOTSTRAP_ENABLED=true AUTHZ_BOOTSTRAP_ACTOR_KEY=bootstrap-admin AUTHZ_BOOTSTRAP_DISPLAY_NAME='Bootstrap Admin' AUTHZ_BOOTSTRAP_ROLE_CODE=APPLICATION_ADMIN AUTHZ_BOOTSTRAP_TENANT_ID='*' AUTHZ_BOOTSTRAP_REQUIRE_EMPTY_ACTOR_TABLE=false make local-backend`,
+            `cd .. && HTTP_ADDR=:${LOCAL_E2E_BACKEND_PORT} ERS_DATABASE_PATH=data/app-e2e.db ERS_RESET_DATABASE=true ERS_PROVISION_E2E_ADMIN=true E2E_ADMIN_EMAIL=admin@example.com E2E_ADMIN_PASSWORD='Local-E2E-Administrator-28D!' E2E_ADMIN_ACTOR_KEY=e2e-application-admin APP_ENV=ci AUTHZ_ACTOR_HEADER_MODE=test AUTHZ_BOOTSTRAP_ENABLED=true AUTHZ_BOOTSTRAP_ACTOR_KEY=bootstrap-admin AUTHZ_BOOTSTRAP_DISPLAY_NAME='Bootstrap Admin' AUTHZ_BOOTSTRAP_ROLE_CODE=APPLICATION_ADMIN AUTHZ_BOOTSTRAP_TENANT_ID='*' AUTHZ_BOOTSTRAP_REQUIRE_EMPTY_ACTOR_TABLE=false make local-backend`,
           url: `${localE2EBackendURL}/healthz`,
           reuseExistingServer: false,
           timeout: 120_000,
         },
         {
           command:
-            `ERS_API_PROXY_TARGET=http://127.0.0.1:${LOCAL_E2E_BACKEND_PORT} ERS_E2E_AUTHZ_PROXY=true PLAYWRIGHT_AUTHZ_ACTOR_ID=bootstrap-admin PLAYWRIGHT_AUTHZ_TENANT_ID=default npm run dev -- --host 0.0.0.0 --port ${LOCAL_E2E_FRONTEND_PORT}`,
+            `ERS_API_PROXY_TARGET=http://127.0.0.1:${LOCAL_E2E_BACKEND_PORT} ERS_LOCAL_AUTHZ_BOOTSTRAP=false PLAYWRIGHT_AUTHZ_ACTOR_ID=e2e-application-admin PLAYWRIGHT_AUTHZ_TENANT_ID=default npm run dev -- --host 0.0.0.0 --port ${LOCAL_E2E_FRONTEND_PORT}`,
           url: localE2EFrontendURL,
           reuseExistingServer: false,
           timeout: 120_000,

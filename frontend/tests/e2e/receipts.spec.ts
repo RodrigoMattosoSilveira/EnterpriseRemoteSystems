@@ -168,7 +168,7 @@ test("outstanding receipts workbench filters by collaborator and source and link
   await expect(page.getByRole("heading", { name: "Outstanding receipts" })).toBeVisible();
 
   await page.getByLabel("Source type").selectOption("EXPENSE");
-  await page.getByLabel("Collaborator").fill(`ReceiptWorkbench${suffix}`);
+  await page.getByRole("textbox", { name: "Collaborator", exact: true }).fill(`ReceiptWorkbench${suffix}`);
   await page.getByRole("button", { name: "Apply filters" }).click();
 
   await expect(page.getByText(receipt.receiptNumber)).toBeVisible();
