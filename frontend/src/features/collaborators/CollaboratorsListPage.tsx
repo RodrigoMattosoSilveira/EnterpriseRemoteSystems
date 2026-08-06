@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Link, useLocation, useSearchParams } from "react-router-dom";
 import { ApiErrorPanel } from "../../components/ApiErrorPanel";
 import { JourneyDaysRemaining } from "../../components/JourneyDaysRemaining";
@@ -9,6 +10,7 @@ import {
 } from "./useCollaborators";
 
 export function CollaboratorsListPage() {
+  const { t, i18n } = useTranslation("collaborators");
   const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
   const search = searchParams.get("search")?.trim() ?? "";
@@ -22,8 +24,9 @@ export function CollaboratorsListPage() {
     () =>
       sortCollaborators(
         hasSearch ? searchResult?.items ?? [] : allCollaborators,
+        t("personUnavailable"),
       ),
-    [allCollaborators, hasSearch, searchResult?.items],
+    [allCollaborators, hasSearch, searchResult?.items, t],
   );
   const total = hasSearch ? searchResult?.total ?? 0 : allCollaborators.length;
   const isLoading = hasSearch ? searchQuery.isLoading : catalogQuery.isLoading;
@@ -60,11 +63,11 @@ export function CollaboratorsListPage() {
         <div className="mx-auto flex max-w-5xl items-center justify-between gap-3">
           <div>
             <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
-              Operations
+              {t("operations")}
             </p>
-            <h1 className="text-xl font-bold text-gray-950">Collaborators</h1>
+            <h1 className="text-xl font-bold text-gray-950">{t("title")}</h1>
             <p className="text-sm text-gray-500">
-              Active work journeys created from complete Person profiles.
+              {t("subtitle")}
             </p>
           </div>
 
@@ -73,25 +76,25 @@ export function CollaboratorsListPage() {
               to="/people"
               className="rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 shadow-sm"
             >
-              People
+              {t("peopleLink")}
             </Link>
             <Link
               to="/expenses"
               className="rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 shadow-sm"
             >
-              Expenses
+              {t("expensesLink")}
             </Link>
             <Link
               to="/work-periods"
               className="rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 shadow-sm"
             >
-              Work Periods
+              {t("workPeriodsLink")}
             </Link>
             <Link
               to="/collaborators/new"
               className="rounded-xl bg-gray-950 px-4 py-2 text-sm font-semibold text-white shadow-sm"
             >
-              Add
+              {t("addButton")}
             </Link>
           </div>
         </div>
@@ -113,14 +116,14 @@ export function CollaboratorsListPage() {
           <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
             <div>
               <h2 className="text-lg font-semibold text-gray-950">
-                Collaborator Journeys
+                {t("journeysTitle")}
               </h2>
               <p className="text-sm text-gray-500">
-                Showing {collaborators.length} of {total} collaborator records.
+                {t("showingRecords", { shown: collaborators.length, total })}
               </p>
               {hasSearch && (
                 <p className="mt-1 text-xs font-medium text-gray-600">
-                  Filtering by “{search}”.
+                  {t("filteringBy", { search })}
                 </p>
               )}
             </div>
@@ -131,13 +134,13 @@ export function CollaboratorsListPage() {
                   htmlFor="collaborator-search"
                   className="text-xs font-semibold uppercase tracking-wide text-gray-500"
                 >
-                  Search by name or nickname
+                  {t("searchByNameOrNickname")}
                 </label>
                 <input
                   id="collaborator-search"
                   value={searchDraft}
                   onChange={(event) => updateSearch(event.target.value)}
-                  placeholder="Type any part of a name or nickname"
+                  placeholder={t("searchPlaceholder")}
                   className="mt-1 w-full rounded-xl border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-gray-950 focus:outline-none focus:ring-1 focus:ring-gray-950"
                 />
               </div>
@@ -148,7 +151,7 @@ export function CollaboratorsListPage() {
                     onClick={clearFilter}
                     className="rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 shadow-sm"
                   >
-                    Clear
+                    {t("clear")}
                   </button>
                 )}
               </div>
@@ -158,7 +161,7 @@ export function CollaboratorsListPage() {
 
         {isLoading && (
           <div className="rounded-2xl border bg-white p-5 shadow-sm">
-            Loading collaborators...
+            {t("loadingCollaborators")}
           </div>
         )}
 
@@ -166,13 +169,13 @@ export function CollaboratorsListPage() {
           <div className="rounded-2xl border bg-white p-8 text-center shadow-sm">
             <h2 className="text-lg font-semibold">
               {hasSearch
-                ? "No collaborators match this filter"
-                : "No collaborators yet"}
+                ? t("noCollaboratorsMatchFilter")
+                : t("noCollaboratorsYet")}
             </h2>
             <p className="mt-2 text-sm text-gray-500">
               {hasSearch
-                ? "Try another name or nickname."
-                : "Create a Collaborator after the related Person profile is complete."}
+                ? t("tryAnotherNameOrNickname")
+                : t("createAfterPersonComplete")}
             </p>
             {!hasSearch && (
               <>
@@ -180,13 +183,13 @@ export function CollaboratorsListPage() {
                   to="/expenses"
                   className="rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 shadow-sm"
                 >
-                  Expenses
+                  {t("expensesLink")}
                 </Link>
                 <Link
                   to="/collaborators/new"
                   className="mt-5 inline-block rounded-xl bg-gray-950 px-5 py-3 text-sm font-semibold text-white"
                 >
-                  Create Collaborator
+                  {t("createCollaborator")}
                 </Link>
               </>
             )}
@@ -199,11 +202,11 @@ export function CollaboratorsListPage() {
               <table className="w-full text-left text-sm">
                 <thead className="bg-gray-50 text-xs uppercase tracking-wide text-gray-500">
                   <tr>
-                    <th className="p-3">Person</th>
-                    <th className="p-3">Journey</th>
-                    <th className="p-3">Work</th>
-                    <th className="p-3">Payment</th>
-                    <th className="p-3">Status</th>
+                    <th className="p-3">{t("person")}</th>
+                    <th className="p-3">{t("journey")}</th>
+                    <th className="p-3">{t("work")}</th>
+                    <th className="p-3">{t("payment")}</th>
+                    <th className="p-3">{t("status")}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y">
@@ -214,7 +217,7 @@ export function CollaboratorsListPage() {
                           to={`/collaborators/${collaborator.id}`}
                           className="font-semibold text-gray-950 underline-offset-2 hover:underline"
                         >
-                          {personDisplayName(collaborator)}
+                          {personDisplayName(collaborator, t("personUnavailable"))}
                         </Link>
                         {personSecondaryLabel(collaborator) && (
                           <div className="text-xs text-gray-500">
@@ -225,7 +228,7 @@ export function CollaboratorsListPage() {
                       <td className="p-3 text-gray-700">
                         <div>{formatDate(collaborator.journeyStartDate)}</div>
                         <div className="text-xs text-gray-500">
-                          Projected end:{" "}
+                          {t("projectedEnd")}: {" "}
                           {formatDate(collaborator.projectedEndDate)}
                         </div>
                         <JourneyDaysRemaining
@@ -235,16 +238,16 @@ export function CollaboratorsListPage() {
                         />
                       </td>
                       <td className="p-3 text-gray-700">
-                        <div>{collaborator.taskLabel || "—"}</div>
+                        <div>{collaborator.taskLabel || t("dash")}</div>
                         <div className="text-xs text-gray-500">
-                          {collaborator.sectorLabel || "—"} ·{" "}
-                          {collaborator.locationLabel || "—"}
+                          {collaborator.sectorLabel || t("dash")} ·{" "}
+                          {collaborator.locationLabel || t("dash")}
                         </div>
                       </td>
                       <td className="p-3 text-gray-700">
-                        <div>{formatMoney(collaborator.paymentValue)}</div>
+                        <div>{formatMoney(collaborator.paymentValue, i18n.language)}</div>
                         <div className="text-xs text-gray-500">
-                          {collaborator.paymentMethodLabel || "—"}
+                          {collaborator.paymentMethodLabel || t("dash")}
                         </div>
                       </td>
                       <td className="p-3">
@@ -265,6 +268,10 @@ export function CollaboratorsListPage() {
                 <CollaboratorCard
                   key={collaborator.id}
                   collaborator={collaborator}
+                  unavailableLabel={t("personUnavailable")}
+                  dash={t("dash")}
+                  locale={i18n.language}
+                  t={t}
                 />
               ))}
             </div>
@@ -280,11 +287,11 @@ const collaboratorNameCollator = new Intl.Collator(undefined, {
   numeric: true,
 });
 
-function sortCollaborators(collaborators: Collaborator[]) {
+function sortCollaborators(collaborators: Collaborator[], unavailableLabel: string) {
   return [...collaborators].sort((left, right) => {
     const displayComparison = collaboratorNameCollator.compare(
-      personDisplayName(left),
-      personDisplayName(right),
+      personDisplayName(left, unavailableLabel),
+      personDisplayName(right, unavailableLabel),
     );
     if (displayComparison !== 0) return displayComparison;
 
@@ -298,13 +305,25 @@ function sortCollaborators(collaborators: Collaborator[]) {
   });
 }
 
-function CollaboratorCard({ collaborator }: { collaborator: Collaborator }) {
+function CollaboratorCard({
+  collaborator,
+  unavailableLabel,
+  dash,
+  locale,
+  t,
+}: {
+  collaborator: Collaborator;
+  unavailableLabel: string;
+  dash: string;
+  locale: string;
+  t: (key: string) => string;
+}) {
   return (
     <Link to={`/collaborators/${collaborator.id}`} className="block p-4">
       <div className="flex items-start justify-between gap-3">
         <div>
           <h2 className="font-semibold text-gray-950">
-            {personDisplayName(collaborator)}
+            {personDisplayName(collaborator, unavailableLabel)}
           </h2>
           {personSecondaryLabel(collaborator) && (
             <p className="text-xs text-gray-500">
@@ -312,8 +331,8 @@ function CollaboratorCard({ collaborator }: { collaborator: Collaborator }) {
             </p>
           )}
           <p className="text-sm text-gray-500">
-            {collaborator.taskLabel || "—"} ·{" "}
-            {collaborator.locationLabel || "—"}
+            {collaborator.taskLabel || dash} · {" "}
+            {collaborator.locationLabel || dash}
           </p>
         </div>
         <StatusBadge
@@ -322,9 +341,9 @@ function CollaboratorCard({ collaborator }: { collaborator: Collaborator }) {
       </div>
 
       <div className="mt-4 grid gap-2 text-sm text-gray-700">
-        <Info label="Start" value={formatDate(collaborator.journeyStartDate)} />
+        <Info label={t("start")} value={formatDate(collaborator.journeyStartDate)} />
         <Info
-          label="Projected End"
+          label={t("projectedEndShort")}
           value={formatDate(collaborator.projectedEndDate)}
         />
         <JourneyDaysRemaining
@@ -332,18 +351,18 @@ function CollaboratorCard({ collaborator }: { collaborator: Collaborator }) {
           closedAt={collaborator.closedAt}
           className="text-right text-sm"
         />
-        <Info label="Payment" value={formatMoney(collaborator.paymentValue)} />
-        <Info label="Method" value={collaborator.paymentMethodLabel || "—"} />
+        <Info label={t("payment")} value={formatMoney(collaborator.paymentValue, locale)} />
+        <Info label={t("method")} value={collaborator.paymentMethodLabel || dash} />
       </div>
     </Link>
   );
 }
 
-function personDisplayName(collaborator: Collaborator) {
+function personDisplayName(collaborator: Collaborator, unavailableLabel: string) {
   return (
     collaborator.personNickname?.trim() ||
     collaborator.personName?.trim() ||
-    "Person unavailable"
+    unavailableLabel
   );
 }
 
@@ -380,8 +399,8 @@ function formatDate(value?: string) {
   return value;
 }
 
-function formatMoney(value: number) {
-  return new Intl.NumberFormat("en-US", {
+function formatMoney(value: number, locale: string) {
+  return new Intl.NumberFormat(locale || "en-US", {
     style: "currency",
     currency: "USD",
   }).format(value);

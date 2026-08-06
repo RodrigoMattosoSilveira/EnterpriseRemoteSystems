@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
 import {
   confirmRecentReauthentication,
@@ -24,37 +25,35 @@ import {
 
 type Action = "ZERO_GOLD" | "PARTIAL_PAYOUT" | "CLOSE_JOURNEY";
 
-const settlementReasonOptions: Array<{
-  value: string;
-  label: string;
-  actions: Action[];
-}> = [
-  {
-    value: "GOLD_BALANCE_PAYOUT",
-    label: "Gold balance payout",
-    actions: ["ZERO_GOLD"] satisfies Action[],
-  },
-  {
-    value: "COLLABORATOR_REQUESTED_PAYOUT",
-    label: "Collaborator requested payout",
-    actions: ["PARTIAL_PAYOUT"] satisfies Action[],
-  },
-  {
-    value: "SCHEDULED_PAYOUT",
-    label: "Scheduled payout",
-    actions: ["PARTIAL_PAYOUT"] satisfies Action[],
-  },
-  {
-    value: "END_OF_JOURNEY_SETTLEMENT",
-    label: "End-of-journey settlement",
-    actions: ["CLOSE_JOURNEY"] satisfies Action[],
-  },
-  {
-    value: "FINAL_BALANCE_PAYOUT",
-    label: "Final balance payout",
-    actions: ["CLOSE_JOURNEY"] satisfies Action[],
-  },
-];
+function settlementReasonOptions(t: (key: string) => string) {
+  return [
+    {
+      value: "GOLD_BALANCE_PAYOUT",
+      label: t("settlementReasons.GOLD_BALANCE_PAYOUT"),
+      actions: ["ZERO_GOLD"] satisfies Action[],
+    },
+    {
+      value: "COLLABORATOR_REQUESTED_PAYOUT",
+      label: t("settlementReasons.COLLABORATOR_REQUESTED_PAYOUT"),
+      actions: ["PARTIAL_PAYOUT"] satisfies Action[],
+    },
+    {
+      value: "SCHEDULED_PAYOUT",
+      label: t("settlementReasons.SCHEDULED_PAYOUT"),
+      actions: ["PARTIAL_PAYOUT"] satisfies Action[],
+    },
+    {
+      value: "END_OF_JOURNEY_SETTLEMENT",
+      label: t("settlementReasons.END_OF_JOURNEY_SETTLEMENT"),
+      actions: ["CLOSE_JOURNEY"] satisfies Action[],
+    },
+    {
+      value: "FINAL_BALANCE_PAYOUT",
+      label: t("settlementReasons.FINAL_BALANCE_PAYOUT"),
+      actions: ["CLOSE_JOURNEY"] satisfies Action[],
+    },
+  ];
+}
 
 export function JourneySettlementPanel({
   collaboratorId,
@@ -65,6 +64,7 @@ export function JourneySettlementPanel({
   projectedEndDate: string;
   closedAt?: string;
 }) {
+  const { t } = useTranslation("collaborators");
   const preview = useSettlementPreview(collaboratorId);
   const [action, setAction] = useState<Action | null>(null);
   const [message, setMessage] = useState("");
@@ -75,10 +75,10 @@ export function JourneySettlementPanel({
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h2 className="text-lg font-semibold text-gray-950">
-            Journey Settlement
+            {t("journeySettlement.title")}
           </h2>
           <p className="mt-1 text-sm text-gray-500">
-            Preview balances, pay outstanding credits, or close the Journey.
+            {t("journeySettlement.description")}
           </p>
           <JourneyDaysRemaining
             projectedEndDate={projectedEndDate}
@@ -91,13 +91,13 @@ export function JourneySettlementPanel({
           className="rounded-xl border border-gray-300 px-3 py-2 text-sm font-semibold text-gray-700 shadow-sm"
           onClick={() => preview.refetch()}
         >
-          Refresh
+          {t("journeySettlement.refresh")}
         </button>
       </div>
 
       {preview.isLoading ? (
         <p className="mt-4 text-sm text-gray-600">
-          Loading settlement preview...
+          {t("journeySettlement.loading")}
         </p>
       ) : null}
       {preview.error ? (
@@ -122,7 +122,8 @@ export function JourneySettlementPanel({
               target="_blank"
               to={`/ledger-entries/${entryId}/receipt`}
             >
-              Print receipt{receiptEntryIds.length > 1 ? ` ${index + 1}` : ""}
+              {t("journeySettlement.printReceipt")}
+              {receiptEntryIds.length > 1 ? ` ${index + 1}` : ""}
             </Link>
           ))}
         </div>
@@ -138,14 +139,14 @@ export function JourneySettlementPanel({
               disabled={preview.data.goldGramBalance <= 0}
               onClick={() => setAction("ZERO_GOLD")}
             >
-              Zero Gold
+              {t("journeySettlement.zeroGold")}
             </button>
             <button
               type="button"
               className="rounded-xl bg-gray-900 px-4 py-2 text-sm font-semibold text-white"
               onClick={() => setAction("PARTIAL_PAYOUT")}
             >
-              Partial Payout
+              {t("journeySettlement.partialPayout")}
             </button>
             <button
               type="button"
@@ -153,12 +154,11 @@ export function JourneySettlementPanel({
               disabled={!preview.data.canClose}
               onClick={() => setAction("CLOSE_JOURNEY")}
             >
-              Close Journey
+              {t("journeySettlement.closeJourney")}
             </button>
           </div>
           <p className="mt-4 text-xs text-gray-500">
-            Settlement actions use the current authorization actor selected in
-            Authz Admin. Operators should not handle backend settlement secrets.
+            {t("journeySettlement.authzHint")}
           </p>
         </>
       ) : null}
@@ -181,21 +181,22 @@ export function JourneySettlementPanel({
 }
 
 function PreviewSummary({ preview }: { preview: SettlementPreview }) {
+  const { t } = useTranslation("collaborators");
   return (
     <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-      <Summary label="BRL balance" value={formatBRL(preview.brlBalance)} />
+      <Summary label={t("journeySettlement.brlBalance")} value={formatBRL(preview.brlBalance)} />
       <Summary
-        label="Gold balance"
+        label={t("journeySettlement.goldBalance")}
         value={`${formatGold(preview.goldGramBalance)} g`}
       />
       <Summary
-        label="Pending accruals"
+        label={t("journeySettlement.pendingAccruals")}
         value={String(preview.pendingAccrualItems)}
       />
-      <Summary label="Can close" value={preview.canClose ? "Yes" : "No"} />
+      <Summary label={t("journeySettlement.canClose")} value={preview.canClose ? t("journeySettlement.yes") : t("journeySettlement.no")} />
       {preview.blockingReasons.length > 0 ? (
         <div className="rounded-xl bg-red-50 p-3 text-sm text-red-800 sm:col-span-2 lg:col-span-4">
-          <span className="font-semibold">Blocking reasons:</span>{" "}
+          <span className="font-semibold">{t("journeySettlement.blockingReasons")}:</span>{" "}
           {preview.blockingReasons.map(formatReason).join(", ")}
         </div>
       ) : null}
@@ -227,6 +228,7 @@ function SettlementActionPanel({
   onClose: () => void;
   onSuccess: (message: string, ledgerEntryIds: string[]) => void;
 }) {
+  const { t } = useTranslation("collaborators");
   const zeroGold = useZeroGold(collaboratorId);
   const payout = usePartialPayout(collaboratorId);
   const closeJourney = useCloseJourney(collaboratorId);
@@ -293,7 +295,7 @@ function SettlementActionPanel({
     };
     if (action === "ZERO_GOLD") {
       const result = await zeroGold.mutateAsync(base);
-      onSuccess("Gold payout posted successfully.", [result.ledgerEntry.id]);
+      onSuccess(t("journeySettlement.action.successZeroGold"), [result.ledgerEntry.id]);
       return;
     }
     if (action === "PARTIAL_PAYOUT") {
@@ -303,14 +305,14 @@ function SettlementActionPanel({
         goldGramAmount: parseGoldInputAmount(goldAmount),
       });
       onSuccess(
-        "Partial payout posted successfully.",
+        t("journeySettlement.action.successPartialPayout"),
         result.ledgerEntries.map((entry) => entry.id),
       );
       return;
     }
     const result = await closeJourney.mutateAsync({ ...base, confirm: true });
     onSuccess(
-      "Journey closed successfully.",
+      t("journeySettlement.action.successCloseJourney"),
       result.ledgerEntries.map((entry) => entry.id),
     );
   }
@@ -328,10 +330,10 @@ function SettlementActionPanel({
               id="settlement-action-panel-title"
               className="text-lg font-bold text-gray-950"
             >
-              {actionTitle(action)}
+              {actionTitle(action, t)}
             </h3>
             <p className="mt-1 text-sm text-gray-500">
-              {actionDescription(action, preview)}
+              {actionDescription(action, preview, t)}
             </p>
           </div>
           <button
@@ -346,7 +348,7 @@ function SettlementActionPanel({
         <form className="mt-5 grid gap-4" onSubmit={submit}>
           {action === "PARTIAL_PAYOUT" ? (
             <div className="grid gap-4 sm:grid-cols-2">
-              <Field label="BRL amount">
+              <Field label={t("journeySettlement.fields.brlAmount")}>
                 <input
                   className={inputClass}
                   type="number"
@@ -356,7 +358,7 @@ function SettlementActionPanel({
                   onChange={(event) => setBrlAmount(event.target.value)}
                 />
               </Field>
-              <Field label="Gold grams">
+              <Field label={t("journeySettlement.fields.goldGrams")}>
                 <input
                   className={inputClass}
                   type="number"
@@ -372,7 +374,7 @@ function SettlementActionPanel({
               </Field>
             </div>
           ) : null}
-          <Field label="Effective date">
+          <Field label={t("journeySettlement.fields.effectiveDate")}>
             <input
               required
               className={inputClass}
@@ -382,36 +384,34 @@ function SettlementActionPanel({
             />
           </Field>
           <div className="rounded-xl border border-blue-200 bg-blue-50 p-3 text-sm text-blue-900">
-            <p className="font-semibold">Authorization actor</p>
+            <p className="font-semibold">{t("journeySettlement.authorizationActor.title")}</p>
             <p className="mt-1">
-              This action uses the actor identified by the authenticated session.
-              Backend settlement keys are not entered by operators or testers.
+              {t("journeySettlement.authorizationActor.description")}
             </p>
           </div>
           <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
-            <p className="font-semibold">Settlement reason required</p>
+            <p className="font-semibold">{t("journeySettlement.reasonRequired.title")}</p>
             <p className="mt-1">
-              Sensitive settlement operations must capture an action-specific
-              reason code and a human-readable reason before they can be submitted.
+              {t("journeySettlement.reasonRequired.description")}
             </p>
           </div>
 
           <div className="rounded-xl border border-purple-200 bg-purple-50 p-3 text-sm text-purple-900">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
-                <p className="font-semibold">Recent reauthentication required</p>
+                <p className="font-semibold">{t("journeySettlement.reauth.title")}</p>
                 <p className="mt-1">
-                  Confirm the operator has recently reauthenticated before
-                  submitting this sensitive operation. This development control
-                  supplies the required backend reauthentication headers.
+                  {t("journeySettlement.reauth.description")}
                 </p>
                 {reauthentication ? (
                   <p className="mt-2 text-xs font-semibold">
-                    Confirmed at {formatDateTime(reauthentication.reauthenticatedAt)}
+                    {t("journeySettlement.reauth.confirmedAt", {
+                      dateTime: formatDateTime(reauthentication.reauthenticatedAt),
+                    })}
                   </p>
                 ) : (
                   <p className="mt-2 text-xs font-semibold">
-                    Not confirmed for this browser session.
+                    {t("journeySettlement.reauth.notConfirmed")}
                   </p>
                 )}
               </div>
@@ -420,7 +420,7 @@ function SettlementActionPanel({
                 className="rounded-xl bg-purple-900 px-3 py-2 text-sm font-semibold text-white"
                 onClick={() => setReauthentication(confirmRecentReauthentication())}
               >
-                Confirm reauthentication
+                {t("journeySettlement.reauth.confirmButton")}
               </button>
             </div>
           </div>
@@ -444,15 +444,15 @@ function SettlementActionPanel({
             onNotesChange={setSecondApprovalNotes}
           />
 
-          <Field label="Reason code">
+          <Field label={t("journeySettlement.fields.reasonCode")}>
             <select
               required
               className={inputClass}
               value={reasonCode}
               onChange={(event) => setReasonCode(event.target.value)}
             >
-              <option value="">Select a reason code</option>
-              {settlementReasonOptions
+              <option value="">{t("journeySettlement.reasonSelectPlaceholder")}</option>
+              {settlementReasonOptions(t)
                 .filter((option) => option.actions.includes(action))
                 .map((option) => (
                   <option key={option.value} value={option.value}>
@@ -461,17 +461,17 @@ function SettlementActionPanel({
                 ))}
             </select>
           </Field>
-          <Field label="Reason text">
+          <Field label={t("journeySettlement.fields.reasonText")}>
             <textarea
               required
               className={inputClass}
               rows={3}
               value={reasonText}
               onChange={(event) => setReasonText(event.target.value)}
-              placeholder="Explain why this payout or settlement action is needed."
+              placeholder={t("journeySettlement.reasonTextPlaceholder")}
             />
           </Field>
-          <Field label="Notes">
+          <Field label={t("journeySettlement.fields.notes")}>
             <textarea
               className={inputClass}
               rows={3}
@@ -486,7 +486,7 @@ function SettlementActionPanel({
               className="rounded-xl border border-gray-300 px-4 py-2 text-sm font-semibold"
               onClick={onClose}
             >
-              Cancel
+              {t("cancel")}
             </button>
             <button
               type="submit"
@@ -498,12 +498,12 @@ function SettlementActionPanel({
               className="rounded-xl bg-gray-900 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
             >
               {mutation.isPending
-                ? "Processing..."
+                ? t("journeySettlement.processing")
                 : !reauthentication
-                  ? "Confirm reauthentication first"
+                  ? t("journeySettlement.reauth.confirmFirst")
                   : secondApprovalEnabled && !secondApprovedBy.trim()
-                    ? "Select second approver first"
-                    : actionButton(action)}
+                    ? t("journeySettlement.secondApproval.selectSecondApproverFirst")
+                    : actionButton(action, t)}
             </button>
           </div>
         </form>
@@ -537,6 +537,7 @@ function SecondApprovalCapture({
   onApprovedByChange: (value: string) => void;
   onNotesChange: (value: string) => void;
 }) {
+  const { t } = useTranslation("collaborators");
   const captureEnabled = policyRequired || captureOptional;
 
   return (
@@ -545,16 +546,16 @@ function SecondApprovalCapture({
         <div>
           <p className="font-semibold">
             {policyRequired
-              ? "Second-person approval required"
-              : "Second-person approval optional"}
+              ? t("journeySettlement.secondApproval.required")
+              : t("journeySettlement.secondApproval.optional")}
           </p>
           <p className="mt-1">
             {policyRequired
-              ? "This tenant requires a different approver before sensitive current-account operations can be submitted."
-              : "Record a second approver when another authorized person reviewed this operation."}
+              ? t("journeySettlement.secondApproval.requiredDescription")
+              : t("journeySettlement.secondApproval.optionalDescription")}
           </p>
           <p className="mt-1 text-xs font-semibold">
-            Primary actor: {primaryActorId || "Loading authenticated actor…"}
+            {t("journeySettlement.secondApproval.primaryActor")}: {primaryActorId || t("journeySettlement.secondApproval.loadingPrimaryActor")}
           </p>
         </div>
         {!policyRequired ? (
@@ -564,18 +565,18 @@ function SecondApprovalCapture({
               checked={captureOptional}
               onChange={(event) => onToggleOptional(event.target.checked)}
             />
-            Record approval
+            {t("journeySettlement.secondApproval.recordApproval")}
           </label>
         ) : null}
       </div>
 
       {isLoadingPolicy ? (
-        <p className="mt-3 text-xs font-semibold">Loading approval policy...</p>
+        <p className="mt-3 text-xs font-semibold">{t("journeySettlement.secondApproval.loadingPolicy")}</p>
       ) : null}
 
       {captureEnabled ? (
         <div className="mt-3 grid gap-3">
-          <Field label="Second approver">
+          <Field label={t("journeySettlement.secondApproval.secondApprover")}>
             <select
               required={policyRequired}
               className={inputClass}
@@ -585,10 +586,10 @@ function SecondApprovalCapture({
             >
               <option value="">
                 {isLoadingActors
-                  ? "Loading approvers..."
+                  ? t("journeySettlement.secondApproval.loadingApprovers")
                   : actors.length === 0
-                    ? "No eligible second approver found"
-                    : "Select a second approver"}
+                    ? t("journeySettlement.secondApproval.noApproverFound")
+                    : t("journeySettlement.secondApproval.selectSecondApprover")}
               </option>
               {actors.map((approver) => (
                 <option key={approver.id} value={approver.actorKey}>
@@ -599,19 +600,18 @@ function SecondApprovalCapture({
               ))}
             </select>
           </Field>
-          <Field label="Second approval notes">
+          <Field label={t("journeySettlement.secondApproval.notes")}>
             <textarea
               className={inputClass}
               rows={2}
               value={notes}
               onChange={(event) => onNotesChange(event.target.value)}
-              placeholder="Optional review notes from the second approver."
+              placeholder={t("journeySettlement.secondApproval.notesPlaceholder")}
             />
           </Field>
           {actors.length === 0 && !isLoadingActors ? (
             <p className="text-xs font-semibold text-amber-900">
-              Add or activate another authorization actor in Authz Admin before
-              posting this operation.
+              {t("journeySettlement.secondApproval.activateActorHint")}
             </p>
           ) : null}
         </div>
@@ -636,26 +636,28 @@ function Field({
 }
 const inputClass =
   "rounded-xl border border-gray-300 px-3 py-2 shadow-sm focus:border-gray-900 focus:outline-none focus:ring-2 focus:ring-gray-900/10";
-function actionTitle(action: Action) {
+function actionTitle(action: Action, t: (key: string, options?: Record<string, unknown>) => string) {
   return action === "ZERO_GOLD"
-    ? "Zero Gold Balance"
+    ? t("journeySettlement.action.zeroGoldTitle")
     : action === "PARTIAL_PAYOUT"
-      ? "Partial Payout"
-      : "Close Journey";
+      ? t("journeySettlement.action.partialPayoutTitle")
+      : t("journeySettlement.action.closeJourneyTitle");
 }
-function actionButton(action: Action) {
+function actionButton(action: Action, t: (key: string, options?: Record<string, unknown>) => string) {
   return action === "ZERO_GOLD"
-    ? "Post Gold Payout"
+    ? t("journeySettlement.action.zeroGoldButton")
     : action === "PARTIAL_PAYOUT"
-      ? "Post Payout"
-      : "Close Journey";
+      ? t("journeySettlement.action.partialPayoutButton")
+      : t("journeySettlement.action.closeJourneyButton");
 }
-function actionDescription(action: Action, preview: SettlementPreview) {
+function actionDescription(action: Action, preview: SettlementPreview, t: (key: string, options?: Record<string, unknown>) => string) {
   if (action === "ZERO_GOLD")
-    return `Pay the full positive gold balance of ${formatGold(preview.goldGramBalance)} g.`;
+    return t("journeySettlement.action.zeroGoldDescription", {
+      amount: formatGold(preview.goldGramBalance),
+    });
   if (action === "PARTIAL_PAYOUT")
-    return "Pay part of the available BRL and/or gold balance.";
-  return "Pay all remaining positive balances and mark this Journey finished.";
+    return t("journeySettlement.action.partialPayoutDescription");
+  return t("journeySettlement.action.closeJourneyDescription");
 }
 function formatReason(value: string) {
   return value.toLowerCase().replaceAll("_", " ");

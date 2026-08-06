@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from "react";
+import { useTranslation } from "react-i18next";
 import { Link, useParams } from "react-router-dom";
 import { ApiErrorPanel } from "../../components/ApiErrorPanel";
 import { JourneyDaysRemaining } from "../../components/JourneyDaysRemaining";
@@ -19,6 +20,7 @@ import { useCollaborator, useUpdateCollaborator } from "./useCollaborators";
 import { useSettlementPreview } from "./useSettlements";
 
 export function CollaboratorDetailPage() {
+  const { t } = useTranslation("collaborators");
   const { id = "" } = useParams();
   const { data: collaborator, isLoading, error } = useCollaborator(id);
   const [editing, setEditing] = useState(false);
@@ -28,7 +30,7 @@ export function CollaboratorDetailPage() {
     return (
       <main className="min-h-screen bg-gray-50 p-4">
         <section className="mx-auto max-w-5xl rounded-2xl border bg-white p-5 shadow-sm">
-          Loading collaborator...
+          {t("loadingCollaborator")}
         </section>
       </main>
     );
@@ -42,7 +44,7 @@ export function CollaboratorDetailPage() {
             className="text-sm font-semibold text-gray-600 underline"
             to="/collaborators"
           >
-            Back to Collaborators
+            {t("backToCollaborators")}
           </Link>
           <div className="mt-4">
             <ApiErrorPanel error={error} />
@@ -60,9 +62,9 @@ export function CollaboratorDetailPage() {
             className="text-sm font-semibold text-gray-600 underline"
             to="/collaborators"
           >
-            Back to Collaborators
+            {t("backToCollaborators")}
           </Link>
-          <p className="mt-4 text-gray-700">Collaborator not found.</p>
+          <p className="mt-4 text-gray-700">{t("collaboratorNotFound")}</p>
         </section>
       </main>
     );
@@ -76,20 +78,22 @@ export function CollaboratorDetailPage() {
             className="text-sm font-semibold text-gray-600 underline"
             to="/collaborators"
           >
-            Back to Collaborators
+            {t("backToCollaborators")}
           </Link>
 
           <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div>
               <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
-                Collaborator Journey
+                {t("journeyHeader")}
               </p>
               <h1 className="text-2xl font-bold text-gray-950">
                 {displayPersonName(collaborator)}
               </h1>
               <p className="mt-1 text-sm text-gray-500">
-                Started {formatDate(collaborator.journeyStartDate)} · Projected
-                end {formatDate(collaborator.projectedEndDate)}
+                {t("startedProjectedEnd", {
+                  startDate: formatDate(collaborator.journeyStartDate),
+                  endDate: formatDate(collaborator.projectedEndDate),
+                })}
               </p>
               <JourneyDaysRemaining
                 projectedEndDate={collaborator.projectedEndDate}
@@ -105,7 +109,7 @@ export function CollaboratorDetailPage() {
                   className="rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 shadow-sm"
                   to={`/collaborators/${collaborator.id}/current-account`}
                 >
-                  Current Account
+                  {t("currentAccount")}
                 </Link>
                 <button
                   type="button"
@@ -115,7 +119,7 @@ export function CollaboratorDetailPage() {
                     setEditing(true);
                   }}
                 >
-                  Edit Collaborator
+                  {t("editCollaborator")}
                 </button>
               </div>
             </div>
@@ -140,7 +144,9 @@ export function CollaboratorDetailPage() {
             onSaved={(updated) => {
               setEditing(false);
               setFlash(
-                `Collaborator updated for ${displayPersonName(updated)}.`,
+                t("collaboratorUpdatedFlash", {
+                  name: displayPersonName(updated),
+                }),
               );
             }}
           />
@@ -150,103 +156,99 @@ export function CollaboratorDetailPage() {
           <div className="flex items-start justify-between gap-3">
             <div>
               <h2 className="text-lg font-semibold text-gray-950">
-                Person Summary
+                {t("personSummary")}
               </h2>
               <p className="mt-1 text-sm text-gray-500">
-                The Person profile behind this Collaborator journey.
+                {t("personSummaryDescription")}
               </p>
             </div>
             <Link
               className="rounded-xl border border-gray-300 px-3 py-2 text-sm font-semibold text-gray-700 shadow-sm"
               to={`/people/${collaborator.personId}`}
             >
-              View Person
+              {t("viewPerson")}
             </Link>
           </div>
 
           <dl className="mt-5 grid gap-3 text-sm">
-            <Info label="Nickname" value={personDisplayName(collaborator)} />
-            <Info label="Legal Name" value={personLegalName(collaborator)} />
-            <Info label="Person ID" value={collaborator.personId} />
+            <Info label={t("nickname")} value={personDisplayName(collaborator)} />
+            <Info label={t("legalName")} value={personLegalName(collaborator)} />
+            <Info label={t("personId")} value={collaborator.personId} />
           </dl>
         </section>
 
         <section className="rounded-2xl border bg-white p-5 shadow-sm">
-          <h2 className="text-lg font-semibold text-gray-950">Lifecycle</h2>
+          <h2 className="text-lg font-semibold text-gray-950">{t("lifecycle")}</h2>
           <p className="mt-1 text-sm text-gray-500">
-            Current journey timing and status.
+            {t("lifecycleDescription")}
           </p>
 
           <dl className="mt-5 grid gap-3 text-sm">
             <Info
-              label="Status"
+              label={t("status")}
               value={collaborator.statusLabel || collaborator.statusId}
             />
             <Info
-              label="Avail."
-              value={planningAvailabilityLabel(
-                collaborator.planningAvailability,
-              )}
+              label={t("availabilityShort")}
+              value={planningAvailabilityLabel(collaborator.planningAvailability, t)}
             />
             <Info
-              label="Journey Start"
+              label={t("journeyStart")}
               value={formatDate(collaborator.journeyStartDate)}
             />
             <Info
-              label="Default End"
+              label={t("defaultEnd")}
               value={formatDate(collaborator.defaultEndDate)}
             />
             <Info
-              label="Extension Days"
+              label={t("extensionDays")}
               value={String(collaborator.extensionDays)}
             />
             <Info
-              label="Projected End"
+              label={t("projectedEndLabel")}
               value={formatDate(collaborator.projectedEndDate)}
             />
-            <Info label="Closed At" value={formatDate(collaborator.closedAt)} />
+            <Info label={t("closedAt")} value={formatDate(collaborator.closedAt)} />
           </dl>
         </section>
 
         <section className="rounded-2xl border bg-white p-5 shadow-sm">
-          <h2 className="text-lg font-semibold text-gray-950">
-            Work Assignment
-          </h2>
+          <h2 className="text-lg font-semibold text-gray-950">{t("workAssignment")}</h2>
           <p className="mt-1 text-sm text-gray-500">
-            Operational placement for this Collaborator.
+            {t("workAssignmentDescription")}
           </p>
 
           <dl className="mt-5 grid gap-3 text-sm">
             <Info
-              label="Sector"
+              label={t("sector")}
               value={collaborator.sectorLabel || collaborator.sectorId}
             />
             <Info
-              label="Location"
+              label={t("location")}
               value={collaborator.locationLabel || collaborator.locationId}
             />
             <Info
-              label="Task"
+              label={t("task")}
               value={collaborator.taskLabel || collaborator.taskId}
             />
           </dl>
         </section>
 
         <section className="rounded-2xl border bg-white p-5 shadow-sm">
-          <h2 className="text-lg font-semibold text-gray-950">Payment</h2>
+          <h2 className="text-lg font-semibold text-gray-950">{t("paymentTitle")}</h2>
           <p className="mt-1 text-sm text-gray-500">
-            Default payment method and value for this journey.
+            {t("paymentDescription")}
           </p>
 
           <dl className="mt-5 grid gap-3 text-sm">
             <Info
-              label="Method"
+              label={t("methodLabel")}
               value={
                 collaborator.paymentMethodLabel || collaborator.paymentMethodId
               }
             />
             <Info
-              label="Value"
+              label={t("value")}
               value={formatCollaboratorPaymentValue(collaborator)}
             />
           </dl>
@@ -283,6 +285,7 @@ function CollaboratorEditPanel({
   onCancel: () => void;
   onSaved: (collaborator: Collaborator) => void;
 }) {
+  const { t } = useTranslation("collaborators");
   const paymentMethodsQuery = useReferenceDataByType("method");
   const sectorsQuery = useReferenceDataByType("sector");
   const locationsQuery = useReferenceDataByType("location");
@@ -330,10 +333,12 @@ function CollaboratorEditPanel({
   );
   const paymentValueConfig = paymentValueInputConfig(
     selectedPaymentMethod?.code,
+    t,
   );
   const paymentValueValidation = validatePaymentValueInput(
     form.paymentValue,
     paymentValueConfig,
+    t,
   );
 
   function update<K extends keyof EditFormState>(
@@ -358,7 +363,7 @@ function CollaboratorEditPanel({
       !form.paymentMethodId
     ) {
       setClientError(
-        "Select availability, sector, location, task, and payment method before saving.",
+        t("selectAvailabilitySectorLocationTaskPayment"),
       );
       return;
     }
@@ -367,9 +372,7 @@ function CollaboratorEditPanel({
       return;
     }
     if (!Number.isInteger(extensionDays) || extensionDays < 0) {
-      setClientError(
-        "Extension days must be a whole number of zero or greater.",
-      );
+      setClientError(t("extensionDaysWholeNumber"));
       return;
     }
 
@@ -394,11 +397,10 @@ function CollaboratorEditPanel({
       <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
         <div>
           <h2 className="text-lg font-semibold text-gray-950">
-            Edit Collaborator
+            {t("editCollaborator")}
           </h2>
           <p className="mt-1 text-sm text-gray-500">
-            Update assignment, payment, and journey extension details for this
-            Collaborator.
+            {t("editCollaboratorDescription")}
           </p>
         </div>
         <button
@@ -406,13 +408,13 @@ function CollaboratorEditPanel({
           className="rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 shadow-sm"
           onClick={onCancel}
         >
-          Cancel edit
+          {t("cancelEdit")}
         </button>
       </div>
 
       {isLoading && (
         <p className="mt-4 rounded-xl bg-gray-50 p-4 text-sm text-gray-700">
-          Loading editable reference data...
+          {t("loadingEditableReferenceData")}
         </p>
       )}
 
@@ -429,50 +431,50 @@ function CollaboratorEditPanel({
         <form onSubmit={submit} className="mt-5 space-y-5">
           <div className="grid gap-4 md:grid-cols-4">
             <Select
-              label="Avail."
+              label={t("availabilityShort")}
               required
               value={form.planningAvailability}
               onChange={(value) => update("planningAvailability", value)}
-              options={planningAvailabilityOptions}
-              placeholder="Select availability"
+              options={planningAvailabilityOptions(t)}
+              placeholder={t("selectAvailability")}
             />
             <Select
-              label="Sector"
+              label={t("sector")}
               required
               value={form.sectorId}
               onChange={(value) => update("sectorId", value)}
               options={sectorOptions}
-              placeholder="Select a sector"
+              placeholder={t("selectSector")}
             />
             <Select
-              label="Location"
+              label={t("location")}
               required
               value={form.locationId}
               onChange={(value) => update("locationId", value)}
               options={locationOptions}
-              placeholder="Select a location"
+              placeholder={t("selectLocation")}
             />
             <Select
-              label="Task"
+              label={t("task")}
               required
               value={form.taskId}
               onChange={(value) => update("taskId", value)}
               options={taskOptions}
-              placeholder="Select a task"
+              placeholder={t("selectTask")}
             />
           </div>
 
           <div className="grid gap-4 md:grid-cols-3">
             <Select
-              label="Payment Method"
+              label={t("paymentMethod")}
               required
               value={form.paymentMethodId}
               onChange={(value) => update("paymentMethodId", value)}
               options={paymentMethodOptions}
-              placeholder="Select a payment method"
+              placeholder={t("selectPaymentMethod")}
             />
             <Input
-              label="Payment Value"
+              label={t("paymentValueLabel")}
               required
               type="text"
               inputMode="decimal"
@@ -483,7 +485,7 @@ function CollaboratorEditPanel({
               onChange={(value) => update("paymentValue", value)}
             />
             <Input
-              label="Extension Days"
+              label={t("extensionDays")}
               required
               type="number"
               min="0"
@@ -499,14 +501,14 @@ function CollaboratorEditPanel({
               className="rounded-xl border border-gray-300 bg-white px-5 py-3 text-sm font-semibold text-gray-700 shadow-sm"
               onClick={onCancel}
             >
-              Cancel
+              {t("cancel")}
             </button>
             <button
               type="submit"
               disabled={updateMutation.isPending}
               className="rounded-xl bg-gray-950 px-5 py-3 text-sm font-semibold text-white shadow-sm disabled:cursor-not-allowed disabled:opacity-60"
             >
-              {updateMutation.isPending ? "Saving..." : "Save Collaborator"}
+              {updateMutation.isPending ? t("saving") : t("saveCollaborator")}
             </button>
           </div>
         </form>
@@ -564,20 +566,28 @@ function collaboratorUpdateInput(
   return input;
 }
 
-const planningAvailabilityOptions = [
-  { value: "ACTIVE", label: "A — Active" },
-  { value: "DAY_OFF", label: "D — Day Off" },
-  { value: "LEAVE_OF_ABSENCE", label: "L — Leave of Absence" },
-];
+function planningAvailabilityOptions(t: (key: string) => string) {
+  return [
+    { value: "ACTIVE", label: t("planningAvailability.active") },
+    { value: "DAY_OFF", label: t("planningAvailability.dayOff") },
+    {
+      value: "LEAVE_OF_ABSENCE",
+      label: t("planningAvailability.leaveOfAbsence"),
+    },
+  ];
+}
 
-function planningAvailabilityLabel(value?: string) {
+function planningAvailabilityLabel(
+  value?: string,
+  t?: (key: string) => string,
+) {
   switch (value) {
     case "DAY_OFF":
-      return "D — Day Off";
+      return t ? t("planningAvailability.dayOff") : "D — Day Off";
     case "LEAVE_OF_ABSENCE":
-      return "L — Leave of Absence";
+      return t ? t("planningAvailability.leaveOfAbsence") : "L — Leave of Absence";
     default:
-      return "A — Active";
+      return t ? t("planningAvailability.active") : "A — Active";
   }
 }
 
@@ -592,11 +602,10 @@ function activeOptionsWithCurrent(
     .map((item) => ({ value: item.id, label: item.label }));
 
   if (currentId && !options.some((option) => option.value === currentId)) {
+    const suffix = "(inactive)";
     options.unshift({
       value: currentId,
-      label: currentLabel
-        ? `${currentLabel} (inactive)`
-        : `${currentId} (inactive)`,
+      label: currentLabel ? `${currentLabel} ${suffix}` : `${currentId} ${suffix}`,
     });
   }
 
@@ -690,6 +699,7 @@ function Input({
 }
 
 function CollaboratorNotes({ collaborator }: { collaborator: Collaborator }) {
+  const { t } = useTranslation("collaborators");
   const rawNotes = collaborator.notes?.trim() ?? "";
   const refreshGoldBalance = hasStoredGoldBalanceNote(rawNotes);
   const preview = useSettlementPreview(
@@ -697,11 +707,11 @@ function CollaboratorNotes({ collaborator }: { collaborator: Collaborator }) {
   );
   const displayedNotes = refreshGoldBalance
     ? notesWithCurrentGoldBalance(rawNotes, preview.data?.goldGramBalance)
-    : rawNotes || "No notes recorded.";
+    : rawNotes || t("noNotesRecorded");
 
   return (
     <section className="rounded-2xl border bg-white p-5 shadow-sm lg:col-span-2">
-      <h2 className="text-lg font-semibold text-gray-950">Notes</h2>
+      <h2 className="text-lg font-semibold text-gray-950">{t("notes")}</h2>
       <p className="mt-3 whitespace-pre-wrap text-sm text-gray-700">
         {displayedNotes}
       </p>
@@ -732,9 +742,10 @@ function formatGoldGramsForNotes(value: number) {
 }
 
 function StatusBadge({ collaborator }: { collaborator: Collaborator }) {
+  const { t } = useTranslation("collaborators");
   const closed = Boolean(collaborator.closedAt);
   const label = closed
-    ? "Closed"
+    ? t("closed")
     : collaborator.statusLabel || collaborator.statusId;
 
   return (

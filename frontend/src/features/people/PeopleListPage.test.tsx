@@ -13,6 +13,7 @@ let root: Root | null;
 let fetchCalls: string[];
 
 beforeEach(() => {
+  void i18n.changeLanguage("en");
   window.localStorage.clear();
   vi.useFakeTimers({ shouldAdvanceTime: true });
   container = document.createElement("div");

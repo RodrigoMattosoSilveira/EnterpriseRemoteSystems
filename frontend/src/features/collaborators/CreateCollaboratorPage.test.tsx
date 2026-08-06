@@ -1,8 +1,10 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
+import { I18nextProvider } from "react-i18next";
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import i18n from "../../app/i18n";
 import { CreateCollaboratorPage } from "./CreateCollaboratorPage";
 import type { Person } from "../../types/people";
 import type { Collaborator } from "../../types/collaborators";
@@ -174,6 +176,7 @@ let fetchCalls: FetchCall[];
 let testQueryClient: QueryClient | null;
 
 beforeEach(() => {
+  void i18n.changeLanguage("en");
   container = document.createElement("div");
   document.body.appendChild(container);
   root = null;
@@ -501,7 +504,7 @@ describe("CreateCollaboratorPage", () => {
     await changeInput("Payment Value", "125.50");
     await clickButton("Create Collaborator");
 
-    await waitForText("Validation failed");
+    await waitForText("The submitted data is invalid.");
     await waitForText("Status: 400 · Code: validation_failed");
     await waitForText("statusId:");
     await waitForText("Collaborator status is required");
@@ -547,7 +550,7 @@ describe("CreateCollaboratorPage", () => {
     await changeInput("Payment Value", "125.50");
     await clickButton("Create Collaborator");
 
-    await waitForText("Validation failed");
+    await waitForText("The submitted data is invalid.");
     await waitForText("personId:");
     await waitForText(
       "Person profile is incomplete. Missing sections: Bank, Emergency.",
@@ -633,9 +636,11 @@ function renderCreateCollaboratorPage() {
 
   act(() => {
     root?.render(
-      <QueryClientProvider client={queryClient}>
-        <RouterProvider router={router} />
-      </QueryClientProvider>,
+      <I18nextProvider i18n={i18n}>
+        <QueryClientProvider client={queryClient}>
+          <RouterProvider router={router} />
+        </QueryClientProvider>
+      </I18nextProvider>,
     );
   });
 }

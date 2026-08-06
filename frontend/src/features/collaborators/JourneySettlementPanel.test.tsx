@@ -1,8 +1,10 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
+import { I18nextProvider } from "react-i18next";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import i18n from "../../app/i18n";
 import type { AuthzActor } from "../../types/authz";
 import type { SettlementPreview } from "../../types/settlements";
 import { JourneySettlementPanel } from "./JourneySettlementPanel";
@@ -11,6 +13,7 @@ let container: HTMLDivElement;
 let root: Root | null;
 
 beforeEach(() => {
+  void i18n.changeLanguage("en");
   window.localStorage.clear();
   container = document.createElement("div");
   document.body.appendChild(container);
@@ -277,14 +280,16 @@ function renderPanel() {
   root = createRoot(container);
   act(() =>
     root?.render(
-      <QueryClientProvider client={client}>
-        <MemoryRouter>
-          <JourneySettlementPanel
-            collaboratorId="collab-1"
-            projectedEndDate="2099-12-31"
-          />
-        </MemoryRouter>
-      </QueryClientProvider>,
+      <I18nextProvider i18n={i18n}>
+        <QueryClientProvider client={client}>
+          <MemoryRouter>
+            <JourneySettlementPanel
+              collaboratorId="collab-1"
+              projectedEndDate="2099-12-31"
+            />
+          </MemoryRouter>
+        </QueryClientProvider>
+      </I18nextProvider>,
     ),
   );
 }

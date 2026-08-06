@@ -66,6 +66,19 @@ const FIELD_ERROR_KEY: Record<string, string> = {
   "Emergency cellular must be a valid Brazilian mobile number": "fieldErrors.emergencyCellularInvalid",
   "Emergency email is invalid": "fieldErrors.emergencyEmailInvalid",
   "Country must be Brasil": "fieldErrors.countryInvalid",
+  "Journey start date must be YYYY-MM-DD": "fieldErrors.journeyStartDateInvalid",
+  "Extension days must be zero or greater": "fieldErrors.extensionDaysInvalid",
+  "Planning availability must be ACTIVE, DAY_OFF, or LEAVE_OF_ABSENCE": "fieldErrors.planningAvailabilityInvalid",
+  "Payment method must be active reference data of type method": "fieldErrors.paymentMethodReferenceInvalid",
+  "Sector must be active reference data of type sector": "fieldErrors.sectorReferenceInvalid",
+  "Location must be active reference data of type location": "fieldErrors.locationReferenceInvalid",
+  "Task must be active reference data of type task": "fieldErrors.taskReferenceInvalid",
+  "Status must be active reference data of type collaborator_status": "fieldErrors.collaboratorStatusReferenceInvalid",
+  "Person profile must be complete before creating a collaborator": "fieldErrors.personProfileIncompleteForCollaborator",
+  "Person already has an active collaborator journey": "fieldErrors.personAlreadyHasActiveCollaboratorJourney",
+  "Collaborator status is required": "fieldErrors.collaboratorStatusRequired",
+  "Payment value must be greater than zero": "fieldErrors.paymentValueGreaterThanZero",
+  "Sector is inactive or does not exist": "fieldErrors.sectorInactiveOrMissing",
 };
 
 // Maps known backend error codes to common-namespace translation keys.

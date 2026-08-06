@@ -10,7 +10,6 @@ import {
   ListViewIcon,
   SegmentedOptionToggle,
 } from "../../components/options/SegmentedOptionToggle";
-import { LanguageSwitcher } from "../../app/LanguageSwitcher";
 import type {
   PeopleListFilter,
   Person,
@@ -158,7 +157,6 @@ export function PeopleListPage() {
             >
               {t("addButton")}
             </Link>
-            <LanguageSwitcher />
           </div>
         </div>
       </header>

@@ -1,5 +1,6 @@
 import { createBrowserRouter, Link, useRouteError } from "react-router-dom";
 import { describeRouteError } from "./routeErrorPresentation";
+import { AppShell } from "./AppShell";
 
 function RouteErrorPage() {
   const presentation = describeRouteError(useRouteError());
@@ -36,6 +37,7 @@ function StatusPage({ title, message }: { title: string; message: string }) {
 export const router = createBrowserRouter([
   {
     path: "/",
+    element: <AppShell />,
     errorElement: <RouteErrorPage />,
     children: [
       {
