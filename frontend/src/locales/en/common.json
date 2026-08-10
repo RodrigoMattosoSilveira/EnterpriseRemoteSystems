@@ -20,6 +20,18 @@
     "cepInvalid": "CEP is invalid",
     "emergencyCellularInvalid": "Emergency cellular must be a valid Brazilian mobile number",
     "emergencyEmailInvalid": "Emergency email is invalid",
-    "countryInvalid": "Country must be Brasil"
+    "countryInvalid": "Country must be Brasil",
+    "expenseItemTypeInvalid": "Expense item type must be CANTEEN or ADMINISTRATIVE",
+    "expenseCurrencyCodeInvalid": "Expense currency code must be BRL or GOLD_GRAM",
+    "expenseAmountGreaterThanZero": "Expense amount must be greater than zero",
+    "expenseQuantityGreaterThanZero": "Expense quantity must be greater than zero",
+    "expenseDateInvalid": "Expense date must be YYYY-MM-DD",
+    "expenseDateFromInvalid": "Expense date from must be YYYY-MM-DD",
+    "expenseDateToInvalid": "Expense date to must be YYYY-MM-DD",
+    "expensePageInvalid": "Expense page must be greater than zero",
+    "expensePageSizeInvalid": "Expense page size must be greater than zero",
+    "expenseCategoryDerived": "Expense category is derived from the price list item",
+    "expenseValueUnitDerived": "Value unit is derived from the selected currency",
+    "expenseAmountCalculated": "Amount is calculated from unit price and quantity"
   }
 }

@@ -20,6 +20,18 @@
     "cepInvalid": "CEP inválido",
     "emergencyCellularInvalid": "O celular de emergência deve ser um número móvel brasileiro válido",
     "emergencyEmailInvalid": "E-mail de emergência inválido",
-    "countryInvalid": "O país deve ser Brasil"
+    "countryInvalid": "O país deve ser Brasil",
+    "expenseItemTypeInvalid": "O tipo de item da despesa deve ser CANTEEN ou ADMINISTRATIVE",
+    "expenseCurrencyCodeInvalid": "O código da moeda da despesa deve ser BRL ou GOLD_GRAM",
+    "expenseAmountGreaterThanZero": "O valor da despesa deve ser maior que zero",
+    "expenseQuantityGreaterThanZero": "A quantidade da despesa deve ser maior que zero",
+    "expenseDateInvalid": "A data da despesa deve estar no formato YYYY-MM-DD",
+    "expenseDateFromInvalid": "A data inicial da despesa deve estar no formato YYYY-MM-DD",
+    "expenseDateToInvalid": "A data final da despesa deve estar no formato YYYY-MM-DD",
+    "expensePageInvalid": "A página da despesa deve ser maior que zero",
+    "expensePageSizeInvalid": "O tamanho da página da despesa deve ser maior que zero",
+    "expenseCategoryDerived": "A categoria da despesa é derivada do item da lista de preços",
+    "expenseValueUnitDerived": "A unidade de valor é derivada da moeda selecionada",
+    "expenseAmountCalculated": "O valor é calculado a partir do preço unitário e da quantidade"
   }
 }

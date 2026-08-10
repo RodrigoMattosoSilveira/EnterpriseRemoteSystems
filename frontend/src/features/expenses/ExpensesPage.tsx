@@ -1,4 +1,5 @@
 import { useMemo, type ChangeEvent } from "react";
+import { useTranslation } from "react-i18next";
 import { Link, useLocation, useSearchParams } from "react-router-dom";
 import { ApiErrorPanel } from "../../components/ApiErrorPanel";
 import type { Collaborator } from "../../types/collaborators";
@@ -18,6 +19,7 @@ const FILTER_OPTION_PAGE_SIZE = 200;
 export function ExpensesPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const location = useLocation();
+  const { t } = useTranslation("expenses");
   const page = parsePositiveInt(searchParams.get("page"), 1);
   const collaboratorId = searchParams.get("collaboratorId") ?? "";
   const collaboratorSearch = searchParams.get("collaboratorSearch") ?? "";
@@ -106,11 +108,11 @@ export function ExpensesPage() {
         <div className="mx-auto flex max-w-5xl items-center justify-between gap-3">
           <div>
             <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
-              Operations
+              {t("page.operations")}
             </p>
-            <h1 className="text-xl font-bold text-gray-950">Expenses</h1>
+            <h1 className="text-xl font-bold text-gray-950">{t("page.title")}</h1>
             <p className="text-sm text-gray-500">
-              Expense deductions recorded in Real or grams of gold.
+              {t("page.subtitle")}
             </p>
           </div>
 
@@ -119,19 +121,19 @@ export function ExpensesPage() {
               to="/people"
               className="rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 shadow-sm"
             >
-              People
+              {t("page.peopleLink")}
             </Link>
             <Link
               to="/collaborators"
               className="rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 shadow-sm"
             >
-              Collaborators
+              {t("page.collaboratorsLink")}
             </Link>
             <Link
               to="/expenses/new"
               className="rounded-xl bg-gray-950 px-4 py-2 text-sm font-semibold text-white shadow-sm"
             >
-              Add
+              {t("page.addButton")}
             </Link>
           </div>
         </div>
@@ -153,10 +155,10 @@ export function ExpensesPage() {
           <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
             <div>
               <h2 className="text-lg font-semibold text-gray-950">
-                Expense Records
+                {t("page.recordsTitle")}
               </h2>
               <p className="text-sm text-gray-500">
-                Showing {expenses.length} of {total} expense records.
+                {t("page.recordsSummary", { shown: expenses.length, total })}
               </p>
             </div>
 
@@ -171,17 +173,17 @@ export function ExpensesPage() {
 
         <section className="rounded-2xl border bg-white p-4 shadow-sm">
           <div className="mb-4">
-            <h2 className="text-lg font-semibold text-gray-950">Filters</h2>
-            <p className="text-sm text-gray-500">Filter expense records by collaborator name, nickname, category, or item.</p>
+            <h2 className="text-lg font-semibold text-gray-950">{t("page.filtersTitle")}</h2>
+            <p className="text-sm text-gray-500">{t("page.filtersDescription")}</p>
             <p className="mt-1 text-xs text-gray-500">
-              Start typing a collaborator first name, last name, full name, or nickname, then select a matching collaborator when you need an exact filter.
+              {t("page.filtersHint")}
             </p>
           </div>
 
           <div className="grid min-w-0 items-start gap-4 md:grid-cols-2 lg:grid-cols-3">
             <div className="relative min-w-0">
               <label className="grid min-w-0 gap-1 text-sm font-medium text-gray-700">
-                Collaborator name or nickname
+                {t("page.collaboratorSearchLabel")}
                 <input
                   id="expense-collaborator-search"
                   type="search"
@@ -197,7 +199,7 @@ export function ExpensesPage() {
                   onChange={(event: ChangeEvent<HTMLInputElement>) =>
                     setFilter("collaboratorSearch", event.target.value)
                   }
-                  placeholder="Search by name or nickname"
+                  placeholder={t("page.collaboratorSearchPlaceholder")}
                   className="w-full min-w-0 rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm"
                 />
               </label>
@@ -205,16 +207,16 @@ export function ExpensesPage() {
                 <div
                   id="expense-collaborator-suggestions"
                   role="listbox"
-                  aria-label="Matching collaborators"
+                  aria-label={t("page.matchingCollaboratorsAriaLabel")}
                   className="absolute left-0 right-0 top-full z-20 mt-1 max-h-60 overflow-y-auto rounded-xl border border-gray-200 bg-white p-1 shadow-lg"
                 >
                   {collaboratorOptionsLoading ? (
                     <p className="px-3 py-2 text-sm text-gray-500">
-                      Loading matching collaborators…
+                      {t("page.collaboratorSuggestionsLoading")}
                     </p>
                   ) : collaboratorOptions.length === 0 ? (
                     <p className="px-3 py-2 text-sm text-gray-500">
-                      No matching collaborators
+                      {t("page.collaboratorSuggestionsEmpty")}
                     </p>
                   ) : (
                     collaboratorOptions.map((collaborator) => (
@@ -239,7 +241,7 @@ export function ExpensesPage() {
                   className="mt-2 flex min-w-0 items-center justify-between gap-2 rounded-xl bg-gray-100 px-3 py-2 text-xs text-gray-700"
                 >
                   <span className="min-w-0">
-                    <span className="font-semibold">Selected:</span>{" "}
+                    <span className="font-semibold">{t("page.selectedLabel")}</span>{" "}
                     <span className="break-words">
                       {selectedCollaborator
                         ? collaboratorDisplayName(selectedCollaborator)
@@ -251,34 +253,34 @@ export function ExpensesPage() {
                     onClick={() => setFilter("collaboratorId", "")}
                     className="shrink-0 rounded-lg border border-gray-300 bg-white px-2 py-1 font-semibold text-gray-700"
                   >
-                    Remove
+                    {t("page.removeButton")}
                   </button>
                 </div>
               )}
             </div>
 
             <label className="grid min-w-0 gap-1 text-sm font-medium text-gray-700">
-              Category
+              {t("page.categoryLabel")}
               <select
                 value={itemType}
                 onChange={(event: ChangeEvent<HTMLSelectElement>) => setFilter("itemType", event.target.value)}
                 className="w-full min-w-0 rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm"
               >
-                <option value="">All categories</option>
-                <option value="CANTEEN">Canteen</option>
-                <option value="ADMINISTRATIVE">Administrative</option>
+                <option value="">{t("page.categoryAll")}</option>
+                <option value="CANTEEN">{t("categories.canteen")}</option>
+                <option value="ADMINISTRATIVE">{t("categories.administrative")}</option>
               </select>
             </label>
 
             <label className="grid min-w-0 gap-1 text-sm font-medium text-gray-700">
-              Item
+              {t("page.itemLabel")}
               <select
                 value={priceListItemId}
                 onChange={(event: ChangeEvent<HTMLSelectElement>) => setFilter("priceListItemId", event.target.value)}
                 aria-describedby={selectedPriceListItem ? "selected-expense-item-filter-label" : undefined}
                 className="w-full min-w-0 rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm"
               >
-                <option value="">All items</option>
+                <option value="">{t("page.itemAll")}</option>
                 {filteredItemOptions.map((item) => (
                   <option key={item.id} value={item.id}>
                     {priceListItemLabel(item)}
@@ -303,31 +305,31 @@ export function ExpensesPage() {
               onClick={clearFilters}
               className="mt-4 rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 shadow-sm"
             >
-              Clear filters
+              {t("page.clearFilters")}
             </button>
           )}
         </section>
 
         {isLoading && (
           <div className="rounded-2xl border bg-white p-5 shadow-sm">
-            Loading expenses...
+            {t("page.loading")}
           </div>
         )}
 
         {!isLoading && !error && expenses.length === 0 && (
           <div className="rounded-2xl border bg-white p-8 text-center shadow-sm">
-            <h2 className="text-lg font-semibold">No expenses found</h2>
+            <h2 className="text-lg font-semibold">{t("page.emptyTitle")}</h2>
             <p className="mt-2 text-sm text-gray-500">
               {hasActiveFilters
-                ? "Adjust the collaborator name, category, or item filters to find more expense records."
-                : "Record a Collaborator expense after an active Collaborator exists."}
+                ? t("page.emptyDescriptionWithFilters")
+                : t("page.emptyDescriptionWithoutFilters")}
             </p>
             {!hasActiveFilters && (
               <Link
                 to="/expenses/new"
                 className="mt-5 inline-block rounded-xl bg-gray-950 px-5 py-3 text-sm font-semibold text-white"
               >
-                Create Expense
+                {t("page.createExpense")}
               </Link>
             )}
           </div>
@@ -339,43 +341,43 @@ export function ExpensesPage() {
               <table className="w-full text-left text-sm">
                 <thead className="bg-gray-50 text-xs uppercase tracking-wide text-gray-500">
                   <tr>
-                    <th className="p-3">Date</th>
-                    <th className="p-3">Collaborator</th>
-                    <th className="p-3">Category</th>
-                    <th className="p-3">Item</th>
-                    <th className="p-3 text-right">Amount</th>
-                    <th className="p-3">Receipt</th>
-                    <th className="p-3">Description</th>
+                    <th className="p-3">{t("page.tableDate")}</th>
+                    <th className="p-3">{t("page.tableCollaborator")}</th>
+                    <th className="p-3">{t("page.tableCategory")}</th>
+                    <th className="p-3">{t("page.tableItem")}</th>
+                    <th className="p-3 text-right">{t("page.tableAmount")}</th>
+                    <th className="p-3">{t("page.tableReceipt")}</th>
+                    <th className="p-3">{t("page.tableDescription")}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y">
                   {expenses.map((expense) => (
                     <tr key={expense.id}>
                       <td className="p-3 text-gray-700">
-                        {formatDate(expense.expenseDate)}
+                        {formatDate(expense.expenseDate, t)}
                       </td>
                       <td className="p-3">
                         <Link
                           to={`/expenses/${expense.id}`}
                           className="font-semibold text-gray-950 underline-offset-2 hover:underline"
                         >
-                          {expense.collaboratorLabel || "Collaborator"}
+                          {expense.collaboratorLabel || t("page.fallbackCollaborator")}
                         </Link>
                       </td>
                       <td className="p-3 text-gray-700">
-                        {displayExpenseCategory(expense)}
+                        {displayExpenseCategory(expense, t)}
                       </td>
                       <td className="p-3 text-gray-700">
-                        {expenseItemLabel(expense)}
+                        {expenseItemLabel(expense, t)}
                       </td>
                       <td className="p-3 text-right font-semibold text-gray-950">
-                        {formatExpenseAmount(expense)}
+                        {formatExpenseAmount(expense, t)}
                       </td>
                       <td className="p-3 text-gray-700">
                         <ExpenseReceiptStatus expense={expense} />
                       </td>
                       <td className="p-3 text-gray-700">
-                        {expense.description || "—"}
+                        {expense.description || t("units.dash")}
                       </td>
                     </tr>
                   ))}
@@ -417,6 +419,8 @@ function PaginationControls({
   isLoading: boolean;
   onPageChange: (page: number) => void;
 }) {
+  const { t } = useTranslation("expenses");
+
   return (
     <nav className="flex flex-wrap items-center gap-3" aria-label="Expense pages">
       <button
@@ -425,10 +429,10 @@ function PaginationControls({
         disabled={isLoading || currentPage <= 1}
         className="rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 shadow-sm disabled:cursor-not-allowed disabled:opacity-50"
       >
-        Previous
+        {t("page.paginationPrevious")}
       </button>
       <span className="text-sm font-medium text-gray-700">
-        Page {currentPage} of {totalPages}
+        {t("page.paginationPage", { current: currentPage, total: totalPages })}
       </span>
       <button
         type="button"
@@ -436,22 +440,24 @@ function PaginationControls({
         disabled={isLoading || currentPage >= totalPages}
         className="rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 shadow-sm disabled:cursor-not-allowed disabled:opacity-50"
       >
-        Next
+        {t("page.paginationNext")}
       </button>
     </nav>
   );
 }
 
 function ExpenseCard({ expense }: { expense: Expense }) {
+  const { t } = useTranslation("expenses");
+
   return (
     <Link to={`/expenses/${expense.id}`} className="block p-4">
       <div className="flex items-start justify-between gap-3">
         <div>
           <h2 className="font-semibold text-gray-950">
-            {expense.collaboratorLabel || "Collaborator"}
+            {expense.collaboratorLabel || t("page.fallbackCollaborator")}
           </h2>
           <p className="text-sm text-gray-500">
-            {displayExpenseCategory(expense)} · {formatDate(expense.expenseDate)}
+            {displayExpenseCategory(expense, t)} · {formatDate(expense.expenseDate, t)}
           </p>
         </div>
         <span className="rounded-full bg-gray-100 px-3 py-1 text-xs font-semibold text-gray-800">
@@ -460,27 +466,28 @@ function ExpenseCard({ expense }: { expense: Expense }) {
       </div>
 
       <div className="mt-4 grid gap-2 text-sm text-gray-700">
-        <Info label="Item" value={expenseItemLabel(expense)} />
-        <Info label="Amount" value={formatExpenseAmount(expense)} />
-        <Info label="Receipt" value={expenseReceiptSummary(expense)} />
-        <Info label="Description" value={expense.description || "—"} />
+        <Info label={t("page.tableItem")} value={expenseItemLabel(expense, t)} />
+        <Info label={t("page.tableAmount")} value={formatExpenseAmount(expense, t)} />
+        <Info label={t("page.tableReceipt")} value={expenseReceiptSummary(expense, t)} />
+        <Info label={t("page.tableDescription")} value={expense.description || t("units.dash")} />
       </div>
     </Link>
   );
 }
 
 function ExpenseReceiptStatus({ expense }: { expense: Expense }) {
+  const { t } = useTranslation("expenses");
   const posting = expense.financialPosting;
   if (!posting) {
     return (
       <span className="inline-flex rounded-full bg-red-100 px-3 py-1 text-xs font-semibold text-red-800">
-        Missing posting
+        {t("page.receiptMissing")}
       </span>
     );
   }
 
   const label = posting.outstandingReceipt
-    ? `Outstanding · ${receiptStatusLabel(posting.receiptStatus)}`
+    ? t("page.receiptOutstanding", { status: receiptStatusLabel(posting.receiptStatus) })
     : receiptStatusLabel(posting.receiptStatus);
 
   return (
@@ -493,11 +500,11 @@ function ExpenseReceiptStatus({ expense }: { expense: Expense }) {
   );
 }
 
-function expenseReceiptSummary(expense: Expense) {
+function expenseReceiptSummary(expense: Expense, t: (key: string, options?: Record<string, unknown>) => string) {
   const posting = expense.financialPosting;
-  if (!posting) return "Missing posting";
+  if (!posting) return t("page.receiptMissing");
   const label = receiptStatusLabel(posting.receiptStatus);
-  return posting.outstandingReceipt ? `Outstanding · ${label}` : label;
+  return posting.outstandingReceipt ? t("page.receiptOutstanding", { status: label }) : label;
 }
 
 function Info({ label, value }: { label: string; value: string }) {
@@ -509,11 +516,11 @@ function Info({ label, value }: { label: string; value: string }) {
   );
 }
 
-function formatExpenseAmount(expense: Expense) {
+function formatExpenseAmount(expense: Expense, t: (key: string) => string) {
   const amount = expense.totalAmount ?? expense.amount;
   const unitCode = `${expense.currencyCode || ""} ${expense.valueUnitId || ""} ${expense.valueUnitLabel || ""}`.toUpperCase();
   if (unitCode.includes("GOLD")) {
-    return `${formatNumber(amount)} g gold`;
+    return `${formatNumber(amount)} ${t("units.gold")}`;
   }
   return new Intl.NumberFormat("pt-BR", {
     style: "currency",
@@ -528,8 +535,8 @@ function formatNumber(value: number) {
   }).format(value);
 }
 
-function formatDate(value?: string) {
-  return value || "—";
+function formatDate(value: string | undefined, t: (key: string) => string) {
+  return value || t("units.dash");
 }
 
 function readFlash(state: unknown) {
@@ -565,21 +572,21 @@ function priceListItemLabel(item: PriceListItem) {
   return `${item.description} · ${item.code}${inactiveSuffix}`;
 }
 
-function displayExpenseCategory(expense: Expense) {
+function displayExpenseCategory(expense: Expense, t: (key: string) => string) {
   if (expense.itemType === "CANTEEN") {
-    return "Canteen";
+    return t("categories.canteen");
   }
   if (expense.itemType === "ADMINISTRATIVE") {
-    return "Administrative";
+    return t("categories.administrative");
   }
   return expense.expenseCategoryLabel || expense.expenseCategoryId;
 }
 
-function expenseItemLabel(expense: Expense) {
+function expenseItemLabel(expense: Expense, t: (key: string) => string) {
   if (expense.itemDescription) {
     return expense.priceListItemCode
       ? `${expense.itemDescription} · ${expense.priceListItemCode}`
       : expense.itemDescription;
   }
-  return "—";
+  return t("units.dash");
 }
