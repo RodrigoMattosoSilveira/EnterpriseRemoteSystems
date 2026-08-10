@@ -93,12 +93,12 @@ export function ExpenseDetailPage() {
           <section className="rounded-2xl border bg-white p-5 shadow-sm sm:col-span-2">
             <h2 className="text-lg font-semibold text-gray-950">{t("detail.calculationAuditTitle")}</h2>
             <dl className="mt-5 grid gap-3 text-sm sm:grid-cols-2">
-              <Info label={t("detail.calculationMethodLabel")} value={formatCalculationMethod(expense.calculationMethod)} />
+              <Info label={t("detail.calculationMethodLabel")} value={formatCalculationMethod(expense.calculationMethod, t)} />
               <Info label={t("detail.quantityLabel")} value={formatOptionalNumber(expense.quantity)} />
-              <Info label={t("detail.unitPriceLabel")} value={formatUnitPrice(expense)} />
+              <Info label={t("detail.unitPriceLabel")} value={formatUnitPrice(expense, t)} />
               <Info label={t("detail.totalLabel")} value={formatExpenseAmount(expense, t)} />
               {expense.goldBrlPerGram && (
-                <Info label={t("detail.goldPriceSourceLabel")} value={formatGoldPriceSource(expense)} />
+                <Info label={t("detail.goldPriceSourceLabel")} value={formatGoldPriceSource(expense, t)} />
               )}
             </dl>
           </section>
