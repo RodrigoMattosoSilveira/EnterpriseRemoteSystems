@@ -1,0 +1,108 @@
+{
+  "header": {
+    "backToCollaborator": "Voltar para Colaborador",
+    "badge": "Conta Corrente do Colaborador",
+    "fallbackTitle": "Conta Corrente",
+    "subtitle": "Saldos e lançamentos do razão desta jornada de colaborador."
+  },
+  "links": {
+    "outstandingReceipts": "Recibos pendentes",
+    "expenses": "Despesas",
+    "openWorkPeriod": "Abrir Período de Trabalho",
+    "openSource": "Abrir origem",
+    "printOrReturnReceipt": "Imprimir ou devolver recibo"
+  },
+  "states": {
+    "loading": "Carregando conta corrente...",
+    "noBalance": "Ainda não há saldo ativo de conta corrente.",
+    "noLedgerEntries": "Não há lançamentos neste filtro",
+    "noLedgerEntriesHelp": "Altere o filtro ou crie um ganho, despesa, pagamento ou correção."
+  },
+  "filters": {
+    "label": "Filtrar lançamentos",
+    "options": {
+      "all": "Todos os lançamentos",
+      "credits": "Créditos",
+      "debits": "Débitos",
+      "earnings": "Ganhos",
+      "expenses": "Despesas",
+      "outstandingReceipts": "Recibos pendentes"
+    }
+  },
+  "ledger": {
+    "title": "Lançamentos",
+    "subtitle": "Inspecione créditos, débitos, descontos de despesas e obrigações de recibo.",
+    "receiptStatus": "Recibo: {{status}}",
+    "receiptMissing": "Recibo: ausente",
+    "effectiveLine": "{{amount}} · Vigência {{effectiveDate}}",
+    "sourceLine": "Origem: {{source}}",
+    "assignmentSource": "{{sourceLabel}} · Alocação {{assignmentId}}",
+    "outstandingReceiptHelp": "Recibo pendente: imprima, colete assinatura e registre a devolução assinada.",
+    "receiptClosed": "Recibo devolvido ou encerrado.",
+    "entryTypes": {
+      "EXPENSE_DEDUCTION": "desconto de despesa",
+      "EARNING_CREDIT": "crédito de ganho"
+    },
+    "directions": {
+      "DEBIT": "DÉBITO",
+      "CREDIT": "CRÉDITO"
+    }
+  },
+  "pagination": {
+    "summary_one": "Mostrando página {{page}} de {{totalPages}} · {{total}} lançamento",
+    "summary_other": "Mostrando página {{page}} de {{totalPages}} · {{total}} lançamentos",
+    "previous": "Anterior",
+    "next": "Próxima"
+  },
+  "settings": {
+    "header": {
+      "badge": "Administração",
+      "title": "Configurações de Conta Corrente",
+      "subtitle": "Configure regras de aprovação por inquilino para fluxos sensíveis de conta corrente."
+    },
+    "nav": {
+      "authorization": "Autorização",
+      "auditLogs": "Logs de auditoria",
+      "referenceData": "Dados de referência",
+      "goldPrices": "Preços do ouro",
+      "priceList": "Tabela de preços",
+      "backToPeople": "Voltar para Pessoas"
+    },
+    "flash": {
+      "required": "A aprovação de segunda pessoa agora é obrigatória para operações sensíveis de conta corrente.",
+      "optional": "A aprovação de segunda pessoa agora é opcional para operações sensíveis de conta corrente."
+    },
+    "context": {
+      "title": "Contexto de autorização autenticado",
+      "description": "A sessão identifica o ator. O inquilino selecionado é enviado como escopo e validado contra as permissões persistidas desse ator.",
+      "selectedTenant": "ID do inquilino selecionado"
+    },
+    "policy": {
+      "title": "Aprovação de segunda pessoa",
+      "description": "Controla se operações sensíveis de conta corrente devem incluir um aprovador diferente além do ator principal.",
+      "loading": "Carregando política...",
+      "toggleLabel": "Exigir aprovação de segunda pessoa para operações sensíveis de conta corrente",
+      "toggleHelp": "Deixe desabilitado para tornar a segunda aprovação opcional, mas ainda aceita e auditada quando fornecida.",
+      "status": {
+        "loading": "Carregando",
+        "required": "Obrigatória",
+        "optional": "Opcional"
+      }
+    },
+    "warning": {
+      "title": "Aviso operacional",
+      "description": "Quando esta política estiver habilitada, fluxos sensíveis como correções de razão, liquidações de jornada, zeramento de ouro, correções de pagamento e backfills de recibo devem registrar um segundo aprovador válido. O segundo aprovador não pode ser o mesmo ator que executa a operação."
+    },
+    "meta": {
+      "tenant": "Inquilino",
+      "updatedBy": "Última atualização por",
+      "updatedAt": "Última atualização em",
+      "empty": "—"
+    },
+    "actions": {
+      "saving": "Salvando...",
+      "save": "Salvar política",
+      "reset": "Redefinir"
+    }
+  }
+}

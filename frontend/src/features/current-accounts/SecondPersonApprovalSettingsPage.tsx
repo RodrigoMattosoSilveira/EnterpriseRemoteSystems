@@ -1,4 +1,5 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
 import { ApiErrorPanel } from "../../components/ApiErrorPanel";
 import {
@@ -12,6 +13,7 @@ import {
 } from "./useSecondPersonApprovalPolicy";
 
 export function SecondPersonApprovalSettingsPage() {
+  const { t } = useTranslation("currentAccounts");
   const [tenantId, setTenantId] = useState(() =>
     typeof window === "undefined" ? "default" : readSelectedTenantId(window.localStorage),
   );
@@ -43,8 +45,8 @@ export function SecondPersonApprovalSettingsPage() {
       const updated = await updatePolicy.mutateAsync({ required });
       setSuccessMessage(
         updated.required
-          ? "Second-person approval is now required for sensitive current-account operations."
-          : "Second-person approval is now optional for sensitive current-account operations.",
+          ? t("settings.flash.required")
+          : t("settings.flash.optional"),
       );
     } catch {
       // Mutation error is rendered by ApiErrorPanel.
@@ -61,32 +63,32 @@ export function SecondPersonApprovalSettingsPage() {
         <div className="mx-auto flex max-w-5xl items-center justify-between gap-3">
           <div>
             <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
-              Administration
+              {t("settings.header.badge")}
             </p>
-            <h1 className="text-xl font-bold text-gray-950">Current Account Settings</h1>
+            <h1 className="text-xl font-bold text-gray-950">{t("settings.header.title")}</h1>
             <p className="text-sm text-gray-500">
-              Configure tenant-level approval rules for sensitive current-account workflows.
+              {t("settings.header.subtitle")}
             </p>
           </div>
 
           <div className="flex items-center gap-2">
             <Link className="text-sm font-semibold text-gray-700 underline" to="/admin/authorization">
-              Authorization
+              {t("settings.nav.authorization")}
             </Link>
             <Link className="text-sm font-semibold text-gray-700 underline" to="/admin/audit-logs">
-              Audit Logs
+              {t("settings.nav.auditLogs")}
             </Link>
             <Link className="text-sm font-semibold text-gray-700 underline" to="/admin/reference-data">
-              Reference Data
+              {t("settings.nav.referenceData")}
             </Link>
             <Link className="text-sm font-semibold text-gray-700 underline" to="/admin/gold-prices">
-              Gold Prices
+              {t("settings.nav.goldPrices")}
             </Link>
             <Link className="text-sm font-semibold text-gray-700 underline" to="/admin/price-list-items">
-              Price List
+              {t("settings.nav.priceList")}
             </Link>
             <Link className="text-sm font-semibold text-gray-700 underline" to="/people">
-              Back to People
+              {t("settings.nav.backToPeople")}
             </Link>
           </div>
         </div>
@@ -102,12 +104,12 @@ export function SecondPersonApprovalSettingsPage() {
         <ApiErrorPanel error={queryError ?? actionError} />
 
         <section className="rounded-2xl border bg-white p-4 shadow-sm">
-          <h2 className="text-lg font-semibold text-gray-950">Authenticated authorization context</h2>
+          <h2 className="text-lg font-semibold text-gray-950">{t("settings.context.title")}</h2>
           <p className="mt-1 text-sm text-gray-500">
-            The session identifies the actor. The selected tenant is sent as a scope hint and validated against that actor&apos;s persisted grants.
+            {t("settings.context.description")}
           </p>
           <label className="mt-4 block max-w-md text-sm font-semibold text-gray-700">
-            Selected Tenant ID
+            {t("settings.context.selectedTenant")}
             <input
               className="mt-2 block w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm"
               value={tenantId}
@@ -119,22 +121,22 @@ export function SecondPersonApprovalSettingsPage() {
         <form className="rounded-2xl border bg-white p-4 shadow-sm" onSubmit={handleSubmit}>
           <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
             <div>
-              <h2 className="text-lg font-semibold text-gray-950">Second-person approval</h2>
+              <h2 className="text-lg font-semibold text-gray-950">{t("settings.policy.title")}</h2>
               <p className="mt-1 text-sm text-gray-500">
-                Controls whether sensitive current-account operations must include a different approver in addition to the primary actor.
+                {t("settings.policy.description")}
               </p>
             </div>
             <PolicyStatus required={policyQuery.data?.required} isLoading={policyQuery.isLoading} />
           </div>
 
           <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
-            <p className="font-semibold">Operational warning</p>
+            <p className="font-semibold">{t("settings.warning.title")}</p>
             <p className="mt-1">
-              When this policy is enabled, sensitive workflows such as ledger corrections, journey settlements, gold zeroing, payout corrections, and receipt backfills must capture a valid second approver. The second approver cannot be the same actor performing the operation.
+              {t("settings.warning.description")}
             </p>
           </div>
 
-          {policyQuery.isLoading && <p className="mt-4 text-sm text-gray-500">Loading policy...</p>}
+          {policyQuery.isLoading && <p className="mt-4 text-sm text-gray-500">{t("settings.policy.loading")}</p>}
 
           <label className="mt-4 flex items-start gap-3 rounded-2xl border p-4 text-sm font-semibold text-gray-800">
             <input
@@ -145,24 +147,24 @@ export function SecondPersonApprovalSettingsPage() {
               onChange={(event) => setRequired(event.target.checked)}
             />
             <span>
-              Require second-person approval for sensitive current-account operations
+              {t("settings.policy.toggleLabel")}
               <span className="mt-1 block font-normal text-gray-500">
-                Leave disabled to make second approval optional but still accepted and audited when provided.
+                {t("settings.policy.toggleHelp")}
               </span>
             </span>
           </label>
 
           <dl className="mt-4 grid gap-3 rounded-2xl bg-gray-50 p-4 text-sm md:grid-cols-3">
             <div>
-              <dt className="font-semibold text-gray-700">Tenant</dt>
+              <dt className="font-semibold text-gray-700">{t("settings.meta.tenant")}</dt>
               <dd className="mt-1 text-gray-600">{policyQuery.data?.tenantId ?? tenantId}</dd>
             </div>
             <div>
-              <dt className="font-semibold text-gray-700">Last updated by</dt>
-              <dd className="mt-1 text-gray-600">{policyQuery.data?.updatedBy || "—"}</dd>
+              <dt className="font-semibold text-gray-700">{t("settings.meta.updatedBy")}</dt>
+              <dd className="mt-1 text-gray-600">{policyQuery.data?.updatedBy || t("settings.meta.empty")}</dd>
             </div>
             <div>
-              <dt className="font-semibold text-gray-700">Last updated at</dt>
+              <dt className="font-semibold text-gray-700">{t("settings.meta.updatedAt")}</dt>
               <dd className="mt-1 text-gray-600">{formatDateTime(policyQuery.data?.updatedAt)}</dd>
             </div>
           </dl>
@@ -173,7 +175,7 @@ export function SecondPersonApprovalSettingsPage() {
               disabled={policyQuery.isLoading || updatePolicy.isPending || !hasChanges}
               type="submit"
             >
-              {updatePolicy.isPending ? "Saving..." : "Save Policy"}
+              {updatePolicy.isPending ? t("settings.actions.saving") : t("settings.actions.save")}
             </button>
             <button
               className="rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-800 disabled:opacity-60"
@@ -181,7 +183,7 @@ export function SecondPersonApprovalSettingsPage() {
               type="button"
               onClick={() => setRequired(policyQuery.data?.required ?? false)}
             >
-              Reset
+              {t("settings.actions.reset")}
             </button>
           </div>
         </form>
@@ -191,17 +193,18 @@ export function SecondPersonApprovalSettingsPage() {
 }
 
 function PolicyStatus({ required, isLoading }: { required?: boolean; isLoading: boolean }) {
+  const { t } = useTranslation("currentAccounts");
   if (isLoading || typeof required !== "boolean") {
     return (
       <span className="rounded-full bg-gray-100 px-3 py-1 text-xs font-semibold text-gray-700">
-        Loading
+        {t("settings.policy.status.loading")}
       </span>
     );
   }
 
   return (
     <span className={required ? "rounded-full bg-red-100 px-3 py-1 text-xs font-semibold text-red-700" : "rounded-full bg-green-100 px-3 py-1 text-xs font-semibold text-green-700"}>
-      {required ? "Required" : "Optional"}
+      {required ? t("settings.policy.status.required") : t("settings.policy.status.optional")}
     </span>
   );
 }

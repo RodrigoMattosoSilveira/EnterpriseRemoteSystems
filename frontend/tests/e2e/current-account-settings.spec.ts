@@ -67,3 +67,17 @@ test("admin can view and update second-person approval policy", async ({ page, r
     });
   }
 });
+
+test("admin can view current-account settings in Portuguese", async ({ page }) => {
+  await page.goto("/admin/current-account-settings");
+
+  await page.getByLabel("Language").selectOption("pt-BR");
+
+  await expect(
+    page.getByRole("heading", { name: "Configurações de Conta Corrente", exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Aprovação de segunda pessoa", exact: true }),
+  ).toBeVisible();
+  await expect(page.getByRole("button", { name: "Salvar política" })).toBeVisible();
+});

@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { ApiErrorPanel } from "../../components/ApiErrorPanel";
 import type {
@@ -10,23 +11,23 @@ import { useCollaboratorCurrentAccount } from "./useCurrentAccount";
 
 type LedgerFilterOption = {
   value: string;
-  label: string;
+  labelKey: string;
   apiFilter: CurrentAccountFilter;
 };
 
 const ledgerFilters: LedgerFilterOption[] = [
-  { value: "all", label: "All entries", apiFilter: {} },
-  { value: "credits", label: "Credits", apiFilter: { direction: "CREDIT" } },
-  { value: "debits", label: "Debits", apiFilter: { direction: "DEBIT" } },
+  { value: "all", labelKey: "filters.options.all", apiFilter: {} },
+  { value: "credits", labelKey: "filters.options.credits", apiFilter: { direction: "CREDIT" } },
+  { value: "debits", labelKey: "filters.options.debits", apiFilter: { direction: "DEBIT" } },
   {
     value: "earnings",
-    label: "Earnings",
+    labelKey: "filters.options.earnings",
     apiFilter: { sourceType: "WORK_PERIOD_ASSIGNMENT" },
   },
-  { value: "expenses", label: "Expenses", apiFilter: { sourceType: "EXPENSE" } },
+  { value: "expenses", labelKey: "filters.options.expenses", apiFilter: { sourceType: "EXPENSE" } },
   {
     value: "outstanding-receipts",
-    label: "Outstanding receipts",
+    labelKey: "filters.options.outstandingReceipts",
     apiFilter: { outstandingReceipts: true },
   },
 ];
@@ -34,6 +35,7 @@ const ledgerFilters: LedgerFilterOption[] = [
 const PAGE_SIZE = 25;
 
 export function CollaboratorCurrentAccountPage() {
+  const { t } = useTranslation("currentAccounts");
   const { id = "" } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
   const filter = searchParams.get("filter") ?? "all";
@@ -73,18 +75,18 @@ export function CollaboratorCurrentAccountPage() {
             className="text-sm font-semibold text-gray-600 underline"
             to={`/collaborators/${id}`}
           >
-            Back to Collaborator
+            {t("header.backToCollaborator")}
           </Link>
           <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div>
               <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
-                Collaborator Current Account
+                {t("header.badge")}
               </p>
               <h1 className="text-2xl font-bold text-gray-950">
-                {data?.collaboratorLabel || "Current Account"}
+                {data?.collaboratorLabel || t("header.fallbackTitle")}
               </h1>
               <p className="mt-1 text-sm text-gray-600">
-                Balances and ledger entries for this collaborator journey.
+                {t("header.subtitle")}
               </p>
             </div>
             <div className="flex flex-wrap gap-2 sm:justify-end">
@@ -92,13 +94,13 @@ export function CollaboratorCurrentAccountPage() {
                 className="rounded-xl border bg-white px-4 py-2 text-sm font-semibold text-gray-700 shadow-sm"
                 to="/receipts/outstanding"
               >
-                Outstanding Receipts
+                {t("links.outstandingReceipts")}
               </Link>
               <Link
                 className="rounded-xl border bg-white px-4 py-2 text-sm font-semibold text-gray-700 shadow-sm"
                 to="/expenses"
               >
-                Expenses
+                {t("links.expenses")}
               </Link>
             </div>
           </div>
@@ -110,7 +112,7 @@ export function CollaboratorCurrentAccountPage() {
 
         {currentAccount.isLoading ? (
           <section className="rounded-2xl border bg-white p-5 shadow-sm">
-            Loading current account...
+            {t("states.loading")}
           </section>
         ) : data ? (
           <>
@@ -122,7 +124,7 @@ export function CollaboratorCurrentAccountPage() {
               ) : (
                 <div className="rounded-2xl border bg-white p-5 shadow-sm sm:col-span-2 lg:col-span-3">
                   <p className="text-sm font-semibold text-gray-700">
-                    No active current-account balance yet.
+                    {t("states.noBalance")}
                   </p>
                 </div>
               )}
@@ -132,14 +134,14 @@ export function CollaboratorCurrentAccountPage() {
               <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
                 <div>
                   <h2 className="text-lg font-semibold text-gray-950">
-                    Ledger Entries
+                    {t("ledger.title")}
                   </h2>
                   <p className="mt-1 text-sm text-gray-600">
-                    Inspect credits, debits, expense deductions, and receipt obligations.
+                    {t("ledger.subtitle")}
                   </p>
                 </div>
                 <label className="grid gap-1 text-sm font-medium text-gray-700 md:min-w-64">
-                  <span>Filter ledger entries</span>
+                  <span>{t("filters.label")}</span>
                   <select
                     className="rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm shadow-sm"
                     value={selectedFilter.value}
@@ -147,7 +149,7 @@ export function CollaboratorCurrentAccountPage() {
                   >
                     {ledgerFilters.map((option) => (
                       <option key={option.value} value={option.value}>
-                        {option.label}
+                        {t(option.labelKey)}
                       </option>
                     ))}
                   </select>
@@ -164,10 +166,10 @@ export function CollaboratorCurrentAccountPage() {
                 ) : (
                   <div className="p-8 text-center">
                     <h3 className="text-base font-bold text-gray-900">
-                      No ledger entries in this filter
+                      {t("states.noLedgerEntries")}
                     </h3>
                     <p className="mt-2 text-sm text-gray-600">
-                      Change the filter or create an earning, expense, payout, or correction.
+                      {t("states.noLedgerEntriesHelp")}
                     </p>
                   </div>
                 )}
@@ -176,7 +178,12 @@ export function CollaboratorCurrentAccountPage() {
               {ledgerEntries ? (
                 <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <p className="text-sm text-gray-600">
-                    Showing page {ledgerEntries.page} of {totalPages} · {ledgerEntries.total} ledger entr{ledgerEntries.total === 1 ? "y" : "ies"}
+                    {t("pagination.summary", {
+                      count: ledgerEntries.total,
+                      page: ledgerEntries.page,
+                      totalPages,
+                      total: ledgerEntries.total,
+                    })}
                   </p>
                   <div className="flex gap-2">
                     <button
@@ -185,7 +192,7 @@ export function CollaboratorCurrentAccountPage() {
                       disabled={ledgerEntries.page <= 1}
                       onClick={() => changePage(ledgerEntries.page - 1)}
                     >
-                      Previous
+                      {t("pagination.previous")}
                     </button>
                     <button
                       type="button"
@@ -193,7 +200,7 @@ export function CollaboratorCurrentAccountPage() {
                       disabled={ledgerEntries.page >= totalPages}
                       onClick={() => changePage(ledgerEntries.page + 1)}
                     >
-                      Next
+                      {t("pagination.next")}
                     </button>
                   </div>
                 </div>
@@ -222,53 +229,57 @@ function BalanceCard({ balance }: { balance: CurrentAccountBalance }) {
 }
 
 function LedgerEntryRow({ entry }: { entry: LedgerEntry }) {
+  const { t } = useTranslation("currentAccounts");
   const receipt = entry.receipt;
   return (
     <article className="grid gap-3 p-4 md:grid-cols-[1fr_auto] md:items-center">
       <div>
         <div className="flex flex-wrap items-center gap-2">
-          <h3 className="font-bold text-gray-950">{humanize(entry.entryType)}</h3>
+          <h3 className="font-bold text-gray-950">{entryTypeLabel(entry.entryType, t)}</h3>
           <span className={`rounded-full px-2 py-1 text-xs font-semibold ${entry.direction === "DEBIT" ? "bg-red-50 text-red-700" : "bg-green-50 text-green-700"}`}>
-            {entry.direction}
+            {directionLabel(entry.direction, t)}
           </span>
           {receipt ? (
             <span className={`rounded-full px-2 py-1 text-xs font-semibold ${receiptStatusTone(receipt.status)}`}>
-              Receipt: {receiptStatusLabel(receipt.status)}
+              {t("ledger.receiptStatus", { status: receiptStatusLabel(receipt.status) })}
             </span>
           ) : entry.direction === "DEBIT" ? (
             <span className="rounded-full bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-800">
-              Receipt: missing
+              {t("ledger.receiptMissing")}
             </span>
           ) : null}
         </div>
         <p className="mt-1 text-sm text-gray-700">
-          {formatAmount(entry.signedAmount, entry.valueUnitCode || entry.valueUnitLabel)} · Effective {entry.effectiveDate}
+          {t("ledger.effectiveLine", {
+            amount: formatAmount(entry.signedAmount, entry.valueUnitCode || entry.valueUnitLabel),
+            effectiveDate: entry.effectiveDate,
+          })}
         </p>
         <p className="mt-1 text-xs text-gray-500">
-          Source: {sourceLabel(entry)}
+          {t("ledger.sourceLine", { source: sourceLabel(entry, t) })}
         </p>
         {entry.description ? (
           <p className="mt-1 text-sm text-gray-600">{entry.description}</p>
         ) : null}
         {receipt?.outstanding ? (
           <p className="mt-2 rounded-xl bg-amber-50 p-2 text-xs font-semibold text-amber-900">
-            Outstanding receipt: print, collect signature, and record the signed return.
+            {t("ledger.outstandingReceiptHelp")}
           </p>
         ) : receipt && !receipt.outstanding ? (
           <p className="mt-2 rounded-xl bg-green-50 p-2 text-xs font-semibold text-green-900">
-            Receipt returned or closed.
+            {t("ledger.receiptClosed")}
           </p>
         ) : null}
       </div>
       <div className="flex flex-wrap gap-2 md:justify-end">
         {sourceLink(entry) ? (
           <Link className="rounded-xl border px-4 py-2 text-sm font-semibold" to={sourceLink(entry)!}>
-            {sourceActionLabel(entry)}
+            {sourceActionLabel(entry, t)}
           </Link>
         ) : null}
         {receipt || entry.direction === "DEBIT" ? (
           <Link className="rounded-xl bg-gray-900 px-4 py-2 text-sm font-semibold text-white" to={`/ledger-entries/${entry.id}/receipt`}>
-            Print or return receipt
+            {t("links.printOrReturnReceipt")}
           </Link>
         ) : null}
       </div>
@@ -286,16 +297,19 @@ function sourceLink(entry: LedgerEntry) {
   return "";
 }
 
-function sourceActionLabel(entry: LedgerEntry) {
+function sourceActionLabel(entry: LedgerEntry, t: (key: string) => string) {
   if (entry.sourceType === "WORK_PERIOD_ASSIGNMENT") {
-    return "Open Work Period";
+    return t("links.openWorkPeriod");
   }
-  return "Open source";
+  return t("links.openSource");
 }
 
-function sourceLabel(entry: LedgerEntry) {
+function sourceLabel(entry: LedgerEntry, t: (key: string, options?: Record<string, unknown>) => string) {
   if (entry.sourceLabel) {
-    return `${entry.sourceLabel} · Assignment ${shortId(entry.sourceId)}`;
+    return t("ledger.assignmentSource", {
+      sourceLabel: entry.sourceLabel,
+      assignmentId: shortId(entry.sourceId),
+    });
   }
   return `${entry.sourceType} · ${entry.sourceId}`;
 }
@@ -325,4 +339,14 @@ function formatNumber(value: number, maximumFractionDigits = 2) {
 
 function humanize(value: string) {
   return value.toLowerCase().replaceAll("_", " ");
+}
+
+function entryTypeLabel(entryType: string, t: (key: string, options?: Record<string, unknown>) => string) {
+  const key = `ledger.entryTypes.${entryType}`;
+  return t(key, { defaultValue: humanize(entryType) });
+}
+
+function directionLabel(direction: string, t: (key: string, options?: Record<string, unknown>) => string) {
+  const key = `ledger.directions.${direction}`;
+  return t(key, { defaultValue: direction });
 }

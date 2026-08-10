@@ -78,7 +78,6 @@ const FIELD_ERROR_KEY: Record<string, string> = {
   "Unknown work period status": "fieldErrors.unknownWorkPeriodStatus",
   "Page must be greater than zero": "fieldErrors.pageInvalid",
   "Page size must be greater than zero": "fieldErrors.pageSizeInvalid",
-  "Required": "fieldErrors.required",
   "Collaborator can only appear once": "fieldErrors.collaboratorDuplicate",
   "Planned status must be INCLUDED or EXCLUDED": "fieldErrors.plannedStatusInvalid",
   "Actual status must be WORKED, ABSENT, SICK_DAY_OFF, TIME_OFF, REPLACED, or CANCELLED": "fieldErrors.actualStatusInvalid",
@@ -102,13 +101,23 @@ const FIELD_ERROR_KEY: Record<string, string> = {
   "Amount must be greater than zero": "fieldErrors.expenseAmountGreaterThanZero",
   "Quantity must be greater than zero": "fieldErrors.expenseQuantityGreaterThanZero",
   "Expense date must be YYYY-MM-DD": "fieldErrors.expenseDateInvalid",
-  "Date from must be YYYY-MM-DD": "fieldErrors.expenseDateFromInvalid",
-  "Date to must be YYYY-MM-DD": "fieldErrors.expenseDateToInvalid",
-  "Page must be greater than zero": "fieldErrors.expensePageInvalid",
-  "Page size must be greater than zero": "fieldErrors.expensePageSizeInvalid",
   "Expense category is derived from the price list item": "fieldErrors.expenseCategoryDerived",
   "Value unit is derived from the selected currency": "fieldErrors.expenseValueUnitDerived",
   "Amount is calculated from unit price and quantity": "fieldErrors.expenseAmountCalculated",
+  "Direction must be CREDIT or DEBIT": "fieldErrors.directionInvalid",
+  "Effective date must be YYYY-MM-DD": "fieldErrors.effectiveDateInvalid",
+  "Required when second-person approval is configured for sensitive operations": "fieldErrors.secondApprovalRequiredByPolicy",
+  "Second approver must be different from the authorizing actor": "fieldErrors.secondApprovalMustDiffer",
+  "BRL amount cannot be negative": "fieldErrors.brlAmountNonNegative",
+  "BRL amount supports at most 2 decimal places": "fieldErrors.brlAmountMaxDecimals",
+  "Gold amount cannot be negative": "fieldErrors.goldAmountNonNegative",
+  "Gold amount supports at most 8 decimal places": "fieldErrors.goldAmountMaxDecimals",
+  "At least one payout amount must be greater than zero": "fieldErrors.payoutAmountRequired",
+  "Confirmation is required": "fieldErrors.confirmationRequired",
+  "Status must be one of PENDING_ISSUE, ISSUED, PRINTED, or SIGNED": "fieldErrors.receiptStatusInvalid",
+  "Source type must be one of EXPENSE, EXPENSE_REPLACEMENT, JOURNEY_SETTLEMENT, LEDGER_CORRECTION, or ACCRUAL_ITEM": "fieldErrors.receiptSourceTypeInvalid",
+  "Authorized by is required": "fieldErrors.authorizedByRequired",
+  "signed document reference is required to return a receipt": "fieldErrors.signedDocumentReferenceRequired",
 };
 
 // Maps known backend error codes to common-namespace translation keys.
@@ -122,6 +131,26 @@ function apiErrorCodeToKey(code?: string): string | undefined {
       return "apiErrors.authenticationRequired";
     case "not_found":
       return "apiErrors.notFound";
+    case "recent_reauthentication_required":
+      return "apiErrors.recentReauthenticationRequired";
+    case "no_positive_gold_balance":
+      return "apiErrors.noPositiveGoldBalance";
+    case "payout_exceeds_available_balance":
+      return "apiErrors.payoutExceedsAvailableBalance";
+    case "journey_close_conflict":
+      return "apiErrors.journeyCloseConflict";
+    case "ledger_settlement_disabled":
+      return "apiErrors.ledgerSettlementDisabled";
+    case "ledger_correction_disabled":
+      return "apiErrors.ledgerCorrectionDisabled";
+    case "ledger_correction_conflict":
+      return "apiErrors.ledgerCorrectionConflict";
+    case "receipt_cancelled":
+      return "apiErrors.receiptCancelled";
+    case "receipt_already_returned":
+      return "apiErrors.receiptAlreadyReturned";
+    case "missing_actor":
+      return "apiErrors.missingActor";
     case "validation_failed":
     case "VALIDATION_ERROR":
     case "validation_error":

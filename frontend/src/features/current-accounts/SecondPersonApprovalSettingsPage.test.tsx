@@ -1,8 +1,10 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
+import { I18nextProvider } from "react-i18next";
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import i18n from "../../app/i18n";
 import { SecondPersonApprovalSettingsPage } from "./SecondPersonApprovalSettingsPage";
 import type { SecondPersonApprovalPolicy } from "../../types/currentAccounts";
 
@@ -19,6 +21,7 @@ type FetchCall = {
 };
 
 beforeEach(() => {
+  void i18n.changeLanguage("en");
   policy = {
     tenantId: "default",
     required: false,
@@ -107,7 +110,18 @@ describe("SecondPersonApprovalSettingsPage", () => {
     await clickCheckbox("Require second-person approval for sensitive current-account operations");
     await clickButton("Save Policy");
 
-    await waitForText("Actor is not permitted to perform this operation");
+    await waitForText("You are not permitted to perform this operation.");
+  });
+
+  it("renders localized Portuguese labels", async () => {
+    void i18n.changeLanguage("pt-BR");
+    mockPolicyFetch();
+
+    renderPage();
+
+    await waitForText("Aprovação de segunda pessoa");
+    await waitForText("Aviso operacional");
+    await waitForText("Salvar política");
   });
 });
 
@@ -147,9 +161,11 @@ function renderPage() {
   act(() => {
     root = createRoot(container);
     root.render(
-      <QueryClientProvider client={queryClient}>
-        <RouterProvider router={router} />
-      </QueryClientProvider>,
+      <I18nextProvider i18n={i18n}>
+        <QueryClientProvider client={queryClient}>
+          <RouterProvider router={router} />
+        </QueryClientProvider>
+      </I18nextProvider>,
     );
   });
 }

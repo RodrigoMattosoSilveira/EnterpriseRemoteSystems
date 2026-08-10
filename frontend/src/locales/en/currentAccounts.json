@@ -1,0 +1,108 @@
+{
+  "header": {
+    "backToCollaborator": "Back to Collaborator",
+    "badge": "Collaborator Current Account",
+    "fallbackTitle": "Current Account",
+    "subtitle": "Balances and ledger entries for this collaborator journey."
+  },
+  "links": {
+    "outstandingReceipts": "Outstanding Receipts",
+    "expenses": "Expenses",
+    "openWorkPeriod": "Open Work Period",
+    "openSource": "Open source",
+    "printOrReturnReceipt": "Print or return receipt"
+  },
+  "states": {
+    "loading": "Loading current account...",
+    "noBalance": "No active current-account balance yet.",
+    "noLedgerEntries": "No ledger entries in this filter",
+    "noLedgerEntriesHelp": "Change the filter or create an earning, expense, payout, or correction."
+  },
+  "filters": {
+    "label": "Filter ledger entries",
+    "options": {
+      "all": "All entries",
+      "credits": "Credits",
+      "debits": "Debits",
+      "earnings": "Earnings",
+      "expenses": "Expenses",
+      "outstandingReceipts": "Outstanding receipts"
+    }
+  },
+  "ledger": {
+    "title": "Ledger Entries",
+    "subtitle": "Inspect credits, debits, expense deductions, and receipt obligations.",
+    "receiptStatus": "Receipt: {{status}}",
+    "receiptMissing": "Receipt: missing",
+    "effectiveLine": "{{amount}} · Effective {{effectiveDate}}",
+    "sourceLine": "Source: {{source}}",
+    "assignmentSource": "{{sourceLabel}} · Assignment {{assignmentId}}",
+    "outstandingReceiptHelp": "Outstanding receipt: print, collect signature, and record the signed return.",
+    "receiptClosed": "Receipt returned or closed.",
+    "entryTypes": {
+      "EXPENSE_DEDUCTION": "expense deduction",
+      "EARNING_CREDIT": "earning credit"
+    },
+    "directions": {
+      "DEBIT": "DEBIT",
+      "CREDIT": "CREDIT"
+    }
+  },
+  "pagination": {
+    "summary_one": "Showing page {{page}} of {{totalPages}} · {{total}} ledger entry",
+    "summary_other": "Showing page {{page}} of {{totalPages}} · {{total}} ledger entries",
+    "previous": "Previous",
+    "next": "Next"
+  },
+  "settings": {
+    "header": {
+      "badge": "Administration",
+      "title": "Current Account Settings",
+      "subtitle": "Configure tenant-level approval rules for sensitive current-account workflows."
+    },
+    "nav": {
+      "authorization": "Authorization",
+      "auditLogs": "Audit Logs",
+      "referenceData": "Reference Data",
+      "goldPrices": "Gold Prices",
+      "priceList": "Price List",
+      "backToPeople": "Back to People"
+    },
+    "flash": {
+      "required": "Second-person approval is now required for sensitive current-account operations.",
+      "optional": "Second-person approval is now optional for sensitive current-account operations."
+    },
+    "context": {
+      "title": "Authenticated authorization context",
+      "description": "The session identifies the actor. The selected tenant is sent as a scope hint and validated against that actor's persisted grants.",
+      "selectedTenant": "Selected Tenant ID"
+    },
+    "policy": {
+      "title": "Second-person approval",
+      "description": "Controls whether sensitive current-account operations must include a different approver in addition to the primary actor.",
+      "loading": "Loading policy...",
+      "toggleLabel": "Require second-person approval for sensitive current-account operations",
+      "toggleHelp": "Leave disabled to make second approval optional but still accepted and audited when provided.",
+      "status": {
+        "loading": "Loading",
+        "required": "Required",
+        "optional": "Optional"
+      }
+    },
+    "warning": {
+      "title": "Operational warning",
+      "description": "When this policy is enabled, sensitive workflows such as ledger corrections, journey settlements, gold zeroing, payout corrections, and receipt backfills must capture a valid second approver. The second approver cannot be the same actor performing the operation."
+    },
+    "meta": {
+      "tenant": "Tenant",
+      "updatedBy": "Last updated by",
+      "updatedAt": "Last updated at",
+      "empty": "—"
+    },
+    "actions": {
+      "saving": "Saving...",
+      "save": "Save Policy",
+      "reset": "Reset"
+    }
+  }
+}

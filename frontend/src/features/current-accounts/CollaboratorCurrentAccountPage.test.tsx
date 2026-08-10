@@ -1,8 +1,10 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
+import { I18nextProvider } from "react-i18next";
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import i18n from "../../app/i18n";
 import { CollaboratorCurrentAccountPage } from "./CollaboratorCurrentAccountPage";
 import type { CurrentAccountDetail } from "../../types/currentAccounts";
 
@@ -13,6 +15,7 @@ let root: Root | null;
 let fetchCalls: FetchCall[];
 
 beforeEach(() => {
+  void i18n.changeLanguage("en");
   container = document.createElement("div");
   document.body.appendChild(container);
   root = null;
@@ -205,9 +208,11 @@ function renderCurrentAccountPage(initialEntry: string) {
   act(() => {
     root = createRoot(container);
     root.render(
-      <QueryClientProvider client={queryClient}>
-        <RouterProvider router={router} />
-      </QueryClientProvider>,
+      <I18nextProvider i18n={i18n}>
+        <QueryClientProvider client={queryClient}>
+          <RouterProvider router={router} />
+        </QueryClientProvider>
+      </I18nextProvider>,
     );
   });
 }
