@@ -1,7 +1,9 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act } from "react";
+import { I18nextProvider } from "react-i18next";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import i18n from "../../app/i18n";
 import { CurrentAndFutureEarningsModal } from "./CurrentAndFutureEarningsModal";
 
 let root: Root | null;
@@ -11,6 +13,7 @@ beforeEach(() => {
   container = document.createElement("div");
   document.body.appendChild(container);
   root = null;
+  void i18n.changeLanguage("en");
 });
 
 afterEach(async () => {
@@ -61,7 +64,9 @@ describe("CurrentAndFutureEarningsModal", () => {
       root = createRoot(container);
       root.render(
         <QueryClientProvider client={queryClient}>
-          <CurrentAndFutureEarningsModal collaboratorId="c-1" onClose={onClose} />
+          <I18nextProvider i18n={i18n}>
+            <CurrentAndFutureEarningsModal collaboratorId="c-1" onClose={onClose} />
+          </I18nextProvider>
         </QueryClientProvider>,
       );
     });
