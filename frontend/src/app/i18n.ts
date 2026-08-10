@@ -5,6 +5,8 @@ import commonEn from "../locales/en/common.json";
 import commonPtBR from "../locales/pt-BR/common.json";
 import collaboratorsEn from "../locales/en/collaborators.json";
 import collaboratorsPtBR from "../locales/pt-BR/collaborators.json";
+import expensesEn from "../locales/en/expenses.json";
+import expensesPtBR from "../locales/pt-BR/expenses.json";
 import peopleEn from "../locales/en/people.json";
 import peoplePtBR from "../locales/pt-BR/people.json";
 
@@ -13,17 +15,18 @@ void i18n
   .use(initReactI18next)
   .init({
     resources: {
-      en: { common: commonEn, collaborators: collaboratorsEn, people: peopleEn },
+      en: { common: commonEn, collaborators: collaboratorsEn, expenses: expensesEn, people: peopleEn },
       "pt-BR": {
         common: commonPtBR,
         collaborators: collaboratorsPtBR,
+        expenses: expensesPtBR,
         people: peoplePtBR,
       },
     },
     fallbackLng: "en",
     supportedLngs: ["en", "pt-BR"],
     defaultNS: "common",
-    ns: ["common", "collaborators", "people"],
+    ns: ["common", "collaborators", "expenses", "people"],
     interpolation: { escapeValue: false },
     detection: {
       order: ["querystring", "localStorage", "navigator"],

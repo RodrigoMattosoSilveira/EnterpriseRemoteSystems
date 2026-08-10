@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { useTranslation } from "react-i18next";
 import { ApiErrorPanel } from "../../components/ApiErrorPanel";
 import { JourneyDaysRemaining } from "../../components/JourneyDaysRemaining";
 import { useFinancialProjection } from "./useFinancialProjection";
@@ -10,6 +11,7 @@ export function CurrentAndFutureEarningsModal({
   collaboratorId: string;
   onClose: () => void;
 }) {
+  const { t } = useTranslation("expenses");
   const projectionQuery = useFinancialProjection(collaboratorId, true);
 
   useEffect(() => {
@@ -39,13 +41,13 @@ export function CurrentAndFutureEarningsModal({
         <div className="flex items-start justify-between gap-4">
           <div>
             <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
-              Financial estimate
+              {t("modal.eyebrow")}
             </p>
             <h2
               id="current-future-earnings-title"
               className="text-xl font-bold text-gray-950"
             >
-              Current and Future Earnings
+              {t("modal.title")}
             </h2>
             {projection?.collaboratorLabel && (
               <p className="mt-1 text-sm text-gray-500">
@@ -64,87 +66,87 @@ export function CurrentAndFutureEarningsModal({
         </div>
 
         {projectionQuery.isLoading && (
-          <p className="mt-6 text-sm text-gray-600">Loading earnings...</p>
+          <p className="mt-6 text-sm text-gray-600">{t("modal.loading")}</p>
         )}
         <ApiErrorPanel error={projectionQuery.error} />
 
         {projection && (
           <div className="mt-6 space-y-5">
             <AmountSection
-              title="Current Balances"
+              title={t("modal.currentBalancesTitle")}
               amounts={projection.currentBalances}
             />
             <AmountSection
-              title="Ready Accrual Earnings Not Yet Posted"
+              title={t("modal.readyAccrualTitle")}
               amounts={projection.unpostedReadyEarnings ?? zeroAmounts}
             />
             <AmountSection
-              title="Estimated Future Earnings"
+              title={t("modal.estimatedFutureTitle")}
               amounts={projection.estimatedFutureEarnings ?? zeroAmounts}
             />
             <AmountSection
-              title="Projected Earnings Through Journey End"
+              title={t("modal.projectedEarningsTitle")}
               amounts={projection.projectedEarnings}
             />
             <AmountSection
-              title="Projected Journey-End Balances"
+              title={t("modal.projectedBalancesTitle")}
               amounts={projection.projectedFinalBalances}
             />
 
             <section className="rounded-xl border bg-gray-50 p-4 text-sm text-gray-700">
-              <h3 className="font-semibold text-gray-950">Projection Basis</h3>
+              <h3 className="font-semibold text-gray-950">{t("modal.projectionBasisTitle")}</h3>
               <JourneyDaysRemaining
                 projectedEndDate={projection.projection.journeyEndDate}
                 className="mt-1 block text-sm"
               />
               <dl className="mt-2 grid gap-2 sm:grid-cols-2">
                 <Detail
-                  label="Journey end"
+                  label={t("modal.journeyEndLabel")}
                   value={formatDate(projection.projection.journeyEndDate)}
                 />
                 <Detail
-                  label="Calendar work periods"
+                  label={t("modal.calendarWorkPeriodsLabel")}
                   value={String(
                     projection.projection.calendarWorkPeriods ??
                       projection.projection.remainingWorkPeriods,
                   )}
                 />
                 <Detail
-                  label="Posted work periods"
+                  label={t("modal.postedWorkPeriodsLabel")}
                   value={String(projection.projection.postedWorkPeriods ?? 0)}
                 />
                 <Detail
-                  label="Ready accrual work periods"
+                  label={t("modal.readyAccrualWorkPeriodsLabel")}
                   value={String(
                     projection.projection.readyAccrualWorkPeriods ?? 0,
                   )}
                 />
                 <Detail
-                  label="Estimated future work periods"
+                  label={t("modal.estimatedFutureWorkPeriodsLabel")}
                   value={String(
                     projection.projection.estimatedFutureWorkPeriods ??
                       projection.projection.remainingWorkPeriods,
                   )}
                 />
                 <Detail
-                  label="Pending accrual items"
+                  label={t("modal.pendingAccrualItemsLabel")}
                   value={String(projection.projection.pendingAccrualItems ?? 0)}
                 />
                 {projection.projection.locationLabel && (
                   <Detail
-                    label="Assigned well"
+                    label={t("modal.assignedWellLabel")}
                     value={projection.projection.locationLabel}
                   />
                 )}
                 {projection.projection.productionMethod && (
                   <Detail
-                    label="Method"
+                    label={t("modal.methodLabel")}
                     value={formatMethod(projection.projection.productionMethod)}
                   />
                 )}
                 {projection.projection.productionValueUsed !== undefined && (
                   <Detail
-                    label="Production value used"
+                    label={t("modal.productionValueUsedLabel")}
                     value={`${formatGold(projection.projection.productionValueUsed)} g`}
                   />
                 )}
@@ -155,10 +157,7 @@ export function CurrentAndFutureEarningsModal({
                 </p>
               )}
               <p className="mt-3 text-xs text-gray-500">
-                Current balances include posted ledger entries. Ready accruals are
-                calculated but not posted yet. Estimated future earnings exclude
-                work periods already posted or already represented by ready
-                accruals.
+                {t("modal.summaryText")}
               </p>
             </section>
           </div>
@@ -170,7 +169,7 @@ export function CurrentAndFutureEarningsModal({
             onClick={onClose}
             type="button"
           >
-            Close
+            {t("modal.closeButton")}
           </button>
         </div>
       </section>
@@ -187,12 +186,14 @@ function AmountSection({
   title: string;
   amounts: { brlAmount: number | null; goldGramAmount: number | null };
 }) {
+  const { t } = useTranslation("expenses");
+
   return (
     <section className="rounded-xl border p-4">
       <h3 className="font-semibold text-gray-950">{title}</h3>
       <dl className="mt-3 grid gap-3 sm:grid-cols-2">
         <Detail
-          label="BRL"
+          label={t("modal.amounts.brl")}
           value={
             amounts.brlAmount === null
               ? "Unavailable"
@@ -200,7 +201,7 @@ function AmountSection({
           }
         />
         <Detail
-          label="Grams of gold"
+          label={t("modal.amounts.goldGrams")}
           value={
             amounts.goldGramAmount === null
               ? "Unavailable"
@@ -247,9 +248,10 @@ function formatMethod(value: string) {
 }
 
 function formatWarning(value: string) {
+  const { t } = useTranslation("expenses");
   if (value === "NO_GOLD_PRODUCTION_HISTORY")
-    return "Projected gold earnings are unavailable because no usable gold-production history exists for the assigned well.";
+    return t("modal.warningNoGoldHistory");
   if (value === "PENDING_ACCRUAL_INPUTS")
-    return "Some accrual items still need inputs. Ready accruals are included, but pending items are not counted until resolved.";
+    return t("modal.warningPendingAccrualInputs");
   return value;
 }

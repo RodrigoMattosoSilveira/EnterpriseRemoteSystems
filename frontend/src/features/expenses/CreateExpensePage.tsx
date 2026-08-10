@@ -1,4 +1,5 @@
 import { useMemo, useState, type FormEvent } from "react";
+import { useTranslation } from "react-i18next";
 import { Link, useNavigate } from "react-router-dom";
 import { ApiErrorPanel } from "../../components/ApiErrorPanel";
 import { JourneyDaysRemaining } from "../../components/JourneyDaysRemaining";
@@ -36,6 +37,7 @@ const initialForm: FormState = {
 
 export function CreateExpensePage() {
   const navigate = useNavigate();
+  const { t } = useTranslation("expenses");
   const priceListItemsQuery = usePriceListItems();
   const latestGoldPriceQuery = useLatestGoldPrice();
   const createMutation = useCreateExpenseWithPriceList();
@@ -110,30 +112,30 @@ export function CreateExpensePage() {
     setClientValidationError("");
 
     if (!form.collaboratorId) {
-      setClientValidationError("Select an active Collaborator.");
+      setClientValidationError(t("create.validationSelectCollaborator"));
       return;
     }
     if (!form.itemType) {
-      setClientValidationError("Select a category.");
+      setClientValidationError(t("create.validationSelectCategory"));
       return;
     }
     if (!form.priceListItemId) {
       setClientValidationError(
-        "Select an item description from the price list.",
+        t("create.validationSelectItem"),
       );
       return;
     }
     if (!form.currencyCode) {
-      setClientValidationError("Select Real/BRL or Grams of Gold.");
+      setClientValidationError(t("create.validationSelectCurrency"));
       return;
     }
     if (!Number.isFinite(quantity) || quantity <= 0) {
-      setClientValidationError("Quantity must be greater than zero.");
+      setClientValidationError(t("create.validationQuantity"));
       return;
     }
     if (form.currencyCode === "GOLD_GRAM" && !selectedGoldPrice) {
       setClientValidationError(
-        "A current gold price is required for Grams of Gold expenses.",
+        t("create.validationGoldPrice"),
       );
       return;
     }
@@ -151,7 +153,7 @@ export function CreateExpensePage() {
       onSuccess: (expense) => {
         navigate("/expenses", {
           state: {
-            flash: `Expense created for ${expense.collaboratorLabel || "Collaborator"}.`,
+            flash: t("create.successFlash", { name: expense.collaboratorLabel || t("page.fallbackCollaborator") }),
           },
         });
       },
@@ -166,16 +168,15 @@ export function CreateExpensePage() {
             className="text-sm font-semibold text-gray-600 underline"
             to="/expenses"
           >
-            Back to Expenses
+            {t("create.backToExpenses")}
           </Link>
           <div className="mt-4">
             <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
-              Expense deduction
+              {t("create.eyebrow")}
             </p>
-            <h1 className="text-2xl font-bold text-gray-950">New Expense</h1>
+            <h1 className="text-2xl font-bold text-gray-950">{t("create.title")}</h1>
             <p className="mt-1 text-sm text-gray-500">
-              Record item-based expenses from Canteen or Administrative price
-              lists.
+              {t("create.subtitle")}
             </p>
           </div>
         </div>
@@ -184,7 +185,7 @@ export function CreateExpensePage() {
       <section className="mx-auto max-w-3xl space-y-4 p-4">
         {isLoading && (
           <div className="rounded-2xl border bg-white p-5 shadow-sm">
-            Loading expense setup data...
+            {t("create.loadingSetup")}
           </div>
         )}
 
@@ -209,17 +210,16 @@ export function CreateExpensePage() {
           >
             <section>
               <h2 className="text-lg font-semibold text-gray-950">
-                Expense Details
+                {t("create.formTitle")}
               </h2>
               <p className="mt-1 text-sm text-gray-500">
-                Select the Collaborator, category, price-list item, currency,
-                and quantity.
+                {t("create.formDescription")}
               </p>
             </section>
 
             <div className="relative">
               <label className="block text-sm font-medium text-gray-700">
-                Collaborator *
+                {t("create.collaboratorLabel")}
                 <input
                   id="expense-create-collaborator-search"
                   type="search"
@@ -236,7 +236,7 @@ export function CreateExpensePage() {
                   onChange={(event) =>
                     changeCollaboratorSearch(event.target.value)
                   }
-                  placeholder="Type a Collaborator name or nickname"
+                  placeholder={t("create.collaboratorSearchPlaceholder")}
                 />
               </label>
 
@@ -244,16 +244,16 @@ export function CreateExpensePage() {
                 <div
                   id="expense-create-collaborator-suggestions"
                   role="listbox"
-                  aria-label="Matching active collaborators"
+                  aria-label={t("create.matchingActiveCollaboratorsAriaLabel")}
                   className="absolute left-0 right-0 top-full z-20 mt-1 max-h-60 overflow-y-auto rounded-xl border border-gray-200 bg-white p-1 shadow-lg"
                 >
                   {collaboratorsQuery.isFetching ? (
                     <p className="px-3 py-2 text-sm text-gray-500">
-                      Loading matching Collaborators…
+                      {t("create.collaboratorSuggestionsLoading")}
                     </p>
                   ) : activeCollaborators.length === 0 ? (
                     <p className="px-3 py-2 text-sm text-gray-500">
-                      No matching active Collaborators
+                      {t("create.collaboratorSuggestionsEmpty")}
                     </p>
                   ) : (
                     activeCollaborators.map((collaborator) => (
@@ -276,11 +276,11 @@ export function CreateExpensePage() {
             {selectedCollaborator && (
               <div
                 role="status"
-                aria-label="Selected expense Collaborator"
+                aria-label={t("create.selectedCollaboratorLabel")}
                 className="flex items-center justify-between gap-3 rounded-xl bg-gray-100 px-3 py-2 text-sm text-gray-700"
               >
                 <span className="min-w-0 break-words">
-                  <span className="font-semibold">Selected:</span>{" "}
+                  <span className="font-semibold">{t("create.selectedLabel")}</span>{" "}
                   {collaboratorLabel(selectedCollaborator)}
                 </span>
                 <button
@@ -288,7 +288,7 @@ export function CreateExpensePage() {
                   className="shrink-0 font-semibold underline"
                   onClick={() => changeCollaboratorSearch("")}
                 >
-                  Change
+                  {t("create.changeButton")}
                 </button>
               </div>
             )}
@@ -304,14 +304,14 @@ export function CreateExpensePage() {
                   type="button"
                   onClick={() => setShowEarningsModal(true)}
                 >
-                  View current and future earnings
+                  {t("create.viewEarningsButton")}
                 </button>
               </div>
             )}
 
             <div className="grid gap-4 sm:grid-cols-2">
               <label className="block text-sm font-medium text-gray-700">
-                Category *
+                {t("create.categoryLabel")}
                 <select
                   className="mt-1 w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-gray-950 shadow-sm"
                   value={form.itemType}
@@ -323,13 +323,13 @@ export function CreateExpensePage() {
                     }))
                   }
                 >
-                  <option value="CANTEEN">Canteen</option>
-                  <option value="ADMINISTRATIVE">Administrative</option>
+                  <option value="CANTEEN">{t("categories.canteen")}</option>
+                  <option value="ADMINISTRATIVE">{t("categories.administrative")}</option>
                 </select>
               </label>
 
               <label className="block text-sm font-medium text-gray-700">
-                Currency *
+                {t("create.currencyLabel")}
                 <select
                   className="mt-1 w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-gray-950 shadow-sm"
                   value={form.currencyCode}
@@ -340,14 +340,14 @@ export function CreateExpensePage() {
                     }))
                   }
                 >
-                  <option value="BRL">Real / BRL</option>
-                  <option value="GOLD_GRAM">Grams of Gold</option>
+                  <option value="BRL">{t("create.currencyBrl")}</option>
+                  <option value="GOLD_GRAM">{t("create.currencyGold")}</option>
                 </select>
               </label>
             </div>
 
             <label className="block text-sm font-medium text-gray-700">
-              Item Description *
+              {t("create.itemLabel")}
               <select
                 className="mt-1 w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-gray-950 shadow-sm"
                 value={form.priceListItemId}
@@ -358,7 +358,7 @@ export function CreateExpensePage() {
                   }))
                 }
               >
-                <option value="">Select a price-list item</option>
+                <option value="">{t("create.itemPlaceholder")}</option>
                 {filteredPriceListItems.map((item) => (
                   <option key={item.id} value={item.id}>
                     {priceListItemLabel(item)}
@@ -367,15 +367,14 @@ export function CreateExpensePage() {
               </select>
               {filteredPriceListItems.length === 0 && (
                 <span className="mt-2 block rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-900">
-                  No active {categoryLabel(form.itemType).toLowerCase()}{" "}
-                  price-list items are available.
+                  {t("create.itemEmptyState", { category: categoryLabel(form.itemType, t).toLowerCase() })}
                 </span>
               )}
             </label>
 
             <div className="grid gap-4 sm:grid-cols-2">
               <label className="block text-sm font-medium text-gray-700">
-                Quantity *
+                {t("create.quantityLabel")}
                 <input
                   className="mt-1 w-full rounded-xl border border-gray-300 px-3 py-2 text-gray-950 shadow-sm"
                   type="number"
@@ -388,12 +387,12 @@ export function CreateExpensePage() {
                       quantity: event.target.value,
                     }))
                   }
-                  placeholder="1"
+                  placeholder={t("create.quantityPlaceholder")}
                 />
               </label>
 
               <label className="block text-sm font-medium text-gray-700">
-                Expense Date *
+                {t("create.expenseDateLabel")}
                 <input
                   className="mt-1 w-full rounded-xl border border-gray-300 px-3 py-2 text-gray-950 shadow-sm"
                   type="date"
@@ -418,7 +417,7 @@ export function CreateExpensePage() {
             />
 
             <label className="block text-sm font-medium text-gray-700">
-              Notes
+              {t("create.notesLabel")}
               <textarea
                 className="mt-1 min-h-24 w-full rounded-xl border border-gray-300 px-3 py-2 text-gray-950 shadow-sm"
                 value={form.description}
@@ -428,7 +427,7 @@ export function CreateExpensePage() {
                     description: event.target.value,
                   }))
                 }
-                placeholder="Optional note about this expense"
+                placeholder={t("create.notesPlaceholder")}
               />
             </label>
 
@@ -437,14 +436,14 @@ export function CreateExpensePage() {
                 className="rounded-xl border border-gray-300 px-5 py-3 text-center text-sm font-semibold text-gray-700 shadow-sm"
                 to="/expenses"
               >
-                Cancel
+                {t("create.cancelButton")}
               </Link>
               <button
                 className="rounded-xl bg-gray-950 px-5 py-3 text-sm font-semibold text-white shadow-sm disabled:cursor-not-allowed disabled:bg-gray-400"
                 type="submit"
                 disabled={createMutation.isPending}
               >
-                {createMutation.isPending ? "Creating..." : "Create Expense"}
+                {createMutation.isPending ? t("create.submittingButton") : t("create.submitButton")}
               </button>
             </div>
           </form>
@@ -476,56 +475,53 @@ function CalculationPreview({
   isGoldPriceLoading: boolean;
   preview: CalculationPreviewState;
 }) {
+  const { t } = useTranslation("expenses");
+
   return (
     <section className="rounded-2xl border border-blue-100 bg-blue-50 p-4 text-sm text-blue-950">
-      <h3 className="font-semibold text-blue-950">Calculation preview</h3>
+      <h3 className="font-semibold text-blue-950">{t("create.calculationPreviewTitle")}</h3>
       <p className="mt-1 text-blue-900">
-        Price-list item prices are stored in Real/BRL. Totals are calculated as
-        unit price × quantity.
+        {t("create.calculationPreviewDescription")}
       </p>
 
       {!item && (
         <p className="mt-3 rounded-xl border border-blue-200 bg-white/70 p-3 font-medium">
-          Select an item to preview unit price and total.
+          {t("create.previewSelectItem")}
         </p>
       )}
 
       {item && (
         <dl className="mt-3 grid gap-3 sm:grid-cols-2">
-          <PreviewStat label="Selected item" value={priceListItemLabel(item)} />
+          <PreviewStat label={t("create.previewSelectedItem")} value={priceListItemLabel(item)} />
           <PreviewStat
-            label="Stored BRL unit price"
+            label={t("create.previewStoredUnitPrice")}
             value={formatBRL(item.unitPriceBrl)}
           />
           <PreviewStat
-            label="Selected currency unit price"
+            label={t("create.previewCurrencyUnitPrice")}
             value={preview.unitPriceLabel}
           />
-          <PreviewStat label="Quantity" value={preview.quantityLabel} />
+          <PreviewStat label={t("create.previewQuantity")} value={preview.quantityLabel} />
           <PreviewStat
-            label="Total price"
+            label={t("create.previewTotalPrice")}
             value={preview.totalLabel}
             emphasized
           />
-          <PreviewStat label="Calculation method" value={preview.methodLabel} />
+          <PreviewStat label={t("create.previewCalculationMethod")} value={preview.methodLabel} />
         </dl>
       )}
 
       {currencyCode === "GOLD_GRAM" && (
         <div className="mt-3 rounded-xl border border-blue-200 bg-white/80 p-3 text-blue-950">
-          {isGoldPriceLoading && <p>Loading latest gold price...</p>}
+          {isGoldPriceLoading && <p>{t("create.loadingGoldPrice")}</p>}
           {!isGoldPriceLoading && latestGoldPriceBrlPerGram && (
             <p>
-              Latest gold price source: {formatBRL(latestGoldPriceBrlPerGram)}{" "}
-              per gram
-              {latestGoldPriceDate ? ` on ${latestGoldPriceDate}` : ""}.
-              Conversion: BRL ÷ BRL per gram = grams.
+              {t("create.previewGoldPriceAvailable", { price: formatBRL(latestGoldPriceBrlPerGram), dateSuffix: latestGoldPriceDate ? ` on ${latestGoldPriceDate}` : "" })}
             </p>
           )}
           {!isGoldPriceLoading && !latestGoldPriceBrlPerGram && (
             <p className="font-medium text-amber-900">
-              A current gold price is required before this expense can be
-              recorded in grams of gold.
+              {t("create.previewGoldPriceMissing")}
             </p>
           )}
         </div>
@@ -562,22 +558,23 @@ function SetupWarning({
 }: {
   hasPriceListItems: boolean;
 }) {
+  const { t } = useTranslation("expenses");
   const missing = [
     !hasPriceListItems
-      ? "active Canteen or Administrative price-list items"
+      ? t("create.setupMissingItems")
       : "",
   ].filter(Boolean);
 
   return (
     <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5 text-sm text-amber-900 shadow-sm">
-      <p className="font-semibold">Expense setup is incomplete.</p>
-      <p className="mt-1">Configure or create: {missing.join(", ")}.</p>
+      <p className="font-semibold">{t("create.setupWarningTitle")}</p>
+      <p className="mt-1">{t("create.setupWarningDescription", { missing: missing.join(", ") })}</p>
       {!hasPriceListItems && (
         <Link
           className="mt-3 inline-block font-semibold underline"
           to="/admin/price-list-items"
         >
-          Manage Price List Items
+          {t("create.managePriceListItems")}
         </Link>
       )}
     </div>
@@ -604,7 +601,7 @@ function compareCollaborators(a: Collaborator, b: Collaborator) {
 
 function comparePriceListItems(a: PriceListItem, b: PriceListItem) {
   return (
-    categoryLabel(a.itemType).localeCompare(categoryLabel(b.itemType)) ||
+    categoryLabel(a.itemType, undefined).localeCompare(categoryLabel(b.itemType, undefined)) ||
     a.sortOrder - b.sortOrder ||
     a.description.localeCompare(b.description) ||
     a.code.localeCompare(b.code)
@@ -627,8 +624,11 @@ function priceListItemLabel(item: PriceListItem) {
   return `${item.description} · ${item.code}`;
 }
 
-function categoryLabel(value: PriceListItemType) {
-  return value === "ADMINISTRATIVE" ? "Administrative" : "Canteen";
+function categoryLabel(value: PriceListItemType, t?: (key: string) => string) {
+  if (value === "ADMINISTRATIVE") {
+    return t ? t("categories.administrative") : "ADMINISTRATIVE";
+  }
+  return t ? t("categories.canteen") : "CANTEEN";
 }
 
 type CalculationPreviewState = {

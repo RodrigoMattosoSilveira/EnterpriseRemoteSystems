@@ -79,6 +79,18 @@ const FIELD_ERROR_KEY: Record<string, string> = {
   "Collaborator status is required": "fieldErrors.collaboratorStatusRequired",
   "Payment value must be greater than zero": "fieldErrors.paymentValueGreaterThanZero",
   "Sector is inactive or does not exist": "fieldErrors.sectorInactiveOrMissing",
+  "Item type must be CANTEEN or ADMINISTRATIVE": "fieldErrors.expenseItemTypeInvalid",
+  "Currency code must be BRL or GOLD_GRAM": "fieldErrors.expenseCurrencyCodeInvalid",
+  "Amount must be greater than zero": "fieldErrors.expenseAmountGreaterThanZero",
+  "Quantity must be greater than zero": "fieldErrors.expenseQuantityGreaterThanZero",
+  "Expense date must be YYYY-MM-DD": "fieldErrors.expenseDateInvalid",
+  "Date from must be YYYY-MM-DD": "fieldErrors.expenseDateFromInvalid",
+  "Date to must be YYYY-MM-DD": "fieldErrors.expenseDateToInvalid",
+  "Page must be greater than zero": "fieldErrors.expensePageInvalid",
+  "Page size must be greater than zero": "fieldErrors.expensePageSizeInvalid",
+  "Expense category is derived from the price list item": "fieldErrors.expenseCategoryDerived",
+  "Value unit is derived from the selected currency": "fieldErrors.expenseValueUnitDerived",
+  "Amount is calculated from unit price and quantity": "fieldErrors.expenseAmountCalculated",
 };
 
 // Maps known backend error codes to common-namespace translation keys.
