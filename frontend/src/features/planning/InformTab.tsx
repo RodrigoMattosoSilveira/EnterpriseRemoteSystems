@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import type {
   WorkPlanRoster,
   WorkPeriod,
@@ -13,15 +14,16 @@ export function InformTab(props: {
   unreplacedAbsentees?: WorkPeriodAssignment[];
   onInform: () => void;
 }) {
+  const { t } = useTranslation("planning");
   const canInform = props.workPeriod.status === "PLANNING";
   const unreplacedAbsentees = props.unreplacedAbsentees ?? [];
   return (
     <section className="space-y-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h2 className="text-lg font-semibold">Inform Collaborators</h2>
+          <h2 className="text-lg font-semibold">{t("inform.title")}</h2>
           <p className="text-sm text-gray-500">
-            Review the included roster, then print and post it at the Canteen.
+            {t("inform.description")}
           </p>
         </div>
         <div className="flex gap-2">
@@ -31,14 +33,14 @@ export function InformTab(props: {
               disabled={props.pending}
               className="rounded-xl bg-gray-950 px-4 py-2 text-sm font-semibold text-white disabled:bg-gray-400"
             >
-              {props.pending ? "Informing..." : "Mark as Informed"}
+              {props.pending ? t("inform.informingButton") : t("inform.markInformedButton")}
             </button>
           )}
           <button
             onClick={() => window.print()}
             className="rounded-xl border px-4 py-2 text-sm font-semibold"
           >
-            Print Work Plan
+            {t("inform.printButton")}
           </button>
         </div>
       </div>
@@ -48,12 +50,10 @@ export function InformTab(props: {
           role="alert"
         >
           <p className="font-semibold">
-            Warning: time-off collaborators without replacements
+            {t("inform.warningTitle")}
           </p>
           <p className="mt-1">
-            Before informing or printing, review these Day Off / Leave of
-            Absence collaborators that do not have a replacement in this Work
-            Period:
+            {t("inform.warningDescription")}
           </p>
           <ul className="mt-2 list-disc pl-5">
             {unreplacedAbsentees.map((row) => (
@@ -61,7 +61,7 @@ export function InformTab(props: {
                 {row.collaboratorNickname ||
                   row.collaboratorName ||
                   row.collaboratorId}{" "}
-                — {humanizePlanningCode(row.planningAvailability)}
+                — {humanizePlanningCode(row.planningAvailability, t)}
               </li>
             ))}
           </ul>
@@ -69,28 +69,28 @@ export function InformTab(props: {
       )}
       <div className="rounded-2xl border bg-white p-5 shadow-sm print:border-0 print:shadow-none">
         {props.loading ? (
-          <p>Loading roster...</p>
+          <p>{t("inform.loadingRoster")}</p>
         ) : (
           <>
             <div className="border-b pb-4 text-center">
               <h3 className="text-2xl font-bold">
-                {props.roster?.title ?? "Work Plan"}
+                {props.roster?.title ?? t("inform.workPlanTitle")}
               </h3>
               <p className="mt-1 text-sm text-gray-600">
                 {props.roster?.subtitle ??
                   `${props.workPeriod.workDate} — ${props.workPeriod.name}`}
               </p>
               <p className="mt-1 text-xs font-semibold uppercase tracking-wide text-gray-500">
-                {humanizePlanningCode(props.workPeriod.status)}
+                {humanizePlanningCode(props.workPeriod.status, t)}
               </p>
             </div>
             <table className="mt-4 w-full text-left text-sm">
               <thead>
                 <tr className="border-b">
-                  <th className="py-2">Name</th>
-                  <th className="py-2">Sector</th>
-                  <th className="py-2">Local</th>
-                  <th className="py-2">Task</th>
+                  <th className="py-2">{t("inform.tableName")}</th>
+                  <th className="py-2">{t("inform.tableSector")}</th>
+                  <th className="py-2">{t("inform.tableLocal")}</th>
+                  <th className="py-2">{t("inform.tableTask")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -109,7 +109,7 @@ export function InformTab(props: {
             </table>
             {(props.roster?.rows.length ?? 0) === 0 && (
               <p className="py-8 text-center text-sm text-gray-500">
-                No included collaborators.
+                {t("inform.emptyRoster")}
               </p>
             )}
           </>

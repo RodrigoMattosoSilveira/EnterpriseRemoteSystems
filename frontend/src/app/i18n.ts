@@ -9,24 +9,27 @@ import expensesEn from "../locales/en/expenses.json";
 import expensesPtBR from "../locales/pt-BR/expenses.json";
 import peopleEn from "../locales/en/people.json";
 import peoplePtBR from "../locales/pt-BR/people.json";
+import planningEn from "../locales/en/planning.json";
+import planningPtBR from "../locales/pt-BR/planning.json";
 
 void i18n
   .use(LanguageDetector)
   .use(initReactI18next)
   .init({
     resources: {
-      en: { common: commonEn, collaborators: collaboratorsEn, expenses: expensesEn, people: peopleEn },
+      en: { common: commonEn, collaborators: collaboratorsEn, expenses: expensesEn, people: peopleEn, planning: planningEn },
       "pt-BR": {
         common: commonPtBR,
         collaborators: collaboratorsPtBR,
         expenses: expensesPtBR,
         people: peoplePtBR,
+        planning: planningPtBR,
       },
     },
     fallbackLng: "en",
     supportedLngs: ["en", "pt-BR"],
     defaultNS: "common",
-    ns: ["common", "collaborators", "expenses", "people"],
+    ns: ["common", "collaborators", "expenses", "people", "planning"],
     interpolation: { escapeValue: false },
     detection: {
       order: ["querystring", "localStorage", "navigator"],

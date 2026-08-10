@@ -1,6 +1,8 @@
 import { act } from "react";
+import { I18nextProvider } from "react-i18next";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import i18n from "../../app/i18n";
 import { PlanTab } from "./PlanTab";
 import type {
   BulkPlanWorkPeriodAssignmentsInput,
@@ -17,6 +19,7 @@ beforeEach(() => {
   container = document.createElement("div");
   document.body.appendChild(container);
   root = null;
+  void i18n.changeLanguage("en");
 });
 
 afterEach(async () => {
@@ -28,6 +31,18 @@ afterEach(async () => {
 });
 
 describe("PlanTab", () => {
+  it("renders planning copy in Portuguese when the locale is switched", async () => {
+    await i18n.changeLanguage("pt-BR");
+
+    await renderPlanTab({
+      onBulkPlan: vi.fn(),
+      onRefineAssignment: vi.fn(),
+    });
+
+    expect(container.textContent).toContain("Planejar atribuições");
+    expect(container.textContent).toContain("Salvar plano");
+  });
+
   it("refines a collaborator assignment locally before selected-only plan save", async () => {
     const onBulkPlan = vi.fn();
     const onRefineAssignment = vi.fn(
@@ -430,17 +445,19 @@ async function renderPlanTab(props: {
   await act(async () => {
     root = createRoot(container);
     root.render(
-      <PlanTab
-        template={props.templateOverride ?? template}
-        sectors={sectors}
-        locations={locations}
-        tasks={tasks}
-        editable
-        loading={false}
-        pending={false}
-        onBulkPlan={props.onBulkPlan}
-        onRefineAssignment={props.onRefineAssignment}
-      />,
+      <I18nextProvider i18n={i18n}>
+        <PlanTab
+          template={props.templateOverride ?? template}
+          sectors={sectors}
+          locations={locations}
+          tasks={tasks}
+          editable
+          loading={false}
+          pending={false}
+          onBulkPlan={props.onBulkPlan}
+          onRefineAssignment={props.onRefineAssignment}
+        />
+      </I18nextProvider>,
     );
   });
 }

@@ -1,8 +1,10 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act } from "react";
+import { I18nextProvider } from "react-i18next";
 import { createRoot, type Root } from "react-dom/client";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import i18n from "../../app/i18n";
 import { AccrualTab } from "./AccrualTab";
 import type { WorkPeriod } from "../../types/planning";
 import type { ReferenceDataItem } from "../../types/referenceData";
@@ -38,6 +40,7 @@ beforeEach(() => {
   container = document.createElement("div");
   document.body.appendChild(container);
   root = null;
+  void i18n.changeLanguage("en");
 });
 afterEach(async () => {
   if (root) await act(async () => root?.unmount());
@@ -110,7 +113,9 @@ describe("AccrualTab", () => {
       root.render(
         <MemoryRouter>
           <QueryClientProvider client={queryClient}>
-            <AccrualTab workPeriod={period} locations={locations} />
+            <I18nextProvider i18n={i18n}>
+              <AccrualTab workPeriod={period} locations={locations} />
+            </I18nextProvider>
           </QueryClientProvider>
         </MemoryRouter>,
       );
@@ -190,7 +195,9 @@ describe("AccrualTab", () => {
       root.render(
         <MemoryRouter>
           <QueryClientProvider client={queryClient}>
-            <AccrualTab workPeriod={period} locations={locations} />
+            <I18nextProvider i18n={i18n}>
+              <AccrualTab workPeriod={period} locations={locations} />
+            </I18nextProvider>
           </QueryClientProvider>
         </MemoryRouter>,
       );

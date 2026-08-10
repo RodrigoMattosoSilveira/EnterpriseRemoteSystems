@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Link, useParams } from "react-router-dom";
 import { ApiErrorPanel } from "../../components/ApiErrorPanel";
 import { useReferenceDataByType } from "../reference-data/useReferenceData";
@@ -22,6 +23,7 @@ type Tab = "plan" | "inform" | "outcomes" | "accrual";
 
 export function WorkPeriodDetailPage() {
   const { id = "" } = useParams();
+  const { t } = useTranslation("planning");
   const [tab, setTab] = useState<Tab>("plan");
   const periodQuery = useWorkPeriod(id);
   const assignmentsQuery = useAssignments(id);
@@ -77,7 +79,7 @@ export function WorkPeriodDetailPage() {
             to="/work-periods"
             className="text-sm font-semibold text-gray-600 underline"
           >
-            Back to Work Periods
+            {t("detail.backToWorkPeriods")}
           </Link>
           <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
             <div>
@@ -91,7 +93,7 @@ export function WorkPeriodDetailPage() {
               </p>
             </div>
             <span className="w-fit rounded-full bg-gray-100 px-3 py-1 text-xs font-semibold">
-              {humanizePlanningCode(period.status)}
+              {humanizePlanningCode(period.status, t)}
             </span>
           </div>
         </div>
@@ -106,12 +108,12 @@ export function WorkPeriodDetailPage() {
               className={`rounded-xl px-4 py-2 text-sm font-semibold ${tab === value ? "bg-gray-950 text-white" : "text-gray-600"}`}
             >
               {value === "plan"
-                ? "Plan"
+                ? t("detail.tabs.plan")
                 : value === "inform"
-                  ? "Inform / Print"
+                  ? t("detail.tabs.inform")
                   : value === "outcomes"
-                    ? "Actual Outcomes"
-                    : "Accrual"}
+                    ? t("detail.tabs.outcomes")
+                    : t("detail.tabs.accrual")}
             </button>
           ))}
         </nav>
@@ -148,14 +150,14 @@ export function WorkPeriodDetailPage() {
         {tab === "outcomes" && (
           <section className="space-y-4">
             <div>
-              <h2 className="text-lg font-semibold">Actual Outcomes</h2>
+              <h2 className="text-lg font-semibold">{t("detail.tabs.outcomes")}</h2>
               <p className="text-sm text-gray-500">
-                Record what actually happened for each included collaborator.
+                {t("detail.outcomesIntro")}
               </p>
             </div>
             {included.length === 0 && (
               <div className="rounded-2xl border bg-white p-6 text-center text-sm text-gray-500">
-                No included assignments.
+                {t("detail.outcomesEmpty")}
               </div>
             )}
             {included.map((row) => (
@@ -174,7 +176,7 @@ export function WorkPeriodDetailPage() {
                   </p>
                 </div>
                 <label className="text-sm font-medium text-gray-700">
-                  Outcome
+                  {t("detail.outcomeLabel")}
                   <select
                     value={row.actualStatus ?? ""}
                     disabled={!editable || outcomeMutation.isPending}
@@ -187,10 +189,10 @@ export function WorkPeriodDetailPage() {
                     }
                     className="ml-3 rounded-xl border bg-white px-3 py-2"
                   >
-                    <option value="">Not marked</option>
+                    <option value="">{t("detail.outcomePlaceholder")}</option>
                     {ACTUAL_STATUSES.map((status) => (
                       <option key={status} value={status}>
-                        {humanizePlanningCode(status)}
+                        {humanizePlanningCode(status, t)}
                       </option>
                     ))}
                   </select>
