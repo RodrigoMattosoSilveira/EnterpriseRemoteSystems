@@ -1,4 +1,5 @@
 import { expect, test, type APIRequestContext, type Page } from "@playwright/test";
+import { uniquePersonSuffix } from "./support/test-data";
 import { authzHeaders, e2eApiUrl, seedBrowserAuthz } from "./support/authz";
 
 const PERSON_STATUS_ACTIVE_ID = "ref-person-status-active";
@@ -484,7 +485,7 @@ function completePersonPayload({
 }
 
 function uniqueSuffix(): number {
-  return Date.now() + Math.floor(Math.random() * 1000);
+  return uniquePersonSuffix(test.info().workerIndex);
 }
 
 function e2eFarFutureWorkDate(seed: number): string {

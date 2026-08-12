@@ -2,6 +2,7 @@ import { useState, type FormEvent } from "react";
 import { Link, useParams } from "react-router-dom";
 import { ApiErrorPanel } from "../../components/ApiErrorPanel";
 import { JourneyDaysRemaining } from "../../components/JourneyDaysRemaining";
+import { useAuthorizationContext } from "../../components/layout/AuthorizationContext";
 import type {
   Collaborator,
   UpdateCollaboratorInput,
@@ -20,6 +21,15 @@ import { useSettlementPreview } from "./useSettlements";
 
 export function CollaboratorDetailPage() {
   const { id = "" } = useParams();
+  const actor = useAuthorizationContext();
+  const wildcard = actor.permissions.includes("*");
+  const canBrowseCollaborators = wildcard || actor.permissions.includes("collaborators.read");
+  const canEditCollaborator = wildcard || actor.permissions.includes("collaborators.update");
+  const canPreviewSettlement = wildcard || actor.permissions.includes("journey.settlements.preview");
+  const canReadCurrentAccount =
+    wildcard ||
+    actor.permissions.includes("current_accounts.summary.read") ||
+    (actor.permissions.includes("current_accounts.self.summary.read") && actor.collaboratorId === id);
   const { data: collaborator, isLoading, error } = useCollaborator(id);
   const [editing, setEditing] = useState(false);
   const [flash, setFlash] = useState("");
@@ -72,12 +82,21 @@ export function CollaboratorDetailPage() {
     <main className="min-h-screen bg-gray-50">
       <header className="sticky top-0 z-10 border-b bg-white/95 px-4 py-4 backdrop-blur">
         <div className="mx-auto max-w-5xl">
-          <Link
-            className="text-sm font-semibold text-gray-600 underline"
-            to="/collaborators"
-          >
-            Back to Collaborators
-          </Link>
+          {canBrowseCollaborators ? (
+            <Link
+              className="text-sm font-semibold text-gray-600 underline"
+              to="/collaborators"
+            >
+              Back to Collaborators
+            </Link>
+          ) : actor.personId ? (
+            <Link
+              className="text-sm font-semibold text-gray-600 underline"
+              to={`/people/${actor.personId}`}
+            >
+              My Person record
+            </Link>
+          ) : null}
 
           <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div>
@@ -101,22 +120,26 @@ export function CollaboratorDetailPage() {
             <div className="flex flex-col items-start gap-3 sm:items-end">
               <StatusBadge collaborator={collaborator} />
               <div className="flex flex-wrap gap-2 sm:justify-end">
-                <Link
-                  className="rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 shadow-sm"
-                  to={`/collaborators/${collaborator.id}/current-account`}
-                >
-                  Current Account
-                </Link>
-                <button
-                  type="button"
-                  className="rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 shadow-sm"
-                  onClick={() => {
-                    setFlash("");
-                    setEditing(true);
-                  }}
-                >
-                  Edit Collaborator
-                </button>
+                {canReadCurrentAccount ? (
+                  <Link
+                    className="rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 shadow-sm"
+                    to={`/collaborators/${collaborator.id}/current-account`}
+                  >
+                    Current Account
+                  </Link>
+                ) : null}
+                {canEditCollaborator ? (
+                  <button
+                    type="button"
+                    className="rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 shadow-sm"
+                    onClick={() => {
+                      setFlash("");
+                      setEditing(true);
+                    }}
+                  >
+                    Edit Collaborator
+                  </button>
+                ) : null}
               </div>
             </div>
           </div>
@@ -252,13 +275,18 @@ export function CollaboratorDetailPage() {
           </dl>
         </section>
 
-        <JourneySettlementPanel
-          collaboratorId={collaborator.id}
-          projectedEndDate={collaborator.projectedEndDate}
-          closedAt={collaborator.closedAt}
-        />
+        {canPreviewSettlement ? (
+          <JourneySettlementPanel
+            collaboratorId={collaborator.id}
+            projectedEndDate={collaborator.projectedEndDate}
+            closedAt={collaborator.closedAt}
+          />
+        ) : null}
 
-        <CollaboratorNotes collaborator={collaborator} />
+        <CollaboratorNotes
+          collaborator={collaborator}
+          canRefreshGoldBalance={canPreviewSettlement}
+        />
       </section>
     </main>
   );
@@ -689,9 +717,16 @@ function Input({
   );
 }
 
-function CollaboratorNotes({ collaborator }: { collaborator: Collaborator }) {
+function CollaboratorNotes({
+  collaborator,
+  canRefreshGoldBalance,
+}: {
+  collaborator: Collaborator;
+  canRefreshGoldBalance: boolean;
+}) {
   const rawNotes = collaborator.notes?.trim() ?? "";
-  const refreshGoldBalance = hasStoredGoldBalanceNote(rawNotes);
+  const refreshGoldBalance =
+    canRefreshGoldBalance && hasStoredGoldBalanceNote(rawNotes);
   const preview = useSettlementPreview(
     refreshGoldBalance ? collaborator.id : "",
   );

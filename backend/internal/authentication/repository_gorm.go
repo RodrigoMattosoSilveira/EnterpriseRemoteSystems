@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"enterpriseremotesystems/backend/internal/authz"
+	appdb "enterpriseremotesystems/backend/internal/db"
+	"enterpriseremotesystems/backend/internal/shared/ids"
 	"gorm.io/gorm"
 )
 
@@ -92,42 +94,249 @@ func (r *GORMRepository) ActorHasActiveTenantAccess(ctx context.Context, actorID
 	return len(options) > 0, nil
 }
 
+func (r *GORMRepository) EnsureActorPersonSelfAccess(ctx context.Context, actorID string, now time.Time) error {
+	return r.database.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var actor authz.AuthzActor
+		result := tx.Where("id = ?", strings.TrimSpace(actorID)).Limit(1).Find(&actor)
+		if result.Error != nil {
+			return fmt.Errorf("find authentication authorization actor: %w", result.Error)
+		}
+		if result.RowsAffected == 0 {
+			return gorm.ErrRecordNotFound
+		}
+		return ensureAuthenticatedActorPersonSelfAccess(tx, &actor, now)
+	})
+}
+
 func (r *GORMRepository) CreateAccount(ctx context.Context, account Account) (AccountRecord, error) {
 	err := r.database.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		var actorCount int64
-		if err := tx.Model(&authz.AuthzActor{}).Where("id = ?", account.ActorID).Count(&actorCount).Error; err != nil {
-			return fmt.Errorf("verify authorization actor: %w", err)
+		var actor authz.AuthzActor
+		result := tx.Where("id = ?", account.ActorID).Limit(1).Find(&actor)
+		if result.Error != nil {
+			return fmt.Errorf("verify authorization actor: %w", result.Error)
 		}
-		if actorCount == 0 {
+		if result.RowsAffected == 0 {
 			return gorm.ErrRecordNotFound
 		}
 
-		var loginCount int64
-		if err := tx.Model(&Account{}).Where("login = ? COLLATE NOCASE", account.Login).Count(&loginCount).Error; err != nil {
-			return fmt.Errorf("check authentication login: %w", err)
-		}
-		if loginCount > 0 {
-			return ErrLoginAlreadyExists
+		if err := ensureAuthenticatedActorPersonSelfAccess(tx, &actor, account.CreatedAt); err != nil {
+			return err
 		}
 
-		var actorAccountCount int64
-		if err := tx.Model(&Account{}).Where("actor_id = ?", account.ActorID).Count(&actorAccountCount).Error; err != nil {
-			return fmt.Errorf("check authorization actor account: %w", err)
-		}
-		if actorAccountCount > 0 {
-			return ErrActorAlreadyLinked
-		}
+		return createAuthenticationAccount(tx, account)
+	})
+	if err != nil {
+		return AccountRecord{}, err
+	}
+	return r.FindAccountByID(ctx, account.ID)
+}
 
-		if err := tx.Create(&account).Error; err != nil {
-			errorText := strings.ToLower(err.Error())
-			switch {
-			case strings.Contains(errorText, "auth_user_accounts.login"):
-				return ErrLoginAlreadyExists
-			case strings.Contains(errorText, "auth_user_accounts.actor_id"):
-				return ErrActorAlreadyLinked
-			default:
-				return fmt.Errorf("create authentication account: %w", err)
+func ensureAuthenticatedActorPersonSelfAccess(tx *gorm.DB, actor *authz.AuthzActor, now time.Time) error {
+	if actor == nil {
+		return nil
+	}
+	if now.IsZero() {
+		now = time.Now().UTC()
+	}
+
+	personID := ""
+	if actor.PersonID != nil {
+		personID = strings.TrimSpace(*actor.PersonID)
+	}
+	if personID == "" && actor.CollaboratorID != nil && strings.TrimSpace(*actor.CollaboratorID) != "" {
+		var collaborator appdb.CollaboratorJourney
+		result := tx.Where("id = ?", strings.TrimSpace(*actor.CollaboratorID)).Limit(1).Find(&collaborator)
+		if result.Error != nil {
+			return fmt.Errorf("find authentication actor collaborator: %w", result.Error)
+		}
+		if result.RowsAffected > 0 {
+			personID = strings.TrimSpace(collaborator.PersonID)
+			if personID != "" {
+				if err := tx.Model(&authz.AuthzActor{}).Where("id = ?", actor.ID).Updates(map[string]any{
+					"person_id":  personID,
+					"updated_at": now,
+				}).Error; err != nil {
+					return fmt.Errorf("link authentication actor to person: %w", err)
+				}
+				actor.PersonID = &personID
 			}
+		}
+	}
+	if personID == "" {
+		return nil
+	}
+
+	var person appdb.Person
+	result := tx.Where("id = ?", personID).Limit(1).Find(&person)
+	if result.Error != nil {
+		return fmt.Errorf("find authentication actor person: %w", result.Error)
+	}
+	if result.RowsAffected == 0 {
+		return nil
+	}
+
+	var personRole authz.AuthzRole
+	if err := tx.Where("code = ? AND active = ?", string(authz.RolePerson), true).First(&personRole).Error; err != nil {
+		return fmt.Errorf("find Person authorization role: %w", err)
+	}
+
+	var grant authz.AuthzActorRoleGrant
+	grantResult := tx.
+		Where("actor_id = ? AND role_id = ? AND tenant_id = ?", actor.ID, personRole.ID, person.TenantID).
+		Limit(1).
+		Find(&grant)
+	if grantResult.Error != nil {
+		return fmt.Errorf("find Person authorization grant: %w", grantResult.Error)
+	}
+	if grantResult.RowsAffected == 0 {
+		grant = authz.AuthzActorRoleGrant{
+			ID:        ids.New(),
+			ActorID:   actor.ID,
+			RoleID:    personRole.ID,
+			TenantID:  person.TenantID,
+			Active:    true,
+			CreatedAt: now,
+			UpdatedAt: now,
+		}
+		if err := tx.Create(&grant).Error; err != nil {
+			return fmt.Errorf("create Person authorization grant: %w", err)
+		}
+	} else if !grant.Active {
+		if err := tx.Model(&authz.AuthzActorRoleGrant{}).Where("id = ?", grant.ID).Updates(map[string]any{
+			"active":     true,
+			"updated_at": now,
+		}).Error; err != nil {
+			return fmt.Errorf("reactivate Person authorization grant: %w", err)
+		}
+	}
+
+	return nil
+}
+
+func (r *GORMRepository) CreatePersonAccount(ctx context.Context, tenantID string, account Account) (AccountRecord, error) {
+	tenantID = strings.TrimSpace(tenantID)
+	err := r.database.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var tenant appdb.Tenant
+		result := tx.Where("id = ? AND active = ?", tenantID, true).Limit(1).Find(&tenant)
+		if result.Error != nil {
+			return fmt.Errorf("find authentication tenant: %w", result.Error)
+		}
+		if result.RowsAffected == 0 {
+			return ErrTenantUnavailable
+		}
+
+		var person appdb.Person
+		result = tx.
+			Where("tenant_id = ? AND email = ? COLLATE NOCASE", tenantID, account.Login).
+			Limit(1).
+			Find(&person)
+		if result.Error != nil {
+			return fmt.Errorf("find authentication person: %w", result.Error)
+		}
+		if result.RowsAffected == 0 {
+			return ErrPersonLoginNotFound
+		}
+
+		var collaborator appdb.CollaboratorJourney
+		collaboratorResult := tx.
+			Where("tenant_id = ? AND person_id = ? AND closed_at IS NULL", tenantID, person.ID).
+			Order("journey_start_date DESC, created_at DESC").
+			Limit(1).
+			Find(&collaborator)
+		if collaboratorResult.Error != nil {
+			return fmt.Errorf("find current collaborator for authentication person: %w", collaboratorResult.Error)
+		}
+
+		var actor authz.AuthzActor
+		actorQuery := tx.Where("person_id = ?", person.ID)
+		if collaboratorResult.RowsAffected > 0 {
+			actorQuery = tx.Where("person_id = ? OR collaborator_id = ?", person.ID, collaborator.ID)
+		}
+		actorResult := actorQuery.
+			Order("active DESC, created_at ASC").
+			Limit(1).
+			Find(&actor)
+		if actorResult.Error != nil {
+			return fmt.Errorf("find person authorization actor: %w", actorResult.Error)
+		}
+
+		now := time.Now().UTC()
+		if actorResult.RowsAffected == 0 {
+			personID := person.ID
+			var collaboratorID *string
+			if collaboratorResult.RowsAffected > 0 {
+				value := collaborator.ID
+				collaboratorID = &value
+			}
+			actor = authz.AuthzActor{
+				ID:             ids.New(),
+				ActorKey:       "person:" + person.ID,
+				DisplayName:    authenticationPersonDisplayName(person),
+				PersonID:       &personID,
+				CollaboratorID: collaboratorID,
+				Active:         true,
+				CreatedAt:      now,
+				UpdatedAt:      now,
+			}
+			if err := tx.Create(&actor).Error; err != nil {
+				return fmt.Errorf("create person authorization actor: %w", err)
+			}
+		} else {
+			if !actor.Active {
+				return ErrPersonActorInactive
+			}
+			updates := map[string]any{}
+			if actor.PersonID == nil || strings.TrimSpace(*actor.PersonID) == "" {
+				updates["person_id"] = person.ID
+			}
+			if collaboratorResult.RowsAffected > 0 &&
+				(actor.CollaboratorID == nil || *actor.CollaboratorID != collaborator.ID) {
+				updates["collaborator_id"] = collaborator.ID
+			}
+			if len(updates) > 0 {
+				updates["updated_at"] = now
+				if err := tx.Model(&authz.AuthzActor{}).Where("id = ?", actor.ID).Updates(updates).Error; err != nil {
+					return fmt.Errorf("update person authorization actor identity: %w", err)
+				}
+			}
+		}
+
+		var personRole authz.AuthzRole
+		if err := tx.Where("code = ? AND active = ?", string(authz.RolePerson), true).First(&personRole).Error; err != nil {
+			return fmt.Errorf("find Person authorization role: %w", err)
+		}
+		var personGrant authz.AuthzActorRoleGrant
+		grantResult := tx.
+			Where("actor_id = ? AND role_id = ? AND tenant_id = ?", actor.ID, personRole.ID, tenantID).
+			Limit(1).
+			Find(&personGrant)
+		if grantResult.Error != nil {
+			return fmt.Errorf("find Person authorization grant: %w", grantResult.Error)
+		}
+		if grantResult.RowsAffected == 0 {
+			personGrant = authz.AuthzActorRoleGrant{
+				ID:        ids.New(),
+				ActorID:   actor.ID,
+				RoleID:    personRole.ID,
+				TenantID:  tenantID,
+				Active:    true,
+				CreatedAt: now,
+				UpdatedAt: now,
+			}
+			if err := tx.Create(&personGrant).Error; err != nil {
+				return fmt.Errorf("create Person authorization grant: %w", err)
+			}
+		} else if !personGrant.Active {
+			if err := tx.Model(&authz.AuthzActorRoleGrant{}).
+				Where("id = ?", personGrant.ID).
+				Updates(map[string]any{"active": true, "updated_at": now}).Error; err != nil {
+				return fmt.Errorf("reactivate Person authorization grant: %w", err)
+			}
+		}
+
+		account.ActorID = actor.ID
+		if err := createAuthenticationAccount(tx, account); err != nil {
+			return err
 		}
 		return nil
 	})
@@ -135,6 +344,52 @@ func (r *GORMRepository) CreateAccount(ctx context.Context, account Account) (Ac
 		return AccountRecord{}, err
 	}
 	return r.FindAccountByID(ctx, account.ID)
+}
+
+func authenticationPersonDisplayName(person appdb.Person) string {
+	name := strings.TrimSpace(strings.TrimSpace(person.FirstName) + " " + strings.TrimSpace(person.LastName))
+	nickname := strings.TrimSpace(person.Nickname)
+	switch {
+	case name != "" && nickname != "":
+		return name + " (" + nickname + ")"
+	case nickname != "":
+		return nickname
+	case name != "":
+		return name
+	default:
+		return strings.TrimSpace(person.Email)
+	}
+}
+
+func createAuthenticationAccount(tx *gorm.DB, account Account) error {
+	var loginCount int64
+	if err := tx.Model(&Account{}).Where("login = ? COLLATE NOCASE", account.Login).Count(&loginCount).Error; err != nil {
+		return fmt.Errorf("check authentication login: %w", err)
+	}
+	if loginCount > 0 {
+		return ErrLoginAlreadyExists
+	}
+
+	var actorAccountCount int64
+	if err := tx.Model(&Account{}).Where("actor_id = ?", account.ActorID).Count(&actorAccountCount).Error; err != nil {
+		return fmt.Errorf("check authorization actor account: %w", err)
+	}
+	if actorAccountCount > 0 {
+		return ErrActorAlreadyLinked
+	}
+
+	if err := tx.Create(&account).Error; err != nil {
+		errorText := strings.ToLower(err.Error())
+		switch {
+		case strings.Contains(errorText, "auth_user_accounts.login"):
+			return ErrLoginAlreadyExists
+		case strings.Contains(errorText, "auth_user_accounts.actor_id"):
+			return ErrActorAlreadyLinked
+		default:
+			return fmt.Errorf("create authentication account: %w", err)
+		}
+	}
+	return nil
 }
 
 func (r *GORMRepository) SetAccountActive(ctx context.Context, id string, active bool, now time.Time) (AccountRecord, error) {

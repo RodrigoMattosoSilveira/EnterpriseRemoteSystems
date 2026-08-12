@@ -103,6 +103,145 @@ func TestAuthenticationLoginSessionLogoutAndPasswordChange(t *testing.T) {
 	_ = repository
 }
 
+func TestAuthenticationAccountCreationEnsuresPersonSelfAccessForExistingPersonActor(t *testing.T) {
+	database, _, service, _ := authenticationTestService(t)
+	now := time.Now().UTC()
+
+	status := appdb.ReferenceData{
+		BaseModel: appdb.BaseModel{ID: "auth-existing-person-status", CreatedAt: now, UpdatedAt: now},
+		TenantID:  appdb.DefaultTenantID, Type: "person_status", Code: "AUTH_EXISTING_ACTIVE", Label: "Authentication Existing Active", Active: true,
+	}
+	if err := database.Create(&status).Error; err != nil {
+		t.Fatalf("create person status: %v", err)
+	}
+	person := appdb.Person{
+		BaseModel: appdb.BaseModel{ID: "auth-existing-person", CreatedAt: now, UpdatedAt: now},
+		TenantID:  appdb.DefaultTenantID, FirstName: "Existing", LastName: "Person", Nickname: "ExistingPerson",
+		CPF: "98765432100", RG: "AUTH-EXISTING-RG", Cellular: "11987654321", Email: "existing-person@example.com",
+		Country: "Brasil", ProfileCompletionStatus: "COMPLETE", StatusID: status.ID,
+	}
+	if err := database.Create(&person).Error; err != nil {
+		t.Fatalf("create person: %v", err)
+	}
+	personID := person.ID
+	actor := authz.AuthzActor{
+		ID: "auth-existing-person-actor", ActorKey: "auth-existing-person-actor", DisplayName: "Existing Person Actor",
+		PersonID: &personID, Active: true, CreatedAt: now, UpdatedAt: now,
+	}
+	if err := database.Create(&actor).Error; err != nil {
+		t.Fatalf("create person actor: %v", err)
+	}
+	if err := authz.GrantRole(database, actor.ID, authz.RoleExpenseOperator, appdb.DefaultTenantID); err != nil {
+		t.Fatalf("grant expense operator role: %v", err)
+	}
+
+	account, err := service.CreateAccount(context.Background(), CreateAccountRequest{
+		ActorID: actor.ID, Login: person.Email, TemporaryPassword: "Existing-Person-Password-1",
+	})
+	if err != nil {
+		t.Fatalf("create account: %v", err)
+	}
+
+	var personRole authz.AuthzRole
+	if err := database.Where("code = ?", string(authz.RolePerson)).First(&personRole).Error; err != nil {
+		t.Fatalf("find Person role: %v", err)
+	}
+	var personGrant authz.AuthzActorRoleGrant
+	if err := database.Where(
+		"actor_id = ? AND role_id = ? AND tenant_id = ? AND active = ?",
+		actor.ID, personRole.ID, appdb.DefaultTenantID, true,
+	).First(&personGrant).Error; err != nil {
+		t.Fatalf("expected active Person self-service grant: %v", err)
+	}
+
+	login, err := service.Login(context.Background(), LoginRequest{Login: account.Login, Password: "Existing-Person-Password-1"}, "", "")
+	if err != nil {
+		t.Fatalf("login: %v", err)
+	}
+	if login.Session.PersonID != person.ID {
+		t.Fatalf("expected login session person %q, got %#v", person.ID, login.Session)
+	}
+
+	resolved, err := authz.NewGORMStore(database).FindActor(context.Background(), authz.ActorLookup{
+		ActorID: actor.ActorKey, TenantID: appdb.DefaultTenantID,
+	})
+	if err != nil {
+		t.Fatalf("resolve authenticated actor: %v", err)
+	}
+	if !resolved.HasPermission(authz.PermissionPeopleSelfRead) {
+		t.Fatalf("expected authenticated Person actor to receive people.self.read, permissions=%v", authz.PermissionNames(resolved.Permissions))
+	}
+	if !resolved.HasPermission(authz.PermissionCollaboratorsRead) {
+		t.Fatalf("expected existing expense-operator authorization to be preserved, permissions=%v", authz.PermissionNames(resolved.Permissions))
+	}
+}
+
+func TestAuthenticationLoginBackfillsPersonSelfAccessForExistingAccount(t *testing.T) {
+	database, _, service, actor := authenticationTestService(t)
+	now := time.Now().UTC()
+
+	status := appdb.ReferenceData{
+		BaseModel: appdb.BaseModel{ID: "auth-login-person-status", CreatedAt: now, UpdatedAt: now},
+		TenantID:  appdb.DefaultTenantID, Type: "person_status", Code: "AUTH_LOGIN_ACTIVE", Label: "Authentication Login Active", Active: true,
+	}
+	if err := database.Create(&status).Error; err != nil {
+		t.Fatalf("create person status: %v", err)
+	}
+	person := appdb.Person{
+		BaseModel: appdb.BaseModel{ID: "auth-login-person", CreatedAt: now, UpdatedAt: now},
+		TenantID:  appdb.DefaultTenantID, FirstName: "Login", LastName: "Person", Nickname: "LoginPerson",
+		CPF: "98765432101", RG: "AUTH-LOGIN-RG", Cellular: "11987654322", Email: "login-person@example.com",
+		Country: "Brasil", ProfileCompletionStatus: "COMPLETE", StatusID: status.ID,
+	}
+	if err := database.Create(&person).Error; err != nil {
+		t.Fatalf("create person: %v", err)
+	}
+
+	account, err := service.CreateAccount(context.Background(), CreateAccountRequest{
+		ActorID: actor.ID, Login: person.Email, TemporaryPassword: "Login-Person-Password-1",
+	})
+	if err != nil {
+		t.Fatalf("create pre-existing account: %v", err)
+	}
+	if err := database.Model(&authz.AuthzActor{}).Where("id = ?", actor.ID).Updates(map[string]any{
+		"person_id":  person.ID,
+		"updated_at": now,
+	}).Error; err != nil {
+		t.Fatalf("link existing account actor to person: %v", err)
+	}
+
+	var personRole authz.AuthzRole
+	if err := database.Where("code = ?", string(authz.RolePerson)).First(&personRole).Error; err != nil {
+		t.Fatalf("find Person role: %v", err)
+	}
+	var countBefore int64
+	if err := database.Model(&authz.AuthzActorRoleGrant{}).Where(
+		"actor_id = ? AND role_id = ? AND tenant_id = ? AND active = ?",
+		actor.ID, personRole.ID, appdb.DefaultTenantID, true,
+	).Count(&countBefore).Error; err != nil {
+		t.Fatalf("count Person grants before login: %v", err)
+	}
+	if countBefore != 0 {
+		t.Fatalf("expected legacy account fixture to begin without Person self-service grant, got %d", countBefore)
+	}
+
+	login, err := service.Login(context.Background(), LoginRequest{Login: account.Login, Password: "Login-Person-Password-1"}, "", "")
+	if err != nil {
+		t.Fatalf("login existing account: %v", err)
+	}
+	if login.Session.PersonID != person.ID {
+		t.Fatalf("expected login to refresh Person identity %q, got %#v", person.ID, login.Session)
+	}
+
+	var personGrant authz.AuthzActorRoleGrant
+	if err := database.Where(
+		"actor_id = ? AND role_id = ? AND tenant_id = ? AND active = ?",
+		actor.ID, personRole.ID, appdb.DefaultTenantID, true,
+	).First(&personGrant).Error; err != nil {
+		t.Fatalf("expected login to backfill Person self-service grant: %v", err)
+	}
+}
+
 func TestAuthenticationRejectsInactiveAccountAndActor(t *testing.T) {
 	database, _, service, actor := authenticationTestService(t)
 	account, err := service.CreateAccount(context.Background(), CreateAccountRequest{
@@ -119,6 +258,14 @@ func TestAuthenticationRejectsInactiveAccountAndActor(t *testing.T) {
 	if err != nil {
 		t.Fatalf("issue reset token before account deactivation: %v", err)
 	}
+	var grantsBefore []authz.AuthzActorRoleGrant
+	if err := database.Where("actor_id = ? AND active = ?", actor.ID, true).Order("role_id, tenant_id").Find(&grantsBefore).Error; err != nil {
+		t.Fatalf("load active grants before account deactivation: %v", err)
+	}
+	if len(grantsBefore) == 0 {
+		t.Fatal("expected active authorization grants before account deactivation")
+	}
+
 	if _, err := service.SetAccountActive(context.Background(), account.ID, false); err != nil {
 		t.Fatalf("deactivate account: %v", err)
 	}
@@ -135,6 +282,18 @@ func TestAuthenticationRejectsInactiveAccountAndActor(t *testing.T) {
 	}
 	if _, err := service.SetAccountActive(context.Background(), account.ID, true); err != nil {
 		t.Fatalf("reactivate account: %v", err)
+	}
+	var grantsAfter []authz.AuthzActorRoleGrant
+	if err := database.Where("actor_id = ? AND active = ?", actor.ID, true).Order("role_id, tenant_id").Find(&grantsAfter).Error; err != nil {
+		t.Fatalf("load active grants after account reactivation: %v", err)
+	}
+	if len(grantsAfter) != len(grantsBefore) {
+		t.Fatalf("expected account lifecycle to preserve %d active grants, got %d", len(grantsBefore), len(grantsAfter))
+	}
+	for i := range grantsBefore {
+		if grantsBefore[i].ID != grantsAfter[i].ID || grantsBefore[i].RoleID != grantsAfter[i].RoleID || grantsBefore[i].TenantID != grantsAfter[i].TenantID {
+			t.Fatalf("account lifecycle changed authorization grants: before=%#v after=%#v", grantsBefore, grantsAfter)
+		}
 	}
 	reactivatedLogin, err := service.Login(context.Background(), LoginRequest{Login: account.Login, Password: "Operator-Password-1"}, "", "")
 	if err != nil {
@@ -311,6 +470,133 @@ func createAuthenticationTestActor(t *testing.T, database *gorm.DB) authz.AuthzA
 		t.Fatalf("grant test actor tenant access: %v", err)
 	}
 	return actor
+}
+
+func TestAuthenticationCreatesPersonActorAndAccountWhenNoActorExists(t *testing.T) {
+	database, _, service, _ := authenticationTestService(t)
+	now := time.Now().UTC()
+
+	references := []appdb.ReferenceData{
+		{BaseModel: appdb.BaseModel{ID: "auth-person-status", CreatedAt: now, UpdatedAt: now}, TenantID: appdb.DefaultTenantID, Type: "person_status", Code: "ACTIVE", Label: "Active", Active: true},
+		{BaseModel: appdb.BaseModel{ID: "auth-payment-method", CreatedAt: now, UpdatedAt: now}, TenantID: appdb.DefaultTenantID, Type: "payment_method", Code: "DAILY", Label: "Daily", Active: true},
+		{BaseModel: appdb.BaseModel{ID: "auth-sector", CreatedAt: now, UpdatedAt: now}, TenantID: appdb.DefaultTenantID, Type: "sector", Code: "OPS", Label: "Operations", Active: true},
+		{BaseModel: appdb.BaseModel{ID: "auth-location", CreatedAt: now, UpdatedAt: now}, TenantID: appdb.DefaultTenantID, Type: "location", Code: "MAIN", Label: "Main", Active: true},
+		{BaseModel: appdb.BaseModel{ID: "auth-task", CreatedAt: now, UpdatedAt: now}, TenantID: appdb.DefaultTenantID, Type: "task", Code: "WORK", Label: "Work", Active: true},
+		{BaseModel: appdb.BaseModel{ID: "auth-collaborator-status", CreatedAt: now, UpdatedAt: now}, TenantID: appdb.DefaultTenantID, Type: "collaborator_status", Code: "ACTIVE", Label: "Active Collaborator", Active: true},
+	}
+	for _, reference := range references {
+		if err := database.Create(&reference).Error; err != nil {
+			t.Fatalf("create authentication reference %s: %v", reference.ID, err)
+		}
+	}
+
+	person := appdb.Person{
+		BaseModel: appdb.BaseModel{ID: "auth-person-without-actor", CreatedAt: now, UpdatedAt: now},
+		TenantID:  appdb.DefaultTenantID,
+		FirstName: "Return",
+		LastName:  "Account",
+		Nickname:  "RetAcct",
+		CPF:       "12345678901",
+		RG:        "AUTHTEST01",
+		Cellular:  "11912345678",
+		Email:     "return-account@example.com",
+		Country:   "Brasil",
+		StatusID:  "auth-person-status",
+	}
+	if err := database.Create(&person).Error; err != nil {
+		t.Fatalf("create Person without actor: %v", err)
+	}
+
+	collaborator := appdb.CollaboratorJourney{
+		BaseModel:            appdb.BaseModel{ID: "auth-collaborator-without-actor", CreatedAt: now, UpdatedAt: now},
+		TenantID:             appdb.DefaultTenantID,
+		PersonID:             person.ID,
+		JourneyStartDate:     now,
+		DefaultEndDate:       now.AddDate(0, 0, 90),
+		ProjectedEndDate:     now.AddDate(0, 0, 90),
+		PaymentMethodID:      "auth-payment-method",
+		PaymentValue:         250,
+		PlanningAvailability: "ACTIVE",
+		SectorID:             "auth-sector",
+		LocationID:           "auth-location",
+		TaskID:               "auth-task",
+		StatusID:             "auth-collaborator-status",
+	}
+	if err := database.Create(&collaborator).Error; err != nil {
+		t.Fatalf("create Collaborator without actor: %v", err)
+	}
+
+	mustChangePassword := false
+	account, err := service.CreateAccount(context.Background(), CreateAccountRequest{
+		TenantID:           appdb.DefaultTenantID,
+		Login:              person.Email,
+		TemporaryPassword:  "Return-Account-Password-1",
+		MustChangePassword: &mustChangePassword,
+	})
+	if err != nil {
+		t.Fatalf("create account and Person actor: %v", err)
+	}
+	if account.ActorID == "" {
+		t.Fatal("expected account creation to provision an authorization actor")
+	}
+	if !account.MustChangePassword {
+		t.Fatal("expected a provisioned Person account to require a first-login password change")
+	}
+
+	var persistedAccount Account
+	if err := database.First(&persistedAccount, "id = ?", account.ID).Error; err != nil {
+		t.Fatalf("find provisioned authentication account: %v", err)
+	}
+	if !persistedAccount.MustChangePassword {
+		t.Fatal("expected must_change_password to be persisted for a provisioned Person account")
+	}
+
+	var actor authz.AuthzActor
+	if err := database.First(&actor, "id = ?", account.ActorID).Error; err != nil {
+		t.Fatalf("find provisioned actor: %v", err)
+	}
+	if actor.PersonID == nil || *actor.PersonID != person.ID {
+		t.Fatalf("expected actor person %q, got %#v", person.ID, actor.PersonID)
+	}
+	if actor.CollaboratorID == nil || *actor.CollaboratorID != collaborator.ID {
+		t.Fatalf("expected actor collaborator %q, got %#v", collaborator.ID, actor.CollaboratorID)
+	}
+
+	var personRole authz.AuthzRole
+	if err := database.First(&personRole, "code = ?", string(authz.RolePerson)).Error; err != nil {
+		t.Fatalf("find Person role: %v", err)
+	}
+	var grant authz.AuthzActorRoleGrant
+	if err := database.First(&grant,
+		"actor_id = ? AND role_id = ? AND tenant_id = ?",
+		actor.ID, personRole.ID, appdb.DefaultTenantID,
+	).Error; err != nil {
+		t.Fatalf("find Person role grant: %v", err)
+	}
+	if !grant.Active {
+		t.Fatal("expected provisioned Person role grant to be active")
+	}
+
+	login, err := service.Login(context.Background(), LoginRequest{
+		Login: person.Email, Password: "Return-Account-Password-1",
+	}, "", "")
+	if err != nil {
+		t.Fatalf("login through provisioned account: %v", err)
+	}
+	if login.Session.PersonID != person.ID || login.Session.CollaboratorID != collaborator.ID {
+		t.Fatalf("unexpected provisioned session identity: %#v", login.Session)
+	}
+	if !login.Session.MustChangePassword {
+		t.Fatal("expected first login for a provisioned Person account to require a password change")
+	}
+
+	current, err := service.ResolveSession(context.Background(), login.Token)
+	if err != nil {
+		t.Fatalf("resolve provisioned Person session: %v", err)
+	}
+	if !current.MustChangePassword {
+		t.Fatal("expected resolved provisioned Person session to retain the password-change requirement")
+	}
 }
 
 func TestAuthenticationRejectsAccountForActorWithoutActiveTenantAccess(t *testing.T) {

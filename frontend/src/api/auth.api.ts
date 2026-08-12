@@ -23,7 +23,7 @@ export function logout(): Promise<void> {
 }
 
 export function loadAuthSession(): Promise<AuthSession> {
-  return apiFetch<AuthSession>("/auth/session");
+  return apiFetch<AuthSession>("/auth/session", { cache: "no-store" });
 }
 
 export async function loadAuthTenantOptions(): Promise<AuthTenantOption[]> {
@@ -83,13 +83,62 @@ export function listAuthAccounts(): Promise<AuthAccount[]> {
   return apiFetch<AuthAccount[]>("/auth/accounts");
 }
 
-export function createAuthAccount(
+export const AUTHENTICATION_ACCOUNT_FEEDBACK_EVENT =
+  "ers:authentication-account-feedback";
+
+export type AuthenticationAccountFeedback = {
+  kind: "success" | "error";
+  message: string;
+};
+
+export async function createAuthAccount(
   request: CreateAuthAccountRequest,
 ): Promise<AuthAccount> {
-  return apiFetch<AuthAccount>("/auth/accounts", {
-    method: "POST",
-    body: JSON.stringify(request),
-  });
+  try {
+    const account = await apiFetch<AuthAccount>("/auth/accounts", {
+      method: "POST",
+      body: JSON.stringify(request),
+    });
+    notifyAuthenticationAccountFeedback({
+      kind: "success",
+      message: `Authentication account ${account.login} created.`,
+    });
+    return account;
+  } catch (error) {
+    notifyAuthenticationAccountFeedback({
+      kind: "error",
+      message: authenticationAccountErrorMessage(error),
+    });
+    throw error;
+  }
+}
+
+function notifyAuthenticationAccountFeedback(
+  detail: AuthenticationAccountFeedback,
+): void {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(
+    new CustomEvent<AuthenticationAccountFeedback>(
+      AUTHENTICATION_ACCOUNT_FEEDBACK_EVENT,
+      { detail },
+    ),
+  );
+}
+
+function authenticationAccountErrorMessage(error: unknown): string {
+  if (typeof error === "object" && error !== null && "fields" in error) {
+    const fields = (error as { fields?: Record<string, string> }).fields;
+    const fieldMessage = fields
+      ? Object.values(fields).find((message) => message.trim() !== "")
+      : undefined;
+    if (fieldMessage) {
+      return `Authentication account was not created. ${fieldMessage}`;
+    }
+  }
+  if (error instanceof Error && error.message.trim()) {
+    return `Authentication account was not created. ${error.message}`;
+  }
+  return "Authentication account was not created. Review the account details and try again.";
 }
 
 export function setAuthAccountActive(

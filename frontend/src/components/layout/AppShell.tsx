@@ -72,5 +72,5 @@ export function AppShell() {
     queryClient.clear();
     navigate("/", { replace: true });
   }
-  return <AuthorizationProvider value={actorQuery.data}><div className="min-h-screen bg-slate-50"><TopBar session={auth.session} tenants={tenantOptions} selectedTenantId={selectedTenantId} onTenantChange={changeTenant} onLogout={() => void logout()} /><div className="lg:flex"><SideNav permissions={actorQuery.data.permissions} scope={actorQuery.data.scope} /><main className="min-w-0 flex-1"><Outlet /></main></div></div></AuthorizationProvider>;
+  return <AuthorizationProvider value={actorQuery.data}><div className="min-h-screen bg-slate-50"><TopBar session={auth.session} tenants={tenantOptions} selectedTenantId={selectedTenantId} onTenantChange={changeTenant} onLogout={() => void logout()} /><div className="lg:flex"><SideNav permissions={actorQuery.data.permissions} scope={actorQuery.data.scope} identity={{ personId: actorQuery.data.personId, collaboratorId: actorQuery.data.collaboratorId }} /><main className="min-w-0 flex-1"><Outlet /></main></div></div></AuthorizationProvider>;
 }

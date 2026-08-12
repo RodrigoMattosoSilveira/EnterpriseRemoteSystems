@@ -26,6 +26,48 @@ describe("permission-aware navigation", () => {
     expect(defaultAuthorizedRoute([], "TENANT")).toBe("/password/change");
   });
 
+
+  it("routes self-service actors to their own records instead of tenant-wide lists", () => {
+    const permissions = [
+      "people.self.read",
+      "collaborators.self.read",
+      "current_accounts.self.summary.read",
+      "ledger.receipts.self.read",
+    ];
+    const identity = { personId: "person-1", collaboratorId: "collaborator-1" };
+
+    expect(defaultAuthorizedRoute(permissions, "SELF", identity)).toBe(
+      "/people/person-1",
+    );
+    expect(visibleNavigationLinks(permissions, "SELF", identity).map((link) => link.to)).toEqual(
+      expect.arrayContaining(["/people/person-1", "/collaborators/collaborator-1", "/password/change"]),
+    );
+    expect(visibleNavigationLinks(permissions, "SELF", identity).map((link) => link.to)).not.toContain(
+      "/receipts/outstanding",
+    );
+  });
+
+  it("prioritizes the Person self-service home over Collaborator operator access", () => {
+    expect(
+      defaultAuthorizedRoute(
+        [
+          "people.self.read",
+          "collaborators.self.read",
+          "collaborators.read",
+          "expenses.read",
+        ],
+        "TENANT",
+        { personId: "person-operator", collaboratorId: "collaborator-operator" },
+      ),
+    ).toBe("/people/person-operator");
+  });
+
+  it("does not expose a self-service collection link without the linked identity", () => {
+    expect(visibleNavigationLinks(["people.self.read"], "SELF").map((link) => link.to)).toEqual([
+      "/password/change",
+    ]);
+  });
+
   it("does not expose application-only links to tenant-scoped actors", () => {
     const paths = visibleNavigationLinks(["*"], "TENANT").map((link) => link.to);
     expect(paths).not.toContain("/admin/tenants");

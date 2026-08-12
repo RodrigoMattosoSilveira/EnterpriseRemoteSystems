@@ -80,6 +80,40 @@ describe("RequireAuth", () => {
     expect(container.textContent).not.toContain("Verifying your session");
   });
 
+  it("keeps the mounted page while a focus revalidation is pending", async () => {
+    renderGuard("/admin/authentication");
+
+    await waitFor(() => container.textContent?.includes("Mounted 1") === true);
+    expect(revalidateAuthSession).toHaveBeenCalledTimes(1);
+
+    let resolveFocusValidation: ((state: AuthState) => void) | undefined;
+    revalidateAuthSession.mockImplementationOnce(
+      () =>
+        new Promise<AuthState>((resolve) => {
+          resolveFocusValidation = resolve;
+        }),
+    );
+
+    await act(async () => {
+      window.dispatchEvent(new Event("focus"));
+      await Promise.resolve();
+    });
+
+    expect(revalidateAuthSession).toHaveBeenCalledTimes(2);
+    expect(container.textContent).toContain("Mounted 1");
+    expect(container.textContent).toContain("Verifying your session");
+    expect(mountCount).toBe(1);
+
+    await act(async () => {
+      resolveFocusValidation?.(authenticatedState);
+      await Promise.resolve();
+    });
+
+    expect(container.textContent).toContain("Mounted 1");
+    expect(container.textContent).not.toContain("Verifying your session");
+    expect(mountCount).toBe(1);
+  });
+
   it("still revalidates when the protected pathname changes", async () => {
     renderGuard("/people");
 

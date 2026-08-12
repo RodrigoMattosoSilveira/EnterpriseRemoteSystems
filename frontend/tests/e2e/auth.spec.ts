@@ -1,4 +1,5 @@
 import { expect, test, type APIRequestContext } from "@playwright/test";
+import { uniquePersonSuffix } from "./support/test-data";
 import { authzHeaders, e2eApiUrl, seedBrowserAuthz } from "./support/authz";
 
 test.beforeEach(async ({ page }) => {
@@ -267,5 +268,5 @@ function cpfCheckDigit(numbers: number[]): number {
 }
 
 function uniqueSuffix(): number {
-  return Date.now() + Math.floor(Math.random() * 1000);
+  return uniquePersonSuffix(test.info().workerIndex);
 }

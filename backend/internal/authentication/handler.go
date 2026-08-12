@@ -160,6 +160,7 @@ func (h *Handler) CreateAccount(c fiber.Ctx) error {
 	if err := c.Bind().Body(&req); err != nil {
 		return httpx.BadRequest(c, "invalid_body", "Invalid request body")
 	}
+	req.TenantID = strings.TrimSpace(c.Get(authz.HeaderTenantID))
 	account, err := h.service.CreateAccount(c.Context(), req)
 	if err != nil {
 		return h.writeError(c, err)
@@ -319,15 +320,19 @@ func (h *Handler) writeError(c fiber.Ctx, err error) error {
 	case errors.Is(err, ErrInvalidCredentials):
 		return c.Status(fiber.StatusUnauthorized).JSON(httpx.APIResponse{Error: &httpx.APIError{Code: "invalid_credentials", Message: "Login or password is invalid"}})
 	case errors.Is(err, ErrAuthenticationRequired):
+		setNoStore(c)
 		h.clearSessionCookie(c)
 		return c.Status(fiber.StatusUnauthorized).JSON(httpx.APIResponse{Error: &httpx.APIError{Code: "authentication_required", Message: "An authenticated session is required"}})
 	case errors.Is(err, ErrSessionExpired):
+		setNoStore(c)
 		h.clearSessionCookie(c)
 		return c.Status(fiber.StatusUnauthorized).JSON(httpx.APIResponse{Error: &httpx.APIError{Code: "session_expired", Message: "The authenticated session has expired"}})
 	case errors.Is(err, ErrAccountInactive):
+		setNoStore(c)
 		h.clearSessionCookie(c)
 		return c.Status(fiber.StatusUnauthorized).JSON(httpx.APIResponse{Error: &httpx.APIError{Code: "account_inactive", Message: "The authentication account is inactive"}})
 	case errors.Is(err, ErrActorInactive):
+		setNoStore(c)
 		h.clearSessionCookie(c)
 		return c.Status(fiber.StatusUnauthorized).JSON(httpx.APIResponse{Error: &httpx.APIError{Code: "actor_inactive", Message: "The authorization actor is inactive"}})
 	case errors.Is(err, ErrLoginAlreadyExists):

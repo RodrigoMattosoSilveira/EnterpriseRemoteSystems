@@ -70,9 +70,23 @@ Local browser development uses session authentication by default. The old Vite
 bootstrap actor proxy is opt-in through `ERS_LOCAL_AUTHZ_BOOTSTRAP=true` and is
 reserved for recovery.
 
+A genuinely cookie-less browser context must open protected ERS routes at
+`/login`; it cannot inherit an authenticated session from another browser
+context. Browser private/incognito windows, however, normally share one private
+browsing cookie jar with every other private/incognito window that is still
+open. Opening a second private window therefore does **not** guarantee a fresh
+session. For manual authentication tests that require an anonymous browser,
+close every private/incognito window before opening a new one, or use a separate
+browser profile whose storage is known to be empty. In Developer Tools,
+`GET /api/v1/auth/session` should return HTTP 401 in that fresh context before
+login.
+
 Playwright now provisions and logs in a dedicated `e2e-application-admin`
 account locally and in CI. Header mode remains available only when explicitly
-requested for isolated authorization compatibility tests.
+requested for isolated authorization compatibility tests. Automated coverage
+also runs the globally authenticated administrator context alongside a separate
+cookie-less context and verifies that the latter receives HTTP 401 from
+`/auth/session` and is redirected to `/login`.
 
 ## Tenant-scoped pricing administration
 

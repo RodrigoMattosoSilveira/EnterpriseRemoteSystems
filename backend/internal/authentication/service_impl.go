@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"io"
 	"strings"
@@ -86,11 +87,19 @@ func (s *service) Login(ctx context.Context, req LoginRequest, userAgent string,
 		return LoginResult{}, ErrInvalidCredentials
 	}
 
+	now := s.clock().UTC()
+	if err := s.repository.EnsureActorPersonSelfAccess(ctx, account.ActorID, now); err != nil {
+		return LoginResult{}, err
+	}
+	account, err = s.repository.FindAccountByID(ctx, account.ID)
+	if err != nil {
+		return LoginResult{}, err
+	}
+
 	rawToken, tokenHash, err := s.newToken("ers_s_")
 	if err != nil {
 		return LoginResult{}, err
 	}
-	now := s.clock().UTC()
 	expiresAt := now.Add(s.sessionTTL)
 	session := Session{
 		ID:         ids.New(),
@@ -287,10 +296,11 @@ func (s *service) GetAccount(ctx context.Context, id string) (AccountResponse, e
 
 func (s *service) CreateAccount(ctx context.Context, req CreateAccountRequest) (AccountResponse, error) {
 	actorID := strings.TrimSpace(req.ActorID)
+	tenantID := strings.TrimSpace(req.TenantID)
 	login := normalizeLogin(req.Login)
 	fields := map[string]string{}
-	if actorID == "" {
-		fields["actorId"] = "Authorization actor is required"
+	if actorID == "" && tenantID == "" {
+		fields["actorId"] = "Select an authorization actor or create the account in a selected tenant"
 	}
 	if login == "" {
 		fields["login"] = "Login is required"
@@ -300,15 +310,6 @@ func (s *service) CreateAccount(ctx context.Context, req CreateAccountRequest) (
 	if err := validatePasswordValue(req.TemporaryPassword, "temporaryPassword"); err != nil {
 		for key, value := range err.ValidationFields() {
 			fields[key] = value
-		}
-	}
-	if len(fields) == 0 {
-		hasTenantAccess, err := s.repository.ActorHasActiveTenantAccess(ctx, actorID)
-		if err != nil {
-			return AccountResponse{}, err
-		}
-		if !hasTenantAccess {
-			fields["actorId"] = "Authorization actor must have at least one active role grant for an active tenant"
 		}
 	}
 	if len(fields) > 0 {
@@ -323,8 +324,15 @@ func (s *service) CreateAccount(ctx context.Context, req CreateAccountRequest) (
 	if req.MustChangePassword != nil {
 		mustChangePassword = *req.MustChangePassword
 	}
+	if actorID == "" {
+		// Accounts created while provisioning a Person Actor always start with a
+		// temporary password. The administrator-facing workflow must not be able
+		// to bypass the first-login password change through a stale or malformed
+		// client payload.
+		mustChangePassword = true
+	}
 	now := s.clock().UTC()
-	account, err := s.repository.CreateAccount(ctx, Account{
+	accountInput := Account{
 		ID:                 ids.New(),
 		ActorID:            actorID,
 		Login:              login,
@@ -333,9 +341,41 @@ func (s *service) CreateAccount(ctx context.Context, req CreateAccountRequest) (
 		MustChangePassword: mustChangePassword,
 		CreatedAt:          now,
 		UpdatedAt:          now,
-	})
-	if err != nil {
-		return AccountResponse{}, err
+	}
+
+	var account AccountRecord
+	if actorID == "" {
+		account, err = s.repository.CreatePersonAccount(ctx, tenantID, accountInput)
+		switch {
+		case errors.Is(err, ErrPersonLoginNotFound):
+			return AccountResponse{}, &ValidationError{Fields: map[string]string{
+				"login": "No Person in the selected tenant has this login email",
+			}}
+		case errors.Is(err, ErrPersonActorInactive):
+			return AccountResponse{}, &ValidationError{Fields: map[string]string{
+				"actorId": "The Person's authorization actor is inactive; reactivate it before creating the account",
+			}}
+		case errors.Is(err, ErrTenantUnavailable):
+			return AccountResponse{}, &ValidationError{Fields: map[string]string{
+				"actorId": "The selected tenant is inactive or unavailable",
+			}}
+		case err != nil:
+			return AccountResponse{}, err
+		}
+	} else {
+		hasTenantAccess, accessErr := s.repository.ActorHasActiveTenantAccess(ctx, actorID)
+		if accessErr != nil {
+			return AccountResponse{}, accessErr
+		}
+		if !hasTenantAccess {
+			return AccountResponse{}, &ValidationError{Fields: map[string]string{
+				"actorId": "Authorization actor must have at least one active role grant for an active tenant",
+			}}
+		}
+		account, err = s.repository.CreateAccount(ctx, accountInput)
+		if err != nil {
+			return AccountResponse{}, err
+		}
 	}
 	return accountResponse(account), nil
 }

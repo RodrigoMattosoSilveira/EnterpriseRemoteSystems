@@ -103,6 +103,9 @@ func TestAuthenticationHandlerIssuesReadsAndClearsSessionCookie(t *testing.T) {
 	if revokedResponse.StatusCode != http.StatusUnauthorized {
 		t.Fatalf("expected revoked session status 401, got %d", revokedResponse.StatusCode)
 	}
+	if revokedResponse.Header.Get("Cache-Control") != "no-store" {
+		t.Fatalf("expected rejected session response to disable caching, got %q", revokedResponse.Header.Get("Cache-Control"))
+	}
 	revokedCookies := revokedResponse.Cookies()
 	if len(revokedCookies) != 1 || revokedCookies[0].Name != "ers_test_session" || revokedCookies[0].MaxAge >= 0 {
 		t.Fatalf("expected rejected session request to clear the stale cookie, got %#v", revokedCookies)

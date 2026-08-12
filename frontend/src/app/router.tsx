@@ -8,6 +8,7 @@ import LoginPage from "../features/auth/LoginPage";
 import { ChangePasswordPage } from "../features/auth/ChangePasswordPage";
 import { ResetPasswordPage } from "../features/auth/ResetPasswordPage";
 import { AuthenticationAdminPage } from "../features/auth/AuthenticationAdminPage";
+import { AuthenticationLookupDismissBoundary } from "../features/auth/AuthenticationLookupDismissBoundary";
 import { describeRouteError } from "./routeErrorPresentation";
 
 function RouteErrorPage() {
@@ -17,7 +18,7 @@ function RouteErrorPage() {
 function NotFoundPage() { return <StatusPage title="Page not found" message="The requested page could not be found." />; }
 function PermissionAwareHome() {
   const actor = useAuthorizationContext();
-  return <Navigate to={defaultAuthorizedRoute(actor.permissions, actor.scope)} replace />;
+  return <Navigate to={defaultAuthorizedRoute(actor.permissions, actor.scope, { personId: actor.personId, collaboratorId: actor.collaboratorId })} replace />;
 }
 export function ForbiddenPage() { return <StatusPage title="Access forbidden" message="Your current role does not permit this operation in the selected tenant." />; }
 function StatusPage({ title, message }: { title: string; message: string }) {
@@ -44,7 +45,7 @@ const protectedChildren: RouteObject[] = [
   { path: "admin/tenants", lazy: async () => ({ Component: (await import("../features/tenants/TenantsAdminPage")).TenantsAdminPage }) },
   { path: "admin/tenants/:id", lazy: async () => ({ Component: (await import("../features/tenants/TenantDetailPage")).TenantDetailPage }) },
   { path: "admin/reference-data", lazy: async () => ({ Component: (await import("../features/reference-data/ReferenceDataAdminRoute")).ReferenceDataAdminRoute }) },
-  { path: "admin/authentication", element: <RequirePermission permission="authz.manage" applicationOnly><AuthenticationAdminPage /></RequirePermission> },
+  { path: "admin/authentication", element: <RequirePermission permission="authz.manage" applicationOnly><AuthenticationLookupDismissBoundary><AuthenticationAdminPage /></AuthenticationLookupDismissBoundary></RequirePermission> },
   { path: "admin/authorization", lazy: async () => ({ Component: (await import("../features/authz/AuthzAdminRoute")).AuthzAdminRoute }) },
   { path: "admin/audit-logs", lazy: async () => ({ Component: (await import("../features/authz/AuditLogViewerPage")).AuditLogViewerPage }) },
   { path: "admin/current-account-settings", lazy: async () => ({ Component: (await import("../features/current-accounts/SecondPersonApprovalSettingsPage")).SecondPersonApprovalSettingsPage }) },

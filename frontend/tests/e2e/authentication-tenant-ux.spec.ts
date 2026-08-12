@@ -6,6 +6,13 @@ const baseURL = process.env.PLAYWRIGHT_BASE_URL ?? "http://localhost:15173";
 const login = process.env.E2E_ADMIN_EMAIL ?? (isLoopbackURL(baseURL) ? "admin@example.com" : "");
 const password = process.env.E2E_ADMIN_PASSWORD ?? (isLoopbackURL(baseURL) ? "Local-E2E-Administrator-28D!" : "");
 
+const PERSON_STATUS_ACTIVE_ID = "ref-person-status-active";
+const COLLABORATOR_STATUS_ACTIVE_ID = "ref-collaborator-status-active";
+const PAYMENT_METHOD_DAILY_ID = "ref-method-daily";
+const SECTOR_MINING_ID = "ref-sector-mining";
+const LOCATION_MAIN_MINE_ID = "ref-location-main-mine";
+const TASK_MINER_ID = "ref-task-miner";
+
 test("authenticated user can see identity, tenant, sign out, and sign back in", async ({ browser }) => {
   const context = await browser.newContext({
     baseURL,
@@ -54,6 +61,46 @@ test("missing browser session redirects protected routes to login and restores t
 
   await expect(page).toHaveURL(/\/people$/);
   await expect(page.getByRole("heading", { name: "People", exact: true })).toBeVisible();
+});
+
+test("a fresh cookie-less browser context does not inherit the administrator session", async ({ browser, page }) => {
+  // The default Playwright page carries the globally authenticated
+  // Application Administrator storage state. A separate browser context with
+  // no cookies models a genuinely fresh private/incognito browsing session.
+  await page.goto("/");
+  await expect(page).toHaveURL(/\/people$/);
+  await expect(page.getByText(login, { exact: true })).toBeVisible();
+
+  const privateContext = await browser.newContext({
+    baseURL,
+    storageState: { cookies: [], origins: [] },
+  });
+  const privatePage = await privateContext.newPage();
+
+  try {
+    expect(await privateContext.cookies()).toEqual([]);
+
+    const sessionResponsePromise = privatePage.waitForResponse((response) => {
+      const url = new URL(response.url());
+      return (
+        response.request().method() === "GET" &&
+        url.pathname === "/api/v1/auth/session"
+      );
+    });
+
+    await privatePage.goto("/");
+
+    const sessionResponse = await sessionResponsePromise;
+    expect(sessionResponse.status()).toBe(401);
+    await expect(privatePage).toHaveURL(/\/login\?returnTo=/);
+    await expect(privatePage.getByRole("heading", { name: "Sign in" })).toBeVisible();
+
+    // The authenticated administrator context remains independently signed in.
+    await expect(page).toHaveURL(/\/people$/);
+    await expect(page.getByText(login, { exact: true })).toBeVisible();
+  } finally {
+    await privateContext.close();
+  }
 });
 
 test("password reset page accepts administrator-issued tokens", async ({ page }) => {
@@ -381,6 +428,187 @@ function validBrazilianCellular(seed: string): string {
   const digits = seed.replace(/\D/g, "").padStart(8, "0").slice(-8);
   return `11${`9${digits}`.slice(0, 9)}`;
 }
+
+test("authentication account form preserves its collaborator selection across window focus", async ({ page, request }) => {
+  const suffix = `${Date.now()}${Math.floor(Math.random() * 100_000)}`;
+  const candidate = await provisionAuthenticationActorCandidate(
+    request,
+    `form-stability-${suffix}`,
+  );
+  const accountLogin = `auth-form-${suffix}@example.com`;
+  const temporaryPassword = `Auth-Form-${suffix}-Password!`;
+  // This fixture intentionally remains active after the test. The Person and
+  // Collaborator created for this progressive-search regression are already
+  // persistent test data, and every run uses a unique suffix. Performing a
+  // final actor-deactivation write here masks the actual browser assertion
+  // whenever the test fails: Playwright tears down the request context at the
+  // timeout boundary and the cleanup PATCH replaces the original error.
+  // Keeping this fixture avoids teardown deadlocks and preserves the first
+  // actionable failure from the regression itself.
+  // The default Playwright page fixture already carries the Application
+  // Administrator session produced by global setup. Do not call signIn()
+  // here: navigating an already-authenticated page to /login immediately
+  // redirects away from LoginPage, so the helper can never find its Login
+  // field. This regression starts directly from the authenticated admin
+  // context used by the rest of the suite.
+  await page.goto("/admin/authentication");
+  await expect(
+    page.getByRole("heading", { name: "Authentication Accounts", exact: true }),
+  ).toBeVisible();
+
+  const collaboratorSearch = page.getByLabel(
+    "Find collaborator by name or nickname",
+  );
+  const searchResponsePromise = page.waitForResponse((response) => {
+    const url = new URL(response.url());
+    return (
+      response.request().method() === "GET" &&
+      url.pathname === "/api/v1/collaborators" &&
+      url.searchParams.get("search") === candidate.nickname
+    );
+  });
+  await collaboratorSearch.fill(candidate.nickname);
+  expect((await searchResponsePromise).ok()).toBeTruthy();
+
+  const matchingCollaborators = page.getByRole("listbox", {
+    name: "Matching collaborators for authentication account",
+  });
+  await expect(matchingCollaborators).toBeVisible();
+  await matchingCollaborators
+    .getByRole("option", { name: new RegExp(candidate.nickname) })
+    .click();
+
+  await page.getByLabel("Login").fill(accountLogin);
+  await page.getByLabel("Temporary password").fill(temporaryPassword);
+  await expect(page.getByText("Selected collaborator", { exact: true })).toBeVisible();
+  await expect(page.getByText(candidate.nickname, { exact: false })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Create account" })).toBeEnabled();
+
+  // Trigger the same window-focus event that RequireAuth listens for. Do not
+  // use bringToFront() here: headless Chromium does not provide a real OS
+  // window manager, so foreground-window control can block until the entire
+  // Playwright test times out. The RequireAuth unit test separately proves
+  // that this event starts authoritative session revalidation. This browser
+  // regression is responsible for proving that the mounted form state is
+  // preserved while that focus revalidation runs.
+  const sessionResponsePromise = page.waitForResponse(
+    (response) => {
+      const url = new URL(response.url());
+      return (
+        response.request().method() === "GET" &&
+        url.pathname === "/api/v1/auth/session"
+      );
+    },
+    { timeout: 5_000 },
+  );
+  await page.evaluate(() => {
+    window.dispatchEvent(new Event("blur"));
+    window.dispatchEvent(new Event("focus"));
+  });
+
+  const sessionResponse = await sessionResponsePromise;
+  expect(sessionResponse.ok()).toBeTruthy();
+
+  // RequireAuth explicitly listens to window focus and owns the authoritative
+  // session check. TanStack Query v5 uses visibilitychange, not the window
+  // focus event, for refetchOnWindowFocus, so this test must not require an
+  // unrelated current-actor request from a synthetic focus event.
+  // The focus-driven security check has completed. Authentication-page
+  // datasets themselves deliberately do not refetch on focus, so moving to
+  // another window cannot replace the candidate data under a partially
+  // completed form.
+  await expect(page).toHaveURL(/\/admin\/authentication$/);
+  await expect(page.getByText("Selected collaborator", { exact: true })).toBeVisible();
+  await expect(page.getByText(candidate.nickname, { exact: false })).toBeVisible();
+  await expect(page.getByLabel("Login")).toHaveValue(accountLogin);
+  await expect(page.getByLabel("Temporary password")).toHaveValue(temporaryPassword);
+  await expect(page.getByRole("button", { name: "Create account" })).toBeEnabled();
+});
+
+test("authentication administration finds an existing collaborator actor and linked account by nickname", async ({ page, request }) => {
+  const suffix = `${Date.now()}${Math.floor(Math.random() * 100_000)}`;
+  const candidate = await provisionAuthenticationActorCandidate(
+    request,
+    `actor-lookup-${suffix}`,
+  );
+  const accountLogin = `auth-lookup-${suffix}@example.com`;
+  const accountPassword = `Auth-Lookup-${suffix}-Password!`;
+
+  const accountResponse = await request.post(e2eApiUrl("/api/v1/auth/accounts"), {
+    headers: authzHeaders(),
+    data: {
+      actorId: candidate.actorId,
+      login: accountLogin,
+      temporaryPassword: accountPassword,
+      mustChangePassword: false,
+    },
+  });
+  expect(accountResponse.status()).toBe(201);
+
+  await page.goto("/admin/authentication");
+  await expect(
+    page.getByRole("heading", { name: "Authentication Accounts", exact: true }),
+  ).toBeVisible();
+
+  const createSearchResponse = page.waitForResponse((response) => {
+    const url = new URL(response.url());
+    return (
+      response.request().method() === "GET" &&
+      url.pathname === "/api/v1/collaborators" &&
+      url.searchParams.get("search") === candidate.nickname
+    );
+  });
+  await page
+    .getByLabel("Find collaborator by name or nickname")
+    .fill(candidate.nickname);
+  expect((await createSearchResponse).ok()).toBeTruthy();
+
+  const createResult = page
+    .getByRole("listbox", {
+      name: "Matching collaborators for authentication account",
+    })
+    .getByRole("option")
+    .filter({ hasText: candidate.nickname });
+  await expect(createResult).toBeVisible();
+  await expect(createResult).toContainText(
+    `Already has authentication account ${accountLogin} (active)`,
+  );
+  await expect(createResult).toHaveAttribute("aria-disabled", "true");
+
+  const actorLookupResponse = page.waitForResponse((response) => {
+    const url = new URL(response.url());
+    return (
+      response.request().method() === "GET" &&
+      url.pathname === "/api/v1/collaborators" &&
+      url.searchParams.get("search") === candidate.nickname
+    );
+  });
+  await page
+    .getByLabel("Filter by collaborator name or nickname")
+    .fill(candidate.nickname);
+  expect((await actorLookupResponse).ok()).toBeTruthy();
+
+  const actorLookupResult = page
+    .getByRole("list", { name: "Actor lookup results" })
+    .getByRole("listitem")
+    .filter({ hasText: candidate.nickname });
+  await expect(actorLookupResult).toBeVisible();
+  await expect(actorLookupResult).toContainText(
+    `Actor: ${candidate.nickname} (${candidate.actorKey}) · Active`,
+  );
+  await expect(actorLookupResult).toContainText("EXPENSE_OPERATOR @ default");
+  await expect(actorLookupResult).toContainText(
+    `Authentication account: ${accountLogin} · Active`,
+  );
+
+  const filteredAccountRow = page.getByRole("row").filter({
+    has: page.getByText(accountLogin, { exact: true }),
+  });
+  await expect(filteredAccountRow).toBeVisible();
+  await expect(
+    filteredAccountRow.getByRole("button", { name: "Deactivate" }),
+  ).toBeEnabled();
+});
 
 test("a temporary-password account can sign in after completing the required password change", async ({ page: adminPage, browser, request }) => {
   const suffix = `${Date.now()}${Math.floor(Math.random() * 100_000)}`;
@@ -767,6 +995,110 @@ test("signing in after a forbidden sign-out lands on the next account's first pe
     await deactivateActor(request, expenseOperator.actorId);
   }
 });
+
+type PreparedAuthenticationActorCandidate = {
+  actorId: string;
+  actorKey: string;
+  collaboratorId: string;
+  nickname: string;
+};
+
+async function provisionAuthenticationActorCandidate(
+  request: APIRequestContext,
+  keyPrefix: string,
+): Promise<PreparedAuthenticationActorCandidate> {
+  const suffix = keyPrefix.replace(/\D/g, "").slice(-12) || String(Date.now());
+  const nickname = `AuthCandidate${suffix}`;
+  const personResponse = await request.post(e2eApiUrl("/api/v1/people"), {
+    headers: authzHeaders(),
+    data: {
+      firstName: "Authentication",
+      lastName: `Candidate${suffix}`,
+      nickname,
+      cpf: validCPF(Number(suffix.slice(-9))),
+      rg: `RG-AUTH-${suffix.slice(-8)}`,
+      cellular: validBrazilianCellular(suffix),
+      email: `auth-candidate-${suffix}@example.com`,
+      street1: "Rua Authentication 123",
+      city: "Sao Paulo",
+      state: "SP",
+      cep: "01001000",
+      country: "Brasil",
+      bankName: "Banco E2E",
+      bankNumber: "001",
+      checkingAccount: `12345-${suffix.slice(-1)}`,
+      pixKey: `pix-auth-candidate-${suffix}@example.com`,
+      emergencyName: "Authentication Emergency",
+      emergencyCellular: validBrazilianCellular(`${suffix}7`),
+      emergencyEmail: `auth-candidate-emergency-${suffix}@example.com`,
+      statusId: PERSON_STATUS_ACTIVE_ID,
+      notes: "Authentication account progressive-filter E2E candidate",
+    },
+  });
+  expect(personResponse.status()).toBe(201);
+  const personEnvelope = (await personResponse.json()) as {
+    data?: { id?: string };
+  };
+  const personId = personEnvelope.data?.id;
+  expect(personId).toBeTruthy();
+
+  const collaboratorResponse = await request.post(
+    e2eApiUrl("/api/v1/collaborators"),
+    {
+      headers: authzHeaders(),
+      data: {
+        personId,
+        journeyStartDate: "2026-08-01",
+        paymentMethodId: PAYMENT_METHOD_DAILY_ID,
+        paymentValue: 150,
+        dailyBrlAmount: 150,
+        sectorId: SECTOR_MINING_ID,
+        locationId: LOCATION_MAIN_MINE_ID,
+        taskId: TASK_MINER_ID,
+        statusId: COLLABORATOR_STATUS_ACTIVE_ID,
+        notes: "Authentication account progressive-filter E2E candidate",
+      },
+    },
+  );
+  expect(collaboratorResponse.status()).toBe(201);
+  const collaboratorEnvelope = (await collaboratorResponse.json()) as {
+    data?: { id?: string };
+  };
+  const collaboratorId = collaboratorEnvelope.data?.id;
+  expect(collaboratorId).toBeTruthy();
+
+  const actorKey = `collaborator-${collaboratorId}`;
+  const actorResponse = await request.post(e2eApiUrl("/api/v1/authz/actors"), {
+    headers: authzHeaders(),
+    data: {
+      actorKey,
+      displayName: nickname,
+      personId,
+      collaboratorId,
+      active: true,
+    },
+  });
+  expect(actorResponse.status()).toBe(201);
+  const actorEnvelope = (await actorResponse.json()) as { data?: { id?: string } };
+  const actorId = actorEnvelope.data?.id;
+  expect(actorId).toBeTruthy();
+
+  const grantResponse = await request.post(
+    e2eApiUrl(`/api/v1/authz/actors/${encodeURIComponent(actorId!)}/role-grants`),
+    {
+      headers: authzHeaders(),
+      data: { roleCode: "EXPENSE_OPERATOR", tenantId: "default" },
+    },
+  );
+  expect(grantResponse.status()).toBe(201);
+
+  return {
+    actorId: actorId!,
+    actorKey,
+    collaboratorId: collaboratorId!,
+    nickname,
+  };
+}
 
 type PreparedRoleAccount = {
   actorId: string;
