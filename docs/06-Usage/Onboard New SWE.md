@@ -81,7 +81,7 @@ Then verify the backend health endpoint directly:
 curl -fsS http://localhost:8080/api/v1/healthz
 ```
 
-Protected business APIs require an authenticated session in normal deployed traffic. During local development before Bite 28D's login UX, use the Vite frontend proxy described below; it supplies only the configured persisted bootstrap actor while the backend is explicitly in `AUTHZ_ACTOR_HEADER_MODE=bootstrap`.
+Protected business APIs require an authenticated session. For a prepared local database, run `scripts/ers-b28c-prepare-test-data-final.sh` once and sign in as `local.application.admin@example.com` using the password written by that script. The backend remains in bootstrap mode only so the preparation/recovery script can establish the first accounts.
 
 # 6. Start frontend locally
 
@@ -98,7 +98,7 @@ Open:
 http://localhost:5173
 ```
 
-Before Bite 28D supplies the login UX, the local Vite proxy provides the explicit bootstrap compatibility path. The browser API client itself does not store or send actor identity. It stores only the selected tenant under `ers.auth.selectedTenantId`.
+The frontend now opens the ERS sign-in page. It does not store or send actor identity; the HTTP-only session cookie is authoritative. The browser stores only the selected tenant under `ers.auth.selectedTenantId`. The Vite bootstrap proxy is disabled by default and should be enabled only for deliberate recovery with `ERS_LOCAL_AUTHZ_BOOTSTRAP=true`.
 
 The default local tenant is `default`. To change it manually in browser developer tools:
 
@@ -178,7 +178,7 @@ A normal protected request without a login session returns:
 {"error":{"code":"authentication_required","message":"An authenticated session is required"}}
 ```
 
-Before Bite 28D's login UX, make sure local backend and frontend were started through the project-root `make local-backend` and `make local-frontend` targets. The backend should use `AUTHZ_ACTOR_HEADER_MODE=bootstrap`, and the Vite proxy supplies only the configured `bootstrap-admin` actor.
+For explicit bootstrap recovery, make sure local backend and frontend were started through the project-root `make local-backend` and `make local-frontend` targets. The backend should use `AUTHZ_ACTOR_HEADER_MODE=bootstrap`, and the Vite proxy supplies only the configured `bootstrap-admin` actor.
 
 A `tenant_selection_required` response means the browser has no selected tenant. Store the tenant ID under `ers.auth.selectedTenantId` or select it in an administration page.
 

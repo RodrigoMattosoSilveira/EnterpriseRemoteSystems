@@ -281,6 +281,26 @@ func requirePermissionOrSelfPerson(deps Dependencies, permission authz.Permissio
 	}
 }
 
+func requirePermissionOrSelfCollaborator(deps Dependencies, permission authz.Permission, selfPermission authz.Permission, collaboratorIDParam string) fiber.Handler {
+	return func(c fiber.Ctx) error {
+		if deps.DisableRouteAuthorization {
+			return c.Next()
+		}
+
+		actor, err := requestActor(c, deps)
+		if err != nil {
+			return writeAuthorizationError(c, err)
+		}
+		if authz.RequirePermission(actor, permission) == nil {
+			return c.Next()
+		}
+		if actor.HasPermission(selfPermission) && actor.CollaboratorID != "" && actor.CollaboratorID == c.Params(collaboratorIDParam) {
+			return c.Next()
+		}
+		return writeAuthorizationError(c, authz.ErrForbidden)
+	}
+}
+
 func writeAuthorizationError(c fiber.Ctx, err error) error {
 	if errors.Is(err, authz.ErrAuthenticationRequired) {
 		return c.Status(fiber.StatusUnauthorized).JSON(httpx.APIResponse{Error: &httpx.APIError{Code: "authentication_required", Message: "An authenticated session is required"}})

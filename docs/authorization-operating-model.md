@@ -20,7 +20,7 @@ The response includes the persisted actor record ID, selected tenant, effective 
 
 `AUTHZ_BOOTSTRAP_*` remains a controlled environment-repair mechanism. It is intended to create or restore the first administrator in an environment, not to replace normal actor administration.
 
-Local development and Playwright create a persisted `bootstrap-admin` actor with an `APPLICATION_ADMIN` grant. Before Bite 28D supplies the login UX, the Vite development proxy may send only that configured bootstrap actor in explicit `bootstrap` mode. Playwright uses explicit `test` mode. Neither compatibility path grants permissions; the backend still loads the persisted wildcard grant.
+Local development retains a persisted `bootstrap-admin` actor with an `APPLICATION_ADMIN` grant for deliberate recovery. Bite 28D Playwright provisions and authenticates the separate `e2e-application-admin` account through a real session; explicit `test` header mode remains enabled only for isolated authorization-boundary requests. Neither compatibility path invents permissions; the backend always loads persisted grants.
 
 Production and long-lived environments should keep `AUTHZ_BOOTSTRAP_ENABLED=false` after a valid administrator exists, except during an intentional recovery operation.
 

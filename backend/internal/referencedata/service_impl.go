@@ -7,10 +7,7 @@ import (
 
 	"enterpriseremotesystems/backend/internal/db"
 	"enterpriseremotesystems/backend/internal/shared/ids"
-	"enterpriseremotesystems/backend/internal/tenants"
 )
-
-const defaultTenantID = tenants.DefaultTenantID
 
 type ValidationError struct {
 	Fields map[string]string
@@ -23,13 +20,14 @@ type service struct{ repo Repository }
 
 func NewService(repo Repository) Service { return &service{repo: repo} }
 
-func (s *service) ListByType(ctx context.Context, typ string) ([]ReferenceDataDTO, error) {
+func (s *service) ListByType(ctx context.Context, tenantID string, typ string) ([]ReferenceDataDTO, error) {
+	tenantID = strings.TrimSpace(tenantID)
 	typ = normalizeType(typ)
-	if err := validateType(typ); err != nil {
+	if err := validateTenantAndType(tenantID, typ); err != nil {
 		return nil, err
 	}
 
-	rows, err := s.repo.ListByType(ctx, defaultTenantID, typ)
+	rows, err := s.repo.ListByType(ctx, tenantID, typ)
 	if err != nil {
 		return nil, err
 	}
@@ -40,7 +38,8 @@ func (s *service) ListByType(ctx context.Context, typ string) ([]ReferenceDataDT
 	return out, nil
 }
 
-func (s *service) Create(ctx context.Context, typ string, req CreateReferenceDataRequest) (*ReferenceDataDTO, error) {
+func (s *service) Create(ctx context.Context, tenantID string, typ string, req CreateReferenceDataRequest) (*ReferenceDataDTO, error) {
+	tenantID = strings.TrimSpace(tenantID)
 	typ = normalizeType(typ)
 	code := normalizeCode(req.Code)
 	label := normalizeLabel(req.Label)
@@ -51,14 +50,14 @@ func (s *service) Create(ctx context.Context, typ string, req CreateReferenceDat
 		active = *req.Active
 	}
 
-	if err := s.validateReferenceData(ctx, typ, code, label, ""); err != nil {
+	if err := s.validateReferenceData(ctx, tenantID, typ, code, label, ""); err != nil {
 		return nil, err
 	}
 
 	now := time.Now().UTC()
 	row := &db.ReferenceData{
 		BaseModel:    db.BaseModel{ID: ids.New(), CreatedAt: now, UpdatedAt: now},
-		TenantID:     defaultTenantID,
+		TenantID:     tenantID,
 		Type:         typ,
 		Code:         code,
 		Label:        label,
@@ -74,7 +73,8 @@ func (s *service) Create(ctx context.Context, typ string, req CreateReferenceDat
 	return &dto, nil
 }
 
-func (s *service) Update(ctx context.Context, typ string, id string, req UpdateReferenceDataRequest) (*ReferenceDataDTO, error) {
+func (s *service) Update(ctx context.Context, tenantID string, typ string, id string, req UpdateReferenceDataRequest) (*ReferenceDataDTO, error) {
+	tenantID = strings.TrimSpace(tenantID)
 	typ = normalizeType(typ)
 	id = strings.TrimSpace(id)
 	code := normalizeCode(req.Code)
@@ -82,12 +82,12 @@ func (s *service) Update(ctx context.Context, typ string, id string, req UpdateR
 	description := strings.TrimSpace(req.Description)
 	metadataJSON := strings.TrimSpace(req.MetadataJSON)
 
-	row, err := s.findTyped(ctx, typ, id)
+	row, err := s.findTyped(ctx, tenantID, typ, id)
 	if err != nil {
 		return nil, err
 	}
 
-	if err := s.validateReferenceData(ctx, typ, code, label, row.ID); err != nil {
+	if err := s.validateReferenceData(ctx, tenantID, typ, code, label, row.ID); err != nil {
 		return nil, err
 	}
 
@@ -108,16 +108,16 @@ func (s *service) Update(ctx context.Context, typ string, id string, req UpdateR
 	return &dto, nil
 }
 
-func (s *service) Deactivate(ctx context.Context, typ string, id string) (*ReferenceDataDTO, error) {
-	return s.setActive(ctx, typ, id, false)
+func (s *service) Deactivate(ctx context.Context, tenantID string, typ string, id string) (*ReferenceDataDTO, error) {
+	return s.setActive(ctx, tenantID, typ, id, false)
 }
 
-func (s *service) Reactivate(ctx context.Context, typ string, id string) (*ReferenceDataDTO, error) {
-	return s.setActive(ctx, typ, id, true)
+func (s *service) Reactivate(ctx context.Context, tenantID string, typ string, id string) (*ReferenceDataDTO, error) {
+	return s.setActive(ctx, tenantID, typ, id, true)
 }
 
-func (s *service) setActive(ctx context.Context, typ string, id string, active bool) (*ReferenceDataDTO, error) {
-	row, err := s.findTyped(ctx, normalizeType(typ), strings.TrimSpace(id))
+func (s *service) setActive(ctx context.Context, tenantID string, typ string, id string, active bool) (*ReferenceDataDTO, error) {
+	row, err := s.findTyped(ctx, strings.TrimSpace(tenantID), normalizeType(typ), strings.TrimSpace(id))
 	if err != nil {
 		return nil, err
 	}
@@ -130,22 +130,25 @@ func (s *service) setActive(ctx context.Context, typ string, id string, active b
 	return &dto, nil
 }
 
-func (s *service) findTyped(ctx context.Context, typ string, id string) (*db.ReferenceData, error) {
-	if err := validateType(typ); err != nil {
+func (s *service) findTyped(ctx context.Context, tenantID string, typ string, id string) (*db.ReferenceData, error) {
+	if err := validateTenantAndType(tenantID, typ); err != nil {
 		return nil, err
 	}
-	row, err := s.repo.FindByID(ctx, id)
+	row, err := s.repo.FindByID(ctx, tenantID, id)
 	if err != nil {
 		return nil, err
 	}
-	if row.TenantID != defaultTenantID || row.Type != typ {
+	if row.Type != typ {
 		return nil, ValidationError{Fields: map[string]string{"id": "Reference data item does not belong to this type"}}
 	}
 	return row, nil
 }
 
-func (s *service) validateReferenceData(ctx context.Context, typ string, code string, label string, excludeID string) error {
+func (s *service) validateReferenceData(ctx context.Context, tenantID string, typ string, code string, label string, excludeID string) error {
 	fields := map[string]string{}
+	if strings.TrimSpace(tenantID) == "" {
+		fields["tenantId"] = "Required"
+	}
 	if strings.TrimSpace(typ) == "" {
 		fields["type"] = "Required"
 	}
@@ -159,16 +162,16 @@ func (s *service) validateReferenceData(ctx context.Context, typ string, code st
 		return ValidationError{Fields: fields}
 	}
 
-	tenantExists, err := s.repo.ExistsActiveTenantByID(ctx, defaultTenantID)
+	tenantExists, err := s.repo.ExistsActiveTenantByID(ctx, tenantID)
 	if err != nil {
 		return err
 	}
 	if !tenantExists {
-		fields["tenantId"] = "Default tenant must exist and be active"
+		fields["tenantId"] = "Selected tenant must exist and be active"
 		return ValidationError{Fields: fields}
 	}
 
-	codeExists, err := s.repo.ExistsByTenantTypeCode(ctx, defaultTenantID, typ, code, excludeID)
+	codeExists, err := s.repo.ExistsByTenantTypeCode(ctx, tenantID, typ, code, excludeID)
 	if err != nil {
 		return err
 	}
@@ -176,7 +179,7 @@ func (s *service) validateReferenceData(ctx context.Context, typ string, code st
 		fields["code"] = "Code already exists for this type"
 	}
 
-	labelExists, err := s.repo.ExistsByTenantTypeLabel(ctx, defaultTenantID, typ, label, excludeID)
+	labelExists, err := s.repo.ExistsByTenantTypeLabel(ctx, tenantID, typ, label, excludeID)
 	if err != nil {
 		return err
 	}
@@ -190,9 +193,16 @@ func (s *service) validateReferenceData(ctx context.Context, typ string, code st
 	return nil
 }
 
-func validateType(typ string) error {
+func validateTenantAndType(tenantID string, typ string) error {
+	fields := map[string]string{}
+	if strings.TrimSpace(tenantID) == "" {
+		fields["tenantId"] = "Required"
+	}
 	if strings.TrimSpace(typ) == "" {
-		return ValidationError{Fields: map[string]string{"type": "Required"}}
+		fields["type"] = "Required"
+	}
+	if len(fields) > 0 {
+		return ValidationError{Fields: fields}
 	}
 	return nil
 }

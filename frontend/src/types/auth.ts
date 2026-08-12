@@ -48,6 +48,21 @@ export type CreateAuthAccountRequest = {
 };
 
 export type PasswordResetToken = {
+  accountId: string;
+  login: string;
   token: string;
   expiresAt: string;
+};
+
+export type PasswordResetResult = {
+  accountId: string;
+  login: string;
+  passwordChangedAt: string;
+};
+
+export type AuthTenantOption = {
+  id: string;
+  code: string;
+  name: string;
+  roleCodes: string[];
 };

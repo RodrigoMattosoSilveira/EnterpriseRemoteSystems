@@ -7,10 +7,10 @@ import (
 )
 
 type Repository interface {
-	List(ctx context.Context, filter PersonListFilter) ([]db.Person, int64, error)
+	List(ctx context.Context, tenantID string, filter PersonListFilter) ([]db.Person, int64, error)
 	Create(ctx context.Context, person *db.Person) error
-	FindByID(ctx context.Context, id string) (*db.Person, error)
-	Update(ctx context.Context, person *db.Person) error
+	FindByID(ctx context.Context, tenantID string, id string) (*db.Person, error)
+	Update(ctx context.Context, tenantID string, person *db.Person) error
 	ExistsActivePersonStatus(ctx context.Context, tenantID string, statusID string) (bool, error)
 
 	UniqueConflicts(

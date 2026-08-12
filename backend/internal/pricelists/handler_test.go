@@ -12,6 +12,7 @@ import (
 	"github.com/gofiber/fiber/v3"
 
 	apppkg "enterpriseremotesystems/backend/internal/app"
+	"enterpriseremotesystems/backend/internal/authz"
 	dbpkg "enterpriseremotesystems/backend/internal/db"
 )
 
@@ -70,9 +71,16 @@ type apiGoldPriceResponse struct {
 	} `json:"data"`
 }
 
+type apiTenantResponse struct {
+	Data struct {
+		ID string `json:"id"`
+	} `json:"data"`
+}
+
 type apiGoldPriceListResponse struct {
 	Data []struct {
 		ID         string  `json:"id"`
+		TenantID   string  `json:"tenantId"`
 		PriceDate  string  `json:"priceDate"`
 		BRLPerGram float64 `json:"brlPerGram"`
 		Active     bool    `json:"active"`
@@ -322,6 +330,135 @@ func TestCreateGoldPriceForExistingDateSupersedesExistingActivePrice(t *testing.
 	}
 }
 
+func TestPriceListItemsAndGoldPricesAreScopedBySelectedTenant(t *testing.T) {
+	server, cleanup := newTestServer(t)
+	defer cleanup()
+
+	tenantResponse := requestJSONWithTenant(t, server, http.MethodPost, "/api/v1/tenants", "", map[string]any{
+		"code":        "PRICE-GOLD-SECONDARY",
+		"name":        "Price and Gold Secondary Tenant",
+		"description": "Tenant-isolation test fixture",
+		"active":      true,
+	})
+	defer tenantResponse.Body.Close()
+	if tenantResponse.StatusCode != http.StatusCreated {
+		t.Fatalf("expected secondary tenant create status %d, got %d", http.StatusCreated, tenantResponse.StatusCode)
+	}
+	var tenantBody apiTenantResponse
+	decodeJSON(t, tenantResponse, &tenantBody)
+	secondaryTenantID := tenantBody.Data.ID
+	if secondaryTenantID == "" {
+		t.Fatal("expected secondary tenant id")
+	}
+
+	defaultItem := createPriceListItem(t, server, validPriceListItemPayload(map[string]any{
+		"code":        "TENANT_SCOPE_ITEM",
+		"description": "Default tenant item",
+	}))
+	secondaryItemResponse := requestJSONWithTenant(t, server, http.MethodPost, priceListItemsURL, secondaryTenantID, validPriceListItemPayload(map[string]any{
+		"code":        "TENANT_SCOPE_ITEM",
+		"description": "Secondary tenant item",
+	}))
+	defer secondaryItemResponse.Body.Close()
+	if secondaryItemResponse.StatusCode != http.StatusCreated {
+		var body apiErrorResponse
+		decodeJSON(t, secondaryItemResponse, &body)
+		t.Fatalf("expected same item code to be allowed in another tenant, got %d with error %+v", secondaryItemResponse.StatusCode, body.Error)
+	}
+	var secondaryItem apiPriceListItemResponse
+	decodeJSON(t, secondaryItemResponse, &secondaryItem)
+	if secondaryItem.Data.TenantID != secondaryTenantID {
+		t.Fatalf("expected secondary item tenant %q, got %q", secondaryTenantID, secondaryItem.Data.TenantID)
+	}
+
+	secondaryItemsResponse := requestJSONWithTenant(t, server, http.MethodGet, priceListItemsURL+"?includeInactive=true", secondaryTenantID, nil)
+	defer secondaryItemsResponse.Body.Close()
+	if secondaryItemsResponse.StatusCode != http.StatusOK {
+		t.Fatalf("expected secondary item list status %d, got %d", http.StatusOK, secondaryItemsResponse.StatusCode)
+	}
+	var secondaryItems apiPriceListItemListResponse
+	decodeJSON(t, secondaryItemsResponse, &secondaryItems)
+	if !containsPriceListItem(secondaryItems.Data, secondaryItem.Data.ID, true) {
+		t.Fatalf("expected secondary item in selected tenant list, got %+v", secondaryItems.Data)
+	}
+	for _, row := range secondaryItems.Data {
+		if row.TenantID != secondaryTenantID {
+			t.Fatalf("expected only secondary-tenant price-list items, got %+v", row)
+		}
+		if row.ID == defaultItem.Data.ID {
+			t.Fatalf("default-tenant price-list item leaked into secondary tenant: %+v", row)
+		}
+	}
+
+	crossTenantUpdate := requestJSONWithTenant(t, server, http.MethodPatch, priceListItemsURL+defaultItem.Data.ID, secondaryTenantID, validPriceListItemPayload(map[string]any{
+		"code":        "TENANT_SCOPE_ITEM",
+		"description": "Cross-tenant update must fail",
+	}))
+	defer crossTenantUpdate.Body.Close()
+	if crossTenantUpdate.StatusCode != http.StatusNotFound {
+		t.Fatalf("expected cross-tenant item update status %d, got %d", http.StatusNotFound, crossTenantUpdate.StatusCode)
+	}
+
+	const sharedPriceDate = "2099-12-31"
+	defaultGoldPrice := createGoldPrice(t, server, validGoldPricePayload(map[string]any{
+		"priceDate":  sharedPriceDate,
+		"brlPerGram": 777.11,
+		"notes":      "Default tenant gold price",
+	}))
+	secondaryGoldResponse := requestJSONWithTenant(t, server, http.MethodPost, goldPricesURL, secondaryTenantID, validGoldPricePayload(map[string]any{
+		"priceDate":  sharedPriceDate,
+		"brlPerGram": 888.22,
+		"notes":      "Secondary tenant gold price",
+	}))
+	defer secondaryGoldResponse.Body.Close()
+	if secondaryGoldResponse.StatusCode != http.StatusCreated {
+		var body apiErrorResponse
+		decodeJSON(t, secondaryGoldResponse, &body)
+		t.Fatalf("expected same gold-price date to be allowed in another tenant, got %d with error %+v", secondaryGoldResponse.StatusCode, body.Error)
+	}
+	var secondaryGold apiGoldPriceResponse
+	decodeJSON(t, secondaryGoldResponse, &secondaryGold)
+	if secondaryGold.Data.TenantID != secondaryTenantID {
+		t.Fatalf("expected secondary gold-price tenant %q, got %q", secondaryTenantID, secondaryGold.Data.TenantID)
+	}
+
+	secondaryGoldListResponse := requestJSONWithTenant(t, server, http.MethodGet, goldPricesURL+"?includeInactive=true", secondaryTenantID, nil)
+	defer secondaryGoldListResponse.Body.Close()
+	if secondaryGoldListResponse.StatusCode != http.StatusOK {
+		t.Fatalf("expected secondary gold-price list status %d, got %d", http.StatusOK, secondaryGoldListResponse.StatusCode)
+	}
+	var secondaryGoldList apiGoldPriceListResponse
+	decodeJSON(t, secondaryGoldListResponse, &secondaryGoldList)
+	if len(secondaryGoldList.Data) != 1 || secondaryGoldList.Data[0].ID != secondaryGold.Data.ID {
+		t.Fatalf("expected only secondary gold price, got %+v", secondaryGoldList.Data)
+	}
+	for _, row := range secondaryGoldList.Data {
+		if row.TenantID != secondaryTenantID {
+			t.Fatalf("expected only secondary-tenant gold prices, got %+v", row)
+		}
+		if row.ID == defaultGoldPrice.Data.ID {
+			t.Fatalf("default-tenant gold price leaked into secondary tenant: %+v", row)
+		}
+	}
+
+	latestSecondaryResponse := requestJSONWithTenant(t, server, http.MethodGet, goldPricesURL+"latest", secondaryTenantID, nil)
+	defer latestSecondaryResponse.Body.Close()
+	if latestSecondaryResponse.StatusCode != http.StatusOK {
+		t.Fatalf("expected latest secondary gold-price status %d, got %d", http.StatusOK, latestSecondaryResponse.StatusCode)
+	}
+	var latestSecondary apiGoldPriceResponse
+	decodeJSON(t, latestSecondaryResponse, &latestSecondary)
+	if latestSecondary.Data.ID != secondaryGold.Data.ID || latestSecondary.Data.TenantID != secondaryTenantID {
+		t.Fatalf("expected latest gold price from selected tenant, got %+v", latestSecondary.Data)
+	}
+
+	crossTenantDeactivate := requestJSONWithTenant(t, server, http.MethodPatch, goldPricesURL+defaultGoldPrice.Data.ID+"/deactivate", secondaryTenantID, map[string]any{})
+	defer crossTenantDeactivate.Body.Close()
+	if crossTenantDeactivate.StatusCode != http.StatusNotFound {
+		t.Fatalf("expected cross-tenant gold-price deactivate status %d, got %d", http.StatusNotFound, crossTenantDeactivate.StatusCode)
+	}
+}
+
 func TestPriceListItemDatabaseAllowsHistoryButOnlyOneActiveItemPerCode(t *testing.T) {
 	database, err := dbpkg.Open(filepath.Join(t.TempDir(), "app.db"))
 	if err != nil {
@@ -543,6 +680,32 @@ func validGoldPricePayload(overrides map[string]any) map[string]any {
 		payload[key] = value
 	}
 	return payload
+}
+
+func requestJSONWithTenant(t *testing.T, server *fiber.App, method string, url string, tenantID string, payload map[string]any) *http.Response {
+	t.Helper()
+	var body *bytes.Reader
+	if payload == nil {
+		body = bytes.NewReader(nil)
+	} else {
+		encoded, err := json.Marshal(payload)
+		if err != nil {
+			t.Fatalf("marshal payload: %v", err)
+		}
+		body = bytes.NewReader(encoded)
+	}
+	req := httptest.NewRequest(method, url, body)
+	if payload != nil {
+		req.Header.Set("Content-Type", "application/json")
+	}
+	if tenantID != "" {
+		req.Header.Set(authz.HeaderTenantID, tenantID)
+	}
+	res, err := server.Test(req, fiber.TestConfig{Timeout: 0, FailOnTimeout: false})
+	if err != nil {
+		t.Fatalf("%s %s: %v", method, url, err)
+	}
+	return res
 }
 
 func postJSON(t *testing.T, server *fiber.App, method string, url string, payload map[string]any) *http.Response {

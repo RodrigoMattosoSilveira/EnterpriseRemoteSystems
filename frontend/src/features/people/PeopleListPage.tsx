@@ -373,8 +373,9 @@ export function PeopleListPage() {
                           </span>
                         )}
                       </div>
-                      <p className="text-sm text-gray-500">
-                        Nickname: {person.nickname || "—"}
+                      <p className="mt-1 text-base font-medium text-slate-700">
+                        <span className="font-bold">Nickname:</span>{" "}
+                        {person.nickname || "—"}
                       </p>
                     </div>
 
@@ -383,12 +384,15 @@ export function PeopleListPage() {
                     </StatusBadge>
                   </div>
 
-                  <div className="mt-4 grid gap-2 text-sm text-gray-700">
-                    <Info label="CPF" value={person.cpf} />
-                    <Info label="RG" value={person.rg} />
+                  <dl
+                    aria-label="Person identity and contact details"
+                    className="mt-4 grid gap-2.5 rounded-xl bg-slate-50 p-3 text-base text-slate-800"
+                  >
+                    <Info label="CPF" value={person.cpf} monospaced />
+                    <Info label="RG" value={person.rg} monospaced />
                     <Info label="Cellular" value={person.cellular} />
                     <Info label="Email" value={person.email} />
-                  </div>
+                  </dl>
 
                   {!person.canCreateCollaborator &&
                     person.missingSections &&
@@ -411,8 +415,8 @@ export function PeopleListPage() {
         ) : (
           <div className="overflow-hidden rounded-2xl border bg-white shadow-sm">
             <div className="overflow-x-auto">
-              <table className="w-full text-left text-sm">
-                <thead className="bg-gray-50 text-xs uppercase tracking-wide text-gray-500">
+              <table className="w-full text-left text-base">
+                <thead className="bg-slate-100 text-sm font-bold uppercase tracking-wide text-slate-700">
                   <tr>
                     <th className="p-3">Name</th>
                     <th className="p-3">Nickname</th>
@@ -446,16 +450,14 @@ export function PeopleListPage() {
                             </div>
                           )}
                         </td>
-                        <td className="p-3 align-top text-gray-700">
+                        <td className="p-3 align-top font-medium text-slate-800">
                           {person.nickname || "—"}
                         </td>
-                        <td className="p-3 align-top text-gray-700">
-                          <div><span className="font-light">CPF:</span> {person.cpf || "—"}</div>
-                          <div><span className="font-light">RG:</span> {person.rg || "—"}</div>
+                        <td className="p-3 align-top text-slate-800">
+                          <IdentityDetails cpf={person.cpf} rg={person.rg} />
                         </td>
-                        <td className="p-3 align-top text-gray-700">
-                          <div><span className="font-light">Cellular:</span> {person.cellular || "—"}</div>
-                          <div><span className="font-light">Email:</span> {person.email || "—"}</div>
+                        <td className="p-3 align-top text-slate-800">
+                          <ContactDetails cellular={person.cellular} email={person.email} />
                         </td>
                         <td className="p-3 align-top">
                           <StatusBadge complete={person.canCreateCollaborator}>
@@ -605,12 +607,61 @@ function isPerson(value: unknown): value is Person {
   );
 }
 
-function Info({ label, value }: { label: string; value?: string }) {
+function Info({
+  label,
+  value,
+  monospaced = false,
+}: {
+  label: string;
+  value?: string;
+  monospaced?: boolean;
+}) {
   return (
-    <div className="flex justify-between gap-4">
-      <span className="text-gray-500">{label}</span>
-      <span className="text-right font-medium">{value || "—"}</span>
+    <div className="grid grid-cols-[5rem_minmax(0,1fr)] items-baseline gap-3">
+      <dt className="font-bold text-slate-700">{label}</dt>
+      <dd
+        className={`min-w-0 break-words text-right font-semibold text-slate-950 ${
+          monospaced ? "font-mono tabular-nums tracking-wide" : ""
+        }`}
+      >
+        {value || "—"}
+      </dd>
     </div>
+  );
+}
+
+function IdentityDetails({ cpf, rg }: { cpf?: string; rg?: string }) {
+  return (
+    <dl aria-label="Identity details" className="grid gap-2">
+      <IdentityRow label="CPF" value={cpf} />
+      <IdentityRow label="RG" value={rg} />
+    </dl>
+  );
+}
+
+function IdentityRow({ label, value }: { label: string; value?: string }) {
+  return (
+    <div className="grid grid-cols-[3rem_minmax(0,1fr)] items-baseline gap-2">
+      <dt className="font-bold text-slate-700">{label}</dt>
+      <dd className="font-mono font-semibold tabular-nums tracking-wide text-slate-950">
+        {value || "—"}
+      </dd>
+    </div>
+  );
+}
+
+function ContactDetails({ cellular, email }: { cellular?: string; email?: string }) {
+  return (
+    <dl aria-label="Contact details" className="grid gap-2">
+      <div className="grid grid-cols-[5rem_minmax(0,1fr)] items-baseline gap-2">
+        <dt className="font-bold text-slate-700">Cellular</dt>
+        <dd className="font-semibold tabular-nums text-slate-950">{cellular || "—"}</dd>
+      </div>
+      <div className="grid grid-cols-[5rem_minmax(0,1fr)] items-baseline gap-2">
+        <dt className="font-bold text-slate-700">Email</dt>
+        <dd className="break-all font-semibold text-slate-950">{email || "—"}</dd>
+      </div>
+    </dl>
   );
 }
 

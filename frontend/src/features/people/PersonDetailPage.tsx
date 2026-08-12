@@ -3,11 +3,14 @@ import { Link, useParams, useSearchParams } from "react-router-dom";
 import { PersonForm } from "./PersonForm";
 import { usePerson, useUpdatePerson } from "./usePeople";
 import { ApiErrorPanel } from "../../components/ApiErrorPanel";
+import { useAuthorizationContext } from "../../components/layout/AuthorizationContext";
 
 const ACTIVE_STATUS_ID = "ref-person-status-active";
 
 export function PersonDetailPage() {
   const { id = "" } = useParams();
+  const actor = useAuthorizationContext();
+  const canBrowsePeople = actor.permissions.includes("*") || actor.permissions.includes("people.read");
   const [successMessage, setSuccessMessage] = useState("");
 
   const personQuery = usePerson(id);
@@ -36,9 +39,15 @@ export function PersonDetailPage() {
     <main className="mx-auto max-w-3xl p-4">
       <header className="sticky top-0 z-10 border-b bg-white/95 px-4 py-4 backdrop-blur">
         <div className="mx-auto max-w-4xl">
-          <Link className="text-sm text-gray-500 underline" to={`/people?view=${view}`}>
-            Back to People
-          </Link>
+          {canBrowsePeople ? (
+            <Link className="text-sm text-gray-500 underline" to={`/people?view=${view}`}>
+              Back to People
+            </Link>
+          ) : actor.collaboratorId ? (
+            <Link className="text-sm text-gray-500 underline" to={`/collaborators/${actor.collaboratorId}`}>
+              My Collaborator record
+            </Link>
+          ) : null}
 
           <div className="mt-3 flex items-start justify-between gap-3">
             <div>
@@ -87,13 +96,8 @@ export function PersonDetailPage() {
           submitting={mutation.isPending}
           onSubmit={async (input) => {
             setSuccessMessage("");
-
-            try {
-              await mutation.mutateAsync(input);
-              setSuccessMessage("Person updated successfully.");
-            } catch {
-              // The mutation state renders the API error above the form.
-            }
+            await mutation.mutateAsync(input);
+            setSuccessMessage("Person updated successfully.");
           }}
         />
       </section>

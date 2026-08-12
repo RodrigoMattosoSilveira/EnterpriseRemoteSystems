@@ -7,6 +7,7 @@ import (
 
 	"enterpriseremotesystems/backend/internal/db"
 	"enterpriseremotesystems/backend/internal/shared/ids"
+	"enterpriseremotesystems/backend/internal/shared/tenantctx"
 	"enterpriseremotesystems/backend/internal/tenants"
 )
 
@@ -70,7 +71,7 @@ func (s *service) Create(ctx context.Context, workPeriodID string, req CreateGol
 	now := time.Now().UTC()
 	entry := &db.GoldProductionEntry{
 		BaseModel:         db.BaseModel{ID: ids.New(), CreatedAt: now, UpdatedAt: now},
-		TenantID:          defaultTenantID,
+		TenantID:          tenantctx.TenantID(ctx),
 		WorkPeriodID:      workPeriod.ID,
 		LocationID:        locationID,
 		ProductionDate:    productionDate,

@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"enterpriseremotesystems/backend/internal/db"
+	"enterpriseremotesystems/backend/internal/shared/tenantctx"
 	"gorm.io/gorm"
 )
 
@@ -18,7 +19,7 @@ func (r *gormRepository) ListByWorkPeriod(ctx context.Context, workPeriodID stri
 
 	q := r.db.WithContext(ctx).
 		Model(&db.GoldProductionEntry{}).
-		Where("tenant_id = ? AND work_period_id = ?", defaultTenantID, workPeriodID).
+		Where("tenant_id = ? AND work_period_id = ?", tenantctx.TenantID(ctx), workPeriodID).
 		Preload("Location")
 
 	if !filter.IncludeInactive {
@@ -49,7 +50,7 @@ func (r *gormRepository) Create(ctx context.Context, entry *db.GoldProductionEnt
 func (r *gormRepository) Update(ctx context.Context, entry *db.GoldProductionEntry) error {
 	return r.db.WithContext(ctx).
 		Model(&db.GoldProductionEntry{}).
-		Where("id = ? AND tenant_id = ?", entry.ID, defaultTenantID).
+		Where("id = ? AND tenant_id = ?", entry.ID, tenantctx.TenantID(ctx)).
 		Updates(map[string]any{
 			"location_id":         entry.LocationID,
 			"production_date":     entry.ProductionDate,
@@ -65,7 +66,7 @@ func (r *gormRepository) FindByID(ctx context.Context, id string) (*db.GoldProdu
 	err := r.db.WithContext(ctx).
 		Preload("WorkPeriod").
 		Preload("Location").
-		First(&row, "id = ? AND tenant_id = ?", id, defaultTenantID).Error
+		First(&row, "id = ? AND tenant_id = ?", id, tenantctx.TenantID(ctx)).Error
 	if err != nil {
 		return nil, err
 	}
@@ -74,7 +75,7 @@ func (r *gormRepository) FindByID(ctx context.Context, id string) (*db.GoldProdu
 
 func (r *gormRepository) FindWorkPeriodByID(ctx context.Context, id string) (*db.WorkPeriod, error) {
 	var row db.WorkPeriod
-	err := r.db.WithContext(ctx).First(&row, "id = ? AND tenant_id = ?", id, defaultTenantID).Error
+	err := r.db.WithContext(ctx).First(&row, "id = ? AND tenant_id = ?", id, tenantctx.TenantID(ctx)).Error
 	if err != nil {
 		return nil, err
 	}
@@ -85,7 +86,7 @@ func (r *gormRepository) ExistsActiveLocation(ctx context.Context, id string) (b
 	var count int64
 	err := r.db.WithContext(ctx).
 		Model(&db.ReferenceData{}).
-		Where("id = ? AND tenant_id = ? AND type = ? AND active = ?", id, defaultTenantID, "location", true).
+		Where("id = ? AND tenant_id = ? AND type = ? AND active = ?", id, tenantctx.TenantID(ctx), "location", true).
 		Count(&count).Error
 	if err != nil {
 		return false, err
@@ -97,7 +98,7 @@ func (r *gormRepository) ExistsActiveEntryForPeriodLocationDate(ctx context.Cont
 	var count int64
 	q := r.db.WithContext(ctx).
 		Model(&db.GoldProductionEntry{}).
-		Where("tenant_id = ? AND work_period_id = ? AND location_id = ? AND production_date = ? AND active = ?", defaultTenantID, workPeriodID, locationID, productionDate, true)
+		Where("tenant_id = ? AND work_period_id = ? AND location_id = ? AND production_date = ? AND active = ?", tenantctx.TenantID(ctx), workPeriodID, locationID, productionDate, true)
 	if excludeID != "" {
 		q = q.Where("id <> ?", excludeID)
 	}

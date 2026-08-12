@@ -43,7 +43,7 @@ tokens. Tokens expire and are consumed atomically with the password update.
 
 Bite 28B intentionally does not implement email delivery. The raw reset token
 is returned once to the authorized administrator so it can be delivered through
-an approved channel. Bite 28D can add the operational UX.
+an approved channel. Bite 28D adds the operational account and reset-token UX.
 
 ## Endpoints
 
@@ -56,11 +56,18 @@ Public authentication endpoints:
 Session-authenticated endpoints:
 
 - `GET /api/v1/auth/session`
+- `GET /api/v1/auth/tenant-options`
 - `POST /api/v1/auth/password/change`
 
 Successful login and current-session responses expose the account login in
 `data.login`. The value is normalized to lowercase; there is no separate
 `normalizedLogin` response property.
+
+Successful password-reset responses return `data.accountId`, `data.login`, and
+`data.passwordChangedAt` only after the server reloads the account and verifies
+that the persisted bcrypt hash matches the submitted replacement password.
+Reset-token issuance likewise returns the authoritative `accountId` and `login`
+for the token target.
 
 Application-scoped administration endpoints:
 

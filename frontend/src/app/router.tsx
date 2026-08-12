@@ -1,212 +1,63 @@
-import { createBrowserRouter, Link, useRouteError } from "react-router-dom";
+import { createBrowserRouter, Link, Navigate, useRouteError, type RouteObject } from "react-router-dom";
+import { RequireAuth } from "../components/guards/RequireAuth";
+import { RequirePermission } from "../components/guards/RequireRole";
+import { AppShell } from "../components/layout/AppShell";
+import { useAuthorizationContext } from "../components/layout/AuthorizationContext";
+import { defaultAuthorizedRoute } from "../components/layout/navigation";
+import LoginPage from "../features/auth/LoginPage";
+import { ChangePasswordPage } from "../features/auth/ChangePasswordPage";
+import { ResetPasswordPage } from "../features/auth/ResetPasswordPage";
+import { AuthenticationAdminPage } from "../features/auth/AuthenticationAdminPage";
+import { AuthenticationLookupDismissBoundary } from "../features/auth/AuthenticationLookupDismissBoundary";
 import { describeRouteError } from "./routeErrorPresentation";
 
 function RouteErrorPage() {
   const presentation = describeRouteError(useRouteError());
-
-  return (
-    <StatusPage
-      title={presentation.title}
-      message={presentation.message}
-    />
-  );
+  return <StatusPage title={presentation.title} message={presentation.message} />;
 }
-
-function NotFoundPage() {
-  return (
-    <StatusPage
-      title="Page not found"
-      message="The requested page could not be found."
-    />
-  );
+function NotFoundPage() { return <StatusPage title="Page not found" message="The requested page could not be found." />; }
+function PermissionAwareHome() {
+  const actor = useAuthorizationContext();
+  return <Navigate to={defaultAuthorizedRoute(actor.permissions, actor.scope, { personId: actor.personId, collaboratorId: actor.collaboratorId })} replace />;
 }
-
+export function ForbiddenPage() { return <StatusPage title="Access forbidden" message="Your current role does not permit this operation in the selected tenant." />; }
 function StatusPage({ title, message }: { title: string; message: string }) {
-  return (
-    <main className="p-6">
-      <h1 className="text-2xl font-bold">{title}</h1>
-      <p className="mt-2 text-gray-600">{message}</p>
-      <Link className="mt-4 inline-block underline" to="/people">
-        Go to People
-      </Link>
-    </main>
-  );
+  return <main className="p-6"><section className="mx-auto max-w-xl rounded-2xl border bg-white p-6"><h1 className="text-2xl font-bold">{title}</h1><p className="mt-2 text-slate-600">{message}</p><Link className="mt-4 inline-block underline" to="/">Return to ERS</Link></section></main>;
 }
+
+const protectedChildren: RouteObject[] = [
+  { index: true, element: <PermissionAwareHome /> },
+  { path: "people", lazy: async () => ({ Component: (await import("../features/people/PeopleListPage")).PeopleListPage }) },
+  { path: "people/new", lazy: async () => ({ Component: (await import("../features/people/CreatePersonPage")).CreatePersonPage }) },
+  { path: "people/:id", lazy: async () => ({ Component: (await import("../features/people/PersonDetailPage")).PersonDetailPage }) },
+  { path: "collaborators", lazy: async () => ({ Component: (await import("../features/collaborators/CollaboratorsListPage")).CollaboratorsListPage }) },
+  { path: "collaborators/new", lazy: async () => ({ Component: (await import("../features/collaborators/CreateCollaboratorPage")).CreateCollaboratorPage }) },
+  { path: "collaborators/:id", lazy: async () => ({ Component: (await import("../features/collaborators/CollaboratorDetailPage")).CollaboratorDetailPage }) },
+  { path: "collaborators/:id/current-account", lazy: async () => ({ Component: (await import("../features/current-accounts/CollaboratorCurrentAccountPage")).CollaboratorCurrentAccountPage }) },
+  { path: "expenses", lazy: async () => ({ Component: (await import("../features/expenses/ExpensesPage")).ExpensesPage }) },
+  { path: "expenses/new", lazy: async () => ({ Component: (await import("../features/expenses/CreateExpensePage")).CreateExpensePage }) },
+  { path: "expenses/:id", lazy: async () => ({ Component: (await import("../features/expenses/ExpenseDetailPage")).ExpenseDetailPage }) },
+  { path: "work-periods", lazy: async () => ({ Component: (await import("../features/planning/WorkPeriodsPage")).WorkPeriodsPage }) },
+  { path: "work-periods/:id", lazy: async () => ({ Component: (await import("../features/planning/WorkPeriodDetailPage")).WorkPeriodDetailPage }) },
+  { path: "gold-production", lazy: async () => ({ Component: (await import("../features/production/MineProductionPage")).MineProductionPage }) },
+  { path: "ledger-entries/:entryId/receipt", lazy: async () => ({ Component: (await import("../features/receipts/PrintableReceiptPage")).PrintableReceiptPage }) },
+  { path: "receipts/outstanding", lazy: async () => ({ Component: (await import("../features/receipts/OutstandingReceiptsPage")).OutstandingReceiptsPage }) },
+  { path: "admin/tenants", lazy: async () => ({ Component: (await import("../features/tenants/TenantsAdminPage")).TenantsAdminPage }) },
+  { path: "admin/tenants/:id", lazy: async () => ({ Component: (await import("../features/tenants/TenantDetailPage")).TenantDetailPage }) },
+  { path: "admin/reference-data", lazy: async () => ({ Component: (await import("../features/reference-data/ReferenceDataAdminRoute")).ReferenceDataAdminRoute }) },
+  { path: "admin/authentication", element: <RequirePermission permission="authz.manage" applicationOnly><AuthenticationLookupDismissBoundary><AuthenticationAdminPage /></AuthenticationLookupDismissBoundary></RequirePermission> },
+  { path: "admin/authorization", lazy: async () => ({ Component: (await import("../features/authz/AuthzAdminRoute")).AuthzAdminRoute }) },
+  { path: "admin/audit-logs", lazy: async () => ({ Component: (await import("../features/authz/AuditLogViewerPage")).AuditLogViewerPage }) },
+  { path: "admin/current-account-settings", lazy: async () => ({ Component: (await import("../features/current-accounts/SecondPersonApprovalSettingsPage")).SecondPersonApprovalSettingsPage }) },
+  { path: "admin/gold-prices", lazy: async () => ({ Component: (await import("../features/gold-prices/GoldPricesPage")).GoldPricesPage }) },
+  { path: "admin/price-list-items", lazy: async () => ({ Component: (await import("../features/price-list/PriceListPage")).PriceListPage }) },
+  { path: "forbidden", element: <ForbiddenPage /> },
+  { path: "*", element: <NotFoundPage /> },
+];
 
 export const router = createBrowserRouter([
-  {
-    path: "/",
-    errorElement: <RouteErrorPage />,
-    children: [
-      {
-        index: true,
-        lazy: async () => {
-          const { PeopleListPage } = await import("../features/people/PeopleListPage");
-          return { Component: PeopleListPage };
-        },
-      },
-      {
-        path: "people",
-        lazy: async () => {
-          const { PeopleListPage } = await import("../features/people/PeopleListPage");
-          return { Component: PeopleListPage };
-        },
-      },
-      {
-        path: "people/new",
-        lazy: async () => {
-          const { CreatePersonPage } = await import("../features/people/CreatePersonPage");
-          return { Component: CreatePersonPage };
-        },
-      },
-      {
-        path: "people/:id",
-        lazy: async () => {
-          const { PersonDetailPage } = await import("../features/people/PersonDetailPage");
-          return { Component: PersonDetailPage };
-        },
-      },
-      {
-        path: "collaborators",
-        lazy: async () => {
-          const { CollaboratorsListPage } = await import("../features/collaborators/CollaboratorsListPage");
-          return { Component: CollaboratorsListPage };
-        },
-      },
-      {
-        path: "collaborators/new",
-        lazy: async () => {
-          const { CreateCollaboratorPage } = await import("../features/collaborators/CreateCollaboratorPage");
-          return { Component: CreateCollaboratorPage };
-        },
-      },
-      {
-        path: "collaborators/:id",
-        lazy: async () => {
-          const { CollaboratorDetailPage } = await import("../features/collaborators/CollaboratorDetailPage");
-          return { Component: CollaboratorDetailPage };
-        },
-      },
-      {
-        path: "collaborators/:id/current-account",
-        lazy: async () => {
-          const { CollaboratorCurrentAccountPage } = await import("../features/current-accounts/CollaboratorCurrentAccountPage");
-          return { Component: CollaboratorCurrentAccountPage };
-        },
-      },
-      {
-        path: "expenses",
-        lazy: async () => {
-          const { ExpensesPage } = await import("../features/expenses/ExpensesPage");
-          return { Component: ExpensesPage };
-        },
-      },
-      {
-        path: "expenses/new",
-        lazy: async () => {
-          const { CreateExpensePage } = await import("../features/expenses/CreateExpensePage");
-          return { Component: CreateExpensePage };
-        },
-      },
-      {
-        path: "expenses/:id",
-        lazy: async () => {
-          const { ExpenseDetailPage } = await import("../features/expenses/ExpenseDetailPage");
-          return { Component: ExpenseDetailPage };
-        },
-      },
-      {
-        path: "work-periods",
-        lazy: async () => {
-          const { WorkPeriodsPage } = await import("../features/planning/WorkPeriodsPage");
-          return { Component: WorkPeriodsPage };
-        },
-      },
-      {
-        path: "work-periods/:id",
-        lazy: async () => {
-          const { WorkPeriodDetailPage } = await import("../features/planning/WorkPeriodDetailPage");
-          return { Component: WorkPeriodDetailPage };
-        },
-      },
-      {
-        path: "gold-production",
-        lazy: async () => {
-          const { MineProductionPage } = await import("../features/production/MineProductionPage");
-          return { Component: MineProductionPage };
-        },
-      },
-      {
-        path: "ledger-entries/:entryId/receipt",
-        lazy: async () => {
-          const { PrintableReceiptPage } = await import("../features/receipts/PrintableReceiptPage");
-          return { Component: PrintableReceiptPage };
-        },
-      },
-      {
-        path: "receipts/outstanding",
-        lazy: async () => {
-          const { OutstandingReceiptsPage } = await import("../features/receipts/OutstandingReceiptsPage");
-          return { Component: OutstandingReceiptsPage };
-        },
-      },
-      {
-        path: "admin/tenants",
-        lazy: async () => {
-          const { TenantsAdminPage } = await import("../features/tenants/TenantsAdminPage");
-          return { Component: TenantsAdminPage };
-        },
-      },
-      {
-        path: "admin/tenants/:id",
-        lazy: async () => {
-          const { TenantDetailPage } = await import("../features/tenants/TenantDetailPage");
-          return { Component: TenantDetailPage };
-        },
-      },
-      {
-        path: "admin/reference-data",
-        lazy: async () => {
-          const { ReferenceDataAdminPage } = await import("../features/reference-data/ReferenceDataAdminPage");
-          return { Component: ReferenceDataAdminPage };
-        },
-      },
-      {
-        path: "admin/authorization",
-        lazy: async () => {
-          const { AuthzAdminRoute } = await import("../features/authz/AuthzAdminRoute");
-          return { Component: AuthzAdminRoute };
-        },
-      },
-      {
-        path: "admin/audit-logs",
-        lazy: async () => {
-          const { AuditLogViewerPage } = await import("../features/authz/AuditLogViewerPage");
-          return { Component: AuditLogViewerPage };
-        },
-      },
-      {
-        path: "admin/current-account-settings",
-        lazy: async () => {
-          const { SecondPersonApprovalSettingsPage } = await import("../features/current-accounts/SecondPersonApprovalSettingsPage");
-          return { Component: SecondPersonApprovalSettingsPage };
-        },
-      },
-      {
-        path: "admin/gold-prices",
-        lazy: async () => {
-          const { GoldPricesPage } = await import("../features/gold-prices/GoldPricesPage");
-          return { Component: GoldPricesPage };
-        },
-      },
-      {
-        path: "admin/price-list-items",
-        lazy: async () => {
-          const { PriceListPage } = await import("../features/price-list/PriceListPage");
-          return { Component: PriceListPage };
-        },
-      },
-      { path: "*", element: <NotFoundPage /> },
-    ],
-  },
+  { path: "/login", element: <LoginPage /> },
+  { path: "/password/reset", element: <ResetPasswordPage /> },
+  { path: "/password/change", element: <RequireAuth><ChangePasswordPage /></RequireAuth> },
+  { path: "/", errorElement: <RouteErrorPage />, element: <RequireAuth><AppShell /></RequireAuth>, children: protectedChildren },
 ]);

@@ -117,21 +117,17 @@ for authorization boundary tests and Playwright setup.
 The application refuses to start with `test` mode unless `APP_ENV` is `test`,
 `testing`, or `ci`.
 
-## Local development before Bite 28D
+## Local development after Bite 28D
 
-Bite 28D will provide the browser login and logout experience. Until then, the
-Vite development proxy may add the configured bootstrap actor header while the
-backend runs in `bootstrap` mode.
-
-This can be disabled with:
+The browser now uses login-backed sessions in local development. The Vite proxy
+does not add actor identity by default. The bootstrap compatibility path is
+reserved for deliberate recovery and must be enabled explicitly with:
 
 ```bash
-ERS_LOCAL_AUTHZ_BOOTSTRAP=false npm run dev
+ERS_LOCAL_AUTHZ_BOOTSTRAP=true npm run dev
 ```
 
-The proxy does not exist in a production frontend build. When a valid session
-cookie is present, the session actor remains authoritative even if the proxy or
-caller also sends an actor header.
+A valid session remains authoritative even when the recovery proxy is enabled.
 
 ## Test and CI behavior
 
@@ -179,14 +175,9 @@ Before promotion, verify that:
 7. `/api/v1/authz/current-actor` reports the session actor and selected tenant.
 8. Authorization audit events identify the same actor used by route guards.
 
-## Remaining Bite 28D work
+## Bite 28D application UX
 
-Bite 28C establishes the server and transport security boundary. Bite 28D is
-responsible for the application-facing authentication and tenant UX, including:
-
-- login and logout pages;
-- current-user display;
-- tenant selection for actors with multiple grants;
-- expired-session handling and redirection;
-- unauthorized and forbidden page behavior;
-- password-change and reset workflows in the browser.
+Bite 28D completes the application-facing session boundary with login/logout,
+current-user display, granted-tenant selection, expired-session redirection,
+forbidden-state presentation, password change/reset, and administrator account
+management.

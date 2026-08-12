@@ -11,6 +11,7 @@ import (
 	"sort"
 	"strings"
 
+	"enterpriseremotesystems/backend/internal/db"
 	"enterpriseremotesystems/backend/internal/people"
 	"gorm.io/gorm"
 )
@@ -89,6 +90,7 @@ var validBrazilianUFs = map[string]struct{}{
 
 // Options controls a People CSV import run.
 type Options struct {
+	TenantID        string
 	FilePath        string
 	DryRun          bool
 	ActorUserID     string
@@ -163,6 +165,11 @@ func Run(ctx context.Context, database *gorm.DB, reader io.Reader, opts Options)
 	rows := records[1:]
 	report.RowsRead = len(rows)
 
+	tenantID := strings.TrimSpace(opts.TenantID)
+	if tenantID == "" {
+		tenantID = db.DefaultTenantID
+	}
+
 	actorUserID := strings.TrimSpace(opts.ActorUserID)
 	if actorUserID == "" {
 		actorUserID = defaultActorUserID
@@ -191,7 +198,7 @@ func Run(ctx context.Context, database *gorm.DB, reader io.Reader, opts Options)
 				continue
 			}
 
-			_, err := svc.Create(ctx, req, actorUserID)
+			_, err := svc.Create(ctx, tenantID, req, actorUserID)
 			if err != nil {
 				report.Errors = append(report.Errors, rowErrorsFromError(rowNumber, err)...)
 				continue
