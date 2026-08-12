@@ -3,8 +3,19 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { AuthorizationProvider } from "../../components/layout/AuthorizationContext";
+import type { AuthzCurrentActor } from "../../types/authz";
 import type { Collaborator } from "../../types/collaborators";
 import { CollaboratorDetailPage } from "./CollaboratorDetailPage";
+
+const authorizationActor: AuthzCurrentActor = {
+  actorKey: "test-admin",
+  actorRecordId: "actor-test-admin",
+  tenantId: "default",
+  scope: "APPLICATION",
+  roleCodes: ["APPLICATION_ADMIN"],
+  permissions: ["*"],
+};
 
 const collaborator: Collaborator = {
   id: "collab-1",
@@ -267,7 +278,9 @@ function renderCollaboratorDetailPage(initialEntry: string) {
   act(() => {
     root?.render(
       <QueryClientProvider client={queryClient}>
-        <RouterProvider router={router} />
+        <AuthorizationProvider value={authorizationActor}>
+          <RouterProvider router={router} />
+        </AuthorizationProvider>
       </QueryClientProvider>,
     );
   });

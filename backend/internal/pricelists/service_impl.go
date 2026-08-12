@@ -15,7 +15,7 @@ type service struct{ repo Repository }
 
 func NewService(repo Repository) Service { return &service{repo: repo} }
 
-func (s *service) ListItems(ctx context.Context, filter PriceListItemListFilter) ([]PriceListItemDTO, error) {
+func (s *service) ListItems(ctx context.Context, tenantID string, filter PriceListItemListFilter) ([]PriceListItemDTO, error) {
 	if itemType := strings.TrimSpace(filter.ItemType); itemType != "" {
 		normalized := normalizeItemType(itemType)
 		if normalized != ItemTypeCanteen && normalized != ItemTypeAdministrative {
@@ -23,27 +23,27 @@ func (s *service) ListItems(ctx context.Context, filter PriceListItemListFilter)
 		}
 		filter.ItemType = normalized
 	}
-	rows, err := s.repo.ListItems(ctx, filter)
+	rows, err := s.repo.ListItems(ctx, tenantID, filter)
 	if err != nil {
 		return nil, err
 	}
 	return ToPriceListItemDTOList(rows), nil
 }
 
-func (s *service) CreateItem(ctx context.Context, req CreatePriceListItemRequest) (*PriceListItemDTO, error) {
+func (s *service) CreateItem(ctx context.Context, tenantID string, req CreatePriceListItemRequest) (*PriceListItemDTO, error) {
 	if err := ValidateCreatePriceListItem(req); err != nil {
 		return nil, err
 	}
 	itemType := normalizeItemType(req.ItemType)
 	code := normalizeCode(req.Code)
-	if err := s.ensureNoActiveItemCodeConflict(ctx, "code", itemType, code, ""); err != nil {
+	if err := s.ensureNoActiveItemCodeConflict(ctx, tenantID, "code", itemType, code, ""); err != nil {
 		return nil, err
 	}
 
 	now := time.Now().UTC()
 	item := &db.ExpensePriceListItem{
 		BaseModel:    db.BaseModel{ID: ids.New(), CreatedAt: now, UpdatedAt: now},
-		TenantID:     defaultTenantID,
+		TenantID:     strings.TrimSpace(tenantID),
 		ItemType:     itemType,
 		Code:         code,
 		Description:  strings.TrimSpace(req.Description),
@@ -57,11 +57,11 @@ func (s *service) CreateItem(ctx context.Context, req CreatePriceListItemRequest
 	return ptr(ToPriceListItemDTO(*item)), nil
 }
 
-func (s *service) UpdateItem(ctx context.Context, id string, req UpdatePriceListItemRequest) (*PriceListItemDTO, error) {
+func (s *service) UpdateItem(ctx context.Context, tenantID string, id string, req UpdatePriceListItemRequest) (*PriceListItemDTO, error) {
 	if err := ValidateUpdatePriceListItem(req); err != nil {
 		return nil, err
 	}
-	existing, err := s.repo.FindItemByID(ctx, id)
+	existing, err := s.repo.FindItemByID(ctx, tenantID, id)
 	if err != nil {
 		return nil, err
 	}
@@ -71,7 +71,7 @@ func (s *service) UpdateItem(ctx context.Context, id string, req UpdatePriceList
 
 	itemType := normalizeItemType(req.ItemType)
 	code := normalizeCode(req.Code)
-	if err := s.ensureNoActiveItemCodeConflict(ctx, "code", itemType, code, existing.ID); err != nil {
+	if err := s.ensureNoActiveItemCodeConflict(ctx, tenantID, "code", itemType, code, existing.ID); err != nil {
 		return nil, err
 	}
 
@@ -89,7 +89,7 @@ func (s *service) UpdateItem(ctx context.Context, id string, req UpdatePriceList
 		SupersededPriceListItemID: &supersededID,
 	}
 	existing.UpdatedAt = now
-	if err := s.repo.ReplaceItemWithRevision(ctx, existing, replacement); err != nil {
+	if err := s.repo.ReplaceItemWithRevision(ctx, tenantID, existing, replacement); err != nil {
 		return nil, err
 	}
 	dto := ToPriceListItemDTO(*replacement)
@@ -97,33 +97,33 @@ func (s *service) UpdateItem(ctx context.Context, id string, req UpdatePriceList
 	return &dto, nil
 }
 
-func (s *service) DeactivateItem(ctx context.Context, id string) (*PriceListItemDTO, error) {
-	return s.setItemActive(ctx, id, false)
+func (s *service) DeactivateItem(ctx context.Context, tenantID string, id string) (*PriceListItemDTO, error) {
+	return s.setItemActive(ctx, tenantID, id, false)
 }
 
-func (s *service) ReactivateItem(ctx context.Context, id string) (*PriceListItemDTO, error) {
-	return s.setItemActive(ctx, id, true)
+func (s *service) ReactivateItem(ctx context.Context, tenantID string, id string) (*PriceListItemDTO, error) {
+	return s.setItemActive(ctx, tenantID, id, true)
 }
 
-func (s *service) setItemActive(ctx context.Context, id string, active bool) (*PriceListItemDTO, error) {
-	item, err := s.repo.FindItemByID(ctx, id)
+func (s *service) setItemActive(ctx context.Context, tenantID string, id string, active bool) (*PriceListItemDTO, error) {
+	item, err := s.repo.FindItemByID(ctx, tenantID, id)
 	if err != nil {
 		return nil, err
 	}
 	item.Active = active
 	item.UpdatedAt = time.Now().UTC()
-	if err := s.repo.SetItemActive(ctx, item); err != nil {
+	if err := s.repo.SetItemActive(ctx, tenantID, item); err != nil {
 		return nil, err
 	}
-	updated, err := s.repo.FindItemByID(ctx, item.ID)
+	updated, err := s.repo.FindItemByID(ctx, tenantID, item.ID)
 	if err != nil {
 		return nil, err
 	}
 	return ptr(ToPriceListItemDTO(*updated)), nil
 }
 
-func (s *service) ensureNoActiveItemCodeConflict(ctx context.Context, field string, itemType string, code string, allowedID string) error {
-	existing, err := s.repo.FindActiveItemByKey(ctx, itemType, code)
+func (s *service) ensureNoActiveItemCodeConflict(ctx context.Context, tenantID string, field string, itemType string, code string, allowedID string) error {
+	existing, err := s.repo.FindActiveItemByKey(ctx, tenantID, itemType, code)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil
@@ -136,15 +136,15 @@ func (s *service) ensureNoActiveItemCodeConflict(ctx context.Context, field stri
 	return ValidationError{Fields: map[string]string{field: "An active price-list item already uses this code for this category"}}
 }
 
-func (s *service) ListGoldPrices(ctx context.Context, filter GoldPriceListFilter) ([]GoldPriceDTO, error) {
-	rows, err := s.repo.ListGoldPrices(ctx, filter)
+func (s *service) ListGoldPrices(ctx context.Context, tenantID string, filter GoldPriceListFilter) ([]GoldPriceDTO, error) {
+	rows, err := s.repo.ListGoldPrices(ctx, tenantID, filter)
 	if err != nil {
 		return nil, err
 	}
 	return ToGoldPriceDTOList(rows), nil
 }
 
-func (s *service) CreateGoldPrice(ctx context.Context, req CreateGoldPriceRequest) (*GoldPriceDTO, error) {
+func (s *service) CreateGoldPrice(ctx context.Context, tenantID string, req CreateGoldPriceRequest) (*GoldPriceDTO, error) {
 	if err := ValidateCreateGoldPrice(req); err != nil {
 		return nil, err
 	}
@@ -156,7 +156,7 @@ func (s *service) CreateGoldPrice(ctx context.Context, req CreateGoldPriceReques
 	now := time.Now().UTC()
 	price := &db.GoldPrice{
 		BaseModel:  db.BaseModel{ID: ids.New(), CreatedAt: now, UpdatedAt: now},
-		TenantID:   defaultTenantID,
+		TenantID:   strings.TrimSpace(tenantID),
 		PriceDate:  storedPriceDate,
 		BRLPerGram: req.BRLPerGram,
 		RecordedBy: strings.TrimSpace(req.RecordedBy),
@@ -164,7 +164,7 @@ func (s *service) CreateGoldPrice(ctx context.Context, req CreateGoldPriceReques
 		Active:     true,
 	}
 
-	existing, err := s.repo.FindActiveGoldPriceByDate(ctx, storedPriceDate)
+	existing, err := s.repo.FindActiveGoldPriceByDate(ctx, tenantID, storedPriceDate)
 	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, err
 	}
@@ -176,7 +176,7 @@ func (s *service) CreateGoldPrice(ctx context.Context, req CreateGoldPriceReques
 	}
 
 	existing.UpdatedAt = now
-	if err := s.repo.ReplaceActiveGoldPrice(ctx, existing, price); err != nil {
+	if err := s.repo.ReplaceActiveGoldPrice(ctx, tenantID, existing, price); err != nil {
 		return nil, err
 	}
 	dto := ToGoldPriceDTO(*price)
@@ -184,25 +184,25 @@ func (s *service) CreateGoldPrice(ctx context.Context, req CreateGoldPriceReques
 	return &dto, nil
 }
 
-func (s *service) LatestGoldPrice(ctx context.Context) (*GoldPriceDTO, error) {
-	row, err := s.repo.FindLatestActiveGoldPrice(ctx)
+func (s *service) LatestGoldPrice(ctx context.Context, tenantID string) (*GoldPriceDTO, error) {
+	row, err := s.repo.FindLatestActiveGoldPrice(ctx, tenantID)
 	if err != nil {
 		return nil, err
 	}
 	return ptr(ToGoldPriceDTO(*row)), nil
 }
 
-func (s *service) DeactivateGoldPrice(ctx context.Context, id string) (*GoldPriceDTO, error) {
-	price, err := s.repo.FindGoldPriceByID(ctx, id)
+func (s *service) DeactivateGoldPrice(ctx context.Context, tenantID string, id string) (*GoldPriceDTO, error) {
+	price, err := s.repo.FindGoldPriceByID(ctx, tenantID, id)
 	if err != nil {
 		return nil, err
 	}
 	price.Active = false
 	price.UpdatedAt = time.Now().UTC()
-	if err := s.repo.UpdateGoldPrice(ctx, price); err != nil {
+	if err := s.repo.UpdateGoldPrice(ctx, tenantID, price); err != nil {
 		return nil, err
 	}
-	updated, err := s.repo.FindGoldPriceByID(ctx, price.ID)
+	updated, err := s.repo.FindGoldPriceByID(ctx, tenantID, price.ID)
 	if err != nil {
 		return nil, err
 	}

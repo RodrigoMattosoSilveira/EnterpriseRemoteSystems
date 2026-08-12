@@ -8,10 +8,7 @@ import (
 
 	"enterpriseremotesystems/backend/internal/db"
 	"enterpriseremotesystems/backend/internal/shared/ids"
-	"enterpriseremotesystems/backend/internal/tenants"
 )
-
-const defaultTenantID = tenants.DefaultTenantID
 
 type service struct {
 	repo Repository
@@ -21,8 +18,8 @@ func NewService(repo Repository) Service {
 	return &service{repo: repo}
 }
 
-func (s *service) List(ctx context.Context, filter PersonListFilter) ([]PersonDTO, int64, error) {
-	rows, total, err := s.repo.List(ctx, filter)
+func (s *service) List(ctx context.Context, tenantID string, filter PersonListFilter) ([]PersonDTO, int64, error) {
+	rows, total, err := s.repo.List(ctx, tenantID, filter)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -30,18 +27,18 @@ func (s *service) List(ctx context.Context, filter PersonListFilter) ([]PersonDT
 	return ToDTOList(rows), total, nil
 }
 
-func (s *service) Create(ctx context.Context, req CreatePersonRequest, actorUserID string) (*PersonDTO, error) {
+func (s *service) Create(ctx context.Context, tenantID string, req CreatePersonRequest, actorUserID string) (*PersonDTO, error) {
 	if err := ValidateCreatePerson(req); err != nil {
 		return nil, err
 	}
 
-	if err := s.validatePersonStatus(ctx, defaultTenantID, req.StatusID); err != nil {
+	if err := s.validatePersonStatus(ctx, tenantID, req.StatusID); err != nil {
 		return nil, err
 	}
 
 	conflicts, err := s.repo.UniqueConflicts(
 		ctx,
-		defaultTenantID,
+		tenantID,
 		NormalizeDigits(req.CPF),
 		strings.TrimSpace(req.RG),
 		NormalizeDigits(req.Cellular),
@@ -64,7 +61,7 @@ func (s *service) Create(ctx context.Context, req CreatePersonRequest, actorUser
 			CreatedAt: now,
 			UpdatedAt: now,
 		},
-		TenantID: defaultTenantID,
+		TenantID: tenantID,
 
 		FirstName: strings.TrimSpace(req.FirstName),
 		LastName:  strings.TrimSpace(req.LastName),
@@ -118,7 +115,7 @@ func (s *service) Create(ctx context.Context, req CreatePersonRequest, actorUser
 		return nil, err
 	}
 
-	created, err := s.repo.FindByID(ctx, person.ID)
+	created, err := s.repo.FindByID(ctx, tenantID, person.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -126,8 +123,8 @@ func (s *service) Create(ctx context.Context, req CreatePersonRequest, actorUser
 	return ptr(ToDTO(*created)), nil
 }
 
-func (s *service) GetByID(ctx context.Context, id string) (*PersonDTO, error) {
-	person, err := s.repo.FindByID(ctx, id)
+func (s *service) GetByID(ctx context.Context, tenantID string, id string) (*PersonDTO, error) {
+	person, err := s.repo.FindByID(ctx, tenantID, id)
 	if err != nil {
 		return nil, err
 	}
@@ -135,12 +132,12 @@ func (s *service) GetByID(ctx context.Context, id string) (*PersonDTO, error) {
 	return ptr(ToDTO(*person)), nil
 }
 
-func (s *service) Update(ctx context.Context, id string, req UpdatePersonRequest, actorUserID string) (*PersonDTO, error) {
+func (s *service) Update(ctx context.Context, tenantID string, id string, req UpdatePersonRequest, actorUserID string) (*PersonDTO, error) {
 	if err := ValidateUpdatePerson(req); err != nil {
 		return nil, err
 	}
 
-	person, err := s.repo.FindByID(ctx, id)
+	person, err := s.repo.FindByID(ctx, tenantID, id)
 	if err != nil {
 		return nil, err
 	}
@@ -221,11 +218,11 @@ func (s *service) Update(ctx context.Context, id string, req UpdatePersonRequest
 	log.Printf("UpdatePerson %s: requested statusId=%q", id, req.StatusID)
 	log.Printf("UpdatePerson %s: saving statusId=%q", id, person.StatusID)
 
-	if err := s.repo.Update(ctx, person); err != nil {
+	if err := s.repo.Update(ctx, tenantID, person); err != nil {
 		return nil, err
 	}
 
-	updated, err := s.repo.FindByID(ctx, id)
+	updated, err := s.repo.FindByID(ctx, tenantID, id)
 	if err != nil {
 		return nil, err
 	}

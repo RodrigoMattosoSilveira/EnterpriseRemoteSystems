@@ -1,4 +1,9 @@
 import { readSelectedTenantId } from "./tenantSelection";
+import {
+  notifyAuthenticationRequired,
+  notifyForbidden,
+  type AuthenticationInterruptionReason,
+} from "../app/authEvents";
 
 const API_BASE_URL = "/api/v1";
 type ApiEnvelope<T> = {
@@ -43,6 +48,12 @@ export async function apiFetch<T>(
   const result = await performApiFetch<T>(url, options);
 
   if (!result.response.ok) {
+    if (result.response.status === 401 && !isPublicAuthenticationRequest(path)) {
+      notifyAuthenticationRequired(authenticationInterruptionReason(result.errorCode));
+    }
+    if (result.response.status === 403 && result.errorCode === "forbidden") {
+      notifyForbidden();
+    }
     throw new ApiError({
       status: result.response.status,
       code: result.errorCode,
@@ -166,4 +177,18 @@ function removeHeader(headers: Record<string, string>, target: string): void {
   for (const name of Object.keys(headers)) {
     if (name.toLowerCase() === target) delete headers[name];
   }
+}
+
+function authenticationInterruptionReason(
+  errorCode: string | undefined,
+): AuthenticationInterruptionReason {
+  if (errorCode === "session_expired") return "expired";
+  if (errorCode === "account_inactive" || errorCode === "actor_inactive") {
+    return "inactive";
+  }
+  return "expired";
+}
+
+function isPublicAuthenticationRequest(path: string): boolean {
+  return path === "/auth/login" || path === "/auth/password/reset";
 }

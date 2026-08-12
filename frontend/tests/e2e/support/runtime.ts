@@ -14,7 +14,7 @@ export function resolveE2EAuthMode(
     );
   }
 
-  return isLoopbackURL(baseURL) ? "headers" : "session";
+  return "session";
 }
 
 export function isLoopbackURL(value: string): boolean {

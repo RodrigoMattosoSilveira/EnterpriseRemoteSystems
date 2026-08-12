@@ -19,6 +19,7 @@ type ResetPasswordRequest struct {
 
 type CreateAccountRequest struct {
 	ActorID            string `json:"actorId"`
+	TenantID           string `json:"-"`
 	Login              string `json:"login"`
 	TemporaryPassword  string `json:"temporaryPassword"`
 	MustChangePassword *bool  `json:"mustChangePassword,omitempty"`
@@ -61,6 +62,14 @@ type LoginResult struct {
 }
 
 type PasswordResetTokenResponse struct {
+	AccountID string    `json:"accountId"`
+	Login     string    `json:"login"`
 	Token     string    `json:"token"`
 	ExpiresAt time.Time `json:"expiresAt"`
+}
+
+type PasswordResetResult struct {
+	AccountID         string    `json:"accountId"`
+	Login             string    `json:"login"`
+	PasswordChangedAt time.Time `json:"passwordChangedAt"`
 }

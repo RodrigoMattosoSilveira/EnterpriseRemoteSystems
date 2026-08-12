@@ -225,6 +225,62 @@ func TestRequirePermissionOrSelfPersonRejectsSelfPermissionWithoutLinkedPerson(t
 	}
 }
 
+func TestRequirePermissionOrSelfCollaboratorAllowsMatchingSelfActor(t *testing.T) {
+	store := fakeActorStore{actor: &authz.Actor{
+		ID:             "collaborator-actor",
+		TenantID:       "default",
+		CollaboratorID: "collaborator-self",
+		Scope:          authz.ActorScopeSelf,
+		Permissions: map[authz.Permission]struct{}{
+			authz.PermissionCollaboratorsSelfRead: {},
+		},
+	}}
+
+	app := fiber.New()
+	app.Get("/collaborators/:id", requirePermissionOrSelfCollaborator(Dependencies{ActorStore: store}, authz.PermissionCollaboratorsRead, authz.PermissionCollaboratorsSelfRead, "id"), func(c fiber.Ctx) error {
+		return c.SendStatus(fiber.StatusNoContent)
+	})
+
+	req := httptest.NewRequest(fiber.MethodGet, "/collaborators/collaborator-self", nil)
+	req.Header.Set(authz.HeaderActorID, "collaborator-actor")
+	req.Header.Set(authz.HeaderTenantID, "default")
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	if resp.StatusCode != fiber.StatusNoContent {
+		t.Fatalf("expected 204, got %d", resp.StatusCode)
+	}
+}
+
+func TestRequirePermissionOrSelfCollaboratorRejectsDifferentCollaborator(t *testing.T) {
+	store := fakeActorStore{actor: &authz.Actor{
+		ID:             "collaborator-actor",
+		TenantID:       "default",
+		CollaboratorID: "collaborator-self",
+		Scope:          authz.ActorScopeSelf,
+		Permissions: map[authz.Permission]struct{}{
+			authz.PermissionCollaboratorsSelfRead: {},
+		},
+	}}
+
+	app := fiber.New()
+	app.Get("/collaborators/:id", requirePermissionOrSelfCollaborator(Dependencies{ActorStore: store}, authz.PermissionCollaboratorsRead, authz.PermissionCollaboratorsSelfRead, "id"), func(c fiber.Ctx) error {
+		return c.SendStatus(fiber.StatusNoContent)
+	})
+
+	req := httptest.NewRequest(fiber.MethodGet, "/collaborators/collaborator-other", nil)
+	req.Header.Set(authz.HeaderActorID, "collaborator-actor")
+	req.Header.Set(authz.HeaderTenantID, "default")
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	if resp.StatusCode != fiber.StatusForbidden {
+		t.Fatalf("expected 403, got %d", resp.StatusCode)
+	}
+}
+
 func TestAuthorizationMiddlewareCachesResolvedActorForRouteGuards(t *testing.T) {
 	calls := 0
 	store := fakeActorStore{

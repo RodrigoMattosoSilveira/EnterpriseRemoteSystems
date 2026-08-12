@@ -9,6 +9,7 @@ import (
 	"enterpriseremotesystems/backend/internal/authz"
 	"enterpriseremotesystems/backend/internal/db"
 	"enterpriseremotesystems/backend/internal/shared/ids"
+	"enterpriseremotesystems/backend/internal/shared/tenantctx"
 	"enterpriseremotesystems/backend/internal/tenants"
 	"enterpriseremotesystems/backend/internal/workperiods"
 )
@@ -240,7 +241,7 @@ func (s *service) BulkPlan(ctx context.Context, workPeriodID string, req BulkPla
 
 		assignment := &db.WorkPeriodAssignment{
 			BaseModel:                  db.BaseModel{ID: ids.New(), CreatedAt: now, UpdatedAt: now},
-			TenantID:                   defaultTenantID,
+			TenantID:                   tenantctx.TenantID(ctx),
 			WorkPeriodID:               workPeriod.ID,
 			CollaboratorID:             collaboratorID,
 			PlannedStatus:              plannedStatus,
@@ -430,7 +431,7 @@ func (s *service) Create(ctx context.Context, workPeriodID string, req CreateWor
 	now := time.Now().UTC()
 	assignment := &db.WorkPeriodAssignment{
 		BaseModel:                  db.BaseModel{ID: ids.New(), CreatedAt: now, UpdatedAt: now},
-		TenantID:                   defaultTenantID,
+		TenantID:                   tenantctx.TenantID(ctx),
 		WorkPeriodID:               workPeriod.ID,
 		CollaboratorID:             collaboratorID,
 		PlannedStatus:              strings.ToUpper(strings.TrimSpace(req.PlannedStatus)),
@@ -587,7 +588,7 @@ func (s *service) validateCollaborator(ctx context.Context, collaboratorID strin
 	if err != nil {
 		return err
 	}
-	if !isActiveCollaborator(*collaborator) {
+	if !isActiveCollaborator(ctx, *collaborator) {
 		return ValidationError{Fields: map[string]string{"collaboratorId": "Collaborator must be active and open"}}
 	}
 	return nil
@@ -644,7 +645,7 @@ func (s *service) loadActiveCollaborator(ctx context.Context, collaboratorID str
 	if err != nil {
 		return nil, err
 	}
-	if !isActiveCollaborator(*collaborator) {
+	if !isActiveCollaborator(ctx, *collaborator) {
 		return nil, ValidationError{Fields: map[string]string{"collaboratorId": "Collaborator must be active"}}
 	}
 	return collaborator, nil
@@ -706,11 +707,11 @@ func ensureEditableWorkPeriod(workPeriod db.WorkPeriod) error {
 	return nil
 }
 
-func isActiveCollaborator(row db.CollaboratorJourney) bool {
+func isActiveCollaborator(ctx context.Context, row db.CollaboratorJourney) bool {
 	if row.ClosedAt != nil {
 		return false
 	}
-	return row.TenantID == defaultTenantID && row.Status.Type == "collaborator_status" && row.Status.Code == "ACTIVE" && row.Status.Active
+	return row.TenantID == tenantctx.TenantID(ctx) && row.Status.Type == "collaborator_status" && row.Status.Code == "ACTIVE" && row.Status.Active
 }
 
 func isTemporaryReplacementTargetAvailability(value string) bool {
@@ -760,7 +761,7 @@ func (s *service) recordReplacementAudit(ctx context.Context, actorUserID string
 	metadataJSON, _ := json.Marshal(metadata)
 	_ = s.auditStore.RecordAuthorizationAudit(ctx, authz.AuthorizationAuditEntry{
 		FallbackActorID: actorUserID,
-		TenantID:        defaultTenantID,
+		TenantID:        tenantctx.TenantID(ctx),
 		Permission:      authz.PermissionPlanningUpdate,
 		Operation:       "work_period_assignment_replacement_set",
 		TargetType:      "work_period_assignment",

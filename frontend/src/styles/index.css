@@ -14,3 +14,10 @@ body {
   background: #f9fafb;
   color: #111827;
 }
+
+/* Authentication lookups are absolutely positioned so they can present search
+   results without moving the form. Once the user leaves or dismisses a lookup,
+   keep its stale result panel from covering the remaining account fields. */
+[data-authentication-lookups-dismissed="true"] [role="listbox"] {
+  display: none !important;
+}

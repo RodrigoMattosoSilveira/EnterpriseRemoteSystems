@@ -9,6 +9,7 @@ import (
 
 	"enterpriseremotesystems/backend/internal/db"
 	"enterpriseremotesystems/backend/internal/shared/ids"
+	"enterpriseremotesystems/backend/internal/shared/tenantctx"
 )
 
 var (
@@ -35,7 +36,7 @@ func (s *service) ReverseEntry(ctx context.Context, entryID, authorizedBy string
 	if err := ValidateReverseLedgerEntryRequest(req, authorizedBy); err != nil {
 		return nil, err
 	}
-	if err := s.requireSecondApprovalWhenConfigured(ctx, defaultTenantID, req.CorrectionReasonRequest, authorizedBy); err != nil {
+	if err := s.requireSecondApprovalWhenConfigured(ctx, tenantctx.TenantID(ctx), req.CorrectionReasonRequest, authorizedBy); err != nil {
 		return nil, err
 	}
 	original, err := s.requireCorrectableEntry(ctx, entryID)
@@ -62,7 +63,7 @@ func (s *service) ReplaceEntry(ctx context.Context, entryID, authorizedBy string
 	if err := ValidateReplaceLedgerEntryRequest(req, authorizedBy); err != nil {
 		return nil, err
 	}
-	if err := s.requireSecondApprovalWhenConfigured(ctx, defaultTenantID, req.CorrectionReasonRequest, authorizedBy); err != nil {
+	if err := s.requireSecondApprovalWhenConfigured(ctx, tenantctx.TenantID(ctx), req.CorrectionReasonRequest, authorizedBy); err != nil {
 		return nil, err
 	}
 	original, err := s.requireCorrectableEntry(ctx, entryID)

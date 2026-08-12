@@ -52,6 +52,26 @@ describe("PeopleListPage", () => {
     expect(textNode("Showing 1-1 of 1 people")).toBeTruthy();
   });
 
+  it("renders CPF and RG as prominent identity details", async () => {
+    mockPeopleFetch({ items: [personFixture("person-1", "Maria")], total: 1 });
+
+    renderPeopleListRoute();
+    await waitForText("Maria Pessoa");
+
+    const cardIdentity = container.querySelector('dl[aria-label="Person identity and contact details"]');
+    expect(cardIdentity?.textContent).toContain("CPF");
+    expect(cardIdentity?.textContent).toContain("person-1-cpf");
+    expect(cardIdentity?.textContent).toContain("RG");
+    expect(cardIdentity?.textContent).toContain("person-1-rg");
+
+    await clickButton("List view");
+    await waitForText("Maria Pessoa");
+
+    const listIdentity = container.querySelector('dl[aria-label="Identity details"]');
+    expect(listIdentity?.textContent).toContain("person-1-cpf");
+    expect(listIdentity?.textContent).toContain("person-1-rg");
+  });
+
   it("switches between card view and list view", async () => {
     mockPeopleFetch({ items: [personFixture("person-1", "Maria")], total: 1 });
 

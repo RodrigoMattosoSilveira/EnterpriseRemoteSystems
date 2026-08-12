@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"enterpriseremotesystems/backend/internal/db"
+	"enterpriseremotesystems/backend/internal/shared/tenantctx"
 	"gorm.io/gorm"
 )
 
@@ -18,7 +19,7 @@ func (r *gormRepository) List(ctx context.Context, filter CollaboratorListFilter
 
 	q := r.db.WithContext(ctx).
 		Model(&db.CollaboratorJourney{}).
-		Where("collaborator_journeys.tenant_id = ?", defaultTenantID).
+		Where("collaborator_journeys.tenant_id = ?", tenantctx.TenantID(ctx)).
 		Where("collaborator_journeys.closed_at IS NULL").
 		Preload("Person").
 		Preload("PaymentMethod").
@@ -120,7 +121,7 @@ func (r *gormRepository) ListCandidatePeople(ctx context.Context) ([]db.Person, 
 	var rows []db.Person
 	err := r.db.WithContext(ctx).
 		Model(&db.Person{}).
-		Where("people.tenant_id = ?", defaultTenantID).
+		Where("people.tenant_id = ?", tenantctx.TenantID(ctx)).
 		Where(`NOT EXISTS (
 			SELECT 1
 			FROM collaborator_journeys
@@ -141,7 +142,7 @@ func (r *gormRepository) Create(ctx context.Context, collaborator *db.Collaborat
 func (r *gormRepository) Update(ctx context.Context, collaborator *db.CollaboratorJourney) error {
 	return r.db.WithContext(ctx).
 		Model(&db.CollaboratorJourney{}).
-		Where("id = ? AND tenant_id = ?", collaborator.ID, defaultTenantID).
+		Where("id = ? AND tenant_id = ?", collaborator.ID, tenantctx.TenantID(ctx)).
 		Updates(map[string]any{
 			"updated_at":                          collaborator.UpdatedAt,
 			"extension_days":                      collaborator.ExtensionDays,
@@ -169,7 +170,7 @@ func (r *gormRepository) FindByID(ctx context.Context, id string) (*db.Collabora
 		Preload("Location").
 		Preload("Task").
 		Preload("Status").
-		First(&row, "id = ? AND tenant_id = ?", id, defaultTenantID).Error
+		First(&row, "id = ? AND tenant_id = ?", id, tenantctx.TenantID(ctx)).Error
 	if err != nil {
 		return nil, err
 	}
@@ -178,7 +179,7 @@ func (r *gormRepository) FindByID(ctx context.Context, id string) (*db.Collabora
 
 func (r *gormRepository) FindPersonByID(ctx context.Context, personID string) (*db.Person, error) {
 	var row db.Person
-	err := r.db.WithContext(ctx).First(&row, "id = ? AND tenant_id = ?", personID, defaultTenantID).Error
+	err := r.db.WithContext(ctx).First(&row, "id = ? AND tenant_id = ?", personID, tenantctx.TenantID(ctx)).Error
 	if err != nil {
 		return nil, err
 	}
@@ -188,7 +189,7 @@ func (r *gormRepository) FindPersonByID(ctx context.Context, personID string) (*
 func (r *gormRepository) FindActiveReference(ctx context.Context, id string, typ string) (*db.ReferenceData, error) {
 	var row db.ReferenceData
 	err := r.db.WithContext(ctx).
-		First(&row, "id = ? AND tenant_id = ? AND type = ? AND active = ?", id, defaultTenantID, typ, true).Error
+		First(&row, "id = ? AND tenant_id = ? AND type = ? AND active = ?", id, tenantctx.TenantID(ctx), typ, true).Error
 	if err != nil {
 		return nil, err
 	}
@@ -199,7 +200,7 @@ func (r *gormRepository) ExistsActiveReference(ctx context.Context, id string, t
 	var count int64
 	err := r.db.WithContext(ctx).
 		Model(&db.ReferenceData{}).
-		Where("id = ? AND tenant_id = ? AND type = ? AND active = ?", id, defaultTenantID, typ, true).
+		Where("id = ? AND tenant_id = ? AND type = ? AND active = ?", id, tenantctx.TenantID(ctx), typ, true).
 		Count(&count).Error
 	if err != nil {
 		return false, err
@@ -212,9 +213,9 @@ func (r *gormRepository) ExistsActiveJourneyForPerson(ctx context.Context, perso
 	err := r.db.WithContext(ctx).
 		Model(&db.CollaboratorJourney{}).
 		Joins("JOIN reference_data ON reference_data.id = collaborator_journeys.status_id").
-		Where("collaborator_journeys.tenant_id = ? AND collaborator_journeys.person_id = ?", defaultTenantID, personID).
+		Where("collaborator_journeys.tenant_id = ? AND collaborator_journeys.person_id = ?", tenantctx.TenantID(ctx), personID).
 		Where("collaborator_journeys.closed_at IS NULL").
-		Where("reference_data.tenant_id = ? AND reference_data.type = ? AND reference_data.code = ? AND reference_data.active = ?", defaultTenantID, "collaborator_status", "ACTIVE", true).
+		Where("reference_data.tenant_id = ? AND reference_data.type = ? AND reference_data.code = ? AND reference_data.active = ?", tenantctx.TenantID(ctx), "collaborator_status", "ACTIVE", true).
 		Count(&count).Error
 	if err != nil {
 		return false, err

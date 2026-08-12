@@ -1,4 +1,5 @@
 import { expect, test, type APIRequestContext } from "@playwright/test";
+import { uniquePersonSuffix } from "./support/test-data";
 import { authzHeaders, e2eApiUrl, seedBrowserAuthz } from "./support/authz";
 
 const PERSON_STATUS_ACTIVE_ID = "ref-person-status-active";
@@ -423,7 +424,7 @@ test("current account updates after receipt signed return", async ({
 
   await page.goto("/receipts/outstanding");
   await page.getByLabel("Source type").selectOption("EXPENSE");
-  await page.getByLabel("Collaborator").fill(`RetAcct${suffix}`);
+  await page.getByRole("textbox", { name: "Collaborator", exact: true }).fill(`RetAcct${suffix}`);
   await page.getByRole("button", { name: "Apply filters" }).click();
 
   await expect(page.getByText("No outstanding receipts")).toBeVisible();
@@ -610,7 +611,7 @@ function completePersonPayload({
 }
 
 function uniqueSuffix(): number {
-  return Date.now() + Math.floor(Math.random() * 1000);
+  return uniquePersonSuffix(test.info().workerIndex);
 }
 
 function firstPageSortLastName(seed: number): string {

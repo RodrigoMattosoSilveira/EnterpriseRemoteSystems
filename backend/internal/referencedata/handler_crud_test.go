@@ -31,6 +31,12 @@ type apiReferenceDataListResponse struct {
 	Data []referenceDataDTO `json:"data"`
 }
 
+type apiTenantResponse struct {
+	Data struct {
+		ID string `json:"id"`
+	} `json:"data"`
+}
+
 type referenceDataDTO struct {
 	ID           string `json:"id"`
 	TenantID     string `json:"tenantId"`
@@ -64,6 +70,57 @@ func TestListReferenceDataByTypeReturnsSeededRows(t *testing.T) {
 	}
 	if body.Data[0].Type != "method" {
 		t.Fatalf("expected method type, got %q", body.Data[0].Type)
+	}
+}
+
+func TestReferenceDataIsScopedBySelectedTenant(t *testing.T) {
+	server, cleanup := newTestServer(t)
+	defer cleanup()
+
+	defaultTask := createReferenceData(t, server, "task", map[string]any{
+		"code":  "TENANT_ISOLATION_TASK",
+		"label": "Default Tenant Isolation Task",
+	})
+
+	res := postJSON(t, server, http.MethodPost, "/api/v1/tenants", map[string]any{
+		"code":        "REFERENCE-DATA-TENANT",
+		"name":        "Reference Data Tenant",
+		"description": "Reference-data tenant-isolation test",
+		"active":      true,
+	})
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusCreated {
+		t.Fatalf("expected tenant create status %d, got %d", http.StatusCreated, res.StatusCode)
+	}
+	var tenantBody apiTenantResponse
+	decodeJSON(t, res, &tenantBody)
+	if tenantBody.Data.ID == "" {
+		t.Fatal("expected created tenant id")
+	}
+
+	secondaryTask := createReferenceDataForTenant(t, server, tenantBody.Data.ID, "task", map[string]any{
+		"code":  "TENANT_ISOLATION_TASK",
+		"label": "Secondary Tenant Isolation Task",
+	})
+	if secondaryTask.Data.TenantID != tenantBody.Data.ID {
+		t.Fatalf("expected secondary item tenant %q, got %q", tenantBody.Data.ID, secondaryTask.Data.TenantID)
+	}
+
+	secondaryRows := listReferenceDataForTenant(t, server, tenantBody.Data.ID, "task")
+	assertReferenceDataContainsID(t, secondaryRows.Data, secondaryTask.Data.ID, true)
+	assertReferenceDataContainsID(t, secondaryRows.Data, defaultTask.Data.ID, false)
+
+	defaultRows := listReferenceDataForTenant(t, server, "default", "task")
+	assertReferenceDataContainsID(t, defaultRows.Data, defaultTask.Data.ID, true)
+	assertReferenceDataContainsID(t, defaultRows.Data, secondaryTask.Data.ID, false)
+
+	res = postJSONForTenant(t, server, tenantBody.Data.ID, http.MethodPut, referenceDataURL+"task/"+defaultTask.Data.ID, map[string]any{
+		"code":  "TENANT_ISOLATION_TASK",
+		"label": "Cross-tenant update must fail",
+	})
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusNotFound {
+		t.Fatalf("expected cross-tenant update status %d, got %d", http.StatusNotFound, res.StatusCode)
 	}
 }
 
@@ -246,6 +303,52 @@ func TestReferenceDataUniquenessExcludesCurrentItemOnUpdate(t *testing.T) {
 	}
 }
 
+func createReferenceDataForTenant(t *testing.T, server *fiber.App, tenantID string, typ string, payload map[string]any) apiReferenceDataResponse {
+	t.Helper()
+	res := postJSONForTenant(t, server, tenantID, http.MethodPost, referenceDataURL+typ, payload)
+	defer res.Body.Close()
+
+	if res.StatusCode != http.StatusCreated {
+		var body apiErrorResponse
+		decodeJSON(t, res, &body)
+		t.Fatalf("expected create reference data status %d, got %d with error %+v", http.StatusCreated, res.StatusCode, body.Error)
+	}
+
+	var body apiReferenceDataResponse
+	decodeJSON(t, res, &body)
+	return body
+}
+
+func listReferenceDataForTenant(t *testing.T, server *fiber.App, tenantID string, typ string) apiReferenceDataListResponse {
+	t.Helper()
+	res := getJSONForTenant(t, server, tenantID, referenceDataURL+typ)
+	defer res.Body.Close()
+
+	if res.StatusCode != http.StatusOK {
+		var body apiErrorResponse
+		decodeJSON(t, res, &body)
+		t.Fatalf("expected list reference data status %d, got %d with error %+v", http.StatusOK, res.StatusCode, body.Error)
+	}
+
+	var body apiReferenceDataListResponse
+	decodeJSON(t, res, &body)
+	return body
+}
+
+func assertReferenceDataContainsID(t *testing.T, rows []referenceDataDTO, id string, expected bool) {
+	t.Helper()
+	found := false
+	for _, row := range rows {
+		if row.ID == id {
+			found = true
+			break
+		}
+	}
+	if found != expected {
+		t.Fatalf("expected reference data id %q present=%t, got %t", id, expected, found)
+	}
+}
+
 func createReferenceData(t *testing.T, server *fiber.App, typ string, payload map[string]any) apiReferenceDataResponse {
 	t.Helper()
 	res := postJSON(t, server, http.MethodPost, referenceDataURL+typ, payload)
@@ -287,6 +390,37 @@ func getJSON(t *testing.T, server *fiber.App, url string) *http.Response {
 	if err != nil {
 		t.Fatalf("GET %s: %v", url, err)
 	}
+	return res
+}
+
+func getJSONForTenant(t *testing.T, server *fiber.App, tenantID string, url string) *http.Response {
+	t.Helper()
+	req := httptest.NewRequest(http.MethodGet, url, nil)
+	req.Header.Set("X-Tenant-ID", tenantID)
+	res, err := server.Test(req, fiber.TestConfig{Timeout: 0, FailOnTimeout: false})
+	if err != nil {
+		t.Fatalf("GET %s: %v", url, err)
+	}
+	return res
+}
+
+func postJSONForTenant(t *testing.T, server *fiber.App, tenantID string, method string, url string, payload map[string]any) *http.Response {
+	t.Helper()
+
+	body, err := json.Marshal(payload)
+	if err != nil {
+		t.Fatalf("marshal payload: %v", err)
+	}
+
+	req := httptest.NewRequest(method, url, bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Tenant-ID", tenantID)
+
+	res, err := server.Test(req, fiber.TestConfig{Timeout: 0, FailOnTimeout: false})
+	if err != nil {
+		t.Fatalf("%s %s: %v", method, url, err)
+	}
+
 	return res
 }
 

@@ -1,6 +1,16 @@
-import { request, type APIResponse, type FullConfig } from "@playwright/test";
+import { request, type APIRequestContext, type APIResponse, type FullConfig } from "@playwright/test";
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
+import { isLoopbackURL } from "./support/runtime";
+
+type GoldPriceEnvelope = {
+  data?: Array<{
+    id?: string;
+    priceDate?: string;
+    active?: boolean;
+    notes?: string;
+  }>;
+};
 
 type CurrentActorEnvelope = {
   data?: {
@@ -26,9 +36,10 @@ export default async function globalSetup(config: FullConfig): Promise<void> {
     throw new Error("Authenticated deployed E2E requires a storage-state file path");
   }
 
-  const login = process.env.E2E_ADMIN_EMAIL?.trim();
-  const password = process.env.E2E_ADMIN_PASSWORD;
-  const expectedActorKey = process.env.PLAYWRIGHT_AUTHZ_ACTOR_ID?.trim();
+  const isLocal = isLoopbackURL(baseURL);
+  const login = process.env.E2E_ADMIN_EMAIL?.trim() || (isLocal ? "admin@example.com" : "");
+  const password = process.env.E2E_ADMIN_PASSWORD || (isLocal ? "Local-E2E-Administrator-28D!" : "");
+  const expectedActorKey = process.env.PLAYWRIGHT_AUTHZ_ACTOR_ID?.trim() || (isLocal ? "e2e-application-admin" : "");
   const tenantId = process.env.PLAYWRIGHT_AUTHZ_TENANT_ID?.trim() || "default";
 
   if (!login || !password) {
@@ -67,6 +78,8 @@ export default async function globalSetup(config: FullConfig): Promise<void> {
       );
     }
 
+    await deactivateLeakedTenantIsolationGoldPrices(api);
+
     const state = await api.storageState();
     const origin = new URL(baseURL).origin;
     state.origins = [
@@ -100,4 +113,35 @@ async function requireSuccessfulResponse(
   throw new Error(
     `${operation} failed at ${response.url()}: ${response.status()} ${await response.text()}`,
   );
+}
+
+async function deactivateLeakedTenantIsolationGoldPrices(
+  api: APIRequestContext,
+): Promise<void> {
+  const response = await api.get("/api/v1/gold-prices");
+  await requireSuccessfulResponse(response, "List gold prices before deployed E2E");
+
+  const payload = (await response.json()) as GoldPriceEnvelope;
+  const leakedPrices = (payload.data ?? []).filter((price) => {
+    const notes = price.notes?.trim() ?? "";
+    const year = Number(price.priceDate?.slice(0, 4));
+    return (
+      price.active !== false &&
+      notes.startsWith("Default tenant gold price ") &&
+      Number.isFinite(year) &&
+      year >= 3000
+    );
+  });
+
+  for (const price of leakedPrices) {
+    if (!price.id) continue;
+    const deactivateResponse = await api.patch(
+      `/api/v1/gold-prices/${encodeURIComponent(price.id)}/deactivate`,
+      { data: {} },
+    );
+    await requireSuccessfulResponse(
+      deactivateResponse,
+      `Deactivate leaked tenant-isolation gold price ${price.id}`,
+    );
+  }
 }
