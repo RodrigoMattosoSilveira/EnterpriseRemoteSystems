@@ -1,7 +1,16 @@
-import { request, type APIResponse, type FullConfig } from "@playwright/test";
+import { request, type APIRequestContext, type APIResponse, type FullConfig } from "@playwright/test";
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import { isLoopbackURL } from "./support/runtime";
+
+type GoldPriceEnvelope = {
+  data?: Array<{
+    id?: string;
+    priceDate?: string;
+    active?: boolean;
+    notes?: string;
+  }>;
+};
 
 type CurrentActorEnvelope = {
   data?: {
@@ -69,6 +78,8 @@ export default async function globalSetup(config: FullConfig): Promise<void> {
       );
     }
 
+    await deactivateLeakedTenantIsolationGoldPrices(api);
+
     const state = await api.storageState();
     const origin = new URL(baseURL).origin;
     state.origins = [
@@ -102,4 +113,35 @@ async function requireSuccessfulResponse(
   throw new Error(
     `${operation} failed at ${response.url()}: ${response.status()} ${await response.text()}`,
   );
+}
+
+async function deactivateLeakedTenantIsolationGoldPrices(
+  api: APIRequestContext,
+): Promise<void> {
+  const response = await api.get("/api/v1/gold-prices");
+  await requireSuccessfulResponse(response, "List gold prices before deployed E2E");
+
+  const payload = (await response.json()) as GoldPriceEnvelope;
+  const leakedPrices = (payload.data ?? []).filter((price) => {
+    const notes = price.notes?.trim() ?? "";
+    const year = Number(price.priceDate?.slice(0, 4));
+    return (
+      price.active !== false &&
+      notes.startsWith("Default tenant gold price ") &&
+      Number.isFinite(year) &&
+      year >= 3000
+    );
+  });
+
+  for (const price of leakedPrices) {
+    if (!price.id) continue;
+    const deactivateResponse = await api.patch(
+      `/api/v1/gold-prices/${encodeURIComponent(price.id)}/deactivate`,
+      { data: {} },
+    );
+    await requireSuccessfulResponse(
+      deactivateResponse,
+      `Deactivate leaked tenant-isolation gold price ${price.id}`,
+    );
+  }
 }

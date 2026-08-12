@@ -118,95 +118,104 @@ test("application administrator can switch between granted tenants", async ({ pa
   const defaultOnlyPriceListCode = `TENANT_PRICE_${suffix}`.slice(0, 40).toUpperCase();
   const defaultOnlyPriceListDescription = `Default Tenant Price Item ${suffix}`;
   const defaultOnlyGoldPriceDate = uniqueGoldPriceDate(suffix);
-  const personResponse = await request.post(e2eApiUrl("/api/v1/people"), {
-    headers: authzHeaders(),
-    data: {
-      firstName: "Default",
-      lastName: `TenantOnly${suffix}`,
-      nickname: defaultOnlyNickname,
-      cpf: validCPF(Number(suffix.slice(-9))),
-      rg: `RG-${suffix.slice(-8)}`,
-      cellular: validBrazilianCellular(suffix),
-      email: `tenant-isolation-${suffix}@example.com`,
-      statusId: "ref-person-status-active",
-    },
-  });
-  expect(personResponse.status()).toBe(201);
-
-  const taskResponse = await request.post(
-    e2eApiUrl("/api/v1/reference-data/task"),
-    {
-      headers: authzHeaders(),
-      data: {
-        code: defaultOnlyTaskCode,
-        label: defaultOnlyTaskLabel,
-        description: "Created in default to verify Reference Data tenant isolation",
-        active: true,
-        sortOrder: 9_999,
-        metadataJson: "",
-      },
-    },
-  );
-  expect(taskResponse.status()).toBe(201);
-  const taskEnvelope = (await taskResponse.json()) as { data?: { id?: string } };
-  const defaultOnlyTaskId = taskEnvelope.data?.id;
-  expect(defaultOnlyTaskId).toBeTruthy();
-
-  const priceListItemResponse = await request.post(
-    e2eApiUrl("/api/v1/price-list-items"),
-    {
-      headers: authzHeaders(),
-      data: {
-        itemType: "CANTEEN",
-        code: defaultOnlyPriceListCode,
-        description: defaultOnlyPriceListDescription,
-        unitPriceBrl: 321.45,
-        sortOrder: 9_999,
-      },
-    },
-  );
-  expect(priceListItemResponse.status()).toBe(201);
-  const priceListItemEnvelope = (await priceListItemResponse.json()) as {
-    data?: { id?: string };
-  };
-  const defaultOnlyPriceListItemId = priceListItemEnvelope.data?.id;
-  expect(defaultOnlyPriceListItemId).toBeTruthy();
-
-  const goldPriceResponse = await request.post(e2eApiUrl("/api/v1/gold-prices"), {
-    headers: authzHeaders(),
-    data: {
-      priceDate: defaultOnlyGoldPriceDate,
-      brlPerGram: 654.32,
-      recordedBy: "bootstrap-admin",
-      notes: `Default tenant gold price ${suffix}`,
-    },
-  });
-  expect(goldPriceResponse.status()).toBe(201);
-  const goldPriceEnvelope = (await goldPriceResponse.json()) as {
-    data?: { id?: string };
-  };
-  const defaultOnlyGoldPriceId = goldPriceEnvelope.data?.id;
-  expect(defaultOnlyGoldPriceId).toBeTruthy();
-
-  await page.goto("/people");
-  await page.getByLabel("Filter people").fill(defaultOnlyNickname);
-  await expect(page.getByText(defaultOnlyNickname, { exact: false }).first()).toBeVisible();
-
-  const createResponse = await request.post(e2eApiUrl("/api/v1/tenants"), {
-    headers: authzHeaders(),
-    data: {
-      code: `UX${suffix}`.slice(0, 20),
-      name: `Tenant UX ${suffix}`,
-      description: "Created by the Bite 28D tenant-selection E2E test",
-      active: true,
-    },
-  });
-  expect(createResponse.status()).toBe(201);
-  const created = (await createResponse.json()) as { data?: { id?: string } };
-  const tenantId = created.data?.id;
-  expect(tenantId).toBeTruthy();
+  let defaultOnlyTaskId: string | undefined;
+  let defaultOnlyPriceListItemId: string | undefined;
+  let defaultOnlyGoldPriceId: string | undefined;
+  let tenantId: string | undefined;
 
   try {
+    const personResponse = await request.post(e2eApiUrl("/api/v1/people"), {
+      headers: authzHeaders(),
+      data: {
+        firstName: "Default",
+        lastName: `TenantOnly${suffix}`,
+        nickname: defaultOnlyNickname,
+        cpf: validCPF(Number(suffix.slice(-9))),
+        rg: `RG-${suffix.slice(-8)}`,
+        cellular: validBrazilianCellular(suffix),
+        email: `tenant-isolation-${suffix}@example.com`,
+        statusId: "ref-person-status-active",
+      },
+    });
+    expect(personResponse.status()).toBe(201);
+
+    const taskResponse = await request.post(
+      e2eApiUrl("/api/v1/reference-data/task"),
+      {
+        headers: authzHeaders(),
+        data: {
+          code: defaultOnlyTaskCode,
+          label: defaultOnlyTaskLabel,
+          description: "Created in default to verify Reference Data tenant isolation",
+          active: true,
+          sortOrder: 9_999,
+          metadataJson: "",
+        },
+      },
+    );
+    expect(taskResponse.status()).toBe(201);
+    const taskEnvelope = (await taskResponse.json()) as { data?: { id?: string } };
+    defaultOnlyTaskId = taskEnvelope.data?.id;
+    expect(defaultOnlyTaskId).toBeTruthy();
+
+    const priceListItemResponse = await request.post(
+      e2eApiUrl("/api/v1/price-list-items"),
+      {
+        headers: authzHeaders(),
+        data: {
+          itemType: "CANTEEN",
+          code: defaultOnlyPriceListCode,
+          description: defaultOnlyPriceListDescription,
+          unitPriceBrl: 321.45,
+          sortOrder: 9_999,
+        },
+      },
+    );
+    expect(priceListItemResponse.status()).toBe(201);
+    const priceListItemEnvelope = (await priceListItemResponse.json()) as {
+      data?: { id?: string };
+    };
+    defaultOnlyPriceListItemId = priceListItemEnvelope.data?.id;
+    expect(defaultOnlyPriceListItemId).toBeTruthy();
+
+    const goldPriceResponse = await request.post(e2eApiUrl("/api/v1/gold-prices"), {
+      headers: authzHeaders(),
+      data: {
+        priceDate: defaultOnlyGoldPriceDate,
+        brlPerGram: 654.32,
+        recordedBy: "bootstrap-admin",
+        notes: `Default tenant gold price ${suffix}`,
+      },
+    });
+    expect(goldPriceResponse.status()).toBe(201);
+    const goldPriceEnvelope = (await goldPriceResponse.json()) as {
+      data?: { id?: string };
+    };
+    defaultOnlyGoldPriceId = goldPriceEnvelope.data?.id;
+    expect(defaultOnlyGoldPriceId).toBeTruthy();
+
+    await page.goto("/people");
+    await page.getByLabel("Filter people").fill(defaultOnlyNickname);
+    await expect(page.getByText(defaultOnlyNickname, { exact: false }).first()).toBeVisible();
+
+    const createResponse = await request.post(e2eApiUrl("/api/v1/tenants"), {
+      headers: authzHeaders(),
+      data: {
+        code: `UX${suffix}`.slice(0, 20),
+        name: `Tenant UX ${suffix}`,
+        description: "Created by the Bite 28D tenant-selection E2E test",
+        active: true,
+      },
+    });
+    if (createResponse.status() !== 201) {
+      throw new Error(
+        `Create tenant failed: HTTP ${createResponse.status()} ${await createResponse.text()}`,
+      );
+    }
+    const created = (await createResponse.json()) as { data?: { id?: string } };
+    tenantId = created.data?.id;
+    expect(tenantId).toBeTruthy();
+
     await page.goto("/");
     const selector = page.getByRole("button", { name: "Current tenant" });
     await selector.click();
@@ -398,7 +407,10 @@ test("application administrator can switch between granted tenants", async ({ pa
 
 function uniqueGoldPriceDate(suffix: string): string {
   const digits = suffix.replace(/\D/g, "").padStart(12, "0");
-  const year = 3000 + (Number(digits.slice(-4)) % 6000);
+  // This record exists only to test tenant isolation. Keep it historical so
+  // an interrupted deployed E2E run can never become the default tenant's
+  // "latest" operational gold price and poison unrelated expense tests.
+  const year = 1800 + (Number(digits.slice(-4)) % 200);
   const month = 1 + (Number(digits.slice(-6, -4)) % 12);
   const day = 1 + (Number(digits.slice(-8, -6)) % 28);
   return `${year.toString().padStart(4, "0")}-${month
