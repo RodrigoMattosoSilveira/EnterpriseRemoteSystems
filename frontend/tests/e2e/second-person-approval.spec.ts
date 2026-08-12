@@ -1,4 +1,5 @@
 import { expect, test, type APIRequestContext, type Page } from "@playwright/test";
+import { uniquePersonSuffix } from "./support/test-data";
 import {
   E2E_ACTOR_ID,
   authzHeaders,
@@ -345,7 +346,7 @@ function completePersonPayload({
 }
 
 function uniqueSuffix(): number {
-  return Date.now() + Math.floor(Math.random() * 1000);
+  return uniquePersonSuffix(test.info().workerIndex);
 }
 
 function todayISODate() {

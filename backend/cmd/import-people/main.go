@@ -15,6 +15,7 @@ func main() {
 	dbPath := flag.String("db", "data/app.db", "path to the SQLite database file")
 	filePath := flag.String("file", "", "path to the People CSV file")
 	dryRun := flag.Bool("dry-run", false, "validate the CSV using a transaction and roll back without inserting rows")
+	tenantID := flag.String("tenant-id", db.DefaultTenantID, "tenant ID that owns the imported People")
 	actorUserID := flag.String("actor", "people-csv-import", "actor user ID recorded by the people service")
 	defaultStatusID := flag.String("default-status-id", "", "status ID to use when a CSV row has an empty statusId")
 	flag.Parse()
@@ -40,6 +41,7 @@ func main() {
 	}
 
 	report, err := importer.RunFile(context.Background(), database, importer.Options{
+		TenantID:        *tenantID,
 		FilePath:        *filePath,
 		DryRun:          *dryRun,
 		ActorUserID:     *actorUserID,

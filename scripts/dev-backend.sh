@@ -83,14 +83,36 @@ cd "${BACKEND_DIR}"
 
 mkdir -p data
 
+if [[ "${ERS_PROVISION_E2E_ADMIN:-false}" == "true" ]]; then
+  : "${E2E_ADMIN_EMAIL:?E2E_ADMIN_EMAIL is required when ERS_PROVISION_E2E_ADMIN=true}"
+  : "${E2E_ADMIN_PASSWORD:?E2E_ADMIN_PASSWORD is required when ERS_PROVISION_E2E_ADMIN=true}"
+  provision_payload="$(
+    E2E_ADMIN_ACTOR_KEY="${E2E_ADMIN_ACTOR_KEY:-e2e-application-admin}" \
+    E2E_ADMIN_DISPLAY_NAME="${E2E_ADMIN_DISPLAY_NAME:-Local E2E Administrator}" \
+    E2E_ADMIN_EMAIL="${E2E_ADMIN_EMAIL}" \
+    E2E_ADMIN_PASSWORD="${E2E_ADMIN_PASSWORD}" \
+    python3 - <<'PYJSON'
+import json, os
+print(json.dumps({
+    "actorKey": os.environ["E2E_ADMIN_ACTOR_KEY"],
+    "displayName": os.environ["E2E_ADMIN_DISPLAY_NAME"],
+    "login": os.environ["E2E_ADMIN_EMAIL"],
+    "password": os.environ["E2E_ADMIN_PASSWORD"],
+}))
+PYJSON
+  )"
+  printf '%s' "${provision_payload}" | go run ./cmd/provision-e2e-admin
+  unset provision_payload E2E_ADMIN_PASSWORD
+fi
+
 # Runtime schema changes are disabled by default. SQL migrations above own
 # local/dev/prod schema creation. Set APP_AUTO_MIGRATE=true only for explicit
 # local experiments.
 export APP_AUTO_MIGRATE="${APP_AUTO_MIGRATE:-false}"
 
-# Local browser development uses a persisted bootstrap actor until the real
-# authenticated session layer is wired in. The frontend sends only the actor
-# key and tenant; permissions are always loaded from persisted role grants.
+# Bite 28D local browser development uses login-backed sessions. Bootstrap
+# mode remains available only as an explicit recovery path; the Vite proxy no
+# longer sends the bootstrap actor unless ERS_LOCAL_AUTHZ_BOOTSTRAP=true.
 export AUTHZ_BOOTSTRAP_ENABLED="${AUTHZ_BOOTSTRAP_ENABLED:-true}"
 export AUTHZ_BOOTSTRAP_ACTOR_KEY="${AUTHZ_BOOTSTRAP_ACTOR_KEY:-bootstrap-admin}"
 export AUTHZ_BOOTSTRAP_DISPLAY_NAME="${AUTHZ_BOOTSTRAP_DISPLAY_NAME:-Bootstrap Admin}"

@@ -17,6 +17,7 @@ func NewRepository(database *gorm.DB) Repository {
 }
 func (r *gormRepository) List(
 	ctx context.Context,
+	tenantID string,
 	filter PersonListFilter,
 ) ([]db.Person, int64, error) {
 	var rows []db.Person
@@ -24,19 +25,19 @@ func (r *gormRepository) List(
 
 	q := r.db.WithContext(ctx).
 		Model(&db.Person{}).
-		Where("tenant_id = ?", defaultTenantID).
+		Where("tenant_id = ?", tenantID).
 		Preload("Status")
 
 	if filter.Search != "" {
 		like := "%" + filter.Search + "%"
 		q = q.Where(
-			`first_name LIKE ?
+			`(first_name LIKE ?
 			OR last_name LIKE ?
 			OR nickname LIKE ?
 			OR cpf LIKE ?
 			OR rg LIKE ?
 			OR cellular LIKE ?
-			OR email LIKE ?`,
+			OR email LIKE ?)`,
 			like, like, like, like, like, like, like,
 		)
 	}
@@ -79,18 +80,18 @@ func (r *gormRepository) List(
 func (r *gormRepository) Create(ctx context.Context, person *db.Person) error {
 	return r.db.WithContext(ctx).Create(person).Error
 }
-func (r *gormRepository) FindByID(ctx context.Context, id string) (*db.Person, error) {
+func (r *gormRepository) FindByID(ctx context.Context, tenantID string, id string) (*db.Person, error) {
 	var row db.Person
-	err := r.db.WithContext(ctx).Preload("Status").First(&row, "id = ? AND tenant_id = ?", id, defaultTenantID).Error
+	err := r.db.WithContext(ctx).Preload("Status").First(&row, "id = ? AND tenant_id = ?", id, tenantID).Error
 	if err != nil {
 		return nil, err
 	}
 	return &row, nil
 }
-func (r *gormRepository) Update(ctx context.Context, person *db.Person) error {
+func (r *gormRepository) Update(ctx context.Context, tenantID string, person *db.Person) error {
 	return r.db.WithContext(ctx).
 		Model(&db.Person{}).
-		Where("id = ? AND tenant_id = ?", person.ID, defaultTenantID).
+		Where("id = ? AND tenant_id = ?", person.ID, tenantID).
 		Updates(map[string]any{
 			"first_name":                person.FirstName,
 			"last_name":                 person.LastName,

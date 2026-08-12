@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"io"
 	"strings"
@@ -86,11 +87,19 @@ func (s *service) Login(ctx context.Context, req LoginRequest, userAgent string,
 		return LoginResult{}, ErrInvalidCredentials
 	}
 
+	now := s.clock().UTC()
+	if err := s.repository.EnsureActorPersonSelfAccess(ctx, account.ActorID, now); err != nil {
+		return LoginResult{}, err
+	}
+	account, err = s.repository.FindAccountByID(ctx, account.ID)
+	if err != nil {
+		return LoginResult{}, err
+	}
+
 	rawToken, tokenHash, err := s.newToken("ers_s_")
 	if err != nil {
 		return LoginResult{}, err
 	}
-	now := s.clock().UTC()
 	expiresAt := now.Add(s.sessionTTL)
 	session := Session{
 		ID:         ids.New(),
@@ -139,13 +148,6 @@ func (s *service) ResolveSession(ctx context.Context, rawToken string) (SessionR
 		return SessionResponse{}, err
 	}
 	now := s.clock().UTC()
-	if record.RevokedAt != nil {
-		return SessionResponse{}, ErrAuthenticationRequired
-	}
-	if !record.ExpiresAt.After(now) {
-		_ = s.repository.RevokeSession(ctx, record.Session.ID, now)
-		return SessionResponse{}, ErrSessionExpired
-	}
 	if !record.Account.Active {
 		_ = s.repository.RevokeSession(ctx, record.Session.ID, now)
 		return SessionResponse{}, ErrAccountInactive
@@ -153,6 +155,13 @@ func (s *service) ResolveSession(ctx context.Context, rawToken string) (SessionR
 	if !record.ActorActive {
 		_ = s.repository.RevokeSession(ctx, record.Session.ID, now)
 		return SessionResponse{}, ErrActorInactive
+	}
+	if record.RevokedAt != nil {
+		return SessionResponse{}, ErrAuthenticationRequired
+	}
+	if !record.ExpiresAt.After(now) {
+		_ = s.repository.RevokeSession(ctx, record.Session.ID, now)
+		return SessionResponse{}, ErrSessionExpired
 	}
 	if now.Sub(record.LastSeenAt) >= 5*time.Minute {
 		if err := s.repository.TouchSession(ctx, record.Session.ID, now); err != nil {
@@ -207,35 +216,62 @@ func (s *service) ChangePassword(ctx context.Context, rawToken string, req Chang
 	return s.repository.UpdatePasswordAndRevokeSessions(ctx, record.Account.ID, passwordHash, false, s.clock().UTC())
 }
 
-func (s *service) ResetPassword(ctx context.Context, req ResetPasswordRequest) error {
+func (s *service) ResetPassword(ctx context.Context, req ResetPasswordRequest) (PasswordResetResult, error) {
 	if strings.TrimSpace(req.Token) == "" {
-		return &ValidationError{Fields: map[string]string{"token": "Password reset token is required"}}
+		return PasswordResetResult{}, &ValidationError{Fields: map[string]string{"token": "Password reset token is required"}}
 	}
 	if err := validateNewPassword(req.NewPassword); err != nil {
-		return err
+		return PasswordResetResult{}, err
 	}
 	token, err := s.repository.FindPasswordResetToken(ctx, hashToken(strings.TrimSpace(req.Token)))
 	if err != nil {
 		if isNotFound(err) {
-			return ErrResetTokenInvalid
+			return PasswordResetResult{}, ErrResetTokenInvalid
 		}
-		return err
+		return PasswordResetResult{}, err
+	}
+	account, err := s.repository.FindAccountByID(ctx, token.AccountID)
+	if err != nil {
+		if isNotFound(err) {
+			return PasswordResetResult{}, ErrResetTokenInvalid
+		}
+		return PasswordResetResult{}, err
+	}
+	if !account.Active {
+		return PasswordResetResult{}, ErrAccountInactive
+	}
+	if !account.ActorActive {
+		return PasswordResetResult{}, ErrActorInactive
 	}
 	now := s.clock().UTC()
 	if !token.ExpiresAt.After(now) {
-		return ErrResetTokenExpired
+		return PasswordResetResult{}, ErrResetTokenExpired
 	}
 	passwordHash, err := s.hashPassword(req.NewPassword)
 	if err != nil {
-		return err
+		return PasswordResetResult{}, err
 	}
 	if err := s.repository.ConsumePasswordResetToken(ctx, token.ID, passwordHash, now); err != nil {
 		if isNotFound(err) {
-			return ErrResetTokenInvalid
+			return PasswordResetResult{}, ErrResetTokenInvalid
 		}
-		return err
+		return PasswordResetResult{}, err
 	}
-	return nil
+	updated, err := s.repository.FindAccountByID(ctx, token.AccountID)
+	if err != nil {
+		return PasswordResetResult{}, err
+	}
+	if err := bcrypt.CompareHashAndPassword([]byte(updated.PasswordHash), []byte(req.NewPassword)); err != nil {
+		return PasswordResetResult{}, fmt.Errorf("verify persisted authentication password: %w", err)
+	}
+	if updated.PasswordChangedAt == nil {
+		return PasswordResetResult{}, fmt.Errorf("verify persisted authentication password timestamp")
+	}
+	return PasswordResetResult{
+		AccountID:         updated.ID,
+		Login:             normalizeLogin(updated.Login),
+		PasswordChangedAt: *updated.PasswordChangedAt,
+	}, nil
 }
 
 func (s *service) ListAccounts(ctx context.Context) ([]AccountResponse, error) {
@@ -260,10 +296,11 @@ func (s *service) GetAccount(ctx context.Context, id string) (AccountResponse, e
 
 func (s *service) CreateAccount(ctx context.Context, req CreateAccountRequest) (AccountResponse, error) {
 	actorID := strings.TrimSpace(req.ActorID)
+	tenantID := strings.TrimSpace(req.TenantID)
 	login := normalizeLogin(req.Login)
 	fields := map[string]string{}
-	if actorID == "" {
-		fields["actorId"] = "Authorization actor is required"
+	if actorID == "" && tenantID == "" {
+		fields["actorId"] = "Select an authorization actor or create the account in a selected tenant"
 	}
 	if login == "" {
 		fields["login"] = "Login is required"
@@ -287,8 +324,15 @@ func (s *service) CreateAccount(ctx context.Context, req CreateAccountRequest) (
 	if req.MustChangePassword != nil {
 		mustChangePassword = *req.MustChangePassword
 	}
+	if actorID == "" {
+		// Accounts created while provisioning a Person Actor always start with a
+		// temporary password. The administrator-facing workflow must not be able
+		// to bypass the first-login password change through a stale or malformed
+		// client payload.
+		mustChangePassword = true
+	}
 	now := s.clock().UTC()
-	account, err := s.repository.CreateAccount(ctx, Account{
+	accountInput := Account{
 		ID:                 ids.New(),
 		ActorID:            actorID,
 		Login:              login,
@@ -297,9 +341,41 @@ func (s *service) CreateAccount(ctx context.Context, req CreateAccountRequest) (
 		MustChangePassword: mustChangePassword,
 		CreatedAt:          now,
 		UpdatedAt:          now,
-	})
-	if err != nil {
-		return AccountResponse{}, err
+	}
+
+	var account AccountRecord
+	if actorID == "" {
+		account, err = s.repository.CreatePersonAccount(ctx, tenantID, accountInput)
+		switch {
+		case errors.Is(err, ErrPersonLoginNotFound):
+			return AccountResponse{}, &ValidationError{Fields: map[string]string{
+				"login": "No Person in the selected tenant has this login email",
+			}}
+		case errors.Is(err, ErrPersonActorInactive):
+			return AccountResponse{}, &ValidationError{Fields: map[string]string{
+				"actorId": "The Person's authorization actor is inactive; reactivate it before creating the account",
+			}}
+		case errors.Is(err, ErrTenantUnavailable):
+			return AccountResponse{}, &ValidationError{Fields: map[string]string{
+				"actorId": "The selected tenant is inactive or unavailable",
+			}}
+		case err != nil:
+			return AccountResponse{}, err
+		}
+	} else {
+		hasTenantAccess, accessErr := s.repository.ActorHasActiveTenantAccess(ctx, actorID)
+		if accessErr != nil {
+			return AccountResponse{}, accessErr
+		}
+		if !hasTenantAccess {
+			return AccountResponse{}, &ValidationError{Fields: map[string]string{
+				"actorId": "Authorization actor must have at least one active role grant for an active tenant",
+			}}
+		}
+		account, err = s.repository.CreateAccount(ctx, accountInput)
+		if err != nil {
+			return AccountResponse{}, err
+		}
 	}
 	return accountResponse(account), nil
 }
@@ -317,8 +393,19 @@ func (s *service) IssuePasswordResetToken(ctx context.Context, accountID string)
 	if accountID == "" {
 		return PasswordResetTokenResponse{}, &ValidationError{Fields: map[string]string{"accountId": "Authentication account is required"}}
 	}
-	if _, err := s.repository.FindAccountByID(ctx, accountID); err != nil {
+	account, err := s.repository.FindAccountByID(ctx, accountID)
+	if err != nil {
 		return PasswordResetTokenResponse{}, err
+	}
+	if !account.Active {
+		return PasswordResetTokenResponse{}, &ValidationError{Fields: map[string]string{
+			"accountId": "Password reset tokens can only be issued for active authentication accounts",
+		}}
+	}
+	if !account.ActorActive {
+		return PasswordResetTokenResponse{}, &ValidationError{Fields: map[string]string{
+			"accountId": "Password reset tokens can only be issued when the linked authorization actor is active",
+		}}
 	}
 	rawToken, tokenHash, err := s.newToken("ers_pr_")
 	if err != nil {
@@ -335,7 +422,7 @@ func (s *service) IssuePasswordResetToken(ctx context.Context, accountID string)
 	}, now); err != nil {
 		return PasswordResetTokenResponse{}, err
 	}
-	return PasswordResetTokenResponse{Token: rawToken, ExpiresAt: expiresAt}, nil
+	return PasswordResetTokenResponse{AccountID: account.ID, Login: normalizeLogin(account.Login), Token: rawToken, ExpiresAt: expiresAt}, nil
 }
 
 func (s *service) hashPassword(password string) (string, error) {

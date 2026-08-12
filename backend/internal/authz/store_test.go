@@ -73,6 +73,51 @@ func TestSeedAuthorizationCatalogCreatesCoreRolesAndGrants(t *testing.T) {
 	}
 }
 
+func TestGORMStoreListsActorTenantOptions(t *testing.T) {
+	database := newAuthzTestDB(t)
+	if err := database.AutoMigrate(&appdb.Tenant{}); err != nil {
+		t.Fatalf("migrate tenants: %v", err)
+	}
+	now := time.Now().UTC()
+	for _, tenant := range []appdb.Tenant{
+		{BaseModel: appdb.BaseModel{ID: "tenant-a", CreatedAt: now, UpdatedAt: now}, Code: "A", Name: "Alpha", Active: true},
+		{BaseModel: appdb.BaseModel{ID: "tenant-b", CreatedAt: now, UpdatedAt: now}, Code: "B", Name: "Beta", Active: true},
+		{BaseModel: appdb.BaseModel{ID: "tenant-c", CreatedAt: now, UpdatedAt: now}, Code: "C", Name: "Inactive", Active: true},
+	} {
+		if err := database.Create(&tenant).Error; err != nil {
+			t.Fatalf("create tenant: %v", err)
+		}
+	}
+	// Tenant.Active declares a database default of true, so GORM substitutes
+	// that default when Create receives the zero-value false. Deactivate the
+	// fixture explicitly to exercise the tenant-option active filter.
+	if err := database.Model(&appdb.Tenant{}).
+		Where("id = ?", "tenant-c").
+		Update("active", false).Error; err != nil {
+		t.Fatalf("deactivate tenant: %v", err)
+	}
+
+	tenantActorID := createAuthzActor(t, database, "tenant-user@example.com", nil, nil)
+	grantAuthzRole(t, database, tenantActorID, RoleExpenseOperator, "tenant-b")
+	options, err := NewGORMStore(database).ListActorTenantOptions(context.Background(), tenantActorID)
+	if err != nil {
+		t.Fatalf("list tenant options: %v", err)
+	}
+	if got, want := options, []TenantOption{{ID: "tenant-b", Code: "B", Name: "Beta", RoleCodes: []string{string(RoleExpenseOperator)}}}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("tenant options = %#v, want %#v", got, want)
+	}
+
+	applicationActorID := createAuthzActor(t, database, "application-user@example.com", nil, nil)
+	grantAuthzRole(t, database, applicationActorID, RoleApplicationAdmin, GlobalTenantScope)
+	options, err = NewGORMStore(database).ListActorTenantOptions(context.Background(), applicationActorID)
+	if err != nil {
+		t.Fatalf("list application tenant options: %v", err)
+	}
+	if len(options) != 2 || options[0].ID != "tenant-a" || options[1].ID != "tenant-b" {
+		t.Fatalf("expected all active tenants, got %#v", options)
+	}
+}
+
 func TestGORMStoreFindActorLoadsTenantScopedRolePermissions(t *testing.T) {
 	database := newAuthzTestDB(t)
 	actorID := createAuthzActor(t, database, "expense-operator@example.com", nil, nil)

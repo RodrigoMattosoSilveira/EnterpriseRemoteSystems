@@ -52,7 +52,10 @@ export function useCollaboratorCatalog(enabled = true) {
   });
 }
 
-export function useCollaboratorSearch(search: string) {
+export function useCollaboratorSearch(
+  search: string,
+  refetchOnWindowFocus = true,
+) {
   const normalizedSearch = search.trim();
 
   return useQuery({
@@ -64,6 +67,7 @@ export function useCollaboratorSearch(search: string) {
         pageSize: 25,
       }),
     enabled: normalizedSearch.length > 0,
+    refetchOnWindowFocus,
   });
 }
 

@@ -4,6 +4,10 @@ import type {
   Person,
   UpdatePersonInput,
 } from "../../types/people";
+import {
+  isValidUpdatePersonInput,
+  updatePersonFingerprint,
+} from "./peopleSchemas";
 
 type Props = {
   initial?: Person;
@@ -23,34 +27,19 @@ export function PersonForm({
   const isCreate = !initial;
   const [activeTab, setActiveTab] = useState<Tab>("personal");
 
-  const [form, setForm] = useState<UpdatePersonInput>({
-    firstName: initial?.firstName ?? "",
-    lastName: initial?.lastName ?? "",
-    nickname: initial?.nickname ?? "",
-    cpf: initial?.cpf ?? "",
-    rg: initial?.rg ?? "",
-    cellular: initial?.cellular ?? "",
-    email: initial?.email ?? "",
+  const initialForm = useMemo(
+    () => buildInitialForm(initial, defaultStatusId),
+    [initial, defaultStatusId]
+  );
+  const [form, setForm] = useState<UpdatePersonInput>(() => initialForm);
+  const [savedFingerprint, setSavedFingerprint] = useState(() =>
+    updatePersonFingerprint(initialForm)
+  );
 
-    street1: initial?.street1 ?? "",
-    street2: initial?.street2 ?? "",
-    state: initial?.state ?? "",
-    cep: initial?.cep ?? "",
-    city: initial?.city ?? "",
-    country: initial?.country ?? "Brasil",
-
-    bankName: initial?.bankName ?? "",
-    bankNumber: initial?.bankNumber ?? "",
-    checkingAccount: initial?.checkingAccount ?? "",
-    pixKey: initial?.pixKey ?? "",
-
-    emergencyName: initial?.emergencyName ?? "",
-    emergencyCellular: initial?.emergencyCellular ?? "",
-    emergencyEmail: initial?.emergencyEmail ?? "",
-
-    statusId: initial?.statusId ?? defaultStatusId,
-    notes: initial?.notes ?? "",
-  });
+  const currentFingerprint = updatePersonFingerprint(form);
+  const hasValidChange =
+    isCreate ||
+    (currentFingerprint !== savedFingerprint && isValidUpdatePersonInput(form));
 
   const missingSections = initial?.missingSections ?? [];
 
@@ -69,22 +58,30 @@ export function PersonForm({
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
-    if (isCreate) {
-      await onSubmit({
-        firstName: form.firstName,
-        lastName: form.lastName,
-        nickname: form.nickname,
-        cpf: form.cpf,
-        rg: form.rg,
-        cellular: form.cellular,
-        email: form.email,
-        statusId: form.statusId,
-        notes: form.notes,
-      });
-      return;
-    }
+    if (submitting || (!isCreate && !hasValidChange)) return;
 
-    await onSubmit(form);
+    try {
+      if (isCreate) {
+        await onSubmit({
+          firstName: form.firstName,
+          lastName: form.lastName,
+          nickname: form.nickname,
+          cpf: form.cpf,
+          rg: form.rg,
+          cellular: form.cellular,
+          email: form.email,
+          statusId: form.statusId,
+          notes: form.notes,
+        });
+        return;
+      }
+
+      await onSubmit(form);
+      setSavedFingerprint(currentFingerprint);
+    } catch {
+      // The owning page renders the mutation error. Keep the edit dirty so the
+      // user can correct or retry the submission.
+    }
   }
 
   return (
@@ -350,7 +347,7 @@ export function PersonForm({
       <div className="fixed inset-x-0 bottom-0 z-20 border-t bg-white p-4 shadow-2xl md:sticky md:rounded-2xl md:border">
         <button
           type="submit"
-          disabled={submitting}
+          disabled={submitting || (!isCreate && !hasValidChange)}
           className="w-full rounded-xl bg-gray-950 px-5 py-4 text-base font-semibold text-white shadow-sm disabled:opacity-50"
         >
           {submitting ? "Saving..." : isCreate ? "Create Person" : "Save Changes"}
@@ -358,6 +355,40 @@ export function PersonForm({
       </div>
     </form>
   );
+}
+
+function buildInitialForm(
+  initial: Person | undefined,
+  defaultStatusId: string
+): UpdatePersonInput {
+  return {
+    firstName: initial?.firstName ?? "",
+    lastName: initial?.lastName ?? "",
+    nickname: initial?.nickname ?? "",
+    cpf: initial?.cpf ?? "",
+    rg: initial?.rg ?? "",
+    cellular: initial?.cellular ?? "",
+    email: initial?.email ?? "",
+
+    street1: initial?.street1 ?? "",
+    street2: initial?.street2 ?? "",
+    state: initial?.state ?? "",
+    cep: initial?.cep ?? "",
+    city: initial?.city ?? "",
+    country: initial?.country ?? "Brasil",
+
+    bankName: initial?.bankName ?? "",
+    bankNumber: initial?.bankNumber ?? "",
+    checkingAccount: initial?.checkingAccount ?? "",
+    pixKey: initial?.pixKey ?? "",
+
+    emergencyName: initial?.emergencyName ?? "",
+    emergencyCellular: initial?.emergencyCellular ?? "",
+    emergencyEmail: initial?.emergencyEmail ?? "",
+
+    statusId: initial?.statusId ?? defaultStatusId,
+    notes: initial?.notes ?? "",
+  };
 }
 
 function ProfileStatusCard({

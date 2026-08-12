@@ -239,14 +239,14 @@ local-frontend:
 local-smoke:
 	curl -fsS http://localhost:8080/api/v1/healthz >/dev/null
 	curl -fsS http://localhost:5173/api/v1/healthz >/dev/null
-	curl -fsS http://localhost:5173/api/v1/people/ >/dev/null
-	@echo "Local smoke tests passed."
+	curl -fsS http://localhost:5173/ >/dev/null
+	@echo "Local smoke tests passed; sign in through the browser for protected-route verification."
 
 .PHONY: local-lan-smoke
 local-lan-smoke:
 	curl -fsS http://$(LAN_HOST):5173/api/v1/healthz >/dev/null
-	curl -fsS http://$(LAN_HOST):5173/api/v1/people/ >/dev/null
-	@echo "LAN smoke test passed for $(LAN_HOST)."
+	curl -fsS http://$(LAN_HOST):5173/ >/dev/null
+	@echo "LAN smoke test passed for $(LAN_HOST); protected routes require a login session."
 
 .PHONY: local-people-create-test
 local-people-create-test:

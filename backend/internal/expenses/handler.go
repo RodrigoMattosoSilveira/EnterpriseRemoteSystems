@@ -4,6 +4,7 @@ import (
 	"github.com/gofiber/fiber/v3"
 
 	"enterpriseremotesystems/backend/internal/shared/httpx"
+	"enterpriseremotesystems/backend/internal/shared/requesttenant"
 )
 
 type Handler struct{ service Service }
@@ -16,7 +17,7 @@ func (h *Handler) List(c fiber.Ctx) error {
 		return httpx.WriteError(c, err)
 	}
 
-	result, err := h.service.List(c.Context(), filter)
+	result, err := h.service.List(requesttenant.Context(c), filter)
 	if err != nil {
 		return httpx.WriteError(c, err)
 	}
@@ -30,7 +31,7 @@ func (h *Handler) Create(c fiber.Ctx) error {
 		return httpx.WriteError(c, err)
 	}
 
-	created, err := h.service.Create(c.Context(), req, actorUserID(c))
+	created, err := h.service.Create(requesttenant.Context(c), req, actorUserID(c))
 	if err != nil {
 		return httpx.WriteError(c, err)
 	}
@@ -39,7 +40,7 @@ func (h *Handler) Create(c fiber.Ctx) error {
 }
 
 func (h *Handler) GetByID(c fiber.Ctx) error {
-	item, err := h.service.GetByID(c.Context(), c.Params("id"))
+	item, err := h.service.GetByID(requesttenant.Context(c), c.Params("id"))
 	if err != nil {
 		return httpx.WriteError(c, err)
 	}
@@ -52,7 +53,7 @@ func (h *Handler) Update(c fiber.Ctx) error {
 		return httpx.WriteError(c, err)
 	}
 
-	updated, err := h.service.Update(c.Context(), c.Params("id"), req, actorUserID(c))
+	updated, err := h.service.Update(requesttenant.Context(c), c.Params("id"), req, actorUserID(c))
 	if err != nil {
 		return httpx.WriteError(c, err)
 	}
@@ -60,7 +61,7 @@ func (h *Handler) Update(c fiber.Ctx) error {
 }
 
 func (h *Handler) Deactivate(c fiber.Ctx) error {
-	updated, err := h.service.Deactivate(c.Context(), c.Params("id"), actorUserID(c))
+	updated, err := h.service.Deactivate(requesttenant.Context(c), c.Params("id"), actorUserID(c))
 	if err != nil {
 		return httpx.WriteError(c, err)
 	}
@@ -68,7 +69,7 @@ func (h *Handler) Deactivate(c fiber.Ctx) error {
 }
 
 func (h *Handler) Delete(c fiber.Ctx) error {
-	if err := h.service.Delete(c.Context(), c.Params("id"), actorUserID(c)); err != nil {
+	if err := h.service.Delete(requesttenant.Context(c), c.Params("id"), actorUserID(c)); err != nil {
 		return httpx.WriteError(c, err)
 	}
 	return c.SendStatus(fiber.StatusNoContent)

@@ -227,26 +227,31 @@ test("user can switch the People landing page between card and list views", asyn
   // "firstName lastName" string, so using just the unique first-name part
   // ensures the API actually returns this person and keeps them visible in both
   // views after location.state is dropped on the view-mode switch.
+  const filteredPeopleResponsePromise = page.waitForResponse((response) => {
+    const url = new URL(response.url());
+    return (
+      response.request().method() === "GET" &&
+      url.pathname === "/api/v1/people" &&
+      url.searchParams.get("search") === `View${suffix}`
+    );
+  });
   await page.getByLabel("Filter people").fill(`View${suffix}`);
-
-  // Wait for debounce + API response
-  await page.waitForTimeout(500);
+  const filteredPeopleResponse = await filteredPeopleResponsePromise;
+  expect(filteredPeopleResponse.ok()).toBeTruthy();
   await expect(page.getByRole("link", { name: new RegExp(`^${personName}`) })).toBeVisible();
 
-  // Switch to list view
+  // Switch to list view. Query-only UI navigation must preserve the active
+  // filter and the mounted People page.
   await page.getByRole("button", { name: "List view" }).click();
   await expect(page.getByRole("button", { name: "List view" })).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByLabel("Filter people")).toHaveValue(`View${suffix}`);
   await expect(page.locator("table")).toBeVisible();
-
-  // Debug: dump table contents
-  console.log("TABLE CONTENTS:\n", await page.locator("table").innerText());
-
-  // Match link starting with the person’s name, ignoring suffixes
   await expect(page.getByRole("link", { name: new RegExp(`^${personName}`) })).toBeVisible();
 
   // Switch back to card view
   await page.getByRole("button", { name: "Card view" }).click();
   await expect(page.getByRole("button", { name: "Card view" })).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByLabel("Filter people")).toHaveValue(`View${suffix}`);
   await expect(page.locator("table")).toHaveCount(0);
 
   // In card view, links should be present again

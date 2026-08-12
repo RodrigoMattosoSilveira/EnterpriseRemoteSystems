@@ -11,7 +11,7 @@ type Service interface {
 	ResolveSession(ctx context.Context, rawToken string) (SessionResponse, error)
 	Logout(ctx context.Context, rawToken string) error
 	ChangePassword(ctx context.Context, rawToken string, req ChangePasswordRequest) error
-	ResetPassword(ctx context.Context, req ResetPasswordRequest) error
+	ResetPassword(ctx context.Context, req ResetPasswordRequest) (PasswordResetResult, error)
 	ListAccounts(ctx context.Context) ([]AccountResponse, error)
 	GetAccount(ctx context.Context, id string) (AccountResponse, error)
 	CreateAccount(ctx context.Context, req CreateAccountRequest) (AccountResponse, error)

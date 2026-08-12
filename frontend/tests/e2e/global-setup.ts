@@ -1,6 +1,7 @@
 import { request, type APIResponse, type FullConfig } from "@playwright/test";
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
+import { isLoopbackURL } from "./support/runtime";
 
 type CurrentActorEnvelope = {
   data?: {
@@ -26,9 +27,10 @@ export default async function globalSetup(config: FullConfig): Promise<void> {
     throw new Error("Authenticated deployed E2E requires a storage-state file path");
   }
 
-  const login = process.env.E2E_ADMIN_EMAIL?.trim();
-  const password = process.env.E2E_ADMIN_PASSWORD;
-  const expectedActorKey = process.env.PLAYWRIGHT_AUTHZ_ACTOR_ID?.trim();
+  const isLocal = isLoopbackURL(baseURL);
+  const login = process.env.E2E_ADMIN_EMAIL?.trim() || (isLocal ? "admin@example.com" : "");
+  const password = process.env.E2E_ADMIN_PASSWORD || (isLocal ? "Local-E2E-Administrator-28D!" : "");
+  const expectedActorKey = process.env.PLAYWRIGHT_AUTHZ_ACTOR_ID?.trim() || (isLocal ? "e2e-application-admin" : "");
   const tenantId = process.env.PLAYWRIGHT_AUTHZ_TENANT_ID?.trim() || "default";
 
   if (!login || !password) {

@@ -7,6 +7,7 @@ import (
 
 	"enterpriseremotesystems/backend/internal/db"
 	"enterpriseremotesystems/backend/internal/shared/ids"
+	"enterpriseremotesystems/backend/internal/shared/tenantctx"
 	"enterpriseremotesystems/backend/internal/tenants"
 )
 
@@ -56,7 +57,7 @@ func (s *service) Create(ctx context.Context, req CreateWorkPeriodRequest, actor
 
 	workPeriod := &db.WorkPeriod{
 		BaseModel:  db.BaseModel{ID: ids.New(), CreatedAt: now, UpdatedAt: now},
-		TenantID:   defaultTenantID,
+		TenantID:   tenantctx.TenantID(ctx),
 		WorkDate:   workDate,
 		PeriodCode: periodCode,
 		Name:       strings.TrimSpace(req.Name),

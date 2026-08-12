@@ -3,9 +3,20 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { AuthorizationProvider } from "../../components/layout/AuthorizationContext";
+import type { AuthzCurrentActor } from "../../types/authz";
 import { PeopleListPage } from "./PeopleListPage";
 import { PersonDetailPage } from "./PersonDetailPage";
 import type { Person } from "../../types/people";
+
+const authorizationActor: AuthzCurrentActor = {
+  actorKey: "test-admin",
+  actorRecordId: "actor-test-admin",
+  tenantId: "default",
+  scope: "APPLICATION",
+  roleCodes: ["APPLICATION_ADMIN"],
+  permissions: ["*"],
+};
 
 const PERSON_ID = "person-123";
 
@@ -304,7 +315,9 @@ function renderPersonDetailRoute() {
   act(() => {
     root?.render(
       <QueryClientProvider client={queryClient}>
-        <RouterProvider router={router} />
+        <AuthorizationProvider value={authorizationActor}>
+          <RouterProvider router={router} />
+        </AuthorizationProvider>
       </QueryClientProvider>
     );
   });
