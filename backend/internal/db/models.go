@@ -18,21 +18,22 @@ type Tenant struct {
 	Description string `gorm:"type:text" json:"description,omitempty"`
 	Active      bool   `gorm:"not null;default:true;index" json:"active"`
 
-	ReferenceData         []ReferenceData        `gorm:"foreignKey:TenantID" json:"referenceData,omitempty"`
-	People                []Person               `gorm:"foreignKey:TenantID" json:"people,omitempty"`
-	Collaborators         []CollaboratorJourney  `gorm:"foreignKey:TenantID" json:"collaborators,omitempty"`
-	Expenses              []Expense              `gorm:"foreignKey:TenantID" json:"expenses,omitempty"`
-	ExpensePriceListItems []ExpensePriceListItem `gorm:"foreignKey:TenantID" json:"expensePriceListItems,omitempty"`
-	GoldPrices            []GoldPrice            `gorm:"foreignKey:TenantID" json:"goldPrices,omitempty"`
-	WorkPeriods           []WorkPeriod           `gorm:"foreignKey:TenantID" json:"workPeriods,omitempty"`
-	WorkPeriodAssignments []WorkPeriodAssignment `gorm:"foreignKey:TenantID" json:"workPeriodAssignments,omitempty"`
-	GoldProductionEntries []GoldProductionEntry  `gorm:"foreignKey:TenantID" json:"goldProductionEntries,omitempty"`
-	AccrualRuns           []AccrualRun           `gorm:"foreignKey:TenantID" json:"accrualRuns,omitempty"`
-	AccrualItems          []AccrualItem          `gorm:"foreignKey:TenantID" json:"accrualItems,omitempty"`
-	LedgerEntries         []LedgerEntry          `gorm:"foreignKey:TenantID" json:"ledgerEntries,omitempty"`
-	JourneySettlements    []JourneySettlement    `gorm:"foreignKey:TenantID" json:"journeySettlements,omitempty"`
-	LedgerReceipts        []LedgerReceipt        `gorm:"foreignKey:TenantID" json:"ledgerReceipts,omitempty"`
-	TenantSettings        []TenantSetting        `gorm:"foreignKey:TenantID" json:"tenantSettings,omitempty"`
+	ReferenceData         []ReferenceData          `gorm:"foreignKey:TenantID" json:"referenceData,omitempty"`
+	People                []Person                 `gorm:"foreignKey:TenantID" json:"people,omitempty"` // Legacy compatibility projections; remove after Bite 30 cutover.
+	PersonMemberships     []PersonTenantMembership `gorm:"foreignKey:TenantID" json:"personMemberships,omitempty"`
+	Collaborators         []CollaboratorJourney    `gorm:"foreignKey:TenantID" json:"collaborators,omitempty"`
+	Expenses              []Expense                `gorm:"foreignKey:TenantID" json:"expenses,omitempty"`
+	ExpensePriceListItems []ExpensePriceListItem   `gorm:"foreignKey:TenantID" json:"expensePriceListItems,omitempty"`
+	GoldPrices            []GoldPrice              `gorm:"foreignKey:TenantID" json:"goldPrices,omitempty"`
+	WorkPeriods           []WorkPeriod             `gorm:"foreignKey:TenantID" json:"workPeriods,omitempty"`
+	WorkPeriodAssignments []WorkPeriodAssignment   `gorm:"foreignKey:TenantID" json:"workPeriodAssignments,omitempty"`
+	GoldProductionEntries []GoldProductionEntry    `gorm:"foreignKey:TenantID" json:"goldProductionEntries,omitempty"`
+	AccrualRuns           []AccrualRun             `gorm:"foreignKey:TenantID" json:"accrualRuns,omitempty"`
+	AccrualItems          []AccrualItem            `gorm:"foreignKey:TenantID" json:"accrualItems,omitempty"`
+	LedgerEntries         []LedgerEntry            `gorm:"foreignKey:TenantID" json:"ledgerEntries,omitempty"`
+	JourneySettlements    []JourneySettlement      `gorm:"foreignKey:TenantID" json:"journeySettlements,omitempty"`
+	LedgerReceipts        []LedgerReceipt          `gorm:"foreignKey:TenantID" json:"ledgerReceipts,omitempty"`
+	TenantSettings        []TenantSetting          `gorm:"foreignKey:TenantID" json:"tenantSettings,omitempty"`
 }
 
 type TenantSetting struct {
@@ -100,8 +101,74 @@ type ReferenceData struct {
 	Tenant Tenant `gorm:"foreignKey:TenantID;constraint:OnUpdate:Restrict,OnDelete:Restrict;" json:"tenant,omitempty"`
 }
 
+// GlobalPerson is the authoritative Bite 30 business identity for one human.
+// The legacy Person model below remains a tenant-owned compatibility projection
+// until the later Bite 30 cutovers move collaborators/authentication/financial
+// relationships onto the global identity and PersonTenantMembership directly.
+type GlobalPerson struct {
+	BaseModel
+
+	FirstName string `gorm:"type:text;not null" json:"firstName"`
+	LastName  string `gorm:"type:text;not null" json:"lastName"`
+	Nickname  string `gorm:"type:text;not null" json:"nickname"`
+
+	CPF      string `gorm:"column:cpf;type:text;not null;uniqueIndex:ux_global_people_cpf" json:"cpf"`
+	RG       string `gorm:"column:rg;type:text;not null;index" json:"rg"`
+	Cellular string `gorm:"type:text;not null;index" json:"cellular"`
+	Email    string `gorm:"type:text;not null;index" json:"email"`
+
+	Street1 string `gorm:"type:text" json:"street1,omitempty"`
+	Street2 string `gorm:"type:text" json:"street2,omitempty"`
+	State   string `gorm:"type:text" json:"state,omitempty"`
+	City    string `gorm:"type:text" json:"city,omitempty"`
+	CEP     string `gorm:"column:cep;type:text" json:"cep,omitempty"`
+	Country string `gorm:"type:text;not null;default:Brasil" json:"country"`
+
+	BankName        string  `gorm:"type:text" json:"bankName,omitempty"`
+	BankNumber      string  `gorm:"type:text" json:"bankNumber,omitempty"`
+	CheckingAccount string  `gorm:"type:text" json:"checkingAccount,omitempty"`
+	PIXKey          *string `gorm:"column:pix_key;type:text;index" json:"pixKey,omitempty"`
+
+	EmergencyName     string `gorm:"type:text" json:"emergencyName,omitempty"`
+	EmergencyCellular string `gorm:"type:text" json:"emergencyCellular,omitempty"`
+	EmergencyEmail    string `gorm:"type:text" json:"emergencyEmail,omitempty"`
+
+	ProfileCompletionStatus string `gorm:"type:text;not null;default:PERSONAL_ONLY;index" json:"profileCompletionStatus"`
+	CanCreateCollaborator   bool   `gorm:"not null;default:false;index" json:"canCreateCollaborator"`
+
+	Memberships []PersonTenantMembership `gorm:"foreignKey:PersonID" json:"memberships,omitempty"`
+}
+
+func (GlobalPerson) TableName() string { return "global_people" }
+
+// PersonTenantMembership is the tenant-confidential relationship between one
+// global Person and one Tenant. LegacyPersonID temporarily links the membership
+// to the pre-Bite-30 tenant-owned people row so existing business modules can
+// continue operating while later bites cut over their foreign keys.
+type PersonTenantMembership struct {
+	BaseModel
+
+	TenantID       string  `gorm:"type:text;not null;uniqueIndex:ux_person_tenant_membership,priority:2;index" json:"tenantId"`
+	PersonID       string  `gorm:"type:text;not null;uniqueIndex:ux_person_tenant_membership,priority:1;index" json:"personId"`
+	StatusID       string  `gorm:"type:text;not null;index" json:"statusId"`
+	Notes          string  `gorm:"type:text" json:"notes,omitempty"`
+	LegacyPersonID *string `gorm:"type:text;uniqueIndex" json:"legacyPersonId,omitempty"`
+
+	Tenant       Tenant        `gorm:"foreignKey:TenantID;constraint:OnUpdate:Restrict,OnDelete:Restrict;" json:"tenant,omitempty"`
+	Person       GlobalPerson  `gorm:"foreignKey:PersonID;constraint:OnUpdate:Restrict,OnDelete:Restrict;" json:"person,omitempty"`
+	Status       ReferenceData `gorm:"foreignKey:StatusID;constraint:OnUpdate:Restrict,OnDelete:Restrict;" json:"status,omitempty"`
+	LegacyPerson *Person       `gorm:"foreignKey:LegacyPersonID;constraint:OnUpdate:Restrict,OnDelete:Restrict;" json:"legacyPerson,omitempty"`
+}
+
+func (PersonTenantMembership) TableName() string { return "person_tenant_memberships" }
+
 type Person struct {
 	BaseModel
+
+	// Transitional identity links populated by the People repository. They are
+	// not columns on the legacy people table.
+	GlobalPersonID string `gorm:"-" json:"globalPersonId,omitempty"`
+	MembershipID   string `gorm:"-" json:"membershipId,omitempty"`
 
 	TenantID string `gorm:"type:text;not null;default:default;uniqueIndex:ux_people_tenant_cpf,priority:1;uniqueIndex:ux_people_tenant_rg,priority:1;uniqueIndex:ux_people_tenant_cellular,priority:1;uniqueIndex:ux_people_tenant_email,priority:1;uniqueIndex:ux_people_tenant_pix_key,priority:1;index" json:"tenantId"`
 

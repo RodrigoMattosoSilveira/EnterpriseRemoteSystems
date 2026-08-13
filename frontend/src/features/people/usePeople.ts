@@ -1,12 +1,14 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   createPerson,
+  createPersonMembership,
   getPerson,
   listPeople,
   listPeoplePage,
+  searchGlobalPeople,
   updatePerson,
 } from "../../api/people.api";
-import type { PeopleListFilter, PersonInput } from "../../types/people";
+import type { CreatePersonMembershipInput, PeopleListFilter, PersonInput } from "../../types/people";
 
 export function usePeople(filter: PeopleListFilter = {}) {
   return useQuery({
@@ -63,6 +65,27 @@ export function useUpdatePerson(id: string) {
       queryClient.invalidateQueries({
         queryKey: ["collaborators", "candidates"],
       });
+    },
+  });
+}
+
+
+export function useGlobalPeopleSearch(search: string) {
+  const normalized = search.trim();
+  return useQuery({
+    queryKey: ["people", "global-search", normalized],
+    queryFn: () => searchGlobalPeople(normalized),
+    enabled: normalized.length >= 3,
+  });
+}
+
+export function useCreatePersonMembership() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: CreatePersonMembershipInput) => createPersonMembership(input),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["people"] });
+      queryClient.invalidateQueries({ queryKey: ["collaborators", "candidates"] });
     },
   });
 }

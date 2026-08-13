@@ -4,8 +4,9 @@ import { PersonForm } from "./PersonForm";
 import { usePerson, useUpdatePerson } from "./usePeople";
 import { ApiErrorPanel } from "../../components/ApiErrorPanel";
 import { useAuthorizationContext } from "../../components/layout/AuthorizationContext";
+import { useReferenceDataByType } from "../reference-data/useReferenceData";
 
-const ACTIVE_STATUS_ID = "ref-person-status-active";
+const FALLBACK_ACTIVE_STATUS_ID = "ref-person-status-active";
 
 export function PersonDetailPage() {
   const { id = "" } = useParams();
@@ -15,6 +16,7 @@ export function PersonDetailPage() {
 
   const personQuery = usePerson(id);
   const mutation = useUpdatePerson(id);
+  const statusesQuery = useReferenceDataByType("person_status");
 
   const [searchParams] = useSearchParams();
   const view = searchParams.get("view") || "cards";
@@ -34,6 +36,15 @@ export function PersonDetailPage() {
   if (!personQuery.data) {
     return <main className="p-4">Person not found.</main>;
   }
+
+  const activeStatuses = (statusesQuery.data ?? []).filter((status) => status.active);
+  const statusOptions = activeStatuses.length > 0
+    ? activeStatuses.map((status) => ({ value: status.id, label: status.label }))
+    : undefined;
+  const defaultStatusId =
+    activeStatuses.find((status) => status.code === "ACTIVE")?.id ??
+    personQuery.data.statusId ??
+    FALLBACK_ACTIVE_STATUS_ID;
 
   return (
     <main className="mx-auto max-w-3xl p-4">
@@ -92,7 +103,8 @@ export function PersonDetailPage() {
 
         <PersonForm
           initial={personQuery.data}
-          defaultStatusId={ACTIVE_STATUS_ID}
+          defaultStatusId={defaultStatusId}
+          statusOptions={statusOptions}
           submitting={mutation.isPending}
           onSubmit={async (input) => {
             setSuccessMessage("");

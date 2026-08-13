@@ -244,7 +244,78 @@ def seed_people(conn: sqlite3.Connection) -> None:
                 now,
             ),
         )
+        sync_person_foundation(conn, person_id)
 
+
+def sync_person_foundation(conn: sqlite3.Connection, legacy_person_id: str) -> None:
+    """Keep Bite 30B global Person/Membership data aligned with a manual legacy row."""
+    row = conn.execute("SELECT * FROM people WHERE id = ?", (legacy_person_id,)).fetchone()
+    if row is None:
+        raise ValueError(f"Cannot synchronize missing Person {legacy_person_id}")
+
+    conn.execute(
+        """
+        INSERT INTO global_people (
+          id, first_name, last_name, nickname, cpf, rg, cellular, email,
+          street1, street2, state, cep, city, country,
+          bank_name, bank_number, checking_account, pix_key,
+          emergency_name, emergency_cellular, emergency_email,
+          profile_completion_status, can_create_collaborator, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(cpf) DO UPDATE SET
+          first_name = excluded.first_name,
+          last_name = excluded.last_name,
+          nickname = excluded.nickname,
+          rg = excluded.rg,
+          cellular = excluded.cellular,
+          email = excluded.email,
+          street1 = excluded.street1,
+          street2 = excluded.street2,
+          state = excluded.state,
+          cep = excluded.cep,
+          city = excluded.city,
+          country = excluded.country,
+          bank_name = excluded.bank_name,
+          bank_number = excluded.bank_number,
+          checking_account = excluded.checking_account,
+          pix_key = excluded.pix_key,
+          emergency_name = excluded.emergency_name,
+          emergency_cellular = excluded.emergency_cellular,
+          emergency_email = excluded.emergency_email,
+          profile_completion_status = excluded.profile_completion_status,
+          can_create_collaborator = excluded.can_create_collaborator,
+          updated_at = excluded.updated_at
+        """,
+        (
+            row["id"], row["first_name"], row["last_name"], row["nickname"],
+            row["cpf"], row["rg"], row["cellular"], row["email"],
+            row["street1"], row["street2"], row["state"], row["cep"],
+            row["city"], row["country"], row["bank_name"], row["bank_number"],
+            row["checking_account"], row["pix_key"], row["emergency_name"],
+            row["emergency_cellular"], row["emergency_email"],
+            row["profile_completion_status"], row["can_create_collaborator"],
+            row["created_at"], row["updated_at"],
+        ),
+    )
+    global_person_id = conn.execute(
+        "SELECT id FROM global_people WHERE cpf = ?", (row["cpf"],)
+    ).fetchone()["id"]
+    conn.execute(
+        """
+        INSERT INTO person_tenant_memberships (
+          id, created_at, updated_at, tenant_id, person_id, status_id, notes, legacy_person_id
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(person_id, tenant_id) DO UPDATE SET
+          status_id = excluded.status_id,
+          notes = excluded.notes,
+          legacy_person_id = excluded.legacy_person_id,
+          updated_at = excluded.updated_at
+        """,
+        (
+            f"person-membership-{legacy_person_id}", row["created_at"], row["updated_at"],
+            row["tenant_id"], global_person_id, row["status_id"], row["notes"], legacy_person_id,
+        ),
+    )
 
 def seed_collaborators(conn: sqlite3.Connection) -> None:
     now = datetime.now(timezone.utc).isoformat(timespec="seconds")
@@ -799,7 +870,7 @@ def main() -> None:
         raise SystemExit(f"Database does not exist: {db_path}. Run migrations first.")
 
     with connect(str(db_path)) as conn:
-        require_tables(conn, ["tenants", "reference_data", "people", "collaborator_journeys", "expenses"])
+        require_tables(conn, ["tenants", "reference_data", "people", "global_people", "person_tenant_memberships", "collaborator_journeys", "expenses"])
         with conn:
             upsert_reference_data(conn)
             seed_people(conn)

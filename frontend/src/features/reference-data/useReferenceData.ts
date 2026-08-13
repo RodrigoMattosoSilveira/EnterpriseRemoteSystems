@@ -8,11 +8,11 @@ import {
 } from "../../api/referenceData.api";
 import type { ReferenceDataInput } from "../../types/referenceData";
 
-export function useReferenceDataByType(type: string) {
+export function useReferenceDataByType(type: string, enabled = true) {
   return useQuery({
     queryKey: ["reference-data", type],
     queryFn: () => listReferenceDataByType(type),
-    enabled: Boolean(type),
+    enabled: Boolean(type) && enabled,
   });
 }
 
