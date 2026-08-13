@@ -27,13 +27,15 @@ type apiErrorResponse struct {
 
 type apiPersonResponse struct {
 	Data struct {
-		ID       string `json:"id"`
-		TenantID string `json:"tenantId"`
-		CPF      string `json:"cpf"`
-		RG       string `json:"rg"`
-		Cellular string `json:"cellular"`
-		Email    string `json:"email"`
-		StatusID string `json:"statusId"`
+		ID             string `json:"id"`
+		GlobalPersonID string `json:"globalPersonId"`
+		MembershipID   string `json:"membershipId"`
+		TenantID       string `json:"tenantId"`
+		CPF            string `json:"cpf"`
+		RG             string `json:"rg"`
+		Cellular       string `json:"cellular"`
+		Email          string `json:"email"`
+		StatusID       string `json:"statusId"`
 	} `json:"data"`
 }
 
@@ -53,6 +55,12 @@ func TestCreatePersonReturnsCreated(t *testing.T) {
 
 	if body.Data.ID == "" {
 		t.Fatal("expected created person id")
+	}
+	if body.Data.GlobalPersonID == "" {
+		t.Fatal("expected created global Person id")
+	}
+	if body.Data.MembershipID == "" {
+		t.Fatal("expected created Person-Tenant Membership id")
 	}
 	if body.Data.TenantID != "default" {
 		t.Fatalf("expected tenantId default, got %q", body.Data.TenantID)

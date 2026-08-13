@@ -9,6 +9,12 @@ import (
 func RegisterPeopleRoutes(v1 fiber.Router, deps Dependencies) {
 	r := v1.Group("/people")
 	r.Get("/", requirePermission(deps, authz.PermissionPeopleRead), deps.PeopleHandler.List)
+	// The new Bite 30B global-directory and Membership paths are deliberately
+	// Tenant Administrator-only. The legacy POST /people permission guard remains
+	// temporarily for Bite 28 compatibility until the Application Administrator
+	// control-plane cutover in Bite 30H removes its standing tenant permissions.
+	r.Get("/global", requireTenantAdministrator(deps), deps.PeopleHandler.SearchGlobal)
+	r.Post("/memberships", requireTenantAdministrator(deps), deps.PeopleHandler.CreateMembership)
 	r.Post("/", requirePermission(deps, authz.PermissionPeopleCreate), deps.PeopleHandler.Create)
 	r.Get("/:id", requirePermissionOrSelfPerson(deps, authz.PermissionPeopleRead, authz.PermissionPeopleSelfRead, "id"), deps.PeopleHandler.GetByID)
 	r.Put("/:id", requirePermissionOrSelfPerson(deps, authz.PermissionPeopleUpdate, authz.PermissionPeopleSelfUpdate, "id"), deps.PeopleHandler.Update)

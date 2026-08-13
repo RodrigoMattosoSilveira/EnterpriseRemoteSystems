@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from "react";
 
 import { Link, useLocation, useSearchParams } from "react-router-dom";
 import { ApiErrorPanel } from "../../components/ApiErrorPanel";
+import { useOptionalAuthorizationContext } from "../../components/layout/AuthorizationContext";
+import { useReferenceDataByType } from "../reference-data/useReferenceData";
 
 import { usePeoplePage } from "./usePeople";
 
@@ -30,6 +32,23 @@ const SEARCH_DEBOUNCE_MS = 350;
 
 export function PeopleListPage() {
   const location = useLocation();
+  const actor = useOptionalAuthorizationContext();
+  const canManageMemberships =
+    actor?.scope === "TENANT" && actor.roleCodes.includes("TENANT_ADMIN");
+  // POST /people remains a Bite 28 compatibility path until the 30H global
+  // administration cutover. Preserve the existing create affordance for actors
+  // that currently hold people.create (including today's Application Admin).
+  const canCreatePerson =
+    !actor || actor.permissions.includes("*") || actor.permissions.includes("people.create");
+  // In the real application, status IDs are tenant-specific reference-data IDs.
+  // Component tests render this page without AuthorizationContext, so retain the
+  // historic default IDs only as that isolated-test fallback.
+  const personStatusesQuery = useReferenceDataByType("person_status", Boolean(actor));
+  const personStatuses = personStatusesQuery.data ?? [];
+  const statusIdByCode = useMemo(() => {
+    const entries = personStatuses.map((status) => [status.code, status.id] as const);
+    return new Map(entries);
+  }, [personStatuses]);
   const listState = readPeopleListState(location.state);
 
   const [search, setSearch] = useState("");
@@ -74,14 +93,14 @@ export function PeopleListPage() {
       pageSize,
       statusId:
         peopleStatus === "Active"
-          ? "ref-person-status-active"
+          ? statusIdByCode.get("ACTIVE") ?? (!actor ? "ref-person-status-active" : undefined)
           : peopleStatus === "InActive"
-          ? "ref-person-status-inactive"
+          ? statusIdByCode.get("INACTIVE") ?? (!actor ? "ref-person-status-inactive" : undefined)
           : peopleStatus === "Discontinued"
-          ? "ref-person-status-discontinued"
+          ? statusIdByCode.get("DISCONTINUED") ?? (!actor ? "ref-person-status-discontinued" : undefined)
           : undefined,
     }),
-    [canCreateCollaborator, page, pageSize, profileCompletionStatus, peopleStatus, debouncedSearch],
+    [actor, canCreateCollaborator, page, pageSize, profileCompletionStatus, peopleStatus, debouncedSearch, statusIdByCode],
   );
 
   const { data, isLoading, error } = usePeoplePage(filter);
@@ -93,7 +112,7 @@ export function PeopleListPage() {
     listState.createdPerson,
   );
   const hasActiveFilters = Boolean(
-    debouncedSearch || profileCompletionStatus || canCreateCollaborator !== "all",
+    debouncedSearch || profileCompletionStatus || canCreateCollaborator !== "all" || peopleStatus !== "All",
   );
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
   const pageStart = total === 0 ? 0 : (page - 1) * pageSize + 1;
@@ -104,6 +123,7 @@ export function PeopleListPage() {
     setDebouncedSearch("");
     setProfileCompletionStatus("");
     setCanCreateCollaborator("all");
+    setPeopleStatus("All");
     setPage(1);
   }
 
@@ -149,12 +169,22 @@ export function PeopleListPage() {
             >
               Authz
             </Link>
-            <Link
-              to="/people/new"
-              className="rounded-xl bg-gray-950 px-4 py-2 text-sm font-semibold text-white shadow-sm"
-            >
-              Add
-            </Link>
+            {canManageMemberships && (
+              <Link
+                to="/people/add-existing"
+                className="rounded-xl border border-gray-950 bg-white px-4 py-2 text-sm font-semibold text-gray-950 shadow-sm"
+              >
+                Add existing
+              </Link>
+            )}
+            {canCreatePerson && (
+              <Link
+                to="/people/new"
+                className="rounded-xl bg-gray-950 px-4 py-2 text-sm font-semibold text-white shadow-sm"
+              >
+                New Person
+              </Link>
+            )}
           </div>
         </div>
       </header>
@@ -216,6 +246,11 @@ export function PeopleListPage() {
                 className="rounded-xl border border-gray-300 px-3 py-2 text-sm shadow-sm"
               />
             </label>
+            {canManageMemberships && (
+              <p className="mt-2 text-xs text-gray-500">
+                This filter searches only People already added to the selected tenant.
+              </p>
+            )}
           </div>
 
           <div className="mt-4 grid gap-4 md:grid-cols-4 justify-items-start">
@@ -323,25 +358,49 @@ export function PeopleListPage() {
             </h2>
             <p className="mt-2 text-sm text-gray-500">
               {hasActiveFilters
-                ? "Adjust or clear the filters to widen the People list."
+                ? canManageMemberships && debouncedSearch.length >= 3
+                  ? "No Person in this tenant matches. Search global People to add an existing Person to this tenant, or clear the filters."
+                  : "Adjust or clear the filters to widen the People list."
                 : "Create the first Person record before creating collaborators."}
             </p>
             {hasActiveFilters ? (
-              <button
-                type="button"
-                onClick={clearFilters}
-                className="mt-5 inline-block rounded-xl bg-gray-950 px-5 py-3 text-sm font-semibold text-white"
-              >
-                Clear filters
-              </button>
-            ) : (
-              <Link
-                to="/people/new"
-                className="mt-5 inline-block rounded-xl bg-gray-950 px-5 py-3 text-sm font-semibold text-white"
-              >
-                Create Person
-              </Link>
-            )}
+              <div className="mt-5 flex flex-wrap justify-center gap-2">
+                <button
+                  type="button"
+                  onClick={clearFilters}
+                  className="inline-block rounded-xl bg-gray-950 px-5 py-3 text-sm font-semibold text-white"
+                >
+                  Clear filters
+                </button>
+                {canManageMemberships && debouncedSearch.length >= 3 && (
+                  <Link
+                    to={`/people/add-existing?search=${encodeURIComponent(debouncedSearch)}`}
+                    className="inline-block rounded-xl border border-gray-950 bg-white px-5 py-3 text-sm font-semibold text-gray-950"
+                  >
+                    Search global People
+                  </Link>
+                )}
+              </div>
+            ) : canManageMemberships || canCreatePerson ? (
+              <div className="mt-5 flex justify-center gap-2">
+                {canManageMemberships && (
+                  <Link
+                    to="/people/add-existing"
+                    className="inline-block rounded-xl border border-gray-950 bg-white px-5 py-3 text-sm font-semibold text-gray-950"
+                  >
+                    Add existing
+                  </Link>
+                )}
+                {canCreatePerson && (
+                  <Link
+                    to="/people/new"
+                    className="inline-block rounded-xl bg-gray-950 px-5 py-3 text-sm font-semibold text-white"
+                  >
+                    Create Person
+                  </Link>
+                )}
+              </div>
+            ) : null}
           </div>
         )}
 

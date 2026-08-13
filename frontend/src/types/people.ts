@@ -5,6 +5,9 @@ export type ProfileCompletionStatus =
 
 export type Person = {
   id: string;
+  globalPersonId?: string;
+  membershipId?: string;
+  tenantId?: string;
 
   firstName: string;
   lastName: string;
@@ -101,4 +104,25 @@ export type PeopleListFilter = {
   canCreateCollaborator?: boolean;
   page?: number;
   pageSize?: number;
+};
+export type GlobalPersonSearchResult = {
+  id: string;
+  firstName: string;
+  lastName: string;
+  nickname: string;
+  cpf: string;
+  rg: string;
+  cellular: string;
+  email: string;
+};
+
+export type GlobalPeopleSearchResponse = {
+  items: GlobalPersonSearchResult[];
+  total: number;
+};
+
+export type CreatePersonMembershipInput = {
+  personId: string;
+  statusId: string;
+  notes?: string;
 };

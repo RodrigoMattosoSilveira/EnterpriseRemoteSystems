@@ -3,12 +3,23 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { AuthorizationProvider } from "../../components/layout/AuthorizationContext";
+import type { AuthzCurrentActor } from "../../types/authz";
 import { PeopleListPage } from "./PeopleListPage";
 import type { Person } from "../../types/people";
 
 let container: HTMLDivElement;
 let root: Root | null;
 let fetchCalls: string[];
+
+const tenantAdminActor: AuthzCurrentActor = {
+  actorKey: "tenant-admin",
+  actorRecordId: "actor-tenant-admin",
+  tenantId: "default",
+  scope: "TENANT",
+  roleCodes: ["TENANT_ADMIN"],
+  permissions: ["people.read", "people.create", "people.update"],
+};
 
 beforeEach(() => {
   window.localStorage.clear();
@@ -166,6 +177,30 @@ describe("PeopleListPage", () => {
     expect(textNode("Use bootstrap-admin and reload")).toBeFalsy();
     expect(container.querySelector("pre")).toBeNull();
   });
+
+  it("offers a global Person search when a Tenant Administrator finds no tenant match", async () => {
+    mockPeopleFetch({ items: [], total: 0 });
+
+    renderPeopleListRoute(tenantAdminActor);
+    await waitForText("No people yet");
+
+    await changeInput("Filter people", "pj@example.com");
+    act(() => vi.advanceTimersByTime(400));
+
+    await waitFor(() =>
+      fetchCalls.includes(
+        "/api/v1/people?search=pj%40example.com&page=1&pageSize=10",
+      ),
+    );
+    await waitForText("Search global People");
+
+    const link = Array.from(container.querySelectorAll("a")).find(
+      (node) => node.textContent?.trim() === "Search global People",
+    );
+    expect(link?.getAttribute("href")).toBe(
+      "/people/add-existing?search=pj%40example.com",
+    );
+  });
   it("resets to first page when status changes to Discontinued", async () => {
     mockPeopleFetch({ items: Array.from({ length: 10 }, (_, index) => personFixture(`person-${index + 1}`, `Maria${index + 1}`)), total: 25 });
 
@@ -232,7 +267,7 @@ describe("PeopleListPage", () => {
 
 // ─── Helpers ───────────────────────────────────────────────────────────────
 
-function renderPeopleListRoute() {
+function renderPeopleListRoute(actor?: AuthzCurrentActor) {
   const queryClient = new QueryClient({
     defaultOptions: {
       queries: { retry: false },
@@ -250,7 +285,13 @@ function renderPeopleListRoute() {
   act(() => {
     root?.render(
       <QueryClientProvider client={queryClient}>
-        <RouterProvider router={router} />
+        {actor ? (
+          <AuthorizationProvider value={actor}>
+            <RouterProvider router={router} />
+          </AuthorizationProvider>
+        ) : (
+          <RouterProvider router={router} />
+        )}
       </QueryClientProvider>,
     );
   });
@@ -264,6 +305,9 @@ function mockPeopleFetch(response: { items: Person[]; total: number }) {
 
       if (url.startsWith("/api/v1/people")) {
         return jsonResponse({ data: response });
+      }
+      if (url === "/api/v1/reference-data/person_status") {
+        return jsonResponse({ data: [] });
       }
 
       throw new Error(`Unhandled request: ${url}`);

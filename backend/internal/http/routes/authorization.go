@@ -175,6 +175,28 @@ func requirePermission(deps Dependencies, permission authz.Permission) fiber.Han
 	}
 }
 
+func requireTenantAdministrator(deps Dependencies) fiber.Handler {
+	return func(c fiber.Ctx) error {
+		if deps.DisableRouteAuthorization {
+			return c.Next()
+		}
+
+		actor, err := requestActor(c, deps)
+		if err != nil {
+			return writeAuthorizationError(c, err)
+		}
+		if actor.Scope != authz.ActorScopeTenant || strings.TrimSpace(actor.TenantID) == "" || actor.TenantID == authz.GlobalTenantScope {
+			return writeAuthorizationError(c, authz.ErrForbidden)
+		}
+		for _, roleCode := range actor.RoleCodes {
+			if roleCode == string(authz.RoleTenantAdmin) {
+				return c.Next()
+			}
+		}
+		return writeAuthorizationError(c, authz.ErrForbidden)
+	}
+}
+
 func requireApplicationPermission(deps Dependencies, permission authz.Permission) fiber.Handler {
 	return func(c fiber.Ctx) error {
 		if deps.DisableRouteAuthorization {

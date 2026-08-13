@@ -30,6 +30,7 @@ func TestEveryRegisteredAPIRouteHasAuthorizationCoverage(t *testing.T) {
 		"requirePermission":                   {},
 		"requireApplicationPermission":        {},
 		"requireTenantPermission":             {},
+		"requireTenantAdministrator":          {},
 		"requirePermissionOrSelfPerson":       {},
 		"requirePermissionOrSelfCollaborator": {},
 		"authorizationHandledByHandler":       {},

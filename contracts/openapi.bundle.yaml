@@ -3,7 +3,7 @@ info:
   title: Collaborator Accounting API
   version: 1.0.0
 servers:
-  - url: /api/v1
+- url: /api/v1
 paths:
   /people:
     get:
@@ -17,6 +17,10 @@ paths:
                 $ref: '#/components/schemas/PeopleListResponse'
     post:
       operationId: createPerson
+      description: Transitional Bite 28 compatibility operation. Creates a global
+        Person and a Person-Tenant Membership for the selected tenant in one transaction.
+        Its legacy people.create authorization remains until the Bite 30H global-admin
+        control-plane cutover; new Membership-only creation is Tenant Administrator-only.
       requestBody:
         required: true
         content:
@@ -32,11 +36,64 @@ paths:
                 $ref: '#/components/schemas/PersonResponse'
         '400':
           $ref: '#/components/responses/ValidationError'
+  /people/global:
+    get:
+      operationId: searchGlobalPeople
+      description: Tenant Administrator-only identity search for Persons who do not
+        already have a Membership in the selected tenant. No other-tenant relationship
+        information is returned.
+      parameters:
+      - name: search
+        in: query
+        required: true
+        schema:
+          type: string
+          minLength: 3
+      - name: page
+        in: query
+        schema:
+          type: integer
+          minimum: 1
+      - name: pageSize
+        in: query
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 100
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GlobalPeopleSearchResponse'
+  /people/memberships:
+    post:
+      operationId: createPersonTenantMembership
+      description: Tenant Administrator-only operation that associates an existing
+        global Person with the selected tenant without revealing any other membership.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreatePersonMembershipRequest'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PersonResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '404':
+          $ref: '#/components/responses/NotFound'
   /people/{id}:
     get:
       operationId: getPerson
       parameters:
-        - $ref: '#/components/parameters/PersonID'
+      - $ref: '#/components/parameters/PersonID'
       responses:
         '200':
           description: OK
@@ -49,7 +106,7 @@ paths:
     put:
       operationId: updatePerson
       parameters:
-        - $ref: '#/components/parameters/PersonID'
+      - $ref: '#/components/parameters/PersonID'
       requestBody:
         required: true
         content:
@@ -89,18 +146,11 @@ components:
           schema:
             $ref: '#/components/schemas/ErrorResponse'
   schemas:
-    ErrorResponse:
-      type: object
-      required:
-        - error
-      properties:
-        error:
-          $ref: '#/components/schemas/APIError'
     APIError:
       type: object
       required:
-        - code
-        - message
+      - code
+      - message
       properties:
         code:
           type: string
@@ -110,8 +160,60 @@ components:
           type: object
           additionalProperties:
             type: string
+    ErrorResponse:
+      type: object
+      required:
+      - error
+      properties:
+        error:
+          $ref: '#/components/schemas/APIError'
     Person:
       type: object
+      properties:
+        id:
+          type: string
+        globalPersonId:
+          type: string
+          description: Authoritative application-global Person identity.
+        membershipId:
+          type: string
+          description: Person-Tenant Membership for the selected tenant.
+        tenantId:
+          type: string
+        firstName:
+          type: string
+        lastName:
+          type: string
+        nickname:
+          type: string
+        cpf:
+          type: string
+        rg:
+          type: string
+        cellular:
+          type: string
+        email:
+          type: string
+        statusId:
+          type: string
+        statusLabel:
+          type: string
+        notes:
+          type: string
+    GlobalPersonSearchResult:
+      type: object
+      description: Minimal global identity projection available to a Tenant Administrator
+        when locating a Person for Membership creation. It intentionally contains
+        no membership, Actor, Collaborator, role, financial, or other-tenant data.
+      required:
+      - id
+      - firstName
+      - lastName
+      - nickname
+      - cpf
+      - rg
+      - cellular
+      - email
       properties:
         id:
           type: string
@@ -129,36 +231,19 @@ components:
           type: string
         email:
           type: string
-        statusId:
-          type: string
-    PeopleListResponse:
-      type: object
-      properties:
-        data:
-          type: object
-          properties:
-            items:
-              type: array
-              items:
-                $ref: '#/components/schemas/Person'
-            total:
-              type: integer
-    PersonResponse:
-      type: object
-      properties:
-        data:
-          $ref: '#/components/schemas/Person'
     CreatePersonRequest:
       type: object
+      description: Transitional Bite 30B Tenant Administrator operation that creates
+        one global Person and the selected tenant's Person-Tenant Membership together.
       required:
-        - firstName
-        - lastName
-        - nickname
-        - cpf
-        - rg
-        - cellular
-        - email
-        - statusId
+      - firstName
+      - lastName
+      - nickname
+      - cpf
+      - rg
+      - cellular
+      - email
+      - statusId
       properties:
         firstName:
           type: string
@@ -176,6 +261,53 @@ components:
           type: string
         statusId:
           type: string
+        notes:
+          type: string
     UpdatePersonRequest:
       allOf:
-        - $ref: '#/components/schemas/CreatePersonRequest'
+      - $ref: '#/components/schemas/CreatePersonRequest'
+    CreatePersonMembershipRequest:
+      type: object
+      required:
+      - personId
+      - statusId
+      properties:
+        personId:
+          type: string
+          description: Global Person ID.
+        statusId:
+          type: string
+          description: Active person_status reference-data ID owned by the selected
+            tenant.
+        notes:
+          type: string
+          description: Tenant-private Membership notes.
+    PeopleListResponse:
+      type: object
+      properties:
+        data:
+          type: object
+          properties:
+            items:
+              type: array
+              items:
+                $ref: '#/components/schemas/Person'
+            total:
+              type: integer
+    GlobalPeopleSearchResponse:
+      type: object
+      properties:
+        data:
+          type: object
+          properties:
+            items:
+              type: array
+              items:
+                $ref: '#/components/schemas/GlobalPersonSearchResult'
+            total:
+              type: integer
+    PersonResponse:
+      type: object
+      properties:
+        data:
+          $ref: '#/components/schemas/Person'

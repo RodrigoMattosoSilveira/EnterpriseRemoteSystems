@@ -12,7 +12,7 @@ import (
 	"gorm.io/gorm"
 )
 
-func TestRepositoryUniqueConflictsAreScopedByTenant(t *testing.T) {
+func TestRepositoryUniqueConflictsAreGlobalAcrossTenants(t *testing.T) {
 	database, cleanup := newRepositoryTestDB(t)
 	defer cleanup()
 
@@ -54,36 +54,18 @@ func TestRepositoryUniqueConflictsAreScopedByTenant(t *testing.T) {
 	if err != nil {
 		t.Fatalf("check default tenant conflicts: %v", err)
 	}
-	if conflicts["cpf"] {
-		t.Fatalf("expected same CPF in another tenant not to conflict in default tenant: %+v", conflicts)
-	}
-
-	defaultTenantPerson := db.Person{
-		BaseModel:               db.BaseModel{ID: ids.New(), CreatedAt: now, UpdatedAt: now},
-		TenantID:                db.DefaultTenantID,
-		FirstName:               "Default",
-		LastName:                "CPF",
-		Nickname:                "DefaultCPF",
-		CPF:                     otherTenantPerson.CPF,
-		RG:                      "RG-DEFAULT-001",
-		Cellular:                "11991234567",
-		Email:                   "same-cpf-default@example.com",
-		Country:                 "Brasil",
-		StatusID:                "ref-person-status-active",
-		ProfileCompletionStatus: "PERSONAL_ONLY",
-		CanCreateCollaborator:   false,
-	}
-	if err := database.Create(&defaultTenantPerson).Error; err != nil {
-		t.Fatalf("create default tenant person: %v", err)
-	}
-
-	conflicts, err = repo.UniqueConflicts(ctx, db.DefaultTenantID, otherTenantPerson.CPF, "RG-NEW-001", "11995554444", "new-default@example.com", nil, nil)
-	if err != nil {
-		t.Fatalf("check same tenant conflicts: %v", err)
-	}
 	if !conflicts["cpf"] {
-		t.Fatalf("expected same CPF in default tenant to conflict: %+v", conflicts)
+		t.Fatalf("expected same CPF in another tenant to conflict globally: %+v", conflicts)
 	}
+
+	conflicts, err = repo.UniqueConflicts(ctx, db.DefaultTenantID, "52998224725", otherTenantPerson.RG, "11995554444", "new-default@example.com", nil, nil)
+	if err != nil {
+		t.Fatalf("check global RG conflicts: %v", err)
+	}
+	if !conflicts["rg"] {
+		t.Fatalf("expected RG in another tenant to conflict globally: %+v", conflicts)
+	}
+
 }
 
 func newRepositoryTestDB(t *testing.T) (*gorm.DB, func()) {
@@ -199,8 +181,8 @@ func TestRepositoryPeopleReadsAndWritesAreScopedByTenant(t *testing.T) {
 	}
 
 	defaultPerson.Nickname = "CrossTenantUpdate"
-	if err := repo.Update(ctx, otherTenantID, &defaultPerson); err != nil {
-		t.Fatalf("attempt cross-tenant update: %v", err)
+	if err := repo.Update(ctx, otherTenantID, &defaultPerson); err == nil {
+		t.Fatal("expected cross-tenant update to be rejected")
 	}
 	var persisted db.Person
 	if err := database.First(&persisted, "id = ?", defaultPerson.ID).Error; err != nil {
