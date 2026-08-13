@@ -11,6 +11,11 @@ people:
 
   post:
     operationId: createPerson
+    description: >-
+      Transitional Bite 28 compatibility operation. Creates a global Person and
+      a Person-Tenant Membership for the selected tenant in one transaction. Its
+      legacy people.create authorization remains until the Bite 30H global-admin
+      control-plane cutover; new Membership-only creation is Tenant Administrator-only.
     requestBody:
       required: true
       content:
@@ -26,6 +31,63 @@ people:
               $ref: "../openapi.yaml#/components/schemas/PersonResponse"
       "400":
         $ref: "../openapi.yaml#/components/responses/ValidationError"
+
+globalPeople:
+  get:
+    operationId: searchGlobalPeople
+    description: >-
+      Tenant Administrator-only identity search for Persons who do not already
+      have a Membership in the selected tenant. No other-tenant relationship
+      information is returned.
+    parameters:
+      - name: search
+        in: query
+        required: true
+        schema:
+          type: string
+          minLength: 3
+      - name: page
+        in: query
+        schema:
+          type: integer
+          minimum: 1
+      - name: pageSize
+        in: query
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 100
+    responses:
+      "200":
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: "../openapi.yaml#/components/schemas/GlobalPeopleSearchResponse"
+
+personMemberships:
+  post:
+    operationId: createPersonTenantMembership
+    description: >-
+      Tenant Administrator-only operation that associates an existing global
+      Person with the selected tenant without revealing any other membership.
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "../openapi.yaml#/components/schemas/CreatePersonMembershipRequest"
+    responses:
+      "201":
+        description: Created
+        content:
+          application/json:
+            schema:
+              $ref: "../openapi.yaml#/components/schemas/PersonResponse"
+      "400":
+        $ref: "../openapi.yaml#/components/responses/ValidationError"
+      "404":
+        $ref: "../openapi.yaml#/components/responses/NotFound"
 
 personById:
   get:

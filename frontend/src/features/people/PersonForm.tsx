@@ -12,15 +12,23 @@ import {
 type Props = {
   initial?: Person;
   defaultStatusId: string;
+  statusOptions?: Array<{ value: string; label: string }>;
   submitting?: boolean;
   onSubmit: (input: CreatePersonInput | UpdatePersonInput) => Promise<void>;
 };
+
+const DEFAULT_STATUS_OPTIONS = [
+  { value: "ref-person-status-active", label: "Active" },
+  { value: "ref-person-status-inactive", label: "Inactive" },
+  { value: "ref-person-status-discontinued", label: "Discontinued" },
+];
 
 type Tab = "personal" | "address" | "bank" | "emergency" | "notes";
 
 export function PersonForm({
   initial,
   defaultStatusId,
+  statusOptions = DEFAULT_STATUS_OPTIONS,
   submitting = false,
   onSubmit,
 }: Props) {
@@ -202,14 +210,7 @@ export function PersonForm({
             required
             value={form.statusId}
             onChange={(value) => update("statusId", value)}
-            options={[
-              { value: "ref-person-status-active", label: "Active" },
-              { value: "ref-person-status-inactive", label: "Inactive" },
-              {
-                value: "ref-person-status-discontinued",
-                label: "Discontinued",
-              },
-            ]}
+            options={statusOptions}
           />
         </Section>
       )}

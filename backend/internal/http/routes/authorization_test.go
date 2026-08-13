@@ -115,6 +115,61 @@ func TestRequirePermissionAllowsPersistedActor(t *testing.T) {
 	}
 }
 
+func TestRequireTenantAdministratorAllowsTenantAdminOnly(t *testing.T) {
+	cases := []struct {
+		name       string
+		actor      *authz.Actor
+		wantStatus int
+	}{
+		{
+			name: "tenant administrator",
+			actor: &authz.Actor{
+				ID: "tenant-admin", TenantID: "default", Scope: authz.ActorScopeTenant,
+				RoleCodes:   []string{string(authz.RoleTenantAdmin)},
+				Permissions: map[authz.Permission]struct{}{authz.PermissionAll: {}},
+			},
+			wantStatus: fiber.StatusNoContent,
+		},
+		{
+			name: "tenant operator with people permission",
+			actor: &authz.Actor{
+				ID: "tenant-operator", TenantID: "default", Scope: authz.ActorScopeTenant,
+				RoleCodes:   []string{string(authz.RoleExpenseOperator)},
+				Permissions: map[authz.Permission]struct{}{authz.PermissionPeopleCreate: {}},
+			},
+			wantStatus: fiber.StatusForbidden,
+		},
+		{
+			name: "application administrator",
+			actor: &authz.Actor{
+				ID: "application-admin", TenantID: authz.GlobalTenantScope, Scope: authz.ActorScopeApplication,
+				RoleCodes:   []string{string(authz.RoleApplicationAdmin)},
+				Permissions: map[authz.Permission]struct{}{authz.PermissionAll: {}},
+			},
+			wantStatus: fiber.StatusForbidden,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			app := fiber.New()
+			app.Get("/tenant-admin-only", requireTenantAdministrator(Dependencies{ActorStore: fakeActorStore{actor: tc.actor}}), func(c fiber.Ctx) error {
+				return c.SendStatus(fiber.StatusNoContent)
+			})
+			req := httptest.NewRequest(fiber.MethodGet, "/tenant-admin-only", nil)
+			req.Header.Set(authz.HeaderActorID, tc.actor.ID)
+			req.Header.Set(authz.HeaderTenantID, tc.actor.TenantID)
+			resp, err := app.Test(req)
+			if err != nil {
+				t.Fatalf("request failed: %v", err)
+			}
+			if resp.StatusCode != tc.wantStatus {
+				t.Fatalf("status = %d, want %d", resp.StatusCode, tc.wantStatus)
+			}
+		})
+	}
+}
+
 func TestRequirePermissionOrSelfPersonAllowsFullPermissionActor(t *testing.T) {
 	store := fakeActorStore{actor: &authz.Actor{
 		ID:       "admin",

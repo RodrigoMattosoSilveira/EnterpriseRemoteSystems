@@ -1,8 +1,10 @@
 package people
 
 type PersonDTO struct {
-	ID       string `json:"id"`
-	TenantID string `json:"tenantId"`
+	ID             string `json:"id"`
+	GlobalPersonID string `json:"globalPersonId"`
+	MembershipID   string `json:"membershipId"`
+	TenantID       string `json:"tenantId"`
 
 	FirstName string `json:"firstName"`
 	LastName  string `json:"lastName"`
@@ -108,4 +110,33 @@ type PersonListFilter struct {
 	CanCreateCollaborator   *bool  `query:"canCreateCollaborator"`
 	Page                    int    `query:"page"`
 	PageSize                int    `query:"pageSize"`
+}
+
+// GlobalPersonDTO is the deliberately minimal global-directory projection used
+// by a Tenant Administrator to locate a Person before creating a Membership.
+// It never exposes address, banking, emergency, membership, Actor, Collaborator,
+// role, financial, or other-tenant relationship data.
+type GlobalPersonDTO struct {
+	ID string `json:"id"`
+
+	FirstName string `json:"firstName"`
+	LastName  string `json:"lastName"`
+	Nickname  string `json:"nickname"`
+
+	CPF      string `json:"cpf"`
+	RG       string `json:"rg"`
+	Cellular string `json:"cellular"`
+	Email    string `json:"email"`
+}
+
+type GlobalPersonSearchFilter struct {
+	Search   string `query:"search"`
+	Page     int    `query:"page"`
+	PageSize int    `query:"pageSize"`
+}
+
+type CreatePersonMembershipRequest struct {
+	PersonID string `json:"personId"`
+	StatusID string `json:"statusId"`
+	Notes    string `json:"notes"`
 }

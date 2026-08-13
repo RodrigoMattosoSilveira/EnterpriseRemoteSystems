@@ -39,6 +39,14 @@ func (s *tenantRecordingService) Update(_ context.Context, tenantID string, id s
 	return &PersonDTO{ID: id, TenantID: tenantID}, nil
 }
 
+func (s *tenantRecordingService) SearchGlobal(_ context.Context, tenantID string, _ GlobalPersonSearchFilter) ([]GlobalPersonDTO, int64, error) {
+	return []GlobalPersonDTO{}, 0, nil
+}
+
+func (s *tenantRecordingService) CreateMembership(_ context.Context, tenantID string, _ CreatePersonMembershipRequest, _ string) (*PersonDTO, error) {
+	return &PersonDTO{ID: "person-one", TenantID: tenantID}, nil
+}
+
 func TestHandlerUsesAuthoritativeSelectedTenantForPeopleOperations(t *testing.T) {
 	service := &tenantRecordingService{}
 	handler := NewHandler(service)

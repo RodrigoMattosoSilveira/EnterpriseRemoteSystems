@@ -29,6 +29,7 @@ const protectedChildren: RouteObject[] = [
   { index: true, element: <PermissionAwareHome /> },
   { path: "people", lazy: async () => ({ Component: (await import("../features/people/PeopleListPage")).PeopleListPage }) },
   { path: "people/new", lazy: async () => ({ Component: (await import("../features/people/CreatePersonPage")).CreatePersonPage }) },
+  { path: "people/add-existing", lazy: async () => ({ Component: (await import("../features/people/AddPersonMembershipPage")).AddPersonMembershipPage }) },
   { path: "people/:id", lazy: async () => ({ Component: (await import("../features/people/PersonDetailPage")).PersonDetailPage }) },
   { path: "collaborators", lazy: async () => ({ Component: (await import("../features/collaborators/CollaboratorsListPage")).CollaboratorsListPage }) },
   { path: "collaborators/new", lazy: async () => ({ Component: (await import("../features/collaborators/CreateCollaboratorPage")).CreateCollaboratorPage }) },
