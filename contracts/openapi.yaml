@@ -9,6 +9,10 @@ servers:
 paths:
   /people:
     $ref: "./paths/people.yaml#/people"
+  /people/global:
+    $ref: "./paths/people.yaml#/globalPeople"
+  /people/memberships:
+    $ref: "./paths/people.yaml#/personMemberships"
   /people/{id}:
     $ref: "./paths/people.yaml#/personById"
 
@@ -35,6 +39,12 @@ components:
       $ref: "./components/schemas/person.yaml#/PeopleListResponse"
     PersonResponse:
       $ref: "./components/schemas/person.yaml#/PersonResponse"
+    GlobalPersonSearchResult:
+      $ref: "./components/schemas/person.yaml#/GlobalPersonSearchResult"
+    GlobalPeopleSearchResponse:
+      $ref: "./components/schemas/person.yaml#/GlobalPeopleSearchResponse"
+    CreatePersonMembershipRequest:
+      $ref: "./components/schemas/person.yaml#/CreatePersonMembershipRequest"
     CreatePersonRequest:
       $ref: "./components/schemas/person.yaml#/CreatePersonRequest"
     UpdatePersonRequest:

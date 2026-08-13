@@ -8,3 +8,7 @@ export function useAuthorizationContext(): AuthzCurrentActor {
   if (!value) throw new Error("Authorization context is unavailable");
   return value;
 }
+
+export function useOptionalAuthorizationContext(): AuthzCurrentActor | null {
+  return useContext(AuthorizationContext);
+}

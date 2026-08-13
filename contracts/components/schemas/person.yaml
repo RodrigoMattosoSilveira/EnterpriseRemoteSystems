@@ -3,6 +3,14 @@ Person:
   properties:
     id:
       type: string
+    globalPersonId:
+      type: string
+      description: Authoritative application-global Person identity.
+    membershipId:
+      type: string
+      description: Person-Tenant Membership for the selected tenant.
+    tenantId:
+      type: string
     firstName:
       type: string
     lastName:
@@ -19,9 +27,49 @@ Person:
       type: string
     statusId:
       type: string
+    statusLabel:
+      type: string
+    notes:
+      type: string
+
+GlobalPersonSearchResult:
+  type: object
+  description: >-
+    Minimal global identity projection available to a Tenant Administrator when
+    locating a Person for Membership creation. It intentionally contains no
+    membership, Actor, Collaborator, role, financial, or other-tenant data.
+  required:
+    - id
+    - firstName
+    - lastName
+    - nickname
+    - cpf
+    - rg
+    - cellular
+    - email
+  properties:
+    id:
+      type: string
+    firstName:
+      type: string
+    lastName:
+      type: string
+    nickname:
+      type: string
+    cpf:
+      type: string
+    rg:
+      type: string
+    cellular:
+      type: string
+    email:
+      type: string
 
 CreatePersonRequest:
   type: object
+  description: >-
+    Transitional Bite 30B Tenant Administrator operation that creates one
+    global Person and the selected tenant's Person-Tenant Membership together.
   required:
     - firstName
     - lastName
@@ -48,10 +96,28 @@ CreatePersonRequest:
       type: string
     statusId:
       type: string
+    notes:
+      type: string
 
 UpdatePersonRequest:
   allOf:
     - $ref: "#/CreatePersonRequest"
+
+CreatePersonMembershipRequest:
+  type: object
+  required:
+    - personId
+    - statusId
+  properties:
+    personId:
+      type: string
+      description: Global Person ID.
+    statusId:
+      type: string
+      description: Active person_status reference-data ID owned by the selected tenant.
+    notes:
+      type: string
+      description: Tenant-private Membership notes.
 
 PeopleListResponse:
   type: object
@@ -63,6 +129,19 @@ PeopleListResponse:
           type: array
           items:
             $ref: "#/Person"
+        total:
+          type: integer
+
+GlobalPeopleSearchResponse:
+  type: object
+  properties:
+    data:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/GlobalPersonSearchResult"
         total:
           type: integer
 

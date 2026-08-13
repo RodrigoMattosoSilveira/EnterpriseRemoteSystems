@@ -235,6 +235,36 @@ func (s *service) Update(ctx context.Context, tenantID string, id string, req Up
 // 	return []CollaboratorDTO{}, nil
 // }
 
+func (s *service) SearchGlobal(ctx context.Context, tenantID string, filter GlobalPersonSearchFilter) ([]GlobalPersonDTO, int64, error) {
+	rows, total, err := s.repo.SearchGlobal(ctx, tenantID, filter)
+	if err != nil {
+		return nil, 0, err
+	}
+	return GlobalPersonToDTOList(rows), total, nil
+}
+
+func (s *service) CreateMembership(ctx context.Context, tenantID string, req CreatePersonMembershipRequest, actorUserID string) (*PersonDTO, error) {
+	_ = actorUserID // retained for the audit identity cutover in Bite 30I
+	fields := map[string]string{}
+	if strings.TrimSpace(req.PersonID) == "" {
+		fields["personId"] = "Required"
+	}
+	if strings.TrimSpace(req.StatusID) == "" {
+		fields["statusId"] = "Required"
+	}
+	if len(fields) > 0 {
+		return nil, ValidationError{Fields: fields}
+	}
+	if err := s.validatePersonStatus(ctx, tenantID, req.StatusID); err != nil {
+		return nil, err
+	}
+	created, err := s.repo.CreateMembership(ctx, tenantID, req)
+	if err != nil {
+		return nil, err
+	}
+	return ptr(ToDTO(*created)), nil
+}
+
 func defaultCountry(value string) string {
 	if strings.TrimSpace(value) == "" {
 		return "Brasil"

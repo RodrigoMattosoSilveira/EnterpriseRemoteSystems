@@ -36,6 +36,12 @@ func Bootstrap(cfg Config) (*fiber.App, func(), error) {
 	if err := db.SeedReferenceData(database); err != nil {
 		return nil, nil, err
 	}
+	// Bite 30B is an additive cutover: legacy Person writers remain until later
+	// bites. Repair any compatibility rows that were written without the new
+	// global Person/Membership foundation before serving tenant lookups.
+	if err := db.EnsureGlobalPersonMembershipFoundation(database); err != nil {
+		return nil, nil, err
+	}
 	if cfg.AutoMigrate || (cfg.Env == "test" && !cfg.AutoMigrateConfigured) {
 		if err := authz.AutoMigrate(database); err != nil {
 			return nil, nil, err
@@ -89,7 +95,7 @@ func Bootstrap(cfg Config) (*fiber.App, func(), error) {
 
 	peopleRepo := people.NewRepository(database)
 	peopleSvc := people.NewService(peopleRepo)
-	peopleHandler := people.NewHandler(peopleSvc)
+	peopleHandler := people.NewHandler(peopleSvc, people.WithAuthorizationAudit(actorStore, actorStore))
 
 	collaboratorRepo := collaborators.NewRepository(database)
 	collaboratorSvc := collaborators.NewService(collaboratorRepo)
