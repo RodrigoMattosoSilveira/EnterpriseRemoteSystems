@@ -48,7 +48,11 @@ func (r *GORMRepository) ListAccounts(ctx context.Context) ([]AccountRecord, err
 	}
 	result := make([]AccountRecord, 0, len(rows))
 	for _, row := range rows {
-		result = append(result, mapAccountProjection(row))
+		record, err := r.hydrateAccountActors(ctx, mapAccountProjection(row))
+		if err != nil {
+			return nil, err
+		}
+		result = append(result, record)
 	}
 	return result, nil
 }
@@ -65,7 +69,7 @@ func (r *GORMRepository) FindAccountByID(ctx context.Context, id string) (Accoun
 	if result.RowsAffected == 0 {
 		return AccountRecord{}, gorm.ErrRecordNotFound
 	}
-	return mapAccountProjection(row), nil
+	return r.hydrateAccountActors(ctx, mapAccountProjection(row))
 }
 
 func (r *GORMRepository) FindAccountByLogin(ctx context.Context, login string) (AccountRecord, error) {
@@ -80,7 +84,7 @@ func (r *GORMRepository) FindAccountByLogin(ctx context.Context, login string) (
 	if result.RowsAffected == 0 {
 		return AccountRecord{}, gorm.ErrRecordNotFound
 	}
-	return mapAccountProjection(row), nil
+	return r.hydrateAccountActors(ctx, mapAccountProjection(row))
 }
 
 func (r *GORMRepository) ActorHasActiveTenantAccess(ctx context.Context, actorID string) (bool, error) {
@@ -109,7 +113,17 @@ func (r *GORMRepository) EnsureActorPersonSelfAccess(ctx context.Context, actorI
 }
 
 func (r *GORMRepository) CreateAccount(ctx context.Context, account Account) (AccountRecord, error) {
+	accountID := account.ID
 	err := r.database.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		// Bite 30B deliberately kept legacy People writers alive during the
+		// staged cutover. Repair those projections before using Person identity
+		// to enforce the one-human/one-Account invariant.
+		if tx.Migrator().HasTable(&appdb.PersonTenantMembership{}) {
+			if err := appdb.EnsureGlobalPersonMembershipFoundation(tx); err != nil {
+				return err
+			}
+		}
+
 		var actor authz.AuthzActor
 		result := tx.Where("id = ?", account.ActorID).Limit(1).Find(&actor)
 		if result.Error != nil {
@@ -123,12 +137,64 @@ func (r *GORMRepository) CreateAccount(ctx context.Context, account Account) (Ac
 			return err
 		}
 
-		return createAuthenticationAccount(tx, account)
+		// Once the 30C ownership tables exist, selecting a second tenant Actor
+		// for a Person who already has an Authentication Account extends that
+		// Account instead of creating a second login identity.
+		if tx.Migrator().HasTable(&AccountActor{}) && tx.Migrator().HasTable(&AccountPerson{}) {
+			applicationAdmin, err := actorHasApplicationAdminGrant(tx, actor.ID)
+			if err != nil {
+				return err
+			}
+			if !applicationAdmin {
+				personID, membership, err := resolveLegacyActorGlobalPerson(tx, actor)
+				if err != nil {
+					return err
+				}
+				if personID != "" {
+					var existingPersonBinding AccountPerson
+					existingResult := tx.Where("person_id = ?", personID).Limit(1).Find(&existingPersonBinding)
+					if existingResult.Error != nil {
+						return fmt.Errorf("find existing Authentication Account for Actor Person: %w", existingResult.Error)
+					}
+					if existingResult.RowsAffected > 0 {
+						if membership == nil {
+							return fmt.Errorf("authorization actor %s has a global Person but no Person-Tenant Membership", actor.ID)
+						}
+						binding := AccountActor{
+							AccountID: existingPersonBinding.AccountID,
+							ActorID:   actor.ID,
+							ScopeType: AccountActorScopeTenant,
+							Primary:   false,
+							CreatedAt: account.CreatedAt,
+							UpdatedAt: account.UpdatedAt,
+						}
+						tenantID := membership.TenantID
+						membershipID := membership.ID
+						binding.TenantID = &tenantID
+						binding.MembershipID = &membershipID
+						if err := ensureAccountActorBinding(tx, binding); err != nil {
+							return err
+						}
+						accountID = existingPersonBinding.AccountID
+						return nil
+					}
+				}
+			}
+		}
+
+		if err := createAuthenticationAccount(tx, account); err != nil {
+			return err
+		}
+		if err := ensureAccountActorFoundation(tx, account); err != nil {
+			return err
+		}
+		accountID = account.ID
+		return nil
 	})
 	if err != nil {
 		return AccountRecord{}, err
 	}
-	return r.FindAccountByID(ctx, account.ID)
+	return r.FindAccountByID(ctx, accountID)
 }
 
 func ensureAuthenticatedActorPersonSelfAccess(tx *gorm.DB, actor *authz.AuthzActor, now time.Time) error {
@@ -215,6 +281,7 @@ func ensureAuthenticatedActorPersonSelfAccess(tx *gorm.DB, actor *authz.AuthzAct
 
 func (r *GORMRepository) CreatePersonAccount(ctx context.Context, tenantID string, account Account) (AccountRecord, error) {
 	tenantID = strings.TrimSpace(tenantID)
+	accountID := account.ID
 	err := r.database.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		var tenant appdb.Tenant
 		result := tx.Where("id = ? AND active = ?", tenantID, true).Limit(1).Find(&tenant)
@@ -223,6 +290,13 @@ func (r *GORMRepository) CreatePersonAccount(ctx context.Context, tenantID strin
 		}
 		if result.RowsAffected == 0 {
 			return ErrTenantUnavailable
+		}
+
+		// 30B deliberately allowed legacy Person writers during the staged
+		// cutover. Repair their global Person/Membership projection before 30C
+		// binds authentication identity to that global Person.
+		if err := appdb.EnsureGlobalPersonMembershipFoundation(tx); err != nil {
+			return err
 		}
 
 		var person appdb.Person
@@ -237,113 +311,164 @@ func (r *GORMRepository) CreatePersonAccount(ctx context.Context, tenantID strin
 			return ErrPersonLoginNotFound
 		}
 
-		var collaborator appdb.CollaboratorJourney
-		collaboratorResult := tx.
-			Where("tenant_id = ? AND person_id = ? AND closed_at IS NULL", tenantID, person.ID).
-			Order("journey_start_date DESC, created_at DESC").
-			Limit(1).
-			Find(&collaborator)
-		if collaboratorResult.Error != nil {
-			return fmt.Errorf("find current collaborator for authentication person: %w", collaboratorResult.Error)
+		var membership appdb.PersonTenantMembership
+		membershipResult := tx.Where("legacy_person_id = ? AND tenant_id = ?", person.ID, tenantID).Limit(1).Find(&membership)
+		if membershipResult.Error != nil {
+			return fmt.Errorf("find authentication Person-Tenant Membership: %w", membershipResult.Error)
+		}
+		if membershipResult.RowsAffected == 0 {
+			return fmt.Errorf("authentication Person %s has no Person-Tenant Membership for tenant %s", person.ID, tenantID)
 		}
 
-		var actor authz.AuthzActor
-		actorQuery := tx.Where("person_id = ?", person.ID)
-		if collaboratorResult.RowsAffected > 0 {
-			actorQuery = tx.Where("person_id = ? OR collaborator_id = ?", person.ID, collaborator.ID)
+		// One human has one Account. If the global Person already owns an
+		// Account, adding access in another Tenant creates/links only that
+		// Tenant's Actor and leaves the existing password/session identity intact.
+		var accountPerson AccountPerson
+		accountPersonResult := tx.Where("person_id = ?", membership.PersonID).Limit(1).Find(&accountPerson)
+		if accountPersonResult.Error != nil {
+			return fmt.Errorf("find Authentication Account for global Person: %w", accountPersonResult.Error)
 		}
-		actorResult := actorQuery.
-			Order("active DESC, created_at ASC").
-			Limit(1).
-			Find(&actor)
-		if actorResult.Error != nil {
-			return fmt.Errorf("find person authorization actor: %w", actorResult.Error)
-		}
-
-		now := time.Now().UTC()
-		if actorResult.RowsAffected == 0 {
-			personID := person.ID
-			var collaboratorID *string
-			if collaboratorResult.RowsAffected > 0 {
-				value := collaborator.ID
-				collaboratorID = &value
+		if accountPersonResult.RowsAffected > 0 {
+			var existing Account
+			if err := tx.First(&existing, "id = ?", accountPerson.AccountID).Error; err != nil {
+				return fmt.Errorf("find existing Authentication Account for global Person: %w", err)
 			}
-			actor = authz.AuthzActor{
-				ID:             ids.New(),
-				ActorKey:       "person:" + person.ID,
-				DisplayName:    authenticationPersonDisplayName(person),
-				PersonID:       &personID,
-				CollaboratorID: collaboratorID,
-				Active:         true,
-				CreatedAt:      now,
-				UpdatedAt:      now,
+			if _, err := ensurePersonTenantActor(tx, existing.ID, membership, person, existing.CreatedAt, false); err != nil {
+				return err
 			}
-			if err := tx.Create(&actor).Error; err != nil {
-				return fmt.Errorf("create person authorization actor: %w", err)
-			}
-		} else {
-			if !actor.Active {
-				return ErrPersonActorInactive
-			}
-			updates := map[string]any{}
-			if actor.PersonID == nil || strings.TrimSpace(*actor.PersonID) == "" {
-				updates["person_id"] = person.ID
-			}
-			if collaboratorResult.RowsAffected > 0 &&
-				(actor.CollaboratorID == nil || *actor.CollaboratorID != collaborator.ID) {
-				updates["collaborator_id"] = collaborator.ID
-			}
-			if len(updates) > 0 {
-				updates["updated_at"] = now
-				if err := tx.Model(&authz.AuthzActor{}).Where("id = ?", actor.ID).Updates(updates).Error; err != nil {
-					return fmt.Errorf("update person authorization actor identity: %w", err)
-				}
-			}
+			accountID = existing.ID
+			return nil
 		}
 
-		var personRole authz.AuthzRole
-		if err := tx.Where("code = ? AND active = ?", string(authz.RolePerson), true).First(&personRole).Error; err != nil {
-			return fmt.Errorf("find Person authorization role: %w", err)
+		actor, err := ensurePersonTenantActor(tx, account.ID, membership, person, account.CreatedAt, true)
+		if err != nil {
+			return err
 		}
-		var personGrant authz.AuthzActorRoleGrant
-		grantResult := tx.
-			Where("actor_id = ? AND role_id = ? AND tenant_id = ?", actor.ID, personRole.ID, tenantID).
-			Limit(1).
-			Find(&personGrant)
-		if grantResult.Error != nil {
-			return fmt.Errorf("find Person authorization grant: %w", grantResult.Error)
-		}
-		if grantResult.RowsAffected == 0 {
-			personGrant = authz.AuthzActorRoleGrant{
-				ID:        ids.New(),
-				ActorID:   actor.ID,
-				RoleID:    personRole.ID,
-				TenantID:  tenantID,
-				Active:    true,
-				CreatedAt: now,
-				UpdatedAt: now,
-			}
-			if err := tx.Create(&personGrant).Error; err != nil {
-				return fmt.Errorf("create Person authorization grant: %w", err)
-			}
-		} else if !personGrant.Active {
-			if err := tx.Model(&authz.AuthzActorRoleGrant{}).
-				Where("id = ?", personGrant.ID).
-				Updates(map[string]any{"active": true, "updated_at": now}).Error; err != nil {
-				return fmt.Errorf("reactivate Person authorization grant: %w", err)
-			}
-		}
-
 		account.ActorID = actor.ID
 		if err := createAuthenticationAccount(tx, account); err != nil {
 			return err
 		}
+		if err := ensureAccountPersonBinding(tx, account.ID, membership.PersonID, account.CreatedAt); err != nil {
+			return err
+		}
+		binding := AccountActor{
+			AccountID: account.ID,
+			ActorID:   actor.ID,
+			ScopeType: AccountActorScopeTenant,
+			Primary:   true,
+			CreatedAt: account.CreatedAt,
+			UpdatedAt: account.UpdatedAt,
+		}
+		bindingTenant := tenantID
+		bindingMembership := membership.ID
+		binding.TenantID = &bindingTenant
+		binding.MembershipID = &bindingMembership
+		if err := ensureAccountActorBinding(tx, binding); err != nil {
+			return err
+		}
+		accountID = account.ID
 		return nil
 	})
 	if err != nil {
 		return AccountRecord{}, err
 	}
-	return r.FindAccountByID(ctx, account.ID)
+	return r.FindAccountByID(ctx, accountID)
+}
+
+func ensurePersonTenantActor(tx *gorm.DB, accountID string, membership appdb.PersonTenantMembership, person appdb.Person, createdAt time.Time, accountIsNew bool) (authz.AuthzActor, error) {
+	// Reuse an Actor already bound to this Account/Membership.
+	type bindingProjection struct{ ActorID string }
+	var bound bindingProjection
+	result := tx.Table("auth_account_actors").Select("actor_id").
+		Where("account_id = ? AND scope_type = ? AND tenant_id = ?", accountID, AccountActorScopeTenant, membership.TenantID).
+		Limit(1).Scan(&bound)
+	if result.Error != nil {
+		return authz.AuthzActor{}, fmt.Errorf("find Authentication Account tenant Actor: %w", result.Error)
+	}
+	if result.RowsAffected > 0 {
+		var actor authz.AuthzActor
+		if err := tx.First(&actor, "id = ?", bound.ActorID).Error; err != nil {
+			return authz.AuthzActor{}, fmt.Errorf("find bound tenant Actor: %w", err)
+		}
+		if !actor.Active {
+			return authz.AuthzActor{}, ErrPersonActorInactive
+		}
+		return actor, nil
+	}
+
+	var collaborator appdb.CollaboratorJourney
+	collaboratorResult := tx.
+		Where("tenant_id = ? AND person_id = ? AND closed_at IS NULL", membership.TenantID, person.ID).
+		Order("journey_start_date DESC, created_at DESC").
+		Limit(1).
+		Find(&collaborator)
+	if collaboratorResult.Error != nil {
+		return authz.AuthzActor{}, fmt.Errorf("find current collaborator for authentication person: %w", collaboratorResult.Error)
+	}
+
+	// During the additive cutover, prefer an unbound Bite 28 Actor for this
+	// tenant before creating the canonical per-Membership Actor.
+	var actor authz.AuthzActor
+	actorQuery := tx.Table("authz_actors a").
+		Where("NOT EXISTS (SELECT 1 FROM auth_account_actors aa WHERE aa.actor_id = a.id)")
+	if collaboratorResult.RowsAffected > 0 {
+		actorQuery = actorQuery.Where("a.person_id = ? OR a.collaborator_id = ?", person.ID, collaborator.ID)
+	} else {
+		actorQuery = actorQuery.Where("a.person_id = ?", person.ID)
+	}
+	actorResult := actorQuery.Order("a.active DESC, a.created_at ASC").Limit(1).Scan(&actor)
+	if actorResult.Error != nil {
+		return authz.AuthzActor{}, fmt.Errorf("find unbound Person authorization actor: %w", actorResult.Error)
+	}
+
+	now := time.Now().UTC()
+	if actorResult.RowsAffected == 0 || strings.TrimSpace(actor.ID) == "" {
+		personID := person.ID
+		actor = authz.AuthzActor{
+			ID:          ids.New(),
+			ActorKey:    tenantActorKey("person:"+membership.PersonID, membership.TenantID),
+			DisplayName: authenticationPersonDisplayName(person),
+			PersonID:    &personID,
+			Active:      true,
+			CreatedAt:   now,
+			UpdatedAt:   now,
+		}
+		if collaboratorResult.RowsAffected > 0 {
+			collaboratorID := collaborator.ID
+			actor.CollaboratorID = &collaboratorID
+		}
+		if err := tx.Create(&actor).Error; err != nil {
+			return authz.AuthzActor{}, fmt.Errorf("create Person tenant authorization actor: %w", err)
+		}
+	} else if !actor.Active {
+		return authz.AuthzActor{}, ErrPersonActorInactive
+	}
+
+	if err := ensureAuthenticatedActorPersonSelfAccess(tx, &actor, now); err != nil {
+		return authz.AuthzActor{}, err
+	}
+
+	// Existing Accounts need only the new Actor binding. New Accounts are
+	// bound after the auth_user_accounts row is inserted so foreign keys remain
+	// valid in migration-enabled databases.
+	if !accountIsNew {
+		binding := AccountActor{
+			AccountID: accountID,
+			ActorID:   actor.ID,
+			ScopeType: AccountActorScopeTenant,
+			Primary:   false,
+			CreatedAt: createdAt,
+			UpdatedAt: now,
+		}
+		tenantID := membership.TenantID
+		membershipID := membership.ID
+		binding.TenantID = &tenantID
+		binding.MembershipID = &membershipID
+		if err := ensureAccountActorBinding(tx, binding); err != nil {
+			return authz.AuthzActor{}, err
+		}
+	}
+	return actor, nil
 }
 
 func authenticationPersonDisplayName(person appdb.Person) string {
@@ -372,7 +497,12 @@ func createAuthenticationAccount(tx *gorm.DB, account Account) error {
 
 	var actorAccountCount int64
 	if err := tx.Model(&Account{}).Where("actor_id = ?", account.ActorID).Count(&actorAccountCount).Error; err != nil {
-		return fmt.Errorf("check authorization actor account: %w", err)
+		return fmt.Errorf("check legacy authorization actor account: %w", err)
+	}
+	if actorAccountCount == 0 && tx.Migrator().HasTable(&AccountActor{}) {
+		if err := tx.Model(&AccountActor{}).Where("actor_id = ?", account.ActorID).Count(&actorAccountCount).Error; err != nil {
+			return fmt.Errorf("check authorization actor ownership: %w", err)
+		}
 	}
 	if actorAccountCount > 0 {
 		return ErrActorAlreadyLinked
@@ -590,6 +720,98 @@ func mapAccountProjection(row accountProjection) AccountRecord {
 	}
 }
 
+func (r *GORMRepository) hydrateAccountActors(ctx context.Context, record AccountRecord) (AccountRecord, error) {
+	if !r.database.Migrator().HasTable(&AccountActor{}) {
+		record.AnyActorActive = record.ActorActive
+		return record, nil
+	}
+
+	type actorBindingProjection struct {
+		ActorID         string
+		ActorKey        string
+		DisplayName     string
+		PersonID        *string
+		PersonFirstName *string
+		PersonLastName  *string
+		PersonNickname  *string
+		CollaboratorID  *string
+		Active          bool
+		ScopeType       string
+		TenantID        *string
+		MembershipID    *string
+		IsPrimary       bool
+	}
+	var rows []actorBindingProjection
+	if err := r.database.WithContext(ctx).
+		Table("auth_account_actors aa").
+		Select(`aa.actor_id AS actor_id,
+			a.actor_key AS actor_key,
+			a.display_name AS display_name,
+			a.person_id AS person_id,
+			gp.first_name AS person_first_name,
+			gp.last_name AS person_last_name,
+			gp.nickname AS person_nickname,
+			a.collaborator_id AS collaborator_id,
+			a.active AS active,
+			aa.scope_type AS scope_type,
+			aa.tenant_id AS tenant_id,
+			aa.membership_id AS membership_id,
+			aa.is_primary AS is_primary`).
+		Joins("JOIN authz_actors a ON a.id = aa.actor_id").
+		Joins("LEFT JOIN auth_account_people aap ON aap.account_id = aa.account_id").
+		Joins("LEFT JOIN global_people gp ON gp.id = aap.person_id").
+		Where("aa.account_id = ?", record.ID).
+		Order("aa.is_primary DESC, aa.scope_type ASC, aa.tenant_id ASC, a.actor_key ASC").
+		Scan(&rows).Error; err != nil {
+		return AccountRecord{}, fmt.Errorf("hydrate Authentication Account Actors: %w", err)
+	}
+	if len(rows) == 0 {
+		record.AnyActorActive = record.ActorActive
+		return record, nil
+	}
+
+	record.Actors = make([]AccountActorRecord, 0, len(rows))
+	record.AnyActorActive = false
+	for _, row := range rows {
+		actor := AccountActorRecord{
+			ActorID:        row.ActorID,
+			ActorKey:       row.ActorKey,
+			DisplayName:    row.DisplayName,
+			PersonID:       stringValue(row.PersonID),
+			PersonName:     personDisplayName(stringValue(row.PersonFirstName), stringValue(row.PersonLastName)),
+			PersonNickname: stringValue(row.PersonNickname),
+			CollaboratorID: stringValue(row.CollaboratorID),
+			ScopeType:      row.ScopeType,
+			TenantID:       stringValue(row.TenantID),
+			MembershipID:   stringValue(row.MembershipID),
+			Active:         row.Active,
+			Primary:        row.IsPrimary,
+		}
+		record.Actors = append(record.Actors, actor)
+		if actor.Active {
+			record.AnyActorActive = true
+		}
+		if actor.Primary {
+			record.ActorID = actor.ActorID
+			record.ActorKey = actor.ActorKey
+			record.DisplayName = actor.DisplayName
+			record.PersonID = actor.PersonID
+			record.CollaboratorID = actor.CollaboratorID
+			record.ActorActive = actor.Active
+		}
+	}
+
+	var accountPerson AccountPerson
+	result := r.database.WithContext(ctx).Where("account_id = ?", record.ID).Limit(1).Find(&accountPerson)
+	if result.Error != nil {
+		return AccountRecord{}, fmt.Errorf("hydrate Authentication Account Person: %w", result.Error)
+	}
+	if result.RowsAffected > 0 {
+		record.GlobalPersonID = accountPerson.PersonID
+	}
+	return record, nil
+}
+
 func revokeSessions(tx *gorm.DB, accountID string, now time.Time) error {
 	if err := tx.Model(&Session{}).
 		Where("account_id = ? AND revoked_at IS NULL", accountID).
@@ -606,6 +828,10 @@ func invalidatePasswordResetTokens(tx *gorm.DB, accountID string, now time.Time)
 		return fmt.Errorf("invalidate authentication password reset tokens: %w", err)
 	}
 	return nil
+}
+
+func personDisplayName(firstName string, lastName string) string {
+	return strings.TrimSpace(strings.TrimSpace(firstName) + " " + strings.TrimSpace(lastName))
 }
 
 func stringValue(value *string) string {

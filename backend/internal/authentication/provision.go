@@ -137,6 +137,11 @@ func ProvisionApplicationAdmin(ctx context.Context, database *gorm.DB, cfg Provi
 		if err != nil {
 			return fmt.Errorf("ensure application administrator actor: %w", err)
 		}
+		if err := tx.Model(&authz.AuthzActor{}).Where("id = ?", bootstrap.ActorID).Updates(map[string]any{
+			"person_id": nil, "collaborator_id": nil, "updated_at": time.Now().UTC(),
+		}).Error; err != nil {
+			return fmt.Errorf("clear tenant identity from application administrator actor: %w", err)
+		}
 
 		result = ProvisionApplicationAdminResult{
 			ActorID:                  bootstrap.ActorID,
@@ -185,6 +190,9 @@ func ProvisionApplicationAdmin(ctx context.Context, database *gorm.DB, cfg Provi
 			if err := tx.Create(&account).Error; err != nil {
 				return fmt.Errorf("create administrator authentication account: %w", err)
 			}
+			if err := ensureAccountActorFoundation(tx, account); err != nil {
+				return err
+			}
 			result.AccountID = account.ID
 			result.AccountCreated = true
 			result.PasswordUpdated = true
@@ -223,6 +231,10 @@ func ProvisionApplicationAdmin(ctx context.Context, database *gorm.DB, cfg Provi
 			if updateResult.RowsAffected == 0 {
 				return gorm.ErrRecordNotFound
 			}
+		}
+
+		if err := ensureAccountActorFoundation(tx, actorAccount); err != nil {
+			return err
 		}
 
 		if result.PasswordUpdated || result.AccountReactivated || result.AuthorizationReactivated || result.LoginUpdated {

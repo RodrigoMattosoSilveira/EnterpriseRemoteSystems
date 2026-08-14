@@ -72,17 +72,39 @@ func rejectInvalidAuthenticationSession(deps Dependencies) fiber.Handler {
 }
 
 func resolveAuthenticatedActor(c fiber.Ctx, deps Dependencies, session authentication.SessionResponse) (*authz.Actor, error) {
-	if deps.ActorStore == nil || strings.TrimSpace(session.ActorKey) == "" || strings.TrimSpace(session.ActorID) == "" {
+	if deps.ActorStore == nil {
 		return nil, authz.ErrAuthenticationRequired
 	}
 	tenantID := strings.TrimSpace(c.Get(authz.HeaderTenantID))
 	if tenantID == "" {
 		return nil, authz.ErrTenantSelectionRequired
 	}
-	actor, err := deps.ActorStore.FindActor(c.Context(), authz.ActorLookup{
-		ActorID:  session.ActorKey,
-		TenantID: tenantID,
-	})
+
+	// Bite 30C authenticates the Account, then resolves the Account-owned Actor
+	// for the requested tenant. This is the authoritative path for normal
+	// session traffic and is what allows one human Account to own one Actor per
+	// Tenant. Verified compatibility/test sessions may omit AccountID; those
+	// intentionally continue through the legacy Actor fallback below.
+	accountID := strings.TrimSpace(session.AccountID)
+	if accountID != "" {
+		if accountActorStore, ok := deps.ActorStore.(authz.AccountActorStore); ok {
+			actor, err := accountActorStore.FindAccountActor(c.Context(), accountID, tenantID)
+			if err == nil {
+				actor.Source = authz.ActorSourceAuthenticatedSession
+				return actor, nil
+			}
+			if !errors.Is(err, authz.ErrAccountActorFoundationUnavailable) {
+				return nil, err
+			}
+		}
+	}
+
+	// Compatibility fallback for isolated tests and stores that intentionally do
+	// not implement the Bite 30C Account/Actor relation yet.
+	if strings.TrimSpace(session.ActorKey) == "" || strings.TrimSpace(session.ActorID) == "" {
+		return nil, authz.ErrAuthenticationRequired
+	}
+	actor, err := deps.ActorStore.FindActor(c.Context(), authz.ActorLookup{ActorID: session.ActorKey, TenantID: tenantID})
 	if err != nil {
 		return nil, err
 	}

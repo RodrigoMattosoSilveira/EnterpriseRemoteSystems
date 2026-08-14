@@ -1,0 +1,72 @@
+@startuml
+title ERS Authentication Architecture — Target End State
+
+left to right direction
+
+actor Human
+
+rectangle "Authentication" {
+  rectangle "Authentication Account" as Account
+  rectangle "Session" as Session
+}
+
+rectangle "Global Business Identity" {
+  rectangle "Global Person" as Person
+}
+
+rectangle "Tenant Identity" {
+  rectangle "Person–Tenant Membership" as Membership
+  rectangle "Tenant Actor" as TenantActor
+}
+
+rectangle "Authorization" {
+  rectangle "Intrinsic Self-Service" as Self
+  rectangle "Role Grants" as Grants
+}
+
+rectangle "Collaboration" {
+  rectangle "Collaborator Journey" as Journey
+}
+
+rectangle "Global Administration" {
+  rectangle "Global Actor" as GlobalActor
+  rectangle "Control Plane" as Control
+  rectangle "Support Access Lease" as Lease
+}
+
+Human --> Account
+Account --> Session
+
+Account --> Person : ordinary user
+Person --> Membership
+Account --> TenantActor
+TenantActor --> Membership
+
+Membership --> Journey
+
+TenantActor --> Self
+TenantActor --> Grants
+
+Account --> GlobalActor : Application Admin only
+GlobalActor --> Control
+GlobalActor --> Lease : exceptional support
+
+note bottom of Account
+One human
+=
+one Authentication Account
+end note
+
+note bottom of TenantActor
+One Account may own
+many tenant Actors,
+but at most one per Tenant.
+end note
+
+note bottom of GlobalActor
+GLOBAL and TENANT identities
+may never coexist on the
+same Application Administrator Account.
+end note
+
+@enduml

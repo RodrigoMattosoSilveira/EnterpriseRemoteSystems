@@ -1,0 +1,64 @@
+@startuml
+title Bite 30C — Transitional Persistence Model
+
+class auth_user_accounts {
+  id
+  login
+  actor_id <<LEGACY>>
+}
+
+class auth_account_people {
+  account_id
+  person_id
+}
+
+class auth_account_actors {
+  account_id
+  actor_id
+  scope_type
+  tenant_id
+  membership_id
+  is_primary
+}
+
+class authz_actors {
+  id
+  actor_key
+  person_id <<LEGACY>>
+  collaborator_id <<LEGACY>>
+}
+
+class global_people
+class person_tenant_memberships
+
+auth_user_accounts "1" -- "0..1" auth_account_people
+auth_account_people "*" -- "1" global_people
+
+auth_user_accounts "1" -- "0..*" auth_account_actors
+auth_account_actors "*" -- "1" authz_actors
+auth_account_actors "*" -- "0..1" person_tenant_memberships
+
+auth_user_accounts ..> authz_actors : actor_id\nTEMPORARY compatibility pointer
+
+note right of auth_account_actors
+AUTHORITATIVE 30C
+Account → Actor ownership
+end note
+
+note right of auth_user_accounts
+actor_id remains only as a
+temporary compatibility/default
+pointer.
+
+Scheduled for later removal.
+end note
+
+note right of authz_actors
+person_id / collaborator_id
+are legacy identity links.
+
+Membership becomes the target
+tenant identity relationship.
+end note
+
+@enduml

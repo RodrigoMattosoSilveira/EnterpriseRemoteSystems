@@ -79,7 +79,7 @@ func (s *service) Login(ctx context.Context, req LoginRequest, userAgent string,
 		}
 		return LoginResult{}, err
 	}
-	if !account.Active || !account.ActorActive {
+	if !account.Active || !account.AnyActorActive {
 		_ = bcrypt.CompareHashAndPassword([]byte(account.PasswordHash), []byte(req.Password))
 		return LoginResult{}, ErrInvalidCredentials
 	}
@@ -120,7 +120,7 @@ func (s *service) Login(ctx context.Context, req LoginRequest, userAgent string,
 		_ = s.repository.RevokeSession(ctx, session.ID, now)
 		return LoginResult{}, err
 	}
-	if !refreshedAccount.Active || !refreshedAccount.ActorActive {
+	if !refreshedAccount.Active || !refreshedAccount.AnyActorActive {
 		_ = s.repository.RevokeSession(ctx, session.ID, now)
 		return LoginResult{}, ErrInvalidCredentials
 	}
@@ -152,7 +152,7 @@ func (s *service) ResolveSession(ctx context.Context, rawToken string) (SessionR
 		_ = s.repository.RevokeSession(ctx, record.Session.ID, now)
 		return SessionResponse{}, ErrAccountInactive
 	}
-	if !record.ActorActive {
+	if !record.AnyActorActive {
 		_ = s.repository.RevokeSession(ctx, record.Session.ID, now)
 		return SessionResponse{}, ErrActorInactive
 	}
@@ -240,7 +240,7 @@ func (s *service) ResetPassword(ctx context.Context, req ResetPasswordRequest) (
 	if !account.Active {
 		return PasswordResetResult{}, ErrAccountInactive
 	}
-	if !account.ActorActive {
+	if !account.AnyActorActive {
 		return PasswordResetResult{}, ErrActorInactive
 	}
 	now := s.clock().UTC()
@@ -402,9 +402,9 @@ func (s *service) IssuePasswordResetToken(ctx context.Context, accountID string)
 			"accountId": "Password reset tokens can only be issued for active authentication accounts",
 		}}
 	}
-	if !account.ActorActive {
+	if !account.AnyActorActive {
 		return PasswordResetTokenResponse{}, &ValidationError{Fields: map[string]string{
-			"accountId": "Password reset tokens can only be issued when the linked authorization actor is active",
+			"accountId": "Password reset tokens can only be issued when at least one linked authorization actor is active",
 		}}
 	}
 	rawToken, tokenHash, err := s.newToken("ers_pr_")
@@ -499,11 +499,22 @@ func sessionResponse(account AccountRecord, expiresAt time.Time) SessionResponse
 }
 
 func accountResponse(account AccountRecord) AccountResponse {
+	actors := make([]AccountActorResponse, 0, len(account.Actors))
+	for _, actor := range account.Actors {
+		actors = append(actors, AccountActorResponse{
+			ActorID: actor.ActorID, ActorKey: actor.ActorKey, DisplayName: actor.DisplayName,
+			Scope: actor.ScopeType, TenantID: actor.TenantID, MembershipID: actor.MembershipID,
+			PersonID: actor.PersonID, PersonName: actor.PersonName, PersonNickname: actor.PersonNickname, CollaboratorID: actor.CollaboratorID,
+			Active: actor.Active, Primary: actor.Primary,
+		})
+	}
 	return AccountResponse{
 		ID:                 account.ID,
 		ActorID:            account.ActorID,
 		ActorKey:           account.ActorKey,
 		DisplayName:        account.DisplayName,
+		GlobalPersonID:     account.GlobalPersonID,
+		Actors:             actors,
 		Login:              account.Login,
 		Active:             account.Active,
 		ActorActive:        account.ActorActive,

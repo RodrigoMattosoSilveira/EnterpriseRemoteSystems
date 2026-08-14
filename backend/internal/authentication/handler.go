@@ -107,6 +107,16 @@ func (h *Handler) TenantOptions(c fiber.Ctx) error {
 	if err != nil {
 		return h.writeError(c, err)
 	}
+	if accountActorStore, ok := h.actorStore.(authz.AccountActorStore); ok {
+		options, err := accountActorStore.ListAccountTenantOptions(c.Context(), session.AccountID)
+		if err == nil {
+			setNoStore(c)
+			return httpx.OK(c, options)
+		}
+		if !errors.Is(err, authz.ErrAccountActorFoundationUnavailable) {
+			return h.writeError(c, err)
+		}
+	}
 	if h.tenantOptionStore == nil {
 		return httpx.WriteError(c, errors.New("tenant options are unavailable"))
 	}
@@ -184,7 +194,14 @@ func (h *Handler) SetAccountActive(c fiber.Ctx) error {
 			if findErr != nil {
 				return h.writeError(c, findErr)
 			}
-			if target.ActorID == requestActor.RecordID {
+			ownsRequestActor := target.ActorID == requestActor.RecordID
+			for _, actor := range target.Actors {
+				if actor.ActorID == requestActor.RecordID {
+					ownsRequestActor = true
+					break
+				}
+			}
+			if ownsRequestActor {
 				return c.Status(fiber.StatusForbidden).JSON(httpx.APIResponse{Error: &httpx.APIError{
 					Code:    "self_deactivation_forbidden",
 					Message: "An administrator cannot deactivate their own authentication account",
