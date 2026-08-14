@@ -5,13 +5,31 @@ import (
 	"time"
 )
 
+type AccountActorRecord struct {
+	ActorID        string
+	ActorKey       string
+	DisplayName    string
+	PersonID       string
+	PersonName     string
+	PersonNickname string
+	CollaboratorID string
+	ScopeType      string
+	TenantID       string
+	MembershipID   string
+	Active         bool
+	Primary        bool
+}
+
 type AccountRecord struct {
 	Account
 	ActorKey       string
 	DisplayName    string
 	PersonID       string
+	GlobalPersonID string
 	CollaboratorID string
 	ActorActive    bool
+	AnyActorActive bool
+	Actors         []AccountActorRecord
 }
 
 type SessionRecord struct {

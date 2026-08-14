@@ -1,0 +1,36 @@
+@startuml
+title Authentication Account vs Actor Deactivation
+
+state "Authentication Account ACTIVE" as AccountActive
+state "Authentication Account INACTIVE" as AccountInactive
+
+state "Tenant A Actor ACTIVE" as ActorAActive
+state "Tenant A Actor INACTIVE" as ActorAInactive
+
+state "Tenant B Actor ACTIVE" as ActorBActive
+
+AccountActive --> AccountInactive : deactivate Account
+AccountInactive --> AccountActive : reactivate Account
+
+ActorAActive --> ActorAInactive : deactivate Actor A
+ActorAInactive --> ActorAActive : reactivate Actor A
+
+note right of AccountInactive
+Cannot authenticate anywhere.
+
+All tenant contexts unavailable.
+
+Sessions should be revoked.
+end note
+
+note right of ActorAInactive
+Authentication Account still works.
+
+Tenant B can remain accessible.
+
+Only Tenant A becomes unavailable.
+end note
+
+ActorBActive -[hidden]-> ActorAActive
+
+@enduml

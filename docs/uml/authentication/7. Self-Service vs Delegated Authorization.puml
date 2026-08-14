@@ -1,0 +1,48 @@
+@startuml
+title ERS Authorization — Intrinsic vs Delegated
+
+actor "Authenticated Person" as User
+
+rectangle "Tenant Actor" as Actor
+rectangle "Person–Tenant Membership" as Membership
+rectangle "Global Person" as Person
+
+rectangle "Intrinsic Self-Service" as Self {
+  rectangle "Own Person record"
+  rectangle "Own historical Earnings"
+  rectangle "Own historical Expenses"
+}
+
+rectangle "Collaborator Capabilities" as Collab {
+  rectangle "Current Work Assignments"
+  rectangle "Current Earnings / Expenses"
+}
+
+rectangle "Delegated Authorization" as Delegated {
+  rectangle "Tenant Administrator"
+  rectangle "Earnings Operator"
+  rectangle "Expenses Operator"
+}
+
+User --> Actor
+Actor --> Membership
+Membership --> Person
+
+Person --> Self
+
+Membership --> Collab : if active\nCollaborator Journey
+
+Actor --> Delegated : via Role Grants
+
+note bottom of Self
+NOT granted by PERSON Role.
+
+Derived from identity:
+Actor → Membership → Person.
+end note
+
+note bottom of Delegated
+Explicit Role / Role Grant.
+end note
+
+@enduml

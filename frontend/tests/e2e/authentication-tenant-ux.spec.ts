@@ -596,7 +596,7 @@ test("authentication administration finds an existing collaborator actor and lin
     );
   });
   await page
-    .getByLabel("Filter by collaborator name or nickname")
+    .getByLabel("Filter by Person name or nickname, Actor, or account")
     .fill(candidate.nickname);
   expect((await actorLookupResponse).ok()).toBeTruthy();
 

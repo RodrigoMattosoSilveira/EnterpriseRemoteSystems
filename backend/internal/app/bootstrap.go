@@ -69,6 +69,9 @@ func Bootstrap(cfg Config) (*fiber.App, func(), error) {
 	if bootstrapResult.Enabled {
 		log.Printf("authorization bootstrap ensured actor_key=%s role=%s tenant=%s actor_created=%t grant_created=%t", bootstrapResult.ActorKey, bootstrapResult.RoleCode, bootstrapResult.TenantID, bootstrapResult.ActorCreated, bootstrapResult.GrantCreated)
 	}
+	if err := authentication.EnsureAccountActorFoundation(database); err != nil {
+		return nil, nil, err
+	}
 
 	actorStore := authz.NewGORMStore(database)
 

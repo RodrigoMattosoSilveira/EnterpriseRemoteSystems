@@ -101,7 +101,7 @@ export async function createAuthAccount(
     });
     notifyAuthenticationAccountFeedback({
       kind: "success",
-      message: `Authentication account ${account.login} created.`,
+      message: `Authentication account ${account.login} is ready.`,
     });
     return account;
   } catch (error) {

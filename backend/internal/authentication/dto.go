@@ -29,19 +29,36 @@ type SetAccountActiveRequest struct {
 	Active *bool `json:"active"`
 }
 
+type AccountActorResponse struct {
+	ActorID        string `json:"actorId"`
+	ActorKey       string `json:"actorKey"`
+	DisplayName    string `json:"displayName"`
+	Scope          string `json:"scope"`
+	TenantID       string `json:"tenantId,omitempty"`
+	MembershipID   string `json:"membershipId,omitempty"`
+	PersonID       string `json:"personId,omitempty"`
+	PersonName     string `json:"personName,omitempty"`
+	PersonNickname string `json:"personNickname,omitempty"`
+	CollaboratorID string `json:"collaboratorId,omitempty"`
+	Active         bool   `json:"active"`
+	Primary        bool   `json:"primary"`
+}
+
 type AccountResponse struct {
-	ID                 string     `json:"id"`
-	ActorID            string     `json:"actorId"`
-	ActorKey           string     `json:"actorKey"`
-	DisplayName        string     `json:"displayName"`
-	Login              string     `json:"login"`
-	Active             bool       `json:"active"`
-	ActorActive        bool       `json:"actorActive"`
-	MustChangePassword bool       `json:"mustChangePassword"`
-	LastLoginAt        *time.Time `json:"lastLoginAt,omitempty"`
-	PasswordChangedAt  *time.Time `json:"passwordChangedAt,omitempty"`
-	CreatedAt          time.Time  `json:"createdAt"`
-	UpdatedAt          time.Time  `json:"updatedAt"`
+	ID                 string                 `json:"id"`
+	ActorID            string                 `json:"actorId"`
+	ActorKey           string                 `json:"actorKey"`
+	DisplayName        string                 `json:"displayName"`
+	GlobalPersonID     string                 `json:"globalPersonId,omitempty"`
+	Actors             []AccountActorResponse `json:"actors"`
+	Login              string                 `json:"login"`
+	Active             bool                   `json:"active"`
+	ActorActive        bool                   `json:"actorActive"`
+	MustChangePassword bool                   `json:"mustChangePassword"`
+	LastLoginAt        *time.Time             `json:"lastLoginAt,omitempty"`
+	PasswordChangedAt  *time.Time             `json:"passwordChangedAt,omitempty"`
+	CreatedAt          time.Time              `json:"createdAt"`
+	UpdatedAt          time.Time              `json:"updatedAt"`
 }
 
 type SessionResponse struct {
