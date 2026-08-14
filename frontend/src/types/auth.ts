@@ -10,11 +10,28 @@ export type AuthSession = {
   expiresAt: string;
 };
 
+export type AuthAccountActor = {
+  actorId: string;
+  actorKey: string;
+  displayName: string;
+  scope: "GLOBAL" | "TENANT" | string;
+  tenantId?: string;
+  membershipId?: string;
+  personId?: string;
+  personName?: string;
+  personNickname?: string;
+  collaboratorId?: string;
+  active: boolean;
+  primary: boolean;
+};
+
 export type AuthAccount = {
   id: string;
   actorId: string;
   actorKey: string;
   displayName: string;
+  globalPersonId?: string;
+  actors?: AuthAccountActor[];
   login: string;
   active: boolean;
   actorActive: boolean;

@@ -3,6 +3,7 @@ import type { AuthzActor } from "../../types/authz";
 import type { AuthAccount } from "../../types/auth";
 import {
   authenticationAccountForActor,
+  authenticationAccountMatchesSearch,
   authenticationActorForCollaborator,
   authenticationActorOptionLabel,
   authenticationCollaboratorOptionLabel,
@@ -85,6 +86,35 @@ describe("password reset token eligibility", () => {
     expect(canIssuePasswordResetToken({ ...account, active: false })).toBe(false);
     expect(canIssuePasswordResetToken({ ...account, actorActive: false })).toBe(false);
   });
+
+  it("uses every linked Actor when evaluating a multi-tenant account", () => {
+    expect(
+      canIssuePasswordResetToken({
+        ...account,
+        actorActive: false,
+        actors: [
+          {
+            actorId: "actor-a",
+            actorKey: "actor-a",
+            displayName: "Actor A",
+            scope: "TENANT",
+            tenantId: "tenant-a",
+            active: false,
+            primary: true,
+          },
+          {
+            actorId: "actor-b",
+            actorKey: "actor-b",
+            displayName: "Actor B",
+            scope: "TENANT",
+            tenantId: "tenant-b",
+            active: true,
+            primary: false,
+          },
+        ],
+      }),
+    ).toBe(true);
+  });
 });
 
 describe("authentication account collaborator selection", () => {
@@ -132,6 +162,29 @@ describe("authentication account collaborator selection", () => {
       authenticationActorForCollaborator(
         { ...collaborator, id: "collaborator-other" },
         [eligibleActor],
+      ),
+    ).toBeUndefined();
+  });
+
+  it("maps a collaborator nickname result through the 30C Person/Tenant Actor identity", () => {
+    const personActor: AuthzActor = {
+      ...eligibleActor,
+      id: "actor-person",
+      collaboratorId: undefined,
+      personId: collaborator.personId,
+      roleGrants: eligibleActor.roleGrants?.map((grant) => ({
+        ...grant,
+        actorId: "actor-person",
+      })),
+    };
+
+    expect(authenticationActorForCollaborator(collaborator, [personActor])).toEqual(
+      personActor,
+    );
+    expect(
+      authenticationActorForCollaborator(
+        { ...collaborator, tenantId: "other-tenant" },
+        [personActor],
       ),
     ).toBeUndefined();
   });
@@ -188,5 +241,59 @@ describe("authentication account collaborator selection", () => {
     expect(
       authenticationCollaboratorStatusLabel(eligibleActor, undefined),
     ).toBe("Eligible for account creation");
+  });
+});
+
+describe("authentication account actor/account filter", () => {
+  const personAccount: AuthAccount = {
+    id: "account-person",
+    actorId: "actor-person-a",
+    actorKey: "person-a",
+    displayName: "Marina Oliveira",
+    login: "marina.login@example.test",
+    active: true,
+    actorActive: true,
+    mustChangePassword: false,
+    createdAt: "2026-08-14T00:00:00Z",
+    updatedAt: "2026-08-14T00:00:00Z",
+    actors: [
+      {
+        actorId: "actor-person-a",
+        actorKey: "person-a",
+        displayName: "Marina Oliveira",
+        scope: "TENANT",
+        tenantId: "tenant-a",
+        personId: "legacy-person-a",
+        personName: "Marina Oliveira",
+        personNickname: "Nina",
+        active: true,
+        primary: true,
+      },
+      {
+        actorId: "actor-person-b",
+        actorKey: "person-b",
+        displayName: "Marina Oliveira",
+        scope: "TENANT",
+        tenantId: "tenant-b",
+        personId: "legacy-person-b",
+        personName: "Marina Oliveira",
+        personNickname: "Nina",
+        active: true,
+        primary: false,
+      },
+    ],
+  };
+
+  it("finds a Person-based multi-tenant Authentication Account by nickname", () => {
+    expect(authenticationAccountMatchesSearch(personAccount, "Nina")).toBe(true);
+    expect(authenticationAccountMatchesSearch(personAccount, "nina")).toBe(true);
+  });
+
+  it("continues matching name, Actor key, login, and tenant", () => {
+    expect(authenticationAccountMatchesSearch(personAccount, "Marina")).toBe(true);
+    expect(authenticationAccountMatchesSearch(personAccount, "person-b")).toBe(true);
+    expect(authenticationAccountMatchesSearch(personAccount, "marina.login")).toBe(true);
+    expect(authenticationAccountMatchesSearch(personAccount, "tenant-b")).toBe(true);
+    expect(authenticationAccountMatchesSearch(personAccount, "missing")).toBe(false);
   });
 });

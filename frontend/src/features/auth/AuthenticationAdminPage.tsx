@@ -36,14 +36,29 @@ export function authenticationActorOptionLabel(actor: AuthzActor): string {
 }
 
 export function canIssuePasswordResetToken(account: AuthAccount): boolean {
-  return account.active && account.actorActive;
+  const anyActorActive = account.actors?.some((actor) => actor.active) ?? account.actorActive;
+  return account.active && anyActorActive;
 }
 
 export function authenticationActorForCollaborator(
   collaborator: Collaborator,
   actors: AuthzActor[],
 ): AuthzActor | undefined {
-  return actors.find((actor) => actor.collaboratorId === collaborator.id);
+  const collaboratorActor = actors.find(
+    (actor) => actor.collaboratorId === collaborator.id,
+  );
+  if (collaboratorActor) return collaboratorActor;
+
+  // Bite 30C makes the tenant Actor represent the Person/Membership. During
+  // the transition an Actor does not have to retain a Collaborator Journey ID,
+  // so bridge collaborator search results through the tenant Person identity.
+  return actors.find(
+    (actor) =>
+      actor.personId === collaborator.personId &&
+      activeAuthenticationGrants(actor).some(
+        (grant) => grant.tenantId === collaborator.tenantId,
+      ),
+  );
 }
 
 export function authenticationAccountForActor(
@@ -51,7 +66,11 @@ export function authenticationAccountForActor(
   accounts: AuthAccount[],
 ): AuthAccount | undefined {
   if (!actor) return undefined;
-  return accounts.find((account) => account.actorId === actor.id);
+  return accounts.find(
+    (account) =>
+      account.actorId === actor.id ||
+      account.actors?.some((linkedActor) => linkedActor.actorId === actor.id),
+  );
 }
 
 export function authenticationCollaboratorStatusLabel(
@@ -61,7 +80,7 @@ export function authenticationCollaboratorStatusLabel(
   if (!actor) return "No authorization actor";
   if (account) {
     return `Already has authentication account ${account.login} (${
-      account.active && account.actorActive ? "active" : "inactive"
+      canIssuePasswordResetToken(account) ? "active" : "inactive"
     })`;
   }
   if (!actor.active) return "Authorization actor is inactive";
@@ -86,6 +105,31 @@ export function authenticationCollaboratorOptionLabel(
   const nickname = collaborator.personNickname?.trim();
   const identity = nickname && nickname !== name ? `${name} (${nickname})` : name;
   return `${identity} — ${authenticationActorOptionLabel(actor)}`;
+}
+
+export function authenticationAccountMatchesSearch(
+  account: AuthAccount,
+  searchValue: string,
+  matchedActorIds: Set<string> = new Set(),
+): boolean {
+  const search = searchValue.trim().toLowerCase();
+  if (!search) return true;
+
+  return (
+    matchedActorIds.has(account.actorId) ||
+    account.actors?.some(
+      (actor) =>
+        matchedActorIds.has(actor.actorId) ||
+        actor.actorKey.toLowerCase().includes(search) ||
+        actor.displayName.toLowerCase().includes(search) ||
+        actor.personName?.toLowerCase().includes(search) ||
+        actor.personNickname?.toLowerCase().includes(search) ||
+        actor.tenantId?.toLowerCase().includes(search),
+    ) ||
+    account.login.toLowerCase().includes(search) ||
+    account.actorKey.toLowerCase().includes(search) ||
+    account.displayName.toLowerCase().includes(search)
+  );
 }
 
 export function AuthenticationAdminPage() {
@@ -139,7 +183,12 @@ export function AuthenticationAdminPage() {
     },
   });
   const availableActors = useMemo(() => {
-    const linked = new Set((accounts.data ?? []).map((account) => account.actorId));
+    const linked = new Set(
+      (accounts.data ?? []).flatMap((account) => [
+        account.actorId,
+        ...(account.actors ?? []).map((actor) => actor.actorId),
+      ]),
+    );
     return (actors.data ?? []).filter(
       (actor) =>
         isAuthenticationActorEligible(actor) &&
@@ -183,12 +232,8 @@ export function AuthenticationAdminPage() {
         .map((result) => result.actor?.id)
         .filter((actorId): actorId is string => Boolean(actorId)),
     );
-    return (accounts.data ?? []).filter(
-      (account) =>
-        matchedActorIds.has(account.actorId) ||
-        account.login.toLowerCase().includes(search) ||
-        account.actorKey.toLowerCase().includes(search) ||
-        account.displayName.toLowerCase().includes(search),
+    return (accounts.data ?? []).filter((account) =>
+      authenticationAccountMatchesSearch(account, search, matchedActorIds),
     );
   }, [accounts.data, actorLookupResults, actorLookupSearch]);
 
@@ -421,14 +466,14 @@ export function AuthenticationAdminPage() {
       <section className="mt-6 rounded-2xl border bg-white p-5">
         <h2 className="text-lg font-semibold">Actor/account filter</h2>
         <p className="mt-1 text-sm text-slate-600">
-          Search by collaborator name or nickname to see whether an Authorization
-          Actor and Authentication Account already exist.
+          Search by Person name or nickname, Actor identity, or login to see whether
+          an Authorization Actor and Authentication Account already exist.
         </p>
         <label
           className="mt-4 block text-sm font-medium"
           htmlFor="authentication-actor-lookup"
         >
-          Filter by collaborator name or nickname
+          Filter by Person name or nickname, Actor, or account
         </label>
         <input
           id="authentication-actor-lookup"
@@ -451,7 +496,10 @@ export function AuthenticationAdminPage() {
             ) : actorLookupCollaborators.error ? (
               <p className="p-3 text-sm text-red-700">Could not load actor matches.</p>
             ) : actorLookupResults.length === 0 ? (
-              <p className="p-3 text-sm text-slate-500">No matching collaborators.</p>
+              <p className="p-3 text-sm text-slate-500">
+                No matching collaborators. Person-based Authentication Account matches,
+                if any, are shown in the accounts table below.
+              </p>
             ) : (
               actorLookupResults.map(({ collaborator, actor, account }) => {
                 const collaboratorName =
@@ -482,7 +530,7 @@ export function AuthenticationAdminPage() {
                         <p className="mt-1 font-medium text-slate-700">
                           Authentication account: {account
                             ? `${account.login} · ${
-                                account.active && account.actorActive
+                                canIssuePasswordResetToken(account)
                                   ? "Active"
                                   : "Inactive"
                               }`
@@ -530,7 +578,7 @@ export function AuthenticationAdminPage() {
           <thead className="bg-slate-100">
             <tr>
               <th className="p-3">User</th>
-              <th className="p-3">Actor</th>
+              <th className="p-3">Actors</th>
               <th className="p-3">Status</th>
               <th className="p-3">Actions</th>
             </tr>
@@ -550,8 +598,7 @@ export function AuthenticationAdminPage() {
               const resetPending = pendingAction === `reset:${account.id}`;
               const resetEligible = canIssuePasswordResetToken(account);
               const isCurrentAccount =
-                account.actorId ===
-                (auth.status === "authenticated" ? auth.session.actorId : "");
+                auth.status === "authenticated" && account.id === auth.session.accountId;
               return (
                 <tr key={account.id} className="border-t">
                   <td className="p-3">
@@ -559,9 +606,27 @@ export function AuthenticationAdminPage() {
                     <br />
                     <span className="text-slate-500">{account.login}</span>
                   </td>
-                  <td className="p-3">{account.actorKey}</td>
                   <td className="p-3">
-                    {account.active && account.actorActive ? "Active" : "Inactive"}
+                    {(account.actors?.length ?? 0) > 0 ? (
+                      <ul className="space-y-1">
+                        {account.actors?.map((actor) => (
+                          <li key={actor.actorId}>
+                            <span className="font-medium">{actor.actorKey}</span>
+                            <span className="text-slate-500">
+                              {" "}· {actor.scope}
+                              {actor.tenantId ? ` @ ${actor.tenantId}` : ""}
+                              {actor.primary ? " · primary" : ""}
+                              {!actor.active ? " · inactive" : ""}
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      account.actorKey
+                    )}
+                  </td>
+                  <td className="p-3">
+                    {account.active && canIssuePasswordResetToken(account) ? "Active" : "Inactive"}
                     {account.mustChangePassword
                       ? " · Password change required"
                       : ""}

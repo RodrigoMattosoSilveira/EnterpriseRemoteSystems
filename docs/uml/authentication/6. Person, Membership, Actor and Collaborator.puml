@@ -1,0 +1,45 @@
+@startuml
+title Person / Membership / Actor / Collaborator Separation
+
+class "Global Person" as Person
+class "Person–Tenant Membership" as Membership
+class "Tenant Actor" as Actor
+class "Collaborator Journey" as Journey
+class "Authentication Account" as Account
+
+Person "1" -- "0..*" Membership
+
+Membership "1" -- "0..1" Actor : authorization identity
+Membership "1" -- "0..*" Journey : collaboration history
+
+Account "1" -- "0..*" Actor : controls
+Account "0..1" -- "0..1" Person
+
+note right of Membership
+Created only by a
+Tenant Administrator.
+end note
+
+note right of Journey
+Requires Membership.
+
+Becoming Collaborator
+does NOT create another
+login identity.
+end note
+
+note bottom of Actor
+Actor access can be
+deactivated independently
+for this Tenant.
+end note
+
+note bottom of Person
+Any human may have/create
+an ERS Person record.
+
+Person existence does not
+create Tenant Membership.
+end note
+
+@enduml

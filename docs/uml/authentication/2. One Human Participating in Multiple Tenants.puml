@@ -1,0 +1,54 @@
+@startuml
+title One Authentication Account — Multiple Tenant Actors
+
+skinparam componentStyle rectangle
+
+actor "Maria" as Maria
+
+rectangle "Authentication Account\nmaria@example.com" as Account
+
+rectangle "Global Person\nMaria" as Person
+
+rectangle "Tenant A" {
+  rectangle "Membership A" as MA
+  rectangle "Actor A\nscope=TENANT" as AA
+  rectangle "Tenant-A Role Grants" as GA
+}
+
+rectangle "Tenant B" {
+  rectangle "Membership B" as MB
+  rectangle "Actor B\nscope=TENANT" as AB
+  rectangle "Tenant-B Role Grants" as GB
+}
+
+Maria --> Account : authenticates
+
+Account --> Person : identity
+
+Person --> MA
+Person --> MB
+
+Account --> AA : owns
+Account --> AB : owns
+
+AA --> MA : represents
+AB --> MB : represents
+
+AA --> GA
+AB --> GB
+
+note bottom of Account
+Same login and password
+for every Tenant.
+end note
+
+note bottom of AA
+Actor A != Actor B
+end note
+
+note bottom of Person
+One global Person record
+is shared across memberships.
+end note
+
+@enduml

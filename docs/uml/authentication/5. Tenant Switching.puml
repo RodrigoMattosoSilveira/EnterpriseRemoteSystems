@@ -1,0 +1,43 @@
+@startuml
+title Tenant Switching — Authentication Stays, Actor Changes
+
+actor User
+participant Browser
+participant "ERS API" as API
+database "Session" as Session
+database "Account Actor Bindings" as Bindings
+
+User -> Browser : Select Tenant A
+Browser -> API : Request\nX-Tenant-ID: A
+API -> Session : Resolve accountId
+API -> Bindings : accountId + Tenant A
+Bindings --> API : Actor A
+API --> Browser : Tenant-A context
+
+User -> Browser : Switch to Tenant B
+Browser -> API : Request\nX-Tenant-ID: B
+API -> Session : Resolve same accountId
+API -> Bindings : accountId + Tenant B
+Bindings --> API : Actor B
+API --> Browser : Tenant-B context
+
+note over Session
+Authentication Account:
+unchanged
+
+Session:
+unchanged
+end note
+
+note over Bindings
+Effective Actor:
+Actor A -> Actor B
+
+Tenant:
+A -> B
+
+Roles:
+A roles -> B roles
+end note
+
+@enduml

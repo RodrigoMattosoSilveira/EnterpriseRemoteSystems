@@ -1,0 +1,50 @@
+@startuml
+title Authenticated Tenant Request — Account → Tenant Actor Resolution
+
+actor User
+participant Browser
+participant "ERS API" as API
+database "auth_sessions" as Sessions
+database "auth_user_accounts" as Accounts
+database "auth_account_actors" as Bindings
+database "authz_actors" as Actors
+database "Role Grants" as Grants
+
+User -> Browser : Request Tenant-B resource
+
+Browser -> API : GET /resource\nSession Cookie\nX-Tenant-ID: Tenant-B
+
+API -> Sessions : Resolve Session
+Sessions --> API : accountId
+
+API -> Accounts : Load Account
+Accounts --> API : Account
+
+API -> Bindings : Find Actor for\naccountId + Tenant-B
+
+alt no active Actor for Tenant-B
+  Bindings --> API : none
+  API --> Browser : 403 / no tenant access
+else Actor exists
+  Bindings --> API : actorId
+  API -> Actors : Load Actor
+  Actors --> API : Tenant-B Actor
+
+  API -> Grants : Resolve Tenant-B grants
+  Grants --> API : delegated permissions
+
+  API -> API : Apply intrinsic self-service\n+ delegated authorization
+  API --> Browser : Authorized response
+end
+
+note right of Bindings
+Bite 30C authoritative
+Account → Actor binding.
+end note
+
+note bottom of API
+Tenant A can never silently
+fall back to Tenant B's Actor.
+end note
+
+@enduml
