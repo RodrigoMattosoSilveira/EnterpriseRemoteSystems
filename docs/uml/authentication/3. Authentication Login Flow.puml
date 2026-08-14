@@ -1,0 +1,34 @@
+@startuml
+title ERS Login — Authentication Is Account-Level
+
+actor User
+participant "Browser" as Browser
+participant "Authentication API" as AuthAPI
+database "auth_user_accounts" as Accounts
+database "auth_sessions" as Sessions
+
+User -> Browser : Enter login + password
+Browser -> AuthAPI : POST /auth/login
+
+AuthAPI -> Accounts : Find Authentication Account
+Accounts --> AuthAPI : Account
+
+AuthAPI -> AuthAPI : Verify password
+AuthAPI -> AuthAPI : Verify account.active
+
+alt invalid credentials / inactive Account
+  AuthAPI --> Browser : 401 Unauthorized
+else valid Account
+  AuthAPI -> Sessions : Create Account-level Session
+  Sessions --> AuthAPI : sessionId
+  AuthAPI --> Browser : Session cookie / login result
+end
+
+note over AuthAPI,Sessions
+Session authenticates the Account.
+
+It does NOT permanently select
+one Actor for all Tenants.
+end note
+
+@enduml

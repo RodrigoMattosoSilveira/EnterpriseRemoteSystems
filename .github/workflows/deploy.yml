@@ -90,6 +90,8 @@ jobs:
       SERVER_ROOT: /opt/EnterpriseRemoteSystems
       DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
       DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+      CONFIGURED_E2E_ADMIN_EMAIL: ${{ vars.E2E_ADMIN_EMAIL }}
+      E2E_ADMIN_PASSWORD: ${{ secrets.E2E_ADMIN_PASSWORD }}
 
     outputs:
       env_name: ${{ steps.target.outputs.env_name }}
@@ -98,6 +100,8 @@ jobs:
       env_dir: ${{ steps.target.outputs.env_dir }}
       make_prefix: ${{ steps.target.outputs.make_prefix }}
       run_playwright_post_deploy: ${{ steps.target.outputs.run_playwright_post_deploy }}
+      revision: ${{ steps.revision.outputs.sha }}
+      e2e_admin_email: ${{ steps.e2e_admin.outputs.email }}
 
     steps:
       - name: Resolve deployment target
@@ -125,6 +129,8 @@ jobs:
               echo "domain=dev.enterpriseremotesystems.com" >> "$GITHUB_OUTPUT"
               echo "deploy_edge=${MANUAL_EDGE}" >> "$GITHUB_OUTPUT"
               echo "run_playwright_post_deploy=${MANUAL_PLAYWRIGHT}" >> "$GITHUB_OUTPUT"
+              echo "default_e2e_admin_email=e2e-admin-dev@enterpriseremotesystems.com" >> "$GITHUB_OUTPUT"
+              echo "e2e_admin_display_name=Development E2E Administrator" >> "$GITHUB_OUTPUT"
               ;;
 
             test)
@@ -135,6 +141,8 @@ jobs:
               echo "domain=tst.enterpriseremotesystems.com" >> "$GITHUB_OUTPUT"
               echo "deploy_edge=${MANUAL_EDGE}" >> "$GITHUB_OUTPUT"
               echo "run_playwright_post_deploy=${MANUAL_PLAYWRIGHT}" >> "$GITHUB_OUTPUT"
+              echo "default_e2e_admin_email=e2e-admin-tst@enterpriseremotesystems.com" >> "$GITHUB_OUTPUT"
+              echo "e2e_admin_display_name=Test E2E Administrator" >> "$GITHUB_OUTPUT"
               ;;
 
             production)
@@ -149,6 +157,8 @@ jobs:
 
               # Do not run deployed Playwright against production.
               echo "run_playwright_post_deploy=false" >> "$GITHUB_OUTPUT"
+              echo "default_e2e_admin_email=e2e-admin@enterpriseremotesystems.com" >> "$GITHUB_OUTPUT"
+              echo "e2e_admin_display_name=Production Automation Administrator" >> "$GITHUB_OUTPUT"
               ;;
 
             *)
@@ -156,6 +166,58 @@ jobs:
               exit 1
               ;;
           esac
+
+      - name: Resolve administrator provisioning configuration
+        id: e2e_admin
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          email="${CONFIGURED_E2E_ADMIN_EMAIL:-${{ steps.target.outputs.default_e2e_admin_email }}}"
+          password="${E2E_ADMIN_PASSWORD:-}"
+
+          if [[ -z "$email" ]]; then
+            echo "::error title=Missing administrator login::Unable to resolve the E2E administrator email for '${{ steps.target.outputs.env_name }}'."
+            exit 1
+          fi
+          if [[ -z "$password" ]]; then
+            echo "::error title=Missing administrator provisioning secret::Configure E2E_ADMIN_PASSWORD in the '${{ steps.target.outputs.env_name }}' GitHub environment. The provisioning operation creates or resets the account, so no pre-existing password is required."
+            exit 1
+          fi
+          if [[ "$email" == *$'\n'* || "$email" == *$'\r'* || "$password" == *$'\n'* || "$password" == *$'\r'* ]]; then
+            echo "::error title=Invalid administrator provisioning value::Administrator email and password must not contain newline characters."
+            exit 1
+          fi
+          if [[ "$password" == "change-this-password-immediately" ]]; then
+            echo "::error title=Placeholder administrator password::Replace the placeholder with a unique E2E_ADMIN_PASSWORD secret in the '${{ steps.target.outputs.env_name }}' GitHub environment."
+            exit 1
+          fi
+          password_characters="$(python3 -c 'import os; print(len(os.environ["E2E_ADMIN_PASSWORD"]))')"
+          password_bytes="$(printf '%s' "$password" | wc -c | tr -d '[:space:]')"
+          if (( password_characters < 12 || password_bytes > 72 )); then
+            echo "::error title=Invalid administrator password length::E2E_ADMIN_PASSWORD must contain at least 12 characters and no more than 72 UTF-8 bytes."
+            exit 1
+          fi
+
+          echo "::add-mask::$password"
+          echo "email=$email" >> "$GITHUB_OUTPUT"
+          echo "Administrator provisioning configuration resolved for ${{ steps.target.outputs.env_name }}"
+
+      - name: Checkout deployment branch
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ steps.target.outputs.branch }}
+          fetch-depth: 0
+
+      - name: Resolve immutable deployment revision
+        id: revision
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          SHA="$(git rev-parse HEAD)"
+          echo "sha=${SHA}" >> "$GITHUB_OUTPUT"
+          echo "Deploying immutable revision ${SHA}"
 
       - name: Configure SSH
         shell: bash
@@ -205,14 +267,40 @@ jobs:
              cd '${{ steps.target.outputs.env_dir }}'
 
              echo 'Deploying ${{ steps.target.outputs.env_name }} from branch ${{ steps.target.outputs.branch }}'
+             echo 'Pinned revision: ${{ steps.revision.outputs.sha }}'
 
              git fetch origin '${{ steps.target.outputs.branch }}'
-             git checkout -B '${{ steps.target.outputs.branch }}' 'origin/${{ steps.target.outputs.branch }}'
+             git cat-file -e '${{ steps.revision.outputs.sha }}^{commit}'
+             git checkout -B '${{ steps.target.outputs.branch }}' '${{ steps.revision.outputs.sha }}'
+
+             test "$(git rev-parse HEAD)" = '${{ steps.revision.outputs.sha }}'
 
              make ${{ steps.target.outputs.make_prefix }}-build
              make ${{ steps.target.outputs.make_prefix }}-up
              make ${{ steps.target.outputs.make_prefix }}-backend-health
              make ${{ steps.target.outputs.make_prefix }}-env-caddy-health
+            "
+
+      - name: Provision application administrator
+        shell: bash
+        env:
+          RESOLVED_E2E_ADMIN_EMAIL: ${{ steps.e2e_admin.outputs.email }}
+          E2E_ADMIN_DISPLAY_NAME: ${{ steps.target.outputs.e2e_admin_display_name }}
+        run: |
+          set -euo pipefail
+
+          payload="$(jq -cn \
+            --arg actorKey "e2e-application-admin" \
+            --arg displayName "$E2E_ADMIN_DISPLAY_NAME" \
+            --arg login "$RESOLVED_E2E_ADMIN_EMAIL" \
+            --arg password "$E2E_ADMIN_PASSWORD" \
+            '{actorKey: $actorKey, displayName: $displayName, login: $login, password: $password}')"
+
+          printf '%s' "$payload" | ssh -i ~/.ssh/id_ed25519 \
+            "${DEPLOY_USER}@${DEPLOY_HOST}" \
+            "set -euo pipefail
+             cd '${{ steps.target.outputs.env_dir }}'
+             make server-provision-e2e-admin ENV='${{ steps.target.outputs.env_name }}'
             "
 
       - name: Deploy edge proxy when required
@@ -234,7 +322,7 @@ jobs:
              make edge-reload
             "
 
-      - name: Public smoke and admin-read tests
+      - name: Public smoke tests
         shell: bash
         run: |
           set -euo pipefail
@@ -260,16 +348,19 @@ jobs:
             echo "|---|---|"
             echo "| Environment | ${{ steps.target.outputs.env_name }} |"
             echo "| Branch | ${{ steps.target.outputs.branch }} |"
+            echo "| Revision | ${{ steps.revision.outputs.sha }} |"
             echo "| Domain | ${{ steps.target.outputs.domain }} |"
             echo "| Server folder | ${{ steps.target.outputs.env_dir }} |"
             echo "| Make prefix | ${{ steps.target.outputs.make_prefix }} |"
             echo "| Edge deployed | ${{ steps.target.outputs.deploy_edge }} |"
+            echo "| Administrator login | ${{ steps.e2e_admin.outputs.email }} |"
             echo "| Deployed Playwright | ${{ steps.target.outputs.run_playwright_post_deploy }} |"
           } >> "$GITHUB_STEP_SUMMARY"
 
   deployed-playwright:
     name: Deployed Playwright E2E
     runs-on: ubuntu-latest
+    environment: ${{ needs.deploy.outputs.env_name }}
     container:
       image: mcr.microsoft.com/playwright:v1.60.0-noble
     timeout-minutes: 30
@@ -279,21 +370,51 @@ jobs:
     if: ${{ needs.deploy.outputs.run_playwright_post_deploy == 'true' }}
 
     env:
+      DEPLOYMENT_ENVIRONMENT: ${{ needs.deploy.outputs.env_name }}
       PLAYWRIGHT_BASE_URL: https://${{ needs.deploy.outputs.domain }}
       PLAYWRIGHT_SKIP_WEBSERVER: "true"
-      PLAYWRIGHT_AUTHZ_ACTOR_ID: bootstrap-admin
+      PLAYWRIGHT_AUTH_MODE: session
+      PLAYWRIGHT_AUTHZ_ACTOR_ID: e2e-application-admin
       PLAYWRIGHT_AUTHZ_TENANT_ID: default
+      E2E_ADMIN_EMAIL: ${{ needs.deploy.outputs.e2e_admin_email }}
+      E2E_ADMIN_PASSWORD: ${{ secrets.E2E_ADMIN_PASSWORD }}
+      E2E_ADMIN_EMAIL_SOURCE: provisioned-by-deploy
+      E2E_ADMIN_PASSWORD_CONFIGURED: ${{ secrets.E2E_ADMIN_PASSWORD != '' && 'true' || 'false' }}
 
     steps:
-      - name: Checkout
+      - name: Checkout deployed revision
         uses: actions/checkout@v6
         with:
-          ref: ${{ needs.deploy.outputs.branch }}
+          ref: ${{ needs.deploy.outputs.revision }}
+
+      - name: Trust checked-out repository
+        shell: bash
+        run: |
+          git config --global --add safe.directory "${GITHUB_WORKSPACE}"
 
       - name: Show deployed Playwright target
+        shell: bash
         run: |
+          set -euo pipefail
+
+          echo "DEPLOYMENT_ENVIRONMENT=${DEPLOYMENT_ENVIRONMENT}"
           echo "PLAYWRIGHT_BASE_URL=${PLAYWRIGHT_BASE_URL}"
           echo "PLAYWRIGHT_SKIP_WEBSERVER=${PLAYWRIGHT_SKIP_WEBSERVER}"
+          echo "PLAYWRIGHT_AUTH_MODE=${PLAYWRIGHT_AUTH_MODE}"
+          echo "PLAYWRIGHT_AUTHZ_ACTOR_ID=${PLAYWRIGHT_AUTHZ_ACTOR_ID}"
+          echo "E2E_ADMIN_EMAIL_SOURCE=${E2E_ADMIN_EMAIL_SOURCE}"
+          echo "E2E_ADMIN_PASSWORD_CONFIGURED=${E2E_ADMIN_PASSWORD_CONFIGURED}"
+          if [[ -z "${E2E_ADMIN_EMAIL:-}" || -z "${E2E_ADMIN_PASSWORD:-}" ]]; then
+            echo "::error title=Missing deployed Playwright credentials::The deployment did not provide the provisioned administrator login or E2E_ADMIN_PASSWORD is unavailable in the '${DEPLOYMENT_ENVIRONMENT}' GitHub environment."
+            exit 1
+          fi
+          echo "Deployed Playwright administrator credentials are configured"
+          echo "DEPLOYED_REVISION=${{ needs.deploy.outputs.revision }}"
+          echo "CHECKED_OUT_REVISION=$(git rev-parse HEAD)"
+          test "$(git rev-parse HEAD)" = "${{ needs.deploy.outputs.revision }}"
+
+          grep -n "2_500_000" frontend/tests/e2e/earnings-ui.spec.ts
+          grep -n "2_500_000" frontend/tests/e2e/planning-edge-cases.spec.ts
 
       - name: Set up Node
         uses: actions/setup-node@v6
@@ -312,7 +433,7 @@ jobs:
         env:
           PLAYWRIGHT_BASE_URL: ${{ env.PLAYWRIGHT_BASE_URL }}
           PLAYWRIGHT_SKIP_WEBSERVER: "true"
-          PLAYWRIGHT_AUTHZ_ACTOR_ID: bootstrap-admin
+          PLAYWRIGHT_AUTH_MODE: session
           PLAYWRIGHT_AUTHZ_TENANT_ID: default
         run: npx playwright test
 

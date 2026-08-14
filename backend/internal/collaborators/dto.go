@@ -18,6 +18,7 @@ type CollaboratorDTO struct {
 	GoldCommissionPercent          *float64 `json:"goldCommissionPercent,omitempty"`
 	TimeOffGoldSplitPercent        *float64 `json:"timeOffGoldSplitPercent,omitempty"`
 	SickDayOffReplacementGoldGrams *float64 `json:"sickDayOffReplacementGoldGrams,omitempty"`
+	PlanningAvailability           string   `json:"planningAvailability"`
 	SectorID                       string   `json:"sectorId"`
 	SectorLabel                    string   `json:"sectorLabel,omitempty"`
 	LocationID                     string   `json:"locationId"`
@@ -25,6 +26,7 @@ type CollaboratorDTO struct {
 	TaskID                         string   `json:"taskId"`
 	TaskLabel                      string   `json:"taskLabel,omitempty"`
 	StatusID                       string   `json:"statusId"`
+	StatusCode                     string   `json:"statusCode,omitempty"`
 	StatusLabel                    string   `json:"statusLabel,omitempty"`
 	Notes                          string   `json:"notes,omitempty"`
 	ClosedAt                       string   `json:"closedAt,omitempty"`
@@ -42,6 +44,7 @@ type CreateCollaboratorRequest struct {
 	GoldCommissionPercent          *float64 `json:"goldCommissionPercent"`
 	TimeOffGoldSplitPercent        *float64 `json:"timeOffGoldSplitPercent"`
 	SickDayOffReplacementGoldGrams *float64 `json:"sickDayOffReplacementGoldGrams"`
+	PlanningAvailability           string   `json:"planningAvailability"`
 	SectorID                       string   `json:"sectorId"`
 	LocationID                     string   `json:"locationId"`
 	TaskID                         string   `json:"taskId"`
@@ -57,6 +60,7 @@ type UpdateCollaboratorRequest struct {
 	GoldCommissionPercent          *float64 `json:"goldCommissionPercent"`
 	TimeOffGoldSplitPercent        *float64 `json:"timeOffGoldSplitPercent"`
 	SickDayOffReplacementGoldGrams *float64 `json:"sickDayOffReplacementGoldGrams"`
+	PlanningAvailability           string   `json:"planningAvailability"`
 	SectorID                       string   `json:"sectorId"`
 	LocationID                     string   `json:"locationId"`
 	TaskID                         string   `json:"taskId"`
@@ -64,6 +68,7 @@ type UpdateCollaboratorRequest struct {
 }
 
 type CollaboratorListFilter struct {
+	Search          string `query:"search"`
 	StatusID        string `query:"statusId"`
 	LocationID      string `query:"locationId"`
 	PaymentMethodID string `query:"paymentMethodId"`

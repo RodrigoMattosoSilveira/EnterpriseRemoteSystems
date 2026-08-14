@@ -1,4 +1,5 @@
 import { expect, test, type APIRequestContext } from "@playwright/test";
+import { uniquePersonSuffix } from "./support/test-data";
 import { authzHeaders, e2eApiUrl, seedBrowserAuthz } from "./support/authz";
 
 const PERSON_STATUS_ACTIVE_ID = "ref-person-status-active";
@@ -29,7 +30,11 @@ test("user can navigate additional Expenses pages", async ({
     page.getByRole("heading", { name: "Expenses", exact: true }),
   ).toBeVisible();
   await expect(page.getByRole("heading", { name: "Filters" })).toBeVisible();
-  await expect(page.getByText("Filter expense records by collaborator, category, or item.")).toBeVisible();
+  await expect(
+    page.getByText(
+      "Filter expense records by collaborator name, nickname, category, or item.",
+    ),
+  ).toBeVisible();
   await expect(
     page.getByText(/Showing 50 of \d+ expense records\./),
   ).toBeVisible();
@@ -79,8 +84,30 @@ test("user can filter Expenses by collaborator", async ({ page, request }) => {
 
   await page.goto("/expenses?page=2");
 
-  const collaboratorSelect = page.getByLabel("Collaborator");
-  await expect(collaboratorSelect).toContainText(personNickname);
+  const searchInput = page.getByLabel("Collaborator name or nickname");
+  const searchResponse = page.waitForResponse(
+    (response) =>
+      response.url().includes("/api/v1/expenses") &&
+      new URL(response.url()).searchParams.get("collaboratorSearch") ===
+        personNickname &&
+      response.request().method() === "GET",
+  );
+  const optionsResponse = page.waitForResponse(
+    (response) =>
+      response.url().includes("/api/v1/collaborators") &&
+      new URL(response.url()).searchParams.get("search") === personNickname &&
+      response.request().method() === "GET",
+  );
+  await searchInput.fill(personNickname);
+  await Promise.all([searchResponse, optionsResponse]);
+
+  const collaboratorSuggestions = page.getByRole("listbox", {
+    name: "Matching collaborators",
+  });
+  const collaboratorOption = collaboratorSuggestions.getByRole("option", {
+    name: new RegExp(personNickname),
+  });
+  await expect(collaboratorOption).toBeVisible();
 
   const listResponse = page.waitForResponse(
     (response) =>
@@ -90,7 +117,7 @@ test("user can filter Expenses by collaborator", async ({ page, request }) => {
         .includes(`collaboratorId=${encodeURIComponent(collaborator.id)}`) &&
       response.request().method() === "GET",
   );
-  await collaboratorSelect.selectOption(collaborator.id);
+  await collaboratorOption.click();
   await listResponse;
 
   await expect
@@ -99,7 +126,12 @@ test("user can filter Expenses by collaborator", async ({ page, request }) => {
   await expect
     .poll(() => new URL(page.url()).searchParams.get("collaboratorId"))
     .toBe(collaborator.id);
-  await expect(collaboratorSelect).toHaveValue(collaborator.id);
+  await expect
+    .poll(() => new URL(page.url()).searchParams.get("collaboratorSearch"))
+    .toBeNull();
+  await expect(
+    page.getByRole("status", { name: "Selected collaborator filter" }),
+  ).toContainText(personNickname);
   await expect(page.getByText(/Page 1 of \d+/).first()).toBeVisible();
   const matchingRow = page
     .getByRole("row")
@@ -107,6 +139,149 @@ test("user can filter Expenses by collaborator", async ({ page, request }) => {
     .first();
   await expect(matchingRow).toBeVisible();
   await expect(matchingRow.getByRole("link", { name: personNickname })).toBeVisible();
+});
+
+test("user can filter Expenses by collaborator name or nickname", async ({
+  page,
+  request,
+}) => {
+  const suffix = uniqueSuffix();
+  const targetNickname = `ExpenseSearchNick${suffix}`;
+  const targetPerson = await createCompletePerson(request, {
+    suffix,
+    firstName: `ExpenseSearchTarget${suffix}`,
+    nickname: targetNickname,
+  });
+  const targetCollaborator = await createCollaborator(request, targetPerson.id);
+  const targetDescription = `Nickname-search expense ${suffix}`;
+
+  const otherFirstName = `ExpenseSearchLegal${suffix}`;
+  const otherNickname = `ExpenseSearchOther${suffix}`;
+  const otherPerson = await createCompletePerson(request, {
+    suffix: suffix + 1000,
+    firstName: otherFirstName,
+    nickname: otherNickname,
+  });
+  const otherCollaborator = await createCollaborator(request, otherPerson.id);
+  const otherDescription = `Legal-name-search expense ${suffix}`;
+
+  await createExpense(request, {
+    collaboratorId: targetCollaborator.id,
+    expenseCategoryId: EXPENSE_CATEGORY_CANTEEN_ID,
+    valueUnitId: VALUE_UNIT_BRL_ID,
+    amount: 18.25,
+    expenseDate: "2026-06-23",
+    description: targetDescription,
+  });
+  await createExpense(request, {
+    collaboratorId: otherCollaborator.id,
+    expenseCategoryId: EXPENSE_CATEGORY_CANTEEN_ID,
+    valueUnitId: VALUE_UNIT_BRL_ID,
+    amount: 22.5,
+    expenseDate: "2026-06-24",
+    description: otherDescription,
+  });
+
+  await page.goto("/expenses?page=2");
+
+  const searchInput = page.getByLabel("Collaborator name or nickname");
+  await expect(searchInput).toBeVisible();
+
+  const nicknameResponse = page.waitForResponse(
+    (response) =>
+      response.url().includes("/api/v1/expenses") &&
+      new URL(response.url()).searchParams.get("collaboratorSearch") ===
+        targetNickname &&
+      response.request().method() === "GET",
+  );
+  const nicknameOptionsResponse = page.waitForResponse(
+    (response) =>
+      response.url().includes("/api/v1/collaborators") &&
+      new URL(response.url()).searchParams.get("search") === targetNickname &&
+      response.request().method() === "GET",
+  );
+  await searchInput.fill(targetNickname);
+  await Promise.all([nicknameResponse, nicknameOptionsResponse]);
+
+  await expect(page.getByLabel("Collaborator", { exact: true })).toHaveCount(0);
+
+  const collaboratorSuggestions = page.getByRole("listbox", {
+    name: "Matching collaborators",
+  });
+  await expect(collaboratorSuggestions).toBeVisible();
+  const targetSuggestion = collaboratorSuggestions.getByRole("option", {
+    name: new RegExp(targetNickname),
+  });
+  await expect(targetSuggestion).toBeVisible();
+
+  await expect
+    .poll(() => new URL(page.url()).searchParams.get("page"))
+    .toBeNull();
+  await expect
+    .poll(() => new URL(page.url()).searchParams.get("collaboratorSearch"))
+    .toBe(targetNickname);
+  await expect(searchInput).toHaveValue(targetNickname);
+  const nicknameRow = page
+    .getByRole("row")
+    .filter({ hasText: targetDescription })
+    .first();
+  await expect(nicknameRow).toBeVisible();
+  await expect(nicknameRow).toContainText(targetNickname);
+  await expect(
+    page.getByRole("row").filter({ hasText: otherDescription }),
+  ).toHaveCount(0);
+
+  const collaboratorIdResponse = page.waitForResponse(
+    (response) =>
+      response.url().includes("/api/v1/expenses") &&
+      new URL(response.url()).searchParams.get("collaboratorId") ===
+        targetCollaborator.id &&
+      response.request().method() === "GET",
+  );
+  await targetSuggestion.click();
+  await collaboratorIdResponse;
+  await expect
+    .poll(() => new URL(page.url()).searchParams.get("collaboratorId"))
+    .toBe(targetCollaborator.id);
+  await expect
+    .poll(() => new URL(page.url()).searchParams.get("collaboratorSearch"))
+    .toBeNull();
+  await expect(
+    page.getByRole("status", { name: "Selected collaborator filter" }),
+  ).toContainText(targetNickname);
+
+  const legalNameResponse = page.waitForResponse(
+    (response) =>
+      response.url().includes("/api/v1/expenses") &&
+      new URL(response.url()).searchParams.get("collaboratorSearch") ===
+        otherFirstName &&
+      response.request().method() === "GET",
+  );
+  const legalNameOptionsResponse = page.waitForResponse(
+    (response) =>
+      response.url().includes("/api/v1/collaborators") &&
+      new URL(response.url()).searchParams.get("search") === otherFirstName &&
+      response.request().method() === "GET",
+  );
+  await searchInput.fill(otherFirstName);
+  await Promise.all([legalNameResponse, legalNameOptionsResponse]);
+  await expect(
+    collaboratorSuggestions.getByRole("option", {
+      name: new RegExp(otherNickname),
+    }),
+  ).toBeVisible();
+
+  await expect
+    .poll(() => new URL(page.url()).searchParams.get("collaboratorSearch"))
+    .toBe(otherFirstName);
+  await expect(searchInput).toHaveValue(otherFirstName);
+  const legalNameRow = page
+    .getByRole("row")
+    .filter({ hasText: otherDescription })
+    .first();
+  await expect(legalNameRow).toBeVisible();
+  await expect(legalNameRow).toContainText(otherNickname);
+  await expect(page.getByRole("row").filter({ hasText: targetDescription })).toHaveCount(0);
 });
 
 test("user can filter Expenses by item", async ({ page, request }) => {
@@ -457,7 +632,7 @@ function completePersonPayload({
 }
 
 function uniqueSuffix(): number {
-  return Date.now() + Math.floor(Math.random() * 1000);
+  return uniquePersonSuffix(test.info().workerIndex);
 }
 
 function todayISODate() {

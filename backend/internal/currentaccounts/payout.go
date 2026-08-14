@@ -8,6 +8,7 @@ import (
 
 	"enterpriseremotesystems/backend/internal/db"
 	"enterpriseremotesystems/backend/internal/shared/ids"
+	"enterpriseremotesystems/backend/internal/shared/tenantctx"
 	"gorm.io/gorm"
 )
 
@@ -24,7 +25,7 @@ func (s *service) PartialPayout(ctx context.Context, collaboratorID, authorizedB
 	if err := ValidatePartialPayoutRequest(req, authorizedBy); err != nil {
 		return nil, err
 	}
-	if err := s.requireSecondApprovalWhenConfigured(ctx, defaultTenantID, req.CorrectionReasonRequest, authorizedBy); err != nil {
+	if err := s.requireSecondApprovalWhenConfigured(ctx, tenantctx.TenantID(ctx), req.CorrectionReasonRequest, authorizedBy); err != nil {
 		return nil, err
 	}
 	if _, err := s.repo.FindCollaboratorByID(ctx, collaboratorID); err != nil {
@@ -66,7 +67,7 @@ func (s *service) PartialPayout(ctx context.Context, collaboratorID, authorizedB
 	secondApprovedAt := optionalApprovalTime(secondApprovedBy, now)
 	settlement := db.JourneySettlement{
 		BaseModel:           db.BaseModel{ID: "journey-settlement-" + ids.New(), CreatedAt: now, UpdatedAt: now},
-		TenantID:            defaultTenantID,
+		TenantID:            tenantctx.TenantID(ctx),
 		CollaboratorID:      collaboratorID,
 		SettlementType:      settlementTypePartialPayout,
 		RequestID:           requestID,
@@ -102,9 +103,9 @@ func (s *service) PartialPayout(ctx context.Context, collaboratorID, authorizedB
 	if err := s.repo.CreateSettlementWithEntries(ctx, &settlement, entries...); err != nil {
 		return nil, err
 	}
-	rows := make([]db.LedgerEntry, 0, len(entries))
-	for _, entry := range entries {
-		rows = append(rows, *entry)
+	rows, err := s.repo.FindLedgerEntriesBySource(ctx, ledgerSourceSettlement, settlement.ID)
+	if err != nil {
+		return nil, err
 	}
 	return partialPayoutResult(settlement, rows), nil
 }

@@ -15,8 +15,10 @@ func ToDTO(person db.Person) PersonDTO {
 	completion := computeCompletionForPerson(person)
 
 	return PersonDTO{
-		ID:       person.ID,
-		TenantID: person.TenantID,
+		ID:             person.ID,
+		GlobalPersonID: person.GlobalPersonID,
+		MembershipID:   person.MembershipID,
+		TenantID:       person.TenantID,
 
 		FirstName: person.FirstName,
 		LastName:  person.LastName,
@@ -92,4 +94,20 @@ func stringValue(value *string) string {
 		return ""
 	}
 	return *value
+}
+
+func GlobalPersonToDTO(person db.GlobalPerson) GlobalPersonDTO {
+	return GlobalPersonDTO{
+		ID:        person.ID,
+		FirstName: person.FirstName, LastName: person.LastName, Nickname: person.Nickname,
+		CPF: person.CPF, RG: person.RG, Cellular: person.Cellular, Email: person.Email,
+	}
+}
+
+func GlobalPersonToDTOList(rows []db.GlobalPerson) []GlobalPersonDTO {
+	items := make([]GlobalPersonDTO, 0, len(rows))
+	for _, row := range rows {
+		items = append(items, GlobalPersonToDTO(row))
+	}
+	return items
 }

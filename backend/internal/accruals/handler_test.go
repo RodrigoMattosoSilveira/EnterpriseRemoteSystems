@@ -69,14 +69,15 @@ type apiAccrualRunResponse struct {
 type apiAccrualItemListResponse struct {
 	Data struct {
 		Items []struct {
-			ID              string   `json:"id"`
-			CollaboratorID  string   `json:"collaboratorId"`
-			CalculationType string   `json:"calculationType"`
-			Direction       string   `json:"direction"`
-			BRLAmount       *float64 `json:"brlAmount"`
-			GoldGramAmount  *float64 `json:"goldGramAmount"`
-			Status          string   `json:"status"`
-			PendingReason   string   `json:"pendingReason"`
+			ID                     string   `json:"id"`
+			WorkPeriodAssignmentID string   `json:"workPeriodAssignmentId"`
+			CollaboratorID         string   `json:"collaboratorId"`
+			CalculationType        string   `json:"calculationType"`
+			Direction              string   `json:"direction"`
+			BRLAmount              *float64 `json:"brlAmount"`
+			GoldGramAmount         *float64 `json:"goldGramAmount"`
+			Status                 string   `json:"status"`
+			PendingReason          string   `json:"pendingReason"`
 		} `json:"items"`
 		Total int `json:"total"`
 	} `json:"data"`
@@ -85,17 +86,46 @@ type apiAccrualItemListResponse struct {
 type apiLedgerEntryListResponse struct {
 	Data struct {
 		Items []struct {
-			ID            string  `json:"id"`
-			ValueUnitCode string  `json:"valueUnitCode"`
-			EntryType     string  `json:"entryType"`
-			Direction     string  `json:"direction"`
-			Amount        float64 `json:"amount"`
-			SignedAmount  float64 `json:"signedAmount"`
-			SourceType    string  `json:"sourceType"`
-			SourceID      string  `json:"sourceId"`
-			EffectiveDate string  `json:"effectiveDate"`
+			ID                   string  `json:"id"`
+			ValueUnitCode        string  `json:"valueUnitCode"`
+			EntryType            string  `json:"entryType"`
+			Direction            string  `json:"direction"`
+			Amount               float64 `json:"amount"`
+			SignedAmount         float64 `json:"signedAmount"`
+			SourceType           string  `json:"sourceType"`
+			SourceID             string  `json:"sourceId"`
+			SourceLabel          string  `json:"sourceLabel"`
+			SourceWorkPeriodID   string  `json:"sourceWorkPeriodId"`
+			SourceWorkDate       string  `json:"sourceWorkDate"`
+			SourceWorkPeriodName string  `json:"sourceWorkPeriodName"`
+			EffectiveDate        string  `json:"effectiveDate"`
 		} `json:"items"`
 		Total int `json:"total"`
+	} `json:"data"`
+}
+
+type apiCurrentAccountDetailResponse struct {
+	Data struct {
+		CollaboratorID string `json:"collaboratorId"`
+		Balances       []struct {
+			ValueUnitCode string  `json:"valueUnitCode"`
+			Balance       float64 `json:"balance"`
+		} `json:"balances"`
+		LedgerEntries struct {
+			Items []struct {
+				ValueUnitCode        string  `json:"valueUnitCode"`
+				EntryType            string  `json:"entryType"`
+				Direction            string  `json:"direction"`
+				Amount               float64 `json:"amount"`
+				SourceType           string  `json:"sourceType"`
+				SourceID             string  `json:"sourceId"`
+				SourceLabel          string  `json:"sourceLabel"`
+				SourceWorkPeriodID   string  `json:"sourceWorkPeriodId"`
+				SourceWorkDate       string  `json:"sourceWorkDate"`
+				SourceWorkPeriodName string  `json:"sourceWorkPeriodName"`
+			} `json:"items"`
+			Total int `json:"total"`
+		} `json:"ledgerEntries"`
 	} `json:"data"`
 }
 
@@ -171,7 +201,7 @@ func TestRecalculateAccrualRunUsesGoldProduction(t *testing.T) {
 	}
 }
 
-func TestPostAccrualRunCreatesLedgerEntryAndMarksItemPosted(t *testing.T) {
+func TestPostAccrualRunCreatesAssignmentSourcedBRLLedgerCreditAndMarksItemPosted(t *testing.T) {
 	server, cleanup := newTestServer(t)
 	defer cleanup()
 	workPeriod := createWorkPeriod(t, server, nil)
@@ -188,14 +218,49 @@ func TestPostAccrualRunCreatesLedgerEntryAndMarksItemPosted(t *testing.T) {
 	if items.Data.Total != 1 {
 		t.Fatalf("expected one posted item, got %d", items.Data.Total)
 	}
-	entries := listLedgerEntries(t, server, collaborator.Data.ID, "sourceType=ACCRUAL_ITEM")
+	if items.Data.Items[0].WorkPeriodAssignmentID != assignment.Data.ID {
+		t.Fatalf("expected posted item to retain assignment ID %q, got %+v", assignment.Data.ID, items.Data.Items[0])
+	}
+	entries := listLedgerEntries(t, server, collaborator.Data.ID, "sourceType=WORK_PERIOD_ASSIGNMENT")
 	if entries.Data.Total != 1 {
-		t.Fatalf("expected one ledger entry, got %d", entries.Data.Total)
+		t.Fatalf("expected one assignment-sourced ledger entry, got %d", entries.Data.Total)
 	}
 	entry := entries.Data.Items[0]
-	if entry.EntryType != "EARNING_CREDIT" || entry.Direction != "CREDIT" || entry.ValueUnitCode != "BRL" || entry.Amount != 150.0 || entry.SourceID != items.Data.Items[0].ID {
-		t.Fatalf("unexpected accrual ledger entry: %+v", entry)
+	if entry.EntryType != "EARNING_CREDIT" || entry.Direction != "CREDIT" || entry.ValueUnitCode != "BRL" || entry.Amount != 150.0 || entry.SourceID != assignment.Data.ID {
+		t.Fatalf("unexpected assignment-sourced BRL ledger entry: %+v", entry)
 	}
+	if entry.SourceWorkPeriodID != workPeriod.Data.ID || entry.SourceWorkDate != "2026-06-05" || entry.SourceWorkPeriodName != "06:00-18:00" || entry.SourceLabel != "Work Period 2026-06-05 · 06:00-18:00" {
+		t.Fatalf("expected assignment source details for BRL earning credit, got %+v", entry)
+	}
+}
+
+func TestPostGoldCommissionAccrualRunCreatesGoldLedgerCreditVisibleInCurrentAccount(t *testing.T) {
+	server, cleanup := newTestServer(t)
+	defer cleanup()
+	workPeriod := createWorkPeriod(t, server, nil)
+	collaborator := createActiveCollaborator(t, server, 1, validCollaboratorPayload("", map[string]any{"paymentMethodId": "ref-method-commission", "paymentValue": 5.0, "goldCommissionPercent": 5.0}))
+	assignment := createAssignment(t, server, workPeriod.Data.ID, validAssignmentPayload(collaborator.Data.ID, nil))
+	markOutcome(t, server, assignment.Data.ID, "WORKED")
+	createGoldProductionEntry(t, server, workPeriod.Data.ID, map[string]any{"locationId": "ref-location-main-mine", "productionDate": "2026-06-05", "goldGramsProduced": 100.0})
+	run := createAccrualRun(t, server, workPeriod.Data.ID, map[string]any{})
+
+	posted := postAccrualRun(t, server, run.Data.ID)
+	if posted.Data.Status != "POSTED" || posted.Data.Summary.PostedItems != 1 {
+		t.Fatalf("expected posted gold run with one posted item, got %+v", posted.Data)
+	}
+
+	detail := getCurrentAccountDetail(t, server, collaborator.Data.ID, "sourceType=WORK_PERIOD_ASSIGNMENT")
+	if detail.Data.LedgerEntries.Total != 1 {
+		t.Fatalf("expected one assignment-sourced current-account entry, got %+v", detail.Data.LedgerEntries)
+	}
+	entry := detail.Data.LedgerEntries.Items[0]
+	if entry.EntryType != "EARNING_CREDIT" || entry.Direction != "CREDIT" || entry.ValueUnitCode != "GOLD_GRAM" || entry.Amount != 5.0 || entry.SourceID != assignment.Data.ID {
+		t.Fatalf("unexpected assignment-sourced gold ledger entry: %+v", entry)
+	}
+	if entry.SourceWorkPeriodID != workPeriod.Data.ID || entry.SourceWorkDate != "2026-06-05" || entry.SourceLabel != "Work Period 2026-06-05 · 06:00-18:00" {
+		t.Fatalf("expected assignment source details in current-account detail, got %+v", entry)
+	}
+	assertCurrentAccountBalance(t, detail, "GOLD_GRAM", 5.0)
 }
 
 func TestPostAccrualRunIsIdempotent(t *testing.T) {
@@ -209,9 +274,12 @@ func TestPostAccrualRunIsIdempotent(t *testing.T) {
 
 	postAccrualRun(t, server, run.Data.ID)
 	postAccrualRun(t, server, run.Data.ID)
-	entries := listLedgerEntries(t, server, collaborator.Data.ID, "sourceType=ACCRUAL_ITEM")
+	entries := listLedgerEntries(t, server, collaborator.Data.ID, "sourceType=WORK_PERIOD_ASSIGNMENT")
 	if entries.Data.Total != 1 {
-		t.Fatalf("expected idempotent single ledger entry, got %d", entries.Data.Total)
+		t.Fatalf("expected idempotent single assignment-sourced ledger entry, got %d", entries.Data.Total)
+	}
+	if entries.Data.Items[0].SourceID != assignment.Data.ID {
+		t.Fatalf("expected ledger source to be assignment %q, got %+v", assignment.Data.ID, entries.Data.Items[0])
 	}
 }
 
@@ -260,12 +328,14 @@ func TestSickDayOffGoldCommissionCreatesReplacementTransferItems(t *testing.T) {
 	assertAccrualItem(t, items, replacement.Data.ID, "SICK_DAY_OFF_REPLACEMENT_GOLD_CREDIT", "CREDIT", nil, floatPtr(1.25))
 
 	postAccrualRun(t, server, run.Data.ID)
-	originalEntries := listLedgerEntries(t, server, original.Data.ID, "sourceType=ACCRUAL_ITEM&pageSize=20")
-	assertLedgerEntry(t, originalEntries, "EARNING_CREDIT", "CREDIT", "GOLD_GRAM", 5.0)
-	assertLedgerEntry(t, originalEntries, "REPLACEMENT_TRANSFER", "DEBIT", "GOLD_GRAM", 1.25)
-	replacementEntries := listLedgerEntries(t, server, replacement.Data.ID, "sourceType=ACCRUAL_ITEM&pageSize=20")
-	assertLedgerEntry(t, replacementEntries, "EARNING_CREDIT", "CREDIT", "BRL", 150.0)
-	assertLedgerEntry(t, replacementEntries, "REPLACEMENT_TRANSFER", "CREDIT", "GOLD_GRAM", 1.25)
+	originalEarnings := listLedgerEntries(t, server, original.Data.ID, "sourceType=WORK_PERIOD_ASSIGNMENT&pageSize=20")
+	assertLedgerEntry(t, originalEarnings, "EARNING_CREDIT", "CREDIT", "GOLD_GRAM", 5.0)
+	originalTransfers := listLedgerEntries(t, server, original.Data.ID, "sourceType=ACCRUAL_ITEM&pageSize=20")
+	assertLedgerEntry(t, originalTransfers, "REPLACEMENT_TRANSFER", "DEBIT", "GOLD_GRAM", 1.25)
+	replacementEarnings := listLedgerEntries(t, server, replacement.Data.ID, "sourceType=WORK_PERIOD_ASSIGNMENT&pageSize=20")
+	assertLedgerEntry(t, replacementEarnings, "EARNING_CREDIT", "CREDIT", "BRL", 150.0)
+	replacementTransfers := listLedgerEntries(t, server, replacement.Data.ID, "sourceType=ACCRUAL_ITEM&pageSize=20")
+	assertLedgerEntry(t, replacementTransfers, "REPLACEMENT_TRANSFER", "CREDIT", "GOLD_GRAM", 1.25)
 }
 
 func TestTimeOffGoldCommissionCreatesConfigurableSplitItems(t *testing.T) {
@@ -321,7 +391,7 @@ func TestReplacementGoldItemsWaitForProduction(t *testing.T) {
 func newTestServer(t *testing.T) (*fiber.App, func()) {
 	t.Helper()
 	dbPath := filepath.Join(t.TempDir(), "app.db")
-	server, cleanup, err := apppkg.Bootstrap(apppkg.Config{Env: "test", HTTPAddr: ":0", DBPath: dbPath, JWTSecret: "test-secret"})
+	server, cleanup, err := apppkg.Bootstrap(apppkg.Config{Env: "test", HTTPAddr: ":0", DBPath: dbPath, JWTSecret: "test-secret", DisableRouteAuthorization: true})
 	if err != nil {
 		t.Fatalf("bootstrap test server: %v", err)
 	}
@@ -437,6 +507,22 @@ func listAccrualItems(t *testing.T, server *fiber.App, runID string, query strin
 	decodeJSON(t, res, &body)
 	return body
 }
+func getCurrentAccountDetail(t *testing.T, server *fiber.App, collaboratorID string, query string) apiCurrentAccountDetailResponse {
+	t.Helper()
+	url := collaboratorsURL + collaboratorID + "/current-account"
+	if query != "" {
+		url += "?" + query
+	}
+	res := getJSON(t, server, url)
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("expected current-account detail status %d, got %d", http.StatusOK, res.StatusCode)
+	}
+	var body apiCurrentAccountDetailResponse
+	decodeJSON(t, res, &body)
+	return body
+}
+
 func listLedgerEntries(t *testing.T, server *fiber.App, collaboratorID string, query string) apiLedgerEntryListResponse {
 	t.Helper()
 	url := currentAccountsURL + collaboratorID + "/ledger-entries"
@@ -497,6 +583,16 @@ func cpfForSeq(seq int) string {
 	return cpfs[(seq-1)%len(cpfs)]
 }
 func cellularForSeq(seq int) string { return fmt.Sprintf("11%d%08d", 9, 98865000+seq) }
+func assertCurrentAccountBalance(t *testing.T, detail apiCurrentAccountDetailResponse, valueUnitCode string, balance float64) {
+	t.Helper()
+	for _, item := range detail.Data.Balances {
+		if item.ValueUnitCode == valueUnitCode && item.Balance == balance {
+			return
+		}
+	}
+	t.Fatalf("expected current account balance unit=%s balance=%v in %+v", valueUnitCode, balance, detail.Data.Balances)
+}
+
 func assertAccrualItem(t *testing.T, list apiAccrualItemListResponse, collaboratorID string, calculationType string, direction string, brlAmount *float64, goldAmount *float64) {
 	t.Helper()
 	for _, item := range list.Data.Items {

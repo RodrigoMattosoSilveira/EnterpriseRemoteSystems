@@ -12,6 +12,7 @@ import type {
   CreateAccrualRunInput,
   CreateGoldProductionEntryInput,
 } from "../../types/accruals";
+import { currentAccountQueryKeys } from "../current-accounts/useCurrentAccount";
 import { workPeriodKeys } from "./usePlanning";
 
 export const accrualKeys = {
@@ -104,7 +105,7 @@ export function usePostAccrualRun(workPeriodId: string) {
       queryClient.invalidateQueries({
         queryKey: workPeriodKeys.detail(workPeriodId),
       });
-      queryClient.invalidateQueries({ queryKey: ["current-accounts"] });
+      queryClient.invalidateQueries({ queryKey: currentAccountQueryKeys.all });
     },
   });
 }

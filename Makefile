@@ -44,6 +44,12 @@ SERVER_COMPOSE = docker compose -p $(COMPOSE_PROJECT) --env-file $(ENV_FILE) -f 
 SERVER_COMPOSE_BUILD = BUILDX_NO_DEFAULT_ATTESTATIONS=1 $(SERVER_COMPOSE) --progress plain
 SERVER_SERVICE_CONTAINERS = $(CONTAINER_PREFIX)-backend $(CONTAINER_PREFIX)-frontend $(CONTAINER_PREFIX)-caddy
 
+LOCAL_DOCKER_GO_IMAGE ?= golang:1.26.2-bookworm
+LOCAL_DOCKER_PLAYWRIGHT_IMAGE ?= mcr.microsoft.com/playwright:v1.57.0-noble
+LOCAL_DOCKER_CHECK_IMAGE ?= ers-local-check:latest
+LOCAL_DOCKER_WORKDIR ?= /workspace
+LOCAL_DOCKER ?= docker
+
 # ==============================================================================
 # Help
 # ==============================================================================
@@ -59,17 +65,21 @@ help:
 	@echo "  make local-db-init"
 	@echo "  make local-db-reset"
 	@echo "  make testdata-local-reset"
+	@echo "  make manual-testdata-local-reset"
+	@echo "  make manual-testdata-local-seed"
+	@echo "  make manual-testdata-local-reset-with-work-periods"
 	@echo "  make local-admin-reset"
 	@echo "  make backend-check"
 	@echo "  make frontend-check"
 	@echo "  make local-check"
+	@echo "  make local-docker-check"
 	@echo "  make local-backend"
 	@echo "  make local-frontend"
 	@echo "  make local-smoke"
 	@echo "  make local-lan-smoke LAN_HOST=$(ipconfig getifaddr en0)"
 	@echo "  make local-login-test"
 	@echo "  make local-admin-test"
-	@echo "  make local-check"
+	@echo "  make verify"
 	@echo
 	@echo "Generic server targets:"
 	@echo "  make server-init-env ENV=development|test|production"
@@ -83,7 +93,9 @@ help:
 	@echo "  make server-frontend-logs ENV=development|test|production"
 	@echo "  make server-caddy-logs ENV=development|test|production"
 	@echo "  make server-backend-health ENV=development|test|production"
+	@echo "  make server-provision-e2e-admin ENV=development|test|production < provision.json"
 	@echo "  make server-smoke ENV=development|test|production"
+	@echo "  make server-protected-api-smoke ENV=development|test|production"
 	@echo "  make server-admin-test ENV=development|test|production"
 	@echo "  make server-dns-check ENV=development|test|production"
 	@echo "  make server-cert-check ENV=development|test|production"
@@ -95,21 +107,27 @@ help:
 	@echo "  make server-dev-build"
 	@echo "  make server-dev-up"
 	@echo "  make server-dev-smoke"
+	@echo "  make server-dev-protected-api-smoke"
 	@echo "  make server-dev-admin-test"
+	@echo "  make server-dev-provision-e2e-admin < provision.json"
 	@echo
 	@echo "Test aliases:"
 	@echo "  make server-test-pull"
 	@echo "  make server-test-build"
 	@echo "  make server-test-up"
 	@echo "  make server-test-smoke"
+	@echo "  make server-test-protected-api-smoke"
 	@echo "  make server-test-admin-test"
+	@echo "  make server-test-provision-e2e-admin < provision.json"
 	@echo
 	@echo "Production aliases:"
 	@echo "  make server-prod-pull"
 	@echo "  make server-prod-build"
 	@echo "  make server-prod-up"
 	@echo "  make server-prod-smoke"
+	@echo "  make server-prod-protected-api-smoke"
 	@echo "  make server-prod-admin-test"
+	@echo "  make server-prod-provision-e2e-admin < provision.json"
 	@echo
 	@echo "Edge proxy:"
 	@echo "  make edge-init"
@@ -153,6 +171,7 @@ doctor:
 check-repo:
 	@test -f backend/Dockerfile || (echo "Missing backend/Dockerfile" && exit 1)
 	@test -f backend/docker-entrypoint.sh || (echo "Missing backend/docker-entrypoint.sh" && exit 1)
+	@test -f backend/cmd/provision-e2e-admin/main.go || (echo "Missing backend/cmd/provision-e2e-admin/main.go" && exit 1)
 	@test -d backend/migrations || (echo "Missing backend/migrations" && exit 1)
 	@test -f frontend/Dockerfile || (echo "Missing frontend/Dockerfile" && exit 1)
 	@test -f frontend/nginx.conf || (echo "Missing frontend/nginx.conf" && exit 1)
@@ -220,14 +239,14 @@ local-frontend:
 local-smoke:
 	curl -fsS http://localhost:8080/api/v1/healthz >/dev/null
 	curl -fsS http://localhost:5173/api/v1/healthz >/dev/null
-	curl -fsS http://localhost:5173/api/v1/people/ >/dev/null
-	@echo "Local smoke tests passed."
+	curl -fsS http://localhost:5173/ >/dev/null
+	@echo "Local smoke tests passed; sign in through the browser for protected-route verification."
 
 .PHONY: local-lan-smoke
 local-lan-smoke:
 	curl -fsS http://$(LAN_HOST):5173/api/v1/healthz >/dev/null
-	curl -fsS http://$(LAN_HOST):5173/api/v1/people/ >/dev/null
-	@echo "LAN smoke test passed for $(LAN_HOST)."
+	curl -fsS http://$(LAN_HOST):5173/ >/dev/null
+	@echo "LAN smoke test passed for $(LAN_HOST); protected routes require a login session."
 
 .PHONY: local-people-create-test
 local-people-create-test:
@@ -244,11 +263,54 @@ local-admin-test:
 
 .PHONY: local-check
 local-check:
-	cd backend && go test ./...
+	cd backend && go clean -testcache && go test ./...
 	cd frontend && npm run test:run
 	cd frontend && npx playwright test
 	cd frontend && npm run build
-	
+
+.PHONY: local-docker-doctor
+local-docker-doctor:
+	@command -v $(LOCAL_DOCKER) >/dev/null || (echo "docker not found" && exit 1)
+	@if ! $(LOCAL_DOCKER) info >/dev/null 2>&1; then \
+		echo "Docker daemon is not reachable."; \
+		echo; \
+		echo "Current Docker context:"; \
+		$(LOCAL_DOCKER) context show 2>/dev/null || true; \
+		echo; \
+		echo "On macOS, open Docker Desktop and wait until it reports that it is running."; \
+		echo "If Docker Desktop is already running, check for a stale Docker host/context:"; \
+		echo "  unset DOCKER_HOST"; \
+		echo "  docker context ls"; \
+		echo "  docker context use desktop-linux"; \
+		echo; \
+		echo "Then rerun: make local-docker-check"; \
+		exit 1; \
+	fi
+
+.PHONY: local-docker-check-image
+local-docker-check-image: local-docker-doctor
+	@printf '%s\n' \
+		'FROM $(LOCAL_DOCKER_GO_IMAGE) AS go' \
+		'FROM $(LOCAL_DOCKER_PLAYWRIGHT_IMAGE)' \
+		'USER root' \
+		'COPY --from=go /usr/local/go /usr/local/go' \
+		'ENV PATH="/usr/local/go/bin:$${PATH}"' \
+		'RUN apt-get update && apt-get install -y --no-install-recommends build-essential ca-certificates curl git jq pkg-config sqlite3 && rm -rf /var/lib/apt/lists/*' \
+	| $(LOCAL_DOCKER) build -t $(LOCAL_DOCKER_CHECK_IMAGE) -
+
+.PHONY: local-docker-check
+local-docker-check: local-docker-check-image
+	$(LOCAL_DOCKER) run --rm -t --ipc=host \
+		-v "$(CURDIR):$(LOCAL_DOCKER_WORKDIR)" \
+		-w "$(LOCAL_DOCKER_WORKDIR)" \
+		--user "$$(id -u):$$(id -g)" \
+		-e HOME=/tmp \
+		-e GOCACHE=/tmp/go-build \
+		-e GOMODCACHE=/tmp/gomod \
+		-e NPM_CONFIG_CACHE=/tmp/npm-cache \
+		$(LOCAL_DOCKER_CHECK_IMAGE) \
+		bash -lc 'set -euo pipefail; cd backend && go clean -testcache && go test ./...; cd ../frontend && npm ci && npm run test:run && npx playwright install chromium && npx playwright test && npm run build'
+
 # ==============================================================================
 # Generic server environment targets
 # ==============================================================================
@@ -314,17 +376,25 @@ server-caddy-logs:
 
 .PHONY: server-backend-health
 server-backend-health:
-	docker exec $(CONTAINER_PREFIX)-backend curl -fsS http://localhost:8080/api/v1/healthz
+	docker exec $(CONTAINER_PREFIX)-backend curl -fsS http://localhost:8080/healthz
 	@echo "$(CONTAINER_PREFIX)-backend health check passed."
 
 .PHONY: server-env-caddy-health
 server-env-caddy-health:
-	docker exec $(CONTAINER_PREFIX)-caddy wget -q -O- http://localhost:80/api/v1/healthz >/dev/null
+	docker exec $(CONTAINER_PREFIX)-caddy wget -q -O- http://localhost:80/healthz >/dev/null
 	@echo "$(CONTAINER_PREFIX)-caddy internal health check passed."
+
+.PHONY: server-provision-e2e-admin
+server-provision-e2e-admin:
+	cd $(ENV_DIR) && $(SERVER_COMPOSE) exec -T backend /app/provision-e2e-admin $(if $(filter production,$(ENV)),--allow-production,)
 
 .PHONY: server-smoke
 server-smoke:
-	curl -fsS https://$(DOMAIN)/api/v1/healthz >/dev/null
+	curl -fsS https://$(DOMAIN)/healthz >/dev/null
+	@echo "$(DOMAIN) public smoke tests passed."
+
+.PHONY: server-protected-api-smoke
+server-protected-api-smoke:
 	@authz_actor_id="$$(grep -E '^AUTHZ_BOOTSTRAP_ACTOR_KEY=' "$(ENV_DIR)/$(ENV_FILE)" | tail -n 1 | cut -d= -f2- | sed -e 's/^"//' -e 's/"$$//' -e "s/^'//" -e "s/'$$//")"; \
 	authz_tenant_id="$$(grep -E '^AUTHZ_BOOTSTRAP_TENANT_ID=' "$(ENV_DIR)/$(ENV_FILE)" | tail -n 1 | cut -d= -f2- | sed -e 's/^"//' -e 's/"$$//' -e "s/^'//" -e "s/'$$//")"; \
 	if [ -z "$$authz_actor_id" ]; then \
@@ -334,11 +404,12 @@ server-smoke:
 	if [ -z "$$authz_tenant_id" ] || [ "$$authz_tenant_id" = "*" ]; then \
 		authz_tenant_id="default"; \
 	fi; \
+	echo "Running protected API smoke check for $(DOMAIN) as actor $$authz_actor_id tenant $$authz_tenant_id"; \
 	curl -fsS \
 		-H "X-Actor-ID: $$authz_actor_id" \
 		-H "X-Tenant-ID: $$authz_tenant_id" \
 		https://$(DOMAIN)/api/v1/people/ >/dev/null
-	@echo "$(DOMAIN) smoke tests passed."
+	@echo "$(DOMAIN) protected API smoke tests passed."
 
 .PHONY: server-admin-test
 server-admin-test:
@@ -433,9 +504,17 @@ server-dev-env-caddy-health:
 server-dev-smoke:
 	$(MAKE) server-smoke ENV=development
 
+.PHONY: server-dev-protected-api-smoke
+server-dev-protected-api-smoke:
+	$(MAKE) server-protected-api-smoke ENV=development
+
 .PHONY: server-dev-admin-test
 server-dev-admin-test:
 	$(MAKE) server-admin-test ENV=development
+
+.PHONY: server-dev-provision-e2e-admin
+server-dev-provision-e2e-admin:
+	$(MAKE) server-provision-e2e-admin ENV=development
 
 .PHONY: server-dev-dns-check
 server-dev-dns-check:
@@ -513,9 +592,17 @@ server-test-env-caddy-health:
 server-test-smoke:
 	$(MAKE) server-smoke ENV=test
 
+.PHONY: server-test-protected-api-smoke
+server-test-protected-api-smoke:
+	$(MAKE) server-protected-api-smoke ENV=test
+
 .PHONY: server-test-admin-test
 server-test-admin-test:
 	$(MAKE) server-admin-test ENV=test
+
+.PHONY: server-test-provision-e2e-admin
+server-test-provision-e2e-admin:
+	$(MAKE) server-provision-e2e-admin ENV=test
 
 .PHONY: server-test-dns-check
 server-test-dns-check:
@@ -589,9 +676,17 @@ server-prod-env-caddy-health:
 server-prod-smoke:
 	$(MAKE) server-smoke ENV=production
 
+.PHONY: server-prod-protected-api-smoke
+server-prod-protected-api-smoke:
+	$(MAKE) server-protected-api-smoke ENV=production
+
 .PHONY: server-prod-admin-test
 server-prod-admin-test:
 	$(MAKE) server-admin-test ENV=production
+
+.PHONY: server-prod-provision-e2e-admin
+server-prod-provision-e2e-admin:
+	$(MAKE) server-provision-e2e-admin ENV=production
 
 .PHONY: server-prod-dns-check
 server-prod-dns-check:
@@ -708,6 +803,30 @@ import-people:
 # ==============================================================================
 # Resettable test data
 # ==============================================================================
+
+
+.PHONY: manual-testdata-local-seed
+manual-testdata-local-seed:
+	chmod +x scripts/seed-manual-testdata.py
+	./scripts/seed-manual-testdata.py --with-work-periods
+
+.PHONY: manual-testdata-local-reset
+manual-testdata-local-reset:
+	@echo "Resetting local manual-test database: backend/data/app.db"
+	rm -f backend/data/app.db
+	mkdir -p backend/data
+	DB_PATH=backend/data/app.db ./scripts/db-migrate.sh
+	chmod +x scripts/seed-manual-testdata.py
+	./scripts/seed-manual-testdata.py --with-work-periods
+
+.PHONY: manual-testdata-local-reset-with-work-periods
+manual-testdata-local-reset-with-work-periods:
+	@echo "Resetting local manual-test database with recent Work Periods: backend/data/app.db"
+	rm -f backend/data/app.db
+	mkdir -p backend/data
+	DB_PATH=backend/data/app.db ./scripts/db-migrate.sh
+	chmod +x scripts/seed-manual-testdata.py
+	./scripts/seed-manual-testdata.py --with-work-periods
 
 .PHONY: testdata-local-reset
 testdata-local-reset:

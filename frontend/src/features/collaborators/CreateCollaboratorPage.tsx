@@ -14,7 +14,11 @@ import {
   paymentValueInputConfig,
   validatePaymentValueInput,
 } from "./paymentValue";
-import { useCollaborators, useCreateCollaborator } from "./useCollaborators";
+import {
+  useCollaboratorCandidates,
+  useCollaborators,
+  useCreateCollaborator,
+} from "./useCollaborators";
 
 type FormState = {
   personId: string;
@@ -43,9 +47,9 @@ const initialForm: FormState = {
 export function CreateCollaboratorPage() {
   const navigate = useNavigate();
   const peopleQuery = usePeople({
-    canCreateCollaborator: true,
     pageSize: 1000,
   });
+  const candidatesQuery = useCollaboratorCandidates();
   const paymentMethodsQuery = useReferenceDataByType("method");
   const sectorsQuery = useReferenceDataByType("sector");
   const locationsQuery = useReferenceDataByType("location");
@@ -55,6 +59,7 @@ export function CreateCollaboratorPage() {
   const createMutation = useCreateCollaborator();
 
   const [form, setForm] = useState<FormState>(initialForm);
+  const [personSearch, setPersonSearch] = useState("");
   const [clientValidationError, setClientValidationError] = useState("");
 
   const people = useMemo(
@@ -85,10 +90,10 @@ export function CreateCollaboratorPage() {
 
   const eligiblePeople = useMemo(
     () =>
-      completePeople.filter(
-        (person) => !activeCollaboratorPersonIds.has(person.id),
+      (Array.isArray(candidatesQuery.data) ? candidatesQuery.data : []).sort(
+        (a, b) => personLabel(a).localeCompare(personLabel(b)),
       ),
-    [activeCollaboratorPersonIds, completePeople],
+    [candidatesQuery.data],
   );
 
   const completePeopleWithActiveCollaborator = useMemo(
@@ -104,6 +109,12 @@ export function CreateCollaboratorPage() {
   const selectedPerson = eligiblePeople.find(
     (person) => person.id === form.personId,
   );
+
+  const matchingEligiblePeople = useMemo(
+    () => filterEligiblePeopleByNickname(eligiblePeople, personSearch),
+    [eligiblePeople, personSearch],
+  );
+  const showPersonSuggestions = personSearch.trim().length > 0;
 
   const paymentMethodOptions = useMemo(
     () => activeOptions(paymentMethodsQuery.data),
@@ -202,6 +213,7 @@ export function CreateCollaboratorPage() {
 
   const isLoading =
     peopleQuery.isLoading ||
+    candidatesQuery.isLoading ||
     collaboratorsQuery.isLoading ||
     paymentMethodsQuery.isLoading ||
     sectorsQuery.isLoading ||
@@ -211,6 +223,7 @@ export function CreateCollaboratorPage() {
 
   const loadError =
     peopleQuery.error ||
+    candidatesQuery.error ||
     collaboratorsQuery.error ||
     paymentMethodsQuery.error ||
     sectorsQuery.error ||
@@ -221,6 +234,16 @@ export function CreateCollaboratorPage() {
   function update<K extends keyof FormState>(key: K, value: FormState[K]) {
     setClientValidationError("");
     setForm((prev) => ({ ...prev, [key]: value }));
+  }
+
+  function selectEligiblePerson(person: Person) {
+    update("personId", person.id);
+    setPersonSearch("");
+  }
+
+  function clearEligiblePerson() {
+    update("personId", "");
+    setPersonSearch("");
   }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -354,22 +377,71 @@ export function CreateCollaboratorPage() {
                 </div>
               </div>
 
-              <div className="mt-4">
-                <Select
-                  label="Eligible Person"
-                  required
-                  value={form.personId}
-                  onChange={(value) => update("personId", value)}
-                  options={eligiblePeople.map((person) => ({
-                    value: person.id,
-                    label: personLabel(person),
-                  }))}
-                  placeholder={personSelectPlaceholder(eligiblePeople.length)}
-                  disabled={eligiblePeople.length === 0}
-                />
-              </div>
+              {!selectedPerson && (
+                <div className="relative mt-4">
+                  <label className="block text-sm font-medium text-gray-700">
+                    Find eligible Person by nickname
+                    <span className="text-red-600"> *</span>
+                    <input
+                      type="search"
+                      role="combobox"
+                      aria-autocomplete="list"
+                      aria-controls={
+                        showPersonSuggestions
+                          ? "eligible-person-suggestions"
+                          : undefined
+                      }
+                      aria-expanded={showPersonSuggestions}
+                      disabled={eligiblePeople.length === 0}
+                      value={personSearch}
+                      onChange={(event) =>
+                        setPersonSearch(event.target.value)
+                      }
+                      placeholder={
+                        eligiblePeople.length === 0
+                          ? "No eligible People available"
+                          : "Type any part of a Person nickname"
+                      }
+                      className="mt-1 w-full rounded-xl border border-gray-300 px-3 py-2 shadow-sm focus:border-gray-900 focus:outline-none focus:ring-2 focus:ring-gray-900/10 disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-500"
+                    />
+                  </label>
 
-              {selectedPerson && <SelectedPersonCard person={selectedPerson} />}
+                  {showPersonSuggestions && (
+                    <div
+                      id="eligible-person-suggestions"
+                      role="listbox"
+                      aria-label="Matching eligible People"
+                      className="absolute left-0 right-0 top-full z-20 mt-1 max-h-60 overflow-y-auto rounded-xl border border-gray-200 bg-white p-1 shadow-lg"
+                    >
+                      {matchingEligiblePeople.length === 0 ? (
+                        <p className="px-3 py-2 text-sm text-gray-500">
+                          No matching eligible People
+                        </p>
+                      ) : (
+                        matchingEligiblePeople.map((person) => (
+                          <button
+                            key={person.id}
+                            type="button"
+                            role="option"
+                            aria-selected={person.id === form.personId}
+                            onClick={() => selectEligiblePerson(person)}
+                            className="block w-full rounded-lg px-3 py-2 text-left text-sm font-medium text-gray-800 hover:bg-gray-100 focus:bg-gray-100 focus:outline-none"
+                          >
+                            {personLabel(person)}
+                          </button>
+                        ))
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {selectedPerson && (
+                <SelectedPersonCard
+                  person={selectedPerson}
+                  onChange={clearEligiblePerson}
+                />
+              )}
 
               {eligiblePeople.length === 0 && (
                 <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
@@ -549,7 +621,7 @@ function AlreadyCollaboratorsPanel({ people }: { people: Person[] }) {
   return (
     <div className="mt-4 rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-900">
       <p className="font-semibold">
-        Already active Collaborators are hidden from the dropdown.
+        Already active Collaborators are hidden from eligible Person suggestions.
       </p>
       <p className="mt-1">
         These complete People already have an active Collaborator journey and
@@ -679,7 +751,13 @@ function ReferenceDataSetupSummary({
   );
 }
 
-function SelectedPersonCard({ person }: { person: Person }) {
+function SelectedPersonCard({
+  person,
+  onChange,
+}: {
+  person: Person;
+  onChange: () => void;
+}) {
   return (
     <div className="mt-4 rounded-xl border border-green-200 bg-green-50 p-4 text-sm text-green-900">
       <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
@@ -705,9 +783,18 @@ function SelectedPersonCard({ person }: { person: Person }) {
             </div>
           </dl>
         </div>
-        <Link className="font-semibold underline" to={`/people/${person.id}`}>
-          View Person
-        </Link>
+        <div className="flex shrink-0 items-center gap-3">
+          <Link className="font-semibold underline" to={`/people/${person.id}`}>
+            View Person
+          </Link>
+          <button
+            type="button"
+            onClick={onChange}
+            className="rounded-lg border border-green-300 bg-white px-3 py-1 font-semibold text-green-800"
+          >
+            Change Person
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -819,14 +906,26 @@ function activeOptions(items: ReferenceDataItem[] = []) {
     .map((item) => ({ value: item.id, label: item.label }));
 }
 
-function personSelectPlaceholder(eligiblePeopleCount: number) {
-  return eligiblePeopleCount === 0
-    ? "No eligible People available"
-    : "Select an eligible Person";
-}
-
 function isActiveCollaborator(collaborator: Collaborator) {
   return !collaborator.closedAt;
+}
+
+function filterEligiblePeopleByNickname(people: Person[], filter: string) {
+  const normalizedFilter = normalizePersonNickname(filter);
+  if (!normalizedFilter) return [];
+
+  return people.filter((person) => {
+    const nickname = person.nickname?.trim() || personLabel(person);
+    return normalizePersonNickname(nickname).includes(normalizedFilter);
+  });
+}
+
+function normalizePersonNickname(value: string) {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim()
+    .toLocaleLowerCase();
 }
 
 function personLabel(person: Person) {

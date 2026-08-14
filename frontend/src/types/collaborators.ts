@@ -19,6 +19,7 @@ export type Collaborator = {
   goldCommissionPercent?: number;
   timeOffGoldSplitPercent?: number;
   sickDayOffReplacementGoldGrams?: number;
+  planningAvailability: "ACTIVE" | "DAY_OFF" | "LEAVE_OF_ABSENCE";
 
   sectorId: string;
   sectorLabel?: string;
@@ -30,6 +31,7 @@ export type Collaborator = {
   taskLabel?: string;
 
   statusId: string;
+  statusCode?: string;
   statusLabel?: string;
 
   notes?: string;
@@ -48,6 +50,7 @@ export type CreateCollaboratorInput = {
   goldCommissionPercent?: number;
   timeOffGoldSplitPercent?: number;
   sickDayOffReplacementGoldGrams?: number;
+  planningAvailability?: "ACTIVE" | "DAY_OFF" | "LEAVE_OF_ABSENCE";
   sectorId: string;
   locationId: string;
   taskId: string;
@@ -63,6 +66,7 @@ export type UpdateCollaboratorInput = {
   goldCommissionPercent?: number;
   timeOffGoldSplitPercent?: number;
   sickDayOffReplacementGoldGrams?: number;
+  planningAvailability?: "ACTIVE" | "DAY_OFF" | "LEAVE_OF_ABSENCE";
   sectorId: string;
   locationId: string;
   taskId: string;
@@ -70,6 +74,7 @@ export type UpdateCollaboratorInput = {
 };
 
 export type CollaboratorListFilter = {
+  search?: string;
   statusId?: string;
   locationId?: string;
   paymentMethodId?: string;

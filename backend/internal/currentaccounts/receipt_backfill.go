@@ -7,6 +7,7 @@ import (
 
 	"enterpriseremotesystems/backend/internal/db"
 	"enterpriseremotesystems/backend/internal/shared/ids"
+	"enterpriseremotesystems/backend/internal/shared/tenantctx"
 )
 
 const (
@@ -21,7 +22,7 @@ func (s *service) BackfillDebitLedgerReceipts(ctx context.Context, authorizedBy 
 	if err := ValidateReceiptBackfillRequest(req, authorizedBy); err != nil {
 		return nil, err
 	}
-	if err := s.requireSecondApprovalWhenConfigured(ctx, defaultTenantID, req.CorrectionReasonRequest, authorizedBy); err != nil {
+	if err := s.requireSecondApprovalWhenConfigured(ctx, tenantctx.TenantID(ctx), req.CorrectionReasonRequest, authorizedBy); err != nil {
 		return nil, err
 	}
 

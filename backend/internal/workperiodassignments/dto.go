@@ -8,6 +8,7 @@ type WorkPeriodAssignmentDTO struct {
 	CollaboratorName           string `json:"collaboratorName,omitempty"`
 	CollaboratorNickname       string `json:"collaboratorNickname,omitempty"`
 	PlannedStatus              string `json:"plannedStatus"`
+	PlanningAvailability       string `json:"planningAvailability"`
 	ActualStatus               string `json:"actualStatus,omitempty"`
 	ReplacementForAssignmentID string `json:"replacementForAssignmentId,omitempty"`
 	SectorID                   string `json:"sectorId"`
@@ -24,6 +25,7 @@ type WorkPeriodAssignmentDTO struct {
 type CreateWorkPeriodAssignmentRequest struct {
 	CollaboratorID             string `json:"collaboratorId"`
 	PlannedStatus              string `json:"plannedStatus"`
+	PlanningAvailability       string `json:"planningAvailability"`
 	ReplacementForAssignmentID string `json:"replacementForAssignmentId"`
 	SectorID                   string `json:"sectorId"`
 	LocationID                 string `json:"locationId"`
@@ -33,10 +35,82 @@ type CreateWorkPeriodAssignmentRequest struct {
 type UpdateWorkPeriodAssignmentRequest struct {
 	CollaboratorID             string `json:"collaboratorId"`
 	PlannedStatus              string `json:"plannedStatus"`
+	PlanningAvailability       string `json:"planningAvailability"`
 	ReplacementForAssignmentID string `json:"replacementForAssignmentId"`
 	SectorID                   string `json:"sectorId"`
 	LocationID                 string `json:"locationId"`
 	TaskID                     string `json:"taskId"`
+}
+
+type BulkPlanWorkPeriodAssignmentsRequest struct {
+	Rows []BulkPlanWorkPeriodAssignmentRow `json:"rows"`
+}
+
+type BulkPlanWorkPeriodAssignmentRow struct {
+	CollaboratorID                        string `json:"collaboratorId"`
+	Selected                              bool   `json:"selected"`
+	SectorID                              string `json:"sectorId"`
+	LocationID                            string `json:"locationId"`
+	TaskID                                string `json:"taskId"`
+	PlanningAvailability                  string `json:"planningAvailability"`
+	AvailabilityChanged                   bool   `json:"availabilityChanged"`
+	ReplacementForAssignmentID            string `json:"replacementForAssignmentId"`
+	TemporaryReplacementForCollaboratorID string `json:"temporaryReplacementForCollaboratorId"`
+}
+
+type BulkPlanWorkPeriodAssignmentsResult struct {
+	Assignments   []WorkPeriodAssignmentDTO `json:"assignments"`
+	SelectedCount int                       `json:"selectedCount"`
+}
+
+// PlanAssignmentRefinementRequest captures a focused planning refinement for a single
+// collaborator row. The current Work Period assignment is still saved through bulk-plan;
+// ApplyToFutureDefaults explicitly updates the collaborator Journey planning defaults.
+type PlanAssignmentRefinementRequest struct {
+	CollaboratorID        string `json:"collaboratorId"`
+	SectorID              string `json:"sectorId"`
+	LocationID            string `json:"locationId"`
+	TaskID                string `json:"taskId"`
+	ApplyToFutureDefaults bool   `json:"applyToFutureDefaults"`
+}
+
+type PlanAssignmentRefinementResult struct {
+	CollaboratorID        string `json:"collaboratorId"`
+	SectorID              string `json:"sectorId"`
+	SectorLabel           string `json:"sectorLabel,omitempty"`
+	LocationID            string `json:"locationId"`
+	LocationLabel         string `json:"locationLabel,omitempty"`
+	TaskID                string `json:"taskId"`
+	TaskLabel             string `json:"taskLabel,omitempty"`
+	ApplyToFutureDefaults bool   `json:"applyToFutureDefaults"`
+	FutureDefaultsUpdated bool   `json:"futureDefaultsUpdated"`
+}
+
+type WorkPeriodPlanningTemplateDTO struct {
+	WorkPeriodID       string                          `json:"workPeriodId"`
+	SourceWorkPeriodID string                          `json:"sourceWorkPeriodId,omitempty"`
+	SourceWorkDate     string                          `json:"sourceWorkDate,omitempty"`
+	SourcePeriodName   string                          `json:"sourcePeriodName,omitempty"`
+	Rows               []WorkPeriodPlanningTemplateRow `json:"rows"`
+}
+
+type WorkPeriodPlanningTemplateRow struct {
+	AssignmentID                          string `json:"assignmentId,omitempty"`
+	TemplateAssignmentID                  string `json:"templateAssignmentId,omitempty"`
+	ReplacementForAssignmentID            string `json:"replacementForAssignmentId,omitempty"`
+	TemporaryReplacementForCollaboratorID string `json:"temporaryReplacementForCollaboratorId,omitempty"`
+	CollaboratorID                        string `json:"collaboratorId"`
+	CollaboratorName                      string `json:"collaboratorName,omitempty"`
+	CollaboratorNickname                  string `json:"collaboratorNickname,omitempty"`
+	ProjectedEndDate                      string `json:"projectedEndDate,omitempty"`
+	PlanningAvailability                  string `json:"planningAvailability"`
+	Selected                              bool   `json:"selected"`
+	SectorID                              string `json:"sectorId"`
+	SectorLabel                           string `json:"sectorLabel,omitempty"`
+	LocationID                            string `json:"locationId"`
+	LocationLabel                         string `json:"locationLabel,omitempty"`
+	TaskID                                string `json:"taskId"`
+	TaskLabel                             string `json:"taskLabel,omitempty"`
 }
 
 type MarkActualOutcomeRequest struct {

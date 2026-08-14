@@ -8,15 +8,19 @@ import (
 	"net/http/httptest"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/gofiber/fiber/v3"
 
 	apppkg "enterpriseremotesystems/backend/internal/app"
+	"enterpriseremotesystems/backend/internal/db"
+	peoplepkg "enterpriseremotesystems/backend/internal/people"
 )
 
 const (
-	peopleURL        = "/api/v1/people/"
-	collaboratorsURL = "/api/v1/collaborators/"
+	peopleURL                 = "/api/v1/people/"
+	collaboratorsURL          = "/api/v1/collaborators/"
+	collaboratorCandidatesURL = "/api/v1/collaborators/candidates"
 )
 
 type apiErrorResponse struct {
@@ -53,6 +57,7 @@ type apiCollaboratorResponse struct {
 		GoldCommissionPercent          *float64 `json:"goldCommissionPercent"`
 		TimeOffGoldSplitPercent        *float64 `json:"timeOffGoldSplitPercent"`
 		SickDayOffReplacementGoldGrams *float64 `json:"sickDayOffReplacementGoldGrams"`
+		PlanningAvailability           string   `json:"planningAvailability"`
 		SectorID                       string   `json:"sectorId"`
 		LocationID                     string   `json:"locationId"`
 		TaskID                         string   `json:"taskId"`
@@ -64,6 +69,77 @@ type apiReferenceDataResponse struct {
 	Data struct {
 		ID string `json:"id"`
 	} `json:"data"`
+}
+
+type apiCollaboratorListResponse struct {
+	Data struct {
+		Items []struct {
+			ID             string `json:"id"`
+			PersonName     string `json:"personName"`
+			PersonNickname string `json:"personNickname"`
+		} `json:"items"`
+		Total int64 `json:"total"`
+	} `json:"data"`
+}
+
+type apiCollaboratorCandidatesResponse struct {
+	Data []struct {
+		ID                    string `json:"id"`
+		CanCreateCollaborator bool   `json:"canCreateCollaborator"`
+	} `json:"data"`
+}
+
+func TestListCandidatesRecomputesCompletionAndExcludesActiveJourney(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "app.db")
+	server, cleanup, err := apppkg.Bootstrap(apppkg.Config{
+		Env:                       "test",
+		HTTPAddr:                  ":0",
+		DBPath:                    dbPath,
+		JWTSecret:                 "test-secret",
+		DisableRouteAuthorization: true,
+	})
+	if err != nil {
+		t.Fatalf("bootstrap test server: %v", err)
+	}
+	defer cleanup()
+
+	database, err := db.Open(dbPath)
+	if err != nil {
+		t.Fatalf("open test database: %v", err)
+	}
+	sqlDB, err := database.DB()
+	if err != nil {
+		t.Fatalf("get test sql database: %v", err)
+	}
+	defer sqlDB.Close()
+
+	person := createPerson(t, server, validCompletePersonPayload(1, nil))
+	if err := database.Model(&db.Person{}).
+		Where("id = ?", person.Data.ID).
+		Update("can_create_collaborator", false).Error; err != nil {
+		t.Fatalf("make persisted eligibility stale: %v", err)
+	}
+
+	candidates := listCollaboratorCandidates(t, server)
+	if len(candidates.Data) != 1 {
+		t.Fatalf("expected one candidate, got %+v", candidates.Data)
+	}
+	if candidates.Data[0].ID != person.Data.ID {
+		t.Fatalf("expected candidate %q, got %q", person.Data.ID, candidates.Data[0].ID)
+	}
+	if !candidates.Data[0].CanCreateCollaborator {
+		t.Fatal("expected candidate completion to be recomputed from current Person data")
+	}
+
+	created := createCollaborator(t, server, validCollaboratorPayload(person.Data.ID, nil))
+	if created.Data.PersonID != person.Data.ID {
+		t.Fatalf("expected collaborator for person %q, got %q", person.Data.ID, created.Data.PersonID)
+	}
+
+	candidates = listCollaboratorCandidates(t, server)
+	if len(candidates.Data) != 0 {
+		t.Fatalf("expected active collaborator Person to be removed from candidates, got %+v", candidates.Data)
+	}
 }
 
 func TestCreateCollaboratorFromCompletePersonReturnsCreated(t *testing.T) {
@@ -307,6 +383,154 @@ func TestUpdateCollaboratorEditsAssignmentPaymentAndExtensionDays(t *testing.T) 
 	}
 }
 
+func TestUpdateCollaboratorSavesPlanningAvailability(t *testing.T) {
+	server, cleanup := newTestServer(t)
+	defer cleanup()
+
+	person := createPerson(t, server, validCompletePersonPayload(1, nil))
+	created := createCollaborator(t, server, validCollaboratorPayload(person.Data.ID, nil))
+
+	res := postJSON(t, server, http.MethodPut, collaboratorsURL+created.Data.ID, map[string]any{
+		"sectorId":             "ref-sector-mining",
+		"locationId":           "ref-location-main-mine",
+		"taskId":               "ref-task-miner",
+		"paymentMethodId":      "ref-method-daily",
+		"paymentValue":         150.0,
+		"dailyBrlAmount":       150.0,
+		"extensionDays":        0,
+		"planningAvailability": "DAY_OFF",
+	})
+	defer res.Body.Close()
+
+	if res.StatusCode != http.StatusOK {
+		var body apiErrorResponse
+		decodeJSON(t, res, &body)
+		t.Fatalf("expected update collaborator status %d, got %d with error %+v", http.StatusOK, res.StatusCode, body.Error)
+	}
+
+	var body apiCollaboratorResponse
+	decodeJSON(t, res, &body)
+	if body.Data.PlanningAvailability != "DAY_OFF" {
+		t.Fatalf("expected planningAvailability DAY_OFF, got %q", body.Data.PlanningAvailability)
+	}
+
+	res = postJSON(t, server, http.MethodPut, collaboratorsURL+created.Data.ID, map[string]any{
+		"sectorId":             "ref-sector-mining",
+		"locationId":           "ref-location-main-mine",
+		"taskId":               "ref-task-miner",
+		"paymentMethodId":      "ref-method-daily",
+		"paymentValue":         150.0,
+		"dailyBrlAmount":       150.0,
+		"extensionDays":        0,
+		"planningAvailability": "ACTIVE",
+	})
+	defer res.Body.Close()
+
+	if res.StatusCode != http.StatusOK {
+		var body apiErrorResponse
+		decodeJSON(t, res, &body)
+		t.Fatalf("expected update collaborator status %d, got %d with error %+v", http.StatusOK, res.StatusCode, body.Error)
+	}
+
+	decodeJSON(t, res, &body)
+	if body.Data.PlanningAvailability != "ACTIVE" {
+		t.Fatalf("expected planningAvailability ACTIVE, got %q", body.Data.PlanningAvailability)
+	}
+}
+
+func TestListCollaboratorsOrdersNewestCreatedFirst(t *testing.T) {
+	server, cleanup := newTestServer(t)
+	defer cleanup()
+
+	olderPerson := createPerson(t, server, validCompletePersonPayload(1, nil))
+	createCollaborator(t, server, validCollaboratorPayload(olderPerson.Data.ID, map[string]any{
+		"journeyStartDate": "2099-01-01",
+	}))
+
+	time.Sleep(time.Millisecond)
+
+	newerPerson := createPerson(t, server, validCompletePersonPayload(2, nil))
+	newerCollaborator := createCollaborator(t, server, validCollaboratorPayload(newerPerson.Data.ID, map[string]any{
+		"journeyStartDate": "2026-06-01",
+	}))
+
+	listed := listCollaborators(t, server, "page=1&pageSize=1")
+	if listed.Data.Total != 2 {
+		t.Fatalf("expected two collaborators, got %d", listed.Data.Total)
+	}
+	if len(listed.Data.Items) != 1 {
+		t.Fatalf("expected one collaborator on the first page, got %d", len(listed.Data.Items))
+	}
+	if got := listed.Data.Items[0].ID; got != newerCollaborator.Data.ID {
+		t.Fatalf("expected newest collaborator %q first, got %q", newerCollaborator.Data.ID, got)
+	}
+}
+
+func TestListCollaboratorsFiltersByPersonNameAndNickname(t *testing.T) {
+	server, cleanup := newTestServer(t)
+	defer cleanup()
+
+	firstPerson := createPerson(t, server, validCompletePersonPayload(1, map[string]any{
+		"firstName": "Joao",
+		"lastName":  "Garimpo",
+		"nickname":  "Jota",
+	}))
+	secondPerson := createPerson(t, server, validCompletePersonPayload(2, map[string]any{
+		"firstName": "Maria",
+		"lastName":  "Serra",
+		"nickname":  "Mina",
+	}))
+
+	firstCollaborator := createCollaborator(t, server, validCollaboratorPayload(firstPerson.Data.ID, nil))
+	createCollaborator(t, server, validCollaboratorPayload(secondPerson.Data.ID, map[string]any{
+		"journeyStartDate": "2026-06-02",
+	}))
+
+	byName := listCollaborators(t, server, "search=garimpo")
+	if byName.Data.Total != 1 {
+		t.Fatalf("expected one collaborator by legal-name substring search, got %d", byName.Data.Total)
+	}
+	if got := byName.Data.Items[0].ID; got != firstCollaborator.Data.ID {
+		t.Fatalf("expected collaborator %q by legal-name substring search, got %q", firstCollaborator.Data.ID, got)
+	}
+	if got := byName.Data.Items[0].PersonName; got != "Joao Garimpo" {
+		t.Fatalf("expected personName %q, got %q", "Joao Garimpo", got)
+	}
+
+	byNickname := listCollaborators(t, server, "search=Mina")
+	if byNickname.Data.Total != 1 {
+		t.Fatalf("expected one collaborator by nickname substring search, got %d", byNickname.Data.Total)
+	}
+	if got := byNickname.Data.Items[0].PersonNickname; got != "Mina" {
+		t.Fatalf("expected personNickname %q, got %q", "Mina", got)
+	}
+
+	byMiddleSubstring := listCollaborators(t, server, "search=arimpo")
+	if byMiddleSubstring.Data.Total != 1 {
+		t.Fatalf("expected one collaborator for middle-substring search, got %d", byMiddleSubstring.Data.Total)
+	}
+	if got := byMiddleSubstring.Data.Items[0].ID; got != firstCollaborator.Data.ID {
+		t.Fatalf("expected collaborator %q by middle-substring search, got %q", firstCollaborator.Data.ID, got)
+	}
+
+	accentedPerson := createPerson(t, server, validCompletePersonPayload(3, map[string]any{
+		"firstName": "Aurelio",
+		"lastName":  "Costa",
+		"nickname":  "Áurea",
+	}))
+	accentedCollaborator := createCollaborator(t, server, validCollaboratorPayload(accentedPerson.Data.ID, map[string]any{
+		"journeyStartDate": "2026-06-03",
+	}))
+
+	byAccentInsensitiveNickname := listCollaborators(t, server, "search=aure")
+	if byAccentInsensitiveNickname.Data.Total != 1 {
+		t.Fatalf("expected one collaborator for accent-insensitive nickname search, got %d", byAccentInsensitiveNickname.Data.Total)
+	}
+	if got := byAccentInsensitiveNickname.Data.Items[0].ID; got != accentedCollaborator.Data.ID {
+		t.Fatalf("expected accented collaborator %q, got %q", accentedCollaborator.Data.ID, got)
+	}
+}
+
 func TestUpdateCollaboratorRejectsNegativeExtensionDays(t *testing.T) {
 	server, cleanup := newTestServer(t)
 	defer cleanup()
@@ -402,10 +626,11 @@ func newTestServer(t *testing.T) (*fiber.App, func()) {
 
 	dbPath := filepath.Join(t.TempDir(), "app.db")
 	server, cleanup, err := apppkg.Bootstrap(apppkg.Config{
-		Env:       "test",
-		HTTPAddr:  ":0",
-		DBPath:    dbPath,
-		JWTSecret: "test-secret",
+		Env:                       "test",
+		HTTPAddr:                  ":0",
+		DBPath:                    dbPath,
+		JWTSecret:                 "test-secret",
+		DisableRouteAuthorization: true,
 	})
 	if err != nil {
 		t.Fatalf("bootstrap test server: %v", err)
@@ -461,6 +686,53 @@ func createCollaborator(t *testing.T, server *fiber.App, payload map[string]any)
 	}
 
 	var body apiCollaboratorResponse
+	decodeJSON(t, res, &body)
+	return body
+}
+
+func listCollaborators(t *testing.T, server *fiber.App, query string) apiCollaboratorListResponse {
+	t.Helper()
+
+	url := collaboratorsURL
+	if query != "" {
+		url += "?" + query
+	}
+
+	req := httptest.NewRequest(http.MethodGet, url, nil)
+	res, err := server.Test(req, fiber.TestConfig{Timeout: 0, FailOnTimeout: false})
+	if err != nil {
+		t.Fatalf("GET %s: %v", url, err)
+	}
+	defer res.Body.Close()
+
+	if res.StatusCode != http.StatusOK {
+		var body apiErrorResponse
+		decodeJSON(t, res, &body)
+		t.Fatalf("expected list collaborators status %d, got %d with error %+v", http.StatusOK, res.StatusCode, body.Error)
+	}
+
+	var body apiCollaboratorListResponse
+	decodeJSON(t, res, &body)
+	return body
+}
+
+func listCollaboratorCandidates(t *testing.T, server *fiber.App) apiCollaboratorCandidatesResponse {
+	t.Helper()
+
+	req := httptest.NewRequest(http.MethodGet, collaboratorCandidatesURL, nil)
+	res, err := server.Test(req, fiber.TestConfig{Timeout: 0, FailOnTimeout: false})
+	if err != nil {
+		t.Fatalf("GET %s: %v", collaboratorCandidatesURL, err)
+	}
+	defer res.Body.Close()
+
+	if res.StatusCode != http.StatusOK {
+		var body apiErrorResponse
+		decodeJSON(t, res, &body)
+		t.Fatalf("expected list candidates status %d, got %d with error %+v", http.StatusOK, res.StatusCode, body.Error)
+	}
+
+	var body apiCollaboratorCandidatesResponse
 	decodeJSON(t, res, &body)
 	return body
 }
@@ -547,8 +819,22 @@ func validCompletePersonPayload(seq int, overrides map[string]any) map[string]an
 }
 
 func cpfForSeq(seq int) string {
-	cpfs := []string{"39053344705", "93541134780", "35711002844", "12345678909"}
+	cpfs := []string{"39053344705", "93541134780", "52998224725", "12345678909"}
 	return cpfs[(seq-1)%len(cpfs)]
+}
+
+func TestCPFForSeqReturnsValidUniqueFixtureValues(t *testing.T) {
+	seen := make(map[string]struct{}, 4)
+	for seq := 1; seq <= 4; seq++ {
+		cpf := cpfForSeq(seq)
+		if !peoplepkg.IsValidCPF(cpf) {
+			t.Fatalf("expected CPF fixture %q for sequence %d to be valid", cpf, seq)
+		}
+		if _, exists := seen[cpf]; exists {
+			t.Fatalf("expected CPF fixture %q for sequence %d to be unique", cpf, seq)
+		}
+		seen[cpf] = struct{}{}
+	}
 }
 
 func cellularForSeq(seq int) string {

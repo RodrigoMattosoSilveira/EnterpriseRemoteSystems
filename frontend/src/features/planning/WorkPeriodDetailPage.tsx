@@ -1,23 +1,19 @@
 import { useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { ApiErrorPanel } from "../../components/ApiErrorPanel";
-import { useCollaborators } from "../collaborators/useCollaborators";
 import { useReferenceDataByType } from "../reference-data/useReferenceData";
-import type {
-  ActualStatus,
-  SaveWorkPeriodAssignmentInput,
-} from "../../types/planning";
+import type { ActualStatus, WorkPeriodAssignment } from "../../types/planning";
 import { ACTUAL_STATUSES, humanizePlanningCode } from "./planningSchemas";
 import { AccrualTab } from "./AccrualTab";
 import { InformTab } from "./InformTab";
 import { PlanTab } from "./PlanTab";
 import {
   useAssignments,
-  useCreateAssignment,
-  useDeactivateAssignment,
+  useBulkPlanAssignments,
   useInformWorkPeriod,
   useMarkOutcome,
-  useUpdateAssignment,
+  usePlanningTemplate,
+  useRefinePlanAssignment,
   useWorkPeriod,
   useWorkPlanRoster,
 } from "./usePlanning";
@@ -29,14 +25,13 @@ export function WorkPeriodDetailPage() {
   const [tab, setTab] = useState<Tab>("plan");
   const periodQuery = useWorkPeriod(id);
   const assignmentsQuery = useAssignments(id);
-  const collaboratorsQuery = useCollaborators({ pageSize: 1000 });
   const sectorsQuery = useReferenceDataByType("sector");
   const locationsQuery = useReferenceDataByType("location");
   const tasksQuery = useReferenceDataByType("task");
   const rosterQuery = useWorkPlanRoster(id, tab === "inform");
-  const createMutation = useCreateAssignment(id);
-  const updateMutation = useUpdateAssignment(id);
-  const deactivateMutation = useDeactivateAssignment(id);
+  const planningTemplateQuery = usePlanningTemplate(id);
+  const bulkPlanMutation = useBulkPlanAssignments(id);
+  const refinePlanMutation = useRefinePlanAssignment(id);
   const outcomeMutation = useMarkOutcome(id);
   const informMutation = useInformWorkPeriod(id);
 
@@ -48,20 +43,20 @@ export function WorkPeriodDetailPage() {
   const error =
     periodQuery.error ||
     assignmentsQuery.error ||
-    collaboratorsQuery.error ||
     sectorsQuery.error ||
     locationsQuery.error ||
     tasksQuery.error ||
     rosterQuery.error ||
-    createMutation.error ||
-    updateMutation.error ||
-    deactivateMutation.error ||
+    planningTemplateQuery.error ||
+    bulkPlanMutation.error ||
+    refinePlanMutation.error ||
     outcomeMutation.error ||
     informMutation.error;
-  const pending =
-    createMutation.isPending ||
-    updateMutation.isPending ||
-    deactivateMutation.isPending;
+  const pending = bulkPlanMutation.isPending || refinePlanMutation.isPending;
+  const unreplacedAbsentees = useMemo(
+    () => unreplacedAbsenteeAssignments(assignments),
+    [assignments],
+  );
 
   if (periodQuery.isLoading || !period)
     return (
@@ -122,19 +117,21 @@ export function WorkPeriodDetailPage() {
         </nav>
         {tab === "plan" && (
           <PlanTab
-            assignments={assignments}
-            collaborators={collaboratorsQuery.data?.items ?? []}
+            template={planningTemplateQuery.data}
             sectors={sectorsQuery.data ?? []}
             locations={locationsQuery.data ?? []}
             tasks={tasksQuery.data ?? []}
             editable={editable}
-            pending={pending}
-            onCreate={(input) => createMutation.mutate(input)}
-            onUpdate={(assignmentId, input) =>
-              updateMutation.mutate({ assignmentId, input })
+            loading={
+              planningTemplateQuery.isLoading ||
+              sectorsQuery.isLoading ||
+              locationsQuery.isLoading ||
+              tasksQuery.isLoading
             }
-            onDeactivate={(assignmentId) =>
-              deactivateMutation.mutate(assignmentId)
+            pending={pending}
+            onBulkPlan={(input) => bulkPlanMutation.mutate(input)}
+            onRefineAssignment={(input) =>
+              refinePlanMutation.mutateAsync(input)
             }
           />
         )}
@@ -144,6 +141,7 @@ export function WorkPeriodDetailPage() {
             roster={rosterQuery.data}
             loading={rosterQuery.isLoading}
             pending={informMutation.isPending}
+            unreplacedAbsentees={unreplacedAbsentees}
             onInform={() => informMutation.mutate()}
           />
         )}
@@ -217,4 +215,19 @@ function formatDateTime(value: string) {
     dateStyle: "medium",
     timeStyle: "short",
   }).format(new Date(value));
+}
+
+function unreplacedAbsenteeAssignments(assignments: WorkPeriodAssignment[]) {
+  const replacedAssignmentIds = new Set(
+    assignments
+      .map((row) => row.replacementForAssignmentId?.trim())
+      .filter(Boolean),
+  );
+  return assignments.filter(
+    (row) =>
+      row.active &&
+      (row.planningAvailability === "DAY_OFF" ||
+        row.planningAvailability === "LEAVE_OF_ABSENCE") &&
+      !replacedAssignmentIds.has(row.id),
+  );
 }

@@ -1,4 +1,5 @@
 import { expect, test, type APIRequestContext } from "@playwright/test";
+import { uniquePersonSuffix } from "./support/test-data";
 import { authzHeaders, e2eApiUrl, seedBrowserAuthz } from "./support/authz";
 
 const PERSON_STATUS_ACTIVE_ID = "ref-person-status-active";
@@ -39,11 +40,19 @@ test("user can create a Collaborator from an eligible complete Person", async ({
     page.getByRole("heading", { name: "Select an eligible Person" }),
   ).toBeVisible();
 
-  const personSelect = page.getByLabel("Eligible Person *");
-  await expect(personSelect).toBeEnabled();
-  await expect(personSelect).toContainText(personDisplayName);
+  const personSearch = page.getByLabel(
+    "Find eligible Person by nickname *",
+  );
+  await expect(personSearch).toBeEnabled();
+  await personSearch.fill(personNickname.slice(1));
 
-  await personSelect.selectOption(person.id);
+  const eligibleSuggestions = page.getByRole("listbox", {
+    name: "Matching eligible People",
+  });
+  await expect(eligibleSuggestions).toBeVisible();
+  await eligibleSuggestions
+    .getByRole("option", { name: personDisplayName })
+    .click();
 
   await expect(page.getByText("Selected Person is complete.")).toBeVisible();
 
@@ -95,15 +104,117 @@ test("user can create a Collaborator from an eligible complete Person", async ({
 
   await expect(
     page.getByText(
-      "Already active Collaborators are hidden from the dropdown.",
+      "Already active Collaborators are hidden from eligible Person suggestions.",
     ),
   ).toBeVisible();
 
   await expect(page.getByText(personDisplayName)).toHaveCount(1);
 
-  const refreshedPersonSelect = page.getByLabel("Eligible Person *");
+  const refreshedPersonSearch = page.getByLabel(
+    "Find eligible Person by nickname *",
+  );
+  if (await refreshedPersonSearch.isEnabled()) {
+    await refreshedPersonSearch.fill(personNickname.slice(1));
+    await expect(
+      page.getByRole("listbox", { name: "Matching eligible People" }),
+    ).toContainText("No matching eligible People");
+  } else {
+    await expect(
+      page.getByText("No eligible People are available."),
+    ).toBeVisible();
+  }
+});
 
-  await expect(refreshedPersonSelect).not.toContainText(personDisplayName);
+test("user can filter Collaborators by any part of person name or nickname", async ({
+  page,
+  request,
+}) => {
+  const suffix = uniqueSuffix();
+  const otherSuffix = suffix + 10000;
+  const targetNickname = `FindMe${suffix}`;
+  const otherNickname = `SkipMe${suffix}`;
+  const otherFirstName = `LegalFind${suffix}`;
+  const otherLastName = firstPageSortLastName(otherSuffix);
+
+  const targetPerson = await createCompletePerson(request, {
+    suffix,
+    firstName: `TargetCollab${suffix}`,
+    lastName: firstPageSortLastName(suffix),
+    nickname: targetNickname,
+  });
+  const otherPerson = await createCompletePerson(request, {
+    suffix: otherSuffix,
+    firstName: otherFirstName,
+    lastName: otherLastName,
+    nickname: otherNickname,
+  });
+
+  await createCollaborator(request, {
+    personId: targetPerson.id,
+    journeyStartDate: "2026-06-01",
+    paymentMethodId: PAYMENT_METHOD_DAILY_ID,
+    paymentValue: 150,
+    dailyBrlAmount: 150,
+    sectorId: SECTOR_MINING_ID,
+    locationId: LOCATION_MAIN_MINE_ID,
+    taskId: TASK_MINER_ID,
+    statusId: COLLABORATOR_STATUS_ACTIVE_ID,
+    notes: "Collaborator filter E2E target",
+  });
+  await createCollaborator(request, {
+    personId: otherPerson.id,
+    journeyStartDate: "2026-06-02",
+    paymentMethodId: PAYMENT_METHOD_DAILY_ID,
+    paymentValue: 150,
+    dailyBrlAmount: 150,
+    sectorId: SECTOR_MINING_ID,
+    locationId: LOCATION_MAIN_MINE_ID,
+    taskId: TASK_MINER_ID,
+    statusId: COLLABORATOR_STATUS_ACTIVE_ID,
+    notes: "Collaborator filter E2E non-target",
+  });
+
+  await page.goto("/collaborators");
+
+  await expect(page.getByLabel("Search by name or nickname")).toBeVisible();
+
+  await page.getByLabel("Search by name or nickname").fill(targetNickname);
+
+  await expect(page).toHaveURL(/\/collaborators\?search=/);
+  await expect(
+    page.getByText(`Filtering by “${targetNickname}”.`),
+  ).toBeVisible();
+  await expect(page.getByRole("link", { name: targetNickname })).toBeVisible();
+  await expect(page.getByRole("link", { name: otherNickname })).toHaveCount(0);
+
+  await page.getByRole("button", { name: "Clear" }).click();
+  await expect(page).toHaveURL(/\/collaborators$/);
+
+  await page.getByLabel("Search by name or nickname").fill(otherFirstName);
+
+  await expect(page.getByRole("link", { name: otherNickname })).toBeVisible();
+  await expect(
+    page
+      .getByRole("table")
+      .getByText(`${otherFirstName} ${otherLastName}`, { exact: true }),
+  ).toBeVisible();
+  await expect(page.getByRole("link", { name: targetNickname })).toHaveCount(0);
+
+  const partialFirstName = otherFirstName.slice(1);
+  await page.getByLabel("Search by name or nickname").fill(partialFirstName);
+
+  await expect(
+    page.getByText(`Filtering by “${partialFirstName}”.`),
+  ).toBeVisible();
+  await expect(page.getByRole("link", { name: otherNickname })).toBeVisible();
+
+  const missingSearch = `MissingCollaborator${suffix}`;
+  await page.getByLabel("Search by name or nickname").fill(missingSearch);
+
+  await expect(
+    page.getByText(`Filtering by “${missingSearch}”.`),
+  ).toBeVisible();
+  await expect(page.getByRole("link", { name: otherNickname })).toHaveCount(0);
 });
 
 test("user can edit Collaborator assignment payment and extension days", async ({
@@ -177,8 +288,6 @@ test("user can edit Collaborator assignment payment and extension days", async (
   await expect(page.getByText("2026-09-11").first()).toBeVisible();
 });
 
-
-
 test("user can inspect Collaborator current account ledger and receipt status", async ({
   page,
   request,
@@ -226,11 +335,102 @@ test("user can inspect Collaborator current account ledger and receipt status", 
   await expect(page.getByText("Receipt: Pending issue").first()).toBeVisible();
   await expect(page.getByText("Outstanding receipt:").first()).toBeVisible();
 
-  await page.getByLabel("Filter ledger entries").selectOption("outstanding-receipts");
-  await expect(page.getByText("Showing page 1 of 1 · 1 ledger entry")).toBeVisible();
+  await page
+    .getByLabel("Filter ledger entries")
+    .selectOption("outstanding-receipts");
+  await expect(
+    page.getByText("Showing page 1 of 1 · 1 ledger entry"),
+  ).toBeVisible();
 
   await page.getByRole("link", { name: "Open source" }).click();
   await expect(page).toHaveURL(new RegExp(`/expenses/${expense.id}$`));
+});
+
+test("current account updates after receipt signed return", async ({
+  page,
+  request,
+}) => {
+  const suffix = uniqueSuffix();
+  const person = await createCompletePerson(request, {
+    suffix,
+    firstName: `ReturnAcct${suffix}`,
+    lastName: firstPageSortLastName(suffix),
+    nickname: `RetAcct${suffix}`,
+  });
+  const collaborator = await createCollaborator(request, {
+    personId: person.id,
+    journeyStartDate: "2026-06-01",
+    paymentMethodId: PAYMENT_METHOD_DAILY_ID,
+    paymentValue: 150,
+    dailyBrlAmount: 150,
+    sectorId: SECTOR_MINING_ID,
+    locationId: LOCATION_MAIN_MINE_ID,
+    taskId: TASK_MINER_ID,
+    statusId: COLLABORATOR_STATUS_ACTIVE_ID,
+    notes: "Current account returned receipt E2E setup",
+  });
+  const expense = await createExpense(request, {
+    collaboratorId: collaborator.id,
+    expenseCategoryId: "ref-expense-category-canteen",
+    valueUnitId: "ref-value-unit-brl",
+    amount: 19.75,
+    expenseDate: "2026-06-27",
+    description: `Current account returned receipt ${suffix}`,
+  });
+  const currentAccountUrl = `/collaborators/${collaborator.id}/current-account`;
+
+  await page.goto(currentAccountUrl);
+
+  await expect(page.getByText(/-R\$\s*19,75/).first()).toBeVisible();
+  await expect(page.getByText("Receipt: Pending issue").first()).toBeVisible();
+  await expect(page.getByText("Outstanding receipt:").first()).toBeVisible();
+
+  await page.getByRole("link", { name: "Print or return receipt" }).click();
+  await expect(
+    page.getByRole("heading", { name: "Receipt", exact: true }),
+  ).toBeVisible();
+
+  await page
+    .getByLabel("Signed document reference")
+    .fill(`current-account-return-${suffix}.pdf`);
+  await page
+    .getByLabel("Notes")
+    .fill("Returned from Current Account E2E flow.");
+  await page.getByRole("button", { name: "Record signed return" }).click();
+
+  await expect(
+    page.getByText("Returned", { exact: true }).first(),
+  ).toBeVisible();
+
+  await page.goto(currentAccountUrl);
+  await expect(page.getByText("Receipt: Returned").first()).toBeVisible();
+  await expect(
+    page.getByText("Receipt returned or closed.").first(),
+  ).toBeVisible();
+  await expect(page.getByRole("link", { name: "Open source" })).toHaveAttribute(
+    "href",
+    `/expenses/${expense.id}`,
+  );
+
+  await page
+    .getByLabel("Filter ledger entries")
+    .selectOption("outstanding-receipts");
+  await expect(
+    page.getByText("No ledger entries in this filter"),
+  ).toBeVisible();
+  await expect(
+    page.getByText("Showing page 1 of 1 · 0 ledger entries"),
+  ).toBeVisible();
+
+  await page.goto("/receipts/outstanding");
+  await page.getByLabel("Source type").selectOption("EXPENSE");
+  await page.getByRole("textbox", { name: "Collaborator", exact: true }).fill(`RetAcct${suffix}`);
+  await page.getByRole("button", { name: "Apply filters" }).click();
+
+  await expect(page.getByText("No outstanding receipts")).toBeVisible();
+  await expect(
+    page.getByText("Showing page 1 of 1 · 0 receipts"),
+  ).toBeVisible();
 });
 
 type CreatedPerson = {
@@ -286,7 +486,6 @@ async function createCollaborator(
 
   return body.data;
 }
-
 
 async function createExpense(
   api: APIRequestContext,
@@ -412,7 +611,7 @@ function completePersonPayload({
 }
 
 function uniqueSuffix(): number {
-  return Date.now() + Math.floor(Math.random() * 1000);
+  return uniquePersonSuffix(test.info().workerIndex);
 }
 
 function firstPageSortLastName(seed: number): string {

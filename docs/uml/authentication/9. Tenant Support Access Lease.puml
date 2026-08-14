@@ -1,0 +1,45 @@
+@startuml
+title Exceptional Tenant Support Access
+
+actor "Application Administrator" as AppAdmin
+actor "Tenant Administrator" as TenantAdmin
+
+rectangle "Global Actor" as GlobalActor
+rectangle "Tenant Support Access Lease" as Lease {
+  tenantId
+  purpose
+  allowedOperations
+  startsAt
+  expiresAt
+  terminatedAt
+}
+
+rectangle "Tenant A Business Data" as Data
+rectangle "Audit Log" as Audit
+
+AppAdmin --> GlobalActor
+
+GlobalActor --> Lease : requests
+TenantAdmin --> Lease : approves
+
+Lease --> Data : narrowly scoped access
+
+TenantAdmin --> Lease : terminate at any moment
+
+Lease --> Audit : every action
+GlobalActor --> Audit : actual administrator identity
+
+note right of Lease
+Exactly one Tenant.
+
+Fixed expiration.
+
+Tenant Admin may terminate
+immediately.
+
+Not a Role Grant.
+
+Not a tenant Actor.
+end note
+
+@enduml

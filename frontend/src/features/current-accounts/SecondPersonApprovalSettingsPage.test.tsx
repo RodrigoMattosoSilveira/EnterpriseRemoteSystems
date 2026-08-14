@@ -29,7 +29,7 @@ beforeEach(() => {
   document.body.appendChild(container);
   root = null;
   fetchCalls = [];
-  resetAuthzAdminLocalStorage();
+  window.localStorage.clear();
 });
 
 afterEach(async () => {
@@ -43,7 +43,7 @@ afterEach(async () => {
 });
 
 describe("SecondPersonApprovalSettingsPage", () => {
-  it("loads the policy with actor headers and shows the operational warning", async () => {
+  it("loads the policy with the selected tenant and session credentials", async () => {
     mockPolicyFetch();
 
     renderPage();
@@ -55,7 +55,7 @@ describe("SecondPersonApprovalSettingsPage", () => {
     const getCall = fetchCalls.find(
       (call) => call.url === "/api/v1/current-accounts/settings/second-person-approval" && call.method === "GET",
     );
-    expect(getCall?.headers["X-Actor-ID"]).toBe("bootstrap-admin");
+    expect(getCall?.headers["X-Actor-ID"]).toBeUndefined();
     expect(getCall?.headers["X-Tenant-ID"]).toBe("default");
   });
 
@@ -231,17 +231,4 @@ async function clickButton(name: string) {
   await act(async () => {
     button.click();
   });
-}
-
-function resetAuthzAdminLocalStorage() {
-  const storage = window.localStorage as Storage & { clear?: () => void };
-
-  if (typeof storage.removeItem === "function") {
-    storage.removeItem("ers.authzAdmin.requestActor");
-    return;
-  }
-
-  if (typeof storage.setItem === "function") {
-    storage.setItem("ers.authzAdmin.requestActor", "");
-  }
 }

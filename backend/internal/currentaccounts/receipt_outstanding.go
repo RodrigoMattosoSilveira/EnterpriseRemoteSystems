@@ -15,6 +15,14 @@ var outstandingReceiptStatuses = map[string]bool{
 	"SIGNED":        true,
 }
 
+var allowedOutstandingReceiptSourceTypes = map[string]bool{
+	"EXPENSE":             true,
+	"EXPENSE_REPLACEMENT": true,
+	"JOURNEY_SETTLEMENT":  true,
+	"LEDGER_CORRECTION":   true,
+	"ACCRUAL_ITEM":        true,
+}
+
 func (s *service) ListOutstandingReceipts(ctx context.Context, filter ReceiptListFilter) (*OutstandingReceiptListResult, error) {
 	normalized, err := normalizeReceiptListFilter(filter)
 	if err != nil {
@@ -24,7 +32,7 @@ func (s *service) ListOutstandingReceipts(ctx context.Context, filter ReceiptLis
 	if err != nil {
 		return nil, err
 	}
-	counts, err := s.repo.CountOutstandingReceiptsByStatus(ctx)
+	counts, err := s.repo.CountOutstandingReceiptsByStatus(ctx, normalized)
 	if err != nil {
 		return nil, err
 	}
@@ -51,6 +59,10 @@ func normalizeReceiptListFilter(filter ReceiptListFilter) (normalizedReceiptList
 	if status != "" && !outstandingReceiptStatuses[status] {
 		return normalizedReceiptListFilter{}, ValidationError{Fields: map[string]string{"status": "Status must be one of PENDING_ISSUE, ISSUED, PRINTED, or SIGNED"}}
 	}
+	sourceType := strings.ToUpper(strings.TrimSpace(filter.SourceType))
+	if sourceType != "" && !allowedOutstandingReceiptSourceTypes[sourceType] {
+		return normalizedReceiptListFilter{}, ValidationError{Fields: map[string]string{"sourceType": "Source type must be one of EXPENSE, EXPENSE_REPLACEMENT, JOURNEY_SETTLEMENT, LEDGER_CORRECTION, or ACCRUAL_ITEM"}}
+	}
 	page := filter.Page
 	if page <= 0 {
 		page = 1
@@ -62,7 +74,13 @@ func normalizeReceiptListFilter(filter ReceiptListFilter) (normalizedReceiptList
 	if pageSize > maxPageSize {
 		pageSize = maxPageSize
 	}
-	return normalizedReceiptListFilter{Status: status, Page: page, PageSize: pageSize}, nil
+	return normalizedReceiptListFilter{
+		Status:             status,
+		CollaboratorSearch: strings.TrimSpace(filter.Collaborator),
+		SourceType:         sourceType,
+		Page:               page,
+		PageSize:           pageSize,
+	}, nil
 }
 
 func toOutstandingReceiptDTOList(rows []db.LedgerReceipt) []OutstandingReceiptDTO {
@@ -81,7 +99,7 @@ func toOutstandingReceiptDTO(row db.LedgerReceipt) OutstandingReceiptDTO {
 		SignedAt: formatOptionalTime(row.SignedAt), ReturnedAt: formatOptionalTime(row.ReturnedAt), ReceivedBy: row.ReceivedBy,
 		SignedDocumentRef: row.SignedDocumentRef, Notes: row.Notes,
 		LedgerEntryID: row.LedgerEntryID, EntryType: row.LedgerEntry.EntryType, EffectiveDate: formatDate(row.LedgerEntry.EffectiveDate),
-		ValueUnitCode: row.LedgerEntry.ValueUnit.Code, ValueUnitLabel: row.LedgerEntry.ValueUnit.Label, Amount: row.LedgerEntry.Amount, Description: row.LedgerEntry.Description,
+		ValueUnitCode: row.LedgerEntry.ValueUnit.Code, ValueUnitLabel: row.LedgerEntry.ValueUnit.Label, Amount: row.LedgerEntry.Amount, Description: row.LedgerEntry.Description, SourceType: row.LedgerEntry.SourceType, SourceID: row.LedgerEntry.SourceID,
 		CollaboratorID: row.CollaboratorID, CollaboratorLabel: collaboratorLabel(person),
 		CollaboratorLegalName: strings.TrimSpace(person.FirstName + " " + person.LastName), CollaboratorCPF: person.CPF,
 		CreatedAt: row.CreatedAt.UTC().Format(time.RFC3339),

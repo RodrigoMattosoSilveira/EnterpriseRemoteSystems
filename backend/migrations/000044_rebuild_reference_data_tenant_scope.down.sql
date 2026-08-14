@@ -1,0 +1,4 @@
+-- Intentionally non-destructive.
+-- Once multiple tenants contain the same reference-data codes, restoring a
+-- global UNIQUE(type, code) constraint would make valid tenant-scoped data
+-- impossible to represent.

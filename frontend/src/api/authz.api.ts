@@ -2,6 +2,7 @@ import { apiFetch } from "./client";
 import type {
   AuthzActor,
   AuthzActorRoleGrant,
+  AuthzCurrentActor,
   AuthzAdminRequestActor,
   AuthzAuditLog,
   AuthzAuditLogFilters,
@@ -9,13 +10,19 @@ import type {
   AuthzRole,
   CreateAuthzActorInput,
   GrantAuthzActorRoleInput,
+  SetAuthzActorActiveInput,
 } from "../types/authz";
 
 function authzHeaders(actor: AuthzAdminRequestActor) {
   return {
-    "X-Actor-ID": actor.actorId,
     "X-Tenant-ID": actor.tenantId,
   };
+}
+
+export function getCurrentAuthzActor(actor: AuthzAdminRequestActor): Promise<AuthzCurrentActor> {
+  return apiFetch<AuthzCurrentActor>("/authz/current-actor", {
+    headers: authzHeaders(actor),
+  });
 }
 
 export function listAuthzRoles(actor: AuthzAdminRequestActor): Promise<AuthzRole[]> {
@@ -74,6 +81,18 @@ export function createAuthzActor(
 ): Promise<AuthzActor> {
   return apiFetch<AuthzActor>("/authz/actors", {
     method: "POST",
+    headers: authzHeaders(actor),
+    body: JSON.stringify(input),
+  });
+}
+
+export function setAuthzActorActive(
+  actor: AuthzAdminRequestActor,
+  targetActorId: string,
+  input: SetAuthzActorActiveInput,
+): Promise<AuthzActor> {
+  return apiFetch<AuthzActor>(`/authz/actors/${encodeURIComponent(targetActorId)}/active`, {
+    method: "PATCH",
     headers: authzHeaders(actor),
     body: JSON.stringify(input),
   });

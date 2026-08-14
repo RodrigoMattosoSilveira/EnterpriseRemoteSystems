@@ -25,16 +25,26 @@ const activeCollaborator: Collaborator = {
   paymentMethodId: "payment-brl",
   paymentMethodLabel: "BRL",
   paymentValue: 100,
+  planningAvailability: "ACTIVE",
   sectorId: "sector-mining",
   sectorLabel: "Mining",
   locationId: "location-1",
   locationLabel: "Mine 1",
   taskId: "task-1",
   taskLabel: "General",
-  statusId: "ref-collaborator-status-active",
+  statusId: "tenant-scoped-collaborator-status-active",
+  statusCode: "ACTIVE",
   statusLabel: "Active",
   createdAt: "2026-06-01T12:00:00Z",
   updatedAt: "2026-06-01T12:00:00Z",
+};
+
+const closedCollaborator: Collaborator = {
+  ...activeCollaborator,
+  id: "collab-closed",
+  personId: "person-closed",
+  personNickname: "Closed",
+  closedAt: "2026-06-30T12:00:00Z",
 };
 
 const canteenItem = priceListItem(
@@ -80,7 +90,7 @@ describe("CreateExpensePage", () => {
     renderCreateExpensePage();
 
     await waitForText("New Expense");
-    await changeSelect("Collaborator *", activeCollaborator.id);
+    await selectCollaborator("Maria", "Maria");
     await changeSelect("Category *", "CANTEEN");
     await changeSelect("Item Description *", canteenItem.id);
     await changeSelect("Currency *", "BRL");
@@ -109,7 +119,7 @@ describe("CreateExpensePage", () => {
     renderCreateExpensePage();
 
     await waitForText("New Expense");
-    await changeSelect("Collaborator *", activeCollaborator.id);
+    await selectCollaborator("Maria", "Maria");
     await changeSelect("Category *", "ADMINISTRATIVE");
     await changeSelect("Item Description *", administrativeItem.id);
     await changeSelect("Currency *", "GOLD_GRAM");
@@ -133,12 +143,38 @@ describe("CreateExpensePage", () => {
     await waitForText("Expenses landing");
   });
 
+  it("loads a newly created active Collaborator with targeted server search", async () => {
+    mockCreateExpenseFetch([closedCollaborator, activeCollaborator]);
+    renderCreateExpensePage();
+
+    await changeInput("Collaborator *", "ari");
+    await waitForText("Maria");
+    await clickOption("Maria");
+    await waitForText("Selected: Maria");
+
+    const searchCall = fetchCalls.find((call) => {
+      const url = new URL(call.url, "http://localhost");
+      return (
+        url.pathname === "/api/v1/collaborators" &&
+        url.searchParams.get("search") === "ari" &&
+        url.searchParams.get("page") === "1" &&
+        url.searchParams.get("pageSize") === "25"
+      );
+    });
+    expect(searchCall).toBeDefined();
+    expect(
+      fetchCalls.some((call) =>
+        call.url.includes("/api/v1/collaborators?page=2"),
+      ),
+    ).toBe(false);
+  });
+
   it("requires a price-list item before submitting", async () => {
     mockCreateExpenseFetch();
     renderCreateExpensePage();
 
     await waitForText("New Expense");
-    await changeSelect("Collaborator *", activeCollaborator.id);
+    await selectCollaborator("Maria", "Maria");
     await clickButton("Create Expense");
 
     await waitForText("Select an item description from the price list.");
@@ -150,12 +186,27 @@ describe("CreateExpensePage", () => {
   });
 });
 
-function mockCreateExpenseFetch() {
+function mockCreateExpenseFetch(
+  collaborators: Collaborator[] = [activeCollaborator],
+) {
   mockFetch(async (url, init) => {
     recordFetchCall(url, init);
 
-    if (url === "/api/v1/collaborators") {
-      return jsonResponse({ data: { items: [activeCollaborator], total: 1 } });
+    if (url.startsWith("/api/v1/collaborators?")) {
+      const search = normalizeSearch(
+        new URL(url, "http://localhost").searchParams.get("search") ?? "",
+      );
+      const items = collaborators.filter((collaborator) =>
+        normalizeSearch(
+          `${collaborator.personNickname ?? ""} ${collaborator.personName ?? ""}`,
+        ).includes(search),
+      );
+      return jsonResponse({
+        data: {
+          items,
+          total: items.length,
+        },
+      });
     }
     if (url === "/api/v1/price-list-items") {
       return jsonResponse({ data: [canteenItem, administrativeItem] });
@@ -327,6 +378,30 @@ async function changeInput(label: string, value: string) {
     input.dispatchEvent(new Event("input", { bubbles: true }));
     input.dispatchEvent(new Event("change", { bubbles: true }));
   });
+}
+
+async function selectCollaborator(search: string, optionName: string) {
+  await changeInput("Collaborator *", search);
+  await waitForText(optionName);
+  await clickOption(optionName);
+}
+
+async function clickOption(name: string) {
+  await act(async () => {
+    const option = Array.from(
+      container.querySelectorAll<HTMLElement>('[role="option"]'),
+    ).find((candidate) => candidate.textContent?.trim() === name);
+    if (!option) throw new Error(`Option not found: ${name}`);
+    option.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+  });
+}
+
+function normalizeSearch(value: string) {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim()
+    .toLowerCase();
 }
 
 function setControlValue(

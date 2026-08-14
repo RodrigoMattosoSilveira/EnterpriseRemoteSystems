@@ -37,7 +37,7 @@ func Open(path string) (*gorm.DB, error) {
 }
 
 func AutoMigrate(database *gorm.DB) error {
-	if err := database.AutoMigrate(&Tenant{}, &TenantSetting{}, &ReferenceData{}, &Person{}, &CollaboratorJourney{}, &ExpensePriceListItem{}, &GoldPrice{}, &Expense{}, &LedgerEntry{}, &JourneySettlement{}, &LedgerReceipt{}, &WorkPeriod{}, &WorkPeriodAssignment{}, &GoldProductionEntry{}, &AccrualRun{}, &AccrualItem{}); err != nil {
+	if err := database.AutoMigrate(&Tenant{}, &TenantSetting{}, &ReferenceData{}, &Person{}, &GlobalPerson{}, &PersonTenantMembership{}, &CollaboratorJourney{}, &ExpensePriceListItem{}, &GoldPrice{}, &Expense{}, &LedgerEntry{}, &JourneySettlement{}, &LedgerReceipt{}, &WorkPeriod{}, &WorkPeriodAssignment{}, &GoldProductionEntry{}, &AccrualRun{}, &AccrualItem{}); err != nil {
 		return err
 	}
 	if err := InstallLedgerReceiptStatusGuards(database); err != nil {

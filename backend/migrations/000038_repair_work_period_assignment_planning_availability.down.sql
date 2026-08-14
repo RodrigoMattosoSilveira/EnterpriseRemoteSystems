@@ -1,0 +1,4 @@
+-- SQLite cannot safely drop a column without rebuilding the table.
+-- This repair migration is intentionally non-destructive.
+--
+-- planning_availability remains on work_period_assignments.

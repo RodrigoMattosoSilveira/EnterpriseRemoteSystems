@@ -23,15 +23,16 @@ type Repository interface {
 }
 
 type normalizedExpenseListFilter struct {
-	CollaboratorID    string
-	ExpenseCategoryID string
-	ValueUnitID       string
-	ItemType          string
-	PriceListItemID   string
-	CurrencyCode      string
-	DateFrom          *time.Time
-	DateTo            *time.Time
-	IncludeInactive   bool
-	Page              int
-	PageSize          int
+	CollaboratorID     string
+	CollaboratorSearch string
+	ExpenseCategoryID  string
+	ValueUnitID        string
+	ItemType           string
+	PriceListItemID    string
+	CurrencyCode       string
+	DateFrom           *time.Time
+	DateTo             *time.Time
+	IncludeInactive    bool
+	Page               int
+	PageSize           int
 }

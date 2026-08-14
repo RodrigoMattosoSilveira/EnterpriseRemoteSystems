@@ -92,3 +92,5 @@ export type CreateGoldProductionEntryInput = {
   goldGramsProduced: number;
   notes?: string;
 };
+
+export type UpdateGoldProductionEntryInput = CreateGoldProductionEntryInput;

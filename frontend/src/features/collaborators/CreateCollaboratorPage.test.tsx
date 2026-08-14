@@ -62,6 +62,33 @@ const incompletePerson: Person = {
   statusId: "ref-person-status-active",
 };
 
+const justCompletedPerson: Person = {
+  id: "person-just-completed",
+  firstName: "Joao",
+  lastName: "Novo",
+  nickname: "Joao",
+  cpf: "39053344705",
+  rg: "RG-NEW-1",
+  cellular: "11976543210",
+  email: "joao.novo@example.com",
+  street1: "Rua Jasmin, 198",
+  city: "Laranjal do Jari",
+  state: "Amapa",
+  cep: "68920000",
+  country: "Brasil",
+  bankName: "Banco Teste",
+  bankNumber: "001",
+  checkingAccount: "12345-6",
+  pixKey: "joao.novo@example.com",
+  emergencyName: "Maria Novo",
+  emergencyCellular: "11912345678",
+  emergencyEmail: "maria.novo@example.com",
+  profileCompletionStatus: "COMPLETE",
+  canCreateCollaborator: true,
+  missingSections: [],
+  statusId: "ref-person-status-active",
+};
+
 const activeCollaboratorForSecondPerson: Collaborator = {
   id: "collab-active-1",
   tenantId: "default",
@@ -74,6 +101,7 @@ const activeCollaboratorForSecondPerson: Collaborator = {
   paymentMethodId: "ref-method-daily",
   paymentMethodLabel: "Daily Rate",
   paymentValue: 125.5,
+  planningAvailability: "ACTIVE",
   sectorId: "ref-sector-mining",
   sectorLabel: "Mining",
   locationId: "ref-location-carara",
@@ -143,12 +171,14 @@ const referenceRows: Record<string, ReferenceDataItem[]> = {
 let container: HTMLDivElement;
 let root: Root | null;
 let fetchCalls: FetchCall[];
+let testQueryClient: QueryClient | null;
 
 beforeEach(() => {
   container = document.createElement("div");
   document.body.appendChild(container);
   root = null;
   fetchCalls = [];
+  testQueryClient = null;
 });
 
 afterEach(async () => {
@@ -162,21 +192,28 @@ afterEach(async () => {
 });
 
 describe("CreateCollaboratorPage", () => {
-  it("loads only eligible people into the create form and hides incomplete people", async () => {
+  it("filters eligible People progressively by Person nickname", async () => {
     mockCreateCollaboratorFetch();
 
     renderCreateCollaboratorPage();
 
-    await waitForText("Ana Silva (Ana)");
-    expect(textNode("Carla Moura (Carla)")).toBeTruthy();
-    expect(textNode("2 eligible")).toBeTruthy();
+    await waitForText("2 eligible");
     expect(textNode("1 incomplete")).toBeTruthy();
-    expect(selectOptions("Eligible Person")).toEqual([
-      "Select an eligible Person",
+    expect(() => selectOptions("Eligible Person")).toThrow();
+
+    await changeInput("Find eligible Person by nickname", "an");
+    await waitForListboxOptions("Matching eligible People", [
       "Ana Silva (Ana)",
+    ]);
+
+    await changeInput("Find eligible Person by nickname", "arl");
+    await waitForListboxOptions("Matching eligible People", [
       "Carla Moura (Carla)",
     ]);
-    expect(textNode("Bruno Costa")).toBeFalsy();
+
+    await changeInput("Find eligible Person by nickname", "bruno");
+    await waitForText("No matching eligible People");
+
     expect(textNode("Active reference data")).toBeTruthy();
     expect(
       textNode("Only active reference data values are available"),
@@ -194,6 +231,54 @@ describe("CreateCollaboratorPage", () => {
     expect(textNode("Active")).toBeTruthy();
   });
 
+  it("includes a newly completed Person from the authoritative candidate endpoint", async () => {
+    mockCreateCollaboratorFetch({
+      people: [{ ...justCompletedPerson, canCreateCollaborator: false }],
+      candidates: [justCompletedPerson],
+    });
+
+    renderCreateCollaboratorPage();
+
+    await waitForText("1 eligible");
+    await changeInput("Find eligible Person by nickname", "oa");
+    await waitForListboxOptions("Matching eligible People", [
+      "Joao Novo (Joao)",
+    ]);
+
+    const candidateCall = fetchCalls.find(
+      (call) =>
+        call.method === "GET" &&
+        call.url === "/api/v1/collaborators/candidates",
+    );
+    expect(candidateCall).toBeTruthy();
+  });
+
+  it("matches eligible People by an accent-insensitive nickname substring", async () => {
+    const accentedPerson: Person = {
+      ...completePerson,
+      id: "person-accented",
+      firstName: "Aurelia",
+      lastName: "Souza",
+      nickname: "Áurea",
+      cpf: "52998224725",
+      rg: "RG-ACCENT",
+      cellular: "11911112222",
+      email: "aurea@example.com",
+    };
+    mockCreateCollaboratorFetch({
+      people: [accentedPerson],
+      candidates: [accentedPerson],
+    });
+
+    renderCreateCollaboratorPage();
+
+    await waitForText("1 eligible");
+    await changeInput("Find eligible Person by nickname", "ure");
+    await waitForListboxOptions("Matching eligible People", [
+      "Aurelia Souza (Áurea)",
+    ]);
+  });
+
   it("excludes complete People who already have an active Collaborator", async () => {
     mockCreateCollaboratorFetch({
       collaborators: [activeCollaboratorForSecondPerson],
@@ -201,17 +286,15 @@ describe("CreateCollaboratorPage", () => {
 
     renderCreateCollaboratorPage();
 
-    await waitForText("Ana Silva (Ana)");
+    await waitForText("1 eligible");
 
-    expect(textNode("1 eligible")).toBeTruthy();
     expect(textNode("1 already collaborators")).toBeTruthy();
-    expect(selectOptions("Eligible Person")).toEqual([
-      "Select an eligible Person",
+    await changeInput("Find eligible Person by nickname", "a");
+    await waitForListboxOptions("Matching eligible People", [
       "Ana Silva (Ana)",
     ]);
-    expect(textNode("Search eligible People")).toBeFalsy();
     await waitForText(
-      "Already active Collaborators are hidden from the dropdown.",
+      "Already active Collaborators are hidden from eligible Person suggestions.",
     );
     await waitForText("Carla Moura (Carla)");
 
@@ -263,9 +346,9 @@ describe("CreateCollaboratorPage", () => {
 
     renderCreateCollaboratorPage();
 
-    await waitForText("Ana Silva (Ana)");
+    await waitForText("2 eligible");
 
-    await changeSelect("Eligible Person", "person-complete-1");
+    await selectEligiblePerson("na", "Ana Silva (Ana)");
 
     await waitForText("Selected Person is complete.");
     await waitForText("ana@example.com");
@@ -277,6 +360,15 @@ describe("CreateCollaboratorPage", () => {
       (node) => node.textContent?.trim() === "View Person",
     );
     expect(viewLink?.getAttribute("href")).toBe("/people/person-complete-1");
+
+    await clickButton("Change Person");
+    expect(
+      controlByLabel<HTMLInputElement>(
+        "Find eligible Person by nickname",
+        "input",
+      ),
+    ).toBeTruthy();
+    expect(submitButton().hasAttribute("disabled")).toBe(true);
   });
 
   it("requires a complete Person and all required Collaborator fields before enabling submit", async () => {
@@ -284,11 +376,11 @@ describe("CreateCollaboratorPage", () => {
 
     renderCreateCollaboratorPage();
 
-    await waitForText("Ana Silva (Ana)");
+    await waitForText("2 eligible");
 
     expect(submitButton().hasAttribute("disabled")).toBe(true);
 
-    await changeSelect("Eligible Person", "person-complete-1");
+    await selectEligiblePerson("na", "Ana Silva (Ana)");
     expect(submitButton().hasAttribute("disabled")).toBe(true);
     await waitForText("Complete these fields to enable Create Collaborator:");
     await waitForText("Select a status");
@@ -320,6 +412,13 @@ describe("CreateCollaboratorPage", () => {
     await waitForText("0 eligible");
     await waitForText("1 incomplete");
 
+    const personSearch = controlByLabel<HTMLInputElement>(
+      "Find eligible Person by nickname",
+      "input",
+    );
+    expect(personSearch.disabled).toBe(true);
+    expect(personSearch.placeholder).toBe("No eligible People available");
+
     const submit = Array.from(container.querySelectorAll("button")).find(
       (node) => node.textContent?.trim() === "Create Collaborator",
     );
@@ -331,9 +430,9 @@ describe("CreateCollaboratorPage", () => {
 
     renderCreateCollaboratorPage();
 
-    await waitForText("Ana Silva (Ana)");
+    await waitForText("2 eligible");
 
-    await changeSelect("Eligible Person", "person-complete-1");
+    await selectEligiblePerson("na", "Ana Silva (Ana)");
     await changeInput("Journey Start Date", "2026-05-29");
     await changeSelect("Status", "ref-collaborator-status-active");
     await changeSelect("Sector", "ref-sector-mining");
@@ -359,6 +458,15 @@ describe("CreateCollaboratorPage", () => {
       paymentValue: 125.5,
       notes: "First collaborator journey",
     });
+
+    const cachedCatalog = testQueryClient
+      ? testQueryClient.getQueryData<Collaborator[]>([
+          "collaborators",
+          "list",
+          "catalog",
+        ])
+      : undefined;
+    expect(cachedCatalog?.[0]?.id).toBe("collab-1");
   });
 
   it("shows backend validation errors from the create endpoint", async () => {
@@ -381,9 +489,9 @@ describe("CreateCollaboratorPage", () => {
 
     renderCreateCollaboratorPage();
 
-    await waitForText("Ana Silva (Ana)");
+    await waitForText("2 eligible");
 
-    await changeSelect("Eligible Person", "person-complete-1");
+    await selectEligiblePerson("na", "Ana Silva (Ana)");
     await changeInput("Journey Start Date", "2026-05-29");
     await changeSelect("Status", "ref-collaborator-status-active");
     await changeSelect("Sector", "ref-sector-mining");
@@ -427,9 +535,9 @@ describe("CreateCollaboratorPage", () => {
 
     renderCreateCollaboratorPage();
 
-    await waitForText("Ana Silva (Ana)");
+    await waitForText("2 eligible");
 
-    await changeSelect("Eligible Person", "person-complete-1");
+    await selectEligiblePerson("na", "Ana Silva (Ana)");
     await changeInput("Journey Start Date", "2026-05-29");
     await changeSelect("Status", "ref-collaborator-status-active");
     await changeSelect("Sector", "ref-sector-mining");
@@ -469,9 +577,9 @@ describe("CreateCollaboratorPage", () => {
 
     renderCreateCollaboratorPage();
 
-    await waitForText("Ana Silva (Ana)");
+    await waitForText("2 eligible");
 
-    await changeSelect("Eligible Person", "person-complete-1");
+    await selectEligiblePerson("na", "Ana Silva (Ana)");
     await changeInput("Journey Start Date", "2026-05-29");
     await changeSelect("Status", "ref-collaborator-status-active");
     await changeSelect("Sector", "ref-sector-mining");
@@ -508,6 +616,7 @@ function renderCreateCollaboratorPage() {
       mutations: { retry: false },
     },
   });
+  testQueryClient = queryClient;
 
   const router = createMemoryRouter(
     [
@@ -536,17 +645,35 @@ function mockCreateCollaboratorFetch({
   people = [completePerson, secondCompletePerson, incompletePerson],
   referenceData = referenceRows,
   collaborators = [],
+  candidates,
 }: {
   createResponse?: Response;
   people?: Person[];
   referenceData?: Record<string, ReferenceDataItem[]>;
   collaborators?: Collaborator[];
+  candidates?: Person[];
 } = {}) {
+  const activePersonIds = new Set(
+    collaborators.filter((row) => !row.closedAt).map((row) => row.personId),
+  );
+  const candidateRows =
+    candidates ??
+    people.filter(
+      (person) =>
+        person.canCreateCollaborator && !activePersonIds.has(person.id),
+    );
   mockFetch(async (url, init) => {
     recordFetchCall(url, init);
 
     if (url.startsWith("/api/v1/people")) {
       return jsonResponse({ data: { items: people, total: people.length } });
+    }
+
+    if (
+      url === "/api/v1/collaborators/candidates" &&
+      methodOf(init) === "GET"
+    ) {
+      return jsonResponse({ data: candidateRows });
     }
 
     if (url === "/api/v1/collaborators" && methodOf(init) === "GET") {
@@ -694,6 +821,43 @@ function textNode(text: string) {
   return Array.from(container.querySelectorAll("*")).find((element) =>
     element.textContent?.includes(text),
   );
+}
+
+async function selectEligiblePerson(search: string, optionLabel: string) {
+  await changeInput("Find eligible Person by nickname", search);
+  await waitForListboxOptions("Matching eligible People", [optionLabel]);
+  await clickListboxOption("Matching eligible People", optionLabel);
+}
+
+async function waitForListboxOptions(label: string, expected: string[]) {
+  await waitFor(() => {
+    const listbox = container.querySelector(
+      `[role="listbox"][aria-label="${label}"]`,
+    );
+    if (!listbox) return false;
+
+    const labels = Array.from(listbox.querySelectorAll('[role="option"]')).map(
+      (option) => option.textContent?.trim() ?? "",
+    );
+    return JSON.stringify(labels) === JSON.stringify(expected);
+  });
+}
+
+async function clickListboxOption(label: string, optionLabel: string) {
+  const listbox = container.querySelector(
+    `[role="listbox"][aria-label="${label}"]`,
+  );
+  const option = Array.from(
+    listbox?.querySelectorAll<HTMLButtonElement>('[role="option"]') ?? [],
+  ).find((node) => node.textContent?.trim() === optionLabel);
+
+  if (!option) {
+    throw new Error(`Could not find ${optionLabel} in ${label}`);
+  }
+
+  await act(async () => {
+    option.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+  });
 }
 
 function selectOptions(labelText: string) {

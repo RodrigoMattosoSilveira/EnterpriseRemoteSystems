@@ -46,13 +46,9 @@ export type WorkPeriodListResponse = {
 };
 
 export type PlannedStatus = "INCLUDED" | "EXCLUDED";
+export type PlanningAvailability = "ACTIVE" | "DAY_OFF" | "LEAVE_OF_ABSENCE";
 export type ActualStatus =
-  | "WORKED"
-  | "ABSENT"
-  | "SICK_DAY_OFF"
-  | "TIME_OFF"
-  | "REPLACED"
-  | "CANCELLED";
+  "WORKED" | "ABSENT" | "SICK_DAY_OFF" | "TIME_OFF" | "REPLACED" | "CANCELLED";
 
 export type WorkPeriodAssignment = {
   id: string;
@@ -62,6 +58,7 @@ export type WorkPeriodAssignment = {
   collaboratorName?: string;
   collaboratorNickname?: string;
   plannedStatus: PlannedStatus;
+  planningAvailability: PlanningAvailability;
   actualStatus?: ActualStatus;
   replacementForAssignmentId?: string;
   sectorId: string;
@@ -78,6 +75,7 @@ export type WorkPeriodAssignment = {
 export type SaveWorkPeriodAssignmentInput = {
   collaboratorId: string;
   plannedStatus: PlannedStatus;
+  planningAvailability?: PlanningAvailability;
   replacementForAssignmentId?: string;
   sectorId: string;
   locationId: string;
@@ -115,4 +113,72 @@ export type WorkPlanRoster = {
   subtitle: string;
   status: string;
   rows: WorkPlanRosterRow[];
+};
+
+export type WorkPeriodPlanningTemplateRow = {
+  assignmentId?: string;
+  templateAssignmentId?: string;
+  replacementForAssignmentId?: string;
+  temporaryReplacementForCollaboratorId?: string;
+  collaboratorId: string;
+  collaboratorName?: string;
+  collaboratorNickname?: string;
+  projectedEndDate?: string;
+  planningAvailability: PlanningAvailability;
+  selected: boolean;
+  sectorId: string;
+  sectorLabel?: string;
+  locationId: string;
+  locationLabel?: string;
+  taskId: string;
+  taskLabel?: string;
+};
+
+export type WorkPeriodPlanningTemplate = {
+  workPeriodId: string;
+  sourceWorkPeriodId?: string;
+  sourceWorkDate?: string;
+  sourcePeriodName?: string;
+  rows: WorkPeriodPlanningTemplateRow[];
+};
+
+export type BulkPlanWorkPeriodAssignmentRow = {
+  collaboratorId: string;
+  selected: boolean;
+  sectorId: string;
+  locationId: string;
+  taskId: string;
+  planningAvailability: PlanningAvailability;
+  availabilityChanged?: boolean;
+  replacementForAssignmentId?: string;
+  temporaryReplacementForCollaboratorId?: string;
+};
+
+export type BulkPlanWorkPeriodAssignmentsInput = {
+  rows: BulkPlanWorkPeriodAssignmentRow[];
+};
+
+export type BulkPlanWorkPeriodAssignmentsResult = {
+  assignments: WorkPeriodAssignment[];
+  selectedCount: number;
+};
+
+export type PlanAssignmentRefinementInput = {
+  collaboratorId: string;
+  sectorId: string;
+  locationId: string;
+  taskId: string;
+  applyToFutureDefaults: boolean;
+};
+
+export type PlanAssignmentRefinementResult = {
+  collaboratorId: string;
+  sectorId: string;
+  sectorLabel?: string;
+  locationId: string;
+  locationLabel?: string;
+  taskId: string;
+  taskLabel?: string;
+  applyToFutureDefaults: boolean;
+  futureDefaultsUpdated: boolean;
 };

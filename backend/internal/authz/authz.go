@@ -7,19 +7,18 @@ import (
 )
 
 const (
-	// HeaderAuthorizedBy is the temporary legacy actor header used by existing
-	// financial operation endpoints. New endpoint wiring should use ExtractActor
-	// so this compatibility path stays centralized while authenticated actors are
-	// introduced in future bites.
+	// HeaderAuthorizedBy is the legacy operation-actor header. Bite 28C accepts it
+	// only when the server is explicitly running in isolated test mode.
 	HeaderAuthorizedBy = "X-Authorized-By"
 
-	// HeaderActorID is the forward-compatible actor identity header. It is a
-	// temporary transport shape until ERS has authenticated users/sessions.
+	// HeaderActorID is the legacy actor-identity header. Authenticated sessions are
+	// authoritative in normal traffic; this header is restricted to explicit
+	// bootstrap and isolated-test modes.
 	HeaderActorID = "X-Actor-ID"
 
-	// HeaderActorPermissions is a comma-separated temporary permissions header.
-	// It lets backend tests and transitional clients exercise authorization
-	// decisions before tenant-scoped roles are backed by persisted users.
+	// HeaderActorPermissions is retained only for isolated authorization tests
+	// that do not configure an ActorStore. When a persisted store is available,
+	// header-supplied permissions never replace persisted role grants.
 	HeaderActorPermissions = "X-Actor-Permissions"
 
 	// HeaderTenantID is the forward-compatible tenant scope header for an actor.
@@ -31,8 +30,9 @@ type Permission string
 const (
 	PermissionAll Permission = "*"
 
-	PermissionAuthzRead   Permission = "authz.read"
-	PermissionAuthzManage Permission = "authz.manage"
+	PermissionAuthzSelfRead Permission = "authz.self.read"
+	PermissionAuthzRead     Permission = "authz.read"
+	PermissionAuthzManage   Permission = "authz.manage"
 
 	PermissionTenantsRead   Permission = "tenants.read"
 	PermissionTenantsCreate Permission = "tenants.create"
@@ -60,6 +60,9 @@ const (
 	PermissionPriceListsRead   Permission = "price_lists.read"
 	PermissionPriceListsCreate Permission = "price_lists.create"
 	PermissionPriceListsUpdate Permission = "price_lists.update"
+
+	PermissionReferenceDataRead   Permission = "reference_data.read"
+	PermissionReferenceDataManage Permission = "reference_data.manage"
 
 	PermissionExpensesRead   Permission = "expenses.read"
 	PermissionExpensesCreate Permission = "expenses.create"
@@ -92,9 +95,10 @@ const (
 type ActorSource string
 
 const (
-	ActorSourceHeaderAuthorizedBy ActorSource = "x_authorized_by"
-	ActorSourceHeaderActorID      ActorSource = "x_actor_id"
-	ActorSourcePersisted          ActorSource = "persisted"
+	ActorSourceHeaderAuthorizedBy   ActorSource = "x_authorized_by"
+	ActorSourceHeaderActorID        ActorSource = "x_actor_id"
+	ActorSourcePersisted            ActorSource = "persisted"
+	ActorSourceAuthenticatedSession ActorSource = "authenticated_session"
 )
 
 type ActorScope string
@@ -122,8 +126,11 @@ type Actor struct {
 }
 
 var (
-	ErrMissingActor = errors.New("authorization actor is required")
-	ErrForbidden    = errors.New("actor is not permitted")
+	ErrMissingActor                      = errors.New("authorization actor is required")
+	ErrAuthenticationRequired            = errors.New("authenticated session is required")
+	ErrTenantSelectionRequired           = errors.New("a tenant selection is required")
+	ErrAccountActorFoundationUnavailable = errors.New("account actor foundation is unavailable")
+	ErrForbidden                         = errors.New("actor is not permitted")
 )
 
 type HeaderGetter func(name string) string

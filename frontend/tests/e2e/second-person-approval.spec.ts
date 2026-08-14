@@ -1,5 +1,11 @@
 import { expect, test, type APIRequestContext, type Page } from "@playwright/test";
-import { authzHeaders, e2eApiUrl, seedBrowserAuthz } from "./support/authz";
+import { uniquePersonSuffix } from "./support/test-data";
+import {
+  E2E_ACTOR_ID,
+  authzHeaders,
+  e2eApiUrl,
+  seedBrowserAuthz,
+} from "./support/authz";
 
 const PERSON_STATUS_ACTIVE_ID = "ref-person-status-active";
 const COLLABORATOR_STATUS_ACTIVE_ID = "ref-collaborator-status-active";
@@ -50,7 +56,7 @@ test("partial payout requires and submits a different second approver when tenan
             brlAmount: capturedPayoutPayload.brlAmount,
             goldGramAmount: capturedPayoutPayload.goldGramAmount,
             notes: capturedPayoutPayload.notes ?? "",
-            authorizedBy: "bootstrap-admin",
+            authorizedBy: E2E_ACTOR_ID,
             authorizedAt: new Date().toISOString(),
           },
           ledgerEntries: [
@@ -82,7 +88,7 @@ test("partial payout requires and submits a different second approver when tenan
     await page.getByRole("button", { name: "Partial Payout" }).click();
 
     await expect(page.getByText("Second-person approval required")).toBeVisible();
-    await expect(page.getByText("Primary actor: bootstrap-admin")).toBeVisible();
+    await expect(page.getByText(`Primary actor: ${E2E_ACTOR_ID}`)).toBeVisible();
 
     const secondApproverSelect = page.getByLabel("Second approver");
     await expect(secondApproverSelect).toBeEnabled();
@@ -92,7 +98,7 @@ test("partial payout requires and submits a different second approver when tenan
       .locator("option")
       .allTextContents();
     expect(secondApproverOptions.join("\n")).toContain(secondApprover.actorKey);
-    expect(secondApproverOptions.join("\n")).not.toContain("bootstrap-admin");
+    expect(secondApproverOptions.join("\n")).not.toContain(E2E_ACTOR_ID);
 
     await page.getByLabel("Gold grams").fill("0.01");
     await page.getByLabel("Reason code").selectOption(REQUIRED_REASON_CODE);
@@ -158,7 +164,7 @@ test("partial payout can optionally record second approval when tenant policy is
             brlAmount: capturedPayoutPayload.brlAmount,
             goldGramAmount: capturedPayoutPayload.goldGramAmount,
             notes: capturedPayoutPayload.notes ?? "",
-            authorizedBy: "bootstrap-admin",
+            authorizedBy: E2E_ACTOR_ID,
             authorizedAt: new Date().toISOString(),
           },
           ledgerEntries: [
@@ -340,7 +346,7 @@ function completePersonPayload({
 }
 
 function uniqueSuffix(): number {
-  return Date.now() + Math.floor(Math.random() * 1000);
+  return uniquePersonSuffix(test.info().workerIndex);
 }
 
 function todayISODate() {

@@ -1,0 +1,44 @@
+@startuml
+title Application Administrator — Global Identity Only
+
+actor "Application Administrator" as Admin
+
+rectangle "Authentication Account" as Account
+rectangle "GLOBAL Actor" as GlobalActor
+
+rectangle "ERS Control Plane" {
+  rectangle "Tenant lifecycle"
+  rectangle "Authentication administration"
+  rectangle "Global configuration"
+  rectangle "System / security administration"
+}
+
+rectangle "Tenant A Data Plane" as TenantA {
+  rectangle People
+  rectangle Collaborators
+  rectangle Earnings
+  rectangle Expenses
+}
+
+Admin --> Account
+Account --> GlobalActor
+GlobalActor --> "ERS Control Plane"
+
+GlobalActor -[#red,dashed]-> TenantA : NO standing access
+
+note right of GlobalActor
+No Person
+
+No Person–Tenant Membership
+
+No tenant Actor
+
+No Collaborator Journey
+end note
+
+note bottom of TenantA
+APPLICATION_ADMIN must not mean
+"administrator inside every Tenant."
+end note
+
+@enduml

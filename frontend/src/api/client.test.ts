@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { apiFetch } from "./client";
+import { apiFetch, ApiError } from "./client";
+import { SELECTED_TENANT_STORAGE_KEY } from "./tenantSelection";
 
 type FetchCall = {
   url: string | URL | Request;
@@ -28,68 +29,68 @@ afterEach(() => {
   window.localStorage.clear();
 });
 
-describe("apiFetch temporary authz headers", () => {
-  it("uses the local development bootstrap actor when no actor is stored", async () => {
+describe("apiFetch authenticated-session transport", () => {
+  it("sends same-origin cookies and a tenant selection without actor identity headers", async () => {
+    await apiFetch<{ ok: boolean }>("/people");
+
+    expect(fetchCalls[0]?.init?.credentials).toBe("same-origin");
+    const headers = fetchCalls[0]?.init?.headers as Record<string, string>;
+    expect(headers["X-Tenant-ID"]).toBe("default");
+    expect(headers["X-Actor-ID"]).toBeUndefined();
+    expect(headers["X-Authorized-By"]).toBeUndefined();
+    expect(headers["X-Actor-Permissions"]).toBeUndefined();
+  });
+
+  it("strips caller-supplied actor identity and permission headers", async () => {
+    await apiFetch<{ ok: boolean }>("/people", {
+      headers: {
+        "X-Actor-ID": "spoofed-admin",
+        "x-actor-permissions": "*",
+        "X-Authorized-By": "spoofed-legacy-actor",
+        "X-Tenant-ID": "spoofed-tenant",
+        "X-Reauthenticated-At": "2026-07-23T12:00:00Z",
+      },
+    });
+
+    const headers = fetchCalls[0]?.init?.headers as Record<string, string>;
+    expect(headers["X-Actor-ID"]).toBeUndefined();
+    expect(headers["x-actor-permissions"]).toBeUndefined();
+    expect(headers["X-Authorized-By"]).toBeUndefined();
+    expect(headers["X-Tenant-ID"]).toBe("default");
+    expect(headers["X-Reauthenticated-At"]).toBe("2026-07-23T12:00:00Z");
+  });
+
+  it("uses the explicitly selected tenant", async () => {
+    window.localStorage.setItem(SELECTED_TENANT_STORAGE_KEY, "tenant-a");
+
     await apiFetch<{ ok: boolean }>("/people");
 
     const headers = fetchCalls[0]?.init?.headers as Record<string, string>;
-    expect(headers["X-Actor-ID"]).toBe("bootstrap-admin");
-    expect(headers["X-Authorized-By"]).toBe("bootstrap-admin");
-    expect(headers["X-Tenant-ID"]).toBe("default");
-    expect(headers["X-Actor-Permissions"]).toBe("*");
+    expect(headers["X-Tenant-ID"]).toBe("tenant-a");
+    expect(headers["X-Actor-ID"]).toBeUndefined();
   });
 
-  it("falls back to the local development bootstrap actor when storage is blank", async () => {
-    window.localStorage.setItem("ers.authzAdmin.requestActor", "");
+  it("does not retry authentication failures with bootstrap actor headers", async () => {
+    const fetchMock = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+      fetchCalls.push({ url, init });
+      return new Response(
+        JSON.stringify({
+          error: {
+            code: "authentication_required",
+            message: "An authenticated session is required",
+          },
+        }),
+        { status: 401, headers: { "Content-Type": "application/json" } },
+      );
+    });
+    vi.stubGlobal("fetch", fetchMock);
 
-    await apiFetch<{ ok: boolean }>("/people");
-
-    const headers = fetchCalls[0]?.init?.headers as Record<string, string>;
-    expect(headers["X-Actor-ID"]).toBe("bootstrap-admin");
-    expect(headers["X-Authorized-By"]).toBe("bootstrap-admin");
-    expect(headers["X-Tenant-ID"]).toBe("default");
-    expect(headers["X-Actor-Permissions"]).toBe("*");
-  });
-
-  it("falls back to the local development bootstrap actor when storage is malformed", async () => {
-    window.localStorage.setItem("ers.authzAdmin.requestActor", "not-json");
-
-    await apiFetch<{ ok: boolean }>("/people");
-
-    const headers = fetchCalls[0]?.init?.headers as Record<string, string>;
-    expect(headers["X-Actor-ID"]).toBe("bootstrap-admin");
-    expect(headers["X-Authorized-By"]).toBe("bootstrap-admin");
-    expect(headers["X-Tenant-ID"]).toBe("default");
-    expect(headers["X-Actor-Permissions"]).toBe("*");
-  });
-
-  it("uses a stored actor instead of the local development default", async () => {
-    window.localStorage.setItem(
-      "ers.authzAdmin.requestActor",
-      JSON.stringify({ actorId: "tenant-admin@test.ers", tenantId: "default" }),
+    await expect(apiFetch<{ ok: boolean }>("/people")).rejects.toBeInstanceOf(
+      ApiError,
     );
 
-    await apiFetch<{ ok: boolean }>("/people");
-
+    expect(fetchMock).toHaveBeenCalledTimes(1);
     const headers = fetchCalls[0]?.init?.headers as Record<string, string>;
-    expect(headers["X-Actor-ID"]).toBe("tenant-admin@test.ers");
-    expect(headers["X-Authorized-By"]).toBe("tenant-admin@test.ers");
-    expect(headers["X-Tenant-ID"]).toBe("default");
-    expect(headers["X-Actor-Permissions"]).toBe("*");
-  });
-
-  it("fills missing tenant and permissions for partially stored local development actors", async () => {
-    window.localStorage.setItem(
-      "ers.authzAdmin.requestActor",
-      JSON.stringify({ actorId: "tenant-admin@test.ers" }),
-    );
-
-    await apiFetch<{ ok: boolean }>("/people");
-
-    const headers = fetchCalls[0]?.init?.headers as Record<string, string>;
-    expect(headers["X-Actor-ID"]).toBe("tenant-admin@test.ers");
-    expect(headers["X-Authorized-By"]).toBe("tenant-admin@test.ers");
-    expect(headers["X-Tenant-ID"]).toBe("default");
-    expect(headers["X-Actor-Permissions"]).toBe("*");
+    expect(headers["X-Actor-ID"]).toBeUndefined();
   });
 });

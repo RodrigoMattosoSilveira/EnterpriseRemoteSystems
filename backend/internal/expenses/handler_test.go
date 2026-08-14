@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"path/filepath"
 	"testing"
 	"time"
@@ -458,6 +459,74 @@ func TestListExpenseFiltersAndPagination(t *testing.T) {
 	}
 }
 
+func TestListExpenseFiltersByCollaboratorNameOrNickname(t *testing.T) {
+	server, cleanup := newTestServer(t)
+	defer cleanup()
+
+	mineiroPerson := createPerson(t, server, validCompletePersonPayload(21, map[string]any{
+		"firstName": "Bruno",
+		"lastName":  "Costa",
+		"nickname":  "Mineiro",
+	}))
+	serraPerson := createPerson(t, server, validCompletePersonPayload(22, map[string]any{
+		"firstName": "Carla",
+		"lastName":  "Serra",
+		"nickname":  "CSerra",
+	}))
+	mineiroCollaborator := createCollaborator(t, server, validCollaboratorPayload(mineiroPerson.Data.ID, nil))
+	serraCollaborator := createCollaborator(t, server, validCollaboratorPayload(serraPerson.Data.ID, nil))
+
+	mineiroExpense := createExpense(t, server, validExpensePayload(mineiroCollaborator.Data.ID, map[string]any{
+		"expenseDate": "2026-06-11",
+		"description": "Mineiro collaborator search expense",
+	}))
+	serraExpense := createExpense(t, server, validExpensePayload(serraCollaborator.Data.ID, map[string]any{
+		"expenseDate": "2026-06-12",
+		"description": "Serra collaborator search expense",
+	}))
+
+	res := getJSON(t, server, expensesURL+"?collaboratorSearch="+url.QueryEscape("mineiro"))
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("expected nickname filter status %d, got %d", http.StatusOK, res.StatusCode)
+	}
+	var filtered apiExpenseListResponse
+	decodeJSON(t, res, &filtered)
+	if filtered.Data.Total != 1 || len(filtered.Data.Items) != 1 || filtered.Data.Items[0].ID != mineiroExpense.Data.ID {
+		t.Fatalf("expected nickname search to return only Mineiro expense, got total=%d items=%+v", filtered.Data.Total, filtered.Data.Items)
+	}
+
+	res = getJSON(t, server, expensesURL+"?collaboratorSearch="+url.QueryEscape("Carla Serra"))
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("expected legal-name filter status %d, got %d", http.StatusOK, res.StatusCode)
+	}
+	decodeJSON(t, res, &filtered)
+	if filtered.Data.Total != 1 || len(filtered.Data.Items) != 1 || filtered.Data.Items[0].ID != serraExpense.Data.ID {
+		t.Fatalf("expected legal-name search to return only Serra expense, got total=%d items=%+v", filtered.Data.Total, filtered.Data.Items)
+	}
+
+	res = getJSON(t, server, expensesURL+"?collaboratorSearch="+url.QueryEscape("ser"))
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("expected last-name prefix filter status %d, got %d", http.StatusOK, res.StatusCode)
+	}
+	decodeJSON(t, res, &filtered)
+	if filtered.Data.Total != 1 || len(filtered.Data.Items) != 1 || filtered.Data.Items[0].ID != serraExpense.Data.ID {
+		t.Fatalf("expected last-name prefix search to return only Serra expense, got total=%d items=%+v", filtered.Data.Total, filtered.Data.Items)
+	}
+
+	res = getJSON(t, server, expensesURL+"?collaboratorSearch="+url.QueryEscape("ineiro"))
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("expected non-prefix search status %d, got %d", http.StatusOK, res.StatusCode)
+	}
+	decodeJSON(t, res, &filtered)
+	if filtered.Data.Total != 0 || len(filtered.Data.Items) != 0 {
+		t.Fatalf("expected non-prefix search not to match Mineiro expense, got total=%d items=%+v", filtered.Data.Total, filtered.Data.Items)
+	}
+}
+
 func TestListExpenseFiltersByItemTypeIncludesPriceListAndLegacyCanteenRows(t *testing.T) {
 	server, cleanup := newTestServer(t)
 	defer cleanup()
@@ -793,10 +862,11 @@ func newTestServerWithDatabase(t *testing.T) (*fiber.App, *gorm.DB, func()) {
 
 	dbPath := filepath.Join(t.TempDir(), "app.db")
 	server, cleanup, err := apppkg.Bootstrap(apppkg.Config{
-		Env:       "test",
-		HTTPAddr:  ":0",
-		DBPath:    dbPath,
-		JWTSecret: "test-secret",
+		Env:                       "test",
+		HTTPAddr:                  ":0",
+		DBPath:                    dbPath,
+		JWTSecret:                 "test-secret",
+		DisableRouteAuthorization: true,
 	})
 	if err != nil {
 		t.Fatalf("bootstrap test server: %v", err)

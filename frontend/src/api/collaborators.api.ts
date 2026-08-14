@@ -1,6 +1,7 @@
 import { loadRecentReauthentication } from "../app/reauthStore";
 import { apiFetch } from "./client";
 import type { FinancialProjection } from "../types/financialProjection";
+import type { Person } from "../types/people";
 import type {
   CloseJourneyInput,
   CloseJourneyResult,
@@ -19,11 +20,40 @@ import type {
   UpdateCollaboratorInput,
 } from "../types/collaborators";
 
+export function listCollaboratorCandidates(): Promise<Person[]> {
+  return apiFetch<Person[]>("/collaborators/candidates");
+}
+
+const expenseCollaboratorPageSize = 100;
+
+export async function listAllCollaborators(): Promise<Collaborator[]> {
+  const items: Collaborator[] = [];
+
+  for (let page = 1; ; page += 1) {
+    const result = await listCollaborators({
+      page,
+      pageSize: expenseCollaboratorPageSize,
+    });
+    items.push(...result.items);
+
+    if (items.length >= result.total || result.items.length === 0) {
+      return items;
+    }
+  }
+}
+
+export function listExpenseCollaborators(): Promise<Collaborator[]> {
+  return listAllCollaborators();
+}
+
 export async function listCollaborators(
   filter: CollaboratorListFilter = {},
 ): Promise<CollaboratorListResponse> {
   const searchParams = new URLSearchParams();
 
+  if (filter.search) {
+    searchParams.set("search", filter.search);
+  }
   if (filter.statusId) {
     searchParams.set("statusId", filter.statusId);
   }

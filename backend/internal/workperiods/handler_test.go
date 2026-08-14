@@ -141,6 +141,29 @@ func TestInformWorkPeriodMovesPlanningPeriodToInformed(t *testing.T) {
 	}
 }
 
+func TestCreateWorkPeriodRejectsDuplicateDateAndPeriod(t *testing.T) {
+	server, cleanup := newTestServer(t)
+	defer cleanup()
+
+	createWorkPeriod(t, server, nil)
+
+	res := postJSON(t, server, http.MethodPost, workPeriodsURL, validWorkPeriodPayload(map[string]any{
+		"name": "Duplicate 06:00-18:00",
+	}))
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusBadRequest {
+		var body apiErrorResponse
+		decodeJSON(t, res, &body)
+		t.Fatalf("expected status %d, got %d with error %+v", http.StatusBadRequest, res.StatusCode, body.Error)
+	}
+
+	var body apiErrorResponse
+	decodeJSON(t, res, &body)
+	if body.Error == nil || body.Error.Fields["workDate"] != "A Work Period already exists for this date and period" {
+		t.Fatalf("expected duplicate work period validation error, got %+v", body.Error)
+	}
+}
+
 func TestCreateWorkPeriodRejectsMissingRequiredFields(t *testing.T) {
 	server, cleanup := newTestServer(t)
 	defer cleanup()
@@ -163,10 +186,11 @@ func newTestServer(t *testing.T) (*fiber.App, func()) {
 
 	dbPath := filepath.Join(t.TempDir(), "app.db")
 	server, cleanup, err := apppkg.Bootstrap(apppkg.Config{
-		Env:       "test",
-		HTTPAddr:  ":0",
-		DBPath:    dbPath,
-		JWTSecret: "test-secret",
+		Env:                       "test",
+		HTTPAddr:                  ":0",
+		DBPath:                    dbPath,
+		JWTSecret:                 "test-secret",
+		DisableRouteAuthorization: true,
 	})
 	if err != nil {
 		t.Fatalf("bootstrap test server: %v", err)

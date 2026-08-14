@@ -5,6 +5,7 @@ import (
 	"log"
 
 	"enterpriseremotesystems/backend/internal/accruals"
+	"enterpriseremotesystems/backend/internal/authentication"
 	"enterpriseremotesystems/backend/internal/authz"
 	"enterpriseremotesystems/backend/internal/collaborators"
 	"enterpriseremotesystems/backend/internal/currentaccounts"
@@ -35,8 +36,19 @@ func Bootstrap(cfg Config) (*fiber.App, func(), error) {
 	if err := db.SeedReferenceData(database); err != nil {
 		return nil, nil, err
 	}
+	// Bite 30B is an additive cutover: legacy Person writers remain until later
+	// bites. Repair any compatibility rows that were written without the new
+	// global Person/Membership foundation before serving tenant lookups.
+	if err := db.EnsureGlobalPersonMembershipFoundation(database); err != nil {
+		return nil, nil, err
+	}
 	if cfg.AutoMigrate || (cfg.Env == "test" && !cfg.AutoMigrateConfigured) {
 		if err := authz.AutoMigrate(database); err != nil {
+			return nil, nil, err
+		}
+	}
+	if cfg.AutoMigrate || (cfg.Env == "test" && !cfg.AutoMigrateConfigured) {
+		if err := authentication.AutoMigrate(database); err != nil {
 			return nil, nil, err
 		}
 	}
@@ -57,10 +69,28 @@ func Bootstrap(cfg Config) (*fiber.App, func(), error) {
 	if bootstrapResult.Enabled {
 		log.Printf("authorization bootstrap ensured actor_key=%s role=%s tenant=%s actor_created=%t grant_created=%t", bootstrapResult.ActorKey, bootstrapResult.RoleCode, bootstrapResult.TenantID, bootstrapResult.ActorCreated, bootstrapResult.GrantCreated)
 	}
+	if err := authentication.EnsureAccountActorFoundation(database); err != nil {
+		return nil, nil, err
+	}
+
+	actorStore := authz.NewGORMStore(database)
+
+	authenticationRepo := authentication.NewRepository(database)
+	authenticationSvc := authentication.NewService(authenticationRepo, authentication.ServiceConfig{
+		SessionTTL:       cfg.AuthSessionTTL,
+		PasswordResetTTL: cfg.AuthPasswordResetTTL,
+		PasswordHashCost: cfg.AuthPasswordHashCost,
+	})
+	authenticationHandler := authentication.NewHandler(authenticationSvc, authentication.CookieConfig{
+		Name:     cfg.AuthSessionCookieName,
+		Secure:   cfg.AuthSessionCookieSecure,
+		SameSite: cfg.AuthSessionCookieSameSite,
+		TTL:      cfg.AuthSessionTTL,
+	}, actorStore, actorStore)
 
 	tenantRepo := tenants.NewRepository(database)
 	tenantSvc := tenants.NewService(tenantRepo)
-	tenantHandler := tenants.NewHandler(tenantSvc)
+	tenantHandler := tenants.NewHandler(tenantSvc, actorStore, actorStore)
 
 	refRepo := referencedata.NewGormRepository(database)
 	refSvc := referencedata.NewService(refRepo)
@@ -68,7 +98,7 @@ func Bootstrap(cfg Config) (*fiber.App, func(), error) {
 
 	peopleRepo := people.NewRepository(database)
 	peopleSvc := people.NewService(peopleRepo)
-	peopleHandler := people.NewHandler(peopleSvc)
+	peopleHandler := people.NewHandler(peopleSvc, people.WithAuthorizationAudit(actorStore, actorStore))
 
 	collaboratorRepo := collaborators.NewRepository(database)
 	collaboratorSvc := collaborators.NewService(collaboratorRepo)
@@ -84,7 +114,6 @@ func Bootstrap(cfg Config) (*fiber.App, func(), error) {
 
 	currentAccountRepo := currentaccounts.NewRepository(database)
 	currentAccountSvc := currentaccounts.NewService(currentAccountRepo, cfg.LedgerCorrectionKey, cfg.LedgerSettlementKey)
-	actorStore := authz.NewGORMStore(database)
 	authzHandler := authz.NewHandler(actorStore)
 	currentAccountHandler := currentaccounts.NewHandler(currentAccountSvc, currentaccounts.WithActorStore(actorStore), currentaccounts.WithAuthorizationAudit(actorStore))
 
@@ -93,7 +122,7 @@ func Bootstrap(cfg Config) (*fiber.App, func(), error) {
 	workPeriodHandler := workperiods.NewHandler(workPeriodSvc)
 
 	workPeriodAssignmentRepo := workperiodassignments.NewRepository(database)
-	workPeriodAssignmentSvc := workperiodassignments.NewService(workPeriodAssignmentRepo)
+	workPeriodAssignmentSvc := workperiodassignments.NewService(workPeriodAssignmentRepo, actorStore)
 	workPeriodAssignmentHandler := workperiodassignments.NewHandler(workPeriodAssignmentSvc)
 
 	goldProductionRepo := goldproduction.NewRepository(database)
@@ -106,7 +135,10 @@ func Bootstrap(cfg Config) (*fiber.App, func(), error) {
 
 	deps := routes.Dependencies{
 		DB:                          database,
-		DisableRouteAuthorization:   cfg.Env == "test",
+		AuthenticationHandler:       authenticationHandler,
+		DisableRouteAuthorization:   cfg.DisableRouteAuthorization,
+		ActorHeaderMode:             cfg.AuthzActorHeaderMode,
+		BootstrapActorKey:           cfg.AuthzBootstrapActorKey,
 		AuthzHandler:                authzHandler,
 		ActorStore:                  actorStore,
 		PeopleHandler:               peopleHandler,
@@ -120,6 +152,7 @@ func Bootstrap(cfg Config) (*fiber.App, func(), error) {
 		AccrualHandler:              accrualHandler,
 		ReferenceDataHandler:        refHandler,
 		TenantHandler:               tenantHandler,
+		TenantService:               tenantSvc,
 	}
 
 	server := httpserver.NewServer(deps)

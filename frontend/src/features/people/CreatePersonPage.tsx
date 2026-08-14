@@ -3,12 +3,21 @@ import { PersonForm } from "./PersonForm";
 import { useCreatePerson } from "./usePeople";
 import { ApiError } from "../../api/client";
 import { ApiErrorPanel } from "../../components/ApiErrorPanel";
+import { useReferenceDataByType } from "../reference-data/useReferenceData";
 
-const ACTIVE_STATUS_ID = "ref-person-status-active";
+const FALLBACK_ACTIVE_STATUS_ID = "ref-person-status-active";
 
 export function CreatePersonPage() {
   const navigate = useNavigate();
   const mutation = useCreatePerson();
+  const statusesQuery = useReferenceDataByType("person_status");
+  const activeStatuses = (statusesQuery.data ?? []).filter((status) => status.active);
+  const activeStatus =
+    activeStatuses.find((status) => status.code === "ACTIVE") ?? activeStatuses[0];
+  const defaultStatusId = activeStatus?.id ?? FALLBACK_ACTIVE_STATUS_ID;
+  const statusOptions = activeStatuses.length > 0
+    ? activeStatuses.map((status) => ({ value: status.id, label: status.label }))
+    : undefined;
 
   return (
     <main className="min-h-screen bg-gray-50">
@@ -21,8 +30,9 @@ export function CreatePersonPage() {
             New Person
           </h1>
           <p className="text-sm text-gray-500">
-            Complete the Personal section first. Other sections can be filled
-            later.
+            Create one global Person identity and its membership in the selected
+            tenant. Complete the Personal section first; other sections can be
+            filled later.
           </p>
         </div>
       </header>
@@ -37,7 +47,8 @@ export function CreatePersonPage() {
         )}
 
         <PersonForm
-          defaultStatusId={ACTIVE_STATUS_ID}
+          defaultStatusId={defaultStatusId}
+          statusOptions={statusOptions}
           submitting={mutation.isPending}
           onSubmit={async (input) => {
             const created = await mutation.mutateAsync(input);

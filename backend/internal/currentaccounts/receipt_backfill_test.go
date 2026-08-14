@@ -2,6 +2,7 @@ package currentaccounts
 
 import (
 	"context"
+	"errors"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -88,6 +89,36 @@ func TestBackfillDebitLedgerReceiptsCreatesOnlyMissingReceipts(t *testing.T) {
 	}
 	if second.MissingReceipts != 0 || second.CreatedReceipts != 0 || second.ExistingReceipts != 2 {
 		t.Fatalf("expected idempotent second result, got %+v", second)
+	}
+}
+
+func TestDebitReceiptObligationEnforcementRejectsMissingReceipt(t *testing.T) {
+	database := newReceiptBackfillTestDB(t)
+	collaboratorID, valueUnitID := seedReceiptBackfillDependencies(t, database)
+	now := time.Now().UTC()
+	entry := db.LedgerEntry{
+		BaseModel:      db.BaseModel{ID: ids.New(), CreatedAt: now, UpdatedAt: now},
+		TenantID:       defaultTenantID,
+		CollaboratorID: collaboratorID,
+		ValueUnitID:    valueUnitID,
+		EntryType:      "EXPENSE_DEDUCTION",
+		Direction:      "DEBIT",
+		Amount:         10,
+		EffectiveDate:  now,
+		SourceType:     "EXPENSE",
+		SourceID:       ids.New(),
+		Active:         true,
+		CorrectionType: "ORIGINAL",
+	}
+	if err := database.Session(&gorm.Session{SkipHooks: true}).Create(&entry).Error; err != nil {
+		t.Fatalf("seed ledger entry without hook-generated receipt: %v", err)
+	}
+
+	err := database.Transaction(func(tx *gorm.DB) error {
+		return ensureDebitLedgerReceiptObligations(tx, &entry)
+	})
+	if !errors.Is(err, ErrDebitReceiptObligationMissing) {
+		t.Fatalf("expected missing receipt obligation error, got %v", err)
 	}
 }
 

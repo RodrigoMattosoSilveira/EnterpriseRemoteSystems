@@ -3,8 +3,19 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { AuthorizationProvider } from "../../components/layout/AuthorizationContext";
+import type { AuthzCurrentActor } from "../../types/authz";
 import type { Collaborator } from "../../types/collaborators";
 import { CollaboratorDetailPage } from "./CollaboratorDetailPage";
+
+const authorizationActor: AuthzCurrentActor = {
+  actorKey: "test-admin",
+  actorRecordId: "actor-test-admin",
+  tenantId: "default",
+  scope: "APPLICATION",
+  roleCodes: ["APPLICATION_ADMIN"],
+  permissions: ["*"],
+};
 
 const collaborator: Collaborator = {
   id: "collab-1",
@@ -19,6 +30,7 @@ const collaborator: Collaborator = {
   paymentMethodId: "ref-method-daily",
   paymentMethodLabel: "Daily Rate",
   paymentValue: 125,
+  planningAvailability: "ACTIVE",
   sectorId: "ref-sector-mining",
   sectorLabel: "Mining",
   locationId: "ref-location-carara",
@@ -114,6 +126,7 @@ describe("CollaboratorDetailPage", () => {
             paymentMethodId: "ref-method-salary",
             paymentMethodLabel: "Salary",
             paymentValue: 2400,
+            planningAvailability: "LEAVE_OF_ABSENCE",
             fixedMonthlyBrlAmount: 2400,
             dailyBrlAmount: undefined,
             extensionDays: 12,
@@ -139,6 +152,7 @@ describe("CollaboratorDetailPage", () => {
 
     await waitForText("Save Collaborator");
 
+    changeSelect("Avail.", "LEAVE_OF_ABSENCE");
     changeSelect("Sector", "ref-sector-processing");
     changeSelect("Location", "ref-location-north-pit");
     changeSelect("Task", "ref-task-supervisor");
@@ -158,10 +172,12 @@ describe("CollaboratorDetailPage", () => {
       taskId: "ref-task-supervisor",
       paymentMethodId: "ref-method-salary",
       paymentValue: 2400,
+      planningAvailability: "LEAVE_OF_ABSENCE",
       fixedMonthlyBrlAmount: 2400,
       extensionDays: 12,
     });
     expect(updatePayload?.dailyBrlAmount).toBeUndefined();
+    expect(textNode("L — Leave of Absence")).toBeTruthy();
   });
 
   it("refreshes seeded gold balance notes from the current settlement preview", async () => {
@@ -262,7 +278,9 @@ function renderCollaboratorDetailPage(initialEntry: string) {
   act(() => {
     root?.render(
       <QueryClientProvider client={queryClient}>
-        <RouterProvider router={router} />
+        <AuthorizationProvider value={authorizationActor}>
+          <RouterProvider router={router} />
+        </AuthorizationProvider>
       </QueryClientProvider>,
     );
   });

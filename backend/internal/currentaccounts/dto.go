@@ -36,6 +36,10 @@ type LedgerEntryDTO struct {
 	EffectiveDate        string                 `json:"effectiveDate"`
 	SourceType           string                 `json:"sourceType"`
 	SourceID             string                 `json:"sourceId"`
+	SourceLabel          string                 `json:"sourceLabel,omitempty"`
+	SourceWorkPeriodID   string                 `json:"sourceWorkPeriodId,omitempty"`
+	SourceWorkDate       string                 `json:"sourceWorkDate,omitempty"`
+	SourceWorkPeriodName string                 `json:"sourceWorkPeriodName,omitempty"`
 	Description          string                 `json:"description,omitempty"`
 	Active               bool                   `json:"active"`
 	CorrectionType       string                 `json:"correctionType"`
@@ -213,6 +217,7 @@ const (
 	ProjectionMethodDiscreteLowerMedianLast10 = "DISCRETE_LOWER_MEDIAN_LAST_10_RECORDED_DATES"
 	ProjectionMethodMostRecentNonZero         = "MOST_RECENT_NON_ZERO"
 	ProjectionWarningNoGoldProductionHistory  = "NO_GOLD_PRODUCTION_HISTORY"
+	ProjectionWarningPendingAccrualInputs     = "PENDING_ACCRUAL_INPUTS"
 )
 
 type ProjectionAmountsDTO struct {
@@ -221,32 +226,41 @@ type ProjectionAmountsDTO struct {
 }
 
 type FinancialProjectionBasisDTO struct {
-	ProjectionDate           string   `json:"projectionDate"`
-	JourneyEndDate           string   `json:"journeyEndDate"`
-	PeriodsPerDay            int      `json:"periodsPerDay"`
-	RemainingWorkPeriods     int      `json:"remainingWorkPeriods"`
-	LocationID               string   `json:"locationId,omitempty"`
-	LocationLabel            string   `json:"locationLabel,omitempty"`
-	ProductionMethod         string   `json:"productionMethod,omitempty"`
-	ProductionDatesAvailable int      `json:"productionDatesAvailable"`
-	ProductionValueUsed      *float64 `json:"productionValueUsed,omitempty"`
-	Warning                  string   `json:"warning,omitempty"`
+	ProjectionDate             string   `json:"projectionDate"`
+	JourneyEndDate             string   `json:"journeyEndDate"`
+	PeriodsPerDay              int      `json:"periodsPerDay"`
+	RemainingWorkPeriods       int      `json:"remainingWorkPeriods"`
+	CalendarWorkPeriods        int      `json:"calendarWorkPeriods"`
+	PostedWorkPeriods          int      `json:"postedWorkPeriods"`
+	ReadyAccrualWorkPeriods    int      `json:"readyAccrualWorkPeriods"`
+	EstimatedFutureWorkPeriods int      `json:"estimatedFutureWorkPeriods"`
+	PendingAccrualItems        int64    `json:"pendingAccrualItems"`
+	LocationID                 string   `json:"locationId,omitempty"`
+	LocationLabel              string   `json:"locationLabel,omitempty"`
+	ProductionMethod           string   `json:"productionMethod,omitempty"`
+	ProductionDatesAvailable   int      `json:"productionDatesAvailable"`
+	ProductionValueUsed        *float64 `json:"productionValueUsed,omitempty"`
+	Warning                    string   `json:"warning,omitempty"`
 }
 
 type FinancialProjectionDTO struct {
-	CollaboratorID         string                      `json:"collaboratorId"`
-	CollaboratorLabel      string                      `json:"collaboratorLabel,omitempty"`
-	PaymentMethodCode      string                      `json:"paymentMethodCode"`
-	CurrentBalances        ProjectionAmountsDTO        `json:"currentBalances"`
-	ProjectedEarnings      ProjectionAmountsDTO        `json:"projectedEarnings"`
-	ProjectedFinalBalances ProjectionAmountsDTO        `json:"projectedFinalBalances"`
-	Projection             FinancialProjectionBasisDTO `json:"projection"`
+	CollaboratorID          string                      `json:"collaboratorId"`
+	CollaboratorLabel       string                      `json:"collaboratorLabel,omitempty"`
+	PaymentMethodCode       string                      `json:"paymentMethodCode"`
+	CurrentBalances         ProjectionAmountsDTO        `json:"currentBalances"`
+	UnpostedReadyEarnings   ProjectionAmountsDTO        `json:"unpostedReadyEarnings"`
+	EstimatedFutureEarnings ProjectionAmountsDTO        `json:"estimatedFutureEarnings"`
+	ProjectedEarnings       ProjectionAmountsDTO        `json:"projectedEarnings"`
+	ProjectedFinalBalances  ProjectionAmountsDTO        `json:"projectedFinalBalances"`
+	Projection              FinancialProjectionBasisDTO `json:"projection"`
 }
 
 type ReceiptListFilter struct {
-	Status   string `query:"status"`
-	Page     int    `query:"page"`
-	PageSize int    `query:"pageSize"`
+	Status       string `query:"status"`
+	Collaborator string `query:"collaborator"`
+	SourceType   string `query:"sourceType"`
+	Page         int    `query:"page"`
+	PageSize     int    `query:"pageSize"`
 }
 
 type OutstandingReceiptDTO struct {
@@ -269,6 +283,8 @@ type OutstandingReceiptDTO struct {
 	ValueUnitLabel        string  `json:"valueUnitLabel"`
 	Amount                float64 `json:"amount"`
 	Description           string  `json:"description,omitempty"`
+	SourceType            string  `json:"sourceType"`
+	SourceID              string  `json:"sourceId"`
 	CollaboratorID        string  `json:"collaboratorId"`
 	CollaboratorLabel     string  `json:"collaboratorLabel"`
 	CollaboratorLegalName string  `json:"collaboratorLegalName"`

@@ -1,0 +1,100 @@
+@startuml
+title ERS Authentication & Identity — Overall Domain Model
+
+skinparam classAttributeIconSize 0
+hide methods
+
+class "Human" as Human
+
+class "Authentication Account" as Account {
+  login
+  passwordHash
+  active
+  mustChangePassword
+}
+
+class "Global Person" as Person {
+  personId
+  name
+  email
+  cellular
+  cpf
+}
+
+class "Person–Tenant Membership" as Membership {
+  membershipId
+  tenantStatus
+  tenantNotes
+  active
+}
+
+class "Tenant" as Tenant {
+  tenantId
+  name
+  active
+}
+
+class "Tenant Actor" as TenantActor {
+  actorId
+  actorKey
+  scope = TENANT
+  active
+}
+
+class "Global Actor" as GlobalActor {
+  actorId
+  actorKey
+  scope = GLOBAL
+  active
+}
+
+class "Role Grant" as Grant
+class "Role" as Role
+
+Human "1" -- "1" Account : authenticates through
+
+Account "0..1" -- "0..1" Person : represents\nordinary user
+
+Person "1" -- "0..*" Membership
+Tenant "1" -- "0..*" Membership
+
+Account "1" -- "0..*" TenantActor : controls
+TenantActor "0..1" -- "1" Membership : represents Person\ninside Tenant
+
+Account "1" -- "0..1" GlobalActor : controls
+
+TenantActor "1" -- "0..*" Grant
+Grant "*" -- "1" Role
+
+note right of Account
+One human shall have one,
+and only one,
+Authentication Account.
+end note
+
+note bottom of Person
+Person is global.
+It is NOT tenant-owned.
+end note
+
+note bottom of Membership
+Membership establishes that
+a Person participates in
+one Tenant.
+end note
+
+note right of TenantActor
+One distinct Actor per Tenant.
+
+Switching Tenant means
+switching Tenant Actor.
+end note
+
+note right of GlobalActor
+Used only by the very small
+Application Administrator population.
+
+Never a tenant Person.
+end note
+
+@enduml

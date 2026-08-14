@@ -13,15 +13,18 @@ type Repository interface {
 	ListDebitLedgerEntriesMissingReceipts(ctx context.Context) ([]db.LedgerEntry, error)
 	CreateLedgerReceipts(ctx context.Context, receipts ...*db.LedgerReceipt) error
 	ListOutstandingReceipts(ctx context.Context, filter normalizedReceiptListFilter) ([]db.LedgerReceipt, int64, error)
-	CountOutstandingReceiptsByStatus(ctx context.Context) (map[string]int64, error)
+	CountOutstandingReceiptsByStatus(ctx context.Context, filter normalizedReceiptListFilter) (map[string]int64, error)
 	FindReceiptByLedgerEntryID(ctx context.Context, ledgerEntryID string) (*db.LedgerReceipt, error)
 	MarkReceiptPrinted(ctx context.Context, receiptID, printedBy string, printedAt time.Time) (*db.LedgerReceipt, error)
 	MarkReceiptReturned(ctx context.Context, receiptID, receivedBy, signedDocumentRef, notes string, returnedAt time.Time) (*db.LedgerReceipt, error)
 	ListEntries(ctx context.Context, collaboratorID string, filter normalizedLedgerEntryListFilter) ([]db.LedgerEntry, int64, error)
+	FindWorkPeriodAssignmentSourceDetails(ctx context.Context, assignmentIDs []string) (map[string]WorkPeriodAssignmentSourceDetail, error)
 	ListBalances(ctx context.Context, collaboratorID string) ([]BalanceRow, error)
 	FindCollaboratorByID(ctx context.Context, collaboratorID string) (*db.CollaboratorJourney, error)
 	FindCollaboratorTenantID(ctx context.Context, collaboratorID string) (string, error)
 	ListRecentDailyGoldProduction(ctx context.Context, locationID string, limit int) ([]DailyGoldProductionRow, error)
+	AccrualProjectionForCollaborator(ctx context.Context, collaboratorID string, startDate time.Time, endDate time.Time) (AccrualProjectionRow, error)
+	CountPostedEarningWorkPeriodDates(ctx context.Context, collaboratorID string, startDate time.Time, endDate time.Time) (int, error)
 	CountPendingAccrualItems(ctx context.Context, collaboratorID string) (int64, error)
 	CountOutstandingReceiptsForCollaborator(ctx context.Context, collaboratorID string) (int64, error)
 	FindEntryByID(ctx context.Context, entryID string) (*db.LedgerEntry, error)
@@ -42,9 +45,11 @@ type Repository interface {
 }
 
 type normalizedReceiptListFilter struct {
-	Status   string
-	Page     int
-	PageSize int
+	Status             string
+	CollaboratorSearch string
+	SourceType         string
+	Page               int
+	PageSize           int
 }
 
 type normalizedLedgerEntryListFilter struct {
@@ -72,4 +77,19 @@ type BalanceRow struct {
 type DailyGoldProductionRow struct {
 	ProductionDate time.Time
 	GoldGrams      float64
+}
+
+type AccrualProjectionRow struct {
+	BRLAmount       float64
+	GoldGramAmount  float64
+	WorkPeriodDates int
+	PendingItems    int64
+}
+
+type WorkPeriodAssignmentSourceDetail struct {
+	AssignmentID   string
+	WorkPeriodID   string
+	WorkDate       time.Time
+	PeriodCode     string
+	WorkPeriodName string
 }

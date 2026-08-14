@@ -5,7 +5,7 @@ import { JourneyDaysRemaining } from "../../components/JourneyDaysRemaining";
 import type { Collaborator } from "../../types/collaborators";
 import type { CreateExpenseInput } from "../../types/expenses";
 import type { PriceListItem, PriceListItemType } from "../../types/priceList";
-import { useCollaborators } from "../collaborators/useCollaborators";
+import { useCollaboratorSearch } from "../collaborators/useCollaborators";
 import { useLatestGoldPrice } from "../gold-prices/useGoldPrices";
 import { usePriceListItems } from "../price-list/usePriceList";
 import { useCreateExpense } from "./useExpenses";
@@ -36,23 +36,26 @@ const initialForm: FormState = {
 
 export function CreateExpensePage() {
   const navigate = useNavigate();
-  const collaboratorsQuery = useCollaborators();
   const priceListItemsQuery = usePriceListItems();
   const latestGoldPriceQuery = useLatestGoldPrice();
   const createMutation = useCreateExpenseWithPriceList();
 
   const [form, setForm] = useState<FormState>(initialForm);
+  const [collaboratorSearch, setCollaboratorSearch] = useState("");
+  const [selectedCollaborator, setSelectedCollaborator] =
+    useState<Collaborator | null>(null);
   const [clientValidationError, setClientValidationError] = useState("");
   const [showEarningsModal, setShowEarningsModal] = useState(false);
+  const collaboratorsQuery = useCollaboratorSearch(collaboratorSearch);
 
-  const collaborators = useMemo(
-    () => collaboratorsQuery.data?.items ?? [],
+  const activeCollaborators = useMemo(
+    () =>
+      (collaboratorsQuery.data?.items ?? [])
+        .filter(isActiveCollaborator)
+        .sort(compareCollaborators),
     [collaboratorsQuery.data],
   );
-  const activeCollaborators = useMemo(
-    () => collaborators.filter(isActiveCollaborator).sort(compareCollaborators),
-    [collaborators],
-  );
+  const showCollaboratorSuggestions = Boolean(collaboratorSearch.trim());
 
   const priceListItems = useMemo(
     () =>
@@ -66,9 +69,6 @@ export function CreateExpensePage() {
     [form.itemType, priceListItems],
   );
 
-  const selectedCollaborator = activeCollaborators.find(
-    (row) => row.id === form.collaboratorId,
-  );
   const selectedItem = priceListItems.find(
     (row) => row.id === form.priceListItemId,
   );
@@ -81,11 +81,29 @@ export function CreateExpensePage() {
     selectedGoldPrice?.brlPerGram,
   );
 
-  const isLoading =
-    collaboratorsQuery.isLoading || priceListItemsQuery.isLoading;
-  const loadError = collaboratorsQuery.error || priceListItemsQuery.error;
-  const hasMissingSetup =
-    activeCollaborators.length === 0 || priceListItems.length === 0;
+  const isLoading = priceListItemsQuery.isLoading;
+  const loadError = priceListItemsQuery.error;
+  const hasMissingSetup = priceListItems.length === 0;
+
+  const selectCollaborator = (collaborator: Collaborator) => {
+    setSelectedCollaborator(collaborator);
+    setCollaboratorSearch("");
+    setShowEarningsModal(false);
+    setForm((current) => ({
+      ...current,
+      collaboratorId: collaborator.id,
+    }));
+  };
+
+  const changeCollaboratorSearch = (value: string) => {
+    setCollaboratorSearch(value);
+    setSelectedCollaborator(null);
+    setShowEarningsModal(false);
+    setForm((current) => ({
+      ...current,
+      collaboratorId: "",
+    }));
+  };
 
   const submit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -171,6 +189,7 @@ export function CreateExpensePage() {
         )}
 
         <ApiErrorPanel error={loadError} />
+        <ApiErrorPanel error={collaboratorsQuery.error} />
         <ApiErrorPanel error={createMutation.error} />
 
         {clientValidationError && (
@@ -180,10 +199,7 @@ export function CreateExpensePage() {
         )}
 
         {!isLoading && !loadError && hasMissingSetup && (
-          <SetupWarning
-            hasCollaborators={activeCollaborators.length > 0}
-            hasPriceListItems={priceListItems.length > 0}
-          />
+          <SetupWarning hasPriceListItems={priceListItems.length > 0} />
         )}
 
         {!isLoading && !loadError && !hasMissingSetup && (
@@ -201,26 +217,81 @@ export function CreateExpensePage() {
               </p>
             </section>
 
-            <label className="block text-sm font-medium text-gray-700">
-              Collaborator *
-              <select
-                className="mt-1 w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-gray-950 shadow-sm"
-                value={form.collaboratorId}
-                onChange={(event) =>
-                  setForm((current) => ({
-                    ...current,
-                    collaboratorId: event.target.value,
-                  }))
-                }
+            <div className="relative">
+              <label className="block text-sm font-medium text-gray-700">
+                Collaborator *
+                <input
+                  id="expense-create-collaborator-search"
+                  type="search"
+                  role="combobox"
+                  aria-autocomplete="list"
+                  aria-controls={
+                    showCollaboratorSuggestions
+                      ? "expense-create-collaborator-suggestions"
+                      : undefined
+                  }
+                  aria-expanded={showCollaboratorSuggestions}
+                  className="mt-1 w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-gray-950 shadow-sm"
+                  value={collaboratorSearch}
+                  onChange={(event) =>
+                    changeCollaboratorSearch(event.target.value)
+                  }
+                  placeholder="Type a Collaborator name or nickname"
+                />
+              </label>
+
+              {showCollaboratorSuggestions && (
+                <div
+                  id="expense-create-collaborator-suggestions"
+                  role="listbox"
+                  aria-label="Matching active collaborators"
+                  className="absolute left-0 right-0 top-full z-20 mt-1 max-h-60 overflow-y-auto rounded-xl border border-gray-200 bg-white p-1 shadow-lg"
+                >
+                  {collaboratorsQuery.isFetching ? (
+                    <p className="px-3 py-2 text-sm text-gray-500">
+                      Loading matching Collaborators…
+                    </p>
+                  ) : activeCollaborators.length === 0 ? (
+                    <p className="px-3 py-2 text-sm text-gray-500">
+                      No matching active Collaborators
+                    </p>
+                  ) : (
+                    activeCollaborators.map((collaborator) => (
+                      <button
+                        key={collaborator.id}
+                        type="button"
+                        role="option"
+                        aria-selected={collaborator.id === form.collaboratorId}
+                        onClick={() => selectCollaborator(collaborator)}
+                        className="block w-full rounded-lg px-3 py-2 text-left text-sm font-medium text-gray-800 hover:bg-gray-100 focus:bg-gray-100 focus:outline-none"
+                      >
+                        {collaboratorLabel(collaborator)}
+                      </button>
+                    ))
+                  )}
+                </div>
+              )}
+            </div>
+
+            {selectedCollaborator && (
+              <div
+                role="status"
+                aria-label="Selected expense Collaborator"
+                className="flex items-center justify-between gap-3 rounded-xl bg-gray-100 px-3 py-2 text-sm text-gray-700"
               >
-                <option value="">Select a Collaborator</option>
-                {activeCollaborators.map((collaborator) => (
-                  <option key={collaborator.id} value={collaborator.id}>
-                    {collaboratorLabel(collaborator)}
-                  </option>
-                ))}
-              </select>
-            </label>
+                <span className="min-w-0 break-words">
+                  <span className="font-semibold">Selected:</span>{" "}
+                  {collaboratorLabel(selectedCollaborator)}
+                </span>
+                <button
+                  type="button"
+                  className="shrink-0 font-semibold underline"
+                  onClick={() => changeCollaboratorSearch("")}
+                >
+                  Change
+                </button>
+              </div>
+            )}
 
             {selectedCollaborator && (
               <div className="flex flex-col items-start gap-1">
@@ -487,14 +558,11 @@ function PreviewStat({
 }
 
 function SetupWarning({
-  hasCollaborators,
   hasPriceListItems,
 }: {
-  hasCollaborators: boolean;
   hasPriceListItems: boolean;
 }) {
   const missing = [
-    !hasCollaborators ? "active Collaborators" : "",
     !hasPriceListItems
       ? "active Canteen or Administrative price-list items"
       : "",
@@ -521,10 +589,13 @@ function useCreateExpenseWithPriceList() {
 }
 
 function isActiveCollaborator(collaborator: Collaborator) {
-  return (
-    !collaborator.closedAt &&
-    collaborator.statusId === "ref-collaborator-status-active"
-  );
+  if (collaborator.closedAt) return false;
+
+  const statusCode = collaborator.statusCode?.trim().toUpperCase();
+  if (statusCode) return statusCode === "ACTIVE";
+
+  // Compatibility fallback for older API responses and stored test fixtures.
+  return collaborator.statusId === "ref-collaborator-status-active";
 }
 
 function compareCollaborators(a: Collaborator, b: Collaborator) {

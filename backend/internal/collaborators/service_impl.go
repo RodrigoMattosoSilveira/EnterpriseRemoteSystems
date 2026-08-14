@@ -7,7 +7,9 @@ import (
 	"time"
 
 	"enterpriseremotesystems/backend/internal/db"
+	peoplepkg "enterpriseremotesystems/backend/internal/people"
 	"enterpriseremotesystems/backend/internal/shared/ids"
+	"enterpriseremotesystems/backend/internal/shared/tenantctx"
 	"enterpriseremotesystems/backend/internal/tenants"
 )
 
@@ -32,6 +34,23 @@ func (s *service) List(ctx context.Context, filter CollaboratorListFilter) ([]Co
 	return ToDTOList(rows), total, nil
 }
 
+func (s *service) ListCandidates(ctx context.Context) ([]peoplepkg.PersonDTO, error) {
+	rows, err := s.repo.ListCandidatePeople(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	items := make([]peoplepkg.PersonDTO, 0, len(rows))
+	for _, row := range rows {
+		person := peoplepkg.ToDTO(row)
+		if person.CanCreateCollaborator {
+			items = append(items, person)
+		}
+	}
+
+	return items, nil
+}
+
 func (s *service) Create(ctx context.Context, req CreateCollaboratorRequest, actorUserID string) (*CollaboratorDTO, error) {
 	if err := ValidateCreateCollaborator(req); err != nil {
 		return nil, err
@@ -46,7 +65,7 @@ func (s *service) Create(ctx context.Context, req CreateCollaboratorRequest, act
 	if err != nil {
 		return nil, err
 	}
-	if !person.CanCreateCollaborator {
+	if !peoplepkg.ToDTO(*person).CanCreateCollaborator {
 		return nil, ValidationError{Fields: map[string]string{"personId": "Person profile must be complete before creating a collaborator"}}
 	}
 
@@ -84,7 +103,7 @@ func (s *service) Create(ctx context.Context, req CreateCollaboratorRequest, act
 
 	collaborator := &db.CollaboratorJourney{
 		BaseModel:                      db.BaseModel{ID: ids.New(), CreatedAt: now, UpdatedAt: now},
-		TenantID:                       defaultTenantID,
+		TenantID:                       tenantctx.TenantID(ctx),
 		PersonID:                       strings.TrimSpace(req.PersonID),
 		JourneyStartDate:               startDate,
 		DefaultEndDate:                 defaultEnd,
@@ -97,6 +116,7 @@ func (s *service) Create(ctx context.Context, req CreateCollaboratorRequest, act
 		GoldCommissionPercent:          paymentConfig.GoldCommissionPercent,
 		TimeOffGoldSplitPercent:        paymentConfig.TimeOffGoldSplitPercent,
 		SickDayOffReplacementGoldGrams: paymentConfig.SickDayOffReplacementGoldGrams,
+		PlanningAvailability:           normalizePlanningAvailability(req.PlanningAvailability),
 		SectorID:                       strings.TrimSpace(req.SectorID),
 		LocationID:                     strings.TrimSpace(req.LocationID),
 		TaskID:                         strings.TrimSpace(req.TaskID),
@@ -162,6 +182,9 @@ func (s *service) Update(ctx context.Context, id string, req UpdateCollaboratorR
 	row.GoldCommissionPercent = paymentConfig.GoldCommissionPercent
 	row.TimeOffGoldSplitPercent = paymentConfig.TimeOffGoldSplitPercent
 	row.SickDayOffReplacementGoldGrams = paymentConfig.SickDayOffReplacementGoldGrams
+	if strings.TrimSpace(req.PlanningAvailability) != "" {
+		row.PlanningAvailability = normalizePlanningAvailability(req.PlanningAvailability)
+	}
 	row.SectorID = strings.TrimSpace(req.SectorID)
 	row.LocationID = strings.TrimSpace(req.LocationID)
 	row.TaskID = strings.TrimSpace(req.TaskID)

@@ -1,4 +1,5 @@
-import { useMemo, useState, type FormEvent } from "react";
+import { useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import { ApiErrorPanel } from "../../components/ApiErrorPanel";
 import type { WorkPeriod } from "../../types/planning";
 import type { ReferenceDataItem } from "../../types/referenceData";
@@ -8,7 +9,6 @@ import {
   useAccrualItems,
   useAccrualRuns,
   useCreateAccrualRun,
-  useCreateGoldProductionEntry,
   useGoldProductionEntries,
   usePostAccrualRun,
   useRecalculateAccrualRun,
@@ -16,7 +16,6 @@ import {
 
 export function AccrualTab({
   workPeriod,
-  locations,
 }: {
   workPeriod: WorkPeriod;
   locations: ReferenceDataItem[];
@@ -24,7 +23,6 @@ export function AccrualTab({
   const runsQuery = useAccrualRuns(workPeriod.id);
   const productionQuery = useGoldProductionEntries(workPeriod.id);
   const createRun = useCreateAccrualRun(workPeriod.id);
-  const createProduction = useCreateGoldProductionEntry(workPeriod.id);
   const recalculate = useRecalculateAccrualRun(workPeriod.id);
   const postRun = usePostAccrualRun(workPeriod.id);
   const [selectedRunId, setSelectedRunId] = useState("");
@@ -40,7 +38,6 @@ export function AccrualTab({
     productionQuery.error ||
     itemsQuery.error ||
     createRun.error ||
-    createProduction.error ||
     recalculate.error ||
     postRun.error;
 
@@ -49,17 +46,14 @@ export function AccrualTab({
       <div>
         <h2 className="text-lg font-semibold">Accrual</h2>
         <p className="text-sm text-gray-500">
-          Record well production, calculate collaborator earnings, review
-          pending items, and post ready credits.
+          Review recorded well production, calculate collaborator earnings,
+          review pending items, and post ready credits.
         </p>
       </div>
       <ApiErrorPanel error={error} />
       <GoldProductionPanel
         workPeriod={workPeriod}
-        locations={locations.filter((row) => row.active)}
         entries={productionQuery.data?.items ?? []}
-        pending={createProduction.isPending}
-        onCreate={(input) => createProduction.mutate(input)}
       />
       <AccrualRunPanel
         workPeriod={workPeriod}
@@ -81,13 +75,9 @@ export function AccrualTab({
 
 function GoldProductionPanel({
   workPeriod,
-  locations,
   entries,
-  pending,
-  onCreate,
 }: {
   workPeriod: WorkPeriod;
-  locations: ReferenceDataItem[];
   entries: Array<{
     id: string;
     locationLabel?: string;
@@ -96,123 +86,62 @@ function GoldProductionPanel({
     goldGramsProduced: number;
     notes?: string;
   }>;
-  pending: boolean;
-  onCreate: (input: {
-    locationId: string;
-    productionDate: string;
-    goldGramsProduced: number;
-    notes?: string;
-  }) => void;
 }) {
-  const [locationId, setLocationId] = useState("");
-  const [grams, setGrams] = useState("");
-  const [notes, setNotes] = useState("");
-  const [validation, setValidation] = useState("");
-
-  const submit = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    setValidation("");
-    const value = Number(grams);
-    if (!locationId) return setValidation("Select the well/location.");
-    if (!Number.isFinite(value) || value <= 0)
-      return setValidation("Gold produced must be greater than zero.");
-    if (!/^\d+(?:\.\d{1,8})?$/.test(grams.trim()))
-      return setValidation("Gold produced supports at most 8 decimal places.");
-    onCreate({
-      locationId,
-      productionDate: workPeriod.workDate,
-      goldGramsProduced: value,
-      notes: notes.trim(),
-    });
-    setGrams("");
-    setNotes("");
-  };
+  const totalProduced = entries.reduce(
+    (sum, entry) => sum + entry.goldGramsProduced,
+    0,
+  );
+  const manageHref = `/gold-production?workPeriodId=${encodeURIComponent(workPeriod.id)}`;
 
   return (
-    <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
-      <form
-        onSubmit={submit}
-        className="space-y-4 rounded-2xl border bg-white p-5 shadow-sm"
-      >
+    <div className="rounded-2xl border bg-white p-5 shadow-sm">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h3 className="font-semibold">Gold Production</h3>
+          <h3 className="font-semibold">Gold Produced</h3>
           <p className="text-sm text-gray-500">
-            Enter production for the well used by commission calculations.
+            Gold Produced is read-only in Accrual. Authorized actors must use
+            the Gold Production workflow to create or edit mine production.
           </p>
         </div>
-        {validation && (
-          <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-800">
-            {validation}
-          </div>
-        )}
-        <label className="block text-sm font-medium text-gray-700">
-          Well / Location *
-          <select
-            className="mt-1 w-full rounded-xl border px-3 py-2"
-            value={locationId}
-            onChange={(event) => setLocationId(event.target.value)}
-          >
-            <option value="">Select a well</option>
-            {locations.map((row) => (
-              <option key={row.id} value={row.id}>
-                {row.label}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="block text-sm font-medium text-gray-700">
-          Gold produced (grams) *
-          <input
-            className="mt-1 w-full rounded-xl border px-3 py-2"
-            type="number"
-            min="0.00000001"
-            step="0.00000001"
-            value={grams}
-            onChange={(event) => setGrams(event.target.value)}
-            placeholder="12.12345678"
-          />
-        </label>
-        <label className="block text-sm font-medium text-gray-700">
-          Notes
-          <textarea
-            className="mt-1 w-full rounded-xl border px-3 py-2"
-            value={notes}
-            onChange={(event) => setNotes(event.target.value)}
-            rows={3}
-          />
-        </label>
-        <button
-          disabled={pending}
-          className="rounded-xl bg-gray-950 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+        <Link
+          className="rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 shadow-sm"
+          to={manageHref}
         >
-          {pending ? "Saving..." : "Add Production"}
-        </button>
-      </form>
-      <div className="rounded-2xl border bg-white p-5 shadow-sm">
-        <h3 className="font-semibold">Recorded Production</h3>
-        {entries.length === 0 ? (
-          <p className="mt-3 text-sm text-gray-500">
-            No gold production has been recorded for this Work Period.
-          </p>
-        ) : (
-          <div className="mt-3 space-y-3">
-            {entries.map((entry) => (
-              <article key={entry.id} className="rounded-xl border p-3">
-                <div className="flex items-center justify-between gap-3">
-                  <strong>{entry.locationLabel || entry.locationId}</strong>
-                  <span className="font-mono text-sm">
-                    {entry.goldGramsProduced.toFixed(8)} g
-                  </span>
-                </div>
-                <p className="mt-1 text-xs text-gray-500">
-                  {entry.productionDate}
-                  {entry.notes ? ` · ${entry.notes}` : ""}
-                </p>
-              </article>
-            ))}
-          </div>
-        )}
+          Open Gold Production
+        </Link>
       </div>
+      {entries.length === 0 ? (
+        <p className="mt-3 rounded-xl bg-amber-50 p-3 text-sm text-amber-900">
+          No gold production has been recorded for this Work Period. Commission
+          accrual items that require production will remain pending until an
+          authorized actor records it in Gold Production.
+        </p>
+      ) : (
+        <div className="mt-4 space-y-3">
+          <div className="rounded-xl bg-gray-50 p-3">
+            <div className="text-xs uppercase tracking-wide text-gray-500">
+              Total gold produced
+            </div>
+            <div className="mt-1 font-mono text-xl font-bold">
+              {totalProduced.toFixed(8)} g
+            </div>
+          </div>
+          {entries.map((entry) => (
+            <article key={entry.id} className="rounded-xl border p-3">
+              <div className="flex items-center justify-between gap-3">
+                <strong>{entry.locationLabel || entry.locationId}</strong>
+                <span className="font-mono text-sm">
+                  {entry.goldGramsProduced.toFixed(8)} g
+                </span>
+              </div>
+              <p className="mt-1 text-xs text-gray-500">
+                {entry.productionDate}
+                {entry.notes ? ` · ${entry.notes}` : ""}
+              </p>
+            </article>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -306,6 +235,13 @@ function AccrualRunPanel({
             <Summary label="Posted" value={selectedRun.summary.postedItems} />
             <Summary label="Skipped" value={selectedRun.summary.skippedItems} />
           </div>
+          {selectedRun.summary.postedItems > 0 ? (
+            <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900">
+              <strong>Posted items are now visible in Current Accounts.</strong>{" "}
+              Use the row links below to verify each posted earning credit or
+              transfer in the collaborator ledger.
+            </div>
+          ) : null}
           <div className="flex flex-wrap gap-2">
             <button
               onClick={() => onRecalculate(selectedRun.id)}
@@ -365,6 +301,7 @@ function AccrualItemsTable({ items }: { items: AccrualItem[] }) {
             <th className="px-2 py-3">Gold</th>
             <th className="px-2 py-3">Status</th>
             <th className="px-2 py-3">Pending reason</th>
+            <th className="px-2 py-3">Ledger visibility</th>
           </tr>
         </thead>
         <tbody>
@@ -395,10 +332,49 @@ function AccrualItemsTable({ items }: { items: AccrualItem[] }) {
                   ? humanizePlanningCode(item.pendingReason)
                   : "—"}
               </td>
+              <td className="px-2 py-3">
+                <div className="flex flex-col gap-1">
+                  <span className="text-xs font-semibold text-gray-600">
+                    {ledgerVisibilityLabel(item)}
+                  </span>
+                  <a
+                    className="text-sm font-semibold text-gray-900 underline"
+                    href={currentAccountHref(item)}
+                  >
+                    {item.status === "POSTED"
+                      ? "View in Current Account"
+                      : "Open Current Account"}
+                  </a>
+                </div>
+              </td>
             </tr>
           ))}
         </tbody>
       </table>
     </div>
+  );
+}
+
+function currentAccountHref(item: AccrualItem) {
+  const base = `/collaborators/${encodeURIComponent(item.collaboratorId)}/current-account`;
+  return isAssignmentEarning(item) ? `${base}?filter=earnings` : base;
+}
+
+function ledgerVisibilityLabel(item: AccrualItem) {
+  if (item.status === "POSTED") {
+    return isAssignmentEarning(item)
+      ? "Posted earning credit"
+      : "Posted ledger entry";
+  }
+  if (item.status === "READY") return "Ready to post";
+  if (item.status === "PENDING") return "Waiting for input";
+  return humanizePlanningCode(item.status);
+}
+
+function isAssignmentEarning(item: AccrualItem) {
+  return (
+    item.direction === "CREDIT" &&
+    Boolean(item.workPeriodAssignmentId) &&
+    !item.calculationType.toUpperCase().includes("REPLACEMENT")
   );
 }

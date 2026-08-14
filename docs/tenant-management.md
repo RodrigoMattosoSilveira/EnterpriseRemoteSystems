@@ -1,0 +1,42 @@
+# Bite 28A — Tenant Management
+
+Bite 28A introduced the application-admin tenant lifecycle and tenant-administrator assignment workflow. Bite 28C now derives actor identity from the authenticated session while retaining the tenant ID only as a server-validated selection hint.
+
+## Administration pages
+
+- `/admin/tenants` lists the tenant catalog and creates tenants.
+- `/admin/tenants/:id` edits tenant identity, activates or deactivates a tenant, and manages tenant administrators.
+
+## Tenant lifecycle rules
+
+- Only an application-scoped actor with the required tenant permission may list the full tenant catalog, create tenants, edit tenant identity, change tenant status, or manage tenant administrators.
+- Tenant-scoped administrators may read their own tenant record but cannot list, create, edit, deactivate, or assign administrators for tenants.
+- Tenant codes are normalized to uppercase and must be unique.
+- Tenant records cannot be hard-deleted. API deletion returns `tenant_deletion_not_allowed`, and migration `000040_protect_tenant_history` installs a database trigger that rejects direct SQL deletion.
+- Deactivation preserves all historical records.
+
+## Operational status
+
+The API derives one of three status values:
+
+- `ACTIVE_READY`: the tenant is active and has at least one active actor with an active `TENANT_ADMIN` grant for that tenant.
+- `ACTIVE_NO_TENANT_ADMIN`: the tenant is active but has no active tenant administrator.
+- `INACTIVE`: the tenant is inactive.
+
+## Inactive tenant enforcement
+
+For an inactive selected tenant:
+
+- `GET`, `HEAD`, and `OPTIONS` requests remain available so historical records can be read for audit.
+- Normal tenant-scoped `POST`, `PUT`, `PATCH`, and `DELETE` requests return HTTP `423` with code `tenant_inactive`.
+- Tenant and authorization administration routes remain available to application administrators so the tenant can be repaired, assigned, or reactivated.
+
+## Tenant administrator assignment
+
+The tenant detail page lists persisted authorization actors. Assigning an actor creates or reactivates a tenant-scoped `TENANT_ADMIN` role grant. Inactive actors cannot be assigned. Revocation deactivates only that tenant role grant; it does not delete or deactivate the actor.
+
+## Authenticated scope boundary
+
+The browser no longer transports actor identity. The HTTP-only authentication session identifies the persisted authorization actor. `X-Tenant-ID` remains only as a selected-tenant hint, and the server resolves the session actor's active grants for that immutable tenant ID.
+
+Tenant URLs and tenant-selection requests must use the tenant's immutable `id`; the human-readable tenant `code` is not an API scope identifier. `/admin/tenants/:id` continues to display the tenant identifier for administrative and diagnostic use.

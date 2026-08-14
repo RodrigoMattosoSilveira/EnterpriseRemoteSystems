@@ -1,6 +1,17 @@
-import { useMemo, useState, type FormEvent } from "react";
-import { Link, useLocation } from "react-router-dom";
+import { useEffect, useMemo, useState } from "react";
+
+import { Link, useLocation, useSearchParams } from "react-router-dom";
+import { ApiErrorPanel } from "../../components/ApiErrorPanel";
+import { useOptionalAuthorizationContext } from "../../components/layout/AuthorizationContext";
+import { useReferenceDataByType } from "../reference-data/useReferenceData";
+
 import { usePeoplePage } from "./usePeople";
+
+import {
+  CardViewIcon,
+  ListViewIcon,
+  SegmentedOptionToggle,
+} from "../../components/options/SegmentedOptionToggle";
 import type {
   PeopleListFilter,
   Person,
@@ -17,23 +28,62 @@ type CollaboratorEligibilityFilter = "all" | "true" | "false";
 
 const DEFAULT_PAGE_SIZE = 10;
 const PAGE_SIZE_OPTIONS = [10, 25, 50];
+const SEARCH_DEBOUNCE_MS = 350;
 
 export function PeopleListPage() {
   const location = useLocation();
+  const actor = useOptionalAuthorizationContext();
+  const canManageMemberships =
+    actor?.scope === "TENANT" && actor.roleCodes.includes("TENANT_ADMIN");
+  // POST /people remains a Bite 28 compatibility path until the 30H global
+  // administration cutover. Preserve the existing create affordance for actors
+  // that currently hold people.create (including today's Application Admin).
+  const canCreatePerson =
+    !actor || actor.permissions.includes("*") || actor.permissions.includes("people.create");
+  // In the real application, status IDs are tenant-specific reference-data IDs.
+  // Component tests render this page without AuthorizationContext, so retain the
+  // historic default IDs only as that isolated-test fallback.
+  const personStatusesQuery = useReferenceDataByType("person_status", Boolean(actor));
+  const personStatuses = personStatusesQuery.data ?? [];
+  const statusIdByCode = useMemo(() => {
+    const entries = personStatuses.map((status) => [status.code, status.id] as const);
+    return new Map(entries);
+  }, [personStatuses]);
   const listState = readPeopleListState(location.state);
 
-  const [searchDraft, setSearchDraft] = useState("");
   const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [profileCompletionStatus, setProfileCompletionStatus] =
     useState<ProfileCompletionStatus | "">("");
   const [canCreateCollaborator, setCanCreateCollaborator] =
     useState<CollaboratorEligibilityFilter>("all");
+  const [peopleStatus, setPeopleStatus] = 
+    useState<"All" | "Active" | "InActive" | "Discontinued">("All");
+  
+  const [searchParams, setSearchParams] = useSearchParams();
+  const initialView = (searchParams.get("view") as "cards" | "list") || "cards";
+  const [viewMode, setViewMode] = useState<"cards" | "list">(initialView);
+
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
 
+  const handleChange = (mode: "cards" | "list") => {
+    setViewMode(mode);
+    setSearchParams({ view: mode });
+  };
+
+  // Debounce search input
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(search.trim());
+      setPage(1);
+    }, SEARCH_DEBOUNCE_MS);
+    return () => clearTimeout(timer);
+  }, [search]);
+
   const filter = useMemo<PeopleListFilter>(
     () => ({
-      search: search || undefined,
+      search: debouncedSearch || undefined,
       profileCompletionStatus: profileCompletionStatus || undefined,
       canCreateCollaborator:
         canCreateCollaborator === "all"
@@ -41,8 +91,16 @@ export function PeopleListPage() {
           : canCreateCollaborator === "true",
       page,
       pageSize,
+      statusId:
+        peopleStatus === "Active"
+          ? statusIdByCode.get("ACTIVE") ?? (!actor ? "ref-person-status-active" : undefined)
+          : peopleStatus === "InActive"
+          ? statusIdByCode.get("INACTIVE") ?? (!actor ? "ref-person-status-inactive" : undefined)
+          : peopleStatus === "Discontinued"
+          ? statusIdByCode.get("DISCONTINUED") ?? (!actor ? "ref-person-status-discontinued" : undefined)
+          : undefined,
     }),
-    [canCreateCollaborator, page, pageSize, profileCompletionStatus, search],
+    [actor, canCreateCollaborator, page, pageSize, profileCompletionStatus, peopleStatus, debouncedSearch, statusIdByCode],
   );
 
   const { data, isLoading, error } = usePeoplePage(filter);
@@ -54,23 +112,18 @@ export function PeopleListPage() {
     listState.createdPerson,
   );
   const hasActiveFilters = Boolean(
-    search || profileCompletionStatus || canCreateCollaborator !== "all",
+    debouncedSearch || profileCompletionStatus || canCreateCollaborator !== "all" || peopleStatus !== "All",
   );
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
   const pageStart = total === 0 ? 0 : (page - 1) * pageSize + 1;
   const pageEnd = total === 0 ? 0 : Math.min(total, page * pageSize);
 
-  function applySearch(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setSearch(searchDraft.trim());
-    setPage(1);
-  }
-
   function clearFilters() {
-    setSearchDraft("");
     setSearch("");
+    setDebouncedSearch("");
     setProfileCompletionStatus("");
     setCanCreateCollaborator("all");
+    setPeopleStatus("All");
     setPage(1);
   }
 
@@ -99,6 +152,12 @@ export function PeopleListPage() {
               Expenses
             </Link>
             <Link
+              to="/admin/tenants"
+              className="rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 shadow-sm"
+            >
+              Tenants
+            </Link>
+            <Link
               to="/admin/reference-data"
               className="rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 shadow-sm"
             >
@@ -110,12 +169,22 @@ export function PeopleListPage() {
             >
               Authz
             </Link>
-            <Link
-              to="/people/new"
-              className="rounded-xl bg-gray-950 px-4 py-2 text-sm font-semibold text-white shadow-sm"
-            >
-              Add
-            </Link>
+            {canManageMemberships && (
+              <Link
+                to="/people/add-existing"
+                className="rounded-xl border border-gray-950 bg-white px-4 py-2 text-sm font-semibold text-gray-950 shadow-sm"
+              >
+                Add existing
+              </Link>
+            )}
+            {canCreatePerson && (
+              <Link
+                to="/people/new"
+                className="rounded-xl bg-gray-950 px-4 py-2 text-sm font-semibold text-white shadow-sm"
+              >
+                New Person
+              </Link>
+            )}
           </div>
         </div>
       </header>
@@ -135,11 +204,25 @@ export function PeopleListPage() {
           className="rounded-2xl border bg-white p-5 shadow-sm"
         >
           <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <h2 className="text-lg font-semibold text-gray-950">Filters</h2>
-              <p className="mt-1 text-sm text-gray-500">
-                Search by name, nickname, CPF, RG, cellular, or email.
-              </p>
+            <div className="min-w-0 flex-1">
+              <div>
+                <h2 className="text-lg font-semibold text-gray-950">Filters</h2>
+                <p className="mt-1 text-sm text-gray-500">
+                  Search by name, nickname, CPF, RG, cellular, or email.
+                </p>
+              </div>
+            </div>
+            <div className="flex flex-wrap items-center gap-3">
+              <SegmentedOptionToggle
+                ariaLabel="People view mode"
+                value={viewMode}
+                onChange={handleChange}
+                showLabels={false}
+                options={[
+                  { value: "cards", label: "Card view", icon: <CardViewIcon /> },
+                  { value: "list", label: "List view", icon: <ListViewIcon /> },
+                ]}
+              />
             </div>
             {hasActiveFilters && (
               <button
@@ -152,29 +235,26 @@ export function PeopleListPage() {
             )}
           </div>
 
-          <form
-            onSubmit={applySearch}
-            className="mt-4 grid gap-4 md:grid-cols-[minmax(0,1fr)_auto] md:items-end"
-          >
+          <div className="mt-4">
             <label className="grid gap-1 text-sm font-medium text-gray-700">
               Filter people
               <input
-                value={searchDraft}
-                onChange={(event) => setSearchDraft(event.target.value)}
+                type="search"
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
                 placeholder="Name, nickname, CPF, RG, cellular, or email"
                 className="rounded-xl border border-gray-300 px-3 py-2 text-sm shadow-sm"
               />
             </label>
-            <button
-              type="submit"
-              className="rounded-xl bg-gray-950 px-4 py-2 text-sm font-semibold text-white shadow-sm"
-            >
-              Apply filter
-            </button>
-          </form>
+            {canManageMemberships && (
+              <p className="mt-2 text-xs text-gray-500">
+                This filter searches only People already added to the selected tenant.
+              </p>
+            )}
+          </div>
 
-          <div className="mt-4 grid gap-4 md:grid-cols-3">
-            <label className="grid gap-1 text-sm font-medium text-gray-700">
+          <div className="mt-4 grid gap-4 md:grid-cols-4 justify-items-start">
+            <label className="grid gap-1 text-sm font-medium text-gray-700 min-w-0">
               Profile completion
               <select
                 value={profileCompletionStatus}
@@ -184,7 +264,7 @@ export function PeopleListPage() {
                   );
                   setPage(1);
                 }}
-                className="rounded-xl border border-gray-300 px-3 py-2 text-sm shadow-sm"
+                className="w-full rounded-xl border border-gray-300 px-3 py-2 text-sm shadow-sm"
               >
                 <option value="">All completion statuses</option>
                 <option value="COMPLETE">Complete</option>
@@ -193,7 +273,7 @@ export function PeopleListPage() {
               </select>
             </label>
 
-            <label className="grid gap-1 text-sm font-medium text-gray-700">
+            <label className="grid gap-1 text-sm font-medium text-gray-700 min-w-0">
               Collaborator eligibility
               <select
                 value={canCreateCollaborator}
@@ -203,7 +283,7 @@ export function PeopleListPage() {
                   );
                   setPage(1);
                 }}
-                className="rounded-xl border border-gray-300 px-3 py-2 text-sm shadow-sm"
+                className="w-full rounded-xl border border-gray-300 px-3 py-2 text-sm shadow-sm"
               >
                 <option value="all">All people</option>
                 <option value="true">Can create collaborator</option>
@@ -211,7 +291,25 @@ export function PeopleListPage() {
               </select>
             </label>
 
-            <label className="grid gap-1 text-sm font-medium text-gray-700">
+            <label className="grid gap-1 text-sm font-medium text-gray-700 min-w-0">
+              Status
+              <select
+                value={peopleStatus}
+                onChange={(event) => {
+                  setPeopleStatus(
+                    event.target.value as "All" | "Active" | "InActive" | "Discontinued",
+                  );
+                  setPage(1);
+                }}
+                className="w-full rounded-xl border border-gray-300 px-3 py-2 text-sm shadow-sm">
+                <option value="All">All</option>
+                <option value="Active">Active</option>
+                <option value="InActive">InActive</option>
+                <option value="Discontinued">Discontinued</option>
+              </select>
+            </label>
+
+            <label className="grid gap-1 text-sm font-medium text-gray-700 min-w-0 md:max-w-[10rem]">  
               People per page
               <select
                 value={pageSize}
@@ -219,7 +317,7 @@ export function PeopleListPage() {
                   setPageSize(Number(event.target.value));
                   setPage(1);
                 }}
-                className="rounded-xl border border-gray-300 px-3 py-2 text-sm shadow-sm"
+                className="w-full rounded-xl border border-gray-300 px-3 py-2 text-sm shadow-sm"
               >
                 {PAGE_SIZE_OPTIONS.map((option) => (
                   <option key={option} value={option}>
@@ -237,16 +335,7 @@ export function PeopleListPage() {
           </div>
         )}
 
-        {/* {error && (
-          <div className="rounded-2xl border border-red-200 bg-red-50 p-5 text-red-800">
-            {(error as Error).message}
-          </div>
-        )} */}
-        {error && (
-          <pre className="rounded bg-red-50 p-4 text-xs text-red-800">
-            {JSON.stringify(error, Object.getOwnPropertyNames(error), 2)}
-          </pre>
-        )}
+        {error && <ApiErrorPanel error={error} />}
 
         {!isLoading && !error && (
           <PaginationSummary
@@ -269,87 +358,197 @@ export function PeopleListPage() {
             </h2>
             <p className="mt-2 text-sm text-gray-500">
               {hasActiveFilters
-                ? "Adjust or clear the filters to widen the People list."
+                ? canManageMemberships && debouncedSearch.length >= 3
+                  ? "No Person in this tenant matches. Search global People to add an existing Person to this tenant, or clear the filters."
+                  : "Adjust or clear the filters to widen the People list."
                 : "Create the first Person record before creating collaborators."}
             </p>
             {hasActiveFilters ? (
-              <button
-                type="button"
-                onClick={clearFilters}
-                className="mt-5 inline-block rounded-xl bg-gray-950 px-5 py-3 text-sm font-semibold text-white"
-              >
-                Clear filters
-              </button>
-            ) : (
-              <Link
-                to="/people/new"
-                className="mt-5 inline-block rounded-xl bg-gray-950 px-5 py-3 text-sm font-semibold text-white"
-              >
-                Create Person
-              </Link>
-            )}
+              <div className="mt-5 flex flex-wrap justify-center gap-2">
+                <button
+                  type="button"
+                  onClick={clearFilters}
+                  className="inline-block rounded-xl bg-gray-950 px-5 py-3 text-sm font-semibold text-white"
+                >
+                  Clear filters
+                </button>
+                {canManageMemberships && debouncedSearch.length >= 3 && (
+                  <Link
+                    to={`/people/add-existing?search=${encodeURIComponent(debouncedSearch)}`}
+                    className="inline-block rounded-xl border border-gray-950 bg-white px-5 py-3 text-sm font-semibold text-gray-950"
+                  >
+                    Search global People
+                  </Link>
+                )}
+              </div>
+            ) : canManageMemberships || canCreatePerson ? (
+              <div className="mt-5 flex justify-center gap-2">
+                {canManageMemberships && (
+                  <Link
+                    to="/people/add-existing"
+                    className="inline-block rounded-xl border border-gray-950 bg-white px-5 py-3 text-sm font-semibold text-gray-950"
+                  >
+                    Add existing
+                  </Link>
+                )}
+                {canCreatePerson && (
+                  <Link
+                    to="/people/new"
+                    className="inline-block rounded-xl bg-gray-950 px-5 py-3 text-sm font-semibold text-white"
+                  >
+                    Create Person
+                  </Link>
+                )}
+              </div>
+            ) : null}
           </div>
         )}
 
-        {displayedPeople.map((person) => {
-          const wasJustCreated = person.id === listState.createdPersonId;
+        {viewMode === "cards" ? (
+          <div className="grid gap-4 md:grid-cols-2">
+            {displayedPeople.map((person) => {
+              const wasJustCreated = person.id === listState.createdPersonId;
 
-          return (
-            <Link
-              key={person.id}
-              to={`/people/${person.id}`}
-              className={`block rounded-2xl border p-5 shadow-sm transition hover:shadow-md ${
-                wasJustCreated
-                  ? "border-green-300 bg-green-50 ring-2 ring-green-100"
-                  : "bg-white"
-              }`}
-            >
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <h2 className="text-lg font-semibold text-gray-950">
-                      {person.firstName} {person.lastName}
-                    </h2>
-                    {wasJustCreated && (
-                      <span className="rounded-full bg-green-100 px-3 py-1 text-xs font-semibold text-green-800">
-                        Just added
-                      </span>
+
+              return (
+                <Link
+                  key={person.id}
+                  to={`/people/${person.id}?view=${viewMode}`}
+                  className={`block rounded-2xl border p-5 shadow-sm transition hover:underline ${
+                    wasJustCreated
+                      ? "border-green-300 bg-green-50 ring-2 ring-green-100"
+                      : "bg-white"
+                  }`}
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <h2 className="text-lg font-semibold text-gray-950">
+                          {person.firstName} {person.lastName}
+                        </h2>
+                        {wasJustCreated && (
+                          <span className="rounded-full bg-green-100 px-3 py-1 text-xs font-semibold text-green-800">
+                            Just added
+                          </span>
+                        )}
+                      </div>
+                      <p className="mt-1 text-base font-medium text-slate-700">
+                        <span className="font-bold">Nickname:</span>{" "}
+                        {person.nickname || "—"}
+                      </p>
+                    </div>
+
+                    <StatusBadge complete={person.canCreateCollaborator}>
+                      {person.canCreateCollaborator ? "Complete" : "Incomplete"}
+                    </StatusBadge>
+                  </div>
+
+                  <dl
+                    aria-label="Person identity and contact details"
+                    className="mt-4 grid gap-2.5 rounded-xl bg-slate-50 p-3 text-base text-slate-800"
+                  >
+                    <Info label="CPF" value={person.cpf} monospaced />
+                    <Info label="RG" value={person.rg} monospaced />
+                    <Info label="Cellular" value={person.cellular} />
+                    <Info label="Email" value={person.email} />
+                  </dl>
+
+                  {!person.canCreateCollaborator &&
+                    person.missingSections &&
+                    person.missingSections.length > 0 && (
+                      <div className="mt-4 flex flex-wrap gap-2">
+                        {person.missingSections.map((section) => (
+                          <span
+                            key={section}
+                            className="rounded-full bg-amber-100 px-3 py-1 text-xs font-medium text-amber-800"
+                          >
+                            Missing {section}
+                          </span>
+                        ))}
+                      </div>
                     )}
-                  </div>
-                  <p className="text-sm text-gray-500">
-                    Nickname: {person.nickname || "—"}
-                  </p>
-                </div>
+                </Link>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="overflow-hidden rounded-2xl border bg-white shadow-sm">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-base">
+                <thead className="bg-slate-100 text-sm font-bold uppercase tracking-wide text-slate-700">
+                  <tr>
+                    <th className="p-3">Name</th>
+                    <th className="p-3">Nickname</th>
+                    <th className="p-3">ID</th>
+                    <th className="p-3">Contact</th>
+                    <th className="p-3">Status</th>
+                    {/* <th className="p-3">Missing1</th> */}
+                  </tr>
+                </thead>
+                <tbody className="divide-y">
+                  {displayedPeople.map((person) => {
+                    const wasJustCreated = person.id === listState.createdPersonId;
 
-                <StatusBadge complete={person.canCreateCollaborator}>
-                  {person.canCreateCollaborator ? "Complete" : "Incomplete"}
-                </StatusBadge>
-              </div>
-
-              <div className="mt-4 grid gap-2 text-sm text-gray-700">
-                <Info label="CPF" value={person.cpf} />
-                <Info label="RG" value={person.rg} />
-                <Info label="Cellular" value={person.cellular} />
-                <Info label="Email" value={person.email} />
-              </div>
-
-              {!person.canCreateCollaborator &&
-                person.missingSections &&
-                person.missingSections.length > 0 && (
-                  <div className="mt-4 flex flex-wrap gap-2">
-                    {person.missingSections.map((section) => (
-                      <span
-                        key={section}
-                        className="rounded-full bg-amber-100 px-3 py-1 text-xs font-medium text-amber-800"
+                    return (
+                      <tr
+                        key={person.id}
+                        className={wasJustCreated ? "bg-green-50" : "bg-white"}
                       >
-                        Missing {section}
-                      </span>
-                    ))}
-                  </div>
-                )}
-            </Link>
-          );
-        })}
+                        <td className="p-3 align-top">
+                          <Link
+                            to={`/people/${person.id}?view=${viewMode}`}
+                            className="font-semibold text-gray-950 underline-offset-2 hover:underline"
+                          >
+                            {person.firstName} {person.lastName}
+                          </Link>
+                          {wasJustCreated && (
+                            <div className="mt-1">
+                              <span className="rounded-full bg-green-100 px-3 py-1 text-xs font-semibold text-green-800">
+                                Just added
+                              </span>
+                            </div>
+                          )}
+                        </td>
+                        <td className="p-3 align-top font-medium text-slate-800">
+                          {person.nickname || "—"}
+                        </td>
+                        <td className="p-3 align-top text-slate-800">
+                          <IdentityDetails cpf={person.cpf} rg={person.rg} />
+                        </td>
+                        <td className="p-3 align-top text-slate-800">
+                          <ContactDetails cellular={person.cellular} email={person.email} />
+                        </td>
+                        <td className="p-3 align-top">
+                          <StatusBadge complete={person.canCreateCollaborator}>
+                            {person.canCreateCollaborator ? "Complete" : "Incomplete"}
+                          </StatusBadge>
+                        </td>
+                        {/*
+                        <td className="p-3 align-top">
+                          {person.canCreateCollaborator || !person.missingSections || person.missingSections.length === 0 ? (
+                            <span className="text-gray-400">—</span>
+                          ) : (
+                            <div className="flex flex-wrap gap-2">
+                              {person.missingSections.map((section) => (
+                                <span
+                                  key={section}
+                                  className="rounded-full bg-amber-100 px-3 py-1 text-xs font-medium text-amber-800"
+                                >
+                                  Missing {section}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                        </td>
+                        */}
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
 
         {!isLoading && !error && displayedPeople.length > 0 && (
           <PaginationSummary
@@ -467,12 +666,61 @@ function isPerson(value: unknown): value is Person {
   );
 }
 
-function Info({ label, value }: { label: string; value?: string }) {
+function Info({
+  label,
+  value,
+  monospaced = false,
+}: {
+  label: string;
+  value?: string;
+  monospaced?: boolean;
+}) {
   return (
-    <div className="flex justify-between gap-4">
-      <span className="text-gray-500">{label}</span>
-      <span className="text-right font-medium">{value || "—"}</span>
+    <div className="grid grid-cols-[5rem_minmax(0,1fr)] items-baseline gap-3">
+      <dt className="font-bold text-slate-700">{label}</dt>
+      <dd
+        className={`min-w-0 break-words text-right font-semibold text-slate-950 ${
+          monospaced ? "font-mono tabular-nums tracking-wide" : ""
+        }`}
+      >
+        {value || "—"}
+      </dd>
     </div>
+  );
+}
+
+function IdentityDetails({ cpf, rg }: { cpf?: string; rg?: string }) {
+  return (
+    <dl aria-label="Identity details" className="grid gap-2">
+      <IdentityRow label="CPF" value={cpf} />
+      <IdentityRow label="RG" value={rg} />
+    </dl>
+  );
+}
+
+function IdentityRow({ label, value }: { label: string; value?: string }) {
+  return (
+    <div className="grid grid-cols-[3rem_minmax(0,1fr)] items-baseline gap-2">
+      <dt className="font-bold text-slate-700">{label}</dt>
+      <dd className="font-mono font-semibold tabular-nums tracking-wide text-slate-950">
+        {value || "—"}
+      </dd>
+    </div>
+  );
+}
+
+function ContactDetails({ cellular, email }: { cellular?: string; email?: string }) {
+  return (
+    <dl aria-label="Contact details" className="grid gap-2">
+      <div className="grid grid-cols-[5rem_minmax(0,1fr)] items-baseline gap-2">
+        <dt className="font-bold text-slate-700">Cellular</dt>
+        <dd className="font-semibold tabular-nums text-slate-950">{cellular || "—"}</dd>
+      </div>
+      <div className="grid grid-cols-[5rem_minmax(0,1fr)] items-baseline gap-2">
+        <dt className="font-bold text-slate-700">Email</dt>
+        <dd className="break-all font-semibold text-slate-950">{email || "—"}</dd>
+      </div>
+    </dl>
   );
 }
 

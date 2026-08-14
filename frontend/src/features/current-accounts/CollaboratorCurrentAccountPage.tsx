@@ -1,5 +1,6 @@
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { ApiErrorPanel } from "../../components/ApiErrorPanel";
+import { useAuthorizationContext } from "../../components/layout/AuthorizationContext";
 import type {
   CurrentAccountBalance,
   CurrentAccountFilter,
@@ -18,6 +19,11 @@ const ledgerFilters: LedgerFilterOption[] = [
   { value: "all", label: "All entries", apiFilter: {} },
   { value: "credits", label: "Credits", apiFilter: { direction: "CREDIT" } },
   { value: "debits", label: "Debits", apiFilter: { direction: "DEBIT" } },
+  {
+    value: "earnings",
+    label: "Earnings",
+    apiFilter: { sourceType: "WORK_PERIOD_ASSIGNMENT" },
+  },
   { value: "expenses", label: "Expenses", apiFilter: { sourceType: "EXPENSE" } },
   {
     value: "outstanding-receipts",
@@ -30,6 +36,13 @@ const PAGE_SIZE = 25;
 
 export function CollaboratorCurrentAccountPage() {
   const { id = "" } = useParams();
+  const actor = useAuthorizationContext();
+  const wildcard = actor.permissions.includes("*");
+  const canBrowseExpenses = wildcard || actor.permissions.includes("expenses.read");
+  const canBrowseOutstandingReceipts = wildcard || actor.permissions.includes("ledger.receipts.read");
+  const canOpenOperationalSources =
+    wildcard || actor.permissions.includes("expenses.read") || actor.permissions.includes("planning.read");
+  const canOpenReceipt = wildcard || actor.permissions.includes("ledger.receipts.read");
   const [searchParams, setSearchParams] = useSearchParams();
   const filter = searchParams.get("filter") ?? "all";
   const page = Number(searchParams.get("page") ?? "1") || 1;
@@ -83,18 +96,22 @@ export function CollaboratorCurrentAccountPage() {
               </p>
             </div>
             <div className="flex flex-wrap gap-2 sm:justify-end">
-              <Link
-                className="rounded-xl border bg-white px-4 py-2 text-sm font-semibold text-gray-700 shadow-sm"
-                to="/receipts/outstanding"
-              >
-                Outstanding Receipts
-              </Link>
-              <Link
-                className="rounded-xl border bg-white px-4 py-2 text-sm font-semibold text-gray-700 shadow-sm"
-                to="/expenses"
-              >
-                Expenses
-              </Link>
+              {canBrowseOutstandingReceipts ? (
+                <Link
+                  className="rounded-xl border bg-white px-4 py-2 text-sm font-semibold text-gray-700 shadow-sm"
+                  to="/receipts/outstanding"
+                >
+                  Outstanding Receipts
+                </Link>
+              ) : null}
+              {canBrowseExpenses ? (
+                <Link
+                  className="rounded-xl border bg-white px-4 py-2 text-sm font-semibold text-gray-700 shadow-sm"
+                  to="/expenses"
+                >
+                  Expenses
+                </Link>
+              ) : null}
             </div>
           </div>
         </div>
@@ -153,7 +170,12 @@ export function CollaboratorCurrentAccountPage() {
                 {ledgerEntries && ledgerEntries.items.length > 0 ? (
                   <div className="divide-y">
                     {ledgerEntries.items.map((entry) => (
-                      <LedgerEntryRow key={entry.id} entry={entry} />
+                      <LedgerEntryRow
+                        key={entry.id}
+                        entry={entry}
+                        canOpenOperationalSources={canOpenOperationalSources}
+                        canOpenReceipt={canOpenReceipt}
+                      />
                     ))}
                   </div>
                 ) : (
@@ -216,7 +238,15 @@ function BalanceCard({ balance }: { balance: CurrentAccountBalance }) {
   );
 }
 
-function LedgerEntryRow({ entry }: { entry: LedgerEntry }) {
+function LedgerEntryRow({
+  entry,
+  canOpenOperationalSources,
+  canOpenReceipt,
+}: {
+  entry: LedgerEntry;
+  canOpenOperationalSources: boolean;
+  canOpenReceipt: boolean;
+}) {
   const receipt = entry.receipt;
   return (
     <article className="grid gap-3 p-4 md:grid-cols-[1fr_auto] md:items-center">
@@ -240,7 +270,7 @@ function LedgerEntryRow({ entry }: { entry: LedgerEntry }) {
           {formatAmount(entry.signedAmount, entry.valueUnitCode || entry.valueUnitLabel)} · Effective {entry.effectiveDate}
         </p>
         <p className="mt-1 text-xs text-gray-500">
-          Source: {entry.sourceType} · {entry.sourceId}
+          Source: {sourceLabel(entry)}
         </p>
         {entry.description ? (
           <p className="mt-1 text-sm text-gray-600">{entry.description}</p>
@@ -256,12 +286,12 @@ function LedgerEntryRow({ entry }: { entry: LedgerEntry }) {
         ) : null}
       </div>
       <div className="flex flex-wrap gap-2 md:justify-end">
-        {sourceLink(entry) ? (
+        {canOpenOperationalSources && sourceLink(entry) ? (
           <Link className="rounded-xl border px-4 py-2 text-sm font-semibold" to={sourceLink(entry)!}>
-            Open source
+            {sourceActionLabel(entry)}
           </Link>
         ) : null}
-        {receipt || entry.direction === "DEBIT" ? (
+        {canOpenReceipt && (receipt || entry.direction === "DEBIT") ? (
           <Link className="rounded-xl bg-gray-900 px-4 py-2 text-sm font-semibold text-white" to={`/ledger-entries/${entry.id}/receipt`}>
             Print or return receipt
           </Link>
@@ -275,7 +305,29 @@ function sourceLink(entry: LedgerEntry) {
   if (entry.sourceType === "EXPENSE" && entry.sourceId) {
     return `/expenses/${entry.sourceId}`;
   }
+  if (entry.sourceType === "WORK_PERIOD_ASSIGNMENT" && entry.sourceWorkPeriodId) {
+    return `/work-periods/${entry.sourceWorkPeriodId}`;
+  }
   return "";
+}
+
+function sourceActionLabel(entry: LedgerEntry) {
+  if (entry.sourceType === "WORK_PERIOD_ASSIGNMENT") {
+    return "Open Work Period";
+  }
+  return "Open source";
+}
+
+function sourceLabel(entry: LedgerEntry) {
+  if (entry.sourceLabel) {
+    return `${entry.sourceLabel} · Assignment ${shortId(entry.sourceId)}`;
+  }
+  return `${entry.sourceType} · ${entry.sourceId}`;
+}
+
+function shortId(value: string) {
+  if (!value) return "—";
+  return value.length <= 12 ? value : `${value.slice(0, 8)}…`;
 }
 
 function formatAmount(value: number, unit?: string) {

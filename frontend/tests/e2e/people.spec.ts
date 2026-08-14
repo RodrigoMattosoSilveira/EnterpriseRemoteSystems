@@ -2,6 +2,7 @@ import { expect, test, type APIRequestContext } from "@playwright/test";
 import { authzHeaders, e2eApiUrl, seedBrowserAuthz } from "./support/authz";
 
 const ACTIVE_STATUS_ID = "ref-person-status-active";
+const DISCONTINUED_STATUS_ID = "ref-person-status-discontinued";
 
 test.beforeEach(async ({ page }) => {
   await seedBrowserAuthz(page);
@@ -29,7 +30,10 @@ function validCPF(seed: number): string {
 }
 
 function uniqueSuffix(): number {
-  return Date.now() + Math.floor(Math.random() * 1000);
+  const timestampDigits = Date.now() % 1_000_000;
+  const randomDigits = Math.floor(Math.random() * 1000);
+
+  return timestampDigits * 1000 + randomDigits;
 }
 
 function validRG(seed: number): string {
@@ -97,7 +101,7 @@ test("user can filter and paginate the People page", async ({ page, request }) =
   await page.goto("/people");
 
   await page.getByLabel("Filter people").fill(filterLastName);
-  await page.getByRole("button", { name: "Apply filter" }).click();
+  //await page.getByRole("button", { name: "Apply filter" }).click();
 
   await expect(page.getByText("Showing 1-10 of 11 people").first()).toBeVisible();
   await expect(page.getByText("Page 1 of 2").first()).toBeVisible();
@@ -112,6 +116,151 @@ test("user can filter and paginate the People page", async ({ page, request }) =
   await page.getByRole("button", { name: "Previous" }).last().click();
   await expect(page.getByText("Page 1 of 2").first()).toBeVisible();
 });
+
+test("user can filter People by Discontinued status", async ({ page, request }) => {
+  const suffix = uniqueSuffix();
+  const filterLastName = `PeopleDiscontinued${suffix}`;
+
+  await createPersonViaApi(request, {
+    seed: suffix,
+    firstName: `Active${suffix}`,
+    lastName: filterLastName,
+    statusId: ACTIVE_STATUS_ID,
+  });
+
+  await createPersonViaApi(request, {
+    seed: suffix + 1,
+    firstName: `Discontinued${suffix}`,
+    lastName: filterLastName,
+    statusId: DISCONTINUED_STATUS_ID,
+  });
+
+  await page.goto("/people");
+
+  await page.getByLabel("Filter people").fill(filterLastName);
+  await page.getByRole("combobox", { name: /^Status$/ }).selectOption("Discontinued");
+
+  await expect(
+    page.getByRole("link", {
+      name: new RegExp(`^Discontinued${suffix}\\s+${filterLastName}\\b`),
+    }),
+  ).toBeVisible();
+  await expect(page.getByText(filterLastName, { exact: false }).first()).toBeVisible();
+  await expect(
+    page.getByRole("link", {
+      name: new RegExp(`^Active${suffix}\\s+${filterLastName}\\b`),
+    }),
+  ).toHaveCount(0);
+});
+
+/*
+test("user can switch the People landing page between card and list views", async ({ page }) => {
+  const suffix = uniqueSuffix();
+  const personName = `View${suffix} Toggle`;
+
+  await page.goto("/people/new");
+
+  await page.getByLabel("First Name *").fill(`View${suffix}`);
+  await page.getByLabel("Last Name *").fill("Toggle");
+  await page.getByLabel("Nickname *").fill(`ViewNick${suffix}`);
+  await page.getByLabel("CPF *").fill(generateCPF(String(suffix)));
+  await page.getByLabel("RG *").fill(validRG(suffix));
+  await page.getByLabel("Cellular *").fill(validBrazilianCellular(suffix));
+  await page.getByLabel("Email *").fill(`view-${suffix}@example.com`);
+  await page.getByLabel("Status *").selectOption(ACTIVE_STATUS_ID);
+
+  await page.getByRole("button", { name: "Create Person" }).click();
+
+  // Stay on the navigation triggered by Create Person so the router keeps the
+  // location.state that pins the newly created person to the top of the list.
+  // A fresh page.goto("/people") would lose that state and the new person
+  // might not be on the first unfiltered page.
+  await expect(page).toHaveURL(/\/people$/);
+
+  await expect(page.getByRole("button", { name: "Card view" })).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByRole("link", { name: new RegExp(personName) })).toBeVisible();
+
+  // Filter by the person's name before switching views. Switching view mode
+  // calls setSearchParams which drops location.state in react-router v6, so
+  // the pinning logic no longer works after the switch. Filtering keeps the
+  // person visible on page 1 in both views regardless of state.
+  await page.getByLabel("Filter people").fill(personName);
+  
+  await expect(page.getByRole("link", { name: new RegExp(personName) })).toBeVisible();
+
+  await page.getByRole("button", { name: "List view" }).click();
+
+  await expect(page.getByRole("button", { name: "List view" })).toHaveAttribute("aria-pressed", "true");
+  await expect(page.locator("table")).toBeVisible();
+  await expect(page.getByRole("link", { name: new RegExp(personName) })).toBeVisible();
+
+  await page.getByRole("button", { name: "Card view" }).click();
+
+  await expect(page.getByRole("button", { name: "Card view" })).toHaveAttribute("aria-pressed", "true");
+  await expect(page.locator("table")).toHaveCount(0);
+  await expect(page.getByRole("link", { name: new RegExp(personName) })).toBeVisible();
+}); */
+
+test("user can switch the People landing page between card and list views", async ({ page }) => {
+  const suffix = uniqueSuffix();
+  const personName = `View${suffix} Toggle`;
+
+  await page.goto("/people/new");
+
+  await page.getByLabel("First Name *").fill(`View${suffix}`);
+  await page.getByLabel("Last Name *").fill("Toggle");
+  await page.getByLabel("Nickname *").fill(`ViewNick${suffix}`);
+  await page.getByLabel("CPF *").fill(generateCPF(String(suffix)));
+  await page.getByLabel("RG *").fill(validRG(suffix));
+  await page.getByLabel("Cellular *").fill(validBrazilianCellular(suffix));
+  await page.getByLabel("Email *").fill(`view-${suffix}@example.com`);
+  await page.getByLabel("Status *").selectOption(ACTIVE_STATUS_ID);
+
+  await page.getByRole("button", { name: "Create Person" }).click();
+  await expect(page).toHaveURL(/\/people$/);
+
+  // Card view should be active by default
+  await expect(page.getByRole("button", { name: "Card view" })).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByRole("link", { name: new RegExp(`^${personName}`) })).toBeVisible();
+
+  // Filter by the unique first name only — the API cannot search by a combined
+  // "firstName lastName" string, so using just the unique first-name part
+  // ensures the API actually returns this person and keeps them visible in both
+  // views after location.state is dropped on the view-mode switch.
+  const filteredPeopleResponsePromise = page.waitForResponse((response) => {
+    const url = new URL(response.url());
+    return (
+      response.request().method() === "GET" &&
+      url.pathname === "/api/v1/people" &&
+      url.searchParams.get("search") === `View${suffix}`
+    );
+  });
+  await page.getByLabel("Filter people").fill(`View${suffix}`);
+  const filteredPeopleResponse = await filteredPeopleResponsePromise;
+  expect(filteredPeopleResponse.ok()).toBeTruthy();
+  await expect(page.getByRole("link", { name: new RegExp(`^${personName}`) })).toBeVisible();
+
+  // Switch to list view. Query-only UI navigation must preserve the active
+  // filter and the mounted People page.
+  await page.getByRole("button", { name: "List view" }).click();
+  await expect(page.getByRole("button", { name: "List view" })).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByLabel("Filter people")).toHaveValue(`View${suffix}`);
+  await expect(page.locator("table")).toBeVisible();
+  await expect(page.getByRole("link", { name: new RegExp(`^${personName}`) })).toBeVisible();
+
+  // Switch back to card view
+  await page.getByRole("button", { name: "Card view" }).click();
+  await expect(page.getByRole("button", { name: "Card view" })).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByLabel("Filter people")).toHaveValue(`View${suffix}`);
+  await expect(page.locator("table")).toHaveCount(0);
+
+  // In card view, links should be present again
+  await expect(page.getByRole("link", { name: new RegExp(`^${personName}`) })).toBeVisible();
+});
+
+
+
+
 
 test("user sees required field validation on the create Person form", async ({ page }) => {
   await page.goto("/people/new");
@@ -195,23 +344,45 @@ test("user can create a Person with a valid Brazilian cellular", async ({ page }
 
 async function createPersonViaApi(
   request: APIRequestContext,
-  input: { seed: number; firstName: string; lastName: string },
+  input: {
+    seed: number;
+    firstName: string;
+    lastName: string;
+    statusId?: string;
+  },
 ) {
-  const response = await request.post(e2eApiUrl("/api/v1/people"), {
-    headers: authzHeaders(),
-    data: {
-      firstName: input.firstName,
-      lastName: input.lastName,
-      nickname: input.firstName,
-      cpf: validCPF(input.seed),
-      rg: validRG(input.seed),
-      cellular: validBrazilianCellular(input.seed),
-      email: `people-filter-${input.seed}@example.com`,
-      statusId: ACTIVE_STATUS_ID,
-    },
-  });
+  const attempts = 3;
+  let lastStatus = 0;
+  let lastBody = "";
 
-  expect(response.ok()).toBeTruthy();
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    const seed = input.seed + attempt * 100_000;
+    const response = await request.post(e2eApiUrl("/api/v1/people"), {
+      headers: authzHeaders(),
+      data: {
+        firstName: input.firstName,
+        lastName: input.lastName,
+        nickname: `${input.firstName}-${seed}`,
+        cpf: validCPF(seed),
+        rg: validRG(seed),
+        cellular: validBrazilianCellular(seed),
+        email: `people-filter-${seed}@example.com`,
+        statusId: input.statusId ?? ACTIVE_STATUS_ID,
+      },
+    });
+
+    if (response.ok()) {
+      return;
+    }
+
+    lastStatus = response.status();
+    lastBody = await response.text();
+  }
+
+  expect(
+    false,
+    `Failed to create E2E Person ${input.firstName} ${input.lastName}. Last API status: ${lastStatus}. Last body: ${lastBody}`,
+  ).toBeTruthy();
 }
 
 function validBrazilianCellular(seed: number | string): string {

@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"enterpriseremotesystems/backend/internal/db"
+	"enterpriseremotesystems/backend/internal/shared/tenantctx"
 	"gorm.io/gorm"
 )
 
@@ -18,7 +19,7 @@ func (r *gormRepository) List(ctx context.Context, filter normalizedWorkPeriodLi
 
 	q := r.db.WithContext(ctx).
 		Model(&db.WorkPeriod{}).
-		Where("tenant_id = ?", defaultTenantID)
+		Where("tenant_id = ?", tenantctx.TenantID(ctx))
 
 	if filter.DateFrom != nil {
 		q = q.Where("work_date >= ?", formatDateForQuery(*filter.DateFrom))
@@ -42,10 +43,22 @@ func (r *gormRepository) Create(ctx context.Context, workPeriod *db.WorkPeriod) 
 	return r.db.WithContext(ctx).Create(workPeriod).Error
 }
 
+func (r *gormRepository) ExistsByDateAndCode(ctx context.Context, workDate time.Time, periodCode string) (bool, error) {
+	var count int64
+	err := r.db.WithContext(ctx).
+		Model(&db.WorkPeriod{}).
+		Where("tenant_id = ? AND date(work_date) = ? AND period_code = ?", tenantctx.TenantID(ctx), formatDateForQuery(workDate), periodCode).
+		Count(&count).Error
+	if err != nil {
+		return false, err
+	}
+	return count > 0, nil
+}
+
 func (r *gormRepository) Update(ctx context.Context, workPeriod *db.WorkPeriod) error {
 	return r.db.WithContext(ctx).
 		Model(&db.WorkPeriod{}).
-		Where("id = ? AND tenant_id = ?", workPeriod.ID, defaultTenantID).
+		Where("id = ? AND tenant_id = ?", workPeriod.ID, tenantctx.TenantID(ctx)).
 		Updates(map[string]any{
 			"work_date":         workPeriod.WorkDate,
 			"period_code":       workPeriod.PeriodCode,
@@ -62,7 +75,7 @@ func (r *gormRepository) Update(ctx context.Context, workPeriod *db.WorkPeriod) 
 
 func (r *gormRepository) FindByID(ctx context.Context, id string) (*db.WorkPeriod, error) {
 	var row db.WorkPeriod
-	err := r.db.WithContext(ctx).First(&row, "id = ? AND tenant_id = ?", id, defaultTenantID).Error
+	err := r.db.WithContext(ctx).First(&row, "id = ? AND tenant_id = ?", id, tenantctx.TenantID(ctx)).Error
 	if err != nil {
 		return nil, err
 	}
@@ -77,7 +90,7 @@ func (r *gormRepository) ListIncludedAssignmentsForRoster(ctx context.Context, w
 	var rows []db.WorkPeriodAssignment
 	err := r.db.WithContext(ctx).
 		Model(&db.WorkPeriodAssignment{}).
-		Where("tenant_id = ? AND work_period_id = ? AND active = ? AND planned_status = ?", defaultTenantID, workPeriodID, true, "INCLUDED").
+		Where("tenant_id = ? AND work_period_id = ? AND active = ? AND planned_status = ?", tenantctx.TenantID(ctx), workPeriodID, true, "INCLUDED").
 		Preload("Collaborator.Person").
 		Preload("Sector").
 		Preload("Location").

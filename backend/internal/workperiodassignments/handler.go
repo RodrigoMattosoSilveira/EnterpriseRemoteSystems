@@ -4,6 +4,7 @@ import (
 	"github.com/gofiber/fiber/v3"
 
 	"enterpriseremotesystems/backend/internal/shared/httpx"
+	"enterpriseremotesystems/backend/internal/shared/requesttenant"
 )
 
 type Handler struct{ service Service }
@@ -16,11 +17,43 @@ func (h *Handler) ListByWorkPeriod(c fiber.Ctx) error {
 		return httpx.WriteError(c, err)
 	}
 
-	result, err := h.service.ListByWorkPeriod(c.Context(), c.Params("id"), filter)
+	result, err := h.service.ListByWorkPeriod(requesttenant.Context(c), c.Params("id"), filter)
 	if err != nil {
 		return httpx.WriteError(c, err)
 	}
 
+	return c.JSON(httpx.APIResponse{Data: result})
+}
+
+func (h *Handler) GetPlanningTemplate(c fiber.Ctx) error {
+	result, err := h.service.GetPlanningTemplate(requesttenant.Context(c), c.Params("id"))
+	if err != nil {
+		return httpx.WriteError(c, err)
+	}
+	return c.JSON(httpx.APIResponse{Data: result})
+}
+
+func (h *Handler) BulkPlan(c fiber.Ctx) error {
+	var req BulkPlanWorkPeriodAssignmentsRequest
+	if err := c.Bind().Body(&req); err != nil {
+		return httpx.WriteError(c, err)
+	}
+	result, err := h.service.BulkPlan(requesttenant.Context(c), c.Params("id"), req, actorUserID(c))
+	if err != nil {
+		return httpx.WriteError(c, err)
+	}
+	return c.JSON(httpx.APIResponse{Data: result})
+}
+
+func (h *Handler) RefinePlanAssignment(c fiber.Ctx) error {
+	var req PlanAssignmentRefinementRequest
+	if err := c.Bind().Body(&req); err != nil {
+		return httpx.WriteError(c, err)
+	}
+	result, err := h.service.RefinePlanAssignment(requesttenant.Context(c), c.Params("id"), req, actorUserID(c))
+	if err != nil {
+		return httpx.WriteError(c, err)
+	}
 	return c.JSON(httpx.APIResponse{Data: result})
 }
 
@@ -30,7 +63,7 @@ func (h *Handler) Create(c fiber.Ctx) error {
 		return httpx.WriteError(c, err)
 	}
 
-	created, err := h.service.Create(c.Context(), c.Params("id"), req, actorUserID(c))
+	created, err := h.service.Create(requesttenant.Context(c), c.Params("id"), req, actorUserID(c))
 	if err != nil {
 		return httpx.WriteError(c, err)
 	}
@@ -39,7 +72,7 @@ func (h *Handler) Create(c fiber.Ctx) error {
 }
 
 func (h *Handler) GetByID(c fiber.Ctx) error {
-	item, err := h.service.GetByID(c.Context(), c.Params("assignmentId"))
+	item, err := h.service.GetByID(requesttenant.Context(c), c.Params("assignmentId"))
 	if err != nil {
 		return httpx.WriteError(c, err)
 	}
@@ -52,7 +85,7 @@ func (h *Handler) Update(c fiber.Ctx) error {
 		return httpx.WriteError(c, err)
 	}
 
-	updated, err := h.service.Update(c.Context(), c.Params("assignmentId"), req, actorUserID(c))
+	updated, err := h.service.Update(requesttenant.Context(c), c.Params("assignmentId"), req, actorUserID(c))
 	if err != nil {
 		return httpx.WriteError(c, err)
 	}
@@ -65,7 +98,7 @@ func (h *Handler) MarkActualOutcome(c fiber.Ctx) error {
 		return httpx.WriteError(c, err)
 	}
 
-	updated, err := h.service.MarkActualOutcome(c.Context(), c.Params("assignmentId"), req, actorUserID(c))
+	updated, err := h.service.MarkActualOutcome(requesttenant.Context(c), c.Params("assignmentId"), req, actorUserID(c))
 	if err != nil {
 		return httpx.WriteError(c, err)
 	}
@@ -73,7 +106,7 @@ func (h *Handler) MarkActualOutcome(c fiber.Ctx) error {
 }
 
 func (h *Handler) Deactivate(c fiber.Ctx) error {
-	updated, err := h.service.Deactivate(c.Context(), c.Params("assignmentId"), actorUserID(c))
+	updated, err := h.service.Deactivate(requesttenant.Context(c), c.Params("assignmentId"), actorUserID(c))
 	if err != nil {
 		return httpx.WriteError(c, err)
 	}
@@ -81,7 +114,7 @@ func (h *Handler) Deactivate(c fiber.Ctx) error {
 }
 
 func (h *Handler) Delete(c fiber.Ctx) error {
-	if err := h.service.Delete(c.Context(), c.Params("assignmentId"), actorUserID(c)); err != nil {
+	if err := h.service.Delete(requesttenant.Context(c), c.Params("assignmentId"), actorUserID(c)); err != nil {
 		return httpx.WriteError(c, err)
 	}
 	return c.SendStatus(fiber.StatusNoContent)

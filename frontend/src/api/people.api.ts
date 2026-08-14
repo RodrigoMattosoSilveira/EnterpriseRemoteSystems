@@ -1,6 +1,8 @@
 import { apiFetch } from "./client";
 import type {
   CreatePersonInput,
+  CreatePersonMembershipInput,
+  GlobalPeopleSearchResponse,
   PeopleListFilter,
   PeopleListResponse,
   Person,
@@ -83,4 +85,17 @@ function peopleListSearchParams(filter: PeopleListFilter) {
   }
 
   return searchParams;
+}
+
+
+export function searchGlobalPeople(search: string): Promise<GlobalPeopleSearchResponse> {
+  const params = new URLSearchParams({ search: search.trim(), page: "1", pageSize: "25" });
+  return apiFetch<GlobalPeopleSearchResponse>(`/people/global?${params.toString()}`);
+}
+
+export function createPersonMembership(input: CreatePersonMembershipInput): Promise<Person> {
+  return apiFetch<Person>("/people/memberships", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
 }

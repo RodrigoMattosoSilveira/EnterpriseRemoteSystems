@@ -15,6 +15,7 @@ type ActorAdminStore interface {
 	ListPermissions(ctx context.Context) ([]PermissionResponse, error)
 	ListActors(ctx context.Context) ([]ActorResponse, error)
 	CreateActor(ctx context.Context, req CreateActorRequest) (ActorResponse, error)
+	SetActorActive(ctx context.Context, actorID string, active bool) (ActorResponse, error)
 	GrantActorRole(ctx context.Context, actorID string, req GrantActorRoleRequest) (ActorGrantResponse, error)
 	RevokeActorRoleGrant(ctx context.Context, actorID string, grantID string) (ActorGrantResponse, error)
 	ListAuthorizationAuditLogs(ctx context.Context, filter AuditLogFilter) ([]AuditLogResponse, error)
@@ -47,6 +48,17 @@ type ActorResponse struct {
 	RoleGrants     []ActorGrantResponse `json:"roleGrants,omitempty"`
 }
 
+type CurrentActorResponse struct {
+	ActorKey       string   `json:"actorKey"`
+	ActorRecordID  string   `json:"actorRecordId"`
+	TenantID       string   `json:"tenantId"`
+	Scope          string   `json:"scope"`
+	PersonID       string   `json:"personId,omitempty"`
+	CollaboratorID string   `json:"collaboratorId,omitempty"`
+	RoleCodes      []string `json:"roleCodes"`
+	Permissions    []string `json:"permissions"`
+}
+
 type ActorGrantResponse struct {
 	ID        string `json:"id"`
 	ActorID   string `json:"actorId"`
@@ -63,6 +75,10 @@ type CreateActorRequest struct {
 	PersonID       *string `json:"personId"`
 	CollaboratorID *string `json:"collaboratorId"`
 	Active         *bool   `json:"active"`
+}
+
+type SetActorActiveRequest struct {
+	Active *bool `json:"active"`
 }
 
 type GrantActorRoleRequest struct {
@@ -273,6 +289,44 @@ func (s *GORMStore) CreateActor(ctx context.Context, req CreateActorRequest) (Ac
 	return actorResponse(actor, nil), nil
 }
 
+func (s *GORMStore) SetActorActive(ctx context.Context, actorID string, active bool) (ActorResponse, error) {
+	if s == nil || s.database == nil {
+		return ActorResponse{}, ErrMissingActor
+	}
+	actorID = strings.TrimSpace(actorID)
+	if err := NewValidationError(map[string]string{"actorId": requiredMessage(actorID, "Actor ID is required")}); err != nil {
+		return ActorResponse{}, err
+	}
+
+	var actor AuthzActor
+	if err := s.database.WithContext(ctx).Where("id = ?", actorID).First(&actor).Error; err != nil {
+		return ActorResponse{}, err
+	}
+	if actor.Active == active {
+		grants, err := s.grantsForActor(ctx, actor.ID)
+		if err != nil {
+			return ActorResponse{}, err
+		}
+		return actorResponse(actor, grants), nil
+	}
+	if !active {
+		if err := s.ensureActorDeactivationAllowed(ctx, actor.ID, "active"); err != nil {
+			return ActorResponse{}, err
+		}
+	}
+
+	actor.Active = active
+	actor.UpdatedAt = time.Now().UTC()
+	if err := s.database.WithContext(ctx).Save(&actor).Error; err != nil {
+		return ActorResponse{}, fmt.Errorf("set authorization actor active state: %w", err)
+	}
+	grants, err := s.grantsForActor(ctx, actor.ID)
+	if err != nil {
+		return ActorResponse{}, err
+	}
+	return actorResponse(actor, grants), nil
+}
+
 func (s *GORMStore) GrantActorRole(ctx context.Context, actorID string, req GrantActorRoleRequest) (ActorGrantResponse, error) {
 	if s == nil || s.database == nil {
 		return ActorGrantResponse{}, ErrMissingActor
@@ -302,6 +356,12 @@ func (s *GORMStore) GrantActorRole(ctx context.Context, actorID string, req Gran
 	var role AuthzRole
 	if err := s.database.WithContext(ctx).Where("code = ? AND active = ?", roleCode, true).First(&role).Error; err != nil {
 		return ActorGrantResponse{}, err
+	}
+	if role.ScopeType == string(ActorScopeApplication) && tenantID != GlobalTenantScope {
+		return ActorGrantResponse{}, NewValidationError(map[string]string{"tenantId": "Application-scoped roles must use the global tenant scope (*)"})
+	}
+	if role.ScopeType != string(ActorScopeApplication) && tenantID == GlobalTenantScope {
+		return ActorGrantResponse{}, NewValidationError(map[string]string{"tenantId": "Tenant and self-scoped roles require a tenant ID"})
 	}
 
 	now := time.Now().UTC()
@@ -347,6 +407,9 @@ func (s *GORMStore) RevokeActorRoleGrant(ctx context.Context, actorID string, gr
 	}
 
 	if grant.Active {
+		if err := s.ensureApplicationAdminGrantRemains(ctx, grant, "grantId"); err != nil {
+			return ActorGrantResponse{}, err
+		}
 		grant.Active = false
 		grant.UpdatedAt = time.Now().UTC()
 		if err := s.database.WithContext(ctx).Save(&grant).Error; err != nil {
@@ -359,6 +422,52 @@ func (s *GORMStore) RevokeActorRoleGrant(ctx context.Context, actorID string, gr
 		return ActorGrantResponse{}, err
 	}
 	return grantResponse(grant, role), nil
+}
+
+func (s *GORMStore) ensureActorDeactivationAllowed(ctx context.Context, actorID string, field string) error {
+	var count int64
+	if err := s.database.WithContext(ctx).
+		Model(&AuthzActorRoleGrant{}).
+		Joins("JOIN authz_roles ON authz_roles.id = authz_actor_role_grants.role_id AND authz_roles.active = ?", true).
+		Where("authz_actor_role_grants.actor_id = ? AND authz_actor_role_grants.active = ? AND authz_actor_role_grants.tenant_id = ? AND authz_roles.code = ?", actorID, true, GlobalTenantScope, string(RoleApplicationAdmin)).
+		Count(&count).Error; err != nil {
+		return fmt.Errorf("check application administrator grant: %w", err)
+	}
+	if count == 0 {
+		return nil
+	}
+	return s.ensureApplicationAdminRemains(ctx, actorID, field)
+}
+
+func (s *GORMStore) ensureApplicationAdminRemains(ctx context.Context, actorID string, field string) error {
+	var count int64
+	if err := s.database.WithContext(ctx).
+		Model(&AuthzActorRoleGrant{}).
+		Joins("JOIN authz_actors ON authz_actors.id = authz_actor_role_grants.actor_id AND authz_actors.active = ?", true).
+		Joins("JOIN authz_roles ON authz_roles.id = authz_actor_role_grants.role_id AND authz_roles.active = ?", true).
+		Where("authz_actor_role_grants.active = ? AND authz_actor_role_grants.tenant_id = ? AND authz_roles.code = ? AND authz_actor_role_grants.actor_id <> ?", true, GlobalTenantScope, string(RoleApplicationAdmin), actorID).
+		Distinct("authz_actor_role_grants.actor_id").
+		Count(&count).Error; err != nil {
+		return fmt.Errorf("count remaining application administrators: %w", err)
+	}
+	if count == 0 {
+		return NewValidationError(map[string]string{field: "At least one active application administrator must remain"})
+	}
+	return nil
+}
+
+func (s *GORMStore) ensureApplicationAdminGrantRemains(ctx context.Context, grant AuthzActorRoleGrant, field string) error {
+	if grant.TenantID != GlobalTenantScope {
+		return nil
+	}
+	var role AuthzRole
+	if err := s.database.WithContext(ctx).Where("id = ?", grant.RoleID).First(&role).Error; err != nil {
+		return err
+	}
+	if role.Code != string(RoleApplicationAdmin) {
+		return nil
+	}
+	return s.ensureApplicationAdminRemains(ctx, grant.ActorID, field)
 }
 
 func (s *GORMStore) permissionsForRole(ctx context.Context, roleID string) ([]PermissionResponse, error) {

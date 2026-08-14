@@ -1,5 +1,10 @@
 import { expect, test, type APIRequestContext } from "@playwright/test";
-import { authzHeaders, e2eApiUrl, seedBrowserAuthz } from "./support/authz";
+import {
+  E2E_ACTOR_ID,
+  authzHeaders,
+  e2eApiUrl,
+  seedBrowserAuthz,
+} from "./support/authz";
 
 const PERSON_STATUS_ACTIVE_ID = "ref-person-status-active";
 const COLLABORATOR_STATUS_ACTIVE_ID = "ref-collaborator-status-active";
@@ -9,7 +14,6 @@ const LOCATION_MAIN_MINE_ID = "ref-location-main-mine";
 const TASK_MINER_ID = "ref-task-miner";
 const EXPENSE_CATEGORY_CANTEEN_ID = "ref-expense-category-canteen";
 const VALUE_UNIT_BRL_ID = "ref-value-unit-brl";
-const ADMIN_ACTOR_ID = "bootstrap-admin";
 
 test.beforeEach(async ({ page }) => {
   await seedBrowserAuthz(page);
@@ -70,7 +74,7 @@ test("outstanding receipt appears, can be opened, and disappears after signed re
 
   const returnedReceipt = await getPrintableReceipt(request, ledgerEntry.id);
   expect(returnedReceipt.status).toBe("RETURNED");
-  expect(returnedReceipt.receivedBy).toBe(ADMIN_ACTOR_ID);
+  expect(returnedReceipt.receivedBy).toBe(E2E_ACTOR_ID);
 
   const refreshedReceipt = await findOutstandingReceiptByLedgerEntryId(
     request,
@@ -148,6 +152,35 @@ test("returned receipt locks lifecycle actions", async ({ page, request }) => {
   await expect(lockedButtons.nth(1)).toBeDisabled();
   await expect(page.getByLabel("Signed document reference")).toBeDisabled();
   await expect(page.getByLabel("Notes")).toBeDisabled();
+});
+
+test("outstanding receipts workbench filters by collaborator and source and links to source", async ({
+  page,
+  request,
+}) => {
+  const { collaborator, receipt, suffix } = await createReceiptScenario(request, {
+    descriptionPrefix: "Receipt E2E workbench source",
+    firstNamePrefix: "ReceiptWorkbenchE2E",
+    nicknamePrefix: "ReceiptWorkbench",
+  });
+
+  await page.goto("/receipts/outstanding");
+  await expect(page.getByRole("heading", { name: "Outstanding receipts" })).toBeVisible();
+
+  await page.getByLabel("Source type").selectOption("EXPENSE");
+  await page.getByRole("textbox", { name: "Collaborator", exact: true }).fill(`ReceiptWorkbench${suffix}`);
+  await page.getByRole("button", { name: "Apply filters" }).click();
+
+  await expect(page.getByText(receipt.receiptNumber)).toBeVisible();
+  await expect(page.getByText("Source: expense", { exact: false }).first()).toBeVisible();
+  await expect(page.getByText("Showing page 1 of 1 · 1 receipt")).toBeVisible();
+  await expect(page.getByRole("link", { name: "Current account" })).toHaveAttribute(
+    "href",
+    `/collaborators/${collaborator.id}/current-account`,
+  );
+
+  await page.getByRole("link", { name: "Open source" }).click();
+  await expect(page).toHaveURL(/\/expenses\//);
 });
 
 type ApiEnvelope<T> = {

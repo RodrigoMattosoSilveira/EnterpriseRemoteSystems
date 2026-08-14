@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   confirmRecentReauthentication,
@@ -6,10 +6,14 @@ import {
   type RecentReauthentication,
 } from "../../app/reauthStore";
 import { ApiErrorPanel } from "../../components/ApiErrorPanel";
+import {
+  authorizationRequestContext,
+  readSelectedTenantId,
+} from "../../api/tenantSelection";
 import { JourneyDaysRemaining } from "../../components/JourneyDaysRemaining";
-import type { AuthzActor, AuthzAdminRequestActor } from "../../types/authz";
+import type { AuthzActor } from "../../types/authz";
 import type { SettlementPreview, SecondApprovalInput } from "../../types/settlements";
-import { useAuthzActors } from "../authz/useAuthzAdmin";
+import { useAuthzActors, useCurrentAuthzActor } from "../authz/useAuthzAdmin";
 import { useSecondPersonApprovalPolicy } from "../current-accounts/useSecondPersonApprovalPolicy";
 import {
   useCloseJourney,
@@ -19,13 +23,6 @@ import {
 } from "./useSettlements";
 
 type Action = "ZERO_GOLD" | "PARTIAL_PAYOUT" | "CLOSE_JOURNEY";
-
-const AUTHZ_REQUEST_ACTOR_STORAGE_KEY = "ers.authzAdmin.requestActor";
-
-const defaultRequestActor: AuthzAdminRequestActor = {
-  actorId: "bootstrap-admin",
-  tenantId: "default",
-};
 
 const settlementReasonOptions: Array<{
   value: string;
@@ -241,9 +238,11 @@ function SettlementActionPanel({
   const [notes, setNotes] = useState("");
   const [reauthentication, setReauthentication] =
     useState<RecentReauthentication | null>(() => loadRecentReauthentication());
-  const [requestActor] = useState<AuthzAdminRequestActor>(() =>
-    loadRequestActor(),
+  const [tenantId] = useState(() =>
+    typeof window === "undefined" ? "default" : readSelectedTenantId(window.localStorage),
   );
+  const requestActor = useMemo(() => authorizationRequestContext(tenantId), [tenantId]);
+  const currentActorQuery = useCurrentAuthzActor(requestActor);
   const secondApprovalPolicy = useSecondPersonApprovalPolicy(requestActor);
   const actorsQuery = useAuthzActors(requestActor);
   const [captureOptionalSecondApproval, setCaptureOptionalSecondApproval] =
@@ -253,8 +252,9 @@ function SettlementActionPanel({
   const secondApprovalRequired = Boolean(secondApprovalPolicy.data?.required);
   const secondApprovalEnabled =
     secondApprovalRequired || captureOptionalSecondApproval;
+  const primaryActorId = currentActorQuery.data?.actorKey ?? "";
   const eligibleSecondApprovers = (actorsQuery.data ?? []).filter((actor) =>
-    isEligibleSecondApprover(actor, requestActor.actorId),
+    isEligibleSecondApprover(actor, primaryActorId),
   );
   const mutation =
     action === "ZERO_GOLD"
@@ -384,7 +384,7 @@ function SettlementActionPanel({
           <div className="rounded-xl border border-blue-200 bg-blue-50 p-3 text-sm text-blue-900">
             <p className="font-semibold">Authorization actor</p>
             <p className="mt-1">
-              This action uses the current request actor selected in Authz Admin.
+              This action uses the actor identified by the authenticated session.
               Backend settlement keys are not entered by operators or testers.
             </p>
           </div>
@@ -425,7 +425,7 @@ function SettlementActionPanel({
             </div>
           </div>
           <SecondApprovalCapture
-            actor={requestActor}
+            primaryActorId={primaryActorId}
             actors={eligibleSecondApprovers}
             isLoadingPolicy={secondApprovalPolicy.isLoading}
             isLoadingActors={actorsQuery.isLoading}
@@ -513,7 +513,7 @@ function SettlementActionPanel({
 }
 
 function SecondApprovalCapture({
-  actor,
+  primaryActorId,
   actors,
   isLoadingPolicy,
   isLoadingActors,
@@ -525,7 +525,7 @@ function SecondApprovalCapture({
   onApprovedByChange,
   onNotesChange,
 }: {
-  actor: AuthzAdminRequestActor;
+  primaryActorId: string;
   actors: AuthzActor[];
   isLoadingPolicy: boolean;
   isLoadingActors: boolean;
@@ -554,7 +554,7 @@ function SecondApprovalCapture({
               : "Record a second approver when another authorized person reviewed this operation."}
           </p>
           <p className="mt-1 text-xs font-semibold">
-            Primary actor: {actor.actorId || "—"}
+            Primary actor: {primaryActorId || "Loading authenticated actor…"}
           </p>
         </div>
         {!policyRequired ? (
@@ -688,27 +688,6 @@ function formatDateTime(value: string) {
     timeStyle: "short",
   }).format(new Date(value));
 }
-function loadRequestActor(): AuthzAdminRequestActor {
-  if (typeof window === "undefined") return defaultRequestActor;
-
-  const storage = window.localStorage;
-  if (typeof storage?.getItem !== "function") return defaultRequestActor;
-
-  try {
-    const stored = storage.getItem(AUTHZ_REQUEST_ACTOR_STORAGE_KEY);
-    if (!stored) return defaultRequestActor;
-    const parsed = JSON.parse(stored) as Partial<AuthzAdminRequestActor>;
-    const actorId = typeof parsed.actorId === "string" ? parsed.actorId.trim() : "";
-    const tenantId = typeof parsed.tenantId === "string" ? parsed.tenantId.trim() : "";
-    return {
-      actorId: actorId || defaultRequestActor.actorId,
-      tenantId: tenantId || defaultRequestActor.tenantId,
-    };
-  } catch {
-    return defaultRequestActor;
-  }
-}
-
 function isEligibleSecondApprover(actor: AuthzActor, primaryActorId: string) {
   const actorKey = actor.actorKey.trim();
   if (!actor.active || !actorKey) return false;

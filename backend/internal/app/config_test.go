@@ -1,6 +1,9 @@
 package app
 
-import "testing"
+import (
+	"testing"
+	"time"
+)
 
 func TestLoadConfigReadsAuthzBootstrapSettings(t *testing.T) {
 	t.Setenv("JWT_SECRET", "test-secret")
@@ -29,17 +32,138 @@ func TestLoadConfigReadsAuthzBootstrapSettings(t *testing.T) {
 	}
 }
 
-func TestLoadConfigDefaultsAuthzBootstrapDisabled(t *testing.T) {
+func TestLoadConfigDefaultsAuthzBootstrapEnabledForLocalDevelopment(t *testing.T) {
 	t.Setenv("JWT_SECRET", "test-secret")
+	t.Setenv("APP_ENV", "local")
+
+	cfg, err := LoadConfig()
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	if !cfg.AuthzBootstrapEnabled {
+		t.Fatalf("expected authz bootstrap enabled for local development")
+	}
+	if cfg.AuthzBootstrapActorKey != "bootstrap-admin" || cfg.AuthzBootstrapDisplayName != "Bootstrap Admin" {
+		t.Fatalf("unexpected local bootstrap defaults: %#v", cfg)
+	}
+	if cfg.AuthzBootstrapRoleCode != "APPLICATION_ADMIN" || cfg.AuthzBootstrapTenantID != "*" {
+		t.Fatalf("unexpected bootstrap role defaults: %#v", cfg)
+	}
+}
+
+func TestLoadConfigDefaultsAuthzBootstrapDisabledOutsideLocalDevelopment(t *testing.T) {
+	t.Setenv("JWT_SECRET", "test-secret")
+	t.Setenv("APP_ENV", "production")
 
 	cfg, err := LoadConfig()
 	if err != nil {
 		t.Fatalf("load config: %v", err)
 	}
 	if cfg.AuthzBootstrapEnabled {
-		t.Fatalf("expected authz bootstrap disabled by default")
+		t.Fatalf("expected authz bootstrap disabled outside local development by default")
 	}
 	if cfg.AuthzBootstrapRoleCode != "APPLICATION_ADMIN" || cfg.AuthzBootstrapTenantID != "*" {
 		t.Fatalf("unexpected bootstrap defaults: %#v", cfg)
+	}
+}
+
+func TestLoadConfigDoesNotDisableRouteAuthorizationForServerTestEnvironment(t *testing.T) {
+	t.Setenv("JWT_SECRET", "test-secret")
+	t.Setenv("APP_ENV", "test")
+
+	cfg, err := LoadConfig()
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	if cfg.DisableRouteAuthorization {
+		t.Fatalf("expected route authorization enabled by default for deployed test environment")
+	}
+}
+
+func TestLoadConfigReadsExplicitRouteAuthorizationDisableFlag(t *testing.T) {
+	t.Setenv("JWT_SECRET", "test-secret")
+	t.Setenv("AUTHZ_DISABLE_ROUTE_AUTHORIZATION", "true")
+
+	cfg, err := LoadConfig()
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	if !cfg.DisableRouteAuthorization {
+		t.Fatalf("expected explicit route authorization disable flag")
+	}
+}
+
+func TestLoadConfigReadsAuthenticationSessionSettings(t *testing.T) {
+	t.Setenv("JWT_SECRET", "test-secret")
+	t.Setenv("APP_ENV", "production")
+	t.Setenv("AUTH_SESSION_TTL_MINUTES", "90")
+	t.Setenv("AUTH_PASSWORD_RESET_TTL_MINUTES", "15")
+	t.Setenv("AUTH_PASSWORD_HASH_COST", "10")
+	t.Setenv("AUTH_SESSION_COOKIE_NAME", "ers_prd_session")
+	t.Setenv("AUTH_SESSION_COOKIE_SECURE", "false")
+	t.Setenv("AUTH_SESSION_COOKIE_SAME_SITE", "Strict")
+
+	cfg, err := LoadConfig()
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	if cfg.AuthSessionTTL != 90*time.Minute || cfg.AuthPasswordResetTTL != 15*time.Minute {
+		t.Fatalf("unexpected authentication durations: %#v", cfg)
+	}
+	if cfg.AuthPasswordHashCost != 10 || cfg.AuthSessionCookieName != "ers_prd_session" {
+		t.Fatalf("unexpected authentication settings: %#v", cfg)
+	}
+	if cfg.AuthSessionCookieSecure || cfg.AuthSessionCookieSameSite != "Strict" {
+		t.Fatalf("unexpected authentication cookie settings: %#v", cfg)
+	}
+}
+
+func TestLoadConfigDefaultsSecureAuthenticationCookiesOutsideLocalDevelopment(t *testing.T) {
+	t.Setenv("JWT_SECRET", "test-secret")
+	t.Setenv("APP_ENV", "production")
+
+	cfg, err := LoadConfig()
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	if !cfg.AuthSessionCookieSecure {
+		t.Fatal("expected secure authentication cookies in production")
+	}
+}
+
+func TestLoadConfigDefaultsActorHeaderModeByEnvironment(t *testing.T) {
+	tests := []struct {
+		env      string
+		expected string
+	}{
+		{env: "development", expected: "bootstrap"},
+		{env: "ci", expected: "test"},
+		{env: "test", expected: "test"},
+		{env: "production", expected: "disabled"},
+	}
+	for _, test := range tests {
+		t.Run(test.env, func(t *testing.T) {
+			t.Setenv("JWT_SECRET", "test-secret")
+			t.Setenv("APP_ENV", test.env)
+			t.Setenv("AUTHZ_ACTOR_HEADER_MODE", "")
+
+			cfg, err := LoadConfig()
+			if err != nil {
+				t.Fatalf("load config: %v", err)
+			}
+			if cfg.AuthzActorHeaderMode != test.expected {
+				t.Fatalf("expected actor header mode %q, got %q", test.expected, cfg.AuthzActorHeaderMode)
+			}
+		})
+	}
+}
+
+func TestLoadConfigRejectsTestActorHeadersOutsideTestEnvironment(t *testing.T) {
+	t.Setenv("JWT_SECRET", "test-secret")
+	t.Setenv("APP_ENV", "production")
+	t.Setenv("AUTHZ_ACTOR_HEADER_MODE", "test")
+
+	if _, err := LoadConfig(); err == nil {
+		t.Fatal("expected test actor-header mode to be rejected in production")
 	}
 }

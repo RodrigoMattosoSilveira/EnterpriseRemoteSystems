@@ -1,7 +1,9 @@
 package importer_test
 
 import (
+	"bytes"
 	"context"
+	"encoding/csv"
 	"strings"
 	"testing"
 
@@ -503,7 +505,7 @@ func peopleCSV(row map[string]string) string {
 		values = append(values, row[header])
 	}
 
-	return strings.Join(fullPeopleImportHeaders, ",") + "\n" + strings.Join(values, ",") + "\n"
+	return encodePeopleCSV(fullPeopleImportHeaders, values)
 }
 
 func peopleCSVWithoutHeader(omittedHeader string, row map[string]string) string {
@@ -519,7 +521,26 @@ func peopleCSVWithoutHeader(omittedHeader string, row map[string]string) string 
 		values = append(values, row[header])
 	}
 
-	return strings.Join(headers, ",") + "\n" + strings.Join(values, ",") + "\n"
+	return encodePeopleCSV(headers, values)
+}
+
+func encodePeopleCSV(headers, values []string) string {
+	var buffer bytes.Buffer
+	writer := csv.NewWriter(&buffer)
+
+	if err := writer.Write(headers); err != nil {
+		panic(err)
+	}
+	if err := writer.Write(values); err != nil {
+		panic(err)
+	}
+
+	writer.Flush()
+	if err := writer.Error(); err != nil {
+		panic(err)
+	}
+
+	return buffer.String()
 }
 
 func TestRunRejectsSuspiciousEmail(t *testing.T) {
@@ -640,6 +661,36 @@ func TestRunAcceptsDashedCEP(t *testing.T) {
 	}
 }
 
+func TestRunAcceptsCommonFormattedCEP(t *testing.T) {
+	database := newTestDB(t)
+
+	csvData := peopleCSV(map[string]string{
+		"firstName": "Formatted",
+		"lastName":  "CEP",
+		"nickname":  "FormattedCEP",
+		"cpf":       "86288366757",
+		"rg":        "RG-FORMATCEP",
+		"cellular":  "31998765432",
+		"email":     "formatted-cep@example.com",
+		"statusId":  "ref-person-status-active",
+		"street1":   "Praça da Sé, 1",
+		"city":      "São Paulo",
+		"state":     "SP",
+		"cep":       "01.001‑000",
+		"country":   "Brasil",
+	})
+
+	report, err := importer.Run(context.Background(), database, strings.NewReader(csvData), importer.Options{})
+	if err != nil {
+		t.Fatalf("expected import to succeed, got %v with report %+v", err, report)
+	}
+
+	person := findPersonByEmail(t, database, "formatted-cep@example.com")
+	if person.CEP != "01001000" {
+		t.Fatalf("expected normalized CEP %q, got %q", "01001000", person.CEP)
+	}
+}
+
 func TestRunRejectsSuspiciousCEP(t *testing.T) {
 	database := newTestDB(t)
 
@@ -661,7 +712,7 @@ func TestRunRejectsSuspiciousCEP(t *testing.T) {
 		t.Fatalf("expected import to fail")
 	}
 
-	assertRowError(t, report, 2, "cep", "CEP must contain 8 digits or be formatted as 00000-000")
+	assertRowError(t, report, 2, "cep", "CEP must contain 8 digits; common spaces, dots, and dash characters are accepted")
 }
 
 func TestRunRejectsInvalidStateUF(t *testing.T) {

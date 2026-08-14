@@ -4,6 +4,7 @@ import (
 	"errors"
 	"regexp"
 	"strings"
+	"unicode"
 )
 
 var (
@@ -11,7 +12,7 @@ var (
 	reEmail          = regexp.MustCompile(`^[^\s@]+@[^\s@]+\.[^\s@]+$`)
 	reBrazilCellular = regexp.MustCompile(`^\+?55?[1-9]{2}9[0-9]{8}$|^[1-9]{2}9[0-9]{8}$`)
 	reRG             = regexp.MustCompile(`^[A-Za-z0-9.\-]{5,20}$`)
-	reCEP            = regexp.MustCompile(`^[0-9]{5}-?[0-9]{3}$`)
+	reCEPDigits      = regexp.MustCompile(`^[0-9]{8}$`)
 )
 
 type ValidationError struct {
@@ -123,7 +124,57 @@ func IsValidRG(value string) bool {
 }
 
 func IsValidCEP(value string) bool {
-	return reCEP.MatchString(strings.TrimSpace(value))
+	normalized, ok := parseCEP(value)
+	return ok && reCEPDigits.MatchString(normalized)
+}
+
+// NormalizeCEP returns the canonical eight-digit representation used by the
+// database. Five-digit municipality CEP prefixes are completed with the
+// conventional 000 suffix. Callers should validate with IsValidCEP before
+// persisting the value.
+func NormalizeCEP(value string) string {
+	normalized, _ := parseCEP(value)
+	return normalized
+}
+
+func parseCEP(value string) (string, bool) {
+	var digits strings.Builder
+	digits.Grow(8)
+
+	for _, r := range strings.TrimSpace(value) {
+		switch {
+		case r >= '0' && r <= '9':
+			digits.WriteRune(r)
+		case unicode.IsSpace(r):
+			continue
+		case isCEPSeparator(r):
+			continue
+		default:
+			return "", false
+		}
+	}
+
+	normalized := digits.String()
+	switch len(normalized) {
+	case 5:
+		// Some municipalities use one general CEP ending in 000 and users
+		// commonly enter only its five-digit prefix (for example, 68920 for
+		// 68920-000). Persist the complete canonical CEP.
+		return normalized + "000", true
+	case 8:
+		return normalized, true
+	default:
+		return "", false
+	}
+}
+
+func isCEPSeparator(r rune) bool {
+	switch r {
+	case '.', '-', '‐', '‑', '‒', '–', '—', '−':
+		return true
+	default:
+		return false
+	}
 }
 
 func IsValidBrazilianCellular(value string) bool {

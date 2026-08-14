@@ -7,6 +7,7 @@ import (
 
 	"enterpriseremotesystems/backend/internal/db"
 	"enterpriseremotesystems/backend/internal/shared/ids"
+	"enterpriseremotesystems/backend/internal/shared/tenantctx"
 	"enterpriseremotesystems/backend/internal/tenants"
 )
 
@@ -40,15 +41,25 @@ func (s *service) Create(ctx context.Context, req CreateWorkPeriodRequest, actor
 	}
 
 	workDate, _ := parseDate(req.WorkDate)
+	periodCode := strings.ToUpper(strings.TrimSpace(req.PeriodCode))
 	startsAt, _ := parseTimestamp(req.StartsAt)
 	endsAt, _ := parseTimestamp(req.EndsAt)
+
+	exists, err := s.repo.ExistsByDateAndCode(ctx, workDate, periodCode)
+	if err != nil {
+		return nil, err
+	}
+	if exists {
+		return nil, ValidationError{Fields: map[string]string{"workDate": "A Work Period already exists for this date and period"}}
+	}
+
 	now := time.Now().UTC()
 
 	workPeriod := &db.WorkPeriod{
 		BaseModel:  db.BaseModel{ID: ids.New(), CreatedAt: now, UpdatedAt: now},
-		TenantID:   defaultTenantID,
+		TenantID:   tenantctx.TenantID(ctx),
 		WorkDate:   workDate,
-		PeriodCode: strings.ToUpper(strings.TrimSpace(req.PeriodCode)),
+		PeriodCode: periodCode,
 		Name:       strings.TrimSpace(req.Name),
 		StartsAt:   startsAt.UTC(),
 		EndsAt:     endsAt.UTC(),

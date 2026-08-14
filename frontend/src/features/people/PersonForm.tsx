@@ -4,53 +4,50 @@ import type {
   Person,
   UpdatePersonInput,
 } from "../../types/people";
+import {
+  isValidUpdatePersonInput,
+  updatePersonFingerprint,
+} from "./peopleSchemas";
 
 type Props = {
   initial?: Person;
   defaultStatusId: string;
+  statusOptions?: Array<{ value: string; label: string }>;
   submitting?: boolean;
   onSubmit: (input: CreatePersonInput | UpdatePersonInput) => Promise<void>;
 };
+
+const DEFAULT_STATUS_OPTIONS = [
+  { value: "ref-person-status-active", label: "Active" },
+  { value: "ref-person-status-inactive", label: "Inactive" },
+  { value: "ref-person-status-discontinued", label: "Discontinued" },
+];
 
 type Tab = "personal" | "address" | "bank" | "emergency" | "notes";
 
 export function PersonForm({
   initial,
   defaultStatusId,
+  statusOptions = DEFAULT_STATUS_OPTIONS,
   submitting = false,
   onSubmit,
 }: Props) {
   const isCreate = !initial;
   const [activeTab, setActiveTab] = useState<Tab>("personal");
 
-  const [form, setForm] = useState<UpdatePersonInput>({
-    firstName: initial?.firstName ?? "",
-    lastName: initial?.lastName ?? "",
-    nickname: initial?.nickname ?? "",
-    cpf: initial?.cpf ?? "",
-    rg: initial?.rg ?? "",
-    cellular: initial?.cellular ?? "",
-    email: initial?.email ?? "",
+  const initialForm = useMemo(
+    () => buildInitialForm(initial, defaultStatusId),
+    [initial, defaultStatusId]
+  );
+  const [form, setForm] = useState<UpdatePersonInput>(() => initialForm);
+  const [savedFingerprint, setSavedFingerprint] = useState(() =>
+    updatePersonFingerprint(initialForm)
+  );
 
-    street1: initial?.street1 ?? "",
-    street2: initial?.street2 ?? "",
-    state: initial?.state ?? "",
-    cep: initial?.cep ?? "",
-    city: initial?.city ?? "",
-    country: initial?.country ?? "Brasil",
-
-    bankName: initial?.bankName ?? "",
-    bankNumber: initial?.bankNumber ?? "",
-    checkingAccount: initial?.checkingAccount ?? "",
-    pixKey: initial?.pixKey ?? "",
-
-    emergencyName: initial?.emergencyName ?? "",
-    emergencyCellular: initial?.emergencyCellular ?? "",
-    emergencyEmail: initial?.emergencyEmail ?? "",
-
-    statusId: initial?.statusId ?? defaultStatusId,
-    notes: initial?.notes ?? "",
-  });
+  const currentFingerprint = updatePersonFingerprint(form);
+  const hasValidChange =
+    isCreate ||
+    (currentFingerprint !== savedFingerprint && isValidUpdatePersonInput(form));
 
   const missingSections = initial?.missingSections ?? [];
 
@@ -69,22 +66,30 @@ export function PersonForm({
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
-    if (isCreate) {
-      await onSubmit({
-        firstName: form.firstName,
-        lastName: form.lastName,
-        nickname: form.nickname,
-        cpf: form.cpf,
-        rg: form.rg,
-        cellular: form.cellular,
-        email: form.email,
-        statusId: form.statusId,
-        notes: form.notes,
-      });
-      return;
-    }
+    if (submitting || (!isCreate && !hasValidChange)) return;
 
-    await onSubmit(form);
+    try {
+      if (isCreate) {
+        await onSubmit({
+          firstName: form.firstName,
+          lastName: form.lastName,
+          nickname: form.nickname,
+          cpf: form.cpf,
+          rg: form.rg,
+          cellular: form.cellular,
+          email: form.email,
+          statusId: form.statusId,
+          notes: form.notes,
+        });
+        return;
+      }
+
+      await onSubmit(form);
+      setSavedFingerprint(currentFingerprint);
+    } catch {
+      // The owning page renders the mutation error. Keep the edit dirty so the
+      // user can correct or retry the submission.
+    }
   }
 
   return (
@@ -205,14 +210,7 @@ export function PersonForm({
             required
             value={form.statusId}
             onChange={(value) => update("statusId", value)}
-            options={[
-              { value: "ref-person-status-active", label: "Active" },
-              { value: "ref-person-status-inactive", label: "Inactive" },
-              {
-                value: "ref-person-status-discontinued",
-                label: "Discontinued",
-              },
-            ]}
+            options={statusOptions}
           />
         </Section>
       )}
@@ -350,7 +348,7 @@ export function PersonForm({
       <div className="fixed inset-x-0 bottom-0 z-20 border-t bg-white p-4 shadow-2xl md:sticky md:rounded-2xl md:border">
         <button
           type="submit"
-          disabled={submitting}
+          disabled={submitting || (!isCreate && !hasValidChange)}
           className="w-full rounded-xl bg-gray-950 px-5 py-4 text-base font-semibold text-white shadow-sm disabled:opacity-50"
         >
           {submitting ? "Saving..." : isCreate ? "Create Person" : "Save Changes"}
@@ -358,6 +356,40 @@ export function PersonForm({
       </div>
     </form>
   );
+}
+
+function buildInitialForm(
+  initial: Person | undefined,
+  defaultStatusId: string
+): UpdatePersonInput {
+  return {
+    firstName: initial?.firstName ?? "",
+    lastName: initial?.lastName ?? "",
+    nickname: initial?.nickname ?? "",
+    cpf: initial?.cpf ?? "",
+    rg: initial?.rg ?? "",
+    cellular: initial?.cellular ?? "",
+    email: initial?.email ?? "",
+
+    street1: initial?.street1 ?? "",
+    street2: initial?.street2 ?? "",
+    state: initial?.state ?? "",
+    cep: initial?.cep ?? "",
+    city: initial?.city ?? "",
+    country: initial?.country ?? "Brasil",
+
+    bankName: initial?.bankName ?? "",
+    bankNumber: initial?.bankNumber ?? "",
+    checkingAccount: initial?.checkingAccount ?? "",
+    pixKey: initial?.pixKey ?? "",
+
+    emergencyName: initial?.emergencyName ?? "",
+    emergencyCellular: initial?.emergencyCellular ?? "",
+    emergencyEmail: initial?.emergencyEmail ?? "",
+
+    statusId: initial?.statusId ?? defaultStatusId,
+    notes: initial?.notes ?? "",
+  };
 }
 
 function ProfileStatusCard({
@@ -453,6 +485,7 @@ function TabButton({
     <button
       type="button"
       disabled={disabled}
+      aria-pressed={active}
       onClick={onClick}
       className={`rounded-xl px-4 py-2 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-40 ${
         active ? "bg-gray-950 text-white" : "bg-gray-100 text-gray-700"

@@ -37,7 +37,18 @@ type apiPersonResponse struct {
 
 type apiCollaboratorResponse struct {
 	Data struct {
-		ID string `json:"id"`
+		ID                   string `json:"id"`
+		SectorID             string `json:"sectorId"`
+		LocationID           string `json:"locationId"`
+		TaskID               string `json:"taskId"`
+		PlanningAvailability string `json:"planningAvailability"`
+	} `json:"data"`
+}
+
+type apiReferenceDataResponse struct {
+	Data struct {
+		ID    string `json:"id"`
+		Label string `json:"label"`
 	} `json:"data"`
 }
 
@@ -55,6 +66,7 @@ type apiAssignmentResponse struct {
 		CollaboratorID             string `json:"collaboratorId"`
 		CollaboratorName           string `json:"collaboratorName"`
 		PlannedStatus              string `json:"plannedStatus"`
+		PlanningAvailability       string `json:"planningAvailability"`
 		ActualStatus               string `json:"actualStatus"`
 		ReplacementForAssignmentID string `json:"replacementForAssignmentId"`
 		SectorID                   string `json:"sectorId"`
@@ -70,16 +82,635 @@ type apiAssignmentResponse struct {
 type apiAssignmentListResponse struct {
 	Data struct {
 		Items []struct {
-			ID             string `json:"id"`
-			CollaboratorID string `json:"collaboratorId"`
-			PlannedStatus  string `json:"plannedStatus"`
-			ActualStatus   string `json:"actualStatus"`
-			Active         bool   `json:"active"`
+			ID                   string `json:"id"`
+			CollaboratorID       string `json:"collaboratorId"`
+			PlannedStatus        string `json:"plannedStatus"`
+			PlanningAvailability string `json:"planningAvailability"`
+			ActualStatus         string `json:"actualStatus"`
+			Active               bool   `json:"active"`
 		} `json:"items"`
 		Total    int `json:"total"`
 		Page     int `json:"page"`
 		PageSize int `json:"pageSize"`
 	} `json:"data"`
+}
+
+type apiPlanningTemplateRow struct {
+	AssignmentID                          string `json:"assignmentId"`
+	TemplateAssignmentID                  string `json:"templateAssignmentId"`
+	ReplacementForAssignmentID            string `json:"replacementForAssignmentId"`
+	TemporaryReplacementForCollaboratorID string `json:"temporaryReplacementForCollaboratorId"`
+	CollaboratorID                        string `json:"collaboratorId"`
+	CollaboratorName                      string `json:"collaboratorName"`
+	CollaboratorNickname                  string `json:"collaboratorNickname"`
+	ProjectedEndDate                      string `json:"projectedEndDate"`
+	PlanningAvailability                  string `json:"planningAvailability"`
+	Selected                              bool   `json:"selected"`
+	SectorID                              string `json:"sectorId"`
+	LocationID                            string `json:"locationId"`
+	TaskID                                string `json:"taskId"`
+}
+
+type apiPlanningTemplateResponse struct {
+	Data struct {
+		WorkPeriodID       string                   `json:"workPeriodId"`
+		SourceWorkPeriodID string                   `json:"sourceWorkPeriodId"`
+		SourceWorkDate     string                   `json:"sourceWorkDate"`
+		SourcePeriodName   string                   `json:"sourcePeriodName"`
+		Rows               []apiPlanningTemplateRow `json:"rows"`
+	} `json:"data"`
+}
+
+type apiBulkPlanResponse struct {
+	Data struct {
+		SelectedCount int `json:"selectedCount"`
+		Assignments   []struct {
+			ID                         string `json:"id"`
+			CollaboratorID             string `json:"collaboratorId"`
+			PlannedStatus              string `json:"plannedStatus"`
+			PlanningAvailability       string `json:"planningAvailability"`
+			ReplacementForAssignmentID string `json:"replacementForAssignmentId"`
+			SectorID                   string `json:"sectorId"`
+			LocationID                 string `json:"locationId"`
+			TaskID                     string `json:"taskId"`
+			Active                     bool   `json:"active"`
+		} `json:"assignments"`
+	} `json:"data"`
+}
+
+type apiPlanAssignmentRefinementResponse struct {
+	Data struct {
+		CollaboratorID        string `json:"collaboratorId"`
+		SectorID              string `json:"sectorId"`
+		SectorLabel           string `json:"sectorLabel"`
+		LocationID            string `json:"locationId"`
+		LocationLabel         string `json:"locationLabel"`
+		TaskID                string `json:"taskId"`
+		TaskLabel             string `json:"taskLabel"`
+		ApplyToFutureDefaults bool   `json:"applyToFutureDefaults"`
+		FutureDefaultsUpdated bool   `json:"futureDefaultsUpdated"`
+	} `json:"data"`
+}
+
+func TestPlanningTemplateUsesMostRecentPriorSamePeriod(t *testing.T) {
+	server, cleanup := newTestServer(t)
+	defer cleanup()
+
+	previous := createWorkPeriod(t, server, map[string]any{
+		"workDate": "2026-06-04",
+		"startsAt": "2026-06-04T06:00:00Z",
+		"endsAt":   "2026-06-04T18:00:00Z",
+	})
+	current := createWorkPeriod(t, server, map[string]any{
+		"workDate": "2026-06-05",
+		"startsAt": "2026-06-05T06:00:00Z",
+		"endsAt":   "2026-06-05T18:00:00Z",
+	})
+	selectedCollaborator := createActiveCollaborator(t, server, 1)
+	unselectedCollaborator := createActiveCollaborator(t, server, 2)
+	previousAssignment := createAssignment(t, server, previous.Data.ID, validAssignmentPayload(selectedCollaborator.Data.ID, map[string]any{"locationId": "ref-location-main-mine", "planningAvailability": "DAY_OFF"}))
+
+	res := getJSON(t, server, workPeriodsURL+current.Data.ID+"/assignments/planning-template")
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		var body apiErrorResponse
+		decodeJSON(t, res, &body)
+		t.Fatalf("expected template status %d, got %d with error %+v", http.StatusOK, res.StatusCode, body.Error)
+	}
+
+	var body apiPlanningTemplateResponse
+	decodeJSON(t, res, &body)
+	if body.Data.SourceWorkPeriodID != previous.Data.ID || body.Data.SourceWorkDate != "2026-06-04" {
+		t.Fatalf("expected previous period as source, got id=%q date=%q", body.Data.SourceWorkPeriodID, body.Data.SourceWorkDate)
+	}
+	selectedRow := findTemplateRow(body, selectedCollaborator.Data.ID)
+	if selectedRow == nil || !selectedRow.Selected || selectedRow.TemplateAssignmentID != previousAssignment.Data.ID || selectedRow.PlanningAvailability != "ACTIVE" {
+		t.Fatalf("expected selected collaborator templated from previous assignment while copying collaborator availability, got %+v", selectedRow)
+	}
+	unselectedRow := findTemplateRow(body, unselectedCollaborator.Data.ID)
+	if unselectedRow == nil || unselectedRow.Selected {
+		t.Fatalf("expected other active collaborator to be present and unselected, got %+v", unselectedRow)
+	}
+}
+
+func TestPlanningTemplateUsesCollaboratorAvailabilityAndMostRecentReplacement(t *testing.T) {
+	server, cleanup := newTestServer(t)
+	defer cleanup()
+
+	previous := createWorkPeriod(t, server, map[string]any{
+		"workDate": "2026-06-04",
+		"startsAt": "2026-06-04T06:00:00Z",
+		"endsAt":   "2026-06-04T18:00:00Z",
+	})
+	current := createWorkPeriod(t, server, map[string]any{
+		"workDate": "2026-06-05",
+		"startsAt": "2026-06-05T06:00:00Z",
+		"endsAt":   "2026-06-05T18:00:00Z",
+	})
+	absentee := createActiveCollaborator(t, server, 1)
+	replacement := createActiveCollaborator(t, server, 2)
+	updateCollaboratorAvailability(t, server, absentee.Data.ID, "LEAVE_OF_ABSENCE")
+
+	originalAssignment := createAssignment(t, server, previous.Data.ID, validAssignmentPayload(absentee.Data.ID, map[string]any{
+		"plannedStatus":        "EXCLUDED",
+		"planningAvailability": "LEAVE_OF_ABSENCE",
+	}))
+	createAssignment(t, server, previous.Data.ID, validAssignmentPayload(replacement.Data.ID, map[string]any{
+		"replacementForAssignmentId": originalAssignment.Data.ID,
+	}))
+
+	res := getJSON(t, server, workPeriodsURL+current.Data.ID+"/assignments/planning-template")
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		var body apiErrorResponse
+		decodeJSON(t, res, &body)
+		t.Fatalf("expected template status %d, got %d with error %+v", http.StatusOK, res.StatusCode, body.Error)
+	}
+
+	var body apiPlanningTemplateResponse
+	decodeJSON(t, res, &body)
+	absenteeRow := findTemplateRow(body, absentee.Data.ID)
+	if absenteeRow == nil || absenteeRow.PlanningAvailability != "LEAVE_OF_ABSENCE" {
+		t.Fatalf("expected absentee row to copy collaborator availability, got %+v", absenteeRow)
+	}
+	replacementRow := findTemplateRow(body, replacement.Data.ID)
+	if replacementRow == nil || replacementRow.TemporaryReplacementForCollaboratorID != absentee.Data.ID {
+		t.Fatalf("expected replacement row to inherit most recent replacement target, got %+v", replacementRow)
+	}
+}
+
+func TestPlanningTemplateOnlyIncludesCollaboratorsActiveForWorkDate(t *testing.T) {
+	server, cleanup := newTestServer(t)
+	defer cleanup()
+
+	workPeriod := createWorkPeriod(t, server, nil)
+	activeForDate := createActiveCollaborator(t, server, 1)
+	endedBeforeDate := createCollaborator(t, server, validCollaboratorPayload(
+		createPerson(t, server, validCompletePersonPayload(3, nil)).Data.ID,
+		map[string]any{"journeyStartDate": "2025-01-01"},
+	))
+
+	res := getJSON(t, server, workPeriodsURL+workPeriod.Data.ID+"/assignments/planning-template")
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		var body apiErrorResponse
+		decodeJSON(t, res, &body)
+		t.Fatalf("expected template status %d, got %d with error %+v", http.StatusOK, res.StatusCode, body.Error)
+	}
+
+	var body apiPlanningTemplateResponse
+	decodeJSON(t, res, &body)
+	if findTemplateRow(body, activeForDate.Data.ID) == nil {
+		t.Fatalf("expected collaborator active on work date to be present")
+	}
+	if row := findTemplateRow(body, endedBeforeDate.Data.ID); row != nil {
+		t.Fatalf("expected collaborator outside journey dates to be excluded, got %+v", row)
+	}
+}
+
+func TestBulkPlanSavesSelectedCollaboratorsOnlyAndIgnoresUnselectedRows(t *testing.T) {
+	server, cleanup := newTestServer(t)
+	defer cleanup()
+
+	workPeriod := createWorkPeriod(t, server, nil)
+	first := createActiveCollaborator(t, server, 1)
+	second := createActiveCollaborator(t, server, 2)
+	createAssignment(t, server, workPeriod.Data.ID, validAssignmentPayload(first.Data.ID, nil))
+
+	res := postJSON(t, server, http.MethodPost, workPeriodsURL+workPeriod.Data.ID+"/assignments/bulk-plan", map[string]any{
+		"rows": []map[string]any{
+			{
+				"collaboratorId": first.Data.ID,
+				"selected":       false,
+			},
+			{
+				"collaboratorId": second.Data.ID,
+				"selected":       true,
+				"sectorId":       "ref-sector-mining",
+				"locationId":     "ref-location-main-mine",
+				"taskId":         "ref-task-miner",
+			},
+		},
+	})
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		var body apiErrorResponse
+		decodeJSON(t, res, &body)
+		t.Fatalf("expected bulk-plan status %d, got %d with error %+v", http.StatusOK, res.StatusCode, body.Error)
+	}
+	var body apiBulkPlanResponse
+	decodeJSON(t, res, &body)
+	if body.Data.SelectedCount != 1 || len(body.Data.Assignments) != 1 {
+		t.Fatalf("expected one saved selected assignment, got selected=%d assignments=%d", body.Data.SelectedCount, len(body.Data.Assignments))
+	}
+	if body.Data.Assignments[0].CollaboratorID != second.Data.ID || body.Data.Assignments[0].PlannedStatus != "INCLUDED" || !body.Data.Assignments[0].Active {
+		t.Fatalf("expected active included assignment for second collaborator, got %+v", body.Data.Assignments[0])
+	}
+
+	listRes := getJSON(t, server, workPeriodsURL+workPeriod.Data.ID+"/assignments?plannedStatus=INCLUDED")
+	defer listRes.Body.Close()
+	var listBody apiAssignmentListResponse
+	decodeJSON(t, listRes, &listBody)
+	if listBody.Data.Total != 2 {
+		t.Fatalf("expected original current assignment to remain active while selected row is saved, got total=%d items=%+v", listBody.Data.Total, listBody.Data.Items)
+	}
+	activeByCollaborator := map[string]bool{}
+	for _, item := range listBody.Data.Items {
+		activeByCollaborator[item.CollaboratorID] = item.Active
+	}
+	if !activeByCollaborator[first.Data.ID] || !activeByCollaborator[second.Data.ID] {
+		t.Fatalf("expected both original and selected collaborators to remain active, got %+v", listBody.Data.Items)
+	}
+}
+
+func TestBulkPlanSavesUnselectedAvailabilitySnapshotForNextPlanningCycle(t *testing.T) {
+	server, cleanup := newTestServer(t)
+	defer cleanup()
+
+	firstPeriod := createWorkPeriod(t, server, map[string]any{
+		"workDate": "2026-06-05",
+		"startsAt": "2026-06-05T06:00:00Z",
+		"endsAt":   "2026-06-05T18:00:00Z",
+	})
+	nextPeriod := createWorkPeriod(t, server, map[string]any{
+		"workDate": "2026-06-06",
+		"startsAt": "2026-06-06T06:00:00Z",
+		"endsAt":   "2026-06-06T18:00:00Z",
+	})
+	collaborator := createActiveCollaborator(t, server, 1)
+
+	res := postJSON(t, server, http.MethodPost, workPeriodsURL+firstPeriod.Data.ID+"/assignments/bulk-plan", map[string]any{
+		"rows": []map[string]any{
+			{
+				"collaboratorId":       collaborator.Data.ID,
+				"selected":             false,
+				"planningAvailability": "LEAVE_OF_ABSENCE",
+				"availabilityChanged":  true,
+				"sectorId":             "ref-sector-mining",
+				"locationId":           "ref-location-main-mine",
+				"taskId":               "ref-task-miner",
+			},
+		},
+	})
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		var body apiErrorResponse
+		decodeJSON(t, res, &body)
+		t.Fatalf("expected bulk-plan status %d, got %d with error %+v", http.StatusOK, res.StatusCode, body.Error)
+	}
+	var body apiBulkPlanResponse
+	decodeJSON(t, res, &body)
+	if body.Data.SelectedCount != 0 || len(body.Data.Assignments) != 1 {
+		t.Fatalf("expected one excluded availability snapshot, got selected=%d assignments=%d", body.Data.SelectedCount, len(body.Data.Assignments))
+	}
+	if body.Data.Assignments[0].PlannedStatus != "EXCLUDED" || body.Data.Assignments[0].PlanningAvailability != "LEAVE_OF_ABSENCE" {
+		t.Fatalf("expected excluded leave-of-absence snapshot, got %+v", body.Data.Assignments[0])
+	}
+
+	templateRes := getJSON(t, server, workPeriodsURL+nextPeriod.Data.ID+"/assignments/planning-template")
+	defer templateRes.Body.Close()
+	if templateRes.StatusCode != http.StatusOK {
+		var errBody apiErrorResponse
+		decodeJSON(t, templateRes, &errBody)
+		t.Fatalf("expected template status %d, got %d with error %+v", http.StatusOK, templateRes.StatusCode, errBody.Error)
+	}
+	var templateBody apiPlanningTemplateResponse
+	decodeJSON(t, templateRes, &templateBody)
+	row := findTemplateRow(templateBody, collaborator.Data.ID)
+	if row == nil || row.Selected || row.PlanningAvailability != "LEAVE_OF_ABSENCE" {
+		t.Fatalf("expected next planning cycle to inherit unselected leave-of-absence availability, got %+v", row)
+	}
+}
+
+func TestBulkPlanUpdatesSelectedAvailabilitySnapshotWithoutAssignmentRefs(t *testing.T) {
+	server, cleanup := newTestServer(t)
+	defer cleanup()
+
+	workPeriod := createWorkPeriod(t, server, nil)
+	collaborator := createActiveCollaborator(t, server, 1)
+	created := createAssignment(t, server, workPeriod.Data.ID, validAssignmentPayload(collaborator.Data.ID, nil))
+
+	res := postJSON(t, server, http.MethodPost, workPeriodsURL+workPeriod.Data.ID+"/assignments/bulk-plan", map[string]any{
+		"rows": []map[string]any{
+			{
+				"collaboratorId":       collaborator.Data.ID,
+				"selected":             true,
+				"planningAvailability": "DAY_OFF",
+				"availabilityChanged":  true,
+			},
+		},
+	})
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		var body apiErrorResponse
+		decodeJSON(t, res, &body)
+		t.Fatalf("expected bulk-plan status %d, got %d with error %+v", http.StatusOK, res.StatusCode, body.Error)
+	}
+
+	var body apiBulkPlanResponse
+	decodeJSON(t, res, &body)
+	if body.Data.SelectedCount != 1 || len(body.Data.Assignments) != 1 {
+		t.Fatalf("expected one selected assignment update, got selected=%d assignments=%d", body.Data.SelectedCount, len(body.Data.Assignments))
+	}
+	assignment := body.Data.Assignments[0]
+	if assignment.ID != created.Data.ID || assignment.PlannedStatus != "INCLUDED" || assignment.PlanningAvailability != "DAY_OFF" {
+		t.Fatalf("expected existing included assignment updated to day off, got %+v", assignment)
+	}
+	if assignment.SectorID == "" || assignment.LocationID == "" || assignment.TaskID == "" {
+		t.Fatalf("expected assignment refs to be preserved from the existing assignment, got %+v", assignment)
+	}
+}
+
+func TestBulkPlanSavesTemporaryReplacementForCurrentWorkPeriod(t *testing.T) {
+	server, cleanup := newTestServer(t)
+	defer cleanup()
+
+	workPeriod := createWorkPeriod(t, server, nil)
+	original := createActiveCollaborator(t, server, 1)
+	replacement := createActiveCollaborator(t, server, 2)
+
+	res := postJSON(t, server, http.MethodPost, workPeriodsURL+workPeriod.Data.ID+"/assignments/bulk-plan", map[string]any{
+		"rows": []map[string]any{
+			{
+				"collaboratorId":       original.Data.ID,
+				"selected":             false,
+				"planningAvailability": "DAY_OFF",
+				"availabilityChanged":  true,
+				"sectorId":             "ref-sector-mining",
+				"locationId":           "ref-location-main-mine",
+				"taskId":               "ref-task-miner",
+			},
+			{
+				"collaboratorId":                        replacement.Data.ID,
+				"selected":                              true,
+				"planningAvailability":                  "ACTIVE",
+				"sectorId":                              "ref-sector-mining",
+				"locationId":                            "ref-location-main-mine",
+				"taskId":                                "ref-task-miner",
+				"temporaryReplacementForCollaboratorId": original.Data.ID,
+			},
+		},
+	})
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		var body apiErrorResponse
+		decodeJSON(t, res, &body)
+		t.Fatalf("expected bulk-plan status %d, got %d with error %+v", http.StatusOK, res.StatusCode, body.Error)
+	}
+
+	var body apiBulkPlanResponse
+	decodeJSON(t, res, &body)
+	if body.Data.SelectedCount != 1 || len(body.Data.Assignments) != 2 {
+		t.Fatalf("expected original snapshot and selected replacement, got selected=%d assignments=%d", body.Data.SelectedCount, len(body.Data.Assignments))
+	}
+	assignmentByCollaborator := map[string]struct {
+		ID                         string
+		PlannedStatus              string
+		PlanningAvailability       string
+		ReplacementForAssignmentID string
+	}{}
+	for _, assignment := range body.Data.Assignments {
+		assignmentByCollaborator[assignment.CollaboratorID] = struct {
+			ID                         string
+			PlannedStatus              string
+			PlanningAvailability       string
+			ReplacementForAssignmentID string
+		}{
+			ID:                         assignment.ID,
+			PlannedStatus:              assignment.PlannedStatus,
+			PlanningAvailability:       assignment.PlanningAvailability,
+			ReplacementForAssignmentID: assignment.ReplacementForAssignmentID,
+		}
+	}
+	originalAssignment := assignmentByCollaborator[original.Data.ID]
+	replacementAssignment := assignmentByCollaborator[replacement.Data.ID]
+	if originalAssignment.ID == "" || originalAssignment.PlannedStatus != "EXCLUDED" || originalAssignment.PlanningAvailability != "DAY_OFF" {
+		t.Fatalf("expected original day-off snapshot, got %+v", originalAssignment)
+	}
+	if replacementAssignment.ID == "" || replacementAssignment.PlannedStatus != "INCLUDED" || replacementAssignment.ReplacementForAssignmentID != originalAssignment.ID {
+		t.Fatalf("expected replacement to reference original assignment %q, got %+v", originalAssignment.ID, replacementAssignment)
+	}
+
+	listRes := getJSON(t, server, workPeriodsURL+workPeriod.Data.ID+"/assignments")
+	defer listRes.Body.Close()
+	var listBody apiAssignmentListResponse
+	decodeJSON(t, listRes, &listBody)
+	if listBody.Data.Total != 2 {
+		t.Fatalf("expected replacement to stay scoped to this Work Period only, got total=%d", listBody.Data.Total)
+	}
+}
+
+func TestBulkPlanRejectsTemporaryReplacementForActiveTarget(t *testing.T) {
+	server, cleanup := newTestServer(t)
+	defer cleanup()
+
+	workPeriod := createWorkPeriod(t, server, nil)
+	activeTarget := createActiveCollaborator(t, server, 1)
+	replacement := createActiveCollaborator(t, server, 2)
+
+	res := postJSON(t, server, http.MethodPost, workPeriodsURL+workPeriod.Data.ID+"/assignments/bulk-plan", map[string]any{
+		"rows": []map[string]any{
+			{
+				"collaboratorId":       activeTarget.Data.ID,
+				"selected":             true,
+				"planningAvailability": "ACTIVE",
+				"sectorId":             "ref-sector-mining",
+				"locationId":           "ref-location-main-mine",
+				"taskId":               "ref-task-miner",
+			},
+			{
+				"collaboratorId":                        replacement.Data.ID,
+				"selected":                              true,
+				"planningAvailability":                  "ACTIVE",
+				"sectorId":                              "ref-sector-mining",
+				"locationId":                            "ref-location-main-mine",
+				"taskId":                                "ref-task-miner",
+				"temporaryReplacementForCollaboratorId": activeTarget.Data.ID,
+			},
+		},
+	})
+	defer res.Body.Close()
+
+	assertValidationError(t, res, "temporaryReplacementForCollaboratorId", "Replacement target collaborator must have DAY_OFF or LEAVE_OF_ABSENCE availability")
+}
+
+func TestBulkPlanRejectsTimeOffTemporaryReplacementWorker(t *testing.T) {
+	server, cleanup := newTestServer(t)
+	defer cleanup()
+
+	workPeriod := createWorkPeriod(t, server, nil)
+	absentee := createActiveCollaborator(t, server, 1)
+	replacement := createActiveCollaborator(t, server, 2)
+
+	res := postJSON(t, server, http.MethodPost, workPeriodsURL+workPeriod.Data.ID+"/assignments/bulk-plan", map[string]any{
+		"rows": []map[string]any{
+			{
+				"collaboratorId":       absentee.Data.ID,
+				"selected":             false,
+				"planningAvailability": "LEAVE_OF_ABSENCE",
+				"availabilityChanged":  true,
+				"sectorId":             "ref-sector-mining",
+				"locationId":           "ref-location-main-mine",
+				"taskId":               "ref-task-miner",
+			},
+			{
+				"collaboratorId":                        replacement.Data.ID,
+				"selected":                              true,
+				"planningAvailability":                  "DAY_OFF",
+				"sectorId":                              "ref-sector-mining",
+				"locationId":                            "ref-location-main-mine",
+				"taskId":                                "ref-task-miner",
+				"temporaryReplacementForCollaboratorId": absentee.Data.ID,
+			},
+		},
+	})
+	defer res.Body.Close()
+
+	assertValidationError(t, res, "temporaryReplacementForCollaboratorId", "Replacement collaborator must be available to work")
+}
+
+func TestBulkPlanRejectsDuplicateTemporaryReplacementTarget(t *testing.T) {
+	server, cleanup := newTestServer(t)
+	defer cleanup()
+
+	workPeriod := createWorkPeriod(t, server, nil)
+	absentee := createActiveCollaborator(t, server, 1)
+	firstReplacement := createActiveCollaborator(t, server, 2)
+	secondReplacement := createActiveCollaborator(t, server, 3)
+
+	res := postJSON(t, server, http.MethodPost, workPeriodsURL+workPeriod.Data.ID+"/assignments/bulk-plan", map[string]any{
+		"rows": []map[string]any{
+			{
+				"collaboratorId":       absentee.Data.ID,
+				"selected":             false,
+				"planningAvailability": "DAY_OFF",
+				"availabilityChanged":  true,
+				"sectorId":             "ref-sector-mining",
+				"locationId":           "ref-location-main-mine",
+				"taskId":               "ref-task-miner",
+			},
+			{
+				"collaboratorId":                        firstReplacement.Data.ID,
+				"selected":                              true,
+				"planningAvailability":                  "ACTIVE",
+				"sectorId":                              "ref-sector-mining",
+				"locationId":                            "ref-location-main-mine",
+				"taskId":                                "ref-task-miner",
+				"temporaryReplacementForCollaboratorId": absentee.Data.ID,
+			},
+			{
+				"collaboratorId":                        secondReplacement.Data.ID,
+				"selected":                              true,
+				"planningAvailability":                  "ACTIVE",
+				"sectorId":                              "ref-sector-mining",
+				"locationId":                            "ref-location-main-mine",
+				"taskId":                                "ref-task-miner",
+				"temporaryReplacementForCollaboratorId": absentee.Data.ID,
+			},
+		},
+	})
+	defer res.Body.Close()
+
+	assertValidationError(t, res, "temporaryReplacementForCollaboratorId", "Replacement target collaborator already has a replacement")
+}
+
+func TestBulkPlanSavesUnselectedAvailabilitySnapshotWithoutAssignmentRefs(t *testing.T) {
+	server, cleanup := newTestServer(t)
+	defer cleanup()
+
+	workPeriod := createWorkPeriod(t, server, nil)
+	collaborator := createActiveCollaborator(t, server, 1)
+
+	res := postJSON(t, server, http.MethodPost, workPeriodsURL+workPeriod.Data.ID+"/assignments/bulk-plan", map[string]any{
+		"rows": []map[string]any{
+			{
+				"collaboratorId":       collaborator.Data.ID,
+				"selected":             false,
+				"planningAvailability": "DAY_OFF",
+				"availabilityChanged":  true,
+			},
+		},
+	})
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		var body apiErrorResponse
+		decodeJSON(t, res, &body)
+		t.Fatalf("expected bulk-plan status %d, got %d with error %+v", http.StatusOK, res.StatusCode, body.Error)
+	}
+
+	var body apiBulkPlanResponse
+	decodeJSON(t, res, &body)
+	if body.Data.SelectedCount != 0 || len(body.Data.Assignments) != 1 {
+		t.Fatalf("expected one excluded availability snapshot, got selected=%d assignments=%d", body.Data.SelectedCount, len(body.Data.Assignments))
+	}
+	assignment := body.Data.Assignments[0]
+	if assignment.PlannedStatus != "EXCLUDED" || assignment.PlanningAvailability != "DAY_OFF" {
+		t.Fatalf("expected excluded day-off snapshot, got %+v", assignment)
+	}
+	if assignment.SectorID == "" || assignment.LocationID == "" || assignment.TaskID == "" {
+		t.Fatalf("expected assignment refs to fall back to collaborator planning defaults, got %+v", assignment)
+	}
+}
+
+func TestPlanAssignmentRefinementUpdatesFutureDefaultsWithoutSavingAssignment(t *testing.T) {
+	server, cleanup := newTestServer(t)
+	defer cleanup()
+
+	workPeriod := createWorkPeriod(t, server, nil)
+	collaborator := createActiveCollaborator(t, server, 1)
+	sector := createReferenceData(t, server, "sector", map[string]any{
+		"code":        "PLANNING_REFINEMENT_SECTOR",
+		"label":       "Planning Refinement Sector",
+		"description": "Sector for refinement tests",
+		"sortOrder":   41,
+	})
+	location := createReferenceData(t, server, "location", map[string]any{
+		"code":        "PLANNING_REFINEMENT_LOCATION",
+		"label":       "Planning Refinement Location",
+		"description": "Location for refinement tests",
+		"sortOrder":   42,
+	})
+	task := createReferenceData(t, server, "task", map[string]any{
+		"code":        "PLANNING_REFINEMENT_TASK",
+		"label":       "Planning Refinement Task",
+		"description": "Task for refinement tests",
+		"sortOrder":   43,
+	})
+
+	res := postJSON(t, server, http.MethodPost, workPeriodsURL+workPeriod.Data.ID+"/assignments/plan-refinement", map[string]any{
+		"collaboratorId":        collaborator.Data.ID,
+		"sectorId":              sector.Data.ID,
+		"locationId":            location.Data.ID,
+		"taskId":                task.Data.ID,
+		"applyToFutureDefaults": true,
+	})
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		var body apiErrorResponse
+		decodeJSON(t, res, &body)
+		t.Fatalf("expected refinement status %d, got %d with error %+v", http.StatusOK, res.StatusCode, body.Error)
+	}
+	var body apiPlanAssignmentRefinementResponse
+	decodeJSON(t, res, &body)
+	if !body.Data.FutureDefaultsUpdated || body.Data.SectorLabel != sector.Data.Label || body.Data.LocationLabel != location.Data.Label || body.Data.TaskLabel != task.Data.Label {
+		t.Fatalf("expected future defaults update and labels, got %+v", body.Data)
+	}
+
+	collaboratorRes := getJSON(t, server, collaboratorsURL+collaborator.Data.ID)
+	defer collaboratorRes.Body.Close()
+	var collaboratorBody apiCollaboratorResponse
+	decodeJSON(t, collaboratorRes, &collaboratorBody)
+	if collaboratorBody.Data.SectorID != sector.Data.ID || collaboratorBody.Data.LocationID != location.Data.ID || collaboratorBody.Data.TaskID != task.Data.ID {
+		t.Fatalf("expected collaborator future defaults to change, got sector=%q location=%q task=%q", collaboratorBody.Data.SectorID, collaboratorBody.Data.LocationID, collaboratorBody.Data.TaskID)
+	}
+
+	assignmentsRes := getJSON(t, server, workPeriodsURL+workPeriod.Data.ID+"/assignments")
+	defer assignmentsRes.Body.Close()
+	var assignmentsBody apiAssignmentListResponse
+	decodeJSON(t, assignmentsRes, &assignmentsBody)
+	if assignmentsBody.Data.Total != 0 {
+		t.Fatalf("expected refinement not to save a Work Period assignment before Plan button, got total=%d", assignmentsBody.Data.Total)
+	}
 }
 
 func TestCreateWorkPeriodAssignmentReturnsCreated(t *testing.T) {
@@ -288,10 +919,11 @@ func newTestServer(t *testing.T) (*fiber.App, func()) {
 	t.Helper()
 	dbPath := filepath.Join(t.TempDir(), "app.db")
 	server, cleanup, err := apppkg.Bootstrap(apppkg.Config{
-		Env:       "test",
-		HTTPAddr:  ":0",
-		DBPath:    dbPath,
-		JWTSecret: "test-secret",
+		Env:                       "test",
+		HTTPAddr:                  ":0",
+		DBPath:                    dbPath,
+		JWTSecret:                 "test-secret",
+		DisableRouteAuthorization: true,
 	})
 	if err != nil {
 		t.Fatalf("bootstrap test server: %v", err)
@@ -347,6 +979,20 @@ func createPerson(t *testing.T, server *fiber.App, payload map[string]any) apiPe
 	return body
 }
 
+func createReferenceData(t *testing.T, server *fiber.App, typ string, payload map[string]any) apiReferenceDataResponse {
+	t.Helper()
+	res := postJSON(t, server, http.MethodPost, "/api/v1/reference-data/"+typ, payload)
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusCreated {
+		var body apiErrorResponse
+		decodeJSON(t, res, &body)
+		t.Fatalf("create reference data: expected status %d, got %d with error %+v", http.StatusCreated, res.StatusCode, body.Error)
+	}
+	var body apiReferenceDataResponse
+	decodeJSON(t, res, &body)
+	return body
+}
+
 func createCollaborator(t *testing.T, server *fiber.App, payload map[string]any) apiCollaboratorResponse {
 	t.Helper()
 	res := postJSON(t, server, http.MethodPost, collaboratorsURL, payload)
@@ -355,6 +1001,29 @@ func createCollaborator(t *testing.T, server *fiber.App, payload map[string]any)
 		var body apiErrorResponse
 		decodeJSON(t, res, &body)
 		t.Fatalf("create collaborator: expected status %d, got %d with error %+v", http.StatusCreated, res.StatusCode, body.Error)
+	}
+	var body apiCollaboratorResponse
+	decodeJSON(t, res, &body)
+	return body
+}
+
+func updateCollaboratorAvailability(t *testing.T, server *fiber.App, collaboratorID string, availability string) apiCollaboratorResponse {
+	t.Helper()
+	res := postJSON(t, server, http.MethodPut, collaboratorsURL+collaboratorID, map[string]any{
+		"paymentMethodId":      "ref-method-daily",
+		"paymentValue":         150.0,
+		"dailyBrlAmount":       150.0,
+		"planningAvailability": availability,
+		"sectorId":             "ref-sector-mining",
+		"locationId":           "ref-location-main-mine",
+		"taskId":               "ref-task-miner",
+		"extensionDays":        0,
+	})
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		var body apiErrorResponse
+		decodeJSON(t, res, &body)
+		t.Fatalf("update collaborator availability: expected status %d, got %d with error %+v", http.StatusOK, res.StatusCode, body.Error)
 	}
 	var body apiCollaboratorResponse
 	decodeJSON(t, res, &body)
@@ -377,11 +1046,12 @@ func validWorkPeriodPayload(overrides map[string]any) map[string]any {
 
 func validAssignmentPayload(collaboratorID string, overrides map[string]any) map[string]any {
 	payload := map[string]any{
-		"collaboratorId": collaboratorID,
-		"plannedStatus":  "INCLUDED",
-		"sectorId":       "ref-sector-mining",
-		"locationId":     "ref-location-main-mine",
-		"taskId":         "ref-task-miner",
+		"collaboratorId":       collaboratorID,
+		"plannedStatus":        "INCLUDED",
+		"planningAvailability": "ACTIVE",
+		"sectorId":             "ref-sector-mining",
+		"locationId":           "ref-location-main-mine",
+		"taskId":               "ref-task-miner",
 	}
 	for key, value := range overrides {
 		payload[key] = value
@@ -438,7 +1108,24 @@ func validCompletePersonPayload(seq int, overrides map[string]any) map[string]an
 }
 
 func cpfForSeq(seq int) string {
-	cpfs := []string{"39053344705", "93541134780", "35711002844", "12345678909"}
+	cpfs := []string{
+		"39053344705",
+		"93541134780",
+		"12345678909",
+		"10000000108",
+		"10000000280",
+		"10000000361",
+		"10000000442",
+		"10000000523",
+		"10000000604",
+		"10000000795",
+		"10000000876",
+		"10000000957",
+		"10000001090",
+		"10000001171",
+		"10000001252",
+		"10000001333",
+	}
 	return cpfs[(seq-1)%len(cpfs)]
 }
 
@@ -484,6 +1171,15 @@ func assertValidationError(t *testing.T, res *http.Response, field string, messa
 	if body.Error.Fields[field] != message {
 		t.Fatalf("expected field %q to be %q, got %q", field, message, body.Error.Fields[field])
 	}
+}
+
+func findTemplateRow(body apiPlanningTemplateResponse, collaboratorID string) *apiPlanningTemplateRow {
+	for index := range body.Data.Rows {
+		if body.Data.Rows[index].CollaboratorID == collaboratorID {
+			return &body.Data.Rows[index]
+		}
+	}
+	return nil
 }
 
 func decodeJSON(t *testing.T, res *http.Response, target any) {

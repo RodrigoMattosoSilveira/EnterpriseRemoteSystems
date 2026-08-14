@@ -3,9 +3,20 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { AuthorizationProvider } from "../../components/layout/AuthorizationContext";
+import type { AuthzCurrentActor } from "../../types/authz";
 import { PeopleListPage } from "./PeopleListPage";
 import { PersonDetailPage } from "./PersonDetailPage";
 import type { Person } from "../../types/people";
+
+const authorizationActor: AuthzCurrentActor = {
+  actorKey: "test-admin",
+  actorRecordId: "actor-test-admin",
+  tenantId: "default",
+  scope: "APPLICATION",
+  roleCodes: ["APPLICATION_ADMIN"],
+  permissions: ["*"],
+};
 
 const PERSON_ID = "person-123";
 
@@ -110,14 +121,10 @@ describe("PersonDetailPage", () => {
         });
       }
 
-      if (url === "/api/v1/people" && methodOf(init) === "GET") {
-        return jsonResponse({ items: [], total: 0 });
-      }
-
       throw new Error(`Unhandled request: ${url}`);
     });
 
-    renderPersonDetailRoute();
+    const router = renderPersonDetailRoute();
     await waitForText("Maria Silva");
 
     await changeInput("First Name", "Mariana");
@@ -139,7 +146,110 @@ describe("PersonDetailPage", () => {
       statusId: "ref-person-status-active",
     });
 
-    await waitForText("People");
+    await waitForText("Person updated successfully.");
+    await waitForText("Mariana Silva");
+    expect(router.state.location.pathname).toBe(`/people/${PERSON_ID}`);
+  });
+
+  it("submits status changes when editing a person", async () => {
+    mockFetch(async (url, init) => {
+      recordFetchCall(url, init);
+
+      if (url === `/api/v1/people/${PERSON_ID}` && methodOf(init) === "GET") {
+        return jsonResponse({ data: existingPerson });
+      }
+
+      if (url === `/api/v1/people/${PERSON_ID}` && methodOf(init) === "PUT") {
+        return jsonResponse({
+          data: {
+            ...existingPerson,
+            statusId: "ref-person-status-inactive",
+            statusLabel: "Inactive",
+          },
+        });
+      }
+
+      throw new Error(`Unhandled request: ${url}`);
+    });
+
+    const router = renderPersonDetailRoute();
+    await waitForText("Maria Silva");
+
+    await changeSelect("Status", "ref-person-status-inactive");
+    await submitForm();
+
+    await waitFor(() => fetchCalls.some((call) => call.method === "PUT"));
+
+    const updateCall = fetchCalls.find((call) => call.method === "PUT");
+    expect(updateCall?.body).toMatchObject({
+      statusId: "ref-person-status-inactive",
+    });
+
+    await waitForText("Person updated successfully.");
+    expect(router.state.location.pathname).toBe(`/people/${PERSON_ID}`);
+  });
+
+  it("keeps the Address tab open and refreshes remaining sections after save", async () => {
+    const incompletePerson: Person = {
+      ...existingPerson,
+      street1: "",
+      street2: "",
+      state: "",
+      cep: "",
+      city: "",
+      bankName: "",
+      bankNumber: "",
+      checkingAccount: "",
+      pixKey: "",
+      emergencyName: "",
+      emergencyCellular: "",
+      emergencyEmail: "",
+      profileCompletionStatus: "INCOMPLETE",
+      canCreateCollaborator: false,
+      missingSections: ["Address", "Bank", "Emergency"],
+    };
+
+    mockFetch(async (url, init) => {
+      recordFetchCall(url, init);
+
+      if (url === `/api/v1/people/${PERSON_ID}` && methodOf(init) === "GET") {
+        return jsonResponse({ data: incompletePerson });
+      }
+
+      if (url === `/api/v1/people/${PERSON_ID}` && methodOf(init) === "PUT") {
+        return jsonResponse({
+          data: {
+            ...incompletePerson,
+            street1: "Rua Jasmin, 198",
+            state: "Amapa",
+            city: "Laranjal do Jari",
+            cep: "68920000",
+            country: "Brasil",
+            missingSections: ["Bank", "Emergency"],
+          },
+        });
+      }
+
+      throw new Error(`Unhandled request: ${url}`);
+    });
+
+    const router = renderPersonDetailRoute();
+    await waitForText("Maria Silva");
+
+    await clickButton("Address");
+    await changeInput("Street 1", "Rua Jasmin, 198");
+    await changeInput("State", "Amapa");
+    await changeInput("City", "Laranjal do Jari");
+    await changeInput("CEP", "68920");
+    await submitForm();
+
+    await waitForText("Person updated successfully.");
+
+    expect(router.state.location.pathname).toBe(`/people/${PERSON_ID}`);
+    expect(buttonByText("Address").getAttribute("aria-pressed")).toBe("true");
+    expect(textNode("Missing: Address")).toBeUndefined();
+    expect(textNode("Missing: Bank")).toBeDefined();
+    expect(textNode("Missing: Emergency")).toBeDefined();
   });
 
   it("shows update validation errors returned by the API", async () => {
@@ -205,10 +315,14 @@ function renderPersonDetailRoute() {
   act(() => {
     root?.render(
       <QueryClientProvider client={queryClient}>
-        <RouterProvider router={router} />
+        <AuthorizationProvider value={authorizationActor}>
+          <RouterProvider router={router} />
+        </AuthorizationProvider>
       </QueryClientProvider>
     );
   });
+
+  return router;
 }
 
 function mockFetch(
@@ -323,6 +437,40 @@ async function changeInput(labelText: string, value: string) {
     valueSetter?.call(input, value);
     input.dispatchEvent(new Event("input", { bubbles: true }));
     input.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+}
+
+async function changeSelect(labelText: string, value: string) {
+  const select = selectByLabel(labelText);
+  const valueSetter = Object.getOwnPropertyDescriptor(
+    HTMLSelectElement.prototype,
+    "value"
+  )?.set;
+
+  await act(async () => {
+    valueSetter?.call(select, value);
+    select.dispatchEvent(new Event("input", { bubbles: true }));
+    select.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+}
+
+function buttonByText(text: string) {
+  const button = Array.from(container.querySelectorAll("button")).find(
+    (candidate) => candidate.textContent?.trim().startsWith(text)
+  );
+
+  if (!button) {
+    throw new Error(`Could not find button ${text}`);
+  }
+
+  return button;
+}
+
+async function clickButton(text: string) {
+  const button = buttonByText(text);
+
+  await act(async () => {
+    button.dispatchEvent(new MouseEvent("click", { bubbles: true }));
   });
 }
 

@@ -23,15 +23,82 @@ func TestAuthzAdminEndpointsRequireActor(t *testing.T) {
 
 func TestAuthzAdminEndpointsRejectActorWithoutPermission(t *testing.T) {
 	database := newAuthzTestDB(t)
+	actorID := createAuthzActor(t, database, "persisted-expense@example.com", nil, nil)
+	grantAuthzRole(t, database, actorID, RoleExpenseOperator, "tenant-a")
 	app := newAuthzTestApp(database)
 
 	resp := doAuthzRequest(t, app, http.MethodGet, "/api/v1/authz/roles", nil, map[string]string{
-		HeaderActorID:          "temporary-expense@example.com",
-		HeaderTenantID:         "tenant-a",
-		HeaderActorPermissions: string(PermissionExpensesCreate),
+		HeaderActorID:  "persisted-expense@example.com",
+		HeaderTenantID: "tenant-a",
 	})
 	if resp.StatusCode != http.StatusForbidden {
 		t.Fatalf("expected forbidden status 403, got %d", resp.StatusCode)
+	}
+}
+
+func TestAuthzCurrentActorReturnsPersistedOperatingContext(t *testing.T) {
+	database := newAuthzTestDB(t)
+	actorID := createAuthzActor(t, database, "expense-current@example.com", nil, nil)
+	grantAuthzRole(t, database, actorID, RoleExpenseOperator, "tenant-a")
+	app := newAuthzTestApp(database)
+
+	resp := doAuthzRequest(t, app, http.MethodGet, "/api/v1/authz/current-actor", nil, map[string]string{
+		HeaderActorID:  "expense-current@example.com",
+		HeaderTenantID: "tenant-a",
+	})
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected current actor status 200, got %d", resp.StatusCode)
+	}
+	current := decodeData[CurrentActorResponse](t, resp)
+	if current.ActorKey != "expense-current@example.com" || current.ActorRecordID != actorID || current.TenantID != "tenant-a" {
+		t.Fatalf("unexpected current actor response: %#v", current)
+	}
+	if len(current.RoleCodes) != 1 || current.RoleCodes[0] != string(RoleExpenseOperator) {
+		t.Fatalf("unexpected current actor roles: %#v", current.RoleCodes)
+	}
+	if !containsString(current.Permissions, string(PermissionExpensesCreate)) {
+		t.Fatalf("expected expenses.create permission: %#v", current.Permissions)
+	}
+}
+
+func TestAuthzAdminCannotDeactivateOrRevokeItsOwnOperatingActor(t *testing.T) {
+	database := newAuthzTestDB(t)
+	adminActorID := createAuthzActor(t, database, "self-admin@example.com", nil, nil)
+	grantAuthzRole(t, database, adminActorID, RoleApplicationAdmin, GlobalTenantScope)
+	app := newAuthzTestApp(database)
+	headers := map[string]string{HeaderActorID: "self-admin@example.com", HeaderTenantID: "default"}
+
+	deactivateResp := doAuthzRequest(t, app, http.MethodPatch, "/api/v1/authz/actors/"+adminActorID+"/active", map[string]any{"active": false}, headers)
+	if deactivateResp.StatusCode != http.StatusForbidden {
+		t.Fatalf("expected self-deactivation status 403, got %d", deactivateResp.StatusCode)
+	}
+
+	var grant AuthzActorRoleGrant
+	if err := database.Where("actor_id = ? AND active = ?", adminActorID, true).First(&grant).Error; err != nil {
+		t.Fatalf("find self admin grant: %v", err)
+	}
+	revokeResp := doAuthzRequest(t, app, http.MethodDelete, "/api/v1/authz/actors/"+adminActorID+"/role-grants/"+grant.ID, nil, headers)
+	if revokeResp.StatusCode != http.StatusForbidden {
+		t.Fatalf("expected self-revoke status 403, got %d", revokeResp.StatusCode)
+	}
+}
+
+func TestAuthzAdminCanDeactivateAnotherActor(t *testing.T) {
+	database := newAuthzTestDB(t)
+	adminActorID := createAuthzActor(t, database, "lifecycle-admin@example.com", nil, nil)
+	grantAuthzRole(t, database, adminActorID, RoleApplicationAdmin, GlobalTenantScope)
+	targetID := createAuthzActor(t, database, "operator-to-deactivate@example.com", nil, nil)
+	grantAuthzRole(t, database, targetID, RoleExpenseOperator, "default")
+	app := newAuthzTestApp(database)
+	headers := map[string]string{HeaderActorID: "lifecycle-admin@example.com", HeaderTenantID: "default"}
+
+	resp := doAuthzRequest(t, app, http.MethodPatch, "/api/v1/authz/actors/"+targetID+"/active", map[string]any{"active": false}, headers)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected deactivate status 200, got %d", resp.StatusCode)
+	}
+	updated := decodeData[ActorResponse](t, resp)
+	if updated.Active {
+		t.Fatalf("expected inactive actor, got %#v", updated)
 	}
 }
 
@@ -155,11 +222,13 @@ func newAuthzTestApp(database *gorm.DB) *fiber.App {
 	v1 := api.Group("/v1")
 	authzGroup := v1.Group("/authz")
 	h := NewHandler(store)
+	authzGroup.Get("/current-actor", h.CurrentActor)
 	authzGroup.Get("/roles", h.ListRoles)
 	authzGroup.Get("/permissions", h.ListPermissions)
 	authzGroup.Get("/actors", h.ListActors)
 	authzGroup.Get("/audit-logs", h.ListAuditLogs)
 	authzGroup.Post("/actors", h.CreateActor)
+	authzGroup.Patch("/actors/:id/active", h.SetActorActive)
 	authzGroup.Post("/actors/:id/role-grants", h.GrantActorRole)
 	authzGroup.Delete("/actors/:id/role-grants/:grantId", h.RevokeActorRoleGrant)
 	return app
@@ -207,6 +276,15 @@ func decodeData[T any](t *testing.T, resp *http.Response) T {
 func containsPermissionResponse(rows []PermissionResponse, code string) bool {
 	for _, row := range rows {
 		if row.Code == code {
+			return true
+		}
+	}
+	return false
+}
+
+func containsString(values []string, value string) bool {
+	for _, candidate := range values {
+		if candidate == value {
 			return true
 		}
 	}

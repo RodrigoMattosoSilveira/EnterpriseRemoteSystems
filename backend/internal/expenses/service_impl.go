@@ -9,6 +9,7 @@ import (
 
 	"enterpriseremotesystems/backend/internal/db"
 	"enterpriseremotesystems/backend/internal/shared/ids"
+	"enterpriseremotesystems/backend/internal/shared/tenantctx"
 	"enterpriseremotesystems/backend/internal/tenants"
 	"gorm.io/gorm"
 )
@@ -75,7 +76,7 @@ func (s *service) Create(ctx context.Context, req CreateExpenseRequest, actorUse
 	now := time.Now().UTC()
 	expense := &db.Expense{
 		BaseModel:      db.BaseModel{ID: ids.New(), CreatedAt: now, UpdatedAt: now},
-		TenantID:       defaultTenantID,
+		TenantID:       tenantctx.TenantID(ctx),
 		CollaboratorID: strings.TrimSpace(req.CollaboratorID),
 		ExpenseDate:    expenseDate,
 		Description:    strings.TrimSpace(req.Description),
@@ -407,7 +408,7 @@ func (s *service) validateCollaborator(ctx context.Context, collaboratorID strin
 	if err != nil {
 		return err
 	}
-	if !isActiveCollaborator(*collaborator) {
+	if !isActiveCollaborator(ctx, *collaborator) {
 		return ValidationError{Fields: map[string]string{"collaboratorId": "Collaborator must be active and open"}}
 	}
 	return nil
@@ -447,15 +448,16 @@ func normalizeListFilter(filter ExpenseListFilter) (normalizedExpenseListFilter,
 	}
 
 	out := normalizedExpenseListFilter{
-		CollaboratorID:    strings.TrimSpace(filter.CollaboratorID),
-		ExpenseCategoryID: strings.TrimSpace(filter.ExpenseCategoryID),
-		ValueUnitID:       strings.TrimSpace(filter.ValueUnitID),
-		ItemType:          normalizeItemType(filter.ItemType),
-		PriceListItemID:   strings.TrimSpace(filter.PriceListItemID),
-		CurrencyCode:      normalizeCurrencyCode(filter.CurrencyCode),
-		IncludeInactive:   filter.IncludeInactive,
-		Page:              page,
-		PageSize:          pageSize,
+		CollaboratorID:     strings.TrimSpace(filter.CollaboratorID),
+		CollaboratorSearch: strings.TrimSpace(filter.CollaboratorSearch),
+		ExpenseCategoryID:  strings.TrimSpace(filter.ExpenseCategoryID),
+		ValueUnitID:        strings.TrimSpace(filter.ValueUnitID),
+		ItemType:           normalizeItemType(filter.ItemType),
+		PriceListItemID:    strings.TrimSpace(filter.PriceListItemID),
+		CurrencyCode:       normalizeCurrencyCode(filter.CurrencyCode),
+		IncludeInactive:    filter.IncludeInactive,
+		Page:               page,
+		PageSize:           pageSize,
 	}
 
 	if strings.TrimSpace(filter.DateFrom) != "" {
@@ -483,11 +485,11 @@ func parseExpenseDate(value string) (time.Time, error) {
 	return expenseDate, nil
 }
 
-func isActiveCollaborator(row db.CollaboratorJourney) bool {
+func isActiveCollaborator(ctx context.Context, row db.CollaboratorJourney) bool {
 	if row.ClosedAt != nil {
 		return false
 	}
-	return row.TenantID == defaultTenantID && row.Status.Type == "collaborator_status" && row.Status.Code == "ACTIVE" && row.Status.Active
+	return row.TenantID == tenantctx.TenantID(ctx) && row.Status.Type == "collaborator_status" && row.Status.Code == "ACTIVE" && row.Status.Active
 }
 
 func ptr[T any](value T) *T { return &value }

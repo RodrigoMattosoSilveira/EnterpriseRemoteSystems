@@ -8,15 +8,16 @@ import (
 
 func RegisterCollaboratorRoutes(v1 fiber.Router, deps Dependencies) {
 	r := v1.Group("/collaborators")
+	r.Get("/candidates", requirePermission(deps, authz.PermissionCollaboratorsCreate), deps.CollaboratorHandler.ListCandidates)
 	r.Get("/", requirePermission(deps, authz.PermissionCollaboratorsRead), deps.CollaboratorHandler.List)
 	r.Post("/", requirePermission(deps, authz.PermissionCollaboratorsCreate), deps.CollaboratorHandler.Create)
-	r.Get("/:id", requirePermission(deps, authz.PermissionCollaboratorsRead), deps.CollaboratorHandler.GetByID)
+	r.Get("/:id", requirePermissionOrSelfCollaborator(deps, authz.PermissionCollaboratorsRead, authz.PermissionCollaboratorsSelfRead, "id"), deps.CollaboratorHandler.GetByID)
 	r.Put("/:id", requirePermission(deps, authz.PermissionCollaboratorsUpdate), deps.CollaboratorHandler.Update)
 	r.Get("/:collaboratorId/financial-projection", requirePermission(deps, authz.PermissionCurrentAccountsSummaryRead), deps.CurrentAccountHandler.FinancialProjection)
 	r.Get("/:collaboratorId/settlement-preview", requirePermission(deps, authz.PermissionJourneySettlementsPreview), deps.CurrentAccountHandler.SettlementPreview)
-	r.Post("/:collaboratorId/zero-gold", deps.CurrentAccountHandler.ZeroGold)
-	r.Post("/:collaboratorId/payout", deps.CurrentAccountHandler.PartialPayout)
-	r.Post("/:collaboratorId/close", deps.CurrentAccountHandler.CloseJourney)
-	r.Get("/:collaboratorId/current-account", requirePermission(deps, authz.PermissionCurrentAccountsSummaryRead), deps.CurrentAccountHandler.GetDetail)
-	r.Get("/:collaboratorId/ledger-entries", requirePermission(deps, authz.PermissionCurrentAccountsLedgerRead), deps.CurrentAccountHandler.ListEntries)
+	r.Post("/:collaboratorId/zero-gold", authorizationHandledByHandler(), deps.CurrentAccountHandler.ZeroGold)
+	r.Post("/:collaboratorId/payout", authorizationHandledByHandler(), deps.CurrentAccountHandler.PartialPayout)
+	r.Post("/:collaboratorId/close", authorizationHandledByHandler(), deps.CurrentAccountHandler.CloseJourney)
+	r.Get("/:collaboratorId/current-account", requirePermissionOrSelfCollaborator(deps, authz.PermissionCurrentAccountsSummaryRead, authz.PermissionCurrentAccountsSelfSummaryRead, "collaboratorId"), deps.CurrentAccountHandler.GetDetail)
+	r.Get("/:collaboratorId/ledger-entries", requirePermissionOrSelfCollaborator(deps, authz.PermissionCurrentAccountsLedgerRead, authz.PermissionCurrentAccountsSelfLedgerRead, "collaboratorId"), deps.CurrentAccountHandler.ListEntries)
 }

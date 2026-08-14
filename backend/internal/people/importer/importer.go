@@ -11,6 +11,7 @@ import (
 	"sort"
 	"strings"
 
+	"enterpriseremotesystems/backend/internal/db"
 	"enterpriseremotesystems/backend/internal/people"
 	"gorm.io/gorm"
 )
@@ -53,8 +54,6 @@ var allowedHeaders = buildAllowedHeaders()
 
 var (
 	reEmailLike      = regexp.MustCompile(`^[^@\s]+@[^@\s]+\.[^@\s]+$`)
-	reCEPPlain       = regexp.MustCompile(`^[0-9]{8}$`)
-	reCEPDashed      = regexp.MustCompile(`^[0-9]{5}-[0-9]{3}$`)
 	reBrazilCellular = regexp.MustCompile(`^\+?55?[1-9]{2}9[0-9]{8}$|^[1-9]{2}9[0-9]{8}$`)
 	reStateUF        = regexp.MustCompile(`^[A-Z]{2}$`)
 )
@@ -91,6 +90,7 @@ var validBrazilianUFs = map[string]struct{}{
 
 // Options controls a People CSV import run.
 type Options struct {
+	TenantID        string
 	FilePath        string
 	DryRun          bool
 	ActorUserID     string
@@ -165,6 +165,11 @@ func Run(ctx context.Context, database *gorm.DB, reader io.Reader, opts Options)
 	rows := records[1:]
 	report.RowsRead = len(rows)
 
+	tenantID := strings.TrimSpace(opts.TenantID)
+	if tenantID == "" {
+		tenantID = db.DefaultTenantID
+	}
+
 	actorUserID := strings.TrimSpace(opts.ActorUserID)
 	if actorUserID == "" {
 		actorUserID = defaultActorUserID
@@ -193,7 +198,7 @@ func Run(ctx context.Context, database *gorm.DB, reader io.Reader, opts Options)
 				continue
 			}
 
-			_, err := svc.Create(ctx, req, actorUserID)
+			_, err := svc.Create(ctx, tenantID, req, actorUserID)
 			if err != nil {
 				report.Errors = append(report.Errors, rowErrorsFromError(rowNumber, err)...)
 				continue
@@ -384,7 +389,7 @@ func semanticCSVErrors(rowNumber int, req people.CreatePersonRequest) []RowError
 		errs = append(errs, RowError{
 			Row:     rowNumber,
 			Field:   "cep",
-			Message: "CEP must contain 8 digits or be formatted as 00000-000",
+			Message: "CEP must contain 8 digits; common spaces, dots, and dash characters are accepted",
 		})
 	}
 
@@ -430,8 +435,7 @@ func semanticCSVErrors(rowNumber int, req people.CreatePersonRequest) []RowError
 	return errs
 }
 func isValidImportCEP(value string) bool {
-	value = strings.TrimSpace(value)
-	return reCEPPlain.MatchString(value) || reCEPDashed.MatchString(value)
+	return people.IsValidCEP(value)
 }
 
 func isValidBrazilianUF(value string) bool {

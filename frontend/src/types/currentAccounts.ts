@@ -34,6 +34,10 @@ export type LedgerEntry = {
   effectiveDate: string;
   sourceType: string;
   sourceId: string;
+  sourceLabel?: string;
+  sourceWorkPeriodId?: string;
+  sourceWorkDate?: string;
+  sourceWorkPeriodName?: string;
   description?: string;
   active: boolean;
   correctionType: string;

@@ -75,6 +75,14 @@ export function CurrentAndFutureEarningsModal({
               amounts={projection.currentBalances}
             />
             <AmountSection
+              title="Ready Accrual Earnings Not Yet Posted"
+              amounts={projection.unpostedReadyEarnings ?? zeroAmounts}
+            />
+            <AmountSection
+              title="Estimated Future Earnings"
+              amounts={projection.estimatedFutureEarnings ?? zeroAmounts}
+            />
+            <AmountSection
               title="Projected Earnings Through Journey End"
               amounts={projection.projectedEarnings}
             />
@@ -95,8 +103,32 @@ export function CurrentAndFutureEarningsModal({
                   value={formatDate(projection.projection.journeyEndDate)}
                 />
                 <Detail
-                  label="Remaining work periods"
-                  value={String(projection.projection.remainingWorkPeriods)}
+                  label="Calendar work periods"
+                  value={String(
+                    projection.projection.calendarWorkPeriods ??
+                      projection.projection.remainingWorkPeriods,
+                  )}
+                />
+                <Detail
+                  label="Posted work periods"
+                  value={String(projection.projection.postedWorkPeriods ?? 0)}
+                />
+                <Detail
+                  label="Ready accrual work periods"
+                  value={String(
+                    projection.projection.readyAccrualWorkPeriods ?? 0,
+                  )}
+                />
+                <Detail
+                  label="Estimated future work periods"
+                  value={String(
+                    projection.projection.estimatedFutureWorkPeriods ??
+                      projection.projection.remainingWorkPeriods,
+                  )}
+                />
+                <Detail
+                  label="Pending accrual items"
+                  value={String(projection.projection.pendingAccrualItems ?? 0)}
                 />
                 {projection.projection.locationLabel && (
                   <Detail
@@ -123,8 +155,10 @@ export function CurrentAndFutureEarningsModal({
                 </p>
               )}
               <p className="mt-3 text-xs text-gray-500">
-                These values are estimates and are not posted earnings or
-                guaranteed balances.
+                Current balances include posted ledger entries. Ready accruals are
+                calculated but not posted yet. Estimated future earnings exclude
+                work periods already posted or already represented by ready
+                accruals.
               </p>
             </section>
           </div>
@@ -143,6 +177,8 @@ export function CurrentAndFutureEarningsModal({
     </div>
   );
 }
+
+const zeroAmounts = { brlAmount: 0, goldGramAmount: 0 };
 
 function AmountSection({
   title,
@@ -213,5 +249,7 @@ function formatMethod(value: string) {
 function formatWarning(value: string) {
   if (value === "NO_GOLD_PRODUCTION_HISTORY")
     return "Projected gold earnings are unavailable because no usable gold-production history exists for the assigned well.";
+  if (value === "PENDING_ACCRUAL_INPUTS")
+    return "Some accrual items still need inputs. Ready accruals are included, but pending items are not counted until resolved.";
   return value;
 }
