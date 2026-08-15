@@ -223,19 +223,18 @@ test("user can switch the People landing page between card and list views", asyn
   await expect(page.getByRole("button", { name: "Card view" })).toHaveAttribute("aria-pressed", "true");
   await expect(page.getByRole("link", { name: new RegExp(`^${personName}`) })).toBeVisible();
 
-  // Filter by the unique first name only — the API cannot search by a combined
-  // "firstName lastName" string, so using just the unique first-name part
-  // ensures the API actually returns this person and keeps them visible in both
-  // views after location.state is dropped on the view-mode switch.
+  // Full-name search is supported by the tenant People API. Keep that filter
+  // active while switching views so location.state changes cannot hide the
+  // Person that the server returned.
   const filteredPeopleResponsePromise = page.waitForResponse((response) => {
     const url = new URL(response.url());
     return (
       response.request().method() === "GET" &&
       url.pathname === "/api/v1/people" &&
-      url.searchParams.get("search") === `View${suffix}`
+      url.searchParams.get("search") === personName
     );
   });
-  await page.getByLabel("Filter people").fill(`View${suffix}`);
+  await page.getByLabel("Filter people").fill(personName);
   const filteredPeopleResponse = await filteredPeopleResponsePromise;
   expect(filteredPeopleResponse.ok()).toBeTruthy();
   await expect(page.getByRole("link", { name: new RegExp(`^${personName}`) })).toBeVisible();
@@ -244,14 +243,14 @@ test("user can switch the People landing page between card and list views", asyn
   // filter and the mounted People page.
   await page.getByRole("button", { name: "List view" }).click();
   await expect(page.getByRole("button", { name: "List view" })).toHaveAttribute("aria-pressed", "true");
-  await expect(page.getByLabel("Filter people")).toHaveValue(`View${suffix}`);
+  await expect(page.getByLabel("Filter people")).toHaveValue(personName);
   await expect(page.locator("table")).toBeVisible();
   await expect(page.getByRole("link", { name: new RegExp(`^${personName}`) })).toBeVisible();
 
   // Switch back to card view
   await page.getByRole("button", { name: "Card view" }).click();
   await expect(page.getByRole("button", { name: "Card view" })).toHaveAttribute("aria-pressed", "true");
-  await expect(page.getByLabel("Filter people")).toHaveValue(`View${suffix}`);
+  await expect(page.getByLabel("Filter people")).toHaveValue(personName);
   await expect(page.locator("table")).toHaveCount(0);
 
   // In card view, links should be present again

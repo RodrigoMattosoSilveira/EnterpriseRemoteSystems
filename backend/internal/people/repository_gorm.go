@@ -40,12 +40,13 @@ func (r *gormRepository) List(
 		q = q.Where(
 			`(COALESCE(gp.first_name, people.first_name) LIKE ?
 			OR COALESCE(gp.last_name, people.last_name) LIKE ?
+			OR TRIM(COALESCE(gp.first_name, people.first_name) || ' ' || COALESCE(gp.last_name, people.last_name)) LIKE ?
 			OR COALESCE(gp.nickname, people.nickname) LIKE ?
 			OR COALESCE(gp.cpf, people.cpf) LIKE ?
 			OR COALESCE(gp.rg, people.rg) LIKE ?
 			OR COALESCE(gp.cellular, people.cellular) LIKE ?
 			OR COALESCE(gp.email, people.email) LIKE ?)`,
-			like, like, like, like, like, like, like,
+			like, like, like, like, like, like, like, like,
 		)
 	}
 

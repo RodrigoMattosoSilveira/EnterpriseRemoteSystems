@@ -15,6 +15,7 @@ type AccountActorRecord struct {
 	CollaboratorID string
 	ScopeType      string
 	TenantID       string
+	TenantName     string
 	MembershipID   string
 	Active         bool
 	Primary        bool
@@ -22,14 +23,16 @@ type AccountActorRecord struct {
 
 type AccountRecord struct {
 	Account
-	ActorKey       string
-	DisplayName    string
-	PersonID       string
-	GlobalPersonID string
-	CollaboratorID string
-	ActorActive    bool
-	AnyActorActive bool
-	Actors         []AccountActorRecord
+	ActorKey          string
+	DisplayName       string
+	PersonID          string
+	GlobalPersonID    string
+	GlobalPersonName  string
+	GlobalPersonEmail string
+	CollaboratorID    string
+	ActorActive       bool
+	AnyActorActive    bool
+	Actors            []AccountActorRecord
 }
 
 type SessionRecord struct {

@@ -16,6 +16,7 @@ export type AuthAccountActor = {
   displayName: string;
   scope: "GLOBAL" | "TENANT" | string;
   tenantId?: string;
+  tenantName?: string;
   membershipId?: string;
   personId?: string;
   personName?: string;
@@ -31,6 +32,8 @@ export type AuthAccount = {
   actorKey: string;
   displayName: string;
   globalPersonId?: string;
+  globalPersonName?: string;
+  globalPersonEmail?: string;
   actors?: AuthAccountActor[];
   login: string;
   active: boolean;

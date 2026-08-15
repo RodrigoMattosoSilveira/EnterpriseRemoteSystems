@@ -123,6 +123,14 @@ func TestGlobalPersonMembershipFoundationSharesIdentityWithoutSharingTenantState
 		t.Fatalf("expected authoritative global name in tenant list search, total=%d rows=%+v", total, listed)
 	}
 
+	listed, total, err = svc.List(ctx, db.DefaultTenantID, people.PersonListFilter{Search: "Maria Santos"})
+	if err != nil {
+		t.Fatalf("search default tenant by full updated global name: %v", err)
+	}
+	if total != 1 || len(listed) != 1 || listed[0].ID != created.ID {
+		t.Fatalf("expected authoritative full global name in tenant list search, total=%d rows=%+v", total, listed)
+	}
+
 	listed, total, err = svc.List(ctx, db.DefaultTenantID, people.PersonListFilter{Search: "Silva"})
 	if err != nil {
 		t.Fatalf("search default tenant by stale legacy name: %v", err)

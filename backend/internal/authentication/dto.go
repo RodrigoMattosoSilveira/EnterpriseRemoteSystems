@@ -35,6 +35,7 @@ type AccountActorResponse struct {
 	DisplayName    string `json:"displayName"`
 	Scope          string `json:"scope"`
 	TenantID       string `json:"tenantId,omitempty"`
+	TenantName     string `json:"tenantName,omitempty"`
 	MembershipID   string `json:"membershipId,omitempty"`
 	PersonID       string `json:"personId,omitempty"`
 	PersonName     string `json:"personName,omitempty"`
@@ -50,6 +51,8 @@ type AccountResponse struct {
 	ActorKey           string                 `json:"actorKey"`
 	DisplayName        string                 `json:"displayName"`
 	GlobalPersonID     string                 `json:"globalPersonId,omitempty"`
+	GlobalPersonName   string                 `json:"globalPersonName,omitempty"`
+	GlobalPersonEmail  string                 `json:"globalPersonEmail,omitempty"`
 	Actors             []AccountActorResponse `json:"actors"`
 	Login              string                 `json:"login"`
 	Active             bool                   `json:"active"`

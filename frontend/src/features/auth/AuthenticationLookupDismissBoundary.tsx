@@ -70,17 +70,11 @@ function relaxMissingActorSubmission(root: HTMLElement): void {
     ).find(isCreateAccountButton);
     if (!createButton) continue;
 
-    // Actor provisioning is now a backend responsibility when the selected
-    // tenant Person has no Actor. Do not let the old actor-required UI
-    // contract prevent the POST from reaching that backend path.
+    // Actor provisioning is a backend responsibility when the selected
+    // tenant Person has no Actor. Remove only legacy actor-required form
+    // constraints; the React page remains authoritative for whether a Person
+    // has actually been selected and whether submission is pending.
     relaxIdentityLookupRequirements(form);
-
-    // Preserve the pending guard. Other disabled states on this button were
-    // inherited from the former "pre-existing Actor required" contract.
-    const pending = normalizedText(createButton.textContent).startsWith(
-      "creating",
-    );
-    if (createButton.disabled && !pending) createButton.disabled = false;
   }
 }
 

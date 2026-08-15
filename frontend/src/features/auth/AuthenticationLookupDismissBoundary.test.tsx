@@ -114,7 +114,7 @@ describe("AuthenticationLookupDismissBoundary", () => {
     expect(boundary.dataset.authenticationLookupsDismissed).toBe("false");
   });
 
-  it("allows Create account to submit when the selected Person has no Actor", async () => {
+  it("removes legacy Actor requirements without overriding the page's Person-selection guard", async () => {
     await act(async () => {
       root.render(
         <AuthenticationLookupDismissBoundary>
@@ -155,7 +155,7 @@ describe("AuthenticationLookupDismissBoundary", () => {
     expect(actor.required).toBe(false);
     expect(login.required).toBe(true);
     expect(password.required).toBe(true);
-    expect(button.disabled).toBe(false);
+    expect(button.disabled).toBe(true);
   });
 
   it("keeps Create account disabled while the account request is pending", async () => {
