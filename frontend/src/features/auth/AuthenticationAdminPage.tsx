@@ -4,19 +4,22 @@ import {
   createAuthAccount,
   issuePasswordResetToken,
   listAuthAccounts,
+  loadAuthTenantOptions,
   setAuthAccountActive,
 } from "../../api/auth.api";
 import { listAuthzActors } from "../../api/authz.api";
+import { listPeoplePage } from "../../api/people.api";
 import {
   authorizationRequestContext,
   readSelectedTenantId,
+  setSelectedTenantId,
 } from "../../api/tenantSelection";
 import { useAuthState } from "../../app/useAuth";
 import { ApiErrorPanel } from "../../components/ApiErrorPanel";
-import { useCollaboratorSearch } from "../collaborators/useCollaborators";
-import type { AuthAccount } from "../../types/auth";
+import type { AuthAccount, AuthAccountActor } from "../../types/auth";
 import type { AuthzActor, AuthzActorRoleGrant } from "../../types/authz";
 import type { Collaborator } from "../../types/collaborators";
+import type { Person } from "../../types/people";
 
 export function activeAuthenticationGrants(
   actor: AuthzActor,
@@ -73,6 +76,44 @@ export function authenticationAccountForActor(
   );
 }
 
+export function authenticationActorForPerson(
+  person: Person,
+  actors: AuthzActor[],
+): AuthzActor | undefined {
+  const personIds = new Set(
+    [person.id, person.globalPersonId]
+      .map((value) => value?.trim())
+      .filter((value): value is string => Boolean(value)),
+  );
+  return actors.find(
+    (actor) => Boolean(actor.personId && personIds.has(actor.personId)),
+  );
+}
+
+export function authenticationAccountForPerson(
+  person: Person,
+  accounts: AuthAccount[],
+): AuthAccount | undefined {
+  const globalPersonId = person.globalPersonId?.trim();
+  if (globalPersonId) {
+    const byGlobalPerson = accounts.find(
+      (account) => account.globalPersonId === globalPersonId,
+    );
+    if (byGlobalPerson) return byGlobalPerson;
+  }
+
+  const personIds = new Set(
+    [person.id, person.globalPersonId]
+      .map((value) => value?.trim())
+      .filter((value): value is string => Boolean(value)),
+  );
+  return accounts.find((account) =>
+    account.actors?.some(
+      (actor) => Boolean(actor.personId && personIds.has(actor.personId)),
+    ),
+  );
+}
+
 export function authenticationCollaboratorStatusLabel(
   actor: AuthzActor | undefined,
   account: AuthAccount | undefined,
@@ -124,11 +165,74 @@ export function authenticationAccountMatchesSearch(
         actor.displayName.toLowerCase().includes(search) ||
         actor.personName?.toLowerCase().includes(search) ||
         actor.personNickname?.toLowerCase().includes(search) ||
-        actor.tenantId?.toLowerCase().includes(search),
+        actor.tenantId?.toLowerCase().includes(search) ||
+        actor.tenantName?.toLowerCase().includes(search),
     ) ||
     account.login.toLowerCase().includes(search) ||
+    account.globalPersonName?.toLowerCase().includes(search) ||
+    account.globalPersonEmail?.toLowerCase().includes(search) ||
     account.actorKey.toLowerCase().includes(search) ||
     account.displayName.toLowerCase().includes(search)
+  );
+}
+
+export function authenticationAccountPersonTarget(
+  account: AuthAccount,
+): AuthAccountActor | undefined {
+  const actors = account.actors ?? [];
+  return (
+    actors.find(
+      (actor) =>
+        actor.primary &&
+        actor.scope === "TENANT" &&
+        Boolean(actor.tenantId && actor.personId),
+    ) ??
+    actors.find(
+      (actor) =>
+        actor.scope === "TENANT" && Boolean(actor.tenantId && actor.personId),
+    )
+  );
+}
+
+export function authenticationActorTenantLabel(actor: AuthAccountActor): string {
+  if (actor.scope === "GLOBAL") return "Application-wide";
+  const tenantName = actor.tenantName?.trim();
+  const tenantId = actor.tenantId?.trim();
+  if (tenantName && tenantId && tenantName !== tenantId) {
+    return `${tenantName} (${tenantId})`;
+  }
+  return tenantName || tenantId || "Tenant";
+}
+
+export function authenticationTenantActorIdsMatchingDisplayName(
+  accounts: AuthAccount[],
+  tenantOptions: Array<{ id: string; name: string }>,
+  searchValue: string,
+): Set<string> {
+  const normalizeTenantSearchText = (value: string) =>
+    value
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/\s+/g, " ")
+      .trim()
+      .toLocaleLowerCase();
+  const search = normalizeTenantSearchText(searchValue);
+  if (!search) return new Set();
+
+  const matchingTenantIds = new Set(
+    tenantOptions
+      .filter((tenant) => normalizeTenantSearchText(tenant.name).includes(search))
+      .map((tenant) => tenant.id),
+  );
+
+  return new Set(
+    accounts.flatMap((account) =>
+      (account.actors ?? [])
+        .filter((actor) =>
+          actor.tenantId ? matchingTenantIds.has(actor.tenantId) : false,
+        )
+        .map((actor) => actor.actorId),
+    ),
   );
 }
 
@@ -142,24 +246,58 @@ export function AuthenticationAdminPage() {
     queryFn: listAuthAccounts,
     refetchOnWindowFocus: false,
   });
+  // Reuse the exact Account tenant-options query that AppShell uses for the
+  // visible Tenant selector. If a Tenant name can be selected in the header,
+  // Authentication Administration must match that same displayed name.
+  const authenticatedAccountId =
+    auth.status === "authenticated" ? auth.session.accountId : "";
+  const tenantOptions = useQuery({
+    queryKey: ["auth", authenticatedAccountId, "tenant-options"],
+    queryFn: loadAuthTenantOptions,
+    enabled: Boolean(authenticatedAccountId),
+    staleTime: 60_000,
+    refetchOnWindowFocus: false,
+  });
   const actors = useQuery({
     queryKey: ["authz", "actors", tenantId],
     queryFn: () => listAuthzActors(actorContext),
     refetchOnWindowFocus: false,
   });
-  const [selectedActor, setSelectedActor] = useState<AuthzActor | null>(null);
-  const [selectedCollaborator, setSelectedCollaborator] =
-    useState<Collaborator | null>(null);
-  const [collaboratorSearch, setCollaboratorSearch] = useState("");
-  const collaboratorSearchQuery = useCollaboratorSearch(
-    collaboratorSearch,
-    false,
-  );
+  const [selectedPerson, setSelectedPerson] = useState<Person | null>(null);
+  const [personSearch, setPersonSearch] = useState("");
+  const personSearchQuery = useQuery({
+    queryKey: [
+      "people",
+      "authentication-create",
+      tenantId,
+      personSearch.trim(),
+    ],
+    queryFn: () =>
+      listPeoplePage({
+        search: personSearch.trim(),
+        page: 1,
+        pageSize: 25,
+      }),
+    enabled: personSearch.trim().length > 0,
+    refetchOnWindowFocus: false,
+  });
   const [actorLookupSearch, setActorLookupSearch] = useState("");
-  const actorLookupCollaborators = useCollaboratorSearch(
-    actorLookupSearch,
-    false,
-  );
+  const actorLookupPeople = useQuery({
+    queryKey: [
+      "people",
+      "authentication-lookup",
+      tenantId,
+      actorLookupSearch.trim(),
+    ],
+    queryFn: () =>
+      listPeoplePage({
+        search: actorLookupSearch.trim(),
+        page: 1,
+        pageSize: 25,
+      }),
+    enabled: actorLookupSearch.trim().length > 0,
+    refetchOnWindowFocus: false,
+  });
   const [login, setLogin] = useState("");
   const [temporaryPassword, setTemporaryPassword] = useState("");
   const [actionError, setActionError] = useState<unknown>(null);
@@ -174,54 +312,57 @@ export function AuthenticationAdminPage() {
     mutationFn: createAuthAccount,
     onMutate: () => setActionError(null),
     onSuccess: () => {
-      setSelectedActor(null);
-      setSelectedCollaborator(null);
-      setCollaboratorSearch("");
+      setSelectedPerson(null);
+      setPersonSearch("");
       setLogin("");
       setTemporaryPassword("");
       void queryClient.invalidateQueries({ queryKey: ["auth", "accounts"] });
+      void queryClient.invalidateQueries({ queryKey: ["authz", "actors", tenantId] });
     },
   });
-  const availableActors = useMemo(() => {
-    const linked = new Set(
-      (accounts.data ?? []).flatMap((account) => [
-        account.actorId,
-        ...(account.actors ?? []).map((actor) => actor.actorId),
-      ]),
-    );
-    return (actors.data ?? []).filter(
-      (actor) =>
-        isAuthenticationActorEligible(actor) &&
-        !linked.has(actor.id) &&
-        Boolean(actor.collaboratorId),
-    );
-  }, [accounts.data, actors.data]);
-  const matchingCollaborators = useMemo(() => {
+  const matchingPeople = useMemo(() => {
     const actorItems = actors.data ?? [];
     const accountItems = accounts.data ?? [];
-    return (collaboratorSearchQuery.data?.items ?? []).map((collaborator) => {
-      const actor = authenticationActorForCollaborator(collaborator, actorItems);
-      const account = authenticationAccountForActor(actor, accountItems);
-      return {
-        collaborator,
-        actor,
-        account,
-        canCreate: canCreateAuthenticationAccountForCollaborator(actor, account),
-        statusLabel: authenticationCollaboratorStatusLabel(actor, account),
-      };
+    return (personSearchQuery.data?.items ?? []).map((person) => {
+      const actor = authenticationActorForPerson(person, actorItems);
+      const account =
+        authenticationAccountForPerson(person, accountItems) ??
+        authenticationAccountForActor(actor, accountItems);
+      const canCreate = Boolean(
+        person.email?.trim() &&
+          !account &&
+          (!actor || actor.active),
+      );
+      let statusLabel: string;
+      if (account) {
+        statusLabel = `Already has authentication account ${account.login} (${
+          canIssuePasswordResetToken(account) ? "active" : "inactive"
+        })`;
+      } else if (actor && !actor.active) {
+        statusLabel = "Authorization actor is inactive";
+      } else if (!person.email?.trim()) {
+        statusLabel = "Person email is required for account creation";
+      } else if (actor) {
+        statusLabel = "Eligible for account creation";
+      } else {
+        statusLabel = "Eligible; a tenant Actor will be created";
+      }
+      return { person, actor, account, canCreate, statusLabel };
     });
-  }, [accounts.data, actors.data, collaboratorSearchQuery.data]);
+  }, [accounts.data, actors.data, personSearchQuery.data]);
   const actorLookupResults = useMemo(() => {
     const actorItems = actors.data ?? [];
     const accountItems = accounts.data ?? [];
-    return (actorLookupCollaborators.data?.items ?? []).map((collaborator) => {
-      const actor = authenticationActorForCollaborator(collaborator, actorItems);
-      const account = authenticationAccountForActor(actor, accountItems);
-      return { collaborator, actor, account };
+    return (actorLookupPeople.data?.items ?? []).map((person) => {
+      const actor = authenticationActorForPerson(person, actorItems);
+      const account =
+        authenticationAccountForPerson(person, accountItems) ??
+        authenticationAccountForActor(actor, accountItems);
+      return { person, actor, account };
     });
-  }, [accounts.data, actorLookupCollaborators.data, actors.data]);
-  const showCollaboratorSuggestions =
-    collaboratorSearch.trim().length > 0 && selectedCollaborator === null;
+  }, [accounts.data, actorLookupPeople.data, actors.data]);
+  const showPersonSuggestions =
+    personSearch.trim().length > 0 && selectedPerson === null;
   const showActorLookup = actorLookupSearch.trim().length > 0;
   const filteredAccounts = useMemo(() => {
     const search = actorLookupSearch.trim().toLowerCase();
@@ -232,10 +373,22 @@ export function AuthenticationAdminPage() {
         .map((result) => result.actor?.id)
         .filter((actorId): actorId is string => Boolean(actorId)),
     );
+    for (const actorId of authenticationTenantActorIdsMatchingDisplayName(
+      accounts.data ?? [],
+      tenantOptions.data ?? [],
+      search,
+    )) {
+      matchedActorIds.add(actorId);
+    }
     return (accounts.data ?? []).filter((account) =>
       authenticationAccountMatchesSearch(account, search, matchedActorIds),
     );
-  }, [accounts.data, actorLookupResults, actorLookupSearch]);
+  }, [
+    accounts.data,
+    actorLookupResults,
+    actorLookupSearch,
+    tenantOptions.data,
+  ]);
 
   async function toggle(accountId: string, active: boolean) {
     setActionError(null);
@@ -276,11 +429,11 @@ export function AuthenticationAdminPage() {
     <div className="p-6">
       <h1 className="text-2xl font-bold">Authentication Accounts</h1>
       <p className="mt-1 text-sm text-slate-600">
-        Create login accounts, suspend access, and issue one-time password-reset
-        tokens.
+        Manage Authentication Accounts separately from the Person who owns the
+        account and the tenant-specific Actors through which that account operates.
       </p>
       <ApiErrorPanel
-        error={accounts.error ?? actors.error ?? mutation.error ?? actionError}
+        error={accounts.error ?? tenantOptions.error ?? actors.error ?? mutation.error ?? actionError}
       />
 
       <section className="mt-6 rounded-2xl border bg-white p-5">
@@ -290,7 +443,7 @@ export function AuthenticationAdminPage() {
           onSubmit={(event) => {
             event.preventDefault();
             mutation.mutate({
-              actorId: selectedActor?.id ?? "",
+              actorId: "",
               login,
               temporaryPassword,
               mustChangePassword: true,
@@ -298,123 +451,132 @@ export function AuthenticationAdminPage() {
           }}
         >
           <div className="relative text-sm font-medium md:col-span-3">
-            <label htmlFor="authentication-collaborator-search">
-              Find collaborator by name or nickname
+            <label htmlFor="authentication-person-search">
+              Find Person by name, nickname, or email
             </label>
             <input
-              id="authentication-collaborator-search"
+              id="authentication-person-search"
               className="mt-1 w-full rounded-lg border px-3 py-2"
               type="search"
               role="combobox"
               aria-autocomplete="list"
               aria-controls={
-                showCollaboratorSuggestions
-                  ? "authentication-collaborator-suggestions"
+                showPersonSuggestions
+                  ? "authentication-person-suggestions"
                   : undefined
               }
-              aria-expanded={showCollaboratorSuggestions}
-              placeholder="Type any part of the collaborator name or nickname"
-              value={collaboratorSearch}
-              onChange={(event) => setCollaboratorSearch(event.target.value)}
-              disabled={selectedCollaborator !== null}
+              aria-expanded={showPersonSuggestions}
+              placeholder="Type any part of the Person name, nickname, or email"
+              value={personSearch}
+              onChange={(event) => setPersonSearch(event.target.value)}
+              disabled={selectedPerson !== null}
             />
 
-            {showCollaboratorSuggestions && (
+            {showPersonSuggestions && (
               <div
-                id="authentication-collaborator-suggestions"
+                id="authentication-person-suggestions"
                 role="listbox"
-                aria-label="Matching collaborators for authentication account"
+                aria-label="Matching People for authentication account"
                 className="absolute left-0 right-0 top-full z-20 mt-1 max-h-60 overflow-y-auto rounded-xl border border-slate-200 bg-white p-1 shadow-lg"
               >
-                {collaboratorSearchQuery.isLoading ||
-                collaboratorSearchQuery.isFetching ? (
+                {personSearchQuery.isLoading || personSearchQuery.isFetching ? (
                   <p className="px-3 py-2 text-sm text-slate-500">
-                    Loading matching collaborators…
+                    Loading matching People…
                   </p>
-                ) : collaboratorSearchQuery.error ? (
+                ) : personSearchQuery.error ? (
                   <p className="px-3 py-2 text-sm text-red-700">
-                    Could not load matching collaborators.
+                    Could not load matching People.
                   </p>
-                ) : matchingCollaborators.length === 0 ? (
+                ) : matchingPeople.length === 0 ? (
                   <p className="px-3 py-2 text-sm text-slate-500">
-                    No matching collaborators
+                    No matching People
                   </p>
                 ) : (
-                  matchingCollaborators.map(
-                    ({ collaborator, actor, canCreate, statusLabel }) => {
-                      const collaboratorName =
-                        collaborator.personName?.trim() || "Unnamed collaborator";
-                      const nickname = collaborator.personNickname?.trim();
-                      const identity =
-                        nickname && nickname !== collaboratorName
-                          ? `${collaboratorName} (${nickname})`
-                          : collaboratorName;
+                  matchingPeople.map(({ person, actor, canCreate, statusLabel }) => {
+                    const personName =
+                      `${person.firstName} ${person.lastName}`.trim() ||
+                      "Unnamed Person";
+                    const nickname = person.nickname?.trim();
+                    const identity =
+                      nickname && nickname !== personName
+                        ? `${personName} (${nickname})`
+                        : personName;
 
-                      if (!actor || !canCreate) {
-                        return (
-                          <div
-                            key={collaborator.id}
-                            role="option"
-                            aria-disabled="true"
-                            className="rounded-lg px-3 py-2 text-left text-sm text-slate-700"
-                          >
-                            <p className="font-medium">{identity}</p>
-                            {actor && (
-                              <p className="mt-0.5 text-xs text-slate-500">
-                                Actor: {authenticationActorOptionLabel(actor)}
-                              </p>
-                            )}
-                            <p className="mt-0.5 text-xs font-medium text-amber-700">
-                              {statusLabel}
-                            </p>
-                          </div>
-                        );
-                      }
-
+                    if (!canCreate) {
                       return (
-                        <button
-                          key={actor.id}
-                          type="button"
+                        <div
+                          key={person.membershipId || person.id}
                           role="option"
-                          aria-selected={selectedActor?.id === actor.id}
-                          onClick={() => {
-                            setSelectedActor(actor);
-                            setSelectedCollaborator(collaborator);
-                            setCollaboratorSearch("");
-                          }}
-                          className="block w-full rounded-lg px-3 py-2 text-left text-sm font-medium text-slate-800 hover:bg-slate-100 focus:bg-slate-100 focus:outline-none"
+                          aria-disabled="true"
+                          className="rounded-lg px-3 py-2 text-left text-sm text-slate-700"
                         >
-                          {authenticationCollaboratorOptionLabel(collaborator, actor)}
-                          <span className="mt-0.5 block text-xs font-medium text-emerald-700">
+                          <p className="font-medium">{identity}</p>
+                          <p className="mt-0.5 text-xs text-slate-500">
+                            Email: {person.email}
+                          </p>
+                          {actor && (
+                            <p className="mt-0.5 text-xs text-slate-500">
+                              Actor: {authenticationActorOptionLabel(actor)}
+                            </p>
+                          )}
+                          <p className="mt-0.5 text-xs font-medium text-amber-700">
                             {statusLabel}
-                          </span>
-                        </button>
+                          </p>
+                        </div>
                       );
-                    },
-                  )
+                    }
+
+                    return (
+                      <button
+                        key={person.membershipId || person.id}
+                        type="button"
+                        role="option"
+                        aria-selected={false}
+                        onClick={() => {
+                          setSelectedPerson(person);
+                          setPersonSearch(identity);
+                          setLogin(person.email);
+                        }}
+                        className="block w-full rounded-lg px-3 py-2 text-left text-sm font-medium text-slate-800 hover:bg-slate-100 focus:bg-slate-100 focus:outline-none"
+                      >
+                        {identity}
+                        <span className="mt-0.5 block text-xs font-normal text-slate-500">
+                          {person.email}
+                        </span>
+                        <span className="mt-0.5 block text-xs font-medium text-emerald-700">
+                          {statusLabel}
+                        </span>
+                      </button>
+                    );
+                  })
                 )}
               </div>
             )}
 
-            {selectedCollaborator && selectedActor && (
+            {selectedPerson && (
               <div className="mt-2 rounded-lg border border-blue-100 bg-blue-50 p-3 text-sm text-blue-900">
                 <div className="flex items-start justify-between gap-3">
                   <div>
-                    <p className="font-semibold">Selected collaborator</p>
+                    <p className="font-semibold">Selected Person</p>
                     <p className="mt-1">
-                      {authenticationCollaboratorOptionLabel(
-                        selectedCollaborator,
-                        selectedActor,
-                      )}
+                      {`${selectedPerson.firstName} ${selectedPerson.lastName}`.trim()}
+                      {selectedPerson.nickname?.trim() &&
+                      selectedPerson.nickname.trim() !==
+                        `${selectedPerson.firstName} ${selectedPerson.lastName}`.trim()
+                        ? ` (${selectedPerson.nickname.trim()})`
+                        : ""}
+                    </p>
+                    <p className="mt-0.5 text-xs text-blue-700">
+                      {selectedPerson.email}
                     </p>
                   </div>
                   <button
                     type="button"
                     className="shrink-0 rounded-lg border border-blue-200 bg-white px-2 py-1 font-semibold text-blue-800"
                     onClick={() => {
-                      setSelectedActor(null);
-                      setSelectedCollaborator(null);
-                      setCollaboratorSearch("");
+                      setSelectedPerson(null);
+                      setPersonSearch("");
+                      setLogin("");
                     }}
                   >
                     Change
@@ -444,19 +606,9 @@ export function AuthenticationAdminPage() {
               required
             />
           </label>
-          {availableActors.length === 0 && !actors.isLoading && (
-            <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 md:col-span-3">
-              No eligible collaborator-linked authorization actors are available.
-              Assign an active role grant for an active tenant in{" "}
-              <a className="font-semibold underline" href="/admin/authorization">
-                Authorization
-              </a>{" "}
-              before creating a login account.
-            </p>
-          )}
           <button
             className="rounded-lg bg-slate-900 px-4 py-2 font-semibold text-white md:col-span-3"
-            disabled={mutation.isPending || selectedActor === null}
+            disabled={mutation.isPending || selectedPerson === null}
           >
             {mutation.isPending ? "Creating…" : "Create account"}
           </button>
@@ -466,20 +618,20 @@ export function AuthenticationAdminPage() {
       <section className="mt-6 rounded-2xl border bg-white p-5">
         <h2 className="text-lg font-semibold">Actor/account filter</h2>
         <p className="mt-1 text-sm text-slate-600">
-          Search by Person name or nickname, Actor identity, or login to see whether
+          Search by Person name, nickname, or email, Tenant display name, Actor identity, or login to see whether
           an Authorization Actor and Authentication Account already exist.
         </p>
         <label
           className="mt-4 block text-sm font-medium"
           htmlFor="authentication-actor-lookup"
         >
-          Filter by Person name or nickname, Actor, or account
+          Filter by Person name, nickname, or email, Tenant display name, Actor, or account
         </label>
         <input
           id="authentication-actor-lookup"
           className="mt-1 w-full rounded-lg border px-3 py-2"
           type="search"
-          placeholder="Type collaborator name, nickname, actor key, or login"
+          placeholder="Type Person name, nickname, email, Tenant display name, actor key, or login"
           value={actorLookupSearch}
           onChange={(event) => setActorLookupSearch(event.target.value)}
         />
@@ -490,29 +642,28 @@ export function AuthenticationAdminPage() {
             aria-label="Actor lookup results"
             className="mt-3 divide-y rounded-xl border border-slate-200"
           >
-            {actorLookupCollaborators.isLoading ||
-            actorLookupCollaborators.isFetching ? (
-              <p className="p-3 text-sm text-slate-500">Loading actor matches…</p>
-            ) : actorLookupCollaborators.error ? (
-              <p className="p-3 text-sm text-red-700">Could not load actor matches.</p>
+            {actorLookupPeople.isLoading || actorLookupPeople.isFetching ? (
+              <p className="p-3 text-sm text-slate-500">Loading Person matches…</p>
+            ) : actorLookupPeople.error ? (
+              <p className="p-3 text-sm text-red-700">Could not load Person matches.</p>
             ) : actorLookupResults.length === 0 ? (
-              <p className="p-3 text-sm text-slate-500">
-                No matching collaborators. Person-based Authentication Account matches,
-                if any, are shown in the accounts table below.
-              </p>
+              <p className="p-3 text-sm text-slate-500">No matching People.</p>
             ) : (
-              actorLookupResults.map(({ collaborator, actor, account }) => {
-                const collaboratorName =
-                  collaborator.personName?.trim() || "Unnamed collaborator";
-                const nickname = collaborator.personNickname?.trim();
+              actorLookupResults.map(({ person, actor, account }) => {
+                const personName =
+                  `${person.firstName} ${person.lastName}`.trim() || "Unnamed Person";
+                const nickname = person.nickname?.trim();
                 return (
-                  <article key={collaborator.id} role="listitem" className="p-3 text-sm">
+                  <article
+                    key={person.membershipId || person.id}
+                    role="listitem"
+                    className="p-3 text-sm"
+                  >
                     <p className="font-semibold text-slate-900">
-                      {collaboratorName}
-                      {nickname && nickname !== collaboratorName
-                        ? ` (${nickname})`
-                        : ""}
+                      {personName}
+                      {nickname && nickname !== personName ? ` (${nickname})` : ""}
                     </p>
+                    <p className="mt-1 text-slate-500">Email: {person.email}</p>
                     {!actor ? (
                       <p className="mt-1 text-amber-700">Authorization actor: none</p>
                     ) : (
@@ -527,17 +678,17 @@ export function AuthenticationAdminPage() {
                                 .join(", ")
                             : "none active"}
                         </p>
-                        <p className="mt-1 font-medium text-slate-700">
-                          Authentication account: {account
-                            ? `${account.login} · ${
-                                canIssuePasswordResetToken(account)
-                                  ? "Active"
-                                  : "Inactive"
-                              }`
-                            : "none"}
-                        </p>
                       </>
                     )}
+                    <p className="mt-1 font-medium text-slate-700">
+                      Authentication account: {account
+                        ? `${account.login} · ${
+                            canIssuePasswordResetToken(account)
+                              ? "Active"
+                              : "Inactive"
+                          }`
+                        : "none"}
+                    </p>
                   </article>
                 );
               })
@@ -573,99 +724,206 @@ export function AuthenticationAdminPage() {
         </section>
       )}
 
-      <section className="mt-6 overflow-x-auto rounded-2xl border bg-white">
-        <table className="w-full text-left text-sm">
-          <thead className="bg-slate-100">
-            <tr>
-              <th className="p-3">User</th>
-              <th className="p-3">Actors</th>
-              <th className="p-3">Status</th>
-              <th className="p-3">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filteredAccounts.length === 0 && (
-              <tr className="border-t">
-                <td className="p-3 text-slate-500" colSpan={4}>
-                  {showActorLookup
-                    ? "No authentication accounts match this actor/account filter."
-                    : "No authentication accounts."}
-                </td>
-              </tr>
-            )}
-            {filteredAccounts.map((account) => {
-              const activePending = pendingAction === `active:${account.id}`;
-              const resetPending = pendingAction === `reset:${account.id}`;
-              const resetEligible = canIssuePasswordResetToken(account);
-              const isCurrentAccount =
-                auth.status === "authenticated" && account.id === auth.session.accountId;
-              return (
-                <tr key={account.id} className="border-t">
-                  <td className="p-3">
-                    <strong>{account.displayName}</strong>
-                    <br />
-                    <span className="text-slate-500">{account.login}</span>
-                  </td>
-                  <td className="p-3">
-                    {(account.actors?.length ?? 0) > 0 ? (
-                      <ul className="space-y-1">
-                        {account.actors?.map((actor) => (
-                          <li key={actor.actorId}>
-                            <span className="font-medium">{actor.actorKey}</span>
-                            <span className="text-slate-500">
-                              {" "}· {actor.scope}
-                              {actor.tenantId ? ` @ ${actor.tenantId}` : ""}
-                              {actor.primary ? " · primary" : ""}
-                              {!actor.active ? " · inactive" : ""}
-                            </span>
-                          </li>
-                        ))}
-                      </ul>
-                    ) : (
-                      account.actorKey
-                    )}
-                  </td>
-                  <td className="p-3">
-                    {account.active && canIssuePasswordResetToken(account) ? "Active" : "Inactive"}
-                    {account.mustChangePassword
-                      ? " · Password change required"
-                      : ""}
-                  </td>
-                  <td className="p-3">
-                    <div className="flex flex-wrap gap-2">
-                      <button
-                        className="rounded border px-2 py-1 disabled:opacity-50"
-                        disabled={isCurrentAccount || activePending || pendingAction !== null}
-                        title={isCurrentAccount ? "You cannot deactivate your own account" : undefined}
-                        onClick={() => void toggle(account.id, !account.active)}
-                      >
-                        {activePending
-                          ? "Saving…"
-                          : account.active
-                            ? "Deactivate"
-                            : "Activate"}
-                      </button>
-                      <button
-                        className="rounded border px-2 py-1 disabled:opacity-50"
-                        disabled={
-                          !resetEligible || resetPending || pendingAction !== null
-                        }
-                        title={
-                          resetEligible
-                            ? undefined
-                            : "Activate the authentication account and authorization actor before issuing a reset token"
-                        }
-                        onClick={() => void issue(account.id)}
-                      >
-                        {resetPending ? "Issuing…" : "Issue reset token"}
-                      </button>
+      <section className="mt-6 space-y-4" aria-label="Authentication accounts">
+        {filteredAccounts.length === 0 && (
+          <div className="rounded-2xl border bg-white p-5 text-sm text-slate-500">
+            {showActorLookup
+              ? "No authentication accounts match this actor/account filter."
+              : "No authentication accounts."}
+          </div>
+        )}
+
+        {filteredAccounts.map((account) => {
+          const activePending = pendingAction === `active:${account.id}`;
+          const resetPending = pendingAction === `reset:${account.id}`;
+          const resetEligible = canIssuePasswordResetToken(account);
+          const isCurrentAccount =
+            auth.status === "authenticated" && account.id === auth.session.accountId;
+          const personTarget = authenticationAccountPersonTarget(account);
+          const personName =
+            account.globalPersonName?.trim() ||
+            account.actors?.find((actor) => actor.personName?.trim())?.personName ||
+            "Linked Person";
+          const anyActorActive =
+            account.actors?.some((actor) => actor.active) ?? account.actorActive;
+
+          return (
+            <article
+              key={account.id}
+              className="overflow-hidden rounded-2xl border bg-white"
+              data-testid={`authentication-account-${account.id}`}
+            >
+              <header className="flex flex-wrap items-start justify-between gap-4 border-b bg-slate-50 p-5">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    Authentication Account
+                  </p>
+                  <p className="mt-1 text-lg font-semibold text-slate-950">
+                    {account.login}
+                  </p>
+                </div>
+                <div className="flex flex-wrap gap-2 text-xs font-semibold">
+                  <span
+                    className={`rounded-full px-2.5 py-1 ${
+                      account.active
+                        ? "bg-emerald-100 text-emerald-800"
+                        : "bg-slate-200 text-slate-700"
+                    }`}
+                  >
+                    {account.active ? "Account active" : "Account inactive"}
+                  </span>
+                  {!anyActorActive && (
+                    <span className="rounded-full bg-amber-100 px-2.5 py-1 text-amber-800">
+                      No active Actors
+                    </span>
+                  )}
+                  {account.mustChangePassword && (
+                    <span className="rounded-full bg-amber-100 px-2.5 py-1 text-amber-800">
+                      Password change required
+                    </span>
+                  )}
+                </div>
+              </header>
+
+              <div className="grid gap-6 p-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
+                <section aria-label={`Person linked to ${account.login}`}>
+                  <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-500">
+                    Person
+                  </h3>
+                  {account.globalPersonId ? (
+                    <div className="mt-2">
+                      <p className="font-semibold text-slate-950">{personName}</p>
+                      <p className="mt-1 text-sm text-slate-600">
+                        Email: {account.globalPersonEmail || "Not recorded"}
+                      </p>
+                      {personTarget ? (
+                        <div className="mt-3">
+                          <a
+                            className="inline-flex rounded-lg border px-3 py-1.5 text-sm font-semibold text-slate-800 hover:bg-slate-50"
+                            href={`/people/${encodeURIComponent(personTarget.personId ?? "")}`}
+                            onClick={() => {
+                              if (personTarget.tenantId) {
+                                setSelectedTenantId(
+                                  window.localStorage,
+                                  personTarget.tenantId,
+                                );
+                              }
+                            }}
+                          >
+                            Open Person
+                          </a>
+                          <p className="mt-1 text-xs text-slate-500">
+                            Opens the Person in {authenticationActorTenantLabel(personTarget)}.
+                          </p>
+                        </div>
+                      ) : (
+                        <p className="mt-2 text-xs text-slate-500">
+                          The global Person is linked, but no tenant Person projection is available to open.
+                        </p>
+                      )}
                     </div>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+                  ) : (
+                    <div className="mt-2 rounded-lg border border-dashed p-3 text-sm text-slate-600">
+                      <p className="font-medium text-slate-800">No Person linked</p>
+                      <p className="mt-1 text-xs">
+                        Application-level Accounts may intentionally exist without a Person.
+                      </p>
+                    </div>
+                  )}
+                </section>
+
+                <section aria-label={`Actors linked to ${account.login}`}>
+                  <div className="flex items-baseline justify-between gap-3">
+                    <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-500">
+                      Actors
+                    </h3>
+                    <span className="text-xs text-slate-500">
+                      {account.actors?.length ?? (account.actorKey ? 1 : 0)} linked
+                    </span>
+                  </div>
+                  {(account.actors?.length ?? 0) > 0 ? (
+                    <ul className="mt-2 grid gap-2 sm:grid-cols-2">
+                      {account.actors?.map((actor) => (
+                        <li
+                          key={actor.actorId}
+                          className="rounded-xl border border-slate-200 p-3"
+                        >
+                          <div className="flex items-start justify-between gap-3">
+                            <div>
+                              <p className="font-semibold text-slate-950">
+                                {authenticationActorTenantLabel(actor)}
+                              </p>
+                              <p className="mt-1 text-sm text-slate-700">
+                                {actor.displayName}
+                              </p>
+                              <p className="mt-1 break-all text-xs text-slate-500">
+                                Actor: {actor.actorKey}
+                              </p>
+                            </div>
+                            <span
+                              className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold ${
+                                actor.active
+                                  ? "bg-emerald-100 text-emerald-800"
+                                  : "bg-slate-200 text-slate-700"
+                              }`}
+                            >
+                              {actor.active ? "Active" : "Inactive"}
+                            </span>
+                          </div>
+                          <p className="mt-2 text-xs text-slate-500">
+                            {actor.scope === "GLOBAL" ? "Global Actor" : "Tenant Actor"}
+                            {actor.primary ? " · Primary" : ""}
+                          </p>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <div className="mt-2 rounded-xl border border-slate-200 p-3">
+                      <p className="font-semibold text-slate-950">
+                        {account.displayName}
+                      </p>
+                      <p className="mt-1 break-all text-xs text-slate-500">
+                        Actor: {account.actorKey}
+                      </p>
+                    </div>
+                  )}
+                </section>
+              </div>
+
+              <footer className="flex flex-wrap items-center justify-between gap-3 border-t px-5 py-4">
+                <p className="text-xs text-slate-500">
+                  Password and activation controls apply to the Authentication Account as a whole.
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    className="rounded border px-2 py-1 text-sm disabled:opacity-50"
+                    disabled={isCurrentAccount || activePending || pendingAction !== null}
+                    title={isCurrentAccount ? "You cannot deactivate your own account" : undefined}
+                    onClick={() => void toggle(account.id, !account.active)}
+                  >
+                    {activePending
+                      ? "Saving…"
+                      : account.active
+                        ? "Deactivate"
+                        : "Activate"}
+                  </button>
+                  <button
+                    className="rounded border px-2 py-1 text-sm disabled:opacity-50"
+                    disabled={!resetEligible || resetPending || pendingAction !== null}
+                    title={
+                      resetEligible
+                        ? undefined
+                        : "Activate the authentication account and at least one authorization actor before issuing a reset token"
+                    }
+                    onClick={() => void issue(account.id)}
+                  >
+                    {resetPending ? "Issuing…" : "Issue reset token"}
+                  </button>
+                </div>
+              </footer>
+            </article>
+          );
+        })}
       </section>
     </div>
   );

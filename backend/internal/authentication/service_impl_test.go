@@ -277,8 +277,11 @@ func TestAuthenticationRejectsInactiveAccountAndActor(t *testing.T) {
 	}); err != ErrResetTokenInvalid {
 		t.Fatalf("expected account deactivation to invalidate pending reset tokens, got %v", err)
 	}
-	if _, err := service.Login(context.Background(), LoginRequest{Login: account.Login, Password: "Operator-Password-1"}, "", ""); err != ErrInvalidCredentials {
-		t.Fatalf("expected inactive account login rejection, got %v", err)
+	if _, err := service.Login(context.Background(), LoginRequest{Login: account.Login, Password: "Wrong-Password-1"}, "", ""); err != ErrInvalidCredentials {
+		t.Fatalf("expected inactive account with wrong password to preserve invalid-credentials response, got %v", err)
+	}
+	if _, err := service.Login(context.Background(), LoginRequest{Login: account.Login, Password: "Operator-Password-1"}, "", ""); err != ErrAccountInactive {
+		t.Fatalf("expected correct password for inactive account to return account-inactive, got %v", err)
 	}
 	if _, err := service.SetAccountActive(context.Background(), account.ID, true); err != nil {
 		t.Fatalf("reactivate account: %v", err)
@@ -305,8 +308,11 @@ func TestAuthenticationRejectsInactiveAccountAndActor(t *testing.T) {
 	if err := database.Model(&authz.AuthzActor{}).Where("id = ?", actor.ID).Update("active", false).Error; err != nil {
 		t.Fatalf("deactivate actor: %v", err)
 	}
-	if _, err := service.Login(context.Background(), LoginRequest{Login: account.Login, Password: "Operator-Password-1"}, "", ""); err != ErrInvalidCredentials {
-		t.Fatalf("expected inactive actor login rejection, got %v", err)
+	if _, err := service.Login(context.Background(), LoginRequest{Login: account.Login, Password: "Wrong-Password-1"}, "", ""); err != ErrInvalidCredentials {
+		t.Fatalf("expected inactive actor with wrong password to preserve invalid-credentials response, got %v", err)
+	}
+	if _, err := service.Login(context.Background(), LoginRequest{Login: account.Login, Password: "Operator-Password-1"}, "", ""); err != ErrActorInactive {
+		t.Fatalf("expected correct password for inactive actor to return actor-inactive, got %v", err)
 	}
 }
 
@@ -470,6 +476,79 @@ func createAuthenticationTestActor(t *testing.T, database *gorm.DB) authz.AuthzA
 		t.Fatalf("grant test actor tenant access: %v", err)
 	}
 	return actor
+}
+
+func TestAuthenticationCreatesPersonActorAndAccountWithoutCollaboratorJourney(t *testing.T) {
+	database, _, service, _ := authenticationTestService(t)
+	now := time.Now().UTC()
+
+	status := appdb.ReferenceData{
+		BaseModel: appdb.BaseModel{ID: "auth-person-only-status", CreatedAt: now, UpdatedAt: now},
+		TenantID:  appdb.DefaultTenantID,
+		Type:      "person_status",
+		Code:      "AUTH_PERSON_ONLY_ACTIVE",
+		Label:     "Authentication Person Only Active",
+		Active:    true,
+	}
+	if err := database.Create(&status).Error; err != nil {
+		t.Fatalf("create Person-only status: %v", err)
+	}
+
+	person := appdb.Person{
+		BaseModel: appdb.BaseModel{ID: "auth-person-only", CreatedAt: now, UpdatedAt: now},
+		TenantID:  appdb.DefaultTenantID,
+		FirstName: "Dirceu",
+		LastName:  "Pereira",
+		Nickname:  "Dirceu",
+		CPF:       "12345678909",
+		RG:        "AUTHPERSONONLY",
+		Cellular:  "11912345679",
+		Email:     "dirceu-person-only@example.com",
+		Country:   "Brasil",
+		StatusID:  status.ID,
+	}
+	if err := database.Create(&person).Error; err != nil {
+		t.Fatalf("create Person without Collaborator Journey: %v", err)
+	}
+
+	account, err := service.CreateAccount(context.Background(), CreateAccountRequest{
+		TenantID:          appdb.DefaultTenantID,
+		Login:             person.Email,
+		TemporaryPassword: "Dirceu-Person-Only-Password-1",
+	})
+	if err != nil {
+		t.Fatalf("create Authentication Account for Person without Collaborator Journey: %v", err)
+	}
+	if account.ActorID == "" {
+		t.Fatal("expected Person account creation to provision a tenant Actor")
+	}
+	if !account.MustChangePassword {
+		t.Fatal("expected Person account creation to require a first-login password change")
+	}
+
+	var actor authz.AuthzActor
+	if err := database.First(&actor, "id = ?", account.ActorID).Error; err != nil {
+		t.Fatalf("find provisioned Person Actor: %v", err)
+	}
+	if actor.PersonID == nil || *actor.PersonID != person.ID {
+		t.Fatalf("expected Actor Person %q, got %#v", person.ID, actor.PersonID)
+	}
+	if actor.CollaboratorID != nil {
+		t.Fatalf("expected no Collaborator Journey on Person-only Actor, got %#v", actor.CollaboratorID)
+	}
+
+	login, err := service.Login(context.Background(), LoginRequest{
+		Login: person.Email, Password: "Dirceu-Person-Only-Password-1",
+	}, "", "")
+	if err != nil {
+		t.Fatalf("login through Person-only Authentication Account: %v", err)
+	}
+	if login.Session.PersonID != person.ID {
+		t.Fatalf("expected session Person %q, got %#v", person.ID, login.Session)
+	}
+	if login.Session.CollaboratorID != "" {
+		t.Fatalf("expected empty session Collaborator ID, got %q", login.Session.CollaboratorID)
+	}
 }
 
 func TestAuthenticationCreatesPersonActorAndAccountWhenNoActorExists(t *testing.T) {

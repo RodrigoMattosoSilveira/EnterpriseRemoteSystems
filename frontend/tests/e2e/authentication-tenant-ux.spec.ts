@@ -441,13 +441,13 @@ function validBrazilianCellular(seed: string): string {
   return `11${`9${digits}`.slice(0, 9)}`;
 }
 
-test("authentication account form preserves its collaborator selection across window focus", async ({ page, request }) => {
+test("authentication account form preserves its Person selection across window focus", async ({ page, request }) => {
   const suffix = `${Date.now()}${Math.floor(Math.random() * 100_000)}`;
   const candidate = await provisionAuthenticationActorCandidate(
     request,
     `form-stability-${suffix}`,
   );
-  const accountLogin = `auth-form-${suffix}@example.com`;
+  const accountLogin = candidate.email;
   const temporaryPassword = `Auth-Form-${suffix}-Password!`;
   // This fixture intentionally remains active after the test. The Person and
   // Collaborator created for this progressive-search regression are already
@@ -468,31 +468,31 @@ test("authentication account form preserves its collaborator selection across wi
     page.getByRole("heading", { name: "Authentication Accounts", exact: true }),
   ).toBeVisible();
 
-  const collaboratorSearch = page.getByLabel(
-    "Find collaborator by name or nickname",
+  const personSearch = page.getByLabel(
+    "Find Person by name, nickname, or email",
   );
   const searchResponsePromise = page.waitForResponse((response) => {
     const url = new URL(response.url());
     return (
       response.request().method() === "GET" &&
-      url.pathname === "/api/v1/collaborators" &&
+      url.pathname === "/api/v1/people" &&
       url.searchParams.get("search") === candidate.nickname
     );
   });
-  await collaboratorSearch.fill(candidate.nickname);
+  await personSearch.fill(candidate.nickname);
   expect((await searchResponsePromise).ok()).toBeTruthy();
 
-  const matchingCollaborators = page.getByRole("listbox", {
-    name: "Matching collaborators for authentication account",
+  const matchingPeople = page.getByRole("listbox", {
+    name: "Matching People for authentication account",
   });
-  await expect(matchingCollaborators).toBeVisible();
-  await matchingCollaborators
+  await expect(matchingPeople).toBeVisible();
+  await matchingPeople
     .getByRole("option", { name: new RegExp(candidate.nickname) })
     .click();
 
   await page.getByLabel("Login").fill(accountLogin);
   await page.getByLabel("Temporary password").fill(temporaryPassword);
-  await expect(page.getByText("Selected collaborator", { exact: true })).toBeVisible();
+  await expect(page.getByText("Selected Person", { exact: true })).toBeVisible();
   await expect(page.getByText(candidate.nickname, { exact: false })).toBeVisible();
   await expect(page.getByRole("button", { name: "Create account" })).toBeEnabled();
 
@@ -530,7 +530,7 @@ test("authentication account form preserves its collaborator selection across wi
   // another window cannot replace the candidate data under a partially
   // completed form.
   await expect(page).toHaveURL(/\/admin\/authentication$/);
-  await expect(page.getByText("Selected collaborator", { exact: true })).toBeVisible();
+  await expect(page.getByText("Selected Person", { exact: true })).toBeVisible();
   await expect(page.getByText(candidate.nickname, { exact: false })).toBeVisible();
   await expect(page.getByLabel("Login")).toHaveValue(accountLogin);
   await expect(page.getByLabel("Temporary password")).toHaveValue(temporaryPassword);
@@ -556,6 +556,11 @@ test("authentication administration finds an existing collaborator actor and lin
     },
   });
   expect(accountResponse.status()).toBe(201);
+  const accountEnvelope = (await accountResponse.json()) as {
+    data?: { id?: string };
+  };
+  const accountId = accountEnvelope.data?.id;
+  expect(accountId).toBeTruthy();
 
   await page.goto("/admin/authentication");
   await expect(
@@ -566,18 +571,18 @@ test("authentication administration finds an existing collaborator actor and lin
     const url = new URL(response.url());
     return (
       response.request().method() === "GET" &&
-      url.pathname === "/api/v1/collaborators" &&
+      url.pathname === "/api/v1/people" &&
       url.searchParams.get("search") === candidate.nickname
     );
   });
   await page
-    .getByLabel("Find collaborator by name or nickname")
+    .getByLabel("Find Person by name, nickname, or email")
     .fill(candidate.nickname);
   expect((await createSearchResponse).ok()).toBeTruthy();
 
   const createResult = page
     .getByRole("listbox", {
-      name: "Matching collaborators for authentication account",
+      name: "Matching People for authentication account",
     })
     .getByRole("option")
     .filter({ hasText: candidate.nickname });
@@ -591,12 +596,12 @@ test("authentication administration finds an existing collaborator actor and lin
     const url = new URL(response.url());
     return (
       response.request().method() === "GET" &&
-      url.pathname === "/api/v1/collaborators" &&
+      url.pathname === "/api/v1/people" &&
       url.searchParams.get("search") === candidate.nickname
     );
   });
   await page
-    .getByLabel("Filter by Person name or nickname, Actor, or account")
+    .getByLabel("Filter by Person name, nickname, or email, Tenant display name, Actor, or account")
     .fill(candidate.nickname);
   expect((await actorLookupResponse).ok()).toBeTruthy();
 
@@ -613,13 +618,125 @@ test("authentication administration finds an existing collaborator actor and lin
     `Authentication account: ${accountLogin} · Active`,
   );
 
-  const filteredAccountRow = page.getByRole("row").filter({
-    has: page.getByText(accountLogin, { exact: true }),
-  });
-  await expect(filteredAccountRow).toBeVisible();
+  const filteredAccountCard = page.getByTestId(
+    `authentication-account-${accountId}`,
+  );
+  await expect(filteredAccountCard).toBeVisible();
   await expect(
-    filteredAccountRow.getByRole("button", { name: "Deactivate" }),
+    filteredAccountCard.getByRole("button", { name: "Deactivate" }),
   ).toBeEnabled();
+
+  const selectedTenantName = await page
+    .getByLabel("Current tenant")
+    .locator(":scope > span > span")
+    .first()
+    .innerText();
+  expect(selectedTenantName.trim()).not.toBe("");
+
+  await page
+    .getByLabel("Filter by Person name, nickname, or email, Tenant display name, Actor, or account")
+    .fill(selectedTenantName);
+  await expect(filteredAccountCard).toBeVisible();
+});
+
+test("authentication administration creates an account for a Person who is not a Collaborator", async ({ page, request }) => {
+  const suffix = `${Date.now()}${Math.floor(Math.random() * 100_000)}`;
+  const firstName = "Dirceu";
+  const lastName = `Pereira${suffix}`;
+  const fullName = `${firstName} ${lastName}`;
+  const email = `dirceu-${suffix}@example.com`;
+
+  const personResponse = await request.post(e2eApiUrl("/api/v1/people"), {
+    headers: authzHeaders(),
+    data: {
+      firstName,
+      lastName,
+      nickname: `Dirceu${suffix}`,
+      cpf: validCPF(Number(suffix.slice(-9))),
+      rg: `RG-DIR-${suffix.slice(-8)}`,
+      cellular: validBrazilianCellular(suffix),
+      email,
+      statusId: PERSON_STATUS_ACTIVE_ID,
+      notes: "Authentication Person lookup E2E candidate without Collaborator journey",
+    },
+  });
+  expect(personResponse.status()).toBe(201);
+
+  await page.goto("/admin/authentication");
+  await expect(
+    page.getByRole("heading", { name: "Authentication Accounts", exact: true }),
+  ).toBeVisible();
+
+  const createPersonLookupResponse = page.waitForResponse((response) => {
+    const url = new URL(response.url());
+    return (
+      response.request().method() === "GET" &&
+      url.pathname === "/api/v1/people" &&
+      url.searchParams.get("search") === fullName
+    );
+  });
+  await page
+    .getByLabel("Find Person by name, nickname, or email")
+    .fill(fullName);
+  expect((await createPersonLookupResponse).ok()).toBeTruthy();
+
+  const createPersonResult = page
+    .getByRole("listbox", { name: "Matching People for authentication account" })
+    .getByRole("option")
+    .filter({ hasText: fullName });
+  await expect(createPersonResult).toBeVisible();
+  await expect(createPersonResult).toContainText(
+    "Eligible; a tenant Actor will be created",
+  );
+  await createPersonResult.click();
+  await expect(page.getByText("Selected Person", { exact: true })).toBeVisible();
+  await expect(page.getByLabel("Login")).toHaveValue(email);
+
+  const temporaryPassword = `Dirceu-${suffix}-Password!`;
+  await page.getByLabel("Temporary password").fill(temporaryPassword);
+  await expect(page.getByRole("button", { name: "Create account" })).toBeEnabled();
+
+  const createAccountResponse = page.waitForResponse((response) => {
+    const url = new URL(response.url());
+    return (
+      response.request().method() === "POST" &&
+      url.pathname === "/api/v1/auth/accounts"
+    );
+  });
+  await page.getByRole("button", { name: "Create account" }).click();
+  const accountResponse = await createAccountResponse;
+  expect(accountResponse.status()).toBe(201);
+  const accountEnvelope = (await accountResponse.json()) as {
+    data?: { id?: string; login?: string; actorId?: string };
+  };
+  expect(accountEnvelope.data?.id).toBeTruthy();
+  expect(accountEnvelope.data?.actorId).toBeTruthy();
+  expect(accountEnvelope.data?.login).toBe(email);
+  await expect(
+    page.getByTestId(`authentication-account-${accountEnvelope.data!.id!}`),
+  ).toBeVisible();
+
+  const personLookupResponse = page.waitForResponse((response) => {
+    const url = new URL(response.url());
+    return (
+      response.request().method() === "GET" &&
+      url.pathname === "/api/v1/people" &&
+      url.searchParams.get("search") === fullName
+    );
+  });
+  await page
+    .getByLabel("Filter by Person name, nickname, or email, Tenant display name, Actor, or account")
+    .fill(fullName);
+  expect((await personLookupResponse).ok()).toBeTruthy();
+
+  const result = page
+    .getByRole("list", { name: "Actor lookup results" })
+    .getByRole("listitem")
+    .filter({ hasText: fullName });
+  await expect(result).toBeVisible();
+  await expect(result).toContainText(`Email: ${email}`);
+  await expect(result).toContainText("Actor:");
+  await expect(result).toContainText(`Authentication account: ${email} · Active`);
 });
 
 test("a temporary-password account can sign in after completing the required password change", async ({ page: adminPage, browser, request }) => {
@@ -785,10 +902,10 @@ test("administrator-issued password reset replaces the password and clears the a
       ]),
     );
 
-    const accountRow = adminPage.getByRole("row").filter({
-      has: adminPage.getByText(account.login, { exact: true }),
-    });
-    await expect(accountRow).toBeVisible();
+    const accountCard = adminPage.getByTestId(
+      `authentication-account-${account.accountId}`,
+    );
+    await expect(accountCard).toBeVisible();
     const resetTokenResponsePromise = adminPage.waitForResponse((response) => {
       const url = new URL(response.url());
       return (
@@ -797,7 +914,7 @@ test("administrator-issued password reset replaces the password and clears the a
           `/api/v1/auth/accounts/${account.accountId}/password-reset-tokens`
       );
     });
-    await accountRow
+    await accountCard
       .getByRole("button", { name: "Issue reset token" })
       .click();
     const resetTokenResponse = await resetTokenResponsePromise;
@@ -934,6 +1051,7 @@ test("deactivated authentication account loses its session and cannot sign in un
         "Your account is inactive. Contact an Application Administrator.",
       ),
     ).toBeVisible();
+    await expect(page.getByRole("link", { name: "Reset a password" })).toHaveCount(0);
 
     const rejectedLoginResponse = page.waitForResponse((response) => {
       const url = new URL(response.url());
@@ -945,11 +1063,19 @@ test("deactivated authentication account loses its session and cannot sign in un
     await page.getByLabel("Login").fill(account.login);
     await page.getByLabel("Password").fill(account.password);
     await page.getByRole("button", { name: "Sign in" }).click();
-    expect((await rejectedLoginResponse).status()).toBe(401);
+    const rejectedResponse = await rejectedLoginResponse;
+    expect(rejectedResponse.status()).toBe(401);
+    const rejectedEnvelope = (await rejectedResponse.json()) as {
+      error?: { code?: string };
+    };
+    expect(rejectedEnvelope.error?.code).toBe("account_inactive");
     await expect(page).toHaveURL(/\/login/);
     await expect(
-      page.getByText("The login or password is incorrect."),
+      page.getByText(
+        "Your authentication account is inactive. Contact an Application Administrator.",
+      ),
     ).toBeVisible();
+    await expect(page.getByRole("link", { name: "Reset a password" })).toHaveCount(0);
 
     await setAuthenticationAccountActive(request, account.accountId, true);
     await signIn(page, account.login, account.password);
@@ -1012,7 +1138,9 @@ type PreparedAuthenticationActorCandidate = {
   actorId: string;
   actorKey: string;
   collaboratorId: string;
+  personId: string;
   nickname: string;
+  email: string;
 };
 
 async function provisionAuthenticationActorCandidate(
@@ -1021,6 +1149,7 @@ async function provisionAuthenticationActorCandidate(
 ): Promise<PreparedAuthenticationActorCandidate> {
   const suffix = keyPrefix.replace(/\D/g, "").slice(-12) || String(Date.now());
   const nickname = `AuthCandidate${suffix}`;
+  const email = `auth-candidate-${suffix}@example.com`;
   const personResponse = await request.post(e2eApiUrl("/api/v1/people"), {
     headers: authzHeaders(),
     data: {
@@ -1030,7 +1159,7 @@ async function provisionAuthenticationActorCandidate(
       cpf: validCPF(Number(suffix.slice(-9))),
       rg: `RG-AUTH-${suffix.slice(-8)}`,
       cellular: validBrazilianCellular(suffix),
-      email: `auth-candidate-${suffix}@example.com`,
+      email,
       street1: "Rua Authentication 123",
       city: "Sao Paulo",
       state: "SP",
@@ -1108,7 +1237,9 @@ async function provisionAuthenticationActorCandidate(
     actorId: actorId!,
     actorKey,
     collaboratorId: collaboratorId!,
+    personId: personId!,
     nickname,
+    email,
   };
 }
 
