@@ -931,7 +931,7 @@ test("administrator-issued password reset replaces the password and clears the a
     ).toHaveCount(0);
     await expect(
       adminPage.getByText(
-        "Your account is inactive. Contact an Application Administrator.",
+        "Your authentication account is inactive. Request reactivation to regain access.",
       ),
     ).toHaveCount(0);
     const resetTokenEnvelope = (await resetTokenResponse.json()) as {
@@ -1048,7 +1048,7 @@ test("deactivated authentication account loses its session and cannot sign in un
     await expect(page).toHaveURL(/\/login\?returnTo=/);
     await expect(
       page.getByText(
-        "Your account is inactive. Contact an Application Administrator.",
+        "Your authentication account is inactive. Request reactivation to regain access.",
       ),
     ).toBeVisible();
     await expect(page.getByRole("link", { name: "Reset a password" })).toHaveCount(0);
@@ -1072,10 +1072,11 @@ test("deactivated authentication account loses its session and cannot sign in un
     await expect(page).toHaveURL(/\/login/);
     await expect(
       page.getByText(
-        "Your authentication account is inactive. Contact an Application Administrator.",
+        "Your authentication account is inactive. Request reactivation to regain access.",
       ),
     ).toBeVisible();
     await expect(page.getByRole("link", { name: "Reset a password" })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Request reactivation" })).toBeVisible();
 
     await setAuthenticationAccountActive(request, account.accountId, true);
     await signIn(page, account.login, account.password);
