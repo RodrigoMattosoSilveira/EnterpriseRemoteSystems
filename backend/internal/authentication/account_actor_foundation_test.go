@@ -55,9 +55,16 @@ func TestAccountActorFoundationSplitsMultiTenantPersonActorWithoutMovingLegacyGr
 	if len(accountRecord.Actors) != 2 {
 		t.Fatalf("expected hydrated multi-tenant Actors, got %#v", accountRecord.Actors)
 	}
+	if accountRecord.GlobalPersonName != "Shared Person" || accountRecord.GlobalPersonEmail != "multi@example.com" {
+		t.Fatalf("expected Authentication Account Person identity, got name=%q email=%q", accountRecord.GlobalPersonName, accountRecord.GlobalPersonEmail)
+	}
+	tenantNames := map[string]string{"tenant-a": "Tenant A", "tenant-b": "Tenant B"}
 	for _, boundActor := range accountRecord.Actors {
 		if boundActor.PersonName != "Shared Person" || boundActor.PersonNickname != "Shared" {
 			t.Fatalf("expected global Person search identity on Actor binding, got %#v", boundActor)
+		}
+		if boundActor.TenantName != tenantNames[boundActor.TenantID] {
+			t.Fatalf("expected tenant display name for Actor binding, got %#v", boundActor)
 		}
 	}
 
@@ -185,6 +192,14 @@ func TestCreatePersonAccountReusesGlobalAccountAndAddsSecondTenantActor(t *testi
 	}
 	if second.GlobalPersonID == "" {
 		t.Fatal("expected Authentication Account to bind to the global Person")
+	}
+	if second.GlobalPersonName != "Shared Person" || second.GlobalPersonEmail != "shared@example.com" {
+		t.Fatalf("expected Account response to expose Person identity, got name=%q email=%q", second.GlobalPersonName, second.GlobalPersonEmail)
+	}
+	for _, boundActor := range second.Actors {
+		if boundActor.TenantName == "" {
+			t.Fatalf("expected Account response Actor to expose tenant display name, got %#v", boundActor)
+		}
 	}
 
 	options, err := authz.NewGORMStore(database).ListAccountTenantOptions(context.Background(), second.ID)

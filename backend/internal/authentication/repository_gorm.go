@@ -738,6 +738,7 @@ func (r *GORMRepository) hydrateAccountActors(ctx context.Context, record Accoun
 		Active          bool
 		ScopeType       string
 		TenantID        *string
+		TenantName      *string
 		MembershipID    *string
 		IsPrimary       bool
 	}
@@ -755,11 +756,13 @@ func (r *GORMRepository) hydrateAccountActors(ctx context.Context, record Accoun
 			a.active AS active,
 			aa.scope_type AS scope_type,
 			aa.tenant_id AS tenant_id,
+			t.name AS tenant_name,
 			aa.membership_id AS membership_id,
 			aa.is_primary AS is_primary`).
 		Joins("JOIN authz_actors a ON a.id = aa.actor_id").
 		Joins("LEFT JOIN auth_account_people aap ON aap.account_id = aa.account_id").
 		Joins("LEFT JOIN global_people gp ON gp.id = aap.person_id").
+		Joins("LEFT JOIN tenants t ON t.id = aa.tenant_id").
 		Where("aa.account_id = ?", record.ID).
 		Order("aa.is_primary DESC, aa.scope_type ASC, aa.tenant_id ASC, a.actor_key ASC").
 		Scan(&rows).Error; err != nil {
@@ -783,6 +786,7 @@ func (r *GORMRepository) hydrateAccountActors(ctx context.Context, record Accoun
 			CollaboratorID: stringValue(row.CollaboratorID),
 			ScopeType:      row.ScopeType,
 			TenantID:       stringValue(row.TenantID),
+			TenantName:     stringValue(row.TenantName),
 			MembershipID:   stringValue(row.MembershipID),
 			Active:         row.Active,
 			Primary:        row.IsPrimary,
@@ -801,13 +805,27 @@ func (r *GORMRepository) hydrateAccountActors(ctx context.Context, record Accoun
 		}
 	}
 
-	var accountPerson AccountPerson
-	result := r.database.WithContext(ctx).Where("account_id = ?", record.ID).Limit(1).Find(&accountPerson)
+	type accountPersonProjection struct {
+		PersonID  string
+		FirstName string
+		LastName  string
+		Email     string
+	}
+	var accountPerson accountPersonProjection
+	result := r.database.WithContext(ctx).
+		Table("auth_account_people aap").
+		Select("aap.person_id AS person_id, gp.first_name AS first_name, gp.last_name AS last_name, gp.email AS email").
+		Joins("JOIN global_people gp ON gp.id = aap.person_id").
+		Where("aap.account_id = ?", record.ID).
+		Limit(1).
+		Scan(&accountPerson)
 	if result.Error != nil {
 		return AccountRecord{}, fmt.Errorf("hydrate Authentication Account Person: %w", result.Error)
 	}
 	if result.RowsAffected > 0 {
 		record.GlobalPersonID = accountPerson.PersonID
+		record.GlobalPersonName = personDisplayName(accountPerson.FirstName, accountPerson.LastName)
+		record.GlobalPersonEmail = accountPerson.Email
 	}
 	return record, nil
 }

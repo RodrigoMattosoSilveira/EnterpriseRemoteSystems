@@ -79,8 +79,30 @@ export function resetPassword(
   });
 }
 
-export function listAuthAccounts(): Promise<AuthAccount[]> {
-  return apiFetch<AuthAccount[]>("/auth/accounts");
+export async function listAuthAccounts(): Promise<AuthAccount[]> {
+  const accounts = await apiFetch<AuthAccount[]>("/auth/accounts");
+  return normalizeAuthAccounts(accounts);
+}
+
+export function normalizeAuthAccounts(accounts: AuthAccount[]): AuthAccount[] {
+  return accounts.map((account) => {
+    if (!account.globalPersonId || account.globalPersonName?.trim()) {
+      return account;
+    }
+
+    const actorPersonNames = Array.from(
+      new Set(
+        (account.actors ?? [])
+          .map((actor) => actor.personName?.trim())
+          .filter((name): name is string => Boolean(name)),
+      ),
+    );
+    if (actorPersonNames.length !== 1) {
+      return account;
+    }
+
+    return { ...account, globalPersonName: actorPersonNames[0] };
+  });
 }
 
 export const AUTHENTICATION_ACCOUNT_FEEDBACK_EVENT =

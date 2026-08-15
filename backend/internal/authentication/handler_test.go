@@ -112,6 +112,50 @@ func TestAuthenticationHandlerIssuesReadsAndClearsSessionCookie(t *testing.T) {
 	}
 }
 
+func TestAuthenticationHandlerInactiveAccountLoginReturnsPreciseCodeForVerifiedCredentials(t *testing.T) {
+	_, _, service, actor := authenticationTestService(t)
+	account, err := service.CreateAccount(t.Context(), CreateAccountRequest{
+		ActorID: actor.ID, Login: "inactive-login@example.com", TemporaryPassword: "Inactive-Login-Password-1",
+	})
+	if err != nil {
+		t.Fatalf("create account: %v", err)
+	}
+	if _, err := service.SetAccountActive(t.Context(), account.ID, false); err != nil {
+		t.Fatalf("deactivate account: %v", err)
+	}
+
+	handler := NewHandler(service, CookieConfig{Name: "ers_test_session"}, nil, nil)
+	app := fiber.New()
+	app.Post("/login", handler.Login)
+
+	requestLogin := func(password string) (int, string) {
+		body, _ := json.Marshal(LoginRequest{Login: account.Login, Password: password})
+		request := httptest.NewRequest(http.MethodPost, "/login", bytes.NewReader(body))
+		request.Header.Set("Content-Type", "application/json")
+		response, err := app.Test(request)
+		if err != nil {
+			t.Fatalf("login request: %v", err)
+		}
+		defer response.Body.Close()
+		var payload struct {
+			Error struct {
+				Code string `json:"code"`
+			} `json:"error"`
+		}
+		if err := json.NewDecoder(response.Body).Decode(&payload); err != nil {
+			t.Fatalf("decode login response: %v", err)
+		}
+		return response.StatusCode, payload.Error.Code
+	}
+
+	if status, code := requestLogin("Wrong-Password-1"); status != http.StatusUnauthorized || code != "invalid_credentials" {
+		t.Fatalf("expected wrong password to remain invalid_credentials/401, got %s/%d", code, status)
+	}
+	if status, code := requestLogin("Inactive-Login-Password-1"); status != http.StatusUnauthorized || code != "account_inactive" {
+		t.Fatalf("expected verified inactive account to return account_inactive/401, got %s/%d", code, status)
+	}
+}
+
 func TestAuthenticationHandlerResetReturnsVerifiedAccountIdentity(t *testing.T) {
 	_, _, service, actor := authenticationTestService(t)
 	account, err := service.CreateAccount(t.Context(), CreateAccountRequest{
