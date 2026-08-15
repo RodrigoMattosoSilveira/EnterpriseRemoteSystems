@@ -531,7 +531,7 @@ export function AuthenticationAdminPage() {
                         key={person.membershipId || person.id}
                         type="button"
                         role="option"
-                        aria-selected={selectedPerson?.id === person.id}
+                        aria-selected={false}
                         onClick={() => {
                           setSelectedPerson(person);
                           setPersonSearch(identity);
