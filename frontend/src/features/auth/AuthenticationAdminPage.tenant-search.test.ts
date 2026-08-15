@@ -37,5 +37,13 @@ describe("Authentication Administration Tenant display-name search", () => {
         "manual test",
       )],
     ).toEqual(["actor-byte"]);
+
+    expect(
+      [...authenticationTenantActorIdsMatchingDisplayName(
+        [account],
+        [{ id: "tenant-byte", name: "  Byte   28A\u00a0Manual Test  " }],
+        "Byte 28A Manual Test",
+      )],
+    ).toEqual(["actor-byte"]);
   });
 });

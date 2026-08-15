@@ -596,7 +596,7 @@ test("authentication administration finds an existing collaborator actor and lin
     const url = new URL(response.url());
     return (
       response.request().method() === "GET" &&
-      url.pathname === "/api/v1/collaborators" &&
+      url.pathname === "/api/v1/people" &&
       url.searchParams.get("search") === candidate.nickname
     );
   });
@@ -625,6 +625,69 @@ test("authentication administration finds an existing collaborator actor and lin
   await expect(
     filteredAccountCard.getByRole("button", { name: "Deactivate" }),
   ).toBeEnabled();
+
+  const selectedTenantName = await page
+    .getByLabel("Current tenant")
+    .locator(":scope > span > span")
+    .first()
+    .innerText();
+  expect(selectedTenantName.trim()).not.toBe("");
+
+  await page
+    .getByLabel("Filter by Person name, nickname, or email, Tenant display name, Actor, or account")
+    .fill(selectedTenantName);
+  await expect(filteredAccountCard).toBeVisible();
+});
+
+test("authentication administration finds a Person who is not a Collaborator", async ({ page, request }) => {
+  const suffix = `${Date.now()}${Math.floor(Math.random() * 100_000)}`;
+  const firstName = "Dirceu";
+  const lastName = `Pereira${suffix}`;
+  const fullName = `${firstName} ${lastName}`;
+  const email = `dirceu-${suffix}@example.com`;
+
+  const personResponse = await request.post(e2eApiUrl("/api/v1/people"), {
+    headers: authzHeaders(),
+    data: {
+      firstName,
+      lastName,
+      nickname: `Dirceu${suffix}`,
+      cpf: validCPF(Number(suffix.slice(-9))),
+      rg: `RG-DIR-${suffix.slice(-8)}`,
+      cellular: validBrazilianCellular(suffix),
+      email,
+      statusId: PERSON_STATUS_ACTIVE_ID,
+      notes: "Authentication Person lookup E2E candidate without Collaborator journey",
+    },
+  });
+  expect(personResponse.status()).toBe(201);
+
+  await page.goto("/admin/authentication");
+  await expect(
+    page.getByRole("heading", { name: "Authentication Accounts", exact: true }),
+  ).toBeVisible();
+
+  const personLookupResponse = page.waitForResponse((response) => {
+    const url = new URL(response.url());
+    return (
+      response.request().method() === "GET" &&
+      url.pathname === "/api/v1/people" &&
+      url.searchParams.get("search") === fullName
+    );
+  });
+  await page
+    .getByLabel("Filter by Person name, nickname, or email, Tenant display name, Actor, or account")
+    .fill(fullName);
+  expect((await personLookupResponse).ok()).toBeTruthy();
+
+  const result = page
+    .getByRole("list", { name: "Actor lookup results" })
+    .getByRole("listitem")
+    .filter({ hasText: fullName });
+  await expect(result).toBeVisible();
+  await expect(result).toContainText(`Email: ${email}`);
+  await expect(result).toContainText("Authorization actor: none");
+  await expect(result).toContainText("Authentication account: none");
 });
 
 test("a temporary-password account can sign in after completing the required password change", async ({ page: adminPage, browser, request }) => {

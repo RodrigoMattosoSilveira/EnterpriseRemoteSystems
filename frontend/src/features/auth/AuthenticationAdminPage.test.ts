@@ -1,11 +1,14 @@
 import { describe, expect, it } from "vitest";
 import type { AuthzActor } from "../../types/authz";
 import type { AuthAccount } from "../../types/auth";
+import type { Person } from "../../types/people";
 import {
   authenticationAccountForActor,
+  authenticationAccountForPerson,
   authenticationAccountMatchesSearch,
   authenticationAccountPersonTarget,
   authenticationActorForCollaborator,
+  authenticationActorForPerson,
   authenticationActorTenantLabel,
   authenticationActorOptionLabel,
   authenticationCollaboratorOptionLabel,
@@ -243,6 +246,58 @@ describe("authentication account collaborator selection", () => {
     expect(
       authenticationCollaboratorStatusLabel(eligibleActor, undefined),
     ).toBe("Eligible for account creation");
+  });
+});
+
+describe("authentication Person lookup", () => {
+  const person: Person = {
+    id: "legacy-person-dirceu",
+    globalPersonId: "global-person-dirceu",
+    membershipId: "membership-dirceu-byte",
+    tenantId: "tenant-byte",
+    firstName: "Dirceu",
+    lastName: "Pereira",
+    nickname: "Dirceu",
+    cpf: "12345678901",
+    rg: "DIRCEU01",
+    cellular: "11912345678",
+    email: "dirceu@example.test",
+    country: "Brasil",
+    profileCompletionStatus: "PERSONAL_ONLY",
+    canCreateCollaborator: false,
+    statusId: "active",
+  };
+
+  it("finds a Person independently of Collaborator status", () => {
+    expect(authenticationActorForPerson(person, [])).toBeUndefined();
+    expect(authenticationAccountForPerson(person, [])).toBeUndefined();
+  });
+
+  it("maps a Person to an existing Actor and Authentication Account", () => {
+    const personActor: AuthzActor = {
+      id: "actor-dirceu",
+      actorKey: "dirceu-byte",
+      displayName: "Dirceu Pereira",
+      personId: person.globalPersonId,
+      active: true,
+      roleGrants: [],
+    };
+    const account: AuthAccount = {
+      id: "account-dirceu",
+      actorId: personActor.id,
+      actorKey: personActor.actorKey,
+      displayName: personActor.displayName,
+      globalPersonId: person.globalPersonId,
+      login: person.email,
+      active: true,
+      actorActive: true,
+      mustChangePassword: false,
+      createdAt: "2026-08-15T00:00:00Z",
+      updatedAt: "2026-08-15T00:00:00Z",
+    };
+
+    expect(authenticationActorForPerson(person, [personActor])).toEqual(personActor);
+    expect(authenticationAccountForPerson(person, [account])).toEqual(account);
   });
 });
 

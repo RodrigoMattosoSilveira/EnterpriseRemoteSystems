@@ -8,6 +8,7 @@ import {
   setAuthAccountActive,
 } from "../../api/auth.api";
 import { listAuthzActors } from "../../api/authz.api";
+import { listPeoplePage } from "../../api/people.api";
 import {
   authorizationRequestContext,
   readSelectedTenantId,
@@ -19,6 +20,7 @@ import { useCollaboratorSearch } from "../collaborators/useCollaborators";
 import type { AuthAccount, AuthAccountActor } from "../../types/auth";
 import type { AuthzActor, AuthzActorRoleGrant } from "../../types/authz";
 import type { Collaborator } from "../../types/collaborators";
+import type { Person } from "../../types/people";
 
 export function activeAuthenticationGrants(
   actor: AuthzActor,
@@ -72,6 +74,44 @@ export function authenticationAccountForActor(
     (account) =>
       account.actorId === actor.id ||
       account.actors?.some((linkedActor) => linkedActor.actorId === actor.id),
+  );
+}
+
+export function authenticationActorForPerson(
+  person: Person,
+  actors: AuthzActor[],
+): AuthzActor | undefined {
+  const personIds = new Set(
+    [person.id, person.globalPersonId]
+      .map((value) => value?.trim())
+      .filter((value): value is string => Boolean(value)),
+  );
+  return actors.find(
+    (actor) => Boolean(actor.personId && personIds.has(actor.personId)),
+  );
+}
+
+export function authenticationAccountForPerson(
+  person: Person,
+  accounts: AuthAccount[],
+): AuthAccount | undefined {
+  const globalPersonId = person.globalPersonId?.trim();
+  if (globalPersonId) {
+    const byGlobalPerson = accounts.find(
+      (account) => account.globalPersonId === globalPersonId,
+    );
+    if (byGlobalPerson) return byGlobalPerson;
+  }
+
+  const personIds = new Set(
+    [person.id, person.globalPersonId]
+      .map((value) => value?.trim())
+      .filter((value): value is string => Boolean(value)),
+  );
+  return accounts.find((account) =>
+    account.actors?.some(
+      (actor) => Boolean(actor.personId && personIds.has(actor.personId)),
+    ),
   );
 }
 
@@ -170,12 +210,19 @@ export function authenticationTenantActorIdsMatchingDisplayName(
   tenantOptions: Array<{ id: string; name: string }>,
   searchValue: string,
 ): Set<string> {
-  const search = searchValue.trim().toLowerCase();
+  const normalizeTenantSearchText = (value: string) =>
+    value
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/\s+/g, " ")
+      .trim()
+      .toLocaleLowerCase();
+  const search = normalizeTenantSearchText(searchValue);
   if (!search) return new Set();
 
   const matchingTenantIds = new Set(
     tenantOptions
-      .filter((tenant) => tenant.name.toLowerCase().includes(search))
+      .filter((tenant) => normalizeTenantSearchText(tenant.name).includes(search))
       .map((tenant) => tenant.id),
   );
 
@@ -200,9 +247,16 @@ export function AuthenticationAdminPage() {
     queryFn: listAuthAccounts,
     refetchOnWindowFocus: false,
   });
+  // Reuse the exact Account tenant-options query that AppShell uses for the
+  // visible Tenant selector. If a Tenant name can be selected in the header,
+  // Authentication Administration must match that same displayed name.
+  const authenticatedAccountId =
+    auth.status === "authenticated" ? auth.session.accountId : "";
   const tenantOptions = useQuery({
-    queryKey: ["auth", "tenant-options", "authentication-admin"],
+    queryKey: ["auth", authenticatedAccountId, "tenant-options"],
     queryFn: loadAuthTenantOptions,
+    enabled: Boolean(authenticatedAccountId),
+    staleTime: 60_000,
     refetchOnWindowFocus: false,
   });
   const actors = useQuery({
@@ -219,10 +273,22 @@ export function AuthenticationAdminPage() {
     false,
   );
   const [actorLookupSearch, setActorLookupSearch] = useState("");
-  const actorLookupCollaborators = useCollaboratorSearch(
-    actorLookupSearch,
-    false,
-  );
+  const actorLookupPeople = useQuery({
+    queryKey: [
+      "people",
+      "authentication-lookup",
+      tenantId,
+      actorLookupSearch.trim(),
+    ],
+    queryFn: () =>
+      listPeoplePage({
+        search: actorLookupSearch.trim(),
+        page: 1,
+        pageSize: 25,
+      }),
+    enabled: actorLookupSearch.trim().length > 0,
+    refetchOnWindowFocus: false,
+  });
   const [login, setLogin] = useState("");
   const [temporaryPassword, setTemporaryPassword] = useState("");
   const [actionError, setActionError] = useState<unknown>(null);
@@ -277,12 +343,14 @@ export function AuthenticationAdminPage() {
   const actorLookupResults = useMemo(() => {
     const actorItems = actors.data ?? [];
     const accountItems = accounts.data ?? [];
-    return (actorLookupCollaborators.data?.items ?? []).map((collaborator) => {
-      const actor = authenticationActorForCollaborator(collaborator, actorItems);
-      const account = authenticationAccountForActor(actor, accountItems);
-      return { collaborator, actor, account };
+    return (actorLookupPeople.data?.items ?? []).map((person) => {
+      const actor = authenticationActorForPerson(person, actorItems);
+      const account =
+        authenticationAccountForPerson(person, accountItems) ??
+        authenticationAccountForActor(actor, accountItems);
+      return { person, actor, account };
     });
-  }, [accounts.data, actorLookupCollaborators.data, actors.data]);
+  }, [accounts.data, actorLookupPeople.data, actors.data]);
   const showCollaboratorSuggestions =
     collaboratorSearch.trim().length > 0 && selectedCollaborator === null;
   const showActorLookup = actorLookupSearch.trim().length > 0;
@@ -355,7 +423,7 @@ export function AuthenticationAdminPage() {
         account and the tenant-specific Actors through which that account operates.
       </p>
       <ApiErrorPanel
-        error={accounts.error ?? actors.error ?? mutation.error ?? actionError}
+        error={accounts.error ?? tenantOptions.error ?? actors.error ?? mutation.error ?? actionError}
       />
 
       <section className="mt-6 rounded-2xl border bg-white p-5">
@@ -565,29 +633,28 @@ export function AuthenticationAdminPage() {
             aria-label="Actor lookup results"
             className="mt-3 divide-y rounded-xl border border-slate-200"
           >
-            {actorLookupCollaborators.isLoading ||
-            actorLookupCollaborators.isFetching ? (
-              <p className="p-3 text-sm text-slate-500">Loading actor matches…</p>
-            ) : actorLookupCollaborators.error ? (
-              <p className="p-3 text-sm text-red-700">Could not load actor matches.</p>
+            {actorLookupPeople.isLoading || actorLookupPeople.isFetching ? (
+              <p className="p-3 text-sm text-slate-500">Loading Person matches…</p>
+            ) : actorLookupPeople.error ? (
+              <p className="p-3 text-sm text-red-700">Could not load Person matches.</p>
             ) : actorLookupResults.length === 0 ? (
-              <p className="p-3 text-sm text-slate-500">
-                No matching collaborators. Person-based Authentication Account matches,
-                if any, are shown in the accounts table below.
-              </p>
+              <p className="p-3 text-sm text-slate-500">No matching People.</p>
             ) : (
-              actorLookupResults.map(({ collaborator, actor, account }) => {
-                const collaboratorName =
-                  collaborator.personName?.trim() || "Unnamed collaborator";
-                const nickname = collaborator.personNickname?.trim();
+              actorLookupResults.map(({ person, actor, account }) => {
+                const personName =
+                  `${person.firstName} ${person.lastName}`.trim() || "Unnamed Person";
+                const nickname = person.nickname?.trim();
                 return (
-                  <article key={collaborator.id} role="listitem" className="p-3 text-sm">
+                  <article
+                    key={person.membershipId || person.id}
+                    role="listitem"
+                    className="p-3 text-sm"
+                  >
                     <p className="font-semibold text-slate-900">
-                      {collaboratorName}
-                      {nickname && nickname !== collaboratorName
-                        ? ` (${nickname})`
-                        : ""}
+                      {personName}
+                      {nickname && nickname !== personName ? ` (${nickname})` : ""}
                     </p>
+                    <p className="mt-1 text-slate-500">Email: {person.email}</p>
                     {!actor ? (
                       <p className="mt-1 text-amber-700">Authorization actor: none</p>
                     ) : (
@@ -602,17 +669,17 @@ export function AuthenticationAdminPage() {
                                 .join(", ")
                             : "none active"}
                         </p>
-                        <p className="mt-1 font-medium text-slate-700">
-                          Authentication account: {account
-                            ? `${account.login} · ${
-                                canIssuePasswordResetToken(account)
-                                  ? "Active"
-                                  : "Inactive"
-                              }`
-                            : "none"}
-                        </p>
                       </>
                     )}
+                    <p className="mt-1 font-medium text-slate-700">
+                      Authentication account: {account
+                        ? `${account.login} · ${
+                            canIssuePasswordResetToken(account)
+                              ? "Active"
+                              : "Inactive"
+                          }`
+                        : "none"}
+                    </p>
                   </article>
                 );
               })
