@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link, Navigate, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { ApiError } from "../../api/client";
+import { requestAccountReactivation } from "../../api/auth.api";
 import { authenticate } from "../../app/authStore";
 import { useAuthState } from "../../app/useAuth";
 import { AuthCard, AuthField, primaryButtonClass } from "./AuthCard";
@@ -15,6 +16,9 @@ export default function LoginPage() {
   const [error, setError] = useState("");
   const [loginErrorCode, setLoginErrorCode] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [reactivationPending, setReactivationPending] = useState(false);
+  const [reactivationMessage, setReactivationMessage] = useState("");
+  const [reactivationError, setReactivationError] = useState("");
 
   if (auth.status === "authenticated") {
     return <Navigate to={auth.session.mustChangePassword ? "/password/change" : safeReturnTo(params.get("returnTo"))} replace />;
@@ -25,6 +29,8 @@ export default function LoginPage() {
     setSubmitting(true);
     setError("");
     setLoginErrorCode(null);
+    setReactivationMessage("");
+    setReactivationError("");
     try {
       const session = await authenticate({ login, password });
       navigate(session.mustChangePassword ? "/password/change" : safeReturnTo(params.get("returnTo")), { replace: true });
@@ -37,17 +43,46 @@ export default function LoginPage() {
     }
   }
 
+  async function requestReactivation() {
+    setReactivationPending(true);
+    setReactivationMessage("");
+    setReactivationError("");
+    try {
+      await requestAccountReactivation({ login, password });
+      setReactivationMessage("Reactivation requested. An Application Administrator will review your request.");
+      setPassword("");
+    } catch (cause) {
+      setReactivationError(
+        cause instanceof Error ? cause.message : "Unable to request account reactivation.",
+      );
+    } finally {
+      setReactivationPending(false);
+    }
+  }
+
   return (
     <AuthCard title="Sign in" subtitle="Use your ERS account to continue.">
       {auth.status === "anonymous" && auth.reason === "expired" && <p role="alert" className="mb-4 rounded-xl bg-amber-50 p-3 text-sm text-amber-900">Your session expired. Sign in again to continue.</p>}
-      {auth.status === "anonymous" && auth.reason === "inactive" && <p role="alert" className="mb-4 rounded-xl bg-amber-50 p-3 text-sm text-amber-900">Your account is inactive. Contact an Application Administrator.</p>}
+      {auth.status === "anonymous" && auth.reason === "inactive" && <p role="alert" className="mb-4 rounded-xl bg-amber-50 p-3 text-sm text-amber-900">Your authentication account is inactive. Request reactivation to regain access.</p>}
       {location.state && typeof location.state === "object" && "message" in location.state && <p role="status" className="mb-4 rounded-xl bg-emerald-50 p-3 text-sm text-emerald-900">{String(location.state.message)}</p>}
       {error && <p role="alert" className="mb-4 rounded-xl bg-red-50 p-3 text-sm text-red-800">{error}</p>}
+      {reactivationError && <p role="alert" className="mb-4 rounded-xl bg-red-50 p-3 text-sm text-red-800">{reactivationError}</p>}
+      {reactivationMessage && <p role="status" className="mb-4 rounded-xl bg-emerald-50 p-3 text-sm text-emerald-900">{reactivationMessage}</p>}
       <form onSubmit={submit} className="space-y-4">
         <AuthField label="Login" type="email" autoComplete="username" value={login} onChange={(e) => setLogin(e.target.value)} required />
         <AuthField label="Password" type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} required />
         <button className={primaryButtonClass} disabled={submitting}>{submitting ? "Signing in…" : "Sign in"}</button>
       </form>
+      {loginErrorCode === "account_inactive" && !reactivationMessage && (
+        <button
+          type="button"
+          className={`${primaryButtonClass} mt-3`}
+          disabled={reactivationPending || !login.trim() || !password}
+          onClick={() => void requestReactivation()}
+        >
+          {reactivationPending ? "Requesting…" : "Request reactivation"}
+        </button>
+      )}
       {!isInactiveLoginState(auth, loginErrorCode) && (
         <p className="mt-5 text-center text-sm text-slate-600"><Link className="underline" to="/password/reset">Reset a password</Link></p>
       )}
@@ -63,7 +98,7 @@ export function loginFailurePresentation(cause: unknown): {
     if (cause.code === "account_inactive") {
       return {
         code: cause.code,
-        message: "Your authentication account is inactive. Contact an Application Administrator.",
+        message: "Your authentication account is inactive. Request reactivation to regain access.",
       };
     }
     if (cause.code === "actor_inactive") {

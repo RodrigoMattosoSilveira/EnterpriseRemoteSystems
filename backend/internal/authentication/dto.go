@@ -93,3 +93,44 @@ type PasswordResetResult struct {
 	Login             string    `json:"login"`
 	PasswordChangedAt time.Time `json:"passwordChangedAt"`
 }
+
+type EnablePersonAuthenticationRequest struct {
+	TemporaryPassword string `json:"temporaryPassword"`
+}
+
+type PersonAuthenticationStatusResponse struct {
+	Enabled                bool   `json:"enabled"`
+	AccountActive          bool   `json:"accountActive"`
+	CanRequestReactivation bool   `json:"canRequestReactivation"`
+	Status                 string `json:"status"`
+}
+
+type RequestAccountReactivationRequest struct {
+	Login    string `json:"login"`
+	Password string `json:"password"`
+}
+
+type ReviewAccountReactivationRequest struct {
+	Approve bool   `json:"approve"`
+	Reason  string `json:"reason"`
+}
+
+type AccountReactivationRequestResponse struct {
+	ID                string     `json:"id"`
+	AccountID         string     `json:"accountId"`
+	Login             string     `json:"login"`
+	GlobalPersonName  string     `json:"globalPersonName,omitempty"`
+	Status            string     `json:"status"`
+	RequestedByType   string     `json:"requestedByType"`
+	RequestedTenantID string     `json:"requestedTenantId,omitempty"`
+	FirstRequestedAt  time.Time  `json:"firstRequestedAt"`
+	LastRequestedAt   time.Time  `json:"lastRequestedAt"`
+	RequestCount      int        `json:"requestCount"`
+	ReviewedByActorID string     `json:"reviewedByActorId,omitempty"`
+	ReviewedAt        *time.Time `json:"reviewedAt,omitempty"`
+	ReviewReason      string     `json:"reviewReason,omitempty"`
+}
+
+type ReactivationRequestAcknowledgement struct {
+	Status string `json:"status"`
+}

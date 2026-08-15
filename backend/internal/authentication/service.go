@@ -17,6 +17,12 @@ type Service interface {
 	CreateAccount(ctx context.Context, req CreateAccountRequest) (AccountResponse, error)
 	SetAccountActive(ctx context.Context, id string, active bool) (AccountResponse, error)
 	IssuePasswordResetToken(ctx context.Context, accountID string) (PasswordResetTokenResponse, error)
+	GetPersonAuthenticationStatus(ctx context.Context, tenantID string, personID string) (PersonAuthenticationStatusResponse, error)
+	EnablePersonAuthentication(ctx context.Context, tenantID string, personID string, req EnablePersonAuthenticationRequest) (PersonAuthenticationStatusResponse, error)
+	RequestSelfReactivation(ctx context.Context, req RequestAccountReactivationRequest, userAgent string, ipAddress string) (ReactivationRequestAcknowledgement, error)
+	RequestTenantPersonReactivation(ctx context.Context, tenantID string, personID string, requesterActorID string, userAgent string, ipAddress string) (ReactivationRequestAcknowledgement, error)
+	ListReactivationRequests(ctx context.Context) ([]AccountReactivationRequestResponse, error)
+	ReviewReactivationRequest(ctx context.Context, requestID string, reviewerActorID string, req ReviewAccountReactivationRequest) (AccountReactivationRequestResponse, error)
 }
 
 type ServiceConfig struct {
