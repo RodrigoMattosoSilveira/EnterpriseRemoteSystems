@@ -1051,6 +1051,7 @@ test("deactivated authentication account loses its session and cannot sign in un
         "Your account is inactive. Contact an Application Administrator.",
       ),
     ).toBeVisible();
+    await expect(page.getByRole("link", { name: "Reset a password" })).toHaveCount(0);
 
     const rejectedLoginResponse = page.waitForResponse((response) => {
       const url = new URL(response.url());
@@ -1062,11 +1063,19 @@ test("deactivated authentication account loses its session and cannot sign in un
     await page.getByLabel("Login").fill(account.login);
     await page.getByLabel("Password").fill(account.password);
     await page.getByRole("button", { name: "Sign in" }).click();
-    expect((await rejectedLoginResponse).status()).toBe(401);
+    const rejectedResponse = await rejectedLoginResponse;
+    expect(rejectedResponse.status()).toBe(401);
+    const rejectedEnvelope = (await rejectedResponse.json()) as {
+      error?: { code?: string };
+    };
+    expect(rejectedEnvelope.error?.code).toBe("account_inactive");
     await expect(page).toHaveURL(/\/login/);
     await expect(
-      page.getByText("The login or password is incorrect."),
+      page.getByText(
+        "Your authentication account is inactive. Contact an Application Administrator.",
+      ),
     ).toBeVisible();
+    await expect(page.getByRole("link", { name: "Reset a password" })).toHaveCount(0);
 
     await setAuthenticationAccountActive(request, account.accountId, true);
     await signIn(page, account.login, account.password);

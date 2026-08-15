@@ -79,12 +79,14 @@ func (s *service) Login(ctx context.Context, req LoginRequest, userAgent string,
 		}
 		return LoginResult{}, err
 	}
-	if !account.Active || !account.AnyActorActive {
-		_ = bcrypt.CompareHashAndPassword([]byte(account.PasswordHash), []byte(req.Password))
-		return LoginResult{}, ErrInvalidCredentials
-	}
 	if err := bcrypt.CompareHashAndPassword([]byte(account.PasswordHash), []byte(req.Password)); err != nil {
 		return LoginResult{}, ErrInvalidCredentials
+	}
+	if !account.Active {
+		return LoginResult{}, ErrAccountInactive
+	}
+	if !account.AnyActorActive {
+		return LoginResult{}, ErrActorInactive
 	}
 
 	now := s.clock().UTC()
@@ -120,9 +122,13 @@ func (s *service) Login(ctx context.Context, req LoginRequest, userAgent string,
 		_ = s.repository.RevokeSession(ctx, session.ID, now)
 		return LoginResult{}, err
 	}
-	if !refreshedAccount.Active || !refreshedAccount.AnyActorActive {
+	if !refreshedAccount.Active {
 		_ = s.repository.RevokeSession(ctx, session.ID, now)
-		return LoginResult{}, ErrInvalidCredentials
+		return LoginResult{}, ErrAccountInactive
+	}
+	if !refreshedAccount.AnyActorActive {
+		_ = s.repository.RevokeSession(ctx, session.ID, now)
+		return LoginResult{}, ErrActorInactive
 	}
 	if err := s.repository.UpdateLastLogin(ctx, account.ID, now); err != nil {
 		_ = s.repository.RevokeSession(ctx, session.ID, now)

@@ -13,6 +13,7 @@ export default function LoginPage() {
   const [login, setLogin] = useState(() => loginFromLocationState(location.state));
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [loginErrorCode, setLoginErrorCode] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
   if (auth.status === "authenticated") {
@@ -23,11 +24,14 @@ export default function LoginPage() {
     event.preventDefault();
     setSubmitting(true);
     setError("");
+    setLoginErrorCode(null);
     try {
       const session = await authenticate({ login, password });
       navigate(session.mustChangePassword ? "/password/change" : safeReturnTo(params.get("returnTo")), { replace: true });
     } catch (cause) {
-      setError(cause instanceof ApiError && cause.status === 401 ? "The login or password is incorrect." : cause instanceof Error ? cause.message : "Unable to sign in.");
+      const presentation = loginFailurePresentation(cause);
+      setError(presentation.message);
+      setLoginErrorCode(presentation.code);
     } finally {
       setSubmitting(false);
     }
@@ -44,8 +48,49 @@ export default function LoginPage() {
         <AuthField label="Password" type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} required />
         <button className={primaryButtonClass} disabled={submitting}>{submitting ? "Signing in…" : "Sign in"}</button>
       </form>
-      <p className="mt-5 text-center text-sm text-slate-600"><Link className="underline" to="/password/reset">Reset a password</Link></p>
+      {!isInactiveLoginState(auth, loginErrorCode) && (
+        <p className="mt-5 text-center text-sm text-slate-600"><Link className="underline" to="/password/reset">Reset a password</Link></p>
+      )}
     </AuthCard>
+  );
+}
+
+export function loginFailurePresentation(cause: unknown): {
+  code: string | null;
+  message: string;
+} {
+  if (cause instanceof ApiError) {
+    if (cause.code === "account_inactive") {
+      return {
+        code: cause.code,
+        message: "Your authentication account is inactive. Contact an Application Administrator.",
+      };
+    }
+    if (cause.code === "actor_inactive") {
+      return {
+        code: cause.code,
+        message: "Your authorization access is inactive. Contact a Tenant Administrator.",
+      };
+    }
+    if (cause.status === 401) {
+      return { code: cause.code ?? null, message: "The login or password is incorrect." };
+    }
+  }
+
+  return {
+    code: null,
+    message: cause instanceof Error ? cause.message : "Unable to sign in.",
+  };
+}
+
+export function isInactiveLoginState(
+  auth: ReturnType<typeof useAuthState>,
+  loginErrorCode: string | null,
+): boolean {
+  return (
+    (auth.status === "anonymous" && auth.reason === "inactive") ||
+    loginErrorCode === "account_inactive" ||
+    loginErrorCode === "actor_inactive"
   );
 }
 

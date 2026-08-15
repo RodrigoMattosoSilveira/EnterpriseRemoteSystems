@@ -277,8 +277,11 @@ func TestAuthenticationRejectsInactiveAccountAndActor(t *testing.T) {
 	}); err != ErrResetTokenInvalid {
 		t.Fatalf("expected account deactivation to invalidate pending reset tokens, got %v", err)
 	}
-	if _, err := service.Login(context.Background(), LoginRequest{Login: account.Login, Password: "Operator-Password-1"}, "", ""); err != ErrInvalidCredentials {
-		t.Fatalf("expected inactive account login rejection, got %v", err)
+	if _, err := service.Login(context.Background(), LoginRequest{Login: account.Login, Password: "Wrong-Password-1"}, "", ""); err != ErrInvalidCredentials {
+		t.Fatalf("expected inactive account with wrong password to preserve invalid-credentials response, got %v", err)
+	}
+	if _, err := service.Login(context.Background(), LoginRequest{Login: account.Login, Password: "Operator-Password-1"}, "", ""); err != ErrAccountInactive {
+		t.Fatalf("expected correct password for inactive account to return account-inactive, got %v", err)
 	}
 	if _, err := service.SetAccountActive(context.Background(), account.ID, true); err != nil {
 		t.Fatalf("reactivate account: %v", err)
@@ -305,8 +308,11 @@ func TestAuthenticationRejectsInactiveAccountAndActor(t *testing.T) {
 	if err := database.Model(&authz.AuthzActor{}).Where("id = ?", actor.ID).Update("active", false).Error; err != nil {
 		t.Fatalf("deactivate actor: %v", err)
 	}
-	if _, err := service.Login(context.Background(), LoginRequest{Login: account.Login, Password: "Operator-Password-1"}, "", ""); err != ErrInvalidCredentials {
-		t.Fatalf("expected inactive actor login rejection, got %v", err)
+	if _, err := service.Login(context.Background(), LoginRequest{Login: account.Login, Password: "Wrong-Password-1"}, "", ""); err != ErrInvalidCredentials {
+		t.Fatalf("expected inactive actor with wrong password to preserve invalid-credentials response, got %v", err)
+	}
+	if _, err := service.Login(context.Background(), LoginRequest{Login: account.Login, Password: "Operator-Password-1"}, "", ""); err != ErrActorInactive {
+		t.Fatalf("expected correct password for inactive actor to return actor-inactive, got %v", err)
 	}
 }
 
