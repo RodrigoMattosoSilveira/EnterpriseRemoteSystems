@@ -4,17 +4,19 @@ import {
   createAuthAccount,
   issuePasswordResetToken,
   listAuthAccounts,
+  loadAuthTenantOptions,
   setAuthAccountActive,
 } from "../../api/auth.api";
 import { listAuthzActors } from "../../api/authz.api";
 import {
   authorizationRequestContext,
   readSelectedTenantId,
+  setSelectedTenantId,
 } from "../../api/tenantSelection";
 import { useAuthState } from "../../app/useAuth";
 import { ApiErrorPanel } from "../../components/ApiErrorPanel";
 import { useCollaboratorSearch } from "../collaborators/useCollaborators";
-import type { AuthAccount } from "../../types/auth";
+import type { AuthAccount, AuthAccountActor } from "../../types/auth";
 import type { AuthzActor, AuthzActorRoleGrant } from "../../types/authz";
 import type { Collaborator } from "../../types/collaborators";
 
@@ -124,11 +126,67 @@ export function authenticationAccountMatchesSearch(
         actor.displayName.toLowerCase().includes(search) ||
         actor.personName?.toLowerCase().includes(search) ||
         actor.personNickname?.toLowerCase().includes(search) ||
-        actor.tenantId?.toLowerCase().includes(search),
+        actor.tenantId?.toLowerCase().includes(search) ||
+        actor.tenantName?.toLowerCase().includes(search),
     ) ||
     account.login.toLowerCase().includes(search) ||
+    account.globalPersonName?.toLowerCase().includes(search) ||
+    account.globalPersonEmail?.toLowerCase().includes(search) ||
     account.actorKey.toLowerCase().includes(search) ||
     account.displayName.toLowerCase().includes(search)
+  );
+}
+
+export function authenticationAccountPersonTarget(
+  account: AuthAccount,
+): AuthAccountActor | undefined {
+  const actors = account.actors ?? [];
+  return (
+    actors.find(
+      (actor) =>
+        actor.primary &&
+        actor.scope === "TENANT" &&
+        Boolean(actor.tenantId && actor.personId),
+    ) ??
+    actors.find(
+      (actor) =>
+        actor.scope === "TENANT" && Boolean(actor.tenantId && actor.personId),
+    )
+  );
+}
+
+export function authenticationActorTenantLabel(actor: AuthAccountActor): string {
+  if (actor.scope === "GLOBAL") return "Application-wide";
+  const tenantName = actor.tenantName?.trim();
+  const tenantId = actor.tenantId?.trim();
+  if (tenantName && tenantId && tenantName !== tenantId) {
+    return `${tenantName} (${tenantId})`;
+  }
+  return tenantName || tenantId || "Tenant";
+}
+
+export function authenticationTenantActorIdsMatchingDisplayName(
+  accounts: AuthAccount[],
+  tenantOptions: Array<{ id: string; name: string }>,
+  searchValue: string,
+): Set<string> {
+  const search = searchValue.trim().toLowerCase();
+  if (!search) return new Set();
+
+  const matchingTenantIds = new Set(
+    tenantOptions
+      .filter((tenant) => tenant.name.toLowerCase().includes(search))
+      .map((tenant) => tenant.id),
+  );
+
+  return new Set(
+    accounts.flatMap((account) =>
+      (account.actors ?? [])
+        .filter((actor) =>
+          actor.tenantId ? matchingTenantIds.has(actor.tenantId) : false,
+        )
+        .map((actor) => actor.actorId),
+    ),
   );
 }
 
@@ -140,6 +198,11 @@ export function AuthenticationAdminPage() {
   const accounts = useQuery({
     queryKey: ["auth", "accounts"],
     queryFn: listAuthAccounts,
+    refetchOnWindowFocus: false,
+  });
+  const tenantOptions = useQuery({
+    queryKey: ["auth", "tenant-options", "authentication-admin"],
+    queryFn: loadAuthTenantOptions,
     refetchOnWindowFocus: false,
   });
   const actors = useQuery({
@@ -232,10 +295,22 @@ export function AuthenticationAdminPage() {
         .map((result) => result.actor?.id)
         .filter((actorId): actorId is string => Boolean(actorId)),
     );
+    for (const actorId of authenticationTenantActorIdsMatchingDisplayName(
+      accounts.data ?? [],
+      tenantOptions.data ?? [],
+      search,
+    )) {
+      matchedActorIds.add(actorId);
+    }
     return (accounts.data ?? []).filter((account) =>
       authenticationAccountMatchesSearch(account, search, matchedActorIds),
     );
-  }, [accounts.data, actorLookupResults, actorLookupSearch]);
+  }, [
+    accounts.data,
+    actorLookupResults,
+    actorLookupSearch,
+    tenantOptions.data,
+  ]);
 
   async function toggle(accountId: string, active: boolean) {
     setActionError(null);
@@ -276,8 +351,8 @@ export function AuthenticationAdminPage() {
     <div className="p-6">
       <h1 className="text-2xl font-bold">Authentication Accounts</h1>
       <p className="mt-1 text-sm text-slate-600">
-        Create login accounts, suspend access, and issue one-time password-reset
-        tokens.
+        Manage Authentication Accounts separately from the Person who owns the
+        account and the tenant-specific Actors through which that account operates.
       </p>
       <ApiErrorPanel
         error={accounts.error ?? actors.error ?? mutation.error ?? actionError}
@@ -466,20 +541,20 @@ export function AuthenticationAdminPage() {
       <section className="mt-6 rounded-2xl border bg-white p-5">
         <h2 className="text-lg font-semibold">Actor/account filter</h2>
         <p className="mt-1 text-sm text-slate-600">
-          Search by Person name or nickname, Actor identity, or login to see whether
+          Search by Person name, nickname, or email, Tenant display name, Actor identity, or login to see whether
           an Authorization Actor and Authentication Account already exist.
         </p>
         <label
           className="mt-4 block text-sm font-medium"
           htmlFor="authentication-actor-lookup"
         >
-          Filter by Person name or nickname, Actor, or account
+          Filter by Person name, nickname, or email, Tenant display name, Actor, or account
         </label>
         <input
           id="authentication-actor-lookup"
           className="mt-1 w-full rounded-lg border px-3 py-2"
           type="search"
-          placeholder="Type collaborator name, nickname, actor key, or login"
+          placeholder="Type Person name, nickname, email, Tenant display name, actor key, or login"
           value={actorLookupSearch}
           onChange={(event) => setActorLookupSearch(event.target.value)}
         />
@@ -573,99 +648,206 @@ export function AuthenticationAdminPage() {
         </section>
       )}
 
-      <section className="mt-6 overflow-x-auto rounded-2xl border bg-white">
-        <table className="w-full text-left text-sm">
-          <thead className="bg-slate-100">
-            <tr>
-              <th className="p-3">User</th>
-              <th className="p-3">Actors</th>
-              <th className="p-3">Status</th>
-              <th className="p-3">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filteredAccounts.length === 0 && (
-              <tr className="border-t">
-                <td className="p-3 text-slate-500" colSpan={4}>
-                  {showActorLookup
-                    ? "No authentication accounts match this actor/account filter."
-                    : "No authentication accounts."}
-                </td>
-              </tr>
-            )}
-            {filteredAccounts.map((account) => {
-              const activePending = pendingAction === `active:${account.id}`;
-              const resetPending = pendingAction === `reset:${account.id}`;
-              const resetEligible = canIssuePasswordResetToken(account);
-              const isCurrentAccount =
-                auth.status === "authenticated" && account.id === auth.session.accountId;
-              return (
-                <tr key={account.id} className="border-t">
-                  <td className="p-3">
-                    <strong>{account.displayName}</strong>
-                    <br />
-                    <span className="text-slate-500">{account.login}</span>
-                  </td>
-                  <td className="p-3">
-                    {(account.actors?.length ?? 0) > 0 ? (
-                      <ul className="space-y-1">
-                        {account.actors?.map((actor) => (
-                          <li key={actor.actorId}>
-                            <span className="font-medium">{actor.actorKey}</span>
-                            <span className="text-slate-500">
-                              {" "}· {actor.scope}
-                              {actor.tenantId ? ` @ ${actor.tenantId}` : ""}
-                              {actor.primary ? " · primary" : ""}
-                              {!actor.active ? " · inactive" : ""}
-                            </span>
-                          </li>
-                        ))}
-                      </ul>
-                    ) : (
-                      account.actorKey
-                    )}
-                  </td>
-                  <td className="p-3">
-                    {account.active && canIssuePasswordResetToken(account) ? "Active" : "Inactive"}
-                    {account.mustChangePassword
-                      ? " · Password change required"
-                      : ""}
-                  </td>
-                  <td className="p-3">
-                    <div className="flex flex-wrap gap-2">
-                      <button
-                        className="rounded border px-2 py-1 disabled:opacity-50"
-                        disabled={isCurrentAccount || activePending || pendingAction !== null}
-                        title={isCurrentAccount ? "You cannot deactivate your own account" : undefined}
-                        onClick={() => void toggle(account.id, !account.active)}
-                      >
-                        {activePending
-                          ? "Saving…"
-                          : account.active
-                            ? "Deactivate"
-                            : "Activate"}
-                      </button>
-                      <button
-                        className="rounded border px-2 py-1 disabled:opacity-50"
-                        disabled={
-                          !resetEligible || resetPending || pendingAction !== null
-                        }
-                        title={
-                          resetEligible
-                            ? undefined
-                            : "Activate the authentication account and authorization actor before issuing a reset token"
-                        }
-                        onClick={() => void issue(account.id)}
-                      >
-                        {resetPending ? "Issuing…" : "Issue reset token"}
-                      </button>
+      <section className="mt-6 space-y-4" aria-label="Authentication accounts">
+        {filteredAccounts.length === 0 && (
+          <div className="rounded-2xl border bg-white p-5 text-sm text-slate-500">
+            {showActorLookup
+              ? "No authentication accounts match this actor/account filter."
+              : "No authentication accounts."}
+          </div>
+        )}
+
+        {filteredAccounts.map((account) => {
+          const activePending = pendingAction === `active:${account.id}`;
+          const resetPending = pendingAction === `reset:${account.id}`;
+          const resetEligible = canIssuePasswordResetToken(account);
+          const isCurrentAccount =
+            auth.status === "authenticated" && account.id === auth.session.accountId;
+          const personTarget = authenticationAccountPersonTarget(account);
+          const personName =
+            account.globalPersonName?.trim() ||
+            account.actors?.find((actor) => actor.personName?.trim())?.personName ||
+            "Linked Person";
+          const anyActorActive =
+            account.actors?.some((actor) => actor.active) ?? account.actorActive;
+
+          return (
+            <article
+              key={account.id}
+              className="overflow-hidden rounded-2xl border bg-white"
+              data-testid={`authentication-account-${account.id}`}
+            >
+              <header className="flex flex-wrap items-start justify-between gap-4 border-b bg-slate-50 p-5">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    Authentication Account
+                  </p>
+                  <p className="mt-1 text-lg font-semibold text-slate-950">
+                    {account.login}
+                  </p>
+                </div>
+                <div className="flex flex-wrap gap-2 text-xs font-semibold">
+                  <span
+                    className={`rounded-full px-2.5 py-1 ${
+                      account.active
+                        ? "bg-emerald-100 text-emerald-800"
+                        : "bg-slate-200 text-slate-700"
+                    }`}
+                  >
+                    {account.active ? "Account active" : "Account inactive"}
+                  </span>
+                  {!anyActorActive && (
+                    <span className="rounded-full bg-amber-100 px-2.5 py-1 text-amber-800">
+                      No active Actors
+                    </span>
+                  )}
+                  {account.mustChangePassword && (
+                    <span className="rounded-full bg-amber-100 px-2.5 py-1 text-amber-800">
+                      Password change required
+                    </span>
+                  )}
+                </div>
+              </header>
+
+              <div className="grid gap-6 p-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
+                <section aria-label={`Person linked to ${account.login}`}>
+                  <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-500">
+                    Person
+                  </h3>
+                  {account.globalPersonId ? (
+                    <div className="mt-2">
+                      <p className="font-semibold text-slate-950">{personName}</p>
+                      <p className="mt-1 text-sm text-slate-600">
+                        Email: {account.globalPersonEmail || "Not recorded"}
+                      </p>
+                      {personTarget ? (
+                        <div className="mt-3">
+                          <a
+                            className="inline-flex rounded-lg border px-3 py-1.5 text-sm font-semibold text-slate-800 hover:bg-slate-50"
+                            href={`/people/${encodeURIComponent(personTarget.personId ?? "")}`}
+                            onClick={() => {
+                              if (personTarget.tenantId) {
+                                setSelectedTenantId(
+                                  window.localStorage,
+                                  personTarget.tenantId,
+                                );
+                              }
+                            }}
+                          >
+                            Open Person
+                          </a>
+                          <p className="mt-1 text-xs text-slate-500">
+                            Opens the Person in {authenticationActorTenantLabel(personTarget)}.
+                          </p>
+                        </div>
+                      ) : (
+                        <p className="mt-2 text-xs text-slate-500">
+                          The global Person is linked, but no tenant Person projection is available to open.
+                        </p>
+                      )}
                     </div>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+                  ) : (
+                    <div className="mt-2 rounded-lg border border-dashed p-3 text-sm text-slate-600">
+                      <p className="font-medium text-slate-800">No Person linked</p>
+                      <p className="mt-1 text-xs">
+                        Application-level Accounts may intentionally exist without a Person.
+                      </p>
+                    </div>
+                  )}
+                </section>
+
+                <section aria-label={`Actors linked to ${account.login}`}>
+                  <div className="flex items-baseline justify-between gap-3">
+                    <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-500">
+                      Actors
+                    </h3>
+                    <span className="text-xs text-slate-500">
+                      {account.actors?.length ?? (account.actorKey ? 1 : 0)} linked
+                    </span>
+                  </div>
+                  {(account.actors?.length ?? 0) > 0 ? (
+                    <ul className="mt-2 grid gap-2 sm:grid-cols-2">
+                      {account.actors?.map((actor) => (
+                        <li
+                          key={actor.actorId}
+                          className="rounded-xl border border-slate-200 p-3"
+                        >
+                          <div className="flex items-start justify-between gap-3">
+                            <div>
+                              <p className="font-semibold text-slate-950">
+                                {authenticationActorTenantLabel(actor)}
+                              </p>
+                              <p className="mt-1 text-sm text-slate-700">
+                                {actor.displayName}
+                              </p>
+                              <p className="mt-1 break-all text-xs text-slate-500">
+                                Actor: {actor.actorKey}
+                              </p>
+                            </div>
+                            <span
+                              className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold ${
+                                actor.active
+                                  ? "bg-emerald-100 text-emerald-800"
+                                  : "bg-slate-200 text-slate-700"
+                              }`}
+                            >
+                              {actor.active ? "Active" : "Inactive"}
+                            </span>
+                          </div>
+                          <p className="mt-2 text-xs text-slate-500">
+                            {actor.scope === "GLOBAL" ? "Global Actor" : "Tenant Actor"}
+                            {actor.primary ? " · Primary" : ""}
+                          </p>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <div className="mt-2 rounded-xl border border-slate-200 p-3">
+                      <p className="font-semibold text-slate-950">
+                        {account.displayName}
+                      </p>
+                      <p className="mt-1 break-all text-xs text-slate-500">
+                        Actor: {account.actorKey}
+                      </p>
+                    </div>
+                  )}
+                </section>
+              </div>
+
+              <footer className="flex flex-wrap items-center justify-between gap-3 border-t px-5 py-4">
+                <p className="text-xs text-slate-500">
+                  Password and activation controls apply to the Authentication Account as a whole.
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    className="rounded border px-2 py-1 text-sm disabled:opacity-50"
+                    disabled={isCurrentAccount || activePending || pendingAction !== null}
+                    title={isCurrentAccount ? "You cannot deactivate your own account" : undefined}
+                    onClick={() => void toggle(account.id, !account.active)}
+                  >
+                    {activePending
+                      ? "Saving…"
+                      : account.active
+                        ? "Deactivate"
+                        : "Activate"}
+                  </button>
+                  <button
+                    className="rounded border px-2 py-1 text-sm disabled:opacity-50"
+                    disabled={!resetEligible || resetPending || pendingAction !== null}
+                    title={
+                      resetEligible
+                        ? undefined
+                        : "Activate the authentication account and at least one authorization actor before issuing a reset token"
+                    }
+                    onClick={() => void issue(account.id)}
+                  >
+                    {resetPending ? "Issuing…" : "Issue reset token"}
+                  </button>
+                </div>
+              </footer>
+            </article>
+          );
+        })}
       </section>
     </div>
   );

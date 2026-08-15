@@ -4,7 +4,9 @@ import type { AuthAccount } from "../../types/auth";
 import {
   authenticationAccountForActor,
   authenticationAccountMatchesSearch,
+  authenticationAccountPersonTarget,
   authenticationActorForCollaborator,
+  authenticationActorTenantLabel,
   authenticationActorOptionLabel,
   authenticationCollaboratorOptionLabel,
   authenticationCollaboratorStatusLabel,
@@ -250,6 +252,9 @@ describe("authentication account actor/account filter", () => {
     actorId: "actor-person-a",
     actorKey: "person-a",
     displayName: "Marina Oliveira",
+    globalPersonId: "global-person-marina",
+    globalPersonName: "Marina Oliveira",
+    globalPersonEmail: "marina.person@example.test",
     login: "marina.login@example.test",
     active: true,
     actorActive: true,
@@ -263,6 +268,7 @@ describe("authentication account actor/account filter", () => {
         displayName: "Marina Oliveira",
         scope: "TENANT",
         tenantId: "tenant-a",
+        tenantName: "Byte 28A Manual Test",
         personId: "legacy-person-a",
         personName: "Marina Oliveira",
         personNickname: "Nina",
@@ -275,6 +281,7 @@ describe("authentication account actor/account filter", () => {
         displayName: "Marina Oliveira",
         scope: "TENANT",
         tenantId: "tenant-b",
+        tenantName: "default",
         personId: "legacy-person-b",
         personName: "Marina Oliveira",
         personNickname: "Nina",
@@ -289,11 +296,32 @@ describe("authentication account actor/account filter", () => {
     expect(authenticationAccountMatchesSearch(personAccount, "nina")).toBe(true);
   });
 
-  it("continues matching name, Actor key, login, and tenant", () => {
+  it("continues matching Person identity, Actor key, login, tenant id, and tenant name", () => {
     expect(authenticationAccountMatchesSearch(personAccount, "Marina")).toBe(true);
+    expect(authenticationAccountMatchesSearch(personAccount, "marina.person")).toBe(true);
     expect(authenticationAccountMatchesSearch(personAccount, "person-b")).toBe(true);
     expect(authenticationAccountMatchesSearch(personAccount, "marina.login")).toBe(true);
     expect(authenticationAccountMatchesSearch(personAccount, "tenant-b")).toBe(true);
+    expect(authenticationAccountMatchesSearch(personAccount, "Byte 28A")).toBe(true);
     expect(authenticationAccountMatchesSearch(personAccount, "missing")).toBe(false);
+  });
+
+  it("opens the primary tenant Person and labels Actors by tenant rather than conflating them with the Account", () => {
+    const target = authenticationAccountPersonTarget(personAccount);
+    expect(target?.actorId).toBe("actor-person-a");
+    expect(target?.personId).toBe("legacy-person-a");
+    expect(authenticationActorTenantLabel(target!)).toBe(
+      "Byte 28A Manual Test (tenant-a)",
+    );
+    expect(
+      authenticationActorTenantLabel({
+        actorId: "global-admin",
+        actorKey: "bootstrap-admin",
+        displayName: "Application Administrator",
+        scope: "GLOBAL",
+        active: true,
+        primary: true,
+      }),
+    ).toBe("Application-wide");
   });
 });

@@ -556,6 +556,11 @@ test("authentication administration finds an existing collaborator actor and lin
     },
   });
   expect(accountResponse.status()).toBe(201);
+  const accountEnvelope = (await accountResponse.json()) as {
+    data?: { id?: string };
+  };
+  const accountId = accountEnvelope.data?.id;
+  expect(accountId).toBeTruthy();
 
   await page.goto("/admin/authentication");
   await expect(
@@ -596,7 +601,7 @@ test("authentication administration finds an existing collaborator actor and lin
     );
   });
   await page
-    .getByLabel("Filter by Person name or nickname, Actor, or account")
+    .getByLabel("Filter by Person name, nickname, or email, Tenant display name, Actor, or account")
     .fill(candidate.nickname);
   expect((await actorLookupResponse).ok()).toBeTruthy();
 
@@ -613,12 +618,12 @@ test("authentication administration finds an existing collaborator actor and lin
     `Authentication account: ${accountLogin} · Active`,
   );
 
-  const filteredAccountRow = page.getByRole("row").filter({
-    has: page.getByText(accountLogin, { exact: true }),
-  });
-  await expect(filteredAccountRow).toBeVisible();
+  const filteredAccountCard = page.getByTestId(
+    `authentication-account-${accountId}`,
+  );
+  await expect(filteredAccountCard).toBeVisible();
   await expect(
-    filteredAccountRow.getByRole("button", { name: "Deactivate" }),
+    filteredAccountCard.getByRole("button", { name: "Deactivate" }),
   ).toBeEnabled();
 });
 
@@ -785,10 +790,10 @@ test("administrator-issued password reset replaces the password and clears the a
       ]),
     );
 
-    const accountRow = adminPage.getByRole("row").filter({
-      has: adminPage.getByText(account.login, { exact: true }),
-    });
-    await expect(accountRow).toBeVisible();
+    const accountCard = adminPage.getByTestId(
+      `authentication-account-${account.accountId}`,
+    );
+    await expect(accountCard).toBeVisible();
     const resetTokenResponsePromise = adminPage.waitForResponse((response) => {
       const url = new URL(response.url());
       return (
@@ -797,7 +802,7 @@ test("administrator-issued password reset replaces the password and clears the a
           `/api/v1/auth/accounts/${account.accountId}/password-reset-tokens`
       );
     });
-    await accountRow
+    await accountCard
       .getByRole("button", { name: "Issue reset token" })
       .click();
     const resetTokenResponse = await resetTokenResponsePromise;

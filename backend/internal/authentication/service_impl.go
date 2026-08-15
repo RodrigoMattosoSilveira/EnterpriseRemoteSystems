@@ -503,7 +503,7 @@ func accountResponse(account AccountRecord) AccountResponse {
 	for _, actor := range account.Actors {
 		actors = append(actors, AccountActorResponse{
 			ActorID: actor.ActorID, ActorKey: actor.ActorKey, DisplayName: actor.DisplayName,
-			Scope: actor.ScopeType, TenantID: actor.TenantID, MembershipID: actor.MembershipID,
+			Scope: actor.ScopeType, TenantID: actor.TenantID, TenantName: actor.TenantName, MembershipID: actor.MembershipID,
 			PersonID: actor.PersonID, PersonName: actor.PersonName, PersonNickname: actor.PersonNickname, CollaboratorID: actor.CollaboratorID,
 			Active: actor.Active, Primary: actor.Primary,
 		})
@@ -514,6 +514,8 @@ func accountResponse(account AccountRecord) AccountResponse {
 		ActorKey:           account.ActorKey,
 		DisplayName:        account.DisplayName,
 		GlobalPersonID:     account.GlobalPersonID,
+		GlobalPersonName:   account.GlobalPersonName,
+		GlobalPersonEmail:  account.GlobalPersonEmail,
 		Actors:             actors,
 		Login:              account.Login,
 		Active:             account.Active,
