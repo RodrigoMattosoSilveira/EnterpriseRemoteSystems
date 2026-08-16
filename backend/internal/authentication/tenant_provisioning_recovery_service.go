@@ -146,6 +146,7 @@ func personAuthenticationStatusResponse(record PersonAuthenticationRecord) Perso
 		status = "ACCOUNT_INACTIVE"
 	}
 	return PersonAuthenticationStatusResponse{
+		Login:                  normalizeLogin(record.Login),
 		Enabled:                record.Enabled,
 		AccountActive:          record.Enabled && record.AccountActive,
 		CanRequestReactivation: record.Enabled && !record.AccountActive,

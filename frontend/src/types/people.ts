@@ -128,6 +128,7 @@ export type CreatePersonMembershipInput = {
 };
 
 export type PersonAuthenticationStatus = {
+  login: string;
   enabled: boolean;
   accountActive: boolean;
   canRequestReactivation: boolean;

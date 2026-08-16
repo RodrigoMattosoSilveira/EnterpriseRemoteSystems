@@ -38,6 +38,9 @@ func TestTenantProvisioningCreatesOrReusesOneGlobalAccountWithoutChangingExistin
 	if !first.Enabled || !first.AccountActive || first.Status != "ENABLED" {
 		t.Fatalf("unexpected tenant A enabled status: %#v", first)
 	}
+	if first.Login != "tenant-driven@example.com" {
+		t.Fatalf("tenant provisioning must return the authoritative Account login, got %q", first.Login)
+	}
 
 	// The current tenant must not be told that a global Account already exists
 	// until authentication is enabled for this tenant.
@@ -74,8 +77,15 @@ func TestTenantProvisioningCreatesOrReusesOneGlobalAccountWithoutChangingExistin
 		t.Fatalf("expected distinct tenant Actors on one Account, got %#v", bindings)
 	}
 
-	if _, err := service.Login(context.Background(), LoginRequest{Login: accounts[0].Login, Password: "Tenant-Driven-Password-1"}, "", ""); err != nil {
-		t.Fatalf("existing Account credentials must survive second-tenant provisioning: %v", err)
+	loginResult, err := service.Login(context.Background(), LoginRequest{Login: accounts[0].Login, Password: "Tenant-Driven-Password-1"}, "", "")
+	if err != nil {
+		t.Fatalf("newly provisioned Account must authenticate with its temporary password: %v", err)
+	}
+	if !loginResult.Session.MustChangePassword {
+		t.Fatal("newly provisioned Account must require a password change on first sign-in")
+	}
+	if loginResult.Session.Login != "tenant-driven@example.com" {
+		t.Fatalf("unexpected provisioned Account login: %q", loginResult.Session.Login)
 	}
 	if _, err := service.Login(context.Background(), LoginRequest{Login: accounts[0].Login, Password: "Ignored-Second-Password-2"}, "", ""); !errors.Is(err, ErrInvalidCredentials) {
 		t.Fatalf("second-tenant temporary password must not reset the global Account, got %v", err)
