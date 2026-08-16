@@ -132,5 +132,6 @@ export type PersonAuthenticationStatus = {
   enabled: boolean;
   accountActive: boolean;
   canRequestReactivation: boolean;
+  requiresTemporaryPassword: boolean;
   status: "NOT_ENABLED" | "ENABLED" | "ACCOUNT_INACTIVE" | string;
 };

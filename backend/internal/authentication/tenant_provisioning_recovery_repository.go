@@ -79,6 +79,7 @@ func (r *GORMRepository) FindPersonAuthentication(ctx context.Context, tenantID 
 	if accountResult.RowsAffected == 0 {
 		return record, nil
 	}
+	record.AccountExists = true
 
 	var binding AccountActor
 	bindingResult := r.database.WithContext(ctx).
@@ -89,8 +90,10 @@ func (r *GORMRepository) FindPersonAuthentication(ctx context.Context, tenantID 
 		return PersonAuthenticationRecord{}, fmt.Errorf("find current Tenant Actor binding: %w", bindingResult.Error)
 	}
 	if bindingResult.RowsAffected == 0 {
-		// Do not expose the existence or state of a global Account that has not
-		// yet been enabled for this tenant.
+		// The tenant-facing status may report only whether credential
+		// initialization is required for this enable operation. Do not load or
+		// expose the global Account's state, Actors, Memberships, or tenants until
+		// this tenant has its own Actor binding.
 		return record, nil
 	}
 
@@ -98,6 +101,7 @@ func (r *GORMRepository) FindPersonAuthentication(ctx context.Context, tenantID 
 	if err := r.database.WithContext(ctx).First(&account, "id = ?", accountPerson.AccountID).Error; err != nil {
 		return PersonAuthenticationRecord{}, fmt.Errorf("find enabled Authentication Account: %w", err)
 	}
+	record.Login = normalizeLogin(account.Login)
 	record.AccountID = account.ID
 	record.Enabled = true
 	record.AccountActive = account.Active

@@ -42,6 +42,7 @@ type PersonAuthenticationRecord struct {
 	MembershipID   string
 	Login          string
 	AccountID      string
+	AccountExists  bool
 	Enabled        bool
 	AccountActive  bool
 }

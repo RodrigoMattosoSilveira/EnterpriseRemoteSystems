@@ -28,19 +28,24 @@ func (s *service) EnablePersonAuthentication(ctx context.Context, tenantID strin
 	if target.Enabled {
 		return personAuthenticationStatusResponse(target), nil
 	}
-	if err := validatePasswordValue(req.TemporaryPassword, "temporaryPassword"); err != nil {
-		return PersonAuthenticationStatusResponse{}, err
+
+	// A temporary password is credential initialization, not tenant access data.
+	// Require and hash one only when ERS must create the human's global Account.
+	// If the global Person already owns an Account, CreatePersonAccount will reuse
+	// it and add only this tenant's Actor binding; its existing credentials must
+	// remain untouched.
+	passwordHash := ""
+	if !target.AccountExists {
+		if err := validatePasswordValue(req.TemporaryPassword, "temporaryPassword"); err != nil {
+			return PersonAuthenticationStatusResponse{}, err
+		}
+		passwordHash, err = s.hashPassword(req.TemporaryPassword)
+		if err != nil {
+			return PersonAuthenticationStatusResponse{}, err
+		}
 	}
 
-	passwordHash, err := s.hashPassword(req.TemporaryPassword)
-	if err != nil {
-		return PersonAuthenticationStatusResponse{}, err
-	}
 	now := s.clock().UTC()
-	// CreatePersonAccount is intentionally authoritative about create-vs-reuse.
-	// The temporary password is used only if no global Account exists; when an
-	// Account already exists, its login/password/session identity is preserved
-	// and only this tenant's Actor binding is added.
 	_, err = s.repository.CreatePersonAccount(ctx, tenantID, Account{
 		ID:                 ids.New(),
 		Login:              target.Login,
@@ -146,11 +151,12 @@ func personAuthenticationStatusResponse(record PersonAuthenticationRecord) Perso
 		status = "ACCOUNT_INACTIVE"
 	}
 	return PersonAuthenticationStatusResponse{
-		Login:                  normalizeLogin(record.Login),
-		Enabled:                record.Enabled,
-		AccountActive:          record.Enabled && record.AccountActive,
-		CanRequestReactivation: record.Enabled && !record.AccountActive,
-		Status:                 status,
+		Login:                     normalizeLogin(record.Login),
+		Enabled:                   record.Enabled,
+		AccountActive:             record.Enabled && record.AccountActive,
+		CanRequestReactivation:    record.Enabled && !record.AccountActive,
+		RequiresTemporaryPassword: !record.Enabled && !record.AccountExists,
+		Status:                    status,
 	}
 }
 

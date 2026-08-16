@@ -99,11 +99,12 @@ type EnablePersonAuthenticationRequest struct {
 }
 
 type PersonAuthenticationStatusResponse struct {
-	Login                  string `json:"login"`
-	Enabled                bool   `json:"enabled"`
-	AccountActive          bool   `json:"accountActive"`
-	CanRequestReactivation bool   `json:"canRequestReactivation"`
-	Status                 string `json:"status"`
+	Login                     string `json:"login"`
+	Enabled                   bool   `json:"enabled"`
+	AccountActive             bool   `json:"accountActive"`
+	CanRequestReactivation    bool   `json:"canRequestReactivation"`
+	RequiresTemporaryPassword bool   `json:"requiresTemporaryPassword"`
+	Status                    string `json:"status"`
 }
 
 type RequestAccountReactivationRequest struct {

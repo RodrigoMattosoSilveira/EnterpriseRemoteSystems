@@ -15,7 +15,7 @@ func TestTenantProvisioningCreatesOrReusesOneGlobalAccountWithoutChangingExistin
 	database := accountActorFoundationTestDatabase(t)
 	now := time.Now().UTC()
 	createFoundationTenantPerson(t, database, "tenant-a", "Tenant A", "tenant-person-a", "55566677788", "tenant-driven@example.com", now)
-	createFoundationTenantPerson(t, database, "tenant-b", "Tenant B", "tenant-person-b", "55566677788", "tenant-driven@example.com", now.Add(time.Second))
+	createFoundationTenantPerson(t, database, "tenant-b", "Tenant B", "tenant-person-b", "55566677788", "tenant-b-person@example.com", now.Add(time.Second))
 	if err := appdb.EnsureGlobalPersonMembershipFoundation(database); err != nil {
 		t.Fatalf("ensure Person membership foundation: %v", err)
 	}
@@ -25,7 +25,7 @@ func TestTenantProvisioningCreatesOrReusesOneGlobalAccountWithoutChangingExistin
 	if err != nil {
 		t.Fatalf("get initial tenant A authentication status: %v", err)
 	}
-	if before.Enabled || before.AccountActive || before.Status != "NOT_ENABLED" {
+	if before.Enabled || before.AccountActive || !before.RequiresTemporaryPassword || before.Status != "NOT_ENABLED" {
 		t.Fatalf("unexpected initial tenant A authentication status: %#v", before)
 	}
 
@@ -42,24 +42,26 @@ func TestTenantProvisioningCreatesOrReusesOneGlobalAccountWithoutChangingExistin
 		t.Fatalf("tenant provisioning must return the authoritative Account login, got %q", first.Login)
 	}
 
-	// The current tenant must not be told that a global Account already exists
-	// until authentication is enabled for this tenant.
+	// Tenant B may learn only whether credential initialization is required for
+	// this provisioning action. It must not receive another tenant, Actor, or
+	// Membership identity.
 	beforeSecond, err := service.GetPersonAuthenticationStatus(context.Background(), "tenant-b", "tenant-person-b")
 	if err != nil {
 		t.Fatalf("get tenant B authentication status: %v", err)
 	}
-	if beforeSecond.Enabled || beforeSecond.AccountActive || beforeSecond.Status != "NOT_ENABLED" {
-		t.Fatalf("tenant B status leaked global Account state: %#v", beforeSecond)
+	if beforeSecond.Enabled || beforeSecond.AccountActive || beforeSecond.RequiresTemporaryPassword || beforeSecond.Status != "NOT_ENABLED" {
+		t.Fatalf("tenant B should be ready to enable without credential initialization: %#v", beforeSecond)
 	}
 
-	second, err := service.EnablePersonAuthentication(context.Background(), "tenant-b", "tenant-person-b", EnablePersonAuthenticationRequest{
-		TemporaryPassword: "Ignored-Second-Password-2",
-	})
+	second, err := service.EnablePersonAuthentication(context.Background(), "tenant-b", "tenant-person-b", EnablePersonAuthenticationRequest{})
 	if err != nil {
 		t.Fatalf("enable tenant B authentication: %v", err)
 	}
 	if !second.Enabled || !second.AccountActive || second.Status != "ENABLED" {
 		t.Fatalf("unexpected tenant B enabled status: %#v", second)
+	}
+	if second.Login != "tenant-driven@example.com" {
+		t.Fatalf("tenant B provisioning must return the existing Account login, got %q", second.Login)
 	}
 
 	var accounts []Account

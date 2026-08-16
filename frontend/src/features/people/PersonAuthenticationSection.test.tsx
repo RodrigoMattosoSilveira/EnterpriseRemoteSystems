@@ -52,6 +52,7 @@ describe("PersonAuthenticationSection", () => {
             enabled: false,
             accountActive: false,
             canRequestReactivation: false,
+            requiresTemporaryPassword: true,
             status: "NOT_ENABLED",
           },
         });
@@ -68,6 +69,7 @@ describe("PersonAuthenticationSection", () => {
             enabled: true,
             accountActive: true,
             canRequestReactivation: false,
+            requiresTemporaryPassword: false,
             status: "ENABLED",
           },
         });
@@ -80,6 +82,7 @@ describe("PersonAuthenticationSection", () => {
             enabled: true,
             accountActive: true,
             canRequestReactivation: false,
+            requiresTemporaryPassword: false,
             status: "ENABLED",
           },
         });
@@ -115,6 +118,95 @@ describe("PersonAuthenticationSection", () => {
     expect(enableCall?.body).toEqual({ temporaryPassword: TEMPORARY_PASSWORD });
 
     await waitForText(`Authentication is enabled for this tenant. Account login: ${LOGIN}.`);
+  });
+
+  it("enables a second tenant without asking for or sending a temporary password", async () => {
+    let enabled = false;
+    mockFetch(async (url, init) => {
+      fetchCalls.push({
+        url,
+        method: init?.method?.toUpperCase() ?? "GET",
+        body: parseBody(init?.body),
+      });
+
+      if (url === `/api/v1/people/${PERSON_ID}/authentication` && !enabled) {
+        return jsonResponse({
+          data: {
+            login: LOGIN,
+            enabled: false,
+            accountActive: false,
+            canRequestReactivation: false,
+            requiresTemporaryPassword: false,
+            status: "NOT_ENABLED",
+          },
+        });
+      }
+
+      if (
+        url === `/api/v1/people/${PERSON_ID}/authentication/enable` &&
+        init?.method === "POST"
+      ) {
+        enabled = true;
+        return jsonResponse({
+          data: {
+            login: LOGIN,
+            enabled: true,
+            accountActive: true,
+            canRequestReactivation: false,
+            requiresTemporaryPassword: false,
+            status: "ENABLED",
+          },
+        });
+      }
+
+      if (url === `/api/v1/people/${PERSON_ID}/authentication` && enabled) {
+        return jsonResponse({
+          data: {
+            login: LOGIN,
+            enabled: true,
+            accountActive: true,
+            canRequestReactivation: false,
+            requiresTemporaryPassword: false,
+            status: "ENABLED",
+          },
+        });
+      }
+
+      throw new Error(`Unhandled request: ${url}`);
+    });
+
+    renderSection();
+
+    await waitForText("Status: Not enabled for this tenant");
+    expect(container.textContent).toContain(
+      "No credential changes are required for this operation.",
+    );
+    expect(
+      Array.from(container.querySelectorAll("label")).some((node) =>
+        node.textContent?.includes("Initial temporary password"),
+      ),
+    ).toBe(false);
+    expect(
+      Array.from(container.querySelectorAll("label")).some((node) =>
+        node.textContent?.includes("Confirm temporary password"),
+      ),
+    ).toBe(false);
+
+    const enableButton = buttonByText("Enable Authentication");
+    expect(enableButton.disabled).toBe(false);
+
+    await act(async () => {
+      enableButton.click();
+    });
+
+    await waitFor(() => fetchCalls.some((call) => call.method === "POST"));
+    const enableCall = fetchCalls.find((call) => call.method === "POST");
+    expect(enableCall?.url).toBe(`/api/v1/people/${PERSON_ID}/authentication/enable`);
+    expect(enableCall?.body).toEqual({});
+
+    await waitForText(
+      `Authentication is enabled for this tenant. Account login: ${LOGIN}. Account credentials were not changed.`,
+    );
   });
 });
 

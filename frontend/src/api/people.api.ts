@@ -106,11 +106,11 @@ export function getPersonAuthenticationStatus(personId: string): Promise<PersonA
 
 export function enablePersonAuthentication(
   personId: string,
-  temporaryPassword: string,
+  temporaryPassword?: string,
 ): Promise<PersonAuthenticationStatus> {
   return apiFetch<PersonAuthenticationStatus>(`/people/${encodeURIComponent(personId)}/authentication/enable`, {
     method: "POST",
-    body: JSON.stringify({ temporaryPassword }),
+    body: JSON.stringify(temporaryPassword ? { temporaryPassword } : {}),
   });
 }
 
