@@ -115,14 +115,18 @@ type Actor struct {
 	ID string
 	// RecordID is the persisted authz_actors primary key when the actor was loaded
 	// from the authorization store.
-	RecordID       string
-	TenantID       string
-	PersonID       string
-	CollaboratorID string
-	Source         ActorSource
-	Scope          ActorScope
-	RoleCodes      []string
-	Permissions    map[Permission]struct{}
+	RecordID             string
+	TenantID             string
+	PersonID             string
+	CollaboratorID       string
+	Source               ActorSource
+	Scope                ActorScope
+	RoleCodes            []string
+	Permissions          map[Permission]struct{}
+	IntrinsicPermissions map[Permission]struct{}
+	DelegatedPermissions map[Permission]struct{}
+	MembershipID         string
+	GlobalPersonID       string
 }
 
 var (
@@ -185,6 +189,19 @@ func (a *Actor) HasPermission(permission Permission) bool {
 	return ok
 }
 
+// HasIntrinsicPermission reports whether permission is derived from the
+// authenticated Account -> tenant Actor -> active Membership -> Person identity
+// chain. Bite 30D deliberately separates these rights from delegated Role
+// Grants; callers performing own-resource authorization should use this method
+// rather than treating a role permission as proof of identity.
+func (a *Actor) HasIntrinsicPermission(permission Permission) bool {
+	if a == nil || strings.TrimSpace(a.ID) == "" || permission == "" {
+		return false
+	}
+	_, ok := a.IntrinsicPermissions[permission]
+	return ok
+}
+
 type RequireOption func(*requireOptions)
 
 type requireOptions struct {
@@ -230,6 +247,10 @@ func RequireTenantScope(actor *Actor, tenantID string) error {
 	if strings.TrimSpace(tenantID) == "" {
 		return ErrForbidden
 	}
+	// Bite 30D separates intrinsic and delegated authority, but final removal
+	// of Application Administrator standing tenant-data compatibility belongs
+	// to Bite 30H. Preserve that transitional scope bypass until then; 30D no
+	// longer folds global Role Grants into a tenant Actor identity.
 	if actor.Scope == ActorScopeApplication {
 		return nil
 	}

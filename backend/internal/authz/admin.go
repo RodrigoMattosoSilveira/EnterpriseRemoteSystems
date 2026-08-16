@@ -49,14 +49,18 @@ type ActorResponse struct {
 }
 
 type CurrentActorResponse struct {
-	ActorKey       string   `json:"actorKey"`
-	ActorRecordID  string   `json:"actorRecordId"`
-	TenantID       string   `json:"tenantId"`
-	Scope          string   `json:"scope"`
-	PersonID       string   `json:"personId,omitempty"`
-	CollaboratorID string   `json:"collaboratorId,omitempty"`
-	RoleCodes      []string `json:"roleCodes"`
-	Permissions    []string `json:"permissions"`
+	ActorKey             string   `json:"actorKey"`
+	ActorRecordID        string   `json:"actorRecordId"`
+	TenantID             string   `json:"tenantId"`
+	Scope                string   `json:"scope"`
+	PersonID             string   `json:"personId,omitempty"`
+	GlobalPersonID       string   `json:"globalPersonId,omitempty"`
+	MembershipID         string   `json:"membershipId,omitempty"`
+	CollaboratorID       string   `json:"collaboratorId,omitempty"`
+	RoleCodes            []string `json:"roleCodes"`
+	Permissions          []string `json:"permissions"`
+	IntrinsicPermissions []string `json:"intrinsicPermissions"`
+	DelegatedPermissions []string `json:"delegatedPermissions"`
 }
 
 type ActorGrantResponse struct {
@@ -357,11 +361,8 @@ func (s *GORMStore) GrantActorRole(ctx context.Context, actorID string, req Gran
 	if err := s.database.WithContext(ctx).Where("code = ? AND active = ?", roleCode, true).First(&role).Error; err != nil {
 		return ActorGrantResponse{}, err
 	}
-	if role.ScopeType == string(ActorScopeApplication) && tenantID != GlobalTenantScope {
-		return ActorGrantResponse{}, NewValidationError(map[string]string{"tenantId": "Application-scoped roles must use the global tenant scope (*)"})
-	}
-	if role.ScopeType != string(ActorScopeApplication) && tenantID == GlobalTenantScope {
-		return ActorGrantResponse{}, NewValidationError(map[string]string{"tenantId": "Tenant and self-scoped roles require a tenant ID"})
+	if err := ValidateDelegatedRoleGrant(s.database.WithContext(ctx), actor.ID, role, tenantID, true); err != nil {
+		return ActorGrantResponse{}, err
 	}
 
 	now := time.Now().UTC()

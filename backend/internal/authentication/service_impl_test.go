@@ -103,13 +103,13 @@ func TestAuthenticationLoginSessionLogoutAndPasswordChange(t *testing.T) {
 	_ = repository
 }
 
-func TestAuthenticationAccountCreationEnsuresPersonSelfAccessForExistingPersonActor(t *testing.T) {
+func TestAuthenticationAccountCreationDerivesSelfAccessFromAccountMembership(t *testing.T) {
 	database, _, service, _ := authenticationTestService(t)
 	now := time.Now().UTC()
 
 	status := appdb.ReferenceData{
 		BaseModel: appdb.BaseModel{ID: "auth-existing-person-status", CreatedAt: now, UpdatedAt: now},
-		TenantID:  appdb.DefaultTenantID, Type: "person_status", Code: "AUTH_EXISTING_ACTIVE", Label: "Authentication Existing Active", Active: true,
+		TenantID:  appdb.DefaultTenantID, Type: "person_status", Code: "ACTIVE", Label: "Authentication Existing Active", Active: true,
 	}
 	if err := database.Create(&status).Error; err != nil {
 		t.Fatalf("create person status: %v", err)
@@ -142,17 +142,7 @@ func TestAuthenticationAccountCreationEnsuresPersonSelfAccessForExistingPersonAc
 		t.Fatalf("create account: %v", err)
 	}
 
-	var personRole authz.AuthzRole
-	if err := database.Where("code = ?", string(authz.RolePerson)).First(&personRole).Error; err != nil {
-		t.Fatalf("find Person role: %v", err)
-	}
-	var personGrant authz.AuthzActorRoleGrant
-	if err := database.Where(
-		"actor_id = ? AND role_id = ? AND tenant_id = ? AND active = ?",
-		actor.ID, personRole.ID, appdb.DefaultTenantID, true,
-	).First(&personGrant).Error; err != nil {
-		t.Fatalf("expected active Person self-service grant: %v", err)
-	}
+	assertNoActivePersonRoleGrant(t, database, actor.ID)
 
 	login, err := service.Login(context.Background(), LoginRequest{Login: account.Login, Password: "Existing-Person-Password-1"}, "", "")
 	if err != nil {
@@ -161,28 +151,27 @@ func TestAuthenticationAccountCreationEnsuresPersonSelfAccessForExistingPersonAc
 	if login.Session.PersonID != person.ID {
 		t.Fatalf("expected login session person %q, got %#v", person.ID, login.Session)
 	}
+	assertNoActivePersonRoleGrant(t, database, actor.ID)
 
-	resolved, err := authz.NewGORMStore(database).FindActor(context.Background(), authz.ActorLookup{
-		ActorID: actor.ActorKey, TenantID: appdb.DefaultTenantID,
-	})
+	resolved, err := authz.NewGORMStore(database).FindAccountActor(context.Background(), account.ID, appdb.DefaultTenantID)
 	if err != nil {
-		t.Fatalf("resolve authenticated actor: %v", err)
+		t.Fatalf("resolve authenticated Account Actor: %v", err)
 	}
-	if !resolved.HasPermission(authz.PermissionPeopleSelfRead) {
-		t.Fatalf("expected authenticated Person actor to receive people.self.read, permissions=%v", authz.PermissionNames(resolved.Permissions))
+	if !resolved.HasIntrinsicPermission(authz.PermissionPeopleSelfRead) || !resolved.HasPermission(authz.PermissionPeopleSelfUpdate) {
+		t.Fatalf("expected intrinsic Person self-service, effective=%v intrinsic=%v", authz.PermissionNames(resolved.Permissions), authz.PermissionNames(resolved.IntrinsicPermissions))
 	}
-	if !resolved.HasPermission(authz.PermissionCollaboratorsRead) {
-		t.Fatalf("expected existing expense-operator authorization to be preserved, permissions=%v", authz.PermissionNames(resolved.Permissions))
+	if !resolved.HasPermission(authz.PermissionCollaboratorsRead) || resolved.HasIntrinsicPermission(authz.PermissionCollaboratorsRead) {
+		t.Fatalf("expected existing Expense Operator authorization to remain delegated and additive, effective=%v intrinsic=%v", authz.PermissionNames(resolved.Permissions), authz.PermissionNames(resolved.IntrinsicPermissions))
 	}
 }
 
-func TestAuthenticationLoginBackfillsPersonSelfAccessForExistingAccount(t *testing.T) {
-	database, _, service, actor := authenticationTestService(t)
+func TestAuthenticationLoginDoesNotBackfillPersonRoleGrant(t *testing.T) {
+	database, _, service, _ := authenticationTestService(t)
 	now := time.Now().UTC()
 
 	status := appdb.ReferenceData{
 		BaseModel: appdb.BaseModel{ID: "auth-login-person-status", CreatedAt: now, UpdatedAt: now},
-		TenantID:  appdb.DefaultTenantID, Type: "person_status", Code: "AUTH_LOGIN_ACTIVE", Label: "Authentication Login Active", Active: true,
+		TenantID:  appdb.DefaultTenantID, Type: "person_status", Code: "ACTIVE", Label: "Authentication Login Active", Active: true,
 	}
 	if err := database.Create(&status).Error; err != nil {
 		t.Fatalf("create person status: %v", err)
@@ -198,47 +187,42 @@ func TestAuthenticationLoginBackfillsPersonSelfAccessForExistingAccount(t *testi
 	}
 
 	account, err := service.CreateAccount(context.Background(), CreateAccountRequest{
-		ActorID: actor.ID, Login: person.Email, TemporaryPassword: "Login-Person-Password-1",
+		TenantID: appdb.DefaultTenantID, Login: person.Email, TemporaryPassword: "Login-Person-Password-1",
 	})
 	if err != nil {
-		t.Fatalf("create pre-existing account: %v", err)
+		t.Fatalf("create Person account: %v", err)
 	}
-	if err := database.Model(&authz.AuthzActor{}).Where("id = ?", actor.ID).Updates(map[string]any{
-		"person_id":  person.ID,
-		"updated_at": now,
-	}).Error; err != nil {
-		t.Fatalf("link existing account actor to person: %v", err)
-	}
-
-	var personRole authz.AuthzRole
-	if err := database.Where("code = ?", string(authz.RolePerson)).First(&personRole).Error; err != nil {
-		t.Fatalf("find Person role: %v", err)
-	}
-	var countBefore int64
-	if err := database.Model(&authz.AuthzActorRoleGrant{}).Where(
-		"actor_id = ? AND role_id = ? AND tenant_id = ? AND active = ?",
-		actor.ID, personRole.ID, appdb.DefaultTenantID, true,
-	).Count(&countBefore).Error; err != nil {
-		t.Fatalf("count Person grants before login: %v", err)
-	}
-	if countBefore != 0 {
-		t.Fatalf("expected legacy account fixture to begin without Person self-service grant, got %d", countBefore)
-	}
+	assertNoActivePersonRoleGrant(t, database, account.ActorID)
 
 	login, err := service.Login(context.Background(), LoginRequest{Login: account.Login, Password: "Login-Person-Password-1"}, "", "")
 	if err != nil {
 		t.Fatalf("login existing account: %v", err)
 	}
 	if login.Session.PersonID != person.ID {
-		t.Fatalf("expected login to refresh Person identity %q, got %#v", person.ID, login.Session)
+		t.Fatalf("expected login Person identity %q, got %#v", person.ID, login.Session)
 	}
+	assertNoActivePersonRoleGrant(t, database, account.ActorID)
 
-	var personGrant authz.AuthzActorRoleGrant
-	if err := database.Where(
-		"actor_id = ? AND role_id = ? AND tenant_id = ? AND active = ?",
-		actor.ID, personRole.ID, appdb.DefaultTenantID, true,
-	).First(&personGrant).Error; err != nil {
-		t.Fatalf("expected login to backfill Person self-service grant: %v", err)
+	resolved, err := authz.NewGORMStore(database).FindAccountActor(context.Background(), account.ID, appdb.DefaultTenantID)
+	if err != nil {
+		t.Fatalf("resolve Account Actor after login: %v", err)
+	}
+	if !resolved.HasIntrinsicPermission(authz.PermissionPeopleSelfRead) {
+		t.Fatalf("login must retain intrinsic self-service without creating a PERSON grant: %#v", resolved)
+	}
+}
+
+func assertNoActivePersonRoleGrant(t *testing.T, database *gorm.DB, actorID string) {
+	t.Helper()
+	var count int64
+	if err := database.Table("authz_actor_role_grants g").
+		Joins("JOIN authz_roles r ON r.id = g.role_id").
+		Where("g.actor_id = ? AND g.active = ? AND r.code = ?", actorID, true, string(authz.RolePerson)).
+		Count(&count).Error; err != nil {
+		t.Fatalf("count active PERSON Role Grants: %v", err)
+	}
+	if count != 0 {
+		t.Fatalf("Bite 30D must not materialize PERSON self-service Role Grants; actor %s has %d", actorID, count)
 	}
 }
 
@@ -486,7 +470,7 @@ func TestAuthenticationCreatesPersonActorAndAccountWithoutCollaboratorJourney(t 
 		BaseModel: appdb.BaseModel{ID: "auth-person-only-status", CreatedAt: now, UpdatedAt: now},
 		TenantID:  appdb.DefaultTenantID,
 		Type:      "person_status",
-		Code:      "AUTH_PERSON_ONLY_ACTIVE",
+		Code:      "ACTIVE",
 		Label:     "Authentication Person Only Active",
 		Active:    true,
 	}
@@ -548,6 +532,17 @@ func TestAuthenticationCreatesPersonActorAndAccountWithoutCollaboratorJourney(t 
 	}
 	if login.Session.CollaboratorID != "" {
 		t.Fatalf("expected empty session Collaborator ID, got %q", login.Session.CollaboratorID)
+	}
+	assertNoActivePersonRoleGrant(t, database, account.ActorID)
+	resolved, err := authz.NewGORMStore(database).FindAccountActor(context.Background(), account.ID, appdb.DefaultTenantID)
+	if err != nil {
+		t.Fatalf("resolve Person-only Account Actor: %v", err)
+	}
+	if !resolved.HasIntrinsicPermission(authz.PermissionPeopleSelfRead) || !resolved.HasIntrinsicPermission(authz.PermissionPeopleSelfUpdate) {
+		t.Fatalf("Person-only Account must derive own-Person rights intrinsically: %v", authz.PermissionNames(resolved.IntrinsicPermissions))
+	}
+	if resolved.HasPermission(authz.PermissionCollaboratorsSelfRead) || resolved.CollaboratorID != "" {
+		t.Fatalf("Person without an active Collaborator Journey must not receive collaborator-only self-service: %#v", resolved)
 	}
 }
 
@@ -641,19 +636,27 @@ func TestAuthenticationCreatesPersonActorAndAccountWhenNoActorExists(t *testing.
 		t.Fatalf("expected actor collaborator %q, got %#v", collaborator.ID, actor.CollaboratorID)
 	}
 
-	var personRole authz.AuthzRole
-	if err := database.First(&personRole, "code = ?", string(authz.RolePerson)).Error; err != nil {
-		t.Fatalf("find Person role: %v", err)
+	assertNoActivePersonRoleGrant(t, database, actor.ID)
+
+	resolved, err := authz.NewGORMStore(database).FindAccountActor(context.Background(), account.ID, appdb.DefaultTenantID)
+	if err != nil {
+		t.Fatalf("resolve provisioned Account Actor: %v", err)
 	}
-	var grant authz.AuthzActorRoleGrant
-	if err := database.First(&grant,
-		"actor_id = ? AND role_id = ? AND tenant_id = ?",
-		actor.ID, personRole.ID, appdb.DefaultTenantID,
-	).Error; err != nil {
-		t.Fatalf("find Person role grant: %v", err)
+	for _, permission := range []authz.Permission{
+		authz.PermissionPeopleSelfRead,
+		authz.PermissionPeopleSelfUpdate,
+		authz.PermissionCollaboratorsSelfRead,
+		authz.PermissionCurrentAccountsSelfSummaryRead,
+		authz.PermissionCurrentAccountsSelfLedgerRead,
+		authz.PermissionAssignmentsSelfCurrentRead,
+		authz.PermissionLedgerReceiptsSelfRead,
+	} {
+		if !resolved.HasIntrinsicPermission(permission) {
+			t.Fatalf("expected intrinsic permission %s for active Collaborator Person, got %v", permission, authz.PermissionNames(resolved.IntrinsicPermissions))
+		}
 	}
-	if !grant.Active {
-		t.Fatal("expected provisioned Person role grant to be active")
+	if len(resolved.RoleCodes) != 0 {
+		t.Fatalf("new Person Actor must not require delegated roles for self-service, got %#v", resolved.RoleCodes)
 	}
 
 	login, err := service.Login(context.Background(), LoginRequest{

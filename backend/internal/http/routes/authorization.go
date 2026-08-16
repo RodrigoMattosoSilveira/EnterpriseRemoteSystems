@@ -252,6 +252,12 @@ func requireTenantPermission(deps Dependencies, permission authz.Permission, ten
 		if err := authz.RequirePermission(actor, permission); err != nil {
 			return writeAuthorizationError(c, err)
 		}
+		// Tenant records are part of the application control plane. A global
+		// Actor with an explicit tenant-control permission may inspect them, but
+		// this exception does not authorize ordinary tenant business routes.
+		if actor.Scope == authz.ActorScopeApplication {
+			return c.Next()
+		}
 		if err := authz.RequireTenantScope(actor, c.Params(tenantIDParam)); err != nil {
 			return writeAuthorizationError(c, err)
 		}
@@ -318,7 +324,7 @@ func requirePermissionOrSelfPerson(deps Dependencies, permission authz.Permissio
 		if authz.RequirePermission(actor, permission) == nil {
 			return c.Next()
 		}
-		if actor.HasPermission(selfPermission) && actor.PersonID != "" && actor.PersonID == c.Params(personIDParam) {
+		if actor.HasIntrinsicPermission(selfPermission) && actor.PersonID != "" && actor.PersonID == c.Params(personIDParam) {
 			return c.Next()
 		}
 		return writeAuthorizationError(c, authz.ErrForbidden)
@@ -338,7 +344,7 @@ func requirePermissionOrSelfCollaborator(deps Dependencies, permission authz.Per
 		if authz.RequirePermission(actor, permission) == nil {
 			return c.Next()
 		}
-		if actor.HasPermission(selfPermission) && actor.CollaboratorID != "" && actor.CollaboratorID == c.Params(collaboratorIDParam) {
+		if actor.HasIntrinsicPermission(selfPermission) && actor.CollaboratorID != "" && actor.CollaboratorID == c.Params(collaboratorIDParam) {
 			return c.Next()
 		}
 		return writeAuthorizationError(c, authz.ErrForbidden)

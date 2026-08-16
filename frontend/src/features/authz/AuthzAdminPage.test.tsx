@@ -17,6 +17,15 @@ const roles = [
     permissions: [{ code: "*", label: "All", description: "All permissions" }],
   },
   {
+    id: "authz-role-person",
+    code: "PERSON",
+    label: "Person",
+    description: "Deprecated intrinsic self-service role",
+    scopeType: "SELF",
+    active: false,
+    permissions: [{ code: "people.self.read", label: "Read self", description: "" }],
+  },
+  {
     id: "authz-role-expense-operator",
     code: "EXPENSE_OPERATOR",
     label: "Expense Operator",
@@ -166,6 +175,11 @@ describe("AuthzAdminPage", () => {
 
     expect(fetchCalls.some((call) => call.url === "/api/v1/authz/current-actor")).toBe(true);
     expect(fetchCalls.some((call) => call.url === "/api/v1/authz/roles")).toBe(true);
+    expect(textNode("PERSON")).toBeDefined();
+    const personGrantOption = Array.from(document.querySelectorAll("select option")).find(
+      (option) => option.textContent === "PERSON",
+    );
+    expect(personGrantOption).toBeUndefined();
     expect(fetchCalls.some((call) => call.url === "/api/v1/authz/permissions")).toBe(true);
     expect(fetchCalls.some((call) => call.url === "/api/v1/authz/actors")).toBe(true);
     expect(fetchCalls.every((call) => call.headers["X-Actor-ID"] === undefined)).toBe(true);

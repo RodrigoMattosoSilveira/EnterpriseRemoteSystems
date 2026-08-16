@@ -30,14 +30,30 @@ type AuthzCurrentActor = {
   scope: string;
   roleCodes: string[];
   permissions: string[];
+  intrinsicPermissions?: string[];
+  delegatedPermissions?: string[];
+};
+
+type ProvisionedAuthzActor = AuthzActor & {
+  login: string;
+  temporaryPassword: string;
+};
+
+type AuthAccount = {
+  actors: Array<{
+    actorId: string;
+    actorKey: string;
+    displayName: string;
+    tenantId?: string;
+    active: boolean;
+  }>;
 };
 
 type RoleCode =
   | "APPLICATION_ADMIN"
   | "TENANT_ADMIN"
   | "EARNINGS_OPERATOR"
-  | "EXPENSE_OPERATOR"
-  | "PERSON";
+  | "EXPENSE_OPERATOR";
 
 const DEFAULT_TENANT_ID = "default";
 
@@ -89,6 +105,9 @@ test.describe("authorization role boundaries", () => {
       expect(currentActor.actorKey).toBe(actor.actorKey);
       expect(currentActor.tenantId).toBe(DEFAULT_TENANT_ID);
       expect(currentActor.roleCodes).toContain("EXPENSE_OPERATOR");
+      expect(currentActor.permissions).toContain("people.self.read");
+      expect(currentActor.intrinsicPermissions).toContain("people.self.read");
+      expect(currentActor.delegatedPermissions).toContain("expenses.create");
       expect(currentActor.permissions).toContain("expenses.create");
       expect(currentActor.permissions).toContain("ledger.receipts.print");
       expect(currentActor.permissions).not.toContain("authz.manage");
@@ -156,6 +175,8 @@ test.describe("authorization role boundaries", () => {
       const currentActor = await getCurrentActor(actorApi, headers);
       expect(currentActor.actorKey).toBe(actor.actorKey);
       expect(currentActor.roleCodes).toContain("EARNINGS_OPERATOR");
+      expect(currentActor.intrinsicPermissions).toContain("people.self.read");
+      expect(currentActor.delegatedPermissions).toContain("planning.create");
       expect(currentActor.permissions).toContain("planning.create");
       expect(currentActor.permissions).toContain("earnings.create");
       expect(currentActor.permissions).not.toContain("expenses.create");
@@ -246,6 +267,20 @@ test.describe("authorization role boundaries", () => {
       "tenant-scoped operational grants must not use global tenant scope",
     );
     await expectValidationField(invalidTenantGrant, "tenantId");
+
+    const unboundTenantGrant = await adminApi.post(
+      e2eApiUrl(`/api/v1/authz/actors/${encodeURIComponent(actor.id)}/role-grants`),
+      {
+        headers: authzHeaders(),
+        data: { roleCode: "EXPENSE_OPERATOR", tenantId: DEFAULT_TENANT_ID },
+      },
+    );
+    await expectStatus(
+      unboundTenantGrant,
+      400,
+      "tenant delegated roles require an Actor already bound to that tenant",
+    );
+    await expectValidationField(unboundTenantGrant, "actorId");
   });
 });
 
@@ -284,31 +319,73 @@ function tenantHeaders(tenantId = DEFAULT_TENANT_ID): Record<string, string> {
 }
 
 async function createActorAccountAndLogin(
-  adminApi: APIRequestContext,
-  actor: AuthzActor,
+  _adminApi: APIRequestContext,
+  actor: ProvisionedAuthzActor,
 ): Promise<APIRequestContext> {
-  const temporaryPassword = `E2E-${uniqueSuffix()}-Password!`;
-  const response = await adminApi.post(e2eApiUrl("/api/v1/auth/accounts"), {
-    headers: authzHeaders(),
+  const firstSession = await loginIsolatedApi(actor.login, actor.temporaryPassword);
+  const permanentPassword = `${actor.temporaryPassword}-Changed`;
+  const changeResponse = await firstSession.post(e2eApiUrl("/api/v1/auth/password/change"), {
     data: {
-      actorId: actor.id,
-      login: actor.actorKey,
-      temporaryPassword,
-      mustChangePassword: false,
+      currentPassword: actor.temporaryPassword,
+      newPassword: permanentPassword,
     },
   });
-  await expectStatus(response, 201, `create authentication account for ${actor.actorKey}`);
-  return loginIsolatedApi(actor.actorKey, temporaryPassword);
+  try {
+    await expectStatus(changeResponse, 204, `complete first-login password change for ${actor.login}`);
+  } finally {
+    await firstSession.dispose();
+  }
+  return loginIsolatedApi(actor.login, permanentPassword);
 }
 
 async function createActorWithRole(
   api: APIRequestContext,
   keyPrefix: string,
   roleCode: RoleCode,
-): Promise<AuthzActor> {
-  const actor = await createAuthzActor(api, `${keyPrefix}-${uniqueSuffix()}`);
-  await grantRole(api, actor.id, roleCode, DEFAULT_TENANT_ID);
-  return actor;
+): Promise<ProvisionedAuthzActor> {
+  const seed = uniqueNumericSuffix();
+  const login = `authz-${keyPrefix}-${seed}@example.com`;
+  const personResponse = await api.post(e2eApiUrl("/api/v1/people"), {
+    headers: authzHeaders(),
+    data: {
+      firstName: `Authz${keyPrefix}`,
+      lastName: "Boundary",
+      nickname: `${keyPrefix}-${seed}`,
+      cpf: validCPF(seed),
+      rg: `RG-AUTHZ-${String(seed).slice(-8)}`,
+      cellular: validBrazilianCellular(seed),
+      email: login,
+      statusId: "ref-person-status-active",
+    },
+  });
+  await expectStatus(personResponse, 201, `create Person for ${roleCode}`);
+
+  const temporaryPassword = `E2E-${seed}-Password!`;
+  const accountResponse = await api.post(e2eApiUrl("/api/v1/auth/accounts"), {
+    headers: authzHeaders(DEFAULT_TENANT_ID),
+    data: {
+      login,
+      temporaryPassword,
+    },
+  });
+  await expectStatus(accountResponse, 201, `create tenant-bound authentication account for ${login}`);
+  const accountBody = (await accountResponse.json()) as ApiEnvelope<AuthAccount>;
+  const accountActor = accountBody.data?.actors.find(
+    (candidate) => candidate.tenantId === DEFAULT_TENANT_ID,
+  );
+  if (!accountActor) {
+    throw new Error(`Authentication account ${login} did not include a default-tenant Actor`);
+  }
+
+  await grantRole(api, accountActor.actorId, roleCode, DEFAULT_TENANT_ID);
+  return {
+    id: accountActor.actorId,
+    actorKey: accountActor.actorKey,
+    displayName: accountActor.displayName,
+    active: accountActor.active,
+    login,
+    temporaryPassword,
+  };
 }
 
 async function createAuthzActor(api: APIRequestContext, keyPrefix: string): Promise<AuthzActor> {
@@ -397,6 +474,35 @@ async function expectErrorCode(response: APIResponse, expectedCode: string): Pro
 async function expectValidationField(response: APIResponse, fieldName: string): Promise<void> {
   const body = (await response.json()) as ApiEnvelope<unknown>;
   expect(body.error?.fields?.[fieldName]).toBeTruthy();
+}
+
+function uniqueNumericSuffix(): number {
+  const timestampDigits = Date.now() % 1_000_000;
+  const randomDigits = Math.floor(Math.random() * 1000);
+  return timestampDigits * 1000 + randomDigits;
+}
+
+function validBrazilianCellular(seed: number): string {
+  const uniqueDigits = String(seed).padStart(8, "0").slice(-8);
+  return `11${`9${uniqueDigits}`.slice(0, 9)}`;
+}
+
+function validCPF(seed: number): string {
+  const base = String(seed).padStart(9, "0").slice(-9);
+  const digits = base.split("").map(Number);
+  const first = cpfCheckDigit(digits);
+  const second = cpfCheckDigit([...digits, first]);
+  return `${base}${first}${second}`;
+}
+
+function cpfCheckDigit(numbers: number[]): number {
+  const weightStart = numbers.length + 1;
+  const sum = numbers.reduce(
+    (total, digit, index) => total + digit * (weightStart - index),
+    0,
+  );
+  const remainder = sum % 11;
+  return remainder < 2 ? 0 : 11 - remainder;
 }
 
 function uniqueSuffix(): string {

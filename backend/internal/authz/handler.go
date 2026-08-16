@@ -23,14 +23,18 @@ func (h *Handler) CurrentActor(c fiber.Ctx) error {
 		return writeAuthorizationHTTPError(c, err)
 	}
 	return httpx.OK(c, CurrentActorResponse{
-		ActorKey:       actor.ID,
-		ActorRecordID:  actor.RecordID,
-		TenantID:       actor.TenantID,
-		Scope:          string(actor.Scope),
-		PersonID:       actor.PersonID,
-		CollaboratorID: actor.CollaboratorID,
-		RoleCodes:      append([]string(nil), actor.RoleCodes...),
-		Permissions:    PermissionNames(actor.Permissions),
+		ActorKey:             actor.ID,
+		ActorRecordID:        actor.RecordID,
+		TenantID:             actor.TenantID,
+		Scope:                string(actor.Scope),
+		PersonID:             actor.PersonID,
+		GlobalPersonID:       actor.GlobalPersonID,
+		MembershipID:         actor.MembershipID,
+		CollaboratorID:       actor.CollaboratorID,
+		RoleCodes:            append([]string(nil), actor.RoleCodes...),
+		Permissions:          PermissionNames(actor.Permissions),
+		IntrinsicPermissions: PermissionNames(actor.IntrinsicPermissions),
+		DelegatedPermissions: PermissionNames(actor.DelegatedPermissions),
 	})
 }
 

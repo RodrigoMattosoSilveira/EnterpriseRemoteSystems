@@ -20,8 +20,16 @@ func TestSeedAuthorizationCatalogCreatesCoreRolesAndGrants(t *testing.T) {
 	if err := database.Model(&AuthzRole{}).Count(&roles).Error; err != nil {
 		t.Fatalf("count roles: %v", err)
 	}
-	if roles != 5 {
-		t.Fatalf("expected 5 roles, got %d", roles)
+	if roles != 4 {
+		t.Fatalf("expected 4 delegated roles after removal of PERSON self-service role, got %d", roles)
+	}
+
+	var personRoles int64
+	if err := database.Model(&AuthzRole{}).Where("code = ?", string(RolePerson)).Count(&personRoles).Error; err != nil {
+		t.Fatalf("count legacy Person roles: %v", err)
+	}
+	if personRoles != 0 {
+		t.Fatalf("fresh 30D catalog must not seed PERSON as a delegable role, got %d rows", personRoles)
 	}
 
 	var expenseReceiptBackfill int64
@@ -52,13 +60,10 @@ func TestSeedAuthorizationCatalogCreatesCoreRolesAndGrants(t *testing.T) {
 	}{
 		{RoleEarningsOperator, PermissionAuthzSelfRead},
 		{RoleExpenseOperator, PermissionAuthzSelfRead},
-		{RolePerson, PermissionAuthzSelfRead},
 		{RoleEarningsOperator, PermissionTenantsRead},
 		{RoleEarningsOperator, PermissionReferenceDataRead},
 		{RoleExpenseOperator, PermissionTenantsRead},
 		{RoleExpenseOperator, PermissionReferenceDataRead},
-		{RolePerson, PermissionTenantsRead},
-		{RolePerson, PermissionReferenceDataRead},
 	} {
 		var count int64
 		if err := database.Model(&AuthzRolePermission{}).
@@ -163,7 +168,7 @@ func TestGORMStoreFindActorEnforcesTenantGrantScope(t *testing.T) {
 	}
 }
 
-func TestGORMStoreFindActorLoadsApplicationScopedWildcard(t *testing.T) {
+func TestGORMStoreFindActorLoadsApplicationControlPlaneAndTransitionalWildcard(t *testing.T) {
 	database := newAuthzTestDB(t)
 	actorID := createAuthzActor(t, database, "app-admin@example.com", nil, nil)
 	grantAuthzRole(t, database, actorID, RoleApplicationAdmin, GlobalTenantScope)
@@ -176,34 +181,54 @@ func TestGORMStoreFindActorLoadsApplicationScopedWildcard(t *testing.T) {
 	if actor.Scope != ActorScopeApplication {
 		t.Fatalf("expected application scope, got %q", actor.Scope)
 	}
+	if err := RequirePermission(actor, PermissionAuthzManage); err != nil {
+		t.Fatalf("expected explicit application control-plane permission, got %v", err)
+	}
 	if err := RequirePermission(actor, PermissionJourneySettlementsClose); err != nil {
-		t.Fatalf("expected wildcard permission, got %v", err)
+		t.Fatalf("expected transitional Application Administrator wildcard compatibility until Bite 30H, got %v", err)
 	}
 	if err := RequireTenantScope(actor, "tenant-b"); err != nil {
 		t.Fatalf("expected application actor to access tenant-b, got %v", err)
 	}
 }
 
-func TestGORMStoreFindActorLoadsPersonSelfPermissions(t *testing.T) {
+func TestGORMStoreFindActorDoesNotMergeGlobalAndTenantRoleIdentities(t *testing.T) {
+	database := newAuthzTestDB(t)
+	actorID := createAuthzActor(t, database, "mixed-scope@example.com", nil, nil)
+	grantAuthzRole(t, database, actorID, RoleApplicationAdmin, GlobalTenantScope)
+	grantAuthzRole(t, database, actorID, RoleExpenseOperator, "tenant-a")
+
+	actor, err := NewGORMStore(database).FindActor(context.Background(), ActorLookup{ActorID: "mixed-scope@example.com", TenantID: "tenant-a"})
+	if err != nil {
+		t.Fatalf("find mixed-scope legacy actor: %v", err)
+	}
+	if actor.Scope != ActorScopeApplication {
+		t.Fatalf("global role must resolve a global Actor identity, got %q", actor.Scope)
+	}
+	if !reflect.DeepEqual(actor.RoleCodes, []string{string(RoleApplicationAdmin)}) {
+		t.Fatalf("global Actor must not merge tenant Role Codes into one effective identity, got %#v", actor.RoleCodes)
+	}
+}
+
+func TestGORMStoreFindActorDoesNotManufactureIntrinsicSelfServiceFromLegacyLinks(t *testing.T) {
 	database := newAuthzTestDB(t)
 	personID := "person-123"
 	collaboratorID := "collaborator-123"
-	actorID := createAuthzActor(t, database, "person@example.com", &personID, &collaboratorID)
-	grantAuthzRole(t, database, actorID, RolePerson, "tenant-a")
+	createAuthzActor(t, database, "person@example.com", &personID, &collaboratorID)
 
 	actor, err := NewGORMStore(database).FindActor(context.Background(), ActorLookup{ActorID: "person@example.com", TenantID: "tenant-a"})
 	if err != nil {
 		t.Fatalf("find actor: %v", err)
 	}
 
-	if actor.Scope != ActorScopeSelf || actor.PersonID != personID || actor.CollaboratorID != collaboratorID {
-		t.Fatalf("unexpected self-scoped actor: %#v", actor)
+	if actor.Scope != ActorScopeTenant || actor.PersonID != personID || actor.CollaboratorID != collaboratorID {
+		t.Fatalf("unexpected legacy persisted actor: %#v", actor)
 	}
-	if !actor.HasPermission(PermissionPeopleSelfUpdate) {
-		t.Fatalf("expected self person update permission")
+	if actor.HasPermission(PermissionPeopleSelfUpdate) || actor.HasIntrinsicPermission(PermissionPeopleSelfUpdate) {
+		t.Fatalf("legacy Actor links alone must not establish intrinsic self-service: %#v", actor)
 	}
-	if actor.HasPermission(PermissionPeopleUpdate) {
-		t.Fatalf("person actor must not have tenant-wide people update permission")
+	if len(actor.RoleCodes) != 0 || len(actor.DelegatedPermissions) != 0 {
+		t.Fatalf("expected no delegated authority without an active Role Grant, got roles=%#v permissions=%#v", actor.RoleCodes, PermissionNames(actor.DelegatedPermissions))
 	}
 }
 
@@ -339,6 +364,20 @@ func TestGORMStoreValidatesRoleGrantScope(t *testing.T) {
 	var validation ValidationError
 	if !errors.As(err, &validation) || validation.ValidationFields()["tenantId"] == "" {
 		t.Fatalf("expected application role tenant validation, got %T %v", err, err)
+	}
+
+	// A legacy PERSON row may exist in upgraded databases, but it is no longer
+	// delegable in 30D.
+	legacyPersonRole := AuthzRole{ID: "legacy-person-role", Code: string(RolePerson), Label: "Person", ScopeType: string(ActorScopeSelf), Active: true, CreatedAt: time.Now().UTC(), UpdatedAt: time.Now().UTC()}
+	if err := database.Create(&legacyPersonRole).Error; err != nil {
+		t.Fatalf("create legacy Person role fixture: %v", err)
+	}
+	_, err = store.GrantActorRole(context.Background(), actorID, GrantActorRoleRequest{
+		RoleCode: string(RolePerson),
+		TenantID: "tenant-a",
+	})
+	if !errors.As(err, &validation) || validation.ValidationFields()["roleCode"] == "" {
+		t.Fatalf("expected intrinsic self-service role rejection, got %T %v", err, err)
 	}
 
 	_, err = store.GrantActorRole(context.Background(), actorID, GrantActorRoleRequest{

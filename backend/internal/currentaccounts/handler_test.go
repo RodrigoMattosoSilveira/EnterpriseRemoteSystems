@@ -10,10 +10,12 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/gofiber/fiber/v3"
+	"gorm.io/gorm"
 
 	apppkg "enterpriseremotesystems/backend/internal/app"
 	"enterpriseremotesystems/backend/internal/authz"
@@ -1647,21 +1649,54 @@ func seedCurrentAccountTestActors(t *testing.T, dbPath string) {
 	}{
 		{actorKey: "ledger-admin@example.com", role: authz.RoleApplicationAdmin, tenantID: authz.GlobalTenantScope},
 		{actorKey: "settlement-admin@example.com", role: authz.RoleApplicationAdmin, tenantID: authz.GlobalTenantScope},
-		{actorKey: "receipt-viewer@example.com", role: authz.RolePerson, tenantID: "default"},
+		{actorKey: "receipt-viewer@example.com", role: authz.RoleEarningsOperator, tenantID: "default"},
 		{actorKey: "receipt-printer@example.com", role: authz.RoleExpenseOperator, tenantID: "default"},
 		{actorKey: "receipt-returner@example.com", role: authz.RoleExpenseOperator, tenantID: "default"},
 		{actorKey: "receipt-backfiller@example.com", role: authz.RoleTenantAdmin, tenantID: "default"},
 	}
 	for _, testActor := range testActors {
-		if _, err := authz.EnsureBootstrapActor(context.Background(), database, authz.BootstrapConfig{
-			Enabled:     true,
-			ActorKey:    testActor.actorKey,
-			DisplayName: testActor.actorKey,
-			RoleCode:    testActor.role,
-			TenantID:    testActor.tenantID,
-		}); err != nil {
-			t.Fatalf("seed persisted actor %s: %v", testActor.actorKey, err)
+		if testActor.tenantID == authz.GlobalTenantScope {
+			if _, err := authz.EnsureBootstrapActor(context.Background(), database, authz.BootstrapConfig{
+				Enabled:     true,
+				ActorKey:    testActor.actorKey,
+				DisplayName: testActor.actorKey,
+				RoleCode:    testActor.role,
+				TenantID:    testActor.tenantID,
+			}); err != nil {
+				t.Fatalf("seed persisted actor %s: %v", testActor.actorKey, err)
+			}
+			continue
 		}
+
+		seedBoundCurrentAccountTestActor(t, database, testActor.actorKey, testActor.role, testActor.tenantID)
+	}
+}
+
+func seedBoundCurrentAccountTestActor(t *testing.T, database *gorm.DB, actorKey string, role authz.RoleCode, tenantID string) {
+	t.Helper()
+	now := time.Now().UTC()
+	actorID := "current-account-test-actor-" + strings.ReplaceAll(actorKey, "@", "-")
+	accountID := "current-account-test-account-" + strings.ReplaceAll(actorKey, "@", "-")
+	actor := authz.AuthzActor{
+		ID: actorID, ActorKey: actorKey, DisplayName: actorKey, Active: true, CreatedAt: now, UpdatedAt: now,
+	}
+	if err := database.Create(&actor).Error; err != nil {
+		t.Fatalf("create bound current-account test actor %s: %v", actorKey, err)
+	}
+	if err := database.Table("auth_user_accounts").Create(map[string]any{
+		"id": accountID, "actor_id": actorID, "login": actorKey, "password_hash": "test-only-not-used",
+		"active": true, "must_change_password": false, "created_at": now, "updated_at": now,
+	}).Error; err != nil {
+		t.Fatalf("create bound current-account test account %s: %v", actorKey, err)
+	}
+	if err := database.Table("auth_account_actors").Create(map[string]any{
+		"account_id": accountID, "actor_id": actorID, "scope_type": "TENANT", "tenant_id": tenantID,
+		"membership_id": nil, "is_primary": true, "created_at": now, "updated_at": now,
+	}).Error; err != nil {
+		t.Fatalf("bind current-account test actor %s to tenant %s: %v", actorKey, tenantID, err)
+	}
+	if err := authz.GrantRole(database, actorID, role, tenantID); err != nil {
+		t.Fatalf("grant %s to bound current-account test actor %s: %v", role, actorKey, err)
 	}
 }
 

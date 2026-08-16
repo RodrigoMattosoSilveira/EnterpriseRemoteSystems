@@ -90,13 +90,6 @@ func (s *service) Login(ctx context.Context, req LoginRequest, userAgent string,
 	}
 
 	now := s.clock().UTC()
-	if err := s.repository.EnsureActorPersonSelfAccess(ctx, account.ActorID, now); err != nil {
-		return LoginResult{}, err
-	}
-	account, err = s.repository.FindAccountByID(ctx, account.ID)
-	if err != nil {
-		return LoginResult{}, err
-	}
 
 	rawToken, tokenHash, err := s.newToken("ers_s_")
 	if err != nil {

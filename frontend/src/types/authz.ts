@@ -9,9 +9,13 @@ export type AuthzCurrentActor = {
   tenantId: string;
   scope: string;
   personId?: string;
+  globalPersonId?: string;
+  membershipId?: string;
   collaboratorId?: string;
   roleCodes: string[];
   permissions: string[];
+  intrinsicPermissions?: string[];
+  delegatedPermissions?: string[];
 };
 
 export type AuthzPermission = {

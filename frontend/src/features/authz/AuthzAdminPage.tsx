@@ -62,6 +62,10 @@ export function AuthzAdminPage() {
   const setActorActiveMutation = useSetAuthzActorActive(requestActor);
 
   const roles = useMemo(() => [...(rolesQuery.data ?? [])].sort(byCode), [rolesQuery.data]);
+  const grantableRoles = useMemo(
+    () => roles.filter((role) => role.active && role.code !== "PERSON"),
+    [roles],
+  );
   const permissions = useMemo(
     () => [...(permissionsQuery.data ?? [])].sort(byCode),
     [permissionsQuery.data],
@@ -243,6 +247,12 @@ export function AuthzAdminPage() {
                 Roles: {currentActorQuery.data.roleCodes.join(", ") || "No active roles"}
               </p>
               <p className="mt-1 text-xs">
+                Intrinsic permissions: {currentActorQuery.data.intrinsicPermissions?.join(", ") || "None"}
+              </p>
+              <p className="mt-1 text-xs">
+                Delegated permissions: {currentActorQuery.data.delegatedPermissions?.join(", ") || "None"}
+              </p>
+              <p className="mt-1 text-xs">
                 Effective permissions: {currentActorQuery.data.permissions.join(", ") || "None"}
               </p>
             </div>
@@ -269,7 +279,7 @@ export function AuthzAdminPage() {
           <form className="rounded-2xl border bg-white p-4 shadow-sm" onSubmit={handleCreateActor}>
             <h2 className="text-lg font-semibold text-gray-950">Create actor</h2>
             <p className="mt-1 text-sm text-gray-500">
-              Create a security actor, then grant one or more roles below.
+              Create a global/control-plane security actor here. Tenant delegated roles can be granted only to Actors already bound to that tenant through an Authentication Account and active Membership.
             </p>
 
             {collaboratorsForbidden ? (
@@ -356,7 +366,7 @@ export function AuthzAdminPage() {
                       <ActorCard
                         key={actor.id}
                         actor={actor}
-                        roles={roles}
+                        roles={grantableRoles}
                         currentActorKey={currentActorQuery.data?.actorKey ?? ""}
                         isMutating={
                           grantRoleMutation.isPending ||
