@@ -62,7 +62,7 @@ describe("loginFailurePresentation", () => {
       ),
     ).toEqual({
       code: "account_inactive",
-      message: "Your authentication account is inactive. Contact an Application Administrator.",
+      message: "Your authentication account is inactive. Request reactivation to regain access.",
     });
   });
 

@@ -6,6 +6,7 @@ import type {
   PeopleListFilter,
   PeopleListResponse,
   Person,
+  PersonAuthenticationStatus,
   UpdatePersonInput,
 } from "../types/people";
 
@@ -87,7 +88,6 @@ function peopleListSearchParams(filter: PeopleListFilter) {
   return searchParams;
 }
 
-
 export function searchGlobalPeople(search: string): Promise<GlobalPeopleSearchResponse> {
   const params = new URLSearchParams({ search: search.trim(), page: "1", pageSize: "25" });
   return apiFetch<GlobalPeopleSearchResponse>(`/people/global?${params.toString()}`);
@@ -97,5 +97,27 @@ export function createPersonMembership(input: CreatePersonMembershipInput): Prom
   return apiFetch<Person>("/people/memberships", {
     method: "POST",
     body: JSON.stringify(input),
+  });
+}
+
+export function getPersonAuthenticationStatus(personId: string): Promise<PersonAuthenticationStatus> {
+  return apiFetch<PersonAuthenticationStatus>(`/people/${encodeURIComponent(personId)}/authentication`, { cache: "no-store" });
+}
+
+export function enablePersonAuthentication(
+  personId: string,
+  temporaryPassword?: string,
+): Promise<PersonAuthenticationStatus> {
+  return apiFetch<PersonAuthenticationStatus>(`/people/${encodeURIComponent(personId)}/authentication/enable`, {
+    method: "POST",
+    body: JSON.stringify(temporaryPassword ? { temporaryPassword } : {}),
+  });
+}
+
+export function requestPersonAuthenticationReactivation(
+  personId: string,
+): Promise<{ status: string }> {
+  return apiFetch<{ status: string }>(`/people/${encodeURIComponent(personId)}/authentication/reactivation-request`, {
+    method: "POST",
   });
 }

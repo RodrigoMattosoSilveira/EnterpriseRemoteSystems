@@ -159,9 +159,34 @@ func TestAuthenticationAccountRoutesRequireApplicationScope(t *testing.T) {
 		`r.Post("/accounts", requireApplicationPermission`,
 		`r.Patch("/accounts/:id/active", requireApplicationPermission`,
 		`r.Post("/accounts/:id/password-reset-tokens", requireApplicationPermission`,
+		`r.Get("/reactivation-requests", requireApplicationPermission`,
+		`r.Post("/reactivation-requests/:id/decision", requireApplicationPermission`,
 	} {
 		if !strings.Contains(source, route) {
 			t.Fatalf("authentication account administration route must require application scope: %s", route)
+		}
+	}
+}
+
+func TestTenantAuthenticationProvisioningRoutesRequireTenantAdministrator(t *testing.T) {
+	t.Parallel()
+
+	_, currentFile, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("resolve route test directory")
+	}
+	contents, err := os.ReadFile(filepath.Join(filepath.Dir(currentFile), "people.go"))
+	if err != nil {
+		t.Fatalf("read People routes: %v", err)
+	}
+	source := string(contents)
+	for _, route := range []string{
+		`r.Get("/:id/authentication", requireTenantAdministrator`,
+		`r.Post("/:id/authentication/enable", requireTenantAdministrator`,
+		`r.Post("/:id/authentication/reactivation-request", requireTenantAdministrator`,
+	} {
+		if !strings.Contains(source, route) {
+			t.Fatalf("tenant authentication route must require Tenant Administrator scope: %s", route)
 		}
 	}
 }

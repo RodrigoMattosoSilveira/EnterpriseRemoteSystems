@@ -221,8 +221,15 @@ func (r *gormRepository) SearchGlobal(ctx context.Context, tenantID string, filt
 	}
 	if search != "" {
 		like := "%" + escapeLike(search) + "%"
-		q = q.Where(`(first_name LIKE ? ESCAPE '!' OR last_name LIKE ? ESCAPE '!' OR nickname LIKE ? ESCAPE '!' OR cpf LIKE ? ESCAPE '!' OR rg LIKE ? ESCAPE '!' OR cellular LIKE ? ESCAPE '!' OR LOWER(email) LIKE LOWER(?) ESCAPE '!')`,
-			like, like, like, like, like, like, like)
+		q = q.Where(`(first_name LIKE ? ESCAPE '!'
+			OR last_name LIKE ? ESCAPE '!'
+			OR TRIM(first_name || ' ' || last_name) LIKE ? ESCAPE '!'
+			OR nickname LIKE ? ESCAPE '!'
+			OR cpf LIKE ? ESCAPE '!'
+			OR rg LIKE ? ESCAPE '!'
+			OR cellular LIKE ? ESCAPE '!'
+			OR LOWER(email) LIKE LOWER(?) ESCAPE '!')`,
+			like, like, like, like, like, like, like, like)
 	}
 	if err := q.Count(&total).Error; err != nil {
 		return nil, 0, err

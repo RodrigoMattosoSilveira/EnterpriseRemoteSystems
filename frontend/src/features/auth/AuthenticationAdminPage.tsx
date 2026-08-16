@@ -20,6 +20,7 @@ import type { AuthAccount, AuthAccountActor } from "../../types/auth";
 import type { AuthzActor, AuthzActorRoleGrant } from "../../types/authz";
 import type { Collaborator } from "../../types/collaborators";
 import type { Person } from "../../types/people";
+import { ReactivationRequestsPanel } from "./ReactivationRequestsPanel";
 
 export function activeAuthenticationGrants(
   actor: AuthzActor,
@@ -435,6 +436,8 @@ export function AuthenticationAdminPage() {
       <ApiErrorPanel
         error={accounts.error ?? tenantOptions.error ?? actors.error ?? mutation.error ?? actionError}
       />
+
+      <ReactivationRequestsPanel />
 
       <section className="mt-6 rounded-2xl border bg-white p-5">
         <h2 className="text-lg font-semibold">Create account</h2>

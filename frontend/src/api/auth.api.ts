@@ -9,6 +9,8 @@ import type {
   PasswordResetResult,
   PasswordResetToken,
   ResetPasswordRequest,
+  AccountReactivationRequest,
+  ReactivationRequestAcknowledgement,
 } from "../types/auth";
 
 export function login(request: LoginRequest): Promise<AuthSession> {
@@ -179,5 +181,27 @@ export function issuePasswordResetToken(
   return apiFetch<PasswordResetToken>(
     `/auth/accounts/${accountId}/password-reset-tokens`,
     { method: "POST" },
+  );
+}
+
+export function requestAccountReactivation(request: LoginRequest): Promise<ReactivationRequestAcknowledgement> {
+  return apiFetch<ReactivationRequestAcknowledgement>("/auth/reactivation-requests", {
+    method: "POST",
+    body: JSON.stringify(request),
+  });
+}
+
+export function listAccountReactivationRequests(): Promise<AccountReactivationRequest[]> {
+  return apiFetch<AccountReactivationRequest[]>("/auth/reactivation-requests", { cache: "no-store" });
+}
+
+export function reviewAccountReactivationRequest(
+  requestId: string,
+  approve: boolean,
+  reason: string,
+): Promise<AccountReactivationRequest> {
+  return apiFetch<AccountReactivationRequest>(
+    `/auth/reactivation-requests/${encodeURIComponent(requestId)}/decision`,
+    { method: "POST", body: JSON.stringify({ approve, reason }) },
   );
 }

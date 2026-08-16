@@ -83,3 +83,38 @@ type PasswordResetToken struct {
 }
 
 func (PasswordResetToken) TableName() string { return "auth_password_reset_tokens" }
+
+const (
+	ReactivationRequestStatusPending  = "PENDING"
+	ReactivationRequestStatusApproved = "APPROVED"
+	ReactivationRequestStatusRejected = "REJECTED"
+
+	ReactivationRequestSourceSelf        = "SELF"
+	ReactivationRequestSourceTenantAdmin = "TENANT_ADMIN"
+)
+
+// AccountReactivationRequest records a request to restore an inactive global
+// Authentication Account. The request never changes tenant Actor bindings.
+// Application Administrators are the only identities allowed to approve or
+// reject it. Repeated requests while one is pending refresh the audit context
+// rather than creating an unbounded queue of duplicate requests.
+type AccountReactivationRequest struct {
+	ID                 string     `gorm:"type:text;primaryKey"`
+	AccountID          string     `gorm:"type:text;not null;index"`
+	Status             string     `gorm:"type:text;not null;index"`
+	RequestedByType    string     `gorm:"type:text;not null"`
+	RequestedByActorID *string    `gorm:"type:text;index"`
+	RequestedTenantID  *string    `gorm:"type:text;index"`
+	UserAgent          string     `gorm:"type:text"`
+	IPAddress          string     `gorm:"type:text"`
+	FirstRequestedAt   time.Time  `gorm:"type:datetime;not null"`
+	LastRequestedAt    time.Time  `gorm:"type:datetime;not null;index"`
+	RequestCount       int        `gorm:"not null;default:1"`
+	ReviewedByActorID  *string    `gorm:"type:text;index"`
+	ReviewedAt         *time.Time `gorm:"type:datetime;index"`
+	ReviewReason       string     `gorm:"type:text"`
+	CreatedAt          time.Time  `gorm:"not null"`
+	UpdatedAt          time.Time  `gorm:"not null"`
+}
+
+func (AccountReactivationRequest) TableName() string { return "auth_account_reactivation_requests" }
