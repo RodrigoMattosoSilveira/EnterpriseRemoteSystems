@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 
-import { Link, useLocation, useSearchParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { ApiErrorPanel } from "../../components/ApiErrorPanel";
 import { useOptionalAuthorizationContext } from "../../components/layout/AuthorizationContext";
 import { useReferenceDataByType } from "../reference-data/useReferenceData";
 
-import { usePeoplePage } from "./usePeople";
+import { useCreatePersonMembership, useGlobalPeopleSearch, usePeoplePage } from "./usePeople";
 
 import {
   CardViewIcon,
@@ -32,6 +32,7 @@ const SEARCH_DEBOUNCE_MS = 350;
 
 export function PeopleListPage() {
   const location = useLocation();
+  const navigate = useNavigate();
   const actor = useOptionalAuthorizationContext();
   const canManageMemberships =
     actor?.scope === "TENANT" && actor.roleCodes.includes("TENANT_ADMIN");
@@ -106,6 +107,18 @@ export function PeopleListPage() {
   const { data, isLoading, error } = usePeoplePage(filter);
   const people = data?.items ?? [];
   const total = data?.total ?? 0;
+  const shouldSearchGlobal =
+    canManageMemberships &&
+    debouncedSearch.length >= 3 &&
+    !isLoading &&
+    !error &&
+    total === 0;
+  const globalPeopleQuery = useGlobalPeopleSearch(
+    shouldSearchGlobal ? debouncedSearch : "",
+  );
+  const createMembership = useCreatePersonMembership();
+  const globalCandidates = globalPeopleQuery.data?.items ?? [];
+  const activeMembershipStatusId = statusIdByCode.get("ACTIVE");
   const displayedPeople = pinCreatedPerson(
     people,
     listState.createdPersonId,
@@ -248,7 +261,7 @@ export function PeopleListPage() {
             </label>
             {canManageMemberships && (
               <p className="mt-2 text-xs text-gray-500">
-                This filter searches only People already added to the selected tenant.
+                Current-tenant People are searched first. If none match, ERS also searches global People who can be added to this tenant.
               </p>
             )}
           </div>
@@ -336,6 +349,8 @@ export function PeopleListPage() {
         )}
 
         {error && <ApiErrorPanel error={error} />}
+        {globalPeopleQuery.error && <ApiErrorPanel error={globalPeopleQuery.error} />}
+        {createMembership.error && <ApiErrorPanel error={createMembership.error} />}
 
         {!isLoading && !error && (
           <PaginationSummary
@@ -352,56 +367,159 @@ export function PeopleListPage() {
         )}
 
         {!isLoading && !error && displayedPeople.length === 0 && (
-          <div className="rounded-2xl border bg-white p-8 text-center shadow-sm">
-            <h2 className="text-lg font-semibold">
-              {hasActiveFilters ? "No people match these filters" : "No people yet"}
-            </h2>
-            <p className="mt-2 text-sm text-gray-500">
-              {hasActiveFilters
-                ? canManageMemberships && debouncedSearch.length >= 3
-                  ? "No Person in this tenant matches. Search global People to add an existing Person to this tenant, or clear the filters."
-                  : "Adjust or clear the filters to widen the People list."
-                : "Create the first Person record before creating collaborators."}
-            </p>
-            {hasActiveFilters ? (
-              <div className="mt-5 flex flex-wrap justify-center gap-2">
-                <button
-                  type="button"
-                  onClick={clearFilters}
-                  className="inline-block rounded-xl bg-gray-950 px-5 py-3 text-sm font-semibold text-white"
+          <>
+            {shouldSearchGlobal && globalPeopleQuery.isLoading && (
+              <div className="rounded-2xl border bg-white p-8 text-center shadow-sm">
+                <h2 className="text-lg font-semibold">No Person in this tenant matches</h2>
+                <p className="mt-2 text-sm text-gray-500">
+                  Searching global People who can be added to this tenant...
+                </p>
+              </div>
+            )}
+
+            {shouldSearchGlobal &&
+              !globalPeopleQuery.isLoading &&
+              !globalPeopleQuery.error &&
+              globalCandidates.length > 0 && (
+                <section
+                  aria-label="People available to add to this tenant"
+                  className="rounded-2xl border border-blue-200 bg-blue-50/40 p-5 shadow-sm"
                 >
-                  Clear filters
-                </button>
-                {canManageMemberships && debouncedSearch.length >= 3 && (
-                  <Link
-                    to={`/people/add-existing?search=${encodeURIComponent(debouncedSearch)}`}
-                    className="inline-block rounded-xl border border-gray-950 bg-white px-5 py-3 text-sm font-semibold text-gray-950"
-                  >
-                    Search global People
-                  </Link>
-                )}
+                  <div>
+                    <h2 className="text-lg font-semibold text-gray-950">
+                      People available to add to this tenant
+                    </h2>
+                    <p className="mt-1 text-sm text-gray-600">
+                      No current-tenant Person matched. These global People match your search and do not yet belong to this tenant.
+                      Other tenant relationships and authentication details are not shown.
+                    </p>
+                  </div>
+
+                  <div className="mt-4 grid gap-3">
+                    {globalCandidates.map((person) => (
+                      <article
+                        key={person.id}
+                        className="rounded-xl border bg-white p-4"
+                      >
+                        <div className="flex flex-wrap items-start justify-between gap-3">
+                          <div>
+                            <h3 className="font-semibold text-gray-950">
+                              {person.firstName} {person.lastName}
+                            </h3>
+                            {person.nickname && (
+                              <p className="text-sm text-gray-500">{person.nickname}</p>
+                            )}
+                            <dl className="mt-2 grid gap-x-6 gap-y-1 text-sm md:grid-cols-2">
+                              <div>
+                                <dt className="inline font-medium">Email: </dt>
+                                <dd className="inline">{person.email}</dd>
+                              </div>
+                              <div>
+                                <dt className="inline font-medium">Cellular: </dt>
+                                <dd className="inline">{person.cellular}</dd>
+                              </div>
+                            </dl>
+                          </div>
+
+                          <button
+                            type="button"
+                            disabled={!activeMembershipStatusId || createMembership.isPending}
+                            onClick={async () => {
+                              if (!activeMembershipStatusId) return;
+                              const created = await createMembership.mutateAsync({
+                                personId: person.id,
+                                statusId: activeMembershipStatusId,
+                                notes: "",
+                              });
+                              navigate(`/people/${created.id}`, {
+                                state: {
+                                  flash: `Person membership added: ${created.firstName} ${created.lastName}.`,
+                                },
+                              });
+                            }}
+                            className="rounded-xl bg-gray-950 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            {createMembership.isPending ? "Adding..." : "Add to this tenant"}
+                          </button>
+                        </div>
+                      </article>
+                    ))}
+                  </div>
+
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    <Link
+                      to={`/people/add-existing?search=${encodeURIComponent(debouncedSearch)}`}
+                      className="text-sm font-semibold text-gray-700 underline"
+                    >
+                      Open advanced membership form
+                    </Link>
+                    <button
+                      type="button"
+                      onClick={clearFilters}
+                      className="text-sm font-semibold text-gray-700 underline"
+                    >
+                      Clear filters
+                    </button>
+                  </div>
+                </section>
+              )}
+
+            {(!shouldSearchGlobal ||
+              (!globalPeopleQuery.isLoading &&
+                !globalPeopleQuery.error &&
+                globalCandidates.length === 0)) && (
+              <div className="rounded-2xl border bg-white p-8 text-center shadow-sm">
+                <h2 className="text-lg font-semibold">
+                  {hasActiveFilters ? "No people match these filters" : "No people yet"}
+                </h2>
+                <p className="mt-2 text-sm text-gray-500">
+                  {hasActiveFilters
+                    ? canManageMemberships && debouncedSearch.length >= 3
+                      ? "No Person in this tenant or the global Person directory matches this search. Adjust the search, create a new Person, or clear the filters."
+                      : "Adjust or clear the filters to widen the People list."
+                    : "Create the first Person record before creating collaborators."}
+                </p>
+                {hasActiveFilters ? (
+                  <div className="mt-5 flex flex-wrap justify-center gap-2">
+                    <button
+                      type="button"
+                      onClick={clearFilters}
+                      className="inline-block rounded-xl bg-gray-950 px-5 py-3 text-sm font-semibold text-white"
+                    >
+                      Clear filters
+                    </button>
+                    {canManageMemberships && debouncedSearch.length >= 3 && (
+                      <Link
+                        to={`/people/add-existing?search=${encodeURIComponent(debouncedSearch)}`}
+                        className="inline-block rounded-xl border border-gray-950 bg-white px-5 py-3 text-sm font-semibold text-gray-950"
+                      >
+                        Advanced global search
+                      </Link>
+                    )}
+                  </div>
+                ) : canManageMemberships || canCreatePerson ? (
+                  <div className="mt-5 flex justify-center gap-2">
+                    {canManageMemberships && (
+                      <Link
+                        to="/people/add-existing"
+                        className="inline-block rounded-xl border border-gray-950 bg-white px-5 py-3 text-sm font-semibold text-gray-950"
+                      >
+                        Add existing
+                      </Link>
+                    )}
+                    {canCreatePerson && (
+                      <Link
+                        to="/people/new"
+                        className="inline-block rounded-xl bg-gray-950 px-5 py-3 text-sm font-semibold text-white"
+                      >
+                        Create Person
+                      </Link>
+                    )}
+                  </div>
+                ) : null}
               </div>
-            ) : canManageMemberships || canCreatePerson ? (
-              <div className="mt-5 flex justify-center gap-2">
-                {canManageMemberships && (
-                  <Link
-                    to="/people/add-existing"
-                    className="inline-block rounded-xl border border-gray-950 bg-white px-5 py-3 text-sm font-semibold text-gray-950"
-                  >
-                    Add existing
-                  </Link>
-                )}
-                {canCreatePerson && (
-                  <Link
-                    to="/people/new"
-                    className="inline-block rounded-xl bg-gray-950 px-5 py-3 text-sm font-semibold text-white"
-                  >
-                    Create Person
-                  </Link>
-                )}
-              </div>
-            ) : null}
-          </div>
+            )}
+          </>
         )}
 
         {viewMode === "cards" ? (
