@@ -126,3 +126,12 @@ export type CreatePersonMembershipInput = {
   statusId: string;
   notes?: string;
 };
+
+export type PersonAuthenticationStatus = {
+  login: string;
+  enabled: boolean;
+  accountActive: boolean;
+  canRequestReactivation: boolean;
+  requiresTemporaryPassword: boolean;
+  status: "NOT_ENABLED" | "ENABLED" | "ACCOUNT_INACTIVE" | string;
+};

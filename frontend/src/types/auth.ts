@@ -86,3 +86,23 @@ export type AuthTenantOption = {
   name: string;
   roleCodes: string[];
 };
+
+export type AccountReactivationRequest = {
+  id: string;
+  accountId: string;
+  login: string;
+  globalPersonName?: string;
+  status: "PENDING" | "APPROVED" | "REJECTED" | string;
+  requestedByType: "SELF" | "TENANT_ADMIN" | string;
+  requestedTenantId?: string;
+  firstRequestedAt: string;
+  lastRequestedAt: string;
+  requestCount: number;
+  reviewedByActorId?: string;
+  reviewedAt?: string;
+  reviewReason?: string;
+};
+
+export type ReactivationRequestAcknowledgement = {
+  status: string;
+};

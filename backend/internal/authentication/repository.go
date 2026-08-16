@@ -35,6 +35,24 @@ type AccountRecord struct {
 	Actors            []AccountActorRecord
 }
 
+type PersonAuthenticationRecord struct {
+	TenantID       string
+	LegacyPersonID string
+	GlobalPersonID string
+	MembershipID   string
+	Login          string
+	AccountID      string
+	AccountExists  bool
+	Enabled        bool
+	AccountActive  bool
+}
+
+type ReactivationRequestRecord struct {
+	AccountReactivationRequest
+	Login            string
+	GlobalPersonName string
+}
+
 type SessionRecord struct {
 	Session
 	AccountRecord
@@ -59,4 +77,8 @@ type Repository interface {
 	CreatePasswordResetToken(ctx context.Context, token PasswordResetToken, now time.Time) error
 	FindPasswordResetToken(ctx context.Context, tokenHash string) (PasswordResetToken, error)
 	ConsumePasswordResetToken(ctx context.Context, tokenID string, passwordHash string, now time.Time) error
+	FindPersonAuthentication(ctx context.Context, tenantID string, personID string) (PersonAuthenticationRecord, error)
+	CreateOrRefreshReactivationRequest(ctx context.Context, accountID string, source string, requesterActorID string, tenantID string, userAgent string, ipAddress string, now time.Time) (ReactivationRequestRecord, error)
+	ListReactivationRequests(ctx context.Context) ([]ReactivationRequestRecord, error)
+	ReviewReactivationRequest(ctx context.Context, requestID string, reviewerActorID string, approve bool, reason string, now time.Time) (ReactivationRequestRecord, error)
 }

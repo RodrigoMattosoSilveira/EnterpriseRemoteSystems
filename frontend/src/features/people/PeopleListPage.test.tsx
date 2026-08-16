@@ -178,28 +178,36 @@ describe("PeopleListPage", () => {
     expect(container.querySelector("pre")).toBeNull();
   });
 
-  it("offers a global Person search when a Tenant Administrator finds no tenant match", async () => {
-    mockPeopleFetch({ items: [], total: 0 });
+  it("finds a global Person inline when a Tenant Administrator has no tenant match and adds the membership", async () => {
+    mockTenantPeopleWithGlobalCandidate();
 
     renderPeopleListRoute(tenantAdminActor);
     await waitForText("No people yet");
 
-    await changeInput("Filter people", "pj@example.com");
+    await changeInput("Filter people", "Paulo Provisioning");
     act(() => vi.advanceTimersByTime(400));
 
     await waitFor(() =>
       fetchCalls.includes(
-        "/api/v1/people?search=pj%40example.com&page=1&pageSize=10",
+        "/api/v1/people?search=Paulo+Provisioning&page=1&pageSize=10",
       ),
     );
-    await waitForText("Search global People");
+    await waitFor(() =>
+      fetchCalls.includes(
+        "/api/v1/people/global?search=Paulo+Provisioning&page=1&pageSize=25",
+      ),
+    );
 
-    const link = Array.from(container.querySelectorAll("a")).find(
-      (node) => node.textContent?.trim() === "Search global People",
+    await waitForText("People available to add to this tenant");
+    await waitForText("Paulo Provisioning");
+    expect(textNode("No people match these filters")).toBeFalsy();
+
+    await clickButton("Add to this tenant");
+
+    await waitFor(() =>
+      fetchCalls.includes("/api/v1/people/memberships"),
     );
-    expect(link?.getAttribute("href")).toBe(
-      "/people/add-existing?search=pj%40example.com",
-    );
+    await waitForText("Person detail");
   });
   it("resets to first page when status changes to Discontinued", async () => {
     mockPeopleFetch({ items: Array.from({ length: 10 }, (_, index) => personFixture(`person-${index + 1}`, `Maria${index + 1}`)), total: 25 });
@@ -276,7 +284,10 @@ function renderPeopleListRoute(actor?: AuthzCurrentActor) {
   });
 
   const router = createMemoryRouter(
-    [{ path: "/people", element: <PeopleListPage /> }],
+    [
+      { path: "/people", element: <PeopleListPage /> },
+      { path: "/people/:id", element: <div>Person detail</div> },
+    ],
     { initialEntries: ["/people"] },
   );
 
@@ -308,6 +319,79 @@ function mockPeopleFetch(response: { items: Person[]; total: number }) {
       }
       if (url === "/api/v1/reference-data/person_status") {
         return jsonResponse({ data: [] });
+      }
+
+      throw new Error(`Unhandled request: ${url}`);
+    },
+  );
+}
+
+function mockTenantPeopleWithGlobalCandidate() {
+  vi.spyOn(globalThis, "fetch").mockImplementation(
+    async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === "string" ? input : input.toString();
+      fetchCalls.push(url);
+
+      if (url === "/api/v1/reference-data/person_status") {
+        return jsonResponse({
+          data: [
+            {
+              id: "ref-person-status-active",
+              tenantId: "default",
+              type: "person_status",
+              code: "ACTIVE",
+              label: "Active",
+              active: true,
+              sortOrder: 1,
+            },
+          ],
+        });
+      }
+
+      if (url.startsWith("/api/v1/people/global?")) {
+        return jsonResponse({
+          data: {
+            items: [
+              {
+                id: "global-paulo",
+                firstName: "Paulo",
+                lastName: "Provisioning",
+                nickname: "Paulo",
+                cpf: "39053344705",
+                rg: "RG-PAULO",
+                cellular: "11987654321",
+                email: "pole@example.test",
+              },
+            ],
+            total: 1,
+          },
+        });
+      }
+
+      if (url === "/api/v1/people/memberships" && init?.method === "POST") {
+        expect(JSON.parse(String(init.body))).toEqual({
+          personId: "global-paulo",
+          statusId: "ref-person-status-active",
+          notes: "",
+        });
+        return jsonResponse(
+          {
+            data: {
+              ...personFixture("tenant-b-paulo", "Paulo"),
+              lastName: "Provisioning",
+              nickname: "Paulo",
+              email: "pole@example.test",
+              globalPersonId: "global-paulo",
+              membershipId: "membership-tenant-b-paulo",
+              tenantId: "default",
+            },
+          },
+          { status: 201 },
+        );
+      }
+
+      if (url.startsWith("/api/v1/people?") || url === "/api/v1/people") {
+        return jsonResponse({ data: { items: [], total: 0 } });
       }
 
       throw new Error(`Unhandled request: ${url}`);

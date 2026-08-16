@@ -190,5 +190,9 @@ function authenticationInterruptionReason(
 }
 
 function isPublicAuthenticationRequest(path: string): boolean {
-  return path === "/auth/login" || path === "/auth/password/reset";
+  return (
+    path === "/auth/login" ||
+    path === "/auth/password/reset" ||
+    path === "/auth/reactivation-requests"
+  );
 }
