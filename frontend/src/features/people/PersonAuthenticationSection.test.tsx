@@ -120,6 +120,68 @@ describe("PersonAuthenticationSection", () => {
     await waitForText(`Authentication is enabled for this tenant. Account login: ${LOGIN}.`);
   });
 
+  it("fails safe when an older backend omits requiresTemporaryPassword", async () => {
+    let enabled = false;
+    mockFetch(async (url, init) => {
+      fetchCalls.push({
+        url,
+        method: init?.method?.toUpperCase() ?? "GET",
+        body: parseBody(init?.body),
+      });
+
+      if (url === `/api/v1/people/${PERSON_ID}/authentication` && !enabled) {
+        return jsonResponse({
+          data: {
+            login: LOGIN,
+            enabled: false,
+            accountActive: false,
+            canRequestReactivation: false,
+            status: "NOT_ENABLED",
+          },
+        });
+      }
+
+      if (
+        url === `/api/v1/people/${PERSON_ID}/authentication/enable` &&
+        init?.method === "POST"
+      ) {
+        enabled = true;
+        return jsonResponse({
+          data: {
+            login: LOGIN,
+            enabled: true,
+            accountActive: true,
+            canRequestReactivation: false,
+            requiresTemporaryPassword: false,
+            status: "ENABLED",
+          },
+        });
+      }
+
+      throw new Error(`Unhandled request: ${url}`);
+    });
+
+    renderSection();
+
+    await waitForText("Status: Not enabled for this tenant");
+    const password = inputByLabel("Initial temporary password");
+    const confirmation = inputByLabel("Confirm temporary password");
+    const enableButton = buttonByText("Enable Authentication");
+
+    expect(enableButton.disabled).toBe(true);
+    await changeInput(password, TEMPORARY_PASSWORD);
+    await changeInput(confirmation, TEMPORARY_PASSWORD);
+    expect(enableButton.disabled).toBe(false);
+
+    await act(async () => {
+      enableButton.click();
+    });
+
+    await waitFor(() => fetchCalls.some((call) => call.method === "POST"));
+    const enableCall = fetchCalls.find((call) => call.method === "POST");
+    expect(enableCall?.body).toEqual({ temporaryPassword: TEMPORARY_PASSWORD });
+  });
+
   it("enables a second tenant without asking for or sending a temporary password", async () => {
     let enabled = false;
     mockFetch(async (url, init) => {

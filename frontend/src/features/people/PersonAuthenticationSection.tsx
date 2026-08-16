@@ -17,14 +17,15 @@ export function PersonAuthenticationSection({ personId }: { personId: string }) 
     queryFn: () => getPersonAuthenticationStatus(personId),
     refetchOnWindowFocus: false,
   });
+  const requiresTemporaryPassword = status.data?.requiresTemporaryPassword !== false;
   const enable = useMutation({
     mutationFn: () =>
       enablePersonAuthentication(
         personId,
-        status.data?.requiresTemporaryPassword ? temporaryPassword : undefined,
+        requiresTemporaryPassword ? temporaryPassword : undefined,
       ),
     onSuccess: (result) => {
-      const usedTemporaryPassword = status.data?.requiresTemporaryPassword === true;
+      const usedTemporaryPassword = requiresTemporaryPassword;
       setTemporaryPassword("");
       setConfirmTemporaryPassword("");
       setMessage(
@@ -68,7 +69,7 @@ export function PersonAuthenticationSection({ personId }: { personId: string }) 
       ) : current && !current.enabled ? (
         <div className="mt-4">
           <p className="font-medium text-slate-950">Status: Not enabled for this tenant</p>
-          {current.requiresTemporaryPassword ? (
+          {requiresTemporaryPassword ? (
             <>
               <p className="mt-1 text-sm text-slate-700">
                 Account login: <span className="font-mono">{current.login}</span>
@@ -114,7 +115,7 @@ export function PersonAuthenticationSection({ personId }: { personId: string }) 
             className="mt-3 rounded-lg bg-slate-900 px-4 py-2 font-semibold text-white disabled:opacity-50"
             disabled={
               enable.isPending ||
-              (current.requiresTemporaryPassword &&
+              (requiresTemporaryPassword &&
                 (temporaryPassword.length < 12 ||
                   confirmTemporaryPassword.length < 12 ||
                   temporaryPassword !== confirmTemporaryPassword))
