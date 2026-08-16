@@ -5,6 +5,7 @@ import { usePerson, useUpdatePerson } from "./usePeople";
 import { ApiErrorPanel } from "../../components/ApiErrorPanel";
 import { useAuthorizationContext } from "../../components/layout/AuthorizationContext";
 import { useReferenceDataByType } from "../reference-data/useReferenceData";
+import { PersonAuthenticationSection } from "./PersonAuthenticationSection";
 
 const FALLBACK_ACTIVE_STATUS_ID = "ref-person-status-active";
 
@@ -12,6 +13,8 @@ export function PersonDetailPage() {
   const { id = "" } = useParams();
   const actor = useAuthorizationContext();
   const canBrowsePeople = actor.permissions.includes("*") || actor.permissions.includes("people.read");
+  const canManageTenantAuthentication =
+    actor.scope === "TENANT" && actor.roleCodes.includes("TENANT_ADMIN");
   const [successMessage, setSuccessMessage] = useState("");
 
   const personQuery = usePerson(id);
@@ -113,6 +116,10 @@ export function PersonDetailPage() {
           }}
         />
       </section>
+
+      {canManageTenantAuthentication && (
+        <PersonAuthenticationSection personId={personQuery.data.id} />
+      )}
     </main>
   );
 }

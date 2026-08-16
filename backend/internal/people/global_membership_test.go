@@ -60,6 +60,14 @@ func TestGlobalPersonMembershipFoundationSharesIdentityWithoutSharingTenantState
 		t.Fatalf("expected Maria global identity by email for tenant B, total=%d rows=%+v", total, globalRows)
 	}
 
+	globalRows, total, err = svc.SearchGlobal(ctx, "tenant-b", people.GlobalPersonSearchFilter{Search: "Maria Silva"})
+	if err != nil {
+		t.Fatalf("search global people by full name: %v", err)
+	}
+	if total != 1 || len(globalRows) != 1 || globalRows[0].ID != created.GlobalPersonID {
+		t.Fatalf("expected Maria global identity by full name for tenant B, total=%d rows=%+v", total, globalRows)
+	}
+
 	globalRows, total, err = svc.SearchGlobal(ctx, "tenant-b", people.GlobalPersonSearchFilter{Search: "39053344705"})
 	if err != nil {
 		t.Fatalf("search global people: %v", err)

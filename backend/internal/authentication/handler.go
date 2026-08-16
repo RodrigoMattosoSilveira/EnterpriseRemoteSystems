@@ -358,6 +358,14 @@ func (h *Handler) writeError(c fiber.Ctx, err error) error {
 		return c.Status(fiber.StatusConflict).JSON(httpx.APIResponse{Error: &httpx.APIError{Code: "actor_account_exists", Message: "This authorization actor already has an authentication account"}})
 	case errors.Is(err, ErrResetTokenInvalid), errors.Is(err, ErrResetTokenExpired):
 		return c.Status(fiber.StatusBadRequest).JSON(httpx.APIResponse{Error: &httpx.APIError{Code: "invalid_reset_token", Message: "The password reset token is invalid or expired"}})
+	case errors.Is(err, ErrPersonMembershipRequired):
+		return c.Status(fiber.StatusBadRequest).JSON(httpx.APIResponse{Error: &httpx.APIError{Code: "active_membership_required", Message: "An active Person-Tenant Membership is required"}})
+	case errors.Is(err, ErrAuthenticationNotEnabled):
+		return c.Status(fiber.StatusConflict).JSON(httpx.APIResponse{Error: &httpx.APIError{Code: "authentication_not_enabled", Message: "Authentication is not enabled for this Person in the current tenant"}})
+	case errors.Is(err, ErrAccountAlreadyActive):
+		return c.Status(fiber.StatusConflict).JSON(httpx.APIResponse{Error: &httpx.APIError{Code: "account_already_active", Message: "The authentication account is already active"}})
+	case errors.Is(err, ErrReactivationNotPending):
+		return c.Status(fiber.StatusConflict).JSON(httpx.APIResponse{Error: &httpx.APIError{Code: "reactivation_request_not_pending", Message: "The account reactivation request has already been reviewed"}})
 	default:
 		return httpx.WriteError(c, err)
 	}

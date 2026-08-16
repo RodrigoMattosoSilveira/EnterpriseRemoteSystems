@@ -15,6 +15,11 @@ func RegisterPeopleRoutes(v1 fiber.Router, deps Dependencies) {
 	// control-plane cutover in Bite 30H removes its standing tenant permissions.
 	r.Get("/global", requireTenantAdministrator(deps), deps.PeopleHandler.SearchGlobal)
 	r.Post("/memberships", requireTenantAdministrator(deps), deps.PeopleHandler.CreateMembership)
+	if deps.AuthenticationHandler != nil {
+		r.Get("/:id/authentication", requireTenantAdministrator(deps), deps.AuthenticationHandler.GetPersonAuthenticationStatus)
+		r.Post("/:id/authentication/enable", requireTenantAdministrator(deps), deps.AuthenticationHandler.EnablePersonAuthentication)
+		r.Post("/:id/authentication/reactivation-request", requireTenantAdministrator(deps), deps.AuthenticationHandler.RequestTenantPersonReactivation)
+	}
 	r.Post("/", requirePermission(deps, authz.PermissionPeopleCreate), deps.PeopleHandler.Create)
 	r.Get("/:id", requirePermissionOrSelfPerson(deps, authz.PermissionPeopleRead, authz.PermissionPeopleSelfRead, "id"), deps.PeopleHandler.GetByID)
 	r.Put("/:id", requirePermissionOrSelfPerson(deps, authz.PermissionPeopleUpdate, authz.PermissionPeopleSelfUpdate, "id"), deps.PeopleHandler.Update)
