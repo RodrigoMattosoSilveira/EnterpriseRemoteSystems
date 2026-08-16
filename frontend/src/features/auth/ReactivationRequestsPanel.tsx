@@ -35,6 +35,9 @@ export function ReactivationRequestsPanel() {
           <p className="mt-1 text-sm text-slate-600">
             Review requests for inactive global Authentication Accounts. Approval preserves all Actor bindings and starts a clean session boundary.
           </p>
+          <p className="mt-1 text-sm text-slate-600">
+            ERS does not currently notify the account holder of approval or rejection. After recording a decision, communicate the outcome through the normal support channel.
+          </p>
         </div>
         {open ? (
           <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-700">

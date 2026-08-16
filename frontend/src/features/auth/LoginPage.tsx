@@ -60,6 +60,39 @@ export default function LoginPage() {
     }
   }
 
+  if (reactivationMessage) {
+    return (
+      <AuthCard title="Reactivation requested" subtitle="Your request is waiting for Application Administrator review.">
+        <p role="status" className="rounded-xl bg-emerald-50 p-3 text-sm text-emerald-900">
+          {reactivationMessage}
+        </p>
+        <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
+          <p>
+            ERS does not currently send an email or in-app notification when the request is approved or rejected.
+          </p>
+          <p className="mt-2">
+            The Application Administrator reviewing the request must communicate the decision through the normal support channel.
+          </p>
+          <p className="mt-2">
+            If the request is approved, return here and sign in with your existing login and password. If it is rejected, the support channel should provide the review outcome and next steps.
+          </p>
+        </div>
+        <button
+          type="button"
+          className={`${primaryButtonClass} mt-4`}
+          onClick={() => {
+            setReactivationMessage("");
+            setLoginErrorCode(null);
+            setError("");
+            setReactivationError("");
+          }}
+        >
+          Return to sign in
+        </button>
+      </AuthCard>
+    );
+  }
+
   return (
     <AuthCard title="Sign in" subtitle="Use your ERS account to continue.">
       {auth.status === "anonymous" && auth.reason === "expired" && <p role="alert" className="mb-4 rounded-xl bg-amber-50 p-3 text-sm text-amber-900">Your session expired. Sign in again to continue.</p>}
@@ -67,13 +100,12 @@ export default function LoginPage() {
       {location.state && typeof location.state === "object" && "message" in location.state && <p role="status" className="mb-4 rounded-xl bg-emerald-50 p-3 text-sm text-emerald-900">{String(location.state.message)}</p>}
       {error && <p role="alert" className="mb-4 rounded-xl bg-red-50 p-3 text-sm text-red-800">{error}</p>}
       {reactivationError && <p role="alert" className="mb-4 rounded-xl bg-red-50 p-3 text-sm text-red-800">{reactivationError}</p>}
-      {reactivationMessage && <p role="status" className="mb-4 rounded-xl bg-emerald-50 p-3 text-sm text-emerald-900">{reactivationMessage}</p>}
       <form onSubmit={submit} className="space-y-4">
         <AuthField label="Login" type="email" autoComplete="username" value={login} onChange={(e) => setLogin(e.target.value)} required />
         <AuthField label="Password" type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} required />
         <button className={primaryButtonClass} disabled={submitting}>{submitting ? "Signing in…" : "Sign in"}</button>
       </form>
-      {loginErrorCode === "account_inactive" && !reactivationMessage && (
+      {loginErrorCode === "account_inactive" && (
         <button
           type="button"
           className={`${primaryButtonClass} mt-3`}
