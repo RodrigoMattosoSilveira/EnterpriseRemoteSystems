@@ -22,7 +22,11 @@ func (h *Handler) CurrentActor(c fiber.Ctx) error {
 	if err != nil {
 		return writeAuthorizationHTTPError(c, err)
 	}
-	return httpx.OK(c, CurrentActorResponse{
+	return httpx.OK(c, currentActorResponse(actor))
+}
+
+func currentActorResponse(actor *Actor) CurrentActorResponse {
+	return CurrentActorResponse{
 		ActorKey:             actor.ID,
 		ActorRecordID:        actor.RecordID,
 		TenantID:             actor.TenantID,
@@ -31,11 +35,11 @@ func (h *Handler) CurrentActor(c fiber.Ctx) error {
 		GlobalPersonID:       actor.GlobalPersonID,
 		MembershipID:         actor.MembershipID,
 		CollaboratorID:       actor.CollaboratorID,
-		RoleCodes:            append([]string(nil), actor.RoleCodes...),
+		RoleCodes:            append([]string{}, actor.RoleCodes...),
 		Permissions:          PermissionNames(actor.Permissions),
 		IntrinsicPermissions: PermissionNames(actor.IntrinsicPermissions),
 		DelegatedPermissions: PermissionNames(actor.DelegatedPermissions),
-	})
+	}
 }
 
 func (h *Handler) ListRoles(c fiber.Ctx) error {

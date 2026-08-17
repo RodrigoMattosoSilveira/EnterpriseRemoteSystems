@@ -20,9 +20,41 @@ function authzHeaders(actor: AuthzAdminRequestActor) {
 }
 
 export function getCurrentAuthzActor(actor: AuthzAdminRequestActor): Promise<AuthzCurrentActor> {
-  return apiFetch<AuthzCurrentActor>("/authz/current-actor", {
+  return apiFetch<unknown>("/authz/current-actor", {
     headers: authzHeaders(actor),
-  });
+  }).then(normalizeAuthzCurrentActor);
+}
+
+export function normalizeAuthzCurrentActor(input: unknown): AuthzCurrentActor {
+  const actor = (input && typeof input === "object" ? input : {}) as Record<string, unknown>;
+  return {
+    actorKey: stringValue(actor.actorKey),
+    actorRecordId: stringValue(actor.actorRecordId),
+    tenantId: stringValue(actor.tenantId),
+    scope: stringValue(actor.scope),
+    personId: optionalStringValue(actor.personId),
+    globalPersonId: optionalStringValue(actor.globalPersonId),
+    membershipId: optionalStringValue(actor.membershipId),
+    collaboratorId: optionalStringValue(actor.collaboratorId),
+    roleCodes: stringArray(actor.roleCodes),
+    permissions: stringArray(actor.permissions),
+    intrinsicPermissions: stringArray(actor.intrinsicPermissions),
+    delegatedPermissions: stringArray(actor.delegatedPermissions),
+  };
+}
+
+function stringArray(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === "string")
+    : [];
+}
+
+function stringValue(value: unknown): string {
+  return typeof value === "string" ? value : "";
+}
+
+function optionalStringValue(value: unknown): string | undefined {
+  return typeof value === "string" && value ? value : undefined;
 }
 
 export function listAuthzRoles(actor: AuthzAdminRequestActor): Promise<AuthzRole[]> {

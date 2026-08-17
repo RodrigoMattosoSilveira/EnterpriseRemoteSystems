@@ -61,6 +61,42 @@ func TestAuthzCurrentActorReturnsPersistedOperatingContext(t *testing.T) {
 	}
 }
 
+func TestCurrentActorResponseSerializesEmptyAuthorizationCollectionsAsArrays(t *testing.T) {
+	response := currentActorResponse(&Actor{
+		ID:                   "person-only@example.test",
+		RecordID:             "actor-person-only",
+		TenantID:             "tenant-a",
+		Scope:                ActorScopeTenant,
+		PersonID:             "person-a",
+		GlobalPersonID:       "global-person-a",
+		MembershipID:         "membership-a",
+		RoleCodes:            nil,
+		Permissions:          map[Permission]struct{}{PermissionPeopleSelfRead: {}},
+		IntrinsicPermissions: map[Permission]struct{}{PermissionPeopleSelfRead: {}},
+		DelegatedPermissions: nil,
+	})
+
+	if response.RoleCodes == nil {
+		t.Fatal("expected empty roleCodes array, got nil")
+	}
+	if response.Permissions == nil || response.IntrinsicPermissions == nil || response.DelegatedPermissions == nil {
+		t.Fatalf("expected non-nil permission collections, got %#v", response)
+	}
+
+	payload, err := json.Marshal(response)
+	if err != nil {
+		t.Fatalf("marshal current actor response: %v", err)
+	}
+	for _, expected := range [][]byte{
+		[]byte(`"roleCodes":[]`),
+		[]byte(`"delegatedPermissions":[]`),
+	} {
+		if !bytes.Contains(payload, expected) {
+			t.Fatalf("expected %s in current actor JSON, got %s", expected, payload)
+		}
+	}
+}
+
 func TestAuthzAdminCannotDeactivateOrRevokeItsOwnOperatingActor(t *testing.T) {
 	database := newAuthzTestDB(t)
 	adminActorID := createAuthzActor(t, database, "self-admin@example.com", nil, nil)
