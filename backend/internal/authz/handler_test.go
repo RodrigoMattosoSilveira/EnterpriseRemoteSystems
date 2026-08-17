@@ -228,8 +228,22 @@ func TestAuthzAdminListsRolesPermissionsAndActors(t *testing.T) {
 		t.Fatalf("expected roles status 200, got %d", rolesResp.StatusCode)
 	}
 	roles := decodeData[[]RoleResponse](t, rolesResp)
-	if len(roles) < 5 {
-		t.Fatalf("expected seeded roles, got %#v", roles)
+	for _, expectedRole := range []RoleCode{
+		RoleApplicationAdmin,
+		RoleTenantAdmin,
+		RoleEarningsOperator,
+		RoleExpenseOperator,
+	} {
+		role, ok := findRoleResponse(roles, string(expectedRole))
+		if !ok {
+			t.Fatalf("expected seeded delegated role %s, got %#v", expectedRole, roles)
+		}
+		if !role.Active {
+			t.Fatalf("expected seeded delegated role %s to be active, got %#v", expectedRole, role)
+		}
+	}
+	if role, ok := findRoleResponse(roles, string(RolePerson)); ok {
+		t.Fatalf("PERSON must not be listed as a seeded/grantable 30D role, got %#v", role)
 	}
 
 	permissionsResp := doAuthzRequest(t, app, http.MethodGet, "/api/v1/authz/permissions", nil, headers)
@@ -307,6 +321,15 @@ func decodeData[T any](t *testing.T, resp *http.Response) T {
 		t.Fatalf("decode response: %v", err)
 	}
 	return envelope.Data
+}
+
+func findRoleResponse(rows []RoleResponse, code string) (RoleResponse, bool) {
+	for _, row := range rows {
+		if row.Code == code {
+			return row, true
+		}
+	}
+	return RoleResponse{}, false
 }
 
 func containsPermissionResponse(rows []PermissionResponse, code string) bool {
