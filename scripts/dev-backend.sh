@@ -130,4 +130,11 @@ echo "DEV_SEED_ADMIN=${DEV_SEED_ADMIN:-}"
 echo "DEV_ADMIN_EMAIL=${DEV_ADMIN_EMAIL:-}"
 echo "LLM_COACHING_ENABLED=${LLM_COACHING_ENABLED:-}"
 
-go run ./cmd/api
+if ! command -v air >/dev/null 2>&1; then
+  echo "Air is required for local backend development."
+  echo "Install it with:"
+  echo "  go install github.com/air-verse/air@latest"
+  exit 1
+fi
+
+exec air -c .air.toml
