@@ -1114,6 +1114,37 @@ test("deactivated authentication account loses its session and cannot sign in un
       ),
     ).toBeVisible();
 
+    const adminContext = await browser.newContext({
+      baseURL,
+      storageState: { cookies: [], origins: [] },
+    });
+    const adminPage = await adminContext.newPage();
+    try {
+      await signIn(adminPage, login, password);
+      await expect(adminPage).toHaveURL(/\/people$/);
+
+      const reactivationAlert = adminPage.getByRole("region", {
+        name: "Pending account reactivation requests",
+      });
+      await expect(reactivationAlert).toBeVisible();
+      await expect(reactivationAlert).toHaveClass(/border-red-500/);
+      await expect(
+        reactivationAlert.getByRole("link", { name: "Review requests" }),
+      ).toBeVisible();
+
+      await reactivationAlert.getByRole("link", { name: "Review requests" }).click();
+      await expect(adminPage).toHaveURL(
+        /\/admin\/authentication#account-reactivation-requests$/,
+      );
+      await expect(
+        adminPage.getByRole("heading", { name: "Account reactivation requests" }),
+      ).toBeVisible();
+      await expect(adminPage.getByText(account.login, { exact: true })).toBeVisible();
+      await expect(adminPage.getByText("Pending", { exact: true })).toBeVisible();
+    } finally {
+      await adminContext.close();
+    }
+
     await approveReactivationRequest(request, account.login);
     await page.getByRole("button", { name: "Return to sign in" }).click();
     await expect(page.getByLabel("Login")).toBeVisible();
