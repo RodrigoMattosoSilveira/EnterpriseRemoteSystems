@@ -1100,7 +1100,7 @@ reactivationLifecycleTest(
 
     await setAuthenticationAccountActive(request, account.accountId, false);
 
-    await page.getByRole("link", { name: "Expenses", exact: true }).click();
+    await page.getByRole("link", { name: "Expenses section", exact: true }).click();
     await expect(page).toHaveURL(/\/login\?returnTo=/);
     await expect(
       page.getByText(
