@@ -681,6 +681,20 @@ func TestAuthenticationCreatesPersonActorAndAccountWhenNoActorExists(t *testing.
 	}
 }
 
+func TestAuthenticationAllowsLegacyTenantGrantedActorWithoutMembership(t *testing.T) {
+	_, _, service, actor := authenticationTestService(t)
+
+	account, err := service.CreateAccount(context.Background(), CreateAccountRequest{
+		ActorID: actor.ID, Login: "legacy-granted@example.com", TemporaryPassword: "Legacy-Granted-Password-1",
+	})
+	if err != nil {
+		t.Fatalf("create Account for pre-30D tenant-granted Actor: %v", err)
+	}
+	if account.ActorID != actor.ID {
+		t.Fatalf("expected Account actor %q, got %q", actor.ID, account.ActorID)
+	}
+}
+
 func TestAuthenticationAllowsAccountForActorWithActiveMembershipAndNoDelegatedRole(t *testing.T) {
 	database, _, service, _ := authenticationTestService(t)
 	now := time.Now().UTC()

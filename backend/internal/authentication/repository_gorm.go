@@ -119,22 +119,20 @@ func (r *GORMRepository) ActorHasActiveTenantAccess(ctx context.Context, actorID
 			legacyPersonID = strings.TrimSpace(collaborator.PersonID)
 		}
 	}
-	if legacyPersonID == "" {
-		return false, nil
-	}
-
-	var membershipCount int64
-	err := r.database.WithContext(ctx).
-		Table("person_tenant_memberships m").
-		Joins("JOIN tenants t ON t.id = m.tenant_id AND t.active = ?", true).
-		Joins("JOIN reference_data status ON status.id = m.status_id AND status.tenant_id = m.tenant_id AND status.type = ? AND status.active = ?", "person_status", true).
-		Where("(m.legacy_person_id = ? OR m.person_id = ?) AND status.code = ?", legacyPersonID, legacyPersonID, "ACTIVE").
-		Count(&membershipCount).Error
-	if err != nil {
-		return false, fmt.Errorf("verify authorization actor active Membership: %w", err)
-	}
-	if membershipCount > 0 {
-		return true, nil
+	if legacyPersonID != "" {
+		var membershipCount int64
+		err := r.database.WithContext(ctx).
+			Table("person_tenant_memberships m").
+			Joins("JOIN tenants t ON t.id = m.tenant_id AND t.active = ?", true).
+			Joins("JOIN reference_data status ON status.id = m.status_id AND status.tenant_id = m.tenant_id AND status.type = ? AND status.active = ?", "person_status", true).
+			Where("(m.legacy_person_id = ? OR m.person_id = ?) AND status.code = ?", legacyPersonID, legacyPersonID, "ACTIVE").
+			Count(&membershipCount).Error
+		if err != nil {
+			return false, fmt.Errorf("verify authorization actor active Membership: %w", err)
+		}
+		if membershipCount > 0 {
+			return true, nil
+		}
 	}
 
 	// Compatibility for pre-30D persisted Actors that still have legitimate
