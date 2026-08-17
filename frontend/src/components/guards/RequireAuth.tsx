@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { Navigate, useLocation } from "react-router-dom";
 import {
   initializeAuthSession,
@@ -17,6 +17,8 @@ export function RequireAuth({ children }: { children: ReactNode }) {
   const validationKey = `${accountId}:${location.pathname}`;
   const [validatedKey, setValidatedKey] = useState("");
   const [backgroundValidation, setBackgroundValidation] = useState(false);
+  const validatedAccountRef = useRef("");
+  const lastValidationKeyRef = useRef("");
 
   const validateCurrentSession = useCallback(async (suspendPage: boolean) => {
     if (!accountId) return;
@@ -42,8 +44,32 @@ export function RequireAuth({ children }: { children: ReactNode }) {
   }, [accountId, validationKey]);
 
   useEffect(() => {
+    if (!accountId) {
+      validatedAccountRef.current = "";
+      lastValidationKeyRef.current = "";
+      setValidatedKey("");
+      return;
+    }
+
+    if (validatedAccountRef.current !== accountId) {
+      // Reaching an authenticated AuthState already required a successful
+      // /auth/session load or login response. Treat that fresh server result as
+      // the first protected-route validation instead of immediately issuing a
+      // redundant second /auth/session request. Later pathname changes still
+      // revalidate below, and focus/visibility checks remain unchanged.
+      validatedAccountRef.current = accountId;
+      lastValidationKeyRef.current = validationKey;
+      setValidatedKey(validationKey);
+      return;
+    }
+
+    // React StrictMode intentionally re-runs mount effects in development. Do
+    // not turn that diagnostic replay into a second server-side session check.
+    if (lastValidationKeyRef.current === validationKey) return;
+
+    lastValidationKeyRef.current = validationKey;
     void validateCurrentSession(true);
-  }, [validateCurrentSession]);
+  }, [accountId, validateCurrentSession, validationKey]);
 
   useEffect(() => {
     const validate = () => {

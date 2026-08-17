@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { apiFetch, ApiError } from "./client";
 import { SELECTED_TENANT_STORAGE_KEY } from "./tenantSelection";
-import { subscribeForbidden } from "../app/authEvents";
+import { subscribeAuthenticationRequired, subscribeForbidden } from "../app/authEvents";
 
 type FetchCall = {
   url: string | URL | Request;
@@ -100,6 +100,38 @@ describe("apiFetch authenticated-session transport", () => {
 
       await expect(apiFetch("/people")).rejects.toBeInstanceOf(ApiError);
       expect(forbiddenNotifications).toBe(1);
+    } finally {
+      unsubscribe();
+    }
+  });
+
+  it("leaves auth-session 401 handling to the auth store instead of broadcasting globally", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        new Response(
+          JSON.stringify({
+            error: {
+              code: "authentication_required",
+              message: "An authenticated session is required",
+            },
+          }),
+          { status: 401, headers: { "Content-Type": "application/json" } },
+        ),
+      ),
+    );
+
+    let authenticationNotifications = 0;
+    const unsubscribe = subscribeAuthenticationRequired(() => {
+      authenticationNotifications += 1;
+    });
+
+    try {
+      await expect(apiFetch("/auth/session")).rejects.toBeInstanceOf(ApiError);
+      expect(authenticationNotifications).toBe(0);
+
+      await expect(apiFetch("/people")).rejects.toBeInstanceOf(ApiError);
+      expect(authenticationNotifications).toBe(1);
     } finally {
       unsubscribe();
     }

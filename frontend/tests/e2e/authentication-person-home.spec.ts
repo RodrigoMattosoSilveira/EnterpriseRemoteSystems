@@ -68,7 +68,11 @@ test("an authenticated Person actor lands in People before operator workspaces",
       await expect(page).toHaveURL(
         new RegExp(`/people/${escapeRegExp(personId!)}$`),
       );
-      await expect(page.getByRole("link", { name: "Collaborators section" })).toBeVisible();
+      // A Person-only identity has intrinsic Person self-service but no
+      // Collaborator journey and therefore no Collaborator navigation.
+      await expect(
+        page.getByRole("link", { name: "My Collaborator record" }),
+      ).toHaveCount(0);
 
       const saveButton = page.getByRole("button", { name: "Save Changes" });
       await expect(saveButton).toBeDisabled();

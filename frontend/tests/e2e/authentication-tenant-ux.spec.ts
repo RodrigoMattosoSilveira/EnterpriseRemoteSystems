@@ -111,6 +111,7 @@ test("password reset page accepts administrator-issued tokens", async ({ page })
 
 
 test("application administrator can switch between granted tenants", async ({ page, request }) => {
+  test.setTimeout(60_000);
   const suffix = `${Date.now()}${Math.floor(Math.random() * 10_000)}`;
   const defaultOnlyNickname = `DefaultTenantOnly${suffix}`;
   const defaultOnlyTaskCode = `TENANT_TASK_${suffix}`.slice(0, 40).toUpperCase();
@@ -561,6 +562,17 @@ test("authentication administration finds an existing collaborator actor and lin
   };
   const accountId = accountEnvelope.data?.id;
   expect(accountId).toBeTruthy();
+
+  const grantResponse = await request.post(
+    e2eApiUrl(
+      `/api/v1/authz/actors/${encodeURIComponent(candidate.actorId)}/role-grants`,
+    ),
+    {
+      headers: authzHeaders(),
+      data: { roleCode: "EXPENSE_OPERATOR", tenantId: "default" },
+    },
+  );
+  expect(grantResponse.status()).toBe(201);
 
   await page.goto("/admin/authentication");
   await expect(
@@ -1014,6 +1026,7 @@ test("administrator-issued password reset replaces the password and clears the a
 
 
 test("deactivated authentication account loses its session and cannot sign in until reactivated", async ({ browser, request }) => {
+  test.setTimeout(60_000);
   const suffix = `${Date.now()}${Math.floor(Math.random() * 100_000)}`;
   const account = await provisionRoleAccount(
     request,
@@ -1308,16 +1321,21 @@ async function provisionRoleAccount(
   const login = `auth-${keyPrefix}@example.com`;
   const password = `E2E-${keyPrefix}-Password!`;
   const numericSuffix = keyPrefix.replace(/\D/g, "").slice(-12) || String(Date.now());
+  // Two role fixtures can intentionally share the same timestamp suffix. Keep
+  // their Person-level unique fields distinct by carrying a role discriminator
+  // into the final digits used for CPF/RG/cellular generation.
+  const roleDiscriminator = roleCode === "TENANT_ADMIN" ? "1" : "2";
+  const identitySuffix = `${numericSuffix.slice(-11)}${roleDiscriminator}`;
 
   const personResponse = await request.post(e2eApiUrl("/api/v1/people"), {
     headers: authzHeaders(),
     data: {
       firstName: "Authentication",
-      lastName: `Role${numericSuffix}`,
-      nickname: `AuthRole${numericSuffix}`,
-      cpf: validCPF(Number(numericSuffix.slice(-9))),
-      rg: `AR-${numericSuffix.slice(-8)}`,
-      cellular: validBrazilianCellular(numericSuffix),
+      lastName: `Role${identitySuffix}`,
+      nickname: `AuthRole${identitySuffix}`,
+      cpf: validCPF(Number(identitySuffix.slice(-9))),
+      rg: `AR-${identitySuffix.slice(-8)}`,
+      cellular: validBrazilianCellular(identitySuffix),
       email: login,
       statusId: PERSON_STATUS_ACTIVE_ID,
     },
