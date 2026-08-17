@@ -82,11 +82,18 @@ browser profile whose storage is known to be empty. In Developer Tools,
 login.
 
 Playwright now provisions and logs in a dedicated `e2e-application-admin`
-account locally and in CI. Header mode remains available only when explicitly
-requested for isolated authorization compatibility tests. Automated coverage
-also runs the globally authenticated administrator context alongside a separate
-cookie-less context and verifies that the latter receives HTTP 401 from
-`/auth/session` and is redirected to `/login`.
+account locally and in CI. Session-authenticated Playwright runs use one worker.
+The suite starts one shared `app-e2e.db` backend and `globalSetup` creates one
+server-side administrator session whose storage state is reused by the tests;
+cloning that state across parallel workers would not provide independent
+sessions or independent database state. Serial session-mode execution therefore
+prevents authentication/account lifecycle tests from invalidating or racing the
+workspace used by unrelated tests. Header mode remains eligible for normal
+Playwright parallelism and is available only when explicitly requested for
+isolated authorization compatibility tests. Automated coverage also runs the
+globally authenticated administrator context alongside a separate cookie-less
+context and verifies that the latter receives HTTP 401 from `/auth/session` and
+is redirected to `/login`.
 
 ## Tenant-scoped pricing administration
 

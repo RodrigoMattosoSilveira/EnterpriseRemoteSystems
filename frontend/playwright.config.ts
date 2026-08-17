@@ -41,7 +41,18 @@ export default defineConfig({
   fullyParallel: false,
   forbidOnly: isCI,
   retries: isCI ? 1 : 0,
-  workers: isCI ? 1 : undefined,
+  // Session-mode E2E uses one authenticated storage-state cookie created by
+  // globalSetup and one shared app-e2e.db backend. Running multiple workers
+  // would clone that same server-side session into concurrent browser contexts
+  // while the tests also mutate authentication, tenant, and Person state. That
+  // is not an isolation boundary: one worker can observe another worker's
+  // lifecycle changes and protected pages can disappear mid-interaction.
+  //
+  // CI already runs one worker. Make the same guarantee explicit for every
+  // session-authenticated run (local or deployed). Header mode remains eligible
+  // for Playwright's normal parallelism because it is reserved for isolated
+  // authorization-boundary scenarios that do not share a login session.
+  workers: isCI || authMode === "session" ? 1 : undefined,
   reporter: isCI ? [["github"], ["html", { open: "never" }]] : [["list"], ["html"]],
 
   use: {
