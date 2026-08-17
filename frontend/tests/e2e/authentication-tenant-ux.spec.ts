@@ -1140,13 +1140,40 @@ test("deactivated authentication account loses its session and cannot sign in un
       await expect(
         adminPage.getByRole("heading", { name: "Account reactivation requests" }),
       ).toBeVisible();
-      await expect(adminPage.getByText(account.login, { exact: true })).toBeVisible();
-      await expect(adminPage.getByText("Pending", { exact: true })).toBeVisible();
+
+      const requestCard = adminPage
+        .locator('section[aria-label="Account reactivation requests"] article')
+        .filter({ hasText: account.login });
+      await expect(requestCard).toBeVisible();
+      await expect(requestCard.getByText(account.login, { exact: true })).toBeVisible();
+      await expect(requestCard.getByText("Pending", { exact: true })).toBeVisible();
+
+      await requestCard
+        .getByLabel("Review reason")
+        .fill("E2E account reactivation UX verification");
+      const decisionResponsePromise = adminPage.waitForResponse(
+        (response) => {
+          const url = new URL(response.url());
+          return (
+            response.request().method() === "POST" &&
+            url.pathname.startsWith("/api/v1/auth/reactivation-requests/") &&
+            url.pathname.endsWith("/decision")
+          );
+        },
+        { timeout: 10_000 },
+      );
+      await requestCard
+        .getByRole("button", { name: "Approve reactivation" })
+        .click();
+      const decisionResponse = await decisionResponsePromise;
+      expect(decisionResponse.status()).toBe(200);
+
+      await expect(requestCard).toHaveCount(0);
+      await expect(adminPage.getByText("0 pending", { exact: true })).toBeVisible();
     } finally {
       await adminContext.close();
     }
 
-    await approveReactivationRequest(request, account.login);
     await page.getByRole("button", { name: "Return to sign in" }).click();
     await expect(page.getByLabel("Login")).toBeVisible();
     await expect(page.getByLabel("Password")).toBeVisible();
@@ -1432,40 +1459,6 @@ async function signIn(
   const loginResponse = await loginResponsePromise;
   expect(loginResponse.status()).toBe(200);
   await expect(page).not.toHaveURL(/\/login(?:\?|$)/);
-}
-
-async function approveReactivationRequest(
-  request: APIRequestContext,
-  accountLogin: string,
-): Promise<void> {
-  const listResponse = await request.get(
-    e2eApiUrl("/api/v1/auth/reactivation-requests"),
-    { headers: authzHeaders() },
-  );
-  expect(listResponse.ok()).toBeTruthy();
-  const listEnvelope = (await listResponse.json()) as {
-    data?: Array<{ id?: string; login?: string; status?: string }>;
-  };
-  const pending = (listEnvelope.data ?? []).find(
-    (item) =>
-      item.login?.toLowerCase() === accountLogin.toLowerCase() &&
-      item.status === "PENDING",
-  );
-  expect(pending?.id).toBeTruthy();
-
-  const reviewResponse = await request.post(
-    e2eApiUrl(
-      `/api/v1/auth/reactivation-requests/${encodeURIComponent(pending!.id!)}/decision`,
-    ),
-    {
-      headers: authzHeaders(),
-      data: {
-        approve: true,
-        reason: "E2E account reactivation UX verification",
-      },
-    },
-  );
-  expect(reviewResponse.ok()).toBeTruthy();
 }
 
 async function setAuthenticationAccountActive(
