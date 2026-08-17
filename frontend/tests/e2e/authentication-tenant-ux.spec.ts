@@ -13,15 +13,21 @@ const SECTOR_MINING_ID = "ref-sector-mining";
 const LOCATION_MAIN_MINE_ID = "ref-location-main-mine";
 const TASK_MINER_ID = "ref-task-miner";
 
-type CookieLessPageFixtures = {
+type ReactivationLifecycleFixtures = {
   cookieLessPage: Page;
+  adminReviewPage: Page;
+  reactivationAccount: PreparedRoleAccount;
 };
 
-// This fixture gives only the browser page a genuinely cookie-less context.
-// It deliberately does not override Playwright's storageState option, so the
-// standard `request` fixture keeps the globally authenticated Application
-// Administrator session needed by provisioning and cleanup helpers.
-const cookieLessPageTest = test.extend<CookieLessPageFixtures>({
+// This scenario deliberately owns two independent browser sessions plus a
+// disposable Authentication Account. Keep all resource teardown in fixtures so
+// Playwright gives teardown its own timeout budget instead of charging browser
+// and database cleanup against the 60-second lifecycle workflow itself.
+//
+// Neither browser fixture overrides Playwright's storageState option globally,
+// so the standard `request` fixture remains the authenticated Application
+// Administrator used by provisioning and domain cleanup.
+const reactivationLifecycleTest = test.extend<ReactivationLifecycleFixtures>({
   cookieLessPage: async ({ browser }, use) => {
     const context = await browser.newContext({
       baseURL,
@@ -33,6 +39,36 @@ const cookieLessPageTest = test.extend<CookieLessPageFixtures>({
       await use(page);
     } finally {
       await context.close();
+    }
+  },
+
+  adminReviewPage: async ({ browser }, use) => {
+    const context = await browser.newContext({
+      baseURL,
+      storageState: { cookies: [], origins: [] },
+    });
+    const page = await context.newPage();
+
+    try {
+      await use(page);
+    } finally {
+      await context.close();
+    }
+  },
+
+  reactivationAccount: async ({ request }, use) => {
+    const suffix = `${Date.now()}${Math.floor(Math.random() * 100_000)}`;
+    const account = await provisionRoleAccount(
+      request,
+      `deactivation-${suffix}`,
+      "EXPENSE_OPERATOR",
+    );
+
+    try {
+      await use(account);
+    } finally {
+      await setAuthenticationAccountActive(request, account.accountId, true);
+      await deactivateActor(request, account.actorId);
     }
   },
 });
@@ -1049,16 +1085,16 @@ test("administrator-issued password reset replaces the password and clears the a
 });
 
 
-cookieLessPageTest("deactivated authentication account loses its session and cannot sign in until reactivated", async ({ browser, cookieLessPage: page, request }) => {
-  test.setTimeout(60_000);
-  const suffix = `${Date.now()}${Math.floor(Math.random() * 100_000)}`;
-  const account = await provisionRoleAccount(
+reactivationLifecycleTest(
+  "deactivated authentication account loses its session and cannot sign in until reactivated",
+  async ({
+    cookieLessPage: page,
+    adminReviewPage: adminPage,
+    reactivationAccount: account,
     request,
-    `deactivation-${suffix}`,
-    "EXPENSE_OPERATOR",
-  );
+  }) => {
+    test.setTimeout(60_000);
 
-  try {
     await signIn(page, account.login, account.password);
     await expectPersonSelfServiceHome(page, account.personId);
 
@@ -1134,64 +1170,55 @@ cookieLessPageTest("deactivated authentication account loses its session and can
       ),
     ).toBeVisible();
 
-    const adminContext = await browser.newContext({
-      baseURL,
-      storageState: { cookies: [], origins: [] },
+    await signIn(adminPage, login, password);
+    await expect(adminPage).toHaveURL(/\/people$/);
+
+    const reactivationAlert = adminPage.getByRole("region", {
+      name: "Pending account reactivation requests",
     });
-    const adminPage = await adminContext.newPage();
-    try {
-      await signIn(adminPage, login, password);
-      await expect(adminPage).toHaveURL(/\/people$/);
+    await expect(reactivationAlert).toBeVisible();
+    await expect(reactivationAlert).toHaveClass(/border-red-500/);
+    await expect(
+      reactivationAlert.getByRole("link", { name: "Review requests" }),
+    ).toBeVisible();
 
-      const reactivationAlert = adminPage.getByRole("region", {
-        name: "Pending account reactivation requests",
-      });
-      await expect(reactivationAlert).toBeVisible();
-      await expect(reactivationAlert).toHaveClass(/border-red-500/);
-      await expect(
-        reactivationAlert.getByRole("link", { name: "Review requests" }),
-      ).toBeVisible();
+    await reactivationAlert.getByRole("link", { name: "Review requests" }).click();
+    await expect(adminPage).toHaveURL(
+      /\/admin\/authentication#account-reactivation-requests$/,
+    );
+    await expect(
+      adminPage.getByRole("heading", { name: "Account reactivation requests" }),
+    ).toBeVisible();
 
-      await reactivationAlert.getByRole("link", { name: "Review requests" }).click();
-      await expect(adminPage).toHaveURL(
-        /\/admin\/authentication#account-reactivation-requests$/,
-      );
-      await expect(
-        adminPage.getByRole("heading", { name: "Account reactivation requests" }),
-      ).toBeVisible();
+    const requestCard = adminPage
+      .locator('section[aria-label="Account reactivation requests"] article')
+      .filter({ hasText: account.login });
+    await expect(requestCard).toBeVisible();
+    await expect(requestCard.getByText(account.login, { exact: true })).toBeVisible();
+    await expect(requestCard.getByText("Pending", { exact: true })).toBeVisible();
 
-      const requestCard = adminPage
-        .locator('section[aria-label="Account reactivation requests"] article')
-        .filter({ hasText: account.login });
-      await expect(requestCard).toBeVisible();
-      await expect(requestCard.getByText(account.login, { exact: true })).toBeVisible();
-      await expect(requestCard.getByText("Pending", { exact: true })).toBeVisible();
+    await requestCard
+      .getByLabel("Review reason")
+      .fill("E2E account reactivation UX verification");
+    const decisionResponsePromise = adminPage.waitForResponse(
+      (response) => {
+        const url = new URL(response.url());
+        return (
+          response.request().method() === "POST" &&
+          url.pathname.startsWith("/api/v1/auth/reactivation-requests/") &&
+          url.pathname.endsWith("/decision")
+        );
+      },
+      { timeout: 10_000 },
+    );
+    await requestCard
+      .getByRole("button", { name: "Approve reactivation" })
+      .click();
+    const decisionResponse = await decisionResponsePromise;
+    expect(decisionResponse.status()).toBe(200);
 
-      await requestCard
-        .getByLabel("Review reason")
-        .fill("E2E account reactivation UX verification");
-      const decisionResponsePromise = adminPage.waitForResponse(
-        (response) => {
-          const url = new URL(response.url());
-          return (
-            response.request().method() === "POST" &&
-            url.pathname.startsWith("/api/v1/auth/reactivation-requests/") &&
-            url.pathname.endsWith("/decision")
-          );
-        },
-        { timeout: 10_000 },
-      );
-      await requestCard
-        .getByRole("button", { name: "Approve reactivation" })
-        .click();
-      const decisionResponse = await decisionResponsePromise;
-      expect(decisionResponse.status()).toBe(200);
-
-      await expect(requestCard).toHaveCount(0);
-      await expect(adminPage.getByText("0 pending", { exact: true })).toBeVisible();
-    } finally {
-      await adminContext.close();
-    }
+    await expect(requestCard).toHaveCount(0);
+    await expect(adminPage.getByText("0 pending", { exact: true })).toBeVisible();
 
     await page.getByRole("button", { name: "Return to sign in" }).click();
     await expect(page.getByLabel("Login")).toBeVisible();
@@ -1199,13 +1226,8 @@ cookieLessPageTest("deactivated authentication account loses its session and can
 
     await signIn(page, account.login, account.password);
     await expectPersonSelfServiceHome(page, account.personId);
-  } finally {
-    // Domain cleanup still uses the authenticated request fixture. The custom
-    // cookieLessPage fixture owns browser teardown after the test body.
-    await setAuthenticationAccountActive(request, account.accountId, true);
-    await deactivateActor(request, account.actorId);
-  }
-});
+  },
+);
 
 test("signing in after a forbidden sign-out lands on the next account's first permitted page", async ({ browser, request }) => {
   const suffix = `${Date.now()}${Math.floor(Math.random() * 100_000)}`;
