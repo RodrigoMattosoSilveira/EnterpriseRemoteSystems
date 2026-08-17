@@ -13,14 +13,28 @@ const SECTOR_MINING_ID = "ref-sector-mining";
 const LOCATION_MAIN_MINE_ID = "ref-location-main-mine";
 const TASK_MINER_ID = "ref-task-miner";
 
-// This test variant starts with a genuinely cookie-less browser context while
-// still letting Playwright own the context lifecycle. Long authentication
-// lifecycle scenarios should not manually close their primary context inside
-// the test timeout; the built-in page/context fixtures tear it down reliably
-// after the test body and its cleanup complete.
-const cookieLessTest = test.extend({});
-cookieLessTest.use({
-  storageState: { cookies: [], origins: [] },
+type CookieLessPageFixtures = {
+  cookieLessPage: Page;
+};
+
+// This fixture gives only the browser page a genuinely cookie-less context.
+// It deliberately does not override Playwright's storageState option, so the
+// standard `request` fixture keeps the globally authenticated Application
+// Administrator session needed by provisioning and cleanup helpers.
+const cookieLessPageTest = test.extend<CookieLessPageFixtures>({
+  cookieLessPage: async ({ browser }, use) => {
+    const context = await browser.newContext({
+      baseURL,
+      storageState: { cookies: [], origins: [] },
+    });
+    const page = await context.newPage();
+
+    try {
+      await use(page);
+    } finally {
+      await context.close();
+    }
+  },
 });
 
 test("authenticated user can see identity, tenant, sign out, and sign back in", async ({ browser }) => {
@@ -1035,7 +1049,7 @@ test("administrator-issued password reset replaces the password and clears the a
 });
 
 
-cookieLessTest("deactivated authentication account loses its session and cannot sign in until reactivated", async ({ browser, page, request }) => {
+cookieLessPageTest("deactivated authentication account loses its session and cannot sign in until reactivated", async ({ browser, cookieLessPage: page, request }) => {
   test.setTimeout(60_000);
   const suffix = `${Date.now()}${Math.floor(Math.random() * 100_000)}`;
   const account = await provisionRoleAccount(
@@ -1186,9 +1200,8 @@ cookieLessTest("deactivated authentication account loses its session and cannot 
     await signIn(page, account.login, account.password);
     await expectPersonSelfServiceHome(page, account.personId);
   } finally {
-    // Playwright owns the primary cookie-less context for this test. Keep the
-    // domain cleanup inside the test body; fixture teardown closes the page and
-    // context afterward without consuming this test's 60-second timeout.
+    // Domain cleanup still uses the authenticated request fixture. The custom
+    // cookieLessPage fixture owns browser teardown after the test body.
     await setAuthenticationAccountActive(request, account.accountId, true);
     await deactivateActor(request, account.actorId);
   }
