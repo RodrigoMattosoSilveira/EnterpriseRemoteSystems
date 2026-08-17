@@ -96,6 +96,34 @@ describe("PeopleListPage", () => {
     expect(reviewLink?.textContent?.trim()).toBe("Review requests");
   });
 
+  it("keeps the People workspace usable if the supplemental reactivation response is malformed", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation(
+      async (input: RequestInfo | URL) => {
+        const url = typeof input === "string" ? input : input.toString();
+        fetchCalls.push(url);
+
+        if (url === "/api/v1/auth/reactivation-requests") {
+          return jsonResponse({ data: { unexpected: true } });
+        }
+        if (url.startsWith("/api/v1/people")) {
+          return jsonResponse({ data: { items: [], total: 0 } });
+        }
+        if (url === "/api/v1/reference-data/person_status") {
+          return jsonResponse({ data: [] });
+        }
+        throw new Error(`Unhandled request: ${url}`);
+      },
+    );
+
+    renderPeopleListRoute(applicationAdminActor);
+
+    await waitForText("People");
+    expect(inputByLabel("Filter people")).toBeTruthy();
+    expect(
+      container.querySelector('[aria-label="Pending account reactivation requests"]'),
+    ).toBeFalsy();
+  });
+
   it("does not show a reactivation alert when the Application Administrator has no pending requests", async () => {
     mockApplicationAdminPeopleAndReactivationRequests(0);
 

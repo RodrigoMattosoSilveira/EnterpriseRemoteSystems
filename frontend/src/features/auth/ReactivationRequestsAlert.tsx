@@ -5,7 +5,7 @@ import { ApiErrorPanel } from "../../components/ApiErrorPanel";
 
 export function ReactivationRequestsAlert() {
   const requests = useQuery({
-    queryKey: ["auth", "reactivation-requests"],
+    queryKey: ["auth", "reactivation-requests", "alert"],
     queryFn: listAccountReactivationRequestsForAlert,
     refetchOnWindowFocus: false,
   });
@@ -14,8 +14,9 @@ export function ReactivationRequestsAlert() {
     return <ApiErrorPanel error={requests.error} />;
   }
 
-  const pendingCount = (requests.data ?? []).filter(
-    (request) => request.status === "PENDING",
+  const requestList = Array.isArray(requests.data) ? requests.data : [];
+  const pendingCount = requestList.filter(
+    (request) => request?.status === "PENDING",
   ).length;
 
   if (requests.isLoading || pendingCount === 0) {

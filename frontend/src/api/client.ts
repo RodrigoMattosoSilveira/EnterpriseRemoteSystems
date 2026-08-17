@@ -53,7 +53,10 @@ export async function apiFetch<T>(
   const result = await performApiFetch<T>(url, requestOptions);
 
   if (!result.response.ok) {
-    if (result.response.status === 401 && !isPublicAuthenticationRequest(path)) {
+    if (
+      result.response.status === 401 &&
+      !isPublicAuthenticationRequest(path, requestOptions.method)
+    ) {
       notifyAuthenticationRequired(authenticationInterruptionReason(result.errorCode));
     }
     if (
@@ -198,11 +201,15 @@ function authenticationInterruptionReason(
   return "expired";
 }
 
-function isPublicAuthenticationRequest(path: string): boolean {
+function isPublicAuthenticationRequest(
+  path: string,
+  method: string | undefined,
+): boolean {
+  const normalizedMethod = (method ?? "GET").toUpperCase();
   return (
     path === "/auth/login" ||
     path === "/auth/session" ||
     path === "/auth/password/reset" ||
-    path === "/auth/reactivation-requests"
+    (path === "/auth/reactivation-requests" && normalizedMethod === "POST")
   );
 }

@@ -137,6 +137,42 @@ describe("apiFetch authenticated-session transport", () => {
     }
   });
 
+  it("treats only the POST self-reactivation request as public", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        new Response(
+          JSON.stringify({
+            error: {
+              code: "authentication_required",
+              message: "An authenticated session is required",
+            },
+          }),
+          { status: 401, headers: { "Content-Type": "application/json" } },
+        ),
+      ),
+    );
+
+    let authenticationNotifications = 0;
+    const unsubscribe = subscribeAuthenticationRequired(() => {
+      authenticationNotifications += 1;
+    });
+
+    try {
+      await expect(
+        apiFetch("/auth/reactivation-requests", { method: "POST" }),
+      ).rejects.toBeInstanceOf(ApiError);
+      expect(authenticationNotifications).toBe(0);
+
+      await expect(
+        apiFetch("/auth/reactivation-requests", { method: "GET" }),
+      ).rejects.toBeInstanceOf(ApiError);
+      expect(authenticationNotifications).toBe(1);
+    } finally {
+      unsubscribe();
+    }
+  });
+
   it("does not retry authentication failures with bootstrap actor headers", async () => {
     const fetchMock = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
       fetchCalls.push({ url, init });
