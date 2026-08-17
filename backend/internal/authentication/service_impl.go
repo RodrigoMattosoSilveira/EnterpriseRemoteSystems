@@ -368,7 +368,7 @@ func (s *service) CreateAccount(ctx context.Context, req CreateAccountRequest) (
 		}
 		if !hasTenantAccess {
 			return AccountResponse{}, &ValidationError{Fields: map[string]string{
-				"actorId": "Authorization actor must have at least one active role grant for an active tenant",
+				"actorId": "Authorization actor must be linked to an active Person-Tenant Membership before creating an account",
 			}}
 		}
 		account, err = s.repository.CreateAccount(ctx, accountInput)

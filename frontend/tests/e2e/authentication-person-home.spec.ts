@@ -44,15 +44,8 @@ test("an authenticated Person actor lands in People before operator workspaces",
   expect(actorId).toBeTruthy();
 
   try {
-    const grantResponse = await request.post(
-      e2eApiUrl(`/api/v1/authz/actors/${encodeURIComponent(actorId!)}/role-grants`),
-      {
-        headers: authzHeaders(),
-        data: { roleCode: "EXPENSE_OPERATOR", tenantId: "default" },
-      },
-    );
-    expect(grantResponse.status()).toBe(201);
-
+    // Bite 30D self-service comes from Account -> tenant Actor -> ACTIVE
+    // Membership. This fixture intentionally has no delegated Role Grant.
     const accountResponse = await request.post(e2eApiUrl("/api/v1/auth/accounts"), {
       headers: authzHeaders(),
       data: {

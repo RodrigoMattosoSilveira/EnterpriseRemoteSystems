@@ -681,6 +681,88 @@ func TestAuthenticationCreatesPersonActorAndAccountWhenNoActorExists(t *testing.
 	}
 }
 
+func TestAuthenticationAllowsAccountForActorWithActiveMembershipAndNoDelegatedRole(t *testing.T) {
+	database, _, service, _ := authenticationTestService(t)
+	now := time.Now().UTC()
+
+	status := appdb.ReferenceData{
+		BaseModel: appdb.BaseModel{ID: "auth-membership-only-status", CreatedAt: now, UpdatedAt: now},
+		TenantID:  appdb.DefaultTenantID,
+		Type:      "person_status",
+		Code:      "ACTIVE",
+		Label:     "Authentication Membership Active",
+		Active:    true,
+	}
+	if err := database.Create(&status).Error; err != nil {
+		t.Fatalf("create active Person status: %v", err)
+	}
+
+	person := appdb.Person{
+		BaseModel: appdb.BaseModel{ID: "auth-membership-only-person", CreatedAt: now, UpdatedAt: now},
+		TenantID:  appdb.DefaultTenantID,
+		FirstName: "Membership",
+		LastName:  "Only",
+		Nickname:  "MembershipOnly",
+		CPF:       "52998224725",
+		RG:        "AUTHMEMBERONLY",
+		Cellular:  "11987654321",
+		Email:     "membership-only@example.com",
+		Country:   "Brasil",
+		StatusID:  status.ID,
+	}
+	if err := database.Create(&person).Error; err != nil {
+		t.Fatalf("create Person with active Membership: %v", err)
+	}
+	if err := appdb.EnsureGlobalPersonMembershipFoundation(database); err != nil {
+		t.Fatalf("ensure Person Membership foundation: %v", err)
+	}
+
+	personID := person.ID
+	actor := authz.AuthzActor{
+		ID:          "auth-membership-only-actor",
+		ActorKey:    person.Email,
+		DisplayName: "Membership Only",
+		PersonID:    &personID,
+		Active:      true,
+		CreatedAt:   now,
+		UpdatedAt:   now,
+	}
+	if err := database.Create(&actor).Error; err != nil {
+		t.Fatalf("create Person actor without delegated roles: %v", err)
+	}
+
+	account, err := service.CreateAccount(context.Background(), CreateAccountRequest{
+		ActorID: actor.ID, Login: person.Email, TemporaryPassword: "Membership-Only-Password-1",
+	})
+	if err != nil {
+		t.Fatalf("create Account from active Membership without delegated role: %v", err)
+	}
+	if account.ActorID != actor.ID {
+		t.Fatalf("expected Account actor %q, got %q", actor.ID, account.ActorID)
+	}
+
+	var activeGrantCount int64
+	if err := database.Model(&authz.AuthzActorRoleGrant{}).
+		Where("actor_id = ? AND active = ?", actor.ID, true).
+		Count(&activeGrantCount).Error; err != nil {
+		t.Fatalf("count delegated Role Grants: %v", err)
+	}
+	if activeGrantCount != 0 {
+		t.Fatalf("expected no active delegated Role Grants, got %d", activeGrantCount)
+	}
+
+	resolved, err := authz.NewGORMStore(database).FindAccountActor(context.Background(), account.ID, appdb.DefaultTenantID)
+	if err != nil {
+		t.Fatalf("resolve Account Actor from active Membership: %v", err)
+	}
+	if !resolved.HasIntrinsicPermission(authz.PermissionPeopleSelfRead) {
+		t.Fatalf("expected intrinsic Person self-service, got %v", authz.PermissionNames(resolved.IntrinsicPermissions))
+	}
+	if len(resolved.RoleCodes) != 0 {
+		t.Fatalf("expected zero delegated roles, got %#v", resolved.RoleCodes)
+	}
+}
+
 func TestAuthenticationRejectsAccountForActorWithoutActiveTenantAccess(t *testing.T) {
 	database, _, service, _ := authenticationTestService(t)
 	now := time.Now().UTC()
@@ -703,7 +785,7 @@ func TestAuthenticationRejectsAccountForActorWithoutActiveTenantAccess(t *testin
 	if !errors.As(err, &validation) {
 		t.Fatalf("expected validation error, got %v", err)
 	}
-	if got := validation.ValidationFields()["actorId"]; got != "Authorization actor must have at least one active role grant for an active tenant" {
+	if got := validation.ValidationFields()["actorId"]; got != "Authorization actor must be linked to an active Person-Tenant Membership before creating an account" {
 		t.Fatalf("unexpected actor validation: %q", got)
 	}
 }

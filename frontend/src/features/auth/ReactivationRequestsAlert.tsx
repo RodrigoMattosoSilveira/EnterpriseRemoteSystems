@@ -1,12 +1,12 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
-import { listAccountReactivationRequests } from "../../api/auth.api";
+import { listAccountReactivationRequestsForAlert } from "../../api/auth.api";
 import { ApiErrorPanel } from "../../components/ApiErrorPanel";
 
 export function ReactivationRequestsAlert() {
   const requests = useQuery({
     queryKey: ["auth", "reactivation-requests"],
-    queryFn: listAccountReactivationRequests,
+    queryFn: listAccountReactivationRequestsForAlert,
     refetchOnWindowFocus: false,
   });
 

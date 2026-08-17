@@ -88,12 +88,66 @@ func (r *GORMRepository) FindAccountByLogin(ctx context.Context, login string) (
 }
 
 func (r *GORMRepository) ActorHasActiveTenantAccess(ctx context.Context, actorID string) (bool, error) {
-	options, err := authz.NewGORMStore(r.database).ListActorTenantOptions(ctx, strings.TrimSpace(actorID))
+	actorID = strings.TrimSpace(actorID)
+	if r == nil || r.database == nil || actorID == "" {
+		return false, nil
+	}
+
+	var actor authz.AuthzActor
+	result := r.database.WithContext(ctx).Where("id = ? AND active = ?", actorID, true).Limit(1).Find(&actor)
+	if result.Error != nil {
+		return false, fmt.Errorf("find authorization actor for tenant identity: %w", result.Error)
+	}
+	if result.RowsAffected == 0 {
+		return false, nil
+	}
+
+	legacyPersonID := ""
+	if actor.PersonID != nil {
+		legacyPersonID = strings.TrimSpace(*actor.PersonID)
+	}
+	if legacyPersonID == "" && actor.CollaboratorID != nil && strings.TrimSpace(*actor.CollaboratorID) != "" {
+		var collaborator appdb.CollaboratorJourney
+		lookup := r.database.WithContext(ctx).
+			Where("id = ?", strings.TrimSpace(*actor.CollaboratorID)).
+			Limit(1).
+			Find(&collaborator)
+		if lookup.Error != nil {
+			return false, fmt.Errorf("find authorization actor collaborator: %w", lookup.Error)
+		}
+		if lookup.RowsAffected > 0 {
+			legacyPersonID = strings.TrimSpace(collaborator.PersonID)
+		}
+	}
+	if legacyPersonID == "" {
+		return false, nil
+	}
+
+	var membershipCount int64
+	err := r.database.WithContext(ctx).
+		Table("person_tenant_memberships m").
+		Joins("JOIN tenants t ON t.id = m.tenant_id AND t.active = ?", true).
+		Joins("JOIN reference_data status ON status.id = m.status_id AND status.tenant_id = m.tenant_id AND status.type = ? AND status.active = ?", "person_status", true).
+		Where("(m.legacy_person_id = ? OR m.person_id = ?) AND status.code = ?", legacyPersonID, legacyPersonID, "ACTIVE").
+		Count(&membershipCount).Error
+	if err != nil {
+		return false, fmt.Errorf("verify authorization actor active Membership: %w", err)
+	}
+	if membershipCount > 0 {
+		return true, nil
+	}
+
+	// Compatibility for pre-30D persisted Actors that still have legitimate
+	// tenant grants but no Person/Membership identity. New 30D administrative
+	// grants cannot create this state because they require an Account/Actor
+	// binding first; retaining the fallback avoids making Account creation a
+	// destructive legacy cutover.
+	options, err := authz.NewGORMStore(r.database).ListActorTenantOptions(ctx, actorID)
 	if err != nil {
 		if errors.Is(err, authz.ErrAuthenticationRequired) {
 			return false, nil
 		}
-		return false, fmt.Errorf("verify authorization actor tenant access: %w", err)
+		return false, fmt.Errorf("verify legacy authorization actor tenant access: %w", err)
 	}
 	return len(options) > 0, nil
 }

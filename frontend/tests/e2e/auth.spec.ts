@@ -80,6 +80,32 @@ test("admin can create an authorization actor, grant a role, and revoke it", asy
   await expect(actorCard).toContainText(displayName);
   await expect(actorCard).toContainText("No role grants.");
 
+  // Bite 30D requires a tenant Actor to be Account/Membership-bound before a
+  // delegated tenant Role can be granted. Resolve the Actor created by the UI,
+  // bind it to an Authentication Account, then exercise grant/revoke.
+  const actorsResponse = await request.get(e2eApiUrl("/api/v1/authz/actors"), {
+    headers: authzHeaders(),
+  });
+  expect(actorsResponse.ok()).toBeTruthy();
+  const actorsEnvelope = (await actorsResponse.json()) as {
+    data?: Array<{ id?: string; actorKey?: string }>;
+  };
+  const createdActorId = (actorsEnvelope.data ?? []).find(
+    (actor) => actor.actorKey === actorKey,
+  )?.id;
+  expect(createdActorId).toBeTruthy();
+
+  const accountResponse = await request.post(e2eApiUrl("/api/v1/auth/accounts"), {
+    headers: authzHeaders(),
+    data: {
+      actorId: createdActorId,
+      login: `authz-bound-${suffix}@example.com`,
+      temporaryPassword: `Authz-Bound-${suffix}-Password!`,
+      mustChangePassword: false,
+    },
+  });
+  expect(accountResponse.status()).toBe(201);
+
   const actorNicknameFilter = page.getByLabel(
     "Filter actors by person nickname",
   );

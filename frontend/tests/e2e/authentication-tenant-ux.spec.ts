@@ -777,7 +777,7 @@ test("a temporary-password account can sign in after completing the required pas
     error?: { fields?: Record<string, string> };
   };
   expect(invalidAccountEnvelope.error?.fields?.actorId).toContain(
-    "active role grant",
+    "active Person-Tenant Membership",
   );
 
   await adminPage.goto("/admin/authentication");
@@ -833,10 +833,7 @@ test("a temporary-password account can sign in after completing the required pas
     };
     expect(Array.isArray(tenantOptionsEnvelope.data)).toBeTruthy();
 
-    await expect(page).toHaveURL(/\/collaborators$/);
-    await expect(
-      page.getByRole("heading", { name: "Collaborators", exact: true }),
-    ).toBeVisible();
+    await expectPersonSelfServiceHome(page, account.personId);
     await expect(
       page.getByRole("heading", { name: "Something went wrong" }),
     ).toHaveCount(0);
@@ -874,10 +871,7 @@ test("administrator-issued password reset replaces the password and clears the a
 
   try {
     await signIn(page, account.login, account.password);
-    await expect(page).toHaveURL(/\/collaborators$/);
-    await expect(
-      page.getByRole("heading", { name: "Collaborators", exact: true }),
-    ).toBeVisible();
+    await expectPersonSelfServiceHome(page, account.personId);
 
     await signIn(adminPage, login, password);
     const accountsResponsePromise = adminPage.waitForResponse((response) => {
@@ -992,10 +986,7 @@ test("administrator-issued password reset replaces the password and clears the a
     await page.getByLabel("Password").fill(newPassword);
     await page.getByRole("button", { name: "Sign in" }).click();
     expect((await newPasswordLoginResponse).status()).toBe(200);
-    await expect(page).toHaveURL(/\/collaborators$/);
-    await expect(
-      page.getByRole("heading", { name: "Collaborators", exact: true }),
-    ).toBeVisible();
+    await expectPersonSelfServiceHome(page, account.personId);
 
     await page.getByRole("button", { name: "Sign out" }).click();
     await expect(page).toHaveURL(/\/login$/);
@@ -1037,10 +1028,7 @@ test("deactivated authentication account loses its session and cannot sign in un
 
   try {
     await signIn(page, account.login, account.password);
-    await expect(page).toHaveURL(/\/collaborators$/);
-    await expect(
-      page.getByRole("heading", { name: "Collaborators", exact: true }),
-    ).toBeVisible();
+    await expectPersonSelfServiceHome(page, account.personId);
 
     await setAuthenticationAccountActive(request, account.accountId, false);
 
@@ -1151,10 +1139,7 @@ test("deactivated authentication account loses its session and cannot sign in un
     await expect(page.getByLabel("Password")).toBeVisible();
 
     await signIn(page, account.login, account.password);
-    await expect(page).toHaveURL(/\/collaborators$/);
-    await expect(
-      page.getByRole("heading", { name: "Collaborators", exact: true }),
-    ).toBeVisible();
+    await expectPersonSelfServiceHome(page, account.personId);
   } finally {
     await context.close();
     await setAuthenticationAccountActive(request, account.accountId, true);
@@ -1184,10 +1169,7 @@ test("signing in after a forbidden sign-out lands on the next account's first pe
     await expect(page).toHaveURL(/\/login$/);
 
     await signIn(page, expenseOperator.login, expenseOperator.password);
-    await expect(page).toHaveURL(/\/collaborators$/);
-    await expect(
-      page.getByRole("heading", { name: "Collaborators", exact: true }),
-    ).toBeVisible();
+    await expectPersonSelfServiceHome(page, expenseOperator.personId);
     await expect(page.getByRole("heading", { name: "Access forbidden" })).toHaveCount(0);
     await expect(page.getByRole("link", { name: "Reference data" })).toHaveCount(0);
 
@@ -1296,15 +1278,9 @@ async function provisionAuthenticationActorCandidate(
   const actorId = actorEnvelope.data?.id;
   expect(actorId).toBeTruthy();
 
-  const grantResponse = await request.post(
-    e2eApiUrl(`/api/v1/authz/actors/${encodeURIComponent(actorId!)}/role-grants`),
-    {
-      headers: authzHeaders(),
-      data: { roleCode: "EXPENSE_OPERATOR", tenantId: "default" },
-    },
-  );
-  expect(grantResponse.status()).toBe(201);
-
+  // This Actor is intentionally not granted a delegated role yet. Bite 30D
+  // allows Authentication Account creation from the active Membership; tenant
+  // delegated Roles may be added only after the Account/Actor binding exists.
   return {
     actorId: actorId!,
     actorKey,
@@ -1318,6 +1294,7 @@ async function provisionAuthenticationActorCandidate(
 type PreparedRoleAccount = {
   actorId: string;
   accountId: string;
+  personId: string;
   login: string;
   password: string;
 };
@@ -1330,11 +1307,34 @@ async function provisionRoleAccount(
 ): Promise<PreparedRoleAccount> {
   const login = `auth-${keyPrefix}@example.com`;
   const password = `E2E-${keyPrefix}-Password!`;
+  const numericSuffix = keyPrefix.replace(/\D/g, "").slice(-12) || String(Date.now());
+
+  const personResponse = await request.post(e2eApiUrl("/api/v1/people"), {
+    headers: authzHeaders(),
+    data: {
+      firstName: "Authentication",
+      lastName: `Role${numericSuffix}`,
+      nickname: `AuthRole${numericSuffix}`,
+      cpf: validCPF(Number(numericSuffix.slice(-9))),
+      rg: `AR-${numericSuffix.slice(-8)}`,
+      cellular: validBrazilianCellular(numericSuffix),
+      email: login,
+      statusId: PERSON_STATUS_ACTIVE_ID,
+    },
+  });
+  expect(personResponse.status()).toBe(201);
+  const personEnvelope = (await personResponse.json()) as {
+    data?: { id?: string };
+  };
+  const personId = personEnvelope.data?.id;
+  expect(personId).toBeTruthy();
+
   const actorResponse = await request.post(e2eApiUrl("/api/v1/authz/actors"), {
     headers: authzHeaders(),
     data: {
       actorKey: login,
       displayName: `Authentication UX ${keyPrefix}`,
+      personId,
       active: true,
     },
   });
@@ -1343,15 +1343,9 @@ async function provisionRoleAccount(
   const actorId = actorEnvelope.data?.id;
   expect(actorId).toBeTruthy();
 
-  const grantResponse = await request.post(
-    e2eApiUrl(`/api/v1/authz/actors/${encodeURIComponent(actorId!)}/role-grants`),
-    {
-      headers: authzHeaders(),
-      data: { roleCode, tenantId: "default" },
-    },
-  );
-  expect(grantResponse.status()).toBe(201);
-
+  // 30D identity comes first: Account -> tenant Actor -> ACTIVE Membership.
+  // Delegated authority is additive and is granted only after that binding
+  // exists.
   const accountResponse = await request.post(e2eApiUrl("/api/v1/auth/accounts"), {
     headers: authzHeaders(),
     data: {
@@ -1368,7 +1362,36 @@ async function provisionRoleAccount(
   const accountId = accountEnvelope.data?.id;
   expect(accountId).toBeTruthy();
 
-  return { actorId: actorId!, accountId: accountId!, login, password };
+  const grantResponse = await request.post(
+    e2eApiUrl(`/api/v1/authz/actors/${encodeURIComponent(actorId!)}/role-grants`),
+    {
+      headers: authzHeaders(),
+      data: { roleCode, tenantId: "default" },
+    },
+  );
+  expect(grantResponse.status()).toBe(201);
+
+  return {
+    actorId: actorId!,
+    accountId: accountId!,
+    personId: personId!,
+    login,
+    password,
+  };
+}
+
+async function expectPersonSelfServiceHome(
+  page: Page,
+  personId: string,
+): Promise<void> {
+  await expect(page).toHaveURL(
+    new RegExp(`/people/${escapeRegExp(personId)}$`),
+  );
+  await expect(page.getByRole("button", { name: "Save Changes" })).toBeVisible();
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 async function signIn(

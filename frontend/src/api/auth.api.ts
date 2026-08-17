@@ -195,6 +195,16 @@ export function listAccountReactivationRequests(): Promise<AccountReactivationRe
   return apiFetch<AccountReactivationRequest[]>("/auth/reactivation-requests", { cache: "no-store" });
 }
 
+export function listAccountReactivationRequestsForAlert(): Promise<AccountReactivationRequest[]> {
+  return apiFetch<AccountReactivationRequest[]>("/auth/reactivation-requests", {
+    cache: "no-store",
+    // The landing-page alert is supplemental. If its permission contract is
+    // temporarily unavailable, render its local error state rather than
+    // tearing down the entire People workspace via the global 403 handler.
+    suppressForbiddenNavigation: true,
+  });
+}
+
 export function reviewAccountReactivationRequest(
   requestId: string,
   approve: boolean,
