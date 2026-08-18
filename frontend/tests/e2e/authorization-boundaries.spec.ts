@@ -16,11 +16,20 @@ type ApiEnvelope<T> = {
   };
 };
 
+type AuthzActorRoleGrant = {
+  id: string;
+  actorId: string;
+  roleCode: string;
+  tenantId: string;
+  active: boolean;
+};
+
 type AuthzActor = {
   id: string;
   actorKey: string;
   displayName: string;
   active: boolean;
+  roleGrants?: AuthzActorRoleGrant[];
 };
 
 type AuthzCurrentActor = {
@@ -195,6 +204,7 @@ test.describe("authorization role boundaries", () => {
       expect(currentActor.roleCodes).toEqual(["TENANT_ADMIN"]);
       expect(currentActor.intrinsicPermissions).toContain("people.self.read");
       expect(currentActor.delegatedPermissions).toContain("tenants.read");
+      expect(currentActor.delegatedPermissions).toContain("authz.tenant_role_grants.manage");
       expect(currentActor.delegatedPermissions).toContain("people.create");
       expect(currentActor.delegatedPermissions).toContain("collaborators.update");
       expect(currentActor.delegatedPermissions).toContain("reference_data.read");
@@ -211,6 +221,81 @@ test.describe("authorization role boundaries", () => {
       expect(currentActor.permissions).toContain("journey.settlements.close");
     } finally {
       await actorApi?.dispose();
+    }
+  });
+
+  test("tenant administrators can grant and remove operator roles without removing target self-service", async ({
+    request: adminApi,
+  }) => {
+    let tenantAdminApi: APIRequestContext | undefined;
+    let targetApi: APIRequestContext | undefined;
+    let tenantAdmin: ProvisionedAuthzActor | undefined;
+    let target: ProvisionedAuthzActor | undefined;
+    try {
+      tenantAdmin = await createActorWithRole(adminApi, "tenant-role-manager", "TENANT_ADMIN");
+      target = await createActorWithRole(adminApi, "tenant-role-target", "EXPENSE_OPERATOR");
+      tenantAdminApi = await createActorAccountAndLogin(adminApi, tenantAdmin);
+      targetApi = await createActorAccountAndLogin(adminApi, target);
+      const headers = tenantHeaders();
+
+      const manager = await getCurrentActor(tenantAdminApi, headers);
+      expect(manager.delegatedPermissions).toContain("authz.tenant_role_grants.manage");
+
+      const actorsResponse = await tenantAdminApi.get(
+        e2eApiUrl("/api/v1/authz/tenant-role-actors"),
+        { headers },
+      );
+      await expectStatus(actorsResponse, 200, "list tenant role delegation actors");
+      const actorsBody = (await actorsResponse.json()) as ApiEnvelope<AuthzActor[]>;
+      const targetActor = actorsBody.data?.find((candidate) => candidate.id === target?.id);
+      const expenseGrant = targetActor?.roleGrants?.find(
+        (grant) => grant.roleCode === "EXPENSE_OPERATOR" && grant.active,
+      );
+      if (!targetActor || !expenseGrant) {
+        throw new Error("tenant role delegation directory did not expose the target expense grant");
+      }
+
+      const revokeResponse = await tenantAdminApi.delete(
+        e2eApiUrl(
+          `/api/v1/authz/tenant-role-actors/${encodeURIComponent(target.id)}/role-grants/${encodeURIComponent(expenseGrant.id)}`,
+        ),
+        { headers },
+      );
+      await expectStatus(revokeResponse, 200, "Tenant Administrator revokes Expense Operator");
+
+      const afterRevoke = await getCurrentActor(targetApi, headers);
+      expect(afterRevoke.roleCodes).not.toContain("EXPENSE_OPERATOR");
+      expect(afterRevoke.delegatedPermissions).not.toContain("expenses.create");
+      expect(afterRevoke.intrinsicPermissions).toContain("people.self.read");
+      expect(afterRevoke.permissions).toContain("people.self.read");
+
+      const grantResponse = await tenantAdminApi.post(
+        e2eApiUrl(`/api/v1/authz/tenant-role-actors/${encodeURIComponent(target.id)}/role-grants`),
+        {
+          headers,
+          data: { roleCode: "EARNINGS_OPERATOR" },
+        },
+      );
+      await expectStatus(grantResponse, 201, "Tenant Administrator grants Earnings Operator");
+
+      const afterGrant = await getCurrentActor(targetApi, headers);
+      expect(afterGrant.roleCodes).toContain("EARNINGS_OPERATOR");
+      expect(afterGrant.delegatedPermissions).toContain("planning.create");
+      expect(afterGrant.intrinsicPermissions).toContain("people.self.read");
+
+      const forbiddenAdminGrant = await tenantAdminApi.post(
+        e2eApiUrl(`/api/v1/authz/tenant-role-actors/${encodeURIComponent(target.id)}/role-grants`),
+        {
+          headers,
+          data: { roleCode: "TENANT_ADMIN" },
+        },
+      );
+      await expectStatus(forbiddenAdminGrant, 400, "Tenant Administrator cannot delegate Tenant Administrator");
+    } finally {
+      await tenantAdminApi?.dispose();
+      await targetApi?.dispose();
+      if (tenantAdmin) await setActorActive(adminApi, tenantAdmin.id, false);
+      if (target) await setActorActive(adminApi, target.id, false);
     }
   });
 

@@ -137,6 +137,15 @@ and an `APPLICATION` Actor scope. A Tenant Administrator therefore cannot use
 its explicit tenant-business authority to administer the global authorization
 catalog.
 
+Tenant Administrators instead receive `authz.tenant_role_grants.manage`. The
+tenant-local delegation surface lists active Actors backed by an active
+Person-Tenant Membership in the selected tenant, including Actors with no
+current delegated Role, and allows only `EARNINGS_OPERATOR` and
+`EXPENSE_OPERATOR` grants to be created or revoked. It never exposes or permits
+management of `TENANT_ADMIN`, `APPLICATION_ADMIN`, self-service Roles, or
+cross-tenant grants. Removing an operator grant therefore removes only delegated
+authority; intrinsic Person/Collaborator self-service remains identity-derived.
+
 ### Transitional Application Administrator compatibility
 
 Bite 30D does **not** complete Bite 30H early.

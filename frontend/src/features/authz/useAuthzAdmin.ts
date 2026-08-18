@@ -5,6 +5,9 @@ import {
   grantAuthzActorRole,
   listAuthzActors,
   listTenantAuthzActors,
+  listTenantRoleActors,
+  grantTenantOperatorRole,
+  revokeTenantOperatorRoleGrant,
   listAuthzAuditLogs,
   listAuthzPermissions,
   listAuthzRoles,
@@ -16,6 +19,7 @@ import type {
   AuthzAuditLogFilters,
   CreateAuthzActorInput,
   GrantAuthzActorRoleInput,
+  GrantTenantOperatorRoleInput,
 } from "../../types/authz";
 
 function enabled(actor: AuthzAdminRequestActor) {
@@ -123,6 +127,36 @@ export function useRevokeAuthzActorRoleGrant(actor: AuthzAdminRequestActor) {
       revokeAuthzActorRoleGrant(actor, targetActorId, grantId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [...authzQueryKey(actor), "actors"] });
+    },
+  });
+}
+
+export function useTenantRoleActors(actor: AuthzAdminRequestActor) {
+  return useQuery({
+    queryKey: [...authzQueryKey(actor), "tenant-role-actors"],
+    queryFn: () => listTenantRoleActors(actor),
+    enabled: enabled(actor),
+  });
+}
+
+export function useGrantTenantOperatorRole(actor: AuthzAdminRequestActor) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ targetActorId, input }: { targetActorId: string; input: GrantTenantOperatorRoleInput }) =>
+      grantTenantOperatorRole(actor, targetActorId, input),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [...authzQueryKey(actor), "tenant-role-actors"] });
+    },
+  });
+}
+
+export function useRevokeTenantOperatorRoleGrant(actor: AuthzAdminRequestActor) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ targetActorId, grantId }: { targetActorId: string; grantId: string }) =>
+      revokeTenantOperatorRoleGrant(actor, targetActorId, grantId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [...authzQueryKey(actor), "tenant-role-actors"] });
     },
   });
 }

@@ -10,6 +10,7 @@ import type {
   AuthzRole,
   CreateAuthzActorInput,
   GrantAuthzActorRoleInput,
+  GrantTenantOperatorRoleInput,
   SetAuthzActorActiveInput,
 } from "../types/authz";
 
@@ -81,6 +82,42 @@ export function listTenantAuthzActors(
   return apiFetch<AuthzActor[]>("/authz/tenant-actors", {
     headers: authzHeaders(actor),
   });
+}
+
+
+export function listTenantRoleActors(actor: AuthzAdminRequestActor): Promise<AuthzActor[]> {
+  return apiFetch<AuthzActor[]>("/authz/tenant-role-actors", {
+    headers: authzHeaders(actor),
+  });
+}
+
+export function grantTenantOperatorRole(
+  actor: AuthzAdminRequestActor,
+  targetActorId: string,
+  input: GrantTenantOperatorRoleInput,
+): Promise<AuthzActorRoleGrant> {
+  return apiFetch<AuthzActorRoleGrant>(
+    `/authz/tenant-role-actors/${encodeURIComponent(targetActorId)}/role-grants`,
+    {
+      method: "POST",
+      headers: authzHeaders(actor),
+      body: JSON.stringify(input),
+    },
+  );
+}
+
+export function revokeTenantOperatorRoleGrant(
+  actor: AuthzAdminRequestActor,
+  targetActorId: string,
+  grantId: string,
+): Promise<AuthzActorRoleGrant> {
+  return apiFetch<AuthzActorRoleGrant>(
+    `/authz/tenant-role-actors/${encodeURIComponent(targetActorId)}/role-grants/${encodeURIComponent(grantId)}`,
+    {
+      method: "DELETE",
+      headers: authzHeaders(actor),
+    },
+  );
 }
 
 export function listAuthzAuditLogs(

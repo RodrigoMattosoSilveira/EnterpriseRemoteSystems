@@ -87,6 +87,59 @@ func (h *Handler) ListTenantActors(c fiber.Ctx) error {
 	return httpx.OK(c, actors)
 }
 
+func (h *Handler) ListTenantRoleActors(c fiber.Ctx) error {
+	actor, err := h.resolveTenantRoleManager(c)
+	if err != nil {
+		return writeAuthorizationHTTPError(c, err)
+	}
+	actors, err := h.store.ListTenantRoleActors(c.Context(), actor.TenantID)
+	if err != nil {
+		return h.writeError(c, err)
+	}
+	return httpx.OK(c, actors)
+}
+
+func (h *Handler) GrantTenantOperatorRole(c fiber.Ctx) error {
+	actor, err := h.resolveTenantRoleManager(c)
+	if err != nil {
+		return writeAuthorizationHTTPError(c, err)
+	}
+	var req GrantTenantOperatorRoleRequest
+	if err := c.Bind().Body(&req); err != nil {
+		return httpx.BadRequest(c, "invalid_body", "Invalid request body")
+	}
+	grant, err := h.store.GrantTenantOperatorRole(c.Context(), actor.TenantID, c.Params("id"), req.RoleCode)
+	if err != nil {
+		return h.writeError(c, err)
+	}
+	h.recordAdminAudit(c, PermissionAuthzTenantRoleGrantsManage, "authz.tenant_role_grants.create", "authz_actor_role_grant", grant.ID)
+	return httpx.Created(c, grant)
+}
+
+func (h *Handler) RevokeTenantOperatorRoleGrant(c fiber.Ctx) error {
+	actor, err := h.resolveTenantRoleManager(c)
+	if err != nil {
+		return writeAuthorizationHTTPError(c, err)
+	}
+	grant, err := h.store.RevokeTenantOperatorRoleGrant(c.Context(), actor.TenantID, c.Params("id"), c.Params("grantId"))
+	if err != nil {
+		return h.writeError(c, err)
+	}
+	h.recordAdminAudit(c, PermissionAuthzTenantRoleGrantsManage, "authz.tenant_role_grants.revoke", "authz_actor_role_grant", grant.ID)
+	return httpx.OK(c, grant)
+}
+
+func (h *Handler) resolveTenantRoleManager(c fiber.Ctx) (*Actor, error) {
+	actor, err := h.resolveRequiredActor(c, PermissionAuthzTenantRoleGrantsManage)
+	if err != nil {
+		return nil, err
+	}
+	if actor.Scope != ActorScopeTenant || actor.TenantID == "" || actor.TenantID == GlobalTenantScope {
+		return nil, ErrForbidden
+	}
+	return actor, nil
+}
+
 func (h *Handler) ListAuditLogs(c fiber.Ctx) error {
 	if _, err := h.resolveRequiredActor(c, PermissionAuthzRead); err != nil {
 		return writeAuthorizationHTTPError(c, err)

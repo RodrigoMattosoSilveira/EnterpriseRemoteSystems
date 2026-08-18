@@ -71,6 +71,12 @@ export type GrantAuthzActorRoleInput = {
   tenantId: string;
 };
 
+export type TenantOperatorRoleCode = "EARNINGS_OPERATOR" | "EXPENSE_OPERATOR";
+
+export type GrantTenantOperatorRoleInput = {
+  roleCode: TenantOperatorRoleCode;
+};
+
 export type AuthzAuditLog = {
   id: string;
   occurredAt: string;

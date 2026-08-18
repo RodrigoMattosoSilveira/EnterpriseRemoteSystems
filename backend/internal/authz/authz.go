@@ -30,9 +30,10 @@ type Permission string
 const (
 	PermissionAll Permission = "*"
 
-	PermissionAuthzSelfRead Permission = "authz.self.read"
-	PermissionAuthzRead     Permission = "authz.read"
-	PermissionAuthzManage   Permission = "authz.manage"
+	PermissionAuthzSelfRead               Permission = "authz.self.read"
+	PermissionAuthzRead                   Permission = "authz.read"
+	PermissionAuthzManage                 Permission = "authz.manage"
+	PermissionAuthzTenantRoleGrantsManage Permission = "authz.tenant_role_grants.manage"
 
 	PermissionTenantsRead   Permission = "tenants.read"
 	PermissionTenantsCreate Permission = "tenants.create"

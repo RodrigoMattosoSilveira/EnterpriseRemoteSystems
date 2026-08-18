@@ -539,6 +539,128 @@ func TestGORMStoreListTenantActorsFiltersByTenantAndActiveDelegatedAuthority(t *
 	}
 }
 
+func TestGORMStoreTenantRoleDelegationListsMembersWithNoRoleAndOnlyOperatorGrants(t *testing.T) {
+	database := newAuthzTestDB(t)
+	installTenantRoleDelegationFixtureTables(t, database)
+	store := NewGORMStore(database)
+
+	personOnlyID := createAuthzActor(t, database, "person-only-member@example.com", nil, nil)
+	bindActiveTenantMemberActor(t, database, personOnlyID, "tenant-a")
+
+	expenseID := createAuthzActor(t, database, "expense-member@example.com", nil, nil)
+	bindActiveTenantMemberActor(t, database, expenseID, "tenant-a")
+	grantAuthzRole(t, database, expenseID, RoleExpenseOperator, "tenant-a")
+
+	tenantAdminID := createAuthzActor(t, database, "tenant-admin-member@example.com", nil, nil)
+	bindActiveTenantMemberActor(t, database, tenantAdminID, "tenant-a")
+	grantAuthzRole(t, database, tenantAdminID, RoleTenantAdmin, "tenant-a")
+
+	otherTenantID := createAuthzActor(t, database, "other-tenant-member@example.com", nil, nil)
+	bindActiveTenantMemberActor(t, database, otherTenantID, "tenant-b")
+
+	actors, err := store.ListTenantRoleActors(context.Background(), "tenant-a")
+	if err != nil {
+		t.Fatalf("list tenant role actors: %v", err)
+	}
+	if got, want := len(actors), 3; got != want {
+		t.Fatalf("expected %d tenant member actors, got %#v", want, actors)
+	}
+
+	byKey := map[string]ActorResponse{}
+	for _, actor := range actors {
+		byKey[actor.ActorKey] = actor
+	}
+	if got := byKey["person-only-member@example.com"].RoleGrants; len(got) != 0 {
+		t.Fatalf("person-only member must be delegable before any role is granted, got %#v", got)
+	}
+	if got := byKey["expense-member@example.com"].RoleGrants; len(got) != 1 || got[0].RoleCode != string(RoleExpenseOperator) {
+		t.Fatalf("expected only expense operator grant, got %#v", got)
+	}
+	if got := byKey["tenant-admin-member@example.com"].RoleGrants; len(got) != 0 {
+		t.Fatalf("tenant delegation projection must not expose TENANT_ADMIN grants, got %#v", got)
+	}
+	if _, ok := byKey["other-tenant-member@example.com"]; ok {
+		t.Fatalf("cross-tenant member leaked into tenant-a delegation projection")
+	}
+}
+
+func TestGORMStoreTenantRoleDelegationRestrictsRoleAndTenant(t *testing.T) {
+	database := newAuthzTestDB(t)
+	installTenantRoleDelegationFixtureTables(t, database)
+	store := NewGORMStore(database)
+
+	actorID := createAuthzActor(t, database, "delegation-target@example.com", nil, nil)
+	bindActiveTenantMemberActor(t, database, actorID, "tenant-a")
+
+	grant, err := store.GrantTenantOperatorRole(context.Background(), "tenant-a", actorID, string(RoleEarningsOperator))
+	if err != nil {
+		t.Fatalf("grant tenant earnings operator: %v", err)
+	}
+	if grant.RoleCode != string(RoleEarningsOperator) || grant.TenantID != "tenant-a" || !grant.Active {
+		t.Fatalf("unexpected tenant operator grant: %#v", grant)
+	}
+
+	if _, err := store.GrantTenantOperatorRole(context.Background(), "tenant-a", actorID, string(RoleTenantAdmin)); err == nil {
+		t.Fatal("expected tenant administrator delegation to be rejected")
+	}
+	if _, err := store.GrantTenantOperatorRole(context.Background(), "tenant-b", actorID, string(RoleExpenseOperator)); err == nil {
+		t.Fatal("expected cross-tenant operator delegation to be rejected")
+	}
+
+	revoked, err := store.RevokeTenantOperatorRoleGrant(context.Background(), "tenant-a", actorID, grant.ID)
+	if err != nil {
+		t.Fatalf("revoke tenant earnings operator: %v", err)
+	}
+	if revoked.Active {
+		t.Fatalf("expected revoked tenant operator grant, got %#v", revoked)
+	}
+}
+
+func installTenantRoleDelegationFixtureTables(t *testing.T, database *gorm.DB) {
+	t.Helper()
+	for _, statement := range []string{
+		`CREATE TABLE IF NOT EXISTS auth_account_actors (
+			account_id TEXT NOT NULL,
+			actor_id TEXT NOT NULL,
+			scope_type TEXT NOT NULL,
+			tenant_id TEXT,
+			membership_id TEXT
+		)`,
+		`CREATE TABLE IF NOT EXISTS person_tenant_memberships (
+			id TEXT PRIMARY KEY,
+			tenant_id TEXT NOT NULL,
+			status_id TEXT NOT NULL
+		)`,
+	} {
+		if err := database.Exec(statement).Error; err != nil {
+			t.Fatalf("install tenant role delegation fixture table: %v", err)
+		}
+	}
+}
+
+func bindActiveTenantMemberActor(t *testing.T, database *gorm.DB, actorID string, tenantID string) {
+	t.Helper()
+	membershipID := "membership-" + actorID
+	if err := database.Exec(
+		"INSERT INTO person_tenant_memberships (id, tenant_id, status_id) VALUES (?, ?, ?)",
+		membershipID,
+		tenantID,
+		"ref-person-status-active",
+	).Error; err != nil {
+		t.Fatalf("create active tenant membership: %v", err)
+	}
+	if err := database.Exec(
+		"INSERT INTO auth_account_actors (account_id, actor_id, scope_type, tenant_id, membership_id) VALUES (?, ?, ?, ?, ?)",
+		"account-"+actorID,
+		actorID,
+		"TENANT",
+		tenantID,
+		membershipID,
+	).Error; err != nil {
+		t.Fatalf("bind tenant actor: %v", err)
+	}
+}
+
 func newAuthzTestDB(t *testing.T) *gorm.DB {
 	t.Helper()
 	database, err := appdb.Open(filepath.Join(t.TempDir(), "authz.db"))

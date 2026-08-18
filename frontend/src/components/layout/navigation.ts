@@ -19,7 +19,7 @@ export const navigationLinks: NavigationLink[] = [
   { label: "Outstanding receipts", to: "/receipts/outstanding", anyPermission: ["ledger.receipts.read"] },
   { label: "Tenants", to: "/admin/tenants", anyPermission: ["tenants.create", "tenants.update"], applicationOnly: true },
   { label: "Authentication", to: "/admin/authentication", anyPermission: ["authz.manage"], applicationOnly: true },
-  { label: "Authorization", to: "/admin/authorization", anyPermission: ["authz.read"] },
+  { label: "Authorization", to: "/admin/authorization", anyPermission: ["authz.read", "authz.tenant_role_grants.manage"] },
   { label: "Audit logs", to: "/admin/audit-logs", anyPermission: ["authz.read"] },
   { label: "Reference data", to: "/admin/reference-data", anyPermission: ["reference_data.manage"] },
   { label: "Gold prices", to: "/admin/gold-prices", anyPermission: ["gold_prices.manage"] },

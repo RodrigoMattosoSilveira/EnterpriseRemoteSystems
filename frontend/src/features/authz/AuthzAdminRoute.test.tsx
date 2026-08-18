@@ -12,6 +12,10 @@ vi.mock("./AuthzAdminPage", () => ({
   AuthzAdminPage: () => <p>Authorization administration loaded</p>,
 }));
 
+vi.mock("./TenantRoleDelegationPage", () => ({
+  TenantRoleDelegationPage: () => <p>Tenant delegated roles loaded</p>,
+}));
+
 let container: HTMLDivElement;
 let root: Root | null;
 let fetchCalls: string[];
@@ -43,6 +47,19 @@ describe("AuthzAdminRoute", () => {
     renderRoute();
 
     await waitForText("Authorization administration loaded");
+    expect(fetchCalls).toEqual(["/api/v1/authz/current-actor"]);
+  });
+
+  it("mounts tenant role delegation for a Tenant Administrator", async () => {
+    mockCurrentActor({
+      scope: "TENANT",
+      permissions: ["authz.tenant_role_grants.manage"],
+    });
+
+    renderRoute();
+
+    await waitForText("Tenant delegated roles loaded");
+    expect(container.textContent).not.toContain("Authorization administration loaded");
     expect(fetchCalls).toEqual(["/api/v1/authz/current-actor"]);
   });
 

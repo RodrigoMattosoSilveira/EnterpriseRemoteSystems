@@ -43,6 +43,20 @@ describe("permission-aware navigation", () => {
     expect(tenantAdminPaths).toContain("/admin/gold-prices");
   });
 
+  it("shows tenant Authorization navigation for tenant role delegation managers", () => {
+    const tenantAdminPaths = visibleNavigationLinks(
+      ["people.read", "authz.tenant_role_grants.manage"],
+      "TENANT",
+    ).map((link) => link.to);
+    expect(tenantAdminPaths).toContain("/admin/authorization");
+
+    const expenseOperatorPaths = visibleNavigationLinks(
+      ["collaborators.read", "expenses.read"],
+      "TENANT",
+    ).map((link) => link.to);
+    expect(expenseOperatorPaths).not.toContain("/admin/authorization");
+  });
+
   it("uses Change password when the actor has no operational navigation permission", () => {
     expect(defaultAuthorizedRoute([], "TENANT")).toBe("/password/change");
   });

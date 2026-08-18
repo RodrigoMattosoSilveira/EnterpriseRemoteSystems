@@ -15,10 +15,13 @@ type ActorAdminStore interface {
 	ListPermissions(ctx context.Context) ([]PermissionResponse, error)
 	ListActors(ctx context.Context) ([]ActorResponse, error)
 	ListTenantActors(ctx context.Context, tenantID string) ([]ActorResponse, error)
+	ListTenantRoleActors(ctx context.Context, tenantID string) ([]ActorResponse, error)
 	CreateActor(ctx context.Context, req CreateActorRequest) (ActorResponse, error)
 	SetActorActive(ctx context.Context, actorID string, active bool) (ActorResponse, error)
 	GrantActorRole(ctx context.Context, actorID string, req GrantActorRoleRequest) (ActorGrantResponse, error)
 	RevokeActorRoleGrant(ctx context.Context, actorID string, grantID string) (ActorGrantResponse, error)
+	GrantTenantOperatorRole(ctx context.Context, tenantID string, actorID string, roleCode string) (ActorGrantResponse, error)
+	RevokeTenantOperatorRoleGrant(ctx context.Context, tenantID string, actorID string, grantID string) (ActorGrantResponse, error)
 	ListAuthorizationAuditLogs(ctx context.Context, filter AuditLogFilter) ([]AuditLogResponse, error)
 	RecordAuthorizationAudit(ctx context.Context, entry AuthorizationAuditEntry) error
 }
@@ -89,6 +92,10 @@ type SetActorActiveRequest struct {
 type GrantActorRoleRequest struct {
 	RoleCode string `json:"roleCode"`
 	TenantID string `json:"tenantId"`
+}
+
+type GrantTenantOperatorRoleRequest struct {
+	RoleCode string `json:"roleCode"`
 }
 
 type AuditLogFilter struct {
@@ -289,6 +296,161 @@ func (s *GORMStore) ListTenantActors(ctx context.Context, tenantID string) ([]Ac
 		responses = append(responses, actorResponse(actor, nil))
 	}
 	return responses, nil
+}
+
+// ListTenantRoleActors returns active tenant Actors backed by an active
+// Person-Tenant Membership in the selected tenant. Unlike ListTenantActors,
+// this projection includes members who currently have no delegated role so a
+// Tenant Administrator can grant their first operator role. Only the two
+// tenant-delegable operator grants are exposed.
+func (s *GORMStore) ListTenantRoleActors(ctx context.Context, tenantID string) ([]ActorResponse, error) {
+	if s == nil || s.database == nil {
+		return nil, ErrMissingActor
+	}
+	tenantID = strings.TrimSpace(tenantID)
+	if tenantID == "" || tenantID == GlobalTenantScope {
+		return nil, ErrTenantSelectionRequired
+	}
+	if !s.database.Migrator().HasTable("auth_account_actors") || !s.database.Migrator().HasTable("person_tenant_memberships") {
+		return nil, ErrAccountActorFoundationUnavailable
+	}
+
+	var actors []AuthzActor
+	if err := s.database.WithContext(ctx).
+		Model(&AuthzActor{}).
+		Select("DISTINCT authz_actors.*").
+		Joins("JOIN auth_account_actors aa ON aa.actor_id = authz_actors.id AND aa.scope_type = ? AND aa.tenant_id = ?", "TENANT", tenantID).
+		Joins("JOIN person_tenant_memberships m ON m.id = aa.membership_id AND m.tenant_id = aa.tenant_id AND m.status_id = ?", "ref-person-status-active").
+		Where("authz_actors.active = ?", true).
+		Order("authz_actors.display_name ASC, authz_actors.actor_key ASC").
+		Find(&actors).Error; err != nil {
+		return nil, fmt.Errorf("list tenant role actors: %w", err)
+	}
+
+	responses := make([]ActorResponse, 0, len(actors))
+	for _, actor := range actors {
+		grants, err := s.tenantOperatorGrantsForActor(ctx, actor.ID, tenantID)
+		if err != nil {
+			return nil, err
+		}
+		responses = append(responses, actorResponse(actor, grants))
+	}
+	return responses, nil
+}
+
+func (s *GORMStore) GrantTenantOperatorRole(ctx context.Context, tenantID string, actorID string, roleCode string) (ActorGrantResponse, error) {
+	if s == nil || s.database == nil {
+		return ActorGrantResponse{}, ErrMissingActor
+	}
+	tenantID = strings.TrimSpace(tenantID)
+	actorID = strings.TrimSpace(actorID)
+	roleCode = strings.TrimSpace(roleCode)
+	if !isTenantDelegableOperatorRole(roleCode) {
+		return ActorGrantResponse{}, NewValidationError(map[string]string{
+			"roleCode": "Tenant Administrators may grant only EARNINGS_OPERATOR or EXPENSE_OPERATOR",
+		})
+	}
+	if err := s.ensureActiveTenantMemberActor(ctx, tenantID, actorID); err != nil {
+		return ActorGrantResponse{}, err
+	}
+	return s.GrantActorRole(ctx, actorID, GrantActorRoleRequest{RoleCode: roleCode, TenantID: tenantID})
+}
+
+func (s *GORMStore) RevokeTenantOperatorRoleGrant(ctx context.Context, tenantID string, actorID string, grantID string) (ActorGrantResponse, error) {
+	if s == nil || s.database == nil {
+		return ActorGrantResponse{}, ErrMissingActor
+	}
+	tenantID = strings.TrimSpace(tenantID)
+	actorID = strings.TrimSpace(actorID)
+	grantID = strings.TrimSpace(grantID)
+	if err := NewValidationError(map[string]string{
+		"tenantId": requiredMessage(tenantID, "Tenant ID is required"),
+		"actorId":  requiredMessage(actorID, "Actor ID is required"),
+		"grantId":  requiredMessage(grantID, "Grant ID is required"),
+	}); err != nil {
+		return ActorGrantResponse{}, err
+	}
+
+	var grant AuthzActorRoleGrant
+	if err := s.database.WithContext(ctx).
+		Where("id = ? AND actor_id = ? AND tenant_id = ?", grantID, actorID, tenantID).
+		First(&grant).Error; err != nil {
+		return ActorGrantResponse{}, err
+	}
+	var role AuthzRole
+	if err := s.database.WithContext(ctx).Where("id = ?", grant.RoleID).First(&role).Error; err != nil {
+		return ActorGrantResponse{}, err
+	}
+	if !isTenantDelegableOperatorRole(role.Code) || role.ScopeType != string(ActorScopeTenant) {
+		return ActorGrantResponse{}, NewValidationError(map[string]string{
+			"grantId": "Tenant Administrators may revoke only Earnings Operator or Expenses Operator grants in their tenant",
+		})
+	}
+	if grant.Active {
+		grant.Active = false
+		grant.UpdatedAt = time.Now().UTC()
+		if err := s.database.WithContext(ctx).Save(&grant).Error; err != nil {
+			return ActorGrantResponse{}, fmt.Errorf("revoke tenant operator role grant: %w", err)
+		}
+	}
+	return grantResponse(grant, role), nil
+}
+
+func (s *GORMStore) ensureActiveTenantMemberActor(ctx context.Context, tenantID string, actorID string) error {
+	if strings.TrimSpace(tenantID) == "" || tenantID == GlobalTenantScope {
+		return NewValidationError(map[string]string{"tenantId": "A specific tenant is required"})
+	}
+	if strings.TrimSpace(actorID) == "" {
+		return NewValidationError(map[string]string{"actorId": "Actor ID is required"})
+	}
+	if !s.database.Migrator().HasTable("auth_account_actors") || !s.database.Migrator().HasTable("person_tenant_memberships") {
+		return ErrAccountActorFoundationUnavailable
+	}
+	var count int64
+	if err := s.database.WithContext(ctx).
+		Table("authz_actors a").
+		Joins("JOIN auth_account_actors aa ON aa.actor_id = a.id AND aa.scope_type = ? AND aa.tenant_id = ?", "TENANT", tenantID).
+		Joins("JOIN person_tenant_memberships m ON m.id = aa.membership_id AND m.tenant_id = aa.tenant_id AND m.status_id = ?", "ref-person-status-active").
+		Where("a.id = ? AND a.active = ?", actorID, true).
+		Count(&count).Error; err != nil {
+		return fmt.Errorf("check tenant member actor: %w", err)
+	}
+	if count == 0 {
+		return NewValidationError(map[string]string{"actorId": "Operator roles may be delegated only to an active Actor with an active Membership in the selected tenant"})
+	}
+	return nil
+}
+
+func (s *GORMStore) tenantOperatorGrantsForActor(ctx context.Context, actorID string, tenantID string) ([]ActorGrantResponse, error) {
+	type grantProjection struct {
+		ID        string
+		ActorID   string
+		RoleID    string
+		RoleCode  string
+		TenantID  string
+		ScopeType string
+		Active    bool
+	}
+	var rows []grantProjection
+	if err := s.database.WithContext(ctx).
+		Model(&AuthzActorRoleGrant{}).
+		Joins("JOIN authz_roles ON authz_roles.id = authz_actor_role_grants.role_id").
+		Where("authz_actor_role_grants.actor_id = ? AND authz_actor_role_grants.tenant_id = ? AND authz_actor_role_grants.active = ?", actorID, tenantID, true).
+		Where("authz_roles.code IN ?", []string{string(RoleEarningsOperator), string(RoleExpenseOperator)}).
+		Order("authz_roles.code ASC").
+		Select("authz_actor_role_grants.id AS id, authz_actor_role_grants.actor_id AS actor_id, authz_actor_role_grants.role_id AS role_id, authz_roles.code AS role_code, authz_actor_role_grants.tenant_id AS tenant_id, authz_roles.scope_type AS scope_type, authz_actor_role_grants.active AS active").
+		Scan(&rows).Error; err != nil {
+		return nil, fmt.Errorf("list tenant operator role grants: %w", err)
+	}
+	responses := make([]ActorGrantResponse, 0, len(rows))
+	for _, row := range rows {
+		responses = append(responses, ActorGrantResponse{ID: row.ID, ActorID: row.ActorID, RoleID: row.RoleID, RoleCode: row.RoleCode, TenantID: row.TenantID, ScopeType: row.ScopeType, Active: row.Active})
+	}
+	return responses, nil
+}
+
+func isTenantDelegableOperatorRole(roleCode string) bool {
+	return roleCode == string(RoleEarningsOperator) || roleCode == string(RoleExpenseOperator)
 }
 
 func (s *GORMStore) CreateActor(ctx context.Context, req CreateActorRequest) (ActorResponse, error) {
