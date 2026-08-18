@@ -139,8 +139,9 @@ test("partial payout can optionally record second approval when tenant policy is
     actorKey: `optional-approver-e2e-${suffix}@example.com`,
     displayName: `Optional Approver E2E ${suffix}`,
   });
+  const personSuffix = uniqueSuffix();
   const person = await createCompletePerson(request, {
-    suffix: suffix + 1,
+    suffix: personSuffix,
     firstName: `OptionalApprovalE2E${suffix}`,
     nickname: `OptionalApproval${suffix}`,
   });
