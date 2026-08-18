@@ -27,12 +27,12 @@ export function TenantRoleDelegationPage() {
   const grantMutation = useGrantTenantOperatorRole(requestActor);
   const revokeMutation = useRevokeTenantOperatorRoleGrant(requestActor);
   const [message, setMessage] = useState("");
-  const actors = useMemo(
-    () => [...(actorsQuery.data ?? [])].sort((a, b) =>
+  const actors = useMemo(() => {
+    const rows = Array.isArray(actorsQuery.data) ? actorsQuery.data : [];
+    return [...rows].sort((a, b) =>
       (a.displayName || a.actorKey).localeCompare(b.displayName || b.actorKey),
-    ),
-    [actorsQuery.data],
-  );
+    );
+  }, [actorsQuery.data]);
 
   async function grant(targetActorId: string, roleCode: TenantOperatorRoleCode) {
     setMessage("");

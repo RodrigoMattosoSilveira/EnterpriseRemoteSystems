@@ -44,6 +44,33 @@ export function normalizeAuthzCurrentActor(input: unknown): AuthzCurrentActor {
   };
 }
 
+export function normalizeAuthzActorList(input: unknown): AuthzActor[] {
+  let rows: unknown = input;
+
+  if (!Array.isArray(rows) && rows && typeof rows === "object") {
+    const record = rows as Record<string, unknown>;
+    if (Array.isArray(record.data)) {
+      rows = record.data;
+    } else if (Array.isArray(record.items)) {
+      rows = record.items;
+    } else if (Array.isArray(record.actors)) {
+      rows = record.actors;
+    }
+  }
+
+  if (!Array.isArray(rows)) {
+    return [];
+  }
+
+  return rows.filter((row): row is AuthzActor => {
+    if (!row || typeof row !== "object") {
+      return false;
+    }
+    const actor = row as Record<string, unknown>;
+    return typeof actor.id === "string" && typeof actor.actorKey === "string";
+  });
+}
+
 function stringArray(value: unknown): string[] {
   return Array.isArray(value)
     ? value.filter((item): item is string => typeof item === "string")
@@ -86,9 +113,9 @@ export function listTenantAuthzActors(
 
 
 export function listTenantRoleActors(actor: AuthzAdminRequestActor): Promise<AuthzActor[]> {
-  return apiFetch<AuthzActor[]>("/authz/tenant-role-actors", {
+  return apiFetch<unknown>("/authz/tenant-role-actors", {
     headers: authzHeaders(actor),
-  });
+  }).then(normalizeAuthzActorList);
 }
 
 export function grantTenantOperatorRole(

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { normalizeAuthzCurrentActor } from "./authz.api";
+import { normalizeAuthzActorList, normalizeAuthzCurrentActor } from "./authz.api";
 
 describe("normalizeAuthzCurrentActor", () => {
   it("normalizes null authorization collections for a Person-only Actor", () => {
@@ -49,5 +49,27 @@ describe("normalizeAuthzCurrentActor", () => {
     expect(actor.permissions).toEqual([]);
     expect(actor.intrinsicPermissions).toEqual([]);
     expect(actor.delegatedPermissions).toEqual(["people.read"]);
+  });
+});
+
+describe("normalizeAuthzActorList", () => {
+  const actor = {
+    id: "actor-a",
+    actorKey: "person-a@example.test",
+    displayName: "Person A",
+    active: true,
+    roleGrants: [],
+  };
+
+  it("preserves the tenant-role actor array returned by the API", () => {
+    expect(normalizeAuthzActorList([actor])).toEqual([actor]);
+  });
+
+  it("unwraps a nested data array instead of exposing a non-iterable object to React Query consumers", () => {
+    expect(normalizeAuthzActorList({ data: [actor] })).toEqual([actor]);
+  });
+
+  it("returns an empty array for an unexpected successful response shape", () => {
+    expect(normalizeAuthzActorList({ data: { actor } })).toEqual([]);
   });
 });
