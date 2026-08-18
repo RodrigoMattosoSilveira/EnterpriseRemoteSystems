@@ -30,10 +30,11 @@ export const collaboratorQueryKeys = {
   detail: (id: string) => [...collaboratorQueryKeys.details(), id] as const,
 };
 
-export function useCollaboratorCandidates() {
+export function useCollaboratorCandidates(enabled = true) {
   return useQuery({
     queryKey: collaboratorQueryKeys.candidates(),
     queryFn: listCollaboratorCandidates,
+    enabled,
   });
 }
 
