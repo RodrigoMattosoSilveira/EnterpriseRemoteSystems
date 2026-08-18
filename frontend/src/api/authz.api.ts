@@ -75,6 +75,13 @@ export function listAuthzActors(actor: AuthzAdminRequestActor): Promise<AuthzAct
   });
 }
 
+export function listTenantAuthzActors(
+  actor: AuthzAdminRequestActor,
+): Promise<AuthzActor[]> {
+  return apiFetch<AuthzActor[]>("/authz/tenant-actors", {
+    headers: authzHeaders(actor),
+  });
+}
 
 export function listAuthzAuditLogs(
   actor: AuthzAdminRequestActor,

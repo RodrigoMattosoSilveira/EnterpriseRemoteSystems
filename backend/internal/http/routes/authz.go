@@ -15,6 +15,7 @@ func RegisterAuthzRoutes(router fiber.Router, deps Dependencies) {
 	r.Get("/roles", requireApplicationPermission(deps, authz.PermissionAuthzRead), deps.AuthzHandler.ListRoles)
 	r.Get("/permissions", requireApplicationPermission(deps, authz.PermissionAuthzRead), deps.AuthzHandler.ListPermissions)
 	r.Get("/actors", requireApplicationPermission(deps, authz.PermissionAuthzRead), deps.AuthzHandler.ListActors)
+	r.Get("/tenant-actors", requirePermission(deps, authz.PermissionJourneySettlementsPreview), deps.AuthzHandler.ListTenantActors)
 	r.Get("/audit-logs", requireApplicationPermission(deps, authz.PermissionAuthzRead), deps.AuthzHandler.ListAuditLogs)
 	r.Post("/actors", requireApplicationPermission(deps, authz.PermissionAuthzManage), deps.AuthzHandler.CreateActor)
 	r.Patch("/actors/:id/active", requireApplicationPermission(deps, authz.PermissionAuthzManage), deps.AuthzHandler.SetActorActive)

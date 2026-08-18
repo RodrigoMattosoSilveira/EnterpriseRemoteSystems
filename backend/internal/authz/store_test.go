@@ -455,6 +455,40 @@ func TestGORMStorePreventsRevokingLastApplicationAdministratorGrant(t *testing.T
 	}
 }
 
+func TestGORMStoreListTenantActorsFiltersByTenantAndActiveDelegatedAuthority(t *testing.T) {
+	database := newAuthzTestDB(t)
+	store := NewGORMStore(database)
+
+	tenantAdminID := createAuthzActor(t, database, "tenant-admin@example.com", nil, nil)
+	grantAuthzRole(t, database, tenantAdminID, RoleTenantAdmin, "tenant-a")
+	earningsID := createAuthzActor(t, database, "earnings@example.com", nil, nil)
+	grantAuthzRole(t, database, earningsID, RoleEarningsOperator, "tenant-a")
+	otherTenantID := createAuthzActor(t, database, "other-tenant@example.com", nil, nil)
+	grantAuthzRole(t, database, otherTenantID, RoleEarningsOperator, "tenant-b")
+	createAuthzActor(t, database, "person-only@example.com", nil, nil)
+	inactiveID := createAuthzActor(t, database, "inactive@example.com", nil, nil)
+	grantAuthzRole(t, database, inactiveID, RoleExpenseOperator, "tenant-a")
+	if err := database.Model(&AuthzActor{}).Where("id = ?", inactiveID).Update("active", false).Error; err != nil {
+		t.Fatalf("deactivate actor: %v", err)
+	}
+
+	actors, err := store.ListTenantActors(context.Background(), "tenant-a")
+	if err != nil {
+		t.Fatalf("list tenant actors: %v", err)
+	}
+	if got, want := len(actors), 2; got != want {
+		t.Fatalf("expected %d tenant actors, got %#v", want, actors)
+	}
+	if actors[0].ActorKey != "earnings@example.com" || actors[1].ActorKey != "tenant-admin@example.com" {
+		t.Fatalf("unexpected tenant actor projection: %#v", actors)
+	}
+	for _, actor := range actors {
+		if len(actor.RoleGrants) != 0 {
+			t.Fatalf("tenant actor directory must not expose role grants, got %#v", actor)
+		}
+	}
+}
+
 func newAuthzTestDB(t *testing.T) *gorm.DB {
 	t.Helper()
 	database, err := appdb.Open(filepath.Join(t.TempDir(), "authz.db"))

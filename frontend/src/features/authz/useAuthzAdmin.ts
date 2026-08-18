@@ -4,6 +4,7 @@ import {
   getCurrentAuthzActor,
   grantAuthzActorRole,
   listAuthzActors,
+  listTenantAuthzActors,
   listAuthzAuditLogs,
   listAuthzPermissions,
   listAuthzRoles,
@@ -65,6 +66,14 @@ export function useAuthzActors(actor: AuthzAdminRequestActor) {
   return useQuery({
     queryKey: [...authzQueryKey(actor), "actors"],
     queryFn: () => listAuthzActors(actor),
+    enabled: enabled(actor),
+  });
+}
+
+export function useTenantAuthzActors(actor: AuthzAdminRequestActor) {
+  return useQuery({
+    queryKey: [...authzQueryKey(actor), "tenant-actors"],
+    queryFn: () => listTenantAuthzActors(actor),
     enabled: enabled(actor),
   });
 }

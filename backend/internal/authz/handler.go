@@ -75,6 +75,18 @@ func (h *Handler) ListActors(c fiber.Ctx) error {
 	return httpx.OK(c, actors)
 }
 
+func (h *Handler) ListTenantActors(c fiber.Ctx) error {
+	actor, err := h.resolveRequiredActor(c, PermissionJourneySettlementsPreview)
+	if err != nil {
+		return writeAuthorizationHTTPError(c, err)
+	}
+	actors, err := h.store.ListTenantActors(c.Context(), actor.TenantID)
+	if err != nil {
+		return httpx.WriteError(c, err)
+	}
+	return httpx.OK(c, actors)
+}
+
 func (h *Handler) ListAuditLogs(c fiber.Ctx) error {
 	if _, err := h.resolveRequiredActor(c, PermissionAuthzRead); err != nil {
 		return writeAuthorizationHTTPError(c, err)

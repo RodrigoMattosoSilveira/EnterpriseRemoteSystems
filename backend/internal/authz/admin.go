@@ -14,6 +14,7 @@ type ActorAdminStore interface {
 	ListRoles(ctx context.Context) ([]RoleResponse, error)
 	ListPermissions(ctx context.Context) ([]PermissionResponse, error)
 	ListActors(ctx context.Context) ([]ActorResponse, error)
+	ListTenantActors(ctx context.Context, tenantID string) ([]ActorResponse, error)
 	CreateActor(ctx context.Context, req CreateActorRequest) (ActorResponse, error)
 	SetActorActive(ctx context.Context, actorID string, active bool) (ActorResponse, error)
 	GrantActorRole(ctx context.Context, actorID string, req GrantActorRoleRequest) (ActorGrantResponse, error)
@@ -250,6 +251,42 @@ func (s *GORMStore) ListActors(ctx context.Context) ([]ActorResponse, error) {
 			return nil, err
 		}
 		responses = append(responses, actorResponse(actor, grants))
+	}
+	return responses, nil
+}
+
+// ListTenantActors returns only active tenant-scoped delegated Actors for the
+// selected tenant. It deliberately does not expose the application-global
+// authorization actor catalog or cross-tenant Role Grants. Tenant workflows
+// such as second-person approval can therefore select another authorized
+// Actor without requiring application-level authz.read authority.
+func (s *GORMStore) ListTenantActors(ctx context.Context, tenantID string) ([]ActorResponse, error) {
+	if s == nil || s.database == nil {
+		return nil, ErrMissingActor
+	}
+	tenantID = strings.TrimSpace(tenantID)
+	if tenantID == "" {
+		return nil, ErrTenantSelectionRequired
+	}
+
+	var actors []AuthzActor
+	if err := s.database.WithContext(ctx).
+		Model(&AuthzActor{}).
+		Select("DISTINCT authz_actors.*").
+		Joins("JOIN authz_actor_role_grants g ON g.actor_id = authz_actors.id AND g.active = ? AND g.tenant_id = ?", true, tenantID).
+		Joins("JOIN authz_roles r ON r.id = g.role_id AND r.active = ? AND r.scope_type = ?", true, string(ActorScopeTenant)).
+		Where("authz_actors.active = ?", true).
+		Order("authz_actors.actor_key ASC").
+		Find(&actors).Error; err != nil {
+		return nil, fmt.Errorf("list tenant authorization actors: %w", err)
+	}
+
+	responses := make([]ActorResponse, 0, len(actors))
+	for _, actor := range actors {
+		// The tenant workflow needs only stable actor identity/display data. Do
+		// not attach Role Grants here because ListActors is the application
+		// administration projection and grants may span other tenants.
+		responses = append(responses, actorResponse(actor, nil))
 	}
 	return responses, nil
 }
