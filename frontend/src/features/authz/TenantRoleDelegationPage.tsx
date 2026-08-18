@@ -83,7 +83,7 @@ export function TenantRoleDelegationPage() {
             </div>
             <div className="grid gap-3 sm:grid-cols-2">
               {roles.map((role) => {
-                const grant = (actor.roleGrants ?? []).find(
+                const existingGrant = (actor.roleGrants ?? []).find(
                   (candidate) => candidate.active && candidate.roleCode === role.code,
                 );
                 const busy = grantMutation.isPending || revokeMutation.isPending;
@@ -91,10 +91,10 @@ export function TenantRoleDelegationPage() {
                   <div key={role.code} className="flex items-center justify-between gap-3 rounded-xl border p-3">
                     <div>
                       <p className="text-sm font-semibold text-gray-900">{role.label}</p>
-                      <p className="text-xs text-gray-500">{grant ? "Granted" : "Not granted"}</p>
+                      <p className="text-xs text-gray-500">{existingGrant ? "Granted" : "Not granted"}</p>
                     </div>
-                    {grant ? (
-                      <button type="button" disabled={busy} onClick={() => void revoke(actor.id, grant)} className="rounded-lg border px-3 py-2 text-sm font-semibold disabled:opacity-50">Remove</button>
+                    {existingGrant ? (
+                      <button type="button" disabled={busy} onClick={() => void revoke(actor.id, existingGrant)} className="rounded-lg border px-3 py-2 text-sm font-semibold disabled:opacity-50">Remove</button>
                     ) : (
                       <button type="button" disabled={busy} onClick={() => void grant(actor.id, role.code)} className="rounded-lg bg-gray-900 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50">Grant</button>
                     )}
