@@ -54,6 +54,39 @@ func TestSeedAuthorizationCatalogCreatesCoreRolesAndGrants(t *testing.T) {
 		t.Fatalf("expected expense operator to receive receipt return permission, got %d", expenseReceiptReturn)
 	}
 
+	var tenantAdminPermissions []AuthzRolePermission
+	if err := database.
+		Joins("JOIN authz_roles ON authz_roles.id = authz_role_permissions.role_id").
+		Where("authz_roles.code = ?", string(RoleTenantAdmin)).
+		Find(&tenantAdminPermissions).Error; err != nil {
+		t.Fatalf("list Tenant Administrator permissions: %v", err)
+	}
+	if got, want := len(tenantAdminPermissions), len(tenantAdministratorDelegatedPermissions()); got != want {
+		t.Fatalf("Tenant Administrator permission count = %d, want %d", got, want)
+	}
+	tenantAdminPermissionSet := map[string]struct{}{}
+	for _, row := range tenantAdminPermissions {
+		tenantAdminPermissionSet[row.PermissionCode] = struct{}{}
+	}
+	for _, permission := range tenantAdministratorDelegatedPermissions() {
+		if _, ok := tenantAdminPermissionSet[string(permission)]; !ok {
+			t.Fatalf("Tenant Administrator missing explicit permission %q", permission)
+		}
+	}
+	for _, forbidden := range []Permission{
+		PermissionAll,
+		PermissionAuthzRead,
+		PermissionAuthzManage,
+		PermissionTenantsCreate,
+		PermissionTenantsUpdate,
+		PermissionPeopleSelfRead,
+		PermissionPeopleSelfUpdate,
+	} {
+		if _, ok := tenantAdminPermissionSet[string(forbidden)]; ok {
+			t.Fatalf("Tenant Administrator must not receive %q as delegated authority", forbidden)
+		}
+	}
+
 	for _, tc := range []struct {
 		role       RoleCode
 		permission Permission
@@ -249,7 +282,13 @@ func TestResolveActorLoadsPersistedActorForForwardCompatibleHeaders(t *testing.T
 		t.Fatalf("expected persisted actor source, got %q", actor.Source)
 	}
 	if err := RequirePermission(actor, PermissionExpensesCreate); err != nil {
-		t.Fatalf("expected tenant admin wildcard permission, got %v", err)
+		t.Fatalf("expected explicit Tenant Administrator expense permission, got %v", err)
+	}
+	if actor.HasPermission(PermissionAll) {
+		t.Fatalf("Tenant Administrator must not retain wildcard delegated authority")
+	}
+	if actor.HasPermission(PermissionAuthzManage) {
+		t.Fatalf("Tenant Administrator must not receive application authorization administration")
 	}
 }
 

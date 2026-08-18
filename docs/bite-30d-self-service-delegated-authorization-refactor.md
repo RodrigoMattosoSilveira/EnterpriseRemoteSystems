@@ -68,6 +68,11 @@ Roles and Role Grants now represent delegated authority only, including:
 - `EARNINGS_OPERATOR`
 - `EXPENSE_OPERATOR`
 
+`TENANT_ADMIN` uses an explicit tenant-business permission set rather than the
+historical `*` wildcard. This prevents newly introduced application/global
+permissions from silently becoming tenant-administrator authority. Person
+`*.self.*` capabilities remain intrinsic rather than delegated.
+
 The legacy `PERSON` Role and its historical grants remain in the database for
 migration/audit history, but migration `000048` makes them inactive. Fresh
 catalog seeding does not create the `PERSON` Role.
@@ -122,7 +127,8 @@ tenants.update
 
 Authorization-administration routes require both the appropriate permission
 and an `APPLICATION` Actor scope. A Tenant Administrator therefore cannot use
-its wildcard tenant permission to administer the global authorization catalog.
+its explicit tenant-business authority to administer the global authorization
+catalog.
 
 ### Transitional Application Administrator compatibility
 

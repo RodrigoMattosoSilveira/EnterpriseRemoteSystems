@@ -196,6 +196,47 @@ END`,
 	return nil
 }
 
+func tenantAdministratorDelegatedPermissions() []Permission {
+	return []Permission{
+		PermissionTenantsRead,
+		PermissionPeopleRead,
+		PermissionPeopleCreate,
+		PermissionPeopleUpdate,
+		PermissionCollaboratorsRead,
+		PermissionCollaboratorsCreate,
+		PermissionCollaboratorsUpdate,
+		PermissionPlanningRead,
+		PermissionPlanningCreate,
+		PermissionPlanningUpdate,
+		PermissionEarningsRead,
+		PermissionEarningsCreate,
+		PermissionEarningsUpdate,
+		PermissionPriceListsRead,
+		PermissionPriceListsCreate,
+		PermissionPriceListsUpdate,
+		PermissionReferenceDataRead,
+		PermissionReferenceDataManage,
+		PermissionExpensesRead,
+		PermissionExpensesCreate,
+		PermissionExpensesUpdate,
+		PermissionCurrentAccountsSummaryRead,
+		PermissionCurrentAccountsLedgerRead,
+		PermissionCurrentAccountsLedgerCreate,
+		PermissionCurrentAccountsSettingsRead,
+		PermissionCurrentAccountsSettingsUpdate,
+		PermissionLedgerReceiptsRead,
+		PermissionLedgerReceiptsCreate,
+		PermissionLedgerReceiptsPrint,
+		PermissionLedgerReceiptsReturn,
+		PermissionLedgerReceiptsBackfill,
+		PermissionLedgerCorrectionsCreate,
+		PermissionJourneySettlementsPreview,
+		PermissionJourneySettlementsZeroGold,
+		PermissionJourneySettlementsPartialPayout,
+		PermissionJourneySettlementsClose,
+	}
+}
+
 func SeedAuthorizationCatalog(database *gorm.DB) error {
 	now := time.Now().UTC()
 
@@ -209,7 +250,7 @@ func SeedAuthorizationCatalog(database *gorm.DB) error {
 
 	roles := []AuthzRole{
 		{ID: "authz-role-application-admin", Code: string(RoleApplicationAdmin), Label: "Application Administrator", Description: "Application-global control-plane administration; legacy tenant-data compatibility remains until Bite 30H.", ScopeType: string(ActorScopeApplication), Active: true, CreatedAt: now, UpdatedAt: now},
-		{ID: "authz-role-tenant-admin", Code: string(RoleTenantAdmin), Label: "Tenant Administrator", Description: "CRU all records for the assigned tenant.", ScopeType: string(ActorScopeTenant), Active: true, CreatedAt: now, UpdatedAt: now},
+		{ID: "authz-role-tenant-admin", Code: string(RoleTenantAdmin), Label: "Tenant Administrator", Description: "Tenant-wide administration through explicit delegated permissions.", ScopeType: string(ActorScopeTenant), Active: true, CreatedAt: now, UpdatedAt: now},
 		{ID: "authz-role-earnings-operator", Code: string(RoleEarningsOperator), Label: "Earnings Operator", Description: "Planning and earning operations for the assigned tenant.", ScopeType: string(ActorScopeTenant), Active: true, CreatedAt: now, UpdatedAt: now},
 		{ID: "authz-role-expense-operator", Code: string(RoleExpenseOperator), Label: "Expense Operator", Description: "Expense, price list, current account summary, and receipt operations for the assigned tenant.", ScopeType: string(ActorScopeTenant), Active: true, CreatedAt: now, UpdatedAt: now},
 	}
@@ -228,7 +269,7 @@ func SeedAuthorizationCatalog(database *gorm.DB) error {
 			PermissionAuthzSelfRead, PermissionAuthzRead, PermissionAuthzManage,
 			PermissionTenantsRead, PermissionTenantsCreate, PermissionTenantsUpdate,
 		},
-		RoleTenantAdmin: {PermissionAll},
+		RoleTenantAdmin: tenantAdministratorDelegatedPermissions(),
 		RoleEarningsOperator: {
 			PermissionAuthzSelfRead, PermissionTenantsRead, PermissionReferenceDataRead,
 			PermissionCollaboratorsRead,
@@ -251,6 +292,14 @@ func SeedAuthorizationCatalog(database *gorm.DB) error {
 		RoleTenantAdmin:      "authz-role-tenant-admin",
 		RoleEarningsOperator: "authz-role-earnings-operator",
 		RoleExpenseOperator:  "authz-role-expense-operator",
+	}
+	// Tenant Administrator authority is deliberately explicit in Bite 30D.
+	// Remove the historical wildcard so catalog seeding also converges databases
+	// that were initialized before the explicit-permission migration.
+	if err := database.
+		Where("role_id = ? AND permission_code = ?", roleIDs[RoleTenantAdmin], string(PermissionAll)).
+		Delete(&AuthzRolePermission{}).Error; err != nil {
+		return fmt.Errorf("remove Tenant Administrator wildcard permission: %w", err)
 	}
 	for roleCode, grantedPermissions := range rolePermissions {
 		roleID := roleIDs[roleCode]
@@ -358,7 +407,7 @@ type PermissionCatalogEntry struct {
 
 func PermissionCatalog() []PermissionCatalogEntry {
 	return []PermissionCatalogEntry{
-		{PermissionAll, "All permissions", "Wildcard permission for application and tenant administrators."},
+		{PermissionAll, "All permissions", "Transitional wildcard permission for Application Administrators until Bite 30H."},
 		{PermissionAuthzSelfRead, "Read own authorization context", "Read the current persisted actor, effective roles, scope, and permissions."},
 		{PermissionAuthzRead, "Read authorization administration", "Read authorization actors, roles, permissions, and grants."},
 		{PermissionAuthzManage, "Manage authorization administration", "Create authorization actors and manage role grants."},

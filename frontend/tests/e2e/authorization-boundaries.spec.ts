@@ -163,6 +163,36 @@ test.describe("authorization role boundaries", () => {
     }
   });
 
+  test("tenant administrators expose explicit delegated authority instead of a wildcard", async ({
+    request: adminApi,
+  }) => {
+    let actorApi: APIRequestContext | undefined;
+    try {
+      const actor = await createActorWithRole(adminApi, "tenant-admin", "TENANT_ADMIN");
+      actorApi = await createActorAccountAndLogin(adminApi, actor);
+      const currentActor = await getCurrentActor(actorApi, tenantHeaders());
+
+      expect(currentActor.roleCodes).toEqual(["TENANT_ADMIN"]);
+      expect(currentActor.intrinsicPermissions).toContain("people.self.read");
+      expect(currentActor.delegatedPermissions).toContain("tenants.read");
+      expect(currentActor.delegatedPermissions).toContain("people.create");
+      expect(currentActor.delegatedPermissions).toContain("collaborators.update");
+      expect(currentActor.delegatedPermissions).toContain("reference_data.read");
+      expect(currentActor.delegatedPermissions).toContain("current_accounts.settings.update");
+      expect(currentActor.delegatedPermissions).toContain("journey.settlements.close");
+      expect(currentActor.delegatedPermissions).not.toContain("*");
+      expect(currentActor.delegatedPermissions).not.toContain("authz.read");
+      expect(currentActor.delegatedPermissions).not.toContain("authz.manage");
+      expect(currentActor.delegatedPermissions).not.toContain("tenants.create");
+      expect(currentActor.delegatedPermissions).not.toContain("tenants.update");
+      expect(currentActor.delegatedPermissions).not.toContain("people.self.read");
+      expect(currentActor.permissions).toContain("people.self.read");
+      expect(currentActor.permissions).toContain("journey.settlements.close");
+    } finally {
+      await actorApi?.dispose();
+    }
+  });
+
   test("earnings operators can perform planning work but cannot create expenses or price-list records", async ({
     request: adminApi,
   }) => {
