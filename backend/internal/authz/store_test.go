@@ -631,6 +631,13 @@ func installTenantRoleDelegationFixtureTables(t *testing.T, database *gorm.DB) {
 			tenant_id TEXT NOT NULL,
 			status_id TEXT NOT NULL
 		)`,
+		`CREATE TABLE IF NOT EXISTS reference_data (
+			id TEXT PRIMARY KEY,
+			tenant_id TEXT NOT NULL,
+			type TEXT NOT NULL,
+			code TEXT NOT NULL,
+			active INTEGER NOT NULL
+		)`,
 	} {
 		if err := database.Exec(statement).Error; err != nil {
 			t.Fatalf("install tenant role delegation fixture table: %v", err)
@@ -641,11 +648,22 @@ func installTenantRoleDelegationFixtureTables(t *testing.T, database *gorm.DB) {
 func bindActiveTenantMemberActor(t *testing.T, database *gorm.DB, actorID string, tenantID string) {
 	t.Helper()
 	membershipID := "membership-" + actorID
+	statusID := "status-active-" + tenantID
+	if err := database.Exec(
+		"INSERT OR IGNORE INTO reference_data (id, tenant_id, type, code, active) VALUES (?, ?, ?, ?, ?)",
+		statusID,
+		tenantID,
+		"person_status",
+		"ACTIVE",
+		true,
+	).Error; err != nil {
+		t.Fatalf("create tenant-local active membership status: %v", err)
+	}
 	if err := database.Exec(
 		"INSERT INTO person_tenant_memberships (id, tenant_id, status_id) VALUES (?, ?, ?)",
 		membershipID,
 		tenantID,
-		"ref-person-status-active",
+		statusID,
 	).Error; err != nil {
 		t.Fatalf("create active tenant membership: %v", err)
 	}

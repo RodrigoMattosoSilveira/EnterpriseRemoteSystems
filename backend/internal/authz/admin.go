@@ -320,7 +320,8 @@ func (s *GORMStore) ListTenantRoleActors(ctx context.Context, tenantID string) (
 		Model(&AuthzActor{}).
 		Select("DISTINCT authz_actors.*").
 		Joins("JOIN auth_account_actors aa ON aa.actor_id = authz_actors.id AND aa.scope_type = ? AND aa.tenant_id = ?", "TENANT", tenantID).
-		Joins("JOIN person_tenant_memberships m ON m.id = aa.membership_id AND m.tenant_id = aa.tenant_id AND m.status_id = ?", "ref-person-status-active").
+		Joins("JOIN person_tenant_memberships m ON m.id = aa.membership_id AND m.tenant_id = aa.tenant_id").
+		Joins("JOIN reference_data membership_status ON membership_status.id = m.status_id AND membership_status.tenant_id = m.tenant_id AND membership_status.type = ? AND membership_status.code = ? AND membership_status.active = ?", "person_status", "ACTIVE", true).
 		Where("authz_actors.active = ?", true).
 		Order("authz_actors.display_name ASC, authz_actors.actor_key ASC").
 		Find(&actors).Error; err != nil {
@@ -410,7 +411,8 @@ func (s *GORMStore) ensureActiveTenantMemberActor(ctx context.Context, tenantID 
 	if err := s.database.WithContext(ctx).
 		Table("authz_actors a").
 		Joins("JOIN auth_account_actors aa ON aa.actor_id = a.id AND aa.scope_type = ? AND aa.tenant_id = ?", "TENANT", tenantID).
-		Joins("JOIN person_tenant_memberships m ON m.id = aa.membership_id AND m.tenant_id = aa.tenant_id AND m.status_id = ?", "ref-person-status-active").
+		Joins("JOIN person_tenant_memberships m ON m.id = aa.membership_id AND m.tenant_id = aa.tenant_id").
+		Joins("JOIN reference_data membership_status ON membership_status.id = m.status_id AND membership_status.tenant_id = m.tenant_id AND membership_status.type = ? AND membership_status.code = ? AND membership_status.active = ?", "person_status", "ACTIVE", true).
 		Where("a.id = ? AND a.active = ?", actorID, true).
 		Count(&count).Error; err != nil {
 		return fmt.Errorf("check tenant member actor: %w", err)
