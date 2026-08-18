@@ -111,6 +111,7 @@ test.describe("authorization role boundaries", () => {
       expect(currentActor.permissions).toContain("expenses.create");
       expect(currentActor.permissions).toContain("ledger.receipts.print");
       expect(currentActor.permissions).not.toContain("authz.manage");
+      expect(currentActor.delegatedPermissions).not.toContain("gold_prices.manage");
 
       await expectStatus(
         await actorApi.get(e2eApiUrl("/api/v1/reference-data/sector"), { headers }),
@@ -139,6 +140,25 @@ test.describe("authorization role boundaries", () => {
         }),
         403,
         "expense operators may read operational reference data but must not manage it",
+      );
+
+      await expectStatus(
+        await actorApi.get(e2eApiUrl("/api/v1/gold-prices"), { headers }),
+        403,
+        "expense operators must not browse sensitive gold-price administration history",
+      );
+
+      await expectStatus(
+        await actorApi.post(e2eApiUrl("/api/v1/gold-prices"), {
+          headers,
+          data: {
+            priceDate: "2026-08-18",
+            brlPerGram: 500,
+            recordedBy: actor.actorKey,
+          },
+        }),
+        403,
+        "expense operators must not record sensitive tenant gold prices",
       );
 
       await expectStatus(
@@ -178,6 +198,7 @@ test.describe("authorization role boundaries", () => {
       expect(currentActor.delegatedPermissions).toContain("people.create");
       expect(currentActor.delegatedPermissions).toContain("collaborators.update");
       expect(currentActor.delegatedPermissions).toContain("reference_data.read");
+      expect(currentActor.delegatedPermissions).toContain("gold_prices.manage");
       expect(currentActor.delegatedPermissions).toContain("current_accounts.settings.update");
       expect(currentActor.delegatedPermissions).toContain("journey.settlements.close");
       expect(currentActor.delegatedPermissions).not.toContain("*");

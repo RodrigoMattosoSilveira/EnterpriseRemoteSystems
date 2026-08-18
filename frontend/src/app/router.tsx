@@ -50,7 +50,7 @@ const protectedChildren: RouteObject[] = [
   { path: "admin/authorization", lazy: async () => ({ Component: (await import("../features/authz/AuthzAdminRoute")).AuthzAdminRoute }) },
   { path: "admin/audit-logs", lazy: async () => ({ Component: (await import("../features/authz/AuditLogViewerPage")).AuditLogViewerPage }) },
   { path: "admin/current-account-settings", lazy: async () => ({ Component: (await import("../features/current-accounts/SecondPersonApprovalSettingsPage")).SecondPersonApprovalSettingsPage }) },
-  { path: "admin/gold-prices", lazy: async () => ({ Component: (await import("../features/gold-prices/GoldPricesPage")).GoldPricesPage }) },
+  { path: "admin/gold-prices", lazy: async () => ({ Component: (await import("../features/gold-prices/GoldPricesAdminRoute")).GoldPricesAdminRoute }) },
   { path: "admin/price-list-items", lazy: async () => ({ Component: (await import("../features/price-list/PriceListPage")).PriceListPage }) },
   { path: "forbidden", element: <ForbiddenPage /> },
   { path: "*", element: <NotFoundPage /> },

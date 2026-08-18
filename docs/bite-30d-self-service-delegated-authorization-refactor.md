@@ -73,6 +73,13 @@ historical `*` wildcard. This prevents newly introduced application/global
 permissions from silently becoming tenant-administrator authority. Person
 `*.self.*` capabilities remain intrinsic rather than delegated.
 
+Gold-price administration is also separated from ordinary `price_lists.*`
+authority. `gold_prices.manage` is delegated only to `TENANT_ADMIN`;
+`EXPENSE_OPERATOR` may continue reading the latest active price as an operational
+dependency of GOLD_GRAM expense creation, but cannot browse gold-price history,
+record/replace prices, deactivate prices, or open the Gold Prices administration
+screen.
+
 The legacy `PERSON` Role and its historical grants remain in the database for
 migration/audit history, but migration `000048` makes them inactive. Fresh
 catalog seeding does not create the `PERSON` Role.

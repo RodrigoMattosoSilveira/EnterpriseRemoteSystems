@@ -22,7 +22,7 @@ export const navigationLinks: NavigationLink[] = [
   { label: "Authorization", to: "/admin/authorization", anyPermission: ["authz.read"] },
   { label: "Audit logs", to: "/admin/audit-logs", anyPermission: ["authz.read"] },
   { label: "Reference data", to: "/admin/reference-data", anyPermission: ["reference_data.manage"] },
-  { label: "Gold prices", to: "/admin/gold-prices", anyPermission: ["expenses.create", "expenses.update"] },
+  { label: "Gold prices", to: "/admin/gold-prices", anyPermission: ["gold_prices.manage"] },
   { label: "Price list", to: "/admin/price-list-items", anyPermission: ["price_lists.read"] },
   { label: "Account settings", to: "/admin/current-account-settings", anyPermission: ["current_accounts.settings.read"] },
   { label: "Change password", to: "/password/change" },

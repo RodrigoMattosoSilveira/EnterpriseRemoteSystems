@@ -22,6 +22,27 @@ describe("permission-aware navigation", () => {
     ).toBe("/collaborators");
   });
 
+  it("restricts Gold Prices administration to actors with gold_prices.manage", () => {
+    const expenseOperatorPaths = visibleNavigationLinks(
+      [
+        "collaborators.read",
+        "expenses.read",
+        "expenses.create",
+        "price_lists.read",
+        "price_lists.create",
+        "price_lists.update",
+      ],
+      "TENANT",
+    ).map((link) => link.to);
+    expect(expenseOperatorPaths).not.toContain("/admin/gold-prices");
+
+    const tenantAdminPaths = visibleNavigationLinks(
+      ["people.read", "gold_prices.manage"],
+      "TENANT",
+    ).map((link) => link.to);
+    expect(tenantAdminPaths).toContain("/admin/gold-prices");
+  });
+
   it("uses Change password when the actor has no operational navigation permission", () => {
     expect(defaultAuthorizedRoute([], "TENANT")).toBe("/password/change");
   });

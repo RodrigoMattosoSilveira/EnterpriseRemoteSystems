@@ -54,6 +54,17 @@ func TestSeedAuthorizationCatalogCreatesCoreRolesAndGrants(t *testing.T) {
 		t.Fatalf("expected expense operator to receive receipt return permission, got %d", expenseReceiptReturn)
 	}
 
+	var expenseGoldPriceManage int64
+	if err := database.Model(&AuthzRolePermission{}).
+		Joins("JOIN authz_roles ON authz_roles.id = authz_role_permissions.role_id").
+		Where("authz_roles.code = ? AND permission_code = ?", string(RoleExpenseOperator), string(PermissionGoldPricesManage)).
+		Count(&expenseGoldPriceManage).Error; err != nil {
+		t.Fatalf("count expense gold-price administration permission: %v", err)
+	}
+	if expenseGoldPriceManage != 0 {
+		t.Fatalf("expense operator must not receive sensitive gold-price administration permission")
+	}
+
 	var tenantAdminPermissions []AuthzRolePermission
 	if err := database.
 		Joins("JOIN authz_roles ON authz_roles.id = authz_role_permissions.role_id").
