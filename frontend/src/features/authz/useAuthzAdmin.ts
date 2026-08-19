@@ -15,6 +15,8 @@ import {
   setAuthzActorActive,
 } from "../../api/authz.api";
 import type {
+  AuthzActor,
+  AuthzActorRoleGrant,
   AuthzAdminRequestActor,
   AuthzAuditLogFilters,
   CreateAuthzActorInput,
@@ -126,10 +128,43 @@ export function useGrantAuthzActorRole(actor: AuthzAdminRequestActor) {
       targetActorId: string;
       input: GrantAuthzActorRoleInput;
     }) => grantAuthzActorRole(actor, targetActorId, input),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: [...authzQueryKey(actor), "actors"] });
+    onSuccess: (grant, { targetActorId }) => {
+      const actorsKey = [...authzQueryKey(actor), "actors"] as const;
+      queryClient.setQueryData<AuthzActor[]>(actorsKey, (current) =>
+        upsertActorRoleGrant(current, targetActorId, grant),
+      );
+      queryClient.invalidateQueries({
+        predicate: (query) => isActorCatalogQuery(query.queryKey, actor.actorId),
+      });
     },
   });
+}
+
+function upsertActorRoleGrant(
+  actors: AuthzActor[] | undefined,
+  targetActorId: string,
+  grant: AuthzActorRoleGrant,
+): AuthzActor[] | undefined {
+  if (!actors) return actors;
+
+  return actors.map((actor) => {
+    if (actor.id !== targetActorId) return actor;
+
+    const roleGrants = (actor.roleGrants ?? []).filter(
+      (existing) =>
+        existing.id !== grant.id &&
+        !(existing.roleCode === grant.roleCode && existing.tenantId === grant.tenantId),
+    );
+    return { ...actor, roleGrants: [...roleGrants, grant] };
+  });
+}
+
+function isActorCatalogQuery(queryKey: readonly unknown[], actorId: string): boolean {
+  return (
+    queryKey[0] === "authz-admin" &&
+    queryKey[1] === actorId &&
+    queryKey[3] === "actors"
+  );
 }
 
 export function useRevokeAuthzActorRoleGrant(actor: AuthzAdminRequestActor) {

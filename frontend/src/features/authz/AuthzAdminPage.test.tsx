@@ -467,12 +467,25 @@ describe("AuthzAdminPage", () => {
     ).toBe(true);
 
     await waitFor(() => articleByText("expense-admin").textContent?.includes(tenantId) ?? false);
-    const grantButton = Array.from(articleByText("expense-admin").querySelectorAll("button")).find(
-      (node) => node.textContent?.trim() === "Grant Role",
+    const refreshedArticle = articleByText("expense-admin");
+    const refreshedRoleSelect = controlByLabel<HTMLSelectElement>(
+      refreshedArticle,
+      "Role",
+      "select",
     );
-    expect(grantButton).toBeDefined();
-    expect((grantButton as HTMLButtonElement).disabled).toBe(true);
-    expect(grantTenantInput.value).toBe(tenantId);
+    const refreshedGrantTenantInput = controlByLabel<HTMLInputElement>(
+      refreshedArticle,
+      "Grant tenant",
+      "input",
+    );
+    const grantButton = buttonInArticle("expense-admin", "Grant Role");
+
+    expect(refreshedRoleSelect.value).toBe("TENANT_ADMIN");
+    expect(refreshedGrantTenantInput.value).toBe(tenantId);
+    expect(grantButton.disabled).toBe(true);
+    expect(refreshedArticle.textContent).toContain(
+      `TENANT_ADMIN is already granted for ${tenantId}.`,
+    );
   });
 
   it("deactivates a non-operating persisted actor", async () => {

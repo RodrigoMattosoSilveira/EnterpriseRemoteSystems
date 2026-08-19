@@ -20,7 +20,7 @@ test("admin can create an authorization actor, grant a role, and revoke it", asy
   const collaborator = await createCollaborator(request, person.id);
   const actorKey = `collaborator-${collaborator.id}`;
   const displayName = actorNickname;
-  const grantedRole = "EXPENSE_OPERATOR";
+  const grantedRole = "TENANT_ADMIN";
   const grantTenant = "default";
 
   await page.goto("/admin/authorization");
@@ -143,6 +143,9 @@ test("admin can create an authorization actor, grant a role, and revoke it", asy
     `${grantedRole} granted.`,
   );
   await expect(actorCard).toContainText(`${grantedRole} · ${grantTenant}`);
+  await expect(actorCard.getByLabel("Role")).toHaveValue(grantedRole);
+  await expect(actorCard.getByLabel("Grant tenant")).toHaveValue(grantTenant);
+  await expect(actorCard.getByRole("button", { name: "Grant Role" })).toBeDisabled();
 
   await actorCard.getByRole("button", { name: "Revoke" }).click();
 

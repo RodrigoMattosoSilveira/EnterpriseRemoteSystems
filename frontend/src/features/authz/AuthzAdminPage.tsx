@@ -45,6 +45,7 @@ export function AuthzAdminPage() {
   );
   const [actorForm, setActorForm] = useState<CreateAuthzActorInput>(emptyActorForm);
   const [actorNicknameFilter, setActorNicknameFilter] = useState("");
+  const [grantRoleCodeByActor, setGrantRoleCodeByActor] = useState<Record<string, string>>({});
   const [successMessage, setSuccessMessage] = useState("");
 
   useEffect(() => {
@@ -368,6 +369,13 @@ export function AuthzAdminPage() {
                         actor={actor}
                         roles={grantableRoles}
                         selectedTenantId={requestActor.tenantId}
+                        selectedRoleCode={grantRoleCodeByActor[actor.id]}
+                        onSelectedRoleCodeChange={(roleCode) =>
+                          setGrantRoleCodeByActor((current) => ({
+                            ...current,
+                            [actor.id]: roleCode,
+                          }))
+                        }
                         currentActorKey={currentActorQuery.data?.actorKey ?? ""}
                         isMutating={
                           grantRoleMutation.isPending ||
@@ -614,6 +622,8 @@ function ActorCard({
   actor,
   roles,
   selectedTenantId,
+  selectedRoleCode,
+  onSelectedRoleCodeChange,
   currentActorKey,
   isMutating,
   onGrantRole,
@@ -623,21 +633,24 @@ function ActorCard({
   actor: AuthzActor;
   roles: AuthzRole[];
   selectedTenantId: string;
+  selectedRoleCode?: string;
+  onSelectedRoleCodeChange: (roleCode: string) => void;
   currentActorKey: string;
   isMutating: boolean;
   onGrantRole: (targetActorId: string, roleCode: string, tenantId: string) => Promise<void>;
   onRevokeGrant: (targetActorId: string, grant: AuthzActorRoleGrant) => Promise<void>;
   onSetActive: (targetActorId: string, actorKey: string, active: boolean) => Promise<void>;
 }) {
-  const [roleCode, setRoleCode] = useState(roles[0]?.code ?? "");
+  // Keep the selected Role in the page-level grant workflow rather than in the
+  // individual Actor card. The Actor catalog is tenant-context keyed and a
+  // refresh can recreate cards; local card state would then fall back to the
+  // first role (APPLICATION_ADMIN), changing a tenant grant target back to *.
+  // Page-level state keeps the administrator's explicit Role choice stable.
+  const roleCode = roles.some((role) => role.code === selectedRoleCode)
+    ? selectedRoleCode ?? ""
+    : roles[0]?.code ?? "";
   const selectedRole = roles.find((role) => role.code === roleCode);
   const applicationScopedRole = isApplicationScopedRole(selectedRole);
-
-  useEffect(() => {
-    if (!roleCode && roles[0]?.code) {
-      setRoleCode(roles[0].code);
-    }
-  }, [roleCode, roles]);
 
   // The Authorization page's Selected Tenant ID is the single source of truth
   // for tenant-scoped grants. Keeping a second editable tenant value inside each
@@ -715,7 +728,7 @@ function ActorCard({
           <select
             className="mt-1 block w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm"
             value={roleCode}
-            onChange={(event) => setRoleCode(event.target.value)}
+            onChange={(event) => onSelectedRoleCodeChange(event.target.value)}
           >
             {roles.map((role) => (
               <option key={role.code} value={role.code}>
