@@ -137,6 +137,7 @@ var (
 	ErrMissingActor                      = errors.New("authorization actor is required")
 	ErrAuthenticationRequired            = errors.New("authenticated session is required")
 	ErrTenantSelectionRequired           = errors.New("a tenant selection is required")
+	ErrTenantActorUnavailable            = errors.New("the authenticated account has no active actor for the selected tenant")
 	ErrAccountActorFoundationUnavailable = errors.New("account actor foundation is unavailable")
 	ErrForbidden                         = errors.New("actor is not permitted")
 )

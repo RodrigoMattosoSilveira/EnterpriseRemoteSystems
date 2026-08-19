@@ -1,5 +1,10 @@
 # Bite 28B — User Authentication Foundation
 
+> **Bite 30E supersession:** this document records the original Bite 28B
+> single-Actor authentication model. Bite 30E makes sessions Account-level and
+> makes per-tenant Actor activation an authorization/tenant-selection concern;
+> see `bite-30e-session-tenant-selection-refactor.md`.
+
 ## Scope
 
 Bite 28B establishes login-backed identity without changing the authorization

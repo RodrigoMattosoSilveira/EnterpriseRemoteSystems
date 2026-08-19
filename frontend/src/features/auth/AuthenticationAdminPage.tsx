@@ -41,8 +41,10 @@ export function authenticationActorOptionLabel(actor: AuthzActor): string {
 }
 
 export function canIssuePasswordResetToken(account: AuthAccount): boolean {
-  const anyActorActive = account.actors?.some((actor) => actor.active) ?? account.actorActive;
-  return account.active && anyActorActive;
+  // Bite 30E makes password recovery an Authentication Account concern. Tenant
+  // Actor activation controls tenant authorization only; it must not prevent an
+  // otherwise active Account from replacing its password.
+  return account.active;
 }
 
 export function authenticationActorForCollaborator(
@@ -920,7 +922,7 @@ export function AuthenticationAdminPage() {
                     title={
                       resetEligible
                         ? undefined
-                        : "Activate the authentication account and at least one authorization actor before issuing a reset token"
+                        : "Activate the authentication account before issuing a reset token"
                     }
                     onClick={() => void issue(account.id)}
                   >

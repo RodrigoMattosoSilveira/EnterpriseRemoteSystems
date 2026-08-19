@@ -474,14 +474,20 @@ func stringValue(value *string) string {
 	return *value
 }
 
-// TenantOption describes an active tenant available to an Actor. Tenant-scoped
-// options come from delegated tenant authority; the legacy Application
-// Administrator all-tenant option remains temporarily for 30E/30H compatibility.
+// TenantOption describes an active tenant context available to an authenticated
+// Account. For ordinary Accounts the option names the exact active tenant Actor
+// and Membership that will become effective when the tenant is selected. GLOBAL
+// Application Administrator Accounts retain the staged all-active-tenant
+// compatibility until Bite 30H, but still report their GLOBAL Actor explicitly.
 type TenantOption struct {
-	ID        string   `json:"id"`
-	Code      string   `json:"code"`
-	Name      string   `json:"name"`
-	RoleCodes []string `json:"roleCodes"`
+	ID            string   `json:"id"`
+	Code          string   `json:"code"`
+	Name          string   `json:"name"`
+	RoleCodes     []string `json:"roleCodes"`
+	ActorRecordID string   `json:"actorRecordId"`
+	ActorKey      string   `json:"actorKey"`
+	ActorScope    string   `json:"actorScope"`
+	MembershipID  string   `json:"membershipId,omitempty"`
 }
 
 type TenantOptionStore interface {
@@ -525,7 +531,7 @@ func (s *GORMStore) ListActorTenantOptions(ctx context.Context, actorRecordID st
 	for _, grant := range grants {
 		if grant.TenantID == GlobalTenantScope {
 			// Transitional Application Administrator tenant selection remains
-			// until Bite 30E/30H. 30D no longer treats this as a tenant Role.
+			// until Bite 30H. 30D no longer treats this as a tenant Role.
 			globalRoles[grant.RoleCode] = struct{}{}
 			continue
 		}
@@ -628,7 +634,7 @@ func (s *GORMStore) FindAccountActor(ctx context.Context, accountID string, tena
 		return nil, fmt.Errorf("find authenticated Account Actor: %w", result.Error)
 	}
 	if result.RowsAffected == 0 {
-		return nil, ErrAuthenticationRequired
+		return nil, ErrTenantActorUnavailable
 	}
 
 	if binding.ScopeType == "GLOBAL" {
@@ -637,7 +643,7 @@ func (s *GORMStore) FindAccountActor(ctx context.Context, accountID string, tena
 			return nil, err
 		}
 		if len(roles) == 0 {
-			return nil, ErrAuthenticationRequired
+			return nil, ErrTenantActorUnavailable
 		}
 		return &Actor{
 			ID:       binding.ActorKey,
@@ -665,7 +671,7 @@ type intrinsicTenantIdentity struct {
 
 func (s *GORMStore) buildTenantBoundActor(ctx context.Context, binding accountActorBindingProjection, tenantID string) (*Actor, error) {
 	if binding.TenantID == nil || strings.TrimSpace(*binding.TenantID) != tenantID || binding.MembershipID == nil || strings.TrimSpace(*binding.MembershipID) == "" {
-		return nil, ErrAuthenticationRequired
+		return nil, ErrTenantActorUnavailable
 	}
 
 	var identity intrinsicTenantIdentity
@@ -681,7 +687,7 @@ func (s *GORMStore) buildTenantBoundActor(ctx context.Context, binding accountAc
 		return nil, fmt.Errorf("resolve intrinsic tenant identity: %w", result.Error)
 	}
 	if result.RowsAffected == 0 {
-		return nil, ErrAuthenticationRequired
+		return nil, ErrTenantActorUnavailable
 	}
 
 	personID := stringValue(identity.LegacyPersonID)
@@ -770,52 +776,104 @@ func (s *GORMStore) ListAccountTenantOptions(ctx context.Context, accountID stri
 	}
 	accountID = strings.TrimSpace(accountID)
 
-	var globalCount int64
-	if err := s.database.WithContext(ctx).
+	// A GLOBAL Account remains a control-plane identity. Bite 30H removes its
+	// staged ability to select an active tenant for ordinary tenant-data support;
+	// until then every option explicitly names the same GLOBAL Actor so callers
+	// never mistake tenant selection for a tenant Actor switch.
+	var globalBinding accountActorBindingProjection
+	globalResult := s.database.WithContext(ctx).
 		Table("auth_account_actors aa").
+		Select(`aa.account_id AS account_id,
+			aa.actor_id AS actor_id,
+			a.actor_key AS actor_key,
+			a.display_name AS display_name,
+			aa.scope_type AS scope_type,
+			aa.tenant_id AS tenant_id,
+			aa.membership_id AS membership_id`).
 		Joins("JOIN authz_actors a ON a.id = aa.actor_id AND a.active = ?", true).
 		Where("aa.account_id = ? AND aa.scope_type = ?", accountID, "GLOBAL").
-		Count(&globalCount).Error; err != nil {
-		return nil, fmt.Errorf("find global Account Actor: %w", err)
+		Limit(1).
+		Scan(&globalBinding)
+	if globalResult.Error != nil {
+		return nil, fmt.Errorf("find global Account Actor: %w", globalResult.Error)
 	}
-	if globalCount > 0 {
-		// Tenant-selection compatibility for GLOBAL Application Administrator
-		// Accounts remains until Bite 30E/30H. 30D establishes explicit
-		// control-plane permissions without prematurely removing that behavior.
+	if globalResult.RowsAffected > 0 {
 		var roleCodes []string
 		if err := s.database.WithContext(ctx).
-			Table("auth_account_actors aa").
+			Table("authz_actor_role_grants g").
 			Select("DISTINCT r.code").
-			Joins("JOIN authz_actor_role_grants g ON g.actor_id = aa.actor_id AND g.active = ? AND g.tenant_id = ?", true, GlobalTenantScope).
 			Joins("JOIN authz_roles r ON r.id = g.role_id AND r.active = ?", true).
-			Where("aa.account_id = ? AND aa.scope_type = ?", accountID, "GLOBAL").
+			Where("g.actor_id = ? AND g.active = ? AND g.tenant_id = ?", globalBinding.ActorID, true, GlobalTenantScope).
 			Order("r.code").
 			Pluck("r.code", &roleCodes).Error; err != nil {
 			return nil, fmt.Errorf("find global Account Actor roles: %w", err)
 		}
-		return s.activeTenantOptions(ctx, nil, roleCodes)
+		if len(roleCodes) == 0 {
+			return []TenantOption{}, nil
+		}
+
+		type tenantProjection struct {
+			ID   string
+			Code string
+			Name string
+		}
+		var tenants []tenantProjection
+		if err := s.database.WithContext(ctx).
+			Table("tenants").
+			Select("id, code, name").
+			Where("active = ?", true).
+			Order("name ASC, code ASC, id ASC").
+			Scan(&tenants).Error; err != nil {
+			return nil, fmt.Errorf("find global Account tenant options: %w", err)
+		}
+		options := make([]TenantOption, 0, len(tenants))
+		for _, tenant := range tenants {
+			options = append(options, TenantOption{
+				ID:            tenant.ID,
+				Code:          tenant.Code,
+				Name:          tenant.Name,
+				RoleCodes:     append([]string(nil), roleCodes...),
+				ActorRecordID: globalBinding.ActorID,
+				ActorKey:      globalBinding.ActorKey,
+				ActorScope:    string(ActorScopeApplication),
+			})
+		}
+		return options, nil
 	}
 
+	// Ordinary tenant options are identity options, not Role-Grant options. A
+	// Person with an active Account-owned Actor and active Membership may select
+	// the tenant even when the Actor currently has zero delegated Roles, because
+	// Bite 30D self-service authority is intrinsic to that identity chain.
 	type tenantBinding struct {
-		TenantID string
-		ActorID  string
+		TenantID     string
+		TenantCode   string
+		TenantName   string
+		ActorID      string
+		ActorKey     string
+		MembershipID string
 	}
 	var bindings []tenantBinding
 	if err := s.database.WithContext(ctx).
 		Table("auth_account_actors aa").
-		Select("aa.tenant_id AS tenant_id, aa.actor_id AS actor_id").
+		Select(`aa.tenant_id AS tenant_id,
+			t.code AS tenant_code,
+			t.name AS tenant_name,
+			aa.actor_id AS actor_id,
+			a.actor_key AS actor_key,
+			aa.membership_id AS membership_id`).
 		Joins("JOIN authz_actors a ON a.id = aa.actor_id AND a.active = ?", true).
+		Joins("JOIN tenants t ON t.id = aa.tenant_id AND t.active = ?", true).
 		Joins("JOIN person_tenant_memberships m ON m.id = aa.membership_id AND m.tenant_id = aa.tenant_id").
+		Joins("JOIN auth_account_people ap ON ap.account_id = aa.account_id AND ap.person_id = m.person_id").
 		Joins("JOIN reference_data status ON status.id = m.status_id AND status.tenant_id = m.tenant_id AND status.type = ? AND status.active = ? AND status.code = ?", "person_status", true, "ACTIVE").
 		Where("aa.account_id = ? AND aa.scope_type = ?", accountID, "TENANT").
-		Order("aa.tenant_id").Scan(&bindings).Error; err != nil {
+		Order("t.name ASC, t.code ASC, t.id ASC").
+		Scan(&bindings).Error; err != nil {
 		return nil, fmt.Errorf("list Account tenant Actors: %w", err)
 	}
-	if len(bindings) == 0 {
-		return []TenantOption{}, nil
-	}
 
-	roleCodesByTenant := map[string][]string{}
+	options := make([]TenantOption, 0, len(bindings))
 	for _, binding := range bindings {
 		var roleCodes []string
 		if err := s.database.WithContext(ctx).
@@ -823,42 +881,20 @@ func (s *GORMStore) ListAccountTenantOptions(ctx context.Context, accountID stri
 			Select("r.code").
 			Joins("JOIN authz_roles r ON r.id = g.role_id AND r.active = ?", true).
 			Where("g.actor_id = ? AND g.tenant_id = ? AND g.active = ?", binding.ActorID, binding.TenantID, true).
-			Order("r.code").Pluck("r.code", &roleCodes).Error; err != nil {
+			Order("r.code").
+			Pluck("r.code", &roleCodes).Error; err != nil {
 			return nil, fmt.Errorf("list Account tenant Actor roles: %w", err)
 		}
-		roleCodesByTenant[binding.TenantID] = roleCodes
-	}
-	return s.activeTenantOptions(ctx, roleCodesByTenant, nil)
-}
-
-func (s *GORMStore) activeTenantOptions(ctx context.Context, roleCodesByTenant map[string][]string, globalRoles []string) ([]TenantOption, error) {
-	type tenantProjection struct {
-		ID   string
-		Code string
-		Name string
-	}
-	query := s.database.WithContext(ctx).Table("tenants").Select("id, code, name").Where("active = ?", true)
-	if roleCodesByTenant != nil {
-		ids := make([]string, 0, len(roleCodesByTenant))
-		for tenantID := range roleCodesByTenant {
-			ids = append(ids, tenantID)
-		}
-		if len(ids) == 0 {
-			return []TenantOption{}, nil
-		}
-		query = query.Where("id IN ?", ids)
-	}
-	var tenants []tenantProjection
-	if err := query.Order("name ASC, code ASC, id ASC").Scan(&tenants).Error; err != nil {
-		return nil, fmt.Errorf("find Account tenant options: %w", err)
-	}
-	options := make([]TenantOption, 0, len(tenants))
-	for _, tenant := range tenants {
-		roles := globalRoles
-		if roleCodesByTenant != nil {
-			roles = roleCodesByTenant[tenant.ID]
-		}
-		options = append(options, TenantOption{ID: tenant.ID, Code: tenant.Code, Name: tenant.Name, RoleCodes: append([]string(nil), roles...)})
+		options = append(options, TenantOption{
+			ID:            binding.TenantID,
+			Code:          binding.TenantCode,
+			Name:          binding.TenantName,
+			RoleCodes:     roleCodes,
+			ActorRecordID: binding.ActorID,
+			ActorKey:      binding.ActorKey,
+			ActorScope:    string(ActorScopeTenant),
+			MembershipID:  binding.MembershipID,
+		})
 	}
 	return options, nil
 }

@@ -49,6 +49,18 @@ export function normalizeAuthTenantOptions(
     roleCodes: Array.isArray(option.roleCodes)
       ? option.roleCodes.filter((role): role is string => typeof role === "string")
       : [],
+    ...(typeof option.actorRecordId === "string" && option.actorRecordId.trim()
+      ? { actorRecordId: option.actorRecordId }
+      : {}),
+    ...(typeof option.actorKey === "string" && option.actorKey.trim()
+      ? { actorKey: option.actorKey }
+      : {}),
+    ...(typeof option.actorScope === "string" && option.actorScope.trim()
+      ? { actorScope: option.actorScope }
+      : {}),
+    ...(typeof option.membershipId === "string" && option.membershipId.trim()
+      ? { membershipId: option.membershipId }
+      : {}),
   }));
 }
 

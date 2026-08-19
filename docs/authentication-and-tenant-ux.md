@@ -2,10 +2,11 @@
 
 ## Purpose
 
-Bite 28D exposes the Bite 28B/28C authentication and authorization foundations
-through the browser. Protected application routes now require a verified HTTP
-session and operate in an explicitly selected tenant granted to that session's
-persisted actor.
+Bite 28D exposed the authentication and authorization foundations through the
+browser. Bite 30E now makes the HTTP session explicitly Account-authenticated:
+protected application routes require a verified Account session and an
+explicitly selected tenant whose effective Actor is resolved from that
+Account's persisted Actor bindings.
 
 ## User journey
 
@@ -15,17 +16,34 @@ persisted actor.
    `mustChangePassword` are sent to `/password/change` first.
 3. The application shell shows the current user's display name and normalized
    login.
-4. `GET /api/v1/auth/tenant-options` returns only active tenants covered by the
-   actor's active grants. A global Application Administrator grant returns every
-   active tenant.
+4. `GET /api/v1/auth/tenant-options` returns Account-owned active tenant
+   contexts. Ordinary Accounts receive only tenants backed by an active TENANT
+   Actor and same-tenant ACTIVE Membership. A GLOBAL Application Administrator
+   continues to receive every active tenant during the staged Bite 30H
+   compatibility period, while remaining on the same APPLICATION Actor.
 5. The tenant control opens an in-page dropdown rather than the browser or
    operating system's native floating picker. Users can progressively narrow
    the available tenants by typing any part of the tenant name, code, or ID,
    then select with the mouse or with Arrow keys and Enter.
-6. Changing tenants updates `ers.auth.selectedTenantId`, clears tenant-bound
-   React Query state, and returns to the workspace landing page.
+6. Changing tenants updates `ers.auth.selectedTenantId`, selects the
+   Account-owned Actor for that tenant, clears tenant-bound React Query state,
+   and returns to the workspace landing page.
 7. Logout revokes the server session, clears client authentication state, and
    returns to `/login`.
+
+## Bite 30E session and Actor boundary
+
+The browser session payload contains Account identity only; it no longer exposes
+the legacy Actor/Person/Collaborator fields. The selected tenant plus Account ID
+is resolved server-side to the exact effective Actor. Tenant options also carry
+that Actor's record ID/scope (and Membership ID for ordinary TENANT Actors) so
+the application shell can fail closed if the advertised context and
+`/authz/current-actor` disagree.
+
+Deactivating one tenant Actor is not a global logout when another Actor owned by
+the same Account remains active. The unavailable tenant is removed from the
+Account's options and direct use of it returns `tenant_actor_unavailable`.
+Account deactivation remains global and continues to revoke sessions.
 
 ## Session failure behavior
 
@@ -36,9 +54,12 @@ has no uncached domain request to trigger a server check.
 
 Any protected API response with HTTP 401 clears browser authentication state and
 redirects protected routes to `/login`. Expired sessions display an expiration
-message. Deactivated authentication accounts or authorization actors display an
-inactive-account message. The server clears rejected or revoked session cookies;
-HTTP-only cookies remain the only browser authentication credential.
+message, and a deactivated Authentication Account is rejected globally. A
+tenant Actor becoming inactive is different: the Account session remains valid,
+the tenant is removed from the Account's active tenant options, and direct use
+of that tenant returns `403 tenant_actor_unavailable`. The server clears rejected
+or revoked Account-session cookies; HTTP-only cookies remain the only browser
+authentication credential.
 
 ## Password workflows
 
@@ -59,10 +80,11 @@ HTTP-only cookies remain the only browser authentication credential.
   are shown once and are never persisted by the frontend. Reset-token responses
   identify the exact account ID and login; the administration page clears any
   previously displayed token before requesting another one. Reset-token
-  eligibility belongs to the target account, not to the administrator's
-  session: an inactive target account or actor produces a validation error
-  without clearing the Application Administrator cookie, and the UI disables
-  reset-token issuance for those rows.
+  eligibility belongs to the target Authentication Account, not to the
+  administrator's session or the Account's tenant Actors: an inactive target
+  Account produces a validation error without clearing the Application
+  Administrator cookie, while an active Account remains eligible even when all
+  of its tenant Actors are inactive.
 
 ## Local and automated testing
 

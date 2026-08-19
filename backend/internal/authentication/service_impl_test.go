@@ -226,7 +226,7 @@ func assertNoActivePersonRoleGrant(t *testing.T, database *gorm.DB, actorID stri
 	}
 }
 
-func TestAuthenticationRejectsInactiveAccountAndActor(t *testing.T) {
+func TestAuthenticationSeparatesAccountAndActorActivation(t *testing.T) {
 	database, _, service, actor := authenticationTestService(t)
 	account, err := service.CreateAccount(context.Background(), CreateAccountRequest{
 		ActorID: actor.ID, Login: "operator@example.com", TemporaryPassword: "Operator-Password-1",
@@ -295,12 +295,16 @@ func TestAuthenticationRejectsInactiveAccountAndActor(t *testing.T) {
 	if _, err := service.Login(context.Background(), LoginRequest{Login: account.Login, Password: "Wrong-Password-1"}, "", ""); err != ErrInvalidCredentials {
 		t.Fatalf("expected inactive actor with wrong password to preserve invalid-credentials response, got %v", err)
 	}
-	if _, err := service.Login(context.Background(), LoginRequest{Login: account.Login, Password: "Operator-Password-1"}, "", ""); err != ErrActorInactive {
-		t.Fatalf("expected correct password for inactive actor to return actor-inactive, got %v", err)
+	actorlessLogin, err := service.Login(context.Background(), LoginRequest{Login: account.Login, Password: "Operator-Password-1"}, "", "")
+	if err != nil {
+		t.Fatalf("Bite 30E keeps authentication Account-level when all tenant Actors are inactive: %v", err)
+	}
+	if _, err := service.ResolveSession(context.Background(), actorlessLogin.Token); err != nil {
+		t.Fatalf("Account session must remain valid without an active tenant Actor: %v", err)
 	}
 }
 
-func TestAuthenticationRejectsResetTokenIssuanceForInactiveTargetAsValidation(t *testing.T) {
+func TestAuthenticationRejectsResetTokenForInactiveAccountButNotInactiveActor(t *testing.T) {
 	database, _, service, actor := authenticationTestService(t)
 	account, err := service.CreateAccount(context.Background(), CreateAccountRequest{
 		ActorID: actor.ID, Login: "inactive-reset-target@example.com", TemporaryPassword: "Inactive-Reset-Target-1",
@@ -323,10 +327,12 @@ func TestAuthenticationRejectsResetTokenIssuanceForInactiveTargetAsValidation(t 
 	if err := database.Model(&authz.AuthzActor{}).Where("id = ?", actor.ID).Update("active", false).Error; err != nil {
 		t.Fatalf("deactivate actor: %v", err)
 	}
-	_, err = service.IssuePasswordResetToken(context.Background(), account.ID)
-	validation = nil
-	if !errors.As(err, &validation) || validation.ValidationFields()["accountId"] == "" {
-		t.Fatalf("expected inactive target actor validation, got %v", err)
+	reset, err := service.IssuePasswordResetToken(context.Background(), account.ID)
+	if err != nil {
+		t.Fatalf("active Authentication Account must remain eligible for password recovery when its tenant Actor is inactive: %v", err)
+	}
+	if reset.AccountID != account.ID || reset.Token == "" {
+		t.Fatalf("unexpected Account-level reset token after Actor deactivation: %#v", reset)
 	}
 }
 

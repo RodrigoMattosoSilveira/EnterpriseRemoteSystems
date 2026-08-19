@@ -136,8 +136,8 @@ Expected protected-endpoint behavior:
 
 - missing or expired session is rejected with `authentication_required`
 - missing tenant selection is rejected with `tenant_selection_required`
-- a tenant outside the session actor's persisted grants is rejected
-- an authorized session actor succeeds
+- a tenant with no active Account-owned Actor is rejected with `tenant_actor_unavailable`
+- an Account-owned Actor backed by the selected tenant's valid identity succeeds
 - actor-spoofing headers do not change a valid session identity
 - denied attempts are audited when the operation reaches the authorization/audit path
 

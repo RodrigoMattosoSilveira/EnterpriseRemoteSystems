@@ -1,10 +1,10 @@
 # Persisted authorization actor operating model
 
-ERS uses the login-backed HTTP session as the authoritative actor identity for protected application requests. The browser sends only the HTTP-only session cookie and an optional selected-tenant hint; it does not choose its authorization actor.
+ERS uses the login-backed HTTP session as the authoritative Authentication Account identity for protected application requests. The browser sends only the HTTP-only session cookie and an optional selected-tenant hint; the backend resolves the Account-owned Actor for that tenant and the browser never chooses its authorization actor.
 
 ## Authoritative permissions
 
-For normal application requests, the backend resolves the session to its persisted `authz_actors` record and loads active role grants from `authz_actor_role_grants` for the selected tenant. Effective permissions come only from active persisted roles and permissions.
+For normal application requests, the backend resolves the Account session plus selected tenant to the appropriate persisted `authz_actors` record, then loads intrinsic identity permissions and active delegated role grants for that Actor. Effective permissions come only from the persisted Account/Actor/Membership identity and active persisted delegated authorization.
 
 `X-Actor-Permissions` is no longer accepted as a fallback when the authorization store is available. This prevents a browser, proxy, or API client from granting itself wildcard permissions.
 
@@ -37,4 +37,6 @@ Create a second application administrator and verify it before retiring or chang
 
 ## Tenant selection
 
-The same authenticated actor may have grants for more than one tenant. `X-Tenant-ID` is retained only as a tenant-selection hint. The backend validates that selection against the session actor's persisted grants. Global application-administrator grants apply to every tenant; tenant-scoped grants apply only to their persisted tenant.
+The HTTP session authenticates an Authentication Account, not one tenant Actor. `X-Tenant-ID` is retained only as a tenant-selection hint. For an ordinary Account, the backend resolves the Account-owned active TENANT Actor whose binding and ACTIVE Person–Tenant Membership both belong to that tenant. Selecting another tenant therefore selects another Actor while the Account session remains unchanged. A missing/inactive tenant Actor fails with `tenant_actor_unavailable`; ERS never borrows an Actor from another tenant.
+
+GLOBAL Application Administrator Accounts remain APPLICATION scoped. Until Bite 30H removes the transitional standing tenant compatibility, their tenant selector may enumerate all active tenants, but every selection continues to resolve the same GLOBAL Actor rather than creating or assuming a tenant Actor.

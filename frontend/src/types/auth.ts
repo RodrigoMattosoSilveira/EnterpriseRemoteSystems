@@ -1,10 +1,6 @@
 export type AuthSession = {
   accountId: string;
-  actorId: string;
-  actorKey: string;
   displayName: string;
-  personId?: string;
-  collaboratorId?: string;
   login: string;
   mustChangePassword: boolean;
   expiresAt: string;
@@ -85,6 +81,10 @@ export type AuthTenantOption = {
   code: string;
   name: string;
   roleCodes: string[];
+  actorRecordId?: string;
+  actorKey?: string;
+  actorScope?: string;
+  membershipId?: string;
 };
 
 export type AccountReactivationRequest = {

@@ -2,6 +2,7 @@ package authentication
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -158,6 +159,27 @@ func TestAccountActorFoundationMakesApplicationAdministratorGlobalOnly(t *testin
 		t.Fatalf("Application Administrator Actor must have no tenant identity: %#v", refreshed)
 	}
 
+	for _, tenant := range []appdb.Tenant{
+		{BaseModel: appdb.BaseModel{ID: "tenant-a", CreatedAt: now, UpdatedAt: now}, Code: "A", Name: "Tenant A", Active: true},
+		{BaseModel: appdb.BaseModel{ID: "tenant-b", CreatedAt: now, UpdatedAt: now}, Code: "B", Name: "Tenant B", Active: true},
+	} {
+		if err := database.Create(&tenant).Error; err != nil {
+			t.Fatalf("create active tenant %s: %v", tenant.ID, err)
+		}
+	}
+	options, err := authz.NewGORMStore(database).ListAccountTenantOptions(context.Background(), account.ID)
+	if err != nil {
+		t.Fatalf("list global Account tenant options: %v", err)
+	}
+	if len(options) != 2 {
+		t.Fatalf("global Application Administrator compatibility should expose active tenants, got %#v", options)
+	}
+	for _, option := range options {
+		if option.ActorRecordID != actor.ID || option.ActorKey != actor.ActorKey || option.ActorScope != string(authz.ActorScopeApplication) || option.MembershipID != "" {
+			t.Fatalf("global tenant option must advertise the same GLOBAL Actor without tenant Membership identity: %#v", option)
+		}
+	}
+
 	// Regression: hydrating Account Actor bindings must execute valid SQLite.
 	// `PRIMARY` is a SQLite keyword, so the projection alias must not use it.
 	record, err := NewRepository(database).FindAccountByID(context.Background(), account.ID)
@@ -219,6 +241,16 @@ func TestCreatePersonAccountReusesGlobalAccountAndAddsSecondTenantActor(t *testi
 	if len(options) != 2 {
 		t.Fatalf("expected both tenant options from Account Actors, got %#v", options)
 	}
+	actorsByTenant := map[string]AccountActorResponse{}
+	for _, actor := range second.Actors {
+		actorsByTenant[actor.TenantID] = actor
+	}
+	for _, option := range options {
+		bound := actorsByTenant[option.ID]
+		if option.ActorScope != string(authz.ActorScopeTenant) || option.ActorRecordID != bound.ActorID || option.ActorKey != bound.ActorKey || option.MembershipID != bound.MembershipID {
+			t.Fatalf("tenant option must identify its exact Account-owned Actor and Membership: option=%#v actor=%#v", option, bound)
+		}
+	}
 	for _, tenantID := range []string{"tenant-a", "tenant-b"} {
 		resolved, err := authz.NewGORMStore(database).FindAccountActor(context.Background(), second.ID, tenantID)
 		if err != nil {
@@ -230,6 +262,60 @@ func TestCreatePersonAccountReusesGlobalAccountAndAddsSecondTenantActor(t *testi
 		if len(resolved.RoleCodes) != 0 {
 			t.Fatalf("fresh Person Account Actor should need no delegated Role Grant, got %#v", resolved.RoleCodes)
 		}
+	}
+
+	login, err := service.Login(context.Background(), LoginRequest{Login: "shared@example.com", Password: "Shared-Password-1"}, "", "")
+	if err != nil {
+		t.Fatalf("login multi-tenant Account: %v", err)
+	}
+	tenantAActor := actorsByTenant["tenant-a"]
+	if _, err := authz.NewGORMStore(database).SetActorActive(context.Background(), tenantAActor.ActorID, false); err != nil {
+		t.Fatalf("deactivate only tenant-a Actor: %v", err)
+	}
+	if _, err := service.ResolveSession(context.Background(), login.Token); err != nil {
+		t.Fatalf("tenant Actor deactivation must not revoke the Account-authenticated session: %v", err)
+	}
+	options, err = authz.NewGORMStore(database).ListAccountTenantOptions(context.Background(), second.ID)
+	if err != nil {
+		t.Fatalf("list options after one Actor deactivation: %v", err)
+	}
+	if len(options) != 1 || options[0].ID != "tenant-b" {
+		t.Fatalf("inactive tenant Actor must disappear independently from Account options, got %#v", options)
+	}
+	if _, err := authz.NewGORMStore(database).FindAccountActor(context.Background(), second.ID, "tenant-a"); !errors.Is(err, authz.ErrTenantActorUnavailable) {
+		t.Fatalf("inactive selected Actor must report tenant Actor unavailable without invalidating the Account session, got %v", err)
+	}
+	if _, err := authz.NewGORMStore(database).SetActorActive(context.Background(), tenantAActor.ActorID, true); err != nil {
+		t.Fatalf("reactivate tenant-a Actor: %v", err)
+	}
+	options, err = authz.NewGORMStore(database).ListAccountTenantOptions(context.Background(), second.ID)
+	if err != nil || len(options) != 2 {
+		t.Fatalf("reactivating one Actor must restore only its tenant option: options=%#v err=%v", options, err)
+	}
+
+	inactiveStatus := appdb.ReferenceData{
+		BaseModel: appdb.BaseModel{ID: "status-tenant-a-inactive", CreatedAt: now, UpdatedAt: now},
+		TenantID:  "tenant-a",
+		Type:      "person_status",
+		Code:      "INACTIVE",
+		Label:     "Inactive",
+		Active:    true,
+	}
+	if err := database.Create(&inactiveStatus).Error; err != nil {
+		t.Fatalf("create inactive Membership status: %v", err)
+	}
+	if err := database.Model(&appdb.PersonTenantMembership{}).Where("id = ?", tenantAActor.MembershipID).Update("status_id", inactiveStatus.ID).Error; err != nil {
+		t.Fatalf("deactivate only tenant-a Membership: %v", err)
+	}
+	options, err = authz.NewGORMStore(database).ListAccountTenantOptions(context.Background(), second.ID)
+	if err != nil {
+		t.Fatalf("list options after Membership deactivation: %v", err)
+	}
+	if len(options) != 1 || options[0].ID != "tenant-b" {
+		t.Fatalf("inactive Membership must remove only its tenant option, got %#v", options)
+	}
+	if _, err := authz.NewGORMStore(database).FindAccountActor(context.Background(), second.ID, "tenant-a"); !errors.Is(err, authz.ErrTenantActorUnavailable) {
+		t.Fatalf("selected tenant with inactive Membership must be unavailable without cross-tenant fallback, got %v", err)
 	}
 }
 

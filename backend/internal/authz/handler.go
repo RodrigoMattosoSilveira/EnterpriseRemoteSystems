@@ -274,6 +274,9 @@ func writeAuthorizationHTTPError(c fiber.Ctx, err error) error {
 	if errors.Is(err, ErrTenantSelectionRequired) {
 		return c.Status(fiber.StatusForbidden).JSON(httpx.APIResponse{Error: &httpx.APIError{Code: "tenant_selection_required", Message: "A specific tenant must be selected for this operation"}})
 	}
+	if errors.Is(err, ErrTenantActorUnavailable) {
+		return c.Status(fiber.StatusForbidden).JSON(httpx.APIResponse{Error: &httpx.APIError{Code: "tenant_actor_unavailable", Message: "The authenticated account has no active actor for the selected tenant"}})
+	}
 	if errors.Is(err, ErrMissingActor) {
 		return c.Status(fiber.StatusUnauthorized).JSON(httpx.APIResponse{Error: &httpx.APIError{Code: "missing_actor", Message: "Authorization actor is required"}})
 	}
