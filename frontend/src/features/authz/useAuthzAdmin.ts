@@ -43,6 +43,11 @@ export function useAuthzRoles(actor: AuthzAdminRequestActor) {
     queryKey: [...authzQueryKey(actor), "roles"],
     queryFn: () => listAuthzRoles(actor),
     enabled: enabled(actor),
+    // Roles are application-global control-plane data. Changing the selected
+    // tenant only changes the context used to validate the request and the
+    // target of a tenant grant; it must not blank the catalog while the new
+    // query key revalidates.
+    placeholderData: (previousData) => previousData,
   });
 }
 
@@ -51,6 +56,9 @@ export function useAuthzPermissions(actor: AuthzAdminRequestActor) {
     queryKey: [...authzQueryKey(actor), "permissions"],
     queryFn: () => listAuthzPermissions(actor),
     enabled: enabled(actor),
+    // Permissions are application-global control-plane data; keep the current
+    // catalog visible while a tenant-context change is revalidated.
+    placeholderData: (previousData) => previousData,
   });
 }
 
@@ -71,6 +79,10 @@ export function useAuthzActors(actor: AuthzAdminRequestActor) {
     queryKey: [...authzQueryKey(actor), "actors"],
     queryFn: () => listAuthzActors(actor),
     enabled: enabled(actor),
+    // /authz/actors is the application-global Actor catalog. Preserve it
+    // during tenant selection changes so Actor cards stay mounted while the
+    // request is revalidated with the new X-Tenant-ID context.
+    placeholderData: (previousData) => previousData,
   });
 }
 
