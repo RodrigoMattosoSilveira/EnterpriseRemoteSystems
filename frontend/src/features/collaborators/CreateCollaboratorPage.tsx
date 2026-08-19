@@ -1,5 +1,5 @@
 import { useMemo, useState, type FormEvent } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { ApiError } from "../../api/client";
 import { ApiErrorPanel } from "../../components/ApiErrorPanel";
 import type {
@@ -46,6 +46,11 @@ const initialForm: FormState = {
 
 export function CreateCollaboratorPage() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const requestedPersonId = searchParams.get("personId")?.trim() ?? "";
+  const returnHref = requestedPersonId
+    ? `/people/${encodeURIComponent(requestedPersonId)}`
+    : "/collaborators";
   const peopleQuery = usePeople({
     pageSize: 1000,
   });
@@ -58,7 +63,10 @@ export function CreateCollaboratorPage() {
   const collaboratorsQuery = useCollaborators();
   const createMutation = useCreateCollaborator();
 
-  const [form, setForm] = useState<FormState>(initialForm);
+  const [form, setForm] = useState<FormState>(() => ({
+    ...initialForm,
+    personId: requestedPersonId,
+  }));
   const [personSearch, setPersonSearch] = useState("");
   const [clientValidationError, setClientValidationError] = useState("");
 
@@ -291,8 +299,8 @@ export function CreateCollaboratorPage() {
     <main className="min-h-screen bg-gray-50">
       <header className="sticky top-0 z-10 border-b bg-white/95 px-4 py-4 backdrop-blur">
         <div className="mx-auto max-w-4xl">
-          <Link className="text-sm text-gray-500 underline" to="/collaborators">
-            Back to Collaborators
+          <Link className="text-sm text-gray-500 underline" to={returnHref}>
+            {requestedPersonId ? "Back to Person" : "Back to Collaborators"}
           </Link>
           <h1 className="mt-3 text-2xl font-bold text-gray-950">
             New Collaborator
@@ -376,6 +384,17 @@ export function CreateCollaboratorPage() {
                   )}
                 </div>
               </div>
+
+              {requestedPersonId && !selectedPerson && (
+                <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+                  <p className="font-semibold">
+                    This Person is not currently eligible for a new Collaborator journey.
+                  </p>
+                  <p className="mt-1">
+                    They may already have an active Collaborator journey, or their Person profile may no longer be complete. You can choose another eligible Person below.
+                  </p>
+                </div>
+              )}
 
               {!selectedPerson && (
                 <div className="relative mt-4">
@@ -588,7 +607,7 @@ export function CreateCollaboratorPage() {
 
                 <div className="flex justify-end gap-3">
                   <Link
-                    to="/collaborators"
+                    to={returnHref}
                     className="rounded-xl border border-gray-300 bg-white px-5 py-3 text-sm font-semibold text-gray-700 shadow-sm"
                   >
                     Cancel

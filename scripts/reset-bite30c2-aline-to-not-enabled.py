@@ -30,8 +30,8 @@ pre-provisioning state, this script:
   4. temporarily drops the SQLite Account-deletion prohibition trigger;
   5. deletes only Aline's Authentication Account;
   6. immediately recreates the prohibition trigger;
-  7. preserves Aline's global Person, active Tenant-A Membership, Tenant-A
-     authorization Actor, and PERSON role grant;
+  7. preserves Aline's global Person, active Tenant-A Membership, and Tenant-A
+     authorization Actor; self-service requires no Role Grant after Bite 30D;
   8. runs PRAGMA foreign_key_check before committing.
 
 The preserved, now-unbound Tenant-A Actor will be reused when Authentication is
@@ -338,38 +338,25 @@ def main() -> int:
             "Refusing to reset Aline because the preserved Tenant-A Actor is inactive."
         )
 
-    # Ensure the Actor has only the expected self-service PERSON role in Tenant A.
+    # Person 1 is an intrinsic self-service fixture. It must not have active
+    # delegated Roles; otherwise deleting the Account could destroy a test state
+    # that has evolved beyond the disposable provisioning scenario.
     grants = conn.execute(
         """
-        SELECT
-            g.id,
-            g.tenant_id,
-            g.active,
-            r.code AS role_code
+        SELECT g.id, g.tenant_id, g.active, r.code AS role_code
         FROM authz_actor_role_grants g
-        JOIN authz_roles r
-          ON r.id = g.role_id
-        WHERE g.actor_id = ?
+        JOIN authz_roles r ON r.id = g.role_id
+        WHERE g.actor_id = ? AND g.active = 1
         ORDER BY r.code, g.tenant_id
         """,
         (binding["actor_id"],),
     ).fetchall()
-
-    unexpected_grants = [
-        row
-        for row in grants
-        if row["role_code"] != "PERSON"
-        or row["tenant_id"] != membership["tenant_id"]
-    ]
-    if unexpected_grants:
+    if grants:
         conn.close()
-        detail = ", ".join(
-            f"{row['role_code']}@{row['tenant_id']}"
-            for row in unexpected_grants
-        )
+        detail = ", ".join(f"{row['role_code']}@{row['tenant_id']}" for row in grants)
         raise SystemExit(
-            "Refusing to reset Aline because her Actor has unexpected role grants: "
-            + detail
+            "Refusing to reset Aline because her intrinsic self-service Actor has "
+            "delegated role grants: " + detail
         )
 
     if not args.no_backup:
@@ -390,7 +377,7 @@ def main() -> int:
         conn.execute("BEGIN IMMEDIATE")
 
         # Remove Account-owned artifacts first. The Person, Membership, Actor, and
-        # Actor role grant are intentionally preserved.
+        # Actor delegated grants (normally none for Person 1) are intentionally preserved.
         conn.execute(
             "DELETE FROM auth_sessions WHERE account_id = ?",
             (account["id"],),
@@ -513,7 +500,7 @@ def main() -> int:
     print("  global Person")
     print("  active Tenant-A Membership")
     print("  active Tenant-A authorization Actor")
-    print("  PERSON role grant")
+    print("  intrinsic self-service identity (no Role Grant required)")
     print()
     print("Removed:")
     print("  Authentication Account")

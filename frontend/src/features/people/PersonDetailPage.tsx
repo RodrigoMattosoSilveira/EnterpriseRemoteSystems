@@ -6,6 +6,7 @@ import { ApiErrorPanel } from "../../components/ApiErrorPanel";
 import { useAuthorizationContext } from "../../components/layout/AuthorizationContext";
 import { useReferenceDataByType } from "../reference-data/useReferenceData";
 import { PersonAuthenticationSection } from "./PersonAuthenticationSection";
+import { useCollaboratorCandidates } from "../collaborators/useCollaborators";
 
 const FALLBACK_ACTIVE_STATUS_ID = "ref-person-status-active";
 
@@ -15,9 +16,16 @@ export function PersonDetailPage() {
   const canBrowsePeople = actor.permissions.includes("*") || actor.permissions.includes("people.read");
   const canManageTenantAuthentication =
     actor.scope === "TENANT" && actor.roleCodes.includes("TENANT_ADMIN");
+  const canCreateCollaboratorJourney =
+    actor.scope === "TENANT" &&
+    (actor.permissions.includes("*") ||
+      actor.permissions.includes("collaborators.create"));
   const [successMessage, setSuccessMessage] = useState("");
 
   const personQuery = usePerson(id);
+  const collaboratorCandidatesQuery = useCollaboratorCandidates(
+    canCreateCollaboratorJourney,
+  );
   const mutation = useUpdatePerson(id);
   const statusesQuery = useReferenceDataByType("person_status");
 
@@ -48,6 +56,12 @@ export function PersonDetailPage() {
     activeStatuses.find((status) => status.code === "ACTIVE")?.id ??
     personQuery.data.statusId ??
     FALLBACK_ACTIVE_STATUS_ID;
+  const collaboratorCandidates = Array.isArray(collaboratorCandidatesQuery.data)
+    ? collaboratorCandidatesQuery.data
+    : [];
+  const canStartCollaboratorJourney =
+    canCreateCollaboratorJourney &&
+    collaboratorCandidates.some((person) => person.id === personQuery.data.id);
 
   return (
     <main className="mx-auto max-w-3xl p-4">
@@ -73,15 +87,25 @@ export function PersonDetailPage() {
               </p>
             </div>
 
-            <span
-              className={`rounded-full px-3 py-1 text-xs font-semibold ${
-                personQuery.data.canCreateCollaborator
-                  ? "bg-green-100 text-green-800"
-                  : "bg-amber-100 text-amber-800"
-              }`}
-            >
-              {personQuery.data.canCreateCollaborator ? "Complete" : "Incomplete"}
-            </span>
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              {canStartCollaboratorJourney && (
+                <Link
+                  to={`/collaborators/new?personId=${encodeURIComponent(personQuery.data.id)}`}
+                  className="rounded-xl bg-gray-950 px-4 py-2 text-sm font-semibold text-white shadow-sm"
+                >
+                  Create Collaborator
+                </Link>
+              )}
+              <span
+                className={`rounded-full px-3 py-1 text-xs font-semibold ${
+                  personQuery.data.canCreateCollaborator
+                    ? "bg-green-100 text-green-800"
+                    : "bg-amber-100 text-amber-800"
+                }`}
+              >
+                {personQuery.data.canCreateCollaborator ? "Complete" : "Incomplete"}
+              </span>
+            </div>
           </div>
         </div>
       </header>

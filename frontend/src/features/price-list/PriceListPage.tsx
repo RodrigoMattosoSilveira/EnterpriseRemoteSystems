@@ -1,6 +1,7 @@
 import { useMemo, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { ApiErrorPanel } from "../../components/ApiErrorPanel";
+import { useOptionalAuthorizationContext } from "../../components/layout/AuthorizationContext";
 import type { PriceListItem, PriceListItemInput, PriceListItemType } from "../../types/priceList";
 import {
   emptyPriceListItemFormValue,
@@ -18,6 +19,10 @@ import {
 type CategoryFilter = "ALL" | "CANTEEN" | "ADMINISTRATIVE";
 
 export function PriceListPage() {
+  const actor = useOptionalAuthorizationContext();
+  const canManageGoldPrices = Boolean(
+    actor && (actor.permissions.includes("*") || actor.permissions.includes("gold_prices.manage")),
+  );
   const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>("ALL");
   const [includeInactive, setIncludeInactive] = useState(false);
   const [isCreateFormOpen, setIsCreateFormOpen] = useState(false);
@@ -157,9 +162,11 @@ export function PriceListPage() {
           </div>
 
           <div className="flex flex-wrap items-center justify-end gap-2">
-            <Link className="text-sm font-semibold text-gray-700 underline" to="/admin/gold-prices">
-              Gold Prices
-            </Link>
+            {canManageGoldPrices && (
+              <Link className="text-sm font-semibold text-gray-700 underline" to="/admin/gold-prices">
+                Gold Prices
+              </Link>
+            )}
             <Link className="text-sm font-semibold text-gray-700 underline" to="/admin/reference-data">
               Reference Data
             </Link>

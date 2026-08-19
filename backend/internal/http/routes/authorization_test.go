@@ -202,8 +202,11 @@ func TestRequirePermissionOrSelfPersonAllowsMatchingSelfActor(t *testing.T) {
 		ID:       "person-actor",
 		TenantID: "default",
 		PersonID: "person-self",
-		Scope:    authz.ActorScopeSelf,
+		Scope:    authz.ActorScopeTenant,
 		Permissions: map[authz.Permission]struct{}{
+			authz.PermissionPeopleSelfRead: {},
+		},
+		IntrinsicPermissions: map[authz.Permission]struct{}{
 			authz.PermissionPeopleSelfRead: {},
 		},
 	}}
@@ -225,13 +228,48 @@ func TestRequirePermissionOrSelfPersonAllowsMatchingSelfActor(t *testing.T) {
 	}
 }
 
+func TestRequirePermissionOrSelfPersonRejectsDelegatedSelfPermissionWithoutIntrinsicIdentityAuthority(t *testing.T) {
+	store := fakeActorStore{actor: &authz.Actor{
+		ID:       "person-actor",
+		TenantID: "default",
+		PersonID: "person-self",
+		Scope:    authz.ActorScopeTenant,
+		Permissions: map[authz.Permission]struct{}{
+			authz.PermissionPeopleSelfRead: {},
+		},
+		DelegatedPermissions: map[authz.Permission]struct{}{
+			authz.PermissionPeopleSelfRead: {},
+		},
+		IntrinsicPermissions: map[authz.Permission]struct{}{},
+	}}
+
+	app := fiber.New()
+	app.Get("/people/:id", requirePermissionOrSelfPerson(Dependencies{ActorStore: store}, authz.PermissionPeopleRead, authz.PermissionPeopleSelfRead, "id"), func(c fiber.Ctx) error {
+		return c.SendStatus(fiber.StatusNoContent)
+	})
+
+	req := httptest.NewRequest(fiber.MethodGet, "/people/person-self", nil)
+	req.Header.Set(authz.HeaderActorID, "person-actor")
+	req.Header.Set(authz.HeaderTenantID, "default")
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	if resp.StatusCode != fiber.StatusForbidden {
+		t.Fatalf("expected 403, got %d", resp.StatusCode)
+	}
+}
+
 func TestRequirePermissionOrSelfPersonRejectsDifferentPerson(t *testing.T) {
 	store := fakeActorStore{actor: &authz.Actor{
 		ID:       "person-actor",
 		TenantID: "default",
 		PersonID: "person-self",
-		Scope:    authz.ActorScopeSelf,
+		Scope:    authz.ActorScopeTenant,
 		Permissions: map[authz.Permission]struct{}{
+			authz.PermissionPeopleSelfRead: {},
+		},
+		IntrinsicPermissions: map[authz.Permission]struct{}{
 			authz.PermissionPeopleSelfRead: {},
 		},
 	}}
@@ -257,8 +295,11 @@ func TestRequirePermissionOrSelfPersonRejectsSelfPermissionWithoutLinkedPerson(t
 	store := fakeActorStore{actor: &authz.Actor{
 		ID:       "person-actor",
 		TenantID: "default",
-		Scope:    authz.ActorScopeSelf,
+		Scope:    authz.ActorScopeTenant,
 		Permissions: map[authz.Permission]struct{}{
+			authz.PermissionPeopleSelfRead: {},
+		},
+		IntrinsicPermissions: map[authz.Permission]struct{}{
 			authz.PermissionPeopleSelfRead: {},
 		},
 	}}
@@ -285,8 +326,11 @@ func TestRequirePermissionOrSelfCollaboratorAllowsMatchingSelfActor(t *testing.T
 		ID:             "collaborator-actor",
 		TenantID:       "default",
 		CollaboratorID: "collaborator-self",
-		Scope:          authz.ActorScopeSelf,
+		Scope:          authz.ActorScopeTenant,
 		Permissions: map[authz.Permission]struct{}{
+			authz.PermissionCollaboratorsSelfRead: {},
+		},
+		IntrinsicPermissions: map[authz.Permission]struct{}{
 			authz.PermissionCollaboratorsSelfRead: {},
 		},
 	}}
@@ -313,8 +357,11 @@ func TestRequirePermissionOrSelfCollaboratorRejectsDifferentCollaborator(t *test
 		ID:             "collaborator-actor",
 		TenantID:       "default",
 		CollaboratorID: "collaborator-self",
-		Scope:          authz.ActorScopeSelf,
+		Scope:          authz.ActorScopeTenant,
 		Permissions: map[authz.Permission]struct{}{
+			authz.PermissionCollaboratorsSelfRead: {},
+		},
+		IntrinsicPermissions: map[authz.Permission]struct{}{
 			authz.PermissionCollaboratorsSelfRead: {},
 		},
 	}}

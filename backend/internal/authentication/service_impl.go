@@ -90,13 +90,6 @@ func (s *service) Login(ctx context.Context, req LoginRequest, userAgent string,
 	}
 
 	now := s.clock().UTC()
-	if err := s.repository.EnsureActorPersonSelfAccess(ctx, account.ActorID, now); err != nil {
-		return LoginResult{}, err
-	}
-	account, err = s.repository.FindAccountByID(ctx, account.ID)
-	if err != nil {
-		return LoginResult{}, err
-	}
 
 	rawToken, tokenHash, err := s.newToken("ers_s_")
 	if err != nil {
@@ -375,7 +368,7 @@ func (s *service) CreateAccount(ctx context.Context, req CreateAccountRequest) (
 		}
 		if !hasTenantAccess {
 			return AccountResponse{}, &ValidationError{Fields: map[string]string{
-				"actorId": "Authorization actor must have at least one active role grant for an active tenant",
+				"actorId": "Authorization actor must be linked to an active Person-Tenant Membership before creating an account",
 			}}
 		}
 		account, err = s.repository.CreateAccount(ctx, accountInput)

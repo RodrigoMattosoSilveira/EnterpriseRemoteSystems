@@ -13,7 +13,7 @@ import {
 import { JourneyDaysRemaining } from "../../components/JourneyDaysRemaining";
 import type { AuthzActor } from "../../types/authz";
 import type { SettlementPreview, SecondApprovalInput } from "../../types/settlements";
-import { useAuthzActors, useCurrentAuthzActor } from "../authz/useAuthzAdmin";
+import { useCurrentAuthzActor, useTenantAuthzActors } from "../authz/useAuthzAdmin";
 import { useSecondPersonApprovalPolicy } from "../current-accounts/useSecondPersonApprovalPolicy";
 import {
   useCloseJourney,
@@ -244,7 +244,7 @@ function SettlementActionPanel({
   const requestActor = useMemo(() => authorizationRequestContext(tenantId), [tenantId]);
   const currentActorQuery = useCurrentAuthzActor(requestActor);
   const secondApprovalPolicy = useSecondPersonApprovalPolicy(requestActor);
-  const actorsQuery = useAuthzActors(requestActor);
+  const actorsQuery = useTenantAuthzActors(requestActor);
   const [captureOptionalSecondApproval, setCaptureOptionalSecondApproval] =
     useState(false);
   const [secondApprovedBy, setSecondApprovedBy] = useState("");

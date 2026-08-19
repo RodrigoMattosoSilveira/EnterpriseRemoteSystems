@@ -124,7 +124,12 @@ func (r *gormRepository) ListTenantAdminCandidates(ctx context.Context, tenantID
 	}
 
 	var actors []authz.AuthzActor
-	if err := r.database.WithContext(ctx).Order("actor_key ASC").Find(&actors).Error; err != nil {
+	actorQuery := r.database.WithContext(ctx).Model(&authz.AuthzActor{})
+	if r.database.Migrator().HasTable("auth_account_actors") {
+		actorQuery = actorQuery.
+			Joins("JOIN auth_account_actors aa ON aa.actor_id = authz_actors.id AND aa.scope_type = ? AND aa.tenant_id = ?", "TENANT", strings.TrimSpace(tenantID))
+	}
+	if err := actorQuery.Order("authz_actors.actor_key ASC").Find(&actors).Error; err != nil {
 		return nil, err
 	}
 
@@ -175,6 +180,9 @@ func (r *gormRepository) AssignTenantAdmin(ctx context.Context, tenantID string,
 
 		var role authz.AuthzRole
 		if err := tx.Where("code = ? AND active = ?", string(authz.RoleTenantAdmin), true).First(&role).Error; err != nil {
+			return err
+		}
+		if err := authz.ValidateDelegatedRoleGrant(tx, actor.ID, role, tenant.ID, true); err != nil {
 			return err
 		}
 

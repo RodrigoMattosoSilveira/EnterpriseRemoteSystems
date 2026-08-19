@@ -146,7 +146,13 @@ describe("JourneySettlementPanel", () => {
       (fieldControl("Second approver") as HTMLSelectElement).options,
     ).map((option) => option.value);
     expect(approverOptions).toContain("tenant-approver@example.com");
-    expect(approverOptions).not.toContain("bootstrap-admin");
+    expect(approverOptions).not.toContain("tenant-admin@example.com");
+    expect(
+      requests.some((request) => request.url.includes("/authz/tenant-actors")),
+    ).toBe(true);
+    expect(
+      requests.some((request) => request.url.endsWith("/authz/actors")),
+    ).toBe(false);
 
     await setFieldValue("BRL amount", "25.50");
     await setFieldValue("Reason code", "COLLABORATOR_REQUESTED_PAYOUT");
@@ -203,8 +209,8 @@ function mockSettlementFetch(options: MockSettlementFetchOptions = {}) {
   const actors = options.actors ?? [
     {
       id: "actor-primary",
-      actorKey: "bootstrap-admin",
-      displayName: "Bootstrap Admin",
+      actorKey: "tenant-admin@example.com",
+      displayName: "Tenant Administrator",
       active: true,
       roleGrants: [],
     },
@@ -239,16 +245,16 @@ function mockSettlementFetch(options: MockSettlementFetchOptions = {}) {
 
     if (url.includes("/authz/current-actor")) {
       return jsonResponse({
-        actorKey: "bootstrap-admin",
+        actorKey: "tenant-admin@example.com",
         actorRecordId: "actor-primary",
         tenantId: "default",
-        scope: "APPLICATION",
-        roleCodes: ["APPLICATION_ADMIN"],
+        scope: "TENANT",
+        roleCodes: ["TENANT_ADMIN"],
         permissions: ["*"],
       });
     }
 
-    if (url.includes("/authz/actors")) {
+    if (url.includes("/authz/tenant-actors")) {
       return jsonResponse(actors);
     }
 

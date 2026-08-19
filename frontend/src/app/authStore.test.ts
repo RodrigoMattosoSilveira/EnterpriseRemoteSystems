@@ -131,6 +131,32 @@ describe("authStore", () => {
     });
   });
 
+  it("ignores a stale initial anonymous result after a newer login succeeds", async () => {
+    let rejectInitialSession: ((error: unknown) => void) | undefined;
+    vi.spyOn(authApi, "loadAuthSession").mockImplementation(
+      () =>
+        new Promise<AuthSession>((_resolve, reject) => {
+          rejectInitialSession = reject;
+        }),
+    );
+    vi.spyOn(authApi, "login").mockResolvedValue(session);
+
+    const initialLoad = initializeAuthSession();
+    await authenticate({ login: "admin@example.com", password: "password" });
+
+    rejectInitialSession?.(
+      new ApiError({ message: "Authentication required", status: 401 }),
+    );
+    await initialLoad;
+
+    expect(getAuthState()).toEqual({
+      status: "authenticated",
+      session,
+      error: null,
+      reason: null,
+    });
+  });
+
   it("deduplicates concurrent authenticated-session revalidation", async () => {
     vi.spyOn(authApi, "login").mockResolvedValue(session);
     const loadSession = vi.spyOn(authApi, "loadAuthSession").mockResolvedValue(session);

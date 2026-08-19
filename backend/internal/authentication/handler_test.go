@@ -112,6 +112,29 @@ func TestAuthenticationHandlerIssuesReadsAndClearsSessionCookie(t *testing.T) {
 	}
 }
 
+func TestAuthenticationHandlerMissingSessionDoesNotClearAnUnrelatedBrowserCookie(t *testing.T) {
+	_, _, service, _ := authenticationTestService(t)
+	handler := NewHandler(service, CookieConfig{Name: "ers_test_session", TTL: time.Hour}, nil, nil)
+	app := fiber.New()
+	app.Use(handler.SessionMiddleware())
+	app.Get("/session", handler.RequireSession, handler.CurrentSession)
+
+	request := httptest.NewRequest(http.MethodGet, "/session", nil)
+	response, err := app.Test(request)
+	if err != nil {
+		t.Fatalf("missing session request: %v", err)
+	}
+	if response.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("expected missing session status 401, got %d", response.StatusCode)
+	}
+	if response.Header.Get("Cache-Control") != "no-store" {
+		t.Fatalf("expected missing session response to disable caching, got %q", response.Header.Get("Cache-Control"))
+	}
+	if cookies := response.Cookies(); len(cookies) != 0 {
+		t.Fatalf("expected a cookie-less session probe not to emit a clearing cookie, got %#v", cookies)
+	}
+}
+
 func TestAuthenticationHandlerInactiveAccountLoginReturnsPreciseCodeForVerifiedCredentials(t *testing.T) {
 	_, _, service, actor := authenticationTestService(t)
 	account, err := service.CreateAccount(t.Context(), CreateAccountRequest{

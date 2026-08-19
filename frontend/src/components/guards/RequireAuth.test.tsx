@@ -1,4 +1,4 @@
-import { act, useEffect } from "react";
+import { StrictMode, act, useEffect } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import {
   createMemoryRouter,
@@ -63,7 +63,7 @@ describe("RequireAuth", () => {
     renderGuard("/people?view=cards");
 
     await waitFor(() => container.textContent?.includes("Mounted 1") === true);
-    expect(revalidateAuthSession).toHaveBeenCalledTimes(1);
+    expect(revalidateAuthSession).toHaveBeenCalledTimes(0);
 
     const button = container.querySelector<HTMLButtonElement>("button");
     expect(button).not.toBeNull();
@@ -76,15 +76,22 @@ describe("RequireAuth", () => {
     );
 
     expect(mountCount).toBe(1);
-    expect(revalidateAuthSession).toHaveBeenCalledTimes(1);
+    expect(revalidateAuthSession).toHaveBeenCalledTimes(0);
     expect(container.textContent).not.toContain("Verifying your session");
+  });
+
+  it("does not duplicate the fresh-session validation during StrictMode effect replay", async () => {
+    renderGuard("/people", true);
+
+    await waitFor(() => container.textContent?.includes("Location /people") === true);
+    expect(revalidateAuthSession).toHaveBeenCalledTimes(0);
   });
 
   it("keeps the mounted page while a focus revalidation is pending", async () => {
     renderGuard("/admin/authentication");
 
     await waitFor(() => container.textContent?.includes("Mounted 1") === true);
-    expect(revalidateAuthSession).toHaveBeenCalledTimes(1);
+    expect(revalidateAuthSession).toHaveBeenCalledTimes(0);
 
     let resolveFocusValidation: ((state: AuthState) => void) | undefined;
     revalidateAuthSession.mockImplementationOnce(
@@ -99,7 +106,7 @@ describe("RequireAuth", () => {
       await Promise.resolve();
     });
 
-    expect(revalidateAuthSession).toHaveBeenCalledTimes(2);
+    expect(revalidateAuthSession).toHaveBeenCalledTimes(1);
     expect(container.textContent).toContain("Mounted 1");
     expect(container.textContent).toContain("Verifying your session");
     expect(mountCount).toBe(1);
@@ -118,7 +125,7 @@ describe("RequireAuth", () => {
     renderGuard("/people");
 
     await waitFor(() => container.textContent?.includes("Mounted 1") === true);
-    expect(revalidateAuthSession).toHaveBeenCalledTimes(1);
+    expect(revalidateAuthSession).toHaveBeenCalledTimes(0);
 
     const button = container.querySelector<HTMLButtonElement>("button");
     expect(button).not.toBeNull();
@@ -126,7 +133,7 @@ describe("RequireAuth", () => {
       button?.click();
     });
 
-    await waitFor(() => revalidateAuthSession.mock.calls.length === 2);
+    await waitFor(() => revalidateAuthSession.mock.calls.length === 1);
     await waitFor(() =>
       container.textContent?.includes("Location /expenses") === true,
     );
@@ -135,7 +142,7 @@ describe("RequireAuth", () => {
   });
 });
 
-function renderGuard(initialEntry: string) {
+function renderGuard(initialEntry: string, strictMode = false) {
   const router = createMemoryRouter(
     [
       {
@@ -152,7 +159,8 @@ function renderGuard(initialEntry: string) {
 
   root = createRoot(container);
   act(() => {
-    root?.render(<RouterProvider router={router} />);
+    const app = <RouterProvider router={router} />;
+    root?.render(strictMode ? <StrictMode>{app}</StrictMode> : app);
   });
 }
 

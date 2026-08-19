@@ -3,7 +3,8 @@ import { apiFetch } from "../../api/client";
 import { shouldRetryQuery } from "../../app/queryRetryPolicy";
 import type { AuthzCurrentActor } from "../../types/authz";
 import { AuthzAdminPage } from "./AuthzAdminPage";
-import { canAccessAuthzAdministration } from "./authzAdminRouteAccess";
+import { TenantRoleDelegationPage } from "./TenantRoleDelegationPage";
+import { canAccessAuthzAdministration, canManageTenantRoleDelegation } from "./authzAdminRouteAccess";
 
 export const authzAdminCurrentActorQueryKey = [
   "authz-admin-route",
@@ -33,12 +34,16 @@ export function AuthzAdminRoute() {
     );
   }
 
-  if (!canAccessAuthzAdministration(currentActorQuery.data)) {
-    throw new Response("Forbidden", {
-      status: 403,
-      statusText: "Forbidden",
-    });
+  if (canAccessAuthzAdministration(currentActorQuery.data)) {
+    return <AuthzAdminPage />;
   }
 
-  return <AuthzAdminPage />;
+  if (canManageTenantRoleDelegation(currentActorQuery.data)) {
+    return <TenantRoleDelegationPage />;
+  }
+
+  throw new Response("Forbidden", {
+    status: 403,
+    statusText: "Forbidden",
+  });
 }
