@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient, type QueryFilters } from "@tanstack/react-query";
 import {
   createAuthzActor,
   getCurrentAuthzActor,
@@ -128,14 +128,34 @@ export function useGrantAuthzActorRole(actor: AuthzAdminRequestActor) {
       targetActorId: string;
       input: GrantAuthzActorRoleInput;
     }) => grantAuthzActorRole(actor, targetActorId, input),
-    onSuccess: (grant, { targetActorId }) => {
+    onMutate: async () => {
+      const filter = actorCatalogFilter(actor.actorId);
+      const seedActors = firstCachedActorCatalog(queryClient.getQueriesData<AuthzActor[]>(filter));
+
+      // A tenant-context change can leave /authz/actors in flight while the
+      // administrator submits a grant. Cancel those older reads before the
+      // write so a pre-grant response cannot overwrite the successful grant.
+      await queryClient.cancelQueries(filter);
+      return { seedActors };
+    },
+    onSuccess: (grant, { targetActorId }, context) => {
+      const filter = actorCatalogFilter(actor.actorId);
       const actorsKey = [...authzQueryKey(actor), "actors"] as const;
-      queryClient.setQueryData<AuthzActor[]>(actorsKey, (current) =>
+
+      // Keep every cached application Actor catalog coherent. The current
+      // tenant key can contain only React Query placeholder data, which is not
+      // written to the cache; seed that key from another cached catalog when
+      // necessary before applying the authoritative POST response.
+      queryClient.setQueriesData<AuthzActor[]>(filter, (current) =>
         upsertActorRoleGrant(current, targetActorId, grant),
       );
-      queryClient.invalidateQueries({
-        predicate: (query) => isActorCatalogQuery(query.queryKey, actor.actorId),
-      });
+      queryClient.setQueryData<AuthzActor[]>(actorsKey, (current) =>
+        upsertActorRoleGrant(current ?? context?.seedActors, targetActorId, grant),
+      );
+
+      // The canceled stale read can no longer win. Revalidate after the write
+      // so the visible nested Role Grant card comes from persisted server data.
+      queryClient.invalidateQueries({ ...filter, refetchType: "active" });
     },
   });
 }
@@ -157,6 +177,18 @@ function upsertActorRoleGrant(
     );
     return { ...actor, roleGrants: [...roleGrants, grant] };
   });
+}
+
+function actorCatalogFilter(actorId: string): QueryFilters {
+  return {
+    predicate: (query) => isActorCatalogQuery(query.queryKey, actorId),
+  };
+}
+
+function firstCachedActorCatalog(
+  entries: Array<[readonly unknown[], AuthzActor[] | undefined]>,
+): AuthzActor[] | undefined {
+  return entries.find(([, data]) => Array.isArray(data))?.[1];
 }
 
 function isActorCatalogQuery(queryKey: readonly unknown[], actorId: string): boolean {

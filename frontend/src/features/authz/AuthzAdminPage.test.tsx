@@ -420,6 +420,45 @@ describe("AuthzAdminPage", () => {
     expect(buttonInArticle("expense-admin", "Grant Role").disabled).toBe(true);
   });
 
+  it("rehydrates a persisted tenant grant with its own tenant after the page mounts", async () => {
+    const tenantId = "b16647b4-82a3-4d4e-99d0-c15ede05840b";
+    window.localStorage.setItem("ers.auth.selectedTenantId", "default");
+    actors.push({
+      id: "actor-expense-admin",
+      actorKey: "expense-admin",
+      displayName: "Expense Admin",
+      active: true,
+      roleGrants: [
+        {
+          id: "grant-expense-admin",
+          actorId: "actor-expense-admin",
+          roleId: "authz-role-tenant-admin",
+          roleCode: "TENANT_ADMIN",
+          tenantId,
+          scopeType: "TENANT",
+          active: true,
+        },
+      ],
+    });
+    mockAuthzFetch();
+
+    renderAuthzAdminPage();
+    await waitForText("Expense Admin");
+
+    const article = articleByText("expense-admin");
+    expect(
+      controlByLabel<HTMLSelectElement>(article, "Role", "select").value,
+    ).toBe("TENANT_ADMIN");
+    expect(
+      controlByLabel<HTMLInputElement>(article, "Grant tenant", "input").value,
+    ).toBe(tenantId);
+    expect(buttonInArticle("expense-admin", "Grant Role").disabled).toBe(true);
+    expect(article.textContent).toContain(`TENANT_ADMIN · ${tenantId}`);
+    expect(article.textContent).toContain(
+      `TENANT_ADMIN is already granted for ${tenantId}.`,
+    );
+  });
+
   it("uses the selected tenant for tenant grants and disables an existing grant", async () => {
     const tenantId = "b16647b4-82a3-4d4e-99d0-c15ede05840b";
     actors.push({

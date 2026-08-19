@@ -147,6 +147,15 @@ test("admin can create an authorization actor, grant a role, and revoke it", asy
   await expect(actorCard.getByLabel("Grant tenant")).toHaveValue(grantTenant);
   await expect(actorCard.getByRole("button", { name: "Grant Role" })).toBeDisabled();
 
+  // The grant state must survive a full route/page remount. A persisted tenant
+  // grant is the authoritative fallback for the Actor card; it must not return
+  // to APPLICATION_ADMIN / * merely because local select state was discarded.
+  await page.reload();
+  await expect(actorCard).toContainText(`${grantedRole} · ${grantTenant}`);
+  await expect(actorCard.getByLabel("Role")).toHaveValue(grantedRole);
+  await expect(actorCard.getByLabel("Grant tenant")).toHaveValue(grantTenant);
+  await expect(actorCard.getByRole("button", { name: "Grant Role" })).toBeDisabled();
+
   await actorCard.getByRole("button", { name: "Revoke" }).click();
 
   await expect(page.getByRole("status")).toContainText(

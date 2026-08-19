@@ -646,17 +646,29 @@ function ActorCard({
   // refresh can recreate cards; local card state would then fall back to the
   // first role (APPLICATION_ADMIN), changing a tenant grant target back to *.
   // Page-level state keeps the administrator's explicit Role choice stable.
+  const persistedGrantRoleCode = preferredPersistedGrantRoleCode(
+    actor,
+    roles,
+    selectedTenantId,
+  );
   const roleCode = roles.some((role) => role.code === selectedRoleCode)
     ? selectedRoleCode ?? ""
-    : roles[0]?.code ?? "";
+    : persistedGrantRoleCode || roles[0]?.code || "";
   const selectedRole = roles.find((role) => role.code === roleCode);
   const applicationScopedRole = isApplicationScopedRole(selectedRole);
+  const persistedSelectedRoleGrant = (actor.roleGrants ?? []).find(
+    (grant) => grant.active && grant.roleCode === roleCode,
+  );
 
-  // The Authorization page's Selected Tenant ID is the single source of truth
-  // for tenant-scoped grants. Keeping a second editable tenant value inside each
-  // Actor card allowed the two scopes to drift (including to the application
-  // wildcard). Application-scoped roles are always global.
-  const targetTenantId = applicationScopedRole ? "*" : selectedTenantId.trim();
+  // A persisted grant is authoritative for its own tenant. This matters after
+  // a refresh/remount and while the page-level tenant selector is changing: an
+  // already-granted tenant Role must continue to render its persisted tenant
+  // and disabled duplicate-grant action rather than snapping to another tenant
+  // (or, via APPLICATION_ADMIN, to *). For a new grant, the selected tenant is
+  // still the requested target. Application-scoped roles are always global.
+  const targetTenantId = applicationScopedRole
+    ? "*"
+    : persistedSelectedRoleGrant?.tenantId || selectedTenantId.trim();
   const tenantScopeMissing =
     !applicationScopedRole && (!targetTenantId || targetTenantId === "*");
   const alreadyGranted = Boolean(
@@ -771,6 +783,26 @@ function ActorCard({
         </p>
       )}
     </article>
+  );
+}
+
+
+function preferredPersistedGrantRoleCode(
+  actor: AuthzActor,
+  roles: AuthzRole[],
+  selectedTenantId: string,
+): string {
+  const grantableRoleCodes = new Set(roles.map((role) => role.code));
+  const activeGrants = (actor.roleGrants ?? []).filter(
+    (grant) => grant.active && grantableRoleCodes.has(grant.roleCode),
+  );
+  const selectedTenant = selectedTenantId.trim();
+
+  return (
+    activeGrants.find((grant) => grant.tenantId === selectedTenant)?.roleCode ??
+    activeGrants.find((grant) => grant.tenantId === "*")?.roleCode ??
+    activeGrants[0]?.roleCode ??
+    ""
   );
 }
 
