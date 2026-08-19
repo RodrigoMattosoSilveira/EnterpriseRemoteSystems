@@ -88,28 +88,66 @@ func (r *GORMRepository) FindAccountByLogin(ctx context.Context, login string) (
 }
 
 func (r *GORMRepository) ActorHasActiveTenantAccess(ctx context.Context, actorID string) (bool, error) {
-	options, err := authz.NewGORMStore(r.database).ListActorTenantOptions(ctx, strings.TrimSpace(actorID))
+	actorID = strings.TrimSpace(actorID)
+	if r == nil || r.database == nil || actorID == "" {
+		return false, nil
+	}
+
+	var actor authz.AuthzActor
+	result := r.database.WithContext(ctx).Where("id = ? AND active = ?", actorID, true).Limit(1).Find(&actor)
+	if result.Error != nil {
+		return false, fmt.Errorf("find authorization actor for tenant identity: %w", result.Error)
+	}
+	if result.RowsAffected == 0 {
+		return false, nil
+	}
+
+	legacyPersonID := ""
+	if actor.PersonID != nil {
+		legacyPersonID = strings.TrimSpace(*actor.PersonID)
+	}
+	if legacyPersonID == "" && actor.CollaboratorID != nil && strings.TrimSpace(*actor.CollaboratorID) != "" {
+		var collaborator appdb.CollaboratorJourney
+		lookup := r.database.WithContext(ctx).
+			Where("id = ?", strings.TrimSpace(*actor.CollaboratorID)).
+			Limit(1).
+			Find(&collaborator)
+		if lookup.Error != nil {
+			return false, fmt.Errorf("find authorization actor collaborator: %w", lookup.Error)
+		}
+		if lookup.RowsAffected > 0 {
+			legacyPersonID = strings.TrimSpace(collaborator.PersonID)
+		}
+	}
+	if legacyPersonID != "" {
+		var membershipCount int64
+		err := r.database.WithContext(ctx).
+			Table("person_tenant_memberships m").
+			Joins("JOIN tenants t ON t.id = m.tenant_id AND t.active = ?", true).
+			Joins("JOIN reference_data status ON status.id = m.status_id AND status.tenant_id = m.tenant_id AND status.type = ? AND status.active = ?", "person_status", true).
+			Where("(m.legacy_person_id = ? OR m.person_id = ?) AND status.code = ?", legacyPersonID, legacyPersonID, "ACTIVE").
+			Count(&membershipCount).Error
+		if err != nil {
+			return false, fmt.Errorf("verify authorization actor active Membership: %w", err)
+		}
+		if membershipCount > 0 {
+			return true, nil
+		}
+	}
+
+	// Compatibility for pre-30D persisted Actors that still have legitimate
+	// tenant grants but no Person/Membership identity. New 30D administrative
+	// grants cannot create this state because they require an Account/Actor
+	// binding first; retaining the fallback avoids making Account creation a
+	// destructive legacy cutover.
+	options, err := authz.NewGORMStore(r.database).ListActorTenantOptions(ctx, actorID)
 	if err != nil {
 		if errors.Is(err, authz.ErrAuthenticationRequired) {
 			return false, nil
 		}
-		return false, fmt.Errorf("verify authorization actor tenant access: %w", err)
+		return false, fmt.Errorf("verify legacy authorization actor tenant access: %w", err)
 	}
 	return len(options) > 0, nil
-}
-
-func (r *GORMRepository) EnsureActorPersonSelfAccess(ctx context.Context, actorID string, now time.Time) error {
-	return r.database.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		var actor authz.AuthzActor
-		result := tx.Where("id = ?", strings.TrimSpace(actorID)).Limit(1).Find(&actor)
-		if result.Error != nil {
-			return fmt.Errorf("find authentication authorization actor: %w", result.Error)
-		}
-		if result.RowsAffected == 0 {
-			return gorm.ErrRecordNotFound
-		}
-		return ensureAuthenticatedActorPersonSelfAccess(tx, &actor, now)
-	})
 }
 
 func (r *GORMRepository) CreateAccount(ctx context.Context, account Account) (AccountRecord, error) {
@@ -131,10 +169,6 @@ func (r *GORMRepository) CreateAccount(ctx context.Context, account Account) (Ac
 		}
 		if result.RowsAffected == 0 {
 			return gorm.ErrRecordNotFound
-		}
-
-		if err := ensureAuthenticatedActorPersonSelfAccess(tx, &actor, account.CreatedAt); err != nil {
-			return err
 		}
 
 		// Once the 30C ownership tables exist, selecting a second tenant Actor
@@ -195,88 +229,6 @@ func (r *GORMRepository) CreateAccount(ctx context.Context, account Account) (Ac
 		return AccountRecord{}, err
 	}
 	return r.FindAccountByID(ctx, accountID)
-}
-
-func ensureAuthenticatedActorPersonSelfAccess(tx *gorm.DB, actor *authz.AuthzActor, now time.Time) error {
-	if actor == nil {
-		return nil
-	}
-	if now.IsZero() {
-		now = time.Now().UTC()
-	}
-
-	personID := ""
-	if actor.PersonID != nil {
-		personID = strings.TrimSpace(*actor.PersonID)
-	}
-	if personID == "" && actor.CollaboratorID != nil && strings.TrimSpace(*actor.CollaboratorID) != "" {
-		var collaborator appdb.CollaboratorJourney
-		result := tx.Where("id = ?", strings.TrimSpace(*actor.CollaboratorID)).Limit(1).Find(&collaborator)
-		if result.Error != nil {
-			return fmt.Errorf("find authentication actor collaborator: %w", result.Error)
-		}
-		if result.RowsAffected > 0 {
-			personID = strings.TrimSpace(collaborator.PersonID)
-			if personID != "" {
-				if err := tx.Model(&authz.AuthzActor{}).Where("id = ?", actor.ID).Updates(map[string]any{
-					"person_id":  personID,
-					"updated_at": now,
-				}).Error; err != nil {
-					return fmt.Errorf("link authentication actor to person: %w", err)
-				}
-				actor.PersonID = &personID
-			}
-		}
-	}
-	if personID == "" {
-		return nil
-	}
-
-	var person appdb.Person
-	result := tx.Where("id = ?", personID).Limit(1).Find(&person)
-	if result.Error != nil {
-		return fmt.Errorf("find authentication actor person: %w", result.Error)
-	}
-	if result.RowsAffected == 0 {
-		return nil
-	}
-
-	var personRole authz.AuthzRole
-	if err := tx.Where("code = ? AND active = ?", string(authz.RolePerson), true).First(&personRole).Error; err != nil {
-		return fmt.Errorf("find Person authorization role: %w", err)
-	}
-
-	var grant authz.AuthzActorRoleGrant
-	grantResult := tx.
-		Where("actor_id = ? AND role_id = ? AND tenant_id = ?", actor.ID, personRole.ID, person.TenantID).
-		Limit(1).
-		Find(&grant)
-	if grantResult.Error != nil {
-		return fmt.Errorf("find Person authorization grant: %w", grantResult.Error)
-	}
-	if grantResult.RowsAffected == 0 {
-		grant = authz.AuthzActorRoleGrant{
-			ID:        ids.New(),
-			ActorID:   actor.ID,
-			RoleID:    personRole.ID,
-			TenantID:  person.TenantID,
-			Active:    true,
-			CreatedAt: now,
-			UpdatedAt: now,
-		}
-		if err := tx.Create(&grant).Error; err != nil {
-			return fmt.Errorf("create Person authorization grant: %w", err)
-		}
-	} else if !grant.Active {
-		if err := tx.Model(&authz.AuthzActorRoleGrant{}).Where("id = ?", grant.ID).Updates(map[string]any{
-			"active":     true,
-			"updated_at": now,
-		}).Error; err != nil {
-			return fmt.Errorf("reactivate Person authorization grant: %w", err)
-		}
-	}
-
-	return nil
 }
 
 func (r *GORMRepository) CreatePersonAccount(ctx context.Context, tenantID string, account Account) (AccountRecord, error) {
@@ -442,10 +394,6 @@ func ensurePersonTenantActor(tx *gorm.DB, accountID string, membership appdb.Per
 		}
 	} else if !actor.Active {
 		return authz.AuthzActor{}, ErrPersonActorInactive
-	}
-
-	if err := ensureAuthenticatedActorPersonSelfAccess(tx, &actor, now); err != nil {
-		return authz.AuthzActor{}, err
 	}
 
 	// Existing Accounts need only the new Actor binding. New Accounts are

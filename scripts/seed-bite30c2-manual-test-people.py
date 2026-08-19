@@ -292,7 +292,6 @@ def create_existing_account(
         f"{person['first_name']} {person['last_name']} (30C.2 Person {number})",
         person["legacy_id"],
     )
-    helper.upsert_grant(conn, actor_id, "PERSON", tenant_id)
     account_id = helper.upsert_account(
         conn,
         key,

@@ -12,6 +12,7 @@ import (
 	"time"
 
 	apppkg "enterpriseremotesystems/backend/internal/app"
+	"enterpriseremotesystems/backend/internal/authentication"
 	"enterpriseremotesystems/backend/internal/authz"
 	dbpkg "enterpriseremotesystems/backend/internal/db"
 	"enterpriseremotesystems/backend/internal/shared/ids"
@@ -186,7 +187,7 @@ func TestApplicationAdminCanAssignAndRevokeTenantAdministrator(t *testing.T) {
 	defer cleanup()
 
 	tenant := createTenant(t, server, "WEST", "West Site")
-	actorID := seedActor(t, dbPath, "west-admin@example.com", true)
+	actorID := seedTenantBoundActor(t, dbPath, tenant.ID, "west-admin@example.com", true)
 
 	res := requestJSON(t, server, http.MethodPost, "/api/v1/tenants/"+tenant.ID+"/admins", map[string]any{"actorId": actorID}, nil)
 	defer res.Body.Close()
@@ -232,7 +233,7 @@ func TestTenantAdminCanReadOwnTenantButCannotManageTenantCatalog(t *testing.T) {
 	server, dbPath, cleanup := newTestServer(t, false)
 	defer cleanup()
 
-	actorID := seedActor(t, dbPath, "tenant-admin@example.com", true)
+	actorID := seedTenantBoundActor(t, dbPath, dbpkg.DefaultTenantID, "tenant-admin@example.com", true)
 	database, err := dbpkg.Open(dbPath)
 	if err != nil {
 		t.Fatalf("open test database: %v", err)
@@ -317,13 +318,46 @@ func createTenant(t *testing.T, server *fiber.App, code string, name string) ten
 	return body.Data
 }
 
-func seedActor(t *testing.T, dbPath string, actorKey string, active bool) string {
+func seedTenantBoundActor(t *testing.T, dbPath string, tenantID string, actorKey string, active bool) string {
 	t.Helper()
 	database, err := dbpkg.Open(dbPath)
 	if err != nil {
 		t.Fatalf("open test database: %v", err)
 	}
+	defer closeDatabase(t, database)
+
+	var activeStatus dbpkg.ReferenceData
+	if err := database.WithContext(context.Background()).
+		Where("tenant_id = ? AND type = ? AND code = ? AND active = ?", tenantID, "person_status", "ACTIVE", true).
+		First(&activeStatus).Error; err != nil {
+		t.Fatalf("find active Person status for tenant %s: %v", tenantID, err)
+	}
+
 	now := time.Now().UTC()
+	person := dbpkg.GlobalPerson{
+		BaseModel: dbpkg.BaseModel{ID: ids.New(), CreatedAt: now, UpdatedAt: now},
+		FirstName: "Tenant",
+		LastName:  "Administrator",
+		Nickname:  actorKey,
+		CPF:       ids.New(),
+		RG:        ids.New(),
+		Cellular:  ids.New(),
+		Email:     actorKey,
+		Country:   "Brasil",
+	}
+	if err := database.WithContext(context.Background()).Create(&person).Error; err != nil {
+		t.Fatalf("seed tenant administrator global Person: %v", err)
+	}
+	membership := dbpkg.PersonTenantMembership{
+		BaseModel: dbpkg.BaseModel{ID: ids.New(), CreatedAt: now, UpdatedAt: now},
+		TenantID:  tenantID,
+		PersonID:  person.ID,
+		StatusID:  activeStatus.ID,
+	}
+	if err := database.WithContext(context.Background()).Create(&membership).Error; err != nil {
+		t.Fatalf("seed tenant administrator Membership: %v", err)
+	}
+
 	actor := authz.AuthzActor{
 		ID:          ids.New(),
 		ActorKey:    actorKey,
@@ -333,10 +367,46 @@ func seedActor(t *testing.T, dbPath string, actorKey string, active bool) string
 		UpdatedAt:   now,
 	}
 	if err := database.WithContext(context.Background()).Create(&actor).Error; err != nil {
-		closeDatabase(t, database)
 		t.Fatalf("seed actor: %v", err)
 	}
-	closeDatabase(t, database)
+
+	account := authentication.Account{
+		ID:                 ids.New(),
+		ActorID:            actor.ID,
+		Login:              actorKey,
+		PasswordHash:       "test-password-hash",
+		Active:             true,
+		MustChangePassword: false,
+		CreatedAt:          now,
+		UpdatedAt:          now,
+	}
+	if err := database.WithContext(context.Background()).Create(&account).Error; err != nil {
+		t.Fatalf("seed tenant administrator Authentication Account: %v", err)
+	}
+	accountPerson := authentication.AccountPerson{
+		AccountID: account.ID,
+		PersonID:  person.ID,
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
+	if err := database.WithContext(context.Background()).Create(&accountPerson).Error; err != nil {
+		t.Fatalf("seed tenant administrator Account/Person binding: %v", err)
+	}
+	bindingTenantID := tenantID
+	bindingMembershipID := membership.ID
+	accountActor := authentication.AccountActor{
+		AccountID:    account.ID,
+		ActorID:      actor.ID,
+		ScopeType:    authentication.AccountActorScopeTenant,
+		TenantID:     &bindingTenantID,
+		MembershipID: &bindingMembershipID,
+		Primary:      true,
+		CreatedAt:    now,
+		UpdatedAt:    now,
+	}
+	if err := database.WithContext(context.Background()).Create(&accountActor).Error; err != nil {
+		t.Fatalf("seed tenant administrator Account/Actor binding: %v", err)
+	}
 	return actor.ID
 }
 

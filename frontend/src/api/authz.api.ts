@@ -10,6 +10,7 @@ import type {
   AuthzRole,
   CreateAuthzActorInput,
   GrantAuthzActorRoleInput,
+  GrantTenantOperatorRoleInput,
   SetAuthzActorActiveInput,
 } from "../types/authz";
 
@@ -20,9 +21,68 @@ function authzHeaders(actor: AuthzAdminRequestActor) {
 }
 
 export function getCurrentAuthzActor(actor: AuthzAdminRequestActor): Promise<AuthzCurrentActor> {
-  return apiFetch<AuthzCurrentActor>("/authz/current-actor", {
+  return apiFetch<unknown>("/authz/current-actor", {
     headers: authzHeaders(actor),
+  }).then(normalizeAuthzCurrentActor);
+}
+
+export function normalizeAuthzCurrentActor(input: unknown): AuthzCurrentActor {
+  const actor = (input && typeof input === "object" ? input : {}) as Record<string, unknown>;
+  return {
+    actorKey: stringValue(actor.actorKey),
+    actorRecordId: stringValue(actor.actorRecordId),
+    tenantId: stringValue(actor.tenantId),
+    scope: stringValue(actor.scope),
+    personId: optionalStringValue(actor.personId),
+    globalPersonId: optionalStringValue(actor.globalPersonId),
+    membershipId: optionalStringValue(actor.membershipId),
+    collaboratorId: optionalStringValue(actor.collaboratorId),
+    roleCodes: stringArray(actor.roleCodes),
+    permissions: stringArray(actor.permissions),
+    intrinsicPermissions: stringArray(actor.intrinsicPermissions),
+    delegatedPermissions: stringArray(actor.delegatedPermissions),
+  };
+}
+
+export function normalizeAuthzActorList(input: unknown): AuthzActor[] {
+  let rows: unknown = input;
+
+  if (!Array.isArray(rows) && rows && typeof rows === "object") {
+    const record = rows as Record<string, unknown>;
+    if (Array.isArray(record.data)) {
+      rows = record.data;
+    } else if (Array.isArray(record.items)) {
+      rows = record.items;
+    } else if (Array.isArray(record.actors)) {
+      rows = record.actors;
+    }
+  }
+
+  if (!Array.isArray(rows)) {
+    return [];
+  }
+
+  return rows.filter((row): row is AuthzActor => {
+    if (!row || typeof row !== "object") {
+      return false;
+    }
+    const actor = row as Record<string, unknown>;
+    return typeof actor.id === "string" && typeof actor.actorKey === "string";
   });
+}
+
+function stringArray(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === "string")
+    : [];
+}
+
+function stringValue(value: unknown): string {
+  return typeof value === "string" ? value : "";
+}
+
+function optionalStringValue(value: unknown): string | undefined {
+  return typeof value === "string" && value ? value : undefined;
 }
 
 export function listAuthzRoles(actor: AuthzAdminRequestActor): Promise<AuthzRole[]> {
@@ -43,6 +103,49 @@ export function listAuthzActors(actor: AuthzAdminRequestActor): Promise<AuthzAct
   });
 }
 
+export function listTenantAuthzActors(
+  actor: AuthzAdminRequestActor,
+): Promise<AuthzActor[]> {
+  return apiFetch<AuthzActor[]>("/authz/tenant-actors", {
+    headers: authzHeaders(actor),
+  });
+}
+
+
+export function listTenantRoleActors(actor: AuthzAdminRequestActor): Promise<AuthzActor[]> {
+  return apiFetch<unknown>("/authz/tenant-role-actors", {
+    headers: authzHeaders(actor),
+  }).then(normalizeAuthzActorList);
+}
+
+export function grantTenantOperatorRole(
+  actor: AuthzAdminRequestActor,
+  targetActorId: string,
+  input: GrantTenantOperatorRoleInput,
+): Promise<AuthzActorRoleGrant> {
+  return apiFetch<AuthzActorRoleGrant>(
+    `/authz/tenant-role-actors/${encodeURIComponent(targetActorId)}/role-grants`,
+    {
+      method: "POST",
+      headers: authzHeaders(actor),
+      body: JSON.stringify(input),
+    },
+  );
+}
+
+export function revokeTenantOperatorRoleGrant(
+  actor: AuthzAdminRequestActor,
+  targetActorId: string,
+  grantId: string,
+): Promise<AuthzActorRoleGrant> {
+  return apiFetch<AuthzActorRoleGrant>(
+    `/authz/tenant-role-actors/${encodeURIComponent(targetActorId)}/role-grants/${encodeURIComponent(grantId)}`,
+    {
+      method: "DELETE",
+      headers: authzHeaders(actor),
+    },
+  );
+}
 
 export function listAuthzAuditLogs(
   actor: AuthzAdminRequestActor,

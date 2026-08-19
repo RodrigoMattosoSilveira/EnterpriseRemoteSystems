@@ -448,7 +448,7 @@ def seed_auth_identity(
     key: str,
     seq: int,
     tag: str,
-    role_code: str,
+    role_code: str | None,
     login: str,
 ) -> dict[str, str]:
     person = seed_person(
@@ -462,10 +462,14 @@ def seed_auth_identity(
         email_override=login,
     )
     actor_id = upsert_actor(conn, f"{key}:{tenant_id}", f"{person['first_name']} {person['last_name']} ({tag})", person["legacy_id"])
-    upsert_grant(conn, actor_id, role_code, tenant_id)
+    # Bite 30D requires tenant delegated Roles to match an existing tenant Actor
+    # binding, so create/bind the Account before adding delegated authority.
+    # Self-service fixtures pass role_code=None and need no Role Grant.
     account_id = upsert_account(
         conn, key, login, actor_id, person["global_id"], tenant_id, person["membership_id"]
     )
+    if role_code:
+        upsert_grant(conn, actor_id, role_code, tenant_id)
     return {**person, "actor_id": actor_id, "account_id": account_id, "login": login.lower()}
 
 
@@ -496,8 +500,6 @@ def seed_multi_identity(
     )
     target_actor = upsert_actor(conn, f"{key}:{target_id}", f"{ident['first_name']} {ident['last_name']} ({tag} target)", target_legacy)
     default_actor = upsert_actor(conn, f"{key}:{default_id}", f"{ident['first_name']} {ident['last_name']} ({tag} default)", default_legacy)
-    upsert_grant(conn, target_actor, "PERSON", target_id)
-    upsert_grant(conn, default_actor, "PERSON", default_id)
     account_id = upsert_account(conn, key, login, target_actor, global_id, target_id, target_membership)
     if bind_default:
         bind_secondary_actor(conn, account_id, default_actor, default_id, default_membership)
@@ -593,7 +595,7 @@ def main() -> None:
             "single-tenant-user",
             92,
             "single",
-            "PERSON",
+            None,
             "manual30c.single@example.test",
         )
         multi_ready = seed_multi_identity(

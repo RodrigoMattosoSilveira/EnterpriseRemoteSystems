@@ -20,8 +20,9 @@ test("admin can create an authorization actor, grant a role, and revoke it", asy
   const collaborator = await createCollaborator(request, person.id);
   const actorKey = `collaborator-${collaborator.id}`;
   const displayName = actorNickname;
-  const grantedRole = "EXPENSE_OPERATOR";
+  const grantedRole = "TENANT_ADMIN";
   const grantTenant = "default";
+  const accountLogin = `authz-bound-${suffix}@example.com`;
 
   await page.goto("/admin/authorization");
 
@@ -80,6 +81,67 @@ test("admin can create an authorization actor, grant a role, and revoke it", asy
   await expect(actorCard).toContainText(displayName);
   await expect(actorCard).toContainText("No role grants.");
 
+  // Bite 30D requires a tenant Actor to be Account/Membership-bound before a
+  // delegated tenant Role can be granted. Resolve the Actor created by the UI,
+  // bind it to an Authentication Account, then exercise grant/revoke.
+  const actorsResponse = await request.get(e2eApiUrl("/api/v1/authz/actors"), {
+    headers: authzHeaders(),
+  });
+  expect(actorsResponse.ok()).toBeTruthy();
+  const actorsEnvelope = (await actorsResponse.json()) as {
+    data?: Array<{ id?: string; actorKey?: string }>;
+  };
+  const createdActorId = (actorsEnvelope.data ?? []).find(
+    (actor) => actor.actorKey === actorKey,
+  )?.id;
+  expect(createdActorId).toBeTruthy();
+
+  const accountResponse = await request.post(e2eApiUrl("/api/v1/auth/accounts"), {
+    headers: authzHeaders(),
+    data: {
+      actorId: createdActorId,
+      login: accountLogin,
+      temporaryPassword: `Authz-Bound-${suffix}-Password!`,
+      mustChangePassword: false,
+    },
+  });
+  expect(accountResponse.status()).toBe(201);
+
+  // Account creation changes the authoritative Account -> Actor binding outside
+  // this page's React Query cache. Reload so the Application Authorization UI
+  // receives the real TENANT binding and derives the grant target from it.
+  await page.reload();
+  await expect(actorCard).toContainText(
+    `Authentication Account: Bound · ${accountLogin}`,
+  );
+  await expect(actorCard).toContainText(
+    "Authentication binding: TENANT · default",
+  );
+  await expect(actorCard).toContainText(
+    "Person–Tenant Membership: ACTIVE · same tenant",
+  );
+  await expect(actorCard).toContainText("Tenant Role Grants: ELIGIBLE");
+  await expect(
+    actorCard.getByLabel("Role").locator('option[value="APPLICATION_ADMIN"]'),
+  ).toHaveCount(0);
+
+  const eligibilityFilter = page.getByLabel("Tenant Role Grant eligibility");
+  await expect(eligibilityFilter).toHaveValue("ALL");
+  await eligibilityFilter.selectOption("ELIGIBLE");
+  await expect(actorCard).toBeVisible();
+  await expect(
+    page
+      .getByTestId("authz-actor-card")
+      .filter({
+        has: page.getByRole("heading", {
+          name: "bootstrap-admin",
+          exact: true,
+        }),
+      }),
+  ).toHaveCount(0);
+  await page.getByRole("button", { name: "Clear" }).click();
+  await expect(eligibilityFilter).toHaveValue("ALL");
+
   const actorNicknameFilter = page.getByLabel(
     "Filter actors by person nickname",
   );
@@ -109,13 +171,26 @@ test("admin can create an authorization actor, grant a role, and revoke it", asy
   ).toBeVisible();
 
   await actorCard.getByLabel("Role").selectOption(grantedRole);
-  await actorCard.getByLabel("Grant tenant").fill(grantTenant);
+  await expect(actorCard.getByLabel("Grant tenant")).toHaveValue(grantTenant);
+  await expect(actorCard.getByLabel("Grant tenant")).toBeDisabled();
   await actorCard.getByRole("button", { name: "Grant Role" }).click();
 
   await expect(page.getByRole("status")).toContainText(
     `${grantedRole} granted.`,
   );
   await expect(actorCard).toContainText(`${grantedRole} · ${grantTenant}`);
+  await expect(actorCard.getByLabel("Role")).toHaveValue(grantedRole);
+  await expect(actorCard.getByLabel("Grant tenant")).toHaveValue(grantTenant);
+  await expect(actorCard.getByRole("button", { name: "Grant Role" })).toBeDisabled();
+
+  // The grant state must survive a full route/page remount. A persisted tenant
+  // grant is the authoritative fallback for the Actor card; it must not return
+  // to APPLICATION_ADMIN / * merely because local select state was discarded.
+  await page.reload();
+  await expect(actorCard).toContainText(`${grantedRole} · ${grantTenant}`);
+  await expect(actorCard.getByLabel("Role")).toHaveValue(grantedRole);
+  await expect(actorCard.getByLabel("Grant tenant")).toHaveValue(grantTenant);
+  await expect(actorCard.getByRole("button", { name: "Grant Role" })).toBeDisabled();
 
   await actorCard.getByRole("button", { name: "Revoke" }).click();
 

@@ -94,6 +94,16 @@ func TestAccountActorFoundationSplitsMultiTenantPersonActorWithoutMovingLegacyGr
 	if tenantAActor.Scope != authz.ActorScopeTenant || tenantBActor.Scope != authz.ActorScopeTenant {
 		t.Fatalf("expected explicit tenant Actor scope, got %s and %s", tenantAActor.Scope, tenantBActor.Scope)
 	}
+	for tenantID, resolved := range map[string]*authz.Actor{"tenant-a": tenantAActor, "tenant-b": tenantBActor} {
+		if !resolved.HasIntrinsicPermission(authz.PermissionPeopleSelfRead) || !resolved.HasPermission(authz.PermissionPeopleSelfUpdate) {
+			t.Fatalf("%s Actor must derive Person self-service intrinsically from Account/Membership identity, permissions=%v intrinsic=%v", tenantID, authz.PermissionNames(resolved.Permissions), authz.PermissionNames(resolved.IntrinsicPermissions))
+		}
+		for _, roleCode := range resolved.RoleCodes {
+			if roleCode == string(authz.RolePerson) {
+				t.Fatalf("%s Actor must not depend on PERSON Role Grant after 30D: %#v", tenantID, resolved.RoleCodes)
+			}
+		}
+	}
 
 	// Rollback compatibility: the legacy Actor retains its original grants. 30C
 	// copies grants to the split Actor instead of moving them.
@@ -209,6 +219,18 @@ func TestCreatePersonAccountReusesGlobalAccountAndAddsSecondTenantActor(t *testi
 	if len(options) != 2 {
 		t.Fatalf("expected both tenant options from Account Actors, got %#v", options)
 	}
+	for _, tenantID := range []string{"tenant-a", "tenant-b"} {
+		resolved, err := authz.NewGORMStore(database).FindAccountActor(context.Background(), second.ID, tenantID)
+		if err != nil {
+			t.Fatalf("resolve %s Account Actor without PERSON grant: %v", tenantID, err)
+		}
+		if !resolved.HasIntrinsicPermission(authz.PermissionPeopleSelfRead) || !resolved.HasPermission(authz.PermissionPeopleSelfUpdate) {
+			t.Fatalf("%s Account Actor missing intrinsic Person self-service: permissions=%v intrinsic=%v", tenantID, authz.PermissionNames(resolved.Permissions), authz.PermissionNames(resolved.IntrinsicPermissions))
+		}
+		if len(resolved.RoleCodes) != 0 {
+			t.Fatalf("fresh Person Account Actor should need no delegated Role Grant, got %#v", resolved.RoleCodes)
+		}
+	}
 }
 
 func TestCreateExplicitTenantActorReusesExistingGlobalPersonAccount(t *testing.T) {
@@ -225,8 +247,8 @@ func TestCreateExplicitTenantActorReusesExistingGlobalPersonAccount(t *testing.T
 	if err := database.Create(&actorA).Error; err != nil {
 		t.Fatalf("create tenant A actor: %v", err)
 	}
-	if err := authz.GrantRole(database, actorA.ID, authz.RolePerson, "tenant-a"); err != nil {
-		t.Fatalf("grant tenant A Person role: %v", err)
+	if err := authz.GrantRole(database, actorA.ID, authz.RoleExpenseOperator, "tenant-a"); err != nil {
+		t.Fatalf("grant tenant A delegated operator role: %v", err)
 	}
 
 	personB := "person-explicit-b"
@@ -234,8 +256,8 @@ func TestCreateExplicitTenantActorReusesExistingGlobalPersonAccount(t *testing.T
 	if err := database.Create(&actorB).Error; err != nil {
 		t.Fatalf("create tenant B actor: %v", err)
 	}
-	if err := authz.GrantRole(database, actorB.ID, authz.RolePerson, "tenant-b"); err != nil {
-		t.Fatalf("grant tenant B Person role: %v", err)
+	if err := authz.GrantRole(database, actorB.ID, authz.RoleExpenseOperator, "tenant-b"); err != nil {
+		t.Fatalf("grant tenant B delegated operator role: %v", err)
 	}
 
 	repository := NewRepository(database)
@@ -261,6 +283,18 @@ func TestCreateExplicitTenantActorReusesExistingGlobalPersonAccount(t *testing.T
 	}
 	if accountCount != 1 {
 		t.Fatalf("expected exactly one Authentication Account for the global Person, got %d", accountCount)
+	}
+	for _, tenantID := range []string{"tenant-a", "tenant-b"} {
+		resolved, err := authz.NewGORMStore(database).FindAccountActor(context.Background(), second.ID, tenantID)
+		if err != nil {
+			t.Fatalf("resolve explicit %s Actor: %v", tenantID, err)
+		}
+		if !resolved.HasIntrinsicPermission(authz.PermissionPeopleSelfRead) {
+			t.Fatalf("explicit %s Actor must receive intrinsic self-service from Membership", tenantID)
+		}
+		if !resolved.HasPermission(authz.PermissionExpensesCreate) || resolved.HasIntrinsicPermission(authz.PermissionExpensesCreate) {
+			t.Fatalf("delegated Expense Operator authority must remain additive and non-intrinsic: effective=%v intrinsic=%v", authz.PermissionNames(resolved.Permissions), authz.PermissionNames(resolved.IntrinsicPermissions))
+		}
 	}
 }
 

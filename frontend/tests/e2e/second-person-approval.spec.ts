@@ -27,7 +27,7 @@ test("partial payout requires and submits a different second approver when tenan
   request,
 }) => {
   const suffix = uniqueSuffix();
-  const secondApprover = await createAuthzActor(request, {
+  const secondApprover = await createTenantAuthorizedSecondApprover(request, {
     actorKey: `second-approver-e2e-${suffix}@example.com`,
     displayName: `Second Approver E2E ${suffix}`,
   });
@@ -135,12 +135,13 @@ test("partial payout can optionally record second approval when tenant policy is
   request,
 }) => {
   const suffix = uniqueSuffix();
-  const secondApprover = await createAuthzActor(request, {
+  const secondApprover = await createTenantAuthorizedSecondApprover(request, {
     actorKey: `optional-approver-e2e-${suffix}@example.com`,
     displayName: `Optional Approver E2E ${suffix}`,
   });
+  const personSuffix = uniqueSuffix();
   const person = await createCompletePerson(request, {
-    suffix: suffix + 1,
+    suffix: personSuffix,
     firstName: `OptionalApprovalE2E${suffix}`,
     nickname: `OptionalApproval${suffix}`,
   });
@@ -245,22 +246,71 @@ async function mockSecondPersonApprovalPolicy(page: Page, required: boolean): Pr
   );
 }
 
-async function createAuthzActor(
+async function createTenantAuthorizedSecondApprover(
   api: APIRequestContext,
   input: { actorKey: string; displayName: string },
 ): Promise<AuthzActor> {
-  const response = await api.post(e2eApiUrl("/api/v1/authz/actors"), {
-    headers: authzHeaders(),
-    data: { ...input, active: true },
+  // Bite 30D's tenant actor directory intentionally exposes only Actors with
+  // active tenant-scoped delegated authority. Provision the second approver as
+  // a real tenant identity (Person/Membership -> Actor -> Account -> Role Grant)
+  // instead of relying on the pre-30D behavior where a bare Actor appeared in
+  // the application-global authorization catalog.
+  const identitySuffix = uniqueSuffix();
+  const person = await createCompletePerson(api, {
+    suffix: identitySuffix,
+    firstName: `SecondApprover${identitySuffix}`,
+    nickname: `SecondApprover${identitySuffix}`,
   });
-  if (!response.ok()) {
+
+  const actorResponse = await api.post(e2eApiUrl("/api/v1/authz/actors"), {
+    headers: authzHeaders(),
+    data: {
+      actorKey: input.actorKey,
+      displayName: input.displayName,
+      personId: person.id,
+      active: true,
+    },
+  });
+  if (!actorResponse.ok()) {
     throw new Error(
-      `Create authz actor failed at ${response.url()}: ${response.status()} ${await response.text()}`,
+      `Create second-approver actor failed at ${actorResponse.url()}: ${actorResponse.status()} ${await actorResponse.text()}`,
     );
   }
-  const body = (await response.json()) as ApiEnvelope<AuthzActor>;
-  if (!body.data) throw new Error("Create authz actor response did not include data");
-  return body.data;
+  const actorBody = (await actorResponse.json()) as ApiEnvelope<AuthzActor>;
+  if (!actorBody.data) {
+    throw new Error("Create second-approver actor response did not include data");
+  }
+  const actor = actorBody.data;
+
+  const accountResponse = await api.post(e2eApiUrl("/api/v1/auth/accounts"), {
+    headers: authzHeaders(),
+    data: {
+      actorId: actor.id,
+      login: input.actorKey,
+      temporaryPassword: `Second-Approver-${identitySuffix}-Password!`,
+      mustChangePassword: false,
+    },
+  });
+  if (accountResponse.status() !== 201) {
+    throw new Error(
+      `Create second-approver account failed at ${accountResponse.url()}: ${accountResponse.status()} ${await accountResponse.text()}`,
+    );
+  }
+
+  const grantResponse = await api.post(
+    e2eApiUrl(`/api/v1/authz/actors/${encodeURIComponent(actor.id)}/role-grants`),
+    {
+      headers: authzHeaders(),
+      data: { roleCode: "TENANT_ADMIN", tenantId: "default" },
+    },
+  );
+  if (grantResponse.status() !== 201) {
+    throw new Error(
+      `Grant second-approver tenant role failed at ${grantResponse.url()}: ${grantResponse.status()} ${await grantResponse.text()}`,
+    );
+  }
+
+  return actor;
 }
 
 async function createCompletePerson(

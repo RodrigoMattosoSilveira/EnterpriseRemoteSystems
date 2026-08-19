@@ -14,6 +14,7 @@ EXPLICIT_HTTP_ADDR="${HTTP_ADDR:-}"
 EXPLICIT_APP_ENV="${APP_ENV:-}"
 EXPLICIT_ERS_DATABASE_PATH="${ERS_DATABASE_PATH:-}"
 EXPLICIT_ERS_RESET_DATABASE="${ERS_RESET_DATABASE:-}"
+EXPLICIT_ERS_BACKEND_WATCH="${ERS_BACKEND_WATCH:-}"
 EXPLICIT_AUTHZ_ACTOR_HEADER_MODE="${AUTHZ_ACTOR_HEADER_MODE:-}"
 EXPLICIT_AUTHZ_BOOTSTRAP_ENABLED="${AUTHZ_BOOTSTRAP_ENABLED:-}"
 EXPLICIT_AUTHZ_BOOTSTRAP_ACTOR_KEY="${AUTHZ_BOOTSTRAP_ACTOR_KEY:-}"
@@ -41,6 +42,9 @@ if [[ -n "${EXPLICIT_ERS_DATABASE_PATH}" ]]; then
 fi
 if [[ -n "${EXPLICIT_ERS_RESET_DATABASE}" ]]; then
   export ERS_RESET_DATABASE="${EXPLICIT_ERS_RESET_DATABASE}"
+fi
+if [[ -n "${EXPLICIT_ERS_BACKEND_WATCH}" ]]; then
+  export ERS_BACKEND_WATCH="${EXPLICIT_ERS_BACKEND_WATCH}"
 fi
 if [[ -n "${EXPLICIT_AUTHZ_ACTOR_HEADER_MODE}" ]]; then
   export AUTHZ_ACTOR_HEADER_MODE="${EXPLICIT_AUTHZ_ACTOR_HEADER_MODE}"
@@ -129,5 +133,25 @@ echo "APP_AUTO_MIGRATE=${APP_AUTO_MIGRATE}"
 echo "DEV_SEED_ADMIN=${DEV_SEED_ADMIN:-}"
 echo "DEV_ADMIN_EMAIL=${DEV_ADMIN_EMAIL:-}"
 echo "LLM_COACHING_ENABLED=${LLM_COACHING_ENABLED:-}"
+echo "ERS_BACKEND_WATCH=${ERS_BACKEND_WATCH:-true}"
 
-go run ./cmd/api
+# Interactive development uses Air for hot reload. Test harnesses such as
+# Playwright need a single directly supervised backend process so their process
+# teardown can terminate the server deterministically instead of leaving an Air
+# child process running after the test command exits.
+if [[ "${ERS_BACKEND_WATCH:-true}" == "false" ]]; then
+  direct_backend_binary="./tmp/backend-direct"
+  echo "Building backend without Air..."
+  go build -o "${direct_backend_binary}" ./cmd/api
+  echo "Starting backend without Air..."
+  exec "${direct_backend_binary}"
+fi
+
+if ! command -v air >/dev/null 2>&1; then
+  echo "Air is required for local backend development."
+  echo "Install it with:"
+  echo "  go install github.com/air-verse/air@latest"
+  exit 1
+fi
+
+exec air -c .air.toml

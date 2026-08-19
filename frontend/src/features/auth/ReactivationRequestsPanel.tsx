@@ -6,10 +6,16 @@ import {
 } from "../../api/auth.api";
 import { ApiErrorPanel } from "../../components/ApiErrorPanel";
 
-export function ReactivationRequestsPanel() {
+type ReactivationRequestsPanelProps = {
+  defaultOpen?: boolean;
+};
+
+export function ReactivationRequestsPanel({
+  defaultOpen = false,
+}: ReactivationRequestsPanelProps = {}) {
   const queryClient = useQueryClient();
   const [reasonById, setReasonById] = useState<Record<string, string>>({});
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(defaultOpen);
   const requests = useQuery({
     queryKey: ["auth", "reactivation-requests"],
     queryFn: listAccountReactivationRequests,
@@ -28,7 +34,11 @@ export function ReactivationRequestsPanel() {
   const pending = (requests.data ?? []).filter((request) => request.status === "PENDING");
 
   return (
-    <section className="mt-6 rounded-2xl border bg-white p-5" aria-label="Account reactivation requests">
+    <section
+      id="account-reactivation-requests"
+      className="mt-6 rounded-2xl border bg-white p-5"
+      aria-label="Account reactivation requests"
+    >
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <div>
           <h2 className="text-lg font-semibold">Account reactivation requests</h2>

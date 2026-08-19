@@ -15,8 +15,12 @@ func RegisterPriceListRoutes(v1 fiber.Router, deps Dependencies) {
 	items.Patch("/:id/reactivate", requirePermission(deps, authz.PermissionPriceListsUpdate), deps.PriceListHandler.ReactivateItem)
 
 	goldPrices := v1.Group("/gold-prices")
-	goldPrices.Get("/", requirePermission(deps, authz.PermissionPriceListsRead), deps.PriceListHandler.ListGoldPrices)
+	// Gold-price administration is intentionally narrower than ordinary price-list
+	// operations. Expense Operators may consume the latest active price when
+	// creating GOLD_GRAM expenses, but only Tenant Administrators may browse
+	// history or change the tenant's gold-price source.
+	goldPrices.Get("/", requirePermission(deps, authz.PermissionGoldPricesManage), deps.PriceListHandler.ListGoldPrices)
 	goldPrices.Get("/latest", requirePermission(deps, authz.PermissionPriceListsRead), deps.PriceListHandler.LatestGoldPrice)
-	goldPrices.Post("/", requirePermission(deps, authz.PermissionPriceListsCreate), deps.PriceListHandler.CreateGoldPrice)
-	goldPrices.Patch("/:id/deactivate", requirePermission(deps, authz.PermissionPriceListsUpdate), deps.PriceListHandler.DeactivateGoldPrice)
+	goldPrices.Post("/", requirePermission(deps, authz.PermissionGoldPricesManage), deps.PriceListHandler.CreateGoldPrice)
+	goldPrices.Patch("/:id/deactivate", requirePermission(deps, authz.PermissionGoldPricesManage), deps.PriceListHandler.DeactivateGoldPrice)
 }

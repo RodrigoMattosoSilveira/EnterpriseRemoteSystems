@@ -16,11 +16,20 @@ type ApiEnvelope<T> = {
   };
 };
 
+type AuthzActorRoleGrant = {
+  id: string;
+  actorId: string;
+  roleCode: string;
+  tenantId: string;
+  active: boolean;
+};
+
 type AuthzActor = {
   id: string;
   actorKey: string;
   displayName: string;
   active: boolean;
+  roleGrants?: AuthzActorRoleGrant[];
 };
 
 type AuthzCurrentActor = {
@@ -30,14 +39,30 @@ type AuthzCurrentActor = {
   scope: string;
   roleCodes: string[];
   permissions: string[];
+  intrinsicPermissions?: string[];
+  delegatedPermissions?: string[];
+};
+
+type ProvisionedAuthzActor = AuthzActor & {
+  login: string;
+  temporaryPassword: string;
+};
+
+type AuthAccount = {
+  actors: Array<{
+    actorId: string;
+    actorKey: string;
+    displayName: string;
+    tenantId?: string;
+    active: boolean;
+  }>;
 };
 
 type RoleCode =
   | "APPLICATION_ADMIN"
   | "TENANT_ADMIN"
   | "EARNINGS_OPERATOR"
-  | "EXPENSE_OPERATOR"
-  | "PERSON";
+  | "EXPENSE_OPERATOR";
 
 const DEFAULT_TENANT_ID = "default";
 
@@ -89,9 +114,14 @@ test.describe("authorization role boundaries", () => {
       expect(currentActor.actorKey).toBe(actor.actorKey);
       expect(currentActor.tenantId).toBe(DEFAULT_TENANT_ID);
       expect(currentActor.roleCodes).toContain("EXPENSE_OPERATOR");
+      expect(currentActor.permissions).toContain("people.self.read");
+      expect(currentActor.intrinsicPermissions).toContain("people.self.read");
+      expect(currentActor.delegatedPermissions).toContain("expenses.create");
       expect(currentActor.permissions).toContain("expenses.create");
       expect(currentActor.permissions).toContain("ledger.receipts.print");
       expect(currentActor.permissions).not.toContain("authz.manage");
+      expect(currentActor.delegatedPermissions).not.toContain("gold_prices.manage");
+      expect(currentActor.delegatedPermissions).not.toContain("gold_production.manage");
 
       await expectStatus(
         await actorApi.get(e2eApiUrl("/api/v1/reference-data/sector"), { headers }),
@@ -123,6 +153,26 @@ test.describe("authorization role boundaries", () => {
       );
 
       await expectStatus(
+        await actorApi.get(e2eApiUrl("/api/v1/gold-prices"), { headers }),
+        403,
+        "expense operators must not browse sensitive gold-price administration history",
+      );
+
+      await expectStatus(
+        await actorApi.post(e2eApiUrl("/api/v1/gold-prices"), {
+          headers,
+          data: {
+            priceDate: "2026-08-18",
+            brlPerGram: 500,
+            recordedBy: actor.actorKey,
+          },
+        }),
+        403,
+        "expense operators must not record sensitive tenant gold prices",
+      );
+
+
+      await expectStatus(
         await actorApi.get(e2eApiUrl("/api/v1/authz/actors"), { headers }),
         403,
         "expense operators must not administer authorization actors",
@@ -144,6 +194,114 @@ test.describe("authorization role boundaries", () => {
     }
   });
 
+  test("tenant administrators expose explicit delegated authority instead of a wildcard", async ({
+    request: adminApi,
+  }) => {
+    let actorApi: APIRequestContext | undefined;
+    try {
+      const actor = await createActorWithRole(adminApi, "tenant-admin", "TENANT_ADMIN");
+      actorApi = await createActorAccountAndLogin(adminApi, actor);
+      const currentActor = await getCurrentActor(actorApi, tenantHeaders());
+
+      expect(currentActor.roleCodes).toEqual(["TENANT_ADMIN"]);
+      expect(currentActor.intrinsicPermissions).toContain("people.self.read");
+      expect(currentActor.delegatedPermissions).toContain("tenants.read");
+      expect(currentActor.delegatedPermissions).toContain("authz.tenant_role_grants.manage");
+      expect(currentActor.delegatedPermissions).toContain("people.create");
+      expect(currentActor.delegatedPermissions).toContain("collaborators.update");
+      expect(currentActor.delegatedPermissions).toContain("reference_data.read");
+      expect(currentActor.delegatedPermissions).toContain("gold_prices.manage");
+      expect(currentActor.delegatedPermissions).toContain("gold_production.manage");
+      expect(currentActor.delegatedPermissions).toContain("current_accounts.settings.update");
+      expect(currentActor.delegatedPermissions).toContain("journey.settlements.close");
+      expect(currentActor.delegatedPermissions).not.toContain("*");
+      expect(currentActor.delegatedPermissions).not.toContain("authz.read");
+      expect(currentActor.delegatedPermissions).not.toContain("authz.manage");
+      expect(currentActor.delegatedPermissions).not.toContain("tenants.create");
+      expect(currentActor.delegatedPermissions).not.toContain("tenants.update");
+      expect(currentActor.delegatedPermissions).not.toContain("people.self.read");
+      expect(currentActor.permissions).toContain("people.self.read");
+      expect(currentActor.permissions).toContain("journey.settlements.close");
+    } finally {
+      await actorApi?.dispose();
+    }
+  });
+
+  test("tenant administrators can grant and remove operator roles without removing target self-service", async ({
+    request: adminApi,
+  }) => {
+    let tenantAdminApi: APIRequestContext | undefined;
+    let targetApi: APIRequestContext | undefined;
+    let tenantAdmin: ProvisionedAuthzActor | undefined;
+    let target: ProvisionedAuthzActor | undefined;
+    try {
+      tenantAdmin = await createActorWithRole(adminApi, "tenant-role-manager", "TENANT_ADMIN");
+      target = await createActorWithRole(adminApi, "tenant-role-target", "EXPENSE_OPERATOR");
+      tenantAdminApi = await createActorAccountAndLogin(adminApi, tenantAdmin);
+      targetApi = await createActorAccountAndLogin(adminApi, target);
+      const headers = tenantHeaders();
+
+      const manager = await getCurrentActor(tenantAdminApi, headers);
+      expect(manager.delegatedPermissions).toContain("authz.tenant_role_grants.manage");
+
+      const actorsResponse = await tenantAdminApi.get(
+        e2eApiUrl("/api/v1/authz/tenant-role-actors"),
+        { headers },
+      );
+      await expectStatus(actorsResponse, 200, "list tenant role delegation actors");
+      const actorsBody = (await actorsResponse.json()) as ApiEnvelope<AuthzActor[]>;
+      const targetActor = actorsBody.data?.find((candidate) => candidate.id === target?.id);
+      const expenseGrant = targetActor?.roleGrants?.find(
+        (grant) => grant.roleCode === "EXPENSE_OPERATOR" && grant.active,
+      );
+      if (!targetActor || !expenseGrant) {
+        throw new Error("tenant role delegation directory did not expose the target expense grant");
+      }
+
+      const revokeResponse = await tenantAdminApi.delete(
+        e2eApiUrl(
+          `/api/v1/authz/tenant-role-actors/${encodeURIComponent(target.id)}/role-grants/${encodeURIComponent(expenseGrant.id)}`,
+        ),
+        { headers },
+      );
+      await expectStatus(revokeResponse, 200, "Tenant Administrator revokes Expense Operator");
+
+      const afterRevoke = await getCurrentActor(targetApi, headers);
+      expect(afterRevoke.roleCodes).not.toContain("EXPENSE_OPERATOR");
+      expect(afterRevoke.delegatedPermissions).not.toContain("expenses.create");
+      expect(afterRevoke.intrinsicPermissions).toContain("people.self.read");
+      expect(afterRevoke.permissions).toContain("people.self.read");
+
+      const grantResponse = await tenantAdminApi.post(
+        e2eApiUrl(`/api/v1/authz/tenant-role-actors/${encodeURIComponent(target.id)}/role-grants`),
+        {
+          headers,
+          data: { roleCode: "EARNINGS_OPERATOR" },
+        },
+      );
+      await expectStatus(grantResponse, 201, "Tenant Administrator grants Earnings Operator");
+
+      const afterGrant = await getCurrentActor(targetApi, headers);
+      expect(afterGrant.roleCodes).toContain("EARNINGS_OPERATOR");
+      expect(afterGrant.delegatedPermissions).toContain("planning.create");
+      expect(afterGrant.intrinsicPermissions).toContain("people.self.read");
+
+      const forbiddenAdminGrant = await tenantAdminApi.post(
+        e2eApiUrl(`/api/v1/authz/tenant-role-actors/${encodeURIComponent(target.id)}/role-grants`),
+        {
+          headers,
+          data: { roleCode: "TENANT_ADMIN" },
+        },
+      );
+      await expectStatus(forbiddenAdminGrant, 400, "Tenant Administrator cannot delegate Tenant Administrator");
+    } finally {
+      await tenantAdminApi?.dispose();
+      await targetApi?.dispose();
+      if (tenantAdmin) await setActorActive(adminApi, tenantAdmin.id, false);
+      if (target) await setActorActive(adminApi, target.id, false);
+    }
+  });
+
   test("earnings operators can perform planning work but cannot create expenses or price-list records", async ({
     request: adminApi,
   }) => {
@@ -156,10 +314,13 @@ test.describe("authorization role boundaries", () => {
       const currentActor = await getCurrentActor(actorApi, headers);
       expect(currentActor.actorKey).toBe(actor.actorKey);
       expect(currentActor.roleCodes).toContain("EARNINGS_OPERATOR");
+      expect(currentActor.intrinsicPermissions).toContain("people.self.read");
+      expect(currentActor.delegatedPermissions).toContain("planning.create");
       expect(currentActor.permissions).toContain("planning.create");
       expect(currentActor.permissions).toContain("earnings.create");
       expect(currentActor.permissions).not.toContain("expenses.create");
       expect(currentActor.permissions).not.toContain("price_lists.create");
+      expect(currentActor.delegatedPermissions).not.toContain("gold_production.manage");
 
       await expectStatus(
         await actorApi.get(e2eApiUrl("/api/v1/work-periods?pageSize=1"), { headers }),
@@ -174,6 +335,22 @@ test.describe("authorization role boundaries", () => {
         }),
         400,
         "earnings operators should reach work-period creation validation",
+      );
+
+      await expectStatus(
+        await actorApi.post(
+          e2eApiUrl("/api/v1/work-periods/forbidden-work-period/gold-production-entries"),
+          {
+            headers,
+            data: {
+              locationId: "forbidden-location",
+              productionDate: "2026-08-18",
+              goldGramsProduced: 1,
+            },
+          },
+        ),
+        403,
+        "earnings operators must not record Gold Production",
       );
 
       await expectStatus(
@@ -246,6 +423,20 @@ test.describe("authorization role boundaries", () => {
       "tenant-scoped operational grants must not use global tenant scope",
     );
     await expectValidationField(invalidTenantGrant, "tenantId");
+
+    const unboundTenantGrant = await adminApi.post(
+      e2eApiUrl(`/api/v1/authz/actors/${encodeURIComponent(actor.id)}/role-grants`),
+      {
+        headers: authzHeaders(),
+        data: { roleCode: "EXPENSE_OPERATOR", tenantId: DEFAULT_TENANT_ID },
+      },
+    );
+    await expectStatus(
+      unboundTenantGrant,
+      400,
+      "tenant delegated roles require an Actor already bound to that tenant",
+    );
+    await expectValidationField(unboundTenantGrant, "actorId");
   });
 });
 
@@ -284,31 +475,73 @@ function tenantHeaders(tenantId = DEFAULT_TENANT_ID): Record<string, string> {
 }
 
 async function createActorAccountAndLogin(
-  adminApi: APIRequestContext,
-  actor: AuthzActor,
+  _adminApi: APIRequestContext,
+  actor: ProvisionedAuthzActor,
 ): Promise<APIRequestContext> {
-  const temporaryPassword = `E2E-${uniqueSuffix()}-Password!`;
-  const response = await adminApi.post(e2eApiUrl("/api/v1/auth/accounts"), {
-    headers: authzHeaders(),
+  const firstSession = await loginIsolatedApi(actor.login, actor.temporaryPassword);
+  const permanentPassword = `${actor.temporaryPassword}-Changed`;
+  const changeResponse = await firstSession.post(e2eApiUrl("/api/v1/auth/password/change"), {
     data: {
-      actorId: actor.id,
-      login: actor.actorKey,
-      temporaryPassword,
-      mustChangePassword: false,
+      currentPassword: actor.temporaryPassword,
+      newPassword: permanentPassword,
     },
   });
-  await expectStatus(response, 201, `create authentication account for ${actor.actorKey}`);
-  return loginIsolatedApi(actor.actorKey, temporaryPassword);
+  try {
+    await expectStatus(changeResponse, 204, `complete first-login password change for ${actor.login}`);
+  } finally {
+    await firstSession.dispose();
+  }
+  return loginIsolatedApi(actor.login, permanentPassword);
 }
 
 async function createActorWithRole(
   api: APIRequestContext,
   keyPrefix: string,
   roleCode: RoleCode,
-): Promise<AuthzActor> {
-  const actor = await createAuthzActor(api, `${keyPrefix}-${uniqueSuffix()}`);
-  await grantRole(api, actor.id, roleCode, DEFAULT_TENANT_ID);
-  return actor;
+): Promise<ProvisionedAuthzActor> {
+  const seed = uniqueNumericSuffix();
+  const login = `authz-${keyPrefix}-${seed}@example.com`;
+  const personResponse = await api.post(e2eApiUrl("/api/v1/people"), {
+    headers: authzHeaders(),
+    data: {
+      firstName: `Authz${keyPrefix}`,
+      lastName: "Boundary",
+      nickname: `${keyPrefix}-${seed}`,
+      cpf: validCPF(seed),
+      rg: `RG-AUTHZ-${String(seed).slice(-8)}`,
+      cellular: validBrazilianCellular(seed),
+      email: login,
+      statusId: "ref-person-status-active",
+    },
+  });
+  await expectStatus(personResponse, 201, `create Person for ${roleCode}`);
+
+  const temporaryPassword = `E2E-${seed}-Password!`;
+  const accountResponse = await api.post(e2eApiUrl("/api/v1/auth/accounts"), {
+    headers: authzHeaders(DEFAULT_TENANT_ID),
+    data: {
+      login,
+      temporaryPassword,
+    },
+  });
+  await expectStatus(accountResponse, 201, `create tenant-bound authentication account for ${login}`);
+  const accountBody = (await accountResponse.json()) as ApiEnvelope<AuthAccount>;
+  const accountActor = accountBody.data?.actors.find(
+    (candidate) => candidate.tenantId === DEFAULT_TENANT_ID,
+  );
+  if (!accountActor) {
+    throw new Error(`Authentication account ${login} did not include a default-tenant Actor`);
+  }
+
+  await grantRole(api, accountActor.actorId, roleCode, DEFAULT_TENANT_ID);
+  return {
+    id: accountActor.actorId,
+    actorKey: accountActor.actorKey,
+    displayName: accountActor.displayName,
+    active: accountActor.active,
+    login,
+    temporaryPassword,
+  };
 }
 
 async function createAuthzActor(api: APIRequestContext, keyPrefix: string): Promise<AuthzActor> {
@@ -397,6 +630,35 @@ async function expectErrorCode(response: APIResponse, expectedCode: string): Pro
 async function expectValidationField(response: APIResponse, fieldName: string): Promise<void> {
   const body = (await response.json()) as ApiEnvelope<unknown>;
   expect(body.error?.fields?.[fieldName]).toBeTruthy();
+}
+
+function uniqueNumericSuffix(): number {
+  const timestampDigits = Date.now() % 1_000_000;
+  const randomDigits = Math.floor(Math.random() * 1000);
+  return timestampDigits * 1000 + randomDigits;
+}
+
+function validBrazilianCellular(seed: number): string {
+  const uniqueDigits = String(seed).padStart(8, "0").slice(-8);
+  return `11${`9${uniqueDigits}`.slice(0, 9)}`;
+}
+
+function validCPF(seed: number): string {
+  const base = String(seed).padStart(9, "0").slice(-9);
+  const digits = base.split("").map(Number);
+  const first = cpfCheckDigit(digits);
+  const second = cpfCheckDigit([...digits, first]);
+  return `${base}${first}${second}`;
+}
+
+function cpfCheckDigit(numbers: number[]): number {
+  const weightStart = numbers.length + 1;
+  const sum = numbers.reduce(
+    (total, digit, index) => total + digit * (weightStart - index),
+    0,
+  );
+  const remainder = sum % 11;
+  return remainder < 2 ? 0 : 11 - remainder;
 }
 
 function uniqueSuffix(): string {

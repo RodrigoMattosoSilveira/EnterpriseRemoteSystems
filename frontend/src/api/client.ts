@@ -40,18 +40,30 @@ export class ApiError extends Error {
   }
 }
 
+export type ApiFetchOptions = RequestInit & {
+  suppressForbiddenNavigation?: boolean;
+};
+
 export async function apiFetch<T>(
   path: string,
-  options: RequestInit = {}
+  options: ApiFetchOptions = {}
 ): Promise<T> {
+  const { suppressForbiddenNavigation = false, ...requestOptions } = options;
   const url = `${API_BASE_URL}${path}`;
-  const result = await performApiFetch<T>(url, options);
+  const result = await performApiFetch<T>(url, requestOptions);
 
   if (!result.response.ok) {
-    if (result.response.status === 401 && !isPublicAuthenticationRequest(path)) {
+    if (
+      result.response.status === 401 &&
+      !isPublicAuthenticationRequest(path, requestOptions.method)
+    ) {
       notifyAuthenticationRequired(authenticationInterruptionReason(result.errorCode));
     }
-    if (result.response.status === 403 && result.errorCode === "forbidden") {
+    if (
+      result.response.status === 403 &&
+      result.errorCode === "forbidden" &&
+      !suppressForbiddenNavigation
+    ) {
       notifyForbidden();
     }
     throw new ApiError({
@@ -189,10 +201,15 @@ function authenticationInterruptionReason(
   return "expired";
 }
 
-function isPublicAuthenticationRequest(path: string): boolean {
+function isPublicAuthenticationRequest(
+  path: string,
+  method: string | undefined,
+): boolean {
+  const normalizedMethod = (method ?? "GET").toUpperCase();
   return (
     path === "/auth/login" ||
+    path === "/auth/session" ||
     path === "/auth/password/reset" ||
-    path === "/auth/reactivation-requests"
+    (path === "/auth/reactivation-requests" && normalizedMethod === "POST")
   );
 }

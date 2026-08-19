@@ -44,15 +44,8 @@ test("an authenticated Person actor lands in People before operator workspaces",
   expect(actorId).toBeTruthy();
 
   try {
-    const grantResponse = await request.post(
-      e2eApiUrl(`/api/v1/authz/actors/${encodeURIComponent(actorId!)}/role-grants`),
-      {
-        headers: authzHeaders(),
-        data: { roleCode: "EXPENSE_OPERATOR", tenantId: "default" },
-      },
-    );
-    expect(grantResponse.status()).toBe(201);
-
+    // Bite 30D self-service comes from Account -> tenant Actor -> ACTIVE
+    // Membership. This fixture intentionally has no delegated Role Grant.
     const accountResponse = await request.post(e2eApiUrl("/api/v1/auth/accounts"), {
       headers: authzHeaders(),
       data: {
@@ -75,7 +68,11 @@ test("an authenticated Person actor lands in People before operator workspaces",
       await expect(page).toHaveURL(
         new RegExp(`/people/${escapeRegExp(personId!)}$`),
       );
-      await expect(page.getByRole("link", { name: "Collaborators section" })).toBeVisible();
+      // A Person-only identity has intrinsic Person self-service but no
+      // Collaborator journey and therefore no Collaborator navigation.
+      await expect(
+        page.getByRole("link", { name: "My Collaborator record" }),
+      ).toHaveCount(0);
 
       const saveButton = page.getByRole("button", { name: "Save Changes" });
       await expect(saveButton).toBeDisabled();
