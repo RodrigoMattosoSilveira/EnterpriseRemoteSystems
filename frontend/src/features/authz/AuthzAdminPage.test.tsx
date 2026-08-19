@@ -313,7 +313,13 @@ describe("AuthzAdminPage", () => {
     await waitForText("Expense Admin");
 
     await changeSelectInArticle("expense-admin", "Role", "EXPENSE_OPERATOR");
-    await changeInputInArticle("expense-admin", "Grant tenant", "default");
+    const grantTenantInput = controlByLabel<HTMLInputElement>(
+      articleByText("expense-admin"),
+      "Grant tenant",
+      "input",
+    );
+    expect(grantTenantInput.value).toBe("default");
+    expect(grantTenantInput.disabled).toBe(true);
     await clickButtonInArticle("expense-admin", "Grant Role");
 
     await waitForText("EXPENSE_OPERATOR granted.");
@@ -335,6 +341,61 @@ describe("AuthzAdminPage", () => {
           call.method === "DELETE",
       ),
     ).toBe(true);
+  });
+
+  it("does not allow a tenant role to inherit the application wildcard", async () => {
+    const tenantId = "b16647b4-82a3-4d4e-99d0-c15ede05840b";
+    window.localStorage.setItem("ers.auth.selectedTenantId", "*");
+    actors.push({
+      id: "actor-expense-admin",
+      actorKey: "expense-admin",
+      displayName: "Expense Admin",
+      active: true,
+      roleGrants: [],
+    });
+    mockAuthzFetch();
+
+    renderAuthzAdminPage();
+    await waitForText("Expense Admin");
+
+    await changeSelectInArticle("expense-admin", "Role", "TENANT_ADMIN");
+    const article = articleByText("expense-admin");
+    const grantTenantInput = controlByLabel<HTMLInputElement>(article, "Grant tenant", "input");
+    const grantButton = buttonInArticle("expense-admin", "Grant Role");
+
+    expect(grantTenantInput.value).toBe("*");
+    expect(grantTenantInput.disabled).toBe(true);
+    expect(grantButton.disabled).toBe(true);
+    expect(article.textContent).toContain(
+      "Select a specific tenant in Selected Tenant ID above before granting TENANT_ADMIN.",
+    );
+
+    const selectedTenantInput = controlByLabel<HTMLInputElement>(
+      container,
+      "Selected Tenant ID",
+      "input",
+    );
+    await setInputValue(selectedTenantInput, tenantId);
+    await waitFor(() => grantTenantInput.value === tenantId);
+
+    expect(grantTenantInput.disabled).toBe(true);
+    expect(grantButton.disabled).toBe(false);
+
+    await clickButtonInArticle("expense-admin", "Grant Role");
+    await waitForText("TENANT_ADMIN granted.");
+
+    expect(
+      fetchCalls.some(
+        (call) =>
+          call.url === "/api/v1/authz/actors/actor-expense-admin/role-grants" &&
+          call.method === "POST" &&
+          (call.body as { roleCode?: string; tenantId?: string }).roleCode === "TENANT_ADMIN" &&
+          (call.body as { roleCode?: string; tenantId?: string }).tenantId === tenantId,
+      ),
+    ).toBe(true);
+
+    await waitFor(() => articleByText("expense-admin").textContent?.includes(tenantId) ?? false);
+    expect(buttonInArticle("expense-admin", "Grant Role").disabled).toBe(true);
   });
 
   it("uses the selected tenant for tenant grants and disables an existing grant", async () => {
@@ -743,11 +804,6 @@ async function changeInputInForm(headingText: string, labelText: string, value: 
 }
 
 
-async function changeInputInArticle(articleText: string, labelText: string, value: string) {
-  const article = articleByText(articleText);
-  const input = controlByLabel<HTMLInputElement>(article, labelText, "input");
-  await setInputValue(input, value);
-}
 
 async function changeSelectInArticle(articleText: string, labelText: string, value: string) {
   const article = articleByText(articleText);
@@ -781,6 +837,17 @@ async function submitFormByHeading(headingText: string) {
   await act(async () => {
     form.dispatchEvent(new SubmitEvent("submit", { bubbles: true, cancelable: true }));
   });
+}
+
+function buttonInArticle(articleText: string, name: string) {
+  const article = articleByText(articleText);
+  const button = Array.from(article.querySelectorAll("button")).find(
+    (node) => node.textContent?.trim() === name,
+  );
+  if (!(button instanceof HTMLButtonElement)) {
+    throw new Error(`Could not find button ${name}`);
+  }
+  return button;
 }
 
 async function clickButtonInArticle(articleText: string, name: string) {

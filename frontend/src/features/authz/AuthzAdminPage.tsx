@@ -632,9 +632,6 @@ function ActorCard({
   const [roleCode, setRoleCode] = useState(roles[0]?.code ?? "");
   const selectedRole = roles.find((role) => role.code === roleCode);
   const applicationScopedRole = isApplicationScopedRole(selectedRole);
-  const [tenantId, setTenantId] = useState(() =>
-    applicationScopedRole ? "*" : selectedTenantId.trim(),
-  );
 
   useEffect(() => {
     if (!roleCode && roles[0]?.code) {
@@ -642,11 +639,13 @@ function ActorCard({
     }
   }, [roleCode, roles]);
 
-  useEffect(() => {
-    setTenantId(applicationScopedRole ? "*" : selectedTenantId.trim());
-  }, [applicationScopedRole, roleCode, selectedTenantId]);
-
-  const targetTenantId = applicationScopedRole ? "*" : tenantId.trim();
+  // The Authorization page's Selected Tenant ID is the single source of truth
+  // for tenant-scoped grants. Keeping a second editable tenant value inside each
+  // Actor card allowed the two scopes to drift (including to the application
+  // wildcard). Application-scoped roles are always global.
+  const targetTenantId = applicationScopedRole ? "*" : selectedTenantId.trim();
+  const tenantScopeMissing =
+    !applicationScopedRole && (!targetTenantId || targetTenantId === "*");
   const alreadyGranted = Boolean(
     roleCode &&
       targetTenantId &&
@@ -728,20 +727,31 @@ function ActorCard({
         <label className="block text-sm font-semibold text-gray-700">
           Grant tenant
           <input
-            className="mt-1 block w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm"
-            value={tenantId}
-            disabled={applicationScopedRole}
-            onChange={(event) => setTenantId(event.target.value)}
+            className="mt-1 block w-full rounded-xl border border-gray-300 bg-gray-100 px-3 py-2 text-sm text-gray-700"
+            value={targetTenantId}
+            disabled
+            readOnly
           />
         </label>
         <button
           className="self-end rounded-xl bg-gray-950 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
-          disabled={isMutating || !actor.active || !roleCode || !targetTenantId || alreadyGranted}
+          disabled={
+            isMutating ||
+            !actor.active ||
+            !roleCode ||
+            tenantScopeMissing ||
+            alreadyGranted
+          }
           type="submit"
         >
           Grant Role
         </button>
       </form>
+      {tenantScopeMissing && (
+        <p className="mt-2 text-xs font-medium text-amber-700">
+          Select a specific tenant in Selected Tenant ID above before granting {roleCode}.
+        </p>
+      )}
       {alreadyGranted && (
         <p className="mt-2 text-xs font-medium text-gray-500">
           {roleCode} is already granted for {targetTenantId}.
