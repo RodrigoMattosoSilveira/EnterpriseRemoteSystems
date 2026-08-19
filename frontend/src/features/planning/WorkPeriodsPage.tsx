@@ -1,6 +1,7 @@
 import { FormEvent, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { ApiErrorPanel } from "../../components/ApiErrorPanel";
+import { useAuthorizationContext } from "../../components/layout/AuthorizationContext";
 import type { CreateWorkPeriodInput } from "../../types/planning";
 import { humanizePlanningCode, WORK_PERIOD_STATUSES } from "./planningSchemas";
 import { useCreateWorkPeriod, useWorkPeriods } from "./usePlanning";
@@ -19,6 +20,10 @@ const initialForm: FormState = {
 
 export function WorkPeriodsPage() {
   const navigate = useNavigate();
+  const actor = useAuthorizationContext();
+  const canManageGoldProduction =
+    actor.permissions.includes("*") ||
+    actor.permissions.includes("gold_production.manage");
   const [status, setStatus] = useState("");
   const [showCreate, setShowCreate] = useState(false);
   const [form, setForm] = useState<FormState>(initialForm);
@@ -58,7 +63,9 @@ export function WorkPeriodsPage() {
           </div>
           <div className="flex gap-2">
             <Link to="/collaborators" className="rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 shadow-sm">Collaborators</Link>
-            <Link to="/gold-production" className="rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 shadow-sm">Gold Production</Link>
+            {canManageGoldProduction ? (
+              <Link to="/gold-production" className="rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 shadow-sm">Gold Production</Link>
+            ) : null}
             <button onClick={() => setShowCreate((value) => !value)} className="rounded-xl bg-gray-950 px-4 py-2 text-sm font-semibold text-white shadow-sm">{showCreate ? "Close" : "Add Work Period"}</button>
           </div>
         </div>

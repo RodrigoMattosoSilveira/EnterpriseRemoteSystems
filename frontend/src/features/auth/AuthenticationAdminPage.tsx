@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { useLocation } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   createAuthAccount,
@@ -239,6 +240,7 @@ export function authenticationTenantActorIdsMatchingDisplayName(
 
 export function AuthenticationAdminPage() {
   const auth = useAuthState();
+  const location = useLocation();
   const queryClient = useQueryClient();
   const tenantId = readSelectedTenantId(window.localStorage);
   const actorContext = authorizationRequestContext(tenantId);
@@ -437,7 +439,9 @@ export function AuthenticationAdminPage() {
         error={accounts.error ?? tenantOptions.error ?? actors.error ?? mutation.error ?? actionError}
       />
 
-      <ReactivationRequestsPanel />
+      <ReactivationRequestsPanel
+        defaultOpen={location.hash === "#account-reactivation-requests"}
+      />
 
       <section className="mt-6 rounded-2xl border bg-white p-5">
         <h2 className="text-lg font-semibold">Create account</h2>

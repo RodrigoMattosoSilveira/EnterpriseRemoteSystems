@@ -192,6 +192,27 @@ afterEach(async () => {
 });
 
 describe("CreateCollaboratorPage", () => {
+  it("preselects an eligible Person when opened from that Person record", async () => {
+    mockCreateCollaboratorFetch();
+
+    renderCreateCollaboratorPage(
+      "/collaborators/new?personId=person-complete-1",
+    );
+
+    await waitForText("Selected Person is complete.");
+    await waitForText("Ana Silva (Ana)");
+
+    const backLink = Array.from(container.querySelectorAll("a")).find(
+      (node) => node.textContent?.trim() === "Back to Person",
+    );
+    expect(backLink?.getAttribute("href")).toBe("/people/person-complete-1");
+
+    const changeButton = Array.from(container.querySelectorAll("button")).find(
+      (node) => node.textContent?.trim() === "Change Person",
+    );
+    expect(changeButton).toBeTruthy();
+  });
+
   it("filters eligible People progressively by Person nickname", async () => {
     mockCreateCollaboratorFetch();
 
@@ -609,7 +630,9 @@ describe("CreateCollaboratorPage", () => {
   });
 });
 
-function renderCreateCollaboratorPage() {
+function renderCreateCollaboratorPage(
+  initialEntry = "/collaborators/new",
+) {
   const queryClient = new QueryClient({
     defaultOptions: {
       queries: { retry: false },
@@ -626,7 +649,7 @@ function renderCreateCollaboratorPage() {
         element: <main>Collaborators route reached</main>,
       },
     ],
-    { initialEntries: ["/collaborators/new"] },
+    { initialEntries: [initialEntry] },
   );
 
   root = createRoot(container);

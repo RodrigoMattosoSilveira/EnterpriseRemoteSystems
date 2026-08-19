@@ -79,61 +79,90 @@ func (s *GORMStore) FindActor(ctx context.Context, lookup ActorLookup) (*Actor, 
 		return nil, ErrMissingActor
 	}
 
-	grantQuery := s.database.WithContext(ctx).
-		Model(&AuthzActorRoleGrant{}).
-		Joins("JOIN authz_roles ON authz_roles.id = authz_actor_role_grants.role_id AND authz_roles.active = ?", true).
-		Where("authz_actor_role_grants.actor_id = ? AND authz_actor_role_grants.active = ?", actorRow.ID, true)
-	if tenantID != "" {
-		grantQuery = grantQuery.Where("authz_actor_role_grants.tenant_id IN ?", []string{tenantID, GlobalTenantScope})
+	// A persisted global Actor is evaluated only against global/control-plane
+	// Role Grants. Selecting a tenant no longer turns global authority into
+	// tenant business authority.
+	globalRoles, globalPermissions, err := s.loadDelegatedAuthorization(ctx, actorRow.ID, GlobalTenantScope, ActorScopeApplication)
+	if err != nil {
+		return nil, err
+	}
+	if len(globalRoles) > 0 {
+		return &Actor{
+			ID:       actorRow.ActorKey,
+			RecordID: actorRow.ID,
+			// Bite 30H removes the remaining Application Administrator tenant-data
+			// compatibility. Until then, retain the selected tenant as the request
+			// context without turning this GLOBAL Actor into a tenant Actor.
+			TenantID:             tenantID,
+			Source:               ActorSourcePersisted,
+			Scope:                ActorScopeApplication,
+			RoleCodes:            globalRoles,
+			Permissions:          clonePermissionSet(globalPermissions),
+			DelegatedPermissions: globalPermissions,
+			IntrinsicPermissions: map[Permission]struct{}{},
+		}, nil
 	}
 
+	// Header/test actors remain useful for isolated tests, but tenant delegated
+	// authority is resolved only from grants for the explicitly requested tenant.
+	roles, delegated, err := s.loadDelegatedAuthorization(ctx, actorRow.ID, tenantID, ActorScopeTenant)
+	if err != nil {
+		return nil, err
+	}
+	return &Actor{
+		ID:                   actorRow.ActorKey,
+		RecordID:             actorRow.ID,
+		TenantID:             tenantID,
+		PersonID:             stringValue(actorRow.PersonID),
+		CollaboratorID:       stringValue(actorRow.CollaboratorID),
+		Source:               ActorSourcePersisted,
+		Scope:                ActorScopeTenant,
+		RoleCodes:            roles,
+		Permissions:          clonePermissionSet(delegated),
+		DelegatedPermissions: delegated,
+		IntrinsicPermissions: map[Permission]struct{}{},
+	}, nil
+}
+
+func (s *GORMStore) loadDelegatedAuthorization(ctx context.Context, actorID string, tenantID string, scope ActorScope) ([]string, map[Permission]struct{}, error) {
 	type grantProjection struct {
-		RoleID    string
-		RoleCode  string
-		ScopeType string
-		TenantID  string
+		RoleID   string
+		RoleCode string
 	}
 	var grants []grantProjection
-	if err := grantQuery.Select("authz_roles.id AS role_id, authz_roles.code AS role_code, authz_roles.scope_type AS scope_type, authz_actor_role_grants.tenant_id AS tenant_id").
-		Scan(&grants).Error; err != nil {
-		return nil, fmt.Errorf("find authorization grants: %w", err)
+	query := s.database.WithContext(ctx).
+		Table("authz_actor_role_grants g").
+		Select("r.id AS role_id, r.code AS role_code").
+		Joins("JOIN authz_roles r ON r.id = g.role_id AND r.active = ?", true).
+		Where("g.actor_id = ? AND g.active = ? AND g.tenant_id = ?", actorID, true, tenantID)
+	switch scope {
+	case ActorScopeApplication:
+		query = query.Where("r.scope_type = ?", string(ActorScopeApplication))
+	case ActorScopeTenant:
+		query = query.Where("r.scope_type = ?", string(ActorScopeTenant))
+	default:
+		return nil, nil, ErrForbidden
+	}
+	if err := query.Scan(&grants).Error; err != nil {
+		return nil, nil, fmt.Errorf("find authorization grants: %w", err)
 	}
 
 	permissions := map[Permission]struct{}{}
 	roles := make([]string, 0, len(grants))
-	scope := ActorScope("")
-	resolvedTenantID := tenantID
 	for _, grant := range grants {
 		roles = append(roles, grant.RoleCode)
-		if resolvedTenantID == "" && grant.TenantID != GlobalTenantScope {
-			resolvedTenantID = grant.TenantID
-		}
-		scope = strongestScope(scope, ActorScope(grant.ScopeType))
-
 		var permissionRows []AuthzRolePermission
 		if err := s.database.WithContext(ctx).
 			Where("role_id = ?", grant.RoleID).
 			Find(&permissionRows).Error; err != nil {
-			return nil, fmt.Errorf("find authorization permissions: %w", err)
+			return nil, nil, fmt.Errorf("find authorization permissions: %w", err)
 		}
 		for _, row := range permissionRows {
 			permissions[Permission(row.PermissionCode)] = struct{}{}
 		}
 	}
-
 	sort.Strings(roles)
-
-	return &Actor{
-		ID:             actorRow.ActorKey,
-		RecordID:       actorRow.ID,
-		TenantID:       resolvedTenantID,
-		PersonID:       stringValue(actorRow.PersonID),
-		CollaboratorID: stringValue(actorRow.CollaboratorID),
-		Source:         ActorSourcePersisted,
-		Scope:          scope,
-		RoleCodes:      roles,
-		Permissions:    permissions,
-	}, nil
+	return roles, permissions, nil
 }
 
 func AutoMigrate(database *gorm.DB) error {
@@ -167,6 +196,50 @@ END`,
 	return nil
 }
 
+func tenantAdministratorDelegatedPermissions() []Permission {
+	return []Permission{
+		PermissionTenantsRead,
+		PermissionPeopleRead,
+		PermissionPeopleCreate,
+		PermissionPeopleUpdate,
+		PermissionCollaboratorsRead,
+		PermissionCollaboratorsCreate,
+		PermissionCollaboratorsUpdate,
+		PermissionPlanningRead,
+		PermissionPlanningCreate,
+		PermissionPlanningUpdate,
+		PermissionEarningsRead,
+		PermissionEarningsCreate,
+		PermissionEarningsUpdate,
+		PermissionPriceListsRead,
+		PermissionPriceListsCreate,
+		PermissionPriceListsUpdate,
+		PermissionGoldPricesManage,
+		PermissionGoldProductionManage,
+		PermissionAuthzTenantRoleGrantsManage,
+		PermissionReferenceDataRead,
+		PermissionReferenceDataManage,
+		PermissionExpensesRead,
+		PermissionExpensesCreate,
+		PermissionExpensesUpdate,
+		PermissionCurrentAccountsSummaryRead,
+		PermissionCurrentAccountsLedgerRead,
+		PermissionCurrentAccountsLedgerCreate,
+		PermissionCurrentAccountsSettingsRead,
+		PermissionCurrentAccountsSettingsUpdate,
+		PermissionLedgerReceiptsRead,
+		PermissionLedgerReceiptsCreate,
+		PermissionLedgerReceiptsPrint,
+		PermissionLedgerReceiptsReturn,
+		PermissionLedgerReceiptsBackfill,
+		PermissionLedgerCorrectionsCreate,
+		PermissionJourneySettlementsPreview,
+		PermissionJourneySettlementsZeroGold,
+		PermissionJourneySettlementsPartialPayout,
+		PermissionJourneySettlementsClose,
+	}
+}
+
 func SeedAuthorizationCatalog(database *gorm.DB) error {
 	now := time.Now().UTC()
 
@@ -179,11 +252,10 @@ func SeedAuthorizationCatalog(database *gorm.DB) error {
 	}
 
 	roles := []AuthzRole{
-		{ID: "authz-role-application-admin", Code: string(RoleApplicationAdmin), Label: "Application Administrator", Description: "CRU all records across all tenants.", ScopeType: string(ActorScopeApplication), Active: true, CreatedAt: now, UpdatedAt: now},
-		{ID: "authz-role-tenant-admin", Code: string(RoleTenantAdmin), Label: "Tenant Administrator", Description: "CRU all records for the assigned tenant.", ScopeType: string(ActorScopeTenant), Active: true, CreatedAt: now, UpdatedAt: now},
+		{ID: "authz-role-application-admin", Code: string(RoleApplicationAdmin), Label: "Application Administrator", Description: "Application-global control-plane administration; legacy tenant-data compatibility remains until Bite 30H.", ScopeType: string(ActorScopeApplication), Active: true, CreatedAt: now, UpdatedAt: now},
+		{ID: "authz-role-tenant-admin", Code: string(RoleTenantAdmin), Label: "Tenant Administrator", Description: "Tenant-wide administration through explicit delegated permissions.", ScopeType: string(ActorScopeTenant), Active: true, CreatedAt: now, UpdatedAt: now},
 		{ID: "authz-role-earnings-operator", Code: string(RoleEarningsOperator), Label: "Earnings Operator", Description: "Planning and earning operations for the assigned tenant.", ScopeType: string(ActorScopeTenant), Active: true, CreatedAt: now, UpdatedAt: now},
 		{ID: "authz-role-expense-operator", Code: string(RoleExpenseOperator), Label: "Expense Operator", Description: "Expense, price list, current account summary, and receipt operations for the assigned tenant.", ScopeType: string(ActorScopeTenant), Active: true, CreatedAt: now, UpdatedAt: now},
-		{ID: "authz-role-person", Code: string(RolePerson), Label: "Person", Description: "Self-service read/update access for a person and linked collaborator records.", ScopeType: string(ActorScopeSelf), Active: true, CreatedAt: now, UpdatedAt: now},
 	}
 	for _, role := range roles {
 		if err := database.Where("id = ?", role.ID).FirstOrCreate(&role).Error; err != nil {
@@ -192,8 +264,17 @@ func SeedAuthorizationCatalog(database *gorm.DB) error {
 	}
 
 	rolePermissions := map[RoleCode][]Permission{
-		RoleApplicationAdmin: {PermissionAll},
-		RoleTenantAdmin:      {PermissionAll},
+		RoleApplicationAdmin: {
+			// Explicit control-plane permissions are established in 30D. The
+			// transitional wildcard remains until Bite 30H removes standing
+			// Application Administrator tenant-data compatibility. Gold Production
+			// is an explicit administrative exception shared with Tenant Admins.
+			PermissionAll,
+			PermissionAuthzSelfRead, PermissionAuthzRead, PermissionAuthzManage,
+			PermissionTenantsRead, PermissionTenantsCreate, PermissionTenantsUpdate,
+			PermissionGoldProductionManage,
+		},
+		RoleTenantAdmin: tenantAdministratorDelegatedPermissions(),
 		RoleEarningsOperator: {
 			PermissionAuthzSelfRead, PermissionTenantsRead, PermissionReferenceDataRead,
 			PermissionCollaboratorsRead,
@@ -209,14 +290,6 @@ func SeedAuthorizationCatalog(database *gorm.DB) error {
 			PermissionExpensesRead, PermissionExpensesCreate,
 			PermissionLedgerReceiptsRead, PermissionLedgerReceiptsCreate, PermissionLedgerReceiptsPrint, PermissionLedgerReceiptsReturn,
 		},
-		RolePerson: {
-			PermissionAuthzSelfRead, PermissionTenantsRead, PermissionReferenceDataRead,
-			PermissionPeopleSelfRead, PermissionPeopleSelfUpdate,
-			PermissionCollaboratorsSelfRead,
-			PermissionCurrentAccountsSelfSummaryRead, PermissionCurrentAccountsSelfLedgerRead,
-			PermissionAssignmentsSelfCurrentRead,
-			PermissionLedgerReceiptsSelfRead,
-		},
 	}
 
 	roleIDs := map[RoleCode]string{
@@ -224,7 +297,14 @@ func SeedAuthorizationCatalog(database *gorm.DB) error {
 		RoleTenantAdmin:      "authz-role-tenant-admin",
 		RoleEarningsOperator: "authz-role-earnings-operator",
 		RoleExpenseOperator:  "authz-role-expense-operator",
-		RolePerson:           "authz-role-person",
+	}
+	// Tenant Administrator authority is deliberately explicit in Bite 30D.
+	// Remove the historical wildcard so catalog seeding also converges databases
+	// that were initialized before the explicit-permission migration.
+	if err := database.
+		Where("role_id = ? AND permission_code = ?", roleIDs[RoleTenantAdmin], string(PermissionAll)).
+		Delete(&AuthzRolePermission{}).Error; err != nil {
+		return fmt.Errorf("remove Tenant Administrator wildcard permission: %w", err)
 	}
 	for roleCode, grantedPermissions := range rolePermissions {
 		roleID := roleIDs[roleCode]
@@ -251,11 +331,75 @@ func GrantRole(database *gorm.DB, actorID string, role RoleCode, tenantID string
 	if err := database.Where("code = ? AND active = ?", string(role), true).First(&roleRow).Error; err != nil {
 		return fmt.Errorf("find role %s: %w", role, err)
 	}
+	if err := ValidateDelegatedRoleGrant(database, actorID, roleRow, tenantID, false); err != nil {
+		return err
+	}
 
 	now := time.Now().UTC()
 	grant := AuthzActorRoleGrant{ID: fmt.Sprintf("authz-grant-%s-%s-%s", actorID, roleRow.Code, tenantID), ActorID: actorID, RoleID: roleRow.ID, TenantID: tenantID, Active: true, CreatedAt: now, UpdatedAt: now}
 	if err := database.Where("actor_id = ? AND role_id = ? AND tenant_id = ?", actorID, roleRow.ID, tenantID).FirstOrCreate(&grant).Error; err != nil {
 		return fmt.Errorf("grant role %s: %w", role, err)
+	}
+	return nil
+}
+
+// ValidateDelegatedRoleGrant enforces the Bite 30D separation between Actor
+// identity and delegated authority. Self-service is intrinsic and therefore
+// cannot be granted as a Role. When requireTenantBinding is true, a tenant Role
+// may be granted only to the Actor already bound to that exact tenant through
+// auth_account_actors.
+func ValidateDelegatedRoleGrant(database *gorm.DB, actorID string, role AuthzRole, tenantID string, requireTenantBinding bool) error {
+	actorID = strings.TrimSpace(actorID)
+	tenantID = strings.TrimSpace(tenantID)
+	if actorID == "" {
+		return NewValidationError(map[string]string{"actorId": "Actor ID is required"})
+	}
+	if role.Code == string(RolePerson) || role.ScopeType == string(ActorScopeSelf) {
+		return NewValidationError(map[string]string{"roleCode": "Self-service authorization is intrinsic and cannot be granted as a Role"})
+	}
+	if role.ScopeType == string(ActorScopeApplication) {
+		if tenantID != GlobalTenantScope {
+			return NewValidationError(map[string]string{"tenantId": "Application-scoped roles must use the global tenant scope (*)"})
+		}
+		if database != nil && database.Migrator().HasTable("auth_account_actors") {
+			var tenantBindings int64
+			if err := database.Table("auth_account_actors").Where("actor_id = ? AND scope_type = ?", actorID, "TENANT").Count(&tenantBindings).Error; err != nil {
+				return fmt.Errorf("check application Actor scope: %w", err)
+			}
+			if tenantBindings > 0 {
+				return NewValidationError(map[string]string{"actorId": "Application roles cannot be granted to a tenant Actor"})
+			}
+		}
+		return nil
+	}
+	if role.ScopeType != string(ActorScopeTenant) {
+		return NewValidationError(map[string]string{"roleCode": "Only tenant or application delegated Roles are supported"})
+	}
+	if tenantID == "" || tenantID == GlobalTenantScope {
+		return NewValidationError(map[string]string{"tenantId": "Tenant roles require a specific tenant ID"})
+	}
+	if !requireTenantBinding || database == nil || !database.Migrator().HasTable("auth_account_actors") {
+		return nil
+	}
+
+	type bindingProjection struct {
+		ScopeType string
+		TenantID  *string
+	}
+	var binding bindingProjection
+	result := database.Table("auth_account_actors").
+		Select("scope_type, tenant_id").
+		Where("actor_id = ?", actorID).
+		Limit(1).
+		Scan(&binding)
+	if result.Error != nil {
+		return fmt.Errorf("check tenant Actor binding: %w", result.Error)
+	}
+	if result.RowsAffected == 0 {
+		return NewValidationError(map[string]string{"actorId": "Tenant roles require an Actor bound to the target tenant"})
+	}
+	if binding.ScopeType != "TENANT" || binding.TenantID == nil || strings.TrimSpace(*binding.TenantID) != tenantID {
+		return NewValidationError(map[string]string{"tenantId": "Tenant Role Grant must match the Actor's tenant"})
 	}
 	return nil
 }
@@ -268,10 +412,11 @@ type PermissionCatalogEntry struct {
 
 func PermissionCatalog() []PermissionCatalogEntry {
 	return []PermissionCatalogEntry{
-		{PermissionAll, "All permissions", "Wildcard permission for application and tenant administrators."},
+		{PermissionAll, "All permissions", "Transitional wildcard permission for Application Administrators until Bite 30H."},
 		{PermissionAuthzSelfRead, "Read own authorization context", "Read the current persisted actor, effective roles, scope, and permissions."},
 		{PermissionAuthzRead, "Read authorization administration", "Read authorization actors, roles, permissions, and grants."},
-		{PermissionAuthzManage, "Manage authorization administration", "Create authorization actors and manage role grants."},
+		{PermissionAuthzManage, "Manage authorization administration", "Create authorization actors and manage application-global role grants."},
+		{PermissionAuthzTenantRoleGrantsManage, "Manage tenant operator role grants", "Grant and revoke Earnings Operator and Expenses Operator roles for active members of the selected tenant."},
 		{PermissionTenantsRead, "Read tenants", "Read tenant records."},
 		{PermissionTenantsCreate, "Create tenants", "Create tenant records."},
 		{PermissionTenantsUpdate, "Update tenants", "Update tenant records."},
@@ -293,6 +438,8 @@ func PermissionCatalog() []PermissionCatalogEntry {
 		{PermissionPriceListsRead, "Read price lists", "Read tenant price list records."},
 		{PermissionPriceListsCreate, "Create price lists", "Create tenant price list records."},
 		{PermissionPriceListsUpdate, "Update price lists", "Update tenant price list records."},
+		{PermissionGoldPricesManage, "Manage gold prices", "List, record, replace, and deactivate sensitive tenant gold-price administration records."},
+		{PermissionGoldProductionManage, "Manage gold production", "Record, edit, deactivate, and delete tenant Gold Production entries."},
 		{PermissionReferenceDataRead, "Read reference data", "Read tenant reference data records."},
 		{PermissionReferenceDataManage, "Manage reference data", "Create, update, deactivate, and reactivate tenant reference data records."},
 		{PermissionExpensesRead, "Read expenses", "Read tenant expense records."},
@@ -327,22 +474,9 @@ func stringValue(value *string) string {
 	return *value
 }
 
-func strongestScope(current, next ActorScope) ActorScope {
-	if current == ActorScopeApplication || next == ActorScopeApplication {
-		return ActorScopeApplication
-	}
-	if current == ActorScopeTenant || next == ActorScopeTenant {
-		return ActorScopeTenant
-	}
-	if current == ActorScopeSelf || next == ActorScopeSelf {
-		return ActorScopeSelf
-	}
-	return next
-}
-
-// TenantOption describes an active tenant in which an authenticated actor has
-// at least one active role grant. Application-scoped grants apply to every
-// active tenant.
+// TenantOption describes an active tenant available to an Actor. Tenant-scoped
+// options come from delegated tenant authority; the legacy Application
+// Administrator all-tenant option remains temporarily for 30E/30H compatibility.
 type TenantOption struct {
 	ID        string   `json:"id"`
 	Code      string   `json:"code"`
@@ -390,6 +524,8 @@ func (s *GORMStore) ListActorTenantOptions(ctx context.Context, actorRecordID st
 	tenantRoles := map[string]map[string]struct{}{}
 	for _, grant := range grants {
 		if grant.TenantID == GlobalTenantScope {
+			// Transitional Application Administrator tenant selection remains
+			// until Bite 30E/30H. 30D no longer treats this as a tenant Role.
 			globalRoles[grant.RoleCode] = struct{}{}
 			continue
 		}
@@ -451,14 +587,13 @@ type AccountActorStore interface {
 }
 
 type accountActorBindingProjection struct {
-	ActorID        string
-	ActorKey       string
-	DisplayName    string
-	PersonID       *string
-	CollaboratorID *string
-	ScopeType      string
-	TenantID       *string
-	MembershipID   *string
+	AccountID    string
+	ActorID      string
+	ActorKey     string
+	DisplayName  string
+	ScopeType    string
+	TenantID     *string
+	MembershipID *string
 }
 
 func (s *GORMStore) FindAccountActor(ctx context.Context, accountID string, tenantID string) (*Actor, error) {
@@ -477,11 +612,10 @@ func (s *GORMStore) FindAccountActor(ctx context.Context, accountID string, tena
 	var binding accountActorBindingProjection
 	result := s.database.WithContext(ctx).
 		Table("auth_account_actors aa").
-		Select(`aa.actor_id AS actor_id,
+		Select(`aa.account_id AS account_id,
+			aa.actor_id AS actor_id,
 			a.actor_key AS actor_key,
 			a.display_name AS display_name,
-			a.person_id AS person_id,
-			a.collaborator_id AS collaborator_id,
 			aa.scope_type AS scope_type,
 			aa.tenant_id AS tenant_id,
 			aa.membership_id AS membership_id`).
@@ -497,63 +631,134 @@ func (s *GORMStore) FindAccountActor(ctx context.Context, accountID string, tena
 		return nil, ErrAuthenticationRequired
 	}
 
-	grantTenantID := tenantID
-	actorScope := ActorScopeTenant
-	resolvedTenantID := tenantID
 	if binding.ScopeType == "GLOBAL" {
-		grantTenantID = GlobalTenantScope
-		actorScope = ActorScopeApplication
-		// Until Bite 30H removes Application Administrator tenant-data
-		// compatibility, a global Actor can still be evaluated against the
-		// selected tenant. The binding remains globally scoped and never becomes
-		// a tenant Actor.
-		resolvedTenantID = tenantID
+		roles, delegated, err := s.loadDelegatedAuthorization(ctx, binding.ActorID, GlobalTenantScope, ActorScopeApplication)
+		if err != nil {
+			return nil, err
+		}
+		if len(roles) == 0 {
+			return nil, ErrAuthenticationRequired
+		}
+		return &Actor{
+			ID:       binding.ActorKey,
+			RecordID: binding.ActorID,
+			// Bite 30H removes this selected-tenant compatibility. The Actor
+			// remains APPLICATION scoped and has no Membership/Person identity.
+			TenantID:             tenantID,
+			Source:               ActorSourceAuthenticatedSession,
+			Scope:                ActorScopeApplication,
+			RoleCodes:            roles,
+			Permissions:          clonePermissionSet(delegated),
+			DelegatedPermissions: delegated,
+			IntrinsicPermissions: map[Permission]struct{}{},
+		}, nil
 	}
-	return s.buildBoundActor(ctx, binding, grantTenantID, resolvedTenantID, actorScope)
+
+	return s.buildTenantBoundActor(ctx, binding, tenantID)
 }
 
-func (s *GORMStore) buildBoundActor(ctx context.Context, binding accountActorBindingProjection, grantTenantID string, resolvedTenantID string, scope ActorScope) (*Actor, error) {
-	type grantProjection struct {
-		RoleID   string
-		RoleCode string
-	}
-	var grants []grantProjection
-	if err := s.database.WithContext(ctx).
-		Table("authz_actor_role_grants g").
-		Select("r.id AS role_id, r.code AS role_code").
-		Joins("JOIN authz_roles r ON r.id = g.role_id AND r.active = ?", true).
-		Where("g.actor_id = ? AND g.active = ? AND g.tenant_id = ?", binding.ActorID, true, grantTenantID).
-		Scan(&grants).Error; err != nil {
-		return nil, fmt.Errorf("find authenticated Account Actor grants: %w", err)
-	}
-	if len(grants) == 0 {
+type intrinsicTenantIdentity struct {
+	MembershipID   string
+	GlobalPersonID string
+	LegacyPersonID *string
+}
+
+func (s *GORMStore) buildTenantBoundActor(ctx context.Context, binding accountActorBindingProjection, tenantID string) (*Actor, error) {
+	if binding.TenantID == nil || strings.TrimSpace(*binding.TenantID) != tenantID || binding.MembershipID == nil || strings.TrimSpace(*binding.MembershipID) == "" {
 		return nil, ErrAuthenticationRequired
 	}
 
-	permissions := map[Permission]struct{}{}
-	roles := make([]string, 0, len(grants))
-	for _, grant := range grants {
-		roles = append(roles, grant.RoleCode)
-		var permissionRows []AuthzRolePermission
-		if err := s.database.WithContext(ctx).Where("role_id = ?", grant.RoleID).Find(&permissionRows).Error; err != nil {
-			return nil, fmt.Errorf("find authenticated Account Actor permissions: %w", err)
+	var identity intrinsicTenantIdentity
+	result := s.database.WithContext(ctx).
+		Table("person_tenant_memberships m").
+		Select("m.id AS membership_id, m.person_id AS global_person_id, m.legacy_person_id AS legacy_person_id").
+		Joins("JOIN auth_account_people ap ON ap.account_id = ? AND ap.person_id = m.person_id", binding.AccountID).
+		Joins("JOIN reference_data status ON status.id = m.status_id AND status.tenant_id = m.tenant_id AND status.type = ? AND status.active = ?", "person_status", true).
+		Where("m.id = ? AND m.tenant_id = ? AND status.code = ?", strings.TrimSpace(*binding.MembershipID), tenantID, "ACTIVE").
+		Limit(1).
+		Scan(&identity)
+	if result.Error != nil {
+		return nil, fmt.Errorf("resolve intrinsic tenant identity: %w", result.Error)
+	}
+	if result.RowsAffected == 0 {
+		return nil, ErrAuthenticationRequired
+	}
+
+	personID := stringValue(identity.LegacyPersonID)
+	collaboratorID := ""
+	if personID != "" {
+		type collaboratorProjection struct{ ID string }
+		var collaborator collaboratorProjection
+		if err := s.database.WithContext(ctx).
+			Table("collaborator_journeys").
+			Select("id").
+			Where("tenant_id = ? AND person_id = ? AND closed_at IS NULL", tenantID, personID).
+			Order("journey_start_date DESC, created_at DESC").
+			Limit(1).
+			Scan(&collaborator).Error; err != nil {
+			return nil, fmt.Errorf("resolve intrinsic collaborator identity: %w", err)
 		}
-		for _, row := range permissionRows {
-			permissions[Permission(row.PermissionCode)] = struct{}{}
+		collaboratorID = strings.TrimSpace(collaborator.ID)
+	}
+
+	intrinsic := intrinsicSelfServicePermissions(collaboratorID != "")
+	roles, delegated, err := s.loadDelegatedAuthorization(ctx, binding.ActorID, tenantID, ActorScopeTenant)
+	if err != nil {
+		return nil, err
+	}
+	permissions := mergePermissionSets(intrinsic, delegated)
+
+	return &Actor{
+		ID:                   binding.ActorKey,
+		RecordID:             binding.ActorID,
+		TenantID:             tenantID,
+		PersonID:             personID,
+		GlobalPersonID:       identity.GlobalPersonID,
+		MembershipID:         identity.MembershipID,
+		CollaboratorID:       collaboratorID,
+		Source:               ActorSourceAuthenticatedSession,
+		Scope:                ActorScopeTenant,
+		RoleCodes:            roles,
+		Permissions:          permissions,
+		IntrinsicPermissions: intrinsic,
+		DelegatedPermissions: delegated,
+	}, nil
+}
+
+func intrinsicSelfServicePermissions(activeCollaborator bool) map[Permission]struct{} {
+	permissions := map[Permission]struct{}{
+		PermissionAuthzSelfRead:     {},
+		PermissionTenantsRead:       {},
+		PermissionReferenceDataRead: {},
+		PermissionPeopleSelfRead:    {},
+		PermissionPeopleSelfUpdate:  {},
+	}
+	if activeCollaborator {
+		for _, permission := range []Permission{
+			PermissionCollaboratorsSelfRead,
+			PermissionCurrentAccountsSelfSummaryRead,
+			PermissionCurrentAccountsSelfLedgerRead,
+			PermissionAssignmentsSelfCurrentRead,
+			PermissionLedgerReceiptsSelfRead,
+		} {
+			permissions[permission] = struct{}{}
 		}
 	}
-	sort.Strings(roles)
-	return &Actor{
-		ID:             binding.ActorKey,
-		RecordID:       binding.ActorID,
-		TenantID:       resolvedTenantID,
-		PersonID:       stringValue(binding.PersonID),
-		CollaboratorID: stringValue(binding.CollaboratorID),
-		Source:         ActorSourceAuthenticatedSession,
-		Scope:          scope,
-		RoleCodes:      roles,
-		Permissions:    permissions,
-	}, nil
+	return permissions
+}
+
+func mergePermissionSets(sets ...map[Permission]struct{}) map[Permission]struct{} {
+	merged := map[Permission]struct{}{}
+	for _, set := range sets {
+		for permission := range set {
+			merged[permission] = struct{}{}
+		}
+	}
+	return merged
+}
+
+func clonePermissionSet(source map[Permission]struct{}) map[Permission]struct{} {
+	return mergePermissionSets(source)
 }
 
 func (s *GORMStore) ListAccountTenantOptions(ctx context.Context, accountID string) ([]TenantOption, error) {
@@ -574,6 +779,9 @@ func (s *GORMStore) ListAccountTenantOptions(ctx context.Context, accountID stri
 		return nil, fmt.Errorf("find global Account Actor: %w", err)
 	}
 	if globalCount > 0 {
+		// Tenant-selection compatibility for GLOBAL Application Administrator
+		// Accounts remains until Bite 30E/30H. 30D establishes explicit
+		// control-plane permissions without prematurely removing that behavior.
 		var roleCodes []string
 		if err := s.database.WithContext(ctx).
 			Table("auth_account_actors aa").
@@ -597,6 +805,8 @@ func (s *GORMStore) ListAccountTenantOptions(ctx context.Context, accountID stri
 		Table("auth_account_actors aa").
 		Select("aa.tenant_id AS tenant_id, aa.actor_id AS actor_id").
 		Joins("JOIN authz_actors a ON a.id = aa.actor_id AND a.active = ?", true).
+		Joins("JOIN person_tenant_memberships m ON m.id = aa.membership_id AND m.tenant_id = aa.tenant_id").
+		Joins("JOIN reference_data status ON status.id = m.status_id AND status.tenant_id = m.tenant_id AND status.type = ? AND status.active = ? AND status.code = ?", "person_status", true, "ACTIVE").
 		Where("aa.account_id = ? AND aa.scope_type = ?", accountID, "TENANT").
 		Order("aa.tenant_id").Scan(&bindings).Error; err != nil {
 		return nil, fmt.Errorf("list Account tenant Actors: %w", err)

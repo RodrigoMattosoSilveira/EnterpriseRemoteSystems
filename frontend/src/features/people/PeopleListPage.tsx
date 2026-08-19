@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { ApiErrorPanel } from "../../components/ApiErrorPanel";
+import { ReactivationRequestsAlert } from "../auth/ReactivationRequestsAlert";
 import { useOptionalAuthorizationContext } from "../../components/layout/AuthorizationContext";
 import { useReferenceDataByType } from "../reference-data/useReferenceData";
 
@@ -36,6 +37,8 @@ export function PeopleListPage() {
   const actor = useOptionalAuthorizationContext();
   const canManageMemberships =
     actor?.scope === "TENANT" && actor.roleCodes.includes("TENANT_ADMIN");
+  const isApplicationAdministrator =
+    actor?.scope === "APPLICATION" && actor.roleCodes.includes("APPLICATION_ADMIN");
   // POST /people remains a Bite 28 compatibility path until the 30H global
   // administration cutover. Preserve the existing create affordance for actors
   // that currently hold people.create (including today's Application Admin).
@@ -211,6 +214,8 @@ export function PeopleListPage() {
             {listState.flash}
           </div>
         )}
+
+        {isApplicationAdministrator && <ReactivationRequestsAlert />}
 
         <section
           aria-label="Search and filter controls"

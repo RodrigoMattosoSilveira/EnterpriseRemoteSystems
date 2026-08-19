@@ -17,6 +17,15 @@ const roles = [
     permissions: [{ code: "*", label: "All", description: "All permissions" }],
   },
   {
+    id: "authz-role-person",
+    code: "PERSON",
+    label: "Person",
+    description: "Deprecated intrinsic self-service role",
+    scopeType: "SELF",
+    active: false,
+    permissions: [{ code: "people.self.read", label: "Read self", description: "" }],
+  },
+  {
     id: "authz-role-expense-operator",
     code: "EXPENSE_OPERATOR",
     label: "Expense Operator",
@@ -25,12 +34,34 @@ const roles = [
     active: true,
     permissions: [{ code: "expenses.create", label: "Create Expenses", description: "" }],
   },
+  {
+    id: "authz-role-tenant-admin",
+    code: "TENANT_ADMIN",
+    label: "Tenant Administrator",
+    description: "Tenant administration",
+    scopeType: "TENANT",
+    active: true,
+    permissions: [],
+  },
 ];
 
 const permissions = [
   { code: "authz.read", label: "Read Authorization", description: "Read authz data" },
   { code: "authz.manage", label: "Manage Authorization", description: "Manage authz data" },
 ];
+
+function activeTenantBinding(tenantId: string) {
+  return {
+    accountId: `account-${tenantId}`,
+    accountLogin: `account-${tenantId}@example.test`,
+    scopeType: "TENANT",
+    tenantId,
+    membershipId: `membership-${tenantId}`,
+    membershipTenantId: tenantId,
+    membershipActive: true,
+    membershipSameTenant: true,
+  };
+}
 
 const collaborators = [
   {
@@ -166,6 +197,11 @@ describe("AuthzAdminPage", () => {
 
     expect(fetchCalls.some((call) => call.url === "/api/v1/authz/current-actor")).toBe(true);
     expect(fetchCalls.some((call) => call.url === "/api/v1/authz/roles")).toBe(true);
+    expect(textNode("PERSON")).toBeDefined();
+    const personGrantOption = Array.from(document.querySelectorAll("select option")).find(
+      (option) => option.textContent === "PERSON",
+    );
+    expect(personGrantOption).toBeUndefined();
     expect(fetchCalls.some((call) => call.url === "/api/v1/authz/permissions")).toBe(true);
     expect(fetchCalls.some((call) => call.url === "/api/v1/authz/actors")).toBe(true);
     expect(fetchCalls.every((call) => call.headers["X-Actor-ID"] === undefined)).toBe(true);
@@ -199,12 +235,120 @@ describe("AuthzAdminPage", () => {
     expect(container.textContent).toContain("Showing 1 of 2 actor records.");
 
     await setInputValue(filter, "nickname-that-does-not-exist");
-    await waitForText("No actors match this person nickname.");
+    await waitForText("No actors match these filters.");
     expect(actorCardKeys()).toEqual([]);
 
     await clickButtonByName("Clear");
     await waitFor(() => actorCardKeys().length === 2);
     expect(actorCardKeys()).toEqual(["bootstrap-admin", "collaborator-aurea"]);
+  });
+
+  it("shows and filters tenant Role Grant eligibility from Account and Membership facts", async () => {
+    const tenantId = "tenant-a";
+    actors.push(
+      {
+        id: "actor-eligible",
+        actorKey: "eligible-actor",
+        displayName: "Eligible Actor",
+        active: true,
+        roleGrants: [],
+        binding: activeTenantBinding(tenantId),
+      },
+      {
+        id: "actor-inactive-membership",
+        actorKey: "inactive-membership-actor",
+        displayName: "Inactive Membership Actor",
+        active: true,
+        roleGrants: [],
+        binding: {
+          ...activeTenantBinding(tenantId),
+          accountId: "account-inactive-membership",
+          accountLogin: "inactive-membership@example.test",
+          membershipId: "membership-inactive",
+          membershipActive: false,
+        },
+      },
+      {
+        id: "actor-mismatched-membership",
+        actorKey: "mismatched-membership-actor",
+        displayName: "Mismatched Membership Actor",
+        active: true,
+        roleGrants: [],
+        binding: {
+          ...activeTenantBinding(tenantId),
+          accountId: "account-mismatched-membership",
+          accountLogin: "mismatched-membership@example.test",
+          membershipId: "membership-mismatched",
+          membershipTenantId: "tenant-b",
+          membershipSameTenant: false,
+        },
+      },
+    );
+    mockAuthzFetch();
+
+    renderAuthzAdminPage();
+    await waitForText("Eligible Actor");
+
+    const eligibleArticle = articleByText("eligible-actor");
+    expect(eligibleArticle.textContent).toContain(
+      "Authentication Account: Bound · account-tenant-a@example.test",
+    );
+    expect(eligibleArticle.textContent).toContain(
+      "Authentication binding: TENANT · tenant-a",
+    );
+    expect(eligibleArticle.textContent).toContain(
+      "Person–Tenant Membership: ACTIVE · same tenant · membership-tenant-a",
+    );
+    expect(eligibleArticle.textContent).toContain(
+      "Tenant Role Grants: ELIGIBLE",
+    );
+
+    const inactiveArticle = articleByText("inactive-membership-actor");
+    expect(inactiveArticle.textContent).toContain(
+      "Person–Tenant Membership: INACTIVE · same tenant · membership-inactive",
+    );
+    expect(inactiveArticle.textContent).toContain(
+      "Tenant Role Grants: INELIGIBLE",
+    );
+    expect(inactiveArticle.textContent).toContain(
+      "Person–Tenant Membership must be ACTIVE.",
+    );
+
+    const mismatchedArticle = articleByText("mismatched-membership-actor");
+    expect(mismatchedArticle.textContent).toContain(
+      "Person–Tenant Membership: ACTIVE · tenant mismatch (tenant-b) · membership-mismatched",
+    );
+    expect(mismatchedArticle.textContent).toContain(
+      "Tenant Role Grants: INELIGIBLE",
+    );
+    expect(mismatchedArticle.textContent).toContain(
+      "Membership must belong to the Actor's bound tenant.",
+    );
+
+    const eligibilityFilter = controlByLabel<HTMLSelectElement>(
+      container,
+      "Tenant Role Grant eligibility",
+      "select",
+    );
+    await setSelectValue(eligibilityFilter, "ELIGIBLE");
+
+    await waitFor(() => actorCardKeys().length === 1);
+    expect(actorCardKeys()).toEqual(["eligible-actor"]);
+    expect(container.textContent).toContain(
+      "Showing 1 of 4 actor records · 1 eligible for tenant Role Grants.",
+    );
+
+    await setSelectValue(eligibilityFilter, "INELIGIBLE");
+    await waitFor(() => actorCardKeys().length === 3);
+    expect(actorCardKeys()).toEqual([
+      "bootstrap-admin",
+      "inactive-membership-actor",
+      "mismatched-membership-actor",
+    ]);
+
+    await clickButtonByName("Clear");
+    await waitFor(() => actorCardKeys().length === 4);
+    expect(eligibilityFilter.value).toBe("ALL");
   });
 
   it("filters collaborators progressively and creates an actor from the selected match", async () => {
@@ -283,6 +427,7 @@ describe("AuthzAdminPage", () => {
       displayName: "Expense Admin",
       active: true,
       roleGrants: [],
+      binding: activeTenantBinding("default"),
     });
     mockAuthzFetch();
 
@@ -290,7 +435,13 @@ describe("AuthzAdminPage", () => {
     await waitForText("Expense Admin");
 
     await changeSelectInArticle("expense-admin", "Role", "EXPENSE_OPERATOR");
-    await changeInputInArticle("expense-admin", "Grant tenant", "default");
+    const grantTenantInput = controlByLabel<HTMLInputElement>(
+      articleByText("expense-admin"),
+      "Grant tenant",
+      "input",
+    );
+    expect(grantTenantInput.value).toBe("default");
+    expect(grantTenantInput.disabled).toBe(true);
     await clickButtonInArticle("expense-admin", "Grant Role");
 
     await waitForText("EXPENSE_OPERATOR granted.");
@@ -312,6 +463,166 @@ describe("AuthzAdminPage", () => {
           call.method === "DELETE",
       ),
     ).toBe(true);
+  });
+
+  it("derives a tenant grant from the Actor binding instead of the application wildcard", async () => {
+    const tenantId = "b16647b4-82a3-4d4e-99d0-c15ede05840b";
+    window.localStorage.setItem("ers.auth.selectedTenantId", "*");
+    actors.push({
+      id: "actor-expense-admin",
+      actorKey: "expense-admin",
+      displayName: "Expense Admin",
+      active: true,
+      roleGrants: [],
+      binding: activeTenantBinding(tenantId),
+    });
+    mockAuthzFetch();
+
+    renderAuthzAdminPage();
+    await waitForText("Expense Admin");
+
+    await changeSelectInArticle("expense-admin", "Role", "TENANT_ADMIN");
+    const article = articleByText("expense-admin");
+    const grantTenantInput = controlByLabel<HTMLInputElement>(article, "Grant tenant", "input");
+    const grantButton = buttonInArticle("expense-admin", "Grant Role");
+
+    expect(grantTenantInput.value).toBe(tenantId);
+    expect(grantTenantInput.disabled).toBe(true);
+    expect(grantButton.disabled).toBe(false);
+    expect(article.textContent).toContain(
+      `Authentication Account: Bound · account-${tenantId}@example.test`,
+    );
+    expect(article.textContent).toContain(
+      `Authentication binding: TENANT · ${tenantId}`,
+    );
+    expect(article.textContent).toContain(
+      `Person–Tenant Membership: ACTIVE · same tenant · membership-${tenantId}`,
+    );
+    expect(article.textContent).toContain("Tenant Role Grants: ELIGIBLE");
+    expect(
+      Array.from(controlByLabel<HTMLSelectElement>(article, "Role", "select").options).some(
+        (option) => option.value === "APPLICATION_ADMIN",
+      ),
+    ).toBe(false);
+
+    await clickButtonInArticle("expense-admin", "Grant Role");
+    await waitForText("TENANT_ADMIN granted.");
+
+    expect(
+      fetchCalls.some(
+        (call) =>
+          call.url === "/api/v1/authz/actors/actor-expense-admin/role-grants" &&
+          call.method === "POST" &&
+          (call.body as { roleCode?: string; tenantId?: string }).roleCode === "TENANT_ADMIN" &&
+          (call.body as { roleCode?: string; tenantId?: string }).tenantId === tenantId,
+      ),
+    ).toBe(true);
+
+    await waitFor(() => articleByText("expense-admin").textContent?.includes(tenantId) ?? false);
+    expect(buttonInArticle("expense-admin", "Grant Role").disabled).toBe(true);
+  });
+
+  it("rehydrates a persisted tenant grant with its own tenant after the page mounts", async () => {
+    const tenantId = "b16647b4-82a3-4d4e-99d0-c15ede05840b";
+    window.localStorage.setItem("ers.auth.selectedTenantId", "default");
+    actors.push({
+      id: "actor-expense-admin",
+      actorKey: "expense-admin",
+      displayName: "Expense Admin",
+      active: true,
+      binding: activeTenantBinding(tenantId),
+      roleGrants: [
+        {
+          id: "grant-expense-admin",
+          actorId: "actor-expense-admin",
+          roleId: "authz-role-tenant-admin",
+          roleCode: "TENANT_ADMIN",
+          tenantId,
+          scopeType: "TENANT",
+          active: true,
+        },
+      ],
+    });
+    mockAuthzFetch();
+
+    renderAuthzAdminPage();
+    await waitForText("Expense Admin");
+
+    const article = articleByText("expense-admin");
+    expect(
+      controlByLabel<HTMLSelectElement>(article, "Role", "select").value,
+    ).toBe("TENANT_ADMIN");
+    expect(
+      controlByLabel<HTMLInputElement>(article, "Grant tenant", "input").value,
+    ).toBe(tenantId);
+    const persistedGrantButton = buttonInArticle("expense-admin", "Grant Role");
+    expect(persistedGrantButton.disabled).toBe(true);
+    expect(persistedGrantButton.className).toContain("disabled:bg-gray-300");
+    expect(persistedGrantButton.className).toContain("disabled:text-gray-600");
+    expect(persistedGrantButton.className).toContain("disabled:cursor-not-allowed");
+    expect(article.textContent).toContain(`TENANT_ADMIN · ${tenantId}`);
+    expect(article.textContent).toContain(
+      `TENANT_ADMIN is already granted for ${tenantId}.`,
+    );
+  });
+
+  it("uses the Actor tenant binding for tenant grants and disables an existing grant", async () => {
+    const tenantId = "b16647b4-82a3-4d4e-99d0-c15ede05840b";
+    window.localStorage.setItem("ers.auth.selectedTenantId", "default");
+    actors.push({
+      id: "actor-expense-admin",
+      actorKey: "expense-admin",
+      displayName: "Expense Admin",
+      active: true,
+      roleGrants: [],
+      binding: activeTenantBinding(tenantId),
+    });
+    mockAuthzFetch();
+
+    renderAuthzAdminPage();
+    await waitForText("Expense Admin");
+
+    await changeSelectInArticle("expense-admin", "Role", "TENANT_ADMIN");
+    const article = articleByText("expense-admin");
+    const grantTenantInput = controlByLabel<HTMLInputElement>(article, "Grant tenant", "input");
+    expect(grantTenantInput.value).toBe(tenantId);
+
+    await clickButtonInArticle("expense-admin", "Grant Role");
+    await waitForText("TENANT_ADMIN granted.");
+
+    expect(
+      fetchCalls.some(
+        (call) =>
+          call.url === "/api/v1/authz/actors/actor-expense-admin/role-grants" &&
+          call.method === "POST" &&
+          (call.body as { roleCode?: string; tenantId?: string }).roleCode === "TENANT_ADMIN" &&
+          (call.body as { roleCode?: string; tenantId?: string }).tenantId === tenantId,
+      ),
+    ).toBe(true);
+
+    await waitFor(() => articleByText("expense-admin").textContent?.includes(tenantId) ?? false);
+    const refreshedArticle = articleByText("expense-admin");
+    const refreshedRoleSelect = controlByLabel<HTMLSelectElement>(
+      refreshedArticle,
+      "Role",
+      "select",
+    );
+    const refreshedGrantTenantInput = controlByLabel<HTMLInputElement>(
+      refreshedArticle,
+      "Grant tenant",
+      "input",
+    );
+    const grantButton = buttonInArticle("expense-admin", "Grant Role");
+
+    expect(refreshedRoleSelect.value).toBe("TENANT_ADMIN");
+    expect(refreshedGrantTenantInput.value).toBe(tenantId);
+    expect(grantButton.disabled).toBe(true);
+    expect(grantButton.className).toContain("disabled:bg-gray-300");
+    expect(grantButton.className).toContain("disabled:text-gray-600");
+    expect(grantButton.className).toContain("disabled:cursor-not-allowed");
+    expect(refreshedArticle.textContent).toContain(
+      `TENANT_ADMIN is already granted for ${tenantId}.`,
+    );
   });
 
   it("deactivates a non-operating persisted actor", async () => {
@@ -665,11 +976,6 @@ async function changeInputInForm(headingText: string, labelText: string, value: 
 }
 
 
-async function changeInputInArticle(articleText: string, labelText: string, value: string) {
-  const article = articleByText(articleText);
-  const input = controlByLabel<HTMLInputElement>(article, labelText, "input");
-  await setInputValue(input, value);
-}
 
 async function changeSelectInArticle(articleText: string, labelText: string, value: string) {
   const article = articleByText(articleText);
@@ -703,6 +1009,17 @@ async function submitFormByHeading(headingText: string) {
   await act(async () => {
     form.dispatchEvent(new SubmitEvent("submit", { bubbles: true, cancelable: true }));
   });
+}
+
+function buttonInArticle(articleText: string, name: string) {
+  const article = articleByText(articleText);
+  const button = Array.from(article.querySelectorAll("button")).find(
+    (node) => node.textContent?.trim() === name,
+  );
+  if (!(button instanceof HTMLButtonElement)) {
+    throw new Error(`Could not find button ${name}`);
+  }
+  return button;
 }
 
 async function clickButtonInArticle(articleText: string, name: string) {

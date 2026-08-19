@@ -226,3 +226,31 @@ func TestAuthenticationSessionMiddlewareCoversBusinessRoutesAfterCutover(t *test
 		t.Fatal("authentication routes must continue resolving their own session cookie before session-protected handlers")
 	}
 }
+
+func TestGoldPriceAdministrationRequiresDedicatedTenantAdminPermission(t *testing.T) {
+	t.Parallel()
+
+	_, currentFile, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("resolve route test directory")
+	}
+	contents, err := os.ReadFile(filepath.Join(filepath.Dir(currentFile), "price_lists.go"))
+	if err != nil {
+		t.Fatalf("read price-list routes: %v", err)
+	}
+	source := string(contents)
+
+	for _, route := range []string{
+		`goldPrices.Get("/", requirePermission(deps, authz.PermissionGoldPricesManage)`,
+		`goldPrices.Post("/", requirePermission(deps, authz.PermissionGoldPricesManage)`,
+		`goldPrices.Patch("/:id/deactivate", requirePermission(deps, authz.PermissionGoldPricesManage)`,
+	} {
+		if !strings.Contains(source, route) {
+			t.Fatalf("gold-price administration route must require dedicated Tenant Administrator authority: %s", route)
+		}
+	}
+
+	if !strings.Contains(source, `goldPrices.Get("/latest", requirePermission(deps, authz.PermissionPriceListsRead)`) {
+		t.Fatal("latest active gold price must remain readable to expense workflows without granting gold-price administration")
+	}
+}

@@ -18,6 +18,7 @@ type Listener = () => void;
 
 let state: AuthState = { status: "unknown", session: null, error: null, reason: null };
 let revalidationPromise: Promise<AuthState> | null = null;
+let authTransitionRevision = 0;
 const listeners = new Set<Listener>();
 
 export function getAuthState(): AuthState {
@@ -30,11 +31,16 @@ export function subscribeAuthState(listener: Listener): () => void {
 }
 
 export async function initializeAuthSession(): Promise<AuthState> {
+  const revision = ++authTransitionRevision;
   setState({ status: "loading", session: state.session, error: null, reason: null });
   try {
     const session = await loadAuthSession();
-    setState({ status: "authenticated", session, error: null, reason: null });
+    if (revision === authTransitionRevision) {
+      setState({ status: "authenticated", session, error: null, reason: null });
+    }
   } catch (error) {
+    if (revision !== authTransitionRevision) return state;
+
     if (error instanceof ApiError && error.status === 401) {
       setState({
         status: "anonymous",
@@ -91,27 +97,35 @@ export async function revalidateAuthSession(): Promise<AuthState> {
 }
 
 export async function authenticate(request: LoginRequest): Promise<AuthSession> {
+  const revision = ++authTransitionRevision;
   setState({ status: "loading", session: null, error: null, reason: null });
   try {
     const session = await loginRequest(request);
-    setState({ status: "authenticated", session, error: null, reason: null });
+    if (revision === authTransitionRevision) {
+      setState({ status: "authenticated", session, error: null, reason: null });
+    }
     return session;
   } catch (error) {
-    setState({
-      status: "error",
-      session: null,
-      error: error instanceof Error ? error : new Error("Unable to sign in"),
-      reason: null,
-    });
+    if (revision === authTransitionRevision) {
+      setState({
+        status: "error",
+        session: null,
+        error: error instanceof Error ? error : new Error("Unable to sign in"),
+        reason: null,
+      });
+    }
     throw error;
   }
 }
 
 export async function endAuthSession(): Promise<void> {
+  const revision = ++authTransitionRevision;
   try {
     await logoutRequest();
   } finally {
-    setState({ status: "anonymous", session: null, error: null, reason: "signed-out" });
+    if (revision === authTransitionRevision) {
+      setState({ status: "anonymous", session: null, error: null, reason: "signed-out" });
+    }
   }
 }
 
@@ -119,6 +133,7 @@ export function resetAuthStateForTests(): void {
   state = { status: "unknown", session: null, error: null, reason: null };
   listeners.clear();
   revalidationPromise = null;
+  authTransitionRevision = 0;
 }
 
 function authenticationReason(
@@ -144,6 +159,7 @@ function emitChange(): void {
 
 subscribeAuthenticationRequired((reason) => {
   if (state.status === "authenticated" || state.status === "loading") {
+    authTransitionRevision += 1;
     setState({ status: "anonymous", session: null, error: null, reason });
   }
 });

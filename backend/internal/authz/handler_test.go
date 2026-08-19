@@ -61,6 +61,42 @@ func TestAuthzCurrentActorReturnsPersistedOperatingContext(t *testing.T) {
 	}
 }
 
+func TestCurrentActorResponseSerializesEmptyAuthorizationCollectionsAsArrays(t *testing.T) {
+	response := currentActorResponse(&Actor{
+		ID:                   "person-only@example.test",
+		RecordID:             "actor-person-only",
+		TenantID:             "tenant-a",
+		Scope:                ActorScopeTenant,
+		PersonID:             "person-a",
+		GlobalPersonID:       "global-person-a",
+		MembershipID:         "membership-a",
+		RoleCodes:            nil,
+		Permissions:          map[Permission]struct{}{PermissionPeopleSelfRead: {}},
+		IntrinsicPermissions: map[Permission]struct{}{PermissionPeopleSelfRead: {}},
+		DelegatedPermissions: nil,
+	})
+
+	if response.RoleCodes == nil {
+		t.Fatal("expected empty roleCodes array, got nil")
+	}
+	if response.Permissions == nil || response.IntrinsicPermissions == nil || response.DelegatedPermissions == nil {
+		t.Fatalf("expected non-nil permission collections, got %#v", response)
+	}
+
+	payload, err := json.Marshal(response)
+	if err != nil {
+		t.Fatalf("marshal current actor response: %v", err)
+	}
+	for _, expected := range [][]byte{
+		[]byte(`"roleCodes":[]`),
+		[]byte(`"delegatedPermissions":[]`),
+	} {
+		if !bytes.Contains(payload, expected) {
+			t.Fatalf("expected %s in current actor JSON, got %s", expected, payload)
+		}
+	}
+}
+
 func TestAuthzAdminCannotDeactivateOrRevokeItsOwnOperatingActor(t *testing.T) {
 	database := newAuthzTestDB(t)
 	adminActorID := createAuthzActor(t, database, "self-admin@example.com", nil, nil)
@@ -192,8 +228,22 @@ func TestAuthzAdminListsRolesPermissionsAndActors(t *testing.T) {
 		t.Fatalf("expected roles status 200, got %d", rolesResp.StatusCode)
 	}
 	roles := decodeData[[]RoleResponse](t, rolesResp)
-	if len(roles) < 5 {
-		t.Fatalf("expected seeded roles, got %#v", roles)
+	for _, expectedRole := range []RoleCode{
+		RoleApplicationAdmin,
+		RoleTenantAdmin,
+		RoleEarningsOperator,
+		RoleExpenseOperator,
+	} {
+		role, ok := findRoleResponse(roles, string(expectedRole))
+		if !ok {
+			t.Fatalf("expected seeded delegated role %s, got %#v", expectedRole, roles)
+		}
+		if !role.Active {
+			t.Fatalf("expected seeded delegated role %s to be active, got %#v", expectedRole, role)
+		}
+	}
+	if role, ok := findRoleResponse(roles, string(RolePerson)); ok {
+		t.Fatalf("PERSON must not be listed as a seeded/grantable 30D role, got %#v", role)
 	}
 
 	permissionsResp := doAuthzRequest(t, app, http.MethodGet, "/api/v1/authz/permissions", nil, headers)
@@ -226,6 +276,9 @@ func newAuthzTestApp(database *gorm.DB) *fiber.App {
 	authzGroup.Get("/roles", h.ListRoles)
 	authzGroup.Get("/permissions", h.ListPermissions)
 	authzGroup.Get("/actors", h.ListActors)
+	authzGroup.Get("/tenant-role-actors", h.ListTenantRoleActors)
+	authzGroup.Post("/tenant-role-actors/:id/role-grants", h.GrantTenantOperatorRole)
+	authzGroup.Delete("/tenant-role-actors/:id/role-grants/:grantId", h.RevokeTenantOperatorRoleGrant)
 	authzGroup.Get("/audit-logs", h.ListAuditLogs)
 	authzGroup.Post("/actors", h.CreateActor)
 	authzGroup.Patch("/actors/:id/active", h.SetActorActive)
@@ -271,6 +324,15 @@ func decodeData[T any](t *testing.T, resp *http.Response) T {
 		t.Fatalf("decode response: %v", err)
 	}
 	return envelope.Data
+}
+
+func findRoleResponse(rows []RoleResponse, code string) (RoleResponse, bool) {
+	for _, row := range rows {
+		if row.Code == code {
+			return row, true
+		}
+	}
+	return RoleResponse{}, false
 }
 
 func containsPermissionResponse(rows []PermissionResponse, code string) bool {

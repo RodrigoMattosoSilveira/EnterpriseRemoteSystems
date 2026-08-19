@@ -22,6 +22,60 @@ describe("permission-aware navigation", () => {
     ).toBe("/collaborators");
   });
 
+  it("restricts Gold Prices administration to actors with gold_prices.manage", () => {
+    const expenseOperatorPaths = visibleNavigationLinks(
+      [
+        "collaborators.read",
+        "expenses.read",
+        "expenses.create",
+        "price_lists.read",
+        "price_lists.create",
+        "price_lists.update",
+      ],
+      "TENANT",
+    ).map((link) => link.to);
+    expect(expenseOperatorPaths).not.toContain("/admin/gold-prices");
+
+    const tenantAdminPaths = visibleNavigationLinks(
+      ["people.read", "gold_prices.manage"],
+      "TENANT",
+    ).map((link) => link.to);
+    expect(tenantAdminPaths).toContain("/admin/gold-prices");
+  });
+
+  it("restricts Gold Production administration to administrators", () => {
+    const earningsOperatorPaths = visibleNavigationLinks(
+      ["collaborators.read", "planning.read", "earnings.read", "earnings.create"],
+      "TENANT",
+    ).map((link) => link.to);
+    expect(earningsOperatorPaths).not.toContain("/gold-production");
+
+    const tenantAdminPaths = visibleNavigationLinks(
+      ["people.read", "gold_production.manage"],
+      "TENANT",
+    ).map((link) => link.to);
+    expect(tenantAdminPaths).toContain("/gold-production");
+
+    const applicationAdminPaths = visibleNavigationLinks(["*"], "APPLICATION").map(
+      (link) => link.to,
+    );
+    expect(applicationAdminPaths).toContain("/gold-production");
+  });
+
+  it("shows tenant Authorization navigation for tenant role delegation managers", () => {
+    const tenantAdminPaths = visibleNavigationLinks(
+      ["people.read", "authz.tenant_role_grants.manage"],
+      "TENANT",
+    ).map((link) => link.to);
+    expect(tenantAdminPaths).toContain("/admin/authorization");
+
+    const expenseOperatorPaths = visibleNavigationLinks(
+      ["collaborators.read", "expenses.read"],
+      "TENANT",
+    ).map((link) => link.to);
+    expect(expenseOperatorPaths).not.toContain("/admin/authorization");
+  });
+
   it("uses Change password when the actor has no operational navigation permission", () => {
     expect(defaultAuthorizedRoute([], "TENANT")).toBe("/password/change");
   });

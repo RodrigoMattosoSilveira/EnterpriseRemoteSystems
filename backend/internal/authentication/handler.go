@@ -338,7 +338,13 @@ func (h *Handler) writeError(c fiber.Ctx, err error) error {
 		return c.Status(fiber.StatusUnauthorized).JSON(httpx.APIResponse{Error: &httpx.APIError{Code: "invalid_credentials", Message: "Login or password is invalid"}})
 	case errors.Is(err, ErrAuthenticationRequired):
 		setNoStore(c)
-		h.clearSessionCookie(c)
+		// A cookie-less /auth/session probe can race a successful login in the
+		// browser. Do not emit a Set-Cookie deletion when this request did not
+		// actually carry a session cookie, otherwise the older 401 response can
+		// arrive after POST /auth/login and erase the newly issued session.
+		if h.readCookie(c) != "" {
+			h.clearSessionCookie(c)
+		}
 		return c.Status(fiber.StatusUnauthorized).JSON(httpx.APIResponse{Error: &httpx.APIError{Code: "authentication_required", Message: "An authenticated session is required"}})
 	case errors.Is(err, ErrSessionExpired):
 		setNoStore(c)

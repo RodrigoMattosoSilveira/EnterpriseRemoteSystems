@@ -17,3 +17,15 @@ export function canAccessAuthzAdministration(
     AUTHZ_ADMIN_PERMISSIONS.has(permission),
   );
 }
+
+const TENANT_SCOPE = "TENANT";
+const TENANT_ROLE_GRANTS_PERMISSION = "authz.tenant_role_grants.manage";
+
+export function canManageTenantRoleDelegation(
+  context: AuthzAdminAccessContext | undefined,
+): boolean {
+  return (
+    context?.scope === TENANT_SCOPE &&
+    (context.permissions ?? []).includes(TENANT_ROLE_GRANTS_PERMISSION)
+  );
+}

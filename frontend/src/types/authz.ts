@@ -9,9 +9,13 @@ export type AuthzCurrentActor = {
   tenantId: string;
   scope: string;
   personId?: string;
+  globalPersonId?: string;
+  membershipId?: string;
   collaboratorId?: string;
   roleCodes: string[];
   permissions: string[];
+  intrinsicPermissions?: string[];
+  delegatedPermissions?: string[];
 };
 
 export type AuthzPermission = {
@@ -40,6 +44,17 @@ export type AuthzActorRoleGrant = {
   active: boolean;
 };
 
+export type AuthzActorBinding = {
+  accountId: string;
+  accountLogin?: string;
+  scopeType: string;
+  tenantId?: string;
+  membershipId?: string;
+  membershipTenantId?: string;
+  membershipActive: boolean;
+  membershipSameTenant: boolean;
+};
+
 export type AuthzActor = {
   id: string;
   actorKey: string;
@@ -48,6 +63,7 @@ export type AuthzActor = {
   collaboratorId?: string;
   active: boolean;
   roleGrants?: AuthzActorRoleGrant[];
+  binding?: AuthzActorBinding;
 };
 
 export type CreateAuthzActorInput = {
@@ -65,6 +81,12 @@ export type SetAuthzActorActiveInput = {
 export type GrantAuthzActorRoleInput = {
   roleCode: string;
   tenantId: string;
+};
+
+export type TenantOperatorRoleCode = "EARNINGS_OPERATOR" | "EXPENSE_OPERATOR";
+
+export type GrantTenantOperatorRoleInput = {
+  roleCode: TenantOperatorRoleCode;
 };
 
 export type AuthzAuditLog = {

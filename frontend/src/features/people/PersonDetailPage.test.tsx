@@ -18,6 +18,27 @@ const authorizationActor: AuthzCurrentActor = {
   permissions: ["*"],
 };
 
+const tenantAdministratorActor: AuthzCurrentActor = {
+  actorKey: "tenant-admin",
+  actorRecordId: "actor-tenant-admin",
+  tenantId: "default",
+  scope: "TENANT",
+  personId: "tenant-admin-person",
+  membershipId: "tenant-admin-membership",
+  roleCodes: ["TENANT_ADMIN"],
+  permissions: [
+    "people.read",
+    "people.update",
+    "collaborators.create",
+  ],
+  intrinsicPermissions: ["people.self.read"],
+  delegatedPermissions: [
+    "people.read",
+    "people.update",
+    "collaborators.create",
+  ],
+};
+
 const PERSON_ID = "person-123";
 
 const existingPerson: Person = {
@@ -252,6 +273,56 @@ describe("PersonDetailPage", () => {
     expect(textNode("Missing: Emergency")).toBeDefined();
   });
 
+  it("offers a Tenant Administrator a Create Collaborator action for an eligible Person", async () => {
+    mockFetch(async (url, init) => {
+      recordFetchCall(url, init);
+
+      if (url === `/api/v1/people/${PERSON_ID}`) {
+        return jsonResponse({ data: existingPerson });
+      }
+
+      if (url === "/api/v1/collaborators/candidates") {
+        return jsonResponse({ data: [existingPerson] });
+      }
+
+      if (url === "/api/v1/reference-data/person_status") {
+        return jsonResponse({ data: [] });
+      }
+
+      if (url === `/api/v1/people/${PERSON_ID}/authentication`) {
+        return jsonResponse({
+          data: {
+            enabled: true,
+            accountActive: true,
+            canRequestReactivation: false,
+            login: existingPerson.email,
+          },
+        });
+      }
+
+      throw new Error(`Unhandled request: ${url}`);
+    });
+
+    renderPersonDetailRoute(tenantAdministratorActor);
+
+    await waitForText("Create Collaborator");
+
+    const createCollaboratorLink = Array.from(
+      container.querySelectorAll("a"),
+    ).find((node) => node.textContent?.trim() === "Create Collaborator");
+
+    expect(createCollaboratorLink?.getAttribute("href")).toBe(
+      `/collaborators/new?personId=${PERSON_ID}`,
+    );
+    expect(
+      fetchCalls.some(
+        (call) =>
+          call.method === "GET" &&
+          call.url === "/api/v1/collaborators/candidates",
+      ),
+    ).toBe(true);
+  });
+
   it("shows update validation errors returned by the API", async () => {
     mockFetch(async (url, init) => {
       recordFetchCall(url, init);
@@ -294,7 +365,9 @@ describe("PersonDetailPage", () => {
   });
 });
 
-function renderPersonDetailRoute() {
+function renderPersonDetailRoute(
+  actor: AuthzCurrentActor = authorizationActor,
+) {
   const queryClient = new QueryClient({
     defaultOptions: {
       queries: { retry: false },
@@ -315,7 +388,7 @@ function renderPersonDetailRoute() {
   act(() => {
     root?.render(
       <QueryClientProvider client={queryClient}>
-        <AuthorizationProvider value={authorizationActor}>
+        <AuthorizationProvider value={actor}>
           <RouterProvider router={router} />
         </AuthorizationProvider>
       </QueryClientProvider>
