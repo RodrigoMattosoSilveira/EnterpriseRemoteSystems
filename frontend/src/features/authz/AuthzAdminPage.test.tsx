@@ -232,7 +232,7 @@ describe("AuthzAdminPage", () => {
 
     await waitFor(() => actorCardKeys().length === 1);
     expect(actorCardKeys()).toEqual(["collaborator-aurea"]);
-    expect(container.textContent).toContain("Showing 1 of 2 actor records.");
+    expect(container.textContent).toContain("Showing 1 of 2 actor records");
 
     await setInputValue(filter, "nickname-that-does-not-exist");
     await waitForText("No actors match these filters.");
