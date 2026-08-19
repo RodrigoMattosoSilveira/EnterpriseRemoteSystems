@@ -325,7 +325,7 @@ export function AuthzAdminPage() {
 
           <section className="space-y-4">
             <section className="rounded-2xl border bg-white p-4 shadow-sm">
-              <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+              <div className="flex flex-col gap-4">
                 <div>
                   <h2 className="text-lg font-semibold text-gray-950">Actors</h2>
                   <p className="text-sm text-gray-500">
@@ -338,7 +338,7 @@ export function AuthzAdminPage() {
                 </div>
 
                 {!actorsForbidden && (
-                  <div className="flex w-full flex-col gap-2 sm:flex-row lg:max-w-2xl">
+                  <div className="flex w-full flex-col gap-2 md:flex-row lg:max-w-4xl">
                     <div className="min-w-0 flex-1">
                       <label
                         htmlFor="authz-actor-nickname-filter"
@@ -355,7 +355,7 @@ export function AuthzAdminPage() {
                         className="mt-1 w-full rounded-xl border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-gray-950 focus:outline-none focus:ring-1 focus:ring-gray-950"
                       />
                     </div>
-                    <div className="sm:w-56">
+                    <div className="md:w-56 md:flex-none">
                       <label
                         htmlFor="authz-actor-tenant-role-eligibility-filter"
                         className="text-xs font-semibold uppercase tracking-wide text-gray-500"
