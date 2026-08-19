@@ -376,10 +376,32 @@ describe("AuthzAdminPage", () => {
       "input",
     );
     await setInputValue(selectedTenantInput, tenantId);
-    await waitFor(() => grantTenantInput.value === tenantId);
 
-    expect(grantTenantInput.disabled).toBe(true);
-    expect(grantButton.disabled).toBe(false);
+    // Changing the selected tenant changes the React Query key for the Actor
+    // catalog. The Actor card is therefore briefly unmounted and then
+    // recreated with the new tenant context. Re-query the live card instead
+    // of waiting on the detached input/button references captured above.
+    await waitFor(() => {
+      const refreshedArticle = articleByText("expense-admin");
+      return (
+        controlByLabel<HTMLInputElement>(
+          refreshedArticle,
+          "Grant tenant",
+          "input",
+        ).value === tenantId
+      );
+    });
+
+    const refreshedArticle = articleByText("expense-admin");
+    const refreshedGrantTenantInput = controlByLabel<HTMLInputElement>(
+      refreshedArticle,
+      "Grant tenant",
+      "input",
+    );
+    const refreshedGrantButton = buttonInArticle("expense-admin", "Grant Role");
+
+    expect(refreshedGrantTenantInput.disabled).toBe(true);
+    expect(refreshedGrantButton.disabled).toBe(false);
 
     await clickButtonInArticle("expense-admin", "Grant Role");
     await waitForText("TENANT_ADMIN granted.");
