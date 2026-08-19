@@ -367,6 +367,7 @@ export function AuthzAdminPage() {
                         key={actor.id}
                         actor={actor}
                         roles={grantableRoles}
+                        selectedTenantId={requestActor.tenantId}
                         currentActorKey={currentActorQuery.data?.actorKey ?? ""}
                         isMutating={
                           grantRoleMutation.isPending ||
@@ -612,6 +613,7 @@ function ActorFields({
 function ActorCard({
   actor,
   roles,
+  selectedTenantId,
   currentActorKey,
   isMutating,
   onGrantRole,
@@ -620,6 +622,7 @@ function ActorCard({
 }: {
   actor: AuthzActor;
   roles: AuthzRole[];
+  selectedTenantId: string;
   currentActorKey: string;
   isMutating: boolean;
   onGrantRole: (targetActorId: string, roleCode: string, tenantId: string) => Promise<void>;
@@ -627,7 +630,11 @@ function ActorCard({
   onSetActive: (targetActorId: string, actorKey: string, active: boolean) => Promise<void>;
 }) {
   const [roleCode, setRoleCode] = useState(roles[0]?.code ?? "");
-  const [tenantId, setTenantId] = useState("default");
+  const selectedRole = roles.find((role) => role.code === roleCode);
+  const applicationScopedRole = isApplicationScopedRole(selectedRole);
+  const [tenantId, setTenantId] = useState(() =>
+    applicationScopedRole ? "*" : selectedTenantId.trim(),
+  );
 
   useEffect(() => {
     if (!roleCode && roles[0]?.code) {
@@ -635,10 +642,26 @@ function ActorCard({
     }
   }, [roleCode, roles]);
 
+  useEffect(() => {
+    setTenantId(applicationScopedRole ? "*" : selectedTenantId.trim());
+  }, [applicationScopedRole, roleCode, selectedTenantId]);
+
+  const targetTenantId = applicationScopedRole ? "*" : tenantId.trim();
+  const alreadyGranted = Boolean(
+    roleCode &&
+      targetTenantId &&
+      (actor.roleGrants ?? []).some(
+        (grant) =>
+          grant.active &&
+          grant.roleCode === roleCode &&
+          grant.tenantId === targetTenantId,
+      ),
+  );
+
   async function submitGrant(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!roleCode) return;
-    await onGrantRole(actor.id, roleCode, tenantId.trim() || "*");
+    if (!roleCode || !targetTenantId || alreadyGranted) return;
+    await onGrantRole(actor.id, roleCode, targetTenantId);
   }
 
   return (
@@ -707,18 +730,31 @@ function ActorCard({
           <input
             className="mt-1 block w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm"
             value={tenantId}
+            disabled={applicationScopedRole}
             onChange={(event) => setTenantId(event.target.value)}
           />
         </label>
         <button
           className="self-end rounded-xl bg-gray-950 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
-          disabled={isMutating || !actor.active || !roleCode}
+          disabled={isMutating || !actor.active || !roleCode || !targetTenantId || alreadyGranted}
           type="submit"
         >
           Grant Role
         </button>
       </form>
+      {alreadyGranted && (
+        <p className="mt-2 text-xs font-medium text-gray-500">
+          {roleCode} is already granted for {targetTenantId}.
+        </p>
+      )}
     </article>
+  );
+}
+
+function isApplicationScopedRole(role: AuthzRole | undefined) {
+  return (
+    role?.code === "APPLICATION_ADMIN" ||
+    role?.scopeType.trim().toUpperCase() === "APPLICATION"
   );
 }
 

@@ -34,6 +34,15 @@ const roles = [
     active: true,
     permissions: [{ code: "expenses.create", label: "Create Expenses", description: "" }],
   },
+  {
+    id: "authz-role-tenant-admin",
+    code: "TENANT_ADMIN",
+    label: "Tenant Administrator",
+    description: "Tenant administration",
+    scopeType: "TENANT",
+    active: true,
+    permissions: [],
+  },
 ];
 
 const permissions = [
@@ -326,6 +335,61 @@ describe("AuthzAdminPage", () => {
           call.method === "DELETE",
       ),
     ).toBe(true);
+  });
+
+  it("uses the selected tenant for tenant grants and disables an existing grant", async () => {
+    const tenantId = "b16647b4-82a3-4d4e-99d0-c15ede05840b";
+    actors.push({
+      id: "actor-expense-admin",
+      actorKey: "expense-admin",
+      displayName: "Expense Admin",
+      active: true,
+      roleGrants: [],
+    });
+    mockAuthzFetch();
+
+    renderAuthzAdminPage();
+    await waitForText("Expense Admin");
+
+    const selectedTenantInput = controlByLabel<HTMLInputElement>(
+      container,
+      "Selected Tenant ID",
+      "input",
+    );
+    await setInputValue(selectedTenantInput, tenantId);
+    await waitFor(() =>
+      fetchCalls.some(
+        (call) =>
+          call.url === "/api/v1/authz/current-actor" &&
+          call.headers["X-Tenant-ID"] === tenantId,
+      ),
+    );
+
+    await changeSelectInArticle("expense-admin", "Role", "TENANT_ADMIN");
+    const article = articleByText("expense-admin");
+    const grantTenantInput = controlByLabel<HTMLInputElement>(article, "Grant tenant", "input");
+    expect(grantTenantInput.value).toBe(tenantId);
+
+    await clickButtonInArticle("expense-admin", "Grant Role");
+    await waitForText("TENANT_ADMIN granted.");
+
+    expect(
+      fetchCalls.some(
+        (call) =>
+          call.url === "/api/v1/authz/actors/actor-expense-admin/role-grants" &&
+          call.method === "POST" &&
+          (call.body as { roleCode?: string; tenantId?: string }).roleCode === "TENANT_ADMIN" &&
+          (call.body as { roleCode?: string; tenantId?: string }).tenantId === tenantId,
+      ),
+    ).toBe(true);
+
+    await waitFor(() => articleByText("expense-admin").textContent?.includes(tenantId) ?? false);
+    const grantButton = Array.from(articleByText("expense-admin").querySelectorAll("button")).find(
+      (node) => node.textContent?.trim() === "Grant Role",
+    );
+    expect(grantButton).toBeDefined();
+    expect((grantButton as HTMLButtonElement).disabled).toBe(true);
+    expect(grantTenantInput.value).toBe(tenantId);
   });
 
   it("deactivates a non-operating persisted actor", async () => {
