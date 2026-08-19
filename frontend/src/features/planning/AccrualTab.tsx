@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { ApiErrorPanel } from "../../components/ApiErrorPanel";
+import { useAuthorizationContext } from "../../components/layout/AuthorizationContext";
 import type { WorkPeriod } from "../../types/planning";
 import type { ReferenceDataItem } from "../../types/referenceData";
 import type { AccrualItem, AccrualRun } from "../../types/accruals";
@@ -20,6 +21,10 @@ export function AccrualTab({
   workPeriod: WorkPeriod;
   locations: ReferenceDataItem[];
 }) {
+  const actor = useAuthorizationContext();
+  const canManageGoldProduction =
+    actor.permissions.includes("*") ||
+    actor.permissions.includes("gold_production.manage");
   const runsQuery = useAccrualRuns(workPeriod.id);
   const productionQuery = useGoldProductionEntries(workPeriod.id);
   const createRun = useCreateAccrualRun(workPeriod.id);
@@ -54,6 +59,7 @@ export function AccrualTab({
       <GoldProductionPanel
         workPeriod={workPeriod}
         entries={productionQuery.data?.items ?? []}
+        canManage={canManageGoldProduction}
       />
       <AccrualRunPanel
         workPeriod={workPeriod}
@@ -76,6 +82,7 @@ export function AccrualTab({
 function GoldProductionPanel({
   workPeriod,
   entries,
+  canManage,
 }: {
   workPeriod: WorkPeriod;
   entries: Array<{
@@ -86,6 +93,7 @@ function GoldProductionPanel({
     goldGramsProduced: number;
     notes?: string;
   }>;
+  canManage: boolean;
 }) {
   const totalProduced = entries.reduce(
     (sum, entry) => sum + entry.goldGramsProduced,
@@ -103,12 +111,14 @@ function GoldProductionPanel({
             the Gold Production workflow to create or edit mine production.
           </p>
         </div>
-        <Link
-          className="rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 shadow-sm"
-          to={manageHref}
-        >
-          Open Gold Production
-        </Link>
+        {canManage ? (
+          <Link
+            className="rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 shadow-sm"
+            to={manageHref}
+          >
+            Open Gold Production
+          </Link>
+        ) : null}
       </div>
       {entries.length === 0 ? (
         <p className="mt-3 rounded-xl bg-amber-50 p-3 text-sm text-amber-900">

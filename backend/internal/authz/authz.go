@@ -62,7 +62,8 @@ const (
 	PermissionPriceListsCreate Permission = "price_lists.create"
 	PermissionPriceListsUpdate Permission = "price_lists.update"
 
-	PermissionGoldPricesManage Permission = "gold_prices.manage"
+	PermissionGoldPricesManage     Permission = "gold_prices.manage"
+	PermissionGoldProductionManage Permission = "gold_production.manage"
 
 	PermissionReferenceDataRead   Permission = "reference_data.read"
 	PermissionReferenceDataManage Permission = "reference_data.manage"

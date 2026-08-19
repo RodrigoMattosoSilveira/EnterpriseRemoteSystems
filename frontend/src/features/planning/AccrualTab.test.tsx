@@ -4,6 +4,8 @@ import { createRoot, type Root } from "react-dom/client";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AccrualTab } from "./AccrualTab";
+import { AuthorizationProvider } from "../../components/layout/AuthorizationContext";
+import type { AuthzCurrentActor } from "../../types/authz";
 import type { WorkPeriod } from "../../types/planning";
 import type { ReferenceDataItem } from "../../types/referenceData";
 
@@ -110,7 +112,9 @@ describe("AccrualTab", () => {
       root.render(
         <MemoryRouter>
           <QueryClientProvider client={queryClient}>
-            <AccrualTab workPeriod={period} locations={locations} />
+            <AuthorizationProvider value={actorWithPermissions(["gold_production.manage"])}>
+              <AccrualTab workPeriod={period} locations={locations} />
+            </AuthorizationProvider>
           </QueryClientProvider>
         </MemoryRouter>,
       );
@@ -190,7 +194,9 @@ describe("AccrualTab", () => {
       root.render(
         <MemoryRouter>
           <QueryClientProvider client={queryClient}>
-            <AccrualTab workPeriod={period} locations={locations} />
+            <AuthorizationProvider value={actorWithPermissions(["earnings.read"])}>
+              <AccrualTab workPeriod={period} locations={locations} />
+            </AuthorizationProvider>
           </QueryClientProvider>
         </MemoryRouter>,
       );
@@ -199,6 +205,7 @@ describe("AccrualTab", () => {
     await waitForText("Posted items are now visible in Current Accounts.");
     await waitForText("Posted earning credit");
     await waitForText("View in Current Account");
+    expect(container.textContent).not.toContain("Open Gold Production");
 
     const link = container.querySelector<HTMLAnchorElement>(
       'a[href="/collaborators/collab-1/current-account?filter=earnings"]',
@@ -206,6 +213,19 @@ describe("AccrualTab", () => {
     expect(link).not.toBeNull();
   });
 });
+
+function actorWithPermissions(permissions: string[]): AuthzCurrentActor {
+  return {
+    actorKey: "test-actor",
+    actorRecordId: "test-actor-id",
+    tenantId: "default",
+    scope: "TENANT",
+    roleCodes: [],
+    permissions,
+    intrinsicPermissions: [],
+    delegatedPermissions: permissions,
+  };
+}
 
 function response(data: unknown) {
   return Promise.resolve(

@@ -65,6 +65,30 @@ func TestSeedAuthorizationCatalogCreatesCoreRolesAndGrants(t *testing.T) {
 		t.Fatalf("expense operator must not receive sensitive gold-price administration permission")
 	}
 
+	for _, role := range []RoleCode{RoleEarningsOperator, RoleExpenseOperator} {
+		var operatorGoldProductionManage int64
+		if err := database.Model(&AuthzRolePermission{}).
+			Joins("JOIN authz_roles ON authz_roles.id = authz_role_permissions.role_id").
+			Where("authz_roles.code = ? AND permission_code = ?", string(role), string(PermissionGoldProductionManage)).
+			Count(&operatorGoldProductionManage).Error; err != nil {
+			t.Fatalf("count %s gold-production administration permission: %v", role, err)
+		}
+		if operatorGoldProductionManage != 0 {
+			t.Fatalf("%s must not receive Gold Production administration permission", role)
+		}
+	}
+
+	var applicationAdminGoldProductionManage int64
+	if err := database.Model(&AuthzRolePermission{}).
+		Joins("JOIN authz_roles ON authz_roles.id = authz_role_permissions.role_id").
+		Where("authz_roles.code = ? AND permission_code = ?", string(RoleApplicationAdmin), string(PermissionGoldProductionManage)).
+		Count(&applicationAdminGoldProductionManage).Error; err != nil {
+		t.Fatalf("count Application Administrator gold-production permission: %v", err)
+	}
+	if applicationAdminGoldProductionManage != 1 {
+		t.Fatalf("Application Administrator must receive Gold Production administration permission")
+	}
+
 	var tenantAdminPermissions []AuthzRolePermission
 	if err := database.
 		Joins("JOIN authz_roles ON authz_roles.id = authz_role_permissions.role_id").

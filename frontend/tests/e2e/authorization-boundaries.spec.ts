@@ -121,6 +121,7 @@ test.describe("authorization role boundaries", () => {
       expect(currentActor.permissions).toContain("ledger.receipts.print");
       expect(currentActor.permissions).not.toContain("authz.manage");
       expect(currentActor.delegatedPermissions).not.toContain("gold_prices.manage");
+      expect(currentActor.delegatedPermissions).not.toContain("gold_production.manage");
 
       await expectStatus(
         await actorApi.get(e2eApiUrl("/api/v1/reference-data/sector"), { headers }),
@@ -170,6 +171,7 @@ test.describe("authorization role boundaries", () => {
         "expense operators must not record sensitive tenant gold prices",
       );
 
+
       await expectStatus(
         await actorApi.get(e2eApiUrl("/api/v1/authz/actors"), { headers }),
         403,
@@ -209,6 +211,7 @@ test.describe("authorization role boundaries", () => {
       expect(currentActor.delegatedPermissions).toContain("collaborators.update");
       expect(currentActor.delegatedPermissions).toContain("reference_data.read");
       expect(currentActor.delegatedPermissions).toContain("gold_prices.manage");
+      expect(currentActor.delegatedPermissions).toContain("gold_production.manage");
       expect(currentActor.delegatedPermissions).toContain("current_accounts.settings.update");
       expect(currentActor.delegatedPermissions).toContain("journey.settlements.close");
       expect(currentActor.delegatedPermissions).not.toContain("*");
@@ -317,6 +320,7 @@ test.describe("authorization role boundaries", () => {
       expect(currentActor.permissions).toContain("earnings.create");
       expect(currentActor.permissions).not.toContain("expenses.create");
       expect(currentActor.permissions).not.toContain("price_lists.create");
+      expect(currentActor.delegatedPermissions).not.toContain("gold_production.manage");
 
       await expectStatus(
         await actorApi.get(e2eApiUrl("/api/v1/work-periods?pageSize=1"), { headers }),
@@ -331,6 +335,22 @@ test.describe("authorization role boundaries", () => {
         }),
         400,
         "earnings operators should reach work-period creation validation",
+      );
+
+      await expectStatus(
+        await actorApi.post(
+          e2eApiUrl("/api/v1/work-periods/forbidden-work-period/gold-production-entries"),
+          {
+            headers,
+            data: {
+              locationId: "forbidden-location",
+              productionDate: "2026-08-18",
+              goldGramsProduced: 1,
+            },
+          },
+        ),
+        403,
+        "earnings operators must not record Gold Production",
       );
 
       await expectStatus(

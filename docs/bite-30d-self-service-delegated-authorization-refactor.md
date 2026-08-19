@@ -223,3 +223,12 @@ Bite 30D intentionally does not implement:
 - removal of Application Administrator standing tenant-data wildcard authority
   and Tenant Support Access Leases — Bite 30H;
 - legacy authorization schema removal — later hardening.
+
+
+### Gold Production administration
+
+Gold Production source records are a sensitive administrative input to accrual.
+`EARNINGS_OPERATOR` may read recorded production through the existing earnings-read
+path, but may not create, edit, deactivate, or delete Gold Production. Those
+mutations require `gold_production.manage`, granted only to `TENANT_ADMIN` and
+`APPLICATION_ADMIN`.

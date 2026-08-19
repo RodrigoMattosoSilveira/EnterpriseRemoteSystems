@@ -215,6 +215,7 @@ func tenantAdministratorDelegatedPermissions() []Permission {
 		PermissionPriceListsCreate,
 		PermissionPriceListsUpdate,
 		PermissionGoldPricesManage,
+		PermissionGoldProductionManage,
 		PermissionAuthzTenantRoleGrantsManage,
 		PermissionReferenceDataRead,
 		PermissionReferenceDataManage,
@@ -266,10 +267,12 @@ func SeedAuthorizationCatalog(database *gorm.DB) error {
 		RoleApplicationAdmin: {
 			// Explicit control-plane permissions are established in 30D. The
 			// transitional wildcard remains until Bite 30H removes standing
-			// Application Administrator tenant-data compatibility.
+			// Application Administrator tenant-data compatibility. Gold Production
+			// is an explicit administrative exception shared with Tenant Admins.
 			PermissionAll,
 			PermissionAuthzSelfRead, PermissionAuthzRead, PermissionAuthzManage,
 			PermissionTenantsRead, PermissionTenantsCreate, PermissionTenantsUpdate,
+			PermissionGoldProductionManage,
 		},
 		RoleTenantAdmin: tenantAdministratorDelegatedPermissions(),
 		RoleEarningsOperator: {
@@ -436,6 +439,7 @@ func PermissionCatalog() []PermissionCatalogEntry {
 		{PermissionPriceListsCreate, "Create price lists", "Create tenant price list records."},
 		{PermissionPriceListsUpdate, "Update price lists", "Update tenant price list records."},
 		{PermissionGoldPricesManage, "Manage gold prices", "List, record, replace, and deactivate sensitive tenant gold-price administration records."},
+		{PermissionGoldProductionManage, "Manage gold production", "Record, edit, deactivate, and delete tenant Gold Production entries."},
 		{PermissionReferenceDataRead, "Read reference data", "Read tenant reference data records."},
 		{PermissionReferenceDataManage, "Manage reference data", "Create, update, deactivate, and reactivate tenant reference data records."},
 		{PermissionExpensesRead, "Read expenses", "Read tenant expense records."},
