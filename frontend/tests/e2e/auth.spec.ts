@@ -106,6 +106,17 @@ test("admin can create an authorization actor, grant a role, and revoke it", asy
   });
   expect(accountResponse.status()).toBe(201);
 
+  // Account creation changes the authoritative Account -> Actor binding outside
+  // this page's React Query cache. Reload so the Application Authorization UI
+  // receives the real TENANT binding and derives the grant target from it.
+  await page.reload();
+  await expect(actorCard).toContainText(
+    "Authentication binding: TENANT · default · Membership ACTIVE",
+  );
+  await expect(
+    actorCard.getByLabel("Role").locator('option[value="APPLICATION_ADMIN"]'),
+  ).toHaveCount(0);
+
   const actorNicknameFilter = page.getByLabel(
     "Filter actors by person nickname",
   );

@@ -44,6 +44,13 @@ export type AuthzActorRoleGrant = {
   active: boolean;
 };
 
+export type AuthzActorBinding = {
+  scopeType: string;
+  tenantId?: string;
+  membershipId?: string;
+  membershipActive: boolean;
+};
+
 export type AuthzActor = {
   id: string;
   actorKey: string;
@@ -52,6 +59,7 @@ export type AuthzActor = {
   collaboratorId?: string;
   active: boolean;
   roleGrants?: AuthzActorRoleGrant[];
+  binding?: AuthzActorBinding;
 };
 
 export type CreateAuthzActorInput = {

@@ -640,6 +640,78 @@ func TestGORMStoreTenantRoleDelegationRestrictsRoleAndTenant(t *testing.T) {
 	}
 }
 
+func TestGORMStoreListActorsIncludesAuthoritativeTenantBinding(t *testing.T) {
+	database := newAuthzTestDB(t)
+	installTenantRoleDelegationFixtureTables(t, database)
+	store := NewGORMStore(database)
+
+	actorID := createAuthzActor(t, database, "bound-tenant-admin@example.com", nil, nil)
+	bindActiveTenantMemberActor(t, database, actorID, "tenant-a")
+
+	actors, err := store.ListActors(context.Background())
+	if err != nil {
+		t.Fatalf("list authorization actors: %v", err)
+	}
+
+	var found *ActorResponse
+	for index := range actors {
+		if actors[index].ID == actorID {
+			found = &actors[index]
+			break
+		}
+	}
+	if found == nil {
+		t.Fatalf("expected bound Actor %s in authorization catalog, got %#v", actorID, actors)
+	}
+	if found.Binding == nil {
+		t.Fatalf("expected authoritative Account -> Actor binding, got %#v", found)
+	}
+	if found.Binding.ScopeType != "TENANT" || found.Binding.TenantID != "tenant-a" {
+		t.Fatalf("unexpected tenant binding: %#v", found.Binding)
+	}
+	if found.Binding.MembershipID == "" || !found.Binding.MembershipActive {
+		t.Fatalf("expected active Membership-backed tenant binding, got %#v", found.Binding)
+	}
+}
+
+func TestGORMStoreApplicationAdminTenantRoleGrantPersistsForBoundActor(t *testing.T) {
+	database := newAuthzTestDB(t)
+	installTenantRoleDelegationFixtureTables(t, database)
+	store := NewGORMStore(database)
+
+	actorID := createAuthzActor(t, database, "application-admin-target@example.com", nil, nil)
+	bindActiveTenantMemberActor(t, database, actorID, "tenant-a")
+
+	grant, err := store.GrantActorRole(context.Background(), actorID, GrantActorRoleRequest{
+		RoleCode: string(RoleTenantAdmin),
+		TenantID: "tenant-a",
+	})
+	if err != nil {
+		t.Fatalf("grant TENANT_ADMIN to active tenant-bound Actor: %v", err)
+	}
+	if !grant.Active || grant.RoleCode != string(RoleTenantAdmin) || grant.TenantID != "tenant-a" {
+		t.Fatalf("unexpected TENANT_ADMIN grant: %#v", grant)
+	}
+
+	actors, err := store.ListActors(context.Background())
+	if err != nil {
+		t.Fatalf("list authorization actors after TENANT_ADMIN grant: %v", err)
+	}
+	for _, actor := range actors {
+		if actor.ID != actorID {
+			continue
+		}
+		if actor.Binding == nil || actor.Binding.TenantID != "tenant-a" || !actor.Binding.MembershipActive {
+			t.Fatalf("expected active tenant binding after grant, got %#v", actor.Binding)
+		}
+		if len(actor.RoleGrants) != 1 || actor.RoleGrants[0].RoleCode != string(RoleTenantAdmin) || actor.RoleGrants[0].TenantID != "tenant-a" || !actor.RoleGrants[0].Active {
+			t.Fatalf("expected persisted TENANT_ADMIN grant in Actor catalog, got %#v", actor.RoleGrants)
+		}
+		return
+	}
+	t.Fatalf("expected granted Actor %s in authorization catalog", actorID)
+}
+
 func installTenantRoleDelegationFixtureTables(t *testing.T, database *gorm.DB) {
 	t.Helper()
 	for _, statement := range []string{

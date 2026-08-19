@@ -50,6 +50,15 @@ const permissions = [
   { code: "authz.manage", label: "Manage Authorization", description: "Manage authz data" },
 ];
 
+function activeTenantBinding(tenantId: string) {
+  return {
+    scopeType: "TENANT",
+    tenantId,
+    membershipId: `membership-${tenantId}`,
+    membershipActive: true,
+  };
+}
+
 const collaborators = [
   {
     id: "collaborator-expense-admin",
@@ -306,6 +315,7 @@ describe("AuthzAdminPage", () => {
       displayName: "Expense Admin",
       active: true,
       roleGrants: [],
+      binding: activeTenantBinding("default"),
     });
     mockAuthzFetch();
 
@@ -343,7 +353,7 @@ describe("AuthzAdminPage", () => {
     ).toBe(true);
   });
 
-  it("does not allow a tenant role to inherit the application wildcard", async () => {
+  it("derives a tenant grant from the Actor binding instead of the application wildcard", async () => {
     const tenantId = "b16647b4-82a3-4d4e-99d0-c15ede05840b";
     window.localStorage.setItem("ers.auth.selectedTenantId", "*");
     actors.push({
@@ -352,6 +362,7 @@ describe("AuthzAdminPage", () => {
       displayName: "Expense Admin",
       active: true,
       roleGrants: [],
+      binding: activeTenantBinding(tenantId),
     });
     mockAuthzFetch();
 
@@ -363,45 +374,17 @@ describe("AuthzAdminPage", () => {
     const grantTenantInput = controlByLabel<HTMLInputElement>(article, "Grant tenant", "input");
     const grantButton = buttonInArticle("expense-admin", "Grant Role");
 
-    expect(grantTenantInput.value).toBe("*");
+    expect(grantTenantInput.value).toBe(tenantId);
     expect(grantTenantInput.disabled).toBe(true);
-    expect(grantButton.disabled).toBe(true);
+    expect(grantButton.disabled).toBe(false);
     expect(article.textContent).toContain(
-      "Select a specific tenant in Selected Tenant ID above before granting TENANT_ADMIN.",
+      `Authentication binding: TENANT · ${tenantId} · Membership ACTIVE`,
     );
-
-    const selectedTenantInput = controlByLabel<HTMLInputElement>(
-      container,
-      "Selected Tenant ID",
-      "input",
-    );
-    await setInputValue(selectedTenantInput, tenantId);
-
-    // Changing the selected tenant changes the React Query key for the Actor
-    // catalog. The Actor card is therefore briefly unmounted and then
-    // recreated with the new tenant context. Re-query the live card instead
-    // of waiting on the detached input/button references captured above.
-    await waitFor(() => {
-      const refreshedArticle = articleByText("expense-admin");
-      return (
-        controlByLabel<HTMLInputElement>(
-          refreshedArticle,
-          "Grant tenant",
-          "input",
-        ).value === tenantId
-      );
-    });
-
-    const refreshedArticle = articleByText("expense-admin");
-    const refreshedGrantTenantInput = controlByLabel<HTMLInputElement>(
-      refreshedArticle,
-      "Grant tenant",
-      "input",
-    );
-    const refreshedGrantButton = buttonInArticle("expense-admin", "Grant Role");
-
-    expect(refreshedGrantTenantInput.disabled).toBe(true);
-    expect(refreshedGrantButton.disabled).toBe(false);
+    expect(
+      Array.from(controlByLabel<HTMLSelectElement>(article, "Role", "select").options).some(
+        (option) => option.value === "APPLICATION_ADMIN",
+      ),
+    ).toBe(false);
 
     await clickButtonInArticle("expense-admin", "Grant Role");
     await waitForText("TENANT_ADMIN granted.");
@@ -428,6 +411,7 @@ describe("AuthzAdminPage", () => {
       actorKey: "expense-admin",
       displayName: "Expense Admin",
       active: true,
+      binding: activeTenantBinding(tenantId),
       roleGrants: [
         {
           id: "grant-expense-admin",
@@ -459,33 +443,21 @@ describe("AuthzAdminPage", () => {
     );
   });
 
-  it("uses the selected tenant for tenant grants and disables an existing grant", async () => {
+  it("uses the Actor tenant binding for tenant grants and disables an existing grant", async () => {
     const tenantId = "b16647b4-82a3-4d4e-99d0-c15ede05840b";
+    window.localStorage.setItem("ers.auth.selectedTenantId", "default");
     actors.push({
       id: "actor-expense-admin",
       actorKey: "expense-admin",
       displayName: "Expense Admin",
       active: true,
       roleGrants: [],
+      binding: activeTenantBinding(tenantId),
     });
     mockAuthzFetch();
 
     renderAuthzAdminPage();
     await waitForText("Expense Admin");
-
-    const selectedTenantInput = controlByLabel<HTMLInputElement>(
-      container,
-      "Selected Tenant ID",
-      "input",
-    );
-    await setInputValue(selectedTenantInput, tenantId);
-    await waitFor(() =>
-      fetchCalls.some(
-        (call) =>
-          call.url === "/api/v1/authz/current-actor" &&
-          call.headers["X-Tenant-ID"] === tenantId,
-      ),
-    );
 
     await changeSelectInArticle("expense-admin", "Role", "TENANT_ADMIN");
     const article = articleByText("expense-admin");

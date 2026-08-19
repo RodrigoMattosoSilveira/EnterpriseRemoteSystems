@@ -43,13 +43,29 @@ type PermissionResponse struct {
 }
 
 type ActorResponse struct {
-	ID             string               `json:"id"`
-	ActorKey       string               `json:"actorKey"`
-	DisplayName    string               `json:"displayName"`
-	PersonID       string               `json:"personId,omitempty"`
-	CollaboratorID string               `json:"collaboratorId,omitempty"`
-	Active         bool                 `json:"active"`
-	RoleGrants     []ActorGrantResponse `json:"roleGrants,omitempty"`
+	ID             string                `json:"id"`
+	ActorKey       string                `json:"actorKey"`
+	DisplayName    string                `json:"displayName"`
+	PersonID       string                `json:"personId,omitempty"`
+	CollaboratorID string                `json:"collaboratorId,omitempty"`
+	Active         bool                  `json:"active"`
+	RoleGrants     []ActorGrantResponse  `json:"roleGrants,omitempty"`
+	Binding        *ActorBindingResponse `json:"binding,omitempty"`
+}
+
+// ActorBindingResponse is the authoritative Authentication Account -> Actor
+// scope used by Application Authorization administration. A tenant Actor has
+// exactly one tenant binding; when that binding represents a Person, the
+// Membership must also be active before a tenant Role can be delegated.
+//
+// Keep account identifiers out of this projection. The authorization UI only
+// needs the scope/tenant/Membership facts required to target and validate a
+// grant safely.
+type ActorBindingResponse struct {
+	ScopeType        string `json:"scopeType"`
+	TenantID         string `json:"tenantId,omitempty"`
+	MembershipID     string `json:"membershipId,omitempty"`
+	MembershipActive bool   `json:"membershipActive"`
 }
 
 type CurrentActorResponse struct {
@@ -250,6 +266,10 @@ func (s *GORMStore) ListActors(ctx context.Context) ([]ActorResponse, error) {
 	if err := s.database.WithContext(ctx).Order("actor_key ASC").Find(&actors).Error; err != nil {
 		return nil, fmt.Errorf("list authorization actors: %w", err)
 	}
+	bindings, err := s.actorBindingsForAdministration(ctx)
+	if err != nil {
+		return nil, err
+	}
 
 	responses := make([]ActorResponse, 0, len(actors))
 	for _, actor := range actors {
@@ -257,9 +277,80 @@ func (s *GORMStore) ListActors(ctx context.Context) ([]ActorResponse, error) {
 		if err != nil {
 			return nil, err
 		}
-		responses = append(responses, actorResponse(actor, grants))
+		response := actorResponse(actor, grants)
+		if binding, ok := bindings[actor.ID]; ok {
+			bindingCopy := binding
+			response.Binding = &bindingCopy
+		}
+		responses = append(responses, response)
 	}
 	return responses, nil
+}
+
+func (s *GORMStore) actorBindingsForAdministration(ctx context.Context) (map[string]ActorBindingResponse, error) {
+	bindings := map[string]ActorBindingResponse{}
+	if s == nil || s.database == nil || !s.database.Migrator().HasTable("auth_account_actors") {
+		return bindings, nil
+	}
+
+	type bindingProjection struct {
+		ActorID      string
+		ScopeType    string
+		TenantID     *string
+		MembershipID *string
+	}
+	var rows []bindingProjection
+	if err := s.database.WithContext(ctx).
+		Table("auth_account_actors").
+		Select("actor_id, scope_type, tenant_id, membership_id").
+		Scan(&rows).Error; err != nil {
+		return nil, fmt.Errorf("list authorization actor bindings: %w", err)
+	}
+
+	activeMemberships := map[string]struct{}{}
+	membershipIDs := make([]string, 0, len(rows))
+	for _, row := range rows {
+		if row.MembershipID == nil {
+			continue
+		}
+		membershipID := strings.TrimSpace(*row.MembershipID)
+		if membershipID != "" {
+			membershipIDs = append(membershipIDs, membershipID)
+		}
+	}
+	if len(membershipIDs) > 0 &&
+		s.database.Migrator().HasTable("person_tenant_memberships") &&
+		s.database.Migrator().HasTable("reference_data") {
+		type activeMembershipProjection struct {
+			ID string
+		}
+		var activeRows []activeMembershipProjection
+		if err := s.database.WithContext(ctx).
+			Table("person_tenant_memberships m").
+			Select("m.id AS id").
+			Joins("JOIN reference_data membership_status ON membership_status.id = m.status_id AND membership_status.tenant_id = m.tenant_id AND membership_status.type = ? AND membership_status.code = ? AND membership_status.active = ?", "person_status", "ACTIVE", true).
+			Where("m.id IN ?", membershipIDs).
+			Scan(&activeRows).Error; err != nil {
+			return nil, fmt.Errorf("list active authorization actor memberships: %w", err)
+		}
+		for _, row := range activeRows {
+			activeMemberships[row.ID] = struct{}{}
+		}
+	}
+
+	for _, row := range rows {
+		binding := ActorBindingResponse{ScopeType: strings.TrimSpace(row.ScopeType)}
+		if row.TenantID != nil {
+			binding.TenantID = strings.TrimSpace(*row.TenantID)
+		}
+		if row.MembershipID != nil {
+			binding.MembershipID = strings.TrimSpace(*row.MembershipID)
+			_, binding.MembershipActive = activeMemberships[binding.MembershipID]
+		}
+		bindings[row.ActorID] = binding
+	}
+
+	return bindings, nil
 }
 
 // ListTenantActors returns only active tenant-scoped delegated Actors for the
@@ -404,7 +495,7 @@ func (s *GORMStore) ensureActiveTenantMemberActor(ctx context.Context, tenantID 
 	if strings.TrimSpace(actorID) == "" {
 		return NewValidationError(map[string]string{"actorId": "Actor ID is required"})
 	}
-	if !s.database.Migrator().HasTable("auth_account_actors") || !s.database.Migrator().HasTable("person_tenant_memberships") {
+	if !s.hasTenantMembershipFoundation() {
 		return ErrAccountActorFoundationUnavailable
 	}
 	var count int64
@@ -418,9 +509,17 @@ func (s *GORMStore) ensureActiveTenantMemberActor(ctx context.Context, tenantID 
 		return fmt.Errorf("check tenant member actor: %w", err)
 	}
 	if count == 0 {
-		return NewValidationError(map[string]string{"actorId": "Operator roles may be delegated only to an active Actor with an active Membership in the selected tenant"})
+		return NewValidationError(map[string]string{"actorId": "Tenant roles may be delegated only to an active Actor with an active Membership in the selected tenant"})
 	}
 	return nil
+}
+
+func (s *GORMStore) hasTenantMembershipFoundation() bool {
+	return s != nil &&
+		s.database != nil &&
+		s.database.Migrator().HasTable("auth_account_actors") &&
+		s.database.Migrator().HasTable("person_tenant_memberships") &&
+		s.database.Migrator().HasTable("reference_data")
 }
 
 func (s *GORMStore) tenantOperatorGrantsForActor(ctx context.Context, actorID string, tenantID string) ([]ActorGrantResponse, error) {
@@ -561,6 +660,11 @@ func (s *GORMStore) GrantActorRole(ctx context.Context, actorID string, req Gran
 	var role AuthzRole
 	if err := s.database.WithContext(ctx).Where("code = ? AND active = ?", roleCode, true).First(&role).Error; err != nil {
 		return ActorGrantResponse{}, err
+	}
+	if role.ScopeType == string(ActorScopeTenant) && s.hasTenantMembershipFoundation() {
+		if err := s.ensureActiveTenantMemberActor(ctx, tenantID, actor.ID); err != nil {
+			return ActorGrantResponse{}, err
+		}
 	}
 	if err := ValidateDelegatedRoleGrant(s.database.WithContext(ctx), actor.ID, role, tenantID, true); err != nil {
 		return ActorGrantResponse{}, err

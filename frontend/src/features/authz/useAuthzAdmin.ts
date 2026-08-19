@@ -138,7 +138,7 @@ export function useGrantAuthzActorRole(actor: AuthzAdminRequestActor) {
       await queryClient.cancelQueries(filter);
       return { seedActors };
     },
-    onSuccess: (grant, { targetActorId }, context) => {
+    onSuccess: async (grant, { targetActorId }, context) => {
       const filter = actorCatalogFilter(actor.actorId);
       const actorsKey = [...authzQueryKey(actor), "actors"] as const;
 
@@ -155,7 +155,7 @@ export function useGrantAuthzActorRole(actor: AuthzAdminRequestActor) {
 
       // The canceled stale read can no longer win. Revalidate after the write
       // so the visible nested Role Grant card comes from persisted server data.
-      queryClient.invalidateQueries({ ...filter, refetchType: "active" });
+      await queryClient.invalidateQueries({ ...filter, refetchType: "active" });
     },
   });
 }

@@ -307,7 +307,7 @@ export function AuthzAdminPage() {
                 <div>
                   <h2 className="text-lg font-semibold text-gray-950">Actors</h2>
                   <p className="text-sm text-gray-500">
-                    Grant tenant-scoped roles with a tenant ID, or global roles with *.
+                    Tenant-scoped grants use the Actor&apos;s Authentication Account/Membership binding; global roles use *.
                   </p>
                   <p className="mt-1 text-xs text-gray-500">
                     Showing {filteredActors.length} of {actors.length} actor records.
@@ -641,20 +641,26 @@ function ActorCard({
   onRevokeGrant: (targetActorId: string, grant: AuthzActorRoleGrant) => Promise<void>;
   onSetActive: (targetActorId: string, actorKey: string, active: boolean) => Promise<void>;
 }) {
-  // Keep the selected Role in the page-level grant workflow rather than in the
-  // individual Actor card. The Actor catalog is tenant-context keyed and a
-  // refresh can recreate cards; local card state would then fall back to the
-  // first role (APPLICATION_ADMIN), changing a tenant grant target back to *.
-  // Page-level state keeps the administrator's explicit Role choice stable.
+  // The Account -> Actor binding is authoritative for grant scope. A tenant
+  // Actor belongs to exactly one tenant, so the UI must never offer an
+  // application Role for it or derive the grant tenant from transient page
+  // context. Conversely, a GLOBAL/unbound control-plane Actor may receive only
+  // application Roles. This mirrors the backend scope invariant instead of
+  // asking the administrator to keep Role scope and tenant selection aligned by
+  // hand.
+  const compatibleRoles = roles.filter((role) =>
+    isRoleCompatibleWithActor(role, actor),
+  );
+  const actorTenantId = tenantBindingId(actor);
   const persistedGrantRoleCode = preferredPersistedGrantRoleCode(
     actor,
-    roles,
-    selectedTenantId,
+    compatibleRoles,
+    actorTenantId || selectedTenantId,
   );
-  const roleCode = roles.some((role) => role.code === selectedRoleCode)
+  const roleCode = compatibleRoles.some((role) => role.code === selectedRoleCode)
     ? selectedRoleCode ?? ""
-    : persistedGrantRoleCode || roles[0]?.code || "";
-  const selectedRole = roles.find((role) => role.code === roleCode);
+    : persistedGrantRoleCode || compatibleRoles[0]?.code || "";
+  const selectedRole = compatibleRoles.find((role) => role.code === roleCode);
   const applicationScopedRole = isApplicationScopedRole(selectedRole);
   const persistedSelectedRoleGrant = (actor.roleGrants ?? []).find(
     (grant) => grant.active && grant.roleCode === roleCode,
@@ -668,9 +674,14 @@ function ActorCard({
   // still the requested target. Application-scoped roles are always global.
   const targetTenantId = applicationScopedRole
     ? "*"
-    : persistedSelectedRoleGrant?.tenantId || selectedTenantId.trim();
+    : persistedSelectedRoleGrant?.tenantId || actorTenantId;
   const tenantScopeMissing =
     !applicationScopedRole && (!targetTenantId || targetTenantId === "*");
+  const tenantMembershipInactive = Boolean(
+    actor.binding &&
+      actor.binding.scopeType.trim().toUpperCase() === "TENANT" &&
+      !actor.binding.membershipActive,
+  );
   const alreadyGranted = Boolean(
     roleCode &&
       targetTenantId &&
@@ -699,6 +710,7 @@ function ActorCard({
             {actor.personId ? ` · Person ${actor.personId}` : ""}
             {actor.collaboratorId ? ` · Collaborator ${actor.collaboratorId}` : ""}
           </p>
+          <ActorBindingSummary actor={actor} />
         </div>
         <div className="flex flex-wrap gap-2">
           <button
@@ -741,8 +753,9 @@ function ActorCard({
             className="mt-1 block w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm"
             value={roleCode}
             onChange={(event) => onSelectedRoleCodeChange(event.target.value)}
+            disabled={compatibleRoles.length === 0}
           >
-            {roles.map((role) => (
+            {compatibleRoles.map((role) => (
               <option key={role.code} value={role.code}>
                 {role.code}
               </option>
@@ -765,6 +778,7 @@ function ActorCard({
             !actor.active ||
             !roleCode ||
             tenantScopeMissing ||
+            tenantMembershipInactive ||
             alreadyGranted
           }
           type="submit"
@@ -774,7 +788,12 @@ function ActorCard({
       </form>
       {tenantScopeMissing && (
         <p className="mt-2 text-xs font-medium text-amber-700">
-          Select a specific tenant in Selected Tenant ID above before granting {roleCode}.
+          Tenant Roles require an Authentication Account binding to a specific tenant.
+        </p>
+      )}
+      {tenantMembershipInactive && (
+        <p className="mt-2 text-xs font-medium text-amber-700">
+          Tenant Roles require an ACTIVE Person–Tenant Membership for {actorTenantId || "the bound tenant"}.
         </p>
       )}
       {alreadyGranted && (
@@ -783,6 +802,31 @@ function ActorCard({
         </p>
       )}
     </article>
+  );
+}
+
+function ActorBindingSummary({ actor }: { actor: AuthzActor }) {
+  if (!actor.binding) {
+    return (
+      <p className="mt-1 text-xs font-medium text-gray-500">
+        Authentication binding: Unbound control-plane Actor
+      </p>
+    );
+  }
+
+  const scope = actor.binding.scopeType.trim().toUpperCase();
+  if (scope === "TENANT") {
+    return (
+      <p className="mt-1 text-xs font-medium text-gray-500">
+        Authentication binding: TENANT · {actor.binding.tenantId || "—"} · Membership {actor.binding.membershipActive ? "ACTIVE" : "INACTIVE"}
+      </p>
+    );
+  }
+
+  return (
+    <p className="mt-1 text-xs font-medium text-gray-500">
+      Authentication binding: {scope || "GLOBAL"}
+    </p>
   );
 }
 
@@ -804,6 +848,29 @@ function preferredPersistedGrantRoleCode(
     activeGrants[0]?.roleCode ??
     ""
   );
+}
+
+function tenantBindingId(actor: AuthzActor): string {
+  if (actor.binding?.scopeType.trim().toUpperCase() !== "TENANT") return "";
+  return actor.binding.tenantId?.trim() ?? "";
+}
+
+function isRoleCompatibleWithActor(role: AuthzRole, actor: AuthzActor): boolean {
+  const roleScope = normalizedRoleScope(role);
+  const bindingScope = actor.binding?.scopeType.trim().toUpperCase() ?? "";
+
+  if (bindingScope === "TENANT") return roleScope === "TENANT";
+  if (bindingScope === "GLOBAL") return roleScope === "APPLICATION";
+
+  // Actors created from the Application Authorization page are control-plane
+  // Actors until Authentication Account ownership gives them an explicit
+  // GLOBAL or TENANT binding. Do not let an unbound Actor acquire a tenant Role.
+  return roleScope === "APPLICATION";
+}
+
+function normalizedRoleScope(role: AuthzRole): string {
+  if (role.code === "APPLICATION_ADMIN") return "APPLICATION";
+  return role.scopeType.trim().toUpperCase();
 }
 
 function isApplicationScopedRole(role: AuthzRole | undefined) {
