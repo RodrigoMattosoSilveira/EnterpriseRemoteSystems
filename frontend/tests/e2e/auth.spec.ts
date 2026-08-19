@@ -135,7 +135,8 @@ test("admin can create an authorization actor, grant a role, and revoke it", asy
   ).toBeVisible();
 
   await actorCard.getByLabel("Role").selectOption(grantedRole);
-  await actorCard.getByLabel("Grant tenant").fill(grantTenant);
+  await expect(actorCard.getByLabel("Grant tenant")).toHaveValue(grantTenant);
+  await expect(actorCard.getByLabel("Grant tenant")).toBeDisabled();
   await actorCard.getByRole("button", { name: "Grant Role" }).click();
 
   await expect(page.getByRole("status")).toContainText(
