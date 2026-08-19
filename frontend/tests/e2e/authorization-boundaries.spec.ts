@@ -375,7 +375,9 @@ test.describe("authorization role boundaries", () => {
     }
   });
 
-  test("inactive persisted actors are rejected", async ({ request: adminApi }) => {
+  test("inactive tenant actors make the selected tenant unavailable without invalidating the Account session", async ({
+    request: adminApi,
+  }) => {
     let actorApi: APIRequestContext | undefined;
     try {
       const actor = await createActorWithRole(adminApi, "inactive", "EXPENSE_OPERATOR");
@@ -386,8 +388,19 @@ test.describe("authorization role boundaries", () => {
       const response = await actorApi.get(e2eApiUrl("/api/v1/authz/current-actor"), {
         headers: tenantHeaders(),
       });
-      await expectStatus(response, 401, "inactive actors should be rejected");
-      await expectErrorCode(response, "actor_inactive");
+      await expectStatus(
+        response,
+        403,
+        "inactive tenant actor should make the selected tenant unavailable",
+      );
+      await expectErrorCode(response, "tenant_actor_unavailable");
+
+      const sessionResponse = await actorApi.get(e2eApiUrl("/api/v1/auth/session"));
+      await expectStatus(
+        sessionResponse,
+        200,
+        "inactive tenant actor must not invalidate the Authentication Account session",
+      );
     } finally {
       await actorApi?.dispose();
     }
