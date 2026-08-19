@@ -56,16 +56,21 @@ type ActorResponse struct {
 // ActorBindingResponse is the authoritative Authentication Account -> Actor
 // scope used by Application Authorization administration. A tenant Actor has
 // exactly one tenant binding; when that binding represents a Person, the
-// Membership must also be active before a tenant Role can be delegated.
+// Membership must also be active in the same tenant before a tenant Role can be
+// delegated.
 //
-// Keep account identifiers out of this projection. The authorization UI only
-// needs the scope/tenant/Membership facts required to target and validate a
-// grant safely.
+// The Application Administrator needs these facts on the Actor card so tenant
+// Role eligibility can be understood without cross-referencing Authentication
+// Administration manually.
 type ActorBindingResponse struct {
-	ScopeType        string `json:"scopeType"`
-	TenantID         string `json:"tenantId,omitempty"`
-	MembershipID     string `json:"membershipId,omitempty"`
-	MembershipActive bool   `json:"membershipActive"`
+	AccountID            string `json:"accountId"`
+	AccountLogin         string `json:"accountLogin,omitempty"`
+	ScopeType            string `json:"scopeType"`
+	TenantID             string `json:"tenantId,omitempty"`
+	MembershipID         string `json:"membershipId,omitempty"`
+	MembershipTenantID   string `json:"membershipTenantId,omitempty"`
+	MembershipActive     bool   `json:"membershipActive"`
+	MembershipSameTenant bool   `json:"membershipSameTenant"`
 }
 
 type CurrentActorResponse struct {
@@ -294,6 +299,7 @@ func (s *GORMStore) actorBindingsForAdministration(ctx context.Context) (map[str
 	}
 
 	type bindingProjection struct {
+		AccountID    string
 		ActorID      string
 		ScopeType    string
 		TenantID     *string
@@ -302,14 +308,19 @@ func (s *GORMStore) actorBindingsForAdministration(ctx context.Context) (map[str
 	var rows []bindingProjection
 	if err := s.database.WithContext(ctx).
 		Table("auth_account_actors").
-		Select("actor_id, scope_type, tenant_id, membership_id").
+		Select("account_id, actor_id, scope_type, tenant_id, membership_id").
 		Scan(&rows).Error; err != nil {
 		return nil, fmt.Errorf("list authorization actor bindings: %w", err)
 	}
 
-	activeMemberships := map[string]struct{}{}
+	accountLogins := map[string]string{}
+	accountIDs := make([]string, 0, len(rows))
 	membershipIDs := make([]string, 0, len(rows))
 	for _, row := range rows {
+		accountID := strings.TrimSpace(row.AccountID)
+		if accountID != "" {
+			accountIDs = append(accountIDs, accountID)
+		}
 		if row.MembershipID == nil {
 			continue
 		}
@@ -318,34 +329,75 @@ func (s *GORMStore) actorBindingsForAdministration(ctx context.Context) (map[str
 			membershipIDs = append(membershipIDs, membershipID)
 		}
 	}
+
+	if len(accountIDs) > 0 && s.database.Migrator().HasTable("auth_user_accounts") {
+		type accountProjection struct {
+			ID    string
+			Login string
+		}
+		var accountRows []accountProjection
+		if err := s.database.WithContext(ctx).
+			Table("auth_user_accounts").
+			Select("id, login").
+			Where("id IN ?", accountIDs).
+			Scan(&accountRows).Error; err != nil {
+			return nil, fmt.Errorf("list authorization actor authentication accounts: %w", err)
+		}
+		for _, row := range accountRows {
+			accountLogins[strings.TrimSpace(row.ID)] = strings.TrimSpace(row.Login)
+		}
+	}
+
+	type membershipFact struct {
+		TenantID string
+		Active   bool
+	}
+	membershipFacts := map[string]membershipFact{}
 	if len(membershipIDs) > 0 &&
 		s.database.Migrator().HasTable("person_tenant_memberships") &&
 		s.database.Migrator().HasTable("reference_data") {
-		type activeMembershipProjection struct {
-			ID string
+		type membershipProjection struct {
+			ID           string
+			TenantID     string
+			StatusCode   string
+			StatusActive bool
 		}
-		var activeRows []activeMembershipProjection
+		var membershipRows []membershipProjection
 		if err := s.database.WithContext(ctx).
 			Table("person_tenant_memberships m").
-			Select("m.id AS id").
-			Joins("JOIN reference_data membership_status ON membership_status.id = m.status_id AND membership_status.tenant_id = m.tenant_id AND membership_status.type = ? AND membership_status.code = ? AND membership_status.active = ?", "person_status", "ACTIVE", true).
+			Select("m.id AS id, m.tenant_id AS tenant_id, membership_status.code AS status_code, membership_status.active AS status_active").
+			Joins("LEFT JOIN reference_data membership_status ON membership_status.id = m.status_id AND membership_status.tenant_id = m.tenant_id AND membership_status.type = ?", "person_status").
 			Where("m.id IN ?", membershipIDs).
-			Scan(&activeRows).Error; err != nil {
-			return nil, fmt.Errorf("list active authorization actor memberships: %w", err)
+			Scan(&membershipRows).Error; err != nil {
+			return nil, fmt.Errorf("list authorization actor memberships: %w", err)
 		}
-		for _, row := range activeRows {
-			activeMemberships[row.ID] = struct{}{}
+		for _, row := range membershipRows {
+			membershipFacts[strings.TrimSpace(row.ID)] = membershipFact{
+				TenantID: strings.TrimSpace(row.TenantID),
+				Active:   strings.EqualFold(strings.TrimSpace(row.StatusCode), "ACTIVE") && row.StatusActive,
+			}
 		}
 	}
 
 	for _, row := range rows {
-		binding := ActorBindingResponse{ScopeType: strings.TrimSpace(row.ScopeType)}
+		binding := ActorBindingResponse{
+			AccountID:    strings.TrimSpace(row.AccountID),
+			AccountLogin: accountLogins[strings.TrimSpace(row.AccountID)],
+			ScopeType:    strings.TrimSpace(row.ScopeType),
+		}
 		if row.TenantID != nil {
 			binding.TenantID = strings.TrimSpace(*row.TenantID)
 		}
 		if row.MembershipID != nil {
 			binding.MembershipID = strings.TrimSpace(*row.MembershipID)
-			_, binding.MembershipActive = activeMemberships[binding.MembershipID]
+			if fact, ok := membershipFacts[binding.MembershipID]; ok {
+				binding.MembershipTenantID = fact.TenantID
+				binding.MembershipActive = fact.Active
+				binding.MembershipSameTenant =
+					binding.TenantID != "" &&
+						binding.MembershipTenantID != "" &&
+						binding.TenantID == binding.MembershipTenantID
+			}
 		}
 		bindings[row.ActorID] = binding
 	}

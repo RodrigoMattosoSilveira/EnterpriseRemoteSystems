@@ -39,12 +39,16 @@ const emptyActorForm: CreateAuthzActorInput = {
   active: true,
 };
 
+type TenantRoleEligibilityFilter = "ALL" | "ELIGIBLE" | "INELIGIBLE";
+
 export function AuthzAdminPage() {
   const [requestActor, setRequestActor] = useState<AuthzAdminRequestActor>(() =>
     loadRequestActor(),
   );
   const [actorForm, setActorForm] = useState<CreateAuthzActorInput>(emptyActorForm);
   const [actorNicknameFilter, setActorNicknameFilter] = useState("");
+  const [tenantRoleEligibilityFilter, setTenantRoleEligibilityFilter] =
+    useState<TenantRoleEligibilityFilter>("ALL");
   const [grantRoleCodeByActor, setGrantRoleCodeByActor] = useState<Record<string, string>>({});
   const [successMessage, setSuccessMessage] = useState("");
 
@@ -79,11 +83,29 @@ export function AuthzAdminPage() {
     () => [...(collaboratorsQuery.data ?? [])].sort(byCollaboratorName),
     [collaboratorsQuery.data],
   );
-  const filteredActors = useMemo(
-    () => filterActorsByPersonNickname(actors, collaborators, actorNicknameFilter),
-    [actors, collaborators, actorNicknameFilter],
+  const tenantRoleEligibleActorCount = useMemo(
+    () => actors.filter((actor) => tenantRoleGrantEligibility(actor).eligible).length,
+    [actors],
   );
-  const hasActorNicknameFilter = actorNicknameFilter.trim().length > 0;
+  const filteredActors = useMemo(() => {
+    const nicknameMatches = filterActorsByPersonNickname(
+      actors,
+      collaborators,
+      actorNicknameFilter,
+    );
+    return filterActorsByTenantRoleEligibility(
+      nicknameMatches,
+      tenantRoleEligibilityFilter,
+    );
+  }, [
+    actors,
+    collaborators,
+    actorNicknameFilter,
+    tenantRoleEligibilityFilter,
+  ]);
+  const hasActorFilters =
+    actorNicknameFilter.trim().length > 0 ||
+    tenantRoleEligibilityFilter !== "ALL";
 
   const actionError =
     createActorMutation.error ??
@@ -307,15 +329,16 @@ export function AuthzAdminPage() {
                 <div>
                   <h2 className="text-lg font-semibold text-gray-950">Actors</h2>
                   <p className="text-sm text-gray-500">
-                    Tenant-scoped grants use the Actor&apos;s Authentication Account/Membership binding; global roles use *.
+                    Tenant Role Grants require an Account-bound active Actor with an ACTIVE Person–Tenant Membership in the same tenant; global roles use *.
                   </p>
                   <p className="mt-1 text-xs text-gray-500">
-                    Showing {filteredActors.length} of {actors.length} actor records.
+                    Showing {filteredActors.length} of {actors.length} actor records ·{" "}
+                    {tenantRoleEligibleActorCount} eligible for tenant Role Grants.
                   </p>
                 </div>
 
                 {!actorsForbidden && (
-                  <div className="flex w-full flex-col gap-2 sm:flex-row lg:max-w-xl">
+                  <div className="flex w-full flex-col gap-2 sm:flex-row lg:max-w-2xl">
                     <div className="min-w-0 flex-1">
                       <label
                         htmlFor="authz-actor-nickname-filter"
@@ -332,11 +355,36 @@ export function AuthzAdminPage() {
                         className="mt-1 w-full rounded-xl border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-gray-950 focus:outline-none focus:ring-1 focus:ring-gray-950"
                       />
                     </div>
-                    {hasActorNicknameFilter && (
+                    <div className="sm:w-56">
+                      <label
+                        htmlFor="authz-actor-tenant-role-eligibility-filter"
+                        className="text-xs font-semibold uppercase tracking-wide text-gray-500"
+                      >
+                        Tenant Role Grant eligibility
+                      </label>
+                      <select
+                        id="authz-actor-tenant-role-eligibility-filter"
+                        value={tenantRoleEligibilityFilter}
+                        onChange={(event) =>
+                          setTenantRoleEligibilityFilter(
+                            event.target.value as TenantRoleEligibilityFilter,
+                          )
+                        }
+                        className="mt-1 block w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm shadow-sm focus:border-gray-950 focus:outline-none focus:ring-1 focus:ring-gray-950"
+                      >
+                        <option value="ALL">All actors</option>
+                        <option value="ELIGIBLE">Eligible only</option>
+                        <option value="INELIGIBLE">Ineligible only</option>
+                      </select>
+                    </div>
+                    {hasActorFilters && (
                       <div className="flex items-end">
                         <button
                           type="button"
-                          onClick={() => setActorNicknameFilter("")}
+                          onClick={() => {
+                            setActorNicknameFilter("");
+                            setTenantRoleEligibilityFilter("ALL");
+                          }}
                           className="rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 shadow-sm"
                         >
                           Clear
@@ -359,7 +407,7 @@ export function AuthzAdminPage() {
                   )}
                   {!actorsQuery.isLoading && actors.length > 0 && filteredActors.length === 0 && (
                     <p className="mt-4 rounded-xl border border-dashed p-4 text-center text-sm text-gray-500">
-                      No actors match this person nickname.
+                      No actors match these filters.
                     </p>
                   )}
                   <div className="mt-4 space-y-3">
@@ -675,13 +723,9 @@ function ActorCard({
   const targetTenantId = applicationScopedRole
     ? "*"
     : persistedSelectedRoleGrant?.tenantId || actorTenantId;
-  const tenantScopeMissing =
-    !applicationScopedRole && (!targetTenantId || targetTenantId === "*");
-  const tenantMembershipInactive = Boolean(
-    actor.binding &&
-      actor.binding.scopeType.trim().toUpperCase() === "TENANT" &&
-      !actor.binding.membershipActive,
-  );
+  const tenantEligibility = tenantRoleGrantEligibility(actor);
+  const tenantRoleIneligible =
+    !applicationScopedRole && !tenantEligibility.eligible;
   const alreadyGranted = Boolean(
     roleCode &&
       targetTenantId &&
@@ -777,8 +821,7 @@ function ActorCard({
             isMutating ||
             !actor.active ||
             !roleCode ||
-            tenantScopeMissing ||
-            tenantMembershipInactive ||
+            tenantRoleIneligible ||
             alreadyGranted
           }
           type="submit"
@@ -786,14 +829,9 @@ function ActorCard({
           Grant Role
         </button>
       </form>
-      {tenantScopeMissing && (
+      {tenantRoleIneligible && (
         <p className="mt-2 text-xs font-medium text-amber-700">
-          Tenant Roles require an Authentication Account binding to a specific tenant.
-        </p>
-      )}
-      {tenantMembershipInactive && (
-        <p className="mt-2 text-xs font-medium text-amber-700">
-          Tenant Roles require an ACTIVE Person–Tenant Membership for {actorTenantId || "the bound tenant"}.
+          Tenant Role grant unavailable: {tenantEligibility.reason}
         </p>
       )}
       {alreadyGranted && (
@@ -806,28 +844,151 @@ function ActorCard({
 }
 
 function ActorBindingSummary({ actor }: { actor: AuthzActor }) {
-  if (!actor.binding) {
-    return (
-      <p className="mt-1 text-xs font-medium text-gray-500">
-        Authentication binding: Unbound control-plane Actor
-      </p>
-    );
-  }
-
-  const scope = actor.binding.scopeType.trim().toUpperCase();
-  if (scope === "TENANT") {
-    return (
-      <p className="mt-1 text-xs font-medium text-gray-500">
-        Authentication binding: TENANT · {actor.binding.tenantId || "—"} · Membership {actor.binding.membershipActive ? "ACTIVE" : "INACTIVE"}
-      </p>
-    );
-  }
+  const eligibility = tenantRoleGrantEligibility(actor);
+  const binding = actor.binding;
+  const accountLabel = binding?.accountLogin?.trim() || binding?.accountId?.trim();
 
   return (
-    <p className="mt-1 text-xs font-medium text-gray-500">
-      Authentication binding: {scope || "GLOBAL"}
-    </p>
+    <div className="mt-2 space-y-1 text-xs">
+      <p className="font-medium text-gray-600">
+        Authentication Account:{" "}
+        {binding ? (
+          <>
+            Bound{accountLabel ? ` · ${accountLabel}` : ""}
+          </>
+        ) : (
+          "Not bound"
+        )}
+      </p>
+
+      {!binding ? (
+        <p className="font-medium text-gray-500">
+          Actor scope: Unbound control-plane Actor
+        </p>
+      ) : binding.scopeType.trim().toUpperCase() === "TENANT" ? (
+        <>
+          <p className="font-medium text-gray-500">
+            Authentication binding: TENANT · {binding.tenantId || "—"}
+          </p>
+          <p className="font-medium text-gray-500">
+            Person–Tenant Membership:{" "}
+            {binding.membershipId
+              ? binding.membershipActive
+                ? "ACTIVE"
+                : "INACTIVE"
+              : "Missing"}
+            {binding.membershipId
+              ? binding.membershipSameTenant
+                ? " · same tenant"
+                : ` · tenant mismatch${
+                    binding.membershipTenantId
+                      ? ` (${binding.membershipTenantId})`
+                      : ""
+                  }`
+              : ""}
+            {binding.membershipId ? ` · ${binding.membershipId}` : ""}
+          </p>
+        </>
+      ) : (
+        <>
+          <p className="font-medium text-gray-500">
+            Authentication binding: {binding.scopeType.trim().toUpperCase() || "GLOBAL"}
+          </p>
+          <p className="font-medium text-gray-500">
+            Person–Tenant Membership: Not applicable
+          </p>
+        </>
+      )}
+
+      <div className="flex flex-wrap items-center gap-2 pt-1">
+        <span
+          data-testid="tenant-role-grant-eligibility"
+          className={
+            eligibility.eligible
+              ? "rounded-full bg-green-100 px-2 py-1 font-semibold text-green-800"
+              : "rounded-full bg-amber-100 px-2 py-1 font-semibold text-amber-800"
+          }
+        >
+          Tenant Role Grants: {eligibility.eligible ? "ELIGIBLE" : "INELIGIBLE"}
+        </span>
+        {!eligibility.eligible && (
+          <span className="font-medium text-gray-500">{eligibility.reason}</span>
+        )}
+      </div>
+    </div>
   );
+}
+
+type TenantRoleGrantEligibility = {
+  eligible: boolean;
+  reason: string;
+};
+
+function tenantRoleGrantEligibility(actor: AuthzActor): TenantRoleGrantEligibility {
+  if (!actor.active) {
+    return { eligible: false, reason: "Actor is inactive." };
+  }
+
+  const binding = actor.binding;
+  if (!binding || !(binding.accountId ?? "").trim()) {
+    return {
+      eligible: false,
+      reason: "Authentication Account binding is required.",
+    };
+  }
+
+  if (binding.scopeType.trim().toUpperCase() !== "TENANT") {
+    return {
+      eligible: false,
+      reason: "Actor is not tenant-bound.",
+    };
+  }
+
+  const tenantId = binding.tenantId?.trim() ?? "";
+  if (!tenantId || tenantId === "*") {
+    return {
+      eligible: false,
+      reason: "A specific tenant binding is required.",
+    };
+  }
+
+  if (!binding.membershipId?.trim()) {
+    return {
+      eligible: false,
+      reason: "Person–Tenant Membership is required.",
+    };
+  }
+
+  if (!binding.membershipSameTenant) {
+    return {
+      eligible: false,
+      reason: "Membership must belong to the Actor's bound tenant.",
+    };
+  }
+
+  if (!binding.membershipActive) {
+    return {
+      eligible: false,
+      reason: "Person–Tenant Membership must be ACTIVE.",
+    };
+  }
+
+  return {
+    eligible: true,
+    reason: "Account-bound with an ACTIVE Membership in the same tenant.",
+  };
+}
+
+function filterActorsByTenantRoleEligibility(
+  actors: AuthzActor[],
+  filter: TenantRoleEligibilityFilter,
+) {
+  if (filter === "ALL") return actors;
+
+  return actors.filter((actor) => {
+    const eligible = tenantRoleGrantEligibility(actor).eligible;
+    return filter === "ELIGIBLE" ? eligible : !eligible;
+  });
 }
 
 

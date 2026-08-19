@@ -666,12 +666,87 @@ func TestGORMStoreListActorsIncludesAuthoritativeTenantBinding(t *testing.T) {
 	if found.Binding == nil {
 		t.Fatalf("expected authoritative Account -> Actor binding, got %#v", found)
 	}
+	if found.Binding.AccountID != "account-"+actorID ||
+		found.Binding.AccountLogin != "login-"+actorID+"@example.test" {
+		t.Fatalf("unexpected Authentication Account binding: %#v", found.Binding)
+	}
 	if found.Binding.ScopeType != "TENANT" || found.Binding.TenantID != "tenant-a" {
 		t.Fatalf("unexpected tenant binding: %#v", found.Binding)
 	}
-	if found.Binding.MembershipID == "" || !found.Binding.MembershipActive {
-		t.Fatalf("expected active Membership-backed tenant binding, got %#v", found.Binding)
+	if found.Binding.MembershipID == "" ||
+		found.Binding.MembershipTenantID != "tenant-a" ||
+		!found.Binding.MembershipActive ||
+		!found.Binding.MembershipSameTenant {
+		t.Fatalf("expected active same-tenant Membership-backed binding, got %#v", found.Binding)
 	}
+}
+
+func TestGORMStoreListActorsDistinguishesActiveCrossTenantMembershipMismatch(t *testing.T) {
+	database := newAuthzTestDB(t)
+	installTenantRoleDelegationFixtureTables(t, database)
+	store := NewGORMStore(database)
+
+	actorID := createAuthzActor(t, database, "mismatched-membership@example.com", nil, nil)
+	accountID := "account-" + actorID
+	membershipID := "membership-" + actorID
+	if err := database.Exec(
+		"INSERT INTO auth_user_accounts (id, login) VALUES (?, ?)",
+		accountID,
+		"login-"+actorID+"@example.test",
+	).Error; err != nil {
+		t.Fatalf("create Authentication Account fixture: %v", err)
+	}
+	if err := database.Exec(
+		"INSERT INTO reference_data (id, tenant_id, type, code, active) VALUES (?, ?, ?, ?, ?)",
+		"status-active-tenant-b",
+		"tenant-b",
+		"person_status",
+		"ACTIVE",
+		true,
+	).Error; err != nil {
+		t.Fatalf("create tenant-b active membership status: %v", err)
+	}
+	if err := database.Exec(
+		"INSERT INTO person_tenant_memberships (id, tenant_id, status_id) VALUES (?, ?, ?)",
+		membershipID,
+		"tenant-b",
+		"status-active-tenant-b",
+	).Error; err != nil {
+		t.Fatalf("create tenant-b Membership fixture: %v", err)
+	}
+	if err := database.Exec(
+		"INSERT INTO auth_account_actors (account_id, actor_id, scope_type, tenant_id, membership_id) VALUES (?, ?, ?, ?, ?)",
+		accountID,
+		actorID,
+		"TENANT",
+		"tenant-a",
+		membershipID,
+	).Error; err != nil {
+		t.Fatalf("bind mismatched tenant actor fixture: %v", err)
+	}
+
+	actors, err := store.ListActors(context.Background())
+	if err != nil {
+		t.Fatalf("list authorization actors: %v", err)
+	}
+
+	for _, actor := range actors {
+		if actor.ID != actorID {
+			continue
+		}
+		if actor.Binding == nil {
+			t.Fatalf("expected Account -> Actor binding, got %#v", actor)
+		}
+		if !actor.Binding.MembershipActive {
+			t.Fatalf("expected Membership itself to remain ACTIVE, got %#v", actor.Binding)
+		}
+		if actor.Binding.MembershipTenantID != "tenant-b" || actor.Binding.MembershipSameTenant {
+			t.Fatalf("expected active Membership to be identified as cross-tenant, got %#v", actor.Binding)
+		}
+		return
+	}
+
+	t.Fatalf("expected mismatched Actor %s in authorization catalog", actorID)
 }
 
 func TestGORMStoreApplicationAdminTenantRoleGrantPersistsForBoundActor(t *testing.T) {
@@ -715,6 +790,10 @@ func TestGORMStoreApplicationAdminTenantRoleGrantPersistsForBoundActor(t *testin
 func installTenantRoleDelegationFixtureTables(t *testing.T, database *gorm.DB) {
 	t.Helper()
 	for _, statement := range []string{
+		`CREATE TABLE IF NOT EXISTS auth_user_accounts (
+			id TEXT PRIMARY KEY,
+			login TEXT NOT NULL
+		)`,
 		`CREATE TABLE IF NOT EXISTS auth_account_actors (
 			account_id TEXT NOT NULL,
 			actor_id TEXT NOT NULL,
@@ -743,8 +822,16 @@ func installTenantRoleDelegationFixtureTables(t *testing.T, database *gorm.DB) {
 
 func bindActiveTenantMemberActor(t *testing.T, database *gorm.DB, actorID string, tenantID string) {
 	t.Helper()
+	accountID := "account-" + actorID
 	membershipID := "membership-" + actorID
 	statusID := "status-active-" + tenantID
+	if err := database.Exec(
+		"INSERT OR IGNORE INTO auth_user_accounts (id, login) VALUES (?, ?)",
+		accountID,
+		"login-"+actorID+"@example.test",
+	).Error; err != nil {
+		t.Fatalf("create Authentication Account fixture: %v", err)
+	}
 	if err := database.Exec(
 		"INSERT OR IGNORE INTO reference_data (id, tenant_id, type, code, active) VALUES (?, ?, ?, ?, ?)",
 		statusID,
@@ -765,7 +852,7 @@ func bindActiveTenantMemberActor(t *testing.T, database *gorm.DB, actorID string
 	}
 	if err := database.Exec(
 		"INSERT INTO auth_account_actors (account_id, actor_id, scope_type, tenant_id, membership_id) VALUES (?, ?, ?, ?, ?)",
-		"account-"+actorID,
+		accountID,
 		actorID,
 		"TENANT",
 		tenantID,

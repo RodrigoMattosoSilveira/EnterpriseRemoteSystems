@@ -45,10 +45,14 @@ export type AuthzActorRoleGrant = {
 };
 
 export type AuthzActorBinding = {
+  accountId: string;
+  accountLogin?: string;
   scopeType: string;
   tenantId?: string;
   membershipId?: string;
+  membershipTenantId?: string;
   membershipActive: boolean;
+  membershipSameTenant: boolean;
 };
 
 export type AuthzActor = {

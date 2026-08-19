@@ -22,6 +22,7 @@ test("admin can create an authorization actor, grant a role, and revoke it", asy
   const displayName = actorNickname;
   const grantedRole = "TENANT_ADMIN";
   const grantTenant = "default";
+  const accountLogin = `authz-bound-${suffix}@example.com`;
 
   await page.goto("/admin/authorization");
 
@@ -99,7 +100,7 @@ test("admin can create an authorization actor, grant a role, and revoke it", asy
     headers: authzHeaders(),
     data: {
       actorId: createdActorId,
-      login: `authz-bound-${suffix}@example.com`,
+      login: accountLogin,
       temporaryPassword: `Authz-Bound-${suffix}-Password!`,
       mustChangePassword: false,
     },
@@ -111,11 +112,35 @@ test("admin can create an authorization actor, grant a role, and revoke it", asy
   // receives the real TENANT binding and derives the grant target from it.
   await page.reload();
   await expect(actorCard).toContainText(
-    "Authentication binding: TENANT · default · Membership ACTIVE",
+    `Authentication Account: Bound · ${accountLogin}`,
   );
+  await expect(actorCard).toContainText(
+    "Authentication binding: TENANT · default",
+  );
+  await expect(actorCard).toContainText(
+    "Person–Tenant Membership: ACTIVE · same tenant",
+  );
+  await expect(actorCard).toContainText("Tenant Role Grants: ELIGIBLE");
   await expect(
     actorCard.getByLabel("Role").locator('option[value="APPLICATION_ADMIN"]'),
   ).toHaveCount(0);
+
+  const eligibilityFilter = page.getByLabel("Tenant Role Grant eligibility");
+  await expect(eligibilityFilter).toHaveValue("ALL");
+  await eligibilityFilter.selectOption("ELIGIBLE");
+  await expect(actorCard).toBeVisible();
+  await expect(
+    page
+      .getByTestId("authz-actor-card")
+      .filter({
+        has: page.getByRole("heading", {
+          name: "bootstrap-admin",
+          exact: true,
+        }),
+      }),
+  ).toHaveCount(0);
+  await page.getByRole("button", { name: "Clear" }).click();
+  await expect(eligibilityFilter).toHaveValue("ALL");
 
   const actorNicknameFilter = page.getByLabel(
     "Filter actors by person nickname",

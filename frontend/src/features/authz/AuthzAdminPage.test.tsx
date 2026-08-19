@@ -52,10 +52,14 @@ const permissions = [
 
 function activeTenantBinding(tenantId: string) {
   return {
+    accountId: `account-${tenantId}`,
+    accountLogin: `account-${tenantId}@example.test`,
     scopeType: "TENANT",
     tenantId,
     membershipId: `membership-${tenantId}`,
+    membershipTenantId: tenantId,
     membershipActive: true,
+    membershipSameTenant: true,
   };
 }
 
@@ -231,12 +235,120 @@ describe("AuthzAdminPage", () => {
     expect(container.textContent).toContain("Showing 1 of 2 actor records.");
 
     await setInputValue(filter, "nickname-that-does-not-exist");
-    await waitForText("No actors match this person nickname.");
+    await waitForText("No actors match these filters.");
     expect(actorCardKeys()).toEqual([]);
 
     await clickButtonByName("Clear");
     await waitFor(() => actorCardKeys().length === 2);
     expect(actorCardKeys()).toEqual(["bootstrap-admin", "collaborator-aurea"]);
+  });
+
+  it("shows and filters tenant Role Grant eligibility from Account and Membership facts", async () => {
+    const tenantId = "tenant-a";
+    actors.push(
+      {
+        id: "actor-eligible",
+        actorKey: "eligible-actor",
+        displayName: "Eligible Actor",
+        active: true,
+        roleGrants: [],
+        binding: activeTenantBinding(tenantId),
+      },
+      {
+        id: "actor-inactive-membership",
+        actorKey: "inactive-membership-actor",
+        displayName: "Inactive Membership Actor",
+        active: true,
+        roleGrants: [],
+        binding: {
+          ...activeTenantBinding(tenantId),
+          accountId: "account-inactive-membership",
+          accountLogin: "inactive-membership@example.test",
+          membershipId: "membership-inactive",
+          membershipActive: false,
+        },
+      },
+      {
+        id: "actor-mismatched-membership",
+        actorKey: "mismatched-membership-actor",
+        displayName: "Mismatched Membership Actor",
+        active: true,
+        roleGrants: [],
+        binding: {
+          ...activeTenantBinding(tenantId),
+          accountId: "account-mismatched-membership",
+          accountLogin: "mismatched-membership@example.test",
+          membershipId: "membership-mismatched",
+          membershipTenantId: "tenant-b",
+          membershipSameTenant: false,
+        },
+      },
+    );
+    mockAuthzFetch();
+
+    renderAuthzAdminPage();
+    await waitForText("Eligible Actor");
+
+    const eligibleArticle = articleByText("eligible-actor");
+    expect(eligibleArticle.textContent).toContain(
+      "Authentication Account: Bound · account-tenant-a@example.test",
+    );
+    expect(eligibleArticle.textContent).toContain(
+      "Authentication binding: TENANT · tenant-a",
+    );
+    expect(eligibleArticle.textContent).toContain(
+      "Person–Tenant Membership: ACTIVE · same tenant · membership-tenant-a",
+    );
+    expect(eligibleArticle.textContent).toContain(
+      "Tenant Role Grants: ELIGIBLE",
+    );
+
+    const inactiveArticle = articleByText("inactive-membership-actor");
+    expect(inactiveArticle.textContent).toContain(
+      "Person–Tenant Membership: INACTIVE · same tenant · membership-inactive",
+    );
+    expect(inactiveArticle.textContent).toContain(
+      "Tenant Role Grants: INELIGIBLE",
+    );
+    expect(inactiveArticle.textContent).toContain(
+      "Person–Tenant Membership must be ACTIVE.",
+    );
+
+    const mismatchedArticle = articleByText("mismatched-membership-actor");
+    expect(mismatchedArticle.textContent).toContain(
+      "Person–Tenant Membership: ACTIVE · tenant mismatch (tenant-b) · membership-mismatched",
+    );
+    expect(mismatchedArticle.textContent).toContain(
+      "Tenant Role Grants: INELIGIBLE",
+    );
+    expect(mismatchedArticle.textContent).toContain(
+      "Membership must belong to the Actor's bound tenant.",
+    );
+
+    const eligibilityFilter = controlByLabel<HTMLSelectElement>(
+      container,
+      "Tenant Role Grant eligibility",
+      "select",
+    );
+    await setSelectValue(eligibilityFilter, "ELIGIBLE");
+
+    await waitFor(() => actorCardKeys().length === 1);
+    expect(actorCardKeys()).toEqual(["eligible-actor"]);
+    expect(container.textContent).toContain(
+      "Showing 1 of 4 actor records · 1 eligible for tenant Role Grants.",
+    );
+
+    await setSelectValue(eligibilityFilter, "INELIGIBLE");
+    await waitFor(() => actorCardKeys().length === 3);
+    expect(actorCardKeys()).toEqual([
+      "bootstrap-admin",
+      "inactive-membership-actor",
+      "mismatched-membership-actor",
+    ]);
+
+    await clickButtonByName("Clear");
+    await waitFor(() => actorCardKeys().length === 4);
+    expect(eligibilityFilter.value).toBe("ALL");
   });
 
   it("filters collaborators progressively and creates an actor from the selected match", async () => {
@@ -378,8 +490,15 @@ describe("AuthzAdminPage", () => {
     expect(grantTenantInput.disabled).toBe(true);
     expect(grantButton.disabled).toBe(false);
     expect(article.textContent).toContain(
-      `Authentication binding: TENANT · ${tenantId} · Membership ACTIVE`,
+      `Authentication Account: Bound · account-${tenantId}@example.test`,
     );
+    expect(article.textContent).toContain(
+      `Authentication binding: TENANT · ${tenantId}`,
+    );
+    expect(article.textContent).toContain(
+      `Person–Tenant Membership: ACTIVE · same tenant · membership-${tenantId}`,
+    );
+    expect(article.textContent).toContain("Tenant Role Grants: ELIGIBLE");
     expect(
       Array.from(controlByLabel<HTMLSelectElement>(article, "Role", "select").options).some(
         (option) => option.value === "APPLICATION_ADMIN",
