@@ -436,7 +436,11 @@ describe("AuthzAdminPage", () => {
     expect(
       controlByLabel<HTMLInputElement>(article, "Grant tenant", "input").value,
     ).toBe(tenantId);
-    expect(buttonInArticle("expense-admin", "Grant Role").disabled).toBe(true);
+    const persistedGrantButton = buttonInArticle("expense-admin", "Grant Role");
+    expect(persistedGrantButton.disabled).toBe(true);
+    expect(persistedGrantButton.className).toContain("disabled:bg-gray-300");
+    expect(persistedGrantButton.className).toContain("disabled:text-gray-600");
+    expect(persistedGrantButton.className).toContain("disabled:cursor-not-allowed");
     expect(article.textContent).toContain(`TENANT_ADMIN · ${tenantId}`);
     expect(article.textContent).toContain(
       `TENANT_ADMIN is already granted for ${tenantId}.`,
@@ -494,6 +498,9 @@ describe("AuthzAdminPage", () => {
     expect(refreshedRoleSelect.value).toBe("TENANT_ADMIN");
     expect(refreshedGrantTenantInput.value).toBe(tenantId);
     expect(grantButton.disabled).toBe(true);
+    expect(grantButton.className).toContain("disabled:bg-gray-300");
+    expect(grantButton.className).toContain("disabled:text-gray-600");
+    expect(grantButton.className).toContain("disabled:cursor-not-allowed");
     expect(refreshedArticle.textContent).toContain(
       `TENANT_ADMIN is already granted for ${tenantId}.`,
     );

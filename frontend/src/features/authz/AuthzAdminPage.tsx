@@ -772,7 +772,7 @@ function ActorCard({
           />
         </label>
         <button
-          className="self-end rounded-xl bg-gray-950 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
+          className="self-end rounded-xl bg-gray-950 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-gray-300 disabled:text-gray-600"
           disabled={
             isMutating ||
             !actor.active ||
