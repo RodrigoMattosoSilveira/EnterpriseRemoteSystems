@@ -204,6 +204,11 @@ describe("AuthzAdminPage", () => {
     expect(personGrantOption).toBeUndefined();
     expect(fetchCalls.some((call) => call.url === "/api/v1/authz/permissions")).toBe(true);
     expect(fetchCalls.some((call) => call.url === "/api/v1/authz/actors")).toBe(true);
+    expect(
+      fetchCalls.some(
+        (call) => call.url === "/api/v1/collaborators?page=1&pageSize=100",
+      ),
+    ).toBe(false);
     expect(fetchCalls.every((call) => call.headers["X-Actor-ID"] === undefined)).toBe(true);
     expect(fetchCalls.every((call) => call.headers["X-Tenant-ID"] === "default")).toBe(true);
   });
@@ -704,8 +709,7 @@ describe("AuthzAdminPage", () => {
         method === "GET" &&
         (url === "/api/v1/authz/roles" ||
           url === "/api/v1/authz/permissions" ||
-          url === "/api/v1/authz/actors" ||
-          url === "/api/v1/collaborators?page=1&pageSize=100")
+          url === "/api/v1/authz/actors")
       ) {
         return forbiddenResponse();
       }
@@ -775,9 +779,6 @@ function mockAuthzFetch() {
     }
     if (url === "/api/v1/authz/actors" && method === "GET") {
       return jsonResponse({ data: actors });
-    }
-    if (url === "/api/v1/collaborators?page=1&pageSize=100" && method === "GET") {
-      return jsonResponse({ data: { items: collaborators, total: collaborators.length } });
     }
     if (url.startsWith("/api/v1/collaborators?search=") && method === "GET") {
       const search = new URL(url, "http://localhost").searchParams.get("search") ?? "";

@@ -1,0 +1,1 @@
+DROP INDEX IF EXISTS idx_collaborator_journeys_tenant_open_created;

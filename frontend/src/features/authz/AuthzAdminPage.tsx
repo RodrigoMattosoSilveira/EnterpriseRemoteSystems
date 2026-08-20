@@ -1,9 +1,6 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import {
-  useCollaboratorCatalog,
-  useCollaboratorSearch,
-} from "../collaborators/useCollaborators";
+import { useCollaboratorSearch } from "../collaborators/useCollaborators";
 import { ApiError } from "../../api/client";
 import { ApiErrorPanel } from "../../components/ApiErrorPanel";
 import { readSelectedTenantId, setSelectedTenantId } from "../../api/tenantSelection";
@@ -60,7 +57,10 @@ export function AuthzAdminPage() {
   const rolesQuery = useAuthzRoles(requestActor);
   const permissionsQuery = useAuthzPermissions(requestActor);
   const actorsQuery = useAuthzActors(requestActor);
-  const collaboratorsQuery = useCollaboratorCatalog();
+  const actorCollaboratorSearchQuery = useCollaboratorSearch(
+    actorNicknameFilter,
+    false,
+  );
   const createActorMutation = useCreateAuthzActor(requestActor);
   const grantRoleMutation = useGrantAuthzActorRole(requestActor);
   const revokeGrantMutation = useRevokeAuthzActorRoleGrant(requestActor);
@@ -80,8 +80,8 @@ export function AuthzAdminPage() {
     [actorsQuery.data],
   );
   const collaborators = useMemo(
-    () => [...(collaboratorsQuery.data ?? [])].sort(byCollaboratorName),
-    [collaboratorsQuery.data],
+    () => actorCollaboratorSearchQuery.data?.items ?? [],
+    [actorCollaboratorSearchQuery.data?.items],
   );
   const tenantRoleEligibleActorCount = useMemo(
     () => actors.filter((actor) => tenantRoleGrantEligibility(actor).eligible).length,
@@ -115,15 +115,21 @@ export function AuthzAdminPage() {
   const rolesForbidden = isForbiddenApiError(rolesQuery.error);
   const permissionsForbidden = isForbiddenApiError(permissionsQuery.error);
   const actorsForbidden = isForbiddenApiError(actorsQuery.error);
-  const collaboratorsForbidden = isForbiddenApiError(collaboratorsQuery.error);
+  const collaboratorSearchForbidden = isForbiddenApiError(
+    actorCollaboratorSearchQuery.error,
+  );
+  const createActorForbidden = actorsForbidden;
   const hasLimitedAuthorization =
-    rolesForbidden || permissionsForbidden || actorsForbidden || collaboratorsForbidden;
+    rolesForbidden ||
+    permissionsForbidden ||
+    actorsForbidden ||
+    collaboratorSearchForbidden;
   const queryError = firstNonForbiddenError([
     currentActorQuery.error,
     rolesQuery.error,
     permissionsQuery.error,
     actorsQuery.error,
-    collaboratorsQuery.error,
+    actorCollaboratorSearchQuery.error,
   ]);
 
   async function handleCreateActor(event: FormEvent<HTMLFormElement>) {
@@ -305,7 +311,7 @@ export function AuthzAdminPage() {
               Create a global/control-plane security actor here. Tenant delegated roles can be granted only to Actors already bound to that tenant through an Authentication Account and active Membership.
             </p>
 
-            {collaboratorsForbidden ? (
+            {createActorForbidden ? (
               <CardPermissionNotice cardName="Create actor" />
             ) : (
               <ActorFields
@@ -316,7 +322,7 @@ export function AuthzAdminPage() {
 
             <button
               className="mt-4 w-full rounded-xl bg-gray-950 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
-              disabled={createActorMutation.isPending || collaboratorsForbidden || !actorForm.collaboratorId}
+              disabled={createActorMutation.isPending || createActorForbidden || !actorForm.collaboratorId}
               type="submit"
             >
               {createActorMutation.isPending ? "Creating..." : "Create Actor"}
@@ -1113,10 +1119,6 @@ function normalizeOptional(value: string | null | undefined) {
 
 function byCode<T extends { code: string }>(a: T, b: T) {
   return a.code.localeCompare(b.code);
-}
-
-function byCollaboratorName(a: Collaborator, b: Collaborator) {
-  return collaboratorDisplayName(a).localeCompare(collaboratorDisplayName(b));
 }
 
 function collaboratorDisplayName(collaborator: Collaborator | undefined) {
