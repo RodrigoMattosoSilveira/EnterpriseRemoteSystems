@@ -170,7 +170,7 @@ test("password reset page accepts administrator-issued tokens", async ({ page })
 });
 
 
-test("active Account remains signed in when its tenant Actor is inactive and recovers without re-login", async ({ browser, request }) => {
+test("active Account with no active tenant Actor retains Person self-service and recovers without re-login", async ({ browser, request }) => {
   test.setTimeout(60_000);
   const suffix = `${Date.now()}${Math.floor(Math.random() * 100_000)}`;
   const account = await provisionRoleAccount(
@@ -189,12 +189,38 @@ test("active Account remains signed in when its tenant Actor is inactive and rec
   try {
     await signIn(page, account.login, account.password);
     await expect(page.getByRole("heading", { name: "Signed in" })).toBeVisible();
-    await expect(page.getByRole("heading", { name: "No tenant access" })).toBeVisible();
+    await expect(
+      page.getByRole("heading", { name: "No tenant workspace available" }),
+    ).toBeVisible();
     await expect(
       page.locator("[data-authenticated-account-id]"),
     ).toHaveAttribute("data-authenticated-account-id", account.accountId);
     await expect(page.getByText(account.login, { exact: true })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "My Person" })).toBeVisible();
+    await expect(page.getByText(`Person ID: ${account.globalPersonId}`, { exact: true })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "My Current Account" })).toBeVisible();
+    await expect(
+      page.getByText("No Current Account ledger entries are recorded for this Person."),
+    ).toBeVisible();
     await expect(page.getByRole("button", { name: "Change password" })).toBeVisible();
+
+    const selfServiceResponse = await context.request.get(
+      e2eApiUrl("/api/v1/auth/self-service"),
+    );
+    expect(selfServiceResponse.status()).toBe(200);
+    const selfServiceEnvelope = (await selfServiceResponse.json()) as {
+      data?: {
+        accountId?: string;
+        person?: { id?: string; email?: string };
+        balances?: unknown[];
+        entries?: unknown[];
+      };
+    };
+    expect(selfServiceEnvelope.data?.accountId).toBe(account.accountId);
+    expect(selfServiceEnvelope.data?.person?.id).toBe(account.globalPersonId);
+    expect(selfServiceEnvelope.data?.person?.email).toBe(account.login);
+    expect(selfServiceEnvelope.data?.balances).toEqual([]);
+    expect(selfServiceEnvelope.data?.entries).toEqual([]);
 
     const sessionResponse = await context.request.get(
       e2eApiUrl("/api/v1/auth/session"),
@@ -1444,6 +1470,7 @@ type PreparedRoleAccount = {
   actorId: string;
   accountId: string;
   personId: string;
+  globalPersonId: string;
   login: string;
   password: string;
 };
@@ -1478,10 +1505,12 @@ async function provisionRoleAccount(
   });
   expect(personResponse.status()).toBe(201);
   const personEnvelope = (await personResponse.json()) as {
-    data?: { id?: string };
+    data?: { id?: string; globalPersonId?: string };
   };
   const personId = personEnvelope.data?.id;
+  const globalPersonId = personEnvelope.data?.globalPersonId;
   expect(personId).toBeTruthy();
+  expect(globalPersonId).toBeTruthy();
 
   const actorResponse = await request.post(e2eApiUrl("/api/v1/authz/actors"), {
     headers: authzHeaders(),
@@ -1529,6 +1558,7 @@ async function provisionRoleAccount(
     actorId: actorId!,
     accountId: accountId!,
     personId: personId!,
+    globalPersonId: globalPersonId!,
     login,
     password,
   };

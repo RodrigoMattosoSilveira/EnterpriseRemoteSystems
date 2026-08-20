@@ -128,6 +128,19 @@ func (h *Handler) TenantOptions(c fiber.Ctx) error {
 	return httpx.OK(c, options)
 }
 
+func (h *Handler) SelfServiceHome(c fiber.Ctx) error {
+	session, err := h.currentSession(c)
+	if err != nil {
+		return h.writeError(c, err)
+	}
+	result, err := h.service.GetSelfServiceHome(c.Context(), session.AccountID)
+	if err != nil {
+		return h.writeError(c, err)
+	}
+	setNoStore(c)
+	return httpx.OK(c, result)
+}
+
 func (h *Handler) ChangePassword(c fiber.Ctx) error {
 	if _, err := h.currentSession(c); err != nil {
 		return h.writeError(c, err)

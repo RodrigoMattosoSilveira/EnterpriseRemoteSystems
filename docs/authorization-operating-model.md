@@ -4,7 +4,9 @@ ERS uses the login-backed HTTP session as the authoritative Authentication Accou
 
 ## Authoritative permissions
 
-For normal application requests, the backend resolves the Account session plus selected tenant to the appropriate persisted `authz_actors` record, then loads intrinsic identity permissions and active delegated role grants for that Actor. Effective permissions come only from the persisted Account/Actor/Membership identity and active persisted delegated authorization.
+For normal tenant application requests, the backend resolves the Account session plus selected tenant to the appropriate persisted `authz_actors` record, then loads intrinsic tenant-context permissions and active delegated role grants for that Actor. Effective tenant permissions come only from the persisted Account/Actor/Membership identity and active persisted delegated authorization.
+
+Base own-resource Person self-service is intentionally independent of Tenant Actor resolution. An authenticated ordinary Authentication Account may read only the global Person bound through `auth_account_people` and that Person's read-only Current Account projection even when no Tenant Actor/Membership is currently active. This Account-level path does not grant tenant workspace access, does not create a Current Actor, and does not confer delegated tenant authority. Current Account rows retain Tenant provenance.
 
 `X-Actor-Permissions` is no longer accepted as a fallback when the authorization store is available. This prevents a browser, proxy, or API client from granting itself wildcard permissions.
 

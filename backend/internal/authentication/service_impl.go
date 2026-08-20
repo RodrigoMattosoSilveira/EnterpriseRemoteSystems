@@ -158,6 +158,87 @@ func (s *service) ResolveSession(ctx context.Context, rawToken string) (SessionR
 	return sessionResponse(record.AccountRecord, record.ExpiresAt), nil
 }
 
+func (s *service) GetSelfServiceHome(ctx context.Context, accountID string) (SelfServiceHomeResponse, error) {
+	accountID = strings.TrimSpace(accountID)
+	if accountID == "" {
+		return SelfServiceHomeResponse{}, ErrAuthenticationRequired
+	}
+
+	record, err := s.repository.FindSelfServiceHome(ctx, accountID)
+	if err != nil {
+		return SelfServiceHomeResponse{}, err
+	}
+
+	person := record.Person
+	balances := make([]SelfServiceBalanceResponse, 0, len(record.Balances))
+	for _, balance := range record.Balances {
+		balances = append(balances, SelfServiceBalanceResponse{
+			TenantID:       balance.TenantID,
+			TenantName:     balance.TenantName,
+			ValueUnitID:    balance.ValueUnitID,
+			ValueUnitCode:  balance.ValueUnitCode,
+			ValueUnitLabel: balance.ValueUnitLabel,
+			Balance:        balance.Balance,
+		})
+	}
+
+	entries := make([]SelfServiceLedgerEntryResponse, 0, len(record.Entries))
+	for _, entry := range record.Entries {
+		signedAmount := entry.Amount
+		if strings.EqualFold(strings.TrimSpace(entry.Direction), "DEBIT") {
+			signedAmount = -entry.Amount
+		}
+		entries = append(entries, SelfServiceLedgerEntryResponse{
+			ID:             entry.ID,
+			TenantID:       entry.TenantID,
+			TenantName:     entry.TenantName,
+			CollaboratorID: entry.CollaboratorID,
+			ValueUnitID:    entry.ValueUnitID,
+			ValueUnitCode:  entry.ValueUnitCode,
+			ValueUnitLabel: entry.ValueUnitLabel,
+			EntryType:      entry.EntryType,
+			Direction:      entry.Direction,
+			Amount:         entry.Amount,
+			SignedAmount:   signedAmount,
+			EffectiveDate:  entry.EffectiveDate,
+			SourceType:     entry.SourceType,
+			SourceID:       entry.SourceID,
+			Description:    entry.Description,
+		})
+	}
+
+	return SelfServiceHomeResponse{
+		AccountID: accountID,
+		Person: SelfServicePersonResponse{
+			ID:                      person.ID,
+			FirstName:               person.FirstName,
+			LastName:                person.LastName,
+			Nickname:                person.Nickname,
+			CPF:                     person.CPF,
+			RG:                      person.RG,
+			Cellular:                person.Cellular,
+			Email:                   person.Email,
+			Street1:                 person.Street1,
+			Street2:                 person.Street2,
+			State:                   person.State,
+			City:                    person.City,
+			CEP:                     person.CEP,
+			Country:                 person.Country,
+			BankName:                person.BankName,
+			BankNumber:              person.BankNumber,
+			CheckingAccount:         person.CheckingAccount,
+			PIXKey:                  person.PIXKey,
+			EmergencyName:           person.EmergencyName,
+			EmergencyCellular:       person.EmergencyCellular,
+			EmergencyEmail:          person.EmergencyEmail,
+			ProfileCompletionStatus: person.ProfileCompletionStatus,
+			CanCreateCollaborator:   person.CanCreateCollaborator,
+		},
+		Balances: balances,
+		Entries:  entries,
+	}, nil
+}
+
 func (s *service) Logout(ctx context.Context, rawToken string) error {
 	rawToken = strings.TrimSpace(rawToken)
 	if rawToken == "" {

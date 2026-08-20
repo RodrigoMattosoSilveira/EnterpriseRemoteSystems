@@ -110,10 +110,18 @@ Authentication Account and Actor activation remain separate controls:
   Actor.
 
 If no tenant Actor remains eligible, the browser keeps the Authentication
-Account session and renders an explicit **Signed in** state together with
-**No tenant access**. This makes successful Account authentication visible
-while still refusing to borrow an Actor from another tenant or render a tenant
-workspace.
+Account session and falls back to **Account-level Person self-service**. The
+Person can still inspect the global Person profile and the Person's read-only
+Current Account. Tenant-scoped administration,
+collaboration, operator workspaces, and Current Actor resolution remain
+unavailable until an eligible Tenant Actor returns.
+
+The fallback is derived only from the persisted Authentication Account →
+Person binding. It does not borrow a Tenant Actor, does not reactivate a
+Membership, and does not confer delegated tenant authority. Current Account
+rows retain their Tenant provenance. Bite 30G will replace the
+transitional Collaborator-Journey join used by this read-only projection with
+canonical Person + Tenant financial ownership.
 
 ## Global and tenant authority
 
@@ -134,6 +142,9 @@ Promotion verification should cover at least:
 - deactivating Actor A removes Tenant A without revoking the Account session
   while Actor B remains active;
 - reactivating Actor A restores Tenant A;
+- when no tenant Actor remains eligible, Account-level Person self-service
+  still exposes the authenticated Person and read-only Current Account without
+  exposing a tenant workspace;
 - a selected tenant with no active Account-owned Actor fails with
   `tenant_actor_unavailable` and cannot borrow another tenant's Actor;
 - the GLOBAL Application Administrator continues using one APPLICATION Actor

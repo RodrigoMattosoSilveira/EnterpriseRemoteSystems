@@ -2,6 +2,7 @@ import { apiFetch } from "./client";
 import type {
   AuthAccount,
   AuthSession,
+  AuthSelfServiceHome,
   AuthTenantOption,
   ChangePasswordRequest,
   CreateAuthAccountRequest,
@@ -26,6 +27,10 @@ export function logout(): Promise<void> {
 
 export function loadAuthSession(): Promise<AuthSession> {
   return apiFetch<AuthSession>("/auth/session", { cache: "no-store" });
+}
+
+export function loadAuthSelfServiceHome(): Promise<AuthSelfServiceHome> {
+  return apiFetch<AuthSelfServiceHome>("/auth/self-service", { cache: "no-store" });
 }
 
 export async function loadAuthTenantOptions(): Promise<AuthTenantOption[]> {

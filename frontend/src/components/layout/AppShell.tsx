@@ -2,7 +2,11 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Outlet, useNavigate } from "react-router-dom";
 import { ApiError } from "../../api/client";
-import { loadAuthTenantOptions, normalizeAuthTenantOptions } from "../../api/auth.api";
+import {
+  loadAuthSelfServiceHome,
+  loadAuthTenantOptions,
+  normalizeAuthTenantOptions,
+} from "../../api/auth.api";
 import { getCurrentAuthzActor } from "../../api/authz.api";
 import {
   authorizationRequestContext,
@@ -162,7 +166,7 @@ export function AppShell() {
 
   if (!selectedTenantId || !selectedTenant) {
     return (
-      <NoTenantAccess
+      <AccountSelfServiceWorkspace
         accountId={auth.session.accountId}
         displayName={auth.session.displayName}
         login={auth.session.login}
@@ -194,7 +198,7 @@ export function AppShell() {
 
   if (!actorQuery.data) {
     return (
-      <NoTenantAccess
+      <AccountSelfServiceWorkspace
         accountId={auth.session.accountId}
         displayName={auth.session.displayName}
         login={auth.session.login}
@@ -304,7 +308,7 @@ function WorkspaceError({
   );
 }
 
-function NoTenantAccess({
+function AccountSelfServiceWorkspace({
   accountId,
   displayName,
   login,
@@ -317,54 +321,295 @@ function NoTenantAccess({
   onChangePassword: () => void;
   onLogout: () => void;
 }) {
+  const selfServiceQuery = useQuery({
+    queryKey: ["auth", accountId, "self-service"],
+    queryFn: loadAuthSelfServiceHome,
+    enabled: Boolean(accountId),
+    staleTime: 30_000,
+  });
+
   return (
-    <main className="grid min-h-screen place-items-center p-6">
+    <main className="min-h-screen bg-slate-50 p-4 sm:p-6">
       <section
-        className="max-w-lg rounded-2xl border bg-white p-6"
+        className="mx-auto max-w-5xl space-y-5"
         data-authenticated-account-id={accountId}
       >
-        <h1 className="text-xl font-bold">Signed in</h1>
-        <p role="status" className="mt-2 text-sm text-slate-700">
-          Authentication succeeded for{" "}
-          <span className="font-semibold">{displayName || login}</span>.
-        </p>
-        {displayName && displayName !== login ? (
-          <p className="mt-1 text-sm text-slate-600">
-            Login: <span className="font-medium">{login}</span>
-          </p>
+        <header className="rounded-2xl border bg-white p-5 shadow-sm">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <h1 className="text-2xl font-bold text-slate-950">Signed in</h1>
+              <p role="status" className="mt-1 text-sm text-slate-700">
+                Authentication succeeded for{" "}
+                <span className="font-semibold">{displayName || login}</span>.
+              </p>
+              {displayName && displayName !== login ? (
+                <p className="mt-1 text-sm text-slate-600">
+                  Login: <span className="font-medium">{login}</span>
+                </p>
+              ) : null}
+            </div>
+
+            <div className="flex flex-wrap gap-3">
+              <button
+                className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white"
+                onClick={onChangePassword}
+              >
+                Change password
+              </button>
+              <button
+                className="rounded-lg border bg-white px-4 py-2 text-sm font-semibold"
+                onClick={onLogout}
+              >
+                Sign out
+              </button>
+            </div>
+          </div>
+
+          <div className="mt-5 rounded-xl border border-amber-200 bg-amber-50 p-4">
+            <h2 className="font-semibold text-amber-950">
+              No tenant workspace available
+            </h2>
+            <p className="mt-2 text-sm text-amber-900">
+              No active Tenant Actor backed by an ACTIVE same-tenant
+              Person–Tenant Membership is currently available. Tenant-scoped
+              administration, collaboration, and operator workspaces are
+              unavailable, but your own Person and read-only Current Account
+              remain available below.
+            </p>
+          </div>
+        </header>
+
+        {selfServiceQuery.isLoading ? (
+          <section className="rounded-2xl border bg-white p-5 shadow-sm">
+            Loading your personal information…
+          </section>
+        ) : selfServiceQuery.error ? (
+          <section className="rounded-2xl border border-red-200 bg-red-50 p-5 text-red-900">
+            <h2 className="font-semibold">Unable to load personal information</h2>
+            <p className="mt-2 text-sm">{errorMessage(selfServiceQuery.error)}</p>
+            <button
+              className="mt-4 rounded-lg border border-red-300 bg-white px-4 py-2 text-sm font-semibold"
+              onClick={() => void selfServiceQuery.refetch()}
+            >
+              Try again
+            </button>
+          </section>
+        ) : selfServiceQuery.data ? (
+          <>
+            <section className="rounded-2xl border bg-white p-5 shadow-sm">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    Personal self-service
+                  </p>
+                  <h2 className="mt-1 text-xl font-bold text-slate-950">
+                    My Person
+                  </h2>
+                </div>
+                <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
+                  Person ID: {selfServiceQuery.data.person.id}
+                </span>
+              </div>
+
+              <div className="mt-5 grid gap-5 lg:grid-cols-2">
+                <SelfServicePersonSection title="Personal">
+                  <SelfField
+                    label="Name"
+                    value={`${selfServiceQuery.data.person.firstName} ${selfServiceQuery.data.person.lastName}`.trim()}
+                  />
+                  <SelfField
+                    label="Nickname"
+                    value={selfServiceQuery.data.person.nickname}
+                  />
+                  <SelfField label="Email" value={selfServiceQuery.data.person.email} />
+                  <SelfField
+                    label="Cellular"
+                    value={selfServiceQuery.data.person.cellular}
+                  />
+                  <SelfField label="CPF" value={selfServiceQuery.data.person.cpf} />
+                  <SelfField label="RG" value={selfServiceQuery.data.person.rg} />
+                  <SelfField
+                    label="Profile completion"
+                    value={selfServiceQuery.data.person.profileCompletionStatus}
+                  />
+                  <SelfField
+                    label="Collaborator profile eligible"
+                    value={selfServiceQuery.data.person.canCreateCollaborator ? "Yes" : "No"}
+                  />
+                </SelfServicePersonSection>
+
+                <SelfServicePersonSection title="Address">
+                  <SelfField label="Street 1" value={selfServiceQuery.data.person.street1} />
+                  <SelfField label="Street 2" value={selfServiceQuery.data.person.street2} />
+                  <SelfField label="City" value={selfServiceQuery.data.person.city} />
+                  <SelfField label="State" value={selfServiceQuery.data.person.state} />
+                  <SelfField label="CEP" value={selfServiceQuery.data.person.cep} />
+                  <SelfField label="Country" value={selfServiceQuery.data.person.country} />
+                </SelfServicePersonSection>
+
+                <SelfServicePersonSection title="Bank">
+                  <SelfField label="Bank Name" value={selfServiceQuery.data.person.bankName} />
+                  <SelfField label="Bank Number" value={selfServiceQuery.data.person.bankNumber} />
+                  <SelfField
+                    label="Checking Account"
+                    value={selfServiceQuery.data.person.checkingAccount}
+                  />
+                  <SelfField label="PIX" value={selfServiceQuery.data.person.pixKey} />
+                </SelfServicePersonSection>
+
+                <SelfServicePersonSection title="Emergency Contact">
+                  <SelfField
+                    label="Name"
+                    value={selfServiceQuery.data.person.emergencyName}
+                  />
+                  <SelfField
+                    label="Cellular"
+                    value={selfServiceQuery.data.person.emergencyCellular}
+                  />
+                  <SelfField
+                    label="Email"
+                    value={selfServiceQuery.data.person.emergencyEmail}
+                  />
+                </SelfServicePersonSection>
+              </div>
+            </section>
+
+            <section className="rounded-2xl border bg-white p-5 shadow-sm">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Personal self-service
+                </p>
+                <h2 className="mt-1 text-xl font-bold text-slate-950">
+                  My Current Account
+                </h2>
+                <p className="mt-1 text-sm text-slate-600">
+                  Read-only balances and ledger entries belonging to your Person.
+                  Tenant provenance is preserved even when the corresponding
+                  Tenant Actor or Membership is inactive.
+                </p>
+              </div>
+
+              {selfServiceQuery.data.balances.length > 0 ? (
+                <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                  {selfServiceQuery.data.balances.map((balance) => (
+                    <div
+                      key={`${balance.tenantId}:${balance.valueUnitId}`}
+                      className="rounded-xl border bg-slate-50 p-4"
+                    >
+                      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                        {balance.tenantName || balance.tenantId}
+                      </p>
+                      <p className="mt-1 text-lg font-bold text-slate-950">
+                        {formatSelfServiceAmount(
+                          balance.balance,
+                          balance.valueUnitCode || balance.valueUnitLabel,
+                        )}
+                      </p>
+                      <p className="text-xs text-slate-500">{balance.tenantId}</p>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="mt-5 rounded-xl bg-slate-50 p-4 text-sm text-slate-600">
+                  No Current Account activity is recorded for this Person.
+                </p>
+              )}
+
+              {selfServiceQuery.data.entries.length > 0 ? (
+                <div className="mt-5 overflow-x-auto">
+                  <table className="min-w-full divide-y divide-slate-200 text-sm">
+                    <thead>
+                      <tr className="text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                        <th className="px-3 py-2">Date</th>
+                        <th className="px-3 py-2">Tenant</th>
+                        <th className="px-3 py-2">Description</th>
+                        <th className="px-3 py-2">Direction</th>
+                        <th className="px-3 py-2 text-right">Amount</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {selfServiceQuery.data.entries.map((entry) => (
+                        <tr key={entry.id}>
+                          <td className="whitespace-nowrap px-3 py-3 text-slate-700">
+                            {formatSelfServiceDate(entry.effectiveDate)}
+                          </td>
+                          <td className="px-3 py-3">
+                            <p className="font-medium text-slate-900">
+                              {entry.tenantName || entry.tenantId}
+                            </p>
+                            <p className="text-xs text-slate-500">
+                              {entry.tenantId}
+                            </p>
+                          </td>
+                          <td className="px-3 py-3 text-slate-700">
+                            {entry.description || entry.entryType || entry.sourceType}
+                          </td>
+                          <td className="px-3 py-3 text-slate-700">
+                            {entry.direction}
+                          </td>
+                          <td className="whitespace-nowrap px-3 py-3 text-right font-medium text-slate-900">
+                            {formatSelfServiceAmount(
+                              entry.signedAmount,
+                              entry.valueUnitCode || entry.valueUnitLabel,
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <p className="mt-5 text-sm text-slate-600">
+                  No Current Account ledger entries are recorded for this Person.
+                </p>
+              )}
+            </section>
+          </>
         ) : null}
-
-        <div className="mt-5 rounded-xl border border-amber-200 bg-amber-50 p-4">
-          <h2 className="font-semibold text-amber-950">No tenant access</h2>
-          <p className="mt-2 text-sm text-amber-900">
-            Your Authentication Account is active and remains signed in, but it
-            currently has no active tenant Actor backed by an ACTIVE
-            same-tenant Person–Tenant Membership. No tenant workspace is
-            available until tenant access is restored.
-          </p>
-        </div>
-
-        <p className="mt-4 text-sm text-slate-600">
-          Contact a Tenant Administrator or Application Administrator to restore
-          tenant access. You can still change your Authentication Account
-          password or sign out.
-        </p>
-
-        <div className="mt-4 flex flex-wrap gap-3">
-          <button
-            className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white"
-            onClick={onChangePassword}
-          >
-            Change password
-          </button>
-          <button
-            className="rounded-lg border px-4 py-2 text-sm font-semibold"
-            onClick={onLogout}
-          >
-            Sign out
-          </button>
-        </div>
       </section>
     </main>
   );
+}
+
+
+function SelfServicePersonSection({
+  title,
+  children,
+}: {
+  title: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="rounded-xl border bg-slate-50 p-4">
+      <h3 className="text-sm font-bold text-slate-900">{title}</h3>
+      <dl className="mt-3 grid gap-x-5 gap-y-3 sm:grid-cols-2">{children}</dl>
+    </section>
+  );
+}
+
+function SelfField({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+        {label}
+      </dt>
+      <dd className="mt-1 break-words text-sm font-medium text-slate-900">
+        {value || "—"}
+      </dd>
+    </div>
+  );
+}
+
+function formatSelfServiceDate(value: string): string {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime())
+    ? value
+    : new Intl.DateTimeFormat(undefined, { dateStyle: "medium" }).format(date);
+}
+
+function formatSelfServiceAmount(value: number, unit: string): string {
+  const formatted = new Intl.NumberFormat(undefined, {
+    maximumFractionDigits: 4,
+  }).format(value);
+  return unit ? `${formatted} ${unit}` : formatted;
 }

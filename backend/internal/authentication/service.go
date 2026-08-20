@@ -9,6 +9,7 @@ import (
 type Service interface {
 	Login(ctx context.Context, req LoginRequest, userAgent string, ipAddress string) (LoginResult, error)
 	ResolveSession(ctx context.Context, rawToken string) (SessionResponse, error)
+	GetSelfServiceHome(ctx context.Context, accountID string) (SelfServiceHomeResponse, error)
 	Logout(ctx context.Context, rawToken string) error
 	ChangePassword(ctx context.Context, rawToken string, req ChangePasswordRequest) error
 	ResetPassword(ctx context.Context, req ResetPasswordRequest) (PasswordResetResult, error)

@@ -128,7 +128,7 @@ reported as not found.
 
 ### Permission-aware post-login landing
 
-A successful login without a safe `returnTo` target opens the first navigation route permitted by the actor's effective authorization context. Application and Tenant Administrators land on People. Earnings and Expense Operators land on Collaborators because those roles do not receive `people.read`. Actors without an operational navigation permission land on Change password.
+A successful login without a safe `returnTo` target opens the first navigation route permitted by the resolved tenant Actor when a tenant workspace is available. Application and Tenant Administrators land on People. Earnings and Expense Operators land on Collaborators because those roles do not receive `people.read`. When an ordinary Authentication Account has no usable Tenant Actor, the shell remains authenticated and renders Account-level Person self-service instead of forcing the user into Change password.
 
 The login flow never reuses `/login`, `/forbidden`, or `/password/reset` as a post-login return target. This prevents a Forbidden page reached by one account from becoming the landing page for the next account after sign-out.
 
@@ -142,18 +142,19 @@ normalizes both the current tenant-option array response and the compatible
 `{ items: [...] }` response shape so malformed or stale cached data cannot crash the
 workspace with an `options.some is not a function` rendering error.
 
-### Authentication-account tenant-access prerequisite
+### Authentication Account and tenant workspace independence
 
-An authentication account may be created only for an active authorization actor
-that already has at least one effective active role grant for an active tenant.
-The Authentication administration actor selector omits actors without usable
-tenant access and labels each eligible actor with its active role and tenant
-grants. Administrators must assign the actor's role grants in Authorization
-before creating the login account.
+An ordinary Authentication Account represents the global Person and may remain
+ACTIVE independently of its Tenant Actors. Tenant options are derived from the
+Account's active TENANT Actor bindings backed by ACTIVE same-tenant
+Person–Tenant Memberships; delegated Role Grants are not required merely for
+intrinsic Person self-service.
 
-The backend enforces the same invariant. A direct account-creation request for
-an actor without effective tenant access returns `validation_failed` on
-`actorId`; it cannot create an account that completes a forced password change
-and then reaches the `No tenant access` workspace state. Revoking all grants
-after account creation remains supported and intentionally produces the
-controlled `No tenant access` state until an administrator restores a grant.
+If all Tenant Actors or Memberships become unavailable, authentication still
+succeeds. The browser renders **No tenant workspace available** together with
+Account-level **My Person** and read-only **My Current Account** self-service.
+This fallback derives the Person only from `auth_account_people`, does not
+borrow or synthesize an Actor, and does not grant tenant administration,
+operator, collaboration, or other tenant-scoped capabilities. Restoring an
+eligible Tenant Actor restores the normal tenant workspace without creating a
+new Authentication Account or Session.

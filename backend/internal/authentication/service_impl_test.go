@@ -550,6 +550,155 @@ func TestAuthenticationCreatesPersonActorAndAccountWithoutCollaboratorJourney(t 
 	if resolved.HasPermission(authz.PermissionCollaboratorsSelfRead) || resolved.CollaboratorID != "" {
 		t.Fatalf("Person without an active Collaborator Journey must not receive collaborator-only self-service: %#v", resolved)
 	}
+
+	if err := database.Model(&authz.AuthzActor{}).Where("id = ?", account.ActorID).Update("active", false).Error; err != nil {
+		t.Fatalf("deactivate Person-only tenant Actor: %v", err)
+	}
+	selfService, err := service.GetSelfServiceHome(context.Background(), account.ID)
+	if err != nil {
+		t.Fatalf("Account-level Person self-service must survive tenant Actor deactivation: %v", err)
+	}
+	if selfService.AccountID != account.ID || selfService.Person.ID != account.GlobalPersonID {
+		t.Fatalf("unexpected Account-level self-service identity: %#v", selfService)
+	}
+	if selfService.Person.Email != person.Email {
+		t.Fatalf("expected self-service Person email %q, got %q", person.Email, selfService.Person.Email)
+	}
+	if len(selfService.Balances) != 0 || len(selfService.Entries) != 0 {
+		t.Fatalf("Person without financial history should have an empty Current Account projection: %#v", selfService)
+	}
+}
+
+func TestAccountLevelSelfServiceKeepsCurrentAccountWithoutActiveTenantContext(t *testing.T) {
+	database, _, service, _ := authenticationTestService(t)
+	now := time.Now().UTC()
+
+	references := []appdb.ReferenceData{
+		{BaseModel: appdb.BaseModel{ID: "self-service-person-active", CreatedAt: now, UpdatedAt: now}, TenantID: appdb.DefaultTenantID, Type: "person_status", Code: "ACTIVE", Label: "Self Service Person Active", Active: true},
+		{BaseModel: appdb.BaseModel{ID: "self-service-person-inactive", CreatedAt: now, UpdatedAt: now}, TenantID: appdb.DefaultTenantID, Type: "person_status", Code: "INACTIVE", Label: "Self Service Person Inactive", Active: true},
+		{BaseModel: appdb.BaseModel{ID: "self-service-payment-daily", CreatedAt: now, UpdatedAt: now}, TenantID: appdb.DefaultTenantID, Type: "method", Code: "DAILY", Label: "Self Service Daily", Active: true},
+		{BaseModel: appdb.BaseModel{ID: "self-service-sector", CreatedAt: now, UpdatedAt: now}, TenantID: appdb.DefaultTenantID, Type: "sector", Code: "OPS", Label: "Self Service Operations", Active: true},
+		{BaseModel: appdb.BaseModel{ID: "self-service-location", CreatedAt: now, UpdatedAt: now}, TenantID: appdb.DefaultTenantID, Type: "location", Code: "MAIN", Label: "Self Service Main", Active: true},
+		{BaseModel: appdb.BaseModel{ID: "self-service-task", CreatedAt: now, UpdatedAt: now}, TenantID: appdb.DefaultTenantID, Type: "task", Code: "WORK", Label: "Self Service Work", Active: true},
+		{BaseModel: appdb.BaseModel{ID: "self-service-collaborator-active", CreatedAt: now, UpdatedAt: now}, TenantID: appdb.DefaultTenantID, Type: "collaborator_status", Code: "ACTIVE", Label: "Self Service Collaborator Active", Active: true},
+		{BaseModel: appdb.BaseModel{ID: "self-service-value-brl", CreatedAt: now, UpdatedAt: now}, TenantID: appdb.DefaultTenantID, Type: "value_unit", Code: "BRL", Label: "Brazilian Real", Active: true, SortOrder: 10},
+	}
+	for _, reference := range references {
+		if err := database.Create(&reference).Error; err != nil {
+			t.Fatalf("create self-service reference %s: %v", reference.ID, err)
+		}
+	}
+
+	person := appdb.Person{
+		BaseModel: appdb.BaseModel{ID: "self-service-history-person", CreatedAt: now, UpdatedAt: now},
+		TenantID:  appdb.DefaultTenantID,
+		FirstName: "Historical",
+		LastName:  "Person",
+		Nickname:  "HistoricalPerson",
+		CPF:       "39053344705",
+		RG:        "SELF-SERVICE-HISTORY-RG",
+		Cellular:  "11987650001",
+		Email:     "historical-person@example.com",
+		Country:   "Brasil",
+		StatusID:  "self-service-person-active",
+	}
+	if err := database.Create(&person).Error; err != nil {
+		t.Fatalf("create self-service Person: %v", err)
+	}
+	if err := appdb.EnsureGlobalPersonMembershipFoundation(database); err != nil {
+		t.Fatalf("ensure self-service Person foundation: %v", err)
+	}
+
+	var membership appdb.PersonTenantMembership
+	if err := database.First(&membership, "legacy_person_id = ?", person.ID).Error; err != nil {
+		t.Fatalf("find self-service Membership: %v", err)
+	}
+
+	legacyPersonID := person.ID
+	actor := authz.AuthzActor{
+		ID:          "self-service-history-actor",
+		ActorKey:    "self-service-history-actor",
+		DisplayName: "Historical Person",
+		PersonID:    &legacyPersonID,
+		Active:      true,
+		CreatedAt:   now,
+		UpdatedAt:   now,
+	}
+	if err := database.Create(&actor).Error; err != nil {
+		t.Fatalf("create self-service Actor: %v", err)
+	}
+
+	account, err := service.CreateAccount(context.Background(), CreateAccountRequest{
+		ActorID: actor.ID, Login: person.Email, TemporaryPassword: "Historical-Person-Password-1",
+	})
+	if err != nil {
+		t.Fatalf("create self-service Authentication Account: %v", err)
+	}
+
+	collaborator := appdb.CollaboratorJourney{
+		BaseModel:            appdb.BaseModel{ID: "self-service-history-collaborator", CreatedAt: now, UpdatedAt: now},
+		TenantID:             appdb.DefaultTenantID,
+		PersonID:             person.ID,
+		JourneyStartDate:     now.AddDate(0, -2, 0),
+		DefaultEndDate:       now.AddDate(0, 10, 0),
+		ProjectedEndDate:     now.AddDate(0, 10, 0),
+		PaymentMethodID:      "self-service-payment-daily",
+		PaymentValue:         100,
+		PlanningAvailability: "ACTIVE",
+		SectorID:             "self-service-sector",
+		LocationID:           "self-service-location",
+		TaskID:               "self-service-task",
+		StatusID:             "self-service-collaborator-active",
+	}
+	if err := database.Create(&collaborator).Error; err != nil {
+		t.Fatalf("create self-service Collaborator Journey: %v", err)
+	}
+
+	ledgerEntry := appdb.LedgerEntry{
+		BaseModel:      appdb.BaseModel{ID: "self-service-history-ledger", CreatedAt: now, UpdatedAt: now},
+		TenantID:       appdb.DefaultTenantID,
+		CollaboratorID: collaborator.ID,
+		ValueUnitID:    "self-service-value-brl",
+		EntryType:      "EARNING_CREDIT",
+		Direction:      "CREDIT",
+		Amount:         1250,
+		EffectiveDate:  now.AddDate(0, 0, -10),
+		SourceType:     "MANUAL_TEST",
+		SourceID:       "self-service-history-source",
+		Description:    "Historical earnings visible through Person self-service",
+		Active:         true,
+		CorrectionType: "ORIGINAL",
+	}
+	if err := database.Create(&ledgerEntry).Error; err != nil {
+		t.Fatalf("create self-service Ledger Entry: %v", err)
+	}
+
+	if err := database.Model(&authz.AuthzActor{}).Where("id = ?", actor.ID).Update("active", false).Error; err != nil {
+		t.Fatalf("deactivate self-service Tenant Actor: %v", err)
+	}
+	if err := database.Model(&appdb.PersonTenantMembership{}).Where("id = ?", membership.ID).Update("status_id", "self-service-person-inactive").Error; err != nil {
+		t.Fatalf("deactivate self-service Membership: %v", err)
+	}
+
+	selfService, err := service.GetSelfServiceHome(context.Background(), account.ID)
+	if err != nil {
+		t.Fatalf("load Account-level self-service without active tenant context: %v", err)
+	}
+	if selfService.AccountID != account.ID || selfService.Person.ID != account.GlobalPersonID {
+		t.Fatalf("unexpected Account-level Person identity: %#v", selfService)
+	}
+	if len(selfService.Balances) != 1 {
+		t.Fatalf("expected one Current Account balance, got %#v", selfService.Balances)
+	}
+	if balance := selfService.Balances[0]; balance.TenantID != appdb.DefaultTenantID || balance.ValueUnitCode != "BRL" || balance.Balance != 1250 {
+		t.Fatalf("unexpected Current Account balance: %#v", balance)
+	}
+	if len(selfService.Entries) != 1 {
+		t.Fatalf("expected one Current Account entry, got %#v", selfService.Entries)
+	}
+	if entry := selfService.Entries[0]; entry.ID != ledgerEntry.ID || entry.TenantID != appdb.DefaultTenantID || entry.SignedAmount != 1250 {
+		t.Fatalf("unexpected Current Account entry: %#v", entry)
+	}
 }
 
 func TestAuthenticationCreatesPersonActorAndAccountWhenNoActorExists(t *testing.T) {
