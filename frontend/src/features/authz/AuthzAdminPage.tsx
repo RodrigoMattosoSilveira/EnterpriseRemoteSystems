@@ -1,9 +1,6 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import {
-  useCollaboratorCatalog,
-  useCollaboratorSearch,
-} from "../collaborators/useCollaborators";
+import { useCollaboratorSearch } from "../collaborators/useCollaborators";
 import { ApiError } from "../../api/client";
 import { ApiErrorPanel } from "../../components/ApiErrorPanel";
 import { readSelectedTenantId, setSelectedTenantId } from "../../api/tenantSelection";
@@ -60,7 +57,10 @@ export function AuthzAdminPage() {
   const rolesQuery = useAuthzRoles(requestActor);
   const permissionsQuery = useAuthzPermissions(requestActor);
   const actorsQuery = useAuthzActors(requestActor);
-  const collaboratorsQuery = useCollaboratorCatalog();
+  const actorCollaboratorSearchQuery = useCollaboratorSearch(
+    actorNicknameFilter,
+    false,
+  );
   const createActorMutation = useCreateAuthzActor(requestActor);
   const grantRoleMutation = useGrantAuthzActorRole(requestActor);
   const revokeGrantMutation = useRevokeAuthzActorRoleGrant(requestActor);
@@ -80,8 +80,8 @@ export function AuthzAdminPage() {
     [actorsQuery.data],
   );
   const collaborators = useMemo(
-    () => [...(collaboratorsQuery.data ?? [])].sort(byCollaboratorName),
-    [collaboratorsQuery.data],
+    () => actorCollaboratorSearchQuery.data?.items ?? [],
+    [actorCollaboratorSearchQuery.data?.items],
   );
   const tenantRoleEligibleActorCount = useMemo(
     () => actors.filter((actor) => tenantRoleGrantEligibility(actor).eligible).length,
@@ -115,15 +115,20 @@ export function AuthzAdminPage() {
   const rolesForbidden = isForbiddenApiError(rolesQuery.error);
   const permissionsForbidden = isForbiddenApiError(permissionsQuery.error);
   const actorsForbidden = isForbiddenApiError(actorsQuery.error);
-  const collaboratorsForbidden = isForbiddenApiError(collaboratorsQuery.error);
+  const collaboratorSearchForbidden = isForbiddenApiError(
+    actorCollaboratorSearchQuery.error,
+  );
   const hasLimitedAuthorization =
-    rolesForbidden || permissionsForbidden || actorsForbidden || collaboratorsForbidden;
+    rolesForbidden ||
+    permissionsForbidden ||
+    actorsForbidden ||
+    collaboratorSearchForbidden;
   const queryError = firstNonForbiddenError([
     currentActorQuery.error,
     rolesQuery.error,
     permissionsQuery.error,
     actorsQuery.error,
-    collaboratorsQuery.error,
+    actorCollaboratorSearchQuery.error,
   ]);
 
   async function handleCreateActor(event: FormEvent<HTMLFormElement>) {
@@ -1113,10 +1118,6 @@ function normalizeOptional(value: string | null | undefined) {
 
 function byCode<T extends { code: string }>(a: T, b: T) {
   return a.code.localeCompare(b.code);
-}
-
-function byCollaboratorName(a: Collaborator, b: Collaborator) {
-  return collaboratorDisplayName(a).localeCompare(collaboratorDisplayName(b));
 }
 
 function collaboratorDisplayName(collaborator: Collaborator | undefined) {
