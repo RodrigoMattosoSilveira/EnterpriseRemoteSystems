@@ -2,6 +2,7 @@ import { readSelectedTenantId } from "./tenantSelection";
 import {
   notifyAuthenticationRequired,
   notifyForbidden,
+  notifyTenantActorUnavailable,
   type AuthenticationInterruptionReason,
 } from "../app/authEvents";
 
@@ -65,6 +66,12 @@ export async function apiFetch<T>(
       !suppressForbiddenNavigation
     ) {
       notifyForbidden();
+    }
+    if (
+      result.response.status === 403 &&
+      result.errorCode === "tenant_actor_unavailable"
+    ) {
+      notifyTenantActorUnavailable();
     }
     throw new ApiError({
       status: result.response.status,

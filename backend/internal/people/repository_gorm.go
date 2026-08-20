@@ -37,17 +37,45 @@ func (r *gormRepository) List(
 
 	if filter.Search != "" {
 		like := "%" + filter.Search + "%"
-		q = q.Where(
-			`(COALESCE(gp.first_name, people.first_name) LIKE ?
+		condition := `(COALESCE(gp.first_name, people.first_name) LIKE ?
 			OR COALESCE(gp.last_name, people.last_name) LIKE ?
 			OR TRIM(COALESCE(gp.first_name, people.first_name) || ' ' || COALESCE(gp.last_name, people.last_name)) LIKE ?
 			OR COALESCE(gp.nickname, people.nickname) LIKE ?
 			OR COALESCE(gp.cpf, people.cpf) LIKE ?
 			OR COALESCE(gp.rg, people.rg) LIKE ?
 			OR COALESCE(gp.cellular, people.cellular) LIKE ?
-			OR COALESCE(gp.email, people.email) LIKE ?)`,
-			like, like, like, like, like, like, like, like,
-		)
+			OR COALESCE(gp.email, people.email) LIKE ?`
+		args := []any{like, like, like, like, like, like, like, like}
+
+		// Tenant Administrators often know a Person by Authentication login or
+		// Actor label rather than by the Person profile. Include those identity
+		// aliases without requiring the Actor to be active. Scope Actor matching
+		// to this same tenant so authorization identity from another tenant never
+		// makes a Person appear in the current tenant directory.
+		if r.db.Migrator().HasTable("auth_account_people") &&
+			r.db.Migrator().HasTable("auth_user_accounts") &&
+			r.db.Migrator().HasTable("auth_account_actors") &&
+			r.db.Migrator().HasTable("authz_actors") {
+			condition += `
+			OR EXISTS (
+				SELECT 1
+				FROM auth_account_people ap
+				JOIN auth_user_accounts account ON account.id = ap.account_id
+				LEFT JOIN auth_account_actors aa
+					ON aa.account_id = ap.account_id
+					AND aa.scope_type = 'TENANT'
+					AND aa.tenant_id = people.tenant_id
+				LEFT JOIN authz_actors actor ON actor.id = aa.actor_id
+				WHERE ap.person_id = ptm.person_id
+				  AND (LOWER(account.login) LIKE LOWER(?)
+				       OR actor.id LIKE ?
+				       OR actor.actor_key LIKE ?
+				       OR actor.display_name LIKE ?)
+			)`
+			args = append(args, like, like, like, like)
+		}
+		condition += ")"
+		q = q.Where(condition, args...)
 	}
 
 	if filter.StatusID != "" {

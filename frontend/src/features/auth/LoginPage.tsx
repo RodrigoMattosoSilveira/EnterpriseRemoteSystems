@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { Link, Navigate, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { ApiError } from "../../api/client";
 import { requestAccountReactivation } from "../../api/auth.api";
@@ -9,6 +10,7 @@ import { AuthCard, AuthField, primaryButtonClass } from "./AuthCard";
 export default function LoginPage() {
   const auth = useAuthState();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const location = useLocation();
   const [params] = useSearchParams();
   const [login, setLogin] = useState(() => loginFromLocationState(location.state));
@@ -33,6 +35,11 @@ export default function LoginPage() {
     setReactivationError("");
     try {
       const session = await authenticate({ login, password });
+      // A new Account/session can resolve a completely different tenant Actor.
+      // Drop every query from the prior authenticated context before routing
+      // into the workspace so tenant-neutral query keys cannot briefly render
+      // another Account's cached tenant data.
+      queryClient.clear();
       navigate(session.mustChangePassword ? "/password/change" : safeReturnTo(params.get("returnTo")), { replace: true });
     } catch (cause) {
       const presentation = loginFailurePresentation(cause);

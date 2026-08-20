@@ -145,7 +145,12 @@ test("admin can create an authorization actor, grant a role, and revoke it", asy
   const actorNicknameFilter = page.getByLabel(
     "Filter actors by person nickname",
   );
+  const initialNicknameFilterBox = await actorNicknameFilter.boundingBox();
+  expect(initialNicknameFilterBox?.width ?? 0).toBeGreaterThanOrEqual(320);
+
   await actorNicknameFilter.fill(actorNickname.slice(2));
+  const filteredNicknameFilterBox = await actorNicknameFilter.boundingBox();
+  expect(filteredNicknameFilterBox?.width ?? 0).toBeGreaterThanOrEqual(320);
   await expect(actorCard).toBeVisible();
   await expect(
     page

@@ -13,6 +13,7 @@ import {
   listAuthzRoles,
   revokeAuthzActorRoleGrant,
   setAuthzActorActive,
+  setTenantActorActive,
 } from "../../api/authz.api";
 import type {
   AuthzActor,
@@ -215,6 +216,18 @@ export function useTenantRoleActors(actor: AuthzAdminRequestActor) {
     queryKey: [...authzQueryKey(actor), "tenant-role-actors"],
     queryFn: () => listTenantRoleActors(actor),
     enabled: enabled(actor),
+  });
+}
+
+export function useSetTenantActorActive(actor: AuthzAdminRequestActor) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ targetActorId, active }: { targetActorId: string; active: boolean }) =>
+      setTenantActorActive(actor, targetActorId, { active }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [...authzQueryKey(actor), "tenant-role-actors"] });
+      queryClient.invalidateQueries({ queryKey: [...authzQueryKey(actor), "current-actor"] });
+    },
   });
 }
 

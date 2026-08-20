@@ -1,7 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { apiFetch, ApiError } from "./client";
 import { SELECTED_TENANT_STORAGE_KEY } from "./tenantSelection";
-import { subscribeAuthenticationRequired, subscribeForbidden } from "../app/authEvents";
+import {
+  subscribeAuthenticationRequired,
+  subscribeForbidden,
+  subscribeTenantActorUnavailable,
+} from "../app/authEvents";
 
 type FetchCall = {
   url: string | URL | Request;
@@ -69,6 +73,51 @@ describe("apiFetch authenticated-session transport", () => {
     const headers = fetchCalls[0]?.init?.headers as Record<string, string>;
     expect(headers["X-Tenant-ID"]).toBe("tenant-a");
     expect(headers["X-Actor-ID"]).toBeUndefined();
+  });
+
+  it("broadcasts tenant Actor loss without treating the Account session as unauthenticated", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        new Response(
+          JSON.stringify({
+            error: {
+              code: "tenant_actor_unavailable",
+              message:
+                "The authenticated account has no active actor for the selected tenant",
+            },
+          }),
+          { status: 403, headers: { "Content-Type": "application/json" } },
+        ),
+      ),
+    );
+
+    let tenantActorNotifications = 0;
+    let authenticationNotifications = 0;
+    let forbiddenNotifications = 0;
+    const unsubscribeTenantActor = subscribeTenantActorUnavailable(() => {
+      tenantActorNotifications += 1;
+    });
+    const unsubscribeAuthentication = subscribeAuthenticationRequired(() => {
+      authenticationNotifications += 1;
+    });
+    const unsubscribeForbidden = subscribeForbidden(() => {
+      forbiddenNotifications += 1;
+    });
+
+    try {
+      await expect(apiFetch("/people")).rejects.toMatchObject({
+        status: 403,
+        code: "tenant_actor_unavailable",
+      });
+      expect(tenantActorNotifications).toBe(1);
+      expect(authenticationNotifications).toBe(0);
+      expect(forbiddenNotifications).toBe(0);
+    } finally {
+      unsubscribeTenantActor();
+      unsubscribeAuthentication();
+      unsubscribeForbidden();
+    }
   });
 
   it("can suppress global forbidden navigation for supplemental queries", async () => {

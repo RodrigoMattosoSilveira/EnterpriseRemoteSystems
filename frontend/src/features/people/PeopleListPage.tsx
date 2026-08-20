@@ -226,7 +226,7 @@ export function PeopleListPage() {
               <div>
                 <h2 className="text-lg font-semibold text-gray-950">Filters</h2>
                 <p className="mt-1 text-sm text-gray-500">
-                  Search by name, nickname, CPF, RG, cellular, or email.
+                  Search by Person details, Authentication login, Actor ID, or Actor Key.
                 </p>
               </div>
             </div>

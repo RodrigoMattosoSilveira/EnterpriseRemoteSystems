@@ -85,10 +85,6 @@ func (s *service) Login(ctx context.Context, req LoginRequest, userAgent string,
 	if !account.Active {
 		return LoginResult{}, ErrAccountInactive
 	}
-	if !account.AnyActorActive {
-		return LoginResult{}, ErrActorInactive
-	}
-
 	now := s.clock().UTC()
 
 	rawToken, tokenHash, err := s.newToken("ers_s_")
@@ -119,10 +115,6 @@ func (s *service) Login(ctx context.Context, req LoginRequest, userAgent string,
 		_ = s.repository.RevokeSession(ctx, session.ID, now)
 		return LoginResult{}, ErrAccountInactive
 	}
-	if !refreshedAccount.AnyActorActive {
-		_ = s.repository.RevokeSession(ctx, session.ID, now)
-		return LoginResult{}, ErrActorInactive
-	}
 	if err := s.repository.UpdateLastLogin(ctx, account.ID, now); err != nil {
 		_ = s.repository.RevokeSession(ctx, session.ID, now)
 		return LoginResult{}, err
@@ -151,10 +143,6 @@ func (s *service) ResolveSession(ctx context.Context, rawToken string) (SessionR
 		_ = s.repository.RevokeSession(ctx, record.Session.ID, now)
 		return SessionResponse{}, ErrAccountInactive
 	}
-	if !record.AnyActorActive {
-		_ = s.repository.RevokeSession(ctx, record.Session.ID, now)
-		return SessionResponse{}, ErrActorInactive
-	}
 	if record.RevokedAt != nil {
 		return SessionResponse{}, ErrAuthenticationRequired
 	}
@@ -168,6 +156,87 @@ func (s *service) ResolveSession(ctx context.Context, rawToken string) (SessionR
 		}
 	}
 	return sessionResponse(record.AccountRecord, record.ExpiresAt), nil
+}
+
+func (s *service) GetSelfServiceHome(ctx context.Context, accountID string) (SelfServiceHomeResponse, error) {
+	accountID = strings.TrimSpace(accountID)
+	if accountID == "" {
+		return SelfServiceHomeResponse{}, ErrAuthenticationRequired
+	}
+
+	record, err := s.repository.FindSelfServiceHome(ctx, accountID)
+	if err != nil {
+		return SelfServiceHomeResponse{}, err
+	}
+
+	person := record.Person
+	balances := make([]SelfServiceBalanceResponse, 0, len(record.Balances))
+	for _, balance := range record.Balances {
+		balances = append(balances, SelfServiceBalanceResponse{
+			TenantID:       balance.TenantID,
+			TenantName:     balance.TenantName,
+			ValueUnitID:    balance.ValueUnitID,
+			ValueUnitCode:  balance.ValueUnitCode,
+			ValueUnitLabel: balance.ValueUnitLabel,
+			Balance:        balance.Balance,
+		})
+	}
+
+	entries := make([]SelfServiceLedgerEntryResponse, 0, len(record.Entries))
+	for _, entry := range record.Entries {
+		signedAmount := entry.Amount
+		if strings.EqualFold(strings.TrimSpace(entry.Direction), "DEBIT") {
+			signedAmount = -entry.Amount
+		}
+		entries = append(entries, SelfServiceLedgerEntryResponse{
+			ID:             entry.ID,
+			TenantID:       entry.TenantID,
+			TenantName:     entry.TenantName,
+			CollaboratorID: entry.CollaboratorID,
+			ValueUnitID:    entry.ValueUnitID,
+			ValueUnitCode:  entry.ValueUnitCode,
+			ValueUnitLabel: entry.ValueUnitLabel,
+			EntryType:      entry.EntryType,
+			Direction:      entry.Direction,
+			Amount:         entry.Amount,
+			SignedAmount:   signedAmount,
+			EffectiveDate:  entry.EffectiveDate,
+			SourceType:     entry.SourceType,
+			SourceID:       entry.SourceID,
+			Description:    entry.Description,
+		})
+	}
+
+	return SelfServiceHomeResponse{
+		AccountID: accountID,
+		Person: SelfServicePersonResponse{
+			ID:                      person.ID,
+			FirstName:               person.FirstName,
+			LastName:                person.LastName,
+			Nickname:                person.Nickname,
+			CPF:                     person.CPF,
+			RG:                      person.RG,
+			Cellular:                person.Cellular,
+			Email:                   person.Email,
+			Street1:                 person.Street1,
+			Street2:                 person.Street2,
+			State:                   person.State,
+			City:                    person.City,
+			CEP:                     person.CEP,
+			Country:                 person.Country,
+			BankName:                person.BankName,
+			BankNumber:              person.BankNumber,
+			CheckingAccount:         person.CheckingAccount,
+			PIXKey:                  person.PIXKey,
+			EmergencyName:           person.EmergencyName,
+			EmergencyCellular:       person.EmergencyCellular,
+			EmergencyEmail:          person.EmergencyEmail,
+			ProfileCompletionStatus: person.ProfileCompletionStatus,
+			CanCreateCollaborator:   person.CanCreateCollaborator,
+		},
+		Balances: balances,
+		Entries:  entries,
+	}, nil
 }
 
 func (s *service) Logout(ctx context.Context, rawToken string) error {
@@ -238,9 +307,6 @@ func (s *service) ResetPassword(ctx context.Context, req ResetPasswordRequest) (
 	}
 	if !account.Active {
 		return PasswordResetResult{}, ErrAccountInactive
-	}
-	if !account.AnyActorActive {
-		return PasswordResetResult{}, ErrActorInactive
 	}
 	now := s.clock().UTC()
 	if !token.ExpiresAt.After(now) {
@@ -401,11 +467,6 @@ func (s *service) IssuePasswordResetToken(ctx context.Context, accountID string)
 			"accountId": "Password reset tokens can only be issued for active authentication accounts",
 		}}
 	}
-	if !account.AnyActorActive {
-		return PasswordResetTokenResponse{}, &ValidationError{Fields: map[string]string{
-			"accountId": "Password reset tokens can only be issued when at least one linked authorization actor is active",
-		}}
-	}
 	rawToken, tokenHash, err := s.newToken("ers_pr_")
 	if err != nil {
 		return PasswordResetTokenResponse{}, err
@@ -484,16 +545,23 @@ func validatePasswordValue(password string, field string) *ValidationError {
 }
 
 func sessionResponse(account AccountRecord, expiresAt time.Time) SessionResponse {
+	displayName := strings.TrimSpace(account.GlobalPersonName)
+	if displayName == "" {
+		displayName = strings.TrimSpace(account.DisplayName)
+	}
+	if displayName == "" {
+		displayName = normalizeLogin(account.Login)
+	}
 	return SessionResponse{
 		AccountID:          account.ID,
-		ActorID:            account.ActorID,
-		ActorKey:           account.ActorKey,
-		DisplayName:        account.DisplayName,
-		PersonID:           account.PersonID,
-		CollaboratorID:     account.CollaboratorID,
+		DisplayName:        displayName,
 		Login:              normalizeLogin(account.Login),
 		MustChangePassword: account.MustChangePassword,
 		ExpiresAt:          expiresAt,
+		ActorID:            account.ActorID,
+		ActorKey:           account.ActorKey,
+		PersonID:           account.PersonID,
+		CollaboratorID:     account.CollaboratorID,
 	}
 }
 

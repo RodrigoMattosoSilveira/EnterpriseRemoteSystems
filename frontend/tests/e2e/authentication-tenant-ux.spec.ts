@@ -170,6 +170,91 @@ test("password reset page accepts administrator-issued tokens", async ({ page })
 });
 
 
+test("active Account with no active tenant Actor retains Person self-service and recovers without re-login", async ({ browser, request }) => {
+  test.setTimeout(60_000);
+  const suffix = `${Date.now()}${Math.floor(Math.random() * 100_000)}`;
+  const account = await provisionRoleAccount(
+    request,
+    `actor-lifecycle-${suffix}`,
+    "EXPENSE_OPERATOR",
+  );
+  await setActorActive(request, account.actorId, false);
+
+  const context = await browser.newContext({
+    baseURL,
+    storageState: { cookies: [], origins: [] },
+  });
+  const page = await context.newPage();
+
+  try {
+    await signIn(page, account.login, account.password);
+    await expect(page.getByRole("heading", { name: "Signed in" })).toBeVisible();
+    await expect(
+      page.getByRole("heading", { name: "No tenant workspace available" }),
+    ).toBeVisible();
+    const authenticatedAccount = page.locator("[data-authenticated-account-id]");
+    await expect(authenticatedAccount).toHaveAttribute(
+      "data-authenticated-account-id",
+      account.accountId,
+    );
+    await expect(
+      authenticatedAccount.locator("header").getByText(account.login, { exact: true }),
+    ).toBeVisible();
+    await expect(page.getByRole("heading", { name: "My Person" })).toBeVisible();
+    await expect(page.getByText(`Person ID: ${account.globalPersonId}`, { exact: true })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "My Current Account" })).toBeVisible();
+    await expect(
+      page.getByText("No Current Account ledger entries are recorded for this Person."),
+    ).toBeVisible();
+    await expect(page.getByRole("button", { name: "Change password" })).toBeVisible();
+
+    const selfServiceResponse = await context.request.get(
+      e2eApiUrl("/api/v1/auth/self-service"),
+    );
+    expect(selfServiceResponse.status()).toBe(200);
+    const selfServiceEnvelope = (await selfServiceResponse.json()) as {
+      data?: {
+        accountId?: string;
+        person?: { id?: string; email?: string };
+        balances?: unknown[];
+        entries?: unknown[];
+      };
+    };
+    expect(selfServiceEnvelope.data?.accountId).toBe(account.accountId);
+    expect(selfServiceEnvelope.data?.person?.id).toBe(account.globalPersonId);
+    expect(selfServiceEnvelope.data?.person?.email).toBe(account.login);
+    expect(selfServiceEnvelope.data?.balances).toEqual([]);
+    expect(selfServiceEnvelope.data?.entries).toEqual([]);
+
+    const sessionResponse = await context.request.get(
+      e2eApiUrl("/api/v1/auth/session"),
+    );
+    expect(sessionResponse.status()).toBe(200);
+    const sessionEnvelope = (await sessionResponse.json()) as {
+      data?: Record<string, unknown>;
+    };
+    expect(sessionEnvelope.data?.accountId).toBe(account.accountId);
+    expect(sessionEnvelope.data).not.toHaveProperty("actorId");
+    expect(sessionEnvelope.data).not.toHaveProperty("actorKey");
+
+    await setActorActive(request, account.actorId, true);
+    await page.reload();
+
+    await expectPersonSelfServiceHome(page, account.personId);
+    await expect(page.locator("[data-effective-actor-id]")).toHaveAttribute(
+      "data-effective-actor-id",
+      account.actorId,
+    );
+    await expect(page.locator("[data-effective-actor-id]")).toHaveAttribute(
+      "data-effective-actor-scope",
+      "TENANT",
+    );
+  } finally {
+    await context.close();
+    await setActorActive(request, account.actorId, false);
+  }
+});
+
 test("application administrator can switch between granted tenants", async ({ page, request }) => {
   test.setTimeout(60_000);
   const suffix = `${Date.now()}${Math.floor(Math.random() * 10_000)}`;
@@ -256,6 +341,13 @@ test("application administrator can switch between granted tenants", async ({ pa
     expect(defaultOnlyGoldPriceId).toBeTruthy();
 
     await page.goto("/people");
+    const effectiveActor = page.locator("[data-effective-actor-id]");
+    await expect(effectiveActor).toHaveAttribute("data-effective-actor-scope", "APPLICATION");
+    const applicationActorRecordId = await effectiveActor.getAttribute(
+      "data-effective-actor-id",
+    );
+    expect(applicationActorRecordId).toBeTruthy();
+
     await page.getByLabel("Filter people").fill(defaultOnlyNickname);
     await expect(page.getByText(defaultOnlyNickname, { exact: false }).first()).toBeVisible();
 
@@ -296,6 +388,11 @@ test("application administrator can switch between granted tenants", async ({ pa
         ),
       )
       .toBe(tenantId);
+    await expect(effectiveActor).toHaveAttribute("data-effective-actor-scope", "APPLICATION");
+    await expect(effectiveActor).toHaveAttribute(
+      "data-effective-actor-id",
+      applicationActorRecordId!,
+    );
 
     await page.goto("/people");
     await expect(
@@ -1377,6 +1474,7 @@ type PreparedRoleAccount = {
   actorId: string;
   accountId: string;
   personId: string;
+  globalPersonId: string;
   login: string;
   password: string;
 };
@@ -1411,10 +1509,12 @@ async function provisionRoleAccount(
   });
   expect(personResponse.status()).toBe(201);
   const personEnvelope = (await personResponse.json()) as {
-    data?: { id?: string };
+    data?: { id?: string; globalPersonId?: string };
   };
   const personId = personEnvelope.data?.id;
+  const globalPersonId = personEnvelope.data?.globalPersonId;
   expect(personId).toBeTruthy();
+  expect(globalPersonId).toBeTruthy();
 
   const actorResponse = await request.post(e2eApiUrl("/api/v1/authz/actors"), {
     headers: authzHeaders(),
@@ -1462,6 +1562,7 @@ async function provisionRoleAccount(
     actorId: actorId!,
     accountId: accountId!,
     personId: personId!,
+    globalPersonId: globalPersonId!,
     login,
     password,
   };
@@ -1518,16 +1619,24 @@ async function setAuthenticationAccountActive(
   expect(response.ok()).toBeTruthy();
 }
 
-async function deactivateActor(
+async function setActorActive(
   request: APIRequestContext,
   actorId: string,
+  active: boolean,
 ): Promise<void> {
   const response = await request.patch(
     e2eApiUrl(`/api/v1/authz/actors/${encodeURIComponent(actorId)}/active`),
     {
       headers: authzHeaders(),
-      data: { active: false },
+      data: { active },
     },
   );
   expect(response.ok()).toBeTruthy();
+}
+
+async function deactivateActor(
+  request: APIRequestContext,
+  actorId: string,
+): Promise<void> {
+  await setActorActive(request, actorId, false);
 }
