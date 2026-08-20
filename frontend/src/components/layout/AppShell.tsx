@@ -163,6 +163,9 @@ export function AppShell() {
   if (!selectedTenantId || !selectedTenant) {
     return (
       <NoTenantAccess
+        accountId={auth.session.accountId}
+        displayName={auth.session.displayName}
+        login={auth.session.login}
         onChangePassword={() => navigate("/password/change")}
         onLogout={() => void logout()}
       />
@@ -192,6 +195,9 @@ export function AppShell() {
   if (!actorQuery.data) {
     return (
       <NoTenantAccess
+        accountId={auth.session.accountId}
+        displayName={auth.session.displayName}
+        login={auth.session.login}
         onChangePassword={() => navigate("/password/change")}
         onLogout={() => void logout()}
       />
@@ -299,19 +305,51 @@ function WorkspaceError({
 }
 
 function NoTenantAccess({
+  accountId,
+  displayName,
+  login,
   onChangePassword,
   onLogout,
 }: {
+  accountId: string;
+  displayName: string;
+  login: string;
   onChangePassword: () => void;
   onLogout: () => void;
 }) {
   return (
     <main className="grid min-h-screen place-items-center p-6">
-      <section className="max-w-lg rounded-2xl border bg-white p-6">
-        <h1 className="text-xl font-bold">No tenant access</h1>
-        <p className="mt-2 text-sm text-slate-600">
-          Your Authentication Account is active, but it has no active tenant Actor backed by an ACTIVE Membership. Contact a Tenant Administrator or Application Administrator.
+      <section
+        className="max-w-lg rounded-2xl border bg-white p-6"
+        data-authenticated-account-id={accountId}
+      >
+        <h1 className="text-xl font-bold">Signed in</h1>
+        <p role="status" className="mt-2 text-sm text-slate-700">
+          Authentication succeeded for{" "}
+          <span className="font-semibold">{displayName || login}</span>.
         </p>
+        {displayName && displayName !== login ? (
+          <p className="mt-1 text-sm text-slate-600">
+            Login: <span className="font-medium">{login}</span>
+          </p>
+        ) : null}
+
+        <div className="mt-5 rounded-xl border border-amber-200 bg-amber-50 p-4">
+          <h2 className="font-semibold text-amber-950">No tenant access</h2>
+          <p className="mt-2 text-sm text-amber-900">
+            Your Authentication Account is active and remains signed in, but it
+            currently has no active tenant Actor backed by an ACTIVE
+            same-tenant Person–Tenant Membership. No tenant workspace is
+            available until tenant access is restored.
+          </p>
+        </div>
+
+        <p className="mt-4 text-sm text-slate-600">
+          Contact a Tenant Administrator or Application Administrator to restore
+          tenant access. You can still change your Authentication Account
+          password or sign out.
+        </p>
+
         <div className="mt-4 flex flex-wrap gap-3">
           <button
             className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white"

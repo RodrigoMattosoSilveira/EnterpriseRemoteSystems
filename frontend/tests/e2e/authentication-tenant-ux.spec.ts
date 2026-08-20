@@ -188,7 +188,12 @@ test("active Account remains signed in when its tenant Actor is inactive and rec
 
   try {
     await signIn(page, account.login, account.password);
+    await expect(page.getByRole("heading", { name: "Signed in" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "No tenant access" })).toBeVisible();
+    await expect(
+      page.locator("[data-authenticated-account-id]"),
+    ).toHaveAttribute("data-authenticated-account-id", account.accountId);
+    await expect(page.getByText(account.login, { exact: true })).toBeVisible();
     await expect(page.getByRole("button", { name: "Change password" })).toBeVisible();
 
     const sessionResponse = await context.request.get(

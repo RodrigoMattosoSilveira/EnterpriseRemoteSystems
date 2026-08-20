@@ -109,8 +109,11 @@ Authentication Account and Actor activation remain separate controls:
 - an inactive or mismatched Membership cannot produce an effective tenant
   Actor.
 
-If no tenant Actor remains eligible, the browser keeps the Account session but
-shows **No tenant access** rather than borrowing an Actor from another tenant.
+If no tenant Actor remains eligible, the browser keeps the Authentication
+Account session and renders an explicit **Signed in** state together with
+**No tenant access**. This makes successful Account authentication visible
+while still refusing to borrow an Actor from another tenant or render a tenant
+workspace.
 
 ## Global and tenant authority
 
