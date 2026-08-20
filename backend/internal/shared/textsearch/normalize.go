@@ -31,20 +31,21 @@ func EscapeLIKE(value string) string {
 	return likeReplacer.Replace(value)
 }
 
-// SQLNormalize builds the SQLite equivalent of Normalize for a fixed SQL
-// expression. It is used only when installing/backfilling the persisted search
-// projection; normal reads use the already-normalized search_text column.
-func SQLNormalize(expression string) string {
-	normalized := "LOWER(COALESCE(" + expression + ", ''))"
+// SQLReplacementPairs returns the SQLite replacement sequence used to make
+// persisted search projections equivalent to Normalize. SQLite's built-in
+// LOWER only handles ASCII, so both lower- and upper-case accented forms are
+// included explicitly.
+func SQLReplacementPairs() [][2]string {
+	replacements := make([][2]string, 0, len(replacementPairs))
 	for i := 0; i < len(replacementPairs); i += 2 {
 		from := replacementPairs[i]
 		to := replacementPairs[i+1]
-		normalized = "REPLACE(" + normalized + ", '" + from + "', '" + to + "')"
+		replacements = append(replacements, [2]string{from, to})
 
 		upper := strings.ToUpper(from)
 		if upper != from {
-			normalized = "REPLACE(" + normalized + ", '" + upper + "', '" + to + "')"
+			replacements = append(replacements, [2]string{upper, to})
 		}
 	}
-	return normalized
+	return replacements
 }
