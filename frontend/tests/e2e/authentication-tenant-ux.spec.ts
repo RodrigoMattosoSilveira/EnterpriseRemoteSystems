@@ -192,10 +192,14 @@ test("active Account with no active tenant Actor retains Person self-service and
     await expect(
       page.getByRole("heading", { name: "No tenant workspace available" }),
     ).toBeVisible();
+    const authenticatedAccount = page.locator("[data-authenticated-account-id]");
+    await expect(authenticatedAccount).toHaveAttribute(
+      "data-authenticated-account-id",
+      account.accountId,
+    );
     await expect(
-      page.locator("[data-authenticated-account-id]"),
-    ).toHaveAttribute("data-authenticated-account-id", account.accountId);
-    await expect(page.getByText(account.login, { exact: true })).toBeVisible();
+      authenticatedAccount.locator("header").getByText(account.login, { exact: true }),
+    ).toBeVisible();
     await expect(page.getByRole("heading", { name: "My Person" })).toBeVisible();
     await expect(page.getByText(`Person ID: ${account.globalPersonId}`, { exact: true })).toBeVisible();
     await expect(page.getByRole("heading", { name: "My Current Account" })).toBeVisible();
