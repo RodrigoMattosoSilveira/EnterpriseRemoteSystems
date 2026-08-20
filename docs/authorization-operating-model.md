@@ -28,7 +28,9 @@ Production and long-lived environments should keep `AUTHZ_BOOTSTRAP_ENABLED=fals
 
 ## Actor lifecycle safeguards
 
-Authorization administrators can activate and deactivate actors from the Authorization page. ERS prevents:
+Application Administrators can manage the application Actor catalog. Tenant Administrators can manage only Account-bound Tenant Actors for their selected Tenant: inactive Actors remain visible, and the Tenant Administrator may reactivate an Actor only while its same-tenant Person–Tenant Membership is ACTIVE. A missing Tenant Actor is created through the Person Authentication workflow, which preserves the canonical Authentication Account → Actor → Membership binding rather than creating a free-floating Actor. Tenant operator Role Grants still require an ACTIVE Actor and ACTIVE same-tenant Membership.
+
+ERS prevents:
 
 - an operating actor from deactivating itself;
 - an operating actor from revoking one of its own role grants;

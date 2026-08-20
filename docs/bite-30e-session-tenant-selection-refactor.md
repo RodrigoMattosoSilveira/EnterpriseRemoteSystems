@@ -105,7 +105,9 @@ Authentication Account and Actor activation remain separate controls:
   `tenant_actor_unavailable`, rather than treating the whole Account session as
   unauthenticated;
 - reactivating the Actor restores that tenant option when its Membership is
-  still ACTIVE;
+  still ACTIVE; Tenant Administrators can perform this lifecycle action for an
+  Account-bound Actor in their selected Tenant, while inactive Actors remain
+  visible in Tenant Authorization;
 - an inactive or mismatched Membership cannot produce an effective tenant
   Actor.
 

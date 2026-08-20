@@ -16,6 +16,7 @@ type ActorAdminStore interface {
 	ListActors(ctx context.Context) ([]ActorResponse, error)
 	ListTenantActors(ctx context.Context, tenantID string) ([]ActorResponse, error)
 	ListTenantRoleActors(ctx context.Context, tenantID string) ([]ActorResponse, error)
+	SetTenantActorActive(ctx context.Context, tenantID string, actorID string, active bool) (ActorResponse, error)
 	CreateActor(ctx context.Context, req CreateActorRequest) (ActorResponse, error)
 	SetActorActive(ctx context.Context, actorID string, active bool) (ActorResponse, error)
 	GrantActorRole(ctx context.Context, actorID string, req GrantActorRoleRequest) (ActorGrantResponse, error)
@@ -405,6 +406,62 @@ func (s *GORMStore) actorBindingsForAdministration(ctx context.Context) (map[str
 	return bindings, nil
 }
 
+func (s *GORMStore) tenantActorBindingsForAdministration(ctx context.Context, tenantID string) (map[string]ActorBindingResponse, error) {
+	bindings := map[string]ActorBindingResponse{}
+	tenantID = strings.TrimSpace(tenantID)
+	if s == nil || s.database == nil || tenantID == "" || tenantID == GlobalTenantScope {
+		return bindings, nil
+	}
+	if !s.database.Migrator().HasTable("auth_account_actors") {
+		return bindings, nil
+	}
+
+	type row struct {
+		ActorID                string
+		AccountID              string
+		AccountLogin           string
+		ScopeType              string
+		TenantID               string
+		MembershipID           string
+		MembershipTenant       string
+		MembershipCode         string
+		MembershipStatusActive bool
+	}
+	var rows []row
+	if err := s.database.WithContext(ctx).
+		Table("auth_account_actors aa").
+		Select(`aa.actor_id AS actor_id,
+			aa.account_id AS account_id,
+			COALESCE(accounts.login, '') AS account_login,
+			aa.scope_type AS scope_type,
+			COALESCE(aa.tenant_id, '') AS tenant_id,
+			COALESCE(aa.membership_id, '') AS membership_id,
+			COALESCE(m.tenant_id, '') AS membership_tenant,
+			COALESCE(status.code, '') AS membership_code,
+			COALESCE(status.active, 0) AS membership_status_active`).
+		Joins("LEFT JOIN auth_user_accounts accounts ON accounts.id = aa.account_id").
+		Joins("LEFT JOIN person_tenant_memberships m ON m.id = aa.membership_id").
+		Joins("LEFT JOIN reference_data status ON status.id = m.status_id AND status.tenant_id = m.tenant_id AND status.type = ?", "person_status").
+		Where("aa.scope_type = ? AND aa.tenant_id = ?", "TENANT", tenantID).
+		Scan(&rows).Error; err != nil {
+		return nil, fmt.Errorf("list tenant Actor bindings: %w", err)
+	}
+	for _, candidate := range rows {
+		binding := ActorBindingResponse{
+			AccountID:          strings.TrimSpace(candidate.AccountID),
+			AccountLogin:       strings.TrimSpace(candidate.AccountLogin),
+			ScopeType:          strings.TrimSpace(candidate.ScopeType),
+			TenantID:           strings.TrimSpace(candidate.TenantID),
+			MembershipID:       strings.TrimSpace(candidate.MembershipID),
+			MembershipTenantID: strings.TrimSpace(candidate.MembershipTenant),
+			MembershipActive:   strings.EqualFold(strings.TrimSpace(candidate.MembershipCode), "ACTIVE") && candidate.MembershipStatusActive,
+		}
+		binding.MembershipSameTenant = binding.TenantID != "" && binding.MembershipTenantID == binding.TenantID
+		bindings[strings.TrimSpace(candidate.ActorID)] = binding
+	}
+	return bindings, nil
+}
+
 // ListTenantActors returns only active tenant-scoped delegated Actors for the
 // selected tenant. It deliberately does not expose the application-global
 // authorization actor catalog or cross-tenant Role Grants. Tenant workflows
@@ -441,11 +498,12 @@ func (s *GORMStore) ListTenantActors(ctx context.Context, tenantID string) ([]Ac
 	return responses, nil
 }
 
-// ListTenantRoleActors returns active tenant Actors backed by an active
-// Person-Tenant Membership in the selected tenant. Unlike ListTenantActors,
-// this projection includes members who currently have no delegated role so a
-// Tenant Administrator can grant their first operator role. Only the two
-// tenant-delegable operator grants are exposed.
+// ListTenantRoleActors returns every Account-bound tenant Actor for the
+// selected tenant, including inactive Actors and Actors backed by an inactive
+// Membership. Tenant Administrators need this lifecycle projection to restore
+// an Actor that was deactivated without losing sight of the Person. Role grants
+// remain delegable only when both the Actor and same-tenant Membership are
+// active. Only the two tenant-delegable operator grants are exposed.
 func (s *GORMStore) ListTenantRoleActors(ctx context.Context, tenantID string) ([]ActorResponse, error) {
 	if s == nil || s.database == nil {
 		return nil, ErrMissingActor
@@ -464,22 +522,78 @@ func (s *GORMStore) ListTenantRoleActors(ctx context.Context, tenantID string) (
 		Select("DISTINCT authz_actors.*").
 		Joins("JOIN auth_account_actors aa ON aa.actor_id = authz_actors.id AND aa.scope_type = ? AND aa.tenant_id = ?", "TENANT", tenantID).
 		Joins("JOIN person_tenant_memberships m ON m.id = aa.membership_id AND m.tenant_id = aa.tenant_id").
-		Joins("JOIN reference_data membership_status ON membership_status.id = m.status_id AND membership_status.tenant_id = m.tenant_id AND membership_status.type = ? AND membership_status.code = ? AND membership_status.active = ?", "person_status", "ACTIVE", true).
-		Where("authz_actors.active = ?", true).
 		Order("authz_actors.display_name ASC, authz_actors.actor_key ASC").
 		Find(&actors).Error; err != nil {
 		return nil, fmt.Errorf("list tenant role actors: %w", err)
 	}
 
+	bindings, err := s.tenantActorBindingsForAdministration(ctx, tenantID)
+	if err != nil {
+		return nil, err
+	}
 	responses := make([]ActorResponse, 0, len(actors))
 	for _, actor := range actors {
 		grants, err := s.tenantOperatorGrantsForActor(ctx, actor.ID, tenantID)
 		if err != nil {
 			return nil, err
 		}
-		responses = append(responses, actorResponse(actor, grants))
+		response := actorResponse(actor, grants)
+		if binding, ok := bindings[actor.ID]; ok {
+			bindingCopy := binding
+			response.Binding = &bindingCopy
+		}
+		responses = append(responses, response)
 	}
 	return responses, nil
+}
+
+// SetTenantActorActive changes only an Actor that is authoritatively bound to
+// the selected tenant. Reactivation additionally requires the same-tenant
+// Person-Tenant Membership to be ACTIVE; otherwise the Actor would still be
+// unusable and the lifecycle action would misrepresent tenant access.
+func (s *GORMStore) SetTenantActorActive(ctx context.Context, tenantID string, actorID string, active bool) (ActorResponse, error) {
+	if s == nil || s.database == nil {
+		return ActorResponse{}, ErrMissingActor
+	}
+	tenantID = strings.TrimSpace(tenantID)
+	actorID = strings.TrimSpace(actorID)
+	if tenantID == "" || tenantID == GlobalTenantScope {
+		return ActorResponse{}, NewValidationError(map[string]string{"tenantId": "A specific tenant is required"})
+	}
+	if actorID == "" {
+		return ActorResponse{}, NewValidationError(map[string]string{"actorId": "Actor ID is required"})
+	}
+
+	bindings, err := s.tenantActorBindingsForAdministration(ctx, tenantID)
+	if err != nil {
+		return ActorResponse{}, err
+	}
+	binding, ok := bindings[actorID]
+	if !ok || binding.ScopeType != "TENANT" || binding.TenantID != tenantID {
+		return ActorResponse{}, NewValidationError(map[string]string{"actorId": "Actor is not bound to the selected tenant"})
+	}
+	if active && (!binding.MembershipActive || !binding.MembershipSameTenant) {
+		return ActorResponse{}, NewValidationError(map[string]string{"actorId": "Reactivate the Person-Tenant Membership before activating this tenant Actor"})
+	}
+
+	var actor AuthzActor
+	if err := s.database.WithContext(ctx).Where("id = ?", actorID).First(&actor).Error; err != nil {
+		return ActorResponse{}, err
+	}
+	if actor.Active != active {
+		actor.Active = active
+		actor.UpdatedAt = time.Now().UTC()
+		if err := s.database.WithContext(ctx).Save(&actor).Error; err != nil {
+			return ActorResponse{}, fmt.Errorf("set tenant authorization actor active state: %w", err)
+		}
+	}
+	grants, err := s.tenantOperatorGrantsForActor(ctx, actor.ID, tenantID)
+	if err != nil {
+		return ActorResponse{}, err
+	}
+	response := actorResponse(actor, grants)
+	response.Binding = &binding
+	return response, nil
 }
 
 func (s *GORMStore) GrantTenantOperatorRole(ctx context.Context, tenantID string, actorID string, roleCode string) (ActorGrantResponse, error) {

@@ -206,6 +206,7 @@ test.describe("authorization role boundaries", () => {
       expect(currentActor.roleCodes).toEqual(["TENANT_ADMIN"]);
       expect(currentActor.intrinsicPermissions).toContain("people.self.read");
       expect(currentActor.delegatedPermissions).toContain("tenants.read");
+      expect(currentActor.delegatedPermissions).toContain("authz.tenant_actors.manage");
       expect(currentActor.delegatedPermissions).toContain("authz.tenant_role_grants.manage");
       expect(currentActor.delegatedPermissions).toContain("people.create");
       expect(currentActor.delegatedPermissions).toContain("collaborators.update");
@@ -242,7 +243,38 @@ test.describe("authorization role boundaries", () => {
       const headers = tenantHeaders();
 
       const manager = await getCurrentActor(tenantAdminApi, headers);
+      expect(manager.delegatedPermissions).toContain("authz.tenant_actors.manage");
       expect(manager.delegatedPermissions).toContain("authz.tenant_role_grants.manage");
+
+      const deactivateResponse = await tenantAdminApi.patch(
+        e2eApiUrl(`/api/v1/authz/tenant-role-actors/${encodeURIComponent(target.id)}/active`),
+        { headers, data: { active: false } },
+      );
+      await expectStatus(deactivateResponse, 200, "Tenant Administrator deactivates tenant Actor");
+
+      const inactiveActorsResponse = await tenantAdminApi.get(
+        e2eApiUrl("/api/v1/authz/tenant-role-actors"),
+        { headers },
+      );
+      await expectStatus(inactiveActorsResponse, 200, "inactive tenant Actor remains listed");
+      const inactiveActorsBody = (await inactiveActorsResponse.json()) as ApiEnvelope<AuthzActor[]>;
+      const inactiveTarget = inactiveActorsBody.data?.find((candidate) => candidate.id === target?.id);
+      expect(inactiveTarget?.active).toBe(false);
+
+      const inactiveCurrentActorResponse = await targetApi.get(
+        e2eApiUrl("/api/v1/authz/current-actor"),
+        { headers },
+      );
+      await expectStatus(inactiveCurrentActorResponse, 403, "inactive tenant Actor blocks tenant context");
+
+      const reactivateResponse = await tenantAdminApi.patch(
+        e2eApiUrl(`/api/v1/authz/tenant-role-actors/${encodeURIComponent(target.id)}/active`),
+        { headers, data: { active: true } },
+      );
+      await expectStatus(reactivateResponse, 200, "Tenant Administrator reactivates tenant Actor");
+
+      const restoredTarget = await getCurrentActor(targetApi, headers);
+      expect(restoredTarget.actorRecordId).toBe(target.id);
 
       const actorsResponse = await tenantAdminApi.get(
         e2eApiUrl("/api/v1/authz/tenant-role-actors"),

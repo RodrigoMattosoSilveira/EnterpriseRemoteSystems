@@ -33,6 +33,7 @@ const (
 	PermissionAuthzSelfRead               Permission = "authz.self.read"
 	PermissionAuthzRead                   Permission = "authz.read"
 	PermissionAuthzManage                 Permission = "authz.manage"
+	PermissionAuthzTenantActorsManage     Permission = "authz.tenant_actors.manage"
 	PermissionAuthzTenantRoleGrantsManage Permission = "authz.tenant_role_grants.manage"
 
 	PermissionTenantsRead   Permission = "tenants.read"
