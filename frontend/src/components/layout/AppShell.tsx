@@ -587,7 +587,7 @@ function SelfServicePersonSection({
   );
 }
 
-function SelfField({ label, value }: { label: string; value: string }) {
+function SelfField({ label, value }: { label: string; value?: string }) {
   return (
     <div>
       <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">
