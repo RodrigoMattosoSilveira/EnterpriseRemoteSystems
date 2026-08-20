@@ -54,7 +54,7 @@ export function PersonAuthenticationSection({ personId }: { personId: string }) 
     <section className="mx-auto mt-6 max-w-4xl rounded-2xl border bg-white p-5" aria-label="Authentication">
       <h2 className="text-lg font-semibold">Authentication</h2>
       <p className="mt-1 text-sm text-slate-600">
-        Tenant Administrators can enable authentication for a Person who already has an active Membership in this tenant. ERS owns the global Account create-or-reuse decision.
+        Tenant Administrators can enable authentication for a Person who already has an ACTIVE Membership in this tenant. ERS creates or reuses the global Authentication Account and creates the missing Account-bound Tenant Actor. Existing inactive Tenant Actors are reactivated from Tenant Authorization.
       </p>
 
       <ApiErrorPanel error={error} />

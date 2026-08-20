@@ -119,6 +119,51 @@ func TestAuthzAdminCannotDeactivateOrRevokeItsOwnOperatingActor(t *testing.T) {
 	}
 }
 
+func TestTenantAdminCanReactivateInactiveActorInOwnTenant(t *testing.T) {
+	database := newAuthzTestDB(t)
+	installTenantRoleDelegationFixtureTables(t, database)
+
+	managerID := createAuthzActor(t, database, "tenant-manager@example.com", nil, nil)
+	bindActiveTenantMemberActor(t, database, managerID, "tenant-a")
+	grantAuthzRole(t, database, managerID, RoleTenantAdmin, "tenant-a")
+
+	targetID := createAuthzActor(t, database, "identity-d@example.test", nil, nil)
+	bindActiveTenantMemberActor(t, database, targetID, "tenant-a")
+	if err := database.Model(&AuthzActor{}).Where("id = ?", targetID).Update("active", false).Error; err != nil {
+		t.Fatalf("deactivate target Actor: %v", err)
+	}
+
+	app := newAuthzTestApp(database)
+	headers := map[string]string{HeaderActorID: "tenant-manager@example.com", HeaderTenantID: "tenant-a"}
+
+	listResp := doAuthzRequest(t, app, http.MethodGet, "/api/v1/authz/tenant-role-actors", nil, headers)
+	if listResp.StatusCode != http.StatusOK {
+		t.Fatalf("expected tenant Actor list status 200, got %d", listResp.StatusCode)
+	}
+	actors := decodeData[[]ActorResponse](t, listResp)
+	found := false
+	for _, actor := range actors {
+		if actor.ID == targetID {
+			found = true
+			if actor.Active {
+				t.Fatalf("expected target to be listed inactive, got %#v", actor)
+			}
+		}
+	}
+	if !found {
+		t.Fatalf("expected inactive target Actor in tenant lifecycle directory, got %#v", actors)
+	}
+
+	activateResp := doAuthzRequest(t, app, http.MethodPatch, "/api/v1/authz/tenant-role-actors/"+targetID+"/active", map[string]any{"active": true}, headers)
+	if activateResp.StatusCode != http.StatusOK {
+		t.Fatalf("expected tenant Actor activation status 200, got %d", activateResp.StatusCode)
+	}
+	updated := decodeData[ActorResponse](t, activateResp)
+	if !updated.Active {
+		t.Fatalf("expected target Actor active, got %#v", updated)
+	}
+}
+
 func TestAuthzAdminCanDeactivateAnotherActor(t *testing.T) {
 	database := newAuthzTestDB(t)
 	adminActorID := createAuthzActor(t, database, "lifecycle-admin@example.com", nil, nil)
@@ -277,6 +322,7 @@ func newAuthzTestApp(database *gorm.DB) *fiber.App {
 	authzGroup.Get("/permissions", h.ListPermissions)
 	authzGroup.Get("/actors", h.ListActors)
 	authzGroup.Get("/tenant-role-actors", h.ListTenantRoleActors)
+	authzGroup.Patch("/tenant-role-actors/:id/active", h.SetTenantActorActive)
 	authzGroup.Post("/tenant-role-actors/:id/role-grants", h.GrantTenantOperatorRole)
 	authzGroup.Delete("/tenant-role-actors/:id/role-grants/:grantId", h.RevokeTenantOperatorRoleGrant)
 	authzGroup.Get("/audit-logs", h.ListAuditLogs)

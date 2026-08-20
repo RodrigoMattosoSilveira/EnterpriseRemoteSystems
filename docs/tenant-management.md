@@ -37,6 +37,6 @@ The tenant detail page lists persisted authorization actors. Assigning an actor 
 
 ## Authenticated scope boundary
 
-The browser no longer transports actor identity. The HTTP-only authentication session identifies the persisted authorization actor. `X-Tenant-ID` remains only as a selected-tenant hint, and the server resolves the session actor's active grants for that immutable tenant ID.
+The browser no longer transports actor identity. The HTTP-only authentication session identifies the Authentication Account. `X-Tenant-ID` remains only as a selected-tenant hint, and the server resolves the Account-owned active Actor for that immutable tenant ID. For ordinary Accounts, the Actor must be backed by the same tenant's ACTIVE Person–Tenant Membership.
 
 Tenant URLs and tenant-selection requests must use the tenant's immutable `id`; the human-readable tenant `code` is not an API scope identifier. `/admin/tenants/:id` continues to display the tenant identifier for administrative and diagnostic use.

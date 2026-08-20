@@ -2,6 +2,7 @@ package db
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"time"
@@ -18,7 +19,17 @@ func Open(path string) (*gorm.DB, error) {
 
 	dsn := fmt.Sprintf("file:%s?mode=rwc&_foreign_keys=on&_journal_mode=WAL&_busy_timeout=5000", path)
 
-	database, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{Logger: logger.Default.LogMode(logger.Warn)})
+	databaseLogger := logger.New(
+		log.New(os.Stdout, "\r\n", log.LstdFlags),
+		logger.Config{
+			SlowThreshold:             200 * time.Millisecond,
+			LogLevel:                  logger.Warn,
+			IgnoreRecordNotFoundError: true,
+			Colorful:                  false,
+		},
+	)
+
+	database, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{Logger: databaseLogger})
 	if err != nil {
 		return nil, fmt.Errorf("open sqlite3 database with gorm: %w", err)
 	}
@@ -38,6 +49,9 @@ func Open(path string) (*gorm.DB, error) {
 
 func AutoMigrate(database *gorm.DB) error {
 	if err := database.AutoMigrate(&Tenant{}, &TenantSetting{}, &ReferenceData{}, &Person{}, &GlobalPerson{}, &PersonTenantMembership{}, &CollaboratorJourney{}, &ExpensePriceListItem{}, &GoldPrice{}, &Expense{}, &LedgerEntry{}, &JourneySettlement{}, &LedgerReceipt{}, &WorkPeriod{}, &WorkPeriodAssignment{}, &GoldProductionEntry{}, &AccrualRun{}, &AccrualItem{}); err != nil {
+		return err
+	}
+	if err := InstallPeopleSearchIndex(database); err != nil {
 		return err
 	}
 	if err := InstallLedgerReceiptStatusGuards(database); err != nil {

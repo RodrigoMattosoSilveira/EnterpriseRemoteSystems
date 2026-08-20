@@ -1,19 +1,21 @@
 @startuml
-title ERS Authorization — Intrinsic vs Delegated
+title ERS Authorization — Account-Level Self-Service vs Tenant Authority
 
 actor "Authenticated Person" as User
 
-rectangle "Tenant Actor" as Actor
-rectangle "Person–Tenant Membership" as Membership
+rectangle "Authentication Account" as Account
 rectangle "Global Person" as Person
+rectangle "Person–Tenant Membership" as Membership
+rectangle "Tenant Actor" as Actor
 
-rectangle "Intrinsic Self-Service" as Self {
+rectangle "Base Intrinsic Self-Service" as Self {
   rectangle "Own Person record"
-  rectangle "Own historical Earnings"
-  rectangle "Own historical Expenses"
+  rectangle "Own previous Earnings"
+  rectangle "Own previous Expenses"
 }
 
-rectangle "Collaborator Capabilities" as Collab {
+rectangle "Tenant / Collaborator Capabilities" as Collab {
+  rectangle "Tenant workspace"
   rectangle "Current Work Assignments"
   rectangle "Current Earnings / Expenses"
 }
@@ -24,21 +26,32 @@ rectangle "Delegated Authorization" as Delegated {
   rectangle "Expenses Operator"
 }
 
-User --> Actor
-Actor --> Membership
-Membership --> Person
-
+User --> Account
+Account --> Person
 Person --> Self
 
-Membership --> Collab : if active\nCollaborator Journey
+Person --> Membership
+Account --> Actor
+Actor --> Membership
 
+Actor --> Collab : when tenant Actor +\nMembership are active
 Actor --> Delegated : via Role Grants
 
 note bottom of Self
 NOT granted by PERSON Role.
 
-Derived from identity:
-Actor → Membership → Person.
+Derived from:
+Authentication Account → Person.
+
+Historical financial records retain
+their original Tenant provenance.
+end note
+
+note bottom of Actor
+Tenant Actor activates tenant
+operating context. Deactivation
+does not remove base Person
+self-service.
 end note
 
 note bottom of Delegated

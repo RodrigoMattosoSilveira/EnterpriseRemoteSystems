@@ -1,5 +1,10 @@
 # Bite 28C — Authenticated Authorization Cutover
 
+> **Bite 30E supersession:** this document records the Bite 28C single-Actor
+> cutover. Bite 30E keeps the HTTP session Account-authenticated and resolves an
+> Account-owned Actor from the selected tenant; see
+> `bite-30e-session-tenant-selection-refactor.md`.
+
 ## Purpose
 
 Bite 28C makes the login-backed HTTP session established in Bite 28B the

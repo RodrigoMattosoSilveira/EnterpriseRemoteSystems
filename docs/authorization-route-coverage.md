@@ -16,7 +16,8 @@ Bite 27A makes route authorization explicit for every `/api/v1` endpoint except 
 | `/api/v1/reference-data` | `reference_data.read` | `reference_data.manage` |
 | `/api/v1/tenants/current` and `/api/v1/tenants/{id}` | `tenants.read` with tenant-scope enforcement | Not applicable |
 | `/api/v1/tenants` administration | Application-scoped `tenants.read` | Application-scoped `tenants.create` or `tenants.update` |
-| `/api/v1/authz` | `authz.read` | `authz.manage` |
+| `/api/v1/authz` application catalog | Application-scoped `authz.read` | Application-scoped `authz.manage` |
+| `/api/v1/authz/tenant-role-actors` | `authz.tenant_role_grants.manage` | `authz.tenant_actors.manage` for Actor lifecycle; `authz.tenant_role_grants.manage` for operator Role Grants |
 | `/api/v1/current-accounts` | Current-account summary, ledger, or settings permission matching the operation | Current-account settings permission matching the operation |
 | `/api/v1/receipts` | `ledger.receipts.read` | `ledger.receipts.backfill` |
 | `/api/v1/ledger-entries` | `ledger.receipts.read` | Receipt or ledger-correction permission matching the operation |

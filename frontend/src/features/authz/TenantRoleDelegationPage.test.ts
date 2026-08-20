@@ -48,6 +48,24 @@ const actors: AuthzActor[] = [
       },
     ],
   },
+  {
+    id: "actor-identity-d",
+    actorKey: "manual30e-identity-d",
+    displayName: "Diana Disposable (30E Identity D)",
+    personId: "person-identity-d",
+    active: false,
+    roleGrants: [],
+    binding: {
+      accountId: "account-identity-d",
+      accountLogin: "manual30e.identity-d@example.test",
+      scopeType: "TENANT",
+      tenantId: "tenant-a",
+      membershipId: "membership-identity-d",
+      membershipTenantId: "tenant-a",
+      membershipActive: true,
+      membershipSameTenant: true,
+    },
+  },
 ];
 
 describe("filterTenantRoleActors", () => {
@@ -56,6 +74,7 @@ describe("filterTenantRoleActors", () => {
       filterTenantRoleActors(actors, {
         searchTerm: "sofia",
         roleFilter: "ALL",
+        actorStateFilter: "ALL",
         collaboratorsOnly: false,
       }).map((actor) => actor.id),
     ).toEqual(["actor-expenses"]);
@@ -64,6 +83,7 @@ describe("filterTenantRoleActors", () => {
       filterTenantRoleActors(actors, {
         searchTerm: "collaborator@example.test",
         roleFilter: "ALL",
+        actorStateFilter: "ALL",
         collaboratorsOnly: false,
       }).map((actor) => actor.id),
     ).toEqual(["actor-collaborator"]);
@@ -74,6 +94,7 @@ describe("filterTenantRoleActors", () => {
       filterTenantRoleActors(actors, {
         searchTerm: "",
         roleFilter: "EXPENSE_OPERATOR",
+        actorStateFilter: "ALL",
         collaboratorsOnly: false,
       }).map((actor) => actor.id),
     ).toEqual(["actor-expenses"]);
@@ -82,6 +103,7 @@ describe("filterTenantRoleActors", () => {
       filterTenantRoleActors(actors, {
         searchTerm: "",
         roleFilter: "EARNINGS_OPERATOR",
+        actorStateFilter: "ALL",
         collaboratorsOnly: false,
       }).map((actor) => actor.id),
     ).toEqual(["actor-earnings"]);
@@ -92,16 +114,30 @@ describe("filterTenantRoleActors", () => {
       filterTenantRoleActors(actors, {
         searchTerm: "",
         roleFilter: "NONE",
+        actorStateFilter: "ALL",
         collaboratorsOnly: false,
       }).map((actor) => actor.id),
-    ).toEqual(["actor-collaborator"]);
+    ).toEqual(["actor-collaborator", "actor-identity-d"]);
 
     expect(
       filterTenantRoleActors(actors, {
         searchTerm: "",
         roleFilter: "ALL",
+        actorStateFilter: "ALL",
         collaboratorsOnly: true,
       }).map((actor) => actor.id),
     ).toEqual(["actor-collaborator"]);
+  });
+
+
+  it("finds inactive tenant Actors by Authentication Account login", () => {
+    expect(
+      filterTenantRoleActors(actors, {
+        searchTerm: "manual30e.identity-d@example.test",
+        roleFilter: "ALL",
+        actorStateFilter: "INACTIVE",
+        collaboratorsOnly: false,
+      }).map((actor) => actor.id),
+    ).toEqual(["actor-identity-d"]);
   });
 });

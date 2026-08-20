@@ -35,6 +35,26 @@ func (s fakeActorStore) FindActor(ctx context.Context, lookup authz.ActorLookup)
 	return s.actor, nil
 }
 
+type accountActorRouteStore struct {
+	fakeActorStore
+	accountID  string
+	tenantID   string
+	accountErr error
+}
+
+func (s *accountActorRouteStore) FindAccountActor(_ context.Context, accountID string, tenantID string) (*authz.Actor, error) {
+	s.accountID = accountID
+	s.tenantID = tenantID
+	if s.accountErr != nil {
+		return nil, s.accountErr
+	}
+	return s.actor, nil
+}
+
+func (s *accountActorRouteStore) ListAccountTenantOptions(context.Context, string) ([]authz.TenantOption, error) {
+	return nil, nil
+}
+
 func TestRequirePermissionRejectsMissingActor(t *testing.T) {
 	app := fiber.New()
 	app.Get("/protected", requirePermission(Dependencies{}, authz.PermissionPeopleRead), func(c fiber.Ctx) error {
@@ -608,6 +628,48 @@ func TestAuthenticatedSessionOverridesSpoofedActorHeader(t *testing.T) {
 	}
 	if lookup.ActorID != "session-actor" || lookup.TenantID != "default" {
 		t.Fatalf("expected session lookup, got %#v", lookup)
+	}
+}
+
+func TestAuthenticatedAccountKeepsSessionWhenSelectedTenantActorIsUnavailable(t *testing.T) {
+	store := &accountActorRouteStore{
+		fakeActorStore: fakeActorStore{},
+		accountErr:     authz.ErrTenantActorUnavailable,
+	}
+	deps := Dependencies{ActorStore: store, ActorHeaderMode: actorHeaderModeDisabled}
+
+	app := fiber.New()
+	app.Use(func(c fiber.Ctx) error {
+		authentication.SetSessionContext(c, authentication.SessionResponse{AccountID: "account-1"})
+		return c.Next()
+	})
+	app.Use(authorizationMiddleware(deps))
+	app.Get("/protected", requirePermission(deps, authz.PermissionPeopleRead), func(c fiber.Ctx) error {
+		return c.SendStatus(fiber.StatusNoContent)
+	})
+
+	req := httptest.NewRequest(fiber.MethodGet, "/protected", nil)
+	req.Header.Set(authz.HeaderTenantID, "tenant-a")
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	if resp.StatusCode != fiber.StatusForbidden {
+		t.Fatalf("expected tenant-scoped 403 without ending the Account session, got %d", resp.StatusCode)
+	}
+	if store.accountID != "account-1" || store.tenantID != "tenant-a" {
+		t.Fatalf("expected Account-owned Actor lookup, account=%q tenant=%q", store.accountID, store.tenantID)
+	}
+	var body struct {
+		Error struct {
+			Code string `json:"code"`
+		} `json:"error"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if body.Error.Code != "tenant_actor_unavailable" {
+		t.Fatalf("expected tenant_actor_unavailable, got %q", body.Error.Code)
 	}
 }
 

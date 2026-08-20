@@ -118,6 +118,21 @@ export function listTenantRoleActors(actor: AuthzAdminRequestActor): Promise<Aut
   }).then(normalizeAuthzActorList);
 }
 
+export function setTenantActorActive(
+  actor: AuthzAdminRequestActor,
+  targetActorId: string,
+  input: SetAuthzActorActiveInput,
+): Promise<AuthzActor> {
+  return apiFetch<AuthzActor>(
+    `/authz/tenant-role-actors/${encodeURIComponent(targetActorId)}/active`,
+    {
+      method: "PATCH",
+      headers: authzHeaders(actor),
+      body: JSON.stringify(input),
+    },
+  );
+}
+
 export function grantTenantOperatorRole(
   actor: AuthzAdminRequestActor,
   targetActorId: string,

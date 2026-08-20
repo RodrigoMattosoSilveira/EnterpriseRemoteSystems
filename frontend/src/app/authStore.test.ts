@@ -15,8 +15,6 @@ import type { AuthSession } from "../types/auth";
 
 const session: AuthSession = {
   accountId: "account-1",
-  actorId: "actor-record-1",
-  actorKey: "admin@example.com",
   displayName: "Admin",
   login: "admin@example.com",
   mustChangePassword: false,

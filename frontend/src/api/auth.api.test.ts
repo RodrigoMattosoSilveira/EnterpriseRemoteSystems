@@ -25,6 +25,28 @@ describe("normalizeAuthTenantOptions", () => {
     expect(normalizeAuthTenantOptions(null)).toEqual([]);
   });
 
+  it("preserves Account-owned Actor context advertised for tenant selection", () => {
+    expect(
+      normalizeAuthTenantOptions([
+        {
+          ...tenant,
+          actorRecordId: "actor-tenant-default",
+          actorKey: "person:global-person::tenant::tenant-default",
+          actorScope: "TENANT",
+          membershipId: "membership-tenant-default",
+        },
+      ]),
+    ).toEqual([
+      {
+        ...tenant,
+        actorRecordId: "actor-tenant-default",
+        actorKey: "person:global-person::tenant::tenant-default",
+        actorScope: "TENANT",
+        membershipId: "membership-tenant-default",
+      },
+    ]);
+  });
+
   it("normalizes missing or malformed role codes", () => {
     expect(
       normalizeAuthTenantOptions([

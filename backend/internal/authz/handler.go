@@ -116,6 +116,33 @@ func (h *Handler) GrantTenantOperatorRole(c fiber.Ctx) error {
 	return httpx.Created(c, grant)
 }
 
+func (h *Handler) SetTenantActorActive(c fiber.Ctx) error {
+	actor, err := h.resolveTenantActorManager(c)
+	if err != nil {
+		return writeAuthorizationHTTPError(c, err)
+	}
+	var req SetActorActiveRequest
+	if err := c.Bind().Body(&req); err != nil {
+		return httpx.BadRequest(c, "invalid_body", "Invalid request body")
+	}
+	if req.Active == nil {
+		return httpx.BadRequest(c, "validation_error", "Active state is required")
+	}
+	if actor.RecordID != "" && actor.RecordID == c.Params("id") && !*req.Active {
+		return writeAuthorizationHTTPError(c, ErrForbidden)
+	}
+	updated, err := h.store.SetTenantActorActive(c.Context(), actor.TenantID, c.Params("id"), *req.Active)
+	if err != nil {
+		return h.writeError(c, err)
+	}
+	operation := "authz.tenant_actors.activate"
+	if !*req.Active {
+		operation = "authz.tenant_actors.deactivate"
+	}
+	h.recordAdminAudit(c, PermissionAuthzTenantActorsManage, operation, "authz_actor", updated.ID)
+	return httpx.OK(c, updated)
+}
+
 func (h *Handler) RevokeTenantOperatorRoleGrant(c fiber.Ctx) error {
 	actor, err := h.resolveTenantRoleManager(c)
 	if err != nil {
@@ -127,6 +154,17 @@ func (h *Handler) RevokeTenantOperatorRoleGrant(c fiber.Ctx) error {
 	}
 	h.recordAdminAudit(c, PermissionAuthzTenantRoleGrantsManage, "authz.tenant_role_grants.revoke", "authz_actor_role_grant", grant.ID)
 	return httpx.OK(c, grant)
+}
+
+func (h *Handler) resolveTenantActorManager(c fiber.Ctx) (*Actor, error) {
+	actor, err := h.resolveRequiredActor(c, PermissionAuthzTenantActorsManage)
+	if err != nil {
+		return nil, err
+	}
+	if actor.Scope != ActorScopeTenant || actor.TenantID == "" || actor.TenantID == GlobalTenantScope {
+		return nil, ErrForbidden
+	}
+	return actor, nil
 }
 
 func (h *Handler) resolveTenantRoleManager(c fiber.Ctx) (*Actor, error) {
@@ -273,6 +311,9 @@ func writeAuthorizationHTTPError(c fiber.Ctx, err error) error {
 	}
 	if errors.Is(err, ErrTenantSelectionRequired) {
 		return c.Status(fiber.StatusForbidden).JSON(httpx.APIResponse{Error: &httpx.APIError{Code: "tenant_selection_required", Message: "A specific tenant must be selected for this operation"}})
+	}
+	if errors.Is(err, ErrTenantActorUnavailable) {
+		return c.Status(fiber.StatusForbidden).JSON(httpx.APIResponse{Error: &httpx.APIError{Code: "tenant_actor_unavailable", Message: "The authenticated account has no active actor for the selected tenant"}})
 	}
 	if errors.Is(err, ErrMissingActor) {
 		return c.Status(fiber.StatusUnauthorized).JSON(httpx.APIResponse{Error: &httpx.APIError{Code: "missing_actor", Message: "Authorization actor is required"}})

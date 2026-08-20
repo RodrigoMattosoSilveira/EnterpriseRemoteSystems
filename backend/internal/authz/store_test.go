@@ -582,11 +582,17 @@ func TestGORMStoreTenantRoleDelegationListsMembersWithNoRoleAndOnlyOperatorGrant
 	otherTenantID := createAuthzActor(t, database, "other-tenant-member@example.com", nil, nil)
 	bindActiveTenantMemberActor(t, database, otherTenantID, "tenant-b")
 
+	inactiveID := createAuthzActor(t, database, "inactive-member@example.com", nil, nil)
+	bindActiveTenantMemberActor(t, database, inactiveID, "tenant-a")
+	if err := database.Model(&AuthzActor{}).Where("id = ?", inactiveID).Update("active", false).Error; err != nil {
+		t.Fatalf("deactivate tenant member Actor: %v", err)
+	}
+
 	actors, err := store.ListTenantRoleActors(context.Background(), "tenant-a")
 	if err != nil {
 		t.Fatalf("list tenant role actors: %v", err)
 	}
-	if got, want := len(actors), 3; got != want {
+	if got, want := len(actors), 4; got != want {
 		t.Fatalf("expected %d tenant member actors, got %#v", want, actors)
 	}
 
@@ -603,8 +609,69 @@ func TestGORMStoreTenantRoleDelegationListsMembersWithNoRoleAndOnlyOperatorGrant
 	if got := byKey["tenant-admin-member@example.com"].RoleGrants; len(got) != 0 {
 		t.Fatalf("tenant delegation projection must not expose TENANT_ADMIN grants, got %#v", got)
 	}
+	if inactive := byKey["inactive-member@example.com"]; inactive.ID == "" || inactive.Active {
+		t.Fatalf("expected inactive tenant Actor to remain visible for lifecycle management, got %#v", inactive)
+	} else if inactive.Binding == nil || !inactive.Binding.MembershipActive || inactive.Binding.TenantID != "tenant-a" {
+		t.Fatalf("expected inactive Actor to retain same-tenant Membership facts, got %#v", inactive.Binding)
+	}
 	if _, ok := byKey["other-tenant-member@example.com"]; ok {
 		t.Fatalf("cross-tenant member leaked into tenant-a delegation projection")
+	}
+}
+
+func TestGORMStoreTenantActorLifecycleIsTenantScopedAndRequiresActiveMembershipForActivation(t *testing.T) {
+	database := newAuthzTestDB(t)
+	installTenantRoleDelegationFixtureTables(t, database)
+	store := NewGORMStore(database)
+
+	actorID := createAuthzActor(t, database, "identity-d@example.test", nil, nil)
+	bindActiveTenantMemberActor(t, database, actorID, "tenant-a")
+
+	deactivated, err := store.SetTenantActorActive(context.Background(), "tenant-a", actorID, false)
+	if err != nil {
+		t.Fatalf("deactivate tenant Actor: %v", err)
+	}
+	if deactivated.Active {
+		t.Fatalf("expected tenant Actor inactive, got %#v", deactivated)
+	}
+
+	listed, err := store.ListTenantRoleActors(context.Background(), "tenant-a")
+	if err != nil {
+		t.Fatalf("list tenant Actors after deactivation: %v", err)
+	}
+	if len(listed) != 1 || listed[0].ID != actorID || listed[0].Active {
+		t.Fatalf("expected inactive Actor to remain tenant-visible, got %#v", listed)
+	}
+
+	reactivated, err := store.SetTenantActorActive(context.Background(), "tenant-a", actorID, true)
+	if err != nil {
+		t.Fatalf("reactivate tenant Actor: %v", err)
+	}
+	if !reactivated.Active {
+		t.Fatalf("expected tenant Actor active, got %#v", reactivated)
+	}
+
+	if _, err := store.SetTenantActorActive(context.Background(), "tenant-b", actorID, false); err == nil {
+		t.Fatal("expected cross-tenant Actor lifecycle action to be rejected")
+	}
+
+	if err := database.Exec(
+		"INSERT OR IGNORE INTO reference_data (id, tenant_id, type, code, active) VALUES (?, ?, ?, ?, ?)",
+		"status-inactive-tenant-a", "tenant-a", "person_status", "INACTIVE", true,
+	).Error; err != nil {
+		t.Fatalf("create inactive Membership status: %v", err)
+	}
+	if err := database.Exec(
+		"UPDATE person_tenant_memberships SET status_id = ? WHERE id = ?",
+		"status-inactive-tenant-a", "membership-"+actorID,
+	).Error; err != nil {
+		t.Fatalf("deactivate Membership: %v", err)
+	}
+	if _, err := store.SetTenantActorActive(context.Background(), "tenant-a", actorID, false); err != nil {
+		t.Fatalf("deactivate Actor with inactive Membership: %v", err)
+	}
+	if _, err := store.SetTenantActorActive(context.Background(), "tenant-a", actorID, true); err == nil {
+		t.Fatal("expected Actor activation with inactive Membership to be rejected")
 	}
 }
 

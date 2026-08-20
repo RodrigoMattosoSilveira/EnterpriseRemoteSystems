@@ -2,6 +2,7 @@ import { apiFetch } from "./client";
 import type {
   AuthAccount,
   AuthSession,
+  AuthSelfServiceHome,
   AuthTenantOption,
   ChangePasswordRequest,
   CreateAuthAccountRequest,
@@ -28,6 +29,10 @@ export function loadAuthSession(): Promise<AuthSession> {
   return apiFetch<AuthSession>("/auth/session", { cache: "no-store" });
 }
 
+export function loadAuthSelfServiceHome(): Promise<AuthSelfServiceHome> {
+  return apiFetch<AuthSelfServiceHome>("/auth/self-service", { cache: "no-store" });
+}
+
 export async function loadAuthTenantOptions(): Promise<AuthTenantOption[]> {
   const payload = await apiFetch<unknown>("/auth/tenant-options");
   return normalizeAuthTenantOptions(payload);
@@ -49,6 +54,18 @@ export function normalizeAuthTenantOptions(
     roleCodes: Array.isArray(option.roleCodes)
       ? option.roleCodes.filter((role): role is string => typeof role === "string")
       : [],
+    ...(typeof option.actorRecordId === "string" && option.actorRecordId.trim()
+      ? { actorRecordId: option.actorRecordId }
+      : {}),
+    ...(typeof option.actorKey === "string" && option.actorKey.trim()
+      ? { actorKey: option.actorKey }
+      : {}),
+    ...(typeof option.actorScope === "string" && option.actorScope.trim()
+      ? { actorScope: option.actorScope }
+      : {}),
+    ...(typeof option.membershipId === "string" && option.membershipId.trim()
+      ? { membershipId: option.membershipId }
+      : {}),
   }));
 }
 

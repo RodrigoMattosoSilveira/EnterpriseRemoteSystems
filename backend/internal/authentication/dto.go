@@ -66,14 +66,79 @@ type AccountResponse struct {
 
 type SessionResponse struct {
 	AccountID          string    `json:"accountId"`
-	ActorID            string    `json:"actorId"`
-	ActorKey           string    `json:"actorKey"`
 	DisplayName        string    `json:"displayName"`
-	PersonID           string    `json:"personId,omitempty"`
-	CollaboratorID     string    `json:"collaboratorId,omitempty"`
 	Login              string    `json:"login"`
 	MustChangePassword bool      `json:"mustChangePassword"`
 	ExpiresAt          time.Time `json:"expiresAt"`
+
+	// Bite 30E makes the HTTP session Account-authenticated. These legacy actor
+	// fields remain available only to isolated compatibility tests and route
+	// fallbacks until Bite 30J removes the old single-Actor assumptions; they are
+	// deliberately no longer part of the browser session contract.
+	ActorID        string `json:"-"`
+	ActorKey       string `json:"-"`
+	PersonID       string `json:"-"`
+	CollaboratorID string `json:"-"`
+}
+
+type SelfServicePersonResponse struct {
+	ID                      string `json:"id"`
+	FirstName               string `json:"firstName"`
+	LastName                string `json:"lastName"`
+	Nickname                string `json:"nickname"`
+	CPF                     string `json:"cpf"`
+	RG                      string `json:"rg"`
+	Cellular                string `json:"cellular"`
+	Email                   string `json:"email"`
+	Street1                 string `json:"street1,omitempty"`
+	Street2                 string `json:"street2,omitempty"`
+	State                   string `json:"state,omitempty"`
+	City                    string `json:"city,omitempty"`
+	CEP                     string `json:"cep,omitempty"`
+	Country                 string `json:"country"`
+	BankName                string `json:"bankName,omitempty"`
+	BankNumber              string `json:"bankNumber,omitempty"`
+	CheckingAccount         string `json:"checkingAccount,omitempty"`
+	PIXKey                  string `json:"pixKey,omitempty"`
+	EmergencyName           string `json:"emergencyName,omitempty"`
+	EmergencyCellular       string `json:"emergencyCellular,omitempty"`
+	EmergencyEmail          string `json:"emergencyEmail,omitempty"`
+	ProfileCompletionStatus string `json:"profileCompletionStatus"`
+	CanCreateCollaborator   bool   `json:"canCreateCollaborator"`
+}
+
+type SelfServiceBalanceResponse struct {
+	TenantID       string  `json:"tenantId"`
+	TenantName     string  `json:"tenantName"`
+	ValueUnitID    string  `json:"valueUnitId"`
+	ValueUnitCode  string  `json:"valueUnitCode"`
+	ValueUnitLabel string  `json:"valueUnitLabel"`
+	Balance        float64 `json:"balance"`
+}
+
+type SelfServiceLedgerEntryResponse struct {
+	ID             string    `json:"id"`
+	TenantID       string    `json:"tenantId"`
+	TenantName     string    `json:"tenantName"`
+	CollaboratorID string    `json:"collaboratorId"`
+	ValueUnitID    string    `json:"valueUnitId"`
+	ValueUnitCode  string    `json:"valueUnitCode"`
+	ValueUnitLabel string    `json:"valueUnitLabel"`
+	EntryType      string    `json:"entryType"`
+	Direction      string    `json:"direction"`
+	Amount         float64   `json:"amount"`
+	SignedAmount   float64   `json:"signedAmount"`
+	EffectiveDate  time.Time `json:"effectiveDate"`
+	SourceType     string    `json:"sourceType"`
+	SourceID       string    `json:"sourceId"`
+	Description    string    `json:"description,omitempty"`
+}
+
+type SelfServiceHomeResponse struct {
+	AccountID string                           `json:"accountId"`
+	Person    SelfServicePersonResponse        `json:"person"`
+	Balances  []SelfServiceBalanceResponse     `json:"balances"`
+	Entries   []SelfServiceLedgerEntryResponse `json:"entries"`
 }
 
 type LoginResult struct {
