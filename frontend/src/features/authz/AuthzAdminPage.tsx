@@ -118,6 +118,7 @@ export function AuthzAdminPage() {
   const collaboratorSearchForbidden = isForbiddenApiError(
     actorCollaboratorSearchQuery.error,
   );
+  const createActorForbidden = actorsForbidden;
   const hasLimitedAuthorization =
     rolesForbidden ||
     permissionsForbidden ||
@@ -310,7 +311,7 @@ export function AuthzAdminPage() {
               Create a global/control-plane security actor here. Tenant delegated roles can be granted only to Actors already bound to that tenant through an Authentication Account and active Membership.
             </p>
 
-            {collaboratorsForbidden ? (
+            {createActorForbidden ? (
               <CardPermissionNotice cardName="Create actor" />
             ) : (
               <ActorFields
@@ -321,7 +322,7 @@ export function AuthzAdminPage() {
 
             <button
               className="mt-4 w-full rounded-xl bg-gray-950 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
-              disabled={createActorMutation.isPending || collaboratorsForbidden || !actorForm.collaboratorId}
+              disabled={createActorMutation.isPending || createActorForbidden || !actorForm.collaboratorId}
               type="submit"
             >
               {createActorMutation.isPending ? "Creating..." : "Create Actor"}
