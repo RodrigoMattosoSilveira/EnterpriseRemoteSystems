@@ -83,7 +83,9 @@ export function CreateCollaboratorPage() {
   const activeCollaboratorPersonIds = useMemo(
     () =>
       new Set(
-        collaborators.filter(isActiveCollaborator).map((row) => row.personId),
+        collaborators
+          .filter(isActiveCollaborator)
+          .map((row) => row.legacyPersonId ?? row.personId),
       ),
     [collaborators],
   );
@@ -195,7 +197,10 @@ export function CreateCollaboratorPage() {
 
   const paymentValue = paymentValueValidation.value;
   const submitRequirements = [
-    { met: Boolean(selectedPerson), label: "Select an eligible Person" },
+    {
+      met: Boolean(selectedPerson?.membershipId),
+      label: "Select an eligible active Person–Tenant Membership",
+    },
     {
       met: Boolean(form.journeyStartDate),
       label: "Enter a journey start date",
@@ -272,7 +277,7 @@ export function CreateCollaboratorPage() {
     }
 
     const input: CreateCollaboratorInput = {
-      personId: selectedPerson.id,
+      membershipId: selectedPerson.membershipId ?? "",
       journeyStartDate: form.journeyStartDate,
       paymentMethodId: form.paymentMethodId,
       paymentValue,
@@ -306,7 +311,7 @@ export function CreateCollaboratorPage() {
             New Collaborator
           </h1>
           <p className="text-sm text-gray-500">
-            Create a collaborator journey from a complete Person profile.
+            Create a Collaborator Journey from an active Person–Tenant Membership.
           </p>
         </div>
       </header>
@@ -365,8 +370,8 @@ export function CreateCollaboratorPage() {
                     Select an eligible Person
                   </h2>
                   <p className="mt-1 text-sm text-gray-500">
-                    Only complete People who do not already have an active
-                    Collaborator journey are eligible.
+                    Only active Person–Tenant Memberships whose Person profile is complete
+                    and which have no open Collaborator Journey are eligible.
                   </p>
                 </div>
                 <div className="rounded-xl bg-gray-100 px-3 py-2 text-sm text-gray-700">
@@ -388,10 +393,10 @@ export function CreateCollaboratorPage() {
               {requestedPersonId && !selectedPerson && (
                 <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
                   <p className="font-semibold">
-                    This Person is not currently eligible for a new Collaborator journey.
+                    This Person–Tenant Membership is not currently eligible for a new Collaborator Journey.
                   </p>
                   <p className="mt-1">
-                    They may already have an active Collaborator journey, or their Person profile may no longer be complete. You can choose another eligible Person below.
+                    The Membership may be inactive, may already have an open Collaborator Journey, or the Person profile may no longer be complete. You can choose another eligible Membership below.
                   </p>
                 </div>
               )}
@@ -468,8 +473,8 @@ export function CreateCollaboratorPage() {
                     No eligible People are available.
                   </p>
                   <p className="mt-1">
-                    A Person must be complete and must not already have an
-                    active Collaborator journey before you can select them here.
+                    A Person must have an ACTIVE Membership in this Tenant, a complete profile,
+                    and no open Collaborator Journey before you can select them here.
                   </p>
                   <Link className="mt-2 inline-block underline" to="/people">
                     Go to People
@@ -678,7 +683,7 @@ function DuplicateActiveCollaboratorPanel({
   return (
     <div className="mb-4 rounded-2xl border border-amber-200 bg-amber-50 p-5 text-amber-900 shadow-sm">
       <p className="text-base font-semibold">
-        This Person already has an active Collaborator journey.
+        This Membership already has an open Collaborator Journey.
       </p>
       <p className="mt-1 text-sm">{message}</p>
       {person && (
@@ -704,12 +709,15 @@ function DuplicateActiveCollaboratorPanel({
 function getDuplicateActiveCollaboratorError(error: unknown) {
   if (!(error instanceof ApiError)) return "";
 
-  const personMessage = error.fields?.personId ?? "";
-  if (!personMessage.toLowerCase().includes("active collaborator")) {
+  const membershipMessage = error.fields?.membershipId ?? "";
+  if (
+    !membershipMessage.toLowerCase().includes("open collaborator journey") &&
+    !membershipMessage.toLowerCase().includes("active collaborator")
+  ) {
     return "";
   }
 
-  return personMessage;
+  return membershipMessage;
 }
 
 function ReferenceDataSetupSummary({

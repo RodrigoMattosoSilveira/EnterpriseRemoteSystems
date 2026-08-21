@@ -51,8 +51,11 @@ type TenantSetting struct {
 type CollaboratorJourney struct {
 	BaseModel
 
-	TenantID string `gorm:"type:text;not null;default:default;index" json:"tenantId"`
-	PersonID string `gorm:"type:text;not null;index" json:"personId"`
+	TenantID     string  `gorm:"type:text;not null;default:default;index" json:"tenantId"`
+	MembershipID *string `gorm:"type:text;index" json:"membershipId,omitempty"`
+	// PersonID remains the legacy tenant-owned people.id compatibility foreign key
+	// until Bite 30J removes the pre-Bite-30 projection.
+	PersonID string `gorm:"type:text;not null;index" json:"legacyPersonId"`
 
 	JourneyStartDate time.Time `gorm:"type:date;not null" json:"journeyStartDate"`
 	DefaultEndDate   time.Time `gorm:"type:date;not null" json:"defaultEndDate"`
@@ -76,15 +79,16 @@ type CollaboratorJourney struct {
 	Notes    string     `gorm:"type:text" json:"notes,omitempty"`
 	ClosedAt *time.Time `json:"closedAt,omitempty"`
 
-	Tenant             Tenant              `gorm:"foreignKey:TenantID;constraint:OnUpdate:Restrict,OnDelete:Restrict;" json:"tenant,omitempty"`
-	Person             Person              `gorm:"foreignKey:PersonID;constraint:OnUpdate:Restrict,OnDelete:Restrict;" json:"person,omitempty"`
-	PaymentMethod      ReferenceData       `gorm:"foreignKey:PaymentMethodID;constraint:OnUpdate:Restrict,OnDelete:Restrict;" json:"paymentMethod,omitempty"`
-	Sector             ReferenceData       `gorm:"foreignKey:SectorID;constraint:OnUpdate:Restrict,OnDelete:Restrict;" json:"sector,omitempty"`
-	Location           ReferenceData       `gorm:"foreignKey:LocationID;constraint:OnUpdate:Restrict,OnDelete:Restrict;" json:"location,omitempty"`
-	Task               ReferenceData       `gorm:"foreignKey:TaskID;constraint:OnUpdate:Restrict,OnDelete:Restrict;" json:"task,omitempty"`
-	Status             ReferenceData       `gorm:"foreignKey:StatusID;constraint:OnUpdate:Restrict,OnDelete:Restrict;" json:"status,omitempty"`
-	JourneySettlements []JourneySettlement `gorm:"foreignKey:CollaboratorID" json:"journeySettlements,omitempty"`
-	LedgerReceipts     []LedgerReceipt     `gorm:"foreignKey:CollaboratorID" json:"ledgerReceipts,omitempty"`
+	Tenant             Tenant                 `gorm:"foreignKey:TenantID;constraint:OnUpdate:Restrict,OnDelete:Restrict;" json:"tenant,omitempty"`
+	Membership         PersonTenantMembership `gorm:"foreignKey:MembershipID;constraint:OnUpdate:Restrict,OnDelete:Restrict;" json:"membership,omitempty"`
+	Person             Person                 `gorm:"foreignKey:PersonID;constraint:OnUpdate:Restrict,OnDelete:Restrict;" json:"legacyPerson,omitempty"`
+	PaymentMethod      ReferenceData          `gorm:"foreignKey:PaymentMethodID;constraint:OnUpdate:Restrict,OnDelete:Restrict;" json:"paymentMethod,omitempty"`
+	Sector             ReferenceData          `gorm:"foreignKey:SectorID;constraint:OnUpdate:Restrict,OnDelete:Restrict;" json:"sector,omitempty"`
+	Location           ReferenceData          `gorm:"foreignKey:LocationID;constraint:OnUpdate:Restrict,OnDelete:Restrict;" json:"location,omitempty"`
+	Task               ReferenceData          `gorm:"foreignKey:TaskID;constraint:OnUpdate:Restrict,OnDelete:Restrict;" json:"task,omitempty"`
+	Status             ReferenceData          `gorm:"foreignKey:StatusID;constraint:OnUpdate:Restrict,OnDelete:Restrict;" json:"status,omitempty"`
+	JourneySettlements []JourneySettlement    `gorm:"foreignKey:CollaboratorID" json:"journeySettlements,omitempty"`
+	LedgerReceipts     []LedgerReceipt        `gorm:"foreignKey:CollaboratorID" json:"ledgerReceipts,omitempty"`
 }
 
 type ReferenceData struct {

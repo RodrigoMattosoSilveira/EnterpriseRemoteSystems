@@ -181,7 +181,7 @@ export function CollaboratorDetailPage() {
             </div>
             <Link
               className="rounded-xl border border-gray-300 px-3 py-2 text-sm font-semibold text-gray-700 shadow-sm"
-              to={`/people/${collaborator.personId}`}
+              to={`/people/${collaborator.legacyPersonId ?? collaborator.personId}`}
             >
               View Person
             </Link>
@@ -191,6 +191,10 @@ export function CollaboratorDetailPage() {
             <Info label="Nickname" value={personDisplayName(collaborator)} />
             <Info label="Legal Name" value={personLegalName(collaborator)} />
             <Info label="Person ID" value={collaborator.personId} />
+            <Info label="Membership ID" value={collaborator.membershipId} />
+            {collaborator.legacyPersonId && (
+              <Info label="Legacy Person ID" value={collaborator.legacyPersonId} />
+            )}
           </dl>
         </section>
 

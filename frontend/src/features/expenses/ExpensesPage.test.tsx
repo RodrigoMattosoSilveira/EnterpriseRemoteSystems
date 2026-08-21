@@ -345,7 +345,9 @@ function collaborator(id: string, name: string, personName = name): Collaborator
   return {
     id,
     tenantId: "default",
-    personId: `person-${id}`,
+    membershipId: `membership-${id}`,
+    personId: `global-person-${id}`,
+    legacyPersonId: `person-${id}`,
     personName,
     personNickname: name,
     journeyStartDate: "2026-06-01",

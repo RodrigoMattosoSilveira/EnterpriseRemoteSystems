@@ -20,7 +20,9 @@ const authorizationActor: AuthzCurrentActor = {
 const collaborator: Collaborator = {
   id: "collab-1",
   tenantId: "default",
-  personId: "person-1",
+  membershipId: "membership-1",
+  personId: "global-person-1",
+  legacyPersonId: "person-1",
   personName: "Ana Silva",
   personNickname: "Ana",
   journeyStartDate: "2026-05-01",
@@ -82,6 +84,9 @@ describe("CollaboratorDetailPage", () => {
     expect(textNode("Nickname")).toBeTruthy();
     expect(textNode("Legal Name")).toBeTruthy();
     expect(textNode("Ana Silva")).toBeTruthy();
+    expect(textNode("global-person-1")).toBeTruthy();
+    expect(textNode("membership-1")).toBeTruthy();
+    expect(textNode("person-1")).toBeTruthy();
     expect(linkByText("View Person")?.getAttribute("href")).toBe(
       "/people/person-1",
     );
