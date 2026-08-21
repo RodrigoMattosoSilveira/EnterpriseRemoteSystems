@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -45,11 +46,28 @@ func TestAuthenticationHandlerIssuesReadsAndClearsSessionCookie(t *testing.T) {
 	var loginPayload struct {
 		Data SessionResponse `json:"data"`
 	}
-	if err := json.NewDecoder(loginResponse.Body).Decode(&loginPayload); err != nil {
+	loginBytes, err := io.ReadAll(loginResponse.Body)
+	if err != nil {
+		t.Fatalf("read login response: %v", err)
+	}
+	if err := json.Unmarshal(loginBytes, &loginPayload); err != nil {
 		t.Fatalf("decode login response: %v", err)
 	}
 	if loginPayload.Data.Login != "cookie@example.com" {
 		t.Fatalf("expected normalized login in data.login, got %q", loginPayload.Data.Login)
+	}
+	var loginEnvelope map[string]any
+	if err := json.Unmarshal(loginBytes, &loginEnvelope); err != nil {
+		t.Fatalf("decode raw login response: %v", err)
+	}
+	loginData, ok := loginEnvelope["data"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected login data object, got %#v", loginEnvelope["data"])
+	}
+	for _, legacyField := range []string{"actorId", "actorKey", "personId", "collaboratorId"} {
+		if _, exists := loginData[legacyField]; exists {
+			t.Fatalf("Bite 30E session contract must be Account-authenticated; unexpected %s in %#v", legacyField, loginData)
+		}
 	}
 	cookies := loginResponse.Cookies()
 	if len(cookies) != 1 {

@@ -38,14 +38,15 @@ Human --> Account
 Account --> Session
 
 Account --> Person : ordinary user
+Person --> Self : base own-resource access
 Person --> Membership
 Account --> TenantActor
 TenantActor --> Membership
 
 Membership --> Journey
 
-TenantActor --> Self
 TenantActor --> Grants
+TenantActor --> Journey : activates current\ntenant/collaborator context
 
 Account --> GlobalActor : Application Admin only
 GlobalActor --> Control

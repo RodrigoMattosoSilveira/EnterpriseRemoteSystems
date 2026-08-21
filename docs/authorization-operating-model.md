@@ -1,10 +1,12 @@
 # Persisted authorization actor operating model
 
-ERS uses the login-backed HTTP session as the authoritative actor identity for protected application requests. The browser sends only the HTTP-only session cookie and an optional selected-tenant hint; it does not choose its authorization actor.
+ERS uses the login-backed HTTP session as the authoritative Authentication Account identity for protected application requests. The browser sends only the HTTP-only session cookie and an optional selected-tenant hint; the backend resolves the Account-owned Actor for that tenant and the browser never chooses its authorization actor.
 
 ## Authoritative permissions
 
-For normal application requests, the backend resolves the session to its persisted `authz_actors` record and loads active role grants from `authz_actor_role_grants` for the selected tenant. Effective permissions come only from active persisted roles and permissions.
+For normal tenant application requests, the backend resolves the Account session plus selected tenant to the appropriate persisted `authz_actors` record, then loads intrinsic tenant-context permissions and active delegated role grants for that Actor. Effective tenant permissions come only from the persisted Account/Actor/Membership identity and active persisted delegated authorization.
+
+Base own-resource Person self-service is intentionally independent of Tenant Actor resolution. An authenticated ordinary Authentication Account may read only the global Person bound through `auth_account_people` and that Person's read-only Current Account projection even when no Tenant Actor/Membership is currently active. This Account-level path does not grant tenant workspace access, does not create a Current Actor, and does not confer delegated tenant authority. Current Account rows retain Tenant provenance.
 
 `X-Actor-Permissions` is no longer accepted as a fallback when the authorization store is available. This prevents a browser, proxy, or API client from granting itself wildcard permissions.
 
@@ -26,7 +28,9 @@ Production and long-lived environments should keep `AUTHZ_BOOTSTRAP_ENABLED=fals
 
 ## Actor lifecycle safeguards
 
-Authorization administrators can activate and deactivate actors from the Authorization page. ERS prevents:
+Application Administrators can manage the application Actor catalog. Tenant Administrators can manage only Account-bound Tenant Actors for their selected Tenant: inactive Actors remain visible, and the Tenant Administrator may reactivate an Actor only while its same-tenant Person–Tenant Membership is ACTIVE. A missing Tenant Actor is created through the Person Authentication workflow, which preserves the canonical Authentication Account → Actor → Membership binding rather than creating a free-floating Actor. Tenant operator Role Grants still require an ACTIVE Actor and ACTIVE same-tenant Membership.
+
+ERS prevents:
 
 - an operating actor from deactivating itself;
 - an operating actor from revoking one of its own role grants;
@@ -37,4 +41,6 @@ Create a second application administrator and verify it before retiring or chang
 
 ## Tenant selection
 
-The same authenticated actor may have grants for more than one tenant. `X-Tenant-ID` is retained only as a tenant-selection hint. The backend validates that selection against the session actor's persisted grants. Global application-administrator grants apply to every tenant; tenant-scoped grants apply only to their persisted tenant.
+The HTTP session authenticates an Authentication Account, not one tenant Actor. `X-Tenant-ID` is retained only as a tenant-selection hint. For an ordinary Account, the backend resolves the Account-owned active TENANT Actor whose binding and ACTIVE Person–Tenant Membership both belong to that tenant. Selecting another tenant therefore selects another Actor while the Account session remains unchanged. A missing/inactive tenant Actor fails with `tenant_actor_unavailable`; ERS never borrows an Actor from another tenant.
+
+GLOBAL Application Administrator Accounts remain APPLICATION scoped. Until Bite 30H removes the transitional standing tenant compatibility, their tenant selector may enumerate all active tenants, but every selection continues to resolve the same GLOBAL Actor rather than creating or assuming a tenant Actor.

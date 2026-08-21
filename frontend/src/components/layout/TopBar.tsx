@@ -1,16 +1,29 @@
 import type { AuthSession, AuthTenantOption } from "../../types/auth";
+import type { AuthzCurrentActor } from "../../types/authz";
 import { TenantSelector } from "./TenantSelector";
 
-export function TopBar({ session, tenants, selectedTenantId, onTenantChange, onLogout }: {
+export function TopBar({
+  session,
+  tenants,
+  selectedTenantId,
+  effectiveActor,
+  onTenantChange,
+  onLogout,
+}: {
   session: AuthSession;
   tenants: AuthTenantOption[];
   selectedTenantId: string;
+  effectiveActor: AuthzCurrentActor;
   onTenantChange: (tenantId: string) => void;
   onLogout: () => void;
 }) {
   return (
     <header className="flex flex-col gap-4 border-b border-slate-200 bg-white px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
-      <div>
+      <div
+        data-effective-actor-id={effectiveActor.actorRecordId}
+        data-effective-actor-scope={effectiveActor.scope}
+        data-effective-actor-key={effectiveActor.actorKey}
+      >
         <p className="text-lg font-bold text-slate-950">
           {session.displayName || session.login}
         </p>

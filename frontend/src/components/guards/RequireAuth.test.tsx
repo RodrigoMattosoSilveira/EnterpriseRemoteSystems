@@ -25,8 +25,6 @@ const authenticatedState: AuthState = {
   status: "authenticated",
   session: {
     accountId: "account-session-test",
-    actorId: "actor-session-test",
-    actorKey: "session-test",
     login: "session-test@example.com",
     displayName: "Session Test",
     mustChangePassword: false,

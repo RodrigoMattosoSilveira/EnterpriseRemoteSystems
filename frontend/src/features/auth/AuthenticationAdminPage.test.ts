@@ -86,13 +86,13 @@ describe("password reset token eligibility", () => {
     updatedAt: "2026-08-06T00:00:00Z",
   };
 
-  it("allows reset-token issuance only for an active account and actor", () => {
+  it("treats password reset eligibility as Account-level", () => {
     expect(canIssuePasswordResetToken(account)).toBe(true);
     expect(canIssuePasswordResetToken({ ...account, active: false })).toBe(false);
-    expect(canIssuePasswordResetToken({ ...account, actorActive: false })).toBe(false);
+    expect(canIssuePasswordResetToken({ ...account, actorActive: false })).toBe(true);
   });
 
-  it("uses every linked Actor when evaluating a multi-tenant account", () => {
+  it("does not require any active tenant Actor for password recovery", () => {
     expect(
       canIssuePasswordResetToken({
         ...account,
@@ -113,7 +113,7 @@ describe("password reset token eligibility", () => {
             displayName: "Actor B",
             scope: "TENANT",
             tenantId: "tenant-b",
-            active: true,
+            active: false,
             primary: false,
           },
         ],

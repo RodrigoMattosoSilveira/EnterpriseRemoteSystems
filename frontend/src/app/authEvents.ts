@@ -5,6 +5,7 @@ type AuthenticationRequiredListener = (reason: AuthenticationInterruptionReason)
 
 const authenticationRequiredListeners = new Set<AuthenticationRequiredListener>();
 const forbiddenListeners = new Set<Listener>();
+const tenantActorUnavailableListeners = new Set<Listener>();
 
 export function subscribeAuthenticationRequired(listener: AuthenticationRequiredListener): () => void {
   authenticationRequiredListeners.add(listener);
@@ -24,4 +25,13 @@ export function subscribeForbidden(listener: Listener): () => void {
 
 export function notifyForbidden(): void {
   for (const listener of forbiddenListeners) listener();
+}
+
+export function subscribeTenantActorUnavailable(listener: Listener): () => void {
+  tenantActorUnavailableListeners.add(listener);
+  return () => { tenantActorUnavailableListeners.delete(listener); };
+}
+
+export function notifyTenantActorUnavailable(): void {
+  for (const listener of tenantActorUnavailableListeners) listener();
 }

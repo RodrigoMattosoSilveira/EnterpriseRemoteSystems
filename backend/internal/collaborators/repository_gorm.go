@@ -2,10 +2,10 @@ package collaborators
 
 import (
 	"context"
-	"strings"
 
 	"enterpriseremotesystems/backend/internal/db"
 	"enterpriseremotesystems/backend/internal/shared/tenantctx"
+	"enterpriseremotesystems/backend/internal/shared/textsearch"
 	"gorm.io/gorm"
 )
 
@@ -39,32 +39,9 @@ func (r *gormRepository) List(ctx context.Context, filter CollaboratorListFilter
 	}
 
 	page, pageSize := normalizedPage(filter.Page, filter.PageSize)
-	search := normalizeCollaboratorSearch(filter.Search)
+	search := textsearch.Normalize(filter.Search)
 	if search != "" {
-		var candidates []db.CollaboratorJourney
-		if err := q.
-			Order("collaborator_journeys.created_at DESC, collaborator_journeys.journey_start_date DESC").
-			Find(&candidates).Error; err != nil {
-			return nil, 0, err
-		}
-
-		filtered := make([]db.CollaboratorJourney, 0, len(candidates))
-		for _, candidate := range candidates {
-			if collaboratorMatchesSearch(candidate, search) {
-				filtered = append(filtered, candidate)
-			}
-		}
-
-		total = int64(len(filtered))
-		start := (page - 1) * pageSize
-		if start >= len(filtered) {
-			return []db.CollaboratorJourney{}, total, nil
-		}
-		end := start + pageSize
-		if end > len(filtered) {
-			end = len(filtered)
-		}
-		return filtered[start:end], total, nil
+		q = applyCollaboratorSearch(q, search)
 	}
 
 	if err := q.Count(&total).Error; err != nil {
@@ -89,32 +66,17 @@ func normalizedPage(page, pageSize int) (int, int) {
 	return page, pageSize
 }
 
-func collaboratorMatchesSearch(row db.CollaboratorJourney, normalizedSearch string) bool {
-	fullName := strings.TrimSpace(strings.Join([]string{row.Person.FirstName, row.Person.LastName}, " "))
-	for _, value := range []string{
-		row.Person.FirstName,
-		row.Person.LastName,
-		row.Person.Nickname,
-		fullName,
-	} {
-		if strings.Contains(normalizeCollaboratorSearch(value), normalizedSearch) {
-			return true
-		}
-	}
-	return false
-}
+func applyCollaboratorSearch(q *gorm.DB, normalizedSearch string) *gorm.DB {
+	const searchAlias = "collaborator_search_index"
 
-var collaboratorSearchReplacer = strings.NewReplacer(
-	"á", "a", "à", "a", "â", "a", "ã", "a", "ä", "a",
-	"é", "e", "è", "e", "ê", "e", "ë", "e",
-	"í", "i", "ì", "i", "î", "i", "ï", "i",
-	"ó", "o", "ò", "o", "ô", "o", "õ", "o", "ö", "o",
-	"ú", "u", "ù", "u", "û", "u", "ü", "u",
-	"ç", "c",
-)
+	q = q.Joins(
+		"JOIN people_search_index AS " + searchAlias +
+			" ON " + searchAlias + ".person_id = collaborator_journeys.person_id" +
+			" AND " + searchAlias + ".tenant_id = collaborator_journeys.tenant_id",
+	)
 
-func normalizeCollaboratorSearch(value string) string {
-	return collaboratorSearchReplacer.Replace(strings.ToLower(strings.TrimSpace(value)))
+	pattern := "%" + textsearch.EscapeLIKE(normalizedSearch) + "%"
+	return q.Where(searchAlias+".search_text LIKE ? ESCAPE '\\'", pattern)
 }
 
 func (r *gormRepository) ListCandidatePeople(ctx context.Context) ([]db.Person, error) {

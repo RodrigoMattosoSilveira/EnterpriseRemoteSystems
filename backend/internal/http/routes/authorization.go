@@ -80,7 +80,7 @@ func resolveAuthenticatedActor(c fiber.Ctx, deps Dependencies, session authentic
 		return nil, authz.ErrTenantSelectionRequired
 	}
 
-	// Bite 30C authenticates the Account, then resolves the Account-owned Actor
+	// Bite 30E keeps the Session Account-authenticated, then resolves the Account-owned Actor
 	// for the requested tenant. This is the authoritative path for normal
 	// session traffic and is what allows one human Account to own one Actor per
 	// Tenant. Verified compatibility/test sessions may omit AccountID; those
@@ -357,6 +357,9 @@ func writeAuthorizationError(c fiber.Ctx, err error) error {
 	}
 	if errors.Is(err, authz.ErrTenantSelectionRequired) {
 		return c.Status(fiber.StatusForbidden).JSON(httpx.APIResponse{Error: &httpx.APIError{Code: "tenant_selection_required", Message: "A specific tenant must be selected for this operation"}})
+	}
+	if errors.Is(err, authz.ErrTenantActorUnavailable) {
+		return c.Status(fiber.StatusForbidden).JSON(httpx.APIResponse{Error: &httpx.APIError{Code: "tenant_actor_unavailable", Message: "The authenticated account has no active actor for the selected tenant"}})
 	}
 	if errors.Is(err, authz.ErrMissingActor) {
 		return c.Status(fiber.StatusUnauthorized).JSON(httpx.APIResponse{Error: &httpx.APIError{Code: "missing_actor", Message: "Authorization actor is required"}})

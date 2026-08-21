@@ -150,6 +150,113 @@ func (r *GORMRepository) ActorHasActiveTenantAccess(ctx context.Context, actorID
 	return len(options) > 0, nil
 }
 
+func (r *GORMRepository) FindSelfServiceHome(ctx context.Context, accountID string) (SelfServiceHomeRecord, error) {
+	accountID = strings.TrimSpace(accountID)
+	if accountID == "" {
+		return SelfServiceHomeRecord{}, gorm.ErrRecordNotFound
+	}
+
+	var person SelfServicePersonRecord
+	personResult := r.database.WithContext(ctx).
+		Table("auth_account_people ap").
+		Select(`gp.id,
+			gp.first_name,
+			gp.last_name,
+			gp.nickname,
+			gp.cpf,
+			gp.rg,
+			gp.cellular,
+			gp.email,
+			COALESCE(gp.street1, '') AS street1,
+			COALESCE(gp.street2, '') AS street2,
+			COALESCE(gp.state, '') AS state,
+			COALESCE(gp.city, '') AS city,
+			COALESCE(gp.cep, '') AS cep,
+			gp.country,
+			COALESCE(gp.bank_name, '') AS bank_name,
+			COALESCE(gp.bank_number, '') AS bank_number,
+			COALESCE(gp.checking_account, '') AS checking_account,
+			COALESCE(gp.pix_key, '') AS pix_key,
+			COALESCE(gp.emergency_name, '') AS emergency_name,
+			COALESCE(gp.emergency_cellular, '') AS emergency_cellular,
+			COALESCE(gp.emergency_email, '') AS emergency_email,
+			gp.profile_completion_status,
+			gp.can_create_collaborator`).
+		Joins("JOIN global_people gp ON gp.id = ap.person_id").
+		Where("ap.account_id = ?", accountID).
+		Limit(1).
+		Scan(&person)
+	if personResult.Error != nil {
+		return SelfServiceHomeRecord{}, fmt.Errorf("find self-service Person: %w", personResult.Error)
+	}
+	if personResult.RowsAffected == 0 {
+		return SelfServiceHomeRecord{}, gorm.ErrRecordNotFound
+	}
+
+	// Bite 30G will move financial ownership directly onto Person + Tenant.
+	// Until then, this read-only self-service projection follows the preserved
+	// Membership -> legacy Person -> Collaborator Journey provenance so an
+	// authenticated Person can inspect their own read-only Current Account even
+	// when no tenant Actor is currently active. Membership ACTIVE state is
+	// deliberately not required: own-resource visibility survives Membership/
+	// Actor lifecycle changes while every row retains Tenant provenance.
+	var balances []SelfServiceBalanceRecord
+	if err := r.database.WithContext(ctx).
+		Table("auth_account_people ap").
+		Select(`le.tenant_id,
+			t.name AS tenant_name,
+			le.value_unit_id,
+			vu.code AS value_unit_code,
+			vu.label AS value_unit_label,
+			SUM(CASE WHEN le.direction = 'CREDIT' THEN le.amount ELSE -le.amount END) AS balance`).
+		Joins("JOIN person_tenant_memberships m ON m.person_id = ap.person_id AND m.legacy_person_id IS NOT NULL").
+		Joins("JOIN collaborator_journeys cj ON cj.tenant_id = m.tenant_id AND cj.person_id = m.legacy_person_id").
+		Joins("JOIN ledger_entries le ON le.tenant_id = cj.tenant_id AND le.collaborator_id = cj.id AND le.active = ?", true).
+		Joins("JOIN tenants t ON t.id = le.tenant_id").
+		Joins("JOIN reference_data vu ON vu.id = le.value_unit_id AND vu.tenant_id = le.tenant_id").
+		Where("ap.account_id = ?", accountID).
+		Group("le.tenant_id, t.name, le.value_unit_id, vu.code, vu.label, vu.sort_order").
+		Having("ABS(SUM(CASE WHEN le.direction = 'CREDIT' THEN le.amount ELSE -le.amount END)) > 0.00000001").
+		Order("t.name ASC, vu.sort_order ASC, vu.label ASC").
+		Scan(&balances).Error; err != nil {
+		return SelfServiceHomeRecord{}, fmt.Errorf("list self-service Current Account balances: %w", err)
+	}
+
+	var entries []SelfServiceLedgerEntryRecord
+	if err := r.database.WithContext(ctx).
+		Table("auth_account_people ap").
+		Select(`le.id,
+			le.tenant_id,
+			t.name AS tenant_name,
+			le.collaborator_id,
+			le.value_unit_id,
+			vu.code AS value_unit_code,
+			vu.label AS value_unit_label,
+			le.entry_type,
+			le.direction,
+			le.amount,
+			le.effective_date,
+			le.source_type,
+			le.source_id,
+			COALESCE(le.description, '') AS description`).
+		Joins("JOIN person_tenant_memberships m ON m.person_id = ap.person_id AND m.legacy_person_id IS NOT NULL").
+		Joins("JOIN collaborator_journeys cj ON cj.tenant_id = m.tenant_id AND cj.person_id = m.legacy_person_id").
+		Joins("JOIN ledger_entries le ON le.tenant_id = cj.tenant_id AND le.collaborator_id = cj.id AND le.active = ?", true).
+		Joins("JOIN tenants t ON t.id = le.tenant_id").
+		Joins("JOIN reference_data vu ON vu.id = le.value_unit_id AND vu.tenant_id = le.tenant_id").
+		Where("ap.account_id = ?", accountID).
+		Order("le.effective_date DESC, le.created_at DESC, le.id DESC").
+		Scan(&entries).Error; err != nil {
+		return SelfServiceHomeRecord{}, fmt.Errorf("list self-service Current Account entries: %w", err)
+	}
+
+	return SelfServiceHomeRecord{
+		Person:   person,
+		Balances: balances,
+		Entries:  entries,
+	}, nil
+}
+
 func (r *GORMRepository) CreateAccount(ctx context.Context, account Account) (AccountRecord, error) {
 	accountID := account.ID
 	err := r.database.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
