@@ -61,7 +61,6 @@ func (s *service) Create(ctx context.Context, req CreateCollaboratorRequest, act
 	}
 
 	var membership *db.PersonTenantMembership
-	var err error
 	if strings.TrimSpace(req.MembershipID) != "" {
 		membership, err = s.repo.FindActiveMembershipByID(ctx, strings.TrimSpace(req.MembershipID))
 	} else {
