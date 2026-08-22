@@ -2,7 +2,9 @@ export type Collaborator = {
   id: string;
   tenantId: string;
 
+  membershipId: string;
   personId: string;
+  legacyPersonId?: string;
   personName?: string;
   personNickname?: string;
 
@@ -41,7 +43,7 @@ export type Collaborator = {
 };
 
 export type CreateCollaboratorInput = {
-  personId: string;
+  membershipId: string;
   journeyStartDate: string;
   paymentMethodId: string;
   paymentValue: number;

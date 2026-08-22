@@ -1,0 +1,12 @@
+DROP TRIGGER IF EXISTS trg_collaborator_membership_protect_history_delete;
+DROP TRIGGER IF EXISTS trg_collaborator_membership_identity_immutable;
+DROP TRIGGER IF EXISTS trg_collaborator_membership_single_open_journey_update;
+DROP TRIGGER IF EXISTS trg_collaborator_membership_single_open_journey_insert;
+DROP TRIGGER IF EXISTS trg_collaborator_membership_active_insert;
+DROP TRIGGER IF EXISTS trg_collaborator_membership_consistency_insert;
+DROP TRIGGER IF EXISTS trg_collaborator_membership_required_insert;
+
+DROP INDEX IF EXISTS idx_collaborator_journeys_tenant_membership_closed;
+DROP INDEX IF EXISTS idx_collaborator_journeys_membership_id;
+
+ALTER TABLE collaborator_journeys DROP COLUMN membership_id;

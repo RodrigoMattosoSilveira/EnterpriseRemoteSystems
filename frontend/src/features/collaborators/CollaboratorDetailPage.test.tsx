@@ -20,7 +20,9 @@ const authorizationActor: AuthzCurrentActor = {
 const collaborator: Collaborator = {
   id: "collab-1",
   tenantId: "default",
-  personId: "person-1",
+  membershipId: "membership-1",
+  personId: "global-person-1",
+  legacyPersonId: "person-1",
   personName: "Ana Silva",
   personNickname: "Ana",
   journeyStartDate: "2026-05-01",
@@ -82,6 +84,9 @@ describe("CollaboratorDetailPage", () => {
     expect(textNode("Nickname")).toBeTruthy();
     expect(textNode("Legal Name")).toBeTruthy();
     expect(textNode("Ana Silva")).toBeTruthy();
+    expect(textNode("global-person-1")).toBeTruthy();
+    expect(textNode("membership-1")).toBeTruthy();
+    expect(textNode("person-1")).toBeTruthy();
     expect(linkByText("View Person")?.getAttribute("href")).toBe(
       "/people/person-1",
     );
@@ -214,7 +219,7 @@ describe("CollaboratorDetailPage", () => {
     expect(textNode("Gold balance starts at 8.500 grams.")).toBeFalsy();
   });
 
-  it("shows closed lifecycle state", async () => {
+  it("shows Journey Closed prominently and hides settlement for a closed Journey", async () => {
     mockFetch(async (url) => {
       if (url === "/api/v1/collaborators/collab-closed") {
         return jsonResponse({
@@ -231,9 +236,10 @@ describe("CollaboratorDetailPage", () => {
 
     renderCollaboratorDetailPage("/collaborators/collab-closed");
 
-    await waitForText("Closed");
+    await waitForText("Journey Closed");
     expect(textNode("2026-06-15T10:00:00Z")).toBeTruthy();
-    expect(textNode("0 days remaining")).toBeTruthy();
+    expect(textNode("0 days remaining")).toBeFalsy();
+    expect(textNode("Journey Settlement")).toBeFalsy();
   });
 
   it("shows backend errors", async () => {

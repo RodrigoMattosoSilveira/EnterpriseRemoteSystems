@@ -10,12 +10,29 @@ import (
 const dateLayout = "2006-01-02"
 
 func ToDTO(row db.CollaboratorJourney) CollaboratorDTO {
+	personID := strings.TrimSpace(row.Membership.PersonID)
+	personNameValue := globalPersonName(row.Membership.Person)
+	personNickname := strings.TrimSpace(row.Membership.Person.Nickname)
+	if personID == "" {
+		personID = strings.TrimSpace(row.Person.GlobalPersonID)
+	}
+	if personID == "" {
+		personID = strings.TrimSpace(row.PersonID)
+	}
+	if personNameValue == "" {
+		personNameValue = personName(row.Person)
+	}
+	if personNickname == "" {
+		personNickname = strings.TrimSpace(row.Person.Nickname)
+	}
 	return CollaboratorDTO{
 		ID:                             row.ID,
 		TenantID:                       row.TenantID,
-		PersonID:                       row.PersonID,
-		PersonName:                     personName(row.Person),
-		PersonNickname:                 strings.TrimSpace(row.Person.Nickname),
+		MembershipID:                   collaboratorMembershipID(row.MembershipID),
+		PersonID:                       personID,
+		LegacyPersonID:                 row.PersonID,
+		PersonName:                     personNameValue,
+		PersonNickname:                 personNickname,
 		JourneyStartDate:               formatDate(row.JourneyStartDate),
 		DefaultEndDate:                 formatDate(row.DefaultEndDate),
 		ExtensionDays:                  row.ExtensionDays,
@@ -67,6 +84,17 @@ func ToDTOList(rows []db.CollaboratorJourney) []CollaboratorDTO {
 		out = append(out, ToDTO(row))
 	}
 	return out
+}
+
+func collaboratorMembershipID(value *string) string {
+	if value == nil {
+		return ""
+	}
+	return strings.TrimSpace(*value)
+}
+
+func globalPersonName(person db.GlobalPerson) string {
+	return strings.TrimSpace(strings.Join([]string{person.FirstName, person.LastName}, " "))
 }
 
 func personName(person db.Person) string {

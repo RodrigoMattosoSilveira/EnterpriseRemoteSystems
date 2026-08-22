@@ -33,6 +33,7 @@ export function CollaboratorDetailPage() {
   const { data: collaborator, isLoading, error } = useCollaborator(id);
   const [editing, setEditing] = useState(false);
   const [flash, setFlash] = useState("");
+  const [journeyCloseNotice, setJourneyCloseNotice] = useState("");
 
   if (isLoading) {
     return (
@@ -80,6 +81,12 @@ export function CollaboratorDetailPage() {
 
   return (
     <main className="min-h-screen bg-gray-50">
+      {journeyCloseNotice ? (
+        <JourneyCloseSuccessDialog
+          message={journeyCloseNotice}
+          onDismiss={() => setJourneyCloseNotice("")}
+        />
+      ) : null}
       <header className="sticky top-0 z-10 border-b bg-white/95 px-4 py-4 backdrop-blur">
         <div className="mx-auto max-w-5xl">
           {canBrowseCollaborators ? (
@@ -110,11 +117,22 @@ export function CollaboratorDetailPage() {
                 Started {formatDate(collaborator.journeyStartDate)} · Projected
                 end {formatDate(collaborator.projectedEndDate)}
               </p>
-              <JourneyDaysRemaining
-                projectedEndDate={collaborator.projectedEndDate}
-                closedAt={collaborator.closedAt}
-                className="mt-1 block text-sm"
-              />
+              {collaborator.closedAt ? (
+                <div
+                  role="status"
+                  className="mt-3 inline-flex items-center gap-2 rounded-xl border border-gray-300 bg-gray-100 px-3 py-2 text-sm font-semibold text-gray-900"
+                >
+                  <span>Journey Closed</span>
+                  <span className="font-medium text-gray-600">
+                    {formatDate(collaborator.closedAt)}
+                  </span>
+                </div>
+              ) : (
+                <JourneyDaysRemaining
+                  projectedEndDate={collaborator.projectedEndDate}
+                  className="mt-1 block text-sm"
+                />
+              )}
             </div>
 
             <div className="flex flex-col items-start gap-3 sm:items-end">
@@ -181,7 +199,7 @@ export function CollaboratorDetailPage() {
             </div>
             <Link
               className="rounded-xl border border-gray-300 px-3 py-2 text-sm font-semibold text-gray-700 shadow-sm"
-              to={`/people/${collaborator.personId}`}
+              to={`/people/${collaborator.legacyPersonId ?? collaborator.personId}`}
             >
               View Person
             </Link>
@@ -191,6 +209,10 @@ export function CollaboratorDetailPage() {
             <Info label="Nickname" value={personDisplayName(collaborator)} />
             <Info label="Legal Name" value={personLegalName(collaborator)} />
             <Info label="Person ID" value={collaborator.personId} />
+            <Info label="Membership ID" value={collaborator.membershipId} />
+            {collaborator.legacyPersonId && (
+              <Info label="Legacy Person ID" value={collaborator.legacyPersonId} />
+            )}
           </dl>
         </section>
 
@@ -275,17 +297,17 @@ export function CollaboratorDetailPage() {
           </dl>
         </section>
 
-        {canPreviewSettlement ? (
+        {canPreviewSettlement && !collaborator.closedAt ? (
           <JourneySettlementPanel
             collaboratorId={collaborator.id}
             projectedEndDate={collaborator.projectedEndDate}
-            closedAt={collaborator.closedAt}
+            onJourneyClosed={setJourneyCloseNotice}
           />
         ) : null}
 
         <CollaboratorNotes
           collaborator={collaborator}
-          canRefreshGoldBalance={canPreviewSettlement}
+          canRefreshGoldBalance={canPreviewSettlement && !collaborator.closedAt}
         />
       </section>
     </main>
@@ -764,6 +786,49 @@ function notesWithCurrentGoldBalance(notes: string, goldGramBalance?: number) {
 
 function formatGoldGramsForNotes(value: number) {
   return value.toFixed(3);
+}
+
+function JourneyCloseSuccessDialog({
+  message,
+  onDismiss,
+}: {
+  message: string;
+  onDismiss: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-950/60 p-4">
+      <div
+        role="alertdialog"
+        aria-modal="true"
+        aria-labelledby="journey-close-success-title"
+        aria-describedby="journey-close-success-description"
+        className="w-full max-w-md rounded-2xl border border-green-200 bg-white p-6 shadow-2xl"
+      >
+        <h2
+          id="journey-close-success-title"
+          className="text-xl font-bold text-green-900"
+        >
+          Journey Closed
+        </h2>
+        <p
+          id="journey-close-success-description"
+          className="mt-3 text-base font-semibold text-gray-800"
+        >
+          {message}
+        </p>
+        <div className="mt-6 flex justify-end">
+          <button
+            type="button"
+            autoFocus
+            className="rounded-xl bg-green-800 px-4 py-2 text-sm font-semibold text-white shadow-sm"
+            onClick={onDismiss}
+          >
+            Continue
+          </button>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 function StatusBadge({ collaborator }: { collaborator: Collaborator }) {

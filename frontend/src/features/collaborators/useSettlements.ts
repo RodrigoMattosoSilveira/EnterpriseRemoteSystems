@@ -7,6 +7,7 @@ import {
 } from "../../api/collaborators.api";
 import type {
   CloseJourneyInput,
+  CloseJourneyResult,
   PartialPayoutInput,
   ZeroGoldInput,
 } from "../../types/settlements";
@@ -38,21 +39,28 @@ export function usePartialPayout(collaboratorId: string) {
   );
 }
 
-export function useCloseJourney(collaboratorId: string) {
-  return useSettlementMutation(collaboratorId, (input: CloseJourneyInput) =>
-    closeJourney(collaboratorId, input),
+export function useCloseJourney(
+  collaboratorId: string,
+  onJourneyClosed?: (result: CloseJourneyResult) => void,
+) {
+  return useSettlementMutation(
+    collaboratorId,
+    (input: CloseJourneyInput) => closeJourney(collaboratorId, input),
+    onJourneyClosed,
   );
 }
 
 function useSettlementMutation<TInput, TResult>(
   collaboratorId: string,
   mutationFn: (input: TInput) => Promise<TResult>,
+  onSuccessBeforeInvalidate?: (result: TResult) => void,
 ) {
   const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn,
-    onSuccess: async () => {
+    onSuccess: async (result) => {
+      onSuccessBeforeInvalidate?.(result);
       await Promise.all([
         queryClient.invalidateQueries({
           queryKey: settlementQueryKeys.preview(collaboratorId),
