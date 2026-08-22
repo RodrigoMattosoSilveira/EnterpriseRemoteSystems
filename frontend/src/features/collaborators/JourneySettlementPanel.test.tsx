@@ -176,6 +176,33 @@ describe("JourneySettlementPanel", () => {
     });
   });
 
+  it("notifies the detail page immediately after a Journey closes", async () => {
+    const onJourneyClosed = vi.fn();
+
+    vi.spyOn(globalThis.crypto, "randomUUID").mockReturnValue(
+      "request-close-success" as ReturnType<Crypto["randomUUID"]>,
+    );
+    mockSettlementFetch();
+
+    renderPanel({ onJourneyClosed });
+    await waitForText("R$ 900,00");
+
+    await clickButton("Close Journey");
+    await setFieldValue("Reason code", "END_OF_JOURNEY_SETTLEMENT");
+    await setFieldValue(
+      "Reason text",
+      "Close the Journey after final settlement verification.",
+    );
+    await clickButton("Confirm reauthentication");
+    await clickSubmitButton("Close Journey");
+
+    await waitFor(() =>
+      onJourneyClosed.mock.calls.some(
+        ([message]) => message === "Journey closed successfully.",
+      ),
+    );
+  });
+
   it("does not expose backend settlement secrets to operators", async () => {
     mockSettlementFetch();
 
@@ -258,6 +285,15 @@ function mockSettlementFetch(options: MockSettlementFetchOptions = {}) {
       return jsonResponse(actors);
     }
 
+    if (url.includes("/close")) {
+      return jsonResponse({
+        settlement: { id: "settlement-close" },
+        ledgerEntries: [],
+        journeyStatus: "CLOSED",
+        closedAt: "2026-08-21T12:00:00Z",
+      });
+    }
+
     if (url.includes("/payout")) {
       return jsonResponse({
         settlement: { id: "settlement-1" },
@@ -276,7 +312,11 @@ function jsonResponse(data: unknown) {
   });
 }
 
-function renderPanel() {
+function renderPanel({
+  onJourneyClosed,
+}: {
+  onJourneyClosed?: (message: string) => void;
+} = {}) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
@@ -288,6 +328,7 @@ function renderPanel() {
           <JourneySettlementPanel
             collaboratorId="collab-1"
             projectedEndDate="2099-12-31"
+            onJourneyClosed={onJourneyClosed}
           />
         </MemoryRouter>
       </QueryClientProvider>,
@@ -306,6 +347,14 @@ async function clickButton(text: string) {
     node.textContent?.includes(text),
   );
   if (!button) throw new Error(`Button not found: ${text}`);
+  await act(async () => button.click());
+}
+
+async function clickSubmitButton(text: string) {
+  const button = Array.from(
+    container.querySelectorAll<HTMLButtonElement>('button[type="submit"]'),
+  ).find((node) => node.textContent?.includes(text));
+  if (!button) throw new Error(`Submit button not found: ${text}`);
   await act(async () => button.click());
 }
 
@@ -348,11 +397,15 @@ function setNativeValue(
   descriptor?.set?.call(control, value);
 }
 
-async function waitForText(text: string) {
+async function waitFor(assertion: () => boolean) {
   const until = Date.now() + 1500;
   while (Date.now() < until) {
     await act(async () => new Promise((resolve) => setTimeout(resolve, 10)));
-    if (textNode(text)) return;
+    if (assertion()) return;
   }
-  throw new Error(`Timed out waiting for ${text}`);
+  throw new Error("Timed out waiting for assertion");
+}
+
+async function waitForText(text: string) {
+  await waitFor(() => Boolean(textNode(text)));
 }

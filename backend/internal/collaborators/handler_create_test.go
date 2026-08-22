@@ -35,6 +35,8 @@ type apiErrorResponse struct {
 type apiPersonResponse struct {
 	Data struct {
 		ID                    string `json:"id"`
+		GlobalPersonID        string `json:"globalPersonId"`
+		MembershipID          string `json:"membershipId"`
 		CanCreateCollaborator bool   `json:"canCreateCollaborator"`
 	} `json:"data"`
 }
@@ -43,7 +45,9 @@ type apiCollaboratorResponse struct {
 	Data struct {
 		ID                             string   `json:"id"`
 		TenantID                       string   `json:"tenantId"`
+		MembershipID                   string   `json:"membershipId"`
 		PersonID                       string   `json:"personId"`
+		LegacyPersonID                 string   `json:"legacyPersonId"`
 		PersonName                     string   `json:"personName"`
 		PersonNickname                 string   `json:"personNickname"`
 		JourneyStartDate               string   `json:"journeyStartDate"`
@@ -85,11 +89,13 @@ type apiCollaboratorListResponse struct {
 type apiCollaboratorCandidatesResponse struct {
 	Data []struct {
 		ID                    string `json:"id"`
+		GlobalPersonID        string `json:"globalPersonId"`
+		MembershipID          string `json:"membershipId"`
 		CanCreateCollaborator bool   `json:"canCreateCollaborator"`
 	} `json:"data"`
 }
 
-func TestListCandidatesRecomputesCompletionAndExcludesActiveJourney(t *testing.T) {
+func TestListCandidatesUsesMembershipAndAuthoritativePersonAndExcludesOpenJourney(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "app.db")
 	server, cleanup, err := apppkg.Bootstrap(apppkg.Config{
 		Env:                       "test",
@@ -125,21 +131,74 @@ func TestListCandidatesRecomputesCompletionAndExcludesActiveJourney(t *testing.T
 		t.Fatalf("expected one candidate, got %+v", candidates.Data)
 	}
 	if candidates.Data[0].ID != person.Data.ID {
-		t.Fatalf("expected candidate %q, got %q", person.Data.ID, candidates.Data[0].ID)
+		t.Fatalf("expected legacy candidate Person %q, got %q", person.Data.ID, candidates.Data[0].ID)
+	}
+	if candidates.Data[0].MembershipID != person.Data.MembershipID {
+		t.Fatalf("expected candidate Membership %q, got %q", person.Data.MembershipID, candidates.Data[0].MembershipID)
+	}
+	if candidates.Data[0].GlobalPersonID != person.Data.GlobalPersonID {
+		t.Fatalf("expected candidate Person %q, got %q", person.Data.GlobalPersonID, candidates.Data[0].GlobalPersonID)
 	}
 	if !candidates.Data[0].CanCreateCollaborator {
-		t.Fatal("expected candidate completion to be recomputed from current Person data")
+		t.Fatal("expected authoritative global Person completion to make the Membership eligible")
 	}
 
-	created := createCollaborator(t, server, validCollaboratorPayload(person.Data.ID, nil))
-	if created.Data.PersonID != person.Data.ID {
-		t.Fatalf("expected collaborator for person %q, got %q", person.Data.ID, created.Data.PersonID)
+	created := createCollaborator(t, server, validCollaboratorPayload(person.Data.MembershipID, nil))
+	if created.Data.MembershipID != person.Data.MembershipID {
+		t.Fatalf("expected collaborator for membership %q, got %q", person.Data.MembershipID, created.Data.MembershipID)
+	}
+	if created.Data.PersonID != person.Data.GlobalPersonID {
+		t.Fatalf("expected canonical Person ID %q, got %q", person.Data.GlobalPersonID, created.Data.PersonID)
+	}
+	if created.Data.LegacyPersonID != person.Data.ID {
+		t.Fatalf("expected legacy Person ID %q, got %q", person.Data.ID, created.Data.LegacyPersonID)
 	}
 
 	candidates = listCollaboratorCandidates(t, server)
 	if len(candidates.Data) != 0 {
 		t.Fatalf("expected active collaborator Person to be removed from candidates, got %+v", candidates.Data)
 	}
+}
+
+func TestInactiveMembershipIsNotEligibleForCollaboratorCreation(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "app.db")
+	server, cleanup, err := apppkg.Bootstrap(apppkg.Config{
+		Env:                       "test",
+		HTTPAddr:                  ":0",
+		DBPath:                    dbPath,
+		JWTSecret:                 "test-secret",
+		DisableRouteAuthorization: true,
+	})
+	if err != nil {
+		t.Fatalf("bootstrap test server: %v", err)
+	}
+	defer cleanup()
+
+	database, err := db.Open(dbPath)
+	if err != nil {
+		t.Fatalf("open test database: %v", err)
+	}
+	sqlDB, err := database.DB()
+	if err != nil {
+		t.Fatalf("get test sql database: %v", err)
+	}
+	defer sqlDB.Close()
+
+	person := createPerson(t, server, validCompletePersonPayload(1, nil))
+	if err := database.Model(&db.PersonTenantMembership{}).
+		Where("id = ?", person.Data.MembershipID).
+		Update("status_id", "ref-person-status-inactive").Error; err != nil {
+		t.Fatalf("deactivate membership: %v", err)
+	}
+
+	candidates := listCollaboratorCandidates(t, server)
+	if len(candidates.Data) != 0 {
+		t.Fatalf("expected inactive Membership to be excluded, got %+v", candidates.Data)
+	}
+
+	res := postCollaborator(t, server, validCollaboratorPayload(person.Data.MembershipID, nil))
+	defer res.Body.Close()
+	assertValidationError(t, res, "membershipId", "An active Person–Tenant Membership in this tenant is required")
 }
 
 func TestCreateCollaboratorFromCompletePersonReturnsCreated(t *testing.T) {
@@ -151,7 +210,7 @@ func TestCreateCollaboratorFromCompletePersonReturnsCreated(t *testing.T) {
 		t.Fatal("expected test person to be eligible for collaborator creation")
 	}
 
-	res := postCollaborator(t, server, validCollaboratorPayload(person.Data.ID, nil))
+	res := postCollaborator(t, server, validCollaboratorPayload(person.Data.MembershipID, nil))
 	defer res.Body.Close()
 
 	if res.StatusCode != http.StatusCreated {
@@ -169,8 +228,14 @@ func TestCreateCollaboratorFromCompletePersonReturnsCreated(t *testing.T) {
 	if body.Data.TenantID != "default" {
 		t.Fatalf("expected tenantId default, got %q", body.Data.TenantID)
 	}
-	if body.Data.PersonID != person.Data.ID {
-		t.Fatalf("expected personId %q, got %q", person.Data.ID, body.Data.PersonID)
+	if body.Data.MembershipID != person.Data.MembershipID {
+		t.Fatalf("expected membershipId %q, got %q", person.Data.MembershipID, body.Data.MembershipID)
+	}
+	if body.Data.PersonID != person.Data.GlobalPersonID {
+		t.Fatalf("expected canonical personId %q, got %q", person.Data.GlobalPersonID, body.Data.PersonID)
+	}
+	if body.Data.LegacyPersonID != person.Data.ID {
+		t.Fatalf("expected legacyPersonId %q, got %q", person.Data.ID, body.Data.LegacyPersonID)
 	}
 	if body.Data.PersonName != "Person1 Silva" {
 		t.Fatalf("expected personName %q, got %q", "Person1 Silva", body.Data.PersonName)
@@ -207,7 +272,7 @@ func TestCreateGoldCommissionCollaboratorDefaultsReplacementRules(t *testing.T) 
 
 	person := createPerson(t, server, validCompletePersonPayload(1, nil))
 
-	res := postCollaborator(t, server, validCollaboratorPayload(person.Data.ID, map[string]any{
+	res := postCollaborator(t, server, validCollaboratorPayload(person.Data.MembershipID, map[string]any{
 		"paymentMethodId":       "ref-method-commission",
 		"paymentValue":          7.5,
 		"goldCommissionPercent": 7.5,
@@ -240,7 +305,7 @@ func TestCreateGoldCommissionCollaboratorAcceptsCustomReplacementRules(t *testin
 
 	person := createPerson(t, server, validCompletePersonPayload(1, nil))
 
-	res := postCollaborator(t, server, validCollaboratorPayload(person.Data.ID, map[string]any{
+	res := postCollaborator(t, server, validCollaboratorPayload(person.Data.MembershipID, map[string]any{
 		"paymentMethodId":                "ref-method-commission",
 		"paymentValue":                   8.25,
 		"goldCommissionPercent":          8.25,
@@ -272,7 +337,7 @@ func TestCreateGoldCommissionCollaboratorAcceptsEightDecimalPercent(t *testing.T
 
 	person := createPerson(t, server, validCompletePersonPayload(1, nil))
 
-	res := postCollaborator(t, server, validCollaboratorPayload(person.Data.ID, map[string]any{
+	res := postCollaborator(t, server, validCollaboratorPayload(person.Data.MembershipID, map[string]any{
 		"paymentMethodId":       "ref-method-commission",
 		"paymentValue":          7.12345678,
 		"goldCommissionPercent": 7.12345678,
@@ -299,7 +364,7 @@ func TestCreateGoldCommissionCollaboratorRejectsTooManyPercentDecimals(t *testin
 
 	person := createPerson(t, server, validCompletePersonPayload(1, nil))
 
-	res := postCollaborator(t, server, validCollaboratorPayload(person.Data.ID, map[string]any{
+	res := postCollaborator(t, server, validCollaboratorPayload(person.Data.MembershipID, map[string]any{
 		"paymentMethodId":       "ref-method-commission",
 		"paymentValue":          7.123456789,
 		"goldCommissionPercent": 7.123456789,
@@ -315,7 +380,7 @@ func TestCreateDailyBRLCollaboratorRejectsTooManyAmountDecimals(t *testing.T) {
 
 	person := createPerson(t, server, validCompletePersonPayload(1, nil))
 
-	res := postCollaborator(t, server, validCollaboratorPayload(person.Data.ID, map[string]any{
+	res := postCollaborator(t, server, validCollaboratorPayload(person.Data.MembershipID, map[string]any{
 		"paymentValue":   150.123,
 		"dailyBrlAmount": 150.123,
 	}))
@@ -329,7 +394,7 @@ func TestUpdateCollaboratorEditsAssignmentPaymentAndExtensionDays(t *testing.T) 
 	defer cleanup()
 
 	person := createPerson(t, server, validCompletePersonPayload(1, nil))
-	created := createCollaborator(t, server, validCollaboratorPayload(person.Data.ID, nil))
+	created := createCollaborator(t, server, validCollaboratorPayload(person.Data.MembershipID, nil))
 	sector := createReferenceData(t, server, "sector", map[string]any{"code": "PROCESSING", "label": "Processing", "sortOrder": 20})
 	location := createReferenceData(t, server, "location", map[string]any{"code": "NORTH_PIT", "label": "North Pit", "sortOrder": 20})
 	task := createReferenceData(t, server, "task", map[string]any{"code": "SUPERVISOR", "label": "Supervisor", "sortOrder": 20})
@@ -388,7 +453,7 @@ func TestUpdateCollaboratorSavesPlanningAvailability(t *testing.T) {
 	defer cleanup()
 
 	person := createPerson(t, server, validCompletePersonPayload(1, nil))
-	created := createCollaborator(t, server, validCollaboratorPayload(person.Data.ID, nil))
+	created := createCollaborator(t, server, validCollaboratorPayload(person.Data.MembershipID, nil))
 
 	res := postJSON(t, server, http.MethodPut, collaboratorsURL+created.Data.ID, map[string]any{
 		"sectorId":             "ref-sector-mining",
@@ -443,14 +508,14 @@ func TestListCollaboratorsOrdersNewestCreatedFirst(t *testing.T) {
 	defer cleanup()
 
 	olderPerson := createPerson(t, server, validCompletePersonPayload(1, nil))
-	createCollaborator(t, server, validCollaboratorPayload(olderPerson.Data.ID, map[string]any{
+	createCollaborator(t, server, validCollaboratorPayload(olderPerson.Data.MembershipID, map[string]any{
 		"journeyStartDate": "2099-01-01",
 	}))
 
 	time.Sleep(time.Millisecond)
 
 	newerPerson := createPerson(t, server, validCompletePersonPayload(2, nil))
-	newerCollaborator := createCollaborator(t, server, validCollaboratorPayload(newerPerson.Data.ID, map[string]any{
+	newerCollaborator := createCollaborator(t, server, validCollaboratorPayload(newerPerson.Data.MembershipID, map[string]any{
 		"journeyStartDate": "2026-06-01",
 	}))
 
@@ -481,8 +546,8 @@ func TestListCollaboratorsFiltersByPersonNameAndNickname(t *testing.T) {
 		"nickname":  "Mina",
 	}))
 
-	firstCollaborator := createCollaborator(t, server, validCollaboratorPayload(firstPerson.Data.ID, nil))
-	createCollaborator(t, server, validCollaboratorPayload(secondPerson.Data.ID, map[string]any{
+	firstCollaborator := createCollaborator(t, server, validCollaboratorPayload(firstPerson.Data.MembershipID, nil))
+	createCollaborator(t, server, validCollaboratorPayload(secondPerson.Data.MembershipID, map[string]any{
 		"journeyStartDate": "2026-06-02",
 	}))
 
@@ -518,7 +583,7 @@ func TestListCollaboratorsFiltersByPersonNameAndNickname(t *testing.T) {
 		"lastName":  "Costa",
 		"nickname":  "Áurea",
 	}))
-	accentedCollaborator := createCollaborator(t, server, validCollaboratorPayload(accentedPerson.Data.ID, map[string]any{
+	accentedCollaborator := createCollaborator(t, server, validCollaboratorPayload(accentedPerson.Data.MembershipID, map[string]any{
 		"journeyStartDate": "2026-06-03",
 	}))
 
@@ -536,7 +601,7 @@ func TestUpdateCollaboratorRejectsNegativeExtensionDays(t *testing.T) {
 	defer cleanup()
 
 	person := createPerson(t, server, validCompletePersonPayload(1, nil))
-	created := createCollaborator(t, server, validCollaboratorPayload(person.Data.ID, nil))
+	created := createCollaborator(t, server, validCollaboratorPayload(person.Data.MembershipID, nil))
 
 	res := postJSON(t, server, http.MethodPut, collaboratorsURL+created.Data.ID, map[string]any{
 		"sectorId":        "ref-sector-mining",
@@ -558,10 +623,10 @@ func TestCreateCollaboratorRejectsIncompletePerson(t *testing.T) {
 
 	person := createPerson(t, server, validPersonalOnlyPayload(1, nil))
 
-	res := postCollaborator(t, server, validCollaboratorPayload(person.Data.ID, nil))
+	res := postCollaborator(t, server, validCollaboratorPayload(person.Data.MembershipID, nil))
 	defer res.Body.Close()
 
-	assertValidationError(t, res, "personId", "Person profile must be complete before creating a collaborator")
+	assertValidationError(t, res, "membershipId", "Person profile must be complete before creating a Collaborator")
 }
 
 func TestCreateCollaboratorRejectsDuplicateActiveJourneyForPerson(t *testing.T) {
@@ -569,14 +634,14 @@ func TestCreateCollaboratorRejectsDuplicateActiveJourneyForPerson(t *testing.T) 
 	defer cleanup()
 
 	person := createPerson(t, server, validCompletePersonPayload(1, nil))
-	createCollaborator(t, server, validCollaboratorPayload(person.Data.ID, nil))
+	createCollaborator(t, server, validCollaboratorPayload(person.Data.MembershipID, nil))
 
-	res := postCollaborator(t, server, validCollaboratorPayload(person.Data.ID, map[string]any{
+	res := postCollaborator(t, server, validCollaboratorPayload(person.Data.MembershipID, map[string]any{
 		"journeyStartDate": "2026-07-01",
 	}))
 	defer res.Body.Close()
 
-	assertValidationError(t, res, "personId", "Person already has an active collaborator journey")
+	assertValidationError(t, res, "membershipId", "Membership already has an open Collaborator Journey")
 }
 
 func TestCreateCollaboratorRejectsInactiveReferenceData(t *testing.T) {
@@ -591,7 +656,7 @@ func TestCreateCollaboratorRejectsInactiveReferenceData(t *testing.T) {
 		t.Fatalf("expected deactivate reference data status %d, got %d", http.StatusOK, res.StatusCode)
 	}
 
-	res = postCollaborator(t, server, validCollaboratorPayload(person.Data.ID, nil))
+	res = postCollaborator(t, server, validCollaboratorPayload(person.Data.MembershipID, nil))
 	defer res.Body.Close()
 
 	assertValidationError(t, res, "paymentMethodId", "Payment method must be active reference data of type method")
@@ -603,7 +668,7 @@ func TestCreateCollaboratorRejectsInvalidReferenceData(t *testing.T) {
 
 	person := createPerson(t, server, validCompletePersonPayload(1, nil))
 
-	res := postCollaborator(t, server, validCollaboratorPayload(person.Data.ID, map[string]any{
+	res := postCollaborator(t, server, validCollaboratorPayload(person.Data.MembershipID, map[string]any{
 		"paymentMethodId": "ref-method-not-real",
 	}))
 	defer res.Body.Close()
@@ -618,7 +683,7 @@ func TestCreateCollaboratorRejectsMissingRequiredFields(t *testing.T) {
 	res := postCollaborator(t, server, map[string]any{})
 	defer res.Body.Close()
 
-	assertValidationError(t, res, "personId", "Required")
+	assertValidationError(t, res, "membershipId", "Required")
 }
 
 func newTestServer(t *testing.T) (*fiber.App, func()) {
@@ -761,9 +826,9 @@ func postJSON(t *testing.T, server *fiber.App, method string, url string, payloa
 	return res
 }
 
-func validCollaboratorPayload(personID string, overrides map[string]any) map[string]any {
+func validCollaboratorPayload(membershipID string, overrides map[string]any) map[string]any {
 	payload := map[string]any{
-		"personId":         personID,
+		"membershipId":     membershipID,
 		"journeyStartDate": "2026-06-01",
 		"paymentMethodId":  "ref-method-daily",
 		"paymentValue":     150.0,

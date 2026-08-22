@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { AuthzActor } from "../../types/authz";
 import type { AuthAccount } from "../../types/auth";
+import type { Collaborator } from "../../types/collaborators";
 import type { Person } from "../../types/people";
 import {
   authenticationAccountForActor,
@@ -123,10 +124,12 @@ describe("password reset token eligibility", () => {
 });
 
 describe("authentication account collaborator selection", () => {
-  const collaborator = {
+  const collaborator: Collaborator = {
     id: "collaborator-expense",
     tenantId: "default",
-    personId: "person-expense",
+    membershipId: "membership-expense",
+    personId: "global-person-expense",
+    legacyPersonId: "person-expense",
     personName: "Maria da Silva",
     personNickname: "Mari",
     journeyStartDate: "2026-08-01",
@@ -176,7 +179,7 @@ describe("authentication account collaborator selection", () => {
       ...eligibleActor,
       id: "actor-person",
       collaboratorId: undefined,
-      personId: collaborator.personId,
+      personId: collaborator.legacyPersonId,
       roleGrants: eligibleActor.roleGrants?.map((grant) => ({
         ...grant,
         actorId: "actor-person",

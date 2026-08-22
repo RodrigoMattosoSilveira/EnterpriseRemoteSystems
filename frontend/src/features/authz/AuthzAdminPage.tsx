@@ -563,7 +563,7 @@ function ActorFields({
     onChange({
       ...value,
       collaboratorId: collaborator.id,
-      personId: collaborator.personId,
+      personId: collaborator.legacyPersonId ?? collaborator.personId,
       actorKey: defaultActorKey(collaborator),
       displayName: collaboratorDisplayName(collaborator),
     });

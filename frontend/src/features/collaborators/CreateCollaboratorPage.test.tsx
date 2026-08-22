@@ -16,6 +16,8 @@ type FetchCall = {
 
 const completePerson: Person = {
   id: "person-complete-1",
+  globalPersonId: "global-person-complete-1",
+  membershipId: "membership-complete-1",
   firstName: "Ana",
   lastName: "Silva",
   nickname: "Ana",
@@ -32,6 +34,8 @@ const completePerson: Person = {
 
 const secondCompletePerson: Person = {
   id: "person-complete-2",
+  globalPersonId: "global-person-complete-2",
+  membershipId: "membership-complete-2",
   firstName: "Carla",
   lastName: "Moura",
   nickname: "Carla",
@@ -48,6 +52,8 @@ const secondCompletePerson: Person = {
 
 const incompletePerson: Person = {
   id: "person-incomplete-1",
+  globalPersonId: "global-person-incomplete-1",
+  membershipId: "membership-incomplete-1",
   firstName: "Bruno",
   lastName: "Costa",
   nickname: "Bruno",
@@ -64,6 +70,8 @@ const incompletePerson: Person = {
 
 const justCompletedPerson: Person = {
   id: "person-just-completed",
+  globalPersonId: "global-person-just-completed",
+  membershipId: "membership-just-completed",
   firstName: "Joao",
   lastName: "Novo",
   nickname: "Joao",
@@ -92,7 +100,9 @@ const justCompletedPerson: Person = {
 const activeCollaboratorForSecondPerson: Collaborator = {
   id: "collab-active-1",
   tenantId: "default",
-  personId: "person-complete-2",
+  membershipId: "membership-complete-2",
+  personId: "global-person-complete-2",
+  legacyPersonId: "person-complete-2",
   personName: "Carla Moura (Carla)",
   journeyStartDate: "2026-05-01",
   defaultEndDate: "2026-07-30",
@@ -278,6 +288,8 @@ describe("CreateCollaboratorPage", () => {
     const accentedPerson: Person = {
       ...completePerson,
       id: "person-accented",
+      globalPersonId: "global-person-accented",
+      membershipId: "membership-accented",
       firstName: "Aurelia",
       lastName: "Souza",
       nickname: "Áurea",
@@ -469,7 +481,7 @@ describe("CreateCollaboratorPage", () => {
     const createCall = fetchCalls.find((call) => call.method === "POST");
     expect(createCall?.url).toBe("/api/v1/collaborators");
     expect(createCall?.body).toMatchObject({
-      personId: "person-complete-1",
+      membershipId: "membership-complete-1",
       journeyStartDate: "2026-05-29",
       statusId: "ref-collaborator-status-active",
       sectorId: "ref-sector-mining",
@@ -533,7 +545,7 @@ describe("CreateCollaboratorPage", () => {
 
     expect(textNode("Collaborators route reached")).toBeFalsy();
     expect(
-      textNode("This Person already has an active Collaborator journey."),
+      textNode("This Membership already has an open Collaborator Journey."),
     ).toBeFalsy();
   });
 
@@ -545,7 +557,7 @@ describe("CreateCollaboratorPage", () => {
             code: "validation_failed",
             message: "Validation failed",
             fields: {
-              personId:
+              membershipId:
                 "Person profile is incomplete. Missing sections: Bank, Emergency.",
             },
           },
@@ -569,14 +581,14 @@ describe("CreateCollaboratorPage", () => {
     await clickButton("Create Collaborator");
 
     await waitForText("Validation failed");
-    await waitForText("personId:");
+    await waitForText("membershipId:");
     await waitForText(
       "Person profile is incomplete. Missing sections: Bank, Emergency.",
     );
 
     expect(textNode("Collaborators route reached")).toBeFalsy();
     expect(
-      textNode("This Person already has an active Collaborator journey."),
+      textNode("This Membership already has an open Collaborator Journey."),
     ).toBeFalsy();
   });
 
@@ -588,7 +600,7 @@ describe("CreateCollaboratorPage", () => {
             code: "validation_failed",
             message: "Validation failed",
             fields: {
-              personId: "Person already has an active collaborator journey",
+              membershipId: "Membership already has an open Collaborator Journey",
             },
           },
         },
@@ -611,9 +623,9 @@ describe("CreateCollaboratorPage", () => {
     await clickButton("Create Collaborator");
 
     await waitForText(
-      "This Person already has an active Collaborator journey.",
+      "This Membership already has an open Collaborator Journey.",
     );
-    await waitForText("Person already has an active collaborator journey");
+    await waitForText("Membership already has an open Collaborator Journey");
     await waitForText("Selected Person:");
     await waitForText("Ana Silva (Ana)");
 
@@ -677,7 +689,9 @@ function mockCreateCollaboratorFetch({
   candidates?: Person[];
 } = {}) {
   const activePersonIds = new Set(
-    collaborators.filter((row) => !row.closedAt).map((row) => row.personId),
+    collaborators
+      .filter((row) => !row.closedAt)
+      .map((row) => row.legacyPersonId ?? row.personId),
   );
   const candidateRows =
     candidates ??
@@ -719,7 +733,9 @@ function mockCreateCollaboratorFetch({
             data: {
               id: "collab-1",
               tenantId: "default",
-              personId: "person-complete-1",
+              membershipId: "membership-complete-1",
+              personId: "global-person-complete-1",
+              legacyPersonId: "person-complete-1",
               personName: "Ana Silva (Ana)",
               journeyStartDate: "2026-05-29",
               defaultEndDate: "2026-08-27",

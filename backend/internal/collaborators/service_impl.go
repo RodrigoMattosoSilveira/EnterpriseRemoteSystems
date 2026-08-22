@@ -35,19 +35,18 @@ func (s *service) List(ctx context.Context, filter CollaboratorListFilter) ([]Co
 }
 
 func (s *service) ListCandidates(ctx context.Context) ([]peoplepkg.PersonDTO, error) {
-	rows, err := s.repo.ListCandidatePeople(ctx)
+	rows, err := s.repo.ListCandidateMemberships(ctx)
 	if err != nil {
 		return nil, err
 	}
 
 	items := make([]peoplepkg.PersonDTO, 0, len(rows))
-	for _, row := range rows {
-		person := peoplepkg.ToDTO(row)
-		if person.CanCreateCollaborator {
-			items = append(items, person)
+	for _, membership := range rows {
+		if membership.LegacyPersonID == nil {
+			continue
 		}
+		items = append(items, membershipCandidateToPersonDTO(membership))
 	}
-
 	return items, nil
 }
 
@@ -61,20 +60,28 @@ func (s *service) Create(ctx context.Context, req CreateCollaboratorRequest, act
 		return nil, ValidationError{Fields: map[string]string{"journeyStartDate": "Journey start date must be YYYY-MM-DD"}}
 	}
 
-	person, err := s.repo.FindPersonByID(ctx, strings.TrimSpace(req.PersonID))
-	if err != nil {
-		return nil, err
+	var membership *db.PersonTenantMembership
+	if strings.TrimSpace(req.MembershipID) != "" {
+		membership, err = s.repo.FindActiveMembershipByID(ctx, strings.TrimSpace(req.MembershipID))
+	} else {
+		membership, err = s.repo.FindActiveMembershipByLegacyPersonID(ctx, strings.TrimSpace(req.PersonID))
 	}
-	if !peoplepkg.ToDTO(*person).CanCreateCollaborator {
-		return nil, ValidationError{Fields: map[string]string{"personId": "Person profile must be complete before creating a collaborator"}}
+	if err != nil {
+		return nil, ValidationError{Fields: map[string]string{"membershipId": "An active Person–Tenant Membership in this tenant is required"}}
+	}
+	if membership.LegacyPersonID == nil || strings.TrimSpace(*membership.LegacyPersonID) == "" {
+		return nil, ValidationError{Fields: map[string]string{"membershipId": "Membership is missing its legacy Person compatibility projection"}}
+	}
+	if !membership.Person.CanCreateCollaborator {
+		return nil, ValidationError{Fields: map[string]string{"membershipId": "Person profile must be complete before creating a Collaborator"}}
 	}
 
-	activeExists, err := s.repo.ExistsActiveJourneyForPerson(ctx, person.ID)
+	activeExists, err := s.repo.ExistsOpenJourneyForMembership(ctx, membership.ID)
 	if err != nil {
 		return nil, err
 	}
 	if activeExists {
-		return nil, ValidationError{Fields: map[string]string{"personId": "Person already has an active collaborator journey"}}
+		return nil, ValidationError{Fields: map[string]string{"membershipId": "Membership already has an open Collaborator Journey"}}
 	}
 
 	paymentMethod, err := s.validatePaymentMethod(ctx, req.PaymentMethodID)
@@ -101,10 +108,12 @@ func (s *service) Create(ctx context.Context, req CreateCollaboratorRequest, act
 	now := time.Now().UTC()
 	defaultEnd := startDate.AddDate(0, 0, 90)
 
+	membershipID := membership.ID
 	collaborator := &db.CollaboratorJourney{
 		BaseModel:                      db.BaseModel{ID: ids.New(), CreatedAt: now, UpdatedAt: now},
 		TenantID:                       tenantctx.TenantID(ctx),
-		PersonID:                       strings.TrimSpace(req.PersonID),
+		MembershipID:                   &membershipID,
+		PersonID:                       strings.TrimSpace(*membership.LegacyPersonID),
 		JourneyStartDate:               startDate,
 		DefaultEndDate:                 defaultEnd,
 		ExtensionDays:                  0,
@@ -206,6 +215,46 @@ func (s *service) GetByID(ctx context.Context, id string) (*CollaboratorDTO, err
 		return nil, err
 	}
 	return ptr(ToDTO(*row)), nil
+}
+
+func membershipCandidateToPersonDTO(membership db.PersonTenantMembership) peoplepkg.PersonDTO {
+	legacyID := ""
+	if membership.LegacyPersonID != nil {
+		legacyID = strings.TrimSpace(*membership.LegacyPersonID)
+	}
+	person := membership.Person
+	return peoplepkg.PersonDTO{
+		ID:                      legacyID,
+		GlobalPersonID:          membership.PersonID,
+		MembershipID:            membership.ID,
+		TenantID:                membership.TenantID,
+		FirstName:               person.FirstName,
+		LastName:                person.LastName,
+		Nickname:                person.Nickname,
+		CPF:                     person.CPF,
+		RG:                      person.RG,
+		Cellular:                person.Cellular,
+		Email:                   person.Email,
+		Street1:                 person.Street1,
+		Street2:                 person.Street2,
+		State:                   person.State,
+		City:                    person.City,
+		CEP:                     person.CEP,
+		Country:                 person.Country,
+		BankName:                person.BankName,
+		BankNumber:              person.BankNumber,
+		CheckingAccount:         person.CheckingAccount,
+		EmergencyName:           person.EmergencyName,
+		EmergencyCellular:       person.EmergencyCellular,
+		EmergencyEmail:          person.EmergencyEmail,
+		ProfileCompletionStatus: person.ProfileCompletionStatus,
+		CanCreateCollaborator:   person.CanCreateCollaborator,
+		StatusID:                membership.StatusID,
+		StatusLabel:             membership.Status.Label,
+		Notes:                   membership.Notes,
+		CreatedAt:               membership.CreatedAt.UTC().Format(time.RFC3339),
+		UpdatedAt:               membership.UpdatedAt.UTC().Format(time.RFC3339),
+	}
 }
 
 func (s *service) validatePaymentMethod(ctx context.Context, id string) (*db.ReferenceData, error) {

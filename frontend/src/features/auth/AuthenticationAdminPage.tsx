@@ -61,7 +61,7 @@ export function authenticationActorForCollaborator(
   // so bridge collaborator search results through the tenant Person identity.
   return actors.find(
     (actor) =>
-      actor.personId === collaborator.personId &&
+      actor.personId === (collaborator.legacyPersonId ?? collaborator.personId) &&
       activeAuthenticationGrants(actor).some(
         (grant) => grant.tenantId === collaborator.tenantId,
       ),
