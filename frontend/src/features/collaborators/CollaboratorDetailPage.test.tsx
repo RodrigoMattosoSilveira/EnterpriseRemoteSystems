@@ -219,7 +219,7 @@ describe("CollaboratorDetailPage", () => {
     expect(textNode("Gold balance starts at 8.500 grams.")).toBeFalsy();
   });
 
-  it("shows closed lifecycle state", async () => {
+  it("shows Journey Closed prominently and hides settlement for a closed Journey", async () => {
     mockFetch(async (url) => {
       if (url === "/api/v1/collaborators/collab-closed") {
         return jsonResponse({
@@ -236,9 +236,10 @@ describe("CollaboratorDetailPage", () => {
 
     renderCollaboratorDetailPage("/collaborators/collab-closed");
 
-    await waitForText("Closed");
+    await waitForText("Journey Closed");
     expect(textNode("2026-06-15T10:00:00Z")).toBeTruthy();
-    expect(textNode("0 days remaining")).toBeTruthy();
+    expect(textNode("0 days remaining")).toBeFalsy();
+    expect(textNode("Journey Settlement")).toBeFalsy();
   });
 
   it("shows backend errors", async () => {
