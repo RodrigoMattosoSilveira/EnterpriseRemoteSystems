@@ -60,10 +60,12 @@ export function JourneySettlementPanel({
   collaboratorId,
   projectedEndDate,
   closedAt = "",
+  onJourneyClosed,
 }: {
   collaboratorId: string;
   projectedEndDate: string;
   closedAt?: string;
+  onJourneyClosed?: (message: string) => void;
 }) {
   const preview = useSettlementPreview(collaboratorId);
   const [action, setAction] = useState<Action | null>(null);
@@ -174,6 +176,7 @@ export function JourneySettlementPanel({
             setReceiptEntryIds(entryIds);
             setAction(null);
           }}
+          onJourneyClosed={onJourneyClosed}
         />
       ) : null}
     </section>
@@ -220,16 +223,20 @@ function SettlementActionPanel({
   preview,
   onClose,
   onSuccess,
+  onJourneyClosed,
 }: {
   action: Action;
   collaboratorId: string;
   preview: SettlementPreview;
   onClose: () => void;
   onSuccess: (message: string, ledgerEntryIds: string[]) => void;
+  onJourneyClosed?: (message: string) => void;
 }) {
   const zeroGold = useZeroGold(collaboratorId);
   const payout = usePartialPayout(collaboratorId);
-  const closeJourney = useCloseJourney(collaboratorId);
+  const closeJourney = useCloseJourney(collaboratorId, () =>
+    onJourneyClosed?.("Journey closed successfully."),
+  );
   const [effectiveDate, setEffectiveDate] = useState(today());
   const [brlAmount, setBrlAmount] = useState("");
   const [goldAmount, setGoldAmount] = useState("");

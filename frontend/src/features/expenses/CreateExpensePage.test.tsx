@@ -16,7 +16,9 @@ type FetchCall = {
 const activeCollaborator: Collaborator = {
   id: "collab-1",
   tenantId: "default",
-  personId: "person-1",
+  membershipId: "membership-1",
+  personId: "global-person-1",
+  legacyPersonId: "person-1",
   personNickname: "Maria",
   journeyStartDate: "2026-06-01",
   defaultEndDate: "2026-08-30",
@@ -42,7 +44,9 @@ const activeCollaborator: Collaborator = {
 const closedCollaborator: Collaborator = {
   ...activeCollaborator,
   id: "collab-closed",
-  personId: "person-closed",
+  membershipId: "membership-closed",
+  personId: "global-person-closed",
+  legacyPersonId: "person-closed",
   personNickname: "Closed",
   closedAt: "2026-06-30T12:00:00Z",
 };
