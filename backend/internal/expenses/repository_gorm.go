@@ -147,6 +147,7 @@ func (r *gormRepository) Update(ctx context.Context, expense *db.Expense) error 
 			Model(&db.Expense{}).
 			Where("id = ? AND tenant_id = ?", expense.ID, tenantctx.TenantID(ctx)).
 			Updates(map[string]any{
+				"person_id":                expense.PersonID,
 				"collaborator_id":          expense.CollaboratorID,
 				"expense_category_id":      expense.ExpenseCategoryID,
 				"value_unit_id":            expense.ValueUnitID,
@@ -288,6 +289,7 @@ func (r *gormRepository) FindCollaboratorByID(ctx context.Context, collaboratorI
 	var row db.CollaboratorJourney
 	err := r.db.WithContext(ctx).
 		Preload("Status").
+		Preload("Membership").
 		First(&row, "id = ? AND tenant_id = ?", collaboratorID, tenantctx.TenantID(ctx)).Error
 	if err != nil {
 		return nil, err
@@ -402,6 +404,7 @@ func expenseLedgerEntry(expense *db.Expense) *db.LedgerEntry {
 			UpdatedAt: expense.UpdatedAt,
 		},
 		TenantID:       expense.TenantID,
+		PersonID:       expense.PersonID,
 		CollaboratorID: expense.CollaboratorID,
 		ValueUnitID:    expense.ValueUnitID,
 		EntryType:      ledgerEntryTypeExpenseDeduction,
@@ -424,6 +427,7 @@ func reversalLedgerEntry(original db.LedgerEntry, now time.Time, reason string) 
 			UpdatedAt: now,
 		},
 		TenantID:         original.TenantID,
+		PersonID:         original.PersonID,
 		CollaboratorID:   original.CollaboratorID,
 		ValueUnitID:      original.ValueUnitID,
 		EntryType:        original.EntryType,
@@ -453,6 +457,7 @@ func replacementExpenseLedgerEntry(expense *db.Expense, original *db.LedgerEntry
 			UpdatedAt: now,
 		},
 		TenantID:         expense.TenantID,
+		PersonID:         expense.PersonID,
 		CollaboratorID:   expense.CollaboratorID,
 		ValueUnitID:      expense.ValueUnitID,
 		EntryType:        ledgerEntryTypeExpenseDeduction,

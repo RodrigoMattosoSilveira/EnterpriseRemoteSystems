@@ -22,6 +22,7 @@ export type LedgerEntryReceipt = {
 export type LedgerEntry = {
   id: string;
   tenantId: string;
+  personId: string;
   collaboratorId: string;
   collaboratorLabel?: string;
   valueUnitId: string;
@@ -48,6 +49,8 @@ export type LedgerEntry = {
 };
 
 export type CurrentAccountBalance = {
+  personId: string;
+  personLabel?: string;
   collaboratorId: string;
   collaboratorLabel?: string;
   valueUnitId: string;
@@ -64,6 +67,8 @@ export type LedgerEntryListResult = {
 };
 
 export type CurrentAccountDetail = {
+  personId: string;
+  personLabel?: string;
   collaboratorId: string;
   collaboratorLabel?: string;
   balances: CurrentAccountBalance[];

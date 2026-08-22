@@ -38,6 +38,7 @@ func (entry *LedgerEntry) AfterCreate(tx *gorm.DB) error {
 			UpdatedAt: now,
 		},
 		TenantID:       entry.TenantID,
+		PersonID:       entry.PersonID,
 		CollaboratorID: entry.CollaboratorID,
 		LedgerEntryID:  entry.ID,
 		ReceiptNumber:  &receiptNumber,

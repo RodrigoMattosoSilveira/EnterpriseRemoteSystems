@@ -13,6 +13,7 @@ func ToLedgerEntryDTO(row db.LedgerEntry) LedgerEntryDTO {
 	dto := LedgerEntryDTO{
 		ID:                   row.ID,
 		TenantID:             row.TenantID,
+		PersonID:             row.PersonID,
 		CollaboratorID:       row.CollaboratorID,
 		CollaboratorLabel:    collaboratorLabel(row.Collaborator.Person),
 		ValueUnitID:          row.ValueUnitID,
@@ -68,6 +69,8 @@ func ToLedgerEntryDTOList(rows []db.LedgerEntry) []LedgerEntryDTO {
 
 func ToBalanceDTO(row BalanceRow) CurrentAccountBalanceDTO {
 	return CurrentAccountBalanceDTO{
+		PersonID:          row.PersonID,
+		PersonLabel:       strings.TrimSpace(row.PersonLabel),
 		CollaboratorID:    row.CollaboratorID,
 		CollaboratorLabel: strings.TrimSpace(row.CollaboratorLabel),
 		ValueUnitID:       row.ValueUnitID,
@@ -83,6 +86,13 @@ func ToBalanceDTOList(rows []BalanceRow) []CurrentAccountBalanceDTO {
 		out = append(out, ToBalanceDTO(row))
 	}
 	return out
+}
+
+func globalPersonLabel(person db.GlobalPerson) string {
+	if nickname := strings.TrimSpace(person.Nickname); nickname != "" {
+		return nickname
+	}
+	return strings.TrimSpace(strings.Join([]string{person.FirstName, person.LastName}, " "))
 }
 
 func collaboratorLabel(person db.Person) string {

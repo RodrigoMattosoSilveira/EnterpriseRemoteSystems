@@ -192,6 +192,7 @@ func (s *service) GetSelfServiceHome(ctx context.Context, accountID string) (Sel
 			ID:             entry.ID,
 			TenantID:       entry.TenantID,
 			TenantName:     entry.TenantName,
+			PersonID:       entry.PersonID,
 			CollaboratorID: entry.CollaboratorID,
 			ValueUnitID:    entry.ValueUnitID,
 			ValueUnitCode:  entry.ValueUnitCode,

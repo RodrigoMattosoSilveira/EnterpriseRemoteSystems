@@ -124,7 +124,7 @@ func (r *gormRepository) SummariesForRuns(ctx context.Context, runIDs []string) 
 
 func (r *gormRepository) ListAssignmentsForCalculation(ctx context.Context, workPeriodID string) ([]db.WorkPeriodAssignment, error) {
 	var rows []db.WorkPeriodAssignment
-	err := r.db.WithContext(ctx).Where("tenant_id = ? AND work_period_id = ? AND active = ? AND planned_status = ?", defaultTenantID, workPeriodID, true, "INCLUDED").Preload("Collaborator.PaymentMethod").Preload("Collaborator.Person").Find(&rows).Error
+	err := r.db.WithContext(ctx).Where("tenant_id = ? AND work_period_id = ? AND active = ? AND planned_status = ?", defaultTenantID, workPeriodID, true, "INCLUDED").Preload("Collaborator.PaymentMethod").Preload("Collaborator.Person").Preload("Collaborator.Membership").Find(&rows).Error
 	return rows, err
 }
 

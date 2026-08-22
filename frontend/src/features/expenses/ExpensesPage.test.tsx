@@ -298,6 +298,7 @@ function expense(
   return {
     id,
     tenantId: "default",
+    personId: `person-${collaboratorId}`,
     collaboratorId,
     collaboratorLabel,
     expenseCategoryId: "category-canteen",

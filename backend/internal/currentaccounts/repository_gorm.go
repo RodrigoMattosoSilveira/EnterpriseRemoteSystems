@@ -140,6 +140,49 @@ func (r *gormRepository) ListEntries(ctx context.Context, collaboratorID string,
 	return rows, total, err
 }
 
+func (r *gormRepository) ListPersonEntries(ctx context.Context, personID string, filter normalizedLedgerEntryListFilter) ([]db.LedgerEntry, int64, error) {
+	var rows []db.LedgerEntry
+	var total int64
+
+	q := r.db.WithContext(ctx).
+		Model(&db.LedgerEntry{}).
+		Where("ledger_entries.tenant_id = ? AND ledger_entries.person_id = ?", tenantctx.TenantID(ctx), strings.TrimSpace(personID)).
+		Preload("Collaborator.Person").
+		Preload("ValueUnit").
+		Preload("Receipt")
+
+	if !filter.IncludeInactive {
+		q = q.Where("ledger_entries.active = ?", true)
+	}
+	if filter.ValueUnitID != "" {
+		q = q.Where("ledger_entries.value_unit_id = ?", filter.ValueUnitID)
+	}
+	if filter.EntryType != "" {
+		q = q.Where("ledger_entries.entry_type = ?", filter.EntryType)
+	}
+	if filter.Direction != "" {
+		q = q.Where("ledger_entries.direction = ?", filter.Direction)
+	}
+	if filter.SourceType != "" {
+		q = q.Where("ledger_entries.source_type = ?", filter.SourceType)
+	}
+	if filter.OutstandingReceipts {
+		q = q.Joins("JOIN ledger_receipts AS receipt_filter ON receipt_filter.ledger_entry_id = ledger_entries.id AND receipt_filter.tenant_id = ledger_entries.tenant_id AND receipt_filter.status IN ?", []string{"PENDING_ISSUE", "ISSUED", "PRINTED", "SIGNED"})
+	}
+	if filter.DateFrom != nil {
+		q = q.Where("ledger_entries.effective_date >= ?", formatDateForQuery(*filter.DateFrom))
+	}
+	if filter.DateTo != nil {
+		q = q.Where("ledger_entries.effective_date < ?", formatDateForQuery(filter.DateTo.AddDate(0, 0, 1)))
+	}
+
+	if err := q.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+	err := q.Order("ledger_entries.effective_date DESC, ledger_entries.created_at DESC").Limit(filter.PageSize).Offset((filter.Page - 1) * filter.PageSize).Find(&rows).Error
+	return rows, total, err
+}
+
 func (r *gormRepository) FindWorkPeriodAssignmentSourceDetails(ctx context.Context, assignmentIDs []string) (map[string]WorkPeriodAssignmentSourceDetail, error) {
 	uniqueIDs := make([]string, 0, len(assignmentIDs))
 	seen := map[string]bool{}
@@ -197,10 +240,32 @@ func (r *gormRepository) ListBalances(ctx context.Context, collaboratorID string
 	return rows, err
 }
 
+func (r *gormRepository) ListPersonBalances(ctx context.Context, personID string) ([]BalanceRow, error) {
+	var rows []BalanceRow
+	err := r.db.WithContext(ctx).
+		Table("ledger_entries AS le").
+		Select(`le.person_id,
+			COALESCE(NULLIF(TRIM(gp.nickname), ''), TRIM(gp.first_name || ' ' || gp.last_name)) AS person_label,
+			le.value_unit_id,
+			ru.code AS value_unit_code,
+			ru.label AS value_unit_label,
+			SUM(CASE WHEN le.direction = 'CREDIT' THEN le.amount ELSE -le.amount END) AS balance`).
+		Joins("JOIN global_people gp ON gp.id = le.person_id").
+		Joins("JOIN reference_data ru ON ru.id = le.value_unit_id AND ru.tenant_id = le.tenant_id").
+		Where("le.tenant_id = ? AND le.person_id = ? AND le.active = ?", tenantctx.TenantID(ctx), strings.TrimSpace(personID), true).
+		Group("le.person_id, gp.nickname, gp.first_name, gp.last_name, le.value_unit_id, ru.code, ru.label, ru.sort_order").
+		Having("ABS(SUM(CASE WHEN le.direction = 'CREDIT' THEN le.amount ELSE -le.amount END)) > 0.00000001").
+		Order("ru.sort_order ASC, ru.label ASC").
+		Scan(&rows).Error
+	return rows, err
+}
+
 func (r *gormRepository) FindCollaboratorByID(ctx context.Context, collaboratorID string) (*db.CollaboratorJourney, error) {
 	var row db.CollaboratorJourney
 	err := r.db.WithContext(ctx).
 		Preload("Person").
+		Preload("Membership").
+		Preload("Membership.Person").
 		Preload("Status").
 		Preload("PaymentMethod").
 		Preload("Location").

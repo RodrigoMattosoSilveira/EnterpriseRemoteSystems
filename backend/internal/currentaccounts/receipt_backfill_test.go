@@ -15,12 +15,13 @@ import (
 
 func TestBackfillDebitLedgerReceiptsCreatesOnlyMissingReceipts(t *testing.T) {
 	database := newReceiptBackfillTestDB(t)
-	collaboratorID, valueUnitID := seedReceiptBackfillDependencies(t, database)
+	collaboratorID, valueUnitID, personID := seedReceiptBackfillDependencies(t, database)
 	now := time.Now().UTC()
 
 	missing := db.LedgerEntry{
 		BaseModel:      db.BaseModel{ID: ids.New(), CreatedAt: now, UpdatedAt: now},
 		TenantID:       defaultTenantID,
+		PersonID:       personID,
 		CollaboratorID: collaboratorID,
 		ValueUnitID:    valueUnitID,
 		EntryType:      "EXPENSE_DEDUCTION",
@@ -48,6 +49,7 @@ func TestBackfillDebitLedgerReceiptsCreatesOnlyMissingReceipts(t *testing.T) {
 	if err := database.Create(&db.LedgerReceipt{
 		BaseModel:      db.BaseModel{ID: existingReceiptID, CreatedAt: now, UpdatedAt: now},
 		TenantID:       defaultTenantID,
+		PersonID:       personID,
 		CollaboratorID: collaboratorID,
 		LedgerEntryID:  existing.ID,
 		ReceiptNumber:  &existingReceiptNumber,
@@ -79,8 +81,8 @@ func TestBackfillDebitLedgerReceiptsCreatesOnlyMissingReceipts(t *testing.T) {
 	if err := database.First(&generated, "ledger_entry_id = ?", missing.ID).Error; err != nil {
 		t.Fatalf("find generated receipt: %v", err)
 	}
-	if generated.Status != receiptStatusPendingIssue || generated.ReceiptType != receiptTypeLedgerDebit || generated.ReceiptNumber == nil || !strings.HasPrefix(*generated.ReceiptNumber, receiptNumberPrefix) {
-		t.Fatalf("unexpected generated receipt: %+v", generated)
+	if generated.PersonID != personID || generated.Status != receiptStatusPendingIssue || generated.ReceiptType != receiptTypeLedgerDebit || generated.ReceiptNumber == nil || !strings.HasPrefix(*generated.ReceiptNumber, receiptNumberPrefix) {
+		t.Fatalf("unexpected generated Person-owned receipt: %+v", generated)
 	}
 
 	second, err := svc.BackfillDebitLedgerReceipts(context.Background(), "receipt-admin@example.com", false, reason)
@@ -94,11 +96,12 @@ func TestBackfillDebitLedgerReceiptsCreatesOnlyMissingReceipts(t *testing.T) {
 
 func TestDebitReceiptObligationEnforcementRejectsMissingReceipt(t *testing.T) {
 	database := newReceiptBackfillTestDB(t)
-	collaboratorID, valueUnitID := seedReceiptBackfillDependencies(t, database)
+	collaboratorID, valueUnitID, personID := seedReceiptBackfillDependencies(t, database)
 	now := time.Now().UTC()
 	entry := db.LedgerEntry{
 		BaseModel:      db.BaseModel{ID: ids.New(), CreatedAt: now, UpdatedAt: now},
 		TenantID:       defaultTenantID,
+		PersonID:       personID,
 		CollaboratorID: collaboratorID,
 		ValueUnitID:    valueUnitID,
 		EntryType:      "EXPENSE_DEDUCTION",
@@ -157,7 +160,7 @@ func newReceiptBackfillTestDB(t *testing.T) *gorm.DB {
 	return database
 }
 
-func seedReceiptBackfillDependencies(t *testing.T, database *gorm.DB) (string, string) {
+func seedReceiptBackfillDependencies(t *testing.T, database *gorm.DB) (string, string, string) {
 	t.Helper()
 	now := time.Now().UTC()
 	tenant := db.Tenant{BaseModel: db.BaseModel{ID: defaultTenantID, CreatedAt: now, UpdatedAt: now}, Code: "DEFAULT", Name: "Default Tenant", Active: true}
@@ -175,7 +178,11 @@ func seedReceiptBackfillDependencies(t *testing.T, database *gorm.DB) (string, s
 	if err := database.Create(&refs).Error; err != nil {
 		t.Fatalf("create reference data: %v", err)
 	}
-	person := db.Person{BaseModel: db.BaseModel{ID: ids.New(), CreatedAt: now, UpdatedAt: now}, TenantID: defaultTenantID, FirstName: "Receipt", LastName: "Backfill", Nickname: "Backfill", CPF: ids.New(), RG: ids.New(), Cellular: ids.New(), Email: ids.New() + "@example.com", Country: "Brasil", StatusID: "ref-collaborator-active", ProfileCompletionStatus: "COMPLETE", CanCreateCollaborator: true}
+	globalPerson := db.GlobalPerson{BaseModel: db.BaseModel{ID: ids.New(), CreatedAt: now, UpdatedAt: now}, FirstName: "Receipt", LastName: "Backfill", Nickname: "Backfill", CPF: ids.New(), RG: ids.New(), Cellular: ids.New(), Email: ids.New() + "@example.com", Country: "Brasil", ProfileCompletionStatus: "COMPLETE", CanCreateCollaborator: true}
+	if err := database.Create(&globalPerson).Error; err != nil {
+		t.Fatalf("create global person: %v", err)
+	}
+	person := db.Person{BaseModel: db.BaseModel{ID: ids.New(), CreatedAt: now, UpdatedAt: now}, TenantID: defaultTenantID, FirstName: "Receipt", LastName: "Backfill", Nickname: "Backfill", CPF: globalPerson.CPF, RG: ids.New(), Cellular: ids.New(), Email: ids.New() + "@example.com", Country: "Brasil", StatusID: "ref-collaborator-active", ProfileCompletionStatus: "COMPLETE", CanCreateCollaborator: true}
 	if err := database.Create(&person).Error; err != nil {
 		t.Fatalf("create person: %v", err)
 	}
@@ -189,7 +196,7 @@ func seedReceiptBackfillDependencies(t *testing.T, database *gorm.DB) (string, s
 	if err := database.Create(&collaborator).Error; err != nil {
 		t.Fatalf("create collaborator: %v", err)
 	}
-	return collaborator.ID, "ref-value-unit-brl"
+	return collaborator.ID, "ref-value-unit-brl", globalPerson.ID
 }
 
 func TestSecondPersonApprovalPolicyDefaultsToOptionalAndCanBeUpdated(t *testing.T) {

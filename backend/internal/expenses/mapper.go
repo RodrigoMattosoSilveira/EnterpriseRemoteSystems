@@ -18,6 +18,7 @@ func ToDTO(row db.Expense) ExpenseDTO {
 	return ExpenseDTO{
 		ID:                     row.ID,
 		TenantID:               row.TenantID,
+		PersonID:               row.PersonID,
 		CollaboratorID:         row.CollaboratorID,
 		CollaboratorLabel:      collaboratorLabel(row.Collaborator.Person),
 		ExpenseCategoryID:      row.ExpenseCategoryID,

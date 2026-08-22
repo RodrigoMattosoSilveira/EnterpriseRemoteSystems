@@ -118,6 +118,7 @@ func newCorrectionEntry(original db.LedgerEntry, direction, valueUnitID, entryTy
 	return db.LedgerEntry{
 		BaseModel:            db.BaseModel{ID: "ledger-correction-" + ids.New(), CreatedAt: now, UpdatedAt: now},
 		TenantID:             original.TenantID,
+		PersonID:             original.PersonID,
 		CollaboratorID:       original.CollaboratorID,
 		ValueUnitID:          valueUnitID,
 		EntryType:            entryType,

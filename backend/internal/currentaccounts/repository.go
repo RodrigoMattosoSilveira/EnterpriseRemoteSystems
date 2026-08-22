@@ -18,8 +18,10 @@ type Repository interface {
 	MarkReceiptPrinted(ctx context.Context, receiptID, printedBy string, printedAt time.Time) (*db.LedgerReceipt, error)
 	MarkReceiptReturned(ctx context.Context, receiptID, receivedBy, signedDocumentRef, notes string, returnedAt time.Time) (*db.LedgerReceipt, error)
 	ListEntries(ctx context.Context, collaboratorID string, filter normalizedLedgerEntryListFilter) ([]db.LedgerEntry, int64, error)
+	ListPersonEntries(ctx context.Context, personID string, filter normalizedLedgerEntryListFilter) ([]db.LedgerEntry, int64, error)
 	FindWorkPeriodAssignmentSourceDetails(ctx context.Context, assignmentIDs []string) (map[string]WorkPeriodAssignmentSourceDetail, error)
 	ListBalances(ctx context.Context, collaboratorID string) ([]BalanceRow, error)
+	ListPersonBalances(ctx context.Context, personID string) ([]BalanceRow, error)
 	FindCollaboratorByID(ctx context.Context, collaboratorID string) (*db.CollaboratorJourney, error)
 	FindCollaboratorTenantID(ctx context.Context, collaboratorID string) (string, error)
 	ListRecentDailyGoldProduction(ctx context.Context, locationID string, limit int) ([]DailyGoldProductionRow, error)
@@ -66,6 +68,8 @@ type normalizedLedgerEntryListFilter struct {
 }
 
 type BalanceRow struct {
+	PersonID          string
+	PersonLabel       string
 	CollaboratorID    string
 	CollaboratorLabel string
 	ValueUnitID       string

@@ -95,10 +95,11 @@ The migration intentionally does not remove `collaborator_journeys.person_id`.
 That compatibility removal belongs to Bite 30J after downstream modules have
 cut over.
 
-## Deferred
+## Follow-on cutovers
 
-Bite 30F does not move Expense, Earnings, or Ledger ownership to Person +
-Tenant. That remains Bite 30G.
+Bite 30G moves Expense, Earnings/Accrual, Ledger Entry, and Ledger Receipt
+ownership to global Person + Tenant while retaining Collaborator Journey as
+provenance. See `docs/bite-30g-person-tenant-financial-ownership-refactor.md`.
 
-It also does not remove legacy Person rows, legacy Actor Person/Collaborator
-pointers, or other compatibility schema. Those remain Bite 30J responsibilities.
+Legacy Person rows, legacy Actor Person/Collaborator pointers, and remaining
+compatibility schema are still retained until Bite 30J.

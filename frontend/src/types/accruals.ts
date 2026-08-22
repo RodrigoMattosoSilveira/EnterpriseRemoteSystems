@@ -30,6 +30,7 @@ export type AccrualRun = {
 export type AccrualItem = {
   id: string;
   tenantId: string;
+  personId: string;
   accrualRunId: string;
   workPeriodId: string;
   workPeriodAssignmentId?: string;

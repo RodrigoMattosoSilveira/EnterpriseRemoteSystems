@@ -69,7 +69,8 @@ func (s *service) Create(ctx context.Context, req CreateExpenseRequest, actorUse
 	if err != nil {
 		return nil, err
 	}
-	if err := s.validateCollaborator(ctx, req.CollaboratorID); err != nil {
+	collaborator, err := s.validateCollaborator(ctx, req.CollaboratorID)
+	if err != nil {
 		return nil, err
 	}
 
@@ -77,6 +78,7 @@ func (s *service) Create(ctx context.Context, req CreateExpenseRequest, actorUse
 	expense := &db.Expense{
 		BaseModel:      db.BaseModel{ID: ids.New(), CreatedAt: now, UpdatedAt: now},
 		TenantID:       tenantctx.TenantID(ctx),
+		PersonID:       collaborator.Membership.PersonID,
 		CollaboratorID: strings.TrimSpace(req.CollaboratorID),
 		ExpenseDate:    expenseDate,
 		Description:    strings.TrimSpace(req.Description),
@@ -128,10 +130,12 @@ func (s *service) Update(ctx context.Context, id string, req UpdateExpenseReques
 		return nil, err
 	}
 
-	if err := s.validateCollaborator(ctx, req.CollaboratorID); err != nil {
+	collaborator, err := s.validateCollaborator(ctx, req.CollaboratorID)
+	if err != nil {
 		return nil, err
 	}
 
+	existing.PersonID = collaborator.Membership.PersonID
 	existing.CollaboratorID = strings.TrimSpace(req.CollaboratorID)
 	existing.ExpenseDate = expenseDate
 	existing.Description = strings.TrimSpace(req.Description)
@@ -403,15 +407,18 @@ func clearPriceListCalculation(expense *db.Expense) {
 	expense.CalculationDetailsJSON = ""
 }
 
-func (s *service) validateCollaborator(ctx context.Context, collaboratorID string) error {
+func (s *service) validateCollaborator(ctx context.Context, collaboratorID string) (*db.CollaboratorJourney, error) {
 	collaborator, err := s.repo.FindCollaboratorByID(ctx, strings.TrimSpace(collaboratorID))
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if !isActiveCollaborator(ctx, *collaborator) {
-		return ValidationError{Fields: map[string]string{"collaboratorId": "Collaborator must be active and open"}}
+		return nil, ValidationError{Fields: map[string]string{"collaboratorId": "Collaborator must be active and open"}}
 	}
-	return nil
+	if strings.TrimSpace(collaborator.Membership.PersonID) == "" {
+		return nil, ValidationError{Fields: map[string]string{"collaboratorId": "Collaborator must resolve to a Person–Tenant Membership"}}
+	}
+	return collaborator, nil
 }
 
 func (s *service) validateReference(ctx context.Context, field string, id string, typ string, message string) error {

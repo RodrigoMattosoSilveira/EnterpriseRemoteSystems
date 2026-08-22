@@ -246,6 +246,7 @@ type Expense struct {
 	BaseModel
 
 	TenantID          string    `gorm:"type:text;not null;default:default;index" json:"tenantId"`
+	PersonID          string    `gorm:"type:text;not null;index" json:"personId"`
 	CollaboratorID    string    `gorm:"type:text;not null;index" json:"collaboratorId"`
 	ExpenseCategoryID string    `gorm:"type:text;not null;index" json:"expenseCategoryId"`
 	ValueUnitID       string    `gorm:"type:text;not null;index" json:"valueUnitId"`
@@ -270,6 +271,7 @@ type Expense struct {
 	CalculationDetailsJSON string   `gorm:"type:text" json:"calculationDetailsJson,omitempty"`
 
 	Tenant          Tenant                `gorm:"foreignKey:TenantID;constraint:OnUpdate:Restrict,OnDelete:Restrict;" json:"tenant,omitempty"`
+	Person          GlobalPerson          `gorm:"foreignKey:PersonID;constraint:OnUpdate:Restrict,OnDelete:Restrict;" json:"person,omitempty"`
 	Collaborator    CollaboratorJourney   `gorm:"foreignKey:CollaboratorID;constraint:OnUpdate:Restrict,OnDelete:Restrict;" json:"collaborator,omitempty"`
 	ExpenseCategory ReferenceData         `gorm:"foreignKey:ExpenseCategoryID;constraint:OnUpdate:Restrict,OnDelete:Restrict;" json:"expenseCategory,omitempty"`
 	ValueUnit       ReferenceData         `gorm:"foreignKey:ValueUnitID;constraint:OnUpdate:Restrict,OnDelete:Restrict;" json:"valueUnit,omitempty"`
@@ -305,6 +307,7 @@ type LedgerReceipt struct {
 	BaseModel
 
 	TenantID           string     `gorm:"type:text;not null;default:default;uniqueIndex:ux_ledger_receipts_tenant_number,priority:1;index" json:"tenantId"`
+	PersonID           string     `gorm:"type:text;not null;index" json:"personId"`
 	CollaboratorID     string     `gorm:"type:text;not null;index" json:"collaboratorId"`
 	LedgerEntryID      string     `gorm:"type:text;not null;uniqueIndex" json:"ledgerEntryId"`
 	ReceiptNumber      *string    `gorm:"type:text;uniqueIndex:ux_ledger_receipts_tenant_number,priority:2" json:"receiptNumber,omitempty"`
@@ -323,6 +326,7 @@ type LedgerReceipt struct {
 	Notes              string     `gorm:"type:text" json:"notes,omitempty"`
 
 	Tenant       Tenant              `gorm:"foreignKey:TenantID;constraint:OnUpdate:Restrict,OnDelete:Restrict;" json:"tenant,omitempty"`
+	Person       GlobalPerson        `gorm:"foreignKey:PersonID;constraint:OnUpdate:Restrict,OnDelete:Restrict;" json:"person,omitempty"`
 	Collaborator CollaboratorJourney `gorm:"foreignKey:CollaboratorID;constraint:OnUpdate:Restrict,OnDelete:Restrict;" json:"collaborator,omitempty"`
 	LedgerEntry  LedgerEntry         `gorm:"foreignKey:LedgerEntryID;constraint:OnUpdate:Restrict,OnDelete:Restrict;" json:"ledgerEntry,omitempty"`
 }
@@ -404,6 +408,7 @@ type AccrualItem struct {
 	BaseModel
 
 	TenantID               string   `gorm:"type:text;not null;default:default;index" json:"tenantId"`
+	PersonID               string   `gorm:"type:text;not null;index" json:"personId"`
 	AccrualRunID           string   `gorm:"type:text;not null;index" json:"accrualRunId"`
 	WorkPeriodID           string   `gorm:"type:text;not null;index" json:"workPeriodId"`
 	WorkPeriodAssignmentID *string  `gorm:"type:text;index" json:"workPeriodAssignmentId,omitempty"`
@@ -417,6 +422,7 @@ type AccrualItem struct {
 	Description            string   `gorm:"type:text" json:"description,omitempty"`
 
 	Tenant               Tenant                `gorm:"foreignKey:TenantID;constraint:OnUpdate:Restrict,OnDelete:Restrict;" json:"tenant,omitempty"`
+	Person               GlobalPerson          `gorm:"foreignKey:PersonID;constraint:OnUpdate:Restrict,OnDelete:Restrict;" json:"person,omitempty"`
 	AccrualRun           AccrualRun            `gorm:"foreignKey:AccrualRunID;constraint:OnUpdate:Restrict,OnDelete:Cascade;" json:"accrualRun,omitempty"`
 	WorkPeriod           WorkPeriod            `gorm:"foreignKey:WorkPeriodID;constraint:OnUpdate:Restrict,OnDelete:Restrict;" json:"workPeriod,omitempty"`
 	WorkPeriodAssignment *WorkPeriodAssignment `gorm:"foreignKey:WorkPeriodAssignmentID;constraint:OnUpdate:Restrict,OnDelete:SET NULL;" json:"workPeriodAssignment,omitempty"`
@@ -427,6 +433,7 @@ type LedgerEntry struct {
 	BaseModel
 
 	TenantID             string     `gorm:"type:text;not null;default:default;uniqueIndex:ux_ledger_tenant_source_unit_direction,priority:1;index" json:"tenantId"`
+	PersonID             string     `gorm:"type:text;not null;index" json:"personId"`
 	CollaboratorID       string     `gorm:"type:text;not null;index" json:"collaboratorId"`
 	ValueUnitID          string     `gorm:"type:text;not null;uniqueIndex:ux_ledger_tenant_source_unit_direction,priority:4;index" json:"valueUnitId"`
 	EntryType            string     `gorm:"type:text;not null;index" json:"entryType"`
@@ -449,6 +456,7 @@ type LedgerEntry struct {
 	SecondApprovalNotes  string     `gorm:"type:text" json:"secondApprovalNotes,omitempty"`
 
 	Tenant       Tenant              `gorm:"foreignKey:TenantID;constraint:OnUpdate:Restrict,OnDelete:Restrict;" json:"tenant,omitempty"`
+	Person       GlobalPerson        `gorm:"foreignKey:PersonID;constraint:OnUpdate:Restrict,OnDelete:Restrict;" json:"person,omitempty"`
 	Collaborator CollaboratorJourney `gorm:"foreignKey:CollaboratorID;constraint:OnUpdate:Restrict,OnDelete:Restrict;" json:"collaborator,omitempty"`
 	ValueUnit    ReferenceData       `gorm:"foreignKey:ValueUnitID;constraint:OnUpdate:Restrict,OnDelete:Restrict;" json:"valueUnit,omitempty"`
 	Receipt      *LedgerReceipt      `gorm:"foreignKey:LedgerEntryID" json:"receipt,omitempty"`

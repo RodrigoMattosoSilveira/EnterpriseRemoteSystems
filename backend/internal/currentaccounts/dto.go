@@ -24,6 +24,7 @@ type LedgerEntryReceiptDTO struct {
 type LedgerEntryDTO struct {
 	ID                   string                 `json:"id"`
 	TenantID             string                 `json:"tenantId"`
+	PersonID             string                 `json:"personId"`
 	CollaboratorID       string                 `json:"collaboratorId"`
 	CollaboratorLabel    string                 `json:"collaboratorLabel,omitempty"`
 	ValueUnitID          string                 `json:"valueUnitId"`
@@ -58,6 +59,8 @@ type LedgerEntryDTO struct {
 }
 
 type CurrentAccountBalanceDTO struct {
+	PersonID          string  `json:"personId"`
+	PersonLabel       string  `json:"personLabel,omitempty"`
 	CollaboratorID    string  `json:"collaboratorId"`
 	CollaboratorLabel string  `json:"collaboratorLabel,omitempty"`
 	ValueUnitID       string  `json:"valueUnitId"`
@@ -67,6 +70,8 @@ type CurrentAccountBalanceDTO struct {
 }
 
 type CurrentAccountDetailDTO struct {
+	PersonID          string                     `json:"personId"`
+	PersonLabel       string                     `json:"personLabel,omitempty"`
 	CollaboratorID    string                     `json:"collaboratorId"`
 	CollaboratorLabel string                     `json:"collaboratorLabel,omitempty"`
 	Balances          []CurrentAccountBalanceDTO `json:"balances"`

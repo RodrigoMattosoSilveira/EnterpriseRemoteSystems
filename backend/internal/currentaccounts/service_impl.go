@@ -2,6 +2,7 @@ package currentaccounts
 
 import (
 	"context"
+	"errors"
 	"math"
 	"strings"
 
@@ -102,13 +103,21 @@ func (s *service) GetDetail(ctx context.Context, collaboratorID string, filter L
 	if err != nil {
 		return nil, err
 	}
-	entries, total, err := s.repo.ListEntries(ctx, collaboratorID, normalized)
+	personID, err := financialOwnerPersonID(*collaborator)
 	if err != nil {
 		return nil, err
 	}
-	balances, err := s.repo.ListBalances(ctx, collaboratorID)
+	entries, total, err := s.repo.ListPersonEntries(ctx, personID, normalized)
 	if err != nil {
 		return nil, err
+	}
+	balances, err := s.repo.ListPersonBalances(ctx, personID)
+	if err != nil {
+		return nil, err
+	}
+	for i := range balances {
+		balances[i].CollaboratorID = collaborator.ID
+		balances[i].CollaboratorLabel = globalPersonLabel(collaborator.Membership.Person)
 	}
 
 	dtos, err := s.ledgerEntryDTOsWithSourceDetails(ctx, entries)
@@ -116,9 +125,12 @@ func (s *service) GetDetail(ctx context.Context, collaboratorID string, filter L
 		return nil, err
 	}
 
+	personLabel := globalPersonLabel(collaborator.Membership.Person)
 	return &CurrentAccountDetailDTO{
+		PersonID:          personID,
+		PersonLabel:       personLabel,
 		CollaboratorID:    collaborator.ID,
-		CollaboratorLabel: collaboratorLabel(collaborator.Person),
+		CollaboratorLabel: personLabel,
 		Balances:          ToBalanceDTOList(balances),
 		LedgerEntries: LedgerEntryListResult{
 			Items:    dtos,
@@ -131,7 +143,12 @@ func (s *service) GetDetail(ctx context.Context, collaboratorID string, filter L
 
 func (s *service) ListEntries(ctx context.Context, collaboratorID string, filter LedgerEntryListFilter) (*LedgerEntryListResult, error) {
 	collaboratorID = strings.TrimSpace(collaboratorID)
-	if _, err := s.repo.FindCollaboratorByID(ctx, collaboratorID); err != nil {
+	collaborator, err := s.repo.FindCollaboratorByID(ctx, collaboratorID)
+	if err != nil {
+		return nil, err
+	}
+	personID, err := financialOwnerPersonID(*collaborator)
+	if err != nil {
 		return nil, err
 	}
 
@@ -139,7 +156,7 @@ func (s *service) ListEntries(ctx context.Context, collaboratorID string, filter
 	if err != nil {
 		return nil, err
 	}
-	rows, total, err := s.repo.ListEntries(ctx, collaboratorID, normalized)
+	rows, total, err := s.repo.ListPersonEntries(ctx, personID, normalized)
 	if err != nil {
 		return nil, err
 	}
@@ -196,14 +213,31 @@ func workPeriodAssignmentSourceLabel(detail WorkPeriodAssignmentSourceDetail) st
 
 func (s *service) ListBalances(ctx context.Context, collaboratorID string) ([]CurrentAccountBalanceDTO, error) {
 	collaboratorID = strings.TrimSpace(collaboratorID)
-	if _, err := s.repo.FindCollaboratorByID(ctx, collaboratorID); err != nil {
-		return nil, err
-	}
-	rows, err := s.repo.ListBalances(ctx, collaboratorID)
+	collaborator, err := s.repo.FindCollaboratorByID(ctx, collaboratorID)
 	if err != nil {
 		return nil, err
 	}
+	personID, err := financialOwnerPersonID(*collaborator)
+	if err != nil {
+		return nil, err
+	}
+	rows, err := s.repo.ListPersonBalances(ctx, personID)
+	if err != nil {
+		return nil, err
+	}
+	for i := range rows {
+		rows[i].CollaboratorID = collaborator.ID
+		rows[i].CollaboratorLabel = globalPersonLabel(collaborator.Membership.Person)
+	}
 	return ToBalanceDTOList(rows), nil
+}
+
+func financialOwnerPersonID(collaborator db.CollaboratorJourney) (string, error) {
+	personID := strings.TrimSpace(collaborator.Membership.PersonID)
+	if personID == "" {
+		return "", errors.New("collaborator journey must resolve to a Person–Tenant Membership financial owner")
+	}
+	return personID, nil
 }
 
 func normalizeListFilter(filter LedgerEntryListFilter) (normalizedLedgerEntryListFilter, error) {

@@ -657,6 +657,7 @@ func TestAccountLevelSelfServiceKeepsCurrentAccountWithoutActiveTenantContext(t 
 	ledgerEntry := appdb.LedgerEntry{
 		BaseModel:      appdb.BaseModel{ID: "self-service-history-ledger", CreatedAt: now, UpdatedAt: now},
 		TenantID:       appdb.DefaultTenantID,
+		PersonID:       account.GlobalPersonID,
 		CollaboratorID: collaborator.ID,
 		ValueUnitID:    "self-service-value-brl",
 		EntryType:      "EARNING_CREDIT",
@@ -696,7 +697,7 @@ func TestAccountLevelSelfServiceKeepsCurrentAccountWithoutActiveTenantContext(t 
 	if len(selfService.Entries) != 1 {
 		t.Fatalf("expected one Current Account entry, got %#v", selfService.Entries)
 	}
-	if entry := selfService.Entries[0]; entry.ID != ledgerEntry.ID || entry.TenantID != appdb.DefaultTenantID || entry.SignedAmount != 1250 {
+	if entry := selfService.Entries[0]; entry.ID != ledgerEntry.ID || entry.TenantID != appdb.DefaultTenantID || entry.PersonID != account.GlobalPersonID || entry.SignedAmount != 1250 {
 		t.Fatalf("unexpected Current Account entry: %#v", entry)
 	}
 }

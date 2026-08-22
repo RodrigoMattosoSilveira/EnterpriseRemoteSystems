@@ -3,6 +3,7 @@ package expenses
 type ExpenseDTO struct {
 	ID                     string                      `json:"id"`
 	TenantID               string                      `json:"tenantId"`
+	PersonID               string                      `json:"personId"`
 	CollaboratorID         string                      `json:"collaboratorId"`
 	CollaboratorLabel      string                      `json:"collaboratorLabel,omitempty"`
 	ExpenseCategoryID      string                      `json:"expenseCategoryId"`
