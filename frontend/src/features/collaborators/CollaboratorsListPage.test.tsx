@@ -227,9 +227,9 @@ describe("CollaboratorsListPage", () => {
 
     renderCollaboratorsListPage("/collaborators", selfActor);
 
-    await waitForText("My Collaborator Journeys");
+    await waitForText("Showing 2 Journeys.");
+    expect(textNode("My Collaborator Journeys")).toBeTruthy();
     expect(textNode("Journey History")).toBeTruthy();
-    expect(textNode("Showing 2 Journeys.")).toBeTruthy();
     expect(container.textContent).toContain("Closed 2026-03-31T17:00:00Z");
     expect(container.textContent).toContain("Closed");
     expect(container.textContent).toContain("Active");
