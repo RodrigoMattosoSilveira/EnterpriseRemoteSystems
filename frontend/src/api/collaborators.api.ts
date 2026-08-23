@@ -18,6 +18,7 @@ import type {
   CollaboratorListResponse,
   CreateCollaboratorInput,
   UpdateCollaboratorInput,
+  UpdateCollaboratorWorkAssignmentInput,
 } from "../types/collaborators";
 
 export function listCollaboratorCandidates(): Promise<Person[]> {
@@ -85,6 +86,17 @@ export async function listCollaborators(
   };
 }
 
+
+export function listSelfCollaboratorJourneys(): Promise<Collaborator[]> {
+  return apiFetch<Collaborator[]>("/collaborators/self");
+}
+
+export function getSelfCollaborator(id: string): Promise<Collaborator> {
+  return apiFetch<Collaborator>(
+    `/collaborators/self/${encodeURIComponent(id)}`,
+  );
+}
+
 export function getCollaborator(id: string): Promise<Collaborator> {
   return apiFetch<Collaborator>(`/collaborators/${encodeURIComponent(id)}`);
 }
@@ -106,6 +118,19 @@ export function updateCollaborator(
     method: "PUT",
     body: JSON.stringify(input),
   });
+}
+
+export function updateCollaboratorWorkAssignment(
+  id: string,
+  input: UpdateCollaboratorWorkAssignmentInput,
+): Promise<Collaborator> {
+  return apiFetch<Collaborator>(
+    `/collaborators/${encodeURIComponent(id)}/work-assignment`,
+    {
+      method: "PATCH",
+      body: JSON.stringify(input),
+    },
+  );
 }
 
 export function getCollaboratorFinancialProjection(

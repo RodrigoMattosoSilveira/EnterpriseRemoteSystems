@@ -6,6 +6,7 @@ import { useAuthorizationContext } from "../../components/layout/AuthorizationCo
 import type {
   Collaborator,
   UpdateCollaboratorInput,
+  UpdateCollaboratorWorkAssignmentInput,
 } from "../../types/collaborators";
 import type { ReferenceDataItem } from "../../types/referenceData";
 import { useReferenceDataByType } from "../reference-data/useReferenceData";
@@ -16,7 +17,11 @@ import {
   paymentValueInputConfig,
   validatePaymentValueInput,
 } from "./paymentValue";
-import { useCollaborator, useUpdateCollaborator } from "./useCollaborators";
+import {
+  useCollaborator,
+  useUpdateCollaborator,
+  useUpdateCollaboratorWorkAssignment,
+} from "./useCollaborators";
 import { useSettlementPreview } from "./useSettlements";
 
 export function CollaboratorDetailPage() {
@@ -25,13 +30,19 @@ export function CollaboratorDetailPage() {
   const wildcard = actor.permissions.includes("*");
   const canBrowseCollaborators = wildcard || actor.permissions.includes("collaborators.read");
   const canEditCollaborator = wildcard || actor.permissions.includes("collaborators.update");
+  const canEditWorkAssignment =
+    canEditCollaborator ||
+    actor.permissions.includes("collaborators.work_assignment.update");
   const canPreviewSettlement = wildcard || actor.permissions.includes("journey.settlements.preview");
   const canReadCurrentAccount =
     wildcard ||
     actor.permissions.includes("current_accounts.summary.read") ||
     (actor.permissions.includes("current_accounts.self.summary.read") && actor.collaboratorId === id);
-  const { data: collaborator, isLoading, error } = useCollaborator(id);
-  const [editing, setEditing] = useState(false);
+  const { data: collaborator, isLoading, error } = useCollaborator(
+    id,
+    !canBrowseCollaborators,
+  );
+  const [editMode, setEditMode] = useState<"full" | "work-assignment" | null>(null);
   const [flash, setFlash] = useState("");
   const [journeyCloseNotice, setJourneyCloseNotice] = useState("");
 
@@ -53,7 +64,7 @@ export function CollaboratorDetailPage() {
             className="text-sm font-semibold text-gray-600 underline"
             to="/collaborators"
           >
-            Back to Collaborators
+            {canBrowseCollaborators ? "Back to Collaborators" : "Back to My Journeys"}
           </Link>
           <div className="mt-4">
             <ApiErrorPanel error={error} />
@@ -71,7 +82,7 @@ export function CollaboratorDetailPage() {
             className="text-sm font-semibold text-gray-600 underline"
             to="/collaborators"
           >
-            Back to Collaborators
+            {canBrowseCollaborators ? "Back to Collaborators" : "Back to My Journeys"}
           </Link>
           <p className="mt-4 text-gray-700">Collaborator not found.</p>
         </section>
@@ -89,21 +100,12 @@ export function CollaboratorDetailPage() {
       ) : null}
       <header className="sticky top-0 z-10 border-b bg-white/95 px-4 py-4 backdrop-blur">
         <div className="mx-auto max-w-5xl">
-          {canBrowseCollaborators ? (
-            <Link
-              className="text-sm font-semibold text-gray-600 underline"
-              to="/collaborators"
-            >
-              Back to Collaborators
-            </Link>
-          ) : actor.personId ? (
-            <Link
-              className="text-sm font-semibold text-gray-600 underline"
-              to={`/people/${actor.personId}`}
-            >
-              My Person record
-            </Link>
-          ) : null}
+          <Link
+            className="text-sm font-semibold text-gray-600 underline"
+            to="/collaborators"
+          >
+            {canBrowseCollaborators ? "Back to Collaborators" : "Back to My Journeys"}
+          </Link>
 
           <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div>
@@ -152,10 +154,21 @@ export function CollaboratorDetailPage() {
                     className="rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 shadow-sm"
                     onClick={() => {
                       setFlash("");
-                      setEditing(true);
+                      setEditMode("full");
                     }}
                   >
                     Edit Collaborator
+                  </button>
+                ) : canEditWorkAssignment ? (
+                  <button
+                    type="button"
+                    className="rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 shadow-sm"
+                    onClick={() => {
+                      setFlash("");
+                      setEditMode("work-assignment");
+                    }}
+                  >
+                    Edit Work Assignment
                   </button>
                 ) : null}
               </div>
@@ -174,14 +187,27 @@ export function CollaboratorDetailPage() {
           </div>
         )}
 
-        {editing && (
+        {editMode === "full" && (
           <CollaboratorEditPanel
             collaborator={collaborator}
-            onCancel={() => setEditing(false)}
+            onCancel={() => setEditMode(null)}
             onSaved={(updated) => {
-              setEditing(false);
+              setEditMode(null);
               setFlash(
                 `Collaborator updated for ${displayPersonName(updated)}.`,
+              );
+            }}
+          />
+        )}
+
+        {editMode === "work-assignment" && (
+          <CollaboratorWorkAssignmentEditPanel
+            collaborator={collaborator}
+            onCancel={() => setEditMode(null)}
+            onSaved={(updated) => {
+              setEditMode(null);
+              setFlash(
+                `Work assignment updated for ${displayPersonName(updated)}.`,
               );
             }}
           />
@@ -311,6 +337,168 @@ export function CollaboratorDetailPage() {
         />
       </section>
     </main>
+  );
+}
+
+type WorkAssignmentEditFormState = {
+  sectorId: string;
+  locationId: string;
+  taskId: string;
+};
+
+function CollaboratorWorkAssignmentEditPanel({
+  collaborator,
+  onCancel,
+  onSaved,
+}: {
+  collaborator: Collaborator;
+  onCancel: () => void;
+  onSaved: (collaborator: Collaborator) => void;
+}) {
+  const sectorsQuery = useReferenceDataByType("sector");
+  const locationsQuery = useReferenceDataByType("location");
+  const tasksQuery = useReferenceDataByType("task");
+  const updateMutation = useUpdateCollaboratorWorkAssignment(collaborator.id);
+  const [form, setForm] = useState<WorkAssignmentEditFormState>({
+    sectorId: collaborator.sectorId,
+    locationId: collaborator.locationId,
+    taskId: collaborator.taskId,
+  });
+  const [clientError, setClientError] = useState("");
+
+  const isLoading =
+    sectorsQuery.isLoading || locationsQuery.isLoading || tasksQuery.isLoading;
+  const loadError =
+    sectorsQuery.error || locationsQuery.error || tasksQuery.error;
+
+  const sectorOptions = activeOptionsWithCurrent(
+    sectorsQuery.data,
+    collaborator.sectorId,
+    collaborator.sectorLabel,
+  );
+  const locationOptions = activeOptionsWithCurrent(
+    locationsQuery.data,
+    collaborator.locationId,
+    collaborator.locationLabel,
+  );
+  const taskOptions = activeOptionsWithCurrent(
+    tasksQuery.data,
+    collaborator.taskId,
+    collaborator.taskLabel,
+  );
+
+  function update<K extends keyof WorkAssignmentEditFormState>(
+    key: K,
+    value: WorkAssignmentEditFormState[K],
+  ) {
+    setClientError("");
+    setForm((prev) => ({ ...prev, [key]: value }));
+  }
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!form.sectorId || !form.locationId || !form.taskId) {
+      setClientError("Select sector, location, and task before saving.");
+      return;
+    }
+
+    const input: UpdateCollaboratorWorkAssignmentInput = {
+      sectorId: form.sectorId,
+      locationId: form.locationId,
+      taskId: form.taskId,
+    };
+
+    try {
+      const updated = await updateMutation.mutateAsync(input);
+      onSaved(updated);
+    } catch {
+      // The mutation state renders API validation errors below.
+    }
+  }
+
+  return (
+    <section className="rounded-2xl border bg-white p-5 shadow-sm lg:col-span-2">
+      <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+        <div>
+          <h2 className="text-lg font-semibold text-gray-950">
+            Edit Work Assignment
+          </h2>
+          <p className="mt-1 text-sm text-gray-500">
+            Earnings administration may update only Sector, Location, and Task.
+          </p>
+        </div>
+        <button
+          type="button"
+          className="rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 shadow-sm"
+          onClick={onCancel}
+        >
+          Cancel edit
+        </button>
+      </div>
+
+      {isLoading && (
+        <p className="mt-4 rounded-xl bg-gray-50 p-4 text-sm text-gray-700">
+          Loading editable reference data...
+        </p>
+      )}
+
+      <ApiErrorPanel error={loadError} />
+      <ApiErrorPanel error={updateMutation.error} />
+
+      {clientError && (
+        <div className="mt-4 rounded-xl border border-red-200 bg-red-50 p-4 text-sm font-medium text-red-800">
+          {clientError}
+        </div>
+      )}
+
+      {!isLoading && !loadError && (
+        <form onSubmit={submit} className="mt-5 space-y-5">
+          <div className="grid gap-4 md:grid-cols-3">
+            <Select
+              label="Sector"
+              required
+              value={form.sectorId}
+              onChange={(value) => update("sectorId", value)}
+              options={sectorOptions}
+              placeholder="Select a sector"
+            />
+            <Select
+              label="Location"
+              required
+              value={form.locationId}
+              onChange={(value) => update("locationId", value)}
+              options={locationOptions}
+              placeholder="Select a location"
+            />
+            <Select
+              label="Task"
+              required
+              value={form.taskId}
+              onChange={(value) => update("taskId", value)}
+              options={taskOptions}
+              placeholder="Select a task"
+            />
+          </div>
+
+          <div className="flex justify-end gap-3">
+            <button
+              type="button"
+              className="rounded-xl border border-gray-300 bg-white px-5 py-3 text-sm font-semibold text-gray-700 shadow-sm"
+              onClick={onCancel}
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={updateMutation.isPending}
+              className="rounded-xl bg-gray-950 px-5 py-3 text-sm font-semibold text-white shadow-sm disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {updateMutation.isPending ? "Saving..." : "Save Work Assignment"}
+            </button>
+          </div>
+        </form>
+      )}
+    </section>
   );
 }
 

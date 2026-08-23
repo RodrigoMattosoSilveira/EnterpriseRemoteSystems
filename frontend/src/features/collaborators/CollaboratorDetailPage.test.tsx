@@ -17,6 +17,35 @@ const authorizationActor: AuthzCurrentActor = {
   permissions: ["*"],
 };
 
+
+const selfAuthorizationActor: AuthzCurrentActor = {
+  actorKey: "identity-a",
+  actorRecordId: "actor-identity-a",
+  tenantId: "default",
+  scope: "TENANT",
+  personId: "person-1",
+  globalPersonId: "global-person-1",
+  membershipId: "membership-1",
+  collaboratorId: "collab-current",
+  roleCodes: [],
+  permissions: ["people.self.read", "collaborators.self.read"],
+  intrinsicPermissions: ["people.self.read", "collaborators.self.read"],
+};
+
+const earningsOperatorActor: AuthzCurrentActor = {
+  actorKey: "earnings-admin",
+  actorRecordId: "actor-earnings-admin",
+  tenantId: "default",
+  scope: "TENANT",
+  roleCodes: ["EARNINGS_OPERATOR"],
+  permissions: [
+    "authz.self.read",
+    "collaborators.read",
+    "collaborators.work_assignment.update",
+    "reference_data.read",
+  ],
+};
+
 const collaborator: Collaborator = {
   id: "collab-1",
   tenantId: "default",
@@ -242,6 +271,105 @@ describe("CollaboratorDetailPage", () => {
     expect(textNode("Journey Settlement")).toBeFalsy();
   });
 
+  it("lets the signed-in Person inspect a closed Journey from Journey history", async () => {
+    mockFetch(async (url) => {
+      if (url === "/api/v1/collaborators/self/collab-closed") {
+        return jsonResponse({
+          data: {
+            ...collaborator,
+            id: "collab-closed",
+            closedAt: "2026-06-15T10:00:00Z",
+            statusId: "ref-collaborator-finished",
+            statusLabel: "Finished",
+          },
+        });
+      }
+
+      throw new Error(`Unhandled request: ${url}`);
+    });
+
+    renderCollaboratorDetailPage(
+      "/collaborators/collab-closed",
+      selfAuthorizationActor,
+    );
+
+    await waitForText("Journey Closed");
+    expect(textNode("2026-06-15T10:00:00Z")).toBeTruthy();
+    expect(linkByText("Back to My Journeys")?.getAttribute("href")).toBe(
+      "/collaborators",
+    );
+    expect(textNode("Current Account")).toBeFalsy();
+    expect(buttonByText("Edit Collaborator")).toBeFalsy();
+    expect(buttonByText("Edit Work Assignment")).toBeFalsy();
+  });
+
+  it("lets an Earnings Operator edit only Sector, Location, and Task", async () => {
+    let updatePayload: Record<string, unknown> | undefined;
+
+    mockFetch(async (url, init) => {
+      if (
+        url === "/api/v1/collaborators/collab-1/work-assignment" &&
+        init?.method === "PATCH"
+      ) {
+        updatePayload = JSON.parse(String(init.body)) as Record<string, unknown>;
+        return jsonResponse({
+          data: {
+            ...collaborator,
+            sectorId: "ref-sector-processing",
+            sectorLabel: "Processing",
+            locationId: "ref-location-north-pit",
+            locationLabel: "North Pit",
+            taskId: "ref-task-supervisor",
+            taskLabel: "Supervisor",
+          },
+        });
+      }
+
+      if (url === "/api/v1/collaborators/collab-1") {
+        return jsonResponse({ data: collaborator });
+      }
+
+      throw new Error(`Unhandled request: ${url}`);
+    });
+
+    renderCollaboratorDetailPage(
+      "/collaborators/collab-1",
+      earningsOperatorActor,
+    );
+
+    await waitForText("Ana");
+    expect(buttonByText("Edit Collaborator")).toBeFalsy();
+    expect(buttonByText("Edit Work Assignment")).toBeTruthy();
+
+    await act(async () => {
+      buttonByText("Edit Work Assignment")?.click();
+    });
+
+    await waitForText("Save Work Assignment");
+    expect(labelByText("Sector")).toBeTruthy();
+    expect(labelByText("Location")).toBeTruthy();
+    expect(labelByText("Task")).toBeTruthy();
+    expect(labelByText("Avail.")).toBeFalsy();
+    expect(labelByText("Payment Method")).toBeFalsy();
+    expect(labelByText("Payment Value")).toBeFalsy();
+    expect(labelByText("Extension Days")).toBeFalsy();
+
+    changeSelect("Sector", "ref-sector-processing");
+    changeSelect("Location", "ref-location-north-pit");
+    changeSelect("Task", "ref-task-supervisor");
+
+    await act(async () => {
+      buttonByText("Save Work Assignment")?.click();
+    });
+
+    await waitForText("Work assignment updated for Ana.");
+    expect(updatePayload).toEqual({
+      sectorId: "ref-sector-processing",
+      locationId: "ref-location-north-pit",
+      taskId: "ref-task-supervisor",
+    });
+  });
+
   it("shows backend errors", async () => {
     mockFetch(async (url) => {
       if (url === "/api/v1/collaborators/missing") {
@@ -266,7 +394,10 @@ describe("CollaboratorDetailPage", () => {
   });
 });
 
-function renderCollaboratorDetailPage(initialEntry: string) {
+function renderCollaboratorDetailPage(
+  initialEntry: string,
+  actor: AuthzCurrentActor = authorizationActor,
+) {
   const queryClient = new QueryClient({
     defaultOptions: {
       queries: { retry: false },
@@ -284,7 +415,7 @@ function renderCollaboratorDetailPage(initialEntry: string) {
   act(() => {
     root?.render(
       <QueryClientProvider client={queryClient}>
-        <AuthorizationProvider value={authorizationActor}>
+        <AuthorizationProvider value={actor}>
           <RouterProvider router={router} />
         </AuthorizationProvider>
       </QueryClientProvider>,
@@ -430,6 +561,12 @@ function linkByText(text: string) {
 function buttonByText(text: string) {
   return Array.from(container.querySelectorAll("button")).find((element) =>
     element.textContent?.includes(text),
+  );
+}
+
+function labelByText(labelText: string) {
+  return Array.from(container.querySelectorAll("label")).find(
+    (element) => element.textContent?.includes(labelText),
   );
 }
 

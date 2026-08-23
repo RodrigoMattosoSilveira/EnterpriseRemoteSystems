@@ -60,6 +60,18 @@ func ValidateUpdateCollaborator(req UpdateCollaboratorRequest) error {
 	return nil
 }
 
+func ValidateUpdateCollaboratorWorkAssignment(req UpdateCollaboratorWorkAssignmentRequest) error {
+	fields := map[string]string{}
+	requireString(fields, "sectorId", req.SectorID)
+	requireString(fields, "locationId", req.LocationID)
+	requireString(fields, "taskId", req.TaskID)
+
+	if len(fields) > 0 {
+		return ValidationError{Fields: fields}
+	}
+	return nil
+}
+
 func requireString(fields map[string]string, key string, value string) {
 	if strings.TrimSpace(value) == "" {
 		fields[key] = "Required"

@@ -3,8 +3,34 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { CollaboratorsListPage } from "./CollaboratorsListPage";
+import { AuthorizationProvider } from "../../components/layout/AuthorizationContext";
+import type { AuthzCurrentActor } from "../../types/authz";
 import type { Collaborator } from "../../types/collaborators";
+import { CollaboratorsListPage } from "./CollaboratorsListPage";
+
+
+const adminActor: AuthzCurrentActor = {
+  actorKey: "test-admin",
+  actorRecordId: "actor-test-admin",
+  tenantId: "default",
+  scope: "TENANT",
+  roleCodes: ["TENANT_ADMIN"],
+  permissions: ["collaborators.read"],
+};
+
+const selfActor: AuthzCurrentActor = {
+  actorKey: "identity-a",
+  actorRecordId: "actor-identity-a",
+  tenantId: "default",
+  scope: "TENANT",
+  personId: "person-identity-a",
+  globalPersonId: "global-person-identity-a",
+  membershipId: "membership-identity-a",
+  collaboratorId: "collab-open",
+  roleCodes: [],
+  permissions: ["people.self.read", "collaborators.self.read"],
+  intrinsicPermissions: ["people.self.read", "collaborators.self.read"],
+};
 
 const collaborators: Collaborator[] = [
   {
@@ -168,6 +194,50 @@ describe("CollaboratorsListPage", () => {
     ).toBeTruthy();
   });
 
+  it("shows the signed-in Person's current and closed Journey history", async () => {
+    const closedJourney: Collaborator = {
+      ...collaborators[0],
+      id: "collab-closed",
+      membershipId: "membership-identity-a",
+      personId: "global-person-identity-a",
+      legacyPersonId: "person-identity-a",
+      personName: "Identity A",
+      personNickname: "Identity A",
+      journeyStartDate: "2026-01-01",
+      closedAt: "2026-03-31T17:00:00Z",
+      statusId: "ref-collaborator-finished",
+      statusLabel: "Finished",
+    };
+    const openJourney: Collaborator = {
+      ...closedJourney,
+      id: "collab-open",
+      journeyStartDate: "2026-04-15",
+      closedAt: undefined,
+      statusId: "ref-collaborator-active",
+      statusLabel: "Active",
+    };
+
+    mockFetch(async (url) => {
+      if (url === "/api/v1/collaborators/self") {
+        return jsonResponse({ data: [closedJourney, openJourney] });
+      }
+
+      throw new Error(`Unhandled request: ${url}`);
+    });
+
+    renderCollaboratorsListPage("/collaborators", selfActor);
+
+    await waitForText("My Collaborator Journeys");
+    expect(textNode("Journey History")).toBeTruthy();
+    expect(textNode("Showing 2 Journeys.")).toBeTruthy();
+    expect(container.textContent).toContain("Closed 2026-03-31T17:00:00Z");
+    expect(container.textContent).toContain("Closed");
+    expect(container.textContent).toContain("Active");
+    expect(linkByHref("/collaborators/collab-closed")).toBeTruthy();
+    expect(linkByHref("/collaborators/collab-open")).toBeTruthy();
+    expect(textNode("Add")).toBeFalsy();
+  });
+
   it("shows backend errors", async () => {
     mockFetch(async (url) => {
       if (url === "/api/v1/collaborators?page=1&pageSize=100") {
@@ -192,7 +262,10 @@ describe("CollaboratorsListPage", () => {
   });
 });
 
-function renderCollaboratorsListPage(initialEntry = "/collaborators") {
+function renderCollaboratorsListPage(
+  initialEntry = "/collaborators",
+  actor: AuthzCurrentActor = adminActor,
+) {
   const queryClient = new QueryClient({
     defaultOptions: {
       queries: { retry: false },
@@ -209,11 +282,17 @@ function renderCollaboratorsListPage(initialEntry = "/collaborators") {
 
   act(() => {
     root?.render(
-      <QueryClientProvider client={queryClient}>
-        <RouterProvider router={router} />
-      </QueryClientProvider>,
+      <AuthorizationProvider value={actor}>
+        <QueryClientProvider client={queryClient}>
+          <RouterProvider router={router} />
+        </QueryClientProvider>
+      </AuthorizationProvider>,
     );
   });
+}
+
+function linkByHref(href: string) {
+  return container.querySelector<HTMLAnchorElement>(`a[href="${href}"]`);
 }
 
 function mockFetch(

@@ -58,6 +58,23 @@ func (r *gormRepository) List(ctx context.Context, filter CollaboratorListFilter
 	return rows, total, err
 }
 
+func (r *gormRepository) ListForMembership(ctx context.Context, membershipID string) ([]db.CollaboratorJourney, error) {
+	var rows []db.CollaboratorJourney
+	err := r.db.WithContext(ctx).
+		Where("collaborator_journeys.tenant_id = ? AND collaborator_journeys.membership_id = ?", tenantctx.TenantID(ctx), membershipID).
+		Preload("Membership.Person").
+		Preload("Membership.Status").
+		Preload("Person").
+		Preload("PaymentMethod").
+		Preload("Sector").
+		Preload("Location").
+		Preload("Task").
+		Preload("Status").
+		Order("collaborator_journeys.journey_start_date DESC, collaborator_journeys.created_at DESC").
+		Find(&rows).Error
+	return rows, err
+}
+
 func normalizedPage(page, pageSize int) (int, int) {
 	if page <= 0 {
 		page = 1
@@ -138,6 +155,18 @@ func (r *gormRepository) Update(ctx context.Context, collaborator *db.Collaborat
 		}).Error
 }
 
+func (r *gormRepository) UpdateWorkAssignment(ctx context.Context, collaborator *db.CollaboratorJourney) error {
+	return r.db.WithContext(ctx).
+		Model(&db.CollaboratorJourney{}).
+		Where("id = ? AND tenant_id = ?", collaborator.ID, tenantctx.TenantID(ctx)).
+		Updates(map[string]any{
+			"updated_at":  collaborator.UpdatedAt,
+			"sector_id":   collaborator.SectorID,
+			"location_id": collaborator.LocationID,
+			"task_id":     collaborator.TaskID,
+		}).Error
+}
+
 func (r *gormRepository) FindByID(ctx context.Context, id string) (*db.CollaboratorJourney, error) {
 	var row db.CollaboratorJourney
 	err := r.db.WithContext(ctx).
@@ -150,6 +179,24 @@ func (r *gormRepository) FindByID(ctx context.Context, id string) (*db.Collabora
 		Preload("Task").
 		Preload("Status").
 		First(&row, "id = ? AND tenant_id = ?", id, tenantctx.TenantID(ctx)).Error
+	if err != nil {
+		return nil, err
+	}
+	return &row, nil
+}
+
+func (r *gormRepository) FindByIDForMembership(ctx context.Context, id string, membershipID string) (*db.CollaboratorJourney, error) {
+	var row db.CollaboratorJourney
+	err := r.db.WithContext(ctx).
+		Preload("Membership.Person").
+		Preload("Membership.Status").
+		Preload("Person").
+		Preload("PaymentMethod").
+		Preload("Sector").
+		Preload("Location").
+		Preload("Task").
+		Preload("Status").
+		First(&row, "id = ? AND tenant_id = ? AND membership_id = ?", id, tenantctx.TenantID(ctx), membershipID).Error
 	if err != nil {
 		return nil, err
 	}

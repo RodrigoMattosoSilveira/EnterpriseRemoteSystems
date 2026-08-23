@@ -205,6 +205,7 @@ func tenantAdministratorDelegatedPermissions() []Permission {
 		PermissionCollaboratorsRead,
 		PermissionCollaboratorsCreate,
 		PermissionCollaboratorsUpdate,
+		PermissionCollaboratorsWorkAssignmentUpdate,
 		PermissionPlanningRead,
 		PermissionPlanningCreate,
 		PermissionPlanningUpdate,
@@ -278,7 +279,7 @@ func SeedAuthorizationCatalog(database *gorm.DB) error {
 		RoleTenantAdmin: tenantAdministratorDelegatedPermissions(),
 		RoleEarningsOperator: {
 			PermissionAuthzSelfRead, PermissionTenantsRead, PermissionReferenceDataRead,
-			PermissionCollaboratorsRead,
+			PermissionCollaboratorsRead, PermissionCollaboratorsWorkAssignmentUpdate,
 			PermissionPlanningRead, PermissionPlanningCreate, PermissionPlanningUpdate,
 			PermissionEarningsRead, PermissionEarningsCreate,
 			PermissionCurrentAccountsSummaryRead,
@@ -299,6 +300,16 @@ func SeedAuthorizationCatalog(database *gorm.DB) error {
 		RoleEarningsOperator: "authz-role-earnings-operator",
 		RoleExpenseOperator:  "authz-role-expense-operator",
 	}
+	// Earnings administration is intentionally narrower than full Collaborator
+	// administration. Converge any stale/manual role-permission row so the
+	// EARNINGS_OPERATOR role can change only the work-assignment fields exposed
+	// through PermissionCollaboratorsWorkAssignmentUpdate.
+	if err := database.
+		Where("role_id = ? AND permission_code = ?", roleIDs[RoleEarningsOperator], string(PermissionCollaboratorsUpdate)).
+		Delete(&AuthzRolePermission{}).Error; err != nil {
+		return fmt.Errorf("remove Earnings Operator full collaborator update permission: %w", err)
+	}
+
 	// Tenant Administrator authority is deliberately explicit in Bite 30D.
 	// Remove the historical wildcard so catalog seeding also converges databases
 	// that were initialized before the explicit-permission migration.
@@ -429,8 +440,9 @@ func PermissionCatalog() []PermissionCatalogEntry {
 		{PermissionPeopleSelfUpdate, "Update own person", "Update the actor's own person record."},
 		{PermissionCollaboratorsRead, "Read collaborators", "Read tenant collaborator records."},
 		{PermissionCollaboratorsCreate, "Create collaborators", "Create tenant collaborator records."},
-		{PermissionCollaboratorsUpdate, "Update collaborators", "Update tenant collaborator records."},
-		{PermissionCollaboratorsSelfRead, "Read own collaborator", "Read the actor's linked collaborator record."},
+		{PermissionCollaboratorsUpdate, "Update collaborators", "Update all editable tenant collaborator Journey attributes."},
+		{PermissionCollaboratorsWorkAssignmentUpdate, "Update collaborator work assignment", "Update only Sector, Location, and Task on tenant collaborator Journeys."},
+		{PermissionCollaboratorsSelfRead, "Read own collaborator journeys", "Read current and historical collaborator journeys for the actor's tenant Membership."},
 		{PermissionPlanningRead, "Read planning", "Read tenant planning records."},
 		{PermissionPlanningCreate, "Create planning", "Create tenant planning records."},
 		{PermissionPlanningUpdate, "Update planning", "Update tenant planning records."},
@@ -694,22 +706,32 @@ func (s *GORMStore) buildTenantBoundActor(ctx context.Context, binding accountAc
 
 	personID := stringValue(identity.LegacyPersonID)
 	collaboratorID := ""
-	if personID != "" {
+	hasCollaboratorHistory := false
+	if strings.TrimSpace(identity.MembershipID) != "" {
 		type collaboratorProjection struct{ ID string }
 		var collaborator collaboratorProjection
 		if err := s.database.WithContext(ctx).
 			Table("collaborator_journeys").
 			Select("id").
-			Where("tenant_id = ? AND person_id = ? AND closed_at IS NULL", tenantID, personID).
+			Where("tenant_id = ? AND membership_id = ? AND closed_at IS NULL", tenantID, identity.MembershipID).
 			Order("journey_start_date DESC, created_at DESC").
 			Limit(1).
 			Scan(&collaborator).Error; err != nil {
 			return nil, fmt.Errorf("resolve intrinsic collaborator identity: %w", err)
 		}
 		collaboratorID = strings.TrimSpace(collaborator.ID)
+
+		var journeyCount int64
+		if err := s.database.WithContext(ctx).
+			Table("collaborator_journeys").
+			Where("tenant_id = ? AND membership_id = ?", tenantID, identity.MembershipID).
+			Count(&journeyCount).Error; err != nil {
+			return nil, fmt.Errorf("resolve intrinsic collaborator history: %w", err)
+		}
+		hasCollaboratorHistory = journeyCount > 0
 	}
 
-	intrinsic := intrinsicSelfServicePermissions(collaboratorID != "")
+	intrinsic := intrinsicSelfServicePermissions(hasCollaboratorHistory, collaboratorID != "")
 	roles, delegated, err := s.loadDelegatedAuthorization(ctx, binding.ActorID, tenantID, ActorScopeTenant)
 	if err != nil {
 		return nil, err
@@ -733,7 +755,7 @@ func (s *GORMStore) buildTenantBoundActor(ctx context.Context, binding accountAc
 	}, nil
 }
 
-func intrinsicSelfServicePermissions(activeCollaborator bool) map[Permission]struct{} {
+func intrinsicSelfServicePermissions(hasCollaboratorHistory bool, activeCollaborator bool) map[Permission]struct{} {
 	permissions := map[Permission]struct{}{
 		PermissionAuthzSelfRead:     {},
 		PermissionTenantsRead:       {},
@@ -741,9 +763,11 @@ func intrinsicSelfServicePermissions(activeCollaborator bool) map[Permission]str
 		PermissionPeopleSelfRead:    {},
 		PermissionPeopleSelfUpdate:  {},
 	}
+	if hasCollaboratorHistory {
+		permissions[PermissionCollaboratorsSelfRead] = struct{}{}
+	}
 	if activeCollaborator {
 		for _, permission := range []Permission{
-			PermissionCollaboratorsSelfRead,
 			PermissionCurrentAccountsSelfSummaryRead,
 			PermissionCurrentAccountsSelfLedgerRead,
 			PermissionAssignmentsSelfCurrentRead,

@@ -46,10 +46,11 @@ const (
 	PermissionPeopleSelfRead   Permission = "people.self.read"
 	PermissionPeopleSelfUpdate Permission = "people.self.update"
 
-	PermissionCollaboratorsRead     Permission = "collaborators.read"
-	PermissionCollaboratorsCreate   Permission = "collaborators.create"
-	PermissionCollaboratorsUpdate   Permission = "collaborators.update"
-	PermissionCollaboratorsSelfRead Permission = "collaborators.self.read"
+	PermissionCollaboratorsRead                 Permission = "collaborators.read"
+	PermissionCollaboratorsCreate               Permission = "collaborators.create"
+	PermissionCollaboratorsUpdate               Permission = "collaborators.update"
+	PermissionCollaboratorsWorkAssignmentUpdate Permission = "collaborators.work_assignment.update"
+	PermissionCollaboratorsSelfRead             Permission = "collaborators.self.read"
 
 	PermissionPlanningRead   Permission = "planning.read"
 	PermissionPlanningCreate Permission = "planning.create"

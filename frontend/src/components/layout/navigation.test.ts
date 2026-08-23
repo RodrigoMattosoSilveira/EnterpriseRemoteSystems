@@ -94,7 +94,7 @@ describe("permission-aware navigation", () => {
       "/people/person-1",
     );
     expect(visibleNavigationLinks(permissions, "SELF", identity).map((link) => link.to)).toEqual(
-      expect.arrayContaining(["/people/person-1", "/collaborators/collaborator-1", "/password/change"]),
+      expect.arrayContaining(["/people/person-1", "/collaborators", "/password/change"]),
     );
     expect(visibleNavigationLinks(permissions, "SELF", identity).map((link) => link.to)).not.toContain(
       "/receipts/outstanding",
