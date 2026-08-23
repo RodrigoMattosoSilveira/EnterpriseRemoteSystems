@@ -79,7 +79,10 @@ ID as `expenses.person_id`.
 Accrual calculation resolves every Work Period Assignment's Collaborator
 Journey to its Membership and persists the canonical Person ID on each
 `accrual_items` row. Posting the Accrual Item carries the same Person ID to the
-resulting Ledger Entry.
+resulting Ledger Entry. Accrual Run, Work Period, Assignment, production, value
+unit, and posting repository operations are all scoped by the request's selected
+Tenant; the accrual subsystem does not fall back to the legacy default Tenant
+for authenticated Tenant operations.
 
 Expense-generated Ledger Entries, reversals, replacements, settlement Ledger
 Entries, and correction Ledger Entries all preserve explicit Person + Tenant
@@ -109,6 +112,10 @@ tenant_id + person_id
 Consequently, the Current Account in one Tenant includes financial history from
 all of that Person's historical Journeys in that Tenant. Each Ledger Entry
 still exposes its `collaboratorId` so the originating Journey remains traceable.
+The Current + Future Earnings projection uses this same Person + Tenant balance
+as its starting balance, while unposted-ready and estimated-future earnings
+remain scoped to the selected Journey because they describe that Journey's
+operational provenance.
 
 Settlement Preview, payout, zero-gold, and Journey closure intentionally remain
 Journey-scoped lifecycle operations. They must not consume another Journey's

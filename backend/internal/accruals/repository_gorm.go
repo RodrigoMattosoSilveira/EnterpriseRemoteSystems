@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"enterpriseremotesystems/backend/internal/db"
+	"enterpriseremotesystems/backend/internal/shared/tenantctx"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
@@ -15,7 +16,7 @@ func NewRepository(database *gorm.DB) Repository { return &gormRepository{db: da
 func (r *gormRepository) ListRunsByWorkPeriod(ctx context.Context, workPeriodID string, filter normalizedAccrualRunListFilter) ([]db.AccrualRun, int64, error) {
 	var rows []db.AccrualRun
 	var total int64
-	q := r.db.WithContext(ctx).Model(&db.AccrualRun{}).Where("tenant_id = ? AND work_period_id = ?", defaultTenantID, workPeriodID)
+	q := r.db.WithContext(ctx).Model(&db.AccrualRun{}).Where("tenant_id = ? AND work_period_id = ?", tenantctx.TenantID(ctx), workPeriodID)
 	if filter.Status != "" {
 		q = q.Where("status = ?", filter.Status)
 	}
@@ -31,12 +32,12 @@ func (r *gormRepository) CreateRun(ctx context.Context, run *db.AccrualRun) erro
 }
 
 func (r *gormRepository) UpdateRun(ctx context.Context, run *db.AccrualRun) error {
-	return r.db.WithContext(ctx).Model(&db.AccrualRun{}).Where("id = ? AND tenant_id = ?", run.ID, defaultTenantID).Updates(map[string]any{"status": run.Status, "accrual_date": run.AccrualDate, "notes": run.Notes, "updated_at": run.UpdatedAt}).Error
+	return r.db.WithContext(ctx).Model(&db.AccrualRun{}).Where("id = ? AND tenant_id = ?", run.ID, tenantctx.TenantID(ctx)).Updates(map[string]any{"status": run.Status, "accrual_date": run.AccrualDate, "notes": run.Notes, "updated_at": run.UpdatedAt}).Error
 }
 
 func (r *gormRepository) FindRunByID(ctx context.Context, id string) (*db.AccrualRun, error) {
 	var row db.AccrualRun
-	err := r.db.WithContext(ctx).Preload("WorkPeriod").First(&row, "id = ? AND tenant_id = ?", id, defaultTenantID).Error
+	err := r.db.WithContext(ctx).Preload("WorkPeriod").First(&row, "id = ? AND tenant_id = ?", id, tenantctx.TenantID(ctx)).Error
 	if err != nil {
 		return nil, err
 	}
@@ -45,7 +46,7 @@ func (r *gormRepository) FindRunByID(ctx context.Context, id string) (*db.Accrua
 
 func (r *gormRepository) FindWorkPeriodByID(ctx context.Context, id string) (*db.WorkPeriod, error) {
 	var row db.WorkPeriod
-	err := r.db.WithContext(ctx).First(&row, "id = ? AND tenant_id = ?", id, defaultTenantID).Error
+	err := r.db.WithContext(ctx).First(&row, "id = ? AND tenant_id = ?", id, tenantctx.TenantID(ctx)).Error
 	if err != nil {
 		return nil, err
 	}
@@ -55,7 +56,7 @@ func (r *gormRepository) FindWorkPeriodByID(ctx context.Context, id string) (*db
 func (r *gormRepository) ListItemsByRun(ctx context.Context, runID string, filter normalizedAccrualItemListFilter) ([]db.AccrualItem, int64, error) {
 	var rows []db.AccrualItem
 	var total int64
-	q := r.db.WithContext(ctx).Model(&db.AccrualItem{}).Where("tenant_id = ? AND accrual_run_id = ?", defaultTenantID, runID).Preload("Collaborator.Person")
+	q := r.db.WithContext(ctx).Model(&db.AccrualItem{}).Where("tenant_id = ? AND accrual_run_id = ?", tenantctx.TenantID(ctx), runID).Preload("Collaborator.Person")
 	if filter.Status != "" {
 		q = q.Where("status = ?", filter.Status)
 	}
@@ -74,7 +75,7 @@ func (r *gormRepository) ListItemsByRun(ctx context.Context, runID string, filte
 
 func (r *gormRepository) ReplaceItemsForRun(ctx context.Context, run *db.AccrualRun, items []db.AccrualItem) error {
 	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		if err := tx.Where("tenant_id = ? AND accrual_run_id = ? AND status <> ?", defaultTenantID, run.ID, ItemStatusPosted).Delete(&db.AccrualItem{}).Error; err != nil {
+		if err := tx.Where("tenant_id = ? AND accrual_run_id = ? AND status <> ?", tenantctx.TenantID(ctx), run.ID, ItemStatusPosted).Delete(&db.AccrualItem{}).Error; err != nil {
 			return err
 		}
 		if len(items) > 0 {
@@ -82,7 +83,7 @@ func (r *gormRepository) ReplaceItemsForRun(ctx context.Context, run *db.Accrual
 				return err
 			}
 		}
-		return tx.Model(&db.AccrualRun{}).Where("id = ? AND tenant_id = ?", run.ID, defaultTenantID).Updates(map[string]any{"status": run.Status, "updated_at": run.UpdatedAt}).Error
+		return tx.Model(&db.AccrualRun{}).Where("id = ? AND tenant_id = ?", run.ID, tenantctx.TenantID(ctx)).Updates(map[string]any{"status": run.Status, "updated_at": run.UpdatedAt}).Error
 	})
 }
 
@@ -100,7 +101,7 @@ func (r *gormRepository) SummariesForRuns(ctx context.Context, runIDs []string) 
 		Count        int
 	}
 	var rows []row
-	err := r.db.WithContext(ctx).Model(&db.AccrualItem{}).Select("accrual_run_id, status, count(*) as count").Where("tenant_id = ? AND accrual_run_id IN ?", defaultTenantID, runIDs).Group("accrual_run_id, status").Scan(&rows).Error
+	err := r.db.WithContext(ctx).Model(&db.AccrualItem{}).Select("accrual_run_id, status, count(*) as count").Where("tenant_id = ? AND accrual_run_id IN ?", tenantctx.TenantID(ctx), runIDs).Group("accrual_run_id, status").Scan(&rows).Error
 	if err != nil {
 		return nil, err
 	}
@@ -124,13 +125,13 @@ func (r *gormRepository) SummariesForRuns(ctx context.Context, runIDs []string) 
 
 func (r *gormRepository) ListAssignmentsForCalculation(ctx context.Context, workPeriodID string) ([]db.WorkPeriodAssignment, error) {
 	var rows []db.WorkPeriodAssignment
-	err := r.db.WithContext(ctx).Where("tenant_id = ? AND work_period_id = ? AND active = ? AND planned_status = ?", defaultTenantID, workPeriodID, true, "INCLUDED").Preload("Collaborator.PaymentMethod").Preload("Collaborator.Person").Preload("Collaborator.Membership").Find(&rows).Error
+	err := r.db.WithContext(ctx).Where("tenant_id = ? AND work_period_id = ? AND active = ? AND planned_status = ?", tenantctx.TenantID(ctx), workPeriodID, true, "INCLUDED").Preload("Collaborator.PaymentMethod").Preload("Collaborator.Person").Preload("Collaborator.Membership").Find(&rows).Error
 	return rows, err
 }
 
 func (r *gormRepository) FindGoldProduction(ctx context.Context, workPeriodID string, locationID string) (*db.GoldProductionEntry, error) {
 	var row db.GoldProductionEntry
-	err := r.db.WithContext(ctx).First(&row, "tenant_id = ? AND work_period_id = ? AND location_id = ? AND active = ?", defaultTenantID, workPeriodID, locationID, true).Error
+	err := r.db.WithContext(ctx).First(&row, "tenant_id = ? AND work_period_id = ? AND location_id = ? AND active = ?", tenantctx.TenantID(ctx), workPeriodID, locationID, true).Error
 	if err != nil {
 		return nil, err
 	}
@@ -139,7 +140,7 @@ func (r *gormRepository) FindGoldProduction(ctx context.Context, workPeriodID st
 
 func (r *gormRepository) FindValueUnitByCode(ctx context.Context, code string) (*db.ReferenceData, error) {
 	var row db.ReferenceData
-	err := r.db.WithContext(ctx).First(&row, "tenant_id = ? AND type = ? AND code = ? AND active = ?", defaultTenantID, "value_unit", code, true).Error
+	err := r.db.WithContext(ctx).First(&row, "tenant_id = ? AND type = ? AND code = ? AND active = ?", tenantctx.TenantID(ctx), "value_unit", code, true).Error
 	if err != nil {
 		return nil, err
 	}
@@ -148,13 +149,13 @@ func (r *gormRepository) FindValueUnitByCode(ctx context.Context, code string) (
 
 func (r *gormRepository) ListReadyItemsByRun(ctx context.Context, runID string) ([]db.AccrualItem, error) {
 	var rows []db.AccrualItem
-	err := r.db.WithContext(ctx).Where("tenant_id = ? AND accrual_run_id = ? AND status = ?", defaultTenantID, runID, ItemStatusReady).Order("created_at ASC").Find(&rows).Error
+	err := r.db.WithContext(ctx).Where("tenant_id = ? AND accrual_run_id = ? AND status = ?", tenantctx.TenantID(ctx), runID, ItemStatusReady).Order("created_at ASC").Find(&rows).Error
 	return rows, err
 }
 
 func (r *gormRepository) PendingItemCountByRun(ctx context.Context, runID string) (int64, error) {
 	var count int64
-	err := r.db.WithContext(ctx).Model(&db.AccrualItem{}).Where("tenant_id = ? AND accrual_run_id = ? AND status = ?", defaultTenantID, runID, ItemStatusPending).Count(&count).Error
+	err := r.db.WithContext(ctx).Model(&db.AccrualItem{}).Where("tenant_id = ? AND accrual_run_id = ? AND status = ?", tenantctx.TenantID(ctx), runID, ItemStatusPending).Count(&count).Error
 	return count, err
 }
 
@@ -167,7 +168,7 @@ func (r *gormRepository) PostedItemKeysForWorkPeriod(ctx context.Context, workPe
 	var rows []row
 	err := r.db.WithContext(ctx).Model(&db.AccrualItem{}).
 		Select("work_period_assignment_id, calculation_type, direction").
-		Where("tenant_id = ? AND work_period_id = ? AND status = ? AND work_period_assignment_id IS NOT NULL", defaultTenantID, workPeriodID, ItemStatusPosted).
+		Where("tenant_id = ? AND work_period_id = ? AND status = ? AND work_period_assignment_id IS NOT NULL", tenantctx.TenantID(ctx), workPeriodID, ItemStatusPosted).
 		Scan(&rows).Error
 	if err != nil {
 		return nil, err
@@ -192,18 +193,18 @@ func (r *gormRepository) PostReadyItems(ctx context.Context, run *db.AccrualRun,
 		}
 		if len(ids) > 0 {
 			if err := tx.Model(&db.AccrualItem{}).
-				Where("tenant_id = ? AND accrual_run_id = ? AND id IN ? AND status = ?", defaultTenantID, run.ID, ids, ItemStatusReady).
+				Where("tenant_id = ? AND accrual_run_id = ? AND id IN ? AND status = ?", tenantctx.TenantID(ctx), run.ID, ids, ItemStatusReady).
 				Updates(map[string]any{"status": ItemStatusPosted, "updated_at": run.UpdatedAt}).Error; err != nil {
 				return err
 			}
 		}
 		if err := tx.Model(&db.AccrualRun{}).
-			Where("id = ? AND tenant_id = ?", run.ID, defaultTenantID).
+			Where("id = ? AND tenant_id = ?", run.ID, tenantctx.TenantID(ctx)).
 			Updates(map[string]any{"status": run.Status, "updated_at": run.UpdatedAt}).Error; err != nil {
 			return err
 		}
 		return tx.Model(&db.WorkPeriod{}).
-			Where("id = ? AND tenant_id = ?", run.WorkPeriodID, defaultTenantID).
+			Where("id = ? AND tenant_id = ?", run.WorkPeriodID, tenantctx.TenantID(ctx)).
 			Updates(map[string]any{"status": workPeriodStatus, "updated_at": run.UpdatedAt}).Error
 	})
 }

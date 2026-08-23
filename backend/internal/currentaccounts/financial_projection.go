@@ -17,7 +17,11 @@ func (s *service) FinancialProjection(ctx context.Context, collaboratorID string
 		return nil, err
 	}
 
-	balances, err := s.repo.ListBalances(ctx, collaboratorID)
+	personID, err := financialOwnerPersonID(*collaborator)
+	if err != nil {
+		return nil, err
+	}
+	balances, err := s.repo.ListPersonBalances(ctx, personID)
 	if err != nil {
 		return nil, err
 	}
