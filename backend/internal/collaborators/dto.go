@@ -72,6 +72,12 @@ type UpdateCollaboratorRequest struct {
 	ExtensionDays                  int      `json:"extensionDays"`
 }
 
+type UpdateCollaboratorWorkAssignmentRequest struct {
+	SectorID   string `json:"sectorId"`
+	LocationID string `json:"locationId"`
+	TaskID     string `json:"taskId"`
+}
+
 type CollaboratorListFilter struct {
 	Search          string `query:"search"`
 	StatusID        string `query:"statusId"`

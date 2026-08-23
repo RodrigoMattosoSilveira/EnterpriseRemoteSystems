@@ -193,13 +193,10 @@ func (r *GORMRepository) FindSelfServiceHome(ctx context.Context, accountID stri
 		return SelfServiceHomeRecord{}, gorm.ErrRecordNotFound
 	}
 
-	// Bite 30G will move financial ownership directly onto Person + Tenant.
-	// Until then, this read-only self-service projection follows the preserved
-	// Membership -> legacy Person -> Collaborator Journey provenance so an
-	// authenticated Person can inspect their own read-only Current Account even
-	// when no tenant Actor is currently active. Membership ACTIVE state is
-	// deliberately not required: own-resource visibility survives Membership/
-	// Actor lifecycle changes while every row retains Tenant provenance.
+	// Bite 30G financial ownership is Account -> global Person -> ledger Person +
+	// Tenant. Own-resource visibility therefore no longer depends on a current or
+	// historical Collaborator Journey, an ACTIVE Membership, or an ACTIVE Tenant
+	// Actor. Journey references remain on individual entries only as provenance.
 	var balances []SelfServiceBalanceRecord
 	if err := r.database.WithContext(ctx).
 		Table("auth_account_people ap").
@@ -209,9 +206,7 @@ func (r *GORMRepository) FindSelfServiceHome(ctx context.Context, accountID stri
 			vu.code AS value_unit_code,
 			vu.label AS value_unit_label,
 			SUM(CASE WHEN le.direction = 'CREDIT' THEN le.amount ELSE -le.amount END) AS balance`).
-		Joins("JOIN person_tenant_memberships m ON m.person_id = ap.person_id AND m.legacy_person_id IS NOT NULL").
-		Joins("JOIN collaborator_journeys cj ON cj.tenant_id = m.tenant_id AND cj.person_id = m.legacy_person_id").
-		Joins("JOIN ledger_entries le ON le.tenant_id = cj.tenant_id AND le.collaborator_id = cj.id AND le.active = ?", true).
+		Joins("JOIN ledger_entries le ON le.person_id = ap.person_id AND le.active = ?", true).
 		Joins("JOIN tenants t ON t.id = le.tenant_id").
 		Joins("JOIN reference_data vu ON vu.id = le.value_unit_id AND vu.tenant_id = le.tenant_id").
 		Where("ap.account_id = ?", accountID).
@@ -227,6 +222,7 @@ func (r *GORMRepository) FindSelfServiceHome(ctx context.Context, accountID stri
 		Table("auth_account_people ap").
 		Select(`le.id,
 			le.tenant_id,
+			le.person_id,
 			t.name AS tenant_name,
 			le.collaborator_id,
 			le.value_unit_id,
@@ -239,9 +235,7 @@ func (r *GORMRepository) FindSelfServiceHome(ctx context.Context, accountID stri
 			le.source_type,
 			le.source_id,
 			COALESCE(le.description, '') AS description`).
-		Joins("JOIN person_tenant_memberships m ON m.person_id = ap.person_id AND m.legacy_person_id IS NOT NULL").
-		Joins("JOIN collaborator_journeys cj ON cj.tenant_id = m.tenant_id AND cj.person_id = m.legacy_person_id").
-		Joins("JOIN ledger_entries le ON le.tenant_id = cj.tenant_id AND le.collaborator_id = cj.id AND le.active = ?", true).
+		Joins("JOIN ledger_entries le ON le.person_id = ap.person_id AND le.active = ?", true).
 		Joins("JOIN tenants t ON t.id = le.tenant_id").
 		Joins("JOIN reference_data vu ON vu.id = le.value_unit_id AND vu.tenant_id = le.tenant_id").
 		Where("ap.account_id = ?", accountID).

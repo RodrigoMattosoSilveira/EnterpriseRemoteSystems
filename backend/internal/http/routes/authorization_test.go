@@ -403,6 +403,91 @@ func TestRequirePermissionOrSelfCollaboratorRejectsDifferentCollaborator(t *test
 	}
 }
 
+func TestCollaboratorSelfReadDoesNotAuthorizeCollaboratorMutations(t *testing.T) {
+	store := fakeActorStore{actor: &authz.Actor{
+		ID:       "collaborator-self-actor",
+		TenantID: "default",
+		Scope:    authz.ActorScopeTenant,
+		Permissions: map[authz.Permission]struct{}{
+			authz.PermissionCollaboratorsSelfRead: {},
+		},
+		IntrinsicPermissions: map[authz.Permission]struct{}{
+			authz.PermissionCollaboratorsSelfRead: {},
+		},
+	}}
+
+	app := fiber.New()
+	deps := Dependencies{ActorStore: store}
+	app.Put("/collaborators/:id", requirePermission(deps, authz.PermissionCollaboratorsUpdate), func(c fiber.Ctx) error {
+		return c.SendStatus(fiber.StatusNoContent)
+	})
+	app.Patch("/collaborators/:id/work-assignment", requirePermission(deps, authz.PermissionCollaboratorsWorkAssignmentUpdate), func(c fiber.Ctx) error {
+		return c.SendStatus(fiber.StatusNoContent)
+	})
+
+	for _, tc := range []struct {
+		method string
+		path   string
+	}{
+		{method: fiber.MethodPut, path: "/collaborators/collaborator-self"},
+		{method: fiber.MethodPatch, path: "/collaborators/collaborator-self/work-assignment"},
+	} {
+		req := httptest.NewRequest(tc.method, tc.path, nil)
+		req.Header.Set(authz.HeaderActorID, "collaborator-self-actor")
+		req.Header.Set(authz.HeaderTenantID, "default")
+		resp, err := app.Test(req)
+		if err != nil {
+			t.Fatalf("%s %s failed: %v", tc.method, tc.path, err)
+		}
+		if resp.StatusCode != fiber.StatusForbidden {
+			t.Fatalf("%s %s expected 403, got %d", tc.method, tc.path, resp.StatusCode)
+		}
+	}
+}
+
+func TestEarningsOperatorWorkAssignmentPermissionDoesNotAuthorizeFullCollaboratorUpdate(t *testing.T) {
+	store := fakeActorStore{actor: &authz.Actor{
+		ID:       "earnings-actor",
+		TenantID: "default",
+		Scope:    authz.ActorScopeTenant,
+		Permissions: map[authz.Permission]struct{}{
+			authz.PermissionCollaboratorsRead:                 {},
+			authz.PermissionCollaboratorsWorkAssignmentUpdate: {},
+		},
+	}}
+
+	app := fiber.New()
+	deps := Dependencies{ActorStore: store}
+	app.Put("/collaborators/:id", requirePermission(deps, authz.PermissionCollaboratorsUpdate), func(c fiber.Ctx) error {
+		return c.SendStatus(fiber.StatusNoContent)
+	})
+	app.Patch("/collaborators/:id/work-assignment", requirePermission(deps, authz.PermissionCollaboratorsWorkAssignmentUpdate), func(c fiber.Ctx) error {
+		return c.SendStatus(fiber.StatusNoContent)
+	})
+
+	fullReq := httptest.NewRequest(fiber.MethodPut, "/collaborators/collaborator-1", nil)
+	fullReq.Header.Set(authz.HeaderActorID, "earnings-actor")
+	fullReq.Header.Set(authz.HeaderTenantID, "default")
+	fullResp, err := app.Test(fullReq)
+	if err != nil {
+		t.Fatalf("full collaborator update request failed: %v", err)
+	}
+	if fullResp.StatusCode != fiber.StatusForbidden {
+		t.Fatalf("full collaborator update expected 403, got %d", fullResp.StatusCode)
+	}
+
+	assignmentReq := httptest.NewRequest(fiber.MethodPatch, "/collaborators/collaborator-1/work-assignment", nil)
+	assignmentReq.Header.Set(authz.HeaderActorID, "earnings-actor")
+	assignmentReq.Header.Set(authz.HeaderTenantID, "default")
+	assignmentResp, err := app.Test(assignmentReq)
+	if err != nil {
+		t.Fatalf("work-assignment update request failed: %v", err)
+	}
+	if assignmentResp.StatusCode != fiber.StatusNoContent {
+		t.Fatalf("work-assignment update expected 204, got %d", assignmentResp.StatusCode)
+	}
+}
+
 func TestAuthorizationMiddlewareCachesResolvedActorForRouteGuards(t *testing.T) {
 	calls := 0
 	store := fakeActorStore{

@@ -43,6 +43,15 @@ func (s *service) CloseJourney(ctx context.Context, collaboratorID, authorizedBy
 		return nil, err
 	}
 
+	collaborator, err := s.repo.FindCollaboratorByID(ctx, collaboratorID)
+	if err != nil {
+		return nil, err
+	}
+	personID, err := financialOwnerPersonID(*collaborator)
+	if err != nil {
+		return nil, err
+	}
+
 	preview, err := s.SettlementPreview(ctx, collaboratorID)
 	if err != nil {
 		return nil, err
@@ -92,20 +101,20 @@ func (s *service) CloseJourney(ctx context.Context, collaboratorID, authorizedBy
 		if findErr != nil {
 			return nil, findErr
 		}
-		entries = append(entries, payoutLedgerEntry(settlement, *valueUnit, settlement.BRLAmount, actor, effectiveDate, now))
+		entries = append(entries, payoutLedgerEntry(settlement, personID, *valueUnit, settlement.BRLAmount, actor, effectiveDate, now))
 	}
 	if settlement.GoldGramAmount > 0 {
 		valueUnit, findErr := s.repo.FindValueUnitByCode(ctx, valueUnitGoldGram)
 		if findErr != nil {
 			return nil, findErr
 		}
-		entries = append(entries, payoutLedgerEntry(settlement, *valueUnit, settlement.GoldGramAmount, actor, effectiveDate, now))
+		entries = append(entries, payoutLedgerEntry(settlement, personID, *valueUnit, settlement.GoldGramAmount, actor, effectiveDate, now))
 	}
 
 	if err := s.repo.CloseJourneyWithSettlement(ctx, collaboratorID, finishedStatus.ID, now, &settlement, entries...); err != nil {
 		return nil, err
 	}
-	collaborator, err := s.repo.FindCollaboratorByID(ctx, collaboratorID)
+	collaborator, err = s.repo.FindCollaboratorByID(ctx, collaboratorID)
 	if err != nil {
 		return nil, err
 	}

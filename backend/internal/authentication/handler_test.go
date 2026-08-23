@@ -27,7 +27,7 @@ func TestAuthenticationHandlerIssuesReadsAndClearsSessionCookie(t *testing.T) {
 	app := fiber.New()
 	app.Use(handler.SessionMiddleware())
 	app.Post("/login", handler.Login)
-	app.Get("/session", handler.RequireSession, handler.CurrentSession)
+	app.Get("/session", handler.CurrentSession)
 	app.Post("/logout", handler.Logout)
 
 	body, _ := json.Marshal(LoginRequest{Login: account.Login, Password: "Cookie-Password-1"})
@@ -130,20 +130,20 @@ func TestAuthenticationHandlerIssuesReadsAndClearsSessionCookie(t *testing.T) {
 	}
 }
 
-func TestAuthenticationHandlerMissingSessionDoesNotClearAnUnrelatedBrowserCookie(t *testing.T) {
+func TestAuthenticationHandlerMissingSessionProbeReturnsNoContentWithoutClearingCookies(t *testing.T) {
 	_, _, service, _ := authenticationTestService(t)
 	handler := NewHandler(service, CookieConfig{Name: "ers_test_session", TTL: time.Hour}, nil, nil)
 	app := fiber.New()
 	app.Use(handler.SessionMiddleware())
-	app.Get("/session", handler.RequireSession, handler.CurrentSession)
+	app.Get("/session", handler.CurrentSession)
 
 	request := httptest.NewRequest(http.MethodGet, "/session", nil)
 	response, err := app.Test(request)
 	if err != nil {
 		t.Fatalf("missing session request: %v", err)
 	}
-	if response.StatusCode != http.StatusUnauthorized {
-		t.Fatalf("expected missing session status 401, got %d", response.StatusCode)
+	if response.StatusCode != http.StatusNoContent {
+		t.Fatalf("expected cookie-less session probe status 204, got %d", response.StatusCode)
 	}
 	if response.Header.Get("Cache-Control") != "no-store" {
 		t.Fatalf("expected missing session response to disable caching, got %q", response.Header.Get("Cache-Control"))

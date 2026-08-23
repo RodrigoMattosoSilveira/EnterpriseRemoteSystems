@@ -45,6 +45,7 @@ export type AuthSelfServiceLedgerEntry = {
   id: string;
   tenantId: string;
   tenantName: string;
+  personId: string;
   collaboratorId: string;
   valueUnitId: string;
   valueUnitCode: string;

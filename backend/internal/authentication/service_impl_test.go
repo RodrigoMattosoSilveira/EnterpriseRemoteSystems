@@ -638,6 +638,7 @@ func TestAccountLevelSelfServiceKeepsCurrentAccountWithoutActiveTenantContext(t 
 	collaborator := appdb.CollaboratorJourney{
 		BaseModel:            appdb.BaseModel{ID: "self-service-history-collaborator", CreatedAt: now, UpdatedAt: now},
 		TenantID:             appdb.DefaultTenantID,
+		MembershipID:         &membership.ID,
 		PersonID:             person.ID,
 		JourneyStartDate:     now.AddDate(0, -2, 0),
 		DefaultEndDate:       now.AddDate(0, 10, 0),
@@ -657,6 +658,7 @@ func TestAccountLevelSelfServiceKeepsCurrentAccountWithoutActiveTenantContext(t 
 	ledgerEntry := appdb.LedgerEntry{
 		BaseModel:      appdb.BaseModel{ID: "self-service-history-ledger", CreatedAt: now, UpdatedAt: now},
 		TenantID:       appdb.DefaultTenantID,
+		PersonID:       account.GlobalPersonID,
 		CollaboratorID: collaborator.ID,
 		ValueUnitID:    "self-service-value-brl",
 		EntryType:      "EARNING_CREDIT",
@@ -696,7 +698,7 @@ func TestAccountLevelSelfServiceKeepsCurrentAccountWithoutActiveTenantContext(t 
 	if len(selfService.Entries) != 1 {
 		t.Fatalf("expected one Current Account entry, got %#v", selfService.Entries)
 	}
-	if entry := selfService.Entries[0]; entry.ID != ledgerEntry.ID || entry.TenantID != appdb.DefaultTenantID || entry.SignedAmount != 1250 {
+	if entry := selfService.Entries[0]; entry.ID != ledgerEntry.ID || entry.TenantID != appdb.DefaultTenantID || entry.PersonID != account.GlobalPersonID || entry.SignedAmount != 1250 {
 		t.Fatalf("unexpected Current Account entry: %#v", entry)
 	}
 }
@@ -735,10 +737,19 @@ func TestAuthenticationCreatesPersonActorAndAccountWhenNoActorExists(t *testing.
 	if err := database.Create(&person).Error; err != nil {
 		t.Fatalf("create Person without actor: %v", err)
 	}
+	if err := appdb.EnsureGlobalPersonMembershipFoundation(database); err != nil {
+		t.Fatalf("ensure Person Membership foundation: %v", err)
+	}
+
+	var membership appdb.PersonTenantMembership
+	if err := database.First(&membership, "legacy_person_id = ? AND tenant_id = ?", person.ID, appdb.DefaultTenantID).Error; err != nil {
+		t.Fatalf("find Person-Tenant Membership: %v", err)
+	}
 
 	collaborator := appdb.CollaboratorJourney{
 		BaseModel:            appdb.BaseModel{ID: "auth-collaborator-without-actor", CreatedAt: now, UpdatedAt: now},
 		TenantID:             appdb.DefaultTenantID,
+		MembershipID:         &membership.ID,
 		PersonID:             person.ID,
 		JourneyStartDate:     now,
 		DefaultEndDate:       now.AddDate(0, 0, 90),

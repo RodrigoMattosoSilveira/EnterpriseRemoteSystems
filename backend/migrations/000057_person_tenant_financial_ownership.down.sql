@@ -1,0 +1,23 @@
+DROP TRIGGER IF EXISTS trg_receipt_financial_identity_immutable;
+DROP TRIGGER IF EXISTS trg_receipt_financial_owner_consistency_insert;
+DROP TRIGGER IF EXISTS trg_receipt_financial_owner_required_insert;
+DROP TRIGGER IF EXISTS trg_ledger_financial_identity_immutable;
+DROP TRIGGER IF EXISTS trg_ledger_financial_owner_consistency_insert;
+DROP TRIGGER IF EXISTS trg_ledger_financial_owner_required_insert;
+DROP TRIGGER IF EXISTS trg_accrual_financial_identity_immutable;
+DROP TRIGGER IF EXISTS trg_accrual_financial_owner_consistency_insert;
+DROP TRIGGER IF EXISTS trg_accrual_financial_owner_required_insert;
+DROP TRIGGER IF EXISTS trg_expense_financial_owner_consistency_update;
+DROP TRIGGER IF EXISTS trg_expense_financial_owner_consistency_insert;
+DROP TRIGGER IF EXISTS trg_expense_financial_owner_required_insert;
+
+DROP INDEX IF EXISTS idx_ledger_receipts_tenant_person_status;
+DROP INDEX IF EXISTS idx_ledger_entries_tenant_person_date;
+DROP INDEX IF EXISTS idx_ledger_entries_tenant_person_unit_active;
+DROP INDEX IF EXISTS idx_accrual_items_tenant_person_status;
+DROP INDEX IF EXISTS idx_expenses_tenant_person_date;
+
+ALTER TABLE ledger_receipts DROP COLUMN person_id;
+ALTER TABLE ledger_entries DROP COLUMN person_id;
+ALTER TABLE accrual_items DROP COLUMN person_id;
+ALTER TABLE expenses DROP COLUMN person_id;

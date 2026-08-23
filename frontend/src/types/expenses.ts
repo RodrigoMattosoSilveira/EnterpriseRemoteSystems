@@ -20,6 +20,7 @@ export type ExpenseFinancialPosting = {
 export type Expense = {
   id: string;
   tenantId: string;
+  personId: string;
   collaboratorId: string;
   collaboratorLabel?: string;
   expenseCategoryId: string;

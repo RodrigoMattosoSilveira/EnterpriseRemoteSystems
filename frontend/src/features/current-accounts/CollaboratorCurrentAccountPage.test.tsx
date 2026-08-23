@@ -38,6 +38,8 @@ describe("CollaboratorCurrentAccountPage", () => {
 
     renderCurrentAccountPage("/collaborators/collab-1/current-account");
 
+    await waitForText("Person Current Account");
+    await waitForText("Person-owned balances and ledger history in the selected Tenant.");
     await waitForText("Maria");
     await waitForText("42,50");
     await waitForText("expense deduction");
@@ -118,10 +120,14 @@ function currentAccountDetailWith(
   items: CurrentAccountDetail["ledgerEntries"]["items"],
 ): CurrentAccountDetail {
   return {
+    personId: "person-1",
+    personLabel: "Maria",
     collaboratorId: "collab-1",
     collaboratorLabel: "Maria",
     balances: [
       {
+        personId: "person-1",
+        personLabel: "Maria",
         collaboratorId: "collab-1",
         collaboratorLabel: "Maria",
         valueUnitId: "ref-value-unit-brl",
@@ -151,6 +157,7 @@ const authorizationActor: AuthzCurrentActor = {
 const expenseEntry: CurrentAccountDetail["ledgerEntries"]["items"][number] = {
   id: "ledger-1",
   tenantId: "default",
+  personId: "person-1",
   collaboratorId: "collab-1",
   valueUnitId: "ref-value-unit-brl",
   valueUnitCode: "BRL",
@@ -177,6 +184,7 @@ const expenseEntry: CurrentAccountDetail["ledgerEntries"]["items"][number] = {
 const earningEntry: CurrentAccountDetail["ledgerEntries"]["items"][number] = {
   id: "ledger-earning-1",
   tenantId: "default",
+  personId: "person-1",
   collaboratorId: "collab-1",
   valueUnitId: "ref-value-unit-brl",
   valueUnitCode: "BRL",

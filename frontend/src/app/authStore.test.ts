@@ -40,6 +40,19 @@ describe("authStore", () => {
     });
   });
 
+  it("treats a successful cookie-less session probe as anonymous", async () => {
+    vi.spyOn(authApi, "loadAuthSession").mockResolvedValue(null);
+
+    await initializeAuthSession();
+
+    expect(getAuthState()).toEqual({
+      status: "anonymous",
+      session: null,
+      error: null,
+      reason: null,
+    });
+  });
+
   it("treats an HTTP 401 session response as anonymous", async () => {
     vi.spyOn(authApi, "loadAuthSession").mockRejectedValue(
       new ApiError({ message: "Authentication required", status: 401 }),
@@ -126,6 +139,21 @@ describe("authStore", () => {
       session: null,
       error: null,
       reason: "inactive",
+    });
+  });
+
+  it("invalidates authenticated browser state when the session cookie disappears", async () => {
+    vi.spyOn(authApi, "login").mockResolvedValue(session);
+    vi.spyOn(authApi, "loadAuthSession").mockResolvedValue(null);
+    await authenticate({ login: "admin@example.com", password: "password" });
+
+    await revalidateAuthSession();
+
+    expect(getAuthState()).toEqual({
+      status: "anonymous",
+      session: null,
+      error: null,
+      reason: null,
     });
   });
 

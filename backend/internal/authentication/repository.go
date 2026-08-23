@@ -91,6 +91,7 @@ type SelfServiceBalanceRecord struct {
 type SelfServiceLedgerEntryRecord struct {
 	ID             string
 	TenantID       string
+	PersonID       string
 	TenantName     string
 	CollaboratorID string
 	ValueUnitID    string

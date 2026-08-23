@@ -37,7 +37,8 @@ type apiPersonResponse struct {
 }
 type apiCollaboratorResponse struct {
 	Data struct {
-		ID string `json:"id"`
+		ID       string `json:"id"`
+		PersonID string `json:"personId"`
 	} `json:"data"`
 }
 type apiWorkPeriodResponse struct {
@@ -70,6 +71,7 @@ type apiAccrualItemListResponse struct {
 	Data struct {
 		Items []struct {
 			ID                     string   `json:"id"`
+			PersonID               string   `json:"personId"`
 			WorkPeriodAssignmentID string   `json:"workPeriodAssignmentId"`
 			CollaboratorID         string   `json:"collaboratorId"`
 			CalculationType        string   `json:"calculationType"`
@@ -87,6 +89,7 @@ type apiLedgerEntryListResponse struct {
 	Data struct {
 		Items []struct {
 			ID                   string  `json:"id"`
+			PersonID             string  `json:"personId"`
 			ValueUnitCode        string  `json:"valueUnitCode"`
 			EntryType            string  `json:"entryType"`
 			Direction            string  `json:"direction"`
@@ -106,13 +109,16 @@ type apiLedgerEntryListResponse struct {
 
 type apiCurrentAccountDetailResponse struct {
 	Data struct {
+		PersonID       string `json:"personId"`
 		CollaboratorID string `json:"collaboratorId"`
 		Balances       []struct {
+			PersonID      string  `json:"personId"`
 			ValueUnitCode string  `json:"valueUnitCode"`
 			Balance       float64 `json:"balance"`
 		} `json:"balances"`
 		LedgerEntries struct {
 			Items []struct {
+				PersonID             string  `json:"personId"`
 				ValueUnitCode        string  `json:"valueUnitCode"`
 				EntryType            string  `json:"entryType"`
 				Direction            string  `json:"direction"`
@@ -150,6 +156,9 @@ func TestCreateAccrualRunCreatesReadyDailyBRLItem(t *testing.T) {
 		t.Fatalf("expected one item, got %d", items.Data.Total)
 	}
 	item := items.Data.Items[0]
+	if collaborator.Data.PersonID == "" || item.PersonID != collaborator.Data.PersonID {
+		t.Fatalf("expected Accrual Item Person ownership %q, got %+v", collaborator.Data.PersonID, item)
+	}
 	if item.CalculationType != "DAILY_BRL" || item.Status != "READY" || item.BRLAmount == nil || *item.BRLAmount != 150.0 {
 		t.Fatalf("expected ready daily BRL item, got %+v", item)
 	}
@@ -226,6 +235,9 @@ func TestPostAccrualRunCreatesAssignmentSourcedBRLLedgerCreditAndMarksItemPosted
 		t.Fatalf("expected one assignment-sourced ledger entry, got %d", entries.Data.Total)
 	}
 	entry := entries.Data.Items[0]
+	if entry.PersonID != collaborator.Data.PersonID {
+		t.Fatalf("expected posted Ledger Entry Person ownership %q, got %+v", collaborator.Data.PersonID, entry)
+	}
 	if entry.EntryType != "EARNING_CREDIT" || entry.Direction != "CREDIT" || entry.ValueUnitCode != "BRL" || entry.Amount != 150.0 || entry.SourceID != assignment.Data.ID {
 		t.Fatalf("unexpected assignment-sourced BRL ledger entry: %+v", entry)
 	}

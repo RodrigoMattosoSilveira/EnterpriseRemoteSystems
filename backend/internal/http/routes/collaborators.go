@@ -9,10 +9,13 @@ import (
 func RegisterCollaboratorRoutes(v1 fiber.Router, deps Dependencies) {
 	r := v1.Group("/collaborators")
 	r.Get("/candidates", requirePermission(deps, authz.PermissionCollaboratorsCreate), deps.CollaboratorHandler.ListCandidates)
+	r.Get("/self", requirePermission(deps, authz.PermissionCollaboratorsSelfRead), deps.CollaboratorHandler.ListSelf)
+	r.Get("/self/:id", requirePermission(deps, authz.PermissionCollaboratorsSelfRead), deps.CollaboratorHandler.GetSelfByID)
 	r.Get("/", requirePermission(deps, authz.PermissionCollaboratorsRead), deps.CollaboratorHandler.List)
 	r.Post("/", requirePermission(deps, authz.PermissionCollaboratorsCreate), deps.CollaboratorHandler.Create)
 	r.Get("/:id", requirePermissionOrSelfCollaborator(deps, authz.PermissionCollaboratorsRead, authz.PermissionCollaboratorsSelfRead, "id"), deps.CollaboratorHandler.GetByID)
 	r.Put("/:id", requirePermission(deps, authz.PermissionCollaboratorsUpdate), deps.CollaboratorHandler.Update)
+	r.Patch("/:id/work-assignment", requirePermission(deps, authz.PermissionCollaboratorsWorkAssignmentUpdate), deps.CollaboratorHandler.UpdateWorkAssignment)
 	r.Get("/:collaboratorId/financial-projection", requirePermission(deps, authz.PermissionCurrentAccountsSummaryRead), deps.CurrentAccountHandler.FinancialProjection)
 	r.Get("/:collaboratorId/settlement-preview", requirePermission(deps, authz.PermissionJourneySettlementsPreview), deps.CurrentAccountHandler.SettlementPreview)
 	r.Post("/:collaboratorId/zero-gold", authorizationHandledByHandler(), deps.CurrentAccountHandler.ZeroGold)

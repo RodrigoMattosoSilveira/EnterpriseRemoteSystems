@@ -36,7 +36,11 @@ export async function initializeAuthSession(): Promise<AuthState> {
   try {
     const session = await loadAuthSession();
     if (revision === authTransitionRevision) {
-      setState({ status: "authenticated", session, error: null, reason: null });
+      setState(
+        session
+          ? { status: "authenticated", session, error: null, reason: null }
+          : { status: "anonymous", session: null, error: null, reason: null },
+      );
     }
   } catch (error) {
     if (revision !== authTransitionRevision) return state;
@@ -69,7 +73,11 @@ export async function revalidateAuthSession(): Promise<AuthState> {
     try {
       const session = await loadAuthSession();
       if (state.status === "authenticated" && state.session.accountId === accountId) {
-        setState({ status: "authenticated", session, error: null, reason: null });
+        setState(
+          session
+            ? { status: "authenticated", session, error: null, reason: null }
+            : { status: "anonymous", session: null, error: null, reason: null },
+        );
       }
     } catch (error) {
       if (error instanceof ApiError && error.status === 401) {

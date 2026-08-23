@@ -63,6 +63,7 @@ type apiCollaboratorListResponse struct {
 type apiExpenseResponse struct {
 	Data struct {
 		ID             string  `json:"id"`
+		PersonID       string  `json:"personId"`
 		CollaboratorID string  `json:"collaboratorId"`
 		ValueUnitID    string  `json:"valueUnitId"`
 		Amount         float64 `json:"amount"`
@@ -82,6 +83,7 @@ type apiLedgerEntryListResponse struct {
 	Data struct {
 		Items []struct {
 			ID                   string                         `json:"id"`
+			PersonID             string                         `json:"personId"`
 			CollaboratorID       string                         `json:"collaboratorId"`
 			CollaboratorLabel    string                         `json:"collaboratorLabel"`
 			ValueUnitID          string                         `json:"valueUnitId"`
@@ -112,6 +114,7 @@ type apiLedgerEntryListResponse struct {
 
 type apiBalancesResponse struct {
 	Data []struct {
+		PersonID          string  `json:"personId"`
 		CollaboratorID    string  `json:"collaboratorId"`
 		CollaboratorLabel string  `json:"collaboratorLabel"`
 		ValueUnitID       string  `json:"valueUnitId"`
@@ -618,8 +621,11 @@ func TestExpenseCreatesDebitLedgerEntryAndNegativeCurrentAccountBalance(t *testi
 		t.Fatalf("expected one ledger entry, got %+v", entries.Data)
 	}
 	entry := entries.Data.Items[0]
+	if expense.Data.PersonID == "" || entry.PersonID != expense.Data.PersonID {
+		t.Fatalf("expected Expense and Ledger Entry to share canonical Person ownership, expense=%+v entry=%+v", expense.Data, entry)
+	}
 	if entry.CollaboratorID != collaborator.Data.ID || entry.CollaboratorLabel != "P1" {
-		t.Fatalf("unexpected collaborator fields: %+v", entry)
+		t.Fatalf("unexpected collaborator provenance fields: %+v", entry)
 	}
 	if entry.ValueUnitID != "ref-value-unit-brl" || entry.ValueUnitCode != "BRL" {
 		t.Fatalf("unexpected value unit fields: %+v", entry)
@@ -642,6 +648,9 @@ func TestExpenseCreatesDebitLedgerEntryAndNegativeCurrentAccountBalance(t *testi
 		t.Fatalf("expected one balance, got %+v", balances.Data)
 	}
 	balance := balances.Data[0]
+	if balance.PersonID != expense.Data.PersonID {
+		t.Fatalf("expected Person-owned balance %q, got %+v", expense.Data.PersonID, balance)
+	}
 	if balance.CollaboratorID != collaborator.Data.ID || balance.CollaboratorLabel != "P1" || balance.ValueUnitCode != "BRL" || balance.Balance != -42.5 {
 		t.Fatalf("unexpected balance: %+v", balance)
 	}
@@ -1102,14 +1111,18 @@ func TestCollaboratorCurrentAccountDetailIncludesBalancesAndLedgerEntries(t *tes
 
 	var body struct {
 		Data struct {
+			PersonID          string `json:"personId"`
+			PersonLabel       string `json:"personLabel"`
 			CollaboratorID    string `json:"collaboratorId"`
 			CollaboratorLabel string `json:"collaboratorLabel"`
 			Balances          []struct {
+				PersonID      string  `json:"personId"`
 				ValueUnitCode string  `json:"valueUnitCode"`
 				Balance       float64 `json:"balance"`
 			} `json:"balances"`
 			LedgerEntries struct {
 				Items []struct {
+					PersonID       string  `json:"personId"`
 					EntryType      string  `json:"entryType"`
 					Direction      string  `json:"direction"`
 					ValueUnitCode  string  `json:"valueUnitCode"`
@@ -1128,16 +1141,19 @@ func TestCollaboratorCurrentAccountDetailIncludesBalancesAndLedgerEntries(t *tes
 	}
 	decodeJSON(t, res, &body)
 
-	if body.Data.CollaboratorID != collaborator.Data.ID || body.Data.CollaboratorLabel != "P1" {
-		t.Fatalf("unexpected collaborator detail: %+v", body.Data)
+	if body.Data.PersonID == "" || body.Data.PersonLabel != "P1" || body.Data.CollaboratorID != collaborator.Data.ID || body.Data.CollaboratorLabel != "P1" {
+		t.Fatalf("unexpected Person-owned current account detail: %+v", body.Data)
 	}
-	if len(body.Data.Balances) != 1 || body.Data.Balances[0].ValueUnitCode != "BRL" || body.Data.Balances[0].Balance != -12.25 {
+	if len(body.Data.Balances) != 1 || body.Data.Balances[0].PersonID != body.Data.PersonID || body.Data.Balances[0].ValueUnitCode != "BRL" || body.Data.Balances[0].Balance != -12.25 {
 		t.Fatalf("unexpected balances: %+v", body.Data.Balances)
 	}
 	if body.Data.LedgerEntries.Total != 1 || len(body.Data.LedgerEntries.Items) != 1 {
 		t.Fatalf("unexpected ledger entries: %+v", body.Data.LedgerEntries)
 	}
 	entry := body.Data.LedgerEntries.Items[0]
+	if entry.PersonID != body.Data.PersonID {
+		t.Fatalf("expected detail Ledger Entry Person ID %q, got %+v", body.Data.PersonID, entry)
+	}
 	if entry.EntryType != "EXPENSE_DEDUCTION" || entry.Direction != "DEBIT" || entry.ValueUnitCode != "BRL" || entry.Amount != 12.25 || entry.SignedAmount != -12.25 || entry.CorrectionType != "ORIGINAL" {
 		t.Fatalf("unexpected ledger entry: %+v", entry)
 	}

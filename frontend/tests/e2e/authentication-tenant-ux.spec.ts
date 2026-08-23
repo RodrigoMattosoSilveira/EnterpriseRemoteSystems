@@ -151,7 +151,7 @@ test("a fresh cookie-less browser context does not inherit the administrator ses
     await privatePage.goto("/");
 
     const sessionResponse = await sessionResponsePromise;
-    expect(sessionResponse.status()).toBe(401);
+    expect(sessionResponse.status()).toBe(204);
     await expect(privatePage).toHaveURL(/\/login\?returnTo=/);
     await expect(privatePage.getByRole("heading", { name: "Sign in" })).toBeVisible();
 

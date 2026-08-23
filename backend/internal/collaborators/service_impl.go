@@ -34,6 +34,14 @@ func (s *service) List(ctx context.Context, filter CollaboratorListFilter) ([]Co
 	return ToDTOList(rows), total, nil
 }
 
+func (s *service) ListSelf(ctx context.Context, membershipID string) ([]CollaboratorDTO, error) {
+	rows, err := s.repo.ListForMembership(ctx, strings.TrimSpace(membershipID))
+	if err != nil {
+		return nil, err
+	}
+	return ToDTOList(rows), nil
+}
+
 func (s *service) ListCandidates(ctx context.Context) ([]peoplepkg.PersonDTO, error) {
 	rows, err := s.repo.ListCandidateMemberships(ctx)
 	if err != nil {
@@ -209,8 +217,53 @@ func (s *service) Update(ctx context.Context, id string, req UpdateCollaboratorR
 	return ptr(ToDTO(*updated)), nil
 }
 
+func (s *service) UpdateWorkAssignment(ctx context.Context, id string, req UpdateCollaboratorWorkAssignmentRequest, actorUserID string) (*CollaboratorDTO, error) {
+	_ = actorUserID
+	if err := ValidateUpdateCollaboratorWorkAssignment(req); err != nil {
+		return nil, err
+	}
+
+	row, err := s.repo.FindByID(ctx, strings.TrimSpace(id))
+	if err != nil {
+		return nil, err
+	}
+
+	if err := s.validateReference(ctx, "sectorId", req.SectorID, "sector", "Sector must be active reference data of type sector"); err != nil {
+		return nil, err
+	}
+	if err := s.validateReference(ctx, "locationId", req.LocationID, "location", "Location must be active reference data of type location"); err != nil {
+		return nil, err
+	}
+	if err := s.validateReference(ctx, "taskId", req.TaskID, "task", "Task must be active reference data of type task"); err != nil {
+		return nil, err
+	}
+
+	row.UpdatedAt = time.Now().UTC()
+	row.SectorID = strings.TrimSpace(req.SectorID)
+	row.LocationID = strings.TrimSpace(req.LocationID)
+	row.TaskID = strings.TrimSpace(req.TaskID)
+
+	if err := s.repo.UpdateWorkAssignment(ctx, row); err != nil {
+		return nil, err
+	}
+
+	updated, err := s.repo.FindByID(ctx, row.ID)
+	if err != nil {
+		return nil, err
+	}
+	return ptr(ToDTO(*updated)), nil
+}
+
 func (s *service) GetByID(ctx context.Context, id string) (*CollaboratorDTO, error) {
 	row, err := s.repo.FindByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	return ptr(ToDTO(*row)), nil
+}
+
+func (s *service) GetSelfByID(ctx context.Context, id string, membershipID string) (*CollaboratorDTO, error) {
+	row, err := s.repo.FindByIDForMembership(ctx, strings.TrimSpace(id), strings.TrimSpace(membershipID))
 	if err != nil {
 		return nil, err
 	}
