@@ -94,11 +94,14 @@ func (h *Handler) Logout(c fiber.Ctx) error {
 }
 
 func (h *Handler) CurrentSession(c fiber.Ctx) error {
+	setNoStore(c)
+	if h.readCookie(c) == "" {
+		return c.SendStatus(fiber.StatusNoContent)
+	}
 	session, err := h.currentSession(c)
 	if err != nil {
 		return h.writeError(c, err)
 	}
-	setNoStore(c)
 	return httpx.OK(c, session)
 }
 
