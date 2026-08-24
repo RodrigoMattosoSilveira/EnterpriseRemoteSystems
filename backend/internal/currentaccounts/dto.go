@@ -136,9 +136,13 @@ type LedgerCorrectionResult struct {
 
 const (
 	SettlementBlockerJourneyAlreadyClosed = "JOURNEY_ALREADY_CLOSED"
-	SettlementBlockerNegativeBalance      = "NEGATIVE_BALANCE"
-	SettlementBlockerPendingAccruals      = "PENDING_ACCRUALS"
-	SettlementBlockerOutstandingReceipts  = "OUTSTANDING_RECEIPTS"
+	SettlementBlockerNonZeroBalance       = "NON_ZERO_BALANCE"
+	// SettlementBlockerNegativeBalance is retained as a compatibility constant
+	// for older callers. Settlement Preview now reports NON_ZERO_BALANCE for
+	// either positive or negative Journey balances.
+	SettlementBlockerNegativeBalance     = "NEGATIVE_BALANCE"
+	SettlementBlockerPendingAccruals     = "PENDING_ACCRUALS"
+	SettlementBlockerOutstandingReceipts = "OUTSTANDING_RECEIPTS"
 )
 
 type SettlementPreviewDTO struct {
@@ -199,7 +203,7 @@ type PartialPayoutResult struct {
 	LedgerEntries []LedgerEntryDTO     `json:"ledgerEntries"`
 }
 
-// CloseJourneyRequest confirms final settlement and closes the Collaborator Journey.
+// CloseJourneyRequest confirms that final settlement is already complete and closes the Collaborator Journey.
 type CloseJourneyRequest struct {
 	CorrectionReasonRequest
 	RequestID     string `json:"requestId"`

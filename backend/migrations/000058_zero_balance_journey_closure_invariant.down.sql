@@ -1,0 +1,1 @@
+DROP TRIGGER IF EXISTS trg_collaborator_journey_zero_balance_close;

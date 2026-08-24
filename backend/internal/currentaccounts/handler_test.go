@@ -1240,7 +1240,7 @@ func TestSettlementPreviewAllowsCloseWithoutBlockers(t *testing.T) {
 	}
 }
 
-func TestSettlementPreviewBlocksNegativeBalance(t *testing.T) {
+func TestSettlementPreviewBlocksAnyNonZeroBalance(t *testing.T) {
 	server, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -1259,7 +1259,7 @@ func TestSettlementPreviewBlocksNegativeBalance(t *testing.T) {
 	}
 	decodeJSON(t, res, &body)
 
-	if body.Data.BRLBalance != -42.5 || body.Data.OutstandingReceipts != 1 || body.Data.CanClose || !containsString(body.Data.BlockingReasons, "NEGATIVE_BALANCE") || !containsString(body.Data.BlockingReasons, "OUTSTANDING_RECEIPTS") {
+	if body.Data.BRLBalance != -42.5 || body.Data.OutstandingReceipts != 1 || body.Data.CanClose || !containsString(body.Data.BlockingReasons, "NON_ZERO_BALANCE") || !containsString(body.Data.BlockingReasons, "OUTSTANDING_RECEIPTS") {
 		t.Fatalf("unexpected blocked settlement preview: %+v", body.Data)
 	}
 }
@@ -1305,8 +1305,81 @@ func TestSettlementPreviewBlocksOutstandingReceiptsAfterBalanceCorrection(t *tes
 	}
 	decodeJSON(t, res, &body)
 
-	if body.Data.BRLBalance <= 0 || body.Data.OutstandingReceipts != 1 || body.Data.CanClose || !containsString(body.Data.BlockingReasons, "OUTSTANDING_RECEIPTS") || containsString(body.Data.BlockingReasons, "NEGATIVE_BALANCE") {
-		t.Fatalf("expected outstanding receipt to block close independently of balance, got %+v", body.Data)
+	if body.Data.BRLBalance <= 0 || body.Data.OutstandingReceipts != 1 || body.Data.CanClose || !containsString(body.Data.BlockingReasons, "OUTSTANDING_RECEIPTS") || !containsString(body.Data.BlockingReasons, "NON_ZERO_BALANCE") {
+		t.Fatalf("expected both non-zero balance and outstanding receipt to block close, got %+v", body.Data)
+	}
+}
+
+func TestCloseJourneyRejectsPositiveBalanceEvenWhenReceiptsAreClear(t *testing.T) {
+	server, cleanup := newTestServer(t)
+	defer cleanup()
+
+	collaborator := createActiveCollaborator(t, server, 1)
+	expense := createExpense(t, server, validExpensePayload(collaborator.Data.ID, nil))
+	entries := listLedgerEntries(t, server, collaborator.Data.ID).Data.Items
+	if len(entries) != 1 {
+		t.Fatalf("expected one expense Ledger Entry, got %+v", entries)
+	}
+
+	replace := postAuthorizedJSON(t, server, http.MethodPost, "/api/v1/ledger-entries/"+entries[0].ID+"/replace", map[string]any{
+		"reasonCode":    "ZERO_BALANCE_INVARIANT_TEST",
+		"reasonText":    "Create a positive Journey balance without closing it",
+		"valueUnitId":   "ref-value-unit-brl",
+		"entryType":     "EARNING_CREDIT",
+		"direction":     "CREDIT",
+		"amount":        42.5,
+		"effectiveDate": "2026-06-07",
+		"description":   expense.Data.ID,
+	})
+	replace.Body.Close()
+	if replace.StatusCode != http.StatusOK {
+		t.Fatalf("expected balance correction replace status %d, got %d", http.StatusOK, replace.StatusCode)
+	}
+
+	returned := postReceiptJSON(t, server, "/api/v1/ledger-entries/"+entries[0].ID+"/receipt/return", "receiver@example.com", map[string]any{
+		"signedDocumentRef": "settled-original-expense.pdf",
+	})
+	returned.Body.Close()
+	if returned.StatusCode != http.StatusOK {
+		t.Fatalf("expected receipt return status %d, got %d", http.StatusOK, returned.StatusCode)
+	}
+
+	previewRes := getJSON(t, server, "/api/v1/collaborators/"+collaborator.Data.ID+"/settlement-preview")
+	defer previewRes.Body.Close()
+	var previewBody struct {
+		Data struct {
+			BRLBalance          float64  `json:"brlBalance"`
+			OutstandingReceipts int64    `json:"outstandingReceipts"`
+			CanClose            bool     `json:"canClose"`
+			BlockingReasons     []string `json:"blockingReasons"`
+		} `json:"data"`
+	}
+	decodeJSON(t, previewRes, &previewBody)
+	if previewBody.Data.BRLBalance <= 0 || previewBody.Data.OutstandingReceipts != 0 || previewBody.Data.CanClose || !containsString(previewBody.Data.BlockingReasons, "NON_ZERO_BALANCE") {
+		t.Fatalf("expected positive balance alone to block close, got %+v", previewBody.Data)
+	}
+
+	closeRes := postSettlementJSON(t, server, "/api/v1/collaborators/"+collaborator.Data.ID+"/close", map[string]any{
+		"requestId":     "close-positive-balance-test-001",
+		"reasonCode":    "END_OF_JOURNEY_SETTLEMENT",
+		"reasonText":    "Attempt to close before the positive balance is settled",
+		"effectiveDate": "2026-06-21",
+		"confirm":       true,
+	})
+	defer closeRes.Body.Close()
+	if closeRes.StatusCode != http.StatusConflict {
+		t.Fatalf("expected non-zero balance close conflict %d, got %d", http.StatusConflict, closeRes.StatusCode)
+	}
+
+	detail := getJSON(t, server, collaboratorsURL+collaborator.Data.ID)
+	defer detail.Body.Close()
+	if detail.StatusCode != http.StatusOK {
+		t.Fatalf("expected Journey to remain open after rejected close, got %d", detail.StatusCode)
+	}
+	var detailBody apiCollaboratorResponse
+	decodeJSON(t, detail, &detailBody)
+	if detailBody.Data.ClosedAt != "" || detailBody.Data.Status.Code == "FINISHED" {
+		t.Fatalf("expected Journey to remain open after rejected close, got %+v", detailBody.Data)
 	}
 }
 
@@ -1339,6 +1412,21 @@ func TestCloseJourneyRemovesCollaboratorFromDefaultList(t *testing.T) {
 		var body apiErrorResponse
 		decodeJSON(t, closeRes, &body)
 		t.Fatalf("expected close journey status %d, got %d with error %+v", http.StatusOK, closeRes.StatusCode, body.Error)
+	}
+	var closeBody struct {
+		Data struct {
+			Settlement struct {
+				BRLAmount      float64 `json:"brlAmount"`
+				GoldGramAmount float64 `json:"goldGramAmount"`
+			} `json:"settlement"`
+			LedgerEntries []struct {
+				ID string `json:"id"`
+			} `json:"ledgerEntries"`
+		} `json:"data"`
+	}
+	decodeJSON(t, closeRes, &closeBody)
+	if closeBody.Data.Settlement.BRLAmount != 0 || closeBody.Data.Settlement.GoldGramAmount != 0 || len(closeBody.Data.LedgerEntries) != 0 {
+		t.Fatalf("Close Journey must not post settlement Ledger Entries, got %+v", closeBody.Data)
 	}
 
 	after := getJSON(t, server, collaboratorsURL)

@@ -112,14 +112,16 @@ tenant_id + person_id
 Consequently, the Current Account in one Tenant includes financial history from
 all of that Person's historical Journeys in that Tenant. Each Ledger Entry
 still exposes its `collaboratorId` so the originating Journey remains traceable.
-The Current + Future Earnings projection uses this same Person + Tenant balance
-as its starting balance, while unposted-ready and estimated-future earnings
-remain scoped to the selected Journey because they describe that Journey's
-operational provenance.
+The Person + Tenant Current Account preserves the full financial history across
+Journeys. The Current + Future Earnings projection, however, uses the selected
+Journey's own balance as its starting balance. A later Journey never inherits a
+prior Journey's unsettled balance.
 
 Settlement Preview, payout, zero-gold, and Journey closure intentionally remain
 Journey-scoped lifecycle operations. They must not consume another Journey's
-balance merely because both Journeys belong to the same Person.
+balance merely because both Journeys belong to the same Person. Bite 30G.1 adds
+the stronger invariant that every Journey must independently reach zero in each
+value unit before it can close.
 
 ## Account-level Person self-service
 
