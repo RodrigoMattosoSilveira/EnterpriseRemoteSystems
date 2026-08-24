@@ -1089,6 +1089,7 @@ func TestIntrinsicSelfServiceKeepsJourneyHistoryReadableAfterCurrentJourneyClose
 		PermissionCurrentAccountsSelfLedgerRead,
 		PermissionAssignmentsSelfCurrentRead,
 		PermissionLedgerReceiptsSelfRead,
+		PermissionLedgerReceiptsSelfAccept,
 	} {
 		if _, ok := permissions[permission]; ok {
 			t.Fatalf("closed Journey history must not preserve current Collaborator capability %s", permission)

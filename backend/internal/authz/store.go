@@ -234,10 +234,13 @@ func tenantAdministratorDelegatedPermissions() []Permission {
 		PermissionLedgerReceiptsPrint,
 		PermissionLedgerReceiptsReturn,
 		PermissionLedgerReceiptsBackfill,
+		PermissionLedgerReceiptsTenantAccept,
 		PermissionLedgerCorrectionsCreate,
 		PermissionJourneySettlementsPreview,
 		PermissionJourneySettlementsZeroGold,
 		PermissionJourneySettlementsPartialPayout,
+		PermissionJourneySettlementsFinalTenantPayment,
+		PermissionJourneySettlementsFinalCollaboratorPayment,
 		PermissionJourneySettlementsClose,
 	}
 }
@@ -473,10 +476,14 @@ func PermissionCatalog() []PermissionCatalogEntry {
 		{PermissionLedgerReceiptsReturn, "Return receipts", "Record signed and returned tenant receipts."},
 		{PermissionLedgerReceiptsBackfill, "Backfill receipts", "Backfill missing tenant receipt obligations."},
 		{PermissionLedgerReceiptsSelfRead, "Read own receipts", "Read the actor's own receipt records."},
+		{PermissionLedgerReceiptsSelfAccept, "Accept own settlement receipts", "Accept the actor's own Tenant-to-Collaborator final-settlement receipts in-app."},
+		{PermissionLedgerReceiptsTenantAccept, "Accept Tenant settlement receipts", "Accept Collaborator-to-Tenant final-settlement receipts on behalf of the Tenant."},
 		{PermissionLedgerCorrectionsCreate, "Create ledger corrections", "Create tenant ledger correction records."},
 		{PermissionJourneySettlementsPreview, "Preview journey settlements", "Preview tenant journey settlements."},
 		{PermissionJourneySettlementsZeroGold, "Zero Gold settlement", "Post tenant Zero Gold settlements."},
 		{PermissionJourneySettlementsPartialPayout, "Partial payout settlement", "Post tenant partial payout settlements."},
+		{PermissionJourneySettlementsFinalTenantPayment, "Final Tenant payment", "Post the full positive Journey balance owed by the Tenant to the Collaborator."},
+		{PermissionJourneySettlementsFinalCollaboratorPayment, "Final Collaborator payment", "Record the full negative Journey balance paid by the Collaborator to the Tenant."},
 		{PermissionJourneySettlementsClose, "Close journey", "Close tenant journeys."},
 	}
 }
@@ -772,6 +779,7 @@ func intrinsicSelfServicePermissions(hasCollaboratorHistory bool, activeCollabor
 			PermissionCurrentAccountsSelfLedgerRead,
 			PermissionAssignmentsSelfCurrentRead,
 			PermissionLedgerReceiptsSelfRead,
+			PermissionLedgerReceiptsSelfAccept,
 		} {
 			permissions[permission] = struct{}{}
 		}

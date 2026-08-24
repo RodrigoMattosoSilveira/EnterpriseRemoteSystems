@@ -192,6 +192,61 @@ describe("JourneySettlementPanel", () => {
     });
   });
 
+  it("posts the full positive Journey balance as a final Tenant payment without caller amounts", async () => {
+    const requests: Array<{ url: string; init?: RequestInit; body?: unknown }> = [];
+    vi.spyOn(globalThis.crypto, "randomUUID").mockReturnValue(
+      "request-final-tenant" as ReturnType<Crypto["randomUUID"]>,
+    );
+    mockSettlementFetch({ onRequest: (request) => requests.push(request) });
+
+    renderPanel();
+    await waitForText("R$ 900,00");
+    await clickButton("Settle Tenant Owed Balance");
+    await setFieldValue("Reason code", "FINAL_TENANT_PAYMENT");
+    await setFieldValue("Reason text", "Pay all positive final Journey balances.");
+    await clickButton("Confirm reauthentication");
+    await clickSubmitButton("Post Final Tenant Payment");
+    await waitForText("Collaborator receipt acceptance is required");
+
+    const request = requests.find((candidate) => candidate.url.includes("/final-settlement/tenant-payment"));
+    expect(request?.body).toMatchObject({
+      requestId: "request-final-tenant",
+      reasonCode: "FINAL_TENANT_PAYMENT",
+      reasonText: "Pay all positive final Journey balances.",
+    });
+    expect(request?.body).not.toHaveProperty("brlAmount");
+    expect(request?.body).not.toHaveProperty("goldGramAmount");
+  });
+
+  it("records the full negative Journey balance as a final Collaborator payment without caller amounts", async () => {
+    const requests: Array<{ url: string; init?: RequestInit; body?: unknown }> = [];
+    vi.spyOn(globalThis.crypto, "randomUUID").mockReturnValue(
+      "request-final-collaborator" as ReturnType<Crypto["randomUUID"]>,
+    );
+    mockSettlementFetch({
+      preview: { brlBalance: -80, goldGramBalance: -1.25 },
+      onRequest: (request) => requests.push(request),
+    });
+
+    renderPanel();
+    await waitForText("-R$ 80,00");
+    await clickButton("Record Collaborator Payment");
+    await setFieldValue("Reason code", "FINAL_COLLABORATOR_PAYMENT");
+    await setFieldValue("Reason text", "Record repayment of all negative final Journey balances.");
+    await clickButton("Confirm reauthentication");
+    await clickSubmitButton("Record Final Collaborator Payment");
+    await waitForText("Tenant receipt acceptance is required");
+
+    const request = requests.find((candidate) => candidate.url.includes("/final-settlement/collaborator-payment"));
+    expect(request?.body).toMatchObject({
+      requestId: "request-final-collaborator",
+      reasonCode: "FINAL_COLLABORATOR_PAYMENT",
+      reasonText: "Record repayment of all negative final Journey balances.",
+    });
+    expect(request?.body).not.toHaveProperty("brlAmount");
+    expect(request?.body).not.toHaveProperty("goldGramAmount");
+  });
+
   it("notifies the detail page immediately after a Journey closes", async () => {
     const onJourneyClosed = vi.fn();
 
@@ -252,6 +307,7 @@ function mockSettlementFetch(options: MockSettlementFetchOptions = {}) {
     brlBalance: 900,
     goldGramBalance: 2.5,
     pendingAccrualItems: 0,
+    outstandingReceipts: 0,
     canClose: false,
     blockingReasons: ["NON_ZERO_BALANCE"],
     ...options.preview,
@@ -314,6 +370,20 @@ function mockSettlementFetch(options: MockSettlementFetchOptions = {}) {
         ledgerEntries: [],
         journeyStatus: "CLOSED",
         closedAt: "2026-08-21T12:00:00Z",
+      });
+    }
+
+    if (url.includes("/final-settlement/tenant-payment")) {
+      return jsonResponse({
+        settlement: { id: "settlement-final-tenant", settlementType: "FINAL_TENANT_PAYMENT" },
+        ledgerEntries: [{ id: "ledger-final-tenant-brl" }, { id: "ledger-final-tenant-gold" }],
+      });
+    }
+
+    if (url.includes("/final-settlement/collaborator-payment")) {
+      return jsonResponse({
+        settlement: { id: "settlement-final-collaborator", settlementType: "FINAL_COLLABORATOR_PAYMENT" },
+        ledgerEntries: [{ id: "ledger-final-collaborator-brl" }, { id: "ledger-final-collaborator-gold" }],
       });
     }
 

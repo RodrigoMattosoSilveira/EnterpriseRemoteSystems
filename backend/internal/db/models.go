@@ -312,6 +312,9 @@ type LedgerReceipt struct {
 	LedgerEntryID      string     `gorm:"type:text;not null;uniqueIndex" json:"ledgerEntryId"`
 	ReceiptNumber      *string    `gorm:"type:text;uniqueIndex:ux_ledger_receipts_tenant_number,priority:2" json:"receiptNumber,omitempty"`
 	ReceiptType        string     `gorm:"type:text;not null;default:LEDGER_DEBIT;index" json:"receiptType"`
+	ReceiptPurpose     string     `gorm:"type:text;not null;default:LEDGER_DEBIT;index" json:"receiptPurpose"`
+	PaymentDirection   string     `gorm:"type:text;not null;default:ACCOUNT_DEBIT;index" json:"paymentDirection"`
+	AcceptingParty     string     `gorm:"type:text;not null;default:COLLABORATOR;index" json:"acceptingParty"`
 	Status             string     `gorm:"type:text;not null;default:PENDING_ISSUE;index" json:"status"`
 	IssuedAt           *time.Time `json:"issuedAt,omitempty"`
 	IssuedBy           string     `gorm:"type:text;index" json:"issuedBy,omitempty"`
@@ -320,6 +323,9 @@ type LedgerReceipt struct {
 	ReturnedAt         *time.Time `json:"returnedAt,omitempty"`
 	ReceivedBy         string     `gorm:"type:text;index" json:"receivedBy,omitempty"`
 	SignedDocumentRef  string     `gorm:"type:text" json:"signedDocumentRef,omitempty"`
+	AcceptedAt         *time.Time `json:"acceptedAt,omitempty"`
+	AcceptedBy         string     `gorm:"type:text;index" json:"acceptedBy,omitempty"`
+	AcceptanceMethod   string     `gorm:"type:text" json:"acceptanceMethod,omitempty"`
 	CancelledAt        *time.Time `json:"cancelledAt,omitempty"`
 	CancelledBy        string     `gorm:"type:text;index" json:"cancelledBy,omitempty"`
 	CancellationReason string     `gorm:"type:text" json:"cancellationReason,omitempty"`

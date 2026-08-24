@@ -232,6 +232,7 @@ describe("CollaboratorDetailPage", () => {
             brlBalance: 0,
             goldGramBalance: 6.5,
             pendingAccrualItems: 0,
+            outstandingReceipts: 0,
             canClose: true,
             blockingReasons: [],
           },
