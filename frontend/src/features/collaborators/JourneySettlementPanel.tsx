@@ -46,12 +46,7 @@ const settlementReasonOptions: Array<{
   },
   {
     value: "END_OF_JOURNEY_SETTLEMENT",
-    label: "End-of-journey settlement",
-    actions: ["CLOSE_JOURNEY"] satisfies Action[],
-  },
-  {
-    value: "FINAL_BALANCE_PAYOUT",
-    label: "Final balance payout",
+    label: "End-of-journey closure",
     actions: ["CLOSE_JOURNEY"] satisfies Action[],
   },
 ];
@@ -80,7 +75,7 @@ export function JourneySettlementPanel({
             Journey Settlement
           </h2>
           <p className="mt-1 text-sm text-gray-500">
-            Preview balances, pay outstanding credits, or close the Journey.
+            Preview Journey balances, settle them separately, and close only after every value-unit balance is zero.
           </p>
           <JourneyDaysRemaining
             projectedEndDate={projectedEndDate}
@@ -662,9 +657,10 @@ function actionDescription(action: Action, preview: SettlementPreview) {
     return `Pay the full positive gold balance of ${formatGold(preview.goldGramBalance)} g.`;
   if (action === "PARTIAL_PAYOUT")
     return "Pay part of the available BRL and/or gold balance.";
-  return "Pay all remaining positive balances and mark this Journey finished.";
+  return "Close this Journey only after every Journey balance is zero and all other blockers are cleared. Closing does not post a payment.";
 }
 function formatReason(value: string) {
+  if (value === "NON_ZERO_BALANCE") return "non-zero balance";
   return value.toLowerCase().replaceAll("_", " ");
 }
 function formatBRL(value: number) {

@@ -60,7 +60,7 @@ func (s *service) PartialPayout(ctx context.Context, collaboratorID, authorizedB
 			goldBalance = normalizedZero(balance.Balance)
 		}
 	}
-	if req.BRLAmount > brlBalance+0.00000001 || req.GoldGramAmount > goldBalance+0.00000001 {
+	if req.BRLAmount > brlBalance+balanceZeroTolerance || req.GoldGramAmount > goldBalance+balanceZeroTolerance {
 		return nil, ErrPayoutExceedsAvailableBalance
 	}
 

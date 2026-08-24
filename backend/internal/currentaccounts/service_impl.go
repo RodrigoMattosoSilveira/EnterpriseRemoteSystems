@@ -10,6 +10,7 @@ import (
 )
 
 const (
+	balanceZeroTolerance                 = 0.000000001
 	defaultPageSize                      = 50
 	maxPageSize                          = 200
 	ledgerSourceTypeWorkPeriodAssignment = "WORK_PERIOD_ASSIGNMENT"
@@ -57,6 +58,7 @@ func (s *service) SettlementPreview(ctx context.Context, collaboratorID string) 
 		OutstandingReceipts: outstandingReceipts,
 		BlockingReasons:     []string{},
 	}
+	hasNonZeroBalance := len(balances) > 0
 	for _, balance := range balances {
 		switch balance.ValueUnitCode {
 		case "BRL":
@@ -66,11 +68,14 @@ func (s *service) SettlementPreview(ctx context.Context, collaboratorID string) 
 		}
 	}
 
+	preview.BRLBalance = normalizedZero(preview.BRLBalance)
+	preview.GoldGramBalance = normalizedZero(preview.GoldGramBalance)
+
 	if strings.EqualFold(collaborator.Status.Code, "FINISHED") || collaborator.ClosedAt != nil {
 		preview.BlockingReasons = append(preview.BlockingReasons, SettlementBlockerJourneyAlreadyClosed)
 	}
-	if preview.BRLBalance < -0.00000001 || preview.GoldGramBalance < -0.00000001 {
-		preview.BlockingReasons = append(preview.BlockingReasons, SettlementBlockerNegativeBalance)
+	if hasNonZeroBalance {
+		preview.BlockingReasons = append(preview.BlockingReasons, SettlementBlockerNonZeroBalance)
 	}
 	if pendingAccrualItems > 0 {
 		preview.BlockingReasons = append(preview.BlockingReasons, SettlementBlockerPendingAccruals)
@@ -79,14 +84,12 @@ func (s *service) SettlementPreview(ctx context.Context, collaboratorID string) 
 		preview.BlockingReasons = append(preview.BlockingReasons, SettlementBlockerOutstandingReceipts)
 	}
 
-	preview.BRLBalance = normalizedZero(preview.BRLBalance)
-	preview.GoldGramBalance = normalizedZero(preview.GoldGramBalance)
 	preview.CanClose = len(preview.BlockingReasons) == 0
 	return preview, nil
 }
 
 func normalizedZero(value float64) float64 {
-	if math.Abs(value) <= 0.00000001 {
+	if math.Abs(value) <= balanceZeroTolerance {
 		return 0
 	}
 	return value

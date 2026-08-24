@@ -234,7 +234,7 @@ func (r *gormRepository) ListBalances(ctx context.Context, collaboratorID string
 		Joins("JOIN reference_data ru ON ru.id = le.value_unit_id AND ru.tenant_id = le.tenant_id").
 		Where("le.tenant_id = ? AND le.collaborator_id = ? AND le.active = ?", tenantctx.TenantID(ctx), collaboratorID, true).
 		Group("le.collaborator_id, p.nickname, p.first_name, p.last_name, le.value_unit_id, ru.code, ru.label, ru.sort_order").
-		Having("ABS(SUM(CASE WHEN le.direction = 'CREDIT' THEN le.amount ELSE -le.amount END)) > 0.00000001").
+		Having("ABS(SUM(CASE WHEN le.direction = 'CREDIT' THEN le.amount ELSE -le.amount END)) > 0.000000001").
 		Order("ru.sort_order ASC, ru.label ASC").
 		Scan(&rows).Error
 	return rows, err
@@ -254,7 +254,7 @@ func (r *gormRepository) ListPersonBalances(ctx context.Context, personID string
 		Joins("JOIN reference_data ru ON ru.id = le.value_unit_id AND ru.tenant_id = le.tenant_id").
 		Where("le.tenant_id = ? AND le.person_id = ? AND le.active = ?", tenantctx.TenantID(ctx), strings.TrimSpace(personID), true).
 		Group("le.person_id, gp.nickname, gp.first_name, gp.last_name, le.value_unit_id, ru.code, ru.label, ru.sort_order").
-		Having("ABS(SUM(CASE WHEN le.direction = 'CREDIT' THEN le.amount ELSE -le.amount END)) > 0.00000001").
+		Having("ABS(SUM(CASE WHEN le.direction = 'CREDIT' THEN le.amount ELSE -le.amount END)) > 0.000000001").
 		Order("ru.sort_order ASC, ru.label ASC").
 		Scan(&rows).Error
 	return rows, err
@@ -478,8 +478,8 @@ func (r *gormRepository) FindCollaboratorStatusByCode(ctx context.Context, code 
 	return &row, nil
 }
 
-func (r *gormRepository) CloseJourneyWithSettlement(ctx context.Context, collaboratorID, finishedStatusID string, closedAt time.Time, settlement *db.JourneySettlement, entries ...*db.LedgerEntry) error {
-	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+func (r *gormRepository) CloseJourneyWithAudit(ctx context.Context, collaboratorID, finishedStatusID string, closedAt time.Time, settlement *db.JourneySettlement) error {
+	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		result := tx.Model(&db.CollaboratorJourney{}).
 			Where("id = ? AND tenant_id = ? AND closed_at IS NULL", collaboratorID, tenantctx.TenantID(ctx)).
 			Updates(map[string]any{"status_id": finishedStatusID, "closed_at": closedAt, "updated_at": closedAt})
@@ -489,16 +489,12 @@ func (r *gormRepository) CloseJourneyWithSettlement(ctx context.Context, collabo
 		if result.RowsAffected != 1 {
 			return ErrJourneyAlreadyClosed
 		}
-		if err := tx.Create(settlement).Error; err != nil {
-			return err
-		}
-		for _, entry := range entries {
-			if err := tx.Create(entry).Error; err != nil {
-				return err
-			}
-		}
-		return ensureDebitLedgerReceiptObligations(tx, entries...)
+		return tx.Create(settlement).Error
 	})
+	if err != nil && strings.Contains(err.Error(), "collaborator_journey_non_zero_balance") {
+		return ErrJourneyCloseBlocked
+	}
+	return err
 }
 
 func (r *gormRepository) FindReceiptByLedgerEntryID(ctx context.Context, ledgerEntryID string) (*db.LedgerReceipt, error) {

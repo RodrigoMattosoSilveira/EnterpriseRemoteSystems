@@ -66,6 +66,9 @@ func AutoMigrate(database *gorm.DB) error {
 	if err := InstallExpensePriceListAuditGuards(database); err != nil {
 		return err
 	}
+	if err := InstallJourneyZeroBalanceClosureGuard(database); err != nil {
+		return err
+	}
 	return BackfillLegacyExpenseAuditSnapshots(database)
 }
 

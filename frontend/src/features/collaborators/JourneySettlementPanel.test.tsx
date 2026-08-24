@@ -48,6 +48,22 @@ describe("JourneySettlementPanel", () => {
     expect(textNode("Confirm reauthentication first")).toBeTruthy();
   });
 
+  it("disables Close Journey while any Journey balance is non-zero", async () => {
+    mockSettlementFetch();
+
+    renderPanel();
+    await waitForText("non-zero balance");
+
+    const closeButton = Array.from(
+      container.querySelectorAll<HTMLButtonElement>("button"),
+    ).find((button) => button.textContent?.includes("Close Journey"));
+    expect(closeButton).toBeTruthy();
+    expect(closeButton?.disabled).toBe(true);
+    expect(container.textContent).toContain(
+      "close only after every value-unit balance is zero",
+    );
+  });
+
   it("formats partial payout gold grams with two decimals", async () => {
     mockSettlementFetch({ preview: { goldGramBalance: 2.55555555 } });
 
@@ -182,10 +198,17 @@ describe("JourneySettlementPanel", () => {
     vi.spyOn(globalThis.crypto, "randomUUID").mockReturnValue(
       "request-close-success" as ReturnType<Crypto["randomUUID"]>,
     );
-    mockSettlementFetch();
+    mockSettlementFetch({
+      preview: {
+        brlBalance: 0,
+        goldGramBalance: 0,
+        canClose: true,
+        blockingReasons: [],
+      },
+    });
 
     renderPanel({ onJourneyClosed });
-    await waitForText("R$ 900,00");
+    await waitForText("R$ 0,00");
 
     await clickButton("Close Journey");
     await setFieldValue("Reason code", "END_OF_JOURNEY_SETTLEMENT");
@@ -229,8 +252,8 @@ function mockSettlementFetch(options: MockSettlementFetchOptions = {}) {
     brlBalance: 900,
     goldGramBalance: 2.5,
     pendingAccrualItems: 0,
-    canClose: true,
-    blockingReasons: [],
+    canClose: false,
+    blockingReasons: ["NON_ZERO_BALANCE"],
     ...options.preview,
   } satisfies SettlementPreview;
   const actors = options.actors ?? [
