@@ -424,6 +424,9 @@ func TestCollaboratorSelfReadDoesNotAuthorizeCollaboratorMutations(t *testing.T)
 	app.Patch("/collaborators/:id/work-assignment", requirePermission(deps, authz.PermissionCollaboratorsWorkAssignmentUpdate), func(c fiber.Ctx) error {
 		return c.SendStatus(fiber.StatusNoContent)
 	})
+	app.Post("/collaborators/:id/extend", requirePermission(deps, authz.PermissionCollaboratorsUpdate), func(c fiber.Ctx) error {
+		return c.SendStatus(fiber.StatusNoContent)
+	})
 
 	for _, tc := range []struct {
 		method string
@@ -431,6 +434,7 @@ func TestCollaboratorSelfReadDoesNotAuthorizeCollaboratorMutations(t *testing.T)
 	}{
 		{method: fiber.MethodPut, path: "/collaborators/collaborator-self"},
 		{method: fiber.MethodPatch, path: "/collaborators/collaborator-self/work-assignment"},
+		{method: fiber.MethodPost, path: "/collaborators/collaborator-self/extend"},
 	} {
 		req := httptest.NewRequest(tc.method, tc.path, nil)
 		req.Header.Set(authz.HeaderActorID, "collaborator-self-actor")
@@ -464,6 +468,9 @@ func TestEarningsOperatorWorkAssignmentPermissionDoesNotAuthorizeFullCollaborato
 	app.Patch("/collaborators/:id/work-assignment", requirePermission(deps, authz.PermissionCollaboratorsWorkAssignmentUpdate), func(c fiber.Ctx) error {
 		return c.SendStatus(fiber.StatusNoContent)
 	})
+	app.Post("/collaborators/:id/extend", requirePermission(deps, authz.PermissionCollaboratorsUpdate), func(c fiber.Ctx) error {
+		return c.SendStatus(fiber.StatusNoContent)
+	})
 
 	fullReq := httptest.NewRequest(fiber.MethodPut, "/collaborators/collaborator-1", nil)
 	fullReq.Header.Set(authz.HeaderActorID, "earnings-actor")
@@ -485,6 +492,17 @@ func TestEarningsOperatorWorkAssignmentPermissionDoesNotAuthorizeFullCollaborato
 	}
 	if assignmentResp.StatusCode != fiber.StatusNoContent {
 		t.Fatalf("work-assignment update expected 204, got %d", assignmentResp.StatusCode)
+	}
+
+	extendReq := httptest.NewRequest(fiber.MethodPost, "/collaborators/collaborator-1/extend", nil)
+	extendReq.Header.Set(authz.HeaderActorID, "earnings-actor")
+	extendReq.Header.Set(authz.HeaderTenantID, "default")
+	extendResp, err := app.Test(extendReq)
+	if err != nil {
+		t.Fatalf("Journey extension request failed: %v", err)
+	}
+	if extendResp.StatusCode != fiber.StatusForbidden {
+		t.Fatalf("Journey extension expected 403, got %d", extendResp.StatusCode)
 	}
 }
 

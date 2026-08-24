@@ -122,6 +122,20 @@ func (h *Handler) UpdateWorkAssignment(c fiber.Ctx) error {
 	return c.JSON(httpx.APIResponse{Data: updated})
 }
 
+func (h *Handler) ExtendJourney(c fiber.Ctx) error {
+	var req ExtendCollaboratorJourneyRequest
+	if err := c.Bind().Body(&req); err != nil {
+		return httpx.WriteError(c, err)
+	}
+
+	updated, err := h.service.ExtendJourney(requesttenant.Context(c), c.Params("id"), req, actorUserID(c))
+	if err != nil {
+		return httpx.WriteError(c, err)
+	}
+
+	return c.JSON(httpx.APIResponse{Data: updated})
+}
+
 func actorUserID(c fiber.Ctx) string {
 	value := c.Locals("userID")
 	if userID, ok := value.(string); ok {

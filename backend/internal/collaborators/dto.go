@@ -78,6 +78,13 @@ type UpdateCollaboratorWorkAssignmentRequest struct {
 	TaskID     string `json:"taskId"`
 }
 
+// ExtendCollaboratorJourneyRequest adds calendar days to an open Journey.
+// ExtensionDays on the Journey remains the cumulative extension from its
+// DefaultEndDate; callers provide only the additional days for this action.
+type ExtendCollaboratorJourneyRequest struct {
+	AdditionalDays int `json:"additionalDays"`
+}
+
 type CollaboratorListFilter struct {
 	Search          string `query:"search"`
 	StatusID        string `query:"statusId"`

@@ -81,6 +81,10 @@ export type UpdateCollaboratorWorkAssignmentInput = {
   taskId: string;
 };
 
+export type ExtendCollaboratorJourneyInput = {
+  additionalDays: number;
+};
+
 export type CollaboratorListFilter = {
   search?: string;
   statusId?: string;

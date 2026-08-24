@@ -72,6 +72,15 @@ func ValidateUpdateCollaboratorWorkAssignment(req UpdateCollaboratorWorkAssignme
 	return nil
 }
 
+func ValidateExtendCollaboratorJourney(req ExtendCollaboratorJourneyRequest) error {
+	if req.AdditionalDays <= 0 {
+		return ValidationError{Fields: map[string]string{
+			"additionalDays": "Additional days must be greater than zero",
+		}}
+	}
+	return nil
+}
+
 func requireString(fields map[string]string, key string, value string) {
 	if strings.TrimSpace(value) == "" {
 		fields[key] = "Required"
