@@ -12,10 +12,14 @@ export type UpdateSecondPersonApprovalPolicyInput = {
 export type LedgerEntryReceipt = {
   id: string;
   receiptNumber?: string;
+  receiptPurpose?: string;
+  paymentDirection?: string;
+  acceptingParty?: string;
   status: string;
   outstanding: boolean;
   printedAt?: string;
   returnedAt?: string;
+  acceptedAt?: string;
   signedDocumentRef?: string;
 };
 

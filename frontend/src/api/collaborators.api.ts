@@ -19,6 +19,7 @@ import type {
   CollaboratorListFilter,
   CollaboratorListResponse,
   CreateCollaboratorInput,
+  ExtendCollaboratorJourneyInput,
   UpdateCollaboratorInput,
   UpdateCollaboratorWorkAssignmentInput,
 } from "../types/collaborators";
@@ -130,6 +131,19 @@ export function updateCollaboratorWorkAssignment(
     `/collaborators/${encodeURIComponent(id)}/work-assignment`,
     {
       method: "PATCH",
+      body: JSON.stringify(input),
+    },
+  );
+}
+
+export function extendCollaboratorJourney(
+  id: string,
+  input: ExtendCollaboratorJourneyInput,
+): Promise<Collaborator> {
+  return apiFetch<Collaborator>(
+    `/collaborators/${encodeURIComponent(id)}/extend`,
+    {
+      method: "POST",
       body: JSON.stringify(input),
     },
   );

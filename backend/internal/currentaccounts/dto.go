@@ -14,10 +14,14 @@ type UpdateSecondPersonApprovalPolicyRequest struct {
 type LedgerEntryReceiptDTO struct {
 	ID                string `json:"id"`
 	ReceiptNumber     string `json:"receiptNumber,omitempty"`
+	ReceiptPurpose    string `json:"receiptPurpose,omitempty"`
+	PaymentDirection  string `json:"paymentDirection,omitempty"`
+	AcceptingParty    string `json:"acceptingParty,omitempty"`
 	Status            string `json:"status"`
 	Outstanding       bool   `json:"outstanding"`
 	PrintedAt         string `json:"printedAt,omitempty"`
 	ReturnedAt        string `json:"returnedAt,omitempty"`
+	AcceptedAt        string `json:"acceptedAt,omitempty"`
 	SignedDocumentRef string `json:"signedDocumentRef,omitempty"`
 }
 

@@ -254,6 +254,36 @@ func (s *service) UpdateWorkAssignment(ctx context.Context, id string, req Updat
 	return ptr(ToDTO(*updated)), nil
 }
 
+func (s *service) ExtendJourney(ctx context.Context, id string, req ExtendCollaboratorJourneyRequest, actorUserID string) (*CollaboratorDTO, error) {
+	_ = actorUserID
+	if err := ValidateExtendCollaboratorJourney(req); err != nil {
+		return nil, err
+	}
+
+	row, err := s.repo.FindByID(ctx, strings.TrimSpace(id))
+	if err != nil {
+		return nil, err
+	}
+	if row.ClosedAt != nil || strings.EqualFold(strings.TrimSpace(row.Status.Code), "FINISHED") {
+		return nil, ValidationError{Fields: map[string]string{
+			"additionalDays": "Closed Journeys cannot be extended",
+		}}
+	}
+
+	row.ExtensionDays += req.AdditionalDays
+	row.ProjectedEndDate = row.DefaultEndDate.AddDate(0, 0, row.ExtensionDays)
+	row.UpdatedAt = time.Now().UTC()
+	if err := s.repo.UpdateExtension(ctx, row); err != nil {
+		return nil, err
+	}
+
+	updated, err := s.repo.FindByID(ctx, row.ID)
+	if err != nil {
+		return nil, err
+	}
+	return ptr(ToDTO(*updated)), nil
+}
+
 func (s *service) GetByID(ctx context.Context, id string) (*CollaboratorDTO, error) {
 	row, err := s.repo.FindByID(ctx, id)
 	if err != nil {

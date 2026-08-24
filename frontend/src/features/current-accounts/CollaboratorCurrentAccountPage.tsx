@@ -277,11 +277,17 @@ function LedgerEntryRow({
         ) : null}
         {receipt?.outstanding ? (
           <p className="mt-2 rounded-xl bg-amber-50 p-2 text-xs font-semibold text-amber-900">
-            Outstanding receipt: print, collect signature, and record the signed return.
+            {isFinalSettlementReceipt(receipt.receiptPurpose)
+              ? receipt.acceptingParty === "TENANT"
+                ? "Awaiting Tenant Administrator in-app acceptance."
+                : "Awaiting Collaborator in-app acceptance."
+              : "Outstanding receipt: print, collect signature, and record the signed return."}
           </p>
         ) : receipt && !receipt.outstanding ? (
           <p className="mt-2 rounded-xl bg-green-50 p-2 text-xs font-semibold text-green-900">
-            Receipt returned or closed.
+            {isFinalSettlementReceipt(receipt.receiptPurpose)
+              ? "Final settlement receipt accepted in-app."
+              : "Receipt returned or closed."}
           </p>
         ) : null}
       </div>
@@ -293,7 +299,9 @@ function LedgerEntryRow({
         ) : null}
         {canOpenReceipt && (receipt || entry.direction === "DEBIT") ? (
           <Link className="rounded-xl bg-gray-900 px-4 py-2 text-sm font-semibold text-white" to={`/ledger-entries/${entry.id}/receipt`}>
-            Print or return receipt
+            {isFinalSettlementReceipt(receipt?.receiptPurpose)
+              ? "Review / accept receipt"
+              : "Print or return receipt"}
           </Link>
         ) : null}
       </div>
@@ -346,6 +354,11 @@ function formatNumber(value: number, maximumFractionDigits = 2) {
     minimumFractionDigits: 0,
     maximumFractionDigits,
   }).format(value);
+}
+
+function isFinalSettlementReceipt(purpose?: string) {
+  return purpose === "FINAL_SETTLEMENT_TENANT_PAYMENT" ||
+    purpose === "FINAL_SETTLEMENT_COLLABORATOR_PAYMENT";
 }
 
 function humanize(value: string) {

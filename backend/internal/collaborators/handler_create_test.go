@@ -448,6 +448,67 @@ func TestUpdateCollaboratorEditsAssignmentPaymentAndExtensionDays(t *testing.T) 
 	}
 }
 
+func TestExtendCollaboratorJourneyAddsDaysWithoutChangingOtherAttributes(t *testing.T) {
+	server, cleanup := newTestServer(t)
+	defer cleanup()
+
+	person := createPerson(t, server, validCompletePersonPayload(1, nil))
+	created := createCollaborator(t, server, validCollaboratorPayload(person.Data.MembershipID, nil))
+
+	res := postJSON(t, server, http.MethodPost, collaboratorsURL+created.Data.ID+"/extend", map[string]any{
+		"additionalDays": 14,
+	})
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		var body apiErrorResponse
+		decodeJSON(t, res, &body)
+		t.Fatalf("expected extend Journey status %d, got %d with error %+v", http.StatusOK, res.StatusCode, body.Error)
+	}
+
+	var extended apiCollaboratorResponse
+	decodeJSON(t, res, &extended)
+	if extended.Data.ExtensionDays != created.Data.ExtensionDays+14 {
+		t.Fatalf("expected cumulative extension %d, got %d", created.Data.ExtensionDays+14, extended.Data.ExtensionDays)
+	}
+	if extended.Data.ProjectedEndDate != "2026-09-13" {
+		t.Fatalf("expected projected end date 2026-09-13, got %q", extended.Data.ProjectedEndDate)
+	}
+	if extended.Data.PaymentMethodID != created.Data.PaymentMethodID || extended.Data.PaymentValue != created.Data.PaymentValue {
+		t.Fatalf("Journey extension must not change payment terms: before=%+v after=%+v", created.Data, extended.Data)
+	}
+	if extended.Data.SectorID != created.Data.SectorID || extended.Data.LocationID != created.Data.LocationID || extended.Data.TaskID != created.Data.TaskID {
+		t.Fatalf("Journey extension must not change work assignment: before=%+v after=%+v", created.Data, extended.Data)
+	}
+
+	res = postJSON(t, server, http.MethodPost, collaboratorsURL+created.Data.ID+"/extend", map[string]any{
+		"additionalDays": 7,
+	})
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		var body apiErrorResponse
+		decodeJSON(t, res, &body)
+		t.Fatalf("expected second extend Journey status %d, got %d with error %+v", http.StatusOK, res.StatusCode, body.Error)
+	}
+	decodeJSON(t, res, &extended)
+	if extended.Data.ExtensionDays != created.Data.ExtensionDays+21 || extended.Data.ProjectedEndDate != "2026-09-20" {
+		t.Fatalf("expected cumulative 21-day extension through 2026-09-20, got extensionDays=%d projectedEndDate=%q", extended.Data.ExtensionDays, extended.Data.ProjectedEndDate)
+	}
+}
+
+func TestExtendCollaboratorJourneyRejectsNonPositiveDays(t *testing.T) {
+	server, cleanup := newTestServer(t)
+	defer cleanup()
+
+	person := createPerson(t, server, validCompletePersonPayload(1, nil))
+	created := createCollaborator(t, server, validCollaboratorPayload(person.Data.MembershipID, nil))
+
+	res := postJSON(t, server, http.MethodPost, collaboratorsURL+created.Data.ID+"/extend", map[string]any{
+		"additionalDays": 0,
+	})
+	defer res.Body.Close()
+	assertValidationError(t, res, "additionalDays", "Additional days must be greater than zero")
+}
+
 func TestUpdateCollaboratorWorkAssignmentChangesOnlySectorLocationAndTask(t *testing.T) {
 	server, cleanup := newTestServer(t)
 	defer cleanup()

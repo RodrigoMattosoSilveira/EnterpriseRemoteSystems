@@ -15,4 +15,5 @@ type Service interface {
 	GetSelfByID(ctx context.Context, id string, membershipID string) (*CollaboratorDTO, error)
 	Update(ctx context.Context, id string, req UpdateCollaboratorRequest, actorUserID string) (*CollaboratorDTO, error)
 	UpdateWorkAssignment(ctx context.Context, id string, req UpdateCollaboratorWorkAssignmentRequest, actorUserID string) (*CollaboratorDTO, error)
+	ExtendJourney(ctx context.Context, id string, req ExtendCollaboratorJourneyRequest, actorUserID string) (*CollaboratorDTO, error)
 }
