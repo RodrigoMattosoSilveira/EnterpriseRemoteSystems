@@ -46,7 +46,9 @@ type apiPersonResponse struct {
 
 type apiCollaboratorResponse struct {
 	Data struct {
-		ID string `json:"id"`
+		ID         string `json:"id"`
+		StatusCode string `json:"statusCode"`
+		ClosedAt   string `json:"closedAt"`
 	} `json:"data"`
 }
 
@@ -1378,7 +1380,7 @@ func TestCloseJourneyRejectsPositiveBalanceEvenWhenReceiptsAreClear(t *testing.T
 	}
 	var detailBody apiCollaboratorResponse
 	decodeJSON(t, detail, &detailBody)
-	if detailBody.Data.ClosedAt != "" || detailBody.Data.Status.Code == "FINISHED" {
+	if detailBody.Data.ClosedAt != "" || detailBody.Data.StatusCode == "FINISHED" {
 		t.Fatalf("expected Journey to remain open after rejected close, got %+v", detailBody.Data)
 	}
 }
