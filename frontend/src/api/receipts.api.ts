@@ -1,5 +1,6 @@
 import { apiFetch } from "./client";
 import type {
+  AcceptReceiptRequest,
   OutstandingReceiptListFilter,
   OutstandingReceiptListResult,
   PrintableReceipt,
@@ -18,9 +19,10 @@ export function listOutstandingReceipts(filter: OutstandingReceiptListFilter = {
   return apiFetch<OutstandingReceiptListResult>(`/receipts/outstanding${query ? `?${query}` : ""}`);
 }
 
-export function getPrintableReceipt(ledgerEntryId: string) {
+export function getPrintableReceipt(ledgerEntryId: string, selfService = false) {
+  const suffix = selfService ? "/receipt/self" : "/receipt";
   return apiFetch<PrintableReceipt>(
-    `/ledger-entries/${encodeURIComponent(ledgerEntryId)}/receipt`,
+    `/ledger-entries/${encodeURIComponent(ledgerEntryId)}${suffix}`,
   );
 }
 
@@ -28,6 +30,16 @@ export function markReceiptPrinted(ledgerEntryId: string) {
   return apiFetch<PrintableReceipt>(
     `/ledger-entries/${encodeURIComponent(ledgerEntryId)}/receipt/print`,
     { method: "POST" },
+  );
+}
+
+export function acceptReceipt(
+  ledgerEntryId: string,
+  input: AcceptReceiptRequest,
+): Promise<PrintableReceipt> {
+  return apiFetch<PrintableReceipt>(
+    `/ledger-entries/${encodeURIComponent(ledgerEntryId)}/receipt/accept`,
+    { method: "POST", body: JSON.stringify(input) },
   );
 }
 

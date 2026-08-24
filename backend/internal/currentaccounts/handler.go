@@ -135,6 +135,56 @@ func (h *Handler) PartialPayout(c fiber.Ctx) error {
 	return c.JSON(httpx.APIResponse{Data: result})
 }
 
+func (h *Handler) FinalTenantPayment(c fiber.Ctx) error {
+	var req FinalSettlementRequest
+	if err := c.Bind().Body(&req); err != nil {
+		return httpx.WriteError(c, err)
+	}
+	actor, authorized, err := h.authorizeRecentlyReauthenticatedSensitiveOperationWithMetadata(c, authz.PermissionJourneySettlementsFinalTenantPayment, "current_accounts.final_tenant_payment", "collaborator", c.Params("collaboratorId"), correctionReasonAuditMetadata(req.CorrectionReasonRequest))
+	if err != nil {
+		return err
+	}
+	if !authorized {
+		return nil
+	}
+	if ok, err := h.requireCollaboratorTenantScope(c, actor, c.Params("collaboratorId")); err != nil || !ok {
+		return err
+	}
+	result, err := h.service.FinalTenantPayment(requesttenant.Context(c), c.Params("collaboratorId"), actor.ID, req)
+	if err != nil {
+		if errors.Is(err, ErrNoTenantOwedBalance) || errors.Is(err, ErrJourneyAlreadyClosed) {
+			return c.Status(fiber.StatusConflict).JSON(httpx.APIResponse{Error: &httpx.APIError{Code: "final_settlement_conflict", Message: err.Error()}})
+		}
+		return httpx.WriteError(c, err)
+	}
+	return c.JSON(httpx.APIResponse{Data: result})
+}
+
+func (h *Handler) FinalCollaboratorPayment(c fiber.Ctx) error {
+	var req FinalSettlementRequest
+	if err := c.Bind().Body(&req); err != nil {
+		return httpx.WriteError(c, err)
+	}
+	actor, authorized, err := h.authorizeRecentlyReauthenticatedSensitiveOperationWithMetadata(c, authz.PermissionJourneySettlementsFinalCollaboratorPayment, "current_accounts.final_collaborator_payment", "collaborator", c.Params("collaboratorId"), correctionReasonAuditMetadata(req.CorrectionReasonRequest))
+	if err != nil {
+		return err
+	}
+	if !authorized {
+		return nil
+	}
+	if ok, err := h.requireCollaboratorTenantScope(c, actor, c.Params("collaboratorId")); err != nil || !ok {
+		return err
+	}
+	result, err := h.service.FinalCollaboratorPayment(requesttenant.Context(c), c.Params("collaboratorId"), actor.ID, req)
+	if err != nil {
+		if errors.Is(err, ErrNoCollaboratorOwedBalance) || errors.Is(err, ErrJourneyAlreadyClosed) {
+			return c.Status(fiber.StatusConflict).JSON(httpx.APIResponse{Error: &httpx.APIError{Code: "final_settlement_conflict", Message: err.Error()}})
+		}
+		return httpx.WriteError(c, err)
+	}
+	return c.JSON(httpx.APIResponse{Data: result})
+}
+
 func (h *Handler) CloseJourney(c fiber.Ctx) error {
 	var req CloseJourneyRequest
 	if err := c.Bind().Body(&req); err != nil {
@@ -281,6 +331,24 @@ func (h *Handler) GetPrintableReceipt(c fiber.Ctx) error {
 	return c.JSON(httpx.APIResponse{Data: result})
 }
 
+func (h *Handler) GetSelfPrintableReceipt(c fiber.Ctx) error {
+	actor, err := authz.ResolveRequestActor(c, h.actorStore)
+	if err != nil {
+		return writeAuthorizationError(c, err)
+	}
+	if !actor.HasIntrinsicPermission(authz.PermissionLedgerReceiptsSelfRead) || strings.TrimSpace(actor.CollaboratorID) == "" {
+		return writeAuthorizationError(c, authz.ErrForbidden)
+	}
+	result, err := h.service.GetPrintableReceipt(requesttenant.Context(c), c.Params("entryId"))
+	if err != nil {
+		return httpx.WriteError(c, err)
+	}
+	if actor.CollaboratorID != result.CollaboratorID {
+		return writeAuthorizationError(c, authz.ErrForbidden)
+	}
+	return c.JSON(httpx.APIResponse{Data: result})
+}
+
 func (h *Handler) PrintReceipt(c fiber.Ctx) error {
 	actor, authorized, err := h.authorizeSensitiveOperation(c, authz.PermissionLedgerReceiptsPrint, "ledger_receipts.print", "ledger_entry", c.Params("entryId"), authz.WithLegacyAuthorizedByCompatibility())
 	if err != nil {
@@ -318,6 +386,49 @@ func (h *Handler) ReturnReceipt(c fiber.Ctx) error {
 		}
 		if errors.Is(err, ErrReceiptAlreadyReturned) {
 			return c.Status(fiber.StatusConflict).JSON(httpx.APIResponse{Error: &httpx.APIError{Code: "receipt_already_returned", Message: err.Error()}})
+		}
+		if errors.Is(err, ErrReceiptRequiresInAppAcceptance) {
+			return c.Status(fiber.StatusConflict).JSON(httpx.APIResponse{Error: &httpx.APIError{Code: "receipt_requires_in_app_acceptance", Message: err.Error()}})
+		}
+		return httpx.WriteError(c, err)
+	}
+	return c.JSON(httpx.APIResponse{Data: result})
+}
+
+func (h *Handler) AcceptReceipt(c fiber.Ctx) error {
+	var req AcceptReceiptRequest
+	if err := c.Bind().Body(&req); err != nil {
+		return httpx.WriteError(c, err)
+	}
+	actor, err := authz.ResolveRequestActor(c, h.actorStore)
+	if err != nil {
+		return writeAuthorizationError(c, err)
+	}
+	receipt, err := h.service.GetPrintableReceipt(requesttenant.Context(c), c.Params("entryId"))
+	if err != nil {
+		return httpx.WriteError(c, err)
+	}
+	expectedParty := strings.ToUpper(strings.TrimSpace(receipt.AcceptingParty))
+	switch expectedParty {
+	case receiptAcceptingPartyCollaborator:
+		if !actor.HasIntrinsicPermission(authz.PermissionLedgerReceiptsSelfAccept) || actor.CollaboratorID == "" || actor.CollaboratorID != receipt.CollaboratorID {
+			return writeAuthorizationError(c, authz.ErrForbidden)
+		}
+	case receiptAcceptingPartyTenant:
+		if actor.Scope != authz.ActorScopeTenant || !actor.HasPermission(authz.PermissionLedgerReceiptsTenantAccept) {
+			return writeAuthorizationError(c, authz.ErrForbidden)
+		}
+		if ok, scopeErr := h.requireLedgerEntryTenantScope(c, actor, c.Params("entryId")); scopeErr != nil || !ok {
+			return scopeErr
+		}
+	default:
+		return c.Status(fiber.StatusConflict).JSON(httpx.APIResponse{Error: &httpx.APIError{Code: "receipt_acceptance_party_invalid", Message: ErrReceiptAcceptancePartyMismatch.Error()}})
+	}
+
+	result, err := h.service.AcceptReceipt(requesttenant.Context(c), c.Params("entryId"), actor.ID, expectedParty, req)
+	if err != nil {
+		if errors.Is(err, ErrReceiptAcceptancePartyMismatch) || errors.Is(err, ErrReceiptAlreadyAccepted) || errors.Is(err, ErrReceiptAlreadyReturned) || errors.Is(err, ErrReceiptCancelled) || errors.Is(err, ErrReceiptNotInAppAcceptable) {
+			return c.Status(fiber.StatusConflict).JSON(httpx.APIResponse{Error: &httpx.APIError{Code: "receipt_acceptance_conflict", Message: err.Error()}})
 		}
 		return httpx.WriteError(c, err)
 	}

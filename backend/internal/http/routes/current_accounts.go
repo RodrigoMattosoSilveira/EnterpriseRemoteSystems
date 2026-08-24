@@ -19,8 +19,10 @@ func RegisterCurrentAccountRoutes(v1 fiber.Router, deps Dependencies) {
 
 	ledger := v1.Group("/ledger-entries")
 	ledger.Get("/:entryId/receipt", requirePermission(deps, authz.PermissionLedgerReceiptsRead), deps.CurrentAccountHandler.GetPrintableReceipt)
+	ledger.Get("/:entryId/receipt/self", authorizationHandledByHandler(), deps.CurrentAccountHandler.GetSelfPrintableReceipt)
 	ledger.Post("/:entryId/receipt/print", authorizationHandledByHandler(), deps.CurrentAccountHandler.PrintReceipt)
 	ledger.Post("/:entryId/receipt/return", authorizationHandledByHandler(), deps.CurrentAccountHandler.ReturnReceipt)
+	ledger.Post("/:entryId/receipt/accept", authorizationHandledByHandler(), deps.CurrentAccountHandler.AcceptReceipt)
 	ledger.Post("/:entryId/reverse", authorizationHandledByHandler(), deps.CurrentAccountHandler.ReverseEntry)
 	ledger.Post("/:entryId/replace", authorizationHandledByHandler(), deps.CurrentAccountHandler.ReplaceEntry)
 }

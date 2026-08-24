@@ -42,7 +42,7 @@ export function CollaboratorCurrentAccountPage() {
   const canBrowseOutstandingReceipts = wildcard || actor.permissions.includes("ledger.receipts.read");
   const canOpenOperationalSources =
     wildcard || actor.permissions.includes("expenses.read") || actor.permissions.includes("planning.read");
-  const canOpenReceipt = wildcard || actor.permissions.includes("ledger.receipts.read");
+  const canOpenReceipt = wildcard || actor.permissions.includes("ledger.receipts.read") || actor.permissions.includes("ledger.receipts.self.read");
   const [searchParams, setSearchParams] = useSearchParams();
   const filter = searchParams.get("filter") ?? "all";
   const page = Number(searchParams.get("page") ?? "1") || 1;

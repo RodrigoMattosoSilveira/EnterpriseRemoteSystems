@@ -17,6 +17,7 @@ type Repository interface {
 	FindReceiptByLedgerEntryID(ctx context.Context, ledgerEntryID string) (*db.LedgerReceipt, error)
 	MarkReceiptPrinted(ctx context.Context, receiptID, printedBy string, printedAt time.Time) (*db.LedgerReceipt, error)
 	MarkReceiptReturned(ctx context.Context, receiptID, receivedBy, signedDocumentRef, notes string, returnedAt time.Time) (*db.LedgerReceipt, error)
+	MarkReceiptAccepted(ctx context.Context, receiptID, acceptedBy, signedDocumentRef, notes string, acceptedAt time.Time) (*db.LedgerReceipt, error)
 	ListEntries(ctx context.Context, collaboratorID string, filter normalizedLedgerEntryListFilter) ([]db.LedgerEntry, int64, error)
 	ListPersonEntries(ctx context.Context, personID string, filter normalizedLedgerEntryListFilter) ([]db.LedgerEntry, int64, error)
 	FindWorkPeriodAssignmentSourceDetails(ctx context.Context, assignmentIDs []string) (map[string]WorkPeriodAssignmentSourceDetail, error)

@@ -20,6 +20,8 @@ func RegisterCollaboratorRoutes(v1 fiber.Router, deps Dependencies) {
 	r.Get("/:collaboratorId/settlement-preview", requirePermission(deps, authz.PermissionJourneySettlementsPreview), deps.CurrentAccountHandler.SettlementPreview)
 	r.Post("/:collaboratorId/zero-gold", authorizationHandledByHandler(), deps.CurrentAccountHandler.ZeroGold)
 	r.Post("/:collaboratorId/payout", authorizationHandledByHandler(), deps.CurrentAccountHandler.PartialPayout)
+	r.Post("/:collaboratorId/final-settlement/tenant-payment", authorizationHandledByHandler(), deps.CurrentAccountHandler.FinalTenantPayment)
+	r.Post("/:collaboratorId/final-settlement/collaborator-payment", authorizationHandledByHandler(), deps.CurrentAccountHandler.FinalCollaboratorPayment)
 	r.Post("/:collaboratorId/close", authorizationHandledByHandler(), deps.CurrentAccountHandler.CloseJourney)
 	r.Get("/:collaboratorId/current-account", requirePermissionOrSelfCollaborator(deps, authz.PermissionCurrentAccountsSummaryRead, authz.PermissionCurrentAccountsSelfSummaryRead, "collaboratorId"), deps.CurrentAccountHandler.GetDetail)
 	r.Get("/:collaboratorId/ledger-entries", requirePermissionOrSelfCollaborator(deps, authz.PermissionCurrentAccountsLedgerRead, authz.PermissionCurrentAccountsSelfLedgerRead, "collaboratorId"), deps.CurrentAccountHandler.ListEntries)

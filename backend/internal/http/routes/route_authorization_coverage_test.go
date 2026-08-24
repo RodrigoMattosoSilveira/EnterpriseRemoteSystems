@@ -41,12 +41,16 @@ func TestEveryRegisteredAPIRouteHasAuthorizationCoverage(t *testing.T) {
 		"BackfillDebitLedgerReceipts":      {},
 		"GetSecondPersonApprovalPolicy":    {},
 		"UpdateSecondPersonApprovalPolicy": {},
+		"GetSelfPrintableReceipt":          {},
 		"PrintReceipt":                     {},
 		"ReturnReceipt":                    {},
+		"AcceptReceipt":                    {},
 		"ReverseEntry":                     {},
 		"ReplaceEntry":                     {},
 		"ZeroGold":                         {},
 		"PartialPayout":                    {},
+		"FinalTenantPayment":               {},
+		"FinalCollaboratorPayment":         {},
 		"CloseJourney":                     {},
 	}
 	routeMethods := map[string]struct{}{

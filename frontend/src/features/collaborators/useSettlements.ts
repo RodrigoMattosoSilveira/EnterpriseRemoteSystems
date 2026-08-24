@@ -1,6 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   closeJourney,
+  finalCollaboratorPayment,
+  finalTenantPayment,
   getSettlementPreview,
   partialPayout,
   zeroGold,
@@ -8,6 +10,7 @@ import {
 import type {
   CloseJourneyInput,
   CloseJourneyResult,
+  FinalSettlementInput,
   PartialPayoutInput,
   ZeroGoldInput,
 } from "../../types/settlements";
@@ -36,6 +39,18 @@ export function useZeroGold(collaboratorId: string) {
 export function usePartialPayout(collaboratorId: string) {
   return useSettlementMutation(collaboratorId, (input: PartialPayoutInput) =>
     partialPayout(collaboratorId, input),
+  );
+}
+
+export function useFinalTenantPayment(collaboratorId: string) {
+  return useSettlementMutation(collaboratorId, (input: FinalSettlementInput) =>
+    finalTenantPayment(collaboratorId, input),
+  );
+}
+
+export function useFinalCollaboratorPayment(collaboratorId: string) {
+  return useSettlementMutation(collaboratorId, (input: FinalSettlementInput) =>
+    finalCollaboratorPayment(collaboratorId, input),
   );
 }
 

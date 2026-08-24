@@ -2,6 +2,9 @@ export type PrintableReceipt = {
   id: string;
   receiptNumber: string;
   receiptType: string;
+  receiptPurpose: string;
+  paymentDirection: string;
+  acceptingParty: string;
   status: string;
   issuedAt?: string;
   issuedBy?: string;
@@ -10,6 +13,9 @@ export type PrintableReceipt = {
   returnedAt?: string;
   receivedBy?: string;
   signedDocumentRef?: string;
+  acceptedAt?: string;
+  acceptedBy?: string;
+  acceptanceMethod?: string;
   notes?: string;
   ledgerEntryId: string;
   entryType: string;
@@ -23,6 +29,11 @@ export type PrintableReceipt = {
   collaboratorLegalName: string;
   collaboratorCpf: string;
   createdAt: string;
+};
+
+export type AcceptReceiptRequest = {
+  confirm: boolean;
+  notes: string;
 };
 
 export type ReturnReceiptRequest = {

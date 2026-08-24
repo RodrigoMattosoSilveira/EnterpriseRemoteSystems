@@ -17,12 +17,14 @@ import { useCurrentAuthzActor, useTenantAuthzActors } from "../authz/useAuthzAdm
 import { useSecondPersonApprovalPolicy } from "../current-accounts/useSecondPersonApprovalPolicy";
 import {
   useCloseJourney,
+  useFinalCollaboratorPayment,
+  useFinalTenantPayment,
   usePartialPayout,
   useSettlementPreview,
   useZeroGold,
 } from "./useSettlements";
 
-type Action = "ZERO_GOLD" | "PARTIAL_PAYOUT" | "CLOSE_JOURNEY";
+type Action = "ZERO_GOLD" | "PARTIAL_PAYOUT" | "FINAL_TENANT_PAYMENT" | "FINAL_COLLABORATOR_PAYMENT" | "CLOSE_JOURNEY";
 
 const settlementReasonOptions: Array<{
   value: string;
@@ -43,6 +45,16 @@ const settlementReasonOptions: Array<{
     value: "SCHEDULED_PAYOUT",
     label: "Scheduled payout",
     actions: ["PARTIAL_PAYOUT"] satisfies Action[],
+  },
+  {
+    value: "FINAL_TENANT_PAYMENT",
+    label: "Final Tenant payment",
+    actions: ["FINAL_TENANT_PAYMENT"] satisfies Action[],
+  },
+  {
+    value: "FINAL_COLLABORATOR_PAYMENT",
+    label: "Final Collaborator repayment",
+    actions: ["FINAL_COLLABORATOR_PAYMENT"] satisfies Action[],
   },
   {
     value: "END_OF_JOURNEY_SETTLEMENT",
@@ -146,6 +158,22 @@ export function JourneySettlementPanel({
             </button>
             <button
               type="button"
+              className="rounded-xl bg-green-700 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
+              disabled={preview.data.brlBalance <= 0 && preview.data.goldGramBalance <= 0}
+              onClick={() => setAction("FINAL_TENANT_PAYMENT")}
+            >
+              Settle Tenant Owed Balance
+            </button>
+            <button
+              type="button"
+              className="rounded-xl bg-blue-700 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
+              disabled={preview.data.brlBalance >= 0 && preview.data.goldGramBalance >= 0}
+              onClick={() => setAction("FINAL_COLLABORATOR_PAYMENT")}
+            >
+              Record Collaborator Payment
+            </button>
+            <button
+              type="button"
               className="rounded-xl border border-red-300 px-4 py-2 text-sm font-semibold text-red-700 disabled:cursor-not-allowed disabled:opacity-50"
               disabled={!preview.data.canClose}
               onClick={() => setAction("CLOSE_JOURNEY")}
@@ -190,6 +218,10 @@ function PreviewSummary({ preview }: { preview: SettlementPreview }) {
         label="Pending accruals"
         value={String(preview.pendingAccrualItems)}
       />
+      <Summary
+        label="Outstanding receipts"
+        value={String(preview.outstandingReceipts)}
+      />
       <Summary label="Can close" value={preview.canClose ? "Yes" : "No"} />
       {preview.blockingReasons.length > 0 ? (
         <div className="rounded-xl bg-red-50 p-3 text-sm text-red-800 sm:col-span-2 lg:col-span-4">
@@ -229,6 +261,8 @@ function SettlementActionPanel({
 }) {
   const zeroGold = useZeroGold(collaboratorId);
   const payout = usePartialPayout(collaboratorId);
+  const finalTenantPayment = useFinalTenantPayment(collaboratorId);
+  const finalCollaboratorPayment = useFinalCollaboratorPayment(collaboratorId);
   const closeJourney = useCloseJourney(collaboratorId, () =>
     onJourneyClosed?.("Journey closed successfully."),
   );
@@ -263,7 +297,11 @@ function SettlementActionPanel({
       ? zeroGold
       : action === "PARTIAL_PAYOUT"
         ? payout
-        : closeJourney;
+        : action === "FINAL_TENANT_PAYMENT"
+          ? finalTenantPayment
+          : action === "FINAL_COLLABORATOR_PAYMENT"
+            ? finalCollaboratorPayment
+            : closeJourney;
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) =>
@@ -306,6 +344,22 @@ function SettlementActionPanel({
       });
       onSuccess(
         "Partial payout posted successfully.",
+        result.ledgerEntries.map((entry) => entry.id),
+      );
+      return;
+    }
+    if (action === "FINAL_TENANT_PAYMENT") {
+      const result = await finalTenantPayment.mutateAsync(base);
+      onSuccess(
+        "Final Tenant payment posted. Collaborator receipt acceptance is required before Journey closure.",
+        result.ledgerEntries.map((entry) => entry.id),
+      );
+      return;
+    }
+    if (action === "FINAL_COLLABORATOR_PAYMENT") {
+      const result = await finalCollaboratorPayment.mutateAsync(base);
+      onSuccess(
+        "Collaborator payment recorded. Tenant receipt acceptance is required before Journey closure.",
         result.ledgerEntries.map((entry) => entry.id),
       );
       return;
@@ -639,24 +693,28 @@ function Field({
 const inputClass =
   "rounded-xl border border-gray-300 px-3 py-2 shadow-sm focus:border-gray-900 focus:outline-none focus:ring-2 focus:ring-gray-900/10";
 function actionTitle(action: Action) {
-  return action === "ZERO_GOLD"
-    ? "Zero Gold Balance"
-    : action === "PARTIAL_PAYOUT"
-      ? "Partial Payout"
-      : "Close Journey";
+  if (action === "ZERO_GOLD") return "Zero Gold Balance";
+  if (action === "PARTIAL_PAYOUT") return "Partial Payout";
+  if (action === "FINAL_TENANT_PAYMENT") return "Final Tenant Payment";
+  if (action === "FINAL_COLLABORATOR_PAYMENT") return "Record Collaborator Final Payment";
+  return "Close Journey";
 }
 function actionButton(action: Action) {
-  return action === "ZERO_GOLD"
-    ? "Post Gold Payout"
-    : action === "PARTIAL_PAYOUT"
-      ? "Post Payout"
-      : "Close Journey";
+  if (action === "ZERO_GOLD") return "Post Gold Payout";
+  if (action === "PARTIAL_PAYOUT") return "Post Payout";
+  if (action === "FINAL_TENANT_PAYMENT") return "Post Final Tenant Payment";
+  if (action === "FINAL_COLLABORATOR_PAYMENT") return "Record Final Collaborator Payment";
+  return "Close Journey";
 }
 function actionDescription(action: Action, preview: SettlementPreview) {
   if (action === "ZERO_GOLD")
     return `Pay the full positive gold balance of ${formatGold(preview.goldGramBalance)} g.`;
   if (action === "PARTIAL_PAYOUT")
     return "Pay part of the available BRL and/or gold balance.";
+  if (action === "FINAL_TENANT_PAYMENT")
+    return "Post the complete positive BRL and/or gold Journey balance owed by the Tenant. The Collaborator must accept each generated receipt in-app before closure.";
+  if (action === "FINAL_COLLABORATOR_PAYMENT")
+    return "Record the complete negative BRL and/or gold Journey balance paid by the Collaborator to the Tenant. A Tenant Administrator must accept each generated receipt in-app before closure.";
   return "Close this Journey only after every Journey balance is zero and all other blockers are cleared. Closing does not post a payment.";
 }
 function formatReason(value: string) {

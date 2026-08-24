@@ -84,18 +84,22 @@ const (
 
 	PermissionAssignmentsSelfCurrentRead Permission = "assignments.self.current.read"
 
-	PermissionLedgerReceiptsRead     Permission = "ledger.receipts.read"
-	PermissionLedgerReceiptsCreate   Permission = "ledger.receipts.create"
-	PermissionLedgerReceiptsPrint    Permission = "ledger.receipts.print"
-	PermissionLedgerReceiptsReturn   Permission = "ledger.receipts.return"
-	PermissionLedgerReceiptsBackfill Permission = "ledger.receipts.backfill"
-	PermissionLedgerReceiptsSelfRead Permission = "ledger.receipts.self.read"
+	PermissionLedgerReceiptsRead         Permission = "ledger.receipts.read"
+	PermissionLedgerReceiptsCreate       Permission = "ledger.receipts.create"
+	PermissionLedgerReceiptsPrint        Permission = "ledger.receipts.print"
+	PermissionLedgerReceiptsReturn       Permission = "ledger.receipts.return"
+	PermissionLedgerReceiptsBackfill     Permission = "ledger.receipts.backfill"
+	PermissionLedgerReceiptsSelfRead     Permission = "ledger.receipts.self.read"
+	PermissionLedgerReceiptsSelfAccept   Permission = "ledger.receipts.self.accept"
+	PermissionLedgerReceiptsTenantAccept Permission = "ledger.receipts.tenant.accept"
 
-	PermissionLedgerCorrectionsCreate         Permission = "ledger.corrections.create"
-	PermissionJourneySettlementsPreview       Permission = "journey.settlements.preview"
-	PermissionJourneySettlementsZeroGold      Permission = "journey.settlements.zero_gold"
-	PermissionJourneySettlementsPartialPayout Permission = "journey.settlements.partial_payout"
-	PermissionJourneySettlementsClose         Permission = "journey.settlements.close"
+	PermissionLedgerCorrectionsCreate                    Permission = "ledger.corrections.create"
+	PermissionJourneySettlementsPreview                  Permission = "journey.settlements.preview"
+	PermissionJourneySettlementsZeroGold                 Permission = "journey.settlements.zero_gold"
+	PermissionJourneySettlementsPartialPayout            Permission = "journey.settlements.partial_payout"
+	PermissionJourneySettlementsFinalTenantPayment       Permission = "journey.settlements.final_tenant_payment"
+	PermissionJourneySettlementsFinalCollaboratorPayment Permission = "journey.settlements.final_collaborator_payment"
+	PermissionJourneySettlementsClose                    Permission = "journey.settlements.close"
 )
 
 type ActorSource string
