@@ -23,8 +23,10 @@ Markdown, DevTools helper, and SQL verification script.
 For a clean restart of the same deterministic batch, pass
 --reset-existing-batch. The script restores the clean pre-seed database backup
 recorded for the batch (or discovers the newest compatible clean pre-seed
-backup), then recreates the fixture. This avoids trying to delete immutable
-Authentication Accounts or historical identity rows in place.
+backup). If no compatible clean backup survives, it builds a fresh temporary
+database from the repository migrations, validates it, safely replaces the
+local database, and then recreates the fixture. This avoids trying to delete
+immutable Authentication Accounts or historical identity rows in place.
 
 To keep an existing fixture and create a second independent data set instead,
 pass --batch retry1.
@@ -67,8 +69,9 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help=(
             "If the selected batch already exists, restore a compatible clean "
-            "pre-seed database backup and reseed the same deterministic IDs. "
-            "The backend must be stopped."
+            "pre-seed database backup and reseed the same deterministic IDs. If "
+            "no clean backup survives, rebuild a fresh local database from the "
+            "repository migrations first. The backend must be stopped."
         ),
     )
     return p.parse_args()
@@ -551,14 +554,147 @@ def discover_clean_backup(db_path: Path, batch: str) -> Path | None:
     return None
 
 
+def validate_rebuilt_database(db_path: Path, batch: str) -> None:
+    if database_has_batch(db_path, batch):
+        raise SystemExit(
+            f"Freshly rebuilt database unexpectedly contains fixture batch {batch!r}"
+        )
+
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA foreign_keys=ON")
+    try:
+        require_schema(conn)
+        foreign_key_errors = conn.execute("PRAGMA foreign_key_check").fetchall()
+        if foreign_key_errors:
+            raise SystemExit(
+                "Freshly rebuilt database failed PRAGMA foreign_key_check: "
+                + "; ".join(str(tuple(row)) for row in foreign_key_errors[:10])
+            )
+
+        migrations = {
+            row[0]
+            for row in conn.execute(
+                "SELECT filename FROM schema_migrations"
+            ).fetchall()
+        }
+        if "000059_bidirectional_final_settlement_receipts.up.sql" not in migrations:
+            raise SystemExit(
+                "Freshly rebuilt database did not apply migration 000059"
+            )
+    finally:
+        conn.close()
+
+
+def rebuild_clean_database_from_migrations(db_path: Path, batch: str) -> Path:
+    migrations_dir = ROOT / "backend" / "migrations"
+    migration_paths = sorted(migrations_dir.glob("*.up.sql"))
+    if not migrations_dir.is_dir() or not migration_paths:
+        raise SystemExit(
+            "No compatible clean pre-seed backup was found, and the repository "
+            "migrations needed for an automatic clean rebuild are unavailable. "
+            f"Expected .up.sql files under {migrations_dir}."
+        )
+
+    stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    temporary = db_path.with_name(
+        db_path.name + f".bite30g-clean-rebuild-{prefix(batch)}-{stamp}.tmp"
+    )
+    safety = db_path.with_name(
+        db_path.name + f".before-bite30g-reset-{prefix(batch)}-{stamp}.bak"
+    )
+
+    temporary.unlink(missing_ok=True)
+
+    print(
+        "No compatible clean pre-seed backup survived; "
+        "building a fresh temporary database from repository migrations."
+    )
+    try:
+        conn = sqlite3.connect(temporary)
+        conn.execute(
+            """CREATE TABLE IF NOT EXISTS schema_migrations (
+                 filename TEXT PRIMARY KEY,
+                 applied_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+               )"""
+        )
+        conn.commit()
+        conn.close()
+
+        # Mirror scripts/db-migrate.sh closely: each migration is applied using
+        # a fresh SQLite connection, then recorded only after the SQL succeeds.
+        # This avoids carrying connection-scoped PRAGMA state from one migration
+        # into the next.
+        for migration_path in migration_paths:
+            migration_sql = migration_path.read_text()
+            conn = sqlite3.connect(temporary)
+            try:
+                conn.executescript(migration_sql)
+            finally:
+                conn.close()
+
+            conn = sqlite3.connect(temporary)
+            try:
+                conn.execute(
+                    "INSERT INTO schema_migrations(filename) VALUES(?)",
+                    (migration_path.name,),
+                )
+                conn.commit()
+            finally:
+                conn.close()
+
+        # Keep parity with the local migration runner's compatibility repair.
+        conn = sqlite3.connect(temporary)
+        try:
+            has_availability = conn.execute(
+                """SELECT COUNT(*)
+                     FROM pragma_table_info('collaborator_journeys')
+                    WHERE name = 'planning_availability'"""
+            ).fetchone()[0]
+            if has_availability == 0:
+                conn.execute(
+                    """ALTER TABLE collaborator_journeys
+                         ADD COLUMN planning_availability TEXT NOT NULL DEFAULT 'ACTIVE'
+                         CHECK (planning_availability IN (
+                           'ACTIVE', 'DAY_OFF', 'LEAVE_OF_ABSENCE'
+                         ))"""
+                )
+            conn.execute(
+                """UPDATE collaborator_journeys
+                      SET planning_availability = 'ACTIVE'
+                    WHERE planning_availability IS NULL
+                       OR planning_availability = ''"""
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+        validate_rebuilt_database(temporary, batch)
+    except (sqlite3.DatabaseError, OSError, SystemExit) as exc:
+        temporary.unlink(missing_ok=True)
+        if isinstance(exc, SystemExit):
+            raise
+        raise SystemExit(
+            "Unable to rebuild a clean Bite 30G database from repository "
+            f"migrations: {exc}. The current database was not modified."
+        ) from exc
+
+    # Only after the fresh database is fully migrated and validated do we
+    # preserve and replace the current local database.
+    shutil.copy2(db_path, safety)
+    os.replace(temporary, db_path)
+
+    print(f"Reset safety backup: {safety}")
+    print(
+        f"Rebuilt clean database from {len(migration_paths)} repository migrations."
+    )
+    print(f"Replaced local database only after validation: {db_path}")
+    return db_path
+
 def restore_clean_backup(db_path: Path, batch: str) -> Path:
     source = discover_clean_backup(db_path, batch)
     if not source:
-        raise SystemExit(
-            "Fixture batch has already been used, but no compatible clean pre-seed "
-            "backup could be found. Restore the original pre-test database manually "
-            "or keep the existing data and use a new --batch value."
-        )
+        return rebuild_clean_database_from_migrations(db_path, batch)
 
     stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     safety = db_path.with_name(
