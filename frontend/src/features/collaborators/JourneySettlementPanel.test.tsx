@@ -192,6 +192,68 @@ describe("JourneySettlementPanel", () => {
     });
   });
 
+  it("presents the final settlement workflow according to balance direction", async () => {
+    mockSettlementFetch({ preview: { brlBalance: -80, goldGramBalance: -1.25 } });
+
+    renderPanel();
+    await waitForText("Collaborator owes Tenant");
+    expect(textNode("Extend Journey")).toBeTruthy();
+    expect(textNode("Record Collaborator Payment")).toBeTruthy();
+    expect(textNode("Settle Tenant Owed Balance")).toBeFalsy();
+  });
+
+  it("presents both settlement directions when BRL and Gold have opposite signs", async () => {
+    mockSettlementFetch({ preview: { brlBalance: 100, goldGramBalance: -1.25 } });
+
+    renderPanel();
+    await waitForText("Tenant owes Collaborator");
+    expect(textNode("Collaborator owes Tenant")).toBeTruthy();
+    expect(textNode("Settle Tenant Owed Balance")).toBeTruthy();
+    expect(textNode("Extend Journey")).toBeTruthy();
+    expect(textNode("Record Collaborator Payment")).toBeTruthy();
+  });
+
+  it("shows receipt acceptance as the remaining blocker after balances reach zero", async () => {
+    mockSettlementFetch({
+      preview: {
+        brlBalance: 0,
+        goldGramBalance: 0,
+        outstandingReceipts: 2,
+        canClose: false,
+        blockingReasons: ["OUTSTANDING_RECEIPTS"],
+      },
+    });
+
+    renderPanel();
+    await waitForText("Balances settled — receipt acceptance pending");
+    expect(container.textContent).toContain("2 final-settlement receipts remain outstanding");
+    const closeButton = Array.from(container.querySelectorAll<HTMLButtonElement>("button")).find(
+      (button) => button.textContent?.includes("Close Journey"),
+    );
+    expect(closeButton?.disabled).toBe(true);
+  });
+
+  it("extends a Journey by additional days without invoking settlement reauthentication", async () => {
+    const requests: Array<{ url: string; init?: RequestInit; body?: unknown }> = [];
+    mockSettlementFetch({
+      preview: { brlBalance: -80, goldGramBalance: 0 },
+      onRequest: (request) => requests.push(request),
+    });
+
+    renderPanel();
+    await waitForText("Collaborator owes Tenant");
+    await clickButton("Extend Journey");
+    await waitForText("Extending the Journey does not post a Ledger Entry");
+    await setFieldValue("Additional days", "14");
+    await clickSubmitButton("Confirm Extension");
+    await waitForText("Journey extended by 14 days");
+
+    const request = requests.find((candidate) => candidate.url.includes("/collaborators/collab-1/extend"));
+    expect(request?.body).toEqual({ additionalDays: 14 });
+    const headers = new Headers(request?.init?.headers);
+    expect(headers.get("X-Reauthentication-Method")).toBeNull();
+  });
+
   it("posts the full positive Journey balance as a final Tenant payment without caller amounts", async () => {
     const requests: Array<{ url: string; init?: RequestInit; body?: unknown }> = [];
     vi.spyOn(globalThis.crypto, "randomUUID").mockReturnValue(
@@ -370,6 +432,14 @@ function mockSettlementFetch(options: MockSettlementFetchOptions = {}) {
         ledgerEntries: [],
         journeyStatus: "CLOSED",
         closedAt: "2026-08-21T12:00:00Z",
+      });
+    }
+
+    if (url.includes("/collaborators/collab-1/extend")) {
+      return jsonResponse({
+        id: "collab-1",
+        extensionDays: 14,
+        projectedEndDate: "2100-01-14",
       });
     }
 

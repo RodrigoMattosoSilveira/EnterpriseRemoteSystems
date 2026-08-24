@@ -13,6 +13,7 @@ type Repository interface {
 	Create(ctx context.Context, collaborator *db.CollaboratorJourney) error
 	Update(ctx context.Context, collaborator *db.CollaboratorJourney) error
 	UpdateWorkAssignment(ctx context.Context, collaborator *db.CollaboratorJourney) error
+	UpdateExtension(ctx context.Context, collaborator *db.CollaboratorJourney) error
 	FindByID(ctx context.Context, id string) (*db.CollaboratorJourney, error)
 	FindByIDForMembership(ctx context.Context, id string, membershipID string) (*db.CollaboratorJourney, error)
 	FindActiveMembershipByID(ctx context.Context, membershipID string) (*db.PersonTenantMembership, error)
