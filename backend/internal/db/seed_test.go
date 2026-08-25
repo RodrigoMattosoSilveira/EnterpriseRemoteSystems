@@ -184,6 +184,22 @@ func TestSeedTenantDataPreservesExistingPriceListNaturalKeyWithNonCanonicalID(t 
 	if err := database.Create(&existing).Error; err != nil {
 		t.Fatalf("create existing price-list natural key: %v", err)
 	}
+	// Active has a database default of true, so GORM omits the zero-value false
+	// on Create. Explicitly deactivate the pre-existing row to model the tenant
+	// customization this regression test is intended to preserve.
+	if err := database.Model(&ExpensePriceListItem{}).
+		Where("id = ?", existing.ID).
+		UpdateColumn("active", false).Error; err != nil {
+		t.Fatalf("deactivate existing price-list natural key: %v", err)
+	}
+
+	var before ExpensePriceListItem
+	if err := database.First(&before, "id = ?", existing.ID).Error; err != nil {
+		t.Fatalf("reload existing price-list natural key: %v", err)
+	}
+	if before.Active {
+		t.Fatal("expected existing price-list natural key to be inactive before seeding")
+	}
 
 	if err := SeedTenantData(database, tenant.ID); err != nil {
 		t.Fatalf("seed tenant with existing noncanonical price-list ID: %v", err)
