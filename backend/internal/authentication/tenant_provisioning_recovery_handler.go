@@ -21,6 +21,20 @@ func (h *Handler) GetPersonAuthenticationStatus(c fiber.Ctx) error {
 	return httpx.OK(c, status)
 }
 
+func (h *Handler) IssueTenantPersonPasswordResetToken(c fiber.Ctx) error {
+	actor, err := authz.ResolveRequestActor(c, h.actorStore)
+	if err != nil {
+		return h.writeError(c, err)
+	}
+	result, err := h.service.IssueTenantPersonPasswordResetToken(c.Context(), actor.TenantID, c.Params("id"))
+	if err != nil {
+		return h.writeError(c, err)
+	}
+	h.recordTenantAuthenticationAudit(c, actor, "authentication.password_reset_tokens.issue", c.Params("id"))
+	setNoStore(c)
+	return httpx.Created(c, result)
+}
+
 func (h *Handler) EnablePersonAuthentication(c fiber.Ctx) error {
 	actor, err := authz.ResolveRequestActor(c, h.actorStore)
 	if err != nil {

@@ -34,7 +34,7 @@ export function ResetPasswordPage() {
     finally { setSubmitting(false); }
   }
 
-  return <AuthCard title="Reset password" subtitle="Enter the one-time token issued by an Application Administrator.">
+  return <AuthCard title="Reset password" subtitle="Enter the one-time token issued by an authorized administrator.">
     {error && <p role="alert" className="mb-4 rounded-xl bg-red-50 p-3 text-sm text-red-800">{error}</p>}
     <form onSubmit={submit} className="space-y-4">
       <AuthField label="Reset token" value={token} onChange={(e) => setToken(e.target.value)} required />

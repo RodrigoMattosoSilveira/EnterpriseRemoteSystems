@@ -42,9 +42,14 @@ for the account.
 
 ### `auth_password_reset_tokens`
 
-An Application Administrator can issue a one-time reset token for an account.
-Only the token hash is stored. Issuing a new token invalidates earlier unused
-tokens. Tokens expire and are consumed atomically with the password update.
+An Application Administrator can issue a one-time reset token directly for an
+Account. A Tenant Administrator can issue one only through a Person who has an
+ACTIVE Membership and enabled Account-bound tenant Actor in the selected Tenant.
+The token still resets the one global Authentication Account, so a completed
+reset changes that human's password across all Tenant access and revokes the
+Account's sessions. Only the token hash is stored. Issuing a new token invalidates
+earlier unused tokens. Tokens expire and are consumed atomically with the
+password update.
 
 Bite 28B intentionally does not implement email delivery. The raw reset token
 is returned once to the authorized administrator so it can be delivered through
@@ -81,9 +86,15 @@ Application-scoped administration endpoints:
 - `PATCH /api/v1/auth/accounts/:id/active` — application-scoped `authz.manage`
 - `POST /api/v1/auth/accounts/:id/password-reset-tokens` — application-scoped `authz.manage`
 
-Tenant-scoped administrators cannot list or manage authentication accounts.
-Account creation, activation/deactivation, and reset-token issuance are recorded
-in the authorization audit log.
+Tenant-scoped recovery endpoint:
+
+- `POST /api/v1/people/:id/authentication/password-reset-tokens` — Tenant Administrator only; the Person must have an ACTIVE Membership and enabled Account-bound Actor in the selected Tenant.
+
+Tenant-scoped administrators cannot list or directly manage global Authentication
+Accounts. They may enable authentication, request reactivation, and issue a
+Person-scoped reset token only inside their selected Tenant boundary. Account
+creation, activation/deactivation, and reset-token issuance are recorded in the
+authorization audit log.
 
 Creating an account requires the persisted authorization actor record ID, not
 the external actor key.

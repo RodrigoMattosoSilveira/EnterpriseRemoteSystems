@@ -3,15 +3,18 @@ import { useState } from "react";
 import {
   enablePersonAuthentication,
   getPersonAuthenticationStatus,
+  issuePersonAuthenticationPasswordResetToken,
   requestPersonAuthenticationReactivation,
 } from "../../api/people.api";
 import { ApiErrorPanel } from "../../components/ApiErrorPanel";
+import type { PasswordResetToken } from "../../types/auth";
 
 export function PersonAuthenticationSection({ personId }: { personId: string }) {
   const queryClient = useQueryClient();
   const [temporaryPassword, setTemporaryPassword] = useState("");
   const [confirmTemporaryPassword, setConfirmTemporaryPassword] = useState("");
   const [message, setMessage] = useState("");
+  const [resetToken, setResetToken] = useState<PasswordResetToken | null>(null);
   const status = useQuery({
     queryKey: ["people", personId, "authentication"],
     queryFn: () => getPersonAuthenticationStatus(personId),
@@ -38,6 +41,16 @@ export function PersonAuthenticationSection({ personId }: { personId: string }) 
       void queryClient.invalidateQueries({ queryKey: ["people", personId, "authentication"] });
     },
   });
+  const issuePasswordReset = useMutation({
+    mutationFn: () => issuePersonAuthenticationPasswordResetToken(personId),
+    onMutate: () => {
+      setMessage("");
+      setResetToken(null);
+    },
+    onSuccess: (result) => {
+      setResetToken(result);
+    },
+  });
   const requestReactivation = useMutation({
     mutationFn: () => requestPersonAuthenticationReactivation(personId),
     onSuccess: () => {
@@ -46,7 +59,8 @@ export function PersonAuthenticationSection({ personId }: { personId: string }) 
   });
 
   const current = status.data;
-  const error = status.error ?? enable.error ?? requestReactivation.error;
+  const error =
+    status.error ?? enable.error ?? issuePasswordReset.error ?? requestReactivation.error;
   const passwordConfirmationMismatch =
     confirmTemporaryPassword.length > 0 && temporaryPassword !== confirmTemporaryPassword;
 
@@ -135,6 +149,34 @@ export function PersonAuthenticationSection({ personId }: { personId: string }) 
           <p className="mt-1">
             Account login: <span className="font-mono">{current.login}</span>
           </p>
+          <p className="mt-2 text-emerald-950">
+            A Tenant Administrator may issue a one-time password reset token because this Person has an ACTIVE Membership and enabled authentication in the selected tenant. Completing the reset changes the Person&apos;s global Authentication Account password and revokes its sessions across all tenants.
+          </p>
+          <button
+            type="button"
+            className="mt-3 rounded-lg border border-emerald-300 bg-white px-3 py-2 font-semibold text-emerald-950 disabled:opacity-50"
+            disabled={issuePasswordReset.isPending}
+            onClick={() => issuePasswordReset.mutate()}
+          >
+            {issuePasswordReset.isPending ? "Issuing…" : "Issue password reset token"}
+          </button>
+          {resetToken && (
+            <div role="status" className="mt-3 rounded-lg border border-amber-300 bg-amber-50 p-3 text-amber-950">
+              <p className="font-semibold">One-time reset token for {resetToken.login}</p>
+              <p aria-label="Password reset token" className="mt-2 break-all rounded bg-white p-2 font-mono text-xs">
+                {resetToken.token}
+              </p>
+              <p className="mt-2 text-xs">
+                Expires {new Date(resetToken.expiresAt).toLocaleString()}. Copy it now; ERS will not show it again.
+              </p>
+              <a
+                className="mt-2 inline-block underline"
+                href={`/password/reset?token=${encodeURIComponent(resetToken.token)}`}
+              >
+                Open reset page
+              </a>
+            </div>
+          )}
         </div>
       ) : current?.canRequestReactivation ? (
         <div className="mt-4 rounded-lg bg-amber-50 p-3 text-sm text-amber-950">

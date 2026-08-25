@@ -18,6 +18,7 @@ type Service interface {
 	CreateAccount(ctx context.Context, req CreateAccountRequest) (AccountResponse, error)
 	SetAccountActive(ctx context.Context, id string, active bool) (AccountResponse, error)
 	IssuePasswordResetToken(ctx context.Context, accountID string) (PasswordResetTokenResponse, error)
+	IssueTenantPersonPasswordResetToken(ctx context.Context, tenantID string, personID string) (PasswordResetTokenResponse, error)
 	GetPersonAuthenticationStatus(ctx context.Context, tenantID string, personID string) (PersonAuthenticationStatusResponse, error)
 	EnablePersonAuthentication(ctx context.Context, tenantID string, personID string, req EnablePersonAuthenticationRequest) (PersonAuthenticationStatusResponse, error)
 	RequestSelfReactivation(ctx context.Context, req RequestAccountReactivationRequest, userAgent string, ipAddress string) (ReactivationRequestAcknowledgement, error)
