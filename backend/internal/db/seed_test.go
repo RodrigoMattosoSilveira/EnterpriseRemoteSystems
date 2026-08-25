@@ -108,6 +108,104 @@ func TestSeedTenantDataIsIdempotentAndPreservesTenantChanges(t *testing.T) {
 	}
 }
 
+func TestSeedReferenceDataPreservesExistingNaturalKeyWithNonCanonicalID(t *testing.T) {
+	database := openSeedTestDatabase(t)
+	if err := SeedTenants(database); err != nil {
+		t.Fatalf("seed default tenant: %v", err)
+	}
+
+	now := time.Now().UTC()
+	existing := ReferenceData{
+		BaseModel:   BaseModel{ID: "manual-existing-collaborator-status-active", CreatedAt: now, UpdatedAt: now},
+		TenantID:    DefaultTenantID,
+		Type:        "collaborator_status",
+		Code:        "ACTIVE",
+		Label:       "Active",
+		Description: "Manual fixture row",
+		Active:      true,
+		SortOrder:   777,
+	}
+	if err := database.Create(&existing).Error; err != nil {
+		t.Fatalf("create existing natural-key reference row: %v", err)
+	}
+
+	if err := SeedReferenceData(database); err != nil {
+		t.Fatalf("seed reference data with existing noncanonical ID: %v", err)
+	}
+
+	var rows []ReferenceData
+	if err := database.Where(
+		"tenant_id = ? AND type = ? AND code = ?",
+		DefaultTenantID,
+		"collaborator_status",
+		"ACTIVE",
+	).Find(&rows).Error; err != nil {
+		t.Fatalf("list collaborator ACTIVE rows: %v", err)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("expected one collaborator ACTIVE row, got %d: %#v", len(rows), rows)
+	}
+	if rows[0].ID != existing.ID || rows[0].Description != existing.Description || rows[0].SortOrder != existing.SortOrder {
+		t.Fatalf("expected existing natural-key row to be preserved, got %#v", rows[0])
+	}
+
+	var canonicalCount int64
+	if err := database.Model(&ReferenceData{}).Where("id = ?", "ref-collaborator-status-active").Count(&canonicalCount).Error; err != nil {
+		t.Fatalf("count canonical-ID duplicate: %v", err)
+	}
+	if canonicalCount != 0 {
+		t.Fatalf("expected no canonical-ID duplicate, got %d", canonicalCount)
+	}
+}
+
+func TestSeedTenantDataPreservesExistingPriceListNaturalKeyWithNonCanonicalID(t *testing.T) {
+	database := openSeedTestDatabase(t)
+	now := time.Now().UTC()
+	tenant := Tenant{
+		BaseModel: BaseModel{ID: "tenant-existing-price", CreatedAt: now, UpdatedAt: now},
+		Code:      "EXISTING-PRICE",
+		Name:      "Existing Price Tenant",
+		Active:    true,
+	}
+	if err := database.Create(&tenant).Error; err != nil {
+		t.Fatalf("create tenant: %v", err)
+	}
+
+	existing := ExpensePriceListItem{
+		BaseModel:    BaseModel{ID: "manual-existing-canteen-meal", CreatedAt: now, UpdatedAt: now},
+		TenantID:     tenant.ID,
+		ItemType:     "CANTEEN",
+		Code:         "CANTEEN_MEAL",
+		Description:  "Tenant customized meal",
+		UnitPriceBRL: 88.25,
+		Active:       false,
+		SortOrder:    999,
+	}
+	if err := database.Create(&existing).Error; err != nil {
+		t.Fatalf("create existing price-list natural key: %v", err)
+	}
+
+	if err := SeedTenantData(database, tenant.ID); err != nil {
+		t.Fatalf("seed tenant with existing noncanonical price-list ID: %v", err)
+	}
+
+	var rows []ExpensePriceListItem
+	if err := database.Where(
+		"tenant_id = ? AND item_type = ? AND code = ?",
+		tenant.ID,
+		"CANTEEN",
+		"CANTEEN_MEAL",
+	).Find(&rows).Error; err != nil {
+		t.Fatalf("list existing price-list rows: %v", err)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("expected one CANTEEN_MEAL row, got %d: %#v", len(rows), rows)
+	}
+	if rows[0].ID != existing.ID || rows[0].UnitPriceBRL != existing.UnitPriceBRL || rows[0].Active || rows[0].Description != existing.Description {
+		t.Fatalf("expected existing price-list row to be preserved, got %#v", rows[0])
+	}
+}
+
 func TestSeedTenantDataRejectsUnknownOrGlobalTenant(t *testing.T) {
 	database := openSeedTestDatabase(t)
 	if err := SeedTenantData(database, "*"); err == nil {
