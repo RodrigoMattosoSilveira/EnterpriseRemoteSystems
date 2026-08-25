@@ -1091,6 +1091,10 @@ def main() -> int:
     print("  3. Confirm the backend stays running on 127.0.0.1:8080 before using the DevTools helper.")
     print("     A 502 from localhost:5173/api/... means the Vite proxy cannot reach the backend;")
     print("     it does not mean the selected Account lacks Tenant A.")
+    print("  4. Sign in again after every fixture reset/rebuild. The reset replaces auth_sessions, so")
+    print("     browser sessions created before the reset are intentionally invalid and return HTTP 401.")
+    print('     For DevTools-only API verification you may run: await ERS30G.signIn("A")')
+    print("     Then run: await ERS30G.tenants()")
     return 0
 
 

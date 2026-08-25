@@ -45,6 +45,29 @@
     workPeriodB: "manual30g-work-period-tenant-b",
   });
 
+  const IDENTITIES = Object.freeze({
+    A: { label: "Identity A", login: IDS.identityALogin },
+    B: { label: "Identity B", login: IDS.identityBLogin },
+    C: { label: "Identity C", login: IDS.identityCLogin },
+    M: { label: "Identity M", login: IDS.identityMLogin },
+    H: { label: "Identity H", login: IDS.identityHLogin },
+    R: { label: "Identity R", login: IDS.identityRLogin },
+    EARNINGS: { label: "Earnings Operator", login: IDS.earningsOperatorLogin },
+    OPERATOR: { label: "Operator D", login: IDS.operatorLogin },
+  });
+
+  function resolveIdentity(identity) {
+    const key = String(identity ?? "").trim().toUpperCase();
+    const resolved = IDENTITIES[key];
+    if (!resolved) {
+      throw new Error(
+        `Unknown 30G fixture identity ${JSON.stringify(identity)}. ` +
+        `Use one of: ${Object.keys(IDENTITIES).join(", ")}.`,
+      );
+    }
+    return { key, ...resolved };
+  }
+
   const unwrap = (json) =>
     json && typeof json === "object" && Object.prototype.hasOwnProperty.call(json, "data")
       ? json.data
@@ -84,10 +107,56 @@
       ].join(" ");
     }
     if (result.status === 401) {
-      return `Authentication is required before calling ${path}. Sign in with the intended manual-test identity and retry.`;
+      return [
+        `Authentication is required before calling ${path}.`,
+        "A Bite 30G fixture reset/rebuild replaces auth_sessions, so any browser session created before the reset is intentionally invalid.",
+        "Sign in again through the application UI, or for DevTools API verification run: await ERS30G.signIn(\"A\")",
+        "Then retry: await ERS30G.tenants()",
+        `Fixture password: ${IDS.password}`,
+      ].join(" ");
     }
     const detail = result.error?.message ?? result.error?.code ?? result.raw ?? "no response body";
     return `${path} failed with HTTP ${result.status}: ${typeof detail === "string" ? detail : JSON.stringify(detail)}`;
+  }
+
+  async function session() {
+    const result = await api("/auth/session");
+    if (result.status === 204) {
+      console.log("No authenticated browser session is active.");
+      return null;
+    }
+    if (!result.ok) {
+      throw new Error(apiFailureMessage(result, "/auth/session"));
+    }
+    console.log("Authenticated session", result.data);
+    return result.data;
+  }
+
+  async function signIn(identity = "A") {
+    const selected = resolveIdentity(identity);
+    const result = await api("/auth/login", {
+      method: "POST",
+      body: { login: selected.login, password: IDS.password },
+    });
+    if (!result.ok) {
+      throw new Error(apiFailureMessage(result, "/auth/login"));
+    }
+    console.log(
+      `Signed in as ${selected.label}: ${selected.login}. ` +
+      "The session cookie is active for DevTools calls. Reload/sign in through the normal UI before continuing UI-only steps if the page still shows anonymous state.",
+    );
+    return result.data;
+  }
+
+  function identities() {
+    const rows = Object.entries(IDENTITIES).map(([key, value]) => ({
+      key,
+      identity: value.label,
+      login: value.login,
+      password: IDS.password,
+    }));
+    console.table(rows);
+    return rows;
   }
 
   async function tenantOptions() {
@@ -267,7 +336,7 @@
   }
 
   window.ERS30G = Object.freeze({
-    IDS, api, tenantOptions, tenants, useTenant, reference, apiFailureMessage,
+    IDS, IDENTITIES, api, session, signIn, identities, tenantOptions, tenants, useTenant, reference, apiFailureMessage,
     currentAccount, projection, settlementPreview,
     selfJourneys, selfJourney, selfService,
     receipt, acceptReceipt,
@@ -276,5 +345,7 @@
   });
 
   console.log("ERS30G final helper installed as window.ERS30G");
-  console.log("Start with: await ERS30G.tenants() or await ERS30G.snapshot()");
+  console.log("After a fixture reset, authenticate again before tenant calls.");
+  console.log('DevTools-only sign-in shortcut: await ERS30G.signIn("A")');
+  console.log("Then run: await ERS30G.tenants() or await ERS30G.snapshot()");
 })();
