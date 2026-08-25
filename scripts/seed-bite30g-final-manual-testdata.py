@@ -1010,7 +1010,12 @@ def main() -> int:
     print(f"  Login: {r['login']}  Journey: {r1} OPEN/ZERO")
     print("\nEarnings Operator")
     print(f"  Login: {e['login']}")
-    print("\nRestart the backend before beginning the manual checklist.")
+    print("\nMANDATORY before beginning the manual checklist:")
+    print("  1. Stop any stale backend process if it is still running.")
+    print("  2. From the project root run: make local-backend")
+    print("  3. Confirm the backend stays running on 127.0.0.1:8080 before using the DevTools helper.")
+    print("     A 502 from localhost:5173/api/... means the Vite proxy cannot reach the backend;")
+    print("     it does not mean the selected Account lacks Tenant A.")
     return 0
 
 
