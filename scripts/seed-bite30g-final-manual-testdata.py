@@ -40,6 +40,7 @@ import json
 import os
 import re
 import shutil
+import socket
 import sqlite3
 import sys
 from datetime import date, datetime, time, timedelta, timezone
@@ -495,6 +496,64 @@ def clean_backup_path(db_path: Path, batch: str) -> Path:
     )
 
 
+def sqlite_sidecar_paths(db_path: Path) -> tuple[Path, ...]:
+    return tuple(
+        Path(str(db_path) + suffix)
+        for suffix in ("-wal", "-shm", "-journal")
+    )
+
+
+def remove_sqlite_sidecars(db_path: Path) -> None:
+    for sidecar in sqlite_sidecar_paths(db_path):
+        sidecar.unlink(missing_ok=True)
+
+
+def sqlite_snapshot(source: Path, destination: Path) -> None:
+    """Create a consistent SQLite backup, including committed WAL contents."""
+    destination.unlink(missing_ok=True)
+    source_conn = sqlite3.connect(f"file:{source}?mode=ro", uri=True, timeout=5.0)
+    destination_conn = sqlite3.connect(destination)
+    try:
+        source_conn.execute("PRAGMA busy_timeout=5000")
+        source_conn.backup(destination_conn)
+        destination_conn.commit()
+    finally:
+        destination_conn.close()
+        source_conn.close()
+
+
+def local_backend_is_reachable(host: str = "127.0.0.1", port: int = 8080) -> bool:
+    try:
+        with socket.create_connection((host, port), timeout=0.25):
+            return True
+    except OSError:
+        return False
+
+
+def require_local_backend_stopped_for_reset() -> None:
+    if local_backend_is_reachable():
+        raise SystemExit(
+            "Refusing --reset-existing-batch while the local backend is still "
+            "reachable on 127.0.0.1:8080. Stop make local-backend first, then "
+            "rerun the fixture. Replacing an SQLite database while the backend "
+            "has it open can leave stale WAL/SHM state."
+        )
+
+
+def replace_database_safely(*, current: Path, replacement: Path, safety: Path, batch: str) -> None:
+    """Replace current DB only after snapshotting it and clearing SQLite sidecars."""
+    sqlite_snapshot(current, safety)
+    remove_sqlite_sidecars(current)
+    try:
+        os.replace(replacement, current)
+        validate_rebuilt_database(current, batch)
+    except BaseException:
+        remove_sqlite_sidecars(current)
+        shutil.copy2(safety, current)
+        remove_sqlite_sidecars(current)
+        raise
+
+
 def create_clean_backup(db_path: Path, batch: str) -> Path:
     clean = clean_backup_path(db_path, batch)
     if clean.exists():
@@ -503,7 +562,7 @@ def create_clean_backup(db_path: Path, batch: str) -> Path:
         raise SystemExit(
             f"Refusing to overwrite incompatible clean-backup candidate: {clean}"
         )
-    shutil.copy2(db_path, clean)
+    sqlite_snapshot(db_path, clean)
     return clean
 
 
@@ -680,9 +739,15 @@ def rebuild_clean_database_from_migrations(db_path: Path, batch: str) -> Path:
         ) from exc
 
     # Only after the fresh database is fully migrated and validated do we
-    # preserve and replace the current local database.
-    shutil.copy2(db_path, safety)
-    os.replace(temporary, db_path)
+    # preserve and replace the current local database. The SQLite backup API
+    # captures committed WAL contents from the old database, and stale
+    # sidecars are removed before the new main database is installed.
+    replace_database_safely(
+        current=db_path,
+        replacement=temporary,
+        safety=safety,
+        batch=batch,
+    )
 
     print(f"Reset safety backup: {safety}")
     print(
@@ -700,8 +765,17 @@ def restore_clean_backup(db_path: Path, batch: str) -> Path:
     safety = db_path.with_name(
         db_path.name + f".before-bite30g-reset-{prefix(batch)}-{stamp}.bak"
     )
-    shutil.copy2(db_path, safety)
-    shutil.copy2(source, db_path)
+    temporary = db_path.with_name(
+        db_path.name + f".bite30g-clean-restore-{prefix(batch)}-{stamp}.tmp"
+    )
+    temporary.unlink(missing_ok=True)
+    shutil.copy2(source, temporary)
+    replace_database_safely(
+        current=db_path,
+        replacement=temporary,
+        safety=safety,
+        batch=batch,
+    )
     print(f"Reset safety backup: {safety}")
     print(f"Restored clean pre-seed backup: {source}")
     return source
@@ -742,6 +816,7 @@ def main() -> int:
             raise SystemExit(2)
 
         conn.close()
+        require_local_backend_stopped_for_reset()
         restore_clean_backup(db_path, batch)
         conn = sqlite3.connect(db_path)
         conn.row_factory = sqlite3.Row
@@ -759,7 +834,7 @@ def main() -> int:
     if not args.no_backup:
         stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
         backup = db_path.with_name(db_path.name + f".pre-bite30g-final-{stamp}.bak")
-        shutil.copy2(db_path, backup)
+        sqlite_snapshot(db_path, backup)
         print(f"Backup: {backup}")
         pre_seed_backup = create_clean_backup(db_path, batch)
         print(f"Reusable clean pre-seed backup: {pre_seed_backup}")
