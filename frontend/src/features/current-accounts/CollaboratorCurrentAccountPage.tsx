@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { ApiErrorPanel } from "../../components/ApiErrorPanel";
 import { useAuthorizationContext } from "../../components/layout/AuthorizationContext";
@@ -6,6 +7,7 @@ import type {
   CurrentAccountFilter,
   LedgerEntry,
 } from "../../types/currentAccounts";
+import { CurrentAndFutureEarningsModal } from "../expenses/CurrentAndFutureEarningsModal";
 import { receiptStatusLabel, receiptStatusTone } from "../receipts/receiptLifecycle";
 import { useCollaboratorCurrentAccount } from "./useCurrentAccount";
 
@@ -38,11 +40,14 @@ export function CollaboratorCurrentAccountPage() {
   const { id = "" } = useParams();
   const actor = useAuthorizationContext();
   const wildcard = actor.permissions.includes("*");
+  const canViewFinancialProjection =
+    wildcard || actor.permissions.includes("current_accounts.summary.read");
   const canBrowseExpenses = wildcard || actor.permissions.includes("expenses.read");
   const canBrowseOutstandingReceipts = wildcard || actor.permissions.includes("ledger.receipts.read");
   const canOpenOperationalSources =
     wildcard || actor.permissions.includes("expenses.read") || actor.permissions.includes("planning.read");
   const canOpenReceipt = wildcard || actor.permissions.includes("ledger.receipts.read") || actor.permissions.includes("ledger.receipts.self.read");
+  const [showFinancialProjection, setShowFinancialProjection] = useState(false);
   const [searchParams, setSearchParams] = useSearchParams();
   const filter = searchParams.get("filter") ?? "all";
   const page = Number(searchParams.get("page") ?? "1") || 1;
@@ -96,6 +101,15 @@ export function CollaboratorCurrentAccountPage() {
               </p>
             </div>
             <div className="flex flex-wrap gap-2 sm:justify-end">
+              {canViewFinancialProjection ? (
+                <button
+                  className="rounded-xl border bg-white px-4 py-2 text-sm font-semibold text-gray-700 shadow-sm"
+                  type="button"
+                  onClick={() => setShowFinancialProjection(true)}
+                >
+                  Current + Future Earnings
+                </button>
+              ) : null}
               {canBrowseOutstandingReceipts ? (
                 <Link
                   className="rounded-xl border bg-white px-4 py-2 text-sm font-semibold text-gray-700 shadow-sm"
@@ -219,6 +233,13 @@ export function CollaboratorCurrentAccountPage() {
           </>
         ) : null}
       </section>
+
+      {showFinancialProjection && canViewFinancialProjection ? (
+        <CurrentAndFutureEarningsModal
+          collaboratorId={id}
+          onClose={() => setShowFinancialProjection(false)}
+        />
+      ) : null}
     </main>
   );
 }

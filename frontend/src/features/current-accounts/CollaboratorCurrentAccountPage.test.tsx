@@ -50,6 +50,57 @@ describe("CollaboratorCurrentAccountPage", () => {
     expect(container.querySelector('a[href="/ledger-entries/ledger-1/receipt"]')).not.toBeNull();
   });
 
+  it("opens the selected Journey Current + Future Earnings projection", async () => {
+    mockFetch(async (url, init) => {
+      fetchCalls.push({ url, method: methodOf(init) });
+      if (url.startsWith("/api/v1/collaborators/collab-1/current-account")) {
+        return jsonResponse({ data: currentAccountDetailWith([expenseEntry, earningEntry]) });
+      }
+      if (url === "/api/v1/collaborators/collab-1/financial-projection") {
+        return jsonResponse({
+          data: {
+            collaboratorId: "collab-1",
+            collaboratorLabel: "Maria",
+            paymentMethodCode: "DAILY_BRL",
+            currentBalances: { brlAmount: 25, goldGramAmount: 0 },
+            unpostedReadyEarnings: { brlAmount: 0, goldGramAmount: 0 },
+            estimatedFutureEarnings: { brlAmount: 75, goldGramAmount: 0 },
+            projectedEarnings: { brlAmount: 75, goldGramAmount: 0 },
+            projectedFinalBalances: { brlAmount: 100, goldGramAmount: 0 },
+            projection: {
+              projectionDate: "2026-08-25",
+              journeyEndDate: "2026-08-27",
+              periodsPerDay: 1,
+              remainingWorkPeriods: 3,
+              calendarWorkPeriods: 3,
+              postedWorkPeriods: 0,
+              readyAccrualWorkPeriods: 0,
+              estimatedFutureWorkPeriods: 3,
+              pendingAccrualItems: 0,
+              productionMethod: "DAILY_BRL",
+              productionDatesAvailable: 0,
+            },
+          },
+        });
+      }
+      throw new Error(`Unhandled request: ${methodOf(init)} ${url}`);
+    });
+
+    renderCurrentAccountPage("/collaborators/collab-1/current-account");
+
+    await waitForText("Current + Future Earnings");
+    await clickButton("Current + Future Earnings");
+    await waitForText("Current and Future Earnings");
+    await waitForText("Projected Journey-End Balances");
+
+    expect(container.textContent).toContain("25,00");
+    expect(
+      fetchCalls.some(
+        (call) => call.url === "/api/v1/collaborators/collab-1/financial-projection",
+      ),
+    ).toBe(true);
+  });
+
   it("shows direction-aware in-app acceptance guidance for final-settlement receipts", async () => {
     mockFetch(async (url, init) => {
       fetchCalls.push({ url, method: methodOf(init) });
@@ -282,6 +333,16 @@ function renderCurrentAccountPage(initialEntry: string) {
 async function waitForText(text: string) {
   await vi.waitFor(() => {
     expect(container.textContent).toContain(text);
+  });
+}
+
+async function clickButton(label: string) {
+  const button = Array.from(container.querySelectorAll("button")).find(
+    (candidate) => candidate.textContent?.trim() === label,
+  );
+  if (!button) throw new Error(`Button not found: ${label}`);
+  await act(async () => {
+    button.dispatchEvent(new MouseEvent("click", { bubbles: true }));
   });
 }
 
