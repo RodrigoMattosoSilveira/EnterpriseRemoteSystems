@@ -73,6 +73,7 @@ export function CurrentAndFutureEarningsModal({
             <AmountSection
               title="Current Balances"
               amounts={projection.currentBalances}
+              colorBySign
             />
             <AmountSection
               title="Ready Accrual Earnings Not Yet Posted"
@@ -89,6 +90,7 @@ export function CurrentAndFutureEarningsModal({
             <AmountSection
               title="Projected Journey-End Balances"
               amounts={projection.projectedFinalBalances}
+              colorBySign
             />
 
             <section className="rounded-xl border bg-gray-50 p-4 text-sm text-gray-700">
@@ -183,9 +185,11 @@ const zeroAmounts = { brlAmount: 0, goldGramAmount: 0 };
 function AmountSection({
   title,
   amounts,
+  colorBySign = false,
 }: {
   title: string;
   amounts: { brlAmount: number | null; goldGramAmount: number | null };
+  colorBySign?: boolean;
 }) {
   return (
     <section className="rounded-xl border p-4">
@@ -198,6 +202,9 @@ function AmountSection({
               ? "Unavailable"
               : formatBRL(amounts.brlAmount)
           }
+          valueClassName={
+            colorBySign ? balanceTextClassName(amounts.brlAmount) : undefined
+          }
         />
         <Detail
           label="Grams of gold"
@@ -206,21 +213,39 @@ function AmountSection({
               ? "Unavailable"
               : `${formatGold(amounts.goldGramAmount)} g`
           }
+          valueClassName={
+            colorBySign
+              ? balanceTextClassName(amounts.goldGramAmount)
+              : undefined
+          }
         />
       </dl>
     </section>
   );
 }
 
-function Detail({ label, value }: { label: string; value: string }) {
+function Detail({
+  label,
+  value,
+  valueClassName = "text-gray-950",
+}: {
+  label: string;
+  value: string;
+  valueClassName?: string;
+}) {
   return (
     <div>
       <dt className="text-xs font-semibold uppercase tracking-wide text-gray-500">
         {label}
       </dt>
-      <dd className="mt-1 font-medium text-gray-950">{value}</dd>
+      <dd className={`mt-1 font-medium ${valueClassName}`}>{value}</dd>
     </div>
   );
+}
+
+function balanceTextClassName(value: number | null) {
+  if (value === null) return "text-gray-950";
+  return value >= 0 ? "text-green-700" : "text-red-700";
 }
 
 function formatBRL(value: number) {
