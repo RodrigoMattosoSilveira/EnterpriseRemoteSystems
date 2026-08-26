@@ -126,6 +126,16 @@ describe("AccrualTab", () => {
     expect(container.textContent).toContain("Open Gold Production");
     expect(container.textContent).not.toContain("Add Production");
     expect(container.textContent).toContain("Run Accrual");
+    const notesField = container.querySelector<HTMLTextAreaElement>(
+      'textarea[aria-label="Accrual notes"]',
+    );
+    expect(notesField).not.toBeNull();
+    expect(notesField?.rows).toBe(4);
+    expect(notesField?.className).toContain("w-full");
+    expect(notesField?.className).toContain("min-h-24");
+    expect(container.textContent).toContain(
+      "Optional context for this accrual run.",
+    );
     expect(container.textContent).toContain("Maria");
   });
 
