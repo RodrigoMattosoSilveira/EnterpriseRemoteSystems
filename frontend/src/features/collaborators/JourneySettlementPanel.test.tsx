@@ -227,10 +227,34 @@ describe("JourneySettlementPanel", () => {
     renderPanel();
     await waitForText("Balances settled — receipt acceptance pending");
     expect(container.textContent).toContain("2 final-settlement receipts remain outstanding");
+    expect(container.textContent).not.toContain("Blocking reasons: outstanding receipts");
+    const outstandingReceiptsLink = Array.from(
+      container.querySelectorAll<HTMLAnchorElement>("a"),
+    ).find((link) => link.textContent?.includes("Review outstanding receipts"));
+    expect(outstandingReceiptsLink?.getAttribute("href")).toBe(
+      "/receipts/outstanding",
+    );
     const closeButton = Array.from(container.querySelectorAll<HTMLButtonElement>("button")).find(
       (button) => button.textContent?.includes("Close Journey"),
     );
     expect(closeButton?.disabled).toBe(true);
+  });
+
+  it("suppresses a stale generic outstanding-receipts reason when the receipt count is zero", async () => {
+    mockSettlementFetch({
+      preview: {
+        brlBalance: 0,
+        goldGramBalance: 0,
+        outstandingReceipts: 0,
+        canClose: false,
+        blockingReasons: ["OUTSTANDING_RECEIPTS"],
+      },
+    });
+
+    renderPanel();
+    await waitForText("Outstanding receipts");
+    expect(container.textContent).not.toContain("Blocking reasons: outstanding receipts");
+    expect(textNode("Balances settled — receipt acceptance pending")).toBeFalsy();
   });
 
   it("extends a Journey by additional days without invoking settlement reauthentication", async () => {

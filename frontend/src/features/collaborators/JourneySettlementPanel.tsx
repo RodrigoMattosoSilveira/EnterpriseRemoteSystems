@@ -274,6 +274,12 @@ function SettlementWorkflow({
           <p className="mt-1 text-sm text-amber-900">
             The Journey balances are zero, but {preview.outstandingReceipts} final-settlement receipt{preview.outstandingReceipts === 1 ? " remains" : "s remain"} outstanding. The designated accepting party must complete in-app acceptance before closure.
           </p>
+          <Link
+            className="mt-3 inline-flex text-sm font-semibold text-amber-950 underline"
+            to="/receipts/outstanding"
+          >
+            Review outstanding receipts
+          </Link>
         </section>
       ) : null}
 
@@ -415,6 +421,17 @@ function negativeBalanceSummary(preview: SettlementPreview) {
 }
 
 function PreviewSummary({ preview }: { preview: SettlementPreview }) {
+  const receiptAcceptancePending =
+    preview.brlBalance === 0 &&
+    preview.goldGramBalance === 0 &&
+    preview.outstandingReceipts > 0;
+  const visibleBlockingReasons = preview.blockingReasons.filter((reason) => {
+    if (reason !== "OUTSTANDING_RECEIPTS") return true;
+    // Receipt-only closure blocking already has a dedicated, actionable panel.
+    // Also suppress a stale/inconsistent receipt reason when the count is zero.
+    return preview.outstandingReceipts > 0 && !receiptAcceptancePending;
+  });
+
   return (
     <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
       <Summary label="BRL balance" value={formatBRL(preview.brlBalance)} />
@@ -431,10 +448,10 @@ function PreviewSummary({ preview }: { preview: SettlementPreview }) {
         value={String(preview.outstandingReceipts)}
       />
       <Summary label="Can close" value={preview.canClose ? "Yes" : "No"} />
-      {preview.blockingReasons.length > 0 ? (
+      {visibleBlockingReasons.length > 0 ? (
         <div className="rounded-xl bg-red-50 p-3 text-sm text-red-800 sm:col-span-2 lg:col-span-4">
           <span className="font-semibold">Blocking reasons:</span>{" "}
-          {preview.blockingReasons.map(formatReason).join(", ")}
+          {visibleBlockingReasons.map(formatReason).join(", ")}
         </div>
       ) : null}
     </div>
