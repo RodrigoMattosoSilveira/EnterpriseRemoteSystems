@@ -58,6 +58,7 @@ export type CreateExpenseInput = {
   collaboratorId: string;
   expenseDate: string;
   description?: string;
+  recreatedFromExpenseId?: string;
 
   // Bite 21 canonical price-list expense fields. Expense category, value unit,
   // amount, item description, and totals are derived by the backend from these
