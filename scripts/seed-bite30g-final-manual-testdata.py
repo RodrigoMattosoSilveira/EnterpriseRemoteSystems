@@ -142,6 +142,10 @@ def require_schema(conn: sqlite3.Connection) -> None:
         cols = {r[1] for r in conn.execute(f"PRAGMA table_info({table})")}
         if "person_id" not in cols:
             raise SystemExit(f"{table}.person_id is missing; apply migration 000057 first")
+    expense_cols = {r[1] for r in conn.execute("PRAGMA table_info(expenses)")}
+    for col in ("cancelled_at", "cancelled_by", "cancellation_reason", "recreated_from_expense_id"):
+        if col not in expense_cols:
+            raise SystemExit(f"expenses.{col} is missing; apply migration 000060 first")
     receipt_cols = {r[1] for r in conn.execute("PRAGMA table_info(ledger_receipts)")}
     for col in ("receipt_purpose", "payment_direction", "accepting_party", "accepted_at", "accepted_by", "acceptance_method"):
         if col not in receipt_cols:
@@ -151,6 +155,8 @@ def require_schema(conn: sqlite3.Connection) -> None:
         "trg_collaborator_journey_zero_balance_close",
         "trg_ledger_receipts_acceptance_insert_guard",
         "trg_ledger_receipts_acceptance_update_guard",
+        "trg_expenses_cancellation_insert_guard",
+        "trg_expenses_cancellation_update_guard",
     ):
         if trg not in triggers:
             raise SystemExit(f"Required Bite 30G trigger {trg} is missing")
@@ -637,9 +643,9 @@ def validate_rebuilt_database(db_path: Path, batch: str) -> None:
                 "SELECT filename FROM schema_migrations"
             ).fetchall()
         }
-        if "000059_bidirectional_final_settlement_receipts.up.sql" not in migrations:
+        if "000060_expense_cancellation_recreation.up.sql" not in migrations:
             raise SystemExit(
-                "Freshly rebuilt database did not apply migration 000059"
+                "Freshly rebuilt database did not apply migration 000060"
             )
     finally:
         conn.close()
@@ -977,7 +983,7 @@ def main() -> int:
     conn.execute("UPDATE people SET status_id=?, updated_at=? WHERE id=?", (refs_a["person_inactive"], iso_dt(utc_now()), h_legacy))
     conn.execute("UPDATE authz_actors SET active=0, updated_at=? WHERE id=?", (iso_dt(utc_now()), h_actor))
 
-    # Identity R: neutral active Journey for expense ownership/reassignment tests.
+    # Identity R: neutral active Journey for expense cancellation/recreation correction tests.
     r = identity(batch, "r", "Rafael", "ExpenseTarget")
     insert_global_person(conn, r)
     r_legacy, r_mem = insert_membership(conn, r, tenant_a["id"], refs_a["person_active"], batch, "r-tenant-a")

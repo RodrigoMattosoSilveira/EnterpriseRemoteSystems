@@ -461,7 +461,7 @@ func PermissionCatalog() []PermissionCatalogEntry {
 		{PermissionReferenceDataManage, "Manage reference data", "Create, update, deactivate, and reactivate tenant reference data records."},
 		{PermissionExpensesRead, "Read expenses", "Read tenant expense records."},
 		{PermissionExpensesCreate, "Create expenses", "Create tenant expense records."},
-		{PermissionExpensesUpdate, "Update expenses", "Update tenant expense records."},
+		{PermissionExpensesUpdate, "Correct expenses", "Cancel incorrect tenant expense records and initiate the replacement workflow."},
 		{PermissionCurrentAccountsSummaryRead, "Read current account summary", "Read tenant collaborator current account summaries."},
 		{PermissionCurrentAccountsLedgerRead, "Read current account ledger", "Read tenant collaborator current account ledger records."},
 		{PermissionCurrentAccountsLedgerCreate, "Create current account ledger", "Create tenant current account ledger records."},

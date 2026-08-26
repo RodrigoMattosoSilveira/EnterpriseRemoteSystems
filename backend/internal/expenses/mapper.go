@@ -29,6 +29,10 @@ func ToDTO(row db.Expense) ExpenseDTO {
 		ExpenseDate:            formatDate(row.ExpenseDate),
 		Description:            row.Description,
 		Active:                 row.Active,
+		CancelledAt:            formatOptionalTime(row.CancelledAt),
+		CancelledBy:            row.CancelledBy,
+		CancellationReason:     row.CancellationReason,
+		RecreatedFromExpenseID: row.RecreatedFromExpenseID,
 		PriceListItemID:        row.PriceListItemID,
 		PriceListItemCode:      row.PriceListItemCode,
 		ItemType:               row.ItemType,
@@ -84,6 +88,13 @@ func formatDate(value time.Time) string {
 		return ""
 	}
 	return value.Format(dateLayout)
+}
+
+func formatOptionalTime(value *time.Time) string {
+	if value == nil || value.IsZero() {
+		return ""
+	}
+	return value.UTC().Format(time.RFC3339)
 }
 
 func normalizeCurrencyCode(value string) string {

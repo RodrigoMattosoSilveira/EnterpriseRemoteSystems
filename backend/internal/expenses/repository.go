@@ -11,7 +11,9 @@ type Repository interface {
 	List(ctx context.Context, filter normalizedExpenseListFilter) ([]db.Expense, int64, error)
 	Create(ctx context.Context, expense *db.Expense) error
 	Update(ctx context.Context, expense *db.Expense) error
+	Cancel(ctx context.Context, expense *db.Expense, actorUserID, reason string) error
 	FindByID(ctx context.Context, id string) (*db.Expense, error)
+	ExistsRecreationFromExpenseID(ctx context.Context, sourceExpenseID string) (bool, error)
 	FindFinancialPostingByExpenseID(ctx context.Context, expenseID string) (*db.LedgerEntry, error)
 	FindFinancialPostingsByExpenseIDs(ctx context.Context, expenseIDs []string) (map[string]*db.LedgerEntry, error)
 	FindCollaboratorByID(ctx context.Context, collaboratorID string) (*db.CollaboratorJourney, error)

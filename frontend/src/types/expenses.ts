@@ -31,6 +31,10 @@ export type Expense = {
   expenseDate: string;
   description?: string;
   active?: boolean;
+  cancelledAt?: string;
+  cancelledBy?: string;
+  cancellationReason?: string;
+  recreatedFromExpenseId?: string;
   priceListItemId?: string;
   priceListItemCode?: string;
   itemType?: "CANTEEN" | "ADMINISTRATIVE" | string;

@@ -245,15 +245,19 @@ type GoldPrice struct {
 type Expense struct {
 	BaseModel
 
-	TenantID          string    `gorm:"type:text;not null;default:default;index" json:"tenantId"`
-	PersonID          string    `gorm:"type:text;not null;index" json:"personId"`
-	CollaboratorID    string    `gorm:"type:text;not null;index" json:"collaboratorId"`
-	ExpenseCategoryID string    `gorm:"type:text;not null;index" json:"expenseCategoryId"`
-	ValueUnitID       string    `gorm:"type:text;not null;index" json:"valueUnitId"`
-	Amount            float64   `gorm:"not null" json:"amount"`
-	ExpenseDate       time.Time `gorm:"type:date;not null;index" json:"expenseDate"`
-	Description       string    `gorm:"type:text" json:"description,omitempty"`
-	Active            bool      `gorm:"not null;default:true;index" json:"active"`
+	TenantID               string     `gorm:"type:text;not null;default:default;index" json:"tenantId"`
+	PersonID               string     `gorm:"type:text;not null;index" json:"personId"`
+	CollaboratorID         string     `gorm:"type:text;not null;index" json:"collaboratorId"`
+	ExpenseCategoryID      string     `gorm:"type:text;not null;index" json:"expenseCategoryId"`
+	ValueUnitID            string     `gorm:"type:text;not null;index" json:"valueUnitId"`
+	Amount                 float64    `gorm:"not null" json:"amount"`
+	ExpenseDate            time.Time  `gorm:"type:date;not null;index" json:"expenseDate"`
+	Description            string     `gorm:"type:text" json:"description,omitempty"`
+	Active                 bool       `gorm:"not null;default:true;index" json:"active"`
+	CancelledAt            *time.Time `json:"cancelledAt,omitempty"`
+	CancelledBy            string     `gorm:"type:text;index" json:"cancelledBy,omitempty"`
+	CancellationReason     string     `gorm:"type:text" json:"cancellationReason,omitempty"`
+	RecreatedFromExpenseID *string    `gorm:"type:text;index" json:"recreatedFromExpenseId,omitempty"`
 
 	PriceListItemID        *string  `gorm:"type:text;index" json:"priceListItemId,omitempty"`
 	PriceListItemCode      string   `gorm:"type:text;index" json:"priceListItemCode,omitempty"`
