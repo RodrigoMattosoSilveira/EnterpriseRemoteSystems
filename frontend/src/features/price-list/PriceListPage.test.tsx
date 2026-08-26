@@ -125,6 +125,34 @@ describe("PriceListPage", () => {
     });
   });
 
+  it("keeps Save Changes disabled and gray until the price-list item is edited", async () => {
+    mockPriceListFetch();
+
+    renderPage();
+
+    await waitForText("Snack");
+    await clickButton("Edit");
+    await waitForText("Edit Document copy");
+
+    const saveButton = buttonByName("Save Changes");
+    expect(saveButton.disabled).toBe(true);
+    expect(saveButton.className).toContain("bg-gray-200");
+    expect(saveButton.className).toContain("text-gray-500");
+    expect(fetchCalls.some((call) => call.method === "PATCH")).toBe(false);
+
+    await changeInputInForm("Edit Document copy", "Description", "Document copy updated");
+
+    expect(saveButton.disabled).toBe(false);
+    expect(saveButton.className).toContain("bg-gray-950");
+    expect(saveButton.className).toContain("text-white");
+
+    await changeInputInForm("Edit Document copy", "Description", "Document copy");
+
+    expect(saveButton.disabled).toBe(true);
+    expect(saveButton.className).toContain("bg-gray-200");
+    expect(saveButton.className).toContain("text-gray-500");
+  });
+
   it("edits an item in place", async () => {
     mockPriceListFetch();
 
@@ -133,7 +161,9 @@ describe("PriceListPage", () => {
     await waitForText("Snack");
     await clickButton("Edit");
     await waitForText("Edit Document copy");
+    expect(buttonByName("Save Changes").disabled).toBe(true);
     await changeInputInForm("Edit Document copy", "Description", "Document copy updated");
+    expect(buttonByName("Save Changes").disabled).toBe(false);
     await changeInputInForm("Edit Document copy", "BRL Unit Price", "6.25");
     await submitFormByHeading("Edit Document copy");
 
@@ -359,11 +389,16 @@ async function submitFormByHeading(headingText: string) {
   });
 }
 
-async function clickButton(name: string) {
+function buttonByName(name: string) {
   const button = Array.from(container.querySelectorAll("button")).find((element) =>
     element.textContent?.trim() === name,
-  );
+  ) as HTMLButtonElement | undefined;
   if (!button) throw new Error(`Button not found: ${name}`);
+  return button;
+}
+
+async function clickButton(name: string) {
+  const button = buttonByName(name);
 
   await act(async () => {
     button.dispatchEvent(new MouseEvent("click", { bubbles: true }));
