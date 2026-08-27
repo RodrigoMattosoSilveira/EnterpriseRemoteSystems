@@ -113,6 +113,8 @@ describe("CollaboratorCurrentAccountPage", () => {
     renderCurrentAccountPage("/collaborators/collab-1/current-account");
 
     await waitForText("Awaiting Collaborator in-app acceptance.");
+    expect(container.textContent).toContain("Payment direction: Tenant To Collaborator");
+    expect(container.textContent).toContain("Accepting party: Collaborator");
     expect(container.textContent).toContain("Review / accept receipt");
     expect(container.textContent).not.toContain("print, collect signature");
   });
@@ -131,10 +133,39 @@ describe("CollaboratorCurrentAccountPage", () => {
     renderCurrentAccountPage("/collaborators/collab-1/current-account");
 
     await waitForText("Final settlement receipt accepted in-app.");
+    expect(container.textContent).toContain("Payment direction: Tenant To Collaborator");
+    expect(container.textContent).toContain("Accepting party: Collaborator");
     expect(container.textContent).not.toContain("Review / accept receipt");
     expect(
       container.querySelector('a[href="/ledger-entries/ledger-final-accepted/receipt"]'),
     ).toBeNull();
+  });
+
+  it("shows Collaborator-to-Tenant settlement authorization metadata", async () => {
+    const collaboratorPaymentEntry = {
+      ...finalSettlementEntry,
+      id: "ledger-final-collaborator-payment",
+      receipt: {
+        ...finalSettlementEntry.receipt!,
+        id: "receipt-final-collaborator-payment",
+        receiptPurpose: "FINAL_SETTLEMENT_COLLABORATOR_PAYMENT",
+        paymentDirection: "COLLABORATOR_TO_TENANT",
+        acceptingParty: "TENANT",
+      },
+    };
+
+    mockFetch(async (url, init) => {
+      fetchCalls.push({ url, method: methodOf(init) });
+      if (url.startsWith("/api/v1/collaborators/collab-1/current-account")) {
+        return jsonResponse({ data: currentAccountDetailWith([collaboratorPaymentEntry]) });
+      }
+      throw new Error(`Unhandled request: ${methodOf(init)} ${url}`);
+    });
+
+    renderCurrentAccountPage("/collaborators/collab-1/current-account");
+
+    await waitForText("Payment direction: Collaborator To Tenant");
+    expect(container.textContent).toContain("Accepting party: Tenant");
   });
 
   it("filters to work-period assignment earnings", async () => {

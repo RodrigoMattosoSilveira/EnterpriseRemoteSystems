@@ -296,6 +296,18 @@ function LedgerEntryRow({
         {entry.description ? (
           <p className="mt-1 text-sm text-gray-600">{entry.description}</p>
         ) : null}
+        {receipt && isFinalSettlementReceipt(receipt.receiptPurpose) ? (
+          <dl className="mt-2 grid gap-1 rounded-xl bg-gray-50 p-3 text-xs text-gray-700 sm:grid-cols-2">
+            <div>
+              <dt className="inline font-semibold text-gray-900">Payment direction: </dt>
+              <dd className="inline">{paymentDirectionLabel(receipt.paymentDirection)}</dd>
+            </div>
+            <div>
+              <dt className="inline font-semibold text-gray-900">Accepting party: </dt>
+              <dd className="inline">{acceptingPartyLabel(receipt.acceptingParty)}</dd>
+            </div>
+          </dl>
+        ) : null}
         {receipt?.outstanding ? (
           <p className="mt-2 rounded-xl bg-amber-50 p-2 text-xs font-semibold text-amber-900">
             {isFinalSettlementReceipt(receipt.receiptPurpose)
@@ -393,6 +405,25 @@ function formatNumber(value: number, maximumFractionDigits = 2) {
 function isFinalSettlementReceipt(purpose?: string) {
   return purpose === "FINAL_SETTLEMENT_TENANT_PAYMENT" ||
     purpose === "FINAL_SETTLEMENT_COLLABORATOR_PAYMENT";
+}
+
+function paymentDirectionLabel(direction?: string) {
+  if (direction === "TENANT_TO_COLLABORATOR") return "Tenant To Collaborator";
+  if (direction === "COLLABORATOR_TO_TENANT") return "Collaborator To Tenant";
+  return direction ? titleCaseCode(direction) : "—";
+}
+
+function acceptingPartyLabel(party?: string) {
+  if (party === "COLLABORATOR") return "Collaborator";
+  if (party === "TENANT") return "Tenant";
+  return party ? titleCaseCode(party) : "—";
+}
+
+function titleCaseCode(value: string) {
+  return value
+    .toLowerCase()
+    .replaceAll("_", " ")
+    .replace(/\b\w/g, (character) => character.toUpperCase());
 }
 
 function humanize(value: string) {
