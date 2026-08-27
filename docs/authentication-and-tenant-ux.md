@@ -156,8 +156,11 @@ Person–Tenant Memberships; delegated Role Grants are not required merely for
 intrinsic Person self-service.
 
 If all Tenant Actors or Memberships become unavailable, authentication still
-succeeds. The browser renders **No tenant workspace available** together with
-Account-level **My Person** and read-only **My Current Account** self-service.
+succeeds. The browser renders **Your personal information is still available**
+with the message, “You currently do not have access to work or administrative
+features. You can still view your personal information and read-only Current
+Account history below.” It continues to provide Account-level **My Person** and
+read-only **My Current Account** self-service.
 This fallback derives the Person only from `auth_account_people`, does not
 borrow or synthesize an Actor, and does not grant tenant administration,
 operator, collaboration, or other tenant-scoped capabilities. Restoring an
