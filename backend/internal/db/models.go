@@ -245,15 +245,19 @@ type GoldPrice struct {
 type Expense struct {
 	BaseModel
 
-	TenantID          string    `gorm:"type:text;not null;default:default;index" json:"tenantId"`
-	PersonID          string    `gorm:"type:text;not null;index" json:"personId"`
-	CollaboratorID    string    `gorm:"type:text;not null;index" json:"collaboratorId"`
-	ExpenseCategoryID string    `gorm:"type:text;not null;index" json:"expenseCategoryId"`
-	ValueUnitID       string    `gorm:"type:text;not null;index" json:"valueUnitId"`
-	Amount            float64   `gorm:"not null" json:"amount"`
-	ExpenseDate       time.Time `gorm:"type:date;not null;index" json:"expenseDate"`
-	Description       string    `gorm:"type:text" json:"description,omitempty"`
-	Active            bool      `gorm:"not null;default:true;index" json:"active"`
+	TenantID               string     `gorm:"type:text;not null;default:default;index" json:"tenantId"`
+	PersonID               string     `gorm:"type:text;not null;index" json:"personId"`
+	CollaboratorID         string     `gorm:"type:text;not null;index" json:"collaboratorId"`
+	ExpenseCategoryID      string     `gorm:"type:text;not null;index" json:"expenseCategoryId"`
+	ValueUnitID            string     `gorm:"type:text;not null;index" json:"valueUnitId"`
+	Amount                 float64    `gorm:"not null" json:"amount"`
+	ExpenseDate            time.Time  `gorm:"type:date;not null;index" json:"expenseDate"`
+	Description            string     `gorm:"type:text" json:"description,omitempty"`
+	Active                 bool       `gorm:"not null;default:true;index" json:"active"`
+	CancelledAt            *time.Time `json:"cancelledAt,omitempty"`
+	CancelledBy            string     `gorm:"type:text;index" json:"cancelledBy,omitempty"`
+	CancellationReason     string     `gorm:"type:text" json:"cancellationReason,omitempty"`
+	RecreatedFromExpenseID *string    `gorm:"type:text;index" json:"recreatedFromExpenseId,omitempty"`
 
 	PriceListItemID        *string  `gorm:"type:text;index" json:"priceListItemId,omitempty"`
 	PriceListItemCode      string   `gorm:"type:text;index" json:"priceListItemCode,omitempty"`
@@ -312,6 +316,9 @@ type LedgerReceipt struct {
 	LedgerEntryID      string     `gorm:"type:text;not null;uniqueIndex" json:"ledgerEntryId"`
 	ReceiptNumber      *string    `gorm:"type:text;uniqueIndex:ux_ledger_receipts_tenant_number,priority:2" json:"receiptNumber,omitempty"`
 	ReceiptType        string     `gorm:"type:text;not null;default:LEDGER_DEBIT;index" json:"receiptType"`
+	ReceiptPurpose     string     `gorm:"type:text;not null;default:LEDGER_DEBIT;index" json:"receiptPurpose"`
+	PaymentDirection   string     `gorm:"type:text;not null;default:ACCOUNT_DEBIT;index" json:"paymentDirection"`
+	AcceptingParty     string     `gorm:"type:text;not null;default:COLLABORATOR;index" json:"acceptingParty"`
 	Status             string     `gorm:"type:text;not null;default:PENDING_ISSUE;index" json:"status"`
 	IssuedAt           *time.Time `json:"issuedAt,omitempty"`
 	IssuedBy           string     `gorm:"type:text;index" json:"issuedBy,omitempty"`
@@ -320,6 +327,9 @@ type LedgerReceipt struct {
 	ReturnedAt         *time.Time `json:"returnedAt,omitempty"`
 	ReceivedBy         string     `gorm:"type:text;index" json:"receivedBy,omitempty"`
 	SignedDocumentRef  string     `gorm:"type:text" json:"signedDocumentRef,omitempty"`
+	AcceptedAt         *time.Time `json:"acceptedAt,omitempty"`
+	AcceptedBy         string     `gorm:"type:text;index" json:"acceptedBy,omitempty"`
+	AcceptanceMethod   string     `gorm:"type:text" json:"acceptanceMethod,omitempty"`
 	CancelledAt        *time.Time `json:"cancelledAt,omitempty"`
 	CancelledBy        string     `gorm:"type:text;index" json:"cancelledBy,omitempty"`
 	CancellationReason string     `gorm:"type:text" json:"cancellationReason,omitempty"`

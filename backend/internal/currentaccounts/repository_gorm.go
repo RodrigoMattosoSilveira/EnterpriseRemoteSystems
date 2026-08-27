@@ -234,7 +234,7 @@ func (r *gormRepository) ListBalances(ctx context.Context, collaboratorID string
 		Joins("JOIN reference_data ru ON ru.id = le.value_unit_id AND ru.tenant_id = le.tenant_id").
 		Where("le.tenant_id = ? AND le.collaborator_id = ? AND le.active = ?", tenantctx.TenantID(ctx), collaboratorID, true).
 		Group("le.collaborator_id, p.nickname, p.first_name, p.last_name, le.value_unit_id, ru.code, ru.label, ru.sort_order").
-		Having("ABS(SUM(CASE WHEN le.direction = 'CREDIT' THEN le.amount ELSE -le.amount END)) > 0.00000001").
+		Having("ABS(SUM(CASE WHEN le.direction = 'CREDIT' THEN le.amount ELSE -le.amount END)) > 0.000000001").
 		Order("ru.sort_order ASC, ru.label ASC").
 		Scan(&rows).Error
 	return rows, err
@@ -254,7 +254,7 @@ func (r *gormRepository) ListPersonBalances(ctx context.Context, personID string
 		Joins("JOIN reference_data ru ON ru.id = le.value_unit_id AND ru.tenant_id = le.tenant_id").
 		Where("le.tenant_id = ? AND le.person_id = ? AND le.active = ?", tenantctx.TenantID(ctx), strings.TrimSpace(personID), true).
 		Group("le.person_id, gp.nickname, gp.first_name, gp.last_name, le.value_unit_id, ru.code, ru.label, ru.sort_order").
-		Having("ABS(SUM(CASE WHEN le.direction = 'CREDIT' THEN le.amount ELSE -le.amount END)) > 0.00000001").
+		Having("ABS(SUM(CASE WHEN le.direction = 'CREDIT' THEN le.amount ELSE -le.amount END)) > 0.000000001").
 		Order("ru.sort_order ASC, ru.label ASC").
 		Scan(&rows).Error
 	return rows, err
@@ -405,7 +405,10 @@ func (r *gormRepository) CreateCorrectionEntries(ctx context.Context, entries ..
 				return err
 			}
 		}
-		return ensureDebitLedgerReceiptObligations(tx, entries...)
+		if err := ensureDebitLedgerReceiptObligations(tx, entries...); err != nil {
+			return err
+		}
+		return ensureFinalSettlementReceiptObligations(tx, entries...)
 	})
 }
 
@@ -464,7 +467,10 @@ func (r *gormRepository) CreateSettlementWithEntries(ctx context.Context, settle
 				return err
 			}
 		}
-		return ensureDebitLedgerReceiptObligations(tx, entries...)
+		if err := ensureDebitLedgerReceiptObligations(tx, entries...); err != nil {
+			return err
+		}
+		return ensureFinalSettlementReceiptObligations(tx, entries...)
 	})
 }
 
@@ -478,8 +484,8 @@ func (r *gormRepository) FindCollaboratorStatusByCode(ctx context.Context, code 
 	return &row, nil
 }
 
-func (r *gormRepository) CloseJourneyWithSettlement(ctx context.Context, collaboratorID, finishedStatusID string, closedAt time.Time, settlement *db.JourneySettlement, entries ...*db.LedgerEntry) error {
-	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+func (r *gormRepository) CloseJourneyWithAudit(ctx context.Context, collaboratorID, finishedStatusID string, closedAt time.Time, settlement *db.JourneySettlement) error {
+	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		result := tx.Model(&db.CollaboratorJourney{}).
 			Where("id = ? AND tenant_id = ? AND closed_at IS NULL", collaboratorID, tenantctx.TenantID(ctx)).
 			Updates(map[string]any{"status_id": finishedStatusID, "closed_at": closedAt, "updated_at": closedAt})
@@ -489,16 +495,12 @@ func (r *gormRepository) CloseJourneyWithSettlement(ctx context.Context, collabo
 		if result.RowsAffected != 1 {
 			return ErrJourneyAlreadyClosed
 		}
-		if err := tx.Create(settlement).Error; err != nil {
-			return err
-		}
-		for _, entry := range entries {
-			if err := tx.Create(entry).Error; err != nil {
-				return err
-			}
-		}
-		return ensureDebitLedgerReceiptObligations(tx, entries...)
+		return tx.Create(settlement).Error
 	})
+	if err != nil && strings.Contains(err.Error(), "collaborator_journey_non_zero_balance") {
+		return ErrJourneyCloseBlocked
+	}
+	return err
 }
 
 func (r *gormRepository) FindReceiptByLedgerEntryID(ctx context.Context, ledgerEntryID string) (*db.LedgerReceipt, error) {
@@ -580,6 +582,43 @@ func (r *gormRepository) MarkReceiptReturned(ctx context.Context, receiptID, rec
 	return r.FindReceiptByID(ctx, receiptID)
 }
 
+func (r *gormRepository) MarkReceiptAccepted(ctx context.Context, receiptID, acceptedBy, signedDocumentRef, notes string, acceptedAt time.Time) (*db.LedgerReceipt, error) {
+	acceptedBy = strings.TrimSpace(acceptedBy)
+	notes = strings.TrimSpace(notes)
+	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var row db.LedgerReceipt
+		if err := tx.First(&row, "id = ? AND tenant_id = ?", receiptID, tenantctx.TenantID(ctx)).Error; err != nil {
+			return err
+		}
+		if row.Status == "CANCELLED" {
+			return ErrReceiptCancelled
+		}
+		if row.AcceptedAt != nil {
+			return ErrReceiptAlreadyAccepted
+		}
+		if row.Status == "RETURNED" {
+			return ErrReceiptAlreadyReturned
+		}
+		updates := map[string]any{
+			"signed_at":           acceptedAt,
+			"returned_at":         acceptedAt,
+			"received_by":         acceptedBy,
+			"signed_document_ref": strings.TrimSpace(signedDocumentRef),
+			"accepted_at":         acceptedAt,
+			"accepted_by":         acceptedBy,
+			"acceptance_method":   receiptAcceptanceMethodInApp,
+			"notes":               notes,
+			"status":              "RETURNED",
+			"updated_at":          acceptedAt,
+		}
+		return tx.Model(&db.LedgerReceipt{}).Where("id = ? AND tenant_id = ?", receiptID, tenantctx.TenantID(ctx)).Updates(updates).Error
+	})
+	if err != nil {
+		return nil, err
+	}
+	return r.FindReceiptByID(ctx, receiptID)
+}
+
 func (r *gormRepository) FindReceiptByID(ctx context.Context, receiptID string) (*db.LedgerReceipt, error) {
 	var row db.LedgerReceipt
 	err := r.db.WithContext(ctx).
@@ -646,6 +685,26 @@ func ensureDebitLedgerReceiptObligations(tx *gorm.DB, entries ...*db.LedgerEntry
 		}
 		if count != 1 {
 			return ErrDebitReceiptObligationMissing
+		}
+	}
+	return nil
+}
+
+func ensureFinalSettlementReceiptObligations(tx *gorm.DB, entries ...*db.LedgerEntry) error {
+	for _, entry := range entries {
+		if entry == nil ||
+			!strings.EqualFold(strings.TrimSpace(entry.EntryType), ledgerEntryTypeFinalSettlement) ||
+			!strings.EqualFold(strings.TrimSpace(entry.SourceType), ledgerSourceSettlement) {
+			continue
+		}
+		var count int64
+		if err := tx.Model(&db.LedgerReceipt{}).
+			Where("tenant_id = ? AND ledger_entry_id = ?", entry.TenantID, entry.ID).
+			Count(&count).Error; err != nil {
+			return err
+		}
+		if count != 1 {
+			return ErrFinalSettlementReceiptObligationMissing
 		}
 	}
 	return nil

@@ -1,4 +1,5 @@
 import { apiFetch } from "./client";
+import type { PasswordResetToken } from "../types/auth";
 import type {
   CreatePersonInput,
   CreatePersonMembershipInput,
@@ -112,6 +113,15 @@ export function enablePersonAuthentication(
     method: "POST",
     body: JSON.stringify(temporaryPassword ? { temporaryPassword } : {}),
   });
+}
+
+export function issuePersonAuthenticationPasswordResetToken(
+  personId: string,
+): Promise<PasswordResetToken> {
+  return apiFetch<PasswordResetToken>(
+    `/people/${encodeURIComponent(personId)}/authentication/password-reset-tokens`,
+    { method: "POST" },
+  );
 }
 
 export function requestPersonAuthenticationReactivation(

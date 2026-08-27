@@ -182,6 +182,67 @@ describe("PersonAuthenticationSection", () => {
     expect(enableCall?.body).toEqual({ temporaryPassword: TEMPORARY_PASSWORD });
   });
 
+  it("lets a Tenant Administrator issue a reset token for an enabled Person in the selected tenant", async () => {
+    mockFetch(async (url, init) => {
+      fetchCalls.push({
+        url,
+        method: init?.method?.toUpperCase() ?? "GET",
+        body: parseBody(init?.body),
+      });
+
+      if (url === `/api/v1/people/${PERSON_ID}/authentication`) {
+        return jsonResponse({
+          data: {
+            login: LOGIN,
+            enabled: true,
+            accountActive: true,
+            canRequestReactivation: false,
+            requiresTemporaryPassword: false,
+            status: "ENABLED",
+          },
+        });
+      }
+
+      if (
+        url === `/api/v1/people/${PERSON_ID}/authentication/password-reset-tokens` &&
+        init?.method === "POST"
+      ) {
+        return jsonResponse(
+          {
+            data: {
+              accountId: "account-1",
+              login: LOGIN,
+              token: "ers_pr_tenant_reset_token",
+              expiresAt: "2030-01-01T00:00:00Z",
+            },
+          },
+          { status: 201 },
+        );
+      }
+
+      throw new Error(`Unhandled request: ${url}`);
+    });
+
+    renderSection();
+
+    await waitForText("Status: Enabled");
+    await waitForText("global Authentication Account password");
+    const resetButton = buttonByText("Issue password reset token");
+
+    await act(async () => {
+      resetButton.click();
+    });
+
+    await waitForText(`One-time reset token for ${LOGIN}`);
+    await waitForText("ers_pr_tenant_reset_token");
+    const resetCall = fetchCalls.find(
+      (call) => call.url.endsWith("/authentication/password-reset-tokens") && call.method === "POST",
+    );
+    expect(resetCall?.url).toBe(
+      `/api/v1/people/${PERSON_ID}/authentication/password-reset-tokens`,
+    );
+  });
+
   it("enables a second tenant without asking for or sending a temporary password", async () => {
     let enabled = false;
     mockFetch(async (url, init) => {

@@ -367,14 +367,11 @@ function AccountSelfServiceWorkspace({
 
           <div className="mt-5 rounded-xl border border-amber-200 bg-amber-50 p-4">
             <h2 className="font-semibold text-amber-950">
-              No tenant workspace available
+             Your personal information is still available
             </h2>
             <p className="mt-2 text-sm text-amber-900">
-              No active Tenant Actor backed by an ACTIVE same-tenant
-              Person–Tenant Membership is currently available. Tenant-scoped
-              administration, collaboration, and operator workspaces are
-              unavailable, but your own Person and read-only Current Account
-              remain available below.
+              You currently do not have access to work or administrative features. 
+              You can still view your personal information and read-only Current Account history below
             </p>
           </div>
         </header>

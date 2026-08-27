@@ -51,10 +51,14 @@ func ToLedgerEntryReceiptDTO(row db.LedgerReceipt) *LedgerEntryReceiptDTO {
 	return &LedgerEntryReceiptDTO{
 		ID:                row.ID,
 		ReceiptNumber:     receiptNumber(row.ReceiptNumber),
+		ReceiptPurpose:    strings.TrimSpace(row.ReceiptPurpose),
+		PaymentDirection:  strings.TrimSpace(row.PaymentDirection),
+		AcceptingParty:    strings.TrimSpace(row.AcceptingParty),
 		Status:            strings.TrimSpace(row.Status),
 		Outstanding:       receiptOutstanding(row.Status),
 		PrintedAt:         formatOptionalTime(row.PrintedAt),
 		ReturnedAt:        formatOptionalTime(row.ReturnedAt),
+		AcceptedAt:        formatOptionalTime(row.AcceptedAt),
 		SignedDocumentRef: strings.TrimSpace(row.SignedDocumentRef),
 	}
 }

@@ -60,6 +60,19 @@ func (h *Handler) Update(c fiber.Ctx) error {
 	return c.JSON(httpx.APIResponse{Data: updated})
 }
 
+func (h *Handler) Cancel(c fiber.Ctx) error {
+	var req CancelExpenseRequest
+	if err := c.Bind().Body(&req); err != nil {
+		return httpx.WriteError(c, err)
+	}
+
+	cancelled, err := h.service.Cancel(requesttenant.Context(c), c.Params("id"), req, actorUserID(c))
+	if err != nil {
+		return httpx.WriteError(c, err)
+	}
+	return c.JSON(httpx.APIResponse{Data: cancelled})
+}
+
 func (h *Handler) Deactivate(c fiber.Ctx) error {
 	updated, err := h.service.Deactivate(requesttenant.Context(c), c.Params("id"), actorUserID(c))
 	if err != nil {

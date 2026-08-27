@@ -74,15 +74,35 @@ func (s *service) Create(ctx context.Context, req CreateExpenseRequest, actorUse
 		return nil, err
 	}
 
+	var recreatedFromExpenseID *string
+	if sourceID := strings.TrimSpace(req.RecreatedFromExpenseID); sourceID != "" {
+		source, err := s.repo.FindByID(ctx, sourceID)
+		if err != nil {
+			return nil, err
+		}
+		if source.Active || source.CancelledAt == nil {
+			return nil, ValidationError{Fields: map[string]string{"recreatedFromExpenseId": "Source expense must be cancelled before it can be recreated"}}
+		}
+		alreadyRecreated, err := s.repo.ExistsRecreationFromExpenseID(ctx, sourceID)
+		if err != nil {
+			return nil, err
+		}
+		if alreadyRecreated {
+			return nil, ValidationError{Fields: map[string]string{"recreatedFromExpenseId": "Cancelled source expense has already been recreated"}}
+		}
+		recreatedFromExpenseID = &sourceID
+	}
+
 	now := time.Now().UTC()
 	expense := &db.Expense{
-		BaseModel:      db.BaseModel{ID: ids.New(), CreatedAt: now, UpdatedAt: now},
-		TenantID:       tenantctx.TenantID(ctx),
-		PersonID:       collaborator.Membership.PersonID,
-		CollaboratorID: strings.TrimSpace(req.CollaboratorID),
-		ExpenseDate:    expenseDate,
-		Description:    strings.TrimSpace(req.Description),
-		Active:         true,
+		BaseModel:              db.BaseModel{ID: ids.New(), CreatedAt: now, UpdatedAt: now},
+		TenantID:               tenantctx.TenantID(ctx),
+		PersonID:               collaborator.Membership.PersonID,
+		CollaboratorID:         strings.TrimSpace(req.CollaboratorID),
+		ExpenseDate:            expenseDate,
+		Description:            strings.TrimSpace(req.Description),
+		Active:                 true,
+		RecreatedFromExpenseID: recreatedFromExpenseID,
 	}
 
 	if usesPriceListCalculation(req.PriceListItemID, req.CurrencyCode, req.Quantity) {
@@ -158,6 +178,40 @@ func (s *service) Update(ctx context.Context, id string, req UpdateExpenseReques
 		return nil, err
 	}
 	return s.expenseDTOWithPosting(ctx, *updated)
+}
+
+func (s *service) Cancel(ctx context.Context, id string, req CancelExpenseRequest, actorUserID string) (*ExpenseDTO, error) {
+	reason := strings.TrimSpace(req.Reason)
+	if reason == "" {
+		return nil, ValidationError{Fields: map[string]string{"reason": "Cancellation reason is required"}}
+	}
+
+	existing, err := s.repo.FindByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if !existing.Active {
+		if existing.CancelledAt != nil {
+			return s.expenseDTOWithPosting(ctx, *existing)
+		}
+		return nil, ValidationError{Fields: map[string]string{"id": "Inactive expense cannot be cancelled"}}
+	}
+
+	now := time.Now().UTC()
+	existing.Active = false
+	existing.CancelledAt = &now
+	existing.CancelledBy = strings.TrimSpace(actorUserID)
+	existing.CancellationReason = reason
+	existing.UpdatedAt = now
+	if err := s.repo.Cancel(ctx, existing, actorUserID, reason); err != nil {
+		return nil, err
+	}
+
+	cancelled, err := s.repo.FindByID(ctx, existing.ID)
+	if err != nil {
+		return nil, err
+	}
+	return s.expenseDTOWithPosting(ctx, *cancelled)
 }
 
 func (s *service) Deactivate(ctx context.Context, id string, actorUserID string) (*ExpenseDTO, error) {

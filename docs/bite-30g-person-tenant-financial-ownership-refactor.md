@@ -50,6 +50,12 @@ financial row
 Ledger Receipt ownership is backfilled from its Ledger Entry so the receipt and
 entry cannot diverge.
 
+Migration `000060_expense_cancellation_recreation` adds explicit Expense
+correction audit fields (`cancelled_at`, `cancelled_by`,
+`cancellation_reason`) plus `recreated_from_expense_id`. Database guards require
+a recreation source to be a cancelled Expense in the same Tenant and permit at
+most one direct replacement for each cancelled source.
+
 The migration refuses to complete if any existing financial row cannot be
 mapped exactly to a same-Tenant Person/Membership/Journey relationship.
 
@@ -60,11 +66,17 @@ non-empty Person ID that agrees with their Tenant and retained Collaborator
 Journey provenance.
 
 Accrual Item, Ledger Entry, and Ledger Receipt financial identity is immutable
-once written. Expense retains the existing supported update/reassignment
-workflow; if an Expense is deliberately reassigned to another active
-Collaborator Journey, its Person ownership changes atomically with its Journey
-provenance and the ledger correction chain preserves the old and replacement
-financial owners.
+once written. Incorrect Expenses are corrected through an explicit
+**cancel-and-recreate** workflow rather than by changing the business meaning of
+the original record in the UI. A Tenant Administrator cancels the incorrect
+Expense with a required reason; ERS preserves that Expense as historical,
+reverses its current financial posting, cancels any still-open receipt
+obligation, and opens a replacement Expense prefilled from the cancelled data.
+The replacement is a new Expense with its own canonical Person + Tenant
+ownership, Collaborator Journey provenance, Ledger Entry, and receipt
+obligation. `recreated_from_expense_id` links the replacement to its cancelled
+source for auditability. Expense Operators may create Expenses but do not have
+the Tenant-Administrator correction authority (`expenses.update`).
 
 Journey provenance remains required during the staged cutover. Bite 30J owns
 removal of obsolete Collaborator-as-owner compatibility constraints after all
@@ -84,10 +96,13 @@ unit, and posting repository operations are all scoped by the request's selected
 Tenant; the accrual subsystem does not fall back to the legacy default Tenant
 for authenticated Tenant operations.
 
-Expense-generated Ledger Entries, reversals, replacements, settlement Ledger
-Entries, and correction Ledger Entries all preserve explicit Person + Tenant
-ownership while retaining Collaborator Journey/source identifiers as
-provenance.
+Expense-generated Ledger Entries, cancellation reversals, replacement Expense
+Ledger Entries, settlement Ledger Entries, and correction Ledger Entries all
+preserve explicit Person + Tenant ownership while retaining Collaborator
+Journey/source identifiers as provenance. Cancelling an Expense never deletes
+or rewrites the original debit. If its receipt has not reached terminal
+`RETURNED` status, the receipt is marked `CANCELLED` with the same correction
+audit reason; a returned receipt remains immutable historical evidence.
 
 ## Current Account
 
@@ -112,14 +127,16 @@ tenant_id + person_id
 Consequently, the Current Account in one Tenant includes financial history from
 all of that Person's historical Journeys in that Tenant. Each Ledger Entry
 still exposes its `collaboratorId` so the originating Journey remains traceable.
-The Current + Future Earnings projection uses this same Person + Tenant balance
-as its starting balance, while unposted-ready and estimated-future earnings
-remain scoped to the selected Journey because they describe that Journey's
-operational provenance.
+The Person + Tenant Current Account preserves the full financial history across
+Journeys. The Current + Future Earnings projection, however, uses the selected
+Journey's own balance as its starting balance. A later Journey never inherits a
+prior Journey's unsettled balance.
 
 Settlement Preview, payout, zero-gold, and Journey closure intentionally remain
 Journey-scoped lifecycle operations. They must not consume another Journey's
-balance merely because both Journeys belong to the same Person.
+balance merely because both Journeys belong to the same Person. Bite 30G.1 adds
+the stronger invariant that every Journey must independently reach zero in each
+value unit before it can close.
 
 ## Account-level Person self-service
 

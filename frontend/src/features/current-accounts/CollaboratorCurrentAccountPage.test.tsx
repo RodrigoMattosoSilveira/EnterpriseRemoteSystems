@@ -50,6 +50,124 @@ describe("CollaboratorCurrentAccountPage", () => {
     expect(container.querySelector('a[href="/ledger-entries/ledger-1/receipt"]')).not.toBeNull();
   });
 
+  it("opens the selected Journey Current + Future Earnings projection", async () => {
+    mockFetch(async (url, init) => {
+      fetchCalls.push({ url, method: methodOf(init) });
+      if (url.startsWith("/api/v1/collaborators/collab-1/current-account")) {
+        return jsonResponse({ data: currentAccountDetailWith([expenseEntry, earningEntry]) });
+      }
+      if (url === "/api/v1/collaborators/collab-1/financial-projection") {
+        return jsonResponse({
+          data: {
+            collaboratorId: "collab-1",
+            collaboratorLabel: "Maria",
+            paymentMethodCode: "DAILY_BRL",
+            currentBalances: { brlAmount: 25, goldGramAmount: 0 },
+            unpostedReadyEarnings: { brlAmount: 0, goldGramAmount: 0 },
+            estimatedFutureEarnings: { brlAmount: 75, goldGramAmount: 0 },
+            projectedEarnings: { brlAmount: 75, goldGramAmount: 0 },
+            projectedFinalBalances: { brlAmount: 100, goldGramAmount: 0 },
+            projection: {
+              projectionDate: "2026-08-25",
+              journeyEndDate: "2026-08-27",
+              periodsPerDay: 1,
+              remainingWorkPeriods: 3,
+              calendarWorkPeriods: 3,
+              postedWorkPeriods: 0,
+              readyAccrualWorkPeriods: 0,
+              estimatedFutureWorkPeriods: 3,
+              pendingAccrualItems: 0,
+              productionMethod: "DAILY_BRL",
+              productionDatesAvailable: 0,
+            },
+          },
+        });
+      }
+      throw new Error(`Unhandled request: ${methodOf(init)} ${url}`);
+    });
+
+    renderCurrentAccountPage("/collaborators/collab-1/current-account");
+
+    await waitForText("Current + Future Earnings");
+    await clickButton("Current + Future Earnings");
+    await waitForText("Current and Future Earnings");
+    await waitForText("Projected Journey-End Balances");
+
+    expect(container.textContent).toContain("25,00");
+    expect(
+      fetchCalls.some(
+        (call) => call.url === "/api/v1/collaborators/collab-1/financial-projection",
+      ),
+    ).toBe(true);
+  });
+
+  it("shows direction-aware in-app acceptance guidance for final-settlement receipts", async () => {
+    mockFetch(async (url, init) => {
+      fetchCalls.push({ url, method: methodOf(init) });
+      if (url.startsWith("/api/v1/collaborators/collab-1/current-account")) {
+        return jsonResponse({ data: currentAccountDetailWith([finalSettlementEntry]) });
+      }
+      throw new Error(`Unhandled request: ${methodOf(init)} ${url}`);
+    });
+
+    renderCurrentAccountPage("/collaborators/collab-1/current-account");
+
+    await waitForText("Awaiting Collaborator in-app acceptance.");
+    expect(container.textContent).toContain("Payment direction: Tenant To Collaborator");
+    expect(container.textContent).toContain("Accepting party: Collaborator");
+    expect(container.textContent).toContain("Review / accept receipt");
+    expect(container.textContent).not.toContain("print, collect signature");
+  });
+
+  it("hides the final-settlement receipt action after in-app acceptance", async () => {
+    mockFetch(async (url, init) => {
+      fetchCalls.push({ url, method: methodOf(init) });
+      if (url.startsWith("/api/v1/collaborators/collab-1/current-account")) {
+        return jsonResponse({
+          data: currentAccountDetailWith([acceptedFinalSettlementEntry]),
+        });
+      }
+      throw new Error(`Unhandled request: ${methodOf(init)} ${url}`);
+    });
+
+    renderCurrentAccountPage("/collaborators/collab-1/current-account");
+
+    await waitForText("Final settlement receipt accepted in-app.");
+    expect(container.textContent).toContain("Payment direction: Tenant To Collaborator");
+    expect(container.textContent).toContain("Accepting party: Collaborator");
+    expect(container.textContent).not.toContain("Review / accept receipt");
+    expect(
+      container.querySelector('a[href="/ledger-entries/ledger-final-accepted/receipt"]'),
+    ).toBeNull();
+  });
+
+  it("shows Collaborator-to-Tenant settlement authorization metadata", async () => {
+    const collaboratorPaymentEntry = {
+      ...finalSettlementEntry,
+      id: "ledger-final-collaborator-payment",
+      receipt: {
+        ...finalSettlementEntry.receipt!,
+        id: "receipt-final-collaborator-payment",
+        receiptPurpose: "FINAL_SETTLEMENT_COLLABORATOR_PAYMENT",
+        paymentDirection: "COLLABORATOR_TO_TENANT",
+        acceptingParty: "TENANT",
+      },
+    };
+
+    mockFetch(async (url, init) => {
+      fetchCalls.push({ url, method: methodOf(init) });
+      if (url.startsWith("/api/v1/collaborators/collab-1/current-account")) {
+        return jsonResponse({ data: currentAccountDetailWith([collaboratorPaymentEntry]) });
+      }
+      throw new Error(`Unhandled request: ${methodOf(init)} ${url}`);
+    });
+
+    renderCurrentAccountPage("/collaborators/collab-1/current-account");
+
+    await waitForText("Payment direction: Collaborator To Tenant");
+    expect(container.textContent).toContain("Accepting party: Tenant");
+  });
+
   it("filters to work-period assignment earnings", async () => {
     mockCurrentAccountFetch();
 
@@ -181,6 +299,47 @@ const expenseEntry: CurrentAccountDetail["ledgerEntries"]["items"][number] = {
   },
 };
 
+const finalSettlementEntry: CurrentAccountDetail["ledgerEntries"]["items"][number] = {
+  id: "ledger-final-1",
+  tenantId: "default",
+  personId: "person-1",
+  collaboratorId: "collab-1",
+  valueUnitId: "ref-value-unit-brl",
+  valueUnitCode: "BRL",
+  valueUnitLabel: "Brazilian Real",
+  entryType: "FINAL_SETTLEMENT",
+  direction: "DEBIT",
+  amount: 125,
+  signedAmount: -125,
+  effectiveDate: "2026-06-30",
+  sourceType: "JOURNEY_SETTLEMENT",
+  sourceId: "settlement-final-1",
+  active: true,
+  correctionType: "ORIGINAL",
+  createdAt: "2026-06-30T00:00:00Z",
+  updatedAt: "2026-06-30T00:00:00Z",
+  receipt: {
+    id: "receipt-final-1",
+    receiptNumber: "FS-1",
+    receiptPurpose: "FINAL_SETTLEMENT_TENANT_PAYMENT",
+    paymentDirection: "TENANT_TO_COLLABORATOR",
+    acceptingParty: "COLLABORATOR",
+    status: "PENDING_ISSUE",
+    outstanding: true,
+  },
+};
+
+const acceptedFinalSettlementEntry: CurrentAccountDetail["ledgerEntries"]["items"][number] = {
+  ...finalSettlementEntry,
+  id: "ledger-final-accepted",
+  receipt: {
+    ...finalSettlementEntry.receipt!,
+    status: "RETURNED",
+    outstanding: false,
+    acceptedAt: "2026-06-30T12:00:00Z",
+  },
+};
+
 const earningEntry: CurrentAccountDetail["ledgerEntries"]["items"][number] = {
   id: "ledger-earning-1",
   tenantId: "default",
@@ -236,6 +395,16 @@ function renderCurrentAccountPage(initialEntry: string) {
 async function waitForText(text: string) {
   await vi.waitFor(() => {
     expect(container.textContent).toContain(text);
+  });
+}
+
+async function clickButton(label: string) {
+  const button = Array.from(container.querySelectorAll("button")).find(
+    (candidate) => candidate.textContent?.trim() === label,
+  );
+  if (!button) throw new Error(`Button not found: ${label}`);
+  await act(async () => {
+    button.dispatchEvent(new MouseEvent("click", { bubbles: true }));
   });
 }
 

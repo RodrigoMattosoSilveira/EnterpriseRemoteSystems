@@ -194,3 +194,79 @@ func TestLedgerReceiptStatusGuardsMakeReturnedTerminal(t *testing.T) {
 		t.Fatalf("expected terminal returned status guard, got %v", err)
 	}
 }
+
+func TestFinalSettlementCreditCreatesTenantAcceptedReceipt(t *testing.T) {
+	database := newLedgerReceiptTestDB(t)
+	collaboratorID, valueUnitID, personID := seedLedgerReceiptTestDependencies(t, database)
+	now := time.Now().UTC()
+	entry := LedgerEntry{
+		BaseModel: BaseModel{ID: ids.New(), CreatedAt: now, UpdatedAt: now},
+		TenantID:  DefaultTenantID, PersonID: personID, CollaboratorID: collaboratorID,
+		ValueUnitID: valueUnitID, EntryType: "FINAL_SETTLEMENT",
+		Direction: "CREDIT", Amount: 125, EffectiveDate: now,
+		SourceType: "JOURNEY_SETTLEMENT", SourceID: ids.New(), Active: true,
+		CorrectionType: "ORIGINAL",
+	}
+	if err := database.Create(&entry).Error; err != nil {
+		t.Fatalf("create final settlement credit: %v", err)
+	}
+	var receipt LedgerReceipt
+	if err := database.First(&receipt, "ledger_entry_id = ?", entry.ID).Error; err != nil {
+		t.Fatalf("find final settlement receipt: %v", err)
+	}
+	if receipt.ReceiptPurpose != "FINAL_SETTLEMENT_COLLABORATOR_PAYMENT" || receipt.PaymentDirection != "COLLABORATOR_TO_TENANT" || receipt.AcceptingParty != "TENANT" {
+		t.Fatalf("unexpected final repayment receipt direction: %#v", receipt)
+	}
+}
+
+func TestFinalSettlementDebitCreatesCollaboratorAcceptedReceipt(t *testing.T) {
+	database := newLedgerReceiptTestDB(t)
+	collaboratorID, valueUnitID, personID := seedLedgerReceiptTestDependencies(t, database)
+	now := time.Now().UTC()
+	entry := LedgerEntry{
+		BaseModel: BaseModel{ID: ids.New(), CreatedAt: now, UpdatedAt: now},
+		TenantID:  DefaultTenantID, PersonID: personID, CollaboratorID: collaboratorID,
+		ValueUnitID: valueUnitID, EntryType: "FINAL_SETTLEMENT",
+		Direction: "DEBIT", Amount: 125, EffectiveDate: now,
+		SourceType: "JOURNEY_SETTLEMENT", SourceID: ids.New(), Active: true,
+		CorrectionType: "ORIGINAL",
+	}
+	if err := database.Create(&entry).Error; err != nil {
+		t.Fatalf("create final settlement debit: %v", err)
+	}
+	var receipt LedgerReceipt
+	if err := database.First(&receipt, "ledger_entry_id = ?", entry.ID).Error; err != nil {
+		t.Fatalf("find final settlement receipt: %v", err)
+	}
+	if receipt.ReceiptPurpose != "FINAL_SETTLEMENT_TENANT_PAYMENT" || receipt.PaymentDirection != "TENANT_TO_COLLABORATOR" || receipt.AcceptingParty != "COLLABORATOR" {
+		t.Fatalf("unexpected final payout receipt direction: %#v", receipt)
+	}
+}
+
+func TestLedgerReceiptAcceptanceIsImmutable(t *testing.T) {
+	database := newLedgerReceiptTestDB(t)
+	collaboratorID, valueUnitID, personID := seedLedgerReceiptTestDependencies(t, database)
+	now := time.Now().UTC()
+	entry := LedgerEntry{
+		BaseModel: BaseModel{ID: ids.New(), CreatedAt: now, UpdatedAt: now},
+		TenantID:  DefaultTenantID, PersonID: personID, CollaboratorID: collaboratorID,
+		ValueUnitID: valueUnitID, EntryType: "FINAL_SETTLEMENT",
+		Direction: "DEBIT", Amount: 125, EffectiveDate: now,
+		SourceType: "JOURNEY_SETTLEMENT", SourceID: ids.New(), Active: true,
+		CorrectionType: "ORIGINAL",
+	}
+	if err := database.Create(&entry).Error; err != nil {
+		t.Fatalf("create final settlement debit: %v", err)
+	}
+	if err := database.Model(&LedgerReceipt{}).Where("ledger_entry_id = ?", entry.ID).Updates(map[string]any{
+		"status": "RETURNED", "issued_at": now, "issued_by": "actor-a", "printed_at": now,
+		"signed_at": now, "returned_at": now, "received_by": "actor-a", "signed_document_ref": "IN_APP:actor-a",
+		"accepted_at": now, "accepted_by": "actor-a", "acceptance_method": "IN_APP", "updated_at": now,
+	}).Error; err != nil {
+		t.Fatalf("accept receipt: %v", err)
+	}
+	err := database.Model(&LedgerReceipt{}).Where("ledger_entry_id = ?", entry.ID).Update("accepted_by", "actor-b").Error
+	if err == nil || !strings.Contains(err.Error(), "ledger_receipt_acceptance_immutable") {
+		t.Fatalf("expected immutable acceptance guard, got %v", err)
+	}
+}

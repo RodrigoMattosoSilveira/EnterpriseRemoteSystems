@@ -65,8 +65,13 @@ authentication credential.
 
 - `/password/change` requires an authenticated session and the current password.
   A successful change revokes all sessions and requires a fresh login.
-- `/password/reset` accepts the one-time token issued by an Application
-  Administrator and a new password. A successful reset revokes all existing
+- `/password/reset` accepts a one-time token issued by an authorized
+  administrator and a new password. Application Administrators may issue a token
+  directly for an Account. A Tenant Administrator may issue one only through a
+  Person who has an ACTIVE Membership and enabled Account-bound tenant Actor in
+  the selected Tenant. Because credentials belong to the global Authentication
+  Account, completing either kind of reset changes the password for all Tenant
+  access owned by that Account. A successful reset revokes all existing
   sessions, reloads the target account, verifies that its persisted bcrypt hash
   matches the submitted replacement password, and returns the authoritative
   account ID, normalized login, and password-change timestamp. The browser

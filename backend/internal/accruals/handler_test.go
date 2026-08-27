@@ -135,6 +135,99 @@ type apiCurrentAccountDetailResponse struct {
 	} `json:"data"`
 }
 
+func TestAccrualRoutesHonorSelectedNonDefaultTenant(t *testing.T) {
+	server, cleanup := newTestServer(t)
+	defer cleanup()
+
+	tenantRes := postJSON(t, server, http.MethodPost, "/api/v1/tenants", map[string]any{
+		"code":        "ACCRUAL-NON-DEFAULT",
+		"name":        "Accrual Non-Default Tenant",
+		"description": "Accrual handler tenant-context regression test",
+		"active":      true,
+	})
+	defer tenantRes.Body.Close()
+	if tenantRes.StatusCode != http.StatusCreated {
+		var body apiErrorResponse
+		decodeJSON(t, tenantRes, &body)
+		t.Fatalf("create non-default tenant: expected status %d, got %d with error %+v", http.StatusCreated, tenantRes.StatusCode, body.Error)
+	}
+	var tenantBody struct {
+		Data struct {
+			ID string `json:"id"`
+		} `json:"data"`
+	}
+	decodeJSON(t, tenantRes, &tenantBody)
+	tenantID := tenantBody.Data.ID
+	if tenantID == "" || tenantID == "default" {
+		t.Fatalf("expected a non-default tenant ID, got %q", tenantID)
+	}
+
+	workPeriodRes := postJSONForTenant(t, server, http.MethodPost, workPeriodsURL, validWorkPeriodPayload(nil), tenantID)
+	defer workPeriodRes.Body.Close()
+	if workPeriodRes.StatusCode != http.StatusCreated {
+		var body apiErrorResponse
+		decodeJSON(t, workPeriodRes, &body)
+		t.Fatalf("create non-default tenant work period: expected status %d, got %d with error %+v", http.StatusCreated, workPeriodRes.StatusCode, body.Error)
+	}
+	var workPeriod apiWorkPeriodResponse
+	decodeJSON(t, workPeriodRes, &workPeriod)
+
+	listRes := getJSONForTenant(t, server, workPeriodsURL+workPeriod.Data.ID+"/accrual-runs?pageSize=100", tenantID)
+	defer listRes.Body.Close()
+	if listRes.StatusCode != http.StatusOK {
+		var body apiErrorResponse
+		decodeJSON(t, listRes, &body)
+		t.Fatalf("list non-default tenant accrual runs: expected status %d, got %d with error %+v", http.StatusOK, listRes.StatusCode, body.Error)
+	}
+
+	runRes := postJSONForTenant(t, server, http.MethodPost, workPeriodsURL+workPeriod.Data.ID+"/accrual-runs", map[string]any{}, tenantID)
+	defer runRes.Body.Close()
+	if runRes.StatusCode != http.StatusCreated {
+		var body apiErrorResponse
+		decodeJSON(t, runRes, &body)
+		t.Fatalf("create non-default tenant accrual run: expected status %d, got %d with error %+v", http.StatusCreated, runRes.StatusCode, body.Error)
+	}
+	var run apiAccrualRunResponse
+	decodeJSON(t, runRes, &run)
+
+	getRunRes := getJSONForTenant(t, server, accrualRunsURL+run.Data.ID, tenantID)
+	defer getRunRes.Body.Close()
+	if getRunRes.StatusCode != http.StatusOK {
+		var body apiErrorResponse
+		decodeJSON(t, getRunRes, &body)
+		t.Fatalf("get non-default tenant accrual run: expected status %d, got %d with error %+v", http.StatusOK, getRunRes.StatusCode, body.Error)
+	}
+
+	recalculateRes := postJSONForTenant(t, server, http.MethodPost, accrualRunsURL+run.Data.ID+"/recalculate", map[string]any{}, tenantID)
+	defer recalculateRes.Body.Close()
+	if recalculateRes.StatusCode != http.StatusOK {
+		var body apiErrorResponse
+		decodeJSON(t, recalculateRes, &body)
+		t.Fatalf("recalculate non-default tenant accrual run: expected status %d, got %d with error %+v", http.StatusOK, recalculateRes.StatusCode, body.Error)
+	}
+
+	itemsRes := getJSONForTenant(t, server, accrualRunsURL+run.Data.ID+"/items?pageSize=100", tenantID)
+	defer itemsRes.Body.Close()
+	if itemsRes.StatusCode != http.StatusOK {
+		var body apiErrorResponse
+		decodeJSON(t, itemsRes, &body)
+		t.Fatalf("list non-default tenant accrual items: expected status %d, got %d with error %+v", http.StatusOK, itemsRes.StatusCode, body.Error)
+	}
+
+	postRes := postJSONForTenant(t, server, http.MethodPost, accrualRunsURL+run.Data.ID+"/post", map[string]any{}, tenantID)
+	defer postRes.Body.Close()
+	if postRes.StatusCode != http.StatusBadRequest {
+		var body apiErrorResponse
+		decodeJSON(t, postRes, &body)
+		t.Fatalf("post empty non-default tenant accrual run: expected validation status %d, got %d with error %+v", http.StatusBadRequest, postRes.StatusCode, body.Error)
+	}
+	var postBody apiErrorResponse
+	decodeJSON(t, postRes, &postBody)
+	if postBody.Error == nil || postBody.Error.Code != "validation_failed" {
+		t.Fatalf("expected selected-tenant run to reach posting validation, got %+v", postBody.Error)
+	}
+}
+
 func TestCreateAccrualRunCreatesReadyDailyBRLItem(t *testing.T) {
 	server, cleanup := newTestServer(t)
 	defer cleanup()
@@ -661,6 +754,34 @@ func getJSON(t *testing.T, server *fiber.App, url string) *http.Response {
 	}
 	return res
 }
+
+func postJSONForTenant(t *testing.T, server *fiber.App, method string, url string, payload map[string]any, tenantID string) *http.Response {
+	t.Helper()
+	body, err := json.Marshal(payload)
+	if err != nil {
+		t.Fatalf("marshal payload: %v", err)
+	}
+	req := httptest.NewRequest(method, url, bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Tenant-ID", tenantID)
+	res, err := server.Test(req, fiber.TestConfig{Timeout: 0, FailOnTimeout: false})
+	if err != nil {
+		t.Fatalf("%s %s tenant=%s: %v", method, url, tenantID, err)
+	}
+	return res
+}
+
+func getJSONForTenant(t *testing.T, server *fiber.App, url string, tenantID string) *http.Response {
+	t.Helper()
+	req := httptest.NewRequest(http.MethodGet, url, nil)
+	req.Header.Set("X-Tenant-ID", tenantID)
+	res, err := server.Test(req, fiber.TestConfig{Timeout: 0, FailOnTimeout: false})
+	if err != nil {
+		t.Fatalf("GET %s tenant=%s: %v", url, tenantID, err)
+	}
+	return res
+}
+
 func decodeJSON(t *testing.T, res *http.Response, target any) {
 	t.Helper()
 	if err := json.NewDecoder(res.Body).Decode(target); err != nil {

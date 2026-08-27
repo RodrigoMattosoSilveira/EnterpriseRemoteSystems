@@ -18,6 +18,21 @@ func (s *service) GetPersonAuthenticationStatus(ctx context.Context, tenantID st
 	return personAuthenticationStatusResponse(record), nil
 }
 
+func (s *service) IssueTenantPersonPasswordResetToken(ctx context.Context, tenantID string, personID string) (PasswordResetTokenResponse, error) {
+	record, err := s.repository.FindPersonAuthentication(ctx, strings.TrimSpace(tenantID), strings.TrimSpace(personID))
+	if err != nil {
+		return PasswordResetTokenResponse{}, err
+	}
+	if !record.Enabled || strings.TrimSpace(record.AccountID) == "" {
+		return PasswordResetTokenResponse{}, ErrAuthenticationNotEnabled
+	}
+	// The credential belongs to the human's global Authentication Account, but
+	// the Tenant Administrator may initiate recovery only through this tenant's
+	// ACTIVE Membership + Account-bound tenant Actor. FindPersonAuthentication
+	// enforces that tenant boundary before the Account-level reset token is issued.
+	return s.IssuePasswordResetToken(ctx, record.AccountID)
+}
+
 func (s *service) EnablePersonAuthentication(ctx context.Context, tenantID string, personID string, req EnablePersonAuthenticationRequest) (PersonAuthenticationStatusResponse, error) {
 	tenantID = strings.TrimSpace(tenantID)
 	personID = strings.TrimSpace(personID)

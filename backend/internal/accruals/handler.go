@@ -4,6 +4,7 @@ import (
 	"github.com/gofiber/fiber/v3"
 
 	"enterpriseremotesystems/backend/internal/shared/httpx"
+	"enterpriseremotesystems/backend/internal/shared/requesttenant"
 )
 
 type Handler struct{ service Service }
@@ -15,7 +16,7 @@ func (h *Handler) ListRunsByWorkPeriod(c fiber.Ctx) error {
 	if err := c.Bind().Query(&filter); err != nil {
 		return httpx.WriteError(c, err)
 	}
-	result, err := h.service.ListRunsByWorkPeriod(c.Context(), c.Params("id"), filter)
+	result, err := h.service.ListRunsByWorkPeriod(requesttenant.Context(c), c.Params("id"), filter)
 	if err != nil {
 		return httpx.WriteError(c, err)
 	}
@@ -27,7 +28,7 @@ func (h *Handler) CreateRun(c fiber.Ctx) error {
 	if err := c.Bind().Body(&req); err != nil {
 		return httpx.WriteError(c, err)
 	}
-	created, err := h.service.CreateRun(c.Context(), c.Params("id"), req, actorUserID(c))
+	created, err := h.service.CreateRun(requesttenant.Context(c), c.Params("id"), req, actorUserID(c))
 	if err != nil {
 		return httpx.WriteError(c, err)
 	}
@@ -35,7 +36,7 @@ func (h *Handler) CreateRun(c fiber.Ctx) error {
 }
 
 func (h *Handler) GetRunByID(c fiber.Ctx) error {
-	run, err := h.service.GetRunByID(c.Context(), c.Params("runId"))
+	run, err := h.service.GetRunByID(requesttenant.Context(c), c.Params("runId"))
 	if err != nil {
 		return httpx.WriteError(c, err)
 	}
@@ -43,7 +44,7 @@ func (h *Handler) GetRunByID(c fiber.Ctx) error {
 }
 
 func (h *Handler) RecalculateRun(c fiber.Ctx) error {
-	run, err := h.service.RecalculateRun(c.Context(), c.Params("runId"), actorUserID(c))
+	run, err := h.service.RecalculateRun(requesttenant.Context(c), c.Params("runId"), actorUserID(c))
 	if err != nil {
 		return httpx.WriteError(c, err)
 	}
@@ -51,7 +52,7 @@ func (h *Handler) RecalculateRun(c fiber.Ctx) error {
 }
 
 func (h *Handler) PostRun(c fiber.Ctx) error {
-	run, err := h.service.PostRun(c.Context(), c.Params("runId"), actorUserID(c))
+	run, err := h.service.PostRun(requesttenant.Context(c), c.Params("runId"), actorUserID(c))
 	if err != nil {
 		return httpx.WriteError(c, err)
 	}
@@ -63,7 +64,7 @@ func (h *Handler) ListItemsByRun(c fiber.Ctx) error {
 	if err := c.Bind().Query(&filter); err != nil {
 		return httpx.WriteError(c, err)
 	}
-	result, err := h.service.ListItemsByRun(c.Context(), c.Params("runId"), filter)
+	result, err := h.service.ListItemsByRun(requesttenant.Context(c), c.Params("runId"), filter)
 	if err != nil {
 		return httpx.WriteError(c, err)
 	}

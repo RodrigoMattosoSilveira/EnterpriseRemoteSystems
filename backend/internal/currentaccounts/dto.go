@@ -14,10 +14,14 @@ type UpdateSecondPersonApprovalPolicyRequest struct {
 type LedgerEntryReceiptDTO struct {
 	ID                string `json:"id"`
 	ReceiptNumber     string `json:"receiptNumber,omitempty"`
+	ReceiptPurpose    string `json:"receiptPurpose,omitempty"`
+	PaymentDirection  string `json:"paymentDirection,omitempty"`
+	AcceptingParty    string `json:"acceptingParty,omitempty"`
 	Status            string `json:"status"`
 	Outstanding       bool   `json:"outstanding"`
 	PrintedAt         string `json:"printedAt,omitempty"`
 	ReturnedAt        string `json:"returnedAt,omitempty"`
+	AcceptedAt        string `json:"acceptedAt,omitempty"`
 	SignedDocumentRef string `json:"signedDocumentRef,omitempty"`
 }
 
@@ -136,9 +140,13 @@ type LedgerCorrectionResult struct {
 
 const (
 	SettlementBlockerJourneyAlreadyClosed = "JOURNEY_ALREADY_CLOSED"
-	SettlementBlockerNegativeBalance      = "NEGATIVE_BALANCE"
-	SettlementBlockerPendingAccruals      = "PENDING_ACCRUALS"
-	SettlementBlockerOutstandingReceipts  = "OUTSTANDING_RECEIPTS"
+	SettlementBlockerNonZeroBalance       = "NON_ZERO_BALANCE"
+	// SettlementBlockerNegativeBalance is retained as a compatibility constant
+	// for older callers. Settlement Preview now reports NON_ZERO_BALANCE for
+	// either positive or negative Journey balances.
+	SettlementBlockerNegativeBalance     = "NEGATIVE_BALANCE"
+	SettlementBlockerPendingAccruals     = "PENDING_ACCRUALS"
+	SettlementBlockerOutstandingReceipts = "OUTSTANDING_RECEIPTS"
 )
 
 type SettlementPreviewDTO struct {
@@ -199,7 +207,27 @@ type PartialPayoutResult struct {
 	LedgerEntries []LedgerEntryDTO     `json:"ledgerEntries"`
 }
 
-// CloseJourneyRequest confirms final settlement and closes the Collaborator Journey.
+// FinalSettlementRequest records the full outstanding balance for one payment
+// direction. The service derives exact BRL/GOLD_GRAM amounts from the Journey;
+// callers cannot supply an arbitrary amount or convert between value units.
+type FinalSettlementRequest struct {
+	CorrectionReasonRequest
+	RequestID     string `json:"requestId"`
+	EffectiveDate string `json:"effectiveDate"`
+	Notes         string `json:"notes"`
+}
+
+type FinalSettlementResult struct {
+	Settlement    JourneySettlementDTO `json:"settlement"`
+	LedgerEntries []LedgerEntryDTO     `json:"ledgerEntries"`
+}
+
+type AcceptReceiptRequest struct {
+	Confirm bool   `json:"confirm"`
+	Notes   string `json:"notes"`
+}
+
+// CloseJourneyRequest confirms that final settlement is already complete and closes the Collaborator Journey.
 type CloseJourneyRequest struct {
 	CorrectionReasonRequest
 	RequestID     string `json:"requestId"`
@@ -272,6 +300,9 @@ type OutstandingReceiptDTO struct {
 	ID                    string  `json:"id"`
 	ReceiptNumber         string  `json:"receiptNumber"`
 	ReceiptType           string  `json:"receiptType"`
+	ReceiptPurpose        string  `json:"receiptPurpose"`
+	PaymentDirection      string  `json:"paymentDirection"`
+	AcceptingParty        string  `json:"acceptingParty"`
 	Status                string  `json:"status"`
 	IssuedAt              string  `json:"issuedAt,omitempty"`
 	IssuedBy              string  `json:"issuedBy,omitempty"`
@@ -280,6 +311,9 @@ type OutstandingReceiptDTO struct {
 	ReturnedAt            string  `json:"returnedAt,omitempty"`
 	ReceivedBy            string  `json:"receivedBy,omitempty"`
 	SignedDocumentRef     string  `json:"signedDocumentRef,omitempty"`
+	AcceptedAt            string  `json:"acceptedAt,omitempty"`
+	AcceptedBy            string  `json:"acceptedBy,omitempty"`
+	AcceptanceMethod      string  `json:"acceptanceMethod,omitempty"`
 	Notes                 string  `json:"notes,omitempty"`
 	LedgerEntryID         string  `json:"ledgerEntryId"`
 	EntryType             string  `json:"entryType"`
@@ -317,6 +351,9 @@ type PrintableReceiptDTO struct {
 	ID                    string  `json:"id"`
 	ReceiptNumber         string  `json:"receiptNumber"`
 	ReceiptType           string  `json:"receiptType"`
+	ReceiptPurpose        string  `json:"receiptPurpose"`
+	PaymentDirection      string  `json:"paymentDirection"`
+	AcceptingParty        string  `json:"acceptingParty"`
 	Status                string  `json:"status"`
 	IssuedAt              string  `json:"issuedAt,omitempty"`
 	IssuedBy              string  `json:"issuedBy,omitempty"`
@@ -325,6 +362,9 @@ type PrintableReceiptDTO struct {
 	ReturnedAt            string  `json:"returnedAt,omitempty"`
 	ReceivedBy            string  `json:"receivedBy,omitempty"`
 	SignedDocumentRef     string  `json:"signedDocumentRef,omitempty"`
+	AcceptedAt            string  `json:"acceptedAt,omitempty"`
+	AcceptedBy            string  `json:"acceptedBy,omitempty"`
+	AcceptanceMethod      string  `json:"acceptanceMethod,omitempty"`
 	Notes                 string  `json:"notes,omitempty"`
 	LedgerEntryID         string  `json:"ledgerEntryId"`
 	EntryType             string  `json:"entryType"`

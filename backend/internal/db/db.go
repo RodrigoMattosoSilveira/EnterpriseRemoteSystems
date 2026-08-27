@@ -57,6 +57,9 @@ func AutoMigrate(database *gorm.DB) error {
 	if err := InstallLedgerReceiptStatusGuards(database); err != nil {
 		return err
 	}
+	if err := InstallLedgerReceiptAcceptanceGuards(database); err != nil {
+		return err
+	}
 	if err := InstallGoldPriceActiveDateConstraint(database); err != nil {
 		return err
 	}
@@ -64,6 +67,9 @@ func AutoMigrate(database *gorm.DB) error {
 		return err
 	}
 	if err := InstallExpensePriceListAuditGuards(database); err != nil {
+		return err
+	}
+	if err := InstallJourneyZeroBalanceClosureGuard(database); err != nil {
 		return err
 	}
 	return BackfillLegacyExpenseAuditSnapshots(database)

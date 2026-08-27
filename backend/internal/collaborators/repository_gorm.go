@@ -167,6 +167,24 @@ func (r *gormRepository) UpdateWorkAssignment(ctx context.Context, collaborator 
 		}).Error
 }
 
+func (r *gormRepository) UpdateExtension(ctx context.Context, collaborator *db.CollaboratorJourney) error {
+	result := r.db.WithContext(ctx).
+		Model(&db.CollaboratorJourney{}).
+		Where("id = ? AND tenant_id = ? AND closed_at IS NULL", collaborator.ID, tenantctx.TenantID(ctx)).
+		Updates(map[string]any{
+			"updated_at":         collaborator.UpdatedAt,
+			"extension_days":     collaborator.ExtensionDays,
+			"projected_end_date": collaborator.ProjectedEndDate,
+		})
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected == 0 {
+		return gorm.ErrRecordNotFound
+	}
+	return nil
+}
+
 func (r *gormRepository) FindByID(ctx context.Context, id string) (*db.CollaboratorJourney, error) {
 	var row db.CollaboratorJourney
 	err := r.db.WithContext(ctx).

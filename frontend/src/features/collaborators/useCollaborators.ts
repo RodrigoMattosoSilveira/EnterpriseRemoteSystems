@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   createCollaborator,
+  extendCollaboratorJourney,
   getCollaborator,
   getSelfCollaborator,
   listAllCollaborators,
@@ -15,6 +16,7 @@ import type {
   Collaborator,
   CollaboratorListFilter,
   CreateCollaboratorInput,
+  ExtendCollaboratorJourneyInput,
   UpdateCollaboratorInput,
   UpdateCollaboratorWorkAssignmentInput,
 } from "../../types/collaborators";
@@ -154,6 +156,24 @@ export function useUpdateCollaboratorWorkAssignment(id: string) {
   return useMutation({
     mutationFn: (input: UpdateCollaboratorWorkAssignmentInput) =>
       updateCollaboratorWorkAssignment(id, input),
+    onSuccess: (collaborator) => {
+      queryClient.invalidateQueries({
+        queryKey: collaboratorQueryKeys.lists(),
+      });
+      queryClient.setQueryData(
+        collaboratorQueryKeys.detail(collaborator.id),
+        collaborator,
+      );
+    },
+  });
+}
+
+export function useExtendCollaboratorJourney(id: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (input: ExtendCollaboratorJourneyInput) =>
+      extendCollaboratorJourney(id, input),
     onSuccess: (collaborator) => {
       queryClient.invalidateQueries({
         queryKey: collaboratorQueryKeys.lists(),

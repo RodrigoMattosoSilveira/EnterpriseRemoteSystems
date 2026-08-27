@@ -173,6 +173,36 @@ describe("CreateExpensePage", () => {
     ).toBe(false);
   });
 
+  it("prefills a replacement from a cancelled Expense and preserves the audit link", async () => {
+    mockRecreateExpenseFetch();
+    renderCreateExpensePage("/expenses/new?copyFrom=expense-cancelled");
+
+    await waitForText("Recreate Expense");
+    await waitForText("Replacement for cancelled Expense");
+    await waitForText("Selected: Maria");
+
+    const quantityInput = await waitForControlByLabel<HTMLInputElement>(
+      "Quantity *",
+      "input",
+    );
+    expect(quantityInput.value).toBe("3");
+
+    await changeInput("Quantity *", "2");
+    await clickButton("Create Replacement Expense");
+
+    const createCall = fetchCalls.find(
+      (call) => call.method === "POST" && call.url === "/api/v1/expenses",
+    );
+    expect(createCall?.body).toMatchObject({
+      collaboratorId: activeCollaborator.id,
+      priceListItemId: canteenItem.id,
+      currencyCode: "BRL",
+      quantity: 2,
+      recreatedFromExpenseId: "expense-cancelled",
+    });
+    await waitForText("Replacement detail");
+  });
+
   it("requires a price-list item before submitting", async () => {
     mockCreateExpenseFetch();
     renderCreateExpensePage();
@@ -256,16 +286,107 @@ function mockCreateExpenseFetch(
   });
 }
 
-function renderCreateExpensePage() {
+function mockRecreateExpenseFetch() {
+  mockFetch(async (url, init) => {
+    recordFetchCall(url, init);
+
+    if (url === "/api/v1/expenses/expense-cancelled") {
+      return jsonResponse({
+        data: {
+          id: "expense-cancelled",
+          tenantId: "default",
+          personId: activeCollaborator.personId,
+          collaboratorId: activeCollaborator.id,
+          collaboratorLabel: activeCollaborator.personNickname,
+          expenseCategoryId: "ref-expense-category-canteen",
+          expenseCategoryLabel: "Canteen",
+          valueUnitId: "ref-value-unit-brl",
+          valueUnitLabel: "BRL",
+          amount: 36.75,
+          expenseDate: "2026-06-25",
+          description: "Wrong quantity",
+          active: false,
+          cancelledAt: "2026-06-26T12:00:00Z",
+          cancelledBy: "tenant-admin",
+          cancellationReason: "Wrong quantity",
+          priceListItemId: canteenItem.id,
+          priceListItemCode: canteenItem.code,
+          itemType: "CANTEEN",
+          itemDescription: canteenItem.description,
+          quantity: 3,
+          unitPriceBrl: canteenItem.unitPriceBrl,
+          currencyCode: "BRL",
+          unitPriceAmount: canteenItem.unitPriceBrl,
+          totalAmount: 36.75,
+          calculationMethod: "BRL_PRICE_LIST",
+          createdAt: "2026-06-25T12:00:00Z",
+          updatedAt: "2026-06-26T12:00:00Z",
+        },
+      });
+    }
+    if (url === `/api/v1/collaborators/${activeCollaborator.id}`) {
+      return jsonResponse({ data: activeCollaborator });
+    }
+    if (url === "/api/v1/price-list-items") {
+      return jsonResponse({ data: [canteenItem, administrativeItem] });
+    }
+    if (url === "/api/v1/gold-prices/latest") {
+      return jsonResponse({
+        data: {
+          id: "gold-price-1",
+          tenantId: "default",
+          priceDate: "2099-06-25",
+          brlPerGram: 137.28,
+          recordedBy: "bootstrap-admin",
+          notes: "Latest price for create expense test",
+          active: true,
+          createdAt: "2099-06-25T12:00:00Z",
+          updatedAt: "2099-06-25T12:00:00Z",
+        },
+      });
+    }
+    if (url === "/api/v1/expenses" && methodOf(init) === "POST") {
+      const body = parseBody(init?.body);
+      return jsonResponse({
+        data: {
+          id: "expense-replacement",
+          tenantId: "default",
+          personId: activeCollaborator.personId,
+          collaboratorId: activeCollaborator.id,
+          collaboratorLabel: activeCollaborator.personNickname,
+          expenseCategoryId: "ref-expense-category-canteen",
+          expenseCategoryLabel: "Canteen",
+          valueUnitId: "ref-value-unit-brl",
+          valueUnitLabel: "BRL",
+          amount: 24.5,
+          expenseDate: "2026-06-25",
+          active: true,
+          priceListItemId: canteenItem.id,
+          itemType: "CANTEEN",
+          quantity: 2,
+          currencyCode: "BRL",
+          ...body,
+          createdAt: "2026-06-26T12:05:00Z",
+          updatedAt: "2026-06-26T12:05:00Z",
+        },
+      });
+    }
+
+    throw new Error(`Unhandled request: ${methodOf(init)} ${url}`);
+  });
+}
+
+function renderCreateExpensePage(initialEntry = "/expenses/new") {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
   const router = createMemoryRouter(
     [
       { path: "/expenses/new", element: <CreateExpensePage /> },
+      { path: "/expenses/:id", element: <div>Replacement detail</div> },
       { path: "/expenses", element: <div>Expenses landing</div> },
     ],
-    { initialEntries: ["/expenses/new"] },
+    { initialEntries: [initialEntry] },
   );
 
   act(() => {

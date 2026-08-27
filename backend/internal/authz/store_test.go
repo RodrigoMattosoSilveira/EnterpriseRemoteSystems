@@ -146,6 +146,17 @@ func TestSeedAuthorizationCatalogCreatesCoreRolesAndGrants(t *testing.T) {
 		}
 	}
 
+	var expenseOperatorUpdate int64
+	if err := database.Model(&AuthzRolePermission{}).
+		Joins("JOIN authz_roles ON authz_roles.id = authz_role_permissions.role_id").
+		Where("authz_roles.code = ? AND permission_code = ?", string(RoleExpenseOperator), string(PermissionExpensesUpdate)).
+		Count(&expenseOperatorUpdate).Error; err != nil {
+		t.Fatalf("count expense update permission for Expense Operator: %v", err)
+	}
+	if expenseOperatorUpdate != 0 {
+		t.Fatalf("Expense Operator must not receive Tenant Administrator expense-correction authority")
+	}
+
 	var earningsFullCollaboratorUpdate int64
 	if err := database.Model(&AuthzRolePermission{}).
 		Joins("JOIN authz_roles ON authz_roles.id = authz_role_permissions.role_id").
@@ -1089,6 +1100,7 @@ func TestIntrinsicSelfServiceKeepsJourneyHistoryReadableAfterCurrentJourneyClose
 		PermissionCurrentAccountsSelfLedgerRead,
 		PermissionAssignmentsSelfCurrentRead,
 		PermissionLedgerReceiptsSelfRead,
+		PermissionLedgerReceiptsSelfAccept,
 	} {
 		if _, ok := permissions[permission]; ok {
 			t.Fatalf("closed Journey history must not preserve current Collaborator capability %s", permission)
