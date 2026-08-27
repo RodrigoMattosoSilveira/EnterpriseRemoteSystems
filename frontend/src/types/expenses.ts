@@ -20,6 +20,7 @@ export type ExpenseFinancialPosting = {
 export type Expense = {
   id: string;
   tenantId: string;
+  personId: string;
   collaboratorId: string;
   collaboratorLabel?: string;
   expenseCategoryId: string;
@@ -30,6 +31,10 @@ export type Expense = {
   expenseDate: string;
   description?: string;
   active?: boolean;
+  cancelledAt?: string;
+  cancelledBy?: string;
+  cancellationReason?: string;
+  recreatedFromExpenseId?: string;
   priceListItemId?: string;
   priceListItemCode?: string;
   itemType?: "CANTEEN" | "ADMINISTRATIVE" | string;
@@ -53,6 +58,7 @@ export type CreateExpenseInput = {
   collaboratorId: string;
   expenseDate: string;
   description?: string;
+  recreatedFromExpenseId?: string;
 
   // Bite 21 canonical price-list expense fields. Expense category, value unit,
   // amount, item description, and totals are derived by the backend from these

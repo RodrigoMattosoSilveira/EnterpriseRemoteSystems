@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { ApiErrorPanel } from "../../components/ApiErrorPanel";
 import { useAuthorizationContext } from "../../components/layout/AuthorizationContext";
@@ -6,6 +7,7 @@ import type {
   CurrentAccountFilter,
   LedgerEntry,
 } from "../../types/currentAccounts";
+import { CurrentAndFutureEarningsModal } from "../expenses/CurrentAndFutureEarningsModal";
 import { receiptStatusLabel, receiptStatusTone } from "../receipts/receiptLifecycle";
 import { useCollaboratorCurrentAccount } from "./useCurrentAccount";
 
@@ -38,11 +40,14 @@ export function CollaboratorCurrentAccountPage() {
   const { id = "" } = useParams();
   const actor = useAuthorizationContext();
   const wildcard = actor.permissions.includes("*");
+  const canViewFinancialProjection =
+    wildcard || actor.permissions.includes("current_accounts.summary.read");
   const canBrowseExpenses = wildcard || actor.permissions.includes("expenses.read");
   const canBrowseOutstandingReceipts = wildcard || actor.permissions.includes("ledger.receipts.read");
   const canOpenOperationalSources =
     wildcard || actor.permissions.includes("expenses.read") || actor.permissions.includes("planning.read");
-  const canOpenReceipt = wildcard || actor.permissions.includes("ledger.receipts.read");
+  const canOpenReceipt = wildcard || actor.permissions.includes("ledger.receipts.read") || actor.permissions.includes("ledger.receipts.self.read");
+  const [showFinancialProjection, setShowFinancialProjection] = useState(false);
   const [searchParams, setSearchParams] = useSearchParams();
   const filter = searchParams.get("filter") ?? "all";
   const page = Number(searchParams.get("page") ?? "1") || 1;
@@ -86,16 +91,25 @@ export function CollaboratorCurrentAccountPage() {
           <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div>
               <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
-                Collaborator Current Account
+                Person Current Account
               </p>
               <h1 className="text-2xl font-bold text-gray-950">
-                {data?.collaboratorLabel || "Current Account"}
+                {data?.personLabel || data?.collaboratorLabel || "Current Account"}
               </h1>
               <p className="mt-1 text-sm text-gray-600">
-                Balances and ledger entries for this collaborator journey.
+                Person-owned balances and ledger history in the selected Tenant. Journey references remain as provenance.
               </p>
             </div>
             <div className="flex flex-wrap gap-2 sm:justify-end">
+              {canViewFinancialProjection ? (
+                <button
+                  className="rounded-xl border bg-white px-4 py-2 text-sm font-semibold text-gray-700 shadow-sm"
+                  type="button"
+                  onClick={() => setShowFinancialProjection(true)}
+                >
+                  Current + Future Earnings
+                </button>
+              ) : null}
               {canBrowseOutstandingReceipts ? (
                 <Link
                   className="rounded-xl border bg-white px-4 py-2 text-sm font-semibold text-gray-700 shadow-sm"
@@ -219,6 +233,13 @@ export function CollaboratorCurrentAccountPage() {
           </>
         ) : null}
       </section>
+
+      {showFinancialProjection && canViewFinancialProjection ? (
+        <CurrentAndFutureEarningsModal
+          collaboratorId={id}
+          onClose={() => setShowFinancialProjection(false)}
+        />
+      ) : null}
     </main>
   );
 }
@@ -275,13 +296,31 @@ function LedgerEntryRow({
         {entry.description ? (
           <p className="mt-1 text-sm text-gray-600">{entry.description}</p>
         ) : null}
+        {receipt && isFinalSettlementReceipt(receipt.receiptPurpose) ? (
+          <dl className="mt-2 grid gap-1 rounded-xl bg-gray-50 p-3 text-xs text-gray-700 sm:grid-cols-2">
+            <div>
+              <dt className="inline font-semibold text-gray-900">Payment direction: </dt>
+              <dd className="inline">{paymentDirectionLabel(receipt.paymentDirection)}</dd>
+            </div>
+            <div>
+              <dt className="inline font-semibold text-gray-900">Accepting party: </dt>
+              <dd className="inline">{acceptingPartyLabel(receipt.acceptingParty)}</dd>
+            </div>
+          </dl>
+        ) : null}
         {receipt?.outstanding ? (
           <p className="mt-2 rounded-xl bg-amber-50 p-2 text-xs font-semibold text-amber-900">
-            Outstanding receipt: print, collect signature, and record the signed return.
+            {isFinalSettlementReceipt(receipt.receiptPurpose)
+              ? receipt.acceptingParty === "TENANT"
+                ? "Awaiting Tenant Administrator in-app acceptance."
+                : "Awaiting Collaborator in-app acceptance."
+              : "Outstanding receipt: print, collect signature, and record the signed return."}
           </p>
         ) : receipt && !receipt.outstanding ? (
           <p className="mt-2 rounded-xl bg-green-50 p-2 text-xs font-semibold text-green-900">
-            Receipt returned or closed.
+            {isFinalSettlementReceipt(receipt.receiptPurpose)
+              ? "Final settlement receipt accepted in-app."
+              : "Receipt returned or closed."}
           </p>
         ) : null}
       </div>
@@ -291,14 +330,29 @@ function LedgerEntryRow({
             {sourceActionLabel(entry)}
           </Link>
         ) : null}
-        {canOpenReceipt && (receipt || entry.direction === "DEBIT") ? (
+        {canOpenReceipt && shouldShowReceiptAction(entry, receipt) ? (
           <Link className="rounded-xl bg-gray-900 px-4 py-2 text-sm font-semibold text-white" to={`/ledger-entries/${entry.id}/receipt`}>
-            Print or return receipt
+            {isFinalSettlementReceipt(receipt?.receiptPurpose)
+              ? "Review / accept receipt"
+              : "Print or return receipt"}
           </Link>
         ) : null}
       </div>
     </article>
   );
+}
+
+function shouldShowReceiptAction(
+  entry: LedgerEntry,
+  receipt: LedgerEntry["receipt"],
+) {
+  if (!receipt) {
+    return entry.direction === "DEBIT";
+  }
+  if (isFinalSettlementReceipt(receipt.receiptPurpose)) {
+    return receipt.outstanding;
+  }
+  return true;
 }
 
 function sourceLink(entry: LedgerEntry) {
@@ -346,6 +400,30 @@ function formatNumber(value: number, maximumFractionDigits = 2) {
     minimumFractionDigits: 0,
     maximumFractionDigits,
   }).format(value);
+}
+
+function isFinalSettlementReceipt(purpose?: string) {
+  return purpose === "FINAL_SETTLEMENT_TENANT_PAYMENT" ||
+    purpose === "FINAL_SETTLEMENT_COLLABORATOR_PAYMENT";
+}
+
+function paymentDirectionLabel(direction?: string) {
+  if (direction === "TENANT_TO_COLLABORATOR") return "Tenant To Collaborator";
+  if (direction === "COLLABORATOR_TO_TENANT") return "Collaborator To Tenant";
+  return direction ? titleCaseCode(direction) : "—";
+}
+
+function acceptingPartyLabel(party?: string) {
+  if (party === "COLLABORATOR") return "Collaborator";
+  if (party === "TENANT") return "Tenant";
+  return party ? titleCaseCode(party) : "—";
+}
+
+function titleCaseCode(value: string) {
+  return value
+    .toLowerCase()
+    .replaceAll("_", " ")
+    .replace(/\b\w/g, (character) => character.toUpperCase());
 }
 
 function humanize(value: string) {

@@ -195,21 +195,33 @@ function AccrualRunPanel({
 
   return (
     <div className="space-y-4 rounded-2xl border bg-white p-5 shadow-sm">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <h3 className="font-semibold">Accrual Runs</h3>
-          <p className="text-sm text-gray-500">
-            Calculation is repeatable; posting only affects READY items.
-          </p>
-        </div>
-        <div className="flex flex-col gap-2 sm:flex-row">
-          <input
-            aria-label="Accrual notes"
-            className="rounded-xl border px-3 py-2 text-sm"
-            value={notes}
-            onChange={(event) => setNotes(event.target.value)}
-            placeholder="Optional run notes"
-          />
+      <div>
+        <h3 className="font-semibold">Accrual Runs</h3>
+        <p className="text-sm text-gray-500">
+          Calculation is repeatable; posting only affects READY items.
+        </p>
+      </div>
+      <div className="rounded-xl border bg-gray-50 p-4">
+        <label
+          className="block text-sm font-semibold text-gray-800"
+          htmlFor="accrual-run-notes"
+        >
+          Accrual notes
+        </label>
+        <p className="mt-1 text-xs text-gray-500">
+          Optional context for this accrual run. Use a meaningful sentence when
+          the reason or scope of the calculation should be recorded.
+        </p>
+        <textarea
+          id="accrual-run-notes"
+          aria-label="Accrual notes"
+          className="mt-3 min-h-24 w-full resize-y rounded-xl border bg-white px-3 py-2 text-sm"
+          rows={4}
+          value={notes}
+          onChange={(event) => setNotes(event.target.value)}
+          placeholder="Example: Final Tenant B accrual after reviewing actual outcomes."
+        />
+        <div className="mt-3 flex justify-end">
           <button
             onClick={create}
             disabled={createPending || workPeriod.status === "CLOSED"}

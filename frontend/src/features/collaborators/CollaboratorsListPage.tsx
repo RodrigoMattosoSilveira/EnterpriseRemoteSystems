@@ -2,32 +2,58 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useLocation, useSearchParams } from "react-router-dom";
 import { ApiErrorPanel } from "../../components/ApiErrorPanel";
 import { JourneyDaysRemaining } from "../../components/JourneyDaysRemaining";
+import { useAuthorizationContext } from "../../components/layout/AuthorizationContext";
 import type { Collaborator } from "../../types/collaborators";
 import {
   useCollaboratorCatalog,
   useCollaboratorSearch,
+  useSelfCollaboratorJourneys,
 } from "./useCollaborators";
 
 export function CollaboratorsListPage() {
   const location = useLocation();
+  const actor = useAuthorizationContext();
+  const wildcard = actor.permissions.includes("*");
+  const canBrowseCollaborators =
+    wildcard || actor.permissions.includes("collaborators.read");
+  const selfMode =
+    !canBrowseCollaborators &&
+    actor.permissions.includes("collaborators.self.read");
   const [searchParams, setSearchParams] = useSearchParams();
   const search = searchParams.get("search")?.trim() ?? "";
   const [searchDraft, setSearchDraft] = useState(search);
-  const hasSearch = search.length > 0;
-  const catalogQuery = useCollaboratorCatalog(!hasSearch);
-  const searchQuery = useCollaboratorSearch(search);
+  const hasSearch = !selfMode && search.length > 0;
+  const catalogQuery = useCollaboratorCatalog(!selfMode && !hasSearch);
+  const searchQuery = useCollaboratorSearch(selfMode ? "" : search);
+  const selfQuery = useSelfCollaboratorJourneys(selfMode);
   const allCollaborators = catalogQuery.data ?? [];
   const searchResult = searchQuery.data;
   const collaborators = useMemo(
-    () =>
-      sortCollaborators(
+    () => {
+      if (selfMode) {
+        return sortSelfCollaboratorJourneys(selfQuery.data ?? []);
+      }
+      return sortCollaborators(
         hasSearch ? searchResult?.items ?? [] : allCollaborators,
-      ),
-    [allCollaborators, hasSearch, searchResult?.items],
+      );
+    },
+    [allCollaborators, hasSearch, searchResult?.items, selfMode, selfQuery.data],
   );
-  const total = hasSearch ? searchResult?.total ?? 0 : allCollaborators.length;
-  const isLoading = hasSearch ? searchQuery.isLoading : catalogQuery.isLoading;
-  const error = hasSearch ? searchQuery.error : catalogQuery.error;
+  const total = selfMode
+    ? selfQuery.data?.length ?? 0
+    : hasSearch
+      ? searchResult?.total ?? 0
+      : allCollaborators.length;
+  const isLoading = selfMode
+    ? selfQuery.isLoading
+    : hasSearch
+      ? searchQuery.isLoading
+      : catalogQuery.isLoading;
+  const error = selfMode
+    ? selfQuery.error
+    : hasSearch
+      ? searchQuery.error
+      : catalogQuery.error;
   const flash = readFlash(location.state);
 
   useEffect(() => {
@@ -62,38 +88,51 @@ export function CollaboratorsListPage() {
             <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
               Operations
             </p>
-            <h1 className="text-xl font-bold text-gray-950">Collaborators</h1>
+            <h1 className="text-xl font-bold text-gray-950">
+              {selfMode ? "My Collaborator Journeys" : "Collaborators"}
+            </h1>
             <p className="text-sm text-gray-500">
-              Active work journeys created from complete Person profiles.
+              {selfMode
+                ? "Current and closed Journeys for your Membership in this Tenant."
+                : "Active work journeys created from complete Person profiles."}
             </p>
           </div>
 
-          <div className="flex items-center gap-2">
+          {canBrowseCollaborators ? (
+            <div className="flex items-center gap-2">
+              <Link
+                to="/people"
+                className="rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 shadow-sm"
+              >
+                People
+              </Link>
+              <Link
+                to="/expenses"
+                className="rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 shadow-sm"
+              >
+                Expenses
+              </Link>
+              <Link
+                to="/work-periods"
+                className="rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 shadow-sm"
+              >
+                Work Periods
+              </Link>
+              <Link
+                to="/collaborators/new"
+                className="rounded-xl bg-gray-950 px-4 py-2 text-sm font-semibold text-white shadow-sm"
+              >
+                Add
+              </Link>
+            </div>
+          ) : actor.personId ? (
             <Link
-              to="/people"
+              to={`/people/${encodeURIComponent(actor.personId)}`}
               className="rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 shadow-sm"
             >
-              People
+              My Person record
             </Link>
-            <Link
-              to="/expenses"
-              className="rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 shadow-sm"
-            >
-              Expenses
-            </Link>
-            <Link
-              to="/work-periods"
-              className="rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 shadow-sm"
-            >
-              Work Periods
-            </Link>
-            <Link
-              to="/collaborators/new"
-              className="rounded-xl bg-gray-950 px-4 py-2 text-sm font-semibold text-white shadow-sm"
-            >
-              Add
-            </Link>
-          </div>
+          ) : null}
         </div>
       </header>
 
@@ -113,10 +152,12 @@ export function CollaboratorsListPage() {
           <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
             <div>
               <h2 className="text-lg font-semibold text-gray-950">
-                Collaborator Journeys
+                {selfMode ? "Journey History" : "Collaborator Journeys"}
               </h2>
               <p className="text-sm text-gray-500">
-                Showing {collaborators.length} of {total} collaborator records.
+                {selfMode
+                  ? `Showing ${collaborators.length} Journey${collaborators.length === 1 ? "" : "s"}.`
+                  : `Showing ${collaborators.length} of ${total} collaborator records.`}
               </p>
               {hasSearch && (
                 <p className="mt-1 text-xs font-medium text-gray-600">
@@ -125,7 +166,8 @@ export function CollaboratorsListPage() {
               )}
             </div>
 
-            <div className="flex w-full flex-col gap-2 sm:flex-row lg:max-w-xl">
+            {!selfMode ? (
+              <div className="flex w-full flex-col gap-2 sm:flex-row lg:max-w-xl">
               <div className="min-w-0 flex-1">
                 <label
                   htmlFor="collaborator-search"
@@ -153,6 +195,7 @@ export function CollaboratorsListPage() {
                 )}
               </div>
             </div>
+            ) : null}
           </div>
         </section>
 
@@ -165,16 +208,20 @@ export function CollaboratorsListPage() {
         {!isLoading && !error && collaborators.length === 0 && (
           <div className="rounded-2xl border bg-white p-8 text-center shadow-sm">
             <h2 className="text-lg font-semibold">
-              {hasSearch
-                ? "No collaborators match this filter"
-                : "No collaborators yet"}
+              {selfMode
+                ? "No Collaborator Journeys yet"
+                : hasSearch
+                  ? "No collaborators match this filter"
+                  : "No collaborators yet"}
             </h2>
             <p className="mt-2 text-sm text-gray-500">
-              {hasSearch
-                ? "Try another name or nickname."
-                : "Create a Collaborator after the related Person profile is complete."}
+              {selfMode
+                ? "No current or historical Journeys are recorded for you in this Tenant."
+                : hasSearch
+                  ? "Try another name or nickname."
+                  : "Create a Collaborator after the related Person profile is complete."}
             </p>
-            {!hasSearch && (
+            {!selfMode && !hasSearch && (
               <>
                 <Link
                   to="/expenses"
@@ -228,11 +275,7 @@ export function CollaboratorsListPage() {
                           Projected end:{" "}
                           {formatDate(collaborator.projectedEndDate)}
                         </div>
-                        <JourneyDaysRemaining
-                          projectedEndDate={collaborator.projectedEndDate}
-                          closedAt={collaborator.closedAt}
-                          className="mt-1 block text-xs"
-                        />
+                        <JourneyTiming collaborator={collaborator} className="mt-1 block text-xs" />
                       </td>
                       <td className="p-3 text-gray-700">
                         <div>{collaborator.taskLabel || "—"}</div>
@@ -248,11 +291,7 @@ export function CollaboratorsListPage() {
                         </div>
                       </td>
                       <td className="p-3">
-                        <StatusBadge
-                          label={
-                            collaborator.statusLabel || collaborator.statusId
-                          }
-                        />
+                        <JourneyStatusBadge collaborator={collaborator} />
                       </td>
                     </tr>
                   ))}
@@ -298,6 +337,16 @@ function sortCollaborators(collaborators: Collaborator[]) {
   });
 }
 
+function sortSelfCollaboratorJourneys(collaborators: Collaborator[]) {
+  return [...collaborators].sort((left, right) => {
+    const startComparison = right.journeyStartDate.localeCompare(
+      left.journeyStartDate,
+    );
+    if (startComparison !== 0) return startComparison;
+    return right.createdAt.localeCompare(left.createdAt);
+  });
+}
+
 function CollaboratorCard({ collaborator }: { collaborator: Collaborator }) {
   return (
     <Link to={`/collaborators/${collaborator.id}`} className="block p-4">
@@ -316,9 +365,7 @@ function CollaboratorCard({ collaborator }: { collaborator: Collaborator }) {
             {collaborator.locationLabel || "—"}
           </p>
         </div>
-        <StatusBadge
-          label={collaborator.statusLabel || collaborator.statusId}
-        />
+        <JourneyStatusBadge collaborator={collaborator} />
       </div>
 
       <div className="mt-4 grid gap-2 text-sm text-gray-700">
@@ -327,11 +374,7 @@ function CollaboratorCard({ collaborator }: { collaborator: Collaborator }) {
           label="Projected End"
           value={formatDate(collaborator.projectedEndDate)}
         />
-        <JourneyDaysRemaining
-          projectedEndDate={collaborator.projectedEndDate}
-          closedAt={collaborator.closedAt}
-          className="text-right text-sm"
-        />
+        <JourneyTiming collaborator={collaborator} className="text-right text-sm" />
         <Info label="Payment" value={formatMoney(collaborator.paymentValue)} />
         <Info label="Method" value={collaborator.paymentMethodLabel || "—"} />
       </div>
@@ -358,11 +401,43 @@ function personSecondaryLabel(collaborator: Collaborator) {
   return name;
 }
 
-function StatusBadge({ label }: { label: string }) {
+function JourneyStatusBadge({ collaborator }: { collaborator: Collaborator }) {
+  const closed = Boolean(collaborator.closedAt);
+  const label = closed
+    ? "Closed"
+    : collaborator.statusLabel || collaborator.statusId;
+
   return (
-    <span className="rounded-full bg-green-100 px-3 py-1 text-xs font-semibold text-green-800">
+    <span
+      className={`rounded-full px-3 py-1 text-xs font-semibold ${
+        closed ? "bg-gray-100 text-gray-700" : "bg-green-100 text-green-800"
+      }`}
+    >
       {label}
     </span>
+  );
+}
+
+function JourneyTiming({
+  collaborator,
+  className,
+}: {
+  collaborator: Collaborator;
+  className?: string;
+}) {
+  if (collaborator.closedAt) {
+    return (
+      <span className={["font-semibold text-gray-600", className].filter(Boolean).join(" ")}>
+        Closed {formatDate(collaborator.closedAt)}
+      </span>
+    );
+  }
+
+  return (
+    <JourneyDaysRemaining
+      projectedEndDate={collaborator.projectedEndDate}
+      className={className}
+    />
   );
 }
 

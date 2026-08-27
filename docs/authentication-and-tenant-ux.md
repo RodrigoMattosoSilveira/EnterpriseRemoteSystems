@@ -65,8 +65,13 @@ authentication credential.
 
 - `/password/change` requires an authenticated session and the current password.
   A successful change revokes all sessions and requires a fresh login.
-- `/password/reset` accepts the one-time token issued by an Application
-  Administrator and a new password. A successful reset revokes all existing
+- `/password/reset` accepts a one-time token issued by an authorized
+  administrator and a new password. Application Administrators may issue a token
+  directly for an Account. A Tenant Administrator may issue one only through a
+  Person who has an ACTIVE Membership and enabled Account-bound tenant Actor in
+  the selected Tenant. Because credentials belong to the global Authentication
+  Account, completing either kind of reset changes the password for all Tenant
+  access owned by that Account. A successful reset revokes all existing
   sessions, reloads the target account, verifies that its persisted bcrypt hash
   matches the submitted replacement password, and returns the authoritative
   account ID, normalized login, and password-change timestamp. The browser
@@ -151,8 +156,11 @@ Person–Tenant Memberships; delegated Role Grants are not required merely for
 intrinsic Person self-service.
 
 If all Tenant Actors or Memberships become unavailable, authentication still
-succeeds. The browser renders **No tenant workspace available** together with
-Account-level **My Person** and read-only **My Current Account** self-service.
+succeeds. The browser renders **Your personal information is still available**
+with the message, “You currently do not have access to work or administrative
+features. You can still view your personal information and read-only Current
+Account history below.” It continues to provide Account-level **My Person** and
+read-only **My Current Account** self-service.
 This fallback derives the Person only from `auth_account_people`, does not
 borrow or synthesize an Actor, and does not grant tenant administration,
 operator, collaboration, or other tenant-scoped capabilities. Restoring an

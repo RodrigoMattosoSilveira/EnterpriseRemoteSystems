@@ -48,7 +48,12 @@ func (s *service) ZeroGold(ctx context.Context, collaboratorID, authorizedBy str
 	if err := s.requireSecondApprovalWhenConfigured(ctx, tenantctx.TenantID(ctx), req.CorrectionReasonRequest, authorizedBy); err != nil {
 		return nil, err
 	}
-	if _, err := s.repo.FindCollaboratorByID(ctx, collaboratorID); err != nil {
+	collaborator, err := s.repo.FindCollaboratorByID(ctx, collaboratorID)
+	if err != nil {
+		return nil, err
+	}
+	personID, err := financialOwnerPersonID(*collaborator)
+	if err != nil {
 		return nil, err
 	}
 
@@ -109,6 +114,7 @@ func (s *service) ZeroGold(ctx context.Context, collaboratorID, authorizedBy str
 	entry := db.LedgerEntry{
 		BaseModel:            db.BaseModel{ID: "ledger-settlement-" + ids.New(), CreatedAt: now, UpdatedAt: now},
 		TenantID:             tenantctx.TenantID(ctx),
+		PersonID:             personID,
 		CollaboratorID:       collaboratorID,
 		ValueUnitID:          valueUnit.ID,
 		EntryType:            ledgerEntryTypePayout,

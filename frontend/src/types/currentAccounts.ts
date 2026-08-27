@@ -12,16 +12,21 @@ export type UpdateSecondPersonApprovalPolicyInput = {
 export type LedgerEntryReceipt = {
   id: string;
   receiptNumber?: string;
+  receiptPurpose?: string;
+  paymentDirection?: string;
+  acceptingParty?: string;
   status: string;
   outstanding: boolean;
   printedAt?: string;
   returnedAt?: string;
+  acceptedAt?: string;
   signedDocumentRef?: string;
 };
 
 export type LedgerEntry = {
   id: string;
   tenantId: string;
+  personId: string;
   collaboratorId: string;
   collaboratorLabel?: string;
   valueUnitId: string;
@@ -48,6 +53,8 @@ export type LedgerEntry = {
 };
 
 export type CurrentAccountBalance = {
+  personId: string;
+  personLabel?: string;
   collaboratorId: string;
   collaboratorLabel?: string;
   valueUnitId: string;
@@ -64,6 +71,8 @@ export type LedgerEntryListResult = {
 };
 
 export type CurrentAccountDetail = {
+  personId: string;
+  personLabel?: string;
   collaboratorId: string;
   collaboratorLabel?: string;
   balances: CurrentAccountBalance[];

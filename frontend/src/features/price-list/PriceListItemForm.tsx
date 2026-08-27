@@ -24,6 +24,7 @@ export function PriceListItemForm({
   description,
   value,
   isPending,
+  isSubmitDisabled = false,
   submitLabel,
   pendingLabel,
   onChange,
@@ -35,6 +36,7 @@ export function PriceListItemForm({
   description: string;
   value: PriceListItemFormValue;
   isPending: boolean;
+  isSubmitDisabled?: boolean;
   submitLabel: string;
   pendingLabel: string;
   onChange: (value: PriceListItemFormValue) => void;
@@ -43,6 +45,16 @@ export function PriceListItemForm({
   layout?: PriceListItemFormLayout;
 }) {
   const isWide = layout === "wide";
+  const submitDisabled = isPending || isSubmitDisabled;
+  const submitClassName = [
+    "mt-4 rounded-xl px-4 py-2 text-sm font-semibold transition-colors",
+    isWide ? "" : "w-full",
+    submitDisabled
+      ? "cursor-not-allowed bg-gray-200 text-gray-500"
+      : "bg-gray-950 text-white hover:bg-gray-800",
+  ]
+    .filter(Boolean)
+    .join(" ");
   const fieldGridClassName = isWide
     ? "mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-6"
     : "mt-4 grid gap-3 sm:grid-cols-2";
@@ -145,12 +157,8 @@ export function PriceListItemForm({
       </p>
 
       <button
-        className={
-          isWide
-            ? "mt-4 rounded-xl bg-gray-950 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
-            : "mt-4 w-full rounded-xl bg-gray-950 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
-        }
-        disabled={isPending}
+        className={submitClassName}
+        disabled={submitDisabled}
         type="submit"
       >
         {isPending ? pendingLabel : submitLabel}

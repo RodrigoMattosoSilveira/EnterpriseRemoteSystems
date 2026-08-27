@@ -448,6 +448,110 @@ func TestUpdateCollaboratorEditsAssignmentPaymentAndExtensionDays(t *testing.T) 
 	}
 }
 
+func TestExtendCollaboratorJourneyAddsDaysWithoutChangingOtherAttributes(t *testing.T) {
+	server, cleanup := newTestServer(t)
+	defer cleanup()
+
+	person := createPerson(t, server, validCompletePersonPayload(1, nil))
+	created := createCollaborator(t, server, validCollaboratorPayload(person.Data.MembershipID, nil))
+
+	res := postJSON(t, server, http.MethodPost, collaboratorsURL+created.Data.ID+"/extend", map[string]any{
+		"additionalDays": 14,
+	})
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		var body apiErrorResponse
+		decodeJSON(t, res, &body)
+		t.Fatalf("expected extend Journey status %d, got %d with error %+v", http.StatusOK, res.StatusCode, body.Error)
+	}
+
+	var extended apiCollaboratorResponse
+	decodeJSON(t, res, &extended)
+	if extended.Data.ExtensionDays != created.Data.ExtensionDays+14 {
+		t.Fatalf("expected cumulative extension %d, got %d", created.Data.ExtensionDays+14, extended.Data.ExtensionDays)
+	}
+	if extended.Data.ProjectedEndDate != "2026-09-13" {
+		t.Fatalf("expected projected end date 2026-09-13, got %q", extended.Data.ProjectedEndDate)
+	}
+	if extended.Data.PaymentMethodID != created.Data.PaymentMethodID || extended.Data.PaymentValue != created.Data.PaymentValue {
+		t.Fatalf("Journey extension must not change payment terms: before=%+v after=%+v", created.Data, extended.Data)
+	}
+	if extended.Data.SectorID != created.Data.SectorID || extended.Data.LocationID != created.Data.LocationID || extended.Data.TaskID != created.Data.TaskID {
+		t.Fatalf("Journey extension must not change work assignment: before=%+v after=%+v", created.Data, extended.Data)
+	}
+
+	res = postJSON(t, server, http.MethodPost, collaboratorsURL+created.Data.ID+"/extend", map[string]any{
+		"additionalDays": 7,
+	})
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		var body apiErrorResponse
+		decodeJSON(t, res, &body)
+		t.Fatalf("expected second extend Journey status %d, got %d with error %+v", http.StatusOK, res.StatusCode, body.Error)
+	}
+	decodeJSON(t, res, &extended)
+	if extended.Data.ExtensionDays != created.Data.ExtensionDays+21 || extended.Data.ProjectedEndDate != "2026-09-20" {
+		t.Fatalf("expected cumulative 21-day extension through 2026-09-20, got extensionDays=%d projectedEndDate=%q", extended.Data.ExtensionDays, extended.Data.ProjectedEndDate)
+	}
+}
+
+func TestExtendCollaboratorJourneyRejectsNonPositiveDays(t *testing.T) {
+	server, cleanup := newTestServer(t)
+	defer cleanup()
+
+	person := createPerson(t, server, validCompletePersonPayload(1, nil))
+	created := createCollaborator(t, server, validCollaboratorPayload(person.Data.MembershipID, nil))
+
+	res := postJSON(t, server, http.MethodPost, collaboratorsURL+created.Data.ID+"/extend", map[string]any{
+		"additionalDays": 0,
+	})
+	defer res.Body.Close()
+	assertValidationError(t, res, "additionalDays", "Additional days must be greater than zero")
+}
+
+func TestUpdateCollaboratorWorkAssignmentChangesOnlySectorLocationAndTask(t *testing.T) {
+	server, cleanup := newTestServer(t)
+	defer cleanup()
+
+	person := createPerson(t, server, validCompletePersonPayload(1, nil))
+	created := createCollaborator(t, server, validCollaboratorPayload(person.Data.MembershipID, nil))
+	sector := createReferenceData(t, server, "sector", map[string]any{"code": "ASSIGNMENT_PROCESSING", "label": "Assignment Processing", "sortOrder": 21})
+	location := createReferenceData(t, server, "location", map[string]any{"code": "ASSIGNMENT_NORTH_PIT", "label": "Assignment North Pit", "sortOrder": 21})
+	task := createReferenceData(t, server, "task", map[string]any{"code": "ASSIGNMENT_SUPERVISOR", "label": "Assignment Supervisor", "sortOrder": 21})
+
+	res := postJSON(t, server, http.MethodPatch, collaboratorsURL+created.Data.ID+"/work-assignment", map[string]any{
+		"sectorId":             sector.Data.ID,
+		"locationId":           location.Data.ID,
+		"taskId":               task.Data.ID,
+		"paymentMethodId":      "ref-method-salary",
+		"paymentValue":         9999.0,
+		"extensionDays":        45,
+		"planningAvailability": "LEAVE_OF_ABSENCE",
+	})
+	defer res.Body.Close()
+
+	if res.StatusCode != http.StatusOK {
+		var body apiErrorResponse
+		decodeJSON(t, res, &body)
+		t.Fatalf("expected work-assignment update status %d, got %d with error %+v", http.StatusOK, res.StatusCode, body.Error)
+	}
+
+	var body apiCollaboratorResponse
+	decodeJSON(t, res, &body)
+	if body.Data.SectorID != sector.Data.ID || body.Data.LocationID != location.Data.ID || body.Data.TaskID != task.Data.ID {
+		t.Fatalf("expected only work-assignment references to change, got %+v", body.Data)
+	}
+	if body.Data.PaymentMethodID != created.Data.PaymentMethodID || body.Data.PaymentValue != created.Data.PaymentValue {
+		t.Fatalf("work-assignment update must not change payment terms: before=%+v after=%+v", created.Data, body.Data)
+	}
+	if body.Data.ExtensionDays != created.Data.ExtensionDays || body.Data.ProjectedEndDate != created.Data.ProjectedEndDate {
+		t.Fatalf("work-assignment update must not change Journey extension: before=%+v after=%+v", created.Data, body.Data)
+	}
+	if body.Data.PlanningAvailability != created.Data.PlanningAvailability {
+		t.Fatalf("work-assignment update must not change planning availability: before=%q after=%q", created.Data.PlanningAvailability, body.Data.PlanningAvailability)
+	}
+}
+
 func TestUpdateCollaboratorSavesPlanningAvailability(t *testing.T) {
 	server, cleanup := newTestServer(t)
 	defer cleanup()

@@ -46,7 +46,9 @@ type apiPersonResponse struct {
 
 type apiCollaboratorResponse struct {
 	Data struct {
-		ID string `json:"id"`
+		ID         string `json:"id"`
+		StatusCode string `json:"statusCode"`
+		ClosedAt   string `json:"closedAt"`
 	} `json:"data"`
 }
 
@@ -63,6 +65,7 @@ type apiCollaboratorListResponse struct {
 type apiExpenseResponse struct {
 	Data struct {
 		ID             string  `json:"id"`
+		PersonID       string  `json:"personId"`
 		CollaboratorID string  `json:"collaboratorId"`
 		ValueUnitID    string  `json:"valueUnitId"`
 		Amount         float64 `json:"amount"`
@@ -82,6 +85,7 @@ type apiLedgerEntryListResponse struct {
 	Data struct {
 		Items []struct {
 			ID                   string                         `json:"id"`
+			PersonID             string                         `json:"personId"`
 			CollaboratorID       string                         `json:"collaboratorId"`
 			CollaboratorLabel    string                         `json:"collaboratorLabel"`
 			ValueUnitID          string                         `json:"valueUnitId"`
@@ -112,6 +116,7 @@ type apiLedgerEntryListResponse struct {
 
 type apiBalancesResponse struct {
 	Data []struct {
+		PersonID          string  `json:"personId"`
 		CollaboratorID    string  `json:"collaboratorId"`
 		CollaboratorLabel string  `json:"collaboratorLabel"`
 		ValueUnitID       string  `json:"valueUnitId"`
@@ -618,8 +623,11 @@ func TestExpenseCreatesDebitLedgerEntryAndNegativeCurrentAccountBalance(t *testi
 		t.Fatalf("expected one ledger entry, got %+v", entries.Data)
 	}
 	entry := entries.Data.Items[0]
+	if expense.Data.PersonID == "" || entry.PersonID != expense.Data.PersonID {
+		t.Fatalf("expected Expense and Ledger Entry to share canonical Person ownership, expense=%+v entry=%+v", expense.Data, entry)
+	}
 	if entry.CollaboratorID != collaborator.Data.ID || entry.CollaboratorLabel != "P1" {
-		t.Fatalf("unexpected collaborator fields: %+v", entry)
+		t.Fatalf("unexpected collaborator provenance fields: %+v", entry)
 	}
 	if entry.ValueUnitID != "ref-value-unit-brl" || entry.ValueUnitCode != "BRL" {
 		t.Fatalf("unexpected value unit fields: %+v", entry)
@@ -642,6 +650,9 @@ func TestExpenseCreatesDebitLedgerEntryAndNegativeCurrentAccountBalance(t *testi
 		t.Fatalf("expected one balance, got %+v", balances.Data)
 	}
 	balance := balances.Data[0]
+	if balance.PersonID != expense.Data.PersonID {
+		t.Fatalf("expected Person-owned balance %q, got %+v", expense.Data.PersonID, balance)
+	}
 	if balance.CollaboratorID != collaborator.Data.ID || balance.CollaboratorLabel != "P1" || balance.ValueUnitCode != "BRL" || balance.Balance != -42.5 {
 		t.Fatalf("unexpected balance: %+v", balance)
 	}
@@ -1102,14 +1113,18 @@ func TestCollaboratorCurrentAccountDetailIncludesBalancesAndLedgerEntries(t *tes
 
 	var body struct {
 		Data struct {
+			PersonID          string `json:"personId"`
+			PersonLabel       string `json:"personLabel"`
 			CollaboratorID    string `json:"collaboratorId"`
 			CollaboratorLabel string `json:"collaboratorLabel"`
 			Balances          []struct {
+				PersonID      string  `json:"personId"`
 				ValueUnitCode string  `json:"valueUnitCode"`
 				Balance       float64 `json:"balance"`
 			} `json:"balances"`
 			LedgerEntries struct {
 				Items []struct {
+					PersonID       string  `json:"personId"`
 					EntryType      string  `json:"entryType"`
 					Direction      string  `json:"direction"`
 					ValueUnitCode  string  `json:"valueUnitCode"`
@@ -1128,16 +1143,19 @@ func TestCollaboratorCurrentAccountDetailIncludesBalancesAndLedgerEntries(t *tes
 	}
 	decodeJSON(t, res, &body)
 
-	if body.Data.CollaboratorID != collaborator.Data.ID || body.Data.CollaboratorLabel != "P1" {
-		t.Fatalf("unexpected collaborator detail: %+v", body.Data)
+	if body.Data.PersonID == "" || body.Data.PersonLabel != "P1" || body.Data.CollaboratorID != collaborator.Data.ID || body.Data.CollaboratorLabel != "P1" {
+		t.Fatalf("unexpected Person-owned current account detail: %+v", body.Data)
 	}
-	if len(body.Data.Balances) != 1 || body.Data.Balances[0].ValueUnitCode != "BRL" || body.Data.Balances[0].Balance != -12.25 {
+	if len(body.Data.Balances) != 1 || body.Data.Balances[0].PersonID != body.Data.PersonID || body.Data.Balances[0].ValueUnitCode != "BRL" || body.Data.Balances[0].Balance != -12.25 {
 		t.Fatalf("unexpected balances: %+v", body.Data.Balances)
 	}
 	if body.Data.LedgerEntries.Total != 1 || len(body.Data.LedgerEntries.Items) != 1 {
 		t.Fatalf("unexpected ledger entries: %+v", body.Data.LedgerEntries)
 	}
 	entry := body.Data.LedgerEntries.Items[0]
+	if entry.PersonID != body.Data.PersonID {
+		t.Fatalf("expected detail Ledger Entry Person ID %q, got %+v", body.Data.PersonID, entry)
+	}
 	if entry.EntryType != "EXPENSE_DEDUCTION" || entry.Direction != "DEBIT" || entry.ValueUnitCode != "BRL" || entry.Amount != 12.25 || entry.SignedAmount != -12.25 || entry.CorrectionType != "ORIGINAL" {
 		t.Fatalf("unexpected ledger entry: %+v", entry)
 	}
@@ -1224,7 +1242,7 @@ func TestSettlementPreviewAllowsCloseWithoutBlockers(t *testing.T) {
 	}
 }
 
-func TestSettlementPreviewBlocksNegativeBalance(t *testing.T) {
+func TestSettlementPreviewBlocksAnyNonZeroBalance(t *testing.T) {
 	server, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -1243,7 +1261,7 @@ func TestSettlementPreviewBlocksNegativeBalance(t *testing.T) {
 	}
 	decodeJSON(t, res, &body)
 
-	if body.Data.BRLBalance != -42.5 || body.Data.OutstandingReceipts != 1 || body.Data.CanClose || !containsString(body.Data.BlockingReasons, "NEGATIVE_BALANCE") || !containsString(body.Data.BlockingReasons, "OUTSTANDING_RECEIPTS") {
+	if body.Data.BRLBalance != -42.5 || body.Data.OutstandingReceipts != 1 || body.Data.CanClose || !containsString(body.Data.BlockingReasons, "NON_ZERO_BALANCE") || !containsString(body.Data.BlockingReasons, "OUTSTANDING_RECEIPTS") {
 		t.Fatalf("unexpected blocked settlement preview: %+v", body.Data)
 	}
 }
@@ -1289,8 +1307,81 @@ func TestSettlementPreviewBlocksOutstandingReceiptsAfterBalanceCorrection(t *tes
 	}
 	decodeJSON(t, res, &body)
 
-	if body.Data.BRLBalance <= 0 || body.Data.OutstandingReceipts != 1 || body.Data.CanClose || !containsString(body.Data.BlockingReasons, "OUTSTANDING_RECEIPTS") || containsString(body.Data.BlockingReasons, "NEGATIVE_BALANCE") {
-		t.Fatalf("expected outstanding receipt to block close independently of balance, got %+v", body.Data)
+	if body.Data.BRLBalance <= 0 || body.Data.OutstandingReceipts != 1 || body.Data.CanClose || !containsString(body.Data.BlockingReasons, "OUTSTANDING_RECEIPTS") || !containsString(body.Data.BlockingReasons, "NON_ZERO_BALANCE") {
+		t.Fatalf("expected both non-zero balance and outstanding receipt to block close, got %+v", body.Data)
+	}
+}
+
+func TestCloseJourneyRejectsPositiveBalanceEvenWhenReceiptsAreClear(t *testing.T) {
+	server, cleanup := newTestServer(t)
+	defer cleanup()
+
+	collaborator := createActiveCollaborator(t, server, 1)
+	expense := createExpense(t, server, validExpensePayload(collaborator.Data.ID, nil))
+	entries := listLedgerEntries(t, server, collaborator.Data.ID).Data.Items
+	if len(entries) != 1 {
+		t.Fatalf("expected one expense Ledger Entry, got %+v", entries)
+	}
+
+	replace := postAuthorizedJSON(t, server, http.MethodPost, "/api/v1/ledger-entries/"+entries[0].ID+"/replace", map[string]any{
+		"reasonCode":    "ZERO_BALANCE_INVARIANT_TEST",
+		"reasonText":    "Create a positive Journey balance without closing it",
+		"valueUnitId":   "ref-value-unit-brl",
+		"entryType":     "EARNING_CREDIT",
+		"direction":     "CREDIT",
+		"amount":        42.5,
+		"effectiveDate": "2026-06-07",
+		"description":   expense.Data.ID,
+	})
+	replace.Body.Close()
+	if replace.StatusCode != http.StatusOK {
+		t.Fatalf("expected balance correction replace status %d, got %d", http.StatusOK, replace.StatusCode)
+	}
+
+	returned := postReceiptJSON(t, server, "/api/v1/ledger-entries/"+entries[0].ID+"/receipt/return", "receiver@example.com", map[string]any{
+		"signedDocumentRef": "settled-original-expense.pdf",
+	})
+	returned.Body.Close()
+	if returned.StatusCode != http.StatusOK {
+		t.Fatalf("expected receipt return status %d, got %d", http.StatusOK, returned.StatusCode)
+	}
+
+	previewRes := getJSON(t, server, "/api/v1/collaborators/"+collaborator.Data.ID+"/settlement-preview")
+	defer previewRes.Body.Close()
+	var previewBody struct {
+		Data struct {
+			BRLBalance          float64  `json:"brlBalance"`
+			OutstandingReceipts int64    `json:"outstandingReceipts"`
+			CanClose            bool     `json:"canClose"`
+			BlockingReasons     []string `json:"blockingReasons"`
+		} `json:"data"`
+	}
+	decodeJSON(t, previewRes, &previewBody)
+	if previewBody.Data.BRLBalance <= 0 || previewBody.Data.OutstandingReceipts != 0 || previewBody.Data.CanClose || !containsString(previewBody.Data.BlockingReasons, "NON_ZERO_BALANCE") {
+		t.Fatalf("expected positive balance alone to block close, got %+v", previewBody.Data)
+	}
+
+	closeRes := postSettlementJSON(t, server, "/api/v1/collaborators/"+collaborator.Data.ID+"/close", map[string]any{
+		"requestId":     "close-positive-balance-test-001",
+		"reasonCode":    "END_OF_JOURNEY_SETTLEMENT",
+		"reasonText":    "Attempt to close before the positive balance is settled",
+		"effectiveDate": "2026-06-21",
+		"confirm":       true,
+	})
+	defer closeRes.Body.Close()
+	if closeRes.StatusCode != http.StatusConflict {
+		t.Fatalf("expected non-zero balance close conflict %d, got %d", http.StatusConflict, closeRes.StatusCode)
+	}
+
+	detail := getJSON(t, server, collaboratorsURL+collaborator.Data.ID)
+	defer detail.Body.Close()
+	if detail.StatusCode != http.StatusOK {
+		t.Fatalf("expected Journey to remain open after rejected close, got %d", detail.StatusCode)
+	}
+	var detailBody apiCollaboratorResponse
+	decodeJSON(t, detail, &detailBody)
+	if detailBody.Data.ClosedAt != "" || detailBody.Data.StatusCode == "FINISHED" {
+		t.Fatalf("expected Journey to remain open after rejected close, got %+v", detailBody.Data)
 	}
 }
 
@@ -1323,6 +1414,21 @@ func TestCloseJourneyRemovesCollaboratorFromDefaultList(t *testing.T) {
 		var body apiErrorResponse
 		decodeJSON(t, closeRes, &body)
 		t.Fatalf("expected close journey status %d, got %d with error %+v", http.StatusOK, closeRes.StatusCode, body.Error)
+	}
+	var closeBody struct {
+		Data struct {
+			Settlement struct {
+				BRLAmount      float64 `json:"brlAmount"`
+				GoldGramAmount float64 `json:"goldGramAmount"`
+			} `json:"settlement"`
+			LedgerEntries []struct {
+				ID string `json:"id"`
+			} `json:"ledgerEntries"`
+		} `json:"data"`
+	}
+	decodeJSON(t, closeRes, &closeBody)
+	if closeBody.Data.Settlement.BRLAmount != 0 || closeBody.Data.Settlement.GoldGramAmount != 0 || len(closeBody.Data.LedgerEntries) != 0 {
+		t.Fatalf("Close Journey must not post settlement Ledger Entries, got %+v", closeBody.Data)
 	}
 
 	after := getJSON(t, server, collaboratorsURL)

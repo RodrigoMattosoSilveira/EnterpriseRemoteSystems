@@ -25,8 +25,8 @@ export function logout(): Promise<void> {
   return apiFetch<void>("/auth/logout", { method: "POST" });
 }
 
-export function loadAuthSession(): Promise<AuthSession> {
-  return apiFetch<AuthSession>("/auth/session", { cache: "no-store" });
+export function loadAuthSession(): Promise<AuthSession | null> {
+  return apiFetch<AuthSession | null>("/auth/session", { cache: "no-store" });
 }
 
 export function loadAuthSelfServiceHome(): Promise<AuthSelfServiceHome> {

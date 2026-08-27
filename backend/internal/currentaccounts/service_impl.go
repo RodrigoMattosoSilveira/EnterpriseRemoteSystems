@@ -2,6 +2,7 @@ package currentaccounts
 
 import (
 	"context"
+	"errors"
 	"math"
 	"strings"
 
@@ -9,6 +10,7 @@ import (
 )
 
 const (
+	balanceZeroTolerance                 = 0.000000001
 	defaultPageSize                      = 50
 	maxPageSize                          = 200
 	ledgerSourceTypeWorkPeriodAssignment = "WORK_PERIOD_ASSIGNMENT"
@@ -56,6 +58,7 @@ func (s *service) SettlementPreview(ctx context.Context, collaboratorID string) 
 		OutstandingReceipts: outstandingReceipts,
 		BlockingReasons:     []string{},
 	}
+	hasNonZeroBalance := len(balances) > 0
 	for _, balance := range balances {
 		switch balance.ValueUnitCode {
 		case "BRL":
@@ -65,11 +68,14 @@ func (s *service) SettlementPreview(ctx context.Context, collaboratorID string) 
 		}
 	}
 
+	preview.BRLBalance = normalizedZero(preview.BRLBalance)
+	preview.GoldGramBalance = normalizedZero(preview.GoldGramBalance)
+
 	if strings.EqualFold(collaborator.Status.Code, "FINISHED") || collaborator.ClosedAt != nil {
 		preview.BlockingReasons = append(preview.BlockingReasons, SettlementBlockerJourneyAlreadyClosed)
 	}
-	if preview.BRLBalance < -0.00000001 || preview.GoldGramBalance < -0.00000001 {
-		preview.BlockingReasons = append(preview.BlockingReasons, SettlementBlockerNegativeBalance)
+	if hasNonZeroBalance {
+		preview.BlockingReasons = append(preview.BlockingReasons, SettlementBlockerNonZeroBalance)
 	}
 	if pendingAccrualItems > 0 {
 		preview.BlockingReasons = append(preview.BlockingReasons, SettlementBlockerPendingAccruals)
@@ -78,14 +84,12 @@ func (s *service) SettlementPreview(ctx context.Context, collaboratorID string) 
 		preview.BlockingReasons = append(preview.BlockingReasons, SettlementBlockerOutstandingReceipts)
 	}
 
-	preview.BRLBalance = normalizedZero(preview.BRLBalance)
-	preview.GoldGramBalance = normalizedZero(preview.GoldGramBalance)
 	preview.CanClose = len(preview.BlockingReasons) == 0
 	return preview, nil
 }
 
 func normalizedZero(value float64) float64 {
-	if math.Abs(value) <= 0.00000001 {
+	if math.Abs(value) <= balanceZeroTolerance {
 		return 0
 	}
 	return value
@@ -102,13 +106,21 @@ func (s *service) GetDetail(ctx context.Context, collaboratorID string, filter L
 	if err != nil {
 		return nil, err
 	}
-	entries, total, err := s.repo.ListEntries(ctx, collaboratorID, normalized)
+	personID, err := financialOwnerPersonID(*collaborator)
 	if err != nil {
 		return nil, err
 	}
-	balances, err := s.repo.ListBalances(ctx, collaboratorID)
+	entries, total, err := s.repo.ListPersonEntries(ctx, personID, normalized)
 	if err != nil {
 		return nil, err
+	}
+	balances, err := s.repo.ListPersonBalances(ctx, personID)
+	if err != nil {
+		return nil, err
+	}
+	for i := range balances {
+		balances[i].CollaboratorID = collaborator.ID
+		balances[i].CollaboratorLabel = globalPersonLabel(collaborator.Membership.Person)
 	}
 
 	dtos, err := s.ledgerEntryDTOsWithSourceDetails(ctx, entries)
@@ -116,9 +128,12 @@ func (s *service) GetDetail(ctx context.Context, collaboratorID string, filter L
 		return nil, err
 	}
 
+	personLabel := globalPersonLabel(collaborator.Membership.Person)
 	return &CurrentAccountDetailDTO{
+		PersonID:          personID,
+		PersonLabel:       personLabel,
 		CollaboratorID:    collaborator.ID,
-		CollaboratorLabel: collaboratorLabel(collaborator.Person),
+		CollaboratorLabel: personLabel,
 		Balances:          ToBalanceDTOList(balances),
 		LedgerEntries: LedgerEntryListResult{
 			Items:    dtos,
@@ -131,7 +146,12 @@ func (s *service) GetDetail(ctx context.Context, collaboratorID string, filter L
 
 func (s *service) ListEntries(ctx context.Context, collaboratorID string, filter LedgerEntryListFilter) (*LedgerEntryListResult, error) {
 	collaboratorID = strings.TrimSpace(collaboratorID)
-	if _, err := s.repo.FindCollaboratorByID(ctx, collaboratorID); err != nil {
+	collaborator, err := s.repo.FindCollaboratorByID(ctx, collaboratorID)
+	if err != nil {
+		return nil, err
+	}
+	personID, err := financialOwnerPersonID(*collaborator)
+	if err != nil {
 		return nil, err
 	}
 
@@ -139,7 +159,7 @@ func (s *service) ListEntries(ctx context.Context, collaboratorID string, filter
 	if err != nil {
 		return nil, err
 	}
-	rows, total, err := s.repo.ListEntries(ctx, collaboratorID, normalized)
+	rows, total, err := s.repo.ListPersonEntries(ctx, personID, normalized)
 	if err != nil {
 		return nil, err
 	}
@@ -196,14 +216,31 @@ func workPeriodAssignmentSourceLabel(detail WorkPeriodAssignmentSourceDetail) st
 
 func (s *service) ListBalances(ctx context.Context, collaboratorID string) ([]CurrentAccountBalanceDTO, error) {
 	collaboratorID = strings.TrimSpace(collaboratorID)
-	if _, err := s.repo.FindCollaboratorByID(ctx, collaboratorID); err != nil {
-		return nil, err
-	}
-	rows, err := s.repo.ListBalances(ctx, collaboratorID)
+	collaborator, err := s.repo.FindCollaboratorByID(ctx, collaboratorID)
 	if err != nil {
 		return nil, err
 	}
+	personID, err := financialOwnerPersonID(*collaborator)
+	if err != nil {
+		return nil, err
+	}
+	rows, err := s.repo.ListPersonBalances(ctx, personID)
+	if err != nil {
+		return nil, err
+	}
+	for i := range rows {
+		rows[i].CollaboratorID = collaborator.ID
+		rows[i].CollaboratorLabel = globalPersonLabel(collaborator.Membership.Person)
+	}
 	return ToBalanceDTOList(rows), nil
+}
+
+func financialOwnerPersonID(collaborator db.CollaboratorJourney) (string, error) {
+	personID := strings.TrimSpace(collaborator.Membership.PersonID)
+	if personID == "" {
+		return "", errors.New("collaborator journey must resolve to a Person–Tenant Membership financial owner")
+	}
+	return personID, nil
 }
 
 func normalizeListFilter(filter LedgerEntryListFilter) (normalizedLedgerEntryListFilter, error) {

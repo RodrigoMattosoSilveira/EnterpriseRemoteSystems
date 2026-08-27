@@ -147,6 +147,7 @@ func (r *gormRepository) Update(ctx context.Context, expense *db.Expense) error 
 			Model(&db.Expense{}).
 			Where("id = ? AND tenant_id = ?", expense.ID, tenantctx.TenantID(ctx)).
 			Updates(map[string]any{
+				"person_id":                expense.PersonID,
 				"collaborator_id":          expense.CollaboratorID,
 				"expense_category_id":      expense.ExpenseCategoryID,
 				"value_unit_id":            expense.ValueUnitID,
@@ -194,6 +195,72 @@ func (r *gormRepository) Update(ctx context.Context, expense *db.Expense) error 
 	})
 }
 
+func (r *gormRepository) Cancel(ctx context.Context, expense *db.Expense, actorUserID, reason string) error {
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		previous, err := latestExpenseLedgerEntry(tx, expense.TenantID, expense.ID)
+		if err != nil {
+			return err
+		}
+
+		updates := map[string]any{
+			"active":              false,
+			"cancelled_at":        expense.CancelledAt,
+			"cancelled_by":        strings.TrimSpace(actorUserID),
+			"cancellation_reason": strings.TrimSpace(reason),
+			"updated_at":          expense.UpdatedAt,
+		}
+		result := tx.
+			Model(&db.Expense{}).
+			Where("id = ? AND tenant_id = ? AND active = ?", expense.ID, tenantctx.TenantID(ctx), true).
+			Updates(updates)
+		if result.Error != nil {
+			return result.Error
+		}
+		if result.RowsAffected != 1 {
+			return gorm.ErrRecordNotFound
+		}
+
+		if previous == nil {
+			return nil
+		}
+
+		now := expense.UpdatedAt
+		if now.IsZero() {
+			now = time.Now().UTC()
+		}
+		reversal := reversalLedgerEntry(*previous, now, "Expense cancellation: "+strings.TrimSpace(reason))
+		if err := tx.Create(&reversal).Error; err != nil {
+			return err
+		}
+
+		debitEntryIDs := tx.
+			Model(&db.LedgerEntry{}).
+			Select("id").
+			Where(
+				"tenant_id = ? AND direction = ? AND correction_type IN (?, ?) AND ((source_type = ? AND source_id = ?) OR (source_type = ? AND source_id LIKE ?))",
+				expense.TenantID,
+				ledgerDirectionDebit,
+				ledgerCorrectionTypeOriginal,
+				ledgerCorrectionTypeReplacement,
+				ledgerSourceTypeExpense,
+				expense.ID,
+				ledgerSourceTypeExpenseReplace,
+				expense.ID+":%",
+			)
+
+		return tx.
+			Model(&db.LedgerReceipt{}).
+			Where("tenant_id = ? AND ledger_entry_id IN (?) AND status NOT IN ?", expense.TenantID, debitEntryIDs, []string{"RETURNED", "CANCELLED"}).
+			Updates(map[string]any{
+				"status":              "CANCELLED",
+				"cancelled_at":        now,
+				"cancelled_by":        strings.TrimSpace(actorUserID),
+				"cancellation_reason": strings.TrimSpace(reason),
+				"updated_at":          now,
+			}).Error
+	})
+}
+
 func (r *gormRepository) FindByID(ctx context.Context, id string) (*db.Expense, error) {
 	var row db.Expense
 	err := r.db.WithContext(ctx).
@@ -208,6 +275,15 @@ func (r *gormRepository) FindByID(ctx context.Context, id string) (*db.Expense, 
 		return nil, err
 	}
 	return &row, nil
+}
+
+func (r *gormRepository) ExistsRecreationFromExpenseID(ctx context.Context, sourceExpenseID string) (bool, error) {
+	var count int64
+	err := r.db.WithContext(ctx).
+		Model(&db.Expense{}).
+		Where("tenant_id = ? AND recreated_from_expense_id = ?", tenantctx.TenantID(ctx), strings.TrimSpace(sourceExpenseID)).
+		Count(&count).Error
+	return count > 0, err
 }
 
 func (r *gormRepository) FindFinancialPostingByExpenseID(ctx context.Context, expenseID string) (*db.LedgerEntry, error) {
@@ -288,6 +364,7 @@ func (r *gormRepository) FindCollaboratorByID(ctx context.Context, collaboratorI
 	var row db.CollaboratorJourney
 	err := r.db.WithContext(ctx).
 		Preload("Status").
+		Preload("Membership").
 		First(&row, "id = ? AND tenant_id = ?", collaboratorID, tenantctx.TenantID(ctx)).Error
 	if err != nil {
 		return nil, err
@@ -402,6 +479,7 @@ func expenseLedgerEntry(expense *db.Expense) *db.LedgerEntry {
 			UpdatedAt: expense.UpdatedAt,
 		},
 		TenantID:       expense.TenantID,
+		PersonID:       expense.PersonID,
 		CollaboratorID: expense.CollaboratorID,
 		ValueUnitID:    expense.ValueUnitID,
 		EntryType:      ledgerEntryTypeExpenseDeduction,
@@ -424,6 +502,7 @@ func reversalLedgerEntry(original db.LedgerEntry, now time.Time, reason string) 
 			UpdatedAt: now,
 		},
 		TenantID:         original.TenantID,
+		PersonID:         original.PersonID,
 		CollaboratorID:   original.CollaboratorID,
 		ValueUnitID:      original.ValueUnitID,
 		EntryType:        original.EntryType,
@@ -453,6 +532,7 @@ func replacementExpenseLedgerEntry(expense *db.Expense, original *db.LedgerEntry
 			UpdatedAt: now,
 		},
 		TenantID:         expense.TenantID,
+		PersonID:         expense.PersonID,
 		CollaboratorID:   expense.CollaboratorID,
 		ValueUnitID:      expense.ValueUnitID,
 		EntryType:        ledgerEntryTypeExpenseDeduction,

@@ -1,14 +1,14 @@
-import { useMemo, useState, type FormEvent } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { ApiErrorPanel } from "../../components/ApiErrorPanel";
 import { JourneyDaysRemaining } from "../../components/JourneyDaysRemaining";
 import type { Collaborator } from "../../types/collaborators";
 import type { CreateExpenseInput } from "../../types/expenses";
 import type { PriceListItem, PriceListItemType } from "../../types/priceList";
-import { useCollaboratorSearch } from "../collaborators/useCollaborators";
+import { useCollaborator, useCollaboratorSearch } from "../collaborators/useCollaborators";
 import { useLatestGoldPrice } from "../gold-prices/useGoldPrices";
 import { usePriceListItems } from "../price-list/usePriceList";
-import { useCreateExpense } from "./useExpenses";
+import { useCreateExpense, useExpense } from "./useExpenses";
 import { CurrentAndFutureEarningsModal } from "./CurrentAndFutureEarningsModal";
 
 type ExpenseCurrencyCode = "BRL" | "GOLD_GRAM";
@@ -36,6 +36,13 @@ const initialForm: FormState = {
 
 export function CreateExpensePage() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const copyFromExpenseId = searchParams.get("copyFrom")?.trim() ?? "";
+  const sourceExpenseQuery = useExpense(copyFromExpenseId);
+  const sourceExpense = sourceExpenseQuery.data;
+  const sourceCollaboratorQuery = useCollaborator(
+    sourceExpense?.collaboratorId ?? "",
+  );
   const priceListItemsQuery = usePriceListItems();
   const latestGoldPriceQuery = useLatestGoldPrice();
   const createMutation = useCreateExpenseWithPriceList();
@@ -46,7 +53,44 @@ export function CreateExpensePage() {
     useState<Collaborator | null>(null);
   const [clientValidationError, setClientValidationError] = useState("");
   const [showEarningsModal, setShowEarningsModal] = useState(false);
+  const prefilledExpenseRef = useRef("");
   const collaboratorsQuery = useCollaboratorSearch(collaboratorSearch);
+
+  useEffect(() => {
+    if (
+      !copyFromExpenseId ||
+      !sourceExpense ||
+      !sourceCollaboratorQuery.data ||
+      prefilledExpenseRef.current === copyFromExpenseId
+    ) {
+      return;
+    }
+    if (sourceExpense.active !== false || !sourceExpense.cancelledAt) {
+      return;
+    }
+
+    const itemType: ExpenseItemType =
+      sourceExpense.itemType === "ADMINISTRATIVE" ? "ADMINISTRATIVE" : "CANTEEN";
+    const currencyCode: ExpenseCurrencyCode =
+      sourceExpense.currencyCode === "GOLD_GRAM" ? "GOLD_GRAM" : "BRL";
+
+    setSelectedCollaborator(sourceCollaboratorQuery.data);
+    setCollaboratorSearch("");
+    setForm({
+      collaboratorId: sourceExpense.collaboratorId,
+      itemType,
+      priceListItemId: sourceExpense.priceListItemId ?? "",
+      currencyCode,
+      quantity: String(sourceExpense.quantity ?? 1),
+      expenseDate: sourceExpense.expenseDate || todayISODate(),
+      description: sourceExpense.description ?? "",
+    });
+    prefilledExpenseRef.current = copyFromExpenseId;
+  }, [
+    copyFromExpenseId,
+    sourceCollaboratorQuery.data,
+    sourceExpense,
+  ]);
 
   const activeCollaborators = useMemo(
     () =>
@@ -81,8 +125,14 @@ export function CreateExpensePage() {
     selectedGoldPrice?.brlPerGram,
   );
 
-  const isLoading = priceListItemsQuery.isLoading;
-  const loadError = priceListItemsQuery.error;
+  const isLoading =
+    priceListItemsQuery.isLoading ||
+    (Boolean(copyFromExpenseId) &&
+      (sourceExpenseQuery.isLoading || sourceCollaboratorQuery.isLoading));
+  const loadError =
+    priceListItemsQuery.error ||
+    sourceExpenseQuery.error ||
+    sourceCollaboratorQuery.error;
   const hasMissingSetup = priceListItems.length === 0;
 
   const selectCollaborator = (collaborator: Collaborator) => {
@@ -140,6 +190,10 @@ export function CreateExpensePage() {
 
     const input: CreateExpenseInput = {
       collaboratorId: form.collaboratorId,
+      recreatedFromExpenseId:
+        sourceExpense?.cancelledAt && sourceExpense.active === false
+          ? sourceExpense.id
+          : undefined,
       priceListItemId: form.priceListItemId,
       currencyCode: form.currencyCode,
       quantity,
@@ -149,6 +203,10 @@ export function CreateExpensePage() {
 
     createMutation.mutate(input, {
       onSuccess: (expense) => {
+        if (copyFromExpenseId) {
+          navigate(`/expenses/${expense.id}`);
+          return;
+        }
         navigate("/expenses", {
           state: {
             flash: `Expense created for ${expense.collaboratorLabel || "Collaborator"}.`,
@@ -172,16 +230,45 @@ export function CreateExpensePage() {
             <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
               Expense deduction
             </p>
-            <h1 className="text-2xl font-bold text-gray-950">New Expense</h1>
+            <h1 className="text-2xl font-bold text-gray-950">
+              {copyFromExpenseId ? "Recreate Expense" : "New Expense"}
+            </h1>
             <p className="mt-1 text-sm text-gray-500">
-              Record item-based expenses from Canteen or Administrative price
-              lists.
+              {copyFromExpenseId
+                ? "Review the cancelled Expense data and change only the incorrect fields before creating the replacement."
+                : "Record item-based expenses from Canteen or Administrative price lists."}
             </p>
           </div>
         </div>
       </header>
 
       <section className="mx-auto max-w-3xl space-y-4 p-4">
+        {copyFromExpenseId &&
+          sourceExpense &&
+          sourceExpense.active === false &&
+          sourceExpense.cancelledAt && (
+            <section className="rounded-2xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-950">
+              <p className="font-semibold">Replacement for cancelled Expense</p>
+              <p className="mt-1">
+                Fields were copied from the cancelled Expense. Correct the wrong value(s), review the calculation preview, then create the replacement.
+              </p>
+              <Link
+                className="mt-2 inline-block font-semibold underline"
+                to={`/expenses/${sourceExpense.id}`}
+              >
+                Open cancelled source
+              </Link>
+            </section>
+          )}
+
+        {copyFromExpenseId &&
+          sourceExpense &&
+          (sourceExpense.active !== false || !sourceExpense.cancelledAt) && (
+            <section className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm font-medium text-red-800">
+              The source Expense must be cancelled before it can be recreated.
+            </section>
+          )}
+
         {isLoading && (
           <div className="rounded-2xl border bg-white p-5 shadow-sm">
             Loading expense setup data...
@@ -444,7 +531,11 @@ export function CreateExpensePage() {
                 type="submit"
                 disabled={createMutation.isPending}
               >
-                {createMutation.isPending ? "Creating..." : "Create Expense"}
+                {createMutation.isPending
+                  ? "Creating..."
+                  : copyFromExpenseId
+                    ? "Create Replacement Expense"
+                    : "Create Expense"}
               </button>
             </div>
           </form>

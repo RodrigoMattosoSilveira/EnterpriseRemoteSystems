@@ -15,44 +15,53 @@ import type { AuthzActor } from "../../types/authz";
 import type { SettlementPreview, SecondApprovalInput } from "../../types/settlements";
 import { useCurrentAuthzActor, useTenantAuthzActors } from "../authz/useAuthzAdmin";
 import { useSecondPersonApprovalPolicy } from "../current-accounts/useSecondPersonApprovalPolicy";
+import { useExtendCollaboratorJourney } from "./useCollaborators";
 import {
   useCloseJourney,
+  useFinalCollaboratorPayment,
+  useFinalTenantPayment,
   usePartialPayout,
   useSettlementPreview,
   useZeroGold,
 } from "./useSettlements";
 
-type Action = "ZERO_GOLD" | "PARTIAL_PAYOUT" | "CLOSE_JOURNEY";
+type SensitiveAction = "ZERO_GOLD" | "PARTIAL_PAYOUT" | "FINAL_TENANT_PAYMENT" | "FINAL_COLLABORATOR_PAYMENT" | "CLOSE_JOURNEY";
+type Action = SensitiveAction | "EXTEND_JOURNEY";
 
 const settlementReasonOptions: Array<{
   value: string;
   label: string;
-  actions: Action[];
+  actions: SensitiveAction[];
 }> = [
   {
     value: "GOLD_BALANCE_PAYOUT",
     label: "Gold balance payout",
-    actions: ["ZERO_GOLD"] satisfies Action[],
+    actions: ["ZERO_GOLD"] satisfies SensitiveAction[],
   },
   {
     value: "COLLABORATOR_REQUESTED_PAYOUT",
     label: "Collaborator requested payout",
-    actions: ["PARTIAL_PAYOUT"] satisfies Action[],
+    actions: ["PARTIAL_PAYOUT"] satisfies SensitiveAction[],
   },
   {
     value: "SCHEDULED_PAYOUT",
     label: "Scheduled payout",
-    actions: ["PARTIAL_PAYOUT"] satisfies Action[],
+    actions: ["PARTIAL_PAYOUT"] satisfies SensitiveAction[],
+  },
+  {
+    value: "FINAL_TENANT_PAYMENT",
+    label: "Final Tenant payment",
+    actions: ["FINAL_TENANT_PAYMENT"] satisfies SensitiveAction[],
+  },
+  {
+    value: "FINAL_COLLABORATOR_PAYMENT",
+    label: "Final Collaborator repayment",
+    actions: ["FINAL_COLLABORATOR_PAYMENT"] satisfies SensitiveAction[],
   },
   {
     value: "END_OF_JOURNEY_SETTLEMENT",
-    label: "End-of-journey settlement",
-    actions: ["CLOSE_JOURNEY"] satisfies Action[],
-  },
-  {
-    value: "FINAL_BALANCE_PAYOUT",
-    label: "Final balance payout",
-    actions: ["CLOSE_JOURNEY"] satisfies Action[],
+    label: "End-of-journey closure",
+    actions: ["CLOSE_JOURNEY"] satisfies SensitiveAction[],
   },
 ];
 
@@ -80,7 +89,7 @@ export function JourneySettlementPanel({
             Journey Settlement
           </h2>
           <p className="mt-1 text-sm text-gray-500">
-            Preview balances, pay outstanding credits, or close the Journey.
+            Preview Journey balances, settle them separately, and close only after every value-unit balance is zero.
           </p>
           <JourneyDaysRemaining
             projectedEndDate={projectedEndDate}
@@ -124,7 +133,7 @@ export function JourneySettlementPanel({
               target="_blank"
               to={`/ledger-entries/${entryId}/receipt`}
             >
-              Print receipt{receiptEntryIds.length > 1 ? ` ${index + 1}` : ""}
+              Open receipt{receiptEntryIds.length > 1 ? ` ${index + 1}` : ""}
             </Link>
           ))}
         </div>
@@ -133,31 +142,32 @@ export function JourneySettlementPanel({
       {preview.data ? (
         <>
           <PreviewSummary preview={preview.data} />
-          <div className="mt-5 flex flex-wrap gap-3">
-            <button
-              type="button"
-              className="rounded-xl bg-amber-600 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
-              disabled={preview.data.goldGramBalance <= 0}
-              onClick={() => setAction("ZERO_GOLD")}
-            >
-              Zero Gold
-            </button>
-            <button
-              type="button"
-              className="rounded-xl bg-gray-900 px-4 py-2 text-sm font-semibold text-white"
-              onClick={() => setAction("PARTIAL_PAYOUT")}
-            >
-              Partial Payout
-            </button>
-            <button
-              type="button"
-              className="rounded-xl border border-red-300 px-4 py-2 text-sm font-semibold text-red-700 disabled:cursor-not-allowed disabled:opacity-50"
-              disabled={!preview.data.canClose}
-              onClick={() => setAction("CLOSE_JOURNEY")}
-            >
-              Close Journey
-            </button>
-          </div>
+          <SettlementWorkflow preview={preview.data} onAction={setAction} />
+          <details className="mt-5 rounded-xl border border-gray-200 bg-gray-50 p-4">
+            <summary className="cursor-pointer text-sm font-semibold text-gray-700">
+              Other payout actions
+            </summary>
+            <p className="mt-2 text-xs text-gray-500">
+              These operational payouts remain available during an open Journey, but they are not substitutes for the direction-aware final settlement required at Journey end.
+            </p>
+            <div className="mt-3 flex flex-wrap gap-3">
+              <button
+                type="button"
+                className="rounded-xl bg-amber-600 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
+                disabled={preview.data.goldGramBalance <= 0}
+                onClick={() => setAction("ZERO_GOLD")}
+              >
+                Zero Gold
+              </button>
+              <button
+                type="button"
+                className="rounded-xl bg-gray-900 px-4 py-2 text-sm font-semibold text-white"
+                onClick={() => setAction("PARTIAL_PAYOUT")}
+              >
+                Partial Payout
+              </button>
+            </div>
+          </details>
           <p className="mt-4 text-xs text-gray-500">
             Settlement actions use the current authorization actor selected in
             Authz Admin. Operators should not handle backend settlement secrets.
@@ -165,7 +175,18 @@ export function JourneySettlementPanel({
         </>
       ) : null}
 
-      {action && preview.data ? (
+      {action === "EXTEND_JOURNEY" ? (
+        <JourneyExtensionPanel
+          collaboratorId={collaboratorId}
+          projectedEndDate={projectedEndDate}
+          onClose={() => setAction(null)}
+          onSuccess={(text) => {
+            setMessage(text);
+            setReceiptEntryIds([]);
+            setAction(null);
+          }}
+        />
+      ) : action && preview.data ? (
         <SettlementActionPanel
           action={action}
           collaboratorId={collaboratorId}
@@ -183,7 +204,234 @@ export function JourneySettlementPanel({
   );
 }
 
+function SettlementWorkflow({
+  preview,
+  onAction,
+}: {
+  preview: SettlementPreview;
+  onAction: (action: Action) => void;
+}) {
+  const tenantOwesCollaborator =
+    preview.brlBalance > 0 || preview.goldGramBalance > 0;
+  const collaboratorOwesTenant =
+    preview.brlBalance < 0 || preview.goldGramBalance < 0;
+  const balancesZero = !tenantOwesCollaborator && !collaboratorOwesTenant;
+
+  return (
+    <div className="mt-5 grid gap-4">
+      {tenantOwesCollaborator ? (
+        <section className="rounded-2xl border border-green-200 bg-green-50 p-4">
+          <h3 className="font-bold text-green-950">Tenant owes Collaborator</h3>
+          <p className="mt-1 text-sm text-green-900">
+            Post the exact positive Journey balance as the final Tenant payment. The generated receipt must then be accepted in-app by the Collaborator.
+          </p>
+          <p className="mt-2 text-sm font-semibold text-green-950">
+            {positiveBalanceSummary(preview)}
+          </p>
+          <button
+            type="button"
+            className="mt-3 rounded-xl bg-green-700 px-4 py-2 text-sm font-semibold text-white"
+            onClick={() => onAction("FINAL_TENANT_PAYMENT")}
+          >
+            Settle Tenant Owed Balance
+          </button>
+        </section>
+      ) : null}
+
+      {collaboratorOwesTenant ? (
+        <section className="rounded-2xl border border-blue-200 bg-blue-50 p-4">
+          <h3 className="font-bold text-blue-950">Collaborator owes Tenant</h3>
+          <p className="mt-1 text-sm text-blue-900">
+            Either extend the open Journey to give the Collaborator more time to earn the amount owed, or record the full repayment already received by the Tenant.
+          </p>
+          <p className="mt-2 text-sm font-semibold text-blue-950">
+            {negativeBalanceSummary(preview)}
+          </p>
+          <div className="mt-3 flex flex-wrap gap-3">
+            <button
+              type="button"
+              className="rounded-xl border border-blue-300 bg-white px-4 py-2 text-sm font-semibold text-blue-800"
+              onClick={() => onAction("EXTEND_JOURNEY")}
+            >
+              Extend Journey
+            </button>
+            <button
+              type="button"
+              className="rounded-xl bg-blue-700 px-4 py-2 text-sm font-semibold text-white"
+              onClick={() => onAction("FINAL_COLLABORATOR_PAYMENT")}
+            >
+              Record Collaborator Payment
+            </button>
+          </div>
+        </section>
+      ) : null}
+
+      {balancesZero && preview.outstandingReceipts > 0 ? (
+        <section className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
+          <h3 className="font-bold text-amber-950">
+            Balances settled — receipt acceptance pending
+          </h3>
+          <p className="mt-1 text-sm text-amber-900">
+            The Journey balances are zero, but {preview.outstandingReceipts} final-settlement receipt{preview.outstandingReceipts === 1 ? " remains" : "s remain"} outstanding. The designated accepting party must complete in-app acceptance before closure.
+          </p>
+          <Link
+            className="mt-3 inline-flex text-sm font-semibold text-amber-950 underline"
+            to="/receipts/outstanding"
+          >
+            Review outstanding receipts
+          </Link>
+        </section>
+      ) : null}
+
+      {preview.pendingAccrualItems > 0 ? (
+        <section className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
+          <h3 className="font-bold text-amber-950">Pending earnings remain</h3>
+          <p className="mt-1 text-sm text-amber-900">
+            Post or resolve {preview.pendingAccrualItems} pending accrual item{preview.pendingAccrualItems === 1 ? "" : "s"} before final closure.
+          </p>
+        </section>
+      ) : null}
+
+      <section className={`rounded-2xl border p-4 ${preview.canClose ? "border-emerald-300 bg-emerald-50" : "border-gray-200 bg-gray-50"}`}>
+        <h3 className={`font-bold ${preview.canClose ? "text-emerald-950" : "text-gray-900"}`}>
+          {preview.canClose ? "Ready to close Journey" : "Journey closure is blocked"}
+        </h3>
+        <p className={`mt-1 text-sm ${preview.canClose ? "text-emerald-900" : "text-gray-600"}`}>
+          {preview.canClose
+            ? "Every Journey balance is zero, required receipts are complete, and no pending accrual blockers remain."
+            : "Resolve every blocking condition above before closing. Close Journey never posts or converts a settlement payment."}
+        </p>
+        <button
+          type="button"
+          className="mt-3 rounded-xl border border-red-300 bg-white px-4 py-2 text-sm font-semibold text-red-700 disabled:cursor-not-allowed disabled:opacity-50"
+          disabled={!preview.canClose}
+          onClick={() => onAction("CLOSE_JOURNEY")}
+        >
+          Close Journey
+        </button>
+      </section>
+    </div>
+  );
+}
+
+function JourneyExtensionPanel({
+  collaboratorId,
+  projectedEndDate,
+  onClose,
+  onSuccess,
+}: {
+  collaboratorId: string;
+  projectedEndDate: string;
+  onClose: () => void;
+  onSuccess: (message: string) => void;
+}) {
+  const extendJourney = useExtendCollaboratorJourney(collaboratorId);
+  const [additionalDays, setAdditionalDays] = useState("7");
+  const parsedDays = Number(additionalDays);
+  const validDays = Number.isInteger(parsedDays) && parsedDays > 0;
+  const nextProjectedEndDate = validDays
+    ? addDaysToISODate(projectedEndDate, parsedDays)
+    : "";
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) =>
+      event.key === "Escape" && onClose();
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [onClose]);
+
+  async function submit(event: React.FormEvent) {
+    event.preventDefault();
+    if (!validDays) return;
+    const updated = await extendJourney.mutateAsync({ additionalDays: parsedDays });
+    onSuccess(
+      `Journey extended by ${parsedDays} day${parsedDays === 1 ? "" : "s"}. New projected end date: ${formatDateOnly(updated.projectedEndDate)}.`,
+    );
+  }
+
+  return (
+    <div
+      role="region"
+      aria-labelledby="journey-extension-panel-title"
+      className="mt-5 rounded-2xl border border-blue-200 bg-blue-50 p-4 shadow-inner"
+    >
+      <div className="rounded-2xl bg-white p-5 shadow-sm">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h3 id="journey-extension-panel-title" className="text-lg font-bold text-gray-950">
+              Extend Journey
+            </h3>
+            <p className="mt-1 text-sm text-gray-600">
+              Give the Collaborator more time to earn against the amount owed to the Tenant. Extending the Journey does not post a Ledger Entry and does not settle the current debt.
+            </p>
+          </div>
+          <button type="button" aria-label="Close" className="text-2xl text-gray-500" onClick={onClose}>×</button>
+        </div>
+
+        <form className="mt-5 grid gap-4" onSubmit={submit}>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Summary label="Current projected end" value={formatDateOnly(projectedEndDate)} />
+            <Summary label="New projected end" value={nextProjectedEndDate ? formatDateOnly(nextProjectedEndDate) : "—"} />
+          </div>
+          <Field label="Additional days">
+            <input
+              required
+              className={inputClass}
+              type="number"
+              min="1"
+              step="1"
+              value={additionalDays}
+              onChange={(event) => setAdditionalDays(event.target.value)}
+            />
+          </Field>
+          <p className="rounded-xl bg-blue-50 p-3 text-sm text-blue-900">
+            The extension is added to the Journey's existing cumulative extension. The Journey remains open and the amount owed remains unchanged until later earnings or a recorded Collaborator payment brings the balance to zero.
+          </p>
+          {extendJourney.error ? <ApiErrorPanel error={extendJourney.error} /> : null}
+          <div className="flex flex-wrap gap-3">
+            <button
+              type="submit"
+              disabled={!validDays || extendJourney.isPending}
+              className="rounded-xl bg-blue-700 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {extendJourney.isPending ? "Extending..." : "Confirm Extension"}
+            </button>
+            <button type="button" className="rounded-xl border px-4 py-2 text-sm font-semibold" onClick={onClose}>
+              Cancel
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+function positiveBalanceSummary(preview: SettlementPreview) {
+  const parts: string[] = [];
+  if (preview.brlBalance > 0) parts.push(formatBRL(preview.brlBalance));
+  if (preview.goldGramBalance > 0) parts.push(`${formatGold(preview.goldGramBalance)} g gold`);
+  return `Tenant payment required: ${parts.join(" and ")}.`;
+}
+
+function negativeBalanceSummary(preview: SettlementPreview) {
+  const parts: string[] = [];
+  if (preview.brlBalance < 0) parts.push(formatBRL(Math.abs(preview.brlBalance)));
+  if (preview.goldGramBalance < 0) parts.push(`${formatGold(Math.abs(preview.goldGramBalance))} g gold`);
+  return `Collaborator repayment required: ${parts.join(" and ")}.`;
+}
+
 function PreviewSummary({ preview }: { preview: SettlementPreview }) {
+  const receiptAcceptancePending =
+    preview.brlBalance === 0 &&
+    preview.goldGramBalance === 0 &&
+    preview.outstandingReceipts > 0;
+  const visibleBlockingReasons = preview.blockingReasons.filter((reason) => {
+    if (reason !== "OUTSTANDING_RECEIPTS") return true;
+    // Receipt-only closure blocking already has a dedicated, actionable panel.
+    // Also suppress a stale/inconsistent receipt reason when the count is zero.
+    return preview.outstandingReceipts > 0 && !receiptAcceptancePending;
+  });
+
   return (
     <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
       <Summary label="BRL balance" value={formatBRL(preview.brlBalance)} />
@@ -195,11 +443,15 @@ function PreviewSummary({ preview }: { preview: SettlementPreview }) {
         label="Pending accruals"
         value={String(preview.pendingAccrualItems)}
       />
+      <Summary
+        label="Outstanding receipts"
+        value={String(preview.outstandingReceipts)}
+      />
       <Summary label="Can close" value={preview.canClose ? "Yes" : "No"} />
-      {preview.blockingReasons.length > 0 ? (
+      {visibleBlockingReasons.length > 0 ? (
         <div className="rounded-xl bg-red-50 p-3 text-sm text-red-800 sm:col-span-2 lg:col-span-4">
           <span className="font-semibold">Blocking reasons:</span>{" "}
-          {preview.blockingReasons.map(formatReason).join(", ")}
+          {visibleBlockingReasons.map(formatReason).join(", ")}
         </div>
       ) : null}
     </div>
@@ -225,7 +477,7 @@ function SettlementActionPanel({
   onSuccess,
   onJourneyClosed,
 }: {
-  action: Action;
+  action: SensitiveAction;
   collaboratorId: string;
   preview: SettlementPreview;
   onClose: () => void;
@@ -234,6 +486,8 @@ function SettlementActionPanel({
 }) {
   const zeroGold = useZeroGold(collaboratorId);
   const payout = usePartialPayout(collaboratorId);
+  const finalTenantPayment = useFinalTenantPayment(collaboratorId);
+  const finalCollaboratorPayment = useFinalCollaboratorPayment(collaboratorId);
   const closeJourney = useCloseJourney(collaboratorId, () =>
     onJourneyClosed?.("Journey closed successfully."),
   );
@@ -268,7 +522,11 @@ function SettlementActionPanel({
       ? zeroGold
       : action === "PARTIAL_PAYOUT"
         ? payout
-        : closeJourney;
+        : action === "FINAL_TENANT_PAYMENT"
+          ? finalTenantPayment
+          : action === "FINAL_COLLABORATOR_PAYMENT"
+            ? finalCollaboratorPayment
+            : closeJourney;
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) =>
@@ -311,6 +569,22 @@ function SettlementActionPanel({
       });
       onSuccess(
         "Partial payout posted successfully.",
+        result.ledgerEntries.map((entry) => entry.id),
+      );
+      return;
+    }
+    if (action === "FINAL_TENANT_PAYMENT") {
+      const result = await finalTenantPayment.mutateAsync(base);
+      onSuccess(
+        "Final Tenant payment posted. Collaborator receipt acceptance is required before Journey closure.",
+        result.ledgerEntries.map((entry) => entry.id),
+      );
+      return;
+    }
+    if (action === "FINAL_COLLABORATOR_PAYMENT") {
+      const result = await finalCollaboratorPayment.mutateAsync(base);
+      onSuccess(
+        "Collaborator payment recorded. Tenant receipt acceptance is required before Journey closure.",
         result.ledgerEntries.map((entry) => entry.id),
       );
       return;
@@ -643,28 +917,33 @@ function Field({
 }
 const inputClass =
   "rounded-xl border border-gray-300 px-3 py-2 shadow-sm focus:border-gray-900 focus:outline-none focus:ring-2 focus:ring-gray-900/10";
-function actionTitle(action: Action) {
-  return action === "ZERO_GOLD"
-    ? "Zero Gold Balance"
-    : action === "PARTIAL_PAYOUT"
-      ? "Partial Payout"
-      : "Close Journey";
+function actionTitle(action: SensitiveAction) {
+  if (action === "ZERO_GOLD") return "Zero Gold Balance";
+  if (action === "PARTIAL_PAYOUT") return "Partial Payout";
+  if (action === "FINAL_TENANT_PAYMENT") return "Final Tenant Payment";
+  if (action === "FINAL_COLLABORATOR_PAYMENT") return "Record Collaborator Final Payment";
+  return "Close Journey";
 }
-function actionButton(action: Action) {
-  return action === "ZERO_GOLD"
-    ? "Post Gold Payout"
-    : action === "PARTIAL_PAYOUT"
-      ? "Post Payout"
-      : "Close Journey";
+function actionButton(action: SensitiveAction) {
+  if (action === "ZERO_GOLD") return "Post Gold Payout";
+  if (action === "PARTIAL_PAYOUT") return "Post Payout";
+  if (action === "FINAL_TENANT_PAYMENT") return "Post Final Tenant Payment";
+  if (action === "FINAL_COLLABORATOR_PAYMENT") return "Record Final Collaborator Payment";
+  return "Close Journey";
 }
-function actionDescription(action: Action, preview: SettlementPreview) {
+function actionDescription(action: SensitiveAction, preview: SettlementPreview) {
   if (action === "ZERO_GOLD")
     return `Pay the full positive gold balance of ${formatGold(preview.goldGramBalance)} g.`;
   if (action === "PARTIAL_PAYOUT")
     return "Pay part of the available BRL and/or gold balance.";
-  return "Pay all remaining positive balances and mark this Journey finished.";
+  if (action === "FINAL_TENANT_PAYMENT")
+    return "Post the complete positive BRL and/or gold Journey balance owed by the Tenant. The Collaborator must accept each generated receipt in-app before closure.";
+  if (action === "FINAL_COLLABORATOR_PAYMENT")
+    return "Record the complete negative BRL and/or gold Journey balance paid by the Collaborator to the Tenant. A Tenant Administrator must accept each generated receipt in-app before closure.";
+  return "Close this Journey only after every Journey balance is zero and all other blockers are cleared. Closing does not post a payment.";
 }
 function formatReason(value: string) {
+  if (value === "NON_ZERO_BALANCE") return "non-zero balance";
   return value.toLowerCase().replaceAll("_", " ");
 }
 function formatBRL(value: number) {
@@ -689,6 +968,21 @@ function parseGoldInputAmount(value: string) {
   if (!Number.isFinite(parsed)) return 0;
   return Math.round(parsed * 100) / 100;
 }
+function addDaysToISODate(value: string, days: number) {
+  const date = new Date(`${value.slice(0, 10)}T00:00:00Z`);
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
+function formatDateOnly(value: string) {
+  const normalized = value.slice(0, 10);
+  const date = new Date(`${normalized}T00:00:00Z`);
+  return new Intl.DateTimeFormat(undefined, {
+    dateStyle: "medium",
+    timeZone: "UTC",
+  }).format(date);
+}
+
 function formatDateTime(value: string) {
   return new Intl.DateTimeFormat(undefined, {
     dateStyle: "medium",

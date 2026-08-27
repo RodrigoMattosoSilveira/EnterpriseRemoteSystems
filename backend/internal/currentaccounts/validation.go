@@ -227,3 +227,29 @@ func ValidateReceiptBackfillRequest(req ReceiptBackfillRequest, authorizedBy str
 	}
 	return nil
 }
+
+func ValidateFinalSettlementRequest(req FinalSettlementRequest, authorizedBy string) error {
+	fields := map[string]string{}
+	if strings.TrimSpace(authorizedBy) == "" {
+		fields["authorizedBy"] = "Required"
+	}
+	if strings.TrimSpace(req.RequestID) == "" {
+		fields["requestId"] = "Required"
+	}
+	validateCorrectionReason(fields, req.CorrectionReasonRequest)
+	validateOptionalSecondApproval(fields, req.CorrectionReasonRequest, authorizedBy)
+	if _, err := parseDate(req.EffectiveDate); err != nil {
+		fields["effectiveDate"] = "Effective date must be YYYY-MM-DD"
+	}
+	if len(fields) > 0 {
+		return ValidationError{Fields: fields}
+	}
+	return nil
+}
+
+func ValidateAcceptReceiptRequest(req AcceptReceiptRequest) error {
+	if req.Confirm {
+		return nil
+	}
+	return ValidationError{Fields: map[string]string{"confirm": "Confirmation is required"}}
+}

@@ -45,10 +45,20 @@ type recordingReceiptService struct {
 	replaceEntryBy       string
 	collaboratorTenantID string
 	ledgerEntryTenantID  string
+	printableReceipt     *PrintableReceiptDTO
+	acceptedBy           string
+	acceptedParty        string
 }
 
 func newRecordingReceiptService() *recordingReceiptService {
-	return &recordingReceiptService{collaboratorTenantID: "tenant-a", ledgerEntryTenantID: "tenant-a"}
+	return &recordingReceiptService{
+		collaboratorTenantID: "tenant-a",
+		ledgerEntryTenantID:  "tenant-a",
+		printableReceipt: &PrintableReceiptDTO{
+			ID: "receipt-1", LedgerEntryID: "entry-1", CollaboratorID: "collab-a",
+			ReceiptPurpose: receiptPurposeFinalTenantPayment, AcceptingParty: receiptAcceptingPartyCollaborator, Status: "PENDING_ISSUE",
+		},
+	}
 }
 
 func (s *recordingReceiptService) PrintReceipt(_ context.Context, _ string, printedBy string) (*PrintableReceiptDTO, error) {
@@ -579,6 +589,120 @@ func TestCurrentAccountHandlerEnforcesSettlementTenantOwnership(t *testing.T) {
 	}
 }
 
+func TestSelfPrintableReceiptRequiresOwnCollaboratorReceipt(t *testing.T) {
+	service := newRecordingReceiptService()
+	store := fakeActorStore{actor: &authz.Actor{
+		ID: "collaborator@example.com", TenantID: "tenant-a", CollaboratorID: "collab-a",
+		Source: authz.ActorSourcePersisted, Scope: authz.ActorScopeTenant,
+		Permissions:          map[authz.Permission]struct{}{authz.PermissionLedgerReceiptsSelfRead: {}},
+		IntrinsicPermissions: map[authz.Permission]struct{}{authz.PermissionLedgerReceiptsSelfRead: {}},
+	}}
+	app := fiber.New()
+	app.Get("/ledger-entries/:entryId/receipt/self", NewHandler(service, WithActorStore(store)).GetSelfPrintableReceipt)
+
+	req := httptest.NewRequest(http.MethodGet, "/ledger-entries/entry-1/receipt/self", nil)
+	req.Header.Set(authz.HeaderActorID, "collaborator@example.com")
+	req.Header.Set(authz.HeaderTenantID, "tenant-a")
+	res, err := app.Test(req, fiber.TestConfig{Timeout: 0, FailOnTimeout: false})
+	if err != nil {
+		t.Fatalf("request own receipt: %v", err)
+	}
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("expected own self receipt status %d, got %d", http.StatusOK, res.StatusCode)
+	}
+
+	service.printableReceipt.CollaboratorID = "collab-b"
+	res, err = app.Test(req, fiber.TestConfig{Timeout: 0, FailOnTimeout: false})
+	if err != nil {
+		t.Fatalf("request other receipt: %v", err)
+	}
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusForbidden {
+		t.Fatalf("expected other Collaborator receipt status %d, got %d", http.StatusForbidden, res.StatusCode)
+	}
+}
+
+func TestReceiptAcceptanceEnforcesDirectionAwareAcceptingParty(t *testing.T) {
+	t.Run("Collaborator accepts own Tenant payment", func(t *testing.T) {
+		service := newRecordingReceiptService()
+		store := fakeActorStore{actor: &authz.Actor{
+			ID: "collaborator@example.com", TenantID: "tenant-a", CollaboratorID: "collab-a",
+			Source: authz.ActorSourcePersisted, Scope: authz.ActorScopeTenant,
+			Permissions:          map[authz.Permission]struct{}{authz.PermissionLedgerReceiptsSelfAccept: {}},
+			IntrinsicPermissions: map[authz.Permission]struct{}{authz.PermissionLedgerReceiptsSelfAccept: {}},
+		}}
+		app := fiber.New()
+		app.Post("/ledger-entries/:entryId/receipt/accept", NewHandler(service, WithActorStore(store)).AcceptReceipt)
+		res := postAuthzJSON(t, app, "/ledger-entries/entry-1/receipt/accept", map[string]any{"confirm": true}, "collaborator@example.com", "tenant-a")
+		defer res.Body.Close()
+		if res.StatusCode != http.StatusOK {
+			t.Fatalf("expected Collaborator acceptance status %d, got %d", http.StatusOK, res.StatusCode)
+		}
+		if service.acceptedBy != "collaborator@example.com" || service.acceptedParty != receiptAcceptingPartyCollaborator {
+			t.Fatalf("unexpected Collaborator acceptance call by=%q party=%q", service.acceptedBy, service.acceptedParty)
+		}
+	})
+
+	t.Run("another Collaborator cannot accept", func(t *testing.T) {
+		service := newRecordingReceiptService()
+		store := fakeActorStore{actor: &authz.Actor{
+			ID: "other@example.com", TenantID: "tenant-a", CollaboratorID: "collab-b",
+			Source: authz.ActorSourcePersisted, Scope: authz.ActorScopeTenant,
+			Permissions:          map[authz.Permission]struct{}{authz.PermissionLedgerReceiptsSelfAccept: {}},
+			IntrinsicPermissions: map[authz.Permission]struct{}{authz.PermissionLedgerReceiptsSelfAccept: {}},
+		}}
+		app := fiber.New()
+		app.Post("/ledger-entries/:entryId/receipt/accept", NewHandler(service, WithActorStore(store)).AcceptReceipt)
+		res := postAuthzJSON(t, app, "/ledger-entries/entry-1/receipt/accept", map[string]any{"confirm": true}, "other@example.com", "tenant-a")
+		defer res.Body.Close()
+		if res.StatusCode != http.StatusForbidden {
+			t.Fatalf("expected other Collaborator acceptance status %d, got %d", http.StatusForbidden, res.StatusCode)
+		}
+		if service.acceptedBy != "" {
+			t.Fatalf("service must not accept another Collaborator's receipt")
+		}
+	})
+
+	t.Run("Tenant Administrator accepts Collaborator repayment", func(t *testing.T) {
+		service := newRecordingReceiptService()
+		service.printableReceipt.ReceiptPurpose = receiptPurposeFinalCollaboratorPayment
+		service.printableReceipt.AcceptingParty = receiptAcceptingPartyTenant
+		store := fakeActorStore{actor: &authz.Actor{
+			ID: "tenant-admin@example.com", TenantID: "tenant-a", Source: authz.ActorSourcePersisted, Scope: authz.ActorScopeTenant,
+			Permissions: map[authz.Permission]struct{}{authz.PermissionLedgerReceiptsTenantAccept: {}},
+		}}
+		app := fiber.New()
+		app.Post("/ledger-entries/:entryId/receipt/accept", NewHandler(service, WithActorStore(store)).AcceptReceipt)
+		res := postAuthzJSON(t, app, "/ledger-entries/entry-1/receipt/accept", map[string]any{"confirm": true}, "tenant-admin@example.com", "tenant-a")
+		defer res.Body.Close()
+		if res.StatusCode != http.StatusOK {
+			t.Fatalf("expected Tenant acceptance status %d, got %d", http.StatusOK, res.StatusCode)
+		}
+		if service.acceptedBy != "tenant-admin@example.com" || service.acceptedParty != receiptAcceptingPartyTenant {
+			t.Fatalf("unexpected Tenant acceptance call by=%q party=%q", service.acceptedBy, service.acceptedParty)
+		}
+	})
+
+	t.Run("Tenant Administrator cannot accept Collaborator-designated receipt", func(t *testing.T) {
+		service := newRecordingReceiptService()
+		store := fakeActorStore{actor: &authz.Actor{
+			ID: "tenant-admin@example.com", TenantID: "tenant-a", Source: authz.ActorSourcePersisted, Scope: authz.ActorScopeTenant,
+			Permissions: map[authz.Permission]struct{}{authz.PermissionLedgerReceiptsTenantAccept: {}},
+		}}
+		app := fiber.New()
+		app.Post("/ledger-entries/:entryId/receipt/accept", NewHandler(service, WithActorStore(store)).AcceptReceipt)
+		res := postAuthzJSON(t, app, "/ledger-entries/entry-1/receipt/accept", map[string]any{"confirm": true}, "tenant-admin@example.com", "tenant-a")
+		defer res.Body.Close()
+		if res.StatusCode != http.StatusForbidden {
+			t.Fatalf("expected wrong-party Tenant acceptance status %d, got %d", http.StatusForbidden, res.StatusCode)
+		}
+		if service.acceptedBy != "" {
+			t.Fatalf("service must not allow Tenant to accept Collaborator-designated receipt")
+		}
+	})
+}
+
 func (s *recordingReceiptService) GetSecondPersonApprovalPolicy(context.Context, string) (*SecondPersonApprovalPolicyDTO, error) {
 	return &SecondPersonApprovalPolicyDTO{TenantID: "tenant-a", Required: false}, nil
 }
@@ -592,7 +716,11 @@ func (s *recordingReceiptService) ListOutstandingReceipts(context.Context, Recei
 	return nil, errors.New("not implemented")
 }
 func (s *recordingReceiptService) GetPrintableReceipt(context.Context, string) (*PrintableReceiptDTO, error) {
-	return nil, errors.New("not implemented")
+	if s.printableReceipt == nil {
+		return nil, errors.New("not implemented")
+	}
+	copy := *s.printableReceipt
+	return &copy, nil
 }
 func (s *recordingReceiptService) ReturnReceipt(context.Context, string, string, ReturnReceiptRequest) (*PrintableReceiptDTO, error) {
 	return nil, errors.New("not implemented")
@@ -610,6 +738,23 @@ func (s *recordingReceiptService) ZeroGold(_ context.Context, _ string, authoriz
 func (s *recordingReceiptService) PartialPayout(_ context.Context, _ string, authorizedBy string, _ PartialPayoutRequest) (*PartialPayoutResult, error) {
 	s.partialPayoutBy = authorizedBy
 	return &PartialPayoutResult{Settlement: JourneySettlementDTO{ID: "settlement-1", AuthorizedBy: authorizedBy}}, nil
+}
+func (s *recordingReceiptService) FinalTenantPayment(_ context.Context, _ string, authorizedBy string, _ FinalSettlementRequest) (*FinalSettlementResult, error) {
+	return &FinalSettlementResult{Settlement: JourneySettlementDTO{ID: "settlement-final-tenant", AuthorizedBy: authorizedBy}}, nil
+}
+func (s *recordingReceiptService) FinalCollaboratorPayment(_ context.Context, _ string, authorizedBy string, _ FinalSettlementRequest) (*FinalSettlementResult, error) {
+	return &FinalSettlementResult{Settlement: JourneySettlementDTO{ID: "settlement-final-collaborator", AuthorizedBy: authorizedBy}}, nil
+}
+func (s *recordingReceiptService) AcceptReceipt(_ context.Context, _ string, acceptedBy, expectedParty string, _ AcceptReceiptRequest) (*PrintableReceiptDTO, error) {
+	s.acceptedBy = acceptedBy
+	s.acceptedParty = expectedParty
+	copy := *s.printableReceipt
+	copy.AcceptedBy = acceptedBy
+	copy.AcceptingParty = expectedParty
+	copy.AcceptedAt = time.Now().UTC().Format(time.RFC3339)
+	copy.AcceptanceMethod = receiptAcceptanceMethodInApp
+	copy.Status = "RETURNED"
+	return &copy, nil
 }
 func (s *recordingReceiptService) CloseJourney(_ context.Context, _ string, authorizedBy string, _ CloseJourneyRequest) (*CloseJourneyResult, error) {
 	s.closeJourneyBy = authorizedBy

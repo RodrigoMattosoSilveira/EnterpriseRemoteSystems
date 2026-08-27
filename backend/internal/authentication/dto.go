@@ -120,6 +120,7 @@ type SelfServiceLedgerEntryResponse struct {
 	ID             string    `json:"id"`
 	TenantID       string    `json:"tenantId"`
 	TenantName     string    `json:"tenantName"`
+	PersonID       string    `json:"personId"`
 	CollaboratorID string    `json:"collaboratorId"`
 	ValueUnitID    string    `json:"valueUnitId"`
 	ValueUnitCode  string    `json:"valueUnitCode"`

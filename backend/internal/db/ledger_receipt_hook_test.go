@@ -12,11 +12,11 @@ import (
 
 func TestDebitLedgerEntryCreatesPendingReceipt(t *testing.T) {
 	database := newLedgerReceiptTestDB(t)
-	collaboratorID, valueUnitID := seedLedgerReceiptTestDependencies(t, database)
+	collaboratorID, valueUnitID, personID := seedLedgerReceiptTestDependencies(t, database)
 	now := time.Now().UTC()
 	entry := LedgerEntry{
 		BaseModel: BaseModel{ID: ids.New(), CreatedAt: now, UpdatedAt: now},
-		TenantID:  DefaultTenantID, CollaboratorID: collaboratorID,
+		TenantID:  DefaultTenantID, PersonID: personID, CollaboratorID: collaboratorID,
 		ValueUnitID: valueUnitID, EntryType: "EXPENSE_DEDUCTION",
 		Direction: "DEBIT", Amount: 125, EffectiveDate: now,
 		SourceType: "EXPENSE", SourceID: ids.New(), Active: true,
@@ -40,18 +40,18 @@ func TestDebitLedgerEntryCreatesPendingReceipt(t *testing.T) {
 	if receipt.ReceiptNumber == nil || !strings.HasPrefix(*receipt.ReceiptNumber, "RCP-") {
 		t.Fatalf("expected generated receipt number, got %#v", receipt.ReceiptNumber)
 	}
-	if receipt.CollaboratorID != collaboratorID || receipt.TenantID != DefaultTenantID {
-		t.Fatalf("receipt scope does not match ledger entry: %#v", receipt)
+	if receipt.PersonID != personID || receipt.CollaboratorID != collaboratorID || receipt.TenantID != DefaultTenantID {
+		t.Fatalf("receipt financial owner/provenance does not match ledger entry: %#v", receipt)
 	}
 }
 
 func TestCreditLedgerEntryDoesNotCreateReceipt(t *testing.T) {
 	database := newLedgerReceiptTestDB(t)
-	collaboratorID, valueUnitID := seedLedgerReceiptTestDependencies(t, database)
+	collaboratorID, valueUnitID, personID := seedLedgerReceiptTestDependencies(t, database)
 	now := time.Now().UTC()
 	entry := LedgerEntry{
 		BaseModel: BaseModel{ID: ids.New(), CreatedAt: now, UpdatedAt: now},
-		TenantID:  DefaultTenantID, CollaboratorID: collaboratorID,
+		TenantID:  DefaultTenantID, PersonID: personID, CollaboratorID: collaboratorID,
 		ValueUnitID: valueUnitID, EntryType: "EARNING_CREDIT",
 		Direction: "CREDIT", Amount: 125, EffectiveDate: now,
 		SourceType: "ACCRUAL_ITEM", SourceID: ids.New(), Active: true,
@@ -83,7 +83,7 @@ func newLedgerReceiptTestDB(t *testing.T) *gorm.DB {
 	return database
 }
 
-func seedLedgerReceiptTestDependencies(t *testing.T, database *gorm.DB) (string, string) {
+func seedLedgerReceiptTestDependencies(t *testing.T, database *gorm.DB) (string, string, string) {
 	t.Helper()
 	now := time.Now().UTC()
 	tenant := Tenant{BaseModel: BaseModel{ID: DefaultTenantID, CreatedAt: now, UpdatedAt: now}, Code: "DEFAULT", Name: "Default Tenant", Active: true}
@@ -103,7 +103,11 @@ func seedLedgerReceiptTestDependencies(t *testing.T, database *gorm.DB) (string,
 		t.Fatalf("create reference data: %v", err)
 	}
 
-	person := Person{BaseModel: BaseModel{ID: ids.New(), CreatedAt: now, UpdatedAt: now}, TenantID: DefaultTenantID, FirstName: "Receipt", LastName: "Test", Nickname: "Receipt", CPF: ids.New(), RG: ids.New(), Cellular: ids.New(), Email: ids.New() + "@example.com", Country: "Brasil", StatusID: "ref-collaborator-active", ProfileCompletionStatus: "COMPLETE", CanCreateCollaborator: true}
+	globalPerson := GlobalPerson{BaseModel: BaseModel{ID: ids.New(), CreatedAt: now, UpdatedAt: now}, FirstName: "Receipt", LastName: "Test", Nickname: "Receipt", CPF: ids.New(), RG: ids.New(), Cellular: ids.New(), Email: ids.New() + "@example.com", Country: "Brasil", ProfileCompletionStatus: "COMPLETE", CanCreateCollaborator: true}
+	if err := database.Create(&globalPerson).Error; err != nil {
+		t.Fatalf("create global person: %v", err)
+	}
+	person := Person{BaseModel: BaseModel{ID: ids.New(), CreatedAt: now, UpdatedAt: now}, TenantID: DefaultTenantID, FirstName: "Receipt", LastName: "Test", Nickname: "Receipt", CPF: globalPerson.CPF, RG: ids.New(), Cellular: ids.New(), Email: ids.New() + "@example.com", Country: "Brasil", StatusID: "ref-collaborator-active", ProfileCompletionStatus: "COMPLETE", CanCreateCollaborator: true}
 	if err := database.Create(&person).Error; err != nil {
 		t.Fatalf("create person: %v", err)
 	}
@@ -118,16 +122,16 @@ func seedLedgerReceiptTestDependencies(t *testing.T, database *gorm.DB) (string,
 	if err := database.Create(&collaborator).Error; err != nil {
 		t.Fatalf("create collaborator: %v", err)
 	}
-	return collaborator.ID, "ref-value-unit-brl"
+	return collaborator.ID, "ref-value-unit-brl", globalPerson.ID
 }
 
 func TestLedgerReceiptStatusGuardsRejectReturnedWithoutSignedDocument(t *testing.T) {
 	database := newLedgerReceiptTestDB(t)
-	collaboratorID, valueUnitID := seedLedgerReceiptTestDependencies(t, database)
+	collaboratorID, valueUnitID, personID := seedLedgerReceiptTestDependencies(t, database)
 	now := time.Now().UTC()
 	entry := LedgerEntry{
 		BaseModel: BaseModel{ID: ids.New(), CreatedAt: now, UpdatedAt: now},
-		TenantID:  DefaultTenantID, CollaboratorID: collaboratorID,
+		TenantID:  DefaultTenantID, PersonID: personID, CollaboratorID: collaboratorID,
 		ValueUnitID: valueUnitID, EntryType: "EXPENSE_DEDUCTION",
 		Direction: "DEBIT", Amount: 125, EffectiveDate: now,
 		SourceType: "EXPENSE", SourceID: ids.New(), Active: true,
@@ -153,11 +157,11 @@ func TestLedgerReceiptStatusGuardsRejectReturnedWithoutSignedDocument(t *testing
 
 func TestLedgerReceiptStatusGuardsMakeReturnedTerminal(t *testing.T) {
 	database := newLedgerReceiptTestDB(t)
-	collaboratorID, valueUnitID := seedLedgerReceiptTestDependencies(t, database)
+	collaboratorID, valueUnitID, personID := seedLedgerReceiptTestDependencies(t, database)
 	now := time.Now().UTC()
 	entry := LedgerEntry{
 		BaseModel: BaseModel{ID: ids.New(), CreatedAt: now, UpdatedAt: now},
-		TenantID:  DefaultTenantID, CollaboratorID: collaboratorID,
+		TenantID:  DefaultTenantID, PersonID: personID, CollaboratorID: collaboratorID,
 		ValueUnitID: valueUnitID, EntryType: "EXPENSE_DEDUCTION",
 		Direction: "DEBIT", Amount: 125, EffectiveDate: now,
 		SourceType: "EXPENSE", SourceID: ids.New(), Active: true,
@@ -188,5 +192,81 @@ func TestLedgerReceiptStatusGuardsMakeReturnedTerminal(t *testing.T) {
 		Updates(map[string]any{"status": "PRINTED", "updated_at": now}).Error
 	if err == nil || !strings.Contains(err.Error(), "RETURNED status is terminal") {
 		t.Fatalf("expected terminal returned status guard, got %v", err)
+	}
+}
+
+func TestFinalSettlementCreditCreatesTenantAcceptedReceipt(t *testing.T) {
+	database := newLedgerReceiptTestDB(t)
+	collaboratorID, valueUnitID, personID := seedLedgerReceiptTestDependencies(t, database)
+	now := time.Now().UTC()
+	entry := LedgerEntry{
+		BaseModel: BaseModel{ID: ids.New(), CreatedAt: now, UpdatedAt: now},
+		TenantID:  DefaultTenantID, PersonID: personID, CollaboratorID: collaboratorID,
+		ValueUnitID: valueUnitID, EntryType: "FINAL_SETTLEMENT",
+		Direction: "CREDIT", Amount: 125, EffectiveDate: now,
+		SourceType: "JOURNEY_SETTLEMENT", SourceID: ids.New(), Active: true,
+		CorrectionType: "ORIGINAL",
+	}
+	if err := database.Create(&entry).Error; err != nil {
+		t.Fatalf("create final settlement credit: %v", err)
+	}
+	var receipt LedgerReceipt
+	if err := database.First(&receipt, "ledger_entry_id = ?", entry.ID).Error; err != nil {
+		t.Fatalf("find final settlement receipt: %v", err)
+	}
+	if receipt.ReceiptPurpose != "FINAL_SETTLEMENT_COLLABORATOR_PAYMENT" || receipt.PaymentDirection != "COLLABORATOR_TO_TENANT" || receipt.AcceptingParty != "TENANT" {
+		t.Fatalf("unexpected final repayment receipt direction: %#v", receipt)
+	}
+}
+
+func TestFinalSettlementDebitCreatesCollaboratorAcceptedReceipt(t *testing.T) {
+	database := newLedgerReceiptTestDB(t)
+	collaboratorID, valueUnitID, personID := seedLedgerReceiptTestDependencies(t, database)
+	now := time.Now().UTC()
+	entry := LedgerEntry{
+		BaseModel: BaseModel{ID: ids.New(), CreatedAt: now, UpdatedAt: now},
+		TenantID:  DefaultTenantID, PersonID: personID, CollaboratorID: collaboratorID,
+		ValueUnitID: valueUnitID, EntryType: "FINAL_SETTLEMENT",
+		Direction: "DEBIT", Amount: 125, EffectiveDate: now,
+		SourceType: "JOURNEY_SETTLEMENT", SourceID: ids.New(), Active: true,
+		CorrectionType: "ORIGINAL",
+	}
+	if err := database.Create(&entry).Error; err != nil {
+		t.Fatalf("create final settlement debit: %v", err)
+	}
+	var receipt LedgerReceipt
+	if err := database.First(&receipt, "ledger_entry_id = ?", entry.ID).Error; err != nil {
+		t.Fatalf("find final settlement receipt: %v", err)
+	}
+	if receipt.ReceiptPurpose != "FINAL_SETTLEMENT_TENANT_PAYMENT" || receipt.PaymentDirection != "TENANT_TO_COLLABORATOR" || receipt.AcceptingParty != "COLLABORATOR" {
+		t.Fatalf("unexpected final payout receipt direction: %#v", receipt)
+	}
+}
+
+func TestLedgerReceiptAcceptanceIsImmutable(t *testing.T) {
+	database := newLedgerReceiptTestDB(t)
+	collaboratorID, valueUnitID, personID := seedLedgerReceiptTestDependencies(t, database)
+	now := time.Now().UTC()
+	entry := LedgerEntry{
+		BaseModel: BaseModel{ID: ids.New(), CreatedAt: now, UpdatedAt: now},
+		TenantID:  DefaultTenantID, PersonID: personID, CollaboratorID: collaboratorID,
+		ValueUnitID: valueUnitID, EntryType: "FINAL_SETTLEMENT",
+		Direction: "DEBIT", Amount: 125, EffectiveDate: now,
+		SourceType: "JOURNEY_SETTLEMENT", SourceID: ids.New(), Active: true,
+		CorrectionType: "ORIGINAL",
+	}
+	if err := database.Create(&entry).Error; err != nil {
+		t.Fatalf("create final settlement debit: %v", err)
+	}
+	if err := database.Model(&LedgerReceipt{}).Where("ledger_entry_id = ?", entry.ID).Updates(map[string]any{
+		"status": "RETURNED", "issued_at": now, "issued_by": "actor-a", "printed_at": now,
+		"signed_at": now, "returned_at": now, "received_by": "actor-a", "signed_document_ref": "IN_APP:actor-a",
+		"accepted_at": now, "accepted_by": "actor-a", "acceptance_method": "IN_APP", "updated_at": now,
+	}).Error; err != nil {
+		t.Fatalf("accept receipt: %v", err)
+	}
+	err := database.Model(&LedgerReceipt{}).Where("ledger_entry_id = ?", entry.ID).Update("accepted_by", "actor-b").Error
+	if err == nil || !strings.Contains(err.Error(), "ledger_receipt_acceptance_immutable") {
+		t.Fatalf("expected immutable acceptance guard, got %v", err)
 	}
 }

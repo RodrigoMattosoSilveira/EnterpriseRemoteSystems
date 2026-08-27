@@ -151,7 +151,7 @@ test("a fresh cookie-less browser context does not inherit the administrator ses
     await privatePage.goto("/");
 
     const sessionResponse = await sessionResponsePromise;
-    expect(sessionResponse.status()).toBe(401);
+    expect(sessionResponse.status()).toBe(204);
     await expect(privatePage).toHaveURL(/\/login\?returnTo=/);
     await expect(privatePage.getByRole("heading", { name: "Sign in" })).toBeVisible();
 
@@ -190,7 +190,14 @@ test("active Account with no active tenant Actor retains Person self-service and
     await signIn(page, account.login, account.password);
     await expect(page.getByRole("heading", { name: "Signed in" })).toBeVisible();
     await expect(
-      page.getByRole("heading", { name: "No tenant workspace available" }),
+      page.getByRole("heading", {
+        name: "Your personal information is still available",
+      }),
+    ).toBeVisible();
+    await expect(
+      page.getByText(
+        "You currently do not have access to work or administrative features. You can still view your personal information and read-only Current Account history below.",
+      ),
     ).toBeVisible();
     const authenticatedAccount = page.locator("[data-authenticated-account-id]");
     await expect(authenticatedAccount).toHaveAttribute(

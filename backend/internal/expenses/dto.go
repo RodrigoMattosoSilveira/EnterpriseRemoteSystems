@@ -3,6 +3,7 @@ package expenses
 type ExpenseDTO struct {
 	ID                     string                      `json:"id"`
 	TenantID               string                      `json:"tenantId"`
+	PersonID               string                      `json:"personId"`
 	CollaboratorID         string                      `json:"collaboratorId"`
 	CollaboratorLabel      string                      `json:"collaboratorLabel,omitempty"`
 	ExpenseCategoryID      string                      `json:"expenseCategoryId"`
@@ -13,6 +14,10 @@ type ExpenseDTO struct {
 	ExpenseDate            string                      `json:"expenseDate"`
 	Description            string                      `json:"description,omitempty"`
 	Active                 bool                        `json:"active"`
+	CancelledAt            string                      `json:"cancelledAt,omitempty"`
+	CancelledBy            string                      `json:"cancelledBy,omitempty"`
+	CancellationReason     string                      `json:"cancellationReason,omitempty"`
+	RecreatedFromExpenseID *string                     `json:"recreatedFromExpenseId,omitempty"`
 	PriceListItemID        *string                     `json:"priceListItemId,omitempty"`
 	PriceListItemCode      string                      `json:"priceListItemCode,omitempty"`
 	ItemType               string                      `json:"itemType,omitempty"`
@@ -52,27 +57,32 @@ type ExpenseFinancialPostingDTO struct {
 }
 
 type CreateExpenseRequest struct {
-	CollaboratorID    string  `json:"collaboratorId"`
-	ExpenseCategoryID string  `json:"expenseCategoryId"`
-	ValueUnitID       string  `json:"valueUnitId"`
-	Amount            float64 `json:"amount"`
-	ExpenseDate       string  `json:"expenseDate"`
-	Description       string  `json:"description"`
-	PriceListItemID   string  `json:"priceListItemId"`
-	CurrencyCode      string  `json:"currencyCode"`
-	Quantity          float64 `json:"quantity"`
+	CollaboratorID         string  `json:"collaboratorId"`
+	ExpenseCategoryID      string  `json:"expenseCategoryId"`
+	ValueUnitID            string  `json:"valueUnitId"`
+	Amount                 float64 `json:"amount"`
+	ExpenseDate            string  `json:"expenseDate"`
+	Description            string  `json:"description"`
+	RecreatedFromExpenseID string  `json:"recreatedFromExpenseId"`
+	PriceListItemID        string  `json:"priceListItemId"`
+	CurrencyCode           string  `json:"currencyCode"`
+	Quantity               float64 `json:"quantity"`
 }
 
+type CancelExpenseRequest struct {
+	Reason string `json:"reason"`
+}
 type UpdateExpenseRequest struct {
-	CollaboratorID    string  `json:"collaboratorId"`
-	ExpenseCategoryID string  `json:"expenseCategoryId"`
-	ValueUnitID       string  `json:"valueUnitId"`
-	Amount            float64 `json:"amount"`
-	ExpenseDate       string  `json:"expenseDate"`
-	Description       string  `json:"description"`
-	PriceListItemID   string  `json:"priceListItemId"`
-	CurrencyCode      string  `json:"currencyCode"`
-	Quantity          float64 `json:"quantity"`
+	CollaboratorID         string  `json:"collaboratorId"`
+	ExpenseCategoryID      string  `json:"expenseCategoryId"`
+	ValueUnitID            string  `json:"valueUnitId"`
+	Amount                 float64 `json:"amount"`
+	ExpenseDate            string  `json:"expenseDate"`
+	Description            string  `json:"description"`
+	RecreatedFromExpenseID string  `json:"recreatedFromExpenseId"`
+	PriceListItemID        string  `json:"priceListItemId"`
+	CurrencyCode           string  `json:"currencyCode"`
+	Quantity               float64 `json:"quantity"`
 }
 
 type ExpenseListFilter struct {

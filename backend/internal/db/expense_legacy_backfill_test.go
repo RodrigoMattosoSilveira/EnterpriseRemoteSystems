@@ -20,6 +20,23 @@ func TestBackfillLegacyExpenseAuditSnapshotsClassifiesLegacyRows(t *testing.T) {
 	}
 
 	now := time.Now().UTC()
+	globalPerson := GlobalPerson{
+		BaseModel:               BaseModel{ID: "legacy-backfill-global-person", CreatedAt: now, UpdatedAt: now},
+		FirstName:               "Legacy",
+		LastName:                "Backfill",
+		Nickname:                "LegacyBackfill",
+		CPF:                     "11122233344",
+		RG:                      "RGBACK-GLOBAL",
+		Cellular:                "11999990001",
+		Email:                   "legacy-backfill-global@example.com",
+		Country:                 "Brasil",
+		ProfileCompletionStatus: "COMPLETE",
+		CanCreateCollaborator:   true,
+	}
+	if err := database.Create(&globalPerson).Error; err != nil {
+		t.Fatalf("create global person: %v", err)
+	}
+
 	person := Person{
 		BaseModel:               BaseModel{ID: "legacy-backfill-person", CreatedAt: now, UpdatedAt: now},
 		TenantID:                DefaultTenantID,
@@ -60,6 +77,7 @@ func TestBackfillLegacyExpenseAuditSnapshotsClassifiesLegacyRows(t *testing.T) {
 	canteenExpense := Expense{
 		BaseModel:         BaseModel{ID: "legacy-canteen-expense", CreatedAt: now, UpdatedAt: now},
 		TenantID:          DefaultTenantID,
+		PersonID:          globalPerson.ID,
 		CollaboratorID:    collaborator.ID,
 		ExpenseCategoryID: "ref-expense-category-canteen",
 		ValueUnitID:       "ref-value-unit-brl",
@@ -71,6 +89,7 @@ func TestBackfillLegacyExpenseAuditSnapshotsClassifiesLegacyRows(t *testing.T) {
 	flightExpense := Expense{
 		BaseModel:         BaseModel{ID: "legacy-flight-expense", CreatedAt: now, UpdatedAt: now},
 		TenantID:          DefaultTenantID,
+		PersonID:          globalPerson.ID,
 		CollaboratorID:    collaborator.ID,
 		ExpenseCategoryID: "ref-expense-category-flight",
 		ValueUnitID:       "ref-value-unit-gold-gram",

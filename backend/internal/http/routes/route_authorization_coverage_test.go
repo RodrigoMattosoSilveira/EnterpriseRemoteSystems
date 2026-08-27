@@ -41,12 +41,16 @@ func TestEveryRegisteredAPIRouteHasAuthorizationCoverage(t *testing.T) {
 		"BackfillDebitLedgerReceipts":      {},
 		"GetSecondPersonApprovalPolicy":    {},
 		"UpdateSecondPersonApprovalPolicy": {},
+		"GetSelfPrintableReceipt":          {},
 		"PrintReceipt":                     {},
 		"ReturnReceipt":                    {},
+		"AcceptReceipt":                    {},
 		"ReverseEntry":                     {},
 		"ReplaceEntry":                     {},
 		"ZeroGold":                         {},
 		"PartialPayout":                    {},
+		"FinalTenantPayment":               {},
+		"FinalCollaboratorPayment":         {},
 		"CloseJourney":                     {},
 	}
 	routeMethods := map[string]struct{}{
@@ -183,6 +187,7 @@ func TestTenantAuthenticationProvisioningRoutesRequireTenantAdministrator(t *tes
 	for _, route := range []string{
 		`r.Get("/:id/authentication", requireTenantAdministrator`,
 		`r.Post("/:id/authentication/enable", requireTenantAdministrator`,
+		`r.Post("/:id/authentication/password-reset-tokens", requireTenantAdministrator`,
 		`r.Post("/:id/authentication/reactivation-request", requireTenantAdministrator`,
 	} {
 		if !strings.Contains(source, route) {

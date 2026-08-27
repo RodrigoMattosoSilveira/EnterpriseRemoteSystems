@@ -9,6 +9,7 @@ import (
 	"enterpriseremotesystems/backend/internal/authz"
 	appdb "enterpriseremotesystems/backend/internal/db"
 	"golang.org/x/crypto/bcrypt"
+	"gorm.io/gorm"
 )
 
 func TestTenantProvisioningCreatesOrReusesOneGlobalAccountWithoutChangingExistingCredentials(t *testing.T) {
@@ -91,6 +92,39 @@ func TestTenantProvisioningCreatesOrReusesOneGlobalAccountWithoutChangingExistin
 	}
 	if _, err := service.Login(context.Background(), LoginRequest{Login: accounts[0].Login, Password: "Ignored-Second-Password-2"}, "", ""); !errors.Is(err, ErrInvalidCredentials) {
 		t.Fatalf("second-tenant temporary password must not reset the global Account, got %v", err)
+	}
+}
+
+func TestTenantAdministratorCanIssuePasswordResetTokenOnlyThroughEnabledTenantPerson(t *testing.T) {
+	database := accountActorFoundationTestDatabase(t)
+	now := time.Now().UTC()
+	createFoundationTenantPerson(t, database, "tenant-reset", "Reset Tenant", "tenant-reset-person", "44455566677", "tenant-reset@example.com", now)
+	createFoundationTenantPerson(t, database, "tenant-other", "Other Tenant", "tenant-other-person", "33344455566", "tenant-other@example.com", now.Add(time.Second))
+	if err := appdb.EnsureGlobalPersonMembershipFoundation(database); err != nil {
+		t.Fatalf("ensure Person membership foundation: %v", err)
+	}
+
+	service := NewService(NewRepository(database), ServiceConfig{PasswordHashCost: bcrypt.MinCost})
+	if _, err := service.IssueTenantPersonPasswordResetToken(context.Background(), "tenant-reset", "tenant-reset-person"); !errors.Is(err, ErrAuthenticationNotEnabled) {
+		t.Fatalf("tenant reset must require authentication enabled in the selected tenant, got %v", err)
+	}
+
+	if _, err := service.EnablePersonAuthentication(context.Background(), "tenant-reset", "tenant-reset-person", EnablePersonAuthenticationRequest{
+		TemporaryPassword: "Tenant-Reset-Password-1",
+	}); err != nil {
+		t.Fatalf("enable tenant reset account: %v", err)
+	}
+
+	reset, err := service.IssueTenantPersonPasswordResetToken(context.Background(), "tenant-reset", "tenant-reset-person")
+	if err != nil {
+		t.Fatalf("issue tenant-scoped password reset token: %v", err)
+	}
+	if reset.Login != "tenant-reset@example.com" || reset.AccountID == "" || reset.Token == "" {
+		t.Fatalf("unexpected tenant-scoped reset response: %#v", reset)
+	}
+
+	if _, err := service.IssueTenantPersonPasswordResetToken(context.Background(), "tenant-other", "tenant-reset-person"); !errors.Is(err, gorm.ErrRecordNotFound) {
+		t.Fatalf("tenant administrator must not reset a Person outside the selected tenant, got %v", err)
 	}
 }
 

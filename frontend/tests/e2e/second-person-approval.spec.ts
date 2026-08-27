@@ -85,7 +85,7 @@ test("partial payout requires and submits a different second approver when tenan
       page.getByRole("heading", { name: "Journey Settlement", exact: true }),
     ).toBeVisible();
 
-    await page.getByRole("button", { name: "Partial Payout" }).click();
+    await openPartialPayout(page);
 
     await expect(page.getByText("Second-person approval required")).toBeVisible();
     await expect(page.getByText(`Primary actor: ${E2E_ACTOR_ID}`)).toBeVisible();
@@ -186,7 +186,7 @@ test("partial payout can optionally record second approval when tenant policy is
   await mockSecondPersonApprovalPolicy(page, false);
 
   await page.goto(`/collaborators/${collaborator.id}`);
-    await page.getByRole("button", { name: "Partial Payout" }).click();
+    await openPartialPayout(page);
 
     await expect(page.getByText("Second-person approval optional")).toBeVisible();
     await expect(page.getByLabel("Second approver")).toHaveCount(0);
@@ -232,6 +232,15 @@ type PartialPayoutPayload = {
   notes?: string;
   secondApproval?: { approvedBy: string; notes?: string };
 };
+
+async function openPartialPayout(page: Page): Promise<void> {
+  const otherPayoutActions = page.locator("summary").filter({
+    hasText: "Other payout actions",
+  });
+  await expect(otherPayoutActions).toBeVisible();
+  await otherPayoutActions.click();
+  await page.getByRole("button", { name: "Partial Payout" }).click();
+}
 
 async function mockSecondPersonApprovalPolicy(page: Page, required: boolean): Promise<void> {
   await page.route(
