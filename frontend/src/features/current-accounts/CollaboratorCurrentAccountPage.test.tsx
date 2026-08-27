@@ -117,6 +117,26 @@ describe("CollaboratorCurrentAccountPage", () => {
     expect(container.textContent).not.toContain("print, collect signature");
   });
 
+  it("hides the final-settlement receipt action after in-app acceptance", async () => {
+    mockFetch(async (url, init) => {
+      fetchCalls.push({ url, method: methodOf(init) });
+      if (url.startsWith("/api/v1/collaborators/collab-1/current-account")) {
+        return jsonResponse({
+          data: currentAccountDetailWith([acceptedFinalSettlementEntry]),
+        });
+      }
+      throw new Error(`Unhandled request: ${methodOf(init)} ${url}`);
+    });
+
+    renderCurrentAccountPage("/collaborators/collab-1/current-account");
+
+    await waitForText("Final settlement receipt accepted in-app.");
+    expect(container.textContent).not.toContain("Review / accept receipt");
+    expect(
+      container.querySelector('a[href="/ledger-entries/ledger-final-accepted/receipt"]'),
+    ).toBeNull();
+  });
+
   it("filters to work-period assignment earnings", async () => {
     mockCurrentAccountFetch();
 
@@ -275,6 +295,17 @@ const finalSettlementEntry: CurrentAccountDetail["ledgerEntries"]["items"][numbe
     acceptingParty: "COLLABORATOR",
     status: "PENDING_ISSUE",
     outstanding: true,
+  },
+};
+
+const acceptedFinalSettlementEntry: CurrentAccountDetail["ledgerEntries"]["items"][number] = {
+  ...finalSettlementEntry,
+  id: "ledger-final-accepted",
+  receipt: {
+    ...finalSettlementEntry.receipt!,
+    status: "RETURNED",
+    outstanding: false,
+    acceptedAt: "2026-06-30T12:00:00Z",
   },
 };
 

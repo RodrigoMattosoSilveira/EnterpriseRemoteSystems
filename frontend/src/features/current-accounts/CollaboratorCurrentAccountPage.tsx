@@ -318,7 +318,7 @@ function LedgerEntryRow({
             {sourceActionLabel(entry)}
           </Link>
         ) : null}
-        {canOpenReceipt && (receipt || entry.direction === "DEBIT") ? (
+        {canOpenReceipt && shouldShowReceiptAction(entry, receipt) ? (
           <Link className="rounded-xl bg-gray-900 px-4 py-2 text-sm font-semibold text-white" to={`/ledger-entries/${entry.id}/receipt`}>
             {isFinalSettlementReceipt(receipt?.receiptPurpose)
               ? "Review / accept receipt"
@@ -328,6 +328,19 @@ function LedgerEntryRow({
       </div>
     </article>
   );
+}
+
+function shouldShowReceiptAction(
+  entry: LedgerEntry,
+  receipt: LedgerEntry["receipt"],
+) {
+  if (!receipt) {
+    return entry.direction === "DEBIT";
+  }
+  if (isFinalSettlementReceipt(receipt.receiptPurpose)) {
+    return receipt.outstanding;
+  }
+  return true;
 }
 
 function sourceLink(entry: LedgerEntry) {
