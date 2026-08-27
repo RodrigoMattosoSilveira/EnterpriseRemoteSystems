@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  cancelExpense,
   createExpense,
   getExpense,
   listExpenses,
@@ -27,6 +28,20 @@ export function useExpense(id: string) {
     queryKey: expenseQueryKeys.detail(id),
     queryFn: () => getExpense(id),
     enabled: Boolean(id),
+  });
+}
+
+export function useCancelExpense() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ id, reason }: { id: string; reason: string }) =>
+      cancelExpense(id, reason),
+    onSuccess: (expense) => {
+      queryClient.invalidateQueries({ queryKey: expenseQueryKeys.lists() });
+      queryClient.invalidateQueries({ queryKey: ["currentAccounts"] });
+      queryClient.setQueryData(expenseQueryKeys.detail(expense.id), expense);
+    },
   });
 }
 

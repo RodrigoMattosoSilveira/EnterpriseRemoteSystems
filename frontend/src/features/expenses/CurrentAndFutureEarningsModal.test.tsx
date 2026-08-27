@@ -28,11 +28,11 @@ describe("CurrentAndFutureEarningsModal", () => {
           collaboratorId: "c-1",
           collaboratorLabel: "Maria",
           paymentMethodCode: "GOLD_COMMISSION",
-          currentBalances: { brlAmount: 450, goldGramAmount: 3.25 },
+          currentBalances: { brlAmount: 450, goldGramAmount: -3.25 },
           unpostedReadyEarnings: { brlAmount: 0, goldGramAmount: 1.5 },
           estimatedFutureEarnings: { brlAmount: 0, goldGramAmount: 7.225 },
           projectedEarnings: { brlAmount: 0, goldGramAmount: 8.725 },
-          projectedFinalBalances: { brlAmount: 450, goldGramAmount: 11.975 },
+          projectedFinalBalances: { brlAmount: 0, goldGramAmount: -11.975 },
           projection: {
             projectionDate: "2026-06-08",
             journeyEndDate: "2026-06-15",
@@ -73,18 +73,39 @@ describe("CurrentAndFutureEarningsModal", () => {
     expect(container.textContent).toContain("Estimated Future Earnings");
     expect(container.textContent).toContain("1.50000000 g");
     expect(container.textContent).toContain("7.22500000 g");
-    expect(container.textContent).toContain("11.97500000 g");
+    expect(container.textContent).toContain("-11.97500000 g");
     expect(container.textContent).toContain("Calendar work periods");
     expect(container.textContent).toContain("Posted work periods");
     expect(container.textContent).toContain("Ready accrual work periods");
     expect(container.textContent).toContain("Estimated future work periods");
     expect(container.textContent).toContain("Pending accrual items");
     expect(container.textContent).toContain("Well 1");
+    const currentBalances = amountValuesForSection("Current Balances");
+    expect(currentBalances[0]?.classList.contains("text-green-700")).toBe(true);
+    expect(currentBalances[1]?.classList.contains("text-red-700")).toBe(true);
+
+    const projectedBalances = amountValuesForSection(
+      "Projected Journey-End Balances",
+    );
+    expect(projectedBalances[0]?.classList.contains("text-green-700")).toBe(true);
+    expect(projectedBalances[1]?.classList.contains("text-red-700")).toBe(true);
+
+    const futureEarnings = amountValuesForSection("Estimated Future Earnings");
+    expect(futureEarnings[0]?.classList.contains("text-gray-950")).toBe(true);
+    expect(futureEarnings[1]?.classList.contains("text-gray-950")).toBe(true);
 
     window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
     expect(onClose).toHaveBeenCalledOnce();
   });
 });
+
+function amountValuesForSection(title: string) {
+  const section = Array.from(container.querySelectorAll("section")).find(
+    (candidate) => candidate.querySelector("h3")?.textContent === title,
+  );
+  if (!section) throw new Error(`Missing amount section: ${title}`);
+  return Array.from(section.querySelectorAll("dd"));
+}
 
 function response(data: unknown) {
   return Promise.resolve(

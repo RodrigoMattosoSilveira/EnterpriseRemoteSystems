@@ -43,6 +43,11 @@ func (s *service) CloseJourney(ctx context.Context, collaboratorID, authorizedBy
 		return nil, err
 	}
 
+	collaborator, err := s.repo.FindCollaboratorByID(ctx, collaboratorID)
+	if err != nil {
+		return nil, err
+	}
+
 	preview, err := s.SettlementPreview(ctx, collaboratorID)
 	if err != nil {
 		return nil, err
@@ -74,8 +79,8 @@ func (s *service) CloseJourney(ctx context.Context, collaboratorID, authorizedBy
 		RequestID:           requestID,
 		Status:              settlementStatusPosted,
 		EffectiveDate:       effectiveDate,
-		BRLAmount:           maxPositive(preview.BRLBalance),
-		GoldGramAmount:      maxPositive(preview.GoldGramBalance),
+		BRLAmount:           0,
+		GoldGramAmount:      0,
 		Notes:               strings.TrimSpace(req.Notes),
 		ReasonCode:          reasonCode,
 		ReasonText:          reasonText,
@@ -86,42 +91,18 @@ func (s *service) CloseJourney(ctx context.Context, collaboratorID, authorizedBy
 		SecondApprovalNotes: secondApprovalNotes,
 	}
 
-	entries := make([]*db.LedgerEntry, 0, 2)
-	if settlement.BRLAmount > 0 {
-		valueUnit, findErr := s.repo.FindValueUnitByCode(ctx, valueUnitBRL)
-		if findErr != nil {
-			return nil, findErr
-		}
-		entries = append(entries, payoutLedgerEntry(settlement, *valueUnit, settlement.BRLAmount, actor, effectiveDate, now))
-	}
-	if settlement.GoldGramAmount > 0 {
-		valueUnit, findErr := s.repo.FindValueUnitByCode(ctx, valueUnitGoldGram)
-		if findErr != nil {
-			return nil, findErr
-		}
-		entries = append(entries, payoutLedgerEntry(settlement, *valueUnit, settlement.GoldGramAmount, actor, effectiveDate, now))
-	}
-
-	if err := s.repo.CloseJourneyWithSettlement(ctx, collaboratorID, finishedStatus.ID, now, &settlement, entries...); err != nil {
+	// Closing a Journey records only the lifecycle audit event. Settlement must
+	// already have driven every Journey-scoped value-unit balance to exactly
+	// zero before this method is called. Close Journey itself never posts payout
+	// or repayment Ledger Entries.
+	if err := s.repo.CloseJourneyWithAudit(ctx, collaboratorID, finishedStatus.ID, now, &settlement); err != nil {
 		return nil, err
 	}
-	collaborator, err := s.repo.FindCollaboratorByID(ctx, collaboratorID)
+	collaborator, err = s.repo.FindCollaboratorByID(ctx, collaboratorID)
 	if err != nil {
 		return nil, err
 	}
-	rows, err := s.repo.FindLedgerEntriesBySource(ctx, ledgerSourceSettlement, settlement.ID)
-	if err != nil {
-		return nil, err
-	}
-	return closeJourneyResult(settlement, rows, *collaborator), nil
-}
-
-func maxPositive(value float64) float64 {
-	value = normalizedZero(value)
-	if value > 0 {
-		return value
-	}
-	return 0
+	return closeJourneyResult(settlement, nil, *collaborator), nil
 }
 
 func closeJourneyResult(settlement db.JourneySettlement, entries []db.LedgerEntry, collaborator db.CollaboratorJourney) *CloseJourneyResult {

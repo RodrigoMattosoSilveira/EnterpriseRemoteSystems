@@ -28,7 +28,12 @@ func (s *service) PartialPayout(ctx context.Context, collaboratorID, authorizedB
 	if err := s.requireSecondApprovalWhenConfigured(ctx, tenantctx.TenantID(ctx), req.CorrectionReasonRequest, authorizedBy); err != nil {
 		return nil, err
 	}
-	if _, err := s.repo.FindCollaboratorByID(ctx, collaboratorID); err != nil {
+	collaborator, err := s.repo.FindCollaboratorByID(ctx, collaboratorID)
+	if err != nil {
+		return nil, err
+	}
+	personID, err := financialOwnerPersonID(*collaborator)
+	if err != nil {
 		return nil, err
 	}
 
@@ -55,7 +60,7 @@ func (s *service) PartialPayout(ctx context.Context, collaboratorID, authorizedB
 			goldBalance = normalizedZero(balance.Balance)
 		}
 	}
-	if req.BRLAmount > brlBalance+0.00000001 || req.GoldGramAmount > goldBalance+0.00000001 {
+	if req.BRLAmount > brlBalance+balanceZeroTolerance || req.GoldGramAmount > goldBalance+balanceZeroTolerance {
 		return nil, ErrPayoutExceedsAvailableBalance
 	}
 
@@ -91,14 +96,14 @@ func (s *service) PartialPayout(ctx context.Context, collaboratorID, authorizedB
 		if findErr != nil {
 			return nil, findErr
 		}
-		entries = append(entries, payoutLedgerEntry(settlement, *valueUnit, req.BRLAmount, actor, effectiveDate, now))
+		entries = append(entries, payoutLedgerEntry(settlement, personID, *valueUnit, req.BRLAmount, actor, effectiveDate, now))
 	}
 	if req.GoldGramAmount > 0 {
 		valueUnit, findErr := s.repo.FindValueUnitByCode(ctx, valueUnitGoldGram)
 		if findErr != nil {
 			return nil, findErr
 		}
-		entries = append(entries, payoutLedgerEntry(settlement, *valueUnit, req.GoldGramAmount, actor, effectiveDate, now))
+		entries = append(entries, payoutLedgerEntry(settlement, personID, *valueUnit, req.GoldGramAmount, actor, effectiveDate, now))
 	}
 	if err := s.repo.CreateSettlementWithEntries(ctx, &settlement, entries...); err != nil {
 		return nil, err
@@ -110,10 +115,11 @@ func (s *service) PartialPayout(ctx context.Context, collaboratorID, authorizedB
 	return partialPayoutResult(settlement, rows), nil
 }
 
-func payoutLedgerEntry(settlement db.JourneySettlement, valueUnit db.ReferenceData, amount float64, actor string, effectiveDate, now time.Time) *db.LedgerEntry {
+func payoutLedgerEntry(settlement db.JourneySettlement, personID string, valueUnit db.ReferenceData, amount float64, actor string, effectiveDate, now time.Time) *db.LedgerEntry {
 	return &db.LedgerEntry{
 		BaseModel:            db.BaseModel{ID: "ledger-settlement-" + ids.New(), CreatedAt: now, UpdatedAt: now},
 		TenantID:             settlement.TenantID,
+		PersonID:             personID,
 		CollaboratorID:       settlement.CollaboratorID,
 		ValueUnitID:          valueUnit.ID,
 		ValueUnit:            valueUnit,

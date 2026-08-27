@@ -8,13 +8,10 @@ import (
 
 	"enterpriseremotesystems/backend/internal/db"
 	"enterpriseremotesystems/backend/internal/shared/ids"
-	"enterpriseremotesystems/backend/internal/tenants"
 	"enterpriseremotesystems/backend/internal/workperiodassignments"
 	"enterpriseremotesystems/backend/internal/workperiods"
 	"gorm.io/gorm"
 )
-
-const defaultTenantID = tenants.DefaultTenantID
 
 const (
 	defaultPageSize = 50
@@ -64,7 +61,7 @@ func (s *service) CreateRun(ctx context.Context, workPeriodID string, req Create
 		accrualDate, _ = parseDate(req.AccrualDate)
 	}
 	now := time.Now().UTC()
-	run := &db.AccrualRun{BaseModel: db.BaseModel{ID: ids.New(), CreatedAt: now, UpdatedAt: now}, TenantID: defaultTenantID, WorkPeriodID: workPeriod.ID, Status: RunStatusDraft, AccrualDate: accrualDate, Notes: strings.TrimSpace(req.Notes)}
+	run := &db.AccrualRun{BaseModel: db.BaseModel{ID: ids.New(), CreatedAt: now, UpdatedAt: now}, TenantID: workPeriod.TenantID, WorkPeriodID: workPeriod.ID, Status: RunStatusDraft, AccrualDate: accrualDate, Notes: strings.TrimSpace(req.Notes)}
 	if err := s.repo.CreateRun(ctx, run); err != nil {
 		return nil, err
 	}
@@ -180,7 +177,11 @@ func (s *service) calculateItems(ctx context.Context, run db.AccrualRun) ([]db.A
 	items := make([]db.AccrualItem, 0, len(assignments)*2)
 	for _, assignment := range assignments {
 		assignmentID := assignment.ID
-		base := db.AccrualItem{BaseModel: db.BaseModel{ID: ids.New(), CreatedAt: now, UpdatedAt: now}, TenantID: defaultTenantID, AccrualRunID: run.ID, WorkPeriodID: run.WorkPeriodID, WorkPeriodAssignmentID: &assignmentID, CollaboratorID: assignment.CollaboratorID, Direction: DirectionCredit}
+		personID := strings.TrimSpace(assignment.Collaborator.Membership.PersonID)
+		if personID == "" {
+			return nil, errors.New("work period assignment collaborator must resolve to a Person–Tenant Membership")
+		}
+		base := db.AccrualItem{BaseModel: db.BaseModel{ID: ids.New(), CreatedAt: now, UpdatedAt: now}, TenantID: run.TenantID, PersonID: personID, AccrualRunID: run.ID, WorkPeriodID: run.WorkPeriodID, WorkPeriodAssignmentID: &assignmentID, CollaboratorID: assignment.CollaboratorID, Direction: DirectionCredit}
 		status := strings.TrimSpace(stringValue(assignment.ActualStatus))
 		if status == "" {
 			item := base
@@ -347,17 +348,17 @@ func isGoldCommissionAssignment(assignment db.WorkPeriodAssignment) bool {
 
 func pendingReplacementAssignment(assignment db.WorkPeriodAssignment, run db.AccrualRun, calculationType string, description string, now time.Time) db.AccrualItem {
 	assignmentID := assignment.ID
-	return db.AccrualItem{BaseModel: db.BaseModel{ID: ids.New(), CreatedAt: now, UpdatedAt: now}, TenantID: defaultTenantID, AccrualRunID: run.ID, WorkPeriodID: run.WorkPeriodID, WorkPeriodAssignmentID: &assignmentID, CollaboratorID: assignment.CollaboratorID, CalculationType: calculationType, Direction: DirectionCredit, Status: ItemStatusPending, PendingReason: PendingReasonReplacementAssignmentMissing, Description: description}
+	return db.AccrualItem{BaseModel: db.BaseModel{ID: ids.New(), CreatedAt: now, UpdatedAt: now}, TenantID: run.TenantID, PersonID: assignment.Collaborator.Membership.PersonID, AccrualRunID: run.ID, WorkPeriodID: run.WorkPeriodID, WorkPeriodAssignmentID: &assignmentID, CollaboratorID: assignment.CollaboratorID, CalculationType: calculationType, Direction: DirectionCredit, Status: ItemStatusPending, PendingReason: PendingReasonReplacementAssignmentMissing, Description: description}
 }
 
 func pendingGoldProductionForReplacement(assignment db.WorkPeriodAssignment, run db.AccrualRun, calculationType string, description string, now time.Time) db.AccrualItem {
 	assignmentID := assignment.ID
-	return db.AccrualItem{BaseModel: db.BaseModel{ID: ids.New(), CreatedAt: now, UpdatedAt: now}, TenantID: defaultTenantID, AccrualRunID: run.ID, WorkPeriodID: run.WorkPeriodID, WorkPeriodAssignmentID: &assignmentID, CollaboratorID: assignment.CollaboratorID, CalculationType: calculationType, Direction: DirectionCredit, Status: ItemStatusPending, PendingReason: PendingReasonGoldProductionMissing, Description: description}
+	return db.AccrualItem{BaseModel: db.BaseModel{ID: ids.New(), CreatedAt: now, UpdatedAt: now}, TenantID: run.TenantID, PersonID: assignment.Collaborator.Membership.PersonID, AccrualRunID: run.ID, WorkPeriodID: run.WorkPeriodID, WorkPeriodAssignmentID: &assignmentID, CollaboratorID: assignment.CollaboratorID, CalculationType: calculationType, Direction: DirectionCredit, Status: ItemStatusPending, PendingReason: PendingReasonGoldProductionMissing, Description: description}
 }
 
 func replacementGoldItem(assignment db.WorkPeriodAssignment, run db.AccrualRun, calculationType string, direction string, amount float64, description string, now time.Time) db.AccrualItem {
 	assignmentID := assignment.ID
-	return db.AccrualItem{BaseModel: db.BaseModel{ID: ids.New(), CreatedAt: now, UpdatedAt: now}, TenantID: defaultTenantID, AccrualRunID: run.ID, WorkPeriodID: run.WorkPeriodID, WorkPeriodAssignmentID: &assignmentID, CollaboratorID: assignment.CollaboratorID, CalculationType: calculationType, Direction: direction, GoldGramAmount: &amount, Status: ItemStatusReady, Description: description}
+	return db.AccrualItem{BaseModel: db.BaseModel{ID: ids.New(), CreatedAt: now, UpdatedAt: now}, TenantID: run.TenantID, PersonID: assignment.Collaborator.Membership.PersonID, AccrualRunID: run.ID, WorkPeriodID: run.WorkPeriodID, WorkPeriodAssignmentID: &assignmentID, CollaboratorID: assignment.CollaboratorID, CalculationType: calculationType, Direction: direction, GoldGramAmount: &amount, Status: ItemStatusReady, Description: description}
 }
 
 func valueOrDefault(value *float64, fallback float64) float64 {
@@ -463,6 +464,7 @@ func accrualLedgerEntry(item db.AccrualItem, valueUnit db.ReferenceData, directi
 			UpdatedAt: now,
 		},
 		TenantID:       item.TenantID,
+		PersonID:       item.PersonID,
 		CollaboratorID: item.CollaboratorID,
 		ValueUnitID:    valueUnit.ID,
 		EntryType:      entryType,

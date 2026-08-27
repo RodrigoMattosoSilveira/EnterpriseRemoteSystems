@@ -5,6 +5,7 @@ export type SettlementPreview = {
   brlBalance: number;
   goldGramBalance: number;
   pendingAccrualItems: number;
+  outstandingReceipts: number;
   canClose: boolean;
   blockingReasons: string[];
 };
@@ -79,4 +80,15 @@ export type CloseJourneyResult = {
   ledgerEntries: SettlementLedgerEntry[];
   journeyStatus: string;
   closedAt: string;
+};
+
+export type FinalSettlementInput = CorrectionReasonInput & {
+  requestId: string;
+  effectiveDate: string;
+  notes: string;
+};
+
+export type FinalSettlementResult = {
+  settlement: JourneySettlement;
+  ledgerEntries: SettlementLedgerEntry[];
 };

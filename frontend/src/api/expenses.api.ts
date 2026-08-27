@@ -72,3 +72,10 @@ export function createExpense(input: CreateExpenseInput): Promise<Expense> {
     body: JSON.stringify(input),
   });
 }
+
+export function cancelExpense(id: string, reason: string): Promise<Expense> {
+  return apiFetch<Expense>(`/expenses/${encodeURIComponent(id)}/cancel`, {
+    method: "POST",
+    body: JSON.stringify({ reason }),
+  });
+}

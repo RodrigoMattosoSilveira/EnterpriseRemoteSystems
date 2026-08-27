@@ -1,18 +1,24 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   createCollaborator,
+  extendCollaboratorJourney,
   getCollaborator,
+  getSelfCollaborator,
   listAllCollaborators,
   listCollaboratorCandidates,
   listCollaborators,
   listExpenseCollaborators,
+  listSelfCollaboratorJourneys,
   updateCollaborator,
+  updateCollaboratorWorkAssignment,
 } from "../../api/collaborators.api";
 import type {
   Collaborator,
   CollaboratorListFilter,
   CreateCollaboratorInput,
+  ExtendCollaboratorJourneyInput,
   UpdateCollaboratorInput,
+  UpdateCollaboratorWorkAssignmentInput,
 } from "../../types/collaborators";
 
 export const collaboratorQueryKeys = {
@@ -21,6 +27,7 @@ export const collaboratorQueryKeys = {
   list: (filter: CollaboratorListFilter = {}) =>
     [...collaboratorQueryKeys.lists(), filter] as const,
   catalog: () => [...collaboratorQueryKeys.lists(), "catalog"] as const,
+  selfList: () => [...collaboratorQueryKeys.lists(), "self"] as const,
   search: (search: string) =>
     [...collaboratorQueryKeys.lists(), "search", search] as const,
   candidates: () => [...collaboratorQueryKeys.all, "candidates"] as const,
@@ -28,6 +35,8 @@ export const collaboratorQueryKeys = {
     [...collaboratorQueryKeys.lists(), "expense-candidates"] as const,
   details: () => [...collaboratorQueryKeys.all, "detail"] as const,
   detail: (id: string) => [...collaboratorQueryKeys.details(), id] as const,
+  selfDetail: (id: string) =>
+    [...collaboratorQueryKeys.details(), "self", id] as const,
 };
 
 export function useCollaboratorCandidates(enabled = true) {
@@ -79,10 +88,21 @@ export function useExpenseCollaborators() {
   });
 }
 
-export function useCollaborator(id: string) {
+export function useSelfCollaboratorJourneys(enabled = true) {
   return useQuery({
-    queryKey: collaboratorQueryKeys.detail(id),
-    queryFn: () => getCollaborator(id),
+    queryKey: collaboratorQueryKeys.selfList(),
+    queryFn: listSelfCollaboratorJourneys,
+    enabled,
+  });
+}
+
+export function useCollaborator(id: string, selfOnly = false) {
+  return useQuery({
+    queryKey: selfOnly
+      ? collaboratorQueryKeys.selfDetail(id)
+      : collaboratorQueryKeys.detail(id),
+    queryFn: () =>
+      selfOnly ? getSelfCollaborator(id) : getCollaborator(id),
     enabled: Boolean(id),
   });
 }
@@ -118,6 +138,42 @@ export function useUpdateCollaborator(id: string) {
   return useMutation({
     mutationFn: (input: UpdateCollaboratorInput) =>
       updateCollaborator(id, input),
+    onSuccess: (collaborator) => {
+      queryClient.invalidateQueries({
+        queryKey: collaboratorQueryKeys.lists(),
+      });
+      queryClient.setQueryData(
+        collaboratorQueryKeys.detail(collaborator.id),
+        collaborator,
+      );
+    },
+  });
+}
+
+export function useUpdateCollaboratorWorkAssignment(id: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (input: UpdateCollaboratorWorkAssignmentInput) =>
+      updateCollaboratorWorkAssignment(id, input),
+    onSuccess: (collaborator) => {
+      queryClient.invalidateQueries({
+        queryKey: collaboratorQueryKeys.lists(),
+      });
+      queryClient.setQueryData(
+        collaboratorQueryKeys.detail(collaborator.id),
+        collaborator,
+      );
+    },
+  });
+}
+
+export function useExtendCollaboratorJourney(id: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (input: ExtendCollaboratorJourneyInput) =>
+      extendCollaboratorJourney(id, input),
     onSuccess: (collaborator) => {
       queryClient.invalidateQueries({
         queryKey: collaboratorQueryKeys.lists(),

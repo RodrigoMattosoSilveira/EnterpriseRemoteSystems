@@ -131,8 +131,16 @@ func seedTenantData(database *gorm.DB, tenantID string, includePriceList bool) e
 				TenantID:  tenantID, Type: seed.Type, Code: seed.Code, Label: seed.Label,
 				Description: seed.Description, Active: true, SortOrder: seed.SortOrder,
 			}
-			if err := tx.Where("tenant_id = ? AND type = ? AND code = ?", tenantID, seed.Type, seed.Code).
-				FirstOrCreate(&row).Error; err != nil {
+			var existing ReferenceData
+			lookup := tx.Where("tenant_id = ? AND type = ? AND code = ?", tenantID, seed.Type, seed.Code).
+				Limit(1).Find(&existing)
+			if lookup.Error != nil {
+				return fmt.Errorf("find reference data %s/%s: %w", seed.Type, seed.Code, lookup.Error)
+			}
+			if lookup.RowsAffected > 0 {
+				continue
+			}
+			if err := tx.Create(&row).Error; err != nil {
 				return fmt.Errorf("seed reference data %s/%s: %w", seed.Type, seed.Code, err)
 			}
 		}
@@ -147,8 +155,16 @@ func seedTenantData(database *gorm.DB, tenantID string, includePriceList bool) e
 				Description: seed.Description, UnitPriceBRL: seed.UnitPriceBRL,
 				Active: true, SortOrder: seed.SortOrder,
 			}
-			if err := tx.Where("tenant_id = ? AND item_type = ? AND code = ?", tenantID, seed.ItemType, seed.Code).
-				FirstOrCreate(&row).Error; err != nil {
+			var existing ExpensePriceListItem
+			lookup := tx.Where("tenant_id = ? AND item_type = ? AND code = ?", tenantID, seed.ItemType, seed.Code).
+				Limit(1).Find(&existing)
+			if lookup.Error != nil {
+				return fmt.Errorf("find price-list item %s/%s: %w", seed.ItemType, seed.Code, lookup.Error)
+			}
+			if lookup.RowsAffected > 0 {
+				continue
+			}
+			if err := tx.Create(&row).Error; err != nil {
 				return fmt.Errorf("seed price-list item %s/%s: %w", seed.ItemType, seed.Code, err)
 			}
 		}

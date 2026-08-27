@@ -48,6 +48,22 @@ describe("JourneySettlementPanel", () => {
     expect(textNode("Confirm reauthentication first")).toBeTruthy();
   });
 
+  it("disables Close Journey while any Journey balance is non-zero", async () => {
+    mockSettlementFetch();
+
+    renderPanel();
+    await waitForText("non-zero balance");
+
+    const closeButton = Array.from(
+      container.querySelectorAll<HTMLButtonElement>("button"),
+    ).find((button) => button.textContent?.includes("Close Journey"));
+    expect(closeButton).toBeTruthy();
+    expect(closeButton?.disabled).toBe(true);
+    expect(container.textContent).toContain(
+      "close only after every value-unit balance is zero",
+    );
+  });
+
   it("formats partial payout gold grams with two decimals", async () => {
     mockSettlementFetch({ preview: { goldGramBalance: 2.55555555 } });
 
@@ -176,16 +192,164 @@ describe("JourneySettlementPanel", () => {
     });
   });
 
+  it("presents the final settlement workflow according to balance direction", async () => {
+    mockSettlementFetch({ preview: { brlBalance: -80, goldGramBalance: -1.25 } });
+
+    renderPanel();
+    await waitForText("Collaborator owes Tenant");
+    expect(textNode("Extend Journey")).toBeTruthy();
+    expect(textNode("Record Collaborator Payment")).toBeTruthy();
+    expect(textNode("Settle Tenant Owed Balance")).toBeFalsy();
+  });
+
+  it("presents both settlement directions when BRL and Gold have opposite signs", async () => {
+    mockSettlementFetch({ preview: { brlBalance: 100, goldGramBalance: -1.25 } });
+
+    renderPanel();
+    await waitForText("Tenant owes Collaborator");
+    expect(textNode("Collaborator owes Tenant")).toBeTruthy();
+    expect(textNode("Settle Tenant Owed Balance")).toBeTruthy();
+    expect(textNode("Extend Journey")).toBeTruthy();
+    expect(textNode("Record Collaborator Payment")).toBeTruthy();
+  });
+
+  it("shows receipt acceptance as the remaining blocker after balances reach zero", async () => {
+    mockSettlementFetch({
+      preview: {
+        brlBalance: 0,
+        goldGramBalance: 0,
+        outstandingReceipts: 2,
+        canClose: false,
+        blockingReasons: ["OUTSTANDING_RECEIPTS"],
+      },
+    });
+
+    renderPanel();
+    await waitForText("Balances settled — receipt acceptance pending");
+    expect(container.textContent).toContain("2 final-settlement receipts remain outstanding");
+    expect(container.textContent).not.toContain("Blocking reasons: outstanding receipts");
+    const outstandingReceiptsLink = Array.from(
+      container.querySelectorAll<HTMLAnchorElement>("a"),
+    ).find((link) => link.textContent?.includes("Review outstanding receipts"));
+    expect(outstandingReceiptsLink?.getAttribute("href")).toBe(
+      "/receipts/outstanding",
+    );
+    const closeButton = Array.from(container.querySelectorAll<HTMLButtonElement>("button")).find(
+      (button) => button.textContent?.includes("Close Journey"),
+    );
+    expect(closeButton?.disabled).toBe(true);
+  });
+
+  it("suppresses a stale generic outstanding-receipts reason when the receipt count is zero", async () => {
+    mockSettlementFetch({
+      preview: {
+        brlBalance: 0,
+        goldGramBalance: 0,
+        outstandingReceipts: 0,
+        canClose: false,
+        blockingReasons: ["OUTSTANDING_RECEIPTS"],
+      },
+    });
+
+    renderPanel();
+    await waitForText("Outstanding receipts");
+    expect(container.textContent).not.toContain("Blocking reasons: outstanding receipts");
+    expect(textNode("Balances settled — receipt acceptance pending")).toBeFalsy();
+  });
+
+  it("extends a Journey by additional days without invoking settlement reauthentication", async () => {
+    const requests: Array<{ url: string; init?: RequestInit; body?: unknown }> = [];
+    mockSettlementFetch({
+      preview: { brlBalance: -80, goldGramBalance: 0 },
+      onRequest: (request) => requests.push(request),
+    });
+
+    renderPanel();
+    await waitForText("Collaborator owes Tenant");
+    await clickButton("Extend Journey");
+    await waitForText("Extending the Journey does not post a Ledger Entry");
+    await setFieldValue("Additional days", "14");
+    await clickSubmitButton("Confirm Extension");
+    await waitForText("Journey extended by 14 days");
+
+    const request = requests.find((candidate) => candidate.url.includes("/collaborators/collab-1/extend"));
+    expect(request?.body).toEqual({ additionalDays: 14 });
+    const headers = new Headers(request?.init?.headers);
+    expect(headers.get("X-Reauthentication-Method")).toBeNull();
+  });
+
+  it("posts the full positive Journey balance as a final Tenant payment without caller amounts", async () => {
+    const requests: Array<{ url: string; init?: RequestInit; body?: unknown }> = [];
+    vi.spyOn(globalThis.crypto, "randomUUID").mockReturnValue(
+      "request-final-tenant" as ReturnType<Crypto["randomUUID"]>,
+    );
+    mockSettlementFetch({ onRequest: (request) => requests.push(request) });
+
+    renderPanel();
+    await waitForText("R$ 900,00");
+    await clickButton("Settle Tenant Owed Balance");
+    await setFieldValue("Reason code", "FINAL_TENANT_PAYMENT");
+    await setFieldValue("Reason text", "Pay all positive final Journey balances.");
+    await clickButton("Confirm reauthentication");
+    await clickSubmitButton("Post Final Tenant Payment");
+    await waitForText("Collaborator receipt acceptance is required");
+
+    const request = requests.find((candidate) => candidate.url.includes("/final-settlement/tenant-payment"));
+    expect(request?.body).toMatchObject({
+      requestId: "request-final-tenant",
+      reasonCode: "FINAL_TENANT_PAYMENT",
+      reasonText: "Pay all positive final Journey balances.",
+    });
+    expect(request?.body).not.toHaveProperty("brlAmount");
+    expect(request?.body).not.toHaveProperty("goldGramAmount");
+  });
+
+  it("records the full negative Journey balance as a final Collaborator payment without caller amounts", async () => {
+    const requests: Array<{ url: string; init?: RequestInit; body?: unknown }> = [];
+    vi.spyOn(globalThis.crypto, "randomUUID").mockReturnValue(
+      "request-final-collaborator" as ReturnType<Crypto["randomUUID"]>,
+    );
+    mockSettlementFetch({
+      preview: { brlBalance: -80, goldGramBalance: -1.25 },
+      onRequest: (request) => requests.push(request),
+    });
+
+    renderPanel();
+    await waitForText("-R$ 80,00");
+    await clickButton("Record Collaborator Payment");
+    await setFieldValue("Reason code", "FINAL_COLLABORATOR_PAYMENT");
+    await setFieldValue("Reason text", "Record repayment of all negative final Journey balances.");
+    await clickButton("Confirm reauthentication");
+    await clickSubmitButton("Record Final Collaborator Payment");
+    await waitForText("Tenant receipt acceptance is required");
+
+    const request = requests.find((candidate) => candidate.url.includes("/final-settlement/collaborator-payment"));
+    expect(request?.body).toMatchObject({
+      requestId: "request-final-collaborator",
+      reasonCode: "FINAL_COLLABORATOR_PAYMENT",
+      reasonText: "Record repayment of all negative final Journey balances.",
+    });
+    expect(request?.body).not.toHaveProperty("brlAmount");
+    expect(request?.body).not.toHaveProperty("goldGramAmount");
+  });
+
   it("notifies the detail page immediately after a Journey closes", async () => {
     const onJourneyClosed = vi.fn();
 
     vi.spyOn(globalThis.crypto, "randomUUID").mockReturnValue(
       "request-close-success" as ReturnType<Crypto["randomUUID"]>,
     );
-    mockSettlementFetch();
+    mockSettlementFetch({
+      preview: {
+        brlBalance: 0,
+        goldGramBalance: 0,
+        canClose: true,
+        blockingReasons: [],
+      },
+    });
 
     renderPanel({ onJourneyClosed });
-    await waitForText("R$ 900,00");
+    await waitForText("R$ 0,00");
 
     await clickButton("Close Journey");
     await setFieldValue("Reason code", "END_OF_JOURNEY_SETTLEMENT");
@@ -229,8 +393,9 @@ function mockSettlementFetch(options: MockSettlementFetchOptions = {}) {
     brlBalance: 900,
     goldGramBalance: 2.5,
     pendingAccrualItems: 0,
-    canClose: true,
-    blockingReasons: [],
+    outstandingReceipts: 0,
+    canClose: false,
+    blockingReasons: ["NON_ZERO_BALANCE"],
     ...options.preview,
   } satisfies SettlementPreview;
   const actors = options.actors ?? [
@@ -291,6 +456,28 @@ function mockSettlementFetch(options: MockSettlementFetchOptions = {}) {
         ledgerEntries: [],
         journeyStatus: "CLOSED",
         closedAt: "2026-08-21T12:00:00Z",
+      });
+    }
+
+    if (url.includes("/collaborators/collab-1/extend")) {
+      return jsonResponse({
+        id: "collab-1",
+        extensionDays: 14,
+        projectedEndDate: "2100-01-14",
+      });
+    }
+
+    if (url.includes("/final-settlement/tenant-payment")) {
+      return jsonResponse({
+        settlement: { id: "settlement-final-tenant", settlementType: "FINAL_TENANT_PAYMENT" },
+        ledgerEntries: [{ id: "ledger-final-tenant-brl" }, { id: "ledger-final-tenant-gold" }],
+      });
+    }
+
+    if (url.includes("/final-settlement/collaborator-payment")) {
+      return jsonResponse({
+        settlement: { id: "settlement-final-collaborator", settlementType: "FINAL_COLLABORATOR_PAYMENT" },
+        ledgerEntries: [{ id: "ledger-final-collaborator-brl" }, { id: "ledger-final-collaborator-gold" }],
       });
     }
 

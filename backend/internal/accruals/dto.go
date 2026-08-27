@@ -23,6 +23,7 @@ type AccrualSummaryDTO struct {
 type AccrualItemDTO struct {
 	ID                     string   `json:"id"`
 	TenantID               string   `json:"tenantId"`
+	PersonID               string   `json:"personId"`
 	AccrualRunID           string   `json:"accrualRunId"`
 	WorkPeriodID           string   `json:"workPeriodId"`
 	WorkPeriodAssignmentID string   `json:"workPeriodAssignmentId,omitempty"`

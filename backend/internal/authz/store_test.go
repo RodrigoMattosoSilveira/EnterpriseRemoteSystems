@@ -130,6 +130,7 @@ func TestSeedAuthorizationCatalogCreatesCoreRolesAndGrants(t *testing.T) {
 		{RoleExpenseOperator, PermissionAuthzSelfRead},
 		{RoleEarningsOperator, PermissionTenantsRead},
 		{RoleEarningsOperator, PermissionReferenceDataRead},
+		{RoleEarningsOperator, PermissionCollaboratorsWorkAssignmentUpdate},
 		{RoleExpenseOperator, PermissionTenantsRead},
 		{RoleExpenseOperator, PermissionReferenceDataRead},
 	} {
@@ -143,6 +144,28 @@ func TestSeedAuthorizationCatalogCreatesCoreRolesAndGrants(t *testing.T) {
 		if count != 1 {
 			t.Fatalf("expected %s to receive %s, got %d grants", tc.role, tc.permission, count)
 		}
+	}
+
+	var expenseOperatorUpdate int64
+	if err := database.Model(&AuthzRolePermission{}).
+		Joins("JOIN authz_roles ON authz_roles.id = authz_role_permissions.role_id").
+		Where("authz_roles.code = ? AND permission_code = ?", string(RoleExpenseOperator), string(PermissionExpensesUpdate)).
+		Count(&expenseOperatorUpdate).Error; err != nil {
+		t.Fatalf("count expense update permission for Expense Operator: %v", err)
+	}
+	if expenseOperatorUpdate != 0 {
+		t.Fatalf("Expense Operator must not receive Tenant Administrator expense-correction authority")
+	}
+
+	var earningsFullCollaboratorUpdate int64
+	if err := database.Model(&AuthzRolePermission{}).
+		Joins("JOIN authz_roles ON authz_roles.id = authz_role_permissions.role_id").
+		Where("authz_roles.code = ? AND permission_code = ?", string(RoleEarningsOperator), string(PermissionCollaboratorsUpdate)).
+		Count(&earningsFullCollaboratorUpdate).Error; err != nil {
+		t.Fatalf("count full collaborator update permission for earnings operator: %v", err)
+	}
+	if earningsFullCollaboratorUpdate != 0 {
+		t.Fatalf("EARNINGS_OPERATOR must not receive full collaborator update permission")
 	}
 }
 
@@ -1062,5 +1085,25 @@ func TestAuthorizationAuditLogModelRejectsORMMutation(t *testing.T) {
 
 	if err := database.Delete(&row).Error; !errors.Is(err, ErrImmutableAuditLog) {
 		t.Fatalf("expected ErrImmutableAuditLog for ORM delete, got %v", err)
+	}
+}
+
+func TestIntrinsicSelfServiceKeepsJourneyHistoryReadableAfterCurrentJourneyCloses(t *testing.T) {
+	permissions := intrinsicSelfServicePermissions(true, false)
+	if _, ok := permissions[PermissionCollaboratorsSelfRead]; !ok {
+		t.Fatal("historical Collaborator Journey read must survive the absence of an open Journey")
+	}
+	for _, permission := range []Permission{
+		PermissionCollaboratorsUpdate,
+		PermissionCollaboratorsWorkAssignmentUpdate,
+		PermissionCurrentAccountsSelfSummaryRead,
+		PermissionCurrentAccountsSelfLedgerRead,
+		PermissionAssignmentsSelfCurrentRead,
+		PermissionLedgerReceiptsSelfRead,
+		PermissionLedgerReceiptsSelfAccept,
+	} {
+		if _, ok := permissions[permission]; ok {
+			t.Fatalf("closed Journey history must not preserve current Collaborator capability %s", permission)
+		}
 	}
 }

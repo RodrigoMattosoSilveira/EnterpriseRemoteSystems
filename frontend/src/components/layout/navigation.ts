@@ -48,8 +48,8 @@ export function visibleNavigationLinks(
         : [];
     }
     if (link.to === "/collaborators" && !wildcard && !permissions.includes("collaborators.read")) {
-      return permissions.includes("collaborators.self.read") && identity.collaboratorId
-        ? [{ ...link, to: `/collaborators/${encodeURIComponent(identity.collaboratorId)}` }]
+      return permissions.includes("collaborators.self.read") && identity.personId
+        ? [{ ...link, to: "/collaborators" }]
         : [];
     }
     return [link];

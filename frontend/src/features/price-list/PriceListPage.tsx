@@ -54,6 +54,9 @@ export function PriceListPage() {
     updateMutation.error ??
     deactivateMutation.error ??
     reactivateMutation.error;
+  const editFormIsDirty = Boolean(
+    editing && !priceListItemFormValuesEqual(editForm, formValueFromItem(editing)),
+  );
 
   async function handleCreate(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -80,7 +83,7 @@ export function PriceListPage() {
 
   async function handleUpdate(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!editing) return;
+    if (!editing || !editFormIsDirty) return;
     setClientValidationError("");
     setSuccessMessage("");
     updateMutation.reset();
@@ -344,6 +347,7 @@ export function PriceListPage() {
             description="Update the item metadata and BRL unit price. Saving creates a new active version and keeps this version inactive for audit history."
             value={editForm}
             isPending={updateMutation.isPending}
+            isSubmitDisabled={!editFormIsDirty}
             submitLabel="Save Changes"
             pendingLabel="Saving..."
             onChange={setEditForm}
@@ -364,6 +368,19 @@ function formValueFromItem(item: PriceListItem): PriceListItemFormValue {
     unitPriceBrl: String(item.unitPriceBrl),
     sortOrder: String(item.sortOrder),
   };
+}
+
+function priceListItemFormValuesEqual(
+  left: PriceListItemFormValue,
+  right: PriceListItemFormValue,
+) {
+  return (
+    left.itemType === right.itemType &&
+    left.code === right.code &&
+    left.description === right.description &&
+    left.unitPriceBrl === right.unitPriceBrl &&
+    left.sortOrder === right.sortOrder
+  );
 }
 
 function formValueToInput(value: PriceListItemFormValue): PriceListItemInput {

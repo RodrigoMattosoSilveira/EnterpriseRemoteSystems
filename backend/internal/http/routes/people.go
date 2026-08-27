@@ -18,6 +18,7 @@ func RegisterPeopleRoutes(v1 fiber.Router, deps Dependencies) {
 	if deps.AuthenticationHandler != nil {
 		r.Get("/:id/authentication", requireTenantAdministrator(deps), deps.AuthenticationHandler.GetPersonAuthenticationStatus)
 		r.Post("/:id/authentication/enable", requireTenantAdministrator(deps), deps.AuthenticationHandler.EnablePersonAuthentication)
+		r.Post("/:id/authentication/password-reset-tokens", requireTenantAdministrator(deps), deps.AuthenticationHandler.IssueTenantPersonPasswordResetToken)
 		r.Post("/:id/authentication/reactivation-request", requireTenantAdministrator(deps), deps.AuthenticationHandler.RequestTenantPersonReactivation)
 	}
 	r.Post("/", requirePermission(deps, authz.PermissionPeopleCreate), deps.PeopleHandler.Create)

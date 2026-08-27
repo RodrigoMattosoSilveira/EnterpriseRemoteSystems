@@ -1,4 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { AuthorizationProvider } from "../../components/layout/AuthorizationContext";
+import type { AuthzCurrentActor } from "../../types/authz";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
@@ -10,6 +12,7 @@ let container: HTMLDivElement;
 let root: Root | null;
 let fetchCalls: FetchCall[];
 let receipt: PrintableReceipt;
+let authActor: AuthzCurrentActor;
 
 type FetchCall = {
   url: string;
@@ -29,6 +32,7 @@ beforeEach(() => {
   root = null;
   fetchCalls = [];
   receipt = receiptFixture();
+  authActor = actorFixture();
   vi.stubGlobal("print", vi.fn());
 });
 
@@ -96,6 +100,65 @@ describe("PrintableReceiptPage", () => {
     expect(terminalButtons.every((button) => button.disabled)).toBe(true);
     expect((fieldControl("Signed document reference") as HTMLInputElement | null)?.disabled).toBe(true);
   });
+
+  it("lets the Collaborator accept the Tenant final payment through self-service", async () => {
+    authActor = actorFixture({
+      actorKey: "collaborator@example.com",
+      actorRecordId: "actor-collaborator",
+      collaboratorId: "collab-20e",
+      roleCodes: [],
+      permissions: ["ledger.receipts.self.read", "ledger.receipts.self.accept"],
+      intrinsicPermissions: ["ledger.receipts.self.read", "ledger.receipts.self.accept"],
+      delegatedPermissions: [],
+    });
+    receipt = receiptFixture({
+      receiptPurpose: "FINAL_SETTLEMENT_TENANT_PAYMENT",
+      paymentDirection: "TENANT_TO_COLLABORATOR",
+      acceptingParty: "COLLABORATOR",
+      entryType: "FINAL_SETTLEMENT",
+      description: "Final Journey payment from Tenant to Collaborator",
+    });
+    mockReceiptFetch();
+    renderPage();
+
+    await waitForText("In-app settlement acceptance");
+    await waitForText("The Collaborator must confirm");
+    expect(fetchCalls.some((call) => call.url.endsWith("/receipt/self") && call.method === "GET")).toBe(true);
+    expect(buttonByText("Accept payment and sign receipt")?.disabled).toBe(false);
+    expect(buttonByText("Record signed return")).toBeFalsy();
+
+    await setFieldValue("Acceptance notes", "Received in full.");
+    await clickButton("Accept payment and sign receipt");
+    await waitForText("Accepted in-app by collaborator@example.com");
+
+    const acceptCall = fetchCalls.find((call) => call.url.endsWith("/receipt/accept"));
+    expect(acceptCall?.body).toEqual({ confirm: true, notes: "Received in full." });
+  });
+
+  it("lets a Tenant Administrator accept a Collaborator final repayment", async () => {
+    authActor = actorFixture({
+      actorKey: "tenant-admin@example.com",
+      actorRecordId: "actor-tenant-admin",
+      roleCodes: ["TENANT_ADMIN"],
+      permissions: ["ledger.receipts.read", "ledger.receipts.tenant.accept"],
+      intrinsicPermissions: [],
+      delegatedPermissions: ["ledger.receipts.read", "ledger.receipts.tenant.accept"],
+    });
+    receipt = receiptFixture({
+      receiptPurpose: "FINAL_SETTLEMENT_COLLABORATOR_PAYMENT",
+      paymentDirection: "COLLABORATOR_TO_TENANT",
+      acceptingParty: "TENANT",
+      entryType: "FINAL_SETTLEMENT",
+      description: "Final Journey payment from Collaborator to Tenant",
+    });
+    mockReceiptFetch();
+    renderPage();
+
+    await waitForText("A Tenant Administrator must confirm");
+    expect(fetchCalls.some((call) => call.url.endsWith("/receipt") && !call.url.endsWith("/receipt/self") && call.method === "GET")).toBe(true);
+    await clickButton("Accept payment and sign receipt");
+    await waitForText("Accepted in-app by tenant-admin@example.com");
+  });
 });
 
 function renderPage() {
@@ -111,7 +174,9 @@ function renderPage() {
     root = createRoot(container);
     root.render(
       <QueryClientProvider client={queryClient}>
-        <RouterProvider router={router} />
+        <AuthorizationProvider value={authActor}>
+          <RouterProvider router={router} />
+        </AuthorizationProvider>
       </QueryClientProvider>,
     );
   });
@@ -127,7 +192,25 @@ function mockReceiptFetch() {
       body: parseBody(init?.body),
     });
 
-    if (url === "/api/v1/ledger-entries/ledger-entry-20e/receipt" && (!init?.method || init.method === "GET")) {
+    if ((url === "/api/v1/ledger-entries/ledger-entry-20e/receipt" || url === "/api/v1/ledger-entries/ledger-entry-20e/receipt/self") && (!init?.method || init.method === "GET")) {
+      return Promise.resolve(jsonResponse({ data: receipt }));
+    }
+
+
+    if (url === "/api/v1/ledger-entries/ledger-entry-20e/receipt/accept" && init?.method === "POST") {
+      const body = parseBody(init.body) as { confirm: boolean; notes: string };
+      receipt = {
+        ...receipt,
+        status: "RETURNED",
+        acceptedAt: "2026-06-22T12:05:00Z",
+        acceptedBy: authActor.actorKey,
+        acceptanceMethod: "IN_APP",
+        signedAt: "2026-06-22T12:05:00Z",
+        returnedAt: "2026-06-22T12:05:00Z",
+        receivedBy: authActor.actorKey,
+        signedDocumentRef: `IN_APP:${authActor.actorKey}:2026-06-22T12:05:00Z`,
+        notes: body.notes,
+      };
       return Promise.resolve(jsonResponse({ data: receipt }));
     }
 
@@ -154,6 +237,9 @@ function receiptFixture(overrides: Partial<PrintableReceipt> = {}): PrintableRec
     id: "receipt-20e",
     receiptNumber: "RCP-20E",
     receiptType: "LEDGER_DEBIT",
+    receiptPurpose: "LEDGER_DEBIT",
+    paymentDirection: "ACCOUNT_DEBIT",
+    acceptingParty: "COLLABORATOR",
     status: "PENDING_ISSUE",
     ledgerEntryId: "ledger-entry-20e",
     entryType: "DEBIT",
@@ -167,6 +253,20 @@ function receiptFixture(overrides: Partial<PrintableReceipt> = {}): PrintableRec
     collaboratorLegalName: "Receipt Lifecycle",
     collaboratorCpf: "12345678901",
     createdAt: "2026-06-22T12:00:00Z",
+    ...overrides,
+  };
+}
+
+function actorFixture(overrides: Partial<AuthzCurrentActor> = {}): AuthzCurrentActor {
+  return {
+    actorKey: "expense-operator@example.com",
+    actorRecordId: "actor-expense-operator",
+    tenantId: "default",
+    scope: "TENANT",
+    roleCodes: ["EXPENSE_OPERATOR"],
+    permissions: ["ledger.receipts.read", "ledger.receipts.print", "ledger.receipts.return"],
+    intrinsicPermissions: [],
+    delegatedPermissions: ["ledger.receipts.read", "ledger.receipts.print", "ledger.receipts.return"],
     ...overrides,
   };
 }

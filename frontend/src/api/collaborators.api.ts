@@ -5,6 +5,8 @@ import type { Person } from "../types/people";
 import type {
   CloseJourneyInput,
   CloseJourneyResult,
+  FinalSettlementInput,
+  FinalSettlementResult,
   PartialPayoutInput,
   PartialPayoutResult,
   SettlementPreview,
@@ -17,7 +19,9 @@ import type {
   CollaboratorListFilter,
   CollaboratorListResponse,
   CreateCollaboratorInput,
+  ExtendCollaboratorJourneyInput,
   UpdateCollaboratorInput,
+  UpdateCollaboratorWorkAssignmentInput,
 } from "../types/collaborators";
 
 export function listCollaboratorCandidates(): Promise<Person[]> {
@@ -85,6 +89,17 @@ export async function listCollaborators(
   };
 }
 
+
+export function listSelfCollaboratorJourneys(): Promise<Collaborator[]> {
+  return apiFetch<Collaborator[]>("/collaborators/self");
+}
+
+export function getSelfCollaborator(id: string): Promise<Collaborator> {
+  return apiFetch<Collaborator>(
+    `/collaborators/self/${encodeURIComponent(id)}`,
+  );
+}
+
 export function getCollaborator(id: string): Promise<Collaborator> {
   return apiFetch<Collaborator>(`/collaborators/${encodeURIComponent(id)}`);
 }
@@ -106,6 +121,32 @@ export function updateCollaborator(
     method: "PUT",
     body: JSON.stringify(input),
   });
+}
+
+export function updateCollaboratorWorkAssignment(
+  id: string,
+  input: UpdateCollaboratorWorkAssignmentInput,
+): Promise<Collaborator> {
+  return apiFetch<Collaborator>(
+    `/collaborators/${encodeURIComponent(id)}/work-assignment`,
+    {
+      method: "PATCH",
+      body: JSON.stringify(input),
+    },
+  );
+}
+
+export function extendCollaboratorJourney(
+  id: string,
+  input: ExtendCollaboratorJourneyInput,
+): Promise<Collaborator> {
+  return apiFetch<Collaborator>(
+    `/collaborators/${encodeURIComponent(id)}/extend`,
+    {
+      method: "POST",
+      body: JSON.stringify(input),
+    },
+  );
 }
 
 export function getCollaboratorFinancialProjection(
@@ -144,6 +185,34 @@ export function partialPayout(
 ): Promise<PartialPayoutResult> {
   return apiFetch<PartialPayoutResult>(
     `/collaborators/${encodeURIComponent(collaboratorId)}/payout`,
+    {
+      method: "POST",
+      headers: recentReauthenticationHeaders(),
+      body: JSON.stringify(input),
+    },
+  );
+}
+
+export function finalTenantPayment(
+  collaboratorId: string,
+  input: FinalSettlementInput,
+): Promise<FinalSettlementResult> {
+  return apiFetch<FinalSettlementResult>(
+    `/collaborators/${encodeURIComponent(collaboratorId)}/final-settlement/tenant-payment`,
+    {
+      method: "POST",
+      headers: recentReauthenticationHeaders(),
+      body: JSON.stringify(input),
+    },
+  );
+}
+
+export function finalCollaboratorPayment(
+  collaboratorId: string,
+  input: FinalSettlementInput,
+): Promise<FinalSettlementResult> {
+  return apiFetch<FinalSettlementResult>(
+    `/collaborators/${encodeURIComponent(collaboratorId)}/final-settlement/collaborator-payment`,
     {
       method: "POST",
       headers: recentReauthenticationHeaders(),

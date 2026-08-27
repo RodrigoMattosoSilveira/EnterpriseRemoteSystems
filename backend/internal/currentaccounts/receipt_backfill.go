@@ -58,6 +58,7 @@ func (s *service) BackfillDebitLedgerReceipts(ctx context.Context, authorizedBy 
 		receipts = append(receipts, &db.LedgerReceipt{
 			BaseModel:      db.BaseModel{ID: receiptID, CreatedAt: now, UpdatedAt: now},
 			TenantID:       entry.TenantID,
+			PersonID:       entry.PersonID,
 			CollaboratorID: entry.CollaboratorID,
 			LedgerEntryID:  entry.ID,
 			ReceiptNumber:  &receiptNumber,

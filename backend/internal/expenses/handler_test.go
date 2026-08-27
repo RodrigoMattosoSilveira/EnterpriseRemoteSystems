@@ -62,6 +62,10 @@ type apiExpenseResponse struct {
 		ExpenseDate            string   `json:"expenseDate"`
 		Description            string   `json:"description"`
 		Active                 bool     `json:"active"`
+		CancelledAt            string   `json:"cancelledAt"`
+		CancelledBy            string   `json:"cancelledBy"`
+		CancellationReason     string   `json:"cancellationReason"`
+		RecreatedFromExpenseID *string  `json:"recreatedFromExpenseId"`
 		PriceListItemID        *string  `json:"priceListItemId"`
 		PriceListItemCode      string   `json:"priceListItemCode"`
 		ItemType               string   `json:"itemType"`
@@ -670,6 +674,162 @@ func TestUpdateExpenseReturnsUpdatedExpense(t *testing.T) {
 	if body.Data.ExpenseCategoryID != "ref-expense-category-flight" || body.Data.ValueUnitID != "ref-value-unit-gold-gram" || body.Data.Amount != 3.75 || body.Data.ExpenseDate != "2026-06-04" {
 		t.Fatalf("unexpected updated expense: %+v", body.Data)
 	}
+}
+
+func TestCancelExpensePreservesAuditAndReversesFinancialEffect(t *testing.T) {
+	server, database, cleanup := newTestServerWithDatabase(t)
+	defer cleanup()
+
+	collaborator := createActiveCollaborator(t, server, 1)
+	expense := createExpense(t, server, validExpensePayload(collaborator.Data.ID, nil))
+
+	res := postJSON(t, server, http.MethodPost, expensesURL+expense.Data.ID+"/cancel", map[string]any{
+		"reason": "Wrong collaborator selected",
+	})
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		var body apiErrorResponse
+		decodeJSON(t, res, &body)
+		t.Fatalf("expected cancel status %d, got %d with error %+v", http.StatusOK, res.StatusCode, body.Error)
+	}
+	var cancelled apiExpenseResponse
+	decodeJSON(t, res, &cancelled)
+
+	if cancelled.Data.Active {
+		t.Fatal("expected cancelled expense to be inactive")
+	}
+	if cancelled.Data.CancelledAt == "" || cancelled.Data.CancelledBy != "system" || cancelled.Data.CancellationReason != "Wrong collaborator selected" {
+		t.Fatalf("unexpected cancellation audit: %+v", cancelled.Data)
+	}
+	if cancelled.Data.FinancialPosting == nil || cancelled.Data.FinancialPosting.ReceiptStatus != "CANCELLED" || cancelled.Data.FinancialPosting.OutstandingReceipt {
+		t.Fatalf("expected original receipt obligation to be cancelled, got %+v", cancelled.Data.FinancialPosting)
+	}
+
+	var original dbpkg.LedgerEntry
+	if err := database.First(&original, "id = ?", "ledger-expense-"+expense.Data.ID).Error; err != nil {
+		t.Fatalf("find original expense ledger entry: %v", err)
+	}
+	var reversals []dbpkg.LedgerEntry
+	if err := database.Where("tenant_id = ? AND related_entry_id = ? AND correction_type = ?", "default", original.ID, "REVERSAL").Find(&reversals).Error; err != nil {
+		t.Fatalf("find expense cancellation reversal: %v", err)
+	}
+	if len(reversals) != 1 || reversals[0].Direction != "CREDIT" || reversals[0].Amount != original.Amount {
+		t.Fatalf("expected one equal CREDIT reversal, got %+v", reversals)
+	}
+
+	var receipt dbpkg.LedgerReceipt
+	if err := database.First(&receipt, "ledger_entry_id = ?", original.ID).Error; err != nil {
+		t.Fatalf("find cancelled receipt: %v", err)
+	}
+	if receipt.Status != "CANCELLED" || receipt.CancelledAt == nil || receipt.CancelledBy != "system" || receipt.CancellationReason != "Wrong collaborator selected" {
+		t.Fatalf("unexpected cancelled receipt audit: %+v", receipt)
+	}
+}
+
+func TestCancelExpensePreservesReturnedReceiptAsHistoricalEvidence(t *testing.T) {
+	server, database, cleanup := newTestServerWithDatabase(t)
+	defer cleanup()
+
+	collaborator := createActiveCollaborator(t, server, 1)
+	expense := createExpense(t, server, validExpensePayload(collaborator.Data.ID, nil))
+
+	var receipt dbpkg.LedgerReceipt
+	if err := database.First(&receipt, "ledger_entry_id = ?", "ledger-expense-"+expense.Data.ID).Error; err != nil {
+		t.Fatalf("find original receipt: %v", err)
+	}
+	now := time.Now().UTC()
+	if err := database.Model(&dbpkg.LedgerReceipt{}).
+		Where("id = ?", receipt.ID).
+		Updates(map[string]any{
+			"status":              "RETURNED",
+			"issued_at":           now,
+			"issued_by":           "operator",
+			"printed_at":          now,
+			"signed_at":           now,
+			"returned_at":         now,
+			"received_by":         "operator",
+			"signed_document_ref": "manual-returned-receipt",
+			"updated_at":          now,
+		}).Error; err != nil {
+		t.Fatalf("mark receipt returned: %v", err)
+	}
+
+	res := postJSON(t, server, http.MethodPost, expensesURL+expense.Data.ID+"/cancel", map[string]any{
+		"reason": "Wrong item",
+	})
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		var body apiErrorResponse
+		decodeJSON(t, res, &body)
+		t.Fatalf("expected cancel status %d, got %d with error %+v", http.StatusOK, res.StatusCode, body.Error)
+	}
+
+	if err := database.First(&receipt, "id = ?", receipt.ID).Error; err != nil {
+		t.Fatalf("reload returned receipt: %v", err)
+	}
+	if receipt.Status != "RETURNED" || receipt.CancelledAt != nil || receipt.CancellationReason != "" {
+		t.Fatalf("returned receipt must remain immutable historical evidence, got %+v", receipt)
+	}
+}
+
+func TestCancelExpenseRequiresReason(t *testing.T) {
+	server, cleanup := newTestServer(t)
+	defer cleanup()
+
+	collaborator := createActiveCollaborator(t, server, 1)
+	expense := createExpense(t, server, validExpensePayload(collaborator.Data.ID, nil))
+
+	res := postJSON(t, server, http.MethodPost, expensesURL+expense.Data.ID+"/cancel", map[string]any{})
+	defer res.Body.Close()
+	assertValidationError(t, res, "reason", "Cancellation reason is required")
+}
+
+func TestCreateExpenseCanLinkOnlyToCancelledSource(t *testing.T) {
+	server, cleanup := newTestServer(t)
+	defer cleanup()
+
+	collaborator := createActiveCollaborator(t, server, 1)
+	source := createExpense(t, server, validExpensePayload(collaborator.Data.ID, nil))
+
+	activeSourcePayload := validExpensePayload(collaborator.Data.ID, map[string]any{
+		"description":            "Attempt from active source",
+		"recreatedFromExpenseId": source.Data.ID,
+	})
+	res := postJSON(t, server, http.MethodPost, expensesURL, activeSourcePayload)
+	defer res.Body.Close()
+	assertValidationError(t, res, "recreatedFromExpenseId", "Source expense must be cancelled before it can be recreated")
+
+	cancelRes := postJSON(t, server, http.MethodPost, expensesURL+source.Data.ID+"/cancel", map[string]any{
+		"reason": "Wrong quantity",
+	})
+	defer cancelRes.Body.Close()
+	if cancelRes.StatusCode != http.StatusOK {
+		t.Fatalf("expected source cancellation status %d, got %d", http.StatusOK, cancelRes.StatusCode)
+	}
+
+	recreatedPayload := validExpensePayload(collaborator.Data.ID, map[string]any{
+		"description":            "Corrected expense",
+		"recreatedFromExpenseId": source.Data.ID,
+	})
+	res = postJSON(t, server, http.MethodPost, expensesURL, recreatedPayload)
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusCreated {
+		var body apiErrorResponse
+		decodeJSON(t, res, &body)
+		t.Fatalf("expected recreated expense status %d, got %d with error %+v", http.StatusCreated, res.StatusCode, body.Error)
+	}
+	var recreated apiExpenseResponse
+	decodeJSON(t, res, &recreated)
+	if recreated.Data.RecreatedFromExpenseID == nil || *recreated.Data.RecreatedFromExpenseID != source.Data.ID {
+		t.Fatalf("expected recreated-from link %q, got %+v", source.Data.ID, recreated.Data.RecreatedFromExpenseID)
+	}
+	if !recreated.Data.Active {
+		t.Fatal("expected recreated expense to be active")
+	}
+
+	res = postJSON(t, server, http.MethodPost, expensesURL, recreatedPayload)
+	defer res.Body.Close()
+	assertValidationError(t, res, "recreatedFromExpenseId", "Cancelled source expense has already been recreated")
 }
 
 func TestDeactivateAndDeleteExpenseHideItFromDefaultList(t *testing.T) {
