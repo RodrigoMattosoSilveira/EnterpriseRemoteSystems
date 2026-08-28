@@ -131,7 +131,7 @@ export function ExpensesPage() {
               to="/expenses/new"
               className="rounded-xl bg-gray-950 px-4 py-2 text-sm font-semibold text-white shadow-sm"
             >
-              Add
+              Create Expense
             </Link>
           </div>
         </div>
