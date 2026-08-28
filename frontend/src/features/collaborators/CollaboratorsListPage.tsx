@@ -249,7 +249,9 @@ export function CollaboratorsListPage() {
                     <th className="p-3">Person</th>
                     <th className="p-3">Journey</th>
                     <th className="p-3">Work</th>
-                    <th className="p-3">Payment</th>
+                    <th className="p-3">
+                      {selfMode ? "Journey ID" : "Payment"}
+                    </th>
                     <th className="p-3">Status</th>
                   </tr>
                 </thead>
@@ -285,10 +287,21 @@ export function CollaboratorsListPage() {
                         </div>
                       </td>
                       <td className="p-3 text-gray-700">
-                        <div>{formatMoney(collaborator.paymentValue)}</div>
-                        <div className="text-xs text-gray-500">
-                          {collaborator.paymentMethodLabel || "—"}
-                        </div>
+                        {selfMode ? (
+                          <Link
+                            to={`/collaborators/${collaborator.id}`}
+                            className="break-all font-mono text-xs font-semibold text-gray-900 underline decoration-gray-300 underline-offset-2 hover:decoration-gray-900"
+                          >
+                            {collaborator.id}
+                          </Link>
+                        ) : (
+                          <>
+                            <div>{formatMoney(collaborator.paymentValue)}</div>
+                            <div className="text-xs text-gray-500">
+                              {collaborator.paymentMethodLabel || "—"}
+                            </div>
+                          </>
+                        )}
                       </td>
                       <td className="p-3">
                         <JourneyStatusBadge collaborator={collaborator} />
@@ -304,6 +317,7 @@ export function CollaboratorsListPage() {
                 <CollaboratorCard
                   key={collaborator.id}
                   collaborator={collaborator}
+                  selfMode={selfMode}
                 />
               ))}
             </div>
@@ -347,7 +361,13 @@ function sortSelfCollaboratorJourneys(collaborators: Collaborator[]) {
   });
 }
 
-function CollaboratorCard({ collaborator }: { collaborator: Collaborator }) {
+function CollaboratorCard({
+  collaborator,
+  selfMode,
+}: {
+  collaborator: Collaborator;
+  selfMode: boolean;
+}) {
   return (
     <Link to={`/collaborators/${collaborator.id}`} className="block p-4">
       <div className="flex items-start justify-between gap-3">
@@ -374,9 +394,24 @@ function CollaboratorCard({ collaborator }: { collaborator: Collaborator }) {
           label="Projected End"
           value={formatDate(collaborator.projectedEndDate)}
         />
-        <JourneyTiming collaborator={collaborator} className="text-right text-sm" />
-        <Info label="Payment" value={formatMoney(collaborator.paymentValue)} />
-        <Info label="Method" value={collaborator.paymentMethodLabel || "—"} />
+        <JourneyTiming
+          collaborator={collaborator}
+          className="text-right text-sm"
+        />
+        {selfMode ? (
+          <Info label="Journey ID" value={collaborator.id} breakValue />
+        ) : (
+          <>
+            <Info
+              label="Payment"
+              value={formatMoney(collaborator.paymentValue)}
+            />
+            <Info
+              label="Method"
+              value={collaborator.paymentMethodLabel || "—"}
+            />
+          </>
+        )}
       </div>
     </Link>
   );
@@ -441,11 +476,23 @@ function JourneyTiming({
   );
 }
 
-function Info({ label, value }: { label: string; value: string }) {
+function Info({
+  label,
+  value,
+  breakValue = false,
+}: {
+  label: string;
+  value: string;
+  breakValue?: boolean;
+}) {
   return (
     <div className="flex justify-between gap-4">
       <span className="text-gray-500">{label}</span>
-      <span className="text-right font-medium">{value}</span>
+      <span
+        className={`text-right font-medium ${breakValue ? "break-all font-mono text-xs" : ""}`}
+      >
+        {value}
+      </span>
     </div>
   );
 }
