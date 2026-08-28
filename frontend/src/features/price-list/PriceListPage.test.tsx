@@ -93,6 +93,43 @@ describe("PriceListPage", () => {
     expect(fetchCalls.some((call) => call.url === "/api/v1/price-list-items?includeInactive=true")).toBe(true);
   });
 
+
+  it("filters price-list items by description or code without another API request", async () => {
+    rows = [
+      ...rows,
+      {
+        id: "price-manual30g-expense-20",
+        tenantId: "default",
+        itemType: "CANTEEN",
+        code: "MANUAL30G_EXPENSE_20",
+        description: "30G Manual Expense 20 BRL",
+        unitPriceBrl: 20,
+        active: true,
+        sortOrder: 930,
+        createdAt: "2026-08-28T12:00:00Z",
+        updatedAt: "2026-08-28T12:00:00Z",
+      },
+    ];
+    mockPriceListFetch();
+
+    renderPage();
+
+    await waitForText("30G Manual Expense 20 BRL");
+    const initialGetCount = fetchCalls.filter((call) => call.method === "GET").length;
+
+    await changeInputByLabel("Description or code", "MANUAL30G_EXPENSE_20");
+
+    await waitForText("30G Manual Expense 20 BRL");
+    expect(textNode("Snack")).toBeUndefined();
+    expect(textNode("Document copy")).toBeUndefined();
+    expect(fetchCalls.filter((call) => call.method === "GET").length).toBe(initialGetCount);
+
+    await changeInputByLabel("Description or code", "manual expense");
+
+    await waitForText("30G Manual Expense 20 BRL");
+    expect(textNode("Snack")).toBeUndefined();
+  });
+
   it("opens the create panel, creates a Canteen item, and dismisses the panel", async () => {
     mockPriceListFetch();
 
@@ -355,6 +392,18 @@ function textNode(text: string) {
   return Array.from(container.querySelectorAll("*")).find((element) =>
     element.textContent?.includes(text),
   );
+}
+
+
+async function changeInputByLabel(labelText: string, value: string) {
+  const input = controlByLabel<HTMLInputElement>(container, labelText, "input");
+  const valueSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+
+  await act(async () => {
+    valueSetter?.call(input, value);
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+  });
 }
 
 async function changeInputInForm(headingText: string, labelText: string, value: string) {
