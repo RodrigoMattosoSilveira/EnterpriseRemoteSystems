@@ -298,6 +298,8 @@ type ReceiptListFilter struct {
 
 type OutstandingReceiptDTO struct {
 	ID                    string  `json:"id"`
+	TenantID              string  `json:"tenantId"`
+	PersonID              string  `json:"personId"`
 	ReceiptNumber         string  `json:"receiptNumber"`
 	ReceiptType           string  `json:"receiptType"`
 	ReceiptPurpose        string  `json:"receiptPurpose"`
@@ -349,6 +351,8 @@ type OutstandingReceiptListResult struct {
 
 type PrintableReceiptDTO struct {
 	ID                    string  `json:"id"`
+	TenantID              string  `json:"tenantId"`
+	PersonID              string  `json:"personId"`
 	ReceiptNumber         string  `json:"receiptNumber"`
 	ReceiptType           string  `json:"receiptType"`
 	ReceiptPurpose        string  `json:"receiptPurpose"`
