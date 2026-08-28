@@ -249,9 +249,7 @@ export function CollaboratorsListPage() {
                     <th className="p-3">Person</th>
                     <th className="p-3">Journey</th>
                     <th className="p-3">Work</th>
-                    <th className="p-3">
-                      {selfMode ? "Journey ID" : "Payment"}
-                    </th>
+                    <th className="p-3">Journey ID</th>
                     <th className="p-3">Status</th>
                   </tr>
                 </thead>
@@ -287,21 +285,12 @@ export function CollaboratorsListPage() {
                         </div>
                       </td>
                       <td className="p-3 text-gray-700">
-                        {selfMode ? (
-                          <Link
-                            to={`/collaborators/${collaborator.id}`}
-                            className="break-all font-mono text-xs font-semibold text-gray-900 underline decoration-gray-300 underline-offset-2 hover:decoration-gray-900"
-                          >
-                            {collaborator.id}
-                          </Link>
-                        ) : (
-                          <>
-                            <div>{formatMoney(collaborator.paymentValue)}</div>
-                            <div className="text-xs text-gray-500">
-                              {collaborator.paymentMethodLabel || "—"}
-                            </div>
-                          </>
-                        )}
+                        <Link
+                          to={`/collaborators/${collaborator.id}`}
+                          className="break-all font-mono text-xs font-semibold text-gray-900 underline decoration-gray-300 underline-offset-2 hover:decoration-gray-900"
+                        >
+                          {collaborator.id}
+                        </Link>
                       </td>
                       <td className="p-3">
                         <JourneyStatusBadge collaborator={collaborator} />
@@ -398,20 +387,7 @@ function CollaboratorCard({
           collaborator={collaborator}
           className="text-right text-sm"
         />
-        {selfMode ? (
-          <Info label="Journey ID" value={collaborator.id} breakValue />
-        ) : (
-          <>
-            <Info
-              label="Payment"
-              value={formatMoney(collaborator.paymentValue)}
-            />
-            <Info
-              label="Method"
-              value={collaborator.paymentMethodLabel || "—"}
-            />
-          </>
-        )}
+        <Info label="Journey ID" value={collaborator.id} breakValue />
       </div>
     </Link>
   );
@@ -500,13 +476,6 @@ function Info({
 function formatDate(value?: string) {
   if (!value) return "—";
   return value;
-}
-
-function formatMoney(value: number) {
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-  }).format(value);
 }
 
 function readFlash(state: unknown) {

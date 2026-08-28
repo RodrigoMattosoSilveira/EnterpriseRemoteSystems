@@ -119,9 +119,16 @@ describe("CollaboratorsListPage", () => {
     expect(textNode("Collaborator Journeys")).toBeTruthy();
     expect(textNode("Operator")).toBeTruthy();
     expect(textNode("Mining · Mina Carara")).toBeTruthy();
-    expect(textNode("Daily Rate")).toBeTruthy();
-    expect(textNode("$125.00")).toBeTruthy();
-    expect(textNode("Payment")).toBeTruthy();
+    expect(textNode("Journey ID")).toBeTruthy();
+    expect(container.textContent).toContain("collab-1");
+    expect(
+      Array.from(
+        container.querySelectorAll<HTMLAnchorElement>(
+          'a[href="/collaborators/collab-1"]',
+        ),
+      ).some((link) => link.textContent?.trim() === "collab-1"),
+    ).toBe(true);
+    expect(textNode("Payment")).toBeFalsy();
     expect(textNode("Active")).toBeTruthy();
   });
 
@@ -153,7 +160,9 @@ describe("CollaboratorsListPage", () => {
     ).toBe("Filger");
 
     const displayedNames = Array.from(
-      container.querySelectorAll<HTMLAnchorElement>("tbody a"),
+      container.querySelectorAll<HTMLAnchorElement>(
+        "tbody tr td:first-child a",
+      ),
     ).map((link) => link.textContent?.trim());
     expect(displayedNames).toEqual(["Ana", "Zulu"]);
   });
