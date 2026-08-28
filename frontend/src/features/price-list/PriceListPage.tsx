@@ -63,9 +63,11 @@ export function PriceListPage() {
     updateMutation.error ??
     deactivateMutation.error ??
     reactivateMutation.error;
+  const createFormIsValid = priceListItemFormIsValid(createForm);
   const editFormIsDirty = Boolean(
     editing && !priceListItemFormValuesEqual(editForm, formValueFromItem(editing)),
   );
+  const editFormIsValid = priceListItemFormIsValid(editForm);
 
   async function handleCreate(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -232,6 +234,7 @@ export function PriceListPage() {
             description="Create an active item that can be selected on the New Expense form. The list moves down while this panel is open."
             value={createForm}
             isPending={createMutation.isPending}
+            isSubmitDisabled={!createFormIsValid}
             submitLabel="Create Item"
             pendingLabel="Creating..."
             onChange={setCreateForm}
@@ -367,7 +370,7 @@ export function PriceListPage() {
             description="Update the item metadata and BRL unit price. Saving creates a new active version and keeps this version inactive for audit history."
             value={editForm}
             isPending={updateMutation.isPending}
-            isSubmitDisabled={!editFormIsDirty}
+            isSubmitDisabled={!editFormIsDirty || !editFormIsValid}
             submitLabel="Save Changes"
             pendingLabel="Saving..."
             onChange={setEditForm}
@@ -411,6 +414,10 @@ function formValueToInput(value: PriceListItemFormValue): PriceListItemInput {
     unitPriceBrl: Number(value.unitPriceBrl),
     sortOrder: Number(value.sortOrder || 0),
   };
+}
+
+function priceListItemFormIsValid(value: PriceListItemFormValue) {
+  return validatePriceListItemInput(formValueToInput(value)) === "";
 }
 
 function validatePriceListItemInput(input: PriceListItemInput) {

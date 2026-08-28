@@ -140,10 +140,39 @@ describe("PriceListPage", () => {
 
     await clickButton("Add Price List Item");
     await waitForText("Create Price List Item");
+
+    const createForm = formByHeading("Create Price List Item");
+    const createButton = buttonByName("Create Item");
+    expect(createButton.disabled).toBe(true);
+    expect(createButton.className).toContain("bg-gray-200");
+    expect(createButton.className).toContain("text-gray-500");
+    expect(controlByLabel<HTMLSelectElement>(createForm, "Category", "select").required).toBe(true);
+    expect(controlByLabel<HTMLInputElement>(createForm, "Code", "input").required).toBe(true);
+    expect(controlByLabel<HTMLInputElement>(createForm, "Description", "input").required).toBe(true);
+    expect(controlByLabel<HTMLInputElement>(createForm, "BRL Unit Price", "input").required).toBe(true);
+
     await changeSelectInForm("Create Price List Item", "Category", "CANTEEN");
     await changeInputInForm("Create Price List Item", "Code", "canteen_water_bottle");
+    expect(createButton.disabled).toBe(true);
+
     await changeInputInForm("Create Price List Item", "Description", "Water bottle");
+    expect(createButton.disabled).toBe(true);
+
+    await changeInputInForm("Create Price List Item", "BRL Unit Price", "0");
+    expect(createButton.disabled).toBe(true);
+
     await changeInputInForm("Create Price List Item", "BRL Unit Price", "8.75");
+    expect(createButton.disabled).toBe(false);
+    expect(createButton.className).toContain("bg-gray-950");
+    expect(createButton.className).toContain("text-white");
+
+    await changeInputInForm("Create Price List Item", "Description", "");
+    expect(createButton.disabled).toBe(true);
+    expect(createButton.className).toContain("bg-gray-200");
+
+    await changeInputInForm("Create Price List Item", "Description", "Water bottle");
+    expect(createButton.disabled).toBe(false);
+
     await changeInputInForm("Create Price List Item", "Sort Order", "5");
     await submitFormByHeading("Create Price List Item");
 
