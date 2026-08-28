@@ -197,6 +197,9 @@ function ReceiptRow({ receipt }: { receipt: OutstandingReceipt }) {
           <span className={`rounded-full px-2 py-1 text-xs font-semibold ${receiptStatusTone(receipt.status)}`}>{receiptStatusLabel(receipt.status)}</span>
         </div>
         <p className="mt-1 text-sm text-gray-700">{receipt.collaboratorLabel} · {receipt.collaboratorLegalName}</p>
+        <p className="mt-1 text-xs text-gray-500">
+          Person owner: <span className="font-mono">{receipt.personId}</span> · Journey provenance: <span className="font-mono">{receipt.collaboratorId}</span> · Tenant: <span className="font-mono">{receipt.tenantId}</span>
+        </p>
         <p className="mt-1 text-sm text-gray-600">
           {humanize(receipt.entryType)} · {formatAmount(receipt.amount, receipt.valueUnitCode)} · Effective {receipt.effectiveDate}
         </p>

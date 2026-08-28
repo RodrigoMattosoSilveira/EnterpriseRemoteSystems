@@ -46,6 +46,10 @@ export function CollaboratorCurrentAccountPage() {
   const canBrowseOutstandingReceipts = wildcard || actor.permissions.includes("ledger.receipts.read");
   const canOpenOperationalSources =
     wildcard || actor.permissions.includes("expenses.read") || actor.permissions.includes("planning.read");
+  const canOpenJourneyProvenance =
+    wildcard ||
+    actor.permissions.includes("collaborators.read") ||
+    actor.permissions.includes("collaborators.self.read");
   const canOpenReceipt = wildcard || actor.permissions.includes("ledger.receipts.read") || actor.permissions.includes("ledger.receipts.self.read");
   const [showFinancialProjection, setShowFinancialProjection] = useState(false);
   const [searchParams, setSearchParams] = useSearchParams();
@@ -188,6 +192,7 @@ export function CollaboratorCurrentAccountPage() {
                         key={entry.id}
                         entry={entry}
                         canOpenOperationalSources={canOpenOperationalSources}
+                        canOpenJourneyProvenance={canOpenJourneyProvenance}
                         canOpenReceipt={canOpenReceipt}
                       />
                     ))}
@@ -262,10 +267,12 @@ function BalanceCard({ balance }: { balance: CurrentAccountBalance }) {
 function LedgerEntryRow({
   entry,
   canOpenOperationalSources,
+  canOpenJourneyProvenance,
   canOpenReceipt,
 }: {
   entry: LedgerEntry;
   canOpenOperationalSources: boolean;
+  canOpenJourneyProvenance: boolean;
   canOpenReceipt: boolean;
 }) {
   const receipt = entry.receipt;
@@ -296,6 +303,27 @@ function LedgerEntryRow({
         {entry.description ? (
           <p className="mt-1 text-sm text-gray-600">{entry.description}</p>
         ) : null}
+        <dl className="mt-2 grid gap-1 rounded-xl border border-gray-100 bg-gray-50 p-3 text-xs text-gray-700 sm:grid-cols-2">
+          <div>
+            <dt className="inline font-semibold text-gray-900">Person owner: </dt>
+            <dd className="inline font-mono">{entry.personId}</dd>
+          </div>
+          <div>
+            <dt className="inline font-semibold text-gray-900">Journey provenance: </dt>
+            <dd className="inline">
+              {canOpenJourneyProvenance ? (
+                <Link
+                  className="font-mono font-semibold underline"
+                  to={`/collaborators/${entry.collaboratorId}`}
+                >
+                  {entry.collaboratorId}
+                </Link>
+              ) : (
+                <span className="font-mono">{entry.collaboratorId}</span>
+              )}
+            </dd>
+          </div>
+        </dl>
         {receipt && isFinalSettlementReceipt(receipt.receiptPurpose) ? (
           <dl className="mt-2 grid gap-1 rounded-xl bg-gray-50 p-3 text-xs text-gray-700 sm:grid-cols-2">
             <div>

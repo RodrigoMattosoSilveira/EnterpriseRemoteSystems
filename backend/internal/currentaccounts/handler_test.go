@@ -190,6 +190,8 @@ type apiFinancialProjectionResponse struct {
 type apiPrintableReceiptResponse struct {
 	Data struct {
 		ID                string `json:"id"`
+		TenantID          string `json:"tenantId"`
+		PersonID          string `json:"personId"`
 		ReceiptNumber     string `json:"receiptNumber"`
 		Status            string `json:"status"`
 		IssuedAt          string `json:"issuedAt"`
@@ -718,6 +720,9 @@ func TestReceiptPrintAuthorization(t *testing.T) {
 	decodeJSON(t, permitted, &body)
 	if body.Data.Status != "PRINTED" || body.Data.IssuedBy != "receipt-printer@example.com" {
 		t.Fatalf("unexpected printed receipt: %+v", body.Data)
+	}
+	if body.Data.TenantID == "" || body.Data.PersonID == "" || body.Data.CollaboratorID != collaborator.Data.ID {
+		t.Fatalf("expected canonical receipt ownership metadata, got %+v", body.Data)
 	}
 }
 

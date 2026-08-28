@@ -87,6 +87,7 @@ describe("AccrualTab", () => {
                 tenantId: "default",
                 accrualRunId: "run-1",
                 workPeriodId: "wp-1",
+                personId: "person-1",
                 collaboratorId: "c-1",
                 collaboratorName: "Maria",
                 calculationType: "GOLD_COMMISSION",
@@ -137,6 +138,9 @@ describe("AccrualTab", () => {
       "Optional context for this accrual run.",
     );
     expect(container.textContent).toContain("Maria");
+    expect(container.textContent).toContain("Person owner: person-1");
+    expect(container.textContent).toContain("Journey provenance: c-1");
+    expect(container.textContent).toContain("Tenant: default");
   });
 
   it("shows posted accrual items as visible in Current Account earnings", async () => {
@@ -179,6 +183,7 @@ describe("AccrualTab", () => {
                 accrualRunId: "run-posted-1",
                 workPeriodId: "wp-1",
                 workPeriodAssignmentId: "assign-1",
+                personId: "person-1",
                 collaboratorId: "collab-1",
                 collaboratorName: "Maria",
                 calculationType: "DAILY_BRL",
@@ -216,6 +221,9 @@ describe("AccrualTab", () => {
     await waitForText("Posted earning credit");
     await waitForText("View in Current Account");
     expect(container.textContent).not.toContain("Open Gold Production");
+    expect(container.textContent).toContain("Person owner: person-1");
+    expect(container.textContent).toContain("Journey provenance: collab-1");
+    expect(container.textContent).toContain("Tenant: default");
 
     const link = container.querySelector<HTMLAnchorElement>(
       'a[href="/collaborators/collab-1/current-account?filter=earnings"]',

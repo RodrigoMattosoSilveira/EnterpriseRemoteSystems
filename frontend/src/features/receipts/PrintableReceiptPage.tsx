@@ -162,6 +162,9 @@ export function PrintableReceiptPage() {
 
         <dl className="mt-6 grid gap-3 text-sm sm:grid-cols-2">
           <Item label="Collaborator" value={data.collaboratorLabel} />
+          <Item label="Tenant" value={data.tenantId} />
+          <Item label="Person owner" value={data.personId} />
+          <Item label="Journey provenance" value={data.collaboratorId} />
           <Item label="Legal name" value={data.collaboratorLegalName} />
           <Item label="CPF" value={data.collaboratorCpf} />
           <Item label="Effective date" value={data.effectiveDate} />

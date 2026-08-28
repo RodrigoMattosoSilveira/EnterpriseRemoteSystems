@@ -18,7 +18,7 @@ Default tenant mapping:
     Tenant B: default
 
 The default batch produces deterministic IDs used verbatim by the accompanying
-Markdown, DevTools helper, and SQL verification script.
+UX-first manual promotion suite and automated technical verification.
 
 For a clean restart of the same deterministic batch, pass
 --reset-existing-batch. The script restores the clean pre-seed database backup
@@ -1117,13 +1117,14 @@ def main() -> int:
     print("\nMANDATORY before beginning the manual checklist:")
     print("  1. Stop any stale backend process if it is still running.")
     print("  2. From the project root run: make local-backend")
-    print("  3. Confirm the backend stays running on 127.0.0.1:8080 before using the DevTools helper.")
+    print("  3. Confirm the backend stays running on 127.0.0.1:8080 before opening the application UI.")
     print("     A 502 from localhost:5173/api/... means the Vite proxy cannot reach the backend;")
     print("     it does not mean the selected Account lacks Tenant A.")
-    print("  4. Sign in again after every fixture reset/rebuild. The reset replaces auth_sessions, so")
-    print("     browser sessions created before the reset are intentionally invalid and return HTTP 401.")
-    print('     For DevTools-only API verification you may run: await ERS30G.signIn("A")')
-    print("     Then run: await ERS30G.tenants()")
+    print("  4. Sign in again through the application UI after every fixture reset/rebuild.")
+    print("     The reset replaces auth_sessions, so browser sessions created before the reset are")
+    print("     intentionally invalid and return HTTP 401.")
+    print("  5. Perform the functional promotion suite through the supported UI only.")
+    print("     Do not use the legacy ERS30G DevTools helper to execute or verify manual test steps.")
     return 0
 
 

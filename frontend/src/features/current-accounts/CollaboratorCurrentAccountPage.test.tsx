@@ -168,6 +168,33 @@ describe("CollaboratorCurrentAccountPage", () => {
     expect(container.textContent).toContain("Accepting party: Tenant");
   });
 
+  it("shows canonical Person ownership and historical Journey provenance on each ledger row", async () => {
+    const historicalEntry = {
+      ...earningEntry,
+      id: "ledger-historical-a1",
+      personId: "person-a",
+      collaboratorId: "journey-a1-closed",
+      description: "Historical A1 earning",
+    };
+
+    mockFetch(async (url, init) => {
+      fetchCalls.push({ url, method: methodOf(init) });
+      if (url.startsWith("/api/v1/collaborators/collab-1/current-account")) {
+        return jsonResponse({ data: currentAccountDetailWith([historicalEntry]) });
+      }
+      throw new Error(`Unhandled request: ${methodOf(init)} ${url}`);
+    });
+
+    renderCurrentAccountPage("/collaborators/collab-1/current-account");
+
+    await waitForText("Historical A1 earning");
+    expect(container.textContent).toContain("Person owner: person-a");
+    expect(container.textContent).toContain("Journey provenance: journey-a1-closed");
+    expect(
+      container.querySelector('a[href="/collaborators/journey-a1-closed"]'),
+    ).not.toBeNull();
+  });
+
   it("filters to work-period assignment earnings", async () => {
     mockCurrentAccountFetch();
 

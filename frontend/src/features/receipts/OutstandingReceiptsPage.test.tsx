@@ -41,6 +41,9 @@ describe("OutstandingReceiptsPage", () => {
     await waitForText("Maria");
     await waitForText("Source: expense");
     await waitForText("Next action: Print receipt");
+    expect(container.textContent).toContain("Person owner: person-1");
+    expect(container.textContent).toContain("Journey provenance: collab-1");
+    expect(container.textContent).toContain("Tenant: default");
 
     expect(container.querySelector('a[href="/collaborators/collab-1"]')).not.toBeNull();
     expect(container.querySelector('a[href="/collaborators/collab-1/current-account"]')).not.toBeNull();
@@ -92,6 +95,8 @@ const outstandingReceipts: OutstandingReceiptListResult = {
   items: [
     {
       id: "receipt-1",
+      tenantId: "default",
+      personId: "person-1",
       receiptNumber: "R-1",
       receiptType: "LEDGER_DEBIT",
       receiptPurpose: "LEDGER_DEBIT",

@@ -330,7 +330,21 @@ function AccrualItemsTable({ items }: { items: AccrualItem[] }) {
           {items.map((item) => (
             <tr key={item.id} className="border-b last:border-0">
               <td className="px-2 py-3 font-medium">
-                {item.collaboratorName || item.collaboratorId}
+                <div>{item.collaboratorName || item.collaboratorId}</div>
+                <dl className="mt-1 grid gap-0.5 text-xs font-normal text-gray-500">
+                  <div>
+                    <dt className="inline font-semibold text-gray-600">Person owner: </dt>
+                    <dd className="inline font-mono">{item.personId}</dd>
+                  </div>
+                  <div>
+                    <dt className="inline font-semibold text-gray-600">Journey provenance: </dt>
+                    <dd className="inline font-mono">{item.collaboratorId}</dd>
+                  </div>
+                  <div>
+                    <dt className="inline font-semibold text-gray-600">Tenant: </dt>
+                    <dd className="inline font-mono">{item.tenantId}</dd>
+                  </div>
+                </dl>
               </td>
               <td className="px-2 py-3">
                 {humanizePlanningCode(item.calculationType)}

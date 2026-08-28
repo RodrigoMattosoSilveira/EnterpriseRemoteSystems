@@ -52,6 +52,10 @@ describe("PrintableReceiptPage", () => {
 
     await waitForText("Receipt lifecycle");
     await waitForText("Pending issue");
+    await waitForText("Person owner");
+    expect(container.textContent).toContain("person-20e");
+    expect(container.textContent).toContain("collab-20e");
+    expect(container.textContent).toContain("default");
     await waitForText("Signed document reference");
     expect(fieldControl("Received by")).toBeFalsy();
 
@@ -235,6 +239,8 @@ function mockReceiptFetch() {
 function receiptFixture(overrides: Partial<PrintableReceipt> = {}): PrintableReceipt {
   return {
     id: "receipt-20e",
+    tenantId: "default",
+    personId: "person-20e",
     receiptNumber: "RCP-20E",
     receiptType: "LEDGER_DEBIT",
     receiptPurpose: "LEDGER_DEBIT",
