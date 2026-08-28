@@ -97,8 +97,21 @@ test("user can create a Collaborator from an eligible complete Person", async ({
     page.getByRole("link", { name: new RegExp(personNickname) }),
   ).toBeVisible();
 
-  await expect(page.getByText("Miner").first()).toBeVisible();
-  await expect(page.getByText("Daily wage").first()).toBeVisible();
+  const createdCollaboratorRow = page.getByRole("row").filter({
+    has: page.getByRole("link", { name: new RegExp(personNickname) }),
+  });
+  await expect(createdCollaboratorRow.getByText("Miner")).toBeVisible();
+
+  const journeyIdLink = createdCollaboratorRow
+    .getByRole("cell")
+    .nth(3)
+    .getByRole("link");
+  await expect(journeyIdLink).toBeVisible();
+  await expect(journeyIdLink).toHaveAttribute(
+    "href",
+    /^\/collaborators\/[^/]+$/,
+  );
+  await expect(journeyIdLink).not.toHaveText("");
 
   await page.goto("/collaborators/new");
 
