@@ -94,12 +94,18 @@ export function CollaboratorCurrentAccountPage() {
           </Link>
           <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div>
-              <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+              <h1 className="text-3xl font-bold text-gray-950">
                 Person Current Account
-              </p>
-              <h1 className="text-2xl font-bold text-gray-950">
-                {data?.personLabel || data?.collaboratorLabel || "Current Account"}
               </h1>
+              <h2 className="mt-1 text-lg font-semibold text-gray-800">
+                {data?.personLabel || data?.collaboratorLabel || "Current Account"}
+              </h2>
+              <p className="mt-1 text-sm text-gray-600">
+                <span className="font-semibold">Journey Code:</span>{" "}
+                <span className="break-all font-mono">
+                  {data?.collaboratorId || id}
+                </span>
+              </p>
               <p className="mt-1 text-sm text-gray-600">
                 Person-owned balances and ledger history in the selected Tenant. Journey references remain as provenance.
               </p>
