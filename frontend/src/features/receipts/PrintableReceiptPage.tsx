@@ -59,6 +59,7 @@ export function PrintableReceiptPage() {
     actor.permissions.includes("ledger.receipts.tenant.accept");
   const canAccept = finalSettlementReceipt && !isReceiptTerminal(data.status) && (canAcceptAsCollaborator || canAcceptAsTenant);
   const terminal = isReceiptTerminal(data.status);
+  const cancelledReceipt = data.status === "CANCELLED";
   const signedDocumentReady = signedDocumentRef.trim().length > 0;
 
   return (
@@ -69,11 +70,13 @@ export function PrintableReceiptPage() {
 
           {finalSettlementReceipt ? (
             <SettlementReceiptLifecyclePanel receipt={data} />
+          ) : cancelledReceipt ? (
+            <CancelledReceiptPanel />
           ) : (
             <ReceiptLifecyclePanel receipt={data} />
           )}
 
-          {!finalSettlementReceipt ? (
+          {!finalSettlementReceipt && !cancelledReceipt ? (
           <div className="mt-4 grid gap-4 rounded-2xl border p-4">
             <div>
               <h2 className="text-lg font-bold">Print lifecycle step</h2>
@@ -124,7 +127,7 @@ export function PrintableReceiptPage() {
             </div>
           ) : null}
 
-          {!finalSettlementReceipt ? (
+          {!finalSettlementReceipt && !cancelledReceipt ? (
           <div className="mt-4 grid gap-4 rounded-2xl border p-4">
             <div>
               <h2 className="text-lg font-bold">Signed receipt return</h2>
@@ -208,6 +211,11 @@ export function PrintableReceiptPage() {
                 : `Awaiting in-app acceptance by the designated ${data.acceptingParty === "TENANT" ? "Tenant Administrator" : "Collaborator"}.`}
             </p>
           </div>
+        ) : cancelledReceipt ? (
+          <div className="mt-10 rounded-xl border border-gray-200 bg-gray-50 p-4 text-sm text-gray-700">
+            <p className="font-semibold">Receipt obligation cancelled</p>
+            <p className="mt-2">This receipt is retained as historical evidence only. No signature or signed-return record is required.</p>
+          </div>
         ) : (
           <div className="mt-16 grid gap-10 sm:grid-cols-2">
             <Signature label="Collaborator signature" />
@@ -217,6 +225,23 @@ export function PrintableReceiptPage() {
         <p className="mt-10 text-xs text-gray-500">{receiptAcknowledgement(data)}</p>
       </section>
     </main>
+  );
+}
+
+
+function CancelledReceiptPanel() {
+  return (
+    <section className="mt-4 rounded-2xl border border-gray-200 bg-gray-50 p-4" aria-label="Cancelled receipt">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h2 className="text-lg font-bold">Receipt obligation cancelled</h2>
+          <p className="mt-1 text-sm text-gray-700">
+            This receipt is retained as historical evidence only. It is no longer outstanding, and printing, signature, and signed-return handling are not required.
+          </p>
+        </div>
+        <span className="rounded-full bg-gray-200 px-3 py-1 text-sm font-semibold text-gray-700">Cancelled</span>
+      </div>
+    </section>
   );
 }
 
@@ -286,6 +311,9 @@ function Signature({ label }: { label: string }) { return <div className="border
 function humanize(value: string) { return value.toLowerCase().replaceAll("_", " "); }
 function formatAmount(value: number, unit: string) { return unit === "BRL" ? new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value) : `${value.toFixed(2)} g`; }
 function receiptAcknowledgement(receipt: PrintableReceipt) {
+  if (receipt.status === "CANCELLED") {
+    return "This receipt obligation was cancelled and is retained as historical evidence only. No signature or return is required.";
+  }
   if (receipt.receiptPurpose === "FINAL_SETTLEMENT_TENANT_PAYMENT") {
     return "By accepting, the Collaborator confirms receipt and acceptance of the Tenant's final Journey payment.";
   }

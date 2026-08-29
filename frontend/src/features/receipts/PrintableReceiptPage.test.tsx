@@ -105,6 +105,29 @@ describe("PrintableReceiptPage", () => {
     expect((fieldControl("Signed document reference") as HTMLInputElement | null)?.disabled).toBe(true);
   });
 
+  it("removes print and signed-return requirements for cancelled receipts", async () => {
+    receipt = receiptFixture({ status: "CANCELLED" });
+    mockReceiptFetch();
+
+    renderPage();
+
+    await waitForText("Receipt obligation cancelled");
+    await waitForText("This receipt is retained as historical evidence only.");
+
+    expect(container.textContent).not.toContain("Print lifecycle step");
+    expect(container.textContent).not.toContain("Signed receipt return");
+    expect(container.textContent).not.toContain("Follow the required status sequence");
+    expect(container.textContent).not.toContain("Waiting to be printed");
+    expect(container.textContent).not.toContain("Waiting for collaborator signature");
+    expect(container.textContent).not.toContain("Waiting for office return record");
+    expect(buttonByText("Print Receipt")).toBeFalsy();
+    expect(buttonByText("Record signed return")).toBeFalsy();
+    expect(fieldControl("Signed document reference")).toBeFalsy();
+    expect(container.textContent).not.toContain("Collaborator signature");
+    expect(container.textContent).not.toContain("Office administrator");
+    expect(container.textContent).toContain("No signature or signed-return record is required.");
+  });
+
   it("lets the Collaborator accept the Tenant final payment through self-service", async () => {
     authActor = actorFixture({
       actorKey: "collaborator@example.com",
