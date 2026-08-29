@@ -263,7 +263,7 @@ describe("CreateExpensePage", () => {
     await waitForText("Replacement detail");
   });
 
-  it("requires a price-list item before submitting", async () => {
+  it("requires a Canteen price-list item before submitting", async () => {
     mockCreateExpenseFetch();
     renderCreateExpensePage();
 
@@ -271,10 +271,15 @@ describe("CreateExpensePage", () => {
     await selectCollaborator("Maria", "Maria");
     await clickButton("Create Expense");
 
-    await waitForText("Select an item description from the price list.");
+    await waitForText(
+      "Complete Canteen item 1: select an item and currency and enter a quantity greater than zero.",
+    );
     expect(
       fetchCalls.some(
-        (call) => call.method === "POST" && call.url === "/api/v1/expenses",
+        (call) =>
+          call.method === "POST" &&
+          (call.url === "/api/v1/expenses" ||
+            call.url === "/api/v1/expenses/canteen-batch"),
       ),
     ).toBe(false);
   });
