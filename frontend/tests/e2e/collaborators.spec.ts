@@ -418,8 +418,16 @@ test("current account updates after receipt signed return", async ({
   await page.goto(currentAccountUrl);
   await expect(page.getByText("Receipt: Returned").first()).toBeVisible();
   await expect(
-    page.getByText("Receipt returned or closed.").first(),
+    page
+      .getByText("Receipt returned; no further receipt action is required.")
+      .first(),
   ).toBeVisible();
+  await expect(
+    page.getByRole("link", { name: "View receipt" }).first(),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("link", { name: "Print or return receipt" }),
+  ).toHaveCount(0);
   await expect(page.getByRole("link", { name: "Open source" })).toHaveAttribute(
     "href",
     `/expenses/${expense.id}`,
