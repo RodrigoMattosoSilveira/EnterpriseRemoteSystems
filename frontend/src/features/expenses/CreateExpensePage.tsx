@@ -3,12 +3,19 @@ import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { ApiErrorPanel } from "../../components/ApiErrorPanel";
 import { JourneyDaysRemaining } from "../../components/JourneyDaysRemaining";
 import type { Collaborator } from "../../types/collaborators";
-import type { CreateExpenseInput } from "../../types/expenses";
+import type {
+  CreateCanteenExpenseBatchInput,
+  CreateExpenseInput,
+} from "../../types/expenses";
 import type { PriceListItem, PriceListItemType } from "../../types/priceList";
 import { useCollaborator, useCollaboratorSearch } from "../collaborators/useCollaborators";
 import { useLatestGoldPrice } from "../gold-prices/useGoldPrices";
 import { usePriceListItems } from "../price-list/usePriceList";
-import { useCreateExpense, useExpense } from "./useExpenses";
+import {
+  useCreateCanteenExpenseBatch,
+  useCreateExpense,
+  useExpense,
+} from "./useExpenses";
 import { CurrentAndFutureEarningsModal } from "./CurrentAndFutureEarningsModal";
 
 type ExpenseCurrencyCode = "BRL" | "GOLD_GRAM";
@@ -23,6 +30,24 @@ type FormState = {
   expenseDate: string;
   description: string;
 };
+
+type CanteenLineState = {
+  id: number;
+  priceListItemId: string;
+  currencyCode: ExpenseCurrencyCode;
+  quantity: string;
+};
+
+let nextCanteenLineID = 1;
+
+function newCanteenLine(): CanteenLineState {
+  return {
+    id: nextCanteenLineID++,
+    priceListItemId: "",
+    currencyCode: "BRL",
+    quantity: "1",
+  };
+}
 
 const initialForm: FormState = {
   collaboratorId: "",
@@ -46,8 +71,12 @@ export function CreateExpensePage() {
   const priceListItemsQuery = usePriceListItems();
   const latestGoldPriceQuery = useLatestGoldPrice();
   const createMutation = useCreateExpenseWithPriceList();
+  const batchCreateMutation = useCreateCanteenExpenseBatch();
 
   const [form, setForm] = useState<FormState>(initialForm);
+  const [canteenLines, setCanteenLines] = useState<CanteenLineState[]>([
+    newCanteenLine(),
+  ]);
   const [collaboratorSearch, setCollaboratorSearch] = useState("");
   const [selectedCollaborator, setSelectedCollaborator] =
     useState<Collaborator | null>(null);
@@ -134,6 +163,8 @@ export function CreateExpensePage() {
     sourceExpenseQuery.error ||
     sourceCollaboratorQuery.error;
   const hasMissingSetup = priceListItems.length === 0;
+  const isCanteenBatchMode = !copyFromExpenseId && form.itemType === "CANTEEN";
+  const isCreating = createMutation.isPending || batchCreateMutation.isPending;
 
   const selectCollaborator = (collaborator: Collaborator) => {
     setSelectedCollaborator(collaborator);
@@ -155,6 +186,31 @@ export function CreateExpensePage() {
     }));
   };
 
+  const updateCanteenLine = (
+    lineID: number,
+    changes: Partial<Omit<CanteenLineState, "id">>,
+  ) => {
+    setCanteenLines((current) =>
+      current.map((line) =>
+        line.id === lineID ? { ...line, ...changes } : line,
+      ),
+    );
+  };
+
+  const addCanteenLine = () => {
+    setCanteenLines((current) =>
+      current.length >= 100 ? current : [...current, newCanteenLine()],
+    );
+  };
+
+  const removeCanteenLine = (lineID: number) => {
+    setCanteenLines((current) =>
+      current.length <= 1
+        ? current
+        : current.filter((line) => line.id !== lineID),
+    );
+  };
+
   const submit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setClientValidationError("");
@@ -167,6 +223,54 @@ export function CreateExpensePage() {
       setClientValidationError("Select a category.");
       return;
     }
+    if (!form.expenseDate) {
+      setClientValidationError("Select an expense date.");
+      return;
+    }
+
+    if (isCanteenBatchMode) {
+      const invalidLineIndex = canteenLines.findIndex((line) => {
+        const lineQuantity = Number(line.quantity);
+        return (
+          !line.priceListItemId ||
+          !line.currencyCode ||
+          !Number.isFinite(lineQuantity) ||
+          lineQuantity <= 0 ||
+          (line.currencyCode === "GOLD_GRAM" && !selectedGoldPrice)
+        );
+      });
+      if (invalidLineIndex >= 0) {
+        setClientValidationError(
+          `Complete Canteen item ${invalidLineIndex + 1}: select an item and currency and enter a quantity greater than zero${selectedGoldPrice ? "." : "; a current gold price is also required for Gold expenses."}`,
+        );
+        return;
+      }
+
+      const batchInput: CreateCanteenExpenseBatchInput = {
+        collaboratorId: form.collaboratorId,
+        expenseDate: form.expenseDate,
+        description: form.description.trim(),
+        items: canteenLines.map((line) => ({
+          priceListItemId: line.priceListItemId,
+          currencyCode: line.currencyCode,
+          quantity: Number(line.quantity),
+        })),
+      };
+      batchCreateMutation.mutate(batchInput, {
+        onSuccess: (result) => {
+          navigate("/expenses", {
+            state: {
+              flash:
+                result.items.length === 1
+                  ? `Expense created for ${result.items[0]?.collaboratorLabel || "Collaborator"}.`
+                  : `${result.items.length} Canteen expenses created for ${result.items[0]?.collaboratorLabel || "Collaborator"}.`,
+            },
+          });
+        },
+      });
+      return;
+    }
+
     if (!form.priceListItemId) {
       setClientValidationError(
         "Select an item description from the price list.",
@@ -236,7 +340,7 @@ export function CreateExpensePage() {
             <p className="mt-1 text-sm text-gray-500">
               {copyFromExpenseId
                 ? "Review the cancelled Expense data and change only the incorrect fields before creating the replacement."
-                : "Record item-based expenses from Canteen or Administrative price lists."}
+                : "Record multiple Canteen items in one operation, with a currency per item, or record a single Administrative expense."}
             </p>
           </div>
         </div>
@@ -277,7 +381,7 @@ export function CreateExpensePage() {
 
         <ApiErrorPanel error={loadError} />
         <ApiErrorPanel error={collaboratorsQuery.error} />
-        <ApiErrorPanel error={createMutation.error} />
+        <ApiErrorPanel error={createMutation.error || batchCreateMutation.error} />
 
         {clientValidationError && (
           <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm font-medium text-red-800">
@@ -299,8 +403,7 @@ export function CreateExpensePage() {
                 Expense Details
               </h2>
               <p className="mt-1 text-sm text-gray-500">
-                Select the Collaborator, category, price-list item, currency,
-                and quantity.
+                Select the Collaborator and shared expense context. Canteen purchases may contain multiple individually recorded items.
               </p>
             </section>
 
@@ -402,81 +505,23 @@ export function CreateExpensePage() {
                 <select
                   className="mt-1 w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-gray-950 shadow-sm"
                   value={form.itemType}
-                  onChange={(event) =>
+                  onChange={(event) => {
+                    const itemType = event.target.value as ExpenseItemType;
                     setForm((current) => ({
                       ...current,
-                      itemType: event.target.value as ExpenseItemType,
+                      itemType,
                       priceListItemId: "",
-                    }))
-                  }
+                      currencyCode: "BRL",
+                      quantity: "1",
+                    }));
+                    if (itemType === "CANTEEN") {
+                      setCanteenLines([newCanteenLine()]);
+                    }
+                  }}
                 >
                   <option value="CANTEEN">Canteen</option>
                   <option value="ADMINISTRATIVE">Administrative</option>
                 </select>
-              </label>
-
-              <label className="block text-sm font-medium text-gray-700">
-                Currency *
-                <select
-                  className="mt-1 w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-gray-950 shadow-sm"
-                  value={form.currencyCode}
-                  onChange={(event) =>
-                    setForm((current) => ({
-                      ...current,
-                      currencyCode: event.target.value as ExpenseCurrencyCode,
-                    }))
-                  }
-                >
-                  <option value="BRL">Real / BRL</option>
-                  <option value="GOLD_GRAM">Grams of Gold</option>
-                </select>
-              </label>
-            </div>
-
-            <label className="block text-sm font-medium text-gray-700">
-              Item Description *
-              <select
-                className="mt-1 w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-gray-950 shadow-sm"
-                value={form.priceListItemId}
-                onChange={(event) =>
-                  setForm((current) => ({
-                    ...current,
-                    priceListItemId: event.target.value,
-                  }))
-                }
-              >
-                <option value="">Select a price-list item</option>
-                {filteredPriceListItems.map((item) => (
-                  <option key={item.id} value={item.id}>
-                    {priceListItemLabel(item)}
-                  </option>
-                ))}
-              </select>
-              {filteredPriceListItems.length === 0 && (
-                <span className="mt-2 block rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-900">
-                  No active {categoryLabel(form.itemType).toLowerCase()}{" "}
-                  price-list items are available.
-                </span>
-              )}
-            </label>
-
-            <div className="grid gap-4 sm:grid-cols-2">
-              <label className="block text-sm font-medium text-gray-700">
-                Quantity *
-                <input
-                  className="mt-1 w-full rounded-xl border border-gray-300 px-3 py-2 text-gray-950 shadow-sm"
-                  type="number"
-                  min="0.001"
-                  step="0.001"
-                  value={form.quantity}
-                  onChange={(event) =>
-                    setForm((current) => ({
-                      ...current,
-                      quantity: event.target.value,
-                    }))
-                  }
-                  placeholder="1"
-                />
               </label>
 
               <label className="block text-sm font-medium text-gray-700">
@@ -495,14 +540,221 @@ export function CreateExpensePage() {
               </label>
             </div>
 
-            <CalculationPreview
-              currencyCode={form.currencyCode}
-              item={selectedItem}
-              latestGoldPriceBrlPerGram={selectedGoldPrice?.brlPerGram}
-              latestGoldPriceDate={selectedGoldPrice?.priceDate}
-              isGoldPriceLoading={latestGoldPriceQuery.isLoading}
-              preview={calculationPreview}
-            />
+            {isCanteenBatchMode ? (
+              <section className="space-y-3" aria-labelledby="canteen-items-heading">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+                  <div>
+                    <h2
+                      id="canteen-items-heading"
+                      className="text-lg font-semibold text-gray-950"
+                    >
+                      Canteen Items
+                    </h2>
+                    <p className="mt-1 text-sm text-gray-500">
+                      Enter each purchased item on its own line. Every line is
+                      recorded as a separate Expense, ledger debit, and receipt
+                      obligation. Currency is selected per item.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    className="rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-800 shadow-sm disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-400"
+                    onClick={addCanteenLine}
+                    disabled={isCreating || canteenLines.length >= 100}
+                  >
+                    Add Canteen Item
+                  </button>
+                </div>
+
+                {canteenLines.map((line, index) => {
+                  const lineItem = priceListItems.find(
+                    (item) => item.id === line.priceListItemId,
+                  );
+                  const lineQuantity = Number(line.quantity);
+                  const linePreview = buildCalculationPreview(
+                    lineItem,
+                    line.currencyCode,
+                    lineQuantity,
+                    selectedGoldPrice?.brlPerGram,
+                  );
+
+                  return (
+                    <fieldset
+                      key={line.id}
+                      className="space-y-4 rounded-2xl border border-gray-200 bg-gray-50 p-4"
+                    >
+                      <legend className="px-1 font-semibold text-gray-950">
+                        Canteen Item {index + 1}
+                      </legend>
+                      {canteenLines.length > 1 && (
+                        <div className="flex justify-end">
+                          <button
+                            type="button"
+                            className="text-sm font-semibold text-red-700 underline disabled:text-gray-400"
+                            onClick={() => removeCanteenLine(line.id)}
+                            disabled={isCreating}
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      )}
+
+                      <label className="block text-sm font-medium text-gray-700">
+                        Item Description *
+                        <select
+                          aria-label={`Canteen item ${index + 1} description`}
+                          className="mt-1 w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-gray-950 shadow-sm"
+                          value={line.priceListItemId}
+                          onChange={(event) =>
+                            updateCanteenLine(line.id, {
+                              priceListItemId: event.target.value,
+                            })
+                          }
+                        >
+                          <option value="">Select a price-list item</option>
+                          {filteredPriceListItems.map((item) => (
+                            <option key={item.id} value={item.id}>
+                              {priceListItemLabel(item)}
+                            </option>
+                          ))}
+                        </select>
+                        {filteredPriceListItems.length === 0 && (
+                          <span className="mt-2 block rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-900">
+                            No active Canteen price-list items are available.
+                          </span>
+                        )}
+                      </label>
+
+                      <div className="grid gap-4 sm:grid-cols-2">
+                        <label className="block text-sm font-medium text-gray-700">
+                          Currency *
+                          <select
+                            aria-label={`Canteen item ${index + 1} currency`}
+                            className="mt-1 w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-gray-950 shadow-sm"
+                            value={line.currencyCode}
+                            onChange={(event) =>
+                              updateCanteenLine(line.id, {
+                                currencyCode: event.target
+                                  .value as ExpenseCurrencyCode,
+                              })
+                            }
+                          >
+                            <option value="BRL">Real / BRL</option>
+                            <option value="GOLD_GRAM">Grams of Gold</option>
+                          </select>
+                        </label>
+
+                        <label className="block text-sm font-medium text-gray-700">
+                          Quantity *
+                          <input
+                            aria-label={`Canteen item ${index + 1} quantity`}
+                            className="mt-1 w-full rounded-xl border border-gray-300 px-3 py-2 text-gray-950 shadow-sm"
+                            type="number"
+                            min="0.001"
+                            step="0.001"
+                            value={line.quantity}
+                            onChange={(event) =>
+                              updateCanteenLine(line.id, {
+                                quantity: event.target.value,
+                              })
+                            }
+                          />
+                        </label>
+                      </div>
+
+                      <CalculationPreview
+                        currencyCode={line.currencyCode}
+                        item={lineItem}
+                        latestGoldPriceBrlPerGram={
+                          selectedGoldPrice?.brlPerGram
+                        }
+                        latestGoldPriceDate={selectedGoldPrice?.priceDate}
+                        isGoldPriceLoading={latestGoldPriceQuery.isLoading}
+                        preview={linePreview}
+                      />
+                    </fieldset>
+                  );
+                })}
+              </section>
+            ) : (
+              <>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <label className="block text-sm font-medium text-gray-700">
+                    Currency *
+                    <select
+                      className="mt-1 w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-gray-950 shadow-sm"
+                      value={form.currencyCode}
+                      onChange={(event) =>
+                        setForm((current) => ({
+                          ...current,
+                          currencyCode: event.target
+                            .value as ExpenseCurrencyCode,
+                        }))
+                      }
+                    >
+                      <option value="BRL">Real / BRL</option>
+                      <option value="GOLD_GRAM">Grams of Gold</option>
+                    </select>
+                  </label>
+
+                  <label className="block text-sm font-medium text-gray-700">
+                    Quantity *
+                    <input
+                      className="mt-1 w-full rounded-xl border border-gray-300 px-3 py-2 text-gray-950 shadow-sm"
+                      type="number"
+                      min="0.001"
+                      step="0.001"
+                      value={form.quantity}
+                      onChange={(event) =>
+                        setForm((current) => ({
+                          ...current,
+                          quantity: event.target.value,
+                        }))
+                      }
+                      placeholder="1"
+                    />
+                  </label>
+                </div>
+
+                <label className="block text-sm font-medium text-gray-700">
+                  Item Description *
+                  <select
+                    className="mt-1 w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-gray-950 shadow-sm"
+                    value={form.priceListItemId}
+                    onChange={(event) =>
+                      setForm((current) => ({
+                        ...current,
+                        priceListItemId: event.target.value,
+                      }))
+                    }
+                  >
+                    <option value="">Select a price-list item</option>
+                    {filteredPriceListItems.map((item) => (
+                      <option key={item.id} value={item.id}>
+                        {priceListItemLabel(item)}
+                      </option>
+                    ))}
+                  </select>
+                  {filteredPriceListItems.length === 0 && (
+                    <span className="mt-2 block rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-900">
+                      No active {categoryLabel(form.itemType).toLowerCase()}
+                      price-list items are available.
+                    </span>
+                  )}
+                </label>
+
+                <CalculationPreview
+                  currencyCode={form.currencyCode}
+                  item={selectedItem}
+                  latestGoldPriceBrlPerGram={
+                    selectedGoldPrice?.brlPerGram
+                  }
+                  latestGoldPriceDate={selectedGoldPrice?.priceDate}
+                  isGoldPriceLoading={latestGoldPriceQuery.isLoading}
+                  preview={calculationPreview}
+                />
+              </>
+            )}
 
             <label className="block text-sm font-medium text-gray-700">
               Notes
@@ -529,13 +781,15 @@ export function CreateExpensePage() {
               <button
                 className="rounded-xl bg-gray-950 px-5 py-3 text-sm font-semibold text-white shadow-sm disabled:cursor-not-allowed disabled:bg-gray-400"
                 type="submit"
-                disabled={createMutation.isPending}
+                disabled={isCreating}
               >
-                {createMutation.isPending
+                {isCreating
                   ? "Creating..."
                   : copyFromExpenseId
                     ? "Create Replacement Expense"
-                    : "Create Expense"}
+                    : isCanteenBatchMode && canteenLines.length > 1
+                      ? "Create Expenses"
+                      : "Create Expense"}
               </button>
             </div>
           </form>

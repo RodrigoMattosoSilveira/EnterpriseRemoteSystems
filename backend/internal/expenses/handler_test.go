@@ -101,6 +101,20 @@ type apiExpenseResponse struct {
 	} `json:"data"`
 }
 
+type apiCanteenExpenseBatchResponse struct {
+	Data struct {
+		Items []struct {
+			ID                string   `json:"id"`
+			CollaboratorID    string   `json:"collaboratorId"`
+			PriceListItemID   *string  `json:"priceListItemId"`
+			PriceListItemCode string   `json:"priceListItemCode"`
+			ItemType          string   `json:"itemType"`
+			Quantity          *float64 `json:"quantity"`
+			CurrencyCode      string   `json:"currencyCode"`
+		} `json:"items"`
+	} `json:"data"`
+}
+
 type apiExpenseListItem struct {
 	ID                string  `json:"id"`
 	CollaboratorID    string  `json:"collaboratorId"`
@@ -156,6 +170,142 @@ type apiGoldPriceResponse struct {
 		PriceDate  string  `json:"priceDate"`
 		BRLPerGram float64 `json:"brlPerGram"`
 	} `json:"data"`
+}
+
+func TestCreateCanteenExpenseBatchCreatesSeparateExpensesWithPerItemCurrency(t *testing.T) {
+	server, cleanup := newTestServer(t)
+	defer cleanup()
+
+	collaborator := createActiveCollaborator(t, server, 90)
+	food := createPriceListItem(t, server, validPriceListItemPayload(map[string]any{
+		"code":         "BATCH_FOOD",
+		"description":  "Batch food",
+		"unitPriceBrl": 20.0,
+	}))
+	drink := createPriceListItem(t, server, validPriceListItemPayload(map[string]any{
+		"code":         "BATCH_DRINK",
+		"description":  "Batch drink",
+		"unitPriceBrl": 10.0,
+	}))
+	createGoldPrice(t, server, validGoldPricePayload(map[string]any{
+		"priceDate":  "2026-06-03",
+		"brlPerGram": 100.0,
+	}))
+
+	payload := map[string]any{
+		"collaboratorId": collaborator.Data.ID,
+		"expenseDate":    "2026-06-03",
+		"description":    "One Canteen purchase",
+		"items": []map[string]any{
+			{
+				"priceListItemId": food.Data.ID,
+				"currencyCode":    "BRL",
+				"quantity":        2.0,
+			},
+			{
+				"priceListItemId": drink.Data.ID,
+				"currencyCode":    "GOLD_GRAM",
+				"quantity":        3.0,
+			},
+		},
+	}
+	res := postJSON(t, server, http.MethodPost, expensesURL+"canteen-batch", payload)
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusCreated {
+		var body apiErrorResponse
+		decodeJSON(t, res, &body)
+		t.Fatalf("expected status %d, got %d with error %+v", http.StatusCreated, res.StatusCode, body.Error)
+	}
+
+	var body apiCanteenExpenseBatchResponse
+	decodeJSON(t, res, &body)
+	if len(body.Data.Items) != 2 {
+		t.Fatalf("expected 2 expenses, got %d", len(body.Data.Items))
+	}
+	first, second := body.Data.Items[0], body.Data.Items[1]
+	if first.ID == "" || second.ID == "" || first.ID == second.ID {
+		t.Fatalf("expected two independent expense ids, got %q and %q", first.ID, second.ID)
+	}
+	if first.CollaboratorID != collaborator.Data.ID || second.CollaboratorID != collaborator.Data.ID {
+		t.Fatalf("expected shared collaborator %q, got %+v", collaborator.Data.ID, body.Data.Items)
+	}
+	if first.ItemType != "CANTEEN" || second.ItemType != "CANTEEN" {
+		t.Fatalf("expected CANTEEN item type for every expense, got %+v", body.Data.Items)
+	}
+	if first.CurrencyCode != "BRL" || second.CurrencyCode != "GOLD_GRAM" {
+		t.Fatalf("expected independent BRL/GOLD_GRAM currencies, got %q/%q", first.CurrencyCode, second.CurrencyCode)
+	}
+	if first.PriceListItemID == nil || *first.PriceListItemID != food.Data.ID || first.PriceListItemCode != "BATCH_FOOD" {
+		t.Fatalf("unexpected first item identity: %+v", first)
+	}
+	if second.PriceListItemID == nil || *second.PriceListItemID != drink.Data.ID || second.PriceListItemCode != "BATCH_DRINK" {
+		t.Fatalf("unexpected second item identity: %+v", second)
+	}
+	if first.Quantity == nil || *first.Quantity != 2 || second.Quantity == nil || *second.Quantity != 3 {
+		t.Fatalf("expected per-line quantities 2 and 3, got %+v", body.Data.Items)
+	}
+	for index, item := range body.Data.Items {
+		getRes := getJSON(t, server, expensesURL+item.ID)
+		var detail apiExpenseResponse
+		decodeJSON(t, getRes, &detail)
+		getRes.Body.Close()
+		posting := detail.Data.FinancialPosting
+		if posting == nil || posting.LedgerEntryID == "" || posting.ReceiptID == "" || !posting.OutstandingReceipt {
+			t.Fatalf("expected expense %d to have its own ledger entry and receipt obligation, got %+v", index+1, posting)
+		}
+	}
+}
+
+func TestCreateCanteenExpenseBatchRejectsNonCanteenItemWithoutPartialWrite(t *testing.T) {
+	server, cleanup := newTestServer(t)
+	defer cleanup()
+
+	collaborator := createActiveCollaborator(t, server, 91)
+	canteen := createPriceListItem(t, server, validPriceListItemPayload(map[string]any{
+		"code": "BATCH_VALID_CANTEEN",
+	}))
+	administrative := createPriceListItem(t, server, validPriceListItemPayload(map[string]any{
+		"itemType":    "ADMINISTRATIVE",
+		"code":        "BATCH_ADMIN",
+		"description": "Administrative item",
+	}))
+
+	payload := map[string]any{
+		"collaboratorId": collaborator.Data.ID,
+		"expenseDate":    "2026-06-03",
+		"items": []map[string]any{
+			{
+				"priceListItemId": canteen.Data.ID,
+				"currencyCode":    "BRL",
+				"quantity":        1.0,
+			},
+			{
+				"priceListItemId": administrative.Data.ID,
+				"currencyCode":    "BRL",
+				"quantity":        1.0,
+			},
+		},
+	}
+	res := postJSON(t, server, http.MethodPost, expensesURL+"canteen-batch", payload)
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusBadRequest {
+		var body apiErrorResponse
+		decodeJSON(t, res, &body)
+		t.Fatalf("expected status %d, got %d with error %+v", http.StatusBadRequest, res.StatusCode, body.Error)
+	}
+	var errorBody apiErrorResponse
+	decodeJSON(t, res, &errorBody)
+	if errorBody.Error == nil || errorBody.Error.Fields["items.1.priceListItemId"] == "" {
+		t.Fatalf("expected indexed Canteen validation error, got %+v", errorBody.Error)
+	}
+
+	listRes := getJSON(t, server, expensesURL+"?page=1&pageSize=20")
+	defer listRes.Body.Close()
+	var listBody apiExpenseListResponse
+	decodeJSON(t, listRes, &listBody)
+	if listBody.Data.Total != 0 {
+		t.Fatalf("expected rejected batch to create no expenses, got total %d", listBody.Data.Total)
+	}
 }
 
 func TestCreateExpenseReturnsCreated(t *testing.T) {

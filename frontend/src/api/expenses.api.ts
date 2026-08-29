@@ -1,5 +1,7 @@
 import { apiFetch } from "./client";
 import type {
+  CreateCanteenExpenseBatchInput,
+  CreateCanteenExpenseBatchResult,
   CreateExpenseInput,
   Expense,
   ExpenseListFilter,
@@ -68,6 +70,15 @@ export function getExpense(id: string): Promise<Expense> {
 
 export function createExpense(input: CreateExpenseInput): Promise<Expense> {
   return apiFetch<Expense>("/expenses", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export function createCanteenExpenseBatch(
+  input: CreateCanteenExpenseBatchInput,
+): Promise<CreateCanteenExpenseBatchResult> {
+  return apiFetch<CreateCanteenExpenseBatchResult>("/expenses/canteen-batch", {
     method: "POST",
     body: JSON.stringify(input),
   });

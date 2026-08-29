@@ -39,6 +39,20 @@ func (h *Handler) Create(c fiber.Ctx) error {
 	return c.Status(fiber.StatusCreated).JSON(httpx.APIResponse{Data: created})
 }
 
+func (h *Handler) CreateCanteenBatch(c fiber.Ctx) error {
+	var req CreateCanteenExpenseBatchRequest
+	if err := c.Bind().Body(&req); err != nil {
+		return httpx.WriteError(c, err)
+	}
+
+	created, err := h.service.CreateCanteenBatch(requesttenant.Context(c), req, actorUserID(c))
+	if err != nil {
+		return httpx.WriteError(c, err)
+	}
+
+	return c.Status(fiber.StatusCreated).JSON(httpx.APIResponse{Data: created})
+}
+
 func (h *Handler) GetByID(c fiber.Ctx) error {
 	item, err := h.service.GetByID(requesttenant.Context(c), c.Params("id"))
 	if err != nil {

@@ -136,6 +136,27 @@ func (r *gormRepository) Create(ctx context.Context, expense *db.Expense) error 
 	})
 }
 
+func (r *gormRepository) CreateBatch(ctx context.Context, expenses []*db.Expense) error {
+	if len(expenses) == 0 {
+		return nil
+	}
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		for _, expense := range expenses {
+			if err := tx.Create(expense).Error; err != nil {
+				return err
+			}
+			entry := expenseLedgerEntry(expense)
+			if err := tx.Create(entry).Error; err != nil {
+				return err
+			}
+			if err := ensureReceiptObligation(tx, entry.TenantID, entry.ID); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+}
+
 func (r *gormRepository) Update(ctx context.Context, expense *db.Expense) error {
 	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		previous, err := latestExpenseLedgerEntry(tx, expense.TenantID, expense.ID)

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strconv"
 	"strings"
 	"time"
 
@@ -122,6 +123,102 @@ func (s *service) Create(ctx context.Context, req CreateExpenseRequest, actorUse
 		return nil, err
 	}
 	return s.expenseDTOWithPosting(ctx, *created)
+}
+
+func (s *service) CreateCanteenBatch(ctx context.Context, req CreateCanteenExpenseBatchRequest, actorUserID string) (*CreateCanteenExpenseBatchResult, error) {
+	fields := map[string]string{}
+	requireString(fields, "collaboratorId", req.CollaboratorID)
+	requireString(fields, "expenseDate", req.ExpenseDate)
+	if strings.TrimSpace(req.ExpenseDate) != "" {
+		if _, err := parseExpenseDate(req.ExpenseDate); err != nil {
+			fields["expenseDate"] = "Expense date must be YYYY-MM-DD"
+		}
+	}
+	if len(req.Items) == 0 {
+		fields["items"] = "At least one Canteen item is required"
+	}
+	if len(req.Items) > 100 {
+		fields["items"] = "No more than 100 Canteen items may be recorded at once"
+	}
+	if len(fields) > 0 {
+		return nil, ValidationError{Fields: fields}
+	}
+
+	expenseDate, err := parseExpenseDate(req.ExpenseDate)
+	if err != nil {
+		return nil, err
+	}
+	collaborator, err := s.validateCollaborator(ctx, req.CollaboratorID)
+	if err != nil {
+		return nil, err
+	}
+
+	now := time.Now().UTC()
+	expenses := make([]*db.Expense, 0, len(req.Items))
+	for index, itemReq := range req.Items {
+		if err := validatePriceListExpenseFields(
+			req.CollaboratorID,
+			itemReq.PriceListItemID,
+			itemReq.CurrencyCode,
+			itemReq.Quantity,
+			req.ExpenseDate,
+			"",
+			"",
+			0,
+		); err != nil {
+			return nil, prefixBatchItemValidationError(err, index)
+		}
+
+		expense := &db.Expense{
+			BaseModel:      db.BaseModel{ID: ids.New(), CreatedAt: now, UpdatedAt: now},
+			TenantID:       tenantctx.TenantID(ctx),
+			PersonID:       collaborator.Membership.PersonID,
+			CollaboratorID: strings.TrimSpace(req.CollaboratorID),
+			ExpenseDate:    expenseDate,
+			Description:    strings.TrimSpace(req.Description),
+			Active:         true,
+		}
+		if err := s.applyPriceListCalculation(ctx, expense, itemReq.PriceListItemID, itemReq.CurrencyCode, itemReq.Quantity); err != nil {
+			return nil, prefixBatchItemValidationError(err, index)
+		}
+		if expense.ItemType != itemTypeCanteen {
+			return nil, ValidationError{Fields: map[string]string{
+				batchItemField(index, "priceListItemId"): "Only active Canteen price-list items may be recorded in a Canteen batch",
+			}}
+		}
+		expenses = append(expenses, expense)
+	}
+
+	if err := s.repo.CreateBatch(ctx, expenses); err != nil {
+		return nil, err
+	}
+
+	result := &CreateCanteenExpenseBatchResult{Items: make([]ExpenseDTO, 0, len(expenses))}
+	for _, expense := range expenses {
+		result.Items = append(result.Items, ToDTO(*expense))
+	}
+	return result, nil
+}
+
+func batchItemField(index int, field string) string {
+	return "items." + strconv.Itoa(index) + "." + field
+}
+
+func prefixBatchItemValidationError(err error, index int) error {
+	var validationErr ValidationError
+	if !errors.As(err, &validationErr) {
+		return err
+	}
+	fields := make(map[string]string, len(validationErr.Fields))
+	for field, message := range validationErr.Fields {
+		switch field {
+		case "collaboratorId", "expenseDate":
+			fields[field] = message
+		default:
+			fields[batchItemField(index, field)] = message
+		}
+	}
+	return ValidationError{Fields: fields}
 }
 
 func (s *service) GetByID(ctx context.Context, id string) (*ExpenseDTO, error) {

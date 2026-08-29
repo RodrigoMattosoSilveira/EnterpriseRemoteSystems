@@ -58,6 +58,13 @@ const canteenItem = priceListItem(
   "Snack",
   12.25,
 );
+const canteenDrinkItem = priceListItem(
+  "item-canteen-drink",
+  "CANTEEN",
+  "DRINK",
+  "Drink",
+  6.5,
+);
 const administrativeItem = priceListItem(
   "item-admin",
   "ADMINISTRATIVE",
@@ -104,17 +111,70 @@ describe("CreateExpensePage", () => {
     await clickButton("Create Expense");
 
     const createCall = fetchCalls.find(
-      (call) => call.method === "POST" && call.url === "/api/v1/expenses",
+      (call) =>
+        call.method === "POST" &&
+        call.url === "/api/v1/expenses/canteen-batch",
     );
     expect(createCall?.body).toMatchObject({
       collaboratorId: activeCollaborator.id,
-      priceListItemId: canteenItem.id,
-      currencyCode: "BRL",
-      quantity: 3,
+      items: [
+        {
+          priceListItemId: canteenItem.id,
+          currencyCode: "BRL",
+          quantity: 3,
+        },
+      ],
     });
     expect(createCall?.body).not.toHaveProperty("expenseCategoryId");
     expect(createCall?.body).not.toHaveProperty("valueUnitId");
     expect(createCall?.body).not.toHaveProperty("amount");
+    await waitForText("Expenses landing");
+  });
+
+  it("records multiple Canteen items atomically with a currency per line", async () => {
+    mockCreateExpenseFetch();
+    renderCreateExpensePage();
+
+    await waitForText("New Expense");
+    await selectCollaborator("Maria", "Maria");
+    await changeSelect("Item Description *", canteenItem.id);
+    await changeInput("Quantity *", "2");
+    await clickButton("Add Canteen Item");
+
+    await changeSelectByAriaLabel(
+      "Canteen item 2 description",
+      canteenDrinkItem.id,
+    );
+    await changeSelectByAriaLabel("Canteen item 2 currency", "GOLD_GRAM");
+    await changeInputByAriaLabel("Canteen item 2 quantity", "3");
+
+    await clickButton("Create Expenses");
+
+    const createCall = fetchCalls.find(
+      (call) =>
+        call.method === "POST" &&
+        call.url === "/api/v1/expenses/canteen-batch",
+    );
+    expect(createCall?.body).toMatchObject({
+      collaboratorId: activeCollaborator.id,
+      items: [
+        {
+          priceListItemId: canteenItem.id,
+          currencyCode: "BRL",
+          quantity: 2,
+        },
+        {
+          priceListItemId: canteenDrinkItem.id,
+          currencyCode: "GOLD_GRAM",
+          quantity: 3,
+        },
+      ],
+    });
+    expect(
+      fetchCalls.some(
+        (call) => call.method === "POST" && call.url === "/api/v1/expenses",
+      ),
+    ).toBe(false);
     await waitForText("Expenses landing");
   });
 
@@ -243,7 +303,9 @@ function mockCreateExpenseFetch(
       });
     }
     if (url === "/api/v1/price-list-items") {
-      return jsonResponse({ data: [canteenItem, administrativeItem] });
+      return jsonResponse({
+        data: [canteenItem, canteenDrinkItem, administrativeItem],
+      });
     }
     if (url === "/api/v1/gold-prices/latest") {
       return jsonResponse({
@@ -257,6 +319,39 @@ function mockCreateExpenseFetch(
           active: true,
           createdAt: "2099-06-25T12:00:00Z",
           updatedAt: "2099-06-25T12:00:00Z",
+        },
+      });
+    }
+    if (
+      url === "/api/v1/expenses/canteen-batch" &&
+      methodOf(init) === "POST"
+    ) {
+      const body = parseBody(init?.body) as {
+        collaboratorId: string;
+        expenseDate: string;
+        description?: string;
+        items: Array<{
+          priceListItemId: string;
+          currencyCode: string;
+          quantity: number;
+        }>;
+      };
+      return jsonResponse({
+        data: {
+          items: body.items.map((item, index) => ({
+            id: `expense-batch-${index + 1}`,
+            tenantId: "default",
+            collaboratorId: body.collaboratorId,
+            collaboratorLabel: activeCollaborator.personNickname,
+            expenseDate: body.expenseDate,
+            description: body.description,
+            priceListItemId: item.priceListItemId,
+            currencyCode: item.currencyCode,
+            quantity: item.quantity,
+            active: true,
+            createdAt: "2026-06-25T12:00:00Z",
+            updatedAt: "2026-06-25T12:00:00Z",
+          })),
         },
       });
     }
@@ -503,6 +598,37 @@ async function changeInput(label: string, value: string) {
     input.dispatchEvent(new Event("input", { bubbles: true }));
     input.dispatchEvent(new Event("change", { bubbles: true }));
   });
+}
+
+async function changeSelectByAriaLabel(label: string, value: string) {
+  const select = await waitForAriaLabel<HTMLSelectElement>(label, "select");
+  await act(async () => {
+    setControlValue(select, value);
+    select.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+}
+
+async function changeInputByAriaLabel(label: string, value: string) {
+  const input = await waitForAriaLabel<HTMLInputElement>(label, "input");
+  await act(async () => {
+    setControlValue(input, value);
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+}
+
+async function waitForAriaLabel<T extends HTMLElement>(
+  label: string,
+  selector: string,
+): Promise<T> {
+  for (let i = 0; i < 60; i += 1) {
+    const control = container.querySelector(`${selector}[aria-label="${label}"]`);
+    if (control instanceof HTMLElement) return control as T;
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    });
+  }
+  throw new Error(`Control not found for aria-label ${label}`);
 }
 
 async function selectCollaborator(search: string, optionName: string) {

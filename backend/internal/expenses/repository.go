@@ -10,6 +10,7 @@ import (
 type Repository interface {
 	List(ctx context.Context, filter normalizedExpenseListFilter) ([]db.Expense, int64, error)
 	Create(ctx context.Context, expense *db.Expense) error
+	CreateBatch(ctx context.Context, expenses []*db.Expense) error
 	Update(ctx context.Context, expense *db.Expense) error
 	Cancel(ctx context.Context, expense *db.Expense, actorUserID, reason string) error
 	FindByID(ctx context.Context, id string) (*db.Expense, error)
