@@ -16,6 +16,7 @@ import (
 
 	apppkg "enterpriseremotesystems/backend/internal/app"
 	dbpkg "enterpriseremotesystems/backend/internal/db"
+	peoplepkg "enterpriseremotesystems/backend/internal/people"
 )
 
 const (
@@ -1470,8 +1471,22 @@ func validCompletePersonPayload(seq int, overrides map[string]any) map[string]an
 }
 
 func cpfForSeq(seq int) string {
-	cpfs := []string{"39053344705", "93541134780", "35711002844", "12345678909"}
+	cpfs := []string{"39053344705", "93541134780", "52998224725", "12345678909"}
 	return cpfs[(seq-1)%len(cpfs)]
+}
+
+func TestCPFForSeqReturnsValidUniqueFixtureValues(t *testing.T) {
+	seen := make(map[string]struct{}, 4)
+	for seq := 1; seq <= 4; seq++ {
+		cpf := cpfForSeq(seq)
+		if !peoplepkg.IsValidCPF(cpf) {
+			t.Fatalf("expected CPF fixture %q for sequence %d to be valid", cpf, seq)
+		}
+		if _, exists := seen[cpf]; exists {
+			t.Fatalf("expected CPF fixture %q for sequence %d to be unique", cpf, seq)
+		}
+		seen[cpf] = struct{}{}
+	}
 }
 
 func cellularForSeq(seq int) string {
