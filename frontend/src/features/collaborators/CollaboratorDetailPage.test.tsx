@@ -108,7 +108,15 @@ describe("CollaboratorDetailPage", () => {
 
     await waitForText("Ana");
 
-    expect(textNode("Collaborator Journey")).toBeTruthy();
+    const journeyHeading = headingByText("h1", "Collaborator Journey");
+    const collaboratorHeading = headingByText("h2", "Ana");
+
+    expect(journeyHeading).toBeTruthy();
+    expect(journeyHeading?.className).toContain("text-3xl");
+    expect(collaboratorHeading).toBeTruthy();
+    expect(collaboratorHeading?.className).toContain("text-lg");
+    expect(textNode("Journey Code:")).toBeTruthy();
+    expect(textNode("collab-1")).toBeTruthy();
     expect(textNode("Person Summary")).toBeTruthy();
     expect(textNode("Nickname")).toBeTruthy();
     expect(textNode("Legal Name")).toBeTruthy();
@@ -549,6 +557,12 @@ async function waitFor(assertion: () => boolean) {
 
 function textNode(text: string) {
   return Array.from(container.querySelectorAll("*")).find((element) =>
+    element.textContent?.includes(text),
+  );
+}
+
+function headingByText(tag: "h1" | "h2", text: string) {
+  return Array.from(container.querySelectorAll(tag)).find((element) =>
     element.textContent?.includes(text),
   );
 }
