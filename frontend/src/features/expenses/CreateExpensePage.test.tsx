@@ -247,7 +247,24 @@ describe("CreateExpensePage", () => {
     );
     expect(quantityInput.value).toBe("3");
 
+    const replacementButton = await waitForButton("Create Replacement Expense");
+    expect(replacementButton.disabled).toBe(true);
+    expect(replacementButton.className).toContain("disabled:bg-gray-400");
+    expect(
+      fetchCalls.some(
+        (call) => call.method === "POST" && call.url === "/api/v1/expenses",
+      ),
+    ).toBe(false);
+
     await changeInput("Quantity *", "2");
+    expect(replacementButton.disabled).toBe(false);
+
+    await changeSelect("Item Description *", "");
+    expect(replacementButton.disabled).toBe(true);
+
+    await changeSelect("Item Description *", canteenItem.id);
+    expect(replacementButton.disabled).toBe(false);
+
     await clickButton("Create Replacement Expense");
 
     const createCall = fetchCalls.find(
@@ -575,6 +592,19 @@ async function waitForText(text: string) {
     });
   }
   throw new Error(`Missing text: ${text}`);
+}
+
+async function waitForButton(name: string): Promise<HTMLButtonElement> {
+  for (let i = 0; i < 60; i += 1) {
+    const button = Array.from(container.querySelectorAll("button")).find(
+      (candidate) => candidate.textContent?.trim() === name,
+    );
+    if (button) return button;
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    });
+  }
+  throw new Error(`Button not found: ${name}`);
 }
 
 async function clickButton(name: string) {

@@ -165,6 +165,28 @@ export function CreateExpensePage() {
   const hasMissingSetup = priceListItems.length === 0;
   const isCanteenBatchMode = !copyFromExpenseId && form.itemType === "CANTEEN";
   const isCreating = createMutation.isPending || batchCreateMutation.isPending;
+  const replacementFormIsValid = Boolean(
+    copyFromExpenseId &&
+      sourceExpense?.active === false &&
+      sourceExpense.cancelledAt &&
+      form.collaboratorId &&
+      form.itemType &&
+      form.expenseDate &&
+      form.priceListItemId &&
+      form.currencyCode &&
+      Number.isFinite(quantity) &&
+      quantity > 0 &&
+      (form.currencyCode !== "GOLD_GRAM" || selectedGoldPrice),
+  );
+  const replacementFormIsDirty = Boolean(
+    copyFromExpenseId &&
+      sourceExpense &&
+      replacementDiffersFromSource(form, sourceExpense),
+  );
+  const replacementSubmitDisabled = Boolean(
+    copyFromExpenseId &&
+      (!replacementFormIsValid || !replacementFormIsDirty),
+  );
 
   const selectCollaborator = (collaborator: Collaborator) => {
     setSelectedCollaborator(collaborator);
@@ -225,6 +247,13 @@ export function CreateExpensePage() {
     }
     if (!form.expenseDate) {
       setClientValidationError("Select an expense date.");
+      return;
+    }
+
+    if (copyFromExpenseId && !replacementFormIsDirty) {
+      setClientValidationError(
+        "Change at least one Expense detail before creating the replacement.",
+      );
       return;
     }
 
@@ -355,6 +384,11 @@ export function CreateExpensePage() {
               <p className="font-semibold">Replacement for cancelled Expense</p>
               <p className="mt-1">
                 Fields were copied from the cancelled Expense. Correct the wrong value(s), review the calculation preview, then create the replacement.
+              </p>
+              <p className="mt-1">
+                Create Replacement Expense stays disabled until at least one
+                Expense detail differs from the cancelled source and all
+                required values are valid.
               </p>
               <Link
                 className="mt-2 inline-block font-semibold underline"
@@ -781,7 +815,7 @@ export function CreateExpensePage() {
               <button
                 className="rounded-xl bg-gray-950 px-5 py-3 text-sm font-semibold text-white shadow-sm disabled:cursor-not-allowed disabled:bg-gray-400"
                 type="submit"
-                disabled={isCreating}
+                disabled={isCreating || replacementSubmitDisabled}
               >
                 {isCreating
                   ? "Creating..."
@@ -803,6 +837,34 @@ export function CreateExpensePage() {
         />
       )}
     </main>
+  );
+}
+
+function replacementDiffersFromSource(
+  form: FormState,
+  sourceExpense: {
+    collaboratorId: string;
+    itemType?: string;
+    priceListItemId?: string;
+    currencyCode?: string;
+    quantity?: number;
+    expenseDate: string;
+    description?: string;
+  },
+) {
+  const sourceItemType: ExpenseItemType =
+    sourceExpense.itemType === "ADMINISTRATIVE" ? "ADMINISTRATIVE" : "CANTEEN";
+  const sourceCurrencyCode: ExpenseCurrencyCode =
+    sourceExpense.currencyCode === "GOLD_GRAM" ? "GOLD_GRAM" : "BRL";
+
+  return (
+    form.collaboratorId !== sourceExpense.collaboratorId ||
+    form.itemType !== sourceItemType ||
+    form.priceListItemId !== (sourceExpense.priceListItemId ?? "") ||
+    form.currencyCode !== sourceCurrencyCode ||
+    Number(form.quantity) !== Number(sourceExpense.quantity ?? 1) ||
+    form.expenseDate !== sourceExpense.expenseDate ||
+    form.description.trim() !== (sourceExpense.description ?? "").trim()
   );
 }
 
