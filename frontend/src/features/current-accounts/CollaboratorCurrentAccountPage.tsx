@@ -345,10 +345,12 @@ function LedgerEntryRow({
               : "Outstanding receipt: print, collect signature, and record the signed return."}
           </p>
         ) : receipt && !receipt.outstanding ? (
-          <p className="mt-2 rounded-xl bg-green-50 p-2 text-xs font-semibold text-green-900">
+          <p className={`mt-2 rounded-xl p-2 text-xs font-semibold ${receipt.status === "CANCELLED" ? "bg-gray-100 text-gray-700" : "bg-green-50 text-green-900"}`}>
             {isFinalSettlementReceipt(receipt.receiptPurpose)
               ? "Final settlement receipt accepted in-app."
-              : "Receipt returned or closed."}
+              : receipt.status === "CANCELLED"
+                ? "Receipt obligation cancelled; no signature or return is required."
+                : "Receipt returned; no further receipt action is required."}
           </p>
         ) : null}
       </div>
@@ -359,15 +361,29 @@ function LedgerEntryRow({
           </Link>
         ) : null}
         {canOpenReceipt && shouldShowReceiptAction(entry, receipt) ? (
-          <Link className="rounded-xl bg-gray-900 px-4 py-2 text-sm font-semibold text-white" to={`/ledger-entries/${entry.id}/receipt`}>
-            {isFinalSettlementReceipt(receipt?.receiptPurpose)
-              ? "Review / accept receipt"
-              : "Print or return receipt"}
+          <Link
+            className={receipt && !receipt.outstanding
+              ? "rounded-xl border px-4 py-2 text-sm font-semibold"
+              : "rounded-xl bg-gray-900 px-4 py-2 text-sm font-semibold text-white"}
+            to={`/ledger-entries/${entry.id}/receipt`}
+          >
+            {receiptActionLabel(receipt)}
           </Link>
         ) : null}
       </div>
     </article>
   );
+}
+
+
+function receiptActionLabel(receipt: LedgerEntry["receipt"]) {
+  if (isFinalSettlementReceipt(receipt?.receiptPurpose)) {
+    return "Review / accept receipt";
+  }
+  if (receipt && !receipt.outstanding) {
+    return "View receipt";
+  }
+  return "Print or return receipt";
 }
 
 function shouldShowReceiptAction(

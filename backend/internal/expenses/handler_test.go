@@ -879,6 +879,24 @@ func TestCancelExpensePreservesAuditAndReversesFinancialEffect(t *testing.T) {
 	if receipt.Status != "CANCELLED" || receipt.CancelledAt == nil || receipt.CancelledBy != "system" || receipt.CancellationReason != "Wrong collaborator selected" {
 		t.Fatalf("unexpected cancelled receipt audit: %+v", receipt)
 	}
+
+	outstandingRes := getJSON(t, server, "/api/v1/receipts/outstanding?sourceType=EXPENSE")
+	defer outstandingRes.Body.Close()
+	if outstandingRes.StatusCode != http.StatusOK {
+		t.Fatalf("expected outstanding receipt workbench status %d, got %d", http.StatusOK, outstandingRes.StatusCode)
+	}
+	var outstanding struct {
+		Data struct {
+			Items []struct {
+				ID string `json:"id"`
+			} `json:"items"`
+			Total int `json:"total"`
+		} `json:"data"`
+	}
+	decodeJSON(t, outstandingRes, &outstanding)
+	if outstanding.Data.Total != 0 || len(outstanding.Data.Items) != 0 {
+		t.Fatalf("expected cancelled Expense receipt to be absent from outstanding workbench, got %+v", outstanding.Data)
+	}
 }
 
 func TestCancelExpensePreservesReturnedReceiptAsHistoricalEvidence(t *testing.T) {

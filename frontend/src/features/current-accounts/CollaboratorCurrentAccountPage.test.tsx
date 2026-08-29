@@ -119,6 +119,38 @@ describe("CollaboratorCurrentAccountPage", () => {
     expect(container.textContent).not.toContain("print, collect signature");
   });
 
+  it("shows a cancelled Expense receipt as historical evidence without an outstanding action", async () => {
+    const cancelledExpenseEntry = {
+      ...expenseEntry,
+      id: "ledger-expense-cancelled",
+      receipt: {
+        ...expenseEntry.receipt!,
+        id: "receipt-expense-cancelled",
+        status: "CANCELLED",
+        outstanding: false,
+      },
+    };
+
+    mockFetch(async (url, init) => {
+      fetchCalls.push({ url, method: methodOf(init) });
+      if (url.startsWith("/api/v1/collaborators/collab-1/current-account")) {
+        return jsonResponse({ data: currentAccountDetailWith([cancelledExpenseEntry]) });
+      }
+      throw new Error(`Unhandled request: ${methodOf(init)} ${url}`);
+    });
+
+    renderCurrentAccountPage("/collaborators/collab-1/current-account");
+
+    await waitForText("Receipt: Cancelled");
+    await waitForText("Receipt obligation cancelled; no signature or return is required.");
+    expect(container.textContent).not.toContain("Outstanding receipt: print, collect signature");
+    expect(container.textContent).not.toContain("Print or return receipt");
+    expect(container.textContent).toContain("View receipt");
+    expect(
+      container.querySelector('a[href="/ledger-entries/ledger-expense-cancelled/receipt"]'),
+    ).not.toBeNull();
+  });
+
   it("hides the final-settlement receipt action after in-app acceptance", async () => {
     mockFetch(async (url, init) => {
       fetchCalls.push({ url, method: methodOf(init) });
