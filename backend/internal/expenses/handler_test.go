@@ -261,6 +261,114 @@ func TestCreateCanteenExpenseBatchCreatesSeparateExpensesWithPerItemCurrency(t *
 	}
 }
 
+func TestCancelCanteenBatchExpenseClosesExactReversedReceiptObligation(t *testing.T) {
+	server, database, cleanup := newTestServerWithDatabase(t)
+	defer cleanup()
+
+	collaborator := createActiveCollaborator(t, server, 92)
+	item := createPriceListItem(t, server, validPriceListItemPayload(map[string]any{
+		"code":         "BATCH_CANCEL_ITEM",
+		"description":  "Batch cancellation item",
+		"unitPriceBrl": 20.0,
+	}))
+
+	batchRes := postJSON(t, server, http.MethodPost, expensesURL+"canteen-batch", map[string]any{
+		"collaboratorId": collaborator.Data.ID,
+		"expenseDate":    "2026-06-03",
+		"description":    "Batch expense to cancel",
+		"items": []map[string]any{
+			{
+				"priceListItemId": item.Data.ID,
+				"currencyCode":    "BRL",
+				"quantity":        1.0,
+			},
+		},
+	})
+	defer batchRes.Body.Close()
+	if batchRes.StatusCode != http.StatusCreated {
+		var body apiErrorResponse
+		decodeJSON(t, batchRes, &body)
+		t.Fatalf("expected batch create status %d, got %d with error %+v", http.StatusCreated, batchRes.StatusCode, body.Error)
+	}
+	var batch apiCanteenExpenseBatchResponse
+	decodeJSON(t, batchRes, &batch)
+	if len(batch.Data.Items) != 1 {
+		t.Fatalf("expected one batch expense, got %+v", batch.Data.Items)
+	}
+	expenseID := batch.Data.Items[0].ID
+
+	detailRes := getJSON(t, server, expensesURL+expenseID)
+	defer detailRes.Body.Close()
+	if detailRes.StatusCode != http.StatusOK {
+		t.Fatalf("expected batch expense detail status %d, got %d", http.StatusOK, detailRes.StatusCode)
+	}
+	var detail apiExpenseResponse
+	decodeJSON(t, detailRes, &detail)
+	if detail.Data.FinancialPosting == nil || detail.Data.FinancialPosting.LedgerEntryID == "" || detail.Data.FinancialPosting.ReceiptID == "" {
+		t.Fatalf("expected batch expense debit and receipt before cancellation, got %+v", detail.Data.FinancialPosting)
+	}
+	originalLedgerEntryID := detail.Data.FinancialPosting.LedgerEntryID
+	originalReceiptID := detail.Data.FinancialPosting.ReceiptID
+	if detail.Data.FinancialPosting.ReceiptStatus != "PENDING_ISSUE" || !detail.Data.FinancialPosting.OutstandingReceipt {
+		t.Fatalf("expected initial batch receipt to be outstanding, got %+v", detail.Data.FinancialPosting)
+	}
+
+	cancelRes := postJSON(t, server, http.MethodPost, expensesURL+expenseID+"/cancel", map[string]any{
+		"reason": "Wrong collaborator selected",
+	})
+	defer cancelRes.Body.Close()
+	if cancelRes.StatusCode != http.StatusOK {
+		var body apiErrorResponse
+		decodeJSON(t, cancelRes, &body)
+		t.Fatalf("expected cancel status %d, got %d with error %+v", http.StatusOK, cancelRes.StatusCode, body.Error)
+	}
+	var cancelled apiExpenseResponse
+	decodeJSON(t, cancelRes, &cancelled)
+	if cancelled.Data.FinancialPosting == nil || cancelled.Data.FinancialPosting.LedgerEntryID != originalLedgerEntryID {
+		t.Fatalf("expected cancelled Expense to retain original debit %q, got %+v", originalLedgerEntryID, cancelled.Data.FinancialPosting)
+	}
+	if cancelled.Data.FinancialPosting.ReceiptID != originalReceiptID || cancelled.Data.FinancialPosting.ReceiptStatus != "CANCELLED" || cancelled.Data.FinancialPosting.OutstandingReceipt {
+		t.Fatalf("expected exact reversed debit receipt %q to be terminal after cancellation, got %+v", originalReceiptID, cancelled.Data.FinancialPosting)
+	}
+
+	var reversals []dbpkg.LedgerEntry
+	if err := database.
+		Where("tenant_id = ? AND related_entry_id = ? AND correction_type = ?", "default", originalLedgerEntryID, "REVERSAL").
+		Find(&reversals).Error; err != nil {
+		t.Fatalf("find batch Expense cancellation reversal: %v", err)
+	}
+	if len(reversals) != 1 || reversals[0].Direction != "CREDIT" || reversals[0].Amount != 20.0 {
+		t.Fatalf("expected one +20 CREDIT reversal of exact batch debit %q, got %+v", originalLedgerEntryID, reversals)
+	}
+
+	var receipt dbpkg.LedgerReceipt
+	if err := database.First(&receipt, "id = ? AND ledger_entry_id = ?", originalReceiptID, originalLedgerEntryID).Error; err != nil {
+		t.Fatalf("find exact cancelled batch receipt: %v", err)
+	}
+	if receipt.Status != "CANCELLED" || receipt.CancelledAt == nil || receipt.CancellationReason != "Wrong collaborator selected" {
+		t.Fatalf("expected exact batch receipt to be CANCELLED, got %+v", receipt)
+	}
+
+	outstandingRes := getJSON(t, server, "/api/v1/receipts/outstanding?sourceType=EXPENSE")
+	defer outstandingRes.Body.Close()
+	if outstandingRes.StatusCode != http.StatusOK {
+		t.Fatalf("expected outstanding receipt workbench status %d, got %d", http.StatusOK, outstandingRes.StatusCode)
+	}
+	var outstanding struct {
+		Data struct {
+			Items []struct {
+				ID string `json:"id"`
+			} `json:"items"`
+		} `json:"data"`
+	}
+	decodeJSON(t, outstandingRes, &outstanding)
+	for _, row := range outstanding.Data.Items {
+		if row.ID == originalReceiptID {
+			t.Fatalf("cancelled batch receipt %q must not remain outstanding", originalReceiptID)
+		}
+	}
+}
+
 func TestCreateCanteenExpenseBatchRejectsNonCanteenItemWithoutPartialWrite(t *testing.T) {
 	server, cleanup := newTestServer(t)
 	defer cleanup()

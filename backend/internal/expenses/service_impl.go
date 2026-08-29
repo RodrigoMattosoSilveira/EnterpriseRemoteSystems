@@ -28,7 +28,10 @@ const (
 	calculationMethodLegacyDirectEntry    = "LEGACY_DIRECT_ENTRY"
 )
 
-var ErrExpenseReceiptObligationMissing = errors.New("expense ledger debit receipt obligation was not generated")
+var (
+	ErrExpenseReceiptObligationMissing      = errors.New("expense ledger debit receipt obligation was not generated")
+	ErrExpenseReceiptCancellationIncomplete = errors.New("expense ledger debit receipt obligation remained open after cancellation")
+)
 
 type service struct{ repo Repository }
 
