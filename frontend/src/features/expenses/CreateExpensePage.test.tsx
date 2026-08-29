@@ -131,6 +131,34 @@ describe("CreateExpensePage", () => {
     await waitForText("Expenses landing");
   });
 
+  it("submits a Canteen expense at most once when the form is submitted twice immediately", async () => {
+    mockCreateExpenseFetch();
+    renderCreateExpensePage();
+
+    await waitForText("New Expense");
+    await selectCollaborator("Maria", "Maria");
+    await changeSelect("Item Description *", canteenItem.id);
+    await changeSelect("Currency *", "BRL");
+    await changeInput("Quantity *", "1");
+
+    const form = container.querySelector("form");
+    if (!form) throw new Error("Create Expense form not found");
+
+    await act(async () => {
+      form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+      form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+      await Promise.resolve();
+    });
+
+    const batchPosts = fetchCalls.filter(
+      (call) =>
+        call.method === "POST" &&
+        call.url === "/api/v1/expenses/canteen-batch",
+    );
+    expect(batchPosts).toHaveLength(1);
+    await waitForText("Expenses landing");
+  });
+
   it("records multiple Canteen items atomically with a currency per line", async () => {
     mockCreateExpenseFetch();
     renderCreateExpensePage();

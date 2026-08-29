@@ -86,11 +86,13 @@ test("user can create an Expense for an active Collaborator", async ({
   const expensesBody =
     (await expensesResponse.json()) as ApiEnvelope<ExpenseListResponse>;
 
-  const createdExpense = expensesBody.data?.items.find(
+  const matchingExpenses = (expensesBody.data?.items ?? []).filter(
     (expense) =>
       expense.description === "Created by Playwright price-list expense flow",
   );
 
+  expect(matchingExpenses).toHaveLength(1);
+  const createdExpense = matchingExpenses[0];
   expect(createdExpense).toBeDefined();
   expect(createdExpense?.financialPosting?.direction).toBe("DEBIT");
   expect(createdExpense?.financialPosting?.entryType).toBe("EXPENSE_DEDUCTION");

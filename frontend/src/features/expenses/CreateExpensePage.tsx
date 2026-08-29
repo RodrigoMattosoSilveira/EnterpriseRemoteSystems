@@ -82,7 +82,9 @@ export function CreateExpensePage() {
     useState<Collaborator | null>(null);
   const [clientValidationError, setClientValidationError] = useState("");
   const [showEarningsModal, setShowEarningsModal] = useState(false);
+  const [submissionLocked, setSubmissionLocked] = useState(false);
   const prefilledExpenseRef = useRef("");
+  const submissionInFlightRef = useRef(false);
   const collaboratorsQuery = useCollaboratorSearch(collaboratorSearch);
 
   useEffect(() => {
@@ -233,9 +235,27 @@ export function CreateExpensePage() {
     );
   };
 
+  const beginSubmission = () => {
+    if (submissionInFlightRef.current) {
+      return false;
+    }
+    submissionInFlightRef.current = true;
+    setSubmissionLocked(true);
+    return true;
+  };
+
+  const releaseSubmission = () => {
+    submissionInFlightRef.current = false;
+    setSubmissionLocked(false);
+  };
+
   const submit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setClientValidationError("");
+
+    if (submissionInFlightRef.current) {
+      return;
+    }
 
     if (!form.collaboratorId) {
       setClientValidationError("Select an active Collaborator.");
@@ -275,6 +295,10 @@ export function CreateExpensePage() {
         return;
       }
 
+      if (!beginSubmission()) {
+        return;
+      }
+
       const batchInput: CreateCanteenExpenseBatchInput = {
         collaboratorId: form.collaboratorId,
         expenseDate: form.expenseDate,
@@ -296,6 +320,7 @@ export function CreateExpensePage() {
             },
           });
         },
+        onError: releaseSubmission,
       });
       return;
     }
@@ -318,6 +343,10 @@ export function CreateExpensePage() {
       setClientValidationError(
         "A current gold price is required for Grams of Gold expenses.",
       );
+      return;
+    }
+
+    if (!beginSubmission()) {
       return;
     }
 
@@ -346,6 +375,7 @@ export function CreateExpensePage() {
           },
         });
       },
+      onError: releaseSubmission,
     });
   };
 
@@ -815,7 +845,7 @@ export function CreateExpensePage() {
               <button
                 className="rounded-xl bg-gray-950 px-5 py-3 text-sm font-semibold text-white shadow-sm disabled:cursor-not-allowed disabled:bg-gray-400"
                 type="submit"
-                disabled={isCreating || replacementSubmitDisabled}
+                disabled={isCreating || submissionLocked || replacementSubmitDisabled}
               >
                 {isCreating
                   ? "Creating..."
