@@ -107,6 +107,7 @@ type apiCanteenExpenseBatchResponse struct {
 		Items []struct {
 			ID                string   `json:"id"`
 			CollaboratorID    string   `json:"collaboratorId"`
+			CollaboratorLabel string   `json:"collaboratorLabel"`
 			PriceListItemID   *string  `json:"priceListItemId"`
 			PriceListItemCode string   `json:"priceListItemCode"`
 			ItemType          string   `json:"itemType"`
@@ -229,6 +230,9 @@ func TestCreateCanteenExpenseBatchCreatesSeparateExpensesWithPerItemCurrency(t *
 	}
 	if first.CollaboratorID != collaborator.Data.ID || second.CollaboratorID != collaborator.Data.ID {
 		t.Fatalf("expected shared collaborator %q, got %+v", collaborator.Data.ID, body.Data.Items)
+	}
+	if first.CollaboratorLabel != "P90" || second.CollaboratorLabel != "P90" {
+		t.Fatalf("expected canonical Collaborator label %q on every batch result item, got %q/%q", "P90", first.CollaboratorLabel, second.CollaboratorLabel)
 	}
 	if first.ItemType != "CANTEEN" || second.ItemType != "CANTEEN" {
 		t.Fatalf("expected CANTEEN item type for every expense, got %+v", body.Data.Items)

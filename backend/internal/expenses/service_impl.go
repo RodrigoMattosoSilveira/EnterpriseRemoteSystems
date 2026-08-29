@@ -193,9 +193,12 @@ func (s *service) CreateCanteenBatch(ctx context.Context, req CreateCanteenExpen
 		return nil, err
 	}
 
+	collaboratorLabel := globalPersonLabel(collaborator.Membership.Person)
 	result := &CreateCanteenExpenseBatchResult{Items: make([]ExpenseDTO, 0, len(expenses))}
 	for _, expense := range expenses {
-		result.Items = append(result.Items, ToDTO(*expense))
+		dto := ToDTO(*expense)
+		dto.CollaboratorLabel = collaboratorLabel
+		result.Items = append(result.Items, dto)
 	}
 	return result, nil
 }

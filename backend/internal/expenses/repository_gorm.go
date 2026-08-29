@@ -386,6 +386,7 @@ func (r *gormRepository) FindCollaboratorByID(ctx context.Context, collaboratorI
 	err := r.db.WithContext(ctx).
 		Preload("Status").
 		Preload("Membership").
+		Preload("Membership.Person").
 		First(&row, "id = ? AND tenant_id = ?", collaboratorID, tenantctx.TenantID(ctx)).Error
 	if err != nil {
 		return nil, err
