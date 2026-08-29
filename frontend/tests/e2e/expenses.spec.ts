@@ -52,9 +52,9 @@ test("user can create an Expense for an active Collaborator", async ({
 
   await selectExpenseCollaborator(page, personNickname);
   await page.getByLabel("Category *").selectOption("CANTEEN");
-  await page.getByLabel("Item Description *").selectOption(item.id);
-  await page.getByLabel("Currency *").selectOption("BRL");
-  await page.getByLabel("Quantity *").fill(EXPENSE_QUANTITY);
+  await page.getByLabel("Canteen item 1 description").selectOption(item.id);
+  await page.getByLabel("Canteen item 1 currency").selectOption("BRL");
+  await page.getByLabel("Canteen item 1 quantity").fill(EXPENSE_QUANTITY);
   await expect(page.getByText("Calculation preview")).toBeVisible();
   await expect(page.getByText("BRL price list").first()).toBeVisible();
   await page
