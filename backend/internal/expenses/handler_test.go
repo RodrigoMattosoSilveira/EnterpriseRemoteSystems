@@ -266,6 +266,7 @@ func TestCancelCanteenBatchExpenseClosesExactReversedReceiptObligation(t *testin
 	defer cleanup()
 
 	collaborator := createActiveCollaborator(t, server, 92)
+	replacementCollaborator := createActiveCollaborator(t, server, 93)
 	item := createPriceListItem(t, server, validPriceListItemPayload(map[string]any{
 		"code":         "BATCH_CANCEL_ITEM",
 		"description":  "Batch cancellation item",
@@ -366,6 +367,33 @@ func TestCancelCanteenBatchExpenseClosesExactReversedReceiptObligation(t *testin
 		if row.ID == originalReceiptID {
 			t.Fatalf("cancelled batch receipt %q must not remain outstanding", originalReceiptID)
 		}
+	}
+
+	recreateRes := postJSON(t, server, http.MethodPost, expensesURL, map[string]any{
+		"collaboratorId":         replacementCollaborator.Data.ID,
+		"priceListItemId":        item.Data.ID,
+		"currencyCode":           "BRL",
+		"quantity":               1.0,
+		"expenseDate":            "2026-06-03",
+		"description":            "Corrected owner",
+		"recreatedFromExpenseId": expenseID,
+	})
+	defer recreateRes.Body.Close()
+	if recreateRes.StatusCode != http.StatusCreated {
+		var body apiErrorResponse
+		decodeJSON(t, recreateRes, &body)
+		t.Fatalf("expected cross-owner recreation status %d, got %d with error %+v", http.StatusCreated, recreateRes.StatusCode, body.Error)
+	}
+	var recreated apiExpenseResponse
+	decodeJSON(t, recreateRes, &recreated)
+	if recreated.Data.CollaboratorID != replacementCollaborator.Data.ID {
+		t.Fatalf("expected replacement ownership to move to collaborator %q, got %q", replacementCollaborator.Data.ID, recreated.Data.CollaboratorID)
+	}
+	if recreated.Data.RecreatedFromExpenseID == nil || *recreated.Data.RecreatedFromExpenseID != expenseID {
+		t.Fatalf("expected replacement to retain recreated-from link %q, got %+v", expenseID, recreated.Data.RecreatedFromExpenseID)
+	}
+	if recreated.Data.FinancialPosting == nil || recreated.Data.FinancialPosting.Direction != "DEBIT" || recreated.Data.FinancialPosting.Amount != 20.0 || !recreated.Data.FinancialPosting.OutstandingReceipt {
+		t.Fatalf("expected replacement to create its own -20 debit and receipt obligation, got %+v", recreated.Data.FinancialPosting)
 	}
 }
 

@@ -41,6 +41,17 @@ const activeCollaborator: Collaborator = {
   updatedAt: "2026-06-01T12:00:00Z",
 };
 
+const replacementCollaborator: Collaborator = {
+  ...activeCollaborator,
+  id: "collab-a2",
+  membershipId: "membership-a2",
+  personId: "global-person-a",
+  legacyPersonId: "person-a",
+  personNickname: "Ana",
+  createdAt: "2026-06-02T12:00:00Z",
+  updatedAt: "2026-06-02T12:00:00Z",
+};
+
 const closedCollaborator: Collaborator = {
   ...activeCollaborator,
   id: "collab-closed",
@@ -284,7 +295,8 @@ describe("CreateExpensePage", () => {
       ),
     ).toBe(false);
 
-    await changeInput("Quantity *", "2");
+    await selectCollaborator("Ana", "Ana");
+    await waitForText("Selected: Ana");
     expect(replacementButton.disabled).toBe(false);
 
     await changeSelect("Item Description *", "");
@@ -299,10 +311,10 @@ describe("CreateExpensePage", () => {
       (call) => call.method === "POST" && call.url === "/api/v1/expenses",
     );
     expect(createCall?.body).toMatchObject({
-      collaboratorId: activeCollaborator.id,
+      collaboratorId: replacementCollaborator.id,
       priceListItemId: canteenItem.id,
       currencyCode: "BRL",
-      quantity: 2,
+      quantity: 3,
       recreatedFromExpenseId: "expense-cancelled",
     });
     await waitForText("Replacement detail");
@@ -469,6 +481,25 @@ function mockRecreateExpenseFetch() {
         },
       });
     }
+    if (url.startsWith("/api/v1/collaborators?")) {
+      const search = normalizeSearch(
+        new URL(url, "http://localhost").searchParams.get("search") ?? "",
+      );
+      const collaborators = [
+        activeCollaborator,
+        replacementCollaborator,
+      ].filter((collaborator) =>
+        normalizeSearch(
+          `${collaborator.personNickname ?? ""} ${collaborator.personName ?? ""}`,
+        ).includes(search),
+      );
+      return jsonResponse({
+        data: {
+          items: collaborators,
+          total: collaborators.length,
+        },
+      });
+    }
     if (url === `/api/v1/collaborators/${activeCollaborator.id}`) {
       return jsonResponse({ data: activeCollaborator });
     }
@@ -491,14 +522,18 @@ function mockRecreateExpenseFetch() {
       });
     }
     if (url === "/api/v1/expenses" && methodOf(init) === "POST") {
-      const body = parseBody(init?.body);
+      const body = parseBody(init?.body) as { collaboratorId?: string };
+      const targetCollaborator =
+        body.collaboratorId === replacementCollaborator.id
+          ? replacementCollaborator
+          : activeCollaborator;
       return jsonResponse({
         data: {
           id: "expense-replacement",
           tenantId: "default",
-          personId: activeCollaborator.personId,
-          collaboratorId: activeCollaborator.id,
-          collaboratorLabel: activeCollaborator.personNickname,
+          personId: targetCollaborator.personId,
+          collaboratorId: targetCollaborator.id,
+          collaboratorLabel: targetCollaborator.personNickname,
           expenseCategoryId: "ref-expense-category-canteen",
           expenseCategoryLabel: "Canteen",
           valueUnitId: "ref-value-unit-brl",
