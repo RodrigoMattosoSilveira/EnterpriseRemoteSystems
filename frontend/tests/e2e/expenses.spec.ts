@@ -52,9 +52,9 @@ test("user can create an Expense for an active Collaborator", async ({
 
   await selectExpenseCollaborator(page, personNickname);
   await page.getByLabel("Category *").selectOption("CANTEEN");
-  await page.getByLabel("Item Description *").selectOption(item.id);
-  await page.getByLabel("Currency *").selectOption("BRL");
-  await page.getByLabel("Quantity *").fill(EXPENSE_QUANTITY);
+  await page.getByLabel("Canteen item 1 description").selectOption(item.id);
+  await page.getByLabel("Canteen item 1 currency").selectOption("BRL");
+  await page.getByLabel("Canteen item 1 quantity").fill(EXPENSE_QUANTITY);
   await expect(page.getByText("Calculation preview")).toBeVisible();
   await expect(page.getByText("BRL price list").first()).toBeVisible();
   await page
@@ -86,11 +86,13 @@ test("user can create an Expense for an active Collaborator", async ({
   const expensesBody =
     (await expensesResponse.json()) as ApiEnvelope<ExpenseListResponse>;
 
-  const createdExpense = expensesBody.data?.items.find(
+  const matchingExpenses = (expensesBody.data?.items ?? []).filter(
     (expense) =>
       expense.description === "Created by Playwright price-list expense flow",
   );
 
+  expect(matchingExpenses).toHaveLength(1);
+  const createdExpense = matchingExpenses[0];
   expect(createdExpense).toBeDefined();
   expect(createdExpense?.financialPosting?.direction).toBe("DEBIT");
   expect(createdExpense?.financialPosting?.entryType).toBe("EXPENSE_DEDUCTION");

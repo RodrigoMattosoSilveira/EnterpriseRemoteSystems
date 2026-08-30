@@ -43,9 +43,16 @@ export function CollaboratorCurrentAccountPage() {
   const canViewFinancialProjection =
     wildcard || actor.permissions.includes("current_accounts.summary.read");
   const canBrowseExpenses = wildcard || actor.permissions.includes("expenses.read");
-  const canBrowseOutstandingReceipts = wildcard || actor.permissions.includes("ledger.receipts.read");
+  const canBrowseOutstandingReceipts =
+    wildcard ||
+    actor.permissions.includes("ledger.receipts.read") ||
+    actor.permissions.includes("ledger.receipts.self.read");
   const canOpenOperationalSources =
     wildcard || actor.permissions.includes("expenses.read") || actor.permissions.includes("planning.read");
+  const canOpenJourneyProvenance =
+    wildcard ||
+    actor.permissions.includes("collaborators.read") ||
+    actor.permissions.includes("collaborators.self.read");
   const canOpenReceipt = wildcard || actor.permissions.includes("ledger.receipts.read") || actor.permissions.includes("ledger.receipts.self.read");
   const [showFinancialProjection, setShowFinancialProjection] = useState(false);
   const [searchParams, setSearchParams] = useSearchParams();
@@ -90,12 +97,18 @@ export function CollaboratorCurrentAccountPage() {
           </Link>
           <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div>
-              <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+              <h1 className="text-3xl font-bold text-gray-950">
                 Person Current Account
-              </p>
-              <h1 className="text-2xl font-bold text-gray-950">
-                {data?.personLabel || data?.collaboratorLabel || "Current Account"}
               </h1>
+              <h2 className="mt-1 text-lg font-semibold text-gray-800">
+                {data?.personLabel || data?.collaboratorLabel || "Current Account"}
+              </h2>
+              <p className="mt-1 text-sm text-gray-600">
+                <span className="font-semibold">Journey Code:</span>{" "}
+                <span className="break-all font-mono">
+                  {data?.collaboratorId || id}
+                </span>
+              </p>
               <p className="mt-1 text-sm text-gray-600">
                 Person-owned balances and ledger history in the selected Tenant. Journey references remain as provenance.
               </p>
@@ -141,17 +154,12 @@ export function CollaboratorCurrentAccountPage() {
         ) : data ? (
           <>
             <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              {data.balances.length > 0 ? (
-                data.balances.map((balance) => (
-                  <BalanceCard key={balance.valueUnitId} balance={balance} />
-                ))
-              ) : (
-                <div className="rounded-2xl border bg-white p-5 shadow-sm sm:col-span-2 lg:col-span-3">
-                  <p className="text-sm font-semibold text-gray-700">
-                    No active current-account balance yet.
-                  </p>
-                </div>
-              )}
+              {balancesForDisplay(data.balances).map((balance) => (
+                <BalanceCard
+                  key={balance.valueUnitCode || balance.valueUnitLabel}
+                  balance={balance}
+                />
+              ))}
             </section>
 
             <section className="rounded-2xl border bg-white p-5 shadow-sm">
@@ -188,6 +196,7 @@ export function CollaboratorCurrentAccountPage() {
                         key={entry.id}
                         entry={entry}
                         canOpenOperationalSources={canOpenOperationalSources}
+                        canOpenJourneyProvenance={canOpenJourneyProvenance}
                         canOpenReceipt={canOpenReceipt}
                       />
                     ))}
@@ -244,7 +253,38 @@ export function CollaboratorCurrentAccountPage() {
   );
 }
 
-function BalanceCard({ balance }: { balance: CurrentAccountBalance }) {
+type DisplayBalance = Pick<
+  CurrentAccountBalance,
+  "valueUnitCode" | "valueUnitLabel" | "balance"
+>;
+
+const canonicalDisplayBalances: DisplayBalance[] = [
+  { valueUnitCode: "BRL", valueUnitLabel: "Real", balance: 0 },
+  { valueUnitCode: "GOLD_GRAM", valueUnitLabel: "Grams of Gold", balance: 0 },
+];
+
+function balancesForDisplay(balances: CurrentAccountBalance[]): DisplayBalance[] {
+  const balancesByCode = new Map(
+    balances.map((balance) => [
+      (balance.valueUnitCode || "").toUpperCase(),
+      balance,
+    ]),
+  );
+  const canonicalCodes = new Set(
+    canonicalDisplayBalances.map((balance) => balance.valueUnitCode),
+  );
+  const canonicalBalances = canonicalDisplayBalances.map((balance) => ({
+    ...balance,
+    balance: balancesByCode.get(balance.valueUnitCode || "")?.balance ?? 0,
+  }));
+  const additionalBalances = balances.filter(
+    (balance) => !canonicalCodes.has((balance.valueUnitCode || "").toUpperCase()),
+  );
+
+  return [...canonicalBalances, ...additionalBalances];
+}
+
+function BalanceCard({ balance }: { balance: DisplayBalance }) {
   const code = balance.valueUnitCode || balance.valueUnitLabel || "Balance";
   return (
     <article className="rounded-2xl border bg-white p-5 shadow-sm">
@@ -252,7 +292,7 @@ function BalanceCard({ balance }: { balance: CurrentAccountBalance }) {
         {balance.valueUnitLabel || code}
       </p>
       <p className="mt-2 text-2xl font-bold text-gray-950">
-        {formatAmount(balance.balance, code)}
+        {formatBalanceAmount(balance.balance, code)}
       </p>
       <p className="mt-1 text-xs text-gray-500">{code}</p>
     </article>
@@ -262,10 +302,12 @@ function BalanceCard({ balance }: { balance: CurrentAccountBalance }) {
 function LedgerEntryRow({
   entry,
   canOpenOperationalSources,
+  canOpenJourneyProvenance,
   canOpenReceipt,
 }: {
   entry: LedgerEntry;
   canOpenOperationalSources: boolean;
+  canOpenJourneyProvenance: boolean;
   canOpenReceipt: boolean;
 }) {
   const receipt = entry.receipt;
@@ -296,6 +338,27 @@ function LedgerEntryRow({
         {entry.description ? (
           <p className="mt-1 text-sm text-gray-600">{entry.description}</p>
         ) : null}
+        <dl className="mt-2 grid gap-1 rounded-xl border border-gray-100 bg-gray-50 p-3 text-xs text-gray-700 sm:grid-cols-2">
+          <div>
+            <dt className="inline font-semibold text-gray-900">Person owner: </dt>
+            <dd className="inline font-mono">{entry.personId}</dd>
+          </div>
+          <div>
+            <dt className="inline font-semibold text-gray-900">Journey provenance: </dt>
+            <dd className="inline">
+              {canOpenJourneyProvenance ? (
+                <Link
+                  className="font-mono font-semibold underline"
+                  to={`/collaborators/${entry.collaboratorId}`}
+                >
+                  {entry.collaboratorId}
+                </Link>
+              ) : (
+                <span className="font-mono">{entry.collaboratorId}</span>
+              )}
+            </dd>
+          </div>
+        </dl>
         {receipt && isFinalSettlementReceipt(receipt.receiptPurpose) ? (
           <dl className="mt-2 grid gap-1 rounded-xl bg-gray-50 p-3 text-xs text-gray-700 sm:grid-cols-2">
             <div>
@@ -317,10 +380,12 @@ function LedgerEntryRow({
               : "Outstanding receipt: print, collect signature, and record the signed return."}
           </p>
         ) : receipt && !receipt.outstanding ? (
-          <p className="mt-2 rounded-xl bg-green-50 p-2 text-xs font-semibold text-green-900">
+          <p className={`mt-2 rounded-xl p-2 text-xs font-semibold ${receipt.status === "CANCELLED" ? "bg-gray-100 text-gray-700" : "bg-green-50 text-green-900"}`}>
             {isFinalSettlementReceipt(receipt.receiptPurpose)
               ? "Final settlement receipt accepted in-app."
-              : "Receipt returned or closed."}
+              : receipt.status === "CANCELLED"
+                ? "Receipt obligation cancelled; no signature or return is required."
+                : "Receipt returned; no further receipt action is required."}
           </p>
         ) : null}
       </div>
@@ -331,15 +396,29 @@ function LedgerEntryRow({
           </Link>
         ) : null}
         {canOpenReceipt && shouldShowReceiptAction(entry, receipt) ? (
-          <Link className="rounded-xl bg-gray-900 px-4 py-2 text-sm font-semibold text-white" to={`/ledger-entries/${entry.id}/receipt`}>
-            {isFinalSettlementReceipt(receipt?.receiptPurpose)
-              ? "Review / accept receipt"
-              : "Print or return receipt"}
+          <Link
+            className={receipt && !receipt.outstanding
+              ? "rounded-xl border px-4 py-2 text-sm font-semibold"
+              : "rounded-xl bg-gray-900 px-4 py-2 text-sm font-semibold text-white"}
+            to={`/ledger-entries/${entry.id}/receipt`}
+          >
+            {receiptActionLabel(receipt)}
           </Link>
         ) : null}
       </div>
     </article>
   );
+}
+
+
+function receiptActionLabel(receipt: LedgerEntry["receipt"]) {
+  if (isFinalSettlementReceipt(receipt?.receiptPurpose)) {
+    return "Review / accept receipt";
+  }
+  if (receipt && !receipt.outstanding) {
+    return "View receipt";
+  }
+  return "Print or return receipt";
 }
 
 function shouldShowReceiptAction(
@@ -382,6 +461,14 @@ function sourceLabel(entry: LedgerEntry) {
 function shortId(value: string) {
   if (!value) return "—";
   return value.length <= 12 ? value : `${value.slice(0, 8)}…`;
+}
+
+function formatBalanceAmount(value: number, unit?: string) {
+  const normalized = (unit || "").toUpperCase();
+  if (normalized.includes("GOLD")) {
+    return formatNumber(value, 8);
+  }
+  return formatAmount(value, unit);
 }
 
 function formatAmount(value: number, unit?: string) {

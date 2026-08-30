@@ -71,7 +71,9 @@ export function AccrualTab({
         recalculatePending={recalculate.isPending}
         postPending={postRun.isPending}
         onSelectRun={setSelectedRunId}
-        onCreate={(input) => createRun.mutate(input)}
+        onCreate={async (input) => {
+          await createRun.mutateAsync(input);
+        }}
         onRecalculate={(runId) => recalculate.mutate(runId)}
         onPost={(runId) => postRun.mutate(runId)}
       />
@@ -179,13 +181,29 @@ function AccrualRunPanel({
   recalculatePending: boolean;
   postPending: boolean;
   onSelectRun: (id: string) => void;
-  onCreate: (input: { accrualDate: string; notes?: string }) => void;
+  onCreate: (input: { accrualDate: string; notes?: string }) => Promise<void>;
   onRecalculate: (id: string) => void;
   onPost: (id: string) => void;
 }) {
   const [notes, setNotes] = useState("");
-  const create = () =>
-    onCreate({ accrualDate: workPeriod.workDate, notes: notes.trim() });
+  const hasActiveRun = runs.some(
+    (run) => run.status !== "POSTED" && run.status !== "VOIDED",
+  );
+  const hasRequiredNotes = notes.trim().length > 0;
+  const canCreate =
+    hasRequiredNotes &&
+    !hasActiveRun &&
+    !createPending &&
+    workPeriod.status !== "CLOSED";
+  const create = async () => {
+    if (!canCreate) return;
+    try {
+      await onCreate({ accrualDate: workPeriod.workDate, notes: notes.trim() });
+      setNotes("");
+    } catch {
+      // Mutation errors are surfaced by ApiErrorPanel. Preserve notes for retry.
+    }
+  };
   const canPost = Boolean(
     selectedRun &&
     selectedRun.summary.readyItems > 0 &&
@@ -208,24 +226,34 @@ function AccrualRunPanel({
         >
           Accrual notes
         </label>
-        <p className="mt-1 text-xs text-gray-500">
-          Optional context for this accrual run. Use a meaningful sentence when
-          the reason or scope of the calculation should be recorded.
+        <p id="accrual-run-notes-help" className="mt-1 text-xs text-gray-500">
+          {workPeriod.status === "CLOSED"
+            ? "Closed Work Periods cannot create accrual runs."
+            : hasActiveRun
+              ? "An unposted accrual run already exists. Recalculate or post that run before creating another one."
+              : "Required. Describe the reason or scope of this accrual run. Notes are cleared after a successful run."}
         </p>
         <textarea
           id="accrual-run-notes"
           aria-label="Accrual notes"
-          className="mt-3 min-h-24 w-full resize-y rounded-xl border bg-white px-3 py-2 text-sm"
+          aria-describedby="accrual-run-notes-help"
+          className="mt-3 min-h-24 w-full resize-y rounded-xl border bg-white px-3 py-2 text-sm disabled:bg-gray-100 disabled:text-gray-500"
           rows={4}
           value={notes}
           onChange={(event) => setNotes(event.target.value)}
           placeholder="Example: Final Tenant B accrual after reviewing actual outcomes."
+          required
+          disabled={createPending || hasActiveRun || workPeriod.status === "CLOSED"}
         />
         <div className="mt-3 flex justify-end">
           <button
-            onClick={create}
-            disabled={createPending || workPeriod.status === "CLOSED"}
-            className="rounded-xl bg-gray-950 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+            onClick={() => void create()}
+            disabled={!canCreate}
+            className={`rounded-xl px-4 py-2 text-sm font-semibold ${
+              canCreate
+                ? "bg-gray-950 text-white"
+                : "cursor-not-allowed bg-gray-200 text-gray-500"
+            }`}
           >
             {createPending ? "Calculating..." : "Run Accrual"}
           </button>
@@ -330,7 +358,21 @@ function AccrualItemsTable({ items }: { items: AccrualItem[] }) {
           {items.map((item) => (
             <tr key={item.id} className="border-b last:border-0">
               <td className="px-2 py-3 font-medium">
-                {item.collaboratorName || item.collaboratorId}
+                <div>{item.collaboratorName || item.collaboratorId}</div>
+                <dl className="mt-1 grid gap-0.5 text-xs font-normal text-gray-500">
+                  <div>
+                    <dt className="inline font-semibold text-gray-600">Person owner: </dt>
+                    <dd className="inline font-mono">{item.personId}</dd>
+                  </div>
+                  <div>
+                    <dt className="inline font-semibold text-gray-600">Journey provenance: </dt>
+                    <dd className="inline font-mono">{item.collaboratorId}</dd>
+                  </div>
+                  <div>
+                    <dt className="inline font-semibold text-gray-600">Tenant: </dt>
+                    <dd className="inline font-mono">{item.tenantId}</dd>
+                  </div>
+                </dl>
               </td>
               <td className="px-2 py-3">
                 {humanizePlanningCode(item.calculationType)}

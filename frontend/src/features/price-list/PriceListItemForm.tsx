@@ -97,6 +97,7 @@ export function PriceListItemForm({
           Category
           <select
             className="mt-1 block w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm"
+            required
             value={value.itemType}
             onChange={(event) =>
               onChange({ ...value, itemType: event.target.value as PriceListFormItemType })
@@ -111,6 +112,7 @@ export function PriceListItemForm({
           Code
           <input
             className="mt-1 block w-full rounded-xl border border-gray-300 px-3 py-2 text-sm"
+            required
             value={value.code}
             onChange={(event) => onChange({ ...value, code: event.target.value })}
             placeholder="CANTEEN_SNACK"
@@ -121,6 +123,7 @@ export function PriceListItemForm({
           Description
           <input
             className="mt-1 block w-full rounded-xl border border-gray-300 px-3 py-2 text-sm"
+            required
             value={value.description}
             onChange={(event) => onChange({ ...value, description: event.target.value })}
             placeholder="Snack"
@@ -132,6 +135,7 @@ export function PriceListItemForm({
           <input
             className="mt-1 block w-full rounded-xl border border-gray-300 px-3 py-2 text-sm"
             min="0.01"
+            required
             step="0.01"
             type="number"
             value={value.unitPriceBrl}

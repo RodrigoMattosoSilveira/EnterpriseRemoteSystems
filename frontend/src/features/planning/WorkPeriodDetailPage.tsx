@@ -1,6 +1,9 @@
 import { useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Link, useParams } from "react-router-dom";
 import { ApiErrorPanel } from "../../components/ApiErrorPanel";
+import { loadAuthTenantOptions } from "../../api/auth.api";
+import { useAuthState } from "../../app/useAuth";
 import { useReferenceDataByType } from "../reference-data/useReferenceData";
 import type { ActualStatus, WorkPeriodAssignment } from "../../types/planning";
 import { ACTUAL_STATUSES, humanizePlanningCode } from "./planningSchemas";
@@ -23,6 +26,15 @@ type Tab = "plan" | "inform" | "outcomes" | "accrual";
 export function WorkPeriodDetailPage() {
   const { id = "" } = useParams();
   const [tab, setTab] = useState<Tab>("plan");
+  const auth = useAuthState();
+  const accountId =
+    auth.status === "authenticated" ? auth.session.accountId : "";
+  const tenantOptionsQuery = useQuery({
+    queryKey: ["auth", accountId, "tenant-options"],
+    queryFn: loadAuthTenantOptions,
+    enabled: Boolean(accountId),
+    staleTime: 60_000,
+  });
   const periodQuery = useWorkPeriod(id);
   const assignmentsQuery = useAssignments(id);
   const sectorsQuery = useReferenceDataByType("sector");
@@ -65,6 +77,9 @@ export function WorkPeriodDetailPage() {
       </main>
     );
   const editable = period.status !== "CLOSED";
+  const tenantName =
+    tenantOptionsQuery.data?.find((tenant) => tenant.id === period.tenantId)
+      ?.name ?? period.tenantId;
   const included = assignments.filter(
     (row) => row.active && row.plannedStatus === "INCLUDED",
   );
@@ -79,13 +94,22 @@ export function WorkPeriodDetailPage() {
           >
             Back to Work Periods
           </Link>
-          <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+          <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div>
-              <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
-                {period.workDate} · {period.periodCode}
+              <h1 className="text-3xl font-bold text-gray-950">Work Period</h1>
+              <h2 className="mt-1 text-lg font-semibold text-gray-800">
+                {tenantName} · {period.workDate} · {period.name}
+              </h2>
+              <p className="mt-1 text-sm text-gray-600">
+                <span className="font-semibold">Work Period Code:</span>{" "}
+                <span className="font-mono">{period.periodCode}</span>
               </p>
-              <h1 className="text-2xl font-bold">{period.name}</h1>
-              <p className="text-sm text-gray-500">
+              <p className="mt-1 text-sm text-gray-600">
+                <span className="font-semibold">Work Period ID:</span>{" "}
+                <span className="break-all font-mono">{period.id}</span>
+              </p>
+              <p className="mt-1 text-sm text-gray-600">
+                <span className="font-semibold">Schedule:</span>{" "}
                 {formatDateTime(period.startsAt)} to{" "}
                 {formatDateTime(period.endsAt)}
               </p>

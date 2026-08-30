@@ -52,6 +52,10 @@ describe("PrintableReceiptPage", () => {
 
     await waitForText("Receipt lifecycle");
     await waitForText("Pending issue");
+    await waitForText("Person owner");
+    expect(container.textContent).toContain("person-20e");
+    expect(container.textContent).toContain("collab-20e");
+    expect(container.textContent).toContain("default");
     await waitForText("Signed document reference");
     expect(fieldControl("Received by")).toBeFalsy();
 
@@ -99,6 +103,29 @@ describe("PrintableReceiptPage", () => {
     expect(terminalButtons.length).toBeGreaterThan(0);
     expect(terminalButtons.every((button) => button.disabled)).toBe(true);
     expect((fieldControl("Signed document reference") as HTMLInputElement | null)?.disabled).toBe(true);
+  });
+
+  it("removes print and signed-return requirements for cancelled receipts", async () => {
+    receipt = receiptFixture({ status: "CANCELLED" });
+    mockReceiptFetch();
+
+    renderPage();
+
+    await waitForText("Receipt obligation cancelled");
+    await waitForText("This receipt is retained as historical evidence only.");
+
+    expect(container.textContent).not.toContain("Print lifecycle step");
+    expect(container.textContent).not.toContain("Signed receipt return");
+    expect(container.textContent).not.toContain("Follow the required status sequence");
+    expect(container.textContent).not.toContain("Waiting to be printed");
+    expect(container.textContent).not.toContain("Waiting for collaborator signature");
+    expect(container.textContent).not.toContain("Waiting for office return record");
+    expect(buttonByText("Print Receipt")).toBeFalsy();
+    expect(buttonByText("Record signed return")).toBeFalsy();
+    expect(fieldControl("Signed document reference")).toBeFalsy();
+    expect(container.textContent).not.toContain("Collaborator signature");
+    expect(container.textContent).not.toContain("Office administrator");
+    expect(container.textContent).toContain("No signature or signed-return record is required.");
   });
 
   it("lets the Collaborator accept the Tenant final payment through self-service", async () => {
@@ -235,6 +262,8 @@ function mockReceiptFetch() {
 function receiptFixture(overrides: Partial<PrintableReceipt> = {}): PrintableReceipt {
   return {
     id: "receipt-20e",
+    tenantId: "default",
+    personId: "person-20e",
     receiptNumber: "RCP-20E",
     receiptType: "LEDGER_DEBIT",
     receiptPurpose: "LEDGER_DEBIT",

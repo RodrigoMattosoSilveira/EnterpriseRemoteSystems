@@ -67,6 +67,7 @@ describe("CurrentAndFutureEarningsModal", () => {
     });
 
     await waitForText("Projected Journey-End Balances");
+    expect(container.textContent).toContain("Journey provenance: c-1");
     expect(container.textContent).toContain(
       "Ready Accrual Earnings Not Yet Posted",
     );

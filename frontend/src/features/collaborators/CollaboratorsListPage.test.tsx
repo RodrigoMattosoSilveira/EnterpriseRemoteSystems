@@ -119,8 +119,16 @@ describe("CollaboratorsListPage", () => {
     expect(textNode("Collaborator Journeys")).toBeTruthy();
     expect(textNode("Operator")).toBeTruthy();
     expect(textNode("Mining · Mina Carara")).toBeTruthy();
-    expect(textNode("Daily Rate")).toBeTruthy();
-    expect(textNode("$125.00")).toBeTruthy();
+    expect(textNode("Journey ID")).toBeTruthy();
+    expect(container.textContent).toContain("collab-1");
+    expect(
+      Array.from(
+        container.querySelectorAll<HTMLAnchorElement>(
+          'a[href="/collaborators/collab-1"]',
+        ),
+      ).some((link) => link.textContent?.trim() === "collab-1"),
+    ).toBe(true);
+    expect(textNode("Payment")).toBeFalsy();
     expect(textNode("Active")).toBeTruthy();
   });
 
@@ -152,7 +160,9 @@ describe("CollaboratorsListPage", () => {
     ).toBe("Filger");
 
     const displayedNames = Array.from(
-      container.querySelectorAll<HTMLAnchorElement>("tbody a"),
+      container.querySelectorAll<HTMLAnchorElement>(
+        "tbody tr td:first-child a",
+      ),
     ).map((link) => link.textContent?.trim());
     expect(displayedNames).toEqual(["Ana", "Zulu"]);
   });
@@ -233,8 +243,23 @@ describe("CollaboratorsListPage", () => {
     expect(container.textContent).toContain("Closed 2026-03-31T17:00:00Z");
     expect(container.textContent).toContain("Closed");
     expect(container.textContent).toContain("Active");
-    expect(linkByHref("/collaborators/collab-closed")).toBeTruthy();
-    expect(linkByHref("/collaborators/collab-open")).toBeTruthy();
+    expect(textNode("Journey ID")).toBeTruthy();
+    expect(container.textContent).toContain("collab-closed");
+    expect(container.textContent).toContain("collab-open");
+    expect(
+      Array.from(
+        container.querySelectorAll<HTMLAnchorElement>(
+          'a[href="/collaborators/collab-open"]',
+        ),
+      ).some((link) => link.textContent?.trim() === "collab-open"),
+    ).toBe(true);
+    expect(
+      Array.from(
+        container.querySelectorAll<HTMLAnchorElement>(
+          'a[href="/collaborators/collab-closed"]',
+        ),
+      ).some((link) => link.textContent?.trim() === "collab-closed"),
+    ).toBe(true);
     expect(textNode("Add")).toBeFalsy();
   });
 

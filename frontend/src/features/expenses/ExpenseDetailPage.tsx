@@ -219,6 +219,32 @@ export function ExpenseDetailPage() {
           </dl>
         </section>
 
+        <section className="rounded-2xl border bg-white p-5 shadow-sm sm:col-span-2">
+          <h2 className="text-lg font-semibold text-gray-950">Financial Ownership</h2>
+          <p className="mt-1 text-sm text-gray-600">
+            Canonical owner and Journey provenance used by the Expense, Ledger Entry, and Receipt chain.
+          </p>
+          <dl className="mt-5 grid gap-3 text-sm sm:grid-cols-2">
+            <Info label="Tenant" value={expense.tenantId} />
+            <Info label="Person owner" value={expense.personId} />
+            <Info label="Journey provenance" value={expense.collaboratorId} />
+          </dl>
+          <div className="mt-4 flex flex-wrap gap-3">
+            <Link
+              className="rounded-xl border bg-white px-4 py-2 text-sm font-semibold"
+              to={`/collaborators/${expense.collaboratorId}`}
+            >
+              Open Journey
+            </Link>
+            <Link
+              className="rounded-xl border bg-white px-4 py-2 text-sm font-semibold"
+              to={`/collaborators/${expense.collaboratorId}/current-account`}
+            >
+              Open Current Account
+            </Link>
+          </div>
+        </section>
+
         {hasAuditSnapshot(expense) && (
           <section className="rounded-2xl border bg-white p-5 shadow-sm sm:col-span-2">
             <h2 className="text-lg font-semibold text-gray-950">Calculation Audit</h2>

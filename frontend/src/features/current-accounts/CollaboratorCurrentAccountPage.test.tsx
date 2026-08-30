@@ -41,13 +41,65 @@ describe("CollaboratorCurrentAccountPage", () => {
     await waitForText("Person Current Account");
     await waitForText("Person-owned balances and ledger history in the selected Tenant.");
     await waitForText("Maria");
+    await waitForText("Journey Code:");
+    await waitForText("collab-1");
     await waitForText("42,50");
+
+    const currentAccountHeading = container.querySelector("h1");
+    expect(currentAccountHeading?.textContent?.trim()).toBe("Person Current Account");
+    expect(currentAccountHeading?.className).toContain("text-3xl");
+
+    const personHeading = container.querySelector("h2");
+    expect(personHeading?.textContent?.trim()).toBe("Maria");
+    expect(personHeading?.className).toContain("text-lg");
+    expect(container.textContent).toContain("Journey Code: collab-1");
     await waitForText("expense deduction");
     await waitForText("Receipt: Pending issue");
     await waitForText("Outstanding receipt: print, collect signature, and record the signed return.");
 
     expect(container.querySelector('a[href="/expenses/expense-1"]')).not.toBeNull();
     expect(container.querySelector('a[href="/ledger-entries/ledger-1/receipt"]')).not.toBeNull();
+  });
+
+  it("shows explicit zero Real and Grams of Gold balances when there are no active balance rows", async () => {
+    mockFetch(async (url, init) => {
+      fetchCalls.push({ url, method: methodOf(init) });
+      if (url.startsWith("/api/v1/collaborators/collab-1/current-account")) {
+        const detail = currentAccountDetailWith([]);
+        detail.balances = [];
+        return jsonResponse({ data: detail });
+      }
+      throw new Error(`Unhandled request: ${methodOf(init)} ${url}`);
+    });
+
+    renderCurrentAccountPage("/collaborators/collab-1/current-account");
+
+    await waitForText("Real");
+    await waitForText("Grams of Gold");
+
+    const balanceCards = Array.from(container.querySelectorAll("article"));
+    expect(balanceCards).toHaveLength(2);
+    const realCard = balanceCards.find((card) => card.textContent?.includes("BRL"));
+    const goldCard = balanceCards.find((card) => card.textContent?.includes("GOLD_GRAM"));
+
+    expect(realCard?.textContent).toContain("Real");
+    expect(realCard?.textContent).toContain("0,00");
+    expect(goldCard?.textContent).toContain("Grams of Gold");
+    expect(goldCard?.textContent).toContain("0");
+    expect(goldCard?.textContent).not.toContain("g gold");
+    expect(container.textContent).not.toContain("No active current-account balance yet.");
+  });
+
+  it("shows Outstanding Receipts to a self-service Collaborator", async () => {
+    mockCurrentAccountFetch();
+
+    renderCurrentAccountPage(
+      "/collaborators/collab-1/current-account",
+      selfServiceAuthorizationActor,
+    );
+
+    await waitForText("Outstanding Receipts");
+    expect(container.querySelector('a[href="/receipts/outstanding"]')).not.toBeNull();
   });
 
   it("opens the selected Journey Current + Future Earnings projection", async () => {
@@ -119,6 +171,38 @@ describe("CollaboratorCurrentAccountPage", () => {
     expect(container.textContent).not.toContain("print, collect signature");
   });
 
+  it("shows a cancelled Expense receipt as historical evidence without an outstanding action", async () => {
+    const cancelledExpenseEntry = {
+      ...expenseEntry,
+      id: "ledger-expense-cancelled",
+      receipt: {
+        ...expenseEntry.receipt!,
+        id: "receipt-expense-cancelled",
+        status: "CANCELLED",
+        outstanding: false,
+      },
+    };
+
+    mockFetch(async (url, init) => {
+      fetchCalls.push({ url, method: methodOf(init) });
+      if (url.startsWith("/api/v1/collaborators/collab-1/current-account")) {
+        return jsonResponse({ data: currentAccountDetailWith([cancelledExpenseEntry]) });
+      }
+      throw new Error(`Unhandled request: ${methodOf(init)} ${url}`);
+    });
+
+    renderCurrentAccountPage("/collaborators/collab-1/current-account");
+
+    await waitForText("Receipt: Cancelled");
+    await waitForText("Receipt obligation cancelled; no signature or return is required.");
+    expect(container.textContent).not.toContain("Outstanding receipt: print, collect signature");
+    expect(container.textContent).not.toContain("Print or return receipt");
+    expect(container.textContent).toContain("View receipt");
+    expect(
+      container.querySelector('a[href="/ledger-entries/ledger-expense-cancelled/receipt"]'),
+    ).not.toBeNull();
+  });
+
   it("hides the final-settlement receipt action after in-app acceptance", async () => {
     mockFetch(async (url, init) => {
       fetchCalls.push({ url, method: methodOf(init) });
@@ -166,6 +250,33 @@ describe("CollaboratorCurrentAccountPage", () => {
 
     await waitForText("Payment direction: Collaborator To Tenant");
     expect(container.textContent).toContain("Accepting party: Tenant");
+  });
+
+  it("shows canonical Person ownership and historical Journey provenance on each ledger row", async () => {
+    const historicalEntry = {
+      ...earningEntry,
+      id: "ledger-historical-a1",
+      personId: "person-a",
+      collaboratorId: "journey-a1-closed",
+      description: "Historical A1 earning",
+    };
+
+    mockFetch(async (url, init) => {
+      fetchCalls.push({ url, method: methodOf(init) });
+      if (url.startsWith("/api/v1/collaborators/collab-1/current-account")) {
+        return jsonResponse({ data: currentAccountDetailWith([historicalEntry]) });
+      }
+      throw new Error(`Unhandled request: ${methodOf(init)} ${url}`);
+    });
+
+    renderCurrentAccountPage("/collaborators/collab-1/current-account");
+
+    await waitForText("Historical A1 earning");
+    expect(container.textContent).toContain("Person owner: person-a");
+    expect(container.textContent).toContain("Journey provenance: journey-a1-closed");
+    expect(
+      container.querySelector('a[href="/collaborators/journey-a1-closed"]'),
+    ).not.toBeNull();
   });
 
   it("filters to work-period assignment earnings", async () => {
@@ -272,6 +383,28 @@ const authorizationActor: AuthzCurrentActor = {
   permissions: ["*"],
 };
 
+const selfServiceAuthorizationActor: AuthzCurrentActor = {
+  actorKey: "collaborator",
+  actorRecordId: "actor-collaborator",
+  tenantId: "default",
+  scope: "TENANT",
+  personId: "person-1",
+  collaboratorId: "collab-1",
+  roleCodes: ["PERSON"],
+  permissions: [
+    "people.self.read",
+    "collaborators.self.read",
+    "current_accounts.self.summary.read",
+    "ledger.receipts.self.read",
+  ],
+  intrinsicPermissions: [
+    "people.self.read",
+    "collaborators.self.read",
+    "current_accounts.self.summary.read",
+    "ledger.receipts.self.read",
+  ],
+};
+
 const expenseEntry: CurrentAccountDetail["ledgerEntries"]["items"][number] = {
   id: "ledger-1",
   tenantId: "default",
@@ -366,7 +499,7 @@ const earningEntry: CurrentAccountDetail["ledgerEntries"]["items"][number] = {
   updatedAt: "2026-06-05T00:00:00Z",
 };
 
-function renderCurrentAccountPage(initialEntry: string) {
+function renderCurrentAccountPage(initialEntry: string, actor: AuthzCurrentActor = authorizationActor) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
@@ -384,7 +517,7 @@ function renderCurrentAccountPage(initialEntry: string) {
     root = createRoot(container);
     root.render(
       <QueryClientProvider client={queryClient}>
-        <AuthorizationProvider value={authorizationActor}>
+        <AuthorizationProvider value={actor}>
           <RouterProvider router={router} />
         </AuthorizationProvider>
       </QueryClientProvider>,

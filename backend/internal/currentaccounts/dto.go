@@ -289,15 +289,18 @@ type FinancialProjectionDTO struct {
 }
 
 type ReceiptListFilter struct {
-	Status       string `query:"status"`
-	Collaborator string `query:"collaborator"`
-	SourceType   string `query:"sourceType"`
-	Page         int    `query:"page"`
-	PageSize     int    `query:"pageSize"`
+	Status              string `query:"status"`
+	Collaborator        string `query:"collaborator"`
+	SourceType          string `query:"sourceType"`
+	Page                int    `query:"page"`
+	PageSize            int    `query:"pageSize"`
+	ExactCollaboratorID string `query:"-"`
 }
 
 type OutstandingReceiptDTO struct {
 	ID                    string  `json:"id"`
+	TenantID              string  `json:"tenantId"`
+	PersonID              string  `json:"personId"`
 	ReceiptNumber         string  `json:"receiptNumber"`
 	ReceiptType           string  `json:"receiptType"`
 	ReceiptPurpose        string  `json:"receiptPurpose"`
@@ -349,6 +352,8 @@ type OutstandingReceiptListResult struct {
 
 type PrintableReceiptDTO struct {
 	ID                    string  `json:"id"`
+	TenantID              string  `json:"tenantId"`
+	PersonID              string  `json:"personId"`
 	ReceiptNumber         string  `json:"receiptNumber"`
 	ReceiptType           string  `json:"receiptType"`
 	ReceiptPurpose        string  `json:"receiptPurpose"`

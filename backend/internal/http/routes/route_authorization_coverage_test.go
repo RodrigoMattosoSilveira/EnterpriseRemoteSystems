@@ -42,6 +42,7 @@ func TestEveryRegisteredAPIRouteHasAuthorizationCoverage(t *testing.T) {
 		"GetSecondPersonApprovalPolicy":    {},
 		"UpdateSecondPersonApprovalPolicy": {},
 		"GetSelfPrintableReceipt":          {},
+		"ListOutstandingReceipts":          {},
 		"PrintReceipt":                     {},
 		"ReturnReceipt":                    {},
 		"AcceptReceipt":                    {},
