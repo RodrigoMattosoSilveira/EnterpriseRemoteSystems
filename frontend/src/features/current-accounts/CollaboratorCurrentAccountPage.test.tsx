@@ -61,6 +61,35 @@ describe("CollaboratorCurrentAccountPage", () => {
     expect(container.querySelector('a[href="/ledger-entries/ledger-1/receipt"]')).not.toBeNull();
   });
 
+  it("shows explicit zero Real and Grams of Gold balances when there are no active balance rows", async () => {
+    mockFetch(async (url, init) => {
+      fetchCalls.push({ url, method: methodOf(init) });
+      if (url.startsWith("/api/v1/collaborators/collab-1/current-account")) {
+        const detail = currentAccountDetailWith([]);
+        detail.balances = [];
+        return jsonResponse({ data: detail });
+      }
+      throw new Error(`Unhandled request: ${methodOf(init)} ${url}`);
+    });
+
+    renderCurrentAccountPage("/collaborators/collab-1/current-account");
+
+    await waitForText("Real");
+    await waitForText("Grams of Gold");
+
+    const balanceCards = Array.from(container.querySelectorAll("article"));
+    expect(balanceCards).toHaveLength(2);
+    const realCard = balanceCards.find((card) => card.textContent?.includes("BRL"));
+    const goldCard = balanceCards.find((card) => card.textContent?.includes("GOLD_GRAM"));
+
+    expect(realCard?.textContent).toContain("Real");
+    expect(realCard?.textContent).toContain("0,00");
+    expect(goldCard?.textContent).toContain("Grams of Gold");
+    expect(goldCard?.textContent).toContain("0");
+    expect(goldCard?.textContent).not.toContain("g gold");
+    expect(container.textContent).not.toContain("No active current-account balance yet.");
+  });
+
   it("opens the selected Journey Current + Future Earnings projection", async () => {
     mockFetch(async (url, init) => {
       fetchCalls.push({ url, method: methodOf(init) });

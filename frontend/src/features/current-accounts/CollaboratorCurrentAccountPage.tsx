@@ -151,17 +151,12 @@ export function CollaboratorCurrentAccountPage() {
         ) : data ? (
           <>
             <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              {data.balances.length > 0 ? (
-                data.balances.map((balance) => (
-                  <BalanceCard key={balance.valueUnitId} balance={balance} />
-                ))
-              ) : (
-                <div className="rounded-2xl border bg-white p-5 shadow-sm sm:col-span-2 lg:col-span-3">
-                  <p className="text-sm font-semibold text-gray-700">
-                    No active current-account balance yet.
-                  </p>
-                </div>
-              )}
+              {balancesForDisplay(data.balances).map((balance) => (
+                <BalanceCard
+                  key={balance.valueUnitCode || balance.valueUnitLabel}
+                  balance={balance}
+                />
+              ))}
             </section>
 
             <section className="rounded-2xl border bg-white p-5 shadow-sm">
@@ -255,7 +250,38 @@ export function CollaboratorCurrentAccountPage() {
   );
 }
 
-function BalanceCard({ balance }: { balance: CurrentAccountBalance }) {
+type DisplayBalance = Pick<
+  CurrentAccountBalance,
+  "valueUnitCode" | "valueUnitLabel" | "balance"
+>;
+
+const canonicalDisplayBalances: DisplayBalance[] = [
+  { valueUnitCode: "BRL", valueUnitLabel: "Real", balance: 0 },
+  { valueUnitCode: "GOLD_GRAM", valueUnitLabel: "Grams of Gold", balance: 0 },
+];
+
+function balancesForDisplay(balances: CurrentAccountBalance[]): DisplayBalance[] {
+  const balancesByCode = new Map(
+    balances.map((balance) => [
+      (balance.valueUnitCode || "").toUpperCase(),
+      balance,
+    ]),
+  );
+  const canonicalCodes = new Set(
+    canonicalDisplayBalances.map((balance) => balance.valueUnitCode),
+  );
+  const canonicalBalances = canonicalDisplayBalances.map((balance) => ({
+    ...balance,
+    balance: balancesByCode.get(balance.valueUnitCode || "")?.balance ?? 0,
+  }));
+  const additionalBalances = balances.filter(
+    (balance) => !canonicalCodes.has((balance.valueUnitCode || "").toUpperCase()),
+  );
+
+  return [...canonicalBalances, ...additionalBalances];
+}
+
+function BalanceCard({ balance }: { balance: DisplayBalance }) {
   const code = balance.valueUnitCode || balance.valueUnitLabel || "Balance";
   return (
     <article className="rounded-2xl border bg-white p-5 shadow-sm">
@@ -263,7 +289,7 @@ function BalanceCard({ balance }: { balance: CurrentAccountBalance }) {
         {balance.valueUnitLabel || code}
       </p>
       <p className="mt-2 text-2xl font-bold text-gray-950">
-        {formatAmount(balance.balance, code)}
+        {formatBalanceAmount(balance.balance, code)}
       </p>
       <p className="mt-1 text-xs text-gray-500">{code}</p>
     </article>
@@ -432,6 +458,14 @@ function sourceLabel(entry: LedgerEntry) {
 function shortId(value: string) {
   if (!value) return "—";
   return value.length <= 12 ? value : `${value.slice(0, 8)}…`;
+}
+
+function formatBalanceAmount(value: number, unit?: string) {
+  const normalized = (unit || "").toUpperCase();
+  if (normalized.includes("GOLD")) {
+    return formatNumber(value, 8);
+  }
+  return formatAmount(value, unit);
 }
 
 function formatAmount(value: number, unit?: string) {
