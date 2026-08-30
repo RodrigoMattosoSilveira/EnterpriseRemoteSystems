@@ -39,7 +39,7 @@ export function PeopleListPage() {
     actor?.scope === "TENANT" && actor.roleCodes.includes("TENANT_ADMIN");
   const isApplicationAdministrator =
     actor?.scope === "APPLICATION" && actor.roleCodes.includes("APPLICATION_ADMIN");
-  // POST /people remains a Bite 28 compatibility path until the 30H global
+  // POST /people remains a Bite 28 compatibility path until the dedicated global
   // administration cutover. Preserve the existing create affordance for actors
   // that currently hold people.create (including today's Application Admin).
   const canCreatePerson =

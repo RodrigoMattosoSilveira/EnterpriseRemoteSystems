@@ -7,7 +7,8 @@ Default database:
     backend/data/app.db
 
 Default credentials:
-    Operator D: manual30g.operator@example.test
+    Operator D (Tenant A Administrator): manual30g.operator@example.test
+    Operator E (Tenant B Administrator): manual30g.tenant-b-admin@example.test
     Identity A: manual30g.identity-a@example.test
     Identity B: manual30g.identity-b@example.test
     Identity C: manual30g.identity-c@example.test
@@ -247,7 +248,10 @@ def ensure_refs(conn, tenant_id: str, batch: str) -> dict[str, str]:
 def identity(batch: str, code: str, first: str, last: str) -> dict[str, str]:
     pfx = prefix(batch)
     key = f"bite30g:{batch}:{code}"
-    login_name = "operator" if code == "operator" else f"identity-{code}"
+    login_name = {
+        "operator": "operator",
+        "tenant-b-admin": "tenant-b-admin",
+    }.get(code, f"identity-{code}")
     login = f"{pfx}.{login_name}@example.test".lower()
     return {
         "person_id": ident(batch, f"global-person-{code}"),
@@ -447,7 +451,7 @@ def insert_work_period(conn, *, wid, aid, tenant_id, collaborator_id, refs, work
 
 
 def batch_sentinel_ids(batch: str) -> list[str]:
-    identity_codes = ("a", "b", "c", "m", "h", "r", "earnings", "operator")
+    identity_codes = ("a", "b", "c", "m", "h", "r", "earnings", "operator", "tenant-b-admin")
     return [ident(batch, f"global-person-{code}") for code in identity_codes]
 
 
@@ -1025,17 +1029,22 @@ def main() -> int:
     insert_account(conn, e, e_actor, tenant_a["id"], e_mem)
     grant_role(conn, e_actor, tenant_a["id"], "EARNINGS_OPERATOR", batch, "earnings-tenant-a")
 
-    # Operator D: TENANT_ADMIN in both tenants.
+    # Bite 30H cardinality: one global Person may administer only one Tenant.
+    # Operator D remains the Tenant A administrator; Operator E is a distinct
+    # global Person and provides the deterministic Tenant B administrator.
     d = identity(batch, "operator", "Daniela", "TenantOperator")
     insert_global_person(conn, d)
     d_legacy_a, d_mem_a = insert_membership(conn, d, tenant_a["id"], refs_a["person_active"], batch, "operator-tenant-a")
-    d_legacy_b, d_mem_b = insert_membership(conn, d, tenant_b["id"], refs_b["person_active"], batch, "operator-tenant-b")
-    d_actor_a, d_key_a = insert_actor(conn, d_legacy_a, tenant_a["id"], batch, "operator-tenant-a", "30G Operator · Tenant A")
-    d_actor_b, d_key_b = insert_actor(conn, d_legacy_b, tenant_b["id"], batch, "operator-tenant-b", "30G Operator · Tenant B")
+    d_actor_a, d_key_a = insert_actor(conn, d_legacy_a, tenant_a["id"], batch, "operator-tenant-a", "30G Operator D · Tenant A")
     insert_account(conn, d, d_actor_a, tenant_a["id"], d_mem_a)
-    bind_actor(conn, d["account_id"], d_actor_b, tenant_b["id"], d_mem_b)
     grant_tenant_admin(conn, d_actor_a, tenant_a["id"], batch, "operator-tenant-a")
-    grant_tenant_admin(conn, d_actor_b, tenant_b["id"], batch, "operator-tenant-b")
+
+    tenant_b_admin = identity(batch, "tenant-b-admin", "Elisa", "TenantAdministrator")
+    insert_global_person(conn, tenant_b_admin)
+    tb_legacy, tb_mem = insert_membership(conn, tenant_b_admin, tenant_b["id"], refs_b["person_active"], batch, "tenant-b-admin")
+    tb_actor, tb_key = insert_actor(conn, tb_legacy, tenant_b["id"], batch, "tenant-b-admin", "30G Operator E · Tenant B")
+    insert_account(conn, tenant_b_admin, tb_actor, tenant_b["id"], tb_mem)
+    grant_tenant_admin(conn, tb_actor, tenant_b["id"], batch, "tenant-b-admin")
 
     fk = conn.execute("PRAGMA foreign_key_check").fetchall()
     if fk:
@@ -1072,8 +1081,9 @@ def main() -> int:
         "identityR": {"login": r["login"], "personId": r["person_id"], "membershipId": r_mem, "actorId": r_actor, "actorKey": r_key, "journeyR1Open": r1},
         "earningsOperator": {"login": e["login"], "personId": e["person_id"], "membershipId": e_mem, "actorId": e_actor, "actorKey": e_key},
         "operator": {"login": d["login"], "personId": d["person_id"],
-            "tenantA": {"membershipId": d_mem_a, "actorId": d_actor_a, "actorKey": d_key_a},
-            "tenantB": {"membershipId": d_mem_b, "actorId": d_actor_b, "actorKey": d_key_b}},
+            "tenantA": {"membershipId": d_mem_a, "actorId": d_actor_a, "actorKey": d_key_a}},
+        "tenantBAdministrator": {"login": tenant_b_admin["login"], "personId": tenant_b_admin["person_id"],
+            "tenantB": {"membershipId": tb_mem, "actorId": tb_actor, "actorKey": tb_key}},
         "expectedInitialJourneyBalances": {
             "A1_TenantA_BRL": 0.0, "A2_TenantA_BRL": 0.0, "A_TenantB_BRL": 300.0,
             "B1_BRL": 200.0, "B1_GOLD_GRAM": 2.5,
@@ -1096,8 +1106,10 @@ def main() -> int:
     print(f"Tenant A:  {tenant_a['name']}  [{tenant_a['id']}]")
     print(f"Tenant B:  {tenant_b['name']}  [{tenant_b['id']}]")
     print("Second-person approval policy forced to FALSE in both fixture Tenants.")
-    print("\nOperator D — Tenant Administrator in both Tenants")
+    print("\nOperator D — Tenant A Administrator")
     print(f"  Login: {d['login']}")
+    print("\nOperator E — Tenant B Administrator")
+    print(f"  Login: {tenant_b_admin['login']}")
     print("\nIdentity A — cross-Journey / cross-Tenant")
     print(f"  Login: {a['login']}")
     print(f"  Tenant A: A1 CLOSED/ZERO={a1}; A2 OPEN/ZERO={a2}; Work Period={wp_a}")

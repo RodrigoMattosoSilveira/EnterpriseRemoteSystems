@@ -19,7 +19,7 @@ Account's persisted Actor bindings.
 4. `GET /api/v1/auth/tenant-options` returns Account-owned active tenant
    contexts. Ordinary Accounts receive only tenants backed by an active TENANT
    Actor and same-tenant ACTIVE Membership. A GLOBAL Application Administrator
-   continues to receive every active tenant during the staged Bite 30H
+   continues to receive every active tenant during the staged global-control-plane
    compatibility period, while remaining on the same APPLICATION Actor.
 5. The tenant control opens an in-page dropdown rather than the browser or
    operating system's native floating picker. Users can progressively narrow

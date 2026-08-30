@@ -37,7 +37,19 @@ export function TenantDetailPage() {
 
   const candidates = useMemo(() => candidatesQuery.data ?? [], [candidatesQuery.data]);
   const assignedAdmins = candidates.filter((candidate) => candidate.assigned);
-  const assignableActors = candidates.filter((candidate) => candidate.active && !candidate.assigned);
+  const tenantAdminAssignmentCount =
+    tenantQuery.data?.tenantAdminAssignmentCount ?? assignedAdmins.length;
+  const tenantAdminCapacityReached = tenantAdminAssignmentCount >= 2;
+  const assignableActors = candidates.filter(
+    (candidate) =>
+      candidate.active &&
+      !candidate.assigned &&
+      candidate.eligible !== false &&
+      !tenantAdminCapacityReached,
+  );
+  const unavailableActors = candidates.filter(
+    (candidate) => !candidate.assigned && candidate.eligible === false,
+  );
   const actionError =
     updateMutation.error ?? activeMutation.error ?? assignMutation.error ?? revokeMutation.error;
 
@@ -127,7 +139,7 @@ export function TenantDetailPage() {
                   <h2 className="text-lg font-semibold text-gray-950">Operational status</h2>
                   <p className="mt-1 text-sm text-gray-500">
                     {tenant.active
-                      ? "Tenant writes are enabled. Assign at least one active tenant administrator for operational readiness."
+                      ? "Tenant writes are enabled. One Tenant Administrator provides readiness; a second distinct Person may be assigned for operational redundancy."
                       : "Tenant writes are blocked. Historical records remain readable for audit."}
                   </p>
                 </div>
@@ -146,7 +158,8 @@ export function TenantDetailPage() {
                   <div>
                     <dt className="font-semibold text-gray-950">Tenant administrators</dt>
                     <dd>
-                      <span className="font-semibold">{tenant.tenantAdminCount}</span> active
+                      <span className="font-semibold">{tenantAdminAssignmentCount}</span> of 2 assignments
+                      <span className="ml-2 text-xs text-gray-500">({tenant.tenantAdminCount} active Actor{tenant.tenantAdminCount === 1 ? "" : "s"})</span>
                     </dd>
                   </div>
                 </dl>
@@ -185,28 +198,56 @@ export function TenantDetailPage() {
             <section className="rounded-2xl border bg-white p-5 shadow-sm">
               <h2 className="text-lg font-semibold text-gray-950">Tenant administrators</h2>
               <p className="mt-1 text-sm text-gray-500">
-                Assignment grants the persisted TENANT_ADMIN role for this tenant. Inactive actors cannot be assigned.
+                A Tenant may have up to two active TENANT_ADMIN assignments, held by two distinct Persons. A Person may administer only one Tenant at a time. Actor deactivation does not release an assignment; revoke the Role Grant explicitly.
               </p>
 
+              {tenantAdminAssignmentCount === 1 && (
+                <p className="mt-4 rounded-xl border border-blue-200 bg-blue-50 p-3 text-sm text-blue-900">
+                  1 of 2 Tenant Administrator slots is occupied. You may assign a second distinct Person for operational redundancy.
+                </p>
+              )}
+              {tenantAdminCapacityReached && (
+                <p className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm font-medium text-amber-900">
+                  Both Tenant Administrator slots are occupied. Revoke an existing assignment before assigning another Person.
+                </p>
+              )}
+
               <div className="mt-4 flex flex-col gap-2 sm:flex-row">
-                <select className="min-w-0 flex-1 rounded-xl border border-gray-300 px-3 py-2 text-sm" onChange={(event) => setSelectedActorId(event.target.value)} value={selectedActorId}>
-                  <option value="">Select an active actor</option>
+                <select
+                  className="min-w-0 flex-1 rounded-xl border border-gray-300 px-3 py-2 text-sm disabled:bg-gray-100 disabled:text-gray-500"
+                  disabled={tenantAdminCapacityReached}
+                  onChange={(event) => setSelectedActorId(event.target.value)}
+                  value={selectedActorId}
+                >
+                  <option value="">{tenantAdminCapacityReached ? "Maximum of two administrators assigned" : "Select an eligible active actor"}</option>
                   {assignableActors.map((candidate) => (
                     <option key={candidate.actorId} value={candidate.actorId}>
                       {candidate.displayName || candidate.actorKey} ({candidate.actorKey})
                     </option>
                   ))}
                 </select>
-                <button className="rounded-xl bg-gray-950 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60" disabled={!selectedActorId || assignMutation.isPending} onClick={handleAssign} type="button">
+                <button className="rounded-xl bg-gray-950 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60" disabled={tenantAdminCapacityReached || !selectedActorId || assignMutation.isPending} onClick={handleAssign} type="button">
                   {assignMutation.isPending ? "Assigning..." : "Assign Admin"}
                 </button>
               </div>
 
               {candidatesQuery.isLoading && <p className="mt-4 text-sm text-gray-500">Loading actors...</p>}
-              {!candidatesQuery.isLoading && tenant.tenantAdminCount === 0 && (
+              {!candidatesQuery.isLoading && tenantAdminAssignmentCount === 0 && (
                 <p className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
-                  No active tenant administrator is assigned.
+                  No Tenant Administrator is assigned. Assign at least one for operational readiness.
                 </p>
+              )}
+              {unavailableActors.length > 0 && !tenantAdminCapacityReached && (
+                <div className="mt-4 rounded-xl border border-gray-200 bg-gray-50 p-3 text-xs text-gray-600">
+                  <p className="font-semibold text-gray-800">Unavailable administrator candidates</p>
+                  <ul className="mt-2 space-y-1">
+                    {unavailableActors.map((candidate) => (
+                      <li key={candidate.actorId}>
+                        {candidate.displayName || candidate.actorKey}: {candidate.ineligibilityReason || "Not eligible for Tenant Administrator assignment"}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
               )}
               <div className="mt-4 space-y-2">
                 {assignedAdmins.map((candidate) => (
@@ -219,6 +260,11 @@ export function TenantDetailPage() {
                       <p className="text-xs text-gray-500">
                         Actor record ID: <code className="break-all font-mono text-gray-700">{candidate.actorId}</code>
                       </p>
+                      {candidate.globalPersonId && (
+                        <p className="text-xs text-gray-500">
+                          Global Person ID: <code className="break-all font-mono text-gray-700">{candidate.globalPersonId}</code>
+                        </p>
+                      )}
                       {!candidate.active && <p className="mt-1 text-xs font-semibold text-amber-700">Inactive actor</p>}
                     </div>
                     <button className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-800 disabled:opacity-60" disabled={revokeMutation.isPending} onClick={() => handleRevoke(candidate.actorId)} type="button">

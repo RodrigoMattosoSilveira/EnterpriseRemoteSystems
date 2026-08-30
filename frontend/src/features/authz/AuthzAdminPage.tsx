@@ -421,6 +421,7 @@ export function AuthzAdminPage() {
                       <ActorCard
                         key={actor.id}
                         actor={actor}
+                        allActors={actors}
                         roles={grantableRoles}
                         selectedTenantId={requestActor.tenantId}
                         selectedRoleCode={grantRoleCodeByActor[actor.id]}
@@ -674,6 +675,7 @@ function ActorFields({
 
 function ActorCard({
   actor,
+  allActors,
   roles,
   selectedTenantId,
   selectedRoleCode,
@@ -685,6 +687,7 @@ function ActorCard({
   onSetActive,
 }: {
   actor: AuthzActor;
+  allActors: AuthzActor[];
   roles: AuthzRole[];
   selectedTenantId: string;
   selectedRoleCode?: string;
@@ -732,6 +735,10 @@ function ActorCard({
   const tenantEligibility = tenantRoleGrantEligibility(actor);
   const tenantRoleIneligible =
     !applicationScopedRole && !tenantEligibility.eligible;
+  const tenantAdminCardinalityBlocker =
+    roleCode === "TENANT_ADMIN" && targetTenantId
+      ? tenantAdministratorGrantBlocker(actor, allActors, targetTenantId)
+      : "";
   const alreadyGranted = Boolean(
     roleCode &&
       targetTenantId &&
@@ -745,7 +752,12 @@ function ActorCard({
 
   async function submitGrant(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!roleCode || !targetTenantId || alreadyGranted) return;
+    if (
+      !roleCode ||
+      !targetTenantId ||
+      alreadyGranted ||
+      tenantAdminCardinalityBlocker
+    ) return;
     await onGrantRole(actor.id, roleCode, targetTenantId);
   }
 
@@ -828,6 +840,7 @@ function ActorCard({
             !actor.active ||
             !roleCode ||
             tenantRoleIneligible ||
+            Boolean(tenantAdminCardinalityBlocker) ||
             alreadyGranted
           }
           type="submit"
@@ -838,6 +851,11 @@ function ActorCard({
       {tenantRoleIneligible && (
         <p className="mt-2 text-xs font-medium text-amber-700">
           Tenant Role grant unavailable: {tenantEligibility.reason}
+        </p>
+      )}
+      {tenantAdminCardinalityBlocker && !alreadyGranted && (
+        <p className="mt-2 text-xs font-medium text-amber-700">
+          TENANT_ADMIN grant unavailable: {tenantAdminCardinalityBlocker}
         </p>
       )}
       {alreadyGranted && (
@@ -997,6 +1015,52 @@ function filterActorsByTenantRoleEligibility(
   });
 }
 
+
+function tenantAdministratorGrantBlocker(
+  actor: AuthzActor,
+  allActors: AuthzActor[],
+  targetTenantId: string,
+): string {
+  const targetPersonId = actor.globalPersonId?.trim() ?? actor.binding?.globalPersonId?.trim() ?? "";
+  if (!targetPersonId) {
+    return "Tenant Administrator authority requires a tenant Actor bound to a canonical Person Membership.";
+  }
+
+  const activeTenantAdminGrants = allActors.flatMap((candidateActor) =>
+    (candidateActor.roleGrants ?? [])
+      .filter((grant) => grant.active && grant.roleCode === "TENANT_ADMIN")
+      .map((grant) => ({ actor: candidateActor, grant })),
+  );
+  const otherGrants = activeTenantAdminGrants.filter(
+    ({ actor: grantedActor }) => grantedActor.id !== actor.id,
+  );
+
+  if (
+    otherGrants.filter(({ grant }) => grant.tenantId === targetTenantId).length >= 2
+  ) {
+    return "Tenant already has the maximum of two active Tenant Administrators.";
+  }
+
+  const samePersonSameTenant = otherGrants.find(
+    ({ actor: grantedActor, grant }) =>
+      (grantedActor.globalPersonId?.trim() ?? grantedActor.binding?.globalPersonId?.trim()) === targetPersonId &&
+      grant.tenantId === targetTenantId,
+  );
+  if (samePersonSameTenant) {
+    return "The second Tenant Administrator slot must belong to a different Person.";
+  }
+
+  const samePersonOtherTenant = activeTenantAdminGrants.find(
+    ({ actor: grantedActor, grant }) =>
+      (grantedActor.globalPersonId?.trim() ?? grantedActor.binding?.globalPersonId?.trim()) === targetPersonId &&
+      grant.tenantId !== targetTenantId,
+  );
+  if (samePersonOtherTenant) {
+    return `This Person already administers tenant ${samePersonOtherTenant.grant.tenantId}; a Person may administer only one Tenant at a time.`;
+  }
+
+  return "";
+}
 
 function preferredPersistedGrantRoleCode(
   actor: AuthzActor,

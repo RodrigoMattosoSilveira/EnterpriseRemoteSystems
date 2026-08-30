@@ -13,6 +13,7 @@ const tenant = {
   active: true,
   operationalStatus: "ACTIVE_NO_TENANT_ADMIN",
   tenantAdminCount: 0,
+  tenantAdminAssignmentCount: 0,
   createdAt: "2026-01-01T00:00:00Z",
   updatedAt: "2026-01-01T00:00:00Z",
 };
@@ -21,8 +22,10 @@ const candidate = {
   actorId: "actor-north-admin",
   actorKey: "north-admin@example.com",
   displayName: "North Admin",
+  globalPersonId: "person-north-admin",
   active: true,
   assigned: false,
+  eligible: true,
 };
 
 let container: HTMLDivElement;
@@ -90,6 +93,117 @@ describe("TenantDetailPage", () => {
     await waitForText("North Site deactivated.");
     expect(calls.some((call) => call.url.endsWith("/active") && call.method === "PATCH")).toBe(true);
   });
+  it("enforces two Tenant Administrator slots and explains Person cross-Tenant ineligibility", async () => {
+    const fullTenant = {
+      ...tenant,
+      operationalStatus: "ACTIVE_READY",
+      tenantAdminCount: 2,
+      tenantAdminAssignmentCount: 2,
+    };
+    const assignedOne = {
+      ...candidate,
+      actorId: "actor-admin-one",
+      actorKey: "admin-one@example.com",
+      displayName: "Admin One",
+      globalPersonId: "person-admin-one",
+      assigned: true,
+    };
+    const assignedTwo = {
+      ...candidate,
+      actorId: "actor-admin-two",
+      actorKey: "admin-two@example.com",
+      displayName: "Admin Two",
+      globalPersonId: "person-admin-two",
+      assigned: true,
+    };
+    const unavailable = {
+      ...candidate,
+      actorId: "actor-cross-tenant",
+      actorKey: "cross-tenant@example.com",
+      displayName: "Cross Tenant Admin",
+      globalPersonId: "person-cross-tenant",
+      assigned: false,
+      eligible: false,
+      ineligibilityReason: "This Person already administers tenant south",
+      tenantAdminTenantId: "south",
+    };
+
+    mockFetch(async (url, init) => {
+      calls.push({ url, method: init?.method ?? "GET", body: parseBody(init?.body) });
+      if (url === "/api/v1/tenants/north" && !init?.method) {
+        return json({ data: fullTenant });
+      }
+      if (url === "/api/v1/tenants/north/admin-candidates" && !init?.method) {
+        return json({ data: [assignedOne, assignedTwo, unavailable] });
+      }
+      throw new Error(`Unhandled request: ${url}`);
+    });
+
+    renderPage();
+    await waitForText("Both Tenant Administrator slots are occupied.");
+    expect(container.textContent).toContain("2 of 2 assignments");
+    const select = [...container.querySelectorAll("select")].find((node) =>
+      node.textContent?.includes("Maximum of two administrators assigned"),
+    );
+    expect(select?.disabled).toBe(true);
+    const assignButton = [...container.querySelectorAll("button")].find(
+      (button) => button.textContent === "Assign Admin",
+    );
+    expect(assignButton?.disabled).toBe(true);
+    expect(container.textContent).toContain("Global Person ID: person-admin-one");
+    expect(calls.some((call) => call.method === "POST")).toBe(false);
+  });
+
+  it("excludes a Person who already administers another Tenant while a slot remains", async () => {
+    const oneAdminTenant = {
+      ...tenant,
+      operationalStatus: "ACTIVE_READY",
+      tenantAdminCount: 1,
+      tenantAdminAssignmentCount: 1,
+    };
+    const assigned = {
+      ...candidate,
+      actorId: "actor-admin-one",
+      actorKey: "admin-one@example.com",
+      displayName: "Admin One",
+      globalPersonId: "person-admin-one",
+      assigned: true,
+    };
+    const unavailable = {
+      ...candidate,
+      actorId: "actor-cross-tenant",
+      actorKey: "cross-tenant@example.com",
+      displayName: "Cross Tenant Admin",
+      globalPersonId: "person-cross-tenant",
+      assigned: false,
+      eligible: false,
+      ineligibilityReason: "This Person already administers tenant south",
+      tenantAdminTenantId: "south",
+    };
+
+    mockFetch(async (url, init) => {
+      calls.push({ url, method: init?.method ?? "GET", body: parseBody(init?.body) });
+      if (url === "/api/v1/tenants/north" && !init?.method) {
+        return json({ data: oneAdminTenant });
+      }
+      if (url === "/api/v1/tenants/north/admin-candidates" && !init?.method) {
+        return json({ data: [assigned, unavailable] });
+      }
+      throw new Error(`Unhandled request: ${url}`);
+    });
+
+    renderPage();
+    await waitForText("1 of 2 Tenant Administrator slots is occupied.");
+    await waitForText("Unavailable administrator candidates");
+    expect(container.textContent).toContain(
+      "Cross Tenant Admin: This Person already administers tenant south",
+    );
+    const select = [...container.querySelectorAll("select")].find((node) =>
+      node.textContent?.includes("Select an eligible active actor"),
+    );
+    expect(select?.textContent).not.toContain("Cross Tenant Admin");
+  });
+
 });
 
 function renderPage() {

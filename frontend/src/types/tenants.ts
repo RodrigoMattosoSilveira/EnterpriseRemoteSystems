@@ -11,6 +11,7 @@ export type Tenant = {
   active: boolean;
   operationalStatus: TenantOperationalStatus;
   tenantAdminCount: number;
+  tenantAdminAssignmentCount?: number;
   createdAt: string;
   updatedAt: string;
 };
@@ -32,6 +33,10 @@ export type TenantAdminCandidate = {
   actorId: string;
   actorKey: string;
   displayName: string;
+  globalPersonId?: string;
   active: boolean;
   assigned: boolean;
+  eligible?: boolean;
+  ineligibilityReason?: string;
+  tenantAdminTenantId?: string;
 };

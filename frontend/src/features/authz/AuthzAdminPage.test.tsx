@@ -68,6 +68,7 @@ const collaborators = [
     id: "collaborator-expense-admin",
     tenantId: "default",
     personId: "person-expense-admin",
+    globalPersonId: "person-expense-admin",
     personName: "Expense Admin",
     personNickname: "Expense Admin",
     journeyStartDate: "2026-01-01",
@@ -93,6 +94,7 @@ const collaborators = [
     id: "collaborator-aurea",
     tenantId: "default",
     personId: "person-aurea",
+    globalPersonId: "person-aurea",
     personName: "Aurea de Souza",
     personNickname: "Áurea",
     journeyStartDate: "2026-01-02",
@@ -219,6 +221,7 @@ describe("AuthzAdminPage", () => {
       actorKey: "collaborator-aurea",
       displayName: "Historical Actor Label",
       personId: "person-aurea",
+      globalPersonId: "person-aurea",
       collaboratorId: "collaborator-aurea",
       active: true,
       roleGrants: [],
@@ -398,6 +401,7 @@ describe("AuthzAdminPage", () => {
       displayName: "Expense Admin",
       active: true,
       personId: "person-expense-admin",
+      globalPersonId: "person-expense-admin",
       collaboratorId: "collaborator-expense-admin",
     });
   });
@@ -430,6 +434,8 @@ describe("AuthzAdminPage", () => {
       id: "actor-expense-admin",
       actorKey: "expense-admin",
       displayName: "Expense Admin",
+      personId: "person-expense-admin",
+      globalPersonId: "person-expense-admin",
       active: true,
       roleGrants: [],
       binding: activeTenantBinding("default"),
@@ -477,6 +483,8 @@ describe("AuthzAdminPage", () => {
       id: "actor-expense-admin",
       actorKey: "expense-admin",
       displayName: "Expense Admin",
+      personId: "person-expense-admin",
+      globalPersonId: "person-expense-admin",
       active: true,
       roleGrants: [],
       binding: activeTenantBinding(tenantId),
@@ -527,6 +535,126 @@ describe("AuthzAdminPage", () => {
     expect(buttonInArticle("expense-admin", "Grant Role").disabled).toBe(true);
   });
 
+  it("disables a third Tenant Administrator grant when both Tenant slots are occupied", async () => {
+    const tenantId = "tenant-cardinality";
+    actors.push(
+      {
+        id: "actor-admin-one",
+        actorKey: "admin-one",
+        displayName: "Admin One",
+        personId: "person-admin-one",
+        globalPersonId: "person-admin-one",
+        active: true,
+        binding: activeTenantBinding(tenantId),
+        roleGrants: [
+          {
+            id: "grant-admin-one",
+            actorId: "actor-admin-one",
+            roleId: "authz-role-tenant-admin",
+            roleCode: "TENANT_ADMIN",
+            tenantId,
+            scopeType: "TENANT",
+            active: true,
+          },
+        ],
+      },
+      {
+        id: "actor-admin-two",
+        actorKey: "admin-two",
+        displayName: "Admin Two",
+        personId: "person-admin-two",
+        globalPersonId: "person-admin-two",
+        active: true,
+        binding: activeTenantBinding(tenantId),
+        roleGrants: [
+          {
+            id: "grant-admin-two",
+            actorId: "actor-admin-two",
+            roleId: "authz-role-tenant-admin",
+            roleCode: "TENANT_ADMIN",
+            tenantId,
+            scopeType: "TENANT",
+            active: true,
+          },
+        ],
+      },
+      {
+        id: "actor-admin-three",
+        actorKey: "admin-three",
+        displayName: "Admin Three",
+        personId: "person-admin-three",
+        globalPersonId: "person-admin-three",
+        active: true,
+        binding: activeTenantBinding(tenantId),
+        roleGrants: [],
+      },
+    );
+    mockAuthzFetch();
+
+    renderAuthzAdminPage();
+    await waitForText("Admin Three");
+    await changeSelectInArticle("admin-three", "Role", "TENANT_ADMIN");
+
+    const article = articleByText("admin-three");
+    expect(buttonInArticle("admin-three", "Grant Role").disabled).toBe(true);
+    expect(article.textContent).toContain(
+      "Tenant already has the maximum of two active Tenant Administrators.",
+    );
+    expect(
+      fetchCalls.some(
+        (call) =>
+          call.url === "/api/v1/authz/actors/actor-admin-three/role-grants" &&
+          call.method === "POST",
+      ),
+    ).toBe(false);
+  });
+
+  it("disables Tenant Administrator when the Person already administers another Tenant", async () => {
+    actors.push(
+      {
+        id: "actor-existing-cross-admin",
+        actorKey: "existing-cross-admin",
+        displayName: "Existing Cross Admin",
+        personId: "person-cross-admin",
+        globalPersonId: "person-cross-admin",
+        active: true,
+        binding: activeTenantBinding("tenant-b"),
+        roleGrants: [
+          {
+            id: "grant-existing-cross-admin",
+            actorId: "actor-existing-cross-admin",
+            roleId: "authz-role-tenant-admin",
+            roleCode: "TENANT_ADMIN",
+            tenantId: "tenant-b",
+            scopeType: "TENANT",
+            active: true,
+          },
+        ],
+      },
+      {
+        id: "actor-target-cross-admin",
+        actorKey: "target-cross-admin",
+        displayName: "Target Cross Admin",
+        personId: "person-cross-admin",
+        globalPersonId: "person-cross-admin",
+        active: true,
+        binding: activeTenantBinding("tenant-a"),
+        roleGrants: [],
+      },
+    );
+    mockAuthzFetch();
+
+    renderAuthzAdminPage();
+    await waitForText("Target Cross Admin");
+    await changeSelectInArticle("target-cross-admin", "Role", "TENANT_ADMIN");
+
+    const article = articleByText("target-cross-admin");
+    expect(buttonInArticle("target-cross-admin", "Grant Role").disabled).toBe(true);
+    expect(article.textContent).toContain(
+      "This Person already administers tenant tenant-b; a Person may administer only one Tenant at a time.",
+    );
+  });
+
   it("rehydrates a persisted tenant grant with its own tenant after the page mounts", async () => {
     const tenantId = "b16647b4-82a3-4d4e-99d0-c15ede05840b";
     window.localStorage.setItem("ers.auth.selectedTenantId", "default");
@@ -534,6 +662,8 @@ describe("AuthzAdminPage", () => {
       id: "actor-expense-admin",
       actorKey: "expense-admin",
       displayName: "Expense Admin",
+      personId: "person-expense-admin",
+      globalPersonId: "person-expense-admin",
       active: true,
       binding: activeTenantBinding(tenantId),
       roleGrants: [
@@ -578,6 +708,8 @@ describe("AuthzAdminPage", () => {
       id: "actor-expense-admin",
       actorKey: "expense-admin",
       displayName: "Expense Admin",
+      personId: "person-expense-admin",
+      globalPersonId: "person-expense-admin",
       active: true,
       roleGrants: [],
       binding: activeTenantBinding(tenantId),
@@ -635,6 +767,8 @@ describe("AuthzAdminPage", () => {
       id: "actor-expense-admin",
       actorKey: "expense-admin",
       displayName: "Expense Admin",
+      personId: "person-expense-admin",
+      globalPersonId: "person-expense-admin",
       active: true,
       roleGrants: [],
     });

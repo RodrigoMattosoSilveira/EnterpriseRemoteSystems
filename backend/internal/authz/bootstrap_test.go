@@ -3,6 +3,7 @@ package authz
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	"gorm.io/gorm"
@@ -110,7 +111,7 @@ func TestEnsureBootstrapActorIsIdempotent(t *testing.T) {
 	}
 }
 
-func TestEnsureBootstrapActorCanCreateTenantScopedAdmin(t *testing.T) {
+func TestEnsureBootstrapActorRejectsUnboundTenantAdministrator(t *testing.T) {
 	database := newAuthzTestDB(t)
 
 	_, err := EnsureBootstrapActor(context.Background(), database, BootstrapConfig{
@@ -120,19 +121,8 @@ func TestEnsureBootstrapActorCanCreateTenantScopedAdmin(t *testing.T) {
 		RoleCode:    RoleTenantAdmin,
 		TenantID:    "tenant-a",
 	})
-	if err != nil {
-		t.Fatalf("ensure bootstrap actor: %v", err)
-	}
-
-	actor, err := NewGORMStore(database).FindActor(context.Background(), ActorLookup{ActorID: "tenant-bootstrap", TenantID: "tenant-a"})
-	if err != nil {
-		t.Fatalf("find tenant bootstrap actor: %v", err)
-	}
-	if actor.Scope != ActorScopeTenant || actor.TenantID != "tenant-a" {
-		t.Fatalf("expected tenant-scoped actor, got %#v", actor)
-	}
-	if err := RequireTenantScope(actor, "tenant-b"); !errors.Is(err, ErrForbidden) {
-		t.Fatalf("expected tenant-b to be forbidden, got %v", err)
+	if err == nil || !strings.Contains(err.Error(), "Account/Actor and Person Membership foundation") {
+		t.Fatalf("expected unbound Tenant Administrator bootstrap rejection, got %v", err)
 	}
 }
 

@@ -1,0 +1,8 @@
+DROP TRIGGER IF EXISTS trg_tenant_admin_person_cross_tenant_update;
+DROP TRIGGER IF EXISTS trg_tenant_admin_person_cross_tenant_insert;
+DROP TRIGGER IF EXISTS trg_tenant_admin_distinct_person_update;
+DROP TRIGGER IF EXISTS trg_tenant_admin_distinct_person_insert;
+DROP TRIGGER IF EXISTS trg_tenant_admin_tenant_limit_update;
+DROP TRIGGER IF EXISTS trg_tenant_admin_tenant_limit_insert;
+DROP TRIGGER IF EXISTS trg_tenant_admin_global_person_update;
+DROP TRIGGER IF EXISTS trg_tenant_admin_global_person_insert;

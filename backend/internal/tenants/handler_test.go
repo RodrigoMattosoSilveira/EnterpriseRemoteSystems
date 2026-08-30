@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -40,13 +41,14 @@ type apiErrorResponse struct {
 }
 
 type tenantDTO struct {
-	ID                string `json:"id"`
-	Code              string `json:"code"`
-	Name              string `json:"name"`
-	Description       string `json:"description"`
-	Active            bool   `json:"active"`
-	OperationalStatus string `json:"operationalStatus"`
-	TenantAdminCount  int64  `json:"tenantAdminCount"`
+	ID                         string `json:"id"`
+	Code                       string `json:"code"`
+	Name                       string `json:"name"`
+	Description                string `json:"description"`
+	Active                     bool   `json:"active"`
+	OperationalStatus          string `json:"operationalStatus"`
+	TenantAdminCount           int64  `json:"tenantAdminCount"`
+	TenantAdminAssignmentCount int64  `json:"tenantAdminAssignmentCount"`
 }
 
 type tenantAdminCandidateDTO struct {
@@ -196,7 +198,7 @@ func TestApplicationAdminCanAssignAndRevokeTenantAdministrator(t *testing.T) {
 	}
 	var assignedBody apiTenantResponse
 	decodeJSON(t, res, &assignedBody)
-	if assignedBody.Data.TenantAdminCount != 1 || assignedBody.Data.OperationalStatus != "ACTIVE_READY" {
+	if assignedBody.Data.TenantAdminCount != 1 || assignedBody.Data.TenantAdminAssignmentCount != 1 || assignedBody.Data.OperationalStatus != "ACTIVE_READY" {
 		t.Fatalf("expected tenant to become operationally ready, got %+v", assignedBody.Data)
 	}
 
@@ -224,8 +226,58 @@ func TestApplicationAdminCanAssignAndRevokeTenantAdministrator(t *testing.T) {
 	}
 	var revokedBody apiTenantResponse
 	decodeJSON(t, res, &revokedBody)
-	if revokedBody.Data.TenantAdminCount != 0 || revokedBody.Data.OperationalStatus != "ACTIVE_NO_TENANT_ADMIN" {
+	if revokedBody.Data.TenantAdminCount != 0 || revokedBody.Data.TenantAdminAssignmentCount != 0 || revokedBody.Data.OperationalStatus != "ACTIVE_NO_TENANT_ADMIN" {
 		t.Fatalf("unexpected tenant after revoke: %+v", revokedBody.Data)
+	}
+}
+
+func TestTenantAdministratorCardinalityAllowsTwoAndRejectsThirdAssignment(t *testing.T) {
+	server, dbPath, cleanup := newTestServer(t, true)
+	defer cleanup()
+
+	tenant := createTenant(t, server, "CARDINALITY", "Cardinality Tenant")
+	actorA := seedTenantBoundActor(t, dbPath, tenant.ID, "cardinality-admin-a@example.com", true)
+	actorB := seedTenantBoundActor(t, dbPath, tenant.ID, "cardinality-admin-b@example.com", true)
+	actorC := seedTenantBoundActor(t, dbPath, tenant.ID, "cardinality-admin-c@example.com", true)
+
+	for index, actorID := range []string{actorA, actorB} {
+		res := requestJSON(t, server, http.MethodPost, "/api/v1/tenants/"+tenant.ID+"/admins", map[string]any{"actorId": actorID}, nil)
+		if res.StatusCode != http.StatusOK {
+			res.Body.Close()
+			t.Fatalf("assign allowed Tenant Administrator %d: expected %d, got %d", index+1, http.StatusOK, res.StatusCode)
+		}
+		var body apiTenantResponse
+		decodeJSON(t, res, &body)
+		res.Body.Close()
+		if body.Data.TenantAdminCount != int64(index+1) || body.Data.TenantAdminAssignmentCount != int64(index+1) {
+			t.Fatalf("expected %d Tenant Administrator assignments, got %+v", index+1, body.Data)
+		}
+	}
+
+	res := requestJSON(t, server, http.MethodPost, "/api/v1/tenants/"+tenant.ID+"/admins", map[string]any{"actorId": actorC}, nil)
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusBadRequest {
+		t.Fatalf("expected third Tenant Administrator status %d, got %d", http.StatusBadRequest, res.StatusCode)
+	}
+	var body apiErrorResponse
+	decodeJSON(t, res, &body)
+	if !strings.Contains(body.Error.Fields["tenantId"], "maximum of two") {
+		t.Fatalf("expected Tenant cardinality validation error, got %+v", body.Error)
+	}
+
+	database, err := dbpkg.Open(dbPath)
+	if err != nil {
+		t.Fatalf("open test database: %v", err)
+	}
+	defer closeDatabase(t, database)
+	var activeGrants int64
+	if err := database.Model(&authz.AuthzActorRoleGrant{}).
+		Where("role_id = ? AND tenant_id = ? AND active = ?", "authz-role-tenant-admin", tenant.ID, true).
+		Count(&activeGrants).Error; err != nil {
+		t.Fatalf("count Tenant Administrator grants: %v", err)
+	}
+	if activeGrants != 2 {
+		t.Fatalf("expected exactly two persisted active Tenant Administrator grants, got %d", activeGrants)
 	}
 }
 
@@ -362,6 +414,7 @@ func seedTenantBoundActor(t *testing.T, dbPath string, tenantID string, actorKey
 		ID:          ids.New(),
 		ActorKey:    actorKey,
 		DisplayName: actorKey,
+		PersonID:    &person.ID,
 		Active:      active,
 		CreatedAt:   now,
 		UpdatedAt:   now,
