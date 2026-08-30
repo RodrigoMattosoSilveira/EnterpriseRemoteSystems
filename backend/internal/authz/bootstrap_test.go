@@ -3,7 +3,6 @@ package authz
 import (
 	"context"
 	"errors"
-	"strings"
 	"testing"
 
 	"gorm.io/gorm"
@@ -121,8 +120,15 @@ func TestEnsureBootstrapActorRejectsUnboundTenantAdministrator(t *testing.T) {
 		RoleCode:    RoleTenantAdmin,
 		TenantID:    "tenant-a",
 	})
-	if err == nil || !strings.Contains(err.Error(), "Account/Actor and Person Membership foundation") {
-		t.Fatalf("expected unbound Tenant Administrator bootstrap rejection, got %v", err)
+	if err == nil {
+		t.Fatalf("expected unbound Tenant Administrator bootstrap rejection")
+	}
+	var validation ValidationError
+	if !errors.As(err, &validation) {
+		t.Fatalf("expected ValidationError, got %T %v", err, err)
+	}
+	if got := validation.ValidationFields()["actorId"]; got != "Tenant Administrator authority requires the Account/Actor and Person Membership foundation" {
+		t.Fatalf("expected Account/Actor and Person Membership validation message, got %q", got)
 	}
 }
 
