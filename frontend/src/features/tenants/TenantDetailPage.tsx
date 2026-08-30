@@ -196,9 +196,9 @@ export function TenantDetailPage() {
             </form>
 
             <section className="rounded-2xl border bg-white p-5 shadow-sm">
-              <h2 className="text-lg font-semibold text-gray-950">Tenant administrators</h2>
+              <h2 className="text-lg font-semibold text-gray-950">Tenant Administrators</h2>
               <p className="mt-1 text-sm text-gray-500">
-                A Tenant may have up to two active TENANT_ADMIN assignments, held by two distinct Persons. A Person may administer only one Tenant at a time. Actor deactivation does not release an assignment; revoke the Role Grant explicitly.
+                A Tenant may have up to two active Tenant Administrators (TENANT_ADMIN assignments). A Person who is a TENANT_ADMIN for Tenant A cannot concurrently be a TENANT_ADMIN for Tenant B; a Person may administer only one Tenant at a time. To remove a Person&apos;s Tenant Administrator privilege, explicitly revoke the Person Actor&apos;s TENANT_ADMIN Role Grant.
               </p>
 
               {tenantAdminAssignmentCount === 1 && (

@@ -140,7 +140,17 @@ describe("TenantDetailPage", () => {
     });
 
     renderPage();
+    await waitForText("Tenant Administrators");
     await waitForText("Both Tenant Administrator slots are occupied.");
+    expect(container.textContent).toContain(
+      "A Tenant may have up to two active Tenant Administrators (TENANT_ADMIN assignments).",
+    );
+    expect(container.textContent).toContain(
+      "A Person who is a TENANT_ADMIN for Tenant A cannot concurrently be a TENANT_ADMIN for Tenant B; a Person may administer only one Tenant at a time.",
+    );
+    expect(container.textContent).toContain(
+      "To remove a Person's Tenant Administrator privilege, explicitly revoke the Person Actor's TENANT_ADMIN Role Grant.",
+    );
     expect(container.textContent).toContain("2 of 2 assignments");
     const select = [...container.querySelectorAll("select")].find((node) =>
       node.textContent?.includes("Maximum of two administrators assigned"),
