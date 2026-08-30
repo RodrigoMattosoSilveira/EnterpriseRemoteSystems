@@ -110,15 +110,19 @@ export function TenantDetailPage() {
   return (
     <main className="min-h-screen bg-gray-50">
       <header className="sticky top-0 z-10 border-b bg-white/95 px-4 py-4 backdrop-blur">
-        <div className="mx-auto flex max-w-5xl items-center justify-between gap-3">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Tenant administration</p>
-            <h1 className="text-xl font-bold text-gray-950">{tenant?.name ?? "Tenant"}</h1>
-            <p className="text-sm text-gray-500">Edit identity, lifecycle status, and tenant administrator assignments.</p>
-          </div>
-          <Link className="text-sm font-semibold text-gray-700 underline" to="/admin/tenants">
+        <div className="mx-auto max-w-5xl">
+          <Link className="text-sm font-semibold text-gray-600 underline" to="/admin/tenants">
             Back to Tenants
           </Link>
+          <div className="mt-4">
+            <h1 className="text-3xl font-bold text-gray-950">Tenant Administration</h1>
+            <h2 className="mt-1 text-lg font-semibold text-gray-800">{tenant?.name ?? "Tenant"}</h2>
+            <p className="mt-1 text-sm text-gray-600">
+              <span className="font-semibold">Tenant Code:</span>{" "}
+              <span className="font-mono">{tenant?.code ?? id}</span>
+            </p>
+            <p className="mt-1 text-sm text-gray-500">Edit identity, lifecycle status, and tenant administrator assignments.</p>
+          </div>
         </div>
       </header>
 

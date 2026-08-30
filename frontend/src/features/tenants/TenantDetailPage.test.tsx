@@ -70,6 +70,13 @@ describe("TenantDetailPage", () => {
 
     renderPage();
     await waitForText("North Site");
+    const pageHeading = container.querySelector("header h1");
+    expect(pageHeading?.textContent).toBe("Tenant Administration");
+    expect(pageHeading?.className).toContain("text-3xl");
+    const tenantHeading = container.querySelector("header h2");
+    expect(tenantHeading?.textContent).toBe("North Site");
+    expect(tenantHeading?.className).toContain("text-lg");
+    expect(container.querySelector("header")?.textContent).toContain("Tenant Code:NORTH");
     await changeSelect("Select an eligible active actor", candidate.actorId);
     await click("Assign Admin");
     await waitForText("North Admin assigned as tenant administrator.");
