@@ -74,6 +74,23 @@ export type CreateExpenseInput = {
   amount?: number;
 };
 
+export type CreateCanteenExpenseBatchItemInput = {
+  priceListItemId: string;
+  currencyCode: "BRL" | "GOLD_GRAM";
+  quantity: number;
+};
+
+export type CreateCanteenExpenseBatchInput = {
+  collaboratorId: string;
+  expenseDate: string;
+  description?: string;
+  items: CreateCanteenExpenseBatchItemInput[];
+};
+
+export type CreateCanteenExpenseBatchResult = {
+  items: Expense[];
+};
+
 export type ExpenseListFilter = {
   collaboratorId?: string;
   collaboratorSearch?: string;

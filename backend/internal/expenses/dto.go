@@ -69,6 +69,23 @@ type CreateExpenseRequest struct {
 	Quantity               float64 `json:"quantity"`
 }
 
+type CreateCanteenExpenseBatchItemRequest struct {
+	PriceListItemID string  `json:"priceListItemId"`
+	CurrencyCode    string  `json:"currencyCode"`
+	Quantity        float64 `json:"quantity"`
+}
+
+type CreateCanteenExpenseBatchRequest struct {
+	CollaboratorID string                                 `json:"collaboratorId"`
+	ExpenseDate    string                                 `json:"expenseDate"`
+	Description    string                                 `json:"description"`
+	Items          []CreateCanteenExpenseBatchItemRequest `json:"items"`
+}
+
+type CreateCanteenExpenseBatchResult struct {
+	Items []ExpenseDTO `json:"items"`
+}
+
 type CancelExpenseRequest struct {
 	Reason string `json:"reason"`
 }

@@ -97,8 +97,21 @@ test("user can create a Collaborator from an eligible complete Person", async ({
     page.getByRole("link", { name: new RegExp(personNickname) }),
   ).toBeVisible();
 
-  await expect(page.getByText("Miner").first()).toBeVisible();
-  await expect(page.getByText("Daily wage").first()).toBeVisible();
+  const createdCollaboratorRow = page.getByRole("row").filter({
+    has: page.getByRole("link", { name: new RegExp(personNickname) }),
+  });
+  await expect(createdCollaboratorRow.getByText("Miner")).toBeVisible();
+
+  const journeyIdLink = createdCollaboratorRow
+    .getByRole("cell")
+    .nth(3)
+    .getByRole("link");
+  await expect(journeyIdLink).toBeVisible();
+  await expect(journeyIdLink).toHaveAttribute(
+    "href",
+    /^\/collaborators\/[^/]+$/,
+  );
+  await expect(journeyIdLink).not.toHaveText("");
 
   await page.goto("/collaborators/new");
 
@@ -405,8 +418,16 @@ test("current account updates after receipt signed return", async ({
   await page.goto(currentAccountUrl);
   await expect(page.getByText("Receipt: Returned").first()).toBeVisible();
   await expect(
-    page.getByText("Receipt returned or closed.").first(),
+    page
+      .getByText("Receipt returned; no further receipt action is required.")
+      .first(),
   ).toBeVisible();
+  await expect(
+    page.getByRole("link", { name: "View receipt" }).first(),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("link", { name: "Print or return receipt" }),
+  ).toHaveCount(0);
   await expect(page.getByRole("link", { name: "Open source" })).toHaveAttribute(
     "href",
     `/expenses/${expense.id}`,

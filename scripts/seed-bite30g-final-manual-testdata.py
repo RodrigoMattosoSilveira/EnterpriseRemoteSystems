@@ -18,15 +18,18 @@ Default tenant mapping:
     Tenant B: default
 
 The default batch produces deterministic IDs used verbatim by the accompanying
-Markdown, DevTools helper, and SQL verification script.
+UX-first manual promotion suite and automated technical verification.
 
 For a clean restart of the same deterministic batch, pass
 --reset-existing-batch. The script restores the clean pre-seed database backup
 recorded for the batch (or discovers the newest compatible clean pre-seed
 backup). If no compatible clean backup survives, it builds a fresh temporary
 database from the repository migrations, validates it, safely replaces the
-local database, and then recreates the fixture. This avoids trying to delete
-immutable Authentication Accounts or historical identity rows in place.
+local database, and then recreates the fixture. If a stale deterministic
+clean-backup file survives from an older schema or fixture state, the script
+quarantines it before creating a fresh reusable clean backup. This avoids
+trying to delete immutable Authentication Accounts or historical identity
+rows in place.
 
 To keep an existing fixture and create a second independent data set instead,
 pass --batch retry1.
@@ -565,9 +568,29 @@ def create_clean_backup(db_path: Path, batch: str) -> Path:
     if clean.exists():
         if database_is_compatible_clean_backup(clean, batch):
             return clean
-        raise SystemExit(
-            f"Refusing to overwrite incompatible clean-backup candidate: {clean}"
+        if not database_is_compatible_clean_backup(db_path, batch):
+            raise SystemExit(
+                "Current database is not a compatible clean pre-seed database; "
+                f"refusing to replace incompatible clean-backup candidate: {clean}"
+            )
+
+        stamp = datetime.now().strftime("%Y%m%d-%H%M%S-%f")
+        quarantined = clean.with_name(
+            clean.name + f".incompatible-{stamp}.bak"
         )
+        os.replace(clean, quarantined)
+        print(
+            "Quarantined incompatible clean-backup candidate: "
+            f"{quarantined}"
+        )
+        try:
+            sqlite_snapshot(db_path, clean)
+        except BaseException:
+            clean.unlink(missing_ok=True)
+            os.replace(quarantined, clean)
+            raise
+        return clean
+
     sqlite_snapshot(db_path, clean)
     return clean
 
@@ -1094,13 +1117,14 @@ def main() -> int:
     print("\nMANDATORY before beginning the manual checklist:")
     print("  1. Stop any stale backend process if it is still running.")
     print("  2. From the project root run: make local-backend")
-    print("  3. Confirm the backend stays running on 127.0.0.1:8080 before using the DevTools helper.")
+    print("  3. Confirm the backend stays running on 127.0.0.1:8080 before opening the application UI.")
     print("     A 502 from localhost:5173/api/... means the Vite proxy cannot reach the backend;")
     print("     it does not mean the selected Account lacks Tenant A.")
-    print("  4. Sign in again after every fixture reset/rebuild. The reset replaces auth_sessions, so")
-    print("     browser sessions created before the reset are intentionally invalid and return HTTP 401.")
-    print('     For DevTools-only API verification you may run: await ERS30G.signIn("A")')
-    print("     Then run: await ERS30G.tenants()")
+    print("  4. Sign in again through the application UI after every fixture reset/rebuild.")
+    print("     The reset replaces auth_sessions, so browser sessions created before the reset are")
+    print("     intentionally invalid and return HTTP 401.")
+    print("  5. Perform the functional promotion suite through the supported UI only.")
+    print("     Do not use the legacy ERS30G DevTools helper to execute or verify manual test steps.")
     return 0
 
 

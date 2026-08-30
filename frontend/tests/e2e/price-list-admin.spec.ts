@@ -47,10 +47,10 @@ test("admin can create Canteen and Administrative items and use them on New Expe
   await selectExpenseCollaborator(page, collaboratorNickname);
 
   await page.getByLabel("Category *").selectOption("CANTEEN");
-  await expectPriceListOption(page, canteenDescription, 1);
+  await expectPriceListOption(page, "CANTEEN", canteenDescription, 1);
 
   await page.getByLabel("Category *").selectOption("ADMINISTRATIVE");
-  await expectPriceListOption(page, administrativeDescription, 1);
+  await expectPriceListOption(page, "ADMINISTRATIVE", administrativeDescription, 1);
 });
 
 test("admin can deactivate an item and still view it as inactive history", async ({
@@ -80,7 +80,7 @@ test("admin can deactivate an item and still view it as inactive history", async
   await page.goto("/expenses/new");
   await expect(page.getByRole("heading", { name: "New Expense" })).toBeVisible();
   await page.getByLabel("Category *").selectOption("ADMINISTRATIVE");
-  await expectPriceListOption(page, description, 0);
+  await expectPriceListOption(page, "ADMINISTRATIVE", description, 0);
 
   await page.goto("/admin/price-list-items");
   await page.getByLabel("Include inactive").check();
@@ -130,8 +130,8 @@ test("admin edit creates a new active version and preserves inactive history", a
   await page.goto("/expenses/new");
   await expect(page.getByRole("heading", { name: "New Expense" })).toBeVisible();
   await page.getByLabel("Category *").selectOption("CANTEEN");
-  await expectPriceListOption(page, revisedDescription, 1);
-  await expectPriceListOption(page, originalDescription, 0);
+  await expectPriceListOption(page, "CANTEEN", revisedDescription, 1);
+  await expectPriceListOption(page, "CANTEEN", originalDescription, 0);
 });
 
 type PriceListFormInput = {
@@ -193,9 +193,19 @@ function priceListRow(page: Page, description: string) {
   return page.getByRole("row").filter({ hasText: description }).first();
 }
 
-async function expectPriceListOption(page: Page, description: string, count: number) {
+async function expectPriceListOption(
+  page: Page,
+  itemType: PriceListFormInput["itemType"],
+  description: string,
+  count: number,
+) {
+  const itemSelect =
+    itemType === "CANTEEN"
+      ? page.getByLabel("Canteen item 1 description")
+      : page.getByLabel("Item Description *");
+
   await expect(
-    page.getByLabel("Item Description *").locator("option", { hasText: description }),
+    itemSelect.locator("option", { hasText: description }),
   ).toHaveCount(count);
 }
 

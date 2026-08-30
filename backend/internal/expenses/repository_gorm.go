@@ -136,6 +136,27 @@ func (r *gormRepository) Create(ctx context.Context, expense *db.Expense) error 
 	})
 }
 
+func (r *gormRepository) CreateBatch(ctx context.Context, expenses []*db.Expense) error {
+	if len(expenses) == 0 {
+		return nil
+	}
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		for _, expense := range expenses {
+			if err := tx.Create(expense).Error; err != nil {
+				return err
+			}
+			entry := expenseLedgerEntry(expense)
+			if err := tx.Create(entry).Error; err != nil {
+				return err
+			}
+			if err := ensureReceiptObligation(tx, entry.TenantID, entry.ID); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+}
+
 func (r *gormRepository) Update(ctx context.Context, expense *db.Expense) error {
 	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		previous, err := latestExpenseLedgerEntry(tx, expense.TenantID, expense.ID)
@@ -233,9 +254,20 @@ func (r *gormRepository) Cancel(ctx context.Context, expense *db.Expense, actorU
 			return err
 		}
 
-		debitEntryIDs := tx.
+		// Close the receipt obligation attached to the exact ledger debit that the
+		// reversal cancels. Do not rely only on an Expense source-pattern query: the
+		// reversal's RelatedEntryID is the authoritative link between the financial
+		// correction and the receipt obligation that must become terminal.
+		if err := cancelOpenExpenseReceipt(tx, expense.TenantID, previous.ID, actorUserID, reason, now); err != nil {
+			return err
+		}
+
+		// Also close any other still-open receipt obligations belonging to historical
+		// debit postings of this Expense (for example, a prior replacement posting).
+		// Returned receipts remain immutable historical evidence.
+		var debitEntryIDs []string
+		if err := tx.
 			Model(&db.LedgerEntry{}).
-			Select("id").
 			Where(
 				"tenant_id = ? AND direction = ? AND correction_type IN (?, ?) AND ((source_type = ? AND source_id = ?) OR (source_type = ? AND source_id LIKE ?))",
 				expense.TenantID,
@@ -246,19 +278,55 @@ func (r *gormRepository) Cancel(ctx context.Context, expense *db.Expense, actorU
 				expense.ID,
 				ledgerSourceTypeExpenseReplace,
 				expense.ID+":%",
-			)
+			).
+			Pluck("id", &debitEntryIDs).Error; err != nil {
+			return err
+		}
+		for _, ledgerEntryID := range debitEntryIDs {
+			if ledgerEntryID == previous.ID {
+				continue
+			}
+			if err := cancelOpenExpenseReceipt(tx, expense.TenantID, ledgerEntryID, actorUserID, reason, now); err != nil {
+				return err
+			}
+		}
 
-		return tx.
-			Model(&db.LedgerReceipt{}).
-			Where("tenant_id = ? AND ledger_entry_id IN (?) AND status NOT IN ?", expense.TenantID, debitEntryIDs, []string{"RETURNED", "CANCELLED"}).
-			Updates(map[string]any{
-				"status":              "CANCELLED",
-				"cancelled_at":        now,
-				"cancelled_by":        strings.TrimSpace(actorUserID),
-				"cancellation_reason": strings.TrimSpace(reason),
-				"updated_at":          now,
-			}).Error
+		return ensureExpenseReceiptTerminal(tx, expense.TenantID, previous.ID)
 	})
+}
+
+func cancelOpenExpenseReceipt(tx *gorm.DB, tenantID, ledgerEntryID, actorUserID, reason string, now time.Time) error {
+	return tx.
+		Model(&db.LedgerReceipt{}).
+		Where(
+			"tenant_id = ? AND ledger_entry_id = ? AND status NOT IN ?",
+			tenantID,
+			ledgerEntryID,
+			[]string{"RETURNED", "CANCELLED"},
+		).
+		Updates(map[string]any{
+			"status":              "CANCELLED",
+			"cancelled_at":        now,
+			"cancelled_by":        strings.TrimSpace(actorUserID),
+			"cancellation_reason": strings.TrimSpace(reason),
+			"updated_at":          now,
+		}).Error
+}
+
+func ensureExpenseReceiptTerminal(tx *gorm.DB, tenantID, ledgerEntryID string) error {
+	var receipt db.LedgerReceipt
+	if err := tx.
+		Select("id", "status").
+		First(&receipt, "tenant_id = ? AND ledger_entry_id = ?", tenantID, ledgerEntryID).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return ErrExpenseReceiptObligationMissing
+		}
+		return err
+	}
+	if receipt.Status != "RETURNED" && receipt.Status != "CANCELLED" {
+		return ErrExpenseReceiptCancellationIncomplete
+	}
+	return nil
 }
 
 func (r *gormRepository) FindByID(ctx context.Context, id string) (*db.Expense, error) {
@@ -365,6 +433,7 @@ func (r *gormRepository) FindCollaboratorByID(ctx context.Context, collaboratorI
 	err := r.db.WithContext(ctx).
 		Preload("Status").
 		Preload("Membership").
+		Preload("Membership.Person").
 		First(&row, "id = ? AND tenant_id = ?", collaboratorID, tenantctx.TenantID(ctx)).Error
 	if err != nil {
 		return nil, err

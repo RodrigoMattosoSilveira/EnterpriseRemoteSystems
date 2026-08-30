@@ -16,7 +16,7 @@ export const navigationLinks: NavigationLink[] = [
   { label: "Expenses", to: "/expenses", anyPermission: ["expenses.read"] },
   { label: "Work periods", to: "/work-periods", anyPermission: ["planning.read"] },
   { label: "Gold production", to: "/gold-production", anyPermission: ["gold_production.manage"] },
-  { label: "Outstanding receipts", to: "/receipts/outstanding", anyPermission: ["ledger.receipts.read"] },
+  { label: "Outstanding Receipts", to: "/receipts/outstanding", anyPermission: ["ledger.receipts.read", "ledger.receipts.self.read"] },
   { label: "Tenants", to: "/admin/tenants", anyPermission: ["tenants.create", "tenants.update"], applicationOnly: true },
   { label: "Authentication", to: "/admin/authentication", anyPermission: ["authz.manage"], applicationOnly: true },
   { label: "Authorization", to: "/admin/authorization", anyPermission: ["authz.read", "authz.tenant_role_grants.manage"] },

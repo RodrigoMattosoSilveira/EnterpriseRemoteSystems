@@ -52,6 +52,11 @@ export function CurrentAndFutureEarningsModal({
                 {projection.collaboratorLabel}
               </p>
             )}
+            {projection ? (
+              <p className="mt-1 text-xs text-gray-500">
+                Journey provenance: <span className="font-mono">{projection.collaboratorId}</span>
+              </p>
+            ) : null}
           </div>
           <button
             aria-label="Close Current and Future Earnings"

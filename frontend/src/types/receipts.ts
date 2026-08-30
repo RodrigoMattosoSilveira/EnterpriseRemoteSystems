@@ -1,5 +1,7 @@
 export type PrintableReceipt = {
   id: string;
+  tenantId: string;
+  personId: string;
   receiptNumber: string;
   receiptType: string;
   receiptPurpose: string;

@@ -190,6 +190,8 @@ type apiFinancialProjectionResponse struct {
 type apiPrintableReceiptResponse struct {
 	Data struct {
 		ID                string `json:"id"`
+		TenantID          string `json:"tenantId"`
+		PersonID          string `json:"personId"`
 		ReceiptNumber     string `json:"receiptNumber"`
 		Status            string `json:"status"`
 		IssuedAt          string `json:"issuedAt"`
@@ -719,6 +721,9 @@ func TestReceiptPrintAuthorization(t *testing.T) {
 	if body.Data.Status != "PRINTED" || body.Data.IssuedBy != "receipt-printer@example.com" {
 		t.Fatalf("unexpected printed receipt: %+v", body.Data)
 	}
+	if body.Data.TenantID == "" || body.Data.PersonID == "" || body.Data.CollaboratorID != collaborator.Data.ID {
+		t.Fatalf("expected canonical receipt ownership metadata, got %+v", body.Data)
+	}
 }
 
 func TestReceiptReturnAuthorization(t *testing.T) {
@@ -927,7 +932,7 @@ func TestOutstandingReceiptsListsOnlyUnreturnedActionItems(t *testing.T) {
 		t.Fatalf("expected return status %d, got %d", http.StatusOK, returnRes.StatusCode)
 	}
 
-	res := getJSON(t, server, "/api/v1/receipts/outstanding")
+	res := getOutstandingReceiptsJSON(t, server, "/api/v1/receipts/outstanding")
 	defer res.Body.Close()
 	if res.StatusCode != http.StatusOK {
 		t.Fatalf("expected outstanding receipt status %d, got %d", http.StatusOK, res.StatusCode)
@@ -945,7 +950,7 @@ func TestOutstandingReceiptsListsOnlyUnreturnedActionItems(t *testing.T) {
 		t.Fatalf("unexpected outstanding summary: %+v", body.Data.Summary)
 	}
 
-	printedRes := getJSON(t, server, "/api/v1/receipts/outstanding?status=PRINTED")
+	printedRes := getOutstandingReceiptsJSON(t, server, "/api/v1/receipts/outstanding?status=PRINTED")
 	defer printedRes.Body.Close()
 	if printedRes.StatusCode != http.StatusOK {
 		t.Fatalf("expected printed filter status %d, got %d", http.StatusOK, printedRes.StatusCode)
@@ -956,7 +961,7 @@ func TestOutstandingReceiptsListsOnlyUnreturnedActionItems(t *testing.T) {
 		t.Fatalf("expected no printed receipts, got %+v", printedBody.Data)
 	}
 
-	sourceRes := getJSON(t, server, "/api/v1/receipts/outstanding?sourceType=EXPENSE")
+	sourceRes := getOutstandingReceiptsJSON(t, server, "/api/v1/receipts/outstanding?sourceType=EXPENSE")
 	defer sourceRes.Body.Close()
 	if sourceRes.StatusCode != http.StatusOK {
 		t.Fatalf("expected source filter status %d, got %d", http.StatusOK, sourceRes.StatusCode)
@@ -970,7 +975,7 @@ func TestOutstandingReceiptsListsOnlyUnreturnedActionItems(t *testing.T) {
 		t.Fatalf("expected source-scoped summary, got %+v", sourceBody.Data.Summary)
 	}
 
-	collaboratorRes := getJSON(t, server, "/api/v1/receipts/outstanding?collaborator=P1")
+	collaboratorRes := getOutstandingReceiptsJSON(t, server, "/api/v1/receipts/outstanding?collaborator=P1")
 	defer collaboratorRes.Body.Close()
 	if collaboratorRes.StatusCode != http.StatusOK {
 		t.Fatalf("expected collaborator filter status %d, got %d", http.StatusOK, collaboratorRes.StatusCode)
@@ -981,7 +986,7 @@ func TestOutstandingReceiptsListsOnlyUnreturnedActionItems(t *testing.T) {
 		t.Fatalf("expected collaborator-filtered receipt, got %+v", collaboratorBody.Data)
 	}
 
-	collaboratorIDRes := getJSON(t, server, "/api/v1/receipts/outstanding?collaborator="+url.QueryEscape(collaborator.Data.ID))
+	collaboratorIDRes := getOutstandingReceiptsJSON(t, server, "/api/v1/receipts/outstanding?collaborator="+url.QueryEscape(collaborator.Data.ID))
 	defer collaboratorIDRes.Body.Close()
 	if collaboratorIDRes.StatusCode != http.StatusOK {
 		t.Fatalf("expected collaborator ID filter status %d, got %d", http.StatusOK, collaboratorIDRes.StatusCode)
@@ -992,7 +997,7 @@ func TestOutstandingReceiptsListsOnlyUnreturnedActionItems(t *testing.T) {
 		t.Fatalf("expected collaborator ID-filtered receipt, got %+v", collaboratorIDBody.Data)
 	}
 
-	missingCollaboratorRes := getJSON(t, server, "/api/v1/receipts/outstanding?collaborator=no-such-collaborator")
+	missingCollaboratorRes := getOutstandingReceiptsJSON(t, server, "/api/v1/receipts/outstanding?collaborator=no-such-collaborator")
 	defer missingCollaboratorRes.Body.Close()
 	if missingCollaboratorRes.StatusCode != http.StatusOK {
 		t.Fatalf("expected missing collaborator filter status %d, got %d", http.StatusOK, missingCollaboratorRes.StatusCode)
@@ -1999,6 +2004,19 @@ func postJSON(t *testing.T, server *fiber.App, method string, url string, payloa
 func getJSON(t *testing.T, server *fiber.App, url string) *http.Response {
 	t.Helper()
 	req := httptest.NewRequest(http.MethodGet, url, nil)
+	res, err := server.Test(req, fiber.TestConfig{Timeout: 0, FailOnTimeout: false})
+	if err != nil {
+		t.Fatalf("GET %s: %v", url, err)
+	}
+	return res
+}
+
+func getOutstandingReceiptsJSON(t *testing.T, server *fiber.App, url string) *http.Response {
+	t.Helper()
+	req := httptest.NewRequest(http.MethodGet, url, nil)
+	req.Header.Set(authz.HeaderAuthorizedBy, "receipt-workbench-test")
+	req.Header.Set(authz.HeaderTenantID, "default")
+	req.Header.Set(authz.HeaderActorPermissions, string(authz.PermissionLedgerReceiptsRead))
 	res, err := server.Test(req, fiber.TestConfig{Timeout: 0, FailOnTimeout: false})
 	if err != nil {
 		t.Fatalf("GET %s: %v", url, err)

@@ -1,6 +1,7 @@
 import { FormEvent, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { ApiErrorPanel } from "../../components/ApiErrorPanel";
+import { useAuthorizationContext } from "../../components/layout/AuthorizationContext";
 import type { OutstandingReceipt } from "../../types/receipts";
 import { nextReceiptAction, receiptStatusLabel, receiptStatusTone } from "./receiptLifecycle";
 import { useOutstandingReceipts } from "./useReceipt";
@@ -25,6 +26,19 @@ const sourceTypes = [
 const pageSizeOptions = [10, 25, 50];
 
 export function OutstandingReceiptsPage() {
+  const actor = useAuthorizationContext();
+  const wildcard = actor.permissions.includes("*");
+  const tenantReceiptAccess = wildcard || actor.permissions.includes("ledger.receipts.read");
+  const selfServiceReceiptAccess =
+    !tenantReceiptAccess && actor.permissions.includes("ledger.receipts.self.read");
+  const peopleHref =
+    wildcard || actor.permissions.includes("people.read")
+      ? "/people"
+      : actor.personId && actor.permissions.includes("people.self.read")
+        ? `/people/${encodeURIComponent(actor.personId)}`
+        : "";
+  const canBrowseExpenses = wildcard || actor.permissions.includes("expenses.read");
+
   const [searchParams, setSearchParams] = useSearchParams();
   const status = searchParams.get("status") ?? "";
   const collaborator = searchParams.get("collaborator") ?? "";
@@ -78,16 +92,22 @@ export function OutstandingReceiptsPage() {
             <p className="text-sm font-semibold uppercase tracking-wide text-gray-500">Receipts</p>
             <h1 className="text-3xl font-bold text-gray-900">Outstanding receipts</h1>
             <p className="mt-2 max-w-2xl text-sm text-gray-600">
-              Work all debit receipt obligations that still need to be issued, printed, signed, or returned.
+              {selfServiceReceiptAccess
+                ? "Review your own outstanding receipt obligations and settlement receipts awaiting your acceptance."
+                : "Work all debit receipt obligations that still need to be issued, printed, signed, or returned."}
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Link className="rounded-xl border bg-white px-4 py-2 text-sm font-semibold shadow-sm" to="/people">
-              People
-            </Link>
-            <Link className="rounded-xl border bg-white px-4 py-2 text-sm font-semibold shadow-sm" to="/expenses">
-              Expenses
-            </Link>
+            {peopleHref ? (
+              <Link className="rounded-xl border bg-white px-4 py-2 text-sm font-semibold shadow-sm" to={peopleHref}>
+                {tenantReceiptAccess ? "People" : "My Person"}
+              </Link>
+            ) : null}
+            {canBrowseExpenses ? (
+              <Link className="rounded-xl border bg-white px-4 py-2 text-sm font-semibold shadow-sm" to="/expenses">
+                Expenses
+              </Link>
+            ) : null}
           </div>
         </header>
 
@@ -119,15 +139,21 @@ export function OutstandingReceiptsPage() {
                 ))}
               </select>
             </label>
-            <label className="grid gap-1 text-sm font-medium">
-              <span>Collaborator</span>
-              <input
-                className="rounded-xl border px-3 py-2"
-                placeholder="Nickname, legal name, CPF, or collaborator ID"
-                value={collaboratorDraft}
-                onChange={(event) => setCollaboratorDraft(event.target.value)}
-              />
-            </label>
+            {tenantReceiptAccess ? (
+              <label className="grid gap-1 text-sm font-medium">
+                <span>Collaborator</span>
+                <input
+                  className="rounded-xl border px-3 py-2"
+                  placeholder="Nickname, legal name, CPF, or collaborator ID"
+                  value={collaboratorDraft}
+                  onChange={(event) => setCollaboratorDraft(event.target.value)}
+                />
+              </label>
+            ) : (
+              <div className="rounded-xl border bg-gray-50 px-3 py-2 text-sm text-gray-600">
+                Showing only receipts for your current Collaborator Journey.
+              </div>
+            )}
             <div className="flex flex-wrap gap-2">
               <button type="submit" className="rounded-xl bg-gray-900 px-4 py-2 text-sm font-semibold text-white">
                 Apply filters
@@ -152,7 +178,13 @@ export function OutstandingReceiptsPage() {
             <p className="p-6 text-sm text-gray-600">Loading outstanding receipts...</p>
           ) : data && data.items.length > 0 ? (
             <div className="divide-y">
-              {data.items.map((receipt) => <ReceiptRow key={receipt.id} receipt={receipt} />)}
+              {data.items.map((receipt) => (
+                <ReceiptRow
+                  key={receipt.id}
+                  receipt={receipt}
+                  canBrowseExpenses={canBrowseExpenses}
+                />
+              ))}
             </div>
           ) : (
             <div className="p-8 text-center">
@@ -186,7 +218,7 @@ function SummaryCard({ label, value }: { label: string; value: number }) {
   return <div className="rounded-2xl border bg-white p-4 shadow-sm"><p className="text-xs font-semibold uppercase tracking-wide text-gray-500">{label}</p><p className="mt-2 text-2xl font-bold">{value}</p></div>;
 }
 
-function ReceiptRow({ receipt }: { receipt: OutstandingReceipt }) {
+function ReceiptRow({ receipt, canBrowseExpenses }: { receipt: OutstandingReceipt; canBrowseExpenses: boolean }) {
   const sourceLink = sourceHref(receipt);
 
   return (
@@ -197,6 +229,9 @@ function ReceiptRow({ receipt }: { receipt: OutstandingReceipt }) {
           <span className={`rounded-full px-2 py-1 text-xs font-semibold ${receiptStatusTone(receipt.status)}`}>{receiptStatusLabel(receipt.status)}</span>
         </div>
         <p className="mt-1 text-sm text-gray-700">{receipt.collaboratorLabel} · {receipt.collaboratorLegalName}</p>
+        <p className="mt-1 text-xs text-gray-500">
+          Person owner: <span className="font-mono">{receipt.personId}</span> · Journey provenance: <span className="font-mono">{receipt.collaboratorId}</span> · Tenant: <span className="font-mono">{receipt.tenantId}</span>
+        </p>
         <p className="mt-1 text-sm text-gray-600">
           {humanize(receipt.entryType)} · {formatAmount(receipt.amount, receipt.valueUnitCode)} · Effective {receipt.effectiveDate}
         </p>
@@ -210,7 +245,7 @@ function ReceiptRow({ receipt }: { receipt: OutstandingReceipt }) {
       <div className="flex flex-wrap gap-2 sm:justify-end">
         <Link className="rounded-xl border px-4 py-2 text-sm font-semibold" to={`/collaborators/${receipt.collaboratorId}`}>Collaborator</Link>
         <Link className="rounded-xl border px-4 py-2 text-sm font-semibold" to={`/collaborators/${receipt.collaboratorId}/current-account`}>Current account</Link>
-        {sourceLink ? <Link className="rounded-xl border px-4 py-2 text-sm font-semibold" to={sourceLink}>Open source</Link> : null}
+        {sourceLink && canBrowseExpenses ? <Link className="rounded-xl border px-4 py-2 text-sm font-semibold" to={sourceLink}>Open source</Link> : null}
         <Link className="rounded-xl bg-gray-900 px-4 py-2 text-sm font-semibold text-white" to={`/ledger-entries/${receipt.ledgerEntryId}/receipt`}>Open receipt</Link>
       </div>
     </article>
