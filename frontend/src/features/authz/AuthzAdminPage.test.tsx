@@ -401,7 +401,6 @@ describe("AuthzAdminPage", () => {
       displayName: "Expense Admin",
       active: true,
       personId: "person-expense-admin",
-      globalPersonId: "person-expense-admin",
       collaboratorId: "collaborator-expense-admin",
     });
   });

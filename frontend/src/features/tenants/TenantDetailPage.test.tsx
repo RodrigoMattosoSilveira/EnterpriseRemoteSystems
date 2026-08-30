@@ -52,25 +52,25 @@ describe("TenantDetailPage", () => {
     mockFetch(async (url, init) => {
       calls.push({ url, method: init?.method ?? "GET", body: parseBody(init?.body) });
       if (url === "/api/v1/tenants/north" && !init?.method) {
-        return json({ data: { ...tenant, active, operationalStatus: active ? (assigned ? "ACTIVE_READY" : "ACTIVE_NO_TENANT_ADMIN") : "INACTIVE", tenantAdminCount: assigned ? 1 : 0 } });
+        return json({ data: { ...tenant, active, operationalStatus: active ? (assigned ? "ACTIVE_READY" : "ACTIVE_NO_TENANT_ADMIN") : "INACTIVE", tenantAdminCount: assigned ? 1 : 0, tenantAdminAssignmentCount: assigned ? 1 : 0 } });
       }
       if (url === "/api/v1/tenants/north/admin-candidates" && !init?.method) {
         return json({ data: [{ ...candidate, assigned }] });
       }
       if (url === "/api/v1/tenants/north/admins" && init?.method === "POST") {
         assigned = true;
-        return json({ data: { ...tenant, tenantAdminCount: 1, operationalStatus: "ACTIVE_READY" } });
+        return json({ data: { ...tenant, tenantAdminCount: 1, tenantAdminAssignmentCount: 1, operationalStatus: "ACTIVE_READY" } });
       }
       if (url === "/api/v1/tenants/north/active" && init?.method === "PATCH") {
         active = false;
-        return json({ data: { ...tenant, active: false, operationalStatus: "INACTIVE", tenantAdminCount: assigned ? 1 : 0 } });
+        return json({ data: { ...tenant, active: false, operationalStatus: "INACTIVE", tenantAdminCount: assigned ? 1 : 0, tenantAdminAssignmentCount: assigned ? 1 : 0 } });
       }
       throw new Error(`Unhandled request: ${url}`);
     });
 
     renderPage();
     await waitForText("North Site");
-    await changeSelect("Select an active actor", candidate.actorId);
+    await changeSelect("Select an eligible active actor", candidate.actorId);
     await click("Assign Admin");
     await waitForText("North Admin assigned as tenant administrator.");
     expect(calls.find((call) => call.url.endsWith("/admins") && call.method === "POST")?.body).toEqual({ actorId: candidate.actorId });
