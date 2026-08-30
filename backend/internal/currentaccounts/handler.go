@@ -609,10 +609,27 @@ func correctionReasonAuditMetadata(req CorrectionReasonRequest) string {
 }
 
 func (h *Handler) ListOutstandingReceipts(c fiber.Ctx) error {
+	actor, err := authz.ResolveRequestActor(c, h.actorStore)
+	if err != nil {
+		return writeAuthorizationError(c, err)
+	}
+
 	var filter ReceiptListFilter
 	if err := c.Bind().Query(&filter); err != nil {
 		return httpx.WriteError(c, err)
 	}
+
+	if !actor.HasPermission(authz.PermissionLedgerReceiptsRead) {
+		if !actor.HasIntrinsicPermission(authz.PermissionLedgerReceiptsSelfRead) || strings.TrimSpace(actor.CollaboratorID) == "" {
+			return writeAuthorizationError(c, authz.ErrForbidden)
+		}
+		// Self-service actors must never broaden this tenant workbench with a
+		// caller-supplied collaborator search. Restrict the query to the exact
+		// Collaborator Journey bound to the authenticated Actor.
+		filter.Collaborator = ""
+		filter.ExactCollaboratorID = actor.CollaboratorID
+	}
+
 	result, err := h.service.ListOutstandingReceipts(requesttenant.Context(c), filter)
 	if err != nil {
 		return httpx.WriteError(c, err)

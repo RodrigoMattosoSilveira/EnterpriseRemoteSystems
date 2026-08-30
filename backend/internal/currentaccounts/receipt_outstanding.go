@@ -75,11 +75,12 @@ func normalizeReceiptListFilter(filter ReceiptListFilter) (normalizedReceiptList
 		pageSize = maxPageSize
 	}
 	return normalizedReceiptListFilter{
-		Status:             status,
-		CollaboratorSearch: strings.TrimSpace(filter.Collaborator),
-		SourceType:         sourceType,
-		Page:               page,
-		PageSize:           pageSize,
+		Status:              status,
+		CollaboratorSearch:  strings.TrimSpace(filter.Collaborator),
+		ExactCollaboratorID: strings.TrimSpace(filter.ExactCollaboratorID),
+		SourceType:          sourceType,
+		Page:                page,
+		PageSize:            pageSize,
 	}, nil
 }
 

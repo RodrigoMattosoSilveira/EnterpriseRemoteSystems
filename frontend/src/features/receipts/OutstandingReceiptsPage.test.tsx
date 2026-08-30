@@ -3,6 +3,8 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { AuthorizationProvider } from "../../components/layout/AuthorizationContext";
+import type { AuthzCurrentActor } from "../../types/authz";
 import { OutstandingReceiptsPage } from "./OutstandingReceiptsPage";
 import type { OutstandingReceiptListResult } from "../../types/receipts";
 
@@ -77,6 +79,22 @@ describe("OutstandingReceiptsPage", () => {
       ).toBe(true);
     });
   });
+
+  it("presents the workbench as own receipts for a self-service Collaborator", async () => {
+    mockReceiptsFetch();
+
+    renderOutstandingReceiptsPage("/receipts/outstanding", selfServiceActor);
+
+    await waitForText("Outstanding receipts");
+    await waitForText("Review your own outstanding receipt obligations");
+    await waitForText("Showing only receipts for your current Collaborator Journey.");
+
+    expect(container.querySelector('input[placeholder*="Nickname"]')).toBeNull();
+    expect(container.querySelector('a[href="/people/person-1"]')?.textContent).toContain("My Person");
+    expect(container.querySelector('a[href="/expenses"]')).toBeNull();
+    expect(container.querySelector('a[href="/expenses/expense-1"]')).toBeNull();
+    expect(container.querySelector('a[href="/ledger-entries/ledger-1/receipt"]')).not.toBeNull();
+  });
 });
 
 function mockReceiptsFetch() {
@@ -90,6 +108,37 @@ function mockReceiptsFetch() {
     throw new Error(`Unhandled request: ${init?.method ?? "GET"} ${url}`);
   });
 }
+
+const tenantReceiptActor: AuthzCurrentActor = {
+  actorKey: "tenant-admin",
+  actorRecordId: "actor-tenant-admin",
+  tenantId: "default",
+  scope: "TENANT",
+  roleCodes: ["TENANT_ADMIN"],
+  permissions: ["ledger.receipts.read", "people.read", "expenses.read"],
+};
+
+const selfServiceActor: AuthzCurrentActor = {
+  actorKey: "collaborator",
+  actorRecordId: "actor-collaborator",
+  tenantId: "default",
+  scope: "TENANT",
+  personId: "person-1",
+  collaboratorId: "collab-1",
+  roleCodes: ["PERSON"],
+  permissions: [
+    "people.self.read",
+    "collaborators.self.read",
+    "ledger.receipts.self.read",
+    "ledger.receipts.self.accept",
+  ],
+  intrinsicPermissions: [
+    "people.self.read",
+    "collaborators.self.read",
+    "ledger.receipts.self.read",
+    "ledger.receipts.self.accept",
+  ],
+};
 
 const outstandingReceipts: OutstandingReceiptListResult = {
   items: [
@@ -131,7 +180,7 @@ const outstandingReceipts: OutstandingReceiptListResult = {
   },
 };
 
-function renderOutstandingReceiptsPage(initialEntry: string) {
+function renderOutstandingReceiptsPage(initialEntry: string, actor: AuthzCurrentActor = tenantReceiptActor) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
@@ -149,7 +198,9 @@ function renderOutstandingReceiptsPage(initialEntry: string) {
     root = createRoot(container);
     root.render(
       <QueryClientProvider client={queryClient}>
-        <RouterProvider router={router} />
+        <AuthorizationProvider value={actor}>
+          <RouterProvider router={router} />
+        </AuthorizationProvider>
       </QueryClientProvider>,
     );
   });

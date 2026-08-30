@@ -90,6 +90,18 @@ describe("CollaboratorCurrentAccountPage", () => {
     expect(container.textContent).not.toContain("No active current-account balance yet.");
   });
 
+  it("shows Outstanding Receipts to a self-service Collaborator", async () => {
+    mockCurrentAccountFetch();
+
+    renderCurrentAccountPage(
+      "/collaborators/collab-1/current-account",
+      selfServiceAuthorizationActor,
+    );
+
+    await waitForText("Outstanding Receipts");
+    expect(container.querySelector('a[href="/receipts/outstanding"]')).not.toBeNull();
+  });
+
   it("opens the selected Journey Current + Future Earnings projection", async () => {
     mockFetch(async (url, init) => {
       fetchCalls.push({ url, method: methodOf(init) });
@@ -371,6 +383,28 @@ const authorizationActor: AuthzCurrentActor = {
   permissions: ["*"],
 };
 
+const selfServiceAuthorizationActor: AuthzCurrentActor = {
+  actorKey: "collaborator",
+  actorRecordId: "actor-collaborator",
+  tenantId: "default",
+  scope: "TENANT",
+  personId: "person-1",
+  collaboratorId: "collab-1",
+  roleCodes: ["PERSON"],
+  permissions: [
+    "people.self.read",
+    "collaborators.self.read",
+    "current_accounts.self.summary.read",
+    "ledger.receipts.self.read",
+  ],
+  intrinsicPermissions: [
+    "people.self.read",
+    "collaborators.self.read",
+    "current_accounts.self.summary.read",
+    "ledger.receipts.self.read",
+  ],
+};
+
 const expenseEntry: CurrentAccountDetail["ledgerEntries"]["items"][number] = {
   id: "ledger-1",
   tenantId: "default",
@@ -465,7 +499,7 @@ const earningEntry: CurrentAccountDetail["ledgerEntries"]["items"][number] = {
   updatedAt: "2026-06-05T00:00:00Z",
 };
 
-function renderCurrentAccountPage(initialEntry: string) {
+function renderCurrentAccountPage(initialEntry: string, actor: AuthzCurrentActor = authorizationActor) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
@@ -483,7 +517,7 @@ function renderCurrentAccountPage(initialEntry: string) {
     root = createRoot(container);
     root.render(
       <QueryClientProvider client={queryClient}>
-        <AuthorizationProvider value={authorizationActor}>
+        <AuthorizationProvider value={actor}>
           <RouterProvider router={router} />
         </AuthorizationProvider>
       </QueryClientProvider>,

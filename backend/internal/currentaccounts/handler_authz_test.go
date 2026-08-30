@@ -48,6 +48,8 @@ type recordingReceiptService struct {
 	printableReceipt     *PrintableReceiptDTO
 	acceptedBy           string
 	acceptedParty        string
+	outstandingFilter    ReceiptListFilter
+	outstandingCalls     int
 }
 
 func newRecordingReceiptService() *recordingReceiptService {
@@ -589,6 +591,96 @@ func TestCurrentAccountHandlerEnforcesSettlementTenantOwnership(t *testing.T) {
 	}
 }
 
+func TestOutstandingReceiptsAllowsTenantReadOrExactSelfScope(t *testing.T) {
+	t.Run("self-service is restricted to exact own Collaborator Journey", func(t *testing.T) {
+		service := newRecordingReceiptService()
+		store := fakeActorStore{actor: &authz.Actor{
+			ID: "collaborator@example.com", TenantID: "tenant-a", CollaboratorID: "collab-a",
+			Source: authz.ActorSourcePersisted, Scope: authz.ActorScopeTenant,
+			Permissions:          map[authz.Permission]struct{}{authz.PermissionLedgerReceiptsSelfRead: {}},
+			IntrinsicPermissions: map[authz.Permission]struct{}{authz.PermissionLedgerReceiptsSelfRead: {}},
+		}}
+		app := fiber.New()
+		app.Get("/receipts/outstanding", NewHandler(service, WithActorStore(store)).ListOutstandingReceipts)
+
+		req := httptest.NewRequest(http.MethodGet, "/receipts/outstanding?collaborator=collab-b&sourceType=JOURNEY_SETTLEMENT", nil)
+		req.Header.Set(authz.HeaderActorID, "collaborator@example.com")
+		req.Header.Set(authz.HeaderTenantID, "tenant-a")
+		res, err := app.Test(req, fiber.TestConfig{Timeout: 0, FailOnTimeout: false})
+		if err != nil {
+			t.Fatalf("request self outstanding receipts: %v", err)
+		}
+		defer res.Body.Close()
+		if res.StatusCode != http.StatusOK {
+			t.Fatalf("expected self outstanding receipt status %d, got %d", http.StatusOK, res.StatusCode)
+		}
+		if service.outstandingCalls != 1 {
+			t.Fatalf("expected one service call, got %d", service.outstandingCalls)
+		}
+		if service.outstandingFilter.ExactCollaboratorID != "collab-a" {
+			t.Fatalf("expected exact self Collaborator restriction, got %+v", service.outstandingFilter)
+		}
+		if service.outstandingFilter.Collaborator != "" {
+			t.Fatalf("self-service caller must not retain caller-supplied collaborator search, got %+v", service.outstandingFilter)
+		}
+		if service.outstandingFilter.SourceType != "JOURNEY_SETTLEMENT" {
+			t.Fatalf("expected non-identity filters to remain available, got %+v", service.outstandingFilter)
+		}
+	})
+
+	t.Run("tenant-wide receipt reader retains workbench collaborator filter", func(t *testing.T) {
+		service := newRecordingReceiptService()
+		store := fakeActorStore{actor: &authz.Actor{
+			ID: "tenant-admin@example.com", TenantID: "tenant-a",
+			Source: authz.ActorSourcePersisted, Scope: authz.ActorScopeTenant,
+			Permissions: map[authz.Permission]struct{}{authz.PermissionLedgerReceiptsRead: {}},
+		}}
+		app := fiber.New()
+		app.Get("/receipts/outstanding", NewHandler(service, WithActorStore(store)).ListOutstandingReceipts)
+
+		req := httptest.NewRequest(http.MethodGet, "/receipts/outstanding?collaborator=Maria", nil)
+		req.Header.Set(authz.HeaderActorID, "tenant-admin@example.com")
+		req.Header.Set(authz.HeaderTenantID, "tenant-a")
+		res, err := app.Test(req, fiber.TestConfig{Timeout: 0, FailOnTimeout: false})
+		if err != nil {
+			t.Fatalf("request tenant outstanding receipts: %v", err)
+		}
+		defer res.Body.Close()
+		if res.StatusCode != http.StatusOK {
+			t.Fatalf("expected tenant outstanding receipt status %d, got %d", http.StatusOK, res.StatusCode)
+		}
+		if service.outstandingFilter.Collaborator != "Maria" || service.outstandingFilter.ExactCollaboratorID != "" {
+			t.Fatalf("expected tenant workbench filter unchanged, got %+v", service.outstandingFilter)
+		}
+	})
+
+	t.Run("actor without tenant or intrinsic self receipt permission is forbidden", func(t *testing.T) {
+		service := newRecordingReceiptService()
+		store := fakeActorStore{actor: &authz.Actor{
+			ID: "person@example.com", TenantID: "tenant-a", CollaboratorID: "collab-a",
+			Source: authz.ActorSourcePersisted, Scope: authz.ActorScopeTenant,
+			Permissions: map[authz.Permission]struct{}{},
+		}}
+		app := fiber.New()
+		app.Get("/receipts/outstanding", NewHandler(service, WithActorStore(store)).ListOutstandingReceipts)
+
+		req := httptest.NewRequest(http.MethodGet, "/receipts/outstanding", nil)
+		req.Header.Set(authz.HeaderActorID, "person@example.com")
+		req.Header.Set(authz.HeaderTenantID, "tenant-a")
+		res, err := app.Test(req, fiber.TestConfig{Timeout: 0, FailOnTimeout: false})
+		if err != nil {
+			t.Fatalf("request unauthorized outstanding receipts: %v", err)
+		}
+		defer res.Body.Close()
+		if res.StatusCode != http.StatusForbidden {
+			t.Fatalf("expected status %d, got %d", http.StatusForbidden, res.StatusCode)
+		}
+		if service.outstandingCalls != 0 {
+			t.Fatalf("service must not be called for unauthorized receipt list, got %d calls", service.outstandingCalls)
+		}
+	})
+}
+
 func TestSelfPrintableReceiptRequiresOwnCollaboratorReceipt(t *testing.T) {
 	service := newRecordingReceiptService()
 	store := fakeActorStore{actor: &authz.Actor{
@@ -712,8 +804,10 @@ func (s *recordingReceiptService) UpdateSecondPersonApprovalPolicy(context.Conte
 func (s *recordingReceiptService) BackfillDebitLedgerReceipts(context.Context, string, bool, ReceiptBackfillRequest) (*ReceiptBackfillResult, error) {
 	return nil, errors.New("not implemented")
 }
-func (s *recordingReceiptService) ListOutstandingReceipts(context.Context, ReceiptListFilter) (*OutstandingReceiptListResult, error) {
-	return nil, errors.New("not implemented")
+func (s *recordingReceiptService) ListOutstandingReceipts(_ context.Context, filter ReceiptListFilter) (*OutstandingReceiptListResult, error) {
+	s.outstandingCalls++
+	s.outstandingFilter = filter
+	return &OutstandingReceiptListResult{Items: []OutstandingReceiptDTO{}, Page: 1, PageSize: 25}, nil
 }
 func (s *recordingReceiptService) GetPrintableReceipt(context.Context, string) (*PrintableReceiptDTO, error) {
 	if s.printableReceipt == nil {

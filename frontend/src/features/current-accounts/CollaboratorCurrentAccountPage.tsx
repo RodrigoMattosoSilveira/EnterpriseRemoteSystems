@@ -43,7 +43,10 @@ export function CollaboratorCurrentAccountPage() {
   const canViewFinancialProjection =
     wildcard || actor.permissions.includes("current_accounts.summary.read");
   const canBrowseExpenses = wildcard || actor.permissions.includes("expenses.read");
-  const canBrowseOutstandingReceipts = wildcard || actor.permissions.includes("ledger.receipts.read");
+  const canBrowseOutstandingReceipts =
+    wildcard ||
+    actor.permissions.includes("ledger.receipts.read") ||
+    actor.permissions.includes("ledger.receipts.self.read");
   const canOpenOperationalSources =
     wildcard || actor.permissions.includes("expenses.read") || actor.permissions.includes("planning.read");
   const canOpenJourneyProvenance =

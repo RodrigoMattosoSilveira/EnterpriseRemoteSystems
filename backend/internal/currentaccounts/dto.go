@@ -289,11 +289,12 @@ type FinancialProjectionDTO struct {
 }
 
 type ReceiptListFilter struct {
-	Status       string `query:"status"`
-	Collaborator string `query:"collaborator"`
-	SourceType   string `query:"sourceType"`
-	Page         int    `query:"page"`
-	PageSize     int    `query:"pageSize"`
+	Status              string `query:"status"`
+	Collaborator        string `query:"collaborator"`
+	SourceType          string `query:"sourceType"`
+	Page                int    `query:"page"`
+	PageSize            int    `query:"pageSize"`
+	ExactCollaboratorID string `query:"-"`
 }
 
 type OutstandingReceiptDTO struct {
