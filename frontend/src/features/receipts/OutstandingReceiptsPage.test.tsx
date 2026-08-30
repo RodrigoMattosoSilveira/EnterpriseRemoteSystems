@@ -88,6 +88,7 @@ describe("OutstandingReceiptsPage", () => {
     await waitForText("Outstanding receipts");
     await waitForText("Review your own outstanding receipt obligations");
     await waitForText("Showing only receipts for your current Collaborator Journey.");
+    await waitForText("Maria");
 
     expect(container.querySelector('input[placeholder*="Nickname"]')).toBeNull();
     expect(container.querySelector('a[href="/people/person-1"]')?.textContent).toContain("My Person");
