@@ -87,6 +87,7 @@ describe("AccrualTab", () => {
                 tenantId: "default",
                 accrualRunId: "run-1",
                 workPeriodId: "wp-1",
+                personId: "person-1",
                 collaboratorId: "c-1",
                 collaboratorName: "Maria",
                 calculationType: "GOLD_COMMISSION",
@@ -133,10 +134,123 @@ describe("AccrualTab", () => {
     expect(notesField?.rows).toBe(4);
     expect(notesField?.className).toContain("w-full");
     expect(notesField?.className).toContain("min-h-24");
+    expect(notesField?.required).toBe(true);
+    expect(notesField?.disabled).toBe(true);
     expect(container.textContent).toContain(
-      "Optional context for this accrual run.",
+      "An unposted accrual run already exists.",
     );
+    const runButton = Array.from(container.querySelectorAll("button")).find(
+      (button) => button.textContent === "Run Accrual",
+    );
+    expect(runButton).not.toBeUndefined();
+    expect(runButton?.disabled).toBe(true);
+    expect(runButton?.className).toContain("bg-gray-200");
     expect(container.textContent).toContain("Maria");
+    expect(container.textContent).toContain("Person owner: person-1");
+    expect(container.textContent).toContain("Journey provenance: c-1");
+    expect(container.textContent).toContain("Tenant: default");
+  });
+
+  it("requires notes and returns Run Accrual to disabled after a successful run", async () => {
+    let created = false;
+    let submittedNotes = "";
+    const createdRun = {
+      id: "run-created-1",
+      tenantId: "default",
+      workPeriodId: "wp-1",
+      status: "READY_TO_POST",
+      accrualDate: "2026-06-07",
+      notes: "30G FINAL Tenant A accrual",
+      summary: {
+        totalItems: 1,
+        readyItems: 1,
+        pendingItems: 0,
+        skippedItems: 0,
+        postedItems: 0,
+      },
+      createdAt: "x",
+      updatedAt: "x",
+    };
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        if (url.includes("gold-production-entries"))
+          return response({ items: [], total: 0, page: 1, pageSize: 100 });
+        if (url.includes("/work-periods/wp-1/accrual-runs")) {
+          if (init?.method === "POST") {
+            const body = JSON.parse(String(init.body ?? "{}")) as {
+              notes?: string;
+            };
+            submittedNotes = body.notes ?? "";
+            created = true;
+            return response(createdRun);
+          }
+          return response({
+            items: created ? [createdRun] : [],
+            total: created ? 1 : 0,
+            page: 1,
+            pageSize: 100,
+          });
+        }
+        if (url.includes("/accrual-runs/run-created-1/items"))
+          return response({
+            items: [],
+            total: 0,
+            page: 1,
+            pageSize: 500,
+          });
+        throw new Error(`Unhandled request ${url}`);
+      }),
+    );
+
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    await act(async () => {
+      root = createRoot(container);
+      root.render(
+        <MemoryRouter>
+          <QueryClientProvider client={queryClient}>
+            <AuthorizationProvider value={actorWithPermissions(["earnings.read"])}>
+              <AccrualTab workPeriod={period} locations={locations} />
+            </AuthorizationProvider>
+          </QueryClientProvider>
+        </MemoryRouter>,
+      );
+    });
+
+    await waitForText("Required. Describe the reason or scope of this accrual run.");
+    const notesField = container.querySelector<HTMLTextAreaElement>(
+      'textarea[aria-label="Accrual notes"]',
+    );
+    const runButton = Array.from(container.querySelectorAll("button")).find(
+      (button) => button.textContent === "Run Accrual",
+    );
+    expect(notesField).not.toBeNull();
+    expect(notesField?.required).toBe(true);
+    expect(notesField?.disabled).toBe(false);
+    expect(runButton).not.toBeUndefined();
+    expect(runButton?.disabled).toBe(true);
+    expect(runButton?.className).toContain("bg-gray-200");
+
+    await act(async () => {
+      setInputValue(notesField!, "30G FINAL Tenant A accrual");
+    });
+    expect(runButton?.disabled).toBe(false);
+    expect(runButton?.className).toContain("bg-gray-950");
+
+    await act(async () => {
+      runButton?.click();
+    });
+    await waitForText("An unposted accrual run already exists.");
+
+    expect(submittedNotes).toBe("30G FINAL Tenant A accrual");
+    expect(notesField?.value).toBe("");
+    expect(notesField?.disabled).toBe(true);
+    expect(runButton?.disabled).toBe(true);
+    expect(runButton?.className).toContain("bg-gray-200");
   });
 
   it("shows posted accrual items as visible in Current Account earnings", async () => {
@@ -179,6 +293,7 @@ describe("AccrualTab", () => {
                 accrualRunId: "run-posted-1",
                 workPeriodId: "wp-1",
                 workPeriodAssignmentId: "assign-1",
+                personId: "person-1",
                 collaboratorId: "collab-1",
                 collaboratorName: "Maria",
                 calculationType: "DAILY_BRL",
@@ -216,6 +331,9 @@ describe("AccrualTab", () => {
     await waitForText("Posted earning credit");
     await waitForText("View in Current Account");
     expect(container.textContent).not.toContain("Open Gold Production");
+    expect(container.textContent).toContain("Person owner: person-1");
+    expect(container.textContent).toContain("Journey provenance: collab-1");
+    expect(container.textContent).toContain("Tenant: default");
 
     const link = container.querySelector<HTMLAnchorElement>(
       'a[href="/collaborators/collab-1/current-account?filter=earnings"]',
@@ -223,6 +341,16 @@ describe("AccrualTab", () => {
     expect(link).not.toBeNull();
   });
 });
+
+function setInputValue(
+  input: HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement,
+  value: string,
+) {
+  const prototype = Object.getPrototypeOf(input) as object;
+  const descriptor = Object.getOwnPropertyDescriptor(prototype, "value");
+  descriptor?.set?.call(input, value);
+  input.dispatchEvent(new Event("input", { bubbles: true }));
+}
 
 function actorWithPermissions(permissions: string[]): AuthzCurrentActor {
   return {

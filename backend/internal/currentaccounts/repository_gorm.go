@@ -79,6 +79,9 @@ func (r *gormRepository) CountOutstandingReceiptsByStatus(ctx context.Context, f
 }
 
 func applyOutstandingReceiptWorkbenchFilters(q *gorm.DB, filter normalizedReceiptListFilter) *gorm.DB {
+	if filter.ExactCollaboratorID != "" {
+		q = q.Where("ledger_receipts.collaborator_id = ?", filter.ExactCollaboratorID)
+	}
 	if filter.SourceType != "" {
 		q = q.Joins("JOIN ledger_entries AS receipt_source_filter ON receipt_source_filter.id = ledger_receipts.ledger_entry_id AND receipt_source_filter.tenant_id = ledger_receipts.tenant_id").
 			Where("receipt_source_filter.source_type = ?", filter.SourceType)

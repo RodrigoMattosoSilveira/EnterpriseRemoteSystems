@@ -99,6 +99,14 @@ describe("ExpenseDetailPage correction workflow", () => {
     renderExpenseDetail(tenantAdmin);
 
     await waitForText("Correct Expense");
+    await waitForText("Financial Ownership");
+    expect(container.textContent).toContain("Tenanttenant-a");
+    expect(container.textContent).toContain("Person ownerperson-a");
+    expect(container.textContent).toContain("Journey provenancejourney-a");
+    expect(container.querySelector('a[href="/collaborators/journey-a"]')).not.toBeNull();
+    expect(
+      container.querySelector('a[href="/collaborators/journey-a/current-account"]'),
+    ).not.toBeNull();
     await clickButton("Correct expense");
     await changeTextarea("Cancellation reason", "Wrong Collaborator Journey");
     await clickButton("Cancel and recreate");

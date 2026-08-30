@@ -8,7 +8,7 @@ import (
 
 func RegisterCurrentAccountRoutes(v1 fiber.Router, deps Dependencies) {
 	receipts := v1.Group("/receipts")
-	receipts.Get("/outstanding", requirePermission(deps, authz.PermissionLedgerReceiptsRead), deps.CurrentAccountHandler.ListOutstandingReceipts)
+	receipts.Get("/outstanding", authorizationHandledByHandler(), deps.CurrentAccountHandler.ListOutstandingReceipts)
 	receipts.Post("/backfill-debit-ledger-entries", authorizationHandledByHandler(), deps.CurrentAccountHandler.BackfillDebitLedgerReceipts)
 
 	r := v1.Group("/current-accounts")

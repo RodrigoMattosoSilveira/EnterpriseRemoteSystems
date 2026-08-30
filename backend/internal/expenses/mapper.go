@@ -79,6 +79,13 @@ func collaboratorLabel(person db.Person) string {
 	return strings.TrimSpace(strings.Join([]string{person.FirstName, person.LastName}, " "))
 }
 
+func globalPersonLabel(person db.GlobalPerson) string {
+	if nickname := strings.TrimSpace(person.Nickname); nickname != "" {
+		return nickname
+	}
+	return strings.TrimSpace(strings.Join([]string{person.FirstName, person.LastName}, " "))
+}
+
 func parseDate(value string) (time.Time, error) {
 	return time.Parse(dateLayout, strings.TrimSpace(value))
 }

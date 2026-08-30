@@ -41,6 +41,17 @@ const activeCollaborator: Collaborator = {
   updatedAt: "2026-06-01T12:00:00Z",
 };
 
+const replacementCollaborator: Collaborator = {
+  ...activeCollaborator,
+  id: "collab-a2",
+  membershipId: "membership-a2",
+  personId: "global-person-a",
+  legacyPersonId: "person-a",
+  personNickname: "Ana",
+  createdAt: "2026-06-02T12:00:00Z",
+  updatedAt: "2026-06-02T12:00:00Z",
+};
+
 const closedCollaborator: Collaborator = {
   ...activeCollaborator,
   id: "collab-closed",
@@ -57,6 +68,13 @@ const canteenItem = priceListItem(
   "SNACK",
   "Snack",
   12.25,
+);
+const canteenDrinkItem = priceListItem(
+  "item-canteen-drink",
+  "CANTEEN",
+  "DRINK",
+  "Drink",
+  6.5,
 );
 const administrativeItem = priceListItem(
   "item-admin",
@@ -104,17 +122,98 @@ describe("CreateExpensePage", () => {
     await clickButton("Create Expense");
 
     const createCall = fetchCalls.find(
-      (call) => call.method === "POST" && call.url === "/api/v1/expenses",
+      (call) =>
+        call.method === "POST" &&
+        call.url === "/api/v1/expenses/canteen-batch",
     );
     expect(createCall?.body).toMatchObject({
       collaboratorId: activeCollaborator.id,
-      priceListItemId: canteenItem.id,
-      currencyCode: "BRL",
-      quantity: 3,
+      items: [
+        {
+          priceListItemId: canteenItem.id,
+          currencyCode: "BRL",
+          quantity: 3,
+        },
+      ],
     });
     expect(createCall?.body).not.toHaveProperty("expenseCategoryId");
     expect(createCall?.body).not.toHaveProperty("valueUnitId");
     expect(createCall?.body).not.toHaveProperty("amount");
+    await waitForText("Expenses landing");
+  });
+
+  it("submits a Canteen expense at most once when the form is submitted twice immediately", async () => {
+    mockCreateExpenseFetch();
+    renderCreateExpensePage();
+
+    await waitForText("New Expense");
+    await selectCollaborator("Maria", "Maria");
+    await changeSelect("Item Description *", canteenItem.id);
+    await changeSelect("Currency *", "BRL");
+    await changeInput("Quantity *", "1");
+
+    const form = container.querySelector("form");
+    if (!form) throw new Error("Create Expense form not found");
+
+    await act(async () => {
+      form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+      form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+      await Promise.resolve();
+    });
+
+    const batchPosts = fetchCalls.filter(
+      (call) =>
+        call.method === "POST" &&
+        call.url === "/api/v1/expenses/canteen-batch",
+    );
+    expect(batchPosts).toHaveLength(1);
+    await waitForText("Expenses landing");
+  });
+
+  it("records multiple Canteen items atomically with a currency per line", async () => {
+    mockCreateExpenseFetch();
+    renderCreateExpensePage();
+
+    await waitForText("New Expense");
+    await selectCollaborator("Maria", "Maria");
+    await changeSelect("Item Description *", canteenItem.id);
+    await changeInput("Quantity *", "2");
+    await clickButton("Add Canteen Item");
+
+    await changeSelectByAriaLabel(
+      "Canteen item 2 description",
+      canteenDrinkItem.id,
+    );
+    await changeSelectByAriaLabel("Canteen item 2 currency", "GOLD_GRAM");
+    await changeInputByAriaLabel("Canteen item 2 quantity", "3");
+
+    await clickButton("Create Expenses");
+
+    const createCall = fetchCalls.find(
+      (call) =>
+        call.method === "POST" &&
+        call.url === "/api/v1/expenses/canteen-batch",
+    );
+    expect(createCall?.body).toMatchObject({
+      collaboratorId: activeCollaborator.id,
+      items: [
+        {
+          priceListItemId: canteenItem.id,
+          currencyCode: "BRL",
+          quantity: 2,
+        },
+        {
+          priceListItemId: canteenDrinkItem.id,
+          currencyCode: "GOLD_GRAM",
+          quantity: 3,
+        },
+      ],
+    });
+    expect(
+      fetchCalls.some(
+        (call) => call.method === "POST" && call.url === "/api/v1/expenses",
+      ),
+    ).toBe(false);
     await waitForText("Expenses landing");
   });
 
@@ -187,23 +286,41 @@ describe("CreateExpensePage", () => {
     );
     expect(quantityInput.value).toBe("3");
 
-    await changeInput("Quantity *", "2");
+    const replacementButton = await waitForButton("Create Replacement Expense");
+    expect(replacementButton.disabled).toBe(true);
+    expect(replacementButton.className).toContain("disabled:bg-gray-400");
+    expect(
+      fetchCalls.some(
+        (call) => call.method === "POST" && call.url === "/api/v1/expenses",
+      ),
+    ).toBe(false);
+
+    await selectCollaborator("Ana", "Ana");
+    await waitForText("Selected: Ana");
+    expect(replacementButton.disabled).toBe(false);
+
+    await changeSelect("Item Description *", "");
+    expect(replacementButton.disabled).toBe(true);
+
+    await changeSelect("Item Description *", canteenItem.id);
+    expect(replacementButton.disabled).toBe(false);
+
     await clickButton("Create Replacement Expense");
 
     const createCall = fetchCalls.find(
       (call) => call.method === "POST" && call.url === "/api/v1/expenses",
     );
     expect(createCall?.body).toMatchObject({
-      collaboratorId: activeCollaborator.id,
+      collaboratorId: replacementCollaborator.id,
       priceListItemId: canteenItem.id,
       currencyCode: "BRL",
-      quantity: 2,
+      quantity: 3,
       recreatedFromExpenseId: "expense-cancelled",
     });
     await waitForText("Replacement detail");
   });
 
-  it("requires a price-list item before submitting", async () => {
+  it("requires a Canteen price-list item before submitting", async () => {
     mockCreateExpenseFetch();
     renderCreateExpensePage();
 
@@ -211,10 +328,15 @@ describe("CreateExpensePage", () => {
     await selectCollaborator("Maria", "Maria");
     await clickButton("Create Expense");
 
-    await waitForText("Select an item description from the price list.");
+    await waitForText(
+      "Complete Canteen item 1: select an item and currency and enter a quantity greater than zero.",
+    );
     expect(
       fetchCalls.some(
-        (call) => call.method === "POST" && call.url === "/api/v1/expenses",
+        (call) =>
+          call.method === "POST" &&
+          (call.url === "/api/v1/expenses" ||
+            call.url === "/api/v1/expenses/canteen-batch"),
       ),
     ).toBe(false);
   });
@@ -243,7 +365,9 @@ function mockCreateExpenseFetch(
       });
     }
     if (url === "/api/v1/price-list-items") {
-      return jsonResponse({ data: [canteenItem, administrativeItem] });
+      return jsonResponse({
+        data: [canteenItem, canteenDrinkItem, administrativeItem],
+      });
     }
     if (url === "/api/v1/gold-prices/latest") {
       return jsonResponse({
@@ -257,6 +381,39 @@ function mockCreateExpenseFetch(
           active: true,
           createdAt: "2099-06-25T12:00:00Z",
           updatedAt: "2099-06-25T12:00:00Z",
+        },
+      });
+    }
+    if (
+      url === "/api/v1/expenses/canteen-batch" &&
+      methodOf(init) === "POST"
+    ) {
+      const body = parseBody(init?.body) as {
+        collaboratorId: string;
+        expenseDate: string;
+        description?: string;
+        items: Array<{
+          priceListItemId: string;
+          currencyCode: string;
+          quantity: number;
+        }>;
+      };
+      return jsonResponse({
+        data: {
+          items: body.items.map((item, index) => ({
+            id: `expense-batch-${index + 1}`,
+            tenantId: "default",
+            collaboratorId: body.collaboratorId,
+            collaboratorLabel: activeCollaborator.personNickname,
+            expenseDate: body.expenseDate,
+            description: body.description,
+            priceListItemId: item.priceListItemId,
+            currencyCode: item.currencyCode,
+            quantity: item.quantity,
+            active: true,
+            createdAt: "2026-06-25T12:00:00Z",
+            updatedAt: "2026-06-25T12:00:00Z",
+          })),
         },
       });
     }
@@ -324,6 +481,25 @@ function mockRecreateExpenseFetch() {
         },
       });
     }
+    if (url.startsWith("/api/v1/collaborators?")) {
+      const search = normalizeSearch(
+        new URL(url, "http://localhost").searchParams.get("search") ?? "",
+      );
+      const collaborators = [
+        activeCollaborator,
+        replacementCollaborator,
+      ].filter((collaborator) =>
+        normalizeSearch(
+          `${collaborator.personNickname ?? ""} ${collaborator.personName ?? ""}`,
+        ).includes(search),
+      );
+      return jsonResponse({
+        data: {
+          items: collaborators,
+          total: collaborators.length,
+        },
+      });
+    }
     if (url === `/api/v1/collaborators/${activeCollaborator.id}`) {
       return jsonResponse({ data: activeCollaborator });
     }
@@ -346,14 +522,18 @@ function mockRecreateExpenseFetch() {
       });
     }
     if (url === "/api/v1/expenses" && methodOf(init) === "POST") {
-      const body = parseBody(init?.body);
+      const body = parseBody(init?.body) as { collaboratorId?: string };
+      const targetCollaborator =
+        body.collaboratorId === replacementCollaborator.id
+          ? replacementCollaborator
+          : activeCollaborator;
       return jsonResponse({
         data: {
           id: "expense-replacement",
           tenantId: "default",
-          personId: activeCollaborator.personId,
-          collaboratorId: activeCollaborator.id,
-          collaboratorLabel: activeCollaborator.personNickname,
+          personId: targetCollaborator.personId,
+          collaboratorId: targetCollaborator.id,
+          collaboratorLabel: targetCollaborator.personNickname,
           expenseCategoryId: "ref-expense-category-canteen",
           expenseCategoryLabel: "Canteen",
           valueUnitId: "ref-value-unit-brl",
@@ -477,6 +657,19 @@ async function waitForText(text: string) {
   throw new Error(`Missing text: ${text}`);
 }
 
+async function waitForButton(name: string): Promise<HTMLButtonElement> {
+  for (let i = 0; i < 60; i += 1) {
+    const button = Array.from(container.querySelectorAll("button")).find(
+      (candidate) => candidate.textContent?.trim() === name,
+    );
+    if (button) return button;
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    });
+  }
+  throw new Error(`Button not found: ${name}`);
+}
+
 async function clickButton(name: string) {
   await act(async () => {
     const button = Array.from(container.querySelectorAll("button")).find(
@@ -503,6 +696,37 @@ async function changeInput(label: string, value: string) {
     input.dispatchEvent(new Event("input", { bubbles: true }));
     input.dispatchEvent(new Event("change", { bubbles: true }));
   });
+}
+
+async function changeSelectByAriaLabel(label: string, value: string) {
+  const select = await waitForAriaLabel<HTMLSelectElement>(label, "select");
+  await act(async () => {
+    setControlValue(select, value);
+    select.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+}
+
+async function changeInputByAriaLabel(label: string, value: string) {
+  const input = await waitForAriaLabel<HTMLInputElement>(label, "input");
+  await act(async () => {
+    setControlValue(input, value);
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+}
+
+async function waitForAriaLabel<T extends HTMLElement>(
+  label: string,
+  selector: string,
+): Promise<T> {
+  for (let i = 0; i < 60; i += 1) {
+    const control = container.querySelector(`${selector}[aria-label="${label}"]`);
+    if (control instanceof HTMLElement) return control as T;
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    });
+  }
+  throw new Error(`Control not found for aria-label ${label}`);
 }
 
 async function selectCollaborator(search: string, optionName: string) {

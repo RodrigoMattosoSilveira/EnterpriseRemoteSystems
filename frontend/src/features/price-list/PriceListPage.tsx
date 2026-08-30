@@ -24,6 +24,7 @@ export function PriceListPage() {
     actor && (actor.permissions.includes("*") || actor.permissions.includes("gold_prices.manage")),
   );
   const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>("ALL");
+  const [descriptionOrCodeFilter, setDescriptionOrCodeFilter] = useState("");
   const [includeInactive, setIncludeInactive] = useState(false);
   const [isCreateFormOpen, setIsCreateFormOpen] = useState(false);
   const [createForm, setCreateForm] = useState<PriceListItemFormValue>(emptyPriceListItemFormValue);
@@ -45,18 +46,28 @@ export function PriceListPage() {
   const deactivateMutation = useDeactivatePriceListItem();
   const reactivateMutation = useReactivatePriceListItem();
 
-  const rows = useMemo(
-    () => [...(priceListQuery.data ?? [])].sort(comparePriceListItems),
-    [priceListQuery.data],
-  );
+  const rows = useMemo(() => {
+    const normalizedFilter = descriptionOrCodeFilter.trim().toLocaleLowerCase();
+    return [...(priceListQuery.data ?? [])]
+      .filter((item) => {
+        if (!normalizedFilter) return true;
+        return (
+          item.description.toLocaleLowerCase().includes(normalizedFilter) ||
+          item.code.toLocaleLowerCase().includes(normalizedFilter)
+        );
+      })
+      .sort(comparePriceListItems);
+  }, [descriptionOrCodeFilter, priceListQuery.data]);
   const actionError =
     createMutation.error ??
     updateMutation.error ??
     deactivateMutation.error ??
     reactivateMutation.error;
+  const createFormIsValid = priceListItemFormIsValid(createForm);
   const editFormIsDirty = Boolean(
     editing && !priceListItemFormValuesEqual(editForm, formValueFromItem(editing)),
   );
+  const editFormIsValid = priceListItemFormIsValid(editForm);
 
   async function handleCreate(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -223,6 +234,7 @@ export function PriceListPage() {
             description="Create an active item that can be selected on the New Expense form. The list moves down while this panel is open."
             value={createForm}
             isPending={createMutation.isPending}
+            isSubmitDisabled={!createFormIsValid}
             submitLabel="Create Item"
             pendingLabel="Creating..."
             onChange={setCreateForm}
@@ -245,7 +257,18 @@ export function PriceListPage() {
             </span>
           </div>
 
-          <div className="mt-4 grid gap-3 md:grid-cols-[1fr_auto] md:items-end">
+          <div className="mt-4 grid gap-3 md:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_auto] md:items-end">
+            <label className="block text-sm font-semibold text-gray-700">
+              Description or code
+              <input
+                className="mt-1 block w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm"
+                type="search"
+                value={descriptionOrCodeFilter}
+                placeholder="Search description or code"
+                onChange={(event) => setDescriptionOrCodeFilter(event.target.value)}
+              />
+            </label>
+
             <label className="block text-sm font-semibold text-gray-700">
               Category filter
               <select
@@ -273,8 +296,8 @@ export function PriceListPage() {
 
           {!priceListQuery.isLoading && rows.length === 0 && (
             <div className="mt-4 rounded-xl border border-dashed p-4 text-center text-sm text-gray-500">
-              <p className="font-semibold text-gray-700">No price-list items found.</p>
-              <p className="mt-1">Create a Canteen or Administrative item so expenses can use price-list pricing.</p>
+              <p className="font-semibold text-gray-700">No price-list items match the current filters.</p>
+              <p className="mt-1">Change the Description or code, Category, or Include inactive filters to see other items.</p>
             </div>
           )}
 
@@ -347,7 +370,7 @@ export function PriceListPage() {
             description="Update the item metadata and BRL unit price. Saving creates a new active version and keeps this version inactive for audit history."
             value={editForm}
             isPending={updateMutation.isPending}
-            isSubmitDisabled={!editFormIsDirty}
+            isSubmitDisabled={!editFormIsDirty || !editFormIsValid}
             submitLabel="Save Changes"
             pendingLabel="Saving..."
             onChange={setEditForm}
@@ -391,6 +414,10 @@ function formValueToInput(value: PriceListItemFormValue): PriceListItemInput {
     unitPriceBrl: Number(value.unitPriceBrl),
     sortOrder: Number(value.sortOrder || 0),
   };
+}
+
+function priceListItemFormIsValid(value: PriceListItemFormValue) {
+  return validatePriceListItemInput(formValueToInput(value)) === "";
 }
 
 function validatePriceListItemInput(input: PriceListItemInput) {

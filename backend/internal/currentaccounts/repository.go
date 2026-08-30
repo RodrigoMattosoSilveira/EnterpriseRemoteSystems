@@ -48,11 +48,12 @@ type Repository interface {
 }
 
 type normalizedReceiptListFilter struct {
-	Status             string
-	CollaboratorSearch string
-	SourceType         string
-	Page               int
-	PageSize           int
+	Status              string
+	CollaboratorSearch  string
+	ExactCollaboratorID string
+	SourceType          string
+	Page                int
+	PageSize            int
 }
 
 type normalizedLedgerEntryListFilter struct {
