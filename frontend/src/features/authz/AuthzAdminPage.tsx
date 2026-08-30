@@ -43,7 +43,7 @@ export function AuthzAdminPage() {
     loadRequestActor(),
   );
   const [actorForm, setActorForm] = useState<CreateAuthzActorInput>(emptyActorForm);
-  const [actorNicknameFilter, setActorNicknameFilter] = useState("");
+  const [actorFilter, setActorFilter] = useState("");
   const [tenantRoleEligibilityFilter, setTenantRoleEligibilityFilter] =
     useState<TenantRoleEligibilityFilter>("ALL");
   const [grantRoleCodeByActor, setGrantRoleCodeByActor] = useState<Record<string, string>>({});
@@ -58,7 +58,7 @@ export function AuthzAdminPage() {
   const permissionsQuery = useAuthzPermissions(requestActor);
   const actorsQuery = useAuthzActors(requestActor);
   const actorCollaboratorSearchQuery = useCollaboratorSearch(
-    actorNicknameFilter,
+    actorFilter,
     false,
   );
   const createActorMutation = useCreateAuthzActor(requestActor);
@@ -88,23 +88,23 @@ export function AuthzAdminPage() {
     [actors],
   );
   const filteredActors = useMemo(() => {
-    const nicknameMatches = filterActorsByPersonNickname(
+    const identityMatches = filterActorsByActorKeyOrPersonNickname(
       actors,
       collaborators,
-      actorNicknameFilter,
+      actorFilter,
     );
     return filterActorsByTenantRoleEligibility(
-      nicknameMatches,
+      identityMatches,
       tenantRoleEligibilityFilter,
     );
   }, [
     actors,
     collaborators,
-    actorNicknameFilter,
+    actorFilter,
     tenantRoleEligibilityFilter,
   ]);
   const hasActorFilters =
-    actorNicknameFilter.trim().length > 0 ||
+    actorFilter.trim().length > 0 ||
     tenantRoleEligibilityFilter !== "ALL";
 
   const actionError =
@@ -350,14 +350,14 @@ export function AuthzAdminPage() {
                         htmlFor="authz-actor-nickname-filter"
                         className="text-xs font-semibold uppercase tracking-wide text-gray-500"
                       >
-                        Filter actors by person nickname
+                        Filter actors by Actor Key or person nickname
                       </label>
                       <input
                         id="authz-actor-nickname-filter"
                         type="search"
-                        value={actorNicknameFilter}
-                        onChange={(event) => setActorNicknameFilter(event.target.value)}
-                        placeholder="Type any part of a person nickname"
+                        value={actorFilter}
+                        onChange={(event) => setActorFilter(event.target.value)}
+                        placeholder="Type any part of an Actor Key or person nickname"
                         className="mt-1 w-full rounded-xl border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-gray-950 focus:outline-none focus:ring-1 focus:ring-gray-950"
                       />
                     </div>
@@ -388,7 +388,7 @@ export function AuthzAdminPage() {
                         <button
                           type="button"
                           onClick={() => {
-                            setActorNicknameFilter("");
+                            setActorFilter("");
                             setTenantRoleEligibilityFilter("ALL");
                           }}
                           className="rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 shadow-sm"
@@ -1111,12 +1111,12 @@ function isApplicationScopedRole(role: AuthzRole | undefined) {
   );
 }
 
-function filterActorsByPersonNickname(
+function filterActorsByActorKeyOrPersonNickname(
   actors: AuthzActor[],
   collaborators: Collaborator[],
   filter: string,
 ) {
-  const normalizedFilter = normalizeActorNickname(filter);
+  const normalizedFilter = normalizeActorFilterValue(filter);
   if (!normalizedFilter) return actors;
 
   const collaboratorsById = new Map(
@@ -1124,17 +1124,21 @@ function filterActorsByPersonNickname(
   );
 
   return actors.filter((actor) => {
+    if (normalizeActorFilterValue(actor.actorKey).includes(normalizedFilter)) {
+      return true;
+    }
+
     const collaborator = actor.collaboratorId
       ? collaboratorsById.get(actor.collaboratorId)
       : undefined;
     const nickname =
       collaborator?.personNickname?.trim() || actor.displayName.trim();
 
-    return normalizeActorNickname(nickname).includes(normalizedFilter);
+    return normalizeActorFilterValue(nickname).includes(normalizedFilter);
   });
 }
 
-function normalizeActorNickname(value: string) {
+function normalizeActorFilterValue(value: string) {
   return value
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")

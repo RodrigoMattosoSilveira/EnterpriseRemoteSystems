@@ -215,7 +215,7 @@ describe("AuthzAdminPage", () => {
     expect(fetchCalls.every((call) => call.headers["X-Tenant-ID"] === "default")).toBe(true);
   });
 
-  it("filters actor cards progressively by the linked Person nickname", async () => {
+  it("filters actor cards progressively by Actor Key or linked Person nickname", async () => {
     actors.push({
       id: "actor-aurea",
       actorKey: "collaborator-aurea",
@@ -233,13 +233,18 @@ describe("AuthzAdminPage", () => {
 
     const filter = controlByLabel<HTMLInputElement>(
       container,
-      "Filter actors by person nickname",
+      "Filter actors by Actor Key or person nickname",
       "input",
     );
     await setInputValue(filter, "aure");
 
     await waitFor(() => actorCardKeys().length === 1);
     expect(actorCardKeys()).toEqual(["collaborator-aurea"]);
+    expect(container.textContent).toContain("Showing 1 of 2 actor records");
+
+    await setInputValue(filter, "bootstrap-ad");
+    await waitFor(() => actorCardKeys().length === 1);
+    expect(actorCardKeys()).toEqual(["bootstrap-admin"]);
     expect(container.textContent).toContain("Showing 1 of 2 actor records");
 
     await setInputValue(filter, "nickname-that-does-not-exist");
@@ -249,6 +254,41 @@ describe("AuthzAdminPage", () => {
     await clickButtonByName("Clear");
     await waitFor(() => actorCardKeys().length === 2);
     expect(actorCardKeys()).toEqual(["bootstrap-admin", "collaborator-aurea"]);
+  });
+
+
+  it("uses Actor Key to distinguish Actors that share the same Person nickname", async () => {
+    actors.push(
+      {
+        id: "actor-identity-a-tenant-a",
+        actorKey: "manual30g-actor-key-a-tenant-a",
+        displayName: "30G Identity A",
+        active: true,
+        roleGrants: [],
+      },
+      {
+        id: "actor-identity-a-tenant-b",
+        actorKey: "manual30g-actor-key-a-tenant-b",
+        displayName: "30G Identity A",
+        active: true,
+        roleGrants: [],
+      },
+    );
+    mockAuthzFetch();
+
+    renderAuthzAdminPage();
+    await waitForText("manual30g-actor-key-a-tenant-a");
+
+    const filter = controlByLabel<HTMLInputElement>(
+      container,
+      "Filter actors by Actor Key or person nickname",
+      "input",
+    );
+    await setInputValue(filter, "manual30g-actor-key-a-tenant-a");
+
+    await waitFor(() => actorCardKeys().length === 1);
+    expect(actorCardKeys()).toEqual(["manual30g-actor-key-a-tenant-a"]);
+    expect(container.textContent).toContain("Showing 1 of 3 actor records");
   });
 
   it("shows and filters tenant Role Grant eligibility from Account and Membership facts", async () => {
