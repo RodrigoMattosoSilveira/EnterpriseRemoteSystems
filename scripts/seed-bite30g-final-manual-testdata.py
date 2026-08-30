@@ -486,6 +486,37 @@ def database_has_batch(db_path: Path, batch: str) -> bool:
             pass
 
 
+def repository_migration_filenames() -> set[str]:
+    migrations_dir = ROOT / "backend" / "migrations"
+    if not migrations_dir.is_dir():
+        return set()
+    return {path.name for path in migrations_dir.glob("*.up.sql")}
+
+
+def database_applied_migrations(conn: sqlite3.Connection) -> set[str]:
+    tables = {
+        row[0]
+        for row in conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table'"
+        ).fetchall()
+    }
+    if "schema_migrations" not in tables:
+        return set()
+    return {
+        row[0]
+        for row in conn.execute(
+            "SELECT filename FROM schema_migrations"
+        ).fetchall()
+    }
+
+
+def database_has_current_repository_migrations(conn: sqlite3.Connection) -> bool:
+    required = repository_migration_filenames()
+    if not required:
+        return False
+    return required.issubset(database_applied_migrations(conn))
+
+
 def database_is_compatible_clean_backup(db_path: Path, batch: str) -> bool:
     if not db_path.exists() or database_has_batch(db_path, batch):
         return False
@@ -493,7 +524,7 @@ def database_is_compatible_clean_backup(db_path: Path, batch: str) -> bool:
         conn = sqlite3.connect(db_path)
         conn.row_factory = sqlite3.Row
         require_schema(conn)
-        return True
+        return database_has_current_repository_migrations(conn)
     except (sqlite3.DatabaseError, SystemExit):
         return False
     finally:
@@ -664,15 +695,18 @@ def validate_rebuilt_database(db_path: Path, batch: str) -> None:
                 + "; ".join(str(tuple(row)) for row in foreign_key_errors[:10])
             )
 
-        migrations = {
-            row[0]
-            for row in conn.execute(
-                "SELECT filename FROM schema_migrations"
-            ).fetchall()
-        }
-        if "000060_expense_cancellation_recreation.up.sql" not in migrations:
+        required_migrations = repository_migration_filenames()
+        applied_migrations = database_applied_migrations(conn)
+        missing_migrations = sorted(required_migrations - applied_migrations)
+        if not required_migrations:
             raise SystemExit(
-                "Freshly rebuilt database did not apply migration 000060"
+                "Freshly rebuilt database cannot be validated because repository "
+                "migrations are unavailable"
+            )
+        if missing_migrations:
+            raise SystemExit(
+                "Freshly rebuilt database is missing repository migrations: "
+                + ", ".join(missing_migrations)
             )
     finally:
         conn.close()
