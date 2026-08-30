@@ -15,6 +15,7 @@ import (
 	"gorm.io/gorm"
 
 	apppkg "enterpriseremotesystems/backend/internal/app"
+	"enterpriseremotesystems/backend/internal/authz"
 	dbpkg "enterpriseremotesystems/backend/internal/db"
 	peoplepkg "enterpriseremotesystems/backend/internal/people"
 )
@@ -350,7 +351,7 @@ func TestCancelCanteenBatchExpenseClosesExactReversedReceiptObligation(t *testin
 		t.Fatalf("expected exact batch receipt to be CANCELLED, got %+v", receipt)
 	}
 
-	outstandingRes := getJSON(t, server, "/api/v1/receipts/outstanding?sourceType=EXPENSE")
+	outstandingRes := getOutstandingReceiptsJSON(t, server, "/api/v1/receipts/outstanding?sourceType=EXPENSE")
 	defer outstandingRes.Body.Close()
 	if outstandingRes.StatusCode != http.StatusOK {
 		t.Fatalf("expected outstanding receipt workbench status %d, got %d", http.StatusOK, outstandingRes.StatusCode)
@@ -1016,7 +1017,7 @@ func TestCancelExpensePreservesAuditAndReversesFinancialEffect(t *testing.T) {
 		t.Fatalf("unexpected cancelled receipt audit: %+v", receipt)
 	}
 
-	outstandingRes := getJSON(t, server, "/api/v1/receipts/outstanding?sourceType=EXPENSE")
+	outstandingRes := getOutstandingReceiptsJSON(t, server, "/api/v1/receipts/outstanding?sourceType=EXPENSE")
 	defer outstandingRes.Body.Close()
 	if outstandingRes.StatusCode != http.StatusOK {
 		t.Fatalf("expected outstanding receipt workbench status %d, got %d", http.StatusOK, outstandingRes.StatusCode)
@@ -1531,6 +1532,19 @@ func postJSON(t *testing.T, server *fiber.App, method string, url string, payloa
 func getJSON(t *testing.T, server *fiber.App, url string) *http.Response {
 	t.Helper()
 	req := httptest.NewRequest(http.MethodGet, url, nil)
+	res, err := server.Test(req, fiber.TestConfig{Timeout: 0, FailOnTimeout: false})
+	if err != nil {
+		t.Fatalf("GET %s: %v", url, err)
+	}
+	return res
+}
+
+func getOutstandingReceiptsJSON(t *testing.T, server *fiber.App, url string) *http.Response {
+	t.Helper()
+	req := httptest.NewRequest(http.MethodGet, url, nil)
+	req.Header.Set(authz.HeaderAuthorizedBy, "receipt-workbench-test")
+	req.Header.Set(authz.HeaderTenantID, "default")
+	req.Header.Set(authz.HeaderActorPermissions, string(authz.PermissionLedgerReceiptsRead))
 	res, err := server.Test(req, fiber.TestConfig{Timeout: 0, FailOnTimeout: false})
 	if err != nil {
 		t.Fatalf("GET %s: %v", url, err)
