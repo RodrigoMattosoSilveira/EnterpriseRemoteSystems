@@ -41,10 +41,13 @@ for migration in "$MIGRATIONS_DIR"/*.up.sql; do
 
   filename="$(basename "$migration")"
   echo "Applying migration to fresh Development database: ${filename}"
-  {
-    cat "$migration"
-    printf "\nINSERT INTO schema_migrations (filename) VALUES ('%s');\n" "$filename"
-  } | sqlite3 -bail "$TMP_DB"
+  # Match the established runtime/local migration contract: execute each
+  # migration file in its own sqlite3 invocation, then record it only after
+  # that invocation succeeds. Some historical migration files rely on EOF to
+  # terminate their final statement and therefore must not have bookkeeping SQL
+  # concatenated onto the same input stream.
+  sqlite3 -bail "$TMP_DB" < "$migration"
+  sqlite3 -bail "$TMP_DB" "INSERT INTO schema_migrations (filename) VALUES ('$filename');"
   migration_count=$((migration_count + 1))
 done
 
