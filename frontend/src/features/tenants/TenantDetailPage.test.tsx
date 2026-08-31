@@ -76,7 +76,7 @@ describe("TenantDetailPage", () => {
     const tenantHeading = container.querySelector("header h2");
     expect(tenantHeading?.textContent).toBe("North Site");
     expect(tenantHeading?.className).toContain("text-lg");
-    expect(container.querySelector("header")?.textContent).toContain("Tenant Code:NORTH");
+    expect(container.querySelector("header")?.textContent).toContain("Tenant Code: NORTH");
     await changeSelect("Select an eligible active actor", candidate.actorId);
     await click("Assign Admin");
     await waitForText("North Admin assigned as tenant administrator.");
