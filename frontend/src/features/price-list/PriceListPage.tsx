@@ -15,6 +15,7 @@ import {
   useReactivatePriceListItem,
   useUpdatePriceListItem,
 } from "./usePriceList";
+import { PageTitle } from "../../components/layout/PageHeading";
 
 type CategoryFilter = "ALL" | "CANTEEN" | "ADMINISTRATIVE";
 
@@ -169,7 +170,7 @@ export function PriceListPage() {
             <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
               Administration
             </p>
-            <h1 className="text-xl font-bold text-gray-950">Price List Items</h1>
+            <PageTitle>Price List Items</PageTitle>
             <p className="text-sm text-gray-500">
               Manage Canteen and Administrative items used by the New Expense workflow.
             </p>

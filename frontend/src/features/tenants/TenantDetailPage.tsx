@@ -11,6 +11,7 @@ import {
   useTenantAdminCandidates,
   useUpdateTenant,
 } from "./useTenants";
+import { PageContextHeading, PageTitle } from "../../components/layout/PageHeading";
 
 const emptyForm: UpdateTenantInput = { code: "", name: "", description: "" };
 
@@ -115,8 +116,8 @@ export function TenantDetailPage() {
             Back to Tenants
           </Link>
           <div className="mt-4">
-            <h1 className="text-3xl font-bold text-gray-950">Tenant Administration</h1>
-            <h2 className="mt-1 text-lg font-semibold text-gray-800">{tenant?.name ?? "Tenant"}</h2>
+            <PageTitle>Tenant Administration</PageTitle>
+            <PageContextHeading>{tenant?.name ?? "Tenant"}</PageContextHeading>
             <p className="mt-1 text-sm text-gray-600">
               <span className="font-semibold">Tenant Code:</span>{" "}
               <span className="font-mono">{tenant?.code ?? id}</span>

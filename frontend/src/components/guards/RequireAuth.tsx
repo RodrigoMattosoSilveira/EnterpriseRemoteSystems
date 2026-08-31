@@ -5,6 +5,7 @@ import {
   revalidateAuthSession,
 } from "../../app/authStore";
 import { useAuthState } from "../../app/useAuth";
+import { PageTitle } from "../layout/PageHeading";
 
 export function RequireAuth({ children }: { children: ReactNode }) {
   const auth = useAuthState();
@@ -102,7 +103,7 @@ export function RequireAuth({ children }: { children: ReactNode }) {
     return (
       <main className="grid min-h-screen place-items-center p-6">
         <section className="max-w-md rounded-2xl border bg-white p-6">
-          <h1 className="text-xl font-bold">Unable to verify your session</h1>
+          <PageTitle>Unable to verify your session</PageTitle>
           <p className="mt-2 text-sm text-slate-600">{auth.error.message}</p>
           <button
             className="mt-4 rounded-lg bg-slate-900 px-4 py-2 text-white"

@@ -22,6 +22,7 @@ import {
   useRevokeAuthzActorRoleGrant,
   useSetAuthzActorActive,
 } from "./useAuthzAdmin";
+import { PageTitle } from "../../components/layout/PageHeading";
 
 const defaultRequestActor: AuthzAdminRequestActor = {
   actorId: "authenticated-session",
@@ -201,7 +202,7 @@ export function AuthzAdminPage() {
             <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
               Administration
             </p>
-            <h1 className="text-xl font-bold text-gray-950">Authorization</h1>
+            <PageTitle>Authorization</PageTitle>
             <p className="text-sm text-gray-500">
               Manage authorization actors, role grants, and available permissions.
             </p>

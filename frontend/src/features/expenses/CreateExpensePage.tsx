@@ -17,6 +17,7 @@ import {
   useExpense,
 } from "./useExpenses";
 import { CurrentAndFutureEarningsModal } from "./CurrentAndFutureEarningsModal";
+import { PageTitle } from "../../components/layout/PageHeading";
 
 type ExpenseCurrencyCode = "BRL" | "GOLD_GRAM";
 type ExpenseItemType = "CANTEEN" | "ADMINISTRATIVE";
@@ -393,9 +394,9 @@ export function CreateExpensePage() {
             <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
               Expense deduction
             </p>
-            <h1 className="text-2xl font-bold text-gray-950">
+            <PageTitle>
               {copyFromExpenseId ? "Recreate Expense" : "New Expense"}
-            </h1>
+            </PageTitle>
             <p className="mt-1 text-sm text-gray-500">
               {copyFromExpenseId
                 ? "Review the cancelled Expense data and change only the incorrect fields before creating the replacement."

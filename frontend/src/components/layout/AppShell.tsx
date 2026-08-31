@@ -22,6 +22,7 @@ import { useAuthState } from "../../app/useAuth";
 import { AuthorizationProvider } from "./AuthorizationContext";
 import { SideNav } from "./SideNav";
 import { TopBar } from "./TopBar";
+import { PageTitle } from "./PageHeading";
 
 export function AppShell() {
   const auth = useAuthState();
@@ -287,7 +288,7 @@ function WorkspaceError({
   return (
     <main className="grid min-h-screen place-items-center p-6">
       <section className="max-w-lg rounded-2xl border bg-white p-6">
-        <h1 className="text-xl font-bold">{title}</h1>
+        <PageTitle>{title}</PageTitle>
         <p className="mt-2 text-sm text-slate-600">{message}</p>
         <div className="mt-4 flex gap-3">
           <button
@@ -337,7 +338,7 @@ function AccountSelfServiceWorkspace({
         <header className="rounded-2xl border bg-white p-5 shadow-sm">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
             <div>
-              <h1 className="text-2xl font-bold text-slate-950">Signed in</h1>
+              <PageTitle>Signed in</PageTitle>
               <p role="status" className="mt-1 text-sm text-slate-700">
                 Authentication succeeded for{" "}
                 <span className="font-semibold">{displayName || login}</span>.

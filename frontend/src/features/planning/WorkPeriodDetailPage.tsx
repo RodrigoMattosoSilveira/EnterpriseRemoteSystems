@@ -20,6 +20,7 @@ import {
   useWorkPeriod,
   useWorkPlanRoster,
 } from "./usePlanning";
+import { PageContextHeading, PageTitle } from "../../components/layout/PageHeading";
 
 type Tab = "plan" | "inform" | "outcomes" | "accrual";
 
@@ -96,10 +97,10 @@ export function WorkPeriodDetailPage() {
           </Link>
           <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div>
-              <h1 className="text-3xl font-bold text-gray-950">Work Period</h1>
-              <h2 className="mt-1 text-lg font-semibold text-gray-800">
+              <PageTitle>Work Period</PageTitle>
+              <PageContextHeading>
                 {tenantName} · {period.workDate} · {period.name}
-              </h2>
+              </PageContextHeading>
               <p className="mt-1 text-sm text-gray-600">
                 <span className="font-semibold">Work Period Code:</span>{" "}
                 <span className="font-mono">{period.periodCode}</span>

@@ -4,6 +4,7 @@ import { useCreatePerson } from "./usePeople";
 import { ApiError } from "../../api/client";
 import { ApiErrorPanel } from "../../components/ApiErrorPanel";
 import { useReferenceDataByType } from "../reference-data/useReferenceData";
+import { PageTitle } from "../../components/layout/PageHeading";
 
 const FALLBACK_ACTIVE_STATUS_ID = "ref-person-status-active";
 
@@ -26,9 +27,9 @@ export function CreatePersonPage() {
           <Link className="text-sm text-gray-500 underline" to="/people">
             Back to People
           </Link>
-          <h1 className="mt-3 text-2xl font-bold text-gray-950">
+          <PageTitle className="mt-3">
             New Person
-          </h1>
+          </PageTitle>
           <p className="text-sm text-gray-500">
             Create one global Person identity and its membership in the selected
             tenant. Complete the Personal section first; other sections can be
