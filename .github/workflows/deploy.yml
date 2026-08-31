@@ -32,6 +32,12 @@ on:
         default: true
         type: boolean
 
+      test_release_rehearsal:
+        description: "For Test only: restore the known pre-release baseline before deployment and record a rehearsal gate after full verification."
+        required: false
+        default: false
+        type: boolean
+
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
   
@@ -101,7 +107,10 @@ jobs:
       make_prefix: ${{ steps.target.outputs.make_prefix }}
       run_playwright_post_deploy: ${{ steps.target.outputs.run_playwright_post_deploy }}
       revision: ${{ steps.revision.outputs.sha }}
+      tree_sha: ${{ steps.revision.outputs.tree_sha }}
       e2e_admin_email: ${{ steps.e2e_admin.outputs.email }}
+      database_strategy: ${{ steps.target.outputs.database_strategy }}
+      test_release_rehearsal: ${{ steps.target.outputs.test_release_rehearsal }}
 
     steps:
       - name: Resolve deployment target
@@ -114,10 +123,17 @@ jobs:
             TARGET_ENV="${{ inputs.environment }}"
             MANUAL_EDGE="${{ inputs.deploy_edge }}"
             MANUAL_PLAYWRIGHT="${{ inputs.run_deployed_playwright }}"
+            TEST_RELEASE_REHEARSAL="${{ inputs.test_release_rehearsal }}"
           else
             TARGET_ENV="${GITHUB_REF_NAME}"
             MANUAL_EDGE="false"
             MANUAL_PLAYWRIGHT="true"
+            TEST_RELEASE_REHEARSAL="false"
+          fi
+
+          if [[ "$TEST_RELEASE_REHEARSAL" == "true" && "$TARGET_ENV" != "test" ]]; then
+            echo "Test release rehearsal may only be requested for the Test environment."
+            exit 1
           fi
 
           case "$TARGET_ENV" in
@@ -131,6 +147,8 @@ jobs:
               echo "run_playwright_post_deploy=${MANUAL_PLAYWRIGHT}" >> "$GITHUB_OUTPUT"
               echo "default_e2e_admin_email=e2e-admin-dev@enterpriseremotesystems.com" >> "$GITHUB_OUTPUT"
               echo "e2e_admin_display_name=Development E2E Administrator" >> "$GITHUB_OUTPUT"
+              echo "database_strategy=replace-fresh" >> "$GITHUB_OUTPUT"
+              echo "test_release_rehearsal=false" >> "$GITHUB_OUTPUT"
               ;;
 
             test)
@@ -143,6 +161,21 @@ jobs:
               echo "run_playwright_post_deploy=${MANUAL_PLAYWRIGHT}" >> "$GITHUB_OUTPUT"
               echo "default_e2e_admin_email=e2e-admin-tst@enterpriseremotesystems.com" >> "$GITHUB_OUTPUT"
               echo "e2e_admin_display_name=Test E2E Administrator" >> "$GITHUB_OUTPUT"
+              echo "database_strategy=migrate-in-place" >> "$GITHUB_OUTPUT"
+              if [[ "$TEST_RELEASE_REHEARSAL" == "true" ]]; then
+                if [[ "${{ github.event_name }}" != "workflow_dispatch" ]]; then
+                  echo "Test release rehearsal must be requested explicitly with workflow_dispatch."
+                  exit 1
+                fi
+                if [[ "$MANUAL_PLAYWRIGHT" != "true" ]]; then
+                  echo "Test release rehearsal requires deployed Playwright verification."
+                  exit 1
+                fi
+                echo "database_strategy=restore-baseline+migrate-in-place" >> "$GITHUB_OUTPUT"
+                echo "test_release_rehearsal=true" >> "$GITHUB_OUTPUT"
+              else
+                echo "test_release_rehearsal=false" >> "$GITHUB_OUTPUT"
+              fi
               ;;
 
             production)
@@ -159,6 +192,8 @@ jobs:
               echo "run_playwright_post_deploy=false" >> "$GITHUB_OUTPUT"
               echo "default_e2e_admin_email=e2e-admin@enterpriseremotesystems.com" >> "$GITHUB_OUTPUT"
               echo "e2e_admin_display_name=Production Automation Administrator" >> "$GITHUB_OUTPUT"
+              echo "database_strategy=migrate-in-place" >> "$GITHUB_OUTPUT"
+              echo "test_release_rehearsal=false" >> "$GITHUB_OUTPUT"
               ;;
 
             *)
@@ -216,8 +251,10 @@ jobs:
           set -euo pipefail
 
           SHA="$(git rev-parse HEAD)"
+          TREE_SHA="$(git rev-parse HEAD^{tree})"
           echo "sha=${SHA}" >> "$GITHUB_OUTPUT"
-          echo "Deploying immutable revision ${SHA}"
+          echo "tree_sha=${TREE_SHA}" >> "$GITHUB_OUTPUT"
+          echo "Deploying immutable revision ${SHA} (tree ${TREE_SHA})"
 
       - name: Configure SSH
         shell: bash
@@ -274,8 +311,34 @@ jobs:
              git checkout -B '${{ steps.target.outputs.branch }}' '${{ steps.revision.outputs.sha }}'
 
              test "$(git rev-parse HEAD)" = '${{ steps.revision.outputs.sha }}'
+             test "$(git rev-parse HEAD^{tree})" = '${{ steps.revision.outputs.tree_sha }}'
+
+             if [[ '${{ steps.target.outputs.env_name }}' == 'production' ]]; then
+               make server-require-test-release-rehearsal \
+                 ENV=production \
+                 TREE_SHA='${{ steps.revision.outputs.tree_sha }}'
+             fi
 
              make ${{ steps.target.outputs.make_prefix }}-build
+
+             case '${{ steps.target.outputs.database_strategy }}' in
+               replace-fresh)
+                 echo 'Replacing disposable Development database from the current migration chain.'
+                 make server-replace-development-db ENV=development
+                 ;;
+               restore-baseline+migrate-in-place)
+                 echo 'Restoring the known pre-release Test baseline; backend startup will migrate it in place.'
+                 make server-test-rehearsal-restore ENV=test
+                 ;;
+               migrate-in-place)
+                 echo 'Preserving ${{ steps.target.outputs.env_name }} database; migrations will run in place during backend startup.'
+                 ;;
+               *)
+                 echo 'Unsupported database strategy: ${{ steps.target.outputs.database_strategy }}'
+                 exit 1
+                 ;;
+             esac
+
              if ! make ${{ steps.target.outputs.make_prefix }}-up; then
                echo 'Application stack failed to become healthy; collecting server diagnostics.'
                make server-diagnostics ENV='${{ steps.target.outputs.env_name }}' || true
@@ -362,6 +425,9 @@ jobs:
             echo "| Make prefix | ${{ steps.target.outputs.make_prefix }} |"
             echo "| Edge deployed | ${{ steps.target.outputs.deploy_edge }} |"
             echo "| Administrator login | ${{ steps.e2e_admin.outputs.email }} |"
+            echo "| Database strategy | ${{ steps.target.outputs.database_strategy }} |"
+            echo "| Test release rehearsal | ${{ steps.target.outputs.test_release_rehearsal }} |"
+            echo "| Source tree | ${{ steps.revision.outputs.tree_sha }} |"
             echo "| Deployed Playwright | ${{ steps.target.outputs.run_playwright_post_deploy }} |"
           } >> "$GITHUB_STEP_SUMMARY"
 
@@ -388,6 +454,8 @@ jobs:
       E2E_ADMIN_PASSWORD: ${{ secrets.E2E_ADMIN_PASSWORD }}
       E2E_ADMIN_EMAIL_SOURCE: provisioned-by-deploy
       E2E_ADMIN_PASSWORD_CONFIGURED: ${{ secrets.E2E_ADMIN_PASSWORD != '' && 'true' || 'false' }}
+      TEST_RELEASE_REHEARSAL: ${{ needs.deploy.outputs.test_release_rehearsal }}
+      DEPLOYED_TREE_SHA: ${{ needs.deploy.outputs.tree_sha }}
 
     steps:
       - name: Checkout deployed revision
@@ -412,6 +480,8 @@ jobs:
           echo "PLAYWRIGHT_AUTHZ_ACTOR_ID=${PLAYWRIGHT_AUTHZ_ACTOR_ID}"
           echo "E2E_ADMIN_EMAIL_SOURCE=${E2E_ADMIN_EMAIL_SOURCE}"
           echo "E2E_ADMIN_PASSWORD_CONFIGURED=${E2E_ADMIN_PASSWORD_CONFIGURED}"
+          echo "TEST_RELEASE_REHEARSAL=${TEST_RELEASE_REHEARSAL}"
+          echo "DEPLOYED_TREE_SHA=${DEPLOYED_TREE_SHA}"
           if [[ -z "${E2E_ADMIN_EMAIL:-}" || -z "${E2E_ADMIN_PASSWORD:-}" ]]; then
             echo "::error title=Missing deployed Playwright credentials::The deployment did not provide the provisioned administrator login or E2E_ADMIN_PASSWORD is unavailable in the '${DEPLOYMENT_ENVIRONMENT}' GitHub environment."
             exit 1
@@ -460,3 +530,47 @@ jobs:
           name: deployed-playwright-test-results-${{ needs.deploy.outputs.env_name }}
           path: frontend/test-results/
           if-no-files-found: ignore
+
+  record-test-release-rehearsal:
+    name: Record successful Test release rehearsal
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs:
+      - deploy
+      - deployed-playwright
+    if: ${{ needs.deploy.result == 'success' && needs.deployed-playwright.result == 'success' && needs.deploy.outputs.env_name == 'test' && needs.deploy.outputs.test_release_rehearsal == 'true' }}
+    environment: test
+
+    env:
+      DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+      DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+
+    steps:
+      - name: Configure SSH
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          cat > ~/.ssh/id_ed25519 <<'EOF'
+          ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
+          EOF
+          chmod 600 ~/.ssh/id_ed25519
+          cat > ~/.ssh/known_hosts <<'EOF'
+          ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+          EOF
+          chmod 644 ~/.ssh/known_hosts
+
+      - name: Record rehearsal gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh -i ~/.ssh/id_ed25519 \
+            "${DEPLOY_USER}@${DEPLOY_HOST}" \
+            "set -euo pipefail
+             cd '/opt/EnterpriseRemoteSystems/test'
+             make server-record-test-release-rehearsal \
+               ENV=test \
+               TREE_SHA='${{ needs.deploy.outputs.tree_sha }}' \
+               REVISION='${{ needs.deploy.outputs.revision }}'
+            "

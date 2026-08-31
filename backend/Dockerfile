@@ -20,7 +20,9 @@ COPY --from=builder /out/import-people /app/import-people
 COPY --from=builder /out/provision-e2e-admin /app/provision-e2e-admin
 COPY migrations /app/migrations
 COPY docker-entrypoint.sh /app/docker-entrypoint.sh
-RUN chmod +x /app/docker-entrypoint.sh \
+COPY build-development-db.sh /app/build-development-db.sh
+COPY restore-test-rehearsal-db.sh /app/restore-test-rehearsal-db.sh
+RUN chmod +x /app/docker-entrypoint.sh /app/build-development-db.sh /app/restore-test-rehearsal-db.sh \
     && mkdir -p /app/data
 ENV PORT=8080
 ENV DATABASE_PATH=/app/data/app.db
