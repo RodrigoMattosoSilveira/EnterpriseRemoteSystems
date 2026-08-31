@@ -276,8 +276,16 @@ jobs:
              test "$(git rev-parse HEAD)" = '${{ steps.revision.outputs.sha }}'
 
              make ${{ steps.target.outputs.make_prefix }}-build
-             make ${{ steps.target.outputs.make_prefix }}-up
-             make ${{ steps.target.outputs.make_prefix }}-backend-health
+             if ! make ${{ steps.target.outputs.make_prefix }}-up; then
+               echo 'Application stack failed to become healthy; collecting server diagnostics.'
+               make server-diagnostics ENV='${{ steps.target.outputs.env_name }}' || true
+               exit 1
+             fi
+             if ! make ${{ steps.target.outputs.make_prefix }}-backend-health; then
+               echo 'Backend health verification failed; collecting server diagnostics.'
+               make server-diagnostics ENV='${{ steps.target.outputs.env_name }}' || true
+               exit 1
+             fi
              make ${{ steps.target.outputs.make_prefix }}-env-caddy-health
             "
 
