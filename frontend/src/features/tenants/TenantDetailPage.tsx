@@ -1,5 +1,6 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
+import { ActionSuccessDialog } from "../../components/ActionSuccessDialog";
 import { ApiErrorPanel } from "../../components/ApiErrorPanel";
 import type { UpdateTenantInput } from "../../types/tenants";
 import { OperationalStatusBadge } from "./TenantsAdminPage";
@@ -100,7 +101,7 @@ export function TenantDetailPage() {
     revokeMutation.reset();
     try {
       await revokeMutation.mutateAsync(actorId);
-      setSuccessMessage("Tenant administrator assignment revoked.");
+      setSuccessMessage("Tenant Administrator assignment was revoked.");
     } catch {
       // Mutation error is rendered by ApiErrorPanel.
     }
@@ -110,6 +111,12 @@ export function TenantDetailPage() {
 
   return (
     <main className="min-h-screen bg-gray-50">
+      {successMessage && (
+        <ActionSuccessDialog
+          message={successMessage}
+          onDismiss={() => setSuccessMessage("")}
+        />
+      )}
       <header className="sticky top-0 z-10 border-b bg-white/95 px-4 py-4 backdrop-blur">
         <div className="mx-auto max-w-5xl">
           <Link className="text-sm font-semibold text-gray-600 underline" to="/admin/tenants">
@@ -128,11 +135,6 @@ export function TenantDetailPage() {
       </header>
 
       <section className="mx-auto max-w-5xl space-y-4 p-4">
-        {successMessage && (
-          <div role="status" className="rounded-2xl border border-green-200 bg-green-50 p-4 text-sm font-medium text-green-800">
-            {successMessage}
-          </div>
-        )}
         <ApiErrorPanel error={tenantQuery.error ?? candidatesQuery.error ?? actionError} />
         {tenantQuery.isLoading && <p className="text-sm text-gray-500">Loading tenant...</p>}
 

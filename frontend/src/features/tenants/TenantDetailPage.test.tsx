@@ -79,8 +79,10 @@ describe("TenantDetailPage", () => {
     expect(container.querySelector("header")?.textContent).toContain("Tenant Code: NORTH");
     await changeSelect("Select an eligible active actor", candidate.actorId);
     await click("Assign Admin");
-    await waitForText("North Admin assigned as tenant administrator.");
+    await waitForDialogMessage("North Admin assigned as tenant administrator.");
     expect(calls.find((call) => call.url.endsWith("/admins") && call.method === "POST")?.body).toEqual({ actorId: candidate.actorId });
+    await click("Continue");
+    expect(container.querySelector('[role="alertdialog"]')).toBeNull();
 
     await waitForText("Tenant access verification");
     expect(container.textContent).toContain("Tenant IDnorth");
@@ -97,8 +99,49 @@ describe("TenantDetailPage", () => {
     expect(verificationCommand?.textContent).not.toContain('X-Tenant-ID: NORTH');
 
     await click("Deactivate Tenant");
-    await waitForText("North Site deactivated.");
+    await waitForDialogMessage("North Site deactivated.");
     expect(calls.some((call) => call.url.endsWith("/active") && call.method === "PATCH")).toBe(true);
+    await click("Continue");
+  });
+
+  it("confirms Tenant Administrator revocation in a modal dialog", async () => {
+    let assigned = true;
+    mockFetch(async (url, init) => {
+      calls.push({ url, method: init?.method ?? "GET", body: parseBody(init?.body) });
+      if (url === "/api/v1/tenants/north" && !init?.method) {
+        return json({
+          data: {
+            ...tenant,
+            operationalStatus: assigned ? "ACTIVE_READY" : "ACTIVE_NO_TENANT_ADMIN",
+            tenantAdminCount: assigned ? 1 : 0,
+            tenantAdminAssignmentCount: assigned ? 1 : 0,
+          },
+        });
+      }
+      if (url === "/api/v1/tenants/north/admin-candidates" && !init?.method) {
+        return json({ data: [{ ...candidate, assigned }] });
+      }
+      if (url === `/api/v1/tenants/north/admins/${candidate.actorId}` && init?.method === "DELETE") {
+        assigned = false;
+        return json({
+          data: {
+            ...tenant,
+            operationalStatus: "ACTIVE_NO_TENANT_ADMIN",
+            tenantAdminCount: 0,
+            tenantAdminAssignmentCount: 0,
+          },
+        });
+      }
+      throw new Error(`Unhandled request: ${url}`);
+    });
+
+    renderPage();
+    await waitForText("North Admin");
+    await click("Revoke");
+    await waitForDialogMessage("Tenant Administrator assignment was revoked.");
+    expect(calls.some((call) => call.url.endsWith(`/admins/${candidate.actorId}`) && call.method === "DELETE")).toBe(true);
+    await click("Continue");
+    expect(container.querySelector('[role="alertdialog"]')).toBeNull();
   });
   it("enforces two Tenant Administrator slots and explains Person cross-Tenant ineligibility", async () => {
     const fullTenant = {
@@ -256,6 +299,19 @@ async function click(text: string) {
   const button = [...container.querySelectorAll("button")].find((node) => node.textContent?.includes(text));
   if (!button) throw new Error(`Button ${text} not found`);
   await act(async () => button.click());
+}
+
+async function waitForDialogMessage(message: string) {
+  const timeout = Date.now() + 1500;
+  while (Date.now() < timeout) {
+    const dialog = container.querySelector('[role="alertdialog"]');
+    if (dialog?.textContent?.includes("Action completed") && dialog.textContent.includes(message)) {
+      expect(dialog.getAttribute("aria-modal")).toBe("true");
+      return;
+    }
+    await act(async () => new Promise((resolve) => setTimeout(resolve, 10)));
+  }
+  throw new Error(`Timed out waiting for success dialog message: ${message}`);
 }
 
 async function waitForText(text: string) {
