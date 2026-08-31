@@ -199,11 +199,8 @@ export function AuthzAdminPage() {
       <header className="sticky top-0 z-10 border-b bg-white/95 px-4 py-4 backdrop-blur">
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-3">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
-              Administration
-            </p>
-            <PageTitle>Authorization</PageTitle>
-            <p className="text-sm text-gray-500">
+            <PageTitle>Application Authorization</PageTitle>
+            <p className="mt-1 text-sm text-gray-500">
               Manage authorization actors, role grants, and available permissions.
             </p>
           </div>

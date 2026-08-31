@@ -197,6 +197,19 @@ describe("AuthzAdminPage", () => {
     await waitForText("Bootstrap Admin");
     await waitForText("Authenticated actor verified");
 
+    const pageHeading = container.querySelector("header h1");
+    expect(pageHeading?.textContent).toBe("Application Authorization");
+    expect(pageHeading?.className).toContain("text-3xl");
+    const contextHeading = Array.from(container.querySelectorAll("h2")).find(
+      (heading) => heading.textContent === "Authenticated authorization context",
+    );
+    expect(contextHeading?.className).toContain("text-lg");
+    expect(
+      Array.from(container.querySelectorAll("header p")).some(
+        (paragraph) => paragraph.textContent?.trim() === "Administration",
+      ),
+    ).toBe(false);
+
     expect(fetchCalls.some((call) => call.url === "/api/v1/authz/current-actor")).toBe(true);
     expect(fetchCalls.some((call) => call.url === "/api/v1/authz/roles")).toBe(true);
     expect(textNode("PERSON")).toBeDefined();

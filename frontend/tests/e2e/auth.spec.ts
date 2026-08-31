@@ -27,7 +27,7 @@ test("admin can create an authorization actor, grant a role, and revoke it", asy
   await page.goto("/admin/authorization");
 
   await expect(
-    page.getByRole("heading", { name: "Authorization", exact: true }),
+    page.getByRole("heading", { name: "Application Authorization", exact: true }),
   ).toBeVisible();
   await expect(
     page.getByRole("heading", { name: "Authenticated authorization context" }),
