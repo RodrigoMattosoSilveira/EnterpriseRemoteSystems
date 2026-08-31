@@ -88,6 +88,7 @@ help:
 	@echo "  make server-up ENV=development|test|production"
 	@echo "  make server-down ENV=development|test|production"
 	@echo "  make server-ps ENV=development|test|production"
+	@echo "  make server-diagnostics ENV=development|test|production"
 	@echo "  make server-logs ENV=development|test|production"
 	@echo "  make server-backend-logs ENV=development|test|production"
 	@echo "  make server-frontend-logs ENV=development|test|production"
@@ -357,6 +358,25 @@ server-down-volumes:
 .PHONY: server-ps
 server-ps:
 	cd $(ENV_DIR) && $(SERVER_COMPOSE) ps -a
+
+.PHONY: server-diagnostics
+server-diagnostics:
+	@echo "Server diagnostics for $(ENV) ($(COMPOSE_PROJECT))"
+	@cd $(ENV_DIR) && $(SERVER_COMPOSE) ps -a || true
+	@container="$(CONTAINER_PREFIX)-backend"; \
+	if docker ps -a --format '{{.Names}}' | grep -qx "$$container"; then \
+		echo; \
+		echo "----- $$container state -----"; \
+		docker inspect "$$container" --format 'status={{.State.Status}} exit_code={{.State.ExitCode}} error={{.State.Error}}{{if .State.Health}} health={{.State.Health.Status}}{{end}}' || true; \
+		echo; \
+		echo "----- $$container healthcheck history -----"; \
+		docker inspect "$$container" --format '{{if .State.Health}}{{range .State.Health.Log}}{{.Start}} exit={{.ExitCode}} {{printf "%s" .Output}}{{println}}{{end}}{{else}}no healthcheck state recorded{{end}}' || true; \
+		echo; \
+		echo "----- $$container logs (last 200 lines) -----"; \
+		docker logs --tail=200 "$$container" 2>&1 || true; \
+	else \
+		echo "Backend container $$container does not exist."; \
+	fi
 
 .PHONY: server-logs
 server-logs:
