@@ -51,6 +51,18 @@ Bite 30H enforces the invariant at three layers:
 
 Upgrade migration does not choose a winner when legacy data already violates a cardinality rule. It fails explicitly so administrators can reconcile the conflicting grants deliberately.
 
+## Offline upgrade reconciliation
+
+The `000062_tenant_administrator_cardinality` migration deliberately stops when an existing environment violates the new cardinality rules. Because the API cannot start while that migration is blocked, ERS provides an explicit offline reconciliation path for server environments.
+
+1. Stop the application stack without deleting volumes: `make server-down ENV=<environment>`.
+2. Run `make server-bite30h-admin-report ENV=<environment>` to list every active `TENANT_ADMIN` Role Grant and the exact preflight violations.
+3. Select the Role Grant IDs whose Tenant Administrator authority must be removed. ERS never chooses these grants automatically.
+4. Run `make server-bite30h-admin-revoke ENV=<environment> GRANT_IDS='grant-id-1 grant-id-2'`. The command creates a timestamped SQLite backup before mutation, deactivates only the explicitly named active `TENANT_ADMIN` Role Grants, appends an immutable authorization audit event for each revocation, and prints the cardinality report again.
+5. Redeploy. Migration `000062` remains the final authority and will continue to fail if any violation remains.
+
+Actor deactivation is not an offline reconciliation mechanism and does not release a Tenant Administrator assignment slot. The Role Grant itself must be explicitly revoked.
+
 ## Out of scope
 
 The previously planned removal of Application Administrator standing Tenant-data compatibility and Tenant Support Access Lease is **not** implemented by this Bite 30H. That control-plane cutover remains deferred to a dedicated later bite.

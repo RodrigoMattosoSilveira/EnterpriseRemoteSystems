@@ -89,6 +89,8 @@ help:
 	@echo "  make server-down ENV=development|test|production"
 	@echo "  make server-ps ENV=development|test|production"
 	@echo "  make server-diagnostics ENV=development|test|production"
+	@echo "  make server-bite30h-admin-report ENV=development|test|production"
+	@echo "  make server-bite30h-admin-revoke ENV=development|test|production GRANT_IDS='grant-id ...'"
 	@echo "  make server-logs ENV=development|test|production"
 	@echo "  make server-backend-logs ENV=development|test|production"
 	@echo "  make server-frontend-logs ENV=development|test|production"
@@ -377,6 +379,15 @@ server-diagnostics:
 	else \
 		echo "Backend container $$container does not exist."; \
 	fi
+
+.PHONY: server-bite30h-admin-report
+server-bite30h-admin-report:
+	cd $(ENV_DIR) && COMPOSE_PROJECT="$(COMPOSE_PROJECT)" ENV_FILE="$(ENV_FILE)" ENV_NAME="$(ENV)" ./scripts/bite30h-tenant-admin-reconcile.sh report
+
+.PHONY: server-bite30h-admin-revoke
+server-bite30h-admin-revoke:
+	@test -n "$(strip $(GRANT_IDS))" || (echo "GRANT_IDS is required; run server-bite30h-admin-report first and explicitly select Role Grant IDs." && exit 2)
+	cd $(ENV_DIR) && COMPOSE_PROJECT="$(COMPOSE_PROJECT)" ENV_FILE="$(ENV_FILE)" ENV_NAME="$(ENV)" RECONCILIATION_OPERATOR="$${USER:-offline-operator}" ./scripts/bite30h-tenant-admin-reconcile.sh revoke $(GRANT_IDS)
 
 .PHONY: server-logs
 server-logs:
