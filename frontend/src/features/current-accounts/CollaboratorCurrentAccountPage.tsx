@@ -10,6 +10,7 @@ import type {
 import { CurrentAndFutureEarningsModal } from "../expenses/CurrentAndFutureEarningsModal";
 import { receiptStatusLabel, receiptStatusTone } from "../receipts/receiptLifecycle";
 import { useCollaboratorCurrentAccount } from "./useCurrentAccount";
+import { PageContextHeading, PageTitle } from "../../components/layout/PageHeading";
 
 type LedgerFilterOption = {
   value: string;
@@ -97,12 +98,12 @@ export function CollaboratorCurrentAccountPage() {
           </Link>
           <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div>
-              <h1 className="text-3xl font-bold text-gray-950">
+              <PageTitle>
                 Person Current Account
-              </h1>
-              <h2 className="mt-1 text-lg font-semibold text-gray-800">
+              </PageTitle>
+              <PageContextHeading>
                 {data?.personLabel || data?.collaboratorLabel || "Current Account"}
-              </h2>
+              </PageContextHeading>
               <p className="mt-1 text-sm text-gray-600">
                 <span className="font-semibold">Journey Code:</span>{" "}
                 <span className="break-all font-mono">

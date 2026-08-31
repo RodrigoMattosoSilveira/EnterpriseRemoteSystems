@@ -4,6 +4,7 @@ import { ApiError } from "../../api/client";
 import { ApiErrorPanel } from "../../components/ApiErrorPanel";
 import type { CreateTenantInput, Tenant, TenantOperationalStatus } from "../../types/tenants";
 import { useCreateTenant, useTenants } from "./useTenants";
+import { PageTitle } from "../../components/layout/PageHeading";
 
 const emptyForm: CreateTenantInput = {
   code: "",
@@ -51,7 +52,7 @@ export function TenantsAdminPage() {
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-3">
           <div>
             <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Administration</p>
-            <h1 className="text-xl font-bold text-gray-950">Tenants</h1>
+            <PageTitle>Tenants</PageTitle>
             <p className="text-sm text-gray-500">
               Create tenant boundaries, monitor operational readiness, and assign tenant administrators.
             </p>

@@ -14,6 +14,7 @@ import {
   useGoldPrices,
   useLatestGoldPrice,
 } from "./useGoldPrices";
+import { PageTitle } from "../../components/layout/PageHeading";
 
 
 export function GoldPricesPage() {
@@ -88,7 +89,7 @@ export function GoldPricesPage() {
             <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
               Administration
             </p>
-            <h1 className="text-xl font-bold text-gray-950">Gold Prices</h1>
+            <PageTitle>Gold Prices</PageTitle>
             <p className="text-sm text-gray-500">
               Record the tenant gold-price source used when BRL price-list expenses are converted to grams of gold.
             </p>

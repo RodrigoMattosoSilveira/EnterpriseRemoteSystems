@@ -14,6 +14,7 @@ import {
   useSetTenantActorActive,
   useTenantRoleActors,
 } from "./useAuthzAdmin";
+import { PageTitle } from "../../components/layout/PageHeading";
 
 const roles: Array<{ code: TenantOperatorRoleCode; label: string }> = [
   { code: "EARNINGS_OPERATOR", label: "Earnings Operator" },
@@ -99,7 +100,7 @@ export function TenantRoleDelegationPage() {
       <header className="border-b bg-white px-4 py-4">
         <div className="mx-auto max-w-5xl">
           <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Administration</p>
-          <h1 className="text-xl font-bold text-gray-950">Tenant Authorization</h1>
+          <PageTitle>Tenant Authorization</PageTitle>
           <p className="text-sm text-gray-600">
             Activate or deactivate this tenant&apos;s Account-bound Actors and grant or remove Earnings Operator and Expenses Operator authority.
           </p>

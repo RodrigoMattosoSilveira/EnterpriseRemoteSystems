@@ -140,11 +140,15 @@ func (s *service) ListTenantAdminCandidates(ctx context.Context, tenantID string
 	result := make([]TenantAdminCandidateDTO, 0, len(rows))
 	for _, row := range rows {
 		result = append(result, TenantAdminCandidateDTO{
-			ActorID:     row.ActorID,
-			ActorKey:    row.ActorKey,
-			DisplayName: row.DisplayName,
-			Active:      row.Active,
-			Assigned:    row.Assigned,
+			ActorID:             row.ActorID,
+			ActorKey:            row.ActorKey,
+			DisplayName:         row.DisplayName,
+			GlobalPersonID:      row.GlobalPersonID,
+			Active:              row.Active,
+			Assigned:            row.Assigned,
+			Eligible:            row.Eligible,
+			IneligibilityReason: row.IneligibilityReason,
+			TenantAdminTenantID: row.TenantAdminTenantID,
 		})
 	}
 	return result, nil
@@ -222,15 +226,16 @@ func mapTenant(row TenantRecord) TenantDTO {
 		status = OperationalStatusActiveNoAdmin
 	}
 	return TenantDTO{
-		ID:                row.Tenant.ID,
-		Code:              row.Tenant.Code,
-		Name:              row.Tenant.Name,
-		Description:       row.Tenant.Description,
-		Active:            row.Tenant.Active,
-		OperationalStatus: status,
-		TenantAdminCount:  row.TenantAdminCount,
-		CreatedAt:         row.Tenant.CreatedAt,
-		UpdatedAt:         row.Tenant.UpdatedAt,
+		ID:                         row.Tenant.ID,
+		Code:                       row.Tenant.Code,
+		Name:                       row.Tenant.Name,
+		Description:                row.Tenant.Description,
+		Active:                     row.Tenant.Active,
+		OperationalStatus:          status,
+		TenantAdminCount:           row.TenantAdminCount,
+		TenantAdminAssignmentCount: row.TenantAdminAssignmentCount,
+		CreatedAt:                  row.Tenant.CreatedAt,
+		UpdatedAt:                  row.Tenant.UpdatedAt,
 	}
 }
 

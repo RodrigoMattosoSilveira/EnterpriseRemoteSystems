@@ -8,6 +8,7 @@ import {
 } from "../../api/tenantSelection";
 import type { AuthzAuditLog, AuthzAuditLogFilters } from "../../types/authz";
 import { useAuthzAuditLogs } from "./useAuthzAdmin";
+import { PageTitle } from "../../components/layout/PageHeading";
 
 const defaultFilters: Required<Pick<AuthzAuditLogFilters, "operation" | "decision" | "actorId" | "targetType" | "targetId">> & { limit: number } = {
   operation: "",
@@ -70,7 +71,7 @@ export function AuditLogViewerPage() {
             <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
               Administration
             </p>
-            <h1 className="text-xl font-bold text-gray-950">Audit Log Viewer</h1>
+            <PageTitle>Audit Log Viewer</PageTitle>
             <p className="text-sm text-gray-500">
               Review append-only authorization audit events for sensitive current-account, receipt, and authorization workflows.
             </p>

@@ -12,7 +12,7 @@ func RegisterPeopleRoutes(v1 fiber.Router, deps Dependencies) {
 	// The new Bite 30B global-directory and Membership paths are deliberately
 	// Tenant Administrator-only. The legacy POST /people permission guard remains
 	// temporarily for Bite 28 compatibility until the Application Administrator
-	// control-plane cutover in Bite 30H removes its standing tenant permissions.
+	// dedicated global control-plane cutover removes its standing tenant permissions.
 	r.Get("/global", requireTenantAdministrator(deps), deps.PeopleHandler.SearchGlobal)
 	r.Post("/memberships", requireTenantAdministrator(deps), deps.PeopleHandler.CreateMembership)
 	if deps.AuthenticationHandler != nil {

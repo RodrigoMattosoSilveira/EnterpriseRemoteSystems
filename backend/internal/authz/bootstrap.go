@@ -113,6 +113,10 @@ func EnsureBootstrapActor(ctx context.Context, database *gorm.DB, cfg BootstrapC
 		if err := tx.Where("code = ? AND active = ?", string(cfg.RoleCode), true).First(&role).Error; err != nil {
 			return fmt.Errorf("find bootstrap authorization role %s: %w", cfg.RoleCode, err)
 		}
+		requireTenantBinding := role.ScopeType == string(ActorScopeTenant)
+		if err := ValidateDelegatedRoleGrant(tx, actor.ID, role, cfg.TenantID, requireTenantBinding); err != nil {
+			return fmt.Errorf("validate bootstrap authorization role grant: %w", err)
+		}
 
 		var grant AuthzActorRoleGrant
 		if err := tx.Where("actor_id = ? AND role_id = ? AND tenant_id = ?", actor.ID, role.ID, cfg.TenantID).First(&grant).Error; err != nil {

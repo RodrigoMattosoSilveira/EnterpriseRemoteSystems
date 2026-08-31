@@ -2,6 +2,7 @@ import { createBrowserRouter, Link, Navigate, useRouteError, type RouteObject } 
 import { RequireAuth } from "../components/guards/RequireAuth";
 import { RequirePermission } from "../components/guards/RequireRole";
 import { AppShell } from "../components/layout/AppShell";
+import { PageTitle } from "../components/layout/PageHeading";
 import { useAuthorizationContext } from "../components/layout/AuthorizationContext";
 import { defaultAuthorizedRoute } from "../components/layout/navigation";
 import LoginPage from "../features/auth/LoginPage";
@@ -22,7 +23,7 @@ function PermissionAwareHome() {
 }
 export function ForbiddenPage() { return <StatusPage title="Access forbidden" message="Your current role does not permit this operation in the selected tenant." />; }
 function StatusPage({ title, message }: { title: string; message: string }) {
-  return <main className="p-6"><section className="mx-auto max-w-xl rounded-2xl border bg-white p-6"><h1 className="text-2xl font-bold">{title}</h1><p className="mt-2 text-slate-600">{message}</p><Link className="mt-4 inline-block underline" to="/">Return to ERS</Link></section></main>;
+  return <main className="p-6"><section className="mx-auto max-w-xl rounded-2xl border bg-white p-6"><PageTitle>{title}</PageTitle><p className="mt-2 text-slate-600">{message}</p><Link className="mt-4 inline-block underline" to="/">Return to ERS</Link></section></main>;
 }
 
 const protectedChildren: RouteObject[] = [

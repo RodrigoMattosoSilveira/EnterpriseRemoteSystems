@@ -9,6 +9,7 @@ import {
   useCollaboratorSearch,
   useSelfCollaboratorJourneys,
 } from "./useCollaborators";
+import { PageTitle } from "../../components/layout/PageHeading";
 
 export function CollaboratorsListPage() {
   const location = useLocation();
@@ -88,9 +89,9 @@ export function CollaboratorsListPage() {
             <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
               Operations
             </p>
-            <h1 className="text-xl font-bold text-gray-950">
+            <PageTitle>
               {selfMode ? "My Collaborator Journeys" : "Collaborators"}
-            </h1>
+            </PageTitle>
             <p className="text-sm text-gray-500">
               {selfMode
                 ? "Current and closed Journeys for your Membership in this Tenant."

@@ -7,6 +7,7 @@ import { useAuthorizationContext } from "../../components/layout/AuthorizationCo
 import { useReferenceDataByType } from "../reference-data/useReferenceData";
 import { PersonAuthenticationSection } from "./PersonAuthenticationSection";
 import { useCollaboratorCandidates } from "../collaborators/useCollaborators";
+import { PageContextHeading, PageTitle } from "../../components/layout/PageHeading";
 
 const FALLBACK_ACTIVE_STATUS_ID = "ref-person-status-active";
 
@@ -79,10 +80,11 @@ export function PersonDetailPage() {
 
           <div className="mt-3 flex items-start justify-between gap-3">
             <div>
-              <h1 className="text-2xl font-bold text-gray-950">
+              <PageTitle>Person</PageTitle>
+              <PageContextHeading>
                 {personQuery.data.firstName} {personQuery.data.lastName}
-              </h1>
-              <p className="text-sm text-gray-500">
+              </PageContextHeading>
+              <p className="mt-1 text-sm text-gray-500">
                 {personQuery.data.nickname}
               </p>
             </div>

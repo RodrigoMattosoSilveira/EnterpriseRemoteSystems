@@ -19,6 +19,7 @@ import {
   useCollaborators,
   useCreateCollaborator,
 } from "./useCollaborators";
+import { PageTitle } from "../../components/layout/PageHeading";
 
 type FormState = {
   personId: string;
@@ -307,9 +308,9 @@ export function CreateCollaboratorPage() {
           <Link className="text-sm text-gray-500 underline" to={returnHref}>
             {requestedPersonId ? "Back to Person" : "Back to Collaborators"}
           </Link>
-          <h1 className="mt-3 text-2xl font-bold text-gray-950">
+          <PageTitle className="mt-3">
             New Collaborator
-          </h1>
+          </PageTitle>
           <p className="text-sm text-gray-500">
             Create a Collaborator Journey from an active Person–Tenant Membership.
           </p>

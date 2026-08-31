@@ -9,6 +9,7 @@
   const IDS = Object.freeze({
     password: "Manual-30C-Password!",
     operatorLogin: "manual30g.operator@example.test",
+    tenantBAdminLogin: "manual30g.tenant-b-admin@example.test",
     identityALogin: "manual30g.identity-a@example.test",
     identityBLogin: "manual30g.identity-b@example.test",
     identityCLogin: "manual30g.identity-c@example.test",
@@ -53,7 +54,8 @@
     H: { label: "Identity H", login: IDS.identityHLogin },
     R: { label: "Identity R", login: IDS.identityRLogin },
     EARNINGS: { label: "Earnings Operator", login: IDS.earningsOperatorLogin },
-    OPERATOR: { label: "Operator D", login: IDS.operatorLogin },
+    OPERATOR: { label: "Operator D · Tenant A Administrator", login: IDS.operatorLogin },
+    TENANT_B_ADMIN: { label: "Operator E · Tenant B Administrator", login: IDS.tenantBAdminLogin },
   });
 
   function resolveIdentity(identity) {

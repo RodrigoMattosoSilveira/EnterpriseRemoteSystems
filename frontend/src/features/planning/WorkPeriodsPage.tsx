@@ -5,6 +5,7 @@ import { useAuthorizationContext } from "../../components/layout/AuthorizationCo
 import type { CreateWorkPeriodInput } from "../../types/planning";
 import { humanizePlanningCode, WORK_PERIOD_STATUSES } from "./planningSchemas";
 import { useCreateWorkPeriod, useWorkPeriods } from "./usePlanning";
+import { PageTitle } from "../../components/layout/PageHeading";
 
 function today() { return new Date().toISOString().slice(0, 10); }
 
@@ -58,7 +59,7 @@ export function WorkPeriodsPage() {
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-3">
           <div>
             <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Planning</p>
-            <h1 className="text-2xl font-bold text-gray-950">Work Periods</h1>
+            <PageTitle>Work Periods</PageTitle>
             <p className="text-sm text-gray-500">Plan shift assignments, inform collaborators, and record actual outcomes.</p>
           </div>
           <div className="flex gap-2">

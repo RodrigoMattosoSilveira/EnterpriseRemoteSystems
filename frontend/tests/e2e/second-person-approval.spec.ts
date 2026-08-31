@@ -260,10 +260,10 @@ async function createTenantAuthorizedSecondApprover(
   input: { actorKey: string; displayName: string },
 ): Promise<AuthzActor> {
   // Bite 30D's tenant actor directory intentionally exposes only Actors with
-  // active tenant-scoped delegated authority. Provision the second approver as
-  // a real tenant identity (Person/Membership -> Actor -> Account -> Role Grant)
-  // instead of relying on the pre-30D behavior where a bare Actor appeared in
-  // the application-global authorization catalog.
+  // active tenant-scoped delegated authority. A second approver needs to be a
+  // distinct authorized tenant Actor, not a Tenant Administrator. Provision an
+  // Earnings Operator so this fixture does not consume one of Bite 30H's two
+  // scarce TENANT_ADMIN slots.
   const identitySuffix = uniqueSuffix();
   const person = await createCompletePerson(api, {
     suffix: identitySuffix,
@@ -310,12 +310,12 @@ async function createTenantAuthorizedSecondApprover(
     e2eApiUrl(`/api/v1/authz/actors/${encodeURIComponent(actor.id)}/role-grants`),
     {
       headers: authzHeaders(),
-      data: { roleCode: "TENANT_ADMIN", tenantId: "default" },
+      data: { roleCode: "EARNINGS_OPERATOR", tenantId: "default" },
     },
   );
   if (grantResponse.status() !== 201) {
     throw new Error(
-      `Grant second-approver tenant role failed at ${grantResponse.url()}: ${grantResponse.status()} ${await grantResponse.text()}`,
+      `Grant second-approver Earnings Operator role failed at ${grantResponse.url()}: ${grantResponse.status()} ${await grantResponse.text()}`,
     );
   }
 
