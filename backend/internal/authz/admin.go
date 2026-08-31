@@ -48,6 +48,7 @@ type ActorResponse struct {
 	ActorKey       string                `json:"actorKey"`
 	DisplayName    string                `json:"displayName"`
 	PersonID       string                `json:"personId,omitempty"`
+	GlobalPersonID string                `json:"globalPersonId,omitempty"`
 	CollaboratorID string                `json:"collaboratorId,omitempty"`
 	Active         bool                  `json:"active"`
 	RoleGrants     []ActorGrantResponse  `json:"roleGrants,omitempty"`
@@ -65,6 +66,7 @@ type ActorResponse struct {
 // Administration manually.
 type ActorBindingResponse struct {
 	AccountID            string `json:"accountId"`
+	GlobalPersonID       string `json:"globalPersonId,omitempty"`
 	AccountLogin         string `json:"accountLogin,omitempty"`
 	ScopeType            string `json:"scopeType"`
 	TenantID             string `json:"tenantId,omitempty"`
@@ -287,6 +289,7 @@ func (s *GORMStore) ListActors(ctx context.Context) ([]ActorResponse, error) {
 		if binding, ok := bindings[actor.ID]; ok {
 			bindingCopy := binding
 			response.Binding = &bindingCopy
+			response.GlobalPersonID = binding.GlobalPersonID
 		}
 		responses = append(responses, response)
 	}
@@ -350,23 +353,25 @@ func (s *GORMStore) actorBindingsForAdministration(ctx context.Context) (map[str
 	}
 
 	type membershipFact struct {
-		TenantID string
-		Active   bool
+		TenantID       string
+		GlobalPersonID string
+		Active         bool
 	}
 	membershipFacts := map[string]membershipFact{}
 	if len(membershipIDs) > 0 &&
 		s.database.Migrator().HasTable("person_tenant_memberships") &&
 		s.database.Migrator().HasTable("reference_data") {
 		type membershipProjection struct {
-			ID           string
-			TenantID     string
-			StatusCode   string
-			StatusActive bool
+			ID             string
+			TenantID       string
+			GlobalPersonID string
+			StatusCode     string
+			StatusActive   bool
 		}
 		var membershipRows []membershipProjection
 		if err := s.database.WithContext(ctx).
 			Table("person_tenant_memberships m").
-			Select("m.id AS id, m.tenant_id AS tenant_id, membership_status.code AS status_code, membership_status.active AS status_active").
+			Select("m.id AS id, m.tenant_id AS tenant_id, m.person_id AS global_person_id, membership_status.code AS status_code, membership_status.active AS status_active").
 			Joins("LEFT JOIN reference_data membership_status ON membership_status.id = m.status_id AND membership_status.tenant_id = m.tenant_id AND membership_status.type = ?", "person_status").
 			Where("m.id IN ?", membershipIDs).
 			Scan(&membershipRows).Error; err != nil {
@@ -374,8 +379,9 @@ func (s *GORMStore) actorBindingsForAdministration(ctx context.Context) (map[str
 		}
 		for _, row := range membershipRows {
 			membershipFacts[strings.TrimSpace(row.ID)] = membershipFact{
-				TenantID: strings.TrimSpace(row.TenantID),
-				Active:   strings.EqualFold(strings.TrimSpace(row.StatusCode), "ACTIVE") && row.StatusActive,
+				TenantID:       strings.TrimSpace(row.TenantID),
+				GlobalPersonID: strings.TrimSpace(row.GlobalPersonID),
+				Active:         strings.EqualFold(strings.TrimSpace(row.StatusCode), "ACTIVE") && row.StatusActive,
 			}
 		}
 	}
@@ -392,6 +398,7 @@ func (s *GORMStore) actorBindingsForAdministration(ctx context.Context) (map[str
 		if row.MembershipID != nil {
 			binding.MembershipID = strings.TrimSpace(*row.MembershipID)
 			if fact, ok := membershipFacts[binding.MembershipID]; ok {
+				binding.GlobalPersonID = fact.GlobalPersonID
 				binding.MembershipTenantID = fact.TenantID
 				binding.MembershipActive = fact.Active
 				binding.MembershipSameTenant =
@@ -419,6 +426,7 @@ func (s *GORMStore) tenantActorBindingsForAdministration(ctx context.Context, te
 	type row struct {
 		ActorID                string
 		AccountID              string
+		GlobalPersonID         string
 		AccountLogin           string
 		ScopeType              string
 		TenantID               string
@@ -436,6 +444,7 @@ func (s *GORMStore) tenantActorBindingsForAdministration(ctx context.Context, te
 			aa.scope_type AS scope_type,
 			COALESCE(aa.tenant_id, '') AS tenant_id,
 			COALESCE(aa.membership_id, '') AS membership_id,
+			COALESCE(m.person_id, '') AS global_person_id,
 			COALESCE(m.tenant_id, '') AS membership_tenant,
 			COALESCE(status.code, '') AS membership_code,
 			COALESCE(status.active, 0) AS membership_status_active`).
@@ -449,6 +458,7 @@ func (s *GORMStore) tenantActorBindingsForAdministration(ctx context.Context, te
 	for _, candidate := range rows {
 		binding := ActorBindingResponse{
 			AccountID:          strings.TrimSpace(candidate.AccountID),
+			GlobalPersonID:     strings.TrimSpace(candidate.GlobalPersonID),
 			AccountLogin:       strings.TrimSpace(candidate.AccountLogin),
 			ScopeType:          strings.TrimSpace(candidate.ScopeType),
 			TenantID:           strings.TrimSpace(candidate.TenantID),
@@ -541,6 +551,7 @@ func (s *GORMStore) ListTenantRoleActors(ctx context.Context, tenantID string) (
 		if binding, ok := bindings[actor.ID]; ok {
 			bindingCopy := binding
 			response.Binding = &bindingCopy
+			response.GlobalPersonID = binding.GlobalPersonID
 		}
 		responses = append(responses, response)
 	}

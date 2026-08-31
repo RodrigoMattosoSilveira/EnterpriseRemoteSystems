@@ -123,7 +123,8 @@ func TestTenantAdminCanReactivateInactiveActorInOwnTenant(t *testing.T) {
 	database := newAuthzTestDB(t)
 	installTenantRoleDelegationFixtureTables(t, database)
 
-	managerID := createAuthzActor(t, database, "tenant-manager@example.com", nil, nil)
+	managerPersonID := "person-tenant-manager"
+	managerID := createAuthzActor(t, database, "tenant-manager@example.com", &managerPersonID, nil)
 	bindActiveTenantMemberActor(t, database, managerID, "tenant-a")
 	grantAuthzRole(t, database, managerID, RoleTenantAdmin, "tenant-a")
 

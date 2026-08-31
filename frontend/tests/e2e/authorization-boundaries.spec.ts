@@ -46,6 +46,7 @@ type AuthzCurrentActor = {
 type ProvisionedAuthzActor = AuthzActor & {
   login: string;
   temporaryPassword: string;
+  roleGrantId: string;
 };
 
 type AuthAccount = {
@@ -198,8 +199,9 @@ test.describe("authorization role boundaries", () => {
     request: adminApi,
   }) => {
     let actorApi: APIRequestContext | undefined;
+    let actor: ProvisionedAuthzActor | undefined;
     try {
-      const actor = await createActorWithRole(adminApi, "tenant-admin", "TENANT_ADMIN");
+      actor = await createActorWithRole(adminApi, "tenant-admin", "TENANT_ADMIN");
       actorApi = await createActorAccountAndLogin(adminApi, actor);
       const currentActor = await getCurrentActor(actorApi, tenantHeaders());
 
@@ -225,6 +227,10 @@ test.describe("authorization role boundaries", () => {
       expect(currentActor.permissions).toContain("journey.settlements.close");
     } finally {
       await actorApi?.dispose();
+      if (actor) {
+        await revokeRoleGrant(adminApi, actor.id, actor.roleGrantId);
+        await setActorActive(adminApi, actor.id, false);
+      }
     }
   });
 
@@ -329,7 +335,10 @@ test.describe("authorization role boundaries", () => {
     } finally {
       await tenantAdminApi?.dispose();
       await targetApi?.dispose();
-      if (tenantAdmin) await setActorActive(adminApi, tenantAdmin.id, false);
+      if (tenantAdmin) {
+        await revokeRoleGrant(adminApi, tenantAdmin.id, tenantAdmin.roleGrantId);
+        await setActorActive(adminApi, tenantAdmin.id, false);
+      }
       if (target) await setActorActive(adminApi, target.id, false);
     }
   });
@@ -578,7 +587,12 @@ async function createActorWithRole(
     throw new Error(`Authentication account ${login} did not include a default-tenant Actor`);
   }
 
-  await grantRole(api, accountActor.actorId, roleCode, DEFAULT_TENANT_ID);
+  const roleGrant = await grantRole(
+    api,
+    accountActor.actorId,
+    roleCode,
+    DEFAULT_TENANT_ID,
+  );
   return {
     id: accountActor.actorId,
     actorKey: accountActor.actorKey,
@@ -586,6 +600,7 @@ async function createActorWithRole(
     active: accountActor.active,
     login,
     temporaryPassword,
+    roleGrantId: roleGrant.id,
   };
 }
 
@@ -613,7 +628,7 @@ async function grantRole(
   actorId: string,
   roleCode: RoleCode,
   tenantId: string,
-): Promise<void> {
+): Promise<AuthzActorRoleGrant> {
   const response = await api.post(
     e2eApiUrl(`/api/v1/authz/actors/${encodeURIComponent(actorId)}/role-grants`),
     {
@@ -622,6 +637,25 @@ async function grantRole(
     },
   );
   await expectStatus(response, 201, `grant ${roleCode} to ${actorId}`);
+  const body = (await response.json()) as ApiEnvelope<AuthzActorRoleGrant>;
+  if (!body.data) {
+    throw new Error(`Grant ${roleCode} response did not include data`);
+  }
+  return body.data;
+}
+
+async function revokeRoleGrant(
+  api: APIRequestContext,
+  actorId: string,
+  grantId: string,
+): Promise<void> {
+  const response = await api.delete(
+    e2eApiUrl(
+      `/api/v1/authz/actors/${encodeURIComponent(actorId)}/role-grants/${encodeURIComponent(grantId)}`,
+    ),
+    { headers: authzHeaders() },
+  );
+  await expectStatus(response, 200, `revoke role grant ${grantId} from ${actorId}`);
 }
 
 async function setActorActive(

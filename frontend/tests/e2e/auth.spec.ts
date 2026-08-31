@@ -27,7 +27,7 @@ test("admin can create an authorization actor, grant a role, and revoke it", asy
   await page.goto("/admin/authorization");
 
   await expect(
-    page.getByRole("heading", { name: "Authorization", exact: true }),
+    page.getByRole("heading", { name: "Application Authorization", exact: true }),
   ).toBeVisible();
   await expect(
     page.getByRole("heading", { name: "Authenticated authorization context" }),
@@ -143,7 +143,7 @@ test("admin can create an authorization actor, grant a role, and revoke it", asy
   await expect(eligibilityFilter).toHaveValue("ALL");
 
   const actorNicknameFilter = page.getByLabel(
-    "Filter actors by person nickname",
+    "Filter actors by Actor Key or person nickname",
   );
   const initialNicknameFilterBox = await actorNicknameFilter.boundingBox();
   expect(initialNicknameFilterBox?.width ?? 0).toBeGreaterThanOrEqual(320);

@@ -14,6 +14,7 @@ import {
   useReferenceDataByType,
   useUpdateReferenceDataItem,
 } from "./useReferenceData";
+import { PageTitle } from "../../components/layout/PageHeading";
 
 const emptyForm: ReferenceDataInput = {
   code: "",
@@ -135,7 +136,7 @@ export function ReferenceDataAdminPage() {
             <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
               Administration
             </p>
-            <h1 className="text-xl font-bold text-gray-950">Reference Data</h1>
+            <PageTitle>Reference Data</PageTitle>
             <p className="text-sm text-gray-500">
               Manage tenant-ready Collaborator and Person dropdown values.
             </p>

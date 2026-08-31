@@ -100,6 +100,12 @@ describe("ExpenseDetailPage correction workflow", () => {
 
     await waitForText("Correct Expense");
     await waitForText("Financial Ownership");
+    const pageHeading = container.querySelector("h1");
+    const categoryHeading = container.querySelector("header h2");
+    expect(pageHeading?.textContent?.trim()).toBe("Expense");
+    expect(pageHeading?.className).toContain("text-3xl");
+    expect(categoryHeading?.textContent?.trim()).toBe("Canteen");
+    expect(categoryHeading?.className).toContain("text-lg");
     expect(container.textContent).toContain("Tenanttenant-a");
     expect(container.textContent).toContain("Person ownerperson-a");
     expect(container.textContent).toContain("Journey provenancejourney-a");

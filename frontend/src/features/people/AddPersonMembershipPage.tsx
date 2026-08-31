@@ -4,6 +4,7 @@ import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { ApiErrorPanel } from "../../components/ApiErrorPanel";
 import { useReferenceDataByType } from "../reference-data/useReferenceData";
 import { useCreatePersonMembership, useGlobalPeopleSearch } from "./usePeople";
+import { PageTitle } from "../../components/layout/PageHeading";
 
 const SEARCH_DEBOUNCE_MS = 300;
 
@@ -45,7 +46,7 @@ export function AddPersonMembershipPage() {
           <Link className="text-sm text-gray-500 underline" to="/people">
             Back to People
           </Link>
-          <h1 className="mt-3 text-2xl font-bold text-gray-950">Add existing Person</h1>
+          <PageTitle className="mt-3">Add existing Person</PageTitle>
           <p className="mt-1 text-sm text-gray-500">
             Search the global Person directory, then create a membership in the selected tenant.
             Other tenant relationships are never shown.

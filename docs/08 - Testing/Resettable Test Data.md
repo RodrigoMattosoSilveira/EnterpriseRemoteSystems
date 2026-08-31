@@ -1,8 +1,8 @@
 # Resettable Test Data
 
-ERS has a resettable test-data mechanism for disposable local, development, and test databases.
+ERS has resettable test-data mechanisms for Local and disposable Development data. Test remains resettable when an operator explicitly prepares a release rehearsal or test dataset, but ordinary Test deployments preserve the existing database and migrate it in place.
 
-Do **not** use it for production. The reset script refuses production by default.
+Do **not** use reset operations for Production. Production data is preserved and migrated in place.
 
 ## Local reset
 
@@ -29,14 +29,14 @@ ENV=development make testdata-server-reset
 
 ## Test server reset
 
-Run this on the server from the deployed repository checkout:
+An explicit Test-data reset remains available for targeted test preparation:
 
 ```bash
 cd /opt/EnterpriseRemoteSystems/test
 ENV=test make testdata-server-reset
 ```
 
-The server reset stops the environment compose stack, removes the backend SQLite volume, starts the stack again, waits for backend health, and loads the selected dataset SQL files into `/app/data/app.db` inside the backend container.
+It is **not** part of ordinary Test deployment. Normal Test deployment preserves the database and migrates it in place. Release migration rehearsals use the separately validated baseline/restore workflow documented in `docs/05 - Deployment/Database Promotion Strategy.md`.
 
 ## Selecting one dataset
 

@@ -114,6 +114,13 @@ describe("PersonDetailPage", () => {
 
     await waitForText("Maria Silva");
 
+    const pageHeading = container.querySelector("h1");
+    const personHeading = container.querySelector("header h2");
+    expect(pageHeading?.textContent?.trim()).toBe("Person");
+    expect(pageHeading?.className).toContain("text-3xl");
+    expect(personHeading?.textContent?.trim()).toBe("Maria Silva");
+    expect(personHeading?.className).toContain("text-lg");
+
     expect(inputByLabel("First Name").value).toBe("Maria");
     expect(inputByLabel("Last Name").value).toBe("Silva");
     expect(inputByLabel("Nickname").value).toBe("Mari");

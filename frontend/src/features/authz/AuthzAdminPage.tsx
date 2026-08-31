@@ -22,6 +22,7 @@ import {
   useRevokeAuthzActorRoleGrant,
   useSetAuthzActorActive,
 } from "./useAuthzAdmin";
+import { PageTitle } from "../../components/layout/PageHeading";
 
 const defaultRequestActor: AuthzAdminRequestActor = {
   actorId: "authenticated-session",
@@ -43,7 +44,7 @@ export function AuthzAdminPage() {
     loadRequestActor(),
   );
   const [actorForm, setActorForm] = useState<CreateAuthzActorInput>(emptyActorForm);
-  const [actorNicknameFilter, setActorNicknameFilter] = useState("");
+  const [actorFilter, setActorFilter] = useState("");
   const [tenantRoleEligibilityFilter, setTenantRoleEligibilityFilter] =
     useState<TenantRoleEligibilityFilter>("ALL");
   const [grantRoleCodeByActor, setGrantRoleCodeByActor] = useState<Record<string, string>>({});
@@ -58,7 +59,7 @@ export function AuthzAdminPage() {
   const permissionsQuery = useAuthzPermissions(requestActor);
   const actorsQuery = useAuthzActors(requestActor);
   const actorCollaboratorSearchQuery = useCollaboratorSearch(
-    actorNicknameFilter,
+    actorFilter,
     false,
   );
   const createActorMutation = useCreateAuthzActor(requestActor);
@@ -88,23 +89,23 @@ export function AuthzAdminPage() {
     [actors],
   );
   const filteredActors = useMemo(() => {
-    const nicknameMatches = filterActorsByPersonNickname(
+    const identityMatches = filterActorsByActorKeyOrPersonNickname(
       actors,
       collaborators,
-      actorNicknameFilter,
+      actorFilter,
     );
     return filterActorsByTenantRoleEligibility(
-      nicknameMatches,
+      identityMatches,
       tenantRoleEligibilityFilter,
     );
   }, [
     actors,
     collaborators,
-    actorNicknameFilter,
+    actorFilter,
     tenantRoleEligibilityFilter,
   ]);
   const hasActorFilters =
-    actorNicknameFilter.trim().length > 0 ||
+    actorFilter.trim().length > 0 ||
     tenantRoleEligibilityFilter !== "ALL";
 
   const actionError =
@@ -198,11 +199,8 @@ export function AuthzAdminPage() {
       <header className="sticky top-0 z-10 border-b bg-white/95 px-4 py-4 backdrop-blur">
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-3">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
-              Administration
-            </p>
-            <h1 className="text-xl font-bold text-gray-950">Authorization</h1>
-            <p className="text-sm text-gray-500">
+            <PageTitle>Application Authorization</PageTitle>
+            <p className="mt-1 text-sm text-gray-500">
               Manage authorization actors, role grants, and available permissions.
             </p>
           </div>
@@ -350,14 +348,14 @@ export function AuthzAdminPage() {
                         htmlFor="authz-actor-nickname-filter"
                         className="text-xs font-semibold uppercase tracking-wide text-gray-500"
                       >
-                        Filter actors by person nickname
+                        Filter actors by Actor Key or person nickname
                       </label>
                       <input
                         id="authz-actor-nickname-filter"
                         type="search"
-                        value={actorNicknameFilter}
-                        onChange={(event) => setActorNicknameFilter(event.target.value)}
-                        placeholder="Type any part of a person nickname"
+                        value={actorFilter}
+                        onChange={(event) => setActorFilter(event.target.value)}
+                        placeholder="Type any part of an Actor Key or person nickname"
                         className="mt-1 w-full rounded-xl border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-gray-950 focus:outline-none focus:ring-1 focus:ring-gray-950"
                       />
                     </div>
@@ -388,7 +386,7 @@ export function AuthzAdminPage() {
                         <button
                           type="button"
                           onClick={() => {
-                            setActorNicknameFilter("");
+                            setActorFilter("");
                             setTenantRoleEligibilityFilter("ALL");
                           }}
                           className="rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 shadow-sm"
@@ -421,6 +419,7 @@ export function AuthzAdminPage() {
                       <ActorCard
                         key={actor.id}
                         actor={actor}
+                        allActors={actors}
                         roles={grantableRoles}
                         selectedTenantId={requestActor.tenantId}
                         selectedRoleCode={grantRoleCodeByActor[actor.id]}
@@ -674,6 +673,7 @@ function ActorFields({
 
 function ActorCard({
   actor,
+  allActors,
   roles,
   selectedTenantId,
   selectedRoleCode,
@@ -685,6 +685,7 @@ function ActorCard({
   onSetActive,
 }: {
   actor: AuthzActor;
+  allActors: AuthzActor[];
   roles: AuthzRole[];
   selectedTenantId: string;
   selectedRoleCode?: string;
@@ -732,6 +733,10 @@ function ActorCard({
   const tenantEligibility = tenantRoleGrantEligibility(actor);
   const tenantRoleIneligible =
     !applicationScopedRole && !tenantEligibility.eligible;
+  const tenantAdminCardinalityBlocker =
+    roleCode === "TENANT_ADMIN" && targetTenantId
+      ? tenantAdministratorGrantBlocker(actor, allActors, targetTenantId)
+      : "";
   const alreadyGranted = Boolean(
     roleCode &&
       targetTenantId &&
@@ -745,7 +750,12 @@ function ActorCard({
 
   async function submitGrant(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!roleCode || !targetTenantId || alreadyGranted) return;
+    if (
+      !roleCode ||
+      !targetTenantId ||
+      alreadyGranted ||
+      tenantAdminCardinalityBlocker
+    ) return;
     await onGrantRole(actor.id, roleCode, targetTenantId);
   }
 
@@ -828,6 +838,7 @@ function ActorCard({
             !actor.active ||
             !roleCode ||
             tenantRoleIneligible ||
+            Boolean(tenantAdminCardinalityBlocker) ||
             alreadyGranted
           }
           type="submit"
@@ -838,6 +849,11 @@ function ActorCard({
       {tenantRoleIneligible && (
         <p className="mt-2 text-xs font-medium text-amber-700">
           Tenant Role grant unavailable: {tenantEligibility.reason}
+        </p>
+      )}
+      {tenantAdminCardinalityBlocker && !alreadyGranted && (
+        <p className="mt-2 text-xs font-medium text-amber-700">
+          TENANT_ADMIN grant unavailable: {tenantAdminCardinalityBlocker}
         </p>
       )}
       {alreadyGranted && (
@@ -998,6 +1014,52 @@ function filterActorsByTenantRoleEligibility(
 }
 
 
+function tenantAdministratorGrantBlocker(
+  actor: AuthzActor,
+  allActors: AuthzActor[],
+  targetTenantId: string,
+): string {
+  const targetPersonId = actor.globalPersonId?.trim() ?? actor.binding?.globalPersonId?.trim() ?? "";
+  if (!targetPersonId) {
+    return "Tenant Administrator authority requires a tenant Actor bound to a canonical Person Membership.";
+  }
+
+  const activeTenantAdminGrants = allActors.flatMap((candidateActor) =>
+    (candidateActor.roleGrants ?? [])
+      .filter((grant) => grant.active && grant.roleCode === "TENANT_ADMIN")
+      .map((grant) => ({ actor: candidateActor, grant })),
+  );
+  const otherGrants = activeTenantAdminGrants.filter(
+    ({ actor: grantedActor }) => grantedActor.id !== actor.id,
+  );
+
+  if (
+    otherGrants.filter(({ grant }) => grant.tenantId === targetTenantId).length >= 2
+  ) {
+    return "Tenant already has the maximum of two active Tenant Administrators.";
+  }
+
+  const samePersonSameTenant = otherGrants.find(
+    ({ actor: grantedActor, grant }) =>
+      (grantedActor.globalPersonId?.trim() ?? grantedActor.binding?.globalPersonId?.trim()) === targetPersonId &&
+      grant.tenantId === targetTenantId,
+  );
+  if (samePersonSameTenant) {
+    return "The second Tenant Administrator slot must belong to a different Person.";
+  }
+
+  const samePersonOtherTenant = activeTenantAdminGrants.find(
+    ({ actor: grantedActor, grant }) =>
+      (grantedActor.globalPersonId?.trim() ?? grantedActor.binding?.globalPersonId?.trim()) === targetPersonId &&
+      grant.tenantId !== targetTenantId,
+  );
+  if (samePersonOtherTenant) {
+    return `This Person already administers tenant ${samePersonOtherTenant.grant.tenantId}; a Person may administer only one Tenant at a time.`;
+  }
+
+  return "";
+}
+
 function preferredPersistedGrantRoleCode(
   actor: AuthzActor,
   roles: AuthzRole[],
@@ -1047,12 +1109,12 @@ function isApplicationScopedRole(role: AuthzRole | undefined) {
   );
 }
 
-function filterActorsByPersonNickname(
+function filterActorsByActorKeyOrPersonNickname(
   actors: AuthzActor[],
   collaborators: Collaborator[],
   filter: string,
 ) {
-  const normalizedFilter = normalizeActorNickname(filter);
+  const normalizedFilter = normalizeActorFilterValue(filter);
   if (!normalizedFilter) return actors;
 
   const collaboratorsById = new Map(
@@ -1060,17 +1122,21 @@ function filterActorsByPersonNickname(
   );
 
   return actors.filter((actor) => {
+    if (normalizeActorFilterValue(actor.actorKey).includes(normalizedFilter)) {
+      return true;
+    }
+
     const collaborator = actor.collaboratorId
       ? collaboratorsById.get(actor.collaboratorId)
       : undefined;
     const nickname =
       collaborator?.personNickname?.trim() || actor.displayName.trim();
 
-    return normalizeActorNickname(nickname).includes(normalizedFilter);
+    return normalizeActorFilterValue(nickname).includes(normalizedFilter);
   });
 }
 
-function normalizeActorNickname(value: string) {
+function normalizeActorFilterValue(value: string) {
   return value
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")

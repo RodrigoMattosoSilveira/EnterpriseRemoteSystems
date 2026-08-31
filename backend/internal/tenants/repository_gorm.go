@@ -28,7 +28,11 @@ func (r *gormRepository) List(ctx context.Context) ([]TenantRecord, error) {
 		if err != nil {
 			return nil, err
 		}
-		result = append(result, TenantRecord{Tenant: row, TenantAdminCount: count})
+		assignmentCount, err := r.countActiveTenantAdminAssignments(ctx, row.ID)
+		if err != nil {
+			return nil, err
+		}
+		result = append(result, TenantRecord{Tenant: row, TenantAdminCount: count, TenantAdminAssignmentCount: assignmentCount})
 	}
 	return result, nil
 }
@@ -42,7 +46,11 @@ func (r *gormRepository) FindByID(ctx context.Context, id string) (*TenantRecord
 	if err != nil {
 		return nil, err
 	}
-	return &TenantRecord{Tenant: tenant, TenantAdminCount: count}, nil
+	assignmentCount, err := r.countActiveTenantAdminAssignments(ctx, tenant.ID)
+	if err != nil {
+		return nil, err
+	}
+	return &TenantRecord{Tenant: tenant, TenantAdminCount: count, TenantAdminAssignmentCount: assignmentCount}, nil
 }
 
 func (r *gormRepository) CodeExists(ctx context.Context, code string, excludeID string) (bool, error) {
@@ -117,47 +125,128 @@ func (r *gormRepository) ExistsActiveByID(ctx context.Context, id string) (bool,
 }
 
 func (r *gormRepository) ListTenantAdminCandidates(ctx context.Context, tenantID string) ([]TenantAdminCandidateRecord, error) {
+	tenantID = strings.TrimSpace(tenantID)
 	if exists, err := r.ExistsByID(ctx, tenantID); err != nil {
 		return nil, err
 	} else if !exists {
 		return nil, gorm.ErrRecordNotFound
 	}
 
-	var actors []authz.AuthzActor
-	actorQuery := r.database.WithContext(ctx).Model(&authz.AuthzActor{})
-	if r.database.Migrator().HasTable("auth_account_actors") {
-		actorQuery = actorQuery.
-			Joins("JOIN auth_account_actors aa ON aa.actor_id = authz_actors.id AND aa.scope_type = ? AND aa.tenant_id = ?", "TENANT", strings.TrimSpace(tenantID))
+	type candidateActorProjection struct {
+		ID             string
+		ActorKey       string
+		DisplayName    string
+		Active         bool
+		GlobalPersonID string
 	}
-	if err := actorQuery.Order("authz_actors.actor_key ASC").Find(&actors).Error; err != nil {
+	var actors []candidateActorProjection
+	hasPersonFoundation := r.database.Migrator().HasTable("auth_account_actors") && r.database.Migrator().HasTable("person_tenant_memberships")
+	if hasPersonFoundation {
+		if err := r.database.WithContext(ctx).
+			Table("authz_actors a").
+			Select("a.id, a.actor_key, a.display_name, a.active, COALESCE(m.person_id, '') AS global_person_id").
+			Joins("JOIN auth_account_actors aa ON aa.actor_id = a.id AND aa.scope_type = ? AND aa.tenant_id = ?", "TENANT", tenantID).
+			Joins("LEFT JOIN person_tenant_memberships m ON m.id = aa.membership_id AND m.tenant_id = aa.tenant_id").
+			Order("a.actor_key ASC").
+			Scan(&actors).Error; err != nil {
+			return nil, err
+		}
+	} else {
+		// Compatibility for isolated pre-Bite-30 repository tests. Production
+		// Tenant Administrator candidates use the canonical Membership Person.
+		if err := r.database.WithContext(ctx).
+			Table("authz_actors a").
+			Select("a.id, a.actor_key, a.display_name, a.active, COALESCE(a.person_id, '') AS global_person_id").
+			Order("a.actor_key ASC").
+			Scan(&actors).Error; err != nil {
+			return nil, err
+		}
+	}
+
+	type adminGrantProjection struct {
+		ActorID        string
+		TenantID       string
+		GlobalPersonID string
+	}
+	var adminGrants []adminGrantProjection
+	grantQuery := r.database.WithContext(ctx).
+		Table("authz_actor_role_grants g").
+		Joins("JOIN authz_roles role ON role.id = g.role_id AND role.code = ?", string(authz.RoleTenantAdmin)).
+		Where("g.active = ?", true)
+	if hasPersonFoundation {
+		grantQuery = grantQuery.
+			Select("g.actor_id, g.tenant_id, COALESCE(m.person_id, '') AS global_person_id").
+			Joins("LEFT JOIN auth_account_actors aa ON aa.actor_id = g.actor_id AND aa.scope_type = ? AND aa.tenant_id = g.tenant_id", "TENANT").
+			Joins("LEFT JOIN person_tenant_memberships m ON m.id = aa.membership_id AND m.tenant_id = aa.tenant_id")
+	} else {
+		grantQuery = grantQuery.
+			Select("g.actor_id, g.tenant_id, COALESCE(a.person_id, '') AS global_person_id").
+			Joins("JOIN authz_actors a ON a.id = g.actor_id")
+	}
+	if err := grantQuery.Scan(&adminGrants).Error; err != nil {
 		return nil, err
 	}
 
-	var role authz.AuthzRole
-	if err := r.database.WithContext(ctx).Where("code = ?", string(authz.RoleTenantAdmin)).First(&role).Error; err != nil {
-		return nil, err
-	}
-
-	var grants []authz.AuthzActorRoleGrant
-	if err := r.database.WithContext(ctx).
-		Where("role_id = ? AND tenant_id = ? AND active = ?", role.ID, strings.TrimSpace(tenantID), true).
-		Find(&grants).Error; err != nil {
-		return nil, err
-	}
-	assigned := make(map[string]struct{}, len(grants))
-	for _, grant := range grants {
-		assigned[grant.ActorID] = struct{}{}
+	assigned := make(map[string]struct{})
+	personAdminTenant := make(map[string]string)
+	personAdminActor := make(map[string]string)
+	targetTenantAdminCount := 0
+	for _, grant := range adminGrants {
+		globalPersonID := strings.TrimSpace(grant.GlobalPersonID)
+		if grant.TenantID == tenantID {
+			assigned[grant.ActorID] = struct{}{}
+			targetTenantAdminCount++
+		}
+		if globalPersonID == "" {
+			continue
+		}
+		if _, exists := personAdminTenant[globalPersonID]; !exists {
+			personAdminTenant[globalPersonID] = grant.TenantID
+			personAdminActor[globalPersonID] = grant.ActorID
+		}
 	}
 
 	result := make([]TenantAdminCandidateRecord, 0, len(actors))
 	for _, actor := range actors {
+		globalPersonID := strings.TrimSpace(actor.GlobalPersonID)
 		_, isAssigned := assigned[actor.ID]
+		eligible := true
+		reason := ""
+		adminTenantID := ""
+
+		switch {
+		case isAssigned:
+			// The current assignment remains visible even when its Actor is inactive.
+			// Actor deactivation never frees a Tenant Administrator slot.
+		case !actor.Active:
+			eligible = false
+			reason = "Inactive actors cannot be assigned as Tenant Administrators"
+		case globalPersonID == "":
+			eligible = false
+			reason = "Tenant Administrator authority requires a tenant Actor bound to a canonical Person Membership"
+		case targetTenantAdminCount >= 2:
+			eligible = false
+			reason = "Tenant already has the maximum of two active Tenant Administrators"
+		case personAdminTenant[globalPersonID] != "" && personAdminTenant[globalPersonID] != tenantID:
+			eligible = false
+			adminTenantID = personAdminTenant[globalPersonID]
+			reason = fmt.Sprintf("This Person already administers tenant %s", adminTenantID)
+		case personAdminTenant[globalPersonID] == tenantID && personAdminActor[globalPersonID] != actor.ID:
+			eligible = false
+			adminTenantID = tenantID
+			reason = "The other Tenant Administrator slot must belong to a different Person"
+		}
+
 		result = append(result, TenantAdminCandidateRecord{
-			ActorID:     actor.ID,
-			ActorKey:    actor.ActorKey,
-			DisplayName: actor.DisplayName,
-			Active:      actor.Active,
-			Assigned:    isAssigned,
+			ActorID:             actor.ID,
+			ActorKey:            actor.ActorKey,
+			DisplayName:         actor.DisplayName,
+			GlobalPersonID:      globalPersonID,
+			Active:              actor.Active,
+			Assigned:            isAssigned,
+			Eligible:            eligible,
+			IneligibilityReason: reason,
+			TenantAdminTenantID: adminTenantID,
 		})
 	}
 	return result, nil
@@ -245,6 +334,20 @@ func (r *gormRepository) countActiveTenantAdmins(ctx context.Context, tenantID s
 		Count(&count).Error
 	if err != nil {
 		return 0, fmt.Errorf("count tenant administrators: %w", err)
+	}
+	return count, nil
+}
+
+func (r *gormRepository) countActiveTenantAdminAssignments(ctx context.Context, tenantID string) (int64, error) {
+	var count int64
+	err := r.database.WithContext(ctx).
+		Model(&authz.AuthzActorRoleGrant{}).
+		Joins("JOIN authz_roles ON authz_roles.id = authz_actor_role_grants.role_id AND authz_roles.active = ?", true).
+		Where("authz_actor_role_grants.tenant_id = ? AND authz_actor_role_grants.active = ? AND authz_roles.code = ?", strings.TrimSpace(tenantID), true, string(authz.RoleTenantAdmin)).
+		Distinct("authz_actor_role_grants.actor_id").
+		Count(&count).Error
+	if err != nil {
+		return 0, fmt.Errorf("count Tenant Administrator assignments: %w", err)
 	}
 	return count, nil
 }

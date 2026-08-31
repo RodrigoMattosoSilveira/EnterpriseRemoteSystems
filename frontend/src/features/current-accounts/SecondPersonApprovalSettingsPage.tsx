@@ -10,6 +10,7 @@ import {
   useSecondPersonApprovalPolicy,
   useUpdateSecondPersonApprovalPolicy,
 } from "./useSecondPersonApprovalPolicy";
+import { PageTitle } from "../../components/layout/PageHeading";
 
 export function SecondPersonApprovalSettingsPage() {
   const [tenantId, setTenantId] = useState(() =>
@@ -63,7 +64,7 @@ export function SecondPersonApprovalSettingsPage() {
             <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
               Administration
             </p>
-            <h1 className="text-xl font-bold text-gray-950">Current Account Settings</h1>
+            <PageTitle>Current Account Settings</PageTitle>
             <p className="text-sm text-gray-500">
               Configure tenant-level approval rules for sensitive current-account workflows.
             </p>

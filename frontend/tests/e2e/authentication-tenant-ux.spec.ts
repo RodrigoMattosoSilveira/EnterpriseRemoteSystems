@@ -1335,8 +1335,16 @@ reactivationLifecycleTest(
 
 test("signing in after a forbidden sign-out lands on the next account's first permitted page", async ({ browser, request }) => {
   const suffix = `${Date.now()}${Math.floor(Math.random() * 100_000)}`;
-  const tenantAdmin = await provisionRoleAccount(request, `tenant-admin-${suffix}`, "TENANT_ADMIN");
-  const expenseOperator = await provisionRoleAccount(request, `expense-operator-${suffix}`, "EXPENSE_OPERATOR");
+  const earningsOperator = await provisionRoleAccount(
+    request,
+    `earnings-operator-${suffix}`,
+    "EARNINGS_OPERATOR",
+  );
+  const expenseOperator = await provisionRoleAccount(
+    request,
+    `expense-operator-${suffix}`,
+    "EXPENSE_OPERATOR",
+  );
   const context = await browser.newContext({
     baseURL,
     storageState: { cookies: [], origins: [] },
@@ -1344,8 +1352,8 @@ test("signing in after a forbidden sign-out lands on the next account's first pe
   const page = await context.newPage();
 
   try {
-    await signIn(page, tenantAdmin.login, tenantAdmin.password);
-    await expect(page).toHaveURL(/\/people$/);
+    await signIn(page, earningsOperator.login, earningsOperator.password);
+    await expectPersonSelfServiceHome(page, earningsOperator.personId);
 
     await page.goto("/admin/authentication");
     await expect(page).toHaveURL(/\/forbidden$/);
@@ -1369,7 +1377,7 @@ test("signing in after a forbidden sign-out lands on the next account's first pe
     ).toHaveCount(0);
   } finally {
     await context.close();
-    await deactivateActor(request, tenantAdmin.actorId);
+    await deactivateActor(request, earningsOperator.actorId);
     await deactivateActor(request, expenseOperator.actorId);
   }
 });
@@ -1489,7 +1497,7 @@ type PreparedRoleAccount = {
 async function provisionRoleAccount(
   request: APIRequestContext,
   keyPrefix: string,
-  roleCode: "TENANT_ADMIN" | "EXPENSE_OPERATOR",
+  roleCode: "EARNINGS_OPERATOR" | "EXPENSE_OPERATOR",
   mustChangePassword = false,
 ): Promise<PreparedRoleAccount> {
   const login = `auth-${keyPrefix}@example.com`;
@@ -1498,7 +1506,7 @@ async function provisionRoleAccount(
   // Two role fixtures can intentionally share the same timestamp suffix. Keep
   // their Person-level unique fields distinct by carrying a role discriminator
   // into the final digits used for CPF/RG/cellular generation.
-  const roleDiscriminator = roleCode === "TENANT_ADMIN" ? "1" : "2";
+  const roleDiscriminator = roleCode === "EARNINGS_OPERATOR" ? "1" : "2";
   const identitySuffix = `${numericSuffix.slice(-11)}${roleDiscriminator}`;
 
   const personResponse = await request.post(e2eApiUrl("/api/v1/people"), {
