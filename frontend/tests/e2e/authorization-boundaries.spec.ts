@@ -200,11 +200,18 @@ test.describe("authorization role boundaries", () => {
   }) => {
     let actorApi: APIRequestContext | undefined;
     let actor: ProvisionedAuthzActor | undefined;
+    const tenantId = await createTenant(adminApi, "tenant-admin-boundary");
     try {
-      actor = await createActorWithRole(adminApi, "tenant-admin", "TENANT_ADMIN");
+      actor = await createActorWithRole(
+        adminApi,
+        "tenant-admin",
+        "TENANT_ADMIN",
+        tenantId,
+      );
       actorApi = await createActorAccountAndLogin(adminApi, actor);
-      const currentActor = await getCurrentActor(actorApi, tenantHeaders());
+      const currentActor = await getCurrentActor(actorApi, tenantHeaders(tenantId));
 
+      expect(currentActor.tenantId).toBe(tenantId);
       expect(currentActor.roleCodes).toEqual(["TENANT_ADMIN"]);
       expect(currentActor.intrinsicPermissions).toContain("people.self.read");
       expect(currentActor.delegatedPermissions).toContain("tenants.read");
@@ -241,12 +248,23 @@ test.describe("authorization role boundaries", () => {
     let targetApi: APIRequestContext | undefined;
     let tenantAdmin: ProvisionedAuthzActor | undefined;
     let target: ProvisionedAuthzActor | undefined;
+    const tenantId = await createTenant(adminApi, "tenant-role-boundary");
     try {
-      tenantAdmin = await createActorWithRole(adminApi, "tenant-role-manager", "TENANT_ADMIN");
-      target = await createActorWithRole(adminApi, "tenant-role-target", "EXPENSE_OPERATOR");
+      tenantAdmin = await createActorWithRole(
+        adminApi,
+        "tenant-role-manager",
+        "TENANT_ADMIN",
+        tenantId,
+      );
+      target = await createActorWithRole(
+        adminApi,
+        "tenant-role-target",
+        "EXPENSE_OPERATOR",
+        tenantId,
+      );
       tenantAdminApi = await createActorAccountAndLogin(adminApi, tenantAdmin);
       targetApi = await createActorAccountAndLogin(adminApi, target);
-      const headers = tenantHeaders();
+      const headers = tenantHeaders(tenantId);
 
       const manager = await getCurrentActor(tenantAdminApi, headers);
       expect(manager.delegatedPermissions).toContain("authz.tenant_actors.manage");
@@ -548,15 +566,40 @@ async function createActorAccountAndLogin(
   return loginIsolatedApi(actor.login, permanentPassword);
 }
 
+async function createTenant(
+  api: APIRequestContext,
+  keyPrefix: string,
+): Promise<string> {
+  const seed = uniqueNumericSuffix();
+  const response = await api.post(e2eApiUrl("/api/v1/tenants"), {
+    headers: authzHeaders(DEFAULT_TENANT_ID),
+    data: {
+      code: `AUTHZ${seed}`.slice(0, 20),
+      name: `Authorization Boundary ${keyPrefix} ${seed}`,
+      description: "Isolated Tenant for authorization-boundary E2E coverage",
+      active: true,
+    },
+  });
+  await expectStatus(response, 201, `create isolated Tenant for ${keyPrefix}`);
+
+  const body = (await response.json()) as ApiEnvelope<{ id?: string }>;
+  const tenantId = body.data?.id;
+  if (!tenantId) {
+    throw new Error(`Create isolated Tenant for ${keyPrefix} did not return an id`);
+  }
+  return tenantId;
+}
+
 async function createActorWithRole(
   api: APIRequestContext,
   keyPrefix: string,
   roleCode: RoleCode,
+  tenantId = DEFAULT_TENANT_ID,
 ): Promise<ProvisionedAuthzActor> {
   const seed = uniqueNumericSuffix();
   const login = `authz-${keyPrefix}-${seed}@example.com`;
   const personResponse = await api.post(e2eApiUrl("/api/v1/people"), {
-    headers: authzHeaders(),
+    headers: authzHeaders(tenantId),
     data: {
       firstName: `Authz${keyPrefix}`,
       lastName: "Boundary",
@@ -572,7 +615,7 @@ async function createActorWithRole(
 
   const temporaryPassword = `E2E-${seed}-Password!`;
   const accountResponse = await api.post(e2eApiUrl("/api/v1/auth/accounts"), {
-    headers: authzHeaders(DEFAULT_TENANT_ID),
+    headers: authzHeaders(tenantId),
     data: {
       login,
       temporaryPassword,
@@ -581,17 +624,19 @@ async function createActorWithRole(
   await expectStatus(accountResponse, 201, `create tenant-bound authentication account for ${login}`);
   const accountBody = (await accountResponse.json()) as ApiEnvelope<AuthAccount>;
   const accountActor = accountBody.data?.actors.find(
-    (candidate) => candidate.tenantId === DEFAULT_TENANT_ID,
+    (candidate) => candidate.tenantId === tenantId,
   );
   if (!accountActor) {
-    throw new Error(`Authentication account ${login} did not include a default-tenant Actor`);
+    throw new Error(
+      `Authentication account ${login} did not include a tenant Actor for ${tenantId}`,
+    );
   }
 
   const roleGrant = await grantRole(
     api,
     accountActor.actorId,
     roleCode,
-    DEFAULT_TENANT_ID,
+    tenantId,
   );
   return {
     id: accountActor.actorId,
