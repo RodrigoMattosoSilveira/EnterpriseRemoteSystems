@@ -90,6 +90,7 @@ help:
 	@echo "  make server-down ENV=development|test|production"
 	@echo "  make server-replace-development-db ENV=development"
 	@echo "  make server-test-rehearsal-capture-baseline"
+	@echo "  make server-test-rehearsal-ensure-baseline"
 	@echo "  make server-test-rehearsal-restore"
 	@echo "  make server-record-test-release-rehearsal ENV=test TREE_SHA=<tree> REVISION=<sha>"
 	@echo "  make server-require-test-release-rehearsal ENV=production TREE_SHA=<tree>"
@@ -126,6 +127,7 @@ help:
 	@echo "  make server-test-build"
 	@echo "  make server-test-up"
 	@echo "  make server-test-rehearsal-capture-baseline"
+	@echo "  make server-test-rehearsal-ensure-baseline"
 	@echo "  make server-test-rehearsal-restore"
 	@echo "  make server-test-smoke"
 	@echo "  make server-test-protected-api-smoke"
@@ -423,12 +425,37 @@ server-test-rehearsal-capture-baseline:
 	echo "Captured Test release baseline: $$baseline"; \
 	sha256sum "$$baseline"
 
+.PHONY: server-test-rehearsal-ensure-baseline
+server-test-rehearsal-ensure-baseline:
+	@if [[ "$(ENV)" != "test" ]]; then \
+		echo "Refusing Test release-baseline preparation for ENV=$(ENV)."; \
+		exit 2; \
+	fi
+	@baseline="$(TEST_RELEASE_BASELINE_DB)"; \
+	if [[ -f "$$baseline" ]]; then \
+		echo "Using existing Test release baseline: $$baseline"; \
+		sha256sum "$$baseline"; \
+		exit 0; \
+	fi; \
+	echo "No captured Test release baseline exists; generating a deterministic pre-30H baseline from repository migrations."; \
+	baseline_dir="$$(dirname "$$baseline")"; \
+	baseline_name="$$(basename "$$baseline")"; \
+	mkdir -p "$$baseline_dir"; \
+	baseline_dir="$$(cd "$$baseline_dir" && pwd)"; \
+	cd $(ENV_DIR) && $(SERVER_COMPOSE) run --rm --no-deps \
+		-v "$$baseline_dir:/rehearsal-baseline" \
+		-e TEST_RELEASE_BASELINE_DB="/rehearsal-baseline/$$baseline_name" \
+		-e EXPECTED_LAST_MIGRATION="$(TEST_RELEASE_BASELINE_LAST_MIGRATION)" \
+		-e MIGRATION_UNDER_REHEARSAL="$(TEST_RELEASE_MIGRATION_UNDER_REHEARSAL)" \
+		--entrypoint /app/build-test-rehearsal-baseline.sh backend
+
 .PHONY: server-test-rehearsal-restore
 server-test-rehearsal-restore:
 	@if [[ "$(ENV)" != "test" ]]; then \
 		echo "Refusing Test release-rehearsal restore for ENV=$(ENV)."; \
 		exit 2; \
 	fi
+	@$(MAKE) server-test-rehearsal-ensure-baseline ENV=test
 	@baseline="$(TEST_RELEASE_BASELINE_DB)"; \
 	if [[ ! -f "$$baseline" ]]; then \
 		echo "Missing Test release baseline: $$baseline"; \
