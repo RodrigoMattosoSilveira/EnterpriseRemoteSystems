@@ -7,11 +7,13 @@ Default database:
     backend/data/app.db
 
 Default credentials:
-    Operator D: manual30g.operator@example.test
+    Operator D (Tenant A Administrator): manual30g.operator@example.test
+    Operator E (Tenant B Administrator): manual30g.tenant-b-admin@example.test
     Identity A: manual30g.identity-a@example.test
     Identity B: manual30g.identity-b@example.test
     Identity C: manual30g.identity-c@example.test
-    Password for all accounts: Manual-30C-Password!
+    Password for Person/Tenant accounts: Manual-30C-Password!
+    Application Administrator: admin@example.com / admin123
 
 Default tenant mapping:
     Tenant A: Byte 28A Manual Test (created if missing)
@@ -59,6 +61,11 @@ DEFAULT_TENANT_B = "default"
 DEFAULT_BATCH = "manual30g"
 DEFAULT_PASSWORD = "Manual-30C-Password!"
 DEFAULT_PASSWORD_HASH = "$2a$10$2aGDP1WNWYv3Q2aC4URnv.t40kw1HHjYOHUfvmctSf8Pb7D6Vo0t2"
+APPLICATION_ADMIN_LOGIN = "admin@example.com"
+APPLICATION_ADMIN_PASSWORD = "admin123"
+APPLICATION_ADMIN_PASSWORD_HASH = "$2a$10$EZzXciz8z.kUCl/LTpui1OVq7J4K10qlrR0oFrFYIXJ/rlVUmYgqO"
+APPLICATION_ADMIN_ACTOR_KEY = "bootstrap-admin"
+APPLICATION_ADMIN_DISPLAY_NAME = "Bootstrap Admin"
 
 
 def parse_args() -> argparse.Namespace:
@@ -247,7 +254,10 @@ def ensure_refs(conn, tenant_id: str, batch: str) -> dict[str, str]:
 def identity(batch: str, code: str, first: str, last: str) -> dict[str, str]:
     pfx = prefix(batch)
     key = f"bite30g:{batch}:{code}"
-    login_name = "operator" if code == "operator" else f"identity-{code}"
+    login_name = {
+        "operator": "operator",
+        "tenant-b-admin": "tenant-b-admin",
+    }.get(code, f"identity-{code}")
     login = f"{pfx}.{login_name}@example.test".lower()
     return {
         "person_id": ident(batch, f"global-person-{code}"),
@@ -408,6 +418,214 @@ def grant_role(conn, actor_id: str, tenant_id: str, role_code: str, batch: str, 
     )
 
 
+def ensure_application_administrator(conn: sqlite3.Connection, batch: str) -> dict[str, str]:
+    """Create/reconcile the local manual-test Application Administrator account.
+
+    Application Administrator is a GLOBAL Actor and deliberately has no Person
+    or Tenant Membership binding. The weak local password is fixture-only.
+    """
+    ts = iso_dt(utc_now())
+    role = row_or_none(
+        conn,
+        "SELECT id FROM authz_roles WHERE code='APPLICATION_ADMIN' AND active=1 LIMIT 1",
+    )
+    if not role:
+        raise SystemExit("APPLICATION_ADMIN role was not found")
+
+    actor = row_or_none(
+        conn,
+        "SELECT id,person_id,collaborator_id FROM authz_actors WHERE actor_key=? LIMIT 1",
+        (APPLICATION_ADMIN_ACTOR_KEY,),
+    )
+    if actor:
+        if actor["person_id"] is not None or actor["collaborator_id"] is not None:
+            raise SystemExit(
+                f"{APPLICATION_ADMIN_ACTOR_KEY} is already bound to a Person or Collaborator; "
+                "refusing to repurpose it as the global Application Administrator"
+            )
+        actor_id = actor["id"]
+        conn.execute(
+            "UPDATE authz_actors SET display_name=?,active=1,updated_at=? WHERE id=?",
+            (APPLICATION_ADMIN_DISPLAY_NAME, ts, actor_id),
+        )
+    else:
+        actor_id = ident(batch, "application-admin-actor")
+        if row_or_none(conn, "SELECT id FROM authz_actors WHERE id=?", (actor_id,)):
+            raise SystemExit(
+                f"Deterministic Application Administrator Actor id {actor_id} is already in use"
+            )
+        conn.execute(
+            """INSERT INTO authz_actors(
+                 id,actor_key,display_name,person_id,collaborator_id,active,created_at,updated_at)
+               VALUES(?,?,?,NULL,NULL,1,?,?)""",
+            (actor_id, APPLICATION_ADMIN_ACTOR_KEY, APPLICATION_ADMIN_DISPLAY_NAME, ts, ts),
+        )
+
+    grant = row_or_none(
+        conn,
+        """SELECT id FROM authz_actor_role_grants
+           WHERE actor_id=? AND role_id=? AND tenant_id='*' LIMIT 1""",
+        (actor_id, role["id"]),
+    )
+    if grant:
+        grant_id = grant["id"]
+        conn.execute(
+            "UPDATE authz_actor_role_grants SET active=1,updated_at=? WHERE id=?",
+            (ts, grant_id),
+        )
+    else:
+        grant_id = ident(batch, "application-admin-grant")
+        conn.execute(
+            """INSERT INTO authz_actor_role_grants(
+                 id,actor_id,role_id,tenant_id,active,created_at,updated_at)
+               VALUES(?,?,?,'*',1,?,?)""",
+            (grant_id, actor_id, role["id"], ts, ts),
+        )
+
+    fixed_account_id = ident(batch, "application-admin-account")
+    by_login = row_or_none(
+        conn,
+        "SELECT id,actor_id,login FROM auth_user_accounts WHERE login=? COLLATE NOCASE LIMIT 1",
+        (APPLICATION_ADMIN_LOGIN,),
+    )
+    by_actor = row_or_none(
+        conn,
+        "SELECT id,actor_id,login FROM auth_user_accounts WHERE actor_id=? LIMIT 1",
+        (actor_id,),
+    )
+    by_id = row_or_none(
+        conn,
+        "SELECT id,actor_id,login FROM auth_user_accounts WHERE id=? LIMIT 1",
+        (fixed_account_id,),
+    )
+
+    existing_accounts = [row for row in (by_login, by_actor, by_id) if row is not None]
+    existing_ids = {row["id"] for row in existing_accounts}
+    if len(existing_ids) > 1:
+        raise SystemExit(
+            "Application Administrator login, Actor, or deterministic Account id are already "
+            "bound to different Authentication Accounts"
+        )
+
+    if existing_accounts:
+        account = existing_accounts[0]
+        if account["actor_id"] != actor_id:
+            raise SystemExit(
+                f"{APPLICATION_ADMIN_LOGIN} is already bound to a different Actor; refusing to overwrite it"
+            )
+        if account["login"].strip().lower() != APPLICATION_ADMIN_LOGIN:
+            raise SystemExit(
+                f"{APPLICATION_ADMIN_ACTOR_KEY} is already bound to login {account['login']!r}; "
+                f"expected {APPLICATION_ADMIN_LOGIN!r}"
+            )
+        account_id = account["id"]
+        conn.execute(
+            """UPDATE auth_user_accounts
+               SET password_hash=?,active=1,must_change_password=0,last_login_at=NULL,
+                   password_changed_at=?,updated_at=?
+               WHERE id=?""",
+            (APPLICATION_ADMIN_PASSWORD_HASH, ts, ts, account_id),
+        )
+    else:
+        account_id = fixed_account_id
+        conn.execute(
+            """INSERT INTO auth_user_accounts(
+                 id,actor_id,login,password_hash,active,must_change_password,last_login_at,
+                 password_changed_at,created_at,updated_at)
+               VALUES(?,?,?,?,1,0,NULL,?,?,?)""",
+            (
+                account_id,
+                actor_id,
+                APPLICATION_ADMIN_LOGIN,
+                APPLICATION_ADMIN_PASSWORD_HASH,
+                ts,
+                ts,
+                ts,
+            ),
+        )
+
+    person_binding = row_or_none(
+        conn, "SELECT person_id FROM auth_account_people WHERE account_id=?", (account_id,)
+    )
+    if person_binding:
+        raise SystemExit(
+            "Application Administrator Authentication Account has a Person binding; "
+            "global administrators must remain Person-independent"
+        )
+
+    actor_binding = row_or_none(
+        conn,
+        "SELECT account_id,scope_type,tenant_id,membership_id,is_primary FROM auth_account_actors WHERE actor_id=?",
+        (actor_id,),
+    )
+    if actor_binding and actor_binding["account_id"] != account_id:
+        raise SystemExit(
+            f"{APPLICATION_ADMIN_ACTOR_KEY} is already bound to another Authentication Account"
+        )
+
+    account_bindings = conn.execute(
+        "SELECT actor_id,scope_type,tenant_id,membership_id FROM auth_account_actors WHERE account_id=?",
+        (account_id,),
+    ).fetchall()
+    incompatible = [
+        row
+        for row in account_bindings
+        if row["actor_id"] != actor_id
+        or row["scope_type"] != "GLOBAL"
+        or row["tenant_id"] is not None
+        or row["membership_id"] is not None
+    ]
+    if incompatible:
+        raise SystemExit(
+            "Application Administrator Authentication Account has an incompatible Tenant/Actor binding; "
+            "refusing to rewrite its identity foundation"
+        )
+
+    if actor_binding is None:
+        conn.execute(
+            """INSERT INTO auth_account_actors(
+                 account_id,actor_id,scope_type,tenant_id,membership_id,is_primary,created_at,updated_at)
+               VALUES(?,?,'GLOBAL',NULL,NULL,1,?,?)""",
+            (account_id, actor_id, ts, ts),
+        )
+    else:
+        conn.execute(
+            "UPDATE auth_account_actors SET is_primary=1,updated_at=? WHERE account_id=? AND actor_id=?",
+            (ts, account_id, actor_id),
+        )
+
+    # A fixture reset invalidates any prior privileged session or recovery token.
+    conn.execute("DELETE FROM auth_sessions WHERE account_id=?", (account_id,))
+    conn.execute("DELETE FROM auth_password_reset_tokens WHERE account_id=?", (account_id,))
+
+    check = row_or_none(
+        conn,
+        """SELECT au.login,au.active,au.must_change_password,az.actor_key,az.active AS actor_active,
+                  g.active AS grant_active,aa.scope_type,aa.tenant_id,aa.membership_id
+             FROM auth_user_accounts au
+             JOIN authz_actors az ON az.id=au.actor_id
+             JOIN authz_actor_role_grants g ON g.actor_id=az.id AND g.role_id=? AND g.tenant_id='*'
+             JOIN auth_account_actors aa ON aa.account_id=au.id AND aa.actor_id=az.id
+            WHERE au.id=?""",
+        (role["id"], account_id),
+    )
+    if (
+        not check
+        or check["login"] != APPLICATION_ADMIN_LOGIN
+        or check["active"] != 1
+        or check["must_change_password"] != 0
+        or check["actor_key"] != APPLICATION_ADMIN_ACTOR_KEY
+        or check["actor_active"] != 1
+        or check["grant_active"] != 1
+        or check["scope_type"] != "GLOBAL"
+        or check["tenant_id"] is not None
+        or check["membership_id"] is not None
+    ):
+        raise RuntimeError("Application Administrator fixture failed post-write validation")
+
+    return {"accountId": account_id, "actorId": actor_id, "grantId": grant_id}
+
+
 def set_second_approval_policy(conn, tenant_id: str, required: bool, batch: str):
     key = "current_accounts.require_second_person_approval_for_sensitive_operations"
     ts = iso_dt(utc_now())
@@ -447,7 +665,7 @@ def insert_work_period(conn, *, wid, aid, tenant_id, collaborator_id, refs, work
 
 
 def batch_sentinel_ids(batch: str) -> list[str]:
-    identity_codes = ("a", "b", "c", "m", "h", "r", "earnings", "operator")
+    identity_codes = ("a", "b", "c", "m", "h", "r", "earnings", "operator", "tenant-b-admin")
     return [ident(batch, f"global-person-{code}") for code in identity_codes]
 
 
@@ -482,6 +700,37 @@ def database_has_batch(db_path: Path, batch: str) -> bool:
             pass
 
 
+def repository_migration_filenames() -> set[str]:
+    migrations_dir = ROOT / "backend" / "migrations"
+    if not migrations_dir.is_dir():
+        return set()
+    return {path.name for path in migrations_dir.glob("*.up.sql")}
+
+
+def database_applied_migrations(conn: sqlite3.Connection) -> set[str]:
+    tables = {
+        row[0]
+        for row in conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table'"
+        ).fetchall()
+    }
+    if "schema_migrations" not in tables:
+        return set()
+    return {
+        row[0]
+        for row in conn.execute(
+            "SELECT filename FROM schema_migrations"
+        ).fetchall()
+    }
+
+
+def database_has_current_repository_migrations(conn: sqlite3.Connection) -> bool:
+    required = repository_migration_filenames()
+    if not required:
+        return False
+    return required.issubset(database_applied_migrations(conn))
+
+
 def database_is_compatible_clean_backup(db_path: Path, batch: str) -> bool:
     if not db_path.exists() or database_has_batch(db_path, batch):
         return False
@@ -489,7 +738,7 @@ def database_is_compatible_clean_backup(db_path: Path, batch: str) -> bool:
         conn = sqlite3.connect(db_path)
         conn.row_factory = sqlite3.Row
         require_schema(conn)
-        return True
+        return database_has_current_repository_migrations(conn)
     except (sqlite3.DatabaseError, SystemExit):
         return False
     finally:
@@ -660,15 +909,18 @@ def validate_rebuilt_database(db_path: Path, batch: str) -> None:
                 + "; ".join(str(tuple(row)) for row in foreign_key_errors[:10])
             )
 
-        migrations = {
-            row[0]
-            for row in conn.execute(
-                "SELECT filename FROM schema_migrations"
-            ).fetchall()
-        }
-        if "000060_expense_cancellation_recreation.up.sql" not in migrations:
+        required_migrations = repository_migration_filenames()
+        applied_migrations = database_applied_migrations(conn)
+        missing_migrations = sorted(required_migrations - applied_migrations)
+        if not required_migrations:
             raise SystemExit(
-                "Freshly rebuilt database did not apply migration 000060"
+                "Freshly rebuilt database cannot be validated because repository "
+                "migrations are unavailable"
+            )
+        if missing_migrations:
+            raise SystemExit(
+                "Freshly rebuilt database is missing repository migrations: "
+                + ", ".join(missing_migrations)
             )
     finally:
         conn.close()
@@ -882,6 +1134,7 @@ def main() -> int:
     refs_b = ensure_refs(conn, tenant_b["id"], batch)
     set_second_approval_policy(conn, tenant_a["id"], False, batch)
     set_second_approval_policy(conn, tenant_b["id"], False, batch)
+    application_admin = ensure_application_administrator(conn, batch)
 
 
     today = date.today()
@@ -1025,17 +1278,22 @@ def main() -> int:
     insert_account(conn, e, e_actor, tenant_a["id"], e_mem)
     grant_role(conn, e_actor, tenant_a["id"], "EARNINGS_OPERATOR", batch, "earnings-tenant-a")
 
-    # Operator D: TENANT_ADMIN in both tenants.
+    # Bite 30H cardinality: one global Person may administer only one Tenant.
+    # Operator D remains the Tenant A administrator; Operator E is a distinct
+    # global Person and provides the deterministic Tenant B administrator.
     d = identity(batch, "operator", "Daniela", "TenantOperator")
     insert_global_person(conn, d)
     d_legacy_a, d_mem_a = insert_membership(conn, d, tenant_a["id"], refs_a["person_active"], batch, "operator-tenant-a")
-    d_legacy_b, d_mem_b = insert_membership(conn, d, tenant_b["id"], refs_b["person_active"], batch, "operator-tenant-b")
-    d_actor_a, d_key_a = insert_actor(conn, d_legacy_a, tenant_a["id"], batch, "operator-tenant-a", "30G Operator · Tenant A")
-    d_actor_b, d_key_b = insert_actor(conn, d_legacy_b, tenant_b["id"], batch, "operator-tenant-b", "30G Operator · Tenant B")
+    d_actor_a, d_key_a = insert_actor(conn, d_legacy_a, tenant_a["id"], batch, "operator-tenant-a", "30G Operator D · Tenant A")
     insert_account(conn, d, d_actor_a, tenant_a["id"], d_mem_a)
-    bind_actor(conn, d["account_id"], d_actor_b, tenant_b["id"], d_mem_b)
     grant_tenant_admin(conn, d_actor_a, tenant_a["id"], batch, "operator-tenant-a")
-    grant_tenant_admin(conn, d_actor_b, tenant_b["id"], batch, "operator-tenant-b")
+
+    tenant_b_admin = identity(batch, "tenant-b-admin", "Elisa", "TenantAdministrator")
+    insert_global_person(conn, tenant_b_admin)
+    tb_legacy, tb_mem = insert_membership(conn, tenant_b_admin, tenant_b["id"], refs_b["person_active"], batch, "tenant-b-admin")
+    tb_actor, tb_key = insert_actor(conn, tb_legacy, tenant_b["id"], batch, "tenant-b-admin", "30G Operator E · Tenant B")
+    insert_account(conn, tenant_b_admin, tb_actor, tenant_b["id"], tb_mem)
+    grant_tenant_admin(conn, tb_actor, tenant_b["id"], batch, "tenant-b-admin")
 
     fk = conn.execute("PRAGMA foreign_key_check").fetchall()
     if fk:
@@ -1072,8 +1330,9 @@ def main() -> int:
         "identityR": {"login": r["login"], "personId": r["person_id"], "membershipId": r_mem, "actorId": r_actor, "actorKey": r_key, "journeyR1Open": r1},
         "earningsOperator": {"login": e["login"], "personId": e["person_id"], "membershipId": e_mem, "actorId": e_actor, "actorKey": e_key},
         "operator": {"login": d["login"], "personId": d["person_id"],
-            "tenantA": {"membershipId": d_mem_a, "actorId": d_actor_a, "actorKey": d_key_a},
-            "tenantB": {"membershipId": d_mem_b, "actorId": d_actor_b, "actorKey": d_key_b}},
+            "tenantA": {"membershipId": d_mem_a, "actorId": d_actor_a, "actorKey": d_key_a}},
+        "tenantBAdministrator": {"login": tenant_b_admin["login"], "personId": tenant_b_admin["person_id"],
+            "tenantB": {"membershipId": tb_mem, "actorId": tb_actor, "actorKey": tb_key}},
         "expectedInitialJourneyBalances": {
             "A1_TenantA_BRL": 0.0, "A2_TenantA_BRL": 0.0, "A_TenantB_BRL": 300.0,
             "B1_BRL": 200.0, "B1_GOLD_GRAM": 2.5,
@@ -1083,6 +1342,12 @@ def main() -> int:
         },
         "accrualAmountsBRL": {"tenantA": 50.0, "tenantB": 70.0},
         "secondPersonApprovalPolicy": False,
+        "applicationAdministrator": {
+            "login": APPLICATION_ADMIN_LOGIN,
+            "accountId": application_admin["accountId"],
+            "actorId": application_admin["actorId"],
+            "actorKey": APPLICATION_ADMIN_ACTOR_KEY,
+        },
     }
     manifest_path = db_path.parent / f"{prefix(batch)}-fixture.json"
     manifest_path.write_text(json.dumps(manifest, indent=2) + "\n")
@@ -1092,12 +1357,17 @@ def main() -> int:
     print(f"Database:  {db_path}")
     print(f"Batch:     {batch}")
     print(f"Manifest:  {manifest_path}")
-    print(f"Password:  {DEFAULT_PASSWORD}")
+    print(f"Person/Tenant account password:  {DEFAULT_PASSWORD}")
     print(f"Tenant A:  {tenant_a['name']}  [{tenant_a['id']}]")
     print(f"Tenant B:  {tenant_b['name']}  [{tenant_b['id']}]")
     print("Second-person approval policy forced to FALSE in both fixture Tenants.")
-    print("\nOperator D — Tenant Administrator in both Tenants")
+    print("\nApplication Administrator")
+    print(f"  Login: {APPLICATION_ADMIN_LOGIN}")
+    print(f"  Password: {APPLICATION_ADMIN_PASSWORD}")
+    print("\nOperator D — Tenant A Administrator")
     print(f"  Login: {d['login']}")
+    print("\nOperator E — Tenant B Administrator")
+    print(f"  Login: {tenant_b_admin['login']}")
     print("\nIdentity A — cross-Journey / cross-Tenant")
     print(f"  Login: {a['login']}")
     print(f"  Tenant A: A1 CLOSED/ZERO={a1}; A2 OPEN/ZERO={a2}; Work Period={wp_a}")

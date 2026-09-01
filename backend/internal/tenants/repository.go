@@ -7,16 +7,21 @@ import (
 )
 
 type TenantRecord struct {
-	Tenant           db.Tenant
-	TenantAdminCount int64
+	Tenant                     db.Tenant
+	TenantAdminCount           int64
+	TenantAdminAssignmentCount int64
 }
 
 type TenantAdminCandidateRecord struct {
-	ActorID     string
-	ActorKey    string
-	DisplayName string
-	Active      bool
-	Assigned    bool
+	ActorID             string
+	ActorKey            string
+	DisplayName         string
+	GlobalPersonID      string
+	Active              bool
+	Assigned            bool
+	Eligible            bool
+	IneligibilityReason string
+	TenantAdminTenantID string
 }
 
 type Repository interface {

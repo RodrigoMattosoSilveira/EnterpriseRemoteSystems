@@ -1786,10 +1786,36 @@ func seedCurrentAccountTestActors(t *testing.T, dbPath string) {
 func seedBoundCurrentAccountTestActor(t *testing.T, database *gorm.DB, actorKey string, role authz.RoleCode, tenantID string) {
 	t.Helper()
 	now := time.Now().UTC()
-	actorID := "current-account-test-actor-" + strings.ReplaceAll(actorKey, "@", "-")
-	accountID := "current-account-test-account-" + strings.ReplaceAll(actorKey, "@", "-")
+	suffix := strings.NewReplacer("@", "-", ".", "-").Replace(actorKey)
+	actorID := "current-account-test-actor-" + suffix
+	accountID := "current-account-test-account-" + suffix
+	globalPersonID := "current-account-test-global-person-" + suffix
+	membershipID := "current-account-test-membership-" + suffix
+
+	var activeStatus db.ReferenceData
+	if err := database.Where("tenant_id = ? AND type = ? AND code = ? AND active = ?", tenantID, "person_status", "ACTIVE", true).First(&activeStatus).Error; err != nil {
+		t.Fatalf("find active Person Membership status for %s: %v", actorKey, err)
+	}
+	globalPerson := db.GlobalPerson{
+		BaseModel: db.BaseModel{ID: globalPersonID, CreatedAt: now, UpdatedAt: now},
+		FirstName: "Current", LastName: "Account Test", Nickname: actorKey,
+		CPF: "cpf-" + suffix, RG: "rg-" + suffix, Cellular: "cell-" + suffix,
+		Email: actorKey, Country: "Brasil",
+	}
+	if err := database.Create(&globalPerson).Error; err != nil {
+		t.Fatalf("create current-account test global Person %s: %v", actorKey, err)
+	}
+	membership := db.PersonTenantMembership{
+		BaseModel: db.BaseModel{ID: membershipID, CreatedAt: now, UpdatedAt: now},
+		TenantID:  tenantID, PersonID: globalPersonID, StatusID: activeStatus.ID,
+	}
+	if err := database.Create(&membership).Error; err != nil {
+		t.Fatalf("create current-account test Membership %s: %v", actorKey, err)
+	}
+
+	legacyPersonProjectionID := "current-account-test-person-" + suffix
 	actor := authz.AuthzActor{
-		ID: actorID, ActorKey: actorKey, DisplayName: actorKey, Active: true, CreatedAt: now, UpdatedAt: now,
+		ID: actorID, ActorKey: actorKey, DisplayName: actorKey, PersonID: &legacyPersonProjectionID, Active: true, CreatedAt: now, UpdatedAt: now,
 	}
 	if err := database.Create(&actor).Error; err != nil {
 		t.Fatalf("create bound current-account test actor %s: %v", actorKey, err)
@@ -1800,9 +1826,14 @@ func seedBoundCurrentAccountTestActor(t *testing.T, database *gorm.DB, actorKey 
 	}).Error; err != nil {
 		t.Fatalf("create bound current-account test account %s: %v", actorKey, err)
 	}
+	if err := database.Table("auth_account_people").Create(map[string]any{
+		"account_id": accountID, "person_id": globalPersonID, "created_at": now, "updated_at": now,
+	}).Error; err != nil {
+		t.Fatalf("bind current-account test account %s to global Person: %v", actorKey, err)
+	}
 	if err := database.Table("auth_account_actors").Create(map[string]any{
 		"account_id": accountID, "actor_id": actorID, "scope_type": "TENANT", "tenant_id": tenantID,
-		"membership_id": nil, "is_primary": true, "created_at": now, "updated_at": now,
+		"membership_id": membershipID, "is_primary": true, "created_at": now, "updated_at": now,
 	}).Error; err != nil {
 		t.Fatalf("bind current-account test actor %s to tenant %s: %v", actorKey, tenantID, err)
 	}

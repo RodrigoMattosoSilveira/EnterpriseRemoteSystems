@@ -18,6 +18,7 @@ import type {
   Person,
   ProfileCompletionStatus,
 } from "../../types/people";
+import { PageTitle } from "../../components/layout/PageHeading";
 
 type PeopleListState = {
   flash: string;
@@ -39,7 +40,7 @@ export function PeopleListPage() {
     actor?.scope === "TENANT" && actor.roleCodes.includes("TENANT_ADMIN");
   const isApplicationAdministrator =
     actor?.scope === "APPLICATION" && actor.roleCodes.includes("APPLICATION_ADMIN");
-  // POST /people remains a Bite 28 compatibility path until the 30H global
+  // POST /people remains a Bite 28 compatibility path until the dedicated global
   // administration cutover. Preserve the existing create affordance for actors
   // that currently hold people.create (including today's Application Admin).
   const canCreatePerson =
@@ -148,7 +149,7 @@ export function PeopleListPage() {
       <header className="sticky top-0 z-10 border-b bg-white/95 px-4 py-4 backdrop-blur">
         <div className="mx-auto flex max-w-4xl items-center justify-between gap-3">
           <div>
-            <h1 className="text-xl font-bold text-gray-950">People</h1>
+            <PageTitle>People</PageTitle>
             <p className="text-sm text-gray-500">
               Permanent identity records
             </p>

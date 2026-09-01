@@ -23,6 +23,7 @@ import {
   useUpdateCollaboratorWorkAssignment,
 } from "./useCollaborators";
 import { useSettlementPreview } from "./useSettlements";
+import { PageContextHeading, PageTitle } from "../../components/layout/PageHeading";
 
 export function CollaboratorDetailPage() {
   const { id = "" } = useParams();
@@ -109,12 +110,12 @@ export function CollaboratorDetailPage() {
 
           <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div>
-              <h1 className="text-3xl font-bold text-gray-950">
+              <PageTitle>
                 Collaborator Journey
-              </h1>
-              <h2 className="mt-1 text-lg font-semibold text-gray-800">
+              </PageTitle>
+              <PageContextHeading>
                 {displayPersonName(collaborator)}
-              </h2>
+              </PageContextHeading>
               <p className="mt-1 text-sm text-gray-600">
                 <span className="font-semibold">Journey Code:</span>{" "}
                 <span className="break-all font-mono">{collaborator.id}</span>

@@ -12,6 +12,7 @@ import {
   receiptStatusTone,
 } from "./receiptLifecycle";
 import { useAcceptReceipt, usePrintableReceipt, usePrintReceipt, useReturnReceipt } from "./useReceipt";
+import { PageTitle } from "../../components/layout/PageHeading";
 
 export function PrintableReceiptPage() {
   const { entryId = "" } = useParams();
@@ -159,7 +160,7 @@ export function PrintableReceiptPage() {
 
         <header className="mt-8 border-b pb-5 text-center print:mt-0">
           <p className="text-sm font-semibold uppercase tracking-widest">Enterprise Remote Systems</p>
-          <h1 className="mt-2 text-3xl font-bold">Receipt</h1>
+          <PageTitle className="mt-2">Receipt</PageTitle>
           <p className="mt-2 font-mono text-sm">{data.receiptNumber}</p>
         </header>
 

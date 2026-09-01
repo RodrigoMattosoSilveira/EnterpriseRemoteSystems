@@ -72,6 +72,7 @@ help:
 	@echo "  make backend-check"
 	@echo "  make frontend-check"
 	@echo "  make local-check"
+	@echo "  make migration-check"
 	@echo "  make local-docker-check"
 	@echo "  make local-backend"
 	@echo "  make local-frontend"
@@ -87,7 +88,16 @@ help:
 	@echo "  make server-build ENV=development|test|production"
 	@echo "  make server-up ENV=development|test|production"
 	@echo "  make server-down ENV=development|test|production"
+	@echo "  make server-replace-development-db ENV=development"
+	@echo "  make server-test-rehearsal-capture-baseline"
+	@echo "  make server-test-rehearsal-ensure-baseline"
+	@echo "  make server-test-rehearsal-restore"
+	@echo "  make server-record-test-release-rehearsal ENV=test TREE_SHA=<tree> REVISION=<sha>"
+	@echo "  make server-require-test-release-rehearsal ENV=production TREE_SHA=<tree>"
 	@echo "  make server-ps ENV=development|test|production"
+	@echo "  make server-diagnostics ENV=development|test|production"
+	@echo "  make server-bite30h-admin-report ENV=development|test|production"
+	@echo "  make server-bite30h-admin-revoke ENV=development|test|production GRANT_IDS='grant-id ...'"
 	@echo "  make server-logs ENV=development|test|production"
 	@echo "  make server-backend-logs ENV=development|test|production"
 	@echo "  make server-frontend-logs ENV=development|test|production"
@@ -106,6 +116,7 @@ help:
 	@echo "  make server-dev-pull"
 	@echo "  make server-dev-build"
 	@echo "  make server-dev-up"
+	@echo "  make server-dev-replace-db"
 	@echo "  make server-dev-smoke"
 	@echo "  make server-dev-protected-api-smoke"
 	@echo "  make server-dev-admin-test"
@@ -115,6 +126,9 @@ help:
 	@echo "  make server-test-pull"
 	@echo "  make server-test-build"
 	@echo "  make server-test-up"
+	@echo "  make server-test-rehearsal-capture-baseline"
+	@echo "  make server-test-rehearsal-ensure-baseline"
+	@echo "  make server-test-rehearsal-restore"
 	@echo "  make server-test-smoke"
 	@echo "  make server-test-protected-api-smoke"
 	@echo "  make server-test-admin-test"
@@ -220,6 +234,10 @@ local-admin-reset:
 .PHONY: backend-check
 backend-check:
 	cd backend && go mod tidy && go test ./...
+
+.PHONY: migration-check
+migration-check:
+	cd backend && go test ./internal/db -run 'Migration' -count=1
 
 .PHONY: frontend-check
 frontend-check:
@@ -354,9 +372,220 @@ server-down-volumes:
 	@echo "Use only for development/test resets or after a backup."
 	cd $(ENV_DIR) && $(SERVER_COMPOSE) down -v
 
+.PHONY: server-replace-development-db
+server-replace-development-db:
+	@if [[ "$(ENV)" != "development" ]]; then \
+		echo "Refusing Development database replacement for ENV=$(ENV)."; \
+		exit 2; \
+	fi
+	@echo "Replacing disposable Development SQLite volume from the current migration chain."
+	cd $(ENV_DIR) && $(SERVER_COMPOSE) down
+	@volume="$(COMPOSE_PROJECT)_backend-data"; \
+	if docker volume inspect "$$volume" >/dev/null 2>&1; then \
+		echo "Removing disposable SQLite volume $$volume"; \
+		docker volume rm "$$volume" >/dev/null; \
+	fi; \
+	docker volume create "$$volume" >/dev/null
+	cd $(ENV_DIR) && $(SERVER_COMPOSE) run --rm --no-deps --entrypoint /app/build-development-db.sh backend
+
+TEST_RELEASE_BASELINE_DB ?= $(SERVER_ROOT)/test/rehearsal-baselines/pre-bite30h.db
+TEST_RELEASE_BASELINE_LAST_MIGRATION ?= 000061_expand_final_settlement_database_checks.up.sql
+TEST_RELEASE_MIGRATION_UNDER_REHEARSAL ?= 000062_tenant_administrator_cardinality.up.sql
+TEST_RELEASE_REHEARSAL_MARKER_DIR ?= $(SERVER_ROOT)/test/release-rehearsal-passed
+
+.PHONY: server-test-rehearsal-capture-baseline
+server-test-rehearsal-capture-baseline:
+	@if [[ "$(ENV)" != "test" ]]; then \
+		echo "Refusing Test release-baseline capture for ENV=$(ENV)."; \
+		exit 2; \
+	fi
+	@baseline="$(TEST_RELEASE_BASELINE_DB)"; \
+	container="$(CONTAINER_PREFIX)-backend"; \
+	if [[ -e "$$baseline" ]]; then \
+		echo "Refusing to overwrite existing Test release baseline: $$baseline"; \
+		exit 2; \
+	fi; \
+	if ! docker ps --format '{{.Names}}' | grep -qx "$$container"; then \
+		echo "Test backend must be running to capture a baseline: $$container"; \
+		exit 2; \
+	fi; \
+	required="$$(docker exec "$$container" sqlite3 /app/data/app.db "SELECT COUNT(*) FROM schema_migrations WHERE filename='$(TEST_RELEASE_BASELINE_LAST_MIGRATION)';")"; \
+	forbidden="$$(docker exec "$$container" sqlite3 /app/data/app.db "SELECT COUNT(*) FROM schema_migrations WHERE filename='$(TEST_RELEASE_MIGRATION_UNDER_REHEARSAL)';")"; \
+	if [[ "$$required" != "1" || "$$forbidden" != "0" ]]; then \
+		echo "Current Test database is not the expected pre-release baseline."; \
+		echo "Required migration present: $$required ($(TEST_RELEASE_BASELINE_LAST_MIGRATION))"; \
+		echo "Migration under rehearsal already present: $$forbidden ($(TEST_RELEASE_MIGRATION_UNDER_REHEARSAL))"; \
+		exit 2; \
+	fi; \
+	mkdir -p "$$(dirname "$$baseline")"; \
+	docker exec "$$container" rm -f /tmp/ers-test-release-baseline.db; \
+	docker exec "$$container" sqlite3 /app/data/app.db ".backup '/tmp/ers-test-release-baseline.db'"; \
+	docker cp "$$container:/tmp/ers-test-release-baseline.db" "$$baseline"; \
+	docker exec "$$container" rm -f /tmp/ers-test-release-baseline.db; \
+	echo "Captured Test release baseline: $$baseline"; \
+	sha256sum "$$baseline"
+
+.PHONY: server-test-rehearsal-ensure-baseline
+server-test-rehearsal-ensure-baseline:
+	@if [[ "$(ENV)" != "test" ]]; then \
+		echo "Refusing Test release-baseline preparation for ENV=$(ENV)."; \
+		exit 2; \
+	fi
+	@baseline="$(TEST_RELEASE_BASELINE_DB)"; \
+	if [[ -f "$$baseline" ]]; then \
+		baseline_dir="$$(dirname "$$baseline")"; \
+		baseline_name="$$(basename "$$baseline")"; \
+		baseline_dir="$$(cd "$$baseline_dir" && pwd)"; \
+		synthetic_count="$$(cd $(ENV_DIR) && $(SERVER_COMPOSE) run --rm --no-deps \
+			-v "$$baseline_dir:/rehearsal-baseline:ro" \
+			--entrypoint sqlite3 backend \
+			"/rehearsal-baseline/$$baseline_name" \
+			"SELECT COUNT(*) FROM auth_user_accounts WHERE id IN ('test-rehearsal-account-a','test-rehearsal-account-b');")"; \
+		if [[ "$$synthetic_count" == "2" ]]; then \
+			alignment_count="$$(cd $(ENV_DIR) && $(SERVER_COMPOSE) run --rm --no-deps \
+				-v "$$baseline_dir:/rehearsal-baseline:ro" \
+				--entrypoint sqlite3 backend \
+				"/rehearsal-baseline/$$baseline_name" \
+				"SELECT COUNT(*) FROM auth_user_accounts a JOIN authz_actors az ON az.id=a.actor_id JOIN person_tenant_memberships m ON m.legacy_person_id=az.person_id JOIN auth_account_people ap ON ap.account_id=a.id AND ap.person_id=m.person_id JOIN auth_account_actors aa ON aa.account_id=a.id AND aa.actor_id=az.id AND aa.scope_type='TENANT' AND aa.tenant_id=m.tenant_id AND aa.membership_id=m.id WHERE a.id IN ('test-rehearsal-account-a','test-rehearsal-account-b');")"; \
+		if [[ "$$alignment_count" != "2" ]]; then \
+			echo "Existing deterministic Test release baseline has stale pre-30H Account/Actor identity shape; regenerating it."; \
+			rm -f "$$baseline"; \
+		else \
+			echo "Using existing validated deterministic Test release baseline: $$baseline"; \
+			sha256sum "$$baseline"; \
+			exit 0; \
+		fi; \
+		else \
+			echo "Using existing captured Test release baseline: $$baseline"; \
+			sha256sum "$$baseline"; \
+			exit 0; \
+		fi; \
+	fi; \
+	echo "No valid captured Test release baseline exists; generating a deterministic pre-30H baseline from repository migrations."; \
+	baseline_dir="$$(dirname "$$baseline")"; \
+	baseline_name="$$(basename "$$baseline")"; \
+	mkdir -p "$$baseline_dir"; \
+	baseline_dir="$$(cd "$$baseline_dir" && pwd)"; \
+	cd $(ENV_DIR) && $(SERVER_COMPOSE) run --rm --no-deps \
+		-v "$$baseline_dir:/rehearsal-baseline" \
+		-e TEST_RELEASE_BASELINE_DB="/rehearsal-baseline/$$baseline_name" \
+		-e EXPECTED_LAST_MIGRATION="$(TEST_RELEASE_BASELINE_LAST_MIGRATION)" \
+		-e MIGRATION_UNDER_REHEARSAL="$(TEST_RELEASE_MIGRATION_UNDER_REHEARSAL)" \
+		--entrypoint /app/build-test-rehearsal-baseline.sh backend
+
+.PHONY: server-test-rehearsal-restore
+server-test-rehearsal-restore:
+	@if [[ "$(ENV)" != "test" ]]; then \
+		echo "Refusing Test release-rehearsal restore for ENV=$(ENV)."; \
+		exit 2; \
+	fi
+	@$(MAKE) server-test-rehearsal-ensure-baseline ENV=test
+	@baseline="$(TEST_RELEASE_BASELINE_DB)"; \
+	if [[ ! -f "$$baseline" ]]; then \
+		echo "Missing Test release baseline: $$baseline"; \
+		echo "Capture or install the known pre-release baseline before requesting a rehearsal."; \
+		exit 2; \
+	fi; \
+	baseline_dir="$$(cd "$$(dirname "$$baseline")" && pwd)"; \
+	baseline_name="$$(basename "$$baseline")"; \
+	cd $(ENV_DIR) && $(SERVER_COMPOSE) down; \
+	volume="$(COMPOSE_PROJECT)_backend-data"; \
+	if docker volume inspect "$$volume" >/dev/null 2>&1; then \
+		echo "Removing Test SQLite volume before restoring the known release baseline: $$volume"; \
+		docker volume rm "$$volume" >/dev/null; \
+	fi; \
+	docker volume create "$$volume" >/dev/null; \
+	cd $(ENV_DIR) && $(SERVER_COMPOSE) run --rm --no-deps \
+		-v "$$baseline_dir:/rehearsal-baseline:ro" \
+		-e REHEARSAL_BASELINE_DB="/rehearsal-baseline/$$baseline_name" \
+		-e EXPECTED_LAST_MIGRATION="$(TEST_RELEASE_BASELINE_LAST_MIGRATION)" \
+		-e FORBIDDEN_MIGRATION="$(TEST_RELEASE_MIGRATION_UNDER_REHEARSAL)" \
+		--entrypoint /app/restore-test-rehearsal-db.sh backend
+
+.PHONY: server-record-test-release-rehearsal
+server-record-test-release-rehearsal:
+	@if [[ "$(ENV)" != "test" ]]; then \
+		echo "Refusing Test release-rehearsal marker for ENV=$(ENV)."; \
+		exit 2; \
+	fi
+	@if [[ -z "$(TREE_SHA)" || -z "$(REVISION)" ]]; then \
+		echo "TREE_SHA and REVISION are required."; \
+		exit 2; \
+	fi
+	@baseline="$(TEST_RELEASE_BASELINE_DB)"; \
+	if [[ ! -f "$$baseline" ]]; then \
+		echo "Cannot record rehearsal without baseline: $$baseline"; \
+		exit 2; \
+	fi; \
+	mkdir -p "$(TEST_RELEASE_REHEARSAL_MARKER_DIR)"; \
+	marker="$(TEST_RELEASE_REHEARSAL_MARKER_DIR)/$(TREE_SHA).passed"; \
+	baseline_sha="$$(sha256sum "$$baseline" | awk '{print $$1}')"; \
+	{ \
+		echo "tree_sha=$(TREE_SHA)"; \
+		echo "revision=$(REVISION)"; \
+		echo "baseline=$$baseline"; \
+		echo "baseline_sha256=$$baseline_sha"; \
+		echo "baseline_last_migration=$(TEST_RELEASE_BASELINE_LAST_MIGRATION)"; \
+		echo "migration_under_rehearsal=$(TEST_RELEASE_MIGRATION_UNDER_REHEARSAL)"; \
+		echo "passed_at=$$(date -u +%Y-%m-%dT%H:%M:%SZ)"; \
+	} > "$$marker"; \
+	echo "Recorded successful Test release rehearsal: $$marker"; \
+	cat "$$marker"
+
+.PHONY: server-require-test-release-rehearsal
+server-require-test-release-rehearsal:
+	@if [[ "$(ENV)" != "production" ]]; then \
+		echo "Release-rehearsal production gate must be checked with ENV=production."; \
+		exit 2; \
+	fi
+	@if [[ -z "$(TREE_SHA)" ]]; then \
+		echo "TREE_SHA is required."; \
+		exit 2; \
+	fi
+	@marker="$(TEST_RELEASE_REHEARSAL_MARKER_DIR)/$(TREE_SHA).passed"; \
+	if [[ ! -f "$$marker" ]]; then \
+		echo "Production deployment blocked: no successful Test release rehearsal exists for source tree $(TREE_SHA)."; \
+		echo "Expected marker: $$marker"; \
+		exit 1; \
+	fi; \
+	grep -qx "tree_sha=$(TREE_SHA)" "$$marker" || { \
+		echo "Production deployment blocked: Test release-rehearsal marker does not match source tree $(TREE_SHA)."; \
+		exit 1; \
+	}; \
+	echo "Production release gate passed using Test rehearsal marker:"; \
+	cat "$$marker"
+
 .PHONY: server-ps
 server-ps:
 	cd $(ENV_DIR) && $(SERVER_COMPOSE) ps -a
+
+.PHONY: server-diagnostics
+server-diagnostics:
+	@echo "Server diagnostics for $(ENV) ($(COMPOSE_PROJECT))"
+	@cd $(ENV_DIR) && $(SERVER_COMPOSE) ps -a || true
+	@container="$(CONTAINER_PREFIX)-backend"; \
+	if docker ps -a --format '{{.Names}}' | grep -qx "$$container"; then \
+		echo; \
+		echo "----- $$container state -----"; \
+		docker inspect "$$container" --format 'status={{.State.Status}} exit_code={{.State.ExitCode}} error={{.State.Error}}{{if .State.Health}} health={{.State.Health.Status}}{{end}}' || true; \
+		echo; \
+		echo "----- $$container healthcheck history -----"; \
+		docker inspect "$$container" --format '{{if .State.Health}}{{range .State.Health.Log}}{{.Start}} exit={{.ExitCode}} {{printf "%s" .Output}}{{println}}{{end}}{{else}}no healthcheck state recorded{{end}}' || true; \
+		echo; \
+		echo "----- $$container logs (last 200 lines) -----"; \
+		docker logs --tail=200 "$$container" 2>&1 || true; \
+	else \
+		echo "Backend container $$container does not exist."; \
+	fi
+
+.PHONY: server-bite30h-admin-report
+server-bite30h-admin-report:
+	cd $(ENV_DIR) && COMPOSE_PROJECT="$(COMPOSE_PROJECT)" ENV_FILE="$(ENV_FILE)" ENV_NAME="$(ENV)" ./scripts/bite30h-tenant-admin-reconcile.sh report
+
+.PHONY: server-bite30h-admin-revoke
+server-bite30h-admin-revoke:
+	@test -n "$(strip $(GRANT_IDS))" || (echo "GRANT_IDS is required; run server-bite30h-admin-report first and explicitly select Role Grant IDs." && exit 2)
+	cd $(ENV_DIR) && COMPOSE_PROJECT="$(COMPOSE_PROJECT)" ENV_FILE="$(ENV_FILE)" ENV_NAME="$(ENV)" RECONCILIATION_OPERATOR="$${USER:-offline-operator}" ./scripts/bite30h-tenant-admin-reconcile.sh revoke $(GRANT_IDS)
 
 .PHONY: server-logs
 server-logs:
@@ -463,6 +692,10 @@ server-dev-build:
 .PHONY: server-dev-up
 server-dev-up:
 	$(MAKE) server-up ENV=development
+
+.PHONY: server-dev-replace-db
+server-dev-replace-db:
+	$(MAKE) server-replace-development-db ENV=development
 
 .PHONY: server-dev-down
 server-dev-down:

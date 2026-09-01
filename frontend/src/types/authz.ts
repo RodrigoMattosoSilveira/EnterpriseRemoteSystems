@@ -46,6 +46,7 @@ export type AuthzActorRoleGrant = {
 
 export type AuthzActorBinding = {
   accountId: string;
+  globalPersonId?: string;
   accountLogin?: string;
   scopeType: string;
   tenantId?: string;
@@ -60,6 +61,7 @@ export type AuthzActor = {
   actorKey: string;
   displayName: string;
   personId?: string;
+  globalPersonId?: string;
   collaboratorId?: string;
   active: boolean;
   roleGrants?: AuthzActorRoleGrant[];

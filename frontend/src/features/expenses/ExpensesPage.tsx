@@ -11,6 +11,7 @@ import {
 import { usePriceListItems } from "../price-list/usePriceList";
 import { receiptStatusLabel, receiptStatusTone } from "../receipts/receiptLifecycle";
 import { useExpenses } from "./useExpenses";
+import { PageTitle } from "../../components/layout/PageHeading";
 
 const EXPENSE_PAGE_SIZE = 50;
 const FILTER_OPTION_PAGE_SIZE = 200;
@@ -108,7 +109,7 @@ export function ExpensesPage() {
             <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
               Operations
             </p>
-            <h1 className="text-xl font-bold text-gray-950">Expenses</h1>
+            <PageTitle>Expenses</PageTitle>
             <p className="text-sm text-gray-500">
               Expense deductions recorded in Real or grams of gold.
             </p>

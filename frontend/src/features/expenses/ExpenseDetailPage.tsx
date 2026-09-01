@@ -5,6 +5,7 @@ import { useOptionalAuthorizationContext } from "../../components/layout/Authori
 import type { Expense } from "../../types/expenses";
 import { receiptStatusLabel, receiptStatusTone } from "../receipts/receiptLifecycle";
 import { useCancelExpense, useExpense } from "./useExpenses";
+import { PageContextHeading, PageTitle } from "../../components/layout/PageHeading";
 
 export function ExpenseDetailPage() {
   const { id = "" } = useParams();
@@ -85,12 +86,8 @@ export function ExpenseDetailPage() {
             Back to Expenses
           </Link>
           <div className="mt-4">
-            <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
-              Expense
-            </p>
-            <h1 className="text-2xl font-bold text-gray-950">
-              {displayExpenseCategory(expense)}
-            </h1>
+            <PageTitle>Expense</PageTitle>
+            <PageContextHeading>{displayExpenseCategory(expense)}</PageContextHeading>
             <p className="mt-1 text-sm text-gray-500">
               {expense.collaboratorLabel || "Collaborator"} · {expense.expenseDate}
             </p>

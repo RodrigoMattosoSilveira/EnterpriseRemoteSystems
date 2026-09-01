@@ -19,8 +19,8 @@ Bite 28A introduced the application-admin tenant lifecycle and tenant-administra
 
 The API derives one of three status values:
 
-- `ACTIVE_READY`: the tenant is active and has at least one active actor with an active `TENANT_ADMIN` grant for that tenant.
-- `ACTIVE_NO_TENANT_ADMIN`: the tenant is active but has no active tenant administrator.
+- `ACTIVE_READY`: the tenant is active and has at least one active Actor with an active `TENANT_ADMIN` grant for that tenant.
+- `ACTIVE_NO_TENANT_ADMIN`: the tenant is active but has no currently active Tenant Administrator Actor. An inactive Actor can still retain an active `TENANT_ADMIN` assignment slot until that grant is explicitly revoked.
 - `INACTIVE`: the tenant is inactive.
 
 ## Inactive tenant enforcement
@@ -33,7 +33,16 @@ For an inactive selected tenant:
 
 ## Tenant administrator assignment
 
-The tenant detail page lists persisted authorization actors. Assigning an actor creates or reactivates a tenant-scoped `TENANT_ADMIN` role grant. Inactive actors cannot be assigned. Revocation deactivates only that tenant role grant; it does not delete or deactivate the actor.
+Bite 30H adds two cardinality invariants:
+
+- each Tenant may have **zero, one, or two** active `TENANT_ADMIN` Role Grants;
+- one Person may hold active `TENANT_ADMIN` authority in **only one Tenant at a time**.
+
+When a Tenant uses both slots, the grants must belong to two distinct global Persons. This permits operational redundancy without allowing one privileged Person to bridge multiple Tenants. A third active assignment in the same Tenant is rejected. Assigning a second Tenant Actor for the same Person is also rejected, even inside the same Tenant.
+
+The tenant detail page lists persisted authorization Actors and reports assignment capacity separately from currently active administrator Actors. Assigning an Actor creates or reactivates a tenant-scoped `TENANT_ADMIN` Role Grant. Inactive Actors cannot be newly assigned. Revocation deactivates only that Role Grant; it does not delete or deactivate the Actor. Deactivating an Actor does **not** release its administrator slot; the active grant must be explicitly revoked.
+
+A Tenant with one administrator may assign a second distinct Person before revoking a departing administrator, allowing a safe overlap/handoff without an administrative coverage gap.
 
 ## Authenticated scope boundary
 

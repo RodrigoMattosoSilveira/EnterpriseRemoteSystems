@@ -14,6 +14,7 @@ import {
   useCreateMineProduction,
   useUpdateMineProduction,
 } from "./useMineProduction";
+import { PageTitle } from "../../components/layout/PageHeading";
 
 export function MineProductionPage() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -89,9 +90,9 @@ export function MineProductionPage() {
             <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
               Earnings
             </p>
-            <h1 className="text-2xl font-bold text-gray-950">
+            <PageTitle>
               Gold Production
-            </h1>
+            </PageTitle>
             <p className="text-sm text-gray-500">
               Authorized actors record and edit mine production here. Accrual
               uses these records as read-only inputs.

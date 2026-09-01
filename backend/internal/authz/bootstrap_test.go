@@ -110,7 +110,7 @@ func TestEnsureBootstrapActorIsIdempotent(t *testing.T) {
 	}
 }
 
-func TestEnsureBootstrapActorCanCreateTenantScopedAdmin(t *testing.T) {
+func TestEnsureBootstrapActorRejectsUnboundTenantAdministrator(t *testing.T) {
 	database := newAuthzTestDB(t)
 
 	_, err := EnsureBootstrapActor(context.Background(), database, BootstrapConfig{
@@ -120,19 +120,15 @@ func TestEnsureBootstrapActorCanCreateTenantScopedAdmin(t *testing.T) {
 		RoleCode:    RoleTenantAdmin,
 		TenantID:    "tenant-a",
 	})
-	if err != nil {
-		t.Fatalf("ensure bootstrap actor: %v", err)
+	if err == nil {
+		t.Fatalf("expected unbound Tenant Administrator bootstrap rejection")
 	}
-
-	actor, err := NewGORMStore(database).FindActor(context.Background(), ActorLookup{ActorID: "tenant-bootstrap", TenantID: "tenant-a"})
-	if err != nil {
-		t.Fatalf("find tenant bootstrap actor: %v", err)
+	var validation ValidationError
+	if !errors.As(err, &validation) {
+		t.Fatalf("expected ValidationError, got %T %v", err, err)
 	}
-	if actor.Scope != ActorScopeTenant || actor.TenantID != "tenant-a" {
-		t.Fatalf("expected tenant-scoped actor, got %#v", actor)
-	}
-	if err := RequireTenantScope(actor, "tenant-b"); !errors.Is(err, ErrForbidden) {
-		t.Fatalf("expected tenant-b to be forbidden, got %v", err)
+	if got := validation.ValidationFields()["actorId"]; got != "Tenant Administrator authority requires the Account/Actor and Person Membership foundation" {
+		t.Fatalf("expected Account/Actor and Person Membership validation message, got %q", got)
 	}
 }
 

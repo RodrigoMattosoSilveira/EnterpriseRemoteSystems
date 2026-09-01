@@ -14,7 +14,7 @@ people:
     description: >-
       Transitional Bite 28 compatibility operation. Creates a global Person and
       a Person-Tenant Membership for the selected tenant in one transaction. Its
-      legacy people.create authorization remains until the Bite 30H global-admin
+      legacy people.create authorization remains until the dedicated global-admin
       control-plane cutover; new Membership-only creation is Tenant Administrator-only.
     requestBody:
       required: true

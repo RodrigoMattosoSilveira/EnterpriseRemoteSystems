@@ -260,7 +260,7 @@ func RequireTenantScope(actor *Actor, tenantID string) error {
 	}
 	// Bite 30D separates intrinsic and delegated authority, but final removal
 	// of Application Administrator standing tenant-data compatibility belongs
-	// to Bite 30H. Preserve that transitional scope bypass until then; 30D no
+	// to the dedicated global control-plane cutover. Preserve that transitional scope bypass until then; 30D no
 	// longer folds global Role Grants into a tenant Actor identity.
 	if actor.Scope == ActorScopeApplication {
 		return nil

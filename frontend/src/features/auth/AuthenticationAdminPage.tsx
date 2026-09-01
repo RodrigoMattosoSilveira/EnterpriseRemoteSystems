@@ -22,6 +22,7 @@ import type { AuthzActor, AuthzActorRoleGrant } from "../../types/authz";
 import type { Collaborator } from "../../types/collaborators";
 import type { Person } from "../../types/people";
 import { ReactivationRequestsPanel } from "./ReactivationRequestsPanel";
+import { PageTitle } from "../../components/layout/PageHeading";
 
 export function activeAuthenticationGrants(
   actor: AuthzActor,
@@ -432,7 +433,7 @@ export function AuthenticationAdminPage() {
 
   return (
     <div className="p-6">
-      <h1 className="text-2xl font-bold">Authentication Accounts</h1>
+      <PageTitle>Authentication Accounts</PageTitle>
       <p className="mt-1 text-sm text-slate-600">
         Manage Authentication Accounts separately from the Person who owns the
         account and the tenant-specific Actors through which that account operates.

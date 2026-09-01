@@ -11,15 +11,16 @@ const (
 )
 
 type TenantDTO struct {
-	ID                string            `json:"id"`
-	Code              string            `json:"code"`
-	Name              string            `json:"name"`
-	Description       string            `json:"description,omitempty"`
-	Active            bool              `json:"active"`
-	OperationalStatus OperationalStatus `json:"operationalStatus"`
-	TenantAdminCount  int64             `json:"tenantAdminCount"`
-	CreatedAt         time.Time         `json:"createdAt"`
-	UpdatedAt         time.Time         `json:"updatedAt"`
+	ID                         string            `json:"id"`
+	Code                       string            `json:"code"`
+	Name                       string            `json:"name"`
+	Description                string            `json:"description,omitempty"`
+	Active                     bool              `json:"active"`
+	OperationalStatus          OperationalStatus `json:"operationalStatus"`
+	TenantAdminCount           int64             `json:"tenantAdminCount"`
+	TenantAdminAssignmentCount int64             `json:"tenantAdminAssignmentCount"`
+	CreatedAt                  time.Time         `json:"createdAt"`
+	UpdatedAt                  time.Time         `json:"updatedAt"`
 }
 
 type CreateTenantRequest struct {
@@ -44,9 +45,13 @@ type AssignTenantAdminRequest struct {
 }
 
 type TenantAdminCandidateDTO struct {
-	ActorID     string `json:"actorId"`
-	ActorKey    string `json:"actorKey"`
-	DisplayName string `json:"displayName"`
-	Active      bool   `json:"active"`
-	Assigned    bool   `json:"assigned"`
+	ActorID             string `json:"actorId"`
+	ActorKey            string `json:"actorKey"`
+	DisplayName         string `json:"displayName"`
+	GlobalPersonID      string `json:"globalPersonId,omitempty"`
+	Active              bool   `json:"active"`
+	Assigned            bool   `json:"assigned"`
+	Eligible            bool   `json:"eligible"`
+	IneligibilityReason string `json:"ineligibilityReason,omitempty"`
+	TenantAdminTenantID string `json:"tenantAdminTenantId,omitempty"`
 }

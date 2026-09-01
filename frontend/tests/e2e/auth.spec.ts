@@ -1,6 +1,6 @@
 import { expect, test, type APIRequestContext } from "@playwright/test";
 import { uniquePersonSuffix } from "./support/test-data";
-import { authzHeaders, e2eApiUrl, seedBrowserAuthz } from "./support/authz";
+import { E2E_ACTOR_ID, authzHeaders, e2eApiUrl, seedBrowserAuthz } from "./support/authz";
 
 test.beforeEach(async ({ page }) => {
   await seedBrowserAuthz(page);
@@ -20,14 +20,16 @@ test("admin can create an authorization actor, grant a role, and revoke it", asy
   const collaborator = await createCollaborator(request, person.id);
   const actorKey = `collaborator-${collaborator.id}`;
   const displayName = actorNickname;
-  const grantedRole = "TENANT_ADMIN";
+  // This test exercises generic tenant Role Grant UX. Keep it independent of
+  // Bite 30H Tenant Administrator slot cardinality, which has dedicated coverage.
+  const grantedRole = "EXPENSE_OPERATOR";
   const grantTenant = "default";
   const accountLogin = `authz-bound-${suffix}@example.com`;
 
   await page.goto("/admin/authorization");
 
   await expect(
-    page.getByRole("heading", { name: "Authorization", exact: true }),
+    page.getByRole("heading", { name: "Application Authorization", exact: true }),
   ).toBeVisible();
   await expect(
     page.getByRole("heading", { name: "Authenticated authorization context" }),
@@ -134,7 +136,7 @@ test("admin can create an authorization actor, grant a role, and revoke it", asy
       .getByTestId("authz-actor-card")
       .filter({
         has: page.getByRole("heading", {
-          name: "bootstrap-admin",
+          name: E2E_ACTOR_ID,
           exact: true,
         }),
       }),
@@ -143,7 +145,7 @@ test("admin can create an authorization actor, grant a role, and revoke it", asy
   await expect(eligibilityFilter).toHaveValue("ALL");
 
   const actorNicknameFilter = page.getByLabel(
-    "Filter actors by person nickname",
+    "Filter actors by Actor Key or person nickname",
   );
   const initialNicknameFilterBox = await actorNicknameFilter.boundingBox();
   expect(initialNicknameFilterBox?.width ?? 0).toBeGreaterThanOrEqual(320);
@@ -157,7 +159,7 @@ test("admin can create an authorization actor, grant a role, and revoke it", asy
       .getByTestId("authz-actor-card")
       .filter({
         has: page.getByRole("heading", {
-          name: "bootstrap-admin",
+          name: E2E_ACTOR_ID,
           exact: true,
         }),
       }),
@@ -169,7 +171,7 @@ test("admin can create an authorization actor, grant a role, and revoke it", asy
       .getByTestId("authz-actor-card")
       .filter({
         has: page.getByRole("heading", {
-          name: "bootstrap-admin",
+          name: E2E_ACTOR_ID,
           exact: true,
         }),
       }),

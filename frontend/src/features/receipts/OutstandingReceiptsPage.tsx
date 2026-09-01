@@ -5,6 +5,7 @@ import { useAuthorizationContext } from "../../components/layout/AuthorizationCo
 import type { OutstandingReceipt } from "../../types/receipts";
 import { nextReceiptAction, receiptStatusLabel, receiptStatusTone } from "./receiptLifecycle";
 import { useOutstandingReceipts } from "./useReceipt";
+import { PageTitle } from "../../components/layout/PageHeading";
 
 const statuses = [
   { value: "", label: "All outstanding" },
@@ -90,7 +91,7 @@ export function OutstandingReceiptsPage() {
         <header className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <p className="text-sm font-semibold uppercase tracking-wide text-gray-500">Receipts</p>
-            <h1 className="text-3xl font-bold text-gray-900">Outstanding receipts</h1>
+            <PageTitle>Outstanding receipts</PageTitle>
             <p className="mt-2 max-w-2xl text-sm text-gray-600">
               {selfServiceReceiptAccess
                 ? "Review your own outstanding receipt obligations and settlement receipts awaiting your acceptance."
