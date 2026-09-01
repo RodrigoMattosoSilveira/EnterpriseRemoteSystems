@@ -72,6 +72,31 @@ fi
 sqlite3 -bail "$TMP_DB" <<'SQL'
 PRAGMA foreign_keys = ON;
 
+-- Preserve the tenant-local Person compatibility projection as a real
+-- pre-30H database would. Startup's Account/Actor foundation repair resolves
+-- the legacy Actor Person through person_tenant_memberships.legacy_person_id;
+-- omitting this bridge creates a hybrid fixture that migration 000062 accepts
+-- but the application correctly rejects during bootstrap.
+INSERT INTO people (
+  id, first_name, last_name, nickname, cpf, rg, cellular, email,
+  country, profile_completion_status, can_create_collaborator,
+  status_id, notes, created_at, updated_at, tenant_id
+) VALUES
+  (
+    'test-rehearsal-legacy-person-a', 'Release', 'Rehearsal A', 'Rehearsal Admin A',
+    '99000000001', 'REHEARSAL-RG-A', '+5599000000001', 'release-rehearsal-admin-a@example.test',
+    'Brasil', 'COMPLETE', 1, 'ref-person-status-active',
+    'Pre-30H release-rehearsal legacy Person projection A',
+    CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 'default'
+  ),
+  (
+    'test-rehearsal-legacy-person-b', 'Release', 'Rehearsal B', 'Rehearsal Admin B',
+    '99000000002', 'REHEARSAL-RG-B', '+5599000000002', 'release-rehearsal-admin-b@example.test',
+    'Brasil', 'COMPLETE', 1, 'ref-person-status-active',
+    'Pre-30H release-rehearsal legacy Person projection B',
+    CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 'default'
+  );
+
 INSERT INTO global_people (
   id, first_name, last_name, nickname, cpf, rg, cellular, email,
   country, profile_completion_status, can_create_collaborator,
@@ -94,12 +119,12 @@ INSERT INTO person_tenant_memberships (
   (
     'test-rehearsal-membership-a', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP,
     'default', 'test-rehearsal-global-person-a', 'ref-person-status-active',
-    'Pre-30H release-rehearsal Tenant Administrator A', NULL
+    'Pre-30H release-rehearsal Tenant Administrator A', 'test-rehearsal-legacy-person-a'
   ),
   (
     'test-rehearsal-membership-b', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP,
     'default', 'test-rehearsal-global-person-b', 'ref-person-status-active',
-    'Pre-30H release-rehearsal Tenant Administrator B', NULL
+    'Pre-30H release-rehearsal Tenant Administrator B', 'test-rehearsal-legacy-person-b'
   );
 
 INSERT INTO authz_actors (
@@ -107,12 +132,12 @@ INSERT INTO authz_actors (
 ) VALUES
   (
     'test-rehearsal-actor-a', 'test-rehearsal-tenant-admin-a',
-    'Release Rehearsal Tenant Administrator A', NULL, NULL, 1,
+    'Release Rehearsal Tenant Administrator A', 'test-rehearsal-legacy-person-a', NULL, 1,
     CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
   ),
   (
     'test-rehearsal-actor-b', 'test-rehearsal-tenant-admin-b',
-    'Release Rehearsal Tenant Administrator B', NULL, NULL, 1,
+    'Release Rehearsal Tenant Administrator B', 'test-rehearsal-legacy-person-b', NULL, 1,
     CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
   );
 
@@ -188,6 +213,29 @@ if [ "$admin_count" != "2" ] || [ "$distinct_people" != "2" ]; then
   exit 1
 fi
 
+# A pre-30H account must resolve to the same Membership through both the
+# compatibility path (Account.actor_id -> Actor.person_id -> legacy_person_id)
+# and the explicit 30C path (auth_account_actors.membership_id). This is the
+# identity shape that EnsureAccountActorFoundation() expects during startup.
+legacy_explicit_alignment="$(sqlite3 "$TMP_DB" "
+SELECT COUNT(*)
+FROM auth_user_accounts a
+JOIN authz_actors az ON az.id = a.actor_id
+JOIN person_tenant_memberships legacy_m ON legacy_m.legacy_person_id = az.person_id
+JOIN auth_account_people ap ON ap.account_id = a.id AND ap.person_id = legacy_m.person_id
+JOIN auth_account_actors aa
+  ON aa.account_id = a.id
+ AND aa.actor_id = az.id
+ AND aa.scope_type = 'TENANT'
+ AND aa.tenant_id = legacy_m.tenant_id
+ AND aa.membership_id = legacy_m.id
+WHERE a.id IN ('test-rehearsal-account-a', 'test-rehearsal-account-b');
+")"
+if [ "$legacy_explicit_alignment" != "2" ]; then
+  echo "Generated Test release baseline has inconsistent legacy and explicit Account/Actor Membership bindings." >&2
+  exit 1
+fi
+
 # Prove the baseline itself can take the migration under rehearsal, without
 # mutating the saved pre-release snapshot.
 cp "$TMP_DB" "$PROBE_DB"
@@ -223,6 +271,7 @@ printf '%s\n' \
   "Migration under rehearsal: $MIGRATION_UNDER_REHEARSAL" \
   "Pre-release migrations applied: $applied_count" \
   "Representative Tenant Administrators: 2 distinct global Persons" \
+  "Legacy/explicit Account-Actor identity alignment: 2/2" \
   "Migration probe triggers: $trigger_count" \
   "Integrity check: ok" \
   "Foreign key check: clean"
