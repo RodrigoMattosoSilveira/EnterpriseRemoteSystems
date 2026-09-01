@@ -59,6 +59,14 @@ type AuthAccount = {
   }>;
 };
 
+type ReferenceDataItem = {
+  id: string;
+  tenantId: string;
+  type: string;
+  code: string;
+  active: boolean;
+};
+
 type RoleCode =
   | "APPLICATION_ADMIN"
   | "TENANT_ADMIN"
@@ -598,6 +606,7 @@ async function createActorWithRole(
 ): Promise<ProvisionedAuthzActor> {
   const seed = uniqueNumericSuffix();
   const login = `authz-${keyPrefix}-${seed}@example.com`;
+  const activePersonStatusId = await getActivePersonStatusId(api, tenantId);
   const personResponse = await api.post(e2eApiUrl("/api/v1/people"), {
     headers: authzHeaders(tenantId),
     data: {
@@ -608,7 +617,7 @@ async function createActorWithRole(
       rg: `RG-AUTHZ-${String(seed).slice(-8)}`,
       cellular: validBrazilianCellular(seed),
       email: login,
-      statusId: "ref-person-status-active",
+      statusId: activePersonStatusId,
     },
   });
   await expectStatus(personResponse, 201, `create Person for ${roleCode}`);
@@ -647,6 +656,29 @@ async function createActorWithRole(
     temporaryPassword,
     roleGrantId: roleGrant.id,
   };
+}
+
+async function getActivePersonStatusId(
+  api: APIRequestContext,
+  tenantId: string,
+): Promise<string> {
+  const response = await api.get(e2eApiUrl("/api/v1/reference-data/person_status"), {
+    headers: authzHeaders(tenantId),
+  });
+  await expectStatus(response, 200, `list Person Status reference data for Tenant ${tenantId}`);
+
+  const body = (await response.json()) as ApiEnvelope<ReferenceDataItem[]>;
+  const activeStatus = body.data?.find(
+    (item) =>
+      item.tenantId === tenantId &&
+      item.type === "person_status" &&
+      item.code === "ACTIVE" &&
+      item.active,
+  );
+  if (!activeStatus) {
+    throw new Error(`Tenant ${tenantId} does not have an active ACTIVE Person Status`);
+  }
+  return activeStatus.id;
 }
 
 async function createAuthzActor(api: APIRequestContext, keyPrefix: string): Promise<AuthzActor> {
