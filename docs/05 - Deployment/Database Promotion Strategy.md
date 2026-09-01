@@ -40,13 +40,17 @@ The existing Bite 30H offline Tenant Administrator reconciliation utility is not
 
 ## Test release rehearsal
 
-A release rehearsal is an explicit `workflow_dispatch` deployment to **Test** with **Test release rehearsal** enabled. Deployed Playwright must also remain enabled.
+A normal branch promotion into `test` is automatically treated as the release rehearsal. This keeps the promotion path safe by default: the exact source tree promoted from Development is rehearsed against a known pre-release baseline and must pass deployed Playwright before a Production gate can be recorded.
+
+`workflow_dispatch` remains available for an explicit ordinary Test redeploy with **Test release rehearsal** disabled. When rehearsal is enabled, deployed Playwright must also remain enabled.
 
 The rehearsal uses the known baseline:
 
 ```text
 /opt/EnterpriseRemoteSystems/test/rehearsal-baselines/pre-bite30h.db
 ```
+
+If a previously captured baseline exists, it is reused and never overwritten. If no baseline was captured before Bite 30H reached Test, deployment creates a deterministic pre-30H baseline from the repository migrations through `000061`. That generated baseline contains the upper valid Bite 30H boundary—two active Tenant Administrators in one Tenant, held by two distinct global Persons—and is probed with `000062` before it is accepted. The local migration suite continues to exercise all deliberate legacy rejection cases.
 
 For Bite 30H that baseline must contain migrations through:
 
@@ -68,7 +72,7 @@ Only after all of those checks succeed is a release-rehearsal marker recorded fo
 
 ## Capturing the Bite 30H Test baseline
 
-Capture the baseline while Test is still running the pre-30H database:
+A captured pre-30H Test snapshot is preferred when one is available because it preserves a real historical Test state. Capture it while Test is still running the pre-30H database:
 
 ```bash
 cd /opt/EnterpriseRemoteSystems/test
@@ -86,7 +90,7 @@ mkdir -p rehearsal-baselines
 cp backups/app-<timestamp>.db rehearsal-baselines/pre-bite30h.db
 ```
 
-The Bite 30H rehearsal restore validates that copied snapshot before it can replace the Test database.
+The Bite 30H rehearsal restore validates that copied snapshot before it can replace the Test database. If no snapshot was captured, `make server-test-rehearsal-ensure-baseline ENV=test` generates and validates the deterministic fallback baseline automatically.
 
 ## Production release gate
 

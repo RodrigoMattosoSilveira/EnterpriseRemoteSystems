@@ -128,7 +128,14 @@ jobs:
             TARGET_ENV="${GITHUB_REF_NAME}"
             MANUAL_EDGE="false"
             MANUAL_PLAYWRIGHT="true"
-            TEST_RELEASE_REHEARSAL="false"
+            # A branch promotion into Test is itself the release rehearsal.
+            # Manual workflow_dispatch remains available for an explicit ordinary
+            # Test redeploy with test_release_rehearsal=false.
+            if [[ "$TARGET_ENV" == "test" ]]; then
+              TEST_RELEASE_REHEARSAL="true"
+            else
+              TEST_RELEASE_REHEARSAL="false"
+            fi
           fi
 
           if [[ "$TEST_RELEASE_REHEARSAL" == "true" && "$TARGET_ENV" != "test" ]]; then
@@ -163,10 +170,6 @@ jobs:
               echo "e2e_admin_display_name=Test E2E Administrator" >> "$GITHUB_OUTPUT"
               echo "database_strategy=migrate-in-place" >> "$GITHUB_OUTPUT"
               if [[ "$TEST_RELEASE_REHEARSAL" == "true" ]]; then
-                if [[ "${{ github.event_name }}" != "workflow_dispatch" ]]; then
-                  echo "Test release rehearsal must be requested explicitly with workflow_dispatch."
-                  exit 1
-                fi
                 if [[ "$MANUAL_PLAYWRIGHT" != "true" ]]; then
                   echo "Test release rehearsal requires deployed Playwright verification."
                   exit 1

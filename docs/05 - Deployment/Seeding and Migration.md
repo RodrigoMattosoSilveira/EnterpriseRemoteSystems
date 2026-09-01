@@ -12,3 +12,9 @@
 - Local `go test ./...` and `make migration-check` exercise migration fixtures before any deployed rehearsal.
 
 See `docs/05 - Deployment/Database Promotion Strategy.md`.
+
+## Test promotion and release rehearsal
+
+A push to the `test` branch is a release promotion, so deployment automatically runs the Test release rehearsal rather than treating the accumulated Test database as the release baseline. The rehearsal restores `/opt/EnterpriseRemoteSystems/test/rehearsal-baselines/pre-bite30h.db`, migrates it in place through the current release, and runs deployed Playwright.
+
+If the baseline does not exist, `server-test-rehearsal-ensure-baseline` builds a deterministic pre-30H baseline from repository migrations through `000061_expand_final_settlement_database_checks.up.sql`. An existing captured baseline is never overwritten. Manual `workflow_dispatch` may still request an ordinary Test redeploy with release rehearsal disabled.
