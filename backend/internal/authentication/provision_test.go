@@ -259,7 +259,7 @@ func assertApplicationAdministrator(t *testing.T, database *gorm.DB, actorKey st
 	t.Helper()
 	actor, err := authz.NewGORMStore(database).FindActor(context.Background(), authz.ActorLookup{
 		ActorID:  actorKey,
-		TenantID: "default",
+		TenantID: authz.GlobalTenantScope,
 	})
 	if err != nil {
 		t.Fatalf("find provisioned authorization actor: %v", err)
