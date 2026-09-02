@@ -1,9 +1,12 @@
 import { expect, test, type APIRequestContext } from "@playwright/test";
 import { uniquePersonSuffix } from "./support/test-data";
-import { E2E_ACTOR_ID, authzHeaders, e2eApiUrl, seedBrowserAuthz } from "./support/authz";
+import { E2E_ACTOR_ID, authzHeaders, e2eApiUrl, seedBrowserApplicationAdmin } from "./support/authz";
+import { applicationAdminStorageStatePath } from "./support/storage";
+
+test.use({ storageState: applicationAdminStorageStatePath });
 
 test.beforeEach(async ({ page }) => {
-  await seedBrowserAuthz(page);
+  await seedBrowserApplicationAdmin(page);
 });
 
 test("admin can create an authorization actor, grant a role, and revoke it", async ({
@@ -34,7 +37,7 @@ test("admin can create an authorization actor, grant a role, and revoke it", asy
   await expect(
     page.getByRole("heading", { name: "Authenticated authorization context" }),
   ).toBeVisible();
-  await expect(page.getByLabel("Selected Tenant ID")).toHaveValue("default");
+  await expect(page.getByLabel("Selected Tenant ID")).toHaveValue("*");
   await expect(page.getByText("Authenticated actor verified")).toBeVisible();
 
   await expect(

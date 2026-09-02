@@ -1,7 +1,10 @@
 import { expect, test, type APIRequestContext, type Page } from "@playwright/test";
-import { authzHeaders, e2eApiUrl } from "./support/authz";
+import { applicationAdminHeaders, authzHeaders, e2eApiUrl } from "./support/authz";
+import { applicationAdminStorageStatePath } from "./support/storage";
 import { isLoopbackURL } from "./support/runtime";
 
+
+test.use({ storageState: applicationAdminStorageStatePath });
 const baseURL = process.env.PLAYWRIGHT_BASE_URL ?? "http://localhost:15173";
 const login = process.env.E2E_ADMIN_EMAIL ?? (isLoopbackURL(baseURL) ? "admin@example.com" : "");
 const password = process.env.E2E_ADMIN_PASSWORD ?? (isLoopbackURL(baseURL) ? "Local-E2E-Administrator-28D!" : "");
@@ -85,11 +88,11 @@ test("authenticated user can see identity, tenant, sign out, and sign back in", 
     await page.getByLabel("Password").fill(password);
     await page.getByRole("button", { name: "Sign in" }).click();
 
-    await expect(page).toHaveURL(/\/people$/);
+    await expect(page).toHaveURL(/\/admin\/tenants$/);
     await expect(page.getByText(login, { exact: true })).toBeVisible();
-    await expect(page.getByRole("button", { name: "Current tenant" })).toHaveAttribute(
+    await expect(page.getByRole("button", { name: "Administration context" })).toHaveAttribute(
       "data-selected-tenant-id",
-      "default",
+      "*",
     );
 
     await page.getByRole("button", { name: "Sign out" }).click();
@@ -100,7 +103,7 @@ test("authenticated user can see identity, tenant, sign out, and sign back in", 
     await page.getByLabel("Password").fill(password);
     await page.getByRole("button", { name: "Sign in" }).click();
 
-    await expect(page).toHaveURL(/\/people$/);
+    await expect(page).toHaveURL(/\/admin\/tenants$/);
     await expect(page.getByText(login, { exact: true })).toBeVisible();
   } finally {
     await context.close();
@@ -262,349 +265,47 @@ test("active Account with no active tenant Actor retains Person self-service and
   }
 });
 
-test("application administrator can switch between granted tenants", async ({ page, request }) => {
+test("application administrator remains in the global control plane when a Tenant is created", async ({ page, request }) => {
   test.setTimeout(60_000);
   const suffix = `${Date.now()}${Math.floor(Math.random() * 10_000)}`;
-  const defaultOnlyNickname = `DefaultTenantOnly${suffix}`;
-  const defaultOnlyTaskCode = `TENANT_TASK_${suffix}`.slice(0, 40).toUpperCase();
-  const defaultOnlyTaskLabel = `Default Tenant Task ${suffix}`;
-  const defaultOnlyPriceListCode = `TENANT_PRICE_${suffix}`.slice(0, 40).toUpperCase();
-  const defaultOnlyPriceListDescription = `Default Tenant Price Item ${suffix}`;
-  const defaultOnlyGoldPriceDate = uniqueGoldPriceDate(suffix);
-  let defaultOnlyTaskId: string | undefined;
-  let defaultOnlyPriceListItemId: string | undefined;
-  let defaultOnlyGoldPriceId: string | undefined;
-  let tenantId: string | undefined;
 
-  try {
-    const personResponse = await request.post(e2eApiUrl("/api/v1/people"), {
-      headers: authzHeaders(),
-      data: {
-        firstName: "Default",
-        lastName: `TenantOnly${suffix}`,
-        nickname: defaultOnlyNickname,
-        cpf: validCPF(Number(suffix.slice(-9))),
-        rg: `RG-${suffix.slice(-8)}`,
-        cellular: validBrazilianCellular(suffix),
-        email: `tenant-isolation-${suffix}@example.com`,
-        statusId: "ref-person-status-active",
-      },
-    });
-    expect(personResponse.status()).toBe(201);
-
-    const taskResponse = await request.post(
-      e2eApiUrl("/api/v1/reference-data/task"),
-      {
-        headers: authzHeaders(),
-        data: {
-          code: defaultOnlyTaskCode,
-          label: defaultOnlyTaskLabel,
-          description: "Created in default to verify Reference Data tenant isolation",
-          active: true,
-          sortOrder: 9_999,
-          metadataJson: "",
-        },
-      },
+  const createResponse = await request.post(e2eApiUrl("/api/v1/tenants"), {
+    headers: applicationAdminHeaders(),
+    data: {
+      code: `UX${suffix}`.slice(0, 20),
+      name: `Tenant UX ${suffix}`,
+      description: "Created by the Bite 30I.1 global-control-plane E2E test",
+      active: true,
+    },
+  });
+  if (createResponse.status() !== 201) {
+    throw new Error(
+      `Create tenant failed: HTTP ${createResponse.status()} ${await createResponse.text()}`,
     );
-    expect(taskResponse.status()).toBe(201);
-    const taskEnvelope = (await taskResponse.json()) as { data?: { id?: string } };
-    defaultOnlyTaskId = taskEnvelope.data?.id;
-    expect(defaultOnlyTaskId).toBeTruthy();
-
-    const priceListItemResponse = await request.post(
-      e2eApiUrl("/api/v1/price-list-items"),
-      {
-        headers: authzHeaders(),
-        data: {
-          itemType: "CANTEEN",
-          code: defaultOnlyPriceListCode,
-          description: defaultOnlyPriceListDescription,
-          unitPriceBrl: 321.45,
-          sortOrder: 9_999,
-        },
-      },
-    );
-    expect(priceListItemResponse.status()).toBe(201);
-    const priceListItemEnvelope = (await priceListItemResponse.json()) as {
-      data?: { id?: string };
-    };
-    defaultOnlyPriceListItemId = priceListItemEnvelope.data?.id;
-    expect(defaultOnlyPriceListItemId).toBeTruthy();
-
-    const goldPriceResponse = await request.post(e2eApiUrl("/api/v1/gold-prices"), {
-      headers: authzHeaders(),
-      data: {
-        priceDate: defaultOnlyGoldPriceDate,
-        brlPerGram: 654.32,
-        recordedBy: "bootstrap-admin",
-        notes: `Default tenant gold price ${suffix}`,
-      },
-    });
-    expect(goldPriceResponse.status()).toBe(201);
-    const goldPriceEnvelope = (await goldPriceResponse.json()) as {
-      data?: { id?: string };
-    };
-    defaultOnlyGoldPriceId = goldPriceEnvelope.data?.id;
-    expect(defaultOnlyGoldPriceId).toBeTruthy();
-
-    await page.goto("/people");
-    const effectiveActor = page.locator("[data-effective-actor-id]");
-    await expect(effectiveActor).toHaveAttribute("data-effective-actor-scope", "APPLICATION");
-    const applicationActorRecordId = await effectiveActor.getAttribute(
-      "data-effective-actor-id",
-    );
-    expect(applicationActorRecordId).toBeTruthy();
-
-    await page.getByLabel("Filter people").fill(defaultOnlyNickname);
-    await expect(page.getByText(defaultOnlyNickname, { exact: false }).first()).toBeVisible();
-
-    const createResponse = await request.post(e2eApiUrl("/api/v1/tenants"), {
-      headers: authzHeaders(),
-      data: {
-        code: `UX${suffix}`.slice(0, 20),
-        name: `Tenant UX ${suffix}`,
-        description: "Created by the Bite 28D tenant-selection E2E test",
-        active: true,
-      },
-    });
-    if (createResponse.status() !== 201) {
-      throw new Error(
-        `Create tenant failed: HTTP ${createResponse.status()} ${await createResponse.text()}`,
-      );
-    }
-    const created = (await createResponse.json()) as { data?: { id?: string } };
-    tenantId = created.data?.id;
-    expect(tenantId).toBeTruthy();
-
-    await page.goto("/");
-    const selector = page.getByRole("button", { name: "Current tenant" });
-    await selector.click();
-    await page.getByLabel("Filter tenants").fill(`Tenant UX ${suffix}`);
-
-    const tenantOption = page.locator(
-      `[role="option"][data-tenant-id="${tenantId}"]`,
-    );
-    await expect(tenantOption).toBeVisible();
-    await tenantOption.click();
-
-    await expect(selector).toHaveAttribute("data-selected-tenant-id", tenantId!);
-    await expect
-      .poll(() =>
-        page.evaluate(() =>
-          window.localStorage.getItem("ers.auth.selectedTenantId"),
-        ),
-      )
-      .toBe(tenantId);
-    await expect(effectiveActor).toHaveAttribute("data-effective-actor-scope", "APPLICATION");
-    await expect(effectiveActor).toHaveAttribute(
-      "data-effective-actor-id",
-      applicationActorRecordId!,
-    );
-
-    await page.goto("/people");
-    await expect(
-      page.getByRole("heading", { name: "People", exact: true }),
-    ).toBeVisible();
-
-    const filteredPeopleResponsePromise = page.waitForResponse((response) => {
-      const url = new URL(response.url());
-      return (
-        response.request().method() === "GET" &&
-        url.pathname === "/api/v1/people" &&
-        url.searchParams.get("search") === defaultOnlyNickname
-      );
-    });
-
-    await page.getByLabel("Filter people").fill(defaultOnlyNickname);
-
-    const filteredPeopleResponse = await filteredPeopleResponsePromise;
-    expect(filteredPeopleResponse.ok()).toBeTruthy();
-    expect(filteredPeopleResponse.request().headers()["x-tenant-id"]).toBe(
-      tenantId,
-    );
-
-    const filteredPeopleEnvelope = (await filteredPeopleResponse.json()) as {
-      data?: { items?: unknown[]; total?: number };
-    };
-    expect(filteredPeopleEnvelope.data?.items ?? []).toHaveLength(0);
-    expect(filteredPeopleEnvelope.data?.total ?? 0).toBe(0);
-
-    await expect(page.getByText(defaultOnlyNickname, { exact: false })).toHaveCount(0);
-    await expect(
-      page.getByRole("heading", { name: "No people match these filters" }),
-    ).toBeVisible();
-
-    await page.goto("/admin/reference-data");
-    await expect(
-      page.getByRole("heading", { name: "Reference Data", exact: true }),
-    ).toBeVisible();
-
-    const taskListResponsePromise = page.waitForResponse((response) => {
-      const url = new URL(response.url());
-      return (
-        response.request().method() === "GET" &&
-        url.pathname === "/api/v1/reference-data/task"
-      );
-    });
-
-    await page.getByLabel("Reference data type").selectOption("task");
-    const taskListResponse = await taskListResponsePromise;
-    expect(taskListResponse.ok()).toBeTruthy();
-    expect(taskListResponse.request().headers()["x-tenant-id"]).toBe(tenantId);
-
-    const taskListEnvelope = (await taskListResponse.json()) as {
-      data?: Array<{ id?: string; tenantId?: string; code?: string; label?: string }>;
-    };
-    const selectedTenantTasks = taskListEnvelope.data ?? [];
-    expect(
-      selectedTenantTasks.every((item) => item.tenantId === tenantId),
-    ).toBeTruthy();
-    expect(
-      selectedTenantTasks.some((item) => item.code === defaultOnlyTaskCode),
-    ).toBeFalsy();
-    await expect(page.getByText(defaultOnlyTaskLabel, { exact: true })).toHaveCount(0);
-
-    const priceListResponsePromise = page.waitForResponse((response) => {
-      const url = new URL(response.url());
-      return (
-        response.request().method() === "GET" &&
-        url.pathname === "/api/v1/price-list-items"
-      );
-    });
-
-    await page.goto("/admin/price-list-items");
-    await expect(
-      page.getByRole("heading", { name: "Price List Items", exact: true }),
-    ).toBeVisible();
-    const priceListResponse = await priceListResponsePromise;
-    expect(priceListResponse.ok()).toBeTruthy();
-    expect(priceListResponse.request().headers()["x-tenant-id"]).toBe(tenantId);
-
-    const priceListEnvelope = (await priceListResponse.json()) as {
-      data?: Array<{ id?: string; tenantId?: string; code?: string; description?: string }>;
-    };
-    const selectedTenantPriceListItems = priceListEnvelope.data ?? [];
-    expect(
-      selectedTenantPriceListItems.every((item) => item.tenantId === tenantId),
-    ).toBeTruthy();
-    expect(
-      selectedTenantPriceListItems.some(
-        (item) =>
-          item.code === defaultOnlyPriceListCode ||
-          item.description === defaultOnlyPriceListDescription,
-      ),
-    ).toBeFalsy();
-    await expect(
-      page.getByText(defaultOnlyPriceListDescription, { exact: true }),
-    ).toHaveCount(0);
-
-    const goldPriceListResponsePromise = page.waitForResponse((response) => {
-      const url = new URL(response.url());
-      return (
-        response.request().method() === "GET" &&
-        url.pathname === "/api/v1/gold-prices"
-      );
-    });
-
-    await page.goto("/admin/gold-prices");
-    await expect(
-      page.getByRole("heading", { name: "Gold Prices", exact: true }),
-    ).toBeVisible();
-    const goldPriceListResponse = await goldPriceListResponsePromise;
-    expect(goldPriceListResponse.ok()).toBeTruthy();
-    expect(goldPriceListResponse.request().headers()["x-tenant-id"]).toBe(tenantId);
-
-    const goldPriceListEnvelope = (await goldPriceListResponse.json()) as {
-      data?: Array<{ id?: string; tenantId?: string; priceDate?: string }>;
-    };
-    const selectedTenantGoldPrices = goldPriceListEnvelope.data ?? [];
-    expect(
-      selectedTenantGoldPrices.every((price) => price.tenantId === tenantId),
-    ).toBeTruthy();
-    expect(
-      selectedTenantGoldPrices.some(
-        (price) =>
-          price.id === defaultOnlyGoldPriceId ||
-          price.priceDate === defaultOnlyGoldPriceDate,
-      ),
-    ).toBeFalsy();
-    await expect(
-      page.getByText(defaultOnlyGoldPriceDate, { exact: true }),
-    ).toHaveCount(0);
-  } finally {
-
-    if (defaultOnlyPriceListItemId) {
-      const deactivatePriceListItemResponse = await request.patch(
-        e2eApiUrl(
-          `/api/v1/price-list-items/${encodeURIComponent(defaultOnlyPriceListItemId)}/deactivate`,
-        ),
-        { headers: authzHeaders(), data: {} },
-      );
-      expect(deactivatePriceListItemResponse.ok()).toBeTruthy();
-    }
-    if (defaultOnlyGoldPriceId) {
-      const deactivateGoldPriceResponse = await request.patch(
-        e2eApiUrl(
-          `/api/v1/gold-prices/${encodeURIComponent(defaultOnlyGoldPriceId)}/deactivate`,
-        ),
-        { headers: authzHeaders(), data: {} },
-      );
-      expect(deactivateGoldPriceResponse.ok()).toBeTruthy();
-    }
-    if (defaultOnlyTaskId) {
-      const deactivateTaskResponse = await request.patch(
-        e2eApiUrl(
-          `/api/v1/reference-data/task/${encodeURIComponent(defaultOnlyTaskId)}/deactivate`,
-        ),
-        { headers: authzHeaders() },
-      );
-      expect(deactivateTaskResponse.ok()).toBeTruthy();
-    }
-    if (tenantId) {
-      const deactivateResponse = await request.patch(
-        e2eApiUrl(`/api/v1/tenants/${encodeURIComponent(tenantId)}/active`),
-        { headers: authzHeaders(), data: { active: false } },
-      );
-      expect(deactivateResponse.ok()).toBeTruthy();
-    }
   }
+  const created = (await createResponse.json()) as { data?: { id?: string; name?: string } };
+  const tenantId = created.data?.id;
+  expect(tenantId).toBeTruthy();
+
+  await page.goto("/admin/tenants");
+  await expect(page.getByRole("heading", { name: "Tenants", exact: true })).toBeVisible();
+  await expect(page.getByText(`Tenant UX ${suffix}`, { exact: true })).toBeVisible();
+
+  const selector = page.getByRole("button", { name: "Administration context" });
+  await expect(selector).toHaveAttribute("data-selected-tenant-id", "*");
+  await selector.click();
+  await expect(page.locator(`[role="option"][data-tenant-id="${tenantId}"]`)).toHaveCount(0);
+
+  const tenantPeopleResponse = await request.get(e2eApiUrl("/api/v1/people"), {
+    headers: {
+      "X-Actor-ID": "e2e-application-admin",
+      "X-Tenant-ID": tenantId!,
+    },
+  });
+  expect(tenantPeopleResponse.status()).toBe(403);
+  const denied = (await tenantPeopleResponse.json()) as { error?: { code?: string } };
+  expect(denied.error?.code).toBe("tenant_actor_unavailable");
 });
-
-function uniqueGoldPriceDate(suffix: string): string {
-  const digits = suffix.replace(/\D/g, "").padStart(12, "0");
-  // This record exists only to test tenant isolation. Keep it historical so
-  // an interrupted deployed E2E run can never become the default tenant's
-  // "latest" operational gold price and poison unrelated expense tests.
-  const year = 1800 + (Number(digits.slice(-4)) % 200);
-  const month = 1 + (Number(digits.slice(-6, -4)) % 12);
-  const day = 1 + (Number(digits.slice(-8, -6)) % 28);
-  return `${year.toString().padStart(4, "0")}-${month
-    .toString()
-    .padStart(2, "0")}-${day.toString().padStart(2, "0")}`;
-}
-
-function validCPF(seed: number): string {
-  const base = String(seed).padStart(9, "0").slice(-9);
-  const digits = base.split("").map(Number);
-  const first = cpfCheckDigit(digits);
-  const second = cpfCheckDigit([...digits, first]);
-  return `${base}${first}${second}`;
-}
-
-function cpfCheckDigit(numbers: number[]): number {
-  const weightStart = numbers.length + 1;
-  const sum = numbers.reduce(
-    (total, digit, index) => total + digit * (weightStart - index),
-    0,
-  );
-  const remainder = sum % 11;
-  return remainder < 2 ? 0 : 11 - remainder;
-}
-
-function validBrazilianCellular(seed: string): string {
-  const digits = seed.replace(/\D/g, "").padStart(8, "0").slice(-8);
-  return `11${`9${digits}`.slice(0, 9)}`;
-}
 
 test("authentication account form preserves its Person selection across window focus", async ({ page, request }) => {
   const suffix = `${Date.now()}${Math.floor(Math.random() * 100_000)}`;

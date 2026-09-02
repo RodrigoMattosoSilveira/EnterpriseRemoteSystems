@@ -1,7 +1,6 @@
 import { defineConfig, devices } from "@playwright/test";
-import { join } from "node:path";
-import { fileURLToPath } from "node:url";
 import { resolveE2EAuthMode } from "./tests/e2e/support/runtime";
+import { tenantAdminStorageStatePath } from "./tests/e2e/support/storage";
 
 declare const process: {
   env: Record<string, string | undefined>;
@@ -21,12 +20,6 @@ const localE2EBackendURL = `http://localhost:${LOCAL_E2E_BACKEND_PORT}`;
 const baseURL = runtimeEnv.PLAYWRIGHT_BASE_URL ?? localE2EFrontendURL;
 const storageOrigin = new URL(baseURL).origin;
 const authMode = resolveE2EAuthMode(baseURL, runtimeEnv.PLAYWRIGHT_AUTH_MODE);
-const authenticatedStorageStatePath = join(
-  fileURLToPath(new URL(".", import.meta.url)),
-  "test-results",
-  ".auth",
-  "admin.json",
-);
 
 const authzActorId = runtimeEnv.PLAYWRIGHT_AUTHZ_ACTOR_ID ?? (authMode === "session" ? "e2e-application-admin" : "bootstrap-admin");
 const authzTenantId = runtimeEnv.PLAYWRIGHT_AUTHZ_TENANT_ID ?? "default";
@@ -66,7 +59,7 @@ export default defineConfig({
         : undefined,
     storageState:
       authMode === "session"
-        ? authenticatedStorageStatePath
+        ? tenantAdminStorageStatePath
         : {
             cookies: [],
             origins: [
@@ -102,7 +95,7 @@ export default defineConfig({
         },
         {
           command:
-            `ERS_API_PROXY_TARGET=http://127.0.0.1:${LOCAL_E2E_BACKEND_PORT} ERS_LOCAL_AUTHZ_BOOTSTRAP=false PLAYWRIGHT_AUTHZ_ACTOR_ID=e2e-application-admin PLAYWRIGHT_AUTHZ_TENANT_ID=default npm run dev -- --host 0.0.0.0 --port ${LOCAL_E2E_FRONTEND_PORT}`,
+            `ERS_API_PROXY_TARGET=http://127.0.0.1:${LOCAL_E2E_BACKEND_PORT} ERS_LOCAL_AUTHZ_BOOTSTRAP=false PLAYWRIGHT_AUTHZ_ACTOR_ID=e2e-default-tenant-admin PLAYWRIGHT_AUTHZ_TENANT_ID=default npm run dev -- --host 0.0.0.0 --port ${LOCAL_E2E_FRONTEND_PORT}`,
           url: localE2EFrontendURL,
           reuseExistingServer: false,
           timeout: 120_000,

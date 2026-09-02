@@ -56,7 +56,8 @@ func main() {
 		defer sqlDB.Close()
 	}
 
-	result, err := authentication.ProvisionApplicationAdmin(context.Background(), database, authentication.ProvisionApplicationAdminConfig{
+	ctx := context.Background()
+	result, err := authentication.ProvisionApplicationAdmin(ctx, database, authentication.ProvisionApplicationAdminConfig{
 		ActorKey:         input.ActorKey,
 		DisplayName:      input.DisplayName,
 		Login:            input.Login,
@@ -65,6 +66,13 @@ func main() {
 	})
 	if err != nil {
 		log.Fatalf("provision application administrator: %v", err)
+	}
+
+	if appEnv != "production" && appEnv != "prod" {
+		tenantAdminPassword := firstNonEmpty(os.Getenv("E2E_TENANT_ADMIN_PASSWORD"), input.Password)
+		if err := ensureE2ETenantFixtures(ctx, database, tenantAdminPassword, positiveInt(os.Getenv("AUTH_PASSWORD_HASH_COST"), 12)); err != nil {
+			log.Fatalf("provision E2E Default Tenant Administrator: %v", err)
+		}
 	}
 
 	fmt.Printf(
