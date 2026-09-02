@@ -375,12 +375,18 @@ function currentAccountDetailWith(
 }
 
 const authorizationActor: AuthzCurrentActor = {
-  actorKey: "test-admin",
-  actorRecordId: "actor-test-admin",
+  actorKey: "tenant-admin",
+  actorRecordId: "actor-tenant-admin",
   tenantId: "default",
-  scope: "APPLICATION",
-  roleCodes: ["APPLICATION_ADMIN"],
-  permissions: ["*"],
+  scope: "TENANT",
+  roleCodes: ["TENANT_ADMIN"],
+  permissions: [
+    "current_accounts.summary.read",
+    "expenses.read",
+    "planning.read",
+    "collaborators.read",
+    "ledger.receipts.read",
+  ],
 };
 
 const selfServiceAuthorizationActor: AuthzCurrentActor = {

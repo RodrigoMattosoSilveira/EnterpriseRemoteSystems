@@ -58,7 +58,7 @@ function authenticationRecoveryHint(error: unknown): string | null {
   }
 
   if (error.code === "tenant_selection_required") {
-    return "Select a tenant that is granted to the authenticated user before retrying this operation.";
+    return "Select an available authorization context before retrying this operation.";
   }
 
   return null;

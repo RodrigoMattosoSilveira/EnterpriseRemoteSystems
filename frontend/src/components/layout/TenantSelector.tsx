@@ -19,6 +19,14 @@ export function TenantSelector({
   const filterRef = useRef<HTMLInputElement>(null);
 
   const selectedTenant = tenants.find((tenant) => tenant.id === selectedTenantId);
+  const globalAdministration = tenants.some((tenant) => tenant.id === "*");
+  const contextNoun = globalAdministration ? "context" : "tenant";
+  const contextNounPlural = globalAdministration ? "contexts" : "tenants";
+  const selectorLabel = globalAdministration ? "Administration context" : "Tenant";
+  const currentContextLabel = globalAdministration
+    ? "Current administration context"
+    : "Current tenant";
+  const filterLabel = globalAdministration ? "Filter contexts" : "Filter tenants";
   const filteredTenants = useMemo(() => {
     const normalizedQuery = normalizeSearchText(query.trim());
     if (!normalizedQuery) return tenants;
@@ -103,17 +111,17 @@ export function TenantSelector({
 
   const selectedLabel = selectedTenant
     ? `${selectedTenant.name} (${selectedTenant.code})`
-    : "Choose tenant";
+    : `Choose ${contextNoun}`;
 
   return (
     <div ref={rootRef} className="relative">
       <p className="mb-1 text-xs font-bold uppercase tracking-wide text-slate-600">
-        Tenant
+        {selectorLabel}
       </p>
       <button
         ref={triggerRef}
         type="button"
-        aria-label="Current tenant"
+        aria-label={currentContextLabel}
         aria-haspopup="listbox"
         aria-expanded={open}
         data-selected-tenant-id={selectedTenantId}
@@ -122,10 +130,10 @@ export function TenantSelector({
       >
         <span className="min-w-0">
           <span className="block truncate text-base font-bold text-slate-950">
-            {selectedTenant?.name ?? "Choose tenant"}
+            {selectedTenant?.name ?? `Choose ${contextNoun}`}
           </span>
           <span className="block truncate text-sm font-semibold text-slate-600">
-            {selectedTenant?.code ?? "No active tenant"}
+            {selectedTenant?.code ?? `No active ${contextNoun}`}
           </span>
         </span>
         <svg
@@ -146,17 +154,17 @@ export function TenantSelector({
 
       {open && (
         <section
-          aria-label="Tenant selection"
+          aria-label={`${selectorLabel} selection`}
           className="absolute right-0 z-50 mt-2 w-[28rem] max-w-[calc(100vw-2rem)] overflow-hidden rounded-2xl border border-slate-300 bg-white shadow-xl"
         >
           <div className="border-b border-slate-200 p-3">
             <label className="grid gap-1.5 text-sm font-bold text-slate-800">
-              Filter tenants
+              {filterLabel}
               <input
                 ref={filterRef}
                 type="search"
                 role="combobox"
-                aria-label="Filter tenants"
+                aria-label={filterLabel}
                 aria-autocomplete="list"
                 aria-controls="tenant-options"
                 aria-expanded="true"
@@ -173,14 +181,14 @@ export function TenantSelector({
               />
             </label>
             <p className="mt-2 text-sm font-medium text-slate-600" aria-live="polite">
-              {filteredTenants.length} of {tenants.length} tenants
+              {filteredTenants.length} of {tenants.length} {contextNounPlural}
             </p>
           </div>
 
           <div id="tenant-options" role="listbox" className="max-h-80 overflow-y-auto p-2">
             {filteredTenants.length === 0 ? (
               <p className="px-3 py-6 text-center text-base font-medium text-slate-600">
-                No tenants match “{query}”.
+                No {contextNounPlural} match “{query}”.
               </p>
             ) : (
               filteredTenants.map((tenant, index) => {

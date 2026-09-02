@@ -284,7 +284,7 @@ func requireActiveTenantForMutations(deps Dependencies) fiber.Handler {
 		if tenantID == authz.GlobalTenantScope {
 			return c.Status(fiber.StatusForbidden).JSON(httpx.APIResponse{Error: &httpx.APIError{
 				Code:    "tenant_selection_required",
-				Message: "A specific tenant must be selected for this operation",
+				Message: "An authorization context must be selected for this operation",
 			}})
 		}
 		if err := deps.TenantService.RequireActive(c.Context(), tenantID); err != nil {
@@ -356,7 +356,7 @@ func writeAuthorizationError(c fiber.Ctx, err error) error {
 		return c.Status(fiber.StatusUnauthorized).JSON(httpx.APIResponse{Error: &httpx.APIError{Code: "authentication_required", Message: "An authenticated session is required"}})
 	}
 	if errors.Is(err, authz.ErrTenantSelectionRequired) {
-		return c.Status(fiber.StatusForbidden).JSON(httpx.APIResponse{Error: &httpx.APIError{Code: "tenant_selection_required", Message: "A specific tenant must be selected for this operation"}})
+		return c.Status(fiber.StatusForbidden).JSON(httpx.APIResponse{Error: &httpx.APIError{Code: "tenant_selection_required", Message: "An authorization context must be selected for this operation"}})
 	}
 	if errors.Is(err, authz.ErrTenantActorUnavailable) {
 		return c.Status(fiber.StatusForbidden).JSON(httpx.APIResponse{Error: &httpx.APIError{Code: "tenant_actor_unavailable", Message: "The authenticated account has no active actor for the selected tenant"}})

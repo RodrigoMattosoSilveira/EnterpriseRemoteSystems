@@ -171,13 +171,25 @@ func TestAccountActorFoundationMakesApplicationAdministratorGlobalOnly(t *testin
 	if err != nil {
 		t.Fatalf("list global Account tenant options: %v", err)
 	}
-	if len(options) != 2 {
-		t.Fatalf("global Application Administrator compatibility should expose active tenants, got %#v", options)
+	if len(options) != 1 {
+		t.Fatalf("global Application Administrator must expose only the control-plane context, got %#v", options)
 	}
-	for _, option := range options {
-		if option.ActorRecordID != actor.ID || option.ActorKey != actor.ActorKey || option.ActorScope != string(authz.ActorScopeApplication) || option.MembershipID != "" {
-			t.Fatalf("global tenant option must advertise the same GLOBAL Actor without tenant Membership identity: %#v", option)
-		}
+	option := options[0]
+	if option.ID != authz.GlobalTenantScope || option.Code != "GLOBAL" || option.Name != "Global administration" ||
+		option.ActorRecordID != actor.ID || option.ActorKey != actor.ActorKey ||
+		option.ActorScope != string(authz.ActorScopeApplication) || option.MembershipID != "" {
+		t.Fatalf("unexpected global control-plane option: %#v", option)
+	}
+
+	resolvedGlobal, err := authz.NewGORMStore(database).FindAccountActor(context.Background(), account.ID, authz.GlobalTenantScope)
+	if err != nil {
+		t.Fatalf("resolve global Account Actor: %v", err)
+	}
+	if resolvedGlobal.Scope != authz.ActorScopeApplication || resolvedGlobal.TenantID != authz.GlobalTenantScope {
+		t.Fatalf("expected application control-plane Actor, got %#v", resolvedGlobal)
+	}
+	if resolvedTenant, err := authz.NewGORMStore(database).FindAccountActor(context.Background(), account.ID, "tenant-a"); resolvedTenant != nil || !errors.Is(err, authz.ErrTenantActorUnavailable) {
+		t.Fatalf("GLOBAL Account must not resolve through a Tenant selection: actor=%#v err=%v", resolvedTenant, err)
 	}
 
 	// Regression: hydrating Account Actor bindings must execute valid SQLite.

@@ -5,6 +5,8 @@ import { ApiErrorPanel } from "../../components/ApiErrorPanel";
 import type { CreateTenantInput, Tenant, TenantOperationalStatus } from "../../types/tenants";
 import { useCreateTenant, useTenants } from "./useTenants";
 import { PageTitle } from "../../components/layout/PageHeading";
+import { useOptionalAuthorizationContext } from "../../components/layout/AuthorizationContext";
+import { ReactivationRequestsAlert } from "../auth/ReactivationRequestsAlert";
 
 const emptyForm: CreateTenantInput = {
   code: "",
@@ -14,6 +16,9 @@ const emptyForm: CreateTenantInput = {
 };
 
 export function TenantsAdminPage() {
+  const actor = useOptionalAuthorizationContext();
+  const isApplicationAdministrator =
+    actor?.scope === "APPLICATION" && actor.roleCodes.includes("APPLICATION_ADMIN");
   const [form, setForm] = useState<CreateTenantInput>(emptyForm);
   const [successMessage, setSuccessMessage] = useState("");
   const tenantsQuery = useTenants();
@@ -58,12 +63,28 @@ export function TenantsAdminPage() {
             </p>
           </div>
           <div className="flex flex-wrap items-center justify-end gap-3 text-sm font-semibold text-gray-700">
-            <Link className="underline" to="/admin/authorization">Authorization</Link>
-            <Link className="underline" to="/admin/reference-data">Reference Data</Link>
-            <Link className="underline" to="/people">Back to People</Link>
+            {isApplicationAdministrator ? (
+              <>
+                <Link className="underline" to="/admin/authentication">Authentication</Link>
+                <Link className="underline" to="/admin/authorization">Authorization</Link>
+                <Link className="underline" to="/admin/audit-logs">Audit logs</Link>
+              </>
+            ) : (
+              <>
+                <Link className="underline" to="/admin/authorization">Authorization</Link>
+                <Link className="underline" to="/admin/reference-data">Reference Data</Link>
+                <Link className="underline" to="/people">Back to People</Link>
+              </>
+            )}
           </div>
         </div>
       </header>
+
+      {isApplicationAdministrator && (
+        <section className="mx-auto max-w-6xl px-4 pt-4">
+          <ReactivationRequestsAlert />
+        </section>
+      )}
 
       <section className="mx-auto grid max-w-6xl gap-4 p-4 lg:grid-cols-[22rem_1fr]">
         <form className="h-fit rounded-2xl border bg-white p-5 shadow-sm" onSubmit={handleCreate}>

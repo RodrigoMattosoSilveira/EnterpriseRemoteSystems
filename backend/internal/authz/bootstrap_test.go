@@ -62,7 +62,7 @@ func TestEnsureBootstrapActorCreatesApplicationAdminGrant(t *testing.T) {
 		t.Fatalf("unexpected bootstrap result: %#v", result)
 	}
 
-	actor, err := NewGORMStore(database).FindActor(context.Background(), ActorLookup{ActorID: "bootstrap-admin", TenantID: "default"})
+	actor, err := NewGORMStore(database).FindActor(context.Background(), ActorLookup{ActorID: "bootstrap-admin", TenantID: GlobalTenantScope})
 	if err != nil {
 		t.Fatalf("find bootstrap actor: %v", err)
 	}
@@ -166,12 +166,15 @@ func TestEnsureBootstrapActorReactivatesExistingActorAndGrant(t *testing.T) {
 		t.Fatalf("expected reactivation without creation, got %#v", result)
 	}
 
-	actor, err := NewGORMStore(database).FindActor(context.Background(), ActorLookup{ActorID: "bootstrap-admin", TenantID: "default"})
+	actor, err := NewGORMStore(database).FindActor(context.Background(), ActorLookup{ActorID: "bootstrap-admin", TenantID: GlobalTenantScope})
 	if err != nil {
 		t.Fatalf("find reactivated actor: %v", err)
 	}
-	if !actor.HasPermission(PermissionAll) {
-		t.Fatalf("expected wildcard permission after reactivation")
+	if actor.HasPermission(PermissionAll) || actor.HasPermission(PermissionGoldProductionManage) {
+		t.Fatalf("reactivated Application Administrator must remain control-plane-only: %#v", PermissionNames(actor.Permissions))
+	}
+	if !actor.HasPermission(PermissionAuthzManage) || !actor.HasPermission(PermissionTenantsUpdate) {
+		t.Fatalf("reactivated Application Administrator missing control-plane permissions: %#v", PermissionNames(actor.Permissions))
 	}
 }
 

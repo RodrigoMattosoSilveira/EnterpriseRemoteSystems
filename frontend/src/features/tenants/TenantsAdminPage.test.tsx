@@ -4,6 +4,8 @@ import { createRoot, type Root } from "react-dom/client";
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { TenantsAdminPage } from "./TenantsAdminPage";
+import { AuthorizationProvider } from "../../components/layout/AuthorizationContext";
+import type { AuthzCurrentActor } from "../../types/authz";
 
 const tenant = {
   id: "default",
@@ -15,6 +17,22 @@ const tenant = {
   tenantAdminCount: 0,
   createdAt: "2026-01-01T00:00:00Z",
   updatedAt: "2026-01-01T00:00:00Z",
+};
+
+const applicationAdminActor: AuthzCurrentActor = {
+  actorKey: "bootstrap-admin",
+  actorRecordId: "actor-application-admin",
+  tenantId: "*",
+  scope: "APPLICATION",
+  roleCodes: ["APPLICATION_ADMIN"],
+  permissions: [
+    "authz.self.read",
+    "authz.read",
+    "authz.manage",
+    "tenants.read",
+    "tenants.create",
+    "tenants.update",
+  ],
 };
 
 let container: HTMLDivElement;
@@ -57,6 +75,77 @@ describe("TenantsAdminPage", () => {
       name: "North Site",
       active: true,
     });
+  });
+
+  it("surfaces pending account reactivation requests on the GLOBAL control-plane landing page", async () => {
+    mockFetch(async (url, init) => {
+      calls.push({ url, method: init?.method ?? "GET", body: parseBody(init?.body) });
+      if (url === "/api/v1/tenants" && !init?.method) return json({ data: [tenant] });
+      if (url === "/api/v1/auth/reactivation-requests" && !init?.method) {
+        return json({
+          data: [
+            {
+              id: "reactivation-request-1",
+              accountId: "account-1",
+              login: "pending@example.test",
+              globalPersonName: "Pending Person",
+              status: "PENDING",
+              requestedByType: "SELF",
+              firstRequestedAt: "2026-08-17T15:00:00Z",
+              lastRequestedAt: "2026-08-17T15:00:00Z",
+              requestCount: 1,
+            },
+          ],
+        });
+      }
+      throw new Error(`Unhandled request: ${url}`);
+    });
+
+    renderPage(applicationAdminActor);
+    await waitForText("Account Reactivation Requests");
+    await waitForText("1 pending");
+
+    const alert = container.querySelector('[aria-label="Pending account reactivation requests"]');
+    expect(alert).toBeTruthy();
+    expect(alert?.className).toContain("border-red-500");
+    expect(container.textContent).toContain("Authentication");
+    expect(container.textContent).toContain("Audit logs");
+    expect(container.textContent).not.toContain("Back to People");
+  });
+
+  it("keeps the control-plane tenant catalog usable if the supplemental reactivation response is malformed", async () => {
+    mockFetch(async (url, init) => {
+      calls.push({ url, method: init?.method ?? "GET", body: parseBody(init?.body) });
+      if (url === "/api/v1/tenants" && !init?.method) return json({ data: [tenant] });
+      if (url === "/api/v1/auth/reactivation-requests" && !init?.method) {
+        return json({ data: { unexpected: true } });
+      }
+      throw new Error(`Unhandled request: ${url}`);
+    });
+
+    renderPage(applicationAdminActor);
+    await waitForText("Tenants");
+    expect(container.textContent).toContain("Default Tenant");
+    expect(
+      container.querySelector('[aria-label="Pending account reactivation requests"]'),
+    ).toBeFalsy();
+  });
+
+  it("does not show a reactivation alert when the Application Administrator has no pending requests", async () => {
+    mockFetch(async (url, init) => {
+      calls.push({ url, method: init?.method ?? "GET", body: parseBody(init?.body) });
+      if (url === "/api/v1/tenants" && !init?.method) return json({ data: [tenant] });
+      if (url === "/api/v1/auth/reactivation-requests" && !init?.method) {
+        return json({ data: [] });
+      }
+      throw new Error(`Unhandled request: ${url}`);
+    });
+
+    renderPage(applicationAdminActor);
+    await waitForText("Tenants");
+    expect(
+      container.querySelector('[aria-label="Pending account reactivation requests"]'),
+    ).toBeFalsy();
   });
 
   it("shows duplicate tenant code errors beneath the Code input", async () => {
@@ -112,11 +201,21 @@ describe("TenantsAdminPage", () => {
   });
 });
 
-function renderPage() {
+function renderPage(actor?: AuthzCurrentActor) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
   const router = createMemoryRouter([{ path: "/admin/tenants", element: <TenantsAdminPage /> }], { initialEntries: ["/admin/tenants"] });
   root = createRoot(container);
-  act(() => root?.render(<QueryClientProvider client={client}><RouterProvider router={router} /></QueryClientProvider>));
+  act(() => root?.render(
+    <QueryClientProvider client={client}>
+      {actor ? (
+        <AuthorizationProvider value={actor}>
+          <RouterProvider router={router} />
+        </AuthorizationProvider>
+      ) : (
+        <RouterProvider router={router} />
+      )}
+    </QueryClientProvider>,
+  ));
 }
 
 function mockFetch(handler: (url: string, init?: RequestInit) => Promise<Response>) {

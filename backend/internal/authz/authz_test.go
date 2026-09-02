@@ -136,11 +136,11 @@ func TestRequirePermissionAllowsWildcardPermission(t *testing.T) {
 	}
 }
 
-func TestRequireTenantScopeAllowsApplicationActor(t *testing.T) {
-	actor := &Actor{ID: "app-admin@example.com", Scope: ActorScopeApplication}
+func TestRequireTenantScopeRejectsApplicationControlPlaneActor(t *testing.T) {
+	actor := &Actor{ID: "app-admin@example.com", TenantID: GlobalTenantScope, Scope: ActorScopeApplication}
 
-	if err := RequireTenantScope(actor, "tenant-1"); err != nil {
-		t.Fatalf("expected application actor to access tenant, got %v", err)
+	if err := RequireTenantScope(actor, "tenant-1"); !errors.Is(err, ErrForbidden) {
+		t.Fatalf("expected Application control-plane actor to be denied Tenant scope, got %v", err)
 	}
 }
 

@@ -1758,8 +1758,8 @@ func seedCurrentAccountTestActors(t *testing.T, dbPath string) {
 		role     authz.RoleCode
 		tenantID string
 	}{
-		{actorKey: "ledger-admin@example.com", role: authz.RoleApplicationAdmin, tenantID: authz.GlobalTenantScope},
-		{actorKey: "settlement-admin@example.com", role: authz.RoleApplicationAdmin, tenantID: authz.GlobalTenantScope},
+		{actorKey: "ledger-admin@example.com", role: authz.RoleTenantAdmin, tenantID: "default"},
+		{actorKey: "settlement-admin@example.com", role: authz.RoleTenantAdmin, tenantID: "default"},
 		{actorKey: "receipt-viewer@example.com", role: authz.RoleEarningsOperator, tenantID: "default"},
 		{actorKey: "receipt-printer@example.com", role: authz.RoleExpenseOperator, tenantID: "default"},
 		{actorKey: "receipt-returner@example.com", role: authz.RoleExpenseOperator, tenantID: "default"},

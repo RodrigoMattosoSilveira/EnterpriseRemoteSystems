@@ -87,13 +87,13 @@ func (s *GORMStore) FindActor(ctx context.Context, lookup ActorLookup) (*Actor, 
 		return nil, err
 	}
 	if len(globalRoles) > 0 {
+		if tenantID != GlobalTenantScope {
+			return nil, ErrTenantActorUnavailable
+		}
 		return &Actor{
-			ID:       actorRow.ActorKey,
-			RecordID: actorRow.ID,
-			// The dedicated global control-plane cutover removes the remaining Application Administrator tenant-data
-			// compatibility. Until then, retain the selected tenant as the request
-			// context without turning this GLOBAL Actor into a tenant Actor.
-			TenantID:             tenantID,
+			ID:                   actorRow.ActorKey,
+			RecordID:             actorRow.ID,
+			TenantID:             GlobalTenantScope,
 			Source:               ActorSourcePersisted,
 			Scope:                ActorScopeApplication,
 			RoleCodes:            globalRoles,
@@ -196,6 +196,17 @@ END`,
 	return nil
 }
 
+func applicationAdministratorControlPlanePermissions() []Permission {
+	return []Permission{
+		PermissionAuthzSelfRead,
+		PermissionAuthzRead,
+		PermissionAuthzManage,
+		PermissionTenantsRead,
+		PermissionTenantsCreate,
+		PermissionTenantsUpdate,
+	}
+}
+
 func tenantAdministratorDelegatedPermissions() []Permission {
 	return []Permission{
 		PermissionTenantsRead,
@@ -257,7 +268,7 @@ func SeedAuthorizationCatalog(database *gorm.DB) error {
 	}
 
 	roles := []AuthzRole{
-		{ID: "authz-role-application-admin", Code: string(RoleApplicationAdmin), Label: "Application Administrator", Description: "Application-global control-plane administration; legacy tenant-data compatibility remains transitional pending a dedicated global control-plane cutover.", ScopeType: string(ActorScopeApplication), Active: true, CreatedAt: now, UpdatedAt: now},
+		{ID: "authz-role-application-admin", Code: string(RoleApplicationAdmin), Label: "Application Administrator", Description: "Application-global control-plane administration with no standing Tenant business-data access.", ScopeType: string(ActorScopeApplication), Active: true, CreatedAt: now, UpdatedAt: now},
 		{ID: "authz-role-tenant-admin", Code: string(RoleTenantAdmin), Label: "Tenant Administrator", Description: "Tenant-wide administration through explicit delegated permissions.", ScopeType: string(ActorScopeTenant), Active: true, CreatedAt: now, UpdatedAt: now},
 		{ID: "authz-role-earnings-operator", Code: string(RoleEarningsOperator), Label: "Earnings Operator", Description: "Planning and earning operations for the assigned tenant.", ScopeType: string(ActorScopeTenant), Active: true, CreatedAt: now, UpdatedAt: now},
 		{ID: "authz-role-expense-operator", Code: string(RoleExpenseOperator), Label: "Expense Operator", Description: "Expense, price list, current account summary, and receipt operations for the assigned tenant.", ScopeType: string(ActorScopeTenant), Active: true, CreatedAt: now, UpdatedAt: now},
@@ -269,17 +280,8 @@ func SeedAuthorizationCatalog(database *gorm.DB) error {
 	}
 
 	rolePermissions := map[RoleCode][]Permission{
-		RoleApplicationAdmin: {
-			// Explicit control-plane permissions are established in 30D. The
-			// transitional wildcard remains until the dedicated global control-plane cutover removes standing
-			// Application Administrator tenant-data compatibility. Gold Production
-			// is an explicit administrative exception shared with Tenant Admins.
-			PermissionAll,
-			PermissionAuthzSelfRead, PermissionAuthzRead, PermissionAuthzManage,
-			PermissionTenantsRead, PermissionTenantsCreate, PermissionTenantsUpdate,
-			PermissionGoldProductionManage,
-		},
-		RoleTenantAdmin: tenantAdministratorDelegatedPermissions(),
+		RoleApplicationAdmin: applicationAdministratorControlPlanePermissions(),
+		RoleTenantAdmin:      tenantAdministratorDelegatedPermissions(),
 		RoleEarningsOperator: {
 			PermissionAuthzSelfRead, PermissionTenantsRead, PermissionReferenceDataRead,
 			PermissionCollaboratorsRead, PermissionCollaboratorsWorkAssignmentUpdate,
@@ -311,6 +313,19 @@ func SeedAuthorizationCatalog(database *gorm.DB) error {
 		Where("role_id = ? AND permission_code = ?", roleIDs[RoleEarningsOperator], string(PermissionCollaboratorsUpdate)).
 		Delete(&AuthzRolePermission{}).Error; err != nil {
 		return fmt.Errorf("remove Earnings Operator full collaborator update permission: %w", err)
+	}
+
+	// Bite 30I.1 cuts APPLICATION_ADMIN over to explicit control-plane
+	// authority. Converge pre-migration/test databases by removing every stale
+	// role permission that is not part of that allowlist.
+	allowedApplicationPermissions := make([]string, 0, len(applicationAdministratorControlPlanePermissions()))
+	for _, permission := range applicationAdministratorControlPlanePermissions() {
+		allowedApplicationPermissions = append(allowedApplicationPermissions, string(permission))
+	}
+	if err := database.
+		Where("role_id = ? AND permission_code NOT IN ?", roleIDs[RoleApplicationAdmin], allowedApplicationPermissions).
+		Delete(&AuthzRolePermission{}).Error; err != nil {
+		return fmt.Errorf("remove Application Administrator tenant-data permissions: %w", err)
 	}
 
 	// Tenant Administrator authority is deliberately explicit in Bite 30D.
@@ -547,7 +562,7 @@ type PermissionCatalogEntry struct {
 
 func PermissionCatalog() []PermissionCatalogEntry {
 	return []PermissionCatalogEntry{
-		{PermissionAll, "All permissions", "Transitional wildcard permission for Application Administrators pending the dedicated global control-plane cutover."},
+		{PermissionAll, "All permissions", "Legacy wildcard permission retained for compatibility testing; APPLICATION_ADMIN no longer receives it after Bite 30I.1."},
 		{PermissionAuthzSelfRead, "Read own authorization context", "Read the current persisted actor, effective roles, scope, and permissions."},
 		{PermissionAuthzRead, "Read authorization administration", "Read authorization actors, roles, permissions, and grants."},
 		{PermissionAuthzManage, "Manage authorization administration", "Create authorization actors and manage application-global role grants."},
@@ -618,8 +633,8 @@ func stringValue(value *string) string {
 // TenantOption describes an active tenant context available to an authenticated
 // Account. For ordinary Accounts the option names the exact active tenant Actor
 // and Membership that will become effective when the tenant is selected. GLOBAL
-// Application Administrator Accounts retain the staged all-active-tenant
-// compatibility pending the dedicated global control-plane cutover, but still report their GLOBAL Actor explicitly.
+// Application Administrator Accounts expose exactly one control-plane context
+// (`*`) and never enumerate Tenants as implicit operating contexts.
 type TenantOption struct {
 	ID            string   `json:"id"`
 	Code          string   `json:"code"`
@@ -671,8 +686,6 @@ func (s *GORMStore) ListActorTenantOptions(ctx context.Context, actorRecordID st
 	tenantRoles := map[string]map[string]struct{}{}
 	for _, grant := range grants {
 		if grant.TenantID == GlobalTenantScope {
-			// Transitional Application Administrator tenant selection remains
-			// until the dedicated global control-plane cutover. 30D no longer treats this as a tenant Role.
 			globalRoles[grant.RoleCode] = struct{}{}
 			continue
 		}
@@ -682,41 +695,49 @@ func (s *GORMStore) ListActorTenantOptions(ctx context.Context, actorRecordID st
 		tenantRoles[grant.TenantID][grant.RoleCode] = struct{}{}
 	}
 
+	if len(globalRoles) > 0 {
+		roleCodes := make([]string, 0, len(globalRoles))
+		for role := range globalRoles {
+			roleCodes = append(roleCodes, role)
+		}
+		sort.Strings(roleCodes)
+		return []TenantOption{{
+			ID:            GlobalTenantScope,
+			Code:          "GLOBAL",
+			Name:          "Global administration",
+			RoleCodes:     roleCodes,
+			ActorRecordID: actor.ID,
+			ActorKey:      actor.ActorKey,
+			ActorScope:    string(ActorScopeApplication),
+		}}, nil
+	}
+
 	type tenantProjection struct {
 		ID   string
 		Code string
 		Name string
 	}
+	ids := make([]string, 0, len(tenantRoles))
+	for tenantID := range tenantRoles {
+		ids = append(ids, tenantID)
+	}
+	if len(ids) == 0 {
+		return []TenantOption{}, nil
+	}
 	var tenants []tenantProjection
-	query := s.database.WithContext(ctx).
+	if err := s.database.WithContext(ctx).
 		Table("tenants").
 		Select("id, code, name").
-		Where("active = ?", true)
-	if len(globalRoles) == 0 {
-		ids := make([]string, 0, len(tenantRoles))
-		for tenantID := range tenantRoles {
-			ids = append(ids, tenantID)
-		}
-		if len(ids) == 0 {
-			return []TenantOption{}, nil
-		}
-		query = query.Where("id IN ?", ids)
-	}
-	if err := query.Order("name ASC, code ASC, id ASC").Scan(&tenants).Error; err != nil {
+		Where("active = ? AND id IN ?", true, ids).
+		Order("name ASC, code ASC, id ASC").
+		Scan(&tenants).Error; err != nil {
 		return nil, fmt.Errorf("find tenant options: %w", err)
 	}
 
 	options := make([]TenantOption, 0, len(tenants))
 	for _, tenant := range tenants {
-		roles := map[string]struct{}{}
-		for role := range globalRoles {
-			roles[role] = struct{}{}
-		}
+		roleCodes := make([]string, 0, len(tenantRoles[tenant.ID]))
 		for role := range tenantRoles[tenant.ID] {
-			roles[role] = struct{}{}
-		}
-		roleCodes := make([]string, 0, len(roles))
-		for role := range roles {
 			roleCodes = append(roleCodes, role)
 		}
 		sort.Strings(roleCodes)
@@ -757,7 +778,7 @@ func (s *GORMStore) FindAccountActor(ctx context.Context, accountID string, tena
 	}
 
 	var binding accountActorBindingProjection
-	result := s.database.WithContext(ctx).
+	query := s.database.WithContext(ctx).
 		Table("auth_account_actors aa").
 		Select(`aa.account_id AS account_id,
 			aa.actor_id AS actor_id,
@@ -767,8 +788,14 @@ func (s *GORMStore) FindAccountActor(ctx context.Context, accountID string, tena
 			aa.tenant_id AS tenant_id,
 			aa.membership_id AS membership_id`).
 		Joins("JOIN authz_actors a ON a.id = aa.actor_id AND a.active = ?", true).
-		Where("aa.account_id = ? AND ((aa.scope_type = ? AND aa.tenant_id = ?) OR aa.scope_type = ?)", accountID, "TENANT", tenantID, "GLOBAL").
-		Order("CASE WHEN aa.scope_type = 'TENANT' THEN 0 ELSE 1 END, aa.is_primary DESC").
+		Where("aa.account_id = ?", accountID)
+	if tenantID == GlobalTenantScope {
+		query = query.Where("aa.scope_type = ?", "GLOBAL")
+	} else {
+		query = query.Where("aa.scope_type = ? AND aa.tenant_id = ?", "TENANT", tenantID)
+	}
+	result := query.
+		Order("aa.is_primary DESC").
 		Limit(1).
 		Scan(&binding)
 	if result.Error != nil {
@@ -787,11 +814,9 @@ func (s *GORMStore) FindAccountActor(ctx context.Context, accountID string, tena
 			return nil, ErrTenantActorUnavailable
 		}
 		return &Actor{
-			ID:       binding.ActorKey,
-			RecordID: binding.ActorID,
-			// The dedicated global control-plane cutover removes this selected-tenant compatibility. The Actor
-			// remains APPLICATION scoped and has no Membership/Person identity.
-			TenantID:             tenantID,
+			ID:                   binding.ActorKey,
+			RecordID:             binding.ActorID,
+			TenantID:             GlobalTenantScope,
 			Source:               ActorSourceAuthenticatedSession,
 			Scope:                ActorScopeApplication,
 			RoleCodes:            roles,
@@ -930,10 +955,9 @@ func (s *GORMStore) ListAccountTenantOptions(ctx context.Context, accountID stri
 	}
 	accountID = strings.TrimSpace(accountID)
 
-	// A GLOBAL Account remains a control-plane identity. The dedicated global control-plane cutover removes its
-	// staged ability to select an active tenant for ordinary tenant-data support;
-	// until then every option explicitly names the same GLOBAL Actor so callers
-	// never mistake tenant selection for a tenant Actor switch.
+	// A GLOBAL Account exposes one explicit application control-plane context.
+	// It never enumerates active Tenants because Tenant identifiers are not
+	// authorization grants.
 	var globalBinding accountActorBindingProjection
 	globalResult := s.database.WithContext(ctx).
 		Table("auth_account_actors aa").
@@ -965,34 +989,15 @@ func (s *GORMStore) ListAccountTenantOptions(ctx context.Context, accountID stri
 		if len(roleCodes) == 0 {
 			return []TenantOption{}, nil
 		}
-
-		type tenantProjection struct {
-			ID   string
-			Code string
-			Name string
-		}
-		var tenants []tenantProjection
-		if err := s.database.WithContext(ctx).
-			Table("tenants").
-			Select("id, code, name").
-			Where("active = ?", true).
-			Order("name ASC, code ASC, id ASC").
-			Scan(&tenants).Error; err != nil {
-			return nil, fmt.Errorf("find global Account tenant options: %w", err)
-		}
-		options := make([]TenantOption, 0, len(tenants))
-		for _, tenant := range tenants {
-			options = append(options, TenantOption{
-				ID:            tenant.ID,
-				Code:          tenant.Code,
-				Name:          tenant.Name,
-				RoleCodes:     append([]string(nil), roleCodes...),
-				ActorRecordID: globalBinding.ActorID,
-				ActorKey:      globalBinding.ActorKey,
-				ActorScope:    string(ActorScopeApplication),
-			})
-		}
-		return options, nil
+		return []TenantOption{{
+			ID:            GlobalTenantScope,
+			Code:          "GLOBAL",
+			Name:          "Global administration",
+			RoleCodes:     roleCodes,
+			ActorRecordID: globalBinding.ActorID,
+			ActorKey:      globalBinding.ActorKey,
+			ActorScope:    string(ActorScopeApplication),
+		}}, nil
 	}
 
 	// Ordinary tenant options are identity options, not Role-Grant options. A
