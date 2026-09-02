@@ -1,8 +1,11 @@
 import { expect, test } from "@playwright/test";
-import { seedBrowserApplicationAdmin } from "./support/authz";
+import { applicationAdminHeaders, seedBrowserApplicationAdmin } from "./support/authz";
 import { applicationAdminStorageStatePath } from "./support/storage";
 
-test.use({ storageState: applicationAdminStorageStatePath });
+test.use({
+  storageState: applicationAdminStorageStatePath,
+  extraHTTPHeaders: applicationAdminHeaders(),
+});
 
 test.beforeEach(async ({ page }) => {
   await seedBrowserApplicationAdmin(page);

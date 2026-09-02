@@ -1,9 +1,12 @@
 import { expect, test, type APIRequestContext } from "@playwright/test";
 import { uniquePersonSuffix } from "./support/test-data";
-import { E2E_ACTOR_ID, authzHeaders, e2eApiUrl, seedBrowserApplicationAdmin } from "./support/authz";
+import { E2E_ACTOR_ID, applicationAdminHeaders, authzHeaders, e2eApiUrl, seedBrowserApplicationAdmin } from "./support/authz";
 import { applicationAdminStorageStatePath } from "./support/storage";
 
-test.use({ storageState: applicationAdminStorageStatePath });
+test.use({
+  storageState: applicationAdminStorageStatePath,
+  extraHTTPHeaders: applicationAdminHeaders(),
+});
 
 test.beforeEach(async ({ page }) => {
   await seedBrowserApplicationAdmin(page);

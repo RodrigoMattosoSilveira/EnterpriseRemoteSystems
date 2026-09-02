@@ -1,5 +1,6 @@
 import { defineConfig, devices } from "@playwright/test";
 import { resolveE2EAuthMode } from "./tests/e2e/support/runtime";
+import { applicationAdminHeaders, authzHeaders } from "./tests/e2e/support/authz";
 import { tenantAdminStorageStatePath } from "./tests/e2e/support/storage";
 
 declare const process: {
@@ -47,16 +48,17 @@ export default defineConfig({
     screenshot: "only-on-failure",
     video: "retain-on-failure",
     // Header mode deliberately fixes the actor and tenant for isolated
-    // authorization tests. Session mode must not install a context-wide tenant
-    // header: the application sends the tenant selected in localStorage, and a
-    // fixed Playwright header would override browser tenant switching.
+    // authorization tests. Session mode defaults the shared Playwright context
+    // to the canonical E2E Tenant Administrator; control-plane specs override
+    // these headers explicitly with applicationAdminHeaders(). Browser contexts
+    // created inside a test remain header-free unless the test opts in.
     extraHTTPHeaders:
       authMode === "headers"
         ? {
             "X-Actor-ID": authzActorId,
             "X-Tenant-ID": authzTenantId,
           }
-        : undefined,
+        : authzHeaders(),
     storageState:
       authMode === "session"
         ? tenantAdminStorageStatePath
