@@ -1,0 +1,25 @@
+{
+  "cookies": [
+    {
+      "name": "ers_session",
+      "value": "ers_s_RWShBfmQVMbXyHrTMBp7hcG0KbZT2iWolovC7NFJyp8",
+      "domain": "localhost",
+      "path": "/",
+      "expires": 1788424992.569,
+      "httpOnly": true,
+      "secure": false,
+      "sameSite": "Lax"
+    }
+  ],
+  "origins": [
+    {
+      "origin": "http://localhost:15173",
+      "localStorage": [
+        {
+          "name": "ers.auth.selectedTenantId",
+          "value": "*"
+        }
+      ]
+    }
+  ]
+}
