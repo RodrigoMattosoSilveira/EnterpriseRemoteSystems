@@ -242,7 +242,7 @@ describe("AuthzAdminPage", () => {
     mockAuthzFetch();
 
     renderAuthzAdminPage();
-    await waitForText("Historical Actor Label");
+    await waitForText("Áurea Historical Actor");
 
     const filter = controlByLabel<HTMLInputElement>(
       container,
