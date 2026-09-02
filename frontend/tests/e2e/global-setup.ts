@@ -1,20 +1,12 @@
-import { request, type APIRequestContext, type APIResponse, type FullConfig } from "@playwright/test";
+import { request, type APIResponse, type FullConfig } from "@playwright/test";
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import { isLoopbackURL } from "./support/runtime";
 
-type GoldPriceEnvelope = {
-  data?: Array<{
-    id?: string;
-    priceDate?: string;
-    active?: boolean;
-    notes?: string;
-  }>;
-};
-
 type CurrentActorEnvelope = {
   data?: {
     actorKey?: string;
+    tenantId?: string;
     scope?: string;
     permissions?: string[];
   };
@@ -40,7 +32,7 @@ export default async function globalSetup(config: FullConfig): Promise<void> {
   const login = process.env.E2E_ADMIN_EMAIL?.trim() || (isLocal ? "admin@example.com" : "");
   const password = process.env.E2E_ADMIN_PASSWORD || (isLocal ? "Local-E2E-Administrator-28D!" : "");
   const expectedActorKey = process.env.PLAYWRIGHT_AUTHZ_ACTOR_ID?.trim() || (isLocal ? "e2e-application-admin" : "");
-  const tenantId = process.env.PLAYWRIGHT_AUTHZ_TENANT_ID?.trim() || "default";
+  const globalContextId = "*";
 
   if (!login || !password) {
     throw new Error(
@@ -50,7 +42,7 @@ export default async function globalSetup(config: FullConfig): Promise<void> {
 
   const api = await request.newContext({
     baseURL,
-    extraHTTPHeaders: { "X-Tenant-ID": tenantId },
+    extraHTTPHeaders: { "X-Tenant-ID": globalContextId },
   });
 
   try {
@@ -66,10 +58,12 @@ export default async function globalSetup(config: FullConfig): Promise<void> {
     const permissions = actorPayload.data?.permissions ?? [];
     if (
       actorPayload.data?.scope !== "APPLICATION" ||
-      (!permissions.includes("authz.manage") && !permissions.includes("*"))
+      actorPayload.data?.tenantId !== globalContextId ||
+      !permissions.includes("authz.manage") ||
+      permissions.includes("*")
     ) {
       throw new Error(
-        "The deployed E2E account must resolve to an application-scoped authorization administrator",
+        "The deployed E2E account must resolve to the GLOBAL control-plane Application Administrator without wildcard Tenant authority",
       );
     }
     if (expectedActorKey && actorPayload.data?.actorKey !== expectedActorKey) {
@@ -77,8 +71,6 @@ export default async function globalSetup(config: FullConfig): Promise<void> {
         `The deployed E2E account resolved to actor ${actorPayload.data?.actorKey ?? "<missing>"}; expected ${expectedActorKey}`,
       );
     }
-
-    await deactivateLeakedTenantIsolationGoldPrices(api);
 
     const state = await api.storageState();
     const origin = new URL(baseURL).origin;
@@ -89,7 +81,7 @@ export default async function globalSetup(config: FullConfig): Promise<void> {
         localStorage: [
           {
             name: "ers.auth.selectedTenantId",
-            value: tenantId,
+            value: globalContextId,
           },
         ],
       },
@@ -113,35 +105,4 @@ async function requireSuccessfulResponse(
   throw new Error(
     `${operation} failed at ${response.url()}: ${response.status()} ${await response.text()}`,
   );
-}
-
-async function deactivateLeakedTenantIsolationGoldPrices(
-  api: APIRequestContext,
-): Promise<void> {
-  const response = await api.get("/api/v1/gold-prices");
-  await requireSuccessfulResponse(response, "List gold prices before deployed E2E");
-
-  const payload = (await response.json()) as GoldPriceEnvelope;
-  const leakedPrices = (payload.data ?? []).filter((price) => {
-    const notes = price.notes?.trim() ?? "";
-    const year = Number(price.priceDate?.slice(0, 4));
-    return (
-      price.active !== false &&
-      notes.startsWith("Default tenant gold price ") &&
-      Number.isFinite(year) &&
-      year >= 3000
-    );
-  });
-
-  for (const price of leakedPrices) {
-    if (!price.id) continue;
-    const deactivateResponse = await api.patch(
-      `/api/v1/gold-prices/${encodeURIComponent(price.id)}/deactivate`,
-      { data: {} },
-    );
-    await requireSuccessfulResponse(
-      deactivateResponse,
-      `Deactivate leaked tenant-isolation gold price ${price.id}`,
-    );
-  }
 }
