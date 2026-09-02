@@ -99,27 +99,93 @@ func ensureE2ETenantAdministrator(ctx context.Context, database *gorm.DB, fixtur
 			return fmt.Errorf("ensure E2E Tenant Administrator Person: %w", err)
 		}
 
-		membership := dbpkg.PersonTenantMembership{
-			BaseModel: dbpkg.BaseModel{ID: fixture.Stem + "-membership", CreatedAt: now, UpdatedAt: now},
-			TenantID:  fixture.TenantID,
-			PersonID:  person.ID,
-			StatusID:  status.ID,
+		legacyPerson := dbpkg.Person{
+			BaseModel:               dbpkg.BaseModel{ID: fixture.Stem + "-legacy-person", CreatedAt: now, UpdatedAt: now},
+			TenantID:                fixture.TenantID,
+			FirstName:               person.FirstName,
+			LastName:                person.LastName,
+			Nickname:                person.Nickname,
+			CPF:                     person.CPF,
+			RG:                      person.RG,
+			Cellular:                person.Cellular,
+			Email:                   person.Email,
+			Country:                 person.Country,
+			ProfileCompletionStatus: "COMPLETE",
+			StatusID:                status.ID,
 		}
-		if err := tx.Where("id = ?", membership.ID).FirstOrCreate(&membership).Error; err != nil {
-			return fmt.Errorf("ensure E2E Tenant Administrator Membership: %w", err)
+		if err := tx.Where("id = ?", legacyPerson.ID).FirstOrCreate(&legacyPerson).Error; err != nil {
+			return fmt.Errorf("ensure E2E Tenant Administrator legacy Person projection: %w", err)
+		}
+
+		legacyPersonID := legacyPerson.ID
+		membership := dbpkg.PersonTenantMembership{
+			BaseModel:      dbpkg.BaseModel{ID: fixture.Stem + "-membership", CreatedAt: now, UpdatedAt: now},
+			TenantID:       fixture.TenantID,
+			PersonID:       person.ID,
+			StatusID:       status.ID,
+			LegacyPersonID: &legacyPersonID,
+		}
+		var existingMembership dbpkg.PersonTenantMembership
+		membershipResult := tx.Where("id = ?", membership.ID).Limit(1).Find(&existingMembership)
+		if membershipResult.Error != nil {
+			return fmt.Errorf("find E2E Tenant Administrator Membership: %w", membershipResult.Error)
+		}
+		if membershipResult.RowsAffected == 0 {
+			if err := tx.Create(&membership).Error; err != nil {
+				return fmt.Errorf("ensure E2E Tenant Administrator Membership: %w", err)
+			}
+		} else {
+			if existingMembership.TenantID != membership.TenantID || existingMembership.PersonID != membership.PersonID {
+				return fmt.Errorf("E2E Tenant Administrator Membership %s is bound to another Person or Tenant", membership.ID)
+			}
+			if existingMembership.LegacyPersonID != nil && strings.TrimSpace(*existingMembership.LegacyPersonID) != "" &&
+				strings.TrimSpace(*existingMembership.LegacyPersonID) != legacyPerson.ID {
+				return fmt.Errorf("E2E Tenant Administrator Membership %s is bound to another legacy Person", membership.ID)
+			}
+			if err := tx.Model(&dbpkg.PersonTenantMembership{}).Where("id = ?", membership.ID).Updates(map[string]any{
+				"legacy_person_id": legacyPerson.ID,
+				"status_id":        status.ID,
+				"updated_at":       now,
+			}).Error; err != nil {
+				return fmt.Errorf("reconcile E2E Tenant Administrator Membership: %w", err)
+			}
 		}
 
 		actor := authz.AuthzActor{
 			ID:          fixture.Stem + "-actor",
 			ActorKey:    fixture.ActorKey,
 			DisplayName: fixture.ActorKey,
-			PersonID:    &person.ID,
+			PersonID:    &legacyPersonID,
 			Active:      true,
 			CreatedAt:   now,
 			UpdatedAt:   now,
 		}
-		if err := tx.Where("id = ?", actor.ID).FirstOrCreate(&actor).Error; err != nil {
-			return fmt.Errorf("ensure E2E Tenant Administrator Actor: %w", err)
+		var existingActor authz.AuthzActor
+		actorResult := tx.Where("id = ?", actor.ID).Limit(1).Find(&existingActor)
+		if actorResult.Error != nil {
+			return fmt.Errorf("find E2E Tenant Administrator Actor: %w", actorResult.Error)
+		}
+		if actorResult.RowsAffected == 0 {
+			if err := tx.Create(&actor).Error; err != nil {
+				return fmt.Errorf("ensure E2E Tenant Administrator Actor: %w", err)
+			}
+		} else {
+			existingPersonID := ""
+			if existingActor.PersonID != nil {
+				existingPersonID = strings.TrimSpace(*existingActor.PersonID)
+			}
+			if existingPersonID != "" && existingPersonID != person.ID && existingPersonID != legacyPerson.ID {
+				return fmt.Errorf("E2E Tenant Administrator Actor %s is bound to another legacy Person", actor.ID)
+			}
+			if err := tx.Model(&authz.AuthzActor{}).Where("id = ?", actor.ID).Updates(map[string]any{
+				"actor_key":    actor.ActorKey,
+				"display_name": actor.DisplayName,
+				"person_id":    legacyPerson.ID,
+				"active":       true,
+				"updated_at":   now,
+			}).Error; err != nil {
+				return fmt.Errorf("reconcile E2E Tenant Administrator Actor: %w", err)
+			}
 		}
 
 		passwordHash, err := bcrypt.GenerateFromPassword([]byte(password), passwordHashCost)
