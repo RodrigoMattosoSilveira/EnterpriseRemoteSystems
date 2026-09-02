@@ -124,7 +124,7 @@ describe("TenantsAdminPage", () => {
     });
 
     renderPage(applicationAdminActor);
-    await waitForText("Tenants");
+    await waitForText("Default Tenant");
     expect(container.textContent).toContain("Default Tenant");
     expect(
       container.querySelector('[aria-label="Pending account reactivation requests"]'),

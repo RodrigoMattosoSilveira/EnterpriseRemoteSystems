@@ -94,7 +94,7 @@ describe("GoldPricesPage", () => {
     expect(createCall?.body).toMatchObject({
       priceDate: "2026-06-22",
       brlPerGram: 525.75,
-      recordedBy: "bootstrap-admin",
+      recordedBy: "tenant-gold-price-admin",
       notes: "Manual admin quote",
     });
   });
