@@ -614,8 +614,9 @@ async function createActorWithRole(
 
   const temporaryPassword = `E2E-${seed}-Password!`;
   const accountResponse = await api.post(e2eApiUrl("/api/v1/auth/accounts"), {
-    headers: authzHeaders(tenantId),
+    headers: applicationAdminHeaders(),
     data: {
+      tenantId,
       login,
       temporaryPassword,
     },

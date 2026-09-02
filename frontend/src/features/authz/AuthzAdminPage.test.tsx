@@ -228,11 +228,11 @@ describe("AuthzAdminPage", () => {
     expect(fetchCalls.every((call) => call.headers["X-Tenant-ID"] === "default")).toBe(true);
   });
 
-  it("filters actor cards progressively by Actor Key or linked Person nickname", async () => {
+  it("filters actor cards progressively by Actor Key or display name", async () => {
     actors.push({
       id: "actor-aurea",
-      actorKey: "collaborator-aurea",
-      displayName: "Historical Actor Label",
+      actorKey: "actor-historical-001",
+      displayName: "Áurea Historical Actor",
       personId: "person-aurea",
       globalPersonId: "person-aurea",
       collaboratorId: "collaborator-aurea",
@@ -246,13 +246,13 @@ describe("AuthzAdminPage", () => {
 
     const filter = controlByLabel<HTMLInputElement>(
       container,
-      "Filter actors by Actor Key or person nickname",
+      "Filter actors by Actor Key or display name",
       "input",
     );
     await setInputValue(filter, "aure");
 
     await waitFor(() => actorCardKeys().length === 1);
-    expect(actorCardKeys()).toEqual(["collaborator-aurea"]);
+    expect(actorCardKeys()).toEqual(["actor-historical-001"]);
     expect(container.textContent).toContain("Showing 1 of 2 actor records");
 
     await setInputValue(filter, "bootstrap-ad");
@@ -266,7 +266,7 @@ describe("AuthzAdminPage", () => {
 
     await clickButtonByName("Clear");
     await waitFor(() => actorCardKeys().length === 2);
-    expect(actorCardKeys()).toEqual(["bootstrap-admin", "collaborator-aurea"]);
+    expect(actorCardKeys()).toEqual(["actor-historical-001", "bootstrap-admin"]);
   });
 
 
@@ -294,7 +294,7 @@ describe("AuthzAdminPage", () => {
 
     const filter = controlByLabel<HTMLInputElement>(
       container,
-      "Filter actors by Actor Key or person nickname",
+      "Filter actors by Actor Key or display name",
       "input",
     );
     await setInputValue(filter, "manual30g-actor-key-a-tenant-a");
@@ -412,73 +412,43 @@ describe("AuthzAdminPage", () => {
     expect(eligibilityFilter.value).toBe("ALL");
   });
 
-  it("filters collaborators progressively and creates an actor from the selected match", async () => {
+  it("creates a global actor without reading Tenant collaborator data", async () => {
     mockAuthzFetch();
 
     renderAuthzAdminPage();
     await waitForText("Bootstrap Admin");
 
-    const collaboratorSearch = controlByLabel<HTMLInputElement>(
-      formByHeading("Create actor"),
-      "Find collaborator by person nickname",
+    const createForm = formByHeading("Create actor");
+    const actorKey = controlByLabel<HTMLInputElement>(
+      createForm,
+      "Actor Key",
       "input",
     );
-    await setInputValue(collaboratorSearch, "pense");
+    const displayName = controlByLabel<HTMLInputElement>(
+      createForm,
+      "Display Name",
+      "input",
+    );
 
-    await waitForText("Expense Admin · Active · Main Mine");
-    expect(
-      fetchCalls.some(
-        (call) =>
-          call.url ===
-          "/api/v1/collaborators?search=pense&page=1&pageSize=25",
-      ),
-    ).toBe(true);
-    expect(createActorSuggestionLabels()).toEqual([
-      "Expense Admin · Active · Main Mine",
-    ]);
-
-    await clickCreateActorSuggestion("Expense Admin · Active · Main Mine");
-    await waitForText("Actor key: collaborator-expense-admin");
-    expect(collaboratorSearch.value).toBe("");
-    expect(createActorSuggestionLabels()).toEqual([]);
-
+    await setInputValue(actorKey, "global-support-e2e");
+    await setInputValue(displayName, "Global Support E2E");
     await submitFormByHeading("Create actor");
 
-    await waitForText("collaborator-expense-admin created.");
+    await waitForText("global-support-e2e created.");
 
     const createCall = fetchCalls.find(
       (call) => call.url === "/api/v1/authz/actors" && call.method === "POST",
     );
     expect(createCall?.body).toMatchObject({
-      actorKey: "collaborator-expense-admin",
-      displayName: "Expense Admin",
+      actorKey: "global-support-e2e",
+      displayName: "Global Support E2E",
       active: true,
-      personId: "person-expense-admin",
-      collaboratorId: "collaborator-expense-admin",
+      personId: null,
+      collaboratorId: null,
     });
-  });
-
-  it("matches Create actor collaborators by any accent-insensitive nickname substring", async () => {
-    mockAuthzFetch();
-
-    renderAuthzAdminPage();
-    await waitForText("Bootstrap Admin");
-
-    const collaboratorSearch = controlByLabel<HTMLInputElement>(
-      formByHeading("Create actor"),
-      "Find collaborator by person nickname",
-      "input",
-    );
-    await setInputValue(collaboratorSearch, "aure");
-
-    await waitForText("Áurea · Active · Main Mine");
-    expect(createActorSuggestionLabels()).toEqual([
-      "Áurea · Active · Main Mine",
-    ]);
-
-    await setInputValue(collaboratorSearch, "nickname-that-does-not-exist");
-    await waitForText("No matching collaborators");
-    expect(createActorSuggestionLabels()).toEqual([]);
+    expect(
+      fetchCalls.some((call) => call.url.startsWith("/api/v1/collaborators")),
+    ).toBe(false);
   });
 
   it("grants and revokes actor roles", async () => {

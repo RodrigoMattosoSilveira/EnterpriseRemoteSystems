@@ -149,7 +149,7 @@ echo "ERS_BACKEND_WATCH=${ERS_BACKEND_WATCH:-true}"
 if [[ "${ERS_BACKEND_WATCH:-true}" == "false" ]]; then
   direct_backend_binary="./tmp/backend-direct"
   echo "Building backend without Air..."
-  go build -o "${direct_backend_binary}" ./cmd/api
+  go build -buildvcs=false -o "${direct_backend_binary}" ./cmd/api
   echo "Starting backend without Air..."
   exec "${direct_backend_binary}"
 fi

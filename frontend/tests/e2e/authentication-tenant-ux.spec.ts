@@ -114,7 +114,7 @@ test("authenticated user can see identity, tenant, sign out, and sign back in", 
 });
 
 test("missing browser session redirects protected routes to login and restores the route", async ({ page, context }) => {
-  await page.goto("/people");
+  await page.goto("/admin/tenants");
   await context.clearCookies();
   await page.reload();
 
@@ -125,8 +125,8 @@ test("missing browser session redirects protected routes to login and restores t
   await page.getByLabel("Password").fill(password);
   await page.getByRole("button", { name: "Sign in" }).click();
 
-  await expect(page).toHaveURL(/\/people$/);
-  await expect(page.getByRole("heading", { name: "People", exact: true })).toBeVisible();
+  await expect(page).toHaveURL(/\/admin\/tenants$/);
+  await expect(page.getByRole("heading", { name: "Tenants", exact: true })).toBeVisible();
 });
 
 test("a fresh cookie-less browser context does not inherit the administrator session", async ({ browser, page }) => {
@@ -134,7 +134,7 @@ test("a fresh cookie-less browser context does not inherit the administrator ses
   // Application Administrator storage state. A separate browser context with
   // no cookies models a genuinely fresh private/incognito browsing session.
   await page.goto("/");
-  await expect(page).toHaveURL(/\/people$/);
+  await expect(page).toHaveURL(/\/admin\/tenants$/);
   await expect(page.getByText(login, { exact: true })).toBeVisible();
 
   const privateContext = await browser.newContext({
@@ -162,7 +162,7 @@ test("a fresh cookie-less browser context does not inherit the administrator ses
     await expect(privatePage.getByRole("heading", { name: "Sign in" })).toBeVisible();
 
     // The authenticated administrator context remains independently signed in.
-    await expect(page).toHaveURL(/\/people$/);
+    await expect(page).toHaveURL(/\/admin\/tenants$/);
     await expect(page.getByText(login, { exact: true })).toBeVisible();
   } finally {
     await privateContext.close();
@@ -416,7 +416,7 @@ test("authentication administration finds an existing collaborator actor and lin
   const accountPassword = `Auth-Lookup-${suffix}-Password!`;
 
   const accountResponse = await request.post(e2eApiUrl("/api/v1/auth/accounts"), {
-    headers: authzHeaders(),
+    headers: applicationAdminHeaders(),
     data: {
       actorId: candidate.actorId,
       login: accountLogin,
@@ -436,7 +436,7 @@ test("authentication administration finds an existing collaborator actor and lin
       `/api/v1/authz/actors/${encodeURIComponent(candidate.actorId)}/role-grants`,
     ),
     {
-      headers: authzHeaders(),
+      headers: applicationAdminHeaders(),
       data: { roleCode: "EXPENSE_OPERATOR", tenantId: "default" },
     },
   );
@@ -625,7 +625,7 @@ test("a temporary-password account can sign in after completing the required pas
   const actorWithoutAccessResponse = await request.post(
     e2eApiUrl("/api/v1/authz/actors"),
     {
-      headers: authzHeaders(),
+      headers: applicationAdminHeaders(),
       data: {
         actorKey: actorWithoutAccessLogin,
         displayName: `Authentication UX no access ${suffix}`,
@@ -643,7 +643,7 @@ test("a temporary-password account can sign in after completing the required pas
   const invalidAccountResponse = await request.post(
     e2eApiUrl("/api/v1/auth/accounts"),
     {
-      headers: authzHeaders(),
+      headers: applicationAdminHeaders(),
       data: {
         actorId: actorWithoutAccessId,
         login: actorWithoutAccessLogin,
@@ -979,7 +979,7 @@ reactivationLifecycleTest(
     ).toBeVisible();
 
     await signIn(adminPage, login, password);
-    await expect(adminPage).toHaveURL(/\/people$/);
+    await expect(adminPage).toHaveURL(/\/admin\/tenants$/);
 
     const reactivationAlert = adminPage.getByRole("region", {
       name: "Pending account reactivation requests",
@@ -1162,7 +1162,7 @@ async function provisionAuthenticationActorCandidate(
 
   const actorKey = `collaborator-${collaboratorId}`;
   const actorResponse = await request.post(e2eApiUrl("/api/v1/authz/actors"), {
-    headers: authzHeaders(),
+    headers: applicationAdminHeaders(),
     data: {
       actorKey,
       displayName: nickname,
@@ -1236,7 +1236,7 @@ async function provisionRoleAccount(
   expect(globalPersonId).toBeTruthy();
 
   const actorResponse = await request.post(e2eApiUrl("/api/v1/authz/actors"), {
-    headers: authzHeaders(),
+    headers: applicationAdminHeaders(),
     data: {
       actorKey: login,
       displayName: `Authentication UX ${keyPrefix}`,
@@ -1253,7 +1253,7 @@ async function provisionRoleAccount(
   // Delegated authority is additive and is granted only after that binding
   // exists.
   const accountResponse = await request.post(e2eApiUrl("/api/v1/auth/accounts"), {
-    headers: authzHeaders(),
+    headers: applicationAdminHeaders(),
     data: {
       actorId,
       login,
@@ -1271,7 +1271,7 @@ async function provisionRoleAccount(
   const grantResponse = await request.post(
     e2eApiUrl(`/api/v1/authz/actors/${encodeURIComponent(actorId!)}/role-grants`),
     {
-      headers: authzHeaders(),
+      headers: applicationAdminHeaders(),
       data: { roleCode, tenantId: "default" },
     },
   );
@@ -1295,6 +1295,29 @@ async function expectPersonSelfServiceHome(
     new RegExp(`/people/${escapeRegExp(personId)}$`),
   );
   await expect(page.getByRole("button", { name: "Save Changes" })).toBeVisible();
+}
+
+function validCPF(seed: number): string {
+  const base = String(seed).padStart(9, "0").slice(-9);
+  const digits = base.split("").map(Number);
+  const first = cpfCheckDigit(digits);
+  const second = cpfCheckDigit([...digits, first]);
+  return `${base}${first}${second}`;
+}
+
+function cpfCheckDigit(numbers: number[]): number {
+  const weightStart = numbers.length + 1;
+  const sum = numbers.reduce(
+    (total, digit, index) => total + digit * (weightStart - index),
+    0,
+  );
+  const remainder = sum % 11;
+  return remainder < 2 ? 0 : 11 - remainder;
+}
+
+function validBrazilianCellular(seed: number | string): string {
+  const digits = String(seed).replace(/\D/g, "").padStart(8, "0").slice(-8);
+  return `11${`9${digits}`.slice(0, 9)}`;
 }
 
 function escapeRegExp(value: string): string {
@@ -1331,7 +1354,7 @@ async function setAuthenticationAccountActive(
   const response = await request.patch(
     e2eApiUrl(`/api/v1/auth/accounts/${encodeURIComponent(accountId)}/active`),
     {
-      headers: authzHeaders(),
+      headers: applicationAdminHeaders(),
       data: { active },
     },
   );
@@ -1346,7 +1369,7 @@ async function setActorActive(
   const response = await request.patch(
     e2eApiUrl(`/api/v1/authz/actors/${encodeURIComponent(actorId)}/active`),
     {
-      headers: authzHeaders(),
+      headers: applicationAdminHeaders(),
       data: { active },
     },
   );

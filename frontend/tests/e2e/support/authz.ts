@@ -54,7 +54,7 @@ export function applicationAdminHeaders(): Record<string, string> {
 }
 
 export async function seedBrowserAuthz(page: Page): Promise<void> {
-  if (e2eAuthMode === "headers" || e2eAuthMode === "session") {
+  if (e2eAuthMode === "headers") {
     await page.route("**/api/**", async (route) => {
       await route.continue({
         headers: {
@@ -74,7 +74,7 @@ export async function seedBrowserAuthz(page: Page): Promise<void> {
 }
 
 export async function seedBrowserApplicationAdmin(page: Page): Promise<void> {
-  if (e2eAuthMode === "headers" || e2eAuthMode === "session") {
+  if (e2eAuthMode === "headers") {
     await page.route("**/api/**", async (route) => {
       await route.continue({
         headers: {

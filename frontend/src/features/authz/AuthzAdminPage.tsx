@@ -1,10 +1,8 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { useCollaboratorSearch } from "../collaborators/useCollaborators";
 import { ApiError } from "../../api/client";
 import { ApiErrorPanel } from "../../components/ApiErrorPanel";
 import { readSelectedTenantId, setSelectedTenantId } from "../../api/tenantSelection";
-import type { Collaborator } from "../../types/collaborators";
 import type {
   AuthzActor,
   AuthzActorRoleGrant,
@@ -58,10 +56,6 @@ export function AuthzAdminPage() {
   const rolesQuery = useAuthzRoles(requestActor);
   const permissionsQuery = useAuthzPermissions(requestActor);
   const actorsQuery = useAuthzActors(requestActor);
-  const actorCollaboratorSearchQuery = useCollaboratorSearch(
-    actorFilter,
-    false,
-  );
   const createActorMutation = useCreateAuthzActor(requestActor);
   const grantRoleMutation = useGrantAuthzActorRole(requestActor);
   const revokeGrantMutation = useRevokeAuthzActorRoleGrant(requestActor);
@@ -80,18 +74,13 @@ export function AuthzAdminPage() {
     () => [...(actorsQuery.data ?? [])].sort((a, b) => a.actorKey.localeCompare(b.actorKey)),
     [actorsQuery.data],
   );
-  const collaborators = useMemo(
-    () => actorCollaboratorSearchQuery.data?.items ?? [],
-    [actorCollaboratorSearchQuery.data?.items],
-  );
   const tenantRoleEligibleActorCount = useMemo(
     () => actors.filter((actor) => tenantRoleGrantEligibility(actor).eligible).length,
     [actors],
   );
   const filteredActors = useMemo(() => {
-    const identityMatches = filterActorsByActorKeyOrPersonNickname(
+    const identityMatches = filterActorsByActorKeyOrDisplayName(
       actors,
-      collaborators,
       actorFilter,
     );
     return filterActorsByTenantRoleEligibility(
@@ -100,7 +89,6 @@ export function AuthzAdminPage() {
     );
   }, [
     actors,
-    collaborators,
     actorFilter,
     tenantRoleEligibilityFilter,
   ]);
@@ -116,21 +104,16 @@ export function AuthzAdminPage() {
   const rolesForbidden = isForbiddenApiError(rolesQuery.error);
   const permissionsForbidden = isForbiddenApiError(permissionsQuery.error);
   const actorsForbidden = isForbiddenApiError(actorsQuery.error);
-  const collaboratorSearchForbidden = isForbiddenApiError(
-    actorCollaboratorSearchQuery.error,
-  );
   const createActorForbidden = actorsForbidden;
   const hasLimitedAuthorization =
     rolesForbidden ||
     permissionsForbidden ||
-    actorsForbidden ||
-    collaboratorSearchForbidden;
+    actorsForbidden;
   const queryError = firstNonForbiddenError([
     currentActorQuery.error,
     rolesQuery.error,
     permissionsQuery.error,
     actorsQuery.error,
-    actorCollaboratorSearchQuery.error,
   ]);
 
   async function handleCreateActor(event: FormEvent<HTMLFormElement>) {
@@ -138,7 +121,7 @@ export function AuthzAdminPage() {
     setSuccessMessage("");
     createActorMutation.reset();
 
-    if (!actorForm.collaboratorId || !actorForm.personId || !actorForm.actorKey) return;
+    if (!actorForm.actorKey.trim()) return;
 
     try {
       const created = await createActorMutation.mutateAsync({
@@ -206,26 +189,14 @@ export function AuthzAdminPage() {
           </div>
 
           <div className="flex items-center gap-2">
-            <Link className="text-sm font-semibold text-gray-700 underline" to="/admin/current-account-settings">
-              Current Account Settings
-            </Link>
-            <Link className="text-sm font-semibold text-gray-700 underline" to="/admin/audit-logs">
-              Audit Logs
-            </Link>
             <Link className="text-sm font-semibold text-gray-700 underline" to="/admin/tenants">
               Tenants
             </Link>
-            <Link className="text-sm font-semibold text-gray-700 underline" to="/admin/reference-data">
-              Reference Data
+            <Link className="text-sm font-semibold text-gray-700 underline" to="/admin/authentication">
+              Authentication
             </Link>
-            <Link className="text-sm font-semibold text-gray-700 underline" to="/admin/gold-prices">
-              Gold Prices
-            </Link>
-            <Link className="text-sm font-semibold text-gray-700 underline" to="/admin/price-list-items">
-              Price List
-            </Link>
-            <Link className="text-sm font-semibold text-gray-700 underline" to="/people">
-              Back to People
+            <Link className="text-sm font-semibold text-gray-700 underline" to="/admin/audit-logs">
+              Audit Logs
             </Link>
           </div>
         </div>
@@ -320,7 +291,7 @@ export function AuthzAdminPage() {
 
             <button
               className="mt-4 w-full rounded-xl bg-gray-950 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
-              disabled={createActorMutation.isPending || createActorForbidden || !actorForm.collaboratorId}
+              disabled={createActorMutation.isPending || createActorForbidden || !actorForm.actorKey.trim()}
               type="submit"
             >
               {createActorMutation.isPending ? "Creating..." : "Create Actor"}
@@ -348,14 +319,14 @@ export function AuthzAdminPage() {
                         htmlFor="authz-actor-nickname-filter"
                         className="text-xs font-semibold uppercase tracking-wide text-gray-500"
                       >
-                        Filter actors by Actor Key or person nickname
+                        Filter actors by Actor Key or display name
                       </label>
                       <input
                         id="authz-actor-nickname-filter"
                         type="search"
                         value={actorFilter}
                         onChange={(event) => setActorFilter(event.target.value)}
-                        placeholder="Type any part of an Actor Key or person nickname"
+                        placeholder="Type any part of an Actor Key or display name"
                         className="mt-1 w-full rounded-xl border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-gray-950 focus:outline-none focus:ring-1 focus:ring-gray-950"
                       />
                     </div>
@@ -544,129 +515,37 @@ function ActorFields({
   value: CreateAuthzActorInput;
   onChange: (value: CreateAuthzActorInput) => void;
 }) {
-  const [collaboratorSearch, setCollaboratorSearch] = useState("");
-  const [selectedCollaborator, setSelectedCollaborator] =
-    useState<Collaborator | null>(null);
-  const collaboratorSearchQuery = useCollaboratorSearch(collaboratorSearch);
-  const matchingCollaborators = collaboratorSearchQuery.data?.items ?? [];
-  const showCollaboratorSuggestions = collaboratorSearch.trim().length > 0;
-
-  useEffect(() => {
-    if (!value.collaboratorId) {
-      setSelectedCollaborator(null);
-    }
-  }, [value.collaboratorId]);
-
-  function selectCollaborator(collaborator: Collaborator) {
-    setSelectedCollaborator(collaborator);
-    onChange({
-      ...value,
-      collaboratorId: collaborator.id,
-      personId: collaborator.legacyPersonId ?? collaborator.personId,
-      actorKey: defaultActorKey(collaborator),
-      displayName: collaboratorDisplayName(collaborator),
-    });
-    setCollaboratorSearch("");
-  }
-
-  function clearCollaboratorSelection() {
-    setSelectedCollaborator(null);
-    onChange({
-      ...value,
-      collaboratorId: "",
-      personId: "",
-      actorKey: "",
-      displayName: "",
-    });
-    setCollaboratorSearch("");
-  }
-
   return (
     <div className="mt-4 space-y-3">
-      <div className="relative">
-        <label
-          htmlFor="authz-create-actor-collaborator-search"
-          className="block text-sm font-semibold text-gray-700"
-        >
-          Find collaborator by person nickname
-        </label>
+      <label className="block text-sm font-semibold text-gray-700">
+        Actor Key
         <input
-          id="authz-create-actor-collaborator-search"
-          type="search"
-          role="combobox"
-          aria-autocomplete="list"
-          aria-controls={
-            showCollaboratorSuggestions
-              ? "authz-create-actor-collaborator-suggestions"
-              : undefined
+          type="text"
+          value={value.actorKey}
+          onChange={(event) =>
+            onChange({ ...value, actorKey: event.target.value })
           }
-          aria-expanded={showCollaboratorSuggestions}
-          value={collaboratorSearch}
-          onChange={(event) => setCollaboratorSearch(event.target.value)}
-          placeholder="Type any part of a person nickname"
+          placeholder="global-support-operator"
           className="mt-2 block w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-base leading-6 text-gray-950"
         />
+      </label>
 
-        {showCollaboratorSuggestions && (
-          <div
-            id="authz-create-actor-collaborator-suggestions"
-            role="listbox"
-            aria-label="Matching collaborators for actor creation"
-            className="absolute left-0 right-0 top-full z-20 mt-1 max-h-60 overflow-y-auto rounded-xl border border-gray-200 bg-white p-1 shadow-lg"
-          >
-            {collaboratorSearchQuery.isLoading ||
-            collaboratorSearchQuery.isFetching ? (
-              <p className="px-3 py-2 text-sm text-gray-500">
-                Loading matching collaborators…
-              </p>
-            ) : collaboratorSearchQuery.error ? (
-              <p className="px-3 py-2 text-sm text-red-700">
-                Could not load matching collaborators.
-              </p>
-            ) : matchingCollaborators.length === 0 ? (
-              <p className="px-3 py-2 text-sm text-gray-500">
-                No matching collaborators
-              </p>
-            ) : (
-              matchingCollaborators.map((collaborator) => (
-                <button
-                  key={collaborator.id}
-                  type="button"
-                  role="option"
-                  aria-selected={collaborator.id === value.collaboratorId}
-                  onClick={() => selectCollaborator(collaborator)}
-                  className="block w-full rounded-lg px-3 py-2 text-left text-sm font-medium text-gray-800 hover:bg-gray-100 focus:bg-gray-100 focus:outline-none"
-                >
-                  {collaboratorOptionLabel(collaborator)}
-                </button>
-              ))
-            )}
-          </div>
-        )}
-      </div>
+      <label className="block text-sm font-semibold text-gray-700">
+        Display Name
+        <input
+          type="text"
+          value={value.displayName}
+          onChange={(event) =>
+            onChange({ ...value, displayName: event.target.value })
+          }
+          placeholder="Global Support Operator"
+          className="mt-2 block w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-base leading-6 text-gray-950"
+        />
+      </label>
 
-      {selectedCollaborator && (
-        <div className="rounded-xl border border-blue-100 bg-blue-50 p-3 text-xs text-blue-900">
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <p className="font-semibold">Derived actor identity</p>
-              <p className="mt-1">Actor key: {value.actorKey}</p>
-              <p>
-                Display name:{" "}
-                {value.displayName || collaboratorDisplayName(selectedCollaborator)}
-              </p>
-              <p>Person ID and Collaborator ID will be derived from the selected collaborator.</p>
-            </div>
-            <button
-              type="button"
-              onClick={clearCollaboratorSelection}
-              className="shrink-0 rounded-lg border border-blue-200 bg-white px-2 py-1 font-semibold text-blue-800"
-            >
-              Change
-            </button>
-          </div>
-        </div>
-      )}
+      <p className="text-xs text-gray-500">
+        Global/control-plane Actors are created without Tenant Person or Collaborator bindings. Tenant role eligibility appears only after an Authentication Account binds an Actor to an ACTIVE Person–Tenant Membership.
+      </p>
     </div>
   );
 }
@@ -1109,31 +988,17 @@ function isApplicationScopedRole(role: AuthzRole | undefined) {
   );
 }
 
-function filterActorsByActorKeyOrPersonNickname(
+function filterActorsByActorKeyOrDisplayName(
   actors: AuthzActor[],
-  collaborators: Collaborator[],
   filter: string,
 ) {
   const normalizedFilter = normalizeActorFilterValue(filter);
   if (!normalizedFilter) return actors;
 
-  const collaboratorsById = new Map(
-    collaborators.map((collaborator) => [collaborator.id, collaborator]),
+  return actors.filter((actor) =>
+    normalizeActorFilterValue(actor.actorKey).includes(normalizedFilter) ||
+    normalizeActorFilterValue(actor.displayName).includes(normalizedFilter),
   );
-
-  return actors.filter((actor) => {
-    if (normalizeActorFilterValue(actor.actorKey).includes(normalizedFilter)) {
-      return true;
-    }
-
-    const collaborator = actor.collaboratorId
-      ? collaboratorsById.get(actor.collaboratorId)
-      : undefined;
-    const nickname =
-      collaborator?.personNickname?.trim() || actor.displayName.trim();
-
-    return normalizeActorFilterValue(nickname).includes(normalizedFilter);
-  });
 }
 
 function normalizeActorFilterValue(value: string) {
@@ -1185,31 +1050,4 @@ function normalizeOptional(value: string | null | undefined) {
 
 function byCode<T extends { code: string }>(a: T, b: T) {
   return a.code.localeCompare(b.code);
-}
-
-function collaboratorDisplayName(collaborator: Collaborator | undefined) {
-  if (!collaborator) return "";
-  return (
-    collaborator.personNickname?.trim() ||
-    collaborator.personName?.trim() ||
-    collaborator.id
-  );
-}
-
-function collaboratorOptionLabel(collaborator: Collaborator) {
-  const name = collaboratorDisplayName(collaborator);
-  const status = collaborator.statusLabel ? ` · ${collaborator.statusLabel}` : "";
-  const location = collaborator.locationLabel ? ` · ${collaborator.locationLabel}` : "";
-  return `${name}${status}${location}`;
-}
-
-function defaultActorKey(collaborator: Collaborator | undefined) {
-  if (!collaborator) return "";
-
-  const collaboratorId = collaborator.id.trim();
-  if (!collaboratorId) return "";
-
-  return collaboratorId.startsWith("collaborator-")
-    ? collaboratorId
-    : `collaborator-${collaboratorId}`;
 }

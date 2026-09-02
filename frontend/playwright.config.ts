@@ -58,7 +58,7 @@ export default defineConfig({
             "X-Actor-ID": authzActorId,
             "X-Tenant-ID": authzTenantId,
           }
-        : authzHeaders(),
+        : undefined,
     storageState:
       authMode === "session"
         ? tenantAdminStorageStatePath
