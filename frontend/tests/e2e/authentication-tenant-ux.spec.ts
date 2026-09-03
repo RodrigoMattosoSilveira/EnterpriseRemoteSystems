@@ -6,7 +6,6 @@ import { isLoopbackURL } from "./support/runtime";
 
 test.use({
   storageState: applicationAdminStorageStatePath,
-  extraHTTPHeaders: applicationAdminHeaders(),
 });
 const baseURL = process.env.PLAYWRIGHT_BASE_URL ?? "http://localhost:15173";
 const login = process.env.E2E_ADMIN_EMAIL ?? (isLoopbackURL(baseURL) ? "admin@example.com" : "");
