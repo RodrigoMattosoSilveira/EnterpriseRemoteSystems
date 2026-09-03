@@ -186,7 +186,14 @@ func (h *Handler) CreateAccount(c fiber.Ctx) error {
 	if err := c.Bind().Body(&req); err != nil {
 		return httpx.BadRequest(c, "invalid_body", "Invalid request body")
 	}
-	req.TenantID = strings.TrimSpace(c.Get(authz.HeaderTenantID))
+	// The request Actor remains authorized in its current control-plane context.
+	// tenantId in the body is operation data identifying the Person/Tenant target;
+	// do not replace it with the authorization-context header (which is "*" for
+	// an Application Administrator). Legacy callers may still omit tenantId when
+	// their authorization context is already Tenant-scoped.
+	if strings.TrimSpace(req.TenantID) == "" {
+		req.TenantID = strings.TrimSpace(c.Get(authz.HeaderTenantID))
+	}
 	account, err := h.service.CreateAccount(c.Context(), req)
 	if err != nil {
 		return h.writeError(c, err)

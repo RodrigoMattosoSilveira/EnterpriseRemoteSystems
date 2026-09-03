@@ -119,6 +119,7 @@ export type ResetPasswordRequest = {
 
 export type CreateAuthAccountRequest = {
   actorId: string;
+  tenantId?: string;
   login: string;
   temporaryPassword: string;
   mustChangePassword?: boolean;

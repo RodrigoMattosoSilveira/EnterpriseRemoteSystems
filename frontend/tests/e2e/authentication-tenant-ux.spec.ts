@@ -1,4 +1,4 @@
-import { expect, test, type APIRequestContext, type Page } from "@playwright/test";
+import { expect, request as playwrightRequest, test, type APIRequestContext, type Page } from "@playwright/test";
 import { applicationAdminHeaders, authzHeaders, e2eApiUrl } from "./support/authz";
 import { applicationAdminStorageStatePath } from "./support/storage";
 import { isLoopbackURL } from "./support/runtime";
@@ -12,12 +12,8 @@ const baseURL = process.env.PLAYWRIGHT_BASE_URL ?? "http://localhost:15173";
 const login = process.env.E2E_ADMIN_EMAIL ?? (isLoopbackURL(baseURL) ? "admin@example.com" : "");
 const password = process.env.E2E_ADMIN_PASSWORD ?? (isLoopbackURL(baseURL) ? "Local-E2E-Administrator-28D!" : "");
 
+const DEFAULT_TENANT_ID = "default";
 const PERSON_STATUS_ACTIVE_ID = "ref-person-status-active";
-const COLLABORATOR_STATUS_ACTIVE_ID = "ref-collaborator-status-active";
-const PAYMENT_METHOD_DAILY_ID = "ref-method-daily";
-const SECTOR_MINING_ID = "ref-sector-mining";
-const LOCATION_MAIN_MINE_ID = "ref-location-main-mine";
-const TASK_MINER_ID = "ref-task-miner";
 
 type ReactivationLifecycleFixtures = {
   cookieLessPage: Page;
@@ -310,68 +306,26 @@ test("application administrator remains in the global control plane when a Tenan
   expect(denied.error?.code).toBe("tenant_actor_unavailable");
 });
 
-test("authentication account form preserves its Person selection across window focus", async ({ page, request }) => {
+test("authentication account form preserves its target Tenant and Person login across window focus", async ({ page, request }) => {
   const suffix = `${Date.now()}${Math.floor(Math.random() * 100_000)}`;
-  const candidate = await provisionAuthenticationActorCandidate(
+  const candidate = await provisionAuthenticationPersonCandidate(
     request,
     `form-stability-${suffix}`,
   );
-  const accountLogin = candidate.email;
   const temporaryPassword = `Auth-Form-${suffix}-Password!`;
-  // This fixture intentionally remains active after the test. The Person and
-  // Collaborator created for this progressive-search regression are already
-  // persistent test data, and every run uses a unique suffix. Performing a
-  // final actor-deactivation write here masks the actual browser assertion
-  // whenever the test fails: Playwright tears down the request context at the
-  // timeout boundary and the cleanup PATCH replaces the original error.
-  // Keeping this fixture avoids teardown deadlocks and preserves the first
-  // actionable failure from the regression itself.
-  // The default Playwright page fixture already carries the Application
-  // Administrator session produced by global setup. Do not call signIn()
-  // here: navigating an already-authenticated page to /login immediately
-  // redirects away from LoginPage, so the helper can never find its Login
-  // field. This regression starts directly from the authenticated admin
-  // context used by the rest of the suite.
+
   await page.goto("/admin/authentication");
   await expect(
     page.getByRole("heading", { name: "Authentication Accounts", exact: true }),
   ).toBeVisible();
 
-  const personSearch = page.getByLabel(
-    "Find Person by name, nickname, or email",
-  );
-  const searchResponsePromise = page.waitForResponse((response) => {
-    const url = new URL(response.url());
-    return (
-      response.request().method() === "GET" &&
-      url.pathname === "/api/v1/people" &&
-      url.searchParams.get("search") === candidate.nickname
-    );
-  });
-  await personSearch.fill(candidate.nickname);
-  expect((await searchResponsePromise).ok()).toBeTruthy();
-
-  const matchingPeople = page.getByRole("listbox", {
-    name: "Matching People for authentication account",
-  });
-  await expect(matchingPeople).toBeVisible();
-  await matchingPeople
-    .getByRole("option", { name: new RegExp(candidate.nickname) })
-    .click();
-
-  await page.getByLabel("Login").fill(accountLogin);
-  await page.getByLabel("Temporary password").fill(temporaryPassword);
-  await expect(page.getByText("Selected Person", { exact: true })).toBeVisible();
-  await expect(page.getByText(candidate.nickname, { exact: false })).toBeVisible();
+  await page.getByLabel("Target Tenant *").selectOption(DEFAULT_TENANT_ID);
+  await page.getByLabel("Person login email *").fill(candidate.email);
+  await page.getByLabel("Temporary password *").fill(temporaryPassword);
   await expect(page.getByRole("button", { name: "Create account" })).toBeEnabled();
 
-  // Trigger the same window-focus event that RequireAuth listens for. Do not
-  // use bringToFront() here: headless Chromium does not provide a real OS
-  // window manager, so foreground-window control can block until the entire
-  // Playwright test times out. The RequireAuth unit test separately proves
-  // that this event starts authoritative session revalidation. This browser
-  // regression is responsible for proving that the mounted form state is
-  // preserved while that focus revalidation runs.
+  // Trigger RequireAuth's authoritative focus revalidation. The form is global
+  // control-plane state and must remain intact while that session check runs.
   const sessionResponsePromise = page.waitForResponse(
     (response) => {
       const url = new URL(response.url());
@@ -386,136 +340,44 @@ test("authentication account form preserves its Person selection across window f
     window.dispatchEvent(new Event("blur"));
     window.dispatchEvent(new Event("focus"));
   });
+  expect((await sessionResponsePromise).ok()).toBeTruthy();
 
-  const sessionResponse = await sessionResponsePromise;
-  expect(sessionResponse.ok()).toBeTruthy();
-
-  // RequireAuth explicitly listens to window focus and owns the authoritative
-  // session check. TanStack Query v5 uses visibilitychange, not the window
-  // focus event, for refetchOnWindowFocus, so this test must not require an
-  // unrelated current-actor request from a synthetic focus event.
-  // The focus-driven security check has completed. Authentication-page
-  // datasets themselves deliberately do not refetch on focus, so moving to
-  // another window cannot replace the candidate data under a partially
-  // completed form.
   await expect(page).toHaveURL(/\/admin\/authentication$/);
-  await expect(page.getByText("Selected Person", { exact: true })).toBeVisible();
-  await expect(page.getByText(candidate.nickname, { exact: false })).toBeVisible();
-  await expect(page.getByLabel("Login")).toHaveValue(accountLogin);
-  await expect(page.getByLabel("Temporary password")).toHaveValue(temporaryPassword);
+  await expect(page.getByLabel("Target Tenant *")).toHaveValue(DEFAULT_TENANT_ID);
+  await expect(page.getByLabel("Person login email *")).toHaveValue(candidate.email);
+  await expect(page.getByLabel("Temporary password *")).toHaveValue(temporaryPassword);
   await expect(page.getByRole("button", { name: "Create account" })).toBeEnabled();
 });
 
-test("authentication administration finds an existing collaborator actor and linked account by nickname", async ({ page, request }) => {
+test("authentication administration finds an existing tenant Actor and linked account by nickname", async ({ page, request }) => {
   const suffix = `${Date.now()}${Math.floor(Math.random() * 100_000)}`;
-  const candidate = await provisionAuthenticationActorCandidate(
+  const account = await provisionRoleAccount(
     request,
     `actor-lookup-${suffix}`,
+    "EXPENSE_OPERATOR",
   );
-  const accountLogin = `auth-lookup-${suffix}@example.com`;
-  const accountPassword = `Auth-Lookup-${suffix}-Password!`;
-
-  const accountResponse = await request.post(e2eApiUrl("/api/v1/auth/accounts"), {
-    headers: applicationAdminHeaders(),
-    data: {
-      actorId: candidate.actorId,
-      login: accountLogin,
-      temporaryPassword: accountPassword,
-      mustChangePassword: false,
-    },
-  });
-  expect(accountResponse.status()).toBe(201);
-  const accountEnvelope = (await accountResponse.json()) as {
-    data?: { id?: string };
-  };
-  const accountId = accountEnvelope.data?.id;
-  expect(accountId).toBeTruthy();
-
-  const grantResponse = await request.post(
-    e2eApiUrl(
-      `/api/v1/authz/actors/${encodeURIComponent(candidate.actorId)}/role-grants`,
-    ),
-    {
-      headers: applicationAdminHeaders(),
-      data: { roleCode: "EXPENSE_OPERATOR", tenantId: "default" },
-    },
-  );
-  expect(grantResponse.status()).toBe(201);
 
   await page.goto("/admin/authentication");
   await expect(
     page.getByRole("heading", { name: "Authentication Accounts", exact: true }),
   ).toBeVisible();
 
-  const createSearchResponse = page.waitForResponse((response) => {
-    const url = new URL(response.url());
-    return (
-      response.request().method() === "GET" &&
-      url.pathname === "/api/v1/people" &&
-      url.searchParams.get("search") === candidate.nickname
-    );
-  });
-  await page
-    .getByLabel("Find Person by name, nickname, or email")
-    .fill(candidate.nickname);
-  expect((await createSearchResponse).ok()).toBeTruthy();
-
-  const createResult = page
-    .getByRole("listbox", {
-      name: "Matching People for authentication account",
-    })
-    .getByRole("option")
-    .filter({ hasText: candidate.nickname });
-  await expect(createResult).toBeVisible();
-  await expect(createResult).toContainText(
-    `Already has authentication account ${accountLogin} (active)`,
+  const filter = page.getByLabel(
+    "Filter by Person name, nickname, or email, Tenant display name, Actor, or account",
   );
-  await expect(createResult).toHaveAttribute("aria-disabled", "true");
-
-  const actorLookupResponse = page.waitForResponse((response) => {
-    const url = new URL(response.url());
-    return (
-      response.request().method() === "GET" &&
-      url.pathname === "/api/v1/people" &&
-      url.searchParams.get("search") === candidate.nickname
-    );
-  });
-  await page
-    .getByLabel("Filter by Person name, nickname, or email, Tenant display name, Actor, or account")
-    .fill(candidate.nickname);
-  expect((await actorLookupResponse).ok()).toBeTruthy();
-
-  const actorLookupResult = page
-    .getByRole("list", { name: "Actor lookup results" })
-    .getByRole("listitem")
-    .filter({ hasText: candidate.nickname });
-  await expect(actorLookupResult).toBeVisible();
-  await expect(actorLookupResult).toContainText(
-    `Actor: ${candidate.nickname} (${candidate.actorKey}) · Active`,
-  );
-  await expect(actorLookupResult).toContainText("EXPENSE_OPERATOR @ default");
-  await expect(actorLookupResult).toContainText(
-    `Authentication account: ${accountLogin} · Active`,
-  );
+  await filter.fill(account.nickname);
 
   const filteredAccountCard = page.getByTestId(
-    `authentication-account-${accountId}`,
+    `authentication-account-${account.accountId}`,
   );
   await expect(filteredAccountCard).toBeVisible();
+  await expect(filteredAccountCard).toContainText(account.login);
+  await expect(filteredAccountCard).toContainText(account.nickname);
   await expect(
     filteredAccountCard.getByRole("button", { name: "Deactivate" }),
   ).toBeEnabled();
 
-  const selectedTenantName = await page
-    .getByLabel("Current tenant")
-    .locator(":scope > span > span")
-    .first()
-    .innerText();
-  expect(selectedTenantName.trim()).not.toBe("");
-
-  await page
-    .getByLabel("Filter by Person name, nickname, or email, Tenant display name, Actor, or account")
-    .fill(selectedTenantName);
+  await filter.fill("Default Tenant");
   await expect(filteredAccountCard).toBeVisible();
 });
 
@@ -537,7 +399,7 @@ test("authentication administration creates an account for a Person who is not a
       cellular: validBrazilianCellular(suffix),
       email,
       statusId: PERSON_STATUS_ACTIVE_ID,
-      notes: "Authentication Person lookup E2E candidate without Collaborator journey",
+      notes: "Authentication target-Tenant E2E candidate without Collaborator journey",
     },
   });
   expect(personResponse.status()).toBe(201);
@@ -547,33 +409,10 @@ test("authentication administration creates an account for a Person who is not a
     page.getByRole("heading", { name: "Authentication Accounts", exact: true }),
   ).toBeVisible();
 
-  const createPersonLookupResponse = page.waitForResponse((response) => {
-    const url = new URL(response.url());
-    return (
-      response.request().method() === "GET" &&
-      url.pathname === "/api/v1/people" &&
-      url.searchParams.get("search") === fullName
-    );
-  });
-  await page
-    .getByLabel("Find Person by name, nickname, or email")
-    .fill(fullName);
-  expect((await createPersonLookupResponse).ok()).toBeTruthy();
-
-  const createPersonResult = page
-    .getByRole("listbox", { name: "Matching People for authentication account" })
-    .getByRole("option")
-    .filter({ hasText: fullName });
-  await expect(createPersonResult).toBeVisible();
-  await expect(createPersonResult).toContainText(
-    "Eligible; a tenant Actor will be created",
-  );
-  await createPersonResult.click();
-  await expect(page.getByText("Selected Person", { exact: true })).toBeVisible();
-  await expect(page.getByLabel("Login")).toHaveValue(email);
-
+  await page.getByLabel("Target Tenant *").selectOption(DEFAULT_TENANT_ID);
+  await page.getByLabel("Person login email *").fill(email);
   const temporaryPassword = `Dirceu-${suffix}-Password!`;
-  await page.getByLabel("Temporary password").fill(temporaryPassword);
+  await page.getByLabel("Temporary password *").fill(temporaryPassword);
   await expect(page.getByRole("button", { name: "Create account" })).toBeEnabled();
 
   const createAccountResponse = page.waitForResponse((response) => {
@@ -587,36 +426,31 @@ test("authentication administration creates an account for a Person who is not a
   const accountResponse = await createAccountResponse;
   expect(accountResponse.status()).toBe(201);
   const accountEnvelope = (await accountResponse.json()) as {
-    data?: { id?: string; login?: string; actorId?: string };
+    data?: {
+      id?: string;
+      login?: string;
+      actors?: Array<{ actorId?: string; tenantId?: string }>;
+    };
   };
   expect(accountEnvelope.data?.id).toBeTruthy();
-  expect(accountEnvelope.data?.actorId).toBeTruthy();
   expect(accountEnvelope.data?.login).toBe(email);
-  await expect(
-    page.getByTestId(`authentication-account-${accountEnvelope.data!.id!}`),
-  ).toBeVisible();
+  expect(
+    accountEnvelope.data?.actors?.some(
+      (actor) => actor.tenantId === DEFAULT_TENANT_ID && Boolean(actor.actorId),
+    ),
+  ).toBe(true);
 
-  const personLookupResponse = page.waitForResponse((response) => {
-    const url = new URL(response.url());
-    return (
-      response.request().method() === "GET" &&
-      url.pathname === "/api/v1/people" &&
-      url.searchParams.get("search") === fullName
-    );
-  });
+  const accountCard = page.getByTestId(
+    `authentication-account-${accountEnvelope.data!.id!}`,
+  );
+  await expect(accountCard).toBeVisible();
+  await expect(accountCard).toContainText(fullName);
+  await expect(accountCard).toContainText(email);
+
   await page
     .getByLabel("Filter by Person name, nickname, or email, Tenant display name, Actor, or account")
     .fill(fullName);
-  expect((await personLookupResponse).ok()).toBeTruthy();
-
-  const result = page
-    .getByRole("list", { name: "Actor lookup results" })
-    .getByRole("listitem")
-    .filter({ hasText: fullName });
-  await expect(result).toBeVisible();
-  await expect(result).toContainText(`Email: ${email}`);
-  await expect(result).toContainText("Actor:");
-  await expect(result).toContainText(`Authentication account: ${email} · Active`);
+  await expect(accountCard).toBeVisible();
 });
 
 test("a temporary-password account can sign in after completing the required password change", async ({ page: adminPage, browser, request }) => {
@@ -1086,19 +920,16 @@ test("signing in after a forbidden sign-out lands on the next account's first pe
   }
 });
 
-type PreparedAuthenticationActorCandidate = {
-  actorId: string;
-  actorKey: string;
-  collaboratorId: string;
+type PreparedAuthenticationPersonCandidate = {
   personId: string;
   nickname: string;
   email: string;
 };
 
-async function provisionAuthenticationActorCandidate(
+async function provisionAuthenticationPersonCandidate(
   request: APIRequestContext,
   keyPrefix: string,
-): Promise<PreparedAuthenticationActorCandidate> {
+): Promise<PreparedAuthenticationPersonCandidate> {
   const suffix = keyPrefix.replace(/\D/g, "").slice(-12) || String(Date.now());
   const nickname = `AuthCandidate${suffix}`;
   const email = `auth-candidate-${suffix}@example.com`;
@@ -1112,20 +943,8 @@ async function provisionAuthenticationActorCandidate(
       rg: `RG-AUTH-${suffix.slice(-8)}`,
       cellular: validBrazilianCellular(suffix),
       email,
-      street1: "Rua Authentication 123",
-      city: "Sao Paulo",
-      state: "SP",
-      cep: "01001000",
-      country: "Brasil",
-      bankName: "Banco E2E",
-      bankNumber: "001",
-      checkingAccount: `12345-${suffix.slice(-1)}`,
-      pixKey: `pix-auth-candidate-${suffix}@example.com`,
-      emergencyName: "Authentication Emergency",
-      emergencyCellular: validBrazilianCellular(`${suffix}7`),
-      emergencyEmail: `auth-candidate-emergency-${suffix}@example.com`,
       statusId: PERSON_STATUS_ACTIVE_ID,
-      notes: "Authentication account progressive-filter E2E candidate",
+      notes: "Authentication target-Tenant form E2E candidate",
     },
   });
   expect(personResponse.status()).toBe(201);
@@ -1134,65 +953,14 @@ async function provisionAuthenticationActorCandidate(
   };
   const personId = personEnvelope.data?.id;
   expect(personId).toBeTruthy();
-
-  const collaboratorResponse = await request.post(
-    e2eApiUrl("/api/v1/collaborators"),
-    {
-      headers: authzHeaders(),
-      data: {
-        personId,
-        journeyStartDate: "2026-08-01",
-        paymentMethodId: PAYMENT_METHOD_DAILY_ID,
-        paymentValue: 150,
-        dailyBrlAmount: 150,
-        sectorId: SECTOR_MINING_ID,
-        locationId: LOCATION_MAIN_MINE_ID,
-        taskId: TASK_MINER_ID,
-        statusId: COLLABORATOR_STATUS_ACTIVE_ID,
-        notes: "Authentication account progressive-filter E2E candidate",
-      },
-    },
-  );
-  expect(collaboratorResponse.status()).toBe(201);
-  const collaboratorEnvelope = (await collaboratorResponse.json()) as {
-    data?: { id?: string };
-  };
-  const collaboratorId = collaboratorEnvelope.data?.id;
-  expect(collaboratorId).toBeTruthy();
-
-  const actorKey = `collaborator-${collaboratorId}`;
-  const actorResponse = await request.post(e2eApiUrl("/api/v1/authz/actors"), {
-    headers: applicationAdminHeaders(),
-    data: {
-      actorKey,
-      displayName: nickname,
-      personId,
-      collaboratorId,
-      active: true,
-    },
-  });
-  expect(actorResponse.status()).toBe(201);
-  const actorEnvelope = (await actorResponse.json()) as { data?: { id?: string } };
-  const actorId = actorEnvelope.data?.id;
-  expect(actorId).toBeTruthy();
-
-  // This Actor is intentionally not granted a delegated role yet. Bite 30D
-  // allows Authentication Account creation from the active Membership; tenant
-  // delegated Roles may be added only after the Account/Actor binding exists.
-  return {
-    actorId: actorId!,
-    actorKey,
-    collaboratorId: collaboratorId!,
-    personId: personId!,
-    nickname,
-    email,
-  };
+  return { personId: personId!, nickname, email };
 }
 
 type PreparedRoleAccount = {
   actorId: string;
   accountId: string;
   personId: string;
+  nickname: string;
   globalPersonId: string;
   login: string;
   password: string;
@@ -1206,6 +974,9 @@ async function provisionRoleAccount(
 ): Promise<PreparedRoleAccount> {
   const login = `auth-${keyPrefix}@example.com`;
   const password = `E2E-${keyPrefix}-Password!`;
+  const temporaryPassword = mustChangePassword
+    ? password
+    : `Temporary-${keyPrefix}-Password!`;
   const numericSuffix = keyPrefix.replace(/\D/g, "").slice(-12) || String(Date.now());
   // Two role fixtures can intentionally share the same timestamp suffix. Keep
   // their Person-level unique fields distinct by carrying a role discriminator
@@ -1235,52 +1006,73 @@ async function provisionRoleAccount(
   expect(personId).toBeTruthy();
   expect(globalPersonId).toBeTruthy();
 
-  const actorResponse = await request.post(e2eApiUrl("/api/v1/authz/actors"), {
-    headers: applicationAdminHeaders(),
-    data: {
-      actorKey: login,
-      displayName: `Authentication UX ${keyPrefix}`,
-      personId,
-      active: true,
-    },
-  });
-  expect(actorResponse.status()).toBe(201);
-  const actorEnvelope = (await actorResponse.json()) as { data?: { id?: string } };
-  const actorId = actorEnvelope.data?.id;
-  expect(actorId).toBeTruthy();
-
-  // 30D identity comes first: Account -> tenant Actor -> ACTIVE Membership.
-  // Delegated authority is additive and is granted only after that binding
-  // exists.
+  // Provision the Authentication Account through the canonical Person + Tenant
+  // path. The target Tenant is operation data; the Application Administrator
+  // remains authorized in the global "*" control-plane context. The backend
+  // resolves the Person, Membership, and canonical Tenant Actor atomically.
   const accountResponse = await request.post(e2eApiUrl("/api/v1/auth/accounts"), {
     headers: applicationAdminHeaders(),
     data: {
-      actorId,
+      tenantId: DEFAULT_TENANT_ID,
       login,
-      temporaryPassword: password,
+      temporaryPassword,
       mustChangePassword,
     },
   });
   expect(accountResponse.status()).toBe(201);
   const accountEnvelope = (await accountResponse.json()) as {
-    data?: { id?: string };
+    data?: {
+      id?: string;
+      actors?: Array<{ actorId?: string; tenantId?: string }>;
+    };
   };
   const accountId = accountEnvelope.data?.id;
+  const tenantActor = accountEnvelope.data?.actors?.find(
+    (candidate) => candidate.tenantId === DEFAULT_TENANT_ID,
+  );
+  const actorId = tenantActor?.actorId;
   expect(accountId).toBeTruthy();
+  expect(actorId).toBeTruthy();
 
   const grantResponse = await request.post(
     e2eApiUrl(`/api/v1/authz/actors/${encodeURIComponent(actorId!)}/role-grants`),
     {
       headers: applicationAdminHeaders(),
-      data: { roleCode, tenantId: "default" },
+      data: { roleCode, tenantId: DEFAULT_TENANT_ID },
     },
   );
   expect(grantResponse.status()).toBe(201);
+
+  if (!mustChangePassword) {
+    // Account provisioning deliberately requires a first-login password change.
+    // Complete that lifecycle in an isolated API context so the shared
+    // Application Administrator request fixture keeps its own session intact.
+    const accountSession = await playwrightRequest.newContext({ baseURL });
+    try {
+      const loginResponse = await accountSession.post(e2eApiUrl("/api/v1/auth/login"), {
+        data: { login, password: temporaryPassword },
+      });
+      expect(loginResponse.status()).toBe(200);
+      const changeResponse = await accountSession.post(
+        e2eApiUrl("/api/v1/auth/password/change"),
+        {
+          data: {
+            currentPassword: temporaryPassword,
+            newPassword: password,
+          },
+        },
+      );
+      expect(changeResponse.status()).toBe(204);
+    } finally {
+      await accountSession.dispose();
+    }
+  }
 
   return {
     actorId: actorId!,
     accountId: accountId!,
     personId: personId!,
+    nickname: `AuthRole${identitySuffix}`,
     globalPersonId: globalPersonId!,
     login,
     password,

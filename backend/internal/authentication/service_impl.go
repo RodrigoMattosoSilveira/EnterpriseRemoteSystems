@@ -423,7 +423,7 @@ func (s *service) CreateAccount(ctx context.Context, req CreateAccountRequest) (
 			}}
 		case errors.Is(err, ErrTenantUnavailable):
 			return AccountResponse{}, &ValidationError{Fields: map[string]string{
-				"actorId": "The selected tenant is inactive or unavailable",
+				"tenantId": "The selected tenant is inactive or unavailable",
 			}}
 		case err != nil:
 			return AccountResponse{}, err
