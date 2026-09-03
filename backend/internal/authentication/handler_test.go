@@ -193,8 +193,8 @@ func TestAuthenticationHandlerInactiveAccountLoginReturnsPreciseCodeForVerifiedC
 	if status, code := requestLogin("Wrong-Password-1"); status != http.StatusUnauthorized || code != "invalid_credentials" {
 		t.Fatalf("expected wrong password to remain invalid_credentials/401, got %s/%d", code, status)
 	}
-	if status, code := requestLogin("Inactive-Login-Password-1"); status != http.StatusUnauthorized || code != "account_inactive" {
-		t.Fatalf("expected verified inactive account to return account_inactive/401, got %s/%d", code, status)
+	if status, code := requestLogin("Inactive-Login-Password-1"); status != http.StatusUnauthorized || code != "account_security_suspended" {
+		t.Fatalf("expected verified security-suspended account to return account_security_suspended/401, got %s/%d", code, status)
 	}
 }
 

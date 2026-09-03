@@ -27,6 +27,7 @@ type accountProjection struct {
 	Login              string
 	PasswordHash       string
 	Active             bool
+	SecuritySuspended  bool
 	MustChangePassword bool
 	LastLoginAt        *time.Time
 	PasswordChangedAt  *time.Time
@@ -572,17 +573,39 @@ func createAuthenticationAccount(tx *gorm.DB, account Account) error {
 }
 
 func (r *GORMRepository) SetAccountActive(ctx context.Context, id string, active bool, now time.Time) (AccountRecord, error) {
+	id = strings.TrimSpace(id)
 	err := r.database.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		result := tx.Model(&Account{}).
-			Where("id = ?", strings.TrimSpace(id)).
-			Updates(map[string]any{"active": active, "updated_at": now})
-		if result.Error != nil {
-			return fmt.Errorf("update authentication account state: %w", result.Error)
+		var account Account
+		if err := tx.First(&account, "id = ?", id).Error; err != nil {
+			return err
 		}
-		if result.RowsAffected == 0 {
-			return gorm.ErrRecordNotFound
+		effectiveActive := active
+		updates := map[string]any{"updated_at": now}
+		if active {
+			// Application Administrator activation clears only the global security
+			// suspension. An operationally inactive Person still requires a Tenant
+			// Administrator to reactivate one specific Membership.
+			updates["security_suspended"] = false
+			type personState struct{ OperationalActive bool }
+			var state personState
+			result := tx.Table("auth_account_people ap").
+				Select("gp.operational_active").
+				Joins("JOIN global_people gp ON gp.id = ap.person_id").
+				Where("ap.account_id = ?", id).Limit(1).Scan(&state)
+			if result.Error != nil {
+				return fmt.Errorf("resolve Authentication Account Person lifecycle: %w", result.Error)
+			}
+			if result.RowsAffected > 0 && !state.OperationalActive {
+				effectiveActive = false
+			}
+		} else {
+			updates["security_suspended"] = true
 		}
-		if !active {
+		updates["active"] = effectiveActive
+		if err := tx.Model(&Account{}).Where("id = ?", id).Updates(updates).Error; err != nil {
+			return fmt.Errorf("update authentication account state: %w", err)
+		}
+		if !effectiveActive {
 			if err := revokeSessions(tx, id, now); err != nil {
 				return err
 			}
@@ -734,6 +757,7 @@ func (r *GORMRepository) accountQuery(ctx context.Context) *gorm.DB {
 			auth_user_accounts.login,
 			auth_user_accounts.password_hash,
 			auth_user_accounts.active,
+			auth_user_accounts.security_suspended,
 			auth_user_accounts.must_change_password,
 			auth_user_accounts.last_login_at,
 			auth_user_accounts.password_changed_at,
@@ -755,6 +779,7 @@ func mapAccountProjection(row accountProjection) AccountRecord {
 			Login:              row.Login,
 			PasswordHash:       row.PasswordHash,
 			Active:             row.Active,
+			SecuritySuspended:  row.SecuritySuspended,
 			MustChangePassword: row.MustChangePassword,
 			LastLoginAt:        row.LastLoginAt,
 			PasswordChangedAt:  row.PasswordChangedAt,
@@ -855,15 +880,16 @@ func (r *GORMRepository) hydrateAccountActors(ctx context.Context, record Accoun
 	}
 
 	type accountPersonProjection struct {
-		PersonID  string
-		FirstName string
-		LastName  string
-		Email     string
+		PersonID          string
+		FirstName         string
+		LastName          string
+		Email             string
+		OperationalActive bool
 	}
 	var accountPerson accountPersonProjection
 	result := r.database.WithContext(ctx).
 		Table("auth_account_people aap").
-		Select("aap.person_id AS person_id, gp.first_name AS first_name, gp.last_name AS last_name, gp.email AS email").
+		Select("aap.person_id AS person_id, gp.first_name AS first_name, gp.last_name AS last_name, gp.email AS email, gp.operational_active AS operational_active").
 		Joins("JOIN global_people gp ON gp.id = aap.person_id").
 		Where("aap.account_id = ?", record.ID).
 		Limit(1).
@@ -875,6 +901,7 @@ func (r *GORMRepository) hydrateAccountActors(ctx context.Context, record Accoun
 		record.GlobalPersonID = accountPerson.PersonID
 		record.GlobalPersonName = personDisplayName(accountPerson.FirstName, accountPerson.LastName)
 		record.GlobalPersonEmail = accountPerson.Email
+		record.OperationalActive = accountPerson.OperationalActive
 	}
 	return record, nil
 }

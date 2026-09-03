@@ -92,13 +92,14 @@ type CurrentActorResponse struct {
 }
 
 type ActorGrantResponse struct {
-	ID        string `json:"id"`
-	ActorID   string `json:"actorId"`
-	RoleID    string `json:"roleId"`
-	RoleCode  string `json:"roleCode"`
-	TenantID  string `json:"tenantId"`
-	ScopeType string `json:"scopeType"`
-	Active    bool   `json:"active"`
+	ID                 string `json:"id"`
+	ActorID            string `json:"actorId"`
+	RoleID             string `json:"roleId"`
+	RoleCode           string `json:"roleCode"`
+	TenantID           string `json:"tenantId"`
+	ScopeType          string `json:"scopeType"`
+	Active             bool   `json:"active"`
+	LifecycleSuspended bool   `json:"lifecycleSuspended"`
 }
 
 type CreateActorRequest struct {
@@ -490,7 +491,7 @@ func (s *GORMStore) ListTenantActors(ctx context.Context, tenantID string) ([]Ac
 	if err := s.database.WithContext(ctx).
 		Model(&AuthzActor{}).
 		Select("DISTINCT authz_actors.*").
-		Joins("JOIN authz_actor_role_grants g ON g.actor_id = authz_actors.id AND g.active = ? AND g.tenant_id = ?", true, tenantID).
+		Joins("JOIN authz_actor_role_grants g ON g.actor_id = authz_actors.id AND g.active = ? AND g.lifecycle_suspended = ? AND g.tenant_id = ?", true, false, tenantID).
 		Joins("JOIN authz_roles r ON r.id = g.role_id AND r.active = ? AND r.scope_type = ?", true, string(ActorScopeTenant)).
 		Where("authz_actors.active = ?", true).
 		Order("authz_actors.actor_key ASC").
@@ -701,13 +702,14 @@ func (s *GORMStore) hasTenantMembershipFoundation() bool {
 
 func (s *GORMStore) tenantOperatorGrantsForActor(ctx context.Context, actorID string, tenantID string) ([]ActorGrantResponse, error) {
 	type grantProjection struct {
-		ID        string
-		ActorID   string
-		RoleID    string
-		RoleCode  string
-		TenantID  string
-		ScopeType string
-		Active    bool
+		ID                 string
+		ActorID            string
+		RoleID             string
+		RoleCode           string
+		TenantID           string
+		ScopeType          string
+		Active             bool
+		LifecycleSuspended bool
 	}
 	var rows []grantProjection
 	if err := s.database.WithContext(ctx).
@@ -716,13 +718,13 @@ func (s *GORMStore) tenantOperatorGrantsForActor(ctx context.Context, actorID st
 		Where("authz_actor_role_grants.actor_id = ? AND authz_actor_role_grants.tenant_id = ? AND authz_actor_role_grants.active = ?", actorID, tenantID, true).
 		Where("authz_roles.code IN ?", []string{string(RoleEarningsOperator), string(RoleExpenseOperator)}).
 		Order("authz_roles.code ASC").
-		Select("authz_actor_role_grants.id AS id, authz_actor_role_grants.actor_id AS actor_id, authz_actor_role_grants.role_id AS role_id, authz_roles.code AS role_code, authz_actor_role_grants.tenant_id AS tenant_id, authz_roles.scope_type AS scope_type, authz_actor_role_grants.active AS active").
+		Select("authz_actor_role_grants.id AS id, authz_actor_role_grants.actor_id AS actor_id, authz_actor_role_grants.role_id AS role_id, authz_roles.code AS role_code, authz_actor_role_grants.tenant_id AS tenant_id, authz_roles.scope_type AS scope_type, authz_actor_role_grants.active AS active, authz_actor_role_grants.lifecycle_suspended AS lifecycle_suspended").
 		Scan(&rows).Error; err != nil {
 		return nil, fmt.Errorf("list tenant operator role grants: %w", err)
 	}
 	responses := make([]ActorGrantResponse, 0, len(rows))
 	for _, row := range rows {
-		responses = append(responses, ActorGrantResponse{ID: row.ID, ActorID: row.ActorID, RoleID: row.RoleID, RoleCode: row.RoleCode, TenantID: row.TenantID, ScopeType: row.ScopeType, Active: row.Active})
+		responses = append(responses, ActorGrantResponse{ID: row.ID, ActorID: row.ActorID, RoleID: row.RoleID, RoleCode: row.RoleCode, TenantID: row.TenantID, ScopeType: row.ScopeType, Active: row.Active, LifecycleSuspended: row.LifecycleSuspended})
 	}
 	return responses, nil
 }
@@ -856,12 +858,13 @@ func (s *GORMStore) GrantActorRole(ctx context.Context, actorID string, req Gran
 		return ActorGrantResponse{}, fmt.Errorf("find authorization role grant: %w", grantResult.Error)
 	}
 	if grantResult.RowsAffected == 0 {
-		grant = AuthzActorRoleGrant{ID: ids.New(), ActorID: actorID, RoleID: role.ID, TenantID: tenantID, Active: true, CreatedAt: now, UpdatedAt: now}
+		grant = AuthzActorRoleGrant{ID: ids.New(), ActorID: actorID, RoleID: role.ID, TenantID: tenantID, Active: true, LifecycleSuspended: false, CreatedAt: now, UpdatedAt: now}
 		if err := s.database.WithContext(ctx).Create(&grant).Error; err != nil {
 			return ActorGrantResponse{}, fmt.Errorf("grant authorization role: %w", err)
 		}
-	} else if !grant.Active {
+	} else if !grant.Active || grant.LifecycleSuspended {
 		grant.Active = true
+		grant.LifecycleSuspended = false
 		grant.UpdatedAt = now
 		if err := s.database.WithContext(ctx).Save(&grant).Error; err != nil {
 			return ActorGrantResponse{}, fmt.Errorf("reactivate authorization role grant: %w", err)
@@ -971,13 +974,14 @@ func (s *GORMStore) permissionsForRole(ctx context.Context, roleID string) ([]Pe
 
 func (s *GORMStore) grantsForActor(ctx context.Context, actorID string) ([]ActorGrantResponse, error) {
 	type grantProjection struct {
-		ID        string
-		ActorID   string
-		RoleID    string
-		RoleCode  string
-		TenantID  string
-		ScopeType string
-		Active    bool
+		ID                 string
+		ActorID            string
+		RoleID             string
+		RoleCode           string
+		TenantID           string
+		ScopeType          string
+		Active             bool
+		LifecycleSuspended bool
 	}
 	var rows []grantProjection
 	if err := s.database.WithContext(ctx).
@@ -985,13 +989,13 @@ func (s *GORMStore) grantsForActor(ctx context.Context, actorID string) ([]Actor
 		Joins("JOIN authz_roles ON authz_roles.id = authz_actor_role_grants.role_id").
 		Where("authz_actor_role_grants.actor_id = ? AND authz_actor_role_grants.active = ?", actorID, true).
 		Order("authz_roles.code ASC, authz_actor_role_grants.tenant_id ASC").
-		Select("authz_actor_role_grants.id AS id, authz_actor_role_grants.actor_id AS actor_id, authz_actor_role_grants.role_id AS role_id, authz_roles.code AS role_code, authz_actor_role_grants.tenant_id AS tenant_id, authz_roles.scope_type AS scope_type, authz_actor_role_grants.active AS active").
+		Select("authz_actor_role_grants.id AS id, authz_actor_role_grants.actor_id AS actor_id, authz_actor_role_grants.role_id AS role_id, authz_roles.code AS role_code, authz_actor_role_grants.tenant_id AS tenant_id, authz_roles.scope_type AS scope_type, authz_actor_role_grants.active AS active, authz_actor_role_grants.lifecycle_suspended AS lifecycle_suspended").
 		Scan(&rows).Error; err != nil {
 		return nil, fmt.Errorf("list actor role grants: %w", err)
 	}
 	responses := make([]ActorGrantResponse, 0, len(rows))
 	for _, row := range rows {
-		responses = append(responses, ActorGrantResponse{ID: row.ID, ActorID: row.ActorID, RoleID: row.RoleID, RoleCode: row.RoleCode, TenantID: row.TenantID, ScopeType: row.ScopeType, Active: row.Active})
+		responses = append(responses, ActorGrantResponse{ID: row.ID, ActorID: row.ActorID, RoleID: row.RoleID, RoleCode: row.RoleCode, TenantID: row.TenantID, ScopeType: row.ScopeType, Active: row.Active, LifecycleSuspended: row.LifecycleSuspended})
 	}
 	sort.Slice(responses, func(i, j int) bool {
 		if responses[i].RoleCode == responses[j].RoleCode {
@@ -1015,7 +1019,7 @@ func actorResponse(actor AuthzActor, grants []ActorGrantResponse) ActorResponse 
 }
 
 func grantResponse(grant AuthzActorRoleGrant, role AuthzRole) ActorGrantResponse {
-	return ActorGrantResponse{ID: grant.ID, ActorID: grant.ActorID, RoleID: grant.RoleID, RoleCode: role.Code, TenantID: grant.TenantID, ScopeType: role.ScopeType, Active: grant.Active}
+	return ActorGrantResponse{ID: grant.ID, ActorID: grant.ActorID, RoleID: grant.RoleID, RoleCode: role.Code, TenantID: grant.TenantID, ScopeType: role.ScopeType, Active: grant.Active, LifecycleSuspended: grant.LifecycleSuspended}
 }
 
 func normalizedStringPtr(value *string) *string {

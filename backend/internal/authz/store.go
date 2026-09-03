@@ -134,7 +134,7 @@ func (s *GORMStore) loadDelegatedAuthorization(ctx context.Context, actorID stri
 		Table("authz_actor_role_grants g").
 		Select("r.id AS role_id, r.code AS role_code").
 		Joins("JOIN authz_roles r ON r.id = g.role_id AND r.active = ?", true).
-		Where("g.actor_id = ? AND g.active = ? AND g.tenant_id = ?", actorID, true, tenantID)
+		Where("g.actor_id = ? AND g.active = ? AND g.lifecycle_suspended = ? AND g.tenant_id = ?", actorID, true, false, tenantID)
 	switch scope {
 	case ActorScopeApplication:
 		query = query.Where("r.scope_type = ?", string(ActorScopeApplication))
@@ -366,9 +366,18 @@ func GrantRole(database *gorm.DB, actorID string, role RoleCode, tenantID string
 	}
 
 	now := time.Now().UTC()
-	grant := AuthzActorRoleGrant{ID: fmt.Sprintf("authz-grant-%s-%s-%s", actorID, roleRow.Code, tenantID), ActorID: actorID, RoleID: roleRow.ID, TenantID: tenantID, Active: true, CreatedAt: now, UpdatedAt: now}
-	if err := database.Where("actor_id = ? AND role_id = ? AND tenant_id = ?", actorID, roleRow.ID, tenantID).FirstOrCreate(&grant).Error; err != nil {
-		return fmt.Errorf("grant role %s: %w", role, err)
+	grant := AuthzActorRoleGrant{ID: fmt.Sprintf("authz-grant-%s-%s-%s", actorID, roleRow.Code, tenantID), ActorID: actorID, RoleID: roleRow.ID, TenantID: tenantID, Active: true, LifecycleSuspended: false, CreatedAt: now, UpdatedAt: now}
+	result := database.Where("actor_id = ? AND role_id = ? AND tenant_id = ?", actorID, roleRow.ID, tenantID).FirstOrCreate(&grant)
+	if result.Error != nil {
+		return fmt.Errorf("grant role %s: %w", role, result.Error)
+	}
+	if result.RowsAffected == 0 && (!grant.Active || grant.LifecycleSuspended) {
+		grant.Active = true
+		grant.LifecycleSuspended = false
+		grant.UpdatedAt = now
+		if err := database.Save(&grant).Error; err != nil {
+			return fmt.Errorf("reactivate role %s: %w", role, err)
+		}
 	}
 	return nil
 }
@@ -677,7 +686,7 @@ func (s *GORMStore) ListActorTenantOptions(ctx context.Context, actorRecordID st
 		Model(&AuthzActorRoleGrant{}).
 		Select("authz_actor_role_grants.tenant_id AS tenant_id, authz_roles.code AS role_code").
 		Joins("JOIN authz_roles ON authz_roles.id = authz_actor_role_grants.role_id AND authz_roles.active = ?", true).
-		Where("authz_actor_role_grants.actor_id = ? AND authz_actor_role_grants.active = ?", actorRecordID, true).
+		Where("authz_actor_role_grants.actor_id = ? AND authz_actor_role_grants.active = ? AND authz_actor_role_grants.lifecycle_suspended = ?", actorRecordID, true, false).
 		Scan(&grants).Error; err != nil {
 		return nil, fmt.Errorf("find tenant-option grants: %w", err)
 	}
@@ -981,7 +990,7 @@ func (s *GORMStore) ListAccountTenantOptions(ctx context.Context, accountID stri
 			Table("authz_actor_role_grants g").
 			Select("DISTINCT r.code").
 			Joins("JOIN authz_roles r ON r.id = g.role_id AND r.active = ?", true).
-			Where("g.actor_id = ? AND g.active = ? AND g.tenant_id = ?", globalBinding.ActorID, true, GlobalTenantScope).
+			Where("g.actor_id = ? AND g.active = ? AND g.lifecycle_suspended = ? AND g.tenant_id = ?", globalBinding.ActorID, true, false, GlobalTenantScope).
 			Order("r.code").
 			Pluck("r.code", &roleCodes).Error; err != nil {
 			return nil, fmt.Errorf("find global Account Actor roles: %w", err)
@@ -1039,7 +1048,7 @@ func (s *GORMStore) ListAccountTenantOptions(ctx context.Context, accountID stri
 			Table("authz_actor_role_grants g").
 			Select("r.code").
 			Joins("JOIN authz_roles r ON r.id = g.role_id AND r.active = ?", true).
-			Where("g.actor_id = ? AND g.tenant_id = ? AND g.active = ?", binding.ActorID, binding.TenantID, true).
+			Where("g.actor_id = ? AND g.tenant_id = ? AND g.active = ? AND g.lifecycle_suspended = ?", binding.ActorID, binding.TenantID, true, false).
 			Order("r.code").
 			Pluck("r.code", &roleCodes).Error; err != nil {
 			return nil, fmt.Errorf("list Account tenant Actor roles: %w", err)

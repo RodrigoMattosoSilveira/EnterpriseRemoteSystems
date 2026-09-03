@@ -148,7 +148,12 @@ function authenticationReason(
   error: ApiError,
 ): "expired" | "inactive" | null {
   if (error.code === "session_expired") return "expired";
-  if (error.code === "account_inactive" || error.code === "actor_inactive") {
+  if (
+    error.code === "account_inactive" ||
+    error.code === "account_security_suspended" ||
+    error.code === "account_operationally_inactive" ||
+    error.code === "actor_inactive"
+  ) {
     return "inactive";
   }
   return null;

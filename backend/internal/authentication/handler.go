@@ -236,9 +236,9 @@ func (h *Handler) SetAccountActive(c fiber.Ctx) error {
 	if err != nil {
 		return h.writeError(c, err)
 	}
-	operation := "authentication.accounts.activate"
+	operation := "authentication.accounts.security_suspension_clear"
 	if !*req.Active {
-		operation = "authentication.accounts.deactivate"
+		operation = "authentication.accounts.security_suspend"
 	}
 	h.recordAdminAudit(c, operation, account.ID)
 	return httpx.OK(c, account)
@@ -373,6 +373,16 @@ func (h *Handler) writeError(c fiber.Ctx, err error) error {
 		setNoStore(c)
 		h.clearSessionCookie(c)
 		return c.Status(fiber.StatusUnauthorized).JSON(httpx.APIResponse{Error: &httpx.APIError{Code: "session_expired", Message: "The authenticated session has expired"}})
+	case errors.Is(err, ErrAccountSecuritySuspended):
+		setNoStore(c)
+		h.clearSessionCookie(c)
+		return c.Status(fiber.StatusUnauthorized).JSON(httpx.APIResponse{Error: &httpx.APIError{Code: "account_security_suspended", Message: "The authentication account is security-suspended"}})
+	case errors.Is(err, ErrAccountOperationallyInactive):
+		setNoStore(c)
+		h.clearSessionCookie(c)
+		return c.Status(fiber.StatusUnauthorized).JSON(httpx.APIResponse{Error: &httpx.APIError{Code: "account_operationally_inactive", Message: "The Person is operationally inactive and must be reactivated by a Tenant Administrator"}})
+	case errors.Is(err, ErrTenantReactivationRequired):
+		return c.Status(fiber.StatusConflict).JSON(httpx.APIResponse{Error: &httpx.APIError{Code: "tenant_reactivation_required", Message: "The Person is operationally inactive and must be reactivated by a Tenant Administrator"}})
 	case errors.Is(err, ErrAccountInactive):
 		setNoStore(c)
 		h.clearSessionCookie(c)

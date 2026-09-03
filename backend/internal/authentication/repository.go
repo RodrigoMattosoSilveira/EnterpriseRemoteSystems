@@ -29,6 +29,7 @@ type AccountRecord struct {
 	GlobalPersonID    string
 	GlobalPersonName  string
 	GlobalPersonEmail string
+	OperationalActive bool
 	CollaboratorID    string
 	ActorActive       bool
 	AnyActorActive    bool
@@ -36,15 +37,19 @@ type AccountRecord struct {
 }
 
 type PersonAuthenticationRecord struct {
-	TenantID       string
-	LegacyPersonID string
-	GlobalPersonID string
-	MembershipID   string
-	Login          string
-	AccountID      string
-	AccountExists  bool
-	Enabled        bool
-	AccountActive  bool
+	TenantID             string
+	LegacyPersonID       string
+	GlobalPersonID       string
+	MembershipID         string
+	Login                string
+	AccountID            string
+	AccountExists        bool
+	Enabled              bool
+	AccountActive        bool
+	SecuritySuspended    bool
+	MembershipActive     bool
+	OperationalActive    bool
+	MembershipStatusCode string
 }
 
 type ReactivationRequestRecord struct {

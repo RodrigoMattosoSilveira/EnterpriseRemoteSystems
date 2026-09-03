@@ -15,6 +15,7 @@ func RegisterPeopleRoutes(v1 fiber.Router, deps Dependencies) {
 	// people.create capability of a Tenant-scoped Actor.
 	r.Get("/global", requireTenantAdministrator(deps), deps.PeopleHandler.SearchGlobal)
 	r.Post("/memberships", requireTenantAdministrator(deps), deps.PeopleHandler.CreateMembership)
+	r.Post("/:id/reactivate", requireTenantAdministrator(deps), deps.PeopleHandler.Reactivate)
 	if deps.AuthenticationHandler != nil {
 		r.Get("/:id/authentication", requireTenantAdministrator(deps), deps.AuthenticationHandler.GetPersonAuthenticationStatus)
 		r.Post("/:id/authentication/enable", requireTenantAdministrator(deps), deps.AuthenticationHandler.EnablePersonAuthentication)

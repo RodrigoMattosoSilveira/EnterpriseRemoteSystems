@@ -331,6 +331,65 @@ describe("PersonAuthenticationSection", () => {
       `Authentication is enabled for this tenant. Account login: ${LOGIN}. Account credentials were not changed.`,
     );
   });
+  it("lets a Tenant Administrator reactivate an operationally inactive Person for only this Tenant", async () => {
+    let reactivated = false;
+    mockFetch(async (url, init) => {
+      fetchCalls.push({ url, method: init?.method?.toUpperCase() ?? "GET", body: parseBody(init?.body) });
+      if (url === `/api/v1/people/${PERSON_ID}/authentication`) {
+        return jsonResponse({ data: reactivated
+          ? { login: LOGIN, enabled: true, accountActive: true, membershipActive: true, operationalActive: true, canTenantReactivate: false, canRequestReactivation: false, requiresTemporaryPassword: false, status: "ENABLED" }
+          : { login: LOGIN, enabled: true, accountActive: false, membershipActive: false, operationalActive: false, canTenantReactivate: true, canRequestReactivation: false, requiresTemporaryPassword: false, status: "OPERATIONALLY_INACTIVE" } });
+      }
+      if (url === `/api/v1/people/${PERSON_ID}/reactivate` && init?.method === "POST") {
+        reactivated = true;
+        return jsonResponse({ data: { id: PERSON_ID } });
+      }
+      throw new Error(`Unhandled request: ${url}`);
+    });
+
+    renderSection();
+    await waitForText("Status: Operationally inactive");
+    const button = buttonByText("Reactivate Person for this Tenant");
+    await act(async () => { button.click(); });
+    await waitForText("Previous delegated privileges remain suspended");
+    expect(fetchCalls.some((call) => call.url === `/api/v1/people/${PERSON_ID}/reactivate` && call.method === "POST")).toBe(true);
+  });
+
+
+  it("describes an inactive Membership separately after another Tenant has reactivated the Person", async () => {
+    mockFetch(async (url, init) => {
+      fetchCalls.push({ url, method: init?.method?.toUpperCase() ?? "GET", body: parseBody(init?.body) });
+      if (url === `/api/v1/people/${PERSON_ID}/authentication`) {
+        return jsonResponse({ data: { login: LOGIN, enabled: true, accountActive: true, membershipActive: false, operationalActive: true, canTenantReactivate: true, canRequestReactivation: false, requiresTemporaryPassword: false, status: "TENANT_INACTIVE" } });
+      }
+      throw new Error(`Unhandled request: ${url}`);
+    });
+
+    renderSection();
+    await waitForText("Status: Inactive in this Tenant");
+    expect(container.textContent).toContain("Reactivate Person for this Tenant");
+  });
+
+  it("routes a security-suspended Account to Application Administrator review instead of Tenant reactivation", async () => {
+    mockFetch(async (url, init) => {
+      fetchCalls.push({ url, method: init?.method?.toUpperCase() ?? "GET", body: parseBody(init?.body) });
+      if (url === `/api/v1/people/${PERSON_ID}/authentication`) {
+        return jsonResponse({ data: { login: LOGIN, enabled: true, accountActive: false, securitySuspended: true, membershipActive: false, operationalActive: false, canTenantReactivate: false, canRequestReactivation: true, requiresTemporaryPassword: false, status: "SECURITY_SUSPENDED" } });
+      }
+      if (url === `/api/v1/people/${PERSON_ID}/authentication/reactivation-request` && init?.method === "POST") {
+        return jsonResponse({ data: { status: "PENDING" } });
+      }
+      throw new Error(`Unhandled request: ${url}`);
+    });
+
+    renderSection();
+    await waitForText("Status: Application security suspension");
+    expect(container.textContent).not.toContain("Reactivate Person for this Tenant");
+    const button = buttonByText("Request Application Administrator Review");
+    await act(async () => { button.click(); });
+    await waitForText("Application Administrator will review it");
+  });
+
 });
 
 function renderSection() {

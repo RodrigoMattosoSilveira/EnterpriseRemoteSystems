@@ -202,7 +202,12 @@ function authenticationInterruptionReason(
   errorCode: string | undefined,
 ): AuthenticationInterruptionReason {
   if (errorCode === "session_expired") return "expired";
-  if (errorCode === "account_inactive" || errorCode === "actor_inactive") {
+  if (
+    errorCode === "account_inactive" ||
+    errorCode === "account_security_suspended" ||
+    errorCode === "account_operationally_inactive" ||
+    errorCode === "actor_inactive"
+  ) {
     return "inactive";
   }
   return "expired";

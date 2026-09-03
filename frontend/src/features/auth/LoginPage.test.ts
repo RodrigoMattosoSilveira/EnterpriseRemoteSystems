@@ -51,6 +51,36 @@ describe("loginFailurePresentation", () => {
     });
   });
 
+  it("routes operational inactivity to a Tenant Administrator", () => {
+    expect(
+      loginFailurePresentation(
+        new ApiError({
+          status: 401,
+          code: "account_operationally_inactive",
+          message: "operationally inactive",
+        }),
+      ),
+    ).toEqual({
+      code: "account_operationally_inactive",
+      message: "Your Person is operationally inactive. Contact a Tenant Administrator to reactivate you for their Tenant.",
+    });
+  });
+
+  it("routes application security suspension to Application Administrator review", () => {
+    expect(
+      loginFailurePresentation(
+        new ApiError({
+          status: 401,
+          code: "account_security_suspended",
+          message: "security suspended",
+        }),
+      ),
+    ).toEqual({
+      code: "account_security_suspended",
+      message: "Your Authentication Account is security-suspended. Request Application Administrator review to regain access.",
+    });
+  });
+
   it("explains that a verified Authentication Account is inactive", () => {
     expect(
       loginFailurePresentation(

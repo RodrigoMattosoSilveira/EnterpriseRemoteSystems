@@ -131,7 +131,11 @@ export type PersonAuthenticationStatus = {
   login: string;
   enabled: boolean;
   accountActive: boolean;
+  securitySuspended?: boolean;
+  membershipActive?: boolean;
+  operationalActive?: boolean;
+  canTenantReactivate?: boolean;
   canRequestReactivation: boolean;
   requiresTemporaryPassword: boolean;
-  status: "NOT_ENABLED" | "ENABLED" | "ACCOUNT_INACTIVE" | string;
+  status: "NOT_ENABLED" | "ENABLED" | "ACCOUNT_INACTIVE" | "OPERATIONALLY_INACTIVE" | "TENANT_INACTIVE" | "SECURITY_SUSPENDED" | string;
 };

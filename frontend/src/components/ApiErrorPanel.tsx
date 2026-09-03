@@ -51,6 +51,8 @@ function authenticationRecoveryHint(error: unknown): string | null {
       "authentication_required",
       "session_expired",
       "account_inactive",
+      "account_security_suspended",
+      "account_operationally_inactive",
       "actor_inactive",
     ].includes(error.code ?? "")
   ) {

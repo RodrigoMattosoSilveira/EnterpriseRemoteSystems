@@ -622,6 +622,7 @@ function ActorCard({
       (actor.roleGrants ?? []).some(
         (grant) =>
           grant.active &&
+          !grant.lifecycleSuspended &&
           grant.roleCode === roleCode &&
           grant.tenantId === targetTenantId,
       ),
@@ -672,6 +673,9 @@ function ActorCard({
             <div>
               <span className="font-semibold text-gray-950">{grant.roleCode}</span>
               <span className="text-gray-500"> · {grant.tenantId} · {grant.scopeType}</span>
+              {grant.lifecycleSuspended && (
+                <span className="ml-2 rounded bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-900">Lifecycle suspended</span>
+              )}
             </div>
             <button
               className="rounded-lg border border-red-200 bg-white px-3 py-1 text-xs font-semibold text-red-700 disabled:opacity-60"

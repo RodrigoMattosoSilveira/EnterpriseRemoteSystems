@@ -16,6 +16,7 @@ type Account struct {
 	Login              string     `gorm:"type:text;not null;uniqueIndex"`
 	PasswordHash       string     `gorm:"type:text;not null"`
 	Active             bool       `gorm:"not null;index"`
+	SecuritySuspended  bool       `gorm:"column:security_suspended;not null;default:false;index"`
 	MustChangePassword bool       `gorm:"not null"`
 	LastLoginAt        *time.Time `gorm:"type:datetime"`
 	PasswordChangedAt  *time.Time `gorm:"type:datetime"`

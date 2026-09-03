@@ -373,7 +373,7 @@ test("authentication administration finds an existing tenant Actor and linked ac
   await expect(filteredAccountCard).toContainText(account.login);
   await expect(filteredAccountCard).toContainText(account.nickname);
   await expect(
-    filteredAccountCard.getByRole("button", { name: "Deactivate" }),
+    filteredAccountCard.getByRole("button", { name: "Security suspend" }),
   ).toBeEnabled();
 
   await filter.fill("Default Tenant");
@@ -628,7 +628,7 @@ test("administrator-issued password reset replaces the password and clears the a
     ).toHaveCount(0);
     await expect(
       adminPage.getByText(
-        "Your authentication account is inactive. Request reactivation to regain access.",
+        "Your authentication access is inactive. Sign in again to see whether Tenant reactivation or Application Administrator review is required.",
       ),
     ).toHaveCount(0);
     const resetTokenEnvelope = (await resetTokenResponse.json()) as {
@@ -717,7 +717,7 @@ test("administrator-issued password reset replaces the password and clears the a
 
 
 reactivationLifecycleTest(
-  "deactivated authentication account loses its session and cannot sign in until reactivated",
+  "security-suspended authentication account loses its session and cannot sign in until Application Administrator review",
   async ({
     cookieLessPage: page,
     adminReviewPage: adminPage,
@@ -735,7 +735,7 @@ reactivationLifecycleTest(
     await expect(page).toHaveURL(/\/login\?returnTo=/);
     await expect(
       page.getByText(
-        "Your authentication account is inactive. Request reactivation to regain access.",
+        "Your authentication access is inactive. Sign in again to see whether Tenant reactivation or Application Administrator review is required.",
       ),
     ).toBeVisible();
     await expect(page.getByRole("link", { name: "Reset a password" })).toHaveCount(0);
@@ -755,11 +755,11 @@ reactivationLifecycleTest(
     const rejectedEnvelope = (await rejectedResponse.json()) as {
       error?: { code?: string };
     };
-    expect(rejectedEnvelope.error?.code).toBe("account_inactive");
+    expect(rejectedEnvelope.error?.code).toBe("account_security_suspended");
     await expect(page).toHaveURL(/\/login/);
     await expect(
       page.getByText(
-        "Your authentication account is inactive. Request reactivation to regain access.",
+        "Your Authentication Account is security-suspended. Request Application Administrator review to regain access.",
       ),
     ).toBeVisible();
     await expect(page.getByRole("link", { name: "Reset a password" })).toHaveCount(0);

@@ -42,6 +42,7 @@ export type AuthzActorRoleGrant = {
   tenantId: string;
   scopeType: string;
   active: boolean;
+  lifecycleSuspended?: boolean;
 };
 
 export type AuthzActorBinding = {

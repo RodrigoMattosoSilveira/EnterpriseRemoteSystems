@@ -20,7 +20,9 @@ import { PageTitle } from "../../components/layout/PageHeading";
 export function activeAuthenticationGrants(
   actor: AuthzActor,
 ): AuthzActorRoleGrant[] {
-  return (actor.roleGrants ?? []).filter((grant) => grant.active);
+  return (actor.roleGrants ?? []).filter(
+    (grant) => grant.active && !grant.lifecycleSuspended,
+  );
 }
 
 export function isAuthenticationActorEligible(actor: AuthzActor): boolean {
@@ -35,10 +37,14 @@ export function authenticationActorOptionLabel(actor: AuthzActor): string {
 }
 
 export function canIssuePasswordResetToken(account: AuthAccount): boolean {
-  // Bite 30E makes password recovery an Authentication Account concern. Tenant
-  // Actor activation controls tenant authorization only; it must not prevent an
-  // otherwise active Account from replacing its password.
-  return account.active;
+  // Password recovery remains Account-global, but an operationally inactive
+  // Person or security-suspended Account cannot reset credentials until the
+  // appropriate lifecycle authority restores access.
+  return (
+    account.active &&
+    !account.securitySuspended &&
+    (!account.globalPersonId || account.operationalActive !== false)
+  );
 }
 
 export function authenticationActorForCollaborator(
@@ -494,12 +500,22 @@ export function AuthenticationAdminPage() {
                 <div className="flex flex-wrap gap-2 text-xs font-semibold">
                   <span
                     className={`rounded-full px-2.5 py-1 ${
-                      account.active
-                        ? "bg-emerald-100 text-emerald-800"
-                        : "bg-slate-200 text-slate-700"
+                      account.securitySuspended
+                        ? "bg-red-100 text-red-800"
+                        : account.globalPersonId && account.operationalActive === false
+                          ? "bg-amber-100 text-amber-800"
+                          : account.active
+                            ? "bg-emerald-100 text-emerald-800"
+                            : "bg-slate-200 text-slate-700"
                     }`}
                   >
-                    {account.active ? "Account active" : "Account inactive"}
+                    {account.securitySuspended
+                      ? "Security suspended"
+                      : account.globalPersonId && account.operationalActive === false
+                        ? "Operationally inactive"
+                        : account.active
+                          ? "Account active"
+                          : "Account inactive"}
                   </span>
                   {!anyActorActive && (
                     <span className="rounded-full bg-amber-100 px-2.5 py-1 text-amber-800">
@@ -600,20 +616,20 @@ export function AuthenticationAdminPage() {
 
               <footer className="flex flex-wrap items-center justify-between gap-3 border-t px-5 py-4">
                 <p className="text-xs text-slate-500">
-                  Password and activation controls apply to the Authentication Account as a whole.
+                  Security suspension is application-global. Operational Person reactivation belongs to a Tenant Administrator.
                 </p>
                 <div className="flex flex-wrap gap-2">
                   <button
                     className="rounded border px-2 py-1 text-sm disabled:opacity-50"
                     disabled={isCurrentAccount || activePending || pendingAction !== null}
-                    title={isCurrentAccount ? "You cannot deactivate your own account" : undefined}
-                    onClick={() => void toggle(account.id, !account.active)}
+                    title={isCurrentAccount ? "You cannot security-suspend your own account" : undefined}
+                    onClick={() => void toggle(account.id, Boolean(account.securitySuspended))}
                   >
                     {activePending
                       ? "Saving…"
-                      : account.active
-                        ? "Deactivate"
-                        : "Activate"}
+                      : account.securitySuspended
+                        ? "Clear security suspension"
+                        : "Security suspend"}
                   </button>
                   <button
                     className="rounded border px-2 py-1 text-sm disabled:opacity-50"
@@ -621,7 +637,7 @@ export function AuthenticationAdminPage() {
                     title={
                       resetEligible
                         ? undefined
-                        : "Activate the authentication account before issuing a reset token"
+                        : "Account must be active, operationally available, and not security-suspended before issuing a reset token"
                     }
                     onClick={() => void issue(account.id)}
                   >
