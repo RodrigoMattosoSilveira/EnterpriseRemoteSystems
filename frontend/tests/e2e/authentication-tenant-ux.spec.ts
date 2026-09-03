@@ -588,7 +588,16 @@ test("administrator-issued password reset replaces the password and clears the a
     await expectPersonSelfServiceHome(page, account.personId);
 
     await signIn(adminPage, login, password);
+    await expect(adminPage).toHaveURL(/\/admin\/tenants$/);
+
     await adminPage.goto("/admin/authentication");
+    await expect(adminPage).toHaveURL(/\/admin\/authentication$/);
+    await expect(
+      adminPage.getByRole("heading", {
+        name: "Authentication Accounts",
+        exact: true,
+      }),
+    ).toBeVisible();
 
     const accountCard = adminPage.getByTestId(
       `authentication-account-${account.accountId}`,
