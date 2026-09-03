@@ -37,7 +37,10 @@ export function TenantDetailPage() {
     });
   }, [tenantQuery.data]);
 
-  const candidates = useMemo(() => candidatesQuery.data ?? [], [candidatesQuery.data]);
+  const candidates = useMemo(
+    () => (Array.isArray(candidatesQuery.data) ? candidatesQuery.data : []),
+    [candidatesQuery.data],
+  );
   const assignedAdmins = candidates.filter((candidate) => candidate.assigned);
   const tenantAdminAssignmentCount =
     tenantQuery.data?.tenantAdminAssignmentCount ?? assignedAdmins.length;
