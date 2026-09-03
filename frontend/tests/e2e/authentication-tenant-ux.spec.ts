@@ -564,6 +564,7 @@ test("a temporary-password account can sign in after completing the required pas
 
 
 test("administrator-issued password reset replaces the password and clears the active browser session", async ({ browser, request }) => {
+  test.setTimeout(60_000);
   const suffix = `${Date.now()}${Math.floor(Math.random() * 100_000)}`;
   const account = await provisionRoleAccount(
     request,

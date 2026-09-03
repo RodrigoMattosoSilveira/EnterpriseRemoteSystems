@@ -2,7 +2,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const authDir = join(
-  fileURLToPath(new URL("../..", import.meta.url)),
+  fileURLToPath(new URL("../../..", import.meta.url)),
   "test-results",
   ".auth",
 );
