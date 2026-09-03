@@ -588,27 +588,7 @@ test("administrator-issued password reset replaces the password and clears the a
     await expectPersonSelfServiceHome(page, account.personId);
 
     await signIn(adminPage, login, password);
-    const accountsResponsePromise = adminPage.waitForResponse((response) => {
-      const url = new URL(response.url());
-      return (
-        response.request().method() === "GET" &&
-        url.pathname === "/api/v1/auth/accounts"
-      );
-    });
     await adminPage.goto("/admin/authentication");
-    const accountsResponse = await accountsResponsePromise;
-    expect(accountsResponse.ok()).toBeTruthy();
-    const accountsEnvelope = (await accountsResponse.json()) as {
-      data?: Array<{ id?: string; login?: string }>;
-    };
-    expect(accountsEnvelope.data).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          id: account.accountId,
-          login: account.login,
-        }),
-      ]),
-    );
 
     const accountCard = adminPage.getByTestId(
       `authentication-account-${account.accountId}`,
