@@ -53,6 +53,23 @@ afterEach(async () => {
 });
 
 describe("TenantsAdminPage", () => {
+  it("renders the Administration and Tenants heading hierarchy", async () => {
+    mockFetch(async (url, init) => {
+      calls.push({ url, method: init?.method ?? "GET", body: parseBody(init?.body) });
+      if (url === "/api/v1/tenants" && !init?.method) return json({ data: [tenant] });
+      throw new Error(`Unhandled request: ${url}`);
+    });
+
+    renderPage();
+    await waitForText("Default Tenant");
+
+    expect(container.querySelector("h1")?.textContent).toBe("Administration");
+    expect(container.querySelector("h2")?.textContent).toBe("Tenants");
+    expect(container.textContent).toContain(
+      "Create tenant boundaries, monitor operational readiness, and assign tenant administrators.",
+    );
+  });
+
   it("lists tenants and creates a tenant", async () => {
     mockFetch(async (url, init) => {
       calls.push({ url, method: init?.method ?? "GET", body: parseBody(init?.body) });
