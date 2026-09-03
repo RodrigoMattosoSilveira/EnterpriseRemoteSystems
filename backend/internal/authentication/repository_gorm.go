@@ -333,8 +333,9 @@ func (r *GORMRepository) CreateAccount(ctx context.Context, account Account) (Ac
 	return r.FindAccountByID(ctx, accountID)
 }
 
-func (r *GORMRepository) CreatePersonAccount(ctx context.Context, tenantID string, account Account) (AccountRecord, error) {
+func (r *GORMRepository) CreatePersonAccount(ctx context.Context, tenantID string, personID string, account Account) (AccountRecord, error) {
 	tenantID = strings.TrimSpace(tenantID)
+	personID = strings.TrimSpace(personID)
 	accountID := account.ID
 	err := r.database.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		var tenant appdb.Tenant
@@ -354,10 +355,21 @@ func (r *GORMRepository) CreatePersonAccount(ctx context.Context, tenantID strin
 		}
 
 		var person appdb.Person
-		result = tx.
-			Where("tenant_id = ? AND email = ? COLLATE NOCASE", tenantID, account.Login).
-			Limit(1).
-			Find(&person)
+		personQuery := tx.Where("tenant_id = ?", tenantID)
+		if personID != "" {
+			// Tenant-driven provisioning starts from an exact Person selected in
+			// the Tenant UI. Once the global Person already owns an Account, its
+			// authoritative Account login may legitimately differ from this
+			// Tenant-local Person email projection, so do not re-identify the
+			// selected Person by Account login.
+			personQuery = personQuery.Where("id = ?", personID)
+		} else {
+			// Global Authentication Administration creates an Account from the
+			// exact login entered by the Application Administrator and therefore
+			// continues to resolve the selected Tenant Person by email.
+			personQuery = personQuery.Where("email = ? COLLATE NOCASE", account.Login)
+		}
+		result = personQuery.Limit(1).Find(&person)
 		if result.Error != nil {
 			return fmt.Errorf("find authentication person: %w", result.Error)
 		}

@@ -429,7 +429,7 @@ func (s *service) CreateAccount(ctx context.Context, req CreateAccountRequest) (
 
 	var account AccountRecord
 	if actorID == "" {
-		account, err = s.repository.CreatePersonAccount(ctx, tenantID, accountInput)
+		account, err = s.repository.CreatePersonAccount(ctx, tenantID, "", accountInput)
 		switch {
 		case errors.Is(err, ErrPersonLoginNotFound):
 			return AccountResponse{}, &ValidationError{Fields: map[string]string{

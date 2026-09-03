@@ -67,7 +67,7 @@ func (s *service) EnablePersonAuthentication(ctx context.Context, tenantID strin
 	}
 
 	now := s.clock().UTC()
-	_, err = s.repository.CreatePersonAccount(ctx, tenantID, Account{
+	_, err = s.repository.CreatePersonAccount(ctx, tenantID, personID, Account{
 		ID:                 ids.New(),
 		Login:              target.Login,
 		PasswordHash:       passwordHash,

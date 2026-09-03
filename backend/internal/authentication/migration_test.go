@@ -31,6 +31,19 @@ func TestAuthenticationMigrationProtectsNormalizedLoginAndActorLink(t *testing.T
 	}
 
 	now := time.Now().UTC()
+	// This test intentionally stops at migration 000042. Insert Accounts using
+	// exactly the columns that existed at that historical schema boundary rather
+	// than the current Account GORM model, which may gain columns in later bites.
+	insertMigration42Account := func(account Account) error {
+		return database.Exec(`INSERT INTO auth_user_accounts (
+			id, actor_id, login, password_hash, active, must_change_password,
+			last_login_at, password_changed_at, created_at, updated_at
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			account.ID, account.ActorID, account.Login, account.PasswordHash, account.Active, account.MustChangePassword,
+			account.LastLoginAt, account.PasswordChangedAt, account.CreatedAt, account.UpdatedAt,
+		).Error
+	}
+
 	firstActor := authz.AuthzActor{ID: "actor-one", ActorKey: "actor-one", Active: true, CreatedAt: now, UpdatedAt: now}
 	secondActor := authz.AuthzActor{ID: "actor-two", ActorKey: "actor-two", Active: true, CreatedAt: now, UpdatedAt: now}
 	if err := database.Create(&firstActor).Error; err != nil {
@@ -44,7 +57,7 @@ func TestAuthenticationMigrationProtectsNormalizedLoginAndActorLink(t *testing.T
 		ID: "invalid-account", ActorID: firstActor.ID, Login: "Upper@Example.COM", PasswordHash: "hash",
 		Active: true, MustChangePassword: true, CreatedAt: now, UpdatedAt: now,
 	}
-	if err := database.Create(&invalid).Error; err == nil || !strings.Contains(err.Error(), "authentication_login_must_be_normalized") {
+	if err := insertMigration42Account(invalid); err == nil || !strings.Contains(err.Error(), "authentication_login_must_be_normalized") {
 		t.Fatalf("expected non-normalized login rejection, got %v", err)
 	}
 
@@ -52,7 +65,7 @@ func TestAuthenticationMigrationProtectsNormalizedLoginAndActorLink(t *testing.T
 		ID: "valid-account", ActorID: firstActor.ID, Login: "valid@example.com", PasswordHash: "hash",
 		Active: true, MustChangePassword: true, CreatedAt: now, UpdatedAt: now,
 	}
-	if err := database.Create(&valid).Error; err != nil {
+	if err := insertMigration42Account(valid); err != nil {
 		t.Fatalf("create valid account: %v", err)
 	}
 	if err := database.Model(&Account{}).Where("id = ?", valid.ID).Update("actor_id", secondActor.ID).Error; err == nil || !strings.Contains(err.Error(), "authentication_actor_id_immutable") {
@@ -69,7 +82,7 @@ func TestAuthenticationMigrationProtectsNormalizedLoginAndActorLink(t *testing.T
 		ID: "second-account", ActorID: secondActor.ID, Login: "second@example.com", PasswordHash: "hash",
 		Active: true, MustChangePassword: true, CreatedAt: now, UpdatedAt: now,
 	}
-	if err := database.Create(&secondAccount).Error; err != nil {
+	if err := insertMigration42Account(secondAccount); err != nil {
 		t.Fatalf("create second account: %v", err)
 	}
 	session := Session{

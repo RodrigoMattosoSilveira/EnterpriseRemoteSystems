@@ -128,7 +128,7 @@ type Repository interface {
 	FindAccountByLogin(ctx context.Context, login string) (AccountRecord, error)
 	ActorHasActiveTenantAccess(ctx context.Context, actorID string) (bool, error)
 	CreateAccount(ctx context.Context, account Account) (AccountRecord, error)
-	CreatePersonAccount(ctx context.Context, tenantID string, account Account) (AccountRecord, error)
+	CreatePersonAccount(ctx context.Context, tenantID string, personID string, account Account) (AccountRecord, error)
 	SetAccountActive(ctx context.Context, id string, active bool, now time.Time) (AccountRecord, error)
 	UpdateLastLogin(ctx context.Context, id string, now time.Time) error
 	UpdatePasswordAndRevokeSessions(ctx context.Context, id string, passwordHash string, mustChangePassword bool, now time.Time) error
