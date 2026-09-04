@@ -168,8 +168,8 @@ BEGIN
 END;
 
 -- At most one still-open request/effective lease may exist for one Application
--- Administrator Actor and one Tenant at a time. Expired APPROVED history does
--- not block a new request.
+-- Administrator Actor and one Tenant at a time. A PENDING request whose fixed
+-- expiration has passed and expired APPROVED history do not block a new request.
 CREATE TRIGGER trg_support_access_lease_open_conflict_insert
 BEFORE INSERT ON tenant_support_access_leases
 FOR EACH ROW
@@ -178,10 +178,8 @@ WHEN EXISTS (
   FROM tenant_support_access_leases existing
   WHERE existing.application_actor_id = NEW.application_actor_id
     AND existing.tenant_id = NEW.tenant_id
-    AND (
-      existing.status = 'PENDING'
-      OR (existing.status = 'APPROVED' AND julianday(existing.expires_at) > julianday(CURRENT_TIMESTAMP))
-    )
+    AND existing.status IN ('PENDING', 'APPROVED')
+    AND julianday(existing.expires_at) > julianday(CURRENT_TIMESTAMP)
 )
 BEGIN
   SELECT RAISE(ABORT, 'support_access_lease_open_conflict');

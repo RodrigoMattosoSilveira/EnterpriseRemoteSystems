@@ -892,7 +892,26 @@ func (s *GORMStore) FindAccountActor(ctx context.Context, accountID string, tena
 		}, nil
 	}
 
-	return s.buildTenantBoundActor(ctx, binding, tenantID)
+	tenantActor, err := s.buildTenantBoundActor(ctx, binding, tenantID)
+	if err == nil {
+		return tenantActor, nil
+	}
+	if !errors.Is(err, ErrTenantActorUnavailable) {
+		return nil, err
+	}
+
+	// An ordinary active Tenant Actor remains preferred. If the persisted Tenant
+	// binding is no longer operational (for example, its Membership is inactive),
+	// a valid support lease may still provide the existing GLOBAL Application
+	// Administrator Actor with temporary authority for this exact Tenant.
+	supportActor, supportErr := s.buildSupportLeaseActorForAccount(ctx, accountID, tenantID)
+	if supportErr == nil {
+		return supportActor, nil
+	}
+	if !errors.Is(supportErr, gorm.ErrRecordNotFound) && !errors.Is(supportErr, ErrTenantActorUnavailable) {
+		return nil, supportErr
+	}
+	return nil, err
 }
 
 type intrinsicTenantIdentity struct {

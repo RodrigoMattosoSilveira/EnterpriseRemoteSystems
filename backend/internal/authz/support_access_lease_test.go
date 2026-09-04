@@ -185,6 +185,93 @@ func TestTenantSupportAccessLeaseExpiresWithoutLifecycleRewrite(t *testing.T) {
 	}
 }
 
+func TestTenantSupportAccessLeaseAllowsNewRequestAfterPendingExpiration(t *testing.T) {
+	database := newAuthzTestDB(t)
+	installSupportAccessLeaseFixtureTables(t, database)
+	seedSupportAccessLeaseTenant(t, database, "tenant-a", "Tenant A")
+	seedSupportApplicationAdministrator(t, database, "support-pending-expiry-app@example.test", "account-support-pending-expiry")
+	store := NewGORMStore(database)
+
+	applicationActor, err := store.FindAccountActor(context.Background(), "account-support-pending-expiry", GlobalTenantScope)
+	if err != nil {
+		t.Fatalf("resolve Application Administrator: %v", err)
+	}
+	first, err := store.CreateSupportAccessLease(context.Background(), applicationActor, CreateSupportAccessLeaseRequest{
+		TenantID:    "tenant-a",
+		ExpiresAt:   time.Now().UTC().Add(time.Hour).Format(time.RFC3339),
+		Reason:      "Initial support request",
+		Permissions: []string{string(PermissionPeopleRead)},
+	})
+	if err != nil {
+		t.Fatalf("request initial pending lease: %v", err)
+	}
+
+	if err := database.Model(&TenantSupportAccessLease{}).Where("id = ?", first.ID).Update("expires_at", time.Now().UTC().Add(-time.Minute)).Error; err != nil {
+		t.Fatalf("force lapsed pending fixture: %v", err)
+	}
+
+	replacement, err := store.CreateSupportAccessLease(context.Background(), applicationActor, CreateSupportAccessLeaseRequest{
+		TenantID:    "tenant-a",
+		ExpiresAt:   time.Now().UTC().Add(2 * time.Hour).Format(time.RFC3339),
+		Reason:      "Replacement support request",
+		Permissions: []string{string(PermissionExpensesRead)},
+	})
+	if err != nil {
+		t.Fatalf("lapsed pending request must not block replacement: %v", err)
+	}
+	if replacement.ID == first.ID || replacement.Status != SupportAccessLeaseStatusPending {
+		t.Fatalf("unexpected replacement lease: %#v", replacement)
+	}
+}
+
+func TestTenantSupportAccessLeaseFallsBackWhenOrdinaryTenantMembershipIsInactive(t *testing.T) {
+	database := newAuthzTestDB(t)
+	installSupportAccessLeaseFixtureTables(t, database)
+	seedSupportAccessLeaseTenant(t, database, "tenant-a", "Tenant A")
+
+	applicationActorID := seedSupportApplicationAdministrator(t, database, "support-fallback-app@example.test", "account-support-fallback")
+	staleTenantActorID := seedSupportTenantAdministrator(t, database, "tenant-a", "support-fallback-stale@example.test", "account-support-fallback", "person-support-fallback")
+	seedSupportTenantAdministrator(t, database, "tenant-a", "support-fallback-approver@example.test", "account-support-fallback-approver", "person-support-fallback-approver")
+	store := NewGORMStore(database)
+
+	now := time.Now().UTC()
+	if err := database.Exec(`INSERT INTO reference_data(id, type, code, label, active, tenant_id, created_at, updated_at) VALUES (?, 'person_status', 'INACTIVE', 'Inactive', 1, ?, ?, ?)`, "status-inactive-tenant-a", "tenant-a", now, now).Error; err != nil {
+		t.Fatalf("seed inactive Person status: %v", err)
+	}
+	if err := database.Exec(`UPDATE person_tenant_memberships SET status_id = ? WHERE id = ?`, "status-inactive-tenant-a", "membership-"+staleTenantActorID).Error; err != nil {
+		t.Fatalf("deactivate ordinary Tenant Membership: %v", err)
+	}
+
+	applicationActor, err := store.FindAccountActor(context.Background(), "account-support-fallback", GlobalTenantScope)
+	if err != nil {
+		t.Fatalf("resolve Application Administrator: %v", err)
+	}
+	approver, err := store.FindActor(context.Background(), ActorLookup{ActorID: "support-fallback-approver@example.test", TenantID: "tenant-a"})
+	if err != nil {
+		t.Fatalf("resolve approving Tenant Administrator: %v", err)
+	}
+	lease, err := store.CreateSupportAccessLease(context.Background(), applicationActor, CreateSupportAccessLeaseRequest{
+		TenantID:    "tenant-a",
+		ExpiresAt:   time.Now().UTC().Add(time.Hour).Format(time.RFC3339),
+		Reason:      "Support despite inactive ordinary membership",
+		Permissions: []string{string(PermissionPeopleRead)},
+	})
+	if err != nil {
+		t.Fatalf("request support lease: %v", err)
+	}
+	if _, err := store.ApproveSupportAccessLease(context.Background(), approver, lease.ID); err != nil {
+		t.Fatalf("approve support lease: %v", err)
+	}
+
+	supportActor, err := store.FindAccountActor(context.Background(), "account-support-fallback", "tenant-a")
+	if err != nil {
+		t.Fatalf("inactive ordinary Tenant Membership must fall back to active support lease: %v", err)
+	}
+	if supportActor.RecordID != applicationActorID || supportActor.Scope != ActorScopeApplication || supportActor.SupportLeaseID != lease.ID {
+		t.Fatalf("expected lease-backed GLOBAL Application Administrator Actor, got %#v", supportActor)
+	}
+}
+
 func TestTenantSupportAccessLeaseRequiresExactCanonicalTenantAdministrator(t *testing.T) {
 	database := newAuthzTestDB(t)
 	installSupportAccessLeaseFixtureTables(t, database)

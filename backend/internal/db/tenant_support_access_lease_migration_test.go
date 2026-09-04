@@ -41,8 +41,9 @@ INSERT INTO authz_role_permissions(role_id, permission_code, created_at) VALUES
   ('authz-role-application-admin', 'tenants.read', CURRENT_TIMESTAMP),
   ('authz-role-application-admin', 'tenants.create', CURRENT_TIMESTAMP),
   ('authz-role-application-admin', 'tenants.update', CURRENT_TIMESTAMP);
-INSERT INTO tenants(id, code, name, active, created_at, updated_at)
-VALUES ('tenant-a', 'A', 'Tenant A', 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
+INSERT INTO tenants(id, code, name, active, created_at, updated_at) VALUES
+  ('tenant-a', 'A', 'Tenant A', 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+  ('tenant-b', 'B', 'Tenant B', 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
 INSERT INTO reference_data(id, tenant_id, type, code, active)
 VALUES ('status-active-a', 'tenant-a', 'person_status', 'ACTIVE', 1);
 INSERT INTO person_tenant_memberships(id, tenant_id, person_id, status_id)
@@ -62,6 +63,27 @@ INSERT INTO authz_actor_role_grants(id, actor_id, role_id, tenant_id, active, li
 	}
 
 	applyTenantSupportAccessLeaseMigrationFile(t, sqlDB, "000065_tenant_support_access_lease_domain.up.sql")
+
+	if _, err := sqlDB.Exec(`
+INSERT INTO tenant_support_access_leases(
+  id, tenant_id, application_actor_id, requested_by_actor_id,
+  requested_at, expires_at, reason, status, created_at, updated_at
+) VALUES (
+  'lease-lapsed-pending', 'tenant-b', 'actor-application-admin', 'actor-application-admin',
+  datetime(CURRENT_TIMESTAMP, '-2 hours'), datetime(CURRENT_TIMESTAMP, '-1 hour'), 'Lapsed request', 'PENDING', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+)`); err != nil {
+		t.Fatalf("insert lapsed pending support access lease: %v", err)
+	}
+	if _, err := sqlDB.Exec(`
+INSERT INTO tenant_support_access_leases(
+  id, tenant_id, application_actor_id, requested_by_actor_id,
+  requested_at, expires_at, reason, status, created_at, updated_at
+) VALUES (
+  'lease-after-lapsed-pending', 'tenant-b', 'actor-application-admin', 'actor-application-admin',
+  CURRENT_TIMESTAMP, datetime(CURRENT_TIMESTAMP, '+2 hours'), 'Replacement request', 'PENDING', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+)`); err != nil {
+		t.Fatalf("lapsed PENDING lease must not block a later request: %v", err)
+	}
 
 	for _, permission := range []string{"support_access_leases.read", "support_access_leases.request"} {
 		var count int

@@ -170,7 +170,7 @@ func (s *GORMStore) CreateSupportAccessLease(ctx context.Context, actor *Actor, 
 
 		var openCount int64
 		if err := tx.Model(&TenantSupportAccessLease{}).
-			Where("application_actor_id = ? AND tenant_id = ? AND (status = ? OR (status = ? AND expires_at > ?))", actor.RecordID, tenantID, SupportAccessLeaseStatusPending, SupportAccessLeaseStatusApproved, now).
+			Where("application_actor_id = ? AND tenant_id = ? AND ((status = ? OR status = ?) AND expires_at > ?)", actor.RecordID, tenantID, SupportAccessLeaseStatusPending, SupportAccessLeaseStatusApproved, now).
 			Count(&openCount).Error; err != nil {
 			return fmt.Errorf("check existing support access lease: %w", err)
 		}
