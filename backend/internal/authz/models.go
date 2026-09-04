@@ -82,6 +82,50 @@ type AuthzAuditLog struct {
 	CreatedAt      time.Time `gorm:"not null"`
 }
 
+type TenantSupportAccessLease struct {
+	ID                  string     `gorm:"type:text;primaryKey"`
+	TenantID            string     `gorm:"type:text;not null;index"`
+	ApplicationActorID  string     `gorm:"type:text;not null;index"`
+	RequestedByActorID  string     `gorm:"type:text;not null"`
+	RequestedAt         time.Time  `gorm:"not null;index"`
+	ExpiresAt           time.Time  `gorm:"not null;index"`
+	Reason              string     `gorm:"type:text;not null"`
+	Status              string     `gorm:"type:text;not null;index"`
+	ApprovedAt          *time.Time `gorm:"index"`
+	ApprovedByActorID   *string    `gorm:"type:text"`
+	TerminatedAt        *time.Time `gorm:"index"`
+	TerminatedByActorID *string    `gorm:"type:text"`
+	TerminationReason   string     `gorm:"type:text"`
+	CreatedAt           time.Time  `gorm:"not null"`
+	UpdatedAt           time.Time  `gorm:"not null"`
+}
+
+func (TenantSupportAccessLease) TableName() string { return "tenant_support_access_leases" }
+
+type TenantSupportAccessLeasePermission struct {
+	LeaseID        string    `gorm:"type:text;primaryKey"`
+	PermissionCode string    `gorm:"type:text;primaryKey"`
+	CreatedAt      time.Time `gorm:"not null"`
+}
+
+func (TenantSupportAccessLeasePermission) TableName() string {
+	return "tenant_support_access_lease_permissions"
+}
+
+type TenantSupportAccessLeaseEvent struct {
+	ID           string    `gorm:"type:text;primaryKey"`
+	LeaseID      string    `gorm:"type:text;not null;index"`
+	EventType    string    `gorm:"type:text;not null;index"`
+	ActorID      string    `gorm:"type:text;not null;index"`
+	OccurredAt   time.Time `gorm:"not null;index"`
+	MetadataJSON string    `gorm:"type:text"`
+	CreatedAt    time.Time `gorm:"not null"`
+}
+
+func (TenantSupportAccessLeaseEvent) TableName() string {
+	return "tenant_support_access_lease_events"
+}
+
 var ErrImmutableAuditLog = errors.New("authorization audit logs are immutable")
 
 func (AuthzAuditLog) TableName() string { return "authz_audit_logs" }

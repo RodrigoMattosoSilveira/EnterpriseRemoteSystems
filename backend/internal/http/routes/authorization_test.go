@@ -655,6 +655,34 @@ func TestRequireApplicationPermissionAllowsApplicationScopedActor(t *testing.T) 
 	}
 }
 
+func TestRequireApplicationPermissionRejectsLeasedApplicationContext(t *testing.T) {
+	store := fakeActorStore{actor: &authz.Actor{
+		ID:             "application-admin",
+		TenantID:       "tenant-a",
+		Scope:          authz.ActorScopeApplication,
+		SupportLeaseID: "lease-a",
+		Permissions: map[authz.Permission]struct{}{
+			authz.PermissionTenantsCreate: {},
+		},
+	}}
+
+	app := fiber.New()
+	app.Post("/tenants", requireApplicationPermission(Dependencies{ActorStore: store}, authz.PermissionTenantsCreate), func(c fiber.Ctx) error {
+		return c.SendStatus(fiber.StatusNoContent)
+	})
+
+	req := httptest.NewRequest(fiber.MethodPost, "/tenants", nil)
+	req.Header.Set(authz.HeaderActorID, "application-admin")
+	req.Header.Set(authz.HeaderTenantID, "tenant-a")
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	if resp.StatusCode != fiber.StatusForbidden {
+		t.Fatalf("expected leased Application context to be denied global control-plane action, got %d", resp.StatusCode)
+	}
+}
+
 func TestRequireTenantPermissionAllowsApplicationControlPlaneTenantMetadata(t *testing.T) {
 	store := fakeActorStore{actor: &authz.Actor{
 		ID:       "application-admin",

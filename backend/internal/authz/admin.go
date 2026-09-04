@@ -25,6 +25,10 @@ type ActorAdminStore interface {
 	RevokeTenantOperatorRoleGrant(ctx context.Context, tenantID string, actorID string, grantID string) (ActorGrantResponse, error)
 	ListAuthorizationAuditLogs(ctx context.Context, filter AuditLogFilter) ([]AuditLogResponse, error)
 	RecordAuthorizationAudit(ctx context.Context, entry AuthorizationAuditEntry) error
+	CreateSupportAccessLease(ctx context.Context, actor *Actor, req CreateSupportAccessLeaseRequest) (SupportAccessLeaseResponse, error)
+	ListSupportAccessLeases(ctx context.Context, actor *Actor, filter SupportAccessLeaseFilter) ([]SupportAccessLeaseResponse, error)
+	ApproveSupportAccessLease(ctx context.Context, actor *Actor, leaseID string) (SupportAccessLeaseResponse, error)
+	TerminateSupportAccessLease(ctx context.Context, actor *Actor, leaseID string, reason string) (SupportAccessLeaseResponse, error)
 }
 
 type RoleResponse struct {
@@ -77,18 +81,21 @@ type ActorBindingResponse struct {
 }
 
 type CurrentActorResponse struct {
-	ActorKey             string   `json:"actorKey"`
-	ActorRecordID        string   `json:"actorRecordId"`
-	TenantID             string   `json:"tenantId"`
-	Scope                string   `json:"scope"`
-	PersonID             string   `json:"personId,omitempty"`
-	GlobalPersonID       string   `json:"globalPersonId,omitempty"`
-	MembershipID         string   `json:"membershipId,omitempty"`
-	CollaboratorID       string   `json:"collaboratorId,omitempty"`
-	RoleCodes            []string `json:"roleCodes"`
-	Permissions          []string `json:"permissions"`
-	IntrinsicPermissions []string `json:"intrinsicPermissions"`
-	DelegatedPermissions []string `json:"delegatedPermissions"`
+	ActorKey                string   `json:"actorKey"`
+	ActorRecordID           string   `json:"actorRecordId"`
+	TenantID                string   `json:"tenantId"`
+	Scope                   string   `json:"scope"`
+	PersonID                string   `json:"personId,omitempty"`
+	GlobalPersonID          string   `json:"globalPersonId,omitempty"`
+	MembershipID            string   `json:"membershipId,omitempty"`
+	CollaboratorID          string   `json:"collaboratorId,omitempty"`
+	RoleCodes               []string `json:"roleCodes"`
+	Permissions             []string `json:"permissions"`
+	IntrinsicPermissions    []string `json:"intrinsicPermissions"`
+	DelegatedPermissions    []string `json:"delegatedPermissions"`
+	SupportLeaseID          string   `json:"supportLeaseId,omitempty"`
+	SupportLeaseExpiresAt   string   `json:"supportLeaseExpiresAt,omitempty"`
+	SupportLeasePermissions []string `json:"supportLeasePermissions"`
 }
 
 type ActorGrantResponse struct {
