@@ -23,6 +23,7 @@ const session: AuthSession = {
 
 afterEach(() => {
   vi.restoreAllMocks();
+  window.localStorage.clear();
   resetAuthStateForTests();
 });
 
@@ -38,6 +39,19 @@ describe("authStore", () => {
       error: null,
       reason: null,
     });
+  });
+
+  it("drops a tenant selection owned by another Account when an existing session loads", async () => {
+    window.localStorage.setItem("ers.auth.selectedTenantId", "manual30g-tenant-a");
+    window.localStorage.setItem("ers.auth.selectedTenantAccountId", "old-account");
+    vi.spyOn(authApi, "loadAuthSession").mockResolvedValue(session);
+
+    await initializeAuthSession();
+
+    expect(window.localStorage.getItem("ers.auth.selectedTenantId")).toBeNull();
+    expect(window.localStorage.getItem("ers.auth.selectedTenantAccountId")).toBe(
+      session.accountId,
+    );
   });
 
   it("treats a successful cookie-less session probe as anonymous", async () => {
@@ -192,6 +206,34 @@ describe("authStore", () => {
 
     expect(loadSession).toHaveBeenCalledTimes(1);
     expect(getAuthState().status).toBe("authenticated");
+  });
+
+  it("drops a tenant selection owned by another Account when login succeeds", async () => {
+    window.localStorage.setItem("ers.auth.selectedTenantId", "manual30g-tenant-a");
+    window.localStorage.setItem("ers.auth.selectedTenantAccountId", "old-account");
+    vi.spyOn(authApi, "login").mockResolvedValue(session);
+
+    await authenticate({ login: "admin@example.com", password: "password" });
+
+    expect(window.localStorage.getItem("ers.auth.selectedTenantId")).toBeNull();
+    expect(window.localStorage.getItem("ers.auth.selectedTenantAccountId")).toBe(
+      session.accountId,
+    );
+  });
+
+  it("preserves the selected tenant when the same Account signs in again", async () => {
+    window.localStorage.setItem("ers.auth.selectedTenantId", "tenant-a");
+    window.localStorage.setItem(
+      "ers.auth.selectedTenantAccountId",
+      session.accountId,
+    );
+    vi.spyOn(authApi, "login").mockResolvedValue(session);
+
+    await authenticate({ login: "admin@example.com", password: "password" });
+
+    expect(window.localStorage.getItem("ers.auth.selectedTenantId")).toBe(
+      "tenant-a",
+    );
   });
 
   it("publishes login and logout state changes", async () => {
