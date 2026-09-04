@@ -16,6 +16,12 @@ type CurrentActorEnvelope = {
   };
 };
 
+type AuthSessionEnvelope = {
+  data?: {
+    accountId?: string;
+  };
+};
+
 export default async function globalSetup(config: FullConfig): Promise<void> {
   const project = config.projects[0];
   if (!project) {
@@ -101,6 +107,14 @@ async function authenticateAndPersist(input: {
     });
     await requireSuccessfulResponse(loginResponse, `Authenticate deployed E2E account ${input.login}`);
 
+    const loginPayload = (await loginResponse.json()) as AuthSessionEnvelope;
+    const accountId = loginPayload.data?.accountId?.trim();
+    if (!accountId) {
+      throw new Error(
+        `The deployed E2E account ${input.login} did not return an Authentication Account ID`,
+      );
+    }
+
     const actorResponse = await api.get("/api/v1/authz/current-actor");
     await requireSuccessfulResponse(actorResponse, `Resolve deployed E2E authorization for ${input.login}`);
 
@@ -132,6 +146,10 @@ async function authenticateAndPersist(input: {
           {
             name: "ers.auth.selectedTenantId",
             value: input.selectedTenantId,
+          },
+          {
+            name: "ers.auth.selectedTenantAccountId",
+            value: accountId,
           },
         ],
       },
