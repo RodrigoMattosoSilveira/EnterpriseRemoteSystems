@@ -78,15 +78,30 @@ func TestSeedAuthorizationCatalogCreatesCoreRolesAndGrants(t *testing.T) {
 		}
 	}
 
-	var applicationAdminGoldProductionManage int64
-	if err := database.Model(&AuthzRolePermission{}).
+	var applicationAdminPermissions []AuthzRolePermission
+	if err := database.
 		Joins("JOIN authz_roles ON authz_roles.id = authz_role_permissions.role_id").
-		Where("authz_roles.code = ? AND permission_code = ?", string(RoleApplicationAdmin), string(PermissionGoldProductionManage)).
-		Count(&applicationAdminGoldProductionManage).Error; err != nil {
-		t.Fatalf("count Application Administrator gold-production permission: %v", err)
+		Where("authz_roles.code = ?", string(RoleApplicationAdmin)).
+		Order("permission_code ASC").
+		Find(&applicationAdminPermissions).Error; err != nil {
+		t.Fatalf("list Application Administrator permissions: %v", err)
 	}
-	if applicationAdminGoldProductionManage != 1 {
-		t.Fatalf("Application Administrator must receive Gold Production administration permission")
+	if got, want := len(applicationAdminPermissions), len(applicationAdministratorControlPlanePermissions()); got != want {
+		t.Fatalf("Application Administrator permission count = %d, want %d", got, want)
+	}
+	applicationAdminPermissionSet := map[string]struct{}{}
+	for _, row := range applicationAdminPermissions {
+		applicationAdminPermissionSet[row.PermissionCode] = struct{}{}
+	}
+	for _, permission := range applicationAdministratorControlPlanePermissions() {
+		if _, ok := applicationAdminPermissionSet[string(permission)]; !ok {
+			t.Fatalf("Application Administrator missing control-plane permission %q", permission)
+		}
+	}
+	for _, forbidden := range []Permission{PermissionAll, PermissionGoldProductionManage, PermissionPeopleRead, PermissionExpensesRead} {
+		if _, ok := applicationAdminPermissionSet[string(forbidden)]; ok {
+			t.Fatalf("Application Administrator must not receive standing Tenant permission %q", forbidden)
+		}
 	}
 
 	var tenantAdminPermissions []AuthzRolePermission
@@ -209,8 +224,12 @@ func TestGORMStoreListsActorTenantOptions(t *testing.T) {
 	if err != nil {
 		t.Fatalf("list application tenant options: %v", err)
 	}
-	if len(options) != 2 || options[0].ID != "tenant-a" || options[1].ID != "tenant-b" {
-		t.Fatalf("expected all active tenants, got %#v", options)
+	if got, want := options, []TenantOption{{
+		ID: GlobalTenantScope, Code: "GLOBAL", Name: "Global administration",
+		RoleCodes: []string{string(RoleApplicationAdmin)}, ActorRecordID: applicationActorID,
+		ActorKey: "application-user@example.com", ActorScope: string(ActorScopeApplication),
+	}}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("application control-plane options = %#v, want %#v", got, want)
 	}
 }
 
@@ -259,27 +278,31 @@ func TestGORMStoreFindActorEnforcesTenantGrantScope(t *testing.T) {
 	}
 }
 
-func TestGORMStoreFindActorLoadsApplicationControlPlaneAndTransitionalWildcard(t *testing.T) {
+func TestGORMStoreFindActorLoadsApplicationControlPlaneWithoutTenantAuthority(t *testing.T) {
 	database := newAuthzTestDB(t)
 	actorID := createAuthzActor(t, database, "app-admin@example.com", nil, nil)
 	grantAuthzRole(t, database, actorID, RoleApplicationAdmin, GlobalTenantScope)
 
-	actor, err := NewGORMStore(database).FindActor(context.Background(), ActorLookup{ActorID: "app-admin@example.com", TenantID: "tenant-b"})
+	actor, err := NewGORMStore(database).FindActor(context.Background(), ActorLookup{ActorID: "app-admin@example.com", TenantID: GlobalTenantScope})
 	if err != nil {
-		t.Fatalf("find actor: %v", err)
+		t.Fatalf("find application control-plane actor: %v", err)
 	}
 
-	if actor.Scope != ActorScopeApplication {
-		t.Fatalf("expected application scope, got %q", actor.Scope)
+	if actor.Scope != ActorScopeApplication || actor.TenantID != GlobalTenantScope {
+		t.Fatalf("expected global application control-plane context, got %#v", actor)
 	}
 	if err := RequirePermission(actor, PermissionAuthzManage); err != nil {
 		t.Fatalf("expected explicit application control-plane permission, got %v", err)
 	}
-	if err := RequirePermission(actor, PermissionJourneySettlementsClose); err != nil {
-		t.Fatalf("expected transitional Application Administrator wildcard compatibility pending the dedicated global control-plane cutover, got %v", err)
+	if err := RequirePermission(actor, PermissionJourneySettlementsClose); !errors.Is(err, ErrForbidden) {
+		t.Fatalf("Application Administrator must not inherit Tenant business authority, got %v", err)
 	}
-	if err := RequireTenantScope(actor, "tenant-b"); err != nil {
-		t.Fatalf("expected application actor to access tenant-b, got %v", err)
+	if err := RequireTenantScope(actor, "tenant-b"); !errors.Is(err, ErrForbidden) {
+		t.Fatalf("Application Administrator must not satisfy ordinary Tenant scope, got %v", err)
+	}
+
+	if tenantActor, err := NewGORMStore(database).FindActor(context.Background(), ActorLookup{ActorID: "app-admin@example.com", TenantID: "tenant-b"}); tenantActor != nil || !errors.Is(err, ErrTenantActorUnavailable) {
+		t.Fatalf("specific Tenant lookup must not turn GLOBAL Actor into Tenant authority: actor=%#v err=%v", tenantActor, err)
 	}
 }
 
@@ -289,9 +312,9 @@ func TestGORMStoreFindActorDoesNotMergeGlobalAndTenantRoleIdentities(t *testing.
 	grantAuthzRole(t, database, actorID, RoleApplicationAdmin, GlobalTenantScope)
 	grantAuthzRole(t, database, actorID, RoleExpenseOperator, "tenant-a")
 
-	actor, err := NewGORMStore(database).FindActor(context.Background(), ActorLookup{ActorID: "mixed-scope@example.com", TenantID: "tenant-a"})
+	actor, err := NewGORMStore(database).FindActor(context.Background(), ActorLookup{ActorID: "mixed-scope@example.com", TenantID: GlobalTenantScope})
 	if err != nil {
-		t.Fatalf("find mixed-scope legacy actor: %v", err)
+		t.Fatalf("find mixed-scope global actor: %v", err)
 	}
 	if actor.Scope != ActorScopeApplication {
 		t.Fatalf("global role must resolve a global Actor identity, got %q", actor.Scope)

@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from "react";
 
 import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { ApiErrorPanel } from "../../components/ApiErrorPanel";
-import { ReactivationRequestsAlert } from "../auth/ReactivationRequestsAlert";
 import { useOptionalAuthorizationContext } from "../../components/layout/AuthorizationContext";
 import { useReferenceDataByType } from "../reference-data/useReferenceData";
 
@@ -38,11 +37,9 @@ export function PeopleListPage() {
   const actor = useOptionalAuthorizationContext();
   const canManageMemberships =
     actor?.scope === "TENANT" && actor.roleCodes.includes("TENANT_ADMIN");
-  const isApplicationAdministrator =
-    actor?.scope === "APPLICATION" && actor.roleCodes.includes("APPLICATION_ADMIN");
-  // POST /people remains a Bite 28 compatibility path until the dedicated global
-  // administration cutover. Preserve the existing create affordance for actors
-  // that currently hold people.create (including today's Application Admin).
+  // Person creation is a Tenant data-plane capability. Bite 30I.1 removes it
+  // from the GLOBAL Application Administrator while preserving it for Tenant
+  // identities that explicitly hold people.create.
   const canCreatePerson =
     !actor || actor.permissions.includes("*") || actor.permissions.includes("people.create");
   // In the real application, status IDs are tenant-specific reference-data IDs.
@@ -216,7 +213,6 @@ export function PeopleListPage() {
           </div>
         )}
 
-        {isApplicationAdministrator && <ReactivationRequestsAlert />}
 
         <section
           aria-label="Search and filter controls"

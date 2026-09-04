@@ -103,7 +103,7 @@ export default function LoginPage() {
   return (
     <AuthCard title="Sign in" subtitle="Use your ERS account to continue.">
       {auth.status === "anonymous" && auth.reason === "expired" && <p role="alert" className="mb-4 rounded-xl bg-amber-50 p-3 text-sm text-amber-900">Your session expired. Sign in again to continue.</p>}
-      {auth.status === "anonymous" && auth.reason === "inactive" && <p role="alert" className="mb-4 rounded-xl bg-amber-50 p-3 text-sm text-amber-900">Your authentication account is inactive. Request reactivation to regain access.</p>}
+      {auth.status === "anonymous" && auth.reason === "inactive" && <p role="alert" className="mb-4 rounded-xl bg-amber-50 p-3 text-sm text-amber-900">Your authentication access is inactive. Sign in again to see whether Tenant reactivation or Application Administrator review is required.</p>}
       {location.state && typeof location.state === "object" && "message" in location.state && <p role="status" className="mb-4 rounded-xl bg-emerald-50 p-3 text-sm text-emerald-900">{String(location.state.message)}</p>}
       {error && <p role="alert" className="mb-4 rounded-xl bg-red-50 p-3 text-sm text-red-800">{error}</p>}
       {reactivationError && <p role="alert" className="mb-4 rounded-xl bg-red-50 p-3 text-sm text-red-800">{reactivationError}</p>}
@@ -112,7 +112,7 @@ export default function LoginPage() {
         <AuthField label="Password" type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} required />
         <button className={primaryButtonClass} disabled={submitting}>{submitting ? "Signing in…" : "Sign in"}</button>
       </form>
-      {loginErrorCode === "account_inactive" && (
+      {(loginErrorCode === "account_security_suspended" || loginErrorCode === "account_inactive") && (
         <button
           type="button"
           className={`${primaryButtonClass} mt-3`}
@@ -134,6 +134,18 @@ export function loginFailurePresentation(cause: unknown): {
   message: string;
 } {
   if (cause instanceof ApiError) {
+    if (cause.code === "account_security_suspended") {
+      return {
+        code: cause.code,
+        message: "Your Authentication Account is security-suspended. Request Application Administrator review to regain access.",
+      };
+    }
+    if (cause.code === "account_operationally_inactive") {
+      return {
+        code: cause.code,
+        message: "Your Person is operationally inactive. Contact a Tenant Administrator to reactivate you for their Tenant.",
+      };
+    }
     if (cause.code === "account_inactive") {
       return {
         code: cause.code,
@@ -164,6 +176,8 @@ export function isInactiveLoginState(
   return (
     (auth.status === "anonymous" && auth.reason === "inactive") ||
     loginErrorCode === "account_inactive" ||
+    loginErrorCode === "account_security_suspended" ||
+    loginErrorCode === "account_operationally_inactive" ||
     loginErrorCode === "actor_inactive"
   );
 }

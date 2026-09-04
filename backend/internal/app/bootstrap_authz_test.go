@@ -31,7 +31,7 @@ func TestBootstrapEnsuresConfiguredAuthzBootstrapActor(t *testing.T) {
 	if err != nil {
 		t.Fatalf("open database: %v", err)
 	}
-	actor, err := authz.NewGORMStore(database).FindActor(context.Background(), authz.ActorLookup{ActorID: "bootstrap-admin", TenantID: "default"})
+	actor, err := authz.NewGORMStore(database).FindActor(context.Background(), authz.ActorLookup{ActorID: "bootstrap-admin", TenantID: authz.GlobalTenantScope})
 	if err != nil {
 		t.Fatalf("find bootstrap actor: %v", err)
 	}

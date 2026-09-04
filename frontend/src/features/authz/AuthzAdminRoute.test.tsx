@@ -94,10 +94,10 @@ describe("AuthzAdminRoute", () => {
     queryClient.setQueryData(authzAdminCurrentActorQueryKey, {
       actorKey: "previous-application-admin",
       actorRecordId: "actor-previous-application-admin",
-      tenantId: "default",
+      tenantId: "*",
       scope: "APPLICATION",
       roleCodes: ["APPLICATION_ADMIN"],
-      permissions: ["*"],
+      permissions: ["authz.read", "authz.manage"],
     });
 
     renderRoute(queryClient);
@@ -196,7 +196,7 @@ function currentActor(input: { scope: string; permissions: string[] }) {
   return {
     actorKey: "session-actor",
     actorRecordId: "actor-session-actor",
-    tenantId: "default",
+    tenantId: input.scope === "APPLICATION" ? "*" : "default",
     scope: input.scope,
     roleCodes:
       input.scope === "APPLICATION" ? ["APPLICATION_ADMIN"] : ["TENANT_ADMIN"],

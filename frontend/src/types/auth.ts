@@ -94,6 +94,8 @@ export type AuthAccount = {
   actors?: AuthAccountActor[];
   login: string;
   active: boolean;
+  securitySuspended?: boolean;
+  operationalActive?: boolean;
   actorActive: boolean;
   mustChangePassword: boolean;
   lastLoginAt?: string;
@@ -119,6 +121,7 @@ export type ResetPasswordRequest = {
 
 export type CreateAuthAccountRequest = {
   actorId: string;
+  tenantId?: string;
   login: string;
   temporaryPassword: string;
   mustChangePassword?: boolean;

@@ -258,12 +258,11 @@ func RequireTenantScope(actor *Actor, tenantID string) error {
 	if strings.TrimSpace(tenantID) == "" {
 		return ErrForbidden
 	}
-	// Bite 30D separates intrinsic and delegated authority, but final removal
-	// of Application Administrator standing tenant-data compatibility belongs
-	// to the dedicated global control-plane cutover. Preserve that transitional scope bypass until then; 30D no
-	// longer folds global Role Grants into a tenant Actor identity.
+	// A GLOBAL/Application Actor is a control-plane identity. It never satisfies
+	// ordinary Tenant scope. Bite 30I.2 will add exceptional support access as a
+	// separate authorization mechanism rather than weakening this invariant.
 	if actor.Scope == ActorScopeApplication {
-		return nil
+		return ErrForbidden
 	}
 	if strings.TrimSpace(actor.TenantID) == strings.TrimSpace(tenantID) {
 		return nil

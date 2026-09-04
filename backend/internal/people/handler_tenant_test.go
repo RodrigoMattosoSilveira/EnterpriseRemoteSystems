@@ -47,6 +47,10 @@ func (s *tenantRecordingService) CreateMembership(_ context.Context, tenantID st
 	return &PersonDTO{ID: "person-one", TenantID: tenantID}, nil
 }
 
+func (s *tenantRecordingService) Reactivate(_ context.Context, tenantID string, id string, _ string) (*PersonDTO, error) {
+	return &PersonDTO{ID: id, TenantID: tenantID}, nil
+}
+
 func TestHandlerUsesAuthoritativeSelectedTenantForPeopleOperations(t *testing.T) {
 	service := &tenantRecordingService{}
 	handler := NewHandler(service)

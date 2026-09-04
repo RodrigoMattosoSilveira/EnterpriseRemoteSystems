@@ -5,7 +5,7 @@ import {
   type APIRequestContext,
   type APIResponse,
 } from "@playwright/test";
-import { authzHeaders, e2eApiUrl } from "./support/authz";
+import { applicationAdminHeaders, authzHeaders, e2eApiUrl } from "./support/authz";
 
 type ApiEnvelope<T> = {
   data?: T;
@@ -479,7 +479,7 @@ test.describe("authorization role boundaries", () => {
     const invalidApplicationGrant = await adminApi.post(
       e2eApiUrl(`/api/v1/authz/actors/${encodeURIComponent(actor.id)}/role-grants`),
       {
-        headers: authzHeaders(),
+        headers: applicationAdminHeaders(),
         data: { roleCode: "APPLICATION_ADMIN", tenantId: DEFAULT_TENANT_ID },
       },
     );
@@ -493,7 +493,7 @@ test.describe("authorization role boundaries", () => {
     const invalidTenantGrant = await adminApi.post(
       e2eApiUrl(`/api/v1/authz/actors/${encodeURIComponent(actor.id)}/role-grants`),
       {
-        headers: authzHeaders(),
+        headers: applicationAdminHeaders(),
         data: { roleCode: "EXPENSE_OPERATOR", tenantId: "*" },
       },
     );
@@ -507,7 +507,7 @@ test.describe("authorization role boundaries", () => {
     const unboundTenantGrant = await adminApi.post(
       e2eApiUrl(`/api/v1/authz/actors/${encodeURIComponent(actor.id)}/role-grants`),
       {
-        headers: authzHeaders(),
+        headers: applicationAdminHeaders(),
         data: { roleCode: "EXPENSE_OPERATOR", tenantId: DEFAULT_TENANT_ID },
       },
     );
@@ -575,27 +575,17 @@ async function createActorAccountAndLogin(
 }
 
 async function createTenant(
-  api: APIRequestContext,
+  _api: APIRequestContext,
   keyPrefix: string,
 ): Promise<string> {
-  const seed = uniqueNumericSuffix();
-  const response = await api.post(e2eApiUrl("/api/v1/tenants"), {
-    headers: authzHeaders(DEFAULT_TENANT_ID),
-    data: {
-      code: `AUTHZ${seed}`.slice(0, 20),
-      name: `Authorization Boundary ${keyPrefix} ${seed}`,
-      description: "Isolated Tenant for authorization-boundary E2E coverage",
-      active: true,
-    },
-  });
-  await expectStatus(response, 201, `create isolated Tenant for ${keyPrefix}`);
-
-  const body = (await response.json()) as ApiEnvelope<{ id?: string }>;
-  const tenantId = body.data?.id;
-  if (!tenantId) {
-    throw new Error(`Create isolated Tenant for ${keyPrefix} did not return an id`);
+  switch (keyPrefix) {
+    case "tenant-admin-boundary":
+      return "e2e-authz-admin-tenant";
+    case "tenant-role-boundary":
+      return "e2e-authz-role-tenant";
+    default:
+      throw new Error(`No deterministic E2E Tenant fixture exists for ${keyPrefix}`);
   }
-  return tenantId;
 }
 
 async function createActorWithRole(
@@ -624,8 +614,9 @@ async function createActorWithRole(
 
   const temporaryPassword = `E2E-${seed}-Password!`;
   const accountResponse = await api.post(e2eApiUrl("/api/v1/auth/accounts"), {
-    headers: authzHeaders(tenantId),
+    headers: applicationAdminHeaders(),
     data: {
+      tenantId,
       login,
       temporaryPassword,
     },
@@ -684,7 +675,7 @@ async function getActivePersonStatusId(
 async function createAuthzActor(api: APIRequestContext, keyPrefix: string): Promise<AuthzActor> {
   const actorKey = `authz-${keyPrefix}-e2e@example.com`;
   const response = await api.post(e2eApiUrl("/api/v1/authz/actors"), {
-    headers: authzHeaders(),
+    headers: applicationAdminHeaders(),
     data: {
       actorKey,
       displayName: `Authorization E2E ${keyPrefix}`,
@@ -709,7 +700,7 @@ async function grantRole(
   const response = await api.post(
     e2eApiUrl(`/api/v1/authz/actors/${encodeURIComponent(actorId)}/role-grants`),
     {
-      headers: authzHeaders(),
+      headers: applicationAdminHeaders(),
       data: { roleCode, tenantId },
     },
   );
@@ -730,7 +721,7 @@ async function revokeRoleGrant(
     e2eApiUrl(
       `/api/v1/authz/actors/${encodeURIComponent(actorId)}/role-grants/${encodeURIComponent(grantId)}`,
     ),
-    { headers: authzHeaders() },
+    { headers: applicationAdminHeaders() },
   );
   await expectStatus(response, 200, `revoke role grant ${grantId} from ${actorId}`);
 }
@@ -743,7 +734,7 @@ async function setActorActive(
   const response = await api.patch(
     e2eApiUrl(`/api/v1/authz/actors/${encodeURIComponent(actorId)}/active`),
     {
-      headers: authzHeaders(),
+      headers: applicationAdminHeaders(),
       data: { active },
     },
   );

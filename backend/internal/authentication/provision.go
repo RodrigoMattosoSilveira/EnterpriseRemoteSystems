@@ -205,8 +205,9 @@ func ProvisionApplicationAdmin(ctx context.Context, database *gorm.DB, cfg Provi
 			updates["login"] = cfg.Login
 			result.LoginUpdated = true
 		}
-		if !actorAccount.Active {
+		if !actorAccount.Active || actorAccount.SecuritySuspended {
 			updates["active"] = true
+			updates["security_suspended"] = false
 			result.AccountReactivated = true
 		}
 		if actorAccount.MustChangePassword {

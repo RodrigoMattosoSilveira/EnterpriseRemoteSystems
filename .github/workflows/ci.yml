@@ -1,11 +1,19 @@
 name: CI
 
 on:
+  push:
+    branches-ignore:
+      - development
+      - test
+      - production
+
   pull_request:
     branches:
       - development
       - test
       - production
+
+  workflow_dispatch:
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
@@ -14,7 +22,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: ci-${{ github.event.pull_request.number || github.ref }}
+  group: ci-${{ github.event.pull_request.head.ref || github.ref_name }}
   cancel-in-progress: true
 
 jobs:
@@ -66,8 +74,14 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Run frontend checks
+      - name: Run TypeScript checks
         run: npm run check
+
+      - name: Run frontend unit tests
+        run: npm run test:run
+
+      - name: Build frontend
+        run: npm run build
 
   playwright:
     name: Playwright local E2E
@@ -86,7 +100,8 @@ jobs:
       - name: Install system tools
         run: |
           apt-get update
-          apt-get install -y sqlite3 curl
+          apt-get install -y --no-install-recommends sqlite3 curl python3
+          rm -rf /var/lib/apt/lists/*
 
       - name: Set up Go
         uses: actions/setup-go@v6
@@ -105,135 +120,20 @@ jobs:
         working-directory: frontend
         run: npm ci
 
-
-      - name: Initialize CI database
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          mkdir -p backend/data
-          rm -f backend/data/app-ci.db
-
-          for migration in backend/migrations/*.up.sql; do
-            echo "Applying $migration"
-            sqlite3 backend/data/app-ci.db < "$migration"
-          done
-
-          sqlite3 backend/data/app-ci.db ".tables"
-
-      - name: Provision CI E2E administrator
-        working-directory: backend
-        shell: bash
-        env:
-          APP_ENV: ci
-          DATABASE_PATH: data/app-ci.db
-          AUTH_PASSWORD_HASH_COST: "4"
-        run: |
-          set -euo pipefail
-
-          printf '%s' '{"actorKey":"e2e-application-admin","displayName":"CI E2E Administrator","login":"admin@example.com","password":"CI-Administrator-Password-28C!"}' \
-            | go run ./cmd/provision-e2e-admin
-
-      - name: Start backend
-        working-directory: backend
-        shell: bash
-        env:
-          APP_ENV: ci
-          PORT: "8080"
-          DATABASE_PATH: data/app-ci.db
-
-          JWT_SECRET: ci-secret-change-me
-          JWT_ISSUER: call-it-cure-it-ci
-          JWT_EXPIRATION_MINUTES: "480"
-
-          DEV_SEED_ADMIN: "true"
-          DEV_ADMIN_EMAIL: admin@example.com
-          DEV_ADMIN_PASSWORD: admin123
-          DEV_ADMIN_NAME: Admin User
-
-          LLM_COACHING_ENABLED: "false"
-          OPENAI_API_KEY: ""
-          OPENAI_MODEL: gpt-5.1-mini
-          OPENAI_BASE_URL: https://api.openai.com/v1
-          OPENAI_TIMEOUT_SECONDS: "20"
-
-          CORS_ALLOW_ORIGINS: http://localhost:5173
-
-          AUTHZ_BOOTSTRAP_ENABLED: "true"
-          AUTHZ_BOOTSTRAP_ACTOR_KEY: bootstrap-admin
-          AUTHZ_BOOTSTRAP_DISPLAY_NAME: Bootstrap Admin
-          AUTHZ_BOOTSTRAP_ROLE_CODE: APPLICATION_ADMIN
-          AUTHZ_BOOTSTRAP_TENANT_ID: "*"
-          AUTHZ_BOOTSTRAP_REQUIRE_EMPTY_ACTOR_TABLE: "false"
-          AUTHZ_ACTOR_HEADER_MODE: test
-        run: |
-          set -euo pipefail
-
-          go run ./cmd/api > /tmp/ers-backend.log 2>&1 &
-          echo $! > /tmp/ers-backend.pid
-
-      - name: Wait for backend
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          for i in {1..30}; do
-            if curl -fsS http://localhost:8080/api/v1/healthz >/dev/null; then
-              echo "Backend is ready"
-              exit 0
-            fi
-
-            echo "Waiting for backend..."
-            sleep 2
-          done
-
-          echo "Backend failed to start"
-          cat /tmp/ers-backend.log
-          exit 1
-
-      - name: Start frontend
-        working-directory: frontend
-        shell: bash
-        env:
-          VITE_API_BASE_URL: /api/v1
-          ERS_LOCAL_AUTHZ_BOOTSTRAP: "false"
-          PLAYWRIGHT_AUTHZ_ACTOR_ID: e2e-application-admin
-          PLAYWRIGHT_AUTHZ_TENANT_ID: default
-        run: |
-          set -euo pipefail
-
-          npm run dev -- --host 0.0.0.0 --port 5173 > /tmp/ers-frontend.log 2>&1 &
-          echo $! > /tmp/ers-frontend.pid
-
-      - name: Wait for frontend
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          for i in {1..30}; do
-            if curl -fsS http://localhost:5173 >/dev/null; then
-              echo "Frontend is ready"
-              exit 0
-            fi
-
-            echo "Waiting for frontend..."
-            sleep 2
-          done
-
-          echo "Frontend failed to start"
-          cat /tmp/ers-frontend.log
-          exit 1
-
       - name: Run Playwright tests
         working-directory: frontend
         env:
-          PLAYWRIGHT_BASE_URL: http://localhost:5173
-          PLAYWRIGHT_SKIP_WEBSERVER: "true"
+          PLAYWRIGHT_BASE_URL: http://localhost:15173
           PLAYWRIGHT_AUTH_MODE: session
-          PLAYWRIGHT_AUTHZ_ACTOR_ID: e2e-application-admin
           PLAYWRIGHT_AUTHZ_TENANT_ID: default
+          PLAYWRIGHT_TENANT_ADMIN_ACTOR_ID: e2e-default-tenant-admin
+          PLAYWRIGHT_APPLICATION_ADMIN_ACTOR_ID: e2e-application-admin
           E2E_ADMIN_EMAIL: admin@example.com
-          E2E_ADMIN_PASSWORD: CI-Administrator-Password-28C!
+          E2E_ADMIN_PASSWORD: Local-E2E-Administrator-28D!
+          E2E_APPLICATION_ADMIN_ACTOR_KEY: e2e-application-admin
+          E2E_TENANT_ADMIN_EMAIL: tenant-admin@example.com
+          E2E_TENANT_ADMIN_PASSWORD: Local-E2E-Administrator-28D!
+          E2E_TENANT_ADMIN_ACTOR_KEY: e2e-default-tenant-admin
         run: npx playwright test
 
       - name: Upload Playwright report
@@ -250,20 +150,4 @@ jobs:
         with:
           name: playwright-test-results
           path: frontend/test-results/
-          if-no-files-found: ignore
-
-      - name: Upload backend log
-        if: failure()
-        uses: actions/upload-artifact@v6
-        with:
-          name: backend-log
-          path: /tmp/ers-backend.log
-          if-no-files-found: ignore
-
-      - name: Upload frontend log
-        if: failure()
-        uses: actions/upload-artifact@v6
-        with:
-          name: frontend-log
-          path: /tmp/ers-frontend.log
           if-no-files-found: ignore

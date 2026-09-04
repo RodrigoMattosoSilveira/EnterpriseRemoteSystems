@@ -253,3 +253,45 @@ func TestAccountReactivationRequestPreservesAccountActorsAndRevokesStaleSessions
 		t.Fatalf("reactivated Account should authenticate with existing credentials: %v", err)
 	}
 }
+
+func TestOperationallyInactivePersonCannotRequestApplicationAdministratorReactivation(t *testing.T) {
+	database := accountActorFoundationTestDatabase(t)
+	now := time.Now().UTC()
+	createFoundationTenantPerson(t, database, "tenant-operational-return", "Operational Return Tenant", "operational-return-person", "98765432100", "operational.return@example.com", now)
+	if err := appdb.EnsureGlobalPersonMembershipFoundation(database); err != nil {
+		t.Fatalf("ensure Person membership foundation: %v", err)
+	}
+
+	service := NewService(NewRepository(database), ServiceConfig{PasswordHashCost: bcrypt.MinCost})
+	if _, err := service.EnablePersonAuthentication(context.Background(), "tenant-operational-return", "operational-return-person", EnablePersonAuthenticationRequest{
+		TemporaryPassword: "Operational-Return-Password-1",
+	}); err != nil {
+		t.Fatalf("enable operational return account: %v", err)
+	}
+
+	var account Account
+	if err := database.First(&account, "login = ?", "operational.return@example.com").Error; err != nil {
+		t.Fatalf("find operational return Account: %v", err)
+	}
+	var binding AccountPerson
+	if err := database.First(&binding, "account_id = ?", account.ID).Error; err != nil {
+		t.Fatalf("find Account Person binding: %v", err)
+	}
+	if err := database.Model(&appdb.GlobalPerson{}).Where("id = ?", binding.PersonID).Update("operational_active", false).Error; err != nil {
+		t.Fatalf("mark Person operationally inactive: %v", err)
+	}
+
+	_, err := service.RequestSelfReactivation(context.Background(), RequestAccountReactivationRequest{
+		Login: account.Login, Password: "Operational-Return-Password-1",
+	}, "test-agent", "127.0.0.1")
+	if !errors.Is(err, ErrTenantReactivationRequired) {
+		t.Fatalf("operational inactivity must route to Tenant reactivation even while Account active, got %v", err)
+	}
+	var requestCount int64
+	if err := database.Model(&AccountReactivationRequest{}).Where("account_id = ?", account.ID).Count(&requestCount).Error; err != nil {
+		t.Fatalf("count reactivation requests: %v", err)
+	}
+	if requestCount != 0 {
+		t.Fatalf("operational inactivity must not create an Application Administrator request, count=%d", requestCount)
+	}
+}

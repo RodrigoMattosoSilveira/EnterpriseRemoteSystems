@@ -102,7 +102,7 @@ func TestAuthzAdminCannotDeactivateOrRevokeItsOwnOperatingActor(t *testing.T) {
 	adminActorID := createAuthzActor(t, database, "self-admin@example.com", nil, nil)
 	grantAuthzRole(t, database, adminActorID, RoleApplicationAdmin, GlobalTenantScope)
 	app := newAuthzTestApp(database)
-	headers := map[string]string{HeaderActorID: "self-admin@example.com", HeaderTenantID: "default"}
+	headers := map[string]string{HeaderActorID: "self-admin@example.com", HeaderTenantID: GlobalTenantScope}
 
 	deactivateResp := doAuthzRequest(t, app, http.MethodPatch, "/api/v1/authz/actors/"+adminActorID+"/active", map[string]any{"active": false}, headers)
 	if deactivateResp.StatusCode != http.StatusForbidden {
@@ -172,7 +172,7 @@ func TestAuthzAdminCanDeactivateAnotherActor(t *testing.T) {
 	targetID := createAuthzActor(t, database, "operator-to-deactivate@example.com", nil, nil)
 	grantAuthzRole(t, database, targetID, RoleExpenseOperator, "default")
 	app := newAuthzTestApp(database)
-	headers := map[string]string{HeaderActorID: "lifecycle-admin@example.com", HeaderTenantID: "default"}
+	headers := map[string]string{HeaderActorID: "lifecycle-admin@example.com", HeaderTenantID: GlobalTenantScope}
 
 	resp := doAuthzRequest(t, app, http.MethodPatch, "/api/v1/authz/actors/"+targetID+"/active", map[string]any{"active": false}, headers)
 	if resp.StatusCode != http.StatusOK {
@@ -189,7 +189,7 @@ func TestAuthzAdminCanCreateActorGrantRoleAndRevokeGrant(t *testing.T) {
 	adminActorID := createAuthzActor(t, database, "app-admin-tooling@example.com", nil, nil)
 	grantAuthzRole(t, database, adminActorID, RoleApplicationAdmin, GlobalTenantScope)
 	app := newAuthzTestApp(database)
-	headers := map[string]string{HeaderActorID: "app-admin-tooling@example.com", HeaderTenantID: "tenant-a"}
+	headers := map[string]string{HeaderActorID: "app-admin-tooling@example.com", HeaderTenantID: GlobalTenantScope}
 
 	createBody := map[string]any{"actorKey": "expenses-tooling@example.com", "displayName": "Expenses Tooling"}
 	createResp := doAuthzRequest(t, app, http.MethodPost, "/api/v1/authz/actors", createBody, headers)
@@ -267,7 +267,7 @@ func TestAuthzAdminListsRolesPermissionsAndActors(t *testing.T) {
 	adminActorID := createAuthzActor(t, database, "app-admin-list@example.com", nil, nil)
 	grantAuthzRole(t, database, adminActorID, RoleApplicationAdmin, GlobalTenantScope)
 	app := newAuthzTestApp(database)
-	headers := map[string]string{HeaderActorID: "app-admin-list@example.com", HeaderTenantID: "tenant-a"}
+	headers := map[string]string{HeaderActorID: "app-admin-list@example.com", HeaderTenantID: GlobalTenantScope}
 
 	rolesResp := doAuthzRequest(t, app, http.MethodGet, "/api/v1/authz/roles", nil, headers)
 	if rolesResp.StatusCode != http.StatusOK {

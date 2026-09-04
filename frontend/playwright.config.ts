@@ -1,7 +1,7 @@
 import { defineConfig, devices } from "@playwright/test";
-import { join } from "node:path";
-import { fileURLToPath } from "node:url";
 import { resolveE2EAuthMode } from "./tests/e2e/support/runtime";
+import { applicationAdminHeaders, authzHeaders } from "./tests/e2e/support/authz";
+import { tenantAdminStorageStatePath } from "./tests/e2e/support/storage";
 
 declare const process: {
   env: Record<string, string | undefined>;
@@ -21,12 +21,6 @@ const localE2EBackendURL = `http://localhost:${LOCAL_E2E_BACKEND_PORT}`;
 const baseURL = runtimeEnv.PLAYWRIGHT_BASE_URL ?? localE2EFrontendURL;
 const storageOrigin = new URL(baseURL).origin;
 const authMode = resolveE2EAuthMode(baseURL, runtimeEnv.PLAYWRIGHT_AUTH_MODE);
-const authenticatedStorageStatePath = join(
-  fileURLToPath(new URL(".", import.meta.url)),
-  "test-results",
-  ".auth",
-  "admin.json",
-);
 
 const authzActorId = runtimeEnv.PLAYWRIGHT_AUTHZ_ACTOR_ID ?? (authMode === "session" ? "e2e-application-admin" : "bootstrap-admin");
 const authzTenantId = runtimeEnv.PLAYWRIGHT_AUTHZ_TENANT_ID ?? "default";
@@ -54,9 +48,10 @@ export default defineConfig({
     screenshot: "only-on-failure",
     video: "retain-on-failure",
     // Header mode deliberately fixes the actor and tenant for isolated
-    // authorization tests. Session mode must not install a context-wide tenant
-    // header: the application sends the tenant selected in localStorage, and a
-    // fixed Playwright header would override browser tenant switching.
+    // authorization tests. Session mode defaults the shared Playwright context
+    // to the canonical E2E Tenant Administrator; control-plane specs override
+    // these headers explicitly with applicationAdminHeaders(). Browser contexts
+    // created inside a test remain header-free unless the test opts in.
     extraHTTPHeaders:
       authMode === "headers"
         ? {
@@ -66,7 +61,7 @@ export default defineConfig({
         : undefined,
     storageState:
       authMode === "session"
-        ? authenticatedStorageStatePath
+        ? tenantAdminStorageStatePath
         : {
             cookies: [],
             origins: [
@@ -95,14 +90,14 @@ export default defineConfig({
     : [
         {
           command:
-            `cd .. && exec env HTTP_ADDR=:${LOCAL_E2E_BACKEND_PORT} ERS_DATABASE_PATH=data/app-e2e.db ERS_RESET_DATABASE=true ERS_BACKEND_WATCH=false ERS_PROVISION_E2E_ADMIN=true E2E_ADMIN_EMAIL=admin@example.com E2E_ADMIN_PASSWORD='Local-E2E-Administrator-28D!' E2E_ADMIN_ACTOR_KEY=e2e-application-admin APP_ENV=ci AUTHZ_ACTOR_HEADER_MODE=test AUTHZ_BOOTSTRAP_ENABLED=true AUTHZ_BOOTSTRAP_ACTOR_KEY=bootstrap-admin AUTHZ_BOOTSTRAP_DISPLAY_NAME='Bootstrap Admin' AUTHZ_BOOTSTRAP_ROLE_CODE=APPLICATION_ADMIN AUTHZ_BOOTSTRAP_TENANT_ID='*' AUTHZ_BOOTSTRAP_REQUIRE_EMPTY_ACTOR_TABLE=false ./scripts/dev-backend.sh`,
+            `cd .. && exec env HTTP_ADDR=:${LOCAL_E2E_BACKEND_PORT} ERS_DATABASE_PATH=data/app-e2e.db ERS_RESET_DATABASE=true ERS_BACKEND_WATCH=false ERS_SKIP_DOTENV=true ERS_PROVISION_E2E_ADMIN=true E2E_ADMIN_EMAIL=admin@example.com E2E_ADMIN_PASSWORD='Local-E2E-Administrator-28D!' E2E_ADMIN_ACTOR_KEY=e2e-application-admin AUTH_PASSWORD_HASH_COST=4 APP_ENV=ci JWT_SECRET='local-e2e-only-secret' AUTHZ_ACTOR_HEADER_MODE=test AUTHZ_BOOTSTRAP_ENABLED=true AUTHZ_BOOTSTRAP_ACTOR_KEY=bootstrap-admin AUTHZ_BOOTSTRAP_DISPLAY_NAME='Bootstrap Admin' AUTHZ_BOOTSTRAP_ROLE_CODE=APPLICATION_ADMIN AUTHZ_BOOTSTRAP_TENANT_ID='*' AUTHZ_BOOTSTRAP_REQUIRE_EMPTY_ACTOR_TABLE=false ./scripts/dev-backend.sh`,
           url: `${localE2EBackendURL}/healthz`,
           reuseExistingServer: false,
           timeout: 120_000,
         },
         {
           command:
-            `ERS_API_PROXY_TARGET=http://127.0.0.1:${LOCAL_E2E_BACKEND_PORT} ERS_LOCAL_AUTHZ_BOOTSTRAP=false PLAYWRIGHT_AUTHZ_ACTOR_ID=e2e-application-admin PLAYWRIGHT_AUTHZ_TENANT_ID=default npm run dev -- --host 0.0.0.0 --port ${LOCAL_E2E_FRONTEND_PORT}`,
+            `ERS_API_PROXY_TARGET=http://127.0.0.1:${LOCAL_E2E_BACKEND_PORT} ERS_LOCAL_AUTHZ_BOOTSTRAP=false PLAYWRIGHT_AUTHZ_ACTOR_ID=e2e-default-tenant-admin PLAYWRIGHT_AUTHZ_TENANT_ID=default npm run dev -- --host 0.0.0.0 --port ${LOCAL_E2E_FRONTEND_PORT}`,
           url: localE2EFrontendURL,
           reuseExistingServer: false,
           timeout: 120_000,

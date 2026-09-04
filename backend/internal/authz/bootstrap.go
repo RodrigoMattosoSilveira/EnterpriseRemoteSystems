@@ -128,8 +128,9 @@ func EnsureBootstrapActor(ctx context.Context, database *gorm.DB, cfg BootstrapC
 				return fmt.Errorf("create bootstrap authorization role grant: %w", err)
 			}
 			result.GrantCreated = true
-		} else if !grant.Active {
+		} else if !grant.Active || grant.LifecycleSuspended {
 			grant.Active = true
+			grant.LifecycleSuspended = false
 			grant.UpdatedAt = now
 			if err := tx.Save(&grant).Error; err != nil {
 				return fmt.Errorf("reactivate bootstrap authorization role grant: %w", err)

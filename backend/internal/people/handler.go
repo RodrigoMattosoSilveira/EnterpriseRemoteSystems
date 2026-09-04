@@ -95,10 +95,32 @@ func (h *Handler) CreateMembership(c fiber.Ctx) error {
 	}
 	created, err := h.service.CreateMembership(c.Context(), requestTenantID(c), req, actorUserID(c))
 	if err != nil {
+		if errors.Is(err, ErrApplicationSecuritySuspended) {
+			return c.Status(fiber.StatusConflict).JSON(httpx.APIResponse{Error: &httpx.APIError{
+				Code:    "account_security_suspended",
+				Message: "The Authentication Account is security-suspended and requires Application Administrator review",
+			}})
+		}
 		return httpx.WriteError(c, err)
 	}
 	h.recordAudit(c, authz.PermissionPeopleCreate, "people.memberships.create", created.GlobalPersonID, `{"membershipId":"`+created.MembershipID+`"}`)
 	return c.Status(fiber.StatusCreated).JSON(httpx.APIResponse{Data: created})
+}
+
+func (h *Handler) Reactivate(c fiber.Ctx) error {
+	id := c.Params("id")
+	reactivated, err := h.service.Reactivate(c.Context(), requestTenantID(c), id, actorUserID(c))
+	if err != nil {
+		if errors.Is(err, ErrApplicationSecuritySuspended) {
+			return c.Status(fiber.StatusConflict).JSON(httpx.APIResponse{Error: &httpx.APIError{
+				Code:    "account_security_suspended",
+				Message: "The Authentication Account is security-suspended and requires Application Administrator review",
+			}})
+		}
+		return httpx.WriteError(c, err)
+	}
+	h.recordAudit(c, authz.PermissionPeopleUpdate, "people.operational_reactivate", reactivated.GlobalPersonID, `{"membershipId":"`+reactivated.MembershipID+`"}`)
+	return c.JSON(httpx.APIResponse{Data: reactivated})
 }
 
 func (h *Handler) GetByID(c fiber.Ctx) error {
@@ -124,6 +146,12 @@ func (h *Handler) Update(c fiber.Ctx) error {
 
 	updated, err := h.service.Update(c.Context(), requestTenantID(c), id, req, actorUserID(c))
 	if err != nil {
+		if errors.Is(err, ErrTenantReactivationRequired) {
+			return c.Status(fiber.StatusConflict).JSON(httpx.APIResponse{Error: &httpx.APIError{
+				Code:    "tenant_reactivation_required",
+				Message: "Use the Tenant reactivation action to return an operationally inactive Person to ACTIVE",
+			}})
+		}
 		return httpx.WriteError(c, err)
 	}
 	// Updating through a tenant changes the shared global Person fields while

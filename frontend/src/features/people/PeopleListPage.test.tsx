@@ -21,15 +21,6 @@ const tenantAdminActor: AuthzCurrentActor = {
   permissions: ["people.read", "people.create", "people.update"],
 };
 
-const applicationAdminActor: AuthzCurrentActor = {
-  actorKey: "bootstrap-admin",
-  actorRecordId: "actor-application-admin",
-  tenantId: "default",
-  scope: "APPLICATION",
-  roleCodes: ["APPLICATION_ADMIN"],
-  permissions: ["*", "authz.read", "authz.manage", "people.read", "people.create"],
-};
-
 beforeEach(() => {
   window.localStorage.clear();
   vi.useFakeTimers({ shouldAdvanceTime: true });
@@ -70,72 +61,6 @@ describe("PeopleListPage", () => {
     expect(buttonByName("Card view").getAttribute("aria-pressed")).toBe("true");
     expect(selectByLabel("People per page").value).toBe("10");
     expect(textNode("Showing 1-1 of 1 people")).toBeTruthy();
-  });
-
-  it("shows a red pending-reactivation alert for an Application Administrator", async () => {
-    mockApplicationAdminPeopleAndReactivationRequests(2);
-
-    renderPeopleListRoute(applicationAdminActor);
-
-    await waitForText("Account Reactivation Requests");
-    await waitForText("2 pending");
-    await waitForText(
-      "2 authentication accounts are awaiting Application Administrator review.",
-    );
-
-    const alert = container.querySelector(
-      '[aria-label="Pending account reactivation requests"]',
-    );
-    expect(alert).toBeTruthy();
-    expect(alert?.className).toContain("border-red-500");
-    expect(textNode("Approve reactivation")).toBeFalsy();
-
-    const reviewLink = container.querySelector<HTMLAnchorElement>(
-      'a[href="/admin/authentication#account-reactivation-requests"]',
-    );
-    expect(reviewLink?.textContent?.trim()).toBe("Review requests");
-  });
-
-  it("keeps the People workspace usable if the supplemental reactivation response is malformed", async () => {
-    vi.spyOn(globalThis, "fetch").mockImplementation(
-      async (input: RequestInfo | URL) => {
-        const url = typeof input === "string" ? input : input.toString();
-        fetchCalls.push(url);
-
-        if (url === "/api/v1/auth/reactivation-requests") {
-          return jsonResponse({ data: { unexpected: true } });
-        }
-        if (url.startsWith("/api/v1/people")) {
-          return jsonResponse({ data: { items: [], total: 0 } });
-        }
-        if (url === "/api/v1/reference-data/person_status") {
-          return jsonResponse({ data: [] });
-        }
-        throw new Error(`Unhandled request: ${url}`);
-      },
-    );
-
-    renderPeopleListRoute(applicationAdminActor);
-
-    await waitForText("People");
-    expect(inputByLabel("Filter people")).toBeTruthy();
-    expect(
-      container.querySelector('[aria-label="Pending account reactivation requests"]'),
-    ).toBeFalsy();
-  });
-
-  it("does not show a reactivation alert when the Application Administrator has no pending requests", async () => {
-    mockApplicationAdminPeopleAndReactivationRequests(0);
-
-    renderPeopleListRoute(applicationAdminActor);
-
-    await waitFor(() =>
-      fetchCalls.includes("/api/v1/auth/reactivation-requests"),
-    );
-
-    expect(
-      container.querySelector('[aria-label="Pending account reactivation requests"]'),
-    ).toBeFalsy();
   });
 
   it("does not load Application reactivation requests for a Tenant Administrator", async () => {
@@ -395,39 +320,6 @@ function renderPeopleListRoute(actor?: AuthzCurrentActor) {
       </QueryClientProvider>,
     );
   });
-}
-
-function mockApplicationAdminPeopleAndReactivationRequests(pendingCount: number) {
-  vi.spyOn(globalThis, "fetch").mockImplementation(
-    async (input: RequestInfo | URL) => {
-      const url = typeof input === "string" ? input : input.toString();
-      fetchCalls.push(url);
-
-      if (url === "/api/v1/auth/reactivation-requests") {
-        return jsonResponse({
-          data: Array.from({ length: pendingCount }, (_, index) => ({
-            id: `reactivation-request-${index + 1}`,
-            accountId: `account-${index + 1}`,
-            login: `pending-${index + 1}@example.test`,
-            globalPersonName: `Pending Person ${index + 1}`,
-            status: "PENDING",
-            requestedByType: "SELF",
-            firstRequestedAt: "2026-08-17T15:00:00Z",
-            lastRequestedAt: "2026-08-17T15:00:00Z",
-            requestCount: 1,
-          })),
-        });
-      }
-      if (url.startsWith("/api/v1/people")) {
-        return jsonResponse({ data: { items: [], total: 0 } });
-      }
-      if (url === "/api/v1/reference-data/person_status") {
-        return jsonResponse({ data: [] });
-      }
-
-      throw new Error(`Unhandled request: ${url}`);
-    },
-  );
 }
 
 function mockPeopleFetch(response: { items: Person[]; total: number }) {

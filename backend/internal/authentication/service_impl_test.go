@@ -253,8 +253,8 @@ func TestAuthenticationSeparatesAccountAndActorActivation(t *testing.T) {
 	if _, err := service.SetAccountActive(context.Background(), account.ID, false); err != nil {
 		t.Fatalf("deactivate account: %v", err)
 	}
-	if _, err := service.ResolveSession(context.Background(), activeLogin.Token); err != ErrAccountInactive {
-		t.Fatalf("expected account deactivation to invalidate the active session, got %v", err)
+	if _, err := service.ResolveSession(context.Background(), activeLogin.Token); err != ErrAccountSecuritySuspended {
+		t.Fatalf("expected security suspension to invalidate the active session, got %v", err)
 	}
 	if _, err := service.ResetPassword(context.Background(), ResetPasswordRequest{
 		Token: pendingReset.Token, NewPassword: "Unexpected-Password-2",
@@ -264,8 +264,8 @@ func TestAuthenticationSeparatesAccountAndActorActivation(t *testing.T) {
 	if _, err := service.Login(context.Background(), LoginRequest{Login: account.Login, Password: "Wrong-Password-1"}, "", ""); err != ErrInvalidCredentials {
 		t.Fatalf("expected inactive account with wrong password to preserve invalid-credentials response, got %v", err)
 	}
-	if _, err := service.Login(context.Background(), LoginRequest{Login: account.Login, Password: "Operator-Password-1"}, "", ""); err != ErrAccountInactive {
-		t.Fatalf("expected correct password for inactive account to return account-inactive, got %v", err)
+	if _, err := service.Login(context.Background(), LoginRequest{Login: account.Login, Password: "Operator-Password-1"}, "", ""); err != ErrAccountSecuritySuspended {
+		t.Fatalf("expected correct password for security-suspended account to return account-security-suspended, got %v", err)
 	}
 	if _, err := service.SetAccountActive(context.Background(), account.ID, true); err != nil {
 		t.Fatalf("reactivate account: %v", err)

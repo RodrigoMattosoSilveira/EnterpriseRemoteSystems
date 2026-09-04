@@ -139,6 +139,7 @@ type GlobalPerson struct {
 
 	ProfileCompletionStatus string `gorm:"type:text;not null;default:PERSONAL_ONLY;index" json:"profileCompletionStatus"`
 	CanCreateCollaborator   bool   `gorm:"not null;default:false;index" json:"canCreateCollaborator"`
+	OperationalActive       bool   `gorm:"column:operational_active;not null;default:true;index" json:"operationalActive"`
 
 	Memberships []PersonTenantMembership `gorm:"foreignKey:PersonID" json:"memberships,omitempty"`
 }

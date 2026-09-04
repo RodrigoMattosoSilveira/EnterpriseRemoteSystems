@@ -52,13 +52,14 @@ type AuthzRolePermission struct {
 func (AuthzRolePermission) TableName() string { return "authz_role_permissions" }
 
 type AuthzActorRoleGrant struct {
-	ID        string    `gorm:"type:text;primaryKey"`
-	ActorID   string    `gorm:"type:text;not null;uniqueIndex:ux_authz_actor_role_tenant,priority:1;index"`
-	RoleID    string    `gorm:"type:text;not null;uniqueIndex:ux_authz_actor_role_tenant,priority:2;index"`
-	TenantID  string    `gorm:"type:text;not null;default:*;uniqueIndex:ux_authz_actor_role_tenant,priority:3;index"`
-	Active    bool      `gorm:"not null;default:true;index"`
-	CreatedAt time.Time `gorm:"not null"`
-	UpdatedAt time.Time `gorm:"not null"`
+	ID                 string    `gorm:"type:text;primaryKey"`
+	ActorID            string    `gorm:"type:text;not null;uniqueIndex:ux_authz_actor_role_tenant,priority:1;index"`
+	RoleID             string    `gorm:"type:text;not null;uniqueIndex:ux_authz_actor_role_tenant,priority:2;index"`
+	TenantID           string    `gorm:"type:text;not null;default:*;uniqueIndex:ux_authz_actor_role_tenant,priority:3;index"`
+	Active             bool      `gorm:"not null;default:true;index"`
+	LifecycleSuspended bool      `gorm:"column:lifecycle_suspended;not null;default:false;index"`
+	CreatedAt          time.Time `gorm:"not null"`
+	UpdatedAt          time.Time `gorm:"not null"`
 }
 
 func (AuthzActorRoleGrant) TableName() string { return "authz_actor_role_grants" }
