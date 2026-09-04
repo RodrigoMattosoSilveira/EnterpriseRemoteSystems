@@ -291,9 +291,12 @@ export function TenantDetailPage() {
                 >
                   <h3 className="font-semibold text-blue-950">Tenant access verification</h3>
                   <p className="mt-1 text-sm text-blue-900">
-                    Use the exact persisted actor key and immutable Tenant ID shown below. Do not
-                    prepend another <code className="font-mono">collaborator-</code> segment, use
-                    the actor record ID, or substitute the tenant code.
+                    Use the assigned administrator&apos;s Authentication Account credentials and the
+                    immutable Tenant ID shown below. The terminal cannot reuse the browser&apos;s
+                    HTTP-only session cookie, so the command signs in first, stores a temporary
+                    session cookie, verifies Tenant access, and then removes the cookie jar. Do not
+                    add <code className="font-mono">X-Actor-ID</code>; 30I.1 requires
+                    session-backed authorization.
                   </p>
                   <div className="mt-3 space-y-3">
                     {assignedAdmins.map((candidate) => (
@@ -322,9 +325,21 @@ export function TenantDetailPage() {
 
 function tenantAccessCurlCommand(tenantId: string) {
   return [
-    "curl -i \\",
-    "  -b /tmp/ers-session.cookies \\",
+    'printf "Authentication Account login: "',
+    "read -r ERS_LOGIN",
+    'printf "Password for %s: " "$ERS_LOGIN"',
+    "read -rs ERS_PASSWORD",
+    'printf "\n"',
+    "export ERS_LOGIN ERS_PASSWORD",
+    "rm -f /tmp/ers-session.cookies",
+    "curl -fsS -c /tmp/ers-session.cookies \\",
+    '  -H "Content-Type: application/json" \\',
+    `  --data "$(python3 -c 'import json, os; print(json.dumps({"login": os.environ["ERS_LOGIN"], "password": os.environ["ERS_PASSWORD"]}))')" \\`,
+    '  "http://localhost:8080/api/v1/auth/login" >/dev/null &&',
+    "curl -i -b /tmp/ers-session.cookies \\",
     `  -H "X-Tenant-ID: ${tenantId}" \\`,
     `  "http://localhost:8080/api/v1/tenants/${tenantId}"`,
+    "unset ERS_PASSWORD ERS_LOGIN",
+    "rm -f /tmp/ers-session.cookies",
   ].join("\n");
 }

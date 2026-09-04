@@ -114,11 +114,16 @@ describe("TenantDetailPage", () => {
     const verificationCommand = container.querySelector(
       '[aria-label="Tenant access curl command for north-admin@example.com"]',
     );
+    expect(verificationCommand?.textContent).toContain('Authentication Account login:');
+    expect(verificationCommand?.textContent).toContain('read -rs ERS_PASSWORD');
+    expect(verificationCommand?.textContent).toContain('-c /tmp/ers-session.cookies');
+    expect(verificationCommand?.textContent).toContain('/api/v1/auth/login');
     expect(verificationCommand?.textContent).toContain('-b /tmp/ers-session.cookies');
     expect(verificationCommand?.textContent).not.toContain('X-Actor-ID');
     expect(verificationCommand?.textContent).toContain('X-Tenant-ID: north');
     expect(verificationCommand?.textContent).toContain('/api/v1/tenants/north');
     expect(verificationCommand?.textContent).not.toContain('X-Tenant-ID: NORTH');
+    expect(verificationCommand?.textContent).toContain('rm -f /tmp/ers-session.cookies');
 
     await click("Deactivate Tenant");
     await waitForDialogMessage("North Site deactivated.");
