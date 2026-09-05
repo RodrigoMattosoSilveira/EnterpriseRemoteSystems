@@ -16,6 +16,9 @@ export type AuthzCurrentActor = {
   permissions: string[];
   intrinsicPermissions?: string[];
   delegatedPermissions?: string[];
+  supportLeaseId?: string;
+  supportLeaseExpiresAt?: string;
+  supportLeasePermissions?: string[];
 };
 
 export type AuthzPermission = {
