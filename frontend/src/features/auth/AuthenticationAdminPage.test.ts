@@ -10,6 +10,7 @@ import {
   authenticationAccountPersonTarget,
   authenticationActorForCollaborator,
   authenticationActorForPerson,
+  authenticationActorIdentityRows,
   authenticationActorTenantLabel,
   authenticationActorOptionLabel,
   authenticationCollaboratorOptionLabel,
@@ -362,6 +363,23 @@ describe("authentication account actor/account filter", () => {
     expect(authenticationAccountMatchesSearch(personAccount, "tenant-b")).toBe(true);
     expect(authenticationAccountMatchesSearch(personAccount, "Byte 28A")).toBe(true);
     expect(authenticationAccountMatchesSearch(personAccount, "missing")).toBe(false);
+  });
+
+  it("exposes explicit Actor ID and Actor Key labels for manual identity inspection", () => {
+    expect(authenticationActorIdentityRows(personAccount.actors![0])).toEqual([
+      { label: "Actor ID", value: "actor-person-a" },
+      { label: "Actor Key", value: "person-a" },
+    ]);
+
+    expect(
+      authenticationActorIdentityRows({
+        actorId: "global-admin-record",
+        actorKey: "bootstrap-admin",
+      }),
+    ).toEqual([
+      { label: "Actor ID", value: "global-admin-record" },
+      { label: "Actor Key", value: "bootstrap-admin" },
+    ]);
   });
 
   it("opens the primary tenant Person and labels Actors by tenant rather than conflating them with the Account", () => {

@@ -208,6 +208,15 @@ export function authenticationActorTenantLabel(actor: AuthAccountActor): string 
   return tenantName || tenantId || "Tenant";
 }
 
+export function authenticationActorIdentityRows(
+  actor: Pick<AuthAccountActor, "actorId" | "actorKey">,
+): Array<{ label: "Actor ID" | "Actor Key"; value: string }> {
+  return [
+    { label: "Actor ID", value: actor.actorId },
+    { label: "Actor Key", value: actor.actorKey },
+  ];
+}
+
 export function authenticationTenantActorIdsMatchingDisplayName(
   accounts: AuthAccount[],
   tenantOptions: Array<{ id: string; name: string }>,
@@ -580,9 +589,16 @@ export function AuthenticationAdminPage() {
                               <p className="mt-1 text-sm text-slate-700">
                                 {actor.displayName}
                               </p>
-                              <p className="mt-1 break-all text-xs text-slate-500">
-                                Actor: {actor.actorKey}
-                              </p>
+                              <dl className="mt-2 space-y-1 text-xs text-slate-500">
+                                {authenticationActorIdentityRows(actor).map((identity) => (
+                                  <div key={identity.label} className="flex flex-wrap gap-x-1">
+                                    <dt className="font-semibold text-slate-600">
+                                      {identity.label}:
+                                    </dt>
+                                    <dd className="break-all font-mono">{identity.value}</dd>
+                                  </div>
+                                ))}
+                              </dl>
                             </div>
                             <span
                               className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold ${
@@ -606,9 +622,19 @@ export function AuthenticationAdminPage() {
                       <p className="font-semibold text-slate-950">
                         {account.displayName}
                       </p>
-                      <p className="mt-1 break-all text-xs text-slate-500">
-                        Actor: {account.actorKey}
-                      </p>
+                      <dl className="mt-2 space-y-1 text-xs text-slate-500">
+                        {authenticationActorIdentityRows({
+                          actorId: account.actorId,
+                          actorKey: account.actorKey,
+                        }).map((identity) => (
+                          <div key={identity.label} className="flex flex-wrap gap-x-1">
+                            <dt className="font-semibold text-slate-600">
+                              {identity.label}:
+                            </dt>
+                            <dd className="break-all font-mono">{identity.value}</dd>
+                          </div>
+                        ))}
+                      </dl>
                     </div>
                   )}
                 </section>
