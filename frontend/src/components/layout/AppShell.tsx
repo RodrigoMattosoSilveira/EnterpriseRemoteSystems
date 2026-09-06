@@ -227,7 +227,13 @@ export function AppShell() {
   }
 
   return (
-    <AuthorizationProvider value={actorQuery.data}>
+    <AuthorizationProvider
+      value={{
+        ...actorQuery.data,
+        selectedTenantName: selectedTenant.name,
+        selectedTenantCode: selectedTenant.code,
+      }}
+    >
       <div className="min-h-screen bg-slate-50">
         <TopBar
           session={auth.session}

@@ -3,7 +3,10 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { AuthorizationProvider } from "../../components/layout/AuthorizationContext";
+import {
+  AuthorizationProvider,
+  type AuthorizationContextValue,
+} from "../../components/layout/AuthorizationContext";
 import type { AuthzCurrentActor } from "../../types/authz";
 import { PeopleListPage } from "./PeopleListPage";
 import type { Person } from "../../types/people";
@@ -61,6 +64,44 @@ describe("PeopleListPage", () => {
     expect(buttonByName("Card view").getAttribute("aria-pressed")).toBe("true");
     expect(selectByLabel("People per page").value).toBe("10");
     expect(textNode("Showing 1-1 of 1 people")).toBeTruthy();
+  });
+
+
+  it("makes the selected Tenant boundary explicit even when a Person nickname mentions another Tenant", async () => {
+    const confusingPerson = {
+      ...personFixture("person-elisa", "Elisa"),
+      nickname: "30G Tenant B Admin",
+    };
+    mockPeopleFetch({ items: [confusingPerson], total: 1 });
+
+    const supportLeaseActor: AuthorizationContextValue = {
+      actorKey: "bootstrap-admin",
+      actorRecordId: "actor-bootstrap-admin",
+      tenantId: "default",
+      selectedTenantName: "Tenant A Manual Test",
+      selectedTenantCode: "TENANT-A",
+      scope: "APPLICATION",
+      roleCodes: ["APPLICATION_ADMIN"],
+      permissions: ["people.read", "reference_data.read"],
+      supportLeaseId: "lease-tenant-a-people-read",
+      supportLeasePermissions: ["people.read", "reference_data.read"],
+    };
+
+    renderPeopleListRoute(supportLeaseActor);
+    await waitForText("Elisa Pessoa");
+
+    const boundary = container.querySelector('[aria-label="People tenant scope"]');
+    expect(boundary).toBeTruthy();
+    expect(boundary?.textContent).toContain("People tenant boundary");
+    expect(boundary?.textContent).toContain("Tenant A Manual Test");
+    expect(boundary?.textContent).toContain("TENANT-A");
+    expect(boundary?.textContent).toContain("Tenant ID: default");
+    expect(boundary?.textContent).toContain("Tenant Support Access Lease");
+    expect(boundary?.textContent).toContain("lease-tenant-a-people-read");
+    expect(boundary?.textContent).toContain(
+      "nickname may mention another Tenant; that profile text does not change the Tenant boundary of this list",
+    );
+    expect(container.textContent).toContain("30G Tenant B Admin");
   });
 
   it("does not load Application reactivation requests for a Tenant Administrator", async () => {
@@ -289,7 +330,7 @@ describe("PeopleListPage", () => {
 
 // ─── Helpers ───────────────────────────────────────────────────────────────
 
-function renderPeopleListRoute(actor?: AuthzCurrentActor) {
+function renderPeopleListRoute(actor?: AuthorizationContextValue) {
   const queryClient = new QueryClient({
     defaultOptions: {
       queries: { retry: false },
