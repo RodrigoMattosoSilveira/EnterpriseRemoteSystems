@@ -1,5 +1,10 @@
 import { expect, request as playwrightRequest, test, type APIRequestContext, type Page } from "@playwright/test";
-import { applicationAdminHeaders, authzHeaders, e2eApiUrl } from "./support/authz";
+import {
+  applicationAdminHeaders,
+  authzHeaders,
+  e2eApiUrl,
+  newTenantAdminApi,
+} from "./support/authz";
 import { applicationAdminStorageStatePath } from "./support/storage";
 import { isLoopbackURL } from "./support/runtime";
 
@@ -416,21 +421,26 @@ test("authentication administration creates an account for a Person who is not a
   const fullName = `${firstName} ${lastName}`;
   const email = `dirceu-${suffix}@example.com`;
 
-  const personResponse = await request.post(e2eApiUrl("/api/v1/people"), {
-    headers: authzHeaders(),
-    data: {
-      firstName,
-      lastName,
-      nickname: `Dirceu${suffix}`,
-      cpf: validCPF(Number(suffix.slice(-9))),
-      rg: `RG-DIR-${suffix.slice(-8)}`,
-      cellular: validBrazilianCellular(suffix),
-      email,
-      statusId: PERSON_STATUS_ACTIVE_ID,
-      notes: "Authentication target-Tenant E2E candidate without Collaborator journey",
-    },
-  });
-  expect(personResponse.status()).toBe(201);
+  const tenantAdminApi = await newTenantAdminApi(DEFAULT_TENANT_ID);
+  try {
+    const personResponse = await tenantAdminApi.post(e2eApiUrl("/api/v1/people"), {
+      headers: authzHeaders(),
+      data: {
+        firstName,
+        lastName,
+        nickname: `Dirceu${suffix}`,
+        cpf: validCPF(Number(suffix.slice(-9))),
+        rg: `RG-DIR-${suffix.slice(-8)}`,
+        cellular: validBrazilianCellular(suffix),
+        email,
+        statusId: PERSON_STATUS_ACTIVE_ID,
+        notes: "Authentication target-Tenant E2E candidate without Collaborator journey",
+      },
+    });
+    expect(personResponse.status()).toBe(201);
+  } finally {
+    await tenantAdminApi.dispose();
+  }
 
   await page.goto("/admin/authentication");
   await expect(
@@ -945,33 +955,38 @@ type PreparedAuthenticationPersonCandidate = {
 };
 
 async function provisionAuthenticationPersonCandidate(
-  request: APIRequestContext,
+  _request: APIRequestContext,
   keyPrefix: string,
 ): Promise<PreparedAuthenticationPersonCandidate> {
   const suffix = keyPrefix.replace(/\D/g, "").slice(-12) || String(Date.now());
   const nickname = `AuthCandidate${suffix}`;
   const email = `auth-candidate-${suffix}@example.com`;
-  const personResponse = await request.post(e2eApiUrl("/api/v1/people"), {
-    headers: authzHeaders(),
-    data: {
-      firstName: "Authentication",
-      lastName: `Candidate${suffix}`,
-      nickname,
-      cpf: validCPF(Number(suffix.slice(-9))),
-      rg: `RG-AUTH-${suffix.slice(-8)}`,
-      cellular: validBrazilianCellular(suffix),
-      email,
-      statusId: PERSON_STATUS_ACTIVE_ID,
-      notes: "Authentication target-Tenant form E2E candidate",
-    },
-  });
-  expect(personResponse.status()).toBe(201);
-  const personEnvelope = (await personResponse.json()) as {
-    data?: { id?: string };
-  };
-  const personId = personEnvelope.data?.id;
-  expect(personId).toBeTruthy();
-  return { personId: personId!, nickname, email };
+  const tenantAdminApi = await newTenantAdminApi(DEFAULT_TENANT_ID);
+  try {
+    const personResponse = await tenantAdminApi.post(e2eApiUrl("/api/v1/people"), {
+      headers: authzHeaders(),
+      data: {
+        firstName: "Authentication",
+        lastName: `Candidate${suffix}`,
+        nickname,
+        cpf: validCPF(Number(suffix.slice(-9))),
+        rg: `RG-AUTH-${suffix.slice(-8)}`,
+        cellular: validBrazilianCellular(suffix),
+        email,
+        statusId: PERSON_STATUS_ACTIVE_ID,
+        notes: "Authentication target-Tenant form E2E candidate",
+      },
+    });
+    expect(personResponse.status()).toBe(201);
+    const personEnvelope = (await personResponse.json()) as {
+      data?: { id?: string };
+    };
+    const personId = personEnvelope.data?.id;
+    expect(personId).toBeTruthy();
+    return { personId: personId!, nickname, email };
+  } finally {
+    await tenantAdminApi.dispose();
+  }
 }
 
 type PreparedRoleAccount = {
@@ -1002,27 +1017,34 @@ async function provisionRoleAccount(
   const roleDiscriminator = roleCode === "EARNINGS_OPERATOR" ? "1" : "2";
   const identitySuffix = `${numericSuffix.slice(-11)}${roleDiscriminator}`;
 
-  const personResponse = await request.post(e2eApiUrl("/api/v1/people"), {
-    headers: authzHeaders(),
-    data: {
-      firstName: "Authentication",
-      lastName: `Role${identitySuffix}`,
-      nickname: `AuthRole${identitySuffix}`,
-      cpf: validCPF(Number(identitySuffix.slice(-9))),
-      rg: `AR-${identitySuffix.slice(-8)}`,
-      cellular: validBrazilianCellular(identitySuffix),
-      email: login,
-      statusId: PERSON_STATUS_ACTIVE_ID,
-    },
-  });
-  expect(personResponse.status()).toBe(201);
-  const personEnvelope = (await personResponse.json()) as {
-    data?: { id?: string; globalPersonId?: string };
-  };
-  const personId = personEnvelope.data?.id;
-  const globalPersonId = personEnvelope.data?.globalPersonId;
-  expect(personId).toBeTruthy();
-  expect(globalPersonId).toBeTruthy();
+  const tenantAdminApi = await newTenantAdminApi(DEFAULT_TENANT_ID);
+  let personId: string | undefined;
+  let globalPersonId: string | undefined;
+  try {
+    const personResponse = await tenantAdminApi.post(e2eApiUrl("/api/v1/people"), {
+      headers: authzHeaders(),
+      data: {
+        firstName: "Authentication",
+        lastName: `Role${identitySuffix}`,
+        nickname: `AuthRole${identitySuffix}`,
+        cpf: validCPF(Number(identitySuffix.slice(-9))),
+        rg: `AR-${identitySuffix.slice(-8)}`,
+        cellular: validBrazilianCellular(identitySuffix),
+        email: login,
+        statusId: PERSON_STATUS_ACTIVE_ID,
+      },
+    });
+    expect(personResponse.status()).toBe(201);
+    const personEnvelope = (await personResponse.json()) as {
+      data?: { id?: string; globalPersonId?: string };
+    };
+    personId = personEnvelope.data?.id;
+    globalPersonId = personEnvelope.data?.globalPersonId;
+    expect(personId).toBeTruthy();
+    expect(globalPersonId).toBeTruthy();
+  } finally {
+    await tenantAdminApi.dispose();
+  }
 
   // Provision the Authentication Account through the canonical Person + Tenant
   // path. The target Tenant is operation data; the Application Administrator
