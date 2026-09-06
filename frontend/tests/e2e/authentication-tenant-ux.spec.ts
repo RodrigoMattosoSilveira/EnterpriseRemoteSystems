@@ -305,6 +305,35 @@ test("application administrator remains in the global control plane when a Tenan
   expect(denied.error?.code).toBe("tenant_actor_unavailable");
 });
 
+test("authentication administration makes the GLOBAL Application Administrator identity boundary explicit", async ({ page }) => {
+  await page.goto("/admin/authentication");
+  await expect(
+    page.getByRole("heading", { name: "Authentication Accounts", exact: true }),
+  ).toBeVisible();
+
+  await page
+    .getByLabel(
+      "Filter by Person name, nickname, or email, Tenant display name, Actor, or account",
+    )
+    .fill(login);
+
+  const account = page
+    .locator('article[data-testid^="authentication-account-"]')
+    .filter({ hasText: login })
+    .first();
+  await expect(account).toBeVisible();
+
+  const boundary = account.getByRole("region", {
+    name: `Account identity boundary for ${login}`,
+  });
+  await expect(boundary).toBeVisible();
+  await expect(boundary).toContainText("Person binding");
+  await expect(boundary).toContainText("None — no Person linked");
+  await expect(boundary).toContainText("Tenant Actor bindings");
+  await expect(boundary).toContainText("None — no Tenant Actors linked");
+  await expect(boundary).toContainText("Global Actor bindings");
+});
+
 test("authentication account form preserves its target Tenant and Person login across window focus", async ({ page, request }) => {
   const suffix = `${Date.now()}${Math.floor(Math.random() * 100_000)}`;
   const candidate = await provisionAuthenticationPersonCandidate(
