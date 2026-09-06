@@ -1,5 +1,5 @@
 import { expect, test, type APIRequestContext } from "@playwright/test";
-import { authzHeaders, e2eApiUrl } from "./support/authz";
+import { authzHeaders, e2eApiUrl, newTenantAdminApi } from "./support/authz";
 
 const DEFAULT_TENANT_ID = "default";
 const PERSON_STATUS_ACTIVE_ID = "ref-person-status-active";
@@ -130,10 +130,11 @@ test("operational domain records created in default are hidden from another tena
 
   const tenant: CreatedTenant = { id: "e2e-isolation-tenant" };
   const selectedTenantHeaders = authzHeaders(tenant.id);
+  const selectedTenantApi = await newTenantAdminApi(tenant.id);
 
   try {
     await expectPagedListExcludes(
-      request,
+      selectedTenantApi,
       `/api/v1/collaborators?search=${encodeURIComponent(person.nickname)}&page=1&pageSize=100`,
       selectedTenantHeaders,
       collaborator.id,
@@ -142,7 +143,7 @@ test("operational domain records created in default are hidden from another tena
     );
 
     await expectPagedListExcludes(
-      request,
+      selectedTenantApi,
       `/api/v1/expenses?collaboratorId=${encodeURIComponent(collaborator.id)}&page=1&pageSize=100`,
       selectedTenantHeaders,
       expense.id,
@@ -151,7 +152,7 @@ test("operational domain records created in default are hidden from another tena
     );
 
     await expectPagedListExcludes(
-      request,
+      selectedTenantApi,
       `/api/v1/work-periods?dateFrom=${workDate}&dateTo=${workDate}&page=1&pageSize=100`,
       selectedTenantHeaders,
       workPeriod.id,
@@ -160,7 +161,7 @@ test("operational domain records created in default are hidden from another tena
     );
 
     await expectNestedResourceHidden(
-      request,
+      selectedTenantApi,
       `/api/v1/work-periods/${encodeURIComponent(workPeriod.id)}/assignments?page=1&pageSize=100`,
       selectedTenantHeaders,
       assignment.id,
@@ -169,7 +170,7 @@ test("operational domain records created in default are hidden from another tena
     );
 
     await expectNestedResourceHidden(
-      request,
+      selectedTenantApi,
       `/api/v1/work-periods/${encodeURIComponent(
         workPeriod.id,
       )}/gold-production-entries?page=1&pageSize=100`,
@@ -180,7 +181,7 @@ test("operational domain records created in default are hidden from another tena
     );
 
     await expectPagedListExcludes(
-      request,
+      selectedTenantApi,
       `/api/v1/receipts/outstanding?collaborator=${encodeURIComponent(
         person.nickname,
       )}&sourceType=EXPENSE&page=1&pageSize=100`,
@@ -191,42 +192,43 @@ test("operational domain records created in default are hidden from another tena
     );
 
     await expectCrossTenantDetailHidden(
-      request,
+      selectedTenantApi,
       `/api/v1/collaborators/${encodeURIComponent(collaborator.id)}`,
       selectedTenantHeaders,
       "Collaborator detail",
     );
     await expectCrossTenantDetailHidden(
-      request,
+      selectedTenantApi,
       `/api/v1/expenses/${encodeURIComponent(expense.id)}`,
       selectedTenantHeaders,
       "Expense detail",
     );
     await expectCrossTenantDetailHidden(
-      request,
+      selectedTenantApi,
       `/api/v1/work-periods/${encodeURIComponent(workPeriod.id)}`,
       selectedTenantHeaders,
       "Work Period detail",
     );
     await expectCrossTenantDetailHidden(
-      request,
+      selectedTenantApi,
       `/api/v1/work-period-assignments/${encodeURIComponent(assignment.id)}`,
       selectedTenantHeaders,
       "Work Period Assignment detail",
     );
     await expectCrossTenantDetailHidden(
-      request,
+      selectedTenantApi,
       `/api/v1/gold-production-entries/${encodeURIComponent(goldProduction.id)}`,
       selectedTenantHeaders,
       "Gold Production detail",
     );
     await expectCrossTenantDetailHidden(
-      request,
+      selectedTenantApi,
       `/api/v1/collaborators/${encodeURIComponent(collaborator.id)}/current-account`,
       selectedTenantHeaders,
       "Current Account detail",
     );
   } finally {
+    await selectedTenantApi.dispose();
     await bestEffortPatch(
       request,
       `/api/v1/gold-production-entries/${encodeURIComponent(goldProduction.id)}/deactivate`,
