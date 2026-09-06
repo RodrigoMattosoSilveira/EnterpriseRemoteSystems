@@ -83,6 +83,7 @@ func TestProvisionApplicationAdminReconcilesAccountAndRevokesSessions(t *testing
 	}
 	if err := database.Model(&Account{}).Where("id = ?", created.AccountID).Updates(map[string]any{
 		"active":               false,
+		"security_suspended":   true,
 		"must_change_password": true,
 	}).Error; err != nil {
 		t.Fatalf("deactivate account: %v", err)
@@ -108,8 +109,8 @@ func TestProvisionApplicationAdminReconcilesAccountAndRevokesSessions(t *testing
 	}
 
 	account := findProvisionedAccount(t, database, cfg.Login)
-	if !account.Active || account.MustChangePassword {
-		t.Fatalf("expected reconciled active account, got %#v", account)
+	if !account.Active || account.SecuritySuspended || account.MustChangePassword {
+		t.Fatalf("expected reconciled active non-suspended account, got %#v", account)
 	}
 	if bcrypt.CompareHashAndPassword([]byte(account.PasswordHash), []byte(cfg.Password)) != nil {
 		t.Fatal("rotated password does not match")
@@ -259,7 +260,7 @@ func assertApplicationAdministrator(t *testing.T, database *gorm.DB, actorKey st
 	t.Helper()
 	actor, err := authz.NewGORMStore(database).FindActor(context.Background(), authz.ActorLookup{
 		ActorID:  actorKey,
-		TenantID: "default",
+		TenantID: authz.GlobalTenantScope,
 	})
 	if err != nil {
 		t.Fatalf("find provisioned authorization actor: %v", err)

@@ -46,6 +46,28 @@ afterEach(async () => {
 });
 
 describe("TenantDetailPage", () => {
+  it("renders a newly created Tenant when the admin-candidate payload contains no rows", async () => {
+    mockFetch(async (url, init) => {
+      calls.push({ url, method: init?.method ?? "GET", body: parseBody(init?.body) });
+      if (url === "/api/v1/tenants/north" && !init?.method) {
+        return json({ data: tenant });
+      }
+      if (url === "/api/v1/tenants/north/admin-candidates" && !init?.method) {
+        return json({ data: { candidates: [] } });
+      }
+      throw new Error(`Unhandled request: ${url}`);
+    });
+
+    renderPage();
+
+    await waitForText("North Site");
+    await waitForText("No Tenant Administrator is assigned.");
+    expect(container.querySelector("header h1")?.textContent).toBe("Tenant Administration");
+    expect(container.querySelector("header h2")?.textContent).toBe("North Site");
+    expect(container.textContent).toContain("Tenant Code: NORTH");
+    expect(container.textContent).toContain("Select an eligible active actor");
+  });
+
   it("assigns a tenant administrator and deactivates the tenant", async () => {
     let assigned = false;
     let active = true;
@@ -92,11 +114,16 @@ describe("TenantDetailPage", () => {
     const verificationCommand = container.querySelector(
       '[aria-label="Tenant access curl command for north-admin@example.com"]',
     );
+    expect(verificationCommand?.textContent).toContain('Authentication Account login:');
+    expect(verificationCommand?.textContent).toContain('read -rs ERS_PASSWORD');
+    expect(verificationCommand?.textContent).toContain('-c /tmp/ers-session.cookies');
+    expect(verificationCommand?.textContent).toContain('/api/v1/auth/login');
     expect(verificationCommand?.textContent).toContain('-b /tmp/ers-session.cookies');
     expect(verificationCommand?.textContent).not.toContain('X-Actor-ID');
     expect(verificationCommand?.textContent).toContain('X-Tenant-ID: north');
     expect(verificationCommand?.textContent).toContain('/api/v1/tenants/north');
     expect(verificationCommand?.textContent).not.toContain('X-Tenant-ID: NORTH');
+    expect(verificationCommand?.textContent).toContain('rm -f /tmp/ers-session.cookies');
 
     await click("Deactivate Tenant");
     await waitForDialogMessage("North Site deactivated.");

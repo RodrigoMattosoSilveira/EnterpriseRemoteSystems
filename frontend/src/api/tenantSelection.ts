@@ -1,6 +1,8 @@
 import type { AuthzAdminRequestActor } from "../types/authz";
 
 export const SELECTED_TENANT_STORAGE_KEY = "ers.auth.selectedTenantId";
+export const SELECTED_TENANT_ACCOUNT_STORAGE_KEY =
+  "ers.auth.selectedTenantAccountId";
 export const DEFAULT_SELECTED_TENANT_ID = "default";
 
 const LEGACY_REQUEST_ACTOR_STORAGE_KEY = "ers.authzAdmin.requestActor";
@@ -44,6 +46,50 @@ export function setSelectedTenantId(storage: Storage, tenantId: string): string 
     // the tenant selection cannot be persisted.
   }
   return normalized;
+}
+
+export function reconcileSelectedTenantForAccount(
+  storage: Storage,
+  accountId: string,
+): void {
+  const normalizedAccountId = normalizeString(accountId);
+  if (!normalizedAccountId) return;
+
+  try {
+    const selectedTenantOwner = normalizeString(
+      storage.getItem(SELECTED_TENANT_ACCOUNT_STORAGE_KEY),
+    );
+
+    if (selectedTenantOwner !== normalizedAccountId) {
+      storage.removeItem(SELECTED_TENANT_STORAGE_KEY);
+      storage.removeItem(LEGACY_REQUEST_ACTOR_STORAGE_KEY);
+    }
+
+    storage.setItem(SELECTED_TENANT_ACCOUNT_STORAGE_KEY, normalizedAccountId);
+  } catch {
+    // Storage may be unavailable in locked-down browser contexts. Requests then
+    // fail closed through the backend's tenant-selection requirement.
+  }
+}
+
+export function setSelectedTenantForAccount(
+  storage: Storage,
+  tenantId: string,
+  accountId: string,
+): string {
+  const selectedTenantId = setSelectedTenantId(storage, tenantId);
+  const normalizedAccountId = normalizeString(accountId);
+
+  if (!normalizedAccountId) return selectedTenantId;
+
+  try {
+    storage.setItem(SELECTED_TENANT_ACCOUNT_STORAGE_KEY, normalizedAccountId);
+  } catch {
+    // The selected tenant was still returned to the caller. Protected requests
+    // fail closed if browser storage cannot persist the Account ownership.
+  }
+
+  return selectedTenantId;
 }
 
 export function authorizationRequestContext(tenantId: string): AuthzAdminRequestActor {

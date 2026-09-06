@@ -56,17 +56,25 @@ func (r *GORMRepository) FindPersonAuthentication(ctx context.Context, tenantID 
 	if membershipResult.Error != nil {
 		return PersonAuthenticationRecord{}, fmt.Errorf("find Person-Tenant Membership for authentication: %w", membershipResult.Error)
 	}
-	if membershipResult.RowsAffected == 0 || strings.TrimSpace(membership.ID) == "" || !strings.EqualFold(strings.TrimSpace(membership.Code), "ACTIVE") {
+	if membershipResult.RowsAffected == 0 || strings.TrimSpace(membership.ID) == "" {
 		return PersonAuthenticationRecord{}, ErrPersonMembershipRequired
 	}
+	membershipCode := strings.ToUpper(strings.TrimSpace(membership.Code))
 
 	record := PersonAuthenticationRecord{
-		TenantID:       tenantID,
-		LegacyPersonID: person.ID,
-		GlobalPersonID: membership.PersonID,
-		MembershipID:   membership.ID,
-		Login:          normalizeLogin(person.Email),
+		TenantID:             tenantID,
+		LegacyPersonID:       person.ID,
+		GlobalPersonID:       membership.PersonID,
+		MembershipID:         membership.ID,
+		MembershipActive:     membershipCode == "ACTIVE",
+		MembershipStatusCode: membershipCode,
+		Login:                normalizeLogin(person.Email),
 	}
+	var lifecycle struct{ OperationalActive bool }
+	if err := r.database.WithContext(ctx).Table("global_people").Select("operational_active").Where("id = ?", membership.PersonID).Limit(1).Scan(&lifecycle).Error; err != nil {
+		return PersonAuthenticationRecord{}, fmt.Errorf("find global Person operational lifecycle: %w", err)
+	}
+	record.OperationalActive = lifecycle.OperationalActive
 
 	var accountPerson AccountPerson
 	accountResult := r.database.WithContext(ctx).
@@ -80,6 +88,14 @@ func (r *GORMRepository) FindPersonAuthentication(ctx context.Context, tenantID 
 		return record, nil
 	}
 	record.AccountExists = true
+	var account Account
+	if err := r.database.WithContext(ctx).First(&account, "id = ?", accountPerson.AccountID).Error; err != nil {
+		return PersonAuthenticationRecord{}, fmt.Errorf("find Authentication Account for Person lifecycle: %w", err)
+	}
+	record.AccountID = account.ID
+	record.SecuritySuspended = account.SecuritySuspended
+	record.AccountActive = account.Active
+	record.Login = normalizeLogin(account.Login)
 
 	var binding AccountActor
 	bindingResult := r.database.WithContext(ctx).
@@ -97,14 +113,7 @@ func (r *GORMRepository) FindPersonAuthentication(ctx context.Context, tenantID 
 		return record, nil
 	}
 
-	var account Account
-	if err := r.database.WithContext(ctx).First(&account, "id = ?", accountPerson.AccountID).Error; err != nil {
-		return PersonAuthenticationRecord{}, fmt.Errorf("find enabled Authentication Account: %w", err)
-	}
-	record.Login = normalizeLogin(account.Login)
-	record.AccountID = account.ID
 	record.Enabled = true
-	record.AccountActive = account.Active
 	return record, nil
 }
 
@@ -134,6 +143,9 @@ func (r *GORMRepository) CreateOrRefreshReactivationRequest(
 		}
 		if account.Active {
 			return ErrAccountAlreadyActive
+		}
+		if !account.SecuritySuspended {
+			return ErrAccountOperationallyInactive
 		}
 
 		var pending AccountReactivationRequest
@@ -233,9 +245,20 @@ func (r *GORMRepository) ReviewReactivationRequest(
 			}
 
 			status = ReactivationRequestStatusApproved
+			effectiveActive := true
+			type lifecycle struct{ OperationalActive bool }
+			var state lifecycle
+			personResult := tx.Table("auth_account_people ap").Select("gp.operational_active").Joins("JOIN global_people gp ON gp.id = ap.person_id").Where("ap.account_id = ?", request.AccountID).Limit(1).Scan(&state)
+			if personResult.Error != nil {
+				return fmt.Errorf("resolve reviewed Account Person lifecycle: %w", personResult.Error)
+			}
+			if personResult.RowsAffected > 0 && !state.OperationalActive {
+				effectiveActive = false
+			}
 			result := tx.Model(&Account{}).Where("id = ?", request.AccountID).Updates(map[string]any{
-				"active":     true,
-				"updated_at": now,
+				"active":             effectiveActive,
+				"security_suspended": false,
+				"updated_at":         now,
 			})
 			if result.Error != nil {
 				return fmt.Errorf("reactivate Authentication Account: %w", result.Error)

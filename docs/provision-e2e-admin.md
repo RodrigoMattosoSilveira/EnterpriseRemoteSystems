@@ -11,7 +11,8 @@ It replaces the account-provisioning portion of `scripts/ers-b28c-prepare-test-d
 Each run ensures that:
 
 - authorization actor `e2e-application-admin` exists and is active;
-- the actor has an active `APPLICATION_ADMIN` grant at global tenant scope `*`;
+- the actor has an active `APPLICATION_ADMIN` grant at global control-plane scope `*`;
+- `*` identifies the application control plane and does **not** authorize Tenant business-data access;
 - one active authentication account is linked to that actor;
 - the configured login is normalized and unique;
 - the configured password is current;

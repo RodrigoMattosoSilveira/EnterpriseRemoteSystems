@@ -22,14 +22,21 @@ EXPLICIT_AUTHZ_BOOTSTRAP_DISPLAY_NAME="${AUTHZ_BOOTSTRAP_DISPLAY_NAME:-}"
 EXPLICIT_AUTHZ_BOOTSTRAP_ROLE_CODE="${AUTHZ_BOOTSTRAP_ROLE_CODE:-}"
 EXPLICIT_AUTHZ_BOOTSTRAP_TENANT_ID="${AUTHZ_BOOTSTRAP_TENANT_ID:-}"
 EXPLICIT_AUTHZ_BOOTSTRAP_REQUIRE_EMPTY_ACTOR_TABLE="${AUTHZ_BOOTSTRAP_REQUIRE_EMPTY_ACTOR_TABLE:-}"
+SKIP_DOTENV="${ERS_SKIP_DOTENV:-false}"
 
-if [[ ! -f "backend/.env" ]]; then
-  ./scripts/render-env.sh dev backend/.env
+# Normal local development loads backend/.env, rendering it from the developer
+# environment files when necessary. Playwright and CI set ERS_SKIP_DOTENV=true
+# so their isolated backend is fully defined by command-level environment values
+# and does not depend on untracked developer dotenv files.
+if [[ "${SKIP_DOTENV}" != "true" ]]; then
+  if [[ ! -f "backend/.env" ]]; then
+    ./scripts/render-env.sh dev backend/.env
+  fi
+
+  set -a
+  source backend/.env
+  set +a
 fi
-
-set -a
-source backend/.env
-set +a
 
 if [[ -n "${EXPLICIT_HTTP_ADDR}" ]]; then
   export HTTP_ADDR="${EXPLICIT_HTTP_ADDR}"
@@ -142,7 +149,7 @@ echo "ERS_BACKEND_WATCH=${ERS_BACKEND_WATCH:-true}"
 if [[ "${ERS_BACKEND_WATCH:-true}" == "false" ]]; then
   direct_backend_binary="./tmp/backend-direct"
   echo "Building backend without Air..."
-  go build -o "${direct_backend_binary}" ./cmd/api
+  go build -buildvcs=false -o "${direct_backend_binary}" ./cmd/api
   echo "Starting backend without Air..."
   exec "${direct_backend_binary}"
 fi

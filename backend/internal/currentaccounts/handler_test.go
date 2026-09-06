@@ -781,7 +781,7 @@ func TestReceiptBackfillAuthorization(t *testing.T) {
 		t.Fatalf("expected forbidden status %d, got %d", http.StatusForbidden, forbidden.StatusCode)
 	}
 
-	permitted := postReceiptActorJSON(t, server, url, "receipt-backfiller@example.com", map[string]any{
+	permitted := postReceiptActorJSON(t, server, url, "ledger-admin@example.com", map[string]any{
 		"reasonCode": "RECEIPT_BACKFILL",
 		"reasonText": "Backfill historical debit ledger receipts",
 	})
@@ -798,7 +798,7 @@ func TestReceiptBackfillAuthorization(t *testing.T) {
 		} `json:"data"`
 	}
 	decodeJSON(t, permitted, &body)
-	if !body.Data.DryRun || body.Data.RequestedBy != "receipt-backfiller@example.com" {
+	if !body.Data.DryRun || body.Data.RequestedBy != "ledger-admin@example.com" {
 		t.Fatalf("unexpected backfill result: %+v", body.Data)
 	}
 }
@@ -1758,12 +1758,11 @@ func seedCurrentAccountTestActors(t *testing.T, dbPath string) {
 		role     authz.RoleCode
 		tenantID string
 	}{
-		{actorKey: "ledger-admin@example.com", role: authz.RoleApplicationAdmin, tenantID: authz.GlobalTenantScope},
-		{actorKey: "settlement-admin@example.com", role: authz.RoleApplicationAdmin, tenantID: authz.GlobalTenantScope},
+		{actorKey: "ledger-admin@example.com", role: authz.RoleTenantAdmin, tenantID: "default"},
+		{actorKey: "settlement-admin@example.com", role: authz.RoleTenantAdmin, tenantID: "default"},
 		{actorKey: "receipt-viewer@example.com", role: authz.RoleEarningsOperator, tenantID: "default"},
 		{actorKey: "receipt-printer@example.com", role: authz.RoleExpenseOperator, tenantID: "default"},
 		{actorKey: "receipt-returner@example.com", role: authz.RoleExpenseOperator, tenantID: "default"},
-		{actorKey: "receipt-backfiller@example.com", role: authz.RoleTenantAdmin, tenantID: "default"},
 	}
 	for _, testActor := range testActors {
 		if testActor.tenantID == authz.GlobalTenantScope {

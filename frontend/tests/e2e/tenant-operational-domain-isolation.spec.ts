@@ -128,18 +128,7 @@ test("operational domain records created in default are hidden from another tena
   );
   expect(goldProduction.tenantId).toBe(DEFAULT_TENANT_ID);
 
-  const tenant = await postData<CreatedTenant>(
-    request,
-    "/api/v1/tenants",
-    {
-      code: `AUDIT${suffix}`.slice(0, 20).toUpperCase(),
-      name: `Tenant isolation audit ${suffix}`,
-      description: "Created by the operational tenant-isolation E2E test",
-      active: true,
-    },
-    defaultHeaders,
-    "create comparison tenant",
-  );
+  const tenant: CreatedTenant = { id: "e2e-isolation-tenant" };
   const selectedTenantHeaders = authzHeaders(tenant.id);
 
   try {
@@ -261,12 +250,6 @@ test("operational domain records created in default are hidden from another tena
       `/api/v1/price-list-items/${encodeURIComponent(priceListItem.id)}/deactivate`,
       defaultHeaders,
       {},
-    );
-    await bestEffortPatch(
-      request,
-      `/api/v1/tenants/${encodeURIComponent(tenant.id)}/active`,
-      defaultHeaders,
-      { active: false },
     );
   }
 });

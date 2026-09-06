@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from "react";
 
 import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { ApiErrorPanel } from "../../components/ApiErrorPanel";
-import { ReactivationRequestsAlert } from "../auth/ReactivationRequestsAlert";
 import { useOptionalAuthorizationContext } from "../../components/layout/AuthorizationContext";
 import { useReferenceDataByType } from "../reference-data/useReferenceData";
 
@@ -38,11 +37,9 @@ export function PeopleListPage() {
   const actor = useOptionalAuthorizationContext();
   const canManageMemberships =
     actor?.scope === "TENANT" && actor.roleCodes.includes("TENANT_ADMIN");
-  const isApplicationAdministrator =
-    actor?.scope === "APPLICATION" && actor.roleCodes.includes("APPLICATION_ADMIN");
-  // POST /people remains a Bite 28 compatibility path until the dedicated global
-  // administration cutover. Preserve the existing create affordance for actors
-  // that currently hold people.create (including today's Application Admin).
+  // Person creation is a Tenant data-plane capability. Bite 30I.1 removes it
+  // from the GLOBAL Application Administrator while preserving it for Tenant
+  // identities that explicitly hold people.create.
   const canCreatePerson =
     !actor || actor.permissions.includes("*") || actor.permissions.includes("people.create");
   // In the real application, status IDs are tenant-specific reference-data IDs.
@@ -216,7 +213,44 @@ export function PeopleListPage() {
           </div>
         )}
 
-        {isApplicationAdministrator && <ReactivationRequestsAlert />}
+        {actor && actor.tenantId !== "*" && (
+          <section
+            aria-label="People tenant scope"
+            className="rounded-2xl border border-slate-300 bg-white p-5 shadow-sm"
+          >
+            <div className="flex flex-wrap items-start justify-between gap-4">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-wide text-slate-500">
+                  People tenant boundary
+                </p>
+                <h2 className="mt-1 text-lg font-bold text-slate-950">
+                  {actor.selectedTenantName ?? actor.selectedTenantCode ?? actor.tenantId}
+                </h2>
+                <p className="mt-1 text-sm font-semibold text-slate-700">
+                  {actor.selectedTenantCode && actor.selectedTenantCode !== actor.selectedTenantName
+                    ? `${actor.selectedTenantCode} · `
+                    : ""}
+                  Tenant ID: <span className="font-mono">{actor.tenantId}</span>
+                </p>
+              </div>
+              {actor.supportLeaseId && (
+                <span className="rounded-full bg-slate-900 px-3 py-1.5 text-xs font-bold text-white">
+                  Tenant Support Access Lease
+                </span>
+              )}
+            </div>
+            <p className="mt-3 text-sm text-slate-700">
+              The People directory below is loaded in this Tenant context. A Person's name or
+              nickname may mention another Tenant; that profile text does not change the Tenant
+              boundary of this list.
+            </p>
+            {actor.supportLeaseId && (
+              <p className="mt-2 text-xs font-medium text-slate-500">
+                Support Lease ID: <span className="font-mono">{actor.supportLeaseId}</span>
+              </p>
+            )}
+          </section>
+        )}
 
         <section
           aria-label="Search and filter controls"

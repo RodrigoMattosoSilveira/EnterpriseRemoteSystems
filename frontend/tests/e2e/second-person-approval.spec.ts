@@ -2,6 +2,7 @@ import { expect, test, type APIRequestContext, type Page } from "@playwright/tes
 import { uniquePersonSuffix } from "./support/test-data";
 import {
   E2E_ACTOR_ID,
+  applicationAdminHeaders,
   authzHeaders,
   e2eApiUrl,
   seedBrowserAuthz,
@@ -272,7 +273,7 @@ async function createTenantAuthorizedSecondApprover(
   });
 
   const actorResponse = await api.post(e2eApiUrl("/api/v1/authz/actors"), {
-    headers: authzHeaders(),
+    headers: applicationAdminHeaders(),
     data: {
       actorKey: input.actorKey,
       displayName: input.displayName,
@@ -292,7 +293,7 @@ async function createTenantAuthorizedSecondApprover(
   const actor = actorBody.data;
 
   const accountResponse = await api.post(e2eApiUrl("/api/v1/auth/accounts"), {
-    headers: authzHeaders(),
+    headers: applicationAdminHeaders(),
     data: {
       actorId: actor.id,
       login: input.actorKey,
@@ -309,7 +310,7 @@ async function createTenantAuthorizedSecondApprover(
   const grantResponse = await api.post(
     e2eApiUrl(`/api/v1/authz/actors/${encodeURIComponent(actor.id)}/role-grants`),
     {
-      headers: authzHeaders(),
+      headers: applicationAdminHeaders(),
       data: { roleCode: "EARNINGS_OPERATOR", tenantId: "default" },
     },
   );

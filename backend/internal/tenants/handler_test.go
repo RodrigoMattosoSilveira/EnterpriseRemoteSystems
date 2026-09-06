@@ -316,10 +316,10 @@ func TestTenantAdminCanReadOwnTenantButCannotManageTenantCatalog(t *testing.T) {
 }
 
 func TestInactiveTenantBlocksWritesButKeepsReadsAvailable(t *testing.T) {
-	server, _, cleanup := newTestServer(t, false)
+	server, dbPath, cleanup := newTestServer(t, false)
 	defer cleanup()
 
-	adminHeaders := actorHeaders("bootstrap-admin", "default")
+	adminHeaders := actorHeaders("bootstrap-admin", authz.GlobalTenantScope)
 	res := requestJSON(t, server, http.MethodPost, "/api/v1/tenants", map[string]any{"code": "PAUSED", "name": "Paused Site"}, adminHeaders)
 	if res.StatusCode != http.StatusCreated {
 		defer res.Body.Close()
@@ -329,6 +329,18 @@ func TestInactiveTenantBlocksWritesButKeepsReadsAvailable(t *testing.T) {
 	decodeJSON(t, res, &createdBody)
 	res.Body.Close()
 
+	pausedActorKey := "paused-tenant-admin@example.com"
+	pausedActorID := seedTenantBoundActor(t, dbPath, createdBody.Data.ID, pausedActorKey, true)
+	database, err := dbpkg.Open(dbPath)
+	if err != nil {
+		t.Fatalf("open paused tenant database: %v", err)
+	}
+	if err := authz.GrantRole(database, pausedActorID, authz.RoleTenantAdmin, createdBody.Data.ID); err != nil {
+		closeDatabase(t, database)
+		t.Fatalf("grant paused tenant administrator role: %v", err)
+	}
+	closeDatabase(t, database)
+
 	res = requestJSON(t, server, http.MethodPatch, "/api/v1/tenants/"+createdBody.Data.ID+"/active", map[string]any{"active": false}, adminHeaders)
 	if res.StatusCode != http.StatusOK {
 		defer res.Body.Close()
@@ -336,7 +348,7 @@ func TestInactiveTenantBlocksWritesButKeepsReadsAvailable(t *testing.T) {
 	}
 	res.Body.Close()
 
-	pausedHeaders := actorHeaders("bootstrap-admin", createdBody.Data.ID)
+	pausedHeaders := actorHeaders(pausedActorKey, createdBody.Data.ID)
 	res = requestJSON(t, server, http.MethodPost, "/api/v1/people", map[string]any{}, pausedHeaders)
 	defer res.Body.Close()
 	if res.StatusCode != http.StatusLocked {

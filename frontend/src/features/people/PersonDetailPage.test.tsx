@@ -10,12 +10,12 @@ import { PersonDetailPage } from "./PersonDetailPage";
 import type { Person } from "../../types/people";
 
 const authorizationActor: AuthzCurrentActor = {
-  actorKey: "test-admin",
-  actorRecordId: "actor-test-admin",
+  actorKey: "people-operator",
+  actorRecordId: "actor-people-operator",
   tenantId: "default",
-  scope: "APPLICATION",
-  roleCodes: ["APPLICATION_ADMIN"],
-  permissions: ["*"],
+  scope: "TENANT",
+  roleCodes: ["EXPENSE_OPERATOR"],
+  permissions: ["people.read"],
 };
 
 const tenantAdministratorActor: AuthzCurrentActor = {

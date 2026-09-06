@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { authzHeaders, e2eApiUrl } from "./support/authz";
+import { applicationAdminHeaders, authzHeaders, e2eApiUrl } from "./support/authz";
 import { uniquePersonSuffix } from "./support/test-data";
 
 declare const process: { env: Record<string, string | undefined> };
@@ -30,7 +30,7 @@ test("an authenticated Person actor lands in People before operator workspaces",
   expect(personId).toBeTruthy();
 
   const actorResponse = await request.post(e2eApiUrl("/api/v1/authz/actors"), {
-    headers: authzHeaders(),
+    headers: applicationAdminHeaders(),
     data: {
       actorKey: email,
       displayName: `Person Home ${suffix}`,
@@ -47,7 +47,7 @@ test("an authenticated Person actor lands in People before operator workspaces",
     // Bite 30D self-service comes from Account -> tenant Actor -> ACTIVE
     // Membership. This fixture intentionally has no delegated Role Grant.
     const accountResponse = await request.post(e2eApiUrl("/api/v1/auth/accounts"), {
-      headers: authzHeaders(),
+      headers: applicationAdminHeaders(),
       data: {
         actorId,
         login: email,
@@ -98,7 +98,7 @@ test("an authenticated Person actor lands in People before operator workspaces",
     const deactivateResponse = await request.patch(
       e2eApiUrl(`/api/v1/authz/actors/${encodeURIComponent(actorId!)}/active`),
       {
-        headers: authzHeaders(),
+        headers: applicationAdminHeaders(),
         data: { active: false },
       },
     );

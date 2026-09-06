@@ -29,6 +29,20 @@ func authorizationMiddleware(deps Dependencies) fiber.Handler {
 		}
 
 		if session, ok := authentication.SessionFromContext(c); ok {
+			// Isolated E2E runs may deliberately exercise a second persisted Actor
+			// while retaining the browser's authenticated Account session. Honor an
+			// explicit Actor header only in the already-restricted test header mode;
+			// normal runtime session traffic remains authoritative.
+			if strings.EqualFold(strings.TrimSpace(deps.ActorHeaderMode), actorHeaderModeTest) && strings.TrimSpace(c.Get(authz.HeaderActorID)) != "" {
+				actor, err := resolveConfiguredHeaderActor(c, deps)
+				if err != nil {
+					authz.SetRequestActorError(c, authenticationBoundaryError(err))
+					return c.Next()
+				}
+				authz.SetRequestActor(c, actor)
+				return c.Next()
+			}
+
 			actor, err := resolveAuthenticatedActor(c, deps, session)
 			if err != nil {
 				authz.SetRequestActorError(c, authenticationBoundaryError(err))
@@ -232,7 +246,7 @@ func requireApplicationPermission(deps Dependencies, permission authz.Permission
 		if err := authz.RequirePermission(actor, permission); err != nil {
 			return writeAuthorizationError(c, err)
 		}
-		if actor.Scope != authz.ActorScopeApplication {
+		if actor.Scope != authz.ActorScopeApplication || actor.TenantID != authz.GlobalTenantScope || actor.SupportLeaseID != "" {
 			return writeAuthorizationError(c, authz.ErrForbidden)
 		}
 		return c.Next()
@@ -284,7 +298,7 @@ func requireActiveTenantForMutations(deps Dependencies) fiber.Handler {
 		if tenantID == authz.GlobalTenantScope {
 			return c.Status(fiber.StatusForbidden).JSON(httpx.APIResponse{Error: &httpx.APIError{
 				Code:    "tenant_selection_required",
-				Message: "A specific tenant must be selected for this operation",
+				Message: "An authorization context must be selected for this operation",
 			}})
 		}
 		if err := deps.TenantService.RequireActive(c.Context(), tenantID); err != nil {
@@ -356,7 +370,7 @@ func writeAuthorizationError(c fiber.Ctx, err error) error {
 		return c.Status(fiber.StatusUnauthorized).JSON(httpx.APIResponse{Error: &httpx.APIError{Code: "authentication_required", Message: "An authenticated session is required"}})
 	}
 	if errors.Is(err, authz.ErrTenantSelectionRequired) {
-		return c.Status(fiber.StatusForbidden).JSON(httpx.APIResponse{Error: &httpx.APIError{Code: "tenant_selection_required", Message: "A specific tenant must be selected for this operation"}})
+		return c.Status(fiber.StatusForbidden).JSON(httpx.APIResponse{Error: &httpx.APIError{Code: "tenant_selection_required", Message: "An authorization context must be selected for this operation"}})
 	}
 	if errors.Is(err, authz.ErrTenantActorUnavailable) {
 		return c.Status(fiber.StatusForbidden).JSON(httpx.APIResponse{Error: &httpx.APIError{Code: "tenant_actor_unavailable", Message: "The authenticated account has no active actor for the selected tenant"}})

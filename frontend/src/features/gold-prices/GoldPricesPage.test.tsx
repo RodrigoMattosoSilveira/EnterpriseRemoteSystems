@@ -94,7 +94,7 @@ describe("GoldPricesPage", () => {
     expect(createCall?.body).toMatchObject({
       priceDate: "2026-06-22",
       brlPerGram: 525.75,
-      recordedBy: "bootstrap-admin",
+      recordedBy: "tenant-gold-price-admin",
       notes: "Manual admin quote",
     });
   });
@@ -146,12 +146,12 @@ function mockGoldPriceFetch() {
     if (url === "/api/v1/authz/current-actor" && method === "GET") {
       return jsonResponse({
         data: {
-          actorKey: "bootstrap-admin",
-          actorRecordId: "actor-bootstrap-admin",
+          actorKey: "tenant-gold-price-admin",
+          actorRecordId: "actor-tenant-gold-price-admin",
           tenantId: "default",
-          scope: "APPLICATION",
-          roleCodes: ["APPLICATION_ADMIN"],
-          permissions: ["*"],
+          scope: "TENANT",
+          roleCodes: ["TENANT_ADMIN"],
+          permissions: ["gold_prices.manage"],
         },
       });
     }

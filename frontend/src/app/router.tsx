@@ -21,7 +21,7 @@ function PermissionAwareHome() {
   const actor = useAuthorizationContext();
   return <Navigate to={defaultAuthorizedRoute(actor.permissions, actor.scope, { personId: actor.personId, collaboratorId: actor.collaboratorId })} replace />;
 }
-export function ForbiddenPage() { return <StatusPage title="Access forbidden" message="Your current role does not permit this operation in the selected tenant." />; }
+export function ForbiddenPage() { return <StatusPage title="Access forbidden" message="Your current authorization context does not permit this operation." />; }
 function StatusPage({ title, message }: { title: string; message: string }) {
   return <main className="p-6"><section className="mx-auto max-w-xl rounded-2xl border bg-white p-6"><PageTitle>{title}</PageTitle><p className="mt-2 text-slate-600">{message}</p><Link className="mt-4 inline-block underline" to="/">Return to ERS</Link></section></main>;
 }

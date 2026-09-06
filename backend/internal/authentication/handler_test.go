@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"enterpriseremotesystems/backend/internal/authz"
+	appdb "enterpriseremotesystems/backend/internal/db"
 	"github.com/gofiber/fiber/v3"
 )
 
@@ -192,8 +193,8 @@ func TestAuthenticationHandlerInactiveAccountLoginReturnsPreciseCodeForVerifiedC
 	if status, code := requestLogin("Wrong-Password-1"); status != http.StatusUnauthorized || code != "invalid_credentials" {
 		t.Fatalf("expected wrong password to remain invalid_credentials/401, got %s/%d", code, status)
 	}
-	if status, code := requestLogin("Inactive-Login-Password-1"); status != http.StatusUnauthorized || code != "account_inactive" {
-		t.Fatalf("expected verified inactive account to return account_inactive/401, got %s/%d", code, status)
+	if status, code := requestLogin("Inactive-Login-Password-1"); status != http.StatusUnauthorized || code != "account_security_suspended" {
+		t.Fatalf("expected verified security-suspended account to return account_security_suspended/401, got %s/%d", code, status)
 	}
 }
 
@@ -302,6 +303,52 @@ type recordingAuthenticationAuditStore struct {
 func (s *recordingAuthenticationAuditStore) RecordAuthorizationAudit(_ context.Context, entry authz.AuthorizationAuditEntry) error {
 	s.entries = append(s.entries, entry)
 	return nil
+}
+
+func TestAuthenticationHandlerPreservesTargetTenantFromCreateAccountBody(t *testing.T) {
+	database, _, service, _ := authenticationTestService(t)
+	now := time.Now().UTC()
+	status := appdb.ReferenceData{
+		BaseModel: appdb.BaseModel{ID: "handler-target-tenant-status", CreatedAt: now, UpdatedAt: now},
+		TenantID:  appdb.DefaultTenantID,
+		Type:      "person_status",
+		Code:      "ACTIVE",
+		Label:     "Active",
+		Active:    true,
+	}
+	if err := database.Create(&status).Error; err != nil {
+		t.Fatalf("create Person status: %v", err)
+	}
+	person := appdb.Person{
+		BaseModel: appdb.BaseModel{ID: "handler-target-tenant-person", CreatedAt: now, UpdatedAt: now},
+		TenantID:  appdb.DefaultTenantID,
+		FirstName: "Target", LastName: "Tenant", Nickname: "TargetTenant",
+		CPF: "12345678909", RG: "HANDLERTARGET", Cellular: "11912345679",
+		Email: "handler-target-tenant@example.com", Country: "Brasil", StatusID: status.ID,
+	}
+	if err := database.Create(&person).Error; err != nil {
+		t.Fatalf("create Person: %v", err)
+	}
+
+	handler := NewHandler(service, CookieConfig{}, nil, nil)
+	app := fiber.New()
+	app.Post("/accounts", handler.CreateAccount)
+	body, _ := json.Marshal(CreateAccountRequest{
+		TenantID:          appdb.DefaultTenantID,
+		Login:             person.Email,
+		TemporaryPassword: "Target-Tenant-Password-1",
+	})
+	request := httptest.NewRequest(http.MethodPost, "/accounts", bytes.NewReader(body))
+	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set(authz.HeaderTenantID, authz.GlobalTenantScope)
+	response, err := app.Test(request)
+	if err != nil {
+		t.Fatalf("create account request: %v", err)
+	}
+	if response.StatusCode != http.StatusCreated {
+		payload, _ := io.ReadAll(response.Body)
+		t.Fatalf("expected target-Tenant account creation status 201, got %d: %s", response.StatusCode, payload)
+	}
 }
 
 func TestAuthenticationHandlerAuditsAccountCreation(t *testing.T) {

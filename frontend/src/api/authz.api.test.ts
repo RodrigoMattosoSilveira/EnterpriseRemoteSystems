@@ -30,6 +30,33 @@ describe("normalizeAuthzCurrentActor", () => {
       permissions: ["authz.self.read", "people.self.read"],
       intrinsicPermissions: ["authz.self.read", "people.self.read"],
       delegatedPermissions: [],
+      supportLeaseId: undefined,
+      supportLeaseExpiresAt: undefined,
+      supportLeasePermissions: [],
+    });
+  });
+
+  it("preserves Tenant Support Access Lease provenance for lease-aware UI", () => {
+    expect(
+      normalizeAuthzCurrentActor({
+        actorKey: "bootstrap-admin",
+        actorRecordId: "actor-bootstrap-admin",
+        tenantId: "default",
+        scope: "APPLICATION",
+        roleCodes: ["APPLICATION_ADMIN"],
+        permissions: ["people.read", "reference_data.read"],
+        supportLeaseId: "lease-a",
+        supportLeaseExpiresAt: "2026-09-05T18:00:00Z",
+        supportLeasePermissions: ["people.read", "reference_data.read"],
+      }),
+    ).toMatchObject({
+      actorKey: "bootstrap-admin",
+      actorRecordId: "actor-bootstrap-admin",
+      tenantId: "default",
+      scope: "APPLICATION",
+      supportLeaseId: "lease-a",
+      supportLeaseExpiresAt: "2026-09-05T18:00:00Z",
+      supportLeasePermissions: ["people.read", "reference_data.read"],
     });
   });
 

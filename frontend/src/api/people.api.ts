@@ -101,6 +101,12 @@ export function createPersonMembership(input: CreatePersonMembershipInput): Prom
   });
 }
 
+export function reactivatePerson(personId: string): Promise<Person> {
+  return apiFetch<Person>(`/people/${encodeURIComponent(personId)}/reactivate`, {
+    method: "POST",
+  });
+}
+
 export function getPersonAuthenticationStatus(personId: string): Promise<PersonAuthenticationStatus> {
   return apiFetch<PersonAuthenticationStatus>(`/people/${encodeURIComponent(personId)}/authentication`, { cache: "no-store" });
 }

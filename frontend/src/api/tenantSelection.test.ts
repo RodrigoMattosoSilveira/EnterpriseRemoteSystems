@@ -1,10 +1,13 @@
 import { afterEach, describe, expect, it } from "vitest";
 import {
   DEFAULT_SELECTED_TENANT_ID,
+  SELECTED_TENANT_ACCOUNT_STORAGE_KEY,
   SELECTED_TENANT_STORAGE_KEY,
   authorizationRequestContext,
   ensureSelectedTenantStored,
   readSelectedTenantId,
+  reconcileSelectedTenantForAccount,
+  setSelectedTenantForAccount,
   setSelectedTenantId,
 } from "./tenantSelection";
 
@@ -61,6 +64,42 @@ describe("tenant selection", () => {
     expect(readSelectedTenantId(window.localStorage)).toBe(
       DEFAULT_SELECTED_TENANT_ID,
     );
+  });
+
+  it("drops a persisted tenant when a different Authentication Account signs in", () => {
+    setSelectedTenantForAccount(window.localStorage, "tenant-a", "account-a");
+
+    reconcileSelectedTenantForAccount(window.localStorage, "account-b");
+
+    expect(window.localStorage.getItem(SELECTED_TENANT_STORAGE_KEY)).toBeNull();
+    expect(
+      window.localStorage.getItem(SELECTED_TENANT_ACCOUNT_STORAGE_KEY),
+    ).toBe("account-b");
+  });
+
+  it("preserves a persisted tenant when the same Authentication Account signs in again", () => {
+    setSelectedTenantForAccount(window.localStorage, "tenant-a", "account-a");
+
+    reconcileSelectedTenantForAccount(window.localStorage, "account-a");
+
+    expect(readSelectedTenantId(window.localStorage)).toBe("tenant-a");
+    expect(
+      window.localStorage.getItem(SELECTED_TENANT_ACCOUNT_STORAGE_KEY),
+    ).toBe("account-a");
+  });
+
+  it("discards an unowned legacy tenant selection at the first authenticated Account boundary", () => {
+    window.localStorage.setItem(
+      SELECTED_TENANT_STORAGE_KEY,
+      "manual30g-tenant-a",
+    );
+
+    reconcileSelectedTenantForAccount(window.localStorage, "account-b");
+
+    expect(window.localStorage.getItem(SELECTED_TENANT_STORAGE_KEY)).toBeNull();
+    expect(
+      window.localStorage.getItem(SELECTED_TENANT_ACCOUNT_STORAGE_KEY),
+    ).toBe("account-b");
   });
 
   it("builds a tenant-only authorization request context", () => {
