@@ -50,7 +50,7 @@ The rehearsal uses the known baseline:
 /opt/EnterpriseRemoteSystems/test/rehearsal-baselines/pre-bite30h.db
 ```
 
-If a previously captured baseline exists, it is reused and never overwritten. If no baseline was captured before Bite 30H reached Test, deployment creates a deterministic pre-30H baseline from the repository migrations through `000061`. That generated baseline contains the upper valid Bite 30H boundary—two active Tenant Administrators in one Tenant, held by two distinct global Persons—and is probed with `000062` before it is accepted. The local migration suite continues to exercise all deliberate legacy rejection cases.
+If a previously captured baseline exists, it is reused and never overwritten. If no baseline was captured before Bite 30H reached Test, deployment creates a deterministic pre-30H baseline from the repository migrations through `000061`. That generated baseline contains the upper valid Bite 30H boundary—two active Tenant Administrators in one Tenant, held by two distinct global Persons—and is probed with `000062` before it is accepted. One of those two valid slots is deliberately the deterministic `e2e-default-tenant-admin` / `tenant-admin@example.com` identity used by deployed Playwright. After the historical migration succeeds, E2E provisioning therefore reconciles that existing slot and password instead of attempting to create a prohibited third Tenant Administrator. The other slot remains a release-rehearsal-only Person so the two-Person upper boundary is still exercised. The local migration suite continues to exercise all deliberate legacy rejection cases.
 
 For Bite 30H that baseline must contain migrations through:
 

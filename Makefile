@@ -436,25 +436,33 @@ server-test-rehearsal-ensure-baseline:
 		baseline_dir="$$(dirname "$$baseline")"; \
 		baseline_name="$$(basename "$$baseline")"; \
 		baseline_dir="$$(cd "$$baseline_dir" && pwd)"; \
-		synthetic_count="$$(cd $(ENV_DIR) && $(SERVER_COMPOSE) run --rm --no-deps \
+		legacy_synthetic_count="$$(cd $(ENV_DIR) && $(SERVER_COMPOSE) run --rm --no-deps \
 			-v "$$baseline_dir:/rehearsal-baseline:ro" \
 			--entrypoint sqlite3 backend \
 			"/rehearsal-baseline/$$baseline_name" \
 			"SELECT COUNT(*) FROM auth_user_accounts WHERE id IN ('test-rehearsal-account-a','test-rehearsal-account-b');")"; \
-		if [[ "$$synthetic_count" == "2" ]]; then \
+		current_synthetic_count="$$(cd $(ENV_DIR) && $(SERVER_COMPOSE) run --rm --no-deps \
+			-v "$$baseline_dir:/rehearsal-baseline:ro" \
+			--entrypoint sqlite3 backend \
+			"/rehearsal-baseline/$$baseline_name" \
+			"SELECT COUNT(*) FROM auth_user_accounts WHERE id IN ('e2e-default-tenant-admin-account','test-rehearsal-account-b');")"; \
+		if [[ "$$legacy_synthetic_count" == "2" ]]; then \
+			echo "Existing deterministic Test release baseline predates E2E Tenant Administrator cardinality compatibility; regenerating it."; \
+			rm -f "$$baseline"; \
+		elif [[ "$$current_synthetic_count" == "2" ]]; then \
 			alignment_count="$$(cd $(ENV_DIR) && $(SERVER_COMPOSE) run --rm --no-deps \
 				-v "$$baseline_dir:/rehearsal-baseline:ro" \
 				--entrypoint sqlite3 backend \
 				"/rehearsal-baseline/$$baseline_name" \
-				"SELECT COUNT(*) FROM auth_user_accounts a JOIN authz_actors az ON az.id=a.actor_id JOIN person_tenant_memberships m ON m.legacy_person_id=az.person_id JOIN auth_account_people ap ON ap.account_id=a.id AND ap.person_id=m.person_id JOIN auth_account_actors aa ON aa.account_id=a.id AND aa.actor_id=az.id AND aa.scope_type='TENANT' AND aa.tenant_id=m.tenant_id AND aa.membership_id=m.id WHERE a.id IN ('test-rehearsal-account-a','test-rehearsal-account-b');")"; \
-		if [[ "$$alignment_count" != "2" ]]; then \
-			echo "Existing deterministic Test release baseline has stale pre-30H Account/Actor identity shape; regenerating it."; \
-			rm -f "$$baseline"; \
-		else \
-			echo "Using existing validated deterministic Test release baseline: $$baseline"; \
-			sha256sum "$$baseline"; \
-			exit 0; \
-		fi; \
+				"SELECT COUNT(*) FROM auth_user_accounts a JOIN authz_actors az ON az.id=a.actor_id JOIN person_tenant_memberships m ON m.legacy_person_id=az.person_id JOIN auth_account_people ap ON ap.account_id=a.id AND ap.person_id=m.person_id JOIN auth_account_actors aa ON aa.account_id=a.id AND aa.actor_id=az.id AND aa.scope_type='TENANT' AND aa.tenant_id=m.tenant_id AND aa.membership_id=m.id WHERE a.id IN ('e2e-default-tenant-admin-account','test-rehearsal-account-b');")"; \
+			if [[ "$$alignment_count" != "2" ]]; then \
+				echo "Existing deterministic Test release baseline has stale pre-30H Account/Actor identity shape; regenerating it."; \
+				rm -f "$$baseline"; \
+			else \
+				echo "Using existing validated deterministic Test release baseline: $$baseline"; \
+				sha256sum "$$baseline"; \
+				exit 0; \
+			fi; \
 		else \
 			echo "Using existing captured Test release baseline: $$baseline"; \
 			sha256sum "$$baseline"; \
