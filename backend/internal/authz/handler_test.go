@@ -2,10 +2,12 @@ package authz
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/gofiber/fiber/v3"
 	"gorm.io/gorm"
@@ -102,7 +104,7 @@ func TestAuthzAdminCannotDeactivateOrRevokeItsOwnOperatingActor(t *testing.T) {
 	adminActorID := createAuthzActor(t, database, "self-admin@example.com", nil, nil)
 	grantAuthzRole(t, database, adminActorID, RoleApplicationAdmin, GlobalTenantScope)
 	app := newAuthzTestApp(database)
-	headers := map[string]string{HeaderActorID: "self-admin@example.com", HeaderTenantID: "default"}
+	headers := map[string]string{HeaderActorID: "self-admin@example.com", HeaderTenantID: GlobalTenantScope}
 
 	deactivateResp := doAuthzRequest(t, app, http.MethodPatch, "/api/v1/authz/actors/"+adminActorID+"/active", map[string]any{"active": false}, headers)
 	if deactivateResp.StatusCode != http.StatusForbidden {
@@ -172,7 +174,7 @@ func TestAuthzAdminCanDeactivateAnotherActor(t *testing.T) {
 	targetID := createAuthzActor(t, database, "operator-to-deactivate@example.com", nil, nil)
 	grantAuthzRole(t, database, targetID, RoleExpenseOperator, "default")
 	app := newAuthzTestApp(database)
-	headers := map[string]string{HeaderActorID: "lifecycle-admin@example.com", HeaderTenantID: "default"}
+	headers := map[string]string{HeaderActorID: "lifecycle-admin@example.com", HeaderTenantID: GlobalTenantScope}
 
 	resp := doAuthzRequest(t, app, http.MethodPatch, "/api/v1/authz/actors/"+targetID+"/active", map[string]any{"active": false}, headers)
 	if resp.StatusCode != http.StatusOK {
@@ -189,7 +191,7 @@ func TestAuthzAdminCanCreateActorGrantRoleAndRevokeGrant(t *testing.T) {
 	adminActorID := createAuthzActor(t, database, "app-admin-tooling@example.com", nil, nil)
 	grantAuthzRole(t, database, adminActorID, RoleApplicationAdmin, GlobalTenantScope)
 	app := newAuthzTestApp(database)
-	headers := map[string]string{HeaderActorID: "app-admin-tooling@example.com", HeaderTenantID: "tenant-a"}
+	headers := map[string]string{HeaderActorID: "app-admin-tooling@example.com", HeaderTenantID: GlobalTenantScope}
 
 	createBody := map[string]any{"actorKey": "expenses-tooling@example.com", "displayName": "Expenses Tooling"}
 	createResp := doAuthzRequest(t, app, http.MethodPost, "/api/v1/authz/actors", createBody, headers)
@@ -267,7 +269,7 @@ func TestAuthzAdminListsRolesPermissionsAndActors(t *testing.T) {
 	adminActorID := createAuthzActor(t, database, "app-admin-list@example.com", nil, nil)
 	grantAuthzRole(t, database, adminActorID, RoleApplicationAdmin, GlobalTenantScope)
 	app := newAuthzTestApp(database)
-	headers := map[string]string{HeaderActorID: "app-admin-list@example.com", HeaderTenantID: "tenant-a"}
+	headers := map[string]string{HeaderActorID: "app-admin-list@example.com", HeaderTenantID: GlobalTenantScope}
 
 	rolesResp := doAuthzRequest(t, app, http.MethodGet, "/api/v1/authz/roles", nil, headers)
 	if rolesResp.StatusCode != http.StatusOK {
@@ -311,6 +313,65 @@ func TestAuthzAdminListsRolesPermissionsAndActors(t *testing.T) {
 	}
 }
 
+func TestTenantSupportAccessLeaseHTTPLifecycleAndCurrentActorProvenance(t *testing.T) {
+	database := newAuthzTestDB(t)
+	installSupportAccessLeaseFixtureTables(t, database)
+	seedSupportAccessLeaseTenant(t, database, "tenant-a", "Tenant A")
+	seedSupportApplicationAdministrator(t, database, "lease-http-app@example.test", "account-lease-http-app")
+	seedSupportTenantAdministrator(t, database, "tenant-a", "lease-http-admin@example.test", "account-lease-http-admin", "person-lease-http-admin")
+	app := newAuthzTestApp(database)
+
+	requestResp := doAuthzRequest(t, app, http.MethodPost, "/api/v1/authz/support-access-leases", map[string]any{
+		"tenantId":    "tenant-a",
+		"expiresAt":   time.Now().UTC().Add(time.Hour).Format(time.RFC3339),
+		"reason":      "HTTP support workflow",
+		"permissions": []string{string(PermissionPeopleRead)},
+	}, map[string]string{HeaderActorID: "lease-http-app@example.test", HeaderTenantID: GlobalTenantScope})
+	if requestResp.StatusCode != http.StatusCreated {
+		t.Fatalf("expected support lease request status 201, got %d", requestResp.StatusCode)
+	}
+	lease := decodeData[SupportAccessLeaseResponse](t, requestResp)
+	if lease.Status != SupportAccessLeaseStatusPending || lease.ID == "" {
+		t.Fatalf("unexpected requested support lease: %#v", lease)
+	}
+
+	approveResp := doAuthzRequest(t, app, http.MethodPost, "/api/v1/authz/support-access-leases/"+lease.ID+"/approve", nil, map[string]string{
+		HeaderActorID: "lease-http-admin@example.test", HeaderTenantID: "tenant-a",
+	})
+	if approveResp.StatusCode != http.StatusOK {
+		t.Fatalf("expected support lease approval status 200, got %d", approveResp.StatusCode)
+	}
+
+	currentResp := doAuthzRequest(t, app, http.MethodGet, "/api/v1/authz/current-actor", nil, map[string]string{
+		HeaderActorID: "lease-http-app@example.test", HeaderTenantID: "tenant-a",
+	})
+	if currentResp.StatusCode != http.StatusOK {
+		t.Fatalf("expected leased current actor status 200, got %d", currentResp.StatusCode)
+	}
+	current := decodeData[CurrentActorResponse](t, currentResp)
+	if current.Scope != string(ActorScopeApplication) || current.TenantID != "tenant-a" || current.SupportLeaseID != lease.ID {
+		t.Fatalf("unexpected leased current Actor provenance: %#v", current)
+	}
+	if !containsString(current.SupportLeasePermissions, string(PermissionPeopleRead)) {
+		t.Fatalf("expected support lease permission provenance: %#v", current.SupportLeasePermissions)
+	}
+
+	terminateResp := doAuthzRequest(t, app, http.MethodPost, "/api/v1/authz/support-access-leases/"+lease.ID+"/terminate", map[string]any{"reason": "complete"}, map[string]string{
+		HeaderActorID: "lease-http-admin@example.test", HeaderTenantID: "tenant-a",
+	})
+	if terminateResp.StatusCode != http.StatusOK {
+		t.Fatalf("expected support lease termination status 200, got %d", terminateResp.StatusCode)
+	}
+
+	logs, err := NewGORMStore(database).ListAuthorizationAuditLogs(context.Background(), AuditLogFilter{TargetType: "tenant_support_access_lease", TargetID: lease.ID})
+	if err != nil {
+		t.Fatalf("list support lease audit logs: %v", err)
+	}
+	if len(logs) != 3 {
+		t.Fatalf("expected request/approve/terminate audit logs, got %#v", logs)
+	}
+}
+
 func newAuthzTestApp(database *gorm.DB) *fiber.App {
 	store := NewGORMStore(database)
 	app := fiber.New()
@@ -326,6 +387,10 @@ func newAuthzTestApp(database *gorm.DB) *fiber.App {
 	authzGroup.Patch("/tenant-role-actors/:id/active", h.SetTenantActorActive)
 	authzGroup.Post("/tenant-role-actors/:id/role-grants", h.GrantTenantOperatorRole)
 	authzGroup.Delete("/tenant-role-actors/:id/role-grants/:grantId", h.RevokeTenantOperatorRoleGrant)
+	authzGroup.Get("/support-access-leases", h.ListSupportAccessLeases)
+	authzGroup.Post("/support-access-leases", h.RequestSupportAccessLease)
+	authzGroup.Post("/support-access-leases/:id/approve", h.ApproveSupportAccessLease)
+	authzGroup.Post("/support-access-leases/:id/terminate", h.TerminateSupportAccessLease)
 	authzGroup.Get("/audit-logs", h.ListAuditLogs)
 	authzGroup.Post("/actors", h.CreateActor)
 	authzGroup.Patch("/actors/:id/active", h.SetActorActive)

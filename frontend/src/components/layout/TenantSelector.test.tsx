@@ -9,9 +9,9 @@ let container: HTMLDivElement;
 let root: Root;
 
 const tenants: AuthTenantOption[] = [
-  { id: "default", code: "DEFAULT", name: "Default Tenant", roleCodes: ["APPLICATION_ADMIN"] },
-  { id: "tenant-alpha", code: "ALPHA", name: "Alpha Operations", roleCodes: ["APPLICATION_ADMIN"] },
-  { id: "tenant-beta", code: "BETA", name: "Beta Cooperative", roleCodes: ["APPLICATION_ADMIN"] },
+  { id: "default", code: "DEFAULT", name: "Default Tenant", roleCodes: ["TENANT_ADMIN"] },
+  { id: "tenant-alpha", code: "ALPHA", name: "Alpha Operations", roleCodes: ["TENANT_ADMIN"] },
+  { id: "tenant-beta", code: "BETA", name: "Beta Cooperative", roleCodes: ["TENANT_ADMIN"] },
 ];
 
 beforeEach(() => {
@@ -57,6 +57,45 @@ describe("TenantSelector", () => {
 
     expect(onTenantChange).toHaveBeenCalledWith("tenant-alpha");
   });
+
+  it("labels the GLOBAL option as an administration context instead of a tenant", async () => {
+    const onTenantChange = vi.fn();
+
+    act(() => {
+      root.render(
+        <TenantSelector
+          tenants={[
+            {
+              id: "*",
+              code: "GLOBAL",
+              name: "Global administration",
+              roleCodes: ["APPLICATION_ADMIN"],
+              actorRecordId: "global-admin-actor",
+              actorKey: "global-admin",
+              actorScope: "APPLICATION",
+            },
+          ]}
+          selectedTenantId="*"
+          onTenantChange={onTenantChange}
+        />,
+      );
+    });
+
+    expect(container.textContent).toContain("Administration context");
+    expect(container.textContent).toContain("Global administration");
+    expect(container.textContent).toContain("GLOBAL");
+
+    const button = container.querySelector<HTMLButtonElement>(
+      'button[aria-label="Current administration context"]',
+    );
+    if (!button) throw new Error("Current administration context button not found");
+    await click(button);
+
+    expect(container.querySelector('section[aria-label="Administration context selection"]')).toBeTruthy();
+    expect(container.querySelector('input[aria-label="Filter contexts"]')).toBeTruthy();
+    expect(container.textContent).toContain("1 of 1 contexts");
+  });
+
 });
 
 function renderSelector(onTenantChange: (tenantId: string) => void) {

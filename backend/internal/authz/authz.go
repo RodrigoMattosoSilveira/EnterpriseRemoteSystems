@@ -36,6 +36,11 @@ const (
 	PermissionAuthzTenantActorsManage     Permission = "authz.tenant_actors.manage"
 	PermissionAuthzTenantRoleGrantsManage Permission = "authz.tenant_role_grants.manage"
 
+	PermissionSupportAccessLeasesRead      Permission = "support_access_leases.read"
+	PermissionSupportAccessLeasesRequest   Permission = "support_access_leases.request"
+	PermissionSupportAccessLeasesApprove   Permission = "support_access_leases.approve"
+	PermissionSupportAccessLeasesTerminate Permission = "support_access_leases.terminate"
+
 	PermissionTenantsRead   Permission = "tenants.read"
 	PermissionTenantsCreate Permission = "tenants.create"
 	PermissionTenantsUpdate Permission = "tenants.update"
@@ -125,18 +130,21 @@ type Actor struct {
 	ID string
 	// RecordID is the persisted authz_actors primary key when the actor was loaded
 	// from the authorization store.
-	RecordID             string
-	TenantID             string
-	PersonID             string
-	CollaboratorID       string
-	Source               ActorSource
-	Scope                ActorScope
-	RoleCodes            []string
-	Permissions          map[Permission]struct{}
-	IntrinsicPermissions map[Permission]struct{}
-	DelegatedPermissions map[Permission]struct{}
-	MembershipID         string
-	GlobalPersonID       string
+	RecordID                string
+	TenantID                string
+	PersonID                string
+	CollaboratorID          string
+	Source                  ActorSource
+	Scope                   ActorScope
+	RoleCodes               []string
+	Permissions             map[Permission]struct{}
+	IntrinsicPermissions    map[Permission]struct{}
+	DelegatedPermissions    map[Permission]struct{}
+	MembershipID            string
+	GlobalPersonID          string
+	SupportLeaseID          string
+	SupportLeaseExpiresAt   string
+	SupportLeasePermissions map[Permission]struct{}
 }
 
 var (
@@ -258,12 +266,14 @@ func RequireTenantScope(actor *Actor, tenantID string) error {
 	if strings.TrimSpace(tenantID) == "" {
 		return ErrForbidden
 	}
-	// Bite 30D separates intrinsic and delegated authority, but final removal
-	// of Application Administrator standing tenant-data compatibility belongs
-	// to the dedicated global control-plane cutover. Preserve that transitional scope bypass until then; 30D no
-	// longer folds global Role Grants into a tenant Actor identity.
+	// A GLOBAL/Application Actor normally remains control-plane only. Bite 30I.2
+	// permits Tenant scope only when the effective request Actor carries an
+	// active Tenant Support Access Lease resolved for this exact Tenant.
 	if actor.Scope == ActorScopeApplication {
-		return nil
+		if strings.TrimSpace(actor.SupportLeaseID) != "" && strings.TrimSpace(actor.TenantID) == strings.TrimSpace(tenantID) {
+			return nil
+		}
+		return ErrForbidden
 	}
 	if strings.TrimSpace(actor.TenantID) == strings.TrimSpace(tenantID) {
 		return nil

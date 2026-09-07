@@ -2,8 +2,10 @@ import { expect, test, type APIRequestContext, type Page } from "@playwright/tes
 import { uniquePersonSuffix } from "./support/test-data";
 import {
   E2E_ACTOR_ID,
+  applicationAdminHeaders,
   authzHeaders,
   e2eApiUrl,
+  newApplicationAdminApi,
   seedBrowserAuthz,
 } from "./support/authz";
 
@@ -271,55 +273,66 @@ async function createTenantAuthorizedSecondApprover(
     nickname: `SecondApprover${identitySuffix}`,
   });
 
-  const actorResponse = await api.post(e2eApiUrl("/api/v1/authz/actors"), {
-    headers: authzHeaders(),
-    data: {
-      actorKey: input.actorKey,
-      displayName: input.displayName,
-      personId: person.id,
-      active: true,
-    },
-  });
-  if (!actorResponse.ok()) {
-    throw new Error(
-      `Create second-approver actor failed at ${actorResponse.url()}: ${actorResponse.status()} ${await actorResponse.text()}`,
+  const applicationAdminApi = await newApplicationAdminApi();
+  try {
+    const actorResponse = await applicationAdminApi.post(
+      e2eApiUrl("/api/v1/authz/actors"),
+      {
+        headers: applicationAdminHeaders(),
+        data: {
+          actorKey: input.actorKey,
+          displayName: input.displayName,
+          personId: person.id,
+          active: true,
+        },
+      },
     );
-  }
-  const actorBody = (await actorResponse.json()) as ApiEnvelope<AuthzActor>;
-  if (!actorBody.data) {
-    throw new Error("Create second-approver actor response did not include data");
-  }
-  const actor = actorBody.data;
+    if (!actorResponse.ok()) {
+      throw new Error(
+        `Create second-approver actor failed at ${actorResponse.url()}: ${actorResponse.status()} ${await actorResponse.text()}`,
+      );
+    }
+    const actorBody = (await actorResponse.json()) as ApiEnvelope<AuthzActor>;
+    if (!actorBody.data) {
+      throw new Error("Create second-approver actor response did not include data");
+    }
+    const actor = actorBody.data;
 
-  const accountResponse = await api.post(e2eApiUrl("/api/v1/auth/accounts"), {
-    headers: authzHeaders(),
-    data: {
-      actorId: actor.id,
-      login: input.actorKey,
-      temporaryPassword: `Second-Approver-${identitySuffix}-Password!`,
-      mustChangePassword: false,
-    },
-  });
-  if (accountResponse.status() !== 201) {
-    throw new Error(
-      `Create second-approver account failed at ${accountResponse.url()}: ${accountResponse.status()} ${await accountResponse.text()}`,
+    const accountResponse = await applicationAdminApi.post(
+      e2eApiUrl("/api/v1/auth/accounts"),
+      {
+        headers: applicationAdminHeaders(),
+        data: {
+          actorId: actor.id,
+          login: input.actorKey,
+          temporaryPassword: `Second-Approver-${identitySuffix}-Password!`,
+          mustChangePassword: false,
+        },
+      },
     );
-  }
+    if (accountResponse.status() !== 201) {
+      throw new Error(
+        `Create second-approver account failed at ${accountResponse.url()}: ${accountResponse.status()} ${await accountResponse.text()}`,
+      );
+    }
 
-  const grantResponse = await api.post(
-    e2eApiUrl(`/api/v1/authz/actors/${encodeURIComponent(actor.id)}/role-grants`),
-    {
-      headers: authzHeaders(),
-      data: { roleCode: "EARNINGS_OPERATOR", tenantId: "default" },
-    },
-  );
-  if (grantResponse.status() !== 201) {
-    throw new Error(
-      `Grant second-approver Earnings Operator role failed at ${grantResponse.url()}: ${grantResponse.status()} ${await grantResponse.text()}`,
+    const grantResponse = await applicationAdminApi.post(
+      e2eApiUrl(`/api/v1/authz/actors/${encodeURIComponent(actor.id)}/role-grants`),
+      {
+        headers: applicationAdminHeaders(),
+        data: { roleCode: "EARNINGS_OPERATOR", tenantId: "default" },
+      },
     );
-  }
+    if (grantResponse.status() !== 201) {
+      throw new Error(
+        `Grant second-approver Earnings Operator role failed at ${grantResponse.url()}: ${grantResponse.status()} ${await grantResponse.text()}`,
+      );
+    }
 
-  return actor;
+    return actor;
+  } finally {
+    await applicationAdminApi.dispose();
+  }
 }
 
 async function createCompletePerson(

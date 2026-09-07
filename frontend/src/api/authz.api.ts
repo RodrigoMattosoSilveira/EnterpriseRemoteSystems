@@ -41,6 +41,9 @@ export function normalizeAuthzCurrentActor(input: unknown): AuthzCurrentActor {
     permissions: stringArray(actor.permissions),
     intrinsicPermissions: stringArray(actor.intrinsicPermissions),
     delegatedPermissions: stringArray(actor.delegatedPermissions),
+    supportLeaseId: optionalStringValue(actor.supportLeaseId),
+    supportLeaseExpiresAt: optionalStringValue(actor.supportLeaseExpiresAt),
+    supportLeasePermissions: stringArray(actor.supportLeasePermissions),
   };
 }
 

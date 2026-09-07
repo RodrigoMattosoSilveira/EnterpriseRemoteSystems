@@ -164,7 +164,7 @@ func TestRequireTenantAdministratorAllowsTenantAdminOnly(t *testing.T) {
 			actor: &authz.Actor{
 				ID: "application-admin", TenantID: authz.GlobalTenantScope, Scope: authz.ActorScopeApplication,
 				RoleCodes:   []string{string(authz.RoleApplicationAdmin)},
-				Permissions: map[authz.Permission]struct{}{authz.PermissionAll: {}},
+				Permissions: map[authz.Permission]struct{}{authz.PermissionAuthzManage: {}},
 			},
 			wantStatus: fiber.StatusForbidden,
 		},
@@ -631,10 +631,10 @@ func TestRequireApplicationPermissionRejectsTenantScopedWildcardActor(t *testing
 func TestRequireApplicationPermissionAllowsApplicationScopedActor(t *testing.T) {
 	store := fakeActorStore{actor: &authz.Actor{
 		ID:       "application-admin",
-		TenantID: "default",
+		TenantID: authz.GlobalTenantScope,
 		Scope:    authz.ActorScopeApplication,
 		Permissions: map[authz.Permission]struct{}{
-			authz.PermissionAll: {},
+			authz.PermissionTenantsCreate: {},
 		},
 	}}
 
@@ -645,13 +645,68 @@ func TestRequireApplicationPermissionAllowsApplicationScopedActor(t *testing.T) 
 
 	req := httptest.NewRequest(fiber.MethodPost, "/tenants", nil)
 	req.Header.Set(authz.HeaderActorID, "application-admin")
-	req.Header.Set(authz.HeaderTenantID, "default")
+	req.Header.Set(authz.HeaderTenantID, authz.GlobalTenantScope)
 	resp, err := app.Test(req)
 	if err != nil {
 		t.Fatalf("request failed: %v", err)
 	}
 	if resp.StatusCode != fiber.StatusNoContent {
 		t.Fatalf("expected 204, got %d", resp.StatusCode)
+	}
+}
+
+func TestRequireApplicationPermissionRejectsLeasedApplicationContext(t *testing.T) {
+	store := fakeActorStore{actor: &authz.Actor{
+		ID:             "application-admin",
+		TenantID:       "tenant-a",
+		Scope:          authz.ActorScopeApplication,
+		SupportLeaseID: "lease-a",
+		Permissions: map[authz.Permission]struct{}{
+			authz.PermissionTenantsCreate: {},
+		},
+	}}
+
+	app := fiber.New()
+	app.Post("/tenants", requireApplicationPermission(Dependencies{ActorStore: store}, authz.PermissionTenantsCreate), func(c fiber.Ctx) error {
+		return c.SendStatus(fiber.StatusNoContent)
+	})
+
+	req := httptest.NewRequest(fiber.MethodPost, "/tenants", nil)
+	req.Header.Set(authz.HeaderActorID, "application-admin")
+	req.Header.Set(authz.HeaderTenantID, "tenant-a")
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	if resp.StatusCode != fiber.StatusForbidden {
+		t.Fatalf("expected leased Application context to be denied global control-plane action, got %d", resp.StatusCode)
+	}
+}
+
+func TestRequireTenantPermissionAllowsApplicationControlPlaneTenantMetadata(t *testing.T) {
+	store := fakeActorStore{actor: &authz.Actor{
+		ID:       "application-admin",
+		TenantID: authz.GlobalTenantScope,
+		Scope:    authz.ActorScopeApplication,
+		Permissions: map[authz.Permission]struct{}{
+			authz.PermissionTenantsRead: {},
+		},
+	}}
+
+	app := fiber.New()
+	app.Get("/tenants/:id", requireTenantPermission(Dependencies{ActorStore: store}, authz.PermissionTenantsRead, "id"), func(c fiber.Ctx) error {
+		return c.SendStatus(fiber.StatusNoContent)
+	})
+
+	req := httptest.NewRequest(fiber.MethodGet, "/tenants/tenant-b", nil)
+	req.Header.Set(authz.HeaderActorID, "application-admin")
+	req.Header.Set(authz.HeaderTenantID, authz.GlobalTenantScope)
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	if resp.StatusCode != fiber.StatusNoContent {
+		t.Fatalf("expected control-plane tenant metadata read 204, got %d", resp.StatusCode)
 	}
 }
 
@@ -776,6 +831,50 @@ func TestAuthenticatedAccountKeepsSessionWhenSelectedTenantActorIsUnavailable(t 
 	}
 }
 
+func TestAuthenticatedGlobalAccountResolvesOnlyControlPlaneContext(t *testing.T) {
+	store := &accountActorRouteStore{fakeActorStore: fakeActorStore{actor: &authz.Actor{
+		ID:        "application-admin",
+		RecordID:  "actor-application-admin",
+		TenantID:  authz.GlobalTenantScope,
+		Scope:     authz.ActorScopeApplication,
+		RoleCodes: []string{string(authz.RoleApplicationAdmin)},
+		Permissions: map[authz.Permission]struct{}{
+			authz.PermissionTenantsRead: {},
+		},
+	}}}
+	deps := Dependencies{ActorStore: store, ActorHeaderMode: actorHeaderModeDisabled}
+
+	app := fiber.New()
+	app.Use(func(c fiber.Ctx) error {
+		authentication.SetSessionContext(c, authentication.SessionResponse{AccountID: "application-account"})
+		return c.Next()
+	})
+	app.Use(authorizationMiddleware(deps))
+	app.Get("/control-plane", requireApplicationPermission(deps, authz.PermissionTenantsRead), func(c fiber.Ctx) error {
+		actor, err := authz.RequestActorFromContext(c)
+		if err != nil {
+			return err
+		}
+		if actor.Scope != authz.ActorScopeApplication || actor.TenantID != authz.GlobalTenantScope {
+			t.Fatalf("unexpected GLOBAL control-plane actor: %#v", actor)
+		}
+		return c.SendStatus(fiber.StatusNoContent)
+	})
+
+	req := httptest.NewRequest(fiber.MethodGet, "/control-plane", nil)
+	req.Header.Set(authz.HeaderTenantID, authz.GlobalTenantScope)
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	if resp.StatusCode != fiber.StatusNoContent {
+		t.Fatalf("expected 204, got %d", resp.StatusCode)
+	}
+	if store.accountID != "application-account" || store.tenantID != authz.GlobalTenantScope {
+		t.Fatalf("expected Account control-plane lookup, account=%q context=%q", store.accountID, store.tenantID)
+	}
+}
+
 func TestDisabledActorHeadersRequireAuthentication(t *testing.T) {
 	deps := Dependencies{ActorHeaderMode: actorHeaderModeDisabled}
 	app := fiber.New()
@@ -800,10 +899,10 @@ func TestBootstrapActorHeaderModeAllowsOnlyConfiguredBootstrapActor(t *testing.T
 	store := fakeActorStore{actor: &authz.Actor{
 		ID:       "bootstrap-admin",
 		RecordID: "bootstrap-record",
-		TenantID: "default",
+		TenantID: authz.GlobalTenantScope,
 		Scope:    authz.ActorScopeApplication,
 		Permissions: map[authz.Permission]struct{}{
-			authz.PermissionAll: {},
+			authz.PermissionAuthzManage: {},
 		},
 	}}
 	deps := Dependencies{
@@ -813,7 +912,7 @@ func TestBootstrapActorHeaderModeAllowsOnlyConfiguredBootstrapActor(t *testing.T
 	}
 	app := fiber.New()
 	app.Use(authorizationMiddleware(deps))
-	app.Get("/protected", requirePermission(deps, authz.PermissionPeopleRead), func(c fiber.Ctx) error {
+	app.Get("/protected", requirePermission(deps, authz.PermissionAuthzManage), func(c fiber.Ctx) error {
 		return c.SendStatus(fiber.StatusNoContent)
 	})
 
@@ -826,7 +925,7 @@ func TestBootstrapActorHeaderModeAllowsOnlyConfiguredBootstrapActor(t *testing.T
 	} {
 		req := httptest.NewRequest(fiber.MethodGet, "/protected", nil)
 		req.Header.Set(authz.HeaderActorID, test.actorKey)
-		req.Header.Set(authz.HeaderTenantID, "default")
+		req.Header.Set(authz.HeaderTenantID, authz.GlobalTenantScope)
 		resp, err := app.Test(req)
 		if err != nil {
 			t.Fatalf("request failed: %v", err)
@@ -883,10 +982,10 @@ func TestBootstrapActorHeaderModeRejectsIdentityEscalationHeaders(t *testing.T) 
 	store := fakeActorStore{actor: &authz.Actor{
 		ID:       "bootstrap-admin",
 		RecordID: "bootstrap-record",
-		TenantID: "default",
+		TenantID: authz.GlobalTenantScope,
 		Scope:    authz.ActorScopeApplication,
 		Permissions: map[authz.Permission]struct{}{
-			authz.PermissionAll: {},
+			authz.PermissionAuthzManage: {},
 		},
 	}}
 	deps := Dependencies{
@@ -898,13 +997,13 @@ func TestBootstrapActorHeaderModeRejectsIdentityEscalationHeaders(t *testing.T) 
 	for _, header := range []string{authz.HeaderAuthorizedBy, authz.HeaderActorPermissions} {
 		app := fiber.New()
 		app.Use(authorizationMiddleware(deps))
-		app.Get("/protected", requirePermission(deps, authz.PermissionPeopleRead), func(c fiber.Ctx) error {
+		app.Get("/protected", requirePermission(deps, authz.PermissionAuthzManage), func(c fiber.Ctx) error {
 			return c.SendStatus(fiber.StatusNoContent)
 		})
 
 		req := httptest.NewRequest(fiber.MethodGet, "/protected", nil)
 		req.Header.Set(authz.HeaderActorID, "bootstrap-admin")
-		req.Header.Set(authz.HeaderTenantID, "default")
+		req.Header.Set(authz.HeaderTenantID, authz.GlobalTenantScope)
 		req.Header.Set(header, "*")
 		resp, err := app.Test(req)
 		if err != nil {

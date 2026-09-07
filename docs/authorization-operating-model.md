@@ -1,6 +1,6 @@
 # Persisted authorization actor operating model
 
-ERS uses the login-backed HTTP session as the authoritative Authentication Account identity for protected application requests. The browser sends only the HTTP-only session cookie and an optional selected-tenant hint; the backend resolves the Account-owned Actor for that tenant and the browser never chooses its authorization actor.
+ERS uses the login-backed HTTP session as the authoritative Authentication Account identity for protected application requests. The browser sends only the HTTP-only session cookie and an operating-context hint. For ordinary Accounts that hint is a Tenant ID and the backend resolves the exact Account-owned Tenant Actor. For a GLOBAL Application Administrator the only normal context is `*`, which resolves the Account-owned GLOBAL Actor. The browser never chooses its authorization actor.
 
 ## Authoritative permissions
 
@@ -16,7 +16,7 @@ The current operating context can be inspected through:
 GET /api/v1/authz/current-actor
 ```
 
-The response includes the persisted actor record ID, selected tenant, effective scope, active role codes, and effective permissions.
+The response includes the persisted actor record ID, effective context (`*` for global administration or a Tenant ID for ordinary Tenant identity), effective scope, active role codes, and effective permissions.
 
 ## Bootstrap actor
 
@@ -43,4 +43,4 @@ Create a second application administrator and verify it before retiring or chang
 
 The HTTP session authenticates an Authentication Account, not one tenant Actor. `X-Tenant-ID` is retained only as a tenant-selection hint. For an ordinary Account, the backend resolves the Account-owned active TENANT Actor whose binding and ACTIVE Person–Tenant Membership both belong to that tenant. Selecting another tenant therefore selects another Actor while the Account session remains unchanged. A missing/inactive tenant Actor fails with `tenant_actor_unavailable`; ERS never borrows an Actor from another tenant.
 
-GLOBAL Application Administrator Accounts remain APPLICATION scoped. Until the dedicated global control-plane cutover removes the transitional standing tenant compatibility, their tenant selector may enumerate all active tenants, but every selection continues to resolve the same GLOBAL Actor rather than creating or assuming a tenant Actor.
+GLOBAL Application Administrator Accounts remain APPLICATION scoped and operate in one explicit control-plane context, `*` (`Global administration`). The context selector does not enumerate Tenants for a GLOBAL Account. Supplying a specific Tenant ID cannot convert or reuse the GLOBAL Actor as a Tenant identity and fails with `tenant_actor_unavailable`. `APPLICATION_ADMIN` has only explicit control-plane permissions; it has no standing People, Collaborator, planning, financial, receipt, reference-data, or other Tenant business-data authority. Exceptional Tenant support access is intentionally deferred to Bite 30I.2 and must not be represented as a Tenant Actor or ordinary Tenant Role Grant.

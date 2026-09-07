@@ -68,12 +68,12 @@ actor's active persisted grants.
 
 Expected outcomes include:
 
-- no tenant selected: `403 tenant_selection_required`;
-- no applicable grant: `403 forbidden`;
-- active tenant or application grant: authorization continues.
+- no operating context selected: `403 tenant_selection_required`;
+- ordinary Account selects a Tenant without an active Account-owned Tenant Actor: `403 tenant_actor_unavailable`;
+- GLOBAL Application Administrator selects `*`: application control-plane authorization continues;
+- GLOBAL Application Administrator supplies a specific Tenant ID: `403 tenant_actor_unavailable`.
 
-An `APPLICATION_ADMIN` grant scoped to `*` remains valid across tenants.
-Tenant-scoped roles apply only to their persisted tenant.
+Bite 30I.1 gives `APPLICATION_ADMIN` a real GLOBAL control-plane context identified by `*`. The `*` marker no longer means authority inside every Tenant. Tenant-scoped roles apply only to their persisted Tenant, and exceptional Tenant support access is deferred to the explicit Tenant Support Access Lease mechanism in Bite 30I.2.
 
 ## Request actor context
 

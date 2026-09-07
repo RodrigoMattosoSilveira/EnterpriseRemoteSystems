@@ -47,13 +47,13 @@ describe("ApiErrorPanel authentication guidance", () => {
             new ApiError({
               status: 403,
               code: "tenant_selection_required",
-              message: "A specific tenant must be selected",
+              message: "An authorization context must be selected",
             })
           }
         />,
       );
     });
 
-    expect(container.textContent).toContain("Select a tenant");
+    expect(container.textContent).toContain("Select an available authorization context");
   });
 });

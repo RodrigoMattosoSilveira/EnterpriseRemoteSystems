@@ -320,7 +320,8 @@ function activeOperatorGrant(
   roleCode: TenantOperatorRoleCode,
 ): AuthzActorRoleGrant | undefined {
   return (actor.roleGrants ?? []).find(
-    (candidate) => candidate.active && candidate.roleCode === roleCode,
+    (candidate) =>
+      candidate.active && !candidate.lifecycleSuspended && candidate.roleCode === roleCode,
   );
 }
 

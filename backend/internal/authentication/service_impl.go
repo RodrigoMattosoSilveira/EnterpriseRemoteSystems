@@ -82,6 +82,12 @@ func (s *service) Login(ctx context.Context, req LoginRequest, userAgent string,
 	if err := bcrypt.CompareHashAndPassword([]byte(account.PasswordHash), []byte(req.Password)); err != nil {
 		return LoginResult{}, ErrInvalidCredentials
 	}
+	if account.SecuritySuspended {
+		return LoginResult{}, ErrAccountSecuritySuspended
+	}
+	if account.GlobalPersonID != "" && !account.OperationalActive {
+		return LoginResult{}, ErrAccountOperationallyInactive
+	}
 	if !account.Active {
 		return LoginResult{}, ErrAccountInactive
 	}
@@ -111,8 +117,14 @@ func (s *service) Login(ctx context.Context, req LoginRequest, userAgent string,
 		_ = s.repository.RevokeSession(ctx, session.ID, now)
 		return LoginResult{}, err
 	}
-	if !refreshedAccount.Active {
+	if refreshedAccount.SecuritySuspended || (refreshedAccount.GlobalPersonID != "" && !refreshedAccount.OperationalActive) || !refreshedAccount.Active {
 		_ = s.repository.RevokeSession(ctx, session.ID, now)
+		if refreshedAccount.SecuritySuspended {
+			return LoginResult{}, ErrAccountSecuritySuspended
+		}
+		if refreshedAccount.GlobalPersonID != "" && !refreshedAccount.OperationalActive {
+			return LoginResult{}, ErrAccountOperationallyInactive
+		}
 		return LoginResult{}, ErrAccountInactive
 	}
 	if err := s.repository.UpdateLastLogin(ctx, account.ID, now); err != nil {
@@ -139,8 +151,14 @@ func (s *service) ResolveSession(ctx context.Context, rawToken string) (SessionR
 		return SessionResponse{}, err
 	}
 	now := s.clock().UTC()
-	if !record.Account.Active {
+	if record.Account.SecuritySuspended || (record.GlobalPersonID != "" && !record.OperationalActive) || !record.Account.Active {
 		_ = s.repository.RevokeSession(ctx, record.Session.ID, now)
+		if record.Account.SecuritySuspended {
+			return SessionResponse{}, ErrAccountSecuritySuspended
+		}
+		if record.GlobalPersonID != "" && !record.OperationalActive {
+			return SessionResponse{}, ErrAccountOperationallyInactive
+		}
 		return SessionResponse{}, ErrAccountInactive
 	}
 	if record.RevokedAt != nil {
@@ -411,7 +429,7 @@ func (s *service) CreateAccount(ctx context.Context, req CreateAccountRequest) (
 
 	var account AccountRecord
 	if actorID == "" {
-		account, err = s.repository.CreatePersonAccount(ctx, tenantID, accountInput)
+		account, err = s.repository.CreatePersonAccount(ctx, tenantID, "", accountInput)
 		switch {
 		case errors.Is(err, ErrPersonLoginNotFound):
 			return AccountResponse{}, &ValidationError{Fields: map[string]string{
@@ -423,7 +441,7 @@ func (s *service) CreateAccount(ctx context.Context, req CreateAccountRequest) (
 			}}
 		case errors.Is(err, ErrTenantUnavailable):
 			return AccountResponse{}, &ValidationError{Fields: map[string]string{
-				"actorId": "The selected tenant is inactive or unavailable",
+				"tenantId": "The selected tenant is inactive or unavailable",
 			}}
 		case err != nil:
 			return AccountResponse{}, err
@@ -587,6 +605,8 @@ func accountResponse(account AccountRecord) AccountResponse {
 		Actors:             actors,
 		Login:              account.Login,
 		Active:             account.Active,
+		SecuritySuspended:  account.SecuritySuspended,
+		OperationalActive:  account.OperationalActive,
 		ActorActive:        account.ActorActive,
 		MustChangePassword: account.MustChangePassword,
 		LastLoginAt:        account.LastLoginAt,
