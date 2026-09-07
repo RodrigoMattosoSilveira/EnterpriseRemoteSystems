@@ -3,6 +3,7 @@ package db
 import (
 	"fmt"
 	"log"
+	"net/url"
 	"os"
 	"path/filepath"
 	"time"
@@ -17,7 +18,7 @@ func Open(path string) (*gorm.DB, error) {
 		return nil, err
 	}
 
-	dsn := fmt.Sprintf("file:%s?mode=rwc&_foreign_keys=on&_journal_mode=WAL&_busy_timeout=5000", path)
+	dsn := sqliteDSN(path)
 
 	databaseLogger := logger.New(
 		log.New(os.Stdout, "\r\n", log.LstdFlags),
@@ -45,6 +46,20 @@ func Open(path string) (*gorm.DB, error) {
 	sqlDB.SetConnMaxLifetime(time.Hour)
 
 	return database, nil
+}
+
+func sqliteDSN(path string) string {
+	query := url.Values{}
+	query.Set("mode", "rwc")
+	// ncruces/go-sqlite3 v0.34 applies connection PRAGMAs through repeated
+	// _pragma parameters. Keep these on every connection rather than relying on
+	// mattn-style shorthand parameters that this driver version does not apply.
+	query.Add("_pragma", "foreign_keys(on)")
+	query.Add("_pragma", "journal_mode(WAL)")
+	query.Add("_pragma", "synchronous(FULL)")
+	query.Add("_pragma", "busy_timeout(5000)")
+
+	return fmt.Sprintf("file:%s?%s", path, query.Encode())
 }
 
 func AutoMigrate(database *gorm.DB) error {
