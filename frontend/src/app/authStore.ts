@@ -5,6 +5,7 @@ import {
   logout as logoutRequest,
 } from "../api/auth.api";
 import type { AuthSession, LoginRequest } from "../types/auth";
+import { reconcileSelectedTenantForAccount } from "../api/tenantSelection";
 import { subscribeAuthenticationRequired } from "./authEvents";
 
 export type AuthState =
@@ -36,6 +37,7 @@ export async function initializeAuthSession(): Promise<AuthState> {
   try {
     const session = await loadAuthSession();
     if (revision === authTransitionRevision) {
+      if (session) reconcileBrowserTenantSelection(session.accountId);
       setState(
         session
           ? { status: "authenticated", session, error: null, reason: null }
@@ -73,6 +75,7 @@ export async function revalidateAuthSession(): Promise<AuthState> {
     try {
       const session = await loadAuthSession();
       if (state.status === "authenticated" && state.session.accountId === accountId) {
+        if (session) reconcileBrowserTenantSelection(session.accountId);
         setState(
           session
             ? { status: "authenticated", session, error: null, reason: null }
@@ -110,6 +113,7 @@ export async function authenticate(request: LoginRequest): Promise<AuthSession> 
   try {
     const session = await loginRequest(request);
     if (revision === authTransitionRevision) {
+      reconcileBrowserTenantSelection(session.accountId);
       setState({ status: "authenticated", session, error: null, reason: null });
     }
     return session;
@@ -148,10 +152,20 @@ function authenticationReason(
   error: ApiError,
 ): "expired" | "inactive" | null {
   if (error.code === "session_expired") return "expired";
-  if (error.code === "account_inactive" || error.code === "actor_inactive") {
+  if (
+    error.code === "account_inactive" ||
+    error.code === "account_security_suspended" ||
+    error.code === "account_operationally_inactive" ||
+    error.code === "actor_inactive"
+  ) {
     return "inactive";
   }
   return null;
+}
+
+function reconcileBrowserTenantSelection(accountId: string): void {
+  if (typeof window === "undefined") return;
+  reconcileSelectedTenantForAccount(window.localStorage, accountId);
 }
 
 function setState(next: AuthState): void {

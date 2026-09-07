@@ -9,12 +9,18 @@ import type { Collaborator } from "../../types/collaborators";
 import { CollaboratorDetailPage } from "./CollaboratorDetailPage";
 
 const authorizationActor: AuthzCurrentActor = {
-  actorKey: "test-admin",
-  actorRecordId: "actor-test-admin",
+  actorKey: "tenant-admin",
+  actorRecordId: "actor-tenant-admin",
   tenantId: "default",
-  scope: "APPLICATION",
-  roleCodes: ["APPLICATION_ADMIN"],
-  permissions: ["*"],
+  scope: "TENANT",
+  roleCodes: ["TENANT_ADMIN"],
+  permissions: [
+    "collaborators.read",
+    "collaborators.update",
+    "collaborators.work_assignment.update",
+    "journey.settlements.preview",
+    "current_accounts.summary.read",
+  ],
 };
 
 

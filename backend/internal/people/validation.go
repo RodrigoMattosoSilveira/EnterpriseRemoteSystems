@@ -8,6 +8,9 @@ import (
 )
 
 var (
+	ErrApplicationSecuritySuspended = errors.New("authentication account is security-suspended")
+	ErrTenantReactivationRequired   = errors.New("inactive Person-Tenant Membership must be reactivated through the Tenant reactivation workflow")
+
 	reDigitsOnly     = regexp.MustCompile(`\D`)
 	reEmail          = regexp.MustCompile(`^[^\s@]+@[^\s@]+\.[^\s@]+$`)
 	reBrazilCellular = regexp.MustCompile(`^\+?55?[1-9]{2}9[0-9]{8}$|^[1-9]{2}9[0-9]{8}$`)

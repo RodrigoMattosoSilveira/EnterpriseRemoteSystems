@@ -11,7 +11,7 @@ import { getCurrentAuthzActor } from "../../api/authz.api";
 import {
   authorizationRequestContext,
   readSelectedTenantId,
-  setSelectedTenantId,
+  setSelectedTenantForAccount,
 } from "../../api/tenantSelection";
 import { endAuthSession } from "../../app/authStore";
 import {
@@ -76,7 +76,7 @@ export function AppShell() {
           !isAccountTenantOptionsQuery(query.queryKey, accountId),
       });
 
-      setSelectedTenantId(window.localStorage, normalized);
+      setSelectedTenantForAccount(window.localStorage, normalized, accountId);
       setRequestedTenantId(normalized);
       navigate("/", { replace: true });
     },
@@ -85,8 +85,8 @@ export function AppShell() {
 
   useEffect(() => {
     if (!selectedTenantId || typeof window === "undefined") return;
-    setSelectedTenantId(window.localStorage, selectedTenantId);
-  }, [selectedTenantId]);
+    setSelectedTenantForAccount(window.localStorage, selectedTenantId, accountId);
+  }, [accountId, selectedTenantId]);
 
   // A stale persisted selection (or a tenant Actor that was just deactivated)
   // must transition through the same cache-clearing boundary as an explicit
@@ -227,7 +227,13 @@ export function AppShell() {
   }
 
   return (
-    <AuthorizationProvider value={actorQuery.data}>
+    <AuthorizationProvider
+      value={{
+        ...actorQuery.data,
+        selectedTenantName: selectedTenant.name,
+        selectedTenantCode: selectedTenant.code,
+      }}
+    >
       <div className="min-h-screen bg-slate-50">
         <TopBar
           session={auth.session}

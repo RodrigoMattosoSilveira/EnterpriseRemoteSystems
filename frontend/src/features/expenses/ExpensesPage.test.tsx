@@ -4,6 +4,8 @@ import { createRoot, type Root } from "react-dom/client";
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ExpensesPage } from "./ExpensesPage";
+import { AuthorizationProvider } from "../../components/layout/AuthorizationContext";
+import type { AuthzCurrentActor } from "../../types/authz";
 import type { Collaborator } from "../../types/collaborators";
 import type { Expense, ExpenseListResponse } from "../../types/expenses";
 import type { PriceListItem } from "../../types/priceList";
@@ -58,6 +60,63 @@ afterEach(async () => {
 });
 
 describe("ExpensesPage", () => {
+  it("keeps a support lease context intact when Expenses is not leased", async () => {
+    const supportLeaseActor: AuthzCurrentActor = {
+      actorKey: "bootstrap-admin",
+      actorRecordId: "actor-bootstrap-admin",
+      tenantId: "default",
+      scope: "APPLICATION",
+      roleCodes: ["APPLICATION_ADMIN"],
+      permissions: ["people.read", "reference_data.read"],
+      supportLeaseId: "support-lease-1",
+      supportLeaseExpiresAt: "2026-09-05T18:00:00Z",
+      supportLeasePermissions: ["people.read", "reference_data.read"],
+    };
+    window.localStorage.setItem("ers.auth.selectedTenantId", "default");
+    window.localStorage.setItem("ers.auth.selectedTenantAccountId", "account-admin");
+    vi.stubGlobal("fetch", vi.fn());
+
+    renderExpensesPage("/expenses", supportLeaseActor);
+
+    await waitForText("Expenses not authorized");
+    await waitForText(
+      "Your current Tenant Support Access Lease does not authorize Expenses.",
+    );
+
+    expect(container.textContent).toContain(
+      "The lease remains active for its approved Tenant permissions.",
+    );
+    expect(
+      container.querySelector('a[href="/people"]')?.textContent?.trim(),
+    ).toBe("Return to People");
+    expect(window.localStorage.getItem("ers.auth.selectedTenantId")).toBe(
+      "default",
+    );
+    expect(
+      window.localStorage.getItem("ers.auth.selectedTenantAccountId"),
+    ).toBe("account-admin");
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it("renders a generic local denial without loading Expense data for a non-lease Actor", async () => {
+    const actor: AuthzCurrentActor = {
+      actorKey: "people-reader",
+      actorRecordId: "actor-people-reader",
+      tenantId: "default",
+      scope: "TENANT",
+      roleCodes: [],
+      permissions: ["people.read"],
+    };
+    vi.stubGlobal("fetch", vi.fn());
+
+    renderExpensesPage("/expenses", actor);
+
+    await waitForText("Expenses not authorized");
+    expect(container.textContent).toContain(
+      "Your current authorization context does not permit access to Expenses.",
+    );
+    expect(fetch).not.toHaveBeenCalled();
+  });
   it("shows a navigation link back to People", async () => {
     mockExpensePageFetch();
 
@@ -387,7 +446,10 @@ function priceListItem(id: string, itemType: string, code: string, description: 
   };
 }
 
-function renderExpensesPage(initialEntry: string) {
+function renderExpensesPage(
+  initialEntry: string,
+  actor?: AuthzCurrentActor,
+) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
@@ -400,7 +462,13 @@ function renderExpensesPage(initialEntry: string) {
     root = createRoot(container);
     root.render(
       <QueryClientProvider client={queryClient}>
-        <RouterProvider router={router} />
+        {actor ? (
+          <AuthorizationProvider value={actor}>
+            <RouterProvider router={router} />
+          </AuthorizationProvider>
+        ) : (
+          <RouterProvider router={router} />
+        )}
       </QueryClientProvider>,
     );
   });

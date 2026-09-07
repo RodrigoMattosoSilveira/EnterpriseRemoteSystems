@@ -2,8 +2,13 @@ import { describe, expect, it } from "vitest";
 import { defaultAuthorizedRoute, visibleNavigationLinks } from "./navigation";
 
 describe("permission-aware navigation", () => {
-  it("routes application and tenant administrators to People", () => {
-    expect(defaultAuthorizedRoute(["*"], "APPLICATION")).toBe("/people");
+  it("routes the GLOBAL Application Administrator to the control plane and Tenant administrators to People", () => {
+    expect(
+      defaultAuthorizedRoute(
+        ["authz.read", "authz.manage", "tenants.read", "tenants.create", "tenants.update"],
+        "APPLICATION",
+      ),
+    ).toBe("/admin/tenants");
     expect(defaultAuthorizedRoute(["*"], "TENANT")).toBe("/people");
   });
 
@@ -56,10 +61,15 @@ describe("permission-aware navigation", () => {
     ).map((link) => link.to);
     expect(tenantAdminPaths).toContain("/gold-production");
 
-    const applicationAdminPaths = visibleNavigationLinks(["*"], "APPLICATION").map(
-      (link) => link.to,
-    );
-    expect(applicationAdminPaths).toContain("/gold-production");
+    const applicationAdminPaths = visibleNavigationLinks(
+      ["authz.read", "authz.manage", "tenants.read", "tenants.create", "tenants.update"],
+      "APPLICATION",
+    ).map((link) => link.to);
+    expect(applicationAdminPaths).not.toContain("/gold-production");
+    expect(applicationAdminPaths).not.toContain("/people");
+    expect(applicationAdminPaths).not.toContain("/expenses");
+    expect(applicationAdminPaths).toContain("/admin/tenants");
+    expect(applicationAdminPaths).toContain("/admin/authentication");
   });
 
   it("shows tenant Authorization navigation for tenant role delegation managers", () => {

@@ -1,5 +1,5 @@
 import { expect, test, type APIRequestContext } from "@playwright/test";
-import { authzHeaders, e2eApiUrl } from "./support/authz";
+import { authzHeaders, e2eApiUrl, newTenantAdminApi } from "./support/authz";
 
 const DEFAULT_TENANT_ID = "default";
 const PERSON_STATUS_ACTIVE_ID = "ref-person-status-active";
@@ -128,23 +128,13 @@ test("operational domain records created in default are hidden from another tena
   );
   expect(goldProduction.tenantId).toBe(DEFAULT_TENANT_ID);
 
-  const tenant = await postData<CreatedTenant>(
-    request,
-    "/api/v1/tenants",
-    {
-      code: `AUDIT${suffix}`.slice(0, 20).toUpperCase(),
-      name: `Tenant isolation audit ${suffix}`,
-      description: "Created by the operational tenant-isolation E2E test",
-      active: true,
-    },
-    defaultHeaders,
-    "create comparison tenant",
-  );
+  const tenant: CreatedTenant = { id: "e2e-isolation-tenant" };
   const selectedTenantHeaders = authzHeaders(tenant.id);
+  const selectedTenantApi = await newTenantAdminApi(tenant.id);
 
   try {
     await expectPagedListExcludes(
-      request,
+      selectedTenantApi,
       `/api/v1/collaborators?search=${encodeURIComponent(person.nickname)}&page=1&pageSize=100`,
       selectedTenantHeaders,
       collaborator.id,
@@ -153,7 +143,7 @@ test("operational domain records created in default are hidden from another tena
     );
 
     await expectPagedListExcludes(
-      request,
+      selectedTenantApi,
       `/api/v1/expenses?collaboratorId=${encodeURIComponent(collaborator.id)}&page=1&pageSize=100`,
       selectedTenantHeaders,
       expense.id,
@@ -162,7 +152,7 @@ test("operational domain records created in default are hidden from another tena
     );
 
     await expectPagedListExcludes(
-      request,
+      selectedTenantApi,
       `/api/v1/work-periods?dateFrom=${workDate}&dateTo=${workDate}&page=1&pageSize=100`,
       selectedTenantHeaders,
       workPeriod.id,
@@ -171,7 +161,7 @@ test("operational domain records created in default are hidden from another tena
     );
 
     await expectNestedResourceHidden(
-      request,
+      selectedTenantApi,
       `/api/v1/work-periods/${encodeURIComponent(workPeriod.id)}/assignments?page=1&pageSize=100`,
       selectedTenantHeaders,
       assignment.id,
@@ -180,7 +170,7 @@ test("operational domain records created in default are hidden from another tena
     );
 
     await expectNestedResourceHidden(
-      request,
+      selectedTenantApi,
       `/api/v1/work-periods/${encodeURIComponent(
         workPeriod.id,
       )}/gold-production-entries?page=1&pageSize=100`,
@@ -191,7 +181,7 @@ test("operational domain records created in default are hidden from another tena
     );
 
     await expectPagedListExcludes(
-      request,
+      selectedTenantApi,
       `/api/v1/receipts/outstanding?collaborator=${encodeURIComponent(
         person.nickname,
       )}&sourceType=EXPENSE&page=1&pageSize=100`,
@@ -202,42 +192,43 @@ test("operational domain records created in default are hidden from another tena
     );
 
     await expectCrossTenantDetailHidden(
-      request,
+      selectedTenantApi,
       `/api/v1/collaborators/${encodeURIComponent(collaborator.id)}`,
       selectedTenantHeaders,
       "Collaborator detail",
     );
     await expectCrossTenantDetailHidden(
-      request,
+      selectedTenantApi,
       `/api/v1/expenses/${encodeURIComponent(expense.id)}`,
       selectedTenantHeaders,
       "Expense detail",
     );
     await expectCrossTenantDetailHidden(
-      request,
+      selectedTenantApi,
       `/api/v1/work-periods/${encodeURIComponent(workPeriod.id)}`,
       selectedTenantHeaders,
       "Work Period detail",
     );
     await expectCrossTenantDetailHidden(
-      request,
+      selectedTenantApi,
       `/api/v1/work-period-assignments/${encodeURIComponent(assignment.id)}`,
       selectedTenantHeaders,
       "Work Period Assignment detail",
     );
     await expectCrossTenantDetailHidden(
-      request,
+      selectedTenantApi,
       `/api/v1/gold-production-entries/${encodeURIComponent(goldProduction.id)}`,
       selectedTenantHeaders,
       "Gold Production detail",
     );
     await expectCrossTenantDetailHidden(
-      request,
+      selectedTenantApi,
       `/api/v1/collaborators/${encodeURIComponent(collaborator.id)}/current-account`,
       selectedTenantHeaders,
       "Current Account detail",
     );
   } finally {
+    await selectedTenantApi.dispose();
     await bestEffortPatch(
       request,
       `/api/v1/gold-production-entries/${encodeURIComponent(goldProduction.id)}/deactivate`,
@@ -261,12 +252,6 @@ test("operational domain records created in default are hidden from another tena
       `/api/v1/price-list-items/${encodeURIComponent(priceListItem.id)}/deactivate`,
       defaultHeaders,
       {},
-    );
-    await bestEffortPatch(
-      request,
-      `/api/v1/tenants/${encodeURIComponent(tenant.id)}/active`,
-      defaultHeaders,
-      { active: false },
     );
   }
 });

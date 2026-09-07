@@ -1,8 +1,14 @@
 import { expect, test } from "@playwright/test";
-import { seedBrowserAuthz } from "./support/authz";
+import { applicationAdminHeaders, seedBrowserApplicationAdmin } from "./support/authz";
+import { applicationAdminStorageStatePath } from "./support/storage";
+
+test.use({
+  storageState: applicationAdminStorageStatePath,
+  extraHTTPHeaders: applicationAdminHeaders(),
+});
 
 test.beforeEach(async ({ page }) => {
-  await seedBrowserAuthz(page);
+  await seedBrowserApplicationAdmin(page);
 });
 
 test("admin can view and filter sensitive audit logs", async ({ page }) => {
@@ -66,7 +72,7 @@ test("admin can view and filter sensitive audit logs", async ({ page }) => {
   await expect(
     page.getByRole("heading", { name: "Authenticated authorization context" }),
   ).toBeVisible();
-  await expect(page.getByLabel("Selected Tenant ID")).toHaveValue("default");
+  await expect(page.getByLabel("Selected Tenant ID")).toHaveValue("*");
   const authorizedPayoutRow = page
     .getByTestId("audit-log-row")
     .filter({ hasText: "Partial payout" })

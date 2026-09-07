@@ -23,6 +23,9 @@ func (s *service) IssueTenantPersonPasswordResetToken(ctx context.Context, tenan
 	if err != nil {
 		return PasswordResetTokenResponse{}, err
 	}
+	if !record.MembershipActive {
+		return PasswordResetTokenResponse{}, ErrPersonMembershipRequired
+	}
 	if !record.Enabled || strings.TrimSpace(record.AccountID) == "" {
 		return PasswordResetTokenResponse{}, ErrAuthenticationNotEnabled
 	}
@@ -39,6 +42,9 @@ func (s *service) EnablePersonAuthentication(ctx context.Context, tenantID strin
 	target, err := s.repository.FindPersonAuthentication(ctx, tenantID, personID)
 	if err != nil {
 		return PersonAuthenticationStatusResponse{}, err
+	}
+	if !target.MembershipActive {
+		return PersonAuthenticationStatusResponse{}, ErrPersonMembershipRequired
 	}
 	if target.Enabled {
 		return personAuthenticationStatusResponse(target), nil
@@ -61,7 +67,7 @@ func (s *service) EnablePersonAuthentication(ctx context.Context, tenantID strin
 	}
 
 	now := s.clock().UTC()
-	_, err = s.repository.CreatePersonAccount(ctx, tenantID, Account{
+	_, err = s.repository.CreatePersonAccount(ctx, tenantID, personID, Account{
 		ID:                 ids.New(),
 		Login:              target.Login,
 		PasswordHash:       passwordHash,
@@ -96,13 +102,19 @@ func (s *service) RequestSelfReactivation(ctx context.Context, req RequestAccoun
 	if bcrypt.CompareHashAndPassword([]byte(account.PasswordHash), []byte(req.Password)) != nil {
 		return ReactivationRequestAcknowledgement{}, ErrInvalidCredentials
 	}
+	if account.SecuritySuspended {
+		if _, err := s.repository.CreateOrRefreshReactivationRequest(ctx, account.ID, ReactivationRequestSourceSelf, "", "", userAgent, ipAddress, s.clock().UTC()); err != nil {
+			return ReactivationRequestAcknowledgement{}, err
+		}
+		return ReactivationRequestAcknowledgement{Status: ReactivationRequestStatusPending}, nil
+	}
+	if strings.TrimSpace(account.GlobalPersonID) != "" && !account.OperationalActive {
+		return ReactivationRequestAcknowledgement{}, ErrTenantReactivationRequired
+	}
 	if account.Active {
 		return ReactivationRequestAcknowledgement{}, ErrAccountAlreadyActive
 	}
-	if _, err := s.repository.CreateOrRefreshReactivationRequest(ctx, account.ID, ReactivationRequestSourceSelf, "", "", userAgent, ipAddress, s.clock().UTC()); err != nil {
-		return ReactivationRequestAcknowledgement{}, err
-	}
-	return ReactivationRequestAcknowledgement{Status: ReactivationRequestStatusPending}, nil
+	return ReactivationRequestAcknowledgement{}, ErrTenantReactivationRequired
 }
 
 func (s *service) RequestTenantPersonReactivation(ctx context.Context, tenantID string, personID string, requesterActorID string, userAgent string, ipAddress string) (ReactivationRequestAcknowledgement, error) {
@@ -110,11 +122,11 @@ func (s *service) RequestTenantPersonReactivation(ctx context.Context, tenantID 
 	if err != nil {
 		return ReactivationRequestAcknowledgement{}, err
 	}
-	if !record.Enabled || strings.TrimSpace(record.AccountID) == "" {
+	if strings.TrimSpace(record.AccountID) == "" {
 		return ReactivationRequestAcknowledgement{}, ErrAuthenticationNotEnabled
 	}
-	if record.AccountActive {
-		return ReactivationRequestAcknowledgement{}, ErrAccountAlreadyActive
+	if !record.SecuritySuspended {
+		return ReactivationRequestAcknowledgement{}, ErrTenantReactivationRequired
 	}
 	if _, err := s.repository.CreateOrRefreshReactivationRequest(ctx, record.AccountID, ReactivationRequestSourceTenantAdmin, requesterActorID, record.TenantID, userAgent, ipAddress, s.clock().UTC()); err != nil {
 		return ReactivationRequestAcknowledgement{}, err
@@ -160,17 +172,28 @@ func (s *service) ReviewReactivationRequest(ctx context.Context, requestID strin
 
 func personAuthenticationStatusResponse(record PersonAuthenticationRecord) PersonAuthenticationStatusResponse {
 	status := "NOT_ENABLED"
-	if record.Enabled && record.AccountActive {
+	switch {
+	case record.SecuritySuspended:
+		status = "SECURITY_SUSPENDED"
+	case !record.OperationalActive:
+		status = "OPERATIONALLY_INACTIVE"
+	case !record.MembershipActive:
+		status = "TENANT_INACTIVE"
+	case record.Enabled && record.AccountActive:
 		status = "ENABLED"
-	} else if record.Enabled {
+	case record.Enabled:
 		status = "ACCOUNT_INACTIVE"
 	}
 	return PersonAuthenticationStatusResponse{
 		Login:                     normalizeLogin(record.Login),
 		Enabled:                   record.Enabled,
 		AccountActive:             record.Enabled && record.AccountActive,
-		CanRequestReactivation:    record.Enabled && !record.AccountActive,
-		RequiresTemporaryPassword: !record.Enabled && !record.AccountExists,
+		SecuritySuspended:         record.SecuritySuspended,
+		MembershipActive:          record.MembershipActive,
+		OperationalActive:         record.OperationalActive,
+		CanTenantReactivate:       record.MembershipStatusCode == "INACTIVE" && !record.SecuritySuspended,
+		CanRequestReactivation:    record.SecuritySuspended,
+		RequiresTemporaryPassword: !record.AccountExists,
 		Status:                    status,
 	}
 }

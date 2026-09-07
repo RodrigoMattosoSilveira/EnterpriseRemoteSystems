@@ -19,7 +19,7 @@ type ResetPasswordRequest struct {
 
 type CreateAccountRequest struct {
 	ActorID            string `json:"actorId"`
-	TenantID           string `json:"-"`
+	TenantID           string `json:"tenantId,omitempty"`
 	Login              string `json:"login"`
 	TemporaryPassword  string `json:"temporaryPassword"`
 	MustChangePassword *bool  `json:"mustChangePassword,omitempty"`
@@ -56,6 +56,8 @@ type AccountResponse struct {
 	Actors             []AccountActorResponse `json:"actors"`
 	Login              string                 `json:"login"`
 	Active             bool                   `json:"active"`
+	SecuritySuspended  bool                   `json:"securitySuspended"`
+	OperationalActive  bool                   `json:"operationalActive"`
 	ActorActive        bool                   `json:"actorActive"`
 	MustChangePassword bool                   `json:"mustChangePassword"`
 	LastLoginAt        *time.Time             `json:"lastLoginAt,omitempty"`
@@ -168,6 +170,10 @@ type PersonAuthenticationStatusResponse struct {
 	Login                     string `json:"login"`
 	Enabled                   bool   `json:"enabled"`
 	AccountActive             bool   `json:"accountActive"`
+	SecuritySuspended         bool   `json:"securitySuspended"`
+	MembershipActive          bool   `json:"membershipActive"`
+	OperationalActive         bool   `json:"operationalActive"`
+	CanTenantReactivate       bool   `json:"canTenantReactivate"`
 	CanRequestReactivation    bool   `json:"canRequestReactivation"`
 	RequiresTemporaryPassword bool   `json:"requiresTemporaryPassword"`
 	Status                    string `json:"status"`

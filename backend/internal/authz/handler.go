@@ -27,18 +27,21 @@ func (h *Handler) CurrentActor(c fiber.Ctx) error {
 
 func currentActorResponse(actor *Actor) CurrentActorResponse {
 	return CurrentActorResponse{
-		ActorKey:             actor.ID,
-		ActorRecordID:        actor.RecordID,
-		TenantID:             actor.TenantID,
-		Scope:                string(actor.Scope),
-		PersonID:             actor.PersonID,
-		GlobalPersonID:       actor.GlobalPersonID,
-		MembershipID:         actor.MembershipID,
-		CollaboratorID:       actor.CollaboratorID,
-		RoleCodes:            append([]string{}, actor.RoleCodes...),
-		Permissions:          PermissionNames(actor.Permissions),
-		IntrinsicPermissions: PermissionNames(actor.IntrinsicPermissions),
-		DelegatedPermissions: PermissionNames(actor.DelegatedPermissions),
+		ActorKey:                actor.ID,
+		ActorRecordID:           actor.RecordID,
+		TenantID:                actor.TenantID,
+		Scope:                   string(actor.Scope),
+		PersonID:                actor.PersonID,
+		GlobalPersonID:          actor.GlobalPersonID,
+		MembershipID:            actor.MembershipID,
+		CollaboratorID:          actor.CollaboratorID,
+		RoleCodes:               append([]string{}, actor.RoleCodes...),
+		Permissions:             PermissionNames(actor.Permissions),
+		IntrinsicPermissions:    PermissionNames(actor.IntrinsicPermissions),
+		DelegatedPermissions:    PermissionNames(actor.DelegatedPermissions),
+		SupportLeaseID:          actor.SupportLeaseID,
+		SupportLeaseExpiresAt:   actor.SupportLeaseExpiresAt,
+		SupportLeasePermissions: PermissionNames(actor.SupportLeasePermissions),
 	}
 }
 

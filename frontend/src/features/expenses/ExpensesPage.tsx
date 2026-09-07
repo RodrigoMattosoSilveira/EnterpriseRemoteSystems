@@ -1,6 +1,7 @@
 import { useMemo, type ChangeEvent } from "react";
 import { Link, useLocation, useSearchParams } from "react-router-dom";
 import { ApiErrorPanel } from "../../components/ApiErrorPanel";
+import { useOptionalAuthorizationContext } from "../../components/layout/AuthorizationContext";
 import type { Collaborator } from "../../types/collaborators";
 import type { Expense, ExpenseListFilter } from "../../types/expenses";
 import type { PriceListItem } from "../../types/priceList";
@@ -17,6 +18,50 @@ const EXPENSE_PAGE_SIZE = 50;
 const FILTER_OPTION_PAGE_SIZE = 200;
 
 export function ExpensesPage() {
+  const actor = useOptionalAuthorizationContext();
+  const canReadExpenses =
+    !actor ||
+    actor.permissions.includes("*") ||
+    actor.permissions.includes("expenses.read");
+
+  if (!canReadExpenses) {
+    return <ExpensesAccessDenied supportLeaseId={actor.supportLeaseId} />;
+  }
+
+  return <AuthorizedExpensesPage />;
+}
+
+function ExpensesAccessDenied({
+  supportLeaseId,
+}: {
+  supportLeaseId?: string;
+}) {
+  const supportLease = Boolean(supportLeaseId);
+
+  return (
+    <main className="min-h-screen bg-gray-50 p-6">
+      <section className="mx-auto max-w-xl rounded-2xl border bg-white p-6 shadow-sm">
+        <PageTitle>Expenses not authorized</PageTitle>
+        <p className="mt-2 text-sm text-slate-600">
+          {supportLease
+            ? "Your current Tenant Support Access Lease does not authorize Expenses. The lease remains active for its approved Tenant permissions."
+            : "Your current authorization context does not permit access to Expenses."}
+        </p>
+        <p className="mt-2 text-sm text-slate-600">
+          Return to People or select another available administration or tenant context if you need different authority.
+        </p>
+        <Link
+          className="mt-4 inline-block rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 shadow-sm"
+          to="/people"
+        >
+          Return to People
+        </Link>
+      </section>
+    </main>
+  );
+}
+
+function AuthorizedExpensesPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const location = useLocation();
   const page = parsePositiveInt(searchParams.get("page"), 1);

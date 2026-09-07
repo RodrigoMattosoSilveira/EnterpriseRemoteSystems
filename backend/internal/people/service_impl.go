@@ -265,6 +265,18 @@ func (s *service) CreateMembership(ctx context.Context, tenantID string, req Cre
 	return ptr(ToDTO(*created)), nil
 }
 
+func (s *service) Reactivate(ctx context.Context, tenantID string, id string, actorUserID string) (*PersonDTO, error) {
+	_ = actorUserID
+	if strings.TrimSpace(id) == "" {
+		return nil, ValidationError{Fields: map[string]string{"personId": "Required"}}
+	}
+	reactivated, err := s.repo.Reactivate(ctx, strings.TrimSpace(tenantID), strings.TrimSpace(id))
+	if err != nil {
+		return nil, err
+	}
+	return ptr(ToDTO(*reactivated)), nil
+}
+
 func defaultCountry(value string) string {
 	if strings.TrimSpace(value) == "" {
 		return "Brasil"

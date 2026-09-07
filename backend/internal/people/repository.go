@@ -19,6 +19,7 @@ type Repository interface {
 	// Bite 30B global identity / membership foundation.
 	SearchGlobal(ctx context.Context, tenantID string, filter GlobalPersonSearchFilter) ([]db.GlobalPerson, int64, error)
 	CreateMembership(ctx context.Context, tenantID string, req CreatePersonMembershipRequest) (*db.Person, error)
+	Reactivate(ctx context.Context, tenantID string, legacyPersonID string) (*db.Person, error)
 	FindMembershipByLegacyPersonID(ctx context.Context, tenantID string, legacyPersonID string) (*db.PersonTenantMembership, error)
 
 	UniqueConflicts(

@@ -1,5 +1,10 @@
 import { expect, test, type Page } from "@playwright/test";
-import { authzHeaders, e2eApiUrl } from "./support/authz";
+import {
+  applicationAdminHeaders,
+  authzHeaders,
+  e2eApiUrl,
+  newApplicationAdminApi,
+} from "./support/authz";
 import { uniquePersonSuffix } from "./support/test-data";
 
 declare const process: { env: Record<string, string | undefined> };
@@ -29,32 +34,40 @@ test("an authenticated Person actor lands in People before operator workspaces",
   const personId = personEnvelope.data?.id;
   expect(personId).toBeTruthy();
 
-  const actorResponse = await request.post(e2eApiUrl("/api/v1/authz/actors"), {
-    headers: authzHeaders(),
-    data: {
-      actorKey: email,
-      displayName: `Person Home ${suffix}`,
-      personId,
-      active: true,
-    },
-  });
-  expect(actorResponse.status()).toBe(201);
-  const actorEnvelope = (await actorResponse.json()) as { data?: { id?: string } };
-  const actorId = actorEnvelope.data?.id;
-  expect(actorId).toBeTruthy();
-
+  const applicationAdminApi = await newApplicationAdminApi();
+  let actorId: string | undefined;
   try {
+    const actorResponse = await applicationAdminApi.post(
+      e2eApiUrl("/api/v1/authz/actors"),
+      {
+        headers: applicationAdminHeaders(),
+        data: {
+          actorKey: email,
+          displayName: `Person Home ${suffix}`,
+          personId,
+          active: true,
+        },
+      },
+    );
+    expect(actorResponse.status()).toBe(201);
+    const actorEnvelope = (await actorResponse.json()) as { data?: { id?: string } };
+    actorId = actorEnvelope.data?.id;
+    expect(actorId).toBeTruthy();
+
     // Bite 30D self-service comes from Account -> tenant Actor -> ACTIVE
     // Membership. This fixture intentionally has no delegated Role Grant.
-    const accountResponse = await request.post(e2eApiUrl("/api/v1/auth/accounts"), {
-      headers: authzHeaders(),
-      data: {
-        actorId,
-        login: email,
-        temporaryPassword: password,
-        mustChangePassword: false,
+    const accountResponse = await applicationAdminApi.post(
+      e2eApiUrl("/api/v1/auth/accounts"),
+      {
+        headers: applicationAdminHeaders(),
+        data: {
+          actorId,
+          login: email,
+          temporaryPassword: password,
+          mustChangePassword: false,
+        },
       },
-    });
+    );
     expect(accountResponse.status()).toBe(201);
 
     const context = await browser.newContext({
@@ -95,14 +108,17 @@ test("an authenticated Person actor lands in People before operator workspaces",
       await context.close();
     }
   } finally {
-    const deactivateResponse = await request.patch(
-      e2eApiUrl(`/api/v1/authz/actors/${encodeURIComponent(actorId!)}/active`),
-      {
-        headers: authzHeaders(),
-        data: { active: false },
-      },
-    );
-    expect(deactivateResponse.ok()).toBeTruthy();
+    if (actorId) {
+      const deactivateResponse = await applicationAdminApi.patch(
+        e2eApiUrl(`/api/v1/authz/actors/${encodeURIComponent(actorId)}/active`),
+        {
+          headers: applicationAdminHeaders(),
+          data: { active: false },
+        },
+      );
+      expect(deactivateResponse.ok()).toBeTruthy();
+    }
+    await applicationAdminApi.dispose();
   }
 });
 
