@@ -66,9 +66,14 @@ fi
 
 # Seed a small, deterministic *valid* pre-30H authorization shape. Two distinct
 # global Persons occupy both Tenant Administrator slots in the default Tenant.
-# This ensures the rehearsal proves that 000062 accepts the upper valid boundary,
-# while the local migration tests continue to exercise all deliberate rejection
-# cases (>2, duplicate Person, cross-Tenant Person, and missing canonical Person).
+# One slot deliberately uses the same stable identity as the post-migration E2E
+# default Tenant Administrator fixture. This preserves the upper valid Bite 30H
+# boundary while allowing deployed Playwright provisioning to reconcile that
+# existing slot instead of attempting to create an invalid third administrator.
+# The second slot remains a release-rehearsal-only Person so 000062 still proves
+# the two-distinct-Person upper boundary. Local migration tests continue to
+# exercise all deliberate rejection cases (>2, duplicate Person, cross-Tenant
+# Person, and missing canonical Person).
 sqlite3 -bail "$TMP_DB" <<'SQL'
 PRAGMA foreign_keys = ON;
 
@@ -83,10 +88,10 @@ INSERT INTO people (
   status_id, notes, created_at, updated_at, tenant_id
 ) VALUES
   (
-    'test-rehearsal-legacy-person-a', 'Release', 'Rehearsal A', 'Rehearsal Admin A',
-    '99000000001', 'REHEARSAL-RG-A', '+5599000000001', 'release-rehearsal-admin-a@example.test',
+    'e2e-default-tenant-admin-legacy-person', 'E2E', 'Tenant Administrator', 'e2e-default-tenant-admin',
+    'e2e-default-tenant-admin-cpf', 'e2e-default-tenant-admin-rg', 'e2e-default-tenant-admin-cellular', 'tenant-admin@example.com',
     'Brasil', 'COMPLETE', 1, 'ref-person-status-active',
-    'Pre-30H release-rehearsal legacy Person projection A',
+    'Pre-30H deterministic E2E default Tenant Administrator legacy Person projection',
     CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 'default'
   ),
   (
@@ -103,8 +108,8 @@ INSERT INTO global_people (
   created_at, updated_at
 ) VALUES
   (
-    'test-rehearsal-global-person-a', 'Release', 'Rehearsal A', 'Rehearsal Admin A',
-    '99000000001', 'REHEARSAL-RG-A', '+5599000000001', 'release-rehearsal-admin-a@example.test',
+    'e2e-default-tenant-admin-person', 'E2E', 'Tenant Administrator', 'e2e-default-tenant-admin',
+    'e2e-default-tenant-admin-cpf', 'e2e-default-tenant-admin-rg', 'e2e-default-tenant-admin-cellular', 'tenant-admin@example.com',
     'Brasil', 'COMPLETE', 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
   ),
   (
@@ -117,9 +122,9 @@ INSERT INTO person_tenant_memberships (
   id, created_at, updated_at, tenant_id, person_id, status_id, notes, legacy_person_id
 ) VALUES
   (
-    'test-rehearsal-membership-a', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP,
-    'default', 'test-rehearsal-global-person-a', 'ref-person-status-active',
-    'Pre-30H release-rehearsal Tenant Administrator A', 'test-rehearsal-legacy-person-a'
+    'e2e-default-tenant-admin-membership', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP,
+    'default', 'e2e-default-tenant-admin-person', 'ref-person-status-active',
+    'Pre-30H deterministic E2E default Tenant Administrator', 'e2e-default-tenant-admin-legacy-person'
   ),
   (
     'test-rehearsal-membership-b', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP,
@@ -131,8 +136,8 @@ INSERT INTO authz_actors (
   id, actor_key, display_name, person_id, collaborator_id, active, created_at, updated_at
 ) VALUES
   (
-    'test-rehearsal-actor-a', 'test-rehearsal-tenant-admin-a',
-    'Release Rehearsal Tenant Administrator A', 'test-rehearsal-legacy-person-a', NULL, 1,
+    'e2e-default-tenant-admin-actor', 'e2e-default-tenant-admin',
+    'e2e-default-tenant-admin', 'e2e-default-tenant-admin-legacy-person', NULL, 1,
     CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
   ),
   (
@@ -145,8 +150,8 @@ INSERT INTO auth_user_accounts (
   id, actor_id, login, password_hash, active, must_change_password, created_at, updated_at
 ) VALUES
   (
-    'test-rehearsal-account-a', 'test-rehearsal-actor-a',
-    'release-rehearsal-admin-a@example.test', 'release-rehearsal-placeholder-hash-a',
+    'e2e-default-tenant-admin-account', 'e2e-default-tenant-admin-actor',
+    'tenant-admin@example.com', 'release-rehearsal-placeholder-hash-a',
     1, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
   ),
   (
@@ -156,15 +161,15 @@ INSERT INTO auth_user_accounts (
   );
 
 INSERT INTO auth_account_people (account_id, person_id, created_at, updated_at) VALUES
-  ('test-rehearsal-account-a', 'test-rehearsal-global-person-a', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+  ('e2e-default-tenant-admin-account', 'e2e-default-tenant-admin-person', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
   ('test-rehearsal-account-b', 'test-rehearsal-global-person-b', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
 
 INSERT INTO auth_account_actors (
   account_id, actor_id, scope_type, tenant_id, membership_id, is_primary, created_at, updated_at
 ) VALUES
   (
-    'test-rehearsal-account-a', 'test-rehearsal-actor-a', 'TENANT', 'default',
-    'test-rehearsal-membership-a', 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+    'e2e-default-tenant-admin-account', 'e2e-default-tenant-admin-actor', 'TENANT', 'default',
+    'e2e-default-tenant-admin-membership', 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
   ),
   (
     'test-rehearsal-account-b', 'test-rehearsal-actor-b', 'TENANT', 'default',
@@ -175,7 +180,7 @@ INSERT INTO authz_actor_role_grants (
   id, actor_id, role_id, tenant_id, active, created_at, updated_at
 ) VALUES
   (
-    'test-rehearsal-tenant-admin-grant-a', 'test-rehearsal-actor-a',
+    'authz-grant-e2e-default-tenant-admin-actor-TENANT_ADMIN-default', 'e2e-default-tenant-admin-actor',
     'authz-role-tenant-admin', 'default', 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
   ),
   (
@@ -212,6 +217,32 @@ if [ "$admin_count" != "2" ] || [ "$distinct_people" != "2" ]; then
   echo "Generated Test release baseline does not contain the expected two distinct valid Tenant Administrators." >&2
   exit 1
 fi
+fixture_slot_count="$(sqlite3 "$TMP_DB" "
+SELECT COUNT(*)
+FROM authz_actor_role_grants g
+JOIN authz_actors az ON az.id = g.actor_id
+JOIN auth_account_actors aa
+  ON aa.actor_id = az.id
+ AND aa.scope_type = 'TENANT'
+ AND aa.tenant_id = g.tenant_id
+JOIN auth_user_accounts a ON a.id = aa.account_id
+JOIN person_tenant_memberships m
+  ON m.id = aa.membership_id
+ AND m.tenant_id = aa.tenant_id
+WHERE g.role_id = 'authz-role-tenant-admin'
+  AND g.tenant_id = 'default'
+  AND g.active = 1
+  AND az.id = 'e2e-default-tenant-admin-actor'
+  AND az.actor_key = 'e2e-default-tenant-admin'
+  AND a.id = 'e2e-default-tenant-admin-account'
+  AND a.login = 'tenant-admin@example.com'
+  AND aa.membership_id = 'e2e-default-tenant-admin-membership'
+  AND m.person_id = 'e2e-default-tenant-admin-person';
+")"
+if [ "$fixture_slot_count" != "1" ]; then
+  echo "Generated Test release baseline does not reserve one valid default-Tenant slot for the deterministic E2E Tenant Administrator." >&2
+  exit 1
+fi
 
 # A pre-30H account must resolve to the same Membership through both the
 # compatibility path (Account.actor_id -> Actor.person_id -> legacy_person_id)
@@ -229,7 +260,7 @@ JOIN auth_account_actors aa
  AND aa.scope_type = 'TENANT'
  AND aa.tenant_id = legacy_m.tenant_id
  AND aa.membership_id = legacy_m.id
-WHERE a.id IN ('test-rehearsal-account-a', 'test-rehearsal-account-b');
+WHERE a.id IN ('e2e-default-tenant-admin-account', 'test-rehearsal-account-b');
 ")"
 if [ "$legacy_explicit_alignment" != "2" ]; then
   echo "Generated Test release baseline has inconsistent legacy and explicit Account/Actor Membership bindings." >&2
@@ -270,7 +301,8 @@ printf '%s\n' \
   "Last migration: $EXPECTED_LAST_MIGRATION" \
   "Migration under rehearsal: $MIGRATION_UNDER_REHEARSAL" \
   "Pre-release migrations applied: $applied_count" \
-  "Representative Tenant Administrators: 2 distinct global Persons" \
+  "Representative Tenant Administrators: deterministic E2E default admin + one distinct rehearsal admin" \
+  "Deterministic E2E default Tenant Administrator slot: compatible" \
   "Legacy/explicit Account-Actor identity alignment: 2/2" \
   "Migration probe triggers: $trigger_count" \
   "Integrity check: ok" \

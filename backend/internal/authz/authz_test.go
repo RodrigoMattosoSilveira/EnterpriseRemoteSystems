@@ -144,6 +144,22 @@ func TestRequireTenantScopeRejectsApplicationControlPlaneActor(t *testing.T) {
 	}
 }
 
+func TestRequireTenantScopeAllowsLeasedApplicationActorOnlyForLeaseTenant(t *testing.T) {
+	actor := &Actor{
+		ID:             "app-admin@example.com",
+		TenantID:       "tenant-1",
+		Scope:          ActorScopeApplication,
+		SupportLeaseID: "lease-1",
+	}
+
+	if err := RequireTenantScope(actor, "tenant-1"); err != nil {
+		t.Fatalf("expected leased Application actor to satisfy exact Tenant scope, got %v", err)
+	}
+	if err := RequireTenantScope(actor, "tenant-2"); !errors.Is(err, ErrForbidden) {
+		t.Fatalf("expected leased Application actor to be denied another Tenant, got %v", err)
+	}
+}
+
 func TestRequireTenantScopeRejectsDifferentTenant(t *testing.T) {
 	actor := &Actor{ID: "tenant-admin@example.com", TenantID: "tenant-1", Scope: ActorScopeTenant}
 

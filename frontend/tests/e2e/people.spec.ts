@@ -73,6 +73,9 @@ test("user can create a Person from the React frontend", async ({ page }) => {
 
   await expect(page).toHaveURL(/\/people$/);
   await expect(page.getByRole("heading", { name: "People" })).toBeVisible();
+  await expect(page.getByLabel("People tenant scope")).toContainText(
+    "Tenant ID: default",
+  );
   await expect(page.getByRole("status")).toContainText(
     `Person record added: ${firstName} ${lastName}.`,
   );

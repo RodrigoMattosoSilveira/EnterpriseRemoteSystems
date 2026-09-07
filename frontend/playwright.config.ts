@@ -49,9 +49,11 @@ export default defineConfig({
     video: "retain-on-failure",
     // Header mode deliberately fixes the actor and tenant for isolated
     // authorization tests. Session mode defaults the shared Playwright context
-    // to the canonical E2E Tenant Administrator; control-plane specs override
-    // these headers explicitly with applicationAdminHeaders(). Browser contexts
-    // created inside a test remain header-free unless the test opts in.
+    // to the canonical E2E Tenant Administrator; control-plane tests use the
+    // Application Administrator storage state / newApplicationAdminApi(), and
+    // Tenant-domain setup uses newTenantAdminApi(). X-Actor-ID impersonation is
+    // never relied upon in session mode. Browser contexts created inside a test
+    // remain header-free unless the test opts in.
     extraHTTPHeaders:
       authMode === "headers"
         ? {

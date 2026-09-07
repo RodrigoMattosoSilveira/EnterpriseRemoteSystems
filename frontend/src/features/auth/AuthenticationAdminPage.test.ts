@@ -6,10 +6,12 @@ import type { Person } from "../../types/people";
 import {
   authenticationAccountForActor,
   authenticationAccountForPerson,
+  authenticationAccountIdentityBoundary,
   authenticationAccountMatchesSearch,
   authenticationAccountPersonTarget,
   authenticationActorForCollaborator,
   authenticationActorForPerson,
+  authenticationActorIdentityRows,
   authenticationActorTenantLabel,
   authenticationActorOptionLabel,
   authenticationCollaboratorOptionLabel,
@@ -362,6 +364,63 @@ describe("authentication account actor/account filter", () => {
     expect(authenticationAccountMatchesSearch(personAccount, "tenant-b")).toBe(true);
     expect(authenticationAccountMatchesSearch(personAccount, "Byte 28A")).toBe(true);
     expect(authenticationAccountMatchesSearch(personAccount, "missing")).toBe(false);
+  });
+
+  it("makes Person and Tenant Actor absence explicit for a GLOBAL Application Administrator account", () => {
+    const globalAdminAccount: AuthAccount = {
+      id: "account-global-admin",
+      actorId: "global-admin-record",
+      actorKey: "bootstrap-admin",
+      displayName: "Application Administrator",
+      login: "admin@example.com",
+      active: true,
+      actorActive: true,
+      mustChangePassword: false,
+      createdAt: "2026-09-06T00:00:00Z",
+      updatedAt: "2026-09-06T00:00:00Z",
+      actors: [
+        {
+          actorId: "global-admin-record",
+          actorKey: "bootstrap-admin",
+          displayName: "Application Administrator",
+          scope: "GLOBAL",
+          active: true,
+          primary: true,
+        },
+      ],
+    };
+
+    expect(authenticationAccountIdentityBoundary(globalAdminAccount)).toEqual({
+      personBinding: "None — no Person linked",
+      tenantActorBindings: "None — no Tenant Actors linked",
+      globalActorBindings: "1",
+    });
+  });
+
+  it("lists exact Tenant Actor boundaries when an account legitimately has Tenant Actors", () => {
+    expect(authenticationAccountIdentityBoundary(personAccount)).toEqual({
+      personBinding: "Bound — Marina Oliveira · global-person-marina",
+      tenantActorBindings:
+        "2 — Byte 28A Manual Test (tenant-a); default (tenant-b)",
+      globalActorBindings: "None — no Global Actors linked",
+    });
+  });
+
+  it("exposes explicit Actor ID and Actor Key labels for manual identity inspection", () => {
+    expect(authenticationActorIdentityRows(personAccount.actors![0])).toEqual([
+      { label: "Actor ID", value: "actor-person-a" },
+      { label: "Actor Key", value: "person-a" },
+    ]);
+
+    expect(
+      authenticationActorIdentityRows({
+        actorId: "global-admin-record",
+        actorKey: "bootstrap-admin",
+      }),
+    ).toEqual([
+      { label: "Actor ID", value: "global-admin-record" },
+      { label: "Actor Key", value: "bootstrap-admin" },
+    ]);
   });
 
   it("opens the primary tenant Person and labels Actors by tenant rather than conflating them with the Account", () => {

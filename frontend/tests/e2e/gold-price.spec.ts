@@ -20,6 +20,16 @@ test('user can navigate to gold price recording & record a new gold price', asyn
   // Navigate to Gold Prices
   await expect(page.getByRole('link', { name: 'Gold Prices', exact: true })).toBeVisible();
   await page.getByRole('link', { name: 'Gold Prices', exact: true }).click();
+
+  // /admin/gold-prices is a lazy-loaded route. Under a parallel local run the
+  // Vite dev server can need longer than the global 5-second expect timeout to
+  // compile and render this chunk for the first time. Verify the destination
+  // explicitly so a real authorization redirect reports its actual URL instead
+  // of surfacing as a misleading missing-copy failure.
+  await expect(page).toHaveURL(/\/admin\/gold-prices$/, { timeout: 15_000 });
+  await expect(page.getByRole('heading', { name: 'Gold Prices', exact: true })).toBeVisible({
+    timeout: 15_000,
+  });
   await expect(page.getByText('Record the tenant gold-price')).toBeVisible();
 
   // Get the date

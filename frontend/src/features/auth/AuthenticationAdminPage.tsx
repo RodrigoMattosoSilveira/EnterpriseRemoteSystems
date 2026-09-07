@@ -208,6 +208,54 @@ export function authenticationActorTenantLabel(actor: AuthAccountActor): string 
   return tenantName || tenantId || "Tenant";
 }
 
+export function authenticationActorIdentityRows(
+  actor: Pick<AuthAccountActor, "actorId" | "actorKey">,
+): Array<{ label: "Actor ID" | "Actor Key"; value: string }> {
+  return [
+    { label: "Actor ID", value: actor.actorId },
+    { label: "Actor Key", value: actor.actorKey },
+  ];
+}
+
+export type AuthenticationAccountIdentityBoundary = {
+  personBinding: string;
+  tenantActorBindings: string;
+  globalActorBindings: string;
+};
+
+export function authenticationAccountIdentityBoundary(
+  account: AuthAccount,
+): AuthenticationAccountIdentityBoundary {
+  const actors = account.actors ?? [];
+  const tenantActors = actors.filter((actor) => actor.scope === "TENANT");
+  const globalActors = actors.filter((actor) => actor.scope === "GLOBAL");
+  const actorProjectionAvailable = Array.isArray(account.actors);
+
+  const personBinding = account.globalPersonId
+    ? `Bound — ${account.globalPersonName?.trim() || account.globalPersonId} · ${account.globalPersonId}`
+    : "None — no Person linked";
+
+  const tenantActorBindings = !actorProjectionAvailable
+    ? "Not available — linked Actor scopes were not loaded"
+    : tenantActors.length === 0
+      ? "None — no Tenant Actors linked"
+      : `${tenantActors.length} — ${tenantActors
+          .map((actor) => authenticationActorTenantLabel(actor))
+          .join("; ")}`;
+
+  const globalActorBindings = !actorProjectionAvailable
+    ? "Not available — linked Actor scopes were not loaded"
+    : globalActors.length === 0
+      ? "None — no Global Actors linked"
+      : `${globalActors.length}`;
+
+  return {
+    personBinding,
+    tenantActorBindings,
+    globalActorBindings,
+  };
+}
+
 export function authenticationTenantActorIdsMatchingDisplayName(
   accounts: AuthAccount[],
   tenantOptions: Array<{ id: string; name: string }>,
@@ -481,6 +529,7 @@ export function AuthenticationAdminPage() {
             "Linked Person";
           const anyActorActive =
             account.actors?.some((actor) => actor.active) ?? account.actorActive;
+          const identityBoundary = authenticationAccountIdentityBoundary(account);
 
           return (
             <article
@@ -531,6 +580,38 @@ export function AuthenticationAdminPage() {
               </header>
 
               <div className="grid gap-6 p-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
+                <section
+                  aria-label={`Account identity boundary for ${account.login}`}
+                  className="rounded-xl border border-slate-200 bg-slate-50 p-4 lg:col-span-2"
+                >
+                  <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-600">
+                    Account identity boundary
+                  </h3>
+                  <p className="mt-1 text-xs text-slate-600">
+                    These are persistent Account identity bindings. A Tenant Support Access Lease
+                    authorizes the existing Application Actor temporarily; it does not create a
+                    Person or Tenant Actor binding.
+                  </p>
+                  <dl className="mt-3 grid gap-3 text-sm sm:grid-cols-3">
+                    <div>
+                      <dt className="font-semibold text-slate-700">Person binding</dt>
+                      <dd className="mt-1 text-slate-900">{identityBoundary.personBinding}</dd>
+                    </div>
+                    <div>
+                      <dt className="font-semibold text-slate-700">Tenant Actor bindings</dt>
+                      <dd className="mt-1 text-slate-900">
+                        {identityBoundary.tenantActorBindings}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt className="font-semibold text-slate-700">Global Actor bindings</dt>
+                      <dd className="mt-1 text-slate-900">
+                        {identityBoundary.globalActorBindings}
+                      </dd>
+                    </div>
+                  </dl>
+                </section>
+
                 <section aria-label={`Person linked to ${account.login}`}>
                   <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-500">
                     Person
@@ -580,9 +661,16 @@ export function AuthenticationAdminPage() {
                               <p className="mt-1 text-sm text-slate-700">
                                 {actor.displayName}
                               </p>
-                              <p className="mt-1 break-all text-xs text-slate-500">
-                                Actor: {actor.actorKey}
-                              </p>
+                              <dl className="mt-2 space-y-1 text-xs text-slate-500">
+                                {authenticationActorIdentityRows(actor).map((identity) => (
+                                  <div key={identity.label} className="flex flex-wrap gap-x-1">
+                                    <dt className="font-semibold text-slate-600">
+                                      {identity.label}:
+                                    </dt>
+                                    <dd className="break-all font-mono">{identity.value}</dd>
+                                  </div>
+                                ))}
+                              </dl>
                             </div>
                             <span
                               className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold ${
@@ -606,9 +694,19 @@ export function AuthenticationAdminPage() {
                       <p className="font-semibold text-slate-950">
                         {account.displayName}
                       </p>
-                      <p className="mt-1 break-all text-xs text-slate-500">
-                        Actor: {account.actorKey}
-                      </p>
+                      <dl className="mt-2 space-y-1 text-xs text-slate-500">
+                        {authenticationActorIdentityRows({
+                          actorId: account.actorId,
+                          actorKey: account.actorKey,
+                        }).map((identity) => (
+                          <div key={identity.label} className="flex flex-wrap gap-x-1">
+                            <dt className="font-semibold text-slate-600">
+                              {identity.label}:
+                            </dt>
+                            <dd className="break-all font-mono">{identity.value}</dd>
+                          </div>
+                        ))}
+                      </dl>
                     </div>
                   )}
                 </section>

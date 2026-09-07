@@ -457,6 +457,14 @@ jobs:
       E2E_ADMIN_PASSWORD: ${{ secrets.E2E_ADMIN_PASSWORD }}
       E2E_ADMIN_EMAIL_SOURCE: provisioned-by-deploy
       E2E_ADMIN_PASSWORD_CONFIGURED: ${{ secrets.E2E_ADMIN_PASSWORD != '' && 'true' || 'false' }}
+      # backend/cmd/provision-e2e-admin creates the deterministic non-Production
+      # Tenant Administrator fixtures with the application-admin provisioning
+      # password unless E2E_TENANT_ADMIN_PASSWORD explicitly overrides it.
+      # Deployed Playwright must authenticate the same fixture credentials.
+      E2E_TENANT_ADMIN_EMAIL: tenant-admin@example.com
+      E2E_TENANT_ADMIN_PASSWORD: ${{ secrets.E2E_ADMIN_PASSWORD }}
+      E2E_TENANT_ADMIN_ACTOR_KEY: e2e-default-tenant-admin
+      E2E_TENANT_ADMIN_PASSWORD_CONFIGURED: ${{ secrets.E2E_ADMIN_PASSWORD != '' && 'true' || 'false' }}
       TEST_RELEASE_REHEARSAL: ${{ needs.deploy.outputs.test_release_rehearsal }}
       DEPLOYED_TREE_SHA: ${{ needs.deploy.outputs.tree_sha }}
 
@@ -483,13 +491,21 @@ jobs:
           echo "PLAYWRIGHT_AUTHZ_ACTOR_ID=${PLAYWRIGHT_AUTHZ_ACTOR_ID}"
           echo "E2E_ADMIN_EMAIL_SOURCE=${E2E_ADMIN_EMAIL_SOURCE}"
           echo "E2E_ADMIN_PASSWORD_CONFIGURED=${E2E_ADMIN_PASSWORD_CONFIGURED}"
+          echo "E2E_TENANT_ADMIN_EMAIL=${E2E_TENANT_ADMIN_EMAIL}"
+          echo "E2E_TENANT_ADMIN_ACTOR_KEY=${E2E_TENANT_ADMIN_ACTOR_KEY}"
+          echo "E2E_TENANT_ADMIN_PASSWORD_CONFIGURED=${E2E_TENANT_ADMIN_PASSWORD_CONFIGURED}"
           echo "TEST_RELEASE_REHEARSAL=${TEST_RELEASE_REHEARSAL}"
           echo "DEPLOYED_TREE_SHA=${DEPLOYED_TREE_SHA}"
           if [[ -z "${E2E_ADMIN_EMAIL:-}" || -z "${E2E_ADMIN_PASSWORD:-}" ]]; then
             echo "::error title=Missing deployed Playwright credentials::The deployment did not provide the provisioned administrator login or E2E_ADMIN_PASSWORD is unavailable in the '${DEPLOYMENT_ENVIRONMENT}' GitHub environment."
             exit 1
           fi
+          if [[ -z "${E2E_TENANT_ADMIN_EMAIL:-}" || -z "${E2E_TENANT_ADMIN_PASSWORD:-}" || -z "${E2E_TENANT_ADMIN_ACTOR_KEY:-}" ]]; then
+            echo "::error title=Missing deployed Tenant Administrator credentials::The deployment did not provide the deterministic Tenant Administrator login, password, and Actor Key required by deployed Tenant-domain Playwright authentication."
+            exit 1
+          fi
           echo "Deployed Playwright administrator credentials are configured"
+          echo "Deployed Playwright Tenant Administrator credentials are configured"
           echo "DEPLOYED_REVISION=${{ needs.deploy.outputs.revision }}"
           echo "CHECKED_OUT_REVISION=$(git rev-parse HEAD)"
           test "$(git rev-parse HEAD)" = "${{ needs.deploy.outputs.revision }}"

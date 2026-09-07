@@ -94,6 +94,63 @@ describe("TenantsAdminPage", () => {
     });
   });
 
+  it("filters the tenant catalog by name, code, id, or description", async () => {
+    const tenants = [
+      tenant,
+      {
+        ...tenant,
+        id: "north-site",
+        code: "NORTH",
+        name: "North Operations",
+        description: "Warehouse and logistics tenant",
+      },
+      {
+        ...tenant,
+        id: "south-site",
+        code: "SOUTH",
+        name: "South Office",
+        description: "Regional administration",
+      },
+    ];
+
+    mockFetch(async (url, init) => {
+      calls.push({ url, method: init?.method ?? "GET", body: parseBody(init?.body) });
+      if (url === "/api/v1/tenants" && !init?.method) return json({ data: tenants });
+      if (url === "/api/v1/auth/reactivation-requests" && !init?.method) return json({ data: [] });
+      throw new Error(`Unhandled request: ${url}`);
+    });
+
+    renderPage(applicationAdminActor);
+    await waitForText("North Operations");
+
+    await setInput("Filter tenants", "north");
+    expect(container.textContent).toContain("North Operations");
+    expect(container.textContent).not.toContain("Default Tenant");
+    expect(container.textContent).not.toContain("South Office");
+    expect(container.textContent).toContain("1 of 3 tenants");
+
+    await setInput("Filter tenants", "LOGISTICS");
+    expect(container.textContent).toContain("North Operations");
+    expect(container.textContent).not.toContain("South Office");
+
+    await setInput("Filter tenants", "south-site");
+    expect(container.textContent).toContain("South Office");
+    expect(container.textContent).not.toContain("North Operations");
+
+    await setInput("Filter tenants", "does-not-exist");
+    expect(container.textContent).toContain("No tenants match the current filter.");
+    expect(container.textContent).toContain("0 of 3 tenants");
+
+    await click("Clear filter");
+    expect(findInput("Filter tenants").value).toBe("");
+    expect(container.textContent).toContain("Default Tenant");
+    expect(container.textContent).toContain("North Operations");
+    expect(container.textContent).toContain("South Office");
+    expect(container.textContent).toContain("3 tenants");
+
+    expect(calls.filter((call) => call.url === "/api/v1/tenants")).toHaveLength(1);
+  });
+
   it("surfaces pending account reactivation requests on the GLOBAL control-plane landing page", async () => {
     mockFetch(async (url, init) => {
       calls.push({ url, method: init?.method ?? "GET", body: parseBody(init?.body) });

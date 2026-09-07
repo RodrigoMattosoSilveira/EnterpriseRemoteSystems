@@ -2,6 +2,7 @@ package authz
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -88,7 +89,27 @@ func (s *GORMStore) FindActor(ctx context.Context, lookup ActorLookup) (*Actor, 
 	}
 	if len(globalRoles) > 0 {
 		if tenantID != GlobalTenantScope {
-			return nil, ErrTenantActorUnavailable
+			lease, err := s.findActiveSupportAccessLease(ctx, actorRow.ID, tenantID, time.Now().UTC())
+			if err != nil {
+				if errors.Is(err, gorm.ErrRecordNotFound) {
+					return nil, ErrTenantActorUnavailable
+				}
+				return nil, err
+			}
+			return &Actor{
+				ID:                      actorRow.ActorKey,
+				RecordID:                actorRow.ID,
+				TenantID:                tenantID,
+				Source:                  ActorSourcePersisted,
+				Scope:                   ActorScopeApplication,
+				RoleCodes:               globalRoles,
+				Permissions:             mergePermissionSets(globalPermissions, lease.Permissions),
+				DelegatedPermissions:    clonePermissionSet(globalPermissions),
+				IntrinsicPermissions:    map[Permission]struct{}{},
+				SupportLeaseID:          lease.ID,
+				SupportLeaseExpiresAt:   lease.ExpiresAt.UTC().Format(time.RFC3339),
+				SupportLeasePermissions: clonePermissionSet(lease.Permissions),
+			}, nil
 		}
 		return &Actor{
 			ID:                   actorRow.ActorKey,
@@ -166,7 +187,17 @@ func (s *GORMStore) loadDelegatedAuthorization(ctx context.Context, actorID stri
 }
 
 func AutoMigrate(database *gorm.DB) error {
-	if err := database.AutoMigrate(&AuthzActor{}, &AuthzRole{}, &AuthzPermission{}, &AuthzRolePermission{}, &AuthzActorRoleGrant{}, &AuthzAuditLog{}); err != nil {
+	if err := database.AutoMigrate(
+		&AuthzActor{},
+		&AuthzRole{},
+		&AuthzPermission{},
+		&AuthzRolePermission{},
+		&AuthzActorRoleGrant{},
+		&AuthzAuditLog{},
+		&TenantSupportAccessLease{},
+		&TenantSupportAccessLeasePermission{},
+		&TenantSupportAccessLeaseEvent{},
+	); err != nil {
 		return err
 	}
 	return EnsureAuditLogImmutability(database)
@@ -201,6 +232,8 @@ func applicationAdministratorControlPlanePermissions() []Permission {
 		PermissionAuthzSelfRead,
 		PermissionAuthzRead,
 		PermissionAuthzManage,
+		PermissionSupportAccessLeasesRead,
+		PermissionSupportAccessLeasesRequest,
 		PermissionTenantsRead,
 		PermissionTenantsCreate,
 		PermissionTenantsUpdate,
@@ -230,6 +263,9 @@ func tenantAdministratorDelegatedPermissions() []Permission {
 		PermissionGoldProductionManage,
 		PermissionAuthzTenantActorsManage,
 		PermissionAuthzTenantRoleGrantsManage,
+		PermissionSupportAccessLeasesRead,
+		PermissionSupportAccessLeasesApprove,
+		PermissionSupportAccessLeasesTerminate,
 		PermissionReferenceDataRead,
 		PermissionReferenceDataManage,
 		PermissionExpensesRead,
@@ -577,6 +613,10 @@ func PermissionCatalog() []PermissionCatalogEntry {
 		{PermissionAuthzManage, "Manage authorization administration", "Create authorization actors and manage application-global role grants."},
 		{PermissionAuthzTenantActorsManage, "Manage tenant Actors", "Activate and deactivate Account-bound Actors for members of the selected tenant."},
 		{PermissionAuthzTenantRoleGrantsManage, "Manage tenant operator role grants", "Grant and revoke Earnings Operator and Expenses Operator roles for active Actors backed by ACTIVE Memberships in the selected tenant."},
+		{PermissionSupportAccessLeasesRead, "Read Tenant support access leases", "Read Tenant Support Access Lease requests and lifecycle state within the actor's authorized scope."},
+		{PermissionSupportAccessLeasesRequest, "Request Tenant support access", "Request fixed-expiration, permission-scoped Tenant support access for the Application Administrator's GLOBAL Actor."},
+		{PermissionSupportAccessLeasesApprove, "Approve Tenant support access", "Approve a pending Tenant Support Access Lease for the Tenant administered by the actor."},
+		{PermissionSupportAccessLeasesTerminate, "Terminate Tenant support access", "Immediately terminate an approved Tenant Support Access Lease for the Tenant administered by the actor."},
 		{PermissionTenantsRead, "Read tenants", "Read tenant records."},
 		{PermissionTenantsCreate, "Create tenants", "Create tenant records."},
 		{PermissionTenantsUpdate, "Update tenants", "Update tenant records."},
@@ -642,17 +682,20 @@ func stringValue(value *string) string {
 // TenantOption describes an active tenant context available to an authenticated
 // Account. For ordinary Accounts the option names the exact active tenant Actor
 // and Membership that will become effective when the tenant is selected. GLOBAL
-// Application Administrator Accounts expose exactly one control-plane context
-// (`*`) and never enumerate Tenants as implicit operating contexts.
+// Application Administrator Accounts always expose the global control-plane
+// context (`*`). Bite 30I.2 additionally exposes a Tenant option only while an
+// approved, unexpired Support Access Lease is effective for that Tenant.
 type TenantOption struct {
-	ID            string   `json:"id"`
-	Code          string   `json:"code"`
-	Name          string   `json:"name"`
-	RoleCodes     []string `json:"roleCodes"`
-	ActorRecordID string   `json:"actorRecordId"`
-	ActorKey      string   `json:"actorKey"`
-	ActorScope    string   `json:"actorScope"`
-	MembershipID  string   `json:"membershipId,omitempty"`
+	ID                    string   `json:"id"`
+	Code                  string   `json:"code"`
+	Name                  string   `json:"name"`
+	RoleCodes             []string `json:"roleCodes"`
+	ActorRecordID         string   `json:"actorRecordId"`
+	ActorKey              string   `json:"actorKey"`
+	ActorScope            string   `json:"actorScope"`
+	MembershipID          string   `json:"membershipId,omitempty"`
+	SupportLeaseID        string   `json:"supportLeaseId,omitempty"`
+	SupportLeaseExpiresAt string   `json:"supportLeaseExpiresAt,omitempty"`
 }
 
 type TenantOptionStore interface {
@@ -710,7 +753,7 @@ func (s *GORMStore) ListActorTenantOptions(ctx context.Context, actorRecordID st
 			roleCodes = append(roleCodes, role)
 		}
 		sort.Strings(roleCodes)
-		return []TenantOption{{
+		options := []TenantOption{{
 			ID:            GlobalTenantScope,
 			Code:          "GLOBAL",
 			Name:          "Global administration",
@@ -718,7 +761,12 @@ func (s *GORMStore) ListActorTenantOptions(ctx context.Context, actorRecordID st
 			ActorRecordID: actor.ID,
 			ActorKey:      actor.ActorKey,
 			ActorScope:    string(ActorScopeApplication),
-		}}, nil
+		}}
+		supportOptions, err := s.supportLeaseTenantOptions(ctx, actor.ID, actor.ActorKey, roleCodes, time.Now().UTC())
+		if err != nil {
+			return nil, err
+		}
+		return append(options, supportOptions...), nil
 	}
 
 	type tenantProjection struct {
@@ -811,6 +859,15 @@ func (s *GORMStore) FindAccountActor(ctx context.Context, accountID string, tena
 		return nil, fmt.Errorf("find authenticated Account Actor: %w", result.Error)
 	}
 	if result.RowsAffected == 0 {
+		if tenantID != GlobalTenantScope {
+			supportActor, err := s.buildSupportLeaseActorForAccount(ctx, accountID, tenantID)
+			if err == nil {
+				return supportActor, nil
+			}
+			if !errors.Is(err, gorm.ErrRecordNotFound) && !errors.Is(err, ErrTenantActorUnavailable) {
+				return nil, err
+			}
+		}
 		return nil, ErrTenantActorUnavailable
 	}
 
@@ -835,7 +892,26 @@ func (s *GORMStore) FindAccountActor(ctx context.Context, accountID string, tena
 		}, nil
 	}
 
-	return s.buildTenantBoundActor(ctx, binding, tenantID)
+	tenantActor, err := s.buildTenantBoundActor(ctx, binding, tenantID)
+	if err == nil {
+		return tenantActor, nil
+	}
+	if !errors.Is(err, ErrTenantActorUnavailable) {
+		return nil, err
+	}
+
+	// An ordinary active Tenant Actor remains preferred. If the persisted Tenant
+	// binding is no longer operational (for example, its Membership is inactive),
+	// a valid support lease may still provide the existing GLOBAL Application
+	// Administrator Actor with temporary authority for this exact Tenant.
+	supportActor, supportErr := s.buildSupportLeaseActorForAccount(ctx, accountID, tenantID)
+	if supportErr == nil {
+		return supportActor, nil
+	}
+	if !errors.Is(supportErr, gorm.ErrRecordNotFound) && !errors.Is(supportErr, ErrTenantActorUnavailable) {
+		return nil, supportErr
+	}
+	return nil, err
 }
 
 type intrinsicTenantIdentity struct {
@@ -998,7 +1074,7 @@ func (s *GORMStore) ListAccountTenantOptions(ctx context.Context, accountID stri
 		if len(roleCodes) == 0 {
 			return []TenantOption{}, nil
 		}
-		return []TenantOption{{
+		options := []TenantOption{{
 			ID:            GlobalTenantScope,
 			Code:          "GLOBAL",
 			Name:          "Global administration",
@@ -1006,7 +1082,12 @@ func (s *GORMStore) ListAccountTenantOptions(ctx context.Context, accountID stri
 			ActorRecordID: globalBinding.ActorID,
 			ActorKey:      globalBinding.ActorKey,
 			ActorScope:    string(ActorScopeApplication),
-		}}, nil
+		}}
+		supportOptions, err := s.supportLeaseTenantOptions(ctx, globalBinding.ActorID, globalBinding.ActorKey, roleCodes, time.Now().UTC())
+		if err != nil {
+			return nil, err
+		}
+		return append(options, supportOptions...), nil
 	}
 
 	// Ordinary tenant options are identity options, not Role-Grant options. A
@@ -1062,6 +1143,110 @@ func (s *GORMStore) ListAccountTenantOptions(ctx context.Context, accountID stri
 			ActorKey:      binding.ActorKey,
 			ActorScope:    string(ActorScopeTenant),
 			MembershipID:  binding.MembershipID,
+		})
+	}
+	return options, nil
+}
+
+func (s *GORMStore) buildSupportLeaseActorForAccount(ctx context.Context, accountID string, tenantID string) (*Actor, error) {
+	if s == nil || s.database == nil || tenantID == "" || tenantID == GlobalTenantScope {
+		return nil, gorm.ErrRecordNotFound
+	}
+	if !s.database.Migrator().HasTable(&TenantSupportAccessLease{}) {
+		return nil, gorm.ErrRecordNotFound
+	}
+
+	var binding accountActorBindingProjection
+	result := s.database.WithContext(ctx).
+		Table("auth_account_actors aa").
+		Select(`aa.account_id AS account_id,
+			aa.actor_id AS actor_id,
+			a.actor_key AS actor_key,
+			a.display_name AS display_name,
+			aa.scope_type AS scope_type,
+			aa.tenant_id AS tenant_id,
+			aa.membership_id AS membership_id`).
+		Joins("JOIN authz_actors a ON a.id = aa.actor_id AND a.active = ?", true).
+		Where("aa.account_id = ? AND aa.scope_type = ?", strings.TrimSpace(accountID), "GLOBAL").
+		Limit(1).
+		Scan(&binding)
+	if result.Error != nil {
+		return nil, fmt.Errorf("find global Account Actor for support lease: %w", result.Error)
+	}
+	if result.RowsAffected == 0 {
+		return nil, gorm.ErrRecordNotFound
+	}
+
+	roles, controlPlanePermissions, err := s.loadDelegatedAuthorization(ctx, binding.ActorID, GlobalTenantScope, ActorScopeApplication)
+	if err != nil {
+		return nil, err
+	}
+	if !containsRoleCode(roles, RoleApplicationAdmin) {
+		return nil, ErrTenantActorUnavailable
+	}
+	lease, err := s.findActiveSupportAccessLease(ctx, binding.ActorID, tenantID, time.Now().UTC())
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, ErrTenantActorUnavailable
+		}
+		return nil, err
+	}
+
+	return &Actor{
+		ID:                      binding.ActorKey,
+		RecordID:                binding.ActorID,
+		TenantID:                tenantID,
+		Source:                  ActorSourceAuthenticatedSession,
+		Scope:                   ActorScopeApplication,
+		RoleCodes:               roles,
+		Permissions:             mergePermissionSets(controlPlanePermissions, lease.Permissions),
+		DelegatedPermissions:    clonePermissionSet(controlPlanePermissions),
+		IntrinsicPermissions:    map[Permission]struct{}{},
+		SupportLeaseID:          lease.ID,
+		SupportLeaseExpiresAt:   lease.ExpiresAt.UTC().Format(time.RFC3339),
+		SupportLeasePermissions: clonePermissionSet(lease.Permissions),
+	}, nil
+}
+
+func (s *GORMStore) supportLeaseTenantOptions(ctx context.Context, actorRecordID string, actorKey string, roleCodes []string, now time.Time) ([]TenantOption, error) {
+	if s == nil || s.database == nil || !s.database.Migrator().HasTable(&TenantSupportAccessLease{}) {
+		return []TenantOption{}, nil
+	}
+	type leaseOptionProjection struct {
+		LeaseID   string
+		TenantID  string
+		Code      string
+		Name      string
+		ExpiresAt time.Time
+	}
+	var rows []leaseOptionProjection
+	if err := s.database.WithContext(ctx).
+		Table("tenant_support_access_leases l").
+		Select("l.id AS lease_id, l.tenant_id AS tenant_id, t.code AS code, t.name AS name, l.expires_at AS expires_at").
+		Joins("JOIN tenants t ON t.id = l.tenant_id AND t.active = ?", true).
+		Where("l.application_actor_id = ? AND l.status = ? AND l.expires_at > ?", actorRecordID, SupportAccessLeaseStatusApproved, now.UTC()).
+		Order("t.name ASC, t.code ASC, t.id ASC, l.approved_at DESC").
+		Scan(&rows).Error; err != nil {
+		return nil, fmt.Errorf("list active Tenant Support Access Lease options: %w", err)
+	}
+
+	seen := map[string]struct{}{}
+	options := make([]TenantOption, 0, len(rows))
+	for _, row := range rows {
+		if _, duplicate := seen[row.TenantID]; duplicate {
+			continue
+		}
+		seen[row.TenantID] = struct{}{}
+		options = append(options, TenantOption{
+			ID:                    row.TenantID,
+			Code:                  row.Code,
+			Name:                  row.Name,
+			RoleCodes:             append([]string{}, roleCodes...),
+			ActorRecordID:         actorRecordID,
+			ActorKey:              actorKey,
+			ActorScope:            string(ActorScopeApplication),
+			SupportLeaseID:        row.LeaseID,
+			SupportLeaseExpiresAt: row.ExpiresAt.UTC().Format(time.RFC3339),
 		})
 	}
 	return options, nil

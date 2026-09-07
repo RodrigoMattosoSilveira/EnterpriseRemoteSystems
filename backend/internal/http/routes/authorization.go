@@ -246,7 +246,7 @@ func requireApplicationPermission(deps Dependencies, permission authz.Permission
 		if err := authz.RequirePermission(actor, permission); err != nil {
 			return writeAuthorizationError(c, err)
 		}
-		if actor.Scope != authz.ActorScopeApplication {
+		if actor.Scope != authz.ActorScopeApplication || actor.TenantID != authz.GlobalTenantScope || actor.SupportLeaseID != "" {
 			return writeAuthorizationError(c, authz.ErrForbidden)
 		}
 		return c.Next()
