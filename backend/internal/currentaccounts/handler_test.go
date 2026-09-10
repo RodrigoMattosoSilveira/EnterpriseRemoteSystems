@@ -1813,15 +1813,14 @@ func seedBoundCurrentAccountTestActor(t *testing.T, database *gorm.DB, actorKey 
 		t.Fatalf("create current-account test Membership %s: %v", actorKey, err)
 	}
 
-	legacyPersonProjectionID := "current-account-test-person-" + suffix
 	actor := authz.AuthzActor{
-		ID: actorID, ActorKey: actorKey, DisplayName: actorKey, PersonID: &legacyPersonProjectionID, Active: true, CreatedAt: now, UpdatedAt: now,
+		ID: actorID, ActorKey: actorKey, DisplayName: actorKey, Active: true, CreatedAt: now, UpdatedAt: now,
 	}
 	if err := database.Create(&actor).Error; err != nil {
 		t.Fatalf("create bound current-account test actor %s: %v", actorKey, err)
 	}
 	if err := database.Table("auth_user_accounts").Create(map[string]any{
-		"id": accountID, "actor_id": actorID, "login": actorKey, "password_hash": "test-only-not-used",
+		"id": accountID, "login": actorKey, "password_hash": "test-only-not-used",
 		"active": true, "must_change_password": false, "created_at": now, "updated_at": now,
 	}).Error; err != nil {
 		t.Fatalf("create bound current-account test account %s: %v", actorKey, err)
@@ -1833,7 +1832,7 @@ func seedBoundCurrentAccountTestActor(t *testing.T, database *gorm.DB, actorKey 
 	}
 	if err := database.Table("auth_account_actors").Create(map[string]any{
 		"account_id": accountID, "actor_id": actorID, "scope_type": "TENANT", "tenant_id": tenantID,
-		"membership_id": membershipID, "is_primary": true, "created_at": now, "updated_at": now,
+		"membership_id": membershipID, "created_at": now, "updated_at": now,
 	}).Error; err != nil {
 		t.Fatalf("bind current-account test actor %s to tenant %s: %v", actorKey, tenantID, err)
 	}

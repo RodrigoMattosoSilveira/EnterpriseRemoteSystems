@@ -201,7 +201,6 @@ func ProvisionApplicationAdmin(ctx context.Context, database *gorm.DB, cfg Provi
 			}
 			account := Account{
 				ID:                 ids.New(),
-				ActorID:            bootstrap.ActorID,
 				Login:              cfg.Login,
 				PasswordHash:       string(passwordHash),
 				Active:             true,
@@ -217,7 +216,6 @@ func ProvisionApplicationAdmin(ctx context.Context, database *gorm.DB, cfg Provi
 				AccountID: account.ID,
 				ActorID:   bootstrap.ActorID,
 				ScopeType: AccountActorScopeGlobal,
-				Primary:   false,
 				CreatedAt: now,
 				UpdatedAt: now,
 			}); err != nil {
@@ -268,7 +266,6 @@ func ProvisionApplicationAdmin(ctx context.Context, database *gorm.DB, cfg Provi
 			AccountID: actorAccount.ID,
 			ActorID:   bootstrap.ActorID,
 			ScopeType: AccountActorScopeGlobal,
-			Primary:   false,
 			CreatedAt: actorBinding.CreatedAt,
 			UpdatedAt: actorBinding.UpdatedAt,
 		}); err != nil {

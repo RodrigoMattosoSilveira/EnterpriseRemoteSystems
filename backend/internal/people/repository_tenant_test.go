@@ -98,13 +98,13 @@ func TestRepositoryPeopleSearchFindsInactiveTenantActorIdentityAliases(t *testin
 	actorKey := "manual30e-identity-d-tenant-a"
 	actor := authz.AuthzActor{
 		ID: actorID, ActorKey: actorKey, DisplayName: "Diana Disposable (30E Identity D)",
-		PersonID: &created.ID, Active: false, CreatedAt: now, UpdatedAt: now,
+		Active: false, CreatedAt: now, UpdatedAt: now,
 	}
 	if err := database.Create(&actor).Error; err != nil {
 		t.Fatalf("create inactive Tenant Actor: %v", err)
 	}
 	account := authentication.Account{
-		ID: "account-identity-d", ActorID: actorID, Login: "manual30e.identity-d@example.test",
+		ID: "account-identity-d", Login: "manual30e.identity-d@example.test",
 		PasswordHash: "manual-test-hash", Active: true, CreatedAt: now, UpdatedAt: now,
 	}
 	if err := database.Create(&account).Error; err != nil {
@@ -119,7 +119,7 @@ func TestRepositoryPeopleSearchFindsInactiveTenantActorIdentityAliases(t *testin
 	membershipID := created.MembershipID
 	if err := database.Create(&authentication.AccountActor{
 		AccountID: account.ID, ActorID: actorID, ScopeType: authentication.AccountActorScopeTenant,
-		TenantID: &tenantID, MembershipID: &membershipID, Primary: true, CreatedAt: now, UpdatedAt: now,
+		TenantID: &tenantID, MembershipID: &membershipID, CreatedAt: now, UpdatedAt: now,
 	}).Error; err != nil {
 		t.Fatalf("bind inactive Tenant Actor: %v", err)
 	}
@@ -152,13 +152,13 @@ func TestRepositoryPeopleSearchFindsInactiveTenantActorIdentityAliases(t *testin
 	otherActorKey := "identity-d-other-tenant-only"
 	if err := database.Create(&authz.AuthzActor{
 		ID: otherActorID, ActorKey: otherActorKey, DisplayName: "Other Tenant Alias Only",
-		PersonID: &created.ID, Active: false, CreatedAt: now, UpdatedAt: now,
+		Active: false, CreatedAt: now, UpdatedAt: now,
 	}).Error; err != nil {
 		t.Fatalf("create other-tenant Actor: %v", err)
 	}
 	if err := database.Create(&authentication.AccountActor{
 		AccountID: account.ID, ActorID: otherActorID, ScopeType: authentication.AccountActorScopeTenant,
-		TenantID: &otherTenantID, Primary: false, CreatedAt: now, UpdatedAt: now,
+		TenantID: &otherTenantID, CreatedAt: now, UpdatedAt: now,
 	}).Error; err != nil {
 		t.Fatalf("bind other-tenant Actor: %v", err)
 	}
@@ -238,17 +238,9 @@ func TestRepositoryPeopleReadsAndWritesAreScopedByTenant(t *testing.T) {
 	if err := database.Create(&[]db.GlobalPerson{defaultGlobal, otherGlobal}).Error; err != nil {
 		t.Fatalf("create global People: %v", err)
 	}
-	defaultLegacyID, otherLegacyID := "person-default", "person-other"
-	legacyRows := []db.Person{
-		{BaseModel: db.BaseModel{ID: defaultLegacyID, CreatedAt: now, UpdatedAt: now}, TenantID: db.DefaultTenantID, FirstName: defaultGlobal.FirstName, LastName: defaultGlobal.LastName, Nickname: defaultGlobal.Nickname, CPF: defaultGlobal.CPF, RG: defaultGlobal.RG, Cellular: defaultGlobal.Cellular, Email: defaultGlobal.Email, Country: "Brasil", StatusID: "ref-person-status-active", ProfileCompletionStatus: "PERSONAL_ONLY"},
-		{BaseModel: db.BaseModel{ID: otherLegacyID, CreatedAt: now, UpdatedAt: now}, TenantID: otherTenantID, FirstName: otherGlobal.FirstName, LastName: otherGlobal.LastName, Nickname: otherGlobal.Nickname, CPF: otherGlobal.CPF, RG: otherGlobal.RG, Cellular: otherGlobal.Cellular, Email: otherGlobal.Email, Country: "Brasil", StatusID: otherActive.ID, ProfileCompletionStatus: "PERSONAL_ONLY"},
-	}
-	if err := database.Create(&legacyRows).Error; err != nil {
-		t.Fatalf("create temporary legacy mirrors: %v", err)
-	}
 	memberships := []db.PersonTenantMembership{
-		{BaseModel: db.BaseModel{ID: "membership-default", CreatedAt: now, UpdatedAt: now}, TenantID: db.DefaultTenantID, PersonID: defaultGlobal.ID, StatusID: "ref-person-status-active", LegacyPersonID: &defaultLegacyID},
-		{BaseModel: db.BaseModel{ID: "membership-other", CreatedAt: now, UpdatedAt: now}, TenantID: otherTenantID, PersonID: otherGlobal.ID, StatusID: otherActive.ID, LegacyPersonID: &otherLegacyID},
+		{BaseModel: db.BaseModel{ID: "membership-default", CreatedAt: now, UpdatedAt: now}, TenantID: db.DefaultTenantID, PersonID: defaultGlobal.ID, StatusID: "ref-person-status-active"},
+		{BaseModel: db.BaseModel{ID: "membership-other", CreatedAt: now, UpdatedAt: now}, TenantID: otherTenantID, PersonID: otherGlobal.ID, StatusID: otherActive.ID},
 	}
 	if err := database.Create(&memberships).Error; err != nil {
 		t.Fatalf("create canonical Memberships: %v", err)

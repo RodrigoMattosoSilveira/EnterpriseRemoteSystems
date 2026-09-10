@@ -653,14 +653,9 @@ func tenantAdministratorGlobalPersonID(database *gorm.DB, actorID string, tenant
 		})
 	}
 
-	// Compatibility for isolated authorization unit tests that intentionally do
-	// not install the Bite 30 Account/Actor foundation. This path is not used by
-	// production Tenant Administrator assignment endpoints.
-	var actor AuthzActor
-	if err := database.Select("id", "person_id").Where("id = ?", actorID).First(&actor).Error; err != nil {
-		return "", fmt.Errorf("find Tenant Administrator Actor: %w", err)
-	}
-	return strings.TrimSpace(stringValue(actor.PersonID)), nil
+	// Internal seed/test callers that do not require a canonical binding cannot
+	// derive Person identity. Never fall back to authz_actors.person_id.
+	return "", nil
 }
 
 type PermissionCatalogEntry struct {

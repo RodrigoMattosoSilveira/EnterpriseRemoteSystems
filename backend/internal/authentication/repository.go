@@ -40,7 +40,6 @@ type AccountRecord struct {
 
 type PersonAuthenticationRecord struct {
 	TenantID             string
-	LegacyPersonID       string
 	GlobalPersonID       string
 	MembershipID         string
 	Login                string

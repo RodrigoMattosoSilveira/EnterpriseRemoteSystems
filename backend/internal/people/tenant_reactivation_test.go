@@ -60,21 +60,19 @@ func TestTenantReactivationRestoresOnlySelectedMembershipAndBaselineAuthority(t 
 	if err := database.First(&membershipBRecord, "id = ?", second.MembershipID).Error; err != nil {
 		t.Fatalf("load Tenant B Membership: %v", err)
 	}
-	if membershipARecord.LegacyPersonID == nil || membershipBRecord.LegacyPersonID == nil {
-		t.Fatal("expected temporary legacy Actor write mirrors during 30K.1")
+	if membershipARecord.LegacyPersonID != nil || membershipBRecord.LegacyPersonID != nil {
+		t.Fatalf("canonical Membership creation must not populate legacy Person projections, A=%+v B=%+v", membershipARecord.LegacyPersonID, membershipBRecord.LegacyPersonID)
 	}
-	legacyPersonA := *membershipARecord.LegacyPersonID
-	legacyPersonB := *membershipBRecord.LegacyPersonID
 
-	account := authentication.Account{ID: "account-return", ActorID: "actor-return-a", Login: "return.worker@example.test", PasswordHash: "not-used", Active: true, CreatedAt: now, UpdatedAt: now}
+	account := authentication.Account{ID: "account-return", Login: "return.worker@example.test", PasswordHash: "not-used", Active: true, CreatedAt: now, UpdatedAt: now}
 	if err := database.Create(&account).Error; err != nil {
 		t.Fatalf("create Account: %v", err)
 	}
 	if err := database.Create(&authentication.AccountPerson{AccountID: account.ID, PersonID: first.GlobalPersonID, CreatedAt: now, UpdatedAt: now}).Error; err != nil {
 		t.Fatalf("bind Account Person: %v", err)
 	}
-	actorA := authz.AuthzActor{ID: "actor-return-a", ActorKey: "return-a", DisplayName: "Return A", PersonID: &legacyPersonA, Active: true, CreatedAt: now, UpdatedAt: now}
-	actorB := authz.AuthzActor{ID: "actor-return-b", ActorKey: "return-b", DisplayName: "Return B", PersonID: &legacyPersonB, Active: true, CreatedAt: now, UpdatedAt: now}
+	actorA := authz.AuthzActor{ID: "actor-return-a", ActorKey: "return-a", DisplayName: "Return A", Active: true, CreatedAt: now, UpdatedAt: now}
+	actorB := authz.AuthzActor{ID: "actor-return-b", ActorKey: "return-b", DisplayName: "Return B", Active: true, CreatedAt: now, UpdatedAt: now}
 	if err := database.Create(&actorA).Error; err != nil {
 		t.Fatalf("create Actor A: %v", err)
 	}
@@ -86,7 +84,7 @@ func TestTenantReactivationRestoresOnlySelectedMembershipAndBaselineAuthority(t 
 	membershipA := first.MembershipID
 	membershipB := second.MembershipID
 	bindings := []authentication.AccountActor{
-		{AccountID: account.ID, ActorID: actorA.ID, ScopeType: authentication.AccountActorScopeTenant, TenantID: &tenantA, MembershipID: &membershipA, Primary: true, CreatedAt: now, UpdatedAt: now},
+		{AccountID: account.ID, ActorID: actorA.ID, ScopeType: authentication.AccountActorScopeTenant, TenantID: &tenantA, MembershipID: &membershipA, CreatedAt: now, UpdatedAt: now},
 		{AccountID: account.ID, ActorID: actorB.ID, ScopeType: authentication.AccountActorScopeTenant, TenantID: &tenantB, MembershipID: &membershipB, CreatedAt: now, UpdatedAt: now},
 	}
 	if err := database.Create(&bindings).Error; err != nil {

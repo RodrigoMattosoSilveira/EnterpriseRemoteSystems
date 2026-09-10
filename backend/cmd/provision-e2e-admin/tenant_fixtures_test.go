@@ -48,7 +48,6 @@ func TestEnsureE2ETenantFixturesSurvivesAccountActorFoundationAndIsIdempotent(t 
 	}
 
 	const stem = "e2e-default-tenant-admin"
-	legacyPersonID := stem + "-legacy-person"
 	membershipID := stem + "-membership"
 	actorID := stem + "-actor"
 	accountID := stem + "-account"
@@ -57,8 +56,8 @@ func TestEnsureE2ETenantFixturesSurvivesAccountActorFoundationAndIsIdempotent(t 
 	if err := database.First(&membership, "id = ?", membershipID).Error; err != nil {
 		t.Fatalf("find E2E Tenant Administrator Membership: %v", err)
 	}
-	if membership.LegacyPersonID == nil || *membership.LegacyPersonID != legacyPersonID {
-		t.Fatalf("expected Membership legacy Person %q, got %#v", legacyPersonID, membership.LegacyPersonID)
+	if membership.LegacyPersonID != nil {
+		t.Fatalf("canonical E2E Membership must not populate legacy Person identity, got %#v", membership.LegacyPersonID)
 	}
 
 	var actor authz.AuthzActor

@@ -95,8 +95,8 @@ func TestGlobalPersonMembershipFoundationSharesIdentityWithoutSharingTenantState
 	if err := database.First(&secondMembership, "id = ?", second.MembershipID).Error; err != nil {
 		t.Fatalf("load Tenant B Membership: %v", err)
 	}
-	if firstMembership.LegacyPersonID == nil || secondMembership.LegacyPersonID == nil || *firstMembership.LegacyPersonID == *secondMembership.LegacyPersonID {
-		t.Fatalf("expected distinct temporary legacy write mirrors, default=%+v tenantB=%+v", firstMembership.LegacyPersonID, secondMembership.LegacyPersonID)
+	if firstMembership.LegacyPersonID != nil || secondMembership.LegacyPersonID != nil {
+		t.Fatalf("canonical Membership creation must not populate legacy Person projections, default=%+v tenantB=%+v", firstMembership.LegacyPersonID, secondMembership.LegacyPersonID)
 	}
 	if second.GlobalPersonID != created.GlobalPersonID {
 		t.Fatalf("expected shared global person %q, got %q", created.GlobalPersonID, second.GlobalPersonID)

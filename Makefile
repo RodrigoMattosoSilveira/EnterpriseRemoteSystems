@@ -293,8 +293,20 @@ local-login-test: local-people-create-test
 local-admin-test:
 	@echo "No local admin API test is currently defined for Enterprise Remote Systems."
 
+
+.PHONY: legacy-identity-dependency-check
+legacy-identity-dependency-check:
+	python3 scripts/verify-no-live-legacy-identity-dependencies.py
+
+.PHONY: local-hot-reload-check
+local-hot-reload-check:
+	@grep -Eq 'cmd = "[^"]*db-migrate\.sh[^"]*&&[^"]*go build' backend/.air.toml || (echo "Air hot reload must apply SQL migrations before rebuilding the backend." && exit 1)
+	@grep -Eq 'include_ext = \[[^]]*"sql"[^]]*\]' backend/.air.toml || (echo "Air hot reload must watch backend migration SQL files." && exit 1)
+
 .PHONY: local-check
 local-check:
+	$(MAKE) local-hot-reload-check
+	$(MAKE) legacy-identity-dependency-check
 	$(MAKE) migration-rehearsal-check
 	cd backend && go clean -testcache && go test ./...
 	cd frontend && npm run test:run
@@ -342,7 +354,7 @@ local-docker-check: local-docker-check-image
 		-e GOMODCACHE=/tmp/gomod \
 		-e NPM_CONFIG_CACHE=/tmp/npm-cache \
 		$(LOCAL_DOCKER_CHECK_IMAGE) \
-		bash -lc 'set -euo pipefail; make migration-rehearsal-check; cd backend && go clean -testcache && go test ./...; cd ../frontend && npm ci && npm run test:run && npx playwright install chromium && npx playwright test && npm run build'
+		bash -lc 'set -euo pipefail; make local-hot-reload-check; make legacy-identity-dependency-check; make migration-rehearsal-check; cd backend && go clean -testcache && go test ./...; cd ../frontend && npm ci && npm run test:run && npx playwright install chromium && npx playwright test && npm run build'
 
 # ==============================================================================
 # Generic server environment targets
@@ -406,8 +418,8 @@ server-replace-development-db:
 TEST_RELEASE_BASELINE_DB ?= $(SERVER_ROOT)/test/rehearsal-baselines/pre-bite30i.db
 TEST_RELEASE_BASELINE_LAST_MIGRATION ?= 000062_tenant_administrator_cardinality.up.sql
 TEST_RELEASE_MIGRATION_UNDER_REHEARSAL ?= 000063_global_administration_control_plane.up.sql
-TEST_RELEASE_FINAL_MIGRATION ?= 000066_support_access_lease_audit_attribution.up.sql
-DEPLOYMENT_FINAL_MIGRATION ?= 000067_audit_identity_lifecycle_hardening.up.sql
+TEST_RELEASE_FINAL_MIGRATION ?= 000068_legacy_identity_dependency_elimination.up.sql
+DEPLOYMENT_FINAL_MIGRATION ?= 000068_legacy_identity_dependency_elimination.up.sql
 TEST_RELEASE_REHEARSAL_MARKER_DIR ?= $(SERVER_ROOT)/test/release-rehearsal-passed
 
 .PHONY: server-test-rehearsal-capture-baseline
@@ -471,7 +483,7 @@ server-test-rehearsal-ensure-baseline:
 				-v "$$baseline_dir:/rehearsal-baseline:ro" \
 				--entrypoint sqlite3 backend \
 				"/rehearsal-baseline/$$baseline_name" \
-				"SELECT COUNT(*) FROM auth_user_accounts a JOIN authz_actors az ON az.id=a.actor_id JOIN person_tenant_memberships m ON m.legacy_person_id=az.person_id JOIN auth_account_people ap ON ap.account_id=a.id AND ap.person_id=m.person_id JOIN auth_account_actors aa ON aa.account_id=a.id AND aa.actor_id=az.id AND aa.scope_type='TENANT' AND aa.tenant_id=m.tenant_id AND aa.membership_id=m.id WHERE a.id IN ('e2e-default-tenant-admin-account','test-rehearsal-account-b');")"; \
+				"SELECT COUNT(DISTINCT a.id) FROM auth_user_accounts a JOIN auth_account_people ap ON ap.account_id=a.id JOIN person_tenant_memberships m ON m.person_id=ap.person_id JOIN auth_account_actors aa ON aa.account_id=a.id AND aa.scope_type='TENANT' AND aa.tenant_id=m.tenant_id AND aa.membership_id=m.id JOIN authz_actors az ON az.id=aa.actor_id WHERE a.id IN ('e2e-default-tenant-admin-account','test-rehearsal-account-b');")"; \
 			if [[ "$$alignment_count" != "2" ]]; then \
 				echo "Existing deterministic Test release baseline has stale pre-30I Account/Actor identity shape; regenerating it."; \
 				rm -f "$$baseline"; \

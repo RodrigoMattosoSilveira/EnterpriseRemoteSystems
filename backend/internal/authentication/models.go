@@ -4,13 +4,12 @@ import "time"
 
 // Account is the application-global authentication identity for one human.
 //
-// ActorID is retained only as a physical compatibility write until Bite 30K.3
-// removes the column. After 30K.2A/30K.2B1 it MUST NOT determine authenticated
-// session identity, Tenant selection, or Authentication Administration display.
-// The authoritative ownership relation is auth_account_actors.
+// ActorID mirrors the still-physical pre-30K.3B column for historical test/migration
+// compatibility only. Current GORM persistence deliberately ignores it; the
+// authoritative ownership relation is auth_account_actors.
 type Account struct {
 	ID                 string     `gorm:"type:text;primaryKey"`
-	ActorID            string     `gorm:"type:text;not null;uniqueIndex"`
+	ActorID            string     `gorm:"column:actor_id;type:text;->"`
 	Login              string     `gorm:"type:text;not null;uniqueIndex"`
 	PasswordHash       string     `gorm:"type:text;not null"`
 	Active             bool       `gorm:"not null;index"`
@@ -44,15 +43,15 @@ const (
 // AccountActor is the authoritative Account -> Actor ownership relation.
 // Tenant bindings identify exactly one Tenant and, when the Actor represents a
 // Person, exactly one Person-Tenant Membership. Global bindings have neither.
-// Primary is retained only because the pre-30K.3 schema still contains
-// is_primary; runtime identity and Administration ordering ignore it.
+// Primary mirrors the still-physical pre-30K.3B column for historical tests
+// only. Current persistence and runtime identity deliberately ignore it.
 type AccountActor struct {
 	AccountID    string    `gorm:"type:text;primaryKey;uniqueIndex:ux_auth_account_actor,priority:1;index"`
 	ActorID      string    `gorm:"type:text;primaryKey;uniqueIndex:ux_auth_account_actor,priority:2;uniqueIndex;index"`
 	ScopeType    string    `gorm:"type:text;not null;index"`
 	TenantID     *string   `gorm:"type:text;index"`
 	MembershipID *string   `gorm:"type:text;index"`
-	Primary      bool      `gorm:"column:is_primary;not null;default:false;index"`
+	Primary      bool      `gorm:"column:is_primary;not null;default:false;->"`
 	CreatedAt    time.Time `gorm:"not null"`
 	UpdatedAt    time.Time `gorm:"not null"`
 }

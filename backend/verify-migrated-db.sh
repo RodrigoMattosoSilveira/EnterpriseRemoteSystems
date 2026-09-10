@@ -5,7 +5,7 @@ DB_PATH="${DATABASE_PATH:-/app/data/app.db}"
 MIGRATIONS_DIR="${MIGRATIONS_DIR:-/app/migrations}"
 EXPECTED_BASELINE_LAST_MIGRATION="${EXPECTED_BASELINE_LAST_MIGRATION:-000062_tenant_administrator_cardinality.up.sql}"
 EXPECTED_FIRST_REHEARSED_MIGRATION="${EXPECTED_FIRST_REHEARSED_MIGRATION:-000063_global_administration_control_plane.up.sql}"
-EXPECTED_FINAL_MIGRATION="${EXPECTED_FINAL_MIGRATION:-000067_audit_identity_lifecycle_hardening.up.sql}"
+EXPECTED_FINAL_MIGRATION="${EXPECTED_FINAL_MIGRATION:-000068_legacy_identity_dependency_elimination.up.sql}"
 
 if [ ! -f "$DB_PATH" ]; then
   echo "Missing database for migration verification: $DB_PATH" >&2
@@ -157,6 +157,42 @@ if [ "$audit_identity_migration_count" = "1" ]; then
   require_trigger trg_authz_audit_identity_required_insert
 fi
 
+legacy_identity_bridge_count="$(sqlite3 "$DB_PATH" "SELECT COUNT(*) FROM schema_migrations WHERE filename='000068_legacy_identity_dependency_elimination.up.sql';")"
+if [ "$legacy_identity_bridge_count" = "1" ]; then
+  # 30K.3A deliberately retains the physical compatibility columns for one
+  # release while proving they are optional, inert, and guarded from new writes.
+  require_table people
+  require_column auth_user_accounts actor_id
+  require_column auth_account_actors is_primary
+  require_column authz_actors person_id
+  require_column authz_actors collaborator_id
+  require_column person_tenant_memberships legacy_person_id
+  require_column collaborator_journeys person_id
+  require_column collaborator_journeys membership_id
+
+  account_actor_notnull="$(sqlite3 "$DB_PATH" "SELECT [notnull] FROM pragma_table_info('auth_user_accounts') WHERE name='actor_id';")"
+  journey_person_notnull="$(sqlite3 "$DB_PATH" "SELECT [notnull] FROM pragma_table_info('collaborator_journeys') WHERE name='person_id';")"
+  journey_membership_notnull="$(sqlite3 "$DB_PATH" "SELECT [notnull] FROM pragma_table_info('collaborator_journeys') WHERE name='membership_id';")"
+  if [ "$account_actor_notnull" != "0" ] || [ "$journey_person_notnull" != "0" ] || [ "$journey_membership_notnull" != "1" ]; then
+    echo "30K.3A compatibility-column nullability is incorrect." >&2
+    echo "auth_user_accounts.actor_id notnull=${account_actor_notnull}" >&2
+    echo "collaborator_journeys.person_id notnull=${journey_person_notnull}" >&2
+    echo "collaborator_journeys.membership_id notnull=${journey_membership_notnull}" >&2
+    exit 1
+  fi
+
+  primary_index_count="$(sqlite3 "$DB_PATH" "SELECT COUNT(*) FROM sqlite_master WHERE type='index' AND name='ux_auth_account_actors_account_primary';")"
+  legacy_projection_trigger_count="$(sqlite3 "$DB_PATH" "SELECT COUNT(*) FROM sqlite_master WHERE type='trigger' AND name IN ('trg_person_membership_legacy_projection_insert','trg_person_membership_legacy_projection_update');")"
+  if [ "$primary_index_count" != "0" ] || [ "$legacy_projection_trigger_count" != "0" ]; then
+    echo "30K.3A retained an active legacy primary/projection constraint." >&2
+    exit 1
+  fi
+
+  for trigger in     trg_auth_user_accounts_legacy_actor_insert_prohibited     trg_auth_user_accounts_legacy_actor_update_prohibited     trg_auth_account_actors_legacy_primary_insert_prohibited     trg_auth_account_actors_legacy_primary_update_prohibited     trg_authz_actors_legacy_identity_insert_prohibited     trg_authz_actors_legacy_identity_update_prohibited     trg_person_membership_legacy_projection_insert_prohibited     trg_person_membership_legacy_projection_update_prohibited     trg_collaborator_journeys_legacy_person_insert_prohibited     trg_collaborator_journeys_legacy_person_update_prohibited; do
+    require_trigger "$trigger"
+  done
+fi
+
 application_admin_permission_count="$(sqlite3 "$DB_PATH" "
 SELECT COUNT(*)
 FROM authz_role_permissions
@@ -200,11 +236,17 @@ FROM authz_actor_role_grants g
 JOIN authz_roles r
   ON r.id = g.role_id
  AND r.code = 'APPLICATION_ADMIN'
-LEFT JOIN authz_actors az ON az.id = g.actor_id
 WHERE g.tenant_id='*'
   AND (
-    az.person_id IS NOT NULL
-    OR az.collaborator_id IS NOT NULL
+    NOT EXISTS (
+      SELECT 1
+      FROM auth_account_actors aa
+      JOIN auth_user_accounts a ON a.id = aa.account_id
+      WHERE aa.actor_id = g.actor_id
+        AND aa.scope_type = 'GLOBAL'
+        AND aa.tenant_id IS NULL
+        AND aa.membership_id IS NULL
+    )
     OR EXISTS (
       SELECT 1
       FROM auth_account_actors aa
@@ -213,9 +255,10 @@ WHERE g.tenant_id='*'
     )
     OR EXISTS (
       SELECT 1
-      FROM auth_user_accounts a
-      JOIN auth_account_people ap ON ap.account_id = a.id
-      WHERE a.actor_id = g.actor_id
+      FROM auth_account_actors aa
+      JOIN auth_account_people ap ON ap.account_id = aa.account_id
+      WHERE aa.actor_id = g.actor_id
+        AND aa.scope_type = 'GLOBAL'
     )
   );
 ")"
@@ -269,4 +312,5 @@ printf '%s\n' \
   "Application Administrator standing authority: control-plane only" \
   "Application Administrator tenant-identity violations: 0" \
   "Audit history guards: append-only" \
-  "30J audit identity schema: $([ "$audit_identity_migration_count" = "1" ] && printf 'present' || printf 'not-yet-applied')"
+  "30J audit identity schema: $([ "$audit_identity_migration_count" = "1" ] && printf 'present' || printf 'not-yet-applied')" \
+  "30K.3A legacy identity bridge: $([ "$legacy_identity_bridge_count" = "1" ] && printf 'present' || printf 'not-yet-applied')"

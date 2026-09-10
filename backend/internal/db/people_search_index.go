@@ -16,7 +16,7 @@ const (
 // InstallPeopleSearchIndex installs a derived search projection keyed by the
 // canonical Person-Tenant Membership. The table is disposable and rebuilt at
 // startup, so Bite 30K.1 can cut live search reads over without removing the
-// legacy people table that remains for compatibility until 30K.3.
+// legacy people table that remains for compatibility until 30K.3B.
 func InstallPeopleSearchIndex(database *gorm.DB) error {
 	statements := []string{
 		`DROP TRIGGER IF EXISTS trg_people_search_index_insert`,

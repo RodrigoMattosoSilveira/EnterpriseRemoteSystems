@@ -140,27 +140,14 @@ func (r *gormRepository) ListTenantAdminCandidates(ctx context.Context, tenantID
 		GlobalPersonID string
 	}
 	var actors []candidateActorProjection
-	hasPersonFoundation := r.database.Migrator().HasTable("auth_account_actors") && r.database.Migrator().HasTable("person_tenant_memberships")
-	if hasPersonFoundation {
-		if err := r.database.WithContext(ctx).
-			Table("authz_actors a").
-			Select("a.id, a.actor_key, a.display_name, a.active, COALESCE(m.person_id, '') AS global_person_id").
-			Joins("JOIN auth_account_actors aa ON aa.actor_id = a.id AND aa.scope_type = ? AND aa.tenant_id = ?", "TENANT", tenantID).
-			Joins("LEFT JOIN person_tenant_memberships m ON m.id = aa.membership_id AND m.tenant_id = aa.tenant_id").
-			Order("a.actor_key ASC").
-			Scan(&actors).Error; err != nil {
-			return nil, err
-		}
-	} else {
-		// Compatibility for isolated pre-Bite-30 repository tests. Production
-		// Tenant Administrator candidates use the canonical Membership Person.
-		if err := r.database.WithContext(ctx).
-			Table("authz_actors a").
-			Select("a.id, a.actor_key, a.display_name, a.active, COALESCE(a.person_id, '') AS global_person_id").
-			Order("a.actor_key ASC").
-			Scan(&actors).Error; err != nil {
-			return nil, err
-		}
+	if err := r.database.WithContext(ctx).
+		Table("authz_actors a").
+		Select("a.id, a.actor_key, a.display_name, a.active, COALESCE(m.person_id, '') AS global_person_id").
+		Joins("JOIN auth_account_actors aa ON aa.actor_id = a.id AND aa.scope_type = ? AND aa.tenant_id = ?", "TENANT", tenantID).
+		Joins("JOIN person_tenant_memberships m ON m.id = aa.membership_id AND m.tenant_id = aa.tenant_id").
+		Order("a.actor_key ASC").
+		Scan(&actors).Error; err != nil {
+		return nil, err
 	}
 
 	type adminGrantProjection struct {
@@ -171,18 +158,11 @@ func (r *gormRepository) ListTenantAdminCandidates(ctx context.Context, tenantID
 	var adminGrants []adminGrantProjection
 	grantQuery := r.database.WithContext(ctx).
 		Table("authz_actor_role_grants g").
+		Select("g.actor_id, g.tenant_id, COALESCE(m.person_id, '') AS global_person_id").
 		Joins("JOIN authz_roles role ON role.id = g.role_id AND role.code = ?", string(authz.RoleTenantAdmin)).
+		Joins("LEFT JOIN auth_account_actors aa ON aa.actor_id = g.actor_id AND aa.scope_type = ? AND aa.tenant_id = g.tenant_id", "TENANT").
+		Joins("LEFT JOIN person_tenant_memberships m ON m.id = aa.membership_id AND m.tenant_id = aa.tenant_id").
 		Where("g.active = ?", true)
-	if hasPersonFoundation {
-		grantQuery = grantQuery.
-			Select("g.actor_id, g.tenant_id, COALESCE(m.person_id, '') AS global_person_id").
-			Joins("LEFT JOIN auth_account_actors aa ON aa.actor_id = g.actor_id AND aa.scope_type = ? AND aa.tenant_id = g.tenant_id", "TENANT").
-			Joins("LEFT JOIN person_tenant_memberships m ON m.id = aa.membership_id AND m.tenant_id = aa.tenant_id")
-	} else {
-		grantQuery = grantQuery.
-			Select("g.actor_id, g.tenant_id, COALESCE(a.person_id, '') AS global_person_id").
-			Joins("JOIN authz_actors a ON a.id = g.actor_id")
-	}
 	if err := grantQuery.Scan(&adminGrants).Error; err != nil {
 		return nil, err
 	}
