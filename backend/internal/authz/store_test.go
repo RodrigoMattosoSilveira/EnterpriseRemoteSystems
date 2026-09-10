@@ -1042,8 +1042,8 @@ func TestTenantAdministratorCardinalityRequiresDistinctPersons(t *testing.T) {
 	personID := "person-shared-admin"
 	actorA := createAuthzActor(t, database, "shared-admin-a@example.com", &personID, nil)
 	actorB := createAuthzActor(t, database, "shared-admin-b@example.com", &personID, nil)
-	bindActiveTenantMemberActor(t, database, actorA, "tenant-a")
-	bindActiveTenantMemberActor(t, database, actorB, "tenant-a")
+	bindActiveTenantMemberActor(t, database, actorA, "tenant-a", personID)
+	bindActiveTenantMemberActor(t, database, actorB, "tenant-a", personID)
 
 	if _, err := store.GrantActorRole(context.Background(), actorA, GrantActorRoleRequest{
 		RoleCode: string(RoleTenantAdmin), TenantID: "tenant-a",
@@ -1065,8 +1065,8 @@ func TestTenantAdministratorCardinalityPreventsPersonFromAdministeringTwoTenants
 	personID := "person-cross-tenant-admin"
 	actorA := createAuthzActor(t, database, "cross-admin-a@example.com", &personID, nil)
 	actorB := createAuthzActor(t, database, "cross-admin-b@example.com", &personID, nil)
-	bindActiveTenantMemberActor(t, database, actorA, "tenant-a")
-	bindActiveTenantMemberActor(t, database, actorB, "tenant-b")
+	bindActiveTenantMemberActor(t, database, actorA, "tenant-a", personID)
+	bindActiveTenantMemberActor(t, database, actorB, "tenant-b", personID)
 
 	if _, err := store.GrantActorRole(context.Background(), actorA, GrantActorRoleRequest{
 		RoleCode: string(RoleTenantAdmin), TenantID: "tenant-a",
@@ -1144,7 +1144,7 @@ func installTenantRoleDelegationFixtureTables(t *testing.T, database *gorm.DB) {
 	}
 }
 
-func bindActiveTenantMemberActor(t *testing.T, database *gorm.DB, actorID string, tenantID string) {
+func bindActiveTenantMemberActor(t *testing.T, database *gorm.DB, actorID string, tenantID string, canonicalPersonID ...string) {
 	t.Helper()
 	accountID := "account-" + actorID
 	membershipID := "membership-" + actorID
@@ -1166,13 +1166,9 @@ func bindActiveTenantMemberActor(t *testing.T, database *gorm.DB, actorID string
 	).Error; err != nil {
 		t.Fatalf("create tenant-local active membership status: %v", err)
 	}
-	var actor AuthzActor
-	if err := database.Select("id", "person_id").Where("id = ?", actorID).First(&actor).Error; err != nil {
-		t.Fatalf("find Actor Person identity for membership fixture: %v", err)
-	}
-	globalPersonID := strings.TrimSpace(stringValue(actor.PersonID))
-	if globalPersonID == "" {
-		globalPersonID = "global-person-" + actorID
+	globalPersonID := "global-person-" + actorID
+	if len(canonicalPersonID) > 0 && strings.TrimSpace(canonicalPersonID[0]) != "" {
+		globalPersonID = strings.TrimSpace(canonicalPersonID[0])
 	}
 	if err := database.Exec(
 		"INSERT INTO person_tenant_memberships (id, tenant_id, person_id, status_id) VALUES (?, ?, ?, ?)",

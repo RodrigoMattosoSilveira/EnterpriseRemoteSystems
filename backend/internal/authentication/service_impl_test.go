@@ -106,31 +106,29 @@ func TestAuthenticationLoginSessionLogoutAndPasswordChange(t *testing.T) {
 func TestAuthenticationAccountCreationDerivesSelfAccessFromAccountMembership(t *testing.T) {
 	database, _, service, _ := authenticationTestService(t)
 	now := time.Now().UTC()
+	loginEmail := "existing-person@example.com"
+	personID := ensureAuthenticationTestPerson(t, database, loginEmail)
 
-	status := authenticationTestActivePersonStatus(t, database)
-	person := appdb.Person{
-		BaseModel: appdb.BaseModel{ID: "auth-existing-person", CreatedAt: now, UpdatedAt: now},
-		TenantID:  appdb.DefaultTenantID, FirstName: "Existing", LastName: "Person", Nickname: "ExistingPerson",
-		CPF: "98765432100", RG: "AUTH-EXISTING-RG", Cellular: "11987654321", Email: "existing-person@example.com",
-		Country: "Brasil", ProfileCompletionStatus: "COMPLETE", StatusID: status.ID,
-	}
-	if err := database.Create(&person).Error; err != nil {
-		t.Fatalf("create person: %v", err)
-	}
-	personID := person.ID
 	actor := authz.AuthzActor{
 		ID: "auth-existing-person-actor", ActorKey: "auth-existing-person-actor", DisplayName: "Existing Person Actor",
-		PersonID: &personID, Active: true, CreatedAt: now, UpdatedAt: now,
+		Active: true, CreatedAt: now, UpdatedAt: now,
 	}
 	if err := database.Create(&actor).Error; err != nil {
 		t.Fatalf("create person actor: %v", err)
+	}
+	// Deliberately populate the retired physical Actor -> Person link using raw
+	// SQL. Current GORM persistence treats the field as read-only, and this
+	// regression proves that even a historical value cannot donate identity or
+	// delegated authority to canonical Account provisioning.
+	if err := database.Exec("UPDATE authz_actors SET person_id = ? WHERE id = ?", personID, actor.ID).Error; err != nil {
+		t.Fatalf("seed historical Actor Person identity: %v", err)
 	}
 	if err := authz.GrantRole(database, actor.ID, authz.RoleExpenseOperator, appdb.DefaultTenantID); err != nil {
 		t.Fatalf("grant expense operator role: %v", err)
 	}
 
 	account, err := service.CreateAccount(context.Background(), CreateAccountRequest{
-		TenantID: appdb.DefaultTenantID, Login: person.Email, TemporaryPassword: "Existing-Person-Password-1",
+		TenantID: appdb.DefaultTenantID, Login: loginEmail, TemporaryPassword: "Existing-Person-Password-1",
 	})
 	if err != nil {
 		t.Fatalf("create account: %v", err)
@@ -164,21 +162,11 @@ func TestAuthenticationAccountCreationDerivesSelfAccessFromAccountMembership(t *
 
 func TestAuthenticationLoginDoesNotBackfillPersonRoleGrant(t *testing.T) {
 	database, _, service, _ := authenticationTestService(t)
-	now := time.Now().UTC()
-
-	status := authenticationTestActivePersonStatus(t, database)
-	person := appdb.Person{
-		BaseModel: appdb.BaseModel{ID: "auth-login-person", CreatedAt: now, UpdatedAt: now},
-		TenantID:  appdb.DefaultTenantID, FirstName: "Login", LastName: "Person", Nickname: "LoginPerson",
-		CPF: "98765432101", RG: "AUTH-LOGIN-RG", Cellular: "11987654322", Email: "login-person@example.com",
-		Country: "Brasil", ProfileCompletionStatus: "COMPLETE", StatusID: status.ID,
-	}
-	if err := database.Create(&person).Error; err != nil {
-		t.Fatalf("create person: %v", err)
-	}
+	loginEmail := "login-person@example.com"
+	ensureAuthenticationTestPerson(t, database, loginEmail)
 
 	account, err := service.CreateAccount(context.Background(), CreateAccountRequest{
-		TenantID: appdb.DefaultTenantID, Login: person.Email, TemporaryPassword: "Login-Person-Password-1",
+		TenantID: appdb.DefaultTenantID, Login: loginEmail, TemporaryPassword: "Login-Person-Password-1",
 	})
 	if err != nil {
 		t.Fatalf("create Person account: %v", err)
@@ -546,30 +534,12 @@ func createAuthenticationTestActor(t *testing.T, database *gorm.DB) authz.AuthzA
 
 func TestAuthenticationCreatesPersonActorAndAccountWithoutCollaboratorJourney(t *testing.T) {
 	database, _, service, _ := authenticationTestService(t)
-	now := time.Now().UTC()
-
-	status := authenticationTestActivePersonStatus(t, database)
-
-	person := appdb.Person{
-		BaseModel: appdb.BaseModel{ID: "auth-person-only", CreatedAt: now, UpdatedAt: now},
-		TenantID:  appdb.DefaultTenantID,
-		FirstName: "Dirceu",
-		LastName:  "Pereira",
-		Nickname:  "Dirceu",
-		CPF:       "12345678909",
-		RG:        "AUTHPERSONONLY",
-		Cellular:  "11912345679",
-		Email:     "dirceu-person-only@example.com",
-		Country:   "Brasil",
-		StatusID:  status.ID,
-	}
-	if err := database.Create(&person).Error; err != nil {
-		t.Fatalf("create Person without Collaborator Journey: %v", err)
-	}
+	loginEmail := "dirceu-person-only@example.com"
+	ensureAuthenticationTestPerson(t, database, loginEmail)
 
 	account, err := service.CreateAccount(context.Background(), CreateAccountRequest{
 		TenantID:          appdb.DefaultTenantID,
-		Login:             person.Email,
+		Login:             loginEmail,
 		TemporaryPassword: "Dirceu-Person-Only-Password-1",
 	})
 	if err != nil {
@@ -594,7 +564,7 @@ func TestAuthenticationCreatesPersonActorAndAccountWithoutCollaboratorJourney(t 
 	}
 
 	login, err := service.Login(context.Background(), LoginRequest{
-		Login: person.Email, Password: "Dirceu-Person-Only-Password-1",
+		Login: loginEmail, Password: "Dirceu-Person-Only-Password-1",
 	}, "", "")
 	if err != nil {
 		t.Fatalf("login through Person-only Authentication Account: %v", err)

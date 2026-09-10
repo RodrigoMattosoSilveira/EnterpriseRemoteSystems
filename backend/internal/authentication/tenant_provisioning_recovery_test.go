@@ -127,7 +127,7 @@ func TestTenantProvisioningRequiresActiveMembership(t *testing.T) {
 	now := time.Now().UTC()
 	_, _ = createCanonicalTenantPerson(t, database, "tenant-inactive", "Inactive Tenant Person", "inactive-person", "66677788899", "inactive-membership@example.com", now)
 	if err := database.Model(&appdb.ReferenceData{}).
-		Where("id = ?", "status-tenant-inactive").
+		Where("id = ?", "status-tenant-inactive-active").
 		Update("code", "INACTIVE").Error; err != nil {
 		t.Fatalf("mark Person Membership status inactive: %v", err)
 	}

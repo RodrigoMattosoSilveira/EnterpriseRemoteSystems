@@ -68,7 +68,10 @@ func TestAuthenticationMigrationProtectsNormalizedLoginAndActorLink(t *testing.T
 	if err := insertMigration42Account(valid); err != nil {
 		t.Fatalf("create valid account: %v", err)
 	}
-	if err := database.Model(&Account{}).Where("id = ?", valid.ID).Update("actor_id", secondActor.ID).Error; err == nil || !strings.Contains(err.Error(), "authentication_actor_id_immutable") {
+	// This is a historical 000042 migration test. Use raw SQL so the current
+	// Account model's read-only compatibility mapping cannot suppress the
+	// attempted write to the then-authoritative actor_id column.
+	if err := database.Exec("UPDATE auth_user_accounts SET actor_id = ? WHERE id = ?", secondActor.ID, valid.ID).Error; err == nil || !strings.Contains(err.Error(), "authentication_actor_id_immutable") {
 		t.Fatalf("expected actor link immutability rejection, got %v", err)
 	}
 	if err := database.Model(&Account{}).Where("id = ?", valid.ID).Update("password_hash", "").Error; err == nil || !strings.Contains(err.Error(), "authentication_password_hash_required") {
