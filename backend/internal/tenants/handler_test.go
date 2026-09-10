@@ -426,7 +426,6 @@ func seedTenantBoundActor(t *testing.T, dbPath string, tenantID string, actorKey
 		ID:          ids.New(),
 		ActorKey:    actorKey,
 		DisplayName: actorKey,
-		PersonID:    &person.ID,
 		Active:      active,
 		CreatedAt:   now,
 		UpdatedAt:   now,

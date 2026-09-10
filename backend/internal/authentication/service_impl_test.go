@@ -107,7 +107,7 @@ func TestAuthenticationAccountCreationIgnoresUnrelatedDelegatedActorAuthority(t 
 	database, _, service, _ := authenticationTestService(t)
 	now := time.Now().UTC()
 	loginEmail := "existing-person@example.com"
-	personID := ensureAuthenticationTestPerson(t, database, loginEmail)
+	ensureAuthenticationTestPerson(t, database, loginEmail)
 
 	actor := authz.AuthzActor{
 		ID: "auth-existing-person-actor", ActorKey: "auth-existing-person-actor", DisplayName: "Existing Person Actor",
