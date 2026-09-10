@@ -112,8 +112,8 @@ func (r *gormRepository) List(
 }
 
 // Create establishes the canonical identity layers atomically: the global
-// Person and the current Tenant's Person-Tenant Membership. 30K.3A no longer
-// creates or updates a tenant-local legacy Person projection.
+// Person and the current Tenant's Person-Tenant Membership. 30K.3B has no
+// tenant-local legacy Person table to create or update.
 func (r *gormRepository) Create(ctx context.Context, person *db.Person) error {
 	if person == nil {
 		return errors.New("person is required")

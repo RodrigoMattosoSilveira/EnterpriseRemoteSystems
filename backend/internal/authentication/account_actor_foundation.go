@@ -9,11 +9,10 @@ import (
 	"gorm.io/gorm"
 )
 
-// EnsureAccountActorFoundation is the 30K.3A startup integrity boundary.
-// Earlier Bite 30 releases used it to reconstruct AccountActor ownership from
-// auth_user_accounts.actor_id and legacy Actor Person/Collaborator columns.
-// That repair behavior is intentionally retired: current databases must already
-// contain the canonical Account -> AccountActor -> Membership/Person graph.
+// EnsureAccountActorFoundation is the canonical startup integrity boundary.
+// 30K.3B physically removes the former identity reconstruction columns, so
+// current databases must already contain the complete Account -> AccountActor ->
+// Membership/Person graph.
 func EnsureAccountActorFoundation(database *gorm.DB) error {
 	if database == nil {
 		return nil

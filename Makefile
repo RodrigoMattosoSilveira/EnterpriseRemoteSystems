@@ -418,8 +418,8 @@ server-replace-development-db:
 TEST_RELEASE_BASELINE_DB ?= $(SERVER_ROOT)/test/rehearsal-baselines/pre-bite30i.db
 TEST_RELEASE_BASELINE_LAST_MIGRATION ?= 000062_tenant_administrator_cardinality.up.sql
 TEST_RELEASE_MIGRATION_UNDER_REHEARSAL ?= 000063_global_administration_control_plane.up.sql
-TEST_RELEASE_FINAL_MIGRATION ?= 000068_legacy_identity_dependency_elimination.up.sql
-DEPLOYMENT_FINAL_MIGRATION ?= 000068_legacy_identity_dependency_elimination.up.sql
+TEST_RELEASE_FINAL_MIGRATION ?= 000069_physical_legacy_identity_schema_removal.up.sql
+DEPLOYMENT_FINAL_MIGRATION ?= 000069_physical_legacy_identity_schema_removal.up.sql
 TEST_RELEASE_REHEARSAL_MARKER_DIR ?= $(SERVER_ROOT)/test/release-rehearsal-passed
 
 .PHONY: server-test-rehearsal-capture-baseline

@@ -103,7 +103,7 @@ func TestAuthenticationLoginSessionLogoutAndPasswordChange(t *testing.T) {
 	_ = repository
 }
 
-func TestAuthenticationAccountCreationDerivesSelfAccessFromAccountMembership(t *testing.T) {
+func TestAuthenticationAccountCreationIgnoresUnrelatedDelegatedActorAuthority(t *testing.T) {
 	database, _, service, _ := authenticationTestService(t)
 	now := time.Now().UTC()
 	loginEmail := "existing-person@example.com"
@@ -116,13 +116,9 @@ func TestAuthenticationAccountCreationDerivesSelfAccessFromAccountMembership(t *
 	if err := database.Create(&actor).Error; err != nil {
 		t.Fatalf("create person actor: %v", err)
 	}
-	// Deliberately populate the retired physical Actor -> Person link using raw
-	// SQL. Current GORM persistence treats the field as read-only, and this
-	// regression proves that even a historical value cannot donate identity or
-	// delegated authority to canonical Account provisioning.
-	if err := database.Exec("UPDATE authz_actors SET person_id = ? WHERE id = ?", personID, actor.ID).Error; err != nil {
-		t.Fatalf("seed historical Actor Person identity: %v", err)
-	}
+	// This Actor deliberately has delegated authority but no canonical AccountActor
+	// binding. Account provisioning must derive identity from the Person/Membership
+	// graph and must not reuse unrelated Actor authority.
 	if err := authz.GrantRole(database, actor.ID, authz.RoleExpenseOperator, appdb.DefaultTenantID); err != nil {
 		t.Fatalf("grant expense operator role: %v", err)
 	}
@@ -135,7 +131,7 @@ func TestAuthenticationAccountCreationDerivesSelfAccessFromAccountMembership(t *
 	}
 
 	if account.ActorID == actor.ID {
-		t.Fatal("canonical provisioning must not reuse a legacy Actor identified by authz_actors.person_id")
+		t.Fatal("canonical provisioning must not reuse an unrelated delegated Actor")
 	}
 	assertNoActivePersonRoleGrant(t, database, account.ActorID)
 
@@ -556,12 +552,6 @@ func TestAuthenticationCreatesPersonActorAndAccountWithoutCollaboratorJourney(t 
 	if err := database.First(&actor, "id = ?", account.ActorID).Error; err != nil {
 		t.Fatalf("find provisioned Person Actor: %v", err)
 	}
-	if actor.PersonID != nil {
-		t.Fatalf("canonical tenant Actor must not persist legacy Person identity, got %#v", actor.PersonID)
-	}
-	if actor.CollaboratorID != nil {
-		t.Fatalf("expected no Collaborator Journey on Person-only Actor, got %#v", actor.CollaboratorID)
-	}
 
 	login, err := service.Login(context.Background(), LoginRequest{
 		Login: loginEmail, Password: "Dirceu-Person-Only-Password-1",
@@ -800,9 +790,6 @@ func TestAuthenticationCreatesPersonActorAndAccountWhenNoActorExists(t *testing.
 	var actor authz.AuthzActor
 	if err := database.First(&actor, "id = ?", account.ActorID).Error; err != nil {
 		t.Fatalf("find provisioned actor: %v", err)
-	}
-	if actor.PersonID != nil || actor.CollaboratorID != nil {
-		t.Fatalf("canonical tenant Actor must be identity-neutral, person=%#v collaborator=%#v", actor.PersonID, actor.CollaboratorID)
 	}
 
 	assertNoActivePersonRoleGrant(t, database, actor.ID)

@@ -437,7 +437,6 @@ func seedTenantBoundActor(t *testing.T, dbPath string, tenantID string, actorKey
 
 	account := authentication.Account{
 		ID:                 ids.New(),
-		ActorID:            actor.ID,
 		Login:              actorKey,
 		PasswordHash:       "test-password-hash",
 		Active:             true,
@@ -465,7 +464,6 @@ func seedTenantBoundActor(t *testing.T, dbPath string, tenantID string, actorKey
 		ScopeType:    authentication.AccountActorScopeTenant,
 		TenantID:     &bindingTenantID,
 		MembershipID: &bindingMembershipID,
-		Primary:      true,
 		CreatedAt:    now,
 		UpdatedAt:    now,
 	}

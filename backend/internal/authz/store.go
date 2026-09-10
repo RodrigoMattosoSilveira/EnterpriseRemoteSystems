@@ -130,7 +130,7 @@ func (s *GORMStore) FindActor(ctx context.Context, lookup ActorLookup) (*Actor, 
 	// authority is resolved only from grants for the explicitly requested tenant.
 	// When the Actor has canonical AccountActor ownership, derive Person,
 	// Membership, Collaborator, and intrinsic self-service identity from that
-	// binding. Never recover identity from authz_actors.person_id/collaborator_id.
+	// binding. The retired Actor identity columns no longer exist.
 	if s.database.Migrator().HasTable("auth_account_actors") {
 		var binding accountActorBindingProjection
 		bindingResult := s.database.WithContext(ctx).
@@ -654,7 +654,7 @@ func tenantAdministratorGlobalPersonID(database *gorm.DB, actorID string, tenant
 	}
 
 	// Internal seed/test callers that do not require a canonical binding cannot
-	// derive Person identity. Never fall back to authz_actors.person_id.
+	// derive Person identity. No retired Actor identity fallback exists.
 	return "", nil
 }
 

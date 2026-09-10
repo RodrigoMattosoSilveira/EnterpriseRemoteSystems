@@ -80,7 +80,6 @@ export type AuthAccountActor = {
   personNickname?: string;
   collaboratorId?: string;
   active: boolean;
-  primary: boolean;
 };
 
 export type AuthAccount = {

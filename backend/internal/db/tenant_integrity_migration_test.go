@@ -23,6 +23,12 @@ func TestTenantIntegrityMigrationRejectsInvalidOwnershipAndGrantScopes(t *testin
 	if err := authz.AutoMigrate(database); err != nil {
 		t.Fatalf("auto migrate authorization: %v", err)
 	}
+	// Migration 000041 predates the 30K.3B physical removal and explicitly
+	// guards the historical people table. Recreate that historical table only
+	// inside this migration-specific test fixture.
+	if err := database.AutoMigrate(&dbpkg.Person{}); err != nil {
+		t.Fatalf("create historical people table: %v", err)
+	}
 	if err := dbpkg.SeedReferenceData(database); err != nil {
 		t.Fatalf("seed reference data: %v", err)
 	}

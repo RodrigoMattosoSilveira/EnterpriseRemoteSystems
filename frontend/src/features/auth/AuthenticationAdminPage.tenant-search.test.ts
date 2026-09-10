@@ -25,7 +25,6 @@ describe("Authentication Administration Tenant display-name search", () => {
           scope: "TENANT",
           tenantId: "tenant-byte",
           active: true,
-          primary: true,
         },
       ],
     };
