@@ -597,8 +597,8 @@ func TestAuthenticationCreatesPersonActorAndAccountWithoutCollaboratorJourney(t 
 	if selfService.AccountID != account.ID || selfService.Person.ID != account.GlobalPersonID {
 		t.Fatalf("unexpected Account-level self-service identity: %#v", selfService)
 	}
-	if selfService.Person.Email != person.Email {
-		t.Fatalf("expected self-service Person email %q, got %q", person.Email, selfService.Person.Email)
+	if selfService.Person.Email != loginEmail {
+		t.Fatalf("expected self-service Person email %q, got %q", loginEmail, selfService.Person.Email)
 	}
 	if len(selfService.Balances) != 0 || len(selfService.Entries) != 0 {
 		t.Fatalf("Person without financial history should have an empty Current Account projection: %#v", selfService)
