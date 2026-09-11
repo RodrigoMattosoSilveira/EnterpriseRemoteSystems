@@ -307,25 +307,15 @@ func (s *recordingAuthenticationAuditStore) RecordAuthorizationAudit(_ context.C
 
 func TestAuthenticationHandlerPreservesTargetTenantFromCreateAccountBody(t *testing.T) {
 	database, _, service, _ := authenticationTestService(t)
-	now := time.Now().UTC()
-	status := authenticationTestActivePersonStatus(t, database)
-	person := appdb.Person{
-		BaseModel: appdb.BaseModel{ID: "handler-target-tenant-person", CreatedAt: now, UpdatedAt: now},
-		TenantID:  appdb.DefaultTenantID,
-		FirstName: "Target", LastName: "Tenant", Nickname: "TargetTenant",
-		CPF: "12345678909", RG: "HANDLERTARGET", Cellular: "11912345679",
-		Email: "handler-target-tenant@example.com", Country: "Brasil", StatusID: status.ID,
-	}
-	if err := database.Create(&person).Error; err != nil {
-		t.Fatalf("create Person: %v", err)
-	}
+	login := "handler-target-tenant@example.com"
+	ensureAuthenticationTestPerson(t, database, login)
 
 	handler := NewHandler(service, CookieConfig{}, nil, nil)
 	app := fiber.New()
 	app.Post("/accounts", handler.CreateAccount)
 	body, _ := json.Marshal(CreateAccountRequest{
 		TenantID:          appdb.DefaultTenantID,
-		Login:             person.Email,
+		Login:             login,
 		TemporaryPassword: "Target-Tenant-Password-1",
 	})
 	request := httptest.NewRequest(http.MethodPost, "/accounts", bytes.NewReader(body))

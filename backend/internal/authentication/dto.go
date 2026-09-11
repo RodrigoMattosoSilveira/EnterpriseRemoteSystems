@@ -41,7 +41,6 @@ type AccountActorResponse struct {
 	PersonNickname string `json:"personNickname,omitempty"`
 	CollaboratorID string `json:"collaboratorId,omitempty"`
 	Active         bool   `json:"active"`
-	Primary        bool   `json:"primary"`
 }
 
 type AccountResponse struct {

@@ -130,7 +130,7 @@ func (s *GORMStore) FindActor(ctx context.Context, lookup ActorLookup) (*Actor, 
 	// authority is resolved only from grants for the explicitly requested tenant.
 	// When the Actor has canonical AccountActor ownership, derive Person,
 	// Membership, Collaborator, and intrinsic self-service identity from that
-	// binding. Never recover identity from authz_actors.person_id/collaborator_id.
+	// binding. The retired Actor identity columns no longer exist.
 	if s.database.Migrator().HasTable("auth_account_actors") {
 		var binding accountActorBindingProjection
 		bindingResult := s.database.WithContext(ctx).
@@ -653,14 +653,9 @@ func tenantAdministratorGlobalPersonID(database *gorm.DB, actorID string, tenant
 		})
 	}
 
-	// Compatibility for isolated authorization unit tests that intentionally do
-	// not install the Bite 30 Account/Actor foundation. This path is not used by
-	// production Tenant Administrator assignment endpoints.
-	var actor AuthzActor
-	if err := database.Select("id", "person_id").Where("id = ?", actorID).First(&actor).Error; err != nil {
-		return "", fmt.Errorf("find Tenant Administrator Actor: %w", err)
-	}
-	return strings.TrimSpace(stringValue(actor.PersonID)), nil
+	// Internal seed/test callers that do not require a canonical binding cannot
+	// derive Person identity. No retired Actor identity fallback exists.
+	return "", nil
 }
 
 type PermissionCatalogEntry struct {

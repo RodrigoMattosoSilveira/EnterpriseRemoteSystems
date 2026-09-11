@@ -178,7 +178,7 @@ export function authenticationAccountMatchesSearch(
 export function authenticationAccountPersonTarget(
   account: AuthAccount,
 ): AuthAccountActor | undefined {
-  // 30K.2B1 no longer treats auth_account_actors.is_primary as identity.
+  // Actor selection is derived from the canonical AccountActor binding list.
   // The Account's Person is global; choose the first canonical Tenant binding
   // only when the UI needs a Tenant Person navigation target.
   return (account.actors ?? []).find(

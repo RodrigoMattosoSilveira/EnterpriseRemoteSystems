@@ -48,12 +48,6 @@ func Bootstrap(cfg Config) (*fiber.App, func(), error) {
 			return nil, nil, err
 		}
 	}
-	// Bite 30B is an additive cutover: legacy Person writers remain until later
-	// bites. Repair any compatibility rows that were written without the new
-	// global Person/Membership foundation before serving tenant lookups.
-	if err := db.EnsureGlobalPersonMembershipFoundation(database); err != nil {
-		return nil, nil, err
-	}
 	if autoMigrate {
 		if err := authz.AutoMigrate(database); err != nil {
 			return nil, nil, err

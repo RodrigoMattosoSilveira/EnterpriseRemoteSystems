@@ -18,13 +18,11 @@ type AccountActorRecord struct {
 	TenantName     string
 	MembershipID   string
 	Active         bool
-	// Primary is a deprecated compatibility response flag. 30K.2B1 does not
-	// read auth_account_actors.is_primary; hydrated bindings always report false.
-	Primary bool
 }
 
 type AccountRecord struct {
 	Account
+	ActorID           string
 	ActorKey          string
 	DisplayName       string
 	PersonID          string
@@ -40,7 +38,6 @@ type AccountRecord struct {
 
 type PersonAuthenticationRecord struct {
 	TenantID             string
-	LegacyPersonID       string
 	GlobalPersonID       string
 	MembershipID         string
 	Login                string

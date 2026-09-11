@@ -183,19 +183,15 @@ func seedReceiptBackfillDependencies(t *testing.T, database *gorm.DB) (string, s
 	if err := database.Create(&globalPerson).Error; err != nil {
 		t.Fatalf("create global person: %v", err)
 	}
-	person := db.Person{BaseModel: db.BaseModel{ID: ids.New(), CreatedAt: now, UpdatedAt: now}, TenantID: defaultTenantID, FirstName: "Receipt", LastName: "Backfill", Nickname: "Backfill", CPF: globalPerson.CPF, RG: ids.New(), Cellular: ids.New(), Email: ids.New() + "@example.com", Country: "Brasil", StatusID: "ref-person-active", ProfileCompletionStatus: "COMPLETE", CanCreateCollaborator: true}
-	if err := database.Create(&person).Error; err != nil {
-		t.Fatalf("create person: %v", err)
-	}
 	membership := db.PersonTenantMembership{
-		BaseModel: db.BaseModel{ID: ids.New(), CreatedAt: now, UpdatedAt: now}, TenantID: defaultTenantID, PersonID: globalPerson.ID, StatusID: "ref-person-active", LegacyPersonID: &person.ID,
+		BaseModel: db.BaseModel{ID: ids.New(), CreatedAt: now, UpdatedAt: now}, TenantID: defaultTenantID, PersonID: globalPerson.ID, StatusID: "ref-person-active",
 	}
 	if err := database.Create(&membership).Error; err != nil {
 		t.Fatalf("create Person-Tenant Membership: %v", err)
 	}
 	daily := 100.0
 	collaborator := db.CollaboratorJourney{
-		BaseModel: db.BaseModel{ID: ids.New(), CreatedAt: now, UpdatedAt: now}, TenantID: defaultTenantID, MembershipID: &membership.ID, PersonID: person.ID,
+		BaseModel: db.BaseModel{ID: ids.New(), CreatedAt: now, UpdatedAt: now}, TenantID: defaultTenantID, MembershipID: &membership.ID,
 		JourneyStartDate: now, DefaultEndDate: now.AddDate(0, 0, 90), ProjectedEndDate: now.AddDate(0, 0, 90),
 		PaymentMethodID: "ref-payment-daily", PaymentValue: daily, DailyBRLAmount: &daily,
 		SectorID: "ref-sector-test", LocationID: "ref-location-test", TaskID: "ref-task-test", StatusID: "ref-collaborator-active",

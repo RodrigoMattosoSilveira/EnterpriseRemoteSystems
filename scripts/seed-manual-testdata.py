@@ -102,6 +102,7 @@ def seed_manual_receipt(
     conn: sqlite3.Connection,
     ledger_entry_id: str,
     collaborator_id: str,
+    person_id: str,
     receipt_number: str,
     sequence: int,
 ) -> None:
@@ -121,6 +122,7 @@ def seed_manual_receipt(
             "updated_at": now,
             "tenant_id": TENANT_ID,
             "collaborator_id": collaborator_id,
+            "person_id": person_id,
             "ledger_entry_id": ledger_entry_id,
             "receipt_number": receipt_number,
             "receipt_type": "LEDGER_DEBIT",
@@ -188,6 +190,7 @@ def upsert_reference_data(conn: sqlite3.Connection) -> None:
 
 
 def seed_people(conn: sqlite3.Connection) -> None:
+    """Seed canonical Global Persons and exact-Tenant Memberships only."""
     now = datetime.now(timezone.utc).isoformat(timespec="seconds")
     first_names = [
         "Ana", "Bruno", "Camila", "Davi", "Elisa", "Felipe", "Giovana", "Hugo", "Isabela", "Joao",
@@ -203,119 +206,26 @@ def seed_people(conn: sqlite3.Connection) -> None:
     for i in range(1, 71):
         first_name = first_names[i - 1]
         last_name = last_names[(i - 1) % len(last_names)]
-        nickname = f"MT {i:02d} {first_name}"
         person_id = f"manual-person-{i:03d}"
-        conn.execute(
-            """
-            INSERT INTO people (
-              id, tenant_id, first_name, last_name, nickname, cpf, rg, cellular,
-              email, country, pix_key, profile_completion_status,
-              can_create_collaborator, status_id, notes, created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'Brasil', ?, 'COMPLETE', 1,
-              'ref-person-status-active', ?, ?, ?)
-            ON CONFLICT(id) DO UPDATE SET
-              first_name = excluded.first_name,
-              last_name = excluded.last_name,
-              nickname = excluded.nickname,
-              cpf = excluded.cpf,
-              rg = excluded.rg,
-              cellular = excluded.cellular,
-              email = excluded.email,
-              pix_key = excluded.pix_key,
-              profile_completion_status = 'COMPLETE',
-              can_create_collaborator = 1,
-              status_id = 'ref-person-status-active',
-              notes = excluded.notes,
-              updated_at = excluded.updated_at
-            """,
-            (
-                person_id,
-                TENANT_ID,
-                first_name,
-                last_name,
-                nickname,
-                f"900000{i:05d}",
-                f"MT-{i:05d}",
-                f"1199{i:07d}",
-                f"manual.person{i:03d}@example.test",
-                f"manual.person{i:03d}@pix.example.test",
-                "Manual test seed person with complete profile.",
-                now,
-                now,
-            ),
-        )
-        sync_person_foundation(conn, person_id)
+        membership_id = f"manual-membership-{i:03d}"
+        person_values = {
+            "id": person_id, "created_at": now, "updated_at": now,
+            "first_name": first_name, "last_name": last_name, "nickname": f"MT {i:02d} {first_name}",
+            "cpf": f"900000{i:05d}", "rg": f"MT-{i:05d}", "cellular": f"1199{i:07d}",
+            "email": f"manual.person{i:03d}@example.test", "country": "Brasil",
+            "pix_key": f"manual.person{i:03d}@pix.example.test",
+            "profile_completion_status": "COMPLETE", "can_create_collaborator": 1,
+            "operational_active": 1,
+        }
+        upsert_filtered_row(conn, "global_people", person_values)
+        membership_values = {
+            "id": membership_id, "created_at": now, "updated_at": now,
+            "tenant_id": TENANT_ID, "person_id": person_id,
+            "status_id": "ref-person-status-active",
+            "notes": "Manual test seed Person Membership.",
+        }
+        upsert_filtered_row(conn, "person_tenant_memberships", membership_values)
 
-
-def sync_person_foundation(conn: sqlite3.Connection, legacy_person_id: str) -> None:
-    """Keep Bite 30B global Person/Membership data aligned with a manual legacy row."""
-    row = conn.execute("SELECT * FROM people WHERE id = ?", (legacy_person_id,)).fetchone()
-    if row is None:
-        raise ValueError(f"Cannot synchronize missing Person {legacy_person_id}")
-
-    conn.execute(
-        """
-        INSERT INTO global_people (
-          id, first_name, last_name, nickname, cpf, rg, cellular, email,
-          street1, street2, state, cep, city, country,
-          bank_name, bank_number, checking_account, pix_key,
-          emergency_name, emergency_cellular, emergency_email,
-          profile_completion_status, can_create_collaborator, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ON CONFLICT(cpf) DO UPDATE SET
-          first_name = excluded.first_name,
-          last_name = excluded.last_name,
-          nickname = excluded.nickname,
-          rg = excluded.rg,
-          cellular = excluded.cellular,
-          email = excluded.email,
-          street1 = excluded.street1,
-          street2 = excluded.street2,
-          state = excluded.state,
-          cep = excluded.cep,
-          city = excluded.city,
-          country = excluded.country,
-          bank_name = excluded.bank_name,
-          bank_number = excluded.bank_number,
-          checking_account = excluded.checking_account,
-          pix_key = excluded.pix_key,
-          emergency_name = excluded.emergency_name,
-          emergency_cellular = excluded.emergency_cellular,
-          emergency_email = excluded.emergency_email,
-          profile_completion_status = excluded.profile_completion_status,
-          can_create_collaborator = excluded.can_create_collaborator,
-          updated_at = excluded.updated_at
-        """,
-        (
-            row["id"], row["first_name"], row["last_name"], row["nickname"],
-            row["cpf"], row["rg"], row["cellular"], row["email"],
-            row["street1"], row["street2"], row["state"], row["cep"],
-            row["city"], row["country"], row["bank_name"], row["bank_number"],
-            row["checking_account"], row["pix_key"], row["emergency_name"],
-            row["emergency_cellular"], row["emergency_email"],
-            row["profile_completion_status"], row["can_create_collaborator"],
-            row["created_at"], row["updated_at"],
-        ),
-    )
-    global_person_id = conn.execute(
-        "SELECT id FROM global_people WHERE cpf = ?", (row["cpf"],)
-    ).fetchone()["id"]
-    conn.execute(
-        """
-        INSERT INTO person_tenant_memberships (
-          id, created_at, updated_at, tenant_id, person_id, status_id, notes, legacy_person_id
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        ON CONFLICT(person_id, tenant_id) DO UPDATE SET
-          status_id = excluded.status_id,
-          notes = excluded.notes,
-          legacy_person_id = excluded.legacy_person_id,
-          updated_at = excluded.updated_at
-        """,
-        (
-            f"person-membership-{legacy_person_id}", row["created_at"], row["updated_at"],
-            row["tenant_id"], global_person_id, row["status_id"], row["notes"], legacy_person_id,
-        ),
-    )
 
 def seed_collaborators(conn: sqlite3.Connection) -> None:
     now = datetime.now(timezone.utc).isoformat(timespec="seconds")
@@ -355,7 +265,7 @@ def seed_collaborators(conn: sqlite3.Connection) -> None:
         values: dict[str, object] = {
             "id": f"manual-collab-{i:03d}",
             "tenant_id": TENANT_ID,
-            "person_id": f"manual-person-{i:03d}",
+            "membership_id": f"manual-membership-{i:03d}",
             "journey_start_date": start.isoformat(),
             "default_end_date": default_end.isoformat(),
             "extension_days": extension_days,
@@ -480,6 +390,7 @@ def seed_expenses(conn: sqlite3.Connection, rng: random.Random) -> None:
             "updated_at": now,
             "tenant_id": TENANT_ID,
             "collaborator_id": f"manual-collab-{collaborator_index:03d}",
+            "person_id": f"manual-person-{collaborator_index:03d}",
             "expense_category_id": category_id,
             "value_unit_id": "ref-value-unit-brl",
             "amount": total,
@@ -527,7 +438,7 @@ def seed_expense_ledger_entries(conn: sqlite3.Connection) -> None:
         return
     for row in conn.execute(
         """
-        SELECT id, created_at, updated_at, tenant_id, collaborator_id, value_unit_id,
+        SELECT id, created_at, updated_at, tenant_id, collaborator_id, person_id, value_unit_id,
                amount, expense_date, description, active
         FROM expenses
         WHERE id LIKE 'manual-expense-%'
@@ -544,6 +455,7 @@ def seed_expense_ledger_entries(conn: sqlite3.Connection) -> None:
                 "updated_at": row["updated_at"],
                 "tenant_id": row["tenant_id"],
                 "collaborator_id": row["collaborator_id"],
+                "person_id": row["person_id"],
                 "value_unit_id": row["value_unit_id"],
                 "entry_type": "EXPENSE_DEDUCTION",
                 "direction": "DEBIT",
@@ -560,6 +472,7 @@ def seed_expense_ledger_entries(conn: sqlite3.Connection) -> None:
             conn,
             ledger_id,
             row["collaborator_id"],
+            row["person_id"],
             f"MAN-EXP-{row['id'].replace('manual-expense-', '')}",
             int(row["id"].replace("manual-expense-", "")),
         )
@@ -570,7 +483,9 @@ def seed_pix_ledger_entries(conn: sqlite3.Connection) -> None:
         return
     now = datetime.now(timezone.utc).isoformat(timespec="seconds")
     for i in range(1, 16):
-        collaborator_id = f"manual-collab-{((i * 2 - 1) % 40) + 1:03d}"
+        collaborator_index = ((i * 2 - 1) % 40) + 1
+        collaborator_id = f"manual-collab-{collaborator_index:03d}"
+        person_id = f"manual-person-{collaborator_index:03d}"
         effective_date = TODAY - timedelta(days=i % 14)
         amount = float(175 + (i % 6) * 65)
         ledger_id = f"manual-ledger-pix-{i:03d}"
@@ -583,6 +498,7 @@ def seed_pix_ledger_entries(conn: sqlite3.Connection) -> None:
                 "updated_at": now,
                 "tenant_id": TENANT_ID,
                 "collaborator_id": collaborator_id,
+                "person_id": person_id,
                 "value_unit_id": "ref-value-unit-brl",
                 "entry_type": "PIX_REMITTANCE",
                 "direction": "DEBIT",
@@ -595,7 +511,7 @@ def seed_pix_ledger_entries(conn: sqlite3.Connection) -> None:
                 "correction_type": "ORIGINAL",
             },
         )
-        seed_manual_receipt(conn, ledger_id, collaborator_id, f"MAN-PIX-{i:03d}", i + 80)
+        seed_manual_receipt(conn, ledger_id, collaborator_id, person_id, f"MAN-PIX-{i:03d}", i + 80)
 
 
 def seed_earning_ledger_entries(conn: sqlite3.Connection) -> None:
@@ -614,11 +530,15 @@ def seed_earning_ledger_entries(conn: sqlite3.Connection) -> None:
     ).fetchall()
     collaborators = conn.execute(
         """
-        SELECT id, payment_method_id, payment_value, daily_brl_amount,
-               fixed_monthly_brl_amount, gold_commission_percent
-        FROM collaborator_journeys
-        WHERE id LIKE 'manual-collab-%'
-        ORDER BY id
+        SELECT cj.id, cj.payment_method_id, cj.payment_value, cj.daily_brl_amount,
+               cj.fixed_monthly_brl_amount, cj.gold_commission_percent,
+               m.person_id
+        FROM collaborator_journeys cj
+        JOIN person_tenant_memberships m
+          ON m.id = cj.membership_id
+         AND m.tenant_id = cj.tenant_id
+        WHERE cj.id LIKE 'manual-collab-%'
+        ORDER BY cj.id
         """
     ).fetchall()
     for period_index, period in enumerate(work_periods, start=1):
@@ -661,6 +581,7 @@ def seed_earning_ledger_entries(conn: sqlite3.Connection) -> None:
                     "updated_at": now,
                     "tenant_id": TENANT_ID,
                     "collaborator_id": collaborator["id"],
+                    "person_id": collaborator["person_id"],
                     "value_unit_id": value_unit_id,
                     "entry_type": "EARNING_CREDIT",
                     "direction": "CREDIT",
@@ -799,7 +720,7 @@ def seed_manual_accrual_runs(conn: sqlite3.Connection) -> None:
 def manual_seed_counts(conn: sqlite3.Connection) -> dict[str, int]:
     table_names = {row["name"] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
     return {
-        "people": conn.execute("SELECT COUNT(*) FROM people WHERE id LIKE 'manual-person-%'").fetchone()[0],
+        "people": conn.execute("SELECT COUNT(*) FROM global_people WHERE id LIKE 'manual-person-%'").fetchone()[0],
         "collaborators": conn.execute("SELECT COUNT(*) FROM collaborator_journeys WHERE id LIKE 'manual-collab-%'").fetchone()[0],
         "expenses": conn.execute("SELECT COUNT(*) FROM expenses WHERE id LIKE 'manual-expense-%'").fetchone()[0],
         "work_periods": conn.execute("SELECT COUNT(*) FROM work_periods WHERE id LIKE 'manual-work-period-%'").fetchone()[0] if "work_periods" in table_names else 0,
@@ -870,7 +791,7 @@ def main() -> None:
         raise SystemExit(f"Database does not exist: {db_path}. Run migrations first.")
 
     with connect(str(db_path)) as conn:
-        require_tables(conn, ["tenants", "reference_data", "people", "global_people", "person_tenant_memberships", "collaborator_journeys", "expenses"])
+        require_tables(conn, ["tenants", "reference_data", "global_people", "person_tenant_memberships", "collaborator_journeys", "expenses"])
         with conn:
             upsert_reference_data(conn)
             seed_people(conn)

@@ -197,13 +197,6 @@ func (r *GORMRepository) CreatePersonAccount(ctx context.Context, tenantID strin
 			return ErrTenantUnavailable
 		}
 
-		// Legacy People writers can still exist until 30K.3. Repair their canonical
-		// projection before provisioning, then resolve identity exclusively through
-		// Global Person + exact Person-Tenant Membership.
-		if err := appdb.EnsureGlobalPersonMembershipFoundation(tx); err != nil {
-			return err
-		}
-
 		var membership appdb.PersonTenantMembership
 		membershipQuery := tx.Model(&appdb.PersonTenantMembership{}).
 			Joins("JOIN global_people gp ON gp.id = person_tenant_memberships.person_id").
@@ -261,7 +254,6 @@ func (r *GORMRepository) CreatePersonAccount(ctx context.Context, tenantID strin
 		if err != nil {
 			return err
 		}
-		account.ActorID = actor.ID
 		if err := createAuthenticationAccount(tx, account); err != nil {
 			return err
 		}
@@ -272,7 +264,6 @@ func (r *GORMRepository) CreatePersonAccount(ctx context.Context, tenantID strin
 			AccountID: account.ID,
 			ActorID:   actor.ID,
 			ScopeType: AccountActorScopeTenant,
-			Primary:   false,
 			CreatedAt: account.CreatedAt,
 			UpdatedAt: account.UpdatedAt,
 		}
@@ -343,7 +334,6 @@ func ensurePersonTenantActor(tx *gorm.DB, accountID string, membership appdb.Per
 			AccountID: accountID,
 			ActorID:   actor.ID,
 			ScopeType: AccountActorScopeTenant,
-			Primary:   false,
 			CreatedAt: createdAt,
 			UpdatedAt: now,
 		}
@@ -382,29 +372,12 @@ func createAuthenticationAccount(tx *gorm.DB, account Account) error {
 		return ErrLoginAlreadyExists
 	}
 
-	var actorAccountCount int64
-	if err := tx.Model(&Account{}).Where("actor_id = ?", account.ActorID).Count(&actorAccountCount).Error; err != nil {
-		return fmt.Errorf("check legacy authorization actor account: %w", err)
-	}
-	if actorAccountCount == 0 && tx.Migrator().HasTable(&AccountActor{}) {
-		if err := tx.Model(&AccountActor{}).Where("actor_id = ?", account.ActorID).Count(&actorAccountCount).Error; err != nil {
-			return fmt.Errorf("check authorization actor ownership: %w", err)
-		}
-	}
-	if actorAccountCount > 0 {
-		return ErrActorAlreadyLinked
-	}
-
 	if err := tx.Create(&account).Error; err != nil {
 		errorText := strings.ToLower(err.Error())
-		switch {
-		case strings.Contains(errorText, "auth_user_accounts.login"):
+		if strings.Contains(errorText, "auth_user_accounts.login") {
 			return ErrLoginAlreadyExists
-		case strings.Contains(errorText, "auth_user_accounts.actor_id"):
-			return ErrActorAlreadyLinked
-		default:
-			return fmt.Errorf("create authentication account: %w", err)
 		}
+		return fmt.Errorf("create authentication account: %w", err)
 	}
 	return nil
 }
@@ -586,10 +559,9 @@ func (r *GORMRepository) ConsumePasswordResetToken(ctx context.Context, tokenID 
 }
 
 func (r *GORMRepository) accountQuery(ctx context.Context) *gorm.DB {
-	// Bite 30K.2B1 makes Authentication Administration hydrate identity only
-	// through auth_account_people + auth_account_actors. The legacy
-	// auth_user_accounts.actor_id column remains a 30K.3 compatibility write,
-	// but it is no longer a read source for Account identity.
+	// Authentication Administration hydrates identity only through
+	// auth_account_people + auth_account_actors. 30K.3B physically removes the
+	// former direct Account -> Actor compatibility column.
 	return r.database.WithContext(ctx).
 		Table("auth_user_accounts").
 		Select(`
@@ -685,18 +657,15 @@ func (r *GORMRepository) hydrateAccountActors(ctx context.Context, record Accoun
 			TenantName:     stringValue(row.TenantName),
 			MembershipID:   stringValue(row.MembershipID),
 			Active:         row.Active,
-			// is_primary is intentionally ignored by 30K.2B1. Keep the response
-			// field false until 30K.3 removes the compatibility column/DTO field.
-			Primary: false,
 		}
 		record.Actors = append(record.Actors, actor)
 		if actor.Active {
 			record.AnyActorActive = true
 		}
 
-		// Preserve the pre-30K response envelope for callers that still render the
-		// top-level Actor fields, but derive that projection deterministically from
-		// the canonical AccountActor binding list rather than actor_id/is_primary.
+		// Preserve the top-level Actor response envelope for callers that still
+		// render it, but derive that projection deterministically from the canonical
+		// AccountActor binding list.
 		if index == 0 {
 			record.ActorID = actor.ActorID
 			record.ActorKey = actor.ActorKey

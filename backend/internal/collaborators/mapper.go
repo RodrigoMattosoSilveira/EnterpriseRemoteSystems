@@ -16,7 +16,6 @@ func ToDTO(row db.CollaboratorJourney) CollaboratorDTO {
 		TenantID:                       row.TenantID,
 		MembershipID:                   collaboratorMembershipID(row.MembershipID),
 		PersonID:                       strings.TrimSpace(row.Membership.PersonID),
-		LegacyPersonID:                 row.PersonID,
 		PersonName:                     globalPersonName(person),
 		PersonNickname:                 strings.TrimSpace(person.Nickname),
 		JourneyStartDate:               formatDate(row.JourneyStartDate),
@@ -80,10 +79,6 @@ func collaboratorMembershipID(value *string) string {
 }
 
 func globalPersonName(person db.GlobalPerson) string {
-	return strings.TrimSpace(strings.Join([]string{person.FirstName, person.LastName}, " "))
-}
-
-func personName(person db.Person) string {
 	return strings.TrimSpace(strings.Join([]string{person.FirstName, person.LastName}, " "))
 }
 

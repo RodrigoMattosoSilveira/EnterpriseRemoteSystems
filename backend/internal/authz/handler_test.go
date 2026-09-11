@@ -213,9 +213,6 @@ func TestAuthzAdminCreatesIdentityNeutralActorAndRejectsUnboundTenantGrant(t *te
 	if err := database.First(&persisted, "id = ?", created.ID).Error; err != nil {
 		t.Fatalf("find created Actor: %v", err)
 	}
-	if persisted.PersonID != nil || persisted.CollaboratorID != nil {
-		t.Fatalf("legacy identity request fields must not be persisted on Actor: %#v", persisted)
-	}
 
 	grantBody := map[string]any{"roleCode": string(RoleExpenseOperator), "tenantId": "tenant-a"}
 	grantResp := doAuthzRequest(t, app, http.MethodPost, "/api/v1/authz/actors/"+created.ID+"/role-grants", grantBody, headers)

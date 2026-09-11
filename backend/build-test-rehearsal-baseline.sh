@@ -6,7 +6,7 @@ TARGET_DB="${TEST_RELEASE_BASELINE_DB:-/rehearsal-baseline/pre-bite30i.db}"
 MIGRATIONS_DIR="${MIGRATIONS_DIR:-/app/migrations}"
 EXPECTED_LAST_MIGRATION="${EXPECTED_LAST_MIGRATION:-000062_tenant_administrator_cardinality.up.sql}"
 MIGRATION_UNDER_REHEARSAL="${MIGRATION_UNDER_REHEARSAL:-000063_global_administration_control_plane.up.sql}"
-EXPECTED_FINAL_MIGRATION="${EXPECTED_FINAL_MIGRATION:-000066_support_access_lease_audit_attribution.up.sql}"
+EXPECTED_FINAL_MIGRATION="${EXPECTED_FINAL_MIGRATION:-000069_physical_legacy_identity_schema_removal.up.sql}"
 VERIFY_MIGRATED_DB_SCRIPT="${VERIFY_MIGRATED_DB_SCRIPT:-$(dirname "$0")/verify-migrated-db.sh}"
 TMP_DB="${TARGET_DB}.building.$$"
 PROBE_DB="${TARGET_DB}.probe.$$"
@@ -52,7 +52,7 @@ for migration in "$MIGRATIONS_DIR"/*.up.sql; do
   # file to EOF, then record the filename in a separate sqlite3 invocation.
   sqlite3 -bail "$TMP_DB" < "$migration"
   escaped_filename="$(printf '%s' "$filename" | sed "s/'/''/g")"
-  sqlite3 -bail "$TMP_DB" "INSERT INTO schema_migrations(filename) VALUES ('$escaped_filename');"
+  sqlite3 -bail "$TMP_DB" "INSERT OR IGNORE INTO schema_migrations(filename) VALUES ('$escaped_filename');"
   applied_count=$((applied_count + 1))
 
   if [ "$filename" = "$EXPECTED_LAST_MIGRATION" ]; then
@@ -76,10 +76,10 @@ sqlite3 -bail "$TMP_DB" <<'SQL'
 PRAGMA foreign_keys = ON;
 
 -- Preserve the tenant-local Person compatibility projection as a real
--- pre-30I database does. Startup's Account/Actor foundation repair resolves
--- the legacy Actor Person through person_tenant_memberships.legacy_person_id;
--- omitting this bridge creates a hybrid fixture that migration 000062 accepts
--- but the application correctly rejects during bootstrap.
+-- pre-30I database does. The later canonical AccountActor/Membership bindings
+-- deliberately agree with that historical projection so the release rehearsal
+-- proves migrations through 000069 preserve canonical identity while current startup
+-- validates only the canonical graph.
 INSERT INTO people (
   id, first_name, last_name, nickname, cpf, rg, cellular, email,
   country, profile_completion_status, can_create_collaborator,
@@ -322,10 +322,10 @@ if [ "$fixture_slot_count" != "1" ]; then
   exit 1
 fi
 
-# A pre-30I ordinary account must resolve to the same Membership through both the
-# compatibility path (Account.actor_id -> Actor.person_id -> legacy_person_id)
-# and the explicit 30C path (auth_account_actors.membership_id). This is the
-# identity shape that EnsureAccountActorFoundation() expects during startup.
+# The deterministic pre-30I baseline deliberately contains both its historical
+# compatibility links and the canonical 30C AccountActor/Membership graph. They
+# must agree before the later migrations are rehearsed; 30K.3A then preserves
+# the historical values while current runtime identity uses only the canonical graph.
 legacy_explicit_alignment="$(sqlite3 "$TMP_DB" "
 SELECT COUNT(*)
 FROM auth_user_accounts a
@@ -372,10 +372,24 @@ for migration in "$MIGRATIONS_DIR"/*.up.sql; do
     continue
   fi
 
-  echo "Applying migration to 30I rehearsal probe: $filename"
+  # Bite 30K.3A installs the canonical Global Person search trigger at runtime.
+  # Rehearse 000069 from that real application-used state, not only from the
+  # migration-only state, so physical removal must tolerate the pre-existing
+  # runtime trigger before recreating the canonical search projection.
+  if [ "$filename" = "000069_physical_legacy_identity_schema_removal.up.sql" ]; then
+    sqlite3 -bail "$PROBE_DB" <<'SQL'
+CREATE TRIGGER IF NOT EXISTS trg_global_person_search_index_update
+AFTER UPDATE OF first_name, last_name, nickname ON global_people
+BEGIN
+  SELECT 1;
+END;
+SQL
+  fi
+
+  echo "Applying migration to release rehearsal probe: $filename"
   sqlite3 -bail "$PROBE_DB" < "$migration"
   escaped_filename="$(printf '%s' "$filename" | sed "s/'/''/g")"
-  sqlite3 -bail "$PROBE_DB" "INSERT INTO schema_migrations(filename) VALUES ('$escaped_filename');"
+  sqlite3 -bail "$PROBE_DB" "INSERT OR IGNORE INTO schema_migrations(filename) VALUES ('$escaped_filename');"
   probe_count=$((probe_count + 1))
 
   if [ "$filename" = "$EXPECTED_FINAL_MIGRATION" ]; then
@@ -389,7 +403,7 @@ if [ "$probe_started" != "1" ]; then
   exit 2
 fi
 if [ "$probe_final_seen" != "1" ]; then
-  echo "Expected final 30I migration was not reached: $EXPECTED_FINAL_MIGRATION" >&2
+  echo "Expected final rehearsal migration was not reached: $EXPECTED_FINAL_MIGRATION" >&2
   exit 2
 fi
 if [ ! -x "$VERIFY_MIGRATED_DB_SCRIPT" ]; then
@@ -416,6 +430,6 @@ printf '%s\n' \
   "Baseline last migration: ${EXPECTED_LAST_MIGRATION}" \
   "First rehearsed migration: ${MIGRATION_UNDER_REHEARSAL}" \
   "Final rehearsed migration: ${EXPECTED_FINAL_MIGRATION}" \
-  "Rehearsed 30I migrations: ${probe_count}" \
+  "Rehearsed migrations: ${probe_count}" \
   "Integrity check: ok" \
   "Foreign key check: clean"

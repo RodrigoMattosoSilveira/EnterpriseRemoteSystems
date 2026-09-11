@@ -43,7 +43,34 @@ INSERT OR IGNORE INTO reference_data (
   ('ref-location-main-mine', 'default', 'location', 'MAIN_MINE', 'Main Mine', 'Default mine location', 1, 10, NULL, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
   ('ref-task-miner', 'default', 'task', 'MINER', 'Miner', 'Mining collaborator task', 1, 10, NULL, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
 
--- Authorization actors that can be selected through the development Authz UI.
+-- Authorization identities used by the development Authz UI. Current test data
+-- follows the canonical Account -> AccountActor -> Membership -> Global Person
+-- relationship and deliberately leaves all legacy identity columns empty.
+INSERT OR IGNORE INTO global_people (
+  id, first_name, last_name, nickname, cpf, rg, cellular, email,
+  country, pix_key, profile_completion_status, can_create_collaborator,
+  operational_active, created_at, updated_at
+) VALUES
+  ('ers-testdata-auth-person-tenant-admin', 'Test', 'Tenant Admin', 'Test Tenant Admin',
+   '71455193060', 'AUTH-TA-001', '11987654001', 'tenant-admin@test.ers',
+   'Brasil', 'tenant-admin@test.ers', 'COMPLETE', 1, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+  ('ers-testdata-auth-person-expense-operator', 'Test', 'Expense Operator', 'Test Expense Operator',
+   '68113435020', 'AUTH-EO-001', '11987654002', 'expense-operator@test.ers',
+   'Brasil', 'expense-operator@test.ers', 'COMPLETE', 1, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+  ('ers-testdata-auth-person-second-approver', 'Test', 'Second Approver', 'Test Second Approver',
+   '05700606002', 'AUTH-SA-001', '11987654003', 'second-approver@test.ers',
+   'Brasil', 'second-approver@test.ers', 'COMPLETE', 1, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
+
+INSERT OR IGNORE INTO person_tenant_memberships (
+  id, created_at, updated_at, tenant_id, person_id, status_id, notes
+) VALUES
+  ('ers-testdata-auth-membership-tenant-admin', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 'default',
+   'ers-testdata-auth-person-tenant-admin', 'ref-person-status-active', 'Canonical Authz test identity.'),
+  ('ers-testdata-auth-membership-expense-operator', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 'default',
+   'ers-testdata-auth-person-expense-operator', 'ref-person-status-active', 'Canonical Authz test identity.'),
+  ('ers-testdata-auth-membership-second-approver', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 'default',
+   'ers-testdata-auth-person-second-approver', 'ref-person-status-active', 'Canonical Authz test identity.');
+
 INSERT OR IGNORE INTO authz_actors (
   id, actor_key, display_name, active, created_at, updated_at
 ) VALUES
@@ -51,47 +78,82 @@ INSERT OR IGNORE INTO authz_actors (
   ('ers-testdata-actor-expense-operator', 'expense-operator@test.ers', 'Test Expense Operator', 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
   ('ers-testdata-actor-second-approver', 'second-approver@test.ers', 'Test Second Approver', 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
 
+INSERT OR IGNORE INTO auth_user_accounts (
+  id, login, password_hash, active, must_change_password, created_at, updated_at
+) VALUES
+  ('ers-testdata-account-tenant-admin', 'tenant-admin@test.ers', '!testdata-login-disabled!', 1, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+  ('ers-testdata-account-expense-operator', 'expense-operator@test.ers', '!testdata-login-disabled!', 1, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+  ('ers-testdata-account-second-approver', 'second-approver@test.ers', '!testdata-login-disabled!', 1, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
+
+INSERT OR IGNORE INTO auth_account_people (account_id, person_id, created_at, updated_at) VALUES
+  ('ers-testdata-account-tenant-admin', 'ers-testdata-auth-person-tenant-admin', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+  ('ers-testdata-account-expense-operator', 'ers-testdata-auth-person-expense-operator', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+  ('ers-testdata-account-second-approver', 'ers-testdata-auth-person-second-approver', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
+
+INSERT OR IGNORE INTO auth_account_actors (
+  account_id, actor_id, scope_type, tenant_id, membership_id, created_at, updated_at
+) VALUES
+  ('ers-testdata-account-tenant-admin', 'ers-testdata-actor-tenant-admin', 'TENANT', 'default', 'ers-testdata-auth-membership-tenant-admin', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+  ('ers-testdata-account-expense-operator', 'ers-testdata-actor-expense-operator', 'TENANT', 'default', 'ers-testdata-auth-membership-expense-operator', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+  ('ers-testdata-account-second-approver', 'ers-testdata-actor-second-approver', 'TENANT', 'default', 'ers-testdata-auth-membership-second-approver', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
+
 INSERT OR IGNORE INTO authz_actor_role_grants (
   id, actor_id, role_id, tenant_id, active, created_at, updated_at
 ) VALUES
   ('ers-testdata-grant-tenant-admin', 'ers-testdata-actor-tenant-admin', 'authz-role-tenant-admin', 'default', 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
   ('ers-testdata-grant-expense-operator', 'ers-testdata-actor-expense-operator', 'authz-role-expense-operator', 'default', 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
 
--- People and active collaborator journeys.
-INSERT OR IGNORE INTO people (
-  id, tenant_id, first_name, last_name, nickname, cpf, rg, cellular, email,
+-- Canonical Global Persons, exact-Tenant Memberships, and active Collaborator Journeys.
+INSERT OR IGNORE INTO global_people (
+  id, first_name, last_name, nickname, cpf, rg, cellular, email,
   country, pix_key, profile_completion_status, can_create_collaborator,
-  status_id, notes, created_at, updated_at
+  operational_active, created_at, updated_at
 ) VALUES
   (
-    'ers-testdata-person-zero-gold', 'default', 'Zelia', 'Gold', 'Zelia Gold',
+    'ers-testdata-person-zero-gold', 'Zelia', 'Gold', 'Zelia Gold',
     '52998224725', 'TG-ZERO-001', '11987654321', 'zelia.gold@test.ers',
-    'Brasil', 'zelia.gold@test.ers', 'COMPLETE', 1,
-    'ref-person-status-active', 'Test data: collaborator with positive gold balance for Zero Gold.',
+    'Brasil', 'zelia.gold@test.ers', 'COMPLETE', 1, 1,
     CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
   ),
   (
-    'ers-testdata-person-partial-payout', 'default', 'Paulo', 'Payout', 'Paulo Payout',
+    'ers-testdata-person-partial-payout', 'Paulo', 'Payout', 'Paulo Payout',
     '39053344705', 'TG-PAYOUT-001', '11987654322', 'paulo.payout@test.ers',
-    'Brasil', 'paulo.payout@test.ers', 'COMPLETE', 1,
-    'ref-person-status-active', 'Test data: collaborator with BRL and gold balances for Partial Payout.',
+    'Brasil', 'paulo.payout@test.ers', 'COMPLETE', 1, 1,
     CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
   ),
   (
-    'ers-testdata-person-close-journey', 'default', 'Clara', 'Close', 'Clara Close',
+    'ers-testdata-person-close-journey', 'Clara', 'Close', 'Clara Close',
     '11144477735', 'TG-CLOSE-001', '11987654323', 'clara.close@test.ers',
-    'Brasil', 'clara.close@test.ers', 'COMPLETE', 1,
-    'ref-person-status-active', 'Test data: collaborator with no blockers for Close Journey.',
+    'Brasil', 'clara.close@test.ers', 'COMPLETE', 1, 1,
     CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
   );
 
+INSERT OR IGNORE INTO person_tenant_memberships (
+  id, created_at, updated_at, tenant_id, person_id, status_id, notes
+) VALUES
+  (
+    'ers-testdata-membership-zero-gold', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP,
+    'default', 'ers-testdata-person-zero-gold', 'ref-person-status-active',
+    'Test data: canonical Membership for Zero Gold collaborator.'
+  ),
+  (
+    'ers-testdata-membership-partial-payout', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP,
+    'default', 'ers-testdata-person-partial-payout', 'ref-person-status-active',
+    'Test data: canonical Membership for Partial Payout collaborator.'
+  ),
+  (
+    'ers-testdata-membership-close-journey', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP,
+    'default', 'ers-testdata-person-close-journey', 'ref-person-status-active',
+    'Test data: canonical Membership for Close Journey collaborator.'
+  );
+
 INSERT OR IGNORE INTO collaborator_journeys (
-  id, tenant_id, person_id, journey_start_date, default_end_date, extension_days,
+  id, tenant_id, membership_id, journey_start_date, default_end_date, extension_days,
   projected_end_date, payment_method_id, payment_value, daily_brl_amount,
   sector_id, location_id, task_id, status_id, notes, created_at, updated_at
 ) VALUES
   (
-    'ers-testdata-collab-zero-gold', 'default', 'ers-testdata-person-zero-gold',
+    'ers-testdata-collab-zero-gold', 'default', 'ers-testdata-membership-zero-gold',
     '2026-04-01', '2026-06-30', 0, '2026-06-30',
     'ref-method-commission', 0, 0,
     'ref-sector-mining', 'ref-location-main-mine', 'ref-task-miner', 'ref-collaborator-status-active',
@@ -99,7 +161,7 @@ INSERT OR IGNORE INTO collaborator_journeys (
     CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
   ),
   (
-    'ers-testdata-collab-partial-payout', 'default', 'ers-testdata-person-partial-payout',
+    'ers-testdata-collab-partial-payout', 'default', 'ers-testdata-membership-partial-payout',
     '2026-04-01', '2026-06-30', 0, '2026-06-30',
     'ref-method-daily', 350, 350,
     'ref-sector-mining', 'ref-location-main-mine', 'ref-task-miner', 'ref-collaborator-status-active',
@@ -107,7 +169,7 @@ INSERT OR IGNORE INTO collaborator_journeys (
     CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
   ),
   (
-    'ers-testdata-collab-close-journey', 'default', 'ers-testdata-person-close-journey',
+    'ers-testdata-collab-close-journey', 'default', 'ers-testdata-membership-close-journey',
     '2026-03-01', '2026-05-30', 0, '2026-05-30',
     'ref-method-daily', 300, 300,
     'ref-sector-mining', 'ref-location-main-mine', 'ref-task-miner', 'ref-collaborator-status-active',
@@ -118,40 +180,40 @@ INSERT OR IGNORE INTO collaborator_journeys (
 -- Positive current-account balances.  These are credits only, so receipt
 -- lifecycle rules for debits are not triggered during dataset load.
 INSERT OR IGNORE INTO ledger_entries (
-  id, tenant_id, collaborator_id, value_unit_id, entry_type, direction, amount,
+  id, tenant_id, collaborator_id, person_id, value_unit_id, entry_type, direction, amount,
   effective_date, source_type, source_id, description, active, correction_type,
   created_at, updated_at
 ) VALUES
   (
-    'ers-testdata-ledger-zero-gold-credit', 'default', 'ers-testdata-collab-zero-gold',
+    'ers-testdata-ledger-zero-gold-credit', 'default', 'ers-testdata-collab-zero-gold', 'ers-testdata-person-zero-gold',
     'ref-value-unit-gold-gram', 'EARNING_CREDIT', 'CREDIT', 8.500,
     '2026-06-15', 'TEST_DATA', 'ers-testdata-source-zero-gold-credit',
     'Seeded gold earning credit for Zero Gold testing.', 1, 'ORIGINAL',
     CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
   ),
   (
-    'ers-testdata-ledger-partial-payout-brl-credit', 'default', 'ers-testdata-collab-partial-payout',
+    'ers-testdata-ledger-partial-payout-brl-credit', 'default', 'ers-testdata-collab-partial-payout', 'ers-testdata-person-partial-payout',
     'ref-value-unit-brl', 'EARNING_CREDIT', 'CREDIT', 1250.00,
     '2026-06-15', 'TEST_DATA', 'ers-testdata-source-partial-payout-brl-credit',
     'Seeded BRL earning credit for Partial Payout testing.', 1, 'ORIGINAL',
     CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
   ),
   (
-    'ers-testdata-ledger-partial-payout-gold-credit', 'default', 'ers-testdata-collab-partial-payout',
+    'ers-testdata-ledger-partial-payout-gold-credit', 'default', 'ers-testdata-collab-partial-payout', 'ers-testdata-person-partial-payout',
     'ref-value-unit-gold-gram', 'EARNING_CREDIT', 'CREDIT', 2.750,
     '2026-06-15', 'TEST_DATA', 'ers-testdata-source-partial-payout-gold-credit',
     'Seeded gold earning credit for Partial Payout testing.', 1, 'ORIGINAL',
     CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
   ),
   (
-    'ers-testdata-ledger-close-journey-brl-credit', 'default', 'ers-testdata-collab-close-journey',
+    'ers-testdata-ledger-close-journey-brl-credit', 'default', 'ers-testdata-collab-close-journey', 'ers-testdata-person-close-journey',
     'ref-value-unit-brl', 'EARNING_CREDIT', 'CREDIT', 600.00,
     '2026-06-15', 'TEST_DATA', 'ers-testdata-source-close-journey-brl-credit',
     'Seeded BRL earning credit for Close Journey testing.', 1, 'ORIGINAL',
     CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
   ),
   (
-    'ers-testdata-ledger-close-journey-gold-credit', 'default', 'ers-testdata-collab-close-journey',
+    'ers-testdata-ledger-close-journey-gold-credit', 'default', 'ers-testdata-collab-close-journey', 'ers-testdata-person-close-journey',
     'ref-value-unit-gold-gram', 'EARNING_CREDIT', 'CREDIT', 1.250,
     '2026-06-15', 'TEST_DATA', 'ers-testdata-source-close-journey-gold-credit',
     'Seeded gold earning credit for Close Journey testing.', 1, 'ORIGINAL',

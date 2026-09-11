@@ -15,10 +15,12 @@ SELECT
     p.nickname,
     p.first_name || ' ' || p.last_name AS legal_name,
     p.email
-FROM people p
+FROM person_tenant_memberships m
+JOIN global_people p
+  ON p.id = m.person_id
 JOIN tenants t
-  ON t.id = p.tenant_id
-WHERE p.tenant_id IN ('default', '$SECOND_TENANT_ID')
+  ON t.id = m.tenant_id
+WHERE m.tenant_id IN ('default', '$SECOND_TENANT_ID')
 ORDER BY
     t.name,
     p.nickname;

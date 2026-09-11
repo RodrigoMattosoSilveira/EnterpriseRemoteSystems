@@ -20,7 +20,7 @@ fi
 echo "Applying migrations to: $DB_PATH"
 echo
 
-sqlite3 "$DB_PATH" "
+sqlite3 -bail "$DB_PATH" "
   PRAGMA foreign_keys = ON;
   CREATE TABLE IF NOT EXISTS schema_migrations (
     filename TEXT PRIMARY KEY,
@@ -39,7 +39,7 @@ fi
 
 for path in "${migrations[@]}"; do
   filename="$(basename "$path")"
-  already_applied="$(sqlite3 "$DB_PATH" "SELECT COUNT(*) FROM schema_migrations WHERE filename = '$filename';")"
+  already_applied="$(sqlite3 -bail "$DB_PATH" "SELECT COUNT(*) FROM schema_migrations WHERE filename = '$filename';")"
 
   if [[ "$already_applied" == "1" ]]; then
     echo "Skipping already applied migration: $filename"
@@ -47,21 +47,21 @@ for path in "${migrations[@]}"; do
   fi
 
   echo "Applying migration: $filename"
-  sqlite3 "$DB_PATH" < "$path"
-  sqlite3 "$DB_PATH" "INSERT INTO schema_migrations (filename) VALUES ('$filename');"
+  sqlite3 -bail "$DB_PATH" < "$path"
+  sqlite3 -bail "$DB_PATH" "INSERT OR IGNORE INTO schema_migrations (filename) VALUES ('$filename');"
 done
 
-collaborator_availability_count="$(sqlite3 "$DB_PATH" "SELECT COUNT(*) FROM pragma_table_info('collaborator_journeys') WHERE name = 'planning_availability';")"
+collaborator_availability_count="$(sqlite3 -bail "$DB_PATH" "SELECT COUNT(*) FROM pragma_table_info('collaborator_journeys') WHERE name = 'planning_availability';")"
 if [[ "$collaborator_availability_count" == "0" ]]; then
   echo "Repairing missing collaborator_journeys.planning_availability column..."
-  sqlite3 "$DB_PATH" "
+  sqlite3 -bail "$DB_PATH" "
     ALTER TABLE collaborator_journeys
       ADD COLUMN planning_availability TEXT NOT NULL DEFAULT 'ACTIVE'
       CHECK (planning_availability IN ('ACTIVE', 'DAY_OFF', 'LEAVE_OF_ABSENCE'));
   "
 fi
 
-sqlite3 "$DB_PATH" "
+sqlite3 -bail "$DB_PATH" "
   UPDATE collaborator_journeys
      SET planning_availability = 'ACTIVE'
    WHERE planning_availability IS NULL OR planning_availability = '';
@@ -70,4 +70,4 @@ sqlite3 "$DB_PATH" "
 echo
 echo "✅ Migrations applied."
 echo
-sqlite3 "$DB_PATH" ".tables"
+sqlite3 -bail "$DB_PATH" ".tables"

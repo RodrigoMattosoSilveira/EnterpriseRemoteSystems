@@ -47,7 +47,6 @@ type apiCollaboratorResponse struct {
 		TenantID                       string   `json:"tenantId"`
 		MembershipID                   string   `json:"membershipId"`
 		PersonID                       string   `json:"personId"`
-		LegacyPersonID                 string   `json:"legacyPersonId"`
 		PersonName                     string   `json:"personName"`
 		PersonNickname                 string   `json:"personNickname"`
 		JourneyStartDate               string   `json:"journeyStartDate"`
@@ -120,12 +119,6 @@ func TestListCandidatesUsesMembershipAndAuthoritativePersonAndExcludesOpenJourne
 	defer sqlDB.Close()
 
 	person := createPerson(t, server, validCompletePersonPayload(1, nil))
-	if err := database.Model(&db.Person{}).
-		Where("id = ?", person.Data.ID).
-		Update("can_create_collaborator", false).Error; err != nil {
-		t.Fatalf("make persisted eligibility stale: %v", err)
-	}
-
 	candidates := listCollaboratorCandidates(t, server)
 	if len(candidates.Data) != 1 {
 		t.Fatalf("expected one candidate, got %+v", candidates.Data)
@@ -149,9 +142,6 @@ func TestListCandidatesUsesMembershipAndAuthoritativePersonAndExcludesOpenJourne
 	}
 	if created.Data.PersonID != person.Data.GlobalPersonID {
 		t.Fatalf("expected canonical Person ID %q, got %q", person.Data.GlobalPersonID, created.Data.PersonID)
-	}
-	if created.Data.LegacyPersonID != person.Data.ID {
-		t.Fatalf("expected legacy Person ID %q, got %q", person.Data.ID, created.Data.LegacyPersonID)
 	}
 
 	candidates = listCollaboratorCandidates(t, server)
@@ -233,9 +223,6 @@ func TestCreateCollaboratorFromCompletePersonReturnsCreated(t *testing.T) {
 	}
 	if body.Data.PersonID != person.Data.GlobalPersonID {
 		t.Fatalf("expected canonical personId %q, got %q", person.Data.GlobalPersonID, body.Data.PersonID)
-	}
-	if body.Data.LegacyPersonID != person.Data.ID {
-		t.Fatalf("expected legacyPersonId %q, got %q", person.Data.ID, body.Data.LegacyPersonID)
 	}
 	if body.Data.PersonName != "Person1 Silva" {
 		t.Fatalf("expected personName %q, got %q", "Person1 Silva", body.Data.PersonName)

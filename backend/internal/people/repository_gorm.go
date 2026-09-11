@@ -111,16 +111,15 @@ func (r *gormRepository) List(
 	return rows, total, nil
 }
 
-// Create establishes all three Bite 30B layers atomically: the authoritative
-// global Person, the current tenant's compatibility projection, and the
-// Person-Tenant Membership. Later bites may create a global Person before any
-// Membership; this compatibility path preserves the existing Tenant Admin UX.
+// Create establishes the canonical identity layers atomically: the global
+// Person and the current Tenant's Person-Tenant Membership. 30K.3B has no
+// tenant-local legacy Person table to create or update.
 func (r *gormRepository) Create(ctx context.Context, person *db.Person) error {
 	if person == nil {
 		return errors.New("person is required")
 	}
 	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		global := globalPersonFromLegacy(*person)
+		global := globalPersonFromProjection(*person)
 		statusCode, err := personStatusCodeTx(tx, person.TenantID, person.StatusID)
 		if err != nil {
 			return err
@@ -129,25 +128,17 @@ func (r *gormRepository) Create(ctx context.Context, person *db.Person) error {
 		if err := tx.Create(&global).Error; err != nil {
 			return err
 		}
-		// GORM applies a declared true default to a zero-value bool on create.
-		// Force the explicit operationally-inactive state after insertion so an
-		// INACTIVE Person cannot be persisted globally as active.
 		if !global.OperationalActive {
 			if err := tx.Model(&db.GlobalPerson{}).Where("id = ?", global.ID).Update("operational_active", false).Error; err != nil {
 				return err
 			}
 		}
-		if err := tx.Create(person).Error; err != nil {
-			return err
-		}
-		legacyID := person.ID
 		membership := db.PersonTenantMembership{
-			BaseModel:      db.BaseModel{ID: ids.New(), CreatedAt: person.CreatedAt, UpdatedAt: person.UpdatedAt},
-			TenantID:       person.TenantID,
-			PersonID:       global.ID,
-			StatusID:       person.StatusID,
-			Notes:          person.Notes,
-			LegacyPersonID: &legacyID,
+			BaseModel: db.BaseModel{ID: ids.New(), CreatedAt: person.CreatedAt, UpdatedAt: person.UpdatedAt},
+			TenantID:  person.TenantID,
+			PersonID:  global.ID,
+			StatusID:  person.StatusID,
+			Notes:     person.Notes,
 		}
 		if err := tx.Create(&membership).Error; err != nil {
 			return err
@@ -189,63 +180,21 @@ func (r *gormRepository) Update(ctx context.Context, tenantID string, person *db
 			return ErrTenantReactivationRequired
 		}
 
-		global := globalPersonFromLegacy(*person)
+		global := globalPersonFromProjection(*person)
 		global.ID = membership.PersonID
-		if err := tx.Model(&db.GlobalPerson{}).
-			Where("id = ?", membership.PersonID).
-			Updates(globalPersonUpdateMap(global)).Error; err != nil {
+		if err := tx.Model(&db.GlobalPerson{}).Where("id = ?", membership.PersonID).Updates(globalPersonUpdateMap(global)).Error; err != nil {
 			return err
 		}
 
-		// Keep every legacy tenant projection synchronized with global fields so
-		// all pre-cutover modules immediately observe a global Person edit.
-		var memberships []db.PersonTenantMembership
-		if err := tx.Where("person_id = ? AND legacy_person_id IS NOT NULL", membership.PersonID).Find(&memberships).Error; err != nil {
+		if err := tx.Model(&db.PersonTenantMembership{}).Where("id = ? AND tenant_id = ?", membership.ID, tenantID).Updates(map[string]any{
+			"status_id": person.StatusID, "notes": person.Notes, "updated_at": person.UpdatedAt,
+		}).Error; err != nil {
 			return err
 		}
-		legacyIDs := make([]string, 0, len(memberships))
-		for _, m := range memberships {
-			if m.LegacyPersonID != nil && strings.TrimSpace(*m.LegacyPersonID) != "" {
-				legacyIDs = append(legacyIDs, *m.LegacyPersonID)
-			}
-		}
-		if len(legacyIDs) > 0 {
-			if err := tx.Model(&db.Person{}).Where("id IN ?", legacyIDs).Updates(legacyGlobalFieldUpdateMap(*person)).Error; err != nil {
-				return err
-			}
-		}
-
-		// INACTIVE is the operational Person lifecycle transition. It deactivates
-		// every Membership and Account-bound tenant Actor while retaining history.
 		if currentStatusCode != "INACTIVE" && requestedStatusCode == "INACTIVE" {
-			if err := tx.Model(&db.Person{}).Where("id = ? AND tenant_id = ?", legacyPersonID(membership), tenantID).Updates(map[string]any{"notes": person.Notes, "updated_at": person.UpdatedAt}).Error; err != nil {
-				return err
-			}
-			if err := tx.Model(&db.PersonTenantMembership{}).Where("id = ? AND tenant_id = ?", membership.ID, tenantID).Updates(map[string]any{"notes": person.Notes, "updated_at": person.UpdatedAt}).Error; err != nil {
-				return err
-			}
 			return deactivateOperationalPersonTx(tx, membership.PersonID, person.UpdatedAt)
 		}
-
-		// Other status changes remain tenant-membership data. In particular, an
-		// INACTIVE Membership cannot be returned to ACTIVE through generic editing;
-		// the explicit Tenant reactivation transaction must be used.
-		if err := tx.Model(&db.Person{}).
-			Where("id = ? AND tenant_id = ?", legacyPersonID(membership), tenantID).
-			Updates(map[string]any{
-				"status_id":  person.StatusID,
-				"notes":      person.Notes,
-				"updated_at": person.UpdatedAt,
-			}).Error; err != nil {
-			return err
-		}
-		return tx.Model(&db.PersonTenantMembership{}).
-			Where("id = ? AND tenant_id = ?", membership.ID, tenantID).
-			Updates(map[string]any{
-				"status_id":  person.StatusID,
-				"notes":      person.Notes,
-				"updated_at": person.UpdatedAt,
-			}).Error
+		return nil
 	})
 }
 
@@ -313,9 +262,7 @@ func (r *gormRepository) CreateMembership(ctx context.Context, tenantID string, 
 			return err
 		}
 		var existing int64
-		if err := tx.Model(&db.PersonTenantMembership{}).
-			Where("person_id = ? AND tenant_id = ?", global.ID, tenantID).
-			Count(&existing).Error; err != nil {
+		if err := tx.Model(&db.PersonTenantMembership{}).Where("person_id = ? AND tenant_id = ?", global.ID, tenantID).Count(&existing).Error; err != nil {
 			return err
 		}
 		if existing > 0 {
@@ -336,21 +283,9 @@ func (r *gormRepository) CreateMembership(ctx context.Context, tenantID string, 
 			}
 			initialStatusID = inactiveStatusID
 		}
-
-		// 30K.1 keeps the legacy row as a write-through compatibility mirror only.
-		// Canonical identity and all returned IDs come from Global Person + Membership.
-		legacy := legacyPersonFromGlobal(global, tenantID, initialStatusID, strings.TrimSpace(req.Notes), ids.New(), now)
-		if err := tx.Create(&legacy).Error; err != nil {
-			return err
-		}
-		legacyID := legacy.ID
 		membership := db.PersonTenantMembership{
-			BaseModel:      db.BaseModel{ID: ids.New(), CreatedAt: now, UpdatedAt: now},
-			TenantID:       tenantID,
-			PersonID:       global.ID,
-			StatusID:       initialStatusID,
-			Notes:          strings.TrimSpace(req.Notes),
-			LegacyPersonID: &legacyID,
+			BaseModel: db.BaseModel{ID: ids.New(), CreatedAt: now, UpdatedAt: now},
+			TenantID:  tenantID, PersonID: global.ID, StatusID: initialStatusID, Notes: strings.TrimSpace(req.Notes),
 		}
 		if err := tx.Create(&membership).Error; err != nil {
 			return err
@@ -363,7 +298,7 @@ func (r *gormRepository) CreateMembership(ctx context.Context, tenantID string, 
 			if suspended {
 				return ErrApplicationSecuritySuspended
 			}
-			if err := reactivateTenantMembershipTx(tx, tenantID, legacy.ID, now); err != nil {
+			if err := reactivateTenantMembershipTx(tx, tenantID, membership.ID, now); err != nil {
 				return err
 			}
 			membership.StatusID = strings.TrimSpace(req.StatusID)
@@ -387,12 +322,9 @@ func (r *gormRepository) Reactivate(ctx context.Context, tenantID string, person
 	if err != nil {
 		return nil, err
 	}
-	if membership.LegacyPersonID == nil || strings.TrimSpace(*membership.LegacyPersonID) == "" {
-		return nil, errors.New("Person-Tenant Membership is missing its temporary legacy Person mirror")
-	}
 	now := time.Now().UTC()
 	if err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		return reactivateTenantMembershipTx(tx, strings.TrimSpace(tenantID), strings.TrimSpace(*membership.LegacyPersonID), now)
+		return reactivateTenantMembershipTx(tx, strings.TrimSpace(tenantID), membership.ID, now)
 	}); err != nil {
 		return nil, err
 	}
@@ -428,7 +360,7 @@ func (r *gormRepository) UniqueConflicts(
 	if excludeID != nil && strings.TrimSpace(*excludeID) != "" {
 		identifier := strings.TrimSpace(*excludeID)
 		var membership db.PersonTenantMembership
-		if err := r.db.WithContext(ctx).Where("person_id = ? OR legacy_person_id = ?", identifier, identifier).First(&membership).Error; err == nil {
+		if err := r.db.WithContext(ctx).Where("person_id = ?", identifier).First(&membership).Error; err == nil {
 			globalExcludeID = membership.PersonID
 		} else {
 			globalExcludeID = identifier
@@ -447,18 +379,6 @@ func (r *gormRepository) UniqueConflicts(
 		if err := query.Count(&count).Error; err != nil {
 			return nil, err
 		}
-		// AutoMigrate-only tests or an interrupted additive deployment can have
-		// legacy rows before the SQL backfill has populated global_people. Keep
-		// uniqueness global even in that compatibility state.
-		if count == 0 && globalExcludeID == "" {
-			legacyQuery := r.db.WithContext(ctx).Model(&db.Person{}).Where(check.column+" = ?", check.value)
-			if excludeID != nil && strings.TrimSpace(*excludeID) != "" {
-				legacyQuery = legacyQuery.Where("id <> ?", strings.TrimSpace(*excludeID))
-			}
-			if err := legacyQuery.Count(&count).Error; err != nil {
-				return nil, err
-			}
-		}
 		if count > 0 {
 			conflicts[check.field] = true
 		}
@@ -472,7 +392,7 @@ func (r *gormRepository) findMembershipByPersonIdentifier(ctx context.Context, t
 	if err := r.db.WithContext(ctx).
 		Preload("Person").
 		Preload("Status").
-		Where("tenant_id = ? AND (person_id = ? OR legacy_person_id = ?)", strings.TrimSpace(tenantID), identifier, identifier).
+		Where("tenant_id = ? AND person_id = ?", strings.TrimSpace(tenantID), identifier).
 		First(&membership).Error; err != nil {
 		return nil, err
 	}
@@ -527,18 +447,11 @@ func findMembershipByPersonIdentifierTx(ctx context.Context, tx *gorm.DB, tenant
 	identifier = strings.TrimSpace(identifier)
 	var membership db.PersonTenantMembership
 	if err := tx.WithContext(ctx).
-		Where("tenant_id = ? AND (person_id = ? OR legacy_person_id = ?)", strings.TrimSpace(tenantID), identifier, identifier).
+		Where("tenant_id = ? AND person_id = ?", strings.TrimSpace(tenantID), identifier).
 		First(&membership).Error; err != nil {
 		return nil, err
 	}
 	return &membership, nil
-}
-
-func legacyPersonID(membership *db.PersonTenantMembership) string {
-	if membership == nil || membership.LegacyPersonID == nil {
-		return ""
-	}
-	return strings.TrimSpace(*membership.LegacyPersonID)
 }
 
 func personStatusCodeTx(tx *gorm.DB, tenantID string, statusID string) (string, error) {
@@ -591,12 +504,6 @@ func deactivateOperationalPersonTx(tx *gorm.DB, globalPersonID string, now time.
 		}
 		if err := tx.Model(&db.PersonTenantMembership{}).Where("id = ?", membership.ID).Updates(map[string]any{"status_id": inactiveStatusID, "updated_at": now}).Error; err != nil {
 			return err
-		}
-		if membership.LegacyPersonID != nil && strings.TrimSpace(*membership.LegacyPersonID) != "" {
-			legacyPersonID := strings.TrimSpace(*membership.LegacyPersonID)
-			if err := tx.Model(&db.Person{}).Where("id = ? AND tenant_id = ?", legacyPersonID, membership.TenantID).Updates(map[string]any{"status_id": inactiveStatusID, "updated_at": now}).Error; err != nil {
-				return err
-			}
 		}
 		membershipIDs = append(membershipIDs, membership.ID)
 	}
@@ -652,9 +559,9 @@ func deactivateOperationalPersonTx(tx *gorm.DB, globalPersonID string, now time.
 	return nil
 }
 
-func reactivateTenantMembershipTx(tx *gorm.DB, tenantID string, legacyPersonID string, now time.Time) error {
+func reactivateTenantMembershipTx(tx *gorm.DB, tenantID string, membershipID string, now time.Time) error {
 	var membership db.PersonTenantMembership
-	result := tx.Where("tenant_id = ? AND legacy_person_id = ?", tenantID, legacyPersonID).Limit(1).Find(&membership)
+	result := tx.Where("id = ? AND tenant_id = ?", strings.TrimSpace(membershipID), strings.TrimSpace(tenantID)).Limit(1).Find(&membership)
 	if result.Error != nil {
 		return result.Error
 	}
@@ -679,11 +586,6 @@ func reactivateTenantMembershipTx(tx *gorm.DB, tenantID string, legacyPersonID s
 	}
 	if err := tx.Model(&db.PersonTenantMembership{}).Where("id = ?", membership.ID).Updates(map[string]any{"status_id": activeStatusID, "updated_at": now}).Error; err != nil {
 		return err
-	}
-	if membership.LegacyPersonID != nil {
-		if err := tx.Model(&db.Person{}).Where("id = ? AND tenant_id = ?", *membership.LegacyPersonID, tenantID).Updates(map[string]any{"status_id": activeStatusID, "updated_at": now}).Error; err != nil {
-			return err
-		}
 	}
 	if err := tx.Model(&db.GlobalPerson{}).Where("id = ?", membership.PersonID).Updates(map[string]any{"operational_active": true, "updated_at": now}).Error; err != nil {
 		return err
@@ -710,37 +612,40 @@ func reactivateTenantMembershipTx(tx *gorm.DB, tenantID string, legacyPersonID s
 
 	type bindingRow struct{ ActorID string }
 	var binding bindingRow
-	bindingResult := tx.Table("auth_account_actors").Select("actor_id").Where("account_id = ? AND scope_type = ? AND tenant_id = ?", account.ID, "TENANT", tenantID).Limit(1).Scan(&binding)
+	bindingResult := tx.Table("auth_account_actors").Select("actor_id").Where("account_id = ? AND scope_type = ? AND tenant_id = ? AND membership_id = ?", account.ID, "TENANT", tenantID, membership.ID).Limit(1).Scan(&binding)
 	if bindingResult.Error != nil {
 		return bindingResult.Error
 	}
 	actorID := strings.TrimSpace(binding.ActorID)
 	if actorID == "" {
-		var legacy db.Person
-		if err := tx.First(&legacy, "id = ? AND tenant_id = ?", legacyPersonID, tenantID).Error; err != nil {
+		var global db.GlobalPerson
+		if err := tx.First(&global, "id = ?", membership.PersonID).Error; err != nil {
 			return err
 		}
 		actorID = ids.New()
 		actorKey := "person:" + membership.PersonID + "::tenant::" + tenantID
-		displayName := strings.TrimSpace(strings.TrimSpace(legacy.FirstName+" "+legacy.LastName) + " (" + strings.TrimSpace(legacy.Nickname) + ")")
-		if strings.TrimSpace(legacy.Nickname) == "" {
-			displayName = strings.TrimSpace(legacy.FirstName + " " + legacy.LastName)
+		displayName := strings.TrimSpace(global.FirstName + " " + global.LastName)
+		if nickname := strings.TrimSpace(global.Nickname); nickname != "" {
+			if displayName != "" {
+				displayName += " (" + nickname + ")"
+			} else {
+				displayName = nickname
+			}
+		}
+		if displayName == "" {
+			displayName = strings.TrimSpace(global.Email)
 		}
 		if err := tx.Table("authz_actors").Create(map[string]any{"id": actorID, "actor_key": actorKey, "display_name": displayName, "active": true, "created_at": now, "updated_at": now}).Error; err != nil {
 			return err
 		}
-		tenant := tenantID
-		membershipID := membership.ID
-		if err := tx.Table("auth_account_actors").Create(map[string]any{"account_id": account.ID, "actor_id": actorID, "scope_type": "TENANT", "tenant_id": tenant, "membership_id": membershipID, "is_primary": false, "created_at": now, "updated_at": now}).Error; err != nil {
+		if err := tx.Table("auth_account_actors").Create(map[string]any{"account_id": account.ID, "actor_id": actorID, "scope_type": "TENANT", "tenant_id": tenantID, "membership_id": membership.ID, "created_at": now, "updated_at": now}).Error; err != nil {
 			return err
 		}
-	} else {
-		if err := tx.Table("authz_actors").Where("id = ?", actorID).Updates(map[string]any{"active": true, "updated_at": now}).Error; err != nil {
-			return err
-		}
+	} else if err := tx.Table("authz_actors").Where("id = ?", actorID).Updates(map[string]any{"active": true, "updated_at": now}).Error; err != nil {
+		return err
 	}
-	// Deliberately do not clear lifecycle_suspended here. Old delegated grants
-	// remain historical until this Tenant explicitly grants each role again.
+	// Deliberately do not clear lifecycle_suspended. Previous delegated grants
+	// remain historical until the Tenant explicitly grants each role again.
 	return nil
 }
 
@@ -748,7 +653,7 @@ func escapeLike(value string) string {
 	return strings.NewReplacer(`!`, `!!`, `%`, `!%`, `_`, `!_`).Replace(value)
 }
 
-func globalPersonFromLegacy(person db.Person) db.GlobalPerson {
+func globalPersonFromProjection(person db.Person) db.GlobalPerson {
 	return db.GlobalPerson{
 		BaseModel: person.BaseModel,
 		FirstName: person.FirstName, LastName: person.LastName, Nickname: person.Nickname,
@@ -760,32 +665,7 @@ func globalPersonFromLegacy(person db.Person) db.GlobalPerson {
 	}
 }
 
-func legacyPersonFromGlobal(global db.GlobalPerson, tenantID, statusID, notes, legacyID string, now time.Time) db.Person {
-	return db.Person{
-		BaseModel: db.BaseModel{ID: legacyID, CreatedAt: now, UpdatedAt: now}, TenantID: tenantID,
-		FirstName: global.FirstName, LastName: global.LastName, Nickname: global.Nickname,
-		CPF: global.CPF, RG: global.RG, Cellular: global.Cellular, Email: global.Email,
-		Street1: global.Street1, Street2: global.Street2, State: global.State, City: global.City, CEP: global.CEP, Country: global.Country,
-		BankName: global.BankName, BankNumber: global.BankNumber, CheckingAccount: global.CheckingAccount, PIXKey: global.PIXKey,
-		EmergencyName: global.EmergencyName, EmergencyCellular: global.EmergencyCellular, EmergencyEmail: global.EmergencyEmail,
-		ProfileCompletionStatus: global.ProfileCompletionStatus, CanCreateCollaborator: global.CanCreateCollaborator,
-		StatusID: statusID, Notes: notes,
-	}
-}
-
 func globalPersonUpdateMap(person db.GlobalPerson) map[string]any {
-	return map[string]any{
-		"first_name": person.FirstName, "last_name": person.LastName, "nickname": person.Nickname,
-		"cpf": person.CPF, "rg": person.RG, "cellular": person.Cellular, "email": person.Email,
-		"street1": person.Street1, "street2": person.Street2, "state": person.State, "city": person.City, "cep": person.CEP, "country": person.Country,
-		"bank_name": person.BankName, "bank_number": person.BankNumber, "checking_account": person.CheckingAccount, "pix_key": person.PIXKey,
-		"emergency_name": person.EmergencyName, "emergency_cellular": person.EmergencyCellular, "emergency_email": person.EmergencyEmail,
-		"profile_completion_status": person.ProfileCompletionStatus, "can_create_collaborator": person.CanCreateCollaborator,
-		"updated_at": person.UpdatedAt,
-	}
-}
-
-func legacyGlobalFieldUpdateMap(person db.Person) map[string]any {
 	return map[string]any{
 		"first_name": person.FirstName, "last_name": person.LastName, "nickname": person.Nickname,
 		"cpf": person.CPF, "rg": person.RG, "cellular": person.Cellular, "email": person.Email,

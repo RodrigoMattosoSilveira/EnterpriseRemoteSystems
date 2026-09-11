@@ -103,41 +103,35 @@ func TestAuthenticationLoginSessionLogoutAndPasswordChange(t *testing.T) {
 	_ = repository
 }
 
-func TestAuthenticationAccountCreationDerivesSelfAccessFromAccountMembership(t *testing.T) {
+func TestAuthenticationAccountCreationIgnoresUnrelatedDelegatedActorAuthority(t *testing.T) {
 	database, _, service, _ := authenticationTestService(t)
 	now := time.Now().UTC()
+	loginEmail := "existing-person@example.com"
+	ensureAuthenticationTestPerson(t, database, loginEmail)
 
-	status := authenticationTestActivePersonStatus(t, database)
-	person := appdb.Person{
-		BaseModel: appdb.BaseModel{ID: "auth-existing-person", CreatedAt: now, UpdatedAt: now},
-		TenantID:  appdb.DefaultTenantID, FirstName: "Existing", LastName: "Person", Nickname: "ExistingPerson",
-		CPF: "98765432100", RG: "AUTH-EXISTING-RG", Cellular: "11987654321", Email: "existing-person@example.com",
-		Country: "Brasil", ProfileCompletionStatus: "COMPLETE", StatusID: status.ID,
-	}
-	if err := database.Create(&person).Error; err != nil {
-		t.Fatalf("create person: %v", err)
-	}
-	personID := person.ID
 	actor := authz.AuthzActor{
 		ID: "auth-existing-person-actor", ActorKey: "auth-existing-person-actor", DisplayName: "Existing Person Actor",
-		PersonID: &personID, Active: true, CreatedAt: now, UpdatedAt: now,
+		Active: true, CreatedAt: now, UpdatedAt: now,
 	}
 	if err := database.Create(&actor).Error; err != nil {
 		t.Fatalf("create person actor: %v", err)
 	}
+	// This Actor deliberately has delegated authority but no canonical AccountActor
+	// binding. Account provisioning must derive identity from the Person/Membership
+	// graph and must not reuse unrelated Actor authority.
 	if err := authz.GrantRole(database, actor.ID, authz.RoleExpenseOperator, appdb.DefaultTenantID); err != nil {
 		t.Fatalf("grant expense operator role: %v", err)
 	}
 
 	account, err := service.CreateAccount(context.Background(), CreateAccountRequest{
-		TenantID: appdb.DefaultTenantID, Login: person.Email, TemporaryPassword: "Existing-Person-Password-1",
+		TenantID: appdb.DefaultTenantID, Login: loginEmail, TemporaryPassword: "Existing-Person-Password-1",
 	})
 	if err != nil {
 		t.Fatalf("create account: %v", err)
 	}
 
 	if account.ActorID == actor.ID {
-		t.Fatal("canonical provisioning must not reuse a legacy Actor identified by authz_actors.person_id")
+		t.Fatal("canonical provisioning must not reuse an unrelated delegated Actor")
 	}
 	assertNoActivePersonRoleGrant(t, database, account.ActorID)
 
@@ -164,21 +158,11 @@ func TestAuthenticationAccountCreationDerivesSelfAccessFromAccountMembership(t *
 
 func TestAuthenticationLoginDoesNotBackfillPersonRoleGrant(t *testing.T) {
 	database, _, service, _ := authenticationTestService(t)
-	now := time.Now().UTC()
-
-	status := authenticationTestActivePersonStatus(t, database)
-	person := appdb.Person{
-		BaseModel: appdb.BaseModel{ID: "auth-login-person", CreatedAt: now, UpdatedAt: now},
-		TenantID:  appdb.DefaultTenantID, FirstName: "Login", LastName: "Person", Nickname: "LoginPerson",
-		CPF: "98765432101", RG: "AUTH-LOGIN-RG", Cellular: "11987654322", Email: "login-person@example.com",
-		Country: "Brasil", ProfileCompletionStatus: "COMPLETE", StatusID: status.ID,
-	}
-	if err := database.Create(&person).Error; err != nil {
-		t.Fatalf("create person: %v", err)
-	}
+	loginEmail := "login-person@example.com"
+	ensureAuthenticationTestPerson(t, database, loginEmail)
 
 	account, err := service.CreateAccount(context.Background(), CreateAccountRequest{
-		TenantID: appdb.DefaultTenantID, Login: person.Email, TemporaryPassword: "Login-Person-Password-1",
+		TenantID: appdb.DefaultTenantID, Login: loginEmail, TemporaryPassword: "Login-Person-Password-1",
 	})
 	if err != nil {
 		t.Fatalf("create Person account: %v", err)
@@ -480,9 +464,6 @@ func ensureAuthenticationTestPerson(t *testing.T, database *gorm.DB, login strin
 	t.Helper()
 	login = normalizeLogin(login)
 	status := authenticationTestActivePersonStatus(t, database)
-	if err := appdb.EnsureGlobalPersonMembershipFoundation(database); err != nil {
-		t.Fatalf("ensure existing Person foundation: %v", err)
-	}
 	type identity struct{ GlobalPersonID string }
 	var existing identity
 	result := database.Table("person_tenant_memberships m").
@@ -499,27 +480,24 @@ func ensureAuthenticationTestPerson(t *testing.T, database *gorm.DB, login strin
 
 	now := time.Now().UTC()
 	stem := strings.NewReplacer("@", "-", ".", "-", "+", "-").Replace(login)
-	person := appdb.Person{
-		BaseModel: appdb.BaseModel{ID: "auth-fixture-" + stem, CreatedAt: now, UpdatedAt: now},
-		TenantID:  appdb.DefaultTenantID, FirstName: "Authentication", LastName: "Fixture", Nickname: stem,
+	personID := "auth-fixture-global-" + stem
+	person := appdb.GlobalPerson{
+		BaseModel: appdb.BaseModel{ID: personID, CreatedAt: now, UpdatedAt: now},
+		FirstName: "Authentication", LastName: "Fixture", Nickname: stem,
 		CPF: "cpf-" + stem, RG: "rg-" + stem, Cellular: "cell-" + stem, Email: login, Country: "Brasil",
-		ProfileCompletionStatus: "COMPLETE", StatusID: status.ID,
+		ProfileCompletionStatus: "COMPLETE", CanCreateCollaborator: true, OperationalActive: true,
 	}
 	if err := database.Create(&person).Error; err != nil {
-		t.Fatalf("create test Person %s: %v", login, err)
+		t.Fatalf("create canonical test Person %s: %v", login, err)
 	}
-	if err := appdb.EnsureGlobalPersonMembershipFoundation(database); err != nil {
-		t.Fatalf("project test Person %s: %v", login, err)
+	membership := appdb.PersonTenantMembership{
+		BaseModel: appdb.BaseModel{ID: "auth-fixture-membership-" + stem, CreatedAt: now, UpdatedAt: now},
+		TenantID:  appdb.DefaultTenantID, PersonID: personID, StatusID: status.ID,
 	}
-	result = database.Table("person_tenant_memberships m").
-		Select("m.person_id AS global_person_id").
-		Joins("JOIN global_people gp ON gp.id = m.person_id").
-		Where("m.tenant_id = ? AND gp.email = ? COLLATE NOCASE", appdb.DefaultTenantID, login).
-		Limit(1).Scan(&existing)
-	if result.Error != nil || result.RowsAffected == 0 || strings.TrimSpace(existing.GlobalPersonID) == "" {
-		t.Fatalf("resolve projected test Person %s: result=%#v error=%v", login, existing, result.Error)
+	if err := database.Create(&membership).Error; err != nil {
+		t.Fatalf("create canonical test Membership %s: %v", login, err)
 	}
-	return strings.TrimSpace(existing.GlobalPersonID)
+	return personID
 }
 
 func createAuthenticationTestActor(t *testing.T, database *gorm.DB) authz.AuthzActor {
@@ -552,30 +530,12 @@ func createAuthenticationTestActor(t *testing.T, database *gorm.DB) authz.AuthzA
 
 func TestAuthenticationCreatesPersonActorAndAccountWithoutCollaboratorJourney(t *testing.T) {
 	database, _, service, _ := authenticationTestService(t)
-	now := time.Now().UTC()
-
-	status := authenticationTestActivePersonStatus(t, database)
-
-	person := appdb.Person{
-		BaseModel: appdb.BaseModel{ID: "auth-person-only", CreatedAt: now, UpdatedAt: now},
-		TenantID:  appdb.DefaultTenantID,
-		FirstName: "Dirceu",
-		LastName:  "Pereira",
-		Nickname:  "Dirceu",
-		CPF:       "12345678909",
-		RG:        "AUTHPERSONONLY",
-		Cellular:  "11912345679",
-		Email:     "dirceu-person-only@example.com",
-		Country:   "Brasil",
-		StatusID:  status.ID,
-	}
-	if err := database.Create(&person).Error; err != nil {
-		t.Fatalf("create Person without Collaborator Journey: %v", err)
-	}
+	loginEmail := "dirceu-person-only@example.com"
+	ensureAuthenticationTestPerson(t, database, loginEmail)
 
 	account, err := service.CreateAccount(context.Background(), CreateAccountRequest{
 		TenantID:          appdb.DefaultTenantID,
-		Login:             person.Email,
+		Login:             loginEmail,
 		TemporaryPassword: "Dirceu-Person-Only-Password-1",
 	})
 	if err != nil {
@@ -592,15 +552,9 @@ func TestAuthenticationCreatesPersonActorAndAccountWithoutCollaboratorJourney(t 
 	if err := database.First(&actor, "id = ?", account.ActorID).Error; err != nil {
 		t.Fatalf("find provisioned Person Actor: %v", err)
 	}
-	if actor.PersonID != nil {
-		t.Fatalf("canonical tenant Actor must not persist legacy Person identity, got %#v", actor.PersonID)
-	}
-	if actor.CollaboratorID != nil {
-		t.Fatalf("expected no Collaborator Journey on Person-only Actor, got %#v", actor.CollaboratorID)
-	}
 
 	login, err := service.Login(context.Background(), LoginRequest{
-		Login: person.Email, Password: "Dirceu-Person-Only-Password-1",
+		Login: loginEmail, Password: "Dirceu-Person-Only-Password-1",
 	}, "", "")
 	if err != nil {
 		t.Fatalf("login through Person-only Authentication Account: %v", err)
@@ -633,8 +587,8 @@ func TestAuthenticationCreatesPersonActorAndAccountWithoutCollaboratorJourney(t 
 	if selfService.AccountID != account.ID || selfService.Person.ID != account.GlobalPersonID {
 		t.Fatalf("unexpected Account-level self-service identity: %#v", selfService)
 	}
-	if selfService.Person.Email != person.Email {
-		t.Fatalf("expected self-service Person email %q, got %q", person.Email, selfService.Person.Email)
+	if selfService.Person.Email != loginEmail {
+		t.Fatalf("expected self-service Person email %q, got %q", loginEmail, selfService.Person.Email)
 	}
 	if len(selfService.Balances) != 0 || len(selfService.Entries) != 0 {
 		t.Fatalf("Person without financial history should have an empty Current Account projection: %#v", selfService)
@@ -661,43 +615,22 @@ func TestAccountLevelSelfServiceKeepsCurrentAccountWithoutActiveTenantContext(t 
 		}
 	}
 
-	person := appdb.Person{
+	person := appdb.GlobalPerson{
 		BaseModel: appdb.BaseModel{ID: "self-service-history-person", CreatedAt: now, UpdatedAt: now},
-		TenantID:  appdb.DefaultTenantID,
-		FirstName: "Historical",
-		LastName:  "Person",
-		Nickname:  "HistoricalPerson",
-		CPF:       "39053344705",
-		RG:        "SELF-SERVICE-HISTORY-RG",
-		Cellular:  "11987650001",
-		Email:     "historical-person@example.com",
-		Country:   "Brasil",
-		StatusID:  activePersonStatus.ID,
+		FirstName: "Historical", LastName: "Person", Nickname: "HistoricalPerson",
+		CPF: "39053344705", RG: "SELF-SERVICE-HISTORY-RG", Cellular: "11987650001",
+		Email: "historical-person@example.com", Country: "Brasil",
+		ProfileCompletionStatus: "COMPLETE", CanCreateCollaborator: true, OperationalActive: true,
 	}
 	if err := database.Create(&person).Error; err != nil {
-		t.Fatalf("create self-service Person: %v", err)
+		t.Fatalf("create canonical self-service Person: %v", err)
 	}
-	if err := appdb.EnsureGlobalPersonMembershipFoundation(database); err != nil {
-		t.Fatalf("ensure self-service Person foundation: %v", err)
+	membership := appdb.PersonTenantMembership{
+		BaseModel: appdb.BaseModel{ID: "self-service-history-membership", CreatedAt: now, UpdatedAt: now},
+		TenantID:  appdb.DefaultTenantID, PersonID: person.ID, StatusID: activePersonStatus.ID,
 	}
-
-	var membership appdb.PersonTenantMembership
-	if err := database.First(&membership, "legacy_person_id = ?", person.ID).Error; err != nil {
-		t.Fatalf("find self-service Membership: %v", err)
-	}
-
-	legacyPersonID := person.ID
-	actor := authz.AuthzActor{
-		ID:          "self-service-history-actor",
-		ActorKey:    "self-service-history-actor",
-		DisplayName: "Historical Person",
-		PersonID:    &legacyPersonID,
-		Active:      true,
-		CreatedAt:   now,
-		UpdatedAt:   now,
-	}
-	if err := database.Create(&actor).Error; err != nil {
-		t.Fatalf("create self-service Actor: %v", err)
+	if err := database.Create(&membership).Error; err != nil {
+		t.Fatalf("create canonical self-service Membership: %v", err)
 	}
 
 	account, err := service.CreateAccount(context.Background(), CreateAccountRequest{
@@ -711,7 +644,6 @@ func TestAccountLevelSelfServiceKeepsCurrentAccountWithoutActiveTenantContext(t 
 		BaseModel:            appdb.BaseModel{ID: "self-service-history-collaborator", CreatedAt: now, UpdatedAt: now},
 		TenantID:             appdb.DefaultTenantID,
 		MembershipID:         &membership.ID,
-		PersonID:             person.ID,
 		JourneyStartDate:     now.AddDate(0, -2, 0),
 		DefaultEndDate:       now.AddDate(0, 10, 0),
 		ProjectedEndDate:     now.AddDate(0, 10, 0),
@@ -747,7 +679,7 @@ func TestAccountLevelSelfServiceKeepsCurrentAccountWithoutActiveTenantContext(t 
 		t.Fatalf("create self-service Ledger Entry: %v", err)
 	}
 
-	if err := database.Model(&authz.AuthzActor{}).Where("id = ?", actor.ID).Update("active", false).Error; err != nil {
+	if err := database.Model(&authz.AuthzActor{}).Where("id = ?", account.ActorID).Update("active", false).Error; err != nil {
 		t.Fatalf("deactivate self-service Tenant Actor: %v", err)
 	}
 	if err := database.Model(&appdb.PersonTenantMembership{}).Where("id = ?", membership.ID).Update("status_id", "self-service-person-inactive").Error; err != nil {
@@ -793,36 +725,28 @@ func TestAuthenticationCreatesPersonActorAndAccountWhenNoActorExists(t *testing.
 		}
 	}
 
-	person := appdb.Person{
+	person := appdb.GlobalPerson{
 		BaseModel: appdb.BaseModel{ID: "auth-person-without-actor", CreatedAt: now, UpdatedAt: now},
-		TenantID:  appdb.DefaultTenantID,
-		FirstName: "Return",
-		LastName:  "Account",
-		Nickname:  "RetAcct",
-		CPF:       "12345678901",
-		RG:        "AUTHTEST01",
-		Cellular:  "11912345678",
-		Email:     "return-account@example.com",
-		Country:   "Brasil",
-		StatusID:  activePersonStatus.ID,
+		FirstName: "Return", LastName: "Account", Nickname: "RetAcct",
+		CPF: "12345678901", RG: "AUTHTEST01", Cellular: "11912345678",
+		Email: "return-account@example.com", Country: "Brasil",
+		ProfileCompletionStatus: "COMPLETE", CanCreateCollaborator: true, OperationalActive: true,
 	}
 	if err := database.Create(&person).Error; err != nil {
-		t.Fatalf("create Person without actor: %v", err)
+		t.Fatalf("create canonical Person without actor: %v", err)
 	}
-	if err := appdb.EnsureGlobalPersonMembershipFoundation(database); err != nil {
-		t.Fatalf("ensure Person Membership foundation: %v", err)
+	membership := appdb.PersonTenantMembership{
+		BaseModel: appdb.BaseModel{ID: "auth-membership-without-actor", CreatedAt: now, UpdatedAt: now},
+		TenantID:  appdb.DefaultTenantID, PersonID: person.ID, StatusID: activePersonStatus.ID,
 	}
-
-	var membership appdb.PersonTenantMembership
-	if err := database.First(&membership, "legacy_person_id = ? AND tenant_id = ?", person.ID, appdb.DefaultTenantID).Error; err != nil {
-		t.Fatalf("find Person-Tenant Membership: %v", err)
+	if err := database.Create(&membership).Error; err != nil {
+		t.Fatalf("create canonical Person-Tenant Membership: %v", err)
 	}
 
 	collaborator := appdb.CollaboratorJourney{
 		BaseModel:            appdb.BaseModel{ID: "auth-collaborator-without-actor", CreatedAt: now, UpdatedAt: now},
 		TenantID:             appdb.DefaultTenantID,
 		MembershipID:         &membership.ID,
-		PersonID:             person.ID,
 		JourneyStartDate:     now,
 		DefaultEndDate:       now.AddDate(0, 0, 90),
 		ProjectedEndDate:     now.AddDate(0, 0, 90),
@@ -866,9 +790,6 @@ func TestAuthenticationCreatesPersonActorAndAccountWhenNoActorExists(t *testing.
 	var actor authz.AuthzActor
 	if err := database.First(&actor, "id = ?", account.ActorID).Error; err != nil {
 		t.Fatalf("find provisioned actor: %v", err)
-	}
-	if actor.PersonID != nil || actor.CollaboratorID != nil {
-		t.Fatalf("canonical tenant Actor must be identity-neutral, person=%#v collaborator=%#v", actor.PersonID, actor.CollaboratorID)
 	}
 
 	assertNoActivePersonRoleGrant(t, database, actor.ID)
@@ -934,38 +855,31 @@ func TestAuthenticationAllowsAccountForActorWithActiveMembershipAndNoDelegatedRo
 
 	status := authenticationTestActivePersonStatus(t, database)
 
-	person := appdb.Person{
+	person := appdb.GlobalPerson{
 		BaseModel: appdb.BaseModel{ID: "auth-membership-only-person", CreatedAt: now, UpdatedAt: now},
-		TenantID:  appdb.DefaultTenantID,
-		FirstName: "Membership",
-		LastName:  "Only",
-		Nickname:  "MembershipOnly",
-		CPF:       "52998224725",
-		RG:        "AUTHMEMBERONLY",
-		Cellular:  "11987654321",
-		Email:     "membership-only@example.com",
-		Country:   "Brasil",
-		StatusID:  status.ID,
+		FirstName: "Membership", LastName: "Only", Nickname: "MembershipOnly",
+		CPF: "52998224725", RG: "AUTHMEMBERONLY", Cellular: "11987654321",
+		Email: "membership-only@example.com", Country: "Brasil",
+		ProfileCompletionStatus: "COMPLETE", CanCreateCollaborator: true, OperationalActive: true,
 	}
 	if err := database.Create(&person).Error; err != nil {
-		t.Fatalf("create Person with active Membership: %v", err)
+		t.Fatalf("create canonical Person with active Membership: %v", err)
 	}
-	if err := appdb.EnsureGlobalPersonMembershipFoundation(database); err != nil {
-		t.Fatalf("ensure Person Membership foundation: %v", err)
+	membership := appdb.PersonTenantMembership{
+		BaseModel: appdb.BaseModel{ID: "auth-membership-only-membership", CreatedAt: now, UpdatedAt: now},
+		TenantID:  appdb.DefaultTenantID, PersonID: person.ID, StatusID: status.ID,
+	}
+	if err := database.Create(&membership).Error; err != nil {
+		t.Fatalf("create canonical active Membership: %v", err)
 	}
 
-	personID := person.ID
 	actor := authz.AuthzActor{
-		ID:          "auth-membership-only-actor",
-		ActorKey:    person.Email,
-		DisplayName: "Membership Only",
-		PersonID:    &personID,
-		Active:      true,
-		CreatedAt:   now,
-		UpdatedAt:   now,
+		ID: "auth-membership-only-actor", ActorKey: person.Email,
+		DisplayName: "Membership Only Legacy-Looking Actor", Active: true,
+		CreatedAt: now, UpdatedAt: now,
 	}
 	if err := database.Create(&actor).Error; err != nil {
-		t.Fatalf("create Person actor without delegated roles: %v", err)
+		t.Fatalf("create unrelated raw Actor without delegated roles: %v", err)
 	}
 
 	account, err := service.CreateAccount(context.Background(), CreateAccountRequest{
