@@ -37,6 +37,11 @@ export function AppShell() {
     queryFn: loadAuthTenantOptions,
     enabled: Boolean(accountId),
     staleTime: 60_000,
+    // Tenant Actor/Membership lifecycle changes can be made by an administrator
+    // in another authenticated browser session. Revalidate this Account-owned
+    // identity catalog whenever the user returns to the application, even when
+    // the previous result is still inside its normal cache window.
+    refetchOnWindowFocus: "always",
   });
   const tenantOptions = useMemo(
     () => normalizeAuthTenantOptions(tenantQuery.data),
@@ -241,6 +246,9 @@ export function AppShell() {
           selectedTenantId={selectedTenantId}
           effectiveActor={actorQuery.data}
           onTenantChange={(tenantId) => void changeTenant(tenantId)}
+          onTenantOptionsRefresh={async () => {
+            await tenantQuery.refetch();
+          }}
           onLogout={() => void logout()}
         />
         <div className="lg:flex">

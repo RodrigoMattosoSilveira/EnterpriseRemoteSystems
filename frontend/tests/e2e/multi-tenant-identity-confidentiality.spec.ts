@@ -226,6 +226,74 @@ test.describe("Bite 30L multi-Tenant identity and confidentiality", () => {
     }
   });
 
+  test("Tenant selector refreshes after another session deactivates and reactivates a Tenant Actor", async ({ browser }) => {
+    const tenantAAdminApi = await newTenantAdminApi(tenantA.id);
+    const { context, page } = await signedInFixturePage(browser);
+    try {
+      const selector = page.getByRole("button", { name: "Current tenant" });
+      await expect(selector).toBeVisible();
+
+      // Keep Tenant B effective while Tenant A is changed from the separate
+      // administrator session. That isolates the option-catalog behavior from
+      // fallback selection of a deactivated current Actor.
+      if ((await selector.getAttribute("data-selected-tenant-id")) !== tenantB.id) {
+        await selector.click();
+        const selection = page.getByRole("region", { name: "Tenant selection" });
+        await expect(
+          selection.locator(`[role="option"][data-tenant-id="${tenantB.id}"]`),
+        ).toBeVisible();
+        await selection.locator(`[role="option"][data-tenant-id="${tenantB.id}"]`).click();
+        await expect(selector).toHaveAttribute("data-selected-tenant-id", tenantB.id);
+      }
+
+      const deactivateResponse = await tenantAAdminApi.patch(
+        e2eApiUrl(
+          `/api/v1/authz/tenant-role-actors/${encodeURIComponent(tenantA.actorId)}/active`,
+        ),
+        { data: { active: false } },
+      );
+      expect(deactivateResponse.status()).toBe(200);
+
+      await selector.click();
+      let selection = page.getByRole("region", { name: "Tenant selection" });
+      await expect(
+        selection.locator(`[role="option"][data-tenant-id="${tenantA.id}"]`),
+      ).toHaveCount(0);
+      await expect(
+        selection.locator(`[role="option"][data-tenant-id="${tenantB.id}"]`),
+      ).toBeVisible();
+      await selector.click();
+
+      const reactivateResponse = await tenantAAdminApi.patch(
+        e2eApiUrl(
+          `/api/v1/authz/tenant-role-actors/${encodeURIComponent(tenantA.actorId)}/active`,
+        ),
+        { data: { active: true } },
+      );
+      expect(reactivateResponse.status()).toBe(200);
+
+      await selector.click();
+      selection = page.getByRole("region", { name: "Tenant selection" });
+      await expect(
+        selection.locator(`[role="option"][data-tenant-id="${tenantA.id}"]`),
+      ).toBeVisible();
+      await expect(
+        selection.locator(`[role="option"][data-tenant-id="${tenantB.id}"]`),
+      ).toBeVisible();
+    } finally {
+      await tenantAAdminApi
+        .patch(
+          e2eApiUrl(
+            `/api/v1/authz/tenant-role-actors/${encodeURIComponent(tenantA.actorId)}/active`,
+          ),
+          { data: { active: true } },
+        )
+        .catch(() => undefined);
+      await context.close();
+      await tenantAAdminApi.dispose();
+    }
+  });
+
   test("Tenant Administrators see only their own Membership projection for the shared Person", async () => {
     for (const tenant of [tenantA, tenantB]) {
       const adminApi = await newTenantAdminApi(tenant.id);

@@ -95,6 +95,36 @@ describe("TenantSelector", () => {
     expect(options()[0]?.dataset.tenantId).toBe("tenant-beta");
   });
 
+
+  it("refreshes the Account-owned Tenant identities before enabling selector options", async () => {
+    const onTenantChange = vi.fn();
+    let resolveRefresh: (() => void) | undefined;
+    const onRefreshTenants = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveRefresh = resolve;
+        }),
+    );
+    renderSelector(onTenantChange, onRefreshTenants);
+
+    await click(currentTenantButton());
+
+    expect(onRefreshTenants).toHaveBeenCalledTimes(1);
+    expect(container.textContent).toContain("Refreshing available tenants…");
+    expect(container.textContent).toContain("Refreshing your available tenants…");
+    expect(options()).toHaveLength(0);
+    expect(filterInput().disabled).toBe(true);
+
+    await act(async () => {
+      resolveRefresh?.();
+      await Promise.resolve();
+    });
+
+    expect(filterInput().disabled).toBe(false);
+    expect(options()).toHaveLength(3);
+    expect(container.textContent).toContain("3 of 3 tenants");
+  });
+
   it("supports keyboard selection from the filtered list", async () => {
     const onTenantChange = vi.fn();
     renderSelector(onTenantChange);
@@ -146,13 +176,17 @@ describe("TenantSelector", () => {
 
 });
 
-function renderSelector(onTenantChange: (tenantId: string) => void) {
+function renderSelector(
+  onTenantChange: (tenantId: string) => void,
+  onRefreshTenants?: () => Promise<void> | void,
+) {
   act(() => {
     root.render(
       <TenantSelector
         tenants={tenants}
         selectedTenantId="default"
         onTenantChange={onTenantChange}
+        onRefreshTenants={onRefreshTenants}
       />,
     );
   });
