@@ -51,12 +51,60 @@ test("application administrator can create an identity-neutral authorization act
   await expect(actorCard).toContainText("Tenant Role Grants: INELIGIBLE");
   await expect(actorCard).toContainText("Authentication Account binding is required.");
 
-  const roleSelect = actorCard.getByLabel("Role");
-  await expect(roleSelect).toBeDisabled();
-  await expect(roleSelect.locator("option")).toHaveCount(0);
+  const roleSelector = actorCard.getByRole("button", { name: "Role", exact: true });
+  await expect(roleSelector).toBeDisabled();
+  await expect(actorCard.getByRole("listbox", { name: "Role choices" })).toHaveCount(0);
   await expect(actorCard.getByRole("button", { name: "Grant Role" })).toBeDisabled();
 
   await page.reload();
   await expect(actorCard).toContainText("No role grants.");
   await expect(actorCard.getByRole("button", { name: "Grant Role" })).toBeDisabled();
+});
+
+test("authorization Actor cards use a filterable Role selector", async ({ page }) => {
+  await page.goto("/admin/authorization");
+
+  const actorCard = page
+    .getByTestId("authz-actor-card")
+    .filter({
+      has: page.getByRole("heading", {
+        name: "e2e-default-tenant-admin",
+        exact: true,
+      }),
+    });
+
+  await expect(actorCard).toBeVisible();
+
+  const roleSelector = actorCard.getByRole("button", { name: "Role", exact: true });
+  await expect(roleSelector).toBeEnabled();
+  await expect(roleSelector).toHaveAttribute("aria-expanded", "false");
+
+  await roleSelector.click();
+
+  const roleFilter = actorCard.getByRole("combobox", { name: "Filter roles" });
+  const roleChoices = actorCard.getByRole("listbox", { name: "Role choices" });
+
+  await expect(roleFilter).toBeVisible();
+  await expect(roleChoices.getByRole("option")).not.toHaveCount(0);
+  await expect(roleChoices.getByRole("option", { name: /EXPENSE_OPERATOR/ })).toBeVisible();
+  await expect(roleChoices.getByRole("option", { name: /TENANT_ADMIN/ })).toBeVisible();
+
+  await roleFilter.fill("expense");
+  await expect(roleChoices.getByRole("option")).toHaveCount(1);
+  await expect(roleChoices.getByRole("option", { name: /EXPENSE_OPERATOR/ })).toBeVisible();
+
+  await roleFilter.fill("");
+  await roleChoices
+    .getByRole("option", { name: /EXPENSE_OPERATOR/ })
+    .click();
+
+  await expect(roleSelector).toHaveAttribute("aria-expanded", "false");
+  await expect(roleSelector).toContainText("EXPENSE_OPERATOR");
+
+  await roleSelector.click();
+  await expect(roleChoices.getByRole("option", { name: /TENANT_ADMIN/ })).toBeVisible();
+
+  await roleFilter.press("Escape");
+  await expect(roleSelector).toHaveAttribute("aria-expanded", "false");
+  await expect(roleSelector).toContainText("EXPENSE_OPERATOR");
 });

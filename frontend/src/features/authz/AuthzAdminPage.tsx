@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { ApiError } from "../../api/client";
 import { ApiErrorPanel } from "../../components/ApiErrorPanel";
@@ -686,21 +686,13 @@ function ActorCard({
       </div>
 
       <form className="mt-3 grid gap-2 md:grid-cols-[1fr_1fr_auto]" onSubmit={submitGrant}>
-        <label className="block text-sm font-semibold text-gray-700">
-          Role
-          <select
-            className="mt-1 block w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm"
-            value={roleCode}
-            onChange={(event) => onSelectedRoleCodeChange(event.target.value)}
-            disabled={compatibleRoles.length === 0}
-          >
-            {compatibleRoles.map((role) => (
-              <option key={role.code} value={role.code}>
-                {role.code}
-              </option>
-            ))}
-          </select>
-        </label>
+        <RoleSelector
+          actorId={actor.id}
+          roles={compatibleRoles}
+          selectedRoleCode={roleCode}
+          onChange={onSelectedRoleCodeChange}
+          disabled={compatibleRoles.length === 0}
+        />
         <label className="block text-sm font-semibold text-gray-700">
           Grant tenant
           <input
@@ -741,6 +733,171 @@ function ActorCard({
         </p>
       )}
     </article>
+  );
+}
+
+function RoleSelector({
+  actorId,
+  roles,
+  selectedRoleCode,
+  onChange,
+  disabled,
+}: {
+  actorId: string;
+  roles: AuthzRole[];
+  selectedRoleCode: string;
+  onChange: (roleCode: string) => void;
+  disabled: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const [filterText, setFilterText] = useState("");
+  const rootRef = useRef<HTMLDivElement>(null);
+  const filterRef = useRef<HTMLInputElement>(null);
+  const selectedRole = roles.find((role) => role.code === selectedRoleCode);
+  const normalizedFilter = filterText.trim().toLocaleLowerCase();
+  const visibleRoles = normalizedFilter
+    ? roles.filter((role) =>
+        [role.code, role.label, role.description].some((value) =>
+          value.toLocaleLowerCase().includes(normalizedFilter),
+        ),
+      )
+    : roles;
+  const optionsId = `authz-role-options-${actorId.replace(/[^a-zA-Z0-9_-]/g, "-")}`;
+
+  function closeSelector({ restoreFocus = false }: { restoreFocus?: boolean } = {}) {
+    setFilterText("");
+    setOpen(false);
+    if (restoreFocus) {
+      window.requestAnimationFrame(() => {
+        rootRef.current
+          ?.querySelector<HTMLButtonElement>('button[aria-label="Role"]')
+          ?.focus();
+      });
+    }
+  }
+
+  function openSelector() {
+    if (disabled) return;
+    setFilterText("");
+    setOpen(true);
+    window.requestAnimationFrame(() => filterRef.current?.focus());
+  }
+
+  function chooseRole(roleCode: string) {
+    onChange(roleCode);
+    closeSelector();
+  }
+
+  return (
+    <div
+      ref={rootRef}
+      className="relative"
+      onBlur={(event) => {
+        const nextTarget = event.relatedTarget;
+        if (
+          open &&
+          (!(nextTarget instanceof Node) || !event.currentTarget.contains(nextTarget))
+        ) {
+          closeSelector();
+        }
+      }}
+    >
+      <p className="text-sm font-semibold text-gray-700">Role</p>
+      <button
+        type="button"
+        aria-label="Role"
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        aria-controls={open ? optionsId : undefined}
+        disabled={disabled}
+        onClick={() => (open ? closeSelector() : openSelector())}
+        className="mt-1 flex w-full items-center justify-between gap-3 rounded-xl border border-gray-300 bg-white px-3 py-2 text-left text-sm text-gray-950 disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-500"
+      >
+        <span className="min-w-0">
+          <span className="block truncate font-semibold">
+            {selectedRole?.code ?? "No compatible Roles"}
+          </span>
+          {selectedRole && (
+            <span className="block truncate text-xs text-gray-500">
+              {selectedRole.label}
+            </span>
+          )}
+        </span>
+        <span aria-hidden="true" className="shrink-0 text-gray-500">
+          {open ? "▲" : "▼"}
+        </span>
+      </button>
+
+      {open && (
+        <div className="absolute left-0 right-0 z-30 mt-1 overflow-hidden rounded-xl border border-gray-300 bg-white shadow-lg">
+          <div className="border-b border-gray-200 p-2">
+            <label className="grid gap-1 text-xs font-semibold text-gray-700">
+              Filter roles
+              <input
+                ref={filterRef}
+                type="search"
+                role="combobox"
+                aria-label="Filter roles"
+                aria-autocomplete="list"
+                aria-controls={optionsId}
+                aria-expanded="true"
+                value={filterText}
+                onChange={(event) => setFilterText(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Escape") {
+                    event.preventDefault();
+                    closeSelector({ restoreFocus: true });
+                  }
+                }}
+                placeholder="Role code, name, or description"
+                className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-950 outline-none focus:border-gray-500 focus:ring-2 focus:ring-gray-200"
+              />
+            </label>
+            <p className="mt-1 text-xs text-gray-500" aria-live="polite">
+              {visibleRoles.length} of {roles.length} compatible Roles
+            </p>
+          </div>
+
+          <div
+            id={optionsId}
+            role="listbox"
+            aria-label="Role choices"
+            className="max-h-64 overflow-y-auto p-1"
+          >
+            {visibleRoles.length === 0 ? (
+              <p className="px-3 py-4 text-sm text-gray-500">
+                No matching Roles.
+              </p>
+            ) : (
+              visibleRoles.map((role) => (
+                <button
+                  key={role.code}
+                  type="button"
+                  role="option"
+                  aria-selected={role.code === selectedRoleCode}
+                  data-role-code={role.code}
+                  onMouseDown={(event) => event.preventDefault()}
+                  onClick={() => chooseRole(role.code)}
+                  className="block w-full rounded-lg px-3 py-2 text-left hover:bg-gray-50 focus:bg-gray-100 focus:outline-none"
+                >
+                  <span className="block text-sm font-semibold text-gray-950">
+                    {role.code}
+                  </span>
+                  <span className="block text-xs font-medium text-gray-600">
+                    {role.label}
+                  </span>
+                  {role.description && (
+                    <span className="mt-0.5 block text-xs text-gray-500">
+                      {role.description}
+                    </span>
+                  )}
+                </button>
+              ))
+            )}
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 
