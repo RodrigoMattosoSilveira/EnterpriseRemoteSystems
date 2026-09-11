@@ -310,6 +310,18 @@ test.describe("Bite 30L multi-Tenant identity and confidentiality", () => {
         tenantId: target.id,
         scope: "TENANT",
       });
+
+      await page.goto(`/people/${encodeURIComponent(personId)}`);
+      await expect(
+        page.getByText(`Membership ID: ${target.membershipId}`, { exact: true }),
+      ).toBeVisible();
+
+      const otherTenant = target.id === tenantA.id ? tenantB : tenantA;
+      await expect(
+        page.getByText(`Membership ID: ${otherTenant.membershipId}`, {
+          exact: true,
+        }),
+      ).toHaveCount(0);
     } finally {
       await context.close();
     }

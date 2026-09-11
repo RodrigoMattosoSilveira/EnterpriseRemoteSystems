@@ -87,6 +87,11 @@ export function PersonDetailPage() {
               <p className="mt-1 text-sm text-gray-500">
                 {personQuery.data.nickname}
               </p>
+              {personQuery.data.membershipId && (
+                <p className="mt-1 text-xs text-gray-500">
+                  Membership ID: <span className="font-mono">{personQuery.data.membershipId}</span>
+                </p>
+              )}
             </div>
 
             <div className="flex flex-wrap items-center justify-end gap-2">
