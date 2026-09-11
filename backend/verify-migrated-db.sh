@@ -5,7 +5,7 @@ DB_PATH="${DATABASE_PATH:-/app/data/app.db}"
 MIGRATIONS_DIR="${MIGRATIONS_DIR:-/app/migrations}"
 EXPECTED_BASELINE_LAST_MIGRATION="${EXPECTED_BASELINE_LAST_MIGRATION:-000062_tenant_administrator_cardinality.up.sql}"
 EXPECTED_FIRST_REHEARSED_MIGRATION="${EXPECTED_FIRST_REHEARSED_MIGRATION:-000063_global_administration_control_plane.up.sql}"
-EXPECTED_FINAL_MIGRATION="${EXPECTED_FINAL_MIGRATION:-000069_physical_legacy_identity_schema_removal.up.sql}"
+EXPECTED_FINAL_MIGRATION="${EXPECTED_FINAL_MIGRATION:-000070_revoke_noncanonical_application_admin_grants.up.sql}"
 
 if [ ! -f "$DB_PATH" ]; then
   echo "Missing database for migration verification: $DB_PATH" >&2
@@ -307,6 +307,8 @@ JOIN authz_roles r
   ON r.id = g.role_id
  AND r.code = 'APPLICATION_ADMIN'
 WHERE g.tenant_id='*'
+  AND g.active=1
+  AND g.lifecycle_suspended=0
   AND (
     NOT EXISTS (
       SELECT 1

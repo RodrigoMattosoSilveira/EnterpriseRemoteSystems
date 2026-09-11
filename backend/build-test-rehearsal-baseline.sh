@@ -6,7 +6,7 @@ TARGET_DB="${TEST_RELEASE_BASELINE_DB:-/rehearsal-baseline/pre-bite30i.db}"
 MIGRATIONS_DIR="${MIGRATIONS_DIR:-/app/migrations}"
 EXPECTED_LAST_MIGRATION="${EXPECTED_LAST_MIGRATION:-000062_tenant_administrator_cardinality.up.sql}"
 MIGRATION_UNDER_REHEARSAL="${MIGRATION_UNDER_REHEARSAL:-000063_global_administration_control_plane.up.sql}"
-EXPECTED_FINAL_MIGRATION="${EXPECTED_FINAL_MIGRATION:-000069_physical_legacy_identity_schema_removal.up.sql}"
+EXPECTED_FINAL_MIGRATION="${EXPECTED_FINAL_MIGRATION:-000070_revoke_noncanonical_application_admin_grants.up.sql}"
 VERIFY_MIGRATED_DB_SCRIPT="${VERIFY_MIGRATED_DB_SCRIPT:-$(dirname "$0")/verify-migrated-db.sh}"
 TMP_DB="${TARGET_DB}.building.$$"
 PROBE_DB="${TARGET_DB}.probe.$$"
@@ -386,6 +386,33 @@ END;
 SQL
   fi
 
+  # Historical Production databases can contain an active bootstrap-era
+  # APPLICATION_ADMIN grant whose Actor was never connected to a canonical
+  # GLOBAL Authentication Account. Seed that exact post-000069 state before
+  # 000070 so release rehearsal proves that the reconciliation preserves the
+  # Actor/history while revoking only its invalid standing authority.
+  if [ "$filename" = "000070_revoke_noncanonical_application_admin_grants.up.sql" ]; then
+    sqlite3 -bail "$PROBE_DB" <<'SQL'
+INSERT INTO authz_actors(
+  id, actor_key, display_name, active, created_at, updated_at
+) VALUES (
+  'test-rehearsal-orphan-app-admin-actor',
+  'test-rehearsal-orphan-app-admin',
+  'Historical Orphan Application Administrator',
+  1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+);
+
+INSERT INTO authz_actor_role_grants(
+  id, actor_id, role_id, tenant_id, active, lifecycle_suspended, created_at, updated_at
+) VALUES (
+  'test-rehearsal-orphan-app-admin-grant',
+  'test-rehearsal-orphan-app-admin-actor',
+  'authz-role-application-admin',
+  '*', 1, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+);
+SQL
+  fi
+
   echo "Applying migration to release rehearsal probe: $filename"
   sqlite3 -bail "$PROBE_DB" < "$migration"
   escaped_filename="$(printf '%s' "$filename" | sed "s/'/''/g")"
@@ -405,6 +432,20 @@ fi
 if [ "$probe_final_seen" != "1" ]; then
   echo "Expected final rehearsal migration was not reached: $EXPECTED_FINAL_MIGRATION" >&2
   exit 2
+fi
+historical_orphan_admin_reconciled="$(sqlite3 "$PROBE_DB" "
+SELECT COUNT(*)
+FROM authz_actors a
+JOIN authz_actor_role_grants g
+  ON g.actor_id = a.id
+WHERE a.id = 'test-rehearsal-orphan-app-admin-actor'
+  AND a.actor_key = 'test-rehearsal-orphan-app-admin'
+  AND g.id = 'test-rehearsal-orphan-app-admin-grant'
+  AND g.active = 0;
+")"
+if [ "$historical_orphan_admin_reconciled" != "1" ]; then
+  echo "30K.3B rehearsal did not preserve the historical orphan Application Administrator Actor while revoking its grant." >&2
+  exit 1
 fi
 if [ ! -x "$VERIFY_MIGRATED_DB_SCRIPT" ]; then
   echo "Missing migrated-database verifier: $VERIFY_MIGRATED_DB_SCRIPT" >&2
