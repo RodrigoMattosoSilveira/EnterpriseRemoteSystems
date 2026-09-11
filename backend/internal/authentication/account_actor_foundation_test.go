@@ -147,9 +147,6 @@ func TestCreatePersonAccountReusesGlobalAccountAndAddsSecondTenantActor(t *testi
 		t.Fatalf("same global Person must reuse one Account with two tenant Actors: first=%#v second=%#v", first, second)
 	}
 	for _, bound := range second.Actors {
-		if bound.Primary {
-			t.Fatalf("legacy primary/default Actor selection must remain inert: %#v", bound)
-		}
 		resolved, err := authz.NewGORMStore(database).FindAccountActor(context.Background(), second.ID, bound.TenantID)
 		if err != nil {
 			t.Fatalf("resolve %s Account Actor: %v", bound.TenantID, err)

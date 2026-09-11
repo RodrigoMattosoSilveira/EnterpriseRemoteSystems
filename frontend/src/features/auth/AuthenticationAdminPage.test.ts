@@ -108,7 +108,6 @@ describe("password reset token eligibility", () => {
             scope: "TENANT",
             tenantId: "tenant-a",
             active: false,
-            primary: true,
           },
           {
             actorId: "actor-b",
@@ -117,7 +116,6 @@ describe("password reset token eligibility", () => {
             scope: "TENANT",
             tenantId: "tenant-b",
             active: false,
-            primary: false,
           },
         ],
       }),
@@ -229,7 +227,6 @@ describe("authentication account collaborator selection", () => {
           membershipId: "membership-expense",
           personId: "global-person-expense",
           active: true,
-          primary: false,
         },
       ],
     };
@@ -348,7 +345,6 @@ describe("authentication account actor/account filter", () => {
         personName: "Marina Oliveira",
         personNickname: "Nina",
         active: true,
-        primary: false,
       },
       {
         actorId: "actor-person-b",
@@ -362,7 +358,6 @@ describe("authentication account actor/account filter", () => {
         personName: "Marina Oliveira",
         personNickname: "Nina",
         active: true,
-        primary: true,
       },
     ],
   };
@@ -401,7 +396,6 @@ describe("authentication account actor/account filter", () => {
           displayName: "Application Administrator",
           scope: "GLOBAL",
           active: true,
-          primary: true,
         },
       ],
     };
@@ -454,7 +448,6 @@ describe("authentication account actor/account filter", () => {
         displayName: "Application Administrator",
         scope: "GLOBAL",
         active: true,
-        primary: true,
       }),
     ).toBe("Application-wide");
   });

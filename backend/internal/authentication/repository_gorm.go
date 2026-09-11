@@ -560,9 +560,8 @@ func (r *GORMRepository) ConsumePasswordResetToken(ctx context.Context, tokenID 
 
 func (r *GORMRepository) accountQuery(ctx context.Context) *gorm.DB {
 	// Authentication Administration hydrates identity only through
-	// auth_account_people + auth_account_actors. The 30K.3A bridge retains the
-	// physical auth_user_accounts.actor_id column as read-only historical data;
-	// current runtime identity never reads or writes it.
+	// auth_account_people + auth_account_actors. 30K.3B physically removes the
+	// former direct Account -> Actor compatibility column.
 	return r.database.WithContext(ctx).
 		Table("auth_user_accounts").
 		Select(`
@@ -658,18 +657,15 @@ func (r *GORMRepository) hydrateAccountActors(ctx context.Context, record Accoun
 			TenantName:     stringValue(row.TenantName),
 			MembershipID:   stringValue(row.MembershipID),
 			Active:         row.Active,
-			// is_primary is intentionally ignored by 30K.2B1. Keep the response
-			// field false until 30K.3B removes the compatibility column/DTO field.
-			Primary: false,
 		}
 		record.Actors = append(record.Actors, actor)
 		if actor.Active {
 			record.AnyActorActive = true
 		}
 
-		// Preserve the pre-30K response envelope for callers that still render the
-		// top-level Actor fields, but derive that projection deterministically from
-		// the canonical AccountActor binding list rather than actor_id/is_primary.
+		// Preserve the top-level Actor response envelope for callers that still
+		// render it, but derive that projection deterministically from the canonical
+		// AccountActor binding list.
 		if index == 0 {
 			record.ActorID = actor.ActorID
 			record.ActorKey = actor.ActorKey

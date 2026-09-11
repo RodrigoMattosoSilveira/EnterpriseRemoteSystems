@@ -122,3 +122,7 @@ manual promotion testing. Physical removal candidates remain:
 - `collaborator_journeys.person_id`;
 - the legacy `people` table;
 - any remaining PERSON/SELF historical catalog state proven safe to remove.
+
+## Follow-on removal
+
+Bite 30K.3B implements the deferred physical removal through migration `000069_physical_legacy_identity_schema_removal.up.sql`. After 000069, the compatibility columns and legacy `people` table described above no longer exist.

@@ -60,9 +60,6 @@ func TestTenantReactivationRestoresOnlySelectedMembershipAndBaselineAuthority(t 
 	if err := database.First(&membershipBRecord, "id = ?", second.MembershipID).Error; err != nil {
 		t.Fatalf("load Tenant B Membership: %v", err)
 	}
-	if membershipARecord.LegacyPersonID != nil || membershipBRecord.LegacyPersonID != nil {
-		t.Fatalf("canonical Membership creation must not populate legacy Person projections, A=%+v B=%+v", membershipARecord.LegacyPersonID, membershipBRecord.LegacyPersonID)
-	}
 
 	account := authentication.Account{ID: "account-return", Login: "return.worker@example.test", PasswordHash: "not-used", Active: true, CreatedAt: now, UpdatedAt: now}
 	if err := database.Create(&account).Error; err != nil {
@@ -287,7 +284,7 @@ func TestCreateMembershipRollsBackWhenApplicationSecuritySuspended(t *testing.T)
 	if err != nil {
 		t.Fatalf("create Person: %v", err)
 	}
-	account := authentication.Account{ID: "account-blocked-return", ActorID: "actor-blocked-return", Login: created.Email, PasswordHash: "not-used", Active: false, SecuritySuspended: true, CreatedAt: now, UpdatedAt: now}
+	account := authentication.Account{ID: "account-blocked-return", Login: created.Email, PasswordHash: "not-used", Active: false, SecuritySuspended: true, CreatedAt: now, UpdatedAt: now}
 	if err := database.Create(&account).Error; err != nil {
 		t.Fatalf("create security-suspended Account: %v", err)
 	}
@@ -327,12 +324,8 @@ func TestCreateMembershipRollsBackWhenApplicationSecuritySuspended(t *testing.T)
 	if membershipCount != 0 {
 		t.Fatalf("security-suspended onboarding must roll back Membership creation, count=%d", membershipCount)
 	}
-	var legacyCount int64
-	if err := database.Model(&db.Person{}).Where("tenant_id = ? AND cpf = ?", "tenant-blocked", created.CPF).Count(&legacyCount).Error; err != nil {
-		t.Fatalf("count rolled-back legacy Person: %v", err)
-	}
-	if legacyCount != 0 {
-		t.Fatalf("security-suspended onboarding must roll back legacy Person creation, count=%d", legacyCount)
+	if database.Migrator().HasTable("people") {
+		t.Fatal("30K.3B runtime schema must not recreate the legacy people table")
 	}
 	assertMembershipStatusCode(t, database, created.MembershipID, "INACTIVE")
 	var global db.GlobalPerson
@@ -362,7 +355,7 @@ func TestTenantReactivationCannotOverrideApplicationSecuritySuspension(t *testin
 		t.Fatalf("create Person: %v", err)
 	}
 	now := time.Now().UTC()
-	account := authentication.Account{ID: "account-secure", ActorID: "actor-secure", Login: created.Email, PasswordHash: "not-used", Active: false, SecuritySuspended: true, CreatedAt: now, UpdatedAt: now}
+	account := authentication.Account{ID: "account-secure", Login: created.Email, PasswordHash: "not-used", Active: false, SecuritySuspended: true, CreatedAt: now, UpdatedAt: now}
 	if err := database.Create(&account).Error; err != nil {
 		t.Fatalf("create suspended Account: %v", err)
 	}

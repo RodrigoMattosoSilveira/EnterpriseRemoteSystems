@@ -19,7 +19,6 @@ type Tenant struct {
 	Active      bool   `gorm:"not null;default:true;index" json:"active"`
 
 	ReferenceData         []ReferenceData          `gorm:"foreignKey:TenantID" json:"referenceData,omitempty"`
-	People                []Person                 `gorm:"foreignKey:TenantID" json:"people,omitempty"` // Legacy compatibility projections; remove after Bite 30 cutover.
 	PersonMemberships     []PersonTenantMembership `gorm:"foreignKey:TenantID" json:"personMemberships,omitempty"`
 	Collaborators         []CollaboratorJourney    `gorm:"foreignKey:TenantID" json:"collaborators,omitempty"`
 	Expenses              []Expense                `gorm:"foreignKey:TenantID" json:"expenses,omitempty"`
@@ -53,9 +52,6 @@ type CollaboratorJourney struct {
 
 	TenantID     string  `gorm:"type:text;not null;default:default;index" json:"tenantId"`
 	MembershipID *string `gorm:"type:text;index" json:"membershipId,omitempty"`
-	// PersonID mirrors the still-physical pre-30K.3B compatibility column only.
-	// Current persistence and identity resolution deliberately ignore it.
-	PersonID string `gorm:"column:person_id;type:text;index;->" json:"-"`
 
 	JourneyStartDate time.Time `gorm:"type:date;not null" json:"journeyStartDate"`
 	DefaultEndDate   time.Time `gorm:"type:date;not null" json:"defaultEndDate"`
@@ -106,9 +102,7 @@ type ReferenceData struct {
 }
 
 // GlobalPerson is the authoritative Bite 30 business identity for one human.
-// The legacy Person model below remains a tenant-owned compatibility projection
-// until the later Bite 30 cutovers move collaborators/authentication/financial
-// relationships onto the global identity and PersonTenantMembership directly.
+// Tenant relationships are represented by PersonTenantMembership.
 type GlobalPerson struct {
 	BaseModel
 
@@ -147,25 +141,24 @@ type GlobalPerson struct {
 func (GlobalPerson) TableName() string { return "global_people" }
 
 // PersonTenantMembership is the tenant-confidential relationship between one
-// global Person and one Tenant. LegacyPersonID mirrors the still-physical
-// pre-30K.3B compatibility column only and is ignored by current persistence.
+// global Person and one Tenant.
 type PersonTenantMembership struct {
 	BaseModel
 
-	TenantID       string  `gorm:"type:text;not null;uniqueIndex:ux_person_tenant_membership,priority:2;index" json:"tenantId"`
-	PersonID       string  `gorm:"type:text;not null;uniqueIndex:ux_person_tenant_membership,priority:1;index" json:"personId"`
-	StatusID       string  `gorm:"type:text;not null;index" json:"statusId"`
-	Notes          string  `gorm:"type:text" json:"notes,omitempty"`
-	LegacyPersonID *string `gorm:"column:legacy_person_id;type:text;index;->" json:"-"`
+	TenantID string `gorm:"type:text;not null;uniqueIndex:ux_person_tenant_membership,priority:2;index" json:"tenantId"`
+	PersonID string `gorm:"type:text;not null;uniqueIndex:ux_person_tenant_membership,priority:1;index" json:"personId"`
+	StatusID string `gorm:"type:text;not null;index" json:"statusId"`
+	Notes    string `gorm:"type:text" json:"notes,omitempty"`
 
-	Tenant       Tenant        `gorm:"foreignKey:TenantID;constraint:OnUpdate:Restrict,OnDelete:Restrict;" json:"tenant,omitempty"`
-	Person       GlobalPerson  `gorm:"foreignKey:PersonID;constraint:OnUpdate:Restrict,OnDelete:Restrict;" json:"person,omitempty"`
-	Status       ReferenceData `gorm:"foreignKey:StatusID;constraint:OnUpdate:Restrict,OnDelete:Restrict;" json:"status,omitempty"`
-	LegacyPerson *Person       `gorm:"-" json:"-"`
+	Tenant Tenant        `gorm:"foreignKey:TenantID;constraint:OnUpdate:Restrict,OnDelete:Restrict;" json:"tenant,omitempty"`
+	Person GlobalPerson  `gorm:"foreignKey:PersonID;constraint:OnUpdate:Restrict,OnDelete:Restrict;" json:"person,omitempty"`
+	Status ReferenceData `gorm:"foreignKey:StatusID;constraint:OnUpdate:Restrict,OnDelete:Restrict;" json:"status,omitempty"`
 }
 
 func (PersonTenantMembership) TableName() string { return "person_tenant_memberships" }
 
+// Person is the tenant-scoped API/domain projection composed from GlobalPerson
+// plus PersonTenantMembership. It is not a persisted GORM table.
 type Person struct {
 	BaseModel
 
@@ -209,7 +202,7 @@ type Person struct {
 
 	Tenant   Tenant                `gorm:"foreignKey:TenantID;constraint:OnUpdate:Restrict,OnDelete:Restrict;" json:"tenant,omitempty"`
 	Status   ReferenceData         `gorm:"foreignKey:StatusID;constraint:OnUpdate:Restrict,OnDelete:Restrict;" json:"status,omitempty"`
-	Journeys []CollaboratorJourney `gorm:"foreignKey:PersonID" json:"journeys,omitempty"`
+	Journeys []CollaboratorJourney `gorm:"-" json:"journeys,omitempty"`
 }
 
 type ExpensePriceListItem struct {

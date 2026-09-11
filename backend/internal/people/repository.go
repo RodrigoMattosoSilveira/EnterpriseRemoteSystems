@@ -9,7 +9,7 @@ import (
 type Repository interface {
 	// Tenant People operations are Membership-native as of Bite 30K.1. The
 	// db.Person return type is a temporary API compatibility projection whose ID
-	// is the canonical Global Person ID; the legacy people row is write-through only.
+	// is the canonical Global Person ID; no legacy people row is persisted.
 	List(ctx context.Context, tenantID string, filter PersonListFilter) ([]db.Person, int64, error)
 	Create(ctx context.Context, person *db.Person) error
 	FindByID(ctx context.Context, tenantID string, id string) (*db.Person, error)

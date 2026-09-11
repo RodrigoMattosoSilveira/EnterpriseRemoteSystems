@@ -572,7 +572,7 @@ func accountResponse(account AccountRecord) AccountResponse {
 			ActorID: actor.ActorID, ActorKey: actor.ActorKey, DisplayName: actor.DisplayName,
 			Scope: actor.ScopeType, TenantID: actor.TenantID, TenantName: actor.TenantName, MembershipID: actor.MembershipID,
 			PersonID: actor.PersonID, PersonName: actor.PersonName, PersonNickname: actor.PersonNickname, CollaboratorID: actor.CollaboratorID,
-			Active: actor.Active, Primary: actor.Primary,
+			Active: actor.Active,
 		})
 	}
 	return AccountResponse{

@@ -45,7 +45,7 @@ func TestProvisionApplicationAdminCreatesAndIsIdempotent(t *testing.T) {
 	if err := database.Where("account_id = ? AND actor_id = ? AND scope_type = ?", account.ID, first.ActorID, AccountActorScopeGlobal).First(&binding).Error; err != nil {
 		t.Fatalf("find canonical application administrator AccountActor binding: %v", err)
 	}
-	if binding.Primary || binding.TenantID != nil || binding.MembershipID != nil {
+	if binding.TenantID != nil || binding.MembershipID != nil {
 		t.Fatalf("expected non-primary GLOBAL AccountActor binding without tenant identity, got %#v", binding)
 	}
 

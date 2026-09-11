@@ -798,7 +798,7 @@ func TestGORMStoreListActorsIncludesAuthoritativeTenantBinding(t *testing.T) {
 	}
 }
 
-func TestGORMStoreListActorsIgnoresLegacyActorIdentityColumns(t *testing.T) {
+func TestGORMStoreListActorsUsesCanonicalIdentityAfterLegacyColumnRemoval(t *testing.T) {
 	database := newAuthzTestDB(t)
 	installTenantRoleDelegationFixtureTables(t, database)
 	store := NewGORMStore(database)
@@ -806,13 +806,12 @@ func TestGORMStoreListActorsIgnoresLegacyActorIdentityColumns(t *testing.T) {
 	actorID := createAuthzActor(t, database, "canonical-identity@example.com", nil, nil)
 	bindActiveTenantMemberActor(t, database, actorID, "tenant-a")
 
-	legacyPersonID := "legacy-person-must-not-win"
-	legacyCollaboratorID := "legacy-collaborator-must-not-win"
-	if err := database.Model(&AuthzActor{}).Where("id = ?", actorID).Updates(map[string]any{
-		"person_id":       legacyPersonID,
-		"collaborator_id": legacyCollaboratorID,
-	}).Error; err != nil {
-		t.Fatalf("inject conflicting legacy Actor identity: %v", err)
+	var retiredColumns int64
+	if err := database.Raw(`SELECT COUNT(*) FROM pragma_table_info('authz_actors') WHERE name IN ('person_id','collaborator_id')`).Scan(&retiredColumns).Error; err != nil {
+		t.Fatalf("inspect authz_actors schema: %v", err)
+	}
+	if retiredColumns != 0 {
+		t.Fatalf("30K.3B must physically remove Actor identity columns, found %d", retiredColumns)
 	}
 
 	actors, err := store.ListActors(context.Background())
@@ -826,11 +825,11 @@ func TestGORMStoreListActorsIgnoresLegacyActorIdentityColumns(t *testing.T) {
 		if actor.Binding == nil || actor.Binding.GlobalPersonID == "" {
 			t.Fatalf("expected canonical AccountActor/Membership identity, got %#v", actor)
 		}
-		if actor.PersonID != actor.Binding.GlobalPersonID || actor.PersonID == legacyPersonID {
-			t.Fatalf("legacy authz_actors.person_id must not determine administration identity: %#v", actor)
+		if actor.PersonID != actor.Binding.GlobalPersonID {
+			t.Fatalf("canonical AccountActor/Membership identity must determine administration identity: %#v", actor)
 		}
 		if actor.CollaboratorID != "" {
-			t.Fatalf("legacy authz_actors.collaborator_id must not determine administration identity: %#v", actor)
+			t.Fatalf("expected no open Collaborator Journey in this canonical fixture: %#v", actor)
 		}
 		return
 	}
@@ -1216,7 +1215,7 @@ func newAuthzTestDB(t *testing.T) *gorm.DB {
 func createAuthzActor(t *testing.T, database *gorm.DB, actorKey string, personID *string, collaboratorID *string) string {
 	t.Helper()
 	now := time.Now().UTC()
-	actor := AuthzActor{ID: "authz-actor-" + actorKey, ActorKey: actorKey, DisplayName: actorKey, PersonID: personID, CollaboratorID: collaboratorID, Active: true, CreatedAt: now, UpdatedAt: now}
+	actor := AuthzActor{ID: "authz-actor-" + actorKey, ActorKey: actorKey, DisplayName: actorKey, Active: true, CreatedAt: now, UpdatedAt: now}
 	if err := database.Create(&actor).Error; err != nil {
 		t.Fatalf("create authz actor: %v", err)
 	}
