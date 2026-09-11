@@ -58,7 +58,9 @@ Generic migration runners retain their ordinary post-success marker operation, b
 
 ## Rehearsal and deployment verification
 
-Release rehearsal advances through 000069. The migrated-database verifier requires the 30K.3B marker and proves:
+Release rehearsal advances through 000070. Migration `000070_revoke_noncanonical_application_admin_grants.up.sql` hardens the canonical Application Administrator boundary for historical server databases: any still-active global `APPLICATION_ADMIN` grant that lacks a valid GLOBAL AccountActor, carries a TENANT AccountActor, or is attached to a Person-linked GLOBAL Account is deactivated while its Actor/grant row remains for history. Valid canonical Application Administrators are unchanged.
+
+The rehearsal deliberately seeds a bootstrap-era orphan Application Administrator after 000069 and proves that 000070 revokes its standing authority without deleting its historical Actor. The migrated-database verifier then proves:
 
 - the legacy `people` table is absent;
 - all six retired identity columns are absent;
@@ -71,6 +73,6 @@ Release rehearsal advances through 000069. The migrated-database verifier requir
 
 ## Rollback
 
-Migration 000069 is intentionally not synthetically reversible. Restoring retired columns from current canonical state would manufacture historical identity semantics that 30K.3B explicitly eliminated.
+Migrations 000069 and 000070 are intentionally not synthetically reversible. Restoring retired columns from current canonical state would manufacture historical identity semantics that 30K.3B explicitly eliminated.
 
-Rollback therefore requires restoration of the verified database backup taken before migration 000069.
+Rollback therefore requires restoration of the verified database backup taken before the relevant irreversible migration.
