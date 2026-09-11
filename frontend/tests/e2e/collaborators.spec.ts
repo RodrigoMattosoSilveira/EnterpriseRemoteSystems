@@ -191,7 +191,10 @@ test("closing a zero-balance Journey preserves canonical Membership identity and
   await closePanel.getByRole("button", { name: "Close Journey", exact: true }).click();
   const closeResponse = await closeResponsePromise;
   expect(closeResponse.status()).toBe(200);
-  await expect(page.getByRole("status")).toContainText("Journey closed successfully.");
+  const closeSuccessDialog = page.getByRole("alertdialog", { name: "Journey Closed" });
+  await expect(closeSuccessDialog).toBeVisible();
+  await expect(closeSuccessDialog).toContainText("Journey closed successfully.");
+  await closeSuccessDialog.getByRole("button", { name: "Continue", exact: true }).click();
 
   const closedResponse = await request.get(
     e2eApiUrl(`/api/v1/collaborators/${encodeURIComponent(firstJourney.id)}`),
