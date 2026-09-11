@@ -286,10 +286,19 @@ test.describe("Bite 30L multi-Tenant identity and confidentiality", () => {
       await selector.click();
       const selection = page.getByRole("region", { name: "Tenant selection" });
       await expect(selection).toBeVisible();
-      await expect(selection.getByRole("option", { name: new RegExp(tenantA.name) })).toBeVisible();
-      await expect(selection.getByRole("option", { name: new RegExp(tenantB.name) })).toBeVisible();
+      await expect(selection).toContainText(
+        "Each tenant below is available through a separate active Actor and Membership owned by this Authentication Account.",
+      );
 
-      await selection.getByRole("option", { name: new RegExp(target.name) }).click();
+      for (const tenant of [tenantA, tenantB]) {
+        const option = selection.locator(`[role="option"][data-tenant-id="${tenant.id}"]`);
+        await expect(option).toBeVisible();
+        await expect(option).toContainText(tenant.name);
+        await expect(option).toContainText(`Actor: ${tenant.actorKey}`);
+        await expect(option).toContainText(`Membership: ${tenant.membershipId}`);
+      }
+
+      await selection.locator(`[role="option"][data-tenant-id="${target.id}"]`).click();
       await expect(selector).toHaveAttribute("data-selected-tenant-id", target.id);
       await expect(page.getByRole("heading", { name: "Something went wrong" })).toHaveCount(0);
 

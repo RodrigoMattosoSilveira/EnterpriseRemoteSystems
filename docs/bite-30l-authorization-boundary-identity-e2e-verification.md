@@ -47,7 +47,7 @@ Bite 30L is the final Bite 30 verification work and absorbs the intent of deferr
 - one active Membership and one active TENANT AccountActor per Tenant;
 - no delegated Role Grant is required for Person self-service.
 
-The Playwright coverage proves that the same authenticated Account resolves to the exact Tenant Actor selected by `X-Tenant-ID`, that each Person projection exposes only the selected Tenant Membership, that an unrelated Tenant cannot be selected, that the browser Tenant selector changes Actor context without another login, and that each Tenant Administrator sees only that Tenant's Membership projection while the onboarding-only global directory excludes the already-associated Person.
+The Playwright coverage proves that the same authenticated Account resolves to the exact Tenant Actor selected by `X-Tenant-ID`, that each Person projection exposes only the selected Tenant Membership, that an unrelated Tenant cannot be selected, that the browser Tenant selector changes Actor context without another login, and that each Tenant Administrator sees only that Tenant's Membership projection while the onboarding-only global directory excludes the already-associated Person. The Tenant selector now makes the identity boundary explicit: every Tenant option is rendered with its own Actor Key and Membership ID, so a multi-Tenant Account is not presented as though one Actor belongs to multiple Tenants.
 
 ## 30L.2 implementation
 

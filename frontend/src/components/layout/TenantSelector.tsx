@@ -32,9 +32,9 @@ export function TenantSelector({
     if (!normalizedQuery) return tenants;
 
     return tenants.filter((tenant) =>
-      normalizeSearchText(`${tenant.name} ${tenant.code} ${tenant.id}`).includes(
-        normalizedQuery,
-      ),
+      normalizeSearchText(
+        `${tenant.name} ${tenant.code} ${tenant.id} ${tenant.actorKey ?? ""} ${tenant.membershipId ?? ""}`,
+      ).includes(normalizedQuery),
     );
   }, [query, tenants]);
 
@@ -183,6 +183,11 @@ export function TenantSelector({
             <p className="mt-2 text-sm font-medium text-slate-600" aria-live="polite">
               {filteredTenants.length} of {tenants.length} {contextNounPlural}
             </p>
+            {!globalAdministration && (
+              <p className="mt-1 text-xs font-medium text-slate-500">
+                Each tenant below is available through a separate active Actor and Membership owned by this Authentication Account.
+              </p>
+            )}
           </div>
 
           <div id="tenant-options" role="listbox" className="max-h-80 overflow-y-auto p-2">
@@ -216,6 +221,12 @@ export function TenantSelector({
                       <span className="block truncate text-sm font-semibold text-slate-600">
                         {tenant.code}
                       </span>
+                      {tenant.actorScope === "TENANT" && tenant.actorKey && tenant.membershipId && (
+                        <span className="mt-1 block text-xs font-medium text-slate-500">
+                          <span className="block truncate">Actor: {tenant.actorKey}</span>
+                          <span className="block truncate">Membership: {tenant.membershipId}</span>
+                        </span>
+                      )}
                     </span>
                     {selected && (
                       <span className="rounded-full bg-slate-900 px-2.5 py-1 text-xs font-bold text-white">

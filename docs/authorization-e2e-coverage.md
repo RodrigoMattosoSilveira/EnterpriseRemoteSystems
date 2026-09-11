@@ -44,6 +44,7 @@ The remaining 30L lifecycle, financial, control-plane, support-lease, audit, and
 30L.2 treats identity lifecycle as one end-state authorization contract rather than as independent CRUD operations. The automated promotion suite now verifies:
 
 - one multi-Tenant Account keeps Tenant B usable while Tenant Actor A is inactive, and the same Account session regains Tenant A after Actor A reactivation;
+- the Tenant selector labels each available Tenant with the distinct Actor Key and Membership ID backing that Account-owned identity, preventing the UI from implying that one Actor owns multiple Tenant memberships;
 - an active Authentication Account can retain intrinsic Person self-service with no active Tenant Actor and recover Tenant access without a new login;
 - security suspension invalidates an existing Account session, rejects login, supports an explicit reactivation request/review, and permits login only after Application Administrator approval;
 - temporary-password first login forces password change;
