@@ -22,7 +22,7 @@ func (r *gormRepository) List(ctx context.Context, filter normalizedExpenseListF
 	q := r.db.WithContext(ctx).
 		Model(&db.Expense{}).
 		Where("expenses.tenant_id = ?", tenantctx.TenantID(ctx)).
-		Preload("Collaborator.Person").
+		Preload("Collaborator.Membership.Person").
 		Preload("ExpenseCategory").
 		Preload("ValueUnit").
 		Preload("PriceListItem").
@@ -77,9 +77,11 @@ func applyCollaboratorSearchFilter(q *gorm.DB, search string) *gorm.DB {
 		`EXISTS (
 			SELECT 1
 			FROM collaborator_journeys AS collaborator_search_journeys
-			JOIN people AS collaborator_search_people
-			  ON collaborator_search_people.id = collaborator_search_journeys.person_id
-			 AND collaborator_search_people.tenant_id = collaborator_search_journeys.tenant_id
+			JOIN person_tenant_memberships AS collaborator_search_memberships
+			  ON collaborator_search_memberships.id = collaborator_search_journeys.membership_id
+			 AND collaborator_search_memberships.tenant_id = collaborator_search_journeys.tenant_id
+			JOIN global_people AS collaborator_search_people
+			  ON collaborator_search_people.id = collaborator_search_memberships.person_id
 			WHERE collaborator_search_journeys.id = expenses.collaborator_id
 			  AND collaborator_search_journeys.tenant_id = expenses.tenant_id
 			  AND (
@@ -332,7 +334,7 @@ func ensureExpenseReceiptTerminal(tx *gorm.DB, tenantID, ledgerEntryID string) e
 func (r *gormRepository) FindByID(ctx context.Context, id string) (*db.Expense, error) {
 	var row db.Expense
 	err := r.db.WithContext(ctx).
-		Preload("Collaborator.Person").
+		Preload("Collaborator.Membership.Person").
 		Preload("Collaborator.Status").
 		Preload("ExpenseCategory").
 		Preload("ValueUnit").

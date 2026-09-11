@@ -108,7 +108,6 @@ describe("password reset token eligibility", () => {
             scope: "TENANT",
             tenantId: "tenant-a",
             active: false,
-            primary: true,
           },
           {
             actorId: "actor-b",
@@ -117,7 +116,6 @@ describe("password reset token eligibility", () => {
             scope: "TENANT",
             tenantId: "tenant-b",
             active: false,
-            primary: false,
           },
         ],
       }),
@@ -176,12 +174,12 @@ describe("authentication account collaborator selection", () => {
     ).toBeUndefined();
   });
 
-  it("maps a collaborator nickname result through the 30C Person/Tenant Actor identity", () => {
+  it("maps a collaborator nickname result through canonical Person/Tenant Actor identity", () => {
     const personActor: AuthzActor = {
       ...eligibleActor,
       id: "actor-person",
       collaboratorId: undefined,
-      personId: collaborator.legacyPersonId,
+      personId: collaborator.personId,
       roleGrants: eligibleActor.roleGrants?.map((grant) => ({
         ...grant,
         actorId: "actor-person",
@@ -210,18 +208,31 @@ describe("authentication account collaborator selection", () => {
   it("keeps matching collaborators discoverable when their actor already has an authentication account", () => {
     const account: AuthAccount = {
       id: "account-expense",
-      actorId: eligibleActor.id,
-      actorKey: eligibleActor.actorKey,
-      displayName: eligibleActor.displayName,
+      actorId: "legacy-single-actor-pointer",
+      actorKey: "legacy-single-actor-key",
+      displayName: "Legacy single Actor projection",
       login: "mari@example.com",
       active: true,
       actorActive: true,
       mustChangePassword: false,
       createdAt: "2026-08-06T00:00:00Z",
       updatedAt: "2026-08-06T00:00:00Z",
+      actors: [
+        {
+          actorId: eligibleActor.id,
+          actorKey: eligibleActor.actorKey,
+          displayName: eligibleActor.displayName,
+          scope: "TENANT",
+          tenantId: "default",
+          membershipId: "membership-expense",
+          personId: "global-person-expense",
+          active: true,
+        },
+      ],
     };
 
     expect(authenticationAccountForActor(eligibleActor, [account])).toEqual(account);
+    expect(authenticationAccountMatchesSearch(account, "legacy-single-actor-key")).toBe(false);
     expect(
       authenticationCollaboratorStatusLabel(eligibleActor, account),
     ).toBe(
@@ -329,11 +340,11 @@ describe("authentication account actor/account filter", () => {
         scope: "TENANT",
         tenantId: "tenant-a",
         tenantName: "Byte 28A Manual Test",
-        personId: "legacy-person-a",
+        membershipId: "membership-person-a",
+        personId: "global-person-marina",
         personName: "Marina Oliveira",
         personNickname: "Nina",
         active: true,
-        primary: true,
       },
       {
         actorId: "actor-person-b",
@@ -342,11 +353,11 @@ describe("authentication account actor/account filter", () => {
         scope: "TENANT",
         tenantId: "tenant-b",
         tenantName: "default",
-        personId: "legacy-person-b",
+        membershipId: "membership-person-b",
+        personId: "global-person-marina",
         personName: "Marina Oliveira",
         personNickname: "Nina",
         active: true,
-        primary: false,
       },
     ],
   };
@@ -385,7 +396,6 @@ describe("authentication account actor/account filter", () => {
           displayName: "Application Administrator",
           scope: "GLOBAL",
           active: true,
-          primary: true,
         },
       ],
     };
@@ -423,10 +433,11 @@ describe("authentication account actor/account filter", () => {
     ]);
   });
 
-  it("opens the primary tenant Person and labels Actors by tenant rather than conflating them with the Account", () => {
+  it("opens a canonical tenant Membership Person and labels Actors by tenant rather than conflating them with the Account", () => {
     const target = authenticationAccountPersonTarget(personAccount);
     expect(target?.actorId).toBe("actor-person-a");
-    expect(target?.personId).toBe("legacy-person-a");
+    expect(target?.personId).toBe("global-person-marina");
+    expect(target?.membershipId).toBe("membership-person-a");
     expect(authenticationActorTenantLabel(target!)).toBe(
       "Byte 28A Manual Test (tenant-a)",
     );
@@ -437,7 +448,6 @@ describe("authentication account actor/account filter", () => {
         displayName: "Application Administrator",
         scope: "GLOBAL",
         active: true,
-        primary: true,
       }),
     ).toBe("Application-wide");
   });

@@ -52,7 +52,7 @@ func (s *service) SettlementPreview(ctx context.Context, collaboratorID string) 
 
 	preview := &SettlementPreviewDTO{
 		CollaboratorID:      collaborator.ID,
-		CollaboratorLabel:   collaboratorLabel(collaborator.Person),
+		CollaboratorLabel:   collaboratorLabel(collaborator.Membership.Person),
 		JourneyStatusCode:   collaborator.Status.Code,
 		PendingAccrualItems: pendingAccrualItems,
 		OutstandingReceipts: outstandingReceipts,

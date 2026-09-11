@@ -17,7 +17,6 @@ type Repository interface {
 	FindByID(ctx context.Context, id string) (*db.CollaboratorJourney, error)
 	FindByIDForMembership(ctx context.Context, id string, membershipID string) (*db.CollaboratorJourney, error)
 	FindActiveMembershipByID(ctx context.Context, membershipID string) (*db.PersonTenantMembership, error)
-	FindActiveMembershipByLegacyPersonID(ctx context.Context, legacyPersonID string) (*db.PersonTenantMembership, error)
 	FindActiveReference(ctx context.Context, id string, typ string) (*db.ReferenceData, error)
 	ExistsActiveReference(ctx context.Context, id string, typ string) (bool, error)
 	ExistsOpenJourneyForMembership(ctx context.Context, membershipID string) (bool, error)

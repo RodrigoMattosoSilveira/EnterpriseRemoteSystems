@@ -12,6 +12,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"enterpriseremotesystems/backend/internal/authz"
 	"enterpriseremotesystems/backend/internal/shared/ids"
 	"golang.org/x/crypto/bcrypt"
 )
@@ -379,12 +380,11 @@ func (s *service) GetAccount(ctx context.Context, id string) (AccountResponse, e
 }
 
 func (s *service) CreateAccount(ctx context.Context, req CreateAccountRequest) (AccountResponse, error) {
-	actorID := strings.TrimSpace(req.ActorID)
 	tenantID := strings.TrimSpace(req.TenantID)
 	login := normalizeLogin(req.Login)
 	fields := map[string]string{}
-	if actorID == "" && tenantID == "" {
-		fields["actorId"] = "Select an authorization actor or create the account in a selected tenant"
+	if tenantID == "" || tenantID == authz.GlobalTenantScope {
+		fields["tenantId"] = "Select a specific tenant for the Person whose authentication account is being provisioned"
 	}
 	if login == "" {
 		fields["login"] = "Login is required"
@@ -404,21 +404,14 @@ func (s *service) CreateAccount(ctx context.Context, req CreateAccountRequest) (
 	if err != nil {
 		return AccountResponse{}, err
 	}
+	// 30K.2B2 makes global Authentication Administration a canonical
+	// Person/Membership provisioning workflow. Every newly-created credential is
+	// therefore temporary; a stale client must not be able to bypass the first
+	// login password change by supplying mustChangePassword=false.
 	mustChangePassword := true
-	if req.MustChangePassword != nil {
-		mustChangePassword = *req.MustChangePassword
-	}
-	if actorID == "" {
-		// Accounts created while provisioning a Person Actor always start with a
-		// temporary password. The administrator-facing workflow must not be able
-		// to bypass the first-login password change through a stale or malformed
-		// client payload.
-		mustChangePassword = true
-	}
 	now := s.clock().UTC()
 	accountInput := Account{
 		ID:                 ids.New(),
-		ActorID:            actorID,
 		Login:              login,
 		PasswordHash:       passwordHash,
 		Active:             true,
@@ -427,39 +420,26 @@ func (s *service) CreateAccount(ctx context.Context, req CreateAccountRequest) (
 		UpdatedAt:          now,
 	}
 
-	var account AccountRecord
-	if actorID == "" {
-		account, err = s.repository.CreatePersonAccount(ctx, tenantID, "", accountInput)
-		switch {
-		case errors.Is(err, ErrPersonLoginNotFound):
-			return AccountResponse{}, &ValidationError{Fields: map[string]string{
-				"login": "No Person in the selected tenant has this login email",
-			}}
-		case errors.Is(err, ErrPersonActorInactive):
-			return AccountResponse{}, &ValidationError{Fields: map[string]string{
-				"actorId": "The Person's authorization actor is inactive; reactivate it before creating the account",
-			}}
-		case errors.Is(err, ErrTenantUnavailable):
-			return AccountResponse{}, &ValidationError{Fields: map[string]string{
-				"tenantId": "The selected tenant is inactive or unavailable",
-			}}
-		case err != nil:
-			return AccountResponse{}, err
-		}
-	} else {
-		hasTenantAccess, accessErr := s.repository.ActorHasActiveTenantAccess(ctx, actorID)
-		if accessErr != nil {
-			return AccountResponse{}, accessErr
-		}
-		if !hasTenantAccess {
-			return AccountResponse{}, &ValidationError{Fields: map[string]string{
-				"actorId": "Authorization actor must be linked to an active Person-Tenant Membership before creating an account",
-			}}
-		}
-		account, err = s.repository.CreateAccount(ctx, accountInput)
-		if err != nil {
-			return AccountResponse{}, err
-		}
+	account, err := s.repository.CreatePersonAccount(ctx, tenantID, "", accountInput)
+	switch {
+	case errors.Is(err, ErrPersonLoginNotFound):
+		return AccountResponse{}, &ValidationError{Fields: map[string]string{
+			"login": "No canonical Person with this login email has a Membership in the selected tenant",
+		}}
+	case errors.Is(err, ErrPersonMembershipRequired):
+		return AccountResponse{}, &ValidationError{Fields: map[string]string{
+			"tenantId": "The Person must have an ACTIVE Person-Tenant Membership in the selected tenant",
+		}}
+	case errors.Is(err, ErrPersonActorInactive):
+		return AccountResponse{}, &ValidationError{Fields: map[string]string{
+			"tenantId": "The Person's canonical Tenant Actor is inactive; reactivate it before enabling authentication",
+		}}
+	case errors.Is(err, ErrTenantUnavailable):
+		return AccountResponse{}, &ValidationError{Fields: map[string]string{
+			"tenantId": "The selected tenant is inactive or unavailable",
+		}}
+	case err != nil:
+		return AccountResponse{}, err
 	}
 	return accountResponse(account), nil
 }
@@ -592,7 +572,7 @@ func accountResponse(account AccountRecord) AccountResponse {
 			ActorID: actor.ActorID, ActorKey: actor.ActorKey, DisplayName: actor.DisplayName,
 			Scope: actor.ScopeType, TenantID: actor.TenantID, TenantName: actor.TenantName, MembershipID: actor.MembershipID,
 			PersonID: actor.PersonID, PersonName: actor.PersonName, PersonNickname: actor.PersonNickname, CollaboratorID: actor.CollaboratorID,
-			Active: actor.Active, Primary: actor.Primary,
+			Active: actor.Active,
 		})
 	}
 	return AccountResponse{

@@ -24,7 +24,7 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
-sqlite3 "$TMP_DB" "
+sqlite3 -bail "$TMP_DB" "
   PRAGMA foreign_keys = ON;
   CREATE TABLE IF NOT EXISTS schema_migrations (
     filename TEXT PRIMARY KEY,
@@ -47,12 +47,12 @@ for migration in "$MIGRATIONS_DIR"/*.up.sql; do
   # terminate their final statement and therefore must not have bookkeeping SQL
   # concatenated onto the same input stream.
   sqlite3 -bail "$TMP_DB" < "$migration"
-  sqlite3 -bail "$TMP_DB" "INSERT INTO schema_migrations (filename) VALUES ('$filename');"
+  sqlite3 -bail "$TMP_DB" "INSERT OR IGNORE INTO schema_migrations (filename) VALUES ('$filename');"
   migration_count=$((migration_count + 1))
 done
 
 # Keep parity with the runtime/local migration compatibility repair.
-collaborator_availability_count="$(sqlite3 "$TMP_DB" "SELECT COUNT(*) FROM pragma_table_info('collaborator_journeys') WHERE name = 'planning_availability';")"
+collaborator_availability_count="$(sqlite3 -bail "$TMP_DB" "SELECT COUNT(*) FROM pragma_table_info('collaborator_journeys') WHERE name = 'planning_availability';")"
 if [ "$collaborator_availability_count" = "0" ]; then
   echo "Repairing missing collaborator_journeys.planning_availability column..."
   sqlite3 -bail "$TMP_DB" "
@@ -68,19 +68,19 @@ sqlite3 -bail "$TMP_DB" "
    WHERE planning_availability IS NULL OR planning_availability = '';
 "
 
-applied_count="$(sqlite3 "$TMP_DB" "SELECT COUNT(*) FROM schema_migrations;")"
+applied_count="$(sqlite3 -bail "$TMP_DB" "SELECT COUNT(*) FROM schema_migrations;")"
 if [ "$applied_count" -ne "$migration_count" ]; then
   echo "Development database migration validation failed: expected ${migration_count}, found ${applied_count}." >&2
   exit 1
 fi
 
-integrity="$(sqlite3 "$TMP_DB" "PRAGMA integrity_check;")"
+integrity="$(sqlite3 -bail "$TMP_DB" "PRAGMA integrity_check;")"
 if [ "$integrity" != "ok" ]; then
   echo "Development database integrity_check failed: ${integrity}" >&2
   exit 1
 fi
 
-foreign_key_violations="$(sqlite3 "$TMP_DB" "PRAGMA foreign_key_check;")"
+foreign_key_violations="$(sqlite3 -bail "$TMP_DB" "PRAGMA foreign_key_check;")"
 if [ -n "$foreign_key_violations" ]; then
   echo "Development database foreign_key_check failed:" >&2
   printf '%s\n' "$foreign_key_violations" >&2

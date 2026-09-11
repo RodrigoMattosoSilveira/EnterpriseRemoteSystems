@@ -56,7 +56,7 @@ func (r *gormRepository) FindWorkPeriodByID(ctx context.Context, id string) (*db
 func (r *gormRepository) ListItemsByRun(ctx context.Context, runID string, filter normalizedAccrualItemListFilter) ([]db.AccrualItem, int64, error) {
 	var rows []db.AccrualItem
 	var total int64
-	q := r.db.WithContext(ctx).Model(&db.AccrualItem{}).Where("tenant_id = ? AND accrual_run_id = ?", tenantctx.TenantID(ctx), runID).Preload("Collaborator.Person")
+	q := r.db.WithContext(ctx).Model(&db.AccrualItem{}).Where("tenant_id = ? AND accrual_run_id = ?", tenantctx.TenantID(ctx), runID).Preload("Collaborator.Membership.Person")
 	if filter.Status != "" {
 		q = q.Where("status = ?", filter.Status)
 	}
@@ -125,7 +125,7 @@ func (r *gormRepository) SummariesForRuns(ctx context.Context, runIDs []string) 
 
 func (r *gormRepository) ListAssignmentsForCalculation(ctx context.Context, workPeriodID string) ([]db.WorkPeriodAssignment, error) {
 	var rows []db.WorkPeriodAssignment
-	err := r.db.WithContext(ctx).Where("tenant_id = ? AND work_period_id = ? AND active = ? AND planned_status = ?", tenantctx.TenantID(ctx), workPeriodID, true, "INCLUDED").Preload("Collaborator.PaymentMethod").Preload("Collaborator.Person").Preload("Collaborator.Membership").Find(&rows).Error
+	err := r.db.WithContext(ctx).Where("tenant_id = ? AND work_period_id = ? AND active = ? AND planned_status = ?", tenantctx.TenantID(ctx), workPeriodID, true, "INCLUDED").Preload("Collaborator.PaymentMethod").Preload("Collaborator.Membership.Person").Preload("Collaborator.Membership").Find(&rows).Error
 	return rows, err
 }
 

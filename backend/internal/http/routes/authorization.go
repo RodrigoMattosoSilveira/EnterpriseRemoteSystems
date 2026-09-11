@@ -97,38 +97,21 @@ func resolveAuthenticatedActor(c fiber.Ctx, deps Dependencies, session authentic
 		return nil, authz.ErrTenantSelectionRequired
 	}
 
-	// Bite 30E keeps the Session Account-authenticated, then resolves the Account-owned Actor
-	// for the requested tenant. This is the authoritative path for normal
-	// session traffic and is what allows one human Account to own one Actor per
-	// Tenant. Verified compatibility/test sessions may omit AccountID; those
-	// intentionally continue through the legacy Actor fallback below.
+	// Bite 30K.2A removes the final authenticated-session fallback to the
+	// legacy single Actor fields. A persisted session identifies only the
+	// Authentication Account; the selected context must resolve through the
+	// authoritative Account -> Actor binding.
 	accountID := strings.TrimSpace(session.AccountID)
-	if accountID != "" {
-		if accountActorStore, ok := deps.ActorStore.(authz.AccountActorStore); ok {
-			actor, err := accountActorStore.FindAccountActor(c.Context(), accountID, tenantID)
-			if err == nil {
-				actor.Source = authz.ActorSourceAuthenticatedSession
-				actor.AccountID = accountID
-				actor.SessionID = strings.TrimSpace(session.SessionID)
-				return actor, nil
-			}
-			if !errors.Is(err, authz.ErrAccountActorFoundationUnavailable) {
-				return nil, err
-			}
-		}
-	}
-
-	// Compatibility fallback for isolated tests and stores that intentionally do
-	// not implement the Bite 30C Account/Actor relation yet.
-	if strings.TrimSpace(session.ActorKey) == "" || strings.TrimSpace(session.ActorID) == "" {
+	if accountID == "" {
 		return nil, authz.ErrAuthenticationRequired
 	}
-	actor, err := deps.ActorStore.FindActor(c.Context(), authz.ActorLookup{ActorID: session.ActorKey, TenantID: tenantID})
+	accountActorStore, ok := deps.ActorStore.(authz.AccountActorStore)
+	if !ok {
+		return nil, authz.ErrAccountActorFoundationUnavailable
+	}
+	actor, err := accountActorStore.FindAccountActor(c.Context(), accountID, tenantID)
 	if err != nil {
 		return nil, err
-	}
-	if actor.RecordID == "" || actor.RecordID != session.ActorID {
-		return nil, authz.ErrAuthenticationRequired
 	}
 	actor.Source = authz.ActorSourceAuthenticatedSession
 	actor.AccountID = accountID

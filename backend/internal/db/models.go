@@ -19,7 +19,6 @@ type Tenant struct {
 	Active      bool   `gorm:"not null;default:true;index" json:"active"`
 
 	ReferenceData         []ReferenceData          `gorm:"foreignKey:TenantID" json:"referenceData,omitempty"`
-	People                []Person                 `gorm:"foreignKey:TenantID" json:"people,omitempty"` // Legacy compatibility projections; remove after Bite 30 cutover.
 	PersonMemberships     []PersonTenantMembership `gorm:"foreignKey:TenantID" json:"personMemberships,omitempty"`
 	Collaborators         []CollaboratorJourney    `gorm:"foreignKey:TenantID" json:"collaborators,omitempty"`
 	Expenses              []Expense                `gorm:"foreignKey:TenantID" json:"expenses,omitempty"`
@@ -53,9 +52,6 @@ type CollaboratorJourney struct {
 
 	TenantID     string  `gorm:"type:text;not null;default:default;index" json:"tenantId"`
 	MembershipID *string `gorm:"type:text;index" json:"membershipId,omitempty"`
-	// PersonID remains the legacy tenant-owned people.id compatibility foreign key
-	// until Bite 30K removes the pre-Bite-30 projection.
-	PersonID string `gorm:"type:text;not null;index" json:"legacyPersonId"`
 
 	JourneyStartDate time.Time `gorm:"type:date;not null" json:"journeyStartDate"`
 	DefaultEndDate   time.Time `gorm:"type:date;not null" json:"defaultEndDate"`
@@ -81,7 +77,7 @@ type CollaboratorJourney struct {
 
 	Tenant             Tenant                 `gorm:"foreignKey:TenantID;constraint:OnUpdate:Restrict,OnDelete:Restrict;" json:"tenant,omitempty"`
 	Membership         PersonTenantMembership `gorm:"foreignKey:MembershipID;constraint:OnUpdate:Restrict,OnDelete:Restrict;" json:"membership,omitempty"`
-	Person             Person                 `gorm:"foreignKey:PersonID;constraint:OnUpdate:Restrict,OnDelete:Restrict;" json:"legacyPerson,omitempty"`
+	Person             Person                 `gorm:"-" json:"-"`
 	PaymentMethod      ReferenceData          `gorm:"foreignKey:PaymentMethodID;constraint:OnUpdate:Restrict,OnDelete:Restrict;" json:"paymentMethod,omitempty"`
 	Sector             ReferenceData          `gorm:"foreignKey:SectorID;constraint:OnUpdate:Restrict,OnDelete:Restrict;" json:"sector,omitempty"`
 	Location           ReferenceData          `gorm:"foreignKey:LocationID;constraint:OnUpdate:Restrict,OnDelete:Restrict;" json:"location,omitempty"`
@@ -106,9 +102,7 @@ type ReferenceData struct {
 }
 
 // GlobalPerson is the authoritative Bite 30 business identity for one human.
-// The legacy Person model below remains a tenant-owned compatibility projection
-// until the later Bite 30 cutovers move collaborators/authentication/financial
-// relationships onto the global identity and PersonTenantMembership directly.
+// Tenant relationships are represented by PersonTenantMembership.
 type GlobalPerson struct {
 	BaseModel
 
@@ -147,26 +141,24 @@ type GlobalPerson struct {
 func (GlobalPerson) TableName() string { return "global_people" }
 
 // PersonTenantMembership is the tenant-confidential relationship between one
-// global Person and one Tenant. LegacyPersonID temporarily links the membership
-// to the pre-Bite-30 tenant-owned people row so existing business modules can
-// continue operating while later bites cut over their foreign keys.
+// global Person and one Tenant.
 type PersonTenantMembership struct {
 	BaseModel
 
-	TenantID       string  `gorm:"type:text;not null;uniqueIndex:ux_person_tenant_membership,priority:2;index" json:"tenantId"`
-	PersonID       string  `gorm:"type:text;not null;uniqueIndex:ux_person_tenant_membership,priority:1;index" json:"personId"`
-	StatusID       string  `gorm:"type:text;not null;index" json:"statusId"`
-	Notes          string  `gorm:"type:text" json:"notes,omitempty"`
-	LegacyPersonID *string `gorm:"type:text;uniqueIndex" json:"legacyPersonId,omitempty"`
+	TenantID string `gorm:"type:text;not null;uniqueIndex:ux_person_tenant_membership,priority:2;index" json:"tenantId"`
+	PersonID string `gorm:"type:text;not null;uniqueIndex:ux_person_tenant_membership,priority:1;index" json:"personId"`
+	StatusID string `gorm:"type:text;not null;index" json:"statusId"`
+	Notes    string `gorm:"type:text" json:"notes,omitempty"`
 
-	Tenant       Tenant        `gorm:"foreignKey:TenantID;constraint:OnUpdate:Restrict,OnDelete:Restrict;" json:"tenant,omitempty"`
-	Person       GlobalPerson  `gorm:"foreignKey:PersonID;constraint:OnUpdate:Restrict,OnDelete:Restrict;" json:"person,omitempty"`
-	Status       ReferenceData `gorm:"foreignKey:StatusID;constraint:OnUpdate:Restrict,OnDelete:Restrict;" json:"status,omitempty"`
-	LegacyPerson *Person       `gorm:"foreignKey:LegacyPersonID;constraint:OnUpdate:Restrict,OnDelete:Restrict;" json:"legacyPerson,omitempty"`
+	Tenant Tenant        `gorm:"foreignKey:TenantID;constraint:OnUpdate:Restrict,OnDelete:Restrict;" json:"tenant,omitempty"`
+	Person GlobalPerson  `gorm:"foreignKey:PersonID;constraint:OnUpdate:Restrict,OnDelete:Restrict;" json:"person,omitempty"`
+	Status ReferenceData `gorm:"foreignKey:StatusID;constraint:OnUpdate:Restrict,OnDelete:Restrict;" json:"status,omitempty"`
 }
 
 func (PersonTenantMembership) TableName() string { return "person_tenant_memberships" }
 
+// Person is the tenant-scoped API/domain projection composed from GlobalPerson
+// plus PersonTenantMembership. It is not a persisted GORM table.
 type Person struct {
 	BaseModel
 
@@ -210,7 +202,7 @@ type Person struct {
 
 	Tenant   Tenant                `gorm:"foreignKey:TenantID;constraint:OnUpdate:Restrict,OnDelete:Restrict;" json:"tenant,omitempty"`
 	Status   ReferenceData         `gorm:"foreignKey:StatusID;constraint:OnUpdate:Restrict,OnDelete:Restrict;" json:"status,omitempty"`
-	Journeys []CollaboratorJourney `gorm:"foreignKey:PersonID" json:"journeys,omitempty"`
+	Journeys []CollaboratorJourney `gorm:"-" json:"journeys,omitempty"`
 }
 
 type ExpensePriceListItem struct {

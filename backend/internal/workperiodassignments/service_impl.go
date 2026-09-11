@@ -101,7 +101,7 @@ func (s *service) GetPlanningTemplate(ctx context.Context, workPeriodID string) 
 		planningRow := WorkPeriodPlanningTemplateRow{
 			CollaboratorID:       collaborator.ID,
 			CollaboratorName:     collaboratorName(collaborator),
-			CollaboratorNickname: collaborator.Person.Nickname,
+			CollaboratorNickname: collaborator.Membership.Person.Nickname,
 			ProjectedEndDate:     formatDate(collaborator.ProjectedEndDate),
 			PlanningAvailability: normalizePlanningAvailability(collaborator.PlanningAvailability),
 			SectorID:             collaborator.SectorID,

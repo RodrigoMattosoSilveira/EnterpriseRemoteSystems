@@ -186,21 +186,38 @@ func TestAuthzAdminCanDeactivateAnotherActor(t *testing.T) {
 	}
 }
 
-func TestAuthzAdminCanCreateActorGrantRoleAndRevokeGrant(t *testing.T) {
+func TestAuthzAdminCreatesIdentityNeutralActorAndRejectsUnboundTenantGrant(t *testing.T) {
 	database := newAuthzTestDB(t)
+	installTenantRoleDelegationFixtureTables(t, database)
 	adminActorID := createAuthzActor(t, database, "app-admin-tooling@example.com", nil, nil)
 	grantAuthzRole(t, database, adminActorID, RoleApplicationAdmin, GlobalTenantScope)
 	app := newAuthzTestApp(database)
 	headers := map[string]string{HeaderActorID: "app-admin-tooling@example.com", HeaderTenantID: GlobalTenantScope}
 
-	createBody := map[string]any{"actorKey": "expenses-tooling@example.com", "displayName": "Expenses Tooling"}
+	createBody := map[string]any{
+		"actorKey":    "expenses-tooling@example.com",
+		"displayName": "Expenses Tooling",
+		// Stale legacy identity inputs must not create Actor identity links.
+		"personId":       "legacy-person-should-be-ignored",
+		"collaboratorId": "legacy-collaborator-should-be-ignored",
+	}
 	createResp := doAuthzRequest(t, app, http.MethodPost, "/api/v1/authz/actors", createBody, headers)
 	if createResp.StatusCode != http.StatusCreated {
 		t.Fatalf("expected create actor status 201, got %d", createResp.StatusCode)
 	}
 	created := decodeData[ActorResponse](t, createResp)
-	if created.ID == "" || created.ActorKey != "expenses-tooling@example.com" || !created.Active {
-		t.Fatalf("unexpected created actor: %#v", created)
+	if created.ID == "" || created.ActorKey != "expenses-tooling@example.com" || !created.Active || created.PersonID != "" || created.CollaboratorID != "" {
+		t.Fatalf("expected identity-neutral created actor, got %#v", created)
+	}
+	var persisted AuthzActor
+	if err := database.First(&persisted, "id = ?", created.ID).Error; err != nil {
+		t.Fatalf("find created Actor: %v", err)
+	}
+
+	grantBody := map[string]any{"roleCode": string(RoleExpenseOperator), "tenantId": "tenant-a"}
+	grantResp := doAuthzRequest(t, app, http.MethodPost, "/api/v1/authz/actors/"+created.ID+"/role-grants", grantBody, headers)
+	if grantResp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("expected unbound tenant Role Grant status 400, got %d", grantResp.StatusCode)
 	}
 
 	auditResp := doAuthzRequest(t, app, http.MethodGet, "/api/v1/authz/audit-logs?operation=authz.actors.create", nil, headers)
@@ -211,57 +228,6 @@ func TestAuthzAdminCanCreateActorGrantRoleAndRevokeGrant(t *testing.T) {
 	if len(auditLogs) == 0 || auditLogs[0].Operation != "authz.actors.create" || auditLogs[0].TargetID != created.ID || auditLogs[0].Decision != AuditDecisionAuthorized {
 		t.Fatalf("expected actor create audit log, got %#v", auditLogs)
 	}
-
-	grantBody := map[string]any{"roleCode": string(RoleExpenseOperator), "tenantId": "tenant-a"}
-	grantResp := doAuthzRequest(t, app, http.MethodPost, "/api/v1/authz/actors/"+created.ID+"/role-grants", grantBody, headers)
-	if grantResp.StatusCode != http.StatusCreated {
-		t.Fatalf("expected grant status 201, got %d", grantResp.StatusCode)
-	}
-	grant := decodeData[ActorGrantResponse](t, grantResp)
-	if grant.RoleCode != string(RoleExpenseOperator) || grant.TenantID != "tenant-a" || !grant.Active {
-		t.Fatalf("unexpected grant: %#v", grant)
-	}
-
-	actor, err := NewGORMStore(database).FindActor(t.Context(), ActorLookup{ActorID: "expenses-tooling@example.com", TenantID: "tenant-a"})
-	if err != nil {
-		t.Fatalf("find granted actor: %v", err)
-	}
-	if !actor.HasPermission(PermissionLedgerReceiptsReturn) {
-		t.Fatalf("expected granted actor to have expense operator permissions")
-	}
-
-	revokeResp := doAuthzRequest(t, app, http.MethodDelete, "/api/v1/authz/actors/"+created.ID+"/role-grants/"+grant.ID, nil, headers)
-	if revokeResp.StatusCode != http.StatusOK {
-		t.Fatalf("expected revoke status 200, got %d", revokeResp.StatusCode)
-	}
-	revoked := decodeData[ActorGrantResponse](t, revokeResp)
-	if revoked.Active {
-		t.Fatalf("expected revoked grant to be inactive: %#v", revoked)
-	}
-
-	actor, err = NewGORMStore(database).FindActor(t.Context(), ActorLookup{ActorID: "expenses-tooling@example.com", TenantID: "tenant-a"})
-	if err != nil {
-		t.Fatalf("find revoked actor: %v", err)
-	}
-	if actor.HasPermission(PermissionLedgerReceiptsReturn) {
-		t.Fatalf("expected revoked actor to lose expense operator permissions")
-	}
-
-	actorsResp := doAuthzRequest(t, app, http.MethodGet, "/api/v1/authz/actors", nil, headers)
-	if actorsResp.StatusCode != http.StatusOK {
-		t.Fatalf("expected actors status 200 after revoke, got %d", actorsResp.StatusCode)
-	}
-	actors := decodeData[[]ActorResponse](t, actorsResp)
-	for _, listedActor := range actors {
-		if listedActor.ID != created.ID {
-			continue
-		}
-		if len(listedActor.RoleGrants) != 0 {
-			t.Fatalf("expected revoked grant to be hidden from actor list, got %#v", listedActor.RoleGrants)
-		}
-		return
-	}
-	t.Fatalf("expected created actor in actor list after revoke")
 }
 
 func TestAuthzAdminListsRolesPermissionsAndActors(t *testing.T) {

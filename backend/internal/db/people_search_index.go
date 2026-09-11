@@ -13,38 +13,48 @@ const (
 	peopleSearchReplaceBatchSize = 8
 )
 
+// InstallPeopleSearchIndex installs a derived search projection keyed by the
+// canonical Person-Tenant Membership. The table is disposable and rebuilt at
+// startup, so Bite 30K.1 can cut live search reads over without removing the
+// legacy people table that remains for compatibility until 30K.3B.
 func InstallPeopleSearchIndex(database *gorm.DB) error {
 	statements := []string{
-		`CREATE TABLE IF NOT EXISTS people_search_index (
-			person_id TEXT PRIMARY KEY,
-			tenant_id TEXT NOT NULL,
-			search_text TEXT NOT NULL,
-			FOREIGN KEY (person_id) REFERENCES people(id) ON UPDATE CASCADE ON DELETE CASCADE,
-			FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON UPDATE RESTRICT ON DELETE RESTRICT
-		)`,
-		`CREATE INDEX IF NOT EXISTS idx_people_search_index_tenant
-			ON people_search_index (tenant_id, person_id)`,
-		`INSERT INTO people_search_index (person_id, tenant_id, search_text)
-		 SELECT people.id, people.tenant_id, ` + peopleSearchRawTextSQL("people") + `
-		   FROM people
-		  WHERE 1 = 1
-		 ON CONFLICT(person_id) DO UPDATE SET
-		   tenant_id = excluded.tenant_id,
-		   search_text = excluded.search_text`,
-	}
-
-	statements = append(statements, peopleSearchNormalizeStatementsSQL("")...)
-	statements = append(statements,
 		`DROP TRIGGER IF EXISTS trg_people_search_index_insert`,
 		`DROP TRIGGER IF EXISTS trg_people_search_index_update`,
 		`DROP TRIGGER IF EXISTS trg_people_search_index_delete`,
-		peopleSearchTriggerSQL("trg_people_search_index_insert", "AFTER INSERT ON people"),
-		peopleSearchTriggerSQL("trg_people_search_index_update", "AFTER UPDATE OF tenant_id, first_name, last_name, nickname ON people"),
-		`CREATE TRIGGER trg_people_search_index_delete
-		 AFTER DELETE ON people
+		`DROP TRIGGER IF EXISTS trg_person_membership_search_index_insert`,
+		`DROP TRIGGER IF EXISTS trg_person_membership_search_index_update`,
+		`DROP TRIGGER IF EXISTS trg_person_membership_search_index_delete`,
+		`DROP TRIGGER IF EXISTS trg_global_person_search_index_update`,
+		`DROP TABLE IF EXISTS people_search_index`,
+		`CREATE TABLE people_search_index (
+			membership_id TEXT PRIMARY KEY,
+			person_id TEXT NOT NULL,
+			tenant_id TEXT NOT NULL,
+			search_text TEXT NOT NULL,
+			FOREIGN KEY (membership_id) REFERENCES person_tenant_memberships(id) ON UPDATE CASCADE ON DELETE CASCADE,
+			FOREIGN KEY (person_id) REFERENCES global_people(id) ON UPDATE RESTRICT ON DELETE RESTRICT,
+			FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON UPDATE RESTRICT ON DELETE RESTRICT
+		)`,
+		`CREATE INDEX idx_people_search_index_tenant
+			ON people_search_index (tenant_id, membership_id)`,
+		`CREATE INDEX idx_people_search_index_person
+			ON people_search_index (person_id, tenant_id)`,
+		`INSERT INTO people_search_index (membership_id, person_id, tenant_id, search_text)
+		 SELECT m.id, m.person_id, m.tenant_id, ` + peopleSearchRawTextSQL("gp") + `
+		   FROM person_tenant_memberships m
+		   JOIN global_people gp ON gp.id = m.person_id`,
+	}
+	statements = append(statements, peopleSearchNormalizeStatementsSQL("")...)
+	statements = append(statements,
+		peopleMembershipSearchTriggerSQL("trg_person_membership_search_index_insert", "AFTER INSERT ON person_tenant_memberships"),
+		peopleMembershipSearchTriggerSQL("trg_person_membership_search_index_update", "AFTER UPDATE OF person_id, tenant_id ON person_tenant_memberships"),
+		`CREATE TRIGGER trg_person_membership_search_index_delete
+		 AFTER DELETE ON person_tenant_memberships
 		 BEGIN
-		   DELETE FROM people_search_index WHERE person_id = OLD.id;
+		   DELETE FROM people_search_index WHERE membership_id = OLD.id;
 		 END`,
+		peopleGlobalSearchUpdateTriggerSQL(),
 	)
 
 	for _, statement := range statements {
@@ -92,15 +102,27 @@ func peopleSearchNormalizeStatementsSQL(whereClause string) []string {
 	return statements
 }
 
-func peopleSearchTriggerSQL(name, event string) string {
+func peopleMembershipSearchTriggerSQL(name, event string) string {
 	statements := []string{
-		`INSERT INTO people_search_index (person_id, tenant_id, search_text)
-		 VALUES (NEW.id, NEW.tenant_id, ` + peopleSearchRawTextSQL("NEW") + `)
-		 ON CONFLICT(person_id) DO UPDATE SET
+		`INSERT INTO people_search_index (membership_id, person_id, tenant_id, search_text)
+		 SELECT NEW.id, NEW.person_id, NEW.tenant_id, ` + peopleSearchRawTextSQL("gp") + `
+		   FROM global_people gp
+		  WHERE gp.id = NEW.person_id
+		 ON CONFLICT(membership_id) DO UPDATE SET
+		   person_id = excluded.person_id,
 		   tenant_id = excluded.tenant_id,
 		   search_text = excluded.search_text`,
 	}
-	statements = append(statements, peopleSearchNormalizeStatementsSQL("person_id = NEW.id")...)
-
+	statements = append(statements, peopleSearchNormalizeStatementsSQL("membership_id = NEW.id")...)
 	return "CREATE TRIGGER " + name + "\n " + event + "\n BEGIN\n   " + strings.Join(statements, ";\n   ") + ";\n END"
+}
+
+func peopleGlobalSearchUpdateTriggerSQL() string {
+	statements := []string{
+		`UPDATE people_search_index
+		   SET search_text = ` + peopleSearchRawTextSQL("NEW") + `
+		 WHERE person_id = NEW.id`,
+	}
+	statements = append(statements, peopleSearchNormalizeStatementsSQL("person_id = NEW.id")...)
+	return "CREATE TRIGGER trg_global_person_search_index_update\n AFTER UPDATE OF first_name, last_name, nickname ON global_people\n BEGIN\n   " + strings.Join(statements, ";\n   ") + ";\n END"
 }

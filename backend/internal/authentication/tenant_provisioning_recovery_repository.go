@@ -6,7 +6,6 @@ import (
 	"strings"
 	"time"
 
-	appdb "enterpriseremotesystems/backend/internal/db"
 	"enterpriseremotesystems/backend/internal/shared/ids"
 	"gorm.io/gorm"
 )
@@ -24,51 +23,36 @@ func (r *GORMRepository) FindPersonAuthentication(ctx context.Context, tenantID 
 		return PersonAuthenticationRecord{}, gorm.ErrRecordNotFound
 	}
 
-	if err := appdb.EnsureGlobalPersonMembershipFoundation(r.database.WithContext(ctx)); err != nil {
-		return PersonAuthenticationRecord{}, err
-	}
-
-	var person appdb.Person
-	result := r.database.WithContext(ctx).
-		Where("id = ? AND tenant_id = ?", personID, tenantID).
-		Limit(1).
-		Find(&person)
-	if result.Error != nil {
-		return PersonAuthenticationRecord{}, fmt.Errorf("find tenant Person for authentication: %w", result.Error)
-	}
-	if result.RowsAffected == 0 {
-		return PersonAuthenticationRecord{}, gorm.ErrRecordNotFound
-	}
-
 	type membershipProjection struct {
 		ID       string
 		PersonID string
 		Code     string
+		Email    string
 	}
 	var membership membershipProjection
 	membershipResult := r.database.WithContext(ctx).
 		Table("person_tenant_memberships m").
-		Select("m.id, m.person_id, r.code").
+		Select("m.id, m.person_id, r.code, gp.email AS email").
 		Joins("JOIN reference_data r ON r.id = m.status_id AND r.tenant_id = m.tenant_id AND r.type = ?", "person_status").
-		Where("m.legacy_person_id = ? AND m.tenant_id = ?", person.ID, tenantID).
+		Joins("JOIN global_people gp ON gp.id = m.person_id").
+		Where("m.tenant_id = ? AND m.person_id = ?", tenantID, personID).
 		Limit(1).
 		Scan(&membership)
 	if membershipResult.Error != nil {
 		return PersonAuthenticationRecord{}, fmt.Errorf("find Person-Tenant Membership for authentication: %w", membershipResult.Error)
 	}
 	if membershipResult.RowsAffected == 0 || strings.TrimSpace(membership.ID) == "" {
-		return PersonAuthenticationRecord{}, ErrPersonMembershipRequired
+		return PersonAuthenticationRecord{}, gorm.ErrRecordNotFound
 	}
 	membershipCode := strings.ToUpper(strings.TrimSpace(membership.Code))
 
 	record := PersonAuthenticationRecord{
 		TenantID:             tenantID,
-		LegacyPersonID:       person.ID,
 		GlobalPersonID:       membership.PersonID,
 		MembershipID:         membership.ID,
 		MembershipActive:     membershipCode == "ACTIVE",
 		MembershipStatusCode: membershipCode,
-		Login:                normalizeLogin(person.Email),
+		Login:                normalizeLogin(membership.Email),
 	}
 	var lifecycle struct{ OperationalActive bool }
 	if err := r.database.WithContext(ctx).Table("global_people").Select("operational_active").Where("id = ?", membership.PersonID).Limit(1).Scan(&lifecycle).Error; err != nil {
@@ -106,10 +90,6 @@ func (r *GORMRepository) FindPersonAuthentication(ctx context.Context, tenantID 
 		return PersonAuthenticationRecord{}, fmt.Errorf("find current Tenant Actor binding: %w", bindingResult.Error)
 	}
 	if bindingResult.RowsAffected == 0 {
-		// The tenant-facing status may report only whether credential
-		// initialization is required for this enable operation. Do not load or
-		// expose the global Account's state, Actors, Memberships, or tenants until
-		// this tenant has its own Actor binding.
 		return record, nil
 	}
 

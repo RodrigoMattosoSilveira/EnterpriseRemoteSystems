@@ -163,7 +163,7 @@ test("user can filter Collaborators by any part of person name or nickname", asy
   });
 
   await createCollaborator(request, {
-    personId: targetPerson.id,
+    membershipId: targetPerson.membershipId,
     journeyStartDate: "2026-06-01",
     paymentMethodId: PAYMENT_METHOD_DAILY_ID,
     paymentValue: 150,
@@ -175,7 +175,7 @@ test("user can filter Collaborators by any part of person name or nickname", asy
     notes: "Collaborator filter E2E target",
   });
   await createCollaborator(request, {
-    personId: otherPerson.id,
+    membershipId: otherPerson.membershipId,
     journeyStartDate: "2026-06-02",
     paymentMethodId: PAYMENT_METHOD_DAILY_ID,
     paymentValue: 150,
@@ -257,7 +257,7 @@ test("user can edit Collaborator assignment payment and extension days", async (
     sortOrder: 100,
   });
   const collaborator = await createCollaborator(request, {
-    personId: person.id,
+    membershipId: person.membershipId,
     journeyStartDate: "2026-06-01",
     paymentMethodId: PAYMENT_METHOD_DAILY_ID,
     paymentValue: 150,
@@ -313,7 +313,7 @@ test("user can inspect Collaborator current account ledger and receipt status", 
     nickname: `AcctC${suffix}`,
   });
   const collaborator = await createCollaborator(request, {
-    personId: person.id,
+    membershipId: person.membershipId,
     journeyStartDate: "2026-06-01",
     paymentMethodId: PAYMENT_METHOD_DAILY_ID,
     paymentValue: 150,
@@ -371,7 +371,7 @@ test("current account updates after receipt signed return", async ({
     nickname: `RetAcct${suffix}`,
   });
   const collaborator = await createCollaborator(request, {
-    personId: person.id,
+    membershipId: person.membershipId,
     journeyStartDate: "2026-06-01",
     paymentMethodId: PAYMENT_METHOD_DAILY_ID,
     paymentValue: 150,
@@ -456,6 +456,7 @@ test("current account updates after receipt signed return", async ({
 
 type CreatedPerson = {
   id: string;
+  membershipId: string;
   firstName: string;
   lastName: string;
   nickname: string;

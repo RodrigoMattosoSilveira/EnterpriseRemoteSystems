@@ -29,7 +29,7 @@ test("backfilled legacy Canteen expense appears as Canteen", async ({
     firstName: `LegacyCanteenE2E${suffix}`,
     nickname: personNickname,
   });
-  const collaborator = await createCollaborator(request, person.id);
+  const collaborator = await createCollaborator(request, person.membershipId);
   const description = `Backfilled legacy Canteen expense ${suffix}`;
 
   await createExpense(request, {
@@ -62,7 +62,7 @@ test("backfilled legacy Administrative expense appears as Administrative", async
     firstName: `LegacyAdminE2E${suffix}`,
     nickname: personNickname,
   });
-  const collaborator = await createCollaborator(request, person.id);
+  const collaborator = await createCollaborator(request, person.membershipId);
   const description = `Backfilled legacy Administrative expense ${suffix}`;
 
   await createExpense(request, {
@@ -95,7 +95,7 @@ test("price-list expense still works after legacy backfill", async ({
     firstName: `BackfillPriceListE2E${suffix}`,
     nickname: personNickname,
   });
-  const collaborator = await createCollaborator(request, person.id);
+  const collaborator = await createCollaborator(request, person.membershipId);
 
   await createExpense(request, {
     collaboratorId: collaborator.id,
@@ -159,7 +159,7 @@ test("grams-of-gold price-list expense shows conversion audit details", async ({
     firstName: `BackfillGoldE2E${suffix}`,
     nickname: personNickname,
   });
-  const collaborator = await createCollaborator(request, person.id);
+  const collaborator = await createCollaborator(request, person.membershipId);
   const item = await createPriceListItem(request, {
     itemType: ITEM_TYPE_ADMINISTRATIVE,
     code: `E2E-BACKFILL-GOLD-${suffix}`,
@@ -218,6 +218,7 @@ type ApiEnvelope<T> = {
 
 type CreatedPerson = {
   id: string;
+  membershipId: string;
   firstName: string;
   lastName: string;
   nickname: string;
@@ -341,12 +342,12 @@ async function createCompletePerson(
 
 async function createCollaborator(
   api: APIRequestContext,
-  personId: string,
+  membershipId: string,
 ): Promise<CreatedCollaborator> {
   const response = await api.post(e2eApiUrl("/api/v1/collaborators"), {
     headers: authzHeaders(),
     data: {
-      personId,
+      membershipId,
       journeyStartDate: todayISODate(),
       paymentMethodId: PAYMENT_METHOD_DAILY_ID,
       paymentValue: 250.75,

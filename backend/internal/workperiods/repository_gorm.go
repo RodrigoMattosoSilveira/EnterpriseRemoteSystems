@@ -91,7 +91,7 @@ func (r *gormRepository) ListIncludedAssignmentsForRoster(ctx context.Context, w
 	err := r.db.WithContext(ctx).
 		Model(&db.WorkPeriodAssignment{}).
 		Where("tenant_id = ? AND work_period_id = ? AND active = ? AND planned_status = ?", tenantctx.TenantID(ctx), workPeriodID, true, "INCLUDED").
-		Preload("Collaborator.Person").
+		Preload("Collaborator.Membership.Person").
 		Preload("Sector").
 		Preload("Location").
 		Preload("Task").

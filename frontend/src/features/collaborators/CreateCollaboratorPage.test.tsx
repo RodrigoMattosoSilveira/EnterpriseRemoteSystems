@@ -15,7 +15,7 @@ type FetchCall = {
 };
 
 const completePerson: Person = {
-  id: "person-complete-1",
+  id: "global-person-complete-1",
   globalPersonId: "global-person-complete-1",
   membershipId: "membership-complete-1",
   firstName: "Ana",
@@ -33,7 +33,7 @@ const completePerson: Person = {
 };
 
 const secondCompletePerson: Person = {
-  id: "person-complete-2",
+  id: "global-person-complete-2",
   globalPersonId: "global-person-complete-2",
   membershipId: "membership-complete-2",
   firstName: "Carla",
@@ -51,7 +51,7 @@ const secondCompletePerson: Person = {
 };
 
 const incompletePerson: Person = {
-  id: "person-incomplete-1",
+  id: "global-person-incomplete-1",
   globalPersonId: "global-person-incomplete-1",
   membershipId: "membership-incomplete-1",
   firstName: "Bruno",
@@ -69,7 +69,7 @@ const incompletePerson: Person = {
 };
 
 const justCompletedPerson: Person = {
-  id: "person-just-completed",
+  id: "global-person-just-completed",
   globalPersonId: "global-person-just-completed",
   membershipId: "membership-just-completed",
   firstName: "Joao",
@@ -206,7 +206,7 @@ describe("CreateCollaboratorPage", () => {
     mockCreateCollaboratorFetch();
 
     renderCreateCollaboratorPage(
-      "/collaborators/new?personId=person-complete-1",
+      "/collaborators/new?personId=global-person-complete-1",
     );
 
     await waitForText("Selected Person is complete.");
@@ -215,7 +215,7 @@ describe("CreateCollaboratorPage", () => {
     const backLink = Array.from(container.querySelectorAll("a")).find(
       (node) => node.textContent?.trim() === "Back to Person",
     );
-    expect(backLink?.getAttribute("href")).toBe("/people/person-complete-1");
+    expect(backLink?.getAttribute("href")).toBe("/people/global-person-complete-1");
 
     const changeButton = Array.from(container.querySelectorAll("button")).find(
       (node) => node.textContent?.trim() === "Change Person",
@@ -335,7 +335,7 @@ describe("CreateCollaboratorPage", () => {
       (node) => node.textContent?.trim() === "Carla Moura (Carla)",
     );
     expect(carlaLinks[0]?.getAttribute("href")).toBe(
-      "/people/person-complete-2",
+      "/people/global-person-complete-2",
     );
   });
 
@@ -392,7 +392,7 @@ describe("CreateCollaboratorPage", () => {
     const viewLink = Array.from(container.querySelectorAll("a")).find(
       (node) => node.textContent?.trim() === "View Person",
     );
-    expect(viewLink?.getAttribute("href")).toBe("/people/person-complete-1");
+    expect(viewLink?.getAttribute("href")).toBe("/people/global-person-complete-1");
 
     await clickButton("Change Person");
     expect(
@@ -637,7 +637,7 @@ describe("CreateCollaboratorPage", () => {
     const personLink = Array.from(container.querySelectorAll("a")).find(
       (node) => node.textContent?.trim() === "View Person",
     );
-    expect(personLink?.getAttribute("href")).toBe("/people/person-complete-1");
+    expect(personLink?.getAttribute("href")).toBe("/people/global-person-complete-1");
     expect(textNode("personId:")).toBeFalsy();
   });
 });
@@ -691,7 +691,7 @@ function mockCreateCollaboratorFetch({
   const activePersonIds = new Set(
     collaborators
       .filter((row) => !row.closedAt)
-      .map((row) => row.legacyPersonId ?? row.personId),
+      .map((row) => row.personId),
   );
   const candidateRows =
     candidates ??

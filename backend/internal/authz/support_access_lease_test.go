@@ -354,9 +354,10 @@ func installSupportAccessLeaseFixtureTables(t *testing.T, database *gorm.DB) {
 	statements := []string{
 		`CREATE TABLE IF NOT EXISTS tenants (id TEXT PRIMARY KEY, code TEXT NOT NULL, name TEXT NOT NULL, active INTEGER NOT NULL DEFAULT 1, created_at DATETIME NOT NULL, updated_at DATETIME NOT NULL)`,
 		`CREATE TABLE IF NOT EXISTS reference_data (id TEXT PRIMARY KEY, type TEXT NOT NULL, code TEXT NOT NULL, label TEXT NOT NULL, active INTEGER NOT NULL DEFAULT 1, tenant_id TEXT NOT NULL, created_at DATETIME NOT NULL, updated_at DATETIME NOT NULL)`,
-		`CREATE TABLE IF NOT EXISTS person_tenant_memberships (id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, person_id TEXT NOT NULL, status_id TEXT NOT NULL, legacy_person_id TEXT NULL, created_at DATETIME NOT NULL, updated_at DATETIME NOT NULL)`,
-		`CREATE TABLE IF NOT EXISTS auth_account_actors (account_id TEXT NOT NULL, actor_id TEXT NOT NULL, scope_type TEXT NOT NULL, tenant_id TEXT NULL, membership_id TEXT NULL, is_primary INTEGER NOT NULL DEFAULT 0, created_at DATETIME NOT NULL, updated_at DATETIME NOT NULL, PRIMARY KEY(account_id, actor_id))`,
+		`CREATE TABLE IF NOT EXISTS person_tenant_memberships (id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, person_id TEXT NOT NULL, status_id TEXT NOT NULL, created_at DATETIME NOT NULL, updated_at DATETIME NOT NULL)`,
+		`CREATE TABLE IF NOT EXISTS auth_account_actors (account_id TEXT NOT NULL, actor_id TEXT NOT NULL, scope_type TEXT NOT NULL, tenant_id TEXT NULL, membership_id TEXT NULL, created_at DATETIME NOT NULL, updated_at DATETIME NOT NULL, PRIMARY KEY(account_id, actor_id))`,
 		`CREATE TABLE IF NOT EXISTS auth_account_people (account_id TEXT NOT NULL, person_id TEXT NOT NULL, created_at DATETIME NOT NULL, updated_at DATETIME NOT NULL, PRIMARY KEY(account_id, person_id))`,
+		`CREATE TABLE IF NOT EXISTS collaborator_journeys (id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, membership_id TEXT NOT NULL, journey_start_date DATETIME NOT NULL, created_at DATETIME NOT NULL, closed_at DATETIME NULL)`,
 	}
 	for _, statement := range statements {
 		if err := database.Exec(statement).Error; err != nil {
@@ -378,7 +379,7 @@ func seedSupportApplicationAdministrator(t *testing.T, database *gorm.DB, actorK
 	actorID := createAuthzActor(t, database, actorKey, nil, nil)
 	grantAuthzRole(t, database, actorID, RoleApplicationAdmin, GlobalTenantScope)
 	now := time.Now().UTC()
-	if err := database.Exec(`INSERT INTO auth_account_actors(account_id, actor_id, scope_type, tenant_id, membership_id, is_primary, created_at, updated_at) VALUES (?, ?, 'GLOBAL', NULL, NULL, 1, ?, ?)`, accountID, actorID, now, now).Error; err != nil {
+	if err := database.Exec(`INSERT INTO auth_account_actors(account_id, actor_id, scope_type, tenant_id, membership_id, created_at, updated_at) VALUES (?, ?, 'GLOBAL', NULL, NULL, ?, ?)`, accountID, actorID, now, now).Error; err != nil {
 		t.Fatalf("bind GLOBAL Application Administrator: %v", err)
 	}
 	return actorID
@@ -397,7 +398,7 @@ func seedSupportTenantAdministrator(t *testing.T, database *gorm.DB, tenantID st
 	if err := database.Exec(`INSERT INTO person_tenant_memberships(id, tenant_id, person_id, status_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)`, membershipID, tenantID, personID, statusID, now, now).Error; err != nil {
 		t.Fatalf("seed Tenant Administrator Membership: %v", err)
 	}
-	if err := database.Exec(`INSERT INTO auth_account_actors(account_id, actor_id, scope_type, tenant_id, membership_id, is_primary, created_at, updated_at) VALUES (?, ?, 'TENANT', ?, ?, 1, ?, ?)`, accountID, actorID, tenantID, membershipID, now, now).Error; err != nil {
+	if err := database.Exec(`INSERT INTO auth_account_actors(account_id, actor_id, scope_type, tenant_id, membership_id, created_at, updated_at) VALUES (?, ?, 'TENANT', ?, ?, ?, ?)`, accountID, actorID, tenantID, membershipID, now, now).Error; err != nil {
 		t.Fatalf("bind Tenant Administrator Actor: %v", err)
 	}
 	if err := database.Exec(`INSERT INTO auth_account_people(account_id, person_id, created_at, updated_at) VALUES (?, ?, ?, ?)`, accountID, personID, now, now).Error; err != nil {

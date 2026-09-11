@@ -3,6 +3,7 @@ package authentication
 import (
 	"context"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -40,6 +41,13 @@ func TestProvisionApplicationAdminCreatesAndIsIdempotent(t *testing.T) {
 		t.Fatal("provisioned password does not match")
 	}
 	assertApplicationAdministrator(t, database, cfg.ActorKey)
+	var binding AccountActor
+	if err := database.Where("account_id = ? AND actor_id = ? AND scope_type = ?", account.ID, first.ActorID, AccountActorScopeGlobal).First(&binding).Error; err != nil {
+		t.Fatalf("find canonical application administrator AccountActor binding: %v", err)
+	}
+	if binding.TenantID != nil || binding.MembershipID != nil {
+		t.Fatalf("expected non-primary GLOBAL AccountActor binding without tenant identity, got %#v", binding)
+	}
 
 	second, err := ProvisionApplicationAdmin(context.Background(), database, cfg)
 	if err != nil {
@@ -201,6 +209,30 @@ func TestProvisionApplicationAdminRevokesSessionsWhenAuthorizationIsReactivated(
 	}
 	if storedResetToken.UsedAt == nil {
 		t.Fatal("expected authorization reactivation to invalidate password reset tokens")
+	}
+}
+
+func TestProvisionApplicationAdminDoesNotFallbackToLegacyAccountActorPointer(t *testing.T) {
+	database := newProvisioningTestDatabase(t)
+	cfg := ProvisionApplicationAdminConfig{
+		ActorKey:         "canonical-only-application-admin",
+		DisplayName:      "Canonical Application Admin",
+		Login:            "canonical-only-admin@example.com",
+		Password:         "Canonical-Administrator-Password!",
+		PasswordHashCost: bcrypt.MinCost,
+	}
+	created, err := ProvisionApplicationAdmin(context.Background(), database, cfg)
+	if err != nil {
+		t.Fatalf("create administrator: %v", err)
+	}
+	if err := database.Where("account_id = ? AND actor_id = ?", created.AccountID, created.ActorID).Delete(&AccountActor{}).Error; err != nil {
+		t.Fatalf("remove canonical AccountActor binding fixture: %v", err)
+	}
+
+	if _, err := ProvisionApplicationAdmin(context.Background(), database, cfg); err == nil {
+		t.Fatal("expected missing canonical GLOBAL AccountActor binding to be rejected")
+	} else if !strings.Contains(err.Error(), "no canonical GLOBAL AccountActor binding") {
+		t.Fatalf("expected canonical AccountActor foundation error, got %v", err)
 	}
 }
 

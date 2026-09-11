@@ -106,31 +106,11 @@ func ensureE2ETenantAdministrator(ctx context.Context, database *gorm.DB, fixtur
 			return fmt.Errorf("ensure E2E Tenant Administrator Person: %w", err)
 		}
 
-		legacyPerson := dbpkg.Person{
-			BaseModel:               dbpkg.BaseModel{ID: fixture.Stem + "-legacy-person", CreatedAt: now, UpdatedAt: now},
-			TenantID:                fixture.TenantID,
-			FirstName:               person.FirstName,
-			LastName:                person.LastName,
-			Nickname:                person.Nickname,
-			CPF:                     person.CPF,
-			RG:                      person.RG,
-			Cellular:                person.Cellular,
-			Email:                   person.Email,
-			Country:                 person.Country,
-			ProfileCompletionStatus: "COMPLETE",
-			StatusID:                status.ID,
-		}
-		if err := tx.Where("id = ?", legacyPerson.ID).FirstOrCreate(&legacyPerson).Error; err != nil {
-			return fmt.Errorf("ensure E2E Tenant Administrator legacy Person projection: %w", err)
-		}
-
-		legacyPersonID := legacyPerson.ID
 		membership := dbpkg.PersonTenantMembership{
-			BaseModel:      dbpkg.BaseModel{ID: fixture.Stem + "-membership", CreatedAt: now, UpdatedAt: now},
-			TenantID:       fixture.TenantID,
-			PersonID:       person.ID,
-			StatusID:       status.ID,
-			LegacyPersonID: &legacyPersonID,
+			BaseModel: dbpkg.BaseModel{ID: fixture.Stem + "-membership", CreatedAt: now, UpdatedAt: now},
+			TenantID:  fixture.TenantID,
+			PersonID:  person.ID,
+			StatusID:  status.ID,
 		}
 		var existingMembership dbpkg.PersonTenantMembership
 		membershipResult := tx.Where("id = ?", membership.ID).Limit(1).Find(&existingMembership)
@@ -145,14 +125,8 @@ func ensureE2ETenantAdministrator(ctx context.Context, database *gorm.DB, fixtur
 			if existingMembership.TenantID != membership.TenantID || existingMembership.PersonID != membership.PersonID {
 				return fmt.Errorf("E2E Tenant Administrator Membership %s is bound to another Person or Tenant", membership.ID)
 			}
-			if existingMembership.LegacyPersonID != nil && strings.TrimSpace(*existingMembership.LegacyPersonID) != "" &&
-				strings.TrimSpace(*existingMembership.LegacyPersonID) != legacyPerson.ID {
-				return fmt.Errorf("E2E Tenant Administrator Membership %s is bound to another legacy Person", membership.ID)
-			}
 			if err := tx.Model(&dbpkg.PersonTenantMembership{}).Where("id = ?", membership.ID).Updates(map[string]any{
-				"legacy_person_id": legacyPerson.ID,
-				"status_id":        status.ID,
-				"updated_at":       now,
+				"status_id": status.ID, "updated_at": now,
 			}).Error; err != nil {
 				return fmt.Errorf("reconcile E2E Tenant Administrator Membership: %w", err)
 			}
@@ -162,7 +136,6 @@ func ensureE2ETenantAdministrator(ctx context.Context, database *gorm.DB, fixtur
 			ID:          fixture.Stem + "-actor",
 			ActorKey:    fixture.ActorKey,
 			DisplayName: fixture.ActorKey,
-			PersonID:    &legacyPersonID,
 			Active:      true,
 			CreatedAt:   now,
 			UpdatedAt:   now,
@@ -177,19 +150,9 @@ func ensureE2ETenantAdministrator(ctx context.Context, database *gorm.DB, fixtur
 				return fmt.Errorf("ensure E2E Tenant Administrator Actor: %w", err)
 			}
 		} else {
-			existingPersonID := ""
-			if existingActor.PersonID != nil {
-				existingPersonID = strings.TrimSpace(*existingActor.PersonID)
-			}
-			if existingPersonID != "" && existingPersonID != person.ID && existingPersonID != legacyPerson.ID {
-				return fmt.Errorf("E2E Tenant Administrator Actor %s is bound to another legacy Person", actor.ID)
-			}
 			if err := tx.Model(&authz.AuthzActor{}).Where("id = ?", actor.ID).Updates(map[string]any{
-				"actor_key":    actor.ActorKey,
-				"display_name": actor.DisplayName,
-				"person_id":    legacyPerson.ID,
-				"active":       true,
-				"updated_at":   now,
+				"actor_key": actor.ActorKey, "display_name": actor.DisplayName,
+				"active": true, "updated_at": now,
 			}).Error; err != nil {
 				return fmt.Errorf("reconcile E2E Tenant Administrator Actor: %w", err)
 			}
@@ -201,7 +164,6 @@ func ensureE2ETenantAdministrator(ctx context.Context, database *gorm.DB, fixtur
 		}
 		account := authentication.Account{
 			ID:                 fixture.Stem + "-account",
-			ActorID:            actor.ID,
 			Login:              fixture.Login,
 			PasswordHash:       string(passwordHash),
 			Active:             true,
@@ -235,10 +197,18 @@ func ensureE2ETenantAdministrator(ctx context.Context, database *gorm.DB, fixtur
 		membershipID := membership.ID
 		accountActor := authentication.AccountActor{
 			AccountID: account.ID, ActorID: actor.ID, ScopeType: authentication.AccountActorScopeTenant,
-			TenantID: &tenantID, MembershipID: &membershipID, Primary: true, CreatedAt: now, UpdatedAt: now,
+			TenantID: &tenantID, MembershipID: &membershipID, CreatedAt: now, UpdatedAt: now,
 		}
 		if err := tx.Where("account_id = ? AND actor_id = ?", account.ID, actor.ID).FirstOrCreate(&accountActor).Error; err != nil {
 			return fmt.Errorf("ensure E2E Tenant Administrator Account/Actor binding: %w", err)
+		}
+		if err := tx.Model(&authentication.AccountActor{}).Where("account_id = ? AND actor_id = ?", account.ID, actor.ID).Updates(map[string]any{
+			"scope_type":    authentication.AccountActorScopeTenant,
+			"tenant_id":     tenantID,
+			"membership_id": membershipID,
+			"updated_at":    now,
+		}).Error; err != nil {
+			return fmt.Errorf("reconcile E2E Tenant Administrator Account/Actor binding: %w", err)
 		}
 
 		if err := authz.GrantRole(tx, actor.ID, authz.RoleTenantAdmin, fixture.TenantID); err != nil {

@@ -63,7 +63,7 @@ func (s *service) ReturnReceipt(ctx context.Context, ledgerEntryID, receivedBy s
 }
 
 func toPrintableReceiptDTO(row db.LedgerReceipt) *PrintableReceiptDTO {
-	person := row.Collaborator.Person
+	person := row.Collaborator.Membership.Person
 	return &PrintableReceiptDTO{
 		ID: row.ID, TenantID: row.TenantID, PersonID: row.PersonID, ReceiptNumber: stringPtrValue(row.ReceiptNumber), ReceiptType: row.ReceiptType, ReceiptPurpose: row.ReceiptPurpose, PaymentDirection: row.PaymentDirection, AcceptingParty: row.AcceptingParty, Status: row.Status,
 		IssuedAt: formatOptionalTime(row.IssuedAt), IssuedBy: row.IssuedBy, PrintedAt: formatOptionalTime(row.PrintedAt),

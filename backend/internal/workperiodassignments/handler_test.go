@@ -31,7 +31,8 @@ type apiErrorResponse struct {
 
 type apiPersonResponse struct {
 	Data struct {
-		ID string `json:"id"`
+		ID           string `json:"id"`
+		MembershipID string `json:"membershipId"`
 	} `json:"data"`
 }
 
@@ -246,7 +247,7 @@ func TestPlanningTemplateOnlyIncludesCollaboratorsActiveForWorkDate(t *testing.T
 	workPeriod := createWorkPeriod(t, server, nil)
 	activeForDate := createActiveCollaborator(t, server, 1)
 	endedBeforeDate := createCollaborator(t, server, validCollaboratorPayload(
-		createPerson(t, server, validCompletePersonPayload(3, nil)).Data.ID,
+		createPerson(t, server, validCompletePersonPayload(3, nil)).Data.MembershipID,
 		map[string]any{"journeyStartDate": "2025-01-01"},
 	))
 
@@ -962,7 +963,7 @@ func createAssignment(t *testing.T, server *fiber.App, workPeriodID string, payl
 func createActiveCollaborator(t *testing.T, server *fiber.App, seq int) apiCollaboratorResponse {
 	t.Helper()
 	person := createPerson(t, server, validCompletePersonPayload(seq, nil))
-	return createCollaborator(t, server, validCollaboratorPayload(person.Data.ID, nil))
+	return createCollaborator(t, server, validCollaboratorPayload(person.Data.MembershipID, nil))
 }
 
 func createPerson(t *testing.T, server *fiber.App, payload map[string]any) apiPersonResponse {
@@ -1059,9 +1060,9 @@ func validAssignmentPayload(collaboratorID string, overrides map[string]any) map
 	return payload
 }
 
-func validCollaboratorPayload(personID string, overrides map[string]any) map[string]any {
+func validCollaboratorPayload(membershipID string, overrides map[string]any) map[string]any {
 	payload := map[string]any{
-		"personId":         personID,
+		"membershipId":     membershipID,
 		"journeyStartDate": "2026-06-01",
 		"paymentMethodId":  "ref-method-daily",
 		"paymentValue":     150.0,

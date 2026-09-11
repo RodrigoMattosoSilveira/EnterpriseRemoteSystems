@@ -36,11 +36,11 @@ Maria,Souza,Maria,93541134780,RG-100002,21998765432,maria@example.com,ref-person
 	}
 
 	var count int64
-	if err := database.Model(&db.Person{}).Count(&count).Error; err != nil {
-		t.Fatalf("count people: %v", err)
+	if err := database.Model(&db.GlobalPerson{}).Count(&count).Error; err != nil {
+		t.Fatalf("count canonical global People: %v", err)
 	}
 	if count != 0 {
-		t.Fatalf("expected dry-run rollback to leave 0 people, got %d", count)
+		t.Fatalf("expected dry-run rollback to leave 0 canonical global People, got %d", count)
 	}
 }
 
@@ -61,11 +61,11 @@ Maria,Souza,Maria,93541134780,RG-100002,21998765432,maria@example.com,ref-person
 	}
 
 	var count int64
-	if err := database.Model(&db.Person{}).Count(&count).Error; err != nil {
-		t.Fatalf("count people: %v", err)
+	if err := database.Model(&db.GlobalPerson{}).Count(&count).Error; err != nil {
+		t.Fatalf("count canonical global People: %v", err)
 	}
 	if count != 2 {
-		t.Fatalf("expected 2 people, got %d", count)
+		t.Fatalf("expected 2 canonical global People, got %d", count)
 	}
 }
 
@@ -87,11 +87,11 @@ Bad,Phone,BadPhone,93541134780,RG-100002,219987654,maria@example.com,ref-person-
 	}
 
 	var count int64
-	if err := database.Model(&db.Person{}).Count(&count).Error; err != nil {
-		t.Fatalf("count people: %v", err)
+	if err := database.Model(&db.GlobalPerson{}).Count(&count).Error; err != nil {
+		t.Fatalf("count canonical global People: %v", err)
 	}
 	if count != 0 {
-		t.Fatalf("expected failed import rollback to leave 0 people, got %d", count)
+		t.Fatalf("expected failed import rollback to leave 0 canonical global People, got %d", count)
 	}
 }
 
@@ -211,10 +211,7 @@ Pix,Person,Pix,11144477735,RG-PIX01,51998765432,pix-person@example.com,ref-perso
 		t.Fatalf("expected 1 row inserted, got %d", report.RowsInserted)
 	}
 
-	var person db.Person
-	if err := database.Where("email = ?", "pix-person@example.com").First(&person).Error; err != nil {
-		t.Fatalf("find imported person: %v", err)
-	}
+	person := findPersonByEmail(t, database, "pix-person@example.com")
 
 	if person.PIXKey == nil {
 		t.Fatal("expected PIXKey to be set")
@@ -465,9 +462,22 @@ Missing,Headers,Missing,15350946056,RG-MISSING01,91998765432,missing-headers@exa
 func findPersonByEmail(t *testing.T, database *gorm.DB, email string) db.Person {
 	t.Helper()
 
+	// The importer now persists canonical identity only. Reconstruct the same
+	// tenant Person projection that the People repository exposes from the
+	// Global Person plus exact Person-Tenant Membership; never read the retired
+	// legacy people table in current importer tests.
 	var person db.Person
-	if err := database.Where("email = ?", email).First(&person).Error; err != nil {
-		t.Fatalf("find imported person by email %q: %v", email, err)
+	result := database.Table("global_people gp").
+		Select("gp.*, m.tenant_id, m.status_id, m.notes").
+		Joins("JOIN person_tenant_memberships m ON m.person_id = gp.id").
+		Where("m.tenant_id = ? AND gp.email = ? COLLATE NOCASE", db.DefaultTenantID, email).
+		Limit(1).
+		Scan(&person)
+	if result.Error != nil {
+		t.Fatalf("find canonical imported Person by email %q: %v", email, result.Error)
+	}
+	if result.RowsAffected == 0 {
+		t.Fatalf("find canonical imported Person by email %q: record not found", email)
 	}
 
 	return person

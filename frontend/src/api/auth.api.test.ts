@@ -94,7 +94,6 @@ describe("normalizeAuthAccounts", () => {
         personId: "legacy-person-a",
         personName: "Marina Oliveira",
         active: true,
-        primary: true,
       },
     ],
   };
@@ -128,7 +127,6 @@ describe("normalizeAuthAccounts", () => {
             personId: "legacy-person-b",
             personName: "Different Person",
             active: true,
-            primary: false,
           },
         ],
       },
@@ -152,7 +150,6 @@ describe("normalizeAuthAccounts", () => {
           scope: "GLOBAL",
           personName: undefined,
           active: true,
-          primary: true,
         },
       ],
     };

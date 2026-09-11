@@ -40,7 +40,8 @@ type apiErrorResponse struct {
 
 type apiPersonResponse struct {
 	Data struct {
-		ID string `json:"id"`
+		ID           string `json:"id"`
+		MembershipID string `json:"membershipId"`
 	} `json:"data"`
 }
 
@@ -569,7 +570,7 @@ func TestFinancialProjectionSeparatesPostedReadyAndEstimatedDailyEarnings(t *tes
 	today := testDateOnly(time.Now().UTC())
 	journeyStart := today.AddDate(0, 0, -86)
 	person := createPerson(t, server, validCompletePersonPayload(1, nil))
-	collaborator := createCollaborator(t, server, validCollaboratorPayload(person.Data.ID, map[string]any{
+	collaborator := createCollaborator(t, server, validCollaboratorPayload(person.Data.MembershipID, map[string]any{
 		"journeyStartDate": journeyStart.Format("2006-01-02"),
 		"paymentValue":     100.0,
 		"dailyBrlAmount":   100.0,
@@ -1812,15 +1813,14 @@ func seedBoundCurrentAccountTestActor(t *testing.T, database *gorm.DB, actorKey 
 		t.Fatalf("create current-account test Membership %s: %v", actorKey, err)
 	}
 
-	legacyPersonProjectionID := "current-account-test-person-" + suffix
 	actor := authz.AuthzActor{
-		ID: actorID, ActorKey: actorKey, DisplayName: actorKey, PersonID: &legacyPersonProjectionID, Active: true, CreatedAt: now, UpdatedAt: now,
+		ID: actorID, ActorKey: actorKey, DisplayName: actorKey, Active: true, CreatedAt: now, UpdatedAt: now,
 	}
 	if err := database.Create(&actor).Error; err != nil {
 		t.Fatalf("create bound current-account test actor %s: %v", actorKey, err)
 	}
 	if err := database.Table("auth_user_accounts").Create(map[string]any{
-		"id": accountID, "actor_id": actorID, "login": actorKey, "password_hash": "test-only-not-used",
+		"id": accountID, "login": actorKey, "password_hash": "test-only-not-used",
 		"active": true, "must_change_password": false, "created_at": now, "updated_at": now,
 	}).Error; err != nil {
 		t.Fatalf("create bound current-account test account %s: %v", actorKey, err)
@@ -1832,7 +1832,7 @@ func seedBoundCurrentAccountTestActor(t *testing.T, database *gorm.DB, actorKey 
 	}
 	if err := database.Table("auth_account_actors").Create(map[string]any{
 		"account_id": accountID, "actor_id": actorID, "scope_type": "TENANT", "tenant_id": tenantID,
-		"membership_id": membershipID, "is_primary": true, "created_at": now, "updated_at": now,
+		"membership_id": membershipID, "created_at": now, "updated_at": now,
 	}).Error; err != nil {
 		t.Fatalf("bind current-account test actor %s to tenant %s: %v", actorKey, tenantID, err)
 	}
@@ -1971,7 +1971,7 @@ func assertFloatPtr(t *testing.T, actual *float64, expected float64, label strin
 func createActiveCollaborator(t *testing.T, server *fiber.App, seq int) apiCollaboratorResponse {
 	t.Helper()
 	person := createPerson(t, server, validCompletePersonPayload(seq, nil))
-	return createCollaborator(t, server, validCollaboratorPayload(person.Data.ID, nil))
+	return createCollaborator(t, server, validCollaboratorPayload(person.Data.MembershipID, nil))
 }
 
 func createPerson(t *testing.T, server *fiber.App, payload map[string]any) apiPersonResponse {
@@ -2069,9 +2069,9 @@ func validExpensePayload(collaboratorID string, overrides map[string]any) map[st
 	return payload
 }
 
-func validCollaboratorPayload(personID string, overrides map[string]any) map[string]any {
+func validCollaboratorPayload(membershipID string, overrides map[string]any) map[string]any {
 	payload := map[string]any{
-		"personId":         personID,
+		"membershipId":     membershipID,
 		"journeyStartDate": "2026-06-01",
 		"paymentMethodId":  "ref-method-daily",
 		"paymentValue":     150.0,

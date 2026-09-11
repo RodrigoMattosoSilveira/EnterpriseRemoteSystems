@@ -9,7 +9,7 @@ import (
 	"gorm.io/gorm"
 )
 
-func TestPeopleSearchIndexTracksAccentInsensitivePersonNames(t *testing.T) {
+func TestPeopleSearchIndexTracksCanonicalMembershipAndGlobalPersonNames(t *testing.T) {
 	database, err := Open(filepath.Join(t.TempDir(), "app.db"))
 	if err != nil {
 		t.Fatalf("open database: %v", err)
@@ -28,54 +28,50 @@ func TestPeopleSearchIndexTracksAccentInsensitivePersonNames(t *testing.T) {
 	}
 
 	now := time.Now().UTC()
-	person := Person{
-		BaseModel: BaseModel{
-			ID:        "person-search-index-test",
-			CreatedAt: now,
-			UpdatedAt: now,
-		},
-		TenantID:                DefaultTenantID,
-		FirstName:               "João",
-		LastName:                "D'Ávila",
-		Nickname:                "Áurea",
-		CPF:                     "12345678901",
-		RG:                      "SEARCH-INDEX-RG",
-		Cellular:                "11999990001",
-		Email:                   "search-index@example.test",
-		Country:                 "Brasil",
-		ProfileCompletionStatus: "COMPLETE",
-		StatusID:                "ref-person-status-active",
+	person := GlobalPerson{
+		BaseModel: BaseModel{ID: "global-person-search-index-test", CreatedAt: now, UpdatedAt: now},
+		FirstName: "João", LastName: "D'Ávila", Nickname: "Áurea",
+		CPF: "12345678901", RG: "SEARCH-INDEX-RG", Cellular: "11999990001",
+		Email: "search-index@example.test", Country: "Brasil",
+		ProfileCompletionStatus: "COMPLETE", OperationalActive: true,
 	}
 	if err := database.Create(&person).Error; err != nil {
-		t.Fatalf("create person: %v", err)
+		t.Fatalf("create global person: %v", err)
+	}
+	membership := PersonTenantMembership{
+		BaseModel: BaseModel{ID: "membership-search-index-test", CreatedAt: now, UpdatedAt: now},
+		TenantID:  DefaultTenantID, PersonID: person.ID, StatusID: "ref-person-status-active",
+	}
+	if err := database.Create(&membership).Error; err != nil {
+		t.Fatalf("create membership: %v", err)
 	}
 
-	assertSearchProjectionContains(t, database, person.ID, "joao")
-	assertSearchProjectionContains(t, database, person.ID, "d'avila")
-	assertSearchProjectionContains(t, database, person.ID, "aurea")
-	assertSearchProjectionContains(t, database, person.ID, "joao d'avila")
+	assertSearchProjectionContains(t, database, membership.ID, "joao")
+	assertSearchProjectionContains(t, database, membership.ID, "d'avila")
+	assertSearchProjectionContains(t, database, membership.ID, "aurea")
+	assertSearchProjectionContains(t, database, membership.ID, "joao d'avila")
 
-	if err := database.Model(&Person{}).
+	if err := database.Model(&GlobalPerson{}).
 		Where("id = ?", person.ID).
 		Updates(map[string]any{
 			"first_name": "María",
 			"nickname":   "Mína",
 			"updated_at": now.Add(time.Minute),
 		}).Error; err != nil {
-		t.Fatalf("update person names: %v", err)
+		t.Fatalf("update global person names: %v", err)
 	}
 
-	assertSearchProjectionContains(t, database, person.ID, "maria")
-	assertSearchProjectionContains(t, database, person.ID, "mina")
+	assertSearchProjectionContains(t, database, membership.ID, "maria")
+	assertSearchProjectionContains(t, database, membership.ID, "mina")
 }
 
-func assertSearchProjectionContains(t *testing.T, database *gorm.DB, personID, want string) {
+func assertSearchProjectionContains(t *testing.T, database *gorm.DB, membershipID, want string) {
 	t.Helper()
 
 	var searchText string
 	if err := database.Raw(
-		"SELECT search_text FROM people_search_index WHERE person_id = ?",
-		personID,
+		"SELECT search_text FROM people_search_index WHERE membership_id = ?",
+		membershipID,
 	).Scan(&searchText).Error; err != nil {
 		t.Fatalf("read search projection: %v", err)
 	}

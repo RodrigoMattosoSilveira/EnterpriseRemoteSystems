@@ -128,6 +128,37 @@ func (s *GORMStore) FindActor(ctx context.Context, lookup ActorLookup) (*Actor, 
 
 	// Header/test actors remain useful for isolated tests, but tenant delegated
 	// authority is resolved only from grants for the explicitly requested tenant.
+	// When the Actor has canonical AccountActor ownership, derive Person,
+	// Membership, Collaborator, and intrinsic self-service identity from that
+	// binding. The retired Actor identity columns no longer exist.
+	if s.database.Migrator().HasTable("auth_account_actors") {
+		var binding accountActorBindingProjection
+		bindingResult := s.database.WithContext(ctx).
+			Table("auth_account_actors aa").
+			Select(`aa.account_id AS account_id,
+				aa.actor_id AS actor_id,
+				a.actor_key AS actor_key,
+				a.display_name AS display_name,
+				aa.scope_type AS scope_type,
+				aa.tenant_id AS tenant_id,
+				aa.membership_id AS membership_id`).
+			Joins("JOIN authz_actors a ON a.id = aa.actor_id AND a.active = ?", true).
+			Where("aa.actor_id = ? AND aa.scope_type = ? AND aa.tenant_id = ?", actorRow.ID, "TENANT", tenantID).
+			Limit(1).
+			Scan(&binding)
+		if bindingResult.Error != nil {
+			return nil, fmt.Errorf("find canonical header Actor binding: %w", bindingResult.Error)
+		}
+		if bindingResult.RowsAffected > 0 {
+			bound, err := s.buildTenantBoundActor(ctx, binding, tenantID)
+			if err != nil {
+				return nil, err
+			}
+			bound.Source = ActorSourcePersisted
+			return bound, nil
+		}
+	}
+
 	roles, delegated, delegatedSources, err := s.loadDelegatedAuthorization(ctx, actorRow.ID, tenantID, ActorScopeTenant)
 	if err != nil {
 		return nil, err
@@ -136,8 +167,6 @@ func (s *GORMStore) FindActor(ctx context.Context, lookup ActorLookup) (*Actor, 
 		ID:                   actorRow.ActorKey,
 		RecordID:             actorRow.ID,
 		TenantID:             tenantID,
-		PersonID:             stringValue(actorRow.PersonID),
-		CollaboratorID:       stringValue(actorRow.CollaboratorID),
 		Source:               ActorSourcePersisted,
 		Scope:                ActorScopeTenant,
 		RoleCodes:            roles,
@@ -470,6 +499,15 @@ func ValidateDelegatedRoleGrant(database *gorm.DB, actorID string, role AuthzRol
 			if tenantBindings > 0 {
 				return NewValidationError(map[string]string{"actorId": "Application roles cannot be granted to a tenant Actor"})
 			}
+			if requireTenantBinding {
+				var globalBindings int64
+				if err := database.Table("auth_account_actors").Where("actor_id = ? AND scope_type = ?", actorID, "GLOBAL").Count(&globalBindings).Error; err != nil {
+					return fmt.Errorf("check application Actor AccountActor binding: %w", err)
+				}
+				if globalBindings == 0 {
+					return NewValidationError(map[string]string{"actorId": "Application roles require a GLOBAL Actor owned by an Authentication Account"})
+				}
+			}
 		}
 		return nil
 	}
@@ -615,14 +653,9 @@ func tenantAdministratorGlobalPersonID(database *gorm.DB, actorID string, tenant
 		})
 	}
 
-	// Compatibility for isolated authorization unit tests that intentionally do
-	// not install the Bite 30 Account/Actor foundation. This path is not used by
-	// production Tenant Administrator assignment endpoints.
-	var actor AuthzActor
-	if err := database.Select("id", "person_id").Where("id = ?", actorID).First(&actor).Error; err != nil {
-		return "", fmt.Errorf("find Tenant Administrator Actor: %w", err)
-	}
-	return strings.TrimSpace(stringValue(actor.PersonID)), nil
+	// Internal seed/test callers that do not require a canonical binding cannot
+	// derive Person identity. No retired Actor identity fallback exists.
+	return "", nil
 }
 
 type PermissionCatalogEntry struct {
@@ -878,7 +911,7 @@ func (s *GORMStore) FindAccountActor(ctx context.Context, accountID string, tena
 		query = query.Where("aa.scope_type = ? AND aa.tenant_id = ?", "TENANT", tenantID)
 	}
 	result := query.
-		Order("aa.is_primary DESC").
+		Order("aa.actor_id ASC").
 		Limit(1).
 		Scan(&binding)
 	if result.Error != nil {
@@ -944,7 +977,6 @@ func (s *GORMStore) FindAccountActor(ctx context.Context, accountID string, tena
 type intrinsicTenantIdentity struct {
 	MembershipID   string
 	GlobalPersonID string
-	LegacyPersonID *string
 }
 
 func (s *GORMStore) buildTenantBoundActor(ctx context.Context, binding accountActorBindingProjection, tenantID string) (*Actor, error) {
@@ -955,7 +987,7 @@ func (s *GORMStore) buildTenantBoundActor(ctx context.Context, binding accountAc
 	var identity intrinsicTenantIdentity
 	result := s.database.WithContext(ctx).
 		Table("person_tenant_memberships m").
-		Select("m.id AS membership_id, m.person_id AS global_person_id, m.legacy_person_id AS legacy_person_id").
+		Select("m.id AS membership_id, m.person_id AS global_person_id").
 		Joins("JOIN auth_account_people ap ON ap.account_id = ? AND ap.person_id = m.person_id", binding.AccountID).
 		Joins("JOIN reference_data status ON status.id = m.status_id AND status.tenant_id = m.tenant_id AND status.type = ? AND status.active = ?", "person_status", true).
 		Where("m.id = ? AND m.tenant_id = ? AND status.code = ?", strings.TrimSpace(*binding.MembershipID), tenantID, "ACTIVE").
@@ -968,7 +1000,7 @@ func (s *GORMStore) buildTenantBoundActor(ctx context.Context, binding accountAc
 		return nil, ErrTenantActorUnavailable
 	}
 
-	personID := stringValue(identity.LegacyPersonID)
+	personID := strings.TrimSpace(identity.GlobalPersonID)
 	collaboratorID := ""
 	hasCollaboratorHistory := false
 	if strings.TrimSpace(identity.MembershipID) != "" {
