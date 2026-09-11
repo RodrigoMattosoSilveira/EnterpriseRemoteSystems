@@ -72,9 +72,10 @@ reset_local() {
   sqlite3 "$DB_PATH" <<'SQL'
 .headers on
 .mode column
-SELECT cj.id AS collaborator_id, p.nickname, cj.notes
+SELECT cj.id AS collaborator_id, gp.nickname, cj.notes
 FROM collaborator_journeys cj
-JOIN people p ON p.id = cj.person_id
+JOIN person_tenant_memberships m ON m.id = cj.membership_id
+JOIN global_people gp ON gp.id = m.person_id
 WHERE cj.id LIKE 'ers-testdata-collab-%'
 ORDER BY cj.id;
 SQL

@@ -46,7 +46,7 @@ func (s *service) FinancialProjection(ctx context.Context, collaboratorID string
 
 	result := &FinancialProjectionDTO{
 		CollaboratorID:    collaborator.ID,
-		CollaboratorLabel: collaboratorLabel(collaborator.Person),
+		CollaboratorLabel: collaboratorLabel(collaborator.Membership.Person),
 		PaymentMethodCode: methodCode,
 		CurrentBalances: ProjectionAmountsDTO{
 			BRLAmount:      projectionFloat64Ptr(currentBRL),

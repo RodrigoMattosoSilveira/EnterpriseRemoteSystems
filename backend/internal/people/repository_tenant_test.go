@@ -32,9 +32,8 @@ func TestRepositoryUniqueConflictsAreGlobalAcrossTenants(t *testing.T) {
 		t.Fatalf("create other tenant: %v", err)
 	}
 
-	otherTenantPerson := db.Person{
+	otherTenantPerson := db.GlobalPerson{
 		BaseModel:               db.BaseModel{ID: ids.New(), CreatedAt: now, UpdatedAt: now},
-		TenantID:                otherTenantID,
 		FirstName:               "Same",
 		LastName:                "CPF",
 		Nickname:                "SameCPF",
@@ -43,12 +42,12 @@ func TestRepositoryUniqueConflictsAreGlobalAcrossTenants(t *testing.T) {
 		Cellular:                "11998765432",
 		Email:                   "same-cpf-other@example.com",
 		Country:                 "Brasil",
-		StatusID:                "ref-person-status-active",
 		ProfileCompletionStatus: "PERSONAL_ONLY",
 		CanCreateCollaborator:   false,
+		OperationalActive:       true,
 	}
 	if err := database.Create(&otherTenantPerson).Error; err != nil {
-		t.Fatalf("create other tenant person: %v", err)
+		t.Fatalf("create global Person: %v", err)
 	}
 
 	repo := people.NewRepository(database)
@@ -99,13 +98,13 @@ func TestRepositoryPeopleSearchFindsInactiveTenantActorIdentityAliases(t *testin
 	actorKey := "manual30e-identity-d-tenant-a"
 	actor := authz.AuthzActor{
 		ID: actorID, ActorKey: actorKey, DisplayName: "Diana Disposable (30E Identity D)",
-		PersonID: &created.ID, Active: false, CreatedAt: now, UpdatedAt: now,
+		Active: false, CreatedAt: now, UpdatedAt: now,
 	}
 	if err := database.Create(&actor).Error; err != nil {
 		t.Fatalf("create inactive Tenant Actor: %v", err)
 	}
 	account := authentication.Account{
-		ID: "account-identity-d", ActorID: actorID, Login: "manual30e.identity-d@example.test",
+		ID: "account-identity-d", Login: "manual30e.identity-d@example.test",
 		PasswordHash: "manual-test-hash", Active: true, CreatedAt: now, UpdatedAt: now,
 	}
 	if err := database.Create(&account).Error; err != nil {
@@ -120,7 +119,7 @@ func TestRepositoryPeopleSearchFindsInactiveTenantActorIdentityAliases(t *testin
 	membershipID := created.MembershipID
 	if err := database.Create(&authentication.AccountActor{
 		AccountID: account.ID, ActorID: actorID, ScopeType: authentication.AccountActorScopeTenant,
-		TenantID: &tenantID, MembershipID: &membershipID, Primary: true, CreatedAt: now, UpdatedAt: now,
+		TenantID: &tenantID, MembershipID: &membershipID, CreatedAt: now, UpdatedAt: now,
 	}).Error; err != nil {
 		t.Fatalf("bind inactive Tenant Actor: %v", err)
 	}
@@ -153,13 +152,13 @@ func TestRepositoryPeopleSearchFindsInactiveTenantActorIdentityAliases(t *testin
 	otherActorKey := "identity-d-other-tenant-only"
 	if err := database.Create(&authz.AuthzActor{
 		ID: otherActorID, ActorKey: otherActorKey, DisplayName: "Other Tenant Alias Only",
-		PersonID: &created.ID, Active: false, CreatedAt: now, UpdatedAt: now,
+		Active: false, CreatedAt: now, UpdatedAt: now,
 	}).Error; err != nil {
 		t.Fatalf("create other-tenant Actor: %v", err)
 	}
 	if err := database.Create(&authentication.AccountActor{
 		AccountID: account.ID, ActorID: otherActorID, ScopeType: authentication.AccountActorScopeTenant,
-		TenantID: &otherTenantID, Primary: false, CreatedAt: now, UpdatedAt: now,
+		TenantID: &otherTenantID, CreatedAt: now, UpdatedAt: now,
 	}).Error; err != nil {
 		t.Fatalf("bind other-tenant Actor: %v", err)
 	}
@@ -216,40 +215,35 @@ func TestRepositoryPeopleReadsAndWritesAreScopedByTenant(t *testing.T) {
 	}).Error; err != nil {
 		t.Fatalf("create other tenant: %v", err)
 	}
+	if err := db.SeedTenantData(database, otherTenantID); err != nil {
+		t.Fatalf("seed other tenant: %v", err)
+	}
+	var otherActive db.ReferenceData
+	if err := database.First(&otherActive, "tenant_id = ? AND type = ? AND code = ?", otherTenantID, "person_status", "ACTIVE").Error; err != nil {
+		t.Fatalf("find other Tenant ACTIVE status: %v", err)
+	}
 
-	defaultPerson := db.Person{
-		BaseModel:               db.BaseModel{ID: "person-default", CreatedAt: now, UpdatedAt: now},
-		TenantID:                db.DefaultTenantID,
-		FirstName:               "Default",
-		LastName:                "Only",
-		Nickname:                "DefaultOnly",
-		CPF:                     "39053344705",
-		RG:                      "RG-DEFAULT-ONLY",
-		Cellular:                "11998765432",
-		Email:                   "default-only@example.com",
-		Country:                 "Brasil",
-		StatusID:                "ref-person-status-active",
-		ProfileCompletionStatus: "PERSONAL_ONLY",
+	defaultGlobal := db.GlobalPerson{
+		BaseModel: db.BaseModel{ID: "global-person-default", CreatedAt: now, UpdatedAt: now},
+		FirstName: "Default", LastName: "Only", Nickname: "DefaultOnly",
+		CPF: "39053344705", RG: "RG-DEFAULT-ONLY", Cellular: "11998765432", Email: "default-only@example.com",
+		Country: "Brasil", ProfileCompletionStatus: "PERSONAL_ONLY", OperationalActive: true,
 	}
-	otherPerson := db.Person{
-		BaseModel:               db.BaseModel{ID: "person-other", CreatedAt: now, UpdatedAt: now},
-		TenantID:                otherTenantID,
-		FirstName:               "Other",
-		LastName:                "Only",
-		Nickname:                "OtherOnly",
-		CPF:                     "93541134780",
-		RG:                      "RG-OTHER-ONLY",
-		Cellular:                "11987654321",
-		Email:                   "other-only@example.com",
-		Country:                 "Brasil",
-		StatusID:                "ref-person-status-active",
-		ProfileCompletionStatus: "PERSONAL_ONLY",
+	otherGlobal := db.GlobalPerson{
+		BaseModel: db.BaseModel{ID: "global-person-other", CreatedAt: now, UpdatedAt: now},
+		FirstName: "Other", LastName: "Only", Nickname: "OtherOnly",
+		CPF: "93541134780", RG: "RG-OTHER-ONLY", Cellular: "11987654321", Email: "other-only@example.com",
+		Country: "Brasil", ProfileCompletionStatus: "PERSONAL_ONLY", OperationalActive: true,
 	}
-	if err := database.Create(&defaultPerson).Error; err != nil {
-		t.Fatalf("create default tenant person: %v", err)
+	if err := database.Create(&[]db.GlobalPerson{defaultGlobal, otherGlobal}).Error; err != nil {
+		t.Fatalf("create global People: %v", err)
 	}
-	if err := database.Create(&otherPerson).Error; err != nil {
-		t.Fatalf("create other tenant person: %v", err)
+	memberships := []db.PersonTenantMembership{
+		{BaseModel: db.BaseModel{ID: "membership-default", CreatedAt: now, UpdatedAt: now}, TenantID: db.DefaultTenantID, PersonID: defaultGlobal.ID, StatusID: "ref-person-status-active"},
+		{BaseModel: db.BaseModel{ID: "membership-other", CreatedAt: now, UpdatedAt: now}, TenantID: otherTenantID, PersonID: otherGlobal.ID, StatusID: otherActive.ID},
+	}
+	if err := database.Create(&memberships).Error; err != nil {
+		t.Fatalf("create canonical Memberships: %v", err)
 	}
 
 	repo := people.NewRepository(database)
@@ -257,41 +251,38 @@ func TestRepositoryPeopleReadsAndWritesAreScopedByTenant(t *testing.T) {
 	if err != nil {
 		t.Fatalf("list other tenant People: %v", err)
 	}
-	if otherTotal != 1 || len(otherRows) != 1 || otherRows[0].ID != otherPerson.ID {
-		t.Fatalf("expected only other tenant Person, got total=%d rows=%+v", otherTotal, otherRows)
+	if otherTotal != 1 || len(otherRows) != 1 || otherRows[0].ID != otherGlobal.ID {
+		t.Fatalf("expected only canonical other-tenant Person, got total=%d rows=%+v", otherTotal, otherRows)
 	}
 
-	otherSearchRows, otherSearchTotal, err := repo.List(ctx, otherTenantID, people.PersonListFilter{Search: defaultPerson.Nickname})
+	otherSearchRows, otherSearchTotal, err := repo.List(ctx, otherTenantID, people.PersonListFilter{Search: defaultGlobal.Nickname})
 	if err != nil {
 		t.Fatalf("search other tenant People using default-only nickname: %v", err)
 	}
 	if otherSearchTotal != 0 || len(otherSearchRows) != 0 {
-		t.Fatalf(
-			"expected default tenant Person search match to remain unavailable through other tenant, got total=%d rows=%+v",
-			otherSearchTotal,
-			otherSearchRows,
-		)
+		t.Fatalf("expected default tenant Person search match to remain unavailable through other tenant, got total=%d rows=%+v", otherSearchTotal, otherSearchRows)
 	}
 
 	defaultRows, defaultTotal, err := repo.List(ctx, db.DefaultTenantID, people.PersonListFilter{})
 	if err != nil {
 		t.Fatalf("list default tenant People: %v", err)
 	}
-	if defaultTotal != 1 || len(defaultRows) != 1 || defaultRows[0].ID != defaultPerson.ID {
-		t.Fatalf("expected only default tenant Person, got total=%d rows=%+v", defaultTotal, defaultRows)
+	if defaultTotal != 1 || len(defaultRows) != 1 || defaultRows[0].ID != defaultGlobal.ID {
+		t.Fatalf("expected only canonical default-tenant Person, got total=%d rows=%+v", defaultTotal, defaultRows)
 	}
 
-	if _, err := repo.FindByID(ctx, otherTenantID, defaultPerson.ID); err == nil {
+	if _, err := repo.FindByID(ctx, otherTenantID, defaultGlobal.ID); err == nil {
 		t.Fatal("expected default tenant Person to be unavailable through other tenant")
 	}
 
-	defaultPerson.Nickname = "CrossTenantUpdate"
-	if err := repo.Update(ctx, otherTenantID, &defaultPerson); err == nil {
+	crossTenant := defaultRows[0]
+	crossTenant.Nickname = "CrossTenantUpdate"
+	if err := repo.Update(ctx, otherTenantID, &crossTenant); err == nil {
 		t.Fatal("expected cross-tenant update to be rejected")
 	}
-	var persisted db.Person
-	if err := database.First(&persisted, "id = ?", defaultPerson.ID).Error; err != nil {
-		t.Fatalf("reload default tenant Person: %v", err)
+	var persisted db.GlobalPerson
+	if err := database.First(&persisted, "id = ?", defaultGlobal.ID).Error; err != nil {
+		t.Fatalf("reload default global Person: %v", err)
 	}
 	if persisted.Nickname == "CrossTenantUpdate" {
 		t.Fatal("expected other tenant update not to modify default tenant Person")

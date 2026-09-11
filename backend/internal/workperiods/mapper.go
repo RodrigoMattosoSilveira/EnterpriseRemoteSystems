@@ -77,7 +77,7 @@ func ToRosterDTO(workPeriod db.WorkPeriod, assignments []db.WorkPeriodAssignment
 			AssignmentID:   assignment.ID,
 			CollaboratorID: assignment.CollaboratorID,
 			Name:           collaboratorDisplayName(assignment),
-			Nickname:       assignment.Collaborator.Person.Nickname,
+			Nickname:       assignment.Collaborator.Membership.Person.Nickname,
 			SectorID:       assignment.SectorID,
 			SectorLabel:    assignment.Sector.Label,
 			LocationID:     assignment.LocationID,
@@ -107,7 +107,7 @@ func ToRosterDTO(workPeriod db.WorkPeriod, assignments []db.WorkPeriodAssignment
 }
 
 func collaboratorDisplayName(assignment db.WorkPeriodAssignment) string {
-	person := assignment.Collaborator.Person
+	person := assignment.Collaborator.Membership.Person
 	name := strings.TrimSpace(strings.TrimSpace(person.FirstName) + " " + strings.TrimSpace(person.LastName))
 	if name != "" {
 		return name

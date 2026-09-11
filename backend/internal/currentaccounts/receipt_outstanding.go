@@ -93,7 +93,7 @@ func toOutstandingReceiptDTOList(rows []db.LedgerReceipt) []OutstandingReceiptDT
 }
 
 func toOutstandingReceiptDTO(row db.LedgerReceipt) OutstandingReceiptDTO {
-	person := row.Collaborator.Person
+	person := row.Collaborator.Membership.Person
 	return OutstandingReceiptDTO{
 		ID: row.ID, TenantID: row.TenantID, PersonID: row.PersonID, ReceiptNumber: stringPtrValue(row.ReceiptNumber), ReceiptType: row.ReceiptType, ReceiptPurpose: row.ReceiptPurpose, PaymentDirection: row.PaymentDirection, AcceptingParty: row.AcceptingParty, Status: row.Status,
 		IssuedAt: formatOptionalTime(row.IssuedAt), IssuedBy: row.IssuedBy, PrintedAt: formatOptionalTime(row.PrintedAt),

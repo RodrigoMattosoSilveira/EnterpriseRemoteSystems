@@ -92,6 +92,7 @@ func seedLedgerReceiptTestDependencies(t *testing.T, database *gorm.DB) (string,
 	}
 
 	refs := []ReferenceData{
+		{BaseModel: BaseModel{ID: "ref-person-active", CreatedAt: now, UpdatedAt: now}, TenantID: DefaultTenantID, Type: "person_status", Code: "ACTIVE", Label: "Active", Active: true},
 		{BaseModel: BaseModel{ID: "ref-payment-daily", CreatedAt: now, UpdatedAt: now}, TenantID: DefaultTenantID, Type: "payment_method", Code: "DAILY_BRL", Label: "Daily BRL", Active: true},
 		{BaseModel: BaseModel{ID: "ref-sector-test", CreatedAt: now, UpdatedAt: now}, TenantID: DefaultTenantID, Type: "sector", Code: "TEST", Label: "Test Sector", Active: true},
 		{BaseModel: BaseModel{ID: "ref-location-test", CreatedAt: now, UpdatedAt: now}, TenantID: DefaultTenantID, Type: "location", Code: "TEST", Label: "Test Well", Active: true},
@@ -107,14 +108,14 @@ func seedLedgerReceiptTestDependencies(t *testing.T, database *gorm.DB) (string,
 	if err := database.Create(&globalPerson).Error; err != nil {
 		t.Fatalf("create global person: %v", err)
 	}
-	person := Person{BaseModel: BaseModel{ID: ids.New(), CreatedAt: now, UpdatedAt: now}, TenantID: DefaultTenantID, FirstName: "Receipt", LastName: "Test", Nickname: "Receipt", CPF: globalPerson.CPF, RG: ids.New(), Cellular: ids.New(), Email: ids.New() + "@example.com", Country: "Brasil", StatusID: "ref-collaborator-active", ProfileCompletionStatus: "COMPLETE", CanCreateCollaborator: true}
-	if err := database.Create(&person).Error; err != nil {
-		t.Fatalf("create person: %v", err)
+	membership := PersonTenantMembership{BaseModel: BaseModel{ID: ids.New(), CreatedAt: now, UpdatedAt: now}, TenantID: DefaultTenantID, PersonID: globalPerson.ID, StatusID: "ref-person-active"}
+	if err := database.Create(&membership).Error; err != nil {
+		t.Fatalf("create Person-Tenant Membership: %v", err)
 	}
 
 	daily := 100.0
 	collaborator := CollaboratorJourney{
-		BaseModel: BaseModel{ID: ids.New(), CreatedAt: now, UpdatedAt: now}, TenantID: DefaultTenantID, PersonID: person.ID,
+		BaseModel: BaseModel{ID: ids.New(), CreatedAt: now, UpdatedAt: now}, TenantID: DefaultTenantID, MembershipID: &membership.ID,
 		JourneyStartDate: now, DefaultEndDate: now.AddDate(0, 0, 90), ProjectedEndDate: now.AddDate(0, 0, 90),
 		PaymentMethodID: "ref-payment-daily", PaymentValue: daily, DailyBRLAmount: &daily,
 		SectorID: "ref-sector-test", LocationID: "ref-location-test", TaskID: "ref-task-test", StatusID: "ref-collaborator-active",

@@ -75,8 +75,6 @@ export type AuthzActor = {
 export type CreateAuthzActorInput = {
   actorKey: string;
   displayName: string;
-  personId?: string | null;
-  collaboratorId?: string | null;
   active: boolean;
 };
 

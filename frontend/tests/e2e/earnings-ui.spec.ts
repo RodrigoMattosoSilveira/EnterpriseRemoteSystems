@@ -28,7 +28,7 @@ test("posted BRL Work Period earnings are visible in Current Account with Work P
     nickname: personNickname,
   });
   const collaborator = await createCollaborator(request, {
-    personId: person.id,
+    membershipId: person.membershipId,
     journeyStartDate: workDate,
     paymentMethodId: PAYMENT_METHOD_DAILY_ID,
     paymentValue: 150.75,
@@ -121,7 +121,7 @@ test("posted gold commission earnings are visible as gold-gram Current Account c
     nickname: personNickname,
   });
   const collaborator = await createCollaborator(request, {
-    personId: person.id,
+    membershipId: person.membershipId,
     journeyStartDate: workDate,
     paymentMethodId: PAYMENT_METHOD_COMMISSION_ID,
     paymentValue: 7.5,
@@ -216,6 +216,7 @@ type ApiEnvelope<T> = {
 
 type CreatedPerson = {
   id: string;
+  membershipId: string;
 };
 
 type CreatedCollaborator = {
@@ -269,7 +270,7 @@ async function createCompletePerson(
 async function createCollaborator(
   api: APIRequestContext,
   input: {
-    personId: string;
+    membershipId: string;
     journeyStartDate: string;
     paymentMethodId: string;
     paymentValue: number;
@@ -280,7 +281,7 @@ async function createCollaborator(
   const response = await api.post(e2eApiUrl("/api/v1/collaborators"), {
     headers: authzHeaders(),
     data: {
-      personId: input.personId,
+      membershipId: input.membershipId,
       journeyStartDate: input.journeyStartDate,
       paymentMethodId: input.paymentMethodId,
       paymentValue: input.paymentValue,

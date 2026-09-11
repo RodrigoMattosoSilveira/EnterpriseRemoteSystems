@@ -21,7 +21,7 @@ func (r *gormRepository) ListByWorkPeriod(ctx context.Context, workPeriodID stri
 	q := r.db.WithContext(ctx).
 		Model(&db.WorkPeriodAssignment{}).
 		Where("tenant_id = ? AND work_period_id = ?", tenantctx.TenantID(ctx), workPeriodID).
-		Preload("Collaborator.Person").
+		Preload("Collaborator.Membership.Person").
 		Preload("Sector").
 		Preload("Location").
 		Preload("Task")
@@ -52,7 +52,7 @@ func (r *gormRepository) ListActiveAssignmentsForWorkPeriod(ctx context.Context,
 	err := r.db.WithContext(ctx).
 		Model(&db.WorkPeriodAssignment{}).
 		Where("tenant_id = ? AND work_period_id = ? AND active = ?", tenantctx.TenantID(ctx), workPeriodID, true).
-		Preload("Collaborator.Person").
+		Preload("Collaborator.Membership.Person").
 		Preload("Sector").
 		Preload("Location").
 		Preload("Task").
@@ -65,13 +65,14 @@ func (r *gormRepository) ListActiveCollaboratorsForPlanning(ctx context.Context,
 	var rows []db.CollaboratorJourney
 	err := r.db.WithContext(ctx).
 		Model(&db.CollaboratorJourney{}).
-		Joins("JOIN people ON people.id = collaborator_journeys.person_id").
+		Joins("JOIN person_tenant_memberships memberships ON memberships.id = collaborator_journeys.membership_id AND memberships.tenant_id = collaborator_journeys.tenant_id").
+		Joins("JOIN global_people people ON people.id = memberships.person_id").
 		Joins("JOIN reference_data statuses ON statuses.id = collaborator_journeys.status_id").
 		Where("collaborator_journeys.tenant_id = ? AND collaborator_journeys.closed_at IS NULL", tenantctx.TenantID(ctx)).
 		Where("date(collaborator_journeys.journey_start_date) <= ?", formatDateForPlanningQuery(workDate)).
 		Where("date(collaborator_journeys.projected_end_date) >= ?", formatDateForPlanningQuery(workDate)).
 		Where("statuses.tenant_id = ? AND statuses.type = ? AND statuses.code = ? AND statuses.active = ?", tenantctx.TenantID(ctx), "collaborator_status", "ACTIVE", true).
-		Preload("Person").
+		Preload("Membership.Person").
 		Preload("Status").
 		Preload("Sector").
 		Preload("Location").
@@ -127,7 +128,7 @@ func (r *gormRepository) FindByID(ctx context.Context, id string) (*db.WorkPerio
 	var row db.WorkPeriodAssignment
 	err := r.db.WithContext(ctx).
 		Preload("WorkPeriod").
-		Preload("Collaborator.Person").
+		Preload("Collaborator.Membership.Person").
 		Preload("Collaborator.Status").
 		Preload("Sector").
 		Preload("Location").
@@ -151,7 +152,7 @@ func (r *gormRepository) FindWorkPeriodByID(ctx context.Context, id string) (*db
 func (r *gormRepository) FindCollaboratorByID(ctx context.Context, id string) (*db.CollaboratorJourney, error) {
 	var row db.CollaboratorJourney
 	err := r.db.WithContext(ctx).
-		Preload("Person").
+		Preload("Membership.Person").
 		Preload("Status").
 		Preload("Sector").
 		Preload("Location").

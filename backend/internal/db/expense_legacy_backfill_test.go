@@ -37,29 +37,19 @@ func TestBackfillLegacyExpenseAuditSnapshotsClassifiesLegacyRows(t *testing.T) {
 		t.Fatalf("create global person: %v", err)
 	}
 
-	person := Person{
-		BaseModel:               BaseModel{ID: "legacy-backfill-person", CreatedAt: now, UpdatedAt: now},
-		TenantID:                DefaultTenantID,
-		FirstName:               "Legacy",
-		LastName:                "Backfill",
-		Nickname:                "LegacyBackfill",
-		CPF:                     "11122233344",
-		RG:                      "RGBACK123",
-		Cellular:                "11999990000",
-		Email:                   "legacy-backfill@example.com",
-		ProfileCompletionStatus: "COMPLETE",
-		CanCreateCollaborator:   true,
-		StatusID:                "ref-person-status-active",
+	membership := PersonTenantMembership{
+		BaseModel: BaseModel{ID: "legacy-backfill-membership", CreatedAt: now, UpdatedAt: now},
+		TenantID:  DefaultTenantID, PersonID: globalPerson.ID, StatusID: "ref-person-status-active",
 	}
-	if err := database.Create(&person).Error; err != nil {
-		t.Fatalf("create person: %v", err)
+	if err := database.Create(&membership).Error; err != nil {
+		t.Fatalf("create Person-Tenant Membership: %v", err)
 	}
 
 	journeyStart := time.Date(2026, 6, 1, 0, 0, 0, 0, time.UTC)
 	collaborator := CollaboratorJourney{
 		BaseModel:        BaseModel{ID: "legacy-backfill-collaborator", CreatedAt: now, UpdatedAt: now},
 		TenantID:         DefaultTenantID,
-		PersonID:         person.ID,
+		MembershipID:     &membership.ID,
 		JourneyStartDate: journeyStart,
 		DefaultEndDate:   journeyStart.AddDate(0, 0, 90),
 		ProjectedEndDate: journeyStart.AddDate(0, 0, 90),

@@ -40,7 +40,8 @@ type apiErrorResponse struct {
 
 type apiPersonResponse struct {
 	Data struct {
-		ID string `json:"id"`
+		ID           string `json:"id"`
+		MembershipID string `json:"membershipId"`
 	} `json:"data"`
 }
 
@@ -769,8 +770,8 @@ func TestListExpenseFiltersByCollaboratorNameOrNickname(t *testing.T) {
 		"lastName":  "Serra",
 		"nickname":  "CSerra",
 	}))
-	mineiroCollaborator := createCollaborator(t, server, validCollaboratorPayload(mineiroPerson.Data.ID, nil))
-	serraCollaborator := createCollaborator(t, server, validCollaboratorPayload(serraPerson.Data.ID, nil))
+	mineiroCollaborator := createCollaborator(t, server, validCollaboratorPayload(mineiroPerson.Data.MembershipID, nil))
+	serraCollaborator := createCollaborator(t, server, validCollaboratorPayload(serraPerson.Data.MembershipID, nil))
 
 	mineiroExpense := createExpense(t, server, validExpensePayload(mineiroCollaborator.Data.ID, map[string]any{
 		"expenseDate": "2026-06-11",
@@ -1435,13 +1436,13 @@ func expenseIDs(items []apiExpenseListItem) map[string]bool {
 func createActiveCollaborator(t *testing.T, server *fiber.App, seq int) apiCollaboratorResponse {
 	t.Helper()
 	person := createPerson(t, server, validCompletePersonPayload(seq, nil))
-	return createCollaborator(t, server, validCollaboratorPayload(person.Data.ID, nil))
+	return createCollaborator(t, server, validCollaboratorPayload(person.Data.MembershipID, nil))
 }
 
 func createFinishedCollaborator(t *testing.T, server *fiber.App, seq int) apiCollaboratorResponse {
 	t.Helper()
 	person := createPerson(t, server, validCompletePersonPayload(seq, nil))
-	return createCollaborator(t, server, validCollaboratorPayload(person.Data.ID, map[string]any{"statusId": "ref-collaborator-status-finished"}))
+	return createCollaborator(t, server, validCollaboratorPayload(person.Data.MembershipID, map[string]any{"statusId": "ref-collaborator-status-finished"}))
 }
 
 func createPerson(t *testing.T, server *fiber.App, payload map[string]any) apiPersonResponse {
@@ -1594,9 +1595,9 @@ func validExpensePayload(collaboratorID string, overrides map[string]any) map[st
 	return payload
 }
 
-func validCollaboratorPayload(personID string, overrides map[string]any) map[string]any {
+func validCollaboratorPayload(membershipID string, overrides map[string]any) map[string]any {
 	payload := map[string]any{
-		"personId":         personID,
+		"membershipId":     membershipID,
 		"journeyStartDate": "2026-06-01",
 		"paymentMethodId":  "ref-method-daily",
 		"paymentValue":     150.0,

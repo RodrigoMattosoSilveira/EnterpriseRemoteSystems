@@ -34,7 +34,7 @@ test("operational domain records created in default are hidden from another tena
     request,
     "/api/v1/collaborators",
     {
-      personId: person.id,
+      membershipId: person.membershipId,
       journeyStartDate: workDate,
       paymentMethodId: PAYMENT_METHOD_DAILY_ID,
       paymentValue: 175.25,
@@ -270,6 +270,7 @@ type PagedResult<T> = {
 
 type CreatedPerson = {
   id: string;
+  membershipId: string;
   tenantId: string;
   nickname: string;
 };

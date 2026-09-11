@@ -335,8 +335,8 @@ func TestGORMStoreFindActorDoesNotManufactureIntrinsicSelfServiceFromLegacyLinks
 		t.Fatalf("find actor: %v", err)
 	}
 
-	if actor.Scope != ActorScopeTenant || actor.PersonID != personID || actor.CollaboratorID != collaboratorID {
-		t.Fatalf("unexpected legacy persisted actor: %#v", actor)
+	if actor.Scope != ActorScopeTenant || actor.PersonID != "" || actor.CollaboratorID != "" {
+		t.Fatalf("legacy Actor identity columns must be inert at runtime: %#v", actor)
 	}
 	if actor.HasPermission(PermissionPeopleSelfUpdate) || actor.HasIntrinsicPermission(PermissionPeopleSelfUpdate) {
 		t.Fatalf("legacy Actor links alone must not establish intrinsic self-service: %#v", actor)
@@ -787,7 +787,7 @@ func TestGORMStoreListActorsIncludesAuthoritativeTenantBinding(t *testing.T) {
 	if found.Binding.ScopeType != "TENANT" || found.Binding.TenantID != "tenant-a" {
 		t.Fatalf("unexpected tenant binding: %#v", found.Binding)
 	}
-	if found.GlobalPersonID == "" || found.Binding.GlobalPersonID != found.GlobalPersonID {
+	if found.GlobalPersonID == "" || found.Binding.GlobalPersonID != found.GlobalPersonID || found.PersonID != found.GlobalPersonID {
 		t.Fatalf("expected canonical global Person identity on Actor catalog, got %#v", found)
 	}
 	if found.Binding.MembershipID == "" ||
@@ -795,6 +795,101 @@ func TestGORMStoreListActorsIncludesAuthoritativeTenantBinding(t *testing.T) {
 		!found.Binding.MembershipActive ||
 		!found.Binding.MembershipSameTenant {
 		t.Fatalf("expected active same-tenant Membership-backed binding, got %#v", found.Binding)
+	}
+}
+
+func TestGORMStoreListActorsUsesCanonicalIdentityAfterLegacyColumnRemoval(t *testing.T) {
+	database := newAuthzTestDB(t)
+	installTenantRoleDelegationFixtureTables(t, database)
+	store := NewGORMStore(database)
+
+	actorID := createAuthzActor(t, database, "canonical-identity@example.com", nil, nil)
+	bindActiveTenantMemberActor(t, database, actorID, "tenant-a")
+
+	var retiredColumns int64
+	if err := database.Raw(`SELECT COUNT(*) FROM pragma_table_info('authz_actors') WHERE name IN ('person_id','collaborator_id')`).Scan(&retiredColumns).Error; err != nil {
+		t.Fatalf("inspect authz_actors schema: %v", err)
+	}
+	if retiredColumns != 0 {
+		t.Fatalf("30K.3B must physically remove Actor identity columns, found %d", retiredColumns)
+	}
+
+	actors, err := store.ListActors(context.Background())
+	if err != nil {
+		t.Fatalf("list authorization actors: %v", err)
+	}
+	for _, actor := range actors {
+		if actor.ID != actorID {
+			continue
+		}
+		if actor.Binding == nil || actor.Binding.GlobalPersonID == "" {
+			t.Fatalf("expected canonical AccountActor/Membership identity, got %#v", actor)
+		}
+		if actor.PersonID != actor.Binding.GlobalPersonID {
+			t.Fatalf("canonical AccountActor/Membership identity must determine administration identity: %#v", actor)
+		}
+		if actor.CollaboratorID != "" {
+			t.Fatalf("expected no open Collaborator Journey in this canonical fixture: %#v", actor)
+		}
+		return
+	}
+	t.Fatalf("expected Actor %s in authorization catalog", actorID)
+}
+
+func TestGORMStoreListRolesHidesLegacyPersonAndSelfRoles(t *testing.T) {
+	database := newAuthzTestDB(t)
+	store := NewGORMStore(database)
+	now := time.Now().UTC()
+
+	legacyRoles := []AuthzRole{
+		{ID: "legacy-role-person", Code: string(RolePerson), Label: "Legacy Person", Description: "legacy", ScopeType: string(ActorScopeTenant), Active: true, CreatedAt: now, UpdatedAt: now},
+		{ID: "legacy-role-self", Code: "LEGACY_SELF", Label: "Legacy Self", Description: "legacy", ScopeType: string(ActorScopeSelf), Active: true, CreatedAt: now, UpdatedAt: now},
+	}
+	for _, role := range legacyRoles {
+		if err := database.Where("id = ?", role.ID).Assign(role).FirstOrCreate(&role).Error; err != nil {
+			t.Fatalf("install legacy role fixture: %v", err)
+		}
+	}
+
+	roles, err := store.ListRoles(context.Background())
+	if err != nil {
+		t.Fatalf("list authorization roles: %v", err)
+	}
+	for _, role := range roles {
+		if role.Code == string(RolePerson) || role.ScopeType == string(ActorScopeSelf) {
+			t.Fatalf("legacy PERSON/SELF authorization must not be administratively exposed: %#v", role)
+		}
+	}
+}
+
+func TestGORMStoreApplicationRoleRequiresGlobalAccountActorBinding(t *testing.T) {
+	database := newAuthzTestDB(t)
+	installTenantRoleDelegationFixtureTables(t, database)
+	store := NewGORMStore(database)
+
+	actorID := createAuthzActor(t, database, "unbound-application-admin@example.com", nil, nil)
+	request := GrantActorRoleRequest{RoleCode: string(RoleApplicationAdmin), TenantID: GlobalTenantScope}
+	if _, err := store.GrantActorRole(context.Background(), actorID, request); err == nil || !strings.Contains(validationMessage(err), "GLOBAL Actor owned by an Authentication Account") {
+		t.Fatalf("expected unbound application Actor grant rejection, got %v", err)
+	}
+
+	accountID := "account-" + actorID
+	if err := database.Exec("INSERT INTO auth_user_accounts (id, login) VALUES (?, ?)", accountID, "global-admin@example.test").Error; err != nil {
+		t.Fatalf("create global Authentication Account fixture: %v", err)
+	}
+	if err := database.Exec(
+		"INSERT INTO auth_account_actors (account_id, actor_id, scope_type, tenant_id, membership_id) VALUES (?, ?, ?, NULL, NULL)",
+		accountID, actorID, "GLOBAL",
+	).Error; err != nil {
+		t.Fatalf("bind global application Actor: %v", err)
+	}
+
+	grant, err := store.GrantActorRole(context.Background(), actorID, request)
+	if err != nil {
+		t.Fatalf("grant APPLICATION_ADMIN to canonical GLOBAL AccountActor: %v", err)
+	}
+	if !grant.Active || grant.RoleCode != string(RoleApplicationAdmin) || grant.TenantID != GlobalTenantScope {
+		t.Fatalf("unexpected application role grant: %#v", grant)
 	}
 }
 
@@ -946,8 +1041,8 @@ func TestTenantAdministratorCardinalityRequiresDistinctPersons(t *testing.T) {
 	personID := "person-shared-admin"
 	actorA := createAuthzActor(t, database, "shared-admin-a@example.com", &personID, nil)
 	actorB := createAuthzActor(t, database, "shared-admin-b@example.com", &personID, nil)
-	bindActiveTenantMemberActor(t, database, actorA, "tenant-a")
-	bindActiveTenantMemberActor(t, database, actorB, "tenant-a")
+	bindActiveTenantMemberActor(t, database, actorA, "tenant-a", personID)
+	bindActiveTenantMemberActor(t, database, actorB, "tenant-a", personID)
 
 	if _, err := store.GrantActorRole(context.Background(), actorA, GrantActorRoleRequest{
 		RoleCode: string(RoleTenantAdmin), TenantID: "tenant-a",
@@ -969,8 +1064,8 @@ func TestTenantAdministratorCardinalityPreventsPersonFromAdministeringTwoTenants
 	personID := "person-cross-tenant-admin"
 	actorA := createAuthzActor(t, database, "cross-admin-a@example.com", &personID, nil)
 	actorB := createAuthzActor(t, database, "cross-admin-b@example.com", &personID, nil)
-	bindActiveTenantMemberActor(t, database, actorA, "tenant-a")
-	bindActiveTenantMemberActor(t, database, actorB, "tenant-b")
+	bindActiveTenantMemberActor(t, database, actorA, "tenant-a", personID)
+	bindActiveTenantMemberActor(t, database, actorB, "tenant-b", personID)
 
 	if _, err := store.GrantActorRole(context.Background(), actorA, GrantActorRoleRequest{
 		RoleCode: string(RoleTenantAdmin), TenantID: "tenant-a",
@@ -1015,6 +1110,11 @@ func installTenantRoleDelegationFixtureTables(t *testing.T, database *gorm.DB) {
 			tenant_id TEXT,
 			membership_id TEXT
 		)`,
+		`CREATE TABLE IF NOT EXISTS auth_account_people (
+			account_id TEXT NOT NULL,
+			person_id TEXT NOT NULL,
+			PRIMARY KEY(account_id, person_id)
+		)`,
 		`CREATE TABLE IF NOT EXISTS person_tenant_memberships (
 			id TEXT PRIMARY KEY,
 			tenant_id TEXT NOT NULL,
@@ -1028,6 +1128,14 @@ func installTenantRoleDelegationFixtureTables(t *testing.T, database *gorm.DB) {
 			code TEXT NOT NULL,
 			active INTEGER NOT NULL
 		)`,
+		`CREATE TABLE IF NOT EXISTS collaborator_journeys (
+			id TEXT PRIMARY KEY,
+			tenant_id TEXT NOT NULL,
+			membership_id TEXT NOT NULL,
+			journey_start_date DATETIME NOT NULL,
+			created_at DATETIME NOT NULL,
+			closed_at DATETIME NULL
+		)`,
 	} {
 		if err := database.Exec(statement).Error; err != nil {
 			t.Fatalf("install tenant role delegation fixture table: %v", err)
@@ -1035,7 +1143,7 @@ func installTenantRoleDelegationFixtureTables(t *testing.T, database *gorm.DB) {
 	}
 }
 
-func bindActiveTenantMemberActor(t *testing.T, database *gorm.DB, actorID string, tenantID string) {
+func bindActiveTenantMemberActor(t *testing.T, database *gorm.DB, actorID string, tenantID string, canonicalPersonID ...string) {
 	t.Helper()
 	accountID := "account-" + actorID
 	membershipID := "membership-" + actorID
@@ -1057,13 +1165,9 @@ func bindActiveTenantMemberActor(t *testing.T, database *gorm.DB, actorID string
 	).Error; err != nil {
 		t.Fatalf("create tenant-local active membership status: %v", err)
 	}
-	var actor AuthzActor
-	if err := database.Select("id", "person_id").Where("id = ?", actorID).First(&actor).Error; err != nil {
-		t.Fatalf("find Actor Person identity for membership fixture: %v", err)
-	}
-	globalPersonID := strings.TrimSpace(stringValue(actor.PersonID))
-	if globalPersonID == "" {
-		globalPersonID = "global-person-" + actorID
+	globalPersonID := "global-person-" + actorID
+	if len(canonicalPersonID) > 0 && strings.TrimSpace(canonicalPersonID[0]) != "" {
+		globalPersonID = strings.TrimSpace(canonicalPersonID[0])
 	}
 	if err := database.Exec(
 		"INSERT INTO person_tenant_memberships (id, tenant_id, person_id, status_id) VALUES (?, ?, ?, ?)",
@@ -1083,6 +1187,13 @@ func bindActiveTenantMemberActor(t *testing.T, database *gorm.DB, actorID string
 		membershipID,
 	).Error; err != nil {
 		t.Fatalf("bind tenant actor: %v", err)
+	}
+	if err := database.Exec(
+		"INSERT OR IGNORE INTO auth_account_people (account_id, person_id) VALUES (?, ?)",
+		accountID,
+		globalPersonID,
+	).Error; err != nil {
+		t.Fatalf("bind Authentication Account to canonical Person: %v", err)
 	}
 }
 
@@ -1104,7 +1215,7 @@ func newAuthzTestDB(t *testing.T) *gorm.DB {
 func createAuthzActor(t *testing.T, database *gorm.DB, actorKey string, personID *string, collaboratorID *string) string {
 	t.Helper()
 	now := time.Now().UTC()
-	actor := AuthzActor{ID: "authz-actor-" + actorKey, ActorKey: actorKey, DisplayName: actorKey, PersonID: personID, CollaboratorID: collaboratorID, Active: true, CreatedAt: now, UpdatedAt: now}
+	actor := AuthzActor{ID: "authz-actor-" + actorKey, ActorKey: actorKey, DisplayName: actorKey, Active: true, CreatedAt: now, UpdatedAt: now}
 	if err := database.Create(&actor).Error; err != nil {
 		t.Fatalf("create authz actor: %v", err)
 	}

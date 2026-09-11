@@ -86,7 +86,7 @@ export function CreateCollaboratorPage() {
       new Set(
         collaborators
           .filter(isActiveCollaborator)
-          .map((row) => row.legacyPersonId ?? row.personId),
+          .map((row) => row.personId),
       ),
     [collaborators],
   );

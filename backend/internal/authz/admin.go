@@ -112,11 +112,9 @@ type ActorGrantResponse struct {
 }
 
 type CreateActorRequest struct {
-	ActorKey       string  `json:"actorKey"`
-	DisplayName    string  `json:"displayName"`
-	PersonID       *string `json:"personId"`
-	CollaboratorID *string `json:"collaboratorId"`
-	Active         *bool   `json:"active"`
+	ActorKey    string `json:"actorKey"`
+	DisplayName string `json:"displayName"`
+	Active      *bool  `json:"active"`
 }
 
 type SetActorActiveRequest struct {
@@ -293,7 +291,10 @@ func (s *GORMStore) ListRoles(ctx context.Context) ([]RoleResponse, error) {
 	}
 
 	var roles []AuthzRole
-	if err := s.database.WithContext(ctx).Order("code ASC").Find(&roles).Error; err != nil {
+	if err := s.database.WithContext(ctx).
+		Where("code <> ? AND scope_type <> ?", string(RolePerson), string(ActorScopeSelf)).
+		Order("code ASC").
+		Find(&roles).Error; err != nil {
 		return nil, fmt.Errorf("list authorization roles: %w", err)
 	}
 
@@ -347,9 +348,9 @@ func (s *GORMStore) ListActors(ctx context.Context) ([]ActorResponse, error) {
 		}
 		response := actorResponse(actor, grants)
 		if binding, ok := bindings[actor.ID]; ok {
-			bindingCopy := binding
-			response.Binding = &bindingCopy
-			response.GlobalPersonID = binding.GlobalPersonID
+			if err := s.applyCanonicalAdministrationIdentity(ctx, &response, binding); err != nil {
+				return nil, err
+			}
 		}
 		responses = append(responses, response)
 	}
@@ -471,6 +472,51 @@ func (s *GORMStore) actorBindingsForAdministration(ctx context.Context) (map[str
 	}
 
 	return bindings, nil
+}
+
+func (s *GORMStore) applyCanonicalAdministrationIdentity(ctx context.Context, response *ActorResponse, binding ActorBindingResponse) error {
+	if response == nil {
+		return nil
+	}
+	bindingCopy := binding
+	response.Binding = &bindingCopy
+	response.GlobalPersonID = strings.TrimSpace(binding.GlobalPersonID)
+	response.PersonID = response.GlobalPersonID
+	response.CollaboratorID = ""
+
+	membershipID := strings.TrimSpace(binding.MembershipID)
+	tenantID := strings.TrimSpace(binding.TenantID)
+	if membershipID == "" || tenantID == "" || tenantID == GlobalTenantScope || !s.database.Migrator().HasTable("collaborator_journeys") {
+		return nil
+	}
+	type collaboratorProjection struct{ ID string }
+	var collaborator collaboratorProjection
+	if err := s.database.WithContext(ctx).
+		Table("collaborator_journeys").
+		Select("id").
+		Where("tenant_id = ? AND membership_id = ? AND closed_at IS NULL", tenantID, membershipID).
+		Order("journey_start_date DESC, created_at DESC").
+		Limit(1).
+		Scan(&collaborator).Error; err != nil {
+		return fmt.Errorf("resolve authorization administration Collaborator identity: %w", err)
+	}
+	response.CollaboratorID = strings.TrimSpace(collaborator.ID)
+	return nil
+}
+
+func (s *GORMStore) applyActorAdministrationBinding(ctx context.Context, response *ActorResponse) error {
+	if response == nil {
+		return nil
+	}
+	bindings, err := s.actorBindingsForAdministration(ctx)
+	if err != nil {
+		return err
+	}
+	binding, ok := bindings[response.ID]
+	if !ok {
+		return nil
+	}
+	return s.applyCanonicalAdministrationIdentity(ctx, response, binding)
 }
 
 func (s *GORMStore) tenantActorBindingsForAdministration(ctx context.Context, tenantID string) (map[string]ActorBindingResponse, error) {
@@ -609,9 +655,9 @@ func (s *GORMStore) ListTenantRoleActors(ctx context.Context, tenantID string) (
 		}
 		response := actorResponse(actor, grants)
 		if binding, ok := bindings[actor.ID]; ok {
-			bindingCopy := binding
-			response.Binding = &bindingCopy
-			response.GlobalPersonID = binding.GlobalPersonID
+			if err := s.applyCanonicalAdministrationIdentity(ctx, &response, binding); err != nil {
+				return nil, err
+			}
 		}
 		responses = append(responses, response)
 	}
@@ -663,7 +709,9 @@ func (s *GORMStore) SetTenantActorActive(ctx context.Context, tenantID string, a
 		return ActorResponse{}, err
 	}
 	response := actorResponse(actor, grants)
-	response.Binding = &binding
+	if err := s.applyCanonicalAdministrationIdentity(ctx, &response, binding); err != nil {
+		return ActorResponse{}, err
+	}
 	return response, nil
 }
 
@@ -812,14 +860,12 @@ func (s *GORMStore) CreateActor(ctx context.Context, req CreateActorRequest) (Ac
 
 	now := time.Now().UTC()
 	actor := AuthzActor{
-		ID:             ids.New(),
-		ActorKey:       actorKey,
-		DisplayName:    strings.TrimSpace(req.DisplayName),
-		PersonID:       normalizedStringPtr(req.PersonID),
-		CollaboratorID: normalizedStringPtr(req.CollaboratorID),
-		Active:         active,
-		CreatedAt:      now,
-		UpdatedAt:      now,
+		ID:          ids.New(),
+		ActorKey:    actorKey,
+		DisplayName: strings.TrimSpace(req.DisplayName),
+		Active:      active,
+		CreatedAt:   now,
+		UpdatedAt:   now,
 	}
 	if actor.DisplayName == "" {
 		actor.DisplayName = actor.ActorKey
@@ -849,7 +895,11 @@ func (s *GORMStore) SetActorActive(ctx context.Context, actorID string, active b
 		if err != nil {
 			return ActorResponse{}, err
 		}
-		return actorResponse(actor, grants), nil
+		response := actorResponse(actor, grants)
+		if err := s.applyActorAdministrationBinding(ctx, &response); err != nil {
+			return ActorResponse{}, err
+		}
+		return response, nil
 	}
 	if !active {
 		if err := s.ensureActorDeactivationAllowed(ctx, actor.ID, "active"); err != nil {
@@ -866,7 +916,11 @@ func (s *GORMStore) SetActorActive(ctx context.Context, actorID string, active b
 	if err != nil {
 		return ActorResponse{}, err
 	}
-	return actorResponse(actor, grants), nil
+	response := actorResponse(actor, grants)
+	if err := s.applyActorAdministrationBinding(ctx, &response); err != nil {
+		return ActorResponse{}, err
+	}
+	return response, nil
 }
 
 func (s *GORMStore) GrantActorRole(ctx context.Context, actorID string, req GrantActorRoleRequest) (ActorGrantResponse, error) {
@@ -1074,22 +1128,11 @@ func permissionResponse(permission AuthzPermission) PermissionResponse {
 }
 
 func actorResponse(actor AuthzActor, grants []ActorGrantResponse) ActorResponse {
-	return ActorResponse{ID: actor.ID, ActorKey: actor.ActorKey, DisplayName: actor.DisplayName, PersonID: stringValue(actor.PersonID), CollaboratorID: stringValue(actor.CollaboratorID), Active: actor.Active, RoleGrants: grants}
+	return ActorResponse{ID: actor.ID, ActorKey: actor.ActorKey, DisplayName: actor.DisplayName, Active: actor.Active, RoleGrants: grants}
 }
 
 func grantResponse(grant AuthzActorRoleGrant, role AuthzRole) ActorGrantResponse {
 	return ActorGrantResponse{ID: grant.ID, ActorID: grant.ActorID, RoleID: grant.RoleID, RoleCode: role.Code, TenantID: grant.TenantID, ScopeType: role.ScopeType, Active: grant.Active, LifecycleSuspended: grant.LifecycleSuspended}
-}
-
-func normalizedStringPtr(value *string) *string {
-	if value == nil {
-		return nil
-	}
-	trimmed := strings.TrimSpace(*value)
-	if trimmed == "" {
-		return nil
-	}
-	return &trimmed
 }
 
 func requiredMessage(value string, message string) string {

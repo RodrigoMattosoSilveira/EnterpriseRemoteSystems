@@ -5,7 +5,6 @@ type CollaboratorDTO struct {
 	TenantID                       string   `json:"tenantId"`
 	MembershipID                   string   `json:"membershipId"`
 	PersonID                       string   `json:"personId"`
-	LegacyPersonID                 string   `json:"legacyPersonId,omitempty"`
 	PersonName                     string   `json:"personName,omitempty"`
 	PersonNickname                 string   `json:"personNickname,omitempty"`
 	JourneyStartDate               string   `json:"journeyStartDate"`
@@ -37,10 +36,7 @@ type CollaboratorDTO struct {
 }
 
 type CreateCollaboratorRequest struct {
-	MembershipID string `json:"membershipId"`
-	// PersonID is a deprecated Bite 30 compatibility selector. The service
-	// resolves it to an ACTIVE Membership and never stores it as the parent.
-	PersonID                       string   `json:"personId,omitempty"`
+	MembershipID                   string   `json:"membershipId"`
 	JourneyStartDate               string   `json:"journeyStartDate"`
 	PaymentMethodID                string   `json:"paymentMethodId"`
 	PaymentValue                   float64  `json:"paymentValue"`

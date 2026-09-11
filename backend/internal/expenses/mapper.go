@@ -20,7 +20,7 @@ func ToDTO(row db.Expense) ExpenseDTO {
 		TenantID:               row.TenantID,
 		PersonID:               row.PersonID,
 		CollaboratorID:         row.CollaboratorID,
-		CollaboratorLabel:      collaboratorLabel(row.Collaborator.Person),
+		CollaboratorLabel:      collaboratorLabel(row.Collaborator.Membership.Person),
 		ExpenseCategoryID:      row.ExpenseCategoryID,
 		ExpenseCategoryLabel:   row.ExpenseCategory.Label,
 		ValueUnitID:            row.ValueUnitID,
@@ -72,7 +72,7 @@ func ToDTOListWithFinancialPostings(rows []db.Expense, postings map[string]*db.L
 	return out
 }
 
-func collaboratorLabel(person db.Person) string {
+func collaboratorLabel(person db.GlobalPerson) string {
 	if nickname := strings.TrimSpace(person.Nickname); nickname != "" {
 		return nickname
 	}

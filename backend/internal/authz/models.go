@@ -8,14 +8,12 @@ import (
 )
 
 type AuthzActor struct {
-	ID             string    `gorm:"type:text;primaryKey"`
-	ActorKey       string    `gorm:"type:text;not null;uniqueIndex"`
-	DisplayName    string    `gorm:"type:text"`
-	PersonID       *string   `gorm:"type:text;index"`
-	CollaboratorID *string   `gorm:"type:text;index"`
-	Active         bool      `gorm:"not null;default:true;index"`
-	CreatedAt      time.Time `gorm:"not null"`
-	UpdatedAt      time.Time `gorm:"not null"`
+	ID          string    `gorm:"type:text;primaryKey"`
+	ActorKey    string    `gorm:"type:text;not null;uniqueIndex"`
+	DisplayName string    `gorm:"type:text"`
+	Active      bool      `gorm:"not null;default:true;index"`
+	CreatedAt   time.Time `gorm:"not null"`
+	UpdatedAt   time.Time `gorm:"not null"`
 }
 
 func (AuthzActor) TableName() string { return "authz_actors" }

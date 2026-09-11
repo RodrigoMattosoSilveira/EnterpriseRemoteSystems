@@ -152,6 +152,7 @@ type ApiEnvelope<T> = {
 
 type CreatedPerson = {
   id: string;
+  membershipId: string;
 };
 
 type CreatedCollaborator = {
@@ -235,7 +236,7 @@ async function createActiveCollaborator(
     firstName: `PriceListAdminE2E${suffix}`,
     nickname: `PriceListAdmin${suffix}`,
   });
-  return createCollaborator(api, person.id);
+  return createCollaborator(api, person.membershipId);
 }
 
 async function createCompletePerson(
@@ -270,12 +271,12 @@ async function createCompletePerson(
 
 async function createCollaborator(
   api: APIRequestContext,
-  personId: string,
+  membershipId: string,
 ): Promise<CreatedCollaborator> {
   const response = await api.post(e2eApiUrl("/api/v1/collaborators"), {
     headers: authzHeaders(),
     data: {
-      personId,
+      membershipId,
       journeyStartDate: todayISODate(),
       paymentMethodId: PAYMENT_METHOD_DAILY_ID,
       paymentValue: 250.75,

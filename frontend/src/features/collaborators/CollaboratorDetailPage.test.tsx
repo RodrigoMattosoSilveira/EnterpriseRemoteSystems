@@ -131,7 +131,7 @@ describe("CollaboratorDetailPage", () => {
     expect(textNode("membership-1")).toBeTruthy();
     expect(textNode("person-1")).toBeTruthy();
     expect(linkByText("View Person")?.getAttribute("href")).toBe(
-      "/people/person-1",
+      "/people/global-person-1",
     );
     expect(textNode("Lifecycle")).toBeTruthy();
     expect(textNode("Journey Start")).toBeTruthy();

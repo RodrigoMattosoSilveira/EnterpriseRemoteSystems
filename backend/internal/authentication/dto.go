@@ -18,7 +18,6 @@ type ResetPasswordRequest struct {
 }
 
 type CreateAccountRequest struct {
-	ActorID            string `json:"actorId"`
 	TenantID           string `json:"tenantId,omitempty"`
 	Login              string `json:"login"`
 	TemporaryPassword  string `json:"temporaryPassword"`
@@ -42,7 +41,6 @@ type AccountActorResponse struct {
 	PersonNickname string `json:"personNickname,omitempty"`
 	CollaboratorID string `json:"collaboratorId,omitempty"`
 	Active         bool   `json:"active"`
-	Primary        bool   `json:"primary"`
 }
 
 type AccountResponse struct {
