@@ -19,12 +19,14 @@ const accountId = "e2e-multi-tenant-account";
 const tenantA = {
   id: "e2e-multi-tenant-a",
   name: "E2E Multi Tenant A",
+  actorId: "e2e-multi-tenant-actor-e2e-multi-tenant-a",
   actorKey: "e2e-multi-tenant-actor-e2e-multi-tenant-a",
   membershipId: "e2e-multi-tenant-membership-e2e-multi-tenant-a",
 };
 const tenantB = {
   id: "e2e-multi-tenant-b",
   name: "E2E Multi Tenant B",
+  actorId: "e2e-multi-tenant-actor-e2e-multi-tenant-b",
   actorKey: "e2e-multi-tenant-actor-e2e-multi-tenant-b",
   membershipId: "e2e-multi-tenant-membership-e2e-multi-tenant-b",
 };
@@ -123,6 +125,104 @@ test.describe("Bite 30L multi-Tenant identity and confidentiality", () => {
       expect([401, 403]).toContain(unrelatedResponse.status());
     } finally {
       await api.dispose();
+    }
+  });
+
+  test("deactivating one Tenant Actor leaves the other Tenant usable and reactivation restores the same session", async () => {
+    const personApi = await authenticatedFixtureApi();
+    const tenantAAdminApi = await newTenantAdminApi(tenantA.id);
+    try {
+      const deactivateResponse = await tenantAAdminApi.patch(
+        e2eApiUrl(
+          `/api/v1/authz/tenant-role-actors/${encodeURIComponent(tenantA.actorId)}/active`,
+        ),
+        { data: { active: false } },
+      );
+      expect(deactivateResponse.status()).toBe(200);
+
+      const unavailableA = await personApi.get(
+        e2eApiUrl("/api/v1/authz/current-actor"),
+        { headers: { "X-Tenant-ID": tenantA.id } },
+      );
+      expect(unavailableA.status()).toBe(403);
+      const unavailableEnvelope = (await unavailableA.json()) as {
+        error?: { code?: string };
+      };
+      expect(unavailableEnvelope.error?.code).toBe("tenant_actor_unavailable");
+
+      const availableB = await personApi.get(
+        e2eApiUrl("/api/v1/authz/current-actor"),
+        { headers: { "X-Tenant-ID": tenantB.id } },
+      );
+      expect(availableB.status()).toBe(200);
+      const availableBEnvelope = (await availableB.json()) as {
+        data?: { actorKey?: string; tenantId?: string };
+      };
+      expect(availableBEnvelope.data).toMatchObject({
+        actorKey: tenantB.actorKey,
+        tenantId: tenantB.id,
+      });
+
+      const sessionResponse = await personApi.get(e2eApiUrl("/api/v1/auth/session"));
+      expect(sessionResponse.status()).toBe(200);
+      const sessionEnvelope = (await sessionResponse.json()) as {
+        data?: { accountId?: string };
+      };
+      expect(sessionEnvelope.data?.accountId).toBe(accountId);
+
+      const optionsWhileInactive = await personApi.get(
+        e2eApiUrl("/api/v1/auth/tenant-options"),
+      );
+      expect(optionsWhileInactive.status()).toBe(200);
+      const inactiveOptionsEnvelope = (await optionsWhileInactive.json()) as {
+        data?: Array<{ id?: string }>;
+      };
+      expect((inactiveOptionsEnvelope.data ?? []).map((option) => option.id)).toEqual([
+        tenantB.id,
+      ]);
+
+      const reactivateResponse = await tenantAAdminApi.patch(
+        e2eApiUrl(
+          `/api/v1/authz/tenant-role-actors/${encodeURIComponent(tenantA.actorId)}/active`,
+        ),
+        { data: { active: true } },
+      );
+      expect(reactivateResponse.status()).toBe(200);
+
+      const restoredA = await personApi.get(
+        e2eApiUrl("/api/v1/authz/current-actor"),
+        { headers: { "X-Tenant-ID": tenantA.id } },
+      );
+      expect(restoredA.status()).toBe(200);
+      const restoredAEnvelope = (await restoredA.json()) as {
+        data?: { actorKey?: string; tenantId?: string };
+      };
+      expect(restoredAEnvelope.data).toMatchObject({
+        actorKey: tenantA.actorKey,
+        tenantId: tenantA.id,
+      });
+
+      const optionsAfterReactivation = await personApi.get(
+        e2eApiUrl("/api/v1/auth/tenant-options"),
+      );
+      expect(optionsAfterReactivation.status()).toBe(200);
+      const restoredOptionsEnvelope = (await optionsAfterReactivation.json()) as {
+        data?: Array<{ id?: string }>;
+      };
+      expect((restoredOptionsEnvelope.data ?? []).map((option) => option.id).sort()).toEqual(
+        [tenantA.id, tenantB.id].sort(),
+      );
+    } finally {
+      await tenantAAdminApi
+        .patch(
+          e2eApiUrl(
+            `/api/v1/authz/tenant-role-actors/${encodeURIComponent(tenantA.actorId)}/active`,
+          ),
+          { data: { active: true } },
+        )
+        .catch(() => undefined);
+      await tenantAAdminApi.dispose();
+      await personApi.dispose();
     }
   });
 

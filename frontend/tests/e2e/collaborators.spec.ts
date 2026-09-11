@@ -138,6 +138,111 @@ test("user can create a Collaborator from an eligible complete Person", async ({
   }
 });
 
+test("closing a zero-balance Journey preserves canonical Membership identity and permits a new Journey", async ({
+  page,
+  request,
+}) => {
+  const suffix = uniqueSuffix();
+  const person = await createCompletePerson(request, {
+    suffix,
+    firstName: `LifecycleE2E${suffix}`,
+    lastName: firstPageSortLastName(suffix),
+    nickname: `Lifecycle${suffix}`,
+  });
+
+  const firstJourney = await createCollaborator(request, {
+    membershipId: person.membershipId,
+    journeyStartDate: "2026-09-01",
+    paymentMethodId: PAYMENT_METHOD_DAILY_ID,
+    paymentValue: 100,
+    dailyBrlAmount: 100,
+    sectorId: SECTOR_MINING_ID,
+    locationId: LOCATION_MAIN_MINE_ID,
+    taskId: TASK_MINER_ID,
+    statusId: COLLABORATOR_STATUS_ACTIVE_ID,
+    notes: "Bite 30L.2 Collaborator lifecycle first Journey",
+  });
+  expect(firstJourney.membershipId).toBe(person.membershipId);
+
+  await page.goto(`/collaborators/${firstJourney.id}`);
+  await expect(
+    page.getByRole("heading", { name: "Journey Settlement", exact: true }),
+  ).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Ready to close Journey" })).toBeVisible();
+
+  await page.getByRole("button", { name: "Close Journey", exact: true }).click();
+  const closePanel = page.getByRole("region", { name: "Close Journey" });
+  await expect(closePanel).toBeVisible();
+  await closePanel.getByLabel("Reason code").selectOption("END_OF_JOURNEY_SETTLEMENT");
+  await closePanel
+    .getByLabel("Reason text")
+    .fill("30L.2 verifies canonical Membership identity across Journey closure");
+  await closePanel
+    .getByRole("button", { name: "Confirm reauthentication", exact: true })
+    .click();
+
+  const closeResponsePromise = page.waitForResponse((response) => {
+    const url = new URL(response.url());
+    return (
+      response.request().method() === "POST" &&
+      url.pathname === `/api/v1/collaborators/${firstJourney.id}/close`
+    );
+  });
+  await closePanel.getByRole("button", { name: "Close Journey", exact: true }).click();
+  const closeResponse = await closeResponsePromise;
+  expect(closeResponse.status()).toBe(200);
+  await expect(page.getByRole("status")).toContainText("Journey closed successfully.");
+
+  const closedResponse = await request.get(
+    e2eApiUrl(`/api/v1/collaborators/${encodeURIComponent(firstJourney.id)}`),
+    { headers: authzHeaders() },
+  );
+  expect(closedResponse.status()).toBe(200);
+  const closedEnvelope = (await closedResponse.json()) as ApiEnvelope<CreatedCollaborator>;
+  expect(closedEnvelope.data?.membershipId).toBe(person.membershipId);
+  expect(closedEnvelope.data?.statusCode).toBe("FINISHED");
+  expect(closedEnvelope.data?.closedAt).toBeTruthy();
+
+  const secondJourney = await createCollaborator(request, {
+    membershipId: person.membershipId,
+    journeyStartDate: "2026-09-02",
+    paymentMethodId: PAYMENT_METHOD_DAILY_ID,
+    paymentValue: 125,
+    dailyBrlAmount: 125,
+    sectorId: SECTOR_MINING_ID,
+    locationId: LOCATION_MAIN_MINE_ID,
+    taskId: TASK_MINER_ID,
+    statusId: COLLABORATOR_STATUS_ACTIVE_ID,
+    notes: "Bite 30L.2 Collaborator lifecycle second Journey",
+  });
+  expect(secondJourney.id).not.toBe(firstJourney.id);
+  expect(secondJourney.membershipId).toBe(person.membershipId);
+  expect(secondJourney.statusCode).toBe("ACTIVE");
+  expect(secondJourney.closedAt ?? "").toBe("");
+
+  const previewResponse = await request.get(
+    e2eApiUrl(
+      `/api/v1/collaborators/${encodeURIComponent(secondJourney.id)}/settlement-preview`,
+    ),
+    { headers: authzHeaders() },
+  );
+  expect(previewResponse.status()).toBe(200);
+  const previewBody = await previewResponse.text();
+  const previewEnvelope = JSON.parse(previewBody) as ApiEnvelope<{
+    collaboratorId?: string;
+    brlBalance?: number;
+    goldGramBalance?: number;
+    canClose?: boolean;
+  }>;
+  expect(previewEnvelope.data).toMatchObject({
+    collaboratorId: secondJourney.id,
+    brlBalance: 0,
+    goldGramBalance: 0,
+    canClose: true,
+  });
+  expect(previewBody).not.toContain(firstJourney.id);
+});
+
 test("user can filter Collaborators by any part of person name or nickname", async ({
   page,
   request,
@@ -464,6 +569,9 @@ type CreatedPerson = {
 
 type CreatedCollaborator = {
   id: string;
+  membershipId?: string;
+  statusCode?: string;
+  closedAt?: string;
 };
 
 type CreatedReferenceData = {
