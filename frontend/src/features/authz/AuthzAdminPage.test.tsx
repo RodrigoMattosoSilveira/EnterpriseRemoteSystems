@@ -787,9 +787,9 @@ describe("AuthzAdminPage", () => {
     await waitForText("Expense Admin");
 
     const article = articleByText("expense-admin");
-    expect(
-      controlByLabel<HTMLSelectElement>(article, "Role", "select").value,
-    ).toBe("TENANT_ADMIN");
+    expect(roleSelectorButtonInArticle("expense-admin").textContent).toContain(
+      "TENANT_ADMIN",
+    );
     expect(
       controlByLabel<HTMLInputElement>(article, "Grant tenant", "input").value,
     ).toBe(tenantId);
@@ -842,11 +842,7 @@ describe("AuthzAdminPage", () => {
 
     await waitFor(() => articleByText("expense-admin").textContent?.includes(tenantId) ?? false);
     const refreshedArticle = articleByText("expense-admin");
-    const refreshedRoleSelect = controlByLabel<HTMLSelectElement>(
-      refreshedArticle,
-      "Role",
-      "select",
-    );
+    const refreshedRoleSelector = roleSelectorButtonInArticle("expense-admin");
     const refreshedGrantTenantInput = controlByLabel<HTMLInputElement>(
       refreshedArticle,
       "Grant tenant",
@@ -854,7 +850,7 @@ describe("AuthzAdminPage", () => {
     );
     const grantButton = buttonInArticle("expense-admin", "Grant Role");
 
-    expect(refreshedRoleSelect.value).toBe("TENANT_ADMIN");
+    expect(refreshedRoleSelector.textContent).toContain("TENANT_ADMIN");
     expect(refreshedGrantTenantInput.value).toBe(tenantId);
     expect(grantButton.disabled).toBe(true);
     expect(grantButton.className).toContain("disabled:bg-gray-300");
