@@ -303,9 +303,19 @@ local-hot-reload-check:
 	@grep -Eq 'cmd = "[^"]*db-migrate\.sh[^"]*&&[^"]*go build' backend/.air.toml || (echo "Air hot reload must apply SQL migrations before rebuilding the backend." && exit 1)
 	@grep -Eq 'include_ext = \[[^]]*"sql"[^]]*\]' backend/.air.toml || (echo "Air hot reload must watch backend migration SQL files." && exit 1)
 
+.PHONY: server-authz-bootstrap-config-check
+server-authz-bootstrap-config-check:
+	@grep -Fq 'AUTHZ_BOOTSTRAP_ENABLED: "$${AUTHZ_BOOTSTRAP_ENABLED:-false}"' docker-compose.server.yml || (echo "Server Compose must pass AUTHZ_BOOTSTRAP_ENABLED with a safe false default." && exit 1)
+	@grep -Fq 'AUTHZ_BOOTSTRAP_ACTOR_KEY: "$${AUTHZ_BOOTSTRAP_ACTOR_KEY:-}"' docker-compose.server.yml || (echo "Server Compose must pass AUTHZ_BOOTSTRAP_ACTOR_KEY." && exit 1)
+	@grep -Fq 'AUTHZ_BOOTSTRAP_DISPLAY_NAME: "$${AUTHZ_BOOTSTRAP_DISPLAY_NAME:-}"' docker-compose.server.yml || (echo "Server Compose must pass AUTHZ_BOOTSTRAP_DISPLAY_NAME." && exit 1)
+	@grep -Fq 'AUTHZ_BOOTSTRAP_ROLE_CODE: "$${AUTHZ_BOOTSTRAP_ROLE_CODE:-APPLICATION_ADMIN}"' docker-compose.server.yml || (echo "Server Compose must pass AUTHZ_BOOTSTRAP_ROLE_CODE." && exit 1)
+	@grep -Fq 'AUTHZ_BOOTSTRAP_TENANT_ID: "$${AUTHZ_BOOTSTRAP_TENANT_ID:-*}"' docker-compose.server.yml || (echo "Server Compose must pass AUTHZ_BOOTSTRAP_TENANT_ID." && exit 1)
+	@grep -Fq 'AUTHZ_BOOTSTRAP_REQUIRE_EMPTY_ACTOR_TABLE: "$${AUTHZ_BOOTSTRAP_REQUIRE_EMPTY_ACTOR_TABLE:-false}"' docker-compose.server.yml || (echo "Server Compose must pass AUTHZ_BOOTSTRAP_REQUIRE_EMPTY_ACTOR_TABLE." && exit 1)
+
 .PHONY: local-check
 local-check:
 	$(MAKE) local-hot-reload-check
+	$(MAKE) server-authz-bootstrap-config-check
 	$(MAKE) legacy-identity-dependency-check
 	$(MAKE) migration-rehearsal-check
 	cd backend && go clean -testcache && go test ./...
@@ -354,7 +364,7 @@ local-docker-check: local-docker-check-image
 		-e GOMODCACHE=/tmp/gomod \
 		-e NPM_CONFIG_CACHE=/tmp/npm-cache \
 		$(LOCAL_DOCKER_CHECK_IMAGE) \
-		bash -lc 'set -euo pipefail; make local-hot-reload-check; make legacy-identity-dependency-check; make migration-rehearsal-check; cd backend && go clean -testcache && go test ./...; cd ../frontend && npm ci && npm run test:run && npx playwright install chromium && npx playwright test && npm run build'
+		bash -lc 'set -euo pipefail; make local-hot-reload-check; make server-authz-bootstrap-config-check; make legacy-identity-dependency-check; make migration-rehearsal-check; cd backend && go clean -testcache && go test ./...; cd ../frontend && npm ci && npm run test:run && npx playwright install chromium && npx playwright test && npm run build'
 
 # ==============================================================================
 # Generic server environment targets
@@ -370,7 +380,7 @@ server-pull:
 	cd $(ENV_DIR) && git checkout $(BRANCH) && git pull
 
 .PHONY: server-build
-server-build:
+server-build: server-authz-bootstrap-config-check
 	cd $(ENV_DIR) && $(SERVER_COMPOSE_BUILD) build
 
 .PHONY: server-remove-stale-containers

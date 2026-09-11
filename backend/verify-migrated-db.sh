@@ -333,7 +333,7 @@ WHERE g.tenant_id='*'
   );
 ")"
 if [ "$application_admin_identity_violations" != "0" ]; then
-  echo "Post-30I Application Administrator identity invariant failed: found ${application_admin_identity_violations} tenant-identity binding(s)." >&2
+  echo "Post-30I Application Administrator identity invariant failed: found ${application_admin_identity_violations} canonical identity violation(s) (missing GLOBAL AccountActor, TENANT AccountActor present, or Person-linked GLOBAL Account)." >&2
   exit 1
 fi
 
