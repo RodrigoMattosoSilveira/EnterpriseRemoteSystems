@@ -524,7 +524,7 @@ describe("AuthzAdminPage", () => {
     const article = articleByText("expense-admin");
     const roleButton = roleSelectorButtonInArticle("expense-admin");
     expect(roleButton.getAttribute("aria-expanded")).toBe("false");
-    expect(roleButton.textContent).toContain("EXPENSE_OPERATOR");
+    expect(roleButton.textContent).toContain("Select a Role");
     expect(article.querySelector('[role="listbox"][aria-label="Role choices"]')).toBeNull();
 
     await openRoleSelectorInArticle("expense-admin");
@@ -537,7 +537,7 @@ describe("AuthzAdminPage", () => {
     await setInputValue(filter, "tenant adm");
     expect(roleChoicesInArticle("expense-admin")).toEqual(["TENANT_ADMIN"]);
     expect(roleSelectorButtonInArticle("expense-admin").textContent).toContain(
-      "EXPENSE_OPERATOR",
+      "Select a Role",
     );
 
     await setInputValue(filter, "");
@@ -546,7 +546,7 @@ describe("AuthzAdminPage", () => {
       "TENANT_ADMIN",
     ]);
     expect(roleSelectorButtonInArticle("expense-admin").textContent).toContain(
-      "EXPENSE_OPERATOR",
+      "Select a Role",
     );
 
     await chooseOpenRoleOptionInArticle("expense-admin", "TENANT_ADMIN");
@@ -787,6 +787,11 @@ describe("AuthzAdminPage", () => {
     await waitForText("Expense Admin");
 
     const article = articleByText("expense-admin");
+    expect(roleSelectorButtonInArticle("expense-admin").textContent).toContain(
+      "Select a Role",
+    );
+    expect(article.textContent).toContain(`TENANT_ADMIN · ${tenantId}`);
+    await chooseRoleInArticle("expense-admin", "TENANT_ADMIN");
     expect(roleSelectorButtonInArticle("expense-admin").textContent).toContain(
       "TENANT_ADMIN",
     );
@@ -1213,7 +1218,7 @@ async function changeInputInForm(headingText: string, labelText: string, value: 
 
 function roleSelectorButtonInArticle(articleText: string) {
   const article = articleByText(articleText);
-  const button = article.querySelector('button[aria-label="Role"]');
+  const button = article.querySelector('button[aria-label="Role selector"]');
   if (!(button instanceof HTMLButtonElement)) {
     throw new Error(`Could not find Role selector for ${articleText}`);
   }

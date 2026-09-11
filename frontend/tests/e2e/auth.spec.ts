@@ -47,17 +47,17 @@ test("application administrator can create an identity-neutral authorization act
 
   await expect(actorCard).toBeVisible();
   await expect(actorCard).toContainText(displayName);
-  await expect(actorCard).toContainText("No role grants.");
+  await expect(actorCard).toContainText("No current Role Grants.");
   await expect(actorCard).toContainText("Tenant Role Grants: INELIGIBLE");
   await expect(actorCard).toContainText("Authentication Account binding is required.");
 
-  const roleSelector = actorCard.getByRole("button", { name: "Role", exact: true });
+  const roleSelector = actorCard.getByRole("button", { name: "Role selector", exact: true });
   await expect(roleSelector).toBeDisabled();
   await expect(actorCard.getByRole("listbox", { name: "Role choices" })).toHaveCount(0);
   await expect(actorCard.getByRole("button", { name: "Grant Role" })).toBeDisabled();
 
   await page.reload();
-  await expect(actorCard).toContainText("No role grants.");
+  await expect(actorCard).toContainText("No current Role Grants.");
   await expect(actorCard.getByRole("button", { name: "Grant Role" })).toBeDisabled();
 });
 
@@ -74,8 +74,13 @@ test("authorization Actor cards use a filterable Role selector", async ({ page }
     });
 
   await expect(actorCard).toBeVisible();
+  await expect(actorCard.getByRole("heading", { name: "Grant a Role", exact: true })).toBeVisible();
+  await expect(
+    actorCard.getByRole("heading", { name: "Current Role Grants", exact: true }),
+  ).toBeVisible();
 
-  const roleSelector = actorCard.getByRole("button", { name: "Role", exact: true });
+  const roleSelector = actorCard.getByRole("button", { name: "Role selector", exact: true });
+  await expect(roleSelector).toContainText("Select a Role");
   await expect(roleSelector).toBeEnabled();
   await expect(roleSelector).toHaveAttribute("aria-expanded", "false");
 
