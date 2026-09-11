@@ -146,6 +146,7 @@ DROP TRIGGER IF EXISTS trg_people_same_tenant_update;
 DROP TRIGGER IF EXISTS trg_people_search_index_delete;
 DROP TRIGGER IF EXISTS trg_people_search_index_insert;
 DROP TRIGGER IF EXISTS trg_people_search_index_update;
+DROP TRIGGER IF EXISTS trg_global_person_search_index_update;
 DROP TRIGGER IF EXISTS trg_people_tenant_exists_insert;
 DROP TRIGGER IF EXISTS trg_people_tenant_immutable;
 DROP TRIGGER IF EXISTS trg_person_membership_identity_immutable;

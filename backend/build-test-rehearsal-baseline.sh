@@ -372,6 +372,20 @@ for migration in "$MIGRATIONS_DIR"/*.up.sql; do
     continue
   fi
 
+  # Bite 30K.3A installs the canonical Global Person search trigger at runtime.
+  # Rehearse 000069 from that real application-used state, not only from the
+  # migration-only state, so physical removal must tolerate the pre-existing
+  # runtime trigger before recreating the canonical search projection.
+  if [ "$filename" = "000069_physical_legacy_identity_schema_removal.up.sql" ]; then
+    sqlite3 -bail "$PROBE_DB" <<'SQL'
+CREATE TRIGGER IF NOT EXISTS trg_global_person_search_index_update
+AFTER UPDATE OF first_name, last_name, nickname ON global_people
+BEGIN
+  SELECT 1;
+END;
+SQL
+  fi
+
   echo "Applying migration to release rehearsal probe: $filename"
   sqlite3 -bail "$PROBE_DB" < "$migration"
   escaped_filename="$(printf '%s' "$filename" | sed "s/'/''/g")"
