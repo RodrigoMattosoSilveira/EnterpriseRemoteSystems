@@ -40,7 +40,8 @@ endif
 
 EDGE_DIR := $(SERVER_ROOT)/edge
 
-SERVER_COMPOSE = docker compose -p $(COMPOSE_PROJECT) --env-file $(ENV_FILE) -f docker-compose.server.yml
+SERVER_AUTHZ_BOOTSTRAP_ENABLED ?= false
+SERVER_COMPOSE = AUTHZ_BOOTSTRAP_ENABLED=$(SERVER_AUTHZ_BOOTSTRAP_ENABLED) docker compose -p $(COMPOSE_PROJECT) --env-file $(ENV_FILE) -f docker-compose.server.yml
 SERVER_COMPOSE_BUILD = BUILDX_NO_DEFAULT_ATTESTATIONS=1 $(SERVER_COMPOSE) --progress plain
 SERVER_SERVICE_CONTAINERS = $(CONTAINER_PREFIX)-backend $(CONTAINER_PREFIX)-frontend $(CONTAINER_PREFIX)-caddy
 
@@ -112,6 +113,7 @@ help:
 	@echo "  make server-dns-check ENV=development|test|production"
 	@echo "  make server-cert-check ENV=development|test|production"
 	@echo "  make server-backup ENV=development|test|production"
+	@echo "  Normal server targets force AUTHZ bootstrap off; deliberate recovery: SERVER_AUTHZ_BOOTSTRAP_ENABLED=true make server-up ENV=<env>"
 	@echo "  make testdata-server-reset ENV=development|test"
 	@echo
 	@echo "Development aliases:"
@@ -305,6 +307,8 @@ local-hot-reload-check:
 
 .PHONY: server-authz-bootstrap-config-check
 server-authz-bootstrap-config-check:
+	@case "$(SERVER_AUTHZ_BOOTSTRAP_ENABLED)" in true|false) ;; *) echo "SERVER_AUTHZ_BOOTSTRAP_ENABLED must be true or false." && exit 1 ;; esac
+	@printf '%s\n' '$(SERVER_COMPOSE)' | grep -Fq 'AUTHZ_BOOTSTRAP_ENABLED=$(SERVER_AUTHZ_BOOTSTRAP_ENABLED)' || (echo "Server Compose commands must override stale environment bootstrap state via SERVER_AUTHZ_BOOTSTRAP_ENABLED." && exit 1)
 	@grep -Fq 'AUTHZ_BOOTSTRAP_ENABLED: "$${AUTHZ_BOOTSTRAP_ENABLED:-false}"' docker-compose.server.yml || (echo "Server Compose must pass AUTHZ_BOOTSTRAP_ENABLED with a safe false default." && exit 1)
 	@grep -Fq 'AUTHZ_BOOTSTRAP_ACTOR_KEY: "$${AUTHZ_BOOTSTRAP_ACTOR_KEY:-}"' docker-compose.server.yml || (echo "Server Compose must pass AUTHZ_BOOTSTRAP_ACTOR_KEY." && exit 1)
 	@grep -Fq 'AUTHZ_BOOTSTRAP_DISPLAY_NAME: "$${AUTHZ_BOOTSTRAP_DISPLAY_NAME:-}"' docker-compose.server.yml || (echo "Server Compose must pass AUTHZ_BOOTSTRAP_DISPLAY_NAME." && exit 1)

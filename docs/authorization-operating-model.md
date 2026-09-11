@@ -24,7 +24,7 @@ The response includes the persisted actor record ID, effective context (`*` for 
 
 Local development retains a persisted `bootstrap-admin` actor with an `APPLICATION_ADMIN` grant for deliberate recovery. Bite 28D Playwright provisions and authenticates the separate `e2e-application-admin` account through a real session; explicit `test` header mode remains enabled only for isolated authorization-boundary requests. Neither compatibility path invents permissions; the backend always loads persisted grants.
 
-Production and long-lived environments should keep `AUTHZ_BOOTSTRAP_ENABLED=false` after a valid administrator exists, except during an intentional recovery operation.
+Production and long-lived environments should keep `AUTHZ_BOOTSTRAP_ENABLED=false` after a valid administrator exists, except during an intentional recovery operation. Normal `make server-*` Compose commands enforce that safe state even when an older persisted `.env.<environment>` still contains `AUTHZ_BOOTSTRAP_ENABLED=true`. To perform a deliberate server recovery, opt in explicitly for that invocation with `SERVER_AUTHZ_BOOTSTRAP_ENABLED=true`, for example `make server-up ENV=development SERVER_AUTHZ_BOOTSTRAP_ENABLED=true`; the next normal server command returns to the safe disabled default without rewriting the persisted environment file.
 
 ## Actor lifecycle safeguards
 
