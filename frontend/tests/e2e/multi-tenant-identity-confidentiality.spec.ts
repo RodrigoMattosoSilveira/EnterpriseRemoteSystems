@@ -126,11 +126,11 @@ test.describe("Bite 30L multi-Tenant identity and confidentiality", () => {
     }
   });
 
-  test("Tenant Administrators can locate the shared Global Person without learning the other Tenant relationship", async () => {
+  test("Tenant Administrators see only their own Membership projection for the shared Person", async () => {
     for (const tenant of [tenantA, tenantB]) {
       const adminApi = await newTenantAdminApi(tenant.id);
       try {
-        const response = await adminApi.get(e2eApiUrl("/api/v1/people/global"), {
+        const response = await adminApi.get(e2eApiUrl("/api/v1/people"), {
           params: { search: login, page: "1", pageSize: "20" },
         });
         expect(response.status()).toBe(200);
@@ -145,15 +145,28 @@ test.describe("Bite 30L multi-Tenant identity and confidentiality", () => {
           : envelope.data?.items ?? [];
         const person = items.find((item) => item.id === personId);
         expect(person).toBeTruthy();
-        expect(person).toMatchObject({ id: personId, email: login });
-        expect(Object.keys(person ?? {}).sort()).toEqual(
-          ["cellular", "cpf", "email", "firstName", "id", "lastName", "nickname", "rg"].sort(),
-        );
+        expect(person).toMatchObject({
+          id: personId,
+          globalPersonId: personId,
+          membershipId: tenant.membershipId,
+          tenantId: tenant.id,
+          email: login,
+        });
 
         const otherTenant = tenant.id === tenantA.id ? tenantB : tenantA;
         expect(body).not.toContain(otherTenant.id);
         expect(body).not.toContain(otherTenant.actorKey);
         expect(body).not.toContain(otherTenant.membershipId);
+
+        const globalResponse = await adminApi.get(e2eApiUrl("/api/v1/people/global"), {
+          params: { search: login, page: "1", pageSize: "20" },
+        });
+        expect(globalResponse.status()).toBe(200);
+        const globalEnvelope = (await globalResponse.json()) as {
+          data?: { items?: Array<Record<string, unknown>>; total?: number };
+        };
+        expect(globalEnvelope.data?.items ?? []).toHaveLength(0);
+        expect(globalEnvelope.data?.total ?? 0).toBe(0);
       } finally {
         await adminApi.dispose();
       }
