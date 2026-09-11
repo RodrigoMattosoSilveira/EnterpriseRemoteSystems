@@ -75,4 +75,31 @@ func TestEnsureE2ETenantFixturesSurvivesAccountActorFoundationAndIsIdempotent(t 
 	if binding.MembershipID == nil || *binding.MembershipID != membershipID {
 		t.Fatalf("expected Account/Actor binding Membership %q, got %#v", membershipID, binding.MembershipID)
 	}
+
+	var multiAccount authentication.Account
+	if err := database.First(&multiAccount, "id = ?", "e2e-multi-tenant-account").Error; err != nil {
+		t.Fatalf("find E2E multi-Tenant Account: %v", err)
+	}
+	if multiAccount.Login != e2eMultiTenantPersonLogin {
+		t.Fatalf("expected E2E multi-Tenant login %q, got %q", e2eMultiTenantPersonLogin, multiAccount.Login)
+	}
+	var multiBindings []authentication.AccountActor
+	if err := database.Where("account_id = ?", multiAccount.ID).Order("tenant_id ASC").Find(&multiBindings).Error; err != nil {
+		t.Fatalf("find E2E multi-Tenant Account/Actor bindings: %v", err)
+	}
+	if len(multiBindings) != 2 {
+		t.Fatalf("expected two E2E multi-Tenant Account/Actor bindings, got %#v", multiBindings)
+	}
+	for i, tenantID := range []string{e2eMultiTenantAID, e2eMultiTenantBID} {
+		binding := multiBindings[i]
+		if binding.ScopeType != authentication.AccountActorScopeTenant {
+			t.Fatalf("expected %s binding to be TENANT scoped, got %q", tenantID, binding.ScopeType)
+		}
+		if binding.TenantID == nil || *binding.TenantID != tenantID {
+			t.Fatalf("expected %s binding tenant, got %#v", tenantID, binding.TenantID)
+		}
+		if binding.MembershipID == nil || *binding.MembershipID == "" {
+			t.Fatalf("expected %s binding Membership, got %#v", tenantID, binding.MembershipID)
+		}
+	}
 }

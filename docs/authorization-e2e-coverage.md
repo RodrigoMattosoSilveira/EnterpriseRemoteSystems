@@ -25,3 +25,16 @@ frontend/tests/e2e/authorization-boundaries.spec.ts
 ## Operational expectation
 
 The E2E tests use only persisted actors and persisted role grants. They must not rely on header-supplied permission lists. This keeps the browser/API promotion suite aligned with the Bite 27B operating model.
+
+
+## Bite 30L.1 — Multi-Tenant Identity and Confidentiality
+
+The final Bite 30 verification work extends this coverage with a deterministic one-Account/two-Tenant identity fixture.
+
+```text
+frontend/tests/e2e/multi-tenant-identity-confidentiality.spec.ts
+```
+
+The 30L.1 coverage verifies that one Authentication Account can own two exact Tenant AccountActors for one Global Person, switch between those Tenant contexts through a real authenticated session, expose only the selected Membership projection, reject an unrelated Tenant context, and keep other-Tenant Membership/Actor identifiers out of Tenant Administrator global-directory results.
+
+The remaining 30L lifecycle, financial, control-plane, support-lease, audit, and deployment gates are intentionally delivered in later 30L sub-bites as documented in `docs/bite-30l-authorization-boundary-identity-e2e-verification.md`.
