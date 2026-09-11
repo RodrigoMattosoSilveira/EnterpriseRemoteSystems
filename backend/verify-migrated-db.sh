@@ -5,7 +5,7 @@ DB_PATH="${DATABASE_PATH:-/app/data/app.db}"
 MIGRATIONS_DIR="${MIGRATIONS_DIR:-/app/migrations}"
 EXPECTED_BASELINE_LAST_MIGRATION="${EXPECTED_BASELINE_LAST_MIGRATION:-000062_tenant_administrator_cardinality.up.sql}"
 EXPECTED_FIRST_REHEARSED_MIGRATION="${EXPECTED_FIRST_REHEARSED_MIGRATION:-000063_global_administration_control_plane.up.sql}"
-EXPECTED_FINAL_MIGRATION="${EXPECTED_FINAL_MIGRATION:-000067_audit_identity_lifecycle_hardening.up.sql}"
+EXPECTED_FINAL_MIGRATION="${EXPECTED_FINAL_MIGRATION:-000069_physical_legacy_identity_schema_removal.up.sql}"
 
 if [ ! -f "$DB_PATH" ]; then
   echo "Missing database for migration verification: $DB_PATH" >&2
@@ -117,6 +117,34 @@ require_trigger() {
   fi
 }
 
+reject_table() {
+  table="$1"
+  count="$(sqlite3 "$DB_PATH" "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='${table}';")"
+  if [ "$count" != "0" ]; then
+    echo "Retired table ${table} must be absent after 30K.3B." >&2
+    exit 1
+  fi
+}
+
+reject_column() {
+  table="$1"
+  column="$2"
+  count="$(sqlite3 "$DB_PATH" "SELECT COUNT(*) FROM pragma_table_info('${table}') WHERE name='${column}';")"
+  if [ "$count" != "0" ]; then
+    echo "Retired column ${table}.${column} must be absent after 30K.3B." >&2
+    exit 1
+  fi
+}
+
+reject_trigger() {
+  trigger="$1"
+  count="$(sqlite3 "$DB_PATH" "SELECT COUNT(*) FROM sqlite_master WHERE type='trigger' AND name='${trigger}';")"
+  if [ "$count" != "0" ]; then
+    echo "Retired trigger ${trigger} must be absent after 30K.3B." >&2
+    exit 1
+  fi
+}
+
 require_column global_people operational_active
 require_column auth_user_accounts security_suspended
 require_column authz_actor_role_grants lifecycle_suspended
@@ -155,6 +183,84 @@ if [ "$audit_identity_migration_count" = "1" ]; then
   require_index idx_authz_audit_logs_correlation_id
   require_index idx_authz_audit_logs_authorization_source
   require_trigger trg_authz_audit_identity_required_insert
+fi
+
+legacy_identity_bridge_count="$(sqlite3 "$DB_PATH" "SELECT COUNT(*) FROM schema_migrations WHERE filename='000068_legacy_identity_dependency_elimination.up.sql';")"
+physical_legacy_removal_count="$(sqlite3 "$DB_PATH" "SELECT COUNT(*) FROM schema_migrations WHERE filename='000069_physical_legacy_identity_schema_removal.up.sql';")"
+if [ "$physical_legacy_removal_count" = "1" ]; then
+  # 30K.3B physically removes every legacy identity storage path retained by
+  # 30K.3A. Current schema verification must prove they cannot silently return.
+  reject_table people
+  reject_column auth_user_accounts actor_id
+  reject_column auth_account_actors is_primary
+  reject_column authz_actors person_id
+  reject_column authz_actors collaborator_id
+  reject_column person_tenant_memberships legacy_person_id
+  reject_column collaborator_journeys person_id
+  require_column collaborator_journeys membership_id
+
+  journey_membership_notnull="$(sqlite3 "$DB_PATH" "SELECT [notnull] FROM pragma_table_info('collaborator_journeys') WHERE name='membership_id';")"
+  if [ "$journey_membership_notnull" != "1" ]; then
+    echo "30K.3B requires collaborator_journeys.membership_id to remain NOT NULL." >&2
+    exit 1
+  fi
+
+  for trigger in \
+    trg_auth_user_accounts_legacy_actor_insert_prohibited \
+    trg_auth_user_accounts_legacy_actor_update_prohibited \
+    trg_auth_account_actors_legacy_primary_insert_prohibited \
+    trg_auth_account_actors_legacy_primary_update_prohibited \
+    trg_authz_actors_legacy_identity_insert_prohibited \
+    trg_authz_actors_legacy_identity_update_prohibited \
+    trg_person_membership_legacy_projection_insert_prohibited \
+    trg_person_membership_legacy_projection_update_prohibited \
+    trg_collaborator_journeys_legacy_person_insert_prohibited \
+    trg_collaborator_journeys_legacy_person_update_prohibited; do
+    reject_trigger "$trigger"
+  done
+
+  for column in membership_id person_id tenant_id search_text; do
+    require_column people_search_index "$column"
+  done
+
+  obsolete_person_self_roles="$(sqlite3 "$DB_PATH" "SELECT COUNT(*) FROM authz_roles WHERE code='PERSON' OR scope_type='SELF';")"
+  if [ "$obsolete_person_self_roles" != "0" ]; then
+    echo "30K.3B retained obsolete PERSON/SELF authorization catalog state." >&2
+    exit 1
+  fi
+elif [ "$legacy_identity_bridge_count" = "1" ]; then
+  # 30K.3A bridge verification remains useful for databases intentionally
+  # stopped before 000069.
+  require_table people
+  require_column auth_user_accounts actor_id
+  require_column auth_account_actors is_primary
+  require_column authz_actors person_id
+  require_column authz_actors collaborator_id
+  require_column person_tenant_memberships legacy_person_id
+  require_column collaborator_journeys person_id
+  require_column collaborator_journeys membership_id
+
+  account_actor_notnull="$(sqlite3 "$DB_PATH" "SELECT [notnull] FROM pragma_table_info('auth_user_accounts') WHERE name='actor_id';")"
+  journey_person_notnull="$(sqlite3 "$DB_PATH" "SELECT [notnull] FROM pragma_table_info('collaborator_journeys') WHERE name='person_id';")"
+  journey_membership_notnull="$(sqlite3 "$DB_PATH" "SELECT [notnull] FROM pragma_table_info('collaborator_journeys') WHERE name='membership_id';")"
+  if [ "$account_actor_notnull" != "0" ] || [ "$journey_person_notnull" != "0" ] || [ "$journey_membership_notnull" != "1" ]; then
+    echo "30K.3A compatibility-column nullability is incorrect." >&2
+    exit 1
+  fi
+
+  for trigger in \
+    trg_auth_user_accounts_legacy_actor_insert_prohibited \
+    trg_auth_user_accounts_legacy_actor_update_prohibited \
+    trg_auth_account_actors_legacy_primary_insert_prohibited \
+    trg_auth_account_actors_legacy_primary_update_prohibited \
+    trg_authz_actors_legacy_identity_insert_prohibited \
+    trg_authz_actors_legacy_identity_update_prohibited \
+    trg_person_membership_legacy_projection_insert_prohibited \
+    trg_person_membership_legacy_projection_update_prohibited \
+    trg_collaborator_journeys_legacy_person_insert_prohibited \
+    trg_collaborator_journeys_legacy_person_update_prohibited; do
+    require_trigger "$trigger"
+  done
 fi
 
 application_admin_permission_count="$(sqlite3 "$DB_PATH" "
@@ -200,11 +306,17 @@ FROM authz_actor_role_grants g
 JOIN authz_roles r
   ON r.id = g.role_id
  AND r.code = 'APPLICATION_ADMIN'
-LEFT JOIN authz_actors az ON az.id = g.actor_id
 WHERE g.tenant_id='*'
   AND (
-    az.person_id IS NOT NULL
-    OR az.collaborator_id IS NOT NULL
+    NOT EXISTS (
+      SELECT 1
+      FROM auth_account_actors aa
+      JOIN auth_user_accounts a ON a.id = aa.account_id
+      WHERE aa.actor_id = g.actor_id
+        AND aa.scope_type = 'GLOBAL'
+        AND aa.tenant_id IS NULL
+        AND aa.membership_id IS NULL
+    )
     OR EXISTS (
       SELECT 1
       FROM auth_account_actors aa
@@ -213,14 +325,15 @@ WHERE g.tenant_id='*'
     )
     OR EXISTS (
       SELECT 1
-      FROM auth_user_accounts a
-      JOIN auth_account_people ap ON ap.account_id = a.id
-      WHERE a.actor_id = g.actor_id
+      FROM auth_account_actors aa
+      JOIN auth_account_people ap ON ap.account_id = aa.account_id
+      WHERE aa.actor_id = g.actor_id
+        AND aa.scope_type = 'GLOBAL'
     )
   );
 ")"
 if [ "$application_admin_identity_violations" != "0" ]; then
-  echo "Post-30I Application Administrator identity invariant failed: found ${application_admin_identity_violations} tenant-identity binding(s)." >&2
+  echo "Post-30I Application Administrator identity invariant failed: found ${application_admin_identity_violations} canonical identity violation(s) (missing GLOBAL AccountActor, TENANT AccountActor present, or Person-linked GLOBAL Account)." >&2
   exit 1
 fi
 
@@ -269,4 +382,6 @@ printf '%s\n' \
   "Application Administrator standing authority: control-plane only" \
   "Application Administrator tenant-identity violations: 0" \
   "Audit history guards: append-only" \
-  "30J audit identity schema: $([ "$audit_identity_migration_count" = "1" ] && printf 'present' || printf 'not-yet-applied')"
+  "30J audit identity schema: $([ "$audit_identity_migration_count" = "1" ] && printf 'present' || printf 'not-yet-applied')" \
+  "30K.3A legacy identity bridge: $([ "$legacy_identity_bridge_count" = "1" ] && printf 'present' || printf 'not-yet-applied')" \
+  "30K.3B physical legacy identity removal: $([ "$physical_legacy_removal_count" = "1" ] && printf 'present' || printf 'not-yet-applied')"

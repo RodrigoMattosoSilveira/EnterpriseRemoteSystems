@@ -77,7 +77,8 @@ def main() -> int:
 
     conn = connect(str(db_path))
     required_tables = [
-        "people",
+        "global_people",
+        "person_tenant_memberships",
         "collaborator_journeys",
         "work_periods",
         "gold_production_entries",
@@ -93,15 +94,16 @@ def main() -> int:
     issues: list[str] = []
 
     print("Manual seed core counts")
-    people_count = int(scalar(conn, "SELECT COUNT(*) FROM people WHERE id LIKE 'manual-person-%'") or 0)
+    people_count = int(scalar(conn, "SELECT COUNT(*) FROM global_people WHERE id LIKE 'manual-person-%'") or 0)
     collaborator_count = int(
         scalar(
             conn,
             """
             SELECT COUNT(*)
             FROM collaborator_journeys cj
-            JOIN people p ON p.id = cj.person_id
-            WHERE p.id LIKE 'manual-person-%'
+            JOIN person_tenant_memberships m ON m.id = cj.membership_id
+            JOIN global_people gp ON gp.id = m.person_id
+            WHERE gp.id LIKE 'manual-person-%'
             """,
         )
         or 0
@@ -120,8 +122,9 @@ def main() -> int:
             """
             SELECT cj.payment_method_id, COUNT(*)
             FROM collaborator_journeys cj
-            JOIN people p ON p.id = cj.person_id
-            WHERE p.id LIKE 'manual-person-%'
+            JOIN person_tenant_memberships m ON m.id = cj.membership_id
+            JOIN global_people gp ON gp.id = m.person_id
+            WHERE gp.id LIKE 'manual-person-%'
             GROUP BY cj.payment_method_id
             ORDER BY cj.payment_method_id
             """
@@ -134,8 +137,9 @@ def main() -> int:
             """
             SELECT MIN(cj.journey_start_date), MAX(cj.journey_start_date), COUNT(*)
             FROM collaborator_journeys cj
-            JOIN people p ON p.id = cj.person_id
-            WHERE p.id LIKE 'manual-person-%'
+            JOIN person_tenant_memberships m ON m.id = cj.membership_id
+            JOIN global_people gp ON gp.id = m.person_id
+            WHERE gp.id LIKE 'manual-person-%'
             """
         ),
     )
@@ -146,8 +150,9 @@ def main() -> int:
             """
             SELECT COUNT(*)
             FROM collaborator_journeys cj
-            JOIN people p ON p.id = cj.person_id
-            WHERE p.id LIKE 'manual-person-%'
+            JOIN person_tenant_memberships m ON m.id = cj.membership_id
+            JOIN global_people gp ON gp.id = m.person_id
+            WHERE gp.id LIKE 'manual-person-%'
               AND cj.journey_start_date >= '2030-01-01'
             """,
         )

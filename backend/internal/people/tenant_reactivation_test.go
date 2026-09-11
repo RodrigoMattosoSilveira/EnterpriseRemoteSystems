@@ -53,15 +53,23 @@ func TestTenantReactivationRestoresOnlySelectedMembershipAndBaselineAuthority(t 
 		t.Fatalf("create Tenant B Membership: %v", err)
 	}
 
-	account := authentication.Account{ID: "account-return", ActorID: "actor-return-a", Login: "return.worker@example.test", PasswordHash: "not-used", Active: true, CreatedAt: now, UpdatedAt: now}
+	var membershipARecord, membershipBRecord db.PersonTenantMembership
+	if err := database.First(&membershipARecord, "id = ?", first.MembershipID).Error; err != nil {
+		t.Fatalf("load Tenant A Membership: %v", err)
+	}
+	if err := database.First(&membershipBRecord, "id = ?", second.MembershipID).Error; err != nil {
+		t.Fatalf("load Tenant B Membership: %v", err)
+	}
+
+	account := authentication.Account{ID: "account-return", Login: "return.worker@example.test", PasswordHash: "not-used", Active: true, CreatedAt: now, UpdatedAt: now}
 	if err := database.Create(&account).Error; err != nil {
 		t.Fatalf("create Account: %v", err)
 	}
 	if err := database.Create(&authentication.AccountPerson{AccountID: account.ID, PersonID: first.GlobalPersonID, CreatedAt: now, UpdatedAt: now}).Error; err != nil {
 		t.Fatalf("bind Account Person: %v", err)
 	}
-	actorA := authz.AuthzActor{ID: "actor-return-a", ActorKey: "return-a", DisplayName: "Return A", PersonID: &first.ID, Active: true, CreatedAt: now, UpdatedAt: now}
-	actorB := authz.AuthzActor{ID: "actor-return-b", ActorKey: "return-b", DisplayName: "Return B", PersonID: &second.ID, Active: true, CreatedAt: now, UpdatedAt: now}
+	actorA := authz.AuthzActor{ID: "actor-return-a", ActorKey: "return-a", DisplayName: "Return A", Active: true, CreatedAt: now, UpdatedAt: now}
+	actorB := authz.AuthzActor{ID: "actor-return-b", ActorKey: "return-b", DisplayName: "Return B", Active: true, CreatedAt: now, UpdatedAt: now}
 	if err := database.Create(&actorA).Error; err != nil {
 		t.Fatalf("create Actor A: %v", err)
 	}
@@ -73,7 +81,7 @@ func TestTenantReactivationRestoresOnlySelectedMembershipAndBaselineAuthority(t 
 	membershipA := first.MembershipID
 	membershipB := second.MembershipID
 	bindings := []authentication.AccountActor{
-		{AccountID: account.ID, ActorID: actorA.ID, ScopeType: authentication.AccountActorScopeTenant, TenantID: &tenantA, MembershipID: &membershipA, Primary: true, CreatedAt: now, UpdatedAt: now},
+		{AccountID: account.ID, ActorID: actorA.ID, ScopeType: authentication.AccountActorScopeTenant, TenantID: &tenantA, MembershipID: &membershipA, CreatedAt: now, UpdatedAt: now},
 		{AccountID: account.ID, ActorID: actorB.ID, ScopeType: authentication.AccountActorScopeTenant, TenantID: &tenantB, MembershipID: &membershipB, CreatedAt: now, UpdatedAt: now},
 	}
 	if err := database.Create(&bindings).Error; err != nil {
@@ -276,7 +284,7 @@ func TestCreateMembershipRollsBackWhenApplicationSecuritySuspended(t *testing.T)
 	if err != nil {
 		t.Fatalf("create Person: %v", err)
 	}
-	account := authentication.Account{ID: "account-blocked-return", ActorID: "actor-blocked-return", Login: created.Email, PasswordHash: "not-used", Active: false, SecuritySuspended: true, CreatedAt: now, UpdatedAt: now}
+	account := authentication.Account{ID: "account-blocked-return", Login: created.Email, PasswordHash: "not-used", Active: false, SecuritySuspended: true, CreatedAt: now, UpdatedAt: now}
 	if err := database.Create(&account).Error; err != nil {
 		t.Fatalf("create security-suspended Account: %v", err)
 	}
@@ -316,12 +324,8 @@ func TestCreateMembershipRollsBackWhenApplicationSecuritySuspended(t *testing.T)
 	if membershipCount != 0 {
 		t.Fatalf("security-suspended onboarding must roll back Membership creation, count=%d", membershipCount)
 	}
-	var legacyCount int64
-	if err := database.Model(&db.Person{}).Where("tenant_id = ? AND cpf = ?", "tenant-blocked", created.CPF).Count(&legacyCount).Error; err != nil {
-		t.Fatalf("count rolled-back legacy Person: %v", err)
-	}
-	if legacyCount != 0 {
-		t.Fatalf("security-suspended onboarding must roll back legacy Person creation, count=%d", legacyCount)
+	if database.Migrator().HasTable("people") {
+		t.Fatal("30K.3B runtime schema must not recreate the legacy people table")
 	}
 	assertMembershipStatusCode(t, database, created.MembershipID, "INACTIVE")
 	var global db.GlobalPerson
@@ -351,7 +355,7 @@ func TestTenantReactivationCannotOverrideApplicationSecuritySuspension(t *testin
 		t.Fatalf("create Person: %v", err)
 	}
 	now := time.Now().UTC()
-	account := authentication.Account{ID: "account-secure", ActorID: "actor-secure", Login: created.Email, PasswordHash: "not-used", Active: false, SecuritySuspended: true, CreatedAt: now, UpdatedAt: now}
+	account := authentication.Account{ID: "account-secure", Login: created.Email, PasswordHash: "not-used", Active: false, SecuritySuspended: true, CreatedAt: now, UpdatedAt: now}
 	if err := database.Create(&account).Error; err != nil {
 		t.Fatalf("create suspended Account: %v", err)
 	}

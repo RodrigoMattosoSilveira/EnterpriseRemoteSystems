@@ -23,11 +23,10 @@ type CookieConfig struct {
 }
 
 type Handler struct {
-	service           Service
-	cookie            CookieConfig
-	actorStore        authz.ActorStore
-	auditStore        authz.AuditLogStore
-	tenantOptionStore authz.TenantOptionStore
+	service    Service
+	cookie     CookieConfig
+	actorStore authz.ActorStore
+	auditStore authz.AuditLogStore
 }
 
 func NewHandler(service Service, cookie CookieConfig, actorStore authz.ActorStore, auditStore authz.AuditLogStore) *Handler {
@@ -40,11 +39,7 @@ func NewHandler(service Service, cookie CookieConfig, actorStore authz.ActorStor
 	if cookie.TTL <= 0 {
 		cookie.TTL = defaultSessionTTL
 	}
-	handler := &Handler{service: service, cookie: cookie, actorStore: actorStore, auditStore: auditStore}
-	if store, ok := actorStore.(authz.TenantOptionStore); ok {
-		handler.tenantOptionStore = store
-	}
-	return handler
+	return &Handler{service: service, cookie: cookie, actorStore: actorStore, auditStore: auditStore}
 }
 
 func (h *Handler) SessionMiddleware() fiber.Handler {
@@ -110,20 +105,11 @@ func (h *Handler) TenantOptions(c fiber.Ctx) error {
 	if err != nil {
 		return h.writeError(c, err)
 	}
-	if accountActorStore, ok := h.actorStore.(authz.AccountActorStore); ok {
-		options, err := accountActorStore.ListAccountTenantOptions(c.Context(), session.AccountID)
-		if err == nil {
-			setNoStore(c)
-			return httpx.OK(c, options)
-		}
-		if !errors.Is(err, authz.ErrAccountActorFoundationUnavailable) {
-			return h.writeError(c, err)
-		}
+	accountActorStore, ok := h.actorStore.(authz.AccountActorStore)
+	if !ok {
+		return httpx.WriteError(c, authz.ErrAccountActorFoundationUnavailable)
 	}
-	if h.tenantOptionStore == nil {
-		return httpx.WriteError(c, errors.New("tenant options are unavailable"))
-	}
-	options, err := h.tenantOptionStore.ListActorTenantOptions(c.Context(), session.ActorID)
+	options, err := accountActorStore.ListAccountTenantOptions(c.Context(), session.AccountID)
 	if err != nil {
 		return h.writeError(c, err)
 	}

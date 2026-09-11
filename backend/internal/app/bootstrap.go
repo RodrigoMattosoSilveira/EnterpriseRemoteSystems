@@ -28,7 +28,8 @@ func Bootstrap(cfg Config) (*fiber.App, func(), error) {
 	if err != nil {
 		return nil, nil, err
 	}
-	if cfg.AutoMigrate || (cfg.Env == "test" && !cfg.AutoMigrateConfigured) {
+	autoMigrate := cfg.AutoMigrate || (cfg.Env == "test" && !cfg.AutoMigrateConfigured)
+	if autoMigrate {
 		if err := db.AutoMigrate(database); err != nil {
 			return nil, nil, err
 		}
@@ -36,18 +37,23 @@ func Bootstrap(cfg Config) (*fiber.App, func(), error) {
 	if err := db.SeedReferenceData(database); err != nil {
 		return nil, nil, err
 	}
-	// Bite 30B is an additive cutover: legacy Person writers remain until later
-	// bites. Repair any compatibility rows that were written without the new
-	// global Person/Membership foundation before serving tenant lookups.
-	if err := db.EnsureGlobalPersonMembershipFoundation(database); err != nil {
-		return nil, nil, err
+	// The People search projection is disposable runtime infrastructure. SQL
+	// migration 000055 still describes the legacy Person-keyed shape, while
+	// Bite 30K.1 reads it by canonical Membership ID. Deployment-style startup
+	// intentionally disables AutoMigrate, so refresh the projection before
+	// repairing Membership foundation rows. Any Memberships created by the
+	// repair are then captured by the canonical Membership-index triggers.
+	if !autoMigrate {
+		if err := db.InstallPeopleSearchIndex(database); err != nil {
+			return nil, nil, err
+		}
 	}
-	if cfg.AutoMigrate || (cfg.Env == "test" && !cfg.AutoMigrateConfigured) {
+	if autoMigrate {
 		if err := authz.AutoMigrate(database); err != nil {
 			return nil, nil, err
 		}
 	}
-	if cfg.AutoMigrate || (cfg.Env == "test" && !cfg.AutoMigrateConfigured) {
+	if autoMigrate {
 		if err := authentication.AutoMigrate(database); err != nil {
 			return nil, nil, err
 		}

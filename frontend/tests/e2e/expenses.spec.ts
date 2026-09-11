@@ -36,7 +36,7 @@ test("user can create an Expense for an active Collaborator", async ({
     nickname: personNickname,
   });
 
-  const collaborator = await createCollaborator(request, person.id);
+  const collaborator = await createCollaborator(request, person.membershipId);
   const item = await createPriceListItem(request, {
     itemType: "CANTEEN",
     code: `E2E_CANTEEN_${suffix}`,
@@ -141,7 +141,7 @@ test("user can create a grams-of-gold Expense from the latest gold price", async
     firstName: `GoldExpenseE2E${suffix}`,
     nickname: personNickname,
   });
-  const collaborator = await createCollaborator(request, person.id);
+  const collaborator = await createCollaborator(request, person.membershipId);
   const item = await createPriceListItem(request, {
     itemType: "ADMINISTRATIVE",
     code: `E2E_ADMIN_${suffix}`,
@@ -216,7 +216,7 @@ test("user can open an Expense detail from the list", async ({
     firstName: `ExpenseDetailE2E${suffix}`,
     nickname: personNickname,
   });
-  const collaborator = await createCollaborator(request, person.id);
+  const collaborator = await createCollaborator(request, person.membershipId);
   const expense = await createExpense(request, {
     collaboratorId: collaborator.id,
     expenseCategoryId: EXPENSE_CATEGORY_FLIGHT_ID,
@@ -248,7 +248,7 @@ test("expenses API supports filters and pagination from the browser test flow", 
     firstName: `ExpenseFilterE2E${suffix}`,
     nickname: `ExpenseFilter${suffix}`,
   });
-  const collaborator = await createCollaborator(request, person.id);
+  const collaborator = await createCollaborator(request, person.membershipId);
 
   const canteen = await createExpense(request, {
     collaboratorId: collaborator.id,
@@ -337,7 +337,7 @@ test("expenses API supports update and soft delete from the browser test flow", 
     firstName: `ExpenseUpdateE2E${suffix}`,
     nickname: `ExpenseUpdate${suffix}`,
   });
-  const collaborator = await createCollaborator(request, person.id);
+  const collaborator = await createCollaborator(request, person.membershipId);
   const expense = await createExpense(request, {
     collaboratorId: collaborator.id,
     expenseCategoryId: EXPENSE_CATEGORY_CANTEEN_ID,
@@ -411,7 +411,7 @@ test("expenses API rejects expenses for non-active Collaborators", async ({
     firstName: `ExpenseClosedE2E${suffix}`,
     nickname: `ExpenseClosed${suffix}`,
   });
-  const collaborator = await createCollaborator(request, person.id, {
+  const collaborator = await createCollaborator(request, person.membershipId, {
     statusId: "ref-collaborator-status-finished",
   });
 
@@ -458,6 +458,7 @@ type ApiEnvelope<T> = {
 
 type CreatedPerson = {
   id: string;
+  membershipId: string;
   firstName: string;
   lastName: string;
   nickname: string;
@@ -582,13 +583,13 @@ async function createCompletePerson(
 
 async function createCollaborator(
   api: APIRequestContext,
-  personId: string,
+  membershipId: string,
   overrides: Partial<{ statusId: string }> = {},
 ): Promise<CreatedCollaborator> {
   const response = await api.post(e2eApiUrl("/api/v1/collaborators"), {
     headers: authzHeaders(),
     data: {
-      personId,
+      membershipId,
       journeyStartDate: todayISODate(),
       paymentMethodId: PAYMENT_METHOD_DAILY_ID,
       paymentValue: 250.75,

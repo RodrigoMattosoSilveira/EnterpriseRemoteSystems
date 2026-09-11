@@ -15,14 +15,11 @@ import (
 func TestTenantProvisioningCreatesOrReusesOneGlobalAccountWithoutChangingExistingCredentials(t *testing.T) {
 	database := accountActorFoundationTestDatabase(t)
 	now := time.Now().UTC()
-	createFoundationTenantPerson(t, database, "tenant-a", "Tenant A", "tenant-person-a", "55566677788", "tenant-driven@example.com", now)
-	createFoundationTenantPerson(t, database, "tenant-b", "Tenant B", "tenant-person-b", "55566677788", "tenant-b-person@example.com", now.Add(time.Second))
-	if err := appdb.EnsureGlobalPersonMembershipFoundation(database); err != nil {
-		t.Fatalf("ensure Person membership foundation: %v", err)
-	}
+	personID, _ := createCanonicalTenantPerson(t, database, "tenant-a", "Tenant A", "tenant-driven-global-person", "55566677788", "tenant-driven@example.com", now)
+	createCanonicalMembershipForPerson(t, database, "tenant-b", "Tenant B", personID, "tenant-driven@example.com", now.Add(time.Second))
 
 	service := NewService(NewRepository(database), ServiceConfig{PasswordHashCost: bcrypt.MinCost})
-	before, err := service.GetPersonAuthenticationStatus(context.Background(), "tenant-a", "tenant-person-a")
+	before, err := service.GetPersonAuthenticationStatus(context.Background(), "tenant-a", personID)
 	if err != nil {
 		t.Fatalf("get initial tenant A authentication status: %v", err)
 	}
@@ -30,7 +27,7 @@ func TestTenantProvisioningCreatesOrReusesOneGlobalAccountWithoutChangingExistin
 		t.Fatalf("unexpected initial tenant A authentication status: %#v", before)
 	}
 
-	first, err := service.EnablePersonAuthentication(context.Background(), "tenant-a", "tenant-person-a", EnablePersonAuthenticationRequest{
+	first, err := service.EnablePersonAuthentication(context.Background(), "tenant-a", personID, EnablePersonAuthenticationRequest{
 		TemporaryPassword: "Tenant-Driven-Password-1",
 	})
 	if err != nil {
@@ -46,7 +43,7 @@ func TestTenantProvisioningCreatesOrReusesOneGlobalAccountWithoutChangingExistin
 	// Tenant B may learn only whether credential initialization is required for
 	// this provisioning action. It must not receive another tenant, Actor, or
 	// Membership identity.
-	beforeSecond, err := service.GetPersonAuthenticationStatus(context.Background(), "tenant-b", "tenant-person-b")
+	beforeSecond, err := service.GetPersonAuthenticationStatus(context.Background(), "tenant-b", personID)
 	if err != nil {
 		t.Fatalf("get tenant B authentication status: %v", err)
 	}
@@ -54,7 +51,7 @@ func TestTenantProvisioningCreatesOrReusesOneGlobalAccountWithoutChangingExistin
 		t.Fatalf("tenant B should be ready to enable without credential initialization: %#v", beforeSecond)
 	}
 
-	second, err := service.EnablePersonAuthentication(context.Background(), "tenant-b", "tenant-person-b", EnablePersonAuthenticationRequest{})
+	second, err := service.EnablePersonAuthentication(context.Background(), "tenant-b", personID, EnablePersonAuthenticationRequest{})
 	if err != nil {
 		t.Fatalf("enable tenant B authentication: %v", err)
 	}
@@ -98,11 +95,8 @@ func TestTenantProvisioningCreatesOrReusesOneGlobalAccountWithoutChangingExistin
 func TestTenantAdministratorCanIssuePasswordResetTokenOnlyThroughEnabledTenantPerson(t *testing.T) {
 	database := accountActorFoundationTestDatabase(t)
 	now := time.Now().UTC()
-	createFoundationTenantPerson(t, database, "tenant-reset", "Reset Tenant", "tenant-reset-person", "44455566677", "tenant-reset@example.com", now)
-	createFoundationTenantPerson(t, database, "tenant-other", "Other Tenant", "tenant-other-person", "33344455566", "tenant-other@example.com", now.Add(time.Second))
-	if err := appdb.EnsureGlobalPersonMembershipFoundation(database); err != nil {
-		t.Fatalf("ensure Person membership foundation: %v", err)
-	}
+	_, _ = createCanonicalTenantPerson(t, database, "tenant-reset", "Reset Tenant", "tenant-reset-person", "44455566677", "tenant-reset@example.com", now)
+	_, _ = createCanonicalTenantPerson(t, database, "tenant-other", "Other Tenant", "tenant-other-person", "33344455566", "tenant-other@example.com", now.Add(time.Second))
 
 	service := NewService(NewRepository(database), ServiceConfig{PasswordHashCost: bcrypt.MinCost})
 	if _, err := service.IssueTenantPersonPasswordResetToken(context.Background(), "tenant-reset", "tenant-reset-person"); !errors.Is(err, ErrAuthenticationNotEnabled) {
@@ -131,12 +125,9 @@ func TestTenantAdministratorCanIssuePasswordResetTokenOnlyThroughEnabledTenantPe
 func TestTenantProvisioningRequiresActiveMembership(t *testing.T) {
 	database := accountActorFoundationTestDatabase(t)
 	now := time.Now().UTC()
-	createFoundationTenantPerson(t, database, "tenant-inactive", "Inactive Tenant Person", "inactive-person", "66677788899", "inactive-membership@example.com", now)
-	if err := appdb.EnsureGlobalPersonMembershipFoundation(database); err != nil {
-		t.Fatalf("ensure Person membership foundation: %v", err)
-	}
+	_, _ = createCanonicalTenantPerson(t, database, "tenant-inactive", "Inactive Tenant Person", "inactive-person", "66677788899", "inactive-membership@example.com", now)
 	if err := database.Model(&appdb.ReferenceData{}).
-		Where("id = ?", "status-tenant-inactive").
+		Where("id = ?", "status-tenant-inactive-active").
 		Update("code", "INACTIVE").Error; err != nil {
 		t.Fatalf("mark Person Membership status inactive: %v", err)
 	}
@@ -153,10 +144,7 @@ func TestTenantProvisioningRequiresActiveMembership(t *testing.T) {
 func TestAccountReactivationRequestPreservesAccountActorsAndRevokesStaleSessions(t *testing.T) {
 	database := accountActorFoundationTestDatabase(t)
 	now := time.Now().UTC()
-	createFoundationTenantPerson(t, database, "tenant-recovery", "Recovery Tenant", "recovery-person", "77788899900", "recovery@example.com", now)
-	if err := appdb.EnsureGlobalPersonMembershipFoundation(database); err != nil {
-		t.Fatalf("ensure Person membership foundation: %v", err)
-	}
+	_, _ = createCanonicalTenantPerson(t, database, "tenant-recovery", "Recovery Tenant", "recovery-person", "77788899900", "recovery@example.com", now)
 
 	repository := NewRepository(database)
 	service := NewService(repository, ServiceConfig{PasswordHashCost: bcrypt.MinCost})
@@ -257,10 +245,7 @@ func TestAccountReactivationRequestPreservesAccountActorsAndRevokesStaleSessions
 func TestOperationallyInactivePersonCannotRequestApplicationAdministratorReactivation(t *testing.T) {
 	database := accountActorFoundationTestDatabase(t)
 	now := time.Now().UTC()
-	createFoundationTenantPerson(t, database, "tenant-operational-return", "Operational Return Tenant", "operational-return-person", "98765432100", "operational.return@example.com", now)
-	if err := appdb.EnsureGlobalPersonMembershipFoundation(database); err != nil {
-		t.Fatalf("ensure Person membership foundation: %v", err)
-	}
+	_, _ = createCanonicalTenantPerson(t, database, "tenant-operational-return", "Operational Return Tenant", "operational-return-person", "98765432100", "operational.return@example.com", now)
 
 	service := NewService(NewRepository(database), ServiceConfig{PasswordHashCost: bcrypt.MinCost})
 	if _, err := service.EnablePersonAuthentication(context.Background(), "tenant-operational-return", "operational-return-person", EnablePersonAuthenticationRequest{

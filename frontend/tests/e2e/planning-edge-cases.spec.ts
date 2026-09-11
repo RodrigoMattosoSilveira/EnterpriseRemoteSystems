@@ -235,6 +235,7 @@ type CreatedCollaborator = {
 
 type CreatedPerson = {
   id: string;
+  membershipId: string;
 };
 
 type CreatedWorkPeriod = {
@@ -282,7 +283,7 @@ async function createPlanningCollaborator(
   const response = await api.post(e2eApiUrl("/api/v1/collaborators"), {
     headers: authzHeaders(),
     data: {
-      personId: person.id,
+      membershipId: person.membershipId,
       journeyStartDate: input.journeyStartDate,
       paymentMethodId: PAYMENT_METHOD_DAILY_ID,
       paymentValue: 125,

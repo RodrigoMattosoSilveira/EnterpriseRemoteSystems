@@ -276,17 +276,13 @@ func seedFinalSettlementJourney(t *testing.T, database *gorm.DB) finalSettlement
 	if err := database.Create(&global).Error; err != nil {
 		t.Fatalf("create Global Person: %v", err)
 	}
-	legacy := db.Person{BaseModel: db.BaseModel{ID: ids.New(), CreatedAt: now, UpdatedAt: now}, TenantID: defaultTenantID, FirstName: "Final", LastName: "Settlement", Nickname: "Final", CPF: global.CPF, RG: "FS-LEGACY-RG", Cellular: "11999990002", Email: "final-settlement-legacy@example.com", Country: "Brasil", StatusID: "fs-person-active", ProfileCompletionStatus: "COMPLETE", CanCreateCollaborator: true}
-	if err := database.Create(&legacy).Error; err != nil {
-		t.Fatalf("create legacy Person: %v", err)
-	}
-	membership := db.PersonTenantMembership{BaseModel: db.BaseModel{ID: ids.New(), CreatedAt: now, UpdatedAt: now}, TenantID: defaultTenantID, PersonID: global.ID, StatusID: "fs-membership-active", LegacyPersonID: &legacy.ID}
+	membership := db.PersonTenantMembership{BaseModel: db.BaseModel{ID: ids.New(), CreatedAt: now, UpdatedAt: now}, TenantID: defaultTenantID, PersonID: global.ID, StatusID: "fs-membership-active"}
 	if err := database.Create(&membership).Error; err != nil {
 		t.Fatalf("create Person-Tenant Membership: %v", err)
 	}
 	daily := 100.0
 	collaborator := db.CollaboratorJourney{
-		BaseModel: db.BaseModel{ID: ids.New(), CreatedAt: now, UpdatedAt: now}, TenantID: defaultTenantID, MembershipID: &membership.ID, PersonID: legacy.ID,
+		BaseModel: db.BaseModel{ID: ids.New(), CreatedAt: now, UpdatedAt: now}, TenantID: defaultTenantID, MembershipID: &membership.ID,
 		JourneyStartDate: now, DefaultEndDate: now.AddDate(0, 0, 90), ProjectedEndDate: now.AddDate(0, 0, 90), PaymentMethodID: "fs-payment-daily", PaymentValue: daily, DailyBRLAmount: &daily,
 		SectorID: "fs-sector", LocationID: "fs-location", TaskID: "fs-task", StatusID: "fs-collaborator-active",
 	}

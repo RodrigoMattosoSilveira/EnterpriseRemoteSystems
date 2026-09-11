@@ -15,7 +15,7 @@ func ToLedgerEntryDTO(row db.LedgerEntry) LedgerEntryDTO {
 		TenantID:             row.TenantID,
 		PersonID:             row.PersonID,
 		CollaboratorID:       row.CollaboratorID,
-		CollaboratorLabel:    collaboratorLabel(row.Collaborator.Person),
+		CollaboratorLabel:    collaboratorLabel(row.Collaborator.Membership.Person),
 		ValueUnitID:          row.ValueUnitID,
 		ValueUnitLabel:       row.ValueUnit.Label,
 		ValueUnitCode:        row.ValueUnit.Code,
@@ -99,7 +99,7 @@ func globalPersonLabel(person db.GlobalPerson) string {
 	return strings.TrimSpace(strings.Join([]string{person.FirstName, person.LastName}, " "))
 }
 
-func collaboratorLabel(person db.Person) string {
+func collaboratorLabel(person db.GlobalPerson) string {
 	if nickname := strings.TrimSpace(person.Nickname); nickname != "" {
 		return nickname
 	}

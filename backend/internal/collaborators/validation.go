@@ -17,7 +17,7 @@ func (e ValidationError) ValidationFields() map[string]string { return e.Fields 
 
 func ValidateCreateCollaborator(req CreateCollaboratorRequest) error {
 	fields := map[string]string{}
-	if strings.TrimSpace(req.MembershipID) == "" && strings.TrimSpace(req.PersonID) == "" {
+	if strings.TrimSpace(req.MembershipID) == "" {
 		fields["membershipId"] = "Required"
 	}
 	requireString(fields, "journeyStartDate", req.JourneyStartDate)

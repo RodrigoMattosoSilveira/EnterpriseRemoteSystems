@@ -745,27 +745,31 @@ func TestRequireTenantPermissionRejectsDifferentTenant(t *testing.T) {
 	}
 }
 
-func TestAuthenticatedSessionOverridesSpoofedActorHeader(t *testing.T) {
-	lookup := authz.ActorLookup{}
-	store := fakeActorStore{
-		lookup: &lookup,
+func TestAuthenticatedAccountBindingOverridesSpoofedActorHeaderAndLegacySessionActor(t *testing.T) {
+	legacyLookupCalls := 0
+	store := &accountActorRouteStore{fakeActorStore: fakeActorStore{
+		calls: &legacyLookupCalls,
 		actor: &authz.Actor{
-			ID:       "session-actor",
-			RecordID: "actor-record-1",
+			ID:       "canonical-tenant-actor",
+			RecordID: "actor-record-canonical",
 			TenantID: "default",
 			Scope:    authz.ActorScopeTenant,
 			Permissions: map[authz.Permission]struct{}{
 				authz.PermissionPeopleRead: {},
 			},
 		},
-	}
+	}}
 	deps := Dependencies{ActorStore: store, ActorHeaderMode: actorHeaderModeDisabled}
 
 	app := fiber.New()
 	app.Use(func(c fiber.Ctx) error {
 		authentication.SetSessionContext(c, authentication.SessionResponse{
-			ActorID:  "actor-record-1",
-			ActorKey: "session-actor",
+			AccountID: "account-1",
+			SessionID: "session-1",
+			// These hidden fields deliberately disagree with the Account binding.
+			// 30K.2A requires them to be inert compatibility data.
+			ActorID:  "legacy-actor-record",
+			ActorKey: "legacy-session-actor",
 		})
 		return c.Next()
 	})
@@ -775,8 +779,11 @@ func TestAuthenticatedSessionOverridesSpoofedActorHeader(t *testing.T) {
 		if err != nil {
 			return err
 		}
-		if actor.ID != "session-actor" || actor.Source != authz.ActorSourceAuthenticatedSession {
+		if actor.ID != "canonical-tenant-actor" || actor.RecordID != "actor-record-canonical" || actor.Source != authz.ActorSourceAuthenticatedSession {
 			t.Fatalf("unexpected authoritative actor: %#v", actor)
+		}
+		if actor.AccountID != "account-1" || actor.SessionID != "session-1" {
+			t.Fatalf("expected canonical Account/Session attribution, got %#v", actor)
 		}
 		return c.SendStatus(fiber.StatusNoContent)
 	})
@@ -792,8 +799,54 @@ func TestAuthenticatedSessionOverridesSpoofedActorHeader(t *testing.T) {
 	if resp.StatusCode != fiber.StatusNoContent {
 		t.Fatalf("expected 204, got %d", resp.StatusCode)
 	}
-	if lookup.ActorID != "session-actor" || lookup.TenantID != "default" {
-		t.Fatalf("expected session lookup, got %#v", lookup)
+	if store.accountID != "account-1" || store.tenantID != "default" {
+		t.Fatalf("expected Account-owned Actor lookup, account=%q tenant=%q", store.accountID, store.tenantID)
+	}
+	if legacyLookupCalls != 0 {
+		t.Fatalf("authenticated Account must not fall back to legacy Actor lookup, got %d calls", legacyLookupCalls)
+	}
+}
+
+func TestAuthenticatedSessionWithoutAccountIDDoesNotFallBackToLegacyActorFields(t *testing.T) {
+	legacyLookupCalls := 0
+	store := fakeActorStore{
+		calls: &legacyLookupCalls,
+		actor: &authz.Actor{
+			ID:       "legacy-session-actor",
+			RecordID: "legacy-actor-record",
+			TenantID: "default",
+			Scope:    authz.ActorScopeTenant,
+			Permissions: map[authz.Permission]struct{}{
+				authz.PermissionPeopleRead: {},
+			},
+		},
+	}
+	deps := Dependencies{ActorStore: store, ActorHeaderMode: actorHeaderModeDisabled}
+
+	app := fiber.New()
+	app.Use(func(c fiber.Ctx) error {
+		authentication.SetSessionContext(c, authentication.SessionResponse{
+			ActorID:  "legacy-actor-record",
+			ActorKey: "legacy-session-actor",
+		})
+		return c.Next()
+	})
+	app.Use(authorizationMiddleware(deps))
+	app.Get("/protected", requirePermission(deps, authz.PermissionPeopleRead), func(c fiber.Ctx) error {
+		return c.SendStatus(fiber.StatusNoContent)
+	})
+
+	req := httptest.NewRequest(fiber.MethodGet, "/protected", nil)
+	req.Header.Set(authz.HeaderTenantID, "default")
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	if resp.StatusCode != fiber.StatusUnauthorized {
+		t.Fatalf("expected 401 without canonical Account identity, got %d", resp.StatusCode)
+	}
+	if legacyLookupCalls != 0 {
+		t.Fatalf("legacy Session Actor fields must be inert, got %d Actor lookups", legacyLookupCalls)
 	}
 }
 
@@ -1038,10 +1091,7 @@ func TestAuthenticatedSessionRequiresTenantSelection(t *testing.T) {
 	deps := Dependencies{ActorStore: fakeActorStore{}, ActorHeaderMode: actorHeaderModeDisabled}
 	app := fiber.New()
 	app.Use(func(c fiber.Ctx) error {
-		authentication.SetSessionContext(c, authentication.SessionResponse{
-			ActorID:  "actor-record-1",
-			ActorKey: "session-actor",
-		})
+		authentication.SetSessionContext(c, authentication.SessionResponse{AccountID: "account-1"})
 		return c.Next()
 	})
 	app.Use(authorizationMiddleware(deps))

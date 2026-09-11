@@ -82,8 +82,18 @@ func TestGlobalPersonMembershipFoundationSharesIdentityWithoutSharingTenantState
 	if err != nil {
 		t.Fatalf("create tenant B membership: %v", err)
 	}
-	if second.ID == created.ID {
-		t.Fatal("expected separate legacy compatibility projection ids")
+	if second.ID != created.GlobalPersonID {
+		t.Fatalf("expected Tenant B People ID to remain canonical Global Person %q, got %q", created.GlobalPersonID, second.ID)
+	}
+	if second.MembershipID == created.MembershipID {
+		t.Fatal("expected distinct Tenant Membership IDs")
+	}
+	var firstMembership, secondMembership db.PersonTenantMembership
+	if err := database.First(&firstMembership, "id = ?", created.MembershipID).Error; err != nil {
+		t.Fatalf("load default Membership: %v", err)
+	}
+	if err := database.First(&secondMembership, "id = ?", second.MembershipID).Error; err != nil {
+		t.Fatalf("load Tenant B Membership: %v", err)
 	}
 	if second.GlobalPersonID != created.GlobalPersonID {
 		t.Fatalf("expected shared global person %q, got %q", created.GlobalPersonID, second.GlobalPersonID)

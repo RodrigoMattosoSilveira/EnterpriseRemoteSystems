@@ -28,7 +28,7 @@ func (r *gormRepository) ListOutstandingReceipts(ctx context.Context, filter nor
 		Model(&db.LedgerReceipt{}).
 		Where("ledger_receipts.tenant_id = ?", tenantctx.TenantID(ctx)).
 		Preload("LedgerEntry.ValueUnit").
-		Preload("Collaborator.Person")
+		Preload("Collaborator.Membership.Person")
 
 	q = applyOutstandingReceiptWorkbenchFilters(q, filter)
 
@@ -90,7 +90,8 @@ func applyOutstandingReceiptWorkbenchFilters(q *gorm.DB, filter normalizedReceip
 		search := strings.TrimSpace(filter.CollaboratorSearch)
 		needle := "%" + strings.ToLower(search) + "%"
 		q = q.Joins("JOIN collaborator_journeys AS receipt_collaborator_filter ON receipt_collaborator_filter.id = ledger_receipts.collaborator_id AND receipt_collaborator_filter.tenant_id = ledger_receipts.tenant_id").
-			Joins("JOIN people AS receipt_person_filter ON receipt_person_filter.id = receipt_collaborator_filter.person_id AND receipt_person_filter.tenant_id = ledger_receipts.tenant_id").
+			Joins("JOIN person_tenant_memberships AS receipt_membership_filter ON receipt_membership_filter.id = receipt_collaborator_filter.membership_id AND receipt_membership_filter.tenant_id = ledger_receipts.tenant_id").
+			Joins("JOIN global_people AS receipt_person_filter ON receipt_person_filter.id = receipt_membership_filter.person_id").
 			Where(`(ledger_receipts.collaborator_id = ?
 				OR LOWER(receipt_collaborator_filter.id) LIKE ?
 				OR LOWER(receipt_person_filter.nickname) LIKE ?
@@ -107,7 +108,7 @@ func (r *gormRepository) ListEntries(ctx context.Context, collaboratorID string,
 	q := r.db.WithContext(ctx).
 		Model(&db.LedgerEntry{}).
 		Where("ledger_entries.tenant_id = ? AND ledger_entries.collaborator_id = ?", tenantctx.TenantID(ctx), collaboratorID).
-		Preload("Collaborator.Person").
+		Preload("Collaborator.Membership.Person").
 		Preload("ValueUnit").
 		Preload("Receipt")
 
@@ -150,7 +151,7 @@ func (r *gormRepository) ListPersonEntries(ctx context.Context, personID string,
 	q := r.db.WithContext(ctx).
 		Model(&db.LedgerEntry{}).
 		Where("ledger_entries.tenant_id = ? AND ledger_entries.person_id = ?", tenantctx.TenantID(ctx), strings.TrimSpace(personID)).
-		Preload("Collaborator.Person").
+		Preload("Collaborator.Membership.Person").
 		Preload("ValueUnit").
 		Preload("Receipt")
 
@@ -233,7 +234,8 @@ func (r *gormRepository) ListBalances(ctx context.Context, collaboratorID string
 			ru.label AS value_unit_label,
 			SUM(CASE WHEN le.direction = 'CREDIT' THEN le.amount ELSE -le.amount END) AS balance`).
 		Joins("JOIN collaborator_journeys cj ON cj.id = le.collaborator_id AND cj.tenant_id = le.tenant_id").
-		Joins("JOIN people p ON p.id = cj.person_id AND p.tenant_id = le.tenant_id").
+		Joins("JOIN person_tenant_memberships m ON m.id = cj.membership_id AND m.tenant_id = le.tenant_id").
+		Joins("JOIN global_people p ON p.id = m.person_id").
 		Joins("JOIN reference_data ru ON ru.id = le.value_unit_id AND ru.tenant_id = le.tenant_id").
 		Where("le.tenant_id = ? AND le.collaborator_id = ? AND le.active = ?", tenantctx.TenantID(ctx), collaboratorID, true).
 		Group("le.collaborator_id, p.nickname, p.first_name, p.last_name, le.value_unit_id, ru.code, ru.label, ru.sort_order").
@@ -266,7 +268,6 @@ func (r *gormRepository) ListPersonBalances(ctx context.Context, personID string
 func (r *gormRepository) FindCollaboratorByID(ctx context.Context, collaboratorID string) (*db.CollaboratorJourney, error) {
 	var row db.CollaboratorJourney
 	err := r.db.WithContext(ctx).
-		Preload("Person").
 		Preload("Membership").
 		Preload("Membership.Person").
 		Preload("Status").
@@ -372,7 +373,7 @@ func formatDateForQuery(value time.Time) string { return value.Format(dateLayout
 func (r *gormRepository) FindEntryByID(ctx context.Context, entryID string) (*db.LedgerEntry, error) {
 	var row db.LedgerEntry
 	err := r.db.WithContext(ctx).
-		Preload("Collaborator.Person").
+		Preload("Collaborator.Membership.Person").
 		Preload("ValueUnit").
 		Preload("Receipt").
 		First(&row, "id = ? AND tenant_id = ?", entryID, tenantctx.TenantID(ctx)).Error
@@ -438,7 +439,7 @@ func (r *gormRepository) FindSettlementByRequestID(ctx context.Context, collabor
 func (r *gormRepository) FindLedgerEntryBySource(ctx context.Context, sourceType, sourceID string) (*db.LedgerEntry, error) {
 	var row db.LedgerEntry
 	err := r.db.WithContext(ctx).
-		Preload("Collaborator.Person").
+		Preload("Collaborator.Membership.Person").
 		Preload("ValueUnit").
 		Preload("Receipt").
 		First(&row, "tenant_id = ? AND source_type = ? AND source_id = ?", tenantctx.TenantID(ctx), sourceType, sourceID).Error
@@ -451,7 +452,7 @@ func (r *gormRepository) FindLedgerEntryBySource(ctx context.Context, sourceType
 func (r *gormRepository) FindLedgerEntriesBySource(ctx context.Context, sourceType, sourceID string) ([]db.LedgerEntry, error) {
 	var rows []db.LedgerEntry
 	err := r.db.WithContext(ctx).
-		Preload("Collaborator.Person").
+		Preload("Collaborator.Membership.Person").
 		Preload("ValueUnit").
 		Preload("Receipt").
 		Where("tenant_id = ? AND source_type = ? AND source_id = ?", tenantctx.TenantID(ctx), sourceType, sourceID).
@@ -510,7 +511,7 @@ func (r *gormRepository) FindReceiptByLedgerEntryID(ctx context.Context, ledgerE
 	var row db.LedgerReceipt
 	err := r.db.WithContext(ctx).
 		Preload("LedgerEntry.ValueUnit").
-		Preload("Collaborator.Person").
+		Preload("Collaborator.Membership.Person").
 		First(&row, "ledger_entry_id = ? AND tenant_id = ?", ledgerEntryID, tenantctx.TenantID(ctx)).Error
 	if err != nil {
 		return nil, err
@@ -626,7 +627,7 @@ func (r *gormRepository) FindReceiptByID(ctx context.Context, receiptID string) 
 	var row db.LedgerReceipt
 	err := r.db.WithContext(ctx).
 		Preload("LedgerEntry.ValueUnit").
-		Preload("Collaborator.Person").
+		Preload("Collaborator.Membership.Person").
 		First(&row, "id = ? AND tenant_id = ?", receiptID, tenantctx.TenantID(ctx)).Error
 	if err != nil {
 		return nil, err

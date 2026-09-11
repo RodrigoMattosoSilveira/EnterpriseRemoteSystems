@@ -32,7 +32,8 @@ type apiErrorResponse struct {
 }
 type apiPersonResponse struct {
 	Data struct {
-		ID string `json:"id"`
+		ID           string `json:"id"`
+		MembershipID string `json:"membershipId"`
 	} `json:"data"`
 }
 type apiCollaboratorResponse struct {
@@ -518,7 +519,7 @@ func createWorkPeriod(t *testing.T, server *fiber.App, overrides map[string]any)
 func createActiveCollaborator(t *testing.T, server *fiber.App, seq int, payload map[string]any) apiCollaboratorResponse {
 	t.Helper()
 	person := createPerson(t, server, validCompletePersonPayload(seq, nil))
-	payload["personId"] = person.Data.ID
+	payload["membershipId"] = person.Data.MembershipID
 	return createCollaborator(t, server, payload)
 }
 func createPerson(t *testing.T, server *fiber.App, payload map[string]any) apiPersonResponse {
@@ -669,8 +670,8 @@ func validAssignmentPayload(collaboratorID string, overrides map[string]any) map
 	}
 	return payload
 }
-func validCollaboratorPayload(personID string, overrides map[string]any) map[string]any {
-	payload := map[string]any{"personId": personID, "journeyStartDate": "2026-06-01", "paymentMethodId": "ref-method-daily", "paymentValue": 150.0, "sectorId": "ref-sector-mining", "locationId": "ref-location-main-mine", "taskId": "ref-task-miner", "statusId": "ref-collaborator-status-active", "notes": "Accrual collaborator"}
+func validCollaboratorPayload(membershipID string, overrides map[string]any) map[string]any {
+	payload := map[string]any{"membershipId": membershipID, "journeyStartDate": "2026-06-01", "paymentMethodId": "ref-method-daily", "paymentValue": 150.0, "sectorId": "ref-sector-mining", "locationId": "ref-location-main-mine", "taskId": "ref-task-miner", "statusId": "ref-collaborator-status-active", "notes": "Accrual collaborator"}
 	for k, v := range overrides {
 		payload[k] = v
 	}

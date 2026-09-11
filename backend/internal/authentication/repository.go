@@ -18,11 +18,11 @@ type AccountActorRecord struct {
 	TenantName     string
 	MembershipID   string
 	Active         bool
-	Primary        bool
 }
 
 type AccountRecord struct {
 	Account
+	ActorID           string
 	ActorKey          string
 	DisplayName       string
 	PersonID          string
@@ -38,7 +38,6 @@ type AccountRecord struct {
 
 type PersonAuthenticationRecord struct {
 	TenantID             string
-	LegacyPersonID       string
 	GlobalPersonID       string
 	MembershipID         string
 	Login                string
@@ -126,8 +125,6 @@ type Repository interface {
 	ListAccounts(ctx context.Context) ([]AccountRecord, error)
 	FindAccountByID(ctx context.Context, id string) (AccountRecord, error)
 	FindAccountByLogin(ctx context.Context, login string) (AccountRecord, error)
-	ActorHasActiveTenantAccess(ctx context.Context, actorID string) (bool, error)
-	CreateAccount(ctx context.Context, account Account) (AccountRecord, error)
 	CreatePersonAccount(ctx context.Context, tenantID string, personID string, account Account) (AccountRecord, error)
 	SetAccountActive(ctx context.Context, id string, active bool, now time.Time) (AccountRecord, error)
 	UpdateLastLogin(ctx context.Context, id string, now time.Time) error

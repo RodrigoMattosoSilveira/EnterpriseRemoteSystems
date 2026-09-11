@@ -23,7 +23,6 @@ func (r *gormRepository) List(ctx context.Context, filter CollaboratorListFilter
 		Where("collaborator_journeys.closed_at IS NULL").
 		Preload("Membership.Person").
 		Preload("Membership.Status").
-		Preload("Person").
 		Preload("PaymentMethod").
 		Preload("Sector").
 		Preload("Location").
@@ -64,7 +63,6 @@ func (r *gormRepository) ListForMembership(ctx context.Context, membershipID str
 		Where("collaborator_journeys.tenant_id = ? AND collaborator_journeys.membership_id = ?", tenantctx.TenantID(ctx), membershipID).
 		Preload("Membership.Person").
 		Preload("Membership.Status").
-		Preload("Person").
 		Preload("PaymentMethod").
 		Preload("Sector").
 		Preload("Location").
@@ -90,7 +88,7 @@ func applyCollaboratorSearch(q *gorm.DB, normalizedSearch string) *gorm.DB {
 
 	q = q.Joins(
 		"JOIN people_search_index AS " + searchAlias +
-			" ON " + searchAlias + ".person_id = collaborator_journeys.person_id" +
+			" ON " + searchAlias + ".membership_id = collaborator_journeys.membership_id" +
 			" AND " + searchAlias + ".tenant_id = collaborator_journeys.tenant_id",
 	)
 
@@ -113,7 +111,6 @@ func (r *gormRepository) ListCandidateMemberships(ctx context.Context) ([]db.Per
 			ON collaborator_candidate_person.id = person_tenant_memberships.person_id
 			AND collaborator_candidate_person.can_create_collaborator = 1`).
 		Where("person_tenant_memberships.tenant_id = ?", tenantID).
-		Where("person_tenant_memberships.legacy_person_id IS NOT NULL").
 		Where(`NOT EXISTS (
 			SELECT 1
 			FROM collaborator_journeys
@@ -123,7 +120,6 @@ func (r *gormRepository) ListCandidateMemberships(ctx context.Context) ([]db.Per
 		)`).
 		Preload("Person").
 		Preload("Status").
-		Preload("LegacyPerson").
 		Order("collaborator_candidate_person.last_name ASC, collaborator_candidate_person.first_name ASC").
 		Find(&rows).Error
 	return rows, err
@@ -190,7 +186,6 @@ func (r *gormRepository) FindByID(ctx context.Context, id string) (*db.Collabora
 	err := r.db.WithContext(ctx).
 		Preload("Membership.Person").
 		Preload("Membership.Status").
-		Preload("Person").
 		Preload("PaymentMethod").
 		Preload("Sector").
 		Preload("Location").
@@ -208,7 +203,6 @@ func (r *gormRepository) FindByIDForMembership(ctx context.Context, id string, m
 	err := r.db.WithContext(ctx).
 		Preload("Membership.Person").
 		Preload("Membership.Status").
-		Preload("Person").
 		Preload("PaymentMethod").
 		Preload("Sector").
 		Preload("Location").
@@ -233,28 +227,7 @@ func (r *gormRepository) FindActiveMembershipByID(ctx context.Context, membershi
 			AND membership_status.active = 1`).
 		Preload("Person").
 		Preload("Status").
-		Preload("LegacyPerson").
 		First(&row, "person_tenant_memberships.id = ? AND person_tenant_memberships.tenant_id = ?", membershipID, tenantID).Error
-	if err != nil {
-		return nil, err
-	}
-	return &row, nil
-}
-
-func (r *gormRepository) FindActiveMembershipByLegacyPersonID(ctx context.Context, legacyPersonID string) (*db.PersonTenantMembership, error) {
-	var row db.PersonTenantMembership
-	tenantID := tenantctx.TenantID(ctx)
-	err := r.db.WithContext(ctx).
-		Joins(`JOIN reference_data AS membership_status
-			ON membership_status.id = person_tenant_memberships.status_id
-			AND membership_status.tenant_id = person_tenant_memberships.tenant_id
-			AND membership_status.type = 'person_status'
-			AND membership_status.code = 'ACTIVE'
-			AND membership_status.active = 1`).
-		Preload("Person").
-		Preload("Status").
-		Preload("LegacyPerson").
-		First(&row, "person_tenant_memberships.legacy_person_id = ? AND person_tenant_memberships.tenant_id = ?", legacyPersonID, tenantID).Error
 	if err != nil {
 		return nil, err
 	}

@@ -28,7 +28,7 @@ for migration in /app/migrations/*.up.sql; do
 
   sqlite3 -bail "$DB_PATH" < "$migration"
 
-  sqlite3 -bail "$DB_PATH" "INSERT INTO schema_migrations (filename) VALUES ('$filename');"
+  sqlite3 -bail "$DB_PATH" "INSERT OR IGNORE INTO schema_migrations (filename) VALUES ('$filename');"
 done
 
 collaborator_availability_count="$(sqlite3 -bail "$DB_PATH" "SELECT COUNT(*) FROM pragma_table_info('collaborator_journeys') WHERE name = 'planning_availability';")"

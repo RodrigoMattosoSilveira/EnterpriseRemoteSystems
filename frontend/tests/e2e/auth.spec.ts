@@ -12,7 +12,7 @@ test.beforeEach(async ({ page }) => {
   await seedBrowserApplicationAdmin(page);
 });
 
-test("application administrator can create a global authorization actor, grant a global role, and revoke it", async ({
+test("application administrator can create an identity-neutral authorization actor without granting delegated authority", async ({
   page,
 }, testInfo) => {
   const suffix = uniquePersonSuffix(testInfo.workerIndex);
@@ -49,24 +49,14 @@ test("application administrator can create a global authorization actor, grant a
   await expect(actorCard).toContainText(displayName);
   await expect(actorCard).toContainText("No role grants.");
   await expect(actorCard).toContainText("Tenant Role Grants: INELIGIBLE");
+  await expect(actorCard).toContainText("Authentication Account binding is required.");
 
-  await actorCard.getByLabel("Role").selectOption("APPLICATION_ADMIN");
-  await expect(actorCard.getByLabel("Grant tenant")).toHaveValue("*");
-  await expect(actorCard.getByLabel("Grant tenant")).toBeDisabled();
-  await actorCard.getByRole("button", { name: "Grant Role" }).click();
-
-  await expect(page.getByRole("status")).toContainText(
-    "APPLICATION_ADMIN granted.",
-  );
-  await expect(actorCard).toContainText("APPLICATION_ADMIN · *");
+  const roleSelect = actorCard.getByLabel("Role");
+  await expect(roleSelect).toBeDisabled();
+  await expect(roleSelect.locator("option")).toHaveCount(0);
+  await expect(actorCard.getByRole("button", { name: "Grant Role" })).toBeDisabled();
 
   await page.reload();
-  await expect(actorCard).toContainText("APPLICATION_ADMIN · *");
-
-  await actorCard.getByRole("button", { name: "Revoke" }).click();
-  await expect(page.getByRole("status")).toContainText(
-    "APPLICATION_ADMIN revoked.",
-  );
-  await expect(actorCard.getByText("APPLICATION_ADMIN · *")).toHaveCount(0);
   await expect(actorCard).toContainText("No role grants.");
+  await expect(actorCard.getByRole("button", { name: "Grant Role" })).toBeDisabled();
 });

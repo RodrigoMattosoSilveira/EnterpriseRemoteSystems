@@ -48,7 +48,6 @@ func TestEnsureE2ETenantFixturesSurvivesAccountActorFoundationAndIsIdempotent(t 
 	}
 
 	const stem = "e2e-default-tenant-admin"
-	legacyPersonID := stem + "-legacy-person"
 	membershipID := stem + "-membership"
 	actorID := stem + "-actor"
 	accountID := stem + "-account"
@@ -57,16 +56,10 @@ func TestEnsureE2ETenantFixturesSurvivesAccountActorFoundationAndIsIdempotent(t 
 	if err := database.First(&membership, "id = ?", membershipID).Error; err != nil {
 		t.Fatalf("find E2E Tenant Administrator Membership: %v", err)
 	}
-	if membership.LegacyPersonID == nil || *membership.LegacyPersonID != legacyPersonID {
-		t.Fatalf("expected Membership legacy Person %q, got %#v", legacyPersonID, membership.LegacyPersonID)
-	}
 
 	var actor authz.AuthzActor
 	if err := database.First(&actor, "id = ?", actorID).Error; err != nil {
 		t.Fatalf("find E2E Tenant Administrator Actor: %v", err)
-	}
-	if actor.PersonID == nil || *actor.PersonID != legacyPersonID {
-		t.Fatalf("expected legacy actor Person projection %q, got %#v", legacyPersonID, actor.PersonID)
 	}
 
 	var binding authentication.AccountActor

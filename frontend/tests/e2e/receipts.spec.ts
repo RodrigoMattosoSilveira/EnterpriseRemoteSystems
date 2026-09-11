@@ -30,7 +30,7 @@ test("outstanding receipt appears, can be opened, and disappears after signed re
     firstName: `ReceiptE2E${suffix}`,
     nickname: `Receipt${suffix}`,
   });
-  const collaborator = await createCollaborator(request, person.id);
+  const collaborator = await createCollaborator(request, person.membershipId);
   await createExpense(request, {
     collaboratorId: collaborator.id,
     expenseCategoryId: EXPENSE_CATEGORY_CANTEEN_ID,
@@ -188,7 +188,7 @@ type ApiEnvelope<T> = {
   error?: { message?: string; fields?: Record<string, string> };
 };
 
-type CreatedPerson = { id: string; firstName: string; lastName: string; nickname: string };
+type CreatedPerson = { id: string; membershipId: string; firstName: string; lastName: string; nickname: string };
 type CreatedCollaborator = { id: string };
 type Expense = { id: string; description?: string };
 type LedgerEntry = { id: string; description?: string; sourceId?: string };
@@ -232,7 +232,7 @@ async function createReceiptScenario(
     firstName: `${input.firstNamePrefix}${suffix}`,
     nickname: `${input.nicknamePrefix}${suffix}`,
   });
-  const collaborator = await createCollaborator(api, person.id);
+  const collaborator = await createCollaborator(api, person.membershipId);
   await createExpense(api, {
     collaboratorId: collaborator.id,
     expenseCategoryId: EXPENSE_CATEGORY_CANTEEN_ID,
@@ -283,12 +283,12 @@ async function createCompletePerson(
 
 async function createCollaborator(
   api: APIRequestContext,
-  personId: string,
+  membershipId: string,
 ): Promise<CreatedCollaborator> {
   const response = await api.post(e2eApiUrl("/api/v1/collaborators"), {
     headers: authzHeaders(),
     data: {
-      personId,
+      membershipId,
       journeyStartDate: todayISODate(),
       paymentMethodId: PAYMENT_METHOD_DAILY_ID,
       paymentValue: 250.75,

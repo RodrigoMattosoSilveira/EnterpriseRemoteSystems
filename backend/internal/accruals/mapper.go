@@ -32,7 +32,7 @@ func ToItemDTOList(rows []db.AccrualItem) []AccrualItemDTO {
 }
 
 func collaboratorName(row db.CollaboratorJourney) string {
-	return strings.TrimSpace(strings.Join([]string{row.Person.FirstName, row.Person.LastName}, " "))
+	return strings.TrimSpace(strings.Join([]string{row.Membership.Person.FirstName, row.Membership.Person.LastName}, " "))
 }
 func nilString(value *string) string {
 	if value == nil {

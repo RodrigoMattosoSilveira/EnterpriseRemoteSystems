@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, request as playwrightRequest, test, type Page } from "@playwright/test";
 import {
   applicationAdminHeaders,
   authzHeaders,
@@ -14,6 +14,7 @@ const baseURL = process.env.PLAYWRIGHT_BASE_URL ?? "http://localhost:15173";
 test("an authenticated Person actor lands in People before operator workspaces", async ({ browser, request }, testInfo) => {
   const suffix = uniquePersonSuffix(testInfo.workerIndex);
   const email = `person-home-${suffix}@example.com`;
+  const temporaryPassword = `Person-Home-${suffix}-Temporary!`;
   const password = `Person-Home-${suffix}-Password!`;
 
   const personResponse = await request.post(e2eApiUrl("/api/v1/people"), {
@@ -37,38 +38,51 @@ test("an authenticated Person actor lands in People before operator workspaces",
   const applicationAdminApi = await newApplicationAdminApi();
   let actorId: string | undefined;
   try {
-    const actorResponse = await applicationAdminApi.post(
-      e2eApiUrl("/api/v1/authz/actors"),
-      {
-        headers: applicationAdminHeaders(),
-        data: {
-          actorKey: email,
-          displayName: `Person Home ${suffix}`,
-          personId,
-          active: true,
-        },
-      },
-    );
-    expect(actorResponse.status()).toBe(201);
-    const actorEnvelope = (await actorResponse.json()) as { data?: { id?: string } };
-    actorId = actorEnvelope.data?.id;
-    expect(actorId).toBeTruthy();
-
-    // Bite 30D self-service comes from Account -> tenant Actor -> ACTIVE
-    // Membership. This fixture intentionally has no delegated Role Grant.
+    // 30K.2B2 provisions Authentication from the canonical Tenant + Person
+    // Membership path. The backend creates/binds the identity-neutral tenant
+    // Actor; a raw Actor is no longer an Authentication identity selector.
     const accountResponse = await applicationAdminApi.post(
       e2eApiUrl("/api/v1/auth/accounts"),
       {
         headers: applicationAdminHeaders(),
         data: {
-          actorId,
+          tenantId: "default",
           login: email,
-          temporaryPassword: password,
-          mustChangePassword: false,
+          temporaryPassword,
         },
       },
     );
     expect(accountResponse.status()).toBe(201);
+    const accountEnvelope = (await accountResponse.json()) as {
+      data?: { actors?: Array<{ actorId?: string; tenantId?: string }> };
+    };
+    actorId = accountEnvelope.data?.actors?.find(
+      (actor) => actor.tenantId === "default",
+    )?.actorId;
+    expect(actorId).toBeTruthy();
+
+    // Administrative provisioning always requires a first-login password
+    // change. Complete that lifecycle in an isolated API context so this test
+    // can focus on the Person self-service landing behavior.
+    const accountSession = await playwrightRequest.newContext({ baseURL });
+    try {
+      const loginResponse = await accountSession.post(e2eApiUrl("/api/v1/auth/login"), {
+        data: { login: email, password: temporaryPassword },
+      });
+      expect(loginResponse.status()).toBe(200);
+      const changeResponse = await accountSession.post(
+        e2eApiUrl("/api/v1/auth/password/change"),
+        {
+          data: {
+            currentPassword: temporaryPassword,
+            newPassword: password,
+          },
+        },
+      );
+      expect(changeResponse.status()).toBe(204);
+    } finally {
+      await accountSession.dispose();
+    }
 
     const context = await browser.newContext({
       baseURL,

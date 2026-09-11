@@ -70,7 +70,7 @@ test("user can filter Expenses by collaborator", async ({ page, request }) => {
     firstName: `ExpenseFilterCollaboratorE2E${suffix}`,
     nickname: personNickname,
   });
-  const collaborator = await createCollaborator(request, person.id);
+  const collaborator = await createCollaborator(request, person.membershipId);
   const description = `Collaborator-filter expense ${suffix}`;
 
   await createExpense(request, {
@@ -152,7 +152,7 @@ test("user can filter Expenses by collaborator name or nickname", async ({
     firstName: `ExpenseSearchTarget${suffix}`,
     nickname: targetNickname,
   });
-  const targetCollaborator = await createCollaborator(request, targetPerson.id);
+  const targetCollaborator = await createCollaborator(request, targetPerson.membershipId);
   const targetDescription = `Nickname-search expense ${suffix}`;
 
   const otherFirstName = `ExpenseSearchLegal${suffix}`;
@@ -162,7 +162,7 @@ test("user can filter Expenses by collaborator name or nickname", async ({
     firstName: otherFirstName,
     nickname: otherNickname,
   });
-  const otherCollaborator = await createCollaborator(request, otherPerson.id);
+  const otherCollaborator = await createCollaborator(request, otherPerson.membershipId);
   const otherDescription = `Legal-name-search expense ${suffix}`;
 
   await createExpense(request, {
@@ -292,7 +292,7 @@ test("user can filter Expenses by item", async ({ page, request }) => {
     firstName: `ExpenseFilterItemE2E${suffix}`,
     nickname: personNickname,
   });
-  const collaborator = await createCollaborator(request, person.id);
+  const collaborator = await createCollaborator(request, person.membershipId);
   const item = await createPriceListItem(request, {
     itemType: "CANTEEN",
     code: `E2E-SNACK-${suffix}`,
@@ -377,6 +377,7 @@ type ApiEnvelope<T> = {
 
 type CreatedPerson = {
   id: string;
+  membershipId: string;
   firstName: string;
   lastName: string;
   nickname: string;
@@ -465,12 +466,12 @@ async function createCompletePerson(
 
 async function createCollaborator(
   api: APIRequestContext,
-  personId: string,
+  membershipId: string,
 ): Promise<CreatedCollaborator> {
   const response = await api.post(e2eApiUrl("/api/v1/collaborators"), {
     headers: authzHeaders(),
     data: {
-      personId,
+      membershipId,
       journeyStartDate: todayISODate(),
       paymentMethodId: PAYMENT_METHOD_DAILY_ID,
       paymentValue: 250.75,
@@ -557,7 +558,7 @@ async function ensureExpenseTotalAboveFirstPage(
     firstName: `ExpensePaginationE2E${suffix}`,
     nickname: `ExpensePagination${suffix}`,
   });
-  const collaborator = await createCollaborator(api, person.id);
+  const collaborator = await createCollaborator(api, person.membershipId);
   const needed = EXPENSES_MINIMUM_FOR_SECOND_PAGE - existingTotal;
 
   for (let index = 0; index < needed; index += 1) {

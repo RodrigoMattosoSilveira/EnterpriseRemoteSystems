@@ -13,7 +13,7 @@ func ToDTO(row db.WorkPeriodAssignment) WorkPeriodAssignmentDTO {
 		WorkPeriodID:               row.WorkPeriodID,
 		CollaboratorID:             row.CollaboratorID,
 		CollaboratorName:           collaboratorName(row.Collaborator),
-		CollaboratorNickname:       row.Collaborator.Person.Nickname,
+		CollaboratorNickname:       row.Collaborator.Membership.Person.Nickname,
 		PlannedStatus:              row.PlannedStatus,
 		PlanningAvailability:       normalizePlanningAvailability(row.PlanningAvailability),
 		ActualStatus:               nilString(row.ActualStatus),
@@ -39,16 +39,17 @@ func ToDTOList(rows []db.WorkPeriodAssignment) []WorkPeriodAssignmentDTO {
 }
 
 func collaboratorName(row db.CollaboratorJourney) string {
-	if row.Person.FirstName == "" && row.Person.LastName == "" {
+	person := row.Membership.Person
+	if person.FirstName == "" && person.LastName == "" {
 		return ""
 	}
-	if row.Person.LastName == "" {
-		return row.Person.FirstName
+	if person.LastName == "" {
+		return person.FirstName
 	}
-	if row.Person.FirstName == "" {
-		return row.Person.LastName
+	if person.FirstName == "" {
+		return person.LastName
 	}
-	return row.Person.FirstName + " " + row.Person.LastName
+	return person.FirstName + " " + person.LastName
 }
 
 func nilString(value *string) string {

@@ -517,10 +517,9 @@ test("a temporary-password account can sign in after completing the required pas
     {
       headers: applicationAdminHeaders(),
       data: {
-        actorId: actorWithoutAccessId,
+        tenantId: DEFAULT_TENANT_ID,
         login: actorWithoutAccessLogin,
         temporaryPassword: `No-Access-${suffix}-Password!`,
-        mustChangePassword: true,
       },
     },
   );
@@ -528,8 +527,8 @@ test("a temporary-password account can sign in after completing the required pas
   const invalidAccountEnvelope = (await invalidAccountResponse.json()) as {
     error?: { fields?: Record<string, string> };
   };
-  expect(invalidAccountEnvelope.error?.fields?.actorId).toContain(
-    "active Person-Tenant Membership",
+  expect(invalidAccountEnvelope.error?.fields?.login).toContain(
+    "No canonical Person",
   );
 
   await adminPage.goto("/admin/authentication");
