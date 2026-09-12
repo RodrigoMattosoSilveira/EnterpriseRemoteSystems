@@ -50,7 +50,8 @@ The remaining 30L lifecycle, financial, control-plane, support-lease, audit, and
 - temporary-password first login forces password change;
 - administrator-issued password reset replaces the credential and invalidates the pre-reset browser session;
 - closing a zero-balance Collaborator Journey preserves canonical Membership identity and a subsequent Journey for that Membership starts with zero Journey balances;
-- revoking a delegated operator Role Grant removes delegated authority while `people.self.read` and `/api/v1/auth/self-service` remain available.
+- revoking a delegated operator Role Grant removes delegated authority while `people.self.read` and `/api/v1/auth/self-service` remain available;
+- the Tenant Administrator authorization route renders a filterable Role selector on each eligible Tenant Actor card and keeps existing operator Role Grants in a separate current-grants section.
 
 The lifecycle proof is intentionally distributed across the established specifications that own each domain:
 
@@ -59,6 +60,8 @@ frontend/tests/e2e/multi-tenant-identity-confidentiality.spec.ts
 frontend/tests/e2e/authentication-tenant-ux.spec.ts
 frontend/tests/e2e/authorization-boundaries.spec.ts
 frontend/tests/e2e/collaborators.spec.ts
+frontend/tests/e2e/tenant-role-delegation-ui.spec.ts
+frontend/tests/e2e/tenant-role-delegation-ui.spec.ts
 ```
 
 30L.3 retains the remaining control-plane, Support Access Lease, audit-attribution, and cross-Tenant financial-isolation verification. 30L.4 remains the final `make local-check` and deployed promotion gate.
