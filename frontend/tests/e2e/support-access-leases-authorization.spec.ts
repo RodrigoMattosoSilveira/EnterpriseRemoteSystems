@@ -93,11 +93,109 @@ const OTHER_TENANT_ID = "e2e-support-lease-other-tenant";
 const EXPIRED_TENANT_ID = "e2e-support-lease-expired-tenant";
 
 test.describe("Tenant Support Access Lease authorization", () => {
-  test("deterministic fixtures expose the global Application Administrator and exact-Tenant Administrators, and a real request becomes effectively EXPIRED while remaining persisted PENDING", async () => {
+  test("Application Administrator remains GLOBAL-only until an exact-Tenant support lease is approved", async () => {
     const applicationAdminApi = await newApplicationAdminApi();
     const tenantAdminApi = await newTenantAdminApi(SUPPORT_TENANT_ID);
-    const expiredTenantAdminApi = await newTenantAdminApi(EXPIRED_TENANT_ID);
+
     try {
+      await closeOpenLeases(applicationAdminApi, tenantAdminApi, SUPPORT_TENANT_ID);
+
+      const applicationAccountID = await getAuthenticatedAccountID(
+        applicationAdminApi,
+        "Application Administrator",
+      );
+      expect(applicationAccountID).toBeTruthy();
+
+      const globalBefore = await getCurrentActor(
+        applicationAdminApi,
+        applicationTenantHeaders("*"),
+      );
+      expect(globalBefore.actorKey).toBe(E2E_APPLICATION_ADMIN_ACTOR_ID);
+      expect(globalBefore.scope).toBe("APPLICATION");
+      expect(globalBefore.tenantId).toBe("*");
+      expect(globalBefore.roleCodes).toContain("APPLICATION_ADMIN");
+      expect(globalBefore.supportLeaseId).toBeFalsy();
+      expect(globalBefore.personId).toBeFalsy();
+      expect(globalBefore.globalPersonId).toBeFalsy();
+      expect(globalBefore.membershipId).toBeFalsy();
+      expect(globalBefore.collaboratorId).toBeFalsy();
+
+      const controlPlaneResponse = await applicationAdminApi.get(
+        e2eApiUrl("/api/v1/authz/roles"),
+        { headers: applicationTenantHeaders("*") },
+      );
+      await expectStatus(
+        controlPlaneResponse,
+        200,
+        "GLOBAL Application Administrator may use the authorization control plane",
+      );
+
+      const tenantActorResponse = await applicationAdminApi.get(
+        e2eApiUrl("/api/v1/authz/current-actor"),
+        { headers: applicationTenantHeaders(SUPPORT_TENANT_ID) },
+      );
+      await expectStatus(
+        tenantActorResponse,
+        403,
+        "Application Administrator must not acquire Tenant identity without an approved support lease",
+      );
+      await expectErrorCode(tenantActorResponse, "tenant_actor_unavailable");
+
+      const tenantPeopleResponse = await applicationAdminApi.get(
+        e2eApiUrl("/api/v1/people?page=1&pageSize=1"),
+        { headers: applicationTenantHeaders(SUPPORT_TENANT_ID) },
+      );
+      await expectStatus(
+        tenantPeopleResponse,
+        403,
+        "GLOBAL Application Administrator must not read Tenant People without an approved support lease",
+      );
+
+      const globalAfter = await getCurrentActor(
+        applicationAdminApi,
+        applicationTenantHeaders("*"),
+      );
+      expect(globalAfter.actorKey).toBe(globalBefore.actorKey);
+      expect(globalAfter.actorRecordId).toBe(globalBefore.actorRecordId);
+      expect(globalAfter.scope).toBe("APPLICATION");
+      expect(globalAfter.tenantId).toBe("*");
+      expect(globalAfter.roleCodes).toEqual(globalBefore.roleCodes);
+      expect(globalAfter.supportLeaseId).toBeFalsy();
+      expect(globalAfter.personId).toBeFalsy();
+      expect(globalAfter.globalPersonId).toBeFalsy();
+      expect(globalAfter.membershipId).toBeFalsy();
+      expect(globalAfter.collaboratorId).toBeFalsy();
+    } finally {
+      await closeOpenLeases(applicationAdminApi, tenantAdminApi, SUPPORT_TENANT_ID).catch(
+        (error) => {
+          console.warn(`Unable to clean an open E2E support lease: ${String(error)}`);
+        },
+      );
+      await tenantAdminApi.dispose();
+      await applicationAdminApi.dispose();
+    }
+  });
+
+  test("approved support lease expires, removes Tenant authority, and preserves exact Account/Actor/Tenant/Lease audit attribution", async () => {
+    const applicationAdminApi = await newApplicationAdminApi();
+    const expiredTenantAdminApi = await newTenantAdminApi(EXPIRED_TENANT_ID);
+
+    try {
+      await closeOpenLeases(
+        applicationAdminApi,
+        expiredTenantAdminApi,
+        EXPIRED_TENANT_ID,
+      );
+
+      const applicationAccountID = await getAuthenticatedAccountID(
+        applicationAdminApi,
+        "Application Administrator",
+      );
+      const tenantAdminAccountID = await getAuthenticatedAccountID(
+        expiredTenantAdminApi,
+        "expired-fixture Tenant Administrator",
+      );
+
       const applicationActor = await getCurrentActor(
         applicationAdminApi,
         applicationTenantHeaders("*"),
@@ -112,16 +210,6 @@ test.describe("Tenant Support Access Lease authorization", () => {
       expect(applicationActor.membershipId).toBeFalsy();
       expect(applicationActor.collaboratorId).toBeFalsy();
 
-      const tenantActor = await getCurrentActor(
-        tenantAdminApi,
-        authzHeaders(SUPPORT_TENANT_ID),
-      );
-      expect(tenantActor.scope).toBe("TENANT");
-      expect(tenantActor.tenantId).toBe(SUPPORT_TENANT_ID);
-      expect(tenantActor.roleCodes).toContain("TENANT_ADMIN");
-      expect(tenantActor.permissions).toContain("support_access_leases.approve");
-      expect(tenantActor.permissions).toContain("support_access_leases.terminate");
-
       const expiredTenantActor = await getCurrentActor(
         expiredTenantAdminApi,
         authzHeaders(EXPIRED_TENANT_ID),
@@ -129,45 +217,141 @@ test.describe("Tenant Support Access Lease authorization", () => {
       expect(expiredTenantActor.scope).toBe("TENANT");
       expect(expiredTenantActor.tenantId).toBe(EXPIRED_TENANT_ID);
       expect(expiredTenantActor.roleCodes).toContain("TENANT_ADMIN");
+      expect(expiredTenantActor.globalPersonId).toBeTruthy();
+      expect(expiredTenantActor.membershipId).toBeTruthy();
 
-      await closeOpenLeases(
-        applicationAdminApi,
-        expiredTenantAdminApi,
-        EXPIRED_TENANT_ID,
-      );
-
-      const expiringRequest = await applicationAdminApi.post(
+      const requestedExpiration = futureTimestampSeconds(8);
+      const requestResponse = await applicationAdminApi.post(
         e2eApiUrl("/api/v1/authz/support-access-leases"),
         {
           headers: applicationTenantHeaders("*"),
           data: {
             tenantId: EXPIRED_TENANT_ID,
-            expiresAt: futureTimestampSeconds(5),
-            reason: "E2E effective-status coverage for an expired PENDING support request",
+            expiresAt: requestedExpiration,
+            reason: "30L.3 approved support lease expiry verification",
             permissions: ["people.read"],
           },
         },
       );
       await expectStatus(
-        expiringRequest,
+        requestResponse,
         201,
-        "request a short-lived PENDING Tenant Support Access Lease",
+        "request a short-lived Tenant Support Access Lease",
       );
+      const requestCorrelationID = responseCorrelationID(requestResponse);
       const requestedLease = await responseData<SupportAccessLease>(
-        expiringRequest,
-        "request a short-lived PENDING Tenant Support Access Lease",
+        requestResponse,
+        "request a short-lived Tenant Support Access Lease",
       );
       expect(requestedLease.status).toBe("PENDING");
       expect(requestedLease.effectiveStatus).toBe("PENDING");
+      expect(requestedLease.applicationActorId).toBe(applicationActor.actorRecordId);
+      expect(requestedLease.requestedByActorId).toBe(applicationActor.actorRecordId);
+      expect(requestedLease.expiresAt).toBe(requestedExpiration);
       expect(requestedLease.permissions).toEqual(["people.read"]);
 
-      const pendingBeforeExpiry = await listLeases(applicationAdminApi, {
-        tenantId: EXPIRED_TENANT_ID,
-        status: "PENDING",
-      });
-      expect(pendingBeforeExpiry.some((lease) => lease.id === requestedLease.id)).toBe(
-        true,
+      const approvalResponse = await expiredTenantAdminApi.post(
+        e2eApiUrl(
+          `/api/v1/authz/support-access-leases/${encodeURIComponent(requestedLease.id)}/approve`,
+        ),
+        { headers: authzHeaders(EXPIRED_TENANT_ID) },
       );
+      await expectStatus(
+        approvalResponse,
+        200,
+        "approve the short-lived Tenant Support Access Lease",
+      );
+      const approvalCorrelationID = responseCorrelationID(approvalResponse);
+      const approvedLease = await responseData<SupportAccessLease>(
+        approvalResponse,
+        "approve the short-lived Tenant Support Access Lease",
+      );
+      expect(approvedLease.status).toBe("APPROVED");
+      expect(approvedLease.effectiveStatus).toBe("APPROVED");
+      expect(approvedLease.approvedByActorId).toBe(expiredTenantActor.actorRecordId);
+      expect(approvedLease.expiresAt).toBe(requestedExpiration);
+
+      const leasedActor = await getCurrentActor(
+        applicationAdminApi,
+        applicationTenantHeaders(EXPIRED_TENANT_ID),
+      );
+      expect(leasedActor.actorKey).toBe(applicationActor.actorKey);
+      expect(leasedActor.actorRecordId).toBe(applicationActor.actorRecordId);
+      expect(leasedActor.scope).toBe("APPLICATION");
+      expect(leasedActor.tenantId).toBe(EXPIRED_TENANT_ID);
+      expect(leasedActor.supportLeaseId).toBe(requestedLease.id);
+      expect(leasedActor.supportLeaseExpiresAt).toBe(requestedExpiration);
+      expect(leasedActor.supportLeasePermissions).toEqual(["people.read"]);
+      expect(leasedActor.personId).toBeFalsy();
+      expect(leasedActor.globalPersonId).toBeFalsy();
+      expect(leasedActor.membershipId).toBeFalsy();
+      expect(leasedActor.collaboratorId).toBeFalsy();
+
+      const auditResponse = await expiredTenantAdminApi.get(
+        e2eApiUrl(
+          `/api/v1/authz/support-access-leases/${encodeURIComponent(requestedLease.id)}/audit-logs`,
+        ),
+        { headers: authzHeaders(EXPIRED_TENANT_ID) },
+      );
+      await expectStatus(
+        auditResponse,
+        200,
+        "read short-lived support lease audit history",
+      );
+      const auditLogs = await responseData<AuditLog[]>(
+        auditResponse,
+        "read short-lived support lease audit history",
+      );
+
+      const requestAudit = expectLeaseAudit(
+        auditLogs,
+        requestedLease.id,
+        "support_access_leases.request",
+        "support_access_leases.request",
+        "AUTHORIZED",
+        undefined,
+        undefined,
+        EXPIRED_TENANT_ID,
+      );
+      expectAuditIdentity(requestAudit, {
+        accountId: applicationAccountID,
+        actorId: applicationActor.actorKey,
+        actorRecordId: applicationActor.actorRecordId,
+        actorScope: "APPLICATION",
+        tenantId: EXPIRED_TENANT_ID,
+        supportLeaseId: requestedLease.id,
+        correlationId: requestCorrelationID,
+        authorizationSource: "GLOBAL_CONTROL_PLANE",
+        authorizationRoleCode: "APPLICATION_ADMIN",
+        requireSourceId: true,
+        requireSession: true,
+      });
+
+      const approvalAudit = expectLeaseAudit(
+        auditLogs,
+        requestedLease.id,
+        "support_access_leases.approve",
+        "support_access_leases.approve",
+        "AUTHORIZED",
+        undefined,
+        undefined,
+        EXPIRED_TENANT_ID,
+      );
+      expectAuditIdentity(approvalAudit, {
+        accountId: tenantAdminAccountID,
+        actorId: expiredTenantActor.actorKey,
+        actorRecordId: expiredTenantActor.actorRecordId,
+        actorScope: "TENANT",
+        personId: expiredTenantActor.globalPersonId,
+        membershipId: expiredTenantActor.membershipId,
+        tenantId: EXPIRED_TENANT_ID,
+        supportLeaseId: requestedLease.id,
+        correlationId: approvalCorrelationID,
+        authorizationSource: "ROLE_GRANT",
+        authorizationRoleCode: "TENANT_ADMIN",
+        requireSourceId: true,
+        requireSession: true,
+      });
 
       await expect
         .poll(
@@ -176,11 +360,11 @@ test.describe("Tenant Support Access Lease authorization", () => {
               tenantId: EXPIRED_TENANT_ID,
               status: "EXPIRED",
             });
-            return expired.some((lease) => lease.id === requestedLease.id);
+            return expired.find((lease) => lease.id === requestedLease.id)?.effectiveStatus;
           },
-          { timeout: 10_000 },
+          { timeout: 15_000 },
         )
-        .toBe(true);
+        .toBe("EXPIRED");
 
       const expired = await listLeases(applicationAdminApi, {
         tenantId: EXPIRED_TENANT_ID,
@@ -188,20 +372,95 @@ test.describe("Tenant Support Access Lease authorization", () => {
       });
       const expiredLease = expired.find((lease) => lease.id === requestedLease.id);
       expect(expiredLease).toBeDefined();
-      expect(expiredLease?.status).toBe("PENDING");
+      expect(expiredLease?.status).toBe("APPROVED");
       expect(expiredLease?.effectiveStatus).toBe("EXPIRED");
+      expect(expiredLease?.expiresAt).toBe(requestedExpiration);
       expect(expiredLease?.permissions).toEqual(["people.read"]);
 
-      const pendingAfterExpiry = await listLeases(applicationAdminApi, {
-        tenantId: EXPIRED_TENANT_ID,
-        status: "PENDING",
-      });
+      const afterExpiryResponse = await applicationAdminApi.get(
+        e2eApiUrl("/api/v1/authz/current-actor"),
+        { headers: applicationTenantHeaders(EXPIRED_TENANT_ID) },
+      );
+      await expectStatus(
+        afterExpiryResponse,
+        403,
+        "expired approved support lease must immediately remove Tenant authority",
+      );
+      await expectErrorCode(afterExpiryResponse, "tenant_actor_unavailable");
+
+      const terminateExpiredResponse = await expiredTenantAdminApi.post(
+        e2eApiUrl(
+          `/api/v1/authz/support-access-leases/${encodeURIComponent(requestedLease.id)}/terminate`,
+        ),
+        {
+          headers: authzHeaders(EXPIRED_TENANT_ID),
+          data: { reason: "Expired leases are already ineffective" },
+        },
+      );
+      await expectStatus(
+        terminateExpiredResponse,
+        409,
+        "an expired approved lease cannot be terminated as though it were still active",
+      );
+      await expectErrorCode(terminateExpiredResponse, "support_access_lease_expired");
+
+      const finalAuditResponse = await expiredTenantAdminApi.get(
+        e2eApiUrl(
+          `/api/v1/authz/support-access-leases/${encodeURIComponent(requestedLease.id)}/audit-logs`,
+        ),
+        { headers: authzHeaders(EXPIRED_TENANT_ID) },
+      );
+      await expectStatus(
+        finalAuditResponse,
+        200,
+        "read expired support lease audit history",
+      );
+      const finalAuditLogs = await responseData<AuditLog[]>(
+        finalAuditResponse,
+        "read expired support lease audit history",
+      );
       expect(
-        pendingAfterExpiry.some((lease) => lease.id === requestedLease.id),
+        finalAuditLogs.some(
+          (entry) =>
+            entry.supportLeaseId === requestedLease.id &&
+            entry.operation === "support_access_leases.terminate",
+        ),
       ).toBe(false);
+
+      // Expiration is an effective state derived from expiresAt. It has no
+      // synthetic actor and therefore must not fabricate an actor-attributed
+      // lifecycle event. The immutable request and approval audit rows remain
+      // the provenance for who created and approved the lease.
+      expect(
+        finalAuditLogs.some(
+          (entry) =>
+            entry.supportLeaseId === requestedLease.id &&
+            entry.operation === "support_access_leases.request",
+        ),
+      ).toBe(true);
+      expect(
+        finalAuditLogs.some(
+          (entry) =>
+            entry.supportLeaseId === requestedLease.id &&
+            entry.operation === "support_access_leases.approve",
+        ),
+      ).toBe(true);
+
+      const globalAfter = await getCurrentActor(
+        applicationAdminApi,
+        applicationTenantHeaders("*"),
+      );
+      expect(globalAfter.actorKey).toBe(applicationActor.actorKey);
+      expect(globalAfter.actorRecordId).toBe(applicationActor.actorRecordId);
+      expect(globalAfter.scope).toBe("APPLICATION");
+      expect(globalAfter.tenantId).toBe("*");
+      expect(globalAfter.supportLeaseId).toBeFalsy();
+      expect(globalAfter.personId).toBeFalsy();
+      expect(globalAfter.globalPersonId).toBeFalsy();
+      expect(globalAfter.membershipId).toBeFalsy();
+      expect(globalAfter.collaboratorId).toBeFalsy();
     } finally {
       await expiredTenantAdminApi.dispose();
-      await tenantAdminApi.dispose();
       await applicationAdminApi.dispose();
     }
   });
@@ -213,6 +472,15 @@ test.describe("Tenant Support Access Lease authorization", () => {
 
     try {
       await closeOpenLeases(applicationAdminApi, tenantAdminApi, SUPPORT_TENANT_ID);
+
+      const applicationAccountID = await getAuthenticatedAccountID(
+        applicationAdminApi,
+        "Application Administrator",
+      );
+      const tenantAdminAccountID = await getAuthenticatedAccountID(
+        tenantAdminApi,
+        "support-Tenant Administrator",
+      );
 
       const globalBefore = await getCurrentActor(
         applicationAdminApi,
@@ -313,6 +581,19 @@ test.describe("Tenant Support Access Lease authorization", () => {
       );
       await expectStatus(duplicateResponse, 409, "reject duplicate open support request");
       await expectErrorCode(duplicateResponse, "support_access_lease_conflict");
+
+      const applicationSelfApproval = await applicationAdminApi.post(
+        e2eApiUrl(
+          `/api/v1/authz/support-access-leases/${encodeURIComponent(requestedLease.id)}/approve`,
+        ),
+        { headers: applicationTenantHeaders("*") },
+      );
+      await expectStatus(
+        applicationSelfApproval,
+        403,
+        "Application Administrator must not approve its own Tenant support request",
+      );
+      await expectErrorCode(applicationSelfApproval, "forbidden");
 
       const wrongTenantApproval = await otherTenantAdminApi.post(
         e2eApiUrl(
@@ -430,13 +711,17 @@ test.describe("Tenant Support Access Lease authorization", () => {
         "AUTHORIZED",
       );
       expectAuditIdentity(requestAudit, {
+        accountId: applicationAccountID,
+        actorId: globalBefore.actorKey,
         actorRecordId: globalBefore.actorRecordId,
         actorScope: "APPLICATION",
+        tenantId: SUPPORT_TENANT_ID,
+        supportLeaseId: requestedLease.id,
         correlationId: requestCorrelationID,
         authorizationSource: "GLOBAL_CONTROL_PLANE",
         authorizationRoleCode: "APPLICATION_ADMIN",
         requireSourceId: true,
-        requireAccountAndSession: true,
+        requireSession: true,
       });
       expect(requestAudit.personId).toBeFalsy();
       expect(requestAudit.membershipId).toBeFalsy();
@@ -449,15 +734,19 @@ test.describe("Tenant Support Access Lease authorization", () => {
         "AUTHORIZED",
       );
       expectAuditIdentity(approvalAudit, {
+        accountId: tenantAdminAccountID,
+        actorId: tenantAdminActor.actorKey,
         actorRecordId: tenantAdminActor.actorRecordId,
         actorScope: "TENANT",
         personId: tenantAdminActor.globalPersonId,
         membershipId: tenantAdminActor.membershipId,
+        tenantId: SUPPORT_TENANT_ID,
+        supportLeaseId: requestedLease.id,
         correlationId: approvalCorrelationID,
         authorizationSource: "ROLE_GRANT",
         authorizationRoleCode: "TENANT_ADMIN",
         requireSourceId: true,
-        requireAccountAndSession: true,
+        requireSession: true,
       });
 
       const peopleAudit = expectLeaseAudit(
@@ -470,12 +759,16 @@ test.describe("Tenant Support Access Lease authorization", () => {
         "/api/v1/people",
       );
       expectAuditIdentity(peopleAudit, {
+        accountId: applicationAccountID,
+        actorId: globalBefore.actorKey,
         actorRecordId: globalBefore.actorRecordId,
         actorScope: "APPLICATION",
+        tenantId: SUPPORT_TENANT_ID,
+        supportLeaseId: requestedLease.id,
         correlationId: peopleCorrelationID,
         authorizationSource: "SUPPORT_LEASE",
         authorizationSourceId: requestedLease.id,
-        requireAccountAndSession: true,
+        requireSession: true,
       });
       expect(peopleAudit.accountId).toBe(requestAudit.accountId);
       expect(peopleAudit.sessionId).toBe(requestAudit.sessionId);
@@ -490,11 +783,15 @@ test.describe("Tenant Support Access Lease authorization", () => {
         "/api/v1/expenses",
       );
       expectAuditIdentity(expensesAudit, {
+        accountId: applicationAccountID,
+        actorId: globalBefore.actorKey,
         actorRecordId: globalBefore.actorRecordId,
         actorScope: "APPLICATION",
+        tenantId: SUPPORT_TENANT_ID,
+        supportLeaseId: requestedLease.id,
         correlationId: expensesCorrelationID,
         authorizationSource: "NONE",
-        requireAccountAndSession: true,
+        requireSession: true,
       });
 
       const controlPlaneAudit = expectLeaseAudit(
@@ -507,13 +804,17 @@ test.describe("Tenant Support Access Lease authorization", () => {
         "/api/v1/authz/roles",
       );
       expectAuditIdentity(controlPlaneAudit, {
+        accountId: applicationAccountID,
+        actorId: globalBefore.actorKey,
         actorRecordId: globalBefore.actorRecordId,
         actorScope: "APPLICATION",
+        tenantId: SUPPORT_TENANT_ID,
+        supportLeaseId: requestedLease.id,
         correlationId: controlPlaneCorrelationID,
         authorizationSource: "GLOBAL_CONTROL_PLANE",
         authorizationRoleCode: "APPLICATION_ADMIN",
         requireSourceId: true,
-        requireAccountAndSession: true,
+        requireSession: true,
       });
 
       const terminationResponse = await tenantAdminApi.post(
@@ -554,18 +855,93 @@ test.describe("Tenant Support Access Lease authorization", () => {
         "AUTHORIZED",
       );
       expectAuditIdentity(terminationAudit, {
+        accountId: tenantAdminAccountID,
+        actorId: tenantAdminActor.actorKey,
         actorRecordId: tenantAdminActor.actorRecordId,
         actorScope: "TENANT",
         personId: tenantAdminActor.globalPersonId,
         membershipId: tenantAdminActor.membershipId,
+        tenantId: SUPPORT_TENANT_ID,
+        supportLeaseId: requestedLease.id,
         correlationId: terminationCorrelationID,
         authorizationSource: "ROLE_GRANT",
         authorizationRoleCode: "TENANT_ADMIN",
         requireSourceId: true,
-        requireAccountAndSession: true,
+        requireSession: true,
       });
       expect(terminationAudit.accountId).toBe(approvalAudit.accountId);
       expect(terminationAudit.sessionId).toBe(approvalAudit.sessionId);
+
+      const applicationAttributedAudit = await listAuditLogs(applicationAdminApi, {
+        accountId: applicationAccountID,
+        actorId: globalBefore.actorKey,
+        tenantId: SUPPORT_TENANT_ID,
+        supportLeaseId: requestedLease.id,
+      });
+      expect(applicationAttributedAudit.length).toBeGreaterThanOrEqual(4);
+      expect(
+        applicationAttributedAudit.every(
+          (entry) =>
+            entry.accountId === applicationAccountID &&
+            entry.actorId === globalBefore.actorKey &&
+            entry.tenantId === SUPPORT_TENANT_ID &&
+            entry.supportLeaseId === requestedLease.id,
+        ),
+      ).toBe(true);
+      expect(
+        applicationAttributedAudit.some(
+          (entry) =>
+            entry.operation === "support_access_leases.request" &&
+            entry.decision === "AUTHORIZED",
+        ),
+      ).toBe(true);
+      expect(
+        applicationAttributedAudit.some(
+          (entry) =>
+            entry.operation === "support_access.use" &&
+            entry.permissionCode === "people.read" &&
+            entry.decision === "AUTHORIZED",
+        ),
+      ).toBe(true);
+      expect(
+        applicationAttributedAudit.some(
+          (entry) =>
+            entry.operation === "support_access.use" &&
+            entry.permissionCode === "expenses.read" &&
+            entry.decision === "DENIED",
+        ),
+      ).toBe(true);
+
+      const tenantAdminAttributedAudit = await listAuditLogs(applicationAdminApi, {
+        accountId: tenantAdminAccountID,
+        actorId: tenantAdminActor.actorKey,
+        tenantId: SUPPORT_TENANT_ID,
+        supportLeaseId: requestedLease.id,
+      });
+      expect(tenantAdminAttributedAudit.length).toBeGreaterThanOrEqual(2);
+      expect(
+        tenantAdminAttributedAudit.every(
+          (entry) =>
+            entry.accountId === tenantAdminAccountID &&
+            entry.actorId === tenantAdminActor.actorKey &&
+            entry.tenantId === SUPPORT_TENANT_ID &&
+            entry.supportLeaseId === requestedLease.id,
+        ),
+      ).toBe(true);
+      expect(
+        tenantAdminAttributedAudit.some(
+          (entry) =>
+            entry.operation === "support_access_leases.approve" &&
+            entry.decision === "AUTHORIZED",
+        ),
+      ).toBe(true);
+      expect(
+        tenantAdminAttributedAudit.some(
+          (entry) =>
+            entry.operation === "support_access_leases.terminate" &&
+            entry.decision === "AUTHORIZED",
+        ),
+      ).toBe(true);
 
       const afterTerminationResponse = await applicationAdminApi.get(
         e2eApiUrl("/api/v1/authz/current-actor"),
@@ -630,6 +1006,21 @@ async function getCurrentActor(
   return responseData<CurrentActor>(response, "resolve current authorization actor");
 }
 
+async function getAuthenticatedAccountID(
+  api: APIRequestContext,
+  context: string,
+): Promise<string> {
+  const response = await api.get(e2eApiUrl("/api/v1/auth/session"));
+  await expectStatus(response, 200, `resolve ${context} Authentication Account`);
+  const session = await responseData<{ accountId?: string }>(
+    response,
+    `resolve ${context} Authentication Account`,
+  );
+  const accountID = session.accountId?.trim() ?? "";
+  expect(accountID, `${context} session must expose its Authentication Account ID`).not.toBe("");
+  return accountID;
+}
+
 async function listLeases(
   api: APIRequestContext,
   filter: { tenantId?: string; status?: string },
@@ -643,6 +1034,29 @@ async function listLeases(
   );
   await expectStatus(response, 200, "list Tenant Support Access Leases");
   return responseArray<SupportAccessLease>(response, "list Tenant Support Access Leases");
+}
+
+async function listAuditLogs(
+  api: APIRequestContext,
+  filter: {
+    accountId?: string;
+    actorId?: string;
+    tenantId?: string;
+    supportLeaseId?: string;
+  },
+): Promise<AuditLog[]> {
+  const query = new URLSearchParams();
+  if (filter.accountId) query.set("accountId", filter.accountId);
+  if (filter.actorId) query.set("actorId", filter.actorId);
+  if (filter.tenantId) query.set("tenantId", filter.tenantId);
+  if (filter.supportLeaseId) query.set("supportLeaseId", filter.supportLeaseId);
+
+  const response = await api.get(
+    e2eApiUrl(`/api/v1/authz/audit-logs?${query.toString()}`),
+    { headers: applicationTenantHeaders("*") },
+  );
+  await expectStatus(response, 200, "list authorization audit logs by attribution");
+  return responseArray<AuditLog>(response, "list authorization audit logs by attribution");
 }
 
 async function closeOpenLeases(
@@ -693,6 +1107,7 @@ function expectLeaseAudit(
   decision: string,
   requestMethod?: string,
   requestPath?: string,
+  expectedTenantId = SUPPORT_TENANT_ID,
 ): AuditLog {
   const entry = logs.find(
     (candidate) =>
@@ -707,26 +1122,34 @@ function expectLeaseAudit(
     entry,
     `expected ${decision} ${operation} audit for ${permissionCode} on lease ${leaseId}`,
   ).toBeDefined();
-  expect(entry?.tenantId).toBe(SUPPORT_TENANT_ID);
+  expect(entry?.tenantId).toBe(expectedTenantId);
   return entry as AuditLog;
 }
 
 type AuditIdentityExpectation = {
+  accountId: string;
+  actorId: string;
   actorRecordId: string;
   actorScope: string;
   personId?: string;
   membershipId?: string;
+  tenantId: string;
+  supportLeaseId: string;
   correlationId: string;
   authorizationSource: string;
   authorizationSourceId?: string;
   authorizationRoleCode?: string;
   requireSourceId?: boolean;
-  requireAccountAndSession?: boolean;
+  requireSession?: boolean;
 };
 
 function expectAuditIdentity(entry: AuditLog, expected: AuditIdentityExpectation): void {
+  expect(entry.accountId).toBe(expected.accountId);
+  expect(entry.actorId).toBe(expected.actorId);
   expect(entry.actorRecordId).toBe(expected.actorRecordId);
   expect(entry.actorScope).toBe(expected.actorScope);
+  expect(entry.tenantId).toBe(expected.tenantId);
+  expect(entry.supportLeaseId).toBe(expected.supportLeaseId);
   expect(entry.correlationId).toBe(expected.correlationId);
   expect(entry.authorizationSource).toBe(expected.authorizationSource);
   if (expected.personId !== undefined) expect(entry.personId).toBe(expected.personId);
@@ -738,8 +1161,7 @@ function expectAuditIdentity(entry: AuditLog, expected: AuditIdentityExpectation
     expect(entry.authorizationRoleCode).toBe(expected.authorizationRoleCode);
   }
   if (expected.requireSourceId) expect(entry.authorizationSourceId).toBeTruthy();
-  if (expected.requireAccountAndSession) {
-    expect(entry.accountId).toBeTruthy();
+  if (expected.requireSession) {
     expect(entry.sessionId).toBeTruthy();
   }
 }

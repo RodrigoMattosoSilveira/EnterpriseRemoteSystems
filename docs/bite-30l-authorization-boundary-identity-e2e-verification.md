@@ -21,15 +21,15 @@ Bite 30L is the final Bite 30 verification work and absorbs the intent of deferr
 - Collaborator Journey lifecycle against canonical Membership identity;
 - delegated Tenant role grant/revoke while intrinsic self-service survives.
 
-### 30L.3 — Control Plane, Support Lease, Audit, and Financial Isolation E2E
+### 30L.3 — Control Plane, Support Lease & Audit Attribution E2E
 
 - Application Administrator GLOBAL-only control-plane isolation;
-- Support Access Lease approval, expiry, immediate termination, and exact-Tenant isolation;
-- Account/Actor/Tenant/Lease audit attribution;
-- cross-Tenant financial isolation for the same Global Person.
+- Support Access Lease request/approve, approved-lease expiry, immediate termination, and exact-Tenant isolation;
+- exact Authentication Account / Actor key / Actor record / Tenant / Lease / session / correlation audit attribution.
 
 ### 30L.4 — Final Verification and Promotion Gate
 
+- remaining same-Global-Person cross-Tenant financial-isolation proof;
 - coverage manifest mapping architecture requirements to automated specs;
 - complete `make local-check` gate;
 - deployed Playwright verification in Development and Test;
@@ -69,6 +69,20 @@ The following existing end-to-end scenarios are explicitly part of the 30L.2 gat
 
 30L.2 does not claim the control-plane, Support Access Lease, audit-attribution, cross-Tenant financial-isolation, or final deployment gates. Those remain in 30L.3 and 30L.4.
 
+## 30L.3 implementation
+
+30L.3 promotes the existing Tenant Support Access Lease runtime from domain coverage to an explicit end-state control-plane boundary proof.
+
+`frontend/tests/e2e/support-access-leases-authorization.spec.ts` now proves three separate contracts:
+
+- an authenticated Application Administrator remains a GLOBAL, identity-neutral control-plane Actor before any support lease is approved; it can use the GLOBAL authorization control plane but cannot resolve or read an arbitrary Tenant merely by supplying that Tenant ID;
+- an exact-Tenant Administrator can approve a short-lived support lease, the same Application Administrator can temporarily resolve only that Tenant with only the allowlisted lease permissions, and an approved lease becomes effectively `EXPIRED` at `expiresAt` and immediately stops resolving Tenant authority without fabricating a synthetic actor-attributed expiration event;
+- request, approval, authorized lease use, denied non-leased use, denied control-plane use from leased Tenant context, and termination are tied to the exact Authentication Account ID, Actor key, Actor record ID, Tenant ID, Support Lease ID, session ID, request correlation ID, and authorization source. The audit query is also exercised with the combined Account/Actor/Tenant/Lease filters to prove the stored attribution is independently retrievable.
+
+The approval path explicitly rejects Application Administrator self-approval and approval by an Administrator from another Tenant. The termination path proves that exact-Tenant termination removes support authority immediately while leaving the Application Administrator's GLOBAL identity unchanged.
+
+Expiration remains a derived effective state rather than a state-transition actor event: the persisted lease remains `APPROVED`, its `effectiveStatus` becomes `EXPIRED`, and its immutable request/approval audit provenance remains intact. This avoids inventing an Actor for the passage of time.
+
 ## Remaining 30L work
 
-30L.1 and 30L.2 do not claim completion of the full 30L architecture checklist. 30L.3 and 30L.4 remain required before Bite 30L is complete and before the final Bite 30 promotion gate can be declared satisfied.
+30L.1 through 30L.3 do not yet claim completion of the full 30L architecture checklist. 30L.4 retains the remaining same-Global-Person cross-Tenant financial-isolation proof plus the final `make local-check`, deployed Playwright, and promotion/deployment verification gates.

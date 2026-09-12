@@ -62,7 +62,30 @@ frontend/tests/e2e/authentication-tenant-ux.spec.ts
 frontend/tests/e2e/authorization-boundaries.spec.ts
 frontend/tests/e2e/collaborators.spec.ts
 frontend/tests/e2e/tenant-role-delegation-ui.spec.ts
-frontend/tests/e2e/tenant-role-delegation-ui.spec.ts
 ```
 
-30L.3 retains the remaining control-plane, Support Access Lease, audit-attribution, and cross-Tenant financial-isolation verification. 30L.4 remains the final `make local-check` and deployed promotion gate.
+## Bite 30L.3 — Control Plane, Support Lease & Audit Attribution
+
+30L.3 makes the Application Administrator / Tenant Support Access Lease boundary a named promotion contract in:
+
+```text
+frontend/tests/e2e/support-access-leases-authorization.spec.ts
+```
+
+The automated coverage verifies:
+
+- the Application Administrator resolves as an identity-neutral `APPLICATION` Actor in GLOBAL (`*`) context and cannot resolve or read a Tenant before an exact-Tenant Support Access Lease is approved;
+- GLOBAL control-plane authorization remains available only in GLOBAL context;
+- Support Access Lease permissions are allowlisted and cannot contain control-plane permissions;
+- the Application Administrator cannot approve its own request, and a Tenant Administrator from another Tenant cannot approve it;
+- the exact-Tenant Administrator can approve the request;
+- the approved lease supplies only the requested Tenant permission and does not create a Person, Membership, Collaborator, or Tenant Actor identity for the Application Administrator;
+- the same lease does not work in any other Tenant and does not permit GLOBAL control-plane operations while operating in the leased Tenant context;
+- an approved short-lived lease becomes effectively `EXPIRED` at `expiresAt`, immediately loses Tenant authority, remains persisted as `APPROVED`, and cannot be terminated after it is already expired;
+- an explicitly terminated lease immediately loses Tenant authority while preserving the same GLOBAL Application Administrator identity;
+- request, approval, authorized support use, denied non-leased use, denied control-plane use, and termination audit rows carry the exact Authentication Account ID, Actor key, Actor record ID, Tenant ID, Support Lease ID, session ID, correlation ID, and authorization source;
+- combined Account/Actor/Tenant/Lease audit filters retrieve the corresponding Application Administrator and Tenant Administrator evidence independently.
+
+Expiration is intentionally derived from `expiresAt`; because no human or system Actor performs an expiration transition, the suite requires the immutable request/approval provenance to remain and requires no fabricated actor-attributed expiration event.
+
+30L.4 retains the remaining same-Global-Person cross-Tenant financial-isolation proof plus the final `make local-check`, deployed Playwright, and promotion/deployment gates.
