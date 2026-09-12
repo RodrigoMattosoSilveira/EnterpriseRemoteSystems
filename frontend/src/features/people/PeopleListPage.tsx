@@ -471,9 +471,11 @@ export function PeopleListPage() {
                                 statusId: activeMembershipStatusId,
                                 notes: "",
                               });
-                              navigate(`/people/${created.id}`, {
+                              navigate(`/people/${created.id}#authentication`, {
                                 state: {
-                                  flash: `Person membership added: ${created.firstName} ${created.lastName}.`,
+                                  flash:
+                                    `Person membership added: ${created.firstName} ${created.lastName}. ` +
+                                    "Configure authentication for this Tenant below.",
                                 },
                               });
                             }}

@@ -53,11 +53,11 @@ export function CreatePersonPage() {
           submitting={mutation.isPending}
           onSubmit={async (input) => {
             const created = await mutation.mutateAsync(input);
-            navigate("/people", {
+            navigate(`/people/${created.id}#authentication`, {
               state: {
-                flash: `Person record added: ${created.firstName} ${created.lastName}.`,
-                createdPersonId: created.id,
-                createdPerson: created,
+                flash:
+                  `Person record added: ${created.firstName} ${created.lastName}. ` +
+                  "Set the initial temporary password below to enable sign-in.",
               },
             });
           }}

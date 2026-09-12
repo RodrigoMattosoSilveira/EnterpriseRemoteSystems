@@ -46,7 +46,7 @@ function formatBrazilianCellular(raw: string): string {
   return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7)}`;
 }
 
-test("user can create a Person from the React frontend", async ({ page }) => {
+test("Tenant Administrator can create a Person and define the initial temporary password", async ({ page, browser }) => {
   const unique = Date.now().toString().slice(-8);
   const firstName = `E2E${unique}`;
   const lastName = "Pessoa";
@@ -71,20 +71,48 @@ test("user can create a Person from the React frontend", async ({ page }) => {
 
   await page.getByRole("button", { name: "Create Person" }).click();
 
-  await expect(page).toHaveURL(/\/people$/);
-  await expect(page.getByRole("heading", { name: "People" })).toBeVisible();
-  await expect(page.getByLabel("People tenant scope")).toContainText(
-    "Tenant ID: default",
-  );
+  await expect(page).toHaveURL(/\/people\/[^#]+#authentication$/);
+  await expect(page.getByRole("heading", { name: "Person", exact: true })).toBeVisible();
   await expect(page.getByRole("status")).toContainText(
     `Person record added: ${firstName} ${lastName}.`,
   );
+  await expect(page.getByRole("status")).toContainText(
+    "Set the initial temporary password below to enable sign-in.",
+  );
 
-  const firstPersonCard = page.locator('main section a[href^="/people/"]').first();
-  await expect(firstPersonCard).toContainText(`${firstName} ${lastName}`);
-  await expect(firstPersonCard).toContainText(nickname);
-  await expect(firstPersonCard).toContainText("Just added");
-  await expect(firstPersonCard).toContainText("Incomplete");
+  const authenticationSection = page.getByRole("region", { name: "Authentication" });
+  await expect(authenticationSection).toBeVisible();
+  await expect(authenticationSection.getByText("Status: Not enabled for this tenant")).toBeVisible();
+  await expect(authenticationSection.getByText(email)).toBeVisible();
+
+  const temporaryPassword = `Tenant-Temporary-${unique}-Password!`;
+  await authenticationSection.getByLabel("Initial temporary password").fill(temporaryPassword);
+  await authenticationSection.getByLabel("Confirm temporary password").fill(temporaryPassword);
+  await authenticationSection.getByRole("button", { name: "Enable Authentication" }).click();
+  await expect(authenticationSection.getByRole("status")).toContainText(
+    `Account login: ${email}`,
+  );
+  await expect(authenticationSection.getByRole("status")).toContainText(
+    "ERS will require a password change on first sign-in.",
+  );
+
+  const baseURL = new URL(page.url()).origin;
+  const freshContext = await browser.newContext({
+    baseURL,
+    storageState: { cookies: [], origins: [] },
+  });
+  const freshPage = await freshContext.newPage();
+  try {
+    await freshPage.goto("/login");
+    await freshPage.getByLabel("Login").fill(email);
+    await freshPage.getByLabel("Password").fill(temporaryPassword);
+    await freshPage.getByRole("button", { name: "Sign in" }).click();
+
+    await expect(freshPage).toHaveURL(/\/password\/change$/);
+    await expect(freshPage.getByRole("heading", { name: "Change password" })).toBeVisible();
+  } finally {
+    await freshContext.close();
+  }
 });
 
 

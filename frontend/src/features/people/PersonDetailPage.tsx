@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Link, useParams, useSearchParams } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { Link, useLocation, useParams, useSearchParams } from "react-router-dom";
 import { PersonForm } from "./PersonForm";
 import { usePerson, useUpdatePerson } from "./usePeople";
 import { ApiErrorPanel } from "../../components/ApiErrorPanel";
@@ -11,8 +11,14 @@ import { PageContextHeading, PageTitle } from "../../components/layout/PageHeadi
 
 const FALLBACK_ACTIVE_STATUS_ID = "ref-person-status-active";
 
+function personDetailFlash(state: unknown): string {
+  if (!state || typeof state !== "object" || !("flash" in state)) return "";
+  return typeof state.flash === "string" ? state.flash : "";
+}
+
 export function PersonDetailPage() {
   const { id = "" } = useParams();
+  const location = useLocation();
   const actor = useAuthorizationContext();
   const canBrowsePeople = actor.permissions.includes("*") || actor.permissions.includes("people.read");
   const canManageTenantAuthentication =
@@ -21,7 +27,7 @@ export function PersonDetailPage() {
     actor.scope === "TENANT" &&
     (actor.permissions.includes("*") ||
       actor.permissions.includes("collaborators.create"));
-  const [successMessage, setSuccessMessage] = useState("");
+  const [successMessage, setSuccessMessage] = useState(() => personDetailFlash(location.state));
 
   const personQuery = usePerson(id);
   const collaboratorCandidatesQuery = useCollaboratorCandidates(
@@ -29,6 +35,22 @@ export function PersonDetailPage() {
   );
   const mutation = useUpdatePerson(id);
   const statusesQuery = useReferenceDataByType("person_status");
+  useEffect(() => {
+    if (
+      !personQuery.data ||
+      !canManageTenantAuthentication ||
+      location.hash !== "#authentication"
+    ) {
+      return;
+    }
+
+    const frame = window.requestAnimationFrame(() => {
+      const authenticationSection = document.getElementById("authentication");
+      authenticationSection?.scrollIntoView({ block: "start" });
+      authenticationSection?.focus({ preventScroll: true });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [canManageTenantAuthentication, location.hash, personQuery.data]);
 
   const [searchParams] = useSearchParams();
   const view = searchParams.get("view") || "cards";

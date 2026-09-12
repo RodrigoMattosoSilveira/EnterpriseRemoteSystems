@@ -48,6 +48,7 @@ The remaining 30L lifecycle, financial, control-plane, support-lease, audit, and
 - an active Authentication Account can retain intrinsic Person self-service with no active Tenant Actor and recover Tenant access without a new login;
 - security suspension invalidates an existing Account session, rejects login, supports an explicit reactivation request/review, and permits login only after Application Administrator approval;
 - temporary-password first login forces password change;
+- a Tenant Administrator creating a Person is routed directly to that Person's Authentication section, can define and confirm the initial temporary password, and the newly provisioned Account must change that password on first sign-in;
 - administrator-issued password reset replaces the credential and invalidates the pre-reset browser session;
 - closing a zero-balance Collaborator Journey preserves canonical Membership identity and a subsequent Journey for that Membership starts with zero Journey balances;
 - revoking a delegated operator Role Grant removes delegated authority while `people.self.read` and `/api/v1/auth/self-service` remain available;
