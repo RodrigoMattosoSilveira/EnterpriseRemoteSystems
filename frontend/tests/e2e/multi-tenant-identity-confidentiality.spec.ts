@@ -228,23 +228,16 @@ test.describe("Bite 30L multi-Tenant identity and confidentiality", () => {
 
   test("Tenant selector refreshes after another session deactivates and reactivates a Tenant Actor", async ({ browser }) => {
     const tenantAAdminApi = await newTenantAdminApi(tenantA.id);
-    const { context, page } = await signedInFixturePage(browser);
+    const { context, page } = await signedInFixturePage(browser, tenantB.id);
     try {
       const selector = page.getByRole("button", { name: "Current tenant" });
       await expect(selector).toBeVisible();
 
-      // Keep Tenant B effective while Tenant A is changed from the separate
-      // administrator session. That isolates the option-catalog behavior from
-      // fallback selection of a deactivated current Actor.
-      if ((await selector.getAttribute("data-selected-tenant-id")) !== tenantB.id) {
-        await selector.click();
-        const selection = page.getByRole("region", { name: "Tenant selection" });
-        await expect(
-          selection.locator(`[role="option"][data-tenant-id="${tenantB.id}"]`),
-        ).toBeVisible();
-        await selection.locator(`[role="option"][data-tenant-id="${tenantB.id}"]`).click();
-        await expect(selector).toHaveAttribute("data-selected-tenant-id", tenantB.id);
-      }
+      // Start with Tenant B effective while Tenant A is changed from the
+      // separate administrator session. The browser storage fixture owns this
+      // setup so the test measures selector refresh behavior, not an unrelated
+      // initial Tenant-switch race.
+      await expect(selector).toHaveAttribute("data-selected-tenant-id", tenantB.id);
 
       const deactivateResponse = await tenantAAdminApi.patch(
         e2eApiUrl(
@@ -422,10 +415,32 @@ async function authenticatedFixtureApi(): Promise<APIRequestContext> {
   return api;
 }
 
-async function signedInFixturePage(browser: Browser): Promise<{ context: BrowserContext; page: Page }> {
+async function signedInFixturePage(
+  browser: Browser,
+  initialTenantId?: string,
+): Promise<{ context: BrowserContext; page: Page }> {
   const context = await browser.newContext({
     baseURL,
-    storageState: { cookies: [], origins: [] },
+    storageState: {
+      cookies: [],
+      origins: initialTenantId
+        ? [
+            {
+              origin: new URL(baseURL).origin,
+              localStorage: [
+                {
+                  name: "ers.auth.selectedTenantId",
+                  value: initialTenantId,
+                },
+                {
+                  name: "ers.auth.selectedTenantAccountId",
+                  value: accountId,
+                },
+              ],
+            },
+          ]
+        : [],
+    },
   });
   const page = await context.newPage();
   await page.goto("/login");

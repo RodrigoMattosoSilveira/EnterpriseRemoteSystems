@@ -248,7 +248,8 @@ test("user can switch the People landing page between card and list views", asyn
   await page.getByLabel("Status *").selectOption(ACTIVE_STATUS_ID);
 
   await page.getByRole("button", { name: "Create Person" }).click();
-  await expect(page).toHaveURL(/\/people$/);
+  await expect(page).toHaveURL(/\/people\/[^/]+#authentication$/);
+  await page.goto("/people");
 
   // Card view should be active by default
   await expect(page.getByRole("button", { name: "Card view" })).toHaveAttribute("aria-pressed", "true");
@@ -327,7 +328,7 @@ test("user sees an error when creating a Person with a duplicate CPF", async ({ 
 
   await page.getByRole("button", { name: "Create Person" }).click();
 
-  await expect(page).toHaveURL(/\/people$/);
+  await expect(page).toHaveURL(/\/people\/[^/]+#authentication$/);
 
   await page.goto("/people/new");
 
@@ -365,7 +366,8 @@ test("user can create a Person with a valid Brazilian cellular", async ({ page }
 
   await page.getByRole("button", { name: "Create Person" }).click();
 
-  await expect(page).toHaveURL(/\/people$/);
+  await expect(page).toHaveURL(/\/people\/[^/]+#authentication$/);
+  await page.goto("/people");
   const firstPersonCard = page.locator('main section a[href^="/people/"]').first();
   await expect(firstPersonCard).toContainText(/Formatted.*Phone/);
   await expect(firstPersonCard).toContainText("Just added");
