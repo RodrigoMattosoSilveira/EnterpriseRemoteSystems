@@ -251,9 +251,11 @@ test("user can switch the People landing page between card and list views", asyn
   await expect(page).toHaveURL(/\/people\/[^/]+#authentication$/);
   await page.goto("/people");
 
-  // Card view should be active by default
+  // Card view should be active by default. The create workflow now lands on
+  // the Person Authentication section, so returning to /people does not carry
+  // the old created-Person pin. Locate the new Person through the supported
+  // tenant People search before exercising view switching.
   await expect(page.getByRole("button", { name: "Card view" })).toHaveAttribute("aria-pressed", "true");
-  await expect(page.getByRole("link", { name: new RegExp(`^${personName}`) })).toBeVisible();
 
   // Full-name search is supported by the tenant People API. Keep that filter
   // active while switching views so location.state changes cannot hide the
@@ -368,9 +370,23 @@ test("user can create a Person with a valid Brazilian cellular", async ({ page }
 
   await expect(page).toHaveURL(/\/people\/[^/]+#authentication$/);
   await page.goto("/people");
-  const firstPersonCard = page.locator('main section a[href^="/people/"]').first();
-  await expect(firstPersonCard).toContainText(/Formatted.*Phone/);
-  await expect(firstPersonCard).toContainText("Just added");
+
+  const personName = `Formatted${suffix} Phone`;
+  const filteredPeopleResponsePromise = page.waitForResponse((response) => {
+    const url = new URL(response.url());
+    return (
+      response.request().method() === "GET" &&
+      url.pathname === "/api/v1/people" &&
+      url.searchParams.get("search") === personName
+    );
+  });
+  await page.getByLabel("Filter people").fill(personName);
+  const filteredPeopleResponse = await filteredPeopleResponsePromise;
+  expect(filteredPeopleResponse.ok()).toBeTruthy();
+
+  const personCard = page.getByRole("link", { name: new RegExp(`^${personName}`) });
+  await expect(personCard).toBeVisible();
+  await expect(personCard).toContainText(cellular);
 });
 
 
