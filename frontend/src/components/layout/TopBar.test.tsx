@@ -56,6 +56,7 @@ describe("TopBar support access provenance", () => {
           selectedTenantId="default"
           effectiveActor={actor}
           onTenantChange={vi.fn()}
+          onTenantOptionsRefresh={vi.fn()}
           onLogout={vi.fn()}
         />,
       );
@@ -86,6 +87,7 @@ describe("TopBar support access provenance", () => {
           selectedTenantId="default"
           effectiveActor={actor}
           onTenantChange={vi.fn()}
+          onTenantOptionsRefresh={vi.fn()}
           onLogout={vi.fn()}
         />,
       );

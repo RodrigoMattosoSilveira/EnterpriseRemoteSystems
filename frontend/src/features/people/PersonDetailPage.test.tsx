@@ -43,6 +43,9 @@ const PERSON_ID = "person-123";
 
 const existingPerson: Person = {
   id: PERSON_ID,
+  globalPersonId: "global-person-123",
+  membershipId: "membership-default-person-123",
+  tenantId: "default",
   firstName: "Maria",
   lastName: "Silva",
   nickname: "Mari",
@@ -120,6 +123,9 @@ describe("PersonDetailPage", () => {
     expect(pageHeading?.className).toContain("text-3xl");
     expect(personHeading?.textContent?.trim()).toBe("Maria Silva");
     expect(personHeading?.className).toContain("text-lg");
+    expect(container.textContent).toContain(
+      "Membership ID: membership-default-person-123",
+    );
 
     expect(inputByLabel("First Name").value).toBe("Maria");
     expect(inputByLabel("Last Name").value).toBe("Silva");

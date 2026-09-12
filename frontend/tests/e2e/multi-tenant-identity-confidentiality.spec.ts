@@ -19,12 +19,14 @@ const accountId = "e2e-multi-tenant-account";
 const tenantA = {
   id: "e2e-multi-tenant-a",
   name: "E2E Multi Tenant A",
+  actorId: "e2e-multi-tenant-actor-e2e-multi-tenant-a",
   actorKey: "e2e-multi-tenant-actor-e2e-multi-tenant-a",
   membershipId: "e2e-multi-tenant-membership-e2e-multi-tenant-a",
 };
 const tenantB = {
   id: "e2e-multi-tenant-b",
   name: "E2E Multi Tenant B",
+  actorId: "e2e-multi-tenant-actor-e2e-multi-tenant-b",
   actorKey: "e2e-multi-tenant-actor-e2e-multi-tenant-b",
   membershipId: "e2e-multi-tenant-membership-e2e-multi-tenant-b",
 };
@@ -126,6 +128,165 @@ test.describe("Bite 30L multi-Tenant identity and confidentiality", () => {
     }
   });
 
+  test("deactivating one Tenant Actor leaves the other Tenant usable and reactivation restores the same session", async () => {
+    const personApi = await authenticatedFixtureApi();
+    const tenantAAdminApi = await newTenantAdminApi(tenantA.id);
+    try {
+      const deactivateResponse = await tenantAAdminApi.patch(
+        e2eApiUrl(
+          `/api/v1/authz/tenant-role-actors/${encodeURIComponent(tenantA.actorId)}/active`,
+        ),
+        { data: { active: false } },
+      );
+      expect(deactivateResponse.status()).toBe(200);
+
+      const unavailableA = await personApi.get(
+        e2eApiUrl("/api/v1/authz/current-actor"),
+        { headers: { "X-Tenant-ID": tenantA.id } },
+      );
+      expect(unavailableA.status()).toBe(403);
+      const unavailableEnvelope = (await unavailableA.json()) as {
+        error?: { code?: string };
+      };
+      expect(unavailableEnvelope.error?.code).toBe("tenant_actor_unavailable");
+
+      const availableB = await personApi.get(
+        e2eApiUrl("/api/v1/authz/current-actor"),
+        { headers: { "X-Tenant-ID": tenantB.id } },
+      );
+      expect(availableB.status()).toBe(200);
+      const availableBEnvelope = (await availableB.json()) as {
+        data?: { actorKey?: string; tenantId?: string };
+      };
+      expect(availableBEnvelope.data).toMatchObject({
+        actorKey: tenantB.actorKey,
+        tenantId: tenantB.id,
+      });
+
+      const sessionResponse = await personApi.get(e2eApiUrl("/api/v1/auth/session"));
+      expect(sessionResponse.status()).toBe(200);
+      const sessionEnvelope = (await sessionResponse.json()) as {
+        data?: { accountId?: string };
+      };
+      expect(sessionEnvelope.data?.accountId).toBe(accountId);
+
+      const optionsWhileInactive = await personApi.get(
+        e2eApiUrl("/api/v1/auth/tenant-options"),
+      );
+      expect(optionsWhileInactive.status()).toBe(200);
+      const inactiveOptionsEnvelope = (await optionsWhileInactive.json()) as {
+        data?: Array<{ id?: string }>;
+      };
+      expect((inactiveOptionsEnvelope.data ?? []).map((option) => option.id)).toEqual([
+        tenantB.id,
+      ]);
+
+      const reactivateResponse = await tenantAAdminApi.patch(
+        e2eApiUrl(
+          `/api/v1/authz/tenant-role-actors/${encodeURIComponent(tenantA.actorId)}/active`,
+        ),
+        { data: { active: true } },
+      );
+      expect(reactivateResponse.status()).toBe(200);
+
+      const restoredA = await personApi.get(
+        e2eApiUrl("/api/v1/authz/current-actor"),
+        { headers: { "X-Tenant-ID": tenantA.id } },
+      );
+      expect(restoredA.status()).toBe(200);
+      const restoredAEnvelope = (await restoredA.json()) as {
+        data?: { actorKey?: string; tenantId?: string };
+      };
+      expect(restoredAEnvelope.data).toMatchObject({
+        actorKey: tenantA.actorKey,
+        tenantId: tenantA.id,
+      });
+
+      const optionsAfterReactivation = await personApi.get(
+        e2eApiUrl("/api/v1/auth/tenant-options"),
+      );
+      expect(optionsAfterReactivation.status()).toBe(200);
+      const restoredOptionsEnvelope = (await optionsAfterReactivation.json()) as {
+        data?: Array<{ id?: string }>;
+      };
+      expect((restoredOptionsEnvelope.data ?? []).map((option) => option.id).sort()).toEqual(
+        [tenantA.id, tenantB.id].sort(),
+      );
+    } finally {
+      await tenantAAdminApi
+        .patch(
+          e2eApiUrl(
+            `/api/v1/authz/tenant-role-actors/${encodeURIComponent(tenantA.actorId)}/active`,
+          ),
+          { data: { active: true } },
+        )
+        .catch(() => undefined);
+      await tenantAAdminApi.dispose();
+      await personApi.dispose();
+    }
+  });
+
+  test("Tenant selector refreshes after another session deactivates and reactivates a Tenant Actor", async ({ browser }) => {
+    const tenantAAdminApi = await newTenantAdminApi(tenantA.id);
+    const { context, page } = await signedInFixturePage(browser, tenantB.id);
+    try {
+      const selector = page.getByRole("button", { name: "Current tenant" });
+      await expect(selector).toBeVisible();
+
+      // Start with Tenant B effective while Tenant A is changed from the
+      // separate administrator session. The browser storage fixture owns this
+      // setup so the test measures selector refresh behavior, not an unrelated
+      // initial Tenant-switch race.
+      await expect(selector).toHaveAttribute("data-selected-tenant-id", tenantB.id);
+
+      const deactivateResponse = await tenantAAdminApi.patch(
+        e2eApiUrl(
+          `/api/v1/authz/tenant-role-actors/${encodeURIComponent(tenantA.actorId)}/active`,
+        ),
+        { data: { active: false } },
+      );
+      expect(deactivateResponse.status()).toBe(200);
+
+      await selector.click();
+      let selection = page.getByRole("region", { name: "Tenant selection" });
+      await expect(
+        selection.locator(`[role="option"][data-tenant-id="${tenantA.id}"]`),
+      ).toHaveCount(0);
+      await expect(
+        selection.locator(`[role="option"][data-tenant-id="${tenantB.id}"]`),
+      ).toBeVisible();
+      await selector.click();
+
+      const reactivateResponse = await tenantAAdminApi.patch(
+        e2eApiUrl(
+          `/api/v1/authz/tenant-role-actors/${encodeURIComponent(tenantA.actorId)}/active`,
+        ),
+        { data: { active: true } },
+      );
+      expect(reactivateResponse.status()).toBe(200);
+
+      await selector.click();
+      selection = page.getByRole("region", { name: "Tenant selection" });
+      await expect(
+        selection.locator(`[role="option"][data-tenant-id="${tenantA.id}"]`),
+      ).toBeVisible();
+      await expect(
+        selection.locator(`[role="option"][data-tenant-id="${tenantB.id}"]`),
+      ).toBeVisible();
+    } finally {
+      await tenantAAdminApi
+        .patch(
+          e2eApiUrl(
+            `/api/v1/authz/tenant-role-actors/${encodeURIComponent(tenantA.actorId)}/active`,
+          ),
+          { data: { active: true } },
+        )
+        .catch(() => undefined);
+      await context.close();
+      await tenantAAdminApi.dispose();
+    }
+  });
+
   test("Tenant Administrators see only their own Membership projection for the shared Person", async () => {
     for (const tenant of [tenantA, tenantB]) {
       const adminApi = await newTenantAdminApi(tenant.id);
@@ -186,10 +347,19 @@ test.describe("Bite 30L multi-Tenant identity and confidentiality", () => {
       await selector.click();
       const selection = page.getByRole("region", { name: "Tenant selection" });
       await expect(selection).toBeVisible();
-      await expect(selection.getByRole("option", { name: new RegExp(tenantA.name) })).toBeVisible();
-      await expect(selection.getByRole("option", { name: new RegExp(tenantB.name) })).toBeVisible();
+      await expect(selection).toContainText(
+        "Each tenant below is available through a separate active Actor and Membership owned by this Authentication Account.",
+      );
 
-      await selection.getByRole("option", { name: new RegExp(target.name) }).click();
+      for (const tenant of [tenantA, tenantB]) {
+        const option = selection.locator(`[role="option"][data-tenant-id="${tenant.id}"]`);
+        await expect(option).toBeVisible();
+        await expect(option).toContainText(tenant.name);
+        await expect(option).toContainText(`Actor: ${tenant.actorKey}`);
+        await expect(option).toContainText(`Membership: ${tenant.membershipId}`);
+      }
+
+      await selection.locator(`[role="option"][data-tenant-id="${target.id}"]`).click();
       await expect(selector).toHaveAttribute("data-selected-tenant-id", target.id);
       await expect(page.getByRole("heading", { name: "Something went wrong" })).toHaveCount(0);
 
@@ -210,6 +380,18 @@ test.describe("Bite 30L multi-Tenant identity and confidentiality", () => {
         tenantId: target.id,
         scope: "TENANT",
       });
+
+      await page.goto(`/people/${encodeURIComponent(personId)}`);
+      await expect(
+        page.getByText(`Membership ID: ${target.membershipId}`, { exact: true }),
+      ).toBeVisible();
+
+      const otherTenant = target.id === tenantA.id ? tenantB : tenantA;
+      await expect(
+        page.getByText(`Membership ID: ${otherTenant.membershipId}`, {
+          exact: true,
+        }),
+      ).toHaveCount(0);
     } finally {
       await context.close();
     }
@@ -233,10 +415,32 @@ async function authenticatedFixtureApi(): Promise<APIRequestContext> {
   return api;
 }
 
-async function signedInFixturePage(browser: Browser): Promise<{ context: BrowserContext; page: Page }> {
+async function signedInFixturePage(
+  browser: Browser,
+  initialTenantId?: string,
+): Promise<{ context: BrowserContext; page: Page }> {
   const context = await browser.newContext({
     baseURL,
-    storageState: { cookies: [], origins: [] },
+    storageState: {
+      cookies: [],
+      origins: initialTenantId
+        ? [
+            {
+              origin: new URL(baseURL).origin,
+              localStorage: [
+                {
+                  name: "ers.auth.selectedTenantId",
+                  value: initialTenantId,
+                },
+                {
+                  name: "ers.auth.selectedTenantAccountId",
+                  value: accountId,
+                },
+              ],
+            },
+          ]
+        : [],
+    },
   });
   const page = await context.newPage();
   await page.goto("/login");

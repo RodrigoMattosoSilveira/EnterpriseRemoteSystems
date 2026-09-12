@@ -437,13 +437,9 @@ describe("AuthzAdminPage", () => {
     await waitForText("global-support-e2e created.");
 
     const createdActorArticle = articleByText("global-support-e2e");
-    const createdActorRole = controlByLabel<HTMLSelectElement>(
-      createdActorArticle,
-      "Role",
-      "select",
-    );
+    const createdActorRole = roleSelectorButtonInArticle("global-support-e2e");
     expect(createdActorRole.disabled).toBe(true);
-    expect(createdActorRole.options.length).toBe(0);
+    expect(createdActorArticle.querySelector('[role="listbox"][aria-label="Role choices"]')).toBeNull();
     expect(buttonInArticle("global-support-e2e", "Grant Role").disabled).toBe(true);
     expect(createdActorArticle.textContent).toContain(
       "Authentication Account binding is required.",
@@ -478,7 +474,7 @@ describe("AuthzAdminPage", () => {
     renderAuthzAdminPage();
     await waitForText("Expense Admin");
 
-    await changeSelectInArticle("expense-admin", "Role", "EXPENSE_OPERATOR");
+    await chooseRoleInArticle("expense-admin", "EXPENSE_OPERATOR");
     const grantTenantInput = controlByLabel<HTMLInputElement>(
       articleByText("expense-admin"),
       "Grant tenant",
@@ -509,6 +505,82 @@ describe("AuthzAdminPage", () => {
     ).toBe(true);
   });
 
+  it("uses a filterable Role selector without changing selection until a Role is chosen", async () => {
+    actors.push({
+      id: "actor-expense-admin",
+      actorKey: "expense-admin",
+      displayName: "Expense Admin",
+      personId: "person-expense-admin",
+      globalPersonId: "person-expense-admin",
+      active: true,
+      roleGrants: [],
+      binding: activeTenantBinding("default"),
+    });
+    mockAuthzFetch();
+
+    renderAuthzAdminPage();
+    await waitForText("Expense Admin");
+
+    const article = articleByText("expense-admin");
+    const roleButton = roleSelectorButtonInArticle("expense-admin");
+    expect(roleButton.getAttribute("aria-expanded")).toBe("false");
+    expect(roleButton.textContent).toContain("Select a Role");
+    expect(article.querySelector('[role="listbox"][aria-label="Role choices"]')).toBeNull();
+
+    await openRoleSelectorInArticle("expense-admin");
+    expect(roleChoicesInArticle("expense-admin")).toEqual([
+      "EXPENSE_OPERATOR",
+      "TENANT_ADMIN",
+    ]);
+
+    const filter = controlByLabel<HTMLInputElement>(article, "Filter roles", "input");
+    await setInputValue(filter, "tenant adm");
+    expect(roleChoicesInArticle("expense-admin")).toEqual(["TENANT_ADMIN"]);
+    expect(roleSelectorButtonInArticle("expense-admin").textContent).toContain(
+      "Select a Role",
+    );
+
+    await setInputValue(filter, "");
+    expect(roleChoicesInArticle("expense-admin")).toEqual([
+      "EXPENSE_OPERATOR",
+      "TENANT_ADMIN",
+    ]);
+    expect(roleSelectorButtonInArticle("expense-admin").textContent).toContain(
+      "Select a Role",
+    );
+
+    await chooseOpenRoleOptionInArticle("expense-admin", "TENANT_ADMIN");
+    expect(roleSelectorButtonInArticle("expense-admin").getAttribute("aria-expanded")).toBe(
+      "false",
+    );
+    expect(roleSelectorButtonInArticle("expense-admin").textContent).toContain(
+      "TENANT_ADMIN",
+    );
+
+    await openRoleSelectorInArticle("expense-admin");
+    expect(roleChoicesInArticle("expense-admin")).toEqual([
+      "EXPENSE_OPERATOR",
+      "TENANT_ADMIN",
+    ]);
+
+    const reopenedFilter = controlByLabel<HTMLInputElement>(
+      article,
+      "Filter roles",
+      "input",
+    );
+    await act(async () => {
+      reopenedFilter.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "Escape", bubbles: true }),
+      );
+    });
+    expect(roleSelectorButtonInArticle("expense-admin").getAttribute("aria-expanded")).toBe(
+      "false",
+    );
+    expect(roleSelectorButtonInArticle("expense-admin").textContent).toContain(
+      "TENANT_ADMIN",
+    );
+  });
+
   it("derives a tenant grant from the Actor binding instead of the application wildcard", async () => {
     const tenantId = "b16647b4-82a3-4d4e-99d0-c15ede05840b";
     window.localStorage.setItem("ers.auth.selectedTenantId", "*");
@@ -527,7 +599,7 @@ describe("AuthzAdminPage", () => {
     renderAuthzAdminPage();
     await waitForText("Expense Admin");
 
-    await changeSelectInArticle("expense-admin", "Role", "TENANT_ADMIN");
+    await chooseRoleInArticle("expense-admin", "TENANT_ADMIN");
     const article = articleByText("expense-admin");
     const grantTenantInput = controlByLabel<HTMLInputElement>(article, "Grant tenant", "input");
     const grantButton = buttonInArticle("expense-admin", "Grant Role");
@@ -545,11 +617,9 @@ describe("AuthzAdminPage", () => {
       `Person–Tenant Membership: ACTIVE · same tenant · membership-${tenantId}`,
     );
     expect(article.textContent).toContain("Tenant Role Grants: ELIGIBLE");
-    expect(
-      Array.from(controlByLabel<HTMLSelectElement>(article, "Role", "select").options).some(
-        (option) => option.value === "APPLICATION_ADMIN",
-      ),
-    ).toBe(false);
+    await openRoleSelectorInArticle("expense-admin");
+    expect(roleChoicesInArticle("expense-admin")).not.toContain("APPLICATION_ADMIN");
+    await closeRoleSelectorInArticle("expense-admin");
 
     await clickButtonInArticle("expense-admin", "Grant Role");
     await waitForText("TENANT_ADMIN granted.");
@@ -626,7 +696,7 @@ describe("AuthzAdminPage", () => {
 
     renderAuthzAdminPage();
     await waitForText("Admin Three");
-    await changeSelectInArticle("admin-three", "Role", "TENANT_ADMIN");
+    await chooseRoleInArticle("admin-three", "TENANT_ADMIN");
 
     const article = articleByText("admin-three");
     expect(buttonInArticle("admin-three", "Grant Role").disabled).toBe(true);
@@ -679,7 +749,7 @@ describe("AuthzAdminPage", () => {
 
     renderAuthzAdminPage();
     await waitForText("Target Cross Admin");
-    await changeSelectInArticle("target-cross-admin", "Role", "TENANT_ADMIN");
+    await chooseRoleInArticle("target-cross-admin", "TENANT_ADMIN");
 
     const article = articleByText("target-cross-admin");
     expect(buttonInArticle("target-cross-admin", "Grant Role").disabled).toBe(true);
@@ -717,9 +787,14 @@ describe("AuthzAdminPage", () => {
     await waitForText("Expense Admin");
 
     const article = articleByText("expense-admin");
-    expect(
-      controlByLabel<HTMLSelectElement>(article, "Role", "select").value,
-    ).toBe("TENANT_ADMIN");
+    expect(roleSelectorButtonInArticle("expense-admin").textContent).toContain(
+      "Select a Role",
+    );
+    expect(article.textContent).toContain(`TENANT_ADMIN · ${tenantId}`);
+    await chooseRoleInArticle("expense-admin", "TENANT_ADMIN");
+    expect(roleSelectorButtonInArticle("expense-admin").textContent).toContain(
+      "TENANT_ADMIN",
+    );
     expect(
       controlByLabel<HTMLInputElement>(article, "Grant tenant", "input").value,
     ).toBe(tenantId);
@@ -752,7 +827,7 @@ describe("AuthzAdminPage", () => {
     renderAuthzAdminPage();
     await waitForText("Expense Admin");
 
-    await changeSelectInArticle("expense-admin", "Role", "TENANT_ADMIN");
+    await chooseRoleInArticle("expense-admin", "TENANT_ADMIN");
     const article = articleByText("expense-admin");
     const grantTenantInput = controlByLabel<HTMLInputElement>(article, "Grant tenant", "input");
     expect(grantTenantInput.value).toBe(tenantId);
@@ -772,11 +847,7 @@ describe("AuthzAdminPage", () => {
 
     await waitFor(() => articleByText("expense-admin").textContent?.includes(tenantId) ?? false);
     const refreshedArticle = articleByText("expense-admin");
-    const refreshedRoleSelect = controlByLabel<HTMLSelectElement>(
-      refreshedArticle,
-      "Role",
-      "select",
-    );
+    const refreshedRoleSelector = roleSelectorButtonInArticle("expense-admin");
     const refreshedGrantTenantInput = controlByLabel<HTMLInputElement>(
       refreshedArticle,
       "Grant tenant",
@@ -784,7 +855,7 @@ describe("AuthzAdminPage", () => {
     );
     const grantButton = buttonInArticle("expense-admin", "Grant Role");
 
-    expect(refreshedRoleSelect.value).toBe("TENANT_ADMIN");
+    expect(refreshedRoleSelector.textContent).toContain("TENANT_ADMIN");
     expect(refreshedGrantTenantInput.value).toBe(tenantId);
     expect(grantButton.disabled).toBe(true);
     expect(grantButton.className).toContain("disabled:bg-gray-300");
@@ -1145,10 +1216,64 @@ async function changeInputInForm(headingText: string, labelText: string, value: 
 
 
 
-async function changeSelectInArticle(articleText: string, labelText: string, value: string) {
+function roleSelectorButtonInArticle(articleText: string) {
   const article = articleByText(articleText);
-  const select = controlByLabel<HTMLSelectElement>(article, labelText, "select");
-  await setSelectValue(select, value);
+  const button = article.querySelector('button[aria-label="Role selector"]');
+  if (!(button instanceof HTMLButtonElement)) {
+    throw new Error(`Could not find Role selector for ${articleText}`);
+  }
+  return button;
+}
+
+async function openRoleSelectorInArticle(articleText: string) {
+  const button = roleSelectorButtonInArticle(articleText);
+  if (button.getAttribute("aria-expanded") === "true") return;
+
+  await act(async () => {
+    button.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+  });
+}
+
+async function closeRoleSelectorInArticle(articleText: string) {
+  const button = roleSelectorButtonInArticle(articleText);
+  if (button.getAttribute("aria-expanded") !== "true") return;
+
+  await act(async () => {
+    button.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+  });
+}
+
+function roleChoicesInArticle(articleText: string) {
+  const article = articleByText(articleText);
+  return Array.from(
+    article.querySelectorAll<HTMLButtonElement>(
+      '[role="listbox"][aria-label="Role choices"] button[role="option"]',
+    ),
+  ).map((button) => button.dataset.roleCode ?? "");
+}
+
+async function chooseOpenRoleOptionInArticle(articleText: string, roleCode: string) {
+  const article = articleByText(articleText);
+  const option = Array.from(
+    article.querySelectorAll<HTMLButtonElement>(
+      '[role="listbox"][aria-label="Role choices"] button[role="option"]',
+    ),
+  ).find((button) => button.dataset.roleCode === roleCode);
+  if (!option) {
+    throw new Error(`Could not find Role ${roleCode} for ${articleText}`);
+  }
+
+  await act(async () => {
+    option.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+  });
+}
+
+async function chooseRoleInArticle(articleText: string, roleCode: string) {
+  await openRoleSelectorInArticle(articleText);
+  const article = articleByText(articleText);
+  const filter = controlByLabel<HTMLInputElement>(article, "Filter roles", "input");
+  await setInputValue(filter, roleCode);
+  await chooseOpenRoleOptionInArticle(articleText, roleCode);
 }
 
 async function setSelectValue(select: HTMLSelectElement, value: string) {

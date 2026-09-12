@@ -9,9 +9,36 @@ let container: HTMLDivElement;
 let root: Root;
 
 const tenants: AuthTenantOption[] = [
-  { id: "default", code: "DEFAULT", name: "Default Tenant", roleCodes: ["TENANT_ADMIN"] },
-  { id: "tenant-alpha", code: "ALPHA", name: "Alpha Operations", roleCodes: ["TENANT_ADMIN"] },
-  { id: "tenant-beta", code: "BETA", name: "Beta Cooperative", roleCodes: ["TENANT_ADMIN"] },
+  {
+    id: "default",
+    code: "DEFAULT",
+    name: "Default Tenant",
+    roleCodes: ["TENANT_ADMIN"],
+    actorRecordId: "actor-default-record",
+    actorKey: "actor-default",
+    actorScope: "TENANT",
+    membershipId: "membership-default",
+  },
+  {
+    id: "tenant-alpha",
+    code: "ALPHA",
+    name: "Alpha Operations",
+    roleCodes: ["TENANT_ADMIN"],
+    actorRecordId: "actor-alpha-record",
+    actorKey: "actor-alpha",
+    actorScope: "TENANT",
+    membershipId: "membership-alpha",
+  },
+  {
+    id: "tenant-beta",
+    code: "BETA",
+    name: "Beta Cooperative",
+    roleCodes: ["TENANT_ADMIN"],
+    actorRecordId: "actor-beta-record",
+    actorKey: "actor-beta",
+    actorScope: "TENANT",
+    membershipId: "membership-beta",
+  },
 ];
 
 beforeEach(() => {
@@ -45,6 +72,57 @@ describe("TenantSelector", () => {
 
     expect(onTenantChange).toHaveBeenCalledWith("tenant-beta");
     expect(filterInputOrNull()).toBeNull();
+  });
+
+  it("makes each selectable tenant's Actor and Membership identity explicit", async () => {
+    const onTenantChange = vi.fn();
+    renderSelector(onTenantChange);
+
+    await click(currentTenantButton());
+
+    expect(container.textContent).toContain(
+      "Each tenant below is available through a separate active Actor and Membership owned by this Authentication Account.",
+    );
+    const alpha = options().find((option) => option.dataset.tenantId === "tenant-alpha");
+    const beta = options().find((option) => option.dataset.tenantId === "tenant-beta");
+    expect(alpha?.textContent).toContain("Actor: actor-alpha");
+    expect(alpha?.textContent).toContain("Membership: membership-alpha");
+    expect(beta?.textContent).toContain("Actor: actor-beta");
+    expect(beta?.textContent).toContain("Membership: membership-beta");
+
+    await typeInto(filterInput(), "membership-beta");
+    expect(options()).toHaveLength(1);
+    expect(options()[0]?.dataset.tenantId).toBe("tenant-beta");
+  });
+
+
+  it("refreshes the Account-owned Tenant identities before enabling selector options", async () => {
+    const onTenantChange = vi.fn();
+    let resolveRefresh: (() => void) | undefined;
+    const onRefreshTenants = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveRefresh = resolve;
+        }),
+    );
+    renderSelector(onTenantChange, onRefreshTenants);
+
+    await click(currentTenantButton());
+
+    expect(onRefreshTenants).toHaveBeenCalledTimes(1);
+    expect(container.textContent).toContain("Refreshing available tenants…");
+    expect(container.textContent).toContain("Refreshing your available tenants…");
+    expect(options()).toHaveLength(0);
+    expect(filterInput().disabled).toBe(true);
+
+    await act(async () => {
+      resolveRefresh?.();
+      await Promise.resolve();
+    });
+
+    expect(filterInput().disabled).toBe(false);
+    expect(options()).toHaveLength(3);
+    expect(container.textContent).toContain("3 of 3 tenants");
   });
 
   it("supports keyboard selection from the filtered list", async () => {
@@ -98,13 +176,17 @@ describe("TenantSelector", () => {
 
 });
 
-function renderSelector(onTenantChange: (tenantId: string) => void) {
+function renderSelector(
+  onTenantChange: (tenantId: string) => void,
+  onRefreshTenants?: () => Promise<void> | void,
+) {
   act(() => {
     root.render(
       <TenantSelector
         tenants={tenants}
         selectedTenantId="default"
         onTenantChange={onTenantChange}
+        onRefreshTenants={onRefreshTenants}
       />,
     );
   });
