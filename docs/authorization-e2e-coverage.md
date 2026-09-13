@@ -76,7 +76,7 @@ The automated coverage verifies:
 
 - the Application Administrator resolves as an identity-neutral `APPLICATION` Actor in GLOBAL (`*`) context and cannot resolve or read a Tenant before an exact-Tenant Support Access Lease is approved;
 - the browser Administration context selector is session-fresh: it shows only `Global administration` before a lease and while a request is `PENDING`, shows the exact Tenant only as `Temporary support access` after approval, and removes it immediately after termination;
-- the GLOBAL `/admin/tenants` control-plane catalog is explicitly distinguished from the authenticated account context catalog: a Tenant may be visible in the administrative inventory while remaining absent from the Administration context selector; catalog visibility is not evidence of an ordinary Tenant Actor/Membership identity;
+- the GLOBAL `/admin/tenants` control-plane catalog is explicitly distinguished from the authenticated account context catalog: a Tenant may be visible in the administrative inventory while remaining absent from the Administration context selector; catalog visibility is not evidence of an ordinary Tenant Actor/Membership identity, and the inventory provides a direct **Open actual Administration context selector** action for manual verification;
 - GLOBAL control-plane authorization remains available only in GLOBAL context;
 - Support Access Lease permissions are allowlisted and cannot contain control-plane permissions;
 - the Application Administrator cannot approve its own request, and a Tenant Administrator from another Tenant cannot approve it;

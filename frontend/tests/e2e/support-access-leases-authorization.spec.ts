@@ -242,11 +242,25 @@ test.describe("Tenant Support Access Lease authorization", () => {
       await expect(tenantCatalog).toBeVisible();
       await expect(
         tenantCatalog.getByRole("note", { name: "Tenant catalog identity boundary" }),
-      ).toContainText("is not an ordinary Tenant identity");
+      ).toContainText("It is not the Tenant/context selector");
       await tenantCatalog.getByRole("searchbox", { name: "Filter tenants" }).fill(SUPPORT_TENANT_ID);
       await expect(tenantCatalog).toContainText(SUPPORT_TENANT_ID);
+      await expect(tenantCatalog.getByRole("columnheader", { name: "Tenant record" })).toBeVisible();
+      await expect(tenantCatalog.getByRole("columnheader", { name: "Record status" })).toBeVisible();
 
-      await selector.click();
+      // Reproduce the exact manual path from the Tenant inventory itself. The
+      // page must provide a direct route to the real account-context selector
+      // so an administrable Tenant record cannot be mistaken for an identity.
+      await tenantCatalog
+        .getByRole("button", { name: "Open actual Administration context selector" })
+        .click();
+      const contextSelection = page.getByRole("region", {
+        name: "Administration context selection",
+      });
+      await expect(contextSelection).toBeVisible();
+      await expect(
+        contextSelection.locator('[role="option"][data-tenant-id="*"]'),
+      ).toBeVisible();
       await expect(supportOption).toHaveCount(0);
       await selector.click();
 

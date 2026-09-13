@@ -221,6 +221,7 @@ describe("TenantSelector", () => {
       'button[aria-label="Current administration context"]',
     );
     if (!button) throw new Error("Current administration context button not found");
+    expect(button.id).toBe("administration-context-selector");
     await click(button);
 
     expect(container.querySelector('section[aria-label="Administration context selection"]')).toBeTruthy();

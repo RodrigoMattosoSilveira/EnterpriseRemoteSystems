@@ -135,6 +135,7 @@ export function TenantSelector({
       </p>
       <button
         ref={triggerRef}
+        id={globalAdministration ? "administration-context-selector" : undefined}
         type="button"
         aria-label={currentContextLabel}
         aria-haspopup="listbox"

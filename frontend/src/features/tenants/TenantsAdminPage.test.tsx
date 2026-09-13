@@ -177,9 +177,18 @@ describe("TenantsAdminPage", () => {
     const identityBoundary = container.querySelector('[aria-label="Tenant catalog identity boundary"]');
 
     expect(catalog?.textContent).toContain("E2E Support Access Lease");
-    expect(identityBoundary?.textContent).toContain("this catalog is the global Tenant inventory");
-    expect(identityBoundary?.textContent).toContain("is not an ordinary Tenant identity");
+    expect(identityBoundary?.textContent).toContain("this table is the global Tenant inventory");
+    expect(identityBoundary?.textContent).toContain("It is not the Tenant/context selector");
+    expect(identityBoundary?.textContent).toContain("does not mean");
     expect(identityBoundary?.textContent).toContain("Administration context");
+    expect(catalog?.textContent).toContain("Tenant record");
+    expect(catalog?.textContent).toContain("Record status");
+    expect(catalog?.textContent).toContain("Manage record");
+    expect(
+      [...container.querySelectorAll("button")].some(
+        (button) => button.textContent?.trim() === "Open actual Administration context selector",
+      ),
+    ).toBe(true);
   });
 
   it("surfaces pending account reactivation requests on the GLOBAL control-plane landing page", async () => {
