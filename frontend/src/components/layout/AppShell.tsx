@@ -219,6 +219,19 @@ export function AppShell() {
     );
   }
 
+  // A Support Access Lease preserves the canonical APPLICATION Actor and its
+  // standing control-plane grants for identity/audit provenance, but those
+  // grants are not usable while operating inside the leased Tenant context.
+  // Present only the immutable lease allowlist to the workspace so navigation,
+  // route guards, and page-level controls cannot advertise standing GLOBAL
+  // authority that the backend correctly rejects in a leased context.
+  const workspaceActor = actorQuery.data.supportLeaseId
+    ? {
+        ...actorQuery.data,
+        permissions: [...(actorQuery.data.supportLeasePermissions ?? [])],
+      }
+    : actorQuery.data;
+
   const contextMismatch =
     selectedTenant.actorRecordId &&
     selectedTenant.actorScope === "TENANT" &&
@@ -239,7 +252,7 @@ export function AppShell() {
   return (
     <AuthorizationProvider
       value={{
-        ...actorQuery.data,
+        ...workspaceActor,
         selectedTenantName: selectedTenant.name,
         selectedTenantCode: selectedTenant.code,
       }}
@@ -249,7 +262,7 @@ export function AppShell() {
           session={auth.session}
           tenants={tenantOptions}
           selectedTenantId={selectedTenantId}
-          effectiveActor={actorQuery.data}
+          effectiveActor={workspaceActor}
           onTenantChange={(tenantId) => void changeTenant(tenantId)}
           onTenantOptionsRefresh={async () => {
             await tenantQuery.refetch();
@@ -258,12 +271,12 @@ export function AppShell() {
         />
         <div className="lg:flex">
           <SideNav
-            permissions={actorQuery.data.permissions}
-            scope={actorQuery.data.scope}
+            permissions={workspaceActor.permissions}
+            scope={workspaceActor.scope}
             identity={{
-              personId: actorQuery.data.personId,
-              collaboratorId: actorQuery.data.collaboratorId,
-              supportLeaseId: actorQuery.data.supportLeaseId,
+              personId: workspaceActor.personId,
+              collaboratorId: workspaceActor.collaboratorId,
+              supportLeaseId: workspaceActor.supportLeaseId,
             }}
           />
           <main className="min-w-0 flex-1">

@@ -317,7 +317,42 @@ test.describe("Tenant Support Access Lease authorization", () => {
       );
       await expect(supportOption).toContainText(`Expires: ${localExpiration}`);
       await expect(supportOption).not.toContainText(`Expires: ${requestedExpiration}`);
+
+      // Exercise the actual browser transition into the leased Tenant. A
+      // people.read-only lease must land on People without an unrelated
+      // reference_data.read request forcing the global 403 handler to
+      // /forbidden. The workspace must also advertise only the lease allowlist,
+      // not the Application Administrator's standing GLOBAL controls.
+      const personStatusRequests: string[] = [];
+      page.on("request", (request) => {
+        if (request.url().includes("/api/v1/reference-data/person_status")) {
+          personStatusRequests.push(request.url());
+        }
+      });
+      const peopleResponse = page.waitForResponse(
+        (response) =>
+          response.request().method() === "GET" &&
+          /\/api\/v1\/people(?:\?|$)/.test(response.url()),
+      );
+      await supportOption.click();
+      expect((await peopleResponse).status()).toBe(200);
+      await expect(selector).toHaveAttribute("data-selected-tenant-id", SUPPORT_TENANT_ID);
+      await expect(page).toHaveURL(/\/people(?:\?|$)/);
+      await expect(page.getByRole("heading", { name: "People" })).toBeVisible();
+      await expect(page.getByRole("heading", { name: "Access forbidden" })).toHaveCount(0);
+      expect(personStatusRequests).toEqual([]);
+      await expect(page.getByRole("link", { name: "People section" })).toBeVisible();
+      await expect(page.getByRole("link", { name: "Tenants section" })).toHaveCount(0);
+      await expect(page.getByRole("link", { name: "Authentication section" })).toHaveCount(0);
+      await expect(page.getByRole("link", { name: "Authorization section" })).toHaveCount(0);
+      await expect(page.getByRole("link", { name: "Audit logs section" })).toHaveCount(0);
+      await expect(page.getByRole("link", { name: "Tenants", exact: true })).toHaveCount(0);
+      await expect(page.getByRole("link", { name: "Admin", exact: true })).toHaveCount(0);
+      await expect(page.getByRole("link", { name: "Authz", exact: true })).toHaveCount(0);
+
       await selector.click();
+      await contextSelection.locator('[role="option"][data-tenant-id="*"]').click();
+      await expect(selector).toHaveAttribute("data-selected-tenant-id", "*");
 
       const terminationResponse = await tenantAdminApi.post(
         e2eApiUrl(
