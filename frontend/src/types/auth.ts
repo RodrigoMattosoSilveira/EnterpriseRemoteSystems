@@ -138,15 +138,20 @@ export type PasswordResetResult = {
   passwordChangedAt: string;
 };
 
+export type AuthTenantContextKind = "GLOBAL" | "TENANT_IDENTITY" | "SUPPORT_LEASE";
+
 export type AuthTenantOption = {
   id: string;
   code: string;
   name: string;
   roleCodes: string[];
+  contextKind?: AuthTenantContextKind;
   actorRecordId?: string;
   actorKey?: string;
   actorScope?: string;
   membershipId?: string;
+  supportLeaseId?: string;
+  supportLeaseExpiresAt?: string;
 };
 
 export type AccountReactivationRequest = {

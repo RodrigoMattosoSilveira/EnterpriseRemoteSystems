@@ -61,6 +61,12 @@ of that tenant returns `403 tenant_actor_unavailable`. The server clears rejecte
 or revoked Account-session cookies; HTTP-only cookies remain the only browser
 authentication credential.
 
+## Tenant Administrator initial credential provisioning
+
+A Tenant Administrator can initialize sign-in for a Person only through an ACTIVE Membership in the selected Tenant. After creating a new Person, or adding an existing Global Person to the Tenant, ERS routes the administrator directly to that Person's Authentication section. If the Global Person does not yet own an Authentication Account, the Tenant Administrator enters and confirms the initial temporary password there; ERS creates the canonical global Account, binds the selected Tenant Actor/Membership, and requires a password change on first sign-in. If the Person already owns a global Account, enabling the selected Tenant reuses that Account and does not replace its existing credentials.
+
+This workflow does not grant Tenant Administrators general Authentication Account administration. Application-level security suspension review, arbitrary Account administration, and control-plane Authentication operations remain Application Administrator responsibilities.
+
 ## Password workflows
 
 - `/password/change` requires an authenticated session and the current password.

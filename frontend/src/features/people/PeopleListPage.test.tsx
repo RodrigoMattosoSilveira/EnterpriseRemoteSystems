@@ -21,7 +21,7 @@ const tenantAdminActor: AuthzCurrentActor = {
   tenantId: "default",
   scope: "TENANT",
   roleCodes: ["TENANT_ADMIN"],
-  permissions: ["people.read", "people.create", "people.update"],
+  permissions: ["people.read", "people.create", "people.update", "reference_data.read"],
 };
 
 beforeEach(() => {
@@ -66,6 +66,41 @@ describe("PeopleListPage", () => {
     expect(textNode("Showing 1-1 of 1 people")).toBeTruthy();
   });
 
+
+  it("opens a people.read-only Support Lease workspace without requesting unleased reference data", async () => {
+    mockPeopleFetch({ items: [personFixture("person-support", "Support")], total: 1 });
+
+    const supportLeaseActor: AuthorizationContextValue = {
+      actorKey: "e2e-application-admin",
+      actorRecordId: "actor-application-admin",
+      tenantId: "e2e-support-lease-tenant",
+      selectedTenantName: "E2E Support Access Lease",
+      selectedTenantCode: "E2ESUPPORT",
+      scope: "APPLICATION",
+      roleCodes: ["APPLICATION_ADMIN"],
+      permissions: ["people.read"],
+      delegatedPermissions: [
+        "authz.read",
+        "authz.manage",
+        "tenants.read",
+        "tenants.create",
+        "tenants.update",
+      ],
+      supportLeaseId: "lease-people-read-only",
+      supportLeasePermissions: ["people.read"],
+    };
+
+    renderPeopleListRoute(supportLeaseActor);
+    await waitForText("Support Pessoa");
+
+    expect(fetchCalls.some((url) => url === "/api/v1/reference-data/person_status")).toBe(false);
+    expect(container.textContent).toContain("Tenant Support Access Lease");
+    expect(container.textContent).toContain("lease-people-read-only");
+    expect(Array.from(container.querySelectorAll("label")).some((label) => label.textContent?.trim().startsWith("Status"))).toBe(false);
+    expect(linkByText("Tenants")).toBeFalsy();
+    expect(linkByText("Admin")).toBeFalsy();
+    expect(linkByText("Authz")).toBeFalsy();
+  });
 
   it("makes the selected Tenant boundary explicit even when a Person nickname mentions another Tenant", async () => {
     const confusingPerson = {
@@ -361,6 +396,14 @@ function renderPeopleListRoute(actor?: AuthorizationContextValue) {
       </QueryClientProvider>,
     );
   });
+}
+
+
+function linkByText(text: string): HTMLAnchorElement | null {
+  const link = Array.from(container.querySelectorAll("a")).find(
+    (candidate) => candidate.textContent?.trim() === text,
+  ) as HTMLAnchorElement | undefined;
+  return link ?? null;
 }
 
 function mockPeopleFetch(response: { items: Person[]; total: number }) {

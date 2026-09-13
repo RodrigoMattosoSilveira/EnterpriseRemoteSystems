@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { ApiError } from "../../api/client";
 import { ApiErrorPanel } from "../../components/ApiErrorPanel";
@@ -388,7 +388,6 @@ export function AuthzAdminPage() {
                         actor={actor}
                         allActors={actors}
                         roles={grantableRoles}
-                        selectedTenantId={requestActor.tenantId}
                         selectedRoleCode={grantRoleCodeByActor[actor.id]}
                         onSelectedRoleCodeChange={(roleCode) =>
                           setGrantRoleCodeByActor((current) => ({
@@ -550,7 +549,6 @@ function ActorCard({
   actor,
   allActors,
   roles,
-  selectedTenantId,
   selectedRoleCode,
   onSelectedRoleCodeChange,
   currentActorKey,
@@ -562,7 +560,6 @@ function ActorCard({
   actor: AuthzActor;
   allActors: AuthzActor[];
   roles: AuthzRole[];
-  selectedTenantId: string;
   selectedRoleCode?: string;
   onSelectedRoleCodeChange: (roleCode: string) => void;
   currentActorKey: string;
@@ -582,14 +579,9 @@ function ActorCard({
     isRoleCompatibleWithActor(role, actor),
   );
   const actorTenantId = tenantBindingId(actor);
-  const persistedGrantRoleCode = preferredPersistedGrantRoleCode(
-    actor,
-    compatibleRoles,
-    actorTenantId || selectedTenantId,
-  );
   const roleCode = compatibleRoles.some((role) => role.code === selectedRoleCode)
     ? selectedRoleCode ?? ""
-    : persistedGrantRoleCode || compatibleRoles[0]?.code || "";
+    : "";
   const selectedRole = compatibleRoles.find((role) => role.code === roleCode);
   const applicationScopedRole = isApplicationScopedRole(selectedRole);
   const persistedSelectedRoleGrant = (actor.roleGrants ?? []).find(
@@ -660,87 +652,263 @@ function ActorCard({
         </div>
       </div>
 
-      <div className="mt-3 space-y-2">
-        {(actor.roleGrants ?? []).length === 0 && (
-          <p className="rounded-xl border border-dashed p-3 text-sm text-gray-500">No role grants.</p>
-        )}
-        {(actor.roleGrants ?? []).map((grant) => (
-          <div key={grant.id} className="flex flex-col gap-2 rounded-xl bg-gray-50 p-3 text-sm md:flex-row md:items-center md:justify-between">
-            <div>
-              <span className="font-semibold text-gray-950">{grant.roleCode}</span>
-              <span className="text-gray-500"> · {grant.tenantId} · {grant.scopeType}</span>
-              {grant.lifecycleSuspended && (
-                <span className="ml-2 rounded bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-900">Lifecycle suspended</span>
-              )}
-            </div>
-            <button
-              className="rounded-lg border border-red-200 bg-white px-3 py-1 text-xs font-semibold text-red-700 disabled:opacity-60"
-              disabled={isMutating || actor.actorKey === currentActorKey}
-              type="button"
-              onClick={() => onRevokeGrant(actor.id, grant)}
-            >
-              Revoke
-            </button>
-          </div>
-        ))}
-      </div>
+      <section className="mt-4 rounded-xl border border-gray-200 bg-gray-50/60 p-3">
+        <div className="mb-3">
+          <h4 className="text-sm font-semibold text-gray-950">Grant a Role</h4>
+          <p className="mt-0.5 text-xs text-gray-600">
+            Choose one compatible Role from the selector, then grant it to this Actor.
+          </p>
+        </div>
 
-      <form className="mt-3 grid gap-2 md:grid-cols-[1fr_1fr_auto]" onSubmit={submitGrant}>
-        <label className="block text-sm font-semibold text-gray-700">
-          Role
-          <select
-            className="mt-1 block w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm"
-            value={roleCode}
-            onChange={(event) => onSelectedRoleCodeChange(event.target.value)}
+        <form className="grid gap-2 md:grid-cols-[1fr_1fr_auto]" onSubmit={submitGrant}>
+          <RoleSelector
+            actorId={actor.id}
+            roles={compatibleRoles}
+            selectedRoleCode={roleCode}
+            onChange={onSelectedRoleCodeChange}
             disabled={compatibleRoles.length === 0}
-          >
-            {compatibleRoles.map((role) => (
-              <option key={role.code} value={role.code}>
-                {role.code}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="block text-sm font-semibold text-gray-700">
-          Grant tenant
-          <input
-            className="mt-1 block w-full rounded-xl border border-gray-300 bg-gray-100 px-3 py-2 text-sm text-gray-700"
-            value={targetTenantId}
-            disabled
-            readOnly
           />
-        </label>
-        <button
-          className="self-end rounded-xl bg-gray-950 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-gray-300 disabled:text-gray-600"
-          disabled={
-            isMutating ||
-            !actor.active ||
-            !roleCode ||
-            tenantRoleIneligible ||
-            Boolean(tenantAdminCardinalityBlocker) ||
-            alreadyGranted
-          }
-          type="submit"
-        >
-          Grant Role
-        </button>
-      </form>
-      {tenantRoleIneligible && (
-        <p className="mt-2 text-xs font-medium text-amber-700">
-          Tenant Role grant unavailable: {tenantEligibility.reason}
-        </p>
-      )}
-      {tenantAdminCardinalityBlocker && !alreadyGranted && (
-        <p className="mt-2 text-xs font-medium text-amber-700">
-          TENANT_ADMIN grant unavailable: {tenantAdminCardinalityBlocker}
-        </p>
-      )}
-      {alreadyGranted && (
-        <p className="mt-2 text-xs font-medium text-gray-500">
-          {roleCode} is already granted for {targetTenantId}.
-        </p>
-      )}
+          <label className="block text-sm font-semibold text-gray-700">
+            Grant tenant
+            <input
+              className="mt-1 block w-full rounded-xl border border-gray-300 bg-gray-100 px-3 py-2 text-sm text-gray-700"
+              value={targetTenantId}
+              disabled
+              readOnly
+            />
+          </label>
+          <button
+            className="self-end rounded-xl bg-gray-950 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-gray-300 disabled:text-gray-600"
+            disabled={
+              isMutating ||
+              !actor.active ||
+              !roleCode ||
+              tenantRoleIneligible ||
+              Boolean(tenantAdminCardinalityBlocker) ||
+              alreadyGranted
+            }
+            type="submit"
+          >
+            Grant Role
+          </button>
+        </form>
+        {tenantRoleIneligible && (
+          <p className="mt-2 text-xs font-medium text-amber-700">
+            Tenant Role grant unavailable: {tenantEligibility.reason}
+          </p>
+        )}
+        {tenantAdminCardinalityBlocker && !alreadyGranted && (
+          <p className="mt-2 text-xs font-medium text-amber-700">
+            TENANT_ADMIN grant unavailable: {tenantAdminCardinalityBlocker}
+          </p>
+        )}
+        {alreadyGranted && (
+          <p className="mt-2 text-xs font-medium text-gray-500">
+            {roleCode} is already granted for {targetTenantId}.
+          </p>
+        )}
+      </section>
+
+      <section className="mt-4">
+        <div className="mb-2">
+          <h4 className="text-sm font-semibold text-gray-950">Current Role Grants</h4>
+          <p className="mt-0.5 text-xs text-gray-500">
+            Roles already granted to this Actor are listed here and can be revoked individually.
+          </p>
+        </div>
+        <div className="space-y-2">
+          {(actor.roleGrants ?? []).length === 0 && (
+            <p className="rounded-xl border border-dashed p-3 text-sm text-gray-500">
+              No current Role Grants.
+            </p>
+          )}
+          {(actor.roleGrants ?? []).map((grant) => (
+            <div key={grant.id} className="flex flex-col gap-2 rounded-xl bg-gray-50 p-3 text-sm md:flex-row md:items-center md:justify-between">
+              <div>
+                <span className="font-semibold text-gray-950">{grant.roleCode}</span>
+                <span className="text-gray-500"> · {grant.tenantId} · {grant.scopeType}</span>
+                {grant.lifecycleSuspended && (
+                  <span className="ml-2 rounded bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-900">Lifecycle suspended</span>
+                )}
+              </div>
+              <button
+                className="rounded-lg border border-red-200 bg-white px-3 py-1 text-xs font-semibold text-red-700 disabled:opacity-60"
+                disabled={isMutating || actor.actorKey === currentActorKey}
+                type="button"
+                onClick={() => onRevokeGrant(actor.id, grant)}
+              >
+                Revoke
+              </button>
+            </div>
+          ))}
+        </div>
+      </section>
     </article>
+  );
+}
+
+function RoleSelector({
+  actorId,
+  roles,
+  selectedRoleCode,
+  onChange,
+  disabled,
+}: {
+  actorId: string;
+  roles: AuthzRole[];
+  selectedRoleCode: string;
+  onChange: (roleCode: string) => void;
+  disabled: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const [filterText, setFilterText] = useState("");
+  const rootRef = useRef<HTMLDivElement>(null);
+  const filterRef = useRef<HTMLInputElement>(null);
+  const selectedRole = roles.find((role) => role.code === selectedRoleCode);
+  const normalizedFilter = filterText.trim().toLocaleLowerCase();
+  const visibleRoles = normalizedFilter
+    ? roles.filter((role) =>
+        [role.code, role.label, role.description].some((value) =>
+          value.toLocaleLowerCase().includes(normalizedFilter),
+        ),
+      )
+    : roles;
+  const optionsId = `authz-role-options-${actorId.replace(/[^a-zA-Z0-9_-]/g, "-")}`;
+
+  function closeSelector({ restoreFocus = false }: { restoreFocus?: boolean } = {}) {
+    setFilterText("");
+    setOpen(false);
+    if (restoreFocus) {
+      window.requestAnimationFrame(() => {
+        rootRef.current
+          ?.querySelector<HTMLButtonElement>('button[aria-label="Role selector"]')
+          ?.focus();
+      });
+    }
+  }
+
+  function openSelector() {
+    if (disabled) return;
+    setFilterText("");
+    setOpen(true);
+    window.requestAnimationFrame(() => filterRef.current?.focus());
+  }
+
+  function chooseRole(roleCode: string) {
+    onChange(roleCode);
+    closeSelector();
+  }
+
+  return (
+    <div
+      ref={rootRef}
+      className="relative"
+      onBlur={(event) => {
+        const nextTarget = event.relatedTarget;
+        if (
+          open &&
+          (!(nextTarget instanceof Node) || !event.currentTarget.contains(nextTarget))
+        ) {
+          closeSelector();
+        }
+      }}
+    >
+      <p className="text-sm font-semibold text-gray-700">Role selector</p>
+      <button
+        type="button"
+        aria-label="Role selector"
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        aria-controls={open ? optionsId : undefined}
+        disabled={disabled}
+        onClick={() => (open ? closeSelector() : openSelector())}
+        className="mt-1 flex w-full items-center justify-between gap-3 rounded-xl border border-gray-300 bg-white px-3 py-2 text-left text-sm text-gray-950 disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-500"
+      >
+        <span className="min-w-0">
+          <span className="block truncate font-semibold">
+            {selectedRole?.code ?? (disabled ? "No compatible Roles" : "Select a Role")}
+          </span>
+          {selectedRole && (
+            <span className="block truncate text-xs text-gray-500">
+              {selectedRole.label}
+            </span>
+          )}
+        </span>
+        <span aria-hidden="true" className="shrink-0 text-gray-500">
+          {open ? "▲" : "▼"}
+        </span>
+      </button>
+
+      {open && (
+        <div className="absolute left-0 right-0 z-30 mt-1 overflow-hidden rounded-xl border border-gray-300 bg-white shadow-lg">
+          <div className="border-b border-gray-200 p-2">
+            <label className="grid gap-1 text-xs font-semibold text-gray-700">
+              Filter roles
+              <input
+                ref={filterRef}
+                type="search"
+                role="combobox"
+                aria-label="Filter roles"
+                aria-autocomplete="list"
+                aria-controls={optionsId}
+                aria-expanded="true"
+                value={filterText}
+                onChange={(event) => setFilterText(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Escape") {
+                    event.preventDefault();
+                    closeSelector({ restoreFocus: true });
+                  }
+                }}
+                placeholder="Role code, name, or description"
+                className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-950 outline-none focus:border-gray-500 focus:ring-2 focus:ring-gray-200"
+              />
+            </label>
+            <p className="mt-1 text-xs text-gray-500" aria-live="polite">
+              {visibleRoles.length} of {roles.length} compatible Roles
+            </p>
+          </div>
+
+          <div
+            id={optionsId}
+            role="listbox"
+            aria-label="Role choices"
+            className="max-h-64 overflow-y-auto p-1"
+          >
+            {visibleRoles.length === 0 ? (
+              <p className="px-3 py-4 text-sm text-gray-500">
+                No matching Roles.
+              </p>
+            ) : (
+              visibleRoles.map((role) => (
+                <button
+                  key={role.code}
+                  type="button"
+                  role="option"
+                  aria-selected={role.code === selectedRoleCode}
+                  data-role-code={role.code}
+                  onMouseDown={(event) => event.preventDefault()}
+                  onClick={() => chooseRole(role.code)}
+                  className="block w-full rounded-lg px-3 py-2 text-left hover:bg-gray-50 focus:bg-gray-100 focus:outline-none"
+                >
+                  <span className="block text-sm font-semibold text-gray-950">
+                    {role.code}
+                  </span>
+                  <span className="block text-xs font-medium text-gray-600">
+                    {role.label}
+                  </span>
+                  {role.description && (
+                    <span className="mt-0.5 block text-xs text-gray-500">
+                      {role.description}
+                    </span>
+                  )}
+                </button>
+              ))
+            )}
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -937,25 +1105,6 @@ function tenantAdministratorGrantBlocker(
   }
 
   return "";
-}
-
-function preferredPersistedGrantRoleCode(
-  actor: AuthzActor,
-  roles: AuthzRole[],
-  selectedTenantId: string,
-): string {
-  const grantableRoleCodes = new Set(roles.map((role) => role.code));
-  const activeGrants = (actor.roleGrants ?? []).filter(
-    (grant) => grant.active && grantableRoleCodes.has(grant.roleCode),
-  );
-  const selectedTenant = selectedTenantId.trim();
-
-  return (
-    activeGrants.find((grant) => grant.tenantId === selectedTenant)?.roleCode ??
-    activeGrants.find((grant) => grant.tenantId === "*")?.roleCode ??
-    activeGrants[0]?.roleCode ??
-    ""
-  );
 }
 
 function tenantBindingId(actor: AuthzActor): string {

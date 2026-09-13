@@ -18,6 +18,7 @@ import type {
   ProfileCompletionStatus,
 } from "../../types/people";
 import { PageTitle } from "../../components/layout/PageHeading";
+import { visibleNavigationLinks } from "../../components/layout/navigation";
 
 type PeopleListState = {
   flash: string;
@@ -40,12 +41,32 @@ export function PeopleListPage() {
   // Person creation is a Tenant data-plane capability. Bite 30I.1 removes it
   // from the GLOBAL Application Administrator while preserving it for Tenant
   // identities that explicitly hold people.create.
+  const wildcard = Boolean(actor?.permissions.includes("*"));
   const canCreatePerson =
-    !actor || actor.permissions.includes("*") || actor.permissions.includes("people.create");
-  // In the real application, status IDs are tenant-specific reference-data IDs.
-  // Component tests render this page without AuthorizationContext, so retain the
-  // historic default IDs only as that isolated-test fallback.
-  const personStatusesQuery = useReferenceDataByType("person_status", Boolean(actor));
+    !actor || wildcard || actor.permissions.includes("people.create");
+  const canReadReferenceData =
+    !actor || wildcard || actor.permissions.includes("reference_data.read");
+  const visiblePaths = useMemo(() => {
+    if (!actor) return null;
+    return new Set(
+      visibleNavigationLinks(actor.permissions, actor.scope, {
+        personId: actor.personId,
+        collaboratorId: actor.collaboratorId,
+        supportLeaseId: actor.supportLeaseId,
+      }).map((link) => link.to),
+    );
+  }, [actor]);
+  const canNavigateTo = (path: string) => !visiblePaths || visiblePaths.has(path);
+
+  // Person status IDs are Tenant reference data. A narrow support lease such as
+  // people.read must still be able to open the People workspace without
+  // triggering an unrelated reference_data.read request (and its global 403
+  // redirect). Status filtering is therefore available only when the effective
+  // context can actually read reference data.
+  const personStatusesQuery = useReferenceDataByType(
+    "person_status",
+    Boolean(actor && canReadReferenceData),
+  );
   const personStatuses = personStatusesQuery.data ?? [];
   const statusIdByCode = useMemo(() => {
     const entries = personStatuses.map((status) => [status.code, status.id] as const);
@@ -153,36 +174,46 @@ export function PeopleListPage() {
           </div>
 
           <div className="flex items-center gap-2">
-            <Link
-              to="/collaborators"
-              className="rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 shadow-sm"
-            >
-              Collaborators
-            </Link>
-            <Link
-              to="/expenses"
-              className="rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 shadow-sm"
-            >
-              Expenses
-            </Link>
-            <Link
-              to="/admin/tenants"
-              className="rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 shadow-sm"
-            >
-              Tenants
-            </Link>
-            <Link
-              to="/admin/reference-data"
-              className="rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 shadow-sm"
-            >
-              Admin
-            </Link>
-            <Link
-              to="/admin/authorization"
-              className="rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 shadow-sm"
-            >
-              Authz
-            </Link>
+            {canNavigateTo("/collaborators") && (
+              <Link
+                to="/collaborators"
+                className="rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 shadow-sm"
+              >
+                Collaborators
+              </Link>
+            )}
+            {canNavigateTo("/expenses") && (
+              <Link
+                to="/expenses"
+                className="rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 shadow-sm"
+              >
+                Expenses
+              </Link>
+            )}
+            {canNavigateTo("/admin/tenants") && (
+              <Link
+                to="/admin/tenants"
+                className="rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 shadow-sm"
+              >
+                Tenants
+              </Link>
+            )}
+            {canNavigateTo("/admin/reference-data") && (
+              <Link
+                to="/admin/reference-data"
+                className="rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 shadow-sm"
+              >
+                Admin
+              </Link>
+            )}
+            {canNavigateTo("/admin/authorization") && (
+              <Link
+                to="/admin/authorization"
+                className="rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 shadow-sm"
+              >
+                Authz
+              </Link>
+            )}
             {canManageMemberships && (
               <Link
                 to="/people/add-existing"
@@ -344,23 +375,25 @@ export function PeopleListPage() {
               </select>
             </label>
 
-            <label className="grid gap-1 text-sm font-medium text-gray-700 min-w-0">
-              Status
-              <select
-                value={peopleStatus}
-                onChange={(event) => {
-                  setPeopleStatus(
-                    event.target.value as "All" | "Active" | "InActive" | "Discontinued",
-                  );
-                  setPage(1);
-                }}
-                className="w-full rounded-xl border border-gray-300 px-3 py-2 text-sm shadow-sm">
-                <option value="All">All</option>
-                <option value="Active">Active</option>
-                <option value="InActive">InActive</option>
-                <option value="Discontinued">Discontinued</option>
-              </select>
-            </label>
+            {canReadReferenceData && (
+              <label className="grid gap-1 text-sm font-medium text-gray-700 min-w-0">
+                Status
+                <select
+                  value={peopleStatus}
+                  onChange={(event) => {
+                    setPeopleStatus(
+                      event.target.value as "All" | "Active" | "InActive" | "Discontinued",
+                    );
+                    setPage(1);
+                  }}
+                  className="w-full rounded-xl border border-gray-300 px-3 py-2 text-sm shadow-sm">
+                  <option value="All">All</option>
+                  <option value="Active">Active</option>
+                  <option value="InActive">InActive</option>
+                  <option value="Discontinued">Discontinued</option>
+                </select>
+              </label>
+            )}
 
             <label className="grid gap-1 text-sm font-medium text-gray-700 min-w-0 md:max-w-[10rem]">  
               People per page
@@ -471,9 +504,11 @@ export function PeopleListPage() {
                                 statusId: activeMembershipStatusId,
                                 notes: "",
                               });
-                              navigate(`/people/${created.id}`, {
+                              navigate(`/people/${created.id}#authentication`, {
                                 state: {
-                                  flash: `Person membership added: ${created.firstName} ${created.lastName}.`,
+                                  flash:
+                                    `Person membership added: ${created.firstName} ${created.lastName}. ` +
+                                    "Configure authentication for this Tenant below.",
                                 },
                               });
                             }}

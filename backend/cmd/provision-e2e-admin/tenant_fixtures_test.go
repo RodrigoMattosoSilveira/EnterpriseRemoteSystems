@@ -75,4 +75,94 @@ func TestEnsureE2ETenantFixturesSurvivesAccountActorFoundationAndIsIdempotent(t 
 	if binding.MembershipID == nil || *binding.MembershipID != membershipID {
 		t.Fatalf("expected Account/Actor binding Membership %q, got %#v", membershipID, binding.MembershipID)
 	}
+
+	var multiAccount authentication.Account
+	if err := database.First(&multiAccount, "id = ?", "e2e-multi-tenant-account").Error; err != nil {
+		t.Fatalf("find E2E multi-Tenant Account: %v", err)
+	}
+	if multiAccount.Login != e2eMultiTenantPersonLogin {
+		t.Fatalf("expected E2E multi-Tenant login %q, got %q", e2eMultiTenantPersonLogin, multiAccount.Login)
+	}
+	var multiBindings []authentication.AccountActor
+	if err := database.Where("account_id = ?", multiAccount.ID).Order("tenant_id ASC").Find(&multiBindings).Error; err != nil {
+		t.Fatalf("find E2E multi-Tenant Account/Actor bindings: %v", err)
+	}
+	if len(multiBindings) != 2 {
+		t.Fatalf("expected two E2E multi-Tenant Account/Actor bindings, got %#v", multiBindings)
+	}
+	for i, tenantID := range []string{e2eMultiTenantAID, e2eMultiTenantBID} {
+		binding := multiBindings[i]
+		if binding.ScopeType != authentication.AccountActorScopeTenant {
+			t.Fatalf("expected %s binding to be TENANT scoped, got %q", tenantID, binding.ScopeType)
+		}
+		if binding.TenantID == nil || *binding.TenantID != tenantID {
+			t.Fatalf("expected %s binding tenant, got %#v", tenantID, binding.TenantID)
+		}
+		if binding.MembershipID == nil || *binding.MembershipID == "" {
+			t.Fatalf("expected %s binding Membership, got %#v", tenantID, binding.MembershipID)
+		}
+	}
+}
+
+func TestE2EApplicationAdministratorTenantOptionsRemainGlobalOnlyBeforeSupportLease(t *testing.T) {
+	database, err := dbpkg.Open(filepath.Join(t.TempDir(), "app.db"))
+	if err != nil {
+		t.Fatalf("open database: %v", err)
+	}
+	if err := dbpkg.AutoMigrate(database); err != nil {
+		t.Fatalf("migrate core database: %v", err)
+	}
+	if err := authz.AutoMigrate(database); err != nil {
+		t.Fatalf("migrate authorization database: %v", err)
+	}
+	if err := authentication.AutoMigrate(database); err != nil {
+		t.Fatalf("migrate authentication database: %v", err)
+	}
+	if err := dbpkg.SeedReferenceData(database); err != nil {
+		t.Fatalf("seed reference data: %v", err)
+	}
+	if err := authz.SeedAuthorizationCatalog(database); err != nil {
+		t.Fatalf("seed authorization catalog: %v", err)
+	}
+
+	ctx := context.Background()
+	const password = "Local-E2E-Administrator-28D!"
+	applicationAdmin, err := authentication.ProvisionApplicationAdmin(ctx, database, authentication.ProvisionApplicationAdminConfig{
+		ActorKey:         "e2e-application-admin",
+		DisplayName:      "Local E2E Administrator",
+		Login:            "admin@example.com",
+		Password:         password,
+		PasswordHashCost: bcrypt.MinCost,
+	})
+	if err != nil {
+		t.Fatalf("provision Application Administrator: %v", err)
+	}
+	if err := ensureE2ETenantFixtures(ctx, database, password, bcrypt.MinCost); err != nil {
+		t.Fatalf("provision E2E Tenant fixtures: %v", err)
+	}
+
+	options, err := authz.NewGORMStore(database).ListAccountTenantOptions(ctx, applicationAdmin.AccountID)
+	if err != nil {
+		t.Fatalf("list Application Administrator tenant options: %v", err)
+	}
+	if len(options) != 1 {
+		t.Fatalf("fresh Application Administrator must expose exactly one context, got %#v", options)
+	}
+	global := options[0]
+	if global.ID != authz.GlobalTenantScope || global.ContextKind != authz.TenantOptionContextGlobal || global.ActorScope != string(authz.ActorScopeApplication) {
+		t.Fatalf("fresh Application Administrator must expose only GLOBAL administration, got %#v", global)
+	}
+	if global.MembershipID != "" || global.SupportLeaseID != "" || global.SupportLeaseExpiresAt != "" {
+		t.Fatalf("fresh GLOBAL context must not carry Tenant identity or Support Lease provenance, got %#v", global)
+	}
+
+	var tenantBindings int64
+	if err := database.Model(&authentication.AccountActor{}).
+		Where("account_id = ? AND scope_type = ?", applicationAdmin.AccountID, authentication.AccountActorScopeTenant).
+		Count(&tenantBindings).Error; err != nil {
+		t.Fatalf("count Application Administrator TENANT bindings: %v", err)
+	}
+	if tenantBindings != 0 {
+		t.Fatalf("fresh Application Administrator unexpectedly has %d TENANT binding(s)", tenantBindings)
+	}
 }
