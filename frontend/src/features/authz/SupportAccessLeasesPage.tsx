@@ -116,7 +116,7 @@ export function SupportAccessLeasesPage() {
           <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Administration</p>
           <PageTitle>Support access</PageTitle>
           <p className="mt-2 max-w-4xl text-sm text-slate-600">
-            Request, review, approve, terminate, and audit exceptional Tenant access without creating a Tenant Actor, Person, Membership, Collaborator, or Role Grant for the Application Administrator.
+            Request, review, approve, terminate, and audit temporary Tenant access without creating a Tenant Actor, Person, Membership, Collaborator, or Role Grant for the Application Administrator.
           </p>
           {tenantAdministrator && (
             <p className="mt-2 text-sm font-semibold text-slate-800">

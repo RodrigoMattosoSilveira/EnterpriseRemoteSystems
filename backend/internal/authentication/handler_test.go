@@ -432,7 +432,7 @@ func TestAuthenticationHandlerListsGrantedTenantOptions(t *testing.T) {
 	}
 
 	store := &tenantOptionAuthenticationActorStore{options: []authz.TenantOption{{
-		ID: "tenant-a", Code: "A", Name: "Alpha", RoleCodes: []string{"TENANT_ADMIN"},
+		ID: "tenant-a", Code: "A", Name: "Alpha", RoleCodes: []string{"TENANT_ADMIN"}, ContextKind: authz.TenantOptionContextTenantIdentity,
 	}}}
 	handler := NewHandler(service, CookieConfig{Name: "ers_test_session", TTL: time.Hour}, store, nil)
 	app := fiber.New()
