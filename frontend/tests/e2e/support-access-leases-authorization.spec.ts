@@ -64,6 +64,19 @@ type Permission = {
   description: string;
 };
 
+type TenantOption = {
+  id: string;
+  code: string;
+  name: string;
+  roleCodes: string[];
+  actorRecordId?: string;
+  actorKey?: string;
+  actorScope?: string;
+  membershipId?: string;
+  supportLeaseId?: string;
+  supportLeaseExpiresAt?: string;
+};
+
 type AuditLog = {
   id: string;
   accountId?: string;
@@ -99,6 +112,11 @@ test.describe("Tenant Support Access Lease authorization", () => {
 
     try {
       await closeOpenLeases(applicationAdminApi, tenantAdminApi, SUPPORT_TENANT_ID);
+
+      const optionsBefore = await getTenantOptions(applicationAdminApi);
+      expect(optionsBefore.map((option) => option.id)).toEqual(["*"]);
+      expect(optionsBefore[0]?.supportLeaseId).toBeFalsy();
+      expect(optionsBefore[0]?.membershipId).toBeFalsy();
 
       const applicationAccountID = await getAuthenticatedAccountID(
         applicationAdminApi,
@@ -473,6 +491,9 @@ test.describe("Tenant Support Access Lease authorization", () => {
     try {
       await closeOpenLeases(applicationAdminApi, tenantAdminApi, SUPPORT_TENANT_ID);
 
+      const optionsBeforeRequest = await getTenantOptions(applicationAdminApi);
+      expect(optionsBeforeRequest.map((option) => option.id)).toEqual(["*"]);
+
       const applicationAccountID = await getAuthenticatedAccountID(
         applicationAdminApi,
         "Application Administrator",
@@ -567,6 +588,9 @@ test.describe("Tenant Support Access Lease authorization", () => {
       expect(requestedLease.requestedByActorId).toBe(globalBefore.actorRecordId);
       expect(requestedLease.expiresAt).toBe(requestedExpiration);
 
+      const optionsWhilePending = await getTenantOptions(applicationAdminApi);
+      expect(optionsWhilePending.map((option) => option.id)).toEqual(["*"]);
+
       const duplicateResponse = await applicationAdminApi.post(
         e2eApiUrl("/api/v1/authz/support-access-leases"),
         {
@@ -624,6 +648,23 @@ test.describe("Tenant Support Access Lease authorization", () => {
       expect(approvedLease.effectiveStatus).toBe("APPROVED");
       expect(approvedLease.expiresAt).toBe(requestedExpiration);
       expect(approvedLease.permissions).toEqual(["people.read"]);
+
+      const optionsAfterApproval = await getTenantOptions(applicationAdminApi);
+      expect(optionsAfterApproval.map((option) => option.id)).toEqual([
+        "*",
+        SUPPORT_TENANT_ID,
+      ]);
+      const supportOption = optionsAfterApproval.find(
+        (option) => option.id === SUPPORT_TENANT_ID,
+      );
+      expect(supportOption).toMatchObject({
+        actorRecordId: globalBefore.actorRecordId,
+        actorKey: globalBefore.actorKey,
+        actorScope: "APPLICATION",
+        supportLeaseId: requestedLease.id,
+        supportLeaseExpiresAt: requestedExpiration,
+      });
+      expect(supportOption?.membershipId).toBeFalsy();
 
       const leasedActor = await getCurrentActor(
         applicationAdminApi,
@@ -943,6 +984,9 @@ test.describe("Tenant Support Access Lease authorization", () => {
         ),
       ).toBe(true);
 
+      const optionsAfterTermination = await getTenantOptions(applicationAdminApi);
+      expect(optionsAfterTermination.map((option) => option.id)).toEqual(["*"]);
+
       const afterTerminationResponse = await applicationAdminApi.get(
         e2eApiUrl("/api/v1/authz/current-actor"),
         { headers: applicationTenantHeaders(SUPPORT_TENANT_ID) },
@@ -995,6 +1039,17 @@ function futureTimestamp(minutes: number): string {
 function futureTimestampSeconds(seconds: number): string {
   const nowToSecond = Math.floor(Date.now() / 1000) * 1000;
   return new Date(nowToSecond + seconds * 1_000).toISOString().replace(".000Z", "Z");
+}
+
+async function getTenantOptions(
+  api: APIRequestContext,
+): Promise<TenantOption[]> {
+  const response = await api.get(e2eApiUrl("/api/v1/auth/tenant-options"));
+  await expectStatus(response, 200, "list authenticated Account Tenant options");
+  return responseArray<TenantOption>(
+    response,
+    "list authenticated Account Tenant options",
+  );
 }
 
 async function getCurrentActor(

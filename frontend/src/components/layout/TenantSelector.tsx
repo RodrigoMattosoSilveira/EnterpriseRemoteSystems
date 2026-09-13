@@ -36,7 +36,7 @@ export function TenantSelector({
 
     return tenants.filter((tenant) =>
       normalizeSearchText(
-        `${tenant.name} ${tenant.code} ${tenant.id} ${tenant.actorKey ?? ""} ${tenant.membershipId ?? ""}`,
+        `${tenant.name} ${tenant.code} ${tenant.id} ${tenant.actorKey ?? ""} ${tenant.membershipId ?? ""} ${tenant.supportLeaseId ?? ""}`,
       ).includes(normalizedQuery),
     );
   }, [query, tenants]);
@@ -150,6 +150,11 @@ export function TenantSelector({
           <span className="block truncate text-sm font-semibold text-slate-600">
             {selectedTenant?.code ?? `No active ${contextNoun}`}
           </span>
+          {selectedTenant?.supportLeaseId && (
+            <span className="mt-1 block text-xs font-bold text-amber-700">
+              Temporary support access
+            </span>
+          )}
         </span>
         <svg
           aria-hidden="true"
@@ -201,7 +206,11 @@ export function TenantSelector({
                 ? `Refreshing available ${contextNounPlural}…`
                 : `${filteredTenants.length} of ${tenants.length} ${contextNounPlural}`}
             </p>
-            {!globalAdministration && (
+            {globalAdministration ? (
+              <p className="mt-1 text-xs font-medium text-slate-500">
+                Tenant entries appear here only while an approved, unexpired Support Access Lease is effective. They are temporary support contexts, not ordinary Tenant identities.
+              </p>
+            ) : (
               <p className="mt-1 text-xs font-medium text-slate-500">
                 Each tenant below is available through a separate active Actor and Membership owned by this Authentication Account.
               </p>
@@ -233,6 +242,14 @@ export function TenantSelector({
                     role="option"
                     aria-selected={selected}
                     data-tenant-id={tenant.id}
+                    data-context-kind={
+                      tenant.id === "*"
+                        ? "global"
+                        : tenant.supportLeaseId
+                          ? "support-lease"
+                          : "tenant-identity"
+                    }
+                    data-support-lease-id={tenant.supportLeaseId}
                     onMouseEnter={() => setActiveIndex(index)}
                     onClick={() => chooseTenant(tenant)}
                     className={`flex w-full items-center justify-between gap-4 rounded-xl px-3 py-3 text-left transition ${
@@ -246,12 +263,20 @@ export function TenantSelector({
                       <span className="block truncate text-sm font-semibold text-slate-600">
                         {tenant.code}
                       </span>
-                      {tenant.actorScope === "TENANT" && tenant.actorKey && tenant.membershipId && (
+                      {tenant.supportLeaseId ? (
+                        <span className="mt-1 block text-xs font-medium text-amber-700">
+                          <span className="block font-bold">Temporary support access</span>
+                          <span className="block truncate">Lease: {tenant.supportLeaseId}</span>
+                          {tenant.supportLeaseExpiresAt && (
+                            <span className="block truncate">Expires: {tenant.supportLeaseExpiresAt}</span>
+                          )}
+                        </span>
+                      ) : tenant.actorScope === "TENANT" && tenant.actorKey && tenant.membershipId ? (
                         <span className="mt-1 block text-xs font-medium text-slate-500">
                           <span className="block truncate">Actor: {tenant.actorKey}</span>
                           <span className="block truncate">Membership: {tenant.membershipId}</span>
                         </span>
-                      )}
+                      ) : null}
                     </span>
                     {selected && (
                       <span className="rounded-full bg-slate-900 px-2.5 py-1 text-xs font-bold text-white">

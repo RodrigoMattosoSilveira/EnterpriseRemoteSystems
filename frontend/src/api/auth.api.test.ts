@@ -47,6 +47,31 @@ describe("normalizeAuthTenantOptions", () => {
     ]);
   });
 
+
+  it("preserves support-lease provenance for temporary Tenant contexts", () => {
+    expect(
+      normalizeAuthTenantOptions([
+        {
+          ...tenant,
+          actorRecordId: "application-actor-record",
+          actorKey: "e2e-application-admin",
+          actorScope: "APPLICATION",
+          supportLeaseId: "lease-support-123",
+          supportLeaseExpiresAt: "2026-09-13T20:00:00Z",
+        },
+      ]),
+    ).toEqual([
+      {
+        ...tenant,
+        actorRecordId: "application-actor-record",
+        actorKey: "e2e-application-admin",
+        actorScope: "APPLICATION",
+        supportLeaseId: "lease-support-123",
+        supportLeaseExpiresAt: "2026-09-13T20:00:00Z",
+      },
+    ]);
+  });
+
   it("normalizes missing or malformed role codes", () => {
     expect(
       normalizeAuthTenantOptions([

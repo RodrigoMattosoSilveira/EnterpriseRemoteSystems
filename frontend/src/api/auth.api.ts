@@ -66,6 +66,12 @@ export function normalizeAuthTenantOptions(
     ...(typeof option.membershipId === "string" && option.membershipId.trim()
       ? { membershipId: option.membershipId }
       : {}),
+    ...(typeof option.supportLeaseId === "string" && option.supportLeaseId.trim()
+      ? { supportLeaseId: option.supportLeaseId }
+      : {}),
+    ...(typeof option.supportLeaseExpiresAt === "string" && option.supportLeaseExpiresAt.trim()
+      ? { supportLeaseExpiresAt: option.supportLeaseExpiresAt }
+      : {}),
   }));
 }
 

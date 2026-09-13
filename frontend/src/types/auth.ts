@@ -147,6 +147,8 @@ export type AuthTenantOption = {
   actorKey?: string;
   actorScope?: string;
   membershipId?: string;
+  supportLeaseId?: string;
+  supportLeaseExpiresAt?: string;
 };
 
 export type AccountReactivationRequest = {

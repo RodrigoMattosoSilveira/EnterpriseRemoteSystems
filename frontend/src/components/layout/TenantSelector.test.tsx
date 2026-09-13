@@ -136,6 +136,57 @@ describe("TenantSelector", () => {
     expect(onTenantChange).toHaveBeenCalledWith("tenant-alpha");
   });
 
+
+  it("distinguishes approved support-lease contexts from ordinary Tenant identities", async () => {
+    const onTenantChange = vi.fn();
+
+    act(() => {
+      root.render(
+        <TenantSelector
+          tenants={[
+            {
+              id: "*",
+              code: "GLOBAL",
+              name: "Global administration",
+              roleCodes: ["APPLICATION_ADMIN"],
+              actorRecordId: "global-admin-actor",
+              actorKey: "global-admin",
+              actorScope: "APPLICATION",
+            },
+            {
+              id: "e2e-support-lease-tenant",
+              code: "E2ESUPPORT",
+              name: "E2E Support Access Lease",
+              roleCodes: ["APPLICATION_ADMIN"],
+              actorRecordId: "global-admin-actor",
+              actorKey: "global-admin",
+              actorScope: "APPLICATION",
+              supportLeaseId: "lease-123",
+              supportLeaseExpiresAt: "2026-09-13T20:00:00Z",
+            },
+          ]}
+          selectedTenantId="*"
+          onTenantChange={onTenantChange}
+        />,
+      );
+    });
+
+    await click(currentAdministrationContextButton());
+
+    expect(container.textContent).toContain(
+      "Tenant entries appear here only while an approved, unexpired Support Access Lease is effective.",
+    );
+    const supportOption = options().find(
+      (option) => option.dataset.tenantId === "e2e-support-lease-tenant",
+    );
+    expect(supportOption?.dataset.contextKind).toBe("support-lease");
+    expect(supportOption?.dataset.supportLeaseId).toBe("lease-123");
+    expect(supportOption?.textContent).toContain("Temporary support access");
+    expect(supportOption?.textContent).toContain("Lease: lease-123");
+    expect(supportOption?.textContent).toContain("Expires: 2026-09-13T20:00:00Z");
+    expect(supportOption?.textContent).not.toContain("Membership:");
+  });
+
   it("labels the GLOBAL option as an administration context instead of a tenant", async () => {
     const onTenantChange = vi.fn();
 
@@ -197,6 +248,15 @@ function currentTenantButton() {
     'button[aria-label="Current tenant"]',
   );
   if (!button) throw new Error("Current tenant button not found");
+  return button;
+}
+
+
+function currentAdministrationContextButton() {
+  const button = container.querySelector<HTMLButtonElement>(
+    'button[aria-label="Current administration context"]',
+  );
+  if (!button) throw new Error("Current administration context button not found");
   return button;
 }
 
