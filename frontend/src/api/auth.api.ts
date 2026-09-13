@@ -47,7 +47,7 @@ export function normalizeAuthTenantOptions(
       ? payload.items
       : [];
 
-  return options.filter(isAuthTenantOption).map((option) => ({
+  const normalized = options.filter(isAuthTenantOption).map((option) => ({
     id: option.id,
     code: option.code,
     name: option.name,
@@ -73,6 +73,27 @@ export function normalizeAuthTenantOptions(
       ? { supportLeaseExpiresAt: option.supportLeaseExpiresAt }
       : {}),
   }));
+
+  // A GLOBAL/Application Account must never acquire an ordinary Tenant identity.
+  // The only Tenant entries allowed beside Global administration are exact
+  // temporary contexts backed by an approved Support Access Lease. Enforce this
+  // again at the client boundary so malformed/stale responses cannot turn an
+  // Application Administrator into a Tenant Actor/Membership in the UI.
+  if (!normalized.some((option) => option.id === "*")) return normalized;
+
+  return normalized.filter(
+    (option) => option.id === "*" || isSupportLeaseTenantOption(option),
+  );
+}
+
+function isSupportLeaseTenantOption(option: AuthTenantOption): boolean {
+  return (
+    option.id !== "*" &&
+    option.actorScope === "APPLICATION" &&
+    Boolean(option.supportLeaseId?.trim()) &&
+    Boolean(option.supportLeaseExpiresAt?.trim()) &&
+    !option.membershipId?.trim()
+  );
 }
 
 function isAuthTenantOption(value: unknown): value is AuthTenantOption {

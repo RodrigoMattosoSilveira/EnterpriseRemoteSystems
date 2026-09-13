@@ -72,6 +72,100 @@ describe("normalizeAuthTenantOptions", () => {
     ]);
   });
 
+
+  it("rejects ordinary Tenant identities when Global administration is present", () => {
+    expect(
+      normalizeAuthTenantOptions([
+        {
+          id: "*",
+          code: "GLOBAL",
+          name: "Global administration",
+          roleCodes: ["APPLICATION_ADMIN"],
+          actorRecordId: "application-actor-record",
+          actorKey: "e2e-application-admin",
+          actorScope: "APPLICATION",
+        },
+        {
+          id: "e2e-support-lease-tenant",
+          code: "E2ESUPPORT",
+          name: "E2E Support Access Lease",
+          roleCodes: ["TENANT_ADMIN"],
+          actorRecordId: "ordinary-tenant-actor",
+          actorKey: "ordinary-tenant-actor",
+          actorScope: "TENANT",
+          membershipId: "ordinary-membership",
+        },
+      ]),
+    ).toEqual([
+      {
+        id: "*",
+        code: "GLOBAL",
+        name: "Global administration",
+        roleCodes: ["APPLICATION_ADMIN"],
+        actorRecordId: "application-actor-record",
+        actorKey: "e2e-application-admin",
+        actorScope: "APPLICATION",
+      },
+    ]);
+  });
+
+  it("keeps only lease-provenanced Tenant contexts beside Global administration", () => {
+    expect(
+      normalizeAuthTenantOptions([
+        {
+          id: "*",
+          code: "GLOBAL",
+          name: "Global administration",
+          roleCodes: ["APPLICATION_ADMIN"],
+          actorRecordId: "application-actor-record",
+          actorKey: "e2e-application-admin",
+          actorScope: "APPLICATION",
+        },
+        {
+          id: "e2e-support-lease-tenant",
+          code: "E2ESUPPORT",
+          name: "E2E Support Access Lease",
+          roleCodes: ["APPLICATION_ADMIN"],
+          actorRecordId: "application-actor-record",
+          actorKey: "e2e-application-admin",
+          actorScope: "APPLICATION",
+          supportLeaseId: "lease-support-123",
+          supportLeaseExpiresAt: "2026-09-13T20:00:00Z",
+        },
+        {
+          id: "tenant-without-provenance",
+          code: "BAD",
+          name: "Malformed Tenant Context",
+          roleCodes: ["APPLICATION_ADMIN"],
+          actorRecordId: "application-actor-record",
+          actorKey: "e2e-application-admin",
+          actorScope: "APPLICATION",
+        },
+      ]),
+    ).toEqual([
+      {
+        id: "*",
+        code: "GLOBAL",
+        name: "Global administration",
+        roleCodes: ["APPLICATION_ADMIN"],
+        actorRecordId: "application-actor-record",
+        actorKey: "e2e-application-admin",
+        actorScope: "APPLICATION",
+      },
+      {
+        id: "e2e-support-lease-tenant",
+        code: "E2ESUPPORT",
+        name: "E2E Support Access Lease",
+        roleCodes: ["APPLICATION_ADMIN"],
+        actorRecordId: "application-actor-record",
+        actorKey: "e2e-application-admin",
+        actorScope: "APPLICATION",
+        supportLeaseId: "lease-support-123",
+        supportLeaseExpiresAt: "2026-09-13T20:00:00Z",
+      },
+    ]);
+  });
+
   it("normalizes missing or malformed role codes", () => {
     expect(
       normalizeAuthTenantOptions([
