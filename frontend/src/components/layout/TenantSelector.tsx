@@ -243,9 +243,9 @@ export function TenantSelector({
                     aria-selected={selected}
                     data-tenant-id={tenant.id}
                     data-context-kind={
-                      tenant.id === "*"
+                      tenant.contextKind === "GLOBAL" || tenant.id === "*"
                         ? "global"
-                        : tenant.supportLeaseId
+                        : tenant.contextKind === "SUPPORT_LEASE"
                           ? "support-lease"
                           : "tenant-identity"
                     }
@@ -263,7 +263,7 @@ export function TenantSelector({
                       <span className="block truncate text-sm font-semibold text-slate-600">
                         {tenant.code}
                       </span>
-                      {tenant.supportLeaseId ? (
+                      {tenant.contextKind === "SUPPORT_LEASE" && tenant.supportLeaseId ? (
                         <span className="mt-1 block text-xs font-medium text-amber-700">
                           <span className="block font-bold">Temporary support access</span>
                           <span className="block truncate">Lease: {tenant.supportLeaseId}</span>

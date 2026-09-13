@@ -269,6 +269,10 @@ local-frontend:
 	chmod +x scripts/dev-frontend.sh
 	./scripts/dev-frontend.sh
 
+.PHONY: local-30l3-global-context-check
+local-30l3-global-context-check:
+	./scripts/check-30l3-global-context.sh
+
 .PHONY: local-smoke
 local-smoke:
 	curl -fsS http://localhost:8080/api/v1/healthz >/dev/null

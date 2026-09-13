@@ -7,6 +7,7 @@ const tenant = {
   code: "DEFAULT",
   name: "Default Tenant",
   roleCodes: ["EXPENSE_OPERATOR"],
+  contextKind: "TENANT_IDENTITY" as const,
 };
 
 describe("normalizeAuthTenantOptions", () => {
@@ -33,6 +34,7 @@ describe("normalizeAuthTenantOptions", () => {
           actorRecordId: "actor-tenant-default",
           actorKey: "person:global-person::tenant::tenant-default",
           actorScope: "TENANT",
+          contextKind: "TENANT_IDENTITY",
           membershipId: "membership-tenant-default",
         },
       ]),
@@ -56,6 +58,7 @@ describe("normalizeAuthTenantOptions", () => {
           actorRecordId: "application-actor-record",
           actorKey: "e2e-application-admin",
           actorScope: "APPLICATION",
+          contextKind: "SUPPORT_LEASE",
           supportLeaseId: "lease-support-123",
           supportLeaseExpiresAt: "2026-09-13T20:00:00Z",
         },
@@ -66,6 +69,7 @@ describe("normalizeAuthTenantOptions", () => {
         actorRecordId: "application-actor-record",
         actorKey: "e2e-application-admin",
         actorScope: "APPLICATION",
+        contextKind: "SUPPORT_LEASE",
         supportLeaseId: "lease-support-123",
         supportLeaseExpiresAt: "2026-09-13T20:00:00Z",
       },
@@ -84,6 +88,7 @@ describe("normalizeAuthTenantOptions", () => {
           actorRecordId: "application-actor-record",
           actorKey: "e2e-application-admin",
           actorScope: "APPLICATION",
+          contextKind: "GLOBAL",
         },
         {
           id: "e2e-support-lease-tenant",
@@ -93,6 +98,7 @@ describe("normalizeAuthTenantOptions", () => {
           actorRecordId: "ordinary-tenant-actor",
           actorKey: "ordinary-tenant-actor",
           actorScope: "TENANT",
+          contextKind: "TENANT_IDENTITY",
           membershipId: "ordinary-membership",
         },
       ]),
@@ -105,6 +111,7 @@ describe("normalizeAuthTenantOptions", () => {
         actorRecordId: "application-actor-record",
         actorKey: "e2e-application-admin",
         actorScope: "APPLICATION",
+        contextKind: "GLOBAL",
       },
     ]);
   });
@@ -120,6 +127,7 @@ describe("normalizeAuthTenantOptions", () => {
           actorRecordId: "application-actor-record",
           actorKey: "e2e-application-admin",
           actorScope: "APPLICATION",
+          contextKind: "GLOBAL",
         },
         {
           id: "e2e-support-lease-tenant",
@@ -129,6 +137,7 @@ describe("normalizeAuthTenantOptions", () => {
           actorRecordId: "application-actor-record",
           actorKey: "e2e-application-admin",
           actorScope: "APPLICATION",
+          contextKind: "SUPPORT_LEASE",
           supportLeaseId: "lease-support-123",
           supportLeaseExpiresAt: "2026-09-13T20:00:00Z",
         },
@@ -140,6 +149,7 @@ describe("normalizeAuthTenantOptions", () => {
           actorRecordId: "application-actor-record",
           actorKey: "e2e-application-admin",
           actorScope: "APPLICATION",
+          contextKind: "SUPPORT_LEASE",
         },
       ]),
     ).toEqual([
@@ -151,6 +161,7 @@ describe("normalizeAuthTenantOptions", () => {
         actorRecordId: "application-actor-record",
         actorKey: "e2e-application-admin",
         actorScope: "APPLICATION",
+        contextKind: "GLOBAL",
       },
       {
         id: "e2e-support-lease-tenant",
@@ -160,8 +171,49 @@ describe("normalizeAuthTenantOptions", () => {
         actorRecordId: "application-actor-record",
         actorKey: "e2e-application-admin",
         actorScope: "APPLICATION",
+        contextKind: "SUPPORT_LEASE",
         supportLeaseId: "lease-support-123",
         supportLeaseExpiresAt: "2026-09-13T20:00:00Z",
+      },
+    ]);
+  });
+
+  it("rejects a Tenant identity that spoofs lease provenance beside Global administration", () => {
+    expect(
+      normalizeAuthTenantOptions([
+        {
+          id: "*",
+          code: "GLOBAL",
+          name: "Global administration",
+          roleCodes: ["APPLICATION_ADMIN"],
+          actorRecordId: "application-actor-record",
+          actorKey: "e2e-application-admin",
+          actorScope: "APPLICATION",
+          contextKind: "GLOBAL",
+        },
+        {
+          id: "e2e-support-lease-tenant",
+          code: "E2ESUPPORT",
+          name: "E2E Support Access Lease",
+          roleCodes: ["APPLICATION_ADMIN"],
+          actorRecordId: "application-actor-record",
+          actorKey: "e2e-application-admin",
+          actorScope: "APPLICATION",
+          contextKind: "TENANT_IDENTITY",
+          supportLeaseId: "lease-spoofed",
+          supportLeaseExpiresAt: "2026-09-13T20:00:00Z",
+        },
+      ]),
+    ).toEqual([
+      {
+        id: "*",
+        code: "GLOBAL",
+        name: "Global administration",
+        roleCodes: ["APPLICATION_ADMIN"],
+        actorRecordId: "application-actor-record",
+        actorKey: "e2e-application-admin",
+        actorScope: "APPLICATION",
+        contextKind: "GLOBAL",
       },
     ]);
   });

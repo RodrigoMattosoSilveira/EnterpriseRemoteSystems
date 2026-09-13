@@ -152,6 +152,7 @@ describe("TenantSelector", () => {
               actorRecordId: "global-admin-actor",
               actorKey: "global-admin",
               actorScope: "APPLICATION",
+              contextKind: "GLOBAL",
             },
             {
               id: "e2e-support-lease-tenant",
@@ -161,6 +162,7 @@ describe("TenantSelector", () => {
               actorRecordId: "global-admin-actor",
               actorKey: "global-admin",
               actorScope: "APPLICATION",
+              contextKind: "SUPPORT_LEASE",
               supportLeaseId: "lease-123",
               supportLeaseExpiresAt: "2026-09-13T20:00:00Z",
             },
@@ -202,6 +204,7 @@ describe("TenantSelector", () => {
               actorRecordId: "global-admin-actor",
               actorKey: "global-admin",
               actorScope: "APPLICATION",
+              contextKind: "GLOBAL",
             },
           ]}
           selectedTenantId="*"

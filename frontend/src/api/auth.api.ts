@@ -56,6 +56,9 @@ export function normalizeAuthTenantOptions(
     roleCodes: Array.isArray(option.roleCodes)
       ? option.roleCodes.filter((role): role is string => typeof role === "string")
       : [],
+    ...(isAuthTenantContextKind(option.contextKind)
+      ? { contextKind: option.contextKind }
+      : {}),
     ...(typeof option.actorRecordId === "string" && option.actorRecordId.trim()
       ? { actorRecordId: option.actorRecordId }
       : {}),
@@ -91,11 +94,16 @@ export function normalizeAuthTenantOptions(
 function isSupportLeaseTenantOption(option: AuthTenantOption): boolean {
   return (
     option.id !== "*" &&
+    option.contextKind === "SUPPORT_LEASE" &&
     option.actorScope === "APPLICATION" &&
     Boolean(option.supportLeaseId?.trim()) &&
     Boolean(option.supportLeaseExpiresAt?.trim()) &&
     !option.membershipId?.trim()
   );
+}
+
+function isAuthTenantContextKind(value: unknown): value is AuthTenantOption["contextKind"] {
+  return value === "GLOBAL" || value === "TENANT_IDENTITY" || value === "SUPPORT_LEASE";
 }
 
 function isAuthTenantOption(value: unknown): value is AuthTenantOption {

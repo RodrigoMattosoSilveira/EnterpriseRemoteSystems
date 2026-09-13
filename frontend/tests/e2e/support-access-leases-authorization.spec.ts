@@ -74,6 +74,7 @@ type TenantOption = {
   actorRecordId?: string;
   actorKey?: string;
   actorScope?: string;
+  contextKind?: "GLOBAL" | "TENANT_IDENTITY" | "SUPPORT_LEASE";
   membershipId?: string;
   supportLeaseId?: string;
   supportLeaseExpiresAt?: string;
@@ -117,6 +118,7 @@ test.describe("Tenant Support Access Lease authorization", () => {
 
       const optionsBefore = await getTenantOptions(applicationAdminApi);
       expect(optionsBefore.map((option) => option.id)).toEqual(["*"]);
+      expect(optionsBefore[0]?.contextKind).toBe("GLOBAL");
       expect(optionsBefore[0]?.supportLeaseId).toBeFalsy();
       expect(optionsBefore[0]?.membershipId).toBeFalsy();
 
@@ -778,6 +780,7 @@ test.describe("Tenant Support Access Lease authorization", () => {
         actorRecordId: globalBefore.actorRecordId,
         actorKey: globalBefore.actorKey,
         actorScope: "APPLICATION",
+        contextKind: "SUPPORT_LEASE",
         supportLeaseId: requestedLease.id,
         supportLeaseExpiresAt: requestedExpiration,
       });
