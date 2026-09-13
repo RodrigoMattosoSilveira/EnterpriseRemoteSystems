@@ -11,7 +11,9 @@ import {
   e2eApiUrl,
   newApplicationAdminApi,
   newTenantAdminApi,
+  seedBrowserApplicationAdmin,
 } from "./support/authz";
+import { applicationAdminStorageStatePath } from "./support/storage";
 
 type ApiEnvelope<T> = {
   data?: T;
@@ -189,6 +191,121 @@ test.describe("Tenant Support Access Lease authorization", () => {
           console.warn(`Unable to clean an open E2E support lease: ${String(error)}`);
         },
       );
+      await tenantAdminApi.dispose();
+      await applicationAdminApi.dispose();
+    }
+  });
+
+  test("Application Administrator browser selector is session-fresh and exposes a support Tenant only while its lease is approved", async ({
+    browser,
+  }) => {
+    const applicationAdminApi = await newApplicationAdminApi();
+    const tenantAdminApi = await newTenantAdminApi(SUPPORT_TENANT_ID);
+    const context = await browser.newContext({
+      storageState: applicationAdminStorageStatePath,
+    });
+    const page = await context.newPage();
+
+    try {
+      await closeOpenLeases(applicationAdminApi, tenantAdminApi, SUPPORT_TENANT_ID);
+      await seedBrowserApplicationAdmin(page);
+      await page.goto("/");
+
+      const selector = page.getByRole("button", {
+        name: "Current administration context",
+      });
+      await expect(selector).toHaveAttribute("data-selected-tenant-id", "*");
+
+      const supportOption = page
+        .getByRole("region", { name: "Administration context selection" })
+        .locator(`[role="option"][data-tenant-id="${SUPPORT_TENANT_ID}"]`);
+
+      await selector.click();
+      await expect(
+        page
+          .getByRole("region", { name: "Administration context selection" })
+          .locator('[role="option"][data-tenant-id="*"]'),
+      ).toBeVisible();
+      await expect(supportOption).toHaveCount(0);
+      await selector.click();
+
+      const requestedExpiration = futureTimestamp(15);
+      const requestResponse = await applicationAdminApi.post(
+        e2eApiUrl("/api/v1/authz/support-access-leases"),
+        {
+          headers: applicationTenantHeaders("*"),
+          data: {
+            tenantId: SUPPORT_TENANT_ID,
+            expiresAt: requestedExpiration,
+            reason: "Browser selector freshness coverage",
+            permissions: ["people.read"],
+          },
+        },
+      );
+      await expectStatus(requestResponse, 201, "request browser selector support lease");
+      const requestedLease = await responseData<SupportAccessLease>(
+        requestResponse,
+        "request browser selector support lease",
+      );
+      expect(requestedLease.status).toBe("PENDING");
+
+      await selector.click();
+      await expect(supportOption).toHaveCount(0);
+      await selector.click();
+
+      const approvalResponse = await tenantAdminApi.post(
+        e2eApiUrl(
+          `/api/v1/authz/support-access-leases/${encodeURIComponent(requestedLease.id)}/approve`,
+        ),
+        { headers: authzHeaders(SUPPORT_TENANT_ID) },
+      );
+      await expectStatus(
+        approvalResponse,
+        200,
+        "approve browser selector support lease",
+      );
+
+      await selector.click();
+      await expect(supportOption).toBeVisible();
+      await expect(supportOption).toHaveAttribute(
+        "data-context-kind",
+        "support-lease",
+      );
+      await expect(supportOption).toHaveAttribute(
+        "data-support-lease-id",
+        requestedLease.id,
+      );
+      await expect(supportOption).toContainText("Temporary support access");
+      await selector.click();
+
+      const terminationResponse = await tenantAdminApi.post(
+        e2eApiUrl(
+          `/api/v1/authz/support-access-leases/${encodeURIComponent(requestedLease.id)}/terminate`,
+        ),
+        {
+          headers: authzHeaders(SUPPORT_TENANT_ID),
+          data: { reason: "Browser selector freshness coverage complete" },
+        },
+      );
+      await expectStatus(
+        terminationResponse,
+        200,
+        "terminate browser selector support lease",
+      );
+
+      await selector.click();
+      await expect(supportOption).toHaveCount(0);
+    } finally {
+      await closeOpenLeases(
+        applicationAdminApi,
+        tenantAdminApi,
+        SUPPORT_TENANT_ID,
+      ).catch((error) => {
+        console.warn(
+          `Unable to clean browser-selector E2E support lease: ${String(error)}`,
+        );
+      });
+      await context.close();
       await tenantAdminApi.dispose();
       await applicationAdminApi.dispose();
     }

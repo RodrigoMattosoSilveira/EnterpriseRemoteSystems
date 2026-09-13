@@ -34,7 +34,9 @@ export function loadAuthSelfServiceHome(): Promise<AuthSelfServiceHome> {
 }
 
 export async function loadAuthTenantOptions(): Promise<AuthTenantOption[]> {
-  const payload = await apiFetch<unknown>("/auth/tenant-options");
+  const payload = await apiFetch<unknown>("/auth/tenant-options", {
+    cache: "no-store",
+  });
   return normalizeAuthTenantOptions(payload);
 }
 

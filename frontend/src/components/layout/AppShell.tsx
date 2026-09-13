@@ -31,16 +31,21 @@ export function AppShell() {
   const authenticatedSession =
     auth.status === "authenticated" ? auth.session : null;
   const accountId = authenticatedSession?.accountId ?? "";
+  const authSessionVersion = authenticatedSession?.expiresAt ?? "";
 
   const tenantQuery = useQuery({
-    queryKey: ["auth", accountId, "tenant-options"],
+    // Tenant/context options are authorization state for one authenticated
+    // session, not durable Account profile data. Including the session expiry
+    // prevents a prior login's support-lease catalog from being reused when the
+    // same Account signs in again.
+    queryKey: ["auth", accountId, "tenant-options", authSessionVersion],
     queryFn: loadAuthTenantOptions,
-    enabled: Boolean(accountId),
-    staleTime: 60_000,
-    // Tenant Actor/Membership lifecycle changes can be made by an administrator
-    // in another authenticated browser session. Revalidate this Account-owned
-    // identity catalog whenever the user returns to the application, even when
-    // the previous result is still inside its normal cache window.
+    enabled: Boolean(accountId && authSessionVersion),
+    staleTime: 0,
+    gcTime: 0,
+    refetchOnMount: "always",
+    // Tenant Actor/Membership and Support Access Lease lifecycle changes can be
+    // made by an administrator in another authenticated browser session.
     refetchOnWindowFocus: "always",
   });
   const tenantOptions = useMemo(
