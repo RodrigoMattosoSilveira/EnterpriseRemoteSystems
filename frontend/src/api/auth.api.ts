@@ -34,7 +34,9 @@ export function loadAuthSelfServiceHome(): Promise<AuthSelfServiceHome> {
 }
 
 export async function loadAuthTenantOptions(): Promise<AuthTenantOption[]> {
-  const payload = await apiFetch<unknown>("/auth/tenant-options");
+  const payload = await apiFetch<unknown>("/auth/tenant-options", {
+    cache: "no-store",
+  });
   return normalizeAuthTenantOptions(payload);
 }
 
@@ -47,13 +49,16 @@ export function normalizeAuthTenantOptions(
       ? payload.items
       : [];
 
-  return options.filter(isAuthTenantOption).map((option) => ({
+  const normalized = options.filter(isAuthTenantOption).map((option) => ({
     id: option.id,
     code: option.code,
     name: option.name,
     roleCodes: Array.isArray(option.roleCodes)
       ? option.roleCodes.filter((role): role is string => typeof role === "string")
       : [],
+    ...(isAuthTenantContextKind(option.contextKind)
+      ? { contextKind: option.contextKind }
+      : {}),
     ...(typeof option.actorRecordId === "string" && option.actorRecordId.trim()
       ? { actorRecordId: option.actorRecordId }
       : {}),
@@ -66,7 +71,39 @@ export function normalizeAuthTenantOptions(
     ...(typeof option.membershipId === "string" && option.membershipId.trim()
       ? { membershipId: option.membershipId }
       : {}),
+    ...(typeof option.supportLeaseId === "string" && option.supportLeaseId.trim()
+      ? { supportLeaseId: option.supportLeaseId }
+      : {}),
+    ...(typeof option.supportLeaseExpiresAt === "string" && option.supportLeaseExpiresAt.trim()
+      ? { supportLeaseExpiresAt: option.supportLeaseExpiresAt }
+      : {}),
   }));
+
+  // A GLOBAL/Application Account must never acquire an ordinary Tenant identity.
+  // The only Tenant entries allowed beside Global administration are exact
+  // temporary contexts backed by an approved Support Access Lease. Enforce this
+  // again at the client boundary so malformed/stale responses cannot turn an
+  // Application Administrator into a Tenant Actor/Membership in the UI.
+  if (!normalized.some((option) => option.id === "*")) return normalized;
+
+  return normalized.filter(
+    (option) => option.id === "*" || isSupportLeaseTenantOption(option),
+  );
+}
+
+function isSupportLeaseTenantOption(option: AuthTenantOption): boolean {
+  return (
+    option.id !== "*" &&
+    option.contextKind === "SUPPORT_LEASE" &&
+    option.actorScope === "APPLICATION" &&
+    Boolean(option.supportLeaseId?.trim()) &&
+    Boolean(option.supportLeaseExpiresAt?.trim()) &&
+    !option.membershipId?.trim()
+  );
+}
+
+function isAuthTenantContextKind(value: unknown): value is AuthTenantOption["contextKind"] {
+  return value === "GLOBAL" || value === "TENANT_IDENTITY" || value === "SUPPORT_LEASE";
 }
 
 function isAuthTenantOption(value: unknown): value is AuthTenantOption {

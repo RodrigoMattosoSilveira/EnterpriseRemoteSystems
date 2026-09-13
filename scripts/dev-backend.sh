@@ -22,6 +22,12 @@ EXPLICIT_AUTHZ_BOOTSTRAP_DISPLAY_NAME="${AUTHZ_BOOTSTRAP_DISPLAY_NAME:-}"
 EXPLICIT_AUTHZ_BOOTSTRAP_ROLE_CODE="${AUTHZ_BOOTSTRAP_ROLE_CODE:-}"
 EXPLICIT_AUTHZ_BOOTSTRAP_TENANT_ID="${AUTHZ_BOOTSTRAP_TENANT_ID:-}"
 EXPLICIT_AUTHZ_BOOTSTRAP_REQUIRE_EMPTY_ACTOR_TABLE="${AUTHZ_BOOTSTRAP_REQUIRE_EMPTY_ACTOR_TABLE:-}"
+EXPLICIT_ERS_PROVISION_E2E_ADMIN="${ERS_PROVISION_E2E_ADMIN:-}"
+EXPLICIT_E2E_ADMIN_EMAIL="${E2E_ADMIN_EMAIL:-}"
+EXPLICIT_E2E_ADMIN_PASSWORD="${E2E_ADMIN_PASSWORD:-}"
+EXPLICIT_E2E_TENANT_ADMIN_PASSWORD="${E2E_TENANT_ADMIN_PASSWORD:-}"
+EXPLICIT_E2E_ADMIN_ACTOR_KEY="${E2E_ADMIN_ACTOR_KEY:-}"
+EXPLICIT_E2E_ADMIN_DISPLAY_NAME="${E2E_ADMIN_DISPLAY_NAME:-}"
 SKIP_DOTENV="${ERS_SKIP_DOTENV:-false}"
 
 # Normal local development loads backend/.env, rendering it from the developer
@@ -74,19 +80,42 @@ fi
 if [[ -n "${EXPLICIT_AUTHZ_BOOTSTRAP_REQUIRE_EMPTY_ACTOR_TABLE}" ]]; then
   export AUTHZ_BOOTSTRAP_REQUIRE_EMPTY_ACTOR_TABLE="${EXPLICIT_AUTHZ_BOOTSTRAP_REQUIRE_EMPTY_ACTOR_TABLE}"
 fi
+if [[ -n "${EXPLICIT_ERS_PROVISION_E2E_ADMIN}" ]]; then
+  export ERS_PROVISION_E2E_ADMIN="${EXPLICIT_ERS_PROVISION_E2E_ADMIN}"
+fi
+if [[ -n "${EXPLICIT_E2E_ADMIN_EMAIL}" ]]; then
+  export E2E_ADMIN_EMAIL="${EXPLICIT_E2E_ADMIN_EMAIL}"
+fi
+if [[ -n "${EXPLICIT_E2E_ADMIN_PASSWORD}" ]]; then
+  export E2E_ADMIN_PASSWORD="${EXPLICIT_E2E_ADMIN_PASSWORD}"
+fi
+if [[ -n "${EXPLICIT_E2E_TENANT_ADMIN_PASSWORD}" ]]; then
+  export E2E_TENANT_ADMIN_PASSWORD="${EXPLICIT_E2E_TENANT_ADMIN_PASSWORD}"
+fi
+if [[ -n "${EXPLICIT_E2E_ADMIN_ACTOR_KEY}" ]]; then
+  export E2E_ADMIN_ACTOR_KEY="${EXPLICIT_E2E_ADMIN_ACTOR_KEY}"
+fi
+if [[ -n "${EXPLICIT_E2E_ADMIN_DISPLAY_NAME}" ]]; then
+  export E2E_ADMIN_DISPLAY_NAME="${EXPLICIT_E2E_ADMIN_DISPLAY_NAME}"
+fi
 
 # ERS_DATABASE_PATH is intentionally checked after sourcing backend/.env so
 # Playwright and other local commands can override the generated dotenv file.
 EFFECTIVE_DATABASE_PATH="${ERS_DATABASE_PATH:-${DB_PATH:-${DATABASE_PATH:-data/app.db}}}"
-export DATABASE_PATH="$EFFECTIVE_DATABASE_PATH"
-export DB_PATH="$EFFECTIVE_DATABASE_PATH"
+if [[ "${EFFECTIVE_DATABASE_PATH}" = /* ]]; then
+  LOCAL_DATABASE_FILE="${EFFECTIVE_DATABASE_PATH}"
+else
+  LOCAL_DATABASE_FILE="${BACKEND_DIR}/${EFFECTIVE_DATABASE_PATH}"
+fi
+export DATABASE_PATH="${LOCAL_DATABASE_FILE}"
+export DB_PATH="${LOCAL_DATABASE_FILE}"
 
 if [[ "${ERS_RESET_DATABASE:-false}" == "true" ]]; then
-  echo "Resetting local backend database: ${DATABASE_PATH}"
-  rm -f "${BACKEND_DIR}/${DATABASE_PATH}"
+  echo "Resetting local backend SQLite database and sidecars: ${LOCAL_DATABASE_FILE}"
+  ./scripts/reset-sqlite-database.sh "${LOCAL_DATABASE_FILE}"
 fi
 
-DB_PATH="${BACKEND_DIR}/${DATABASE_PATH}" \
+DB_PATH="${LOCAL_DATABASE_FILE}" \
 MIGRATIONS_DIR="${BACKEND_DIR}/migrations" \
   ./scripts/db-migrate.sh
 
@@ -113,7 +142,32 @@ print(json.dumps({
 PYJSON
   )"
   printf '%s' "${provision_payload}" | go run ./cmd/provision-e2e-admin
-  unset provision_payload E2E_ADMIN_PASSWORD
+  unset provision_payload E2E_ADMIN_PASSWORD EXPLICIT_E2E_ADMIN_PASSWORD
+fi
+
+# A requested reset must produce a genuinely fresh support-lease lifecycle.
+# This assertion is intentionally limited to reset + deterministic E2E fixture
+# provisioning so normal restarts preserve manual-test lease history.
+if [[ "${ERS_RESET_DATABASE:-false}" == "true" && "${ERS_PROVISION_E2E_ADMIN:-false}" == "true" ]]; then
+  support_lease_count="$(sqlite3 -bail "${LOCAL_DATABASE_FILE}" 'SELECT COUNT(*) FROM tenant_support_access_leases;')"
+  if [[ "${support_lease_count}" != "0" ]]; then
+    echo "Fresh local E2E database unexpectedly contains ${support_lease_count} Support Access Lease row(s)." >&2
+    echo "Refusing to start because ERS_RESET_DATABASE=true did not produce a clean support-lease state." >&2
+    exit 1
+  fi
+
+  escaped_e2e_admin_email="$(printf '%s' "${E2E_ADMIN_EMAIL}" | sed "s/'/''/g")"
+  global_binding_count="$(sqlite3 -bail "${LOCAL_DATABASE_FILE}" "SELECT COUNT(*) FROM auth_account_actors aa JOIN auth_user_accounts ac ON ac.id = aa.account_id WHERE lower(ac.login) = lower('${escaped_e2e_admin_email}') AND aa.scope_type = 'GLOBAL';")"
+  tenant_binding_count="$(sqlite3 -bail "${LOCAL_DATABASE_FILE}" "SELECT COUNT(*) FROM auth_account_actors aa JOIN auth_user_accounts ac ON ac.id = aa.account_id WHERE lower(ac.login) = lower('${escaped_e2e_admin_email}') AND aa.scope_type = 'TENANT';")"
+  person_binding_count="$(sqlite3 -bail "${LOCAL_DATABASE_FILE}" "SELECT COUNT(*) FROM auth_account_people ap JOIN auth_user_accounts ac ON ac.id = ap.account_id WHERE lower(ac.login) = lower('${escaped_e2e_admin_email}');")"
+
+  if [[ "${global_binding_count}" != "1" || "${tenant_binding_count}" != "0" || "${person_binding_count}" != "0" ]]; then
+    echo "Fresh E2E Application Administrator identity is not GLOBAL-only." >&2
+    echo "login=${E2E_ADMIN_EMAIL} global_bindings=${global_binding_count} tenant_bindings=${tenant_binding_count} person_bindings=${person_binding_count}" >&2
+    exit 1
+  fi
+  echo "Verified fresh E2E Application Administrator isolation: login=${E2E_ADMIN_EMAIL} global_bindings=1 tenant_bindings=0 person_bindings=0 support_leases=0"
+  unset support_lease_count escaped_e2e_admin_email global_binding_count tenant_binding_count person_binding_count
 fi
 
 # Runtime schema changes are disabled by default. SQL migrations above own
@@ -132,7 +186,9 @@ export AUTHZ_BOOTSTRAP_TENANT_ID="${AUTHZ_BOOTSTRAP_TENANT_ID:-*}"
 export AUTHZ_BOOTSTRAP_REQUIRE_EMPTY_ACTOR_TABLE="${AUTHZ_BOOTSTRAP_REQUIRE_EMPTY_ACTOR_TABLE:-false}"
 export AUTHZ_ACTOR_HEADER_MODE="${AUTHZ_ACTOR_HEADER_MODE:-bootstrap}"
 
+SOURCE_REVISION="$(git -C "${PROJECT_ROOT}" rev-parse HEAD 2>/dev/null || printf 'unavailable')"
 echo "Starting backend..."
+echo "SOURCE_REVISION=${SOURCE_REVISION}"
 echo "APP_ENV=${APP_ENV:-dev}"
 echo "HTTP_ADDR=${HTTP_ADDR:-:8080}"
 echo "DATABASE_PATH=${DATABASE_PATH}"

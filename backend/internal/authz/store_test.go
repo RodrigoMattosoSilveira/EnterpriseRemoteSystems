@@ -214,7 +214,7 @@ func TestGORMStoreListsActorTenantOptions(t *testing.T) {
 	if err != nil {
 		t.Fatalf("list tenant options: %v", err)
 	}
-	if got, want := options, []TenantOption{{ID: "tenant-b", Code: "B", Name: "Beta", RoleCodes: []string{string(RoleExpenseOperator)}}}; !reflect.DeepEqual(got, want) {
+	if got, want := options, []TenantOption{{ID: "tenant-b", Code: "B", Name: "Beta", RoleCodes: []string{string(RoleExpenseOperator)}, ContextKind: TenantOptionContextTenantIdentity}}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("tenant options = %#v, want %#v", got, want)
 	}
 
@@ -226,7 +226,7 @@ func TestGORMStoreListsActorTenantOptions(t *testing.T) {
 	}
 	if got, want := options, []TenantOption{{
 		ID: GlobalTenantScope, Code: "GLOBAL", Name: "Global administration",
-		RoleCodes: []string{string(RoleApplicationAdmin)}, ActorRecordID: applicationActorID,
+		RoleCodes: []string{string(RoleApplicationAdmin)}, ContextKind: TenantOptionContextGlobal, ActorRecordID: applicationActorID,
 		ActorKey: "application-user@example.com", ActorScope: string(ActorScopeApplication),
 	}}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("application control-plane options = %#v, want %#v", got, want)

@@ -93,7 +93,7 @@ test("authenticated user can see identity, tenant, sign out, and sign back in", 
 
     await expect(page).toHaveURL(/\/admin\/tenants$/);
     await expect(page.getByText(login, { exact: true })).toBeVisible();
-    await expect(page.getByRole("button", { name: "Administration context" })).toHaveAttribute(
+    await expect(page.locator("#administration-context-selector")).toHaveAttribute(
       "data-selected-tenant-id",
       "*",
     );
@@ -294,7 +294,7 @@ test("application administrator remains in the global control plane when a Tenan
   await expect(page.getByRole("heading", { name: "Tenants", exact: true })).toBeVisible();
   await expect(page.getByText(`Tenant UX ${suffix}`, { exact: true })).toBeVisible();
 
-  const selector = page.getByRole("button", { name: "Administration context" });
+  const selector = page.locator("#administration-context-selector");
   await expect(selector).toHaveAttribute("data-selected-tenant-id", "*");
   await selector.click();
   await expect(page.locator(`[role="option"][data-tenant-id="${tenantId}"]`)).toHaveCount(0);

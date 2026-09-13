@@ -181,10 +181,13 @@ export function TenantsAdminPage() {
           )}
           <ApiErrorPanel error={tenantsQuery.error} />
 
-          <section className="rounded-2xl border bg-white p-5 shadow-sm">
+          <section
+            aria-label="Tenant control-plane catalog"
+            className="rounded-2xl border bg-white p-5 shadow-sm"
+          >
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
-                <h2 className="text-lg font-semibold text-gray-950">Tenant catalog</h2>
+                <h2 className="text-lg font-semibold text-gray-950">Tenant control-plane catalog</h2>
                 <p className="text-sm text-gray-500">
                   Inactive tenants remain readable for audit, but normal tenant writes are blocked.
                 </p>
@@ -192,6 +195,30 @@ export function TenantsAdminPage() {
               <span className="rounded-full bg-gray-100 px-3 py-1 text-xs font-semibold text-gray-700">
                 {hasTenantFilter ? `${tenants.length} of ${allTenants.length}` : allTenants.length} tenants
               </span>
+            </div>
+
+            <div
+              role="note"
+              aria-label="Tenant catalog identity boundary"
+              className="mt-4 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-950"
+            >
+              <p>
+                <strong>Identity boundary:</strong> this table is the global Tenant inventory.
+                <strong> It is not the Tenant/context selector.</strong> Seeing any Tenant record here
+                does not mean that Tenant is available to the signed-in account as an ordinary Tenant
+                identity or as temporary support access.
+              </p>
+              <p className="mt-2">
+                Current account access is authoritative only in the top-bar
+                <strong> Administration context</strong> selector.
+              </p>
+              <button
+                className="mt-3 rounded-lg border border-blue-300 bg-white px-3 py-2 text-sm font-semibold text-blue-950 shadow-sm hover:bg-blue-100"
+                type="button"
+                onClick={openAdministrationContextSelector}
+              >
+                Open actual Administration context selector
+              </button>
             </div>
 
             <div className="mt-4 flex items-end gap-3">
@@ -232,10 +259,10 @@ export function TenantsAdminPage() {
                 <table className="w-full min-w-[42rem] text-left text-sm">
                   <thead className="bg-gray-50 text-xs uppercase tracking-wide text-gray-500">
                     <tr>
-                      <th className="p-3">Tenant</th>
-                      <th className="p-3">Status</th>
-                      <th className="p-3">Tenant admins</th>
-                      <th className="p-3 text-right">Action</th>
+                      <th className="p-3">Tenant record</th>
+                      <th className="p-3">Record status</th>
+                      <th className="p-3">Assigned Tenant admins</th>
+                      <th className="p-3 text-right">Record action</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y">
@@ -253,6 +280,15 @@ export function TenantsAdminPage() {
   );
 }
 
+
+function openAdministrationContextSelector() {
+  const selector = document.getElementById("administration-context-selector");
+  if (!(selector instanceof HTMLButtonElement)) return;
+
+  selector.focus();
+  if (selector.getAttribute("aria-expanded") !== "true") selector.click();
+}
+
 function TenantRow({ tenant }: { tenant: Tenant }) {
   return (
     <tr>
@@ -268,7 +304,7 @@ function TenantRow({ tenant }: { tenant: Tenant }) {
           className="rounded-lg border px-3 py-1 text-xs font-semibold text-gray-700"
           to={`/admin/tenants/${tenant.id}`}
         >
-          Manage
+          Manage record
         </Link>
       </td>
     </tr>

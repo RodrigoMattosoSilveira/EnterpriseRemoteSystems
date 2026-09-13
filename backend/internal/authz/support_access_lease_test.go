@@ -32,6 +32,14 @@ func TestTenantSupportAccessLeaseLifecycleGrantsAndRemovesTenantAuthority(t *tes
 	beforeMemberships := countRows(t, database, "person_tenant_memberships")
 	beforeGrants := countRows(t, database, "authz_actor_role_grants")
 
+	optionsBefore, err := store.ListAccountTenantOptions(context.Background(), "account-support-app")
+	if err != nil {
+		t.Fatalf("list Application Administrator options before lease request: %v", err)
+	}
+	if len(optionsBefore) != 1 || optionsBefore[0].ID != GlobalTenantScope || optionsBefore[0].ContextKind != TenantOptionContextGlobal {
+		t.Fatalf("Application Administrator must expose only GLOBAL before a lease request, got %#v", optionsBefore)
+	}
+
 	lease, err := store.CreateSupportAccessLease(context.Background(), applicationActor, CreateSupportAccessLeaseRequest{
 		TenantID:  "tenant-a",
 		ExpiresAt: time.Now().UTC().Add(2 * time.Hour).Format(time.RFC3339),
@@ -66,6 +74,14 @@ func TestTenantSupportAccessLeaseLifecycleGrantsAndRemovesTenantAuthority(t *tes
 
 	if _, err := store.FindAccountActor(context.Background(), "account-support-app", "tenant-a"); !errors.Is(err, ErrTenantActorUnavailable) {
 		t.Fatalf("pending lease must not authorize Tenant access, got %v", err)
+	}
+
+	pendingOptions, err := store.ListAccountTenantOptions(context.Background(), "account-support-app")
+	if err != nil {
+		t.Fatalf("list Application Administrator options while lease is pending: %v", err)
+	}
+	if len(pendingOptions) != 1 || pendingOptions[0].ID != GlobalTenantScope || pendingOptions[0].ContextKind != TenantOptionContextGlobal {
+		t.Fatalf("pending lease must not appear in Tenant options, got %#v", pendingOptions)
 	}
 
 	approved, err := store.ApproveSupportAccessLease(context.Background(), tenantAdminActor, lease.ID)
@@ -109,7 +125,7 @@ func TestTenantSupportAccessLeaseLifecycleGrantsAndRemovesTenantAuthority(t *tes
 	if err != nil {
 		t.Fatalf("list Application Administrator options: %v", err)
 	}
-	if len(options) != 2 || options[0].ID != GlobalTenantScope || options[1].ID != "tenant-a" || options[1].SupportLeaseID != lease.ID || options[1].ActorScope != string(ActorScopeApplication) {
+	if len(options) != 2 || options[0].ID != GlobalTenantScope || options[1].ID != "tenant-a" || options[1].SupportLeaseID != lease.ID || options[1].ContextKind != TenantOptionContextSupportLease || options[1].ActorScope != string(ActorScopeApplication) {
 		t.Fatalf("expected global plus leased Tenant option, got %#v", options)
 	}
 
@@ -188,7 +204,7 @@ func TestTenantSupportAccessLeaseExpiresWithoutLifecycleRewrite(t *testing.T) {
 	if err != nil {
 		t.Fatalf("list options after expiry: %v", err)
 	}
-	if len(options) != 1 || options[0].ID != GlobalTenantScope {
+	if len(options) != 1 || options[0].ID != GlobalTenantScope || options[0].ContextKind != TenantOptionContextGlobal {
 		t.Fatalf("expired lease must disappear from effective Tenant options: %#v", options)
 	}
 }

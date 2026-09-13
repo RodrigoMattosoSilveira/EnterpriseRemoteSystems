@@ -46,7 +46,7 @@ function formatBrazilianCellular(raw: string): string {
   return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7)}`;
 }
 
-test("user can create a Person from the React frontend", async ({ page }) => {
+test("Tenant Administrator can create a Person and define the initial temporary password", async ({ page, browser }) => {
   const unique = Date.now().toString().slice(-8);
   const firstName = `E2E${unique}`;
   const lastName = "Pessoa";
@@ -71,20 +71,48 @@ test("user can create a Person from the React frontend", async ({ page }) => {
 
   await page.getByRole("button", { name: "Create Person" }).click();
 
-  await expect(page).toHaveURL(/\/people$/);
-  await expect(page.getByRole("heading", { name: "People" })).toBeVisible();
-  await expect(page.getByLabel("People tenant scope")).toContainText(
-    "Tenant ID: default",
-  );
+  await expect(page).toHaveURL(/\/people\/[^#]+#authentication$/);
+  await expect(page.getByRole("heading", { name: "Person", exact: true })).toBeVisible();
   await expect(page.getByRole("status")).toContainText(
     `Person record added: ${firstName} ${lastName}.`,
   );
+  await expect(page.getByRole("status")).toContainText(
+    "Set the initial temporary password below to enable sign-in.",
+  );
 
-  const firstPersonCard = page.locator('main section a[href^="/people/"]').first();
-  await expect(firstPersonCard).toContainText(`${firstName} ${lastName}`);
-  await expect(firstPersonCard).toContainText(nickname);
-  await expect(firstPersonCard).toContainText("Just added");
-  await expect(firstPersonCard).toContainText("Incomplete");
+  const authenticationSection = page.getByRole("region", { name: "Authentication" });
+  await expect(authenticationSection).toBeVisible();
+  await expect(authenticationSection.getByText("Status: Not enabled for this tenant")).toBeVisible();
+  await expect(authenticationSection.getByText(email)).toBeVisible();
+
+  const temporaryPassword = `Tenant-Temporary-${unique}-Password!`;
+  await authenticationSection.getByLabel("Initial temporary password").fill(temporaryPassword);
+  await authenticationSection.getByLabel("Confirm temporary password").fill(temporaryPassword);
+  await authenticationSection.getByRole("button", { name: "Enable Authentication" }).click();
+  await expect(authenticationSection.getByRole("status")).toContainText(
+    `Account login: ${email}`,
+  );
+  await expect(authenticationSection.getByRole("status")).toContainText(
+    "ERS will require a password change on first sign-in.",
+  );
+
+  const baseURL = new URL(page.url()).origin;
+  const freshContext = await browser.newContext({
+    baseURL,
+    storageState: { cookies: [], origins: [] },
+  });
+  const freshPage = await freshContext.newPage();
+  try {
+    await freshPage.goto("/login");
+    await freshPage.getByLabel("Login").fill(email);
+    await freshPage.getByLabel("Password").fill(temporaryPassword);
+    await freshPage.getByRole("button", { name: "Sign in" }).click();
+
+    await expect(freshPage).toHaveURL(/\/password\/change$/);
+    await expect(freshPage.getByRole("heading", { name: "Change password" })).toBeVisible();
+  } finally {
+    await freshContext.close();
+  }
 });
 
 
@@ -220,11 +248,14 @@ test("user can switch the People landing page between card and list views", asyn
   await page.getByLabel("Status *").selectOption(ACTIVE_STATUS_ID);
 
   await page.getByRole("button", { name: "Create Person" }).click();
-  await expect(page).toHaveURL(/\/people$/);
+  await expect(page).toHaveURL(/\/people\/[^/]+#authentication$/);
+  await page.goto("/people");
 
-  // Card view should be active by default
+  // Card view should be active by default. The create workflow now lands on
+  // the Person Authentication section, so returning to /people does not carry
+  // the old created-Person pin. Locate the new Person through the supported
+  // tenant People search before exercising view switching.
   await expect(page.getByRole("button", { name: "Card view" })).toHaveAttribute("aria-pressed", "true");
-  await expect(page.getByRole("link", { name: new RegExp(`^${personName}`) })).toBeVisible();
 
   // Full-name search is supported by the tenant People API. Keep that filter
   // active while switching views so location.state changes cannot hide the
@@ -299,7 +330,7 @@ test("user sees an error when creating a Person with a duplicate CPF", async ({ 
 
   await page.getByRole("button", { name: "Create Person" }).click();
 
-  await expect(page).toHaveURL(/\/people$/);
+  await expect(page).toHaveURL(/\/people\/[^/]+#authentication$/);
 
   await page.goto("/people/new");
 
@@ -337,10 +368,25 @@ test("user can create a Person with a valid Brazilian cellular", async ({ page }
 
   await page.getByRole("button", { name: "Create Person" }).click();
 
-  await expect(page).toHaveURL(/\/people$/);
-  const firstPersonCard = page.locator('main section a[href^="/people/"]').first();
-  await expect(firstPersonCard).toContainText(/Formatted.*Phone/);
-  await expect(firstPersonCard).toContainText("Just added");
+  await expect(page).toHaveURL(/\/people\/[^/]+#authentication$/);
+  await page.goto("/people");
+
+  const personName = `Formatted${suffix} Phone`;
+  const filteredPeopleResponsePromise = page.waitForResponse((response) => {
+    const url = new URL(response.url());
+    return (
+      response.request().method() === "GET" &&
+      url.pathname === "/api/v1/people" &&
+      url.searchParams.get("search") === personName
+    );
+  });
+  await page.getByLabel("Filter people").fill(personName);
+  const filteredPeopleResponse = await filteredPeopleResponsePromise;
+  expect(filteredPeopleResponse.ok()).toBeTruthy();
+
+  const personCard = page.getByRole("link", { name: new RegExp(`^${personName}`) });
+  await expect(personCard).toBeVisible();
+  await expect(personCard).toContainText(cellular);
 });
 
 

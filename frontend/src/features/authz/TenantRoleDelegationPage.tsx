@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { ApiErrorPanel } from "../../components/ApiErrorPanel";
 import { useAuthorizationContext } from "../../components/layout/AuthorizationContext";
@@ -46,6 +46,9 @@ export function TenantRoleDelegationPage() {
   const [roleFilter, setRoleFilter] = useState<TenantRoleFilter>("ALL");
   const [actorStateFilter, setActorStateFilter] = useState<ActorStateFilter>("ALL");
   const [collaboratorsOnly, setCollaboratorsOnly] = useState(false);
+  const [selectedRoleByActor, setSelectedRoleByActor] = useState<
+    Record<string, TenantOperatorRoleCode | undefined>
+  >({});
 
   const actors = useMemo(() => {
     const rows = Array.isArray(actorsQuery.data) ? actorsQuery.data : [];
@@ -191,7 +194,7 @@ export function TenantRoleDelegationPage() {
           const isCurrentActor = actor.id === currentActor.actorRecordId;
           const lifecycleBusy = setActorActiveMutation.isPending;
           return (
-            <article key={actor.id} className="rounded-2xl border bg-white p-4 shadow-sm">
+            <article key={actor.id} data-testid="tenant-role-actor-card" className="rounded-2xl border bg-white p-4 shadow-sm">
               <div className="mb-3 flex flex-wrap items-start justify-between gap-2">
                 <div>
                   <h2 className="font-semibold text-gray-950">{actor.displayName || actor.actorKey}</h2>
@@ -240,32 +243,255 @@ export function TenantRoleDelegationPage() {
                 </button>
               </div>
 
-              <div className="grid gap-3 sm:grid-cols-2">
-                {roles.map((role) => {
-                  const existingGrant = activeOperatorGrant(actor, role.code);
-                  const busy = lifecycleBusy || grantMutation.isPending || revokeMutation.isPending;
-                  return (
-                    <div key={role.code} className="flex items-center justify-between gap-3 rounded-xl border p-3">
-                      <div>
-                        <p className="text-sm font-semibold text-gray-900">{role.label}</p>
-                        <p className="text-xs text-gray-500">
-                          {existingGrant ? "Granted" : roleEligible ? "Not granted" : "Actor/Membership must be ACTIVE"}
-                        </p>
-                      </div>
-                      {existingGrant ? (
-                        <button type="button" disabled={busy} onClick={() => void revoke(actor.id, existingGrant)} className="rounded-lg border px-3 py-2 text-sm font-semibold disabled:opacity-50">Remove</button>
-                      ) : (
-                        <button type="button" disabled={busy || !roleEligible} onClick={() => void grant(actor.id, role.code)} className="rounded-lg bg-gray-900 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50">Grant</button>
-                      )}
-                    </div>
-                  );
-                })}
+              <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+                <section className="rounded-xl border border-gray-200 bg-gray-50/60 p-3">
+                  <h3 className="text-sm font-semibold text-gray-950">Grant a Role</h3>
+                  <p className="mt-0.5 text-xs text-gray-600">
+                    Choose one tenant-delegable Role from the selector, then grant it to this Actor.
+                  </p>
+                  <div className="mt-3">
+                    <TenantOperatorRoleSelector
+                      actorId={actor.id}
+                      roles={roles}
+                      selectedRoleCode={selectedRoleByActor[actor.id] ?? ""}
+                      onChange={(roleCode) =>
+                        setSelectedRoleByActor((current) => ({
+                          ...current,
+                          [actor.id]: roleCode,
+                        }))
+                      }
+                      disabled={!roleEligible}
+                    />
+                  </div>
+                  {!roleEligible && (
+                    <p className="mt-2 text-xs font-medium text-amber-700">
+                      Actor and same-tenant Membership must both be ACTIVE before a Role can be granted.
+                    </p>
+                  )}
+                  {selectedRoleByActor[actor.id] &&
+                    activeOperatorGrant(actor, selectedRoleByActor[actor.id]!) && (
+                      <p className="mt-2 text-xs font-medium text-gray-600">
+                        {roleLabel(selectedRoleByActor[actor.id]!)} is already granted.
+                      </p>
+                    )}
+                  <button
+                    type="button"
+                    disabled={
+                      lifecycleBusy ||
+                      grantMutation.isPending ||
+                      revokeMutation.isPending ||
+                      !roleEligible ||
+                      !selectedRoleByActor[actor.id] ||
+                      Boolean(
+                        selectedRoleByActor[actor.id] &&
+                          activeOperatorGrant(actor, selectedRoleByActor[actor.id]!),
+                      )
+                    }
+                    onClick={() => {
+                      const roleCode = selectedRoleByActor[actor.id];
+                      if (roleCode) void grant(actor.id, roleCode);
+                    }}
+                    className="mt-3 rounded-lg bg-gray-900 px-3 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    Grant Role
+                  </button>
+                </section>
+
+                <section className="rounded-xl border p-3">
+                  <h3 className="text-sm font-semibold text-gray-950">Current Role Grants</h3>
+                  <p className="mt-0.5 text-xs text-gray-500">
+                    Roles already granted to this Actor are listed here and can be removed individually.
+                  </p>
+                  <div className="mt-3 space-y-2">
+                    {roles.every((role) => !activeOperatorGrant(actor, role.code)) && (
+                      <p className="rounded-lg border border-dashed p-3 text-sm text-gray-500">
+                        No current operator Role Grants.
+                      </p>
+                    )}
+                    {roles.map((role) => {
+                      const existingGrant = activeOperatorGrant(actor, role.code);
+                      if (!existingGrant) return null;
+                      const busy =
+                        lifecycleBusy ||
+                        grantMutation.isPending ||
+                        revokeMutation.isPending;
+                      return (
+                        <div
+                          key={role.code}
+                          className="flex items-center justify-between gap-3 rounded-lg bg-gray-50 p-3"
+                        >
+                          <div>
+                            <p className="text-sm font-semibold text-gray-900">
+                              {role.code}
+                            </p>
+                            <p className="text-xs text-gray-500">{role.label}</p>
+                          </div>
+                          <button
+                            type="button"
+                            disabled={busy}
+                            onClick={() => void revoke(actor.id, existingGrant)}
+                            className="rounded-lg border px-3 py-2 text-sm font-semibold disabled:opacity-50"
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </section>
               </div>
             </article>
           );
         })}
       </section>
     </main>
+  );
+}
+
+
+function TenantOperatorRoleSelector({
+  actorId,
+  roles,
+  selectedRoleCode,
+  onChange,
+  disabled,
+}: {
+  actorId: string;
+  roles: Array<{ code: TenantOperatorRoleCode; label: string }>;
+  selectedRoleCode: TenantOperatorRoleCode | "";
+  onChange: (roleCode: TenantOperatorRoleCode) => void;
+  disabled: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const [filterText, setFilterText] = useState("");
+  const rootRef = useRef<HTMLDivElement>(null);
+  const filterRef = useRef<HTMLInputElement>(null);
+  const selectedRole = roles.find((role) => role.code === selectedRoleCode);
+  const normalizedFilter = filterText.trim().toLocaleLowerCase();
+  const visibleRoles = normalizedFilter
+    ? roles.filter((role) =>
+        [role.code, role.label].some((value) =>
+          value.toLocaleLowerCase().includes(normalizedFilter),
+        ),
+      )
+    : roles;
+  const optionsId = `tenant-role-options-${actorId.replace(/[^a-zA-Z0-9_-]/g, "-")}`;
+
+  function closeSelector({ restoreFocus = false }: { restoreFocus?: boolean } = {}) {
+    setFilterText("");
+    setOpen(false);
+    if (restoreFocus) {
+      window.requestAnimationFrame(() => {
+        rootRef.current
+          ?.querySelector<HTMLButtonElement>('button[aria-label="Role selector"]')
+          ?.focus();
+      });
+    }
+  }
+
+  function openSelector() {
+    if (disabled) return;
+    setFilterText("");
+    setOpen(true);
+    window.requestAnimationFrame(() => filterRef.current?.focus());
+  }
+
+  return (
+    <div
+      ref={rootRef}
+      className="relative"
+      onBlur={(event) => {
+        const nextTarget = event.relatedTarget;
+        if (
+          open &&
+          (!(nextTarget instanceof Node) || !event.currentTarget.contains(nextTarget))
+        ) {
+          closeSelector();
+        }
+      }}
+    >
+      <p className="text-sm font-semibold text-gray-800">Role</p>
+      <button
+        type="button"
+        aria-label="Role selector"
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        aria-controls={open ? optionsId : undefined}
+        disabled={disabled}
+        onClick={() => (open ? closeSelector() : openSelector())}
+        className="mt-1 flex w-full items-center justify-between gap-3 rounded-lg border bg-white px-3 py-2 text-left text-sm text-gray-950 disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-500"
+      >
+        <span>
+          <span className="block font-semibold">
+            {selectedRole?.code ?? (disabled ? "Role selection unavailable" : "Select a Role")}
+          </span>
+          {selectedRole && (
+            <span className="block text-xs text-gray-500">{selectedRole.label}</span>
+          )}
+        </span>
+        <span aria-hidden="true">{open ? "▲" : "▼"}</span>
+      </button>
+
+      {open && (
+        <div className="absolute left-0 right-0 z-30 mt-1 overflow-hidden rounded-xl border border-gray-300 bg-white shadow-lg">
+          <div className="border-b border-gray-200 p-2">
+            <label className="grid gap-1 text-xs font-semibold text-gray-700">
+              Filter roles
+              <input
+                ref={filterRef}
+                type="search"
+                role="combobox"
+                aria-label="Filter roles"
+                aria-autocomplete="list"
+                aria-controls={optionsId}
+                aria-expanded="true"
+                value={filterText}
+                onChange={(event) => setFilterText(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Escape") {
+                    event.preventDefault();
+                    closeSelector({ restoreFocus: true });
+                  }
+                }}
+                placeholder="Role code or name"
+                className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-normal text-gray-950 outline-none focus:border-gray-500 focus:ring-2 focus:ring-gray-200"
+              />
+            </label>
+          </div>
+          <div
+            id={optionsId}
+            role="listbox"
+            aria-label="Role choices"
+            className="max-h-48 overflow-y-auto p-1"
+          >
+            {visibleRoles.length === 0 ? (
+              <p className="px-3 py-4 text-sm text-gray-500">No matching Roles.</p>
+            ) : (
+              visibleRoles.map((role) => (
+                <button
+                  key={role.code}
+                  type="button"
+                  role="option"
+                  aria-selected={role.code === selectedRoleCode}
+                  data-role-code={role.code}
+                  onMouseDown={(event) => event.preventDefault()}
+                  onClick={() => {
+                    onChange(role.code);
+                    closeSelector();
+                  }}
+                  className="block w-full rounded-lg px-3 py-2 text-left hover:bg-gray-50 focus:bg-gray-100 focus:outline-none"
+                >
+                  <span className="block text-sm font-semibold text-gray-950">
+                    {role.code}
+                  </span>
+                  <span className="block text-xs text-gray-500">{role.label}</span>
+                </button>
+              ))
+            )}
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 
