@@ -157,9 +157,9 @@ if [[ "${ERS_RESET_DATABASE:-false}" == "true" && "${ERS_PROVISION_E2E_ADMIN:-fa
   fi
 
   escaped_e2e_admin_email="$(printf '%s' "${E2E_ADMIN_EMAIL}" | sed "s/'/''/g")"
-  global_binding_count="$(sqlite3 -bail "${LOCAL_DATABASE_FILE}" "SELECT COUNT(*) FROM auth_account_actors aa JOIN auth_accounts ac ON ac.id = aa.account_id WHERE lower(ac.login) = lower('${escaped_e2e_admin_email}') AND aa.scope_type = 'GLOBAL';")"
-  tenant_binding_count="$(sqlite3 -bail "${LOCAL_DATABASE_FILE}" "SELECT COUNT(*) FROM auth_account_actors aa JOIN auth_accounts ac ON ac.id = aa.account_id WHERE lower(ac.login) = lower('${escaped_e2e_admin_email}') AND aa.scope_type = 'TENANT';")"
-  person_binding_count="$(sqlite3 -bail "${LOCAL_DATABASE_FILE}" "SELECT COUNT(*) FROM auth_account_people ap JOIN auth_accounts ac ON ac.id = ap.account_id WHERE lower(ac.login) = lower('${escaped_e2e_admin_email}');")"
+  global_binding_count="$(sqlite3 -bail "${LOCAL_DATABASE_FILE}" "SELECT COUNT(*) FROM auth_account_actors aa JOIN auth_user_accounts ac ON ac.id = aa.account_id WHERE lower(ac.login) = lower('${escaped_e2e_admin_email}') AND aa.scope_type = 'GLOBAL';")"
+  tenant_binding_count="$(sqlite3 -bail "${LOCAL_DATABASE_FILE}" "SELECT COUNT(*) FROM auth_account_actors aa JOIN auth_user_accounts ac ON ac.id = aa.account_id WHERE lower(ac.login) = lower('${escaped_e2e_admin_email}') AND aa.scope_type = 'TENANT';")"
+  person_binding_count="$(sqlite3 -bail "${LOCAL_DATABASE_FILE}" "SELECT COUNT(*) FROM auth_account_people ap JOIN auth_user_accounts ac ON ac.id = ap.account_id WHERE lower(ac.login) = lower('${escaped_e2e_admin_email}');")"
 
   if [[ "${global_binding_count}" != "1" || "${tenant_binding_count}" != "0" || "${person_binding_count}" != "0" ]]; then
     echo "Fresh E2E Application Administrator identity is not GLOBAL-only." >&2

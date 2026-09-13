@@ -318,6 +318,8 @@ local-sqlite-reset-check:
 	echo "Local SQLite reset removes database and journal sidecars."
 	@grep -Fq './scripts/reset-sqlite-database.sh "$${LOCAL_DATABASE_FILE}"' scripts/dev-backend.sh || (echo "Local backend reset must use the SQLite sidecar-aware reset helper." && exit 1)
 	@grep -Fq 'SELECT COUNT(*) FROM tenant_support_access_leases;' scripts/dev-backend.sh || (echo "Fresh E2E reset must verify that no Support Access Lease rows survived." && exit 1)
+	@grep -Fq 'JOIN auth_user_accounts ac ON ac.id = aa.account_id' scripts/dev-backend.sh || (echo "Fresh E2E Application Administrator isolation must query the canonical auth_user_accounts table." && exit 1)
+	@if grep -Eq 'JOIN auth_accounts([[:space:]]|$$)' scripts/dev-backend.sh; then echo "Fresh E2E Application Administrator isolation must not query removed/noncanonical auth_accounts."; exit 1; fi
 
 .PHONY: server-authz-bootstrap-config-check
 server-authz-bootstrap-config-check:
