@@ -305,6 +305,20 @@ local-hot-reload-check:
 	@grep -Eq 'cmd = "[^"]*db-migrate\.sh[^"]*&&[^"]*go build' backend/.air.toml || (echo "Air hot reload must apply SQL migrations before rebuilding the backend." && exit 1)
 	@grep -Eq 'include_ext = \[[^]]*"sql"[^]]*\]' backend/.air.toml || (echo "Air hot reload must watch backend migration SQL files." && exit 1)
 
+.PHONY: local-sqlite-reset-check
+local-sqlite-reset-check:
+	@tmpdir="$$(mktemp -d)"; \
+	trap 'rm -rf "$$tmpdir"' EXIT; \
+	db="$$tmpdir/manual.db"; \
+	touch "$$db" "$$db-wal" "$$db-shm" "$$db-journal"; \
+	./scripts/reset-sqlite-database.sh "$$db"; \
+	for path in "$$db" "$$db-wal" "$$db-shm" "$$db-journal"; do \
+		if [ -e "$$path" ]; then echo "SQLite reset left stale file: $$path"; exit 1; fi; \
+	done; \
+	echo "Local SQLite reset removes database and journal sidecars."
+	@grep -Fq './scripts/reset-sqlite-database.sh "$${LOCAL_DATABASE_FILE}"' scripts/dev-backend.sh || (echo "Local backend reset must use the SQLite sidecar-aware reset helper." && exit 1)
+	@grep -Fq 'SELECT COUNT(*) FROM tenant_support_access_leases;' scripts/dev-backend.sh || (echo "Fresh E2E reset must verify that no Support Access Lease rows survived." && exit 1)
+
 .PHONY: server-authz-bootstrap-config-check
 server-authz-bootstrap-config-check:
 	@case "$(SERVER_AUTHZ_BOOTSTRAP_ENABLED)" in true|false) ;; *) echo "SERVER_AUTHZ_BOOTSTRAP_ENABLED must be true or false." && exit 1 ;; esac
@@ -319,6 +333,7 @@ server-authz-bootstrap-config-check:
 .PHONY: local-check
 local-check:
 	$(MAKE) local-hot-reload-check
+	$(MAKE) local-sqlite-reset-check
 	$(MAKE) server-authz-bootstrap-config-check
 	$(MAKE) legacy-identity-dependency-check
 	$(MAKE) migration-rehearsal-check

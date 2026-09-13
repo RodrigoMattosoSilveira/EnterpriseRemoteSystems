@@ -78,15 +78,20 @@ fi
 # ERS_DATABASE_PATH is intentionally checked after sourcing backend/.env so
 # Playwright and other local commands can override the generated dotenv file.
 EFFECTIVE_DATABASE_PATH="${ERS_DATABASE_PATH:-${DB_PATH:-${DATABASE_PATH:-data/app.db}}}"
-export DATABASE_PATH="$EFFECTIVE_DATABASE_PATH"
-export DB_PATH="$EFFECTIVE_DATABASE_PATH"
+if [[ "${EFFECTIVE_DATABASE_PATH}" = /* ]]; then
+  LOCAL_DATABASE_FILE="${EFFECTIVE_DATABASE_PATH}"
+else
+  LOCAL_DATABASE_FILE="${BACKEND_DIR}/${EFFECTIVE_DATABASE_PATH}"
+fi
+export DATABASE_PATH="${LOCAL_DATABASE_FILE}"
+export DB_PATH="${LOCAL_DATABASE_FILE}"
 
 if [[ "${ERS_RESET_DATABASE:-false}" == "true" ]]; then
-  echo "Resetting local backend database: ${DATABASE_PATH}"
-  rm -f "${BACKEND_DIR}/${DATABASE_PATH}"
+  echo "Resetting local backend SQLite database and sidecars: ${LOCAL_DATABASE_FILE}"
+  ./scripts/reset-sqlite-database.sh "${LOCAL_DATABASE_FILE}"
 fi
 
-DB_PATH="${BACKEND_DIR}/${DATABASE_PATH}" \
+DB_PATH="${LOCAL_DATABASE_FILE}" \
 MIGRATIONS_DIR="${BACKEND_DIR}/migrations" \
   ./scripts/db-migrate.sh
 
@@ -114,6 +119,19 @@ PYJSON
   )"
   printf '%s' "${provision_payload}" | go run ./cmd/provision-e2e-admin
   unset provision_payload E2E_ADMIN_PASSWORD
+fi
+
+# A requested reset must produce a genuinely fresh support-lease lifecycle.
+# This assertion is intentionally limited to reset + deterministic E2E fixture
+# provisioning so normal restarts preserve manual-test lease history.
+if [[ "${ERS_RESET_DATABASE:-false}" == "true" && "${ERS_PROVISION_E2E_ADMIN:-false}" == "true" ]]; then
+  support_lease_count="$(sqlite3 -bail "${LOCAL_DATABASE_FILE}" 'SELECT COUNT(*) FROM tenant_support_access_leases;')"
+  if [[ "${support_lease_count}" != "0" ]]; then
+    echo "Fresh local E2E database unexpectedly contains ${support_lease_count} Support Access Lease row(s)." >&2
+    echo "Refusing to start because ERS_RESET_DATABASE=true did not produce a clean support-lease state." >&2
+    exit 1
+  fi
+  unset support_lease_count
 fi
 
 # Runtime schema changes are disabled by default. SQL migrations above own
