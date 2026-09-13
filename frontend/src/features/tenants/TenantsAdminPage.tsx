@@ -181,10 +181,13 @@ export function TenantsAdminPage() {
           )}
           <ApiErrorPanel error={tenantsQuery.error} />
 
-          <section className="rounded-2xl border bg-white p-5 shadow-sm">
+          <section
+            aria-label="Tenant control-plane catalog"
+            className="rounded-2xl border bg-white p-5 shadow-sm"
+          >
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
-                <h2 className="text-lg font-semibold text-gray-950">Tenant catalog</h2>
+                <h2 className="text-lg font-semibold text-gray-950">Tenant control-plane catalog</h2>
                 <p className="text-sm text-gray-500">
                   Inactive tenants remain readable for audit, but normal tenant writes are blocked.
                 </p>
@@ -192,6 +195,17 @@ export function TenantsAdminPage() {
               <span className="rounded-full bg-gray-100 px-3 py-1 text-xs font-semibold text-gray-700">
                 {hasTenantFilter ? `${tenants.length} of ${allTenants.length}` : allTenants.length} tenants
               </span>
+            </div>
+
+            <div
+              role="note"
+              aria-label="Tenant catalog identity boundary"
+              className="mt-4 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-950"
+            >
+              <strong>Identity boundary:</strong> this catalog is the global Tenant inventory. A Tenant
+              listed here is not an ordinary Tenant identity for the signed-in account and is not a
+              selectable support context. Use the top-bar <strong>Administration context</strong>
+              selector to see the contexts currently available to this account.
             </div>
 
             <div className="mt-4 flex items-end gap-3">

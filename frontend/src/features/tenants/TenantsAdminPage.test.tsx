@@ -151,6 +151,37 @@ describe("TenantsAdminPage", () => {
     expect(calls.filter((call) => call.url === "/api/v1/tenants")).toHaveLength(1);
   });
 
+
+  it("distinguishes control-plane Tenant inventory from selectable account contexts", async () => {
+    const supportTenant = {
+      ...tenant,
+      id: "e2e-support-lease-tenant",
+      code: "E2ESUPPORT",
+      name: "E2E Support Access Lease",
+      description: "Deterministic non-Production Tenant for Playwright authorization coverage",
+      operationalStatus: "ACTIVE_READY",
+      tenantAdminCount: 1,
+    };
+
+    mockFetch(async (url, init) => {
+      calls.push({ url, method: init?.method ?? "GET", body: parseBody(init?.body) });
+      if (url === "/api/v1/tenants" && !init?.method) return json({ data: [supportTenant] });
+      if (url === "/api/v1/auth/reactivation-requests" && !init?.method) return json({ data: [] });
+      throw new Error(`Unhandled request: ${url}`);
+    });
+
+    renderPage(applicationAdminActor);
+    await waitForText("E2E Support Access Lease");
+
+    const catalog = container.querySelector('[aria-label="Tenant control-plane catalog"]');
+    const identityBoundary = container.querySelector('[aria-label="Tenant catalog identity boundary"]');
+
+    expect(catalog?.textContent).toContain("E2E Support Access Lease");
+    expect(identityBoundary?.textContent).toContain("this catalog is the global Tenant inventory");
+    expect(identityBoundary?.textContent).toContain("is not an ordinary Tenant identity");
+    expect(identityBoundary?.textContent).toContain("Administration context");
+  });
+
   it("surfaces pending account reactivation requests on the GLOBAL control-plane landing page", async () => {
     mockFetch(async (url, init) => {
       calls.push({ url, method: init?.method ?? "GET", body: parseBody(init?.body) });
@@ -266,7 +297,7 @@ describe("TenantsAdminPage", () => {
     const codeInput = findInput("Code");
     const codeField = codeInput.closest("label");
     const inlineError = codeField?.querySelector('[role="alert"]');
-    const catalogCard = findSectionByHeading("Tenant catalog");
+    const catalogCard = findSectionByHeading("Tenant control-plane catalog");
 
     expect(inlineError?.textContent).toContain("Tenant code must be unique");
     expect(codeInput.getAttribute("aria-invalid")).toBe("true");

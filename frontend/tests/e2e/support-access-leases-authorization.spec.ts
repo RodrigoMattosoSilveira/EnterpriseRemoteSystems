@@ -231,6 +231,25 @@ test.describe("Tenant Support Access Lease authorization", () => {
       await expect(supportOption).toHaveCount(0);
       await selector.click();
 
+      // The GLOBAL Tenant catalog is deliberately broader than the authenticated
+      // account's context selector. Seeing a Tenant in /admin/tenants proves only
+      // that the Application Administrator may administer the Tenant record; it
+      // must not be interpreted as an ordinary Tenant Actor/Membership identity.
+      await page.goto("/admin/tenants");
+      const tenantCatalog = page.getByRole("region", {
+        name: "Tenant control-plane catalog",
+      });
+      await expect(tenantCatalog).toBeVisible();
+      await expect(
+        tenantCatalog.getByRole("note", { name: "Tenant catalog identity boundary" }),
+      ).toContainText("is not an ordinary Tenant identity");
+      await tenantCatalog.getByRole("searchbox", { name: "Filter tenants" }).fill(SUPPORT_TENANT_ID);
+      await expect(tenantCatalog).toContainText(SUPPORT_TENANT_ID);
+
+      await selector.click();
+      await expect(supportOption).toHaveCount(0);
+      await selector.click();
+
       const requestedExpiration = futureTimestamp(15);
       const requestResponse = await applicationAdminApi.post(
         e2eApiUrl("/api/v1/authz/support-access-leases"),
