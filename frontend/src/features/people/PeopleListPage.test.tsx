@@ -21,7 +21,7 @@ const tenantAdminActor: AuthzCurrentActor = {
   tenantId: "default",
   scope: "TENANT",
   roleCodes: ["TENANT_ADMIN"],
-  permissions: ["people.read", "people.create", "people.update"],
+  permissions: ["people.read", "people.create", "people.update", "reference_data.read"],
 };
 
 beforeEach(() => {
