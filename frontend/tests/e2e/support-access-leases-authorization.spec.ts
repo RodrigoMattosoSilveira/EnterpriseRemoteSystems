@@ -311,6 +311,12 @@ test.describe("Tenant Support Access Lease authorization", () => {
         requestedLease.id,
       );
       await expect(supportOption).toContainText("Temporary support access");
+      const localExpiration = await page.evaluate(
+        (value) => new Date(value).toLocaleString(),
+        requestedExpiration,
+      );
+      await expect(supportOption).toContainText(`Expires: ${localExpiration}`);
+      await expect(supportOption).not.toContainText(`Expires: ${requestedExpiration}`);
       await selector.click();
 
       const terminationResponse = await tenantAdminApi.post(

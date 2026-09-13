@@ -269,7 +269,9 @@ export function TenantSelector({
                           <span className="block font-bold">Temporary support access</span>
                           <span className="block truncate">Lease: {tenant.supportLeaseId}</span>
                           {tenant.supportLeaseExpiresAt && (
-                            <span className="block truncate">Expires: {tenant.supportLeaseExpiresAt}</span>
+                            <span className="block truncate">
+                              Expires: {formatLeaseExpiration(tenant.supportLeaseExpiresAt)}
+                            </span>
                           )}
                         </span>
                       ) : tenant.actorScope === "TENANT" && tenant.actorKey && tenant.membershipId ? (
@@ -293,6 +295,12 @@ export function TenantSelector({
       )}
     </div>
   );
+}
+
+function formatLeaseExpiration(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleString();
 }
 
 function normalizeSearchText(value: string) {

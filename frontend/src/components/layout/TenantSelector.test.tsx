@@ -185,7 +185,11 @@ describe("TenantSelector", () => {
     expect(supportOption?.dataset.supportLeaseId).toBe("lease-123");
     expect(supportOption?.textContent).toContain("Temporary support access");
     expect(supportOption?.textContent).toContain("Lease: lease-123");
-    expect(supportOption?.textContent).toContain("Expires: 2026-09-13T20:00:00Z");
+    const rawExpiration = "2026-09-13T20:00:00Z";
+    expect(supportOption?.textContent).toContain(
+      `Expires: ${new Date(rawExpiration).toLocaleString()}`,
+    );
+    expect(supportOption?.textContent).not.toContain(`Expires: ${rawExpiration}`);
     expect(supportOption?.textContent).not.toContain("Membership:");
   });
 
