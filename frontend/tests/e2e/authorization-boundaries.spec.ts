@@ -342,6 +342,19 @@ test.describe("authorization role boundaries", () => {
       expect(afterRevoke.intrinsicPermissions).toContain("people.self.read");
       expect(afterRevoke.permissions).toContain("people.self.read");
 
+      const selfServiceResponse = await targetApi.get(
+        e2eApiUrl("/api/v1/auth/self-service"),
+      );
+      await expectStatus(
+        selfServiceResponse,
+        200,
+        "revoking delegated operator authority must preserve intrinsic Person self-service",
+      );
+      const selfServiceBody = (await selfServiceResponse.json()) as ApiEnvelope<{
+        person?: { email?: string };
+      }>;
+      expect(selfServiceBody.data?.person?.email).toBe(target.login);
+
       const grantResponse = await tenantAdminApi.post(
         e2eApiUrl(`/api/v1/authz/tenant-role-actors/${encodeURIComponent(target.id)}/role-grants`),
         {

@@ -8,6 +8,7 @@ export function TopBar({
   selectedTenantId,
   effectiveActor,
   onTenantChange,
+  onTenantOptionsRefresh,
   onLogout,
 }: {
   session: AuthSession;
@@ -15,6 +16,7 @@ export function TopBar({
   selectedTenantId: string;
   effectiveActor: AuthzCurrentActor;
   onTenantChange: (tenantId: string) => void;
+  onTenantOptionsRefresh: () => Promise<void> | void;
   onLogout: () => void;
 }) {
   return (
@@ -46,6 +48,7 @@ export function TopBar({
           tenants={tenants}
           selectedTenantId={selectedTenantId}
           onTenantChange={onTenantChange}
+          onRefreshTenants={onTenantOptionsRefresh}
         />
         <button
           className="rounded-xl border border-slate-300 px-4 py-2.5 text-base font-bold text-slate-800 shadow-sm hover:bg-slate-50"

@@ -138,11 +138,11 @@ export function AddPersonMembershipPage() {
                       disabled={!statusId || mutation.isPending}
                       onClick={async () => {
                         const created = await mutation.mutateAsync({ personId: person.id, statusId, notes });
-                        navigate("/people", {
+                        navigate(`/people/${created.id}#authentication`, {
                           state: {
-                            flash: `Person membership added: ${created.firstName} ${created.lastName}.`,
-                            createdPersonId: created.id,
-                            createdPerson: created,
+                            flash:
+                              `Person membership added: ${created.firstName} ${created.lastName}. ` +
+                              "Configure authentication for this Tenant below.",
                           },
                         });
                       }}

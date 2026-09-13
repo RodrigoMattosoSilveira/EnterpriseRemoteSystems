@@ -738,6 +738,14 @@ func stringValue(value *string) string {
 	return *value
 }
 
+type TenantOptionContextKind string
+
+const (
+	TenantOptionContextGlobal         TenantOptionContextKind = "GLOBAL"
+	TenantOptionContextTenantIdentity TenantOptionContextKind = "TENANT_IDENTITY"
+	TenantOptionContextSupportLease   TenantOptionContextKind = "SUPPORT_LEASE"
+)
+
 // TenantOption describes an active tenant context available to an authenticated
 // Account. For ordinary Accounts the option names the exact active tenant Actor
 // and Membership that will become effective when the tenant is selected. GLOBAL
@@ -745,16 +753,17 @@ func stringValue(value *string) string {
 // context (`*`). Bite 30I.2 additionally exposes a Tenant option only while an
 // approved, unexpired Support Access Lease is effective for that Tenant.
 type TenantOption struct {
-	ID                    string   `json:"id"`
-	Code                  string   `json:"code"`
-	Name                  string   `json:"name"`
-	RoleCodes             []string `json:"roleCodes"`
-	ActorRecordID         string   `json:"actorRecordId"`
-	ActorKey              string   `json:"actorKey"`
-	ActorScope            string   `json:"actorScope"`
-	MembershipID          string   `json:"membershipId,omitempty"`
-	SupportLeaseID        string   `json:"supportLeaseId,omitempty"`
-	SupportLeaseExpiresAt string   `json:"supportLeaseExpiresAt,omitempty"`
+	ID                    string                  `json:"id"`
+	Code                  string                  `json:"code"`
+	Name                  string                  `json:"name"`
+	RoleCodes             []string                `json:"roleCodes"`
+	ContextKind           TenantOptionContextKind `json:"contextKind"`
+	ActorRecordID         string                  `json:"actorRecordId"`
+	ActorKey              string                  `json:"actorKey"`
+	ActorScope            string                  `json:"actorScope"`
+	MembershipID          string                  `json:"membershipId,omitempty"`
+	SupportLeaseID        string                  `json:"supportLeaseId,omitempty"`
+	SupportLeaseExpiresAt string                  `json:"supportLeaseExpiresAt,omitempty"`
 }
 
 type TenantOptionStore interface {
@@ -817,6 +826,7 @@ func (s *GORMStore) ListActorTenantOptions(ctx context.Context, actorRecordID st
 			Code:          "GLOBAL",
 			Name:          "Global administration",
 			RoleCodes:     roleCodes,
+			ContextKind:   TenantOptionContextGlobal,
 			ActorRecordID: actor.ID,
 			ActorKey:      actor.ActorKey,
 			ActorScope:    string(ActorScopeApplication),
@@ -857,7 +867,7 @@ func (s *GORMStore) ListActorTenantOptions(ctx context.Context, actorRecordID st
 			roleCodes = append(roleCodes, role)
 		}
 		sort.Strings(roleCodes)
-		options = append(options, TenantOption{ID: tenant.ID, Code: tenant.Code, Name: tenant.Name, RoleCodes: roleCodes})
+		options = append(options, TenantOption{ID: tenant.ID, Code: tenant.Code, Name: tenant.Name, RoleCodes: roleCodes, ContextKind: TenantOptionContextTenantIdentity})
 	}
 	return options, nil
 }
@@ -1165,6 +1175,7 @@ func (s *GORMStore) ListAccountTenantOptions(ctx context.Context, accountID stri
 			Code:          "GLOBAL",
 			Name:          "Global administration",
 			RoleCodes:     roleCodes,
+			ContextKind:   TenantOptionContextGlobal,
 			ActorRecordID: globalBinding.ActorID,
 			ActorKey:      globalBinding.ActorKey,
 			ActorScope:    string(ActorScopeApplication),
@@ -1225,6 +1236,7 @@ func (s *GORMStore) ListAccountTenantOptions(ctx context.Context, accountID stri
 			Code:          binding.TenantCode,
 			Name:          binding.TenantName,
 			RoleCodes:     roleCodes,
+			ContextKind:   TenantOptionContextTenantIdentity,
 			ActorRecordID: binding.ActorID,
 			ActorKey:      binding.ActorKey,
 			ActorScope:    string(ActorScopeTenant),
@@ -1329,6 +1341,7 @@ func (s *GORMStore) supportLeaseTenantOptions(ctx context.Context, actorRecordID
 			Code:                  row.Code,
 			Name:                  row.Name,
 			RoleCodes:             append([]string{}, roleCodes...),
+			ContextKind:           TenantOptionContextSupportLease,
 			ActorRecordID:         actorRecordID,
 			ActorKey:              actorKey,
 			ActorScope:            string(ActorScopeApplication),

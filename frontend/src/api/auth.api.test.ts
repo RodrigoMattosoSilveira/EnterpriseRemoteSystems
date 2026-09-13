@@ -7,6 +7,7 @@ const tenant = {
   code: "DEFAULT",
   name: "Default Tenant",
   roleCodes: ["EXPENSE_OPERATOR"],
+  contextKind: "TENANT_IDENTITY" as const,
 };
 
 describe("normalizeAuthTenantOptions", () => {
@@ -33,6 +34,7 @@ describe("normalizeAuthTenantOptions", () => {
           actorRecordId: "actor-tenant-default",
           actorKey: "person:global-person::tenant::tenant-default",
           actorScope: "TENANT",
+          contextKind: "TENANT_IDENTITY",
           membershipId: "membership-tenant-default",
         },
       ]),
@@ -43,6 +45,175 @@ describe("normalizeAuthTenantOptions", () => {
         actorKey: "person:global-person::tenant::tenant-default",
         actorScope: "TENANT",
         membershipId: "membership-tenant-default",
+      },
+    ]);
+  });
+
+
+  it("preserves support-lease provenance for temporary Tenant contexts", () => {
+    expect(
+      normalizeAuthTenantOptions([
+        {
+          ...tenant,
+          actorRecordId: "application-actor-record",
+          actorKey: "e2e-application-admin",
+          actorScope: "APPLICATION",
+          contextKind: "SUPPORT_LEASE",
+          supportLeaseId: "lease-support-123",
+          supportLeaseExpiresAt: "2026-09-13T20:00:00Z",
+        },
+      ]),
+    ).toEqual([
+      {
+        ...tenant,
+        actorRecordId: "application-actor-record",
+        actorKey: "e2e-application-admin",
+        actorScope: "APPLICATION",
+        contextKind: "SUPPORT_LEASE",
+        supportLeaseId: "lease-support-123",
+        supportLeaseExpiresAt: "2026-09-13T20:00:00Z",
+      },
+    ]);
+  });
+
+
+  it("rejects ordinary Tenant identities when Global administration is present", () => {
+    expect(
+      normalizeAuthTenantOptions([
+        {
+          id: "*",
+          code: "GLOBAL",
+          name: "Global administration",
+          roleCodes: ["APPLICATION_ADMIN"],
+          actorRecordId: "application-actor-record",
+          actorKey: "e2e-application-admin",
+          actorScope: "APPLICATION",
+          contextKind: "GLOBAL",
+        },
+        {
+          id: "e2e-support-lease-tenant",
+          code: "E2ESUPPORT",
+          name: "E2E Support Access Lease",
+          roleCodes: ["TENANT_ADMIN"],
+          actorRecordId: "ordinary-tenant-actor",
+          actorKey: "ordinary-tenant-actor",
+          actorScope: "TENANT",
+          contextKind: "TENANT_IDENTITY",
+          membershipId: "ordinary-membership",
+        },
+      ]),
+    ).toEqual([
+      {
+        id: "*",
+        code: "GLOBAL",
+        name: "Global administration",
+        roleCodes: ["APPLICATION_ADMIN"],
+        actorRecordId: "application-actor-record",
+        actorKey: "e2e-application-admin",
+        actorScope: "APPLICATION",
+        contextKind: "GLOBAL",
+      },
+    ]);
+  });
+
+  it("keeps only lease-provenanced Tenant contexts beside Global administration", () => {
+    expect(
+      normalizeAuthTenantOptions([
+        {
+          id: "*",
+          code: "GLOBAL",
+          name: "Global administration",
+          roleCodes: ["APPLICATION_ADMIN"],
+          actorRecordId: "application-actor-record",
+          actorKey: "e2e-application-admin",
+          actorScope: "APPLICATION",
+          contextKind: "GLOBAL",
+        },
+        {
+          id: "e2e-support-lease-tenant",
+          code: "E2ESUPPORT",
+          name: "E2E Support Access Lease",
+          roleCodes: ["APPLICATION_ADMIN"],
+          actorRecordId: "application-actor-record",
+          actorKey: "e2e-application-admin",
+          actorScope: "APPLICATION",
+          contextKind: "SUPPORT_LEASE",
+          supportLeaseId: "lease-support-123",
+          supportLeaseExpiresAt: "2026-09-13T20:00:00Z",
+        },
+        {
+          id: "tenant-without-provenance",
+          code: "BAD",
+          name: "Malformed Tenant Context",
+          roleCodes: ["APPLICATION_ADMIN"],
+          actorRecordId: "application-actor-record",
+          actorKey: "e2e-application-admin",
+          actorScope: "APPLICATION",
+          contextKind: "SUPPORT_LEASE",
+        },
+      ]),
+    ).toEqual([
+      {
+        id: "*",
+        code: "GLOBAL",
+        name: "Global administration",
+        roleCodes: ["APPLICATION_ADMIN"],
+        actorRecordId: "application-actor-record",
+        actorKey: "e2e-application-admin",
+        actorScope: "APPLICATION",
+        contextKind: "GLOBAL",
+      },
+      {
+        id: "e2e-support-lease-tenant",
+        code: "E2ESUPPORT",
+        name: "E2E Support Access Lease",
+        roleCodes: ["APPLICATION_ADMIN"],
+        actorRecordId: "application-actor-record",
+        actorKey: "e2e-application-admin",
+        actorScope: "APPLICATION",
+        contextKind: "SUPPORT_LEASE",
+        supportLeaseId: "lease-support-123",
+        supportLeaseExpiresAt: "2026-09-13T20:00:00Z",
+      },
+    ]);
+  });
+
+  it("rejects a Tenant identity that spoofs lease provenance beside Global administration", () => {
+    expect(
+      normalizeAuthTenantOptions([
+        {
+          id: "*",
+          code: "GLOBAL",
+          name: "Global administration",
+          roleCodes: ["APPLICATION_ADMIN"],
+          actorRecordId: "application-actor-record",
+          actorKey: "e2e-application-admin",
+          actorScope: "APPLICATION",
+          contextKind: "GLOBAL",
+        },
+        {
+          id: "e2e-support-lease-tenant",
+          code: "E2ESUPPORT",
+          name: "E2E Support Access Lease",
+          roleCodes: ["APPLICATION_ADMIN"],
+          actorRecordId: "application-actor-record",
+          actorKey: "e2e-application-admin",
+          actorScope: "APPLICATION",
+          contextKind: "TENANT_IDENTITY",
+          supportLeaseId: "lease-spoofed",
+          supportLeaseExpiresAt: "2026-09-13T20:00:00Z",
+        },
+      ]),
+    ).toEqual([
+      {
+        id: "*",
+        code: "GLOBAL",
+        name: "Global administration",
+        roleCodes: ["APPLICATION_ADMIN"],
+        actorRecordId: "application-actor-record",
+        actorKey: "e2e-application-admin",
+        actorScope: "APPLICATION",
+        contextKind: "GLOBAL",
       },
     ]);
   });

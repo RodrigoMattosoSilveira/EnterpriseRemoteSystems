@@ -9,9 +9,36 @@ let container: HTMLDivElement;
 let root: Root;
 
 const tenants: AuthTenantOption[] = [
-  { id: "default", code: "DEFAULT", name: "Default Tenant", roleCodes: ["TENANT_ADMIN"] },
-  { id: "tenant-alpha", code: "ALPHA", name: "Alpha Operations", roleCodes: ["TENANT_ADMIN"] },
-  { id: "tenant-beta", code: "BETA", name: "Beta Cooperative", roleCodes: ["TENANT_ADMIN"] },
+  {
+    id: "default",
+    code: "DEFAULT",
+    name: "Default Tenant",
+    roleCodes: ["TENANT_ADMIN"],
+    actorRecordId: "actor-default-record",
+    actorKey: "actor-default",
+    actorScope: "TENANT",
+    membershipId: "membership-default",
+  },
+  {
+    id: "tenant-alpha",
+    code: "ALPHA",
+    name: "Alpha Operations",
+    roleCodes: ["TENANT_ADMIN"],
+    actorRecordId: "actor-alpha-record",
+    actorKey: "actor-alpha",
+    actorScope: "TENANT",
+    membershipId: "membership-alpha",
+  },
+  {
+    id: "tenant-beta",
+    code: "BETA",
+    name: "Beta Cooperative",
+    roleCodes: ["TENANT_ADMIN"],
+    actorRecordId: "actor-beta-record",
+    actorKey: "actor-beta",
+    actorScope: "TENANT",
+    membershipId: "membership-beta",
+  },
 ];
 
 beforeEach(() => {
@@ -47,6 +74,57 @@ describe("TenantSelector", () => {
     expect(filterInputOrNull()).toBeNull();
   });
 
+  it("makes each selectable tenant's Actor and Membership identity explicit", async () => {
+    const onTenantChange = vi.fn();
+    renderSelector(onTenantChange);
+
+    await click(currentTenantButton());
+
+    expect(container.textContent).toContain(
+      "Each tenant below is available through a separate active Actor and Membership owned by this Authentication Account.",
+    );
+    const alpha = options().find((option) => option.dataset.tenantId === "tenant-alpha");
+    const beta = options().find((option) => option.dataset.tenantId === "tenant-beta");
+    expect(alpha?.textContent).toContain("Actor: actor-alpha");
+    expect(alpha?.textContent).toContain("Membership: membership-alpha");
+    expect(beta?.textContent).toContain("Actor: actor-beta");
+    expect(beta?.textContent).toContain("Membership: membership-beta");
+
+    await typeInto(filterInput(), "membership-beta");
+    expect(options()).toHaveLength(1);
+    expect(options()[0]?.dataset.tenantId).toBe("tenant-beta");
+  });
+
+
+  it("refreshes the Account-owned Tenant identities before enabling selector options", async () => {
+    const onTenantChange = vi.fn();
+    let resolveRefresh: (() => void) | undefined;
+    const onRefreshTenants = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveRefresh = resolve;
+        }),
+    );
+    renderSelector(onTenantChange, onRefreshTenants);
+
+    await click(currentTenantButton());
+
+    expect(onRefreshTenants).toHaveBeenCalledTimes(1);
+    expect(container.textContent).toContain("Refreshing available tenants…");
+    expect(container.textContent).toContain("Refreshing your available tenants…");
+    expect(options()).toHaveLength(0);
+    expect(filterInput().disabled).toBe(true);
+
+    await act(async () => {
+      resolveRefresh?.();
+      await Promise.resolve();
+    });
+
+    expect(filterInput().disabled).toBe(false);
+    expect(options()).toHaveLength(3);
+    expect(container.textContent).toContain("3 of 3 tenants");
+  });
+
   it("supports keyboard selection from the filtered list", async () => {
     const onTenantChange = vi.fn();
     renderSelector(onTenantChange);
@@ -56,6 +134,63 @@ describe("TenantSelector", () => {
     await keyDown(filterInput(), "Enter");
 
     expect(onTenantChange).toHaveBeenCalledWith("tenant-alpha");
+  });
+
+
+  it("distinguishes approved support-lease contexts from ordinary Tenant identities", async () => {
+    const onTenantChange = vi.fn();
+
+    act(() => {
+      root.render(
+        <TenantSelector
+          tenants={[
+            {
+              id: "*",
+              code: "GLOBAL",
+              name: "Global administration",
+              roleCodes: ["APPLICATION_ADMIN"],
+              actorRecordId: "global-admin-actor",
+              actorKey: "global-admin",
+              actorScope: "APPLICATION",
+              contextKind: "GLOBAL",
+            },
+            {
+              id: "e2e-support-lease-tenant",
+              code: "E2ESUPPORT",
+              name: "E2E Support Access Lease",
+              roleCodes: ["APPLICATION_ADMIN"],
+              actorRecordId: "global-admin-actor",
+              actorKey: "global-admin",
+              actorScope: "APPLICATION",
+              contextKind: "SUPPORT_LEASE",
+              supportLeaseId: "lease-123",
+              supportLeaseExpiresAt: "2026-09-13T20:00:00Z",
+            },
+          ]}
+          selectedTenantId="*"
+          onTenantChange={onTenantChange}
+        />,
+      );
+    });
+
+    await click(currentAdministrationContextButton());
+
+    expect(container.textContent).toContain(
+      "Tenant entries appear here only while an approved, unexpired Support Access Lease is effective.",
+    );
+    const supportOption = options().find(
+      (option) => option.dataset.tenantId === "e2e-support-lease-tenant",
+    );
+    expect(supportOption?.dataset.contextKind).toBe("support-lease");
+    expect(supportOption?.dataset.supportLeaseId).toBe("lease-123");
+    expect(supportOption?.textContent).toContain("Temporary support access");
+    expect(supportOption?.textContent).toContain("Lease: lease-123");
+    const rawExpiration = "2026-09-13T20:00:00Z";
+    expect(supportOption?.textContent).toContain(
+      `Expires: ${new Date(rawExpiration).toLocaleString()}`,
+    );
+    expect(supportOption?.textContent).not.toContain(`Expires: ${rawExpiration}`);
+    expect(supportOption?.textContent).not.toContain("Membership:");
   });
 
   it("labels the GLOBAL option as an administration context instead of a tenant", async () => {
@@ -73,6 +208,7 @@ describe("TenantSelector", () => {
               actorRecordId: "global-admin-actor",
               actorKey: "global-admin",
               actorScope: "APPLICATION",
+              contextKind: "GLOBAL",
             },
           ]}
           selectedTenantId="*"
@@ -89,6 +225,7 @@ describe("TenantSelector", () => {
       'button[aria-label="Current administration context"]',
     );
     if (!button) throw new Error("Current administration context button not found");
+    expect(button.id).toBe("administration-context-selector");
     await click(button);
 
     expect(container.querySelector('section[aria-label="Administration context selection"]')).toBeTruthy();
@@ -98,13 +235,17 @@ describe("TenantSelector", () => {
 
 });
 
-function renderSelector(onTenantChange: (tenantId: string) => void) {
+function renderSelector(
+  onTenantChange: (tenantId: string) => void,
+  onRefreshTenants?: () => Promise<void> | void,
+) {
   act(() => {
     root.render(
       <TenantSelector
         tenants={tenants}
         selectedTenantId="default"
         onTenantChange={onTenantChange}
+        onRefreshTenants={onRefreshTenants}
       />,
     );
   });
@@ -115,6 +256,15 @@ function currentTenantButton() {
     'button[aria-label="Current tenant"]',
   );
   if (!button) throw new Error("Current tenant button not found");
+  return button;
+}
+
+
+function currentAdministrationContextButton() {
+  const button = container.querySelector<HTMLButtonElement>(
+    'button[aria-label="Current administration context"]',
+  );
+  if (!button) throw new Error("Current administration context button not found");
   return button;
 }
 

@@ -6,12 +6,15 @@ export function TenantSelector({
   tenants,
   selectedTenantId,
   onTenantChange,
+  onRefreshTenants,
 }: {
   tenants: AuthTenantOption[];
   selectedTenantId: string;
   onTenantChange: (tenantId: string) => void;
+  onRefreshTenants?: () => Promise<void> | void;
 }) {
   const [open, setOpen] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [query, setQuery] = useState("");
   const [activeIndex, setActiveIndex] = useState(0);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -32,9 +35,9 @@ export function TenantSelector({
     if (!normalizedQuery) return tenants;
 
     return tenants.filter((tenant) =>
-      normalizeSearchText(`${tenant.name} ${tenant.code} ${tenant.id}`).includes(
-        normalizedQuery,
-      ),
+      normalizeSearchText(
+        `${tenant.name} ${tenant.code} ${tenant.id} ${tenant.actorKey ?? ""} ${tenant.membershipId ?? ""} ${tenant.supportLeaseId ?? ""}`,
+      ).includes(normalizedQuery),
     );
   }, [query, tenants]);
 
@@ -60,10 +63,22 @@ export function TenantSelector({
     setActiveIndex(0);
   }, [query]);
 
-  function openDropdown() {
+  async function openDropdown() {
     setQuery("");
     setActiveIndex(Math.max(0, tenants.findIndex((tenant) => tenant.id === selectedTenantId)));
     setOpen(true);
+
+    if (!onRefreshTenants) return;
+
+    // The Actor/Membership catalog can change in another administrator session.
+    // Never expose the cached option list as authoritative when the user opens
+    // the selector; refresh it before enabling selection.
+    setRefreshing(true);
+    try {
+      await onRefreshTenants();
+    } finally {
+      setRefreshing(false);
+    }
   }
 
   function closeDropdown({ restoreFocus = false } = {}) {
@@ -120,12 +135,13 @@ export function TenantSelector({
       </p>
       <button
         ref={triggerRef}
+        id={globalAdministration ? "administration-context-selector" : undefined}
         type="button"
         aria-label={currentContextLabel}
         aria-haspopup="listbox"
         aria-expanded={open}
         data-selected-tenant-id={selectedTenantId}
-        onClick={() => (open ? closeDropdown() : openDropdown())}
+        onClick={() => (open ? closeDropdown() : void openDropdown())}
         className="flex min-w-[18rem] items-center justify-between gap-4 rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-left shadow-sm transition hover:border-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-500"
       >
         <span className="min-w-0">
@@ -135,6 +151,11 @@ export function TenantSelector({
           <span className="block truncate text-sm font-semibold text-slate-600">
             {selectedTenant?.code ?? `No active ${contextNoun}`}
           </span>
+          {selectedTenant?.supportLeaseId && (
+            <span className="mt-1 block text-xs font-bold text-amber-700">
+              Temporary support access
+            </span>
+          )}
         </span>
         <svg
           aria-hidden="true"
@@ -174,6 +195,7 @@ export function TenantSelector({
                     : undefined
                 }
                 value={query}
+                disabled={refreshing}
                 onChange={(event) => setQuery(event.target.value)}
                 onKeyDown={handleFilterKeyDown}
                 placeholder={selectedLabel}
@@ -181,12 +203,30 @@ export function TenantSelector({
               />
             </label>
             <p className="mt-2 text-sm font-medium text-slate-600" aria-live="polite">
-              {filteredTenants.length} of {tenants.length} {contextNounPlural}
+              {refreshing
+                ? `Refreshing available ${contextNounPlural}…`
+                : `${filteredTenants.length} of ${tenants.length} ${contextNounPlural}`}
             </p>
+            {globalAdministration ? (
+              <p className="mt-1 text-xs font-medium text-slate-500">
+                Tenant entries appear here only while an approved, unexpired Support Access Lease is effective. They are temporary support contexts, not ordinary Tenant identities.
+              </p>
+            ) : (
+              <p className="mt-1 text-xs font-medium text-slate-500">
+                Each tenant below is available through a separate active Actor and Membership owned by this Authentication Account.
+              </p>
+            )}
           </div>
 
           <div id="tenant-options" role="listbox" className="max-h-80 overflow-y-auto p-2">
-            {filteredTenants.length === 0 ? (
+            {refreshing ? (
+              <p
+                role="status"
+                className="px-3 py-6 text-center text-base font-medium text-slate-600"
+              >
+                Refreshing your available {contextNounPlural}…
+              </p>
+            ) : filteredTenants.length === 0 ? (
               <p className="px-3 py-6 text-center text-base font-medium text-slate-600">
                 No {contextNounPlural} match “{query}”.
               </p>
@@ -203,6 +243,14 @@ export function TenantSelector({
                     role="option"
                     aria-selected={selected}
                     data-tenant-id={tenant.id}
+                    data-context-kind={
+                      tenant.contextKind === "GLOBAL" || tenant.id === "*"
+                        ? "global"
+                        : tenant.contextKind === "SUPPORT_LEASE"
+                          ? "support-lease"
+                          : "tenant-identity"
+                    }
+                    data-support-lease-id={tenant.supportLeaseId}
                     onMouseEnter={() => setActiveIndex(index)}
                     onClick={() => chooseTenant(tenant)}
                     className={`flex w-full items-center justify-between gap-4 rounded-xl px-3 py-3 text-left transition ${
@@ -216,6 +264,22 @@ export function TenantSelector({
                       <span className="block truncate text-sm font-semibold text-slate-600">
                         {tenant.code}
                       </span>
+                      {tenant.contextKind === "SUPPORT_LEASE" && tenant.supportLeaseId ? (
+                        <span className="mt-1 block text-xs font-medium text-amber-700">
+                          <span className="block font-bold">Temporary support access</span>
+                          <span className="block truncate">Lease: {tenant.supportLeaseId}</span>
+                          {tenant.supportLeaseExpiresAt && (
+                            <span className="block truncate">
+                              Expires: {formatLeaseExpiration(tenant.supportLeaseExpiresAt)}
+                            </span>
+                          )}
+                        </span>
+                      ) : tenant.actorScope === "TENANT" && tenant.actorKey && tenant.membershipId ? (
+                        <span className="mt-1 block text-xs font-medium text-slate-500">
+                          <span className="block truncate">Actor: {tenant.actorKey}</span>
+                          <span className="block truncate">Membership: {tenant.membershipId}</span>
+                        </span>
+                      ) : null}
                     </span>
                     {selected && (
                       <span className="rounded-full bg-slate-900 px-2.5 py-1 text-xs font-bold text-white">
@@ -231,6 +295,12 @@ export function TenantSelector({
       )}
     </div>
   );
+}
+
+function formatLeaseExpiration(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleString();
 }
 
 function normalizeSearchText(value: string) {
