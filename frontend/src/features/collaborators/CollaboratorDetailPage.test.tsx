@@ -121,7 +121,7 @@ describe("CollaboratorDetailPage", () => {
     expect(journeyHeading?.className).toContain("text-3xl");
     expect(collaboratorHeading).toBeTruthy();
     expect(collaboratorHeading?.className).toContain("text-lg");
-    expect(textNode("Journey Code:")).toBeTruthy();
+    expect(textNode("Journey ID:")).toBeTruthy();
     expect(textNode("collab-1")).toBeTruthy();
     expect(textNode("Person Summary")).toBeTruthy();
     expect(textNode("Nickname")).toBeTruthy();

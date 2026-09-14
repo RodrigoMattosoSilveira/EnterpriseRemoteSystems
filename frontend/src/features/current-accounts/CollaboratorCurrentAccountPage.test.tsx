@@ -41,7 +41,7 @@ describe("CollaboratorCurrentAccountPage", () => {
     await waitForText("Person Current Account");
     await waitForText("Person-owned balances and ledger history in the selected Tenant.");
     await waitForText("Maria");
-    await waitForText("Journey Code:");
+    await waitForText("Journey ID:");
     await waitForText("collab-1");
     await waitForText("42,50");
 
@@ -52,7 +52,7 @@ describe("CollaboratorCurrentAccountPage", () => {
     const personHeading = container.querySelector("h2");
     expect(personHeading?.textContent?.trim()).toBe("Maria");
     expect(personHeading?.className).toContain("text-lg");
-    expect(container.textContent).toContain("Journey Code: collab-1");
+    expect(container.textContent).toContain("Journey ID: collab-1");
     await waitForText("expense deduction");
     await waitForText("Receipt: Pending issue");
     await waitForText("Outstanding receipt: print, collect signature, and record the signed return.");
