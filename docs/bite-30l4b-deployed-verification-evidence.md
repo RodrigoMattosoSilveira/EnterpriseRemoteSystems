@@ -66,7 +66,7 @@ deployed_playwright_evidence_sha256=<sha256>
 deployed_playwright_evidence_artifact=<artifact-name>
 ```
 
-alongside the existing revision/tree and migration evidence. 30L.4C will make Production require and consume this exact Test evidence binding.
+alongside the existing revision/tree and migration evidence. 30L.4C consumes and verifies this exact Test evidence binding before Production deployment.
 
 ## Local verification
 
@@ -78,10 +78,6 @@ make deployed-playwright-evidence-check
 
 It verifies successful Test and Development evidence generation, exact revision/tree verification, and rejection of tree mismatches. `make local-check` runs this target.
 
-## 30L.4 status after this delivery
+## 30L.4 status after 30L.4C
 
-Requirements 1–12 remain covered. Requirement 13 remains intentionally pending only on 30L.4C Production release-gate evidence. The coverage manifest status is therefore:
-
-```text
-pending-30L.4C
-```
+30L.4C consumes this Test evidence in the Production release gate and emits immutable Production deployment/smoke evidence. The final coverage manifest therefore closes requirement 13 with all 13 architecture requirements covered.

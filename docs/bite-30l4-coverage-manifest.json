@@ -180,27 +180,35 @@
     {
       "id": 13,
       "requirement": "deployment verification in the promotion path",
-      "status": "pending-30L.4C",
+      "status": "covered",
       "evidence": [
         {
           "file": ".github/workflows/deploy.yml",
-          "contains": "Generate immutable deployed Playwright evidence"
+          "contains": "Capture required Test release evidence for Production"
         },
         {
-          "file": "scripts/write-deployed-playwright-evidence.py",
-          "contains": "verificationKind"
+          "file": ".github/workflows/deploy.yml",
+          "contains": "Generate immutable Production release-gate evidence"
         },
         {
-          "file": "scripts/verify-deployed-playwright-evidence.py",
-          "contains": "Deployed Playwright evidence verified"
+          "file": ".github/workflows/deploy.yml",
+          "contains": "Upload immutable Production release-gate evidence"
+        },
+        {
+          "file": "scripts/verify-test-release-rehearsal-marker.py",
+          "contains": "Test release-rehearsal evidence verified"
+        },
+        {
+          "file": "scripts/write-production-release-evidence.py",
+          "contains": "production-release-gate"
+        },
+        {
+          "file": "scripts/verify-production-release-evidence.py",
+          "contains": "Production release-gate evidence verified"
         },
         {
           "file": "Makefile",
-          "makeTarget": "deployed-playwright-evidence-check"
-        },
-        {
-          "file": "Makefile",
-          "makeTarget": "server-record-test-release-rehearsal"
+          "makeTarget": "production-release-evidence-check"
         },
         {
           "file": "Makefile",
