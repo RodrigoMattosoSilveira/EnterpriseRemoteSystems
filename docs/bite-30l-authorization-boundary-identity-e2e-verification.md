@@ -29,11 +29,24 @@ Bite 30L is the final Bite 30 verification work and absorbs the intent of deferr
 
 ### 30L.4 — Final Verification and Promotion Gate
 
+30L.4 is split into three ordered promotion-gate deliveries so source-level coverage, deployed verification, and Production evidence can fail independently:
+
+#### 30L.4A — Coverage Closure & Local Promotion Gate
+
 - remaining same-Global-Person cross-Tenant financial-isolation proof;
-- coverage manifest mapping architecture requirements to automated specs;
-- complete `make local-check` gate;
+- machine-checked coverage manifest mapping all thirteen architecture requirements to repository evidence;
+- coverage-manifest verification incorporated into `make local-check`.
+
+#### 30L.4B — Deployed Development/Test Verification Evidence
+
 - deployed Playwright verification in Development and Test;
-- production promotion/rehearsal evidence and deployment verification.
+- immutable deployed revision/tree evidence and machine-readable verification artifacts.
+
+#### 30L.4C — Production Release-Gate Evidence
+
+- exact-tree Test rehearsal/evidence requirement for Production;
+- Production deployment/smoke evidence;
+- final manifest completion with no pending requirements.
 
 ## 30L.1 implementation
 
@@ -86,6 +99,12 @@ The approval path explicitly rejects Application Administrator self-approval and
 
 Expiration remains a derived effective state rather than a state-transition actor event: the persisted lease remains `APPROVED`, its `effectiveStatus` becomes `EXPIRED`, and its immutable request/approval audit provenance remains intact. This avoids inventing an Actor for the passage of time.
 
+## 30L.4A implementation
+
+30L.4A closes the last source-level E2E gap with a same-Global-Person financial-isolation scenario in `multi-tenant-identity-confidentiality.spec.ts`. The deterministic multi-Tenant Person is given an active Collaborator Journey in each Tenant when needed; each Tenant Administrator creates a uniquely marked expense in that Tenant; then one authenticated Person browser session switches Tenant A → Tenant B → Tenant A and proves that each Current Account contains only the selected Tenant's ledger marker. A direct attempt to open Tenant A's Collaborator Current Account while Tenant B is selected is denied, which also proves stale browser cache/state cannot expose the other Tenant's financial data.
+
+`docs/bite-30l4-coverage-manifest.json` is the machine-readable architecture-to-test manifest. `make bite30l4-coverage-manifest-check` verifies all thirteen required Bite 30L architecture rows, referenced files, named Playwright tests, and Make targets. `make local-check` now runs that verifier before the rest of the canonical local gate. Requirement 13 remains explicitly pending until 30L.4B and 30L.4C produce deployed Development/Test and Production release evidence.
+
 ## Remaining 30L work
 
-30L.1 through 30L.3 do not yet claim completion of the full 30L architecture checklist. 30L.4 retains the remaining same-Global-Person cross-Tenant financial-isolation proof plus the final `make local-check`, deployed Playwright, and promotion/deployment verification gates.
+30L.4B must turn Development/Test deployed Playwright runs into immutable verification evidence. 30L.4C must require the exact Test evidence for Production, capture Production deployment/smoke evidence, and update the coverage manifest so `--require-complete` passes with no pending requirement.
