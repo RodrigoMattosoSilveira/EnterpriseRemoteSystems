@@ -83,6 +83,20 @@ func TestEnsureE2ETenantFixturesSurvivesAccountActorFoundationAndIsIdempotent(t 
 	if multiAccount.Login != e2eMultiTenantPersonLogin {
 		t.Fatalf("expected E2E multi-Tenant login %q, got %q", e2eMultiTenantPersonLogin, multiAccount.Login)
 	}
+	var multiPerson dbpkg.GlobalPerson
+	if err := database.First(&multiPerson, "id = ?", "e2e-multi-tenant-person").Error; err != nil {
+		t.Fatalf("find E2E multi-Tenant Global Person: %v", err)
+	}
+	if multiPerson.ProfileCompletionStatus != "COMPLETE" || !multiPerson.CanCreateCollaborator {
+		t.Fatalf(
+			"expected E2E multi-Tenant Global Person to be Collaborator-ready, got status=%q canCreateCollaborator=%v",
+			multiPerson.ProfileCompletionStatus,
+			multiPerson.CanCreateCollaborator,
+		)
+	}
+	if multiPerson.Street1 == "" || multiPerson.CEP == "" || multiPerson.BankName == "" || multiPerson.PIXKey == nil || *multiPerson.PIXKey == "" || multiPerson.EmergencyCellular == "" {
+		t.Fatalf("expected E2E multi-Tenant Global Person to retain complete address, bank, and emergency profile data, got %#v", multiPerson)
+	}
 	var multiBindings []authentication.AccountActor
 	if err := database.Where("account_id = ?", multiAccount.ID).Order("tenant_id ASC").Find(&multiBindings).Error; err != nil {
 		t.Fatalf("find E2E multi-Tenant Account/Actor bindings: %v", err)
