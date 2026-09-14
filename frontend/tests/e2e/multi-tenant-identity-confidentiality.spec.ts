@@ -16,6 +16,7 @@ const baseURL = process.env.PLAYWRIGHT_BASE_URL ?? "http://localhost:15173";
 const login = "e2e-multi-tenant-person@example.com";
 const personId = "e2e-multi-tenant-person";
 const accountId = "e2e-multi-tenant-account";
+const personNickname = "E2E Multi Tenant Person";
 const tenantA = {
   id: "e2e-multi-tenant-a",
   name: "E2E Multi Tenant A",
@@ -334,6 +335,84 @@ test.describe("Bite 30L multi-Tenant identity and confidentiality", () => {
     }
   });
 
+  test("same Global Person keeps self-service financial records isolated by selected Tenant without browser cache leakage", async ({ browser }, testInfo) => {
+    test.setTimeout(90_000);
+
+    const tenantAAdminApi = await newTenantAdminApi(tenantA.id);
+    const tenantBAdminApi = await newTenantAdminApi(tenantB.id);
+    const suffix = `${Date.now()}-${testInfo.workerIndex}`;
+    const markerA = `30L.4 Tenant A financial isolation ${suffix}`;
+    const markerB = `30L.4 Tenant B financial isolation ${suffix}`;
+
+    try {
+      const collaboratorA = await ensureMultiTenantCollaborator(
+        tenantAAdminApi,
+        tenantA,
+      );
+      const collaboratorB = await ensureMultiTenantCollaborator(
+        tenantBAdminApi,
+        tenantB,
+      );
+
+      await createTenantExpense(
+        tenantAAdminApi,
+        tenantA.id,
+        collaboratorA.id,
+        markerA,
+      );
+      await createTenantExpense(
+        tenantBAdminApi,
+        tenantB.id,
+        collaboratorB.id,
+        markerB,
+      );
+
+      const { context, page } = await signedInFixturePage(browser, tenantA.id);
+      try {
+        await assertCurrentAccountIsolation(
+          page,
+          tenantA,
+          collaboratorA.id,
+          markerA,
+          markerB,
+        );
+
+        await selectTenant(page, tenantB.id);
+        await assertCurrentAccountIsolation(
+          page,
+          tenantB,
+          collaboratorB.id,
+          markerB,
+          markerA,
+        );
+
+        // A stale React Query/cache entry from Tenant A must not become visible
+        // after switching to Tenant B, and the Tenant B Actor must not be able to
+        // address Tenant A's Collaborator Journey directly.
+        await page.goto(
+          `/collaborators/${encodeURIComponent(collaboratorA.id)}/current-account`,
+        );
+        await expect(page.getByText(markerA, { exact: true })).toHaveCount(0);
+        await expect(page.getByText(markerB, { exact: true })).toHaveCount(0);
+        await expect(page.getByRole("heading", { name: "Access forbidden" })).toBeVisible();
+
+        await selectTenant(page, tenantA.id);
+        await assertCurrentAccountIsolation(
+          page,
+          tenantA,
+          collaboratorA.id,
+          markerA,
+          markerB,
+        );
+      } finally {
+        await context.close();
+      }
+    } finally {
+      await tenantAAdminApi.dispose();
+      await tenantBAdminApi.dispose();
+    }
+  });
+
   test("the browser Tenant selector switches the same Account between Tenant A and Tenant B without a new login", async ({ browser }) => {
     const { context, page } = await signedInFixturePage(browser);
     try {
@@ -397,6 +476,234 @@ test.describe("Bite 30L multi-Tenant identity and confidentiality", () => {
     }
   });
 });
+
+type FinancialIsolationCollaborator = {
+  id: string;
+  tenantId?: string;
+  membershipId?: string;
+  statusCode?: string;
+  closedAt?: string;
+};
+
+type ReferenceDataOption = {
+  id: string;
+  tenantId?: string;
+  code?: string;
+  active?: boolean;
+};
+
+type PriceListItem = {
+  id: string;
+  tenantId?: string;
+  itemType?: string;
+  active?: boolean;
+};
+
+type CurrentAccountDetail = {
+  personId?: string;
+  collaboratorId?: string;
+  ledgerEntries?: {
+    items?: Array<{
+      tenantId?: string;
+      personId?: string;
+      collaboratorId?: string;
+      description?: string;
+    }>;
+  };
+};
+
+async function ensureMultiTenantCollaborator(
+  api: APIRequestContext,
+  tenant: typeof tenantA,
+): Promise<FinancialIsolationCollaborator> {
+  const listResponse = await api.get(e2eApiUrl("/api/v1/collaborators"), {
+    params: { search: personNickname, page: "1", pageSize: "100" },
+  });
+  expect(listResponse.status()).toBe(200);
+  const listEnvelope = (await listResponse.json()) as {
+    data?: { items?: FinancialIsolationCollaborator[] };
+  };
+  const existing = (listEnvelope.data?.items ?? []).find(
+    (candidate) =>
+      candidate.membershipId === tenant.membershipId &&
+      candidate.statusCode === "ACTIVE" &&
+      !candidate.closedAt,
+  );
+  if (existing) return existing;
+
+  const [statusId, paymentMethodId, sectorId, locationId, taskId] =
+    await Promise.all([
+      referenceDataId(api, tenant.id, "collaborator_status", "ACTIVE"),
+      referenceDataId(api, tenant.id, "method", "DAILY"),
+      referenceDataId(api, tenant.id, "sector", "MINING"),
+      referenceDataId(api, tenant.id, "location", "MAIN_MINE"),
+      referenceDataId(api, tenant.id, "task", "MINER"),
+    ]);
+
+  const response = await api.post(e2eApiUrl("/api/v1/collaborators"), {
+    data: {
+      membershipId: tenant.membershipId,
+      journeyStartDate: todayISODate(),
+      paymentMethodId,
+      paymentValue: 250.75,
+      dailyBrlAmount: 250.75,
+      planningAvailability: "ACTIVE",
+      sectorId,
+      locationId,
+      taskId,
+      statusId,
+      notes: "Bite 30L.4 same-Global-Person financial isolation fixture",
+    },
+  });
+  if (!response.ok()) {
+    throw new Error(
+      `Create ${tenant.id} financial-isolation Collaborator: HTTP ${response.status()} ${await response.text()}`,
+    );
+  }
+  const envelope = (await response.json()) as {
+    data?: FinancialIsolationCollaborator;
+  };
+  if (!envelope.data?.id) {
+    throw new Error(
+      `Create ${tenant.id} financial-isolation Collaborator: response did not include data`,
+    );
+  }
+  expect(envelope.data.tenantId).toBe(tenant.id);
+  expect(envelope.data.membershipId).toBe(tenant.membershipId);
+  return envelope.data;
+}
+
+async function referenceDataId(
+  api: APIRequestContext,
+  tenantId: string,
+  type: string,
+  code: string,
+): Promise<string> {
+  const response = await api.get(
+    e2eApiUrl(`/api/v1/reference-data/${encodeURIComponent(type)}`),
+  );
+  expect(response.status()).toBe(200);
+  const envelope = (await response.json()) as { data?: ReferenceDataOption[] };
+  const row = (envelope.data ?? []).find(
+    (candidate) =>
+      candidate.tenantId === tenantId &&
+      candidate.code === code &&
+      candidate.active !== false,
+  );
+  if (!row?.id) {
+    throw new Error(
+      `Missing ${type}/${code} reference data for financial-isolation Tenant ${tenantId}`,
+    );
+  }
+  return row.id;
+}
+
+async function createTenantExpense(
+  api: APIRequestContext,
+  tenantId: string,
+  collaboratorId: string,
+  description: string,
+): Promise<void> {
+  const priceListResponse = await api.get(e2eApiUrl("/api/v1/price-list-items"), {
+    params: { itemType: "CANTEEN", includeInactive: "false" },
+  });
+  expect(priceListResponse.status()).toBe(200);
+  const priceListEnvelope = (await priceListResponse.json()) as {
+    data?: PriceListItem[];
+  };
+  const item = (priceListEnvelope.data ?? []).find(
+    (candidate) =>
+      candidate.tenantId === tenantId &&
+      candidate.itemType === "CANTEEN" &&
+      candidate.active !== false,
+  );
+  if (!item?.id) {
+    throw new Error(
+      `Missing active CANTEEN price-list item for financial-isolation Tenant ${tenantId}`,
+    );
+  }
+
+  const response = await api.post(e2eApiUrl("/api/v1/expenses"), {
+    data: {
+      collaboratorId,
+      expenseDate: todayISODate(),
+      description,
+      priceListItemId: item.id,
+      currencyCode: "BRL",
+      quantity: 1,
+    },
+  });
+  if (!response.ok()) {
+    throw new Error(
+      `Create ${tenantId} financial-isolation Expense: HTTP ${response.status()} ${await response.text()}`,
+    );
+  }
+  const envelope = (await response.json()) as {
+    data?: {
+      tenantId?: string;
+      personId?: string;
+      collaboratorId?: string;
+      financialPosting?: { ledgerEntryId?: string };
+    };
+  };
+  expect(envelope.data).toMatchObject({
+    tenantId,
+    personId,
+    collaboratorId,
+  });
+  expect(envelope.data?.financialPosting?.ledgerEntryId).toBeTruthy();
+}
+
+async function assertCurrentAccountIsolation(
+  page: Page,
+  tenant: typeof tenantA,
+  collaboratorId: string,
+  ownMarker: string,
+  otherMarker: string,
+): Promise<void> {
+  const responsePromise = page.waitForResponse(
+    (response) =>
+      response.request().method() === "GET" &&
+      response.url().includes(
+        `/api/v1/collaborators/${encodeURIComponent(collaboratorId)}/current-account`,
+      ),
+  );
+  await page.goto(
+    `/collaborators/${encodeURIComponent(collaboratorId)}/current-account`,
+  );
+  const response = await responsePromise;
+  expect(response.status()).toBe(200);
+  const envelope = (await response.json()) as { data?: CurrentAccountDetail };
+  expect(envelope.data).toMatchObject({
+    personId,
+    collaboratorId,
+  });
+  const entries = envelope.data?.ledgerEntries?.items ?? [];
+  expect(entries.some((entry) => entry.description === ownMarker)).toBe(true);
+  expect(entries.some((entry) => entry.description === otherMarker)).toBe(false);
+  expect(
+    entries.every(
+      (entry) =>
+        entry.tenantId === tenant.id &&
+        entry.personId === personId &&
+        entry.collaboratorId === collaboratorId,
+    ),
+  ).toBe(true);
+  await expect(page.getByText(ownMarker, { exact: true })).toBeVisible();
+  await expect(page.getByText(otherMarker, { exact: true })).toHaveCount(0);
+}
+
+async function selectTenant(page: Page, tenantId: string): Promise<void> {
+  const selector = page.getByRole("button", { name: "Current tenant" });
+  await selector.click();
+  const selection = page.getByRole("region", { name: "Tenant selection" });
+  await selection.locator(`[role="option"][data-tenant-id="${tenantId}"]`).click();
+  await expect(selector).toHaveAttribute("data-selected-tenant-id", tenantId);
+}
+
+function todayISODate(): string {
+  return new Date().toISOString().slice(0, 10);
+}
 
 async function authenticatedFixtureApi(): Promise<APIRequestContext> {
   const api = await playwrightRequest.newContext({ baseURL: e2eApiUrl("/") });

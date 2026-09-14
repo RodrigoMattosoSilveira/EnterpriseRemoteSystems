@@ -117,7 +117,7 @@ export function CollaboratorDetailPage() {
                 {displayPersonName(collaborator)}
               </PageContextHeading>
               <p className="mt-1 text-sm text-gray-600">
-                <span className="font-semibold">Journey Code:</span>{" "}
+                <span className="font-semibold">Journey ID:</span>{" "}
                 <span className="break-all font-mono">{collaborator.id}</span>
               </p>
               <p className="mt-1 text-sm text-gray-500">

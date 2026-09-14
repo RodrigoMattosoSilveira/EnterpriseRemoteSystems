@@ -347,8 +347,13 @@ server-authz-bootstrap-config-check:
 server-public-smoke-script-check:
 	bash scripts/test-server-public-smoke.sh
 
+.PHONY: bite30l4-coverage-manifest-check
+bite30l4-coverage-manifest-check:
+	python3 scripts/verify-bite30l4-coverage-manifest.py
+
 .PHONY: local-check
 local-check:
+	$(MAKE) bite30l4-coverage-manifest-check
 	$(MAKE) local-hot-reload-check
 	$(MAKE) server-public-smoke-script-check
 	$(MAKE) local-sqlite-reset-check

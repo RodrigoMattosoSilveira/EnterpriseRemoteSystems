@@ -257,14 +257,30 @@ func ensureE2EMultiTenantPerson(ctx context.Context, database *gorm.DB, password
 			}
 		}
 
+		pixKey := "e2e-multi-tenant-person-pix@example.com"
 		person := dbpkg.GlobalPerson{
 			BaseModel: dbpkg.BaseModel{ID: "e2e-multi-tenant-person", CreatedAt: now, UpdatedAt: now},
 			FirstName: "E2E", LastName: "Multi Tenant Person", Nickname: "E2E Multi Tenant Person",
 			CPF: "e2e-multi-tenant-person-cpf", RG: "e2e-multi-tenant-person-rg",
-			Cellular: "e2e-multi-tenant-person-cellular", Email: e2eMultiTenantPersonLogin, Country: "Brasil",
+			Cellular: "11912345678", Email: e2eMultiTenantPersonLogin,
+			Street1: "Rua E2E Multi Tenant 100", State: "SP", City: "Sao Paulo", CEP: "01001000", Country: "Brasil",
+			BankName: "Banco E2E", BankNumber: "001", CheckingAccount: "300L4-1", PIXKey: &pixKey,
+			EmergencyName: "E2E Emergency Contact", EmergencyCellular: "11987654321", EmergencyEmail: "e2e-multi-tenant-emergency@example.com",
+			ProfileCompletionStatus: "COMPLETE", CanCreateCollaborator: true, OperationalActive: true,
 		}
 		if err := tx.Where("id = ?", person.ID).FirstOrCreate(&person).Error; err != nil {
 			return fmt.Errorf("ensure E2E multi-Tenant Global Person: %w", err)
+		}
+		if err := tx.Model(&dbpkg.GlobalPerson{}).Where("id = ?", person.ID).Updates(map[string]any{
+			"first_name": person.FirstName, "last_name": person.LastName, "nickname": person.Nickname,
+			"cpf": person.CPF, "rg": person.RG, "cellular": person.Cellular, "email": person.Email,
+			"street1": person.Street1, "state": person.State, "city": person.City, "cep": person.CEP, "country": person.Country,
+			"bank_name": person.BankName, "bank_number": person.BankNumber, "checking_account": person.CheckingAccount, "pix_key": pixKey,
+			"emergency_name": person.EmergencyName, "emergency_cellular": person.EmergencyCellular, "emergency_email": person.EmergencyEmail,
+			"profile_completion_status": person.ProfileCompletionStatus, "can_create_collaborator": true, "operational_active": true,
+			"updated_at": now,
+		}).Error; err != nil {
+			return fmt.Errorf("reconcile E2E multi-Tenant Global Person: %w", err)
 		}
 
 		passwordHash, err := bcrypt.GenerateFromPassword([]byte(password), passwordHashCost)
