@@ -191,12 +191,16 @@
       "issueNumber": 20,
       "title": "Add Authentication and Authorization",
       "status": "SUPERSEDED BY BITE 30",
-      "rationale": "The original JWT/header-era proposal is no longer the architecture. Production uses login-backed sessions plus canonical Authentication Account -> AccountActor -> exact Actor/Tenant authorization, hardened throughout Bite 30.",
+      "rationale": "The original JWT/header-era proposal is no longer the architecture. Production uses login-backed sessions plus canonical Authentication Account -> AccountActor -> exact Actor/Tenant authorization; Bite 30D explicitly separates intrinsic self-service authority from delegated Role Grants, and later Bite 30 slices harden session, Tenant-selection, and isolation boundaries.",
       "recommendedDisposition": "close-not-planned",
       "evidence": [
         {
           "file": "docs/user-authentication-foundation.md",
           "contains": "Bite 30E supersession"
+        },
+        {
+          "file": "docs/bite-30d-self-service-delegated-authorization-refactor.md",
+          "contains": "Roles and Role Grants now represent delegated authority only"
         },
         {
           "file": "docs/bite-30e-session-tenant-selection-refactor.md",
@@ -312,15 +316,20 @@
     {
       "issueNumber": 63,
       "title": "Marinaldo Brito missing RG",
-      "status": "OPEN",
-      "rationale": "This is an operational Production-data issue, not a source-code feature. The repository baseline does not contain Production Person data, so the record cannot be proven corrected from source and should remain open until the Production record is verified.",
-      "recommendedDisposition": "keep-open",
+      "status": "OBSOLETE",
+      "rationale": "The named Person record is not present as an actionable Production record, so there is no RG correction to perform. The issue was closed after the owner confirmed that the record had been removed/not added; it no longer represents an outstanding Production-data defect.",
+      "recommendedDisposition": "close-not-planned",
       "evidence": [
         {
           "file": "docs/05 - Deployment/Database Promotion Strategy.md",
           "contains": "Production"
         }
-      ]
+      ],
+      "githubDecision": {
+        "state": "closed",
+        "stateReason": "completed",
+        "decision": "The named Person record is not present, so there is no record to correct."
+      }
     },
     {
       "issueNumber": 69,
@@ -359,9 +368,9 @@
     {
       "issueNumber": 130,
       "title": "I, as an application user, when adding avperson's recoerd, if the nicknameis blank, I want the app to use the person's first name",
-      "status": "OPEN",
-      "rationale": "The issue checklist is stale relative to Production: backend create/update validation still requires nickname, service persistence does not default blank nickname to firstName, and frontend E2E still addresses the field as required.",
-      "recommendedDisposition": "keep-open",
+      "status": "OBSOLETE",
+      "rationale": "Production intentionally continues to require an explicit Person nickname on create and update. After reviewing the implemented behavior, the product decision is to preserve that model and learn from operational use before reconsidering Person naming semantics; automatic nickname = firstName defaulting is therefore not planned.",
+      "recommendedDisposition": "close-not-planned",
       "evidence": [
         {
           "file": "backend/internal/people/validation.go",
@@ -375,7 +384,12 @@
           "file": "frontend/tests/e2e/people.spec.ts",
           "contains": "getByLabel(\"Nickname *\")"
         }
-      ]
+      ],
+      "githubDecision": {
+        "state": "closed",
+        "stateReason": "completed",
+        "decision": "Preserve required explicit nickname behavior and learn from Production practice before changing Person naming semantics."
+      }
     },
     {
       "issueNumber": 151,
@@ -657,5 +671,13 @@
         }
       ]
     }
-  ]
+  ],
+  "decisionRefresh": {
+    "date": "2026-09-14",
+    "patchBaseCommit": "3c6a5d0b5b69c97b1b0b7322a2d1427a795b1746",
+    "notes": [
+      "Issues #63 and #130 remain in scope because they were open when issue #853 was created, but later owner decisions closed them and make their requested changes non-actionable.",
+      "Completed Bite 30D issue #708 is baseline architecture evidence for the supersession of the earlier generic authentication/authorization issue #20."
+    ]
+  }
 }

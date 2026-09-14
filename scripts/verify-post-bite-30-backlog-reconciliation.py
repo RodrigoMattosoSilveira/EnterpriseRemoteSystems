@@ -114,6 +114,15 @@ def main() -> int:
     require_equal(source.get("treeSha"), EXPECTED_PRODUCTION_TREE, "source tree")
     require_equal(source.get("treeMatchesProduction"), True, "treeMatchesProduction")
 
+    refresh = document.get("decisionRefresh")
+    if not isinstance(refresh, dict):
+        fail("decisionRefresh must be an object")
+    require_equal(
+        refresh.get("patchBaseCommit"),
+        "3c6a5d0b5b69c97b1b0b7322a2d1427a795b1746",
+        "decision-refresh patch base",
+    )
+
     scope = document.get("scope")
     if not isinstance(scope, dict):
         fail("scope must be an object")
@@ -124,6 +133,13 @@ def main() -> int:
         fail("items must be an array")
     issue_numbers = [item.get("issueNumber") for item in items if isinstance(item, dict)]
     require_equal(issue_numbers, EXPECTED_ISSUES, "item issue ordering")
+
+    by_issue = {item["issueNumber"]: item for item in items}
+    require_equal(by_issue[63].get("status"), "OBSOLETE", "issue #63 status")
+    require_equal(by_issue[130].get("status"), "OBSOLETE", "issue #130 status")
+    require_equal(
+        by_issue[20].get("status"), "SUPERSEDED BY BITE 30", "issue #20 status"
+    )
 
     for item in items:
         issue_number = item["issueNumber"]
@@ -186,7 +202,9 @@ def main() -> int:
     for marker in (
         EXPECTED_PRODUCTION_COMMIT,
         EXPECTED_PRODUCTION_TREE,
+        "#63",
         "#130",
+        "Bite 30D",
         "#838",
         "#840",
         "#841",

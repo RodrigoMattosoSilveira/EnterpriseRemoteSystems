@@ -6,7 +6,7 @@ Issue: **#853**
 
 This document reconciles the GitHub backlog that was still open when issue #853 was created against the actual Bite 30 Production source tree. It does **not** reopen Bite 30 and it does **not** define Bite 31. Its purpose is to establish which older issues are already delivered, partially delivered, still open, obsolete, or superseded by Bite 30 before the next roadmap decision.
 
-No GitHub issue state is changed by this patch. The `recommendedDisposition` field in the machine-readable manifest is advisory so issue closure can be reviewed deliberately.
+No GitHub issue state is changed by this patch. The `recommendedDisposition` field in the machine-readable manifest is advisory so issue closure can be reviewed deliberately. Because the scope is an immutable snapshot of issues that were open when #853 was created, issues closed afterward remain listed; #63 and #130 are now recorded as `OBSOLETE` based on the owner decisions that closed them.
 
 ## Production baseline
 
@@ -17,7 +17,9 @@ No GitHub issue state is changed by this patch. The `recommendedDisposition` fie
 - Issue #853 source commit: `f53c5fbcb73501db837d031d03c0648ac7a97b25`
 - Issue #853 source Git tree: `7e5c70f986960e719174ce05aede8570a555ef65`
 
-The issue-853 source tree and the Production tree are identical. The reconciliation therefore evaluates the exact Production source contents even though the merge commit SHA differs.
+The issue-853 source tree and the Production tree are identical. The reconciliation therefore evaluates the exact Production source contents even though the merge commit SHA differs. The later reconciliation-document commit (`3c6a5d0b5b69c97b1b0b7322a2d1427a795b1746`) intentionally differs from Production because it adds this backlog artifact; it does not change the Production baseline being evaluated.
+
+Bite 30D (`#708 — Self-Service and Delegated Authorization Refactor`) is treated as completed baseline architecture: intrinsic self-service derives from identity, while Roles and Role Grants represent delegated authority.
 
 ## Classification result
 
@@ -25,8 +27,8 @@ The issue-853 source tree and the Production tree are identical. The reconciliat
 |---|---:|---|
 | DONE | 11 | Production source implements the issue intent. |
 | PARTIALLY DONE | 6 | Production implements a meaningful part, but the requested outcome is incomplete. |
-| OPEN | 12 | The requested outcome is not implemented or still requires operational verification. |
-| OBSOLETE | 2 | The product/architecture made the original question or proposed direction no longer applicable. |
+| OPEN | 10 | The requested outcome is not implemented or still requires operational verification. |
+| OBSOLETE | 4 | The product/architecture made the original question or proposed direction no longer applicable. |
 | SUPERSEDED BY BITE 30 | 2 | Bite 30 replaced the issue's earlier model with the canonical Identity/Access architecture. |
 
 ## Issue-by-issue reconciliation
@@ -40,16 +42,16 @@ The issue-853 source tree and the Production tree are identical. The reconciliat
 | #16 — Add E2E tests for Person | **DONE** | Close as completed | People E2E coverage exists for create, filter/pagination, view switching, required-field validation, duplicate CPF, and cellular validation. |
 | #17 — Add a filter to Person list | **DONE** | Close as completed | The People landing page has live search plus status/profile/collaborator-eligibility filters and card/list views. |
 | #19 — Implement person tests for front end | **DONE** | Close as completed | Frontend unit coverage exists for People list/detail/form behavior in addition to E2E coverage. |
-| #20 — Add Authentication and Authorization | **SUPERSEDED BY BITE 30** | Close as not planned / obsolete | The original JWT/header-era proposal is no longer the architecture. Production uses login-backed sessions plus canonical Authentication Account -> AccountActor -> exact Actor/Tenant authorization, hardened throughout Bite 30. |
+| #20 — Add Authentication and Authorization | **SUPERSEDED BY BITE 30** | Close as not planned / obsolete | The original JWT/header-era proposal is no longer the architecture. Production uses login-backed sessions plus canonical Authentication Account -> AccountActor -> exact Actor/Tenant authorization; Bite 30D explicitly separates intrinsic self-service authority from delegated Role Grants, and later Bite 30 slices harden session, Tenant-selection, and isolation boundaries. |
 | #22 — Refactor to a cloud first architecture | **OBSOLETE** | Close as not planned / obsolete | The issue specifies a Google Cloud/Terraform target, while the actual Production baseline is Docker Compose on a Hetzner-hosted server behind Caddy and SQLite. Relevant contract/database follow-ups survive as separate backlog issues; the original umbrella direction is no longer the deployed architecture. |
 | #26 — Wiring this spec into your Go/React projects | **PARTIALLY DONE** | Keep open | OpenAPI contracts and generated Go/TypeScript artifacts exist, but the original api/spec/full.yaml-as-single-contract/runtime-generated-client wiring is not the current implementation and generated types are not the sole runtime boundary. |
 | #28 — Abstract the DB driver config | **OPEN** | Keep open | Production database opening is SQLite-specific; there is no runtime DB_DRIVER switch or PostgreSQL GORM driver abstraction. |
 | #59 — Implement and validate the People update flow | **DONE** | Close as completed | People update is implemented with backend validation/uniqueness handling and frontend detail/edit tests. |
 | #60 — Design and implement a safe bulk-import | **DONE** | Close as completed | A People CSV importer, CLI command, dry-run Make target, validation tests, and all-or-nothing import behavior are present. |
-| #63 — Marinaldo Brito missing RG | **OPEN** | Keep open | This is an operational Production-data issue, not a source-code feature. The repository baseline does not contain Production Person data, so the record cannot be proven corrected from source and should remain open until the Production record is verified. |
+| #63 — Marinaldo Brito missing RG | **OBSOLETE** | Close as not planned / obsolete | The named Person record is not present as an actionable Production record, so there is no RG correction to perform. The issue was closed after the owner confirmed that the record had been removed/not added; it no longer represents an outstanding Production-data defect. |
 | #69 — A few person use cases | **DONE** | Close as completed | The People UI supports search/filtering, Active/Inactive-style status filters, card/list presentation, and navigation from a displayed Person to the full Person record. |
 | #128 — There is no reference data for Periodo | **OPEN** | Keep open | The canonical reference-data seed has no Diurno/Noturno (day/night period) reference type; Work Period naming remains shift-like rather than backed by the requested reference data. |
-| #130 — I, as an application user, when adding avperson's recoerd, if the nicknameis blank, I want the app to use the person's first name | **OPEN** | Keep open | The issue checklist is stale relative to Production: backend create/update validation still requires nickname, service persistence does not default blank nickname to firstName, and frontend E2E still addresses the field as required. |
+| #130 — I, as an application user, when adding avperson's recoerd, if the nicknameis blank, I want the app to use the person's first name | **OBSOLETE** | Close as not planned / obsolete | Production intentionally continues to require an explicit Person nickname on create and update. After reviewing the implemented behavior, the product decision is to preserve that model and learn from operational use before reconsidering Person naming semantics; automatic `nickname = firstName` defaulting is therefore not planned. |
 | #151 — Should we allow Editing expenese | **OBSOLETE** | Close as not planned / obsolete | The product has made the safer decision: incorrect Expenses are not edited in place in the UI; they are cancelled with an auditable reversal and recreated as a replacement. The original open-ended design question is therefore obsolete. |
 | #181 — Use nickname in the Work Plan Inform Form | **PARTIALLY DONE** | Keep open | The Inform workflow now exposes collaborator nickname, including absence warnings and printed roster rows, but printed roster rows still render full name first and nickname second rather than using nickname as the primary displayed identity. |
 | #291 — Write an e2e test to validate pending receipts | **DONE** | Close as completed | The requested exact lifecycle is covered: create debit receipt, confirm outstanding, open printable receipt, return with signed reference, and confirm it disappears from outstanding receipts. |
@@ -71,13 +73,14 @@ The issue-853 source tree and the Production tree are identical. The reconciliat
 
 After reviewing this reconciliation, issues classified `DONE`, `OBSOLETE`, or `SUPERSEDED BY BITE 30` can be closed with a short comment pointing to this Production-baseline reconciliation. Issues classified `PARTIALLY DONE` or `OPEN` should remain available for roadmap prioritization.
 
-Issues recommended for closure: #5, #9, #15, #16, #17, #19, #20, #22, #59, #60, #69, #151, #291, #409, #844.
+Issues recommended for closure: #5, #9, #15, #16, #17, #19, #20, #22, #59, #60, #63, #69, #130, #151, #291, #409, #844.
 
-Issues recommended to remain open: #11, #26, #28, #63, #128, #130, #181, #304, #621, #622, #623, #624, #625, #838, #840, #841, #842, #843.
+Issues recommended to remain open: #11, #26, #28, #128, #181, #304, #621, #622, #623, #624, #625, #838, #840, #841, #842, #843.
 
 ## Important findings for future roadmap planning
 
-- **Nickname defaulting remains genuinely open (#130).** Production still requires a nickname even though the issue checklist itself says otherwise.
+- **Required nickname behavior is intentionally preserved (#130).** Production still requires an explicit nickname; the automatic `nickname = firstName` proposal is now obsolete unless future Production experience justifies reopening the design decision.
+- **The Marinaldo Brito RG item is no longer actionable (#63).** The named Person record is not present, so there is no Production record to correct.
 - **PostgreSQL remains genuinely open (#28/#838).** The Production database driver is SQLite-only.
 - **Periodic Production backups are only partial (#840).** Pre-deployment verified backups are strong, but periodic daily/weekly scheduling is not repository-enforced.
 - **Device/IP security is only partial (#841).** Sessions capture IP/User-Agent, but device authorization does not exist.
