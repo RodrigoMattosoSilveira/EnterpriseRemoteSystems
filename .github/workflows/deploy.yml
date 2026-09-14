@@ -311,6 +311,42 @@ jobs:
              echo 'Preflight checks passed for ${{ steps.target.outputs.env_name }}'
             "
 
+      - name: Capture required Test release evidence for Production
+        id: production_test_evidence
+        if: ${{ steps.target.outputs.env_name == 'production' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          EVIDENCE_DIR="deployment-evidence/production-release-gate"
+          MARKER_FILE="${EVIDENCE_DIR}/test-release-rehearsal.marker"
+          NORMALIZED_FILE="${EVIDENCE_DIR}/test-release-rehearsal-verification.json"
+          mkdir -p "${EVIDENCE_DIR}"
+
+          ssh -i ~/.ssh/id_ed25519 \
+            "${DEPLOY_USER}@${DEPLOY_HOST}" \
+            "cat '/opt/EnterpriseRemoteSystems/test/release-rehearsal-passed/${{ steps.revision.outputs.tree_sha }}.passed'" \
+            > "${MARKER_FILE}"
+
+          python3 scripts/verify-test-release-rehearsal-marker.py \
+            --file "${MARKER_FILE}" \
+            --expected-tree-sha '${{ steps.revision.outputs.tree_sha }}' \
+            --expected-baseline-last-migration '000062_tenant_administrator_cardinality.up.sql' \
+            --expected-first-rehearsed-migration '000063_global_administration_control_plane.up.sql' \
+            --expected-final-migration '000070_revoke_noncanonical_application_admin_grants.up.sql' \
+            --expected-deployment-final-migration '000070_revoke_noncanonical_application_admin_grants.up.sql' \
+            --normalized-output "${NORMALIZED_FILE}"
+
+          TEST_REVISION="$(jq -r '.testRevision' "${NORMALIZED_FILE}")"
+          TEST_EVIDENCE_ARTIFACT="$(jq -r '.deployedPlaywrightEvidence.artifact' "${NORMALIZED_FILE}")"
+          TEST_EVIDENCE_SHA256="$(jq -r '.deployedPlaywrightEvidence.sha256' "${NORMALIZED_FILE}")"
+          echo "test_revision=${TEST_REVISION}" >> "$GITHUB_OUTPUT"
+          echo "test_evidence_artifact=${TEST_EVIDENCE_ARTIFACT}" >> "$GITHUB_OUTPUT"
+          echo "test_evidence_sha256=${TEST_EVIDENCE_SHA256}" >> "$GITHUB_OUTPUT"
+
+          echo "Production tree is covered by Test release evidence:"
+          cat "${NORMALIZED_FILE}"
+
       - name: Deploy app stack
         shell: bash
         run: |
@@ -433,6 +469,74 @@ jobs:
              make ${{ steps.target.outputs.make_prefix }}-smoke
             "
 
+      - name: Generate immutable Production release-gate evidence
+        id: production_evidence
+        if: ${{ steps.target.outputs.env_name == 'production' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          EVIDENCE_DIR="deployment-evidence/production-release-gate"
+          TEST_EVIDENCE_FILE="${EVIDENCE_DIR}/test-release-rehearsal-verification.json"
+          PRODUCTION_EVIDENCE_FILE="${EVIDENCE_DIR}/production-release-gate-evidence.json"
+          EVIDENCE_ARTIFACT_NAME="production-release-gate-evidence-${{ steps.revision.outputs.sha }}-${{ steps.revision.outputs.tree_sha }}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+
+          SERVER_IDENTITY="$(ssh -i ~/.ssh/id_ed25519 \
+            "${DEPLOY_USER}@${DEPLOY_HOST}" \
+            "cd '${{ steps.target.outputs.env_dir }}' && printf '%s %s\n' \"\$(git rev-parse HEAD)\" \"\$(git rev-parse HEAD^{tree})\"")"
+          read -r SERVER_REVISION SERVER_TREE_SHA <<< "${SERVER_IDENTITY}"
+
+          python3 scripts/write-production-release-evidence.py \
+            --base-url 'https://${{ steps.target.outputs.domain }}' \
+            --revision '${{ steps.revision.outputs.sha }}' \
+            --tree-sha '${{ steps.revision.outputs.tree_sha }}' \
+            --server-revision "${SERVER_REVISION}" \
+            --server-tree-sha "${SERVER_TREE_SHA}" \
+            --test-release-evidence "${TEST_EVIDENCE_FILE}" \
+            --repository "${GITHUB_REPOSITORY}" \
+            --git-ref "${GITHUB_REF}" \
+            --workflow "${GITHUB_WORKFLOW}" \
+            --run-id "${GITHUB_RUN_ID}" \
+            --run-attempt "${GITHUB_RUN_ATTEMPT}" \
+            --artifact-name "${EVIDENCE_ARTIFACT_NAME}" \
+            --output "${PRODUCTION_EVIDENCE_FILE}"
+
+          python3 scripts/verify-production-release-evidence.py \
+            --file "${PRODUCTION_EVIDENCE_FILE}" \
+            --expected-revision '${{ steps.revision.outputs.sha }}' \
+            --expected-tree-sha '${{ steps.revision.outputs.tree_sha }}' \
+            --expected-artifact-name "${EVIDENCE_ARTIFACT_NAME}"
+
+          EVIDENCE_SHA256="$(sha256sum "${PRODUCTION_EVIDENCE_FILE}" | awk '{print $1}')"
+          echo "artifact_name=${EVIDENCE_ARTIFACT_NAME}" >> "$GITHUB_OUTPUT"
+          echo "sha256=${EVIDENCE_SHA256}" >> "$GITHUB_OUTPUT"
+
+          {
+            echo "## Production Release-Gate Evidence"
+            echo
+            echo "| Item | Value |"
+            echo "|---|---|"
+            echo "| Production revision | ${{ steps.revision.outputs.sha }} |"
+            echo "| Production tree SHA | ${{ steps.revision.outputs.tree_sha }} |"
+            echo "| Required Test revision | ${{ steps.production_test_evidence.outputs.test_revision }} |"
+            echo "| Required Test evidence artifact | ${{ steps.production_test_evidence.outputs.test_evidence_artifact }} |"
+            echo "| Required Test evidence SHA-256 | ${{ steps.production_test_evidence.outputs.test_evidence_sha256 }} |"
+            echo "| Production evidence artifact | ${EVIDENCE_ARTIFACT_NAME} |"
+            echo "| Production evidence SHA-256 | ${EVIDENCE_SHA256} |"
+            echo "| Production public smoke | passed |"
+            echo "| Result | passed |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload immutable Production release-gate evidence
+        if: ${{ steps.target.outputs.env_name == 'production' }}
+        uses: actions/upload-artifact@v6
+        with:
+          name: ${{ steps.production_evidence.outputs.artifact_name }}
+          path: deployment-evidence/production-release-gate/
+          if-no-files-found: error
+          overwrite: false
+          retention-days: 365
+
       - name: Deployment summary
         if: always()
         shell: bash
@@ -454,6 +558,10 @@ jobs:
             echo "| Test release rehearsal | ${{ steps.target.outputs.test_release_rehearsal }} |"
             echo "| Source tree | ${{ steps.revision.outputs.tree_sha }} |"
             echo "| Deployed Playwright | ${{ steps.target.outputs.run_playwright_post_deploy }} |"
+            if [[ '${{ steps.target.outputs.env_name }}' == 'production' ]]; then
+              echo "| Required Test evidence | ${{ steps.production_test_evidence.outputs.test_evidence_artifact }} |"
+              echo "| Production release evidence | ${{ steps.production_evidence.outputs.artifact_name }} |"
+            fi
           } >> "$GITHUB_STEP_SUMMARY"
 
   deployed-playwright:
