@@ -78,6 +78,7 @@ help:
 	@echo "  make backend-check"
 	@echo "  make frontend-check"
 	@echo "  make local-check"
+	@echo "  make deployed-playwright-evidence-check"
 	@echo "  make migration-check"
 	@echo "  make migration-rehearsal-check"
 	@echo "  make local-docker-check"
@@ -100,7 +101,7 @@ help:
 	@echo "  make server-test-rehearsal-ensure-baseline"
 	@echo "  make server-test-rehearsal-restore"
 	@echo "  make server-migrated-db-verify ENV=development|test|production"
-	@echo "  make server-record-test-release-rehearsal ENV=test TREE_SHA=<tree> REVISION=<sha>"
+	@echo "  make server-record-test-release-rehearsal ENV=test TREE_SHA=<tree> REVISION=<sha> PLAYWRIGHT_EVIDENCE_SHA256=<sha256> PLAYWRIGHT_EVIDENCE_ARTIFACT=<artifact>"
 	@echo "  make server-require-test-release-rehearsal ENV=production TREE_SHA=<tree>"
 	@echo "  make server-ps ENV=development|test|production"
 	@echo "  make server-diagnostics ENV=development|test|production"
@@ -351,9 +352,14 @@ server-public-smoke-script-check:
 bite30l4-coverage-manifest-check:
 	python3 scripts/verify-bite30l4-coverage-manifest.py
 
+.PHONY: deployed-playwright-evidence-check
+deployed-playwright-evidence-check:
+	python3 scripts/test-deployed-playwright-evidence.py
+
 .PHONY: local-check
 local-check:
 	$(MAKE) bite30l4-coverage-manifest-check
+	$(MAKE) deployed-playwright-evidence-check
 	$(MAKE) local-hot-reload-check
 	$(MAKE) server-public-smoke-script-check
 	$(MAKE) local-sqlite-reset-check
@@ -406,7 +412,7 @@ local-docker-check: local-docker-check-image
 		-e GOMODCACHE=/tmp/gomod \
 		-e NPM_CONFIG_CACHE=/tmp/npm-cache \
 		$(LOCAL_DOCKER_CHECK_IMAGE) \
-		bash -lc 'set -euo pipefail; make local-hot-reload-check; make server-authz-bootstrap-config-check; make legacy-identity-dependency-check; make migration-rehearsal-check; cd backend && go clean -testcache && go test ./...; cd ../frontend && npm ci && npm run test:run && npx playwright install chromium && npx playwright test && npm run build'
+		bash -lc 'set -euo pipefail; make bite30l4-coverage-manifest-check; make deployed-playwright-evidence-check; make local-hot-reload-check; make server-authz-bootstrap-config-check; make legacy-identity-dependency-check; make migration-rehearsal-check; cd backend && go clean -testcache && go test ./...; cd ../frontend && npm ci && npm run test:run && npx playwright install chromium && npx playwright test && npm run build'
 
 # ==============================================================================
 # Generic server environment targets
@@ -616,6 +622,14 @@ server-record-test-release-rehearsal:
 		echo "TREE_SHA and REVISION are required."; \
 		exit 2; \
 	fi
+	@if [[ -z "$(PLAYWRIGHT_EVIDENCE_SHA256)" || -z "$(PLAYWRIGHT_EVIDENCE_ARTIFACT)" ]]; then \
+		echo "PLAYWRIGHT_EVIDENCE_SHA256 and PLAYWRIGHT_EVIDENCE_ARTIFACT are required."; \
+		exit 2; \
+	fi
+	@if ! [[ "$(PLAYWRIGHT_EVIDENCE_SHA256)" =~ ^[0-9a-f]{64}$$ ]]; then \
+		echo "PLAYWRIGHT_EVIDENCE_SHA256 must be a lowercase SHA-256 digest."; \
+		exit 2; \
+	fi
 	@$(MAKE) server-migrated-db-verify ENV=test
 	@baseline="$(TEST_RELEASE_BASELINE_DB)"; \
 	if [[ ! -f "$$baseline" ]]; then \
@@ -628,6 +642,8 @@ server-record-test-release-rehearsal:
 	{ \
 		echo "tree_sha=$(TREE_SHA)"; \
 		echo "revision=$(REVISION)"; \
+		echo "deployed_playwright_evidence_sha256=$(PLAYWRIGHT_EVIDENCE_SHA256)"; \
+		echo "deployed_playwright_evidence_artifact=$(PLAYWRIGHT_EVIDENCE_ARTIFACT)"; \
 		echo "baseline=$$baseline"; \
 		echo "baseline_sha256=$$baseline_sha"; \
 		echo "baseline_last_migration=$(TEST_RELEASE_BASELINE_LAST_MIGRATION)"; \

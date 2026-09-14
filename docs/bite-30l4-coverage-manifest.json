@@ -7,8 +7,13 @@
       "requirement": "schema + migration hardening verification",
       "status": "covered",
       "evidence": [
-        {"file": "Makefile", "makeTarget": "migration-rehearsal-check"},
-        {"file": "backend/verify-migrated-db.sh"}
+        {
+          "file": "Makefile",
+          "makeTarget": "migration-rehearsal-check"
+        },
+        {
+          "file": "backend/verify-migrated-db.sh"
+        }
       ]
     },
     {
@@ -16,8 +21,14 @@
       "requirement": "authorization-boundary verification",
       "status": "covered",
       "evidence": [
-        {"file": "frontend/tests/e2e/authorization-boundaries.spec.ts", "testTitle": "unknown actors cannot gain permissions through X-Actor-Permissions"},
-        {"file": "frontend/tests/e2e/authorization-boundaries.spec.ts", "testTitle": "role grants enforce application and tenant scope rules"}
+        {
+          "file": "frontend/tests/e2e/authorization-boundaries.spec.ts",
+          "testTitle": "unknown actors cannot gain permissions through X-Actor-Permissions"
+        },
+        {
+          "file": "frontend/tests/e2e/authorization-boundaries.spec.ts",
+          "testTitle": "role grants enforce application and tenant scope rules"
+        }
       ]
     },
     {
@@ -25,8 +36,14 @@
       "requirement": "Tenant/User/Auth E2E coverage",
       "status": "covered",
       "evidence": [
-        {"file": "frontend/tests/e2e/authentication-tenant-ux.spec.ts", "testTitle": "authenticated user can see identity, tenant, sign out, and sign back in"},
-        {"file": "frontend/tests/e2e/people.spec.ts", "testTitle": "Tenant Administrator can create a Person and define the initial temporary password"}
+        {
+          "file": "frontend/tests/e2e/authentication-tenant-ux.spec.ts",
+          "testTitle": "authenticated user can see identity, tenant, sign out, and sign back in"
+        },
+        {
+          "file": "frontend/tests/e2e/people.spec.ts",
+          "testTitle": "Tenant Administrator can create a Person and define the initial temporary password"
+        }
       ]
     },
     {
@@ -34,16 +51,25 @@
       "requirement": "multi-tenant Authentication Account / Actor-selection E2E",
       "status": "covered",
       "evidence": [
-        {"file": "frontend/tests/e2e/multi-tenant-identity-confidentiality.spec.ts", "testTitle": "one Account selects the exact Tenant Actor and exposes only that Membership projection"},
-        {"file": "frontend/tests/e2e/multi-tenant-identity-confidentiality.spec.ts", "testTitle": "the browser Tenant selector switches the same Account between Tenant A and Tenant B without a new login"}
+        {
+          "file": "frontend/tests/e2e/multi-tenant-identity-confidentiality.spec.ts",
+          "testTitle": "one Account selects the exact Tenant Actor and exposes only that Membership projection"
+        },
+        {
+          "file": "frontend/tests/e2e/multi-tenant-identity-confidentiality.spec.ts",
+          "testTitle": "the browser Tenant selector switches the same Account between Tenant A and Tenant B without a new login"
+        }
       ]
     },
     {
       "id": 5,
-      "requirement": "cross-tenant Person–Membership confidentiality E2E",
+      "requirement": "cross-tenant Person\u2013Membership confidentiality E2E",
       "status": "covered",
       "evidence": [
-        {"file": "frontend/tests/e2e/multi-tenant-identity-confidentiality.spec.ts", "testTitle": "Tenant Administrators see only their own Membership projection for the shared Person"}
+        {
+          "file": "frontend/tests/e2e/multi-tenant-identity-confidentiality.spec.ts",
+          "testTitle": "Tenant Administrators see only their own Membership projection for the shared Person"
+        }
       ]
     },
     {
@@ -51,8 +77,14 @@
       "requirement": "cross-tenant financial isolation E2E",
       "status": "covered",
       "evidence": [
-        {"file": "frontend/tests/e2e/multi-tenant-identity-confidentiality.spec.ts", "testTitle": "same Global Person keeps self-service financial records isolated by selected Tenant without browser cache leakage"},
-        {"file": "frontend/tests/e2e/tenant-operational-domain-isolation.spec.ts", "testTitle": "operational domain records created in default are hidden from another tenant"}
+        {
+          "file": "frontend/tests/e2e/multi-tenant-identity-confidentiality.spec.ts",
+          "testTitle": "same Global Person keeps self-service financial records isolated by selected Tenant without browser cache leakage"
+        },
+        {
+          "file": "frontend/tests/e2e/tenant-operational-domain-isolation.spec.ts",
+          "testTitle": "operational domain records created in default are hidden from another tenant"
+        }
       ]
     },
     {
@@ -60,8 +92,14 @@
       "requirement": "Application Administrator control-plane isolation E2E",
       "status": "covered",
       "evidence": [
-        {"file": "frontend/tests/e2e/support-access-leases-authorization.spec.ts", "testTitle": "Application Administrator remains GLOBAL-only until an exact-Tenant support lease is approved"},
-        {"file": "frontend/tests/e2e/authentication-tenant-ux.spec.ts", "testTitle": "application administrator remains in the global control plane when a Tenant is created"}
+        {
+          "file": "frontend/tests/e2e/support-access-leases-authorization.spec.ts",
+          "testTitle": "Application Administrator remains GLOBAL-only until an exact-Tenant support lease is approved"
+        },
+        {
+          "file": "frontend/tests/e2e/authentication-tenant-ux.spec.ts",
+          "testTitle": "application administrator remains in the global control plane when a Tenant is created"
+        }
       ]
     },
     {
@@ -69,8 +107,14 @@
       "requirement": "Tenant Support Access Lease approval/expiration/immediate-termination E2E",
       "status": "covered",
       "evidence": [
-        {"file": "frontend/tests/e2e/support-access-leases-authorization.spec.ts", "testTitle": "approved support lease expires, removes Tenant authority, and preserves exact Account/Actor/Tenant/Lease audit attribution"},
-        {"file": "frontend/tests/e2e/support-access-leases-authorization.spec.ts", "testTitle": "request through termination enforces lease allowlist, Tenant isolation, control-plane denial, audit attribution, and identity non-mutation"}
+        {
+          "file": "frontend/tests/e2e/support-access-leases-authorization.spec.ts",
+          "testTitle": "approved support lease expires, removes Tenant authority, and preserves exact Account/Actor/Tenant/Lease audit attribution"
+        },
+        {
+          "file": "frontend/tests/e2e/support-access-leases-authorization.spec.ts",
+          "testTitle": "request through termination enforces lease allowlist, Tenant isolation, control-plane denial, audit attribution, and identity non-mutation"
+        }
       ]
     },
     {
@@ -78,8 +122,14 @@
       "requirement": "Account/Actor/Membership/Collaborator lifecycle E2E",
       "status": "covered",
       "evidence": [
-        {"file": "frontend/tests/e2e/multi-tenant-identity-confidentiality.spec.ts", "testTitle": "deactivating one Tenant Actor leaves the other Tenant usable and reactivation restores the same session"},
-        {"file": "frontend/tests/e2e/collaborators.spec.ts", "testTitle": "closing a zero-balance Journey preserves canonical Membership identity and permits a new Journey"}
+        {
+          "file": "frontend/tests/e2e/multi-tenant-identity-confidentiality.spec.ts",
+          "testTitle": "deactivating one Tenant Actor leaves the other Tenant usable and reactivation restores the same session"
+        },
+        {
+          "file": "frontend/tests/e2e/collaborators.spec.ts",
+          "testTitle": "closing a zero-balance Journey preserves canonical Membership identity and permits a new Journey"
+        }
       ]
     },
     {
@@ -87,9 +137,18 @@
       "requirement": "password/session/deactivation/reactivation E2E",
       "status": "covered",
       "evidence": [
-        {"file": "frontend/tests/e2e/authentication-tenant-ux.spec.ts", "testTitle": "a temporary-password account can sign in after completing the required password change"},
-        {"file": "frontend/tests/e2e/authentication-tenant-ux.spec.ts", "testTitle": "administrator-issued password reset replaces the password and clears the active browser session"},
-        {"file": "frontend/tests/e2e/authentication-tenant-ux.spec.ts", "testTitle": "security-suspended authentication account loses its session and cannot sign in until Application Administrator review"}
+        {
+          "file": "frontend/tests/e2e/authentication-tenant-ux.spec.ts",
+          "testTitle": "a temporary-password account can sign in after completing the required password change"
+        },
+        {
+          "file": "frontend/tests/e2e/authentication-tenant-ux.spec.ts",
+          "testTitle": "administrator-issued password reset replaces the password and clears the active browser session"
+        },
+        {
+          "file": "frontend/tests/e2e/authentication-tenant-ux.spec.ts",
+          "testTitle": "security-suspended authentication account loses its session and cannot sign in until Application Administrator review"
+        }
       ]
     },
     {
@@ -97,8 +156,14 @@
       "requirement": "audit-attribution E2E",
       "status": "covered",
       "evidence": [
-        {"file": "frontend/tests/e2e/support-access-leases-authorization.spec.ts", "testTitle": "approved support lease expires, removes Tenant authority, and preserves exact Account/Actor/Tenant/Lease audit attribution"},
-        {"file": "frontend/tests/e2e/audit-logs.spec.ts", "testTitle": "admin can view and filter sensitive audit logs"}
+        {
+          "file": "frontend/tests/e2e/support-access-leases-authorization.spec.ts",
+          "testTitle": "approved support lease expires, removes Tenant authority, and preserves exact Account/Actor/Tenant/Lease audit attribution"
+        },
+        {
+          "file": "frontend/tests/e2e/audit-logs.spec.ts",
+          "testTitle": "admin can view and filter sensitive audit logs"
+        }
       ]
     },
     {
@@ -106,16 +171,41 @@
       "requirement": "make local-check",
       "status": "covered",
       "evidence": [
-        {"file": "Makefile", "makeTarget": "local-check"}
+        {
+          "file": "Makefile",
+          "makeTarget": "local-check"
+        }
       ]
     },
     {
       "id": 13,
       "requirement": "deployment verification in the promotion path",
-      "status": "pending-30L.4B-30L.4C",
+      "status": "pending-30L.4C",
       "evidence": [
-        {"file": ".github/workflows/deploy.yml", "contains": "Deployed Playwright E2E"},
-        {"file": "Makefile", "makeTarget": "server-require-test-release-rehearsal"}
+        {
+          "file": ".github/workflows/deploy.yml",
+          "contains": "Generate immutable deployed Playwright evidence"
+        },
+        {
+          "file": "scripts/write-deployed-playwright-evidence.py",
+          "contains": "verificationKind"
+        },
+        {
+          "file": "scripts/verify-deployed-playwright-evidence.py",
+          "contains": "Deployed Playwright evidence verified"
+        },
+        {
+          "file": "Makefile",
+          "makeTarget": "deployed-playwright-evidence-check"
+        },
+        {
+          "file": "Makefile",
+          "makeTarget": "server-record-test-release-rehearsal"
+        },
+        {
+          "file": "Makefile",
+          "makeTarget": "server-require-test-release-rehearsal"
+        }
       ]
     }
   ]

@@ -12,7 +12,7 @@ import sys
 ROOT = Path(__file__).resolve().parents[1]
 MANIFEST = ROOT / "docs" / "bite-30l4-coverage-manifest.json"
 EXPECTED_IDS = list(range(1, 14))
-ALLOWED_STATUSES = {"covered", "pending-30L.4B-30L.4C"}
+ALLOWED_STATUSES = {"covered", "pending-30L.4C"}
 
 
 def fail(message: str) -> None:
