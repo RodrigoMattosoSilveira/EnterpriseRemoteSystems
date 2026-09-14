@@ -250,6 +250,9 @@ test.describe("Bite 30L multi-Tenant identity and confidentiality", () => {
 
       await selector.click();
       let selection = page.getByRole("region", { name: "Tenant selection" });
+      await expect(selection.locator('[role="option"]')).toHaveCount(1, {
+        timeout: 15_000,
+      });
       await expect(
         selection.locator(`[role="option"][data-tenant-id="${tenantA.id}"]`),
       ).toHaveCount(0);
@@ -268,6 +271,9 @@ test.describe("Bite 30L multi-Tenant identity and confidentiality", () => {
 
       await selector.click();
       selection = page.getByRole("region", { name: "Tenant selection" });
+      await expect(selection.locator('[role="option"]')).toHaveCount(2, {
+        timeout: 15_000,
+      });
       await expect(
         selection.locator(`[role="option"][data-tenant-id="${tenantA.id}"]`),
       ).toBeVisible();
@@ -426,6 +432,14 @@ test.describe("Bite 30L multi-Tenant identity and confidentiality", () => {
       await selector.click();
       const selection = page.getByRole("region", { name: "Tenant selection" });
       await expect(selection).toBeVisible();
+      // Opening the selector intentionally refreshes the Account-owned Tenant
+      // catalog and withholds cached options until that request completes. A
+      // deployed environment can take longer than Playwright's 5s expect
+      // default, so wait for the authoritative two-option catalog before
+      // asserting its provenance text.
+      await expect(selection.locator('[role="option"]')).toHaveCount(2, {
+        timeout: 15_000,
+      });
       await expect(selection).toContainText(
         "Each tenant below is available through a separate active Actor and Membership owned by this Authentication Account.",
       );
@@ -750,10 +764,22 @@ async function signedInFixturePage(
     },
   });
   const page = await context.newPage();
-  await page.goto("/login");
+  // Give this fixture a deterministic protected destination. Waiting only for
+  // "/login" to disappear is racy: the permission-aware "/" route can briefly
+  // mount AppShell and then redirect to the Person home, which causes
+  // RequireAuth to revalidate the pathname and temporarily unmount the shell.
+  // On deployed Test that transition can overlap a Tenant-selector click and
+  // make the selector region disappear mid-assertion.
+  const stableRoute = `/people/${encodeURIComponent(personId)}`;
+  await page.goto(`/login?returnTo=${encodeURIComponent(stableRoute)}`);
   await page.getByLabel("Login").fill(login);
   await page.getByLabel("Password").fill(fixturePassword());
   await page.getByRole("button", { name: "Sign in" }).click();
-  await expect(page).not.toHaveURL(/\/login(?:\?|$)/);
+  await expect(page).toHaveURL(new URL(stableRoute, baseURL).toString(), {
+    timeout: 15_000,
+  });
+  await expect(page.getByRole("button", { name: "Current tenant" })).toBeVisible({
+    timeout: 15_000,
+  });
   return { context, page };
 }
