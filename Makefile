@@ -79,6 +79,7 @@ help:
 	@echo "  make frontend-check"
 	@echo "  make local-check"
 	@echo "  make deployed-playwright-evidence-check"
+	@echo "  make production-release-evidence-check"
 	@echo "  make migration-check"
 	@echo "  make migration-rehearsal-check"
 	@echo "  make local-docker-check"
@@ -350,16 +351,21 @@ server-public-smoke-script-check:
 
 .PHONY: bite30l4-coverage-manifest-check
 bite30l4-coverage-manifest-check:
-	python3 scripts/verify-bite30l4-coverage-manifest.py
+	python3 scripts/verify-bite30l4-coverage-manifest.py --require-complete
 
 .PHONY: deployed-playwright-evidence-check
 deployed-playwright-evidence-check:
 	python3 scripts/test-deployed-playwright-evidence.py
 
+.PHONY: production-release-evidence-check
+production-release-evidence-check:
+	python3 scripts/test-production-release-evidence.py
+
 .PHONY: local-check
 local-check:
 	$(MAKE) bite30l4-coverage-manifest-check
 	$(MAKE) deployed-playwright-evidence-check
+	$(MAKE) production-release-evidence-check
 	$(MAKE) local-hot-reload-check
 	$(MAKE) server-public-smoke-script-check
 	$(MAKE) local-sqlite-reset-check
@@ -412,7 +418,7 @@ local-docker-check: local-docker-check-image
 		-e GOMODCACHE=/tmp/gomod \
 		-e NPM_CONFIG_CACHE=/tmp/npm-cache \
 		$(LOCAL_DOCKER_CHECK_IMAGE) \
-		bash -lc 'set -euo pipefail; make bite30l4-coverage-manifest-check; make deployed-playwright-evidence-check; make local-hot-reload-check; make server-authz-bootstrap-config-check; make legacy-identity-dependency-check; make migration-rehearsal-check; cd backend && go clean -testcache && go test ./...; cd ../frontend && npm ci && npm run test:run && npx playwright install chromium && npx playwright test && npm run build'
+		bash -lc 'set -euo pipefail; make bite30l4-coverage-manifest-check; make deployed-playwright-evidence-check; make production-release-evidence-check; make local-hot-reload-check; make server-authz-bootstrap-config-check; make legacy-identity-dependency-check; make migration-rehearsal-check; cd backend && go clean -testcache && go test ./...; cd ../frontend && npm ci && npm run test:run && npx playwright install chromium && npx playwright test && npm run build'
 
 # ==============================================================================
 # Generic server environment targets
@@ -671,27 +677,14 @@ server-require-test-release-rehearsal:
 		echo "Expected marker: $$marker"; \
 		exit 1; \
 	fi; \
-	grep -qx "tree_sha=$(TREE_SHA)" "$$marker" || { \
-		echo "Production deployment blocked: Test release-rehearsal marker does not match source tree $(TREE_SHA)."; \
-		exit 1; \
-	}; \
-	grep -qx "baseline_last_migration=$(TEST_RELEASE_BASELINE_LAST_MIGRATION)" "$$marker" || { \
-		echo "Production deployment blocked: rehearsal baseline does not match the required pre-30I migration boundary."; \
-		exit 1; \
-	}; \
-	grep -qx "migration_under_rehearsal=$(TEST_RELEASE_MIGRATION_UNDER_REHEARSAL)" "$$marker" || { \
-		echo "Production deployment blocked: rehearsal did not start at the required 30I migration."; \
-		exit 1; \
-	}; \
-	grep -qx "final_migration=$(TEST_RELEASE_FINAL_MIGRATION)" "$$marker" || { \
-		echo "Production deployment blocked: rehearsal did not verify the complete 30I migration sequence."; \
-		exit 1; \
-	}; \
-	grep -qx "deployment_final_migration=$(DEPLOYMENT_FINAL_MIGRATION)" "$$marker" || { \
-		echo "Production deployment blocked: rehearsal did not verify the current deployed migration boundary $(DEPLOYMENT_FINAL_MIGRATION)."; \
-		exit 1; \
-	}; \
-	echo "Production release gate passed using Test rehearsal marker:"; \
+	python3 scripts/verify-test-release-rehearsal-marker.py \
+		--file "$$marker" \
+		--expected-tree-sha "$(TREE_SHA)" \
+		--expected-baseline-last-migration "$(TEST_RELEASE_BASELINE_LAST_MIGRATION)" \
+		--expected-first-rehearsed-migration "$(TEST_RELEASE_MIGRATION_UNDER_REHEARSAL)" \
+		--expected-final-migration "$(TEST_RELEASE_FINAL_MIGRATION)" \
+		--expected-deployment-final-migration "$(DEPLOYMENT_FINAL_MIGRATION)"; \
+	echo "Production release gate passed using exact Test deployed-Playwright evidence:"; \
 	cat "$$marker"
 
 .PHONY: server-ps
