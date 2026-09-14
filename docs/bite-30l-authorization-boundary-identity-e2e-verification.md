@@ -29,11 +29,24 @@ Bite 30L is the final Bite 30 verification work and absorbs the intent of deferr
 
 ### 30L.4 — Final Verification and Promotion Gate
 
+30L.4 is split into three ordered promotion-gate deliveries so source-level coverage, deployed verification, and Production evidence can fail independently:
+
+#### 30L.4A — Coverage Closure & Local Promotion Gate
+
 - remaining same-Global-Person cross-Tenant financial-isolation proof;
-- coverage manifest mapping architecture requirements to automated specs;
-- complete `make local-check` gate;
+- machine-checked coverage manifest mapping all thirteen architecture requirements to repository evidence;
+- coverage-manifest verification incorporated into `make local-check`.
+
+#### 30L.4B — Deployed Development/Test Verification Evidence
+
 - deployed Playwright verification in Development and Test;
-- production promotion/rehearsal evidence and deployment verification.
+- immutable deployed revision/tree evidence and machine-readable verification artifacts.
+
+#### 30L.4C — Production Release-Gate Evidence
+
+- exact-tree Test rehearsal/evidence requirement for Production;
+- Production deployment/smoke evidence;
+- final manifest completion with no pending requirements.
 
 ## 30L.1 implementation
 
@@ -86,6 +99,20 @@ The approval path explicitly rejects Application Administrator self-approval and
 
 Expiration remains a derived effective state rather than a state-transition actor event: the persisted lease remains `APPROVED`, its `effectiveStatus` becomes `EXPIRED`, and its immutable request/approval audit provenance remains intact. This avoids inventing an Actor for the passage of time.
 
+## 30L.4A implementation
+
+30L.4A closes the last source-level E2E gap with a same-Global-Person financial-isolation scenario in `multi-tenant-identity-confidentiality.spec.ts`. The deterministic multi-Tenant Person is given an active Collaborator Journey in each Tenant when needed; each Tenant Administrator creates a uniquely marked expense in that Tenant; then one authenticated Person browser session switches Tenant A → Tenant B → Tenant A and proves that each Current Account contains only the selected Tenant's ledger marker. A direct attempt to open Tenant A's Collaborator Current Account while Tenant B is selected is denied, which also proves stale browser cache/state cannot expose the other Tenant's financial data.
+
+`docs/bite-30l4-coverage-manifest.json` is the machine-readable architecture-to-test manifest. `make bite30l4-coverage-manifest-check` verifies all thirteen required Bite 30L architecture rows, referenced files, named Playwright tests, and Make targets. `make local-check` runs that verifier before the rest of the canonical local gate.
+
+## 30L.4B implementation
+
+30L.4B makes deployed Playwright mandatory for every Development and Test deployment and binds each successful run to both the immutable deployed Git revision and Git tree SHA. The deployed Playwright checkout must match both identifiers before the suite runs. After the full deployed suite passes, `scripts/write-deployed-playwright-evidence.py` creates a machine-readable `deployed-playwright-verification.json` record containing the environment, deployed and checked-out source identity, workflow/run identity, deployed Playwright runtime contract, immutable artifact names, and verification timestamp. `scripts/verify-deployed-playwright-evidence.py` verifies that record against the exact expected environment/revision/tree before upload.
+
+The evidence JSON, Playwright HTML report, and test-results artifacts are named with environment + revision + tree SHA + workflow run identity and are uploaded with overwrite disabled. The evidence SHA-256 is also recorded into a successful Test release-rehearsal marker, preparing an exact-tree/evidence binding for the Production gate. `make deployed-playwright-evidence-check` regression-tests the evidence writer/verifier contract and is part of `make local-check`. See `docs/bite-30l4b-deployed-verification-evidence.md` for the evidence schema and promotion contract.
+
+Requirement 13 now remains pending only on 30L.4C.
+
 ## Remaining 30L work
 
-30L.1 through 30L.3 do not yet claim completion of the full 30L architecture checklist. 30L.4 retains the remaining same-Global-Person cross-Tenant financial-isolation proof plus the final `make local-check`, deployed Playwright, and promotion/deployment verification gates.
+30L.4C must require the exact successful Test deployed-Playwright evidence for Production, capture Production deployment/public-smoke evidence, and update the coverage manifest so `--require-complete` passes with no pending requirement.

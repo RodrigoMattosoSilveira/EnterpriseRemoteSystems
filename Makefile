@@ -51,6 +51,11 @@ LOCAL_DOCKER_CHECK_IMAGE ?= ers-local-check:latest
 LOCAL_DOCKER_WORKDIR ?= /workspace
 LOCAL_DOCKER ?= docker
 
+SERVER_SMOKE_ATTEMPTS ?= 12
+SERVER_SMOKE_DELAY_SECONDS ?= 5
+SERVER_SMOKE_CONNECT_TIMEOUT_SECONDS ?= 5
+SERVER_SMOKE_MAX_TIME_SECONDS ?= 15
+
 # ==============================================================================
 # Help
 # ==============================================================================
@@ -73,6 +78,7 @@ help:
 	@echo "  make backend-check"
 	@echo "  make frontend-check"
 	@echo "  make local-check"
+	@echo "  make deployed-playwright-evidence-check"
 	@echo "  make migration-check"
 	@echo "  make migration-rehearsal-check"
 	@echo "  make local-docker-check"
@@ -95,7 +101,7 @@ help:
 	@echo "  make server-test-rehearsal-ensure-baseline"
 	@echo "  make server-test-rehearsal-restore"
 	@echo "  make server-migrated-db-verify ENV=development|test|production"
-	@echo "  make server-record-test-release-rehearsal ENV=test TREE_SHA=<tree> REVISION=<sha>"
+	@echo "  make server-record-test-release-rehearsal ENV=test TREE_SHA=<tree> REVISION=<sha> PLAYWRIGHT_EVIDENCE_SHA256=<sha256> PLAYWRIGHT_EVIDENCE_ARTIFACT=<artifact>"
 	@echo "  make server-require-test-release-rehearsal ENV=production TREE_SHA=<tree>"
 	@echo "  make server-ps ENV=development|test|production"
 	@echo "  make server-diagnostics ENV=development|test|production"
@@ -201,6 +207,8 @@ check-repo:
 	@test -f scripts/init-server-env.sh || (echo "Missing scripts/init-server-env.sh" && exit 1)
 	@test -f scripts/dev-backend.sh || (echo "Missing scripts/dev-backend.sh" && exit 1)
 	@test -f scripts/dev-frontend.sh || (echo "Missing scripts/dev-frontend.sh" && exit 1)
+	@test -f scripts/server-public-smoke.sh || (echo "Missing scripts/server-public-smoke.sh" && exit 1)
+	@test -f scripts/test-server-public-smoke.sh || (echo "Missing scripts/test-server-public-smoke.sh" && exit 1)
 	@if [ -d backend/cmd/create-admin ] || [ -d backend/cmd/create-admin.disabled ]; then \
 		echo "Obsolete create-admin command found under backend/cmd. Remove it."; \
 		exit 1; \
@@ -336,9 +344,24 @@ server-authz-bootstrap-config-check:
 	@grep -Fq 'AUTHZ_BOOTSTRAP_TENANT_ID: "$${AUTHZ_BOOTSTRAP_TENANT_ID:-*}"' docker-compose.server.yml || (echo "Server Compose must pass AUTHZ_BOOTSTRAP_TENANT_ID." && exit 1)
 	@grep -Fq 'AUTHZ_BOOTSTRAP_REQUIRE_EMPTY_ACTOR_TABLE: "$${AUTHZ_BOOTSTRAP_REQUIRE_EMPTY_ACTOR_TABLE:-false}"' docker-compose.server.yml || (echo "Server Compose must pass AUTHZ_BOOTSTRAP_REQUIRE_EMPTY_ACTOR_TABLE." && exit 1)
 
+.PHONY: server-public-smoke-script-check
+server-public-smoke-script-check:
+	bash scripts/test-server-public-smoke.sh
+
+.PHONY: bite30l4-coverage-manifest-check
+bite30l4-coverage-manifest-check:
+	python3 scripts/verify-bite30l4-coverage-manifest.py
+
+.PHONY: deployed-playwright-evidence-check
+deployed-playwright-evidence-check:
+	python3 scripts/test-deployed-playwright-evidence.py
+
 .PHONY: local-check
 local-check:
+	$(MAKE) bite30l4-coverage-manifest-check
+	$(MAKE) deployed-playwright-evidence-check
 	$(MAKE) local-hot-reload-check
+	$(MAKE) server-public-smoke-script-check
 	$(MAKE) local-sqlite-reset-check
 	$(MAKE) server-authz-bootstrap-config-check
 	$(MAKE) legacy-identity-dependency-check
@@ -389,7 +412,7 @@ local-docker-check: local-docker-check-image
 		-e GOMODCACHE=/tmp/gomod \
 		-e NPM_CONFIG_CACHE=/tmp/npm-cache \
 		$(LOCAL_DOCKER_CHECK_IMAGE) \
-		bash -lc 'set -euo pipefail; make local-hot-reload-check; make server-authz-bootstrap-config-check; make legacy-identity-dependency-check; make migration-rehearsal-check; cd backend && go clean -testcache && go test ./...; cd ../frontend && npm ci && npm run test:run && npx playwright install chromium && npx playwright test && npm run build'
+		bash -lc 'set -euo pipefail; make bite30l4-coverage-manifest-check; make deployed-playwright-evidence-check; make local-hot-reload-check; make server-authz-bootstrap-config-check; make legacy-identity-dependency-check; make migration-rehearsal-check; cd backend && go clean -testcache && go test ./...; cd ../frontend && npm ci && npm run test:run && npx playwright install chromium && npx playwright test && npm run build'
 
 # ==============================================================================
 # Generic server environment targets
@@ -599,6 +622,14 @@ server-record-test-release-rehearsal:
 		echo "TREE_SHA and REVISION are required."; \
 		exit 2; \
 	fi
+	@if [[ -z "$(PLAYWRIGHT_EVIDENCE_SHA256)" || -z "$(PLAYWRIGHT_EVIDENCE_ARTIFACT)" ]]; then \
+		echo "PLAYWRIGHT_EVIDENCE_SHA256 and PLAYWRIGHT_EVIDENCE_ARTIFACT are required."; \
+		exit 2; \
+	fi
+	@if ! [[ "$(PLAYWRIGHT_EVIDENCE_SHA256)" =~ ^[0-9a-f]{64}$$ ]]; then \
+		echo "PLAYWRIGHT_EVIDENCE_SHA256 must be a lowercase SHA-256 digest."; \
+		exit 2; \
+	fi
 	@$(MAKE) server-migrated-db-verify ENV=test
 	@baseline="$(TEST_RELEASE_BASELINE_DB)"; \
 	if [[ ! -f "$$baseline" ]]; then \
@@ -611,6 +642,8 @@ server-record-test-release-rehearsal:
 	{ \
 		echo "tree_sha=$(TREE_SHA)"; \
 		echo "revision=$(REVISION)"; \
+		echo "deployed_playwright_evidence_sha256=$(PLAYWRIGHT_EVIDENCE_SHA256)"; \
+		echo "deployed_playwright_evidence_artifact=$(PLAYWRIGHT_EVIDENCE_ARTIFACT)"; \
 		echo "baseline=$$baseline"; \
 		echo "baseline_sha256=$$baseline_sha"; \
 		echo "baseline_last_migration=$(TEST_RELEASE_BASELINE_LAST_MIGRATION)"; \
@@ -725,8 +758,11 @@ server-provision-e2e-admin:
 
 .PHONY: server-smoke
 server-smoke:
-	curl -fsS https://$(DOMAIN)/healthz >/dev/null
-	@echo "$(DOMAIN) public smoke tests passed."
+	SERVER_SMOKE_ATTEMPTS=$(SERVER_SMOKE_ATTEMPTS) \
+	SERVER_SMOKE_DELAY_SECONDS=$(SERVER_SMOKE_DELAY_SECONDS) \
+	SERVER_SMOKE_CONNECT_TIMEOUT_SECONDS=$(SERVER_SMOKE_CONNECT_TIMEOUT_SECONDS) \
+	SERVER_SMOKE_MAX_TIME_SECONDS=$(SERVER_SMOKE_MAX_TIME_SECONDS) \
+		bash scripts/server-public-smoke.sh "$(DOMAIN)"
 
 .PHONY: server-protected-api-smoke
 server-protected-api-smoke:
