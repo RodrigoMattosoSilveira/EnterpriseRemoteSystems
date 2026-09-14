@@ -90,4 +90,8 @@ The automated coverage verifies:
 
 Expiration is intentionally derived from `expiresAt`; because no human or system Actor performs an expiration transition, the suite requires the immutable request/approval provenance to remain and requires no fabricated actor-attributed expiration event.
 
-30L.4 retains the remaining same-Global-Person cross-Tenant financial-isolation proof plus the final `make local-check`, deployed Playwright, and promotion/deployment gates.
+## Bite 30L.4A — Coverage Closure & Local Promotion Gate
+
+30L.4A closes the remaining same-Global-Person financial-isolation gap in `frontend/tests/e2e/multi-tenant-identity-confidentiality.spec.ts`. One authenticated Account owns Tenant A and Tenant B Actors/Memberships for the same Global Person. The test establishes a Collaborator Journey and a uniquely marked financial posting in each Tenant, switches the same browser session A → B → A, verifies that each Current Account contains only its selected-Tenant posting, and proves that Tenant B cannot directly address Tenant A's Current Account. This exercises both server authorization and browser-cache/state isolation.
+
+The machine-readable final-coverage map is `docs/bite-30l4-coverage-manifest.json`. `make bite30l4-coverage-manifest-check` validates every architecture requirement and its named repository evidence, and `make local-check` invokes that manifest verifier before the canonical local test/build gate. The manifest deliberately leaves deployment requirement 13 pending until 30L.4B/30L.4C produce immutable deployed Development/Test and Production release evidence.

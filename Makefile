@@ -51,6 +51,11 @@ LOCAL_DOCKER_CHECK_IMAGE ?= ers-local-check:latest
 LOCAL_DOCKER_WORKDIR ?= /workspace
 LOCAL_DOCKER ?= docker
 
+SERVER_SMOKE_ATTEMPTS ?= 12
+SERVER_SMOKE_DELAY_SECONDS ?= 5
+SERVER_SMOKE_CONNECT_TIMEOUT_SECONDS ?= 5
+SERVER_SMOKE_MAX_TIME_SECONDS ?= 15
+
 # ==============================================================================
 # Help
 # ==============================================================================
@@ -201,6 +206,8 @@ check-repo:
 	@test -f scripts/init-server-env.sh || (echo "Missing scripts/init-server-env.sh" && exit 1)
 	@test -f scripts/dev-backend.sh || (echo "Missing scripts/dev-backend.sh" && exit 1)
 	@test -f scripts/dev-frontend.sh || (echo "Missing scripts/dev-frontend.sh" && exit 1)
+	@test -f scripts/server-public-smoke.sh || (echo "Missing scripts/server-public-smoke.sh" && exit 1)
+	@test -f scripts/test-server-public-smoke.sh || (echo "Missing scripts/test-server-public-smoke.sh" && exit 1)
 	@if [ -d backend/cmd/create-admin ] || [ -d backend/cmd/create-admin.disabled ]; then \
 		echo "Obsolete create-admin command found under backend/cmd. Remove it."; \
 		exit 1; \
@@ -336,9 +343,19 @@ server-authz-bootstrap-config-check:
 	@grep -Fq 'AUTHZ_BOOTSTRAP_TENANT_ID: "$${AUTHZ_BOOTSTRAP_TENANT_ID:-*}"' docker-compose.server.yml || (echo "Server Compose must pass AUTHZ_BOOTSTRAP_TENANT_ID." && exit 1)
 	@grep -Fq 'AUTHZ_BOOTSTRAP_REQUIRE_EMPTY_ACTOR_TABLE: "$${AUTHZ_BOOTSTRAP_REQUIRE_EMPTY_ACTOR_TABLE:-false}"' docker-compose.server.yml || (echo "Server Compose must pass AUTHZ_BOOTSTRAP_REQUIRE_EMPTY_ACTOR_TABLE." && exit 1)
 
+.PHONY: server-public-smoke-script-check
+server-public-smoke-script-check:
+	bash scripts/test-server-public-smoke.sh
+
+.PHONY: bite30l4-coverage-manifest-check
+bite30l4-coverage-manifest-check:
+	python3 scripts/verify-bite30l4-coverage-manifest.py
+
 .PHONY: local-check
 local-check:
+	$(MAKE) bite30l4-coverage-manifest-check
 	$(MAKE) local-hot-reload-check
+	$(MAKE) server-public-smoke-script-check
 	$(MAKE) local-sqlite-reset-check
 	$(MAKE) server-authz-bootstrap-config-check
 	$(MAKE) legacy-identity-dependency-check
@@ -725,8 +742,11 @@ server-provision-e2e-admin:
 
 .PHONY: server-smoke
 server-smoke:
-	curl -fsS https://$(DOMAIN)/healthz >/dev/null
-	@echo "$(DOMAIN) public smoke tests passed."
+	SERVER_SMOKE_ATTEMPTS=$(SERVER_SMOKE_ATTEMPTS) \
+	SERVER_SMOKE_DELAY_SECONDS=$(SERVER_SMOKE_DELAY_SECONDS) \
+	SERVER_SMOKE_CONNECT_TIMEOUT_SECONDS=$(SERVER_SMOKE_CONNECT_TIMEOUT_SECONDS) \
+	SERVER_SMOKE_MAX_TIME_SECONDS=$(SERVER_SMOKE_MAX_TIME_SECONDS) \
+		bash scripts/server-public-smoke.sh "$(DOMAIN)"
 
 .PHONY: server-protected-api-smoke
 server-protected-api-smoke:
