@@ -111,8 +111,8 @@ Expiration remains a derived effective state rather than a state-transition acto
 
 The evidence JSON, Playwright HTML report, and test-results artifacts are named with environment + revision + tree SHA + workflow run identity and are uploaded with overwrite disabled. The evidence SHA-256 is also recorded into a successful Test release-rehearsal marker, preparing an exact-tree/evidence binding for the Production gate. `make deployed-playwright-evidence-check` regression-tests the evidence writer/verifier contract and is part of `make local-check`. See `docs/bite-30l4b-deployed-verification-evidence.md` for the evidence schema and promotion contract.
 
-Requirement 13 now remains pending only on 30L.4C.
+Requirement 13 is closed by 30L.4C after Production requires the exact Test evidence for the same source tree and emits final Production deployment/public-smoke evidence.
 
 ## Remaining 30L work
 
-30L.4C must require the exact successful Test deployed-Playwright evidence for Production, capture Production deployment/public-smoke evidence, and update the coverage manifest so `--require-complete` passes with no pending requirement.
+30L.4C requires the exact successful Test deployed-Playwright evidence for the Production source tree, captures immutable Production deployment/public-smoke evidence, and makes the coverage manifest pass `--require-complete` with all 13/13 requirements covered.
