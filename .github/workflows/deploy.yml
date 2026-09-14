@@ -27,7 +27,7 @@ on:
         type: boolean
 
       run_deployed_playwright:
-        description: "Run Playwright against deployed environment. Ignored for production."
+        description: "Run Playwright against deployed environment. Required for Development/Test; ignored for Production."
         required: false
         default: true
         type: boolean
@@ -149,6 +149,14 @@ jobs:
           if [[ "$TEST_RELEASE_REHEARSAL" == "true" && "$TARGET_ENV" != "test" ]]; then
             echo "Test release rehearsal may only be requested for the Test environment."
             exit 1
+          fi
+
+          if [[ "$TARGET_ENV" == "development" || "$TARGET_ENV" == "test" ]]; then
+            if [[ "$MANUAL_PLAYWRIGHT" != "true" ]]; then
+              echo "30L.4B requires deployed Playwright verification evidence for Development and Test."
+              echo "Rerun with run_deployed_playwright=true."
+              exit 1
+            fi
           fi
 
           case "$TARGET_ENV" in
@@ -458,6 +466,10 @@ jobs:
     needs:
       - deploy
 
+    outputs:
+      evidence_artifact_name: ${{ steps.evidence.outputs.artifact_name }}
+      evidence_sha256: ${{ steps.evidence.outputs.sha256 }}
+
     if: ${{ needs.deploy.outputs.run_playwright_post_deploy == 'true' }}
 
     env:
@@ -480,6 +492,7 @@ jobs:
       E2E_TENANT_ADMIN_ACTOR_KEY: e2e-default-tenant-admin
       E2E_TENANT_ADMIN_PASSWORD_CONFIGURED: ${{ secrets.E2E_ADMIN_PASSWORD != '' && 'true' || 'false' }}
       TEST_RELEASE_REHEARSAL: ${{ needs.deploy.outputs.test_release_rehearsal }}
+      DEPLOYED_REVISION: ${{ needs.deploy.outputs.revision }}
       DEPLOYED_TREE_SHA: ${{ needs.deploy.outputs.tree_sha }}
 
     steps:
@@ -509,6 +522,7 @@ jobs:
           echo "E2E_TENANT_ADMIN_ACTOR_KEY=${E2E_TENANT_ADMIN_ACTOR_KEY}"
           echo "E2E_TENANT_ADMIN_PASSWORD_CONFIGURED=${E2E_TENANT_ADMIN_PASSWORD_CONFIGURED}"
           echo "TEST_RELEASE_REHEARSAL=${TEST_RELEASE_REHEARSAL}"
+          echo "DEPLOYED_REVISION=${DEPLOYED_REVISION}"
           echo "DEPLOYED_TREE_SHA=${DEPLOYED_TREE_SHA}"
           if [[ -z "${E2E_ADMIN_EMAIL:-}" || -z "${E2E_ADMIN_PASSWORD:-}" ]]; then
             echo "::error title=Missing deployed Playwright credentials::The deployment did not provide the provisioned administrator login or E2E_ADMIN_PASSWORD is unavailable in the '${DEPLOYMENT_ENVIRONMENT}' GitHub environment."
@@ -520,9 +534,12 @@ jobs:
           fi
           echo "Deployed Playwright administrator credentials are configured"
           echo "Deployed Playwright Tenant Administrator credentials are configured"
-          echo "DEPLOYED_REVISION=${{ needs.deploy.outputs.revision }}"
-          echo "CHECKED_OUT_REVISION=$(git rev-parse HEAD)"
-          test "$(git rev-parse HEAD)" = "${{ needs.deploy.outputs.revision }}"
+          CHECKED_OUT_REVISION="$(git rev-parse HEAD)"
+          CHECKED_OUT_TREE_SHA="$(git rev-parse HEAD^{tree})"
+          echo "CHECKED_OUT_REVISION=${CHECKED_OUT_REVISION}"
+          echo "CHECKED_OUT_TREE_SHA=${CHECKED_OUT_TREE_SHA}"
+          test "${CHECKED_OUT_REVISION}" = "${DEPLOYED_REVISION}"
+          test "${CHECKED_OUT_TREE_SHA}" = "${DEPLOYED_TREE_SHA}"
 
           grep -n "2_500_000" frontend/tests/e2e/earnings-ui.spec.ts
           grep -n "2_500_000" frontend/tests/e2e/planning-edge-cases.spec.ts
@@ -548,21 +565,92 @@ jobs:
           PLAYWRIGHT_AUTHZ_TENANT_ID: default
         run: npx playwright test
 
+      - name: Generate immutable deployed Playwright evidence
+        id: evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          CHECKED_OUT_REVISION="$(git rev-parse HEAD)"
+          CHECKED_OUT_TREE_SHA="$(git rev-parse HEAD^{tree})"
+          EVIDENCE_ARTIFACT_NAME="deployed-playwright-evidence-${DEPLOYMENT_ENVIRONMENT}-${DEPLOYED_REVISION}-${DEPLOYED_TREE_SHA}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          REPORT_ARTIFACT_NAME="deployed-playwright-report-${DEPLOYMENT_ENVIRONMENT}-${DEPLOYED_REVISION}-${DEPLOYED_TREE_SHA}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          RESULTS_ARTIFACT_NAME="deployed-playwright-test-results-${DEPLOYMENT_ENVIRONMENT}-${DEPLOYED_REVISION}-${DEPLOYED_TREE_SHA}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          EVIDENCE_FILE="deployment-evidence/deployed-playwright-verification.json"
+
+          python3 scripts/write-deployed-playwright-evidence.py \
+            --environment "${DEPLOYMENT_ENVIRONMENT}" \
+            --base-url "${PLAYWRIGHT_BASE_URL}" \
+            --revision "${DEPLOYED_REVISION}" \
+            --tree-sha "${DEPLOYED_TREE_SHA}" \
+            --checked-out-revision "${CHECKED_OUT_REVISION}" \
+            --checked-out-tree-sha "${CHECKED_OUT_TREE_SHA}" \
+            --repository "${GITHUB_REPOSITORY}" \
+            --git-ref "${GITHUB_REF}" \
+            --workflow "${GITHUB_WORKFLOW}" \
+            --run-id "${GITHUB_RUN_ID}" \
+            --run-attempt "${GITHUB_RUN_ATTEMPT}" \
+            --test-release-rehearsal "${TEST_RELEASE_REHEARSAL}" \
+            --artifact-name "${EVIDENCE_ARTIFACT_NAME}" \
+            --report-artifact-name "${REPORT_ARTIFACT_NAME}" \
+            --test-results-artifact-name "${RESULTS_ARTIFACT_NAME}" \
+            --output "${EVIDENCE_FILE}"
+
+          python3 scripts/verify-deployed-playwright-evidence.py \
+            --file "${EVIDENCE_FILE}" \
+            --expected-environment "${DEPLOYMENT_ENVIRONMENT}" \
+            --expected-revision "${DEPLOYED_REVISION}" \
+            --expected-tree-sha "${DEPLOYED_TREE_SHA}" \
+            --expected-artifact-name "${EVIDENCE_ARTIFACT_NAME}"
+
+          EVIDENCE_SHA256="$(sha256sum "${EVIDENCE_FILE}" | awk '{print $1}')"
+          echo "artifact_name=${EVIDENCE_ARTIFACT_NAME}" >> "$GITHUB_OUTPUT"
+          echo "sha256=${EVIDENCE_SHA256}" >> "$GITHUB_OUTPUT"
+          echo "Evidence artifact: ${EVIDENCE_ARTIFACT_NAME}"
+          echo "Evidence SHA-256: ${EVIDENCE_SHA256}"
+          cat "${EVIDENCE_FILE}"
+
+          {
+            echo "## Deployed Playwright Verification Evidence"
+            echo
+            echo "| Item | Value |"
+            echo "|---|---|"
+            echo "| Environment | ${DEPLOYMENT_ENVIRONMENT} |"
+            echo "| Revision | ${DEPLOYED_REVISION} |"
+            echo "| Tree SHA | ${DEPLOYED_TREE_SHA} |"
+            echo "| Evidence artifact | ${EVIDENCE_ARTIFACT_NAME} |"
+            echo "| Evidence SHA-256 | ${EVIDENCE_SHA256} |"
+            echo "| Result | passed |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload immutable deployed Playwright evidence
+        uses: actions/upload-artifact@v6
+        with:
+          name: ${{ steps.evidence.outputs.artifact_name }}
+          path: deployment-evidence/deployed-playwright-verification.json
+          if-no-files-found: error
+          overwrite: false
+          retention-days: 90
+
       - name: Upload deployed Playwright report
         if: always()
         uses: actions/upload-artifact@v6
         with:
-          name: deployed-playwright-report-${{ needs.deploy.outputs.env_name }}
+          name: deployed-playwright-report-${{ needs.deploy.outputs.env_name }}-${{ needs.deploy.outputs.revision }}-${{ needs.deploy.outputs.tree_sha }}-${{ github.run_id }}-${{ github.run_attempt }}
           path: frontend/playwright-report/
           if-no-files-found: ignore
+          overwrite: false
+          retention-days: 90
 
       - name: Upload deployed Playwright test results
         if: always()
         uses: actions/upload-artifact@v6
         with:
-          name: deployed-playwright-test-results-${{ needs.deploy.outputs.env_name }}
+          name: deployed-playwright-test-results-${{ needs.deploy.outputs.env_name }}-${{ needs.deploy.outputs.revision }}-${{ needs.deploy.outputs.tree_sha }}-${{ github.run_id }}-${{ github.run_attempt }}
           path: frontend/test-results/
           if-no-files-found: ignore
+          overwrite: false
+          retention-days: 90
 
   record-test-release-rehearsal:
     name: Record successful Test release rehearsal
@@ -605,5 +693,7 @@ jobs:
              make server-record-test-release-rehearsal \
                ENV=test \
                TREE_SHA='${{ needs.deploy.outputs.tree_sha }}' \
-               REVISION='${{ needs.deploy.outputs.revision }}'
+               REVISION='${{ needs.deploy.outputs.revision }}' \
+               PLAYWRIGHT_EVIDENCE_SHA256='${{ needs.deployed-playwright.outputs.evidence_sha256 }}' \
+               PLAYWRIGHT_EVIDENCE_ARTIFACT='${{ needs.deployed-playwright.outputs.evidence_artifact_name }}'
             "
