@@ -1,0 +1,683 @@
+{
+  "reconciliationIssue": 853,
+  "title": "Post-Bite-30 Backlog Reconciliation Against Production Baseline",
+  "snapshotDate": "2026-09-14",
+  "productionBaseline": {
+    "commitSha": "e994c976d116cdd27cac0d9b2de95ef913d10983",
+    "treeSha": "7e5c70f986960e719174ce05aede8570a555ef65",
+    "promotionTimestamp": "2026-09-14T18:49:31Z",
+    "finalMigration": "000070_revoke_noncanonical_application_admin_grants.up.sql"
+  },
+  "sourceBranch": {
+    "name": "853-post-bite-30-backlog-reconciliation-against-production-baseline",
+    "commitSha": "f53c5fbcb73501db837d031d03c0648ac7a97b25",
+    "treeSha": "7e5c70f986960e719174ce05aede8570a555ef65",
+    "treeMatchesProduction": true
+  },
+  "classificationVocabulary": [
+    "DONE",
+    "PARTIALLY DONE",
+    "OPEN",
+    "OBSOLETE",
+    "SUPERSEDED BY BITE 30"
+  ],
+  "scope": {
+    "description": "All GitHub issues that were open when issue #853 was created, excluding #853 itself because it is the reconciliation driver rather than backlog being classified.",
+    "issueNumbers": [
+      5,
+      9,
+      11,
+      15,
+      16,
+      17,
+      19,
+      20,
+      22,
+      26,
+      28,
+      59,
+      60,
+      63,
+      69,
+      128,
+      130,
+      151,
+      181,
+      291,
+      304,
+      409,
+      621,
+      622,
+      623,
+      624,
+      625,
+      838,
+      840,
+      841,
+      842,
+      843,
+      844
+    ]
+  },
+  "items": [
+    {
+      "issueNumber": 5,
+      "title": "next steps",
+      "status": "DONE",
+      "rationale": "The original architecture-to-code checklist is fully represented in the Production tree: GORM-backed database access, SQL migrations, Fiber HTTP routes, and a React router/page application all exist.",
+      "recommendedDisposition": "close-completed",
+      "evidence": [
+        {
+          "file": "backend/internal/db/db.go",
+          "contains": "gorm.Open"
+        },
+        {
+          "file": "backend/migrations/000001_init_schema.up.sql",
+          "contains": "CREATE TABLE"
+        },
+        {
+          "file": "frontend/src/app/router.tsx",
+          "contains": "createBrowserRouter"
+        }
+      ]
+    },
+    {
+      "issueNumber": 9,
+      "title": "React page/route skeleton",
+      "status": "DONE",
+      "rationale": "The frontend has a production route graph covering People, Collaborators, Expenses, Work Periods, receipts, and administration pages.",
+      "recommendedDisposition": "close-completed",
+      "evidence": [
+        {
+          "file": "frontend/src/app/router.tsx",
+          "contains": "const protectedChildren: RouteObject[]"
+        }
+      ]
+    },
+    {
+      "issueNumber": 11,
+      "title": "Service Layer Validation Roles To be enforced",
+      "status": "PARTIALLY DONE",
+      "rationale": "Several bundled rules are enforced (for example one open Collaborator Journey per Membership and pending commission accrual when production is missing), but other original rules such as the 30-day return wait and max-sick-day enforcement are still only configuration/documented intent rather than complete executable policy.",
+      "recommendedDisposition": "keep-open",
+      "evidence": [
+        {
+          "file": "backend/internal/collaborators/service_impl.go",
+          "contains": "Membership already has an open Collaborator Journey"
+        },
+        {
+          "file": "backend/internal/accruals/service_impl.go",
+          "contains": "Gold production is missing for this work period and location"
+        },
+        {
+          "file": "backend/migrations/000003_seed_roles_and_settings.up.sql",
+          "contains": "return_wait_days"
+        },
+        {
+          "file": "backend/migrations/000003_seed_roles_and_settings.up.sql",
+          "contains": "max_sick_days"
+        }
+      ]
+    },
+    {
+      "issueNumber": 15,
+      "title": "implement the environment files logic",
+      "status": "DONE",
+      "rationale": "Repository-owned environment initialization/rendering and per-environment server configuration are implemented and used by deployment tooling.",
+      "recommendedDisposition": "close-completed",
+      "evidence": [
+        {
+          "file": "scripts/init-env.sh",
+          "contains": "#!/usr/bin/env bash"
+        },
+        {
+          "file": "scripts/render-env.sh",
+          "contains": "#!/usr/bin/env bash"
+        },
+        {
+          "file": "scripts/init-server-env.sh",
+          "contains": "#!/usr/bin/env bash"
+        }
+      ]
+    },
+    {
+      "issueNumber": 16,
+      "title": "Add E2E tests for Person",
+      "status": "DONE",
+      "rationale": "People E2E coverage exists for create, filter/pagination, view switching, required-field validation, duplicate CPF, and cellular validation.",
+      "recommendedDisposition": "close-completed",
+      "evidence": [
+        {
+          "file": "frontend/tests/e2e/people.spec.ts",
+          "contains": "Tenant Administrator can create a Person and define the initial temporary password"
+        }
+      ]
+    },
+    {
+      "issueNumber": 17,
+      "title": "Add a filter to Person list",
+      "status": "DONE",
+      "rationale": "The People landing page has live search plus status/profile/collaborator-eligibility filters and card/list views.",
+      "recommendedDisposition": "close-completed",
+      "evidence": [
+        {
+          "file": "frontend/src/features/people/PeopleListPage.tsx",
+          "contains": "Search and filter controls"
+        },
+        {
+          "file": "frontend/tests/e2e/people.spec.ts",
+          "contains": "user can filter and paginate the People page"
+        }
+      ]
+    },
+    {
+      "issueNumber": 19,
+      "title": "Implement person tests for front end",
+      "status": "DONE",
+      "rationale": "Frontend unit coverage exists for People list/detail/form behavior in addition to E2E coverage.",
+      "recommendedDisposition": "close-completed",
+      "evidence": [
+        {
+          "file": "frontend/src/features/people/PeopleListPage.test.tsx",
+          "contains": "PeopleListPage"
+        },
+        {
+          "file": "frontend/src/features/people/PersonDetailPage.test.tsx",
+          "contains": "PersonDetailPage"
+        }
+      ]
+    },
+    {
+      "issueNumber": 20,
+      "title": "Add Authentication and Authorization",
+      "status": "SUPERSEDED BY BITE 30",
+      "rationale": "The original JWT/header-era proposal is no longer the architecture. Production uses login-backed sessions plus canonical Authentication Account -> AccountActor -> exact Actor/Tenant authorization; Bite 30D explicitly separates intrinsic self-service authority from delegated Role Grants, and later Bite 30 slices harden session, Tenant-selection, and isolation boundaries.",
+      "recommendedDisposition": "close-not-planned",
+      "evidence": [
+        {
+          "file": "docs/user-authentication-foundation.md",
+          "contains": "Bite 30E supersession"
+        },
+        {
+          "file": "docs/bite-30d-self-service-delegated-authorization-refactor.md",
+          "contains": "Roles and Role Grants now represent delegated authority only"
+        },
+        {
+          "file": "docs/bite-30e-session-tenant-selection-refactor.md",
+          "contains": "auth_account_actors"
+        },
+        {
+          "file": "docs/bite-30l-authorization-boundary-identity-e2e-verification.md",
+          "contains": "Tenant isolation"
+        }
+      ]
+    },
+    {
+      "issueNumber": 22,
+      "title": "Refactor to a cloud first architecture",
+      "status": "OBSOLETE",
+      "rationale": "The issue specifies a Google Cloud/Terraform target, while the actual Production baseline is Docker Compose on a Hetzner-hosted server behind Caddy and SQLite. Relevant contract/database follow-ups survive as separate backlog issues; the original umbrella direction is no longer the deployed architecture.",
+      "recommendedDisposition": "close-not-planned",
+      "evidence": [
+        {
+          "file": "docs/05 - Deployment/Server Setup.md",
+          "contains": "Hetzner"
+        },
+        {
+          "file": "docker-compose.server.yml",
+          "contains": "services:"
+        },
+        {
+          "file": "backend/internal/db/db.go",
+          "contains": "sqlite.Open"
+        }
+      ]
+    },
+    {
+      "issueNumber": 26,
+      "title": "Wiring this spec into your Go/React projects",
+      "status": "PARTIALLY DONE",
+      "rationale": "OpenAPI contracts and generated Go/TypeScript artifacts exist, but the original api/spec/full.yaml-as-single-contract/runtime-generated-client wiring is not the current implementation and generated types are not the sole runtime boundary.",
+      "recommendedDisposition": "keep-open",
+      "evidence": [
+        {
+          "file": "contracts/oapi-codegen.yaml",
+          "contains": "backend/internal/api/generated/openapi.gen.go"
+        },
+        {
+          "file": "frontend/package.json",
+          "contains": "openapi-typescript ../contracts/openapi.yaml"
+        },
+        {
+          "file": "api/spec/full.yaml",
+          "contains": "openapi:"
+        }
+      ]
+    },
+    {
+      "issueNumber": 28,
+      "title": "Abstract the DB driver config",
+      "status": "OPEN",
+      "rationale": "Production database opening is SQLite-specific; there is no runtime DB_DRIVER switch or PostgreSQL GORM driver abstraction.",
+      "recommendedDisposition": "keep-open",
+      "evidence": [
+        {
+          "file": "backend/internal/db/db.go",
+          "contains": "sqlite.Open"
+        },
+        {
+          "file": "backend/go.mod",
+          "notContains": "gorm.io/driver/postgres"
+        }
+      ]
+    },
+    {
+      "issueNumber": 59,
+      "title": "Implement and validate the People update flow",
+      "status": "DONE",
+      "rationale": "People update is implemented with backend validation/uniqueness handling and frontend detail/edit tests.",
+      "recommendedDisposition": "close-completed",
+      "evidence": [
+        {
+          "file": "backend/internal/people/service_impl.go",
+          "contains": "func (s *service) Update"
+        },
+        {
+          "file": "backend/internal/people/handler_update_test.go",
+          "contains": "TestUpdatePersonReturnsUpdatedPerson"
+        },
+        {
+          "file": "frontend/src/features/people/PersonDetailPage.test.tsx",
+          "contains": "PersonDetailPage"
+        }
+      ]
+    },
+    {
+      "issueNumber": 60,
+      "title": "Design and implement a safe bulk-import",
+      "status": "DONE",
+      "rationale": "A People CSV importer, CLI command, dry-run Make target, validation tests, and all-or-nothing import behavior are present.",
+      "recommendedDisposition": "close-completed",
+      "evidence": [
+        {
+          "file": "backend/internal/people/importer/importer.go",
+          "contains": "package importer"
+        },
+        {
+          "file": "backend/cmd/import-people/main.go",
+          "contains": "package main"
+        },
+        {
+          "file": "Makefile",
+          "contains": "import-people-dry-run:"
+        }
+      ]
+    },
+    {
+      "issueNumber": 63,
+      "title": "Marinaldo Brito missing RG",
+      "status": "OBSOLETE",
+      "rationale": "The named Person record is not present as an actionable Production record, so there is no RG correction to perform. The issue was closed after the owner confirmed that the record had been removed/not added; it no longer represents an outstanding Production-data defect.",
+      "recommendedDisposition": "close-not-planned",
+      "evidence": [
+        {
+          "file": "docs/05 - Deployment/Database Promotion Strategy.md",
+          "contains": "Production"
+        }
+      ],
+      "githubDecision": {
+        "state": "closed",
+        "stateReason": "completed",
+        "decision": "The named Person record is not present, so there is no record to correct."
+      }
+    },
+    {
+      "issueNumber": 69,
+      "title": "A few person use cases",
+      "status": "DONE",
+      "rationale": "The People UI supports search/filtering, Active/Inactive-style status filters, card/list presentation, and navigation from a displayed Person to the full Person record.",
+      "recommendedDisposition": "close-completed",
+      "evidence": [
+        {
+          "file": "frontend/src/features/people/PeopleListPage.tsx",
+          "contains": "Search and filter controls"
+        },
+        {
+          "file": "frontend/src/features/people/PeopleListPage.tsx",
+          "contains": "viewMode === \"cards\""
+        }
+      ]
+    },
+    {
+      "issueNumber": 128,
+      "title": "There is no reference data for Periodo",
+      "status": "OPEN",
+      "rationale": "The canonical reference-data seed has no Diurno/Noturno (day/night period) reference type; Work Period naming remains shift-like rather than backed by the requested reference data.",
+      "recommendedDisposition": "keep-open",
+      "evidence": [
+        {
+          "file": "backend/migrations/000002_seed_reference_data.up.sql",
+          "notContains": "Diurno"
+        },
+        {
+          "file": "backend/migrations/000002_seed_reference_data.up.sql",
+          "notContains": "Noturno"
+        }
+      ]
+    },
+    {
+      "issueNumber": 130,
+      "title": "I, as an application user, when adding avperson's recoerd, if the nicknameis blank, I want the app to use the person's first name",
+      "status": "OBSOLETE",
+      "rationale": "Production intentionally continues to require an explicit Person nickname on create and update. After reviewing the implemented behavior, the product decision is to preserve that model and learn from operational use before reconsidering Person naming semantics; automatic nickname = firstName defaulting is therefore not planned.",
+      "recommendedDisposition": "close-not-planned",
+      "evidence": [
+        {
+          "file": "backend/internal/people/validation.go",
+          "contains": "requireString(fields, \"nickname\", req.Nickname)"
+        },
+        {
+          "file": "backend/internal/people/service_impl.go",
+          "contains": "Nickname:  strings.TrimSpace(req.Nickname)"
+        },
+        {
+          "file": "frontend/tests/e2e/people.spec.ts",
+          "contains": "getByLabel(\"Nickname *\")"
+        }
+      ],
+      "githubDecision": {
+        "state": "closed",
+        "stateReason": "completed",
+        "decision": "Preserve required explicit nickname behavior and learn from Production practice before changing Person naming semantics."
+      }
+    },
+    {
+      "issueNumber": 151,
+      "title": "Should we allow Editing expenese",
+      "status": "OBSOLETE",
+      "rationale": "The product has made the safer decision: incorrect Expenses are not edited in place in the UI; they are cancelled with an auditable reversal and recreated as a replacement. The original open-ended design question is therefore obsolete.",
+      "recommendedDisposition": "close-not-planned",
+      "evidence": [
+        {
+          "file": "frontend/src/features/expenses/ExpenseDetailPage.tsx",
+          "contains": "Incorrect Expenses are not edited in place."
+        },
+        {
+          "file": "backend/internal/expenses/handler_test.go",
+          "contains": "TestCancelExpensePreservesAuditAndReversesFinancialEffect"
+        }
+      ]
+    },
+    {
+      "issueNumber": 181,
+      "title": "Use nickname in the Work Plan Inform Form",
+      "status": "PARTIALLY DONE",
+      "rationale": "The Inform workflow now exposes collaborator nickname, including absence warnings and printed roster rows, but printed roster rows still render full name first and nickname second rather than using nickname as the primary displayed identity.",
+      "recommendedDisposition": "keep-open",
+      "evidence": [
+        {
+          "file": "frontend/src/features/planning/InformTab.tsx",
+          "contains": "row.nickname ? ` (${row.nickname})` : \"\""
+        },
+        {
+          "file": "frontend/src/features/planning/InformTab.tsx",
+          "contains": "row.collaboratorNickname ||"
+        }
+      ]
+    },
+    {
+      "issueNumber": 291,
+      "title": "Write an e2e test to validate pending receipts",
+      "status": "DONE",
+      "rationale": "The requested exact lifecycle is covered: create debit receipt, confirm outstanding, open printable receipt, return with signed reference, and confirm it disappears from outstanding receipts.",
+      "recommendedDisposition": "close-completed",
+      "evidence": [
+        {
+          "file": "frontend/tests/e2e/receipts.spec.ts",
+          "contains": "outstanding receipt appears, can be opened, and disappears after signed return"
+        }
+      ]
+    },
+    {
+      "issueNumber": 304,
+      "title": "Implement I18N infrastructure",
+      "status": "OPEN",
+      "rationale": "The frontend has no i18next/react-i18next dependency or localization bootstrap. The parent i18n initiative remains open.",
+      "recommendedDisposition": "keep-open",
+      "evidence": [
+        {
+          "file": "frontend/package.json",
+          "notContains": "i18next"
+        },
+        {
+          "file": "frontend/package.json",
+          "notContains": "react-i18next"
+        }
+      ]
+    },
+    {
+      "issueNumber": 409,
+      "title": "Integrate real authentication",
+      "status": "DONE",
+      "rationale": "Production has first-party login-backed authentication accounts, hashed session tokens, HTTP-only session cookies, password change/reset, session revocation, account deactivation/reactivation, and E2E login coverage.",
+      "recommendedDisposition": "close-completed",
+      "evidence": [
+        {
+          "file": "backend/migrations/000042_user_authentication_foundation.up.sql",
+          "contains": "CREATE TABLE IF NOT EXISTS auth_sessions"
+        },
+        {
+          "file": "backend/internal/authentication/service_impl.go",
+          "contains": "func (s *service) Login"
+        },
+        {
+          "file": "frontend/tests/e2e/authentication-tenant-ux.spec.ts",
+          "contains": "authenticated user can see identity, tenant, sign out, and sign back in"
+        }
+      ]
+    },
+    {
+      "issueNumber": 621,
+      "title": "Bite-621 i18n Implementation - common",
+      "status": "OPEN",
+      "rationale": "No common localization framework is present in the Production frontend.",
+      "recommendedDisposition": "keep-open",
+      "evidence": [
+        {
+          "file": "frontend/package.json",
+          "notContains": "i18next"
+        }
+      ]
+    },
+    {
+      "issueNumber": 622,
+      "title": "Bite: i18n Implementation - people",
+      "status": "OPEN",
+      "rationale": "People UI strings remain hard-coded English and there is no localization runtime to supply translated People resources.",
+      "recommendedDisposition": "keep-open",
+      "evidence": [
+        {
+          "file": "frontend/src/features/people/PeopleListPage.tsx",
+          "contains": "Search and filter controls"
+        },
+        {
+          "file": "frontend/package.json",
+          "notContains": "i18next"
+        }
+      ]
+    },
+    {
+      "issueNumber": 623,
+      "title": "Bite: i18n Implementation - planning",
+      "status": "OPEN",
+      "rationale": "Planning UI strings remain hard-coded English and there is no localization runtime.",
+      "recommendedDisposition": "keep-open",
+      "evidence": [
+        {
+          "file": "frontend/src/features/planning/WorkPeriodsPage.tsx",
+          "contains": "Plan shift assignments"
+        },
+        {
+          "file": "frontend/package.json",
+          "notContains": "i18next"
+        }
+      ]
+    },
+    {
+      "issueNumber": 624,
+      "title": "Bite: i18n Implementation - expenses",
+      "status": "OPEN",
+      "rationale": "Expense UI strings remain hard-coded English and there is no localization runtime.",
+      "recommendedDisposition": "keep-open",
+      "evidence": [
+        {
+          "file": "frontend/src/features/expenses/ExpenseDetailPage.tsx",
+          "contains": "Incorrect Expenses are not edited in place."
+        },
+        {
+          "file": "frontend/package.json",
+          "notContains": "i18next"
+        }
+      ]
+    },
+    {
+      "issueNumber": 625,
+      "title": "Bite: i18n Implementation - receipts",
+      "status": "OPEN",
+      "rationale": "Receipt UI strings remain hard-coded English and there is no localization runtime.",
+      "recommendedDisposition": "keep-open",
+      "evidence": [
+        {
+          "file": "frontend/tests/e2e/receipts.spec.ts",
+          "contains": "Outstanding receipts"
+        },
+        {
+          "file": "frontend/package.json",
+          "notContains": "i18next"
+        }
+      ]
+    },
+    {
+      "issueNumber": 838,
+      "title": "[Use Case]: Backend database should be changed to postgresql from sqllite, for better peformance.",
+      "status": "OPEN",
+      "rationale": "The Production database implementation is still SQLite and no PostgreSQL driver is present.",
+      "recommendedDisposition": "keep-open",
+      "evidence": [
+        {
+          "file": "backend/internal/db/db.go",
+          "contains": "sqlite.Open"
+        },
+        {
+          "file": "backend/go.mod",
+          "notContains": "gorm.io/driver/postgres"
+        }
+      ]
+    },
+    {
+      "issueNumber": 840,
+      "title": "[Use Case]: Production database backup should be backed up periodically - daily/weekly",
+      "status": "PARTIALLY DONE",
+      "rationale": "Production deployments take and verify a pre-migration SQLite backup, and backup targets/scripts exist, but the repository does not install or enforce a periodic daily/weekly Production backup schedule.",
+      "recommendedDisposition": "keep-open",
+      "evidence": [
+        {
+          "file": ".github/workflows/deploy.yml",
+          "contains": "make server-backup"
+        },
+        {
+          "file": "Makefile",
+          "contains": "server-prod-backup:"
+        },
+        {
+          "file": "docs/05 - Deployment/Infrastructure-Hetzner.md",
+          "contains": "nightly backup script"
+        }
+      ]
+    },
+    {
+      "issueNumber": 841,
+      "title": "[Use Case]: IP Address of logged in user has to be stored in db table. multi device tracking.",
+      "status": "PARTIALLY DONE",
+      "rationale": "Authentication sessions already persist IP address and User-Agent, but there is no durable device identity, device authorization workflow, or access restriction to authorized devices.",
+      "recommendedDisposition": "keep-open",
+      "evidence": [
+        {
+          "file": "backend/migrations/000042_user_authentication_foundation.up.sql",
+          "contains": "ip_address TEXT NOT NULL DEFAULT"
+        },
+        {
+          "file": "backend/internal/authentication/service_impl.go",
+          "contains": "IPAddress:  strings.TrimSpace(ipAddress)"
+        },
+        {
+          "file": "backend/internal/authentication/models.go",
+          "notContains": "DeviceID"
+        }
+      ]
+    },
+    {
+      "issueNumber": 842,
+      "title": "[Use Case]: Need to define our application users, and to quantify for our SAAS license purpose.",
+      "status": "PARTIALLY DONE",
+      "rationale": "Bite 30 establishes a canonical Authentication Account/AccountActor identity and sessions can represent multiple devices, providing a sound user-counting foundation. There is still no SaaS license metric, concurrent-device policy, shared-credential prevention control, or usage-report implementation.",
+      "recommendedDisposition": "keep-open",
+      "evidence": [
+        {
+          "file": "docs/bite-30c-authentication-account-actor-cardinality-scope.md",
+          "contains": "Authentication Account"
+        },
+        {
+          "file": "backend/migrations/000042_user_authentication_foundation.up.sql",
+          "contains": "CREATE TABLE IF NOT EXISTS auth_sessions"
+        }
+      ]
+    },
+    {
+      "issueNumber": 843,
+      "title": "[Use Case]: Our product supports multi-tenancy- we need to introduce SAAS license management module",
+      "status": "OPEN",
+      "rationale": "There is no SaaS license, renewal, subscription, or tenant usage-report module in the Production application.",
+      "recommendedDisposition": "keep-open",
+      "evidence": [
+        {
+          "file": "frontend/src/app/router.tsx",
+          "notContains": "license"
+        },
+        {
+          "file": "backend/internal/db/models.go",
+          "notContains": "License"
+        }
+      ]
+    },
+    {
+      "issueNumber": 844,
+      "title": "[Use Case]: ERS - Multi tenancy",
+      "status": "SUPERSEDED BY BITE 30",
+      "rationale": "Bite 30 replaced the issue's early tenant_id/policy concept with the canonical AccountActor/Membership model and comprehensive cross-Tenant authorization, identity, operational-domain, and financial-isolation coverage.",
+      "recommendedDisposition": "close-completed",
+      "evidence": [
+        {
+          "file": "docs/bite-30l-authorization-boundary-identity-e2e-verification.md",
+          "contains": "cross-Tenant"
+        },
+        {
+          "file": "docs/bite-30e-session-tenant-selection-refactor.md",
+          "contains": "auth_account_actors"
+        },
+        {
+          "file": "frontend/tests/e2e/multi-tenant-identity-confidentiality.spec.ts",
+          "contains": "same Global Person keeps self-service financial records isolated by selected Tenant without browser cache leakage"
+        }
+      ]
+    }
+  ],
+  "decisionRefresh": {
+    "date": "2026-09-14",
+    "patchBaseCommit": "3c6a5d0b5b69c97b1b0b7322a2d1427a795b1746",
+    "notes": [
+      "Issues #63 and #130 remain in scope because they were open when issue #853 was created, but later owner decisions closed them and make their requested changes non-actionable.",
+      "Completed Bite 30D issue #708 is baseline architecture evidence for the supersession of the earlier generic authentication/authorization issue #20."
+    ]
+  }
+}
