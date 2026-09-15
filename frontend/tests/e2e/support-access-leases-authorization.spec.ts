@@ -3,6 +3,7 @@ import {
   test,
   type APIRequestContext,
   type APIResponse,
+  type Page,
 } from "@playwright/test";
 import {
   E2E_APPLICATION_ADMIN_ACTOR_ID,
@@ -201,6 +202,7 @@ test.describe("Tenant Support Access Lease authorization", () => {
   test("Application Administrator browser selector is session-fresh and exposes a support Tenant only while its lease is approved", async ({
     browser,
   }) => {
+    test.slow();
     const applicationAdminApi = await newApplicationAdminApi();
     const tenantAdminApi = await newTenantAdminApi(SUPPORT_TENANT_ID);
     const context = await browser.newContext({
@@ -222,12 +224,7 @@ test.describe("Tenant Support Access Lease authorization", () => {
         .getByRole("region", { name: "Administration context selection" })
         .locator(`[role="option"][data-tenant-id="${SUPPORT_TENANT_ID}"]`);
 
-      await selector.click();
-      await expect(
-        page
-          .getByRole("region", { name: "Administration context selection" })
-          .locator('[role="option"][data-tenant-id="*"]'),
-      ).toBeVisible();
+      await openFreshAdministrationContextSelector(page);
       await expect(supportOption).toHaveCount(0);
       await selector.click();
 
@@ -254,13 +251,7 @@ test.describe("Tenant Support Access Lease authorization", () => {
       await tenantCatalog
         .getByRole("button", { name: "Open actual Administration context selector" })
         .click();
-      const contextSelection = page.getByRole("region", {
-        name: "Administration context selection",
-      });
-      await expect(contextSelection).toBeVisible();
-      await expect(
-        contextSelection.locator('[role="option"][data-tenant-id="*"]'),
-      ).toBeVisible();
+      await waitForFreshAdministrationContextSelector(page);
       await expect(supportOption).toHaveCount(0);
       await selector.click();
 
@@ -284,7 +275,7 @@ test.describe("Tenant Support Access Lease authorization", () => {
       );
       expect(requestedLease.status).toBe("PENDING");
 
-      await selector.click();
+      await openFreshAdministrationContextSelector(page);
       await expect(supportOption).toHaveCount(0);
       await selector.click();
 
@@ -300,7 +291,7 @@ test.describe("Tenant Support Access Lease authorization", () => {
         "approve browser selector support lease",
       );
 
-      await selector.click();
+      await openFreshAdministrationContextSelector(page);
       await expect(supportOption).toBeVisible();
       await expect(supportOption).toHaveAttribute(
         "data-context-kind",
@@ -350,8 +341,8 @@ test.describe("Tenant Support Access Lease authorization", () => {
       await expect(page.getByRole("link", { name: "Admin", exact: true })).toHaveCount(0);
       await expect(page.getByRole("link", { name: "Authz", exact: true })).toHaveCount(0);
 
-      await selector.click();
-      await contextSelection.locator('[role="option"][data-tenant-id="*"]').click();
+      const leasedContextSelection = await openFreshAdministrationContextSelector(page);
+      await leasedContextSelection.locator('[role="option"][data-tenant-id="*"]').click();
       await expect(selector).toHaveAttribute("data-selected-tenant-id", "*");
 
       const terminationResponse = await tenantAdminApi.post(
@@ -369,7 +360,7 @@ test.describe("Tenant Support Access Lease authorization", () => {
         "terminate browser selector support lease",
       );
 
-      await selector.click();
+      await openFreshAdministrationContextSelector(page);
       await expect(supportOption).toHaveCount(0);
     } finally {
       await closeOpenLeases(
@@ -1253,6 +1244,36 @@ async function getCurrentActor(
   const response = await api.get(e2eApiUrl("/api/v1/authz/current-actor"), { headers });
   await expectStatus(response, 200, "resolve current authorization actor");
   return responseData<CurrentActor>(response, "resolve current authorization actor");
+}
+
+async function openFreshAdministrationContextSelector(page: Page) {
+  const selector = page.getByRole("button", {
+    name: "Current administration context",
+  });
+  await selector.click();
+  return waitForFreshAdministrationContextSelector(page);
+}
+
+async function waitForFreshAdministrationContextSelector(page: Page) {
+  const selection = page.getByRole("region", {
+    name: "Administration context selection",
+  });
+  await expect(selection).toBeVisible();
+
+  // Opening the selector deliberately refreshes session-owned contexts and
+  // suppresses stale options until that request completes. Deployed Test can
+  // take longer than Playwright's default 5-second assertion timeout, so wait
+  // on the selector's own enabled-state freshness boundary before asserting
+  // lease presence/absence. This also prevents a false "0 options" PASS while
+  // the selector is merely displaying its refresh state.
+  const filter = selection.getByRole("combobox", { name: "Filter contexts" });
+  await expect(filter).toBeVisible();
+  await expect(filter).toBeEnabled({ timeout: 15_000 });
+  await expect(
+    selection.locator('[role="option"][data-tenant-id="*"]'),
+  ).toBeVisible({ timeout: 15_000 });
+
+  return selection;
 }
 
 async function getAuthenticatedAccountID(
