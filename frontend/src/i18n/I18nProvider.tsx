@@ -14,7 +14,7 @@ import {
   LOCALE_STORAGE_KEY,
   matchSupportedLocale,
   persistLocale,
-  readStoredLocale,
+  readStoredLocaleValue,
   resolveLocale,
   type AppLocale,
   type LocaleResolution,
@@ -71,10 +71,28 @@ function currentBrowserLanguages(): string[] {
 
 function resolveCurrentLocale(): LocaleResolution {
   const storage = currentStorage();
-  return resolveLocale({
-    storedLocale: readStoredLocale(storage),
-    browserLanguages: currentBrowserLanguages(),
-  });
+  const storedValue = readStoredLocaleValue(storage);
+  const storedLocale = matchSupportedLocale(storedValue);
+
+  if (storedLocale) {
+    // Keep the browser preference canonical even when a caller writes an
+    // accepted alias such as `pt` or `EN_us` directly into Local Storage.
+    if (storedValue !== storedLocale) {
+      persistLocale(storage, storedLocale);
+    }
+    return { locale: storedLocale, source: "stored" };
+  }
+
+  const resolved = resolveLocale({ browserLanguages: currentBrowserLanguages() });
+  if (storedValue !== null) {
+    // An existing but unsupported value is invalid persisted state. Repair it
+    // to the supported locale ERS actually resolved instead of leaving a raw
+    // value that can never become an active application locale.
+    persistLocale(storage, resolved.locale);
+    return { locale: resolved.locale, source: "stored" };
+  }
+
+  return resolved;
 }
 
 export function I18nProvider({ children }: { children: ReactNode }) {
@@ -117,13 +135,7 @@ export function I18nProvider({ children }: { children: ReactNode }) {
         return;
       }
 
-      const storedLocale = matchSupportedLocale(event.newValue);
-      if (storedLocale) {
-        setResolution({ locale: storedLocale, source: "stored" });
-        return;
-      }
-
-      setResolution(resolveLocale({ browserLanguages: currentBrowserLanguages() }));
+      synchronizeLocaleFromCurrentEnvironment();
     };
 
     const synchronizeVisibleTab = () => {

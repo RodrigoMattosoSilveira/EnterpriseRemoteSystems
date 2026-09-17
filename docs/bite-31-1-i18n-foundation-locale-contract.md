@@ -21,6 +21,8 @@ At application startup, locale resolution is deterministic:
 2. Otherwise, ERS walks `navigator.languages` in order and uses the first supported locale.
 3. Otherwise, ERS falls back to `en-US`.
 
+When the preference key exists, ERS keeps its stored value canonical. Accepted aliases such as `en`, `pt`, or case/underscore variants are rewritten to the exact supported tags `en-US` or `pt-BR`. An unsupported persisted value such as `fr-FR` is repaired to the supported locale produced by the browser/fallback resolution above. After repair, the preference key therefore contains only `en-US` or `pt-BR`; unsupported raw values are never retained as persisted ERS locale state.
+
 A future visible language selector uses the same service. Selecting a locale persists the explicit preference. Choosing browser language removes that preference and re-runs browser-language resolution.
 
 Locale preference is presentation state only. It must not create, mutate, select, or infer an Authentication Account, AccountActor, Actor, Person, Membership, Collaborator, Tenant, Administration context, Support Access Lease, or authorization permission.

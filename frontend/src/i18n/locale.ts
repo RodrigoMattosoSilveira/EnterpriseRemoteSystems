@@ -60,16 +60,22 @@ export function resolveLocale({
   return { locale: DEFAULT_LOCALE, source: "fallback" };
 }
 
-export function readStoredLocale(storage: Pick<Storage, "getItem"> | null | undefined): AppLocale | null {
+export function readStoredLocaleValue(
+  storage: Pick<Storage, "getItem"> | null | undefined,
+): string | null {
   if (!storage) {
     return null;
   }
 
   try {
-    return matchSupportedLocale(storage.getItem(LOCALE_STORAGE_KEY));
+    return storage.getItem(LOCALE_STORAGE_KEY);
   } catch {
     return null;
   }
+}
+
+export function readStoredLocale(storage: Pick<Storage, "getItem"> | null | undefined): AppLocale | null {
+  return matchSupportedLocale(readStoredLocaleValue(storage));
 }
 
 export function persistLocale(

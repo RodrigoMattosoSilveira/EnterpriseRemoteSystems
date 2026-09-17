@@ -84,6 +84,7 @@ describe("I18nProvider", () => {
       );
     });
 
+    window.localStorage.setItem(LOCALE_STORAGE_KEY, "pt-BR");
     await act(async () => {
       window.dispatchEvent(
         new StorageEvent("storage", {
@@ -95,6 +96,24 @@ describe("I18nProvider", () => {
 
     expect(text("locale")).toBe("pt-BR");
     expect(text("label")).toBe("Idioma");
+  });
+
+  it("repairs an unsupported stored locale to the supported locale ERS resolves", async () => {
+    window.localStorage.setItem(LOCALE_STORAGE_KEY, "fr-FR");
+
+    await act(async () => {
+      root?.render(
+        <I18nProvider>
+          <LocaleHarness />
+        </I18nProvider>,
+      );
+    });
+
+    const activeLocale = text("locale");
+    expect(["en-US", "pt-BR"]).toContain(activeLocale);
+    expect(text("source")).toBe("stored");
+    expect(window.localStorage.getItem(LOCALE_STORAGE_KEY)).toBe(activeLocale);
+    expect(document.documentElement.lang).toBe(activeLocale);
   });
 
   it("reconciles a missed cross-tab locale change when the tab regains focus", async () => {

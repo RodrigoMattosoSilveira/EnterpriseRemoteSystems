@@ -49,4 +49,21 @@ test.describe("I18N locale lifecycle", () => {
       .toBe("pt-BR");
     await expect.poll(() => secondPage.evaluate(() => document.documentElement.lang)).toBe("pt-BR");
   });
+
+  test("repairs an unsupported stored locale to an exact supported locale", async ({ page }) => {
+    await page.goto("/");
+    await page.evaluate((key) => window.localStorage.setItem(key, "fr-FR"), LOCALE_STORAGE_KEY);
+    await page.reload();
+
+    await expect
+      .poll(() => page.evaluate((key) => window.localStorage.getItem(key), LOCALE_STORAGE_KEY))
+      .toMatch(/^(en-US|pt-BR)$/);
+
+    const storedLocale = await page.evaluate(
+      (key) => window.localStorage.getItem(key),
+      LOCALE_STORAGE_KEY,
+    );
+    expect(await page.evaluate(() => document.documentElement.lang)).toBe(storedLocale);
+  });
+
 });
