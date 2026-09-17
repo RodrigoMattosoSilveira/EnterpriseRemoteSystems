@@ -53,8 +53,6 @@ export interface I18nContextValue {
 
 const I18nContext = createContext<I18nContextValue | null>(null);
 
-const VISIBLE_LOCALE_RECONCILIATION_INTERVAL_MS = 250;
-
 function currentStorage(): Storage | null {
   if (typeof window === "undefined") {
     return null;
@@ -139,22 +137,10 @@ export function I18nProvider({ children }: { children: ReactNode }) {
     window.addEventListener("focus", synchronizeLocaleFromCurrentEnvironment);
     document.addEventListener("visibilitychange", synchronizeVisibleTab);
 
-    // `storage`, focus, and visibilitychange are the normal fast paths. Keep a
-    // small visible-tab reconciliation loop as a defensive fallback because a
-    // browser/DevTools lifecycle can miss those events while Local Storage has
-    // already changed. The state equality guard above makes the steady-state
-    // check a no-op without triggering React rerenders.
-    const reconciliationInterval = window.setInterval(() => {
-      if (typeof document !== "undefined" && document.visibilityState === "visible") {
-        synchronizeLocaleFromCurrentEnvironment();
-      }
-    }, VISIBLE_LOCALE_RECONCILIATION_INTERVAL_MS);
-
     return () => {
       window.removeEventListener("storage", synchronizeLocaleAcrossTabs);
       window.removeEventListener("focus", synchronizeLocaleFromCurrentEnvironment);
       document.removeEventListener("visibilitychange", synchronizeVisibleTab);
-      window.clearInterval(reconciliationInterval);
     };
   }, []);
 

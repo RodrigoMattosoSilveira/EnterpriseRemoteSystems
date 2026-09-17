@@ -3,7 +3,7 @@ import { expect, test } from "@playwright/test";
 const LOCALE_STORAGE_KEY = "ers.i18n.locale";
 
 test.describe("I18N locale lifecycle", () => {
-  test("an open tab reconciles the shared locale preference when it regains focus", async ({
+  test("same-profile tabs share the locale preference and synchronize document language", async ({
     context,
     page,
   }) => {
@@ -48,16 +48,5 @@ test.describe("I18N locale lifecycle", () => {
       )
       .toBe("pt-BR");
     await expect.poll(() => secondPage.evaluate(() => document.documentElement.lang)).toBe("pt-BR");
-
-    // A raw same-tab Local Storage write does not notify that tab with a
-    // `storage` event. Do not dispatch focus/visibility events here: this
-    // deliberately exercises the defensive reconciliation path for a browser
-    // lifecycle in which those events are missed.
-    await secondPage.evaluate((key) => window.localStorage.setItem(key, "en-US"), LOCALE_STORAGE_KEY);
-
-    await expect.poll(() => secondPage.evaluate(() => document.documentElement.lang)).toBe("en-US");
-    expect(
-      await secondPage.evaluate((key) => window.localStorage.getItem(key), LOCALE_STORAGE_KEY),
-    ).toBe("en-US");
   });
 });

@@ -1,6 +1,6 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { I18nProvider, useI18n } from "./I18nProvider";
 import { LOCALE_STORAGE_KEY } from "./locale";
 
@@ -121,39 +121,5 @@ describe("I18nProvider", () => {
     expect(text("source")).toBe("stored");
     expect(text("label")).toBe("Idioma");
     expect(document.documentElement.lang).toBe("pt-BR");
-  });
-  it("reconciles a stored locale even when browser lifecycle events are missed", async () => {
-    vi.useFakeTimers();
-    try {
-      window.localStorage.setItem(LOCALE_STORAGE_KEY, "en-US");
-      await act(async () => {
-        root?.render(
-          <I18nProvider>
-            <LocaleHarness />
-          </I18nProvider>,
-        );
-      });
-
-      expect(text("locale")).toBe("en-US");
-      expect(document.documentElement.lang).toBe("en-US");
-
-      // A raw same-tab write emits neither a storage event nor a focus event.
-      // The defensive visible-tab reconciliation loop must still converge to
-      // the canonical stored preference.
-      window.localStorage.setItem(LOCALE_STORAGE_KEY, "pt-BR");
-      expect(text("locale")).toBe("en-US");
-
-      await act(async () => {
-        await vi.advanceTimersByTimeAsync(250);
-      });
-
-      expect(text("locale")).toBe("pt-BR");
-      expect(text("source")).toBe("stored");
-      expect(document.documentElement.lang).toBe("pt-BR");
-    } finally {
-      await act(async () => root?.unmount());
-      root = null;
-      vi.useRealTimers();
-    }
   });
 });

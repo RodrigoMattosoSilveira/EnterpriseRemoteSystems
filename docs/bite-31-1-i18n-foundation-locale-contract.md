@@ -36,9 +36,8 @@ documents that share the same Web Storage area.
 For ERS manual testing, "same application origin" means the scheme, hostname,
 and port are identical in both tabs. For example, `http://localhost:5173` and
 `http://127.0.0.1:5173` are different origins, and `http://localhost:5173` and
-`http://localhost:3000` are also different origins. Different Chrome profiles
-or normal/private browsing contexts may likewise use different storage
-partitions.
+`http://localhost:3000` are also different origins. Different browser profiles
+or normal/private browsing contexts likewise use different storage partitions.
 
 Before diagnosing an ERS cross-tab synchronization failure, verify in both tabs:
 
@@ -99,13 +98,15 @@ The provider synchronizes the document `<html lang>` attribute, listens for the 
 Those changes build on this foundation in Bite 31.2 and Bite 31.3.
 
 
-## Cross-tab reconciliation hardening
+## Cross-tab reconciliation
 
-Cross-tab locale propagation uses the browser `storage` event as the normal
-fast path. The provider also reconciles from canonical Local Storage when the
-window regains focus or becomes visible, and while a tab is visible it performs
-a lightweight periodic reconciliation. The periodic path is defensive: it
-ensures an already-open tab converges to `ers.i18n.locale` even if a browser or
-DevTools lifecycle misses the expected `storage`, focus, or visibility event.
-It does not poll the backend and does not change authentication, authorization,
-Tenant selection, or business state.
+Cross-tab locale propagation uses the browser `storage` event for same-origin
+tabs that share the same browser storage partition. The provider also re-reads
+the canonical Local Storage preference when a tab regains focus or becomes
+visible, providing a bounded lifecycle reconciliation path without background
+polling.
+
+Normal and private/InPrivate browsing contexts intentionally use separate
+storage partitions and are outside this cross-tab synchronization contract.
+Manual cross-tab verification must therefore use two normal tabs in the same
+browser profile and exact application origin.
