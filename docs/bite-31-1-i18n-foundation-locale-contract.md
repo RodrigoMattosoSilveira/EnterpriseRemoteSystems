@@ -25,6 +25,34 @@ A future visible language selector uses the same service. Selecting a locale per
 
 Locale preference is presentation state only. It must not create, mutate, select, or infer an Authentication Account, AccountActor, Actor, Person, Membership, Collaborator, Tenant, Administration context, Support Access Lease, or authorization permission.
 
+
+
+### Browser storage boundary
+
+`ers.i18n.locale` is intentionally a browser-local preference stored in
+`window.localStorage`. Cross-tab synchronization is therefore defined only for
+documents that share the same Web Storage area.
+
+For ERS manual testing, "same application origin" means the scheme, hostname,
+and port are identical in both tabs. For example, `http://localhost:5173` and
+`http://127.0.0.1:5173` are different origins, and `http://localhost:5173` and
+`http://localhost:3000` are also different origins. Different Chrome profiles
+or normal/private browsing contexts may likewise use different storage
+partitions.
+
+Before diagnosing an ERS cross-tab synchronization failure, verify in both tabs:
+
+```javascript
+location.origin
+localStorage.getItem("ers.i18n.locale")
+```
+
+The `location.origin` values must be identical. After a successful write in one
+tab, the other tab must be able to read the same stored value. If it reads
+`null`, the tabs are not sharing the storage area required by this contract;
+I18N provider events or reconciliation cannot safely bridge that browser
+boundary.
+
 ## Translation resources
 
 Translation resources live under `frontend/src/i18n/resources/`.
