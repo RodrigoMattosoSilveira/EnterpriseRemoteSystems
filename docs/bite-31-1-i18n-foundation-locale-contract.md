@@ -57,7 +57,7 @@ Timezone is likewise not inferred from language. Date/time formatting uses the b
 - `t(key, parameters?)`, including named placeholder interpolation;
 - locale-bound number, currency, date, and date-time formatters.
 
-The provider synchronizes the document `<html lang>` attribute, listens for the locale preference changing in another browser tab, and follows the browser `languagechange` event whenever the user has not stored an explicit ERS locale.
+The provider synchronizes the document `<html lang>` attribute, listens for the locale preference changing in another browser tab, and follows the browser `languagechange` event whenever the user has not stored an explicit ERS locale. Because browser `storage` delivery is not the only lifecycle boundary at which an existing tab can become stale, the provider also re-reads the canonical locale preference whenever the tab regains focus or becomes visible. This makes cross-tab locale state self-healing without polling.
 
 ## Out of scope for Bite 31.1
 

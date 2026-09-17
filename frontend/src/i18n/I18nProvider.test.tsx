@@ -96,4 +96,30 @@ describe("I18nProvider", () => {
     expect(text("locale")).toBe("pt-BR");
     expect(text("label")).toBe("Idioma");
   });
+
+  it("reconciles a missed cross-tab locale change when the tab regains focus", async () => {
+    window.localStorage.setItem(LOCALE_STORAGE_KEY, "en-US");
+    await act(async () => {
+      root?.render(
+        <I18nProvider>
+          <LocaleHarness />
+        </I18nProvider>,
+      );
+    });
+
+    expect(text("locale")).toBe("en-US");
+    expect(document.documentElement.lang).toBe("en-US");
+
+    // Simulate another tab updating the shared Local Storage while this tab
+    // misses the storage event. Returning focus must reconcile from storage.
+    window.localStorage.setItem(LOCALE_STORAGE_KEY, "pt-BR");
+    await act(async () => {
+      window.dispatchEvent(new Event("focus"));
+    });
+
+    expect(text("locale")).toBe("pt-BR");
+    expect(text("source")).toBe("stored");
+    expect(text("label")).toBe("Idioma");
+    expect(document.documentElement.lang).toBe("pt-BR");
+  });
 });

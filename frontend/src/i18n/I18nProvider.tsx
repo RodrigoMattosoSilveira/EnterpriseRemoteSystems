@@ -102,6 +102,10 @@ export function I18nProvider({ children }: { children: ReactNode }) {
       return undefined;
     }
 
+    const synchronizeLocaleFromCurrentEnvironment = () => {
+      setResolution(resolveCurrentLocale());
+    };
+
     const synchronizeLocaleAcrossTabs = (event: StorageEvent) => {
       if (event.key !== LOCALE_STORAGE_KEY) {
         return;
@@ -116,8 +120,21 @@ export function I18nProvider({ children }: { children: ReactNode }) {
       setResolution(resolveLocale({ browserLanguages: currentBrowserLanguages() }));
     };
 
+    const synchronizeVisibleTab = () => {
+      if (typeof document === "undefined" || document.visibilityState !== "visible") {
+        return;
+      }
+      synchronizeLocaleFromCurrentEnvironment();
+    };
+
     window.addEventListener("storage", synchronizeLocaleAcrossTabs);
-    return () => window.removeEventListener("storage", synchronizeLocaleAcrossTabs);
+    window.addEventListener("focus", synchronizeLocaleFromCurrentEnvironment);
+    document.addEventListener("visibilitychange", synchronizeVisibleTab);
+    return () => {
+      window.removeEventListener("storage", synchronizeLocaleAcrossTabs);
+      window.removeEventListener("focus", synchronizeLocaleFromCurrentEnvironment);
+      document.removeEventListener("visibilitychange", synchronizeVisibleTab);
+    };
   }, []);
 
   useEffect(() => {
