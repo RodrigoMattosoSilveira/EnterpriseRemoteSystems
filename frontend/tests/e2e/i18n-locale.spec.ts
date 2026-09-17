@@ -22,14 +22,11 @@ test.describe("I18N locale lifecycle", () => {
     await expect.poll(() => secondPage.evaluate(() => document.documentElement.lang)).toBe("pt-BR");
 
     // A raw same-tab Local Storage write does not notify that tab with a
-    // `storage` event. Explicitly dispatch the browser focus event consumed by
-    // I18nProvider to exercise the missed-event reconciliation path. Playwright
-    // `bringToFront()` changes the frontmost page in headless Chromium but does
-    // not guarantee that the page receives a DOM `focus` event.
+    // `storage` event. Do not dispatch focus/visibility events here: this
+    // deliberately exercises the defensive reconciliation path for a browser
+    // lifecycle in which those events are missed.
     await secondPage.evaluate((key) => window.localStorage.setItem(key, "en-US"), LOCALE_STORAGE_KEY);
-    expect(await secondPage.evaluate(() => document.documentElement.lang)).toBe("pt-BR");
 
-    await secondPage.evaluate(() => window.dispatchEvent(new Event("focus")));
     await expect.poll(() => secondPage.evaluate(() => document.documentElement.lang)).toBe("en-US");
     expect(
       await secondPage.evaluate((key) => window.localStorage.getItem(key), LOCALE_STORAGE_KEY),

@@ -69,3 +69,15 @@ The provider synchronizes the document `<html lang>` attribute, listens for the 
 - adding locales other than `en-US` and `pt-BR`.
 
 Those changes build on this foundation in Bite 31.2 and Bite 31.3.
+
+
+## Cross-tab reconciliation hardening
+
+Cross-tab locale propagation uses the browser `storage` event as the normal
+fast path. The provider also reconciles from canonical Local Storage when the
+window regains focus or becomes visible, and while a tab is visible it performs
+a lightweight periodic reconciliation. The periodic path is defensive: it
+ensures an already-open tab converges to `ers.i18n.locale` even if a browser or
+DevTools lifecycle misses the expected `storage`, focus, or visibility event.
+It does not poll the backend and does not change authentication, authorization,
+Tenant selection, or business state.
