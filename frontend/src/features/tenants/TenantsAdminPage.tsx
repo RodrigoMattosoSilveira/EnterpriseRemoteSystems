@@ -296,7 +296,7 @@ function TenantRow({ tenant }: { tenant: Tenant }) {
       <td className="p-3">{tenant.tenantAdminCount}</td>
       <td className="p-3 text-right">
         <Link
-          className="rounded-lg border px-3 py-1 text-xs font-semibold text-gray-700"
+          className="inline-flex items-center justify-center whitespace-nowrap rounded-lg border px-3 py-1 text-xs font-semibold text-gray-700"
           to={`/admin/tenants/${tenant.id}`}
         >
           {t("admin.tenants.manageRecord")}
