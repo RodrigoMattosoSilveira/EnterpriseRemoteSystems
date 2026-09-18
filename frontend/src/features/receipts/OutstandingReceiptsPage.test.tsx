@@ -44,6 +44,8 @@ describe("OutstandingReceiptsPage", () => {
     await waitForText("Maria");
     await waitForText("Source: expense");
     await waitForText("Next action: Print receipt");
+    await waitForText("Showing page 1 of 1 · 1 receipt");
+    expect(container.textContent).not.toContain("receipt(s)");
     expect(container.textContent).toContain("Person owner: person-1");
     expect(container.textContent).toContain("Journey provenance: collab-1");
     expect(container.textContent).toContain("Tenant: default");

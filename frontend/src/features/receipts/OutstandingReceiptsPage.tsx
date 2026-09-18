@@ -199,7 +199,11 @@ export function OutstandingReceiptsPage() {
         {data ? (
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <p className="text-sm text-gray-600">
-              {t("receipts.showingPage", { page: data.page, pages: totalPages, total: data.total })}
+              {t(data.total === 1 ? "receipts.showingPageOne" : "receipts.showingPage", {
+                page: data.page,
+                pages: totalPages,
+                total: data.total,
+              })}
             </p>
             <div className="flex gap-2">
               <button type="button" className="rounded-xl border bg-white px-4 py-2 text-sm font-semibold disabled:opacity-50" disabled={data.page <= 1} onClick={() => updatePage(data.page - 1)}>
