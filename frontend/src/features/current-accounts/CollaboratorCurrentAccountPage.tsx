@@ -295,7 +295,7 @@ function BalanceCard({ balance }: { balance: DisplayBalance }) {
         {code === "BRL" ? t("account.real") : code === "GOLD_GRAM" ? t("account.gramsGold") : balance.valueUnitLabel || code}
       </p>
       <p className="mt-2 text-2xl font-bold text-gray-950">
-        {code.toUpperCase().includes("GOLD") ? `${formatNumber(balance.balance, { maximumFractionDigits: 8 })} ${t("account.goldUnit")}` : formatCurrency(balance.balance, "BRL")}
+        {code.toUpperCase().includes("GOLD") ? formatNumber(balance.balance, { maximumFractionDigits: 8 }) : formatCurrency(balance.balance, "BRL")}
       </p>
       <p className="mt-1 text-xs text-gray-500">{code}</p>
     </article>
