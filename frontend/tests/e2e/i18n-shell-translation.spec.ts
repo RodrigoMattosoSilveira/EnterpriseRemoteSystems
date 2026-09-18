@@ -30,6 +30,19 @@ test.describe("Bite 31.2 visible language selection", () => {
     await page.reload();
     await expect(page.locator("html")).toHaveAttribute("lang", "pt-BR");
     await expect(page.getByRole("heading", { name: "Entrar" })).toBeVisible();
+    await expect
+      .poll(() => page.evaluate((key) => localStorage.getItem(key), LOCALE_STORAGE_KEY))
+      .toBe("pt-BR");
+
+    // A browser may restore a native select independently of React after a
+    // frontend rebuild. Simulate that DOM-only drift and verify the visible
+    // selector snaps back to the provider's persisted pt-BR state.
+    await page.getByRole("combobox", { name: "Idioma" }).evaluate((select) => {
+      (select as HTMLSelectElement).value = "browser";
+      window.dispatchEvent(new PageTransitionEvent("pageshow", { persisted: false }));
+    });
+    await expect(page.getByRole("combobox", { name: "Idioma" })).toHaveValue("pt-BR");
+    await expect(page.getByRole("heading", { name: "Entrar" })).toBeVisible();
 
     await page.getByRole("combobox", { name: "Idioma" }).selectOption("en-US");
     await expect(page.locator("html")).toHaveAttribute("lang", "en-US");

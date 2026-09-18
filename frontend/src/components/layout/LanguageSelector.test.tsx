@@ -120,6 +120,39 @@ describe("LanguageSelector", () => {
     expect(container.textContent).toContain("Idioma");
   });
 
+  it("corrects a browser-restored stale native selection to the provider locale", async () => {
+    await act(async () => {
+      root.render(
+        <I18nProvider>
+          <LanguageSelector />
+        </I18nProvider>,
+      );
+    });
+
+    const select = container.querySelector("select");
+    if (!(select instanceof HTMLSelectElement)) throw new Error("language selector not found");
+
+    expect(window.localStorage.getItem(LOCALE_STORAGE_KEY)).toBeNull();
+    expect(document.documentElement.lang).toBe("en-US");
+    expect(select.value).toBe("browser");
+
+    // Simulate Edge restoring a prior form-control selection after React has
+    // already resolved the actual locale from Browser language. No change
+    // event is fired in this browser-restoration scenario.
+    select.value = "pt-BR";
+    expect(select.value).toBe("pt-BR");
+
+    await act(async () => {
+      window.dispatchEvent(new Event("pageshow"));
+      await new Promise((resolve) => window.requestAnimationFrame(() => resolve(undefined)));
+    });
+
+    expect(select.value).toBe("browser");
+    expect(window.localStorage.getItem(LOCALE_STORAGE_KEY)).toBeNull();
+    expect(document.documentElement.lang).toBe("en-US");
+    expect(container.textContent).toContain("Language");
+  });
+
   it("returns to browser-derived locale without leaving a stored preference", async () => {
     window.localStorage.setItem(LOCALE_STORAGE_KEY, "pt-BR");
     await act(async () => {
