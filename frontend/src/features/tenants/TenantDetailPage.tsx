@@ -269,7 +269,7 @@ export function TenantDetailPage() {
                     <div>
                       <p className="font-semibold text-gray-950">{candidate.displayName || candidate.actorKey}</p>
                       <p className="mt-1 text-xs text-gray-500">
-                        {t("common.actorKey")}: <code className="break-all font-mono text-gray-700">{candidate.actorKey}</code>
+                        {t("admin.tenantDetail.actorKeyLabel")}: <code className="break-all font-mono text-gray-700">{candidate.actorKey}</code>
                       </p>
                       <p className="text-xs text-gray-500">
                         {t("common.actorRecordId")}: <code className="break-all font-mono text-gray-700">{candidate.actorId}</code>

@@ -41,6 +41,7 @@ export const enUSMessages = {
   "common.tenantId": "Tenant ID",
   "common.tenantCode": "Tenant Code",
   "admin.tenantDetail.tenantCodeLabel": "Tenant code",
+  "admin.tenantDetail.actorKeyLabel": "Actor key",
   "common.notRecorded": "Not recorded",
   "common.actionCompleted": "Action completed",
   "common.error.url": "URL",

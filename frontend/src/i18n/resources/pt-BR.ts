@@ -43,6 +43,7 @@ export const ptBRMessages = {
   "common.tenantId": "ID do Tenant",
   "common.tenantCode": "Código do Tenant",
   "admin.tenantDetail.tenantCodeLabel": "Código do Tenant",
+  "admin.tenantDetail.actorKeyLabel": "Chave do Ator",
   "common.notRecorded": "Não registrado",
   "common.actionCompleted": "Ação concluída",
   "common.error.url": "URL",
