@@ -7,6 +7,7 @@ import { AuthorizationProvider } from "../../components/layout/AuthorizationCont
 import type { AuthzCurrentActor } from "../../types/authz";
 import type { Collaborator } from "../../types/collaborators";
 import { CollaboratorsListPage } from "./CollaboratorsListPage";
+import { I18nProvider } from "../../i18n";
 
 
 const adminActor: AuthzCurrentActor = {
@@ -307,11 +308,11 @@ function renderCollaboratorsListPage(
 
   act(() => {
     root?.render(
-      <AuthorizationProvider value={actor}>
+      <I18nProvider><AuthorizationProvider value={actor}>
         <QueryClientProvider client={queryClient}>
           <RouterProvider router={router} />
         </QueryClientProvider>
-      </AuthorizationProvider>,
+      </AuthorizationProvider></I18nProvider>,
     );
   });
 }

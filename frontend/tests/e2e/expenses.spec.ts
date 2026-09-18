@@ -163,7 +163,7 @@ test("user can create a grams-of-gold Expense from the latest gold price", async
   await page.getByLabel("Currency *").selectOption("GOLD_GRAM");
   await page.getByLabel("Quantity *").fill("2");
   await expect(page.getByText("Latest gold price source")).toContainText(
-    "137,28",
+    "137.28",
   );
   await expect(page.getByText("2 g gold")).toBeVisible();
   await page

@@ -118,5 +118,6 @@ claim complete translation of:
 - less frequently demonstrated support/operations pages outside the common
   shell and the administration surfaces covered above.
 
-Those screens must consume the same translation and formatting contracts when
-they are migrated in Bite 31.3 or later work.
+Those screens consume the same translation and formatting contracts in Bite
+31.3 — Core Business Demo Journey in pt-BR. Repeatable Brazilian demo data and
+prospect presentation scripts remain Bite 31.4 and Bite 31.5 work.

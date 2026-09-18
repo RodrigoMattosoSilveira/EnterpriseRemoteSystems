@@ -9,6 +9,7 @@ import type {
   WorkPeriodPlanningTemplate,
   WorkPeriodPlanningTemplateRow,
 } from "../../types/planning";
+import { translateEnglish, type Translate, useI18n } from "../../i18n";
 
 type SortKey =
   | "selected"
@@ -74,6 +75,7 @@ export function PlanTab(props: {
     input: PlanAssignmentRefinementInput,
   ) => Promise<PlanAssignmentRefinementResult>;
 }) {
+  const { t } = useI18n();
   const [rows, setRows] = useState<LocalRow[]>([]);
   const [filters, setFilters] = useState<PlanningTableFilters>(
     emptyPlanningTableFilters,
@@ -284,8 +286,8 @@ export function PlanTab(props: {
       setRefinementDraft(null);
       setRefinementMessage(
         refinementResult?.futureDefaultsUpdated
-          ? "Assignment refinement applied and future planning defaults updated. Click Plan to save this Work Period assignment."
-          : "Assignment refinement applied to this Work Period plan. Click Plan to save it.",
+          ? t("planning.refinementAppliedFuture")
+          : t("planning.refinementApplied"),
       );
     } finally {
       setRefinementPending(false);
@@ -296,30 +298,21 @@ export function PlanTab(props: {
     <section className="space-y-4">
       <div className="flex flex-col gap-3 rounded-2xl border bg-white p-4 shadow-sm sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h2 className="text-lg font-semibold">Plan Assignments</h2>
+          <h2 className="text-lg font-semibold">{t("planning.planAssignments")}</h2>
           <p className="text-sm text-gray-500">
-            Select collaborators for this Work Period. New plans start from the
-            most recent Work Period with the same period code. Saving applies
-            the selected rows only; unselected rows are ignored unless their
-            Availability was changed for inheritance by the next plan.
+            {t("planning.planHelp")}
           </p>
           <p className="mt-2 text-sm text-gray-500">
-            Use Plan Assignment to refine a collaborator&apos;s sector, local,
-            and task before saving the Work Period plan. Use Cand. and Repl. to
-            mark temporary replacements for this Work Period only. Future
-            defaults are updated only when explicitly selected in that
-            refinement workflow.
+            {t("planning.refinementHelp")}
           </p>
           {props.template?.sourceWorkPeriodId && (
             <p className="mt-2 text-sm font-medium text-gray-700">
-              Template source: {props.template.sourceWorkDate} ·{" "}
-              {props.template.sourcePeriodName}
+              {t("planning.templateSource", { date: props.template.sourceWorkDate, name: props.template.sourcePeriodName })}
             </p>
           )}
           {!props.template?.sourceWorkPeriodId && rows.length > 0 && (
             <p className="mt-2 text-sm text-gray-500">
-              No prior same-type Work Period template was found, or this Work
-              Period already has saved assignments.
+              {t("planning.noTemplate")}
             </p>
           )}
           {refinementMessage && (
@@ -334,7 +327,7 @@ export function PlanTab(props: {
             onClick={() => setSort(null)}
             className="rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm font-semibold text-gray-700 shadow-sm"
           >
-            Reset sort
+            {t("planning.resetSort")}
           </button>
           <button
             type="button"
@@ -350,21 +343,19 @@ export function PlanTab(props: {
             }
             className="rounded-xl bg-gray-950 px-4 py-2 text-sm font-semibold text-white shadow-sm disabled:bg-gray-400"
           >
-            {props.pending
-              ? "Saving plan..."
-              : `Save plan (${selectedCount} selected)`}
+            {props.pending ? t("planning.savingPlan") : t("planning.savePlan", { count: selectedCount })}
           </button>
         </div>
       </div>
 
       {props.loading && (
         <div className="rounded-2xl border bg-white p-6 text-sm text-gray-500 shadow-sm">
-          Loading planning collaborators...
+          {t("planning.loadingCollaborators")}
         </div>
       )}
       {!props.loading && rows.length === 0 && (
         <div className="rounded-2xl border bg-white p-6 text-center text-sm text-gray-500 shadow-sm">
-          No active collaborators are available for planning.
+          {t("planning.noActiveCollaborators")}
         </div>
       )}
 
@@ -402,7 +393,7 @@ export function PlanTab(props: {
                 <tr>
                   <SortableHeader
                     label="✓"
-                    title="Selected"
+                    title={t("planning.selected")}
                     active={sort?.key === "selected"}
                     direction={sort?.direction}
                     onClick={() => toggleSort("selected")}
@@ -410,7 +401,7 @@ export function PlanTab(props: {
                   />
                   <SortableHeader
                     label="Cand."
-                    title="Replacement candidate"
+                    title={t("planning.replacementCandidate")}
                     active={sort?.key === "replacementCandidate"}
                     direction={sort?.direction}
                     onClick={() => toggleSort("replacementCandidate")}
@@ -418,47 +409,47 @@ export function PlanTab(props: {
                   />
                   <SortableHeader
                     label="Repl."
-                    title="Temporary replacement target"
+                    title={t("planning.temporaryReplacement")}
                     active={sort?.key === "temporaryReplacement"}
                     direction={sort?.direction}
                     onClick={() => toggleSort("temporaryReplacement")}
                     className="px-1 text-center whitespace-nowrap"
                   />
                   <SortableHeader
-                    label="Nick"
-                    title="Nickname"
+                    label={t("planning.nicknameShort")}
+                    title={t("planning.nickname")}
                     active={sort?.key === "nickname"}
                     direction={sort?.direction}
                     onClick={() => toggleSort("nickname")}
                   />
                   <th
                     className="px-1 py-3 text-center whitespace-nowrap"
-                    title="Days left until projected Journey end"
+                    title={t("planning.daysLeft")}
                   >
-                    D Left
+                    {t("planning.daysLeftShort")}
                   </th>
                   <SortableHeader
-                    label="Avail."
-                    title="Availability"
+                    label={t("collaborator.availabilityShort")}
+                    title={t("planning.availability")}
                     active={sort?.key === "availability"}
                     direction={sort?.direction}
                     onClick={() => toggleSort("availability")}
                     className="px-1 text-center whitespace-nowrap"
                   />
                   <SortableHeader
-                    label="Sector"
+                    label={t("collaborator.sector")}
                     active={sort?.key === "sector"}
                     direction={sort?.direction}
                     onClick={() => toggleSort("sector")}
                   />
                   <SortableHeader
-                    label="Local"
+                    label={t("planning.local")}
                     active={sort?.key === "location"}
                     direction={sort?.direction}
                     onClick={() => toggleSort("location")}
                   />
                   <SortableHeader
-                    label="Task"
+                    label={t("collaborator.task")}
                     active={sort?.key === "task"}
                     direction={sort?.direction}
                     onClick={() => toggleSort("task")}
@@ -472,7 +463,7 @@ export function PlanTab(props: {
                       colSpan={9}
                       className="px-4 py-8 text-center text-sm text-gray-500"
                     >
-                      No collaborators match the current planning filters.
+                      {t("planning.noFilterMatches")}
                     </td>
                   </tr>
                 )}
@@ -562,7 +553,7 @@ export function PlanTab(props: {
                       </div>
                       {row.replacementCandidate && (
                         <span className="mt-1 inline-flex rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-800">
-                          Candidate
+                          {t("planning.candidate")}
                         </span>
                       )}
                       <button
@@ -571,7 +562,7 @@ export function PlanTab(props: {
                         onClick={() => openRefinement(row)}
                         className="mt-2 inline-flex rounded-lg border border-gray-300 bg-white px-2 py-1 text-[11px] font-semibold text-gray-700 shadow-sm hover:bg-gray-50 disabled:bg-gray-100 disabled:text-gray-400"
                       >
-                        Plan Assignment
+                        {t("planning.planAssignment")}
                       </button>
                     </td>
                     <td className="px-1 py-3 text-center align-top">
@@ -582,7 +573,7 @@ export function PlanTab(props: {
                     </td>
                     <td className="px-1 py-3 text-center align-top">
                       <AvailabilitySelect
-                        label={`Availability for ${row.collaboratorNickname || row.collaboratorName || row.collaboratorId}`}
+                        label={t("planning.availabilityFor", { name: row.collaboratorNickname || row.collaboratorName || row.collaboratorId })}
                         value={normalizePlanningAvailability(
                           row.planningAvailability,
                         )}
@@ -597,7 +588,7 @@ export function PlanTab(props: {
                     </td>
                     <td className="px-2 py-3 align-top">
                       <ReferenceSelect
-                        label={`Sector for ${row.collaboratorNickname || row.collaboratorName || row.collaboratorId}`}
+                        label={t("planning.sectorFor", { name: row.collaboratorNickname || row.collaboratorName || row.collaboratorId })}
                         value={row.sectorId}
                         options={props.sectors}
                         widthClassName="w-32"
@@ -611,7 +602,7 @@ export function PlanTab(props: {
                     </td>
                     <td className="px-2 py-3 align-top">
                       <ReferenceSelect
-                        label={`Local for ${row.collaboratorNickname || row.collaboratorName || row.collaboratorId}`}
+                        label={t("planning.localFor", { name: row.collaboratorNickname || row.collaboratorName || row.collaboratorId })}
                         value={row.locationId}
                         options={props.locations}
                         widthClassName="w-32"
@@ -625,7 +616,7 @@ export function PlanTab(props: {
                     </td>
                     <td className="px-2 py-3 align-top">
                       <ReferenceSelect
-                        label={`Task for ${row.collaboratorNickname || row.collaboratorName || row.collaboratorId}`}
+                        label={t("planning.taskFor", { name: row.collaboratorNickname || row.collaboratorName || row.collaboratorId })}
                         value={row.taskId}
                         options={props.tasks}
                         widthClassName="w-44"
@@ -683,70 +674,69 @@ function PlanningTableFiltersPanel(props: {
   filtersActive: boolean;
   onChange: (patch: Partial<PlanningTableFilters>) => void;
   onClear: () => void;
-}) {
+}) {  const { t } = useI18n();
+
   return (
     <div className="space-y-3 border-b bg-gray-50/80 p-4">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h3 className="text-sm font-semibold text-gray-950">
-            Planning table filters
+            {t("planning.filtersAria")}
           </h3>
           <p className="text-xs text-gray-500">
-            Filters only change which rows are visible. Temporary replacement
-            choices are saved only for this Work Period; they do not update
-            future planning defaults.
+            {t("planning.filtersHelp")}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2 text-xs font-medium text-gray-600">
           <span>
-            Showing {props.visibleCount} of {props.totalCount}
+            {t("planning.showing", { visible: props.visibleCount, total: props.totalCount })}
           </span>
           <span>·</span>
-          <span>{props.selectedCount} selected</span>
+          <span>{t("planning.selectedCount", { count: props.selectedCount })}</span>
           <span>·</span>
-          <span>{props.replacementCandidateCount} candidate</span>
+          <span>{t("planning.candidateCount", { count: props.replacementCandidateCount })}</span>
           <span>·</span>
-          <span>{props.temporaryReplacementCount} temporary replacement</span>
+          <span>{t("planning.replacementCount", { count: props.temporaryReplacementCount })}</span>
           <button
             type="button"
             onClick={props.onClear}
             disabled={props.disabled || !props.filtersActive}
             className="rounded-lg border border-gray-300 bg-white px-2 py-1 font-semibold text-gray-700 shadow-sm disabled:bg-gray-100 disabled:text-gray-400"
           >
-            Clear filters
+            {t("people.filters.clear")}
           </button>
         </div>
       </div>
 
       <div className="grid gap-3 md:grid-cols-3 xl:grid-cols-7">
         <label className="text-xs font-semibold uppercase tracking-wide text-gray-500 md:col-span-3 xl:col-span-1">
-          Search collaborators
+          {t("planning.searchCollaborators")}
           <input
             type="search"
             value={props.filters.search}
             disabled={props.disabled}
             onChange={(event) => props.onChange({ search: event.target.value })}
-            placeholder="Nick or name"
+            placeholder={t("planning.searchNick")}
             className="mt-1 w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm font-normal normal-case tracking-normal text-gray-900 shadow-sm disabled:bg-gray-100 disabled:text-gray-500"
           />
         </label>
 
         <FilterSelect
-          label="Selection"
+          label={t("planning.selection")}
           value={props.filters.selection}
           disabled={props.disabled}
           onChange={(selection) =>
             props.onChange({ selection: selection as SelectionFilter })
           }
           options={[
-            { value: "ALL", label: "All rows" },
-            { value: "SELECTED", label: "Selected only" },
-            { value: "UNSELECTED", label: "Unselected only" },
+            { value: "ALL", label: t("planning.allRows") },
+            { value: "SELECTED", label: t("planning.selectedOnly") },
+            { value: "UNSELECTED", label: t("planning.unselectedOnly") },
           ]}
         />
 
         <FilterSelect
-          label="Avail."
+          label={t("collaborator.availabilityShort")}
           value={props.filters.availability}
           disabled={props.disabled}
           onChange={(availability) =>
@@ -755,7 +745,7 @@ function PlanningTableFiltersPanel(props: {
             })
           }
           options={[
-            { value: "ALL", label: "All availability" },
+            { value: "ALL", label: t("planning.allAvailability") },
             { value: "ACTIVE", label: "A" },
             { value: "DAY_OFF", label: "D" },
             { value: "LEAVE_OF_ABSENCE", label: "L" },
@@ -763,7 +753,7 @@ function PlanningTableFiltersPanel(props: {
         />
 
         <FilterSelect
-          label="Candidate"
+          label={t("planning.candidate")}
           value={props.filters.replacementCandidate}
           disabled={props.disabled}
           onChange={(replacementCandidate) =>
@@ -773,34 +763,34 @@ function PlanningTableFiltersPanel(props: {
             })
           }
           options={[
-            { value: "ALL", label: "All rows" },
-            { value: "CANDIDATES", label: "Candidates only" },
-            { value: "NON_CANDIDATES", label: "Non-candidates only" },
+            { value: "ALL", label: t("planning.allRows") },
+            { value: "CANDIDATES", label: t("planning.candidatesOnly") },
+            { value: "NON_CANDIDATES", label: t("planning.nonCandidatesOnly") },
           ]}
         />
 
         <FilterSelect
-          label="Sector"
+          label={t("collaborator.sector")}
           value={props.filters.sectorId}
           disabled={props.disabled}
           onChange={(sectorId) => props.onChange({ sectorId })}
-          options={referenceFilterOptions(props.sectors, "All sectors")}
+          options={referenceFilterOptions(props.sectors, t("planning.allSectors"))}
         />
 
         <FilterSelect
-          label="Local"
+          label={t("planning.local")}
           value={props.filters.locationId}
           disabled={props.disabled}
           onChange={(locationId) => props.onChange({ locationId })}
-          options={referenceFilterOptions(props.locations, "All locals")}
+          options={referenceFilterOptions(props.locations, t("planning.allLocals"))}
         />
 
         <FilterSelect
-          label="Task"
+          label={t("collaborator.task")}
           value={props.filters.taskId}
           disabled={props.disabled}
           onChange={(taskId) => props.onChange({ taskId })}
-          options={referenceFilterOptions(props.tasks, "All tasks")}
+          options={referenceFilterOptions(props.tasks, t("planning.allTasks"))}
         />
       </div>
     </div>
@@ -841,6 +831,7 @@ function SortableHeader(props: {
   title?: string;
   className?: string;
 }) {
+  const { t } = useI18n();
   return (
     <th
       className={["px-2 py-3", props.className].filter(Boolean).join(" ")}
@@ -853,7 +844,7 @@ function SortableHeader(props: {
       >
         {props.label}
         {props.active && (
-          <span aria-label={`sorted ${props.direction}`}>
+          <span aria-label={t("planning.sorted", { direction: props.direction })}>
             {props.direction === "asc" ? "↑" : "↓"}
           </span>
         )}
@@ -873,6 +864,7 @@ function PlanAssignmentRefinementDialog(props: {
   onCancel: () => void;
   onApply: () => void;
 }) {
+  const { t } = useI18n();
   const displayName =
     props.row.collaboratorNickname ||
     props.row.collaboratorName ||
@@ -888,37 +880,36 @@ function PlanAssignmentRefinementDialog(props: {
       >
         <div>
           <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
-            Plan Assignment
+            {t("planning.planAssignment")}
           </p>
           <h3
             id="plan-assignment-refinement-title"
             className="text-xl font-bold text-gray-950"
           >
-            Refine {displayName}
+            {t("planning.refineAssignment", { name: displayName })}
           </h3>
           <p className="mt-1 text-sm text-gray-500">
-            Refine sector, local, and task for this Work Period plan. Future
-            Collaborator defaults change only when explicitly selected below.
+            {t("planning.refineAssignmentHelp")}
           </p>
         </div>
 
         <div className="grid gap-3 sm:grid-cols-3">
           <VisibleReferenceSelect
-            label="Sector"
+            label={t("collaborator.sector")}
             value={props.draft.sectorId}
             options={props.sectors}
             disabled={props.pending}
             onChange={(sectorId) => props.onChange({ sectorId })}
           />
           <VisibleReferenceSelect
-            label="Local"
+            label={t("planning.local")}
             value={props.draft.locationId}
             options={props.locations}
             disabled={props.pending}
             onChange={(locationId) => props.onChange({ locationId })}
           />
           <VisibleReferenceSelect
-            label="Task"
+            label={t("collaborator.task")}
             value={props.draft.taskId}
             options={props.tasks}
             disabled={props.pending}
@@ -938,12 +929,10 @@ function PlanAssignmentRefinementDialog(props: {
           />
           <span>
             <span className="font-semibold text-gray-900">
-              Use these values as future planning defaults for this Collaborator
+              {t("planning.futureDefaults")}
             </span>
             <span className="block text-xs text-gray-500">
-              This is the only option in this workflow that updates the
-              Collaborator Journey defaults. The Work Period assignment is still
-              saved by clicking Plan selected collaborators.
+              {t("planning.futureDefaultsHelp")}
             </span>
           </span>
         </label>
@@ -955,7 +944,7 @@ function PlanAssignmentRefinementDialog(props: {
             disabled={props.pending}
             className="rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 shadow-sm disabled:text-gray-400"
           >
-            Cancel
+            {t("common.cancel")}
           </button>
           <button
             type="button"
@@ -963,7 +952,7 @@ function PlanAssignmentRefinementDialog(props: {
             disabled={props.pending}
             className="rounded-xl bg-gray-950 px-4 py-2 text-sm font-semibold text-white shadow-sm disabled:bg-gray-400"
           >
-            {props.pending ? "Applying..." : "Apply refinement"}
+            {props.pending ? t("planning.applying") : t("planning.applyRefinement")}
           </button>
         </div>
       </section>
@@ -975,6 +964,7 @@ function CompactJourneyDaysRemaining(props: {
   projectedEndDate: string;
   className?: string;
 }) {
+  const { t } = useI18n();
   const presentation = getJourneyDaysPresentation(
     props.projectedEndDate,
     new Date(),
@@ -991,7 +981,7 @@ function CompactJourneyDaysRemaining(props: {
         .join(" ")}
       title={presentation.label}
     >
-      {presentation.daysRemaining} D
+      {presentation.daysRemaining} {t("planning.daysUnitShort")}
     </span>
   );
 }
@@ -1002,13 +992,14 @@ function ReplacementCandidateToggle(props: {
   disabled: boolean;
   onChange: (checked: boolean) => void;
 }) {
+  const { t } = useI18n();
   return (
     <label
       className="inline-flex items-center justify-center"
       title={
         props.checked
-          ? "Marked as a replacement candidate for this Work Period."
-          : "Mark as a replacement candidate for this Work Period."
+          ? t("planning.replacementMarked")
+          : t("planning.replacementMark")
       }
     >
       <span className="sr-only">{props.label}</span>
@@ -1032,6 +1023,7 @@ function TemporaryReplacementSelect(props: {
   disabled: boolean;
   onChange: (value: string) => void;
 }) {
+  const { t } = useI18n();
   const options = props.rows
     .filter((row) =>
       isTemporaryReplacementTargetAvailableForRow(
@@ -1050,13 +1042,13 @@ function TemporaryReplacementSelect(props: {
         value={props.value}
         disabled={props.disabled}
         onChange={(event) => props.onChange(event.target.value)}
-        title={temporaryReplacementTargetTitle(props.value, props.rows)}
+        title={temporaryReplacementTargetTitle(props.value, props.rows, t)}
         className="w-40 rounded-xl border border-gray-300 bg-white px-2 py-2 text-xs text-gray-900 shadow-sm disabled:bg-gray-100 disabled:text-gray-500"
       >
-        <option value="">No temporary replacement</option>
+        <option value="">{t("planning.noReplacement")}</option>
         {options.map((option) => (
           <option key={option.collaboratorId} value={option.collaboratorId}>
-            {temporaryReplacementOptionLabel(option)}
+            {temporaryReplacementOptionLabel(option, t)}
           </option>
         ))}
       </select>
@@ -1070,6 +1062,7 @@ function AvailabilitySelect(props: {
   disabled: boolean;
   onChange: (value: PlanningAvailability) => void;
 }) {
+  const { t } = useI18n();
   return (
     <label>
       <span className="sr-only">{props.label}</span>
@@ -1080,17 +1073,17 @@ function AvailabilitySelect(props: {
         onChange={(event) =>
           props.onChange(normalizePlanningAvailability(event.target.value))
         }
-        title={availabilityLabel(props.value)}
+        title={availabilityLabel(props.value, t)}
         className="w-10 rounded-xl border border-gray-300 bg-white px-1 py-2 text-sm text-gray-900 shadow-sm disabled:bg-gray-100 disabled:text-gray-500"
       >
-        <option value="ACTIVE" title="A — Active">
-          A
+        <option value="ACTIVE" title={t("planning.availability.active")}>
+          {t("planning.availability.active").slice(0, 1)}
         </option>
-        <option value="DAY_OFF" title="D — Day Off">
-          D
+        <option value="DAY_OFF" title={t("planning.availability.dayOff")}>
+          {t("planning.availability.dayOff").slice(0, 1)}
         </option>
-        <option value="LEAVE_OF_ABSENCE" title="L — Leave of Absence">
-          L
+        <option value="LEAVE_OF_ABSENCE" title={t("planning.availability.leave")}>
+          {t("planning.availability.leave").slice(0, 1)}
         </option>
       </select>
     </label>
@@ -1396,16 +1389,23 @@ function isTemporaryReplacementTargetAvailability(
   return availability === "DAY_OFF" || availability === "LEAVE_OF_ABSENCE";
 }
 
-function temporaryReplacementOptionLabel(row: LocalRow) {
-  const availability = availabilityLabel(row.planningAvailability).slice(0, 1);
-  const selection = row.selected ? "selected" : "not selected";
+function temporaryReplacementOptionLabel(
+  row: LocalRow,
+  t: Translate = translateEnglish,
+) {
+  const availability = availabilityLabel(row.planningAvailability, t).slice(0, 1);
+  const selection = row.selected ? t("planning.selectedState") : t("planning.notSelectedState");
   return `${rowNickname(row)} · ${availability} · ${selection}`;
 }
 
-function temporaryReplacementTargetTitle(value: string, rows: LocalRow[]) {
+function temporaryReplacementTargetTitle(
+  value: string,
+  rows: LocalRow[],
+  t: Translate = translateEnglish,
+) {
   const target = rows.find((row) => row.collaboratorId === value);
   return target
-    ? `Temporarily replacing ${temporaryReplacementOptionLabel(target)}`
+    ? t("planning.temporarilyReplacing", { label: temporaryReplacementOptionLabel(target, t) })
     : "";
 }
 
@@ -1422,14 +1422,17 @@ function normalizePlanningAvailability(
   }
 }
 
-function availabilityLabel(value: string | undefined) {
+function availabilityLabel(
+  value: string | undefined,
+  t: Translate = translateEnglish,
+) {
   switch (normalizePlanningAvailability(value)) {
     case "DAY_OFF":
-      return "D — Day Off";
+      return t("planning.availability.dayOff");
     case "LEAVE_OF_ABSENCE":
-      return "L — Leave of Absence";
+      return t("planning.availability.leave");
     case "ACTIVE":
-      return "A — Active";
+      return t("planning.availability.active");
   }
 }
 

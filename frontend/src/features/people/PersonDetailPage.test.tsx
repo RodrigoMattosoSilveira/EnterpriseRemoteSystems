@@ -8,6 +8,7 @@ import type { AuthzCurrentActor } from "../../types/authz";
 import { PeopleListPage } from "./PeopleListPage";
 import { PersonDetailPage } from "./PersonDetailPage";
 import type { Person } from "../../types/people";
+import { I18nProvider } from "../../i18n";
 
 const authorizationActor: AuthzCurrentActor = {
   actorKey: "people-operator",
@@ -400,11 +401,11 @@ function renderPersonDetailRoute(
 
   act(() => {
     root?.render(
-      <QueryClientProvider client={queryClient}>
+      <I18nProvider><QueryClientProvider client={queryClient}>
         <AuthorizationProvider value={actor}>
           <RouterProvider router={router} />
         </AuthorizationProvider>
-      </QueryClientProvider>
+      </QueryClientProvider></I18nProvider>
     );
   });
 

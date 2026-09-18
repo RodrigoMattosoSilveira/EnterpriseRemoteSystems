@@ -4,6 +4,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { WorkPeriodDetailPage } from "./WorkPeriodDetailPage";
+import { I18nProvider } from "../../i18n";
 
 vi.mock("../../app/useAuth", () => ({
   useAuthState: () => ({
@@ -115,15 +116,15 @@ describe("WorkPeriodDetailPage", () => {
 
     await act(async () => {
       root = createRoot(container);
-      root.render(<RouterProvider router={router} />);
+      root.render(<I18nProvider><RouterProvider router={router} /></I18nProvider>);
     });
 
-    await waitForText("Default Tenant · 2026-08-28 · 30G Tenant B accrual regression");
+    await waitForText("Default Tenant · Aug 28, 2026 · 30G Tenant B accrual regression");
 
     const pageHeading = headingByText("h1", "Work Period");
     const workPeriodHeading = headingByText(
       "h2",
-      "Default Tenant · 2026-08-28 · 30G Tenant B accrual regression",
+      "Default Tenant · Aug 28, 2026 · 30G Tenant B accrual regression",
     );
 
     expect(pageHeading).toBeTruthy();

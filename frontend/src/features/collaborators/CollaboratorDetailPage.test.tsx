@@ -7,6 +7,7 @@ import { AuthorizationProvider } from "../../components/layout/AuthorizationCont
 import type { AuthzCurrentActor } from "../../types/authz";
 import type { Collaborator } from "../../types/collaborators";
 import { CollaboratorDetailPage } from "./CollaboratorDetailPage";
+import { I18nProvider } from "../../i18n";
 
 const authorizationActor: AuthzCurrentActor = {
   actorKey: "tenant-admin",
@@ -135,13 +136,13 @@ describe("CollaboratorDetailPage", () => {
     );
     expect(textNode("Lifecycle")).toBeTruthy();
     expect(textNode("Journey Start")).toBeTruthy();
-    expect(textNode("2026-05-01")).toBeTruthy();
+    expect(textNode("May 1, 2026")).toBeTruthy();
     expect(textNode("Default End")).toBeTruthy();
-    expect(textNode("2026-07-30")).toBeTruthy();
+    expect(textNode("Jul 30, 2026")).toBeTruthy();
     expect(textNode("Extension Days")).toBeTruthy();
     expect(textNode("5")).toBeTruthy();
     expect(textNode("Projected End")).toBeTruthy();
-    expect(textNode("2026-08-04")).toBeTruthy();
+    expect(textNode("Aug 4, 2026")).toBeTruthy();
     expect(textNode("Work Assignment")).toBeTruthy();
     expect(textNode("Mining")).toBeTruthy();
     expect(textNode("Mina Carara")).toBeTruthy();
@@ -149,7 +150,7 @@ describe("CollaboratorDetailPage", () => {
     expect(textNode("Payment")).toBeTruthy();
     expect(textNode("Daily Rate")).toBeTruthy();
     expect(textNode("R$")).toBeTruthy();
-    expect(textNode("125,00")).toBeTruthy();
+    expect(textNode("125.00")).toBeTruthy();
     expect(textNode("Primary mine operator.")).toBeTruthy();
   });
 
@@ -281,7 +282,7 @@ describe("CollaboratorDetailPage", () => {
     renderCollaboratorDetailPage("/collaborators/collab-closed");
 
     await waitForText("Journey Closed");
-    expect(textNode("2026-06-15T10:00:00Z")).toBeTruthy();
+    expect(textNode("Jun 15, 2026")).toBeTruthy();
     expect(textNode("0 days remaining")).toBeFalsy();
     expect(textNode("Journey Settlement")).toBeFalsy();
   });
@@ -309,7 +310,7 @@ describe("CollaboratorDetailPage", () => {
     );
 
     await waitForText("Journey Closed");
-    expect(textNode("2026-06-15T10:00:00Z")).toBeTruthy();
+    expect(textNode("Jun 15, 2026")).toBeTruthy();
     expect(linkByText("Back to My Journeys")?.getAttribute("href")).toBe(
       "/collaborators",
     );
@@ -429,11 +430,11 @@ function renderCollaboratorDetailPage(
 
   act(() => {
     root?.render(
-      <QueryClientProvider client={queryClient}>
+      <I18nProvider><QueryClientProvider client={queryClient}>
         <AuthorizationProvider value={actor}>
           <RouterProvider router={router} />
         </AuthorizationProvider>
-      </QueryClientProvider>,
+      </QueryClientProvider></I18nProvider>,
     );
   });
 }

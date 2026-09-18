@@ -33,6 +33,17 @@ describe("locale-bound ERS formatters", () => {
     expect(formatDateTime("pt-BR", value, dateTimeOptions)).toContain("18:30");
   });
 
+  it("keeps date-only domain values on the same calendar day in every local timezone", () => {
+    const options: Intl.DateTimeFormatOptions = {
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    };
+
+    expect(formatDate("en-US", "2026-05-01", options)).toBe("05/01/2026");
+    expect(formatDate("pt-BR", "2026-05-01", options)).toBe("01/05/2026");
+  });
+
   it("rejects invalid date values instead of presenting misleading output", () => {
     expect(() => formatDate("en-US", "not-a-date")).toThrow(RangeError);
   });
