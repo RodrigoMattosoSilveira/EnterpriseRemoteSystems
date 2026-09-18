@@ -693,6 +693,7 @@ export const enUSMessages = {
   'expenses.filters.matching': 'Matching collaborators',
   'expenses.filters.loadingMatches': 'Loading matching collaborators…',
   'expenses.filters.noMatches': 'No matching collaborators',
+  'expenses.filters.selectedCollaborator': 'Selected collaborator filter',
   'expenses.filters.category': 'Category',
   'expenses.filters.allCategories': 'All categories',
   'expenses.filters.canteen': 'Canteen',

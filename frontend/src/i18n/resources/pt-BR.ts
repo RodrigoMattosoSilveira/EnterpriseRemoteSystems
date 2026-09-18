@@ -695,6 +695,7 @@ export const ptBRMessages = {
   'expenses.filters.matching': 'Colaboradores correspondentes',
   'expenses.filters.loadingMatches': 'Carregando Colaboradores correspondentes…',
   'expenses.filters.noMatches': 'Nenhum Colaborador correspondente',
+  'expenses.filters.selectedCollaborator': 'Filtro de Colaborador selecionado',
   'expenses.filters.category': 'Categoria',
   'expenses.filters.allCategories': 'Todas as categorias',
   'expenses.filters.canteen': 'Cantina',

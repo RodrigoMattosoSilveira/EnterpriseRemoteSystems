@@ -284,7 +284,7 @@ function AuthorizedExpensesPage() {
               {collaboratorId && (
                 <div
                   role="status"
-                  aria-label={t("common.selected")}
+                  aria-label={t("expenses.filters.selectedCollaborator")}
                   className="mt-2 flex min-w-0 items-center justify-between gap-2 rounded-xl bg-gray-100 px-3 py-2 text-xs text-gray-700"
                 >
                   <span className="min-w-0">
