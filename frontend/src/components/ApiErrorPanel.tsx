@@ -1,10 +1,11 @@
 import { ApiError } from "../api/client";
+import { translateEnglish, type Translate } from "../i18n";
 
-export function ApiErrorPanel({ error }: { error: unknown }) {
+export function ApiErrorPanel({ error, translate = translateEnglish }: { error: unknown; translate?: Translate }) {
   if (!error) return null;
 
-  const message = error instanceof Error ? error.message : "Unexpected error";
-  const authenticationHint = authenticationRecoveryHint(error);
+  const message = error instanceof Error ? error.message : translate("common.unexpectedError");
+  const authenticationHint = authenticationRecoveryHint(error, translate);
 
   return (
     <div className="mb-4 rounded-2xl border border-red-200 bg-red-50 p-4 text-red-800">
@@ -13,12 +14,12 @@ export function ApiErrorPanel({ error }: { error: unknown }) {
       {error instanceof ApiError && (
         <>
           {error.url && (
-            <p className="mt-1 text-xs text-red-700">URL: {error.url}</p>
+            <p className="mt-1 text-xs text-red-700">{translate("common.error.url")}: {error.url}</p>
           )}
 
           <p className="mt-1 text-xs text-red-700">
-            Status: {error.status ?? "network failure"}
-            {error.code ? ` · Code: ${error.code}` : ""}
+            {translate("common.error.status")}: {error.status ?? translate("common.error.networkFailure")}
+            {error.code ? ` · ${translate("common.error.code")}: ${error.code}` : ""}
           </p>
 
           {error.fields && (
@@ -42,7 +43,7 @@ export function ApiErrorPanel({ error }: { error: unknown }) {
   );
 }
 
-function authenticationRecoveryHint(error: unknown): string | null {
+function authenticationRecoveryHint(error: unknown, t: Translate = translateEnglish): string | null {
   if (!(error instanceof ApiError)) return null;
 
   if (
@@ -56,11 +57,11 @@ function authenticationRecoveryHint(error: unknown): string | null {
       "actor_inactive",
     ].includes(error.code ?? "")
   ) {
-    return "An authenticated user session is required. Sign in again before retrying this operation.";
+    return t("common.error.authenticationHint");
   }
 
   if (error.code === "tenant_selection_required") {
-    return "Select an available authorization context before retrying this operation.";
+    return t("common.error.tenantSelectionHint");
   }
 
   return null;

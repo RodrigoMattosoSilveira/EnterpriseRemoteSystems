@@ -276,6 +276,7 @@ local-backend:
 .PHONY: local-frontend
 local-frontend:
 	chmod +x scripts/dev-frontend.sh
+	git rev-parse HEAD
 	./scripts/dev-frontend.sh
 
 .PHONY: local-30l3-global-context-check

@@ -3,11 +3,13 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { resetPassword } from "../../api/auth.api";
 import { endAuthSession } from "../../app/authStore";
+import { useI18n } from "../../i18n";
 import { AuthCard, AuthField, primaryButtonClass } from "./AuthCard";
 
 export function ResetPasswordPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { t } = useI18n();
   const [params] = useSearchParams();
   const [token, setToken] = useState(params.get("token") ?? "");
   const [newPassword, setNew] = useState("");
@@ -17,7 +19,7 @@ export function ResetPasswordPage() {
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
-    if (newPassword !== confirmation) return setError("The new passwords do not match.");
+    if (newPassword !== confirmation) return setError(t("auth.passwordMismatch"));
     setSubmitting(true); setError("");
     try {
       const result = await resetPassword({ token, newPassword });
@@ -25,23 +27,20 @@ export function ResetPasswordPage() {
       await endAuthSession();
       navigate("/login", {
         replace: true,
-        state: {
-          message: `Password reset for ${result.login}. Sign in with your new password.`,
-          login: result.login,
-        },
+        state: { message: t("auth.reset.success", { login: result.login }), login: result.login },
       });
-    } catch (cause) { setError(cause instanceof Error ? cause.message : "Unable to reset password."); }
+    } catch (cause) { setError(cause instanceof Error ? cause.message : t("auth.reset.unable")); }
     finally { setSubmitting(false); }
   }
 
-  return <AuthCard title="Reset password" subtitle="Enter the one-time token issued by an authorized administrator.">
+  return <AuthCard title={t("auth.reset.title")} subtitle={t("auth.reset.subtitle")}>
     {error && <p role="alert" className="mb-4 rounded-xl bg-red-50 p-3 text-sm text-red-800">{error}</p>}
     <form onSubmit={submit} className="space-y-4">
-      <AuthField label="Reset token" value={token} onChange={(e) => setToken(e.target.value)} required />
-      <AuthField label="New password" type="password" autoComplete="new-password" minLength={12} value={newPassword} onChange={(e) => setNew(e.target.value)} required />
-      <AuthField label="Confirm new password" type="password" autoComplete="new-password" minLength={12} value={confirmation} onChange={(e) => setConfirmation(e.target.value)} required />
-      <button className={primaryButtonClass} disabled={submitting}>{submitting ? "Resetting…" : "Reset password"}</button>
+      <AuthField label={t("auth.reset.token")} value={token} onChange={(e) => setToken(e.target.value)} required />
+      <AuthField label={t("auth.change.newPassword")} type="password" autoComplete="new-password" minLength={12} value={newPassword} onChange={(e) => setNew(e.target.value)} required />
+      <AuthField label={t("auth.change.confirmPassword")} type="password" autoComplete="new-password" minLength={12} value={confirmation} onChange={(e) => setConfirmation(e.target.value)} required />
+      <button className={primaryButtonClass} disabled={submitting}>{submitting ? t("auth.reset.resetting") : t("auth.reset.title")}</button>
     </form>
-    <p className="mt-5 text-center text-sm"><Link className="underline" to="/login">Back to sign in</Link></p>
+    <p className="mt-5 text-center text-sm"><Link className="underline" to="/login">{t("auth.reset.back")}</Link></p>
   </AuthCard>;
 }

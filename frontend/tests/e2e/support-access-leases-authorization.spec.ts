@@ -302,10 +302,13 @@ test.describe("Tenant Support Access Lease authorization", () => {
         requestedLease.id,
       );
       await expect(supportOption).toContainText("Temporary support access");
-      const localExpiration = await page.evaluate(
-        (value) => new Date(value).toLocaleString(),
-        requestedExpiration,
-      );
+      const localExpiration = await page.evaluate((value) => {
+        const locale = document.documentElement.lang || "en-US";
+        return new Intl.DateTimeFormat(locale, {
+          dateStyle: "medium",
+          timeStyle: "short",
+        }).format(new Date(value));
+      }, requestedExpiration);
       await expect(supportOption).toContainText(`Expires: ${localExpiration}`);
       await expect(supportOption).not.toContainText(`Expires: ${requestedExpiration}`);
 

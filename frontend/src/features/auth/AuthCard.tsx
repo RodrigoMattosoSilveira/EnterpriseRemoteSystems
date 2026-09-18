@@ -1,11 +1,15 @@
 import { PageTitle } from "../../components/layout/PageHeading";
 import type { ReactNode } from "react";
+import { LanguageSelector } from "../../components/layout/LanguageSelector";
 
 export function AuthCard({ title, subtitle, children }: { title: string; subtitle: string; children: ReactNode }) {
   return (
     <main className="min-h-screen bg-slate-100 px-4 py-12">
       <section className="mx-auto max-w-md rounded-3xl border border-slate-200 bg-white p-8 shadow-sm">
-        <p className="text-sm font-semibold uppercase tracking-[0.2em] text-slate-500">Enterprise Remote Systems</p>
+        <div className="flex items-start justify-between gap-4">
+          <p className="pt-2 text-sm font-semibold uppercase tracking-[0.2em] text-slate-500">Enterprise Remote Systems</p>
+          <LanguageSelector compact />
+        </div>
         <PageTitle className="mt-3">{title}</PageTitle>
         <p className="mt-2 text-sm text-slate-600">{subtitle}</p>
         <div className="mt-8">{children}</div>

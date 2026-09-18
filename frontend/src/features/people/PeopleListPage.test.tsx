@@ -10,6 +10,7 @@ import {
 import type { AuthzCurrentActor } from "../../types/authz";
 import { PeopleListPage } from "./PeopleListPage";
 import type { Person } from "../../types/people";
+import { I18nProvider, LOCALE_STORAGE_KEY } from "../../i18n";
 
 let container: HTMLDivElement;
 let root: Root | null;
@@ -26,6 +27,7 @@ const tenantAdminActor: AuthzCurrentActor = {
 
 beforeEach(() => {
   window.localStorage.clear();
+  window.localStorage.setItem(LOCALE_STORAGE_KEY, "en-US");
   vi.useFakeTimers({ shouldAdvanceTime: true });
   container = document.createElement("div");
   document.body.appendChild(container);
@@ -137,6 +139,40 @@ describe("PeopleListPage", () => {
       "nickname may mention another Tenant; that profile text does not change the Tenant boundary of this list",
     );
     expect(container.textContent).toContain("30G Tenant B Admin");
+  });
+
+  it("translates the People Tenant-boundary banner in pt-BR without translating Tenant data", async () => {
+    window.localStorage.setItem(LOCALE_STORAGE_KEY, "pt-BR");
+    mockPeopleFetch({ items: [personFixture("person-elisa", "Elisa")], total: 1 });
+
+    const supportLeaseActor: AuthorizationContextValue = {
+      actorKey: "bootstrap-admin",
+      actorRecordId: "actor-bootstrap-admin",
+      tenantId: "default",
+      selectedTenantName: "Tenant A Manual Test",
+      selectedTenantCode: "TENANT-A",
+      scope: "APPLICATION",
+      roleCodes: ["APPLICATION_ADMIN"],
+      permissions: ["people.read", "reference_data.read"],
+      supportLeaseId: "lease-tenant-a-people-read",
+      supportLeasePermissions: ["people.read", "reference_data.read"],
+    };
+
+    renderPeopleListRoute(supportLeaseActor);
+    await waitForText("Elisa Pessoa");
+
+    const boundary = container.querySelector('[aria-label="Limite do Tenant para Pessoas"]');
+    expect(boundary).toBeTruthy();
+    expect(boundary?.textContent).toContain("Limite do Tenant para Pessoas");
+    expect(boundary?.textContent).toContain("Tenant A Manual Test");
+    expect(boundary?.textContent).toContain("TENANT-A");
+    expect(boundary?.textContent).toContain("ID do Tenant: default");
+    expect(boundary?.textContent).toContain("Concessão de Acesso de Suporte ao Tenant");
+    expect(boundary?.textContent).toContain("ID da Concessão de Acesso de Suporte: lease-tenant-a-people-read");
+    expect(boundary?.textContent).toContain(
+      "O diretório de Pessoas abaixo é carregado neste contexto de Tenant. O nome ou apelido de uma Pessoa pode mencionar outro Tenant; esse texto do perfil não altera o limite de Tenant desta lista.",
+    );
+    expect(boundary?.textContent).not.toContain("People tenant boundary");
   });
 
   it("does not load Application reactivation requests for a Tenant Administrator", async () => {
@@ -385,15 +421,17 @@ function renderPeopleListRoute(actor?: AuthorizationContextValue) {
 
   act(() => {
     root?.render(
-      <QueryClientProvider client={queryClient}>
-        {actor ? (
-          <AuthorizationProvider value={actor}>
+      <I18nProvider>
+        <QueryClientProvider client={queryClient}>
+          {actor ? (
+            <AuthorizationProvider value={actor}>
+              <RouterProvider router={router} />
+            </AuthorizationProvider>
+          ) : (
             <RouterProvider router={router} />
-          </AuthorizationProvider>
-        ) : (
-          <RouterProvider router={router} />
-        )}
-      </QueryClientProvider>,
+          )}
+        </QueryClientProvider>
+      </I18nProvider>,
     );
   });
 }

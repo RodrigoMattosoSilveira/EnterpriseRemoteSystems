@@ -167,6 +167,9 @@ export const AUTHENTICATION_ACCOUNT_FEEDBACK_EVENT =
 export type AuthenticationAccountFeedback = {
   kind: "success" | "error";
   message: string;
+  code?: "account_ready" | "account_not_created";
+  login?: string;
+  detail?: string;
 };
 
 export async function createAuthAccount(
@@ -179,13 +182,18 @@ export async function createAuthAccount(
     });
     notifyAuthenticationAccountFeedback({
       kind: "success",
+      code: "account_ready",
+      login: account.login,
       message: `Authentication account ${account.login} is ready.`,
     });
     return account;
   } catch (error) {
+    const feedback = authenticationAccountErrorFeedback(error);
     notifyAuthenticationAccountFeedback({
       kind: "error",
-      message: authenticationAccountErrorMessage(error),
+      code: "account_not_created",
+      message: feedback.message,
+      detail: feedback.detail,
     });
     throw error;
   }
@@ -203,20 +211,28 @@ function notifyAuthenticationAccountFeedback(
   );
 }
 
-function authenticationAccountErrorMessage(error: unknown): string {
+function authenticationAccountErrorFeedback(error: unknown): { message: string; detail?: string } {
   if (typeof error === "object" && error !== null && "fields" in error) {
     const fields = (error as { fields?: Record<string, string> }).fields;
     const fieldMessage = fields
       ? Object.values(fields).find((message) => message.trim() !== "")
       : undefined;
     if (fieldMessage) {
-      return `Authentication account was not created. ${fieldMessage}`;
+      return {
+        message: `Authentication account was not created. ${fieldMessage}`,
+        detail: fieldMessage,
+      };
     }
   }
   if (error instanceof Error && error.message.trim()) {
-    return `Authentication account was not created. ${error.message}`;
+    return {
+      message: `Authentication account was not created. ${error.message}`,
+      detail: error.message,
+    };
   }
-  return "Authentication account was not created. Review the account details and try again.";
+  return {
+    message: "Authentication account was not created. Review the account details and try again.",
+  };
 }
 
 export function setAuthAccountActive(

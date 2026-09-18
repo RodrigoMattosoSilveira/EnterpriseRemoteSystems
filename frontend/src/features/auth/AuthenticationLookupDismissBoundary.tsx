@@ -12,6 +12,7 @@ import {
   AUTHENTICATION_ACCOUNT_FEEDBACK_EVENT,
   type AuthenticationAccountFeedback,
 } from "../../api/auth.api";
+import { useI18n } from "../../i18n";
 
 function elementFromEventTarget(target: EventTarget | null): Element | null {
   return target instanceof Element ? target : null;
@@ -40,6 +41,7 @@ function normalizedText(value: string | null | undefined): string {
 }
 
 function isCreateAccountButton(button: HTMLButtonElement): boolean {
+  if (button.dataset.authenticationCreateAccount === "true") return true;
   const text = normalizedText(button.textContent);
   return (
     text === "create account" || text === "creating…" || text === "creating..."
@@ -83,6 +85,7 @@ export function AuthenticationLookupDismissBoundary({
 }: {
   children: ReactNode;
 }) {
+  const { t } = useI18n();
   const rootRef = useRef<HTMLDivElement>(null);
   const [dismissed, setDismissed] = useState(false);
   const [feedback, setFeedback] =
@@ -183,7 +186,11 @@ export function AuthenticationLookupDismissBoundary({
               : "border-emerald-200 bg-emerald-50 text-emerald-900"
           }`}
         >
-          {feedback.message}
+          {feedback.code === "account_ready" && feedback.login
+            ? t("admin.authentication.feedback.ready", { login: feedback.login })
+            : feedback.code === "account_not_created"
+              ? `${t("admin.authentication.feedback.notCreated")}${feedback.detail ? ` ${feedback.detail}` : ` ${t("admin.authentication.feedback.review")}`}`
+              : feedback.message}
         </div>
       )}
       {children}

@@ -18,6 +18,7 @@ import type {
   ProfileCompletionStatus,
 } from "../../types/people";
 import { PageTitle } from "../../components/layout/PageHeading";
+import { useI18n } from "../../i18n";
 import { visibleNavigationLinks } from "../../components/layout/navigation";
 
 type PeopleListState = {
@@ -33,6 +34,7 @@ const PAGE_SIZE_OPTIONS = [10, 25, 50];
 const SEARCH_DEBOUNCE_MS = 350;
 
 export function PeopleListPage() {
+  const { t } = useI18n();
   const location = useLocation();
   const navigate = useNavigate();
   const actor = useOptionalAuthorizationContext();
@@ -246,13 +248,13 @@ export function PeopleListPage() {
 
         {actor && actor.tenantId !== "*" && (
           <section
-            aria-label="People tenant scope"
+            aria-label={t("people.tenantBoundary.aria")}
             className="rounded-2xl border border-slate-300 bg-white p-5 shadow-sm"
           >
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div>
                 <p className="text-xs font-bold uppercase tracking-wide text-slate-500">
-                  People tenant boundary
+                  {t("people.tenantBoundary.title")}
                 </p>
                 <h2 className="mt-1 text-lg font-bold text-slate-950">
                   {actor.selectedTenantName ?? actor.selectedTenantCode ?? actor.tenantId}
@@ -261,23 +263,21 @@ export function PeopleListPage() {
                   {actor.selectedTenantCode && actor.selectedTenantCode !== actor.selectedTenantName
                     ? `${actor.selectedTenantCode} · `
                     : ""}
-                  Tenant ID: <span className="font-mono">{actor.tenantId}</span>
+                  {t("people.tenantBoundary.tenantId")} <span className="font-mono">{actor.tenantId}</span>
                 </p>
               </div>
               {actor.supportLeaseId && (
                 <span className="rounded-full bg-slate-900 px-3 py-1.5 text-xs font-bold text-white">
-                  Tenant Support Access Lease
+                  {t("people.tenantBoundary.supportLease")}
                 </span>
               )}
             </div>
             <p className="mt-3 text-sm text-slate-700">
-              The People directory below is loaded in this Tenant context. A Person's name or
-              nickname may mention another Tenant; that profile text does not change the Tenant
-              boundary of this list.
+              {t("people.tenantBoundary.description")}
             </p>
             {actor.supportLeaseId && (
               <p className="mt-2 text-xs font-medium text-slate-500">
-                Support Lease ID: <span className="font-mono">{actor.supportLeaseId}</span>
+                {t("people.tenantBoundary.supportLeaseId")} <span className="font-mono">{actor.supportLeaseId}</span>
               </p>
             )}
           </section>
