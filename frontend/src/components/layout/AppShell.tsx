@@ -383,11 +383,14 @@ function AccountSelfServiceWorkspace({
             <div>
               <PageTitle>{t("shell.signedIn.title")}</PageTitle>
               <p role="status" className="mt-1 text-sm text-slate-700">
-                {t("shell.authenticationSucceeded", { name: displayName || login })}
+                {t("shell.authenticationSucceededPrefix")} {" "}
+                <span className="font-semibold">{displayName || login}</span>
+                {t("shell.authenticationSucceededSuffix")}
               </p>
               {displayName && displayName !== login ? (
                 <p className="mt-1 text-sm text-slate-600">
-                  {t("shell.loginValue", { login })}
+                  {t("shell.loginLabel")} {" "}
+                  <span className="font-medium">{login}</span>
                 </p>
               ) : null}
             </div>
