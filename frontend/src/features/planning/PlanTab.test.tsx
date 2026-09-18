@@ -9,6 +9,7 @@ import type {
   WorkPeriodPlanningTemplate,
 } from "../../types/planning";
 import type { ReferenceDataItem } from "../../types/referenceData";
+import { I18nProvider } from "../../i18n";
 
 let container: HTMLDivElement;
 let root: Root | null;
@@ -430,7 +431,7 @@ async function renderPlanTab(props: {
   await act(async () => {
     root = createRoot(container);
     root.render(
-      <PlanTab
+      <I18nProvider><PlanTab
         template={props.templateOverride ?? template}
         sectors={sectors}
         locations={locations}
@@ -440,7 +441,7 @@ async function renderPlanTab(props: {
         pending={false}
         onBulkPlan={props.onBulkPlan}
         onRefineAssignment={props.onRefineAssignment}
-      />,
+      /></I18nProvider>,
     );
   });
 }

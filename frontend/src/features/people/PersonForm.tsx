@@ -8,6 +8,8 @@ import {
   isValidUpdatePersonInput,
   updatePersonFingerprint,
 } from "./peopleSchemas";
+import { useI18n } from "../../i18n";
+import { personMissingSectionLabel, personStatusLabel } from "./personPresentation";
 
 type Props = {
   initial?: Person;
@@ -32,6 +34,7 @@ export function PersonForm({
   submitting = false,
   onSubmit,
 }: Props) {
+  const { t } = useI18n();
   const isCreate = !initial;
   const [activeTab, setActiveTab] = useState<Tab>("personal");
 
@@ -52,9 +55,9 @@ export function PersonForm({
   const missingSections = initial?.missingSections ?? [];
 
   const completionLabel = useMemo(() => {
-    if (!initial) return "New record";
-    return initial.canCreateCollaborator ? "Complete" : "Incomplete";
-  }, [initial]);
+    if (!initial) return t("people.form.newRecord");
+    return initial.canCreateCollaborator ? t("common.complete") : t("common.incomplete");
+  }, [initial, t]);
 
   function update<K extends keyof UpdatePersonInput>(
     key: K,
@@ -105,34 +108,34 @@ export function PersonForm({
         <div className="flex min-w-max gap-2">
           <TabButton
             active={activeTab === "personal"}
-            label="Personal"
+            label={t("people.form.tab.personal")}
             required
             onClick={() => setActiveTab("personal")}
           />
           <TabButton
             active={activeTab === "address"}
-            label="Address"
+            label={t("people.form.tab.address")}
             disabled={isCreate}
             missing={missingSections.includes("Address")}
             onClick={() => setActiveTab("address")}
           />
           <TabButton
             active={activeTab === "bank"}
-            label="Bank"
+            label={t("people.form.tab.bank")}
             disabled={isCreate}
             missing={missingSections.includes("Bank")}
             onClick={() => setActiveTab("bank")}
           />
           <TabButton
             active={activeTab === "emergency"}
-            label="Emergency"
+            label={t("people.form.tab.emergency")}
             disabled={isCreate}
             missing={missingSections.includes("Emergency")}
             onClick={() => setActiveTab("emergency")}
           />
           <TabButton
             active={activeTab === "notes"}
-            label="Notes"
+            label={t("people.form.tab.notes")}
             onClick={() => setActiveTab("notes")}
           />
         </div>
@@ -140,25 +143,24 @@ export function PersonForm({
 
       {isCreate && activeTab !== "personal" && (
         <InfoBox>
-          Save the required Personal section first. Address, Bank, and Emergency
-          sections can be completed after the Person record exists.
+          {t("people.form.savePersonalFirst")}
         </InfoBox>
       )}
 
       {activeTab === "personal" && (
         <Section
-          title="Personal"
-          description="Required before the Person record can be created."
+          title={t("people.form.tab.personal")}
+          description={t("people.form.personalDescription")}
         >
           <div className="grid gap-4 md:grid-cols-2">
             <Input
-              label="First Name"
+              label={t("people.form.firstName")}
               required
               value={form.firstName}
               onChange={(value) => update("firstName", value)}
             />
             <Input
-              label="Last Name"
+              label={t("people.form.lastName")}
               required
               value={form.lastName}
               onChange={(value) => update("lastName", value)}
@@ -166,7 +168,7 @@ export function PersonForm({
           </div>
 
           <Input
-            label="Nickname"
+            label={t("people.form.nickname")}
             required
             value={form.nickname}
             onChange={(value) => update("nickname", value)}
@@ -190,14 +192,14 @@ export function PersonForm({
 
           <div className="grid gap-4 md:grid-cols-2">
             <Input
-              label="Cellular"
+              label={t("people.form.cellular")}
               required
               value={form.cellular}
               placeholder="(11) 99999-9999"
               onChange={(value) => update("cellular", value)}
             />
             <Input
-              label="Email"
+              label={t("people.form.email")}
               required
               type="email"
               value={form.email}
@@ -206,43 +208,46 @@ export function PersonForm({
           </div>
 
           <Select
-            label="Status"
+            label={t("people.form.status")}
             required
             value={form.statusId}
             onChange={(value) => update("statusId", value)}
-            options={statusOptions}
+            options={statusOptions.map((option) => ({
+              ...option,
+              label: personStatusLabel(option.value, option.label, t),
+            }))}
           />
         </Section>
       )}
 
       {activeTab === "address" && !isCreate && (
         <Section
-          title="Address"
-          description="Required before this person can become a collaborator."
+          title={t("people.form.tab.address")}
+          description={t("people.form.requiredForCollaborator")}
         >
           <Input
-            label="Street 1"
+            label={t("people.form.street1")}
             required
             value={form.street1 ?? ""}
             onChange={(value) => update("street1", value)}
           />
 
           <Input
-            label="Street 2"
+            label={t("people.form.street2")}
             value={form.street2 ?? ""}
             onChange={(value) => update("street2", value)}
           />
 
           <div className="grid gap-4 md:grid-cols-2">
             <Input
-              label="State"
+              label={t("people.form.state")}
               required
               value={form.state ?? ""}
               placeholder="Pará"
               onChange={(value) => update("state", value)}
             />
             <Input
-              label="City"
+              label={t("people.form.city")}
               required
               value={form.city ?? ""}
               onChange={(value) => update("city", value)}
@@ -258,7 +263,7 @@ export function PersonForm({
               onChange={(value) => update("cep", value)}
             />
             <Input
-              label="Country"
+              label={t("people.form.country")}
               required
               value={form.country ?? "Brasil"}
               disabled
@@ -270,18 +275,18 @@ export function PersonForm({
 
       {activeTab === "bank" && !isCreate && (
         <Section
-          title="Bank"
-          description="Required before this person can become a collaborator."
+          title={t("people.form.tab.bank")}
+          description={t("people.form.requiredForCollaborator")}
         >
           <div className="grid gap-4 md:grid-cols-2">
             <Input
-              label="Bank Name"
+              label={t("people.form.bankName")}
               required
               value={form.bankName ?? ""}
               onChange={(value) => update("bankName", value)}
             />
             <Input
-              label="Bank Number"
+              label={t("people.form.bankNumber")}
               required
               value={form.bankNumber ?? ""}
               onChange={(value) => update("bankNumber", value)}
@@ -289,7 +294,7 @@ export function PersonForm({
           </div>
 
           <Input
-            label="Checking Account"
+            label={t("people.form.checkingAccount")}
             required
             value={form.checkingAccount ?? ""}
             onChange={(value) => update("checkingAccount", value)}
@@ -306,11 +311,11 @@ export function PersonForm({
 
       {activeTab === "emergency" && !isCreate && (
         <Section
-          title="Emergency"
-          description="Required before this person can become a collaborator."
+          title={t("people.form.tab.emergency")}
+          description={t("people.form.requiredForCollaborator")}
         >
           <Input
-            label="Emergency Contact Name"
+            label={t("people.form.emergencyName")}
             required
             value={form.emergencyName ?? ""}
             onChange={(value) => update("emergencyName", value)}
@@ -318,14 +323,14 @@ export function PersonForm({
 
           <div className="grid gap-4 md:grid-cols-2">
             <Input
-              label="Emergency Cellular"
+              label={t("people.form.emergencyCellular")}
               required
               value={form.emergencyCellular ?? ""}
               placeholder="(11) 99999-9999"
               onChange={(value) => update("emergencyCellular", value)}
             />
             <Input
-              label="Emergency Email"
+              label={t("people.form.emergencyEmail")}
               required
               type="email"
               value={form.emergencyEmail ?? ""}
@@ -336,9 +341,9 @@ export function PersonForm({
       )}
 
       {activeTab === "notes" && (
-        <Section title="Notes" description="Internal notes and observations.">
+        <Section title={t("people.form.tab.notes")} description={t("people.form.notesDescription")}>
           <TextArea
-            label="Notes"
+            label={t("people.form.tab.notes")}
             value={form.notes ?? ""}
             onChange={(value) => update("notes", value)}
           />
@@ -351,7 +356,7 @@ export function PersonForm({
           disabled={submitting || (!isCreate && !hasValidChange)}
           className="w-full rounded-xl bg-gray-950 px-5 py-4 text-base font-semibold text-white shadow-sm disabled:opacity-50"
         >
-          {submitting ? "Saving..." : isCreate ? "Create Person" : "Save Changes"}
+          {submitting ? t("common.savingDots") : isCreate ? t("people.form.create") : t("people.form.saveChanges")}
         </button>
       </div>
     </form>
@@ -403,19 +408,20 @@ function ProfileStatusCard({
   canCreateCollaborator: boolean;
   missingSections: string[];
 }) {
+  const { t } = useI18n();
   return (
     <section className="rounded-2xl border bg-white p-5 shadow-sm">
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
           <h2 className="text-lg font-semibold text-gray-950">
-            Profile Status
+            {t("people.form.profileStatus")}
           </h2>
           <p className="text-sm text-gray-600">
             {isCreate
-              ? "Complete the Personal section to create this Person record."
+              ? t("people.form.createHelp")
               : canCreateCollaborator
-                ? "This person is eligible to become a collaborator."
-                : "This person cannot become a collaborator until all required sections are complete."}
+                ? t("people.form.eligible")
+                : t("people.form.ineligible")}
           </p>
         </div>
 
@@ -437,7 +443,7 @@ function ProfileStatusCard({
               key={section}
               className="rounded-full bg-gray-100 px-3 py-1 text-xs text-gray-700"
             >
-              Missing: {section}
+              {t("people.form.missing", { section: personMissingSectionLabel(section, t) })}
             </span>
           ))}
         </div>

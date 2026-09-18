@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Collaborator } from "../../types/collaborators";
 import type { PriceListItem } from "../../types/priceList";
 import { CreateExpensePage } from "./CreateExpensePage";
+import { I18nProvider } from "../../i18n";
 
 type FetchCall = {
   url: string;
@@ -572,9 +573,9 @@ function renderCreateExpensePage(initialEntry = "/expenses/new") {
   act(() => {
     root = createRoot(container);
     root.render(
-      <QueryClientProvider client={queryClient}>
+      <I18nProvider><QueryClientProvider client={queryClient}>
         <RouterProvider router={router} />
-      </QueryClientProvider>,
+      </QueryClientProvider></I18nProvider>,
     );
   });
 }

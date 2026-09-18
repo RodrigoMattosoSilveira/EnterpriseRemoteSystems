@@ -7,6 +7,7 @@ import { CreateCollaboratorPage } from "./CreateCollaboratorPage";
 import type { Person } from "../../types/people";
 import type { Collaborator } from "../../types/collaborators";
 import type { ReferenceDataItem } from "../../types/referenceData";
+import { I18nProvider } from "../../i18n";
 
 type FetchCall = {
   url: string;
@@ -668,9 +669,9 @@ function renderCreateCollaboratorPage(
 
   act(() => {
     root?.render(
-      <QueryClientProvider client={queryClient}>
+      <I18nProvider><QueryClientProvider client={queryClient}>
         <RouterProvider router={router} />
-      </QueryClientProvider>,
+      </QueryClientProvider></I18nProvider>,
     );
   });
 }

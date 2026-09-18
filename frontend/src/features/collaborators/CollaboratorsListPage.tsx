@@ -10,8 +10,10 @@ import {
   useSelfCollaboratorJourneys,
 } from "./useCollaborators";
 import { PageTitle } from "../../components/layout/PageHeading";
+import { translateEnglish, type Translate, useI18n } from "../../i18n";
 
 export function CollaboratorsListPage() {
+  const { t } = useI18n();
   const location = useLocation();
   const actor = useAuthorizationContext();
   const wildcard = actor.permissions.includes("*");
@@ -87,15 +89,15 @@ export function CollaboratorsListPage() {
         <div className="mx-auto flex max-w-5xl items-center justify-between gap-3">
           <div>
             <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
-              Operations
+              {t("common.operations")}
             </p>
             <PageTitle>
-              {selfMode ? "My Collaborator Journeys" : "Collaborators"}
+              {selfMode ? t("collaborators.myJourneys") : t("collaborators.title")}
             </PageTitle>
             <p className="text-sm text-gray-500">
               {selfMode
-                ? "Current and closed Journeys for your Membership in this Tenant."
-                : "Active work journeys created from complete Person profiles."}
+                ? t("collaborators.selfSubtitle")
+                : t("collaborators.subtitle")}
             </p>
           </div>
 
@@ -105,25 +107,25 @@ export function CollaboratorsListPage() {
                 to="/people"
                 className="rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 shadow-sm"
               >
-                People
+                {t("nav.people")}
               </Link>
               <Link
                 to="/expenses"
                 className="rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 shadow-sm"
               >
-                Expenses
+                {t("nav.expenses")}
               </Link>
               <Link
                 to="/work-periods"
                 className="rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 shadow-sm"
               >
-                Work Periods
+                {t("nav.workPeriods")}
               </Link>
               <Link
                 to="/collaborators/new"
                 className="rounded-xl bg-gray-950 px-4 py-2 text-sm font-semibold text-white shadow-sm"
               >
-                Add
+                {t("collaborators.add")}
               </Link>
             </div>
           ) : actor.personId ? (
@@ -131,7 +133,7 @@ export function CollaboratorsListPage() {
               to={`/people/${encodeURIComponent(actor.personId)}`}
               className="rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 shadow-sm"
             >
-              My Person record
+              {t("collaborators.myPerson")}
             </Link>
           ) : null}
         </div>
@@ -147,22 +149,22 @@ export function CollaboratorsListPage() {
           </div>
         )}
 
-        <ApiErrorPanel error={error} />
+        <ApiErrorPanel error={error} translate={t} />
 
         <section className="rounded-2xl border bg-white p-4 shadow-sm">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
             <div>
               <h2 className="text-lg font-semibold text-gray-950">
-                {selfMode ? "Journey History" : "Collaborator Journeys"}
+                {selfMode ? t("collaborators.history") : t("collaborators.journeys")}
               </h2>
               <p className="text-sm text-gray-500">
                 {selfMode
-                  ? `Showing ${collaborators.length} Journey${collaborators.length === 1 ? "" : "s"}.`
-                  : `Showing ${collaborators.length} of ${total} collaborator records.`}
+                  ? t("collaborators.showingJourneys", { count: collaborators.length })
+                  : t("collaborators.showing", { count: collaborators.length, total })}
               </p>
               {hasSearch && (
                 <p className="mt-1 text-xs font-medium text-gray-600">
-                  Filtering by “{search}”.
+                  {t("collaborators.filtering", { search })}
                 </p>
               )}
             </div>
@@ -174,13 +176,13 @@ export function CollaboratorsListPage() {
                   htmlFor="collaborator-search"
                   className="text-xs font-semibold uppercase tracking-wide text-gray-500"
                 >
-                  Search by name or nickname
+                  {t("collaborators.search")}
                 </label>
                 <input
                   id="collaborator-search"
                   value={searchDraft}
                   onChange={(event) => updateSearch(event.target.value)}
-                  placeholder="Type any part of a name or nickname"
+                  placeholder={t("collaborators.searchPlaceholder")}
                   className="mt-1 w-full rounded-xl border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-gray-950 focus:outline-none focus:ring-1 focus:ring-gray-950"
                 />
               </div>
@@ -191,7 +193,7 @@ export function CollaboratorsListPage() {
                     onClick={clearFilter}
                     className="rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 shadow-sm"
                   >
-                    Clear
+                    {t("common.clear")}
                   </button>
                 )}
               </div>
@@ -202,7 +204,7 @@ export function CollaboratorsListPage() {
 
         {isLoading && (
           <div className="rounded-2xl border bg-white p-5 shadow-sm">
-            Loading collaborators...
+            {t("collaborators.loading")}
           </div>
         )}
 
@@ -210,17 +212,17 @@ export function CollaboratorsListPage() {
           <div className="rounded-2xl border bg-white p-8 text-center shadow-sm">
             <h2 className="text-lg font-semibold">
               {selfMode
-                ? "No Collaborator Journeys yet"
+                ? t("collaborators.emptySelf")
                 : hasSearch
-                  ? "No collaborators match this filter"
-                  : "No collaborators yet"}
+                  ? t("collaborators.emptyFiltered")
+                  : t("collaborators.empty")}
             </h2>
             <p className="mt-2 text-sm text-gray-500">
               {selfMode
-                ? "No current or historical Journeys are recorded for you in this Tenant."
+                ? t("collaborators.emptySelfHelp")
                 : hasSearch
-                  ? "Try another name or nickname."
-                  : "Create a Collaborator after the related Person profile is complete."}
+                  ? t("collaborators.emptyFilteredHelp")
+                  : t("collaborators.emptyHelp")}
             </p>
             {!selfMode && !hasSearch && (
               <>
@@ -228,13 +230,13 @@ export function CollaboratorsListPage() {
                   to="/expenses"
                   className="rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 shadow-sm"
                 >
-                  Expenses
+                  {t("nav.expenses")}
                 </Link>
                 <Link
                   to="/collaborators/new"
                   className="mt-5 inline-block rounded-xl bg-gray-950 px-5 py-3 text-sm font-semibold text-white"
                 >
-                  Create Collaborator
+                  {t("collaborators.create")}
                 </Link>
               </>
             )}
@@ -247,11 +249,11 @@ export function CollaboratorsListPage() {
               <table className="w-full text-left text-sm">
                 <thead className="bg-gray-50 text-xs uppercase tracking-wide text-gray-500">
                   <tr>
-                    <th className="p-3">Person</th>
-                    <th className="p-3">Journey</th>
-                    <th className="p-3">Work</th>
-                    <th className="p-3">Journey ID</th>
-                    <th className="p-3">Status</th>
+                    <th className="p-3">{t("collaborators.table.person")}</th>
+                    <th className="p-3">{t("collaborators.table.journey")}</th>
+                    <th className="p-3">{t("collaborators.table.work")}</th>
+                    <th className="p-3">{t("common.journeyId")}</th>
+                    <th className="p-3">{t("collaborators.table.status")}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y">
@@ -262,7 +264,7 @@ export function CollaboratorsListPage() {
                           to={`/collaborators/${collaborator.id}`}
                           className="font-semibold text-gray-950 underline-offset-2 hover:underline"
                         >
-                          {personDisplayName(collaborator)}
+                          {personDisplayName(collaborator, t)}
                         </Link>
                         {personSecondaryLabel(collaborator) && (
                           <div className="text-xs text-gray-500">
@@ -273,8 +275,7 @@ export function CollaboratorsListPage() {
                       <td className="p-3 text-gray-700">
                         <div>{formatDate(collaborator.journeyStartDate)}</div>
                         <div className="text-xs text-gray-500">
-                          Projected end:{" "}
-                          {formatDate(collaborator.projectedEndDate)}
+                          {t("collaborators.projectedEnd", { date: collaborator.projectedEndDate })}
                         </div>
                         <JourneyTiming collaborator={collaborator} className="mt-1 block text-xs" />
                       </td>
@@ -358,12 +359,13 @@ function CollaboratorCard({
   collaborator: Collaborator;
   selfMode: boolean;
 }) {
+  const { t } = useI18n();
   return (
     <Link to={`/collaborators/${collaborator.id}`} className="block p-4">
       <div className="flex items-start justify-between gap-3">
         <div>
           <h2 className="font-semibold text-gray-950">
-            {personDisplayName(collaborator)}
+            {personDisplayName(collaborator, t)}
           </h2>
           {personSecondaryLabel(collaborator) && (
             <p className="text-xs text-gray-500">
@@ -379,26 +381,29 @@ function CollaboratorCard({
       </div>
 
       <div className="mt-4 grid gap-2 text-sm text-gray-700">
-        <Info label="Start" value={formatDate(collaborator.journeyStartDate)} />
+        <Info label={t("common.start")} value={formatDate(collaborator.journeyStartDate)} />
         <Info
-          label="Projected End"
+          label={t("common.projectedEnd")}
           value={formatDate(collaborator.projectedEndDate)}
         />
         <JourneyTiming
           collaborator={collaborator}
           className="text-right text-sm"
         />
-        <Info label="Journey ID" value={collaborator.id} breakValue />
+        <Info label={t("common.journeyId")} value={collaborator.id} breakValue />
       </div>
     </Link>
   );
 }
 
-function personDisplayName(collaborator: Collaborator) {
+function personDisplayName(
+  collaborator: Collaborator,
+  t: Translate = translateEnglish,
+) {
   return (
     collaborator.personNickname?.trim() ||
     collaborator.personName?.trim() ||
-    "Person unavailable"
+    t("collaborator.personUnavailable")
   );
 }
 
@@ -414,9 +419,10 @@ function personSecondaryLabel(collaborator: Collaborator) {
 }
 
 function JourneyStatusBadge({ collaborator }: { collaborator: Collaborator }) {
+  const { t } = useI18n();
   const closed = Boolean(collaborator.closedAt);
   const label = closed
-    ? "Closed"
+    ? t("collaborators.closed")
     : collaborator.statusLabel || collaborator.statusId;
 
   return (
@@ -437,10 +443,11 @@ function JourneyTiming({
   collaborator: Collaborator;
   className?: string;
 }) {
+  const { t } = useI18n();
   if (collaborator.closedAt) {
     return (
       <span className={["font-semibold text-gray-600", className].filter(Boolean).join(" ")}>
-        Closed {formatDate(collaborator.closedAt)}
+        {t("collaborators.closed")} {formatDate(collaborator.closedAt)}
       </span>
     );
   }

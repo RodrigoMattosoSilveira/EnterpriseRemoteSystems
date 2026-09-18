@@ -18,6 +18,7 @@ import {
 } from "./useExpenses";
 import { CurrentAndFutureEarningsModal } from "./CurrentAndFutureEarningsModal";
 import { PageTitle } from "../../components/layout/PageHeading";
+import { useI18n, translateEnglish, type Translate } from "../../i18n";
 
 type ExpenseCurrencyCode = "BRL" | "GOLD_GRAM";
 type ExpenseItemType = "CANTEEN" | "ADMINISTRATIVE";
@@ -61,6 +62,7 @@ const initialForm: FormState = {
 };
 
 export function CreateExpensePage() {
+  const { t, formatCurrency, formatNumber } = useI18n();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const copyFromExpenseId = searchParams.get("copyFrom")?.trim() ?? "";
@@ -155,6 +157,9 @@ export function CreateExpensePage() {
     form.currencyCode,
     quantity,
     selectedGoldPrice?.brlPerGram,
+    t,
+    formatCurrency,
+    formatNumber,
   );
 
   const isLoading =
@@ -259,21 +264,21 @@ export function CreateExpensePage() {
     }
 
     if (!form.collaboratorId) {
-      setClientValidationError("Select an active Collaborator.");
+      setClientValidationError(t("expense.validation.activeCollaborator"));
       return;
     }
     if (!form.itemType) {
-      setClientValidationError("Select a category.");
+      setClientValidationError(t("expense.validation.category"));
       return;
     }
     if (!form.expenseDate) {
-      setClientValidationError("Select an expense date.");
+      setClientValidationError(t("expense.validation.date"));
       return;
     }
 
     if (copyFromExpenseId && !replacementFormIsDirty) {
       setClientValidationError(
-        "Change at least one Expense detail before creating the replacement.",
+        t("expense.validation.replacementChange"),
       );
       return;
     }
@@ -291,7 +296,9 @@ export function CreateExpensePage() {
       });
       if (invalidLineIndex >= 0) {
         setClientValidationError(
-          `Complete Canteen item ${invalidLineIndex + 1}: select an item and currency and enter a quantity greater than zero${selectedGoldPrice ? "." : "; a current gold price is also required for Gold expenses."}`,
+          selectedGoldPrice
+            ? t("expense.validation.canteenItem", { index: invalidLineIndex + 1 })
+            : t("expense.validation.canteenItemGold", { index: invalidLineIndex + 1 }),
         );
         return;
       }
@@ -316,8 +323,8 @@ export function CreateExpensePage() {
             state: {
               flash:
                 result.items.length === 1
-                  ? `Expense created for ${result.items[0]?.collaboratorLabel || "Collaborator"}.`
-                  : `${result.items.length} Canteen expenses created for ${result.items[0]?.collaboratorLabel || "Collaborator"}.`,
+                  ? t("expense.created", { name: result.items[0]?.collaboratorLabel || t("common.collaborator") })
+                  : t("expense.createdBatch", { count: result.items.length, name: result.items[0]?.collaboratorLabel || t("common.collaborator") }),
             },
           });
         },
@@ -328,21 +335,21 @@ export function CreateExpensePage() {
 
     if (!form.priceListItemId) {
       setClientValidationError(
-        "Select an item description from the price list.",
+        t("expense.validation.priceItem"),
       );
       return;
     }
     if (!form.currencyCode) {
-      setClientValidationError("Select Real/BRL or Grams of Gold.");
+      setClientValidationError(t("expense.validation.currency"));
       return;
     }
     if (!Number.isFinite(quantity) || quantity <= 0) {
-      setClientValidationError("Quantity must be greater than zero.");
+      setClientValidationError(t("expense.validation.quantity"));
       return;
     }
     if (form.currencyCode === "GOLD_GRAM" && !selectedGoldPrice) {
       setClientValidationError(
-        "A current gold price is required for Grams of Gold expenses.",
+        t("expense.validation.goldPrice"),
       );
       return;
     }
@@ -372,7 +379,7 @@ export function CreateExpensePage() {
         }
         navigate("/expenses", {
           state: {
-            flash: `Expense created for ${expense.collaboratorLabel || "Collaborator"}.`,
+            flash: t("expense.created", { name: expense.collaboratorLabel || t("common.collaborator") }),
           },
         });
       },
@@ -388,19 +395,19 @@ export function CreateExpensePage() {
             className="text-sm font-semibold text-gray-600 underline"
             to="/expenses"
           >
-            Back to Expenses
+            {t("expense.back")}
           </Link>
           <div className="mt-4">
             <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
-              Expense deduction
+              {t("expense.deduction")}
             </p>
             <PageTitle>
-              {copyFromExpenseId ? "Recreate Expense" : "New Expense"}
+              {copyFromExpenseId ? t("expense.recreate") : t("expense.new")}
             </PageTitle>
             <p className="mt-1 text-sm text-gray-500">
               {copyFromExpenseId
-                ? "Review the cancelled Expense data and change only the incorrect fields before creating the replacement."
-                : "Record multiple Canteen items in one operation, with a currency per item, or record a single Administrative expense."}
+                ? t("expense.recreateSubtitle")
+                : t("expense.createSubtitle")}
             </p>
           </div>
         </div>
@@ -412,20 +419,18 @@ export function CreateExpensePage() {
           sourceExpense.active === false &&
           sourceExpense.cancelledAt && (
             <section className="rounded-2xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-950">
-              <p className="font-semibold">Replacement for cancelled Expense</p>
+              <p className="font-semibold">{t("expense.replacementTitle")}</p>
               <p className="mt-1">
-                Fields were copied from the cancelled Expense. Correct the wrong value(s), review the calculation preview, then create the replacement.
+                {t("expense.replacementHelp")}
               </p>
               <p className="mt-1">
-                Create Replacement Expense stays disabled until at least one
-                Expense detail differs from the cancelled source and all
-                required values are valid.
+                {t("expense.replacementDisabledHelp")}
               </p>
               <Link
                 className="mt-2 inline-block font-semibold underline"
                 to={`/expenses/${sourceExpense.id}`}
               >
-                Open cancelled source
+                {t("expense.openCancelled")}
               </Link>
             </section>
           )}
@@ -434,19 +439,19 @@ export function CreateExpensePage() {
           sourceExpense &&
           (sourceExpense.active !== false || !sourceExpense.cancelledAt) && (
             <section className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm font-medium text-red-800">
-              The source Expense must be cancelled before it can be recreated.
+              {t("expense.sourceMustCancelled")}
             </section>
           )}
 
         {isLoading && (
           <div className="rounded-2xl border bg-white p-5 shadow-sm">
-            Loading expense setup data...
+            {t("expense.loadingSetup")}
           </div>
         )}
 
-        <ApiErrorPanel error={loadError} />
-        <ApiErrorPanel error={collaboratorsQuery.error} />
-        <ApiErrorPanel error={createMutation.error || batchCreateMutation.error} />
+        <ApiErrorPanel error={loadError} translate={t} />
+        <ApiErrorPanel error={collaboratorsQuery.error} translate={t} />
+        <ApiErrorPanel error={createMutation.error || batchCreateMutation.error} translate={t} />
 
         {clientValidationError && (
           <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm font-medium text-red-800">
@@ -465,16 +470,16 @@ export function CreateExpensePage() {
           >
             <section>
               <h2 className="text-lg font-semibold text-gray-950">
-                Expense Details
+                {t("expense.details")}
               </h2>
               <p className="mt-1 text-sm text-gray-500">
-                Select the Collaborator and shared expense context. Canteen purchases may contain multiple individually recorded items.
+                {t("expense.detailsHelp")}
               </p>
             </section>
 
             <div className="relative">
               <label className="block text-sm font-medium text-gray-700">
-                Collaborator *
+                {t("expense.collaboratorRequired")}
                 <input
                   id="expense-create-collaborator-search"
                   type="search"
@@ -491,7 +496,7 @@ export function CreateExpensePage() {
                   onChange={(event) =>
                     changeCollaboratorSearch(event.target.value)
                   }
-                  placeholder="Type a Collaborator name or nickname"
+                  placeholder={t("expense.searchCollaborator")}
                 />
               </label>
 
@@ -499,16 +504,16 @@ export function CreateExpensePage() {
                 <div
                   id="expense-create-collaborator-suggestions"
                   role="listbox"
-                  aria-label="Matching active collaborators"
+                  aria-label={t("expense.matchingCollaborators")}
                   className="absolute left-0 right-0 top-full z-20 mt-1 max-h-60 overflow-y-auto rounded-xl border border-gray-200 bg-white p-1 shadow-lg"
                 >
                   {collaboratorsQuery.isFetching ? (
                     <p className="px-3 py-2 text-sm text-gray-500">
-                      Loading matching Collaborators…
+                      {t("expense.loadingMatches")}
                     </p>
                   ) : activeCollaborators.length === 0 ? (
                     <p className="px-3 py-2 text-sm text-gray-500">
-                      No matching active Collaborators
+                      {t("expense.noMatches")}
                     </p>
                   ) : (
                     activeCollaborators.map((collaborator) => (
@@ -520,7 +525,7 @@ export function CreateExpensePage() {
                         onClick={() => selectCollaborator(collaborator)}
                         className="block w-full rounded-lg px-3 py-2 text-left text-sm font-medium text-gray-800 hover:bg-gray-100 focus:bg-gray-100 focus:outline-none"
                       >
-                        {collaboratorLabel(collaborator)}
+                        {collaboratorLabel(collaborator, t)}
                       </button>
                     ))
                   )}
@@ -531,19 +536,19 @@ export function CreateExpensePage() {
             {selectedCollaborator && (
               <div
                 role="status"
-                aria-label="Selected expense Collaborator"
+                aria-label={t("expense.selectedCollaborator")}
                 className="flex items-center justify-between gap-3 rounded-xl bg-gray-100 px-3 py-2 text-sm text-gray-700"
               >
                 <span className="min-w-0 break-words">
-                  <span className="font-semibold">Selected:</span>{" "}
-                  {collaboratorLabel(selectedCollaborator)}
+                  <span className="font-semibold">{t("expense.selected")}</span>{" "}
+                  {collaboratorLabel(selectedCollaborator, t)}
                 </span>
                 <button
                   type="button"
                   className="shrink-0 font-semibold underline"
                   onClick={() => changeCollaboratorSearch("")}
                 >
-                  Change
+                  {t("expense.changeCollaborator")}
                 </button>
               </div>
             )}
@@ -559,14 +564,14 @@ export function CreateExpensePage() {
                   type="button"
                   onClick={() => setShowEarningsModal(true)}
                 >
-                  View current and future earnings
+                  {t("expense.currentFuture")}
                 </button>
               </div>
             )}
 
             <div className="grid gap-4 sm:grid-cols-2">
               <label className="block text-sm font-medium text-gray-700">
-                Category *
+                {t("expense.category")} *
                 <select
                   className="mt-1 w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-gray-950 shadow-sm"
                   value={form.itemType}
@@ -584,13 +589,13 @@ export function CreateExpensePage() {
                     }
                   }}
                 >
-                  <option value="CANTEEN">Canteen</option>
-                  <option value="ADMINISTRATIVE">Administrative</option>
+                  <option value="CANTEEN">{t("expense.canteen")}</option>
+                  <option value="ADMINISTRATIVE">{t("expense.administrative")}</option>
                 </select>
               </label>
 
               <label className="block text-sm font-medium text-gray-700">
-                Expense Date *
+                {t("expense.expenseDate")} *
                 <input
                   className="mt-1 w-full rounded-xl border border-gray-300 px-3 py-2 text-gray-950 shadow-sm"
                   type="date"
@@ -613,12 +618,10 @@ export function CreateExpensePage() {
                       id="canteen-items-heading"
                       className="text-lg font-semibold text-gray-950"
                     >
-                      Canteen Items
+                      {t("expense.canteenItems")}
                     </h2>
                     <p className="mt-1 text-sm text-gray-500">
-                      Enter each purchased item on its own line. Every line is
-                      recorded as a separate Expense, ledger debit, and receipt
-                      obligation. Currency is selected per item.
+                      {t("expense.canteenItemsHelp")}
                     </p>
                   </div>
                   <button
@@ -627,7 +630,7 @@ export function CreateExpensePage() {
                     onClick={addCanteenLine}
                     disabled={isCreating || canteenLines.length >= 100}
                   >
-                    Add Canteen Item
+                    {t("expense.addCanteenItem")}
                   </button>
                 </div>
 
@@ -641,6 +644,9 @@ export function CreateExpensePage() {
                     line.currencyCode,
                     lineQuantity,
                     selectedGoldPrice?.brlPerGram,
+                    t,
+                    formatCurrency,
+                    formatNumber,
                   );
 
                   return (
@@ -649,7 +655,7 @@ export function CreateExpensePage() {
                       className="space-y-4 rounded-2xl border border-gray-200 bg-gray-50 p-4"
                     >
                       <legend className="px-1 font-semibold text-gray-950">
-                        Canteen Item {index + 1}
+                        {t("expense.canteenItemNumber", { index: index + 1 })}
                       </legend>
                       {canteenLines.length > 1 && (
                         <div className="flex justify-end">
@@ -659,15 +665,15 @@ export function CreateExpensePage() {
                             onClick={() => removeCanteenLine(line.id)}
                             disabled={isCreating}
                           >
-                            Remove
+                            {t("expense.removeItem")}
                           </button>
                         </div>
                       )}
 
                       <label className="block text-sm font-medium text-gray-700">
-                        Item Description *
+                        {t("expense.itemDescription")} *
                         <select
-                          aria-label={`Canteen item ${index + 1} description`}
+                          aria-label={t("expense.canteenItemDescriptionAria", { index: index + 1 })}
                           className="mt-1 w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-gray-950 shadow-sm"
                           value={line.priceListItemId}
                           onChange={(event) =>
@@ -676,7 +682,7 @@ export function CreateExpensePage() {
                             })
                           }
                         >
-                          <option value="">Select a price-list item</option>
+                          <option value="">{t("expense.selectPriceItem")}</option>
                           {filteredPriceListItems.map((item) => (
                             <option key={item.id} value={item.id}>
                               {priceListItemLabel(item)}
@@ -685,16 +691,16 @@ export function CreateExpensePage() {
                         </select>
                         {filteredPriceListItems.length === 0 && (
                           <span className="mt-2 block rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-900">
-                            No active Canteen price-list items are available.
+                            {t("expense.noCanteenItems")}
                           </span>
                         )}
                       </label>
 
                       <div className="grid gap-4 sm:grid-cols-2">
                         <label className="block text-sm font-medium text-gray-700">
-                          Currency *
+                          {t("expense.currency")} *
                           <select
-                            aria-label={`Canteen item ${index + 1} currency`}
+                            aria-label={t("expense.canteenItemCurrencyAria", { index: index + 1 })}
                             className="mt-1 w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-gray-950 shadow-sm"
                             value={line.currencyCode}
                             onChange={(event) =>
@@ -704,15 +710,15 @@ export function CreateExpensePage() {
                               })
                             }
                           >
-                            <option value="BRL">Real / BRL</option>
-                            <option value="GOLD_GRAM">Grams of Gold</option>
+                            <option value="BRL">{t("expense.realBRL")}</option>
+                            <option value="GOLD_GRAM">{t("expense.gramsGold")}</option>
                           </select>
                         </label>
 
                         <label className="block text-sm font-medium text-gray-700">
-                          Quantity *
+                          {t("expense.quantity")} *
                           <input
-                            aria-label={`Canteen item ${index + 1} quantity`}
+                            aria-label={t("expense.canteenItemQuantityAria", { index: index + 1 })}
                             className="mt-1 w-full rounded-xl border border-gray-300 px-3 py-2 text-gray-950 shadow-sm"
                             type="number"
                             min="0.001"
@@ -745,7 +751,7 @@ export function CreateExpensePage() {
               <>
                 <div className="grid gap-4 sm:grid-cols-2">
                   <label className="block text-sm font-medium text-gray-700">
-                    Currency *
+                    {t("expense.currency")} *
                     <select
                       className="mt-1 w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-gray-950 shadow-sm"
                       value={form.currencyCode}
@@ -757,13 +763,13 @@ export function CreateExpensePage() {
                         }))
                       }
                     >
-                      <option value="BRL">Real / BRL</option>
-                      <option value="GOLD_GRAM">Grams of Gold</option>
+                      <option value="BRL">{t("expense.realBRL")}</option>
+                      <option value="GOLD_GRAM">{t("expense.gramsGold")}</option>
                     </select>
                   </label>
 
                   <label className="block text-sm font-medium text-gray-700">
-                    Quantity *
+                    {t("expense.quantity")} *
                     <input
                       className="mt-1 w-full rounded-xl border border-gray-300 px-3 py-2 text-gray-950 shadow-sm"
                       type="number"
@@ -782,7 +788,7 @@ export function CreateExpensePage() {
                 </div>
 
                 <label className="block text-sm font-medium text-gray-700">
-                  Item Description *
+                  {t("expense.itemDescription")} *
                   <select
                     className="mt-1 w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-gray-950 shadow-sm"
                     value={form.priceListItemId}
@@ -793,7 +799,7 @@ export function CreateExpensePage() {
                       }))
                     }
                   >
-                    <option value="">Select a price-list item</option>
+                    <option value="">{t("expense.selectPriceItem")}</option>
                     {filteredPriceListItems.map((item) => (
                       <option key={item.id} value={item.id}>
                         {priceListItemLabel(item)}
@@ -802,8 +808,7 @@ export function CreateExpensePage() {
                   </select>
                   {filteredPriceListItems.length === 0 && (
                     <span className="mt-2 block rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-900">
-                      No active {categoryLabel(form.itemType).toLowerCase()}
-                      price-list items are available.
+                      {t("expense.noCategoryItems", { category: categoryLabel(form.itemType, t).toLowerCase() })}
                     </span>
                   )}
                 </label>
@@ -822,7 +827,7 @@ export function CreateExpensePage() {
             )}
 
             <label className="block text-sm font-medium text-gray-700">
-              Notes
+              {t("expense.notes")}
               <textarea
                 className="mt-1 min-h-24 w-full rounded-xl border border-gray-300 px-3 py-2 text-gray-950 shadow-sm"
                 value={form.description}
@@ -832,7 +837,7 @@ export function CreateExpensePage() {
                     description: event.target.value,
                   }))
                 }
-                placeholder="Optional note about this expense"
+                placeholder={t("expense.optionalNote")}
               />
             </label>
 
@@ -841,7 +846,7 @@ export function CreateExpensePage() {
                 className="rounded-xl border border-gray-300 px-5 py-3 text-center text-sm font-semibold text-gray-700 shadow-sm"
                 to="/expenses"
               >
-                Cancel
+                {t("common.cancel")}
               </Link>
               <button
                 className="rounded-xl bg-gray-950 px-5 py-3 text-sm font-semibold text-white shadow-sm disabled:cursor-not-allowed disabled:bg-gray-400"
@@ -849,12 +854,12 @@ export function CreateExpensePage() {
                 disabled={isCreating || submissionLocked || replacementSubmitDisabled}
               >
                 {isCreating
-                  ? "Creating..."
+                  ? t("expense.creating")
                   : copyFromExpenseId
-                    ? "Create Replacement Expense"
+                    ? t("expense.createReplacement")
                     : isCanteenBatchMode && canteenLines.length > 1
-                      ? "Create Expenses"
-                      : "Create Expense"}
+                      ? t("expense.createMany")
+                      : t("expense.createOne")}
               </button>
             </div>
           </form>
@@ -914,56 +919,52 @@ function CalculationPreview({
   isGoldPriceLoading: boolean;
   preview: CalculationPreviewState;
 }) {
+  const { t, formatCurrency } = useI18n();
   return (
     <section className="rounded-2xl border border-blue-100 bg-blue-50 p-4 text-sm text-blue-950">
-      <h3 className="font-semibold text-blue-950">Calculation preview</h3>
+      <h3 className="font-semibold text-blue-950">{t("expense.calculationPreview")}</h3>
       <p className="mt-1 text-blue-900">
-        Price-list item prices are stored in Real/BRL. Totals are calculated as
-        unit price × quantity.
+        {t("expense.previewHelp")}
       </p>
 
       {!item && (
         <p className="mt-3 rounded-xl border border-blue-200 bg-white/70 p-3 font-medium">
-          Select an item to preview unit price and total.
+          {t("expense.selectPreview")}
         </p>
       )}
 
       {item && (
         <dl className="mt-3 grid gap-3 sm:grid-cols-2">
-          <PreviewStat label="Selected item" value={priceListItemLabel(item)} />
+          <PreviewStat label={t("expense.selectedItem")} value={priceListItemLabel(item)} />
           <PreviewStat
-            label="Stored BRL unit price"
-            value={formatBRL(item.unitPriceBrl)}
+            label={t("expense.storedUnitPrice")}
+            value={formatCurrency(item.unitPriceBrl, "BRL")}
           />
           <PreviewStat
-            label="Selected currency unit price"
+            label={t("expense.selectedUnitPrice")}
             value={preview.unitPriceLabel}
           />
-          <PreviewStat label="Quantity" value={preview.quantityLabel} />
+          <PreviewStat label={t("expense.quantity")} value={preview.quantityLabel} />
           <PreviewStat
-            label="Total price"
+            label={t("expense.totalPrice")}
             value={preview.totalLabel}
             emphasized
           />
-          <PreviewStat label="Calculation method" value={preview.methodLabel} />
+          <PreviewStat label={t("expense.calculationMethod")} value={preview.methodLabel} />
         </dl>
       )}
 
       {currencyCode === "GOLD_GRAM" && (
         <div className="mt-3 rounded-xl border border-blue-200 bg-white/80 p-3 text-blue-950">
-          {isGoldPriceLoading && <p>Loading latest gold price...</p>}
+          {isGoldPriceLoading && <p>{t("expense.loadingGold")}</p>}
           {!isGoldPriceLoading && latestGoldPriceBrlPerGram && (
             <p>
-              Latest gold price source: {formatBRL(latestGoldPriceBrlPerGram)}{" "}
-              per gram
-              {latestGoldPriceDate ? ` on ${latestGoldPriceDate}` : ""}.
-              Conversion: BRL ÷ BRL per gram = grams.
+              {t("expense.goldSource", { price: formatCurrency(latestGoldPriceBrlPerGram, "BRL"), date: latestGoldPriceDate ? t("expense.goldSourceDate", { date: latestGoldPriceDate }) : "" })}
             </p>
           )}
           {!isGoldPriceLoading && !latestGoldPriceBrlPerGram && (
             <p className="font-medium text-amber-900">
-              A current gold price is required before this expense can be
-              recorded in grams of gold.
+              {t("expense.goldMissing")}
             </p>
           )}
         </div>
@@ -1000,22 +1001,23 @@ function SetupWarning({
 }: {
   hasPriceListItems: boolean;
 }) {
+  const { t } = useI18n();
   const missing = [
     !hasPriceListItems
-      ? "active Canteen or Administrative price-list items"
+      ? t("expense.missingPriceItems")
       : "",
   ].filter(Boolean);
 
   return (
     <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5 text-sm text-amber-900 shadow-sm">
-      <p className="font-semibold">Expense setup is incomplete.</p>
-      <p className="mt-1">Configure or create: {missing.join(", ")}.</p>
+      <p className="font-semibold">{t("expense.setupIncomplete")}</p>
+      <p className="mt-1">{t("expense.setupConfigure", { missing: missing.join(", ") })}</p>
       {!hasPriceListItems && (
         <Link
           className="mt-3 inline-block font-semibold underline"
           to="/admin/price-list-items"
         >
-          Manage Price List Items
+          {t("expense.managePriceItems")}
         </Link>
       )}
     </div>
@@ -1049,11 +1051,11 @@ function comparePriceListItems(a: PriceListItem, b: PriceListItem) {
   );
 }
 
-function collaboratorLabel(collaborator: Collaborator) {
+function collaboratorLabel(collaborator: Collaborator, t: Translate = translateEnglish) {
   const primary =
     collaborator.personNickname?.trim() ||
     collaborator.personName?.trim() ||
-    "Collaborator";
+    t("common.collaborator");
   const secondary = collaborator.personName?.trim();
   if (secondary && secondary !== primary) {
     return `${primary} (${secondary})`;
@@ -1065,8 +1067,8 @@ function priceListItemLabel(item: PriceListItem) {
   return `${item.description} · ${item.code}`;
 }
 
-function categoryLabel(value: PriceListItemType) {
-  return value === "ADMINISTRATIVE" ? "Administrative" : "Canteen";
+function categoryLabel(value: PriceListItemType, t: Translate = translateEnglish) {
+  return value === "ADMINISTRATIVE" ? t("expense.administrative") : t("expense.canteen");
 }
 
 type CalculationPreviewState = {
@@ -1080,65 +1082,54 @@ function buildCalculationPreview(
   item: PriceListItem | undefined,
   currencyCode: ExpenseCurrencyCode,
   quantity: number,
-  latestGoldPriceBrlPerGram?: number,
+  latestGoldPriceBrlPerGram: number | undefined,
+  t: Translate,
+  formatCurrency: ReturnType<typeof useI18n>["formatCurrency"],
+  formatNumber: ReturnType<typeof useI18n>["formatNumber"],
 ): CalculationPreviewState {
   if (!item || !Number.isFinite(quantity) || quantity <= 0) {
     return {
       unitPriceLabel: "—",
       quantityLabel:
         Number.isFinite(quantity) && quantity > 0
-          ? formatDecimal(quantity)
+          ? formatNumber(quantity, { minimumFractionDigits: 0, maximumFractionDigits: 3 })
           : "—",
       totalLabel: "—",
       methodLabel:
         currencyCode === "GOLD_GRAM"
-          ? "BRL to grams using latest gold price"
-          : "BRL price list",
+          ? t("expense.methodGold")
+          : t("expense.methodBRL"),
     };
   }
 
   if (currencyCode === "GOLD_GRAM") {
     if (!latestGoldPriceBrlPerGram || latestGoldPriceBrlPerGram <= 0) {
       return {
-        unitPriceLabel: "Gold price required",
-        quantityLabel: formatDecimal(quantity),
-        totalLabel: "Gold price required",
-        methodLabel: "BRL to grams using latest gold price",
+        unitPriceLabel: t("expense.goldRequired"),
+        quantityLabel: formatNumber(quantity, { minimumFractionDigits: 0, maximumFractionDigits: 3 }),
+        totalLabel: t("expense.goldRequired"),
+        methodLabel: t("expense.methodGold"),
       };
     }
     const unitPriceGold = item.unitPriceBrl / latestGoldPriceBrlPerGram;
     const totalGold = unitPriceGold * quantity;
     return {
-      unitPriceLabel: `${formatDecimal(unitPriceGold, 6)} g gold`,
-      quantityLabel: formatDecimal(quantity),
-      totalLabel: `${formatDecimal(totalGold, 6)} g gold`,
-      methodLabel: "BRL to grams using latest gold price",
+      unitPriceLabel: `${formatNumber(unitPriceGold, { maximumFractionDigits: 6 })} ${t("account.goldUnit")}`,
+      quantityLabel: formatNumber(quantity, { minimumFractionDigits: 0, maximumFractionDigits: 3 }),
+      totalLabel: `${formatNumber(totalGold, { maximumFractionDigits: 6 })} ${t("account.goldUnit")}`,
+      methodLabel: t("expense.methodGold"),
     };
   }
 
   const totalBRL = item.unitPriceBrl * quantity;
   return {
-    unitPriceLabel: formatBRL(item.unitPriceBrl),
-    quantityLabel: formatDecimal(quantity),
-    totalLabel: formatBRL(totalBRL),
-    methodLabel: "BRL price list",
+    unitPriceLabel: formatCurrency(item.unitPriceBrl, "BRL"),
+    quantityLabel: formatNumber(quantity, { minimumFractionDigits: 0, maximumFractionDigits: 3 }),
+    totalLabel: formatCurrency(totalBRL, "BRL"),
+    methodLabel: t("expense.methodBRL"),
   };
 }
 
-function formatBRL(value: number) {
-  return new Intl.NumberFormat("pt-BR", {
-    style: "currency",
-    currency: "BRL",
-    minimumFractionDigits: 2,
-  }).format(value);
-}
-
-function formatDecimal(value: number, maximumFractionDigits = 3) {
-  return new Intl.NumberFormat("en-US", {
-    minimumFractionDigits: 0,
-    maximumFractionDigits,
-  }).format(value);
-}
 
 function todayISODate() {
   return new Date().toISOString().slice(0, 10);

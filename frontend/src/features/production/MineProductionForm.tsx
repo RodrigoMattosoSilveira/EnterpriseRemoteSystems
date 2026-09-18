@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import type { GoldProductionEntry } from "../../types/accruals";
 import type { ReferenceDataItem } from "../../types/referenceData";
+import { useI18n } from "../../i18n";
 
 export type MineProductionFormInput = {
   locationId: string;
@@ -26,6 +27,7 @@ export function MineProductionForm({
   onSubmit: (input: MineProductionFormInput) => void;
   onCancelEdit: () => void;
 }) {
+  const { t } = useI18n();
   const [locationId, setLocationId] = useState("");
   const [grams, setGrams] = useState("");
   const [notes, setNotes] = useState("");
@@ -48,21 +50,21 @@ export function MineProductionForm({
     event.preventDefault();
     setValidation("");
     if (!workDate) {
-      setValidation("Select a Work Period before recording production.");
+      setValidation(t("production.validation.workPeriod"));
       return;
     }
     if (!locationId) {
-      setValidation("Select the well/location.");
+      setValidation(t("production.validation.location"));
       return;
     }
     const trimmedGrams = grams.trim();
     if (!/^\d+(?:\.\d{1,8})?$/.test(trimmedGrams)) {
-      setValidation("Gold produced supports at most 8 decimal places.");
+      setValidation(t("production.validation.decimals"));
       return;
     }
     const value = Number(trimmedGrams);
     if (!Number.isFinite(value) || value <= 0) {
-      setValidation("Gold produced must be greater than zero.");
+      setValidation(t("production.validation.positive"));
       return;
     }
     onSubmit({
@@ -80,15 +82,12 @@ export function MineProductionForm({
     >
       <div>
         <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
-          Authorized workflow
+          {t("production.authorizedWorkflow")}
         </p>
         <h2 className="text-lg font-semibold text-gray-950">
-          {editingEntry ? "Edit Gold Production" : "Record Gold Production"}
+          {editingEntry ? t("production.editTitle") : t("production.recordTitle")}
         </h2>
-        <p className="text-sm text-gray-500">
-          Create or edit mine production here. The Work Period Accrual screen is
-          read-only for Gold Produced.
-        </p>
+        <p className="text-sm text-gray-500">{t("production.formHelp")}</p>
       </div>
       {validation && (
         <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-800">
@@ -96,23 +95,23 @@ export function MineProductionForm({
         </div>
       )}
       <label className="block text-sm font-medium text-gray-700">
-        Production date
+        {t("production.date")}
         <input
           readOnly
           value={workDate ?? ""}
-          placeholder="Select a Work Period"
+          placeholder={t("production.selectWorkPeriod")}
           className="mt-1 w-full rounded-xl border bg-gray-50 px-3 py-2 text-gray-700"
         />
       </label>
       <label className="block text-sm font-medium text-gray-700">
-        Well / Location *
+        {t("production.locationRequired")}
         <select
           className="mt-1 w-full rounded-xl border px-3 py-2"
           value={locationId}
           onChange={(event) => setLocationId(event.target.value)}
           disabled={!workDate || pending}
         >
-          <option value="">Select a well</option>
+          <option value="">{t("production.selectWell")}</option>
           {locations.map((row) => (
             <option key={row.id} value={row.id}>
               {row.label}
@@ -121,7 +120,7 @@ export function MineProductionForm({
         </select>
       </label>
       <label className="block text-sm font-medium text-gray-700">
-        Gold produced (grams) *
+        {t("production.gramsRequired")}
         <input
           className="mt-1 w-full rounded-xl border px-3 py-2"
           inputMode="decimal"
@@ -132,7 +131,7 @@ export function MineProductionForm({
         />
       </label>
       <label className="block text-sm font-medium text-gray-700">
-        Notes
+        {t("common.notes")}
         <textarea
           className="mt-1 w-full rounded-xl border px-3 py-2"
           value={notes}
@@ -147,10 +146,10 @@ export function MineProductionForm({
           className="rounded-xl bg-gray-950 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
         >
           {pending
-            ? "Saving..."
+            ? t("common.saving")
             : editingEntry
-              ? "Save Production"
-              : "Record Production"}
+              ? t("production.save")
+              : t("production.record")}
         </button>
         {editingEntry ? (
           <button
@@ -158,7 +157,7 @@ export function MineProductionForm({
             onClick={onCancelEdit}
             className="rounded-xl border px-4 py-2 text-sm font-semibold"
           >
-            Cancel edit
+            {t("production.cancelEdit")}
           </button>
         ) : null}
       </div>

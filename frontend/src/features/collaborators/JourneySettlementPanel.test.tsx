@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AuthzActor } from "../../types/authz";
 import type { SettlementPreview } from "../../types/settlements";
 import { JourneySettlementPanel } from "./JourneySettlementPanel";
+import { I18nProvider } from "../../i18n";
 
 let container: HTMLDivElement;
 let root: Root | null;
@@ -510,7 +511,7 @@ function renderPanel({
   root = createRoot(container);
   act(() =>
     root?.render(
-      <QueryClientProvider client={client}>
+      <I18nProvider><QueryClientProvider client={client}>
         <MemoryRouter>
           <JourneySettlementPanel
             collaboratorId="collab-1"
@@ -518,7 +519,7 @@ function renderPanel({
             onJourneyClosed={onJourneyClosed}
           />
         </MemoryRouter>
-      </QueryClientProvider>,
+      </QueryClientProvider></I18nProvider>,
     ),
   );
 }

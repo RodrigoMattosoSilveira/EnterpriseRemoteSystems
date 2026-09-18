@@ -8,6 +8,7 @@ import { AuthorizationProvider } from "../../components/layout/AuthorizationCont
 import type { AuthzCurrentActor } from "../../types/authz";
 import type { WorkPeriod } from "../../types/planning";
 import type { ReferenceDataItem } from "../../types/referenceData";
+import { I18nProvider } from "../../i18n";
 
 const period: WorkPeriod = {
   id: "wp-1",
@@ -111,13 +112,13 @@ describe("AccrualTab", () => {
     await act(async () => {
       root = createRoot(container);
       root.render(
-        <MemoryRouter>
+        <I18nProvider><MemoryRouter>
           <QueryClientProvider client={queryClient}>
             <AuthorizationProvider value={actorWithPermissions(["gold_production.manage"])}>
               <AccrualTab workPeriod={period} locations={locations} />
             </AuthorizationProvider>
           </QueryClientProvider>
-        </MemoryRouter>,
+        </MemoryRouter></I18nProvider>,
       );
     });
     await waitForText("Gold Production Missing");
@@ -211,13 +212,13 @@ describe("AccrualTab", () => {
     await act(async () => {
       root = createRoot(container);
       root.render(
-        <MemoryRouter>
+        <I18nProvider><MemoryRouter>
           <QueryClientProvider client={queryClient}>
             <AuthorizationProvider value={actorWithPermissions(["earnings.read"])}>
               <AccrualTab workPeriod={period} locations={locations} />
             </AuthorizationProvider>
           </QueryClientProvider>
-        </MemoryRouter>,
+        </MemoryRouter></I18nProvider>,
       );
     });
 
@@ -317,13 +318,13 @@ describe("AccrualTab", () => {
     await act(async () => {
       root = createRoot(container);
       root.render(
-        <MemoryRouter>
+        <I18nProvider><MemoryRouter>
           <QueryClientProvider client={queryClient}>
             <AuthorizationProvider value={actorWithPermissions(["earnings.read"])}>
               <AccrualTab workPeriod={period} locations={locations} />
             </AuthorizationProvider>
           </QueryClientProvider>
-        </MemoryRouter>,
+        </MemoryRouter></I18nProvider>,
       );
     });
 

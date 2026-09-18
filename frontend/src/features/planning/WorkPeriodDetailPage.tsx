@@ -21,10 +21,12 @@ import {
   useWorkPlanRoster,
 } from "./usePlanning";
 import { PageContextHeading, PageTitle } from "../../components/layout/PageHeading";
+import { useI18n } from "../../i18n";
 
 type Tab = "plan" | "inform" | "outcomes" | "accrual";
 
 export function WorkPeriodDetailPage() {
+  const { t, formatDate, formatDateTime } = useI18n();
   const { id = "" } = useParams();
   const [tab, setTab] = useState<Tab>("plan");
   const auth = useAuthState();
@@ -74,7 +76,7 @@ export function WorkPeriodDetailPage() {
   if (periodQuery.isLoading || !period)
     return (
       <main className="min-h-screen bg-gray-50 p-6">
-        Loading work period...
+        {t("planning.loadingPeriod")}
       </main>
     );
   const editable = period.status !== "CLOSED";
@@ -93,36 +95,36 @@ export function WorkPeriodDetailPage() {
             to="/work-periods"
             className="text-sm font-semibold text-gray-600 underline"
           >
-            Back to Work Periods
+            {t("planning.backPeriods")}
           </Link>
           <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div>
-              <PageTitle>Work Period</PageTitle>
+              <PageTitle>{t("planning.workPeriod")}</PageTitle>
               <PageContextHeading>
-                {tenantName} · {period.workDate} · {period.name}
+                {tenantName} · {formatDate(period.workDate)} · {period.name}
               </PageContextHeading>
               <p className="mt-1 text-sm text-gray-600">
-                <span className="font-semibold">Work Period Code:</span>{" "}
+                <span className="font-semibold">{t("planning.workPeriodCode")}:</span>{" "}
                 <span className="font-mono">{period.periodCode}</span>
               </p>
               <p className="mt-1 text-sm text-gray-600">
-                <span className="font-semibold">Work Period ID:</span>{" "}
+                <span className="font-semibold">{t("planning.workPeriodId")}:</span>{" "}
                 <span className="break-all font-mono">{period.id}</span>
               </p>
               <p className="mt-1 text-sm text-gray-600">
-                <span className="font-semibold">Schedule:</span>{" "}
-                {formatDateTime(period.startsAt)} to{" "}
+                <span className="font-semibold">{t("planning.schedule")}:</span>{" "}
+                {formatDateTime(period.startsAt)} {t("common.to")}{" "}
                 {formatDateTime(period.endsAt)}
               </p>
             </div>
             <span className="w-fit rounded-full bg-gray-100 px-3 py-1 text-xs font-semibold">
-              {humanizePlanningCode(period.status)}
+              {humanizePlanningCode(period.status, t)}
             </span>
           </div>
         </div>
       </header>
       <section className="mx-auto max-w-6xl space-y-4 p-4 print:max-w-none print:p-0">
-        <ApiErrorPanel error={error} />
+        <ApiErrorPanel error={error} translate={t} />
         <nav className="flex gap-2 overflow-x-auto rounded-2xl border bg-white p-2 shadow-sm print:hidden">
           {(["plan", "inform", "outcomes", "accrual"] as Tab[]).map((value) => (
             <button
@@ -131,12 +133,12 @@ export function WorkPeriodDetailPage() {
               className={`rounded-xl px-4 py-2 text-sm font-semibold ${tab === value ? "bg-gray-950 text-white" : "text-gray-600"}`}
             >
               {value === "plan"
-                ? "Plan"
+                ? t("planning.tabPlan")
                 : value === "inform"
-                  ? "Inform / Print"
+                  ? t("planning.informPrint")
                   : value === "outcomes"
-                    ? "Actual Outcomes"
-                    : "Accrual"}
+                    ? t("planning.tabOutcomes")
+                    : t("planning.tabAccrual")}
             </button>
           ))}
         </nav>
@@ -173,14 +175,14 @@ export function WorkPeriodDetailPage() {
         {tab === "outcomes" && (
           <section className="space-y-4">
             <div>
-              <h2 className="text-lg font-semibold">Actual Outcomes</h2>
+              <h2 className="text-lg font-semibold">{t("planning.actualOutcomes")}</h2>
               <p className="text-sm text-gray-500">
-                Record what actually happened for each included collaborator.
+                {t("planning.outcomesHelp")}
               </p>
             </div>
             {included.length === 0 && (
               <div className="rounded-2xl border bg-white p-6 text-center text-sm text-gray-500">
-                No included assignments.
+                {t("planning.noIncluded")}
               </div>
             )}
             {included.map((row) => (
@@ -199,7 +201,7 @@ export function WorkPeriodDetailPage() {
                   </p>
                 </div>
                 <label className="text-sm font-medium text-gray-700">
-                  Outcome
+                  {t("planning.outcome")}
                   <select
                     value={row.actualStatus ?? ""}
                     disabled={!editable || outcomeMutation.isPending}
@@ -212,10 +214,10 @@ export function WorkPeriodDetailPage() {
                     }
                     className="ml-3 rounded-xl border bg-white px-3 py-2"
                   >
-                    <option value="">Not marked</option>
+                    <option value="">{t("planning.notMarked")}</option>
                     {ACTUAL_STATUSES.map((status) => (
                       <option key={status} value={status}>
-                        {humanizePlanningCode(status)}
+                        {humanizePlanningCode(status, t)}
                       </option>
                     ))}
                   </select>
@@ -235,12 +237,6 @@ export function WorkPeriodDetailPage() {
   );
 }
 
-function formatDateTime(value: string) {
-  return new Intl.DateTimeFormat(undefined, {
-    dateStyle: "medium",
-    timeStyle: "short",
-  }).format(new Date(value));
-}
 
 function unreplacedAbsenteeAssignments(assignments: WorkPeriodAssignment[]) {
   const replacedAssignmentIds = new Set(

@@ -5,10 +5,13 @@ import { ApiError } from "../../api/client";
 import { ApiErrorPanel } from "../../components/ApiErrorPanel";
 import { useReferenceDataByType } from "../reference-data/useReferenceData";
 import { PageTitle } from "../../components/layout/PageHeading";
+import { useI18n } from "../../i18n";
+import { personStatusLabel } from "./personPresentation";
 
 const FALLBACK_ACTIVE_STATUS_ID = "ref-person-status-active";
 
 export function CreatePersonPage() {
+  const { t } = useI18n();
   const navigate = useNavigate();
   const mutation = useCreatePerson();
   const statusesQuery = useReferenceDataByType("person_status");
@@ -17,7 +20,7 @@ export function CreatePersonPage() {
     activeStatuses.find((status) => status.code === "ACTIVE") ?? activeStatuses[0];
   const defaultStatusId = activeStatus?.id ?? FALLBACK_ACTIVE_STATUS_ID;
   const statusOptions = activeStatuses.length > 0
-    ? activeStatuses.map((status) => ({ value: status.id, label: status.label }))
+    ? activeStatuses.map((status) => ({ value: status.id, label: personStatusLabel(status.code, status.label, t) }))
     : undefined;
 
   return (
@@ -25,15 +28,13 @@ export function CreatePersonPage() {
       <header className="sticky top-0 z-10 border-b bg-white/95 px-4 py-4 backdrop-blur">
         <div className="mx-auto max-w-4xl">
           <Link className="text-sm text-gray-500 underline" to="/people">
-            Back to People
+            {t("common.backToPeople")}
           </Link>
           <PageTitle className="mt-3">
-            New Person
+            {t("people.new.title")}
           </PageTitle>
           <p className="text-sm text-gray-500">
-            Create one global Person identity and its membership in the selected
-            tenant. Complete the Personal section first; other sections can be
-            filled later.
+            {t("people.new.description")}
           </p>
         </div>
       </header>
@@ -43,7 +44,7 @@ export function CreatePersonPage() {
           <div className="mb-4 rounded-2xl border border-red-200 bg-red-50 p-4 text-red-800">
             <p className="font-semibold">{(mutation.error as Error).message}</p>
 
-            <ApiErrorPanel error={mutation.error} />
+            <ApiErrorPanel error={mutation.error} translate={t} />
           </div>
         )}
 
@@ -55,9 +56,7 @@ export function CreatePersonPage() {
             const created = await mutation.mutateAsync(input);
             navigate(`/people/${created.id}#authentication`, {
               state: {
-                flash:
-                  `Person record added: ${created.firstName} ${created.lastName}. ` +
-                  "Set the initial temporary password below to enable sign-in.",
+                flash: t("people.new.flash", { name: `${created.firstName} ${created.lastName}` }),
               },
             });
           }}

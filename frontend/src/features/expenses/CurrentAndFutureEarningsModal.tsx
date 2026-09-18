@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { ApiErrorPanel } from "../../components/ApiErrorPanel";
 import { JourneyDaysRemaining } from "../../components/JourneyDaysRemaining";
 import { useFinancialProjection } from "./useFinancialProjection";
+import { useI18n, translateEnglish, type Translate } from "../../i18n";
 
 export function CurrentAndFutureEarningsModal({
   collaboratorId,
@@ -10,6 +11,7 @@ export function CurrentAndFutureEarningsModal({
   collaboratorId: string;
   onClose: () => void;
 }) {
+  const { t, formatCurrency, formatNumber, formatDate } = useI18n();
   const projectionQuery = useFinancialProjection(collaboratorId, true);
 
   useEffect(() => {
@@ -39,13 +41,13 @@ export function CurrentAndFutureEarningsModal({
         <div className="flex items-start justify-between gap-4">
           <div>
             <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
-              Financial estimate
+              {t("earnings.financialEstimate")}
             </p>
             <h2
               id="current-future-earnings-title"
               className="text-xl font-bold text-gray-950"
             >
-              Current and Future Earnings
+              {t("earnings.title")}
             </h2>
             {projection?.collaboratorLabel && (
               <p className="mt-1 text-sm text-gray-500">
@@ -54,12 +56,12 @@ export function CurrentAndFutureEarningsModal({
             )}
             {projection ? (
               <p className="mt-1 text-xs text-gray-500">
-                Journey provenance: <span className="font-mono">{projection.collaboratorId}</span>
+                {t("accrual.journeyProvenance")}: <span className="font-mono">{projection.collaboratorId}</span>
               </p>
             ) : null}
           </div>
           <button
-            aria-label="Close Current and Future Earnings"
+            aria-label={t("earnings.closeAria")}
             className="rounded-lg px-3 py-1 text-2xl leading-none text-gray-500 hover:bg-gray-100"
             onClick={onClose}
             type="button"
@@ -69,103 +71,115 @@ export function CurrentAndFutureEarningsModal({
         </div>
 
         {projectionQuery.isLoading && (
-          <p className="mt-6 text-sm text-gray-600">Loading earnings...</p>
+          <p className="mt-6 text-sm text-gray-600">{t("earnings.loading")}</p>
         )}
-        <ApiErrorPanel error={projectionQuery.error} />
+        <ApiErrorPanel error={projectionQuery.error} translate={t} />
 
         {projection && (
           <div className="mt-6 space-y-5">
             <AmountSection
-              title="Current Balances"
+              title={t("earnings.currentBalances")}
               amounts={projection.currentBalances}
               colorBySign
+              formatCurrency={formatCurrency}
+              formatNumber={formatNumber}
+              t={t}
             />
             <AmountSection
-              title="Ready Accrual Earnings Not Yet Posted"
+              title={t("earnings.ready")}
               amounts={projection.unpostedReadyEarnings ?? zeroAmounts}
+              formatCurrency={formatCurrency}
+              formatNumber={formatNumber}
+              t={t}
             />
             <AmountSection
-              title="Estimated Future Earnings"
+              title={t("earnings.future")}
               amounts={projection.estimatedFutureEarnings ?? zeroAmounts}
+              formatCurrency={formatCurrency}
+              formatNumber={formatNumber}
+              t={t}
             />
             <AmountSection
-              title="Projected Earnings Through Journey End"
+              title={t("earnings.projected")}
               amounts={projection.projectedEarnings}
+              formatCurrency={formatCurrency}
+              formatNumber={formatNumber}
+              t={t}
             />
             <AmountSection
-              title="Projected Journey-End Balances"
+              title={t("earnings.projectedBalances")}
               amounts={projection.projectedFinalBalances}
               colorBySign
+              formatCurrency={formatCurrency}
+              formatNumber={formatNumber}
+              t={t}
             />
 
             <section className="rounded-xl border bg-gray-50 p-4 text-sm text-gray-700">
-              <h3 className="font-semibold text-gray-950">Projection Basis</h3>
+              <h3 className="font-semibold text-gray-950">{t("earnings.basis")}</h3>
               <JourneyDaysRemaining
                 projectedEndDate={projection.projection.journeyEndDate}
                 className="mt-1 block text-sm"
               />
               <dl className="mt-2 grid gap-2 sm:grid-cols-2">
                 <Detail
-                  label="Journey end"
+                  label={t("earnings.journeyEnd")}
                   value={formatDate(projection.projection.journeyEndDate)}
                 />
                 <Detail
-                  label="Calendar work periods"
+                  label={t("earnings.calendarPeriods")}
                   value={String(
                     projection.projection.calendarWorkPeriods ??
                       projection.projection.remainingWorkPeriods,
                   )}
                 />
                 <Detail
-                  label="Posted work periods"
+                  label={t("earnings.postedPeriods")}
                   value={String(projection.projection.postedWorkPeriods ?? 0)}
                 />
                 <Detail
-                  label="Ready accrual work periods"
+                  label={t("earnings.readyPeriods")}
                   value={String(
                     projection.projection.readyAccrualWorkPeriods ?? 0,
                   )}
                 />
                 <Detail
-                  label="Estimated future work periods"
+                  label={t("earnings.futurePeriods")}
                   value={String(
                     projection.projection.estimatedFutureWorkPeriods ??
                       projection.projection.remainingWorkPeriods,
                   )}
                 />
                 <Detail
-                  label="Pending accrual items"
+                  label={t("earnings.pendingItems")}
                   value={String(projection.projection.pendingAccrualItems ?? 0)}
                 />
                 {projection.projection.locationLabel && (
                   <Detail
-                    label="Assigned well"
+                    label={t("earnings.assignedWell")}
                     value={projection.projection.locationLabel}
                   />
                 )}
                 {projection.projection.productionMethod && (
                   <Detail
-                    label="Method"
+                    label={t("earnings.method")}
                     value={formatMethod(projection.projection.productionMethod)}
                   />
                 )}
                 {projection.projection.productionValueUsed !== undefined && (
                   <Detail
-                    label="Production value used"
-                    value={`${formatGold(projection.projection.productionValueUsed)} g`}
+                    label={t("earnings.productionValue")}
+                    value={`${formatNumber(projection.projection.productionValueUsed, { maximumFractionDigits: 8 })} g`}
                   />
                 )}
               </dl>
               {projection.projection.warning && (
                 <p className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-amber-900">
-                  {formatWarning(projection.projection.warning)}
+                  {formatWarning(projection.projection.warning, t)}
                 </p>
               )}
               <p className="mt-3 text-xs text-gray-500">
-                Current balances include posted ledger entries. Ready accruals are
-                calculated but not posted yet. Estimated future earnings exclude
-                work periods already posted or already represented by ready
-                accruals.
+                {t("earnings.basisHelp")}
               </p>
             </section>
           </div>
@@ -177,7 +191,7 @@ export function CurrentAndFutureEarningsModal({
             onClick={onClose}
             type="button"
           >
-            Close
+            {t("earnings.close")}
           </button>
         </div>
       </section>
@@ -191,32 +205,38 @@ function AmountSection({
   title,
   amounts,
   colorBySign = false,
+  formatCurrency,
+  formatNumber,
+  t,
 }: {
   title: string;
   amounts: { brlAmount: number | null; goldGramAmount: number | null };
   colorBySign?: boolean;
+  formatCurrency: (value: number, currency: string) => string;
+  formatNumber: (value: number, options?: Intl.NumberFormatOptions) => string;
+  t: Translate;
 }) {
   return (
     <section className="rounded-xl border p-4">
       <h3 className="font-semibold text-gray-950">{title}</h3>
       <dl className="mt-3 grid gap-3 sm:grid-cols-2">
         <Detail
-          label="BRL"
+          label={t("earnings.brl")}
           value={
             amounts.brlAmount === null
-              ? "Unavailable"
-              : formatBRL(amounts.brlAmount)
+              ? t("earnings.unavailable")
+              : formatCurrency(amounts.brlAmount, "BRL")
           }
           valueClassName={
             colorBySign ? balanceTextClassName(amounts.brlAmount) : undefined
           }
         />
         <Detail
-          label="Grams of gold"
+          label={t("earnings.gramsGold")}
           value={
             amounts.goldGramAmount === null
-              ? "Unavailable"
-              : `${formatGold(amounts.goldGramAmount)} g`
+              ? t("earnings.unavailable")
+              : `${formatNumber(amounts.goldGramAmount, { maximumFractionDigits: 8 })} g`
           }
           valueClassName={
             colorBySign
@@ -253,22 +273,6 @@ function balanceTextClassName(value: number | null) {
   return value >= 0 ? "text-green-700" : "text-red-700";
 }
 
-function formatBRL(value: number) {
-  return new Intl.NumberFormat("pt-BR", {
-    style: "currency",
-    currency: "BRL",
-  }).format(value);
-}
-
-function formatGold(value: number) {
-  return value.toFixed(8);
-}
-
-function formatDate(value: string) {
-  const [year, month, day] = value.split("-");
-  return year && month && day ? `${month}/${day}/${year}` : value;
-}
-
 function formatMethod(value: string) {
   return value
     .toLowerCase()
@@ -276,10 +280,10 @@ function formatMethod(value: string) {
     .replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
-function formatWarning(value: string) {
+function formatWarning(value: string, t: Translate = translateEnglish) {
   if (value === "NO_GOLD_PRODUCTION_HISTORY")
-    return "Projected gold earnings are unavailable because no usable gold-production history exists for the assigned well.";
+    return t("earnings.warningNoGold");
   if (value === "PENDING_ACCRUAL_INPUTS")
-    return "Some accrual items still need inputs. Ready accruals are included, but pending items are not counted until resolved.";
+    return t("earnings.warningPending");
   return value;
 }

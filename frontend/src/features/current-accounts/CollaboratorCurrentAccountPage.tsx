@@ -11,6 +11,14 @@ import { CurrentAndFutureEarningsModal } from "../expenses/CurrentAndFutureEarni
 import { receiptStatusLabel, receiptStatusTone } from "../receipts/receiptLifecycle";
 import { useCollaboratorCurrentAccount } from "./useCurrentAccount";
 import { PageContextHeading, PageTitle } from "../../components/layout/PageHeading";
+import { useI18n } from "../../i18n";
+import {
+  acceptingPartyCodeLabel,
+  ledgerDirectionLabel,
+  ledgerEntryTypeLabel,
+  ledgerSourceTypeLabel,
+  paymentDirectionCodeLabel,
+} from "../../i18n/financialLabels";
 
 type LedgerFilterOption = {
   value: string;
@@ -18,26 +26,19 @@ type LedgerFilterOption = {
   apiFilter: CurrentAccountFilter;
 };
 
-const ledgerFilters: LedgerFilterOption[] = [
-  { value: "all", label: "All entries", apiFilter: {} },
-  { value: "credits", label: "Credits", apiFilter: { direction: "CREDIT" } },
-  { value: "debits", label: "Debits", apiFilter: { direction: "DEBIT" } },
-  {
-    value: "earnings",
-    label: "Earnings",
-    apiFilter: { sourceType: "WORK_PERIOD_ASSIGNMENT" },
-  },
-  { value: "expenses", label: "Expenses", apiFilter: { sourceType: "EXPENSE" } },
-  {
-    value: "outstanding-receipts",
-    label: "Outstanding receipts",
-    apiFilter: { outstandingReceipts: true },
-  },
-];
 
 const PAGE_SIZE = 25;
 
 export function CollaboratorCurrentAccountPage() {
+  const { t, formatCurrency, formatDate, formatNumber } = useI18n();
+  const ledgerFilters: LedgerFilterOption[] = [
+    { value: "all", label: t("account.filter.all"), apiFilter: {} },
+    { value: "credits", label: t("account.filter.credits"), apiFilter: { direction: "CREDIT" } },
+    { value: "debits", label: t("account.filter.debits"), apiFilter: { direction: "DEBIT" } },
+    { value: "earnings", label: t("account.filter.earnings"), apiFilter: { sourceType: "WORK_PERIOD_ASSIGNMENT" } },
+    { value: "expenses", label: t("account.filter.expenses"), apiFilter: { sourceType: "EXPENSE" } },
+    { value: "outstanding-receipts", label: t("account.filter.outstanding"), apiFilter: { outstandingReceipts: true } },
+  ];
   const { id = "" } = useParams();
   const actor = useAuthorizationContext();
   const wildcard = actor.permissions.includes("*");
@@ -94,24 +95,24 @@ export function CollaboratorCurrentAccountPage() {
             className="text-sm font-semibold text-gray-600 underline"
             to={`/collaborators/${id}`}
           >
-            Back to Collaborator
+            {t("receipt.backCollaborator")}
           </Link>
           <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div>
               <PageTitle>
-                Person Current Account
+                {t("account.title")}
               </PageTitle>
               <PageContextHeading>
-                {data?.personLabel || data?.collaboratorLabel || "Current Account"}
+                {data?.personLabel || data?.collaboratorLabel || t("account.defaultContext")}
               </PageContextHeading>
               <p className="mt-1 text-sm text-gray-600">
-                <span className="font-semibold">Journey ID:</span>{" "}
+                <span className="font-semibold">{t("common.journeyId")}:</span>{" "}
                 <span className="break-all font-mono">
                   {data?.collaboratorId || id}
                 </span>
               </p>
               <p className="mt-1 text-sm text-gray-600">
-                Person-owned balances and ledger history in the selected Tenant. Journey references remain as provenance.
+                {t("account.subtitle")}
               </p>
             </div>
             <div className="flex flex-wrap gap-2 sm:justify-end">
@@ -121,7 +122,7 @@ export function CollaboratorCurrentAccountPage() {
                   type="button"
                   onClick={() => setShowFinancialProjection(true)}
                 >
-                  Current + Future Earnings
+                  {t("account.futureEarnings")}
                 </button>
               ) : null}
               {canBrowseOutstandingReceipts ? (
@@ -129,7 +130,7 @@ export function CollaboratorCurrentAccountPage() {
                   className="rounded-xl border bg-white px-4 py-2 text-sm font-semibold text-gray-700 shadow-sm"
                   to="/receipts/outstanding"
                 >
-                  Outstanding Receipts
+                  {t("account.outstandingReceipts")}
                 </Link>
               ) : null}
               {canBrowseExpenses ? (
@@ -137,7 +138,7 @@ export function CollaboratorCurrentAccountPage() {
                   className="rounded-xl border bg-white px-4 py-2 text-sm font-semibold text-gray-700 shadow-sm"
                   to="/expenses"
                 >
-                  Expenses
+                  {t("nav.expenses")}
                 </Link>
               ) : null}
             </div>
@@ -146,11 +147,11 @@ export function CollaboratorCurrentAccountPage() {
       </header>
 
       <section className="mx-auto max-w-6xl space-y-4 p-4">
-        <ApiErrorPanel error={currentAccount.error} />
+        <ApiErrorPanel error={currentAccount.error} translate={t} />
 
         {currentAccount.isLoading ? (
           <section className="rounded-2xl border bg-white p-5 shadow-sm">
-            Loading current account...
+            {t("account.loading")}
           </section>
         ) : data ? (
           <>
@@ -167,14 +168,14 @@ export function CollaboratorCurrentAccountPage() {
               <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
                 <div>
                   <h2 className="text-lg font-semibold text-gray-950">
-                    Ledger Entries
+                    {t("account.ledger.title")}
                   </h2>
                   <p className="mt-1 text-sm text-gray-600">
-                    Inspect credits, debits, expense deductions, and receipt obligations.
+                    {t("account.ledger.description")}
                   </p>
                 </div>
                 <label className="grid gap-1 text-sm font-medium text-gray-700 md:min-w-64">
-                  <span>Filter ledger entries</span>
+                  <span>{t("account.ledger.filter")}</span>
                   <select
                     className="rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm shadow-sm"
                     value={selectedFilter.value}
@@ -205,10 +206,10 @@ export function CollaboratorCurrentAccountPage() {
                 ) : (
                   <div className="p-8 text-center">
                     <h3 className="text-base font-bold text-gray-900">
-                      No ledger entries in this filter
+                      {t("account.empty")}
                     </h3>
                     <p className="mt-2 text-sm text-gray-600">
-                      Change the filter or create an earning, expense, payout, or correction.
+                      {t("account.emptyHelp")}
                     </p>
                   </div>
                 )}
@@ -217,7 +218,7 @@ export function CollaboratorCurrentAccountPage() {
               {ledgerEntries ? (
                 <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <p className="text-sm text-gray-600">
-                    Showing page {ledgerEntries.page} of {totalPages} · {ledgerEntries.total} ledger entr{ledgerEntries.total === 1 ? "y" : "ies"}
+                    {t("account.showingPage", { page: ledgerEntries.page, pages: totalPages, total: ledgerEntries.total })}
                   </p>
                   <div className="flex gap-2">
                     <button
@@ -226,7 +227,7 @@ export function CollaboratorCurrentAccountPage() {
                       disabled={ledgerEntries.page <= 1}
                       onClick={() => changePage(ledgerEntries.page - 1)}
                     >
-                      Previous
+                      {t("common.previous")}
                     </button>
                     <button
                       type="button"
@@ -234,7 +235,7 @@ export function CollaboratorCurrentAccountPage() {
                       disabled={ledgerEntries.page >= totalPages}
                       onClick={() => changePage(ledgerEntries.page + 1)}
                     >
-                      Next
+                      {t("common.next")}
                     </button>
                   </div>
                 </div>
@@ -286,14 +287,15 @@ function balancesForDisplay(balances: CurrentAccountBalance[]): DisplayBalance[]
 }
 
 function BalanceCard({ balance }: { balance: DisplayBalance }) {
+  const { t, formatCurrency, formatNumber } = useI18n();
   const code = balance.valueUnitCode || balance.valueUnitLabel || "Balance";
   return (
     <article className="rounded-2xl border bg-white p-5 shadow-sm">
       <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
-        {balance.valueUnitLabel || code}
+        {code === "BRL" ? t("account.real") : code === "GOLD_GRAM" ? t("account.gramsGold") : balance.valueUnitLabel || code}
       </p>
       <p className="mt-2 text-2xl font-bold text-gray-950">
-        {formatBalanceAmount(balance.balance, code)}
+        {code.toUpperCase().includes("GOLD") ? `${formatNumber(balance.balance, { maximumFractionDigits: 8 })} ${t("account.goldUnit")}` : formatCurrency(balance.balance, "BRL")}
       </p>
       <p className="mt-1 text-xs text-gray-500">{code}</p>
     </article>
@@ -311,41 +313,42 @@ function LedgerEntryRow({
   canOpenJourneyProvenance: boolean;
   canOpenReceipt: boolean;
 }) {
+  const { t, formatCurrency, formatDate, formatNumber } = useI18n();
   const receipt = entry.receipt;
   return (
     <article className="grid gap-3 p-4 md:grid-cols-[1fr_auto] md:items-center">
       <div>
         <div className="flex flex-wrap items-center gap-2">
-          <h3 className="font-bold text-gray-950">{humanize(entry.entryType)}</h3>
+          <h3 className="font-bold text-gray-950">{ledgerEntryTypeLabel(entry.entryType, t)}</h3>
           <span className={`rounded-full px-2 py-1 text-xs font-semibold ${entry.direction === "DEBIT" ? "bg-red-50 text-red-700" : "bg-green-50 text-green-700"}`}>
-            {entry.direction}
+            {ledgerDirectionLabel(entry.direction, t)}
           </span>
           {receipt ? (
             <span className={`rounded-full px-2 py-1 text-xs font-semibold ${receiptStatusTone(receipt.status)}`}>
-              Receipt: {receiptStatusLabel(receipt.status)}
+              {t("account.receiptLabel", { status: receiptStatusLabel(receipt.status, t) })}
             </span>
           ) : entry.direction === "DEBIT" ? (
             <span className="rounded-full bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-800">
-              Receipt: missing
+              {t("account.receiptMissing")}
             </span>
           ) : null}
         </div>
         <p className="mt-1 text-sm text-gray-700">
-          {formatAmount(entry.signedAmount, entry.valueUnitCode || entry.valueUnitLabel)} · Effective {entry.effectiveDate}
+          {formatAccountAmount(entry.signedAmount, entry.valueUnitCode || entry.valueUnitLabel, formatCurrency, formatNumber, t)} · {t("account.effective", { date: formatDate(entry.effectiveDate) })}
         </p>
         <p className="mt-1 text-xs text-gray-500">
-          Source: {sourceLabel(entry)}
+          {t("account.source")} {sourceLabel(entry, t)}
         </p>
         {entry.description ? (
           <p className="mt-1 text-sm text-gray-600">{entry.description}</p>
         ) : null}
         <dl className="mt-2 grid gap-1 rounded-xl border border-gray-100 bg-gray-50 p-3 text-xs text-gray-700 sm:grid-cols-2">
           <div>
-            <dt className="inline font-semibold text-gray-900">Person owner: </dt>
+            <dt className="inline font-semibold text-gray-900">{t("account.personOwner")} </dt>
             <dd className="inline font-mono">{entry.personId}</dd>
           </div>
           <div>
-            <dt className="inline font-semibold text-gray-900">Journey provenance: </dt>
+            <dt className="inline font-semibold text-gray-900">{t("account.journeyProvenance")} </dt>
             <dd className="inline">
               {canOpenJourneyProvenance ? (
                 <Link
@@ -363,12 +366,12 @@ function LedgerEntryRow({
         {receipt && isFinalSettlementReceipt(receipt.receiptPurpose) ? (
           <dl className="mt-2 grid gap-1 rounded-xl bg-gray-50 p-3 text-xs text-gray-700 sm:grid-cols-2">
             <div>
-              <dt className="inline font-semibold text-gray-900">Payment direction: </dt>
-              <dd className="inline">{paymentDirectionLabel(receipt.paymentDirection)}</dd>
+              <dt className="inline font-semibold text-gray-900">{t("account.paymentDirection")}: </dt>
+              <dd className="inline">{paymentDirectionCodeLabel(receipt.paymentDirection || "", t)}</dd>
             </div>
             <div>
-              <dt className="inline font-semibold text-gray-900">Accepting party: </dt>
-              <dd className="inline">{acceptingPartyLabel(receipt.acceptingParty)}</dd>
+              <dt className="inline font-semibold text-gray-900">{t("account.acceptingParty")}: </dt>
+              <dd className="inline">{acceptingPartyCodeLabel(receipt.acceptingParty || "", t)}</dd>
             </div>
           </dl>
         ) : null}
@@ -376,24 +379,24 @@ function LedgerEntryRow({
           <p className="mt-2 rounded-xl bg-amber-50 p-2 text-xs font-semibold text-amber-900">
             {isFinalSettlementReceipt(receipt.receiptPurpose)
               ? receipt.acceptingParty === "TENANT"
-                ? "Awaiting Tenant Administrator in-app acceptance."
-                : "Awaiting Collaborator in-app acceptance."
-              : "Outstanding receipt: print, collect signature, and record the signed return."}
+                ? t("account.awaitingTenantAcceptance")
+                : t("account.awaitingCollaboratorAcceptance")
+              : t("account.outstandingManualReceipt")}
           </p>
         ) : receipt && !receipt.outstanding ? (
           <p className={`mt-2 rounded-xl p-2 text-xs font-semibold ${receipt.status === "CANCELLED" ? "bg-gray-100 text-gray-700" : "bg-green-50 text-green-900"}`}>
             {isFinalSettlementReceipt(receipt.receiptPurpose)
-              ? "Final settlement receipt accepted in-app."
+              ? t("account.finalReceiptAccepted")
               : receipt.status === "CANCELLED"
-                ? "Receipt obligation cancelled; no signature or return is required."
-                : "Receipt returned; no further receipt action is required."}
+                ? t("account.receiptCancelled")
+                : t("account.receiptReturned")}
           </p>
         ) : null}
       </div>
       <div className="flex flex-wrap gap-2 md:justify-end">
         {canOpenOperationalSources && sourceLink(entry) ? (
           <Link className="rounded-xl border px-4 py-2 text-sm font-semibold" to={sourceLink(entry)!}>
-            {sourceActionLabel(entry)}
+            {sourceActionLabel(entry, t)}
           </Link>
         ) : null}
         {canOpenReceipt && shouldShowReceiptAction(entry, receipt) ? (
@@ -403,7 +406,7 @@ function LedgerEntryRow({
               : "rounded-xl bg-gray-900 px-4 py-2 text-sm font-semibold text-white"}
             to={`/ledger-entries/${entry.id}/receipt`}
           >
-            {receiptActionLabel(receipt)}
+            {receiptActionLabel(receipt, t)}
           </Link>
         ) : null}
       </div>
@@ -412,14 +415,14 @@ function LedgerEntryRow({
 }
 
 
-function receiptActionLabel(receipt: LedgerEntry["receipt"]) {
+function receiptActionLabel(receipt: LedgerEntry["receipt"], t: ReturnType<typeof useI18n>["t"]) {
   if (isFinalSettlementReceipt(receipt?.receiptPurpose)) {
-    return "Review / accept receipt";
+    return t("account.reviewReceipt");
   }
   if (receipt && !receipt.outstanding) {
-    return "View receipt";
+    return t("account.viewReceipt");
   }
-  return "Print or return receipt";
+  return t("account.printReturnReceipt");
 }
 
 function shouldShowReceiptAction(
@@ -445,18 +448,18 @@ function sourceLink(entry: LedgerEntry) {
   return "";
 }
 
-function sourceActionLabel(entry: LedgerEntry) {
+function sourceActionLabel(entry: LedgerEntry, t: ReturnType<typeof useI18n>["t"]) {
   if (entry.sourceType === "WORK_PERIOD_ASSIGNMENT") {
-    return "Open Work Period";
+    return t("account.openWorkPeriod");
   }
-  return "Open source";
+  return t("account.openSource");
 }
 
-function sourceLabel(entry: LedgerEntry) {
+function sourceLabel(entry: LedgerEntry, t: ReturnType<typeof useI18n>["t"]) {
   if (entry.sourceLabel) {
-    return `${entry.sourceLabel} · Assignment ${shortId(entry.sourceId)}`;
+    return `${entry.sourceLabel} · ${t("account.assignment")} ${shortId(entry.sourceId)}`;
   }
-  return `${entry.sourceType} · ${entry.sourceId}`;
+  return `${ledgerSourceTypeLabel(entry.sourceType, t)} · ${entry.sourceId}`;
 }
 
 function shortId(value: string) {
@@ -464,56 +467,21 @@ function shortId(value: string) {
   return value.length <= 12 ? value : `${value.slice(0, 8)}…`;
 }
 
-function formatBalanceAmount(value: number, unit?: string) {
+function formatAccountAmount(
+  value: number,
+  unit: string | undefined,
+  formatCurrency: ReturnType<typeof useI18n>["formatCurrency"],
+  formatNumber: ReturnType<typeof useI18n>["formatNumber"],
+  t: ReturnType<typeof useI18n>["t"],
+) {
   const normalized = (unit || "").toUpperCase();
   if (normalized.includes("GOLD")) {
-    return formatNumber(value, 8);
+    return `${formatNumber(value, { maximumFractionDigits: 8 })} ${t("account.goldUnit")}`;
   }
-  return formatAmount(value, unit);
-}
-
-function formatAmount(value: number, unit?: string) {
-  const normalized = (unit || "").toUpperCase();
-  if (normalized.includes("GOLD")) {
-    return `${formatNumber(value, 8)} g gold`;
-  }
-  return new Intl.NumberFormat("pt-BR", {
-    style: "currency",
-    currency: "BRL",
-  }).format(value);
-}
-
-function formatNumber(value: number, maximumFractionDigits = 2) {
-  return new Intl.NumberFormat("en-US", {
-    minimumFractionDigits: 0,
-    maximumFractionDigits,
-  }).format(value);
+  return formatCurrency(value, "BRL");
 }
 
 function isFinalSettlementReceipt(purpose?: string) {
   return purpose === "FINAL_SETTLEMENT_TENANT_PAYMENT" ||
     purpose === "FINAL_SETTLEMENT_COLLABORATOR_PAYMENT";
-}
-
-function paymentDirectionLabel(direction?: string) {
-  if (direction === "TENANT_TO_COLLABORATOR") return "Tenant To Collaborator";
-  if (direction === "COLLABORATOR_TO_TENANT") return "Collaborator To Tenant";
-  return direction ? titleCaseCode(direction) : "—";
-}
-
-function acceptingPartyLabel(party?: string) {
-  if (party === "COLLABORATOR") return "Collaborator";
-  if (party === "TENANT") return "Tenant";
-  return party ? titleCaseCode(party) : "—";
-}
-
-function titleCaseCode(value: string) {
-  return value
-    .toLowerCase()
-    .replaceAll("_", " ")
-    .replace(/\b\w/g, (character) => character.toUpperCase());
-}
-
-function humanize(value: string) {
-  return value.toLowerCase().replaceAll("_", " ");
 }

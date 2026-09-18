@@ -7,6 +7,7 @@ import { AuthorizationProvider } from "../../components/layout/AuthorizationCont
 import type { AuthzCurrentActor } from "../../types/authz";
 import { CollaboratorCurrentAccountPage } from "./CollaboratorCurrentAccountPage";
 import type { CurrentAccountDetail } from "../../types/currentAccounts";
+import { I18nProvider } from "../../i18n";
 
 type FetchCall = { url: string; method: string };
 
@@ -522,11 +523,11 @@ function renderCurrentAccountPage(initialEntry: string, actor: AuthzCurrentActor
   act(() => {
     root = createRoot(container);
     root.render(
-      <QueryClientProvider client={queryClient}>
+      <I18nProvider><QueryClientProvider client={queryClient}>
         <AuthorizationProvider value={actor}>
           <RouterProvider router={router} />
         </AuthorizationProvider>
-      </QueryClientProvider>,
+      </QueryClientProvider></I18nProvider>,
     );
   });
 }

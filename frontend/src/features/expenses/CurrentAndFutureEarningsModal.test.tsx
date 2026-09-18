@@ -3,6 +3,7 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CurrentAndFutureEarningsModal } from "./CurrentAndFutureEarningsModal";
+import { I18nProvider } from "../../i18n";
 
 let root: Root | null;
 let container: HTMLDivElement;
@@ -60,9 +61,9 @@ describe("CurrentAndFutureEarningsModal", () => {
     await act(async () => {
       root = createRoot(container);
       root.render(
-        <QueryClientProvider client={queryClient}>
+        <I18nProvider><QueryClientProvider client={queryClient}>
           <CurrentAndFutureEarningsModal collaboratorId="c-1" onClose={onClose} />
-        </QueryClientProvider>,
+        </QueryClientProvider></I18nProvider>,
       );
     });
 

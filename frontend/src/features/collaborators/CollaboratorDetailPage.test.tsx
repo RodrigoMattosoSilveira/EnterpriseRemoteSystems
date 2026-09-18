@@ -7,6 +7,7 @@ import { AuthorizationProvider } from "../../components/layout/AuthorizationCont
 import type { AuthzCurrentActor } from "../../types/authz";
 import type { Collaborator } from "../../types/collaborators";
 import { CollaboratorDetailPage } from "./CollaboratorDetailPage";
+import { I18nProvider } from "../../i18n";
 
 const authorizationActor: AuthzCurrentActor = {
   actorKey: "tenant-admin",
@@ -149,7 +150,7 @@ describe("CollaboratorDetailPage", () => {
     expect(textNode("Payment")).toBeTruthy();
     expect(textNode("Daily Rate")).toBeTruthy();
     expect(textNode("R$")).toBeTruthy();
-    expect(textNode("125,00")).toBeTruthy();
+    expect(textNode("125.00")).toBeTruthy();
     expect(textNode("Primary mine operator.")).toBeTruthy();
   });
 
@@ -429,11 +430,11 @@ function renderCollaboratorDetailPage(
 
   act(() => {
     root?.render(
-      <QueryClientProvider client={queryClient}>
+      <I18nProvider><QueryClientProvider client={queryClient}>
         <AuthorizationProvider value={actor}>
           <RouterProvider router={router} />
         </AuthorizationProvider>
-      </QueryClientProvider>,
+      </QueryClientProvider></I18nProvider>,
     );
   });
 }

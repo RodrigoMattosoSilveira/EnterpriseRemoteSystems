@@ -9,8 +9,10 @@ import {
 } from "../../api/people.api";
 import { ApiErrorPanel } from "../../components/ApiErrorPanel";
 import type { PasswordResetToken } from "../../types/auth";
+import { useI18n } from "../../i18n";
 
 export function PersonAuthenticationSection({ personId }: { personId: string }) {
+  const { t, formatDateTime } = useI18n();
   const queryClient = useQueryClient();
   const [temporaryPassword, setTemporaryPassword] = useState("");
   const [confirmTemporaryPassword, setConfirmTemporaryPassword] = useState("");
@@ -34,10 +36,8 @@ export function PersonAuthenticationSection({ personId }: { personId: string }) 
       setConfirmTemporaryPassword("");
       setMessage(
         usedTemporaryPassword
-          ? `Authentication is enabled for this tenant. Account login: ${result.login}. ` +
-              "Sign in with the temporary password entered here; ERS will require a password change on first sign-in."
-          : `Authentication is enabled for this tenant. Account login: ${result.login}. ` +
-              "Account credentials were not changed.",
+          ? t("people.auth.enabledTemporary", { login: result.login })
+          : t("people.auth.enabledExisting", { login: result.login }),
       );
       void queryClient.invalidateQueries({ queryKey: ["people", personId, "authentication"] });
     },
@@ -55,15 +55,13 @@ export function PersonAuthenticationSection({ personId }: { personId: string }) 
   const requestReactivation = useMutation({
     mutationFn: () => requestPersonAuthenticationReactivation(personId),
     onSuccess: () => {
-      setMessage("Authentication reactivation requested. An Application Administrator will review it.");
+      setMessage(t("people.auth.reactivationRequested"));
     },
   });
   const tenantReactivate = useMutation({
     mutationFn: () => reactivatePerson(personId),
     onSuccess: () => {
-      setMessage(
-        "Person and Authentication Account reactivated for this Tenant. Previous delegated privileges remain suspended and must be explicitly granted again.",
-      );
+      setMessage(t("people.auth.reactivated"));
       void queryClient.invalidateQueries({ queryKey: ["people", personId] });
       void queryClient.invalidateQueries({ queryKey: ["people", personId, "authentication"] });
       void queryClient.invalidateQueries({ queryKey: ["authz"] });
@@ -85,14 +83,14 @@ export function PersonAuthenticationSection({ personId }: { personId: string }) 
       id="authentication"
       tabIndex={-1}
       className="mx-auto mt-6 max-w-4xl scroll-mt-24 rounded-2xl border bg-white p-5 outline-none"
-      aria-label="Authentication"
+      aria-label={t("people.auth.title")}
     >
-      <h2 className="text-lg font-semibold">Authentication</h2>
+      <h2 className="text-lg font-semibold">{t("people.auth.title")}</h2>
       <p className="mt-1 text-sm text-slate-600">
-        Tenant Administrators can enable authentication for a Person who already has an ACTIVE Membership in this tenant. ERS creates or reuses the global Authentication Account and creates the missing Account-bound Tenant Actor. Existing inactive Tenant Actors are reactivated from Tenant Authorization.
+        {t("people.auth.help")}
       </p>
 
-      <ApiErrorPanel error={error} />
+      <ApiErrorPanel error={error} translate={t} />
       {message && (
         <p role="status" className="mt-3 rounded-lg bg-emerald-50 p-3 text-sm text-emerald-900">
           {message}
@@ -100,19 +98,18 @@ export function PersonAuthenticationSection({ personId }: { personId: string }) 
       )}
 
       {status.isLoading ? (
-        <p className="mt-4 text-sm text-slate-500">Loading authentication status…</p>
+        <p className="mt-4 text-sm text-slate-500">{t("people.auth.loading")}</p>
       ) : current?.canTenantReactivate ? (
         <div className="mt-4 rounded-lg bg-amber-50 p-3 text-sm text-amber-950">
           <p className="font-semibold">
-            Status: {current.operationalActive ? "Inactive in this Tenant" : "Operationally inactive"}
+            {t("common.status")}: {current.operationalActive ? t("people.auth.inactiveTenant") : t("people.auth.operationalInactive")}
           </p>
           <p className="mt-1">
-            Reactivating this Person restores only this Tenant&apos;s Membership and baseline Person access.
-            Memberships in other Tenants remain inactive, and previous delegated roles remain suspended.
+            {t("people.auth.reactivateHelp")}
           </p>
           {current.login && (
             <p className="mt-1">
-              Account login: <span className="font-mono">{current.login}</span>
+              {t("people.auth.accountLogin")}: <span className="font-mono">{current.login}</span>
             </p>
           )}
           <button
@@ -124,17 +121,17 @@ export function PersonAuthenticationSection({ personId }: { personId: string }) 
               tenantReactivate.mutate();
             }}
           >
-            {tenantReactivate.isPending ? "Reactivating…" : "Reactivate Person for this Tenant"}
+            {tenantReactivate.isPending ? t("people.auth.reactivating") : t("people.auth.reactivateTenant")}
           </button>
         </div>
       ) : current?.canRequestReactivation ? (
         <div className="mt-4 rounded-lg bg-amber-50 p-3 text-sm text-amber-950">
-          <p className="font-semibold">Status: Application security suspension</p>
+          <p className="font-semibold">{t("common.status")}: {t("people.auth.securitySuspension")}</p>
           <p className="mt-1">
-            Account login: <span className="font-mono">{current.login}</span>
+            {t("people.auth.accountLogin")}: <span className="font-mono">{current.login}</span>
           </p>
           <p className="mt-1">
-            This Account is subject to an application-level security suspension. A Tenant Administrator cannot override it and may only request Application Administrator review.
+            {t("people.auth.securitySuspensionHelp")}
           </p>
           <button
             type="button"
@@ -145,23 +142,23 @@ export function PersonAuthenticationSection({ personId }: { personId: string }) 
               requestReactivation.mutate();
             }}
           >
-            {requestReactivation.isPending ? "Requesting…" : "Request Application Administrator Review"}
+            {requestReactivation.isPending ? t("people.auth.requesting") : t("people.auth.requestReview")}
           </button>
         </div>
 
       ) : current && !current.enabled ? (
         <div className="mt-4">
-          <p className="font-medium text-slate-950">Status: Not enabled for this tenant</p>
+          <p className="font-medium text-slate-950">{t("common.status")}: {t("people.auth.notEnabled")}</p>
           {requiresTemporaryPassword ? (
             <>
               <p className="mt-1 text-sm text-slate-700">
-                Account login: <span className="font-mono">{current.login}</span>
+                {t("people.auth.accountLogin")}: <span className="font-mono">{current.login}</span>
               </p>
               <p className="mt-2 text-sm text-slate-600">
-                Enter and confirm an initial temporary password. ERS will use it to create this Person&apos;s global Authentication Account.
+                {t("people.auth.initialPasswordHelp")}
               </p>
               <label className="mt-3 block text-sm font-medium">
-                Initial temporary password
+                {t("people.auth.initialPassword")}
                 <input
                   className="mt-1 w-full rounded-lg border px-3 py-2"
                   type="password"
@@ -172,7 +169,7 @@ export function PersonAuthenticationSection({ personId }: { personId: string }) 
                 />
               </label>
               <label className="mt-3 block text-sm font-medium">
-                Confirm temporary password
+                {t("people.auth.confirmPassword")}
                 <input
                   className="mt-1 w-full rounded-lg border px-3 py-2"
                   type="password"
@@ -184,13 +181,13 @@ export function PersonAuthenticationSection({ personId }: { personId: string }) 
               </label>
               {passwordConfirmationMismatch && (
                 <p role="alert" className="mt-2 text-sm text-red-700">
-                  The temporary passwords do not match.
+                  {t("people.auth.passwordMismatch")}
                 </p>
               )}
             </>
           ) : (
             <p className="mt-2 text-sm text-slate-600">
-              Enable authentication for this Person in the current tenant. No credential changes are required for this operation.
+              {t("people.auth.enableExistingHelp")}
             </p>
           )}
           <button
@@ -208,18 +205,18 @@ export function PersonAuthenticationSection({ personId }: { personId: string }) 
               enable.mutate();
             }}
           >
-            {enable.isPending ? "Enabling…" : "Enable Authentication"}
+            {enable.isPending ? t("people.auth.enabling") : t("people.auth.enable")}
           </button>
         </div>
       ) : current?.accountActive ? (
         <div className="mt-4 rounded-lg bg-emerald-50 p-3 text-sm text-emerald-900">
-          <p className="font-semibold">Status: Enabled</p>
-          <p className="mt-1">Authentication is enabled for this Person in the current tenant.</p>
+          <p className="font-semibold">{t("common.status")}: {t("people.auth.enabled")}</p>
+          <p className="mt-1">{t("people.auth.enabledHelp")}</p>
           <p className="mt-1">
-            Account login: <span className="font-mono">{current.login}</span>
+            {t("people.auth.accountLogin")}: <span className="font-mono">{current.login}</span>
           </p>
           <p className="mt-2 text-emerald-950">
-            A Tenant Administrator may issue a one-time password reset token because this Person has an ACTIVE Membership and enabled authentication in the selected tenant. Completing the reset changes the Person&apos;s global Authentication Account password and revokes its sessions across all tenants.
+            {t("people.auth.resetHelp")}
           </p>
           <button
             type="button"
@@ -227,22 +224,22 @@ export function PersonAuthenticationSection({ personId }: { personId: string }) 
             disabled={issuePasswordReset.isPending}
             onClick={() => issuePasswordReset.mutate()}
           >
-            {issuePasswordReset.isPending ? "Issuing…" : "Issue password reset token"}
+            {issuePasswordReset.isPending ? t("people.auth.issuing") : t("people.auth.issueReset")}
           </button>
           {resetToken && (
             <div role="status" className="mt-3 rounded-lg border border-amber-300 bg-amber-50 p-3 text-amber-950">
-              <p className="font-semibold">One-time reset token for {resetToken.login}</p>
-              <p aria-label="Password reset token" className="mt-2 break-all rounded bg-white p-2 font-mono text-xs">
+              <p className="font-semibold">{t("people.auth.resetTokenFor", { login: resetToken.login })}</p>
+              <p aria-label={t("people.auth.resetTokenLabel")} className="mt-2 break-all rounded bg-white p-2 font-mono text-xs">
                 {resetToken.token}
               </p>
               <p className="mt-2 text-xs">
-                Expires {new Date(resetToken.expiresAt).toLocaleString()}. Copy it now; ERS will not show it again.
+                {t("people.auth.resetExpires", { date: formatDateTime(resetToken.expiresAt) })}
               </p>
               <a
                 className="mt-2 inline-block underline"
                 href={`/password/reset?token=${encodeURIComponent(resetToken.token)}`}
               >
-                Open reset page
+                {t("people.auth.openReset")}
               </a>
             </div>
           )}
