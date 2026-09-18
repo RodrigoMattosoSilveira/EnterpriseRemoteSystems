@@ -9,6 +9,8 @@ export function LanguageSelector({ compact = false }: { compact?: boolean }) {
       {t("locale.selectorLabel")}
       <select
         aria-label={t("locale.selectorLabel")}
+        autoComplete="off"
+        key={`${localeSource}:${locale}`}
         value={value}
         onChange={(event) => {
           const next = event.target.value;

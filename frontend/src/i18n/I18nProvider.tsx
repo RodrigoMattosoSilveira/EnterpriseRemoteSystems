@@ -104,6 +104,27 @@ export function I18nProvider({ children }: { children: ReactNode }) {
     setResolution({ locale: nextLocale, source: "stored" });
   }, []);
 
+  useEffect(() => {
+    if (resolution.source !== "stored" || typeof window === "undefined") {
+      return undefined;
+    }
+
+    const ensureExplicitLocalePersisted = () => {
+      const storage = currentStorage();
+      if (readStoredLocaleValue(storage) !== locale) {
+        persistLocale(storage, locale);
+      }
+    };
+
+    // An explicit locale is only durable if the canonical preference reaches
+    // Local Storage. `persistLocale` deliberately treats storage failures as
+    // non-fatal, so retry from the committed React state and re-check before a
+    // page is discarded during a frontend rebuild/full reload.
+    ensureExplicitLocalePersisted();
+    window.addEventListener("pagehide", ensureExplicitLocalePersisted);
+    return () => window.removeEventListener("pagehide", ensureExplicitLocalePersisted);
+  }, [locale, resolution.source]);
+
   const useBrowserLocale = useCallback(() => {
     clearStoredLocale(currentStorage());
     setResolution(resolveLocale({ browserLanguages: currentBrowserLanguages() }));
