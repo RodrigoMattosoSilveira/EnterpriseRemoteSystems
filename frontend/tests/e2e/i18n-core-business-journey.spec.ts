@@ -27,4 +27,19 @@ test.describe("Bite 31.3 core business journey pt-BR", () => {
         .toBe("pt-BR");
     }
   });
+
+  test("renders Work Period start and end as deterministic 24-hour pt-BR fields", async ({ page }) => {
+    await page.goto("/work-periods");
+    await page.getByRole("button", { name: "Adicionar Período de Trabalho" }).click();
+
+    const start = page.getByLabel("Início *");
+    const end = page.getByLabel("Fim *");
+
+    await expect(start).toHaveAttribute("type", "text");
+    await expect(start).toHaveAttribute("inputmode", "numeric");
+    await expect(start).toHaveValue("06:00");
+    await expect(end).toHaveAttribute("type", "text");
+    await expect(end).toHaveAttribute("inputmode", "numeric");
+    await expect(end).toHaveValue("18:00");
+  });
 });

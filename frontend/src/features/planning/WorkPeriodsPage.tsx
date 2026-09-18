@@ -12,6 +12,8 @@ function today() { return new Date().toISOString().slice(0, 10); }
 
 type FormState = { workDate: string; periodCode: string; name: string; startTime: string; endTime: string };
 
+const TIME_24_HOUR_PATTERN = /^(?:[01]\d|2[0-3]):[0-5]\d$/;
+
 const initialForm: FormState = {
   workDate: today(),
   periodCode: "DAY",
@@ -41,6 +43,10 @@ export function WorkPeriodsPage() {
     setValidation("");
     if (!form.workDate || !form.periodCode.trim() || !form.name.trim() || !form.startTime || !form.endTime) {
       setValidation(t("planning.validation.required"));
+      return;
+    }
+    if (!TIME_24_HOUR_PATTERN.test(form.startTime) || !TIME_24_HOUR_PATTERN.test(form.endTime)) {
+      setValidation(t("planning.validation.timeFormat"));
       return;
     }
     const startsAt = new Date(`${form.workDate}T${form.startTime}:00`);
@@ -84,8 +90,8 @@ export function WorkPeriodsPage() {
             <label className="text-sm font-medium text-gray-700">{t("planning.workDate")}<input type="date" value={form.workDate} onChange={(e) => setForm({ ...form, workDate: e.target.value })} className="mt-1 w-full rounded-xl border px-3 py-2" /></label>
             <label className="text-sm font-medium text-gray-700">{t("planning.periodCode")}<input value={form.periodCode} onChange={(e) => setForm({ ...form, periodCode: e.target.value })} className="mt-1 w-full rounded-xl border px-3 py-2" /></label>
             <label className="text-sm font-medium text-gray-700">{t("planning.name")}<input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="mt-1 w-full rounded-xl border px-3 py-2" /></label>
-            <label className="text-sm font-medium text-gray-700">{t("planning.starts")}<input type="time" value={form.startTime} onChange={(e) => setForm({ ...form, startTime: e.target.value })} className="mt-1 w-full rounded-xl border px-3 py-2" /></label>
-            <label className="text-sm font-medium text-gray-700">{t("planning.ends")}<input type="time" value={form.endTime} onChange={(e) => setForm({ ...form, endTime: e.target.value })} className="mt-1 w-full rounded-xl border px-3 py-2" /></label>
+            <label className="text-sm font-medium text-gray-700">{t("planning.starts")}<input type="text" inputMode="numeric" autoComplete="off" spellCheck={false} maxLength={5} placeholder="HH:MM" value={form.startTime} onChange={(e) => setForm({ ...form, startTime: e.target.value })} className="mt-1 w-full rounded-xl border px-3 py-2" /></label>
+            <label className="text-sm font-medium text-gray-700">{t("planning.ends")}<input type="text" inputMode="numeric" autoComplete="off" spellCheck={false} maxLength={5} placeholder="HH:MM" value={form.endTime} onChange={(e) => setForm({ ...form, endTime: e.target.value })} className="mt-1 w-full rounded-xl border px-3 py-2" /></label>
             <div className="sm:col-span-2 lg:col-span-5 flex justify-end"><button disabled={createMutation.isPending} className="rounded-xl bg-gray-950 px-5 py-3 text-sm font-semibold text-white disabled:bg-gray-400">{createMutation.isPending ? t("common.creatingDots") : t("planning.createWorkPeriod")}</button></div>
           </form>
         )}

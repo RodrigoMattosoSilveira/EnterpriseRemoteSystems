@@ -567,6 +567,7 @@ export const ptBRMessages = {
   'planning.statusFilter': 'Filtro de status',
   'planning.allStatuses': 'Todos os status',
   'planning.validation.required': 'Preencha a data de trabalho, o código do período, o nome, o horário de início e o horário de fim.',
+  'planning.validation.timeFormat': 'Use horários no formato HH:MM de 24 horas para Início e Fim.',
   'planning.emptyHelp': 'Crie o primeiro período de trabalho semelhante a um turno para começar o planejamento.',
   'expenses.accessDenied.title': 'Despesas não autorizadas',
   'expenses.accessDenied.supportLease': 'Sua Concessão de Acesso de Suporte ao Tenant atual não autoriza Despesas. A concessão permanece ativa para as permissões aprovadas do Tenant.',

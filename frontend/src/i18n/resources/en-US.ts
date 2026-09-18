@@ -565,6 +565,7 @@ export const enUSMessages = {
   'planning.statusFilter': 'Status filter',
   'planning.allStatuses': 'All statuses',
   'planning.validation.required': 'Complete the work date, period code, name, start time, and end time.',
+  'planning.validation.timeFormat': 'Use 24-hour HH:MM times for Start and End.',
   'planning.emptyHelp': 'Create the first shift-like work period to begin planning.',
   'expenses.accessDenied.title': 'Expenses not authorized',
   'expenses.accessDenied.supportLease': 'Your current Tenant Support Access Lease does not authorize Expenses. The lease remains active for its approved Tenant permissions.',
