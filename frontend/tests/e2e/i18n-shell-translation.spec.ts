@@ -27,12 +27,18 @@ test.describe("Bite 31.2 visible language selection", () => {
       .poll(() => page.evaluate((key) => localStorage.getItem(key), LOCALE_STORAGE_KEY))
       .toBe("pt-BR");
 
-    await page.reload();
-    await expect(page.locator("html")).toHaveAttribute("lang", "pt-BR");
-    await expect(page.getByRole("heading", { name: "Entrar" })).toBeVisible();
-    await expect
-      .poll(() => page.evaluate((key) => localStorage.getItem(key), LOCALE_STORAGE_KEY))
-      .toBe("pt-BR");
+    // Repeated reloads must be idempotent. In particular, an outgoing page
+    // must never rewrite stale in-memory locale state during teardown and make
+    // the next page alternate between English and Portuguese.
+    for (let reload = 0; reload < 4; reload += 1) {
+      await page.reload();
+      await expect(page.locator("html")).toHaveAttribute("lang", "pt-BR");
+      await expect(page.getByRole("combobox", { name: "Idioma" })).toHaveValue("pt-BR");
+      await expect(page.getByRole("heading", { name: "Entrar" })).toBeVisible();
+      await expect
+        .poll(() => page.evaluate((key) => localStorage.getItem(key), LOCALE_STORAGE_KEY))
+        .toBe("pt-BR");
+    }
 
     // A browser may restore a native select independently of React after a
     // frontend rebuild. Simulate that DOM-only drift and verify the visible

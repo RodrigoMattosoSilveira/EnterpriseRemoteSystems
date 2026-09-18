@@ -100,30 +100,19 @@ export function I18nProvider({ children }: { children: ReactNode }) {
   const { locale } = resolution;
 
   const setLocale = useCallback((nextLocale: AppLocale) => {
-    persistLocale(currentStorage(), nextLocale);
-    setResolution({ locale: nextLocale, source: "stored" });
-  }, []);
+    const storage = currentStorage();
+    persistLocale(storage, nextLocale);
 
-  useEffect(() => {
-    if (resolution.source !== "stored" || typeof window === "undefined") {
-      return undefined;
+    // Persist explicit user intent at the moment of selection. A second
+    // immediate attempt covers a transient first write failure without ever
+    // allowing a later page teardown to write stale in-memory state over a
+    // newer preference.
+    if (readStoredLocaleValue(storage) !== nextLocale) {
+      persistLocale(storage, nextLocale);
     }
 
-    const ensureExplicitLocalePersisted = () => {
-      const storage = currentStorage();
-      if (readStoredLocaleValue(storage) !== locale) {
-        persistLocale(storage, locale);
-      }
-    };
-
-    // An explicit locale is only durable if the canonical preference reaches
-    // Local Storage. `persistLocale` deliberately treats storage failures as
-    // non-fatal, so retry from the committed React state and re-check before a
-    // page is discarded during a frontend rebuild/full reload.
-    ensureExplicitLocalePersisted();
-    window.addEventListener("pagehide", ensureExplicitLocalePersisted);
-    return () => window.removeEventListener("pagehide", ensureExplicitLocalePersisted);
-  }, [locale, resolution.source]);
+    setResolution({ locale: nextLocale, source: "stored" });
+  }, []);
 
   const useBrowserLocale = useCallback(() => {
     clearStoredLocale(currentStorage());

@@ -116,6 +116,35 @@ describe("I18nProvider", () => {
     expect(document.documentElement.lang).toBe(activeLocale);
   });
 
+  it("does not let a stale pagehide overwrite a newer persisted locale", async () => {
+    window.localStorage.setItem(LOCALE_STORAGE_KEY, "en-US");
+    await act(async () => {
+      root?.render(
+        <I18nProvider>
+          <LocaleHarness />
+        </I18nProvider>,
+      );
+    });
+
+    expect(text("locale")).toBe("en-US");
+    expect(text("source")).toBe("stored");
+
+    // Simulate a newer preference reaching shared Local Storage while this
+    // mounted provider misses the corresponding storage event. The outgoing
+    // page must never push its stale in-memory locale back during pagehide.
+    window.localStorage.setItem(LOCALE_STORAGE_KEY, "pt-BR");
+    await act(async () => window.dispatchEvent(new Event("pagehide")));
+    expect(window.localStorage.getItem(LOCALE_STORAGE_KEY)).toBe("pt-BR");
+
+    // The normal focus reconciliation can then adopt the newer persisted
+    // preference rather than oscillating between stale teardown writes.
+    await act(async () => window.dispatchEvent(new Event("focus")));
+    expect(text("locale")).toBe("pt-BR");
+    expect(text("source")).toBe("stored");
+    expect(text("label")).toBe("Idioma");
+    expect(document.documentElement.lang).toBe("pt-BR");
+  });
+
   it("reconciles a missed cross-tab locale change when the tab regains focus", async () => {
     window.localStorage.setItem(LOCALE_STORAGE_KEY, "en-US");
     await act(async () => {

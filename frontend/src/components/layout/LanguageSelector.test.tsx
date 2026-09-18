@@ -92,16 +92,9 @@ describe("LanguageSelector", () => {
 
     setItemSpy.mockRestore();
 
-    // If the preference disappears while this mounted provider still owns an
-    // explicit locale, page teardown for a frontend rebuild must re-establish
-    // the canonical value before the provider is recreated.
-    window.localStorage.removeItem(LOCALE_STORAGE_KEY);
-    await act(async () => window.dispatchEvent(new Event("pagehide")));
-    expect(window.localStorage.getItem(LOCALE_STORAGE_KEY)).toBe("pt-BR");
-
-    // A frontend rebuild/full reload recreates the provider. The repaired
-    // preference must therefore be sufficient to restore Portuguese without
-    // relying on the previous in-memory React state.
+    // A frontend rebuild/full reload recreates the provider. The immediately
+    // repaired preference must therefore be sufficient to restore Portuguese
+    // without relying on teardown-time writes from the previous page.
     await act(async () => root.unmount());
     container.replaceChildren();
     root = createRoot(container);
