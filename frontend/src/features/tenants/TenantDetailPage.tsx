@@ -166,7 +166,7 @@ export function TenantDetailPage() {
                     <dd className="break-all font-mono text-xs">{tenant.id}</dd>
                   </div>
                   <div>
-                    <dt className="font-semibold text-gray-950">{t("common.tenantCode")}</dt>
+                    <dt className="font-semibold text-gray-950">{t("admin.tenantDetail.tenantCodeLabel")}</dt>
                     <dd className="break-all font-mono text-xs">{tenant.code}</dd>
                   </div>
                   <div>

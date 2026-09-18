@@ -42,6 +42,7 @@ export const ptBRMessages = {
   "common.globalPersonId": "ID global da Pessoa",
   "common.tenantId": "ID do Tenant",
   "common.tenantCode": "Código do Tenant",
+  "admin.tenantDetail.tenantCodeLabel": "Código do Tenant",
   "common.notRecorded": "Não registrado",
   "common.actionCompleted": "Ação concluída",
   "common.error.url": "URL",
