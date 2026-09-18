@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { AuthTenantOption } from "../../types/auth";
 import { TenantSelector } from "./TenantSelector";
+import { I18nProvider, LOCALE_STORAGE_KEY } from "../../i18n";
 
 let container: HTMLDivElement;
 let root: Root;
@@ -45,12 +46,14 @@ beforeEach(() => {
   container = document.createElement("div");
   document.body.appendChild(container);
   root = createRoot(container);
+  window.localStorage.setItem(LOCALE_STORAGE_KEY, "en-US");
 });
 
 afterEach(async () => {
   await act(async () => root.unmount());
   document.body.removeChild(container);
   vi.restoreAllMocks();
+  window.localStorage.removeItem(LOCALE_STORAGE_KEY);
 });
 
 describe("TenantSelector", () => {
@@ -142,6 +145,7 @@ describe("TenantSelector", () => {
 
     act(() => {
       root.render(
+        <I18nProvider>
         <TenantSelector
           tenants={[
             {
@@ -169,7 +173,8 @@ describe("TenantSelector", () => {
           ]}
           selectedTenantId="*"
           onTenantChange={onTenantChange}
-        />,
+        />
+        </I18nProvider>,
       );
     });
 
@@ -187,7 +192,7 @@ describe("TenantSelector", () => {
     expect(supportOption?.textContent).toContain("Lease: lease-123");
     const rawExpiration = "2026-09-13T20:00:00Z";
     expect(supportOption?.textContent).toContain(
-      `Expires: ${new Date(rawExpiration).toLocaleString()}`,
+      `Expires: ${new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeStyle: "short" }).format(new Date(rawExpiration))}`,
     );
     expect(supportOption?.textContent).not.toContain(`Expires: ${rawExpiration}`);
     expect(supportOption?.textContent).not.toContain("Membership:");
@@ -198,6 +203,7 @@ describe("TenantSelector", () => {
 
     act(() => {
       root.render(
+        <I18nProvider>
         <TenantSelector
           tenants={[
             {
@@ -213,7 +219,8 @@ describe("TenantSelector", () => {
           ]}
           selectedTenantId="*"
           onTenantChange={onTenantChange}
-        />,
+        />
+        </I18nProvider>,
       );
     });
 
@@ -241,12 +248,14 @@ function renderSelector(
 ) {
   act(() => {
     root.render(
+      <I18nProvider>
       <TenantSelector
         tenants={tenants}
         selectedTenantId="default"
         onTenantChange={onTenantChange}
         onRefreshTenants={onRefreshTenants}
-      />,
+      />
+      </I18nProvider>,
     );
   });
 }

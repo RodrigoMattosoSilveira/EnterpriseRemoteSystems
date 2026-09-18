@@ -23,3 +23,5 @@ export {
 } from "./formatters";
 export { messagesByLocale, type TranslationKey } from "./resources";
 export { interpolateMessage, type TranslationParameters } from "./translate";
+
+export { translateForLocale, translateEnglish, type Translate } from "./translateResource";

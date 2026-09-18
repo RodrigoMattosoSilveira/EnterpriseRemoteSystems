@@ -22,9 +22,12 @@ import { useAuthState } from "../../app/useAuth";
 import { AuthorizationProvider } from "./AuthorizationContext";
 import { SideNav } from "./SideNav";
 import { TopBar } from "./TopBar";
+import { LanguageSelector } from "./LanguageSelector";
 import { PageTitle } from "./PageHeading";
+import { useI18n, type Translate } from "../../i18n";
 
 export function AppShell() {
+  const { t } = useI18n();
   const auth = useAuthState();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -160,7 +163,7 @@ export function AppShell() {
   if (tenantQuery.isLoading || actorQuery.isLoading || selectingFallback) {
     return (
       <main className="grid min-h-screen place-items-center text-slate-600">
-        Loading your workspace…
+        {t("shell.loadingWorkspace")}
       </main>
     );
   }
@@ -168,7 +171,7 @@ export function AppShell() {
   if (tenantQuery.error) {
     return (
       <WorkspaceError
-        message={errorMessage(tenantQuery.error)}
+        message={errorMessage(tenantQuery.error, t)}
         onRetry={() => void tenantQuery.refetch()}
         onLogout={() => void logout()}
       />
@@ -191,8 +194,8 @@ export function AppShell() {
     if (isTenantActorUnavailable(actorQuery.error)) {
       return (
         <WorkspaceError
-          title="Tenant access changed"
-          message="Your Authentication Account is still signed in, but its Actor for this tenant is no longer active or no longer has an ACTIVE Membership. Refresh access to select another available tenant."
+          title={t("shell.tenantAccessChanged.title")}
+          message={t("shell.tenantAccessChanged.message")}
           onRetry={() => void tenantQuery.refetch()}
           onLogout={() => void logout()}
         />
@@ -200,7 +203,7 @@ export function AppShell() {
     }
     return (
       <WorkspaceError
-        message={errorMessage(actorQuery.error)}
+        message={errorMessage(actorQuery.error, t)}
         onRetry={() => void actorQuery.refetch()}
         onLogout={() => void logout()}
       />
@@ -239,8 +242,8 @@ export function AppShell() {
   if (contextMismatch) {
     return (
       <WorkspaceError
-        title="Authorization context mismatch"
-        message="The effective Actor does not match the Actor advertised for the selected tenant. ERS stopped before rendering tenant data."
+        title={t("shell.authorizationMismatch.title")}
+        message={t("shell.authorizationMismatch.message")}
         onRetry={() => {
           void Promise.all([tenantQuery.refetch(), actorQuery.refetch()]);
         }}
@@ -303,12 +306,12 @@ function isTenantActorUnavailable(error: unknown): boolean {
   return error instanceof ApiError && error.code === "tenant_actor_unavailable";
 }
 
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : "Unexpected error";
+function errorMessage(error: unknown, t: Translate): string {
+  return error instanceof Error ? error.message : t("common.unexpectedError");
 }
 
 function WorkspaceError({
-  title = "Unable to open your workspace",
+  title,
   message,
   onRetry,
   onLogout,
@@ -318,23 +321,29 @@ function WorkspaceError({
   onRetry: () => void;
   onLogout: () => void;
 }) {
+  const { t } = useI18n();
   return (
     <main className="grid min-h-screen place-items-center p-6">
       <section className="max-w-lg rounded-2xl border bg-white p-6">
-        <PageTitle>{title}</PageTitle>
-        <p className="mt-2 text-sm text-slate-600">{message}</p>
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div className="min-w-0 flex-1">
+            <PageTitle>{title ?? t("shell.unableOpen.title")}</PageTitle>
+            <p className="mt-2 text-sm text-slate-600">{message}</p>
+          </div>
+          <LanguageSelector compact />
+        </div>
         <div className="mt-4 flex gap-3">
           <button
             className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white"
             onClick={onRetry}
           >
-            Try again
+            {t("common.tryAgain")}
           </button>
           <button
             className="rounded-lg border px-4 py-2 text-sm font-semibold"
             onClick={onLogout}
           >
-            Sign out
+            {t("common.signOut")}
           </button>
         </div>
       </section>
@@ -355,6 +364,7 @@ function AccountSelfServiceWorkspace({
   onChangePassword: () => void;
   onLogout: () => void;
 }) {
+  const { t, formatDate, formatNumber } = useI18n();
   const selfServiceQuery = useQuery({
     queryKey: ["auth", accountId, "self-service"],
     queryFn: loadAuthSelfServiceHome,
@@ -371,58 +381,57 @@ function AccountSelfServiceWorkspace({
         <header className="rounded-2xl border bg-white p-5 shadow-sm">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
             <div>
-              <PageTitle>Signed in</PageTitle>
+              <PageTitle>{t("shell.signedIn.title")}</PageTitle>
               <p role="status" className="mt-1 text-sm text-slate-700">
-                Authentication succeeded for{" "}
-                <span className="font-semibold">{displayName || login}</span>.
+                {t("shell.authenticationSucceeded", { name: displayName || login })}
               </p>
               {displayName && displayName !== login ? (
                 <p className="mt-1 text-sm text-slate-600">
-                  Login: <span className="font-medium">{login}</span>
+                  {t("shell.loginValue", { login })}
                 </p>
               ) : null}
             </div>
 
-            <div className="flex flex-wrap gap-3">
+            <div className="flex flex-wrap items-end gap-3">
+              <LanguageSelector compact />
               <button
                 className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white"
                 onClick={onChangePassword}
               >
-                Change password
+                {t("common.changePassword")}
               </button>
               <button
                 className="rounded-lg border bg-white px-4 py-2 text-sm font-semibold"
                 onClick={onLogout}
               >
-                Sign out
+                {t("common.signOut")}
               </button>
             </div>
           </div>
 
           <div className="mt-5 rounded-xl border border-amber-200 bg-amber-50 p-4">
             <h2 className="font-semibold text-amber-950">
-              Your personal information is still available
+              {t("shell.personalInfoAvailable.title")}
             </h2>
             <p className="mt-2 text-sm text-amber-900">
-              You currently do not have access to work or administrative features.
-              You can still view your personal information and read-only Current Account history below.
+              {t("shell.personalInfoAvailable.message")}
             </p>
           </div>
         </header>
 
         {selfServiceQuery.isLoading ? (
           <section className="rounded-2xl border bg-white p-5 shadow-sm">
-            Loading your personal information…
+            {t("shell.loadingPersonal")}
           </section>
         ) : selfServiceQuery.error ? (
           <section className="rounded-2xl border border-red-200 bg-red-50 p-5 text-red-900">
-            <h2 className="font-semibold">Unable to load personal information</h2>
-            <p className="mt-2 text-sm">{errorMessage(selfServiceQuery.error)}</p>
+            <h2 className="font-semibold">{t("shell.unableLoadPersonal")}</h2>
+            <p className="mt-2 text-sm">{errorMessage(selfServiceQuery.error, t)}</p>
             <button
               className="mt-4 rounded-lg border border-red-300 bg-white px-4 py-2 text-sm font-semibold"
               onClick={() => void selfServiceQuery.refetch()}
             >
-              Try again
+              {t("common.tryAgain")}
             </button>
           </section>
         ) : selfServiceQuery.data ? (
@@ -431,74 +440,74 @@ function AccountSelfServiceWorkspace({
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    Personal self-service
+                    {t("shell.personalSelfService")}
                   </p>
                   <h2 className="mt-1 text-xl font-bold text-slate-950">
-                    My Person
+                    {t("shell.myPerson")}
                   </h2>
                 </div>
                 <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
-                  Person ID: {selfServiceQuery.data.person.id}
+                  {t("shell.personId", { id: selfServiceQuery.data.person.id })}
                 </span>
               </div>
 
               <div className="mt-5 grid gap-5 lg:grid-cols-2">
-                <SelfServicePersonSection title="Personal">
+                <SelfServicePersonSection title={t("shell.section.personal")}>
                   <SelfField
-                    label="Name"
+                    label={t("shell.field.name")}
                     value={`${selfServiceQuery.data.person.firstName} ${selfServiceQuery.data.person.lastName}`.trim()}
                   />
                   <SelfField
-                    label="Nickname"
+                    label={t("shell.field.nickname")}
                     value={selfServiceQuery.data.person.nickname}
                   />
-                  <SelfField label="Email" value={selfServiceQuery.data.person.email} />
+                  <SelfField label={t("shell.field.email")} value={selfServiceQuery.data.person.email} />
                   <SelfField
-                    label="Cellular"
+                    label={t("shell.field.cellular")}
                     value={selfServiceQuery.data.person.cellular}
                   />
-                  <SelfField label="CPF" value={selfServiceQuery.data.person.cpf} />
-                  <SelfField label="RG" value={selfServiceQuery.data.person.rg} />
+                  <SelfField label={t("shell.field.cpf")} value={selfServiceQuery.data.person.cpf} />
+                  <SelfField label={t("shell.field.rg")} value={selfServiceQuery.data.person.rg} />
                   <SelfField
-                    label="Profile completion"
+                    label={t("shell.field.profileCompletion")}
                     value={selfServiceQuery.data.person.profileCompletionStatus}
                   />
                   <SelfField
-                    label="Collaborator profile eligible"
-                    value={selfServiceQuery.data.person.canCreateCollaborator ? "Yes" : "No"}
+                    label={t("shell.field.collaboratorEligible")}
+                    value={selfServiceQuery.data.person.canCreateCollaborator ? t("common.yes") : t("common.no")}
                   />
                 </SelfServicePersonSection>
 
-                <SelfServicePersonSection title="Address">
-                  <SelfField label="Street 1" value={selfServiceQuery.data.person.street1} />
-                  <SelfField label="Street 2" value={selfServiceQuery.data.person.street2} />
-                  <SelfField label="City" value={selfServiceQuery.data.person.city} />
-                  <SelfField label="State" value={selfServiceQuery.data.person.state} />
-                  <SelfField label="CEP" value={selfServiceQuery.data.person.cep} />
-                  <SelfField label="Country" value={selfServiceQuery.data.person.country} />
+                <SelfServicePersonSection title={t("shell.section.address")}>
+                  <SelfField label={t("shell.field.street1")} value={selfServiceQuery.data.person.street1} />
+                  <SelfField label={t("shell.field.street2")} value={selfServiceQuery.data.person.street2} />
+                  <SelfField label={t("shell.field.city")} value={selfServiceQuery.data.person.city} />
+                  <SelfField label={t("shell.field.state")} value={selfServiceQuery.data.person.state} />
+                  <SelfField label={t("shell.field.cep")} value={selfServiceQuery.data.person.cep} />
+                  <SelfField label={t("shell.field.country")} value={selfServiceQuery.data.person.country} />
                 </SelfServicePersonSection>
 
-                <SelfServicePersonSection title="Bank">
-                  <SelfField label="Bank Name" value={selfServiceQuery.data.person.bankName} />
-                  <SelfField label="Bank Number" value={selfServiceQuery.data.person.bankNumber} />
+                <SelfServicePersonSection title={t("shell.section.bank")}>
+                  <SelfField label={t("shell.field.bankName")} value={selfServiceQuery.data.person.bankName} />
+                  <SelfField label={t("shell.field.bankNumber")} value={selfServiceQuery.data.person.bankNumber} />
                   <SelfField
-                    label="Checking Account"
+                    label={t("shell.field.checkingAccount")}
                     value={selfServiceQuery.data.person.checkingAccount}
                   />
-                  <SelfField label="PIX" value={selfServiceQuery.data.person.pixKey} />
+                  <SelfField label={t("shell.field.pix")} value={selfServiceQuery.data.person.pixKey} />
                 </SelfServicePersonSection>
 
-                <SelfServicePersonSection title="Emergency Contact">
+                <SelfServicePersonSection title={t("shell.section.emergencyContact")}>
                   <SelfField
-                    label="Name"
+                    label={t("shell.field.name")}
                     value={selfServiceQuery.data.person.emergencyName}
                   />
                   <SelfField
-                    label="Cellular"
+                    label={t("shell.field.cellular")}
                     value={selfServiceQuery.data.person.emergencyCellular}
                   />
                   <SelfField
-                    label="Email"
+                    label={t("shell.field.email")}
                     value={selfServiceQuery.data.person.emergencyEmail}
                   />
                 </SelfServicePersonSection>
@@ -508,15 +517,13 @@ function AccountSelfServiceWorkspace({
             <section className="rounded-2xl border bg-white p-5 shadow-sm">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                  Personal self-service
+                  {t("shell.personalSelfService")}
                 </p>
                 <h2 className="mt-1 text-xl font-bold text-slate-950">
-                  My Current Account
+                  {t("shell.myCurrentAccount")}
                 </h2>
                 <p className="mt-1 text-sm text-slate-600">
-                  Read-only balances and ledger entries belonging to your Person.
-                  Tenant provenance is preserved even when the corresponding
-                  Tenant Actor or Membership is inactive.
+                  {t("shell.currentAccountDescription")}
                 </p>
               </div>
 
@@ -531,10 +538,7 @@ function AccountSelfServiceWorkspace({
                         {balance.tenantName || balance.tenantId}
                       </p>
                       <p className="mt-1 text-lg font-bold text-slate-950">
-                        {formatSelfServiceAmount(
-                          balance.balance,
-                          balance.valueUnitCode || balance.valueUnitLabel,
-                        )}
+                        {formatSelfServiceAmount(balance.balance, balance.valueUnitCode || balance.valueUnitLabel, formatNumber)}
                       </p>
                       <p className="text-xs text-slate-500">{balance.tenantId}</p>
                     </div>
@@ -542,7 +546,7 @@ function AccountSelfServiceWorkspace({
                 </div>
               ) : (
                 <p className="mt-5 rounded-xl bg-slate-50 p-4 text-sm text-slate-600">
-                  No Current Account activity is recorded for this Person.
+                  {t("shell.noCurrentAccountActivity")}
                 </p>
               )}
 
@@ -551,18 +555,18 @@ function AccountSelfServiceWorkspace({
                   <table className="min-w-full divide-y divide-slate-200 text-sm">
                     <thead>
                       <tr className="text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
-                        <th className="px-3 py-2">Date</th>
-                        <th className="px-3 py-2">Tenant</th>
-                        <th className="px-3 py-2">Description</th>
-                        <th className="px-3 py-2">Direction</th>
-                        <th className="px-3 py-2 text-right">Amount</th>
+                        <th className="px-3 py-2">{t("shell.table.date")}</th>
+                        <th className="px-3 py-2">{t("shell.table.tenant")}</th>
+                        <th className="px-3 py-2">{t("shell.table.description")}</th>
+                        <th className="px-3 py-2">{t("shell.table.direction")}</th>
+                        <th className="px-3 py-2 text-right">{t("shell.table.amount")}</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
                       {selfServiceQuery.data.entries.map((entry) => (
                         <tr key={entry.id}>
                           <td className="whitespace-nowrap px-3 py-3 text-slate-700">
-                            {formatSelfServiceDate(entry.effectiveDate)}
+                            {formatDate(entry.effectiveDate, { dateStyle: "medium" })}
                           </td>
                           <td className="px-3 py-3">
                             <p className="font-medium text-slate-900">
@@ -579,10 +583,7 @@ function AccountSelfServiceWorkspace({
                             {entry.direction}
                           </td>
                           <td className="whitespace-nowrap px-3 py-3 text-right font-medium text-slate-900">
-                            {formatSelfServiceAmount(
-                              entry.signedAmount,
-                              entry.valueUnitCode || entry.valueUnitLabel,
-                            )}
+                            {formatSelfServiceAmount(entry.signedAmount, entry.valueUnitCode || entry.valueUnitLabel, formatNumber)}
                           </td>
                         </tr>
                       ))}
@@ -591,7 +592,7 @@ function AccountSelfServiceWorkspace({
                 </div>
               ) : (
                 <p className="mt-5 text-sm text-slate-600">
-                  No Current Account ledger entries are recorded for this Person.
+                  {t("shell.noLedgerEntries")}
                 </p>
               )}
             </section>
@@ -631,16 +632,11 @@ function SelfField({ label, value }: { label: string; value?: string }) {
   );
 }
 
-function formatSelfServiceDate(value: string): string {
-  const date = new Date(value);
-  return Number.isNaN(date.getTime())
-    ? value
-    : new Intl.DateTimeFormat(undefined, { dateStyle: "medium" }).format(date);
-}
-
-function formatSelfServiceAmount(value: number, unit: string): string {
-  const formatted = new Intl.NumberFormat(undefined, {
-    maximumFractionDigits: 4,
-  }).format(value);
+function formatSelfServiceAmount(
+  value: number,
+  unit: string,
+  formatNumber: (value: number, options?: Intl.NumberFormatOptions) => string,
+): string {
+  const formatted = formatNumber(value, { maximumFractionDigits: 4 });
   return unit ? `${formatted} ${unit}` : formatted;
 }

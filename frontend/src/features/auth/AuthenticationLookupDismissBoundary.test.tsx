@@ -3,6 +3,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { AuthenticationLookupDismissBoundary } from "./AuthenticationLookupDismissBoundary";
 import { AUTHENTICATION_ACCOUNT_FEEDBACK_EVENT } from "../../api/auth.api";
+import { I18nProvider, LOCALE_STORAGE_KEY } from "../../i18n";
 
 let container: HTMLDivElement;
 let root: Root;
@@ -11,16 +12,19 @@ beforeEach(() => {
   container = document.createElement("div");
   document.body.appendChild(container);
   root = createRoot(container);
+  window.localStorage.setItem(LOCALE_STORAGE_KEY, "en-US");
 });
 
 afterEach(async () => {
   await act(async () => root.unmount());
   container.remove();
+  window.localStorage.removeItem(LOCALE_STORAGE_KEY);
 });
 
 async function renderBoundary() {
   await act(async () => {
     root.render(
+      <I18nProvider>
       <AuthenticationLookupDismissBoundary>
         <input aria-label="Actor filter" role="combobox" />
         <div role="listbox" aria-label="Actor matches">
@@ -28,7 +32,8 @@ async function renderBoundary() {
         </div>
         <input aria-label="Login" />
         <input aria-label="Temporary password" />
-      </AuthenticationLookupDismissBoundary>,
+      </AuthenticationLookupDismissBoundary>
+      </I18nProvider>,
     );
   });
 
@@ -117,6 +122,7 @@ describe("AuthenticationLookupDismissBoundary", () => {
   it("removes legacy Actor requirements without overriding the page's Person-selection guard", async () => {
     await act(async () => {
       root.render(
+        <I18nProvider>
         <AuthenticationLookupDismissBoundary>
           <form>
             <label>
@@ -135,7 +141,8 @@ describe("AuthenticationLookupDismissBoundary", () => {
               Create account
             </button>
           </form>
-        </AuthenticationLookupDismissBoundary>,
+        </AuthenticationLookupDismissBoundary>
+        </I18nProvider>,
       );
     });
 
@@ -161,13 +168,15 @@ describe("AuthenticationLookupDismissBoundary", () => {
   it("keeps Create account disabled while the account request is pending", async () => {
     await act(async () => {
       root.render(
+        <I18nProvider>
         <AuthenticationLookupDismissBoundary>
           <form>
             <button type="submit" disabled>
               Creating…
             </button>
           </form>
-        </AuthenticationLookupDismissBoundary>,
+        </AuthenticationLookupDismissBoundary>
+        </I18nProvider>,
       );
     });
 
@@ -207,6 +216,26 @@ describe("AuthenticationLookupDismissBoundary", () => {
     expect(container.querySelector('[role="alert"]')?.textContent).toContain(
       "was not created",
     );
+  });
+
+  it("uses a locale-independent marker for the translated create-account action", async () => {
+    window.localStorage.setItem(LOCALE_STORAGE_KEY, "pt-BR");
+    await act(async () => {
+      root.render(
+        <I18nProvider>
+          <AuthenticationLookupDismissBoundary>
+            <form>
+              <input aria-label="Ator de autorização" role="combobox" required />
+              <button data-authentication-create-account="true" type="submit">
+                Criar conta
+              </button>
+            </form>
+          </AuthenticationLookupDismissBoundary>
+        </I18nProvider>,
+      );
+    });
+
+    expect(container.querySelector<HTMLInputElement>('input[role="combobox"]')?.required).toBe(false);
   });
 
 });

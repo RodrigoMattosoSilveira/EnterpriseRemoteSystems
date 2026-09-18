@@ -10,7 +10,6 @@ import {
 import {
   browserLanguages,
   clearStoredLocale,
-  DEFAULT_LOCALE,
   LOCALE_STORAGE_KEY,
   matchSupportedLocale,
   persistLocale,
@@ -26,8 +25,9 @@ import {
   formatNumber as formatNumberValue,
   type DateInput,
 } from "./formatters";
-import { messagesByLocale, type TranslationKey } from "./resources";
-import { interpolateMessage, type TranslationParameters } from "./translate";
+import type { TranslationKey } from "./resources";
+import type { TranslationParameters } from "./translate";
+import { translateForLocale } from "./translateResource";
 
 export interface I18nContextValue {
   locale: AppLocale;
@@ -170,17 +170,12 @@ export function I18nProvider({ children }: { children: ReactNode }) {
   }, [resolution.source]);
 
   const value = useMemo<I18nContextValue>(() => {
-    const messages = messagesByLocale[locale] ?? messagesByLocale[DEFAULT_LOCALE];
     return {
       locale,
       localeSource: resolution.source,
       setLocale,
       useBrowserLocale,
-      t: (key, parameters) =>
-        interpolateMessage(
-          messages[key] ?? messagesByLocale[DEFAULT_LOCALE][key] ?? key,
-          parameters,
-        ),
+      t: (key, parameters) => translateForLocale(locale, key, parameters),
       formatNumber: (number, options) => formatNumberValue(locale, number, options),
       formatCurrency: (number, currency, options) =>
         formatCurrencyValue(locale, number, currency, options),

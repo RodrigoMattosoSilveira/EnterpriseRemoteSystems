@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { TenantsAdminPage } from "./TenantsAdminPage";
 import { AuthorizationProvider } from "../../components/layout/AuthorizationContext";
 import type { AuthzCurrentActor } from "../../types/authz";
+import { I18nProvider } from "../../i18n";
 
 const tenant = {
   id: "default",
@@ -317,7 +318,7 @@ describe("TenantsAdminPage", () => {
 
 function renderPage(actor?: AuthzCurrentActor) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
-  const router = createMemoryRouter([{ path: "/admin/tenants", element: <TenantsAdminPage /> }], { initialEntries: ["/admin/tenants"] });
+  const router = createMemoryRouter([{ path: "/admin/tenants", element: <I18nProvider><TenantsAdminPage /></I18nProvider> }], { initialEntries: ["/admin/tenants"] });
   root = createRoot(container);
   act(() => root?.render(
     <QueryClientProvider client={client}>
