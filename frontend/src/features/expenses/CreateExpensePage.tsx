@@ -571,7 +571,7 @@ export function CreateExpensePage() {
 
             <div className="grid gap-4 sm:grid-cols-2">
               <label className="block text-sm font-medium text-gray-700">
-                {t("expense.category")} *
+                {t("expense.categoryRequired")}
                 <select
                   className="mt-1 w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-gray-950 shadow-sm"
                   value={form.itemType}
@@ -595,7 +595,7 @@ export function CreateExpensePage() {
               </label>
 
               <label className="block text-sm font-medium text-gray-700">
-                {t("expense.expenseDate")} *
+                {t("expense.expenseDateRequired")}
                 <input
                   className="mt-1 w-full rounded-xl border border-gray-300 px-3 py-2 text-gray-950 shadow-sm"
                   type="date"
@@ -671,7 +671,7 @@ export function CreateExpensePage() {
                       )}
 
                       <label className="block text-sm font-medium text-gray-700">
-                        {t("expense.itemDescription")} *
+                        {t("expense.itemDescriptionRequired")}
                         <select
                           aria-label={t("expense.canteenItemDescriptionAria", { index: index + 1 })}
                           className="mt-1 w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-gray-950 shadow-sm"
@@ -698,7 +698,7 @@ export function CreateExpensePage() {
 
                       <div className="grid gap-4 sm:grid-cols-2">
                         <label className="block text-sm font-medium text-gray-700">
-                          {t("expense.currency")} *
+                          {t("expense.currencyRequired")}
                           <select
                             aria-label={t("expense.canteenItemCurrencyAria", { index: index + 1 })}
                             className="mt-1 w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-gray-950 shadow-sm"
@@ -716,7 +716,7 @@ export function CreateExpensePage() {
                         </label>
 
                         <label className="block text-sm font-medium text-gray-700">
-                          {t("expense.quantity")} *
+                          {t("expense.quantityRequired")}
                           <input
                             aria-label={t("expense.canteenItemQuantityAria", { index: index + 1 })}
                             className="mt-1 w-full rounded-xl border border-gray-300 px-3 py-2 text-gray-950 shadow-sm"
@@ -751,7 +751,7 @@ export function CreateExpensePage() {
               <>
                 <div className="grid gap-4 sm:grid-cols-2">
                   <label className="block text-sm font-medium text-gray-700">
-                    {t("expense.currency")} *
+                    {t("expense.currencyRequired")}
                     <select
                       className="mt-1 w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-gray-950 shadow-sm"
                       value={form.currencyCode}
@@ -769,7 +769,7 @@ export function CreateExpensePage() {
                   </label>
 
                   <label className="block text-sm font-medium text-gray-700">
-                    {t("expense.quantity")} *
+                    {t("expense.quantityRequired")}
                     <input
                       className="mt-1 w-full rounded-xl border border-gray-300 px-3 py-2 text-gray-950 shadow-sm"
                       type="number"
@@ -788,7 +788,7 @@ export function CreateExpensePage() {
                 </div>
 
                 <label className="block text-sm font-medium text-gray-700">
-                  {t("expense.itemDescription")} *
+                  {t("expense.itemDescriptionRequired")}
                   <select
                     className="mt-1 w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-gray-950 shadow-sm"
                     value={form.priceListItemId}

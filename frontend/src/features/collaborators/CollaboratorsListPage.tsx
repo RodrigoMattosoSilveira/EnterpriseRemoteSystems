@@ -159,7 +159,7 @@ export function CollaboratorsListPage() {
               </h2>
               <p className="text-sm text-gray-500">
                 {selfMode
-                  ? t("collaborators.showingJourneys", { count: collaborators.length })
+                  ? t(collaborators.length === 1 ? "collaborators.showingJourneyOne" : "collaborators.showingJourneys", { count: collaborators.length })
                   : t("collaborators.showing", { count: collaborators.length, total })}
               </p>
               {hasSearch && (

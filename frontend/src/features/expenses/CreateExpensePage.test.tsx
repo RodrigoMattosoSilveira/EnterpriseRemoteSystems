@@ -119,7 +119,7 @@ describe("CreateExpensePage", () => {
     await changeSelect("Currency *", "BRL");
     await changeInput("Quantity *", "3");
 
-    await waitForText("36,75");
+    await waitForText("R$36.75");
     await clickButton("Create Expense");
 
     const createCall = fetchCalls.find(

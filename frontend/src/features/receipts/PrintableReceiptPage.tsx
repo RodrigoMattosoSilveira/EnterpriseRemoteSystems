@@ -189,16 +189,16 @@ export function PrintableReceiptPage() {
           <Item label={t("common.status")} value={finalSettlementReceipt && data.acceptedAt ? t("receipt.accepted") : receiptStatusLabel(data.status, t)} />
           {finalSettlementReceipt ? (
             <>
-              <Item label={t("receipt.acceptedAt")} value={formatDateTime(data.acceptedAt) || t("receipt.awaitingInApp")} />
+              <Item label={t("receipt.acceptedAt")} value={data.acceptedAt ? formatDateTime(data.acceptedAt) : t("receipt.awaitingInApp")} />
               <Item label={t("receipt.acceptedBy")} value={data.acceptedBy || t("receipt.awaitingDesignated")} />
               <Item label={t("receipt.acceptanceMethod")} value={data.acceptanceMethod ? acceptanceMethodLabel(data.acceptanceMethod, t) : t("receipt.inApp")} />
             </>
           ) : (
             <>
               <Item label={t("receipt.issuedBy")} value={data.issuedBy || t("receipt.pendingPrint")} />
-              <Item label={t("receipt.printedAt")} value={formatDateTime(data.printedAt) || t("receipt.notPrinted")} />
-              <Item label={t("receipt.signedAt")} value={formatDateTime(data.signedAt) || t("receipt.notSigned")} />
-              <Item label={t("receipt.returnedAt")} value={formatDateTime(data.returnedAt) || t("receipt.notReturned")} />
+              <Item label={t("receipt.printedAt")} value={data.printedAt ? formatDateTime(data.printedAt) : t("receipt.notPrinted")} />
+              <Item label={t("receipt.signedAt")} value={data.signedAt ? formatDateTime(data.signedAt) : t("receipt.notSigned")} />
+              <Item label={t("receipt.returnedAt")} value={data.returnedAt ? formatDateTime(data.returnedAt) : t("receipt.notReturned")} />
               <Item label={t("receipt.receivedBy")} value={data.receivedBy || t("receipt.notReturned")} />
               <Item label={t("receipt.signedDocumentLabel")} value={data.signedDocumentRef || t("receipt.notRecorded")} />
             </>

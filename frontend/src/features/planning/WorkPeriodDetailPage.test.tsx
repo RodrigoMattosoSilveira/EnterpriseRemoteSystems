@@ -119,12 +119,12 @@ describe("WorkPeriodDetailPage", () => {
       root.render(<I18nProvider><RouterProvider router={router} /></I18nProvider>);
     });
 
-    await waitForText("Default Tenant · 2026-08-28 · 30G Tenant B accrual regression");
+    await waitForText("Default Tenant · Aug 28, 2026 · 30G Tenant B accrual regression");
 
     const pageHeading = headingByText("h1", "Work Period");
     const workPeriodHeading = headingByText(
       "h2",
-      "Default Tenant · 2026-08-28 · 30G Tenant B accrual regression",
+      "Default Tenant · Aug 28, 2026 · 30G Tenant B accrual regression",
     );
 
     expect(pageHeading).toBeTruthy();

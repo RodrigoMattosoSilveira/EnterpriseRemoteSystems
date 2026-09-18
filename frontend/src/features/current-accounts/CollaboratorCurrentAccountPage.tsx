@@ -218,7 +218,7 @@ export function CollaboratorCurrentAccountPage() {
               {ledgerEntries ? (
                 <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <p className="text-sm text-gray-600">
-                    {t("account.showingPage", { page: ledgerEntries.page, pages: totalPages, total: ledgerEntries.total })}
+                    {t(ledgerEntries.total === 1 ? "account.showingPageOne" : "account.showingPage", { page: ledgerEntries.page, pages: totalPages, total: ledgerEntries.total })}
                   </p>
                   <div className="flex gap-2">
                     <button

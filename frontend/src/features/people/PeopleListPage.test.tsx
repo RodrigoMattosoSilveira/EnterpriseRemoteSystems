@@ -324,11 +324,11 @@ describe("PeopleListPage", () => {
       ),
     );
 
-    await waitForText("People available to add to this tenant");
+    await waitForText("People available to add to this Tenant");
     await waitForText("Paulo Provisioning");
     expect(textNode("No people match these filters")).toBeFalsy();
 
-    await clickButton("Add to this tenant");
+    await clickButton("Add to this Tenant");
 
     await waitFor(() =>
       fetchCalls.includes("/api/v1/people/memberships"),

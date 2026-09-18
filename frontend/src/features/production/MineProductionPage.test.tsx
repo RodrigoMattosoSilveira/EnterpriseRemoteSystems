@@ -52,13 +52,13 @@ describe("MineProductionPage", () => {
     renderPage();
 
     await waitForText("Gold Production");
-    await waitForText("12.50000000 g");
+    await waitForText("12.5 g");
     await changeSelectByIndex(1, "well-1");
     await changeInputByIndex(1, "13.25");
     await changeTextArea("Afternoon production");
     await clickButton("Record Production");
 
-    await waitForText("13.25000000 g");
+    await waitForText("13.25 g");
     const createCall = fetchCalls.find((call) => call.method === "POST");
     expect(createCall?.url).toBe(
       "/api/v1/work-periods/wp-1/gold-production-entries",
@@ -82,7 +82,7 @@ describe("MineProductionPage", () => {
     await changeTextArea("Corrected production");
     await clickButton("Save Production");
 
-    await waitForText("14.75000000 g");
+    await waitForText("14.75 g");
     const updateCall = fetchCalls.find((call) => call.method === "PATCH");
     expect(updateCall?.url).toBe("/api/v1/gold-production-entries/gp-1");
     expect(updateCall?.body).toMatchObject({

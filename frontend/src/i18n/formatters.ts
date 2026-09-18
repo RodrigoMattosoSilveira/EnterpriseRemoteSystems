@@ -3,7 +3,27 @@ import type { AppLocale } from "./locale";
 export type DateInput = Date | number | string;
 
 function asDate(value: DateInput): Date {
-  const date = value instanceof Date ? value : new Date(value);
+  if (value instanceof Date) {
+    if (Number.isNaN(value.getTime())) {
+      throw new RangeError(`Invalid date value: ${String(value)}`);
+    }
+    return value;
+  }
+
+  if (typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    const [year, month, day] = value.split("-").map(Number);
+    const date = new Date(year, month - 1, day);
+    if (
+      date.getFullYear() !== year ||
+      date.getMonth() !== month - 1 ||
+      date.getDate() !== day
+    ) {
+      throw new RangeError(`Invalid date value: ${String(value)}`);
+    }
+    return date;
+  }
+
+  const date = new Date(value);
   if (Number.isNaN(date.getTime())) {
     throw new RangeError(`Invalid date value: ${String(value)}`);
   }

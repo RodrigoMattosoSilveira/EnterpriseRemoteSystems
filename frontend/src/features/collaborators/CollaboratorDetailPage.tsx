@@ -282,7 +282,7 @@ export function CollaboratorDetailPage() {
               label={t("collaborator.projectedEnd")}
               value={formatDate(collaborator.projectedEndDate)}
             />
-            <Info label={t("collaborator.closedAt")} value={formatDate(collaborator.closedAt)} />
+            <Info label={t("collaborator.closedAt")} value={collaborator.closedAt ? formatDate(collaborator.closedAt) : "—"} />
           </dl>
         </section>
 

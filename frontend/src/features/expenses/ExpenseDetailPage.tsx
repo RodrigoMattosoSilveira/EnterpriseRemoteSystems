@@ -276,7 +276,7 @@ function Info({ label, value }: { label: string; value: string }) {
 }
 
 function FinancialPostingSection({ expense }: { expense: Expense }) {
-  const { t, formatCurrency, formatNumber } = useI18n();
+  const { t, formatCurrency, formatDate, formatNumber } = useI18n();
   const posting = expense.financialPosting;
 
   if (!posting) {

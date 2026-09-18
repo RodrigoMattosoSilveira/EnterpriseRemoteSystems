@@ -30,7 +30,7 @@ describe("JourneySettlementPanel", () => {
     mockSettlementFetch();
 
     renderPanel();
-    await waitForText("R$ 900,00");
+    await waitForText("R$900.00");
     expect(textNode("2.50 g")).toBeTruthy();
 
     await clickButton("Partial Payout");
@@ -85,7 +85,7 @@ describe("JourneySettlementPanel", () => {
     mockSettlementFetch();
 
     renderPanel();
-    await waitForText("R$ 900,00");
+    await waitForText("R$900.00");
     await clickButton("Partial Payout");
 
     const reasonOptions = Array.from(
@@ -108,7 +108,7 @@ describe("JourneySettlementPanel", () => {
     mockSettlementFetch({ onRequest: (request) => requests.push(request) });
 
     renderPanel();
-    await waitForText("R$ 900,00");
+    await waitForText("R$900.00");
 
     await clickButton("Partial Payout");
     await setFieldValue("BRL amount", "25.50");
@@ -155,7 +155,7 @@ describe("JourneySettlementPanel", () => {
     });
 
     renderPanel();
-    await waitForText("R$ 900,00");
+    await waitForText("R$900.00");
     await clickButton("Partial Payout");
     await waitForText("Second-person approval required");
 
@@ -287,7 +287,7 @@ describe("JourneySettlementPanel", () => {
     mockSettlementFetch({ onRequest: (request) => requests.push(request) });
 
     renderPanel();
-    await waitForText("R$ 900,00");
+    await waitForText("R$900.00");
     await clickButton("Settle Tenant Owed Balance");
     await setFieldValue("Reason code", "FINAL_TENANT_PAYMENT");
     await setFieldValue("Reason text", "Pay all positive final Journey balances.");
@@ -316,7 +316,7 @@ describe("JourneySettlementPanel", () => {
     });
 
     renderPanel();
-    await waitForText("-R$ 80,00");
+    await waitForText("-R$80.00");
     await clickButton("Record Collaborator Payment");
     await setFieldValue("Reason code", "FINAL_COLLABORATOR_PAYMENT");
     await setFieldValue("Reason text", "Record repayment of all negative final Journey balances.");
@@ -350,7 +350,7 @@ describe("JourneySettlementPanel", () => {
     });
 
     renderPanel({ onJourneyClosed });
-    await waitForText("R$ 0,00");
+    await waitForText("R$0.00");
 
     await clickButton("Close Journey");
     await setFieldValue("Reason code", "END_OF_JOURNEY_SETTLEMENT");
@@ -372,7 +372,7 @@ describe("JourneySettlementPanel", () => {
     mockSettlementFetch();
 
     renderPanel();
-    await waitForText("R$ 900,00");
+    await waitForText("R$900.00");
     await clickButton("Partial Payout");
 
     expect(textNode("Settlement key")).toBeFalsy();

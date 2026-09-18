@@ -73,9 +73,9 @@ describe("CurrentAndFutureEarningsModal", () => {
       "Ready Accrual Earnings Not Yet Posted",
     );
     expect(container.textContent).toContain("Estimated Future Earnings");
-    expect(container.textContent).toContain("1.50000000 g");
-    expect(container.textContent).toContain("7.22500000 g");
-    expect(container.textContent).toContain("-11.97500000 g");
+    expect(container.textContent).toContain("1.5 g");
+    expect(container.textContent).toContain("7.225 g");
+    expect(container.textContent).toContain("-11.975 g");
     expect(container.textContent).toContain("Calendar work periods");
     expect(container.textContent).toContain("Posted work periods");
     expect(container.textContent).toContain("Ready accrual work periods");

@@ -136,13 +136,13 @@ describe("CollaboratorDetailPage", () => {
     );
     expect(textNode("Lifecycle")).toBeTruthy();
     expect(textNode("Journey Start")).toBeTruthy();
-    expect(textNode("2026-05-01")).toBeTruthy();
+    expect(textNode("May 1, 2026")).toBeTruthy();
     expect(textNode("Default End")).toBeTruthy();
-    expect(textNode("2026-07-30")).toBeTruthy();
+    expect(textNode("Jul 30, 2026")).toBeTruthy();
     expect(textNode("Extension Days")).toBeTruthy();
     expect(textNode("5")).toBeTruthy();
     expect(textNode("Projected End")).toBeTruthy();
-    expect(textNode("2026-08-04")).toBeTruthy();
+    expect(textNode("Aug 4, 2026")).toBeTruthy();
     expect(textNode("Work Assignment")).toBeTruthy();
     expect(textNode("Mining")).toBeTruthy();
     expect(textNode("Mina Carara")).toBeTruthy();
@@ -282,7 +282,7 @@ describe("CollaboratorDetailPage", () => {
     renderCollaboratorDetailPage("/collaborators/collab-closed");
 
     await waitForText("Journey Closed");
-    expect(textNode("2026-06-15T10:00:00Z")).toBeTruthy();
+    expect(textNode("Jun 15, 2026")).toBeTruthy();
     expect(textNode("0 days remaining")).toBeFalsy();
     expect(textNode("Journey Settlement")).toBeFalsy();
   });
@@ -310,7 +310,7 @@ describe("CollaboratorDetailPage", () => {
     );
 
     await waitForText("Journey Closed");
-    expect(textNode("2026-06-15T10:00:00Z")).toBeTruthy();
+    expect(textNode("Jun 15, 2026")).toBeTruthy();
     expect(linkByText("Back to My Journeys")?.getAttribute("href")).toBe(
       "/collaborators",
     );
