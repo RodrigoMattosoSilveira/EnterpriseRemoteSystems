@@ -72,6 +72,13 @@ export const ptBRMessages = {
   "nav.accountSettings": "Configurações da conta",
   "nav.changePassword": "Alterar senha",
 
+  "people.tenantBoundary.aria": "Limite do Tenant para Pessoas",
+  "people.tenantBoundary.title": "Limite do Tenant para Pessoas",
+  "people.tenantBoundary.tenantId": "ID do Tenant:",
+  "people.tenantBoundary.supportLease": "Concessão de Acesso de Suporte ao Tenant",
+  "people.tenantBoundary.description": "O diretório de Pessoas abaixo é carregado neste contexto de Tenant. O nome ou apelido de uma Pessoa pode mencionar outro Tenant; esse texto do perfil não altera o limite de Tenant desta lista.",
+  "people.tenantBoundary.supportLeaseId": "ID da Concessão de Acesso de Suporte:",
+
   "route.pageNotFound.title": "Página não encontrada",
   "route.pageNotFound.message": "A página solicitada não foi encontrada.",
   "route.forbidden.title": "Acesso proibido",

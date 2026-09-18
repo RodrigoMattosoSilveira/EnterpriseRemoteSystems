@@ -70,6 +70,13 @@ export const enUSMessages = {
   "nav.accountSettings": "Account settings",
   "nav.changePassword": "Change password",
 
+  "people.tenantBoundary.aria": "People tenant scope",
+  "people.tenantBoundary.title": "People tenant boundary",
+  "people.tenantBoundary.tenantId": "Tenant ID:",
+  "people.tenantBoundary.supportLease": "Tenant Support Access Lease",
+  "people.tenantBoundary.description": "The People directory below is loaded in this Tenant context. A Person's name or nickname may mention another Tenant; that profile text does not change the Tenant boundary of this list.",
+  "people.tenantBoundary.supportLeaseId": "Support Lease ID:",
+
   "route.pageNotFound.title": "Page not found",
   "route.pageNotFound.message": "The requested page could not be found.",
   "route.forbidden.title": "Access forbidden",
