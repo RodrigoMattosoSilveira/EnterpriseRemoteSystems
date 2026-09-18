@@ -11,6 +11,13 @@ test.describe("Bite 31.2 visible language selection", () => {
   test("switches the sign-in surface between en-US and pt-BR and persists the choice", async ({ page }) => {
     await page.goto("/login");
 
+    // ERS owns its localization. Browser-level automatic translation must not
+    // rewrite the application after React has selected an ERS locale.
+    await expect(page.locator("html")).toHaveAttribute("translate", "no");
+    await expect(page.locator("html")).toHaveClass(/\bnotranslate\b/);
+    await expect(page.locator("body")).toHaveAttribute("translate", "no");
+    await expect(page.locator('meta[name="google"]')).toHaveAttribute("content", "notranslate");
+
     const language = page.getByRole("combobox", { name: "Language" });
     await expect(language).toBeVisible();
     await expect(page.getByRole("heading", { name: "Sign in" })).toBeVisible();
