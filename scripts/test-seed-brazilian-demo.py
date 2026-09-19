@@ -75,6 +75,24 @@ def main() -> int:
             assert scalar(conn, "SELECT COUNT(*) FROM auth_user_accounts WHERE login='demo.tenant-admin@example.test' AND active=1") == 1
             assert scalar(conn, "SELECT COUNT(*) FROM authz_actor_role_grants g JOIN authz_roles r ON r.id=g.role_id WHERE g.tenant_id=? AND g.active=1 AND r.code='TENANT_ADMIN'", (TENANT_ID,)) == 1
 
+            # João, Camila, and Rafael have canonical Person self-service Accounts.
+            # Intrinsic self-service must not be materialized as delegated Role Grants.
+            for key in ("joao", "camila", "rafael"):
+                account_id = f"demo-br-account-{key}"
+                actor_id = f"demo-br-actor-{key}"
+                person_id = f"demo-br-person-{key}"
+                membership_id = f"demo-br-membership-{key}"
+                login = f"demo31.4.{key}@example.test"
+                assert scalar(conn, "SELECT COUNT(*) FROM auth_user_accounts WHERE id=? AND login=? AND active=1 AND must_change_password=0 AND security_suspended=0", (account_id, login)) == 1
+                assert scalar(conn, "SELECT COUNT(*) FROM auth_account_people WHERE account_id=? AND person_id=?", (account_id, person_id)) == 1
+                assert scalar(conn, "SELECT COUNT(*) FROM auth_account_actors WHERE account_id=? AND actor_id=? AND scope_type='TENANT' AND tenant_id=? AND membership_id=?", (account_id, actor_id, TENANT_ID, membership_id)) == 1
+                assert scalar(conn, "SELECT COUNT(*) FROM authz_actors WHERE id=? AND actor_key=? AND active=1", (actor_id, f"person:{person_id}::tenant::{TENANT_ID}")) == 1
+                assert scalar(conn, "SELECT COUNT(*) FROM authz_actor_role_grants WHERE actor_id=? AND active=1", (actor_id,)) == 0
+            assert scalar(conn, "SELECT COUNT(*) FROM auth_user_accounts WHERE id LIKE 'demo-br-account-%' AND active=1") == 4
+
+            # Beatriz intentionally remains a Person without an Authentication Account.
+            assert scalar(conn, "SELECT COUNT(*) FROM auth_account_people WHERE person_id='demo-br-person-beatriz'") == 0
+
             # The fixture is isolated: no demo business row may be attached to default Tenant.
             for table in ("person_tenant_memberships", "collaborator_journeys", "work_periods", "expenses", "ledger_entries", "ledger_receipts"):
                 assert scalar(conn, f"SELECT COUNT(*) FROM {table} WHERE tenant_id='default' AND id LIKE 'demo-br-%'") == 0
