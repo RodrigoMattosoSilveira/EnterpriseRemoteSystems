@@ -51,6 +51,9 @@ LOCAL_DOCKER_CHECK_IMAGE ?= ers-local-check:latest
 LOCAL_DOCKER_WORKDIR ?= /workspace
 LOCAL_DOCKER ?= docker
 
+BRAZILIAN_DEMO_DB ?= backend/data/brazilian-demo.db
+BRAZILIAN_DEMO_AS_OF ?= 2026-09-18
+
 SERVER_SMOKE_ATTEMPTS ?= 12
 SERVER_SMOKE_DELAY_SECONDS ?= 5
 SERVER_SMOKE_CONNECT_TIMEOUT_SECONDS ?= 5
@@ -74,6 +77,9 @@ help:
 	@echo "  make manual-testdata-local-reset"
 	@echo "  make manual-testdata-local-seed"
 	@echo "  make manual-testdata-local-reset-with-work-periods"
+	@echo "  make brazilian-demo-local-reset [BRAZILIAN_DEMO_AS_OF=YYYY-MM-DD]"
+	@echo "  make brazilian-demo-local-seed [BRAZILIAN_DEMO_AS_OF=YYYY-MM-DD]"
+	@echo "  make brazilian-demo-local-verify [BRAZILIAN_DEMO_AS_OF=YYYY-MM-DD]"
 	@echo "  make local-admin-reset"
 	@echo "  make backend-check"
 	@echo "  make frontend-check"
@@ -377,6 +383,7 @@ local-check:
 	$(MAKE) local-sqlite-reset-check
 	$(MAKE) server-authz-bootstrap-config-check
 	$(MAKE) legacy-identity-dependency-check
+	$(MAKE) brazilian-demo-fixture-check
 	$(MAKE) migration-rehearsal-check
 	cd backend && go clean -testcache && go test ./...
 	cd frontend && npm run test:run
@@ -1199,6 +1206,34 @@ import-people-dry-run:
 import-people:
 	@test -n "$(file)" || (echo "Usage: make import-people file=backend/imports/people.csv" && exit 2)
 	cd backend && go run ./cmd/import-people -db data/app.db -file ../$(file)
+
+# ==============================================================================
+# Bite 31.4 Brazilian demo dataset
+# ==============================================================================
+
+.PHONY: brazilian-demo-fixture-check
+brazilian-demo-fixture-check:
+	python3 scripts/test-seed-brazilian-demo.py
+
+.PHONY: brazilian-demo-local-seed
+brazilian-demo-local-seed:
+	@test "$(ENV)" != "production" || (echo "Refusing to seed Brazilian demo data with ENV=production" && exit 2)
+	chmod +x scripts/seed-brazilian-demo.py
+	DB_PATH="$(BRAZILIAN_DEMO_DB)" BRAZILIAN_DEMO_AS_OF="$(BRAZILIAN_DEMO_AS_OF)" ./scripts/seed-brazilian-demo.py
+
+.PHONY: brazilian-demo-local-verify
+brazilian-demo-local-verify:
+	chmod +x scripts/seed-brazilian-demo.py
+	DB_PATH="$(BRAZILIAN_DEMO_DB)" BRAZILIAN_DEMO_AS_OF="$(BRAZILIAN_DEMO_AS_OF)" ./scripts/seed-brazilian-demo.py --verify-only
+
+.PHONY: brazilian-demo-local-reset
+brazilian-demo-local-reset:
+	@test "$(ENV)" != "production" || (echo "Refusing to reset Brazilian demo data with ENV=production" && exit 2)
+	@echo "Resetting deterministic Brazilian demo database: $(BRAZILIAN_DEMO_DB)"
+	rm -f "$(BRAZILIAN_DEMO_DB)" "$(BRAZILIAN_DEMO_DB)-wal" "$(BRAZILIAN_DEMO_DB)-shm"
+	mkdir -p "$$(dirname "$(BRAZILIAN_DEMO_DB)")"
+	DB_PATH="$(BRAZILIAN_DEMO_DB)" ./scripts/db-migrate.sh
+	$(MAKE) brazilian-demo-local-seed BRAZILIAN_DEMO_DB="$(BRAZILIAN_DEMO_DB)" BRAZILIAN_DEMO_AS_OF="$(BRAZILIAN_DEMO_AS_OF)"
 
 # ==============================================================================
 # Resettable test data
