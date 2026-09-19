@@ -305,11 +305,16 @@ export function PlanTab(props: {
           <p className="mt-2 text-sm text-gray-500">
             {t("planning.refinementHelp")}
           </p>
-          {props.template?.sourceWorkPeriodId && (
-            <p className="mt-2 text-sm font-medium text-gray-700">
-              {t("planning.templateSource", { date: props.template.sourceWorkDate, name: props.template.sourcePeriodName })}
-            </p>
-          )}
+          {props.template?.sourceWorkPeriodId &&
+            props.template.sourceWorkDate &&
+            props.template.sourcePeriodName && (
+              <p className="mt-2 text-sm font-medium text-gray-700">
+                {t("planning.templateSource", {
+                  date: props.template.sourceWorkDate,
+                  name: props.template.sourcePeriodName,
+                })}
+              </p>
+            )}
           {!props.template?.sourceWorkPeriodId && rows.length > 0 && (
             <p className="mt-2 text-sm text-gray-500">
               {t("planning.noTemplate")}
@@ -843,7 +848,7 @@ function SortableHeader(props: {
         className="inline-flex items-center gap-1 font-semibold text-gray-600 hover:text-gray-950"
       >
         {props.label}
-        {props.active && (
+        {props.active && props.direction && (
           <span aria-label={t("planning.sorted", { direction: props.direction })}>
             {props.direction === "asc" ? "↑" : "↓"}
           </span>
