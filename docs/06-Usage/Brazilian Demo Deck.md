@@ -1,167 +1,167 @@
-# Brazilian Prospect Demo Deck — Mineração Serra Dourada
+# Apresentação de Demonstração para Potencial Cliente Brasileiro — Mineração Serra Dourada
 
-> Canonical source for the Bite 31.5 prospect presentation. The live application is the primary visual; these slides frame the story and transitions.
+> Fonte canônica da apresentação comercial do Bite 31.5. A aplicação ao vivo é o recurso visual principal; estes diapositivos organizam a narrativa, os pontos de destaque e as transições.
 
-## Slide 1 — Enterprise Remote Systems
+## Diapositivo 1 — Enterprise Remote Systems
 
-**Headline:** Operação remota com identidade, trabalho e finanças conectados.
+**Título principal:** Operação remota com identidade, trabalho e finanças conectados.
 
-**On-screen points**
+**Pontos exibidos**
 
 - Pessoas e Jornadas separadas, com histórico preservado.
 - Planejamento e produção conectados à remuneração.
 - Despesas, Conta Corrente e Recibos com proveniência.
 - Dados isolados por Tenant.
 
-**Presenter objective**
+**Objetivo do apresentador**
 
-Open with the business problem: remote operations generate many linked facts about people, work, compensation, deductions, and acknowledgements. ERS keeps those facts connected rather than spreading them across disconnected spreadsheets and messages.
+Apresente o problema de negócio: operações remotas geram muitos fatos relacionados a pessoas, trabalho, remuneração, descontos e confirmações. O ERS mantém esses fatos conectados, em vez de espalhá-los por planilhas e mensagens desconectadas.
 
-**Transition**
+**Transição**
 
 “Antes de entrar na operação, vou mostrar primeiro o limite de dados que estamos usando nesta demonstração.”
 
 ---
 
-## Slide 2 — Tenant boundary first
+## Diapositivo 2 — O limite do Tenant vem primeiro
 
-**Headline:** Cada operação é vista dentro de um Tenant explícito.
+**Título principal:** Cada operação é vista dentro de um Tenant explícito.
 
-**Demo anchor**
+**Referência da demonstração**
 
 ```text
 Mineração Serra Dourada — DEMO
 DEMO_BR_SERRA_DOURADA
 ```
 
-**On-screen points**
+**Pontos exibidos**
 
-- The selected Tenant is visible in the application shell.
-- People and operational records are loaded in that Tenant context.
-- Tenant context and authorization are separate from display language.
-- The demo uses synthetic data only.
+- O Tenant selecionado fica visível na estrutura principal da aplicação.
+- Pessoas e registros operacionais são carregados nesse contexto de Tenant.
+- O contexto do Tenant e a autorização são independentes do idioma de apresentação.
+- A demonstração usa somente dados sintéticos.
 
-**Presenter objective**
+**Objetivo do apresentador**
 
-Establish the security/data-isolation story before showing People. Do not imply that a Tenant name is a cosmetic filter; it is the operating boundary for the records being demonstrated.
+Estabeleça a história de segurança e isolamento de dados antes de mostrar Pessoas. Não sugira que o nome do Tenant seja apenas um filtro visual; ele representa o limite operacional dos registros demonstrados.
 
-**Transition**
+**Transição**
 
 “Com o limite do Tenant claro, começamos pela identidade permanente das pessoas.”
 
 ---
 
-## Slide 3 — Person is the durable identity
+## Diapositivo 3 — A Pessoa é a identidade durável
 
-**Headline:** A Pessoa permanece mesmo quando a relação operacional muda.
+**Título principal:** A Pessoa permanece mesmo quando a relação operacional muda.
 
-**Demo anchors**
+**Referências da demonstração**
 
-- Mariana Alves — Tenant Administrator and Person.
-- João Ferreira — active Collaborator.
-- Camila Souza — active commission Collaborator.
-- Rafael Lima — historical Journey plus current Journey.
-- Beatriz Nascimento — Person with no Collaborator Journey.
+- Mariana Alves — Administradora do Tenant e Pessoa.
+- João Ferreira — Colaborador ativo.
+- Camila Souza — Colaboradora ativa remunerada por comissão.
+- Rafael Lima — Jornada histórica e Jornada atual.
+- Beatriz Nascimento — Pessoa sem Jornada de Colaborador.
 
-**Presenter objective**
+**Objetivo do apresentador**
 
-Explain that Person, Membership, and Collaborator Journey are different concepts. Use Beatriz to show that a complete Person does not have to be a Collaborator. Use Rafael to show that a Person can preserve multiple Journeys through time.
+Explique que Pessoa, Vínculo e Jornada de Colaborador são conceitos diferentes. Use Beatriz para mostrar que uma Pessoa completa não precisa ser Colaboradora. Use Rafael para mostrar que uma Pessoa pode preservar várias Jornadas ao longo do tempo.
 
-**Transition**
+**Transição**
 
 “Agora vamos sair do cadastro da Pessoa e olhar a relação operacional: a Jornada.”
 
 ---
 
-## Slide 4 — Journey preserves employment/engagement history
+## Diapositivo 4 — A Jornada preserva o histórico da relação operacional
 
-**Headline:** Uma nova Jornada não apaga a anterior.
+**Título principal:** Uma nova Jornada não apaga a anterior.
 
-**Demo anchor**
+**Referência da demonstração**
 
-Rafael Lima has:
+Rafael Lima possui:
 
-- one historical finished Journey;
-- one newer active Journey;
-- current daily wage of `R$ 350,00` per worked day.
+- uma Jornada histórica encerrada;
+- uma Jornada ativa mais recente;
+- remuneração diária atual de `R$ 350,00` por dia trabalhado.
 
-**Presenter objective**
+**Objetivo do apresentador**
 
-Show why lifecycle history matters. The prospect should see that current work settings can change without rewriting the Person or erasing the historical Journey.
+Mostre por que o histórico do ciclo de vida importa. O potencial cliente deve perceber que as configurações atuais de trabalho podem mudar sem reescrever a Pessoa nem apagar a Jornada histórica.
 
-**Transition**
+**Transição**
 
 “Com os Colaboradores ativos definidos, o próximo passo é planejar quem trabalha, onde e em quê.”
 
 ---
 
-## Slide 5 — Planning connects people to work
+## Diapositivo 5 — O planejamento conecta pessoas ao trabalho
 
-**Headline:** O Período de Trabalho organiza o plano e o realizado.
+**Título principal:** O Período de Trabalho organiza o plano e o realizado.
 
-**Demo anchors**
+**Referências da demonstração**
 
-- completed period: scenario anchor `- 2 days`, `DAY`, `06:00-18:00`, `FULLY_POSTED`;
-- future period: scenario anchor `+ 1 day`, `DAY`, `06:00-18:00`, `PLANNING`;
-- João, Camila, and Rafael are included in both;
-- the completed period records all three as `WORKED`.
+- período concluído: dois dias antes da data-base do cenário, `06:00-18:00`, estado **Totalmente Lançado**;
+- período futuro: um dia depois da data-base do cenário, `06:00-18:00`, estado **Planejamento**;
+- João, Camila e Rafael participam dos dois períodos;
+- no período concluído, os três estão registrados como **Trabalhou**.
 
-**Presenter objective**
+**Objetivo do apresentador**
 
-Use the future period to explain planning and the completed period to explain the bridge from actual work to accrual.
+Use o período futuro para explicar o planejamento e o período concluído para mostrar a passagem do trabalho realizado para a apropriação.
 
-**Transition**
+**Transição**
 
 “Quando o trabalho realizado está registrado, a produção e as regras de remuneração podem gerar valor com proveniência.”
 
 ---
 
-## Slide 6 — Production drives explainable accrual
+## Diapositivo 6 — A produção gera apropriação explicável
 
-**Headline:** Produção registrada → apropriação explicável.
+**Título principal:** Produção registrada → apropriação explicável.
 
-**Demo anchors**
+**Referências da demonstração**
 
-- Gold Production: `80 g`.
-- João: `R$ 300,00` daily earning.
-- Camila: `5% × 80 g = 4 g` gold commission.
-- Rafael: `R$ 350,00` daily earning.
+- Produção de ouro: `80 g`.
+- João: ganho diário de `R$ 300,00`.
+- Camila: comissão em ouro de `5% × 80 g = 4 g`.
+- Rafael: ganho diário de `R$ 350,00`.
 
-**Presenter objective**
+**Objetivo do apresentador**
 
-Make Camila the arithmetic proof point: the prospect can mentally verify `5% × 80 g = 4 g`. Emphasize that the posted earning retains the Work Period/assignment source rather than becoming an unexplained balance.
+Use Camila como prova aritmética: o potencial cliente consegue verificar mentalmente que `5% × 80 g = 4 g`. Reforce que o ganho lançado preserva a origem no Período de Trabalho e na atribuição, em vez de se transformar em um saldo sem explicação.
 
-**Transition**
+**Transição**
 
 “Remuneração é só metade da história. A operação também precisa registrar despesas e mostrar o efeito líquido para cada Pessoa.”
 
 ---
 
-## Slide 7 — Expenses remain traceable
+## Diapositivo 7 — As Despesas permanecem rastreáveis
 
-**Headline:** A despesa não é apenas um número negativo.
+**Título principal:** A Despesa não é apenas um número negativo.
 
-**Demo anchors**
+**Referências da demonstração**
 
-- João: two canteen meals, `2 × R$ 35,00 = R$ 70,00`.
-- Rafael: synthetic flight, `R$ 350,00`.
-- Each expense creates a traceable debit in the Current Account.
+- João: duas refeições na cantina, `2 × R$ 35,00 = R$ 70,00`.
+- Rafael: passagem aérea sintética, `R$ 350,00`.
+- Cada Despesa cria um débito rastreável na Conta Corrente.
 
-**Presenter objective**
+**Objetivo do apresentador**
 
-Show source provenance from Expense to ledger debit. Explain that a correction or receipt lifecycle should not destroy the original business context.
+Mostre a proveniência da Despesa até o débito no livro da Conta Corrente. Explique que uma correção ou o ciclo de vida de um Recibo não deve destruir o contexto original do negócio.
 
-**Transition**
+**Transição**
 
 “O resultado aparece na Conta Corrente, onde crédito e débito ficam reunidos sem perder a origem.”
 
 ---
 
-## Slide 8 — Current Account explains the balance
+## Diapositivo 8 — A Conta Corrente explica o saldo
 
-**Headline:** O saldo é consequência de lançamentos auditáveis.
+**Título principal:** O saldo é consequência de lançamentos auditáveis.
 
-**Demo anchors**
+**Referências da demonstração**
 
 ```text
 João   +R$ 300,00 - R$ 70,00 = R$ 230,00
@@ -169,40 +169,40 @@ Camila +4 g                    = 4 g
 Rafael +R$ 350,00 - R$ 350,00 = R$ 0,00
 ```
 
-**Presenter objective**
+**Objetivo do apresentador**
 
-Do not present balances as opaque totals. Open João’s Current Account and point to the earning credit and canteen debit. If time permits, contrast Camila’s gold unit and Rafael’s zero BRL balance.
+Não apresente os saldos como totais opacos. Abra a Conta Corrente de João e aponte o crédito do ganho e o débito da cantina. Se houver tempo, contraste a unidade em ouro de Camila com o saldo zero em BRL de Rafael.
 
-**Transition**
+**Transição**
 
 “Alguns débitos também exigem controle documental. É aí que entra o ciclo de Recibos.”
 
 ---
 
-## Slide 9 — Receipt state is operational control
+## Diapositivo 9 — O estado do Recibo é um controle operacional
 
-**Headline:** Pendência e conclusão são visíveis, não implícitas.
+**Título principal:** Pendência e conclusão são visíveis, não implícitas.
 
-**Demo anchors**
+**Referências da demonstração**
 
-- João receipt: `PENDING_ISSUE` / **Pendente de emissão**.
-- Rafael receipt: `RETURNED` / **Devolvido**.
+- Recibo de João: **Pendente de emissão**.
+- Recibo de Rafael: **Devolvido**.
 
-**Presenter objective**
+**Objetivo do apresentador**
 
-Contrast pending work with completed evidence. The important point is not the status code itself; it is that the office can see what still requires action and what has already completed the receipt lifecycle.
+Contraste o trabalho pendente com a evidência concluída. O ponto importante não é o código interno do estado; é permitir que o escritório veja o que ainda exige ação e o que já concluiu o ciclo do Recibo.
 
-**Transition**
+**Transição**
 
 “Com isso, fechamos o ciclo: identidade, trabalho, produção, valor, despesa e evidência permanecem conectados.”
 
 ---
 
-## Slide 10 — One connected operating record
+## Diapositivo 10 — Um registro operacional conectado
 
-**Headline:** Do cadastro à evidência financeira, a história permanece ligada.
+**Título principal:** Do cadastro à evidência financeira, a história permanece ligada.
 
-**On-screen chain**
+**Cadeia exibida**
 
 ```text
 Tenant
@@ -215,47 +215,47 @@ Tenant
 → Recibo
 ```
 
-**Presenter objective**
+**Objetivo do apresentador**
 
-Summarize the value proposition in business language: less reconciliation, clearer responsibility, preserved history, and a visible operating boundary.
+Resuma a proposta de valor em linguagem de negócio: menos reconciliação, responsabilidades mais claras, histórico preservado e um limite operacional visível.
 
-**Transition**
+**Transição**
 
-Use Slide 11 for executive close or continue into the deep-demo extension.
+Use o Diapositivo 11 para o encerramento executivo ou continue para o aprofundamento da demonstração.
 
 ---
 
-## Slide 11 — Executive close
+## Diapositivo 11 — Encerramento executivo
 
-**Headline:** O que o prospect acabou de ver
+**Título principal:** O que o potencial cliente acabou de ver
 
-**On-screen points**
+**Pontos exibidos**
 
-- Tenant boundary is explicit.
-- Person identity survives Journey lifecycle changes.
-- Planning and actual work connect to compensation.
-- Financial balances can be explained from source events.
-- Receipt work has visible pending/completed states.
-- Portuguese presentation does not alter canonical data semantics.
+- O limite do Tenant é explícito.
+- A identidade da Pessoa sobrevive às mudanças do ciclo de vida da Jornada.
+- Planejamento e trabalho realizado se conectam à remuneração.
+- Os saldos financeiros podem ser explicados a partir dos eventos de origem.
+- O trabalho com Recibos apresenta estados visíveis de pendência e conclusão.
+- A apresentação em português não altera a semântica canônica dos dados.
 
-**Closing question**
+**Pergunta de encerramento**
 
 “Qual dessas etapas hoje exige mais reconciliação manual ou mais confiança em planilhas na sua operação?”
 
 ---
 
-## Slide 12 — Deep-demo extension map
+## Diapositivo 12 — Mapa para aprofundar a demonstração
 
-**Headline:** Aprofundamento opcional
+**Título principal:** Aprofundamento opcional
 
-**Choose based on prospect interest**
+**Escolha conforme o interesse do potencial cliente**
 
-- **Identity/lifecycle:** Beatriz vs. active Collaborators; Rafael historical/current Journeys.
-- **Operations:** future Work Period planning and assignments.
-- **Compensation:** Camila’s `5% × 80 g = 4 g` commission provenance.
-- **Finance:** João’s `R$ 230,00` balance and source links.
-- **Controls:** João pending receipt vs. Rafael returned receipt.
+- **Identidade e ciclo de vida:** Beatriz em contraste com Colaboradores ativos; Jornadas histórica e atual de Rafael.
+- **Operações:** planejamento do Período de Trabalho futuro e suas atribuições.
+- **Remuneração:** proveniência da comissão de Camila, `5% × 80 g = 4 g`.
+- **Finanças:** saldo de João de `R$ 230,00` e vínculos com as origens.
+- **Controles:** Recibo pendente de João em contraste com o Recibo devolvido de Rafael.
 
-**Presenter objective**
+**Objetivo do apresentador**
 
-Do not continue mechanically through every screen. Use the prospect’s questions to select one or two deep-demo branches while preserving the same deterministic fixture.
+Não percorra mecanicamente todas as telas. Use as perguntas do potencial cliente para escolher uma ou duas ramificações de aprofundamento, preservando o mesmo conjunto determinístico de dados da demonstração.

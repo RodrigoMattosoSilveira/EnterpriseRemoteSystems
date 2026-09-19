@@ -143,7 +143,7 @@ def main() -> int:
     for token in REQUIRED_STORY_TOKENS:
         require_contains(combined_presenter_text, token, "presenter story")
 
-    if "Tenant boundary" not in deck or "Executive close" not in deck:
+    if "O limite do Tenant vem primeiro" not in deck or "Encerramento executivo" not in deck:
         fail("deck no longer contains the required boundary-first executive sequence")
 
     if "make brazilian-demo-local-reset" not in runbook:
