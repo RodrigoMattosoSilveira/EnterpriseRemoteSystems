@@ -24,6 +24,9 @@ TENANT_NAME = "Mineração Serra Dourada — DEMO"
 TENANT_ADMIN_LOGIN = "demo.tenant-admin@example.test"
 TENANT_ADMIN_PASSWORD = "Demo-31.4-Brasil!"
 TENANT_ADMIN_PASSWORD_HASH = "$2a$10$k8rzfs2R2.9Mr3WYNJGVn.ww0hwJMi0ZT4JmNPwpC9LVSLZVMSAdy"
+SELF_SERVICE_PASSWORD = "Demo-31.4-Person!"
+SELF_SERVICE_PASSWORD_HASH = "$2a$10$wAen/MHbc9shK9ao7/yWee3YX7FHcKVa2T2xyuoObrfY4eJUD3P3i"
+SELF_SERVICE_KEYS = ("joao", "camila", "rafael")
 
 PERSONS = {
     "admin": ("Mariana", "Alves", "Mari Admin"),
@@ -238,7 +241,7 @@ def seed_person(conn: sqlite3.Connection, key: str, status_id: str, now: str, *,
     return person_id, membership_id
 
 
-def seed_auth(conn: sqlite3.Connection, person_id: str, membership_id: str, now: str) -> None:
+def seed_tenant_admin_auth(conn: sqlite3.Connection, person_id: str, membership_id: str, now: str) -> None:
     actor_id = demo_id("actor", "tenant-admin")
     account_id = demo_id("account", "tenant-admin")
     insert(conn, "authz_actors", {
@@ -262,6 +265,32 @@ def seed_auth(conn: sqlite3.Connection, person_id: str, membership_id: str, now:
         "id": demo_id("grant", "tenant-admin"), "actor_id": actor_id, "role_id": role_id,
         "tenant_id": TENANT_ID, "active": 1, "created_at": now, "updated_at": now,
         "lifecycle_suspended": 0,
+    })
+
+
+def seed_self_service_auth(conn: sqlite3.Connection, key: str, person_id: str, membership_id: str, now: str) -> None:
+    first, last, nickname = PERSONS[key]
+    actor_id = demo_id("actor", key)
+    account_id = demo_id("account", key)
+    login = f"demo31.4.{key}@example.test"
+    display_name = f"{first} {last} ({nickname})"
+    insert(conn, "authz_actors", {
+        "id": actor_id,
+        "actor_key": f"person:{person_id}::tenant::{TENANT_ID}",
+        "display_name": display_name,
+        "active": 1, "created_at": now, "updated_at": now,
+    })
+    insert(conn, "auth_user_accounts", {
+        "id": account_id, "login": login, "password_hash": SELF_SERVICE_PASSWORD_HASH,
+        "active": 1, "must_change_password": 0, "last_login_at": None, "password_changed_at": now,
+        "created_at": now, "updated_at": now, "security_suspended": 0,
+    })
+    insert(conn, "auth_account_people", {
+        "account_id": account_id, "person_id": person_id, "created_at": now, "updated_at": now,
+    })
+    insert(conn, "auth_account_actors", {
+        "account_id": account_id, "actor_id": actor_id, "scope_type": "TENANT",
+        "tenant_id": TENANT_ID, "membership_id": membership_id, "created_at": now, "updated_at": now,
     })
 
 
@@ -369,7 +398,9 @@ def seed_scenario(conn: sqlite3.Connection, as_of: date) -> None:
     identities: dict[str, tuple[str, str]] = {}
     for key in PERSONS:
         identities[key] = seed_person(conn, key, active_status, now, eligible=(key != "admin"))
-    seed_auth(conn, identities["admin"][0], identities["admin"][1], now)
+    seed_tenant_admin_auth(conn, identities["admin"][0], identities["admin"][1], now)
+    for key in SELF_SERVICE_KEYS:
+        seed_self_service_auth(conn, key, identities[key][0], identities[key][1], now)
 
     joao_j = seed_journey(conn, "joao-current", identities["joao"][1], "DAILY", "UNDERGROUND_MINING", "NORTH_PIT", "DRILLING", as_of - timedelta(days=45), as_of + timedelta(days=45), now, payment=300)
     camila_j = seed_journey(conn, "camila-current", identities["camila"][1], "COMMISSION", "PROCESSING", "PROCESSING_PLANT", "GOLD_PROCESSING", as_of - timedelta(days=60), as_of + timedelta(days=30), now, commission=5)
@@ -490,6 +521,19 @@ def verify_scenario(conn: sqlite3.Connection, as_of: date) -> None:
 
     one(conn, "SELECT id FROM auth_user_accounts WHERE login=? AND active=1", (TENANT_ADMIN_LOGIN,))
     one(conn, "SELECT actor_id FROM auth_account_actors WHERE account_id=? AND tenant_id=?", (demo_id("account", "tenant-admin"), TENANT_ID))
+    for key in SELF_SERVICE_KEYS:
+        person_id = demo_id("person", key)
+        membership_id = demo_id("membership", key)
+        account_id = demo_id("account", key)
+        actor_id = demo_id("actor", key)
+        login = f"demo31.4.{key}@example.test"
+        one(conn, "SELECT id FROM auth_user_accounts WHERE id=? AND login=? AND active=1 AND must_change_password=0 AND security_suspended=0", (account_id, login))
+        one(conn, "SELECT account_id FROM auth_account_people WHERE account_id=? AND person_id=?", (account_id, person_id))
+        one(conn, "SELECT account_id FROM auth_account_actors WHERE account_id=? AND actor_id=? AND scope_type='TENANT' AND tenant_id=? AND membership_id=?", (account_id, actor_id, TENANT_ID, membership_id))
+        one(conn, "SELECT id FROM authz_actors WHERE id=? AND actor_key=? AND active=1", (actor_id, f"person:{person_id}::tenant::{TENANT_ID}"))
+        delegated = conn.execute("SELECT COUNT(*) FROM authz_actor_role_grants WHERE actor_id=? AND active=1", (actor_id,)).fetchone()[0]
+        if delegated:
+            raise SystemExit(f"Self-service demo Actor {actor_id} unexpectedly has {delegated} delegated Role Grant(s).")
 
     if conn.execute("SELECT COUNT(*) FROM collaborator_journeys WHERE tenant_id=?", (TENANT_ID,)).fetchone()[0] != 4:
         raise SystemExit("Expected four demo Journeys (including one historical Journey).")
@@ -531,8 +575,12 @@ def print_summary(as_of: date, db_path: Path) -> None:
     print(f"Database: {db_path}")
     print(f"Scenario date: {as_of.isoformat()}")
     print(f"Tenant: {TENANT_NAME} ({TENANT_CODE})")
-    print(f"Login: {TENANT_ADMIN_LOGIN}")
-    print(f"Password: {TENANT_ADMIN_PASSWORD}")
+    print(f"Tenant Administrator login: {TENANT_ADMIN_LOGIN}")
+    print(f"Tenant Administrator password: {TENANT_ADMIN_PASSWORD}")
+    print(f"Self-service password (João/Camila/Rafael): {SELF_SERVICE_PASSWORD}")
+    for key in SELF_SERVICE_KEYS:
+        first, last, _ = PERSONS[key]
+        print(f"{first} {last} login: demo31.4.{key}@example.test")
     print("Story: People → Journeys → Planning → Gold Production/Accrual → Expenses → Balances/Ledger → Receipts")
     print("Synthetic data only; never sourced from Production or a real customer/person dataset.")
 
