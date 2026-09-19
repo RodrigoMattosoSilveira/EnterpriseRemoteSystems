@@ -57,7 +57,7 @@ Frontend:
 make local-frontend
 ```
 
-Sign in as:
+Sign in as the Tenant Administrator:
 
 ```text
 Login:    demo.tenant-admin@example.test
@@ -65,6 +65,18 @@ Password: Demo-31.4-Brasil!
 Tenant:   Mineração Serra Dourada — DEMO
 Role:     Tenant Administrator
 ```
+
+The fixture also includes three deterministic self-service credentials so the demo can switch from the administrator's operational view to what an individual Person/Collaborator sees inside the same Tenant:
+
+| Person | Login | Password | Access model |
+| --- | --- | --- | --- |
+| João Ferreira (`João`) | `demo31.4.joao@example.test` | `Demo-31.4-Person!` | Intrinsic Person + active-Collaborator self-service |
+| Camila Souza (`Cami`) | `demo31.4.camila@example.test` | `Demo-31.4-Person!` | Intrinsic Person + active-Collaborator self-service |
+| Rafael Lima (`Rafa`) | `demo31.4.rafael@example.test` | `Demo-31.4-Person!` | Intrinsic Person + active-Collaborator self-service |
+
+These synthetic demo Accounts have `must_change_password = false` so a reset returns to immediately usable credentials. Their Tenant Actors receive **no delegated Role Grants**: self-service authority is derived from the canonical `Account → AccountActor → Membership → Person` identity graph and Rafael/João/Camila's active Collaborator Journey. This intentionally demonstrates the same authorization boundary used by ERS rather than creating a special demo role.
+
+Beatriz intentionally has no Authentication Account; she remains the example of a complete Person who has not become a Collaborator.
 
 Select `Português (Brasil)` before beginning the customer-facing journey.
 
@@ -170,6 +182,8 @@ The verifier creates a temporary fully migrated SQLite database using the reposi
 - two Expenses;
 - one pending and one returned receipt;
 - the demo Tenant Administrator binding and role grant;
+- João/Camila/Rafael self-service Account → AccountActor → Membership bindings with no delegated Role Grants;
+- Beatriz remaining without an Authentication Account;
 - expected João/Camila/Rafael balances;
 - no `demo-br-*` business records attached to the default Tenant;
 - a second direct seed attempt is rejected, preserving reset semantics.
