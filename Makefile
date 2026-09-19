@@ -80,6 +80,7 @@ help:
 	@echo "  make brazilian-demo-local-reset [BRAZILIAN_DEMO_AS_OF=YYYY-MM-DD]"
 	@echo "  make brazilian-demo-local-seed [BRAZILIAN_DEMO_AS_OF=YYYY-MM-DD]"
 	@echo "  make brazilian-demo-local-verify [BRAZILIAN_DEMO_AS_OF=YYYY-MM-DD]"
+	@echo "  make brazilian-demo-presentation-check"
 	@echo "  make local-admin-reset"
 	@echo "  make backend-check"
 	@echo "  make frontend-check"
@@ -384,6 +385,7 @@ local-check:
 	$(MAKE) server-authz-bootstrap-config-check
 	$(MAKE) legacy-identity-dependency-check
 	$(MAKE) brazilian-demo-fixture-check
+	$(MAKE) brazilian-demo-presentation-check
 	$(MAKE) migration-rehearsal-check
 	cd backend && go clean -testcache && go test ./...
 	cd frontend && npm run test:run
@@ -431,7 +433,7 @@ local-docker-check: local-docker-check-image
 		-e GOMODCACHE=/tmp/gomod \
 		-e NPM_CONFIG_CACHE=/tmp/npm-cache \
 		$(LOCAL_DOCKER_CHECK_IMAGE) \
-		bash -lc 'set -euo pipefail; make bite30l4-coverage-manifest-check; make post-bite30-backlog-reconciliation-check; make deployed-playwright-evidence-check; make production-release-evidence-check; make local-hot-reload-check; make server-authz-bootstrap-config-check; make legacy-identity-dependency-check; make migration-rehearsal-check; cd backend && go clean -testcache && go test ./...; cd ../frontend && npm ci && npm run test:run && npx playwright install chromium && npx playwright test && npm run build'
+		bash -lc 'set -euo pipefail; make bite30l4-coverage-manifest-check; make post-bite30-backlog-reconciliation-check; make deployed-playwright-evidence-check; make production-release-evidence-check; make local-hot-reload-check; make server-authz-bootstrap-config-check; make legacy-identity-dependency-check; make brazilian-demo-presentation-check; make migration-rehearsal-check; cd backend && go clean -testcache && go test ./...; cd ../frontend && npm ci && npm run test:run && npx playwright install chromium && npx playwright test && npm run build'
 
 # ==============================================================================
 # Generic server environment targets
@@ -1208,12 +1210,16 @@ import-people:
 	cd backend && go run ./cmd/import-people -db data/app.db -file ../$(file)
 
 # ==============================================================================
-# Bite 31.4 Brazilian demo dataset
+# Bite 31.4/31.5 Brazilian demo dataset and presentation
 # ==============================================================================
 
 .PHONY: brazilian-demo-fixture-check
 brazilian-demo-fixture-check:
 	python3 scripts/test-seed-brazilian-demo.py
+
+.PHONY: brazilian-demo-presentation-check
+brazilian-demo-presentation-check:
+	python3 scripts/verify-brazilian-demo-presentation.py
 
 .PHONY: brazilian-demo-local-seed
 brazilian-demo-local-seed:
