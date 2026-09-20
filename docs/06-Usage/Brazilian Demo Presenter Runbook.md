@@ -2,7 +2,7 @@
 
 ## Purpose
 
-This runbook is the executable Bite 31.5 presenter script for the deterministic Brazilian demo. It assumes the presenter is demonstrating the application locally using the dedicated Bite 31.4 database and synthetic Tenant.
+This runbook is the executable Bite 31.5 presenter script for the deterministic Brazilian demo. It supports the dedicated LOCAL Bite 31.4 database and deployed Development/Test environments using the same synthetic Tenant.
 
 The baseline demo is intentionally read-only. It uses seeded records so the presenter can move quickly, avoid accidental state drift, and reset to a known scenario when necessary.
 
@@ -26,9 +26,11 @@ The default scenario anchor is `2026-09-18`.
 
 The current fixture provisions only Mariana’s Authentication Account. João Ferreira, Camila Souza, Rafael Lima, and Beatriz Nascimento are demo Persons, but this source tree does not give them sign-in credentials. Do not attempt those sign-ins during the baseline demo.
 
-### 1. Reset the dedicated demo database
+### 1. Reset the demo database
 
-Stop any backend process using the demo database, then from the repository root run:
+Choose exactly one environment.
+
+For a LOCAL rehearsal, stop any backend process using the dedicated demo database and run:
 
 ```bash
 make brazilian-demo-local-reset
@@ -36,16 +38,27 @@ make brazilian-demo-local-verify
 make brazilian-demo-presentation-check
 ```
 
-Expected result: all three commands complete successfully and the fixture summary identifies `Mineração Serra Dourada — DEMO`.
-
-If using a non-default scenario anchor, use the same date for reset and verification:
+For the deployed Development environment, run this **single pre-demo command** on the ERS server:
 
 ```bash
-make brazilian-demo-local-reset BRAZILIAN_DEMO_AS_OF=2026-10-15
-make brazilian-demo-local-verify BRAZILIAN_DEMO_AS_OF=2026-10-15
+make brazilian-demo-server-reset ENV=development
 ```
 
-Record the scenario anchor. The completed Work Period is `anchor - 2 days`; the future planning Work Period is `anchor + 1 day`.
+For the deployed Test environment, run the same command with the Test environment selected:
+
+```bash
+make brazilian-demo-server-reset ENV=test
+```
+
+The server command is intentionally destructive to the selected Development/Test backend database volume. It refuses Production, takes a verified backup of the current database, recreates a clean migrated backend database using the already-deployed image, seeds and verifies `Mineração Serra Dourada — DEMO`, restarts the complete stack without building/deploying new images, and finishes with backend/public smoke checks. You do **not** need to stop Docker containers manually.
+
+If using a non-default scenario anchor, use the same single server command with the anchor:
+
+```bash
+make brazilian-demo-server-reset ENV=test BRAZILIAN_DEMO_AS_OF=2026-10-15
+```
+
+For LOCAL, pass the same anchor to reset and verification. Record the scenario anchor. The completed Work Period is `anchor - 2 days`; the future planning Work Period is `anchor + 1 day`.
 
 ### 2. Start the backend
 

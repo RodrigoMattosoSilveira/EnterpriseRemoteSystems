@@ -97,14 +97,24 @@ Both paths begin from the same reset fixture and use the same presenter identity
 
 ## Recovery contract
 
-The presenter must recover by returning to known UI landmarks or, when fixture state was changed, by resetting the dedicated demo database:
+The presenter must recover by returning to known UI landmarks or, when fixture state was changed, by resetting the selected demo database.
+
+LOCAL:
 
 ```bash
 make brazilian-demo-local-reset
 make brazilian-demo-local-verify
 ```
 
-The recovery contract never edits Production/customer data and never reuses the ordinary local application database.
+Deployed Development or Test uses one deterministic pre-demo command:
+
+```bash
+make brazilian-demo-server-reset ENV=development
+# or
+make brazilian-demo-server-reset ENV=test
+```
+
+The server reset refuses Production, backs up the selected Development/Test database, recreates a clean migrated backend volume from the already-deployed image, seeds and verifies the Brazilian demo, restarts the existing stack without deploying new images, and runs health/public smoke checks. The recovery contract never edits Production/customer data.
 
 ## Automated verification
 

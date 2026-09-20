@@ -81,6 +81,7 @@ help:
 	@echo "  make brazilian-demo-local-seed [BRAZILIAN_DEMO_AS_OF=YYYY-MM-DD]"
 	@echo "  make brazilian-demo-local-verify [BRAZILIAN_DEMO_AS_OF=YYYY-MM-DD]"
 	@echo "  make brazilian-demo-presentation-check"
+	@echo "  make brazilian-demo-server-reset ENV=development|test [BRAZILIAN_DEMO_AS_OF=YYYY-MM-DD]"
 	@echo "  make local-admin-reset"
 	@echo "  make backend-check"
 	@echo "  make frontend-check"
@@ -1220,6 +1221,7 @@ brazilian-demo-fixture-check:
 .PHONY: brazilian-demo-presentation-check
 brazilian-demo-presentation-check:
 	python3 scripts/verify-brazilian-demo-presentation.py
+	python3 scripts/test-brazilian-demo-server-reset.py
 
 .PHONY: brazilian-demo-local-seed
 brazilian-demo-local-seed:
@@ -1240,6 +1242,19 @@ brazilian-demo-local-reset:
 	mkdir -p "$$(dirname "$(BRAZILIAN_DEMO_DB)")"
 	DB_PATH="$(BRAZILIAN_DEMO_DB)" ./scripts/db-migrate.sh
 	$(MAKE) brazilian-demo-local-seed BRAZILIAN_DEMO_DB="$(BRAZILIAN_DEMO_DB)" BRAZILIAN_DEMO_AS_OF="$(BRAZILIAN_DEMO_AS_OF)"
+
+.PHONY: brazilian-demo-server-reset
+brazilian-demo-server-reset:
+	@case "$(ENV)" in \
+		development|test) ;; \
+		production|prod) echo "Refusing Brazilian demo server reset for Production."; exit 2 ;; \
+		*) echo "Brazilian demo server reset supports ENV=development or ENV=test. Got ENV=$(ENV)."; exit 2 ;; \
+	esac
+	$(MAKE) server-backup ENV=$(ENV)
+	chmod +x scripts/brazilian-demo-server-reset.sh
+	ENV="$(ENV)" SERVER_ROOT="$(SERVER_ROOT)" BRAZILIAN_DEMO_AS_OF="$(BRAZILIAN_DEMO_AS_OF)" ./scripts/brazilian-demo-server-reset.sh
+	$(MAKE) server-backend-health ENV=$(ENV)
+	$(MAKE) server-smoke ENV=$(ENV)
 
 # ==============================================================================
 # Resettable test data
