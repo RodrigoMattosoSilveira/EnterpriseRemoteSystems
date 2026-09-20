@@ -16,10 +16,11 @@ No Production/customer data is used.
 
 ## Deliverables
 
-Bite 31.5 adds two presenter-facing assets:
+Bite 31.5 adds three presenter-facing asset groups:
 
 1. [`docs/06-Usage/Brazilian Demo Deck.md`](06-Usage/Brazilian%20Demo%20Deck.md) — slide-by-slide presentation source for the prospect-facing story.
 2. [`docs/06-Usage/Brazilian Demo Presenter Runbook.md`](06-Usage/Brazilian%20Demo%20Presenter%20Runbook.md) — setup, executive demo, deep-demo extension, recovery procedures, and closing script.
+3. [`docs/uml/demo/`](uml/demo/) — four simple PlantUML visuals for the Tenant boundary, Person/Journey lifecycle, connected operating story, and three financial demo outcomes.
 
 The Markdown deck is the canonical presentation source kept with the application. It can be copied into a preferred slide-authoring tool without making a binary presentation file the source of truth.
 
@@ -115,7 +116,7 @@ make brazilian-demo-presentation-check
 
 The verifier checks that:
 
-- the deck and presenter runbook exist;
+- the deck, presenter runbook, and four PlantUML demo visuals exist;
 - Tenant identity, presenter login/password, and default anchor match the Bite 31.4 seeder;
 - any `.example.test` login advertised by the presenter assets is actually provisioned by the seeder;
 - the core demo routes still exist;

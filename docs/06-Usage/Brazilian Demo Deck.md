@@ -2,6 +2,15 @@
 
 > Fonte canônica da apresentação comercial do Bite 31.5. A aplicação ao vivo é o recurso visual principal; estes diapositivos organizam a narrativa, os pontos de destaque e as transições.
 
+### Recursos visuais PlantUML
+
+Quatro diagramas simples acompanham esta apresentação. Eles foram desenhados para apoiar a conversa comercial, não para substituir a demonstração ao vivo:
+
+- [`Limite do Tenant`](../uml/demo/01-limite-do-tenant.puml) — use com o Diapositivo 2.
+- [`Pessoa, Vínculo e Jornada`](../uml/demo/02-pessoa-vinculo-jornada.puml) — use com os Diapositivos 3 e 4.
+- [`História operacional conectada`](../uml/demo/03-cadeia-operacional.puml) — use com o Diapositivo 10.
+- [`Três histórias financeiras`](../uml/demo/04-tres-historias-financeiras.puml) — use entre os Diapositivos 8 e 11, conforme a conversa.
+
 ## Diapositivo 1 — Enterprise Remote Systems
 
 **Título principal:** Operação remota com identidade, trabalho e finanças conectados.
@@ -24,6 +33,8 @@ Apresente o problema de negócio: operações remotas geram muitos fatos relacio
 ---
 
 ## Diapositivo 2 — O limite do Tenant vem primeiro
+
+**Visual sugerido:** [`Limite do Tenant`](../uml/demo/01-limite-do-tenant.puml)
 
 **Título principal:** Cada operação é vista dentro de um Tenant explícito.
 
@@ -52,6 +63,8 @@ Estabeleça a história de segurança e isolamento de dados antes de mostrar Pes
 ---
 
 ## Diapositivo 3 — A Pessoa é a identidade durável
+
+**Visual sugerido:** [`Pessoa, Vínculo e Jornada`](../uml/demo/02-pessoa-vinculo-jornada.puml)
 
 **Título principal:** A Pessoa permanece mesmo quando a relação operacional muda.
 
@@ -159,6 +172,8 @@ Mostre a proveniência da Despesa até o débito no livro da Conta Corrente. Exp
 
 ## Diapositivo 8 — A Conta Corrente explica o saldo
 
+**Visual sugerido:** [`Três histórias financeiras`](../uml/demo/04-tres-historias-financeiras.puml)
+
 **Título principal:** O saldo é consequência de lançamentos auditáveis.
 
 **Referências da demonstração**
@@ -199,6 +214,8 @@ Contraste o trabalho pendente com a evidência concluída. O ponto importante n�
 ---
 
 ## Diapositivo 10 — Um registro operacional conectado
+
+**Visual sugerido:** [`História operacional conectada`](../uml/demo/03-cadeia-operacional.puml)
 
 **Título principal:** Do cadastro à evidência financeira, a história permanece ligada.
 

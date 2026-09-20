@@ -15,6 +15,13 @@ BITE_DOC = ROOT / "docs" / "bite-31-5-demo-presentation-and-presenter-scripts.md
 ROUTER = ROOT / "frontend" / "src" / "app" / "router.tsx"
 PT_BR = ROOT / "frontend" / "src" / "i18n" / "resources" / "pt-BR.ts"
 
+DEMO_DIAGRAMS = (
+    ROOT / "docs" / "uml" / "demo" / "01-limite-do-tenant.puml",
+    ROOT / "docs" / "uml" / "demo" / "02-pessoa-vinculo-jornada.puml",
+    ROOT / "docs" / "uml" / "demo" / "03-cadeia-operacional.puml",
+    ROOT / "docs" / "uml" / "demo" / "04-tres-historias-financeiras.puml",
+)
+
 CORE_ROUTES = (
     "people",
     "collaborators",
@@ -108,6 +115,19 @@ def main() -> int:
     router = read(ROUTER)
     pt_br = read(PT_BR)
     seed = load_seeder_module()
+    diagrams = {path: read(path) for path in DEMO_DIAGRAMS}
+
+    for path, source in diagrams.items():
+        require_contains(source, "@startuml", f"demo diagram {path.name}")
+        require_contains(source, "@enduml", f"demo diagram {path.name}")
+
+    require_contains(diagrams[DEMO_DIAGRAMS[0]], str(seed.TENANT_NAME), "Tenant-boundary diagram")
+    require_contains(diagrams[DEMO_DIAGRAMS[1]], "Beatriz Nascimento", "Person/Journey diagram")
+    require_contains(diagrams[DEMO_DIAGRAMS[1]], "Rafael Lima", "Person/Journey diagram")
+    require_contains(diagrams[DEMO_DIAGRAMS[2]], "Período de Trabalho", "operating-chain diagram")
+    require_contains(diagrams[DEMO_DIAGRAMS[2]], "Conta Corrente", "operating-chain diagram")
+    for token in ("R$ 230,00", "4 g", "R$ 0,00"):
+        require_contains(diagrams[DEMO_DIAGRAMS[3]], token, "financial-stories diagram")
 
     canonical_values = (
         str(seed.TENANT_ID),

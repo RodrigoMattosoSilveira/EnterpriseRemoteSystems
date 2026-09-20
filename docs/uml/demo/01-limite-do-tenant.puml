@@ -1,0 +1,27 @@
+@startuml
+title Limite do Tenant — o contexto vem antes dos dados
+
+left to right direction
+
+actor "Mariana Alves\nAdministradora do Tenant" as Mariana
+
+rectangle "Tenant selecionado\nMineração Serra Dourada — DEMO" as Tenant
+rectangle "Dados da operação\nPessoas · Jornadas · Trabalho\nDespesas · Conta Corrente · Recibos" as Dados
+rectangle "Outro Tenant\n(dados isolados)" as OutroTenant
+
+Mariana --> Tenant : opera no contexto selecionado
+Tenant --> Dados : delimita a visão operacional
+Tenant -[hidden]right-> OutroTenant
+
+note bottom of Tenant
+O Tenant não é apenas um filtro visual.
+Ele define o limite operacional
+dos registros apresentados.
+end note
+
+note bottom of OutroTenant
+Fora do contexto selecionado.
+Não faz parte desta demonstração.
+end note
+
+@enduml
