@@ -47,6 +47,10 @@ def main() -> int:
 
     require(runbook, "make brazilian-demo-server-reset ENV=development", "presenter runbook")
     require(runbook, "make brazilian-demo-server-reset ENV=test", "presenter runbook")
+    require(runbook, "make testdata-server-reset ENV=development", "presenter runbook")
+    require(runbook, "make testdata-server-reset ENV=test", "presenter runbook")
+    require(runbook, "Future Test-state preservation", "presenter runbook")
+    require(runbook, "does **not** restore whatever ad hoc Test database state existed", "presenter runbook")
 
     # Production must be rejected before any Docker invocation. Point DOCKER_BIN
     # at a marker script and assert that marker is never created.
