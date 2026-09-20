@@ -93,13 +93,16 @@ def advertised_logins(text: str) -> set[str]:
 
 
 def provisioned_login_constants(seed: object) -> set[str]:
-    return {
+    logins = {
         value
         for name, value in vars(seed).items()
         if name.endswith("_LOGIN")
         and isinstance(value, str)
         and re.fullmatch(r"[a-z0-9._+-]+@example\.test", value, flags=re.IGNORECASE)
     }
+    for key in getattr(seed, "SELF_SERVICE_KEYS", ()):
+        logins.add(f"demo31.4.{key}@example.test")
+    return logins
 
 
 def require_contains(text: str, needle: str, context: str) -> None:
@@ -159,6 +162,16 @@ def main() -> int:
 
     for heading in REQUIRED_RUNBOOK_HEADINGS:
         require_contains(runbook, heading, "presenter runbook")
+
+    for token in (
+        "demo31.4.joao@example.test",
+        "Demo-31.5-Joao!",
+        "Emitir token de redefinição de senha",
+        "make testdata-server-reset ENV=development",
+        "make testdata-server-reset ENV=test",
+        "Future Test-state preservation",
+    ):
+        require_contains(runbook, token, "presenter runbook")
 
     for token in REQUIRED_STORY_TOKENS:
         require_contains(combined_presenter_text, token, "presenter story")
