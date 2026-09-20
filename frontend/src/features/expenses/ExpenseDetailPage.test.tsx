@@ -7,6 +7,7 @@ import { AuthorizationProvider } from "../../components/layout/AuthorizationCont
 import type { AuthzCurrentActor } from "../../types/authz";
 import type { Expense } from "../../types/expenses";
 import { ExpenseDetailPage } from "./ExpenseDetailPage";
+import { I18nProvider } from "../../i18n";
 
 let container: HTMLDivElement;
 let root: Root | null;
@@ -152,11 +153,11 @@ function renderExpenseDetail(actor: AuthzCurrentActor) {
   act(() => {
     root = createRoot(container);
     root.render(
-      <AuthorizationProvider value={actor}>
+      <I18nProvider><AuthorizationProvider value={actor}>
         <QueryClientProvider client={queryClient}>
           <RouterProvider router={router} />
         </QueryClientProvider>
-      </AuthorizationProvider>,
+      </AuthorizationProvider></I18nProvider>,
     );
   });
 }

@@ -1,52 +1,51 @@
+import { translateEnglish, type Translate } from "../i18n";
+
 export type RouteErrorPresentation = {
   title: string;
   message: string;
 };
 
-const accessDeniedMessage =
-  "Your account does not have permission to access this page. Contact an administrator if you believe access is required.";
-
-export function describeRouteError(error: unknown): RouteErrorPresentation {
+export function describeRouteError(error: unknown, t: Translate = translateEnglish): RouteErrorPresentation {
   const status = readHttpStatus(error);
 
   if (status === 401) {
     return {
-      title: "Authentication required",
-      message: "Sign in with an authorized account to access this page.",
+      title: t("route.authenticationRequired.title"),
+      message: t("route.authenticationRequired.message"),
     };
   }
 
   if (status === 403) {
     return {
-      title: "Access denied",
-      message: accessDeniedMessage,
+      title: t("route.accessDenied.title"),
+      message: t("route.accessDenied.message"),
     };
   }
 
   if (status === 404) {
     return {
-      title: "Page not found",
-      message: "The requested page could not be found.",
+      title: t("route.pageNotFound.title"),
+      message: t("route.pageNotFound.message"),
     };
   }
 
   if (status !== undefined) {
     return {
       title: formatHttpStatusTitle(status, readStatusText(error)),
-      message: "The request could not be completed.",
+      message: t("route.requestFailed.message"),
     };
   }
 
   if (error instanceof Error) {
     return {
-      title: "Something went wrong",
+      title: t("route.somethingWentWrong.title"),
       message: error.message,
     };
   }
 
   return {
-    title: "Something went wrong",
-    message: "An unexpected error occurred.",
+    title: t("route.somethingWentWrong.title"),
+    message: t("route.unexpected.message"),
   };
 }
 

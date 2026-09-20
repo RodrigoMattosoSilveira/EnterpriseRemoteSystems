@@ -7,6 +7,7 @@ import { AuthorizationProvider } from "../../components/layout/AuthorizationCont
 import type { AuthzCurrentActor } from "../../types/authz";
 import { OutstandingReceiptsPage } from "./OutstandingReceiptsPage";
 import type { OutstandingReceiptListResult } from "../../types/receipts";
+import { I18nProvider } from "../../i18n";
 
 type FetchCall = { url: string; method: string };
 
@@ -43,6 +44,8 @@ describe("OutstandingReceiptsPage", () => {
     await waitForText("Maria");
     await waitForText("Source: expense");
     await waitForText("Next action: Print receipt");
+    await waitForText("Showing page 1 of 1 · 1 receipt");
+    expect(container.textContent).not.toContain("receipt(s)");
     expect(container.textContent).toContain("Person owner: person-1");
     expect(container.textContent).toContain("Journey provenance: collab-1");
     expect(container.textContent).toContain("Tenant: default");
@@ -198,11 +201,11 @@ function renderOutstandingReceiptsPage(initialEntry: string, actor: AuthzCurrent
   act(() => {
     root = createRoot(container);
     root.render(
-      <QueryClientProvider client={queryClient}>
+      <I18nProvider><QueryClientProvider client={queryClient}>
         <AuthorizationProvider value={actor}>
           <RouterProvider router={router} />
         </AuthorizationProvider>
-      </QueryClientProvider>,
+      </QueryClientProvider></I18nProvider>,
     );
   });
 }

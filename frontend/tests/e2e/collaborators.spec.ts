@@ -405,8 +405,8 @@ test("user can edit Collaborator assignment payment and extension days", async (
   await expect(page.getByText(location.label).first()).toBeVisible();
   await expect(page.getByText(task.label).first()).toBeVisible();
   await expect(page.getByText("Salary").first()).toBeVisible();
-  await expect(page.getByText(/R\$\s*2\.400,00/).first()).toBeVisible();
-  await expect(page.getByText("2026-09-11").first()).toBeVisible();
+  await expect(page.getByText(/R\$\s*2,400\.00/).first()).toBeVisible();
+  await expect(page.getByText("Sep 11, 2026").first()).toBeVisible();
 });
 
 test("user can inspect Collaborator current account ledger and receipt status", async ({
@@ -451,7 +451,7 @@ test("user can inspect Collaborator current account ledger and receipt status", 
   await expect(
     page.getByRole("heading", { name: `AcctC${suffix}` }),
   ).toBeVisible();
-  await expect(page.getByText(/-R\$\s*42,50/).first()).toBeVisible();
+  await expect(page.getByText(/-R\$\s*42\.50/).first()).toBeVisible();
   await expect(page.getByText("expense deduction").first()).toBeVisible();
   await expect(page.getByText("Receipt: Pending issue").first()).toBeVisible();
   await expect(page.getByText("Outstanding receipt:").first()).toBeVisible();
@@ -502,7 +502,7 @@ test("current account updates after receipt signed return", async ({
 
   await page.goto(currentAccountUrl);
 
-  await expect(page.getByText(/-R\$\s*19,75/).first()).toBeVisible();
+  await expect(page.getByText(/-R\$\s*19\.75/).first()).toBeVisible();
   await expect(page.getByText("Receipt: Pending issue").first()).toBeVisible();
   await expect(page.getByText("Outstanding receipt:").first()).toBeVisible();
 

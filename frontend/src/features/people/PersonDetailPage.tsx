@@ -8,6 +8,8 @@ import { useReferenceDataByType } from "../reference-data/useReferenceData";
 import { PersonAuthenticationSection } from "./PersonAuthenticationSection";
 import { useCollaboratorCandidates } from "../collaborators/useCollaborators";
 import { PageContextHeading, PageTitle } from "../../components/layout/PageHeading";
+import { useI18n } from "../../i18n";
+import { personStatusLabel } from "./personPresentation";
 
 const FALLBACK_ACTIVE_STATUS_ID = "ref-person-status-active";
 
@@ -17,6 +19,7 @@ function personDetailFlash(state: unknown): string {
 }
 
 export function PersonDetailPage() {
+  const { t } = useI18n();
   const { id = "" } = useParams();
   const location = useLocation();
   const actor = useAuthorizationContext();
@@ -56,7 +59,7 @@ export function PersonDetailPage() {
   const view = searchParams.get("view") || "cards";
 
   if (personQuery.isLoading) {
-    return <main className="p-4">Loading person...</main>;
+    return <main className="p-4">{t("people.loading")}</main>;
   }
 
   if (personQuery.error) {
@@ -68,12 +71,12 @@ export function PersonDetailPage() {
   }
 
   if (!personQuery.data) {
-    return <main className="p-4">Person not found.</main>;
+    return <main className="p-4">{t("people.notFound")}</main>;
   }
 
   const activeStatuses = (statusesQuery.data ?? []).filter((status) => status.active);
   const statusOptions = activeStatuses.length > 0
-    ? activeStatuses.map((status) => ({ value: status.id, label: status.label }))
+    ? activeStatuses.map((status) => ({ value: status.id, label: personStatusLabel(status.code, status.label, t) }))
     : undefined;
   const defaultStatusId =
     activeStatuses.find((status) => status.code === "ACTIVE")?.id ??
@@ -92,17 +95,17 @@ export function PersonDetailPage() {
         <div className="mx-auto max-w-4xl">
           {canBrowsePeople ? (
             <Link className="text-sm text-gray-500 underline" to={`/people?view=${view}`}>
-              Back to People
+              {t("people.back")}
             </Link>
           ) : actor.collaboratorId ? (
             <Link className="text-sm text-gray-500 underline" to={`/collaborators/${actor.collaboratorId}`}>
-              My Collaborator record
+              {t("people.myCollaborator")}
             </Link>
           ) : null}
 
           <div className="mt-3 flex items-start justify-between gap-3">
             <div>
-              <PageTitle>Person</PageTitle>
+              <PageTitle>{t("people.personTitle")}</PageTitle>
               <PageContextHeading>
                 {personQuery.data.firstName} {personQuery.data.lastName}
               </PageContextHeading>
@@ -111,7 +114,7 @@ export function PersonDetailPage() {
               </p>
               {personQuery.data.membershipId && (
                 <p className="mt-1 text-xs text-gray-500">
-                  Membership ID: <span className="font-mono">{personQuery.data.membershipId}</span>
+                  {t("people.membershipId")}: <span className="font-mono">{personQuery.data.membershipId}</span>
                 </p>
               )}
             </div>
@@ -122,7 +125,7 @@ export function PersonDetailPage() {
                   to={`/collaborators/new?personId=${encodeURIComponent(personQuery.data.id)}`}
                   className="rounded-xl bg-gray-950 px-4 py-2 text-sm font-semibold text-white shadow-sm"
                 >
-                  Create Collaborator
+                  {t("people.createCollaborator")}
                 </Link>
               )}
               <span
@@ -132,7 +135,7 @@ export function PersonDetailPage() {
                     : "bg-amber-100 text-amber-800"
                 }`}
               >
-                {personQuery.data.canCreateCollaborator ? "Complete" : "Incomplete"}
+                {personQuery.data.canCreateCollaborator ? t("common.complete") : t("common.incomplete")}
               </span>
             </div>
           </div>
@@ -153,7 +156,7 @@ export function PersonDetailPage() {
           <div className="mb-4 rounded border border-red-300 bg-red-50 p-3 text-red-700">
             <p className="font-semibold">{(mutation.error as Error).message}</p>
 
-            <ApiErrorPanel error={mutation.error} />
+            <ApiErrorPanel error={mutation.error} translate={t} />
           </div>
         )}
 
@@ -165,7 +168,7 @@ export function PersonDetailPage() {
           onSubmit={async (input) => {
             setSuccessMessage("");
             await mutation.mutateAsync(input);
-            setSuccessMessage("Person updated successfully.");
+            setSuccessMessage(t("people.updated"));
           }}
         />
       </section>

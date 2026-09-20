@@ -5,10 +5,13 @@ import { ApiErrorPanel } from "../../components/ApiErrorPanel";
 import { useReferenceDataByType } from "../reference-data/useReferenceData";
 import { useCreatePersonMembership, useGlobalPeopleSearch } from "./usePeople";
 import { PageTitle } from "../../components/layout/PageHeading";
+import { useI18n } from "../../i18n";
+import { personStatusLabel } from "./personPresentation";
 
 const SEARCH_DEBOUNCE_MS = 300;
 
 export function AddPersonMembershipPage() {
+  const { t } = useI18n();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const initialSearch = searchParams.get("search") ?? "";
@@ -44,12 +47,11 @@ export function AddPersonMembershipPage() {
       <header className="sticky top-0 z-10 border-b bg-white/95 px-4 py-4 backdrop-blur">
         <div className="mx-auto max-w-4xl">
           <Link className="text-sm text-gray-500 underline" to="/people">
-            Back to People
+            {t("people.back")}
           </Link>
-          <PageTitle className="mt-3">Add existing Person</PageTitle>
+          <PageTitle className="mt-3">{t("people.membership.addExistingTitle")}</PageTitle>
           <p className="mt-1 text-sm text-gray-500">
-            Search the global Person directory, then create a membership in the selected tenant.
-            Other tenant relationships are never shown.
+            {t("people.membership.addExistingHelp")}
           </p>
         </div>
       </header>
@@ -57,7 +59,7 @@ export function AddPersonMembershipPage() {
       <section className="mx-auto max-w-4xl space-y-4 p-4">
         <div className="rounded-2xl border bg-white p-5 shadow-sm">
           <label className="grid gap-1 text-sm font-medium text-gray-700">
-            Find Person
+            {t("people.membership.findPerson")}
             <input
               type="search"
               value={search}
@@ -65,26 +67,26 @@ export function AddPersonMembershipPage() {
                 setSearch(event.target.value);
                 setSelectedPersonId("");
               }}
-              placeholder="Name, nickname, CPF, RG, cellular, or email"
+              placeholder={t("people.membership.searchPlaceholder")}
               className="rounded-xl border border-gray-300 px-3 py-2 shadow-sm"
               autoFocus
             />
           </label>
-          <p className="mt-2 text-xs text-gray-500">Enter at least 3 characters. An unfiltered global directory is not available.</p>
+          <p className="mt-2 text-xs text-gray-500">{t("people.membership.searchHelp")}</p>
         </div>
 
-        {statusesQuery.error && <ApiErrorPanel error={statusesQuery.error} />}
-        {globalQuery.error && <ApiErrorPanel error={globalQuery.error} />}
-        {mutation.error && <ApiErrorPanel error={mutation.error} />}
+        {statusesQuery.error && <ApiErrorPanel error={statusesQuery.error} translate={t} />}
+        {globalQuery.error && <ApiErrorPanel error={globalQuery.error} translate={t} />}
+        {mutation.error && <ApiErrorPanel error={mutation.error} translate={t} />}
 
         {debouncedSearch.length >= 3 && globalQuery.isLoading && (
-          <div className="rounded-2xl border bg-white p-5 shadow-sm">Searching...</div>
+          <div className="rounded-2xl border bg-white p-5 shadow-sm">{t("common.searching")}</div>
         )}
 
         {debouncedSearch.length >= 3 && !globalQuery.isLoading && !globalQuery.error && rows.length === 0 && (
           <div className="rounded-2xl border bg-white p-5 text-sm text-gray-600 shadow-sm">
-            No global Person outside this tenant matches the search. If this is a new human, create a new Person instead.
-            <div className="mt-3"><Link className="font-semibold underline" to="/people/new">Create new Person</Link></div>
+            {t("people.membership.noMatch")}
+            <div className="mt-3"><Link className="font-semibold underline" to="/people/new">{t("people.createPerson")}</Link></div>
           </div>
         )}
 
@@ -99,8 +101,8 @@ export function AddPersonMembershipPage() {
                   <dl className="mt-3 grid gap-x-6 gap-y-1 text-sm md:grid-cols-2">
                     <div><dt className="inline font-medium">CPF: </dt><dd className="inline">{person.cpf}</dd></div>
                     <div><dt className="inline font-medium">RG: </dt><dd className="inline">{person.rg}</dd></div>
-                    <div><dt className="inline font-medium">Cellular: </dt><dd className="inline">{person.cellular}</dd></div>
-                    <div><dt className="inline font-medium">Email: </dt><dd className="inline">{person.email}</dd></div>
+                    <div><dt className="inline font-medium">{t("common.cellular")}: </dt><dd className="inline">{person.cellular}</dd></div>
+                    <div><dt className="inline font-medium">{t("common.email")}: </dt><dd className="inline">{person.email}</dd></div>
                   </dl>
                 </div>
                 <button
@@ -108,24 +110,28 @@ export function AddPersonMembershipPage() {
                   onClick={() => setSelectedPersonId(selected ? "" : person.id)}
                   className="rounded-xl bg-gray-950 px-4 py-2 text-sm font-semibold text-white"
                 >
-                  {selected ? "Selected" : "Select"}
+                  {selected ? t("common.selected") : t("common.select")}
                 </button>
               </div>
 
               {selected && (
                 <div className="mt-5 grid gap-4 border-t pt-4">
                   <label className="grid gap-1 text-sm font-medium text-gray-700">
-                    Tenant status
+                    {t("people.membership.tenantStatus")}
                     <select
                       value={statusId}
                       onChange={(event) => setStatusId(event.target.value)}
                       className="rounded-xl border border-gray-300 px-3 py-2"
                     >
-                      {activeStatuses.map((status) => <option key={status.id} value={status.id}>{status.label}</option>)}
+                      {activeStatuses.map((status) => (
+                        <option key={status.id} value={status.id}>
+                          {personStatusLabel(status.code, status.label, t)}
+                        </option>
+                      ))}
                     </select>
                   </label>
                   <label className="grid gap-1 text-sm font-medium text-gray-700">
-                    Tenant-private notes
+                    {t("people.membership.privateNotes")}
                     <textarea
                       value={notes}
                       onChange={(event) => setNotes(event.target.value)}
@@ -140,15 +146,16 @@ export function AddPersonMembershipPage() {
                         const created = await mutation.mutateAsync({ personId: person.id, statusId, notes });
                         navigate(`/people/${created.id}#authentication`, {
                           state: {
-                            flash:
-                              `Person membership added: ${created.firstName} ${created.lastName}. ` +
-                              "Configure authentication for this Tenant below.",
+                            flash: t("people.membershipAdded", {
+                              name: `${created.firstName} ${created.lastName}`,
+                              instruction: t("people.authentication.configureTenant"),
+                            }),
                           },
                         });
                       }}
                       className="rounded-xl bg-gray-950 px-5 py-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
                     >
-                      {mutation.isPending ? "Adding..." : "Add to this tenant"}
+                      {mutation.isPending ? t("people.adding") : t("people.addToTenant")}
                     </button>
                   </div>
                 </div>

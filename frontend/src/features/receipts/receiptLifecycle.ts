@@ -1,13 +1,5 @@
 import type { PrintableReceipt } from "../../types/receipts";
-
-export const receiptStatusLabels: Record<string, string> = {
-  PENDING_ISSUE: "Pending issue",
-  ISSUED: "Issued",
-  PRINTED: "Printed",
-  SIGNED: "Signed",
-  RETURNED: "Returned",
-  CANCELLED: "Cancelled",
-};
+import { translateEnglish, type Translate } from "../../i18n";
 
 const statusRanks: Record<string, number> = {
   PENDING_ISSUE: 0,
@@ -25,8 +17,26 @@ export type ReceiptLifecycleStep = {
   detail: string;
 };
 
-export function receiptStatusLabel(status: string): string {
-  return receiptStatusLabels[status] ?? humanize(status);
+export function receiptStatusLabel(
+  status: string,
+  t: Translate = translateEnglish,
+): string {
+  switch (status) {
+    case "PENDING_ISSUE":
+      return t("receipt.status.pendingIssue");
+    case "ISSUED":
+      return t("receipt.status.issued");
+    case "PRINTED":
+      return t("receipt.status.printed");
+    case "SIGNED":
+      return t("receipt.status.signed");
+    case "RETURNED":
+      return t("receipt.status.returned");
+    case "CANCELLED":
+      return t("receipt.status.cancelled");
+    default:
+      return humanize(status);
+  }
 }
 
 export function receiptStatusTone(status: string): string {
@@ -58,40 +68,55 @@ export function canReturnReceipt(receipt: PrintableReceipt): boolean {
   return !isReceiptTerminal(receipt.status);
 }
 
-export function nextReceiptAction(receipt: PrintableReceipt): string {
-  if (receipt.status === "RETURNED") return "Lifecycle complete";
-  if (receipt.status === "CANCELLED") return "No action allowed";
+export function nextReceiptAction(
+  receipt: PrintableReceipt,
+  t: Translate = translateEnglish,
+): string {
+  if (receipt.status === "RETURNED") return t("receipt.action.lifecycleComplete");
+  if (receipt.status === "CANCELLED") return t("receipt.action.noneAllowed");
   if (receipt.status === "PENDING_ISSUE" || receipt.status === "ISSUED") {
-    return "Print receipt";
+    return t("receipt.action.print");
   }
-  return "Record signed return";
+  return t("receipt.action.recordReturn");
 }
 
-export function receiptLifecycleSteps(receipt: PrintableReceipt): ReceiptLifecycleStep[] {
+export function receiptLifecycleSteps(
+  receipt: PrintableReceipt,
+  t: Translate = translateEnglish,
+  formatDateTime: (value: string) => string = defaultFormatDateTime,
+): ReceiptLifecycleStep[] {
   return [
     {
       key: "issued",
-      label: "Issued",
+      label: t("receipt.lifecycle.issued"),
       completed: isAtLeast(receipt.status, "ISSUED") || Boolean(receipt.issuedAt || receipt.issuedBy),
-      detail: receipt.issuedAt ? `Issued ${formatDateTime(receipt.issuedAt)}` : "Waiting to be issued",
+      detail: receipt.issuedAt
+        ? t("receipt.lifecycle.issuedAt", { date: formatDateTime(receipt.issuedAt) })
+        : t("receipt.lifecycle.waitingIssue"),
     },
     {
       key: "printed",
-      label: "Printed",
+      label: t("receipt.lifecycle.printed"),
       completed: isAtLeast(receipt.status, "PRINTED") || Boolean(receipt.printedAt),
-      detail: receipt.printedAt ? `Printed ${formatDateTime(receipt.printedAt)}` : "Waiting to be printed",
+      detail: receipt.printedAt
+        ? t("receipt.lifecycle.printedAt", { date: formatDateTime(receipt.printedAt) })
+        : t("receipt.lifecycle.waitingPrint"),
     },
     {
       key: "signed",
-      label: "Signed",
+      label: t("receipt.lifecycle.signed"),
       completed: isAtLeast(receipt.status, "SIGNED") || Boolean(receipt.signedAt),
-      detail: receipt.signedAt ? `Signed ${formatDateTime(receipt.signedAt)}` : "Waiting for collaborator signature",
+      detail: receipt.signedAt
+        ? t("receipt.lifecycle.signedAt", { date: formatDateTime(receipt.signedAt) })
+        : t("receipt.lifecycle.waitingSignature"),
     },
     {
       key: "returned",
-      label: "Returned",
+      label: t("receipt.lifecycle.returned"),
       completed: receipt.status === "RETURNED" || Boolean(receipt.returnedAt),
-      detail: receipt.returnedAt ? `Returned ${formatDateTime(receipt.returnedAt)}` : "Waiting for office return record",
+      detail: receipt.returnedAt
+        ? t("receipt.lifecycle.returnedAt", { date: formatDateTime(receipt.returnedAt) })
+        : t("receipt.lifecycle.waitingReturn"),
     },
   ];
 }
@@ -105,7 +130,7 @@ function humanize(value: string): string {
   return value.toLowerCase().replaceAll("_", " ");
 }
 
-function formatDateTime(value: string): string {
+function defaultFormatDateTime(value: string): string {
   return new Intl.DateTimeFormat("en-US", {
     dateStyle: "medium",
     timeStyle: "short",

@@ -16,6 +16,7 @@ import type { Collaborator } from "../../types/collaborators";
 import type { Person } from "../../types/people";
 import { ReactivationRequestsPanel } from "./ReactivationRequestsPanel";
 import { PageTitle } from "../../components/layout/PageHeading";
+import { translateEnglish, useI18n, type Translate } from "../../i18n";
 
 export function activeAuthenticationGrants(
   actor: AuthzActor,
@@ -119,18 +120,20 @@ export function authenticationAccountForPerson(
 export function authenticationCollaboratorStatusLabel(
   actor: AuthzActor | undefined,
   account: AuthAccount | undefined,
+  t: Translate = translateEnglish,
 ): string {
-  if (!actor) return "No authorization actor";
+  if (!actor) return t("admin.authentication.helper.noAuthorizationActor");
   if (account) {
-    return `Already has authentication account ${account.login} (${
-      canIssuePasswordResetToken(account) ? "active" : "inactive"
-    })`;
+    return t("admin.authentication.helper.alreadyHasAccount", {
+      login: account.login,
+      status: t(canIssuePasswordResetToken(account) ? "admin.authentication.helper.boundaryActive" : "admin.authentication.helper.boundaryInactive"),
+    });
   }
-  if (!actor.active) return "Authorization actor is inactive";
+  if (!actor.active) return t("admin.authentication.helper.actorInactive");
   if (activeAuthenticationGrants(actor).length === 0) {
-    return "Authorization actor has no active role grant";
+    return t("admin.authentication.helper.noActiveGrant");
   }
-  return "Eligible for account creation";
+  return t("admin.authentication.helper.eligible");
 }
 
 export function canCreateAuthenticationAccountForCollaborator(
@@ -188,22 +191,23 @@ export function authenticationAccountPersonTarget(
   );
 }
 
-export function authenticationActorTenantLabel(actor: AuthAccountActor): string {
-  if (actor.scope === "GLOBAL") return "Application-wide";
+export function authenticationActorTenantLabel(actor: AuthAccountActor, t: Translate = translateEnglish): string {
+  if (actor.scope === "GLOBAL") return t("admin.authentication.scope.applicationWide");
   const tenantName = actor.tenantName?.trim();
   const tenantId = actor.tenantId?.trim();
   if (tenantName && tenantId && tenantName !== tenantId) {
     return `${tenantName} (${tenantId})`;
   }
-  return tenantName || tenantId || "Tenant";
+  return tenantName || tenantId || t("admin.authentication.scope.tenantFallback");
 }
 
 export function authenticationActorIdentityRows(
   actor: Pick<AuthAccountActor, "actorId" | "actorKey">,
-): Array<{ label: "Actor ID" | "Actor Key"; value: string }> {
+  t: Translate = translateEnglish,
+): Array<{ label: string; value: string }> {
   return [
-    { label: "Actor ID", value: actor.actorId },
-    { label: "Actor Key", value: actor.actorKey },
+    { label: t("common.actorId"), value: actor.actorId },
+    { label: t("common.actorKey"), value: actor.actorKey },
   ];
 }
 
@@ -215,6 +219,7 @@ export type AuthenticationAccountIdentityBoundary = {
 
 export function authenticationAccountIdentityBoundary(
   account: AuthAccount,
+  t: Translate = translateEnglish,
 ): AuthenticationAccountIdentityBoundary {
   const actors = account.actors ?? [];
   const tenantActors = actors.filter((actor) => actor.scope === "TENANT");
@@ -222,21 +227,19 @@ export function authenticationAccountIdentityBoundary(
   const actorProjectionAvailable = Array.isArray(account.actors);
 
   const personBinding = account.globalPersonId
-    ? `Bound — ${account.globalPersonName?.trim() || account.globalPersonId} · ${account.globalPersonId}`
-    : "None — no Person linked";
+    ? t("admin.authentication.boundary.bound", { name: account.globalPersonName?.trim() || account.globalPersonId, id: account.globalPersonId })
+    : t("admin.authentication.boundary.noPerson");
 
   const tenantActorBindings = !actorProjectionAvailable
-    ? "Not available — linked Actor scopes were not loaded"
+    ? t("admin.authentication.boundary.notLoaded")
     : tenantActors.length === 0
-      ? "None — no Tenant Actors linked"
-      : `${tenantActors.length} — ${tenantActors
-          .map((actor) => authenticationActorTenantLabel(actor))
-          .join("; ")}`;
+      ? t("admin.authentication.boundary.noTenantActors")
+      : t("admin.authentication.boundary.tenantActorCount", { count: tenantActors.length, tenants: tenantActors.map((actor) => authenticationActorTenantLabel(actor, t)).join("; ") });
 
   const globalActorBindings = !actorProjectionAvailable
-    ? "Not available — linked Actor scopes were not loaded"
+    ? t("admin.authentication.boundary.notLoaded")
     : globalActors.length === 0
-      ? "None — no Global Actors linked"
+      ? t("admin.authentication.boundary.noGlobalActors")
       : `${globalActors.length}`;
 
   return {
@@ -279,6 +282,7 @@ export function authenticationTenantActorIdsMatchingDisplayName(
 }
 
 export function AuthenticationAdminPage() {
+  const { t, formatDateTime } = useI18n();
   const auth = useAuthState();
   const location = useLocation();
   const queryClient = useQueryClient();
@@ -346,7 +350,7 @@ export function AuthenticationAdminPage() {
     try {
       const token = await issuePasswordResetToken(accountId);
       if (token.accountId !== accountId) {
-        throw new Error("Password reset token was issued for a different authentication account");
+        throw new Error(t("admin.authentication.reset.wrongAccount"));
       }
       setResetToken({
         accountId: token.accountId,
@@ -363,13 +367,13 @@ export function AuthenticationAdminPage() {
 
   return (
     <div className="p-6">
-      <PageTitle>Authentication Accounts</PageTitle>
+      <PageTitle>{t("admin.authentication.title")}</PageTitle>
       <p className="mt-1 text-sm text-slate-600">
-        Manage Authentication Accounts separately from the Person who owns the
-        account and the tenant-specific Actors through which that account operates.
+        {t("admin.authentication.description")}
       </p>
       <ApiErrorPanel
         error={accounts.error ?? tenants.error ?? mutation.error ?? actionError}
+        translate={t}
       />
 
       <ReactivationRequestsPanel
@@ -377,7 +381,7 @@ export function AuthenticationAdminPage() {
       />
 
       <section className="mt-6 rounded-2xl border bg-white p-5">
-        <h2 className="text-lg font-semibold">Create account</h2>
+        <h2 className="text-lg font-semibold">{t("admin.authentication.create.title")}</h2>
         <form
           className="mt-4 grid gap-4 md:grid-cols-3"
           onSubmit={(event) => {
@@ -391,14 +395,14 @@ export function AuthenticationAdminPage() {
           }}
         >
           <label className="text-sm font-medium">
-            Target Tenant *
+            {t("admin.authentication.create.targetTenant")}
             <select
               className="mt-1 w-full rounded-lg border px-3 py-2"
               value={targetTenantId}
               onChange={(event) => setTargetTenantId(event.target.value)}
               required
             >
-              <option value="">Select a Tenant</option>
+              <option value="">{t("admin.authentication.create.selectTenant")}</option>
               {activeTenants.map((tenant) => (
                 <option key={tenant.id} value={tenant.id}>
                   {tenant.name}
@@ -407,7 +411,7 @@ export function AuthenticationAdminPage() {
             </select>
           </label>
           <label className="text-sm font-medium">
-            Person login email *
+            {t("admin.authentication.create.login")}
             <input
               className="mt-1 w-full rounded-lg border px-3 py-2"
               type="email"
@@ -417,7 +421,7 @@ export function AuthenticationAdminPage() {
             />
           </label>
           <label className="text-sm font-medium">
-            Temporary password *
+            {t("admin.authentication.create.tempPassword")}
             <input
               className="mt-1 w-full rounded-lg border px-3 py-2"
               type="password"
@@ -428,12 +432,10 @@ export function AuthenticationAdminPage() {
             />
           </label>
           <p className="text-sm text-slate-600 md:col-span-3">
-            Application Administrators remain in the global control plane. Choose the
-            target Tenant and enter the Person&apos;s exact login email; ERS resolves the
-            Person, ACTIVE Membership, and canonical Tenant Actor without granting
-            standing access to Tenant People data.
+            {t("admin.authentication.create.help")}
           </p>
           <button
+            data-authentication-create-account="true"
             className="rounded-lg bg-slate-900 px-4 py-2 font-semibold text-white md:col-span-3 disabled:opacity-50"
             disabled={
               mutation.isPending ||
@@ -442,28 +444,27 @@ export function AuthenticationAdminPage() {
               !temporaryPassword
             }
           >
-            {mutation.isPending ? "Creating…" : "Create account"}
+            {mutation.isPending ? t("common.creating") : t("admin.authentication.create.button")}
           </button>
         </form>
       </section>
 
       <section className="mt-6 rounded-2xl border bg-white p-5">
-        <h2 className="text-lg font-semibold">Actor/account filter</h2>
+        <h2 className="text-lg font-semibold">{t("admin.authentication.filter.title")}</h2>
         <p className="mt-1 text-sm text-slate-600">
-          Filter the Authentication Account records already available to the global control plane by
-          Person identity, Tenant display name, Actor identity, or login.
+          {t("admin.authentication.filter.description")}
         </p>
         <label
           className="mt-4 block text-sm font-medium"
           htmlFor="authentication-actor-lookup"
         >
-          Filter by Person name, nickname, or email, Tenant display name, Actor, or account
+          {t("admin.authentication.filter.label")}
         </label>
         <input
           id="authentication-actor-lookup"
           className="mt-1 w-full rounded-lg border px-3 py-2"
           type="search"
-          placeholder="Type Person name, nickname, email, Tenant display name, actor key, or login"
+          placeholder={t("admin.authentication.filter.placeholder")}
           value={actorLookupSearch}
           onChange={(event) => setActorLookupSearch(event.target.value)}
         />
@@ -476,33 +477,32 @@ export function AuthenticationAdminPage() {
           className="mt-6 rounded-2xl border border-amber-300 bg-amber-50 p-5"
         >
           <h2 className="font-semibold">
-            One-time reset token for {resetToken.login}
+            {t("admin.authentication.reset.title", { login: resetToken.login })}
           </h2>
           <p
-            aria-label="Password reset token"
+            aria-label={t("admin.authentication.reset.aria")}
             className="mt-2 break-all rounded bg-white p-3 font-mono text-sm"
           >
             {resetToken.token}
           </p>
           <p className="mt-2 text-xs">
-            Expires {new Date(resetToken.expiresAt).toLocaleString()}. Copy it
-            now; ERS will not show it again.
+            {t("admin.authentication.reset.expires", { date: formatDateTime(resetToken.expiresAt) })}
           </p>
           <a
             className="mt-3 inline-block underline"
             href={`/password/reset?token=${encodeURIComponent(resetToken.token)}`}
           >
-            Open reset page
+            {t("admin.authentication.reset.open")}
           </a>
         </section>
       )}
 
-      <section className="mt-6 space-y-4" aria-label="Authentication accounts">
+      <section className="mt-6 space-y-4" aria-label={t("admin.authentication.accounts.aria")}>
         {filteredAccounts.length === 0 && (
           <div className="rounded-2xl border bg-white p-5 text-sm text-slate-500">
             {showActorLookup
-              ? "No authentication accounts match this actor/account filter."
-              : "No authentication accounts."}
+              ? t("admin.authentication.accounts.noneFiltered")
+              : t("admin.authentication.accounts.none")}
           </div>
         )}
 
@@ -515,9 +515,9 @@ export function AuthenticationAdminPage() {
           const personName =
             account.globalPersonName?.trim() ||
             account.actors?.find((actor) => actor.personName?.trim())?.personName ||
-            "Linked Person";
+            t("admin.authentication.linkedPerson");
           const anyActorActive = account.actors?.some((actor) => actor.active) ?? false;
-          const identityBoundary = authenticationAccountIdentityBoundary(account);
+          const identityBoundary = authenticationAccountIdentityBoundary(account, t);
 
           return (
             <article
@@ -528,7 +528,7 @@ export function AuthenticationAdminPage() {
               <header className="flex flex-wrap items-start justify-between gap-4 border-b bg-slate-50 p-5">
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    Authentication Account
+                    {t("admin.authentication.account")}
                   </p>
                   <p className="mt-1 text-lg font-semibold text-slate-950">
                     {account.login}
@@ -547,21 +547,21 @@ export function AuthenticationAdminPage() {
                     }`}
                   >
                     {account.securitySuspended
-                      ? "Security suspended"
+                      ? t("admin.authentication.status.securitySuspended")
                       : account.globalPersonId && account.operationalActive === false
-                        ? "Operationally inactive"
+                        ? t("admin.authentication.status.operationallyInactive")
                         : account.active
-                          ? "Account active"
-                          : "Account inactive"}
+                          ? t("admin.authentication.status.active")
+                          : t("admin.authentication.status.inactive")}
                   </span>
                   {!anyActorActive && (
                     <span className="rounded-full bg-amber-100 px-2.5 py-1 text-amber-800">
-                      No active Actors
+                      {t("admin.authentication.status.noActiveActors")}
                     </span>
                   )}
                   {account.mustChangePassword && (
                     <span className="rounded-full bg-amber-100 px-2.5 py-1 text-amber-800">
-                      Password change required
+                      {t("admin.authentication.status.passwordChangeRequired")}
                     </span>
                   )}
                 </div>
@@ -569,30 +569,28 @@ export function AuthenticationAdminPage() {
 
               <div className="grid gap-6 p-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
                 <section
-                  aria-label={`Account identity boundary for ${account.login}`}
+                  aria-label={t("admin.authentication.boundary.aria", { login: account.login })}
                   className="rounded-xl border border-slate-200 bg-slate-50 p-4 lg:col-span-2"
                 >
                   <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-600">
-                    Account identity boundary
+                    {t("admin.authentication.boundary.title")}
                   </h3>
                   <p className="mt-1 text-xs text-slate-600">
-                    These are persistent Account identity bindings. A Tenant Support Access Lease
-                    authorizes the existing Application Actor temporarily; it does not create a
-                    Person or Tenant Actor binding.
+                    {t("admin.authentication.boundary.description")}
                   </p>
                   <dl className="mt-3 grid gap-3 text-sm sm:grid-cols-3">
                     <div>
-                      <dt className="font-semibold text-slate-700">Person binding</dt>
+                      <dt className="font-semibold text-slate-700">{t("admin.authentication.boundary.personBinding")}</dt>
                       <dd className="mt-1 text-slate-900">{identityBoundary.personBinding}</dd>
                     </div>
                     <div>
-                      <dt className="font-semibold text-slate-700">Tenant Actor bindings</dt>
+                      <dt className="font-semibold text-slate-700">{t("admin.authentication.boundary.tenantActors")}</dt>
                       <dd className="mt-1 text-slate-900">
                         {identityBoundary.tenantActorBindings}
                       </dd>
                     </div>
                     <div>
-                      <dt className="font-semibold text-slate-700">Global Actor bindings</dt>
+                      <dt className="font-semibold text-slate-700">{t("admin.authentication.boundary.globalActors")}</dt>
                       <dd className="mt-1 text-slate-900">
                         {identityBoundary.globalActorBindings}
                       </dd>
@@ -600,38 +598,37 @@ export function AuthenticationAdminPage() {
                   </dl>
                 </section>
 
-                <section aria-label={`Person linked to ${account.login}`}>
+                <section aria-label={t("admin.authentication.person.aria", { login: account.login })}>
                   <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-500">
-                    Person
+                    {t("common.person")}
                   </h3>
                   {account.globalPersonId ? (
                     <div className="mt-2">
                       <p className="font-semibold text-slate-950">{personName}</p>
                       <p className="mt-1 text-sm text-slate-600">
-                        Email: {account.globalPersonEmail || "Not recorded"}
+                        {t("common.email")}: {account.globalPersonEmail || t("common.notRecorded")}
                       </p>
                       <p className="mt-2 text-xs text-slate-500">
-                        Tenant Person projections are shown through the linked Actors below.
-                        Open Tenant business data only from an authorized Tenant workspace.
+                        {t("admin.authentication.person.tenantProjectionHelp")}
                       </p>
                     </div>
                   ) : (
                     <div className="mt-2 rounded-lg border border-dashed p-3 text-sm text-slate-600">
-                      <p className="font-medium text-slate-800">No Person linked</p>
+                      <p className="font-medium text-slate-800">{t("admin.authentication.person.noPerson")}</p>
                       <p className="mt-1 text-xs">
-                        Application-level Accounts may intentionally exist without a Person.
+                        {t("admin.authentication.person.applicationAccountHelp")}
                       </p>
                     </div>
                   )}
                 </section>
 
-                <section aria-label={`Actors linked to ${account.login}`}>
+                <section aria-label={t("admin.authentication.actors.aria", { login: account.login })}>
                   <div className="flex items-baseline justify-between gap-3">
                     <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-500">
-                      Actors
+                      {t("admin.authentication.actors.title")}
                     </h3>
                     <span className="text-xs text-slate-500">
-                      {account.actors?.length ?? 0} linked
+                      {t("admin.authentication.actors.linkedCount", { count: account.actors?.length ?? 0 })}
                     </span>
                   </div>
                   {(account.actors?.length ?? 0) > 0 ? (
@@ -644,13 +641,13 @@ export function AuthenticationAdminPage() {
                           <div className="flex items-start justify-between gap-3">
                             <div>
                               <p className="font-semibold text-slate-950">
-                                {authenticationActorTenantLabel(actor)}
+                                {authenticationActorTenantLabel(actor, t)}
                               </p>
                               <p className="mt-1 text-sm text-slate-700">
                                 {actor.displayName}
                               </p>
                               <dl className="mt-2 space-y-1 text-xs text-slate-500">
-                                {authenticationActorIdentityRows(actor).map((identity) => (
+                                {authenticationActorIdentityRows(actor, t).map((identity) => (
                                   <div key={identity.label} className="flex flex-wrap gap-x-1">
                                     <dt className="font-semibold text-slate-600">
                                       {identity.label}:
@@ -667,20 +664,18 @@ export function AuthenticationAdminPage() {
                                   : "bg-slate-200 text-slate-700"
                               }`}
                             >
-                              {actor.active ? "Active" : "Inactive"}
+                              {actor.active ? t("common.active") : t("common.inactive")}
                             </span>
                           </div>
                           <p className="mt-2 text-xs text-slate-500">
-                            {actor.scope === "GLOBAL" ? "Global Actor" : "Tenant Actor"}
+                            {actor.scope === "GLOBAL" ? t("admin.authentication.actors.global") : t("admin.authentication.actors.tenant")}
                           </p>
                         </li>
                       ))}
                     </ul>
                   ) : (
                     <div className="mt-2 rounded-xl border border-dashed border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
-                      Canonical Account→Actor bindings are unavailable for this account.
-                      Authentication Administration will not reconstruct identity from the
-                      legacy single-Actor pointer.
+                      {t("admin.authentication.actors.unavailable")}
                     </div>
                   )}
                 </section>
@@ -688,20 +683,20 @@ export function AuthenticationAdminPage() {
 
               <footer className="flex flex-wrap items-center justify-between gap-3 border-t px-5 py-4">
                 <p className="text-xs text-slate-500">
-                  Security suspension is application-global. Operational Person reactivation belongs to a Tenant Administrator.
+                  {t("admin.authentication.footer.help")}
                 </p>
                 <div className="flex flex-wrap gap-2">
                   <button
                     className="rounded border px-2 py-1 text-sm disabled:opacity-50"
                     disabled={isCurrentAccount || activePending || pendingAction !== null}
-                    title={isCurrentAccount ? "You cannot security-suspend your own account" : undefined}
+                    title={isCurrentAccount ? t("admin.authentication.action.selfSuspendTitle") : undefined}
                     onClick={() => void toggle(account.id, Boolean(account.securitySuspended))}
                   >
                     {activePending
-                      ? "Saving…"
+                      ? t("common.saving")
                       : account.securitySuspended
-                        ? "Clear security suspension"
-                        : "Security suspend"}
+                        ? t("admin.authentication.action.clearSuspension")
+                        : t("admin.authentication.action.suspend")}
                   </button>
                   <button
                     className="rounded border px-2 py-1 text-sm disabled:opacity-50"
@@ -709,11 +704,11 @@ export function AuthenticationAdminPage() {
                     title={
                       resetEligible
                         ? undefined
-                        : "Account must be active, operationally available, and not security-suspended before issuing a reset token"
+                        : t("admin.authentication.action.resetIneligibleTitle")
                     }
                     onClick={() => void issue(account.id)}
                   >
-                    {resetPending ? "Issuing…" : "Issue reset token"}
+                    {resetPending ? t("admin.authentication.action.issuing") : t("admin.authentication.action.issueReset")}
                   </button>
                 </div>
               </footer>

@@ -9,6 +9,7 @@ import type {
   WorkPeriodPlanningTemplate,
 } from "../../types/planning";
 import type { ReferenceDataItem } from "../../types/referenceData";
+import { I18nProvider } from "../../i18n";
 
 let container: HTMLDivElement;
 let root: Root | null;
@@ -355,6 +356,43 @@ describe("PlanTab", () => {
     });
   });
 
+  it(
+    "omits incomplete optional template-source metadata instead of interpolating undefined values",
+    async () => {
+      await renderPlanTab({
+        onBulkPlan: vi.fn(),
+        onRefineAssignment: vi.fn(),
+        templateOverride: {
+          ...template,
+          sourceWorkDate: undefined,
+          sourcePeriodName: undefined,
+        },
+      });
+
+      expect(container.textContent).not.toContain("Template source:");
+      expect(container.textContent).not.toContain("{date}");
+      expect(container.textContent).not.toContain("{name}");
+    },
+  );
+
+  it(
+    "renders a sort-direction annotation only after a concrete sort direction exists",
+    async () => {
+      await renderPlanTab({
+        onBulkPlan: vi.fn(),
+        onRefineAssignment: vi.fn(),
+      });
+
+      expect(container.querySelector('[aria-label^="sorted "]')).toBeNull();
+
+      await clickButton("Nick");
+
+      expect(
+        container.querySelector('[aria-label="sorted asc"]')?.textContent,
+      ).toBe("↑");
+    },
+  );
+
   it("uses compact planning table controls so Task remains visible", async () => {
     await renderPlanTab({
       onBulkPlan: vi.fn(),
@@ -430,7 +468,7 @@ async function renderPlanTab(props: {
   await act(async () => {
     root = createRoot(container);
     root.render(
-      <PlanTab
+      <I18nProvider><PlanTab
         template={props.templateOverride ?? template}
         sectors={sectors}
         locations={locations}
@@ -440,7 +478,7 @@ async function renderPlanTab(props: {
         pending={false}
         onBulkPlan={props.onBulkPlan}
         onRefineAssignment={props.onRefineAssignment}
-      />,
+      /></I18nProvider>,
     );
   });
 }

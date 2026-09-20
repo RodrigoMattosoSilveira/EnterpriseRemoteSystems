@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import type { AuthTenantOption } from "../../types/auth";
+import { useI18n } from "../../i18n";
 
 export function TenantSelector({
   tenants,
@@ -20,16 +21,15 @@ export function TenantSelector({
   const rootRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const filterRef = useRef<HTMLInputElement>(null);
+  const { t, formatDateTime } = useI18n();
 
   const selectedTenant = tenants.find((tenant) => tenant.id === selectedTenantId);
   const globalAdministration = tenants.some((tenant) => tenant.id === "*");
-  const contextNoun = globalAdministration ? "context" : "tenant";
-  const contextNounPlural = globalAdministration ? "contexts" : "tenants";
-  const selectorLabel = globalAdministration ? "Administration context" : "Tenant";
-  const currentContextLabel = globalAdministration
-    ? "Current administration context"
-    : "Current tenant";
-  const filterLabel = globalAdministration ? "Filter contexts" : "Filter tenants";
+  const contextNoun = t(globalAdministration ? "tenantSelector.context" : "tenantSelector.tenant");
+  const contextNounPlural = t(globalAdministration ? "tenantSelector.contexts" : "tenantSelector.tenants");
+  const selectorLabel = t(globalAdministration ? "tenantSelector.administrationContext" : "tenantSelector.tenantLabel");
+  const currentContextLabel = t(globalAdministration ? "tenantSelector.currentAdministrationContext" : "tenantSelector.currentTenant");
+  const filterLabel = t(globalAdministration ? "tenantSelector.filterContexts" : "tenantSelector.filterTenants");
   const filteredTenants = useMemo(() => {
     const normalizedQuery = normalizeSearchText(query.trim());
     if (!normalizedQuery) return tenants;
@@ -126,7 +126,7 @@ export function TenantSelector({
 
   const selectedLabel = selectedTenant
     ? `${selectedTenant.name} (${selectedTenant.code})`
-    : `Choose ${contextNoun}`;
+    : t(globalAdministration ? "tenantSelector.chooseContext" : "tenantSelector.chooseTenant");
 
   return (
     <div ref={rootRef} className="relative">
@@ -146,14 +146,14 @@ export function TenantSelector({
       >
         <span className="min-w-0">
           <span className="block truncate text-base font-bold text-slate-950">
-            {selectedTenant?.name ?? `Choose ${contextNoun}`}
+            {selectedTenant?.name ?? t(globalAdministration ? "tenantSelector.chooseContext" : "tenantSelector.chooseTenant")}
           </span>
           <span className="block truncate text-sm font-semibold text-slate-600">
-            {selectedTenant?.code ?? `No active ${contextNoun}`}
+            {selectedTenant?.code ?? t(globalAdministration ? "tenantSelector.noActiveContext" : "tenantSelector.noActiveTenant")}
           </span>
           {selectedTenant?.supportLeaseId && (
             <span className="mt-1 block text-xs font-bold text-amber-700">
-              Temporary support access
+              {t("tenantSelector.temporarySupportAccess")}
             </span>
           )}
         </span>
@@ -175,7 +175,7 @@ export function TenantSelector({
 
       {open && (
         <section
-          aria-label={`${selectorLabel} selection`}
+          aria-label={t("tenantSelector.selectionAria", { label: selectorLabel })}
           className="absolute right-0 z-50 mt-2 w-[28rem] max-w-[calc(100vw-2rem)] overflow-hidden rounded-2xl border border-slate-300 bg-white shadow-xl"
         >
           <div className="border-b border-slate-200 p-3">
@@ -204,16 +204,16 @@ export function TenantSelector({
             </label>
             <p className="mt-2 text-sm font-medium text-slate-600" aria-live="polite">
               {refreshing
-                ? `Refreshing available ${contextNounPlural}…`
-                : `${filteredTenants.length} of ${tenants.length} ${contextNounPlural}`}
+                ? t("tenantSelector.refreshingAvailable", { items: contextNounPlural })
+                : t("tenantSelector.count", { visible: filteredTenants.length, total: tenants.length, items: contextNounPlural })}
             </p>
             {globalAdministration ? (
               <p className="mt-1 text-xs font-medium text-slate-500">
-                Tenant entries appear here only while an approved, unexpired Support Access Lease is effective. They are temporary support contexts, not ordinary Tenant identities.
+                {t("tenantSelector.globalHelp")}
               </p>
             ) : (
               <p className="mt-1 text-xs font-medium text-slate-500">
-                Each tenant below is available through a separate active Actor and Membership owned by this Authentication Account.
+                {t("tenantSelector.tenantHelp")}
               </p>
             )}
           </div>
@@ -224,11 +224,11 @@ export function TenantSelector({
                 role="status"
                 className="px-3 py-6 text-center text-base font-medium text-slate-600"
               >
-                Refreshing your available {contextNounPlural}…
+                {t("tenantSelector.refreshingYours", { items: contextNounPlural })}
               </p>
             ) : filteredTenants.length === 0 ? (
               <p className="px-3 py-6 text-center text-base font-medium text-slate-600">
-                No {contextNounPlural} match “{query}”.
+                {t("tenantSelector.noMatch", { items: contextNounPlural, query })}
               </p>
             ) : (
               filteredTenants.map((tenant, index) => {
@@ -266,24 +266,24 @@ export function TenantSelector({
                       </span>
                       {tenant.contextKind === "SUPPORT_LEASE" && tenant.supportLeaseId ? (
                         <span className="mt-1 block text-xs font-medium text-amber-700">
-                          <span className="block font-bold">Temporary support access</span>
-                          <span className="block truncate">Lease: {tenant.supportLeaseId}</span>
+                          <span className="block font-bold">{t("tenantSelector.temporarySupportAccess")}</span>
+                          <span className="block truncate">{t("tenantSelector.lease", { id: tenant.supportLeaseId })}</span>
                           {tenant.supportLeaseExpiresAt && (
                             <span className="block truncate">
-                              Expires: {formatLeaseExpiration(tenant.supportLeaseExpiresAt)}
+                              {t("tenantSelector.expires", { value: formatDateTime(tenant.supportLeaseExpiresAt) })}
                             </span>
                           )}
                         </span>
                       ) : tenant.actorScope === "TENANT" && tenant.actorKey && tenant.membershipId ? (
                         <span className="mt-1 block text-xs font-medium text-slate-500">
-                          <span className="block truncate">Actor: {tenant.actorKey}</span>
-                          <span className="block truncate">Membership: {tenant.membershipId}</span>
+                          <span className="block truncate">{t("tenantSelector.actor", { value: tenant.actorKey })}</span>
+                          <span className="block truncate">{t("tenantSelector.membership", { value: tenant.membershipId })}</span>
                         </span>
                       ) : null}
                     </span>
                     {selected && (
                       <span className="rounded-full bg-slate-900 px-2.5 py-1 text-xs font-bold text-white">
-                        Selected
+                        {t("common.selected")}
                       </span>
                     )}
                   </button>
@@ -295,12 +295,6 @@ export function TenantSelector({
       )}
     </div>
   );
-}
-
-function formatLeaseExpiration(value: string): string {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  return date.toLocaleString();
 }
 
 function normalizeSearchText(value: string) {

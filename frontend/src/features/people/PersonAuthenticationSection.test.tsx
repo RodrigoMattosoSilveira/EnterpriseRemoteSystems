@@ -3,6 +3,7 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { PersonAuthenticationSection } from "./PersonAuthenticationSection";
+import { I18nProvider } from "../../i18n";
 
 const PERSON_ID = "person-authentication-1";
 const LOGIN = "manual30c2.person1@example.test";
@@ -403,9 +404,9 @@ function renderSection() {
   root = createRoot(container);
   act(() => {
     root?.render(
-      <QueryClientProvider client={queryClient}>
+      <I18nProvider><QueryClientProvider client={queryClient}>
         <PersonAuthenticationSection personId={PERSON_ID} />
-      </QueryClientProvider>,
+      </QueryClientProvider></I18nProvider>,
     );
   });
 }

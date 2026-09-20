@@ -5,6 +5,7 @@ import { createMemoryRouter, RouterProvider } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AddPersonMembershipPage } from "./AddPersonMembershipPage";
+import { I18nProvider } from "../../i18n";
 
 let container: HTMLDivElement;
 let root: Root | null;
@@ -64,9 +65,9 @@ function renderRoute(initialEntry: string) {
   root = createRoot(container);
   act(() => {
     root?.render(
-      <QueryClientProvider client={queryClient}>
+      <I18nProvider><QueryClientProvider client={queryClient}>
         <RouterProvider router={router} />
-      </QueryClientProvider>,
+      </QueryClientProvider></I18nProvider>,
     );
   });
 }

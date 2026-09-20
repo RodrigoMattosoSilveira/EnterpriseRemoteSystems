@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { TenantsAdminPage } from "./TenantsAdminPage";
 import { AuthorizationProvider } from "../../components/layout/AuthorizationContext";
 import type { AuthzCurrentActor } from "../../types/authz";
+import { I18nProvider, LOCALE_STORAGE_KEY } from "../../i18n";
 
 const tenant = {
   id: "default",
@@ -40,6 +41,7 @@ let root: Root | null;
 let calls: Array<{ url: string; method: string; body?: unknown }>;
 
 beforeEach(() => {
+  window.localStorage.clear();
   container = document.createElement("div");
   document.body.appendChild(container);
   root = null;
@@ -151,6 +153,27 @@ describe("TenantsAdminPage", () => {
     expect(calls.filter((call) => call.url === "/api/v1/tenants")).toHaveLength(1);
   });
 
+
+  it("keeps the Portuguese Manage record action on one line", async () => {
+    window.localStorage.setItem(LOCALE_STORAGE_KEY, "pt-BR");
+    mockFetch(async (url, init) => {
+      calls.push({ url, method: init?.method ?? "GET", body: parseBody(init?.body) });
+      if (url === "/api/v1/tenants" && !init?.method) return json({ data: [tenant] });
+      if (url === "/api/v1/auth/reactivation-requests" && !init?.method) return json({ data: [] });
+      throw new Error(`Unhandled request: ${url}`);
+    });
+
+    renderPage(applicationAdminActor);
+    await waitForText("Gerenciar registro");
+
+    const manageRecordLink = [...container.querySelectorAll("a")].find(
+      (link) => link.textContent?.trim() === "Gerenciar registro",
+    );
+
+    expect(manageRecordLink).toBeTruthy();
+    expect(manageRecordLink?.className).toContain("whitespace-nowrap");
+    expect(manageRecordLink?.className).toContain("inline-flex");
+  });
 
   it("distinguishes control-plane Tenant inventory from selectable account contexts", async () => {
     const supportTenant = {
@@ -317,7 +340,7 @@ describe("TenantsAdminPage", () => {
 
 function renderPage(actor?: AuthzCurrentActor) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
-  const router = createMemoryRouter([{ path: "/admin/tenants", element: <TenantsAdminPage /> }], { initialEntries: ["/admin/tenants"] });
+  const router = createMemoryRouter([{ path: "/admin/tenants", element: <I18nProvider><TenantsAdminPage /></I18nProvider> }], { initialEntries: ["/admin/tenants"] });
   root = createRoot(container);
   act(() => root?.render(
     <QueryClientProvider client={client}>
