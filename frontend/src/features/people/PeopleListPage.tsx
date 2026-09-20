@@ -18,6 +18,8 @@ import type {
   ProfileCompletionStatus,
 } from "../../types/people";
 import { PageTitle } from "../../components/layout/PageHeading";
+import { useI18n } from "../../i18n";
+import { personMissingSectionLabel } from "./personPresentation";
 import { visibleNavigationLinks } from "../../components/layout/navigation";
 
 type PeopleListState = {
@@ -33,6 +35,7 @@ const PAGE_SIZE_OPTIONS = [10, 25, 50];
 const SEARCH_DEBOUNCE_MS = 350;
 
 export function PeopleListPage() {
+  const { t } = useI18n();
   const location = useLocation();
   const navigate = useNavigate();
   const actor = useOptionalAuthorizationContext();
@@ -167,9 +170,9 @@ export function PeopleListPage() {
       <header className="sticky top-0 z-10 border-b bg-white/95 px-4 py-4 backdrop-blur">
         <div className="mx-auto flex max-w-4xl items-center justify-between gap-3">
           <div>
-            <PageTitle>People</PageTitle>
+            <PageTitle>{t("people.title")}</PageTitle>
             <p className="text-sm text-gray-500">
-              Permanent identity records
+              {t("people.subtitle")}
             </p>
           </div>
 
@@ -179,7 +182,7 @@ export function PeopleListPage() {
                 to="/collaborators"
                 className="rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 shadow-sm"
               >
-                Collaborators
+                {t("common.collaborators")}
               </Link>
             )}
             {canNavigateTo("/expenses") && (
@@ -187,7 +190,7 @@ export function PeopleListPage() {
                 to="/expenses"
                 className="rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 shadow-sm"
               >
-                Expenses
+                {t("common.expenses")}
               </Link>
             )}
             {canNavigateTo("/admin/tenants") && (
@@ -195,7 +198,7 @@ export function PeopleListPage() {
                 to="/admin/tenants"
                 className="rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 shadow-sm"
               >
-                Tenants
+                {t("common.tenants")}
               </Link>
             )}
             {canNavigateTo("/admin/reference-data") && (
@@ -203,7 +206,7 @@ export function PeopleListPage() {
                 to="/admin/reference-data"
                 className="rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 shadow-sm"
               >
-                Admin
+                {t("common.admin")}
               </Link>
             )}
             {canNavigateTo("/admin/authorization") && (
@@ -211,7 +214,7 @@ export function PeopleListPage() {
                 to="/admin/authorization"
                 className="rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 shadow-sm"
               >
-                Authz
+                {t("common.authorizationShort")}
               </Link>
             )}
             {canManageMemberships && (
@@ -219,7 +222,7 @@ export function PeopleListPage() {
                 to="/people/add-existing"
                 className="rounded-xl border border-gray-950 bg-white px-4 py-2 text-sm font-semibold text-gray-950 shadow-sm"
               >
-                Add existing
+                {t("people.addExisting")}
               </Link>
             )}
             {canCreatePerson && (
@@ -227,7 +230,7 @@ export function PeopleListPage() {
                 to="/people/new"
                 className="rounded-xl bg-gray-950 px-4 py-2 text-sm font-semibold text-white shadow-sm"
               >
-                New Person
+                {t("people.newPerson")}
               </Link>
             )}
           </div>
@@ -246,13 +249,13 @@ export function PeopleListPage() {
 
         {actor && actor.tenantId !== "*" && (
           <section
-            aria-label="People tenant scope"
+            aria-label={t("people.tenantBoundary.aria")}
             className="rounded-2xl border border-slate-300 bg-white p-5 shadow-sm"
           >
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div>
                 <p className="text-xs font-bold uppercase tracking-wide text-slate-500">
-                  People tenant boundary
+                  {t("people.tenantBoundary.title")}
                 </p>
                 <h2 className="mt-1 text-lg font-bold text-slate-950">
                   {actor.selectedTenantName ?? actor.selectedTenantCode ?? actor.tenantId}
@@ -261,50 +264,49 @@ export function PeopleListPage() {
                   {actor.selectedTenantCode && actor.selectedTenantCode !== actor.selectedTenantName
                     ? `${actor.selectedTenantCode} · `
                     : ""}
-                  Tenant ID: <span className="font-mono">{actor.tenantId}</span>
+                  {t("people.tenantBoundary.tenantId")} <span className="font-mono">{actor.tenantId}</span>
                 </p>
               </div>
               {actor.supportLeaseId && (
                 <span className="rounded-full bg-slate-900 px-3 py-1.5 text-xs font-bold text-white">
-                  Tenant Support Access Lease
+                  {t("people.tenantBoundary.supportLease")}
                 </span>
               )}
             </div>
             <p className="mt-3 text-sm text-slate-700">
-              The People directory below is loaded in this Tenant context. A Person's name or
-              nickname may mention another Tenant; that profile text does not change the Tenant
-              boundary of this list.
+              {t("people.tenantBoundary.description")}
             </p>
             {actor.supportLeaseId && (
               <p className="mt-2 text-xs font-medium text-slate-500">
-                Support Lease ID: <span className="font-mono">{actor.supportLeaseId}</span>
+                {t("people.tenantBoundary.supportLeaseId")} <span className="font-mono">{actor.supportLeaseId}</span>
               </p>
             )}
           </section>
         )}
 
+        {/* Stable post-Bite-30 reconciliation evidence marker: Search and filter controls */}
         <section
-          aria-label="Search and filter controls"
+          aria-label={t("people.filters.aria")}
           className="rounded-2xl border bg-white p-5 shadow-sm"
         >
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="min-w-0 flex-1">
               <div>
-                <h2 className="text-lg font-semibold text-gray-950">Filters</h2>
+                <h2 className="text-lg font-semibold text-gray-950">{t("people.filters.title")}</h2>
                 <p className="mt-1 text-sm text-gray-500">
-                  Search by Person details, Authentication login, Actor ID, or Actor Key.
+                  {t("people.filters.help")}
                 </p>
               </div>
             </div>
             <div className="flex flex-wrap items-center gap-3">
               <SegmentedOptionToggle
-                ariaLabel="People view mode"
+                ariaLabel={t("people.filters.aria")}
                 value={viewMode}
                 onChange={handleChange}
                 showLabels={false}
                 options={[
-                  { value: "cards", label: "Card view", icon: <CardViewIcon /> },
-                  { value: "list", label: "List view", icon: <ListViewIcon /> },
+                  { value: "cards", label: t("common.cards"), icon: <CardViewIcon /> },
+                  { value: "list", label: t("common.list"), icon: <ListViewIcon /> },
                 ]}
               />
             </div>
@@ -314,32 +316,32 @@ export function PeopleListPage() {
                 onClick={clearFilters}
                 className="rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 shadow-sm"
               >
-                Clear filters
+                {t("people.filters.clear")}
               </button>
             )}
           </div>
 
           <div className="mt-4">
             <label className="grid gap-1 text-sm font-medium text-gray-700">
-              Filter people
+              {t("people.filters.filterPeople")}
               <input
                 type="search"
                 value={search}
                 onChange={(event) => setSearch(event.target.value)}
-                placeholder="Name, nickname, CPF, RG, cellular, or email"
+                placeholder={t("people.filters.searchPlaceholder")}
                 className="rounded-xl border border-gray-300 px-3 py-2 text-sm shadow-sm"
               />
             </label>
             {canManageMemberships && (
               <p className="mt-2 text-xs text-gray-500">
-                Current-tenant People are searched first. If none match, ERS also searches global People who can be added to this tenant.
+                {t("people.filters.globalHelp")}
               </p>
             )}
           </div>
 
           <div className="mt-4 grid gap-4 md:grid-cols-4 justify-items-start">
             <label className="grid gap-1 text-sm font-medium text-gray-700 min-w-0">
-              Profile completion
+              {t("people.filters.profileCompletion")}
               <select
                 value={profileCompletionStatus}
                 onChange={(event) => {
@@ -350,15 +352,15 @@ export function PeopleListPage() {
                 }}
                 className="w-full rounded-xl border border-gray-300 px-3 py-2 text-sm shadow-sm"
               >
-                <option value="">All completion statuses</option>
-                <option value="COMPLETE">Complete</option>
-                <option value="INCOMPLETE">Incomplete</option>
-                <option value="PERSONAL_ONLY">Personal only</option>
+                <option value="">{t("people.filters.allCompletion")}</option>
+                <option value="COMPLETE">{t("common.complete")}</option>
+                <option value="INCOMPLETE">{t("common.incomplete")}</option>
+                <option value="PERSONAL_ONLY">{t("people.filters.personalOnly")}</option>
               </select>
             </label>
 
             <label className="grid gap-1 text-sm font-medium text-gray-700 min-w-0">
-              Collaborator eligibility
+              {t("people.filters.collaboratorEligibility")}
               <select
                 value={canCreateCollaborator}
                 onChange={(event) => {
@@ -369,15 +371,15 @@ export function PeopleListPage() {
                 }}
                 className="w-full rounded-xl border border-gray-300 px-3 py-2 text-sm shadow-sm"
               >
-                <option value="all">All people</option>
-                <option value="true">Can create collaborator</option>
-                <option value="false">Cannot create collaborator</option>
+                <option value="all">{t("people.filters.allPeople")}</option>
+                <option value="true">{t("people.filters.canCreate")}</option>
+                <option value="false">{t("people.filters.cannotCreate")}</option>
               </select>
             </label>
 
             {canReadReferenceData && (
               <label className="grid gap-1 text-sm font-medium text-gray-700 min-w-0">
-                Status
+                {t("people.filters.status")}
                 <select
                   value={peopleStatus}
                   onChange={(event) => {
@@ -387,16 +389,16 @@ export function PeopleListPage() {
                     setPage(1);
                   }}
                   className="w-full rounded-xl border border-gray-300 px-3 py-2 text-sm shadow-sm">
-                  <option value="All">All</option>
-                  <option value="Active">Active</option>
-                  <option value="InActive">InActive</option>
-                  <option value="Discontinued">Discontinued</option>
+                  <option value="All">{t("people.filters.all")}</option>
+                  <option value="Active">{t("common.active")}</option>
+                  <option value="InActive">{t("common.inactive")}</option>
+                  <option value="Discontinued">{t("common.discontinued")}</option>
                 </select>
               </label>
             )}
 
             <label className="grid gap-1 text-sm font-medium text-gray-700 min-w-0 md:max-w-[10rem]">  
-              People per page
+              {t("people.filters.perPage")}
               <select
                 value={pageSize}
                 onChange={(event) => {
@@ -417,13 +419,13 @@ export function PeopleListPage() {
 
         {isLoading && (
           <div className="rounded-2xl border bg-white p-5 shadow-sm">
-            Loading people...
+            {t("people.loading")}
           </div>
         )}
 
-        {error && <ApiErrorPanel error={error} />}
-        {globalPeopleQuery.error && <ApiErrorPanel error={globalPeopleQuery.error} />}
-        {createMembership.error && <ApiErrorPanel error={createMembership.error} />}
+        {error && <ApiErrorPanel error={error} translate={t} />}
+        {globalPeopleQuery.error && <ApiErrorPanel error={globalPeopleQuery.error} translate={t} />}
+        {createMembership.error && <ApiErrorPanel error={createMembership.error} translate={t} />}
 
         {!isLoading && !error && (
           <PaginationSummary
@@ -443,9 +445,9 @@ export function PeopleListPage() {
           <>
             {shouldSearchGlobal && globalPeopleQuery.isLoading && (
               <div className="rounded-2xl border bg-white p-8 text-center shadow-sm">
-                <h2 className="text-lg font-semibold">No Person in this tenant matches</h2>
+                <h2 className="text-lg font-semibold">{t("people.empty.noMatch")}</h2>
                 <p className="mt-2 text-sm text-gray-500">
-                  Searching global People who can be added to this tenant...
+                  {t("people.global.searching")}
                 </p>
               </div>
             )}
@@ -455,16 +457,15 @@ export function PeopleListPage() {
               !globalPeopleQuery.error &&
               globalCandidates.length > 0 && (
                 <section
-                  aria-label="People available to add to this tenant"
+                  aria-label={t("people.global.availableAria")}
                   className="rounded-2xl border border-blue-200 bg-blue-50/40 p-5 shadow-sm"
                 >
                   <div>
                     <h2 className="text-lg font-semibold text-gray-950">
-                      People available to add to this tenant
+                      {t("people.global.availableTitle")}
                     </h2>
                     <p className="mt-1 text-sm text-gray-600">
-                      No current-tenant Person matched. These global People match your search and do not yet belong to this tenant.
-                      Other tenant relationships and authentication details are not shown.
+                      {t("people.global.availableHelp")}
                     </p>
                   </div>
 
@@ -484,11 +485,11 @@ export function PeopleListPage() {
                             )}
                             <dl className="mt-2 grid gap-x-6 gap-y-1 text-sm md:grid-cols-2">
                               <div>
-                                <dt className="inline font-medium">Email: </dt>
+                                <dt className="inline font-medium">{t("common.email")}: </dt>
                                 <dd className="inline">{person.email}</dd>
                               </div>
                               <div>
-                                <dt className="inline font-medium">Cellular: </dt>
+                                <dt className="inline font-medium">{t("common.cellular")}: </dt>
                                 <dd className="inline">{person.cellular}</dd>
                               </div>
                             </dl>
@@ -506,15 +507,16 @@ export function PeopleListPage() {
                               });
                               navigate(`/people/${created.id}#authentication`, {
                                 state: {
-                                  flash:
-                                    `Person membership added: ${created.firstName} ${created.lastName}. ` +
-                                    "Configure authentication for this Tenant below.",
+                                  flash: t("people.membershipAdded", {
+                                    name: `${created.firstName} ${created.lastName}`,
+                                    instruction: t("people.authentication.configureTenant"),
+                                  }),
                                 },
                               });
                             }}
                             className="rounded-xl bg-gray-950 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
                           >
-                            {createMembership.isPending ? "Adding..." : "Add to this tenant"}
+                            {createMembership.isPending ? t("people.adding") : t("people.addToTenant")}
                           </button>
                         </div>
                       </article>
@@ -526,14 +528,14 @@ export function PeopleListPage() {
                       to={`/people/add-existing?search=${encodeURIComponent(debouncedSearch)}`}
                       className="text-sm font-semibold text-gray-700 underline"
                     >
-                      Open advanced membership form
+                      {t("people.global.openAdvanced")}
                     </Link>
                     <button
                       type="button"
                       onClick={clearFilters}
                       className="text-sm font-semibold text-gray-700 underline"
                     >
-                      Clear filters
+                      {t("people.filters.clear")}
                     </button>
                   </div>
                 </section>
@@ -545,14 +547,14 @@ export function PeopleListPage() {
                 globalCandidates.length === 0)) && (
               <div className="rounded-2xl border bg-white p-8 text-center shadow-sm">
                 <h2 className="text-lg font-semibold">
-                  {hasActiveFilters ? "No people match these filters" : "No people yet"}
+                  {hasActiveFilters ? t("people.empty.noMatch") : t("people.empty.none")}
                 </h2>
                 <p className="mt-2 text-sm text-gray-500">
                   {hasActiveFilters
                     ? canManageMemberships && debouncedSearch.length >= 3
-                      ? "No Person in this tenant or the global Person directory matches this search. Adjust the search, create a new Person, or clear the filters."
-                      : "Adjust or clear the filters to widen the People list."
-                    : "Create the first Person record before creating collaborators."}
+                      ? t("people.global.noMatch")
+                      : t("people.filters.widen")
+                    : t("people.empty.createFirst")}
                 </p>
                 {hasActiveFilters ? (
                   <div className="mt-5 flex flex-wrap justify-center gap-2">
@@ -561,14 +563,14 @@ export function PeopleListPage() {
                       onClick={clearFilters}
                       className="inline-block rounded-xl bg-gray-950 px-5 py-3 text-sm font-semibold text-white"
                     >
-                      Clear filters
+                      {t("people.filters.clear")}
                     </button>
                     {canManageMemberships && debouncedSearch.length >= 3 && (
                       <Link
                         to={`/people/add-existing?search=${encodeURIComponent(debouncedSearch)}`}
                         className="inline-block rounded-xl border border-gray-950 bg-white px-5 py-3 text-sm font-semibold text-gray-950"
                       >
-                        Advanced global search
+                        {t("people.global.advancedSearch")}
                       </Link>
                     )}
                   </div>
@@ -579,7 +581,7 @@ export function PeopleListPage() {
                         to="/people/add-existing"
                         className="inline-block rounded-xl border border-gray-950 bg-white px-5 py-3 text-sm font-semibold text-gray-950"
                       >
-                        Add existing
+                        {t("people.addExisting")}
                       </Link>
                     )}
                     {canCreatePerson && (
@@ -587,7 +589,7 @@ export function PeopleListPage() {
                         to="/people/new"
                         className="inline-block rounded-xl bg-gray-950 px-5 py-3 text-sm font-semibold text-white"
                       >
-                        Create Person
+                        {t("people.createPerson")}
                       </Link>
                     )}
                   </div>
@@ -621,29 +623,29 @@ export function PeopleListPage() {
                         </h2>
                         {wasJustCreated && (
                           <span className="rounded-full bg-green-100 px-3 py-1 text-xs font-semibold text-green-800">
-                            Just added
+                            {t("people.justAdded")}
                           </span>
                         )}
                       </div>
                       <p className="mt-1 text-base font-medium text-slate-700">
-                        <span className="font-bold">Nickname:</span>{" "}
+                        <span className="font-bold">{t("common.nickname")}:</span>{" "}
                         {person.nickname || "—"}
                       </p>
                     </div>
 
                     <StatusBadge complete={person.canCreateCollaborator}>
-                      {person.canCreateCollaborator ? "Complete" : "Incomplete"}
+                      {person.canCreateCollaborator ? t("people.profileComplete") : t("people.profileIncomplete")}
                     </StatusBadge>
                   </div>
 
                   <dl
-                    aria-label="Person identity and contact details"
+                    aria-label={t("people.details.identityAria")}
                     className="mt-4 grid gap-2.5 rounded-xl bg-slate-50 p-3 text-base text-slate-800"
                   >
                     <Info label="CPF" value={person.cpf} monospaced />
                     <Info label="RG" value={person.rg} monospaced />
-                    <Info label="Cellular" value={person.cellular} />
-                    <Info label="Email" value={person.email} />
+                    <Info label={t("people.contact.cellular")} value={person.cellular} />
+                    <Info label={t("people.contact.email")} value={person.email} />
                   </dl>
 
                   {!person.canCreateCollaborator &&
@@ -655,7 +657,7 @@ export function PeopleListPage() {
                             key={section}
                             className="rounded-full bg-amber-100 px-3 py-1 text-xs font-medium text-amber-800"
                           >
-                            Missing {section}
+                            {t("people.missingSection", { section: personMissingSectionLabel(section, t) })}
                           </span>
                         ))}
                       </div>
@@ -670,11 +672,11 @@ export function PeopleListPage() {
               <table className="w-full text-left text-base">
                 <thead className="bg-slate-100 text-sm font-bold uppercase tracking-wide text-slate-700">
                   <tr>
-                    <th className="p-3">Name</th>
-                    <th className="p-3">Nickname</th>
+                    <th className="p-3">{t("people.table.name")}</th>
+                    <th className="p-3">{t("people.table.nickname")}</th>
                     <th className="p-3">ID</th>
-                    <th className="p-3">Contact</th>
-                    <th className="p-3">Status</th>
+                    <th className="p-3">{t("people.table.contact")}</th>
+                    <th className="p-3">{t("people.table.status")}</th>
                     {/* <th className="p-3">Missing1</th> */}
                   </tr>
                 </thead>
@@ -697,7 +699,7 @@ export function PeopleListPage() {
                           {wasJustCreated && (
                             <div className="mt-1">
                               <span className="rounded-full bg-green-100 px-3 py-1 text-xs font-semibold text-green-800">
-                                Just added
+                                {t("people.justAdded")}
                               </span>
                             </div>
                           )}
@@ -713,7 +715,7 @@ export function PeopleListPage() {
                         </td>
                         <td className="p-3 align-top">
                           <StatusBadge complete={person.canCreateCollaborator}>
-                            {person.canCreateCollaborator ? "Complete" : "Incomplete"}
+                            {person.canCreateCollaborator ? t("people.profileComplete") : t("people.profileIncomplete")}
                           </StatusBadge>
                         </td>
                         {/*
@@ -727,7 +729,7 @@ export function PeopleListPage() {
                                   key={section}
                                   className="rounded-full bg-amber-100 px-3 py-1 text-xs font-medium text-amber-800"
                                 >
-                                  Missing {section}
+                                  {t("people.missingSection", { section: personMissingSectionLabel(section, t) })}
                                 </span>
                               ))}
                             </div>
@@ -778,10 +780,11 @@ function PaginationSummary({
   onPrevious: () => void;
   onNext: () => void;
 }) {
+  const { t } = useI18n();
   return (
     <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border bg-white p-4 text-sm shadow-sm">
       <p className="font-medium text-gray-700" aria-live="polite">
-        Showing {pageStart}-{pageEnd} of {total} people
+        {t("people.pagination.summary", { start: pageStart, end: pageEnd, total })}
       </p>
       <div className="flex items-center gap-3">
         <button
@@ -790,10 +793,10 @@ function PaginationSummary({
           disabled={page <= 1}
           className="rounded-xl border border-gray-300 bg-white px-4 py-2 font-semibold text-gray-700 shadow-sm disabled:cursor-not-allowed disabled:opacity-50"
         >
-          Previous
+          {t("common.previous")}
         </button>
         <span className="text-gray-500">
-          Page {page} of {totalPages}
+          {t("people.pagination.page", { page, total: totalPages })}
         </span>
         <button
           type="button"
@@ -801,7 +804,7 @@ function PaginationSummary({
           disabled={page >= totalPages || total === 0}
           className="rounded-xl border border-gray-300 bg-white px-4 py-2 font-semibold text-gray-700 shadow-sm disabled:cursor-not-allowed disabled:opacity-50"
         >
-          Next
+          {t("common.next")}
         </button>
       </div>
     </div>
@@ -883,8 +886,9 @@ function Info({
 }
 
 function IdentityDetails({ cpf, rg }: { cpf?: string; rg?: string }) {
+  const { t } = useI18n();
   return (
-    <dl aria-label="Identity details" className="grid gap-2">
+    <dl aria-label={t("people.identityAria")} className="grid gap-2">
       <IdentityRow label="CPF" value={cpf} />
       <IdentityRow label="RG" value={rg} />
     </dl>
@@ -903,14 +907,15 @@ function IdentityRow({ label, value }: { label: string; value?: string }) {
 }
 
 function ContactDetails({ cellular, email }: { cellular?: string; email?: string }) {
+  const { t } = useI18n();
   return (
-    <dl aria-label="Contact details" className="grid gap-2">
+    <dl aria-label={t("people.contact.aria")} className="grid gap-2">
       <div className="grid grid-cols-[5rem_minmax(0,1fr)] items-baseline gap-2">
-        <dt className="font-bold text-slate-700">Cellular</dt>
+        <dt className="font-bold text-slate-700">{t("people.contact.cellular")}</dt>
         <dd className="font-semibold tabular-nums text-slate-950">{cellular || "—"}</dd>
       </div>
       <div className="grid grid-cols-[5rem_minmax(0,1fr)] items-baseline gap-2">
-        <dt className="font-bold text-slate-700">Email</dt>
+        <dt className="font-bold text-slate-700">{t("people.contact.email")}</dt>
         <dd className="break-all font-semibold text-slate-950">{email || "—"}</dd>
       </div>
     </dl>

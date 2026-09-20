@@ -5,6 +5,7 @@ import {
   reviewAccountReactivationRequest,
 } from "../../api/auth.api";
 import { ApiErrorPanel } from "../../components/ApiErrorPanel";
+import { useI18n } from "../../i18n";
 
 type ReactivationRequestsPanelProps = {
   defaultOpen?: boolean;
@@ -14,6 +15,7 @@ export function ReactivationRequestsPanel({
   defaultOpen = false,
 }: ReactivationRequestsPanelProps = {}) {
   const queryClient = useQueryClient();
+  const { t, formatDateTime } = useI18n();
   const [reasonById, setReasonById] = useState<Record<string, string>>({});
   const [open, setOpen] = useState(defaultOpen);
   const requests = useQuery({
@@ -37,21 +39,21 @@ export function ReactivationRequestsPanel({
     <section
       id="account-reactivation-requests"
       className="mt-6 rounded-2xl border bg-white p-5"
-      aria-label="Account reactivation requests"
+      aria-label={t("reactivation.panel.aria")}
     >
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <div>
-          <h2 className="text-lg font-semibold">Account reactivation requests</h2>
+          <h2 className="text-lg font-semibold">{t("reactivation.panel.title")}</h2>
           <p className="mt-1 text-sm text-slate-600">
-            Review requests for inactive global Authentication Accounts. Approval preserves all Actor bindings and starts a clean session boundary.
+            {t("reactivation.panel.description")}
           </p>
           <p className="mt-1 text-sm text-slate-600">
-            ERS does not currently notify the account holder of approval or rejection. After recording a decision, communicate the outcome through the normal support channel.
+            {t("reactivation.panel.notification")}
           </p>
         </div>
         {open ? (
           <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-700">
-            {pending.length} pending
+            {t("reactivation.pendingCount", { count: pending.length })}
           </span>
         ) : (
           <button
@@ -59,17 +61,17 @@ export function ReactivationRequestsPanel({
             className="rounded-lg border px-3 py-2 text-sm font-semibold"
             onClick={() => setOpen(true)}
           >
-            Review requests
+            {t("reactivation.reviewRequests")}
           </button>
         )}
       </div>
 
-      {open && <ApiErrorPanel error={requests.error ?? review.error} />}
+      {open && <ApiErrorPanel error={requests.error ?? review.error} translate={t} />}
 
       {!open ? null : requests.isLoading ? (
-        <p className="mt-4 text-sm text-slate-500">Loading reactivation requests…</p>
+        <p className="mt-4 text-sm text-slate-500">{t("reactivation.loading")}</p>
       ) : pending.length === 0 ? (
-        <p className="mt-4 text-sm text-slate-500">No pending reactivation requests.</p>
+        <p className="mt-4 text-sm text-slate-500">{t("reactivation.nonePending")}</p>
       ) : (
         <div className="mt-4 space-y-3">
           {pending.map((request) => {
@@ -83,23 +85,23 @@ export function ReactivationRequestsPanel({
                     </p>
                     <p className="mt-1 text-sm text-slate-600">{request.login}</p>
                     <p className="mt-1 text-xs text-slate-500">
-                      Requested {new Date(request.lastRequestedAt).toLocaleString()} · {request.requestedByType === "TENANT_ADMIN" ? "Tenant Administrator" : "Account holder"}
-                      {request.requestCount > 1 ? ` · ${request.requestCount} requests` : ""}
-                      {request.requestedTenantId ? ` · Tenant ${request.requestedTenantId}` : ""}
+                      {t("reactivation.requestedMeta", { date: formatDateTime(request.lastRequestedAt), requester: t(request.requestedByType === "TENANT_ADMIN" ? "reactivation.requester.tenantAdmin" : "reactivation.requester.accountHolder") })}
+                      {request.requestCount > 1 ? t("reactivation.requestCount", { count: request.requestCount }) : ""}
+                      {request.requestedTenantId ? t("reactivation.requestedTenant", { tenantId: request.requestedTenantId }) : ""}
                     </p>
                   </div>
-                  <span className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-800">Pending</span>
+                  <span className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-800">{t("reactivation.pending")}</span>
                 </div>
 
                 <label className="mt-3 block text-sm font-medium">
-                  Review reason
+                  {t("reactivation.reviewReason")}
                   <input
                     className="mt-1 w-full rounded-lg border px-3 py-2"
                     value={reasonById[request.id] ?? ""}
                     onChange={(event) =>
                       setReasonById((current) => ({ ...current, [request.id]: event.target.value }))
                     }
-                    placeholder="Required review reason"
+                    placeholder={t("reactivation.reviewReasonPlaceholder")}
                   />
                 </label>
                 <div className="mt-3 flex flex-wrap gap-2">
@@ -114,7 +116,7 @@ export function ReactivationRequestsPanel({
                       })
                     }
                   >
-                    {pendingThis ? "Saving…" : "Approve reactivation"}
+                    {pendingThis ? t("common.saving") : t("reactivation.approve")}
                   </button>
                   <button
                     className="rounded-lg border px-3 py-2 text-sm font-semibold disabled:opacity-50"
@@ -127,7 +129,7 @@ export function ReactivationRequestsPanel({
                       })
                     }
                   >
-                    Reject
+                    {t("reactivation.reject")}
                   </button>
                 </div>
               </article>

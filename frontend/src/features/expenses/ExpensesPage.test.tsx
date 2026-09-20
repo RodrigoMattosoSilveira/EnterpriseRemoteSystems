@@ -9,6 +9,7 @@ import type { AuthzCurrentActor } from "../../types/authz";
 import type { Collaborator } from "../../types/collaborators";
 import type { Expense, ExpenseListResponse } from "../../types/expenses";
 import type { PriceListItem } from "../../types/priceList";
+import { I18nProvider } from "../../i18n";
 
 type FetchCall = {
   url: string;
@@ -461,7 +462,7 @@ function renderExpensesPage(
   act(() => {
     root = createRoot(container);
     root.render(
-      <QueryClientProvider client={queryClient}>
+      <I18nProvider><QueryClientProvider client={queryClient}>
         {actor ? (
           <AuthorizationProvider value={actor}>
             <RouterProvider router={router} />
@@ -469,7 +470,7 @@ function renderExpensesPage(
         ) : (
           <RouterProvider router={router} />
         )}
-      </QueryClientProvider>,
+      </QueryClientProvider></I18nProvider>,
     );
   });
 }

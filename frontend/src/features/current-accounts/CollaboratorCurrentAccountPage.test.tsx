@@ -7,6 +7,7 @@ import { AuthorizationProvider } from "../../components/layout/AuthorizationCont
 import type { AuthzCurrentActor } from "../../types/authz";
 import { CollaboratorCurrentAccountPage } from "./CollaboratorCurrentAccountPage";
 import type { CurrentAccountDetail } from "../../types/currentAccounts";
+import { I18nProvider } from "../../i18n";
 
 type FetchCall = { url: string; method: string };
 
@@ -43,7 +44,7 @@ describe("CollaboratorCurrentAccountPage", () => {
     await waitForText("Maria");
     await waitForText("Journey ID:");
     await waitForText("collab-1");
-    await waitForText("42,50");
+    await waitForText("R$42.50");
 
     const currentAccountHeading = container.querySelector("h1");
     expect(currentAccountHeading?.textContent?.trim()).toBe("Person Current Account");
@@ -83,7 +84,7 @@ describe("CollaboratorCurrentAccountPage", () => {
     const goldCard = balanceCards.find((card) => card.textContent?.includes("GOLD_GRAM"));
 
     expect(realCard?.textContent).toContain("Real");
-    expect(realCard?.textContent).toContain("0,00");
+    expect(realCard?.textContent).toContain("R$0.00");
     expect(goldCard?.textContent).toContain("Grams of Gold");
     expect(goldCard?.textContent).toContain("0");
     expect(goldCard?.textContent).not.toContain("g gold");
@@ -145,7 +146,7 @@ describe("CollaboratorCurrentAccountPage", () => {
     await waitForText("Current and Future Earnings");
     await waitForText("Projected Journey-End Balances");
 
-    expect(container.textContent).toContain("25,00");
+    expect(container.textContent).toContain("R$25.00");
     expect(
       fetchCalls.some(
         (call) => call.url === "/api/v1/collaborators/collab-1/financial-projection",
@@ -522,11 +523,11 @@ function renderCurrentAccountPage(initialEntry: string, actor: AuthzCurrentActor
   act(() => {
     root = createRoot(container);
     root.render(
-      <QueryClientProvider client={queryClient}>
+      <I18nProvider><QueryClientProvider client={queryClient}>
         <AuthorizationProvider value={actor}>
           <RouterProvider router={router} />
         </AuthorizationProvider>
-      </QueryClientProvider>,
+      </QueryClientProvider></I18nProvider>,
     );
   });
 }

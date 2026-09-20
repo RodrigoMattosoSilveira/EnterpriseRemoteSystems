@@ -1,5 +1,7 @@
+import type { TranslationKey } from "../../i18n";
+
 export type NavigationLink = {
-  label: string;
+  labelKey: TranslationKey;
   to: string;
   anyPermission?: string[];
   applicationOnly?: boolean;
@@ -12,22 +14,22 @@ export type NavigationIdentity = {
 };
 
 export const navigationLinks: NavigationLink[] = [
-  { label: "People", to: "/people", anyPermission: ["people.read", "people.self.read"] },
-  { label: "Collaborators", to: "/collaborators", anyPermission: ["collaborators.read", "collaborators.self.read"] },
-  { label: "Expenses", to: "/expenses", anyPermission: ["expenses.read"] },
-  { label: "Work periods", to: "/work-periods", anyPermission: ["planning.read"] },
-  { label: "Gold production", to: "/gold-production", anyPermission: ["gold_production.manage"] },
-  { label: "Outstanding Receipts", to: "/receipts/outstanding", anyPermission: ["ledger.receipts.read", "ledger.receipts.self.read"] },
-  { label: "Tenants", to: "/admin/tenants", anyPermission: ["tenants.create", "tenants.update"], applicationOnly: true },
-  { label: "Authentication", to: "/admin/authentication", anyPermission: ["authz.manage"], applicationOnly: true },
-  { label: "Authorization", to: "/admin/authorization", anyPermission: ["authz.read", "authz.tenant_role_grants.manage"] },
-  { label: "Support access", to: "/admin/support-access-leases", anyPermission: ["support_access_leases.read"] },
-  { label: "Audit logs", to: "/admin/audit-logs", anyPermission: ["authz.read"] },
-  { label: "Reference data", to: "/admin/reference-data", anyPermission: ["reference_data.manage"] },
-  { label: "Gold prices", to: "/admin/gold-prices", anyPermission: ["gold_prices.manage"] },
-  { label: "Price list", to: "/admin/price-list-items", anyPermission: ["price_lists.read"] },
-  { label: "Account settings", to: "/admin/current-account-settings", anyPermission: ["current_accounts.settings.read"] },
-  { label: "Change password", to: "/password/change" },
+  { labelKey: "nav.people", to: "/people", anyPermission: ["people.read", "people.self.read"] },
+  { labelKey: "nav.collaborators", to: "/collaborators", anyPermission: ["collaborators.read", "collaborators.self.read"] },
+  { labelKey: "nav.expenses", to: "/expenses", anyPermission: ["expenses.read"] },
+  { labelKey: "nav.workPeriods", to: "/work-periods", anyPermission: ["planning.read"] },
+  { labelKey: "nav.goldProduction", to: "/gold-production", anyPermission: ["gold_production.manage"] },
+  { labelKey: "nav.outstandingReceipts", to: "/receipts/outstanding", anyPermission: ["ledger.receipts.read", "ledger.receipts.self.read"] },
+  { labelKey: "nav.tenants", to: "/admin/tenants", anyPermission: ["tenants.create", "tenants.update"], applicationOnly: true },
+  { labelKey: "nav.authentication", to: "/admin/authentication", anyPermission: ["authz.manage"], applicationOnly: true },
+  { labelKey: "nav.authorization", to: "/admin/authorization", anyPermission: ["authz.read", "authz.tenant_role_grants.manage"] },
+  { labelKey: "nav.supportAccess", to: "/admin/support-access-leases", anyPermission: ["support_access_leases.read"] },
+  { labelKey: "nav.auditLogs", to: "/admin/audit-logs", anyPermission: ["authz.read"] },
+  { labelKey: "nav.referenceData", to: "/admin/reference-data", anyPermission: ["reference_data.manage"] },
+  { labelKey: "nav.goldPrices", to: "/admin/gold-prices", anyPermission: ["gold_prices.manage"] },
+  { labelKey: "nav.priceList", to: "/admin/price-list-items", anyPermission: ["price_lists.read"] },
+  { labelKey: "nav.accountSettings", to: "/admin/current-account-settings", anyPermission: ["current_accounts.settings.read"] },
+  { labelKey: "nav.changePassword", to: "/password/change" },
 ];
 
 export function visibleNavigationLinks(

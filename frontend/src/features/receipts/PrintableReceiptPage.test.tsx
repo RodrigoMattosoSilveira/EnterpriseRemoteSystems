@@ -7,6 +7,7 @@ import { createMemoryRouter, RouterProvider } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { PrintableReceipt } from "../../types/receipts";
 import { PrintableReceiptPage } from "./PrintableReceiptPage";
+import { I18nProvider } from "../../i18n";
 
 let container: HTMLDivElement;
 let root: Root | null;
@@ -200,11 +201,11 @@ function renderPage() {
   act(() => {
     root = createRoot(container);
     root.render(
-      <QueryClientProvider client={queryClient}>
+      <I18nProvider><QueryClientProvider client={queryClient}>
         <AuthorizationProvider value={authActor}>
           <RouterProvider router={router} />
         </AuthorizationProvider>
-      </QueryClientProvider>,
+      </QueryClientProvider></I18nProvider>,
     );
   });
 }

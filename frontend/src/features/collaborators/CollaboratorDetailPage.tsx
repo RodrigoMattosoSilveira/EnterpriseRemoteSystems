@@ -24,8 +24,10 @@ import {
 } from "./useCollaborators";
 import { useSettlementPreview } from "./useSettlements";
 import { PageContextHeading, PageTitle } from "../../components/layout/PageHeading";
+import { translateEnglish, type Translate, useI18n } from "../../i18n";
 
 export function CollaboratorDetailPage() {
+  const { t, formatDate, formatCurrency } = useI18n();
   const { id = "" } = useParams();
   const actor = useAuthorizationContext();
   const wildcard = actor.permissions.includes("*");
@@ -51,7 +53,7 @@ export function CollaboratorDetailPage() {
     return (
       <main className="min-h-screen bg-gray-50 p-4">
         <section className="mx-auto max-w-5xl rounded-2xl border bg-white p-5 shadow-sm">
-          Loading collaborator...
+          {t("collaborator.loading")}
         </section>
       </main>
     );
@@ -65,10 +67,10 @@ export function CollaboratorDetailPage() {
             className="text-sm font-semibold text-gray-600 underline"
             to="/collaborators"
           >
-            {canBrowseCollaborators ? "Back to Collaborators" : "Back to My Journeys"}
+            {canBrowseCollaborators ? t("collaborator.back") : t("collaborator.backMy")}
           </Link>
           <div className="mt-4">
-            <ApiErrorPanel error={error} />
+            <ApiErrorPanel error={error} translate={t} />
           </div>
         </section>
       </main>
@@ -83,9 +85,9 @@ export function CollaboratorDetailPage() {
             className="text-sm font-semibold text-gray-600 underline"
             to="/collaborators"
           >
-            {canBrowseCollaborators ? "Back to Collaborators" : "Back to My Journeys"}
+            {canBrowseCollaborators ? t("collaborator.back") : t("collaborator.backMy")}
           </Link>
-          <p className="mt-4 text-gray-700">Collaborator not found.</p>
+          <p className="mt-4 text-gray-700">{t("collaborator.notFound")}</p>
         </section>
       </main>
     );
@@ -105,31 +107,30 @@ export function CollaboratorDetailPage() {
             className="text-sm font-semibold text-gray-600 underline"
             to="/collaborators"
           >
-            {canBrowseCollaborators ? "Back to Collaborators" : "Back to My Journeys"}
+            {canBrowseCollaborators ? t("collaborator.back") : t("collaborator.backMy")}
           </Link>
 
           <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div>
               <PageTitle>
-                Collaborator Journey
+                {t("collaborator.journeyTitle")}
               </PageTitle>
               <PageContextHeading>
                 {displayPersonName(collaborator)}
               </PageContextHeading>
               <p className="mt-1 text-sm text-gray-600">
-                <span className="font-semibold">Journey ID:</span>{" "}
+                <span className="font-semibold">{t("collaborator.journeyId")}:</span>{" "}
                 <span className="break-all font-mono">{collaborator.id}</span>
               </p>
               <p className="mt-1 text-sm text-gray-500">
-                Started {formatDate(collaborator.journeyStartDate)} · Projected
-                end {formatDate(collaborator.projectedEndDate)}
+                {t("collaborator.startedProjected", { start: formatDate(collaborator.journeyStartDate), end: formatDate(collaborator.projectedEndDate) })}
               </p>
               {collaborator.closedAt ? (
                 <div
                   role="status"
                   className="mt-3 inline-flex items-center gap-2 rounded-xl border border-gray-300 bg-gray-100 px-3 py-2 text-sm font-semibold text-gray-900"
                 >
-                  <span>Journey Closed</span>
+                  <span>{t("collaborator.journeyClosed")}</span>
                   <span className="font-medium text-gray-600">
                     {formatDate(collaborator.closedAt)}
                   </span>
@@ -150,7 +151,7 @@ export function CollaboratorDetailPage() {
                     className="rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 shadow-sm"
                     to={`/collaborators/${collaborator.id}/current-account`}
                   >
-                    Current Account
+                    {t("collaborator.currentAccount")}
                   </Link>
                 ) : null}
                 {canEditCollaborator ? (
@@ -162,7 +163,7 @@ export function CollaboratorDetailPage() {
                       setEditMode("full");
                     }}
                   >
-                    Edit Collaborator
+                    {t("collaborator.edit")}
                   </button>
                 ) : canEditWorkAssignment ? (
                   <button
@@ -173,7 +174,7 @@ export function CollaboratorDetailPage() {
                       setEditMode("work-assignment");
                     }}
                   >
-                    Edit Work Assignment
+                    {t("collaborator.editAssignment")}
                   </button>
                 ) : null}
               </div>
@@ -199,7 +200,7 @@ export function CollaboratorDetailPage() {
             onSaved={(updated) => {
               setEditMode(null);
               setFlash(
-                `Collaborator updated for ${displayPersonName(updated)}.`,
+                t("collaborator.updated", { name: displayPersonName(updated) }),
               );
             }}
           />
@@ -212,7 +213,7 @@ export function CollaboratorDetailPage() {
             onSaved={(updated) => {
               setEditMode(null);
               setFlash(
-                `Work assignment updated for ${displayPersonName(updated)}.`,
+                t("collaborator.assignmentUpdated", { name: displayPersonName(updated) }),
               );
             }}
           />
@@ -222,108 +223,109 @@ export function CollaboratorDetailPage() {
           <div className="flex items-start justify-between gap-3">
             <div>
               <h2 className="text-lg font-semibold text-gray-950">
-                Person Summary
+                {t("collaborator.personSummary")}
               </h2>
               <p className="mt-1 text-sm text-gray-500">
-                The Person profile behind this Collaborator journey.
+                {t("collaborator.personSummaryHelp2")}
               </p>
             </div>
             <Link
               className="rounded-xl border border-gray-300 px-3 py-2 text-sm font-semibold text-gray-700 shadow-sm"
               to={`/people/${collaborator.personId}`}
             >
-              View Person
+              {t("collaborator.viewPerson")}
             </Link>
           </div>
 
           <dl className="mt-5 grid gap-3 text-sm">
-            <Info label="Nickname" value={personDisplayName(collaborator)} />
-            <Info label="Legal Name" value={personLegalName(collaborator)} />
-            <Info label="Person ID" value={collaborator.personId} />
-            <Info label="Membership ID" value={collaborator.membershipId} />
+            <Info label={t("common.nickname")} value={personDisplayName(collaborator, t)} />
+            <Info label={t("collaborator.legalName")} value={personLegalName(collaborator)} />
+            <Info label={t("collaborator.personId")} value={collaborator.personId} />
+            <Info label={t("collaborator.membershipId")} value={collaborator.membershipId} />
             {collaborator.legacyPersonId && (
-              <Info label="Legacy Person ID" value={collaborator.legacyPersonId} />
+              <Info label={t("collaborator.legacyPersonId")} value={collaborator.legacyPersonId} />
             )}
           </dl>
         </section>
 
         <section className="rounded-2xl border bg-white p-5 shadow-sm">
-          <h2 className="text-lg font-semibold text-gray-950">Lifecycle</h2>
+          <h2 className="text-lg font-semibold text-gray-950">{t("collaborator.lifecycle")}</h2>
           <p className="mt-1 text-sm text-gray-500">
-            Current journey timing and status.
+            {t("collaborator.lifecycleHelp")}
           </p>
 
           <dl className="mt-5 grid gap-3 text-sm">
             <Info
-              label="Status"
+              label={t("collaborator.status")}
               value={collaborator.statusLabel || collaborator.statusId}
             />
             <Info
-              label="Avail."
+              label={t("collaborator.availabilityShort")}
               value={planningAvailabilityLabel(
                 collaborator.planningAvailability,
+                t,
               )}
             />
             <Info
-              label="Journey Start"
+              label={t("collaborator.journeyStart")}
               value={formatDate(collaborator.journeyStartDate)}
             />
             <Info
-              label="Default End"
+              label={t("collaborator.defaultEnd")}
               value={formatDate(collaborator.defaultEndDate)}
             />
             <Info
-              label="Extension Days"
+              label={t("collaborator.extensionDays")}
               value={String(collaborator.extensionDays)}
             />
             <Info
-              label="Projected End"
+              label={t("collaborator.projectedEnd")}
               value={formatDate(collaborator.projectedEndDate)}
             />
-            <Info label="Closed At" value={formatDate(collaborator.closedAt)} />
+            <Info label={t("collaborator.closedAt")} value={collaborator.closedAt ? formatDate(collaborator.closedAt) : "—"} />
           </dl>
         </section>
 
         <section className="rounded-2xl border bg-white p-5 shadow-sm">
           <h2 className="text-lg font-semibold text-gray-950">
-            Work Assignment
+            {t("collaborator.workAssignment")}
           </h2>
           <p className="mt-1 text-sm text-gray-500">
-            Operational placement for this Collaborator.
+            {t("collaborator.workAssignmentHelp2")}
           </p>
 
           <dl className="mt-5 grid gap-3 text-sm">
             <Info
-              label="Sector"
+              label={t("collaborator.sector")}
               value={collaborator.sectorLabel || collaborator.sectorId}
             />
             <Info
-              label="Location"
+              label={t("collaborator.location")}
               value={collaborator.locationLabel || collaborator.locationId}
             />
             <Info
-              label="Task"
+              label={t("collaborator.task")}
               value={collaborator.taskLabel || collaborator.taskId}
             />
           </dl>
         </section>
 
         <section className="rounded-2xl border bg-white p-5 shadow-sm">
-          <h2 className="text-lg font-semibold text-gray-950">Payment</h2>
+          <h2 className="text-lg font-semibold text-gray-950">{t("collaborator.payment")}</h2>
           <p className="mt-1 text-sm text-gray-500">
-            Default payment method and value for this journey.
+            {t("collaborator.paymentHelp2")}
           </p>
 
           <dl className="mt-5 grid gap-3 text-sm">
             <Info
-              label="Method"
+              label={t("collaborator.method")}
               value={
                 collaborator.paymentMethodLabel || collaborator.paymentMethodId
               }
             />
             <Info
-              label="Value"
-              value={formatCollaboratorPaymentValue(collaborator)}
+              label={t("collaborator.value")}
+              value={formatCollaboratorPaymentValue(collaborator, formatCurrency)}
             />
           </dl>
         </section>
@@ -360,6 +362,7 @@ function CollaboratorWorkAssignmentEditPanel({
   onCancel: () => void;
   onSaved: (collaborator: Collaborator) => void;
 }) {
+  const { t } = useI18n();
   const sectorsQuery = useReferenceDataByType("sector");
   const locationsQuery = useReferenceDataByType("location");
   const tasksQuery = useReferenceDataByType("task");
@@ -403,7 +406,7 @@ function CollaboratorWorkAssignmentEditPanel({
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!form.sectorId || !form.locationId || !form.taskId) {
-      setClientError("Select sector, location, and task before saving.");
+      setClientError(t("collaborator.validation.workAssignmentRequired"));
       return;
     }
 
@@ -426,10 +429,10 @@ function CollaboratorWorkAssignmentEditPanel({
       <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
         <div>
           <h2 className="text-lg font-semibold text-gray-950">
-            Edit Work Assignment
+            {t("collaborator.editAssignment")}
           </h2>
           <p className="mt-1 text-sm text-gray-500">
-            Earnings administration may update only Sector, Location, and Task.
+            {t("collaborator.editAssignmentHelp")}
           </p>
         </div>
         <button
@@ -437,18 +440,18 @@ function CollaboratorWorkAssignmentEditPanel({
           className="rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 shadow-sm"
           onClick={onCancel}
         >
-          Cancel edit
+          {t("common.cancelEdit")}
         </button>
       </div>
 
       {isLoading && (
         <p className="mt-4 rounded-xl bg-gray-50 p-4 text-sm text-gray-700">
-          Loading editable reference data...
+          {t("collaborator.loadingEditable")}
         </p>
       )}
 
-      <ApiErrorPanel error={loadError} />
-      <ApiErrorPanel error={updateMutation.error} />
+      <ApiErrorPanel error={loadError} translate={t} />
+      <ApiErrorPanel error={updateMutation.error} translate={t} />
 
       {clientError && (
         <div className="mt-4 rounded-xl border border-red-200 bg-red-50 p-4 text-sm font-medium text-red-800">
@@ -460,28 +463,28 @@ function CollaboratorWorkAssignmentEditPanel({
         <form onSubmit={submit} className="mt-5 space-y-5">
           <div className="grid gap-4 md:grid-cols-3">
             <Select
-              label="Sector"
+              label={t("collaborator.sector")}
               required
               value={form.sectorId}
               onChange={(value) => update("sectorId", value)}
               options={sectorOptions}
-              placeholder="Select a sector"
+              placeholder={t("collaborator.selectSector")}
             />
             <Select
-              label="Location"
+              label={t("collaborator.location")}
               required
               value={form.locationId}
               onChange={(value) => update("locationId", value)}
               options={locationOptions}
-              placeholder="Select a location"
+              placeholder={t("collaborator.selectLocation")}
             />
             <Select
-              label="Task"
+              label={t("collaborator.task")}
               required
               value={form.taskId}
               onChange={(value) => update("taskId", value)}
               options={taskOptions}
-              placeholder="Select a task"
+              placeholder={t("collaborator.selectTask")}
             />
           </div>
 
@@ -491,14 +494,14 @@ function CollaboratorWorkAssignmentEditPanel({
               className="rounded-xl border border-gray-300 bg-white px-5 py-3 text-sm font-semibold text-gray-700 shadow-sm"
               onClick={onCancel}
             >
-              Cancel
+              {t("common.cancel")}
             </button>
             <button
               type="submit"
               disabled={updateMutation.isPending}
               className="rounded-xl bg-gray-950 px-5 py-3 text-sm font-semibold text-white shadow-sm disabled:cursor-not-allowed disabled:opacity-60"
             >
-              {updateMutation.isPending ? "Saving..." : "Save Work Assignment"}
+              {updateMutation.isPending ? t("common.saving") : t("collaborator.saveAssignment")}
             </button>
           </div>
         </form>
@@ -526,6 +529,7 @@ function CollaboratorEditPanel({
   onCancel: () => void;
   onSaved: (collaborator: Collaborator) => void;
 }) {
+  const { t } = useI18n();
   const paymentMethodsQuery = useReferenceDataByType("method");
   const sectorsQuery = useReferenceDataByType("sector");
   const locationsQuery = useReferenceDataByType("location");
@@ -573,10 +577,12 @@ function CollaboratorEditPanel({
   );
   const paymentValueConfig = paymentValueInputConfig(
     selectedPaymentMethod?.code,
+    t,
   );
   const paymentValueValidation = validatePaymentValueInput(
     form.paymentValue,
     paymentValueConfig,
+    t,
   );
 
   function update<K extends keyof EditFormState>(
@@ -600,9 +606,7 @@ function CollaboratorEditPanel({
       !form.taskId ||
       !form.paymentMethodId
     ) {
-      setClientError(
-        "Select availability, sector, location, task, and payment method before saving.",
-      );
+      setClientError(t("collaborator.validation.editRequired"));
       return;
     }
     if (!paymentValueValidation.valid) {
@@ -610,9 +614,7 @@ function CollaboratorEditPanel({
       return;
     }
     if (!Number.isInteger(extensionDays) || extensionDays < 0) {
-      setClientError(
-        "Extension days must be a whole number of zero or greater.",
-      );
+      setClientError(t("collaborator.validation.extensionDays"));
       return;
     }
 
@@ -637,11 +639,10 @@ function CollaboratorEditPanel({
       <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
         <div>
           <h2 className="text-lg font-semibold text-gray-950">
-            Edit Collaborator
+            {t("collaborator.edit")}
           </h2>
           <p className="mt-1 text-sm text-gray-500">
-            Update assignment, payment, and journey extension details for this
-            Collaborator.
+            {t("collaborator.editHelp")}
           </p>
         </div>
         <button
@@ -649,18 +650,18 @@ function CollaboratorEditPanel({
           className="rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 shadow-sm"
           onClick={onCancel}
         >
-          Cancel edit
+          {t("common.cancelEdit")}
         </button>
       </div>
 
       {isLoading && (
         <p className="mt-4 rounded-xl bg-gray-50 p-4 text-sm text-gray-700">
-          Loading editable reference data...
+          {t("collaborator.loadingEditable")}
         </p>
       )}
 
-      <ApiErrorPanel error={loadError} />
-      <ApiErrorPanel error={updateMutation.error} />
+      <ApiErrorPanel error={loadError} translate={t} />
+      <ApiErrorPanel error={updateMutation.error} translate={t} />
 
       {clientError && (
         <div className="mt-4 rounded-xl border border-red-200 bg-red-50 p-4 text-sm font-medium text-red-800">
@@ -672,50 +673,50 @@ function CollaboratorEditPanel({
         <form onSubmit={submit} className="mt-5 space-y-5">
           <div className="grid gap-4 md:grid-cols-4">
             <Select
-              label="Avail."
+              label={t("collaborator.availabilityShort")}
               required
               value={form.planningAvailability}
               onChange={(value) => update("planningAvailability", value)}
-              options={planningAvailabilityOptions}
-              placeholder="Select availability"
+              options={planningAvailabilityOptions(t)}
+              placeholder={t("collaborator.selectAvailability")}
             />
             <Select
-              label="Sector"
+              label={t("collaborator.sector")}
               required
               value={form.sectorId}
               onChange={(value) => update("sectorId", value)}
               options={sectorOptions}
-              placeholder="Select a sector"
+              placeholder={t("collaborator.selectSector")}
             />
             <Select
-              label="Location"
+              label={t("collaborator.location")}
               required
               value={form.locationId}
               onChange={(value) => update("locationId", value)}
               options={locationOptions}
-              placeholder="Select a location"
+              placeholder={t("collaborator.selectLocation")}
             />
             <Select
-              label="Task"
+              label={t("collaborator.task")}
               required
               value={form.taskId}
               onChange={(value) => update("taskId", value)}
               options={taskOptions}
-              placeholder="Select a task"
+              placeholder={t("collaborator.selectTask")}
             />
           </div>
 
           <div className="grid gap-4 md:grid-cols-3">
             <Select
-              label="Payment Method"
+              label={t("collaborator.paymentMethod")}
               required
               value={form.paymentMethodId}
               onChange={(value) => update("paymentMethodId", value)}
               options={paymentMethodOptions}
-              placeholder="Select a payment method"
+              placeholder={t("collaborator.selectPaymentMethod")}
             />
             <Input
-              label="Payment Value"
+              label={t("collaborator.paymentValue")}
               required
               type="text"
               inputMode="decimal"
@@ -726,7 +727,7 @@ function CollaboratorEditPanel({
               onChange={(value) => update("paymentValue", value)}
             />
             <Input
-              label="Extension Days"
+              label={t("collaborator.extensionDays")}
               required
               type="number"
               min="0"
@@ -742,14 +743,14 @@ function CollaboratorEditPanel({
               className="rounded-xl border border-gray-300 bg-white px-5 py-3 text-sm font-semibold text-gray-700 shadow-sm"
               onClick={onCancel}
             >
-              Cancel
+              {t("common.cancel")}
             </button>
             <button
               type="submit"
               disabled={updateMutation.isPending}
               className="rounded-xl bg-gray-950 px-5 py-3 text-sm font-semibold text-white shadow-sm disabled:cursor-not-allowed disabled:opacity-60"
             >
-              {updateMutation.isPending ? "Saving..." : "Save Collaborator"}
+              {updateMutation.isPending ? t("common.saving") : t("collaborator.save")}
             </button>
           </div>
         </form>
@@ -807,20 +808,22 @@ function collaboratorUpdateInput(
   return input;
 }
 
-const planningAvailabilityOptions = [
-  { value: "ACTIVE", label: "A — Active" },
-  { value: "DAY_OFF", label: "D — Day Off" },
-  { value: "LEAVE_OF_ABSENCE", label: "L — Leave of Absence" },
-];
+function planningAvailabilityOptions(t: ReturnType<typeof useI18n>["t"]) {
+  return [
+    { value: "ACTIVE", label: t("planning.availability.active") },
+    { value: "DAY_OFF", label: t("planning.availability.dayOff") },
+    { value: "LEAVE_OF_ABSENCE", label: t("planning.availability.leave") },
+  ];
+}
 
-function planningAvailabilityLabel(value?: string) {
+function planningAvailabilityLabel(value: string | undefined, t: ReturnType<typeof useI18n>["t"]) {
   switch (value) {
     case "DAY_OFF":
-      return "D — Day Off";
+      return t("planning.availability.dayOff");
     case "LEAVE_OF_ABSENCE":
-      return "L — Leave of Absence";
+      return t("planning.availability.leave");
     default:
-      return "A — Active";
+      return t("planning.availability.active");
   }
 }
 
@@ -939,6 +942,7 @@ function CollaboratorNotes({
   collaborator: Collaborator;
   canRefreshGoldBalance: boolean;
 }) {
+  const { t } = useI18n();
   const rawNotes = collaborator.notes?.trim() ?? "";
   const refreshGoldBalance =
     canRefreshGoldBalance && hasStoredGoldBalanceNote(rawNotes);
@@ -946,12 +950,12 @@ function CollaboratorNotes({
     refreshGoldBalance ? collaborator.id : "",
   );
   const displayedNotes = refreshGoldBalance
-    ? notesWithCurrentGoldBalance(rawNotes, preview.data?.goldGramBalance)
-    : rawNotes || "No notes recorded.";
+    ? notesWithCurrentGoldBalance(rawNotes, preview.data?.goldGramBalance, t)
+    : rawNotes || t("collaborator.noNotes");
 
   return (
     <section className="rounded-2xl border bg-white p-5 shadow-sm lg:col-span-2">
-      <h2 className="text-lg font-semibold text-gray-950">Notes</h2>
+      <h2 className="text-lg font-semibold text-gray-950">{t("collaborator.notes")}</h2>
       <p className="mt-3 whitespace-pre-wrap text-sm text-gray-700">
         {displayedNotes}
       </p>
@@ -966,14 +970,20 @@ function hasStoredGoldBalanceNote(notes: string) {
   return storedGoldBalanceNotePattern.test(notes);
 }
 
-function notesWithCurrentGoldBalance(notes: string, goldGramBalance?: number) {
+function notesWithCurrentGoldBalance(
+  notes: string,
+  goldGramBalance: number | undefined,
+  t: Translate = translateEnglish,
+) {
   if (goldGramBalance === undefined || !Number.isFinite(goldGramBalance)) {
-    return notes || "No notes recorded.";
+    return notes || t("collaborator.noNotes");
   }
 
   return notes.replace(
     storedGoldBalanceNotePattern,
-    `Gold balance starts at ${formatGoldGramsForNotes(goldGramBalance)} grams.`,
+    t("collaborator.goldBalanceStarts", {
+      value: formatGoldGramsForNotes(goldGramBalance),
+    }),
   );
 }
 
@@ -988,6 +998,7 @@ function JourneyCloseSuccessDialog({
   message: string;
   onDismiss: () => void;
 }) {
+  const { t } = useI18n();
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-950/60 p-4">
       <div
@@ -1001,7 +1012,7 @@ function JourneyCloseSuccessDialog({
           id="journey-close-success-title"
           className="text-xl font-bold text-green-900"
         >
-          Journey Closed
+          {t("collaborator.journeyClosed")}
         </h2>
         <p
           id="journey-close-success-description"
@@ -1016,7 +1027,7 @@ function JourneyCloseSuccessDialog({
             className="rounded-xl bg-green-800 px-4 py-2 text-sm font-semibold text-white shadow-sm"
             onClick={onDismiss}
           >
-            Continue
+            {t("common.continue")}
           </button>
         </div>
       </div>
@@ -1025,9 +1036,10 @@ function JourneyCloseSuccessDialog({
 }
 
 function StatusBadge({ collaborator }: { collaborator: Collaborator }) {
+  const { t } = useI18n();
   const closed = Boolean(collaborator.closedAt);
   const label = closed
-    ? "Closed"
+    ? t("collaborator.closed")
     : collaborator.statusLabel || collaborator.statusId;
 
   return (
@@ -1054,11 +1066,11 @@ function displayPersonName(collaborator: Collaborator) {
   return personDisplayName(collaborator);
 }
 
-function personDisplayName(collaborator: Collaborator) {
+function personDisplayName(collaborator: Collaborator, t: Translate = translateEnglish) {
   return (
     collaborator.personNickname?.trim() ||
     collaborator.personName?.trim() ||
-    "Person unavailable"
+    t("collaborator.personUnavailable")
   );
 }
 

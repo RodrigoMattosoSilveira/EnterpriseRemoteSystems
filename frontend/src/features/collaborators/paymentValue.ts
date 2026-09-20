@@ -1,4 +1,5 @@
 import type { Collaborator } from "../../types/collaborators";
+import { translateEnglish, type Translate } from "../../i18n";
 
 export type PaymentValueInputConfig = {
   maxDecimals: number;
@@ -26,14 +27,14 @@ export function normalizePaymentMethodCode(code?: string) {
 
 export function paymentValueInputConfig(
   paymentMethodCode?: string,
+  t: Translate = translateEnglish,
 ): PaymentValueInputConfig {
   switch (normalizePaymentMethodCode(paymentMethodCode)) {
     case "GOLD_COMMISSION":
       return {
         maxDecimals: 8,
         placeholder: "7.12345678",
-        helperText:
-          "For gold commission, enter the collaborator's production percentage. Up to eight decimal places are allowed.",
+        helperText: t("collaborators.paymentHelp.goldCommission"),
         pattern: "[0-9]+([\\.,][0-9]{1,8})?",
       };
     case "DAILY_BRL":
@@ -41,16 +42,14 @@ export function paymentValueInputConfig(
       return {
         maxDecimals: 2,
         placeholder: "150.00",
-        helperText:
-          "For Brazilian Real payments, enter a BRL amount. Up to two decimal places are allowed.",
+        helperText: t("collaborators.paymentHelp.brl"),
         pattern: "[0-9]+([\\.,][0-9]{1,2})?",
       };
     default:
       return {
         maxDecimals: 8,
         placeholder: "0.00",
-        helperText:
-          "Select a payment method to see whether this value is a BRL amount or gold-production percentage.",
+        helperText: t("collaborators.paymentHelp.selectMethod"),
         pattern: "[0-9]+([\\.,][0-9]{1,8})?",
       };
   }
@@ -59,6 +58,7 @@ export function paymentValueInputConfig(
 export function validatePaymentValueInput(
   rawValue: string,
   config: PaymentValueInputConfig,
+  t: Translate = translateEnglish,
 ): { valid: boolean; value: number; message: string } {
   const normalized = rawValue.trim().replace(",", ".");
 
@@ -66,7 +66,7 @@ export function validatePaymentValueInput(
     return {
       valid: false,
       value: Number.NaN,
-      message: "Payment value is required.",
+      message: t("collaborators.paymentValidation.required"),
     };
   }
 
@@ -74,8 +74,7 @@ export function validatePaymentValueInput(
     return {
       valid: false,
       value: Number.NaN,
-      message:
-        "Payment value must use digits and an optional decimal separator.",
+      message: t("collaborators.paymentValidation.numeric"),
     };
   }
 
@@ -84,9 +83,9 @@ export function validatePaymentValueInput(
     return {
       valid: false,
       value: Number.NaN,
-      message: `Payment value can have at most ${numberWord(
-        config.maxDecimals,
-      )} decimal places.`,
+      message: t("collaborators.paymentValidation.decimals", {
+        count: config.maxDecimals,
+      }),
     };
   }
 
@@ -95,16 +94,23 @@ export function validatePaymentValueInput(
     return {
       valid: false,
       value,
-      message: "Payment value must be greater than zero.",
+      message: t("collaborators.paymentValidation.positive"),
     };
   }
 
   return { valid: true, value, message: "" };
 }
 
-export function formatCollaboratorPaymentValue(collaborator: Collaborator) {
+export function formatCollaboratorPaymentValue(
+  collaborator: Collaborator,
+  formatCurrency?: (value: number, currency: string) => string,
+) {
   if (collaborator.goldCommissionPercent !== undefined) {
     return `${formatDecimal(collaborator.goldCommissionPercent, 8)}%`;
+  }
+
+  if (formatCurrency) {
+    return formatCurrency(collaborator.paymentValue, "BRL");
   }
 
   return new Intl.NumberFormat("pt-BR", {
@@ -118,15 +124,4 @@ function formatDecimal(value: number, maxDecimals: number) {
     .toFixed(maxDecimals)
     .replace(/(\.\d*?[1-9])0+$/, "$1")
     .replace(/\.0+$/, "");
-}
-
-function numberWord(value: number) {
-  switch (value) {
-    case 2:
-      return "two";
-    case 8:
-      return "eight";
-    default:
-      return String(value);
-  }
 }

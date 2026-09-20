@@ -2,6 +2,7 @@ import { FormEvent, useMemo, useState } from "react";
 import { JourneyDaysRemaining } from "../../components/JourneyDaysRemaining";
 import type { Collaborator } from "../../types/collaborators";
 import type { ReferenceDataItem } from "../../types/referenceData";
+import { useI18n } from "../../i18n";
 import type {
   PlannedStatus,
   SaveWorkPeriodAssignmentInput,
@@ -20,6 +21,7 @@ export function PlanItemEditor(props: {
   onSave: (input: SaveWorkPeriodAssignmentInput) => void;
   onCancel?: () => void;
 }) {
+  const { t } = useI18n();
   const { assignment } = props;
   const [form, setForm] = useState<SaveWorkPeriodAssignmentInput>({
     collaboratorId: assignment?.collaboratorId ?? "",
@@ -50,7 +52,7 @@ export function PlanItemEditor(props: {
       !form.locationId ||
       !form.taskId
     ) {
-      setError("Select a collaborator, sector, local, and task.");
+      setError(t("planning.editor.validation.required"));
       return;
     }
     props.onSave(form);
@@ -64,12 +66,12 @@ export function PlanItemEditor(props: {
       {error && <p className="text-sm font-medium text-red-700">{error}</p>}
       <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
         <Select
-          label="Collaborator *"
+          label={t("planning.editor.collaboratorRequired")}
           value={form.collaboratorId}
           onChange={(value) => setForm({ ...form, collaboratorId: value })}
           disabled={props.disabled}
         >
-          <option value="">Select collaborator</option>
+          <option value="">{t("planning.editor.selectCollaborator")}</option>
           {availableCollaborators.map((row) => (
             <option key={row.id} value={row.id}>
               {collaboratorLabel(row)}
@@ -77,25 +79,25 @@ export function PlanItemEditor(props: {
           ))}
         </Select>
         <Select
-          label="Planned Status *"
+          label={t("planning.editor.plannedStatusRequired")}
           value={form.plannedStatus}
           onChange={(value) =>
             setForm({ ...form, plannedStatus: value as PlannedStatus })
           }
           disabled={props.disabled}
         >
-          <option value="INCLUDED">Included</option>
-          <option value="EXCLUDED">Excluded</option>
+          <option value="INCLUDED">{t("planning.code.INCLUDED")}</option>
+          <option value="EXCLUDED">{t("planning.code.EXCLUDED")}</option>
         </Select>
         <Select
-          label="Replacement For"
+          label={t("planning.editor.replacementFor")}
           value={form.replacementForAssignmentId ?? ""}
           onChange={(value) =>
             setForm({ ...form, replacementForAssignmentId: value })
           }
           disabled={props.disabled}
         >
-          <option value="">Not a replacement</option>
+          <option value="">{t("planning.editor.notReplacement")}</option>
           {props.assignments
             .filter((row) => row.active && row.id !== assignment?.id)
             .map((row) => (
@@ -107,12 +109,12 @@ export function PlanItemEditor(props: {
             ))}
         </Select>
         <Select
-          label="Sector *"
+          label={t("planning.editor.sectorRequired")}
           value={form.sectorId}
           onChange={(value) => setForm({ ...form, sectorId: value })}
           disabled={props.disabled}
         >
-          <option value="">Select sector</option>
+          <option value="">{t("collaborator.selectSector")}</option>
           {active(props.sectors).map((row) => (
             <option key={row.id} value={row.id}>
               {row.label}
@@ -120,12 +122,12 @@ export function PlanItemEditor(props: {
           ))}
         </Select>
         <Select
-          label="Local / Well *"
+          label={t("planning.editor.localRequired")}
           value={form.locationId}
           onChange={(value) => setForm({ ...form, locationId: value })}
           disabled={props.disabled}
         >
-          <option value="">Select local</option>
+          <option value="">{t("planning.editor.selectLocal")}</option>
           {active(props.locations).map((row) => (
             <option key={row.id} value={row.id}>
               {row.label}
@@ -133,12 +135,12 @@ export function PlanItemEditor(props: {
           ))}
         </Select>
         <Select
-          label="Task *"
+          label={t("planning.editor.taskRequired")}
           value={form.taskId}
           onChange={(value) => setForm({ ...form, taskId: value })}
           disabled={props.disabled}
         >
-          <option value="">Select task</option>
+          <option value="">{t("collaborator.selectTask")}</option>
           {active(props.tasks).map((row) => (
             <option key={row.id} value={row.id}>
               {row.label}
@@ -159,7 +161,7 @@ export function PlanItemEditor(props: {
             onClick={props.onCancel}
             className="rounded-xl border px-4 py-2 text-sm font-semibold"
           >
-            Cancel
+            {t("common.cancel")}
           </button>
         )}
         <button
@@ -167,10 +169,10 @@ export function PlanItemEditor(props: {
           className="rounded-xl bg-gray-950 px-4 py-2 text-sm font-semibold text-white disabled:bg-gray-400"
         >
           {props.pending
-            ? "Saving..."
+            ? t("common.saving")
             : assignment
-              ? "Save Assignment"
-              : "Add Assignment"}
+              ? t("planning.editor.saveAssignment")
+              : t("planning.editor.addAssignment")}
         </button>
       </div>
     </form>

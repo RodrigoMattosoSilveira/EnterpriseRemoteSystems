@@ -205,7 +205,7 @@ test("grams-of-gold price-list expense shows conversion audit details", async ({
   await expect(page.getByText("2 g gold").first()).toBeVisible();
   await expect(page.getByText("Gold price source")).toBeVisible();
   await expect(page.locator("body")).toContainText("2099-12-31");
-  await expect(page.locator("body")).toContainText("137,28");
+  await expect(page.locator("body")).toContainText("137.28");
 });
 
 type ApiEnvelope<T> = {

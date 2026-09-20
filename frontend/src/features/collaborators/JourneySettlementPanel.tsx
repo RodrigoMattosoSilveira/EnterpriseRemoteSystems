@@ -11,6 +11,7 @@ import {
   readSelectedTenantId,
 } from "../../api/tenantSelection";
 import { JourneyDaysRemaining } from "../../components/JourneyDaysRemaining";
+import { useI18n, translateEnglish, type Translate, type TranslationKey } from "../../i18n";
 import type { AuthzActor } from "../../types/authz";
 import type { SettlementPreview, SecondApprovalInput } from "../../types/settlements";
 import { useCurrentAuthzActor, useTenantAuthzActors } from "../authz/useAuthzAdmin";
@@ -30,37 +31,37 @@ type Action = SensitiveAction | "EXTEND_JOURNEY";
 
 const settlementReasonOptions: Array<{
   value: string;
-  label: string;
+  labelKey: TranslationKey;
   actions: SensitiveAction[];
 }> = [
   {
     value: "GOLD_BALANCE_PAYOUT",
-    label: "Gold balance payout",
+    labelKey: "settlement.reasonGold",
     actions: ["ZERO_GOLD"] satisfies SensitiveAction[],
   },
   {
     value: "COLLABORATOR_REQUESTED_PAYOUT",
-    label: "Collaborator requested payout",
+    labelKey: "settlement.reasonRequested",
     actions: ["PARTIAL_PAYOUT"] satisfies SensitiveAction[],
   },
   {
     value: "SCHEDULED_PAYOUT",
-    label: "Scheduled payout",
+    labelKey: "settlement.reasonScheduled",
     actions: ["PARTIAL_PAYOUT"] satisfies SensitiveAction[],
   },
   {
     value: "FINAL_TENANT_PAYMENT",
-    label: "Final Tenant payment",
+    labelKey: "settlement.reasonTenantFinal",
     actions: ["FINAL_TENANT_PAYMENT"] satisfies SensitiveAction[],
   },
   {
     value: "FINAL_COLLABORATOR_PAYMENT",
-    label: "Final Collaborator repayment",
+    labelKey: "settlement.reasonCollaboratorFinal",
     actions: ["FINAL_COLLABORATOR_PAYMENT"] satisfies SensitiveAction[],
   },
   {
     value: "END_OF_JOURNEY_SETTLEMENT",
-    label: "End-of-journey closure",
+    labelKey: "settlement.reasonJourneyEnd",
     actions: ["CLOSE_JOURNEY"] satisfies SensitiveAction[],
   },
 ];
@@ -76,6 +77,8 @@ export function JourneySettlementPanel({
   closedAt?: string;
   onJourneyClosed?: (message: string) => void;
 }) {
+  const { t } = useI18n();
+
   const preview = useSettlementPreview(collaboratorId);
   const [action, setAction] = useState<Action | null>(null);
   const [message, setMessage] = useState("");
@@ -86,10 +89,10 @@ export function JourneySettlementPanel({
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h2 className="text-lg font-semibold text-gray-950">
-            Journey Settlement
+            {t("settlement.title")}
           </h2>
           <p className="mt-1 text-sm text-gray-500">
-            Preview Journey balances, settle them separately, and close only after every value-unit balance is zero.
+            {t("settlement.subtitle")}
           </p>
           <JourneyDaysRemaining
             projectedEndDate={projectedEndDate}
@@ -102,18 +105,18 @@ export function JourneySettlementPanel({
           className="rounded-xl border border-gray-300 px-3 py-2 text-sm font-semibold text-gray-700 shadow-sm"
           onClick={() => preview.refetch()}
         >
-          Refresh
+          {t("settlement.refresh")}
         </button>
       </div>
 
       {preview.isLoading ? (
         <p className="mt-4 text-sm text-gray-600">
-          Loading settlement preview...
+          {t("settlement.loading")}
         </p>
       ) : null}
       {preview.error ? (
         <div className="mt-4">
-          <ApiErrorPanel error={preview.error} />
+          <ApiErrorPanel error={preview.error} translate={t} />
         </div>
       ) : null}
       {message ? (
@@ -133,7 +136,7 @@ export function JourneySettlementPanel({
               target="_blank"
               to={`/ledger-entries/${entryId}/receipt`}
             >
-              Open receipt{receiptEntryIds.length > 1 ? ` ${index + 1}` : ""}
+              {t("settlement.openReceipt")}{receiptEntryIds.length > 1 ? ` ${index + 1}` : ""}
             </Link>
           ))}
         </div>
@@ -145,10 +148,10 @@ export function JourneySettlementPanel({
           <SettlementWorkflow preview={preview.data} onAction={setAction} />
           <details className="mt-5 rounded-xl border border-gray-200 bg-gray-50 p-4">
             <summary className="cursor-pointer text-sm font-semibold text-gray-700">
-              Other payout actions
+              {t("settlement.otherActions")}
             </summary>
             <p className="mt-2 text-xs text-gray-500">
-              These operational payouts remain available during an open Journey, but they are not substitutes for the direction-aware final settlement required at Journey end.
+              {t("settlement.otherActionsHelp")}
             </p>
             <div className="mt-3 flex flex-wrap gap-3">
               <button
@@ -157,20 +160,19 @@ export function JourneySettlementPanel({
                 disabled={preview.data.goldGramBalance <= 0}
                 onClick={() => setAction("ZERO_GOLD")}
               >
-                Zero Gold
+                {t("settlement.zeroGoldShort")}
               </button>
               <button
                 type="button"
                 className="rounded-xl bg-gray-900 px-4 py-2 text-sm font-semibold text-white"
                 onClick={() => setAction("PARTIAL_PAYOUT")}
               >
-                Partial Payout
+                {t("settlement.partialPayoutShort")}
               </button>
             </div>
           </details>
           <p className="mt-4 text-xs text-gray-500">
-            Settlement actions use the current authorization actor selected in
-            Authz Admin. Operators should not handle backend settlement secrets.
+            {t("settlement.actorHelp")}
           </p>
         </>
       ) : null}
@@ -211,6 +213,8 @@ function SettlementWorkflow({
   preview: SettlementPreview;
   onAction: (action: Action) => void;
 }) {
+  const { t, formatCurrency, formatNumber } = useI18n();
+
   const tenantOwesCollaborator =
     preview.brlBalance > 0 || preview.goldGramBalance > 0;
   const collaboratorOwesTenant =
@@ -221,31 +225,31 @@ function SettlementWorkflow({
     <div className="mt-5 grid gap-4">
       {tenantOwesCollaborator ? (
         <section className="rounded-2xl border border-green-200 bg-green-50 p-4">
-          <h3 className="font-bold text-green-950">Tenant owes Collaborator</h3>
+          <h3 className="font-bold text-green-950">{t("settlement.tenantOwes")}</h3>
           <p className="mt-1 text-sm text-green-900">
-            Post the exact positive Journey balance as the final Tenant payment. The generated receipt must then be accepted in-app by the Collaborator.
+            {t("settlement.tenantOwesHelp")}
           </p>
           <p className="mt-2 text-sm font-semibold text-green-950">
-            {positiveBalanceSummary(preview)}
+            {positiveBalanceSummary(preview, t, formatCurrency, formatNumber)}
           </p>
           <button
             type="button"
             className="mt-3 rounded-xl bg-green-700 px-4 py-2 text-sm font-semibold text-white"
             onClick={() => onAction("FINAL_TENANT_PAYMENT")}
           >
-            Settle Tenant Owed Balance
+            {t("settlement.settleTenant")}
           </button>
         </section>
       ) : null}
 
       {collaboratorOwesTenant ? (
         <section className="rounded-2xl border border-blue-200 bg-blue-50 p-4">
-          <h3 className="font-bold text-blue-950">Collaborator owes Tenant</h3>
+          <h3 className="font-bold text-blue-950">{t("settlement.collaboratorOwes")}</h3>
           <p className="mt-1 text-sm text-blue-900">
-            Either extend the open Journey to give the Collaborator more time to earn the amount owed, or record the full repayment already received by the Tenant.
+            {t("settlement.collaboratorOwesHelp")}
           </p>
           <p className="mt-2 text-sm font-semibold text-blue-950">
-            {negativeBalanceSummary(preview)}
+            {negativeBalanceSummary(preview, t, formatCurrency, formatNumber)}
           </p>
           <div className="mt-3 flex flex-wrap gap-3">
             <button
@@ -253,14 +257,14 @@ function SettlementWorkflow({
               className="rounded-xl border border-blue-300 bg-white px-4 py-2 text-sm font-semibold text-blue-800"
               onClick={() => onAction("EXTEND_JOURNEY")}
             >
-              Extend Journey
+              {t("settlement.extendJourney")}
             </button>
             <button
               type="button"
               className="rounded-xl bg-blue-700 px-4 py-2 text-sm font-semibold text-white"
               onClick={() => onAction("FINAL_COLLABORATOR_PAYMENT")}
             >
-              Record Collaborator Payment
+              {t("settlement.recordCollaborator")}
             </button>
           </div>
         </section>
@@ -269,37 +273,35 @@ function SettlementWorkflow({
       {balancesZero && preview.outstandingReceipts > 0 ? (
         <section className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
           <h3 className="font-bold text-amber-950">
-            Balances settled — receipt acceptance pending
+            {t("settlement.receiptPendingTitle")}
           </h3>
           <p className="mt-1 text-sm text-amber-900">
-            The Journey balances are zero, but {preview.outstandingReceipts} final-settlement receipt{preview.outstandingReceipts === 1 ? " remains" : "s remain"} outstanding. The designated accepting party must complete in-app acceptance before closure.
+            {t(preview.outstandingReceipts === 1 ? "settlement.receiptPendingOne" : "settlement.receiptPendingMany", { count: preview.outstandingReceipts })}
           </p>
           <Link
             className="mt-3 inline-flex text-sm font-semibold text-amber-950 underline"
             to="/receipts/outstanding"
           >
-            Review outstanding receipts
+            {t("settlement.reviewOutstanding")}
           </Link>
         </section>
       ) : null}
 
       {preview.pendingAccrualItems > 0 ? (
         <section className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
-          <h3 className="font-bold text-amber-950">Pending earnings remain</h3>
+          <h3 className="font-bold text-amber-950">{t("settlement.pendingEarnings")}</h3>
           <p className="mt-1 text-sm text-amber-900">
-            Post or resolve {preview.pendingAccrualItems} pending accrual item{preview.pendingAccrualItems === 1 ? "" : "s"} before final closure.
+            {t(preview.pendingAccrualItems === 1 ? "settlement.pendingAccrualOne" : "settlement.pendingAccrualMany", { count: preview.pendingAccrualItems })}
           </p>
         </section>
       ) : null}
 
       <section className={`rounded-2xl border p-4 ${preview.canClose ? "border-emerald-300 bg-emerald-50" : "border-gray-200 bg-gray-50"}`}>
         <h3 className={`font-bold ${preview.canClose ? "text-emerald-950" : "text-gray-900"}`}>
-          {preview.canClose ? "Ready to close Journey" : "Journey closure is blocked"}
+          {preview.canClose ? t("settlement.readyClose") : t("settlement.blocked")}
         </h3>
         <p className={`mt-1 text-sm ${preview.canClose ? "text-emerald-900" : "text-gray-600"}`}>
-          {preview.canClose
-            ? "Every Journey balance is zero, required receipts are complete, and no pending accrual blockers remain."
-            : "Resolve every blocking condition above before closing. Close Journey never posts or converts a settlement payment."}
+          {preview.canClose ? t("settlement.closeReadyHelp") : t("settlement.closeBlockedHelp")}
         </p>
         <button
           type="button"
@@ -307,7 +309,7 @@ function SettlementWorkflow({
           disabled={!preview.canClose}
           onClick={() => onAction("CLOSE_JOURNEY")}
         >
-          Close Journey
+          {t("settlement.closeJourney")}
         </button>
       </section>
     </div>
@@ -324,7 +326,8 @@ function JourneyExtensionPanel({
   projectedEndDate: string;
   onClose: () => void;
   onSuccess: (message: string) => void;
-}) {
+}) {  const { t, formatDate } = useI18n();
+
   const extendJourney = useExtendCollaboratorJourney(collaboratorId);
   const [additionalDays, setAdditionalDays] = useState("7");
   const parsedDays = Number(additionalDays);
@@ -345,7 +348,10 @@ function JourneyExtensionPanel({
     if (!validDays) return;
     const updated = await extendJourney.mutateAsync({ additionalDays: parsedDays });
     onSuccess(
-      `Journey extended by ${parsedDays} day${parsedDays === 1 ? "" : "s"}. New projected end date: ${formatDateOnly(updated.projectedEndDate)}.`,
+      t(parsedDays === 1 ? "settlement.extendedOne" : "settlement.extendedMany", {
+        count: parsedDays,
+        date: formatDate(updated.projectedEndDate),
+      }),
     );
   }
 
@@ -359,21 +365,21 @@ function JourneyExtensionPanel({
         <div className="flex items-start justify-between gap-4">
           <div>
             <h3 id="journey-extension-panel-title" className="text-lg font-bold text-gray-950">
-              Extend Journey
+              {t("settlement.extendJourney")}
             </h3>
             <p className="mt-1 text-sm text-gray-600">
-              Give the Collaborator more time to earn against the amount owed to the Tenant. Extending the Journey does not post a Ledger Entry and does not settle the current debt.
+              {t("settlement.extensionHelp")}
             </p>
           </div>
-          <button type="button" aria-label="Close" className="text-2xl text-gray-500" onClick={onClose}>×</button>
+          <button type="button" aria-label={t("settlement.closeAria")} className="text-2xl text-gray-500" onClick={onClose}>×</button>
         </div>
 
         <form className="mt-5 grid gap-4" onSubmit={submit}>
           <div className="grid gap-4 sm:grid-cols-2">
-            <Summary label="Current projected end" value={formatDateOnly(projectedEndDate)} />
-            <Summary label="New projected end" value={nextProjectedEndDate ? formatDateOnly(nextProjectedEndDate) : "—"} />
+            <Summary label={t("settlement.currentProjectedEnd")} value={formatDate(projectedEndDate)} />
+            <Summary label={t("settlement.newProjectedEnd")} value={nextProjectedEndDate ? formatDate(nextProjectedEndDate) : "—"} />
           </div>
-          <Field label="Additional days">
+          <Field label={t("settlement.additionalDays")}>
             <input
               required
               className={inputClass}
@@ -385,19 +391,19 @@ function JourneyExtensionPanel({
             />
           </Field>
           <p className="rounded-xl bg-blue-50 p-3 text-sm text-blue-900">
-            The extension is added to the Journey's existing cumulative extension. The Journey remains open and the amount owed remains unchanged until later earnings or a recorded Collaborator payment brings the balance to zero.
+            {t("settlement.extensionCumulativeHelp")}
           </p>
-          {extendJourney.error ? <ApiErrorPanel error={extendJourney.error} /> : null}
+          {extendJourney.error ? <ApiErrorPanel error={extendJourney.error} translate={t} /> : null}
           <div className="flex flex-wrap gap-3">
             <button
               type="submit"
               disabled={!validDays || extendJourney.isPending}
               className="rounded-xl bg-blue-700 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {extendJourney.isPending ? "Extending..." : "Confirm Extension"}
+              {extendJourney.isPending ? t("settlement.extending") : t("settlement.confirmExtension")}
             </button>
             <button type="button" className="rounded-xl border px-4 py-2 text-sm font-semibold" onClick={onClose}>
-              Cancel
+              {t("common.cancel")}
             </button>
           </div>
         </form>
@@ -406,21 +412,36 @@ function JourneyExtensionPanel({
   );
 }
 
-function positiveBalanceSummary(preview: SettlementPreview) {
+function positiveBalanceSummary(
+  preview: SettlementPreview,
+  t: Translate,
+  formatCurrency: ReturnType<typeof useI18n>["formatCurrency"],
+  formatNumber: ReturnType<typeof useI18n>["formatNumber"],
+) {
   const parts: string[] = [];
-  if (preview.brlBalance > 0) parts.push(formatBRL(preview.brlBalance));
-  if (preview.goldGramBalance > 0) parts.push(`${formatGold(preview.goldGramBalance)} g gold`);
-  return `Tenant payment required: ${parts.join(" and ")}.`;
+  if (preview.brlBalance > 0) parts.push(formatCurrency(preview.brlBalance, "BRL"));
+  if (preview.goldGramBalance > 0) {
+    parts.push(t("settlement.goldAmount", { value: formatNumber(preview.goldGramBalance, { maximumFractionDigits: 2 }) }));
+  }
+  return t("settlement.tenantPaymentRequired", { amounts: parts.join(` ${t("common.and")} `) });
 }
 
-function negativeBalanceSummary(preview: SettlementPreview) {
+function negativeBalanceSummary(
+  preview: SettlementPreview,
+  t: Translate,
+  formatCurrency: ReturnType<typeof useI18n>["formatCurrency"],
+  formatNumber: ReturnType<typeof useI18n>["formatNumber"],
+) {
   const parts: string[] = [];
-  if (preview.brlBalance < 0) parts.push(formatBRL(Math.abs(preview.brlBalance)));
-  if (preview.goldGramBalance < 0) parts.push(`${formatGold(Math.abs(preview.goldGramBalance))} g gold`);
-  return `Collaborator repayment required: ${parts.join(" and ")}.`;
+  if (preview.brlBalance < 0) parts.push(formatCurrency(Math.abs(preview.brlBalance), "BRL"));
+  if (preview.goldGramBalance < 0) {
+    parts.push(t("settlement.goldAmount", { value: formatNumber(Math.abs(preview.goldGramBalance), { maximumFractionDigits: 2 }) }));
+  }
+  return t("settlement.collaboratorRepaymentRequired", { amounts: parts.join(` ${t("common.and")} `) });
 }
 
 function PreviewSummary({ preview }: { preview: SettlementPreview }) {
+  const { t, formatCurrency } = useI18n();
   const receiptAcceptancePending =
     preview.brlBalance === 0 &&
     preview.goldGramBalance === 0 &&
@@ -434,24 +455,24 @@ function PreviewSummary({ preview }: { preview: SettlementPreview }) {
 
   return (
     <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-      <Summary label="BRL balance" value={formatBRL(preview.brlBalance)} />
+      <Summary label={t("settlement.brlBalance")} value={formatCurrency(preview.brlBalance, "BRL")} />
       <Summary
-        label="Gold balance"
+        label={t("settlement.goldBalance")}
         value={`${formatGold(preview.goldGramBalance)} g`}
       />
       <Summary
-        label="Pending accruals"
+        label={t("settlement.pendingAccruals")}
         value={String(preview.pendingAccrualItems)}
       />
       <Summary
-        label="Outstanding receipts"
+        label={t("settlement.outstandingReceipts")}
         value={String(preview.outstandingReceipts)}
       />
-      <Summary label="Can close" value={preview.canClose ? "Yes" : "No"} />
+      <Summary label={t("settlement.canClose")} value={preview.canClose ? t("settlement.yes") : t("settlement.no")} />
       {visibleBlockingReasons.length > 0 ? (
         <div className="rounded-xl bg-red-50 p-3 text-sm text-red-800 sm:col-span-2 lg:col-span-4">
-          <span className="font-semibold">Blocking reasons:</span>{" "}
-          {visibleBlockingReasons.map(formatReason).join(", ")}
+          <span className="font-semibold">{t("settlement.blockingReasons")}</span>{" "}
+          {visibleBlockingReasons.map((reason) => formatReason(reason, t)).join(", ")}
         </div>
       ) : null}
     </div>
@@ -483,13 +504,14 @@ function SettlementActionPanel({
   onClose: () => void;
   onSuccess: (message: string, ledgerEntryIds: string[]) => void;
   onJourneyClosed?: (message: string) => void;
-}) {
+}) {  const { t, formatDateTime } = useI18n();
+
   const zeroGold = useZeroGold(collaboratorId);
   const payout = usePartialPayout(collaboratorId);
   const finalTenantPayment = useFinalTenantPayment(collaboratorId);
   const finalCollaboratorPayment = useFinalCollaboratorPayment(collaboratorId);
   const closeJourney = useCloseJourney(collaboratorId, () =>
-    onJourneyClosed?.("Journey closed successfully."),
+    onJourneyClosed?.(t("settlement.success.closed")),
   );
   const [effectiveDate, setEffectiveDate] = useState(today());
   const [brlAmount, setBrlAmount] = useState("");
@@ -558,7 +580,7 @@ function SettlementActionPanel({
     };
     if (action === "ZERO_GOLD") {
       const result = await zeroGold.mutateAsync(base);
-      onSuccess("Gold payout posted successfully.", [result.ledgerEntry.id]);
+      onSuccess(t("settlement.success.gold"), [result.ledgerEntry.id]);
       return;
     }
     if (action === "PARTIAL_PAYOUT") {
@@ -568,7 +590,7 @@ function SettlementActionPanel({
         goldGramAmount: parseGoldInputAmount(goldAmount),
       });
       onSuccess(
-        "Partial payout posted successfully.",
+        t("settlement.success.partial"),
         result.ledgerEntries.map((entry) => entry.id),
       );
       return;
@@ -576,7 +598,7 @@ function SettlementActionPanel({
     if (action === "FINAL_TENANT_PAYMENT") {
       const result = await finalTenantPayment.mutateAsync(base);
       onSuccess(
-        "Final Tenant payment posted. Collaborator receipt acceptance is required before Journey closure.",
+        t("settlement.success.finalTenant"),
         result.ledgerEntries.map((entry) => entry.id),
       );
       return;
@@ -584,14 +606,14 @@ function SettlementActionPanel({
     if (action === "FINAL_COLLABORATOR_PAYMENT") {
       const result = await finalCollaboratorPayment.mutateAsync(base);
       onSuccess(
-        "Collaborator payment recorded. Tenant receipt acceptance is required before Journey closure.",
+        t("settlement.success.finalCollaborator"),
         result.ledgerEntries.map((entry) => entry.id),
       );
       return;
     }
     const result = await closeJourney.mutateAsync({ ...base, confirm: true });
     onSuccess(
-      "Journey closed successfully.",
+      t("settlement.success.closed"),
       result.ledgerEntries.map((entry) => entry.id),
     );
   }
@@ -609,15 +631,15 @@ function SettlementActionPanel({
               id="settlement-action-panel-title"
               className="text-lg font-bold text-gray-950"
             >
-              {actionTitle(action)}
+              {actionTitle(action, t)}
             </h3>
             <p className="mt-1 text-sm text-gray-500">
-              {actionDescription(action, preview)}
+              {actionDescription(action, preview, t)}
             </p>
           </div>
           <button
             type="button"
-            aria-label="Close"
+            aria-label={t("settlement.closeAria")}
             className="text-2xl text-gray-500"
             onClick={onClose}
           >
@@ -627,7 +649,7 @@ function SettlementActionPanel({
         <form className="mt-5 grid gap-4" onSubmit={submit}>
           {action === "PARTIAL_PAYOUT" ? (
             <div className="grid gap-4 sm:grid-cols-2">
-              <Field label="BRL amount">
+              <Field label={t("settlement.brlAmount")}>
                 <input
                   className={inputClass}
                   type="number"
@@ -637,7 +659,7 @@ function SettlementActionPanel({
                   onChange={(event) => setBrlAmount(event.target.value)}
                 />
               </Field>
-              <Field label="Gold grams">
+              <Field label={t("settlement.goldGrams")}>
                 <input
                   className={inputClass}
                   type="number"
@@ -653,7 +675,7 @@ function SettlementActionPanel({
               </Field>
             </div>
           ) : null}
-          <Field label="Effective date">
+          <Field label={t("settlement.effectiveDate")}>
             <input
               required
               className={inputClass}
@@ -663,36 +685,32 @@ function SettlementActionPanel({
             />
           </Field>
           <div className="rounded-xl border border-blue-200 bg-blue-50 p-3 text-sm text-blue-900">
-            <p className="font-semibold">Authorization actor</p>
+            <p className="font-semibold">{t("settlement.authorizationActor")}</p>
             <p className="mt-1">
-              This action uses the actor identified by the authenticated session.
-              Backend settlement keys are not entered by operators or testers.
+              {t("settlement.authActorHelp")}
             </p>
           </div>
           <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
-            <p className="font-semibold">Settlement reason required</p>
+            <p className="font-semibold">{t("settlement.reasonRequired")}</p>
             <p className="mt-1">
-              Sensitive settlement operations must capture an action-specific
-              reason code and a human-readable reason before they can be submitted.
+              {t("settlement.reasonHelp")}
             </p>
           </div>
 
           <div className="rounded-xl border border-purple-200 bg-purple-50 p-3 text-sm text-purple-900">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
-                <p className="font-semibold">Recent reauthentication required</p>
+                <p className="font-semibold">{t("settlement.reauthRequired")}</p>
                 <p className="mt-1">
-                  Confirm the operator has recently reauthenticated before
-                  submitting this sensitive operation. This development control
-                  supplies the required backend reauthentication headers.
+                  {t("settlement.reauthHelp")}
                 </p>
                 {reauthentication ? (
                   <p className="mt-2 text-xs font-semibold">
-                    Confirmed at {formatDateTime(reauthentication.reauthenticatedAt)}
+                    {t("settlement.confirmedAt", { date: formatDateTime(reauthentication.reauthenticatedAt) })}
                   </p>
                 ) : (
                   <p className="mt-2 text-xs font-semibold">
-                    Not confirmed for this browser session.
+                    {t("settlement.notConfirmed")}
                   </p>
                 )}
               </div>
@@ -701,7 +719,7 @@ function SettlementActionPanel({
                 className="rounded-xl bg-purple-900 px-3 py-2 text-sm font-semibold text-white"
                 onClick={() => setReauthentication(confirmRecentReauthentication())}
               >
-                Confirm reauthentication
+                {t("settlement.confirmReauthAction")}
               </button>
             </div>
           </div>
@@ -725,34 +743,34 @@ function SettlementActionPanel({
             onNotesChange={setSecondApprovalNotes}
           />
 
-          <Field label="Reason code">
+          <Field label={t("settlement.reasonCode")}>
             <select
               required
               className={inputClass}
               value={reasonCode}
               onChange={(event) => setReasonCode(event.target.value)}
             >
-              <option value="">Select a reason code</option>
+              <option value="">{t("settlement.selectReason")}</option>
               {settlementReasonOptions
                 .filter((option) => option.actions.includes(action))
                 .map((option) => (
                   <option key={option.value} value={option.value}>
-                    {option.label}
+                    {t(option.labelKey)}
                   </option>
                 ))}
             </select>
           </Field>
-          <Field label="Reason text">
+          <Field label={t("settlement.reasonText")}>
             <textarea
               required
               className={inputClass}
               rows={3}
               value={reasonText}
               onChange={(event) => setReasonText(event.target.value)}
-              placeholder="Explain why this payout or settlement action is needed."
+              placeholder={t("settlement.reasonPlaceholder")}
             />
           </Field>
-          <Field label="Notes">
+          <Field label={t("settlement.notes")}>
             <textarea
               className={inputClass}
               rows={3}
@@ -760,14 +778,14 @@ function SettlementActionPanel({
               onChange={(event) => setNotes(event.target.value)}
             />
           </Field>
-          {mutation.error ? <ApiErrorPanel error={mutation.error} /> : null}
+          {mutation.error ? <ApiErrorPanel error={mutation.error} translate={t} /> : null}
           <div className="flex justify-end gap-3">
             <button
               type="button"
               className="rounded-xl border border-gray-300 px-4 py-2 text-sm font-semibold"
               onClick={onClose}
             >
-              Cancel
+              {t("common.cancel")}
             </button>
             <button
               type="submit"
@@ -779,12 +797,12 @@ function SettlementActionPanel({
               className="rounded-xl bg-gray-900 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
             >
               {mutation.isPending
-                ? "Processing..."
+                ? t("settlement.process")
                 : !reauthentication
-                  ? "Confirm reauthentication first"
+                  ? t("settlement.confirmReauth")
                   : secondApprovalEnabled && !secondApprovedBy.trim()
-                    ? "Select second approver first"
-                    : actionButton(action)}
+                    ? t("settlement.selectApprover")
+                    : actionButton(action, t)}
             </button>
           </div>
         </form>
@@ -817,7 +835,8 @@ function SecondApprovalCapture({
   onToggleOptional: (checked: boolean) => void;
   onApprovedByChange: (value: string) => void;
   onNotesChange: (value: string) => void;
-}) {
+}) {  const { t } = useI18n();
+
   const captureEnabled = policyRequired || captureOptional;
 
   return (
@@ -826,16 +845,16 @@ function SecondApprovalCapture({
         <div>
           <p className="font-semibold">
             {policyRequired
-              ? "Second-person approval required"
-              : "Second-person approval optional"}
+              ? t("settlement.secondRequired")
+              : t("settlement.secondOptional")}
           </p>
           <p className="mt-1">
             {policyRequired
-              ? "This tenant requires a different approver before sensitive current-account operations can be submitted."
-              : "Record a second approver when another authorized person reviewed this operation."}
+              ? t("settlement.secondRequiredHelp")
+              : t("settlement.secondOptionalHelp")}
           </p>
           <p className="mt-1 text-xs font-semibold">
-            Primary actor: {primaryActorId || "Loading authenticated actor…"}
+            {t("settlement.primaryActor", { actor: primaryActorId || t("settlement.loadingActor") })}
           </p>
         </div>
         {!policyRequired ? (
@@ -845,18 +864,18 @@ function SecondApprovalCapture({
               checked={captureOptional}
               onChange={(event) => onToggleOptional(event.target.checked)}
             />
-            Record approval
+            {t("settlement.recordApproval")}
           </label>
         ) : null}
       </div>
 
       {isLoadingPolicy ? (
-        <p className="mt-3 text-xs font-semibold">Loading approval policy...</p>
+        <p className="mt-3 text-xs font-semibold">{t("settlement.loadingPolicy")}</p>
       ) : null}
 
       {captureEnabled ? (
         <div className="mt-3 grid gap-3">
-          <Field label="Second approver">
+          <Field label={t("settlement.secondApprover")}>
             <select
               required={policyRequired}
               className={inputClass}
@@ -866,10 +885,10 @@ function SecondApprovalCapture({
             >
               <option value="">
                 {isLoadingActors
-                  ? "Loading approvers..."
+                  ? t("settlement.loadingApprovers")
                   : actors.length === 0
-                    ? "No eligible second approver found"
-                    : "Select a second approver"}
+                    ? t("settlement.noApprover")
+                    : t("settlement.selectSecondApprover")}
               </option>
               {actors.map((approver) => (
                 <option key={approver.id} value={approver.actorKey}>
@@ -880,19 +899,18 @@ function SecondApprovalCapture({
               ))}
             </select>
           </Field>
-          <Field label="Second approval notes">
+          <Field label={t("settlement.secondNotes")}>
             <textarea
               className={inputClass}
               rows={2}
               value={notes}
               onChange={(event) => onNotesChange(event.target.value)}
-              placeholder="Optional review notes from the second approver."
+              placeholder={t("settlement.secondNotesPlaceholder")}
             />
           </Field>
           {actors.length === 0 && !isLoadingActors ? (
             <p className="text-xs font-semibold text-amber-900">
-              Add or activate another authorization actor in Authz Admin before
-              posting this operation.
+              {t("settlement.addActorHelp")}
             </p>
           ) : null}
         </div>
@@ -917,40 +935,38 @@ function Field({
 }
 const inputClass =
   "rounded-xl border border-gray-300 px-3 py-2 shadow-sm focus:border-gray-900 focus:outline-none focus:ring-2 focus:ring-gray-900/10";
-function actionTitle(action: SensitiveAction) {
-  if (action === "ZERO_GOLD") return "Zero Gold Balance";
-  if (action === "PARTIAL_PAYOUT") return "Partial Payout";
-  if (action === "FINAL_TENANT_PAYMENT") return "Final Tenant Payment";
-  if (action === "FINAL_COLLABORATOR_PAYMENT") return "Record Collaborator Final Payment";
-  return "Close Journey";
+function actionTitle(action: SensitiveAction, t: Translate = translateEnglish) {
+  if (action === "ZERO_GOLD") return t("settlement.zeroGold");
+  if (action === "PARTIAL_PAYOUT") return t("settlement.partialPayout");
+  if (action === "FINAL_TENANT_PAYMENT") return t("settlement.finalTenant");
+  if (action === "FINAL_COLLABORATOR_PAYMENT") return t("settlement.finalCollaborator");
+  return t("settlement.closeJourney");
 }
-function actionButton(action: SensitiveAction) {
-  if (action === "ZERO_GOLD") return "Post Gold Payout";
-  if (action === "PARTIAL_PAYOUT") return "Post Payout";
-  if (action === "FINAL_TENANT_PAYMENT") return "Post Final Tenant Payment";
-  if (action === "FINAL_COLLABORATOR_PAYMENT") return "Record Final Collaborator Payment";
-  return "Close Journey";
+function actionButton(action: SensitiveAction, t: Translate = translateEnglish) {
+  if (action === "ZERO_GOLD") return t("settlement.postGold");
+  if (action === "PARTIAL_PAYOUT") return t("settlement.postPayout");
+  if (action === "FINAL_TENANT_PAYMENT") return t("settlement.postFinalTenant");
+  if (action === "FINAL_COLLABORATOR_PAYMENT") return t("settlement.postFinalCollaborator");
+  return t("settlement.closeJourney");
 }
-function actionDescription(action: SensitiveAction, preview: SettlementPreview) {
-  if (action === "ZERO_GOLD")
-    return `Pay the full positive gold balance of ${formatGold(preview.goldGramBalance)} g.`;
-  if (action === "PARTIAL_PAYOUT")
-    return "Pay part of the available BRL and/or gold balance.";
-  if (action === "FINAL_TENANT_PAYMENT")
-    return "Post the complete positive BRL and/or gold Journey balance owed by the Tenant. The Collaborator must accept each generated receipt in-app before closure.";
-  if (action === "FINAL_COLLABORATOR_PAYMENT")
-    return "Record the complete negative BRL and/or gold Journey balance paid by the Collaborator to the Tenant. A Tenant Administrator must accept each generated receipt in-app before closure.";
-  return "Close this Journey only after every Journey balance is zero and all other blockers are cleared. Closing does not post a payment.";
+function actionDescription(
+  action: SensitiveAction,
+  preview: SettlementPreview,
+  t: Translate = translateEnglish,
+) {
+  if (action === "ZERO_GOLD") {
+    return t("settlement.action.zeroGoldHelp", {
+      amount: t("settlement.goldAmount", { value: formatGold(preview.goldGramBalance) }),
+    });
+  }
+  if (action === "PARTIAL_PAYOUT") return t("settlement.action.partialHelp");
+  if (action === "FINAL_TENANT_PAYMENT") return t("settlement.action.finalTenantHelp");
+  if (action === "FINAL_COLLABORATOR_PAYMENT") return t("settlement.action.finalCollaboratorHelp");
+  return t("settlement.action.closeHelp");
 }
-function formatReason(value: string) {
-  if (value === "NON_ZERO_BALANCE") return "non-zero balance";
+function formatReason(value: string, t: Translate = translateEnglish) {
+  if (value === "NON_ZERO_BALANCE") return t("settlement.blocker.nonZeroBalance");
   return value.toLowerCase().replaceAll("_", " ");
-}
-function formatBRL(value: number) {
-  return new Intl.NumberFormat("pt-BR", {
-    style: "currency",
-    currency: "BRL",
-  }).format(value);
 }
 function formatGold(value: number) {
   return value.toFixed(2);
@@ -974,21 +990,6 @@ function addDaysToISODate(value: string, days: number) {
   return date.toISOString().slice(0, 10);
 }
 
-function formatDateOnly(value: string) {
-  const normalized = value.slice(0, 10);
-  const date = new Date(`${normalized}T00:00:00Z`);
-  return new Intl.DateTimeFormat(undefined, {
-    dateStyle: "medium",
-    timeZone: "UTC",
-  }).format(date);
-}
-
-function formatDateTime(value: string) {
-  return new Intl.DateTimeFormat(undefined, {
-    dateStyle: "medium",
-    timeStyle: "short",
-  }).format(new Date(value));
-}
 function isEligibleSecondApprover(actor: AuthzActor, primaryActorId: string) {
   const actorKey = actor.actorKey.trim();
   if (!actor.active || !actorKey) return false;

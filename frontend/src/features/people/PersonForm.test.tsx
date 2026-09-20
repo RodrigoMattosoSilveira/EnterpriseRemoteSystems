@@ -3,6 +3,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Person, UpdatePersonInput } from "../../types/people";
 import { PersonForm } from "./PersonForm";
+import { I18nProvider } from "../../i18n";
 
 const existingPerson: Person = {
   id: "person-123",
@@ -111,11 +112,11 @@ describe("PersonForm edit submission state", () => {
 function renderForm(onSubmit: (input: UpdatePersonInput) => Promise<void>) {
   act(() => {
     root?.render(
-      <PersonForm
+      <I18nProvider><PersonForm
         initial={existingPerson}
         defaultStatusId="ref-person-status-active"
         onSubmit={onSubmit}
-      />
+      /></I18nProvider>
     );
   });
 }

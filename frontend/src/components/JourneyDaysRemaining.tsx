@@ -1,3 +1,4 @@
+import { translateEnglish, type Translate, useI18n } from "../i18n";
 const millisecondsPerDay = 24 * 60 * 60 * 1000;
 
 type JourneyDaysRemainingProps = {
@@ -16,11 +17,12 @@ export function getJourneyDaysPresentation(
   projectedEndDate: string,
   now = new Date(),
   closedAt = "",
+  t: Translate = translateEnglish,
 ): JourneyDaysPresentation | null {
   if (closedAt.trim()) {
     return {
       daysRemaining: 0,
-      label: "0 days remaining",
+      label: t("journeyDays.remaining", { count: 0 }),
       colorClass: "text-red-700",
     };
   }
@@ -42,7 +44,7 @@ export function getJourneyDaysPresentation(
     const overdueDays = Math.abs(daysRemaining);
     return {
       daysRemaining,
-      label: `${overdueDays} ${overdueDays === 1 ? "day" : "days"} overdue`,
+      label: t("journeyDays.overdue", { count: overdueDays }),
       colorClass: "text-red-700",
     };
   }
@@ -50,14 +52,14 @@ export function getJourneyDaysPresentation(
   if (daysRemaining === 0) {
     return {
       daysRemaining,
-      label: "Ends today",
+      label: t("journeyDays.endsToday"),
       colorClass: "text-red-700",
     };
   }
 
   return {
     daysRemaining,
-    label: `${daysRemaining} ${daysRemaining === 1 ? "day" : "days"} remaining`,
+    label: t("journeyDays.remaining", { count: daysRemaining }),
     colorClass:
       daysRemaining > 30
         ? "text-green-700"
@@ -72,10 +74,12 @@ export function JourneyDaysRemaining({
   closedAt = "",
   className = "",
 }: JourneyDaysRemainingProps) {
+  const { t } = useI18n();
   const presentation = getJourneyDaysPresentation(
     projectedEndDate,
     new Date(),
     closedAt,
+    t,
   );
 
   if (!presentation) {
