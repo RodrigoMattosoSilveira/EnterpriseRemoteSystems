@@ -175,7 +175,7 @@ export function PrintableReceiptPage() {
 
         <dl className="mt-6 grid gap-3 text-sm sm:grid-cols-2">
           <Item label={t("receipt.collaborator")} value={data.collaboratorLabel} />
-          <Item label="Tenant" value={data.tenantId} />
+          <Item label={t("common.tenant")} value={data.tenantId} />
           <Item label={t("receipt.personOwner")} value={data.personId} />
           <Item label={t("receipt.journeyProvenance")} value={data.collaboratorId} />
           <Item label={t("common.legalName")} value={data.collaboratorLegalName} />

@@ -4,10 +4,10 @@ title Pessoa, Vínculo e Jornada — identidade sem perder histórico
 left to right direction
 
 rectangle "Pessoa\nidentidade durável" as Pessoa
-rectangle "Vínculo com o Tenant\nparticipação no Tenant" as Vinculo
+rectangle "Vínculo com o Locatário\nparticipação no Locatário" as Vinculo
 rectangle "Jornada de Colaborador\nrelação operacional" as Jornada
 
-Pessoa --> Vinculo : participa do Tenant
+Pessoa --> Vinculo : participa do Locatário
 Vinculo --> Jornada : pode ter 0..* Jornadas
 
 note top of Pessoa
