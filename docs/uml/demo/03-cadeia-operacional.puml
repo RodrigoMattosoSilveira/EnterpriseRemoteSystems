@@ -3,7 +3,7 @@ title História operacional conectada — da identidade à evidência
 
 left to right direction
 
-rectangle "Identidade\nTenant → Pessoa → Jornada" as Identidade
+rectangle "Identidade\nLocatário → Pessoa → Jornada" as Identidade
 rectangle "Operação\nPeríodo de Trabalho → Produção" as Operacao
 rectangle "Valor\nApropriação → Despesa" as Valor
 rectangle "Controle\nConta Corrente → Recibo" as Controle

@@ -176,7 +176,14 @@ def main() -> int:
     for token in REQUIRED_STORY_TOKENS:
         require_contains(combined_presenter_text, token, "presenter story")
 
-    if "O limite do Tenant vem primeiro" not in deck or "Encerramento executivo" not in deck:
+    for context, source in (("pt-BR resource", pt_br), ("Portuguese deck", deck), ("presenter runbook", runbook)):
+        if re.search(r"\bTenants?\b", source):
+            fail(f"{context} still exposes the English Tenant terminology")
+    for path, source in diagrams.items():
+        if re.search(r"\bTenants?\b", source):
+            fail(f"demo diagram {path.name} still exposes the English Tenant terminology")
+
+    if "O limite do Locatário vem primeiro" not in deck or "Encerramento executivo" not in deck:
         fail("deck no longer contains the required boundary-first executive sequence")
 
     if "make brazilian-demo-local-reset" not in runbook:

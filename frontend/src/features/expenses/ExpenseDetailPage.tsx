@@ -225,7 +225,7 @@ export function ExpenseDetailPage() {
             {t("expense.ownershipHelp")}
           </p>
           <dl className="mt-5 grid gap-3 text-sm sm:grid-cols-2">
-            <Info label="Tenant" value={expense.tenantId} />
+            <Info label={t("common.tenant")} value={expense.tenantId} />
             <Info label={t("accrual.personOwner")} value={expense.personId} />
             <Info label={t("accrual.journeyProvenance")} value={expense.collaboratorId} />
           </dl>

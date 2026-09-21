@@ -2,9 +2,9 @@
 
 ## Purpose
 
-This runbook is the executable Bite 31.5 presenter script for the deterministic Brazilian demo. It supports the dedicated LOCAL Bite 31.4 database and deployed Development/Test environments using the same synthetic Tenant.
+This runbook is the executable Bite 31.5 presenter script for the deterministic Brazilian demo. It supports the dedicated LOCAL Bite 31.4 database and deployed Development/Test environments using the same synthetic Locatário.
 
-The baseline business-data demo is intentionally read-only. It uses seeded records so the presenter can move quickly, avoid accidental state drift, and reset to a known scenario when necessary. An optional authentication demonstration intentionally changes João Ferreira's password through the Tenant Administrator reset-token flow; the next Brazilian-demo database reset restores the deterministic fixture.
+The baseline business-data demo is intentionally read-only. It uses seeded records so the presenter can move quickly, avoid accidental state drift, and reset to a known scenario when necessary. An optional authentication demonstration intentionally changes João Ferreira's password through the Administrador do Locatário reset-token flow; the next Brazilian-demo database reset restores the deterministic fixture.
 
 ## Presenter preflight
 
@@ -17,9 +17,9 @@ Name:      Mariana Alves
 Login:     demo.tenant-admin@example.test
 Password:  Demo-31.4-Brasil!
 Role:      TENANT_ADMIN
-Tenant:    Mineração Serra Dourada — DEMO
-Tenant ID: demo-br-serra-dourada
-Tenant code: DEMO_BR_SERRA_DOURADA
+Locatário:    Mineração Serra Dourada — DEMO
+Locatário ID: demo-br-serra-dourada
+Locatário code: DEMO_BR_SERRA_DOURADA
 ```
 
 The default scenario anchor is `2026-09-18`.
@@ -40,7 +40,7 @@ Login:    demo31.4.rafael@example.test
 Seeded password: Demo-31.4-Person!
 ```
 
-Beatriz Nascimento intentionally remains a Person with a Tenant Membership but no Authentication Account.
+Beatriz Nascimento intentionally remains a Person with a Vínculo com o Locatário but no Authentication Account.
 
 For the optional password-reset demonstration, do not rely on João's seeded password. Have Mariana issue a one-time reset token and set João's demo password to:
 
@@ -145,15 +145,15 @@ Do not run a separate `server-up` immediately after `brazilian-demo-server-reset
 1. Open the ERS URL for the selected environment.
 2. Sign in with `demo.tenant-admin@example.test` / `Demo-31.4-Brasil!`.
 3. In the **Idioma** selector, choose **Português (Brasil)**.
-4. Confirm the Tenant selector shows **Mineração Serra Dourada — DEMO** with code `DEMO_BR_SERRA_DOURADA`.
+4. Confirm the seletor de Locatário shows **Mineração Serra Dourada — DEMO** with code `DEMO_BR_SERRA_DOURADA`.
 5. Do not create, edit, inform, post, cancel, print, return, or otherwise mutate business records during the baseline business-data demo.
 6. If you intend to demonstrate João's self-service perspective, use the controlled password-reset flow below rather than guessing or reusing Mariana's password.
 
-### 6. Update João's password through the Tenant Administrator UI
+### 6. Update João's password through the Administrador do Locatário UI
 
-Use this flow when you want to demonstrate both Tenant authentication administration and João's self-service experience. It intentionally mutates only João's synthetic demo credential.
+Use this flow when you want to demonstrate both administração de autenticação do Locatário and João's self-service experience. It intentionally mutates only João's synthetic demo credential.
 
-**Starting identity:** Mariana Alves — Tenant Administrator.
+**Starting identity:** Mariana Alves — Administrador do Locatário.
 
 **Required context:** `Mineração Serra Dourada — DEMO`, with **Português (Brasil)** selected.
 
@@ -181,9 +181,9 @@ Login:    demo31.4.joao@example.test
 Password: Demo-31.5-Joao!
 ```
 
-14. Confirm João reaches his ordinary Tenant-scoped self-service experience rather than Mariana's Tenant Administrator workspace.
+14. Confirm João reaches his ordinary com escopo do Locatário self-service experience rather than Mariana's Administrador do Locatário workspace.
 
-Completing the reset changes João's global Authentication Account password and revokes existing sessions for that account across Tenants. The reset page also ends the current browser session after success, so using the same browser provides a natural transition from Mariana's administrative action to João's sign-in. If you want Mariana to remain signed in simultaneously, use a separate browser profile/window for João.
+Completing the reset changes João's global Authentication Account password and revokes existing sessions for that account across Locatários. The reset page also ends the current browser session after success, so using the same browser provides a natural transition from Mariana's administrative action to João's sign-in. If you want Mariana to remain signed in simultaneously, use a separate browser profile/window for João.
 
 The next deterministic Brazilian-demo database reset discards this password change and restores the seeded password `Demo-31.4-Person!`.
 
@@ -260,24 +260,24 @@ Until that restore capability exists, use `make testdata-server-reset ENV=test` 
 
 ## Executive demo — approximately 12 minutes
 
-### Stop 1 — Establish the Tenant boundary
+### Stop 1 — Establish the limite do Locatário
 
-**Identity:** Mariana Alves — Tenant Administrator.
+**Identity:** Mariana Alves — Administrador do Locatário.
 
 **Required context:** `Mineração Serra Dourada — DEMO`.
 
-**UI navigation:** remain on the initial authenticated workspace. Use the Tenant selector in the top bar; do not navigate by URL.
+**UI navigation:** remain on the initial authenticated workspace. Use the seletor de Locatário in the top bar; do not navigate by URL.
 
 **Actions**
 
-1. Point to the Tenant selector.
-2. Read the selected Tenant name aloud: **Mineração Serra Dourada — DEMO**.
+1. Point to the seletor de Locatário.
+2. Read the selected Locatário name aloud: **Mineração Serra Dourada — DEMO**.
 3. Briefly point out the code `DEMO_BR_SERRA_DOURADA`.
 4. Point to **Idioma** and confirm **Português (Brasil)**.
 
 **Talk track**
 
-“Antes de olhar pessoas ou finanças, este é o limite operacional da demonstração. Tudo o que eu abrir agora está sendo carregado no contexto deste Tenant. O idioma é apresentação; ele não muda o Tenant nem a autorização.”
+“Antes de olhar pessoas ou finanças, este é o limite operacional da demonstração. Tudo o que eu abrir agora está sendo carregado no contexto deste Locatário. O idioma é apresentação; ele não muda o Locatário nem a autorização.”
 
 **Do not** imply that changing language changes stored data or security scope.
 
@@ -290,7 +290,7 @@ Until that restore capability exists, use `make testdata-server-reset ENV=test` 
 **Actions**
 
 1. Confirm the page heading is **Pessoas**.
-2. Point to the Tenant-boundary information near the People workspace.
+2. Point to the Locatário-boundary information near the People workspace.
 3. Locate the seeded People list.
 4. Point out João Ferreira, Camila Souza, Rafael Lima, Beatriz Nascimento, and Mariana Alves.
 5. Open **Rafael Lima** by clicking his row/card/link in the UI.
@@ -396,7 +396,7 @@ Return to the slide deck’s **Executive close** slide or remain on Rafael/recei
 
 **Talk track**
 
-“Em uma única história vimos o limite do Tenant, a identidade da Pessoa, o histórico de Jornada, o trabalho planejado e realizado, produção, remuneração, despesa, Conta Corrente e recibo. O objetivo é reduzir reconciliação manual sem perder a origem de cada decisão e valor.”
+“Em uma única história vimos o limite do Locatário, a identidade da Pessoa, o histórico de Jornada, o trabalho planejado e realizado, produção, remuneração, despesa, Conta Corrente e recibo. O objetivo é reduzir reconciliação manual sem perder a origem de cada decisão e valor.”
 
 Ask:
 
@@ -415,13 +415,13 @@ Run the executive path first, then select the branches below based on prospect i
 **Actions**
 
 1. Show that Beatriz has a complete Person record.
-2. Explain the Tenant Membership context visible on the Person page.
+2. Explain the Vínculo com o contexto do Locatário visible on the Person page.
 3. Confirm there is no active Collaborator Journey to open.
 4. Do not create one.
 
 **Talk track**
 
-“Ter uma Pessoa no Tenant não significa automaticamente ter uma Jornada de Colaborador. Essa separação permite cadastrar e governar identidade sem inventar uma relação operacional que ainda não existe.”
+“Ter uma Pessoa no Locatário não significa automaticamente ter uma Jornada de Colaborador. Essa separação permite cadastrar e governar identidade sem inventar uma relação operacional que ainda não existe.”
 
 ### Deep branch B — Future planning without mutating it
 
@@ -496,22 +496,22 @@ Use recovery paths in this order. Do not improvise database edits during a prosp
 3. Confirm the top bar still shows **Mineração Serra Dourada — DEMO**.
 4. Resume from the next story stop.
 
-### Recovery 2 — Wrong Tenant or context appears selected
+### Recovery 2 — Wrong Locatário or context appears selected
 
 1. Stop the business narration.
-2. Open the Tenant selector.
+2. Open the seletor de Locatário.
 3. Select **Mineração Serra Dourada — DEMO**.
 4. Wait for the workspace to finish loading.
 5. Re-open **Pessoas** and confirm the seeded names are present before continuing.
 
-If the demo Tenant is not available, do not continue using another Tenant. Sign out, verify the correct database/backend process is running, then sign in again.
+If the demo Locatário is not available, do not continue using another Locatário. Sign out, verify the correct database/backend process is running, then sign in again.
 
 ### Recovery 3 — Wrong language
 
 1. Use **Idioma**.
 2. Choose **Português (Brasil)**.
 3. Confirm **Pessoas**, **Colaboradores**, **Períodos de trabalho**, **Produção de ouro**, **Despesas**, and **Recibos pendentes** are shown in Portuguese.
-4. Continue without changing Tenant context.
+4. Continue without changing contexto do Locatário.
 
 ### Recovery 4 — A seeded record or demo credential was mutated
 
@@ -559,7 +559,7 @@ A deterministic reset also restores João, Camila, and Rafael to the seeded self
 
 Do not explain the mismatch away.
 
-1. Confirm the selected Tenant is `Mineração Serra Dourada — DEMO`.
+1. Confirm the selected Locatário is `Mineração Serra Dourada — DEMO`.
 2. Confirm you used the intended scenario anchor.
 3. For LOCAL, run `make brazilian-demo-local-verify` with the same `BRAZILIAN_DEMO_AS_OF` value used for reset.
 4. For Development or Test, re-run the corresponding `make brazilian-demo-server-reset ENV=development|test`; the server reset verifies a fresh snapshot of the actual deployed database before it completes.
@@ -582,7 +582,7 @@ make local-frontend
 ```
 
 4. Confirm the frontend revision printed at startup is the revision intended for the demo.
-5. Sign in and re-check Tenant, locale, and balances.
+5. Sign in and re-check Locatário, locale, and balances.
 
 ---
 
@@ -590,7 +590,7 @@ make local-frontend
 
 ### Standard close
 
-“ERS mantém identidade, histórico operacional, planejamento, produção e finanças conectados dentro de um limite explícito de Tenant. Nesta demonstração, cada saldo e cada pendência que vimos consegue voltar ao evento que o originou.”
+“ERS mantém identidade, histórico operacional, planejamento, produção e finanças conectados dentro de um limite explícito de Locatário. Nesta demonstração, cada saldo e cada pendência que vimos consegue voltar ao evento que o originou.”
 
 Then ask the prospect to choose the most relevant next discussion:
 
@@ -599,12 +599,12 @@ Then ask the prospect to choose the most relevant next discussion:
 - compensation and production;
 - expenses and Current Account;
 - receipt/document controls;
-- Tenant/security boundary.
+- Locatário/security boundary.
 
 ### Presenter guardrails
 
 - Never use Production/customer data for this demo.
-- Never switch to another Tenant just to keep a broken demo moving.
+- Never switch to another Locatário just to keep a broken demo moving.
 - Never invent a login for a seeded Person who has no Authentication Account.
 - Never hide a fixture/UI mismatch with narration; recover or report it.
 - Prefer seeded read-only states for the baseline story.
