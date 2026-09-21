@@ -10,4 +10,11 @@ describe("ERS translation resources", () => {
     expect(messagesByLocale["en-US"]["locale.selectorLabel"]).toBe("Language");
     expect(messagesByLocale["pt-BR"]["locale.selectorLabel"]).toBe("Idioma");
   });
+
+  it("uses Locatário terminology only in pt-BR while preserving English Tenant terminology", () => {
+    expect(messagesByLocale["en-US"]["common.tenant"]).toBe("Tenant");
+    expect(messagesByLocale["en-US"]["common.tenants"]).toBe("Tenants");
+    expect(messagesByLocale["pt-BR"]["common.tenant"]).toBe("Locatário");
+    expect(messagesByLocale["pt-BR"]["common.tenants"]).toBe("Locatários");
+  });
 });
