@@ -19,9 +19,9 @@ test.describe("Bite 31.2 Administration pt-BR", () => {
     await expect(page.locator("html")).toHaveAttribute("lang", "pt-BR");
 
     await expect(page.getByRole("heading", { name: "Administração", exact: true })).toBeVisible();
-    await expect(page.getByRole("heading", { name: "Tenants", exact: true })).toBeVisible();
-    await expect(page.getByRole("heading", { name: "Criar Tenant", exact: true })).toBeVisible();
-    await expect(page.getByText("Catálogo de Tenants do plano de controle", { exact: true })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Locatários", exact: true })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Criar Locatário", exact: true })).toBeVisible();
+    await expect(page.getByText("Catálogo de Locatários do plano de controle", { exact: true })).toBeVisible();
     await expect(page.getByRole("button", { name: "Contexto de Administração atual" })).toBeVisible();
     await expect(page.getByRole("navigation", { name: "Navegação principal" })).toBeVisible();
     await expect(page.getByRole("link", { name: "Seção Autenticação" })).toBeVisible();
