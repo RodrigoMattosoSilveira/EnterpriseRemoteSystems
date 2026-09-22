@@ -6,7 +6,7 @@ import { ApiErrorPanel } from "../../components/ApiErrorPanel";
 import { useAuthorizationContext } from "../../components/layout/AuthorizationContext";
 import { useReferenceDataByType } from "../reference-data/useReferenceData";
 import { PersonAuthenticationSection } from "./PersonAuthenticationSection";
-import { useCollaboratorCandidates } from "../collaborators/useCollaborators";
+import { useCollaboratorCandidates, useCollaboratorCatalog } from "../collaborators/useCollaborators";
 import { PageContextHeading, PageTitle } from "../../components/layout/PageHeading";
 import { useI18n } from "../../i18n";
 import { personStatusLabel } from "./personPresentation";
@@ -30,11 +30,18 @@ export function PersonDetailPage() {
     actor.scope === "TENANT" &&
     (actor.permissions.includes("*") ||
       actor.permissions.includes("collaborators.create"));
+  const canBrowseCollaboratorJourneys =
+    actor.scope === "TENANT" &&
+    (actor.permissions.includes("*") ||
+      actor.permissions.includes("collaborators.read"));
   const [successMessage, setSuccessMessage] = useState(() => personDetailFlash(location.state));
 
   const personQuery = usePerson(id);
   const collaboratorCandidatesQuery = useCollaboratorCandidates(
     canCreateCollaboratorJourney,
+  );
+  const collaboratorCatalogQuery = useCollaboratorCatalog(
+    canBrowseCollaboratorJourneys,
   );
   const mutation = useUpdatePerson(id);
   const statusesQuery = useReferenceDataByType("person_status");
@@ -85,7 +92,15 @@ export function PersonDetailPage() {
   const collaboratorCandidates = Array.isArray(collaboratorCandidatesQuery.data)
     ? collaboratorCandidatesQuery.data
     : [];
+  const currentCollaborator = (collaboratorCatalogQuery.data ?? []).find(
+    (collaborator) =>
+      (personQuery.data.membershipId &&
+        collaborator.membershipId === personQuery.data.membershipId) ||
+      collaborator.personId === personQuery.data.globalPersonId ||
+      collaborator.personId === personQuery.data.id,
+  );
   const canStartCollaboratorJourney =
+    !currentCollaborator &&
     canCreateCollaboratorJourney &&
     collaboratorCandidates.some((person) => person.id === personQuery.data.id);
 
@@ -162,6 +177,7 @@ export function PersonDetailPage() {
 
         <PersonForm
           initial={personQuery.data}
+          currentCollaboratorId={currentCollaborator?.id}
           defaultStatusId={defaultStatusId}
           statusOptions={statusOptions}
           submitting={mutation.isPending}

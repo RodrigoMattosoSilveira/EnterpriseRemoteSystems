@@ -303,7 +303,7 @@ Until that restore capability exists, use `make testdata-server-reset ENV=test` 
 
 ### Stop 3 — Rafael Journey history
 
-**UI navigation:** from Rafael’s Person detail, follow the visible Collaborator/Journey action into his current Collaborator detail. If the Person detail presents Journey history first, point to both the historical finished Journey and the active Journey before opening the active one.
+**UI navigation:** from Rafael’s Person detail, select **Abrir Jornada atual** in the **Status do Perfil** card to open his current Collaborator Journey. If a later Person-detail enhancement presents Journey history first, point to both the historical finished Journey and the active Journey before opening the active one.
 
 **Actions**
 
