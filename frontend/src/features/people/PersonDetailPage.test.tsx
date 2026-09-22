@@ -8,6 +8,7 @@ import type { AuthzCurrentActor } from "../../types/authz";
 import { PeopleListPage } from "./PeopleListPage";
 import { PersonDetailPage } from "./PersonDetailPage";
 import type { Person } from "../../types/people";
+import type { Collaborator } from "../../types/collaborators";
 import { I18nProvider } from "../../i18n";
 
 const authorizationActor: AuthzCurrentActor = {
@@ -74,6 +75,31 @@ const existingPerson: Person = {
   statusLabel: "Active",
   notes: "Original notes",
 };
+
+const currentCollaborator: Collaborator = {
+  id: "collaborator-current-123",
+  tenantId: "default",
+  membershipId: existingPerson.membershipId ?? "membership-default-person-123",
+  personId: existingPerson.globalPersonId ?? existingPerson.id,
+  personName: "Maria Silva",
+  personNickname: "Mari",
+  journeyStartDate: "2026-09-01",
+  defaultEndDate: "2026-09-30",
+  extensionDays: 0,
+  projectedEndDate: "2026-09-30",
+  paymentMethodId: "ref-method-daily",
+  paymentValue: 350,
+  planningAvailability: "ACTIVE",
+  sectorId: "ref-sector-1",
+  locationId: "ref-location-1",
+  taskId: "ref-task-1",
+  statusId: "ref-collaborator-status-active",
+  statusCode: "ACTIVE",
+  statusLabel: "Active",
+  createdAt: "2026-09-01T00:00:00Z",
+  updatedAt: "2026-09-01T00:00:00Z",
+};
+
 
 type FetchCall = {
   url: string;
@@ -335,6 +361,64 @@ describe("PersonDetailPage", () => {
           call.url === "/api/v1/collaborators/candidates",
       ),
     ).toBe(true);
+  });
+
+  it("links an existing Collaborator Person to the current Journey without claiming eligibility", async () => {
+    const actorWithCollaboratorRead: AuthzCurrentActor = {
+      ...tenantAdministratorActor,
+      permissions: [...tenantAdministratorActor.permissions, "collaborators.read"],
+      delegatedPermissions: [
+        ...(tenantAdministratorActor.delegatedPermissions ?? []),
+        "collaborators.read",
+      ],
+    };
+
+    mockFetch(async (url, init) => {
+      recordFetchCall(url, init);
+
+      if (url === `/api/v1/people/${PERSON_ID}`) {
+        return jsonResponse({ data: existingPerson });
+      }
+
+      if (url === "/api/v1/collaborators/candidates") {
+        return jsonResponse({ data: [] });
+      }
+
+      if (url === "/api/v1/collaborators?page=1&pageSize=100") {
+        return jsonResponse({ data: { items: [currentCollaborator], total: 1 } });
+      }
+
+      if (url === "/api/v1/reference-data/person_status") {
+        return jsonResponse({ data: [] });
+      }
+
+      if (url === `/api/v1/people/${PERSON_ID}/authentication`) {
+        return jsonResponse({
+          data: {
+            enabled: true,
+            accountActive: true,
+            canRequestReactivation: false,
+            login: existingPerson.email,
+          },
+        });
+      }
+
+      throw new Error(`Unhandled request: ${url}`);
+    });
+
+    renderPersonDetailRoute(actorWithCollaboratorRead);
+
+    await waitForText("Open current Journey");
+
+    const currentJourneyLink = Array.from(container.querySelectorAll("a")).find(
+      (node) => node.textContent?.trim() === "Open current Journey",
+    );
+    expect(currentJourneyLink?.getAttribute("href")).toBe(
+      `/collaborators/${currentCollaborator.id}`,
+    );
+    expect(container.textContent).toContain("All required profile sections are complete.");
+    expect(container.textContent).not.toContain("eligible to become a Collaborator");
+    expect(container.textContent).not.toContain("Create Collaborator");
   });
 
   it("shows update validation errors returned by the API", async () => {

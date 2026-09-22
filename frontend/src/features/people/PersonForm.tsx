@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import type {
   CreatePersonInput,
   Person,
@@ -13,6 +14,7 @@ import { personMissingSectionLabel, personStatusLabel } from "./personPresentati
 
 type Props = {
   initial?: Person;
+  currentCollaboratorId?: string;
   defaultStatusId: string;
   statusOptions?: Array<{ value: string; label: string }>;
   submitting?: boolean;
@@ -29,6 +31,7 @@ type Tab = "personal" | "address" | "bank" | "emergency" | "notes";
 
 export function PersonForm({
   initial,
+  currentCollaboratorId,
   defaultStatusId,
   statusOptions = DEFAULT_STATUS_OPTIONS,
   submitting = false,
@@ -101,6 +104,7 @@ export function PersonForm({
         isCreate={isCreate}
         completionLabel={completionLabel}
         canCreateCollaborator={initial?.canCreateCollaborator ?? false}
+        currentCollaboratorId={currentCollaboratorId}
         missingSections={missingSections}
       />
 
@@ -401,11 +405,13 @@ function ProfileStatusCard({
   isCreate,
   completionLabel,
   canCreateCollaborator,
+  currentCollaboratorId,
   missingSections,
 }: {
   isCreate: boolean;
   completionLabel: string;
   canCreateCollaborator: boolean;
+  currentCollaboratorId?: string;
   missingSections: string[];
 }) {
   const { t } = useI18n();
@@ -420,9 +426,17 @@ function ProfileStatusCard({
             {isCreate
               ? t("people.form.createHelp")
               : canCreateCollaborator
-                ? t("people.form.eligible")
-                : t("people.form.ineligible")}
+                ? t("people.form.profileCompleteHelp")
+                : t("people.form.profileIncompleteHelp")}
           </p>
+          {!isCreate && currentCollaboratorId && (
+            <Link
+              to={`/collaborators/${encodeURIComponent(currentCollaboratorId)}`}
+              className="mt-3 inline-flex rounded-xl border border-gray-950 bg-white px-4 py-2 text-sm font-semibold text-gray-950 shadow-sm hover:underline"
+            >
+              {t("people.form.openCurrentJourney")}
+            </Link>
+          )}
         </div>
 
         <span
