@@ -195,7 +195,6 @@ export const ptBRMessages = {
   "auth.error.invalidCredentials": "O login ou a senha está incorreto.",
   "auth.error.unableSignIn": "Não foi possível entrar.",
   "auth.error.validationFailed": "A solicitação de entrada ficou incompleta. Informe novamente o login e a senha.",
-  "auth.error.localSessionCookieUnavailable": "O navegador móvel não devolveu o cookie da sessão LOCAL do ERS após a entrada. Limpe os dados deste site e tente novamente.",
   "auth.passwordMismatch": "As novas senhas não coincidem.",
   "auth.change.title": "Alterar senha",
   "auth.change.subtitle": "Escolha uma senha forte com pelo menos 12 caracteres.",

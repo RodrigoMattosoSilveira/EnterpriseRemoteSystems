@@ -7,6 +7,8 @@ import {
 } from "../app/authEvents";
 
 const API_BASE_URL = "/api/v1";
+export const LOCAL_SESSION_STORAGE_KEY = "ers.local.session";
+const LOCAL_SESSION_TOKEN_HEADER = "X-ERS-Local-Session";
 type ApiEnvelope<T> = {
   data?: T;
   error?: {
@@ -114,6 +116,7 @@ async function performApiFetch<T>(
       credentials: options.credentials ?? "same-origin",
       headers: authenticatedRequestHeaders(options.headers),
     });
+    syncLocalSessionTransport(response);
   } catch (error) {
     throw new ApiError({
       message: error instanceof Error ? error.message : "Network request failed",
@@ -154,6 +157,8 @@ const FORBIDDEN_ACTOR_HEADERS = new Set([
   "x-actor-id",
   "x-actor-permissions",
   "x-authorized-by",
+  "x-ers-local-lan-proxy",
+  "x-ers-local-session",
 ]);
 
 function authenticatedRequestHeaders(input: HeadersInit | undefined): Record<string, string> {
@@ -172,6 +177,11 @@ function authenticatedRequestHeaders(input: HeadersInit | undefined): Record<str
   if (tenantId) {
     removeHeader(headers, "x-tenant-id");
     headers["X-Tenant-ID"] = tenantId;
+  }
+
+  const localSessionToken = readLocalSessionTransportToken();
+  if (localSessionToken) {
+    headers[LOCAL_SESSION_TOKEN_HEADER] = localSessionToken;
   }
 
   return headers;
@@ -223,5 +233,78 @@ function isPublicAuthenticationRequest(
     path === "/auth/session" ||
     path === "/auth/password/reset" ||
     (path === "/auth/reactivation-requests" && normalizedMethod === "POST")
+  );
+}
+
+export function shouldUseLocalSessionTransport(
+  location: Pick<Location, "protocol" | "hostname">,
+): boolean {
+  return location.protocol === "http:" && isPrivateIPv4Host(location.hostname);
+}
+
+export function clearLocalSessionTransport(): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.sessionStorage.removeItem(LOCAL_SESSION_STORAGE_KEY);
+  } catch {
+    // Storage can be unavailable in restrictive/private browser modes. The
+    // ordinary cookie transport remains authoritative whenever it works.
+  }
+}
+
+function readLocalSessionTransportToken(): string {
+  if (typeof window === "undefined") return "";
+  return localSessionTokenForRequest(window.location, window.sessionStorage);
+}
+
+export function localSessionTokenForRequest(
+  location: Pick<Location, "protocol" | "hostname">,
+  storage: Pick<Storage, "getItem">,
+): string {
+  if (!shouldUseLocalSessionTransport(location)) return "";
+  try {
+    return storage.getItem(LOCAL_SESSION_STORAGE_KEY)?.trim() ?? "";
+  } catch {
+    return "";
+  }
+}
+
+function syncLocalSessionTransport(response: Response): void {
+  if (typeof window === "undefined") return;
+  syncLocalSessionTransportResponse(response, window.location, window.sessionStorage);
+}
+
+export function syncLocalSessionTransportResponse(
+  response: Response,
+  location: Pick<Location, "protocol" | "hostname">,
+  storage: Pick<Storage, "setItem" | "removeItem">,
+): void {
+  if (!shouldUseLocalSessionTransport(location)) return;
+
+  const issuedToken = response.headers.get(LOCAL_SESSION_TOKEN_HEADER)?.trim();
+  try {
+    if (issuedToken) {
+      storage.setItem(LOCAL_SESSION_STORAGE_KEY, issuedToken);
+    } else if (response.status === 401) {
+      storage.removeItem(LOCAL_SESSION_STORAGE_KEY);
+    }
+  } catch {
+    // If sessionStorage is unavailable, the browser can still use the normal
+    // HttpOnly cookie path. LOCAL LAN fallback simply remains unavailable.
+  }
+}
+
+function isPrivateIPv4Host(hostname: string): boolean {
+  const octets = hostname.split(".").map((value) => Number(value));
+  if (
+    octets.length !== 4 ||
+    octets.some((value) => !Number.isInteger(value) || value < 0 || value > 255)
+  ) {
+    return false;
+  }
+  return (
+    octets[0] === 10 ||
+    (octets[0] === 172 && octets[1] >= 16 && octets[1] <= 31) ||
+    (octets[0] === 192 && octets[1] === 168)
   );
 }

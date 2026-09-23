@@ -23,25 +23,12 @@ export default function LoginPage() {
   const [reactivationMessage, setReactivationMessage] = useState("");
   const [reactivationError, setReactivationError] = useState("");
   const { t } = useI18n();
-  const browserLoginError = browserLoginErrorPresentation(
-    params.get("browserLoginError"),
-    t,
-  );
 
   if (auth.status === "authenticated") {
     return <Navigate to={auth.session.mustChangePassword ? "/password/change" : safeReturnTo(params.get("returnTo"))} replace />;
   }
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
-    // On a phone reaching LOCAL through a private LAN address, use a native
-    // browser form navigation. The backend sets the HttpOnly session cookie on
-    // that top-level response and verifies it on a second top-level request
-    // before redirecting into the SPA. Desktop localhost and deployed HTTPS
-    // environments continue to use the JSON/fetch flow below.
-    if (shouldUseLocalBrowserLogin(window.location)) {
-      return;
-    }
-
     event.preventDefault();
     const request = loginRequestFromForm(event.currentTarget, { login, password });
     // Keep action state aligned with values supplied directly by a mobile
@@ -135,17 +122,7 @@ export default function LoginPage() {
       {location.state && typeof location.state === "object" && "message" in location.state && <p role="status" className="mb-4 rounded-xl bg-emerald-50 p-3 text-sm text-emerald-900">{String(location.state.message)}</p>}
       {error && <p role="alert" className="mb-4 rounded-xl bg-red-50 p-3 text-sm text-red-800">{error}</p>}
       {reactivationError && <p role="alert" className="mb-4 rounded-xl bg-red-50 p-3 text-sm text-red-800">{reactivationError}</p>}
-      {browserLoginError && (
-        <p role="alert" className="mb-4 rounded-xl bg-red-50 p-3 text-sm text-red-800">
-          {browserLoginError}
-        </p>
-      )}
-      <form
-        action="/api/v1/auth/browser-login"
-        method="post"
-        onSubmit={submit}
-        className="space-y-4"
-      >
+      <form onSubmit={submit} className="space-y-4">
         <input
           type="hidden"
           name="returnTo"
@@ -187,54 +164,6 @@ export default function LoginPage() {
   );
 }
 
-
-export function shouldUseLocalBrowserLogin(
-  location: Pick<Location, "protocol" | "hostname">,
-): boolean {
-  return location.protocol === "http:" && isPrivateIPv4Host(location.hostname);
-}
-
-function isPrivateIPv4Host(hostname: string): boolean {
-  const octets = hostname.split(".").map((value) => Number(value));
-  if (
-    octets.length !== 4 ||
-    octets.some((value) => !Number.isInteger(value) || value < 0 || value > 255)
-  ) {
-    return false;
-  }
-
-  return (
-    octets[0] === 10 ||
-    (octets[0] === 172 && octets[1] >= 16 && octets[1] <= 31) ||
-    (octets[0] === 192 && octets[1] === 168)
-  );
-}
-
-export function browserLoginErrorPresentation(
-  code: string | null,
-  t: Translate = translateEnglish,
-): string {
-  switch (code) {
-    case "invalid_credentials":
-      return t("auth.error.invalidCredentials");
-    case "account_security_suspended":
-      return t("auth.error.securitySuspended");
-    case "account_operationally_inactive":
-      return t("auth.error.operationallyInactive");
-    case "account_inactive":
-      return t("auth.error.accountInactive");
-    case "actor_inactive":
-      return t("auth.error.actorInactive");
-    case "session_cookie_unavailable":
-      return t("auth.error.localSessionCookieUnavailable");
-    case "validation_failed":
-      return t("auth.error.validationFailed");
-    case "unable_to_sign_in":
-      return t("auth.error.unableSignIn");
-    default:
-      return "";
-  }
-}
 
 export function loginRequestFromForm(
   form: HTMLFormElement,

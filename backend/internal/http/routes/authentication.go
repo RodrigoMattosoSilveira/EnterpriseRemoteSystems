@@ -13,8 +13,6 @@ func RegisterAuthenticationRoutes(router fiber.Router, deps Dependencies) {
 	r := router.Group("/auth")
 	r.Use(authenticationMiddleware(deps))
 	r.Post("/login", authenticationPublic(), deps.AuthenticationHandler.Login)
-	r.Post("/browser-login", authenticationPublic(), deps.AuthenticationHandler.BrowserLogin)
-	r.Get("/browser-login/continue", authenticationPublic(), deps.AuthenticationHandler.BrowserLoginContinue)
 	r.Post("/logout", authenticationPublic(), deps.AuthenticationHandler.Logout)
 	r.Get("/session", authenticationPublic(), deps.AuthenticationHandler.CurrentSession)
 	r.Get("/tenant-options", requireAuthenticatedSession(deps), deps.AuthenticationHandler.TenantOptions)

@@ -193,7 +193,6 @@ export const enUSMessages = {
   "auth.error.invalidCredentials": "The login or password is incorrect.",
   "auth.error.unableSignIn": "Unable to sign in.",
   "auth.error.validationFailed": "The sign-in request was incomplete. Enter your login and password again.",
-  "auth.error.localSessionCookieUnavailable": "The mobile browser did not return the LOCAL ERS session cookie after sign-in. Clear this site's data and try again.",
   "auth.passwordMismatch": "The new passwords do not match.",
   "auth.change.title": "Change password",
   "auth.change.subtitle": "Choose a strong password of at least 12 characters.",

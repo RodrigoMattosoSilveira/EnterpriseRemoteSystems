@@ -7,8 +7,6 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"net/url"
-	"strings"
 	"testing"
 	"time"
 
@@ -17,7 +15,7 @@ import (
 	"github.com/gofiber/fiber/v3"
 )
 
-func TestAuthenticationHandlerLocalBrowserLoginUsesTopLevelCookieHandoff(t *testing.T) {
+func TestAuthenticationHandlerLocalLANSessionHeaderFallback(t *testing.T) {
 	_, _, service, _ := authenticationTestService(t)
 	mustChangePassword := false
 	account, err := service.CreateAccount(t.Context(), CreateAccountRequest{
@@ -30,109 +28,82 @@ func TestAuthenticationHandlerLocalBrowserLoginUsesTopLevelCookieHandoff(t *test
 		t.Fatalf("create account: %v", err)
 	}
 
-	handler := NewHandler(service, CookieConfig{Name: "ers_test_session", Secure: false, SameSite: "Lax", TTL: time.Hour}, nil, nil)
+	handler := NewHandler(service, CookieConfig{
+		Name:                    "ers_test_session",
+		Secure:                  false,
+		SameSite:                "Lax",
+		TTL:                     time.Hour,
+		AllowLocalSessionHeader: true,
+	}, nil, nil)
 	app := fiber.New()
 	app.Use(handler.SessionMiddleware())
-	app.Post("/api/v1/auth/browser-login", handler.BrowserLogin)
-	app.Get("/api/v1/auth/browser-login/continue", handler.BrowserLoginContinue)
+	app.Post("/login", handler.Login)
+	app.Get("/session", handler.CurrentSession)
+	app.Post("/logout", handler.Logout)
 
-	form := url.Values{}
-	form.Set("login", account.Login)
-	form.Set("password", "Mobile-Demo-Password-1")
-	form.Set("returnTo", "/people?view=cards")
-	request := httptest.NewRequest(
-		http.MethodPost,
-		"/api/v1/auth/browser-login",
-		strings.NewReader(form.Encode()),
-	)
-	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	request.Header.Set(localBrowserLoginProxyHeader, "1")
-	request.Header.Set("Sec-Fetch-Site", "same-origin")
-	request.Header.Set("Origin", "http://192.168.2.154:5173")
-	response, err := app.Test(request)
+	body, _ := json.Marshal(LoginRequest{Login: account.Login, Password: "Mobile-Demo-Password-1"})
+	loginRequest := httptest.NewRequest(http.MethodPost, "/login", bytes.NewReader(body))
+	loginRequest.RemoteAddr = "127.0.0.1:41000"
+	loginRequest.Header.Set("Content-Type", "application/json")
+	loginRequest.Header.Set(localSessionProxyHeader, "1")
+	loginResponse, err := app.Test(loginRequest)
 	if err != nil {
-		t.Fatalf("browser login request: %v", err)
+		t.Fatalf("local LAN login request: %v", err)
 	}
-	if response.StatusCode != http.StatusSeeOther {
-		t.Fatalf("expected browser login status 303, got %d", response.StatusCode)
+	if loginResponse.StatusCode != http.StatusOK {
+		t.Fatalf("expected local LAN login status 200, got %d", loginResponse.StatusCode)
 	}
-	if got := response.Header.Get("Location"); got != "/api/v1/auth/browser-login/continue?returnTo=%2Fpeople%3Fview%3Dcards" {
-		t.Fatalf("unexpected browser-login continuation: %q", got)
-	}
-	cookies := response.Cookies()
-	if len(cookies) != 1 {
-		t.Fatalf("expected one browser-login session cookie, got %d", len(cookies))
-	}
-	cookie := cookies[0]
-	if cookie.Name != "ers_test_session" || cookie.Value == "" || cookie.Secure || !cookie.HttpOnly || cookie.Path != "/" {
-		t.Fatalf("unexpected LOCAL browser-login cookie: %#v", cookie)
+	localToken := loginResponse.Header.Get(localSessionTokenHeader)
+	if localToken == "" {
+		t.Fatal("expected LOCAL LAN login to expose the session token to the trusted Vite proxy client")
 	}
 
-	continueRequest := httptest.NewRequest(
-		http.MethodGet,
-		"/api/v1/auth/browser-login/continue?returnTo=%2Fpeople%3Fview%3Dcards",
-		nil,
-	)
-	continueRequest.Header.Set(localBrowserLoginProxyHeader, "1")
-	continueRequest.AddCookie(cookie)
-	continueResponse, err := app.Test(continueRequest)
+	sessionRequest := httptest.NewRequest(http.MethodGet, "/session", nil)
+	sessionRequest.RemoteAddr = "127.0.0.1:41001"
+	sessionRequest.Header.Set(localSessionProxyHeader, "1")
+	sessionRequest.Header.Set(localSessionTokenHeader, localToken)
+	sessionResponse, err := app.Test(sessionRequest)
 	if err != nil {
-		t.Fatalf("browser login continuation: %v", err)
+		t.Fatalf("local LAN session request: %v", err)
 	}
-	if continueResponse.StatusCode != http.StatusSeeOther {
-		t.Fatalf("expected continuation status 303, got %d", continueResponse.StatusCode)
+	if sessionResponse.StatusCode != http.StatusOK {
+		t.Fatalf("expected LOCAL LAN header session status 200, got %d", sessionResponse.StatusCode)
 	}
-	if got := continueResponse.Header.Get("Location"); got != "/people?view=cards" {
-		t.Fatalf("expected verified browser login to continue to People, got %q", got)
-	}
-}
 
-func TestAuthenticationHandlerLocalBrowserLoginRejectsCrossSiteFormAndExplainsMissingCookie(t *testing.T) {
-	_, _, service, _ := authenticationTestService(t)
-	handler := NewHandler(service, CookieConfig{Name: "ers_test_session", Secure: false, SameSite: "Lax", TTL: time.Hour}, nil, nil)
-	app := fiber.New()
-	app.Use(handler.SessionMiddleware())
-	app.Post("/api/v1/auth/browser-login", handler.BrowserLogin)
-	app.Get("/api/v1/auth/browser-login/continue", handler.BrowserLoginContinue)
-
-	crossSite := httptest.NewRequest(
-		http.MethodPost,
-		"/api/v1/auth/browser-login",
-		strings.NewReader("login=x&password=y"),
-	)
-	crossSite.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	crossSite.Header.Set(localBrowserLoginProxyHeader, "1")
-	crossSite.Header.Set("Sec-Fetch-Site", "cross-site")
-	crossSite.Header.Set("Origin", "https://example.invalid")
-	crossSite.Header.Set("X-ERS-Forwarded-Host", "192.168.2.154:5173")
-	crossSite.Header.Set("X-ERS-Forwarded-Proto", "http")
-	crossSiteResponse, err := app.Test(crossSite)
+	untrustedRequest := httptest.NewRequest(http.MethodGet, "/session", nil)
+	untrustedRequest.RemoteAddr = "192.168.2.99:42000"
+	untrustedRequest.Header.Set(localSessionProxyHeader, "1")
+	untrustedRequest.Header.Set(localSessionTokenHeader, localToken)
+	untrustedResponse, err := app.Test(untrustedRequest)
 	if err != nil {
-		t.Fatalf("cross-site browser login request: %v", err)
+		t.Fatalf("untrusted direct session request: %v", err)
 	}
-	if crossSiteResponse.StatusCode != http.StatusForbidden {
-		t.Fatalf("expected cross-site local browser login status 403, got %d", crossSiteResponse.StatusCode)
+	if untrustedResponse.StatusCode != http.StatusNoContent {
+		t.Fatalf("expected direct non-loopback request to be unable to opt into LOCAL header sessions, got %d", untrustedResponse.StatusCode)
 	}
 
-	missingCookie := httptest.NewRequest(
-		http.MethodGet,
-		"/api/v1/auth/browser-login/continue?returnTo=%2Fpeople",
-		nil,
-	)
-	missingCookie.Header.Set(localBrowserLoginProxyHeader, "1")
-	missingCookieResponse, err := app.Test(missingCookie)
+	logoutRequest := httptest.NewRequest(http.MethodPost, "/logout", nil)
+	logoutRequest.RemoteAddr = "127.0.0.1:41002"
+	logoutRequest.Header.Set(localSessionProxyHeader, "1")
+	logoutRequest.Header.Set(localSessionTokenHeader, localToken)
+	logoutResponse, err := app.Test(logoutRequest)
 	if err != nil {
-		t.Fatalf("missing-cookie continuation request: %v", err)
+		t.Fatalf("local LAN logout request: %v", err)
 	}
-	if missingCookieResponse.StatusCode != http.StatusSeeOther {
-		t.Fatalf("expected missing-cookie continuation status 303, got %d", missingCookieResponse.StatusCode)
+	if logoutResponse.StatusCode != http.StatusNoContent {
+		t.Fatalf("expected LOCAL LAN logout status 204, got %d", logoutResponse.StatusCode)
 	}
-	location := missingCookieResponse.Header.Get("Location")
-	if !strings.Contains(location, "browserLoginError=session_cookie_unavailable") {
-		t.Fatalf("expected visible missing-cookie diagnostic, got %q", location)
+
+	revokedRequest := httptest.NewRequest(http.MethodGet, "/session", nil)
+	revokedRequest.RemoteAddr = "127.0.0.1:41003"
+	revokedRequest.Header.Set(localSessionProxyHeader, "1")
+	revokedRequest.Header.Set(localSessionTokenHeader, localToken)
+	revokedResponse, err := app.Test(revokedRequest)
+	if err != nil {
+		t.Fatalf("revoked LOCAL LAN session request: %v", err)
 	}
-	if !strings.Contains(location, "returnTo=%2Fpeople") {
-		t.Fatalf("expected continuation target to survive missing-cookie diagnostic, got %q", location)
+	if revokedResponse.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("expected revoked LOCAL LAN session status 401, got %d", revokedResponse.StatusCode)
 	}
 }
 
@@ -161,6 +132,9 @@ func TestAuthenticationHandlerIssuesReadsAndClearsSessionCookie(t *testing.T) {
 	}
 	if loginResponse.StatusCode != http.StatusOK {
 		t.Fatalf("expected login status 200, got %d", loginResponse.StatusCode)
+	}
+	if got := loginResponse.Header.Get(localSessionTokenHeader); got != "" {
+		t.Fatalf("ordinary authentication must not expose the session token header, got %q", got)
 	}
 	if loginResponse.Header.Get("Cache-Control") != "no-store" {
 		t.Fatalf("expected login response to disable caching, got %q", loginResponse.Header.Get("Cache-Control"))

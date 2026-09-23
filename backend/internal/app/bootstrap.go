@@ -88,10 +88,11 @@ func Bootstrap(cfg Config) (*fiber.App, func(), error) {
 		PasswordHashCost: cfg.AuthPasswordHashCost,
 	})
 	authenticationHandler := authentication.NewHandler(authenticationSvc, authentication.CookieConfig{
-		Name:     cfg.AuthSessionCookieName,
-		Secure:   cfg.AuthSessionCookieSecure,
-		SameSite: cfg.AuthSessionCookieSameSite,
-		TTL:      cfg.AuthSessionTTL,
+		Name:                    cfg.AuthSessionCookieName,
+		Secure:                  cfg.AuthSessionCookieSecure,
+		SameSite:                cfg.AuthSessionCookieSameSite,
+		TTL:                     cfg.AuthSessionTTL,
+		AllowLocalSessionHeader: cfg.AuthLocalSessionHeaderEnabled,
 	}, actorStore, actorStore)
 
 	tenantRepo := tenants.NewRepository(database)

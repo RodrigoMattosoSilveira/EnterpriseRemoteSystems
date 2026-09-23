@@ -331,9 +331,10 @@ local-hot-reload-check:
 local-auth-cookie-config-check:
 	@grep -Fq 'export AUTH_SESSION_COOKIE_SECURE="false"' scripts/dev-backend.sh || (echo "Plain-HTTP local backend must default the session cookie to Secure=false for LAN/mobile access." && exit 1)
 	@grep -Fq 'export AUTH_SESSION_COOKIE_SAME_SITE="Lax"' scripts/dev-backend.sh || (echo "Plain-HTTP local backend must default the session cookie to SameSite=Lax." && exit 1)
+	@grep -Fq 'export AUTH_LOCAL_SESSION_HEADER_ENABLED="true"' scripts/dev-backend.sh || (echo "Plain-HTTP local backend must enable the Vite-proxy-only session-header fallback for LAN/mobile access." && exit 1)
 	@grep -Fq 'set_or_update_env "$$BACKEND_ENV" "AUTH_SESSION_COOKIE_SECURE" "false"' scripts/init-dev-env.sh || (echo "Local environment initialization must persist AUTH_SESSION_COOKIE_SECURE=false." && exit 1)
 	@grep -Fq 'set_or_update_env "$$BACKEND_ENV" "AUTH_SESSION_COOKIE_SAME_SITE" "Lax"' scripts/init-dev-env.sh || (echo "Local environment initialization must persist AUTH_SESSION_COOKIE_SAME_SITE=Lax." && exit 1)
-	@echo "Local HTTP session-cookie configuration is LAN/mobile compatible."
+	@echo "Local HTTP authentication configuration is LAN/mobile compatible."
 
 .PHONY: local-sqlite-reset-check
 local-sqlite-reset-check:

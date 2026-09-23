@@ -118,6 +118,30 @@ func TestLoadConfigReadsAuthenticationSessionSettings(t *testing.T) {
 	}
 }
 
+func TestLoadConfigReadsLocalSessionHeaderSettingOnlyInLocalDevelopment(t *testing.T) {
+	t.Setenv("JWT_SECRET", "test-secret")
+	t.Setenv("APP_ENV", "development")
+	t.Setenv("AUTH_LOCAL_SESSION_HEADER_ENABLED", "true")
+
+	cfg, err := LoadConfig()
+	if err != nil {
+		t.Fatalf("load local config: %v", err)
+	}
+	if !cfg.AuthLocalSessionHeaderEnabled {
+		t.Fatalf("expected explicit LOCAL session-header transport setting: %#v", cfg)
+	}
+}
+
+func TestLoadConfigRejectsLocalSessionHeaderSettingOutsideLocalDevelopment(t *testing.T) {
+	t.Setenv("JWT_SECRET", "test-secret")
+	t.Setenv("APP_ENV", "production")
+	t.Setenv("AUTH_LOCAL_SESSION_HEADER_ENABLED", "true")
+
+	if _, err := LoadConfig(); err == nil {
+		t.Fatal("expected production LOCAL session-header transport setting to be rejected")
+	}
+}
+
 func TestLoadConfigDefaultsSecureAuthenticationCookiesOutsideLocalDevelopment(t *testing.T) {
 	t.Setenv("JWT_SECRET", "test-secret")
 	t.Setenv("APP_ENV", "production")

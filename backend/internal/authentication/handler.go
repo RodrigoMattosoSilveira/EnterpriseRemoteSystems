@@ -2,7 +2,7 @@ package authentication
 
 import (
 	"errors"
-	"net/url"
+	"net"
 	"strings"
 	"time"
 
@@ -17,10 +17,11 @@ const (
 )
 
 type CookieConfig struct {
-	Name     string
-	Secure   bool
-	SameSite string
-	TTL      time.Duration
+	Name                    string
+	Secure                  bool
+	SameSite                string
+	TTL                     time.Duration
+	AllowLocalSessionHeader bool
 }
 
 type Handler struct {
@@ -45,7 +46,7 @@ func NewHandler(service Service, cookie CookieConfig, actorStore authz.ActorStor
 
 func (h *Handler) SessionMiddleware() fiber.Handler {
 	return func(c fiber.Ctx) error {
-		rawToken := h.readCookie(c)
+		rawToken := h.readSessionToken(c)
 		if rawToken == "" {
 			return c.Next()
 		}
@@ -67,130 +68,33 @@ func (h *Handler) RequireSession(c fiber.Ctx) error {
 	return c.Next()
 }
 
-const localBrowserLoginProxyHeader = "X-ERS-Local-Browser-Login"
+const (
+	localSessionProxyHeader = "X-ERS-Local-LAN-Proxy"
+	localSessionTokenHeader = "X-ERS-Local-Session"
+)
 
-// BrowserLogin is a LOCAL-development compatibility boundary for phones that
-// reach the Vite dev server through a private-LAN HTTP origin. The ordinary
-// JSON /auth/login contract remains canonical for deployed environments and
-// API clients. Vite marks this form POST explicitly and the handler accepts it
-// only from a same-origin browser navigation.
-func (h *Handler) BrowserLogin(c fiber.Ctx) error {
-	if c.Get(localBrowserLoginProxyHeader) != "1" {
-		return c.SendStatus(fiber.StatusNotFound)
-	}
-	if !sameOriginLocalBrowserPost(c) {
-		return c.SendStatus(fiber.StatusForbidden)
-	}
-	setNoStore(c)
-
-	var form struct {
-		Login    string `form:"login"`
-		Password string `form:"password"`
-		ReturnTo string `form:"returnTo"`
-	}
-	if err := c.Bind().Body(&form); err != nil {
-		return c.Redirect().Status(fiber.StatusSeeOther).To(browserLoginErrorLocation("validation_failed", form.ReturnTo))
-	}
-
-	result, err := h.service.Login(c.Context(), LoginRequest{
-		Login:    form.Login,
-		Password: form.Password,
-	}, c.Get("User-Agent"), c.IP())
-	if err != nil {
-		setNoStore(c)
-		return c.Redirect().Status(fiber.StatusSeeOther).To(browserLoginErrorLocation(browserLoginErrorCode(err), form.ReturnTo))
-	}
-
-	h.setSessionCookie(c, result.Token, result.Session.ExpiresAt)
-	setNoStore(c)
-	values := url.Values{}
-	values.Set("returnTo", browserLoginTarget(result.Session.MustChangePassword, form.ReturnTo))
-	return c.Redirect().Status(fiber.StatusSeeOther).To("/api/v1/auth/browser-login/continue?" + values.Encode())
-}
-
-// BrowserLoginContinue verifies, as a top-level browser navigation, that the
-// session cookie issued by BrowserLogin was actually returned by the client
-// before the SPA starts authenticated fetches. If the browser rejected the
-// cookie, return to /login with a visible LOCAL diagnostic instead of silently
-// bouncing back to an empty login screen.
-func (h *Handler) BrowserLoginContinue(c fiber.Ctx) error {
-	if c.Get(localBrowserLoginProxyHeader) != "1" {
-		return c.SendStatus(fiber.StatusNotFound)
-	}
-	returnTo := safeBrowserReturnTo(c.Query("returnTo"))
-	session, err := h.currentSession(c)
-	if err != nil {
-		setNoStore(c)
-		return c.Redirect().Status(fiber.StatusSeeOther).To(browserLoginErrorLocation("session_cookie_unavailable", returnTo))
-	}
-	setNoStore(c)
-	return c.Redirect().Status(fiber.StatusSeeOther).To(browserLoginTarget(session.MustChangePassword, returnTo))
-}
-
-func sameOriginLocalBrowserPost(c fiber.Ctx) bool {
-	if strings.EqualFold(strings.TrimSpace(c.Get("Sec-Fetch-Site")), "same-origin") {
-		return true
-	}
-
-	origin := strings.TrimSuffix(strings.TrimSpace(c.Get("Origin")), "/")
-	forwardedHost := strings.TrimSpace(c.Get("X-ERS-Forwarded-Host"))
-	forwardedProto := strings.TrimSpace(c.Get("X-ERS-Forwarded-Proto"))
-	if origin == "" || forwardedHost == "" || forwardedProto == "" {
+// localSessionHeaderAllowed is a LOCAL-only fallback for physical devices whose
+// browser refuses to persist the ordinary ERS cookie on an insecure private-LAN
+// origin. It is disabled unless local-backend explicitly enables it, requires a
+// marker injected by the Vite development proxy, and accepts that marker only
+// from a loopback connection. Deployed clients therefore cannot opt themselves
+// into header-based session transport.
+func (h *Handler) localSessionHeaderAllowed(c fiber.Ctx) bool {
+	if !h.cookie.AllowLocalSessionHeader || c.Get(localSessionProxyHeader) != "1" {
 		return false
 	}
-	return strings.EqualFold(origin, forwardedProto+"://"+forwardedHost)
+	remoteIP := net.ParseIP(strings.TrimSpace(c.IP()))
+	return remoteIP != nil && remoteIP.IsLoopback()
 }
 
-func browserLoginTarget(mustChangePassword bool, returnTo string) string {
-	if mustChangePassword {
-		return "/password/change"
+func (h *Handler) readSessionToken(c fiber.Ctx) string {
+	if token := h.readCookie(c); token != "" {
+		return token
 	}
-	return safeBrowserReturnTo(returnTo)
-}
-
-func safeBrowserReturnTo(value string) string {
-	value = strings.TrimSpace(value)
-	if value == "" || !strings.HasPrefix(value, "/") || strings.HasPrefix(value, "//") {
-		return "/"
+	if !h.localSessionHeaderAllowed(c) {
+		return ""
 	}
-	pathname := value
-	if index := strings.IndexAny(pathname, "?#"); index >= 0 {
-		pathname = pathname[:index]
-	}
-	switch pathname {
-	case "/login", "/forbidden", "/password/reset":
-		return "/"
-	default:
-		return value
-	}
-}
-
-func browserLoginErrorLocation(code string, returnTo string) string {
-	values := url.Values{}
-	values.Set("browserLoginError", code)
-	values.Set("returnTo", safeBrowserReturnTo(returnTo))
-	return "/login?" + values.Encode()
-}
-
-func browserLoginErrorCode(err error) string {
-	switch {
-	case errors.Is(err, ErrInvalidCredentials):
-		return "invalid_credentials"
-	case errors.Is(err, ErrAccountSecuritySuspended):
-		return "account_security_suspended"
-	case errors.Is(err, ErrAccountOperationallyInactive):
-		return "account_operationally_inactive"
-	case errors.Is(err, ErrAccountInactive):
-		return "account_inactive"
-	case errors.Is(err, ErrActorInactive):
-		return "actor_inactive"
-	default:
-		var validation *ValidationError
-		if errors.As(err, &validation) {
-			return "validation_failed"
-		}
-		return "unable_to_sign_in"
-	}
+	return strings.TrimSpace(c.Get(localSessionTokenHeader))
 }
 
 func (h *Handler) Login(c fiber.Ctx) error {
@@ -203,12 +107,15 @@ func (h *Handler) Login(c fiber.Ctx) error {
 		return h.writeError(c, err)
 	}
 	h.setSessionCookie(c, result.Token, result.Session.ExpiresAt)
+	if h.localSessionHeaderAllowed(c) {
+		c.Set(localSessionTokenHeader, result.Token)
+	}
 	setNoStore(c)
 	return httpx.OK(c, result.Session)
 }
 
 func (h *Handler) Logout(c fiber.Ctx) error {
-	if err := h.service.Logout(c.Context(), h.readCookie(c)); err != nil {
+	if err := h.service.Logout(c.Context(), h.readSessionToken(c)); err != nil {
 		return h.writeError(c, err)
 	}
 	h.clearSessionCookie(c)
@@ -217,7 +124,7 @@ func (h *Handler) Logout(c fiber.Ctx) error {
 
 func (h *Handler) CurrentSession(c fiber.Ctx) error {
 	setNoStore(c)
-	if h.readCookie(c) == "" {
+	if h.readSessionToken(c) == "" {
 		return c.SendStatus(fiber.StatusNoContent)
 	}
 	session, err := h.currentSession(c)
@@ -265,7 +172,7 @@ func (h *Handler) ChangePassword(c fiber.Ctx) error {
 	if err := c.Bind().Body(&req); err != nil {
 		return httpx.BadRequest(c, "invalid_body", "Invalid request body")
 	}
-	if err := h.service.ChangePassword(c.Context(), h.readCookie(c), req); err != nil {
+	if err := h.service.ChangePassword(c.Context(), h.readSessionToken(c), req); err != nil {
 		return h.writeError(c, err)
 	}
 	h.clearSessionCookie(c)
@@ -417,7 +324,7 @@ func (h *Handler) currentSession(c fiber.Ctx) (SessionResponse, error) {
 	if session, ok := SessionFromContext(c); ok {
 		return session, nil
 	}
-	session, err := h.service.ResolveSession(c.Context(), h.readCookie(c))
+	session, err := h.service.ResolveSession(c.Context(), h.readSessionToken(c))
 	if err != nil {
 		c.Locals(sessionErrorLocalKey, err)
 		return SessionResponse{}, err
