@@ -31,9 +31,11 @@ export default function LoginPage() {
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const request = loginRequestFromForm(event.currentTarget, { login, password });
-    // Keep controlled state aligned with values supplied directly by a mobile
+    // Keep action state aligned with values supplied directly by a mobile
     // browser/password manager so subsequent error actions use the same
-    // credentials that were actually submitted.
+    // credentials that were actually submitted. The fields themselves remain
+    // uncontrolled so React cannot overwrite a credential-manager DOM update
+    // before FormData reads it.
     setLogin(request.login);
     setPassword(request.password);
     setSubmitting(true);
@@ -116,8 +118,23 @@ export default function LoginPage() {
       {error && <p role="alert" className="mb-4 rounded-xl bg-red-50 p-3 text-sm text-red-800">{error}</p>}
       {reactivationError && <p role="alert" className="mb-4 rounded-xl bg-red-50 p-3 text-sm text-red-800">{reactivationError}</p>}
       <form onSubmit={submit} className="space-y-4">
-        <AuthField label={t("auth.login")} name="login" type="email" autoComplete="username" value={login} onChange={(e) => setLogin(e.target.value)} required />
-        <AuthField label={t("auth.password")} name="password" type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} required />
+        <AuthField
+          label={t("auth.login")}
+          name="login"
+          type="email"
+          autoComplete="username"
+          defaultValue={login}
+          onChange={(e) => setLogin(e.target.value)}
+          required
+        />
+        <AuthField
+          label={t("auth.password")}
+          name="password"
+          type="password"
+          autoComplete="current-password"
+          onChange={(e) => setPassword(e.target.value)}
+          required
+        />
         <button className={primaryButtonClass} disabled={submitting}>{submitting ? t("auth.signingIn") : t("auth.signIn.title")}</button>
       </form>
       {(loginErrorCode === "account_security_suspended" || loginErrorCode === "account_inactive") && (

@@ -327,6 +327,14 @@ local-hot-reload-check:
 	@grep -Eq 'cmd = "[^"]*db-migrate\.sh[^"]*&&[^"]*go build' backend/.air.toml || (echo "Air hot reload must apply SQL migrations before rebuilding the backend." && exit 1)
 	@grep -Eq 'include_ext = \[[^]]*"sql"[^]]*\]' backend/.air.toml || (echo "Air hot reload must watch backend migration SQL files." && exit 1)
 
+.PHONY: local-auth-cookie-config-check
+local-auth-cookie-config-check:
+	@grep -Fq 'export AUTH_SESSION_COOKIE_SECURE="false"' scripts/dev-backend.sh || (echo "Plain-HTTP local backend must default the session cookie to Secure=false for LAN/mobile access." && exit 1)
+	@grep -Fq 'export AUTH_SESSION_COOKIE_SAME_SITE="Lax"' scripts/dev-backend.sh || (echo "Plain-HTTP local backend must default the session cookie to SameSite=Lax." && exit 1)
+	@grep -Fq 'set_or_update_env "$$BACKEND_ENV" "AUTH_SESSION_COOKIE_SECURE" "false"' scripts/init-dev-env.sh || (echo "Local environment initialization must persist AUTH_SESSION_COOKIE_SECURE=false." && exit 1)
+	@grep -Fq 'set_or_update_env "$$BACKEND_ENV" "AUTH_SESSION_COOKIE_SAME_SITE" "Lax"' scripts/init-dev-env.sh || (echo "Local environment initialization must persist AUTH_SESSION_COOKIE_SAME_SITE=Lax." && exit 1)
+	@echo "Local HTTP session-cookie configuration is LAN/mobile compatible."
+
 .PHONY: local-sqlite-reset-check
 local-sqlite-reset-check:
 	@tmpdir="$$(mktemp -d)"; \
@@ -381,6 +389,7 @@ local-check:
 	$(MAKE) deployed-playwright-evidence-check
 	$(MAKE) production-release-evidence-check
 	$(MAKE) local-hot-reload-check
+	$(MAKE) local-auth-cookie-config-check
 	$(MAKE) server-public-smoke-script-check
 	$(MAKE) local-sqlite-reset-check
 	$(MAKE) server-authz-bootstrap-config-check
@@ -434,7 +443,7 @@ local-docker-check: local-docker-check-image
 		-e GOMODCACHE=/tmp/gomod \
 		-e NPM_CONFIG_CACHE=/tmp/npm-cache \
 		$(LOCAL_DOCKER_CHECK_IMAGE) \
-		bash -lc 'set -euo pipefail; make bite30l4-coverage-manifest-check; make post-bite30-backlog-reconciliation-check; make deployed-playwright-evidence-check; make production-release-evidence-check; make local-hot-reload-check; make server-authz-bootstrap-config-check; make legacy-identity-dependency-check; make brazilian-demo-presentation-check; make migration-rehearsal-check; cd backend && go clean -testcache && go test ./...; cd ../frontend && npm ci && npm run test:run && npx playwright install chromium && npx playwright test && npm run build'
+		bash -lc 'set -euo pipefail; make bite30l4-coverage-manifest-check; make post-bite30-backlog-reconciliation-check; make deployed-playwright-evidence-check; make production-release-evidence-check; make local-hot-reload-check; make local-auth-cookie-config-check; make server-authz-bootstrap-config-check; make legacy-identity-dependency-check; make brazilian-demo-presentation-check; make migration-rehearsal-check; cd backend && go clean -testcache && go test ./...; cd ../frontend && npm ci && npm run test:run && npx playwright install chromium && npx playwright test && npm run build'
 
 # ==============================================================================
 # Generic server environment targets
