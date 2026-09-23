@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -36,6 +37,12 @@ func TestAuthenticationHandlerLocalLANSessionHeaderFallback(t *testing.T) {
 		AllowLocalSessionHeader: true,
 	}, nil, nil)
 	app := fiber.New()
+	app.Use(func(c fiber.Ctx) error {
+		if remoteIP := net.ParseIP(c.Get("X-Test-Remote-IP")); remoteIP != nil {
+			c.RequestCtx().SetRemoteAddr(&net.TCPAddr{IP: remoteIP, Port: 41000})
+		}
+		return c.Next()
+	})
 	app.Use(handler.SessionMiddleware())
 	app.Post("/login", handler.Login)
 	app.Get("/session", handler.CurrentSession)
@@ -43,8 +50,8 @@ func TestAuthenticationHandlerLocalLANSessionHeaderFallback(t *testing.T) {
 
 	body, _ := json.Marshal(LoginRequest{Login: account.Login, Password: "Mobile-Demo-Password-1"})
 	loginRequest := httptest.NewRequest(http.MethodPost, "/login", bytes.NewReader(body))
-	loginRequest.RemoteAddr = "127.0.0.1:41000"
 	loginRequest.Header.Set("Content-Type", "application/json")
+	loginRequest.Header.Set("X-Test-Remote-IP", "127.0.0.1")
 	loginRequest.Header.Set(localSessionProxyHeader, "1")
 	loginResponse, err := app.Test(loginRequest)
 	if err != nil {
@@ -59,7 +66,7 @@ func TestAuthenticationHandlerLocalLANSessionHeaderFallback(t *testing.T) {
 	}
 
 	sessionRequest := httptest.NewRequest(http.MethodGet, "/session", nil)
-	sessionRequest.RemoteAddr = "127.0.0.1:41001"
+	sessionRequest.Header.Set("X-Test-Remote-IP", "127.0.0.1")
 	sessionRequest.Header.Set(localSessionProxyHeader, "1")
 	sessionRequest.Header.Set(localSessionTokenHeader, localToken)
 	sessionResponse, err := app.Test(sessionRequest)
@@ -71,7 +78,7 @@ func TestAuthenticationHandlerLocalLANSessionHeaderFallback(t *testing.T) {
 	}
 
 	untrustedRequest := httptest.NewRequest(http.MethodGet, "/session", nil)
-	untrustedRequest.RemoteAddr = "192.168.2.99:42000"
+	untrustedRequest.Header.Set("X-Test-Remote-IP", "192.168.2.99")
 	untrustedRequest.Header.Set(localSessionProxyHeader, "1")
 	untrustedRequest.Header.Set(localSessionTokenHeader, localToken)
 	untrustedResponse, err := app.Test(untrustedRequest)
@@ -83,7 +90,7 @@ func TestAuthenticationHandlerLocalLANSessionHeaderFallback(t *testing.T) {
 	}
 
 	logoutRequest := httptest.NewRequest(http.MethodPost, "/logout", nil)
-	logoutRequest.RemoteAddr = "127.0.0.1:41002"
+	logoutRequest.Header.Set("X-Test-Remote-IP", "127.0.0.1")
 	logoutRequest.Header.Set(localSessionProxyHeader, "1")
 	logoutRequest.Header.Set(localSessionTokenHeader, localToken)
 	logoutResponse, err := app.Test(logoutRequest)
@@ -95,7 +102,7 @@ func TestAuthenticationHandlerLocalLANSessionHeaderFallback(t *testing.T) {
 	}
 
 	revokedRequest := httptest.NewRequest(http.MethodGet, "/session", nil)
-	revokedRequest.RemoteAddr = "127.0.0.1:41003"
+	revokedRequest.Header.Set("X-Test-Remote-IP", "127.0.0.1")
 	revokedRequest.Header.Set(localSessionProxyHeader, "1")
 	revokedRequest.Header.Set(localSessionTokenHeader, localToken)
 	revokedResponse, err := app.Test(revokedRequest)
