@@ -336,8 +336,8 @@ func setNoStore(c fiber.Ctx) {
 
 // WriteSessionError exposes the canonical authentication error response to the
 // Bite 28C business-route middleware. Invalid session cookies are rejected
-// before authorization and receive the same cookie-clearing behavior as the
-// authentication endpoints.
+// before authorization. Passive expired-session responses deliberately avoid
+// clearing cookies because an older response must not erase a newer login.
 func (h *Handler) WriteSessionError(c fiber.Ctx, err error) error {
 	return h.writeError(c, err)
 }
@@ -348,17 +348,22 @@ func (h *Handler) writeError(c fiber.Ctx, err error) error {
 		return c.Status(fiber.StatusUnauthorized).JSON(httpx.APIResponse{Error: &httpx.APIError{Code: "invalid_credentials", Message: "Login or password is invalid"}})
 	case errors.Is(err, ErrAuthenticationRequired):
 		setNoStore(c)
-		// A cookie-less /auth/session probe can race a successful login in the
-		// browser. Do not emit a Set-Cookie deletion when this request did not
-		// actually carry a session cookie, otherwise the older 401 response can
-		// arrive after POST /auth/login and erase the newly issued session.
-		if h.readCookie(c) != "" {
-			h.clearSessionCookie(c)
-		}
+		// Passive session-validation responses must never delete the browser's
+		// cookie. A request carrying an old/revoked cookie can finish after a
+		// successful login on a slower client; deleting by cookie name would then
+		// erase the newer session that was issued by POST /auth/login. The stale
+		// token is already rejected server-side, and explicit logout/password
+		// flows still clear the cookie intentionally.
 		return c.Status(fiber.StatusUnauthorized).JSON(httpx.APIResponse{Error: &httpx.APIError{Code: "authentication_required", Message: "An authenticated session is required"}})
 	case errors.Is(err, ErrSessionExpired):
 		setNoStore(c)
-		h.clearSessionCookie(c)
+		// Do not clear an expired cookie from a passive session-validation
+		// response. On a slower client (notably a mobile browser), an initial
+		// /auth/session request carrying an old expired cookie can finish after a
+		// successful POST /auth/login. A Set-Cookie deletion from the older
+		// response would then erase the newer session cookie and immediately sign
+		// the user back out. The expired token is already rejected server-side,
+		// and a successful login safely replaces it with a new cookie.
 		return c.Status(fiber.StatusUnauthorized).JSON(httpx.APIResponse{Error: &httpx.APIError{Code: "session_expired", Message: "The authenticated session has expired"}})
 	case errors.Is(err, ErrAccountSecuritySuspended):
 		setNoStore(c)

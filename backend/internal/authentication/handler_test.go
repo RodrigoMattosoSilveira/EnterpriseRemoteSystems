@@ -125,9 +125,59 @@ func TestAuthenticationHandlerIssuesReadsAndClearsSessionCookie(t *testing.T) {
 	if revokedResponse.Header.Get("Cache-Control") != "no-store" {
 		t.Fatalf("expected rejected session response to disable caching, got %q", revokedResponse.Header.Get("Cache-Control"))
 	}
-	revokedCookies := revokedResponse.Cookies()
-	if len(revokedCookies) != 1 || revokedCookies[0].Name != "ers_test_session" || revokedCookies[0].MaxAge >= 0 {
-		t.Fatalf("expected rejected session request to clear the stale cookie, got %#v", revokedCookies)
+	if revokedCookies := revokedResponse.Cookies(); len(revokedCookies) != 0 {
+		t.Fatalf("passive rejected session request must not clear a potentially newer browser cookie, got %#v", revokedCookies)
+	}
+}
+
+func TestAuthenticationHandlerExpiredSessionProbeDoesNotClearCookie(t *testing.T) {
+	database, _, service, _ := authenticationTestService(t)
+	account, err := service.CreateAccount(t.Context(), CreateAccountRequest{
+		TenantID: appdb.DefaultTenantID, Login: "cookie@example.com", TemporaryPassword: "Expired-Cookie-Password-1",
+	})
+	if err != nil {
+		t.Fatalf("create account: %v", err)
+	}
+
+	handler := NewHandler(service, CookieConfig{Name: "ers_test_session", TTL: time.Hour}, nil, nil)
+	app := fiber.New()
+	app.Use(handler.SessionMiddleware())
+	app.Post("/login", handler.Login)
+	app.Get("/session", handler.CurrentSession)
+
+	body, _ := json.Marshal(LoginRequest{Login: account.Login, Password: "Expired-Cookie-Password-1"})
+	loginRequest := httptest.NewRequest(http.MethodPost, "/login", bytes.NewReader(body))
+	loginRequest.Header.Set("Content-Type", "application/json")
+	loginResponse, err := app.Test(loginRequest)
+	if err != nil {
+		t.Fatalf("login request: %v", err)
+	}
+	if loginResponse.StatusCode != http.StatusOK {
+		t.Fatalf("expected login status 200, got %d", loginResponse.StatusCode)
+	}
+	cookies := loginResponse.Cookies()
+	if len(cookies) != 1 {
+		t.Fatalf("expected one issued session cookie, got %d", len(cookies))
+	}
+	cookie := cookies[0]
+
+	if err := database.Model(&Session{}).
+		Where("account_id = ?", account.ID).
+		Update("expires_at", time.Now().UTC().Add(-time.Minute)).Error; err != nil {
+		t.Fatalf("expire session: %v", err)
+	}
+
+	expiredRequest := httptest.NewRequest(http.MethodGet, "/session", nil)
+	expiredRequest.AddCookie(cookie)
+	expiredResponse, err := app.Test(expiredRequest)
+	if err != nil {
+		t.Fatalf("expired session request: %v", err)
+	}
+	if expiredResponse.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("expected expired session status 401, got %d", expiredResponse.StatusCode)
+	}
+	if got := expiredResponse.Cookies(); len(got) != 0 {
+		t.Fatalf("an expired passive session probe must not clear a potentially newer browser cookie, got %#v", got)
 	}
 }
 
