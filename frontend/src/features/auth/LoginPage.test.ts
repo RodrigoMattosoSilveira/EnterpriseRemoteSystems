@@ -1,6 +1,28 @@
 import { describe, expect, it } from "vitest";
 import { ApiError } from "../../api/client";
-import { loginFailurePresentation, loginFromLocationState, loginRequestFromForm, safeReturnTo } from "./LoginPage";
+import {
+  authenticatedLoginTarget,
+  loginFailurePresentation,
+  loginFromLocationState,
+  loginRequestFromForm,
+  safeReturnTo,
+  shouldAutoRedirectAuthenticatedLogin,
+} from "./LoginPage";
+
+describe("mobile login handoff", () => {
+  it("suppresses client-side redirect while an explicit login submission owns the handoff", () => {
+    expect(shouldAutoRedirectAuthenticatedLogin(true)).toBe(false);
+    expect(shouldAutoRedirectAuthenticatedLogin(false)).toBe(true);
+  });
+
+  it("uses the same safe destination for the hard post-login navigation", () => {
+    expect(authenticatedLoginTarget(false, "/people?view=cards")).toBe(
+      "/people?view=cards",
+    );
+    expect(authenticatedLoginTarget(false, "https://example.com")).toBe("/");
+    expect(authenticatedLoginTarget(true, "/people")).toBe("/password/change");
+  });
+});
 
 describe("safeReturnTo", () => {
   it("preserves ordinary protected routes", () => {

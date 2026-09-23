@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { Link, Navigate, useLocation, useNavigate, useSearchParams } from "react-router-dom";
+import { Link, Navigate, useLocation, useSearchParams } from "react-router-dom";
 import { ApiError } from "../../api/client";
 import { requestAccountReactivation } from "../../api/auth.api";
 import { authenticate } from "../../app/authStore";
@@ -10,7 +10,6 @@ import { AuthCard, AuthField, primaryButtonClass } from "./AuthCard";
 
 export default function LoginPage() {
   const auth = useAuthState();
-  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const location = useLocation();
   const [params] = useSearchParams();
@@ -24,8 +23,24 @@ export default function LoginPage() {
   const [reactivationError, setReactivationError] = useState("");
   const { t } = useI18n();
 
-  if (auth.status === "authenticated") {
-    return <Navigate to={auth.session.mustChangePassword ? "/password/change" : safeReturnTo(params.get("returnTo"))} replace />;
+  // During an explicit login submission, authenticate() publishes the new
+  // authenticated state before this handler can finish the browser handoff.
+  // Do not let that state change trigger React Router's client-side <Navigate>
+  // and mount protected queries in the old login document. The submit handler
+  // below owns that transition and completes it with a full document navigation.
+  if (
+    auth.status === "authenticated" &&
+    shouldAutoRedirectAuthenticatedLogin(submitting)
+  ) {
+    return (
+      <Navigate
+        to={authenticatedLoginTarget(
+          auth.session.mustChangePassword,
+          params.get("returnTo"),
+        )}
+        replace
+      />
+    );
   }
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
@@ -43,20 +58,38 @@ export default function LoginPage() {
     setLoginErrorCode(null);
     setReactivationMessage("");
     setReactivationError("");
+    let navigationStarted = false;
     try {
       const session = await authenticate(request);
       // A new Account/session can resolve a completely different tenant Actor.
-      // Drop every query from the prior authenticated context before routing
+      // Drop every query from the prior authenticated context before crossing
       // into the workspace so tenant-neutral query keys cannot briefly render
       // another Account's cached tenant data.
       queryClient.clear();
-      navigate(session.mustChangePassword ? "/password/change" : safeReturnTo(params.get("returnTo")), { replace: true });
+
+      // authenticate() publishes authenticated state before returning. While
+      // submitting remains true, the render guard above deliberately suppresses
+      // React Router's <Navigate>. Complete the login boundary with a real
+      // same-origin document navigation so the newly issued HttpOnly cookie is
+      // committed before the fresh application document starts its protected
+      // /auth/session, tenant-options, and authorization requests.
+      navigationStarted = true;
+      window.location.replace(
+        authenticatedLoginTarget(
+          session.mustChangePassword,
+          params.get("returnTo"),
+        ),
+      );
     } catch (cause) {
+      navigationStarted = false;
       const presentation = loginFailurePresentation(cause, t);
       setError(presentation.message);
       setLoginErrorCode(presentation.code);
     } finally {
-      setSubmitting(false);
+      // On success keep the form in its submitting state until the browser
+      // unloads this document. Flipping it back to false would reopen the
+      // authenticated-state <Navigate> race before location.replace commits.
+      if (!navigationStarted) setSubmitting(false);
     }
   }
 
@@ -154,6 +187,16 @@ export default function LoginPage() {
   );
 }
 
+export function shouldAutoRedirectAuthenticatedLogin(submitting: boolean): boolean {
+  return !submitting;
+}
+
+export function authenticatedLoginTarget(
+  mustChangePassword: boolean,
+  returnTo: string | null,
+): string {
+  return mustChangePassword ? "/password/change" : safeReturnTo(returnTo);
+}
 
 export function loginRequestFromForm(
   form: HTMLFormElement,
