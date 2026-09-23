@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Person, UpdatePersonInput } from "../../types/people";
 import { PersonForm } from "./PersonForm";
 import { I18nProvider } from "../../i18n";
+import { MemoryRouter } from "react-router-dom";
 
 const existingPerson: Person = {
   id: "person-123",
@@ -54,6 +55,13 @@ afterEach(async () => {
 });
 
 describe("PersonForm edit submission state", () => {
+  it("describes profile completeness without claiming Collaborator eligibility", () => {
+    const onSubmit = vi.fn(async (_input: UpdatePersonInput) => {});
+    renderForm(onSubmit);
+
+    expect(container.textContent).toContain("All required profile sections are complete.");
+    expect(container.textContent).not.toContain("eligible to become a Collaborator");
+  });
   it("enables Save Changes only when a meaningful valid edit is ready", async () => {
     const onSubmit = vi.fn(async (_input: UpdatePersonInput) => {});
     renderForm(onSubmit);
@@ -112,11 +120,13 @@ describe("PersonForm edit submission state", () => {
 function renderForm(onSubmit: (input: UpdatePersonInput) => Promise<void>) {
   act(() => {
     root?.render(
-      <I18nProvider><PersonForm
-        initial={existingPerson}
-        defaultStatusId="ref-person-status-active"
-        onSubmit={onSubmit}
-      /></I18nProvider>
+      <MemoryRouter>
+        <I18nProvider><PersonForm
+          initial={existingPerson}
+          defaultStatusId="ref-person-status-active"
+          onSubmit={onSubmit}
+        /></I18nProvider>
+      </MemoryRouter>
     );
   });
 }
