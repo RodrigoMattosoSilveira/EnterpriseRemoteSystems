@@ -3,6 +3,7 @@ import {
   apiFetch,
   ApiError,
   LOCAL_SESSION_STORAGE_KEY,
+  isSupersededLocalSessionResponse,
   localSessionTokenForRequest,
   shouldUseLocalSessionTransport,
   syncLocalSessionTransportResponse,
@@ -129,6 +130,40 @@ describe("apiFetch authenticated-session transport", () => {
     expect(window.sessionStorage.getItem(LOCAL_SESSION_STORAGE_KEY)).toBe(
       "replacement-token",
     );
+  });
+
+  it("recognizes stale 401 responses that must not invalidate a newer LOCAL login", () => {
+    const location = { protocol: "http:", hostname: "192.168.2.154" };
+    window.sessionStorage.setItem(LOCAL_SESSION_STORAGE_KEY, "new-login-token");
+
+    expect(
+      isSupersededLocalSessionResponse(
+        location,
+        window.sessionStorage,
+        "",
+      ),
+    ).toBe(true);
+    expect(
+      isSupersededLocalSessionResponse(
+        location,
+        window.sessionStorage,
+        "older-request-token",
+      ),
+    ).toBe(true);
+    expect(
+      isSupersededLocalSessionResponse(
+        location,
+        window.sessionStorage,
+        "new-login-token",
+      ),
+    ).toBe(false);
+    expect(
+      isSupersededLocalSessionResponse(
+        { protocol: "https:", hostname: "192.168.2.154" },
+        window.sessionStorage,
+        "older-request-token",
+      ),
+    ).toBe(false);
   });
   it("sends same-origin cookies and a tenant selection without actor identity headers", async () => {
     await apiFetch<{ ok: boolean }>("/people");

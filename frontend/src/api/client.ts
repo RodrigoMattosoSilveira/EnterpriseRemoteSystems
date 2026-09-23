@@ -58,6 +58,7 @@ export async function apiFetch<T>(
   if (!result.response.ok) {
     if (
       result.response.status === 401 &&
+      !result.authenticationInterruptionSuperseded &&
       !isPublicAuthenticationRequest(path, requestOptions.method)
     ) {
       notifyAuthenticationRequired(authenticationInterruptionReason(result.errorCode));
@@ -102,6 +103,7 @@ type ApiFetchResult<T> = {
   errorCode?: string;
   errorMessage?: string;
   errorFields?: Record<string, string>;
+  authenticationInterruptionSuperseded: boolean;
 };
 
 async function performApiFetch<T>(
@@ -109,6 +111,7 @@ async function performApiFetch<T>(
   options: RequestInit,
 ): Promise<ApiFetchResult<T>> {
   let response: Response;
+  let authenticationInterruptionSuperseded = false;
 
   try {
     const headers = authenticatedRequestHeaders(options.headers);
@@ -118,6 +121,9 @@ async function performApiFetch<T>(
       credentials: options.credentials ?? "same-origin",
       headers,
     });
+    authenticationInterruptionSuperseded =
+      response.status === 401 &&
+      localSessionResponseWasSuperseded(requestLocalSessionToken);
     syncLocalSessionTransport(response, requestLocalSessionToken);
   } catch (error) {
     throw new ApiError({
@@ -144,6 +150,7 @@ async function performApiFetch<T>(
     errorCode: envelope?.error?.code,
     errorMessage: envelope?.error?.message,
     errorFields: envelope?.error?.fields,
+    authenticationInterruptionSuperseded,
   };
 }
 
@@ -268,6 +275,36 @@ export function localSessionTokenForRequest(
     return storage.getItem(LOCAL_SESSION_STORAGE_KEY)?.trim() ?? "";
   } catch {
     return "";
+  }
+}
+
+function localSessionResponseWasSuperseded(
+  requestLocalSessionToken: string,
+): boolean {
+  if (typeof window === "undefined") return false;
+  return isSupersededLocalSessionResponse(
+    window.location,
+    window.sessionStorage,
+    requestLocalSessionToken,
+  );
+}
+
+export function isSupersededLocalSessionResponse(
+  location: Pick<Location, "protocol" | "hostname">,
+  storage: Pick<Storage, "getItem">,
+  requestLocalSessionToken: string,
+): boolean {
+  if (!shouldUseLocalSessionTransport(location)) return false;
+  try {
+    const currentToken =
+      storage.getItem(LOCAL_SESSION_STORAGE_KEY)?.trim() ?? "";
+    // A response belongs to an older authentication generation when the request
+    // carried no LOCAL token (or an older token), but login has since installed
+    // a different token. Such a response may report its own 401, but it must not
+    // sign out the newer session that replaced it.
+    return Boolean(currentToken && currentToken !== requestLocalSessionToken);
+  } catch {
+    return false;
   }
 }
 
