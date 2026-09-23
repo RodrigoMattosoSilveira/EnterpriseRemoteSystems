@@ -23,7 +23,17 @@ export default defineConfig({
         target: apiProxyTarget,
         changeOrigin: true,
         configure: (proxy) => {
-          proxy.on("proxyReq", (proxyReq) => {
+          proxy.on("proxyReq", (proxyReq, req) => {
+            if ((req.url ?? "").startsWith("/api/v1/auth/browser-login")) {
+              // LOCAL mobile login uses a native top-level form POST so the
+              // browser commits the HttpOnly session cookie during navigation.
+              // Mark only this Vite-dev path and preserve the browser-facing
+              // origin metadata so the backend can reject cross-site forms.
+              proxyReq.setHeader("X-ERS-Local-Browser-Login", "1");
+              proxyReq.setHeader("X-ERS-Forwarded-Host", req.headers.host ?? "");
+              proxyReq.setHeader("X-ERS-Forwarded-Proto", "http");
+            }
+
             if (e2eAuthzProxyEnabled) {
               proxyReq.setHeader("X-Actor-ID", e2eAuthzActorId);
               proxyReq.setHeader("X-Tenant-ID", e2eAuthzTenantId);

@@ -1,26 +1,38 @@
 import { describe, expect, it } from "vitest";
 import { ApiError } from "../../api/client";
 import {
-  authenticatedLoginTarget,
+  browserLoginErrorPresentation,
   loginFailurePresentation,
   loginFromLocationState,
   loginRequestFromForm,
   safeReturnTo,
-  shouldAutoRedirectAuthenticatedLogin,
+  shouldUseLocalBrowserLogin,
 } from "./LoginPage";
 
-describe("mobile login handoff", () => {
-  it("suppresses client-side redirect while an explicit login submission owns the handoff", () => {
-    expect(shouldAutoRedirectAuthenticatedLogin(true)).toBe(false);
-    expect(shouldAutoRedirectAuthenticatedLogin(false)).toBe(true);
+
+describe("LOCAL mobile browser login", () => {
+  it("uses the native browser handoff only for private-LAN HTTP origins", () => {
+    expect(
+      shouldUseLocalBrowserLogin({ protocol: "http:", hostname: "192.168.2.154" }),
+    ).toBe(true);
+    expect(
+      shouldUseLocalBrowserLogin({ protocol: "http:", hostname: "10.0.0.22" }),
+    ).toBe(true);
+    expect(
+      shouldUseLocalBrowserLogin({ protocol: "http:", hostname: "172.20.4.7" }),
+    ).toBe(true);
+    expect(
+      shouldUseLocalBrowserLogin({ protocol: "http:", hostname: "localhost" }),
+    ).toBe(false);
+    expect(
+      shouldUseLocalBrowserLogin({ protocol: "https:", hostname: "192.168.2.154" }),
+    ).toBe(false);
   });
 
-  it("uses the same safe destination for the hard post-login navigation", () => {
-    expect(authenticatedLoginTarget(false, "/people?view=cards")).toBe(
-      "/people?view=cards",
+  it("explains when the top-level cookie verification still fails", () => {
+    expect(browserLoginErrorPresentation("session_cookie_unavailable")).toBe(
+      "The mobile browser did not return the LOCAL ERS session cookie after sign-in. Clear this site's data and try again.",
     );
-    expect(authenticatedLoginTarget(false, "https://example.com")).toBe("/");
-    expect(authenticatedLoginTarget(true, "/people")).toBe("/password/change");
   });
 });
 

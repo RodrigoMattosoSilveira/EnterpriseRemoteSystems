@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { Link, Navigate, useLocation, useSearchParams } from "react-router-dom";
+import { Link, Navigate, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { ApiError } from "../../api/client";
 import { requestAccountReactivation } from "../../api/auth.api";
 import { authenticate } from "../../app/authStore";
@@ -10,6 +10,7 @@ import { AuthCard, AuthField, primaryButtonClass } from "./AuthCard";
 
 export default function LoginPage() {
   const auth = useAuthState();
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const location = useLocation();
   const [params] = useSearchParams();
@@ -22,28 +23,25 @@ export default function LoginPage() {
   const [reactivationMessage, setReactivationMessage] = useState("");
   const [reactivationError, setReactivationError] = useState("");
   const { t } = useI18n();
+  const browserLoginError = browserLoginErrorPresentation(
+    params.get("browserLoginError"),
+    t,
+  );
 
-  // During an explicit login submission, authenticate() publishes the new
-  // authenticated state before this handler can finish the browser handoff.
-  // Do not let that state change trigger React Router's client-side <Navigate>
-  // and mount protected queries in the old login document. The submit handler
-  // below owns that transition and completes it with a full document navigation.
-  if (
-    auth.status === "authenticated" &&
-    shouldAutoRedirectAuthenticatedLogin(submitting)
-  ) {
-    return (
-      <Navigate
-        to={authenticatedLoginTarget(
-          auth.session.mustChangePassword,
-          params.get("returnTo"),
-        )}
-        replace
-      />
-    );
+  if (auth.status === "authenticated") {
+    return <Navigate to={auth.session.mustChangePassword ? "/password/change" : safeReturnTo(params.get("returnTo"))} replace />;
   }
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
+    // On a phone reaching LOCAL through a private LAN address, use a native
+    // browser form navigation. The backend sets the HttpOnly session cookie on
+    // that top-level response and verifies it on a second top-level request
+    // before redirecting into the SPA. Desktop localhost and deployed HTTPS
+    // environments continue to use the JSON/fetch flow below.
+    if (shouldUseLocalBrowserLogin(window.location)) {
+      return;
+    }
+
     event.preventDefault();
     const request = loginRequestFromForm(event.currentTarget, { login, password });
     // Keep action state aligned with values supplied directly by a mobile
@@ -58,38 +56,25 @@ export default function LoginPage() {
     setLoginErrorCode(null);
     setReactivationMessage("");
     setReactivationError("");
-    let navigationStarted = false;
     try {
       const session = await authenticate(request);
       // A new Account/session can resolve a completely different tenant Actor.
-      // Drop every query from the prior authenticated context before crossing
+      // Drop every query from the prior authenticated context before routing
       // into the workspace so tenant-neutral query keys cannot briefly render
       // another Account's cached tenant data.
       queryClient.clear();
-
-      // authenticate() publishes authenticated state before returning. While
-      // submitting remains true, the render guard above deliberately suppresses
-      // React Router's <Navigate>. Complete the login boundary with a real
-      // same-origin document navigation so the newly issued HttpOnly cookie is
-      // committed before the fresh application document starts its protected
-      // /auth/session, tenant-options, and authorization requests.
-      navigationStarted = true;
-      window.location.replace(
-        authenticatedLoginTarget(
-          session.mustChangePassword,
-          params.get("returnTo"),
-        ),
+      navigate(
+        session.mustChangePassword
+          ? "/password/change"
+          : safeReturnTo(params.get("returnTo")),
+        { replace: true },
       );
     } catch (cause) {
-      navigationStarted = false;
       const presentation = loginFailurePresentation(cause, t);
       setError(presentation.message);
       setLoginErrorCode(presentation.code);
     } finally {
-      // On success keep the form in its submitting state until the browser
-      // unloads this document. Flipping it back to false would reopen the
-      // authenticated-state <Navigate> race before location.replace commits.
-      if (!navigationStarted) setSubmitting(false);
+      setSubmitting(false);
     }
   }
 
@@ -150,7 +135,22 @@ export default function LoginPage() {
       {location.state && typeof location.state === "object" && "message" in location.state && <p role="status" className="mb-4 rounded-xl bg-emerald-50 p-3 text-sm text-emerald-900">{String(location.state.message)}</p>}
       {error && <p role="alert" className="mb-4 rounded-xl bg-red-50 p-3 text-sm text-red-800">{error}</p>}
       {reactivationError && <p role="alert" className="mb-4 rounded-xl bg-red-50 p-3 text-sm text-red-800">{reactivationError}</p>}
-      <form onSubmit={submit} className="space-y-4">
+      {browserLoginError && (
+        <p role="alert" className="mb-4 rounded-xl bg-red-50 p-3 text-sm text-red-800">
+          {browserLoginError}
+        </p>
+      )}
+      <form
+        action="/api/v1/auth/browser-login"
+        method="post"
+        onSubmit={submit}
+        className="space-y-4"
+      >
+        <input
+          type="hidden"
+          name="returnTo"
+          value={safeReturnTo(params.get("returnTo"))}
+        />
         <AuthField
           label={t("auth.login")}
           name="login"
@@ -187,15 +187,53 @@ export default function LoginPage() {
   );
 }
 
-export function shouldAutoRedirectAuthenticatedLogin(submitting: boolean): boolean {
-  return !submitting;
+
+export function shouldUseLocalBrowserLogin(
+  location: Pick<Location, "protocol" | "hostname">,
+): boolean {
+  return location.protocol === "http:" && isPrivateIPv4Host(location.hostname);
 }
 
-export function authenticatedLoginTarget(
-  mustChangePassword: boolean,
-  returnTo: string | null,
+function isPrivateIPv4Host(hostname: string): boolean {
+  const octets = hostname.split(".").map((value) => Number(value));
+  if (
+    octets.length !== 4 ||
+    octets.some((value) => !Number.isInteger(value) || value < 0 || value > 255)
+  ) {
+    return false;
+  }
+
+  return (
+    octets[0] === 10 ||
+    (octets[0] === 172 && octets[1] >= 16 && octets[1] <= 31) ||
+    (octets[0] === 192 && octets[1] === 168)
+  );
+}
+
+export function browserLoginErrorPresentation(
+  code: string | null,
+  t: Translate = translateEnglish,
 ): string {
-  return mustChangePassword ? "/password/change" : safeReturnTo(returnTo);
+  switch (code) {
+    case "invalid_credentials":
+      return t("auth.error.invalidCredentials");
+    case "account_security_suspended":
+      return t("auth.error.securitySuspended");
+    case "account_operationally_inactive":
+      return t("auth.error.operationallyInactive");
+    case "account_inactive":
+      return t("auth.error.accountInactive");
+    case "actor_inactive":
+      return t("auth.error.actorInactive");
+    case "session_cookie_unavailable":
+      return t("auth.error.localSessionCookieUnavailable");
+    case "validation_failed":
+      return t("auth.error.validationFailed");
+    case "unable_to_sign_in":
+      return t("auth.error.unableSignIn");
+    default:
+      return "";
+  }
 }
 
 export function loginRequestFromForm(

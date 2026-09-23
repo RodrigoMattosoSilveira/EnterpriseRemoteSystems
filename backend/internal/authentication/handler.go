@@ -2,6 +2,7 @@ package authentication
 
 import (
 	"errors"
+	"net/url"
 	"strings"
 	"time"
 
@@ -64,6 +65,132 @@ func (h *Handler) RequireSession(c fiber.Ctx) error {
 		return h.writeError(c, err)
 	}
 	return c.Next()
+}
+
+const localBrowserLoginProxyHeader = "X-ERS-Local-Browser-Login"
+
+// BrowserLogin is a LOCAL-development compatibility boundary for phones that
+// reach the Vite dev server through a private-LAN HTTP origin. The ordinary
+// JSON /auth/login contract remains canonical for deployed environments and
+// API clients. Vite marks this form POST explicitly and the handler accepts it
+// only from a same-origin browser navigation.
+func (h *Handler) BrowserLogin(c fiber.Ctx) error {
+	if c.Get(localBrowserLoginProxyHeader) != "1" {
+		return c.SendStatus(fiber.StatusNotFound)
+	}
+	if !sameOriginLocalBrowserPost(c) {
+		return c.SendStatus(fiber.StatusForbidden)
+	}
+	setNoStore(c)
+
+	var form struct {
+		Login    string `form:"login"`
+		Password string `form:"password"`
+		ReturnTo string `form:"returnTo"`
+	}
+	if err := c.Bind().Body(&form); err != nil {
+		return c.Redirect().Status(fiber.StatusSeeOther).To(browserLoginErrorLocation("validation_failed", form.ReturnTo))
+	}
+
+	result, err := h.service.Login(c.Context(), LoginRequest{
+		Login:    form.Login,
+		Password: form.Password,
+	}, c.Get("User-Agent"), c.IP())
+	if err != nil {
+		setNoStore(c)
+		return c.Redirect().Status(fiber.StatusSeeOther).To(browserLoginErrorLocation(browserLoginErrorCode(err), form.ReturnTo))
+	}
+
+	h.setSessionCookie(c, result.Token, result.Session.ExpiresAt)
+	setNoStore(c)
+	values := url.Values{}
+	values.Set("returnTo", browserLoginTarget(result.Session.MustChangePassword, form.ReturnTo))
+	return c.Redirect().Status(fiber.StatusSeeOther).To("/api/v1/auth/browser-login/continue?" + values.Encode())
+}
+
+// BrowserLoginContinue verifies, as a top-level browser navigation, that the
+// session cookie issued by BrowserLogin was actually returned by the client
+// before the SPA starts authenticated fetches. If the browser rejected the
+// cookie, return to /login with a visible LOCAL diagnostic instead of silently
+// bouncing back to an empty login screen.
+func (h *Handler) BrowserLoginContinue(c fiber.Ctx) error {
+	if c.Get(localBrowserLoginProxyHeader) != "1" {
+		return c.SendStatus(fiber.StatusNotFound)
+	}
+	returnTo := safeBrowserReturnTo(c.Query("returnTo"))
+	session, err := h.currentSession(c)
+	if err != nil {
+		setNoStore(c)
+		return c.Redirect().Status(fiber.StatusSeeOther).To(browserLoginErrorLocation("session_cookie_unavailable", returnTo))
+	}
+	setNoStore(c)
+	return c.Redirect().Status(fiber.StatusSeeOther).To(browserLoginTarget(session.MustChangePassword, returnTo))
+}
+
+func sameOriginLocalBrowserPost(c fiber.Ctx) bool {
+	if strings.EqualFold(strings.TrimSpace(c.Get("Sec-Fetch-Site")), "same-origin") {
+		return true
+	}
+
+	origin := strings.TrimSuffix(strings.TrimSpace(c.Get("Origin")), "/")
+	forwardedHost := strings.TrimSpace(c.Get("X-ERS-Forwarded-Host"))
+	forwardedProto := strings.TrimSpace(c.Get("X-ERS-Forwarded-Proto"))
+	if origin == "" || forwardedHost == "" || forwardedProto == "" {
+		return false
+	}
+	return strings.EqualFold(origin, forwardedProto+"://"+forwardedHost)
+}
+
+func browserLoginTarget(mustChangePassword bool, returnTo string) string {
+	if mustChangePassword {
+		return "/password/change"
+	}
+	return safeBrowserReturnTo(returnTo)
+}
+
+func safeBrowserReturnTo(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" || !strings.HasPrefix(value, "/") || strings.HasPrefix(value, "//") {
+		return "/"
+	}
+	pathname := value
+	if index := strings.IndexAny(pathname, "?#"); index >= 0 {
+		pathname = pathname[:index]
+	}
+	switch pathname {
+	case "/login", "/forbidden", "/password/reset":
+		return "/"
+	default:
+		return value
+	}
+}
+
+func browserLoginErrorLocation(code string, returnTo string) string {
+	values := url.Values{}
+	values.Set("browserLoginError", code)
+	values.Set("returnTo", safeBrowserReturnTo(returnTo))
+	return "/login?" + values.Encode()
+}
+
+func browserLoginErrorCode(err error) string {
+	switch {
+	case errors.Is(err, ErrInvalidCredentials):
+		return "invalid_credentials"
+	case errors.Is(err, ErrAccountSecuritySuspended):
+		return "account_security_suspended"
+	case errors.Is(err, ErrAccountOperationallyInactive):
+		return "account_operationally_inactive"
+	case errors.Is(err, ErrAccountInactive):
+		return "account_inactive"
+	case errors.Is(err, ErrActorInactive):
+		return "actor_inactive"
+	default:
+		var validation *ValidationError
+		if errors.As(err, &validation) {
+			return "validation_failed"
+		}
+		return "unable_to_sign_in"
+	}
 }
 
 func (h *Handler) Login(c fiber.Ctx) error {
