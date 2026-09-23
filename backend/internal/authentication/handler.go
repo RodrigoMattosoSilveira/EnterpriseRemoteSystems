@@ -88,13 +88,19 @@ func (h *Handler) localSessionHeaderAllowed(c fiber.Ctx) bool {
 }
 
 func (h *Handler) readSessionToken(c fiber.Ctx) string {
-	if token := h.readCookie(c); token != "" {
-		return token
+	// On the narrowly gated LOCAL LAN fallback path, prefer the explicit header
+	// token over the cookie. Physical mobile browsers can retain an older cookie
+	// while refusing to persist the replacement Set-Cookie from a fresh login.
+	// Choosing the stale cookie first would therefore defeat the fallback and
+	// immediately turn a successful login into session_expired. Deployed traffic
+	// never reaches this branch because localSessionHeaderAllowed requires both
+	// local-development configuration and a loopback Vite-proxy marker.
+	if h.localSessionHeaderAllowed(c) {
+		if token := strings.TrimSpace(c.Get(localSessionTokenHeader)); token != "" {
+			return token
+		}
 	}
-	if !h.localSessionHeaderAllowed(c) {
-		return ""
-	}
-	return strings.TrimSpace(c.Get(localSessionTokenHeader))
+	return h.readCookie(c)
 }
 
 func (h *Handler) Login(c fiber.Ctx) error {

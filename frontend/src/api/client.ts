@@ -111,12 +111,14 @@ async function performApiFetch<T>(
   let response: Response;
 
   try {
+    const headers = authenticatedRequestHeaders(options.headers);
+    const requestLocalSessionToken = headers[LOCAL_SESSION_TOKEN_HEADER] ?? "";
     response = await fetch(url, {
       ...options,
       credentials: options.credentials ?? "same-origin",
-      headers: authenticatedRequestHeaders(options.headers),
+      headers,
     });
-    syncLocalSessionTransport(response);
+    syncLocalSessionTransport(response, requestLocalSessionToken);
   } catch (error) {
     throw new ApiError({
       message: error instanceof Error ? error.message : "Network request failed",
@@ -269,15 +271,24 @@ export function localSessionTokenForRequest(
   }
 }
 
-function syncLocalSessionTransport(response: Response): void {
+function syncLocalSessionTransport(
+  response: Response,
+  requestLocalSessionToken: string,
+): void {
   if (typeof window === "undefined") return;
-  syncLocalSessionTransportResponse(response, window.location, window.sessionStorage);
+  syncLocalSessionTransportResponse(
+    response,
+    window.location,
+    window.sessionStorage,
+    requestLocalSessionToken,
+  );
 }
 
 export function syncLocalSessionTransportResponse(
   response: Response,
   location: Pick<Location, "protocol" | "hostname">,
-  storage: Pick<Storage, "setItem" | "removeItem">,
+  storage: Pick<Storage, "getItem" | "setItem" | "removeItem">,
+  requestLocalSessionToken = "",
 ): void {
   if (!shouldUseLocalSessionTransport(location)) return;
 
@@ -286,7 +297,18 @@ export function syncLocalSessionTransportResponse(
     if (issuedToken) {
       storage.setItem(LOCAL_SESSION_STORAGE_KEY, issuedToken);
     } else if (response.status === 401) {
-      storage.removeItem(LOCAL_SESSION_STORAGE_KEY);
+      const currentToken =
+        storage.getItem(LOCAL_SESSION_STORAGE_KEY)?.trim() ?? "";
+      // A passive request can start before login and finish after login. Never
+      // let that older 401 erase the newer token just stored by the successful
+      // login response. Likewise, an old-token request racing with a newer login
+      // may clear only the exact token it actually sent.
+      if (
+        !currentToken ||
+        (requestLocalSessionToken && currentToken === requestLocalSessionToken)
+      ) {
+        storage.removeItem(LOCAL_SESSION_STORAGE_KEY);
+      }
     }
   } catch {
     // If sessionStorage is unavailable, the browser can still use the normal

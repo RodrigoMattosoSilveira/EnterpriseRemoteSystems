@@ -90,8 +90,45 @@ describe("apiFetch authenticated-session transport", () => {
       }),
       location,
       window.sessionStorage,
+      "local-session-token",
     );
     expect(window.sessionStorage.getItem(LOCAL_SESSION_STORAGE_KEY)).toBeNull();
+  });
+
+  it("does not let a stale pre-login 401 erase a newer LOCAL session token", () => {
+    const location = { protocol: "http:", hostname: "192.168.2.154" };
+    window.sessionStorage.setItem(LOCAL_SESSION_STORAGE_KEY, "new-login-token");
+
+    syncLocalSessionTransportResponse(
+      new Response(JSON.stringify({ error: { code: "session_expired" } }), {
+        status: 401,
+      }),
+      location,
+      window.sessionStorage,
+      "",
+    );
+
+    expect(window.sessionStorage.getItem(LOCAL_SESSION_STORAGE_KEY)).toBe(
+      "new-login-token",
+    );
+  });
+
+  it("does not let an old-token 401 erase a replacement LOCAL session token", () => {
+    const location = { protocol: "http:", hostname: "192.168.2.154" };
+    window.sessionStorage.setItem(LOCAL_SESSION_STORAGE_KEY, "replacement-token");
+
+    syncLocalSessionTransportResponse(
+      new Response(JSON.stringify({ error: { code: "session_expired" } }), {
+        status: 401,
+      }),
+      location,
+      window.sessionStorage,
+      "older-request-token",
+    );
+
+    expect(window.sessionStorage.getItem(LOCAL_SESSION_STORAGE_KEY)).toBe(
+      "replacement-token",
+    );
   });
   it("sends same-origin cookies and a tenant selection without actor identity headers", async () => {
     await apiFetch<{ ok: boolean }>("/people");

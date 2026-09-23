@@ -69,6 +69,10 @@ func TestAuthenticationHandlerLocalLANSessionHeaderFallback(t *testing.T) {
 	sessionRequest.Header.Set("X-Test-Remote-IP", "127.0.0.1")
 	sessionRequest.Header.Set(localSessionProxyHeader, "1")
 	sessionRequest.Header.Set(localSessionTokenHeader, localToken)
+	// The LOCAL fallback exists because a physical mobile browser can retain an
+	// older cookie while refusing to persist the replacement cookie from login.
+	// A trusted Vite-proxied header token must therefore outrank a stale cookie.
+	sessionRequest.AddCookie(&http.Cookie{Name: "ers_test_session", Value: "stale-mobile-cookie"})
 	sessionResponse, err := app.Test(sessionRequest)
 	if err != nil {
 		t.Fatalf("local LAN session request: %v", err)
