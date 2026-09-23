@@ -16,13 +16,13 @@ import (
 )
 
 func TestAuthenticationHandlerLocalLANSessionHeaderFallback(t *testing.T) {
-	_, _, service, _ := authenticationTestService(t)
-	mustChangePassword := false
+	database, _, service, _ := authenticationTestService(t)
+	login := "mobile-demo@example.com"
+	ensureAuthenticationTestPerson(t, database, login)
 	account, err := service.CreateAccount(t.Context(), CreateAccountRequest{
-		TenantID:           appdb.DefaultTenantID,
-		Login:              "mobile-demo@example.com",
-		TemporaryPassword:  "Mobile-Demo-Password-1",
-		MustChangePassword: &mustChangePassword,
+		TenantID:          appdb.DefaultTenantID,
+		Login:             login,
+		TemporaryPassword: "Mobile-Demo-Password-1",
 	})
 	if err != nil {
 		t.Fatalf("create account: %v", err)
