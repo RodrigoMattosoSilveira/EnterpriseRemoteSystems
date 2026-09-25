@@ -1,4 +1,4 @@
-import { apiFetch } from "./client";
+import { apiFetch, clearLocalSessionTransport } from "./client";
 import type {
   AuthAccount,
   AuthSession,
@@ -21,8 +21,12 @@ export function login(request: LoginRequest): Promise<AuthSession> {
   });
 }
 
-export function logout(): Promise<void> {
-  return apiFetch<void>("/auth/logout", { method: "POST" });
+export async function logout(): Promise<void> {
+  try {
+    await apiFetch<void>("/auth/logout", { method: "POST" });
+  } finally {
+    clearLocalSessionTransport();
+  }
 }
 
 export function loadAuthSession(): Promise<AuthSession | null> {
@@ -119,20 +123,23 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
 
-export function changePassword(request: ChangePasswordRequest): Promise<void> {
-  return apiFetch<void>("/auth/password/change", {
+export async function changePassword(request: ChangePasswordRequest): Promise<void> {
+  await apiFetch<void>("/auth/password/change", {
     method: "POST",
     body: JSON.stringify(request),
   });
+  clearLocalSessionTransport();
 }
 
-export function resetPassword(
+export async function resetPassword(
   request: ResetPasswordRequest,
 ): Promise<PasswordResetResult> {
-  return apiFetch<PasswordResetResult>("/auth/password/reset", {
+  const result = await apiFetch<PasswordResetResult>("/auth/password/reset", {
     method: "POST",
     body: JSON.stringify(request),
   });
+  clearLocalSessionTransport();
+  return result;
 }
 
 export async function listAuthAccounts(): Promise<AuthAccount[]> {

@@ -1,0 +1,20 @@
+@startuml
+title Connected Operational History — from Identity to Evidence
+
+left to right direction
+
+rectangle "Identity\nPerson → Tenant → Journey" as Identity
+rectangle "Operation\nWork Period → Production" as Operation
+rectangle "Value\nAppropriation → Expense" as Value
+rectangle "Control\nCurrent Account → Receipt" as Control
+
+Identity --> Operation : who works and in which context
+Operation --> Value : work and production generate value
+Value --> Control : credit and debit preserve the origin
+
+note bottom of Control		
+The balance and the pending items remain
+linked to the events that originated them.	
+end note
+
+@enduml

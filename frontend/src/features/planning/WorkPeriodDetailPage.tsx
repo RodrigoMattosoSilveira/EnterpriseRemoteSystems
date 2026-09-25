@@ -5,7 +5,11 @@ import { ApiErrorPanel } from "../../components/ApiErrorPanel";
 import { loadAuthTenantOptions } from "../../api/auth.api";
 import { useAuthState } from "../../app/useAuth";
 import { useReferenceDataByType } from "../reference-data/useReferenceData";
-import type { ActualStatus, WorkPeriodAssignment } from "../../types/planning";
+import type {
+  ActualStatus,
+  WorkPeriodAssignment,
+  WorkPeriodStatus,
+} from "../../types/planning";
 import { ACTUAL_STATUSES, humanizePlanningCode } from "./planningSchemas";
 import { AccrualTab } from "./AccrualTab";
 import { InformTab } from "./InformTab";
@@ -28,7 +32,7 @@ type Tab = "plan" | "inform" | "outcomes" | "accrual";
 export function WorkPeriodDetailPage() {
   const { t, formatDate, formatDateTime } = useI18n();
   const { id = "" } = useParams();
-  const [tab, setTab] = useState<Tab>("plan");
+  const [selectedTab, setSelectedTab] = useState<Tab | null>(null);
   const auth = useAuthState();
   const accountId =
     auth.status === "authenticated" ? auth.session.accountId : "";
@@ -39,6 +43,8 @@ export function WorkPeriodDetailPage() {
     staleTime: 60_000,
   });
   const periodQuery = useWorkPeriod(id);
+  const period = periodQuery.data;
+  const tab = selectedTab ?? defaultTabForWorkPeriodStatus(period?.status);
   const assignmentsQuery = useAssignments(id);
   const sectorsQuery = useReferenceDataByType("sector");
   const locationsQuery = useReferenceDataByType("location");
@@ -54,7 +60,6 @@ export function WorkPeriodDetailPage() {
     () => assignmentsQuery.data?.items ?? [],
     [assignmentsQuery.data],
   );
-  const period = periodQuery.data;
   const error =
     periodQuery.error ||
     assignmentsQuery.error ||
@@ -129,7 +134,7 @@ export function WorkPeriodDetailPage() {
           {(["plan", "inform", "outcomes", "accrual"] as Tab[]).map((value) => (
             <button
               key={value}
-              onClick={() => setTab(value)}
+              onClick={() => setSelectedTab(value)}
               className={`rounded-xl px-4 py-2 text-sm font-semibold ${tab === value ? "bg-gray-950 text-white" : "text-gray-600"}`}
             >
               {value === "plan"
@@ -237,6 +242,20 @@ export function WorkPeriodDetailPage() {
   );
 }
 
+function defaultTabForWorkPeriodStatus(status: WorkPeriodStatus | undefined): Tab {
+  switch (status) {
+    case "INFORMED":
+      return "outcomes";
+    case "ACCRUAL_OPEN":
+    case "PARTIALLY_POSTED":
+    case "FULLY_POSTED":
+    case "CLOSED":
+      return "accrual";
+    case "PLANNING":
+    default:
+      return "plan";
+  }
+}
 
 function unreplacedAbsenteeAssignments(assignments: WorkPeriodAssignment[]) {
   const replacedAssignmentIds = new Set(

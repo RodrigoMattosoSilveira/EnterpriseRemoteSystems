@@ -194,6 +194,7 @@ export const ptBRMessages = {
   "auth.error.actorInactive": "Seu acesso de autorização está inativo. Entre em contato com um Administrador do Locatário.",
   "auth.error.invalidCredentials": "O login ou a senha está incorreto.",
   "auth.error.unableSignIn": "Não foi possível entrar.",
+  "auth.error.validationFailed": "A solicitação de entrada ficou incompleta. Informe novamente o login e a senha.",
   "auth.passwordMismatch": "As novas senhas não coincidem.",
   "auth.change.title": "Alterar senha",
   "auth.change.subtitle": "Escolha uma senha forte com pelo menos 12 caracteres.",
