@@ -10,7 +10,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "scripts" / "brazilian-demo-server-reset.sh"
 MAKEFILE = ROOT / "Makefile"
-RUNBOOK = ROOT / "docs" / "06-Usage" / "Brazilian Demo Presenter Runbook.md"
+RUNBOOK_PT = ROOT / "docs" / "06-Usage" / "Demo Presenter Runbook-pt.md"
+RUNBOOK_EN = ROOT / "docs" / "06-Usage" / "Demo Presenter Runbook-en.md"
 
 
 def require(text: str, needle: str, context: str) -> None:
@@ -21,7 +22,8 @@ def require(text: str, needle: str, context: str) -> None:
 def main() -> int:
     script = SCRIPT.read_text(encoding="utf-8")
     makefile = MAKEFILE.read_text(encoding="utf-8")
-    runbook = RUNBOOK.read_text(encoding="utf-8")
+    runbook_pt = RUNBOOK_PT.read_text(encoding="utf-8")
+    runbook_en = RUNBOOK_EN.read_text(encoding="utf-8")
 
     for token in (
         "development)",
@@ -45,12 +47,16 @@ def main() -> int:
     ):
         require(makefile, token, "Makefile")
 
-    require(runbook, "make brazilian-demo-server-reset ENV=development", "presenter runbook")
-    require(runbook, "make brazilian-demo-server-reset ENV=test", "presenter runbook")
-    require(runbook, "make testdata-server-reset ENV=development", "presenter runbook")
-    require(runbook, "make testdata-server-reset ENV=test", "presenter runbook")
-    require(runbook, "Future Test-state preservation", "presenter runbook")
-    require(runbook, "does **not** restore whatever ad hoc Test database state existed", "presenter runbook")
+    for context, runbook in (("Portuguese presenter runbook", runbook_pt), ("English presenter runbook", runbook_en)):
+        require(runbook, "make brazilian-demo-server-reset ENV=development", context)
+        require(runbook, "make brazilian-demo-server-reset ENV=test", context)
+        require(runbook, "make testdata-server-reset ENV=development", context)
+        require(runbook, "make testdata-server-reset ENV=test", context)
+
+    require(runbook_pt, "Preservação futura do estado de Test", "Portuguese presenter runbook")
+    require(runbook_pt, "Não restaura automaticamente um estado ad hoc anterior do banco", "Portuguese presenter runbook")
+    require(runbook_en, "Future Test-state preservation", "English presenter runbook")
+    require(runbook_en, "does **not** restore whatever ad hoc Test database state existed", "English presenter runbook")
 
     # Production must be rejected before any Docker invocation. Point DOCKER_BIN
     # at a marker script and assert that marker is never created.
