@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { ApiError } from "../../api/client";
-import { loginFailurePresentation, loginFromLocationState, safeReturnTo } from "./LoginPage";
+import {
+  loginFailurePresentation,
+  loginFromLocationState,
+  loginRequestFromForm,
+  safeReturnTo,
+} from "./LoginPage";
+
 
 describe("safeReturnTo", () => {
   it("preserves ordinary protected routes", () => {
@@ -34,6 +40,41 @@ describe("loginFromLocationState", () => {
   });
 });
 
+
+
+describe("loginRequestFromForm", () => {
+  it("uses the submitted DOM values when mobile autofill has not updated React state", () => {
+    const form = document.createElement("form");
+    const login = document.createElement("input");
+    login.name = "login";
+    login.value = "demo.tenant-admin@example.test";
+    const password = document.createElement("input");
+    password.name = "password";
+    password.value = "Demo-31.4-Brasil!";
+    form.append(login, password);
+
+    expect(
+      loginRequestFromForm(form, { login: "", password: "" }),
+    ).toEqual({
+      login: "demo.tenant-admin@example.test",
+      password: "Demo-31.4-Brasil!",
+    });
+  });
+
+  it("falls back to controlled state when a named form control is unavailable", () => {
+    const form = document.createElement("form");
+
+    expect(
+      loginRequestFromForm(form, {
+        login: "state@example.test",
+        password: "State-Password-1",
+      }),
+    ).toEqual({
+      login: "state@example.test",
+      password: "State-Password-1",
+    });
+  });
+});
 
 describe("loginFailurePresentation", () => {
   it("preserves the generic message for ordinary invalid credentials", () => {

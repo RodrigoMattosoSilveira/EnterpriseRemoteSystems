@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -14,6 +15,108 @@ import (
 	appdb "enterpriseremotesystems/backend/internal/db"
 	"github.com/gofiber/fiber/v3"
 )
+
+func TestAuthenticationHandlerLocalLANSessionHeaderFallback(t *testing.T) {
+	database, _, service, _ := authenticationTestService(t)
+	login := "mobile-demo@example.com"
+	ensureAuthenticationTestPerson(t, database, login)
+	account, err := service.CreateAccount(t.Context(), CreateAccountRequest{
+		TenantID:          appdb.DefaultTenantID,
+		Login:             login,
+		TemporaryPassword: "Mobile-Demo-Password-1",
+	})
+	if err != nil {
+		t.Fatalf("create account: %v", err)
+	}
+
+	handler := NewHandler(service, CookieConfig{
+		Name:                    "ers_test_session",
+		Secure:                  false,
+		SameSite:                "Lax",
+		TTL:                     time.Hour,
+		AllowLocalSessionHeader: true,
+	}, nil, nil)
+	app := fiber.New()
+	app.Use(func(c fiber.Ctx) error {
+		if remoteIP := net.ParseIP(c.Get("X-Test-Remote-IP")); remoteIP != nil {
+			c.RequestCtx().SetRemoteAddr(&net.TCPAddr{IP: remoteIP, Port: 41000})
+		}
+		return c.Next()
+	})
+	app.Use(handler.SessionMiddleware())
+	app.Post("/login", handler.Login)
+	app.Get("/session", handler.CurrentSession)
+	app.Post("/logout", handler.Logout)
+
+	body, _ := json.Marshal(LoginRequest{Login: account.Login, Password: "Mobile-Demo-Password-1"})
+	loginRequest := httptest.NewRequest(http.MethodPost, "/login", bytes.NewReader(body))
+	loginRequest.Header.Set("Content-Type", "application/json")
+	loginRequest.Header.Set("X-Test-Remote-IP", "127.0.0.1")
+	loginRequest.Header.Set(localSessionProxyHeader, "1")
+	loginResponse, err := app.Test(loginRequest)
+	if err != nil {
+		t.Fatalf("local LAN login request: %v", err)
+	}
+	if loginResponse.StatusCode != http.StatusOK {
+		t.Fatalf("expected local LAN login status 200, got %d", loginResponse.StatusCode)
+	}
+	localToken := loginResponse.Header.Get(localSessionTokenHeader)
+	if localToken == "" {
+		t.Fatal("expected LOCAL LAN login to expose the session token to the trusted Vite proxy client")
+	}
+
+	sessionRequest := httptest.NewRequest(http.MethodGet, "/session", nil)
+	sessionRequest.Header.Set("X-Test-Remote-IP", "127.0.0.1")
+	sessionRequest.Header.Set(localSessionProxyHeader, "1")
+	sessionRequest.Header.Set(localSessionTokenHeader, localToken)
+	// The LOCAL fallback exists because a physical mobile browser can retain an
+	// older cookie while refusing to persist the replacement cookie from login.
+	// A trusted Vite-proxied header token must therefore outrank a stale cookie.
+	sessionRequest.AddCookie(&http.Cookie{Name: "ers_test_session", Value: "stale-mobile-cookie"})
+	sessionResponse, err := app.Test(sessionRequest)
+	if err != nil {
+		t.Fatalf("local LAN session request: %v", err)
+	}
+	if sessionResponse.StatusCode != http.StatusOK {
+		t.Fatalf("expected LOCAL LAN header session status 200, got %d", sessionResponse.StatusCode)
+	}
+
+	untrustedRequest := httptest.NewRequest(http.MethodGet, "/session", nil)
+	untrustedRequest.Header.Set("X-Test-Remote-IP", "192.168.2.99")
+	untrustedRequest.Header.Set(localSessionProxyHeader, "1")
+	untrustedRequest.Header.Set(localSessionTokenHeader, localToken)
+	untrustedResponse, err := app.Test(untrustedRequest)
+	if err != nil {
+		t.Fatalf("untrusted direct session request: %v", err)
+	}
+	if untrustedResponse.StatusCode != http.StatusNoContent {
+		t.Fatalf("expected direct non-loopback request to be unable to opt into LOCAL header sessions, got %d", untrustedResponse.StatusCode)
+	}
+
+	logoutRequest := httptest.NewRequest(http.MethodPost, "/logout", nil)
+	logoutRequest.Header.Set("X-Test-Remote-IP", "127.0.0.1")
+	logoutRequest.Header.Set(localSessionProxyHeader, "1")
+	logoutRequest.Header.Set(localSessionTokenHeader, localToken)
+	logoutResponse, err := app.Test(logoutRequest)
+	if err != nil {
+		t.Fatalf("local LAN logout request: %v", err)
+	}
+	if logoutResponse.StatusCode != http.StatusNoContent {
+		t.Fatalf("expected LOCAL LAN logout status 204, got %d", logoutResponse.StatusCode)
+	}
+
+	revokedRequest := httptest.NewRequest(http.MethodGet, "/session", nil)
+	revokedRequest.Header.Set("X-Test-Remote-IP", "127.0.0.1")
+	revokedRequest.Header.Set(localSessionProxyHeader, "1")
+	revokedRequest.Header.Set(localSessionTokenHeader, localToken)
+	revokedResponse, err := app.Test(revokedRequest)
+	if err != nil {
+		t.Fatalf("revoked LOCAL LAN session request: %v", err)
+	}
+	if revokedResponse.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("expected revoked LOCAL LAN session status 401, got %d", revokedResponse.StatusCode)
+	}
+}
 
 func TestAuthenticationHandlerIssuesReadsAndClearsSessionCookie(t *testing.T) {
 	_, _, service, _ := authenticationTestService(t)
@@ -40,6 +143,9 @@ func TestAuthenticationHandlerIssuesReadsAndClearsSessionCookie(t *testing.T) {
 	}
 	if loginResponse.StatusCode != http.StatusOK {
 		t.Fatalf("expected login status 200, got %d", loginResponse.StatusCode)
+	}
+	if got := loginResponse.Header.Get(localSessionTokenHeader); got != "" {
+		t.Fatalf("ordinary authentication must not expose the session token header, got %q", got)
 	}
 	if loginResponse.Header.Get("Cache-Control") != "no-store" {
 		t.Fatalf("expected login response to disable caching, got %q", loginResponse.Header.Get("Cache-Control"))
@@ -125,9 +231,59 @@ func TestAuthenticationHandlerIssuesReadsAndClearsSessionCookie(t *testing.T) {
 	if revokedResponse.Header.Get("Cache-Control") != "no-store" {
 		t.Fatalf("expected rejected session response to disable caching, got %q", revokedResponse.Header.Get("Cache-Control"))
 	}
-	revokedCookies := revokedResponse.Cookies()
-	if len(revokedCookies) != 1 || revokedCookies[0].Name != "ers_test_session" || revokedCookies[0].MaxAge >= 0 {
-		t.Fatalf("expected rejected session request to clear the stale cookie, got %#v", revokedCookies)
+	if revokedCookies := revokedResponse.Cookies(); len(revokedCookies) != 0 {
+		t.Fatalf("passive rejected session request must not clear a potentially newer browser cookie, got %#v", revokedCookies)
+	}
+}
+
+func TestAuthenticationHandlerExpiredSessionProbeDoesNotClearCookie(t *testing.T) {
+	database, _, service, _ := authenticationTestService(t)
+	account, err := service.CreateAccount(t.Context(), CreateAccountRequest{
+		TenantID: appdb.DefaultTenantID, Login: "cookie@example.com", TemporaryPassword: "Expired-Cookie-Password-1",
+	})
+	if err != nil {
+		t.Fatalf("create account: %v", err)
+	}
+
+	handler := NewHandler(service, CookieConfig{Name: "ers_test_session", TTL: time.Hour}, nil, nil)
+	app := fiber.New()
+	app.Use(handler.SessionMiddleware())
+	app.Post("/login", handler.Login)
+	app.Get("/session", handler.CurrentSession)
+
+	body, _ := json.Marshal(LoginRequest{Login: account.Login, Password: "Expired-Cookie-Password-1"})
+	loginRequest := httptest.NewRequest(http.MethodPost, "/login", bytes.NewReader(body))
+	loginRequest.Header.Set("Content-Type", "application/json")
+	loginResponse, err := app.Test(loginRequest)
+	if err != nil {
+		t.Fatalf("login request: %v", err)
+	}
+	if loginResponse.StatusCode != http.StatusOK {
+		t.Fatalf("expected login status 200, got %d", loginResponse.StatusCode)
+	}
+	cookies := loginResponse.Cookies()
+	if len(cookies) != 1 {
+		t.Fatalf("expected one issued session cookie, got %d", len(cookies))
+	}
+	cookie := cookies[0]
+
+	if err := database.Model(&Session{}).
+		Where("account_id = ?", account.ID).
+		Update("expires_at", time.Now().UTC().Add(-time.Minute)).Error; err != nil {
+		t.Fatalf("expire session: %v", err)
+	}
+
+	expiredRequest := httptest.NewRequest(http.MethodGet, "/session", nil)
+	expiredRequest.AddCookie(cookie)
+	expiredResponse, err := app.Test(expiredRequest)
+	if err != nil {
+		t.Fatalf("expired session request: %v", err)
+	}
+	if expiredResponse.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("expected expired session status 401, got %d", expiredResponse.StatusCode)
+	}
+	if got := expiredResponse.Cookies(); len(got) != 0 {
+		t.Fatalf("an expired passive session probe must not clear a potentially newer browser cookie, got %#v", got)
 	}
 }
 

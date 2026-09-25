@@ -2,6 +2,7 @@ package authentication
 
 import (
 	"errors"
+	"net"
 	"strings"
 	"time"
 
@@ -16,10 +17,11 @@ const (
 )
 
 type CookieConfig struct {
-	Name     string
-	Secure   bool
-	SameSite string
-	TTL      time.Duration
+	Name                    string
+	Secure                  bool
+	SameSite                string
+	TTL                     time.Duration
+	AllowLocalSessionHeader bool
 }
 
 type Handler struct {
@@ -44,7 +46,7 @@ func NewHandler(service Service, cookie CookieConfig, actorStore authz.ActorStor
 
 func (h *Handler) SessionMiddleware() fiber.Handler {
 	return func(c fiber.Ctx) error {
-		rawToken := h.readCookie(c)
+		rawToken := h.readSessionToken(c)
 		if rawToken == "" {
 			return c.Next()
 		}
@@ -66,6 +68,41 @@ func (h *Handler) RequireSession(c fiber.Ctx) error {
 	return c.Next()
 }
 
+const (
+	localSessionProxyHeader = "X-ERS-Local-LAN-Proxy"
+	localSessionTokenHeader = "X-ERS-Local-Session"
+)
+
+// localSessionHeaderAllowed is a LOCAL-only fallback for physical devices whose
+// browser refuses to persist the ordinary ERS cookie on an insecure private-LAN
+// origin. It is disabled unless local-backend explicitly enables it, requires a
+// marker injected by the Vite development proxy, and accepts that marker only
+// from a loopback connection. Deployed clients therefore cannot opt themselves
+// into header-based session transport.
+func (h *Handler) localSessionHeaderAllowed(c fiber.Ctx) bool {
+	if !h.cookie.AllowLocalSessionHeader || c.Get(localSessionProxyHeader) != "1" {
+		return false
+	}
+	remoteIP := net.ParseIP(strings.TrimSpace(c.IP()))
+	return remoteIP != nil && remoteIP.IsLoopback()
+}
+
+func (h *Handler) readSessionToken(c fiber.Ctx) string {
+	// On the narrowly gated LOCAL LAN fallback path, prefer the explicit header
+	// token over the cookie. Physical mobile browsers can retain an older cookie
+	// while refusing to persist the replacement Set-Cookie from a fresh login.
+	// Choosing the stale cookie first would therefore defeat the fallback and
+	// immediately turn a successful login into session_expired. Deployed traffic
+	// never reaches this branch because localSessionHeaderAllowed requires both
+	// local-development configuration and a loopback Vite-proxy marker.
+	if h.localSessionHeaderAllowed(c) {
+		if token := strings.TrimSpace(c.Get(localSessionTokenHeader)); token != "" {
+			return token
+		}
+	}
+	return h.readCookie(c)
+}
+
 func (h *Handler) Login(c fiber.Ctx) error {
 	var req LoginRequest
 	if err := c.Bind().Body(&req); err != nil {
@@ -76,12 +113,15 @@ func (h *Handler) Login(c fiber.Ctx) error {
 		return h.writeError(c, err)
 	}
 	h.setSessionCookie(c, result.Token, result.Session.ExpiresAt)
+	if h.localSessionHeaderAllowed(c) {
+		c.Set(localSessionTokenHeader, result.Token)
+	}
 	setNoStore(c)
 	return httpx.OK(c, result.Session)
 }
 
 func (h *Handler) Logout(c fiber.Ctx) error {
-	if err := h.service.Logout(c.Context(), h.readCookie(c)); err != nil {
+	if err := h.service.Logout(c.Context(), h.readSessionToken(c)); err != nil {
 		return h.writeError(c, err)
 	}
 	h.clearSessionCookie(c)
@@ -90,7 +130,7 @@ func (h *Handler) Logout(c fiber.Ctx) error {
 
 func (h *Handler) CurrentSession(c fiber.Ctx) error {
 	setNoStore(c)
-	if h.readCookie(c) == "" {
+	if h.readSessionToken(c) == "" {
 		return c.SendStatus(fiber.StatusNoContent)
 	}
 	session, err := h.currentSession(c)
@@ -138,7 +178,7 @@ func (h *Handler) ChangePassword(c fiber.Ctx) error {
 	if err := c.Bind().Body(&req); err != nil {
 		return httpx.BadRequest(c, "invalid_body", "Invalid request body")
 	}
-	if err := h.service.ChangePassword(c.Context(), h.readCookie(c), req); err != nil {
+	if err := h.service.ChangePassword(c.Context(), h.readSessionToken(c), req); err != nil {
 		return h.writeError(c, err)
 	}
 	h.clearSessionCookie(c)
@@ -290,7 +330,7 @@ func (h *Handler) currentSession(c fiber.Ctx) (SessionResponse, error) {
 	if session, ok := SessionFromContext(c); ok {
 		return session, nil
 	}
-	session, err := h.service.ResolveSession(c.Context(), h.readCookie(c))
+	session, err := h.service.ResolveSession(c.Context(), h.readSessionToken(c))
 	if err != nil {
 		c.Locals(sessionErrorLocalKey, err)
 		return SessionResponse{}, err
@@ -336,8 +376,8 @@ func setNoStore(c fiber.Ctx) {
 
 // WriteSessionError exposes the canonical authentication error response to the
 // Bite 28C business-route middleware. Invalid session cookies are rejected
-// before authorization and receive the same cookie-clearing behavior as the
-// authentication endpoints.
+// before authorization. Passive expired-session responses deliberately avoid
+// clearing cookies because an older response must not erase a newer login.
 func (h *Handler) WriteSessionError(c fiber.Ctx, err error) error {
 	return h.writeError(c, err)
 }
@@ -348,17 +388,22 @@ func (h *Handler) writeError(c fiber.Ctx, err error) error {
 		return c.Status(fiber.StatusUnauthorized).JSON(httpx.APIResponse{Error: &httpx.APIError{Code: "invalid_credentials", Message: "Login or password is invalid"}})
 	case errors.Is(err, ErrAuthenticationRequired):
 		setNoStore(c)
-		// A cookie-less /auth/session probe can race a successful login in the
-		// browser. Do not emit a Set-Cookie deletion when this request did not
-		// actually carry a session cookie, otherwise the older 401 response can
-		// arrive after POST /auth/login and erase the newly issued session.
-		if h.readCookie(c) != "" {
-			h.clearSessionCookie(c)
-		}
+		// Passive session-validation responses must never delete the browser's
+		// cookie. A request carrying an old/revoked cookie can finish after a
+		// successful login on a slower client; deleting by cookie name would then
+		// erase the newer session that was issued by POST /auth/login. The stale
+		// token is already rejected server-side, and explicit logout/password
+		// flows still clear the cookie intentionally.
 		return c.Status(fiber.StatusUnauthorized).JSON(httpx.APIResponse{Error: &httpx.APIError{Code: "authentication_required", Message: "An authenticated session is required"}})
 	case errors.Is(err, ErrSessionExpired):
 		setNoStore(c)
-		h.clearSessionCookie(c)
+		// Do not clear an expired cookie from a passive session-validation
+		// response. On a slower client (notably a mobile browser), an initial
+		// /auth/session request carrying an old expired cookie can finish after a
+		// successful POST /auth/login. A Set-Cookie deletion from the older
+		// response would then erase the newer session cookie and immediately sign
+		// the user back out. The expired token is already rejected server-side,
+		// and a successful login safely replaces it with a new cookie.
 		return c.Status(fiber.StatusUnauthorized).JSON(httpx.APIResponse{Error: &httpx.APIError{Code: "session_expired", Message: "The authenticated session has expired"}})
 	case errors.Is(err, ErrAccountSecuritySuspended):
 		setNoStore(c)

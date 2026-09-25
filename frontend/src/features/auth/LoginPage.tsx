@@ -28,21 +28,34 @@ export default function LoginPage() {
     return <Navigate to={auth.session.mustChangePassword ? "/password/change" : safeReturnTo(params.get("returnTo"))} replace />;
   }
 
-  async function submit(event: React.FormEvent) {
+  async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    const request = loginRequestFromForm(event.currentTarget, { login, password });
+    // Keep action state aligned with values supplied directly by a mobile
+    // browser/password manager so subsequent error actions use the same
+    // credentials that were actually submitted. The fields themselves remain
+    // uncontrolled so React cannot overwrite a credential-manager DOM update
+    // before FormData reads it.
+    setLogin(request.login);
+    setPassword(request.password);
     setSubmitting(true);
     setError("");
     setLoginErrorCode(null);
     setReactivationMessage("");
     setReactivationError("");
     try {
-      const session = await authenticate({ login, password });
+      const session = await authenticate(request);
       // A new Account/session can resolve a completely different tenant Actor.
       // Drop every query from the prior authenticated context before routing
       // into the workspace so tenant-neutral query keys cannot briefly render
       // another Account's cached tenant data.
       queryClient.clear();
-      navigate(session.mustChangePassword ? "/password/change" : safeReturnTo(params.get("returnTo")), { replace: true });
+      navigate(
+        session.mustChangePassword
+          ? "/password/change"
+          : safeReturnTo(params.get("returnTo")),
+        { replace: true },
+      );
     } catch (cause) {
       const presentation = loginFailurePresentation(cause, t);
       setError(presentation.message);
@@ -110,8 +123,28 @@ export default function LoginPage() {
       {error && <p role="alert" className="mb-4 rounded-xl bg-red-50 p-3 text-sm text-red-800">{error}</p>}
       {reactivationError && <p role="alert" className="mb-4 rounded-xl bg-red-50 p-3 text-sm text-red-800">{reactivationError}</p>}
       <form onSubmit={submit} className="space-y-4">
-        <AuthField label={t("auth.login")} type="email" autoComplete="username" value={login} onChange={(e) => setLogin(e.target.value)} required />
-        <AuthField label={t("auth.password")} type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} required />
+        <input
+          type="hidden"
+          name="returnTo"
+          value={safeReturnTo(params.get("returnTo"))}
+        />
+        <AuthField
+          label={t("auth.login")}
+          name="login"
+          type="email"
+          autoComplete="username"
+          defaultValue={login}
+          onChange={(e) => setLogin(e.target.value)}
+          required
+        />
+        <AuthField
+          label={t("auth.password")}
+          name="password"
+          type="password"
+          autoComplete="current-password"
+          onChange={(e) => setPassword(e.target.value)}
+          required
+        />
         <button className={primaryButtonClass} disabled={submitting}>{submitting ? t("auth.signingIn") : t("auth.signIn.title")}</button>
       </form>
       {(loginErrorCode === "account_security_suspended" || loginErrorCode === "account_inactive") && (
@@ -129,6 +162,27 @@ export default function LoginPage() {
       )}
     </AuthCard>
   );
+}
+
+
+export function loginRequestFromForm(
+  form: HTMLFormElement,
+  fallback: { login: string; password: string },
+): { login: string; password: string } {
+  const data = new FormData(form);
+  const submittedLogin = data.get("login");
+  const submittedPassword = data.get("password");
+
+  return {
+    // Mobile credential managers can update the DOM value without delivering
+    // React's change event before submit. Prefer the browser's submitted form
+    // value, while retaining state as a compatibility fallback.
+    login: typeof submittedLogin === "string" ? submittedLogin : fallback.login,
+    password:
+      typeof submittedPassword === "string"
+        ? submittedPassword
+        : fallback.password,
+  };
 }
 
 export function loginFailurePresentation(cause: unknown, t: Translate = translateEnglish): {
