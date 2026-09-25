@@ -260,7 +260,7 @@ Until that restore capability exists, use `make testdata-server-reset ENV=test` 
 
 ## Executive demo — approximately 12 minutes
 
-### Stop 1 — Establish the limite do Locatário
+### Stop 1 — Dados do Locatário são completamente isolados
 
 **Identity:** Mariana Alves — Administrador do Locatário.
 
