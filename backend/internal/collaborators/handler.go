@@ -47,6 +47,20 @@ func (h *Handler) ListCandidates(c fiber.Ctx) error {
 	return c.JSON(httpx.APIResponse{Data: items})
 }
 
+func (h *Handler) ListForMembership(c fiber.Ctx) error {
+	membershipID := strings.TrimSpace(c.Params("membershipId"))
+	if membershipID == "" {
+		return httpx.WriteError(c, authz.ErrForbidden)
+	}
+
+	items, err := h.service.ListForMembership(requesttenant.Context(c), membershipID)
+	if err != nil {
+		return httpx.WriteError(c, err)
+	}
+
+	return c.JSON(httpx.APIResponse{Data: items})
+}
+
 func (h *Handler) ListSelf(c fiber.Ctx) error {
 	actor, err := authz.RequestActorFromContext(c)
 	if err != nil {

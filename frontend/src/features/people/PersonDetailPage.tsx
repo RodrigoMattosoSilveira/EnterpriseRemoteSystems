@@ -6,7 +6,11 @@ import { ApiErrorPanel } from "../../components/ApiErrorPanel";
 import { useAuthorizationContext } from "../../components/layout/AuthorizationContext";
 import { useReferenceDataByType } from "../reference-data/useReferenceData";
 import { PersonAuthenticationSection } from "./PersonAuthenticationSection";
-import { useCollaboratorCandidates, useCollaboratorCatalog } from "../collaborators/useCollaborators";
+import {
+  useCollaboratorCandidates,
+  useCollaboratorJourneysForMembership,
+} from "../collaborators/useCollaborators";
+import type { Collaborator } from "../../types/collaborators";
 import { PageContextHeading, PageTitle } from "../../components/layout/PageHeading";
 import { useI18n } from "../../i18n";
 import { personStatusLabel } from "./personPresentation";
@@ -19,7 +23,7 @@ function personDetailFlash(state: unknown): string {
 }
 
 export function PersonDetailPage() {
-  const { t } = useI18n();
+  const { t, formatDate } = useI18n();
   const { id = "" } = useParams();
   const location = useLocation();
   const actor = useAuthorizationContext();
@@ -40,7 +44,9 @@ export function PersonDetailPage() {
   const collaboratorCandidatesQuery = useCollaboratorCandidates(
     canCreateCollaboratorJourney,
   );
-  const collaboratorCatalogQuery = useCollaboratorCatalog(
+  const membershipID = personQuery.data?.membershipId ?? "";
+  const collaboratorJourneysQuery = useCollaboratorJourneysForMembership(
+    membershipID,
     canBrowseCollaboratorJourneys,
   );
   const mutation = useUpdatePerson(id);
@@ -92,12 +98,11 @@ export function PersonDetailPage() {
   const collaboratorCandidates = Array.isArray(collaboratorCandidatesQuery.data)
     ? collaboratorCandidatesQuery.data
     : [];
-  const currentCollaborator = (collaboratorCatalogQuery.data ?? []).find(
-    (collaborator) =>
-      (personQuery.data.membershipId &&
-        collaborator.membershipId === personQuery.data.membershipId) ||
-      collaborator.personId === personQuery.data.globalPersonId ||
-      collaborator.personId === personQuery.data.id,
+  const collaboratorJourneys = sortCollaboratorJourneys(
+    collaboratorJourneysQuery.data ?? [],
+  );
+  const currentCollaborator = collaboratorJourneys.find(
+    (collaborator) => !collaborator.closedAt,
   );
   const canStartCollaboratorJourney =
     !currentCollaborator &&
@@ -189,9 +194,132 @@ export function PersonDetailPage() {
         />
       </section>
 
+      {canBrowseCollaboratorJourneys && membershipID && (
+        <section className="mx-auto max-w-4xl px-4 pb-4">
+          <div className="rounded-2xl border bg-white p-4 shadow-sm">
+            <div>
+              <h2
+                id="person-journey-history-title"
+                className="text-lg font-semibold text-gray-950"
+              >
+                {t("people.journeyHistory.title")}
+              </h2>
+              <p className="mt-1 text-sm text-gray-500">
+                {t("people.journeyHistory.description")}
+              </p>
+            </div>
+
+            <ApiErrorPanel error={collaboratorJourneysQuery.error} translate={t} />
+
+            {collaboratorJourneysQuery.isLoading && (
+              <p className="mt-4 text-sm text-gray-600">
+                {t("people.journeyHistory.loading")}
+              </p>
+            )}
+
+            {!collaboratorJourneysQuery.isLoading &&
+              !collaboratorJourneysQuery.error &&
+              collaboratorJourneys.length === 0 && (
+                <p className="mt-4 rounded-xl bg-gray-50 p-4 text-sm text-gray-600">
+                  {t("people.journeyHistory.empty")}
+                </p>
+              )}
+
+            {!collaboratorJourneysQuery.isLoading &&
+              collaboratorJourneys.length > 0 && (
+                <div className="mt-4 space-y-3" aria-labelledby="person-journey-history-title">
+                  {collaboratorJourneys.map((journey) => {
+                    const closed = Boolean(journey.closedAt);
+                    return (
+                      <article
+                        key={journey.id}
+                        className="rounded-xl border border-gray-200 p-4"
+                      >
+                        <div className="flex flex-wrap items-start justify-between gap-3">
+                          <div>
+                            <p className="font-semibold text-gray-950">
+                              {t("people.journeyHistory.started", {
+                                date: formatDate(journey.journeyStartDate),
+                              })}
+                            </p>
+                            <p className="mt-1 text-sm text-gray-500">
+                              {closed
+                                ? t("people.journeyHistory.closedOn", {
+                                    date: formatDate(journey.closedAt!),
+                                  })
+                                : t("people.journeyHistory.projectedEnd", {
+                                    date: formatDate(journey.projectedEndDate),
+                                  })}
+                            </p>
+                          </div>
+                          <span
+                            className={`rounded-full px-3 py-1 text-xs font-semibold ${
+                              closed
+                                ? "bg-gray-100 text-gray-700"
+                                : "bg-green-100 text-green-800"
+                            }`}
+                          >
+                            {closed
+                              ? t("collaborators.closed")
+                              : t("people.journeyHistory.current")}
+                          </span>
+                        </div>
+
+                        <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-2">
+                          <div>
+                            <dt className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+                              {t("people.journeyHistory.workAssignment")}
+                            </dt>
+                            <dd className="mt-1 text-gray-800">
+                              {journey.taskLabel || "—"}
+                              <span className="block text-xs text-gray-500">
+                                {[journey.sectorLabel, journey.locationLabel]
+                                  .filter(Boolean)
+                                  .join(" · ") || "—"}
+                              </span>
+                            </dd>
+                          </div>
+                          <div>
+                            <dt className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+                              {t("people.journeyHistory.compensation")}
+                            </dt>
+                            <dd className="mt-1 text-gray-800">
+                              {journey.paymentMethodLabel || journey.paymentMethodId || "—"}
+                            </dd>
+                          </div>
+                        </dl>
+
+                        <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+                          <span className="break-all font-mono text-xs text-gray-500">
+                            {t("common.journeyId")}: {journey.id}
+                          </span>
+                          <Link
+                            to={`/collaborators/${encodeURIComponent(journey.id)}`}
+                            className="text-sm font-semibold text-gray-950 underline underline-offset-2"
+                          >
+                            {t("people.journeyHistory.openJourney")}
+                          </Link>
+                        </div>
+                      </article>
+                    );
+                  })}
+                </div>
+              )}
+          </div>
+        </section>
+      )}
+
       {canManageTenantAuthentication && (
         <PersonAuthenticationSection personId={personQuery.data.id} />
       )}
     </main>
   );
+}
+
+function sortCollaboratorJourneys(journeys: Collaborator[]) {
+  return [...journeys].sort((left, right) => {
+    const startComparison = right.journeyStartDate.localeCompare(left.journeyStartDate);
+    if (startComparison !== 0) return startComparison;
+    return right.createdAt.localeCompare(left.createdAt);
+  });
 }

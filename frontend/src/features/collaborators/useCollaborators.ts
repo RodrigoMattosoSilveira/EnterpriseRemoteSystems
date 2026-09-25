@@ -6,6 +6,7 @@ import {
   getSelfCollaborator,
   listAllCollaborators,
   listCollaboratorCandidates,
+  listCollaboratorJourneysForMembership,
   listCollaborators,
   listExpenseCollaborators,
   listSelfCollaboratorJourneys,
@@ -28,6 +29,8 @@ export const collaboratorQueryKeys = {
     [...collaboratorQueryKeys.lists(), filter] as const,
   catalog: () => [...collaboratorQueryKeys.lists(), "catalog"] as const,
   selfList: () => [...collaboratorQueryKeys.lists(), "self"] as const,
+  membershipJourneys: (membershipId: string) =>
+    [...collaboratorQueryKeys.lists(), "membership", membershipId] as const,
   search: (search: string) =>
     [...collaboratorQueryKeys.lists(), "search", search] as const,
   candidates: () => [...collaboratorQueryKeys.all, "candidates"] as const,
@@ -85,6 +88,17 @@ export function useExpenseCollaborators() {
   return useQuery({
     queryKey: collaboratorQueryKeys.expenseCandidates(),
     queryFn: listExpenseCollaborators,
+  });
+}
+
+export function useCollaboratorJourneysForMembership(
+  membershipId: string,
+  enabled = true,
+) {
+  return useQuery({
+    queryKey: collaboratorQueryKeys.membershipJourneys(membershipId),
+    queryFn: () => listCollaboratorJourneysForMembership(membershipId),
+    enabled: enabled && Boolean(membershipId),
   });
 }
 

@@ -9,6 +9,7 @@ import (
 func RegisterCollaboratorRoutes(v1 fiber.Router, deps Dependencies) {
 	r := v1.Group("/collaborators")
 	r.Get("/candidates", requirePermission(deps, authz.PermissionCollaboratorsCreate), deps.CollaboratorHandler.ListCandidates)
+	r.Get("/by-membership/:membershipId", requirePermission(deps, authz.PermissionCollaboratorsRead), deps.CollaboratorHandler.ListForMembership)
 	r.Get("/self", requirePermission(deps, authz.PermissionCollaboratorsSelfRead), deps.CollaboratorHandler.ListSelf)
 	r.Get("/self/:id", requirePermission(deps, authz.PermissionCollaboratorsSelfRead), deps.CollaboratorHandler.GetSelfByID)
 	r.Get("/", requirePermission(deps, authz.PermissionCollaboratorsRead), deps.CollaboratorHandler.List)

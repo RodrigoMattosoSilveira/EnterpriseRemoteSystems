@@ -90,6 +90,14 @@ export async function listCollaborators(
 }
 
 
+export function listCollaboratorJourneysForMembership(
+  membershipId: string,
+): Promise<Collaborator[]> {
+  return apiFetch<Collaborator[]>(
+    `/collaborators/by-membership/${encodeURIComponent(membershipId)}`,
+  );
+}
+
 export function listSelfCollaboratorJourneys(): Promise<Collaborator[]> {
   return apiFetch<Collaborator[]>("/collaborators/self");
 }

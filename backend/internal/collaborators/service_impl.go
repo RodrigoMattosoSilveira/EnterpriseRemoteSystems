@@ -34,12 +34,16 @@ func (s *service) List(ctx context.Context, filter CollaboratorListFilter) ([]Co
 	return ToDTOList(rows), total, nil
 }
 
-func (s *service) ListSelf(ctx context.Context, membershipID string) ([]CollaboratorDTO, error) {
+func (s *service) ListForMembership(ctx context.Context, membershipID string) ([]CollaboratorDTO, error) {
 	rows, err := s.repo.ListForMembership(ctx, strings.TrimSpace(membershipID))
 	if err != nil {
 		return nil, err
 	}
 	return ToDTOList(rows), nil
+}
+
+func (s *service) ListSelf(ctx context.Context, membershipID string) ([]CollaboratorDTO, error) {
+	return s.ListForMembership(ctx, membershipID)
 }
 
 func (s *service) ListCandidates(ctx context.Context) ([]peoplepkg.PersonDTO, error) {
