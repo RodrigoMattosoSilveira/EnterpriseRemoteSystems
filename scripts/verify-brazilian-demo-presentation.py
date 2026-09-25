@@ -10,7 +10,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 SEEDER = ROOT / "scripts" / "seed-brazilian-demo.py"
 DECK = ROOT / "docs" / "06-Usage" / "Brazilian Demo Deck.md"
-RUNBOOK = ROOT / "docs" / "06-Usage" / "Brazilian Demo Presenter Runbook.md"
+RUNBOOK_PT = ROOT / "docs" / "06-Usage" / "Demo Presenter Runbook-pt.md"
+RUNBOOK_EN = ROOT / "docs" / "06-Usage" / "Demo Presenter Runbook-en.md"
+LEGACY_RUNBOOK = ROOT / "docs" / "06-Usage" / "Brazilian Demo Presenter Runbook.md"
 BITE_DOC = ROOT / "docs" / "bite-31-5-demo-presentation-and-presenter-scripts.md"
 ROUTER = ROOT / "frontend" / "src" / "app" / "router.tsx"
 PT_BR = ROOT / "frontend" / "src" / "i18n" / "resources" / "pt-BR.ts"
@@ -40,7 +42,15 @@ NAV_KEYS = (
     "nav.outstandingReceipts",
 )
 
-REQUIRED_RUNBOOK_HEADINGS = (
+REQUIRED_PT_RUNBOOK_HEADINGS = (
+    "## Preparação do apresentador",
+    "## Demonstração executiva",
+    "## Demonstração detalhada",
+    "## Recuperação",
+    "## Encerramento",
+)
+
+REQUIRED_EN_RUNBOOK_HEADINGS = (
     "## Presenter preflight",
     "## Executive demo",
     "## Deep demo",
@@ -113,7 +123,10 @@ def require_contains(text: str, needle: str, context: str) -> None:
 def main() -> int:
     read(SEEDER)
     deck = read(DECK)
-    runbook = read(RUNBOOK)
+    runbook_pt = read(RUNBOOK_PT)
+    runbook_en = read(RUNBOOK_EN)
+    if LEGACY_RUNBOOK.exists():
+        fail("legacy mixed-language presenter runbook still exists")
     bite_doc = read(BITE_DOC)
     router = read(ROUTER)
     pt_br = read(PT_BR)
@@ -140,7 +153,7 @@ def main() -> int:
         str(seed.TENANT_ADMIN_PASSWORD),
         seed.DEFAULT_AS_OF.isoformat(),
     )
-    combined_presenter_text = "\n".join((deck, runbook, bite_doc))
+    combined_presenter_text = "\n".join((deck, runbook_pt, runbook_en, bite_doc))
     for value in canonical_values:
         require_contains(combined_presenter_text, value, "presenter assets")
 
@@ -158,10 +171,23 @@ def main() -> int:
 
     for key in NAV_KEYS:
         label = quoted_ts_value(pt_br, key)
-        require_contains(runbook, label, f"presenter runbook ({key})")
+        require_contains(runbook_pt, label, f"Portuguese presenter runbook ({key})")
+        require_contains(runbook_en, label, f"English presenter runbook UI label ({key})")
 
-    for heading in REQUIRED_RUNBOOK_HEADINGS:
-        require_contains(runbook, heading, "presenter runbook")
+    for heading in REQUIRED_PT_RUNBOOK_HEADINGS:
+        require_contains(runbook_pt, heading, "Portuguese presenter runbook")
+    for heading in REQUIRED_EN_RUNBOOK_HEADINGS:
+        require_contains(runbook_en, heading, "English presenter runbook")
+
+    require_contains(runbook_pt, "### Etapa 6 — Despesas rastreáveis", "Portuguese presenter runbook")
+    require_contains(runbook_en, "### Stop 6 — Traceable Expenses", "English presenter runbook")
+
+    for forbidden in ("**Talk track**", "**Actions**", "**Transition:**", "### Stop ", "### Deep branch ", "### Recovery "):
+        if forbidden in runbook_pt:
+            fail(f"Portuguese presenter runbook still contains English structural text: {forbidden!r}")
+    for forbidden in ("**Fala sugerida**", "**Ações**", "**Transição:**", "### Etapa ", "### Aprofundamento ", "### Recuperação "):
+        if forbidden in runbook_en:
+            fail(f"English presenter runbook still contains Portuguese structural text: {forbidden!r}")
 
     for token in (
         "demo31.4.joao@example.test",
@@ -171,12 +197,12 @@ def main() -> int:
         "make testdata-server-reset ENV=test",
         "Future Test-state preservation",
     ):
-        require_contains(runbook, token, "presenter runbook")
+        require_contains(runbook_en, token, "English presenter runbook")
 
     for token in REQUIRED_STORY_TOKENS:
         require_contains(combined_presenter_text, token, "presenter story")
 
-    for context, source in (("pt-BR resource", pt_br), ("Portuguese deck", deck), ("presenter runbook", runbook)):
+    for context, source in (("pt-BR resource", pt_br), ("Portuguese deck", deck), ("Portuguese presenter runbook", runbook_pt)):
         if re.search(r"\bTenants?\b", source):
             fail(f"{context} still exposes the English Tenant terminology")
     for path, source in diagrams.items():
@@ -186,10 +212,13 @@ def main() -> int:
     if "O limite do Locatário vem primeiro" not in deck or "Encerramento executivo" not in deck:
         fail("deck no longer contains the required boundary-first executive sequence")
 
-    if "make brazilian-demo-local-reset" not in runbook:
-        fail("runbook is missing deterministic reset recovery")
-    if "make brazilian-demo-local-verify" not in runbook:
-        fail("runbook is missing fixture verification recovery")
+    for context, source in (("Portuguese presenter runbook", runbook_pt), ("English presenter runbook", runbook_en)):
+        if "make brazilian-demo-local-reset" not in source:
+            fail(f"{context} is missing deterministic reset recovery")
+        if "make brazilian-demo-local-verify" not in source:
+            fail(f"{context} is missing fixture verification recovery")
+        for token in ("R$ 70,00", "R$ 350,00", "Despesas"):
+            require_contains(source, token, context)
 
     print("Bite 31.5 presenter assets verified")
     print(f"Tenant: {seed.TENANT_NAME} ({seed.TENANT_CODE})")

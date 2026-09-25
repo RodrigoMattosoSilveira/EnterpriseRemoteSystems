@@ -19,7 +19,9 @@ No Production/customer data is used.
 Bite 31.5 adds three presenter-facing asset groups:
 
 1. [`docs/06-Usage/Brazilian Demo Deck.md`](06-Usage/Brazilian%20Demo%20Deck.md) — slide-by-slide presentation source for the prospect-facing story.
-2. [`docs/06-Usage/Brazilian Demo Presenter Runbook.md`](06-Usage/Brazilian%20Demo%20Presenter%20Runbook.md) — setup, executive demo, deep-demo extension, recovery procedures, and closing script.
+2. Two synchronized presenter runbooks:
+   - [`docs/06-Usage/Demo Presenter Runbook-pt.md`](06-Usage/Demo%20Presenter%20Runbook-pt.md) — Portuguese presenter instructions and talk track.
+   - [`docs/06-Usage/Demo Presenter Runbook-en.md`](06-Usage/Demo%20Presenter%20Runbook-en.md) — English presenter instructions and talk track; Portuguese UI labels are retained where the live pt-BR interface must be identified.
 3. [`docs/uml/demo/`](uml/demo/) — four simple PlantUML visuals for the Tenant boundary, Person/Journey lifecycle, connected operating story, and three financial demo outcomes.
 
 The Markdown deck is the canonical presentation source kept with the application. It can be copied into a preferred slide-authoring tool without making a binary presentation file the source of truth.
@@ -82,15 +84,15 @@ Role:     TENANT_ADMIN
 Tenant:   Mineração Serra Dourada — DEMO
 ```
 
-The presenter runbook is executable using this identity alone.
+Both presenter runbooks are executable using this identity alone.
 
-The current Bite 31.5 source tree does **not** seed Authentication Accounts for João Ferreira, Camila Souza, Rafael Lima, or Beatriz Nascimento. The presenter must not advertise or attempt collaborator sign-ins unless a later committed fixture explicitly provisions those credentials.
+The current Bite 31.5 source tree also seeds self-service Authentication Accounts for João Ferreira, Camila Souza, and Rafael Lima with the deterministic password `Demo-31.4-Person!`. Beatriz Nascimento intentionally has no Authentication Account. The presenter runbooks advertise only credentials that the Bite 31.4 seeder actually provisions.
 
 ## Executive and deep-demo paths
 
-The runbook defines two supported sequences:
+The two runbooks define the same supported sequences:
 
-- **Executive path — approximately 12 minutes:** Tenant boundary → People → Rafael Journey history → completed Work Period/80 g production → João Current Account → receipt controls → close.
+- **Executive path — approximately 14 minutes:** Tenant boundary → People → Rafael Journey history → completed Work Period/80 g production → Expenses → João Current Account → receipt controls → close.
 - **Deep-demo extension — approximately 25–35 minutes total:** adds Beatriz Person-vs-Collaborator explanation, future planning, Camila commission calculation, expense provenance, and deeper receipt/ledger inspection.
 
 Both paths begin from the same reset fixture and use the same presenter identity.
@@ -126,12 +128,13 @@ make brazilian-demo-presentation-check
 
 The verifier checks that:
 
-- the deck, presenter runbook, and four PlantUML demo visuals exist;
+- the deck, both language-specific presenter runbooks, and four PlantUML demo visuals exist;
 - Tenant identity, presenter login/password, and default anchor match the Bite 31.4 seeder;
 - any `.example.test` login advertised by the presenter assets is actually provisioned by the seeder;
 - the core demo routes still exist;
-- the Portuguese navigation labels used by the runbook match the translation resources;
-- the runbook preserves executive, deep-demo, preflight, recovery, and closing sections;
+- the Portuguese navigation labels used by both runbooks match the translation resources;
+- both runbooks preserve equivalent preflight, executive, deep-demo, recovery, and closing sections;
+- both runbooks contain an explicit executive Expenses stop covering João's `R$ 70,00` canteen Expense and Rafael's `R$ 350,00` flight Expense;
 - the seeded story values used in the talk track remain present (`80 g`, `5%`, `R$ 230,00`, `4 g`, `R$ 0,00`).
 
 `make local-check` and `make local-docker-check` run this check so presentation drift is caught with normal validation.
