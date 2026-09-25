@@ -33,6 +33,7 @@ type Config struct {
 	AuthSessionCookieName            string
 	AuthSessionCookieSecure          bool
 	AuthSessionCookieSameSite        string
+	AuthLocalSessionHeaderEnabled    bool
 }
 
 func LoadConfig() (Config, error) {
@@ -62,9 +63,13 @@ func LoadConfig() (Config, error) {
 		AuthSessionCookieName:            getEnv("AUTH_SESSION_COOKIE_NAME", "ers_session"),
 		AuthSessionCookieSecure:          getEnvBool("AUTH_SESSION_COOKIE_SECURE", authenticationCookieSecureDefault(env)),
 		AuthSessionCookieSameSite:        getEnv("AUTH_SESSION_COOKIE_SAME_SITE", "Lax"),
+		AuthLocalSessionHeaderEnabled:    getEnvBool("AUTH_LOCAL_SESSION_HEADER_ENABLED", false),
 	}
 	if cfg.JWTSecret == "" {
 		return Config{}, fmt.Errorf("JWT_SECRET is required")
+	}
+	if cfg.AuthLocalSessionHeaderEnabled && !isLocalDevelopmentEnvironment(cfg.Env) {
+		return Config{}, fmt.Errorf("AUTH_LOCAL_SESSION_HEADER_ENABLED is permitted only in local development")
 	}
 	mode, err := normalizeActorHeaderMode(cfg.Env, cfg.AuthzActorHeaderMode)
 	if err != nil {
@@ -72,6 +77,15 @@ func LoadConfig() (Config, error) {
 	}
 	cfg.AuthzActorHeaderMode = mode
 	return cfg, nil
+}
+
+func isLocalDevelopmentEnvironment(env string) bool {
+	switch strings.ToLower(strings.TrimSpace(env)) {
+	case "local", "dev", "development":
+		return true
+	default:
+		return false
+	}
 }
 
 func defaultActorHeaderMode(env string) string {

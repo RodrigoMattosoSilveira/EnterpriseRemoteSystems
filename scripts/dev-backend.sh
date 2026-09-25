@@ -15,6 +15,9 @@ EXPLICIT_APP_ENV="${APP_ENV:-}"
 EXPLICIT_ERS_DATABASE_PATH="${ERS_DATABASE_PATH:-}"
 EXPLICIT_ERS_RESET_DATABASE="${ERS_RESET_DATABASE:-}"
 EXPLICIT_ERS_BACKEND_WATCH="${ERS_BACKEND_WATCH:-}"
+EXPLICIT_AUTH_SESSION_COOKIE_SECURE="${AUTH_SESSION_COOKIE_SECURE:-}"
+EXPLICIT_AUTH_SESSION_COOKIE_SAME_SITE="${AUTH_SESSION_COOKIE_SAME_SITE:-}"
+EXPLICIT_AUTH_LOCAL_SESSION_HEADER_ENABLED="${AUTH_LOCAL_SESSION_HEADER_ENABLED:-}"
 EXPLICIT_AUTHZ_ACTOR_HEADER_MODE="${AUTHZ_ACTOR_HEADER_MODE:-}"
 EXPLICIT_AUTHZ_BOOTSTRAP_ENABLED="${AUTHZ_BOOTSTRAP_ENABLED:-}"
 EXPLICIT_AUTHZ_BOOTSTRAP_ACTOR_KEY="${AUTHZ_BOOTSTRAP_ACTOR_KEY:-}"
@@ -58,6 +61,35 @@ if [[ -n "${EXPLICIT_ERS_RESET_DATABASE}" ]]; then
 fi
 if [[ -n "${EXPLICIT_ERS_BACKEND_WATCH}" ]]; then
   export ERS_BACKEND_WATCH="${EXPLICIT_ERS_BACKEND_WATCH}"
+fi
+
+# make local-backend serves the browser over plain HTTP. Browsers treat
+# http://localhost as a special trustworthy origin, but a phone connecting to
+# http://<LAN-IP>:5173 will reject a Secure session cookie. Do not let a stale
+# backend/.env copied from Test/Production silently make LOCAL authentication
+# work on the developer machine while failing on another device. An explicit
+# command-level override remains available for deliberately HTTPS local setups.
+if [[ -n "${EXPLICIT_AUTH_SESSION_COOKIE_SECURE}" ]]; then
+  export AUTH_SESSION_COOKIE_SECURE="${EXPLICIT_AUTH_SESSION_COOKIE_SECURE}"
+else
+  export AUTH_SESSION_COOKIE_SECURE="false"
+fi
+if [[ -n "${EXPLICIT_AUTH_SESSION_COOKIE_SAME_SITE}" ]]; then
+  export AUTH_SESSION_COOKIE_SAME_SITE="${EXPLICIT_AUTH_SESSION_COOKIE_SAME_SITE}"
+else
+  export AUTH_SESSION_COOKIE_SAME_SITE="Lax"
+fi
+if [[ -n "${EXPLICIT_AUTH_LOCAL_SESSION_HEADER_ENABLED}" ]]; then
+  export AUTH_LOCAL_SESSION_HEADER_ENABLED="${EXPLICIT_AUTH_LOCAL_SESSION_HEADER_ENABLED}"
+else
+  # LOCAL private-LAN HTTP may be used from a physical phone whose browser
+  # declines the ordinary session cookie. Enable the Vite-proxy-only header
+  # fallback only for local-development environments; Playwright/CI and
+  # deployed environments keep it disabled.
+  case "${APP_ENV:-development}" in
+    local|dev|development) export AUTH_LOCAL_SESSION_HEADER_ENABLED="true" ;;
+    *) export AUTH_LOCAL_SESSION_HEADER_ENABLED="false" ;;
+  esac
 fi
 if [[ -n "${EXPLICIT_AUTHZ_ACTOR_HEADER_MODE}" ]]; then
   export AUTHZ_ACTOR_HEADER_MODE="${EXPLICIT_AUTHZ_ACTOR_HEADER_MODE}"
@@ -197,6 +229,9 @@ echo "DEV_SEED_ADMIN=${DEV_SEED_ADMIN:-}"
 echo "DEV_ADMIN_EMAIL=${DEV_ADMIN_EMAIL:-}"
 echo "LLM_COACHING_ENABLED=${LLM_COACHING_ENABLED:-}"
 echo "ERS_BACKEND_WATCH=${ERS_BACKEND_WATCH:-true}"
+echo "AUTH_SESSION_COOKIE_SECURE=${AUTH_SESSION_COOKIE_SECURE}"
+echo "AUTH_SESSION_COOKIE_SAME_SITE=${AUTH_SESSION_COOKIE_SAME_SITE}"
+echo "AUTH_LOCAL_SESSION_HEADER_ENABLED=${AUTH_LOCAL_SESSION_HEADER_ENABLED}"
 
 # Interactive development uses Air for hot reload. Test harnesses such as
 # Playwright need a single directly supervised backend process so their process

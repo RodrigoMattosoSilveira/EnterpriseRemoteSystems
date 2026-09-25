@@ -7,6 +7,8 @@ import {
 } from "../app/authEvents";
 
 const API_BASE_URL = "/api/v1";
+export const LOCAL_SESSION_STORAGE_KEY = "ers.local.session";
+const LOCAL_SESSION_TOKEN_HEADER = "X-ERS-Local-Session";
 type ApiEnvelope<T> = {
   data?: T;
   error?: {
@@ -56,6 +58,7 @@ export async function apiFetch<T>(
   if (!result.response.ok) {
     if (
       result.response.status === 401 &&
+      !result.authenticationInterruptionSuperseded &&
       !isPublicAuthenticationRequest(path, requestOptions.method)
     ) {
       notifyAuthenticationRequired(authenticationInterruptionReason(result.errorCode));
@@ -100,6 +103,7 @@ type ApiFetchResult<T> = {
   errorCode?: string;
   errorMessage?: string;
   errorFields?: Record<string, string>;
+  authenticationInterruptionSuperseded: boolean;
 };
 
 async function performApiFetch<T>(
@@ -107,13 +111,20 @@ async function performApiFetch<T>(
   options: RequestInit,
 ): Promise<ApiFetchResult<T>> {
   let response: Response;
+  let authenticationInterruptionSuperseded = false;
 
   try {
+    const headers = authenticatedRequestHeaders(options.headers);
+    const requestLocalSessionToken = headers[LOCAL_SESSION_TOKEN_HEADER] ?? "";
     response = await fetch(url, {
       ...options,
       credentials: options.credentials ?? "same-origin",
-      headers: authenticatedRequestHeaders(options.headers),
+      headers,
     });
+    authenticationInterruptionSuperseded =
+      response.status === 401 &&
+      localSessionResponseWasSuperseded(requestLocalSessionToken);
+    syncLocalSessionTransport(response, requestLocalSessionToken);
   } catch (error) {
     throw new ApiError({
       message: error instanceof Error ? error.message : "Network request failed",
@@ -139,6 +150,7 @@ async function performApiFetch<T>(
     errorCode: envelope?.error?.code,
     errorMessage: envelope?.error?.message,
     errorFields: envelope?.error?.fields,
+    authenticationInterruptionSuperseded,
   };
 }
 
@@ -154,6 +166,8 @@ const FORBIDDEN_ACTOR_HEADERS = new Set([
   "x-actor-id",
   "x-actor-permissions",
   "x-authorized-by",
+  "x-ers-local-lan-proxy",
+  "x-ers-local-session",
 ]);
 
 function authenticatedRequestHeaders(input: HeadersInit | undefined): Record<string, string> {
@@ -172,6 +186,11 @@ function authenticatedRequestHeaders(input: HeadersInit | undefined): Record<str
   if (tenantId) {
     removeHeader(headers, "x-tenant-id");
     headers["X-Tenant-ID"] = tenantId;
+  }
+
+  const localSessionToken = readLocalSessionTransportToken();
+  if (localSessionToken) {
+    headers[LOCAL_SESSION_TOKEN_HEADER] = localSessionToken;
   }
 
   return headers;
@@ -223,5 +242,128 @@ function isPublicAuthenticationRequest(
     path === "/auth/session" ||
     path === "/auth/password/reset" ||
     (path === "/auth/reactivation-requests" && normalizedMethod === "POST")
+  );
+}
+
+export function shouldUseLocalSessionTransport(
+  location: Pick<Location, "protocol" | "hostname">,
+): boolean {
+  return location.protocol === "http:" && isPrivateIPv4Host(location.hostname);
+}
+
+export function clearLocalSessionTransport(): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.sessionStorage.removeItem(LOCAL_SESSION_STORAGE_KEY);
+  } catch {
+    // Storage can be unavailable in restrictive/private browser modes. The
+    // ordinary cookie transport remains authoritative whenever it works.
+  }
+}
+
+function readLocalSessionTransportToken(): string {
+  if (typeof window === "undefined") return "";
+  return localSessionTokenForRequest(window.location, window.sessionStorage);
+}
+
+export function localSessionTokenForRequest(
+  location: Pick<Location, "protocol" | "hostname">,
+  storage: Pick<Storage, "getItem">,
+): string {
+  if (!shouldUseLocalSessionTransport(location)) return "";
+  try {
+    return storage.getItem(LOCAL_SESSION_STORAGE_KEY)?.trim() ?? "";
+  } catch {
+    return "";
+  }
+}
+
+function localSessionResponseWasSuperseded(
+  requestLocalSessionToken: string,
+): boolean {
+  if (typeof window === "undefined") return false;
+  return isSupersededLocalSessionResponse(
+    window.location,
+    window.sessionStorage,
+    requestLocalSessionToken,
+  );
+}
+
+export function isSupersededLocalSessionResponse(
+  location: Pick<Location, "protocol" | "hostname">,
+  storage: Pick<Storage, "getItem">,
+  requestLocalSessionToken: string,
+): boolean {
+  if (!shouldUseLocalSessionTransport(location)) return false;
+  try {
+    const currentToken =
+      storage.getItem(LOCAL_SESSION_STORAGE_KEY)?.trim() ?? "";
+    // A response belongs to an older authentication generation when the request
+    // carried no LOCAL token (or an older token), but login has since installed
+    // a different token. Such a response may report its own 401, but it must not
+    // sign out the newer session that replaced it.
+    return Boolean(currentToken && currentToken !== requestLocalSessionToken);
+  } catch {
+    return false;
+  }
+}
+
+function syncLocalSessionTransport(
+  response: Response,
+  requestLocalSessionToken: string,
+): void {
+  if (typeof window === "undefined") return;
+  syncLocalSessionTransportResponse(
+    response,
+    window.location,
+    window.sessionStorage,
+    requestLocalSessionToken,
+  );
+}
+
+export function syncLocalSessionTransportResponse(
+  response: Response,
+  location: Pick<Location, "protocol" | "hostname">,
+  storage: Pick<Storage, "getItem" | "setItem" | "removeItem">,
+  requestLocalSessionToken = "",
+): void {
+  if (!shouldUseLocalSessionTransport(location)) return;
+
+  const issuedToken = response.headers.get(LOCAL_SESSION_TOKEN_HEADER)?.trim();
+  try {
+    if (issuedToken) {
+      storage.setItem(LOCAL_SESSION_STORAGE_KEY, issuedToken);
+    } else if (response.status === 401) {
+      const currentToken =
+        storage.getItem(LOCAL_SESSION_STORAGE_KEY)?.trim() ?? "";
+      // A passive request can start before login and finish after login. Never
+      // let that older 401 erase the newer token just stored by the successful
+      // login response. Likewise, an old-token request racing with a newer login
+      // may clear only the exact token it actually sent.
+      if (
+        !currentToken ||
+        (requestLocalSessionToken && currentToken === requestLocalSessionToken)
+      ) {
+        storage.removeItem(LOCAL_SESSION_STORAGE_KEY);
+      }
+    }
+  } catch {
+    // If sessionStorage is unavailable, the browser can still use the normal
+    // HttpOnly cookie path. LOCAL LAN fallback simply remains unavailable.
+  }
+}
+
+function isPrivateIPv4Host(hostname: string): boolean {
+  const octets = hostname.split(".").map((value) => Number(value));
+  if (
+    octets.length !== 4 ||
+    octets.some((value) => !Number.isInteger(value) || value < 0 || value > 255)
+  ) {
+    return false;
+  }
+  return (
+    octets[0] === 10 ||
+    (octets[0] === 172 && octets[1] >= 16 && octets[1] <= 31) ||
+    (octets[0] === 192 && octets[1] === 168)
   );
 }
