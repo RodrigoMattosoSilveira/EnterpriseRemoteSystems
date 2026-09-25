@@ -1,0 +1,114 @@
+# Bite 31.1 — I18N Foundation and Locale Contract
+
+## Purpose
+
+Bite 31.1 establishes one localization contract for ERS before application screens are translated. It deliberately does **not** translate the existing shell, Administration, or business-domain UI; those migrations belong to later Bite 31 deliveries.
+
+## Supported locales
+
+ERS currently supports exactly:
+
+- `en-US` — English (United States), and the fallback locale.
+- `pt-BR` — Brazilian Portuguese.
+
+Adding another locale is a deliberate product change. Region-specific languages are not silently mapped to a different supported regional dialect. The generic language tags `en` and `pt` are accepted as `en-US` and `pt-BR`, respectively; `pt-PT`, for example, is not treated as Brazilian Portuguese.
+
+## Locale resolution
+
+At application startup, locale resolution is deterministic:
+
+1. A valid explicit browser-local ERS preference stored under `ers.i18n.locale` wins.
+2. Otherwise, ERS walks `navigator.languages` in order and uses the first supported locale.
+3. Otherwise, ERS falls back to `en-US`.
+
+When the preference key exists, ERS keeps its stored value canonical. Accepted aliases such as `en`, `pt`, or case/underscore variants are rewritten to the exact supported tags `en-US` or `pt-BR`. An unsupported persisted value such as `fr-FR` is repaired to the supported locale produced by the browser/fallback resolution above. After repair, the preference key therefore contains only `en-US` or `pt-BR`; unsupported raw values are never retained as persisted ERS locale state.
+
+The visible language selector introduced by Bite 31.2 uses the same service. Selecting a locale persists the explicit preference. Choosing browser language removes that preference and re-runs browser-language resolution.
+
+Locale preference is presentation state only. It must not create, mutate, select, or infer an Authentication Account, AccountActor, Actor, Person, Membership, Collaborator, Tenant, Administration context, Support Access Lease, or authorization permission.
+
+
+
+### Browser storage boundary
+
+`ers.i18n.locale` is intentionally a browser-local preference stored in
+`window.localStorage`. Cross-tab synchronization is therefore defined only for
+documents that share the same Web Storage area.
+
+For ERS manual testing, "same application origin" means the scheme, hostname,
+and port are identical in both tabs. For example, `http://localhost:5173` and
+`http://127.0.0.1:5173` are different origins, and `http://localhost:5173` and
+`http://localhost:3000` are also different origins. Different browser profiles
+or normal/private browsing contexts likewise use different storage partitions.
+
+Before diagnosing an ERS cross-tab synchronization failure, verify in both tabs:
+
+```javascript
+location.origin
+localStorage.getItem("ers.i18n.locale")
+```
+
+The `location.origin` values must be identical. After a successful write in one
+tab, the other tab must be able to read the same stored value. If it reads
+`null`, the tabs are not sharing the storage area required by this contract;
+I18N provider events or reconciliation cannot safely bridge that browser
+boundary.
+
+## Translation resources
+
+Translation resources live under `frontend/src/i18n/resources/`.
+
+`en-US.ts` defines the canonical translation-key type. Every supported locale must implement the complete key set. TypeScript therefore fails compilation when a locale omits a required key or introduces a misspelled/unknown key.
+
+The runtime retains `en-US` as the defensive fallback resource. Feature deliveries should consume `useI18n().t(...)` rather than branching on locale in React components.
+
+## Formatting contract
+
+`frontend/src/i18n/formatters.ts` centralizes locale-sensitive presentation primitives:
+
+- numbers;
+- currencies;
+- dates;
+- date-times.
+
+The selected locale controls presentation conventions. Currency remains an explicit domain value supplied by the caller; selecting Brazilian Portuguese must not silently convert USD to BRL or otherwise change financial data.
+
+Timezone is likewise not inferred from language. Date/time formatting uses the browser/runtime timezone unless the caller explicitly supplies an `Intl.DateTimeFormatOptions.timeZone`. This preserves the existing ERS rule that user-facing timestamps may be displayed in the browser's local timezone while canonical stored timestamps remain UTC.
+
+## React contract
+
+`I18nProvider` is mounted above the existing Query/Router providers and exposes:
+
+- `locale`;
+- `localeSource` (`stored`, `browser`, or `fallback`);
+- `setLocale(locale)`;
+- `useBrowserLocale()`;
+- `t(key, parameters?)`, including named placeholder interpolation;
+- locale-bound number, currency, date, and date-time formatters.
+
+The provider synchronizes the document `<html lang>` attribute, listens for the locale preference changing in another browser tab, and follows the browser `languagechange` event whenever the user has not stored an explicit ERS locale. Because browser `storage` delivery is not the only lifecycle boundary at which an existing tab can become stale, the provider also re-reads the canonical locale preference whenever the tab regains focus or becomes visible. This makes cross-tab locale state self-healing without polling.
+
+## Out of scope for Bite 31.1
+
+- translating existing ERS screens;
+- adding the visible language selector to the application shell;
+- translating People, Collaborators, Planning, Expenses, Ledger, Receipts, settlement, or Administration workflows;
+- changing API/domain enum values to localized strings;
+- changing persisted business data based on locale;
+- adding locales other than `en-US` and `pt-BR`.
+
+Those changes build on this foundation in Bite 31.2 and Bite 31.3.
+
+
+## Cross-tab reconciliation
+
+Cross-tab locale propagation uses the browser `storage` event for same-origin
+tabs that share the same browser storage partition. The provider also re-reads
+the canonical Local Storage preference when a tab regains focus or becomes
+visible, providing a bounded lifecycle reconciliation path without background
+polling.
+
+Normal and private/InPrivate browsing contexts intentionally use separate
+storage partitions and are outside this cross-tab synchronization contract.
+Manual cross-tab verification must therefore use two normal tabs in the same
+browser profile and exact application origin.

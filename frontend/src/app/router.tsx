@@ -12,19 +12,22 @@ import { AuthenticationAdminPage } from "../features/auth/AuthenticationAdminPag
 import { AuthenticationLookupDismissBoundary } from "../features/auth/AuthenticationLookupDismissBoundary";
 import { SupportAccessLeasesPage } from "../features/authz/SupportAccessLeasesPage";
 import { describeRouteError } from "./routeErrorPresentation";
+import { useI18n } from "../i18n";
 
 function RouteErrorPage() {
-  const presentation = describeRouteError(useRouteError());
+  const { t } = useI18n();
+  const presentation = describeRouteError(useRouteError(), t);
   return <StatusPage title={presentation.title} message={presentation.message} />;
 }
-function NotFoundPage() { return <StatusPage title="Page not found" message="The requested page could not be found." />; }
+function NotFoundPage() { const { t } = useI18n(); return <StatusPage title={t("route.pageNotFound.title")} message={t("route.pageNotFound.message")} />; }
 function PermissionAwareHome() {
   const actor = useAuthorizationContext();
   return <Navigate to={defaultAuthorizedRoute(actor.permissions, actor.scope, { personId: actor.personId, collaboratorId: actor.collaboratorId })} replace />;
 }
-export function ForbiddenPage() { return <StatusPage title="Access forbidden" message="Your current authorization context does not permit this operation." />; }
+export function ForbiddenPage() { const { t } = useI18n(); return <StatusPage title={t("route.forbidden.title")} message={t("route.forbidden.message")} />; }
 function StatusPage({ title, message }: { title: string; message: string }) {
-  return <main className="p-6"><section className="mx-auto max-w-xl rounded-2xl border bg-white p-6"><PageTitle>{title}</PageTitle><p className="mt-2 text-slate-600">{message}</p><Link className="mt-4 inline-block underline" to="/">Return to ERS</Link></section></main>;
+  const { t } = useI18n();
+  return <main className="p-6"><section className="mx-auto max-w-xl rounded-2xl border bg-white p-6"><PageTitle>{title}</PageTitle><p className="mt-2 text-slate-600">{message}</p><Link className="mt-4 inline-block underline" to="/">{t("route.returnToErs")}</Link></section></main>;
 }
 
 const protectedChildren: RouteObject[] = [

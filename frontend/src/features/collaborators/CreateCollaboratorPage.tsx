@@ -20,6 +20,7 @@ import {
   useCreateCollaborator,
 } from "./useCollaborators";
 import { PageTitle } from "../../components/layout/PageHeading";
+import { useI18n } from "../../i18n";
 
 type FormState = {
   personId: string;
@@ -46,6 +47,7 @@ const initialForm: FormState = {
 };
 
 export function CreateCollaboratorPage() {
+  const { t } = useI18n();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const requestedPersonId = searchParams.get("personId")?.trim() ?? "";
@@ -136,10 +138,12 @@ export function CreateCollaboratorPage() {
   );
   const paymentValueConfig = paymentValueInputConfig(
     selectedPaymentMethod?.code,
+    t,
   );
   const paymentValueValidation = validatePaymentValueInput(
     form.paymentValue,
     paymentValueConfig,
+    t,
   );
   const sectorOptions = useMemo(
     () => activeOptions(sectorsQuery.data),
@@ -160,27 +164,27 @@ export function CreateCollaboratorPage() {
 
   const referenceDataGroups = [
     {
-      label: "Payment Methods",
+      label: t("collaborators.reference.paymentMethods"),
       options: paymentMethodOptions,
       total: paymentMethodsQuery.data?.length ?? 0,
     },
     {
-      label: "Sectors",
+      label: t("collaborators.reference.sectors"),
       options: sectorOptions,
       total: sectorsQuery.data?.length ?? 0,
     },
     {
-      label: "Locations",
+      label: t("collaborators.reference.locations"),
       options: locationOptions,
       total: locationsQuery.data?.length ?? 0,
     },
     {
-      label: "Tasks",
+      label: t("collaborators.reference.tasks"),
       options: taskOptions,
       total: tasksQuery.data?.length ?? 0,
     },
     {
-      label: "Collaborator Statuses",
+      label: t("collaborators.reference.statuses"),
       options: statusOptions,
       total: statusesQuery.data?.length ?? 0,
     },
@@ -200,24 +204,24 @@ export function CreateCollaboratorPage() {
   const submitRequirements = [
     {
       met: Boolean(selectedPerson?.membershipId),
-      label: "Select an eligible active Person–Tenant Membership",
+      label: t("collaborators.require.person"),
     },
     {
       met: Boolean(form.journeyStartDate),
-      label: "Enter a journey start date",
+      label: t("collaborators.require.start"),
     },
-    { met: Boolean(form.statusId), label: "Select a status" },
-    { met: Boolean(form.sectorId), label: "Select a sector" },
-    { met: Boolean(form.locationId), label: "Select a location" },
-    { met: Boolean(form.taskId), label: "Select a task" },
-    { met: Boolean(form.paymentMethodId), label: "Select a payment method" },
+    { met: Boolean(form.statusId), label: t("collaborators.require.status") },
+    { met: Boolean(form.sectorId), label: t("collaborators.require.sector") },
+    { met: Boolean(form.locationId), label: t("collaborators.require.location") },
+    { met: Boolean(form.taskId), label: t("collaborators.require.task") },
+    { met: Boolean(form.paymentMethodId), label: t("collaborators.require.paymentMethod") },
     {
       met: paymentValueValidation.valid,
-      label: paymentValueValidation.message || "Enter a valid payment value",
+      label: paymentValueValidation.message || t("collaborators.require.paymentValue"),
     },
     {
       met: !hasMissingActiveReferenceData,
-      label: "Configure active reference data for all required dropdowns",
+      label: t("collaborators.require.reference"),
     },
   ];
   const missingSubmitRequirements = submitRequirements
@@ -265,14 +269,14 @@ export function CreateCollaboratorPage() {
 
     if (!selectedPerson) {
       setClientValidationError(
-        "Select an eligible Person before creating a Collaborator.",
+        t("collaborators.validation.person"),
       );
       return;
     }
 
     if (!canSubmit) {
       setClientValidationError(
-        "Complete all required Collaborator fields before submitting.",
+        t("collaborators.validation.required"),
       );
       return;
     }
@@ -293,7 +297,7 @@ export function CreateCollaboratorPage() {
       const created = await createMutation.mutateAsync(input);
       navigate("/collaborators", {
         state: {
-          flash: `Collaborator created for ${created.personNickname || created.personName || "selected person"}.`,
+          flash: t("collaborators.created", { name: created.personNickname || created.personName || t("common.person") }),
         },
       });
     } catch {
@@ -306,13 +310,13 @@ export function CreateCollaboratorPage() {
       <header className="sticky top-0 z-10 border-b bg-white/95 px-4 py-4 backdrop-blur">
         <div className="mx-auto max-w-4xl">
           <Link className="text-sm text-gray-500 underline" to={returnHref}>
-            {requestedPersonId ? "Back to Person" : "Back to Collaborators"}
+            {requestedPersonId ? t("collaborators.backPerson") : t("collaborators.backList")}
           </Link>
           <PageTitle className="mt-3">
-            New Collaborator
+            {t("collaborators.new.title")}
           </PageTitle>
           <p className="text-sm text-gray-500">
-            Create a Collaborator Journey from an active Person–Tenant Membership.
+            {t("collaborators.new.description")}
           </p>
         </div>
       </header>
@@ -320,18 +324,18 @@ export function CreateCollaboratorPage() {
       <section className="mx-auto max-w-4xl space-y-4 p-4">
         {isLoading && (
           <div className="rounded-2xl border bg-white p-5 shadow-sm">
-            Loading collaborator setup data...
+            {t("collaborators.loadingSetup")}
           </div>
         )}
 
-        <ApiErrorPanel error={loadError} />
+        <ApiErrorPanel error={loadError} translate={t} />
         {duplicateActiveCollaboratorError ? (
           <DuplicateActiveCollaboratorPanel
             person={selectedPerson}
             message={duplicateActiveCollaboratorError}
           />
         ) : (
-          <ApiErrorPanel error={createMutation.error} />
+          <ApiErrorPanel error={createMutation.error} translate={t} />
         )}
 
         {clientValidationError && (
@@ -347,17 +351,16 @@ export function CreateCollaboratorPage() {
         {!isLoading && !loadError && hasMissingActiveReferenceData && (
           <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5 text-sm text-amber-900 shadow-sm">
             <p className="font-semibold">
-              Active reference data is required before creating a Collaborator.
+              {t("collaborators.referenceRequired")}
             </p>
             <p className="mt-1">
-              Configure active values for:{" "}
-              {missingActiveReferenceData.join(", ")}.
+              {t("collaborators.configureValues", { values: missingActiveReferenceData.join(", ") })}
             </p>
             <Link
               className="mt-2 inline-block underline"
               to="/admin/reference-data"
             >
-              Manage reference data
+              {t("collaborators.manageReference")}
             </Link>
           </div>
         )}
@@ -368,25 +371,23 @@ export function CreateCollaboratorPage() {
               <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
                 <div>
                   <h2 className="text-lg font-semibold text-gray-950">
-                    Select an eligible Person
+                    {t("collaborators.selectEligible")}
                   </h2>
                   <p className="mt-1 text-sm text-gray-500">
-                    Only active Person–Tenant Memberships whose Person profile is complete
-                    and which have no open Collaborator Journey are eligible.
+                    {t("collaborators.selectEligibleHelp")}
                   </p>
                 </div>
                 <div className="rounded-xl bg-gray-100 px-3 py-2 text-sm text-gray-700">
                   <span className="font-semibold">{eligiblePeople.length}</span>{" "}
-                  eligible
+                  {t("collaborators.eligibleCount", { count: eligiblePeople.length }).replace(String(eligiblePeople.length), "").trim()}
                   {completePeopleWithActiveCollaborator.length > 0 && (
                     <span>
                       {" "}
-                      · {completePeopleWithActiveCollaborator.length} already
-                      collaborators
+                      · {t("collaborators.alreadyCollaborators", { count: completePeopleWithActiveCollaborator.length })}
                     </span>
                   )}
                   {incompletePeopleCount > 0 && (
-                    <span> · {incompletePeopleCount} incomplete</span>
+                    <span> · {t("collaborators.incompleteCount", { count: incompletePeopleCount })}</span>
                   )}
                 </div>
               </div>
@@ -394,10 +395,10 @@ export function CreateCollaboratorPage() {
               {requestedPersonId && !selectedPerson && (
                 <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
                   <p className="font-semibold">
-                    This Person–Tenant Membership is not currently eligible for a new Collaborator Journey.
+                    {t("collaborators.requestedIneligible")}
                   </p>
                   <p className="mt-1">
-                    The Membership may be inactive, may already have an open Collaborator Journey, or the Person profile may no longer be complete. You can choose another eligible Membership below.
+                    {t("collaborators.requestedIneligibleHelp")}
                   </p>
                 </div>
               )}
@@ -405,7 +406,7 @@ export function CreateCollaboratorPage() {
               {!selectedPerson && (
                 <div className="relative mt-4">
                   <label className="block text-sm font-medium text-gray-700">
-                    Find eligible Person by nickname
+                    {t("collaborators.findEligible")}
                     <span className="text-red-600"> *</span>
                     <input
                       type="search"
@@ -424,8 +425,8 @@ export function CreateCollaboratorPage() {
                       }
                       placeholder={
                         eligiblePeople.length === 0
-                          ? "No eligible People available"
-                          : "Type any part of a Person nickname"
+                          ? t("collaborators.noEligiblePlaceholder")
+                          : t("collaborators.searchEligiblePlaceholder")
                       }
                       className="mt-1 w-full rounded-xl border border-gray-300 px-3 py-2 shadow-sm focus:border-gray-900 focus:outline-none focus:ring-2 focus:ring-gray-900/10 disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-500"
                     />
@@ -435,12 +436,12 @@ export function CreateCollaboratorPage() {
                     <div
                       id="eligible-person-suggestions"
                       role="listbox"
-                      aria-label="Matching eligible People"
+                      aria-label={t("collaborators.matchingEligible")}
                       className="absolute left-0 right-0 top-full z-20 mt-1 max-h-60 overflow-y-auto rounded-xl border border-gray-200 bg-white p-1 shadow-lg"
                     >
                       {matchingEligiblePeople.length === 0 ? (
                         <p className="px-3 py-2 text-sm text-gray-500">
-                          No matching eligible People
+                          {t("collaborators.noMatchingEligible")}
                         </p>
                       ) : (
                         matchingEligiblePeople.map((person) => (
@@ -471,14 +472,13 @@ export function CreateCollaboratorPage() {
               {eligiblePeople.length === 0 && (
                 <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
                   <p className="font-semibold">
-                    No eligible People are available.
+                    {t("collaborators.noEligible")}
                   </p>
                   <p className="mt-1">
-                    A Person must have an ACTIVE Membership in this Tenant, a complete profile,
-                    and no open Collaborator Journey before you can select them here.
+                    {t("collaborators.noEligibleHelp")}
                   </p>
                   <Link className="mt-2 inline-block underline" to="/people">
-                    Go to People
+                    {t("collaborators.goPeople")}
                   </Link>
                 </div>
               )}
@@ -491,10 +491,10 @@ export function CreateCollaboratorPage() {
             </section>
 
             <section className="rounded-2xl border bg-white p-5 shadow-sm">
-              <h2 className="text-lg font-semibold text-gray-950">Journey</h2>
+              <h2 className="text-lg font-semibold text-gray-950">{t("collaborators.journey")}</h2>
               <div className="mt-4 grid gap-4 md:grid-cols-2">
                 <Input
-                  label="Journey Start Date"
+                  label={t("collaborators.journeyStart")}
                   required
                   type="date"
                   value={form.journeyStartDate}
@@ -502,16 +502,14 @@ export function CreateCollaboratorPage() {
                 />
 
                 <Select
-                  label="Status"
+                  label={t("common.status")}
                   required
                   value={form.statusId}
                   onChange={(value) => update("statusId", value)}
                   options={statusOptions}
-                  placeholder={referencePlaceholder(
-                    "status",
-                    statusOptions,
-                    "statuses",
-                  )}
+                  placeholder={statusOptions.length === 0
+                    ? t("collaborators.noActiveStatuses")
+                    : t("collaborators.selectStatus")}
                   disabled={statusOptions.length === 0}
                 />
               </div>
@@ -519,59 +517,61 @@ export function CreateCollaboratorPage() {
 
             <section className="rounded-2xl border bg-white p-5 shadow-sm">
               <h2 className="text-lg font-semibold text-gray-950">
-                Work Assignment
+                {t("collaborators.workAssignment")}
               </h2>
               <div className="mt-4 grid gap-4 md:grid-cols-3">
                 <Select
-                  label="Sector"
+                  label={t("collaborators.sector")}
                   required
                   value={form.sectorId}
                   onChange={(value) => update("sectorId", value)}
                   options={sectorOptions}
-                  placeholder={referencePlaceholder("sector", sectorOptions)}
+                  placeholder={sectorOptions.length === 0
+                    ? t("collaborators.noActiveSectors")
+                    : t("collaborators.selectSector")}
                   disabled={sectorOptions.length === 0}
                 />
                 <Select
-                  label="Location"
+                  label={t("collaborators.location")}
                   required
                   value={form.locationId}
                   onChange={(value) => update("locationId", value)}
                   options={locationOptions}
-                  placeholder={referencePlaceholder(
-                    "location",
-                    locationOptions,
-                  )}
+                  placeholder={locationOptions.length === 0
+                    ? t("collaborators.noActiveLocations")
+                    : t("collaborators.selectLocation")}
                   disabled={locationOptions.length === 0}
                 />
                 <Select
-                  label="Task"
+                  label={t("collaborators.task")}
                   required
                   value={form.taskId}
                   onChange={(value) => update("taskId", value)}
                   options={taskOptions}
-                  placeholder={referencePlaceholder("task", taskOptions)}
+                  placeholder={taskOptions.length === 0
+                    ? t("collaborators.noActiveTasks")
+                    : t("collaborators.selectTask")}
                   disabled={taskOptions.length === 0}
                 />
               </div>
             </section>
 
             <section className="rounded-2xl border bg-white p-5 shadow-sm">
-              <h2 className="text-lg font-semibold text-gray-950">Payment</h2>
+              <h2 className="text-lg font-semibold text-gray-950">{t("collaborators.payment")}</h2>
               <div className="mt-4 grid gap-4 md:grid-cols-2">
                 <Select
-                  label="Payment Method"
+                  label={t("collaborators.paymentMethod")}
                   required
                   value={form.paymentMethodId}
                   onChange={(value) => update("paymentMethodId", value)}
                   options={paymentMethodOptions}
-                  placeholder={referencePlaceholder(
-                    "payment method",
-                    paymentMethodOptions,
-                  )}
+                  placeholder={paymentMethodOptions.length === 0
+                    ? t("collaborators.noActivePaymentMethods")
+                    : t("collaborators.selectPaymentMethod")}
                   disabled={paymentMethodOptions.length === 0}
                 />
                 <Input
-                  label="Payment Value"
+                  label={t("collaborators.paymentValue")}
                   required
                   type="text"
                   inputMode="decimal"
@@ -585,9 +585,9 @@ export function CreateCollaboratorPage() {
             </section>
 
             <section className="rounded-2xl border bg-white p-5 shadow-sm">
-              <h2 className="text-lg font-semibold text-gray-950">Notes</h2>
+              <h2 className="text-lg font-semibold text-gray-950">{t("collaborators.notes")}</h2>
               <label className="mt-4 block text-sm font-medium text-gray-700">
-                Notes
+                {t("collaborators.notes")}
                 <textarea
                   className="mt-1 min-h-24 w-full rounded-xl border border-gray-300 px-3 py-2 shadow-sm focus:border-gray-900 focus:outline-none focus:ring-2 focus:ring-gray-900/10"
                   value={form.notes}
@@ -601,7 +601,7 @@ export function CreateCollaboratorPage() {
                 {missingSubmitRequirements.length > 0 && (
                   <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
                     <p className="font-semibold">
-                      Complete these fields to enable Create Collaborator:
+                      {t("collaborators.completeToEnable")}
                     </p>
                     <ul className="mt-1 list-disc pl-5">
                       {missingSubmitRequirements.map((requirement) => (
@@ -616,21 +616,21 @@ export function CreateCollaboratorPage() {
                     to={returnHref}
                     className="rounded-xl border border-gray-300 bg-white px-5 py-3 text-sm font-semibold text-gray-700 shadow-sm"
                   >
-                    Cancel
+                    {t("common.cancel")}
                   </Link>
                   <button
                     type="submit"
                     disabled={createMutation.isPending || !canSubmit}
                     title={
                       canSubmit
-                        ? "Create Collaborator"
-                        : `Missing: ${missingSubmitRequirements.join(", ")}`
+                        ? t("collaborators.create")
+                        : t("collaborators.missingTitle", { items: missingSubmitRequirements.join(", ") })
                     }
                     className="rounded-xl bg-gray-950 px-5 py-3 text-sm font-semibold text-white shadow-sm disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     {createMutation.isPending
-                      ? "Creating..."
-                      : "Create Collaborator"}
+                      ? t("common.creatingDots")
+                      : t("collaborators.create")}
                   </button>
                 </div>
               </div>
@@ -643,14 +643,14 @@ export function CreateCollaboratorPage() {
 }
 
 function AlreadyCollaboratorsPanel({ people }: { people: Person[] }) {
+  const { t } = useI18n();
   return (
     <div className="mt-4 rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-900">
       <p className="font-semibold">
-        Already active Collaborators are hidden from eligible Person suggestions.
+        {t("collaborators.alreadyHidden")}
       </p>
       <p className="mt-1">
-        These complete People already have an active Collaborator journey and
-        cannot be selected again.
+        {t("collaborators.alreadyHiddenHelp")}
       </p>
       <ul className="mt-3 list-disc space-y-1 pl-5">
         {people.map((person) => (
@@ -668,7 +668,7 @@ function AlreadyCollaboratorsPanel({ people }: { people: Person[] }) {
         className="mt-3 inline-block font-semibold underline"
         to="/collaborators"
       >
-        View Collaborators
+        {t("collaborators.view")}
       </Link>
     </div>
   );
@@ -681,25 +681,26 @@ function DuplicateActiveCollaboratorPanel({
   person?: Person;
   message: string;
 }) {
+  const { t } = useI18n();
   return (
     <div className="mb-4 rounded-2xl border border-amber-200 bg-amber-50 p-5 text-amber-900 shadow-sm">
       <p className="text-base font-semibold">
-        This Membership already has an open Collaborator Journey.
+        {t("collaborators.duplicate")}
       </p>
       <p className="mt-1 text-sm">{message}</p>
       {person && (
         <p className="mt-2 text-sm">
-          Selected Person:{" "}
+          {t("collaborators.selectedPerson")}{" "}
           <span className="font-semibold">{personLabel(person)}</span>
         </p>
       )}
       <div className="mt-3 flex flex-wrap gap-3 text-sm font-semibold">
         <Link className="underline" to="/collaborators">
-          View Collaborators
+          {t("collaborators.view")}
         </Link>
         {person && (
           <Link className="underline" to={`/people/${person.id}`}>
-            View Person
+            {t("collaborators.viewPerson")}
           </Link>
         )}
       </div>
@@ -730,23 +731,23 @@ function ReferenceDataSetupSummary({
     total: number;
   }[];
 }) {
+  const { t } = useI18n();
   return (
     <section className="rounded-2xl border bg-white p-5 shadow-sm">
       <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
         <div>
           <h2 className="text-lg font-semibold text-gray-950">
-            Active reference data
+            {t("collaborators.referenceTitle")}
           </h2>
           <p className="mt-1 text-sm text-gray-500">
-            Only active reference data values are available in Collaborator
-            dropdowns. Inactive values are hidden.
+            {t("collaborators.referenceHelp")}
           </p>
         </div>
         <Link
           className="text-sm font-semibold text-gray-700 underline"
           to="/admin/reference-data"
         >
-          Manage reference data
+          {t("collaborators.manageReference")}
         </Link>
       </div>
 
@@ -763,11 +764,11 @@ function ReferenceDataSetupSummary({
                 <span className="font-semibold text-gray-950">
                   {group.options.length}
                 </span>{" "}
-                active
+                {t("collaborators.activeCount", { count: group.options.length }).replace(String(group.options.length), "").trim()}
                 {inactiveCount > 0 && (
                   <span className="text-gray-500">
                     {" "}
-                    · {inactiveCount} inactive
+                    · {t("collaborators.inactiveCount", { count: inactiveCount })}
                   </span>
                 )}
               </dd>
@@ -785,20 +786,21 @@ function SelectedPersonCard({
 }: {
   person: Person;
   onChange: () => void;
-}) {
+}) {  const { t } = useI18n();
+
   return (
     <div className="mt-4 rounded-xl border border-green-200 bg-green-50 p-4 text-sm text-green-900">
       <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
         <div>
-          <p className="font-semibold">Selected Person is complete.</p>
+          <p className="font-semibold">{t("collaborators.selectedComplete")}</p>
           <p className="mt-1 text-base font-semibold">{personLabel(person)}</p>
           <dl className="mt-2 grid gap-x-4 gap-y-1 md:grid-cols-2">
             <div>
-              <dt className="text-green-700">Email</dt>
+              <dt className="text-green-700">{t("common.email")}</dt>
               <dd>{person.email}</dd>
             </div>
             <div>
-              <dt className="text-green-700">Cellular</dt>
+              <dt className="text-green-700">{t("common.cellular")}</dt>
               <dd>{person.cellular}</dd>
             </div>
             <div>
@@ -806,21 +808,21 @@ function SelectedPersonCard({
               <dd>{person.cpf}</dd>
             </div>
             <div>
-              <dt className="text-green-700">Profile</dt>
+              <dt className="text-green-700">{t("collaborators.profile")}</dt>
               <dd>{person.profileCompletionStatus}</dd>
             </div>
           </dl>
         </div>
         <div className="flex shrink-0 items-center gap-3">
           <Link className="font-semibold underline" to={`/people/${person.id}`}>
-            View Person
+            {t("collaborators.viewPerson")}
           </Link>
           <button
             type="button"
             onClick={onChange}
             className="rounded-lg border border-green-300 bg-white px-3 py-1 font-semibold text-green-800"
           >
-            Change Person
+            {t("collaborators.changePerson")}
           </button>
         </div>
       </div>
@@ -915,16 +917,6 @@ function Input({
       )}
     </label>
   );
-}
-
-function referencePlaceholder(
-  label: string,
-  options: { value: string; label: string }[],
-  pluralLabel = `${label}s`,
-) {
-  return options.length === 0
-    ? `No active ${pluralLabel} available`
-    : `Select a ${label}`;
 }
 
 function activeOptions(items: ReferenceDataItem[] = []) {

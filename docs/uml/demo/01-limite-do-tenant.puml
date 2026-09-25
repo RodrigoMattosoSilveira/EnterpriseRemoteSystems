@@ -1,0 +1,27 @@
+@startuml
+title Limite do Locatário — o contexto vem antes dos dados
+
+left to right direction
+
+actor "Mariana Alves\nAdministradora do Locatário" as Mariana
+
+rectangle "Locatário selecionado\nMineração Serra Dourada — DEMO" as Locatário
+rectangle "Dados da operação\nPessoas · Jornadas · Trabalho\nDespesas · Conta Corrente · Recibos" as Dados
+rectangle "Outro Locatário\n(dados isolados)" as OutroLocatário
+
+Mariana --> Locatário : opera no contexto selecionado
+Locatário --> Dados : delimita a visão operacional
+Locatário -[hidden]right-> OutroLocatário
+
+note bottom of Locatário
+O Locatário não é apenas um filtro visual.
+Ele define o limite operacional
+dos registros apresentados.
+end note
+
+note bottom of OutroLocatário
+Fora do contexto selecionado.
+Não faz parte desta demonstração.
+end note
+
+@enduml

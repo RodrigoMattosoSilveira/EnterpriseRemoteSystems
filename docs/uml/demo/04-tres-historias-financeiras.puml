@@ -1,0 +1,18 @@
+@startuml
+title Três histórias financeiras fáceis de explicar
+
+left to right direction
+
+rectangle "João Ferreira\n\n+ R$ 300,00\n− R$ 70,00\n──────────\nR$ 230,00\n\nRecibo: Pendente de emissão" as Joao
+rectangle "Camila Souza\n\n80 g × 5%\n──────────\n4 g\n\nSaldo: 4 g" as Camila
+rectangle "Rafael Lima\n\n+ R$ 350,00\n− R$ 350,00\n──────────\nR$ 0,00\n\nRecibo: Devolvido" as Rafael
+
+Joao -[hidden]right-> Camila
+Camila -[hidden]right-> Rafael
+
+note bottom of Camila
+Mesma operação, resultados diferentes,
+sempre com proveniência explicável.
+end note
+
+@enduml

@@ -57,7 +57,7 @@ test("posted BRL Work Period earnings are visible in Current Account with Work P
   await createRunResponse;
 
   await expect(page.getByText("150.75").first()).toBeVisible();
-  await expect(page.getByText("READY", { exact: true }).first()).toBeVisible();
+  await expect(page.getByText("Ready", { exact: true }).first()).toBeVisible();
 
   const postRunResponse = page.waitForResponse(
     (response) =>
@@ -94,7 +94,7 @@ test("posted BRL Work Period earnings are visible in Current Account with Work P
     ),
   );
   await expect(page.getByLabel("Filter ledger entries")).toHaveValue("earnings");
-  await expect(page.getByText(/R\$\s*150,75/).first()).toBeVisible();
+  await expect(page.getByText(/R\$\s*150\.75/).first()).toBeVisible();
   await expect(
     page.getByText(`Work Period ${workDate} · ${workPeriodName}`).first(),
   ).toBeVisible();
@@ -153,13 +153,13 @@ test("posted gold commission earnings are visible as gold-gram Current Account c
   await page.getByRole("button", { name: "Record Production" }).click();
   await productionResponse;
 
-  await expect(page.getByText("80.00000000 g")).toBeVisible();
+  await expect(page.getByText("80 g")).toBeVisible();
 
   await page.getByRole("link", { name: "Open Accrual" }).click();
   await expect(page).toHaveURL(`/work-periods/${workPeriod.id}`);
   await page.getByRole("button", { name: "Accrual" }).click();
   await expect(page.getByText("Gold Produced is read-only in Accrual.")).toBeVisible();
-  await expect(page.getByText("80.00000000 g").first()).toBeVisible();
+  await expect(page.getByText("80 g").first()).toBeVisible();
 
   await page.getByLabel("Accrual notes").fill(`Gold E2E accrual ${suffix}`);
   const createRunResponse = page.waitForResponse(
@@ -170,8 +170,8 @@ test("posted gold commission earnings are visible as gold-gram Current Account c
   await page.getByRole("button", { name: "Run Accrual" }).click();
   await createRunResponse;
 
-  await expect(page.getByText("6.00000000 g").first()).toBeVisible();
-  await expect(page.getByText("READY", { exact: true }).first()).toBeVisible();
+  await expect(page.getByText("6 g").first()).toBeVisible();
+  await expect(page.getByText("Ready", { exact: true }).first()).toBeVisible();
 
   const postRunResponse = page.waitForResponse(
     (response) =>

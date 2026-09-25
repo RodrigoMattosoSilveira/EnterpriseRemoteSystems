@@ -13,6 +13,7 @@ import { usePriceListItems } from "../price-list/usePriceList";
 import { receiptStatusLabel, receiptStatusTone } from "../receipts/receiptLifecycle";
 import { useExpenses } from "./useExpenses";
 import { PageTitle } from "../../components/layout/PageHeading";
+import { translateEnglish, type Translate, useI18n } from "../../i18n";
 
 const EXPENSE_PAGE_SIZE = 50;
 const FILTER_OPTION_PAGE_SIZE = 200;
@@ -36,25 +37,26 @@ function ExpensesAccessDenied({
 }: {
   supportLeaseId?: string;
 }) {
+  const { t } = useI18n();
   const supportLease = Boolean(supportLeaseId);
 
   return (
     <main className="min-h-screen bg-gray-50 p-6">
       <section className="mx-auto max-w-xl rounded-2xl border bg-white p-6 shadow-sm">
-        <PageTitle>Expenses not authorized</PageTitle>
+        <PageTitle>{t("expenses.accessDenied.title")}</PageTitle>
         <p className="mt-2 text-sm text-slate-600">
           {supportLease
-            ? "Your current Tenant Support Access Lease does not authorize Expenses. The lease remains active for its approved Tenant permissions."
-            : "Your current authorization context does not permit access to Expenses."}
+            ? t("expenses.accessDenied.supportLease")
+            : t("expenses.accessDenied.context")}
         </p>
         <p className="mt-2 text-sm text-slate-600">
-          Return to People or select another available administration or tenant context if you need different authority.
+          {t("expenses.accessDenied.help")}
         </p>
         <Link
           className="mt-4 inline-block rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 shadow-sm"
           to="/people"
         >
-          Return to People
+          {t("expenses.accessDenied.return")}
         </Link>
       </section>
     </main>
@@ -62,6 +64,7 @@ function ExpensesAccessDenied({
 }
 
 function AuthorizedExpensesPage() {
+  const { t, formatCurrency, formatNumber, formatDate } = useI18n();
   const [searchParams, setSearchParams] = useSearchParams();
   const location = useLocation();
   const page = parsePositiveInt(searchParams.get("page"), 1);
@@ -152,11 +155,11 @@ function AuthorizedExpensesPage() {
         <div className="mx-auto flex max-w-5xl items-center justify-between gap-3">
           <div>
             <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
-              Operations
+              {t("common.operations")}
             </p>
-            <PageTitle>Expenses</PageTitle>
+            <PageTitle>{t("expenses.title")}</PageTitle>
             <p className="text-sm text-gray-500">
-              Expense deductions recorded in Real or grams of gold.
+              {t("expenses.subtitle")}
             </p>
           </div>
 
@@ -165,19 +168,19 @@ function AuthorizedExpensesPage() {
               to="/people"
               className="rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 shadow-sm"
             >
-              People
+              {t("nav.people")}
             </Link>
             <Link
               to="/collaborators"
               className="rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 shadow-sm"
             >
-              Collaborators
+              {t("nav.collaborators")}
             </Link>
             <Link
               to="/expenses/new"
               className="rounded-xl bg-gray-950 px-4 py-2 text-sm font-semibold text-white shadow-sm"
             >
-              Create Expense
+              {t("expenses.create")}
             </Link>
           </div>
         </div>
@@ -193,16 +196,16 @@ function AuthorizedExpensesPage() {
           </div>
         )}
 
-        <ApiErrorPanel error={error} />
+        <ApiErrorPanel error={error} translate={t} />
 
         <section className="rounded-2xl border bg-white p-4 shadow-sm">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
             <div>
               <h2 className="text-lg font-semibold text-gray-950">
-                Expense Records
+                {t("expenses.records")}
               </h2>
               <p className="text-sm text-gray-500">
-                Showing {expenses.length} of {total} expense records.
+                {t("expenses.showing", { count: expenses.length, total })}
               </p>
             </div>
 
@@ -217,17 +220,17 @@ function AuthorizedExpensesPage() {
 
         <section className="rounded-2xl border bg-white p-4 shadow-sm">
           <div className="mb-4">
-            <h2 className="text-lg font-semibold text-gray-950">Filters</h2>
-            <p className="text-sm text-gray-500">Filter expense records by collaborator name, nickname, category, or item.</p>
+            <h2 className="text-lg font-semibold text-gray-950">{t("common.filters")}</h2>
+            <p className="text-sm text-gray-500">{t("expenses.filters.help")}</p>
             <p className="mt-1 text-xs text-gray-500">
-              Start typing a collaborator first name, last name, full name, or nickname, then select a matching collaborator when you need an exact filter.
+              {t("expenses.filters.detail")}
             </p>
           </div>
 
           <div className="grid min-w-0 items-start gap-4 md:grid-cols-2 lg:grid-cols-3">
             <div className="relative min-w-0">
               <label className="grid min-w-0 gap-1 text-sm font-medium text-gray-700">
-                Collaborator name or nickname
+                {t("expenses.filters.collaborator")}
                 <input
                   id="expense-collaborator-search"
                   type="search"
@@ -243,7 +246,7 @@ function AuthorizedExpensesPage() {
                   onChange={(event: ChangeEvent<HTMLInputElement>) =>
                     setFilter("collaboratorSearch", event.target.value)
                   }
-                  placeholder="Search by name or nickname"
+                  placeholder={t("expenses.filters.collaboratorPlaceholder")}
                   className="w-full min-w-0 rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm"
                 />
               </label>
@@ -251,16 +254,16 @@ function AuthorizedExpensesPage() {
                 <div
                   id="expense-collaborator-suggestions"
                   role="listbox"
-                  aria-label="Matching collaborators"
+                  aria-label={t("expenses.filters.matching")}
                   className="absolute left-0 right-0 top-full z-20 mt-1 max-h-60 overflow-y-auto rounded-xl border border-gray-200 bg-white p-1 shadow-lg"
                 >
                   {collaboratorOptionsLoading ? (
                     <p className="px-3 py-2 text-sm text-gray-500">
-                      Loading matching collaborators…
+                      {t("expenses.filters.loadingMatches")}
                     </p>
                   ) : collaboratorOptions.length === 0 ? (
                     <p className="px-3 py-2 text-sm text-gray-500">
-                      No matching collaborators
+                      {t("expenses.filters.noMatches")}
                     </p>
                   ) : (
                     collaboratorOptions.map((collaborator) => (
@@ -281,15 +284,15 @@ function AuthorizedExpensesPage() {
               {collaboratorId && (
                 <div
                   role="status"
-                  aria-label="Selected collaborator filter"
+                  aria-label={t("expenses.filters.selectedCollaborator")}
                   className="mt-2 flex min-w-0 items-center justify-between gap-2 rounded-xl bg-gray-100 px-3 py-2 text-xs text-gray-700"
                 >
                   <span className="min-w-0">
-                    <span className="font-semibold">Selected:</span>{" "}
+                    <span className="font-semibold">{t("common.selectedLabel")}</span>{" "}
                     <span className="break-words">
                       {selectedCollaborator
                         ? collaboratorDisplayName(selectedCollaborator)
-                        : "Loading collaborator…"}
+                        : t("common.loading")}
                     </span>
                   </span>
                   <button
@@ -297,34 +300,34 @@ function AuthorizedExpensesPage() {
                     onClick={() => setFilter("collaboratorId", "")}
                     className="shrink-0 rounded-lg border border-gray-300 bg-white px-2 py-1 font-semibold text-gray-700"
                   >
-                    Remove
+                    {t("common.remove")}
                   </button>
                 </div>
               )}
             </div>
 
             <label className="grid min-w-0 gap-1 text-sm font-medium text-gray-700">
-              Category
+              {t("expenses.filters.category")}
               <select
                 value={itemType}
                 onChange={(event: ChangeEvent<HTMLSelectElement>) => setFilter("itemType", event.target.value)}
                 className="w-full min-w-0 rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm"
               >
-                <option value="">All categories</option>
-                <option value="CANTEEN">Canteen</option>
-                <option value="ADMINISTRATIVE">Administrative</option>
+                <option value="">{t("expenses.filters.allCategories")}</option>
+                <option value="CANTEEN">{t("expenses.filters.canteen")}</option>
+                <option value="ADMINISTRATIVE">{t("expenses.filters.administrative")}</option>
               </select>
             </label>
 
             <label className="grid min-w-0 gap-1 text-sm font-medium text-gray-700">
-              Item
+              {t("expenses.filters.item")}
               <select
                 value={priceListItemId}
                 onChange={(event: ChangeEvent<HTMLSelectElement>) => setFilter("priceListItemId", event.target.value)}
                 aria-describedby={selectedPriceListItem ? "selected-expense-item-filter-label" : undefined}
                 className="w-full min-w-0 rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm"
               >
-                <option value="">All items</option>
+                <option value="">{t("expenses.filters.allItems")}</option>
                 {filteredItemOptions.map((item) => (
                   <option key={item.id} value={item.id}>
                     {priceListItemLabel(item)}
@@ -349,31 +352,31 @@ function AuthorizedExpensesPage() {
               onClick={clearFilters}
               className="mt-4 rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 shadow-sm"
             >
-              Clear filters
+              {t("expenses.filters.clear")}
             </button>
           )}
         </section>
 
         {isLoading && (
           <div className="rounded-2xl border bg-white p-5 shadow-sm">
-            Loading expenses...
+            {t("expenses.loading")}
           </div>
         )}
 
         {!isLoading && !error && expenses.length === 0 && (
           <div className="rounded-2xl border bg-white p-8 text-center shadow-sm">
-            <h2 className="text-lg font-semibold">No expenses found</h2>
+            <h2 className="text-lg font-semibold">{t("expenses.empty")}</h2>
             <p className="mt-2 text-sm text-gray-500">
               {hasActiveFilters
-                ? "Adjust the collaborator name, category, or item filters to find more expense records."
-                : "Record a Collaborator expense after an active Collaborator exists."}
+                ? t("expenses.emptyFilteredHelp")
+                : t("expenses.emptyHelp")}
             </p>
             {!hasActiveFilters && (
               <Link
                 to="/expenses/new"
                 className="mt-5 inline-block rounded-xl bg-gray-950 px-5 py-3 text-sm font-semibold text-white"
               >
-                Create Expense
+                {t("expenses.create")}
               </Link>
             )}
           </div>
@@ -385,13 +388,13 @@ function AuthorizedExpensesPage() {
               <table className="w-full text-left text-sm">
                 <thead className="bg-gray-50 text-xs uppercase tracking-wide text-gray-500">
                   <tr>
-                    <th className="p-3">Date</th>
-                    <th className="p-3">Collaborator</th>
-                    <th className="p-3">Category</th>
-                    <th className="p-3">Item</th>
-                    <th className="p-3 text-right">Amount</th>
-                    <th className="p-3">Receipt</th>
-                    <th className="p-3">Description</th>
+                    <th className="p-3">{t("common.date")}</th>
+                    <th className="p-3">{t("expenses.table.collaborator")}</th>
+                    <th className="p-3">{t("common.category")}</th>
+                    <th className="p-3">{t("common.item")}</th>
+                    <th className="p-3 text-right">{t("common.amount")}</th>
+                    <th className="p-3">{t("common.receipt")}</th>
+                    <th className="p-3">{t("expenses.table.description")}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y">
@@ -405,17 +408,17 @@ function AuthorizedExpensesPage() {
                           to={`/expenses/${expense.id}`}
                           className="font-semibold text-gray-950 underline-offset-2 hover:underline"
                         >
-                          {expense.collaboratorLabel || "Collaborator"}
+                          {expense.collaboratorLabel || t("common.collaborator")}
                         </Link>
                       </td>
                       <td className="p-3 text-gray-700">
-                        {displayExpenseCategory(expense)}
+                        {displayExpenseCategory(expense, t)}
                       </td>
                       <td className="p-3 text-gray-700">
                         {expenseItemLabel(expense)}
                       </td>
                       <td className="p-3 text-right font-semibold text-gray-950">
-                        {formatExpenseAmount(expense)}
+                        {formatExpenseAmount(expense, formatCurrency, formatNumber, t)}
                       </td>
                       <td className="p-3 text-gray-700">
                         <ExpenseReceiptStatus expense={expense} />
@@ -463,18 +466,19 @@ function PaginationControls({
   isLoading: boolean;
   onPageChange: (page: number) => void;
 }) {
+  const { t } = useI18n();
   return (
-    <nav className="flex flex-wrap items-center gap-3" aria-label="Expense pages">
+    <nav className="flex flex-wrap items-center gap-3" aria-label={t("expenses.pagesAria")}>
       <button
         type="button"
         onClick={() => onPageChange(currentPage - 1)}
         disabled={isLoading || currentPage <= 1}
         className="rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 shadow-sm disabled:cursor-not-allowed disabled:opacity-50"
       >
-        Previous
+        {t("common.previous")}
       </button>
       <span className="text-sm font-medium text-gray-700">
-        Page {currentPage} of {totalPages}
+        {t("common.pageOf", { page: currentPage, total: totalPages })}
       </span>
       <button
         type="button"
@@ -482,22 +486,23 @@ function PaginationControls({
         disabled={isLoading || currentPage >= totalPages}
         className="rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 shadow-sm disabled:cursor-not-allowed disabled:opacity-50"
       >
-        Next
+        {t("common.next")}
       </button>
     </nav>
   );
 }
 
 function ExpenseCard({ expense }: { expense: Expense }) {
+  const { t, formatCurrency, formatNumber, formatDate } = useI18n();
   return (
     <Link to={`/expenses/${expense.id}`} className="block p-4">
       <div className="flex items-start justify-between gap-3">
         <div>
           <h2 className="font-semibold text-gray-950">
-            {expense.collaboratorLabel || "Collaborator"}
+            {expense.collaboratorLabel || t("common.collaborator")}
           </h2>
           <p className="text-sm text-gray-500">
-            {displayExpenseCategory(expense)} · {formatDate(expense.expenseDate)}
+            {displayExpenseCategory(expense, t)} · {formatDate(expense.expenseDate)}
           </p>
         </div>
         <span className="rounded-full bg-gray-100 px-3 py-1 text-xs font-semibold text-gray-800">
@@ -506,28 +511,29 @@ function ExpenseCard({ expense }: { expense: Expense }) {
       </div>
 
       <div className="mt-4 grid gap-2 text-sm text-gray-700">
-        <Info label="Item" value={expenseItemLabel(expense)} />
-        <Info label="Amount" value={formatExpenseAmount(expense)} />
-        <Info label="Receipt" value={expenseReceiptSummary(expense)} />
-        <Info label="Description" value={expense.description || "—"} />
+        <Info label={t("common.item")} value={expenseItemLabel(expense)} />
+        <Info label={t("common.amount")} value={formatExpenseAmount(expense, formatCurrency, formatNumber, t)} />
+        <Info label={t("common.receipt")} value={expenseReceiptSummary(expense, t)} />
+        <Info label={t("common.descriptionLabel")} value={expense.description || "—"} />
       </div>
     </Link>
   );
 }
 
 function ExpenseReceiptStatus({ expense }: { expense: Expense }) {
+  const { t } = useI18n();
   const posting = expense.financialPosting;
   if (!posting) {
     return (
       <span className="inline-flex rounded-full bg-red-100 px-3 py-1 text-xs font-semibold text-red-800">
-        Missing posting
+        {t("expense.missingPosting")}
       </span>
     );
   }
 
   const label = posting.outstandingReceipt
-    ? `Outstanding · ${receiptStatusLabel(posting.receiptStatus)}`
-    : receiptStatusLabel(posting.receiptStatus);
+    ? `${t("expense.outstanding")} · ${receiptStatusLabel(posting.receiptStatus, t)}`
+    : receiptStatusLabel(posting.receiptStatus, t);
 
   return (
     <Link
@@ -539,11 +545,11 @@ function ExpenseReceiptStatus({ expense }: { expense: Expense }) {
   );
 }
 
-function expenseReceiptSummary(expense: Expense) {
+function expenseReceiptSummary(expense: Expense, t: Translate = translateEnglish) {
   const posting = expense.financialPosting;
-  if (!posting) return "Missing posting";
-  const label = receiptStatusLabel(posting.receiptStatus);
-  return posting.outstandingReceipt ? `Outstanding · ${label}` : label;
+  if (!posting) return t("expense.missingPosting");
+  const label = receiptStatusLabel(posting.receiptStatus, t);
+  return posting.outstandingReceipt ? `${t("expense.outstanding")} · ${label}` : label;
 }
 
 function Info({ label, value }: { label: string; value: string }) {
@@ -555,27 +561,18 @@ function Info({ label, value }: { label: string; value: string }) {
   );
 }
 
-function formatExpenseAmount(expense: Expense) {
+function formatExpenseAmount(
+  expense: Expense,
+  formatCurrency: ReturnType<typeof useI18n>["formatCurrency"],
+  formatNumber: ReturnType<typeof useI18n>["formatNumber"],
+  t: Translate = translateEnglish,
+) {
   const amount = expense.totalAmount ?? expense.amount;
   const unitCode = `${expense.currencyCode || ""} ${expense.valueUnitId || ""} ${expense.valueUnitLabel || ""}`.toUpperCase();
   if (unitCode.includes("GOLD")) {
-    return `${formatNumber(amount)} g gold`;
+    return `${formatNumber(amount, { minimumFractionDigits: 0, maximumFractionDigits: 3 })} ${t("account.goldUnit")}`;
   }
-  return new Intl.NumberFormat("pt-BR", {
-    style: "currency",
-    currency: "BRL",
-  }).format(amount);
-}
-
-function formatNumber(value: number) {
-  return new Intl.NumberFormat("en-US", {
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 3,
-  }).format(value);
-}
-
-function formatDate(value?: string) {
-  return value || "—";
+  return formatCurrency(amount, "BRL");
 }
 
 function readFlash(state: unknown) {
@@ -611,12 +608,12 @@ function priceListItemLabel(item: PriceListItem) {
   return `${item.description} · ${item.code}${inactiveSuffix}`;
 }
 
-function displayExpenseCategory(expense: Expense) {
+function displayExpenseCategory(expense: Expense, t: Translate = translateEnglish) {
   if (expense.itemType === "CANTEEN") {
-    return "Canteen";
+    return t("expense.canteen");
   }
   if (expense.itemType === "ADMINISTRATIVE") {
-    return "Administrative";
+    return t("expense.administrative");
   }
   return expense.expenseCategoryLabel || expense.expenseCategoryId;
 }

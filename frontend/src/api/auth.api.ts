@@ -1,4 +1,4 @@
-import { apiFetch } from "./client";
+import { apiFetch, clearLocalSessionTransport } from "./client";
 import type {
   AuthAccount,
   AuthSession,
@@ -21,8 +21,12 @@ export function login(request: LoginRequest): Promise<AuthSession> {
   });
 }
 
-export function logout(): Promise<void> {
-  return apiFetch<void>("/auth/logout", { method: "POST" });
+export async function logout(): Promise<void> {
+  try {
+    await apiFetch<void>("/auth/logout", { method: "POST" });
+  } finally {
+    clearLocalSessionTransport();
+  }
 }
 
 export function loadAuthSession(): Promise<AuthSession | null> {
@@ -119,20 +123,23 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
 
-export function changePassword(request: ChangePasswordRequest): Promise<void> {
-  return apiFetch<void>("/auth/password/change", {
+export async function changePassword(request: ChangePasswordRequest): Promise<void> {
+  await apiFetch<void>("/auth/password/change", {
     method: "POST",
     body: JSON.stringify(request),
   });
+  clearLocalSessionTransport();
 }
 
-export function resetPassword(
+export async function resetPassword(
   request: ResetPasswordRequest,
 ): Promise<PasswordResetResult> {
-  return apiFetch<PasswordResetResult>("/auth/password/reset", {
+  const result = await apiFetch<PasswordResetResult>("/auth/password/reset", {
     method: "POST",
     body: JSON.stringify(request),
   });
+  clearLocalSessionTransport();
+  return result;
 }
 
 export async function listAuthAccounts(): Promise<AuthAccount[]> {
@@ -167,6 +174,9 @@ export const AUTHENTICATION_ACCOUNT_FEEDBACK_EVENT =
 export type AuthenticationAccountFeedback = {
   kind: "success" | "error";
   message: string;
+  code?: "account_ready" | "account_not_created";
+  login?: string;
+  detail?: string;
 };
 
 export async function createAuthAccount(
@@ -179,13 +189,18 @@ export async function createAuthAccount(
     });
     notifyAuthenticationAccountFeedback({
       kind: "success",
+      code: "account_ready",
+      login: account.login,
       message: `Authentication account ${account.login} is ready.`,
     });
     return account;
   } catch (error) {
+    const feedback = authenticationAccountErrorFeedback(error);
     notifyAuthenticationAccountFeedback({
       kind: "error",
-      message: authenticationAccountErrorMessage(error),
+      code: "account_not_created",
+      message: feedback.message,
+      detail: feedback.detail,
     });
     throw error;
   }
@@ -203,20 +218,28 @@ function notifyAuthenticationAccountFeedback(
   );
 }
 
-function authenticationAccountErrorMessage(error: unknown): string {
+function authenticationAccountErrorFeedback(error: unknown): { message: string; detail?: string } {
   if (typeof error === "object" && error !== null && "fields" in error) {
     const fields = (error as { fields?: Record<string, string> }).fields;
     const fieldMessage = fields
       ? Object.values(fields).find((message) => message.trim() !== "")
       : undefined;
     if (fieldMessage) {
-      return `Authentication account was not created. ${fieldMessage}`;
+      return {
+        message: `Authentication account was not created. ${fieldMessage}`,
+        detail: fieldMessage,
+      };
     }
   }
   if (error instanceof Error && error.message.trim()) {
-    return `Authentication account was not created. ${error.message}`;
+    return {
+      message: `Authentication account was not created. ${error.message}`,
+      detail: error.message,
+    };
   }
-  return "Authentication account was not created. Review the account details and try again.";
+  return {
+    message: "Authentication account was not created. Review the account details and try again.",
+  };
 }
 
 export function setAuthAccountActive(

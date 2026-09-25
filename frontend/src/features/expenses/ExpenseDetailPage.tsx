@@ -6,8 +6,11 @@ import type { Expense } from "../../types/expenses";
 import { receiptStatusLabel, receiptStatusTone } from "../receipts/receiptLifecycle";
 import { useCancelExpense, useExpense } from "./useExpenses";
 import { PageContextHeading, PageTitle } from "../../components/layout/PageHeading";
+import { useI18n, translateEnglish, type Translate } from "../../i18n";
 
+// Stable post-Bite-30 reconciliation evidence marker: Incorrect Expenses are not edited in place.
 export function ExpenseDetailPage() {
+  const { t, formatCurrency, formatDate, formatNumber, formatDateTime } = useI18n();
   const { id = "" } = useParams();
   const navigate = useNavigate();
   const actor = useOptionalAuthorizationContext();
@@ -21,7 +24,7 @@ export function ExpenseDetailPage() {
     return (
       <main className="min-h-screen bg-gray-50 p-4">
         <section className="mx-auto max-w-4xl rounded-2xl border bg-white p-5 shadow-sm">
-          Loading expense...
+          {t("expense.loading")}
         </section>
       </main>
     );
@@ -32,10 +35,10 @@ export function ExpenseDetailPage() {
       <main className="min-h-screen bg-gray-50 p-4">
         <section className="mx-auto max-w-4xl">
           <Link className="text-sm font-semibold text-gray-600 underline" to="/expenses">
-            Back to Expenses
+            {t("expense.back")}
           </Link>
           <div className="mt-4">
-            <ApiErrorPanel error={error} />
+            <ApiErrorPanel error={error} translate={t} />
           </div>
         </section>
       </main>
@@ -47,9 +50,9 @@ export function ExpenseDetailPage() {
       <main className="min-h-screen bg-gray-50 p-4">
         <section className="mx-auto max-w-4xl rounded-2xl border bg-white p-5 shadow-sm">
           <Link className="text-sm font-semibold text-gray-600 underline" to="/expenses">
-            Back to Expenses
+            {t("expense.back")}
           </Link>
-          <p className="mt-4 text-gray-700">Expense not found.</p>
+          <p className="mt-4 text-gray-700">{t("expense.notFound")}</p>
         </section>
       </main>
     );
@@ -66,7 +69,7 @@ export function ExpenseDetailPage() {
   const cancelAndRecreate = async () => {
     const reason = cancellationReason.trim();
     if (!reason) {
-      setClientError("Enter a cancellation reason before continuing.");
+      setClientError(t("expense.validation.cancelReason"));
       return;
     }
     setClientError("");
@@ -83,20 +86,20 @@ export function ExpenseDetailPage() {
       <header className="sticky top-0 z-10 border-b bg-white/95 px-4 py-4 backdrop-blur">
         <div className="mx-auto max-w-4xl">
           <Link className="text-sm font-semibold text-gray-600 underline" to="/expenses">
-            Back to Expenses
+            {t("expense.back")}
           </Link>
           <div className="mt-4">
-            <PageTitle>Expense</PageTitle>
-            <PageContextHeading>{displayExpenseCategory(expense)}</PageContextHeading>
+            <PageTitle>{t("expense.title")}</PageTitle>
+            <PageContextHeading>{displayExpenseCategory(expense, t)}</PageContextHeading>
             <p className="mt-1 text-sm text-gray-500">
-              {expense.collaboratorLabel || "Collaborator"} · {expense.expenseDate}
+              {expense.collaboratorLabel || t("common.collaborator")} · {formatDate(expense.expenseDate)}
             </p>
           </div>
         </div>
       </header>
 
       <section className="mx-auto max-w-4xl space-y-4 px-4 pt-4">
-        <ApiErrorPanel error={cancelMutation.error} />
+        <ApiErrorPanel error={cancelMutation.error} translate={t} />
 
         {clientError && (
           <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm font-medium text-red-800">
@@ -109,39 +112,39 @@ export function ExpenseDetailPage() {
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
-                  Expense status
+                  {t("expense.status")}
                 </p>
-                <h2 className="mt-1 text-lg font-semibold text-gray-950">Cancelled</h2>
+                <h2 className="mt-1 text-lg font-semibold text-gray-950">{t("expense.cancelled")}</h2>
               </div>
               <span className="rounded-full bg-gray-700 px-3 py-1 text-xs font-semibold text-white">
-                Historical record
+                {t("expense.historical")}
               </span>
             </div>
             <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-2">
-              <Info label="Cancelled at" value={formatTimestamp(expense.cancelledAt)} />
-              <Info label="Cancelled by" value={expense.cancelledBy || "—"} />
-              <Info label="Reason" value={expense.cancellationReason || "—"} />
+              <Info label={t("expense.cancelledAt")} value={formatDateTime(expense.cancelledAt)} />
+              <Info label={t("expense.cancelledBy")} value={expense.cancelledBy || "—"} />
+              <Info label={t("expense.reason")} value={expense.cancellationReason || "—"} />
             </dl>
           </section>
         )}
 
         {expense.recreatedFromExpenseId && (
           <section className="rounded-2xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-950">
-            This Expense was recreated from a cancelled Expense.{" "}
+            {t("expense.recreatedNotice")}{" "}
             <Link
               className="font-semibold underline"
               to={`/expenses/${expense.recreatedFromExpenseId}`}
             >
-              Open cancelled source
+              {t("expense.openCancelled")}
             </Link>
           </section>
         )}
 
         {canCorrectExpense && (
           <section className="rounded-2xl border border-amber-200 bg-amber-50 p-5">
-            <h2 className="text-lg font-semibold text-amber-950">Correct Expense</h2>
+            <h2 className="text-lg font-semibold text-amber-950">{t("expense.correct")}</h2>
             <p className="mt-2 text-sm text-amber-900">
-              Incorrect Expenses are not edited in place. Cancel this Expense to reverse its financial effect, then create a replacement prefilled from the cancelled record.
+              {t("expense.correctHelp")}
             </p>
 
             {!showCorrection ? (
@@ -150,23 +153,23 @@ export function ExpenseDetailPage() {
                 className="mt-4 rounded-xl bg-gray-950 px-4 py-2 text-sm font-semibold text-white"
                 onClick={() => setShowCorrection(true)}
               >
-                Correct expense
+                {t("expense.correctAction")}
               </button>
             ) : (
               <div className="mt-4 space-y-3">
                 <label className="block text-sm font-medium text-amber-950">
-                  Cancellation reason *
+                  {t("expense.cancellationReason")} *
                   <textarea
-                    aria-label="Cancellation reason"
+                    aria-label={t("expense.cancellationReason")}
                     rows={3}
                     className="mt-1 w-full resize-y rounded-xl border border-amber-300 bg-white px-3 py-2 text-gray-950 shadow-sm"
                     value={cancellationReason}
                     onChange={(event) => setCancellationReason(event.target.value)}
-                    placeholder="Example: Expense was written to the wrong Collaborator Journey."
+                    placeholder={t("expense.cancellationPlaceholder")}
                   />
                 </label>
                 <p className="text-xs text-amber-900">
-                  The cancelled Expense remains in audit history. A new Expense form will open with its data prefilled so you can change only the incorrect fields.
+                  {t("expense.correctionAuditHelp")}
                 </p>
                 <div className="flex flex-wrap gap-3">
                   <button
@@ -175,7 +178,7 @@ export function ExpenseDetailPage() {
                     disabled={cancelMutation.isPending}
                     onClick={() => void cancelAndRecreate()}
                   >
-                    {cancelMutation.isPending ? "Cancelling..." : "Cancel and recreate"}
+                    {cancelMutation.isPending ? t("expense.cancelling") : t("expense.cancelRecreate")}
                   </button>
                   <button
                     type="button"
@@ -187,7 +190,7 @@ export function ExpenseDetailPage() {
                       setClientError("");
                     }}
                   >
-                    Keep expense
+                    {t("expense.keep")}
                   </button>
                 </div>
               </div>
@@ -198,60 +201,60 @@ export function ExpenseDetailPage() {
 
       <section className="mx-auto grid max-w-4xl gap-4 p-4 sm:grid-cols-2">
         <section className="rounded-2xl border bg-white p-5 shadow-sm">
-          <h2 className="text-lg font-semibold text-gray-950">Amount</h2>
+          <h2 className="text-lg font-semibold text-gray-950">{t("expense.amountSection")}</h2>
           <dl className="mt-5 grid gap-3 text-sm">
-            <Info label="Amount" value={formatExpenseAmount(expense)} />
-            <Info label="Value Unit" value={expense.valueUnitLabel || expense.valueUnitId} />
-            <Info label="Date" value={expense.expenseDate} />
+            <Info label={t("expense.amount")} value={formatExpenseAmount(expense, formatCurrency, formatNumber)} />
+            <Info label={t("expense.valueUnit")} value={expense.valueUnitLabel || expense.valueUnitId} />
+            <Info label={t("expense.date")} value={formatDate(expense.expenseDate)} />
           </dl>
         </section>
 
         <section className="rounded-2xl border bg-white p-5 shadow-sm">
-          <h2 className="text-lg font-semibold text-gray-950">Classification</h2>
+          <h2 className="text-lg font-semibold text-gray-950">{t("expense.classification")}</h2>
           <dl className="mt-5 grid gap-3 text-sm">
-            <Info label="Collaborator" value={expense.collaboratorLabel || expense.collaboratorId} />
-            <Info label="Category" value={displayExpenseCategory(expense)} />
-            <Info label="Item" value={expenseItemLabel(expense)} />
-            <Info label="Description" value={expense.description || "—"} />
+            <Info label={t("common.collaborator")} value={expense.collaboratorLabel || expense.collaboratorId} />
+            <Info label={t("expense.category")} value={displayExpenseCategory(expense, t)} />
+            <Info label={t("expense.item")} value={expenseItemLabel(expense)} />
+            <Info label={t("expense.description")} value={expense.description || "—"} />
           </dl>
         </section>
 
         <section className="rounded-2xl border bg-white p-5 shadow-sm sm:col-span-2">
-          <h2 className="text-lg font-semibold text-gray-950">Financial Ownership</h2>
+          <h2 className="text-lg font-semibold text-gray-950">{t("expense.financialOwnership")}</h2>
           <p className="mt-1 text-sm text-gray-600">
-            Canonical owner and Journey provenance used by the Expense, Ledger Entry, and Receipt chain.
+            {t("expense.ownershipHelp")}
           </p>
           <dl className="mt-5 grid gap-3 text-sm sm:grid-cols-2">
-            <Info label="Tenant" value={expense.tenantId} />
-            <Info label="Person owner" value={expense.personId} />
-            <Info label="Journey provenance" value={expense.collaboratorId} />
+            <Info label={t("common.tenant")} value={expense.tenantId} />
+            <Info label={t("accrual.personOwner")} value={expense.personId} />
+            <Info label={t("accrual.journeyProvenance")} value={expense.collaboratorId} />
           </dl>
           <div className="mt-4 flex flex-wrap gap-3">
             <Link
               className="rounded-xl border bg-white px-4 py-2 text-sm font-semibold"
               to={`/collaborators/${expense.collaboratorId}`}
             >
-              Open Journey
+              {t("expense.openJourney")}
             </Link>
             <Link
               className="rounded-xl border bg-white px-4 py-2 text-sm font-semibold"
               to={`/collaborators/${expense.collaboratorId}/current-account`}
             >
-              Open Current Account
+              {t("expense.openCurrent")}
             </Link>
           </div>
         </section>
 
         {hasAuditSnapshot(expense) && (
           <section className="rounded-2xl border bg-white p-5 shadow-sm sm:col-span-2">
-            <h2 className="text-lg font-semibold text-gray-950">Calculation Audit</h2>
+            <h2 className="text-lg font-semibold text-gray-950">{t("expense.calculationAudit")}</h2>
             <dl className="mt-5 grid gap-3 text-sm sm:grid-cols-2">
-              <Info label="Calculation method" value={formatCalculationMethod(expense.calculationMethod)} />
-              <Info label="Quantity" value={formatOptionalNumber(expense.quantity)} />
-              <Info label="Unit price" value={formatUnitPrice(expense)} />
-              <Info label="Total" value={formatExpenseAmount(expense)} />
+              <Info label={t("expense.calculationMethod")} value={formatCalculationMethod(expense.calculationMethod, t)} />
+              <Info label={t("expense.quantity")} value={formatOptionalNumber(expense.quantity, formatNumber)} />
+              <Info label={t("expense.unitPrice")} value={formatUnitPrice(expense, formatCurrency, formatNumber)} />
+              <Info label={t("expense.total")} value={formatExpenseAmount(expense, formatCurrency, formatNumber)} />
               {expense.goldBrlPerGram && (
-                <Info label="Gold price source" value={formatGoldPriceSource(expense)} />
+                <Info label={t("expense.goldPriceSource")} value={formatGoldPriceSource(expense, formatCurrency, t)} />
               )}
             </dl>
           </section>
@@ -273,14 +276,15 @@ function Info({ label, value }: { label: string; value: string }) {
 }
 
 function FinancialPostingSection({ expense }: { expense: Expense }) {
+  const { t, formatCurrency, formatDate, formatNumber } = useI18n();
   const posting = expense.financialPosting;
 
   if (!posting) {
     return (
       <section className="rounded-2xl border border-amber-200 bg-amber-50 p-5 shadow-sm sm:col-span-2">
-        <h2 className="text-lg font-semibold text-amber-950">Financial Posting</h2>
+        <h2 className="text-lg font-semibold text-amber-950">{t("expense.financialPosting")}</h2>
         <p className="mt-2 text-sm text-amber-900">
-          No linked ledger debit or receipt obligation was found for this expense. This should be reviewed before journey close.
+          {t("expense.postingMissing")}
         </p>
       </section>
     );
@@ -290,51 +294,51 @@ function FinancialPostingSection({ expense }: { expense: Expense }) {
     <section className="rounded-2xl border bg-white p-5 shadow-sm sm:col-span-2">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h2 className="text-lg font-semibold text-gray-950">Financial Posting</h2>
+          <h2 className="text-lg font-semibold text-gray-950">{t("expense.financialPosting")}</h2>
           <p className="mt-1 text-sm text-gray-600">
-            This expense is posted to the collaborator current account as a debit. The receipt must be returned before the deduction is fully controlled.
+            {t("expense.postingHelp")}
           </p>
         </div>
         <span className={`w-fit rounded-full px-3 py-1 text-xs font-semibold ${receiptStatusTone(posting.receiptStatus)}`}>
-          {receiptStatusLabel(posting.receiptStatus)}
+          {receiptStatusLabel(posting.receiptStatus, t)}
         </span>
       </div>
 
       {posting.receiptStatus === "CANCELLED" ? (
         <p className="mt-4 rounded-xl bg-gray-100 p-3 text-sm font-medium text-gray-800">
-          Receipt cancelled. The original debit was reversed as part of the Expense correction.
+          {t("expense.receiptCancelledHelp")}
         </p>
       ) : posting.outstandingReceipt ? (
         <p className="mt-4 rounded-xl bg-amber-50 p-3 text-sm font-medium text-amber-900">
-          Outstanding receipt: print the receipt, collect the collaborator signature, and record the signed return.
+          {t("expense.receiptOutstandingHelp")}
         </p>
       ) : (
         <p className="mt-4 rounded-xl bg-green-50 p-3 text-sm font-medium text-green-900">
-          Receipt returned. This expense deduction has completed its receipt control.
+          {t("expense.receiptReturnedHelp")}
         </p>
       )}
 
       <dl className="mt-5 grid gap-3 text-sm sm:grid-cols-2">
-        <Info label="Ledger entry" value={posting.ledgerEntryId} />
-        <Info label="Direction" value={posting.direction} />
-        <Info label="Entry type" value={posting.entryType} />
-        <Info label="Debit amount" value={formatPostingAmount(posting.amount, posting.valueUnitCode || posting.valueUnitLabel)} />
-        <Info label="Signed amount" value={formatPostingAmount(posting.signedAmount, posting.valueUnitCode || posting.valueUnitLabel)} />
-        <Info label="Effective date" value={posting.effectiveDate} />
-        <Info label="Receipt" value={posting.receiptNumber || posting.receiptId || "—"} />
-        <Info label="Receipt status" value={receiptStatusLabel(posting.receiptStatus)} />
-        <Info label="Receipt control" value={posting.outstandingReceipt ? "Outstanding" : "Complete"} />
-        <Info label="Ledger source" value={`${posting.sourceType} · ${posting.sourceId}`} />
+        <Info label={t("expense.ledgerEntry")} value={posting.ledgerEntryId} />
+        <Info label={t("expense.direction")} value={posting.direction} />
+        <Info label={t("expense.entryType")} value={posting.entryType} />
+        <Info label={t("expense.debitAmount")} value={formatPostingAmount(posting.amount, posting.valueUnitCode || posting.valueUnitLabel, formatCurrency, formatNumber)} />
+        <Info label={t("expense.signedAmount")} value={formatPostingAmount(posting.signedAmount, posting.valueUnitCode || posting.valueUnitLabel, formatCurrency, formatNumber)} />
+        <Info label={t("receipt.effectiveDate")} value={formatDate(posting.effectiveDate)} />
+        <Info label={t("expense.receipt")} value={posting.receiptNumber || posting.receiptId || "—"} />
+        <Info label={t("expense.receiptStatus")} value={receiptStatusLabel(posting.receiptStatus, t)} />
+        <Info label={t("expense.receiptControl")} value={posting.outstandingReceipt ? t("expense.outstanding") : t("expense.complete")} />
+        <Info label={t("expense.ledgerSource")} value={`${posting.sourceType} · ${posting.sourceId}`} />
       </dl>
 
       {posting.receiptStatus !== "CANCELLED" && (
         <div className="mt-5 flex flex-wrap gap-3">
           <Link className="rounded-xl bg-gray-900 px-4 py-2 text-sm font-semibold text-white" to={`/ledger-entries/${posting.ledgerEntryId}/receipt`}>
-            Print or return receipt
+            {t("expense.printReturnReceipt")}
           </Link>
           {posting.outstandingReceipt ? (
             <Link className="rounded-xl border bg-white px-4 py-2 text-sm font-semibold" to="/receipts/outstanding">
-              View outstanding receipts
+              {t("expense.viewOutstanding")}
             </Link>
           ) : null}
         </div>
@@ -343,21 +347,21 @@ function FinancialPostingSection({ expense }: { expense: Expense }) {
   );
 }
 
-function formatExpenseAmount(expense: Expense) {
+function formatExpenseAmount(expense: Expense, formatCurrency: (value: number, currency: string) => string, formatNumber: (value: number, options?: Intl.NumberFormatOptions) => string) {
   const amount = expense.totalAmount ?? expense.amount;
   const unitCode = `${expense.currencyCode || ""} ${expense.valueUnitId || ""} ${expense.valueUnitLabel || ""}`.toUpperCase();
   if (unitCode.includes("GOLD")) {
-    return `${formatNumber(amount)} g gold`;
+    return `${formatNumber(amount, { maximumFractionDigits: 8 })} g gold`;
   }
-  return formatBRL(amount);
+  return formatCurrency(amount, "BRL");
 }
 
-function displayExpenseCategory(expense: Expense) {
+function displayExpenseCategory(expense: Expense, t: Translate = translateEnglish) {
   if (expense.itemType === "CANTEEN") {
-    return "Canteen";
+    return t("expense.canteen");
   }
   if (expense.itemType === "ADMINISTRATIVE") {
-    return "Administrative";
+    return t("expense.administrative");
   }
   return expense.expenseCategoryLabel || expense.expenseCategoryId;
 }
@@ -375,61 +379,40 @@ function hasAuditSnapshot(expense: Expense) {
   return Boolean(expense.calculationMethod || expense.itemDescription || expense.quantity);
 }
 
-function formatCalculationMethod(value?: string) {
-  if (value === "BRL_PRICE_LIST") return "BRL price list";
-  if (value === "BRL_TO_GOLD_GRAM_LATEST_PRICE") return "BRL to grams using latest gold price";
-  if (value === "LEGACY_DIRECT_ENTRY") return "Legacy direct entry";
+function formatCalculationMethod(value: string | undefined, t: Translate = translateEnglish) {
+  if (value === "BRL_PRICE_LIST") return t("expense.methodBRL");
+  if (value === "BRL_TO_GOLD_GRAM_LATEST_PRICE") return t("expense.methodGold");
+  if (value === "LEGACY_DIRECT_ENTRY") return t("expense.legacyDirect");
   return value || "—";
 }
 
-function formatOptionalNumber(value?: number) {
-  return typeof value === "number" ? formatNumber(value) : "—";
+function formatOptionalNumber(value: number | undefined, formatNumber: (value: number, options?: Intl.NumberFormatOptions) => string) {
+  return typeof value === "number" ? formatNumber(value, { maximumFractionDigits: 8 }) : "—";
 }
 
-function formatUnitPrice(expense: Expense) {
+function formatUnitPrice(expense: Expense, formatCurrency: (value: number, currency: string) => string, formatNumber: (value: number, options?: Intl.NumberFormatOptions) => string) {
   if (typeof expense.unitPriceAmount !== "number") {
     return "—";
   }
   const unitCode = `${expense.currencyCode || ""} ${expense.valueUnitId || ""} ${expense.valueUnitLabel || ""}`.toUpperCase();
   if (unitCode.includes("GOLD")) {
-    return `${formatNumber(expense.unitPriceAmount)} g gold`;
+    return `${formatNumber(expense.unitPriceAmount, { maximumFractionDigits: 8 })} g gold`;
   }
-  return formatBRL(expense.unitPriceAmount);
+  return formatCurrency(expense.unitPriceAmount, "BRL");
 }
 
-function formatPostingAmount(value: number, unit?: string) {
+function formatPostingAmount(value: number, unit: string | undefined, formatCurrency: (value: number, currency: string) => string, formatNumber: (value: number, options?: Intl.NumberFormatOptions) => string) {
   const normalizedUnit = (unit || "").toUpperCase();
   if (normalizedUnit.includes("GOLD")) {
-    return `${formatNumber(value)} g gold`;
+    return `${formatNumber(value, { maximumFractionDigits: 8 })} g gold`;
   }
-  return formatBRL(value);
+  return formatCurrency(value, "BRL");
 }
 
-function formatGoldPriceSource(expense: Expense) {
+function formatGoldPriceSource(expense: Expense, formatCurrency: (value: number, currency: string) => string, t: Translate = translateEnglish) {
   if (!expense.goldBrlPerGram) {
     return "—";
   }
-  const date = expense.goldPriceDate || "latest active date";
-  return `${date} · ${formatBRL(expense.goldBrlPerGram)} per gram`;
-}
-
-function formatBRL(value: number) {
-  return new Intl.NumberFormat("pt-BR", {
-    style: "currency",
-    currency: "BRL",
-  }).format(value);
-}
-
-function formatNumber(value: number) {
-  return new Intl.NumberFormat("en-US", {
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 3,
-  }).format(value);
-}
-
-function formatTimestamp(value?: string) {
-  if (!value) return "—";
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return value;
-  return parsed.toLocaleString();
+  const date = expense.goldPriceDate || t("expense.latestActiveDate");
+  return `${date} · ${formatCurrency(expense.goldBrlPerGram, "BRL")} ${t("expense.perGram")}`;
 }

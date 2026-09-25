@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { TopBar } from "./TopBar";
 import type { AuthSession, AuthTenantOption } from "../../types/auth";
 import type { AuthzCurrentActor } from "../../types/authz";
+import { I18nProvider, LOCALE_STORAGE_KEY } from "../../i18n";
 
 let container: HTMLDivElement;
 let root: Root | null;
@@ -24,6 +25,7 @@ beforeEach(() => {
   container = document.createElement("div");
   document.body.appendChild(container);
   root = null;
+  window.localStorage.setItem(LOCALE_STORAGE_KEY, "en-US");
 });
 
 afterEach(async () => {
@@ -31,6 +33,7 @@ afterEach(async () => {
     await act(async () => root?.unmount());
   }
   document.body.removeChild(container);
+  window.localStorage.removeItem(LOCALE_STORAGE_KEY);
 });
 
 describe("TopBar support access provenance", () => {
@@ -50,6 +53,7 @@ describe("TopBar support access provenance", () => {
     act(() => {
       root = createRoot(container);
       root.render(
+        <I18nProvider>
         <TopBar
           session={session}
           tenants={tenants}
@@ -58,7 +62,8 @@ describe("TopBar support access provenance", () => {
           onTenantChange={vi.fn()}
           onTenantOptionsRefresh={vi.fn()}
           onLogout={vi.fn()}
-        />,
+        />
+        </I18nProvider>,
       );
     });
 
@@ -81,6 +86,7 @@ describe("TopBar support access provenance", () => {
     act(() => {
       root = createRoot(container);
       root.render(
+        <I18nProvider>
         <TopBar
           session={session}
           tenants={tenants}
@@ -89,7 +95,8 @@ describe("TopBar support access provenance", () => {
           onTenantChange={vi.fn()}
           onTenantOptionsRefresh={vi.fn()}
           onLogout={vi.fn()}
-        />,
+        />
+        </I18nProvider>,
       );
     });
 

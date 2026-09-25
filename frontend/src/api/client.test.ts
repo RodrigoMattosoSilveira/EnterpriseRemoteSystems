@@ -1,5 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { apiFetch, ApiError } from "./client";
+import {
+  apiFetch,
+  ApiError,
+  LOCAL_SESSION_STORAGE_KEY,
+  isSupersededLocalSessionResponse,
+  localSessionTokenForRequest,
+  shouldUseLocalSessionTransport,
+  syncLocalSessionTransportResponse,
+} from "./client";
 import { SELECTED_TENANT_STORAGE_KEY } from "./tenantSelection";
 import {
   subscribeAuthenticationRequired,
@@ -17,6 +25,7 @@ const fetchCalls: FetchCall[] = [];
 beforeEach(() => {
   fetchCalls.length = 0;
   window.localStorage.clear();
+  window.sessionStorage.clear();
   vi.stubGlobal(
     "fetch",
     vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
@@ -32,9 +41,130 @@ beforeEach(() => {
 afterEach(() => {
   vi.unstubAllGlobals();
   window.localStorage.clear();
+  window.sessionStorage.clear();
 });
 
 describe("apiFetch authenticated-session transport", () => {
+
+  it("limits the LOCAL session-header transport to private-LAN HTTP origins", () => {
+    expect(
+      shouldUseLocalSessionTransport({ protocol: "http:", hostname: "192.168.2.154" }),
+    ).toBe(true);
+    expect(
+      shouldUseLocalSessionTransport({ protocol: "http:", hostname: "10.0.0.22" }),
+    ).toBe(true);
+    expect(
+      shouldUseLocalSessionTransport({ protocol: "http:", hostname: "172.20.4.7" }),
+    ).toBe(true);
+    expect(
+      shouldUseLocalSessionTransport({ protocol: "http:", hostname: "localhost" }),
+    ).toBe(false);
+    expect(
+      shouldUseLocalSessionTransport({ protocol: "https:", hostname: "192.168.2.154" }),
+    ).toBe(false);
+  });
+
+  it("stores, reuses, and clears the LOCAL session token without exposing it outside the LAN origin", () => {
+    const location = { protocol: "http:", hostname: "192.168.2.154" };
+    const issued = new Response(JSON.stringify({ data: { ok: true } }), {
+      status: 200,
+      headers: { "X-ERS-Local-Session": "local-session-token" },
+    });
+
+    syncLocalSessionTransportResponse(issued, location, window.sessionStorage);
+    expect(window.sessionStorage.getItem(LOCAL_SESSION_STORAGE_KEY)).toBe(
+      "local-session-token",
+    );
+    expect(localSessionTokenForRequest(location, window.sessionStorage)).toBe(
+      "local-session-token",
+    );
+    expect(
+      localSessionTokenForRequest(
+        { protocol: "https:", hostname: "192.168.2.154" },
+        window.sessionStorage,
+      ),
+    ).toBe("");
+
+    syncLocalSessionTransportResponse(
+      new Response(JSON.stringify({ error: { code: "authentication_required" } }), {
+        status: 401,
+      }),
+      location,
+      window.sessionStorage,
+      "local-session-token",
+    );
+    expect(window.sessionStorage.getItem(LOCAL_SESSION_STORAGE_KEY)).toBeNull();
+  });
+
+  it("does not let a stale pre-login 401 erase a newer LOCAL session token", () => {
+    const location = { protocol: "http:", hostname: "192.168.2.154" };
+    window.sessionStorage.setItem(LOCAL_SESSION_STORAGE_KEY, "new-login-token");
+
+    syncLocalSessionTransportResponse(
+      new Response(JSON.stringify({ error: { code: "session_expired" } }), {
+        status: 401,
+      }),
+      location,
+      window.sessionStorage,
+      "",
+    );
+
+    expect(window.sessionStorage.getItem(LOCAL_SESSION_STORAGE_KEY)).toBe(
+      "new-login-token",
+    );
+  });
+
+  it("does not let an old-token 401 erase a replacement LOCAL session token", () => {
+    const location = { protocol: "http:", hostname: "192.168.2.154" };
+    window.sessionStorage.setItem(LOCAL_SESSION_STORAGE_KEY, "replacement-token");
+
+    syncLocalSessionTransportResponse(
+      new Response(JSON.stringify({ error: { code: "session_expired" } }), {
+        status: 401,
+      }),
+      location,
+      window.sessionStorage,
+      "older-request-token",
+    );
+
+    expect(window.sessionStorage.getItem(LOCAL_SESSION_STORAGE_KEY)).toBe(
+      "replacement-token",
+    );
+  });
+
+  it("recognizes stale 401 responses that must not invalidate a newer LOCAL login", () => {
+    const location = { protocol: "http:", hostname: "192.168.2.154" };
+    window.sessionStorage.setItem(LOCAL_SESSION_STORAGE_KEY, "new-login-token");
+
+    expect(
+      isSupersededLocalSessionResponse(
+        location,
+        window.sessionStorage,
+        "",
+      ),
+    ).toBe(true);
+    expect(
+      isSupersededLocalSessionResponse(
+        location,
+        window.sessionStorage,
+        "older-request-token",
+      ),
+    ).toBe(true);
+    expect(
+      isSupersededLocalSessionResponse(
+        location,
+        window.sessionStorage,
+        "new-login-token",
+      ),
+    ).toBe(false);
+    expect(
+      isSupersededLocalSessionResponse(
+        { protocol: "https:", hostname: "192.168.2.154" },
+        window.sessionStorage,
+        "older-request-token",
+      ),
+    ).toBe(false);
+  });
   it("sends same-origin cookies and a tenant selection without actor identity headers", async () => {
     await apiFetch<{ ok: boolean }>("/people");
 
@@ -54,6 +184,8 @@ describe("apiFetch authenticated-session transport", () => {
         "X-Authorized-By": "spoofed-legacy-actor",
         "X-Tenant-ID": "spoofed-tenant",
         "X-Reauthenticated-At": "2026-07-23T12:00:00Z",
+        "X-ERS-Local-LAN-Proxy": "spoofed",
+        "X-ERS-Local-Session": "spoofed-token",
       },
     });
 
@@ -63,6 +195,8 @@ describe("apiFetch authenticated-session transport", () => {
     expect(headers["X-Authorized-By"]).toBeUndefined();
     expect(headers["X-Tenant-ID"]).toBe("default");
     expect(headers["X-Reauthenticated-At"]).toBe("2026-07-23T12:00:00Z");
+    expect(headers["X-ERS-Local-LAN-Proxy"]).toBeUndefined();
+    expect(headers["X-ERS-Local-Session"]).toBeUndefined();
   });
 
   it("uses the explicitly selected tenant", async () => {

@@ -1,0 +1,20 @@
+@startuml
+title História operacional conectada — da identidade à evidência
+
+left to right direction
+
+rectangle "Identidade\nPessoa → Locatário → Jornada" as Identidade
+rectangle "Operação\nPeríodo de Trabalho → Produção" as Operacao
+rectangle "Valor\nApropriação → Despesa" as Valor
+rectangle "Controle\nConta Corrente → Recibo" as Controle
+
+Identidade --> Operacao : quem trabalha e em qual contexto
+Operacao --> Valor : trabalho e produção geram valor
+Valor --> Controle : crédito e débito preservam a origem
+
+note bottom of Controle
+O saldo e a pendência continuam
+ligados aos eventos que os originaram.
+end note
+
+@enduml

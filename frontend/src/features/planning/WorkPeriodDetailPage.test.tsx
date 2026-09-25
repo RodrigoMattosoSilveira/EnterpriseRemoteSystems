@@ -4,6 +4,8 @@ import { createRoot, type Root } from "react-dom/client";
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { WorkPeriodDetailPage } from "./WorkPeriodDetailPage";
+import { I18nProvider, LOCALE_STORAGE_KEY } from "../../i18n";
+import type { WorkPeriod } from "../../types/planning";
 
 vi.mock("../../app/useAuth", () => ({
   useAuthState: () => ({
@@ -39,11 +41,15 @@ vi.mock("../reference-data/useReferenceData", () => ({
   }),
 }));
 
-vi.mock("./PlanTab", () => ({ PlanTab: () => null }));
+vi.mock("./PlanTab", () => ({
+  PlanTab: () => <div data-testid="plan-tab">Plan tab</div>,
+}));
 vi.mock("./InformTab", () => ({ InformTab: () => null }));
-vi.mock("./AccrualTab", () => ({ AccrualTab: () => null }));
+vi.mock("./AccrualTab", () => ({
+  AccrualTab: () => <div data-testid="accrual-tab">Accrual tab</div>,
+}));
 
-const period = {
+const basePeriod: WorkPeriod = {
   id: "manual30g-work-period-tenant-b",
   tenantId: "default",
   workDate: "2026-08-28",
@@ -51,10 +57,12 @@ const period = {
   name: "30G Tenant B accrual regression",
   startsAt: "2026-08-28T06:00:00Z",
   endsAt: "2026-08-28T18:00:00Z",
-  status: "ACCRUAL_OPEN" as const,
+  status: "ACCRUAL_OPEN",
   createdAt: "2026-08-28T00:00:00Z",
   updatedAt: "2026-08-28T00:00:00Z",
 };
+
+let period: WorkPeriod = { ...basePeriod };
 
 vi.mock("./usePlanning", () => ({
   useWorkPeriod: () => ({ data: period, error: null, isLoading: false }),
@@ -83,6 +91,8 @@ let container: HTMLDivElement;
 let root: Root | null;
 
 beforeEach(() => {
+  period = { ...basePeriod };
+  localStorage.clear();
   container = document.createElement("div");
   document.body.appendChild(container);
   root = null;
@@ -91,6 +101,7 @@ beforeEach(() => {
 afterEach(async () => {
   if (root) await act(async () => root?.unmount());
   document.body.removeChild(container);
+  localStorage.clear();
   vi.clearAllMocks();
 });
 
@@ -115,15 +126,15 @@ describe("WorkPeriodDetailPage", () => {
 
     await act(async () => {
       root = createRoot(container);
-      root.render(<RouterProvider router={router} />);
+      root.render(<I18nProvider><RouterProvider router={router} /></I18nProvider>);
     });
 
-    await waitForText("Default Tenant · 2026-08-28 · 30G Tenant B accrual regression");
+    await waitForText("Default Tenant · Aug 28, 2026 · 30G Tenant B accrual regression");
 
     const pageHeading = headingByText("h1", "Work Period");
     const workPeriodHeading = headingByText(
       "h2",
-      "Default Tenant · 2026-08-28 · 30G Tenant B accrual regression",
+      "Default Tenant · Aug 28, 2026 · 30G Tenant B accrual regression",
     );
 
     expect(pageHeading).toBeTruthy();
@@ -135,6 +146,53 @@ describe("WorkPeriodDetailPage", () => {
       "Work Period ID: manual30g-work-period-tenant-b",
     );
     expect(container.textContent).toContain("Schedule:");
+  });
+
+  it("opens a fully posted Work Period in the accrual view instead of planning", async () => {
+    localStorage.setItem(LOCALE_STORAGE_KEY, "pt-BR");
+    period = {
+      ...basePeriod,
+      workDate: "2026-09-16",
+      periodCode: "DAY",
+      name: "06:00-18:00",
+      status: "FULLY_POSTED",
+    };
+
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const router = createMemoryRouter(
+      [
+        {
+          path: "/work-periods/:id",
+          element: (
+            <QueryClientProvider client={queryClient}>
+              <WorkPeriodDetailPage />
+            </QueryClientProvider>
+          ),
+        },
+      ],
+      { initialEntries: ["/work-periods/manual30g-work-period-tenant-b"] },
+    );
+
+    await act(async () => {
+      root = createRoot(container);
+      root.render(<I18nProvider><RouterProvider router={router} /></I18nProvider>);
+    });
+
+    await waitForText("Totalmente Lançado");
+
+    const accrualButton = Array.from(container.querySelectorAll("button")).find(
+      (button) => button.textContent?.trim() === "Acúmulo",
+    );
+    const planButton = Array.from(container.querySelectorAll("button")).find(
+      (button) => button.textContent?.trim() === "Plano",
+    );
+
+    expect(accrualButton?.className).toContain("bg-gray-950");
+    expect(planButton?.className).not.toContain("bg-gray-950");
+    expect(container.querySelector('[data-testid="accrual-tab"]')).toBeTruthy();
+    expect(container.querySelector('[data-testid="plan-tab"]')).toBeNull();
   });
 });
 

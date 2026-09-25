@@ -2,12 +2,14 @@ type ActionSuccessDialogProps = {
   message: string;
   onDismiss: () => void;
   title?: string;
+  continueLabel?: string;
 };
 
 export function ActionSuccessDialog({
   message,
   onDismiss,
   title = "Action completed",
+  continueLabel = "Continue",
 }: ActionSuccessDialogProps) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-950/60 p-4">
@@ -31,7 +33,7 @@ export function ActionSuccessDialog({
             onClick={onDismiss}
             type="button"
           >
-            Continue
+            {continueLabel}
           </button>
         </div>
       </div>

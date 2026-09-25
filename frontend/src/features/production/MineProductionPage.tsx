@@ -15,8 +15,10 @@ import {
   useUpdateMineProduction,
 } from "./useMineProduction";
 import { PageTitle } from "../../components/layout/PageHeading";
+import { useI18n } from "../../i18n";
 
 export function MineProductionPage() {
+  const { t, formatDate, formatNumber } = useI18n();
   const [searchParams, setSearchParams] = useSearchParams();
   const selectedWorkPeriodId = searchParams.get("workPeriodId") ?? "";
   const [editingEntry, setEditingEntry] = useState<GoldProductionEntry | null>(
@@ -88,29 +90,24 @@ export function MineProductionPage() {
         <div className="mx-auto flex max-w-6xl flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
-              Earnings
+              {t("production.earnings")}
             </p>
-            <PageTitle>
-              Gold Production
-            </PageTitle>
-            <p className="text-sm text-gray-500">
-              Authorized actors record and edit mine production here. Accrual
-              uses these records as read-only inputs.
-            </p>
+            <PageTitle>{t("production.title")}</PageTitle>
+            <p className="text-sm text-gray-500">{t("production.subtitle")}</p>
           </div>
           <div className="flex flex-wrap gap-2">
             <Link
               className="rounded-xl border bg-white px-4 py-2 text-sm font-semibold shadow-sm"
               to="/work-periods"
             >
-              Work Periods
+              {t("planning.workPeriods")}
             </Link>
             {selectedWorkPeriodId ? (
               <Link
                 className="rounded-xl border bg-white px-4 py-2 text-sm font-semibold shadow-sm"
                 to={`/work-periods/${encodeURIComponent(selectedWorkPeriodId)}`}
               >
-                Open Accrual
+                {t("production.openAccrual")}
               </Link>
             ) : null}
           </div>
@@ -119,61 +116,47 @@ export function MineProductionPage() {
 
       <section className="mx-auto grid max-w-6xl gap-4 p-4 lg:grid-cols-[minmax(0,2fr)_minmax(320px,1fr)]">
         <div className="space-y-4">
-          <ApiErrorPanel error={error} />
+          <ApiErrorPanel error={error} translate={t} />
           <section className="rounded-2xl border bg-white p-5 shadow-sm">
             <label className="block text-sm font-medium text-gray-700">
-              Work Period *
+              {t("production.workPeriodRequired")}
               <select
                 className="mt-1 w-full rounded-xl border bg-white px-3 py-2"
                 value={selectedWorkPeriodId}
                 onChange={(event) => selectWorkPeriod(event.target.value)}
               >
-                <option value="">Select a Work Period</option>
+                <option value="">{t("production.selectWorkPeriod")}</option>
                 {workPeriods.map((row) => (
                   <option key={row.id} value={row.id}>
-                    {row.workDate} · {row.name} ·{" "}
+                    {formatDate(row.workDate)} · {row.name} ·{" "}
                     {humanizePlanningCode(row.status)}
                   </option>
                 ))}
               </select>
             </label>
             {!selectedWorkPeriodId ? (
-              <p className="mt-3 text-sm text-gray-500">
-                Select a Work Period to view, record, or edit its Gold
-                Production entries.
-              </p>
+              <p className="mt-3 text-sm text-gray-500">{t("production.selectHelp")}</p>
             ) : null}
           </section>
 
           <section className="rounded-2xl border bg-white p-5 shadow-sm">
             <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
               <div>
-                <h2 className="text-lg font-semibold text-gray-950">
-                  Recorded Gold Production
-                </h2>
-                <p className="text-sm text-gray-500">
-                  These entries are the source of the read-only Gold Produced
-                  values shown in Work Period Accrual.
-                </p>
+                <h2 className="text-lg font-semibold text-gray-950">{t("production.recorded")}</h2>
+                <p className="text-sm text-gray-500">{t("production.recordedHelp")}</p>
               </div>
               {selectedWorkPeriod ? (
                 <span className="rounded-full bg-gray-100 px-3 py-1 text-xs font-semibold text-gray-700">
-                  {selectedWorkPeriod.workDate}
+                  {formatDate(selectedWorkPeriod.workDate)}
                 </span>
               ) : null}
             </div>
             {productionQuery.isLoading ? (
-              <p className="mt-4 text-sm text-gray-500">
-                Loading production...
-              </p>
+              <p className="mt-4 text-sm text-gray-500">{t("production.loading")}</p>
             ) : !selectedWorkPeriodId ? (
-              <p className="mt-4 text-sm text-gray-500">
-                Select a Work Period to load production entries.
-              </p>
+              <p className="mt-4 text-sm text-gray-500">{t("production.selectToLoad")}</p>
             ) : entries.length === 0 ? (
-              <p className="mt-4 rounded-xl bg-amber-50 p-3 text-sm text-amber-900">
-                No gold production has been recorded for this Work Period.
-              </p>
+              <p className="mt-4 rounded-xl bg-amber-50 p-3 text-sm text-amber-900">{t("production.empty")}</p>
             ) : (
               <div className="mt-4 space-y-3">
                 {entries.map((entry) => (
@@ -184,20 +167,20 @@ export function MineProductionPage() {
                           {entry.locationLabel || entry.locationId}
                         </p>
                         <p className="mt-1 text-sm text-gray-500">
-                          {entry.productionDate}
+                          {formatDate(entry.productionDate)}
                           {entry.notes ? ` · ${entry.notes}` : ""}
                         </p>
                       </div>
                       <div className="text-left sm:text-right">
                         <p className="font-mono text-lg font-bold">
-                          {entry.goldGramsProduced.toFixed(8)} g
+                          {formatNumber(entry.goldGramsProduced, { maximumFractionDigits: 8 })} g
                         </p>
                         <button
                           type="button"
                           className="mt-2 text-sm font-semibold text-gray-900 underline"
                           onClick={() => setEditingEntry(entry)}
                         >
-                          Edit
+                          {t("common.edit")}
                         </button>
                       </div>
                     </div>

@@ -4,6 +4,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { TenantDetailPage } from "./TenantDetailPage";
+import { I18nProvider } from "../../i18n";
 
 const tenant = {
   id: "north",
@@ -295,7 +296,7 @@ describe("TenantDetailPage", () => {
 
 function renderPage() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
-  const router = createMemoryRouter([{ path: "/admin/tenants/:id", element: <TenantDetailPage /> }], { initialEntries: ["/admin/tenants/north"] });
+  const router = createMemoryRouter([{ path: "/admin/tenants/:id", element: <I18nProvider><TenantDetailPage /></I18nProvider> }], { initialEntries: ["/admin/tenants/north"] });
   root = createRoot(container);
   act(() => root?.render(<QueryClientProvider client={client}><RouterProvider router={router} /></QueryClientProvider>));
 }
