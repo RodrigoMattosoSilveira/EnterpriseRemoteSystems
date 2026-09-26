@@ -9,7 +9,7 @@ import { PeopleListPage } from "./PeopleListPage";
 import { PersonDetailPage } from "./PersonDetailPage";
 import type { Person } from "../../types/people";
 import type { Collaborator } from "../../types/collaborators";
-import { I18nProvider } from "../../i18n";
+import { I18nProvider, LOCALE_STORAGE_KEY } from "../../i18n";
 
 const authorizationActor: AuthzCurrentActor = {
   actorKey: "people-operator",
@@ -38,6 +38,15 @@ const tenantAdministratorActor: AuthzCurrentActor = {
     "people.read",
     "people.update",
     "collaborators.create",
+  ],
+};
+
+const tenantAdministratorWithCollaboratorRead: AuthzCurrentActor = {
+  ...tenantAdministratorActor,
+  permissions: [...tenantAdministratorActor.permissions, "collaborators.read"],
+  delegatedPermissions: [
+    ...(tenantAdministratorActor.delegatedPermissions ?? []),
+    "collaborators.read",
   ],
 };
 
@@ -100,6 +109,24 @@ const currentCollaborator: Collaborator = {
   updatedAt: "2026-09-01T00:00:00Z",
 };
 
+const closedCollaborator: Collaborator = {
+  ...currentCollaborator,
+  id: "collaborator-closed-123",
+  journeyStartDate: "2026-01-10",
+  defaultEndDate: "2026-04-10",
+  projectedEndDate: "2026-04-10",
+  paymentMethodLabel: "Daily Wage",
+  taskLabel: "Miner",
+  sectorLabel: "Mining",
+  locationLabel: "Main Mine",
+  statusId: "ref-collaborator-status-finished",
+  statusCode: "FINISHED",
+  statusLabel: "Finished",
+  closedAt: "2026-04-15T12:00:00Z",
+  createdAt: "2026-01-10T00:00:00Z",
+  updatedAt: "2026-04-15T12:00:00Z",
+};
+
 
 type FetchCall = {
   url: string;
@@ -116,6 +143,7 @@ beforeEach(() => {
   document.body.appendChild(container);
   root = null;
   fetchCalls = [];
+  window.localStorage.clear();
 });
 
 afterEach(async () => {
@@ -125,6 +153,7 @@ afterEach(async () => {
     });
   }
   document.body.removeChild(container);
+  window.localStorage.clear();
   vi.restoreAllMocks();
 });
 
@@ -364,15 +393,6 @@ describe("PersonDetailPage", () => {
   });
 
   it("links an existing Collaborator Person to the current Journey without claiming eligibility", async () => {
-    const actorWithCollaboratorRead: AuthzCurrentActor = {
-      ...tenantAdministratorActor,
-      permissions: [...tenantAdministratorActor.permissions, "collaborators.read"],
-      delegatedPermissions: [
-        ...(tenantAdministratorActor.delegatedPermissions ?? []),
-        "collaborators.read",
-      ],
-    };
-
     mockFetch(async (url, init) => {
       recordFetchCall(url, init);
 
@@ -384,8 +404,8 @@ describe("PersonDetailPage", () => {
         return jsonResponse({ data: [] });
       }
 
-      if (url === "/api/v1/collaborators?page=1&pageSize=100") {
-        return jsonResponse({ data: { items: [currentCollaborator], total: 1 } });
+      if (url === `/api/v1/collaborators/by-membership/${existingPerson.membershipId}`) {
+        return jsonResponse({ data: [currentCollaborator] });
       }
 
       if (url === "/api/v1/reference-data/person_status") {
@@ -406,7 +426,7 @@ describe("PersonDetailPage", () => {
       throw new Error(`Unhandled request: ${url}`);
     });
 
-    renderPersonDetailRoute(actorWithCollaboratorRead);
+    renderPersonDetailRoute(tenantAdministratorWithCollaboratorRead);
 
     await waitForText("Open current Journey");
 
@@ -419,6 +439,100 @@ describe("PersonDetailPage", () => {
     expect(container.textContent).toContain("All required profile sections are complete.");
     expect(container.textContent).not.toContain("eligible to become a Collaborator");
     expect(container.textContent).not.toContain("Create Collaborator");
+  });
+
+  it("shows a Tenant Administrator the current and closed Journeys for this Person only", async () => {
+    mockFetch(async (url, init) => {
+      recordFetchCall(url, init);
+
+      if (url === `/api/v1/people/${PERSON_ID}`) {
+        return jsonResponse({ data: existingPerson });
+      }
+      if (url === "/api/v1/collaborators/candidates") {
+        return jsonResponse({ data: [] });
+      }
+      if (url === `/api/v1/collaborators/by-membership/${existingPerson.membershipId}`) {
+        return jsonResponse({ data: [closedCollaborator, currentCollaborator] });
+      }
+      if (url === "/api/v1/reference-data/person_status") {
+        return jsonResponse({ data: [] });
+      }
+      if (url === `/api/v1/people/${PERSON_ID}/authentication`) {
+        return jsonResponse({
+          data: {
+            enabled: true,
+            accountActive: true,
+            canRequestReactivation: false,
+            login: existingPerson.email,
+          },
+        });
+      }
+
+      throw new Error(`Unhandled request: ${url}`);
+    });
+
+    renderPersonDetailRoute(tenantAdministratorWithCollaboratorRead);
+
+    await waitForText("Journey History");
+    await waitForText("Current");
+    await waitForText("Closed");
+    await waitForText("Daily Wage");
+
+    const journeyLinks = Array.from(container.querySelectorAll("a")).filter(
+      (node) => node.textContent?.trim() === "Open Journey",
+    );
+    expect(journeyLinks.map((node) => node.getAttribute("href"))).toEqual([
+      `/collaborators/${currentCollaborator.id}`,
+      `/collaborators/${closedCollaborator.id}`,
+    ]);
+    expect(
+      fetchCalls.some(
+        (call) =>
+          call.url ===
+          `/api/v1/collaborators/by-membership/${existingPerson.membershipId}`,
+      ),
+    ).toBe(true);
+  });
+
+  it("renders Tenant Administrator Journey history in Brazilian Portuguese", async () => {
+    window.localStorage.setItem(LOCALE_STORAGE_KEY, "pt-BR");
+
+    mockFetch(async (url) => {
+      if (url === `/api/v1/people/${PERSON_ID}`) {
+        return jsonResponse({ data: existingPerson });
+      }
+      if (url === "/api/v1/collaborators/candidates") {
+        return jsonResponse({ data: [] });
+      }
+      if (url === `/api/v1/collaborators/by-membership/${existingPerson.membershipId}`) {
+        return jsonResponse({ data: [closedCollaborator, currentCollaborator] });
+      }
+      if (url === "/api/v1/reference-data/person_status") {
+        return jsonResponse({ data: [] });
+      }
+      if (url === `/api/v1/people/${PERSON_ID}/authentication`) {
+        return jsonResponse({
+          data: {
+            enabled: true,
+            accountActive: true,
+            canRequestReactivation: false,
+            login: existingPerson.email,
+          },
+        });
+      }
+
+      throw new Error(`Unhandled request: ${url}`);
+    });
+
+    renderPersonDetailRoute(tenantAdministratorWithCollaboratorRead);
+
+    await waitForText("Histórico de Jornadas");
+    await waitForText("Atual");
+    await waitForText("Encerrada");
+    await waitForText("Abrir Jornada");
+    expect(container.textContent).toContain(
+      "Jornadas atuais e encerradas desta Pessoa no Locatário atual.",
+    );
   });
 
   it("shows update validation errors returned by the API", async () => {
