@@ -9,6 +9,7 @@ import { PersonAuthenticationSection } from "./PersonAuthenticationSection";
 import {
   useCollaboratorCandidates,
   useCollaboratorJourneysForMembership,
+  useSelfCollaboratorJourneys,
 } from "../collaborators/useCollaborators";
 import type { Collaborator } from "../../types/collaborators";
 import { PageContextHeading, PageTitle } from "../../components/layout/PageHeading";
@@ -38,6 +39,13 @@ export function PersonDetailPage() {
     actor.scope === "TENANT" &&
     (actor.permissions.includes("*") ||
       actor.permissions.includes("collaborators.read"));
+  const canReadOwnCollaboratorJourneys =
+    actor.scope === "TENANT" &&
+    !canBrowseCollaboratorJourneys &&
+    actor.permissions.includes("collaborators.self.read") &&
+    (actor.personId === id || actor.globalPersonId === id);
+  const canReadCollaboratorJourneyHistory =
+    canBrowseCollaboratorJourneys || canReadOwnCollaboratorJourneys;
   const [successMessage, setSuccessMessage] = useState(() => personDetailFlash(location.state));
 
   const personQuery = usePerson(id);
@@ -45,10 +53,16 @@ export function PersonDetailPage() {
     canCreateCollaboratorJourney,
   );
   const membershipID = personQuery.data?.membershipId ?? "";
-  const collaboratorJourneysQuery = useCollaboratorJourneysForMembership(
+  const membershipCollaboratorJourneysQuery = useCollaboratorJourneysForMembership(
     membershipID,
     canBrowseCollaboratorJourneys,
   );
+  const selfCollaboratorJourneysQuery = useSelfCollaboratorJourneys(
+    canReadOwnCollaboratorJourneys,
+  );
+  const collaboratorJourneysQuery = canReadOwnCollaboratorJourneys
+    ? selfCollaboratorJourneysQuery
+    : membershipCollaboratorJourneysQuery;
   const mutation = useUpdatePerson(id);
   const statusesQuery = useReferenceDataByType("person_status");
   useEffect(() => {
@@ -194,7 +208,7 @@ export function PersonDetailPage() {
         />
       </section>
 
-      {canBrowseCollaboratorJourneys && membershipID && (
+      {canReadCollaboratorJourneyHistory && membershipID && (
         <section className="mx-auto max-w-4xl px-4 pb-4">
           <div className="rounded-2xl border bg-white p-4 shadow-sm">
             <div>
@@ -205,7 +219,11 @@ export function PersonDetailPage() {
                 {t("people.journeyHistory.title")}
               </h2>
               <p className="mt-1 text-sm text-gray-500">
-                {t("people.journeyHistory.description")}
+                {t(
+                  canReadOwnCollaboratorJourneys
+                    ? "people.journeyHistory.selfDescription"
+                    : "people.journeyHistory.description",
+                )}
               </p>
             </div>
 
@@ -221,7 +239,11 @@ export function PersonDetailPage() {
               !collaboratorJourneysQuery.error &&
               collaboratorJourneys.length === 0 && (
                 <p className="mt-4 rounded-xl bg-gray-50 p-4 text-sm text-gray-600">
-                  {t("people.journeyHistory.empty")}
+                  {t(
+                    canReadOwnCollaboratorJourneys
+                      ? "people.journeyHistory.selfEmpty"
+                      : "people.journeyHistory.empty",
+                  )}
                 </p>
               )}
 
