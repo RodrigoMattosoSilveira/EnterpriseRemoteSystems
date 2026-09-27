@@ -89,3 +89,78 @@ type CollaboratorListFilter struct {
 	Page            int    `query:"page"`
 	PageSize        int    `query:"pageSize"`
 }
+
+type WorkCreditEvidenceDTO struct {
+	Journey            CollaboratorDTO                `json:"journey"`
+	WorkRecognized     []WorkCreditWorkEvidenceDTO    `json:"workRecognized"`
+	EarningsCalculated []WorkCreditAccrualEvidenceDTO `json:"earningsCalculated"`
+	AccountPostings    []WorkCreditAccountPostingDTO  `json:"accountPostings"`
+}
+
+type WorkCreditWorkEvidenceDTO struct {
+	AssignmentID      string  `json:"assignmentId"`
+	WorkPeriodID      string  `json:"workPeriodId"`
+	WorkDate          string  `json:"workDate"`
+	PeriodCode        string  `json:"periodCode"`
+	WorkPeriodName    string  `json:"workPeriodName,omitempty"`
+	WorkPeriodStatus  string  `json:"workPeriodStatus"`
+	PlannedStatus     string  `json:"plannedStatus"`
+	ActualStatus      string  `json:"actualStatus,omitempty"`
+	SectorID          string  `json:"sectorId"`
+	SectorLabel       string  `json:"sectorLabel,omitempty"`
+	LocationID        string  `json:"locationId"`
+	LocationLabel     string  `json:"locationLabel,omitempty"`
+	TaskID            string  `json:"taskId"`
+	TaskLabel         string  `json:"taskLabel,omitempty"`
+	ProductionEntries int64   `json:"productionEntries"`
+	GoldGramsProduced float64 `json:"goldGramsProduced"`
+}
+
+type WorkCreditAccrualEvidenceDTO struct {
+	ID                     string   `json:"id"`
+	AccrualRunID           string   `json:"accrualRunId"`
+	AccrualRunStatus       string   `json:"accrualRunStatus"`
+	AccrualDate            string   `json:"accrualDate"`
+	WorkPeriodID           string   `json:"workPeriodId"`
+	WorkDate               string   `json:"workDate"`
+	WorkPeriodAssignmentID string   `json:"workPeriodAssignmentId,omitempty"`
+	CalculationType        string   `json:"calculationType"`
+	Direction              string   `json:"direction"`
+	BRLAmount              *float64 `json:"brlAmount,omitempty"`
+	GoldGramAmount         *float64 `json:"goldGramAmount,omitempty"`
+	Status                 string   `json:"status"`
+	PendingReason          string   `json:"pendingReason,omitempty"`
+	Description            string   `json:"description,omitempty"`
+}
+
+type WorkCreditAccountPostingDTO struct {
+	ID                   string                        `json:"id"`
+	EntryType            string                        `json:"entryType"`
+	Direction            string                        `json:"direction"`
+	Amount               float64                       `json:"amount"`
+	SignedAmount         float64                       `json:"signedAmount"`
+	ValueUnitCode        string                        `json:"valueUnitCode,omitempty"`
+	ValueUnitLabel       string                        `json:"valueUnitLabel,omitempty"`
+	EffectiveDate        string                        `json:"effectiveDate"`
+	SourceType           string                        `json:"sourceType"`
+	SourceID             string                        `json:"sourceId"`
+	Description          string                        `json:"description,omitempty"`
+	Active               bool                          `json:"active"`
+	CorrectionType       string                        `json:"correctionType"`
+	RelatedEntryID       string                        `json:"relatedEntryId,omitempty"`
+	CorrectionReasonCode string                        `json:"correctionReasonCode,omitempty"`
+	CorrectionReasonText string                        `json:"correctionReasonText,omitempty"`
+	Receipt              *WorkCreditReceiptEvidenceDTO `json:"receipt,omitempty"`
+}
+
+type WorkCreditReceiptEvidenceDTO struct {
+	ID               string `json:"id"`
+	ReceiptNumber    string `json:"receiptNumber,omitempty"`
+	ReceiptPurpose   string `json:"receiptPurpose,omitempty"`
+	PaymentDirection string `json:"paymentDirection,omitempty"`
+	AcceptingParty   string `json:"acceptingParty,omitempty"`
+	Status           string `json:"status"`
+	Outstanding      bool   `json:"outstanding"`
+	ReturnedAt       string `json:"returnedAt,omitempty"`
+	AcceptedAt       string `json:"acceptedAt,omitempty"`
+}

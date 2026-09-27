@@ -4,6 +4,7 @@ import {
   extendCollaboratorJourney,
   getCollaborator,
   getSelfCollaborator,
+  getSelfWorkCreditEvidence,
   listAllCollaborators,
   listCollaboratorCandidates,
   listCollaboratorJourneysForMembership,
@@ -40,6 +41,8 @@ export const collaboratorQueryKeys = {
   detail: (id: string) => [...collaboratorQueryKeys.details(), id] as const,
   selfDetail: (id: string) =>
     [...collaboratorQueryKeys.details(), "self", id] as const,
+  selfWorkCreditEvidence: (id: string) =>
+    [...collaboratorQueryKeys.details(), "self", id, "work-credit-evidence"] as const,
 };
 
 export function useCollaboratorCandidates(enabled = true) {
@@ -107,6 +110,14 @@ export function useSelfCollaboratorJourneys(enabled = true) {
     queryKey: collaboratorQueryKeys.selfList(),
     queryFn: listSelfCollaboratorJourneys,
     enabled,
+  });
+}
+
+export function useSelfWorkCreditEvidence(id: string, enabled = true) {
+  return useQuery({
+    queryKey: collaboratorQueryKeys.selfWorkCreditEvidence(id),
+    queryFn: () => getSelfWorkCreditEvidence(id),
+    enabled: enabled && Boolean(id),
   });
 }
 

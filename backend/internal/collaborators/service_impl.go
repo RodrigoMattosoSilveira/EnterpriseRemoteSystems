@@ -292,6 +292,15 @@ func (s *service) GetSelfByID(ctx context.Context, id string, membershipID strin
 	return ptr(ToDTO(*row)), nil
 }
 
+func (s *service) GetSelfWorkCreditEvidence(ctx context.Context, id string, membershipID string) (*WorkCreditEvidenceDTO, error) {
+	record, err := s.repo.LoadWorkCreditEvidence(ctx, strings.TrimSpace(id), strings.TrimSpace(membershipID))
+	if err != nil {
+		return nil, err
+	}
+	dto := ToWorkCreditEvidenceDTO(*record)
+	return &dto, nil
+}
+
 func membershipCandidateToPersonDTO(membership db.PersonTenantMembership) peoplepkg.PersonDTO {
 	person := membership.Person
 	return peoplepkg.PersonDTO{

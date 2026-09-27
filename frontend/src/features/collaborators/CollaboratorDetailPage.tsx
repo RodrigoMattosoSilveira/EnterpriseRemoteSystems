@@ -11,6 +11,7 @@ import type {
 import type { ReferenceDataItem } from "../../types/referenceData";
 import { useReferenceDataByType } from "../reference-data/useReferenceData";
 import { JourneySettlementPanel } from "./JourneySettlementPanel";
+import { WorkCreditEvidencePanel } from "./WorkCreditEvidencePanel";
 import {
   formatCollaboratorPaymentValue,
   normalizePaymentMethodCode,
@@ -337,6 +338,12 @@ export function CollaboratorDetailPage() {
             />
           </dl>
         </section>
+
+        {actor.permissions.includes("work_credit_evidence.self.read") &&
+        actor.membershipId &&
+        actor.membershipId === collaborator.membershipId ? (
+          <WorkCreditEvidencePanel journeyId={collaborator.id} />
+        ) : null}
 
         {canPreviewSettlement && !collaborator.closedAt ? (
           <JourneySettlementPanel

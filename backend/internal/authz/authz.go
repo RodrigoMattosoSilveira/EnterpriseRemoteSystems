@@ -61,6 +61,7 @@ const (
 	PermissionCollaboratorsUpdate               Permission = "collaborators.update"
 	PermissionCollaboratorsWorkAssignmentUpdate Permission = "collaborators.work_assignment.update"
 	PermissionCollaboratorsSelfRead             Permission = "collaborators.self.read"
+	PermissionWorkCreditEvidenceSelfRead        Permission = "work_credit_evidence.self.read"
 
 	PermissionPlanningRead   Permission = "planning.read"
 	PermissionPlanningCreate Permission = "planning.create"
