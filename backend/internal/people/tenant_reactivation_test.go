@@ -176,8 +176,26 @@ func TestTenantReactivationRestoresOnlySelectedMembershipAndBaselineAuthority(t 
 	if len(resolved.RoleCodes) != 0 || len(resolved.DelegatedPermissions) != 0 {
 		t.Fatalf("expected baseline-only reactivation with no delegated authority, actor=%+v", resolved)
 	}
+	_, blockedGrantErr := store.GrantTenantOperatorRole(ctx, tenantA, actorA.ID, string(authz.RoleExpenseOperator))
+	if blockedGrantErr == nil {
+		t.Fatal("expected Tenant A re-grant to remain blocked while Tenant B delegated authority is assigned")
+	}
+	validation, ok := blockedGrantErr.(interface{ ValidationFields() map[string]string })
+	if !ok {
+		t.Fatalf("expected cross-Tenant delegated-role validation error, got %T: %v", blockedGrantErr, blockedGrantErr)
+	}
+	if got := validation.ValidationFields()["roleCode"]; got != "This Person already holds delegated authority in another Tenant. Revoke that Tenant's delegated Role Grants before granting authority here." {
+		t.Fatalf("unexpected cross-Tenant delegated-role validation message: %q", got)
+	}
+	revokedB, err := store.RevokeTenantOperatorRoleGrant(ctx, tenantB, actorB.ID, "grant-return-b")
+	if err != nil {
+		t.Fatalf("explicitly revoke Tenant B expense role: %v", err)
+	}
+	if revokedB.Active {
+		t.Fatalf("expected Tenant B delegated authority to be explicitly revoked, grant=%+v", revokedB)
+	}
 	if _, err := store.GrantTenantOperatorRole(ctx, tenantA, actorA.ID, string(authz.RoleExpenseOperator)); err != nil {
-		t.Fatalf("explicitly re-grant expense role: %v", err)
+		t.Fatalf("explicitly re-grant expense role after revoking Tenant B authority: %v", err)
 	}
 	resolved, err = store.FindActor(ctx, authz.ActorLookup{ActorID: actorA.ActorKey, TenantID: tenantA})
 	if err != nil || len(resolved.RoleCodes) != 1 || resolved.RoleCodes[0] != string(authz.RoleExpenseOperator) {
@@ -189,8 +207,8 @@ func TestTenantReactivationRestoresOnlySelectedMembershipAndBaselineAuthority(t 
 	}
 
 	var grantB authz.AuthzActorRoleGrant
-	if err := database.First(&grantB, "id = ?", "grant-return-b").Error; err != nil || !grantB.LifecycleSuspended {
-		t.Fatalf("expected Tenant B historical grant to remain suspended, grant=%+v err=%v", grantB, err)
+	if err := database.First(&grantB, "id = ?", "grant-return-b").Error; err != nil || grantB.Active || !grantB.LifecycleSuspended {
+		t.Fatalf("expected Tenant B historical grant to remain suspended but explicitly revoked, grant=%+v err=%v", grantB, err)
 	}
 }
 
