@@ -1075,6 +1075,7 @@ export const enUSMessages = {
   'settlement.postFinalCollaborator': 'Record Final Collaborator Payment',
   // Bite 31.3 — Collaborator detail
   'collaborator.startedProjected': 'Started {start} · Projected end {end}',
+  'collaborator.startedEnded': 'Started {start} · Ended on {end}',
   'collaborator.updated': 'Collaborator updated for {name}.',
   'collaborator.assignmentUpdated': 'Work assignment updated for {name}.',
   'collaborator.personSummaryHelp2': 'The Person profile behind this Collaborator Journey.',

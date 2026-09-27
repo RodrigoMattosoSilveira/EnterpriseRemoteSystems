@@ -123,7 +123,15 @@ export function CollaboratorDetailPage() {
                 <span className="break-all font-mono">{collaborator.id}</span>
               </p>
               <p className="mt-1 text-sm text-gray-500">
-                {t("collaborator.startedProjected", { start: formatDate(collaborator.journeyStartDate), end: formatDate(collaborator.projectedEndDate) })}
+                {collaborator.closedAt
+                  ? t("collaborator.startedEnded", {
+                      start: formatDate(collaborator.journeyStartDate),
+                      end: formatDate(collaborator.closedAt),
+                    })
+                  : t("collaborator.startedProjected", {
+                      start: formatDate(collaborator.journeyStartDate),
+                      end: formatDate(collaborator.projectedEndDate),
+                    })}
               </p>
               {collaborator.closedAt ? (
                 <div

@@ -1077,6 +1077,7 @@ export const ptBRMessages = {
   'settlement.postFinalCollaborator': 'Registrar Pagamento Final do Colaborador',
   // Bite 31.3 — Collaborator detail
   'collaborator.startedProjected': 'Iniciada {start} · fim projetado {end}',
+  'collaborator.startedEnded': 'Iniciada {start} · encerrada em {end}',
   'collaborator.updated': 'Colaborador atualizado para {name}.',
   'collaborator.assignmentUpdated': 'Atribuição de trabalho atualizada para {name}.',
   'collaborator.personSummaryHelp2': 'O perfil da Pessoa por trás desta Jornada de Colaborador.',

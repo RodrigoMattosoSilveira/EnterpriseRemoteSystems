@@ -11,6 +11,15 @@ describe("ERS translation resources", () => {
     expect(messagesByLocale["pt-BR"]["locale.selectorLabel"]).toBe("Idioma");
   });
 
+  it("describes actual Journey closure dates distinctly from projected end dates", () => {
+    expect(messagesByLocale["en-US"]["collaborator.startedEnded"]).toBe(
+      "Started {start} · Ended on {end}",
+    );
+    expect(messagesByLocale["pt-BR"]["collaborator.startedEnded"]).toBe(
+      "Iniciada {start} · encerrada em {end}",
+    );
+  });
+
   it("uses Locatário terminology only in pt-BR while preserving English Tenant terminology", () => {
     expect(messagesByLocale["en-US"]["common.tenant"]).toBe("Tenant");
     expect(messagesByLocale["en-US"]["common.tenants"]).toBe("Tenants");

@@ -124,6 +124,9 @@ describe("CollaboratorDetailPage", () => {
     expect(collaboratorHeading?.className).toContain("text-lg");
     expect(textNode("Journey ID:")).toBeTruthy();
     expect(textNode("collab-1")).toBeTruthy();
+    expect(
+      textNode("Started May 1, 2026 · Projected end Aug 4, 2026"),
+    ).toBeTruthy();
     expect(textNode("Person Summary")).toBeTruthy();
     expect(textNode("Nickname")).toBeTruthy();
     expect(textNode("Legal Name")).toBeTruthy();
@@ -310,6 +313,12 @@ describe("CollaboratorDetailPage", () => {
     );
 
     await waitForText("Journey Closed");
+    expect(
+      textNode("Started May 1, 2026 · Ended on Jun 15, 2026"),
+    ).toBeTruthy();
+    expect(
+      textNode("Started May 1, 2026 · Projected end Aug 4, 2026"),
+    ).toBeFalsy();
     expect(textNode("Jun 15, 2026")).toBeTruthy();
     expect(linkByText("Back to My Journeys")?.getAttribute("href")).toBe(
       "/collaborators",
