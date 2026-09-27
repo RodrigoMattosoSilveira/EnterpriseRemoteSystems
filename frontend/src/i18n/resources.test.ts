@@ -20,6 +20,27 @@ describe("ERS translation resources", () => {
     );
   });
 
+  it("provides Work and Credit Evidence labels in both supported locales", () => {
+    expect(messagesByLocale["en-US"]["workCredit.title"]).toBe(
+      "Work and Credit Evidence",
+    );
+    expect(messagesByLocale["pt-BR"]["workCredit.title"]).toBe(
+      "Demonstrativo de Trabalho e Crédito",
+    );
+    expect(messagesByLocale["en-US"]["workCredit.amountEarned"]).toBe(
+      "Amount earned",
+    );
+    expect(messagesByLocale["pt-BR"]["workCredit.amountEarned"]).toBe(
+      "Valor ganho",
+    );
+    expect(messagesByLocale["en-US"]["workCredit.creditPosted"]).toBe(
+      "Credit posted",
+    );
+    expect(messagesByLocale["pt-BR"]["workCredit.creditPosted"]).toBe(
+      "Crédito lançado",
+    );
+  });
+
   it("uses Locatário terminology only in pt-BR while preserving English Tenant terminology", () => {
     expect(messagesByLocale["en-US"]["common.tenant"]).toBe("Tenant");
     expect(messagesByLocale["en-US"]["common.tenants"]).toBe("Tenants");

@@ -14,6 +14,7 @@ type Service interface {
 	Create(ctx context.Context, req CreateCollaboratorRequest, actorUserID string) (*CollaboratorDTO, error)
 	GetByID(ctx context.Context, id string) (*CollaboratorDTO, error)
 	GetSelfByID(ctx context.Context, id string, membershipID string) (*CollaboratorDTO, error)
+	GetSelfWorkCreditEvidence(ctx context.Context, id string, membershipID string) (*WorkCreditEvidenceDTO, error)
 	Update(ctx context.Context, id string, req UpdateCollaboratorRequest, actorUserID string) (*CollaboratorDTO, error)
 	UpdateWorkAssignment(ctx context.Context, id string, req UpdateCollaboratorWorkAssignmentRequest, actorUserID string) (*CollaboratorDTO, error)
 	ExtendJourney(ctx context.Context, id string, req ExtendCollaboratorJourneyRequest, actorUserID string) (*CollaboratorDTO, error)

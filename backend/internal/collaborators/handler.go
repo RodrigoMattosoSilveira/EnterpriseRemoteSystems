@@ -108,6 +108,23 @@ func (h *Handler) Create(c fiber.Ctx) error {
 	return c.Status(fiber.StatusCreated).JSON(httpx.APIResponse{Data: created})
 }
 
+func (h *Handler) GetSelfWorkCreditEvidence(c fiber.Ctx) error {
+	actor, err := authz.RequestActorFromContext(c)
+	if err != nil {
+		return httpx.WriteError(c, err)
+	}
+	membershipID := strings.TrimSpace(actor.MembershipID)
+	if membershipID == "" {
+		return httpx.WriteError(c, authz.ErrForbidden)
+	}
+
+	evidence, err := h.service.GetSelfWorkCreditEvidence(requesttenant.Context(c), c.Params("id"), membershipID)
+	if err != nil {
+		return httpx.WriteError(c, err)
+	}
+	return c.JSON(httpx.APIResponse{Data: evidence})
+}
+
 func (h *Handler) GetSelfByID(c fiber.Ctx) error {
 	actor, err := authz.RequestActorFromContext(c)
 	if err != nil {

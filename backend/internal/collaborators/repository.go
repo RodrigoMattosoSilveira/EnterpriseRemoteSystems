@@ -20,4 +20,48 @@ type Repository interface {
 	FindActiveReference(ctx context.Context, id string, typ string) (*db.ReferenceData, error)
 	ExistsActiveReference(ctx context.Context, id string, typ string) (bool, error)
 	ExistsOpenJourneyForMembership(ctx context.Context, membershipID string) (bool, error)
+	LoadWorkCreditEvidence(ctx context.Context, journeyID string, membershipID string) (*WorkCreditEvidenceRecord, error)
+}
+
+type WorkCreditEvidenceRecord struct {
+	Journey            db.CollaboratorJourney
+	WorkRecognized     []WorkCreditWorkRow
+	EarningsCalculated []WorkCreditAccrualRow
+	AccountPostings    []db.LedgerEntry
+}
+
+type WorkCreditWorkRow struct {
+	AssignmentID      string
+	WorkPeriodID      string
+	WorkDate          string
+	PeriodCode        string
+	WorkPeriodName    string
+	WorkPeriodStatus  string
+	PlannedStatus     string
+	ActualStatus      string
+	SectorID          string
+	SectorLabel       string
+	LocationID        string
+	LocationLabel     string
+	TaskID            string
+	TaskLabel         string
+	ProductionEntries int64
+	GoldGramsProduced float64
+}
+
+type WorkCreditAccrualRow struct {
+	ID                     string
+	AccrualRunID           string
+	AccrualRunStatus       string
+	AccrualDate            string
+	WorkPeriodID           string
+	WorkDate               string
+	WorkPeriodAssignmentID string
+	CalculationType        string
+	Direction              string
+	BRLAmount              *float64
+	GoldGramAmount         *float64
+	Status                 string
+	PendingReason          string
+	Description            string
 }

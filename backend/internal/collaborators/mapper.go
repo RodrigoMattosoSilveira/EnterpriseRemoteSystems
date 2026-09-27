@@ -99,3 +99,106 @@ func formatDateTimePtr(value *time.Time) string {
 	}
 	return value.UTC().Format(time.RFC3339)
 }
+
+func ToWorkCreditEvidenceDTO(record WorkCreditEvidenceRecord) WorkCreditEvidenceDTO {
+	work := make([]WorkCreditWorkEvidenceDTO, 0, len(record.WorkRecognized))
+	for _, row := range record.WorkRecognized {
+		work = append(work, WorkCreditWorkEvidenceDTO{
+			AssignmentID:      row.AssignmentID,
+			WorkPeriodID:      row.WorkPeriodID,
+			WorkDate:          row.WorkDate,
+			PeriodCode:        row.PeriodCode,
+			WorkPeriodName:    row.WorkPeriodName,
+			WorkPeriodStatus:  row.WorkPeriodStatus,
+			PlannedStatus:     row.PlannedStatus,
+			ActualStatus:      row.ActualStatus,
+			SectorID:          row.SectorID,
+			SectorLabel:       row.SectorLabel,
+			LocationID:        row.LocationID,
+			LocationLabel:     row.LocationLabel,
+			TaskID:            row.TaskID,
+			TaskLabel:         row.TaskLabel,
+			ProductionEntries: row.ProductionEntries,
+			GoldGramsProduced: row.GoldGramsProduced,
+		})
+	}
+
+	accruals := make([]WorkCreditAccrualEvidenceDTO, 0, len(record.EarningsCalculated))
+	for _, row := range record.EarningsCalculated {
+		accruals = append(accruals, WorkCreditAccrualEvidenceDTO{
+			ID:                     row.ID,
+			AccrualRunID:           row.AccrualRunID,
+			AccrualRunStatus:       row.AccrualRunStatus,
+			AccrualDate:            row.AccrualDate,
+			WorkPeriodID:           row.WorkPeriodID,
+			WorkDate:               row.WorkDate,
+			WorkPeriodAssignmentID: row.WorkPeriodAssignmentID,
+			CalculationType:        row.CalculationType,
+			Direction:              row.Direction,
+			BRLAmount:              row.BRLAmount,
+			GoldGramAmount:         row.GoldGramAmount,
+			Status:                 row.Status,
+			PendingReason:          row.PendingReason,
+			Description:            row.Description,
+		})
+	}
+
+	postings := make([]WorkCreditAccountPostingDTO, 0, len(record.AccountPostings))
+	for _, row := range record.AccountPostings {
+		posting := WorkCreditAccountPostingDTO{
+			ID:                   row.ID,
+			EntryType:            row.EntryType,
+			Direction:            row.Direction,
+			Amount:               row.Amount,
+			SignedAmount:         workCreditSignedAmount(row.Direction, row.Amount),
+			ValueUnitCode:        row.ValueUnit.Code,
+			ValueUnitLabel:       row.ValueUnit.Label,
+			EffectiveDate:        formatDate(row.EffectiveDate),
+			SourceType:           row.SourceType,
+			SourceID:             row.SourceID,
+			Description:          row.Description,
+			Active:               row.Active,
+			CorrectionType:       row.CorrectionType,
+			RelatedEntryID:       collaboratorMembershipID(row.RelatedEntryID),
+			CorrectionReasonCode: row.CorrectionReasonCode,
+			CorrectionReasonText: row.CorrectionReasonText,
+		}
+		if row.Receipt != nil {
+			posting.Receipt = &WorkCreditReceiptEvidenceDTO{
+				ID:               row.Receipt.ID,
+				ReceiptNumber:    collaboratorMembershipID(row.Receipt.ReceiptNumber),
+				ReceiptPurpose:   strings.TrimSpace(row.Receipt.ReceiptPurpose),
+				PaymentDirection: strings.TrimSpace(row.Receipt.PaymentDirection),
+				AcceptingParty:   strings.TrimSpace(row.Receipt.AcceptingParty),
+				Status:           strings.TrimSpace(row.Receipt.Status),
+				Outstanding:      workCreditReceiptOutstanding(row.Receipt.Status),
+				ReturnedAt:       formatDateTimePtr(row.Receipt.ReturnedAt),
+				AcceptedAt:       formatDateTimePtr(row.Receipt.AcceptedAt),
+			}
+		}
+		postings = append(postings, posting)
+	}
+
+	return WorkCreditEvidenceDTO{
+		Journey:            ToDTO(record.Journey),
+		WorkRecognized:     work,
+		EarningsCalculated: accruals,
+		AccountPostings:    postings,
+	}
+}
+
+func workCreditSignedAmount(direction string, amount float64) float64 {
+	if strings.EqualFold(strings.TrimSpace(direction), "DEBIT") {
+		return -amount
+	}
+	return amount
+}
+
+func workCreditReceiptOutstanding(status string) bool {
+	switch strings.ToUpper(strings.TrimSpace(status)) {
+	case "PENDING_ISSUE", "ISSUED", "PRINTED", "SIGNED":
+		return true
+	default:
+		return false
+	}
+}

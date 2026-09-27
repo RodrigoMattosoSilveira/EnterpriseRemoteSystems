@@ -1364,6 +1364,9 @@ func TestIntrinsicSelfServiceKeepsJourneyHistoryReadableAfterCurrentJourneyClose
 	if _, ok := permissions[PermissionCollaboratorsSelfRead]; !ok {
 		t.Fatal("historical Collaborator Journey read must survive the absence of an open Journey")
 	}
+	if _, ok := permissions[PermissionWorkCreditEvidenceSelfRead]; !ok {
+		t.Fatal("historical Work and Credit Evidence read must survive the absence of an open Journey")
+	}
 	for _, permission := range []Permission{
 		PermissionCollaboratorsUpdate,
 		PermissionCollaboratorsWorkAssignmentUpdate,
