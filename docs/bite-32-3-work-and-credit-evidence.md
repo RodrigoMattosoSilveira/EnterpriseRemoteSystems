@@ -100,6 +100,8 @@ The existing Current Account self-service permissions are intentionally tied to 
 
 `work_credit_evidence.self.read` instead follows the same history-preserving rule as `collaborators.self.read`, allowing a Person with only closed Journeys to continue reading the evidence attached to those Journeys.
 
+The deterministic Brazilian demo fixture includes canonical closed-Journey evidence for Rafael Lima: recognized historical work, a posted daily-wage accrual, the corresponding earning credit, and a Journey payout that leaves the closed Journey at zero balance. This is fixture data, not evidence synthesized by the read projection.
+
 ## I18N
 
 The feature ships simultaneously in:
