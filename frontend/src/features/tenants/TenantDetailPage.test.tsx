@@ -202,7 +202,7 @@ describe("TenantDetailPage", () => {
       globalPersonId: "person-cross-tenant",
       assigned: false,
       eligible: false,
-      ineligibilityReason: "This Person already holds delegated authority in another Tenant",
+      ineligibilityReason: "This Person has one or more Roles in another Tenant. They must work with that Tenant to have every Role other than Membership and Collaborator removed before a Role can be assigned here.",
       hasDelegatedAuthorityInOtherTenant: true,
     };
 
@@ -224,10 +224,10 @@ describe("TenantDetailPage", () => {
       "A Tenant may have up to two active Tenant Administrators (TENANT_ADMIN assignments).",
     );
     expect(container.textContent).toContain(
-      "A Person may hold delegated Tenant authority in only one Tenant at a time, including TENANT_ADMIN, EARNINGS_OPERATOR, and EXPENSE_OPERATOR.",
+      "A Person may participate through Membership and Collaborator relationships in multiple Tenants, but may hold any other Tenant Role in only one Tenant at a time.",
     );
     expect(container.textContent).toContain(
-      "To move authority to another Tenant, explicitly revoke the Person's active delegated Role Grants first.",
+      "Before assigning a Role here, the Person must work with the Tenant where those Roles are held to have them removed.",
     );
     expect(container.textContent).toContain("2 of 2 assignments");
     const select = [...container.querySelectorAll("select")].find((node) =>
@@ -242,7 +242,7 @@ describe("TenantDetailPage", () => {
     expect(calls.some((call) => call.method === "POST")).toBe(false);
   });
 
-  it("excludes a Person with delegated authority in another Tenant without disclosing that Tenant", async () => {
+  it("excludes a Person with a non-baseline Role in another Tenant without disclosing that Tenant or Role", async () => {
     const oneAdminTenant = {
       ...tenant,
       operationalStatus: "ACTIVE_READY",
@@ -265,7 +265,7 @@ describe("TenantDetailPage", () => {
       globalPersonId: "person-cross-tenant",
       assigned: false,
       eligible: false,
-      ineligibilityReason: "This Person already holds delegated authority in another Tenant",
+      ineligibilityReason: "This Person has one or more Roles in another Tenant. They must work with that Tenant to have every Role other than Membership and Collaborator removed before a Role can be assigned here.",
       hasDelegatedAuthorityInOtherTenant: true,
     };
 
@@ -284,7 +284,7 @@ describe("TenantDetailPage", () => {
     await waitForText("1 of 2 Tenant Administrator slots is occupied.");
     await waitForText("Unavailable administrator candidates");
     expect(container.textContent).toContain(
-      "Cross Tenant Admin: This Person already holds delegated authority in another Tenant. Revoke that Tenant's delegated Role Grants before granting authority here.",
+      "Cross Tenant Admin: This Person has one or more Roles in another Tenant. They must work with that Tenant to have every Role other than Membership and Collaborator removed before a Role can be assigned here.",
     );
     expect(container.textContent).not.toContain("south");
     const select = [...container.querySelectorAll("select")].find((node) =>

@@ -211,7 +211,7 @@ func (r *gormRepository) ListTenantAdminCandidates(ctx context.Context, tenantID
 			reason = "Tenant already has the maximum of two active Tenant Administrators"
 		case hasDelegatedAuthorityOutside:
 			eligible = false
-			reason = "This Person already holds delegated authority in another Tenant"
+			reason = authz.CrossTenantRoleConflictMessage
 		case personTargetTenantAdminActor[globalPersonID] != "" && personTargetTenantAdminActor[globalPersonID] != actor.ID:
 			eligible = false
 			reason = "The other Tenant Administrator slot must belong to a different Person"

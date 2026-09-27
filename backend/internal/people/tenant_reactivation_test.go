@@ -184,7 +184,7 @@ func TestTenantReactivationRestoresOnlySelectedMembershipAndBaselineAuthority(t 
 	if !ok {
 		t.Fatalf("expected cross-Tenant delegated-role validation error, got %T: %v", blockedGrantErr, blockedGrantErr)
 	}
-	if got := validation.ValidationFields()["roleCode"]; got != "This Person already holds delegated authority in another Tenant. Revoke that Tenant's delegated Role Grants before granting authority here." {
+	if got := validation.ValidationFields()["roleCode"]; got != "This Person has one or more Roles in another Tenant. They must work with that Tenant to have every Role other than Membership and Collaborator removed before a Role can be assigned here." {
 		t.Fatalf("unexpected cross-Tenant delegated-role validation message: %q", got)
 	}
 	revokedB, err := store.RevokeTenantOperatorRoleGrant(ctx, tenantB, actorB.ID, "grant-return-b")

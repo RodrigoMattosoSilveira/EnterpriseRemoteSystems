@@ -1,11 +1,14 @@
 PRAGMA foreign_keys = ON;
 
 -- Bite 32.4 generalizes the Bite 30H Tenant Administrator Person/Tenant
--- boundary to every active tenant-scoped delegated Role Grant. A global Person
--- may participate in many Tenants through Memberships and Collaborator
--- Journeys, but delegated Tenant authority may be assigned in only one Tenant
--- at a time. lifecycle_suspended grants remain assigned (active=1) and continue
--- to reserve that authority Tenant until explicitly revoked.
+-- boundary to every active TENANT-scoped authorization Role Grant. Membership
+-- and Collaborator are baseline relationships and may exist across multiple
+-- Tenants; every other Tenant Role is non-baseline and may be held in only one
+-- Tenant at a time for the same global Person. The guard is deliberately based
+-- on authz_roles.scope_type='TENANT', not an enumerated Role-code list, so future
+-- Tenant Roles inherit the same isolation automatically. lifecycle_suspended
+-- grants remain assigned (active=1) and continue to reserve that Role Tenant
+-- until explicitly revoked by the Tenant where they are held.
 --
 -- Refuse to choose a winning Tenant for any legacy conflict. Automatic
 -- revocation would be an authorization decision with no safe deterministic

@@ -143,7 +143,7 @@ describe("filterTenantRoleActors", () => {
 });
 
 describe("tenantRoleGrantEligibility", () => {
-  it("blocks delegation when the same Person already has delegated authority in another Tenant", () => {
+  it("blocks Role provisioning when the same Person has a non-baseline Role in another Tenant", () => {
     const actor: AuthzActor = {
       id: "actor-cross-tenant",
       actorKey: "cross-tenant@example.test",
@@ -164,7 +164,7 @@ describe("tenantRoleGrantEligibility", () => {
     expect(tenantRoleGrantEligibility(actor)).toBe("CROSS_TENANT_AUTHORITY");
   });
 
-  it("allows baseline multi-Tenant participation when no delegated authority exists elsewhere", () => {
+  it("allows Membership and Collaborator participation in multiple Tenants when no other Role exists elsewhere", () => {
     const actor: AuthzActor = {
       id: "actor-baseline",
       actorKey: "baseline@example.test",

@@ -190,7 +190,7 @@ FROM (
 );
 ")"
   if [ "$cross_tenant_delegated_role_conflicts" != "0" ]; then
-    echo "Bite 32.4 cross-Tenant delegated Role isolation found ${cross_tenant_delegated_role_conflicts} conflicting Person(s)." >&2
+    echo "Bite 32.4 cross-Tenant non-baseline Role isolation found ${cross_tenant_delegated_role_conflicts} conflicting Person(s)." >&2
     exit 1
   fi
 fi

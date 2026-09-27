@@ -21,7 +21,7 @@ const (
 	RolePerson           RoleCode = "PERSON"
 )
 
-const crossTenantDelegatedAuthorityMessage = "This Person already holds delegated authority in another Tenant. Revoke that Tenant's delegated Role Grants before granting authority here."
+const CrossTenantRoleConflictMessage = "This Person has one or more Roles in another Tenant. They must work with that Tenant to have every Role other than Membership and Collaborator removed before a Role can be assigned here."
 
 type RoleCode string
 
@@ -554,11 +554,13 @@ func ValidateDelegatedRoleGrant(database *gorm.DB, actorID string, role AuthzRol
 }
 
 // validateCrossTenantDelegatedRoleIsolation enforces Bite 32.4 at the global
-// Person boundary. A Person may participate in multiple Tenants through
-// Memberships and Collaborator Journeys, but active delegated Tenant Role
-// Grants may belong to only one Tenant at a time. lifecycle_suspended remains
-// an assigned Role Grant and therefore does not release the Tenant-authority
-// boundary; explicit revocation (active=false) does.
+// Person boundary. Membership and Collaborator participation may exist in
+// multiple Tenants, but every active TENANT-scoped authorization Role Grant is
+// a non-baseline Role and may belong to only one Tenant at a time for the same
+// Person. This intentionally covers future Tenant Role codes without a role
+// allowlist. lifecycle_suspended remains an assigned Role Grant and therefore
+// does not release the Tenant-Role boundary; explicit revocation (active=false)
+// does.
 func validateCrossTenantDelegatedRoleIsolation(database *gorm.DB, actorID string, tenantID string) error {
 	if database == nil {
 		return nil
@@ -582,7 +584,7 @@ func validateCrossTenantDelegatedRoleIsolation(database *gorm.DB, actorID string
 		return nil
 	}
 	return NewValidationError(map[string]string{
-		"roleCode": crossTenantDelegatedAuthorityMessage,
+		"roleCode": CrossTenantRoleConflictMessage,
 	})
 }
 

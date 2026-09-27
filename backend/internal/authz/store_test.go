@@ -778,7 +778,7 @@ func TestDelegatedRoleIsolationAllowsSameTenantRolesButBlocksAnotherTenant(t *te
 		t.Fatal("expected cross-Tenant delegated authority to be rejected")
 	} else {
 		message := validationMessage(err)
-		if !strings.Contains(message, "already holds delegated authority in another Tenant") {
+		if !strings.Contains(message, "has one or more Roles in another Tenant") {
 			t.Fatalf("unexpected cross-Tenant delegated authority error: %v", err)
 		}
 		if strings.Contains(message, "tenant-a") || strings.Contains(message, "tenant-b") {
@@ -837,10 +837,59 @@ func TestDelegatedRoleIsolationBlocksMixedTenantRolesAcrossTenants(t *testing.T)
 			}
 			if _, err := store.GrantActorRole(context.Background(), actorB, GrantActorRoleRequest{
 				RoleCode: string(tt.secondRole), TenantID: "tenant-b",
-			}); err == nil || !strings.Contains(validationMessage(err), "already holds delegated authority in another Tenant") {
+			}); err == nil || !strings.Contains(validationMessage(err), "has one or more Roles in another Tenant") {
 				t.Fatalf("expected mixed cross-Tenant delegated Role rejection, got %v", err)
 			}
 		})
+	}
+}
+
+func TestDelegatedRoleIsolationAppliesToUnenumeratedFutureTenantRoles(t *testing.T) {
+	database := newAuthzTestDB(t)
+	installTenantRoleDelegationFixtureTables(t, database)
+	store := NewGORMStore(database)
+
+	personID := "person-future-role-cross-tenant"
+	actorA := createAuthzActor(t, database, "future-role-a@example.com", &personID, nil)
+	actorB := createAuthzActor(t, database, "future-role-b@example.com", &personID, nil)
+	bindActiveTenantMemberActor(t, database, actorA, "tenant-a", personID)
+	bindActiveTenantMemberActor(t, database, actorB, "tenant-b", personID)
+
+	now := time.Now().UTC()
+	futureRole := AuthzRole{
+		ID:          "authz-role-future-tenant",
+		Code:        "FUTURE_TENANT_ROLE",
+		Label:       "Future Tenant Role",
+		Description: "Test-only future Tenant Role proving Bite 32.4 is not role-code enumerated.",
+		ScopeType:   string(ActorScopeTenant),
+		Active:      true,
+		CreatedAt:   now,
+		UpdatedAt:   now,
+	}
+	if err := database.Create(&futureRole).Error; err != nil {
+		t.Fatalf("create future Tenant Role fixture: %v", err)
+	}
+
+	if _, err := store.GrantTenantOperatorRole(context.Background(), "tenant-a", actorA, string(RoleExpenseOperator)); err != nil {
+		t.Fatalf("grant Tenant A operator Role: %v", err)
+	}
+	if _, err := store.GrantActorRole(context.Background(), actorB, GrantActorRoleRequest{
+		RoleCode: futureRole.Code,
+		TenantID: "tenant-b",
+	}); err == nil || !strings.Contains(validationMessage(err), "has one or more Roles in another Tenant") {
+		t.Fatalf("expected unenumerated Tenant Role to be blocked by cross-Tenant Role isolation, got %v", err)
+	}
+
+	if err := database.Model(&AuthzActorRoleGrant{}).
+		Where("actor_id = ? AND tenant_id = ? AND active = ?", actorA, "tenant-a", true).
+		Update("active", false).Error; err != nil {
+		t.Fatalf("revoke Tenant A Role fixture: %v", err)
+	}
+	if _, err := store.GrantActorRole(context.Background(), actorB, GrantActorRoleRequest{
+		RoleCode: futureRole.Code,
+		TenantID: "tenant-b",
+	}); err != nil {
+		t.Fatalf("explicit revocation must make future Tenant Role eligible in another Tenant: %v", err)
 	}
 }
 
@@ -862,7 +911,7 @@ func TestDelegatedRoleIsolationDoesNotBlockBaselineMultiTenantParticipation(t *t
 	}
 }
 
-func TestListTenantRoleActorsMarksCrossTenantDelegatedAuthorityWithoutTenantDisclosure(t *testing.T) {
+func TestListTenantRoleActorsMarksAnyCrossTenantRoleWithoutTenantOrRoleDisclosure(t *testing.T) {
 	database := newAuthzTestDB(t)
 	installTenantRoleDelegationFixtureTables(t, database)
 	store := NewGORMStore(database)
@@ -872,8 +921,22 @@ func TestListTenantRoleActorsMarksCrossTenantDelegatedAuthorityWithoutTenantDisc
 	actorB := createAuthzActor(t, database, "candidate-b@example.com", &personID, nil)
 	bindActiveTenantMemberActor(t, database, actorA, "tenant-a", personID)
 	bindActiveTenantMemberActor(t, database, actorB, "tenant-b", personID)
-	if _, err := store.GrantTenantOperatorRole(context.Background(), "tenant-b", actorB, string(RoleExpenseOperator)); err != nil {
-		t.Fatalf("seed Tenant B delegated authority: %v", err)
+	now := time.Now().UTC()
+	futureRole := AuthzRole{
+		ID:          "authz-role-future-candidate",
+		Code:        "FUTURE_CANDIDATE_ROLE",
+		Label:       "Future Candidate Role",
+		Description: "Test-only future Tenant Role proving candidate conflict detection is generic.",
+		ScopeType:   string(ActorScopeTenant),
+		Active:      true,
+		CreatedAt:   now,
+		UpdatedAt:   now,
+	}
+	if err := database.Create(&futureRole).Error; err != nil {
+		t.Fatalf("create future candidate Role fixture: %v", err)
+	}
+	if err := GrantRole(database, actorB, RoleCode(futureRole.Code), "tenant-b"); err != nil {
+		t.Fatalf("seed Tenant B future Role: %v", err)
 	}
 
 	actors, err := store.ListTenantRoleActors(context.Background(), "tenant-a")
@@ -891,7 +954,7 @@ func TestListTenantRoleActorsMarksCrossTenantDelegatedAuthorityWithoutTenantDisc
 		t.Fatalf("expected Tenant A candidate %s in %#v", actorA, actors)
 	}
 	if !candidate.HasDelegatedAuthorityInOtherTenant {
-		t.Fatalf("expected cross-Tenant authority flag, got %#v", candidate)
+		t.Fatalf("expected cross-Tenant Role-conflict flag, got %#v", candidate)
 	}
 	if len(candidate.RoleGrants) != 0 {
 		t.Fatalf("Tenant A projection must not disclose another Tenant's Role Grants, got %#v", candidate.RoleGrants)
@@ -1218,7 +1281,7 @@ func TestTenantAdministratorCardinalityPreventsPersonFromAdministeringTwoTenants
 	}
 	if _, err := store.GrantActorRole(context.Background(), actorB, GrantActorRoleRequest{
 		RoleCode: string(RoleTenantAdmin), TenantID: "tenant-b",
-	}); err == nil || !strings.Contains(validationMessage(err), "already holds delegated authority in another Tenant") {
+	}); err == nil || !strings.Contains(validationMessage(err), "has one or more Roles in another Tenant") {
 		t.Fatalf("expected generalized cross-Tenant delegated-authority rejection, got %v", err)
 	}
 }

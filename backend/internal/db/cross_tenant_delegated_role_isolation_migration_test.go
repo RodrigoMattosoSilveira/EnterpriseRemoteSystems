@@ -43,6 +43,15 @@ VALUES ('grant-b-expense', 'actor-b', 'role-expense', 'tenant-b', 1, 0)
 		t.Fatalf("expected cross-Tenant delegated Role insertion rejection, got %v", err)
 	}
 
+	// The guard is defined by TENANT scope, not by today's enumerated Role codes.
+	// A future Tenant Role must be blocked by the same Person-wide boundary.
+	if _, err := sqlDB.Exec(`
+INSERT INTO authz_actor_role_grants(id, actor_id, role_id, tenant_id, active, lifecycle_suspended)
+VALUES ('grant-b-future', 'actor-b', 'role-future', 'tenant-b', 1, 0)
+`); err == nil || !strings.Contains(err.Error(), "delegated_role_person_cross_tenant") {
+		t.Fatalf("expected unenumerated future Tenant Role insertion rejection, got %v", err)
+	}
+
 	// Reactivating a historical grant is guarded just like insertion.
 	if _, err := sqlDB.Exec(`
 INSERT INTO authz_actor_role_grants(id, actor_id, role_id, tenant_id, active, lifecycle_suspended)
@@ -102,7 +111,7 @@ func TestCrossTenantDelegatedRoleIsolationMigrationRejectsExistingConflict(t *te
 
 	if _, err := sqlDB.Exec(crossTenantDelegatedRoleIsolationSchema + crossTenantDelegatedRoleIsolationFixture + `
 INSERT INTO authz_actor_role_grants(id, actor_id, role_id, tenant_id, active, lifecycle_suspended)
-VALUES ('grant-b-existing', 'actor-b', 'role-earnings', 'tenant-b', 1, 0);
+VALUES ('grant-b-existing', 'actor-b', 'role-future', 'tenant-b', 1, 0);
 `); err != nil {
 		t.Fatalf("create legacy cross-Tenant conflict fixture: %v", err)
 	}
@@ -154,6 +163,7 @@ INSERT INTO authz_roles(id, code, scope_type, active) VALUES
   ('role-expense', 'EXPENSE_OPERATOR', 'TENANT', 1),
   ('role-earnings', 'EARNINGS_OPERATOR', 'TENANT', 1),
   ('role-tenant-admin', 'TENANT_ADMIN', 'TENANT', 1),
+  ('role-future', 'FUTURE_TENANT_ROLE', 'TENANT', 1),
   ('role-application', 'APPLICATION_ADMIN', 'APPLICATION', 1);
 INSERT INTO authz_actors(id, active) VALUES
   ('actor-a', 1),

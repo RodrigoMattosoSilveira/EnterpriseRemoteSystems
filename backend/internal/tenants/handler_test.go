@@ -187,7 +187,7 @@ func TestTenantCodeMustBeUnique(t *testing.T) {
 	}
 }
 
-func TestTenantAdminCandidatesBlockAnyCrossTenantDelegatedAuthorityWithoutDisclosure(t *testing.T) {
+func TestTenantAdminCandidatesBlockAnyCrossTenantRoleWithoutDisclosure(t *testing.T) {
 	server, dbPath, cleanup := newTestServer(t, true)
 	defer cleanup()
 
@@ -199,10 +199,24 @@ func TestTenantAdminCandidatesBlockAnyCrossTenantDelegatedAuthorityWithoutDisclo
 	if err != nil {
 		t.Fatalf("open test database: %v", err)
 	}
-	store := authz.NewGORMStore(database)
-	if _, err := store.GrantTenantOperatorRole(context.Background(), tenantB.ID, actorB, string(authz.RoleExpenseOperator)); err != nil {
+	now := time.Now().UTC()
+	futureRole := authz.AuthzRole{
+		ID:          "authz-role-future-tenant-handler-test",
+		Code:        "FUTURE_TENANT_ROLE",
+		Label:       "Future Tenant Role",
+		Description: "Test-only future Tenant Role proving candidate eligibility is not role-code enumerated.",
+		ScopeType:   string(authz.ActorScopeTenant),
+		Active:      true,
+		CreatedAt:   now,
+		UpdatedAt:   now,
+	}
+	if err := database.Create(&futureRole).Error; err != nil {
 		closeDatabase(t, database)
-		t.Fatalf("grant delegated authority in Tenant B: %v", err)
+		t.Fatalf("create future Tenant Role fixture: %v", err)
+	}
+	if err := authz.GrantRole(database, actorB, authz.RoleCode(futureRole.Code), tenantB.ID); err != nil {
+		closeDatabase(t, database)
+		t.Fatalf("grant future Tenant Role in Tenant B: %v", err)
 	}
 	closeDatabase(t, database)
 
@@ -224,9 +238,9 @@ func TestTenantAdminCandidatesBlockAnyCrossTenantDelegatedAuthorityWithoutDisclo
 		t.Fatalf("expected Tenant A Actor %s in candidate response: %+v", actorA, body.Data)
 	}
 	if candidate.Eligible || !candidate.HasDelegatedAuthorityInOtherTenant {
-		t.Fatalf("expected candidate blocked by cross-Tenant delegated authority: %+v", candidate)
+		t.Fatalf("expected candidate blocked by a cross-Tenant non-baseline Role: %+v", candidate)
 	}
-	if candidate.IneligibilityReason != "This Person already holds delegated authority in another Tenant" {
+	if candidate.IneligibilityReason != "This Person has one or more Roles in another Tenant. They must work with that Tenant to have every Role other than Membership and Collaborator removed before a Role can be assigned here." {
 		t.Fatalf("unexpected non-disclosing ineligibility reason %q", candidate.IneligibilityReason)
 	}
 	if strings.Contains(candidate.IneligibilityReason, tenantB.ID) || strings.Contains(candidate.IneligibilityReason, tenantB.Code) || strings.Contains(candidate.IneligibilityReason, tenantB.Name) {
@@ -241,8 +255,8 @@ func TestTenantAdminCandidatesBlockAnyCrossTenantDelegatedAuthorityWithoutDisclo
 	var errorBody apiErrorResponse
 	decodeJSON(t, res, &errorBody)
 	message := errorBody.Error.Fields["roleCode"]
-	if !strings.Contains(message, "already holds delegated authority in another Tenant") {
-		t.Fatalf("expected generalized delegated-authority rejection, got %+v", errorBody.Error)
+	if !strings.Contains(message, "has one or more Roles in another Tenant") {
+		t.Fatalf("expected generalized cross-Tenant Role rejection, got %+v", errorBody.Error)
 	}
 	if strings.Contains(message, tenantB.ID) || strings.Contains(message, tenantB.Code) || strings.Contains(message, tenantB.Name) {
 		t.Fatalf("assignment rejection disclosed other Tenant identity: %q", message)

@@ -51,8 +51,8 @@ export const enUSMessages = {
   "common.error.authenticationHint": "An authenticated user session is required. Sign in again before retrying this operation.",
   "common.error.tenantSelectionHint": "Select an available authorization context before retrying this operation.",
 
-  "authz.tenantRoleDelegation.crossTenantAuthorityBadge": "Delegated authority in another Tenant",
-  "authz.tenantRoleDelegation.crossTenantConflict": "This Person already holds delegated authority in another Tenant. Revoke that Tenant's delegated Role Grants before granting authority here.",
+  "authz.tenantRoleDelegation.crossTenantAuthorityBadge": "Role in another Tenant",
+  "authz.tenantRoleDelegation.crossTenantConflict": "This Person has one or more Roles in another Tenant. They must work with that Tenant to have every Role other than Membership and Collaborator removed before a Role can be assigned here.",
 
   "nav.primaryAria": "Primary navigation",
   "nav.sectionAria": "{label} section",
@@ -283,7 +283,7 @@ export const enUSMessages = {
   "admin.tenantDetail.identity": "Tenant identity",
   "admin.tenantDetail.saveTenant": "Save Tenant",
   "admin.tenantDetail.admins.title": "Tenant Administrators",
-  "admin.tenantDetail.admins.description": "A Tenant may have up to two active Tenant Administrators (TENANT_ADMIN assignments). A Person may hold delegated Tenant authority in only one Tenant at a time, including TENANT_ADMIN, EARNINGS_OPERATOR, and EXPENSE_OPERATOR. Baseline Membership or Collaborator participation in other Tenants is allowed. To move authority to another Tenant, explicitly revoke the Person's active delegated Role Grants first.",
+  "admin.tenantDetail.admins.description": "A Tenant may have up to two active Tenant Administrators (TENANT_ADMIN assignments). A Person may participate through Membership and Collaborator relationships in multiple Tenants, but may hold any other Tenant Role in only one Tenant at a time. Before assigning a Role here, the Person must work with the Tenant where those Roles are held to have them removed.",
   "admin.tenantDetail.admins.oneSlot": "1 of 2 Tenant Administrator slots is occupied. You may assign a second distinct Person for operational redundancy.",
   "admin.tenantDetail.admins.full": "Both Tenant Administrator slots are occupied. Revoke an existing assignment before assigning another Person.",
   "admin.tenantDetail.admins.maxAssigned": "Maximum of two administrators assigned",

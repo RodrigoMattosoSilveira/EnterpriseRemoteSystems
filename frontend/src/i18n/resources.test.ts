@@ -41,6 +41,21 @@ describe("ERS translation resources", () => {
     );
   });
 
+  it("describes Bite 32.4 cross-Tenant Role eligibility without disclosing Tenant or Role identity", () => {
+    expect(messagesByLocale["en-US"]["authz.tenantRoleDelegation.crossTenantAuthorityBadge"]).toBe(
+      "Role in another Tenant",
+    );
+    expect(messagesByLocale["en-US"]["authz.tenantRoleDelegation.crossTenantConflict"]).toBe(
+      "This Person has one or more Roles in another Tenant. They must work with that Tenant to have every Role other than Membership and Collaborator removed before a Role can be assigned here.",
+    );
+    expect(messagesByLocale["pt-BR"]["authz.tenantRoleDelegation.crossTenantAuthorityBadge"]).toBe(
+      "Função em outro Locatário",
+    );
+    expect(messagesByLocale["pt-BR"]["authz.tenantRoleDelegation.crossTenantConflict"]).toBe(
+      "Esta Pessoa possui uma ou mais Funções em outro Locatário. Ela deve trabalhar com esse Locatário para que todas as Funções, exceto Vínculo e Colaborador, sejam removidas antes que uma Função possa ser atribuída aqui.",
+    );
+  });
+
   it("uses Locatário terminology only in pt-BR while preserving English Tenant terminology", () => {
     expect(messagesByLocale["en-US"]["common.tenant"]).toBe("Tenant");
     expect(messagesByLocale["en-US"]["common.tenants"]).toBe("Tenants");
