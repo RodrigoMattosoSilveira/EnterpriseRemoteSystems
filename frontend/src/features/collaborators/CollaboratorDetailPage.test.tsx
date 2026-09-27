@@ -452,7 +452,8 @@ describe("CollaboratorDetailPage", () => {
       closedOnlyWorkCreditSelfActor,
     );
 
-    await waitForText("Work and Credit Evidence");
+    await waitForText("Compensation rule");
+    expect(textNode("Work and Credit Evidence")).toBeTruthy();
     expect(textNode("Compensation rule")).toBeTruthy();
     expect(textNode("Work recognized")).toBeTruthy();
     expect(textNode("80 g gold recorded")).toBeTruthy();
@@ -517,7 +518,8 @@ describe("CollaboratorDetailPage", () => {
       closedOnlyWorkCreditSelfActor,
     );
 
-    await waitForText("Demonstrativo de Trabalho e Crédito");
+    await waitForText("Regra de remuneração");
+    expect(textNode("Demonstrativo de Trabalho e Crédito")).toBeTruthy();
     expect(textNode("Regra de remuneração")).toBeTruthy();
     expect(textNode("Trabalho reconhecido")).toBeTruthy();
     expect(textNode("Ganhos calculados")).toBeTruthy();
