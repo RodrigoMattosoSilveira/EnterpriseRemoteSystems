@@ -50,15 +50,16 @@ type PermissionResponse struct {
 }
 
 type ActorResponse struct {
-	ID             string                `json:"id"`
-	ActorKey       string                `json:"actorKey"`
-	DisplayName    string                `json:"displayName"`
-	PersonID       string                `json:"personId,omitempty"`
-	GlobalPersonID string                `json:"globalPersonId,omitempty"`
-	CollaboratorID string                `json:"collaboratorId,omitempty"`
-	Active         bool                  `json:"active"`
-	RoleGrants     []ActorGrantResponse  `json:"roleGrants,omitempty"`
-	Binding        *ActorBindingResponse `json:"binding,omitempty"`
+	ID                                 string                `json:"id"`
+	ActorKey                           string                `json:"actorKey"`
+	DisplayName                        string                `json:"displayName"`
+	PersonID                           string                `json:"personId,omitempty"`
+	GlobalPersonID                     string                `json:"globalPersonId,omitempty"`
+	CollaboratorID                     string                `json:"collaboratorId,omitempty"`
+	Active                             bool                  `json:"active"`
+	RoleGrants                         []ActorGrantResponse  `json:"roleGrants,omitempty"`
+	Binding                            *ActorBindingResponse `json:"binding,omitempty"`
+	HasDelegatedAuthorityInOtherTenant bool                  `json:"hasDelegatedAuthorityInOtherTenant"`
 }
 
 // ActorBindingResponse is the authoritative Authentication Account -> Actor
@@ -647,6 +648,10 @@ func (s *GORMStore) ListTenantRoleActors(ctx context.Context, tenantID string) (
 	if err != nil {
 		return nil, err
 	}
+	crossTenantAuthorityPersons, err := delegatedTenantAuthorityPersonsOutside(s.database.WithContext(ctx), tenantID)
+	if err != nil {
+		return nil, err
+	}
 	responses := make([]ActorResponse, 0, len(actors))
 	for _, actor := range actors {
 		grants, err := s.tenantOperatorGrantsForActor(ctx, actor.ID, tenantID)
@@ -658,6 +663,9 @@ func (s *GORMStore) ListTenantRoleActors(ctx context.Context, tenantID string) (
 			if err := s.applyCanonicalAdministrationIdentity(ctx, &response, binding); err != nil {
 				return nil, err
 			}
+		}
+		if response.GlobalPersonID != "" {
+			_, response.HasDelegatedAuthorityInOtherTenant = crossTenantAuthorityPersons[response.GlobalPersonID]
 		}
 		responses = append(responses, response)
 	}

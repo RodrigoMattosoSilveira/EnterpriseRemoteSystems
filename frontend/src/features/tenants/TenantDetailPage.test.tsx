@@ -202,8 +202,8 @@ describe("TenantDetailPage", () => {
       globalPersonId: "person-cross-tenant",
       assigned: false,
       eligible: false,
-      ineligibilityReason: "This Person already administers tenant south",
-      tenantAdminTenantId: "south",
+      ineligibilityReason: "This Person already holds delegated authority in another Tenant",
+      hasDelegatedAuthorityInOtherTenant: true,
     };
 
     mockFetch(async (url, init) => {
@@ -224,10 +224,10 @@ describe("TenantDetailPage", () => {
       "A Tenant may have up to two active Tenant Administrators (TENANT_ADMIN assignments).",
     );
     expect(container.textContent).toContain(
-      "A Person who is a TENANT_ADMIN for Tenant A cannot concurrently be a TENANT_ADMIN for Tenant B; a Person may administer only one Tenant at a time.",
+      "A Person may hold delegated Tenant authority in only one Tenant at a time, including TENANT_ADMIN, EARNINGS_OPERATOR, and EXPENSE_OPERATOR.",
     );
     expect(container.textContent).toContain(
-      "To remove a Person's Tenant Administrator privilege, explicitly revoke the Person Actor's TENANT_ADMIN Role Grant.",
+      "To move authority to another Tenant, explicitly revoke the Person's active delegated Role Grants first.",
     );
     expect(container.textContent).toContain("2 of 2 assignments");
     const select = [...container.querySelectorAll("select")].find((node) =>
@@ -242,7 +242,7 @@ describe("TenantDetailPage", () => {
     expect(calls.some((call) => call.method === "POST")).toBe(false);
   });
 
-  it("excludes a Person who already administers another Tenant while a slot remains", async () => {
+  it("excludes a Person with delegated authority in another Tenant without disclosing that Tenant", async () => {
     const oneAdminTenant = {
       ...tenant,
       operationalStatus: "ACTIVE_READY",
@@ -265,8 +265,8 @@ describe("TenantDetailPage", () => {
       globalPersonId: "person-cross-tenant",
       assigned: false,
       eligible: false,
-      ineligibilityReason: "This Person already administers tenant south",
-      tenantAdminTenantId: "south",
+      ineligibilityReason: "This Person already holds delegated authority in another Tenant",
+      hasDelegatedAuthorityInOtherTenant: true,
     };
 
     mockFetch(async (url, init) => {
@@ -284,8 +284,9 @@ describe("TenantDetailPage", () => {
     await waitForText("1 of 2 Tenant Administrator slots is occupied.");
     await waitForText("Unavailable administrator candidates");
     expect(container.textContent).toContain(
-      "Cross Tenant Admin: This Person already administers tenant south",
+      "Cross Tenant Admin: This Person already holds delegated authority in another Tenant. Revoke that Tenant's delegated Role Grants before granting authority here.",
     );
+    expect(container.textContent).not.toContain("south");
     const select = [...container.querySelectorAll("select")].find((node) =>
       node.textContent?.includes("Select an eligible active actor"),
     );

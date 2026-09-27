@@ -42,6 +42,8 @@ When a Tenant uses both slots, the grants must belong to two distinct global Per
 
 The tenant detail page lists persisted authorization Actors and reports assignment capacity separately from currently active administrator Actors. Assigning an Actor creates or reactivates a tenant-scoped `TENANT_ADMIN` Role Grant. Inactive Actors cannot be newly assigned. Revocation deactivates only that Role Grant; it does not delete or deactivate the Actor. Deactivating an Actor does **not** release its administrator slot; the active grant must be explicitly revoked.
 
+Bite 32.4 generalizes the Person boundary beyond `TENANT_ADMIN`: if the same global Person already has any active delegated Tenant Role Grant (`TENANT_ADMIN`, `EARNINGS_OPERATOR`, or `EXPENSE_OPERATOR`) in another Tenant, that Person is not eligible for a new Tenant Administrator assignment here. Candidate projections expose only that a conflict exists; they do not disclose the other Tenant's identity or Role. Baseline Membership/Collaborator participation in multiple Tenants remains valid.
+
 A Tenant with one administrator may assign a second distinct Person before revoking a departing administrator, allowing a safe overlap/handoff without an administrative coverage gap.
 
 ## Authenticated scope boundary

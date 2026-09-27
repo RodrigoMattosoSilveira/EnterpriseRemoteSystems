@@ -5,7 +5,7 @@ DB_PATH="${DATABASE_PATH:-/app/data/app.db}"
 MIGRATIONS_DIR="${MIGRATIONS_DIR:-/app/migrations}"
 EXPECTED_BASELINE_LAST_MIGRATION="${EXPECTED_BASELINE_LAST_MIGRATION:-000062_tenant_administrator_cardinality.up.sql}"
 EXPECTED_FIRST_REHEARSED_MIGRATION="${EXPECTED_FIRST_REHEARSED_MIGRATION:-000063_global_administration_control_plane.up.sql}"
-EXPECTED_FINAL_MIGRATION="${EXPECTED_FINAL_MIGRATION:-000070_revoke_noncanonical_application_admin_grants.up.sql}"
+EXPECTED_FINAL_MIGRATION="${EXPECTED_FINAL_MIGRATION:-000071_cross_tenant_delegated_role_isolation.up.sql}"
 
 if [ ! -f "$DB_PATH" ]; then
   echo "Missing database for migration verification: $DB_PATH" >&2
@@ -163,6 +163,37 @@ require_trigger trg_support_access_lease_permission_allowlist
 require_trigger trg_support_access_lease_no_delete
 require_trigger trg_authz_audit_logs_no_update
 require_trigger trg_authz_audit_logs_no_delete
+
+cross_tenant_role_isolation_migration_count="$(sqlite3 "$DB_PATH" "SELECT COUNT(*) FROM schema_migrations WHERE filename='000071_cross_tenant_delegated_role_isolation.up.sql';")"
+if [ "$cross_tenant_role_isolation_migration_count" = "1" ]; then
+  require_trigger trg_delegated_role_person_cross_tenant_insert
+  require_trigger trg_delegated_role_person_cross_tenant_update
+
+  cross_tenant_delegated_role_conflicts="$(sqlite3 "$DB_PATH" "
+SELECT COUNT(*)
+FROM (
+  SELECT m.person_id
+  FROM authz_actor_role_grants g
+  JOIN authz_roles r
+    ON r.id = g.role_id
+   AND r.scope_type = 'TENANT'
+  JOIN auth_account_actors aa
+    ON aa.actor_id = g.actor_id
+   AND aa.scope_type = 'TENANT'
+   AND aa.tenant_id = g.tenant_id
+  JOIN person_tenant_memberships m
+    ON m.id = aa.membership_id
+   AND m.tenant_id = aa.tenant_id
+  WHERE g.active = 1
+  GROUP BY m.person_id
+  HAVING COUNT(DISTINCT g.tenant_id) > 1
+);
+")"
+  if [ "$cross_tenant_delegated_role_conflicts" != "0" ]; then
+    echo "Bite 32.4 cross-Tenant delegated Role isolation found ${cross_tenant_delegated_role_conflicts} conflicting Person(s)." >&2
+    exit 1
+  fi
+fi
 
 audit_identity_migration_count="$(sqlite3 "$DB_PATH" "SELECT COUNT(*) FROM schema_migrations WHERE filename='000067_audit_identity_lifecycle_hardening.up.sql';")"
 if [ "$audit_identity_migration_count" = "1" ]; then

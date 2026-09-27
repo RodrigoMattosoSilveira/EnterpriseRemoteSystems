@@ -53,6 +53,9 @@ export const ptBRMessages = {
   "common.error.authenticationHint": "É necessária uma sessão de usuário autenticada. Entre novamente antes de tentar esta operação outra vez.",
   "common.error.tenantSelectionHint": "Selecione um contexto de autorização disponível antes de tentar esta operação outra vez.",
 
+  "authz.tenantRoleDelegation.crossTenantAuthorityBadge": "Autoridade delegada em outro Locatário",
+  "authz.tenantRoleDelegation.crossTenantConflict": "Esta Pessoa já possui autoridade delegada em outro Locatário. Revogue as Concessões de Função delegadas desse Locatário antes de conceder autoridade aqui.",
+
   "nav.primaryAria": "Navegação principal",
   "nav.sectionAria": "Seção {label}",
   "nav.people": "Pessoas",
@@ -282,7 +285,7 @@ export const ptBRMessages = {
   "admin.tenantDetail.identity": "Identidade do Locatário",
   "admin.tenantDetail.saveTenant": "Salvar Locatário",
   "admin.tenantDetail.admins.title": "Administradores do Locatário",
-  "admin.tenantDetail.admins.description": "Um Locatário pode ter até dois Administradores do Locatário ativos (atribuições TENANT_ADMIN). Uma Pessoa que seja TENANT_ADMIN do Locatário A não pode ser simultaneamente TENANT_ADMIN do Locatário B; uma Pessoa pode administrar apenas um Locatário por vez. Para remover o privilégio de Administrador do Locatário de uma Pessoa, revogue explicitamente a Concessão de Função TENANT_ADMIN do Ator da Pessoa.",
+  "admin.tenantDetail.admins.description": "Um Locatário pode ter até dois Administradores do Locatário ativos (atribuições TENANT_ADMIN). Uma Pessoa pode possuir autoridade delegada de Locatário em apenas um Locatário por vez, incluindo TENANT_ADMIN, EARNINGS_OPERATOR e EXPENSE_OPERATOR. A participação básica por Vínculo ou como Colaborador em outros Locatários continua permitida. Para mover a autoridade para outro Locatário, revogue primeiro as Concessões de Função delegadas ativas da Pessoa.",
   "admin.tenantDetail.admins.oneSlot": "1 de 2 vagas de Administrador do Locatário está ocupada. Você pode atribuir uma segunda Pessoa distinta para redundância operacional.",
   "admin.tenantDetail.admins.full": "As duas vagas de Administrador do Locatário estão ocupadas. Revogue uma atribuição existente antes de atribuir outra Pessoa.",
   "admin.tenantDetail.admins.maxAssigned": "Máximo de dois administradores atribuídos",

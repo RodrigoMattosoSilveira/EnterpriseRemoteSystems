@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { AuthzActor } from "../../types/authz";
-import { filterTenantRoleActors } from "./TenantRoleDelegationPage";
+import { filterTenantRoleActors, tenantRoleGrantEligibility } from "./TenantRoleDelegationPage";
 
 const actors: AuthzActor[] = [
   {
@@ -139,5 +139,49 @@ describe("filterTenantRoleActors", () => {
         collaboratorsOnly: false,
       }).map((actor) => actor.id),
     ).toEqual(["actor-identity-d"]);
+  });
+});
+
+describe("tenantRoleGrantEligibility", () => {
+  it("blocks delegation when the same Person already has delegated authority in another Tenant", () => {
+    const actor: AuthzActor = {
+      id: "actor-cross-tenant",
+      actorKey: "cross-tenant@example.test",
+      displayName: "Cross Tenant Candidate",
+      active: true,
+      hasDelegatedAuthorityInOtherTenant: true,
+      binding: {
+        accountId: "account-cross-tenant",
+        scopeType: "TENANT",
+        tenantId: "tenant-a",
+        membershipId: "membership-a",
+        membershipTenantId: "tenant-a",
+        membershipActive: true,
+        membershipSameTenant: true,
+      },
+    };
+
+    expect(tenantRoleGrantEligibility(actor)).toBe("CROSS_TENANT_AUTHORITY");
+  });
+
+  it("allows baseline multi-Tenant participation when no delegated authority exists elsewhere", () => {
+    const actor: AuthzActor = {
+      id: "actor-baseline",
+      actorKey: "baseline@example.test",
+      displayName: "Baseline Candidate",
+      active: true,
+      hasDelegatedAuthorityInOtherTenant: false,
+      binding: {
+        accountId: "account-baseline",
+        scopeType: "TENANT",
+        tenantId: "tenant-a",
+        membershipId: "membership-a",
+        membershipTenantId: "tenant-a",
+        membershipActive: true,
+        membershipSameTenant: true,
+      },
+    };
+
+    expect(tenantRoleGrantEligibility(actor)).toBe("ELIGIBLE");
   });
 });

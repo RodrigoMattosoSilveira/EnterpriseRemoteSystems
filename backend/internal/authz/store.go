@@ -21,6 +21,8 @@ const (
 	RolePerson           RoleCode = "PERSON"
 )
 
+const crossTenantDelegatedAuthorityMessage = "This Person already holds delegated authority in another Tenant. Revoke that Tenant's delegated Role Grants before granting authority here."
+
 type RoleCode string
 
 type ActorLookup struct {
@@ -539,12 +541,121 @@ func ValidateDelegatedRoleGrant(database *gorm.DB, actorID string, role AuthzRol
 		}
 	}
 
+	if err := validateCrossTenantDelegatedRoleIsolation(database, actorID, tenantID); err != nil {
+		return err
+	}
+
 	if role.Code == string(RoleTenantAdmin) {
 		if err := validateTenantAdministratorCardinality(database, actorID, tenantID, requireTenantBinding); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+// validateCrossTenantDelegatedRoleIsolation enforces Bite 32.4 at the global
+// Person boundary. A Person may participate in multiple Tenants through
+// Memberships and Collaborator Journeys, but active delegated Tenant Role
+// Grants may belong to only one Tenant at a time. lifecycle_suspended remains
+// an assigned Role Grant and therefore does not release the Tenant-authority
+// boundary; explicit revocation (active=false) does.
+func validateCrossTenantDelegatedRoleIsolation(database *gorm.DB, actorID string, tenantID string) error {
+	if database == nil {
+		return nil
+	}
+	globalPersonID, err := delegatedRoleGlobalPersonID(database, actorID, tenantID)
+	if err != nil {
+		return err
+	}
+	if globalPersonID == "" {
+		// Isolated pre-foundation tests and non-Person Actors cannot derive a
+		// canonical global Person. Production Tenant Roles are AccountActor-bound
+		// before this validator is reached.
+		return nil
+	}
+
+	conflict, err := hasDelegatedTenantAuthorityOutside(database, globalPersonID, tenantID)
+	if err != nil {
+		return err
+	}
+	if !conflict {
+		return nil
+	}
+	return NewValidationError(map[string]string{
+		"roleCode": crossTenantDelegatedAuthorityMessage,
+	})
+}
+
+func delegatedRoleGlobalPersonID(database *gorm.DB, actorID string, tenantID string) (string, error) {
+	if database == nil || !database.Migrator().HasTable("auth_account_actors") || !database.Migrator().HasTable("person_tenant_memberships") {
+		return "", nil
+	}
+	type projection struct {
+		GlobalPersonID string
+	}
+	var identity projection
+	result := database.Table("auth_account_actors aa").
+		Select("m.person_id AS global_person_id").
+		Joins("JOIN person_tenant_memberships m ON m.id = aa.membership_id AND m.tenant_id = aa.tenant_id").
+		Where("aa.actor_id = ? AND aa.scope_type = ? AND aa.tenant_id = ?", actorID, "TENANT", tenantID).
+		Limit(1).
+		Scan(&identity)
+	if result.Error != nil {
+		return "", fmt.Errorf("resolve delegated Role global Person: %w", result.Error)
+	}
+	if result.RowsAffected == 0 {
+		return "", nil
+	}
+	return strings.TrimSpace(identity.GlobalPersonID), nil
+}
+
+func hasDelegatedTenantAuthorityOutside(database *gorm.DB, globalPersonID string, tenantID string) (bool, error) {
+	globalPersonID = strings.TrimSpace(globalPersonID)
+	tenantID = strings.TrimSpace(tenantID)
+	if database == nil || globalPersonID == "" || tenantID == "" || tenantID == GlobalTenantScope {
+		return false, nil
+	}
+
+	var count int64
+	err := database.Table("authz_actor_role_grants g").
+		Joins("JOIN authz_roles r ON r.id = g.role_id AND r.scope_type = ?", string(ActorScopeTenant)).
+		Joins("JOIN auth_account_actors aa ON aa.actor_id = g.actor_id AND aa.scope_type = ? AND aa.tenant_id = g.tenant_id", "TENANT").
+		Joins("JOIN person_tenant_memberships m ON m.id = aa.membership_id AND m.tenant_id = aa.tenant_id").
+		Where("g.active = ? AND g.tenant_id <> ? AND m.person_id = ?", true, tenantID, globalPersonID).
+		Count(&count).Error
+	if err != nil {
+		return false, fmt.Errorf("check cross-Tenant delegated Role isolation: %w", err)
+	}
+	return count > 0, nil
+}
+
+func delegatedTenantAuthorityPersonsOutside(database *gorm.DB, tenantID string) (map[string]struct{}, error) {
+	result := map[string]struct{}{}
+	tenantID = strings.TrimSpace(tenantID)
+	if database == nil || tenantID == "" || tenantID == GlobalTenantScope {
+		return result, nil
+	}
+	type projection struct {
+		GlobalPersonID string
+	}
+	var rows []projection
+	err := database.Table("authz_actor_role_grants g").
+		Select("DISTINCT m.person_id AS global_person_id").
+		Joins("JOIN authz_roles r ON r.id = g.role_id AND r.scope_type = ?", string(ActorScopeTenant)).
+		Joins("JOIN auth_account_actors aa ON aa.actor_id = g.actor_id AND aa.scope_type = ? AND aa.tenant_id = g.tenant_id", "TENANT").
+		Joins("JOIN person_tenant_memberships m ON m.id = aa.membership_id AND m.tenant_id = aa.tenant_id").
+		Where("g.active = ? AND g.tenant_id <> ?", true, tenantID).
+		Scan(&rows).Error
+	if err != nil {
+		return nil, fmt.Errorf("list Persons with cross-Tenant delegated authority: %w", err)
+	}
+	for _, row := range rows {
+		personID := strings.TrimSpace(row.GlobalPersonID)
+		if personID != "" {
+			result[personID] = struct{}{}
+		}
+	}
+	return result, nil
 }
 
 func validateTenantAdministratorCardinality(database *gorm.DB, actorID string, tenantID string, requireTenantBinding bool) error {

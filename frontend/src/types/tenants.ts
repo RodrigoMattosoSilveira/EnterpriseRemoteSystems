@@ -38,5 +38,5 @@ export type TenantAdminCandidate = {
   assigned: boolean;
   eligible?: boolean;
   ineligibilityReason?: string;
-  tenantAdminTenantId?: string;
+  hasDelegatedAuthorityInOtherTenant?: boolean;
 };

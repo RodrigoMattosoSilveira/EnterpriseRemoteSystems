@@ -15,6 +15,7 @@ import {
   useTenantRoleActors,
 } from "./useAuthzAdmin";
 import { PageTitle } from "../../components/layout/PageHeading";
+import { useI18n } from "../../i18n";
 
 const roles: Array<{ code: TenantOperatorRoleCode; label: string }> = [
   { code: "EARNINGS_OPERATOR", label: "Earnings Operator" },
@@ -33,6 +34,7 @@ type TenantRoleActorFilters = {
 
 export function TenantRoleDelegationPage() {
   const currentActor = useAuthorizationContext();
+  const { t } = useI18n();
   const requestActor: AuthzAdminRequestActor = {
     actorId: currentActor.actorRecordId || currentActor.actorKey,
     tenantId: currentActor.tenantId,
@@ -190,7 +192,9 @@ export function TenantRoleDelegationPage() {
         {filteredActors.map((actor) => {
           const binding = actor.binding;
           const membershipEligible = Boolean(binding?.membershipActive && binding?.membershipSameTenant);
-          const roleEligible = actor.active && membershipEligible;
+          const grantEligibility = tenantRoleGrantEligibility(actor);
+          const roleEligible = grantEligibility === "ELIGIBLE";
+          const crossTenantAuthority = grantEligibility === "CROSS_TENANT_AUTHORITY";
           const isCurrentActor = actor.id === currentActor.actorRecordId;
           const lifecycleBusy = setActorActiveMutation.isPending;
           return (
@@ -218,6 +222,11 @@ export function TenantRoleDelegationPage() {
                   <span className="rounded-full bg-gray-100 px-2.5 py-1 text-xs font-medium text-gray-700">
                     {actor.collaboratorId ? "Collaborator" : "Tenant member"}
                   </span>
+                  {crossTenantAuthority && (
+                    <span className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-900">
+                      {t("authz.tenantRoleDelegation.crossTenantAuthorityBadge")}
+                    </span>
+                  )}
                 </div>
               </div>
 
@@ -263,11 +272,15 @@ export function TenantRoleDelegationPage() {
                       disabled={!roleEligible}
                     />
                   </div>
-                  {!roleEligible && (
+                  {crossTenantAuthority ? (
+                    <p className="mt-2 text-xs font-medium text-amber-700">
+                      {t("authz.tenantRoleDelegation.crossTenantConflict")}
+                    </p>
+                  ) : !roleEligible ? (
                     <p className="mt-2 text-xs font-medium text-amber-700">
                       Actor and same-tenant Membership must both be ACTIVE before a Role can be granted.
                     </p>
-                  )}
+                  ) : null}
                   {selectedRoleByActor[actor.id] &&
                     activeOperatorGrant(actor, selectedRoleByActor[actor.id]!) && (
                       <p className="mt-2 text-xs font-medium text-gray-600">
@@ -493,6 +506,24 @@ function TenantOperatorRoleSelector({
       )}
     </div>
   );
+}
+
+export type TenantRoleGrantEligibility =
+  | "ELIGIBLE"
+  | "ACTOR_OR_MEMBERSHIP_INACTIVE"
+  | "CROSS_TENANT_AUTHORITY";
+
+export function tenantRoleGrantEligibility(actor: AuthzActor): TenantRoleGrantEligibility {
+  const membershipEligible = Boolean(
+    actor.binding?.membershipActive && actor.binding?.membershipSameTenant,
+  );
+  if (!actor.active || !membershipEligible) {
+    return "ACTOR_OR_MEMBERSHIP_INACTIVE";
+  }
+  if (actor.hasDelegatedAuthorityInOtherTenant) {
+    return "CROSS_TENANT_AUTHORITY";
+  }
+  return "ELIGIBLE";
 }
 
 export function filterTenantRoleActors(

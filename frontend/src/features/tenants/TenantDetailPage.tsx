@@ -257,7 +257,9 @@ export function TenantDetailPage() {
                   <ul className="mt-2 space-y-1">
                     {unavailableActors.map((candidate) => (
                       <li key={candidate.actorId}>
-                        {candidate.displayName || candidate.actorKey}: {candidate.ineligibilityReason || t("admin.tenantDetail.admins.notEligible")}
+                        {candidate.displayName || candidate.actorKey}: {candidate.hasDelegatedAuthorityInOtherTenant
+                          ? t("authz.tenantRoleDelegation.crossTenantConflict")
+                          : candidate.ineligibilityReason || t("admin.tenantDetail.admins.notEligible")}
                       </li>
                     ))}
                   </ul>

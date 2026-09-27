@@ -70,6 +70,7 @@ export type AuthzActor = {
   active: boolean;
   roleGrants?: AuthzActorRoleGrant[];
   binding?: AuthzActorBinding;
+  hasDelegatedAuthorityInOtherTenant?: boolean;
 };
 
 export type CreateAuthzActorInput = {

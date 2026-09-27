@@ -30,6 +30,8 @@ Production and long-lived environments should keep `AUTHZ_BOOTSTRAP_ENABLED=fals
 
 Application Administrators can manage the application Actor catalog. Tenant Administrators can manage only Account-bound Tenant Actors for their selected Tenant: inactive Actors remain visible, and the Tenant Administrator may reactivate an Actor only while its same-tenant Person–Tenant Membership is ACTIVE. A missing Tenant Actor is created through the Person Authentication workflow, which preserves the canonical Authentication Account → Actor → Membership binding rather than creating a free-floating Actor. Tenant operator Role Grants still require an ACTIVE Actor and ACTIVE same-tenant Membership.
 
+Bite 32.4 adds a global-Person delegated-authority boundary: the same Person may retain ordinary Membership/Collaborator participation in multiple Tenants, but active tenant-scoped delegated Role Grants may exist in only one Tenant at a time. The boundary applies across Tenant Administrator, Earnings Operator, and Expenses Operator grants. Actor or Membership lifecycle suspension does not silently release that assignment; all active delegated Role Grants in the current authority Tenant must be explicitly revoked before delegated authority can be granted in another Tenant. Application-global authority and Tenant Support Access Leases remain outside this rule.
+
 ERS prevents:
 
 - an operating actor from deactivating itself;
