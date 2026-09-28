@@ -51,6 +51,9 @@ export function TenantRoleDelegationPage() {
   const [selectedRoleByActor, setSelectedRoleByActor] = useState<
     Record<string, TenantOperatorRoleCode | undefined>
   >({});
+  const [grantMessageByActor, setGrantMessageByActor] = useState<
+    Record<string, string | undefined>
+  >({});
 
   const actors = useMemo(() => {
     const rows = Array.isArray(actorsQuery.data) ? actorsQuery.data : [];
@@ -82,9 +85,14 @@ export function TenantRoleDelegationPage() {
 
   async function grant(targetActorId: string, roleCode: TenantOperatorRoleCode) {
     setMessage("");
+    setGrantMessageByActor((current) => ({ ...current, [targetActorId]: undefined }));
     try {
       await grantMutation.mutateAsync({ targetActorId, input: { roleCode } });
-      setMessage(`${roleLabel(roleCode)} granted.`);
+      setSelectedRoleByActor((current) => ({ ...current, [targetActorId]: undefined }));
+      setGrantMessageByActor((current) => ({
+        ...current,
+        [targetActorId]: `${roleLabel(roleCode)} granted.`,
+      }));
     } catch {
       // ApiErrorPanel renders the mutation error.
     }
@@ -92,6 +100,7 @@ export function TenantRoleDelegationPage() {
 
   async function revoke(targetActorId: string, grant: AuthzActorRoleGrant) {
     setMessage("");
+    setGrantMessageByActor((current) => ({ ...current, [targetActorId]: undefined }));
     try {
       await revokeMutation.mutateAsync({ targetActorId, grantId: grant.id });
       setMessage(`${roleLabel(grant.roleCode as TenantOperatorRoleCode)} revoked.`);
@@ -263,12 +272,16 @@ export function TenantRoleDelegationPage() {
                       actorId={actor.id}
                       roles={roles}
                       selectedRoleCode={selectedRoleByActor[actor.id] ?? ""}
-                      onChange={(roleCode) =>
+                      onChange={(roleCode) => {
+                        setGrantMessageByActor((current) => ({
+                          ...current,
+                          [actor.id]: undefined,
+                        }));
                         setSelectedRoleByActor((current) => ({
                           ...current,
                           [actor.id]: roleCode,
-                        }))
-                      }
+                        }));
+                      }}
                       disabled={!roleEligible}
                     />
                   </div>
@@ -281,6 +294,11 @@ export function TenantRoleDelegationPage() {
                       Actor and same-tenant Membership must both be ACTIVE before a Role can be granted.
                     </p>
                   ) : null}
+                  {grantMessageByActor[actor.id] && (
+                    <p role="status" className="mt-2 text-xs font-medium text-green-700">
+                      {grantMessageByActor[actor.id]}
+                    </p>
+                  )}
                   {selectedRoleByActor[actor.id] &&
                     activeOperatorGrant(actor, selectedRoleByActor[actor.id]!) && (
                       <p className="mt-2 text-xs font-medium text-gray-600">
