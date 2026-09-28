@@ -570,6 +570,8 @@ export function filterTenantRoleActors(
         actor.personId,
         actor.collaboratorId,
         actor.binding?.accountLogin,
+        actor.binding?.personName,
+        actor.binding?.personNickname,
         actor.binding?.membershipId,
       ]
         .filter((value): value is string => typeof value === "string" && value.length > 0)

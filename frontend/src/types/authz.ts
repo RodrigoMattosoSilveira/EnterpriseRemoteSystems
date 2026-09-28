@@ -52,6 +52,8 @@ export type AuthzActorBinding = {
   accountId: string;
   globalPersonId?: string;
   accountLogin?: string;
+  personName?: string;
+  personNickname?: string;
   scopeType: string;
   tenantId?: string;
   membershipId?: string;

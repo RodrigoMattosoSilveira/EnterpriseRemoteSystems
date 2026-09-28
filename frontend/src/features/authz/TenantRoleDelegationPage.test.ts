@@ -89,6 +89,47 @@ describe("filterTenantRoleActors", () => {
     ).toEqual(["actor-collaborator"]);
   });
 
+  it("searches canonical Person name and nickname even when the Actor display name is different", () => {
+    const canonicalPersonActor: AuthzActor = {
+      id: "actor-identity-a",
+      actorKey: "manual30g-identity-a",
+      displayName: "30G Identity A · Tenant A",
+      personId: "person-identity-a",
+      active: true,
+      roleGrants: [],
+      binding: {
+        accountId: "account-identity-a",
+        accountLogin: "manual30g.identity-a@example.test",
+        personName: "Ana FinancialContinuity",
+        personNickname: "30G Identity A",
+        scopeType: "TENANT",
+        tenantId: "tenant-a",
+        membershipId: "membership-identity-a",
+        membershipTenantId: "tenant-a",
+        membershipActive: true,
+        membershipSameTenant: true,
+      },
+    };
+
+    expect(
+      filterTenantRoleActors([canonicalPersonActor], {
+        searchTerm: "Ana",
+        roleFilter: "ALL",
+        actorStateFilter: "ALL",
+        collaboratorsOnly: false,
+      }).map((actor) => actor.id),
+    ).toEqual(["actor-identity-a"]);
+
+    expect(
+      filterTenantRoleActors([canonicalPersonActor], {
+        searchTerm: "FinancialContinuity",
+        roleFilter: "ALL",
+        actorStateFilter: "ALL",
+        collaboratorsOnly: false,
+      }).map((actor) => actor.id),
+    ).toEqual(["actor-identity-a"]);
+  });
+
   it("finds candidates with an existing operator grant for removal", () => {
     expect(
       filterTenantRoleActors(actors, {

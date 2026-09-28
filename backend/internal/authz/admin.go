@@ -75,6 +75,8 @@ type ActorBindingResponse struct {
 	AccountID            string `json:"accountId"`
 	GlobalPersonID       string `json:"globalPersonId,omitempty"`
 	AccountLogin         string `json:"accountLogin,omitempty"`
+	PersonName           string `json:"personName,omitempty"`
+	PersonNickname       string `json:"personNickname,omitempty"`
 	ScopeType            string `json:"scopeType"`
 	TenantID             string `json:"tenantId,omitempty"`
 	MembershipID         string `json:"membershipId,omitempty"`
@@ -535,6 +537,9 @@ func (s *GORMStore) tenantActorBindingsForAdministration(ctx context.Context, te
 		AccountID              string
 		GlobalPersonID         string
 		AccountLogin           string
+		PersonFirstName        string
+		PersonLastName         string
+		PersonNickname         string
 		ScopeType              string
 		TenantID               string
 		MembershipID           string
@@ -543,30 +548,45 @@ func (s *GORMStore) tenantActorBindingsForAdministration(ctx context.Context, te
 		MembershipStatusActive bool
 	}
 	var rows []row
-	if err := s.database.WithContext(ctx).
+	selectColumns := `aa.actor_id AS actor_id,
+		aa.account_id AS account_id,
+		COALESCE(accounts.login, '') AS account_login,
+		aa.scope_type AS scope_type,
+		COALESCE(aa.tenant_id, '') AS tenant_id,
+		COALESCE(aa.membership_id, '') AS membership_id,
+		COALESCE(m.person_id, '') AS global_person_id,
+		COALESCE(m.tenant_id, '') AS membership_tenant,
+		COALESCE(status.code, '') AS membership_code,
+		COALESCE(status.active, 0) AS membership_status_active`
+	query := s.database.WithContext(ctx).
 		Table("auth_account_actors aa").
-		Select(`aa.actor_id AS actor_id,
-			aa.account_id AS account_id,
-			COALESCE(accounts.login, '') AS account_login,
-			aa.scope_type AS scope_type,
-			COALESCE(aa.tenant_id, '') AS tenant_id,
-			COALESCE(aa.membership_id, '') AS membership_id,
-			COALESCE(m.person_id, '') AS global_person_id,
-			COALESCE(m.tenant_id, '') AS membership_tenant,
-			COALESCE(status.code, '') AS membership_code,
-			COALESCE(status.active, 0) AS membership_status_active`).
 		Joins("LEFT JOIN auth_user_accounts accounts ON accounts.id = aa.account_id").
 		Joins("LEFT JOIN person_tenant_memberships m ON m.id = aa.membership_id").
-		Joins("LEFT JOIN reference_data status ON status.id = m.status_id AND status.tenant_id = m.tenant_id AND status.type = ?", "person_status").
+		Joins("LEFT JOIN reference_data status ON status.id = m.status_id AND status.tenant_id = m.tenant_id AND status.type = ?", "person_status")
+	if s.database.Migrator().HasTable("global_people") {
+		selectColumns += `,
+			COALESCE(person.first_name, '') AS person_first_name,
+			COALESCE(person.last_name, '') AS person_last_name,
+			COALESCE(person.nickname, '') AS person_nickname`
+		query = query.Joins("LEFT JOIN global_people person ON person.id = m.person_id")
+	}
+	if err := query.
+		Select(selectColumns).
 		Where("aa.scope_type = ? AND aa.tenant_id = ?", "TENANT", tenantID).
 		Scan(&rows).Error; err != nil {
 		return nil, fmt.Errorf("list tenant Actor bindings: %w", err)
 	}
 	for _, candidate := range rows {
+		personName := strings.TrimSpace(strings.Join([]string{
+			strings.TrimSpace(candidate.PersonFirstName),
+			strings.TrimSpace(candidate.PersonLastName),
+		}, " "))
 		binding := ActorBindingResponse{
 			AccountID:          strings.TrimSpace(candidate.AccountID),
 			GlobalPersonID:     strings.TrimSpace(candidate.GlobalPersonID),
 			AccountLogin:       strings.TrimSpace(candidate.AccountLogin),
+			PersonName:         personName,
+			PersonNickname:     strings.TrimSpace(candidate.PersonNickname),
 			ScopeType:          strings.TrimSpace(candidate.ScopeType),
 			TenantID:           strings.TrimSpace(candidate.TenantID),
 			MembershipID:       strings.TrimSpace(candidate.MembershipID),

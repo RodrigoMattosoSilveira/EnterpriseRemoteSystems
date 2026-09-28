@@ -961,6 +961,43 @@ func TestListTenantRoleActorsMarksAnyCrossTenantRoleWithoutTenantOrRoleDisclosur
 	}
 }
 
+func TestGORMStoreListTenantRoleActorsIncludesCanonicalPersonSearchIdentity(t *testing.T) {
+	database := newAuthzTestDB(t)
+	installTenantRoleDelegationFixtureTables(t, database)
+	store := NewGORMStore(database)
+
+	actorID := createAuthzActor(t, database, "manual30g-identity-a", nil, nil)
+	personID := "person-ana-financial-continuity"
+	bindActiveTenantMemberActor(t, database, actorID, "tenant-a", personID)
+	if err := database.Exec(
+		"UPDATE global_people SET first_name = ?, last_name = ?, nickname = ? WHERE id = ?",
+		"Ana",
+		"FinancialContinuity",
+		"30G Identity A",
+		personID,
+	).Error; err != nil {
+		t.Fatalf("set canonical Person search identity: %v", err)
+	}
+
+	actors, err := store.ListTenantRoleActors(context.Background(), "tenant-a")
+	if err != nil {
+		t.Fatalf("list tenant Role Actors: %v", err)
+	}
+	for _, actor := range actors {
+		if actor.ID != actorID {
+			continue
+		}
+		if actor.Binding == nil {
+			t.Fatalf("expected authoritative binding for %s", actorID)
+		}
+		if actor.Binding.PersonName != "Ana FinancialContinuity" || actor.Binding.PersonNickname != "30G Identity A" {
+			t.Fatalf("expected canonical Person search identity, got %#v", actor.Binding)
+		}
+		return
+	}
+	t.Fatalf("expected Actor %s in tenant Role Actor projection", actorID)
+}
+
 func TestGORMStoreListActorsIncludesAuthoritativeTenantBinding(t *testing.T) {
 	database := newAuthzTestDB(t)
 	installTenantRoleDelegationFixtureTables(t, database)
@@ -1322,6 +1359,12 @@ func installTenantRoleDelegationFixtureTables(t *testing.T, database *gorm.DB) {
 			person_id TEXT NOT NULL,
 			PRIMARY KEY(account_id, person_id)
 		)`,
+		`CREATE TABLE IF NOT EXISTS global_people (
+			id TEXT PRIMARY KEY,
+			first_name TEXT NOT NULL DEFAULT '',
+			last_name TEXT NOT NULL DEFAULT '',
+			nickname TEXT NOT NULL DEFAULT ''
+		)`,
 		`CREATE TABLE IF NOT EXISTS person_tenant_memberships (
 			id TEXT PRIMARY KEY,
 			tenant_id TEXT NOT NULL,
@@ -1375,6 +1418,15 @@ func bindActiveTenantMemberActor(t *testing.T, database *gorm.DB, actorID string
 	globalPersonID := "global-person-" + actorID
 	if len(canonicalPersonID) > 0 && strings.TrimSpace(canonicalPersonID[0]) != "" {
 		globalPersonID = strings.TrimSpace(canonicalPersonID[0])
+	}
+	if err := database.Exec(
+		"INSERT OR IGNORE INTO global_people (id, first_name, last_name, nickname) VALUES (?, ?, ?, ?)",
+		globalPersonID,
+		"Global",
+		"Person",
+		actorID,
+	).Error; err != nil {
+		t.Fatalf("create canonical global Person fixture: %v", err)
 	}
 	if err := database.Exec(
 		"INSERT INTO person_tenant_memberships (id, tenant_id, person_id, status_id) VALUES (?, ?, ?, ?)",
