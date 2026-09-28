@@ -2,7 +2,7 @@
 
 ## Objetivo
 
-Este roteiro é o script executável do apresentador para a demonstração brasileira determinística da Bite 31.5. Ele pode ser usado com o banco LOCAL dedicado da Bite 31.4 e com os ambientes Development/Test usando o mesmo Locatário sintético.
+Este roteiro é o script executável do apresentador para a demonstração brasileira determinística da Bite 31.5. Ele pode ser usado com o banco LOCAL dedicado da Bite 31.4 e com os ambientes Development/Test usando o mesmo Entidade sintética.
 
 A demonstração de dados de negócio é intencionalmente somente leitura. Os registros já vêm preparados para que o apresentador possa avançar rapidamente, evitar alterações acidentais e retornar a um cenário conhecido quando necessário. A demonstração opcional de autenticação altera somente a senha sintética de João Ferreira; a próxima reinicialização do banco da demonstração restaura o estado determinístico.
 
@@ -17,7 +17,7 @@ Nome:       Mariana Alves
 Login:      demo.tenant-admin@example.test
 Senha:      Demo-31.4-Brasil!
 Papel:      TENANT_ADMIN
-Locatário:  Mineração Serra Dourada — DEMO
+Entidade:  Mineração Serra Dourada — DEMO
 ID:         demo-br-serra-dourada
 Código:     DEMO_BR_SERRA_DOURADA
 ```
@@ -40,7 +40,7 @@ Login: demo31.4.rafael@example.test
 Senha inicial: Demo-31.4-Person!
 ```
 
-Beatriz Nascimento permanece intencionalmente como Pessoa com Vínculo com o Locatário, mas sem Conta de Autenticação.
+Beatriz Nascimento permanece intencionalmente como Pessoa com Vínculo com a Entidade, mas sem Conta de Autenticação.
 
 Para a demonstração opcional de redefinição de senha de João, use:
 
@@ -137,15 +137,15 @@ Não execute um `server-up` adicional imediatamente após `brazilian-demo-server
 1. Abra a URL ERS do ambiente escolhido.
 2. Entre com `demo.tenant-admin@example.test` / `Demo-31.4-Brasil!`.
 3. Em **Idioma**, selecione **Português (Brasil)**.
-4. Confirme que o seletor de Locatário mostra **Mineração Serra Dourada — DEMO** e o código `DEMO_BR_SERRA_DOURADA`.
+4. Confirme que o seletor de Entidade mostra **Mineração Serra Dourada — DEMO** e o código `DEMO_BR_SERRA_DOURADA`.
 5. Durante o caminho principal, não crie, edite, informe, lance, cancele, imprima, devolva ou altere registros de negócio.
 6. Se for demonstrar o autoatendimento de João, use o fluxo controlado de redefinição de senha abaixo.
 
-### 6. Atualizar a senha de João pela interface do Administrador do Locatário
+### 6. Atualizar a senha de João pela interface do Administrador da Entidade
 
 Use este fluxo somente quando quiser demonstrar administração de autenticação e a experiência de autoatendimento de João.
 
-**Identidade inicial:** Mariana Alves — Administrador do Locatário.
+**Identidade inicial:** Mariana Alves — Administrador da Entidade.
 
 **Contexto obrigatório:** `Mineração Serra Dourada — DEMO`, com **Português (Brasil)** selecionado.
 
@@ -167,7 +167,7 @@ Demo-31.5-Joao!
 11. Selecione **Redefinir senha**.
 12. Confirme a mensagem de sucesso e o retorno ao fluxo de entrada.
 13. Entre como João usando `demo31.4.joao@example.test` / `Demo-31.5-Joao!`.
-14. Confirme que João chega à experiência de autoatendimento com escopo do Locatário, e não ao espaço administrativo de Mariana.
+14. Confirme que João chega à experiência de autoatendimento com escopo da Entidade, e não ao espaço administrativo de Mariana.
 
 A redefinição revoga sessões existentes dessa conta. Se Mariana precisar permanecer conectada, use outro perfil ou janela de navegador para João. A próxima reinicialização determinística restaura `Demo-31.4-Person!`.
 
@@ -236,24 +236,24 @@ Até que esse fluxo exista, use `make testdata-server-reset ENV=test` somente qu
 
 ## Demonstração executiva — aproximadamente 14 minutos
 
-### Etapa 1 — Os dados do Locatário são completamente isolados
+### Etapa 1 — Os dados da Entidade são completamente isolados
 
-**Identidade:** Mariana Alves — Administrador do Locatário.
+**Identidade:** Mariana Alves — Administrador da Entidade.
 
 **Contexto obrigatório:** `Mineração Serra Dourada — DEMO`.
 
-**Navegação:** permaneça no espaço inicial autenticado. Use o seletor de Locatário na barra superior; não digite URLs manualmente.
+**Navegação:** permaneça no espaço inicial autenticado. Use o seletor de Entidade na barra superior; não digite URLs manualmente.
 
 **Ações**
 
-1. Aponte para o seletor de Locatário.
+1. Aponte para o seletor de Entidade.
 2. Leia **Mineração Serra Dourada — DEMO**.
 3. Mostre o código `DEMO_BR_SERRA_DOURADA`.
 4. Confirme **Idioma → Português (Brasil)**.
 
 **Fala sugerida**
 
-“Antes de olhar pessoas ou finanças, este é o limite operacional da demonstração. Tudo o que eu abrir agora está sendo carregado no contexto deste Locatário. O idioma muda a apresentação; ele não muda o Locatário nem a autorização.”
+“Antes de olhar pessoas ou finanças, este é o limite operacional da demonstração. Tudo o que eu abrir agora está sendo carregado no contexto desta Entidade. O idioma muda a apresentação; ele não muda a Entidade nem a autorização.”
 
 **Transição:** “Com o limite claro, começamos pela Pessoa.”
 
@@ -386,7 +386,7 @@ Retorne ao fechamento do deck ou permaneça na evidência financeira se o públi
 
 **Fala sugerida**
 
-“Em uma única história vimos o limite do Locatário, a identidade da Pessoa, o histórico de Jornada, trabalho planejado e realizado, produção, remuneração, Despesas, Conta Corrente e recibos. O objetivo é reduzir reconciliação manual sem perder a origem de cada decisão e valor.”
+“Em uma única história vimos o limite da Entidade, a identidade da Pessoa, o histórico de Jornada, trabalho planejado e realizado, produção, remuneração, Despesas, Conta Corrente e recibos. O objetivo é reduzir reconciliação manual sem perder a origem de cada decisão e valor.”
 
 Pergunte:
 
@@ -403,11 +403,11 @@ Execute primeiro o caminho executivo e selecione apenas os aprofundamentos relev
 **Navegação:** **Pessoas** → **Beatriz Nascimento**.
 
 1. Mostre o cadastro completo da Pessoa.
-2. Mostre o Vínculo com o Locatário.
+2. Mostre o Vínculo com a Entidade.
 3. Confirme que não há Jornada ativa para abrir.
 4. Não crie uma Jornada.
 
-**Fala sugerida:** “Ter uma Pessoa no Locatário não significa automaticamente ter uma Jornada de Colaborador. Essa separação permite governar identidade sem inventar uma relação operacional que ainda não existe.”
+**Fala sugerida:** “Ter uma Pessoa na Entidade não significa automaticamente ter uma Jornada de Colaborador. Essa separação permite governar identidade sem inventar uma relação operacional que ainda não existe.”
 
 ### Aprofundamento B — Planejamento futuro sem alteração
 
@@ -464,22 +464,22 @@ Execute primeiro o caminho executivo e selecione apenas os aprofundamentos relev
 3. Confirme **Mineração Serra Dourada — DEMO** na barra superior.
 4. Retome a próxima etapa do roteiro.
 
-### Recuperação 2 — Locatário ou contexto incorreto
+### Recuperação 2 — Entidade ou contexto incorreto
 
 1. Interrompa a narrativa.
-2. Abra o seletor de Locatário.
+2. Abra o seletor de Entidade.
 3. Selecione **Mineração Serra Dourada — DEMO**.
 4. Aguarde o carregamento.
 5. Abra **Pessoas** e confirme os nomes semeados.
 
-Se o Locatário da demonstração não estiver disponível, não continue com outro Locatário. Saia, verifique o banco e o servidor da aplicação e entre novamente.
+Se a Entidade da demonstração não estiver disponível, não continue com outra Entidade. Saia, verifique o banco e o servidor da aplicação e entre novamente.
 
 ### Recuperação 3 — Idioma incorreto
 
 1. Abra **Idioma**.
 2. Escolha **Português (Brasil)**.
 3. Confirme **Pessoas**, **Colaboradores**, **Períodos de trabalho**, **Produção de ouro**, **Despesas** e **Recibos pendentes**.
-4. Continue sem alterar o contexto do Locatário.
+4. Continue sem alterar o contexto da Entidade.
 
 ### Recuperação 4 — Registro ou credencial alterado
 
@@ -541,7 +541,7 @@ make local-frontend
 ```
 
 4. Confirme a revisão exibida pela interface web.
-5. Entre novamente e confira Locatário, idioma e saldos.
+5. Entre novamente e confira Entidade, idioma e saldos.
 
 ---
 
@@ -549,7 +549,7 @@ make local-frontend
 
 ### Encerramento padrão
 
-“ERS mantém identidade, histórico operacional, planejamento, produção e finanças conectados dentro de um limite explícito de Locatário. Nesta demonstração, cada saldo e cada pendência consegue voltar ao evento que o originou.”
+“ERS mantém identidade, histórico operacional, planejamento, produção e finanças conectados dentro de um limite explícito de Entidade. Nesta demonstração, cada saldo e cada pendência consegue voltar ao evento que o originou.”
 
 Pergunte qual tema merece aprofundamento:
 
@@ -558,12 +558,12 @@ Pergunte qual tema merece aprofundamento:
 - remuneração e produção;
 - Despesas e Conta Corrente;
 - recibos e controles documentais;
-- limite de Locatário e segurança.
+- limite de Entidade e segurança.
 
 ### Regras do apresentador
 
 - Nunca use dados de Production ou de clientes nesta demonstração.
-- Nunca mude para outro Locatário apenas para contornar uma falha.
+- Nunca mude para outra Entidade apenas para contornar uma falha.
 - Nunca invente credenciais para uma Pessoa sem Conta de Autenticação.
 - Nunca esconda divergência entre o conjunto de dados e a interface com narrativa; recupere ou registre o defeito.
 - Prefira estados semeados e somente leitura no caminho principal.
