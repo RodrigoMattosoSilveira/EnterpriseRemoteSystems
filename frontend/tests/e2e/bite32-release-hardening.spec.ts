@@ -97,7 +97,20 @@ test.describe("Bite 32.5 release-hardening journeys and authorization", () => {
         }),
       ).toBeVisible();
 
-      await expect(page.getByText("e2e-bite32-work-assignment", { exact: true })).toBeVisible();
+      const assignmentId = "e2e-bite32-work-assignment";
+      const workRecognizedSection = page
+        .getByRole("heading", { name: "Work recognized", exact: true })
+        .locator("..");
+      const earningsCalculatedSection = page
+        .getByRole("heading", { name: "Earnings calculated", exact: true })
+        .locator("..");
+      const accountPostingsSection = page
+        .getByRole("heading", { name: "Current Account postings", exact: true })
+        .locator("..");
+
+      await expect(workRecognizedSection.getByText(assignmentId, { exact: true })).toBeVisible();
+      await expect(earningsCalculatedSection.getByText(assignmentId, { exact: true })).toBeVisible();
+      await expect(accountPostingsSection.getByText(assignmentId, { exact: true })).toBeVisible();
       await expect(page.getByText("Daily BRL", { exact: true })).toBeVisible();
       await expect(page.getByText(/280\.00/).first()).toBeVisible();
       await expect(page.getByRole("heading", { name: "earning credit", exact: true })).toBeVisible();
