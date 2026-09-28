@@ -619,7 +619,7 @@ jobs:
 
       - name: Verify Bite 32 release coverage contract
         shell: bash
-        run: make bite32-release-coverage-check
+        run: python3 scripts/verify-bite32-release-coverage.py
 
       - name: Show deployed Playwright target
         shell: bash
