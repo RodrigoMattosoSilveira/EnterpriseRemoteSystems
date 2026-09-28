@@ -15,6 +15,7 @@ import {
   useTenantRoleActors,
 } from "./useAuthzAdmin";
 import { PageTitle } from "../../components/layout/PageHeading";
+import { useI18n } from "../../i18n";
 
 const roles: Array<{ code: TenantOperatorRoleCode; label: string }> = [
   { code: "EARNINGS_OPERATOR", label: "Earnings Operator" },
@@ -33,6 +34,7 @@ type TenantRoleActorFilters = {
 
 export function TenantRoleDelegationPage() {
   const currentActor = useAuthorizationContext();
+  const { t } = useI18n();
   const requestActor: AuthzAdminRequestActor = {
     actorId: currentActor.actorRecordId || currentActor.actorKey,
     tenantId: currentActor.tenantId,
@@ -48,6 +50,9 @@ export function TenantRoleDelegationPage() {
   const [collaboratorsOnly, setCollaboratorsOnly] = useState(false);
   const [selectedRoleByActor, setSelectedRoleByActor] = useState<
     Record<string, TenantOperatorRoleCode | undefined>
+  >({});
+  const [grantMessageByActor, setGrantMessageByActor] = useState<
+    Record<string, string | undefined>
   >({});
 
   const actors = useMemo(() => {
@@ -80,9 +85,14 @@ export function TenantRoleDelegationPage() {
 
   async function grant(targetActorId: string, roleCode: TenantOperatorRoleCode) {
     setMessage("");
+    setGrantMessageByActor((current) => ({ ...current, [targetActorId]: undefined }));
     try {
       await grantMutation.mutateAsync({ targetActorId, input: { roleCode } });
-      setMessage(`${roleLabel(roleCode)} granted.`);
+      setSelectedRoleByActor((current) => ({ ...current, [targetActorId]: undefined }));
+      setGrantMessageByActor((current) => ({
+        ...current,
+        [targetActorId]: `${roleLabel(roleCode)} granted.`,
+      }));
     } catch {
       // ApiErrorPanel renders the mutation error.
     }
@@ -90,6 +100,7 @@ export function TenantRoleDelegationPage() {
 
   async function revoke(targetActorId: string, grant: AuthzActorRoleGrant) {
     setMessage("");
+    setGrantMessageByActor((current) => ({ ...current, [targetActorId]: undefined }));
     try {
       await revokeMutation.mutateAsync({ targetActorId, grantId: grant.id });
       setMessage(`${roleLabel(grant.roleCode as TenantOperatorRoleCode)} revoked.`);
@@ -190,7 +201,9 @@ export function TenantRoleDelegationPage() {
         {filteredActors.map((actor) => {
           const binding = actor.binding;
           const membershipEligible = Boolean(binding?.membershipActive && binding?.membershipSameTenant);
-          const roleEligible = actor.active && membershipEligible;
+          const grantEligibility = tenantRoleGrantEligibility(actor);
+          const roleEligible = grantEligibility === "ELIGIBLE";
+          const crossTenantAuthority = grantEligibility === "CROSS_TENANT_AUTHORITY";
           const isCurrentActor = actor.id === currentActor.actorRecordId;
           const lifecycleBusy = setActorActiveMutation.isPending;
           return (
@@ -218,6 +231,11 @@ export function TenantRoleDelegationPage() {
                   <span className="rounded-full bg-gray-100 px-2.5 py-1 text-xs font-medium text-gray-700">
                     {actor.collaboratorId ? "Collaborator" : "Tenant member"}
                   </span>
+                  {crossTenantAuthority && (
+                    <span className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-900">
+                      {t("authz.tenantRoleDelegation.crossTenantAuthorityBadge")}
+                    </span>
+                  )}
                 </div>
               </div>
 
@@ -254,18 +272,31 @@ export function TenantRoleDelegationPage() {
                       actorId={actor.id}
                       roles={roles}
                       selectedRoleCode={selectedRoleByActor[actor.id] ?? ""}
-                      onChange={(roleCode) =>
+                      onChange={(roleCode) => {
+                        setGrantMessageByActor((current) => ({
+                          ...current,
+                          [actor.id]: undefined,
+                        }));
                         setSelectedRoleByActor((current) => ({
                           ...current,
                           [actor.id]: roleCode,
-                        }))
-                      }
+                        }));
+                      }}
                       disabled={!roleEligible}
                     />
                   </div>
-                  {!roleEligible && (
+                  {crossTenantAuthority ? (
+                    <p className="mt-2 text-xs font-medium text-amber-700">
+                      {t("authz.tenantRoleDelegation.crossTenantConflict")}
+                    </p>
+                  ) : !roleEligible ? (
                     <p className="mt-2 text-xs font-medium text-amber-700">
                       Actor and same-tenant Membership must both be ACTIVE before a Role can be granted.
+                    </p>
+                  ) : null}
+                  {grantMessageByActor[actor.id] && (
+                    <p role="status" className="mt-2 text-xs font-medium text-green-700">
+                      {grantMessageByActor[actor.id]}
                     </p>
                   )}
                   {selectedRoleByActor[actor.id] &&
@@ -495,6 +526,24 @@ function TenantOperatorRoleSelector({
   );
 }
 
+export type TenantRoleGrantEligibility =
+  | "ELIGIBLE"
+  | "ACTOR_OR_MEMBERSHIP_INACTIVE"
+  | "CROSS_TENANT_AUTHORITY";
+
+export function tenantRoleGrantEligibility(actor: AuthzActor): TenantRoleGrantEligibility {
+  const membershipEligible = Boolean(
+    actor.binding?.membershipActive && actor.binding?.membershipSameTenant,
+  );
+  if (!actor.active || !membershipEligible) {
+    return "ACTOR_OR_MEMBERSHIP_INACTIVE";
+  }
+  if (actor.hasDelegatedAuthorityInOtherTenant) {
+    return "CROSS_TENANT_AUTHORITY";
+  }
+  return "ELIGIBLE";
+}
+
 export function filterTenantRoleActors(
   actors: AuthzActor[],
   filters: TenantRoleActorFilters,
@@ -521,6 +570,8 @@ export function filterTenantRoleActors(
         actor.personId,
         actor.collaboratorId,
         actor.binding?.accountLogin,
+        actor.binding?.personName,
+        actor.binding?.personNickname,
         actor.binding?.membershipId,
       ]
         .filter((value): value is string => typeof value === "string" && value.length > 0)

@@ -52,6 +52,8 @@ export type AuthzActorBinding = {
   accountId: string;
   globalPersonId?: string;
   accountLogin?: string;
+  personName?: string;
+  personNickname?: string;
   scopeType: string;
   tenantId?: string;
   membershipId?: string;
@@ -70,6 +72,7 @@ export type AuthzActor = {
   active: boolean;
   roleGrants?: AuthzActorRoleGrant[];
   binding?: AuthzActorBinding;
+  hasDelegatedAuthorityInOtherTenant?: boolean;
 };
 
 export type CreateAuthzActorInput = {

@@ -21,6 +21,8 @@ const (
 	RolePerson           RoleCode = "PERSON"
 )
 
+const CrossTenantRoleConflictMessage = "This Person has one or more Roles in another Tenant. They must work with that Tenant to have every Role other than Membership and Collaborator removed before a Role can be assigned here."
+
 type RoleCode string
 
 type ActorLookup struct {
@@ -539,12 +541,123 @@ func ValidateDelegatedRoleGrant(database *gorm.DB, actorID string, role AuthzRol
 		}
 	}
 
+	if err := validateCrossTenantDelegatedRoleIsolation(database, actorID, tenantID); err != nil {
+		return err
+	}
+
 	if role.Code == string(RoleTenantAdmin) {
 		if err := validateTenantAdministratorCardinality(database, actorID, tenantID, requireTenantBinding); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+// validateCrossTenantDelegatedRoleIsolation enforces Bite 32.4 at the global
+// Person boundary. Membership and Collaborator participation may exist in
+// multiple Tenants, but every active TENANT-scoped authorization Role Grant is
+// a non-baseline Role and may belong to only one Tenant at a time for the same
+// Person. This intentionally covers future Tenant Role codes without a role
+// allowlist. lifecycle_suspended remains an assigned Role Grant and therefore
+// does not release the Tenant-Role boundary; explicit revocation (active=false)
+// does.
+func validateCrossTenantDelegatedRoleIsolation(database *gorm.DB, actorID string, tenantID string) error {
+	if database == nil {
+		return nil
+	}
+	globalPersonID, err := delegatedRoleGlobalPersonID(database, actorID, tenantID)
+	if err != nil {
+		return err
+	}
+	if globalPersonID == "" {
+		// Isolated pre-foundation tests and non-Person Actors cannot derive a
+		// canonical global Person. Production Tenant Roles are AccountActor-bound
+		// before this validator is reached.
+		return nil
+	}
+
+	conflict, err := hasDelegatedTenantAuthorityOutside(database, globalPersonID, tenantID)
+	if err != nil {
+		return err
+	}
+	if !conflict {
+		return nil
+	}
+	return NewValidationError(map[string]string{
+		"roleCode": CrossTenantRoleConflictMessage,
+	})
+}
+
+func delegatedRoleGlobalPersonID(database *gorm.DB, actorID string, tenantID string) (string, error) {
+	if database == nil || !database.Migrator().HasTable("auth_account_actors") || !database.Migrator().HasTable("person_tenant_memberships") {
+		return "", nil
+	}
+	type projection struct {
+		GlobalPersonID string
+	}
+	var identity projection
+	result := database.Table("auth_account_actors aa").
+		Select("m.person_id AS global_person_id").
+		Joins("JOIN person_tenant_memberships m ON m.id = aa.membership_id AND m.tenant_id = aa.tenant_id").
+		Where("aa.actor_id = ? AND aa.scope_type = ? AND aa.tenant_id = ?", actorID, "TENANT", tenantID).
+		Limit(1).
+		Scan(&identity)
+	if result.Error != nil {
+		return "", fmt.Errorf("resolve delegated Role global Person: %w", result.Error)
+	}
+	if result.RowsAffected == 0 {
+		return "", nil
+	}
+	return strings.TrimSpace(identity.GlobalPersonID), nil
+}
+
+func hasDelegatedTenantAuthorityOutside(database *gorm.DB, globalPersonID string, tenantID string) (bool, error) {
+	globalPersonID = strings.TrimSpace(globalPersonID)
+	tenantID = strings.TrimSpace(tenantID)
+	if database == nil || globalPersonID == "" || tenantID == "" || tenantID == GlobalTenantScope {
+		return false, nil
+	}
+
+	var count int64
+	err := database.Table("authz_actor_role_grants g").
+		Joins("JOIN authz_roles r ON r.id = g.role_id AND r.scope_type = ?", string(ActorScopeTenant)).
+		Joins("JOIN auth_account_actors aa ON aa.actor_id = g.actor_id AND aa.scope_type = ? AND aa.tenant_id = g.tenant_id", "TENANT").
+		Joins("JOIN person_tenant_memberships m ON m.id = aa.membership_id AND m.tenant_id = aa.tenant_id").
+		Where("g.active = ? AND g.tenant_id <> ? AND m.person_id = ?", true, tenantID, globalPersonID).
+		Count(&count).Error
+	if err != nil {
+		return false, fmt.Errorf("check cross-Tenant delegated Role isolation: %w", err)
+	}
+	return count > 0, nil
+}
+
+func delegatedTenantAuthorityPersonsOutside(database *gorm.DB, tenantID string) (map[string]struct{}, error) {
+	result := map[string]struct{}{}
+	tenantID = strings.TrimSpace(tenantID)
+	if database == nil || tenantID == "" || tenantID == GlobalTenantScope {
+		return result, nil
+	}
+	type projection struct {
+		GlobalPersonID string
+	}
+	var rows []projection
+	err := database.Table("authz_actor_role_grants g").
+		Select("DISTINCT m.person_id AS global_person_id").
+		Joins("JOIN authz_roles r ON r.id = g.role_id AND r.scope_type = ?", string(ActorScopeTenant)).
+		Joins("JOIN auth_account_actors aa ON aa.actor_id = g.actor_id AND aa.scope_type = ? AND aa.tenant_id = g.tenant_id", "TENANT").
+		Joins("JOIN person_tenant_memberships m ON m.id = aa.membership_id AND m.tenant_id = aa.tenant_id").
+		Where("g.active = ? AND g.tenant_id <> ?", true, tenantID).
+		Scan(&rows).Error
+	if err != nil {
+		return nil, fmt.Errorf("list Persons with cross-Tenant delegated authority: %w", err)
+	}
+	for _, row := range rows {
+		personID := strings.TrimSpace(row.GlobalPersonID)
+		if personID != "" {
+			result[personID] = struct{}{}
+		}
+	}
+	return result, nil
 }
 
 func validateTenantAdministratorCardinality(database *gorm.DB, actorID string, tenantID string, requireTenantBinding bool) error {
@@ -689,6 +802,7 @@ func PermissionCatalog() []PermissionCatalogEntry {
 		{PermissionCollaboratorsUpdate, "Update collaborators", "Update all editable tenant collaborator Journey attributes."},
 		{PermissionCollaboratorsWorkAssignmentUpdate, "Update collaborator work assignment", "Update only Sector, Location, and Task on tenant collaborator Journeys."},
 		{PermissionCollaboratorsSelfRead, "Read own collaborator journeys", "Read current and historical collaborator journeys for the actor's tenant Membership."},
+		{PermissionWorkCreditEvidenceSelfRead, "Read own work and credit evidence", "Read work, accrual, and Journey-specific credit evidence for the actor's own current and historical Journeys."},
 		{PermissionPlanningRead, "Read planning", "Read tenant planning records."},
 		{PermissionPlanningCreate, "Create planning", "Create tenant planning records."},
 		{PermissionPlanningUpdate, "Update planning", "Update tenant planning records."},
@@ -1072,6 +1186,7 @@ func intrinsicSelfServicePermissions(hasCollaboratorHistory bool, activeCollabor
 	}
 	if hasCollaboratorHistory {
 		permissions[PermissionCollaboratorsSelfRead] = struct{}{}
+		permissions[PermissionWorkCreditEvidenceSelfRead] = struct{}{}
 	}
 	if activeCollaborator {
 		for _, permission := range []Permission{

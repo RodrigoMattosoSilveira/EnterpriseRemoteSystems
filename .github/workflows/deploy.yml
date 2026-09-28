@@ -58,6 +58,9 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
+      - name: Verify Bite 32 release coverage contract
+        run: make bite32-release-coverage-check
+
       - name: Set up Go
         uses: actions/setup-go@v6
         with:
@@ -333,8 +336,8 @@ jobs:
             --expected-tree-sha '${{ steps.revision.outputs.tree_sha }}' \
             --expected-baseline-last-migration '000062_tenant_administrator_cardinality.up.sql' \
             --expected-first-rehearsed-migration '000063_global_administration_control_plane.up.sql' \
-            --expected-final-migration '000070_revoke_noncanonical_application_admin_grants.up.sql' \
-            --expected-deployment-final-migration '000070_revoke_noncanonical_application_admin_grants.up.sql' \
+            --expected-final-migration '000071_cross_tenant_delegated_role_isolation.up.sql' \
+            --expected-deployment-final-migration '000071_cross_tenant_delegated_role_isolation.up.sql' \
             --normalized-output "${NORMALIZED_FILE}"
 
           TEST_REVISION="$(jq -r '.testRevision' "${NORMALIZED_FILE}")"
@@ -613,6 +616,10 @@ jobs:
         shell: bash
         run: |
           git config --global --add safe.directory "${GITHUB_WORKSPACE}"
+
+      - name: Verify Bite 32 release coverage contract
+        shell: bash
+        run: python3 scripts/verify-bite32-release-coverage.py
 
       - name: Show deployed Playwright target
         shell: bash

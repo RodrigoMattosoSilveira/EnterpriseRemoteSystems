@@ -133,56 +133,69 @@ func (r *gormRepository) ListTenantAdminCandidates(ctx context.Context, tenantID
 	}
 
 	type candidateActorProjection struct {
-		ID             string
-		ActorKey       string
-		DisplayName    string
-		Active         bool
-		GlobalPersonID string
+		ID              string
+		ActorKey        string
+		DisplayName     string
+		Active          bool
+		GlobalPersonID  string
+		PersonFirstName string
+		PersonLastName  string
+		PersonNickname  string
+		AccountLogin    string
 	}
 	var actors []candidateActorProjection
 	if err := r.database.WithContext(ctx).
 		Table("authz_actors a").
-		Select("a.id, a.actor_key, a.display_name, a.active, COALESCE(m.person_id, '') AS global_person_id").
+		Select(`a.id, a.actor_key, a.display_name, a.active,
+			COALESCE(m.person_id, '') AS global_person_id,
+			COALESCE(person.first_name, '') AS person_first_name,
+			COALESCE(person.last_name, '') AS person_last_name,
+			COALESCE(person.nickname, '') AS person_nickname,
+			COALESCE(account.login, '') AS account_login`).
 		Joins("JOIN auth_account_actors aa ON aa.actor_id = a.id AND aa.scope_type = ? AND aa.tenant_id = ?", "TENANT", tenantID).
 		Joins("JOIN person_tenant_memberships m ON m.id = aa.membership_id AND m.tenant_id = aa.tenant_id").
-		Order("a.actor_key ASC").
+		Joins("JOIN global_people person ON person.id = m.person_id").
+		Joins("JOIN auth_user_accounts account ON account.id = aa.account_id").
+		Order("LOWER(person.first_name) ASC, LOWER(person.last_name) ASC, LOWER(account.login) ASC, a.actor_key ASC").
 		Scan(&actors).Error; err != nil {
 		return nil, err
 	}
 
-	type adminGrantProjection struct {
+	type delegatedGrantProjection struct {
 		ActorID        string
 		TenantID       string
 		GlobalPersonID string
+		RoleCode       string
 	}
-	var adminGrants []adminGrantProjection
+	var delegatedGrants []delegatedGrantProjection
 	grantQuery := r.database.WithContext(ctx).
 		Table("authz_actor_role_grants g").
-		Select("g.actor_id, g.tenant_id, COALESCE(m.person_id, '') AS global_person_id").
-		Joins("JOIN authz_roles role ON role.id = g.role_id AND role.code = ?", string(authz.RoleTenantAdmin)).
+		Select("g.actor_id, g.tenant_id, COALESCE(m.person_id, '') AS global_person_id, role.code AS role_code").
+		Joins("JOIN authz_roles role ON role.id = g.role_id AND role.scope_type = ?", string(authz.ActorScopeTenant)).
 		Joins("LEFT JOIN auth_account_actors aa ON aa.actor_id = g.actor_id AND aa.scope_type = ? AND aa.tenant_id = g.tenant_id", "TENANT").
 		Joins("LEFT JOIN person_tenant_memberships m ON m.id = aa.membership_id AND m.tenant_id = aa.tenant_id").
 		Where("g.active = ?", true)
-	if err := grantQuery.Scan(&adminGrants).Error; err != nil {
+	if err := grantQuery.Scan(&delegatedGrants).Error; err != nil {
 		return nil, err
 	}
 
 	assigned := make(map[string]struct{})
-	personAdminTenant := make(map[string]string)
-	personAdminActor := make(map[string]string)
+	personTargetTenantAdminActor := make(map[string]string)
+	personHasDelegatedAuthorityOutside := make(map[string]bool)
 	targetTenantAdminCount := 0
-	for _, grant := range adminGrants {
+	for _, grant := range delegatedGrants {
 		globalPersonID := strings.TrimSpace(grant.GlobalPersonID)
-		if grant.TenantID == tenantID {
+		if grant.RoleCode == string(authz.RoleTenantAdmin) && grant.TenantID == tenantID {
 			assigned[grant.ActorID] = struct{}{}
 			targetTenantAdminCount++
+			if globalPersonID != "" {
+				if _, exists := personTargetTenantAdminActor[globalPersonID]; !exists {
+					personTargetTenantAdminActor[globalPersonID] = grant.ActorID
+				}
+			}
 		}
-		if globalPersonID == "" {
-			continue
-		}
-		if _, exists := personAdminTenant[globalPersonID]; !exists {
-			personAdminTenant[globalPersonID] = grant.TenantID
-			personAdminActor[globalPersonID] = grant.ActorID
+		if globalPersonID != "" && grant.TenantID != tenantID {
+			personHasDelegatedAuthorityOutside[globalPersonID] = true
 		}
 	}
 
@@ -192,7 +205,7 @@ func (r *gormRepository) ListTenantAdminCandidates(ctx context.Context, tenantID
 		_, isAssigned := assigned[actor.ID]
 		eligible := true
 		reason := ""
-		adminTenantID := ""
+		hasDelegatedAuthorityOutside := personHasDelegatedAuthorityOutside[globalPersonID]
 
 		switch {
 		case isAssigned:
@@ -207,26 +220,32 @@ func (r *gormRepository) ListTenantAdminCandidates(ctx context.Context, tenantID
 		case targetTenantAdminCount >= 2:
 			eligible = false
 			reason = "Tenant already has the maximum of two active Tenant Administrators"
-		case personAdminTenant[globalPersonID] != "" && personAdminTenant[globalPersonID] != tenantID:
+		case hasDelegatedAuthorityOutside:
 			eligible = false
-			adminTenantID = personAdminTenant[globalPersonID]
-			reason = fmt.Sprintf("This Person already administers tenant %s", adminTenantID)
-		case personAdminTenant[globalPersonID] == tenantID && personAdminActor[globalPersonID] != actor.ID:
+			reason = authz.CrossTenantRoleConflictMessage
+		case personTargetTenantAdminActor[globalPersonID] != "" && personTargetTenantAdminActor[globalPersonID] != actor.ID:
 			eligible = false
-			adminTenantID = tenantID
 			reason = "The other Tenant Administrator slot must belong to a different Person"
 		}
 
+		personName := strings.TrimSpace(strings.Join([]string{
+			strings.TrimSpace(actor.PersonFirstName),
+			strings.TrimSpace(actor.PersonLastName),
+		}, " "))
+
 		result = append(result, TenantAdminCandidateRecord{
-			ActorID:             actor.ID,
-			ActorKey:            actor.ActorKey,
-			DisplayName:         actor.DisplayName,
-			GlobalPersonID:      globalPersonID,
-			Active:              actor.Active,
-			Assigned:            isAssigned,
-			Eligible:            eligible,
-			IneligibilityReason: reason,
-			TenantAdminTenantID: adminTenantID,
+			ActorID:                            actor.ID,
+			ActorKey:                           actor.ActorKey,
+			DisplayName:                        actor.DisplayName,
+			GlobalPersonID:                     globalPersonID,
+			PersonName:                         personName,
+			PersonNickname:                     strings.TrimSpace(actor.PersonNickname),
+			AccountLogin:                       strings.TrimSpace(actor.AccountLogin),
+			Active:                             actor.Active,
+			Assigned:                           isAssigned,
+			Eligible:                           eligible,
+			IneligibilityReason:                reason,
+			HasDelegatedAuthorityInOtherTenant: hasDelegatedAuthorityOutside,
 		})
 	}
 	return result, nil

@@ -64,14 +64,24 @@ def main() -> int:
             assert scalar(conn, "SELECT COUNT(*) FROM person_tenant_memberships WHERE tenant_id=?", (TENANT_ID,)) == 5
             assert scalar(conn, "SELECT COUNT(*) FROM collaborator_journeys WHERE tenant_id=?", (TENANT_ID,)) == 4
             assert scalar(conn, "SELECT COUNT(*) FROM collaborator_journeys WHERE tenant_id=? AND closed_at IS NOT NULL", (TENANT_ID,)) == 1
-            assert scalar(conn, "SELECT COUNT(*) FROM work_periods WHERE tenant_id=?", (TENANT_ID,)) == 2
-            assert scalar(conn, "SELECT COUNT(*) FROM work_period_assignments WHERE tenant_id=?", (TENANT_ID,)) == 6
+            assert scalar(conn, "SELECT COUNT(*) FROM work_periods WHERE tenant_id=?", (TENANT_ID,)) == 3
+            assert scalar(conn, "SELECT COUNT(*) FROM work_period_assignments WHERE tenant_id=?", (TENANT_ID,)) == 7
             assert scalar(conn, "SELECT COUNT(*) FROM gold_production_entries WHERE tenant_id=? AND gold_grams_produced=80", (TENANT_ID,)) == 1
-            assert scalar(conn, "SELECT COUNT(*) FROM accrual_runs WHERE tenant_id=? AND status='POSTED'", (TENANT_ID,)) == 1
-            assert scalar(conn, "SELECT COUNT(*) FROM accrual_items WHERE tenant_id=? AND status='POSTED'", (TENANT_ID,)) == 3
+            assert scalar(conn, "SELECT COUNT(*) FROM accrual_runs WHERE tenant_id=? AND status='POSTED'", (TENANT_ID,)) == 2
+            assert scalar(conn, "SELECT COUNT(*) FROM accrual_items WHERE tenant_id=? AND status='POSTED'", (TENANT_ID,)) == 4
             assert scalar(conn, "SELECT COUNT(*) FROM expenses WHERE tenant_id=?", (TENANT_ID,)) == 2
             assert scalar(conn, "SELECT COUNT(*) FROM ledger_receipts WHERE tenant_id=? AND status='PENDING_ISSUE'", (TENANT_ID,)) == 1
             assert scalar(conn, "SELECT COUNT(*) FROM ledger_receipts WHERE tenant_id=? AND status='RETURNED'", (TENANT_ID,)) == 1
+            assert scalar(conn, "SELECT COUNT(*) FROM journey_settlements WHERE tenant_id=? AND settlement_type='PAYOUT' AND status='POSTED'", (TENANT_ID,)) == 1
+
+            historical_journey = "demo-br-journey-rafael-history"
+            historical_assignment = "demo-br-assignment-rafael-history-completed"
+            assert scalar(conn, "SELECT COUNT(*) FROM work_period_assignments WHERE tenant_id=? AND id=? AND collaborator_id=? AND actual_status='WORKED' AND active=1", (TENANT_ID, historical_assignment, historical_journey)) == 1
+            assert scalar(conn, "SELECT COUNT(*) FROM accrual_items WHERE tenant_id=? AND collaborator_id=? AND work_period_assignment_id=? AND calculation_type='DAILY_BRL' AND direction='CREDIT' AND brl_amount=280 AND status='POSTED'", (TENANT_ID, historical_journey, historical_assignment)) == 1
+            assert scalar(conn, "SELECT COUNT(*) FROM ledger_entries WHERE tenant_id=? AND collaborator_id=? AND entry_type='EARNING_CREDIT' AND direction='CREDIT' AND amount=280 AND source_type='WORK_PERIOD_ASSIGNMENT' AND source_id=? AND active=1", (TENANT_ID, historical_journey, historical_assignment)) == 1
+            assert scalar(conn, "SELECT COUNT(*) FROM ledger_entries WHERE tenant_id=? AND collaborator_id=? AND entry_type='PAYOUT' AND direction='DEBIT' AND amount=280 AND source_type='JOURNEY_SETTLEMENT' AND active=1", (TENANT_ID, historical_journey)) == 1
+            assert float(scalar(conn, "SELECT COALESCE(SUM(CASE WHEN direction='CREDIT' THEN amount ELSE -amount END),0) FROM ledger_entries WHERE tenant_id=? AND collaborator_id=? AND active=1", (TENANT_ID, historical_journey))) == 0.0
+
             assert scalar(conn, "SELECT COUNT(*) FROM auth_user_accounts WHERE login='demo.tenant-admin@example.test' AND active=1") == 1
             assert scalar(conn, "SELECT COUNT(*) FROM authz_actor_role_grants g JOIN authz_roles r ON r.id=g.role_id WHERE g.tenant_id=? AND g.active=1 AND r.code='TENANT_ADMIN'", (TENANT_ID,)) == 1
 
@@ -94,7 +104,7 @@ def main() -> int:
             assert scalar(conn, "SELECT COUNT(*) FROM auth_account_people WHERE person_id='demo-br-person-beatriz'") == 0
 
             # The fixture is isolated: no demo business row may be attached to default Tenant.
-            for table in ("person_tenant_memberships", "collaborator_journeys", "work_periods", "expenses", "ledger_entries", "ledger_receipts"):
+            for table in ("person_tenant_memberships", "collaborator_journeys", "work_periods", "expenses", "ledger_entries", "ledger_receipts", "journey_settlements"):
                 assert scalar(conn, f"SELECT COUNT(*) FROM {table} WHERE tenant_id='default' AND id LIKE 'demo-br-%'") == 0
 
             # Story balances: pending debit, gold commission, and a returned-receipt zero balance.

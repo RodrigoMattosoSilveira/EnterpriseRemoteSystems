@@ -1,0 +1,126 @@
+{
+  "bite": "32.5",
+  "title": "E2E, Migration/Authorization Coverage, and Release Hardening",
+  "requirements": [
+    {
+      "id": 1,
+      "status": "covered",
+      "requirement": "Tenant Administrator sees current and closed Journeys for a Person in the selected Tenant.",
+      "evidence": [
+        {
+          "file": "frontend/tests/e2e/bite32-release-hardening.spec.ts",
+          "testTitle": "Tenant Administrator sees current and closed Journey history for one Person"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "status": "covered",
+      "requirement": "Person self-service keeps current and closed Journey history and closed-Journey Work/Credit evidence readable.",
+      "evidence": [
+        {
+          "file": "frontend/tests/e2e/bite32-release-hardening.spec.ts",
+          "testTitle": "Person self-service keeps closed Journey Work and Credit Evidence durable"
+        },
+        {
+          "file": "backend/internal/collaborators/work_credit_evidence_test.go",
+          "contains": "TestGetSelfWorkCreditEvidenceProjectsCanonicalJourneyEvidenceAndEnforcesMembership"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "status": "covered",
+      "requirement": "A Person with a non-baseline Tenant Role in one Tenant cannot receive a non-baseline Role in another Tenant until every such Role is explicitly removed, without disclosing the other Tenant or Role.",
+      "evidence": [
+        {
+          "file": "frontend/tests/e2e/bite32-release-hardening.spec.ts",
+          "testTitle": "another Tenant stays blocked until every non-baseline Role is explicitly removed without disclosure"
+        },
+        {
+          "file": "backend/internal/authz/store_test.go",
+          "contains": "TestListTenantRoleActorsMarksAnyCrossTenantRoleWithoutTenantOrRoleDisclosure"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "status": "covered",
+      "requirement": "Cross-Tenant Role isolation is scope-based and automatically covers future TENANT-scoped Roles.",
+      "evidence": [
+        {
+          "file": "backend/internal/authz/store_test.go",
+          "contains": "TestDelegatedRoleIsolationAppliesToUnenumeratedFutureTenantRoles"
+        },
+        {
+          "file": "backend/internal/tenants/handler_test.go",
+          "contains": "TestTenantAdminCandidatesBlockAnyCrossTenantRoleWithoutDisclosure"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "status": "covered",
+      "requirement": "Migration 000071 rejects existing conflicts and guards cross-Tenant INSERT/reactivation while explicit revocation releases the Person.",
+      "evidence": [
+        {
+          "file": "backend/internal/db/cross_tenant_delegated_role_isolation_migration_test.go",
+          "contains": "TestCrossTenantDelegatedRoleIsolationMigrationGuardsInsertReactivateAndExplicitRevocation"
+        },
+        {
+          "file": "backend/internal/db/cross_tenant_delegated_role_isolation_migration_test.go",
+          "contains": "TestCrossTenantDelegatedRoleIsolationMigrationRejectsExistingConflict"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "status": "covered",
+      "requirement": "Deterministic non-Production E2E fixtures provision durable Bite 32 Journey evidence and a baseline-only cross-Tenant Role-isolation Person idempotently.",
+      "evidence": [
+        {
+          "file": "backend/cmd/provision-e2e-admin/tenant_fixtures_test.go",
+          "contains": "expected current and closed Bite 32 Journeys"
+        },
+        {
+          "file": "backend/cmd/provision-e2e-admin/tenant_fixtures_test.go",
+          "contains": "Bite 32 Role-isolation Person must start with baseline-only participation"
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "status": "covered",
+      "requirement": "Release migration verification requires migration 000071, both database triggers, and zero Person-level cross-Tenant TENANT-role conflicts.",
+      "evidence": [
+        {
+          "file": "backend/verify-migrated-db.sh",
+          "contains": "000071_cross_tenant_delegated_role_isolation.up.sql"
+        },
+        {
+          "file": "backend/verify-migrated-db.sh",
+          "contains": "Bite 32.4 cross-Tenant non-baseline Role isolation"
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "status": "covered",
+      "requirement": "LOCAL, feature CI, and deployed Playwright promotion paths all verify the Bite 32 release coverage contract before release evidence is accepted.",
+      "evidence": [
+        {
+          "file": "Makefile",
+          "makeTarget": "bite32-release-coverage-check"
+        },
+        {
+          "file": ".github/workflows/ci.yml",
+          "contains": "make bite32-release-coverage-check"
+        },
+        {
+          "file": ".github/workflows/deploy.yml",
+          "contains": "python3 scripts/verify-bite32-release-coverage.py"
+        }
+      ]
+    }
+  ]
+}

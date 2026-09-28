@@ -84,7 +84,7 @@ def require_schema(conn: sqlite3.Connection) -> None:
         "tenants", "reference_data", "global_people", "person_tenant_memberships",
         "collaborator_journeys", "work_periods", "work_period_assignments",
         "gold_production_entries", "accrual_runs", "accrual_items", "expenses",
-        "ledger_entries", "ledger_receipts", "gold_prices", "expense_price_list_items",
+        "ledger_entries", "ledger_receipts", "journey_settlements", "gold_prices", "expense_price_list_items",
         "authz_actors", "authz_roles", "authz_actor_role_grants", "auth_user_accounts",
         "auth_account_people", "auth_account_actors",
     }
@@ -361,6 +361,24 @@ def ledger(conn: sqlite3.Connection, key: str, person_id: str, journey_id: str, 
     return lid
 
 
+def seed_payout_settlement(conn: sqlite3.Connection, key: str, person_id: str, journey_id: str,
+                           amount: float, effective: date, now: str, description: str) -> str:
+    settlement_id = demo_id("settlement", key)
+    insert(conn, "journey_settlements", {
+        "id": settlement_id, "created_at": now, "updated_at": now, "tenant_id": TENANT_ID,
+        "collaborator_id": journey_id, "settlement_type": "PAYOUT",
+        "request_id": demo_id("settlement-request", key), "status": "POSTED",
+        "effective_date": effective.isoformat(), "brl_amount": amount, "gold_gram_amount": 0.0,
+        "notes": description, "reason_code": None, "reason_text": None,
+        "authorized_by": "demo-br-tenant-admin", "authorized_at": now,
+        "second_approved_by": None, "second_approved_at": None, "second_approval_notes": None,
+    })
+    return ledger(
+        conn, f"settlement-{key}", person_id, journey_id, "BRL", "PAYOUT", "DEBIT", amount,
+        effective, "JOURNEY_SETTLEMENT", settlement_id, now, description,
+    )
+
+
 def seed_receipt(conn: sqlite3.Connection, key: str, person_id: str, journey_id: str, ledger_id: str,
                  status: str, now: str, completed_at: str | None = None) -> None:
     receipt_no = f"RCP-DEMO-BR-{1 if key == 'pending' else 2:04d}"
@@ -407,11 +425,14 @@ def seed_scenario(conn: sqlite3.Connection, as_of: date) -> None:
     rafael_old = seed_journey(conn, "rafael-history", identities["rafael"][1], "DAILY", "SITE_SUPPORT", "CAMP", "CAMP_SUPPORT", as_of - timedelta(days=220), as_of - timedelta(days=100), now, finished=True, payment=280)
     rafael_j = seed_journey(conn, "rafael-current", identities["rafael"][1], "DAILY", "MAINTENANCE", "MAIN_MINE", "EQUIPMENT_MAINTENANCE", as_of - timedelta(days=50), as_of + timedelta(days=40), now, payment=350)
 
+    historical_date = as_of - timedelta(days=150)
     completed_date = as_of - timedelta(days=2)
     planning_date = as_of + timedelta(days=1)
+    historical = seed_work_period(conn, "rafael-history-completed", historical_date, "FULLY_POSTED", now)
     completed = seed_work_period(conn, "completed", completed_date, "FULLY_POSTED", now)
     planning = seed_work_period(conn, "planning", planning_date, "PLANNING", now)
 
+    a_rafael_old = seed_assignment(conn, historical, rafael_old, "rafael-history-completed", "SITE_SUPPORT", "CAMP", "CAMP_SUPPORT", now, "WORKED")
     a_joao = seed_assignment(conn, completed, joao_j, "completed-joao", "UNDERGROUND_MINING", "NORTH_PIT", "DRILLING", now, "WORKED")
     a_camila = seed_assignment(conn, completed, camila_j, "completed-camila", "PROCESSING", "PROCESSING_PLANT", "GOLD_PROCESSING", now, "WORKED")
     a_rafael = seed_assignment(conn, completed, rafael_j, "completed-rafael", "MAINTENANCE", "MAIN_MINE", "EQUIPMENT_MAINTENANCE", now, "WORKED")
@@ -430,6 +451,32 @@ def seed_scenario(conn: sqlite3.Connection, as_of: date) -> None:
         "gold_grams_produced": 80.0, "active": 1, "notes": "Bite 31.4 synthetic production.",
         "created_at": now, "updated_at": now,
     })
+
+    historical_run_id = demo_id("accrual-run", "rafael-history")
+    insert(conn, "accrual_runs", {
+        "id": historical_run_id, "tenant_id": TENANT_ID, "work_period_id": historical, "status": "POSTED",
+        "accrual_date": historical_date.isoformat(), "notes": "Historical Rafael posted demo accrual.",
+        "created_at": now, "updated_at": now,
+    })
+    historical_item_id = demo_id("accrual-item", "rafael-history")
+    insert(conn, "accrual_items", {
+        "id": historical_item_id, "tenant_id": TENANT_ID, "accrual_run_id": historical_run_id,
+        "work_period_id": historical, "work_period_assignment_id": a_rafael_old,
+        "collaborator_id": rafael_old, "calculation_type": "DAILY_BRL", "direction": "CREDIT",
+        "brl_amount": 280.0, "gold_gram_amount": None, "status": "POSTED", "pending_reason": None,
+        "description": "Historical Rafael daily-wage earning.", "created_at": now, "updated_at": now,
+        "person_id": identities["rafael"][0],
+    })
+    ledger(
+        conn, "earning-rafael-history", identities["rafael"][0], rafael_old, "BRL",
+        "EARNING_CREDIT", "CREDIT", 280.0, historical_date, "WORK_PERIOD_ASSIGNMENT",
+        a_rafael_old, now, "Historical Rafael posted daily-wage earning.",
+    )
+    seed_payout_settlement(
+        conn, "rafael-history", identities["rafael"][0], rafael_old, 280.0,
+        historical_date + timedelta(days=1), now,
+        "Historical Rafael Journey payout; closes the Journey at zero BRL balance.",
+    )
 
     run_id = demo_id("accrual-run")
     insert(conn, "accrual_runs", {
@@ -491,7 +538,8 @@ def seed_scenario(conn: sqlite3.Connection, as_of: date) -> None:
                            as_of - timedelta(days=1), "EXPENSE", rafael_expense_id, now, "Passagem aérea demo já controlada.")
     seed_receipt(conn, "returned", identities["rafael"][0], rafael_j, rafael_ledger, "RETURNED", now, ts(as_of - timedelta(days=1), 18))
 
-    # Ensure the historic Journey is present and zero-balance by design.
+    # The historical Journey now carries canonical work, accrual, credit, and payout evidence
+    # while remaining zero-balance by design.
     assert rafael_old
 
 
@@ -537,12 +585,12 @@ def verify_scenario(conn: sqlite3.Connection, as_of: date) -> None:
 
     if conn.execute("SELECT COUNT(*) FROM collaborator_journeys WHERE tenant_id=?", (TENANT_ID,)).fetchone()[0] != 4:
         raise SystemExit("Expected four demo Journeys (including one historical Journey).")
-    if conn.execute("SELECT COUNT(*) FROM work_periods WHERE tenant_id=?", (TENANT_ID,)).fetchone()[0] != 2:
-        raise SystemExit("Expected two demo Work Periods.")
+    if conn.execute("SELECT COUNT(*) FROM work_periods WHERE tenant_id=?", (TENANT_ID,)).fetchone()[0] != 3:
+        raise SystemExit("Expected three demo Work Periods, including Rafael's historical evidence period.")
     if conn.execute("SELECT COUNT(*) FROM expenses WHERE tenant_id=?", (TENANT_ID,)).fetchone()[0] != 2:
         raise SystemExit("Expected two demo Expenses.")
 
-    for table in ("person_tenant_memberships", "collaborator_journeys", "work_periods", "expenses", "ledger_entries", "ledger_receipts"):
+    for table in ("person_tenant_memberships", "collaborator_journeys", "work_periods", "expenses", "ledger_entries", "ledger_receipts", "journey_settlements"):
         leaked = conn.execute(
             f"SELECT COUNT(*) FROM {table} WHERE tenant_id='default' AND id LIKE 'demo-br-%'"
         ).fetchone()[0]
@@ -565,9 +613,60 @@ def verify_scenario(conn: sqlite3.Connection, as_of: date) -> None:
         if abs(actual - expected) > 1e-9:
             raise SystemExit(f"Unexpected {label} balance: {actual}; expected {expected}")
 
+    historical_journey = demo_id("journey", "rafael-history")
+    historical_date = (as_of - timedelta(days=150)).isoformat()
+    historical_assignment = one(
+        conn,
+        """SELECT wpa.id FROM work_period_assignments wpa
+           JOIN work_periods wp ON wp.id=wpa.work_period_id AND wp.tenant_id=wpa.tenant_id
+           WHERE wpa.tenant_id=? AND wpa.collaborator_id=? AND wp.work_date=?
+             AND wp.status='FULLY_POSTED' AND wpa.actual_status='WORKED' AND wpa.active=1""",
+        (TENANT_ID, historical_journey, historical_date),
+    )
+    one(
+        conn,
+        """SELECT ai.id FROM accrual_items ai
+           JOIN accrual_runs ar ON ar.id=ai.accrual_run_id AND ar.tenant_id=ai.tenant_id
+           WHERE ai.tenant_id=? AND ai.collaborator_id=? AND ai.work_period_assignment_id=?
+             AND ai.calculation_type='DAILY_BRL' AND ai.direction='CREDIT'
+             AND ai.brl_amount=280 AND ai.status='POSTED' AND ar.status='POSTED'""",
+        (TENANT_ID, historical_journey, historical_assignment["id"]),
+    )
+    one(
+        conn,
+        """SELECT id FROM ledger_entries
+           WHERE tenant_id=? AND collaborator_id=? AND entry_type='EARNING_CREDIT'
+             AND direction='CREDIT' AND amount=280 AND source_type='WORK_PERIOD_ASSIGNMENT'
+             AND source_id=? AND active=1""",
+        (TENANT_ID, historical_journey, historical_assignment["id"]),
+    )
+    settlement = one(
+        conn,
+        """SELECT id FROM journey_settlements
+           WHERE tenant_id=? AND collaborator_id=? AND settlement_type='PAYOUT'
+             AND status='POSTED' AND brl_amount=280""",
+        (TENANT_ID, historical_journey),
+    )
+    one(
+        conn,
+        """SELECT id FROM ledger_entries
+           WHERE tenant_id=? AND collaborator_id=? AND entry_type='PAYOUT'
+             AND direction='DEBIT' AND amount=280 AND source_type='JOURNEY_SETTLEMENT'
+             AND source_id=? AND active=1""",
+        (TENANT_ID, historical_journey, settlement["id"]),
+    )
+    historical_balance = conn.execute(
+        """SELECT COALESCE(SUM(CASE WHEN direction='CREDIT' THEN amount ELSE -amount END),0)
+           FROM ledger_entries WHERE tenant_id=? AND collaborator_id=? AND active=1""",
+        (TENANT_ID, historical_journey),
+    ).fetchone()[0]
+    if abs(float(historical_balance)) > 1e-9:
+        raise SystemExit(f"Unexpected Rafael historical Journey balance: {historical_balance}; expected 0")
+
     planning_date = (as_of + timedelta(days=1)).isoformat()
     one(conn, "SELECT id FROM work_periods WHERE tenant_id=? AND work_date=? AND status='PLANNING'", (TENANT_ID, planning_date))
-    one(conn, "SELECT id FROM accrual_runs WHERE tenant_id=? AND status='POSTED'", (TENANT_ID,))
+    if conn.execute("SELECT COUNT(*) FROM accrual_runs WHERE tenant_id=? AND status='POSTED'", (TENANT_ID,)).fetchone()[0] != 2:
+        raise SystemExit("Expected current and historical posted Accrual Runs.")
 
 
 def print_summary(as_of: date, db_path: Path) -> None:

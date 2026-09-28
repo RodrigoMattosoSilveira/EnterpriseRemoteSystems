@@ -7,7 +7,7 @@ import { AuthorizationProvider } from "../../components/layout/AuthorizationCont
 import type { AuthzCurrentActor } from "../../types/authz";
 import type { Collaborator } from "../../types/collaborators";
 import { CollaboratorDetailPage } from "./CollaboratorDetailPage";
-import { I18nProvider } from "../../i18n";
+import { I18nProvider, LOCALE_STORAGE_KEY } from "../../i18n";
 
 const authorizationActor: AuthzCurrentActor = {
   actorKey: "tenant-admin",
@@ -37,6 +37,25 @@ const selfAuthorizationActor: AuthzCurrentActor = {
   roleCodes: [],
   permissions: ["people.self.read", "collaborators.self.read"],
   intrinsicPermissions: ["people.self.read", "collaborators.self.read"],
+};
+
+const workCreditSelfAuthorizationActor: AuthzCurrentActor = {
+  ...selfAuthorizationActor,
+  permissions: [
+    "people.self.read",
+    "collaborators.self.read",
+    "work_credit_evidence.self.read",
+  ],
+  intrinsicPermissions: [
+    "people.self.read",
+    "collaborators.self.read",
+    "work_credit_evidence.self.read",
+  ],
+};
+
+const closedOnlyWorkCreditSelfActor: AuthzCurrentActor = {
+  ...workCreditSelfAuthorizationActor,
+  collaboratorId: undefined,
 };
 
 const earningsOperatorActor: AuthzCurrentActor = {
@@ -86,6 +105,7 @@ let container: HTMLDivElement;
 let root: Root | null;
 
 beforeEach(() => {
+  window.localStorage.removeItem(LOCALE_STORAGE_KEY);
   container = document.createElement("div");
   document.body.appendChild(container);
   root = null;
@@ -124,6 +144,9 @@ describe("CollaboratorDetailPage", () => {
     expect(collaboratorHeading?.className).toContain("text-lg");
     expect(textNode("Journey ID:")).toBeTruthy();
     expect(textNode("collab-1")).toBeTruthy();
+    expect(
+      textNode("Started May 1, 2026 · Projected end Aug 4, 2026"),
+    ).toBeTruthy();
     expect(textNode("Person Summary")).toBeTruthy();
     expect(textNode("Nickname")).toBeTruthy();
     expect(textNode("Legal Name")).toBeTruthy();
@@ -310,6 +333,12 @@ describe("CollaboratorDetailPage", () => {
     );
 
     await waitForText("Journey Closed");
+    expect(
+      textNode("Started May 1, 2026 · Ended on Jun 15, 2026"),
+    ).toBeTruthy();
+    expect(
+      textNode("Started May 1, 2026 · Projected end Aug 4, 2026"),
+    ).toBeFalsy();
     expect(textNode("Jun 15, 2026")).toBeTruthy();
     expect(linkByText("Back to My Journeys")?.getAttribute("href")).toBe(
       "/collaborators",
@@ -317,6 +346,185 @@ describe("CollaboratorDetailPage", () => {
     expect(textNode("Current Account")).toBeFalsy();
     expect(buttonByText("Edit Collaborator")).toBeFalsy();
     expect(buttonByText("Edit Work Assignment")).toBeFalsy();
+  });
+
+  it("shows Work and Credit Evidence for the signed-in Person, including a closed Journey", async () => {
+    mockFetch(async (url) => {
+      if (url === "/api/v1/collaborators/self/collab-closed") {
+        return jsonResponse({
+          data: {
+            ...collaborator,
+            id: "collab-closed",
+            closedAt: "2026-06-15T10:00:00Z",
+            statusId: "ref-collaborator-finished",
+            statusLabel: "Finished",
+          },
+        });
+      }
+      if (url === "/api/v1/collaborators/self/collab-closed/work-credit-evidence") {
+        return jsonResponse({
+          data: {
+            journey: {
+              ...collaborator,
+              id: "collab-closed",
+              closedAt: "2026-06-15T10:00:00Z",
+            },
+            workRecognized: [
+              {
+                assignmentId: "assignment-1",
+                workPeriodId: "work-period-1",
+                workDate: "2026-06-10",
+                periodCode: "DAY",
+                workPeriodName: "Day shift",
+                workPeriodStatus: "FULLY_POSTED",
+                plannedStatus: "INCLUDED",
+                actualStatus: "WORKED",
+                sectorId: "sector-1",
+                sectorLabel: "Mining",
+                locationId: "location-1",
+                locationLabel: "Main Mine",
+                taskId: "task-1",
+                taskLabel: "Operator",
+                productionEntries: 1,
+                goldGramsProduced: 80,
+              },
+            ],
+            earningsCalculated: [
+              {
+                id: "accrual-item-1",
+                accrualRunId: "accrual-run-1",
+                accrualRunStatus: "POSTED",
+                accrualDate: "2026-06-10",
+                workPeriodId: "work-period-1",
+                workDate: "2026-06-10",
+                workPeriodAssignmentId: "assignment-1",
+                calculationType: "DAILY_BRL",
+                direction: "CREDIT",
+                brlAmount: 350,
+                status: "POSTED",
+                description: "Daily earning",
+              },
+            ],
+            accountPostings: [
+              {
+                id: "ledger-1",
+                entryType: "EARNING_CREDIT",
+                direction: "CREDIT",
+                amount: 350,
+                signedAmount: 350,
+                valueUnitCode: "BRL",
+                valueUnitLabel: "Brazilian Real",
+                effectiveDate: "2026-06-10",
+                sourceType: "WORK_PERIOD_ASSIGNMENT",
+                sourceId: "assignment-1",
+                description: "Daily earning",
+                active: true,
+                correctionType: "ORIGINAL",
+              },
+              {
+                id: "ledger-reversal-1",
+                entryType: "EARNING_CREDIT",
+                direction: "DEBIT",
+                amount: 350,
+                signedAmount: -350,
+                valueUnitCode: "BRL",
+                valueUnitLabel: "Brazilian Real",
+                effectiveDate: "2026-06-11",
+                sourceType: "LEDGER_CORRECTION",
+                sourceId: "correction-1",
+                description: "Reverse incorrect earning",
+                active: true,
+                correctionType: "REVERSAL",
+                relatedEntryId: "ledger-1",
+                correctionReasonCode: "INCORRECT_AMOUNT",
+                correctionReasonText: "Incorrect earning amount",
+              },
+            ],
+          },
+        });
+      }
+
+      throw new Error(`Unhandled request: ${url}`);
+    });
+
+    renderCollaboratorDetailPage(
+      "/collaborators/collab-closed",
+      closedOnlyWorkCreditSelfActor,
+    );
+
+    await waitForText("Compensation rule");
+    expect(textNode("Work and Credit Evidence")).toBeTruthy();
+    expect(textNode("Compensation rule")).toBeTruthy();
+    expect(textNode("Work recognized")).toBeTruthy();
+    expect(textNode("80 g gold recorded")).toBeTruthy();
+    expect(textNode("Earnings calculated")).toBeTruthy();
+    expect(textNode("Daily BRL")).toBeTruthy();
+    expect(textNode("350.00")).toBeTruthy();
+    expect(textNode("Current Account postings")).toBeTruthy();
+    expect(textNode("Credit posted")).toBeTruthy();
+    expect(textNode("Debit posted")).toBeTruthy();
+    expect(textNode("earning credit")).toBeTruthy();
+    expect(textNode("Reversal")).toBeTruthy();
+    expect(textNode("Incorrect earning amount")).toBeTruthy();
+    expect(textNode("assignment-1")).toBeTruthy();
+  });
+
+  it("renders the Work and Credit Evidence surface in pt-BR", async () => {
+    window.localStorage.setItem(LOCALE_STORAGE_KEY, "pt-BR");
+    mockFetch(async (url) => {
+      if (url === "/api/v1/collaborators/self/collab-closed") {
+        return jsonResponse({
+          data: {
+            ...collaborator,
+            id: "collab-closed",
+            closedAt: "2026-06-15T10:00:00Z",
+          },
+        });
+      }
+      if (url === "/api/v1/collaborators/self/collab-closed/work-credit-evidence") {
+        return jsonResponse({
+          data: {
+            journey: {
+              ...collaborator,
+              id: "collab-closed",
+              closedAt: "2026-06-15T10:00:00Z",
+            },
+            workRecognized: [],
+            earningsCalculated: [],
+            accountPostings: [
+              {
+                id: "ledger-1",
+                entryType: "EARNING_CREDIT",
+                direction: "CREDIT",
+                amount: 350,
+                signedAmount: 350,
+                valueUnitCode: "BRL",
+                valueUnitLabel: "Real brasileiro",
+                effectiveDate: "2026-06-10",
+                sourceType: "WORK_PERIOD_ASSIGNMENT",
+                sourceId: "assignment-1",
+                active: true,
+                correctionType: "ORIGINAL",
+              },
+            ],
+          },
+        });
+      }
+      throw new Error(`Unhandled request: ${url}`);
+    });
+
+    renderCollaboratorDetailPage(
+      "/collaborators/collab-closed",
+      closedOnlyWorkCreditSelfActor,
+    );
+
+    await waitForText("Regra de remuneração");
+    expect(textNode("Demonstrativo de Trabalho e Crédito")).toBeTruthy();
+    expect(textNode("Regra de remuneração")).toBeTruthy();
+    expect(textNode("Trabalho reconhecido")).toBeTruthy();
+    expect(textNode("Ganhos calculados")).toBeTruthy();
+    expect(textNode("Lançamentos da Conta Corrente")).toBeTruthy();
+    expect(textNode("Crédito lançado")).toBeTruthy();
   });
 
   it("lets an Earnings Operator edit only Sector, Location, and Task", async () => {

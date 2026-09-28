@@ -30,6 +30,8 @@ Production and long-lived environments should keep `AUTHZ_BOOTSTRAP_ENABLED=fals
 
 Application Administrators can manage the application Actor catalog. Tenant Administrators can manage only Account-bound Tenant Actors for their selected Tenant: inactive Actors remain visible, and the Tenant Administrator may reactivate an Actor only while its same-tenant Person–Tenant Membership is ACTIVE. A missing Tenant Actor is created through the Person Authentication workflow, which preserves the canonical Authentication Account → Actor → Membership binding rather than creating a free-floating Actor. Tenant operator Role Grants still require an ACTIVE Actor and ACTIVE same-tenant Membership.
 
+Bite 32.4 adds a global-Person cross-Tenant Role boundary: the same Person may retain Membership and Collaborator participation in multiple Tenants, but any other active `TENANT`-scoped Role Grants may exist in only one Tenant at a time. The boundary is defined by Tenant scope, not by an enumerated list of Role codes, so future Tenant Roles are covered automatically. Actor or Membership lifecycle suspension does not release the assignment; the Person must work with the Tenant where the Roles are held so every non-baseline Role Grant there is explicitly revoked before another Tenant may provision a Role. The provisioning Tenant is informed of the conflict without learning the other Tenant or Roles. Application-global authority and Tenant Support Access Leases remain outside this rule.
+
 ERS prevents:
 
 - an operating actor from deactivating itself;

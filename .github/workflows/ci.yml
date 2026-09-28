@@ -65,6 +65,9 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends sqlite3
 
+      - name: Verify Bite 32 release coverage contract
+        run: make bite32-release-coverage-check
+
       - name: Rehearse pre-30I database through final 30I migration
         run: make migration-rehearsal-check
 

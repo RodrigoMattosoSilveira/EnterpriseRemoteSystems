@@ -47,6 +47,20 @@ func (h *Handler) ListCandidates(c fiber.Ctx) error {
 	return c.JSON(httpx.APIResponse{Data: items})
 }
 
+func (h *Handler) ListForMembership(c fiber.Ctx) error {
+	membershipID := strings.TrimSpace(c.Params("membershipId"))
+	if membershipID == "" {
+		return httpx.WriteError(c, authz.ErrForbidden)
+	}
+
+	items, err := h.service.ListForMembership(requesttenant.Context(c), membershipID)
+	if err != nil {
+		return httpx.WriteError(c, err)
+	}
+
+	return c.JSON(httpx.APIResponse{Data: items})
+}
+
 func (h *Handler) ListSelf(c fiber.Ctx) error {
 	actor, err := authz.RequestActorFromContext(c)
 	if err != nil {
@@ -92,6 +106,23 @@ func (h *Handler) Create(c fiber.Ctx) error {
 	h.recordLifecycleAudit(c, authz.PermissionCollaboratorsCreate, "collaborators.journey.create", created.ID, created.PersonID, created.MembershipID)
 
 	return c.Status(fiber.StatusCreated).JSON(httpx.APIResponse{Data: created})
+}
+
+func (h *Handler) GetSelfWorkCreditEvidence(c fiber.Ctx) error {
+	actor, err := authz.RequestActorFromContext(c)
+	if err != nil {
+		return httpx.WriteError(c, err)
+	}
+	membershipID := strings.TrimSpace(actor.MembershipID)
+	if membershipID == "" {
+		return httpx.WriteError(c, authz.ErrForbidden)
+	}
+
+	evidence, err := h.service.GetSelfWorkCreditEvidence(requesttenant.Context(c), c.Params("id"), membershipID)
+	if err != nil {
+		return httpx.WriteError(c, err)
+	}
+	return c.JSON(httpx.APIResponse{Data: evidence})
 }
 
 func (h *Handler) GetSelfByID(c fiber.Ctx) error {
