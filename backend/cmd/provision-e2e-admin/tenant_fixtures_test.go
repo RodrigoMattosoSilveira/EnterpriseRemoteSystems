@@ -116,6 +116,65 @@ func TestEnsureE2ETenantFixturesSurvivesAccountActorFoundationAndIsIdempotent(t 
 			t.Fatalf("expected %s binding Membership, got %#v", tenantID, binding.MembershipID)
 		}
 	}
+
+	var bite32Journeys []dbpkg.CollaboratorJourney
+	if err := database.Where("id IN ?", []string{e2eBite32CurrentJourneyID, e2eBite32ClosedJourneyID}).Order("id ASC").Find(&bite32Journeys).Error; err != nil {
+		t.Fatalf("find Bite 32 Journey fixtures: %v", err)
+	}
+	if len(bite32Journeys) != 2 {
+		t.Fatalf("expected current and closed Bite 32 Journeys, got %#v", bite32Journeys)
+	}
+	var evidenceAssignments int64
+	if err := database.Model(&dbpkg.WorkPeriodAssignment{}).Where("collaborator_id = ? AND actual_status = ?", e2eBite32ClosedJourneyID, "WORKED").Count(&evidenceAssignments).Error; err != nil {
+		t.Fatalf("count Bite 32 recognized-work evidence: %v", err)
+	}
+	if evidenceAssignments != 1 {
+		t.Fatalf("expected one recognized-work assignment for Bite 32 closed Journey, got %d", evidenceAssignments)
+	}
+	var evidenceAccruals int64
+	if err := database.Model(&dbpkg.AccrualItem{}).Where("collaborator_id = ? AND status = ?", e2eBite32ClosedJourneyID, "POSTED").Count(&evidenceAccruals).Error; err != nil {
+		t.Fatalf("count Bite 32 accrual evidence: %v", err)
+	}
+	if evidenceAccruals != 1 {
+		t.Fatalf("expected one posted Bite 32 accrual item, got %d", evidenceAccruals)
+	}
+	var evidenceLedger int64
+	if err := database.Model(&dbpkg.LedgerEntry{}).Where("collaborator_id = ?", e2eBite32ClosedJourneyID).Count(&evidenceLedger).Error; err != nil {
+		t.Fatalf("count Bite 32 ledger evidence: %v", err)
+	}
+	if evidenceLedger != 2 {
+		t.Fatalf("expected earning credit and payout for Bite 32 closed Journey, got %d", evidenceLedger)
+	}
+
+	var roleAccount authentication.Account
+	if err := database.First(&roleAccount, "id = ?", e2eBite32RoleStem+"-account").Error; err != nil {
+		t.Fatalf("find Bite 32 Role-isolation Account: %v", err)
+	}
+	if roleAccount.Login != e2eBite32RoleLogin {
+		t.Fatalf("expected Bite 32 Role-isolation login %q, got %q", e2eBite32RoleLogin, roleAccount.Login)
+	}
+	var roleBindings []authentication.AccountActor
+	if err := database.Where("account_id = ?", roleAccount.ID).Order("tenant_id ASC").Find(&roleBindings).Error; err != nil {
+		t.Fatalf("find Bite 32 Role-isolation Account/Actor bindings: %v", err)
+	}
+	if len(roleBindings) != 2 {
+		t.Fatalf("expected two Bite 32 Role-isolation Tenant bindings, got %#v", roleBindings)
+	}
+	var roleCollaborators int64
+	if err := database.Model(&dbpkg.CollaboratorJourney{}).Where("id LIKE ? AND closed_at IS NULL", e2eBite32RoleStem+"-journey-%").Count(&roleCollaborators).Error; err != nil {
+		t.Fatalf("count Bite 32 Role-isolation Collaborators: %v", err)
+	}
+	if roleCollaborators != 2 {
+		t.Fatalf("expected baseline Collaborator participation in both Bite 32 Role-isolation Tenants, got %d", roleCollaborators)
+	}
+	var roleGrants int64
+	roleActorIDs := []string{e2eBite32RoleStem + "-actor-" + dbpkg.DefaultTenantID, e2eBite32RoleStem + "-actor-" + e2eBite32RoleOtherTenantID}
+	if err := database.Model(&authz.AuthzActorRoleGrant{}).Where("actor_id IN ? AND active = ?", roleActorIDs, true).Count(&roleGrants).Error; err != nil {
+		t.Fatalf("count Bite 32 Role-isolation delegated grants: %v", err)
+	}
+	if roleGrants != 0 {
+		t.Fatalf("Bite 32 Role-isolation Person must start with baseline-only participation, got %d active Role Grant(s)", roleGrants)
+	}
 }
 
 func TestE2EApplicationAdministratorTenantOptionsRemainGlobalOnlyBeforeSupportLease(t *testing.T) {

@@ -58,6 +58,9 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
+      - name: Verify Bite 32 release coverage contract
+        run: make bite32-release-coverage-check
+
       - name: Set up Go
         uses: actions/setup-go@v6
         with:
@@ -613,6 +616,10 @@ jobs:
         shell: bash
         run: |
           git config --global --add safe.directory "${GITHUB_WORKSPACE}"
+
+      - name: Verify Bite 32 release coverage contract
+        shell: bash
+        run: make bite32-release-coverage-check
 
       - name: Show deployed Playwright target
         shell: bash
