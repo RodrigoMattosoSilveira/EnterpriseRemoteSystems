@@ -22,8 +22,11 @@ const tenant = {
 const candidate = {
   actorId: "actor-north-admin",
   actorKey: "north-admin@example.com",
-  displayName: "North Admin",
+  displayName: "north-admin-actor",
   globalPersonId: "person-north-admin",
+  personName: "Marina Oliveira",
+  personNickname: "Mari",
+  accountLogin: "marina.oliveira@example.test",
   active: true,
   assigned: false,
   eligible: true,
@@ -93,6 +96,13 @@ describe("TenantDetailPage", () => {
 
     renderPage();
     await waitForText("North Site");
+    const assignSelect = [...container.querySelectorAll("select")].find((node) =>
+      node.textContent?.includes("Select an eligible active actor"),
+    );
+    expect(assignSelect?.textContent).toContain(
+      "Marina Oliveira (Mari) — marina.oliveira@example.test",
+    );
+    expect(assignSelect?.textContent).not.toContain(candidate.actorKey);
     const pageHeading = container.querySelector("header h1");
     expect(pageHeading?.textContent).toBe("Tenant Administration");
     expect(pageHeading?.className).toContain("text-3xl");
@@ -102,7 +112,7 @@ describe("TenantDetailPage", () => {
     expect(container.querySelector("header")?.textContent).toContain("Tenant Code: NORTH");
     await changeSelect("Select an eligible active actor", candidate.actorId);
     await click("Assign Admin");
-    await waitForDialogMessage("North Admin assigned as tenant administrator.");
+    await waitForDialogMessage("Marina Oliveira assigned as tenant administrator.");
     expect(calls.find((call) => call.url.endsWith("/admins") && call.method === "POST")?.body).toEqual({ actorId: candidate.actorId });
     await click("Continue");
     expect(container.querySelector('[role="alertdialog"]')).toBeNull();
@@ -164,7 +174,7 @@ describe("TenantDetailPage", () => {
     });
 
     renderPage();
-    await waitForText("North Admin");
+    await waitForText("north-admin-actor");
     await click("Revoke");
     await waitForDialogMessage("Tenant Administrator assignment was revoked.");
     expect(calls.some((call) => call.url.endsWith(`/admins/${candidate.actorId}`) && call.method === "DELETE")).toBe(true);

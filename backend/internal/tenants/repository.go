@@ -17,6 +17,9 @@ type TenantAdminCandidateRecord struct {
 	ActorKey                           string
 	DisplayName                        string
 	GlobalPersonID                     string
+	PersonName                         string
+	PersonNickname                     string
+	AccountLogin                       string
 	Active                             bool
 	Assigned                           bool
 	Eligible                           bool

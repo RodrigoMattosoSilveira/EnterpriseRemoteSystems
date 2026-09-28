@@ -49,6 +49,9 @@ type TenantAdminCandidateDTO struct {
 	ActorKey                           string `json:"actorKey"`
 	DisplayName                        string `json:"displayName"`
 	GlobalPersonID                     string `json:"globalPersonId,omitempty"`
+	PersonName                         string `json:"personName,omitempty"`
+	PersonNickname                     string `json:"personNickname,omitempty"`
+	AccountLogin                       string `json:"accountLogin,omitempty"`
 	Active                             bool   `json:"active"`
 	Assigned                           bool   `json:"assigned"`
 	Eligible                           bool   `json:"eligible"`

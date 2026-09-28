@@ -133,19 +133,30 @@ func (r *gormRepository) ListTenantAdminCandidates(ctx context.Context, tenantID
 	}
 
 	type candidateActorProjection struct {
-		ID             string
-		ActorKey       string
-		DisplayName    string
-		Active         bool
-		GlobalPersonID string
+		ID              string
+		ActorKey        string
+		DisplayName     string
+		Active          bool
+		GlobalPersonID  string
+		PersonFirstName string
+		PersonLastName  string
+		PersonNickname  string
+		AccountLogin    string
 	}
 	var actors []candidateActorProjection
 	if err := r.database.WithContext(ctx).
 		Table("authz_actors a").
-		Select("a.id, a.actor_key, a.display_name, a.active, COALESCE(m.person_id, '') AS global_person_id").
+		Select(`a.id, a.actor_key, a.display_name, a.active,
+			COALESCE(m.person_id, '') AS global_person_id,
+			COALESCE(person.first_name, '') AS person_first_name,
+			COALESCE(person.last_name, '') AS person_last_name,
+			COALESCE(person.nickname, '') AS person_nickname,
+			COALESCE(account.login, '') AS account_login`).
 		Joins("JOIN auth_account_actors aa ON aa.actor_id = a.id AND aa.scope_type = ? AND aa.tenant_id = ?", "TENANT", tenantID).
 		Joins("JOIN person_tenant_memberships m ON m.id = aa.membership_id AND m.tenant_id = aa.tenant_id").
-		Order("a.actor_key ASC").
+		Joins("JOIN global_people person ON person.id = m.person_id").
+		Joins("JOIN auth_user_accounts account ON account.id = aa.account_id").
+		Order("LOWER(person.first_name) ASC, LOWER(person.last_name) ASC, LOWER(account.login) ASC, a.actor_key ASC").
 		Scan(&actors).Error; err != nil {
 		return nil, err
 	}
@@ -217,11 +228,19 @@ func (r *gormRepository) ListTenantAdminCandidates(ctx context.Context, tenantID
 			reason = "The other Tenant Administrator slot must belong to a different Person"
 		}
 
+		personName := strings.TrimSpace(strings.Join([]string{
+			strings.TrimSpace(actor.PersonFirstName),
+			strings.TrimSpace(actor.PersonLastName),
+		}, " "))
+
 		result = append(result, TenantAdminCandidateRecord{
 			ActorID:                            actor.ID,
 			ActorKey:                           actor.ActorKey,
 			DisplayName:                        actor.DisplayName,
 			GlobalPersonID:                     globalPersonID,
+			PersonName:                         personName,
+			PersonNickname:                     strings.TrimSpace(actor.PersonNickname),
+			AccountLogin:                       strings.TrimSpace(actor.AccountLogin),
 			Active:                             actor.Active,
 			Assigned:                           isAssigned,
 			Eligible:                           eligible,

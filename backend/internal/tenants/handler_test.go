@@ -54,6 +54,9 @@ type tenantDTO struct {
 type tenantAdminCandidateDTO struct {
 	ActorID                            string `json:"actorId"`
 	ActorKey                           string `json:"actorKey"`
+	PersonName                         string `json:"personName"`
+	PersonNickname                     string `json:"personNickname"`
+	AccountLogin                       string `json:"accountLogin"`
 	Active                             bool   `json:"active"`
 	Assigned                           bool   `json:"assigned"`
 	Eligible                           bool   `json:"eligible"`
@@ -292,6 +295,15 @@ func TestApplicationAdminCanAssignAndRevokeTenantAdministrator(t *testing.T) {
 	for _, candidate := range candidatesBody.Data {
 		if candidate.ActorID == actorID {
 			foundAssigned = candidate.Assigned && candidate.Active
+			if candidate.PersonName != "Tenant Administrator" {
+				t.Fatalf("expected canonical Person name in candidate projection, got %q", candidate.PersonName)
+			}
+			if candidate.PersonNickname != "west-admin@example.com" {
+				t.Fatalf("expected canonical Person nickname in candidate projection, got %q", candidate.PersonNickname)
+			}
+			if candidate.AccountLogin != "west-admin@example.com" {
+				t.Fatalf("expected Authentication Account login in candidate projection, got %q", candidate.AccountLogin)
+			}
 		}
 	}
 	if !foundAssigned {

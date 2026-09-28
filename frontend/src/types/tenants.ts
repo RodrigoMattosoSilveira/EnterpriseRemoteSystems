@@ -34,6 +34,9 @@ export type TenantAdminCandidate = {
   actorKey: string;
   displayName: string;
   globalPersonId?: string;
+  personName?: string;
+  personNickname?: string;
+  accountLogin?: string;
   active: boolean;
   assigned: boolean;
   eligible?: boolean;
