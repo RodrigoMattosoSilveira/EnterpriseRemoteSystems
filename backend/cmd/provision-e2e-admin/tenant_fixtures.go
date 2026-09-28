@@ -36,6 +36,14 @@ type e2eTenantAdminFixture struct {
 }
 
 func ensureE2ETenantFixtures(ctx context.Context, database *gorm.DB, password string, passwordHashCost int) error {
+	// E2E provisioning runs after SQL migrations but before application bootstrap
+	// calls SeedReferenceData. Migrations guarantee the default Tenant exists, but
+	// not every runtime reference row required by deterministic E2E Journeys.
+	// Establish the complete default-Tenant baseline before any fixture reads it.
+	if err := dbpkg.SeedTenantData(database, dbpkg.DefaultTenantID); err != nil {
+		return fmt.Errorf("seed default Tenant baseline for E2E fixtures: %w", err)
+	}
+
 	fixtures := []e2eTenantAdminFixture{
 		{TenantID: dbpkg.DefaultTenantID, ActorKey: e2eTenantAdminActorKey, Login: e2eTenantAdminLogin, Stem: "e2e-default-tenant-admin"},
 		{TenantID: "e2e-authz-admin-tenant", TenantCode: "E2EAUTHZADMIN", TenantName: "E2E Authorization Admin Boundary", ActorKey: "e2e-authz-admin-tenant-admin", Login: "e2e-authz-admin-tenant-admin@example.com", Stem: "e2e-authz-admin-tenant-admin"},

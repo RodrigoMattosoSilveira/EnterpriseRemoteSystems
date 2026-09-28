@@ -177,6 +177,58 @@ func TestEnsureE2ETenantFixturesSurvivesAccountActorFoundationAndIsIdempotent(t 
 	}
 }
 
+func TestEnsureE2ETenantFixturesSeedsDefaultTenantReferenceBaselineBeforeProvisioning(t *testing.T) {
+	database, err := dbpkg.Open(filepath.Join(t.TempDir(), "app.db"))
+	if err != nil {
+		t.Fatalf("open database: %v", err)
+	}
+	if err := dbpkg.AutoMigrate(database); err != nil {
+		t.Fatalf("migrate core database: %v", err)
+	}
+	if err := authz.AutoMigrate(database); err != nil {
+		t.Fatalf("migrate authorization database: %v", err)
+	}
+	if err := authentication.AutoMigrate(database); err != nil {
+		t.Fatalf("migrate authentication database: %v", err)
+	}
+	if err := dbpkg.SeedTenants(database); err != nil {
+		t.Fatalf("seed default Tenant only: %v", err)
+	}
+	if err := authz.SeedAuthorizationCatalog(database); err != nil {
+		t.Fatalf("seed authorization catalog: %v", err)
+	}
+
+	var before int64
+	if err := database.Model(&dbpkg.ReferenceData{}).
+		Where("tenant_id = ? AND type = ? AND code = ?", dbpkg.DefaultTenantID, "collaborator_status", "ACTIVE").
+		Count(&before).Error; err != nil {
+		t.Fatalf("count default collaborator status before E2E provisioning: %v", err)
+	}
+	if before != 0 {
+		t.Fatalf("expected migration-shaped default Tenant without runtime collaborator baseline, got %d row(s)", before)
+	}
+
+	const password = "e2e-tenant-admin-password"
+	if err := ensureE2ETenantFixtures(context.Background(), database, password, bcrypt.MinCost); err != nil {
+		t.Fatalf("provision E2E Tenant fixtures before application reference bootstrap: %v", err)
+	}
+
+	var after int64
+	if err := database.Model(&dbpkg.ReferenceData{}).
+		Where("tenant_id = ? AND type = ? AND code = ? AND active = ?", dbpkg.DefaultTenantID, "collaborator_status", "ACTIVE", true).
+		Count(&after).Error; err != nil {
+		t.Fatalf("count default collaborator status after E2E provisioning: %v", err)
+	}
+	if after != 1 {
+		t.Fatalf("expected E2E provisioning to establish default collaborator baseline, got %d row(s)", after)
+	}
+
+	var closedJourney dbpkg.CollaboratorJourney
+	if err := database.First(&closedJourney, "id = ?", e2eBite32ClosedJourneyID).Error; err != nil {
+		t.Fatalf("find Bite 32 closed Journey after baseline repair: %v", err)
+	}
+}
+
 func TestE2EApplicationAdministratorTenantOptionsRemainGlobalOnlyBeforeSupportLease(t *testing.T) {
 	database, err := dbpkg.Open(filepath.Join(t.TempDir(), "app.db"))
 	if err != nil {
