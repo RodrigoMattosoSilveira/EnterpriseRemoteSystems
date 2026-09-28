@@ -22,8 +22,11 @@ const tenant = {
 const candidate = {
   actorId: "actor-north-admin",
   actorKey: "north-admin@example.com",
-  displayName: "North Admin",
+  displayName: "north-admin-actor",
   globalPersonId: "person-north-admin",
+  personName: "Marina Oliveira",
+  personNickname: "Mari",
+  accountLogin: "marina.oliveira@example.test",
   active: true,
   assigned: false,
   eligible: true,
@@ -93,6 +96,13 @@ describe("TenantDetailPage", () => {
 
     renderPage();
     await waitForText("North Site");
+    const assignSelect = [...container.querySelectorAll("select")].find((node) =>
+      node.textContent?.includes("Select an eligible active actor"),
+    );
+    expect(assignSelect?.textContent).toContain(
+      "Marina Oliveira (Mari) — marina.oliveira@example.test",
+    );
+    expect(assignSelect?.textContent).not.toContain(candidate.actorKey);
     const pageHeading = container.querySelector("header h1");
     expect(pageHeading?.textContent).toBe("Tenant Administration");
     expect(pageHeading?.className).toContain("text-3xl");
@@ -102,7 +112,7 @@ describe("TenantDetailPage", () => {
     expect(container.querySelector("header")?.textContent).toContain("Tenant Code: NORTH");
     await changeSelect("Select an eligible active actor", candidate.actorId);
     await click("Assign Admin");
-    await waitForDialogMessage("North Admin assigned as tenant administrator.");
+    await waitForDialogMessage("Marina Oliveira assigned as tenant administrator.");
     expect(calls.find((call) => call.url.endsWith("/admins") && call.method === "POST")?.body).toEqual({ actorId: candidate.actorId });
     await click("Continue");
     expect(container.querySelector('[role="alertdialog"]')).toBeNull();
@@ -164,7 +174,7 @@ describe("TenantDetailPage", () => {
     });
 
     renderPage();
-    await waitForText("North Admin");
+    await waitForText("north-admin-actor");
     await click("Revoke");
     await waitForDialogMessage("Tenant Administrator assignment was revoked.");
     expect(calls.some((call) => call.url.endsWith(`/admins/${candidate.actorId}`) && call.method === "DELETE")).toBe(true);
@@ -202,8 +212,8 @@ describe("TenantDetailPage", () => {
       globalPersonId: "person-cross-tenant",
       assigned: false,
       eligible: false,
-      ineligibilityReason: "This Person already administers tenant south",
-      tenantAdminTenantId: "south",
+      ineligibilityReason: "This Person has one or more Roles in another Tenant. They must work with that Tenant to have every Role other than Membership and Collaborator removed before a Role can be assigned here.",
+      hasDelegatedAuthorityInOtherTenant: true,
     };
 
     mockFetch(async (url, init) => {
@@ -224,10 +234,10 @@ describe("TenantDetailPage", () => {
       "A Tenant may have up to two active Tenant Administrators (TENANT_ADMIN assignments).",
     );
     expect(container.textContent).toContain(
-      "A Person who is a TENANT_ADMIN for Tenant A cannot concurrently be a TENANT_ADMIN for Tenant B; a Person may administer only one Tenant at a time.",
+      "A Person may participate through Membership and Collaborator relationships in multiple Tenants, but may hold any other Tenant Role in only one Tenant at a time.",
     );
     expect(container.textContent).toContain(
-      "To remove a Person's Tenant Administrator privilege, explicitly revoke the Person Actor's TENANT_ADMIN Role Grant.",
+      "Before assigning a Role here, the Person must work with the Tenant where those Roles are held to have them removed.",
     );
     expect(container.textContent).toContain("2 of 2 assignments");
     const select = [...container.querySelectorAll("select")].find((node) =>
@@ -242,7 +252,7 @@ describe("TenantDetailPage", () => {
     expect(calls.some((call) => call.method === "POST")).toBe(false);
   });
 
-  it("excludes a Person who already administers another Tenant while a slot remains", async () => {
+  it("excludes a Person with a non-baseline Role in another Tenant without disclosing that Tenant or Role", async () => {
     const oneAdminTenant = {
       ...tenant,
       operationalStatus: "ACTIVE_READY",
@@ -265,8 +275,8 @@ describe("TenantDetailPage", () => {
       globalPersonId: "person-cross-tenant",
       assigned: false,
       eligible: false,
-      ineligibilityReason: "This Person already administers tenant south",
-      tenantAdminTenantId: "south",
+      ineligibilityReason: "This Person has one or more Roles in another Tenant. They must work with that Tenant to have every Role other than Membership and Collaborator removed before a Role can be assigned here.",
+      hasDelegatedAuthorityInOtherTenant: true,
     };
 
     mockFetch(async (url, init) => {
@@ -284,8 +294,9 @@ describe("TenantDetailPage", () => {
     await waitForText("1 of 2 Tenant Administrator slots is occupied.");
     await waitForText("Unavailable administrator candidates");
     expect(container.textContent).toContain(
-      "Cross Tenant Admin: This Person already administers tenant south",
+      "Cross Tenant Admin: This Person has one or more Roles in another Tenant. They must work with that Tenant to have every Role other than Membership and Collaborator removed before a Role can be assigned here.",
     );
+    expect(container.textContent).not.toContain("south");
     const select = [...container.querySelectorAll("select")].find((node) =>
       node.textContent?.includes("Select an eligible active actor"),
     );

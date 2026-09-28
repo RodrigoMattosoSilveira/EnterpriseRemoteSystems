@@ -4,8 +4,10 @@ import {
   extendCollaboratorJourney,
   getCollaborator,
   getSelfCollaborator,
+  getSelfWorkCreditEvidence,
   listAllCollaborators,
   listCollaboratorCandidates,
+  listCollaboratorJourneysForMembership,
   listCollaborators,
   listExpenseCollaborators,
   listSelfCollaboratorJourneys,
@@ -28,6 +30,8 @@ export const collaboratorQueryKeys = {
     [...collaboratorQueryKeys.lists(), filter] as const,
   catalog: () => [...collaboratorQueryKeys.lists(), "catalog"] as const,
   selfList: () => [...collaboratorQueryKeys.lists(), "self"] as const,
+  membershipJourneys: (membershipId: string) =>
+    [...collaboratorQueryKeys.lists(), "membership", membershipId] as const,
   search: (search: string) =>
     [...collaboratorQueryKeys.lists(), "search", search] as const,
   candidates: () => [...collaboratorQueryKeys.all, "candidates"] as const,
@@ -37,6 +41,8 @@ export const collaboratorQueryKeys = {
   detail: (id: string) => [...collaboratorQueryKeys.details(), id] as const,
   selfDetail: (id: string) =>
     [...collaboratorQueryKeys.details(), "self", id] as const,
+  selfWorkCreditEvidence: (id: string) =>
+    [...collaboratorQueryKeys.details(), "self", id, "work-credit-evidence"] as const,
 };
 
 export function useCollaboratorCandidates(enabled = true) {
@@ -88,11 +94,30 @@ export function useExpenseCollaborators() {
   });
 }
 
+export function useCollaboratorJourneysForMembership(
+  membershipId: string,
+  enabled = true,
+) {
+  return useQuery({
+    queryKey: collaboratorQueryKeys.membershipJourneys(membershipId),
+    queryFn: () => listCollaboratorJourneysForMembership(membershipId),
+    enabled: enabled && Boolean(membershipId),
+  });
+}
+
 export function useSelfCollaboratorJourneys(enabled = true) {
   return useQuery({
     queryKey: collaboratorQueryKeys.selfList(),
     queryFn: listSelfCollaboratorJourneys,
     enabled,
+  });
+}
+
+export function useSelfWorkCreditEvidence(id: string, enabled = true) {
+  return useQuery({
+    queryKey: collaboratorQueryKeys.selfWorkCreditEvidence(id),
+    queryFn: () => getSelfWorkCreditEvidence(id),
+    enabled: enabled && Boolean(id),
   });
 }
 

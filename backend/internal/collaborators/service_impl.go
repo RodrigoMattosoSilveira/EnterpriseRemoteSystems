@@ -34,12 +34,16 @@ func (s *service) List(ctx context.Context, filter CollaboratorListFilter) ([]Co
 	return ToDTOList(rows), total, nil
 }
 
-func (s *service) ListSelf(ctx context.Context, membershipID string) ([]CollaboratorDTO, error) {
+func (s *service) ListForMembership(ctx context.Context, membershipID string) ([]CollaboratorDTO, error) {
 	rows, err := s.repo.ListForMembership(ctx, strings.TrimSpace(membershipID))
 	if err != nil {
 		return nil, err
 	}
 	return ToDTOList(rows), nil
+}
+
+func (s *service) ListSelf(ctx context.Context, membershipID string) ([]CollaboratorDTO, error) {
+	return s.ListForMembership(ctx, membershipID)
 }
 
 func (s *service) ListCandidates(ctx context.Context) ([]peoplepkg.PersonDTO, error) {
@@ -286,6 +290,15 @@ func (s *service) GetSelfByID(ctx context.Context, id string, membershipID strin
 		return nil, err
 	}
 	return ptr(ToDTO(*row)), nil
+}
+
+func (s *service) GetSelfWorkCreditEvidence(ctx context.Context, id string, membershipID string) (*WorkCreditEvidenceDTO, error) {
+	record, err := s.repo.LoadWorkCreditEvidence(ctx, strings.TrimSpace(id), strings.TrimSpace(membershipID))
+	if err != nil {
+		return nil, err
+	}
+	dto := ToWorkCreditEvidenceDTO(*record)
+	return &dto, nil
 }
 
 func membershipCandidateToPersonDTO(membership db.PersonTenantMembership) peoplepkg.PersonDTO {

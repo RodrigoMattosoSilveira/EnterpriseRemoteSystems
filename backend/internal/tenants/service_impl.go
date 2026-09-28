@@ -140,15 +140,18 @@ func (s *service) ListTenantAdminCandidates(ctx context.Context, tenantID string
 	result := make([]TenantAdminCandidateDTO, 0, len(rows))
 	for _, row := range rows {
 		result = append(result, TenantAdminCandidateDTO{
-			ActorID:             row.ActorID,
-			ActorKey:            row.ActorKey,
-			DisplayName:         row.DisplayName,
-			GlobalPersonID:      row.GlobalPersonID,
-			Active:              row.Active,
-			Assigned:            row.Assigned,
-			Eligible:            row.Eligible,
-			IneligibilityReason: row.IneligibilityReason,
-			TenantAdminTenantID: row.TenantAdminTenantID,
+			ActorID:                            row.ActorID,
+			ActorKey:                           row.ActorKey,
+			DisplayName:                        row.DisplayName,
+			GlobalPersonID:                     row.GlobalPersonID,
+			PersonName:                         row.PersonName,
+			PersonNickname:                     row.PersonNickname,
+			AccountLogin:                       row.AccountLogin,
+			Active:                             row.Active,
+			Assigned:                           row.Assigned,
+			Eligible:                           row.Eligible,
+			IneligibilityReason:                row.IneligibilityReason,
+			HasDelegatedAuthorityInOtherTenant: row.HasDelegatedAuthorityInOtherTenant,
 		})
 	}
 	return result, nil

@@ -11,6 +11,7 @@ import type {
 import type { ReferenceDataItem } from "../../types/referenceData";
 import { useReferenceDataByType } from "../reference-data/useReferenceData";
 import { JourneySettlementPanel } from "./JourneySettlementPanel";
+import { WorkCreditEvidencePanel } from "./WorkCreditEvidencePanel";
 import {
   formatCollaboratorPaymentValue,
   normalizePaymentMethodCode,
@@ -123,7 +124,15 @@ export function CollaboratorDetailPage() {
                 <span className="break-all font-mono">{collaborator.id}</span>
               </p>
               <p className="mt-1 text-sm text-gray-500">
-                {t("collaborator.startedProjected", { start: formatDate(collaborator.journeyStartDate), end: formatDate(collaborator.projectedEndDate) })}
+                {collaborator.closedAt
+                  ? t("collaborator.startedEnded", {
+                      start: formatDate(collaborator.journeyStartDate),
+                      end: formatDate(collaborator.closedAt),
+                    })
+                  : t("collaborator.startedProjected", {
+                      start: formatDate(collaborator.journeyStartDate),
+                      end: formatDate(collaborator.projectedEndDate),
+                    })}
               </p>
               {collaborator.closedAt ? (
                 <div
@@ -329,6 +338,12 @@ export function CollaboratorDetailPage() {
             />
           </dl>
         </section>
+
+        {actor.permissions.includes("work_credit_evidence.self.read") &&
+        actor.membershipId &&
+        actor.membershipId === collaborator.membershipId ? (
+          <WorkCreditEvidencePanel journeyId={collaborator.id} />
+        ) : null}
 
         {canPreviewSettlement && !collaborator.closedAt ? (
           <JourneySettlementPanel
