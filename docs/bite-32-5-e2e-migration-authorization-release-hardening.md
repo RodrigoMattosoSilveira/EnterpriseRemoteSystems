@@ -29,6 +29,8 @@ Authorization unit coverage remains the lower-level proof that the invariant is 
 
 `docs/bite-32-5-release-coverage-manifest.json` enumerates the eight promotion-critical coverage requirements. `scripts/verify-bite32-release-coverage.py` verifies that every requirement is covered by a real file/test/contract marker and that release migration verification still requires migration `000071`.
 
+The deployed Playwright job invokes that Python verifier directly after checking out the exact deployed revision. This avoids depending on `make` inside the Playwright container while preserving the Make target for LOCAL, feature CI, and the normal Ubuntu quality gate.
+
 The verifier runs through:
 
 - `make local-check`;

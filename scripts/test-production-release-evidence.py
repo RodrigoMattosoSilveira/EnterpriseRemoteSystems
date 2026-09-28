@@ -112,7 +112,7 @@ def main() -> int:
         "scripts/write-production-release-evidence.py",
         "scripts/verify-production-release-evidence.py",
         "production-release-gate-evidence-",
-        "make bite32-release-coverage-check",
+        "python3 scripts/verify-bite32-release-coverage.py",
     ):
         if marker not in workflow:
             raise AssertionError(f"deployment workflow is missing 30L.4C contract marker: {marker}")

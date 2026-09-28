@@ -118,7 +118,7 @@
         },
         {
           "file": ".github/workflows/deploy.yml",
-          "contains": "make bite32-release-coverage-check"
+          "contains": "python3 scripts/verify-bite32-release-coverage.py"
         }
       ]
     }

@@ -74,7 +74,7 @@ def main() -> int:
         "scripts/verify-deployed-playwright-evidence.py",
         "overwrite: false",
         "PLAYWRIGHT_EVIDENCE_SHA256='${{ needs.deployed-playwright.outputs.evidence_sha256 }}'",
-        "make bite32-release-coverage-check",
+        "python3 scripts/verify-bite32-release-coverage.py",
     ]
     for marker in required_workflow_markers:
         if marker not in workflow:
