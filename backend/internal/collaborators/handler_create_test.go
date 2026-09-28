@@ -85,6 +85,15 @@ type apiCollaboratorListResponse struct {
 	} `json:"data"`
 }
 
+type apiCollaboratorJourneyHistoryResponse struct {
+	Data []struct {
+		ID           string `json:"id"`
+		TenantID     string `json:"tenantId"`
+		MembershipID string `json:"membershipId"`
+		ClosedAt     string `json:"closedAt"`
+	} `json:"data"`
+}
+
 type apiCollaboratorCandidatesResponse struct {
 	Data []struct {
 		ID                    string `json:"id"`
@@ -622,6 +631,92 @@ func TestListCollaboratorsOrdersNewestCreatedFirst(t *testing.T) {
 	}
 }
 
+func TestListCollaboratorJourneysForMembershipIncludesClosedAndOpenJourneysAndKeepsTenantScope(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "app.db")
+	server, cleanup, err := apppkg.Bootstrap(apppkg.Config{
+		Env:                       "test",
+		HTTPAddr:                  ":0",
+		DBPath:                    dbPath,
+		JWTSecret:                 "test-secret",
+		DisableRouteAuthorization: true,
+	})
+	if err != nil {
+		t.Fatalf("bootstrap test server: %v", err)
+	}
+	defer cleanup()
+
+	database, err := db.Open(dbPath)
+	if err != nil {
+		t.Fatalf("open test database: %v", err)
+	}
+	sqlDB, err := database.DB()
+	if err != nil {
+		t.Fatalf("get test sql database: %v", err)
+	}
+	defer sqlDB.Close()
+
+	person := createPerson(t, server, validCompletePersonPayload(1, nil))
+	closedJourney := createCollaborator(t, server, validCollaboratorPayload(person.Data.MembershipID, map[string]any{
+		"journeyStartDate": "2026-01-10",
+	}))
+	closedAt := time.Date(2026, time.April, 15, 12, 0, 0, 0, time.UTC)
+	if err := database.Model(&db.CollaboratorJourney{}).
+		Where("id = ?", closedJourney.Data.ID).
+		Updates(map[string]any{"closed_at": closedAt, "updated_at": closedAt}).Error; err != nil {
+		t.Fatalf("close historical collaborator Journey fixture: %v", err)
+	}
+
+	openJourney := createCollaborator(t, server, validCollaboratorPayload(person.Data.MembershipID, map[string]any{
+		"journeyStartDate": "2026-06-01",
+	}))
+
+	var openRow db.CollaboratorJourney
+	if err := database.First(&openRow, "id = ?", openJourney.Data.ID).Error; err != nil {
+		t.Fatalf("load open collaborator Journey fixture: %v", err)
+	}
+	otherTenant := db.Tenant{
+		BaseModel: db.BaseModel{ID: "journey-history-other-tenant", CreatedAt: closedAt, UpdatedAt: closedAt},
+		Code:      "JOURNEY_HISTORY_OTHER",
+		Name:      "Journey History Other Tenant",
+		Active:    true,
+	}
+	if err := database.Create(&otherTenant).Error; err != nil {
+		t.Fatalf("create other Tenant fixture: %v", err)
+	}
+	openRow.ID = "journey-history-other-tenant-row"
+	openRow.TenantID = otherTenant.ID
+	openRow.JourneyStartDate = time.Date(2027, time.January, 1, 0, 0, 0, 0, time.UTC)
+	openRow.DefaultEndDate = openRow.JourneyStartDate.AddDate(0, 0, 90)
+	openRow.ProjectedEndDate = openRow.DefaultEndDate
+	openRow.CreatedAt = closedAt.Add(time.Hour)
+	openRow.UpdatedAt = openRow.CreatedAt
+	if err := database.Create(&openRow).Error; err != nil {
+		t.Fatalf("create same-membership other-Tenant Journey fixture: %v", err)
+	}
+
+	history := listCollaboratorJourneysForMembership(t, server, person.Data.MembershipID)
+	if len(history.Data) != 2 {
+		t.Fatalf("expected exactly current-Tenant open + closed Journeys, got %+v", history.Data)
+	}
+	if history.Data[0].ID != openJourney.Data.ID {
+		t.Fatalf("expected newest open Journey %q first, got %q", openJourney.Data.ID, history.Data[0].ID)
+	}
+	if history.Data[0].TenantID != "default" || history.Data[0].ClosedAt != "" {
+		t.Fatalf("expected current open Journey in default Tenant, got %+v", history.Data[0])
+	}
+	if history.Data[1].ID != closedJourney.Data.ID {
+		t.Fatalf("expected historical closed Journey %q second, got %q", closedJourney.Data.ID, history.Data[1].ID)
+	}
+	if history.Data[1].TenantID != "default" || history.Data[1].ClosedAt == "" {
+		t.Fatalf("expected closed Journey in default Tenant, got %+v", history.Data[1])
+	}
+	for _, journey := range history.Data {
+		if journey.ID == openRow.ID || journey.TenantID == otherTenant.ID {
+			t.Fatalf("other-Tenant Journey leaked through membership history: %+v", history.Data)
+		}
+	}
+}
+
 func TestListCollaboratorsFiltersByPersonNameAndNickname(t *testing.T) {
 	server, cleanup := newTestServer(t)
 	defer cleanup()
@@ -868,6 +963,28 @@ func listCollaborators(t *testing.T, server *fiber.App, query string) apiCollabo
 	}
 
 	var body apiCollaboratorListResponse
+	decodeJSON(t, res, &body)
+	return body
+}
+
+func listCollaboratorJourneysForMembership(t *testing.T, server *fiber.App, membershipID string) apiCollaboratorJourneyHistoryResponse {
+	t.Helper()
+
+	url := "/api/v1/collaborators/by-membership/" + membershipID
+	req := httptest.NewRequest(http.MethodGet, url, nil)
+	res, err := server.Test(req, fiber.TestConfig{Timeout: 0, FailOnTimeout: false})
+	if err != nil {
+		t.Fatalf("GET %s: %v", url, err)
+	}
+	defer res.Body.Close()
+
+	if res.StatusCode != http.StatusOK {
+		var body apiErrorResponse
+		decodeJSON(t, res, &body)
+		t.Fatalf("expected Journey history status %d, got %d with error %+v", http.StatusOK, res.StatusCode, body.Error)
+	}
+
+	var body apiCollaboratorJourneyHistoryResponse
 	decodeJSON(t, res, &body)
 	return body
 }

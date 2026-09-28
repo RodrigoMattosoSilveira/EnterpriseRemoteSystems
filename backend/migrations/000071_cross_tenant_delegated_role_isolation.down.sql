@@ -1,0 +1,2 @@
+DROP TRIGGER IF EXISTS trg_delegated_role_person_cross_tenant_update;
+DROP TRIGGER IF EXISTS trg_delegated_role_person_cross_tenant_insert;

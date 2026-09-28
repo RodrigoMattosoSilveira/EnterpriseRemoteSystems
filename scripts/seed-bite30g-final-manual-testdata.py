@@ -137,7 +137,7 @@ def row_or_none(conn: sqlite3.Connection, sql: str, params=()):
 
 def require_schema(conn: sqlite3.Connection) -> None:
     required = {
-        "tenants", "reference_data", "global_people", "people",
+        "tenants", "reference_data", "global_people",
         "person_tenant_memberships", "authz_actors", "authz_roles",
         "authz_actor_role_grants", "auth_user_accounts", "auth_account_people",
         "auth_account_actors", "collaborator_journeys", "work_periods",
@@ -291,65 +291,93 @@ def insert_global_person(conn, data: dict[str, str]) -> None:
 
 
 def insert_membership(conn, data, tenant_id: str, status_id: str, batch: str, key: str):
+    """Create the canonical global-Person -> Tenant Membership relationship.
+
+    Bite 30K.3B removed the legacy tenant-local people table and
+    person_tenant_memberships.legacy_person_id. Keep the historical two-value
+    return shape used by this fixture, but return the canonical global Person
+    id as the first value so older local variable names do not reintroduce a
+    legacy dependency.
+    """
     ts = iso_dt(utc_now())
-    legacy_id = ident(batch, f"legacy-person-{key}")
     membership_id = ident(batch, f"membership-{key}")
     conn.execute(
-        """INSERT INTO people(
-             id,first_name,last_name,nickname,cpf,rg,cellular,email,street1,street2,state,cep,city,country,
-             bank_name,bank_number,checking_account,pix_key,emergency_name,emergency_cellular,emergency_email,
-             profile_completion_status,can_create_collaborator,status_id,notes,created_at,updated_at,tenant_id)
-           VALUES(?,?,?,?,?,?,?,?, 'Rua Manual 30G',NULL,'PA','66000-000','Manual City','Brasil',
-                  'Manual Bank','001','000123-4',?, 'Manual Emergency','11999990000','manual30g.emergency@example.test',
-                  'COMPLETE',1,?,?, ?,?,?)""",
-        (legacy_id, data["first"], data["last"], data["nickname"], data["cpf"], data["rg"], data["cell"],
-         data["email"], data["pix"], status_id, f"Bite 30G manual fixture {key}", ts, ts, tenant_id),
+        """INSERT INTO person_tenant_memberships(
+             id,created_at,updated_at,tenant_id,person_id,status_id,notes)
+           VALUES(?,?,?,?,?,?,?)""",
+        (
+            membership_id,
+            ts,
+            ts,
+            tenant_id,
+            data["person_id"],
+            status_id,
+            f"Bite 30G membership {key}",
+        ),
     )
-    conn.execute(
-        """INSERT INTO person_tenant_memberships(id,created_at,updated_at,tenant_id,person_id,status_id,notes,legacy_person_id)
-           VALUES(?,?,?,?,?,?,?,?)""",
-        (membership_id, ts, ts, tenant_id, data["person_id"], status_id, f"Bite 30G membership {key}", legacy_id),
-    )
-    return legacy_id, membership_id
+    return data["person_id"], membership_id
 
 
-def insert_actor(conn, legacy_person_id: str, tenant_id: str, batch: str, key: str, display: str):
+
+def insert_actor(conn, person_id: str, tenant_id: str, batch: str, key: str, display: str):
+    """Create the canonical Actor.
+
+    Canonical Person/Tenant identity is carried by auth_account_actors through
+    membership_id; authz_actors no longer stores legacy person/collaborator
+    projection columns.
+    """
+    del person_id, tenant_id  # Identity is bound canonically by AccountActor.
     ts = iso_dt(utc_now())
     actor_id = ident(batch, f"actor-{key}")
     actor_key = ident(batch, f"actor-key-{key}")
     conn.execute(
-        """INSERT INTO authz_actors(id,actor_key,display_name,person_id,collaborator_id,active,created_at,updated_at)
-           VALUES(?,?,?,?,NULL,1,?,?)""",
-        (actor_id, actor_key, display, legacy_person_id, ts, ts),
+        """INSERT INTO authz_actors(
+             id,actor_key,display_name,active,created_at,updated_at)
+           VALUES(?,?,?,1,?,?)""",
+        (actor_id, actor_key, display, ts, ts),
     )
     return actor_id, actor_key
+
 
 
 def insert_account(conn, data, primary_actor: str, tenant_id: str, membership_id: str):
     ts = iso_dt(utc_now())
     conn.execute(
-        """INSERT INTO auth_user_accounts(id,actor_id,login,password_hash,active,must_change_password,last_login_at,password_changed_at,created_at,updated_at)
-           VALUES(?,?,?,?,1,0,NULL,?,?,?)""",
-        (data["account_id"], primary_actor, data["login"], DEFAULT_PASSWORD_HASH, ts, ts, ts),
+        """INSERT INTO auth_user_accounts(
+             id,login,password_hash,active,must_change_password,last_login_at,
+             password_changed_at,created_at,updated_at,security_suspended)
+           VALUES(?,?,?,1,0,NULL,?,?,?,0)""",
+        (
+            data["account_id"],
+            data["login"],
+            DEFAULT_PASSWORD_HASH,
+            ts,
+            ts,
+            ts,
+        ),
     )
     conn.execute(
         "INSERT INTO auth_account_people(account_id,person_id,created_at,updated_at) VALUES(?,?,?,?)",
         (data["account_id"], data["person_id"], ts, ts),
     )
     conn.execute(
-        """INSERT INTO auth_account_actors(account_id,actor_id,scope_type,tenant_id,membership_id,is_primary,created_at,updated_at)
-           VALUES(?,?,'TENANT',?,?,1,?,?)""",
+        """INSERT INTO auth_account_actors(
+             account_id,actor_id,scope_type,tenant_id,membership_id,created_at,updated_at)
+           VALUES(?,?,'TENANT',?,?,?,?)""",
         (data["account_id"], primary_actor, tenant_id, membership_id, ts, ts),
     )
+
 
 
 def bind_actor(conn, account_id: str, actor_id: str, tenant_id: str, membership_id: str):
     ts = iso_dt(utc_now())
     conn.execute(
-        """INSERT INTO auth_account_actors(account_id,actor_id,scope_type,tenant_id,membership_id,is_primary,created_at,updated_at)
-           VALUES(?,?,'TENANT',?,?,0,?,?)""",
+        """INSERT INTO auth_account_actors(
+             account_id,actor_id,scope_type,tenant_id,membership_id,created_at,updated_at)
+           VALUES(?,?,'TENANT',?,?,?,?)""",
         (account_id, actor_id, tenant_id, membership_id, ts, ts),
     )
+
 
 
 def grant_tenant_admin(conn, actor_id: str, tenant_id: str, batch: str, key: str):
@@ -366,18 +394,39 @@ def grant_tenant_admin(conn, actor_id: str, tenant_id: str, batch: str, key: str
 
 def insert_journey(conn, *, jid, tenant_id, legacy_person_id, membership_id, refs, status, start, end,
                    closed_at=None, daily=50.0, note=""):
+    # legacy_person_id remains in the helper signature only so the historical
+    # fixture call sites stay readable; Bite 30K.3B removed collaborator_journeys.person_id.
+    del legacy_person_id
     ts = iso_dt(utc_now())
     conn.execute(
         """INSERT INTO collaborator_journeys(
-             id,created_at,updated_at,tenant_id,person_id,journey_start_date,default_end_date,extension_days,
+             id,created_at,updated_at,tenant_id,journey_start_date,default_end_date,extension_days,
              projected_end_date,payment_method_id,payment_value,sector_id,location_id,task_id,status_id,notes,
              closed_at,fixed_monthly_brl_amount,daily_brl_amount,gold_commission_percent,time_off_gold_split_percent,
              sick_day_off_replacement_gold_grams,planning_availability,membership_id)
-           VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,NULL,?,NULL,NULL,NULL,'ACTIVE',?)""",
-        (jid, ts, ts, tenant_id, legacy_person_id, start.isoformat(), end.isoformat(), 0, end.isoformat(),
-         refs["method_daily"], daily, refs["sector"], refs["location"], refs["task"], refs[status], note,
-         iso_dt(closed_at) if closed_at else None, daily, membership_id),
+           VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,NULL,?,NULL,NULL,NULL,'ACTIVE',?)""",
+        (
+            jid,
+            ts,
+            ts,
+            tenant_id,
+            start.isoformat(),
+            end.isoformat(),
+            0,
+            end.isoformat(),
+            refs["method_daily"],
+            daily,
+            refs["sector"],
+            refs["location"],
+            refs["task"],
+            refs[status],
+            note,
+            iso_dt(closed_at) if closed_at else None,
+            daily,
+            membership_id,
+        ),
     )
+
 
 
 def insert_ledger_credit(conn, *, lid, tenant_id, person_id, collaborator_id, value_unit_id, amount, effective_date, source_id, description):
@@ -422,7 +471,9 @@ def ensure_application_administrator(conn: sqlite3.Connection, batch: str) -> di
     """Create/reconcile the local manual-test Application Administrator account.
 
     Application Administrator is a GLOBAL Actor and deliberately has no Person
-    or Tenant Membership binding. The weak local password is fixture-only.
+    or Tenant Membership binding. Bite 30K.3B removed auth_user_accounts.actor_id
+    and AccountActor.is_primary, so the canonical binding is auth_account_actors.
+    The weak local password is fixture-only.
     """
     ts = iso_dt(utc_now())
     role = row_or_none(
@@ -434,16 +485,22 @@ def ensure_application_administrator(conn: sqlite3.Connection, batch: str) -> di
 
     actor = row_or_none(
         conn,
-        "SELECT id,person_id,collaborator_id FROM authz_actors WHERE actor_key=? LIMIT 1",
+        "SELECT id FROM authz_actors WHERE actor_key=? LIMIT 1",
         (APPLICATION_ADMIN_ACTOR_KEY,),
     )
     if actor:
-        if actor["person_id"] is not None or actor["collaborator_id"] is not None:
+        actor_id = actor["id"]
+        tenant_binding = row_or_none(
+            conn,
+            """SELECT 1 FROM auth_account_actors
+               WHERE actor_id=? AND scope_type='TENANT' LIMIT 1""",
+            (actor_id,),
+        )
+        if tenant_binding:
             raise SystemExit(
-                f"{APPLICATION_ADMIN_ACTOR_KEY} is already bound to a Person or Collaborator; "
+                f"{APPLICATION_ADMIN_ACTOR_KEY} already has a Tenant AccountActor binding; "
                 "refusing to repurpose it as the global Application Administrator"
             )
-        actor_id = actor["id"]
         conn.execute(
             "UPDATE authz_actors SET display_name=?,active=1,updated_at=? WHERE id=?",
             (APPLICATION_ADMIN_DISPLAY_NAME, ts, actor_id),
@@ -456,8 +513,8 @@ def ensure_application_administrator(conn: sqlite3.Connection, batch: str) -> di
             )
         conn.execute(
             """INSERT INTO authz_actors(
-                 id,actor_key,display_name,person_id,collaborator_id,active,created_at,updated_at)
-               VALUES(?,?,?,NULL,NULL,1,?,?)""",
+                 id,actor_key,display_name,active,created_at,updated_at)
+               VALUES(?,?,?,1,?,?)""",
             (actor_id, APPLICATION_ADMIN_ACTOR_KEY, APPLICATION_ADMIN_DISPLAY_NAME, ts, ts),
         )
 
@@ -470,32 +527,37 @@ def ensure_application_administrator(conn: sqlite3.Connection, batch: str) -> di
     if grant:
         grant_id = grant["id"]
         conn.execute(
-            "UPDATE authz_actor_role_grants SET active=1,updated_at=? WHERE id=?",
+            """UPDATE authz_actor_role_grants
+               SET active=1,lifecycle_suspended=0,updated_at=?
+               WHERE id=?""",
             (ts, grant_id),
         )
     else:
         grant_id = ident(batch, "application-admin-grant")
         conn.execute(
             """INSERT INTO authz_actor_role_grants(
-                 id,actor_id,role_id,tenant_id,active,created_at,updated_at)
-               VALUES(?,?,?,'*',1,?,?)""",
+                 id,actor_id,role_id,tenant_id,active,lifecycle_suspended,created_at,updated_at)
+               VALUES(?,?,?,'*',1,0,?,?)""",
             (grant_id, actor_id, role["id"], ts, ts),
         )
 
     fixed_account_id = ident(batch, "application-admin-account")
     by_login = row_or_none(
         conn,
-        "SELECT id,actor_id,login FROM auth_user_accounts WHERE login=? COLLATE NOCASE LIMIT 1",
+        "SELECT id,login FROM auth_user_accounts WHERE login=? COLLATE NOCASE LIMIT 1",
         (APPLICATION_ADMIN_LOGIN,),
     )
     by_actor = row_or_none(
         conn,
-        "SELECT id,actor_id,login FROM auth_user_accounts WHERE actor_id=? LIMIT 1",
+        """SELECT au.id,au.login
+             FROM auth_user_accounts au
+             JOIN auth_account_actors aa ON aa.account_id=au.id
+            WHERE aa.actor_id=? LIMIT 1""",
         (actor_id,),
     )
     by_id = row_or_none(
         conn,
-        "SELECT id,actor_id,login FROM auth_user_accounts WHERE id=? LIMIT 1",
+        "SELECT id,login FROM auth_user_accounts WHERE id=? LIMIT 1",
         (fixed_account_id,),
     )
 
@@ -509,10 +571,6 @@ def ensure_application_administrator(conn: sqlite3.Connection, batch: str) -> di
 
     if existing_accounts:
         account = existing_accounts[0]
-        if account["actor_id"] != actor_id:
-            raise SystemExit(
-                f"{APPLICATION_ADMIN_LOGIN} is already bound to a different Actor; refusing to overwrite it"
-            )
         if account["login"].strip().lower() != APPLICATION_ADMIN_LOGIN:
             raise SystemExit(
                 f"{APPLICATION_ADMIN_ACTOR_KEY} is already bound to login {account['login']!r}; "
@@ -522,7 +580,7 @@ def ensure_application_administrator(conn: sqlite3.Connection, batch: str) -> di
         conn.execute(
             """UPDATE auth_user_accounts
                SET password_hash=?,active=1,must_change_password=0,last_login_at=NULL,
-                   password_changed_at=?,updated_at=?
+                   password_changed_at=?,updated_at=?,security_suspended=0
                WHERE id=?""",
             (APPLICATION_ADMIN_PASSWORD_HASH, ts, ts, account_id),
         )
@@ -530,12 +588,11 @@ def ensure_application_administrator(conn: sqlite3.Connection, batch: str) -> di
         account_id = fixed_account_id
         conn.execute(
             """INSERT INTO auth_user_accounts(
-                 id,actor_id,login,password_hash,active,must_change_password,last_login_at,
-                 password_changed_at,created_at,updated_at)
-               VALUES(?,?,?,?,1,0,NULL,?,?,?)""",
+                 id,login,password_hash,active,must_change_password,last_login_at,
+                 password_changed_at,created_at,updated_at,security_suspended)
+               VALUES(?,?,?,1,0,NULL,?,?,?,0)""",
             (
                 account_id,
-                actor_id,
                 APPLICATION_ADMIN_LOGIN,
                 APPLICATION_ADMIN_PASSWORD_HASH,
                 ts,
@@ -555,7 +612,8 @@ def ensure_application_administrator(conn: sqlite3.Connection, batch: str) -> di
 
     actor_binding = row_or_none(
         conn,
-        "SELECT account_id,scope_type,tenant_id,membership_id,is_primary FROM auth_account_actors WHERE actor_id=?",
+        """SELECT account_id,scope_type,tenant_id,membership_id
+             FROM auth_account_actors WHERE actor_id=?""",
         (actor_id,),
     )
     if actor_binding and actor_binding["account_id"] != account_id:
@@ -584,13 +642,13 @@ def ensure_application_administrator(conn: sqlite3.Connection, batch: str) -> di
     if actor_binding is None:
         conn.execute(
             """INSERT INTO auth_account_actors(
-                 account_id,actor_id,scope_type,tenant_id,membership_id,is_primary,created_at,updated_at)
-               VALUES(?,?,'GLOBAL',NULL,NULL,1,?,?)""",
+                 account_id,actor_id,scope_type,tenant_id,membership_id,created_at,updated_at)
+               VALUES(?,?,'GLOBAL',NULL,NULL,?,?)""",
             (account_id, actor_id, ts, ts),
         )
     else:
         conn.execute(
-            "UPDATE auth_account_actors SET is_primary=1,updated_at=? WHERE account_id=? AND actor_id=?",
+            "UPDATE auth_account_actors SET updated_at=? WHERE account_id=? AND actor_id=?",
             (ts, account_id, actor_id),
         )
 
@@ -603,11 +661,12 @@ def ensure_application_administrator(conn: sqlite3.Connection, batch: str) -> di
         """SELECT au.login,au.active,au.must_change_password,az.actor_key,az.active AS actor_active,
                   g.active AS grant_active,aa.scope_type,aa.tenant_id,aa.membership_id
              FROM auth_user_accounts au
-             JOIN authz_actors az ON az.id=au.actor_id
-             JOIN authz_actor_role_grants g ON g.actor_id=az.id AND g.role_id=? AND g.tenant_id='*'
-             JOIN auth_account_actors aa ON aa.account_id=au.id AND aa.actor_id=az.id
-            WHERE au.id=?""",
-        (role["id"], account_id),
+             JOIN auth_account_actors aa ON aa.account_id=au.id
+             JOIN authz_actors az ON az.id=aa.actor_id
+             JOIN authz_actor_role_grants g
+               ON g.actor_id=az.id AND g.role_id=? AND g.tenant_id='*'
+            WHERE au.id=? AND aa.actor_id=?""",
+        (role["id"], account_id, actor_id),
     )
     if (
         not check
@@ -624,6 +683,7 @@ def ensure_application_administrator(conn: sqlite3.Connection, batch: str) -> di
         raise RuntimeError("Application Administrator fixture failed post-write validation")
 
     return {"accountId": account_id, "actorId": actor_id, "grantId": grant_id}
+
 
 
 def set_second_approval_policy(conn, tenant_id: str, required: bool, batch: str):
@@ -1256,7 +1316,6 @@ def main() -> int:
                         value_unit_id=refs_a["brl"], amount=75.0, effective_date=historical_end,
                         source_id=ident(batch,"source-h-settle"), description="30G H historical settlement -75 BRL")
     conn.execute("UPDATE person_tenant_memberships SET status_id=?, updated_at=? WHERE id=?", (refs_a["person_inactive"], iso_dt(utc_now()), h_mem))
-    conn.execute("UPDATE people SET status_id=?, updated_at=? WHERE id=?", (refs_a["person_inactive"], iso_dt(utc_now()), h_legacy))
     conn.execute("UPDATE authz_actors SET active=0, updated_at=? WHERE id=?", (iso_dt(utc_now()), h_actor))
 
     # Identity R: neutral active Journey for expense cancellation/recreation correction tests.

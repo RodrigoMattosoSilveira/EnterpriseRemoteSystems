@@ -13,15 +13,18 @@ type TenantRecord struct {
 }
 
 type TenantAdminCandidateRecord struct {
-	ActorID             string
-	ActorKey            string
-	DisplayName         string
-	GlobalPersonID      string
-	Active              bool
-	Assigned            bool
-	Eligible            bool
-	IneligibilityReason string
-	TenantAdminTenantID string
+	ActorID                            string
+	ActorKey                           string
+	DisplayName                        string
+	GlobalPersonID                     string
+	PersonName                         string
+	PersonNickname                     string
+	AccountLogin                       string
+	Active                             bool
+	Assigned                           bool
+	Eligible                           bool
+	IneligibilityReason                string
+	HasDelegatedAuthorityInOtherTenant bool
 }
 
 type Repository interface {

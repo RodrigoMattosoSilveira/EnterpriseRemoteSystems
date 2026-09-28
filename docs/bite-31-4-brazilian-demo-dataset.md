@@ -123,26 +123,29 @@ The fixture contains four Journeys:
 - Rafael — historical finished Journey;
 - Rafael — current active Journey, daily wage `R$ 350,00` per worked day.
 
-The historical Rafael Journey has no outstanding financial balance. It exists specifically so the presenter can explain that the Person persists while operational Journeys have their own lifecycle/history.
+The historical Rafael Journey has no outstanding financial balance, but it now preserves a complete synthetic evidence chain for Bite 32.3: one `WORKED` historical Work Period assignment, a posted `R$ 280,00` daily-wage accrual, the matching earning credit, and a posted `R$ 280,00` Journey payout that returns the historical Journey to zero. This lets the presenter show that the Person persists while each Journey keeps its own durable work and financial provenance after closure.
 
 ### Planning and Work Periods
 
-Two Work Periods are seeded relative to the scenario anchor:
+Three Work Periods are seeded relative to the scenario anchor:
 
-- `as-of - 2 days`: `DAY`, `06:00-18:00`, `FULLY_POSTED`, with João, Camila, and Rafael marked `WORKED`;
+- `as-of - 150 days`: `DAY`, `06:00-18:00`, `FULLY_POSTED`, with Rafael's historical Journey marked `WORKED`;
+- `as-of - 2 days`: `DAY`, `06:00-18:00`, `FULLY_POSTED`, with João, Camila, and Rafael's current Journey marked `WORKED`;
 - `as-of + 1 day`: `DAY`, `06:00-18:00`, `PLANNING`, with the same three active Collaborators included but not yet informed.
 
-This creates an intentional completed-versus-pending planning contrast.
+This creates both a durable closed-Journey evidence example and the intentional current completed-versus-pending planning contrast.
 
 ### Gold Production and Accrual
 
-The completed Work Period has:
+The current completed Work Period has:
 
 - `80 g` synthetic Gold Production;
 - one posted Accrual run;
 - João: `R$ 300,00` posted earning;
 - Camila: `4 g` posted gold commission (`5%` of `80 g`);
 - Rafael: `R$ 350,00` posted earning.
+
+The historical Rafael Work Period has its own posted Accrual run and `R$ 280,00` daily-wage earning. That earning is posted to the historical Journey's Current Account and then paid out through a `R$ 280,00` Journey settlement, preserving full Work and Credit Evidence while keeping the closed Journey balance at zero.
 
 A synthetic gold price of `R$ 742,35/g` is also present for expense/gold-price demonstrations.
 

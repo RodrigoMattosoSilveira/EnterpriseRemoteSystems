@@ -267,3 +267,88 @@ func (r *gormRepository) ExistsOpenJourneyForMembership(ctx context.Context, mem
 	}
 	return count > 0, nil
 }
+
+func (r *gormRepository) LoadWorkCreditEvidence(ctx context.Context, journeyID string, membershipID string) (*WorkCreditEvidenceRecord, error) {
+	journey, err := r.FindByIDForMembership(ctx, journeyID, membershipID)
+	if err != nil {
+		return nil, err
+	}
+
+	tenantID := tenantctx.TenantID(ctx)
+	var workRows []WorkCreditWorkRow
+	if err := r.db.WithContext(ctx).
+		Table("work_period_assignments AS wpa").
+		Select(`wpa.id AS assignment_id,
+			wpa.work_period_id AS work_period_id,
+			date(wp.work_date) AS work_date,
+			wp.period_code AS period_code,
+			wp.name AS work_period_name,
+			wp.status AS work_period_status,
+			wpa.planned_status AS planned_status,
+			COALESCE(wpa.actual_status, '') AS actual_status,
+			wpa.sector_id AS sector_id,
+			COALESCE(sector.label, '') AS sector_label,
+			wpa.location_id AS location_id,
+			COALESCE(location.label, '') AS location_label,
+			wpa.task_id AS task_id,
+			COALESCE(task.label, '') AS task_label,
+			COUNT(gp.id) AS production_entries,
+			COALESCE(SUM(gp.gold_grams_produced), 0) AS gold_grams_produced`).
+		Joins("JOIN work_periods AS wp ON wp.id = wpa.work_period_id AND wp.tenant_id = wpa.tenant_id").
+		Joins("JOIN collaborator_journeys AS cj ON cj.id = wpa.collaborator_id AND cj.tenant_id = wpa.tenant_id").
+		Joins("JOIN reference_data AS payment_method ON payment_method.id = cj.payment_method_id AND payment_method.tenant_id = cj.tenant_id AND payment_method.type = ?", "method").
+		Joins("LEFT JOIN reference_data AS sector ON sector.id = wpa.sector_id AND sector.tenant_id = wpa.tenant_id").
+		Joins("LEFT JOIN reference_data AS location ON location.id = wpa.location_id AND location.tenant_id = wpa.tenant_id").
+		Joins("LEFT JOIN reference_data AS task ON task.id = wpa.task_id AND task.tenant_id = wpa.tenant_id").
+		Joins("LEFT JOIN gold_production_entries AS gp ON gp.tenant_id = wpa.tenant_id AND gp.work_period_id = wpa.work_period_id AND gp.location_id = wpa.location_id AND gp.active = ? AND payment_method.code = ?", true, "COMMISSION").
+		Where("wpa.tenant_id = ? AND wpa.collaborator_id = ? AND wpa.active = ? AND wpa.actual_status IS NOT NULL", tenantID, journeyID, true).
+		Group(`wpa.id, wpa.work_period_id, wp.work_date, wp.period_code, wp.name, wp.status,
+			wpa.planned_status, wpa.actual_status, wpa.sector_id, sector.label,
+			wpa.location_id, location.label, wpa.task_id, task.label`).
+		Order("wp.work_date DESC, wp.starts_at ASC, wpa.created_at DESC").
+		Scan(&workRows).Error; err != nil {
+		return nil, err
+	}
+
+	var accrualRows []WorkCreditAccrualRow
+	if err := r.db.WithContext(ctx).
+		Table("accrual_items AS ai").
+		Select(`ai.id AS id,
+			ai.accrual_run_id AS accrual_run_id,
+			ar.status AS accrual_run_status,
+			date(ar.accrual_date) AS accrual_date,
+			ai.work_period_id AS work_period_id,
+			date(wp.work_date) AS work_date,
+			COALESCE(ai.work_period_assignment_id, '') AS work_period_assignment_id,
+			ai.calculation_type AS calculation_type,
+			ai.direction AS direction,
+			ai.brl_amount AS brl_amount,
+			ai.gold_gram_amount AS gold_gram_amount,
+			ai.status AS status,
+			ai.pending_reason AS pending_reason,
+			ai.description AS description`).
+		Joins("JOIN accrual_runs AS ar ON ar.id = ai.accrual_run_id AND ar.tenant_id = ai.tenant_id").
+		Joins("JOIN work_periods AS wp ON wp.id = ai.work_period_id AND wp.tenant_id = ai.tenant_id").
+		Where("ai.tenant_id = ? AND ai.collaborator_id = ?", tenantID, journeyID).
+		Order("wp.work_date DESC, ar.created_at DESC, ai.created_at DESC").
+		Scan(&accrualRows).Error; err != nil {
+		return nil, err
+	}
+
+	var ledgerRows []db.LedgerEntry
+	if err := r.db.WithContext(ctx).
+		Where("ledger_entries.tenant_id = ? AND ledger_entries.collaborator_id = ?", tenantID, journeyID).
+		Preload("ValueUnit").
+		Preload("Receipt").
+		Order("ledger_entries.effective_date DESC, ledger_entries.created_at DESC").
+		Find(&ledgerRows).Error; err != nil {
+		return nil, err
+	}
+
+	return &WorkCreditEvidenceRecord{
+		Journey:            *journey,
+		WorkRecognized:     workRows,
+		EarningsCalculated: accrualRows,
+		AccountPostings:    ledgerRows,
+	}, nil
+}

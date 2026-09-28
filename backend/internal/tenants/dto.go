@@ -45,13 +45,16 @@ type AssignTenantAdminRequest struct {
 }
 
 type TenantAdminCandidateDTO struct {
-	ActorID             string `json:"actorId"`
-	ActorKey            string `json:"actorKey"`
-	DisplayName         string `json:"displayName"`
-	GlobalPersonID      string `json:"globalPersonId,omitempty"`
-	Active              bool   `json:"active"`
-	Assigned            bool   `json:"assigned"`
-	Eligible            bool   `json:"eligible"`
-	IneligibilityReason string `json:"ineligibilityReason,omitempty"`
-	TenantAdminTenantID string `json:"tenantAdminTenantId,omitempty"`
+	ActorID                            string `json:"actorId"`
+	ActorKey                           string `json:"actorKey"`
+	DisplayName                        string `json:"displayName"`
+	GlobalPersonID                     string `json:"globalPersonId,omitempty"`
+	PersonName                         string `json:"personName,omitempty"`
+	PersonNickname                     string `json:"personNickname,omitempty"`
+	AccountLogin                       string `json:"accountLogin,omitempty"`
+	Active                             bool   `json:"active"`
+	Assigned                           bool   `json:"assigned"`
+	Eligible                           bool   `json:"eligible"`
+	IneligibilityReason                string `json:"ineligibilityReason,omitempty"`
+	HasDelegatedAuthorityInOtherTenant bool   `json:"hasDelegatedAuthorityInOtherTenant"`
 }

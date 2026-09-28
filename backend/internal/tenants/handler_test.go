@@ -52,10 +52,16 @@ type tenantDTO struct {
 }
 
 type tenantAdminCandidateDTO struct {
-	ActorID  string `json:"actorId"`
-	ActorKey string `json:"actorKey"`
-	Active   bool   `json:"active"`
-	Assigned bool   `json:"assigned"`
+	ActorID                            string `json:"actorId"`
+	ActorKey                           string `json:"actorKey"`
+	PersonName                         string `json:"personName"`
+	PersonNickname                     string `json:"personNickname"`
+	AccountLogin                       string `json:"accountLogin"`
+	Active                             bool   `json:"active"`
+	Assigned                           bool   `json:"assigned"`
+	Eligible                           bool   `json:"eligible"`
+	IneligibilityReason                string `json:"ineligibilityReason"`
+	HasDelegatedAuthorityInOtherTenant bool   `json:"hasDelegatedAuthorityInOtherTenant"`
 }
 
 func TestCurrentTenantReturnsSeededDefaultTenant(t *testing.T) {
@@ -184,6 +190,82 @@ func TestTenantCodeMustBeUnique(t *testing.T) {
 	}
 }
 
+func TestTenantAdminCandidatesBlockAnyCrossTenantRoleWithoutDisclosure(t *testing.T) {
+	server, dbPath, cleanup := newTestServer(t, true)
+	defer cleanup()
+
+	tenantA := createTenant(t, server, "ISOLATION_A", "Isolation A")
+	tenantB := createTenant(t, server, "ISOLATION_B", "Isolation B")
+	actorA, actorB := seedSharedPersonTenantActors(t, dbPath, tenantA.ID, tenantB.ID)
+
+	database, err := dbpkg.Open(dbPath)
+	if err != nil {
+		t.Fatalf("open test database: %v", err)
+	}
+	now := time.Now().UTC()
+	futureRole := authz.AuthzRole{
+		ID:          "authz-role-future-tenant-handler-test",
+		Code:        "FUTURE_TENANT_ROLE",
+		Label:       "Future Tenant Role",
+		Description: "Test-only future Tenant Role proving candidate eligibility is not role-code enumerated.",
+		ScopeType:   string(authz.ActorScopeTenant),
+		Active:      true,
+		CreatedAt:   now,
+		UpdatedAt:   now,
+	}
+	if err := database.Create(&futureRole).Error; err != nil {
+		closeDatabase(t, database)
+		t.Fatalf("create future Tenant Role fixture: %v", err)
+	}
+	if err := authz.GrantRole(database, actorB, authz.RoleCode(futureRole.Code), tenantB.ID); err != nil {
+		closeDatabase(t, database)
+		t.Fatalf("grant future Tenant Role in Tenant B: %v", err)
+	}
+	closeDatabase(t, database)
+
+	res := requestJSON(t, server, http.MethodGet, "/api/v1/tenants/"+tenantA.ID+"/admin-candidates", nil, nil)
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("expected candidates status %d, got %d", http.StatusOK, res.StatusCode)
+	}
+	var body apiTenantAdminCandidatesResponse
+	decodeJSON(t, res, &body)
+	var candidate *tenantAdminCandidateDTO
+	for i := range body.Data {
+		if body.Data[i].ActorID == actorA {
+			candidate = &body.Data[i]
+			break
+		}
+	}
+	if candidate == nil {
+		t.Fatalf("expected Tenant A Actor %s in candidate response: %+v", actorA, body.Data)
+	}
+	if candidate.Eligible || !candidate.HasDelegatedAuthorityInOtherTenant {
+		t.Fatalf("expected candidate blocked by a cross-Tenant non-baseline Role: %+v", candidate)
+	}
+	if candidate.IneligibilityReason != "This Person has one or more Roles in another Tenant. They must work with that Tenant to have every Role other than Membership and Collaborator removed before a Role can be assigned here." {
+		t.Fatalf("unexpected non-disclosing ineligibility reason %q", candidate.IneligibilityReason)
+	}
+	if strings.Contains(candidate.IneligibilityReason, tenantB.ID) || strings.Contains(candidate.IneligibilityReason, tenantB.Code) || strings.Contains(candidate.IneligibilityReason, tenantB.Name) {
+		t.Fatalf("candidate response disclosed other Tenant identity: %+v", candidate)
+	}
+
+	res = requestJSON(t, server, http.MethodPost, "/api/v1/tenants/"+tenantA.ID+"/admins", map[string]any{"actorId": actorA}, nil)
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusBadRequest {
+		t.Fatalf("expected cross-Tenant Tenant Administrator assignment status %d, got %d", http.StatusBadRequest, res.StatusCode)
+	}
+	var errorBody apiErrorResponse
+	decodeJSON(t, res, &errorBody)
+	message := errorBody.Error.Fields["roleCode"]
+	if !strings.Contains(message, "has one or more Roles in another Tenant") {
+		t.Fatalf("expected generalized cross-Tenant Role rejection, got %+v", errorBody.Error)
+	}
+	if strings.Contains(message, tenantB.ID) || strings.Contains(message, tenantB.Code) || strings.Contains(message, tenantB.Name) {
+		t.Fatalf("assignment rejection disclosed other Tenant identity: %q", message)
+	}
+}
+
 func TestApplicationAdminCanAssignAndRevokeTenantAdministrator(t *testing.T) {
 	server, dbPath, cleanup := newTestServer(t, true)
 	defer cleanup()
@@ -213,6 +295,15 @@ func TestApplicationAdminCanAssignAndRevokeTenantAdministrator(t *testing.T) {
 	for _, candidate := range candidatesBody.Data {
 		if candidate.ActorID == actorID {
 			foundAssigned = candidate.Assigned && candidate.Active
+			if candidate.PersonName != "Tenant Administrator" {
+				t.Fatalf("expected canonical Person name in candidate projection, got %q", candidate.PersonName)
+			}
+			if candidate.PersonNickname != "west-admin@example.com" {
+				t.Fatalf("expected canonical Person nickname in candidate projection, got %q", candidate.PersonNickname)
+			}
+			if candidate.AccountLogin != "west-admin@example.com" {
+				t.Fatalf("expected Authentication Account login in candidate projection, got %q", candidate.AccountLogin)
+			}
 		}
 	}
 	if !foundAssigned {
@@ -470,6 +561,102 @@ func seedTenantBoundActor(t *testing.T, dbPath string, tenantID string, actorKey
 		t.Fatalf("seed tenant administrator Account/Actor binding: %v", err)
 	}
 	return actor.ID
+}
+
+func seedSharedPersonTenantActors(t *testing.T, dbPath string, tenantA string, tenantB string) (string, string) {
+	t.Helper()
+	database, err := dbpkg.Open(dbPath)
+	if err != nil {
+		t.Fatalf("open shared-Person fixture database: %v", err)
+	}
+	defer closeDatabase(t, database)
+
+	statusByTenant := map[string]dbpkg.ReferenceData{}
+	for _, tenantID := range []string{tenantA, tenantB} {
+		var status dbpkg.ReferenceData
+		if err := database.WithContext(context.Background()).
+			Where("tenant_id = ? AND type = ? AND code = ? AND active = ?", tenantID, "person_status", "ACTIVE", true).
+			First(&status).Error; err != nil {
+			t.Fatalf("find active Person status for tenant %s: %v", tenantID, err)
+		}
+		statusByTenant[tenantID] = status
+	}
+
+	now := time.Now().UTC()
+	person := dbpkg.GlobalPerson{
+		BaseModel: dbpkg.BaseModel{ID: ids.New(), CreatedAt: now, UpdatedAt: now},
+		FirstName: "Shared",
+		LastName:  "Person",
+		Nickname:  "Shared Person",
+		CPF:       ids.New(),
+		RG:        ids.New(),
+		Cellular:  ids.New(),
+		Email:     "shared-person-" + ids.New() + "@example.test",
+		Country:   "Brasil",
+	}
+	if err := database.WithContext(context.Background()).Create(&person).Error; err != nil {
+		t.Fatalf("seed shared global Person: %v", err)
+	}
+
+	account := authentication.Account{
+		ID:                 ids.New(),
+		Login:              "shared-account-" + ids.New() + "@example.test",
+		PasswordHash:       "test-password-hash",
+		Active:             true,
+		MustChangePassword: false,
+		CreatedAt:          now,
+		UpdatedAt:          now,
+	}
+	if err := database.WithContext(context.Background()).Create(&account).Error; err != nil {
+		t.Fatalf("seed shared Authentication Account: %v", err)
+	}
+	if err := database.WithContext(context.Background()).Create(&authentication.AccountPerson{
+		AccountID: account.ID,
+		PersonID:  person.ID,
+		CreatedAt: now,
+		UpdatedAt: now,
+	}).Error; err != nil {
+		t.Fatalf("bind shared Authentication Account to Person: %v", err)
+	}
+
+	actorIDs := make([]string, 0, 2)
+	for index, tenantID := range []string{tenantA, tenantB} {
+		membership := dbpkg.PersonTenantMembership{
+			BaseModel: dbpkg.BaseModel{ID: ids.New(), CreatedAt: now, UpdatedAt: now},
+			TenantID:  tenantID,
+			PersonID:  person.ID,
+			StatusID:  statusByTenant[tenantID].ID,
+		}
+		if err := database.WithContext(context.Background()).Create(&membership).Error; err != nil {
+			t.Fatalf("seed shared Person Membership in tenant %s: %v", tenantID, err)
+		}
+		actor := authz.AuthzActor{
+			ID:          ids.New(),
+			ActorKey:    "shared-person-actor-" + string(rune('a'+index)) + "-" + ids.New(),
+			DisplayName: "Shared Person",
+			Active:      true,
+			CreatedAt:   now,
+			UpdatedAt:   now,
+		}
+		if err := database.WithContext(context.Background()).Create(&actor).Error; err != nil {
+			t.Fatalf("seed shared Person Actor in tenant %s: %v", tenantID, err)
+		}
+		bindingTenantID := tenantID
+		bindingMembershipID := membership.ID
+		if err := database.WithContext(context.Background()).Create(&authentication.AccountActor{
+			AccountID:    account.ID,
+			ActorID:      actor.ID,
+			ScopeType:    authentication.AccountActorScopeTenant,
+			TenantID:     &bindingTenantID,
+			MembershipID: &bindingMembershipID,
+			CreatedAt:    now,
+			UpdatedAt:    now,
+		}).Error; err != nil {
+			t.Fatalf("bind shared Person Actor in tenant %s: %v", tenantID, err)
+		}
+		actorIDs = append(actorIDs, actor.ID)
+	}
+	return actorIDs[0], actorIDs[1]
 }
 
 func closeDatabase(t *testing.T, database interface{ DB() (*sql.DB, error) }) {

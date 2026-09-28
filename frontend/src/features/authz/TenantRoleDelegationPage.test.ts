@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { AuthzActor } from "../../types/authz";
-import { filterTenantRoleActors } from "./TenantRoleDelegationPage";
+import { filterTenantRoleActors, tenantRoleGrantEligibility } from "./TenantRoleDelegationPage";
 
 const actors: AuthzActor[] = [
   {
@@ -89,6 +89,47 @@ describe("filterTenantRoleActors", () => {
     ).toEqual(["actor-collaborator"]);
   });
 
+  it("searches canonical Person name and nickname even when the Actor display name is different", () => {
+    const canonicalPersonActor: AuthzActor = {
+      id: "actor-identity-a",
+      actorKey: "manual30g-identity-a",
+      displayName: "30G Identity A · Tenant A",
+      personId: "person-identity-a",
+      active: true,
+      roleGrants: [],
+      binding: {
+        accountId: "account-identity-a",
+        accountLogin: "manual30g.identity-a@example.test",
+        personName: "Ana FinancialContinuity",
+        personNickname: "30G Identity A",
+        scopeType: "TENANT",
+        tenantId: "tenant-a",
+        membershipId: "membership-identity-a",
+        membershipTenantId: "tenant-a",
+        membershipActive: true,
+        membershipSameTenant: true,
+      },
+    };
+
+    expect(
+      filterTenantRoleActors([canonicalPersonActor], {
+        searchTerm: "Ana",
+        roleFilter: "ALL",
+        actorStateFilter: "ALL",
+        collaboratorsOnly: false,
+      }).map((actor) => actor.id),
+    ).toEqual(["actor-identity-a"]);
+
+    expect(
+      filterTenantRoleActors([canonicalPersonActor], {
+        searchTerm: "FinancialContinuity",
+        roleFilter: "ALL",
+        actorStateFilter: "ALL",
+        collaboratorsOnly: false,
+      }).map((actor) => actor.id),
+    ).toEqual(["actor-identity-a"]);
+  });
+
   it("finds candidates with an existing operator grant for removal", () => {
     expect(
       filterTenantRoleActors(actors, {
@@ -139,5 +180,49 @@ describe("filterTenantRoleActors", () => {
         collaboratorsOnly: false,
       }).map((actor) => actor.id),
     ).toEqual(["actor-identity-d"]);
+  });
+});
+
+describe("tenantRoleGrantEligibility", () => {
+  it("blocks Role provisioning when the same Person has a non-baseline Role in another Tenant", () => {
+    const actor: AuthzActor = {
+      id: "actor-cross-tenant",
+      actorKey: "cross-tenant@example.test",
+      displayName: "Cross Tenant Candidate",
+      active: true,
+      hasDelegatedAuthorityInOtherTenant: true,
+      binding: {
+        accountId: "account-cross-tenant",
+        scopeType: "TENANT",
+        tenantId: "tenant-a",
+        membershipId: "membership-a",
+        membershipTenantId: "tenant-a",
+        membershipActive: true,
+        membershipSameTenant: true,
+      },
+    };
+
+    expect(tenantRoleGrantEligibility(actor)).toBe("CROSS_TENANT_AUTHORITY");
+  });
+
+  it("allows Membership and Collaborator participation in multiple Tenants when no other Role exists elsewhere", () => {
+    const actor: AuthzActor = {
+      id: "actor-baseline",
+      actorKey: "baseline@example.test",
+      displayName: "Baseline Candidate",
+      active: true,
+      hasDelegatedAuthorityInOtherTenant: false,
+      binding: {
+        accountId: "account-baseline",
+        scopeType: "TENANT",
+        tenantId: "tenant-a",
+        membershipId: "membership-a",
+        membershipTenantId: "tenant-a",
+        membershipActive: true,
+        membershipSameTenant: true,
+      },
+    };
+
+    expect(tenantRoleGrantEligibility(actor)).toBe("ELIGIBLE");
   });
 });

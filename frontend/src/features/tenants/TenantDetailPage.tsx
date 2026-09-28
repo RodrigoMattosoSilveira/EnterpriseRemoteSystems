@@ -95,7 +95,7 @@ export function TenantDetailPage() {
       await assignMutation.mutateAsync(selectedActorId);
       const actor = candidates.find((candidate) => candidate.actorId === selectedActorId);
       setSelectedActorId("");
-      setSuccessMessage(t("admin.tenantDetail.assigned", { actor: actor?.displayName || actor?.actorKey || t("common.actor") }));
+      setSuccessMessage(t("admin.tenantDetail.assigned", { actor: actor ? tenantAdminCandidatePrimaryName(actor) : t("common.actor") }));
     } catch {
       // Mutation error is rendered by ApiErrorPanel.
     }
@@ -236,7 +236,7 @@ export function TenantDetailPage() {
                   <option value="">{tenantAdminCapacityReached ? t("admin.tenantDetail.admins.maxAssigned") : t("admin.tenantDetail.admins.selectEligible")}</option>
                   {assignableActors.map((candidate) => (
                     <option key={candidate.actorId} value={candidate.actorId}>
-                      {candidate.displayName || candidate.actorKey} ({candidate.actorKey})
+                      {tenantAdminCandidateOptionLabel(candidate)}
                     </option>
                   ))}
                 </select>
@@ -257,7 +257,9 @@ export function TenantDetailPage() {
                   <ul className="mt-2 space-y-1">
                     {unavailableActors.map((candidate) => (
                       <li key={candidate.actorId}>
-                        {candidate.displayName || candidate.actorKey}: {candidate.ineligibilityReason || t("admin.tenantDetail.admins.notEligible")}
+                        {candidate.displayName || candidate.actorKey}: {candidate.hasDelegatedAuthorityInOtherTenant
+                          ? t("authz.tenantRoleDelegation.crossTenantConflict")
+                          : candidate.ineligibilityReason || t("admin.tenantDetail.admins.notEligible")}
                       </li>
                     ))}
                   </ul>
@@ -318,6 +320,44 @@ export function TenantDetailPage() {
       </section>
     </main>
   );
+}
+
+function tenantAdminCandidatePrimaryName(candidate: {
+  personName?: string;
+  personNickname?: string;
+  displayName: string;
+  accountLogin?: string;
+  actorKey: string;
+}) {
+  return (
+    candidate.personName?.trim() ||
+    candidate.personNickname?.trim() ||
+    candidate.displayName?.trim() ||
+    candidate.accountLogin?.trim() ||
+    candidate.actorKey
+  );
+}
+
+function tenantAdminCandidateOptionLabel(candidate: {
+  personName?: string;
+  personNickname?: string;
+  displayName: string;
+  accountLogin?: string;
+  actorKey: string;
+}) {
+  const personName = candidate.personName?.trim() ?? "";
+  const nickname = candidate.personNickname?.trim() ?? "";
+  const login = candidate.accountLogin?.trim() ?? "";
+  const primary = tenantAdminCandidatePrimaryName(candidate);
+
+  let label = primary;
+  if (nickname && nickname !== primary && nickname !== login) {
+    label += ` (${nickname})`;
+  }
+  if (login && login !== primary && login !== nickname) {
+    label += ` — ${login}`;
+  }
+  return label;
 }
 
 function tenantAccessCurlCommand(tenantId: string) {

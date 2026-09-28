@@ -1,6 +1,7 @@
 import { loadRecentReauthentication } from "../app/reauthStore";
 import { apiFetch } from "./client";
 import type { FinancialProjection } from "../types/financialProjection";
+import type { WorkCreditEvidence } from "../types/workCreditEvidence";
 import type { Person } from "../types/people";
 import type {
   CloseJourneyInput,
@@ -90,6 +91,14 @@ export async function listCollaborators(
 }
 
 
+export function listCollaboratorJourneysForMembership(
+  membershipId: string,
+): Promise<Collaborator[]> {
+  return apiFetch<Collaborator[]>(
+    `/collaborators/by-membership/${encodeURIComponent(membershipId)}`,
+  );
+}
+
 export function listSelfCollaboratorJourneys(): Promise<Collaborator[]> {
   return apiFetch<Collaborator[]>("/collaborators/self");
 }
@@ -97,6 +106,12 @@ export function listSelfCollaboratorJourneys(): Promise<Collaborator[]> {
 export function getSelfCollaborator(id: string): Promise<Collaborator> {
   return apiFetch<Collaborator>(
     `/collaborators/self/${encodeURIComponent(id)}`,
+  );
+}
+
+export function getSelfWorkCreditEvidence(id: string): Promise<WorkCreditEvidence> {
+  return apiFetch<WorkCreditEvidence>(
+    `/collaborators/self/${encodeURIComponent(id)}/work-credit-evidence`,
   );
 }
 
