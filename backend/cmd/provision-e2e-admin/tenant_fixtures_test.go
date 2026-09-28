@@ -227,6 +227,12 @@ func TestEnsureE2ETenantFixturesSeedsDefaultTenantReferenceBaselineBeforeProvisi
 	if err := database.First(&closedJourney, "id = ?", e2eBite32ClosedJourneyID).Error; err != nil {
 		t.Fatalf("find Bite 32 closed Journey after baseline repair: %v", err)
 	}
+	if closedJourney.PlanningAvailability != "ACTIVE" {
+		t.Fatalf(
+			"expected Bite 32 closed Journey to retain valid ACTIVE planning availability, got %q",
+			closedJourney.PlanningAvailability,
+		)
+	}
 }
 
 func TestE2EApplicationAdministratorTenantOptionsRemainGlobalOnlyBeforeSupportLease(t *testing.T) {

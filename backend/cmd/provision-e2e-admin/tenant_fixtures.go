@@ -431,7 +431,7 @@ func ensureE2EBite32JourneyEvidenceFixture(ctx context.Context, database *gorm.D
 			DefaultEndDate:   time.Date(2026, 6, 30, 0, 0, 0, 0, time.UTC),
 			ProjectedEndDate: time.Date(2026, 6, 30, 0, 0, 0, 0, time.UTC),
 			PaymentMethodID:  refs["method/DAILY"], PaymentValue: dailyAmount, DailyBRLAmount: &dailyAmount,
-			PlanningAvailability: "INACTIVE", SectorID: refs["sector/MINING"], LocationID: refs["location/MAIN_MINE"], TaskID: refs["task/MINER"],
+			PlanningAvailability: "ACTIVE", SectorID: refs["sector/MINING"], LocationID: refs["location/MAIN_MINE"], TaskID: refs["task/MINER"],
 			StatusID: refs["collaborator_status/FINISHED"], Notes: "Bite 32 release E2E closed Journey", ClosedAt: &closedAt,
 		}
 		if err := tx.Where("id = ?", closedJourney.ID).FirstOrCreate(&closedJourney).Error; err != nil {
