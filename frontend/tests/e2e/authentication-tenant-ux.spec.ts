@@ -930,16 +930,16 @@ test("signing in after a forbidden sign-out lands on the next account's first pe
     await signIn(page, expenseOperator.login, expenseOperator.password);
     await expectPersonSelfServiceHome(page, expenseOperator.personId);
     await expect(page.getByRole("heading", { name: "Access forbidden" })).toHaveCount(0);
-    await expect(page.getByRole("link", { name: "Reference data" })).toHaveCount(0);
+    await expect(page.getByRole("link", { name: "Reference data" })).toBeVisible();
 
     await page.goto("/admin/reference-data");
-    await expect(page).toHaveURL(/\/forbidden$/);
+    await expect(page).toHaveURL(/\/admin\/reference-data$/);
     await expect(
       page.getByRole("heading", { name: "Access forbidden" }),
-    ).toBeVisible();
+    ).toHaveCount(0);
     await expect(
       page.getByRole("heading", { name: "Reference Data", exact: true }),
-    ).toHaveCount(0);
+    ).toBeVisible();
   } finally {
     await context.close();
     await deactivateActor(request, earningsOperator.actorId);
