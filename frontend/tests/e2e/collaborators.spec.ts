@@ -406,7 +406,7 @@ test("user can edit Collaborator assignment and payment without bypassing govern
   await expect(page.getByText(task.label).first()).toBeVisible();
   await expect(page.getByText("Salary").first()).toBeVisible();
   await expect(page.getByText(/R\$\s*2,400\.00/).first()).toBeVisible();
-  await expect(page.getByRole("button", { name: "Propose Journey Extension" })).toBeVisible();
+  await expect(page.getByText("Extension Days").locator("..").getByText("0", { exact: true })).toBeVisible();
 });
 
 test("user can inspect Collaborator current account ledger and receipt status", async ({
