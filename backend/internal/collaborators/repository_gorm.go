@@ -352,3 +352,63 @@ func (r *gormRepository) LoadWorkCreditEvidence(ctx context.Context, journeyID s
 		AccountPostings:    ledgerRows,
 	}, nil
 }
+
+func (r *gormRepository) CreateExtensionRequest(ctx context.Context, request *db.JourneyExtensionRequest) error {
+	return r.db.WithContext(ctx).Create(request).Error
+}
+
+func (r *gormRepository) ListExtensionRequests(ctx context.Context, collaboratorID string) ([]db.JourneyExtensionRequest, error) {
+	var rows []db.JourneyExtensionRequest
+	err := r.db.WithContext(ctx).Where("tenant_id = ? AND collaborator_journey_id = ?", tenantctx.TenantID(ctx), collaboratorID).Order("requested_at DESC").Find(&rows).Error
+	return rows, err
+}
+
+func (r *gormRepository) FindExtensionRequest(ctx context.Context, collaboratorID, requestID string) (*db.JourneyExtensionRequest, error) {
+	var row db.JourneyExtensionRequest
+	if err := r.db.WithContext(ctx).Where("tenant_id = ? AND collaborator_journey_id = ? AND id = ?", tenantctx.TenantID(ctx), collaboratorID, requestID).First(&row).Error; err != nil {
+		return nil, err
+	}
+	return &row, nil
+}
+
+func (r *gormRepository) AcceptExtensionRequest(ctx context.Context, collaborator *db.CollaboratorJourney, request *db.JourneyExtensionRequest) error {
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		result := tx.Model(&db.JourneyExtensionRequest{}).Where("id = ? AND tenant_id = ? AND status = ?", request.ID, tenantctx.TenantID(ctx), "PENDING").Updates(map[string]any{"status": request.Status, "accepted_by": request.AcceptedBy, "accepted_at": request.AcceptedAt, "updated_at": request.UpdatedAt})
+		if result.Error != nil {
+			return result.Error
+		}
+		if result.RowsAffected != 1 {
+			return gorm.ErrRecordNotFound
+		}
+		journeyResult := tx.Model(&db.CollaboratorJourney{}).Where("id = ? AND tenant_id = ? AND closed_at IS NULL", collaborator.ID, tenantctx.TenantID(ctx)).Updates(map[string]any{"extension_days": collaborator.ExtensionDays, "projected_end_date": collaborator.ProjectedEndDate, "updated_at": collaborator.UpdatedAt})
+		if journeyResult.Error != nil {
+			return journeyResult.Error
+		}
+		if journeyResult.RowsAffected != 1 {
+			return gorm.ErrRecordNotFound
+		}
+		return nil
+	})
+}
+
+func (r *gormRepository) UpdateExtensionRequest(ctx context.Context, request *db.JourneyExtensionRequest) error {
+	updates := map[string]any{"status": request.Status, "updated_at": request.UpdatedAt}
+	switch request.Status {
+	case "REJECTED":
+		updates["rejected_by"] = request.RejectedBy
+		updates["rejected_at"] = request.RejectedAt
+	case "CANCELLED":
+		updates["cancelled_by"] = request.CancelledBy
+		updates["cancelled_at"] = request.CancelledAt
+	default:
+		return gorm.ErrInvalidData
+	}
+	result := r.db.WithContext(ctx).Model(&db.JourneyExtensionRequest{}).Where("id = ? AND tenant_id = ? AND status = ?", request.ID, tenantctx.TenantID(ctx), "PENDING").Updates(updates)
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected != 1 {
+		return gorm.ErrRecordNotFound
+	}
+	return nil
+}

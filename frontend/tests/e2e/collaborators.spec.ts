@@ -338,7 +338,7 @@ test("user can filter Collaborators by any part of person name or nickname", asy
   await expect(page.getByRole("link", { name: otherNickname })).toHaveCount(0);
 });
 
-test("user can edit Collaborator assignment payment and extension days", async ({
+test("user can edit Collaborator assignment and payment without bypassing governed Journey extensions", async ({
   page,
   request,
 }) => {
@@ -394,7 +394,7 @@ test("user can edit Collaborator assignment payment and extension days", async (
   await page.getByLabel("Task *").selectOption(task.id);
   await page.getByLabel("Payment Method *").selectOption("ref-method-salary");
   await page.getByLabel("Payment Value *").fill("2400");
-  await page.getByLabel("Extension Days *").fill("12");
+  await expect(page.getByLabel("Extension Days *")).toHaveCount(0);
 
   await page.getByRole("button", { name: "Save Collaborator" }).click();
 
@@ -406,7 +406,7 @@ test("user can edit Collaborator assignment payment and extension days", async (
   await expect(page.getByText(task.label).first()).toBeVisible();
   await expect(page.getByText("Salary").first()).toBeVisible();
   await expect(page.getByText(/R\$\s*2,400\.00/).first()).toBeVisible();
-  await expect(page.getByText("Sep 11, 2026").first()).toBeVisible();
+  await expect(page.getByText("Extension Days").locator("..").getByText("0", { exact: true })).toBeVisible();
 });
 
 test("user can inspect Collaborator current account ledger and receipt status", async ({

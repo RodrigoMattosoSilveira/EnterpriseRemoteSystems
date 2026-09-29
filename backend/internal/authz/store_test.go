@@ -1689,10 +1689,18 @@ func TestIntrinsicSelfServiceKeepsJourneyHistoryReadableAfterCurrentJourneyClose
 		PermissionAssignmentsSelfCurrentRead,
 		PermissionLedgerReceiptsSelfRead,
 		PermissionLedgerReceiptsSelfAccept,
+		PermissionJourneyExtensionsSelfRespond,
 	} {
 		if _, ok := permissions[permission]; ok {
 			t.Fatalf("closed Journey history must not preserve current Collaborator capability %s", permission)
 		}
+	}
+}
+
+func TestIntrinsicSelfServiceAllowsActiveCollaboratorToRespondToJourneyExtension(t *testing.T) {
+	permissions := intrinsicSelfServicePermissions(true, true)
+	if _, ok := permissions[PermissionJourneyExtensionsSelfRespond]; !ok {
+		t.Fatal("active Collaborator must be able to respond to own pending Journey extension")
 	}
 }
 

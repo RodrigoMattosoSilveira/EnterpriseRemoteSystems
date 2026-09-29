@@ -21,6 +21,7 @@ import type {
   CollaboratorListResponse,
   CreateCollaboratorInput,
   ExtendCollaboratorJourneyInput,
+  JourneyExtensionRequest,
   UpdateCollaboratorInput,
   UpdateCollaboratorWorkAssignmentInput,
 } from "../types/collaborators";
@@ -154,8 +155,8 @@ export function updateCollaboratorWorkAssignment(
 export function extendCollaboratorJourney(
   id: string,
   input: ExtendCollaboratorJourneyInput,
-): Promise<Collaborator> {
-  return apiFetch<Collaborator>(
+): Promise<JourneyExtensionRequest> {
+  return apiFetch<JourneyExtensionRequest>(
     `/collaborators/${encodeURIComponent(id)}/extend`,
     {
       method: "POST",
@@ -258,4 +259,18 @@ function recentReauthenticationHeaders(): Record<string, string> {
     "X-Reauthenticated-At": recent.reauthenticatedAt,
     "X-Reauthentication-Method": recent.method,
   };
+}
+
+export function listJourneyExtensionRequests(id: string, self = false): Promise<JourneyExtensionRequest[]> {
+  const prefix = self ? "/collaborators/self" : "/collaborators";
+  return apiFetch<JourneyExtensionRequest[]>(`${prefix}/${encodeURIComponent(id)}/extension-requests`);
+}
+export function acceptJourneyExtensionRequest(id: string, requestId: string): Promise<JourneyExtensionRequest> {
+  return apiFetch<JourneyExtensionRequest>(`/collaborators/${encodeURIComponent(id)}/extension-requests/${encodeURIComponent(requestId)}/accept`, { method: "POST" });
+}
+export function rejectJourneyExtensionRequest(id: string, requestId: string): Promise<JourneyExtensionRequest> {
+  return apiFetch<JourneyExtensionRequest>(`/collaborators/${encodeURIComponent(id)}/extension-requests/${encodeURIComponent(requestId)}/reject`, { method: "POST" });
+}
+export function cancelJourneyExtensionRequest(id: string, requestId: string): Promise<JourneyExtensionRequest> {
+  return apiFetch<JourneyExtensionRequest>(`/collaborators/${encodeURIComponent(id)}/extension-requests/${encodeURIComponent(requestId)}/cancel`, { method: "POST" });
 }

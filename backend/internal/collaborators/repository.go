@@ -14,6 +14,11 @@ type Repository interface {
 	Update(ctx context.Context, collaborator *db.CollaboratorJourney) error
 	UpdateWorkAssignment(ctx context.Context, collaborator *db.CollaboratorJourney) error
 	UpdateExtension(ctx context.Context, collaborator *db.CollaboratorJourney) error
+	CreateExtensionRequest(ctx context.Context, request *db.JourneyExtensionRequest) error
+	ListExtensionRequests(ctx context.Context, collaboratorID string) ([]db.JourneyExtensionRequest, error)
+	FindExtensionRequest(ctx context.Context, collaboratorID, requestID string) (*db.JourneyExtensionRequest, error)
+	AcceptExtensionRequest(ctx context.Context, collaborator *db.CollaboratorJourney, request *db.JourneyExtensionRequest) error
+	UpdateExtensionRequest(ctx context.Context, request *db.JourneyExtensionRequest) error
 	FindByID(ctx context.Context, id string) (*db.CollaboratorJourney, error)
 	FindByIDForMembership(ctx context.Context, id string, membershipID string) (*db.CollaboratorJourney, error)
 	FindActiveMembershipByID(ctx context.Context, membershipID string) (*db.PersonTenantMembership, error)

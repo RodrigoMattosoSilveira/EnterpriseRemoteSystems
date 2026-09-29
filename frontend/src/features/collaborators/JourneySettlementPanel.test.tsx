@@ -193,12 +193,48 @@ describe("JourneySettlementPanel", () => {
     });
   });
 
+  it("offers a governed Journey extension when the Tenant owes the Collaborator", async () => {
+    mockSettlementFetch({ preview: { brlBalance: 900, goldGramBalance: 2.5 } });
+
+    renderPanel();
+    await waitForText("Tenant owes Collaborator");
+    expect(textNode("Propose Journey Extension")).toBeTruthy();
+  });
+
+  it("allows a governed Journey extension proposal when all balances are zero", async () => {
+    const requests: Array<{ url: string; init?: RequestInit; body?: unknown }> = [];
+    mockSettlementFetch({
+      preview: {
+        brlBalance: 0,
+        goldGramBalance: 0,
+        outstandingReceipts: 0,
+        canClose: true,
+        blockingReasons: [],
+      },
+      onRequest: (request) => requests.push(request),
+    });
+
+    renderPanel();
+    await waitForText("Ready to close Journey");
+    await clickButton("Propose Journey Extension");
+    await setFieldValue("Additional days", "7");
+    await setFieldValue("Reason for extension", "Replacement worker has not arrived");
+    await clickSubmitButton("Submit Extension Proposal");
+    await waitForText("Collaborator acceptance is required");
+
+    const request = requests.find((candidate) => candidate.url.includes("/collaborators/collab-1/extend"));
+    expect(request?.body).toEqual({
+      additionalDays: 7,
+      reason: "Replacement worker has not arrived",
+    });
+  });
+
   it("presents the final settlement workflow according to balance direction", async () => {
     mockSettlementFetch({ preview: { brlBalance: -80, goldGramBalance: -1.25 } });
 
     renderPanel();
     await waitForText("Collaborator owes Tenant");
-    expect(textNode("Extend Journey")).toBeTruthy();
+    expect(textNode("Propose Journey Extension")).toBeTruthy();
     expect(textNode("Record Collaborator Payment")).toBeTruthy();
     expect(textNode("Settle Tenant Owed Balance")).toBeFalsy();
   });
@@ -210,7 +246,7 @@ describe("JourneySettlementPanel", () => {
     await waitForText("Tenant owes Collaborator");
     expect(textNode("Collaborator owes Tenant")).toBeTruthy();
     expect(textNode("Settle Tenant Owed Balance")).toBeTruthy();
-    expect(textNode("Extend Journey")).toBeTruthy();
+    expect(textNode("Propose Journey Extension")).toBeTruthy();
     expect(textNode("Record Collaborator Payment")).toBeTruthy();
   });
 
@@ -258,7 +294,7 @@ describe("JourneySettlementPanel", () => {
     expect(textNode("Balances settled — receipt acceptance pending")).toBeFalsy();
   });
 
-  it("extends a Journey by additional days without invoking settlement reauthentication", async () => {
+  it("submits a governed Journey extension proposal without invoking settlement reauthentication", async () => {
     const requests: Array<{ url: string; init?: RequestInit; body?: unknown }> = [];
     mockSettlementFetch({
       preview: { brlBalance: -80, goldGramBalance: 0 },
@@ -267,14 +303,15 @@ describe("JourneySettlementPanel", () => {
 
     renderPanel();
     await waitForText("Collaborator owes Tenant");
-    await clickButton("Extend Journey");
-    await waitForText("Extending the Journey does not post a Ledger Entry");
+    await clickButton("Propose Journey Extension");
+    await waitForText("The current Journey end date does not change until the Collaborator accepts the proposal.");
     await setFieldValue("Additional days", "14");
-    await clickSubmitButton("Confirm Extension");
-    await waitForText("Journey extended by 14 days");
+    await setFieldValue("Reason for extension", "Operational continuity");
+    await clickSubmitButton("Submit Extension Proposal");
+    await waitForText("Collaborator acceptance is required");
 
     const request = requests.find((candidate) => candidate.url.includes("/collaborators/collab-1/extend"));
-    expect(request?.body).toEqual({ additionalDays: 14 });
+    expect(request?.body).toEqual({ additionalDays: 14, reason: "Operational continuity" });
     const headers = new Headers(request?.init?.headers);
     expect(headers.get("X-Reauthentication-Method")).toBeNull();
   });
@@ -462,9 +499,16 @@ function mockSettlementFetch(options: MockSettlementFetchOptions = {}) {
 
     if (url.includes("/collaborators/collab-1/extend")) {
       return jsonResponse({
-        id: "collab-1",
-        extensionDays: 14,
-        projectedEndDate: "2100-01-14",
+        id: "extension-request-1",
+        collaboratorJourneyId: "collab-1",
+        receiptNumber: "JER-TEST",
+        previousEndDate: "2100-01-01",
+        proposedEndDate: "2100-01-15",
+        additionalDays: 14,
+        reason: "Operational continuity",
+        status: "PENDING",
+        requestedBy: "tenant-admin@example.com",
+        requestedAt: "2026-09-29T12:00:00Z",
       });
     }
 

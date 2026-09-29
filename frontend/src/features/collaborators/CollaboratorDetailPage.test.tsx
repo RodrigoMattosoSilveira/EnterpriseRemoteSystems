@@ -177,7 +177,7 @@ describe("CollaboratorDetailPage", () => {
     expect(textNode("Primary mine operator.")).toBeTruthy();
   });
 
-  it("edits collaborator assignment, payment, and extension days", async () => {
+  it("edits collaborator assignment and payment without bypassing Journey extension governance", async () => {
     let updatePayload: Record<string, unknown> | undefined;
 
     mockFetch(async (url, init) => {
@@ -201,8 +201,6 @@ describe("CollaboratorDetailPage", () => {
             planningAvailability: "LEAVE_OF_ABSENCE",
             fixedMonthlyBrlAmount: 2400,
             dailyBrlAmount: undefined,
-            extensionDays: 12,
-            projectedEndDate: "2026-08-11",
           },
         });
       }
@@ -230,7 +228,6 @@ describe("CollaboratorDetailPage", () => {
     changeSelect("Task", "ref-task-supervisor");
     changeSelect("Payment Method", "ref-method-salary");
     changeInput("Payment Value", "2400");
-    changeInput("Extension Days", "12");
 
     await act(async () => {
       buttonByText("Save Collaborator")?.click();
@@ -246,7 +243,6 @@ describe("CollaboratorDetailPage", () => {
       paymentValue: 2400,
       planningAvailability: "LEAVE_OF_ABSENCE",
       fixedMonthlyBrlAmount: 2400,
-      extensionDays: 12,
     });
     expect(updatePayload?.dailyBrlAmount).toBeUndefined();
     expect(textNode("L — Leave of Absence")).toBeTruthy();
@@ -655,6 +651,7 @@ function mockFetch(
       const url = typeof input === "string" ? input : input.toString();
       const referenceData = referenceDataResponse(url);
       if (referenceData) return referenceData;
+      if (url.includes("/extension-requests")) return jsonResponse({ data: [] });
       return handler(url, init);
     },
   );
