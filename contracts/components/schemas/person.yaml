@@ -150,3 +150,27 @@ PersonResponse:
   properties:
     data:
       $ref: "#/Person"
+
+
+PersonPhotoMetadata:
+  type: object
+  required: [contentType, byteSize, width, height, updatedAt]
+  properties:
+    contentType:
+      type: string
+      enum: [image/jpeg, image/png]
+    byteSize:
+      type: integer
+      minimum: 1
+      maximum: 5242880
+    width:
+      type: integer
+      minimum: 64
+      maximum: 2048
+    height:
+      type: integer
+      minimum: 64
+      maximum: 2048
+    updatedAt:
+      type: string
+      format: date-time

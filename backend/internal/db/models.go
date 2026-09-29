@@ -140,6 +140,22 @@ type GlobalPerson struct {
 
 func (GlobalPerson) TableName() string { return "global_people" }
 
+// GlobalPersonPhoto stores the single current photo for one global Person.
+// The bytes are kept outside global_people so ordinary Person projections stay small.
+type GlobalPersonPhoto struct {
+	PersonID    string    `gorm:"column:person_id;type:text;primaryKey" json:"personId"`
+	ContentType string    `gorm:"column:content_type;type:text;not null" json:"contentType"`
+	Data        []byte    `gorm:"column:data;not null" json:"-"`
+	ByteSize    int       `gorm:"column:byte_size;not null" json:"byteSize"`
+	Width       int       `gorm:"column:width;not null" json:"width"`
+	Height      int       `gorm:"column:height;not null" json:"height"`
+	UpdatedBy   string    `gorm:"column:updated_by;type:text;not null" json:"updatedBy"`
+	CreatedAt   time.Time `gorm:"column:created_at;not null" json:"createdAt"`
+	UpdatedAt   time.Time `gorm:"column:updated_at;not null" json:"updatedAt"`
+}
+
+func (GlobalPersonPhoto) TableName() string { return "global_person_photos" }
+
 // PersonTenantMembership is the tenant-confidential relationship between one
 // global Person and one Tenant.
 type PersonTenantMembership struct {

@@ -736,6 +736,9 @@ function mockFetch(
   vi.spyOn(globalThis, "fetch").mockImplementation(
     async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = typeof input === "string" ? input : input.toString();
+      if (url === `/api/v1/people/${PERSON_ID}/photo` && methodOf(init) === "GET") {
+        return jsonResponse({ error: { code: "not_found", message: "Record not found" } }, { status: 404 });
+      }
       return handler(url, init);
     }
   );
