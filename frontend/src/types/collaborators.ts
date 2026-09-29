@@ -10,6 +10,7 @@ export type Collaborator = {
 
   journeyStartDate: string;
   defaultEndDate: string;
+  extensionDays: number;
   projectedEndDate: string;
 
   paymentMethodId: string;
@@ -71,7 +72,6 @@ export type UpdateCollaboratorInput = {
   sectorId: string;
   locationId: string;
   taskId: string;
-  extensionDays: number;
 };
 
 export type UpdateCollaboratorWorkAssignmentInput = {
