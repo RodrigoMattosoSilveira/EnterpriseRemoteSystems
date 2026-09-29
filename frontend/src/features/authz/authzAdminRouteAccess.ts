@@ -20,6 +20,7 @@ export function canAccessAuthzAdministration(
 
 const TENANT_SCOPE = "TENANT";
 const TENANT_ROLE_GRANTS_PERMISSION = "authz.tenant_role_grants.manage";
+const TENANT_ROLE_GRANTS_READ_PERMISSION = "authz.tenant_role_grants.read";
 
 export function canManageTenantRoleDelegation(
   context: AuthzAdminAccessContext | undefined,
@@ -27,5 +28,11 @@ export function canManageTenantRoleDelegation(
   return (
     context?.scope === TENANT_SCOPE &&
     (context.permissions ?? []).includes(TENANT_ROLE_GRANTS_PERMISSION)
+  );
+}
+
+export function canReadTenantRoleDelegation(context: AuthzAdminAccessContext | undefined): boolean {
+  return context?.scope === TENANT_SCOPE && (context.permissions ?? []).some((permission) =>
+    permission === TENANT_ROLE_GRANTS_READ_PERMISSION || permission === TENANT_ROLE_GRANTS_PERMISSION
   );
 }

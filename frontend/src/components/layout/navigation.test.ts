@@ -56,10 +56,16 @@ describe("permission-aware navigation", () => {
     expect(earningsOperatorPaths).not.toContain("/gold-production");
 
     const tenantAdminPaths = visibleNavigationLinks(
-      ["people.read", "gold_production.manage"],
+      ["people.read", "gold_production.read", "gold_production.manage"],
       "TENANT",
     ).map((link) => link.to);
     expect(tenantAdminPaths).toContain("/gold-production");
+
+    const tenantViewerPaths = visibleNavigationLinks(
+      ["people.read", "gold_production.read"],
+      "TENANT",
+    ).map((link) => link.to);
+    expect(tenantViewerPaths).toContain("/gold-production");
 
     const applicationAdminPaths = visibleNavigationLinks(
       ["authz.read", "authz.manage", "tenants.read", "tenants.create", "tenants.update"],

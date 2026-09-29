@@ -29,7 +29,7 @@ afterEach(async () => {
 });
 
 describe("ReferenceDataAdminRoute", () => {
-  it("denies an Expense Operator that can read operational reference data but cannot manage it", async () => {
+  it("allows an Expense Operator to inspect reference data read-only", async () => {
     const router = renderRoute(
       currentActor({
         roleCodes: ["EXPENSE_OPERATOR"],
@@ -37,12 +37,11 @@ describe("ReferenceDataAdminRoute", () => {
       }),
     );
 
-    await waitFor(() => router.state.location.pathname === "/forbidden");
-
-    expect(container.textContent).toContain("Access forbidden");
-    expect(container.textContent).not.toContain(
-      "Reference Data administration loaded",
+    await waitFor(() =>
+      container.textContent?.includes("Reference Data administration loaded") === true,
     );
+
+    expect(router.state.location.pathname).toBe("/admin/reference-data");
   });
 
   it("allows an actor with reference-data management permission", async () => {

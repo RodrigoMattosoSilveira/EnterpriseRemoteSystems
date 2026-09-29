@@ -16,6 +16,7 @@ const GlobalTenantScope = "*"
 const (
 	RoleApplicationAdmin RoleCode = "APPLICATION_ADMIN"
 	RoleTenantAdmin      RoleCode = "TENANT_ADMIN"
+	RoleTenantViewer     RoleCode = "TENANT_VIEWER"
 	RoleEarningsOperator RoleCode = "EARNINGS_OPERATOR"
 	RoleExpenseOperator  RoleCode = "EXPENSE_OPERATOR"
 	RolePerson           RoleCode = "PERSON"
@@ -297,6 +298,30 @@ func applicationAdministratorControlPlanePermissions() []Permission {
 	}
 }
 
+func tenantViewerDelegatedPermissions() []Permission {
+	return []Permission{
+		PermissionAuthzSelfRead,
+		PermissionAuthzTenantActorsRead,
+		PermissionAuthzTenantRoleGrantsRead,
+		PermissionAuthzTenantAuditRead,
+		PermissionSupportAccessLeasesRead,
+		PermissionTenantsRead,
+		PermissionPeopleRead,
+		PermissionCollaboratorsRead,
+		PermissionPlanningRead,
+		PermissionEarningsRead,
+		PermissionPriceListsRead,
+		PermissionGoldPricesRead,
+		PermissionGoldProductionRead,
+		PermissionReferenceDataRead,
+		PermissionExpensesRead,
+		PermissionCurrentAccountsSummaryRead,
+		PermissionCurrentAccountsLedgerRead,
+		PermissionCurrentAccountsSettingsRead,
+		PermissionLedgerReceiptsRead,
+	}
+}
+
 func tenantAdministratorDelegatedPermissions() []Permission {
 	return []Permission{
 		PermissionTenantsRead,
@@ -316,10 +341,15 @@ func tenantAdministratorDelegatedPermissions() []Permission {
 		PermissionPriceListsRead,
 		PermissionPriceListsCreate,
 		PermissionPriceListsUpdate,
+		PermissionGoldPricesRead,
 		PermissionGoldPricesManage,
+		PermissionGoldProductionRead,
 		PermissionGoldProductionManage,
+		PermissionAuthzTenantActorsRead,
 		PermissionAuthzTenantActorsManage,
+		PermissionAuthzTenantRoleGrantsRead,
 		PermissionAuthzTenantRoleGrantsManage,
+		PermissionAuthzTenantAuditRead,
 		PermissionSupportAccessLeasesRead,
 		PermissionSupportAccessLeasesApprove,
 		PermissionSupportAccessLeasesTerminate,
@@ -363,6 +393,7 @@ func SeedAuthorizationCatalog(database *gorm.DB) error {
 	roles := []AuthzRole{
 		{ID: "authz-role-application-admin", Code: string(RoleApplicationAdmin), Label: "Application Administrator", Description: "Application-global control-plane administration with no standing Tenant business-data access.", ScopeType: string(ActorScopeApplication), Active: true, CreatedAt: now, UpdatedAt: now},
 		{ID: "authz-role-tenant-admin", Code: string(RoleTenantAdmin), Label: "Tenant Administrator", Description: "Tenant-wide administration through explicit delegated permissions.", ScopeType: string(ActorScopeTenant), Active: true, CreatedAt: now, UpdatedAt: now},
+		{ID: "authz-role-tenant-viewer", Code: string(RoleTenantViewer), Label: "Entity Executive (Read Only)", Description: "Read-only visibility across Tenant business, authorization, support-access, and audit records.", ScopeType: string(ActorScopeTenant), Active: true, CreatedAt: now, UpdatedAt: now},
 		{ID: "authz-role-earnings-operator", Code: string(RoleEarningsOperator), Label: "Earnings Operator", Description: "Planning and earning operations for the assigned tenant.", ScopeType: string(ActorScopeTenant), Active: true, CreatedAt: now, UpdatedAt: now},
 		{ID: "authz-role-expense-operator", Code: string(RoleExpenseOperator), Label: "Expense Operator", Description: "Expense, price list, current account summary, and receipt operations for the assigned tenant.", ScopeType: string(ActorScopeTenant), Active: true, CreatedAt: now, UpdatedAt: now},
 	}
@@ -375,6 +406,7 @@ func SeedAuthorizationCatalog(database *gorm.DB) error {
 	rolePermissions := map[RoleCode][]Permission{
 		RoleApplicationAdmin: applicationAdministratorControlPlanePermissions(),
 		RoleTenantAdmin:      tenantAdministratorDelegatedPermissions(),
+		RoleTenantViewer:     tenantViewerDelegatedPermissions(),
 		RoleEarningsOperator: {
 			PermissionAuthzSelfRead, PermissionTenantsRead, PermissionReferenceDataRead,
 			PermissionCollaboratorsRead, PermissionCollaboratorsWorkAssignmentUpdate,
@@ -395,6 +427,7 @@ func SeedAuthorizationCatalog(database *gorm.DB) error {
 	roleIDs := map[RoleCode]string{
 		RoleApplicationAdmin: "authz-role-application-admin",
 		RoleTenantAdmin:      "authz-role-tenant-admin",
+		RoleTenantViewer:     "authz-role-tenant-viewer",
 		RoleEarningsOperator: "authz-role-earnings-operator",
 		RoleExpenseOperator:  "authz-role-expense-operator",
 	}
@@ -783,8 +816,11 @@ func PermissionCatalog() []PermissionCatalogEntry {
 		{PermissionAuthzSelfRead, "Read own authorization context", "Read the current persisted actor, effective roles, scope, and permissions."},
 		{PermissionAuthzRead, "Read authorization administration", "Read authorization actors, roles, permissions, and grants."},
 		{PermissionAuthzManage, "Manage authorization administration", "Create authorization actors and manage application-global role grants."},
+		{PermissionAuthzTenantActorsRead, "Read tenant Actors", "Read Account-bound Actors and lifecycle state for the selected tenant."},
 		{PermissionAuthzTenantActorsManage, "Manage tenant Actors", "Activate and deactivate Account-bound Actors for members of the selected tenant."},
+		{PermissionAuthzTenantRoleGrantsRead, "Read tenant role grants", "Read delegated Tenant Role Grants without authority to create or revoke them."},
 		{PermissionAuthzTenantRoleGrantsManage, "Manage tenant operator role grants", "Grant and revoke Earnings Operator and Expenses Operator roles for active Actors backed by ACTIVE Memberships in the selected tenant."},
+		{PermissionAuthzTenantAuditRead, "Read tenant authorization audit", "Read authorization audit records for the selected tenant only."},
 		{PermissionSupportAccessLeasesRead, "Read Tenant support access leases", "Read Tenant Support Access Lease requests and lifecycle state within the actor's authorized scope."},
 		{PermissionSupportAccessLeasesRequest, "Request Tenant support access", "Request fixed-expiration, permission-scoped Tenant support access for the Application Administrator's GLOBAL Actor."},
 		{PermissionSupportAccessLeasesApprove, "Approve Tenant support access", "Approve a pending Tenant Support Access Lease for the Tenant administered by the actor."},
@@ -812,7 +848,9 @@ func PermissionCatalog() []PermissionCatalogEntry {
 		{PermissionPriceListsRead, "Read price lists", "Read tenant price list records."},
 		{PermissionPriceListsCreate, "Create price lists", "Create tenant price list records."},
 		{PermissionPriceListsUpdate, "Update price lists", "Update tenant price list records."},
+		{PermissionGoldPricesRead, "Read gold prices", "Read sensitive tenant gold-price history without mutation authority."},
 		{PermissionGoldPricesManage, "Manage gold prices", "List, record, replace, and deactivate sensitive tenant gold-price administration records."},
+		{PermissionGoldProductionRead, "Read gold production", "Read tenant Gold Production entries without mutation authority."},
 		{PermissionGoldProductionManage, "Manage gold production", "Record, edit, deactivate, and delete tenant Gold Production entries."},
 		{PermissionReferenceDataRead, "Read reference data", "Read tenant reference data records."},
 		{PermissionReferenceDataManage, "Manage reference data", "Create, update, deactivate, and reactivate tenant reference data records."},

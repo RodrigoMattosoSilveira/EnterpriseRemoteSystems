@@ -52,6 +52,7 @@ export const enUSMessages = {
   "common.error.tenantSelectionHint": "Select an available authorization context before retrying this operation.",
 
   "authz.tenantRoleDelegation.crossTenantAuthorityBadge": "Role in another Tenant",
+  "authz.tenantRoleDelegation.tenantViewer": "Entity Executive (Read Only)",
   "authz.tenantRoleDelegation.crossTenantConflict": "This Person has one or more Roles in another Tenant. They must work with that Tenant to have every Role other than Membership and Collaborator removed before a Role can be assigned here.",
 
   "nav.primaryAria": "Primary navigation",

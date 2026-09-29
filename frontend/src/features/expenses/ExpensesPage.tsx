@@ -64,6 +64,11 @@ function ExpensesAccessDenied({
 }
 
 function AuthorizedExpensesPage() {
+  const actor = useOptionalAuthorizationContext();
+  const canCreateExpenses =
+    !actor ||
+    actor.permissions.includes("*") ||
+    actor.permissions.includes("expenses.create");
   const { t, formatCurrency, formatNumber, formatDate } = useI18n();
   const [searchParams, setSearchParams] = useSearchParams();
   const location = useLocation();
@@ -176,12 +181,22 @@ function AuthorizedExpensesPage() {
             >
               {t("nav.collaborators")}
             </Link>
-            <Link
-              to="/expenses/new"
-              className="rounded-xl bg-gray-950 px-4 py-2 text-sm font-semibold text-white shadow-sm"
-            >
-              {t("expenses.create")}
-            </Link>
+            {canCreateExpenses ? (
+              <Link
+                to="/expenses/new"
+                className="rounded-xl bg-gray-950 px-4 py-2 text-sm font-semibold text-white shadow-sm"
+              >
+                {t("expenses.create")}
+              </Link>
+            ) : (
+              <button
+                type="button"
+                disabled
+                className="cursor-not-allowed rounded-xl bg-gray-200 px-4 py-2 text-sm font-semibold text-gray-500 shadow-sm"
+              >
+                {t("expenses.create")}
+              </button>
+            )}
           </div>
         </div>
       </header>
@@ -371,14 +386,23 @@ function AuthorizedExpensesPage() {
                 ? t("expenses.emptyFilteredHelp")
                 : t("expenses.emptyHelp")}
             </p>
-            {!hasActiveFilters && (
-              <Link
-                to="/expenses/new"
-                className="mt-5 inline-block rounded-xl bg-gray-950 px-5 py-3 text-sm font-semibold text-white"
-              >
-                {t("expenses.create")}
-              </Link>
-            )}
+            {!hasActiveFilters &&
+              (canCreateExpenses ? (
+                <Link
+                  to="/expenses/new"
+                  className="mt-5 inline-block rounded-xl bg-gray-950 px-5 py-3 text-sm font-semibold text-white"
+                >
+                  {t("expenses.create")}
+                </Link>
+              ) : (
+                <button
+                  type="button"
+                  disabled
+                  className="mt-5 cursor-not-allowed rounded-xl bg-gray-200 px-5 py-3 text-sm font-semibold text-gray-500"
+                >
+                  {t("expenses.create")}
+                </button>
+              ))}
           </div>
         )}
 

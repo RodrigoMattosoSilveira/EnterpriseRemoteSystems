@@ -5,6 +5,7 @@ import { createMemoryRouter, RouterProvider } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { WorkPeriodDetailPage } from "./WorkPeriodDetailPage";
 import { I18nProvider, LOCALE_STORAGE_KEY } from "../../i18n";
+import { AuthorizationProvider } from "../../components/layout/AuthorizationContext";
 import type { WorkPeriod } from "../../types/planning";
 
 vi.mock("../../app/useAuth", () => ({
@@ -42,9 +43,15 @@ vi.mock("../reference-data/useReferenceData", () => ({
 }));
 
 vi.mock("./PlanTab", () => ({
-  PlanTab: () => <div data-testid="plan-tab">Plan tab</div>,
+  PlanTab: ({ editable }: { editable: boolean }) => (
+    <div data-testid="plan-tab" data-editable={String(editable)}>Plan tab</div>
+  ),
 }));
-vi.mock("./InformTab", () => ({ InformTab: () => null }));
+vi.mock("./InformTab", () => ({
+  InformTab: ({ editable }: { editable: boolean }) => (
+    <div data-testid="inform-tab" data-editable={String(editable)}>Inform tab</div>
+  ),
+}));
 vi.mock("./AccrualTab", () => ({
   AccrualTab: () => <div data-testid="accrual-tab">Accrual tab</div>,
 }));
@@ -126,7 +133,20 @@ describe("WorkPeriodDetailPage", () => {
 
     await act(async () => {
       root = createRoot(container);
-      root.render(<I18nProvider><RouterProvider router={router} /></I18nProvider>);
+      root.render(<I18nProvider>
+        <AuthorizationProvider
+          value={{
+            actorKey: "operator-d",
+            actorRecordId: "actor-operator-d",
+            tenantId: "default",
+            scope: "TENANT",
+            roleCodes: ["TENANT_ADMIN"],
+            permissions: ["planning.read", "planning.update"],
+          }}
+        >
+          <RouterProvider router={router} />
+        </AuthorizationProvider>
+      </I18nProvider>);
     });
 
     await waitForText("Default Tenant · Aug 28, 2026 · 30G Tenant B accrual regression");
@@ -146,6 +166,51 @@ describe("WorkPeriodDetailPage", () => {
       "Work Period ID: manual30g-work-period-tenant-b",
     );
     expect(container.textContent).toContain("Schedule:");
+  });
+
+  it("passes read-only planning state when the actor lacks planning.update", async () => {
+    period = { ...basePeriod, status: "PLANNING" };
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const router = createMemoryRouter(
+      [
+        {
+          path: "/work-periods/:id",
+          element: (
+            <QueryClientProvider client={queryClient}>
+              <WorkPeriodDetailPage />
+            </QueryClientProvider>
+          ),
+        },
+      ],
+      { initialEntries: ["/work-periods/manual30g-work-period-tenant-b"] },
+    );
+
+    await act(async () => {
+      root = createRoot(container);
+      root.render(
+        <I18nProvider>
+          <AuthorizationProvider
+            value={{
+              actorKey: "tenant-viewer",
+              actorRecordId: "actor-tenant-viewer",
+              tenantId: "default",
+              scope: "TENANT",
+              roleCodes: ["TENANT_VIEWER"],
+              permissions: ["planning.read"],
+            }}
+          >
+            <RouterProvider router={router} />
+          </AuthorizationProvider>
+        </I18nProvider>,
+      );
+    });
+
+    await waitForText("Plan tab");
+    expect(
+      container.querySelector('[data-testid="plan-tab"]')?.getAttribute("data-editable"),
+    ).toBe("false");
   });
 
   it("opens a fully posted Work Period in the accrual view instead of planning", async () => {
@@ -177,7 +242,20 @@ describe("WorkPeriodDetailPage", () => {
 
     await act(async () => {
       root = createRoot(container);
-      root.render(<I18nProvider><RouterProvider router={router} /></I18nProvider>);
+      root.render(<I18nProvider>
+        <AuthorizationProvider
+          value={{
+            actorKey: "operator-d",
+            actorRecordId: "actor-operator-d",
+            tenantId: "default",
+            scope: "TENANT",
+            roleCodes: ["TENANT_ADMIN"],
+            permissions: ["planning.read", "planning.update"],
+          }}
+        >
+          <RouterProvider router={router} />
+        </AuthorizationProvider>
+      </I18nProvider>);
     });
 
     await waitForText("Totalmente Lançado");

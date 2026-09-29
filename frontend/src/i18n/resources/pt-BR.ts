@@ -54,6 +54,7 @@ export const ptBRMessages = {
   "common.error.tenantSelectionHint": "Selecione um contexto de autorização disponível antes de tentar esta operação outra vez.",
 
   "authz.tenantRoleDelegation.crossTenantAuthorityBadge": "Função em outra Entidade",
+  "authz.tenantRoleDelegation.tenantViewer": "Executivo da Entidade (Somente Leitura)",
   "authz.tenantRoleDelegation.crossTenantConflict": "Esta Pessoa possui uma ou mais Funções em outra Entidade. Ela deve trabalhar com essa Entidade para que todas as Funções, exceto Vínculo e Colaborador, sejam removidas antes que uma Função possa ser atribuída aqui.",
 
   "nav.primaryAria": "Navegação principal",
