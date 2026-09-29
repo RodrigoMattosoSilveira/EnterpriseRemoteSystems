@@ -23,6 +23,7 @@ BASELINE_SHA = "f" * 64
 BASELINE_LAST = "000062_tenant_administrator_cardinality.up.sql"
 FIRST_REHEARSED = "000063_global_administration_control_plane.up.sql"
 FINAL_MIGRATION = "000071_cross_tenant_delegated_role_isolation.up.sql"
+DEPLOYMENT_FINAL_MIGRATION = "000072_entity_executive_read_only_tenant_role.up.sql"
 
 
 def run(*args: str, expect_success: bool = True) -> subprocess.CompletedProcess[str]:
@@ -57,7 +58,7 @@ def write_marker(path: Path, *, tree: str = TREE_SHA, artifact: str | None = Non
                 f"baseline_last_migration={BASELINE_LAST}",
                 f"migration_under_rehearsal={FIRST_REHEARSED}",
                 f"final_migration={FINAL_MIGRATION}",
-                f"deployment_final_migration={FINAL_MIGRATION}",
+                f"deployment_final_migration={DEPLOYMENT_FINAL_MIGRATION}",
                 "passed_at=2026-09-13T23:59:59Z",
             ]
         )
@@ -73,7 +74,7 @@ def marker_args(marker: Path, normalized: Path, *, tree: str = TREE_SHA) -> list
         "--expected-baseline-last-migration", BASELINE_LAST,
         "--expected-first-rehearsed-migration", FIRST_REHEARSED,
         "--expected-final-migration", FINAL_MIGRATION,
-        "--expected-deployment-final-migration", FINAL_MIGRATION,
+        "--expected-deployment-final-migration", DEPLOYMENT_FINAL_MIGRATION,
         "--normalized-output", str(normalized),
     ]
 
