@@ -80,6 +80,7 @@ const (
 
 	PermissionGoldPricesRead       Permission = "gold_prices.read"
 	PermissionGoldPricesManage     Permission = "gold_prices.manage"
+	PermissionGoldProductionRead   Permission = "gold_production.read"
 	PermissionGoldProductionManage Permission = "gold_production.manage"
 
 	PermissionReferenceDataRead   Permission = "reference_data.read"

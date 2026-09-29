@@ -582,7 +582,7 @@ export function filterTenantRoleActors(
     }
 
     if (filters.roleFilter === "NONE") {
-      return !roles.some((role) => Boolean(activeOperatorGrant(actor, role.code)));
+      return !roleCodes.some((roleCode) => Boolean(activeOperatorGrant(actor, roleCode)));
     }
     if (filters.roleFilter !== "ALL") {
       return Boolean(activeOperatorGrant(actor, filters.roleFilter));

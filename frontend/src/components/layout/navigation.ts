@@ -18,7 +18,7 @@ export const navigationLinks: NavigationLink[] = [
   { labelKey: "nav.collaborators", to: "/collaborators", anyPermission: ["collaborators.read", "collaborators.self.read"] },
   { labelKey: "nav.expenses", to: "/expenses", anyPermission: ["expenses.read"] },
   { labelKey: "nav.workPeriods", to: "/work-periods", anyPermission: ["planning.read"] },
-  { labelKey: "nav.goldProduction", to: "/gold-production", anyPermission: ["earnings.read", "gold_production.manage"] },
+  { labelKey: "nav.goldProduction", to: "/gold-production", anyPermission: ["gold_production.read", "gold_production.manage"] },
   { labelKey: "nav.outstandingReceipts", to: "/receipts/outstanding", anyPermission: ["ledger.receipts.read", "ledger.receipts.self.read"] },
   { labelKey: "nav.tenants", to: "/admin/tenants", anyPermission: ["tenants.create", "tenants.update"], applicationOnly: true },
   { labelKey: "nav.authentication", to: "/admin/authentication", anyPermission: ["authz.manage"], applicationOnly: true },

@@ -3,7 +3,7 @@ import { MineProductionPage } from "./MineProductionPage";
 
 export function MineProductionAdminRoute() {
   return (
-    <RequireAnyPermission permissions={["earnings.read", "gold_production.manage"]}>
+    <RequireAnyPermission permissions={["gold_production.read", "gold_production.manage"]}>
       <MineProductionPage />
     </RequireAnyPermission>
   );
