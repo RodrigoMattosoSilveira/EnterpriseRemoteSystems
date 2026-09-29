@@ -1,20 +1,20 @@
 @startuml
-title Limite do Locatário — o contexto vem antes dos dados
+title Limite da Entidade — o contexto vem antes dos dados
 
 left to right direction
 
-actor "Mariana Alves\nAdministradora do Locatário" as Mariana
+actor "Mariana Alves\nAdministradora da Entidade" as Mariana
 
-rectangle "Locatário selecionado\nMineração Serra Dourada — DEMO" as Locatário
+rectangle "Entidade selecionada\nMineração Serra Dourada — DEMO" as Entidade
 rectangle "Dados da operação\nPessoas · Jornadas · Trabalho\nDespesas · Conta Corrente · Recibos" as Dados
-rectangle "Outro Locatário\n(dados isolados)" as OutroLocatário
+rectangle "Outra Entidade\n(dados isolados)" as OutroLocatário
 
-Mariana --> Locatário : opera no contexto selecionado
-Locatário --> Dados : delimita a visão operacional
-Locatário -[hidden]right-> OutroLocatário
+Mariana --> Entidade : opera no contexto selecionado
+Entidade --> Dados : delimita a visão operacional
+Entidade -[hidden]right-> OutroLocatário
 
-note bottom of Locatário
-O Locatário não é apenas um filtro visual.
+note bottom of Entidade
+A Entidade não é apenas um filtro visual.
 Ele define o limite operacional
 dos registros apresentados.
 end note

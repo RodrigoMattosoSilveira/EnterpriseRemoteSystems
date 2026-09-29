@@ -556,7 +556,7 @@ describe("PersonDetailPage", () => {
     await waitForText("Encerrada");
     await waitForText("Abrir Jornada");
     expect(container.textContent).toContain(
-      "Jornadas atuais e encerradas desta Pessoa no Locatário atual.",
+      "Jornadas atuais e encerradas desta Pessoa na Entidade atual.",
     );
   });
 
@@ -649,7 +649,7 @@ describe("PersonDetailPage", () => {
     renderPersonDetailRoute(personSelfServiceActor);
 
     await waitForText("Histórico de Jornadas");
-    await waitForText("Suas Jornadas de Colaborador atuais e encerradas neste Locatário.");
+    await waitForText("Suas Jornadas de Colaborador atuais e encerradas nesta Entidade.");
     await waitForText("Atual");
     await waitForText("Encerrada");
     await waitForText("Abrir Jornada");
