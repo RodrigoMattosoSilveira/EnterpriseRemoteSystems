@@ -38,8 +38,11 @@ const (
 	PermissionAuthzSelfRead               Permission = "authz.self.read"
 	PermissionAuthzRead                   Permission = "authz.read"
 	PermissionAuthzManage                 Permission = "authz.manage"
+	PermissionAuthzTenantActorsRead       Permission = "authz.tenant_actors.read"
 	PermissionAuthzTenantActorsManage     Permission = "authz.tenant_actors.manage"
+	PermissionAuthzTenantRoleGrantsRead   Permission = "authz.tenant_role_grants.read"
 	PermissionAuthzTenantRoleGrantsManage Permission = "authz.tenant_role_grants.manage"
+	PermissionAuthzTenantAuditRead        Permission = "authz.tenant_audit.read"
 
 	PermissionSupportAccessLeasesRead      Permission = "support_access_leases.read"
 	PermissionSupportAccessLeasesRequest   Permission = "support_access_leases.request"
@@ -75,6 +78,7 @@ const (
 	PermissionPriceListsCreate Permission = "price_lists.create"
 	PermissionPriceListsUpdate Permission = "price_lists.update"
 
+	PermissionGoldPricesRead       Permission = "gold_prices.read"
 	PermissionGoldPricesManage     Permission = "gold_prices.manage"
 	PermissionGoldProductionManage Permission = "gold_production.manage"
 

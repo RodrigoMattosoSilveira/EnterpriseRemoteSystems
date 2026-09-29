@@ -20,8 +20,8 @@ func TestSeedAuthorizationCatalogCreatesCoreRolesAndGrants(t *testing.T) {
 	if err := database.Model(&AuthzRole{}).Count(&roles).Error; err != nil {
 		t.Fatalf("count roles: %v", err)
 	}
-	if roles != 4 {
-		t.Fatalf("expected 4 delegated roles after removal of PERSON self-service role, got %d", roles)
+	if roles != 5 {
+		t.Fatalf("expected 5 delegated roles after adding TENANT_VIEWER, got %d", roles)
 	}
 
 	var personRoles int64
@@ -134,6 +134,59 @@ func TestSeedAuthorizationCatalogCreatesCoreRolesAndGrants(t *testing.T) {
 	} {
 		if _, ok := tenantAdminPermissionSet[string(forbidden)]; ok {
 			t.Fatalf("Tenant Administrator must not receive %q as delegated authority", forbidden)
+		}
+	}
+
+	var tenantViewerPermissions []AuthzRolePermission
+	if err := database.
+		Joins("JOIN authz_roles ON authz_roles.id = authz_role_permissions.role_id").
+		Where("authz_roles.code = ?", string(RoleTenantViewer)).
+		Find(&tenantViewerPermissions).Error; err != nil {
+		t.Fatalf("list Tenant Viewer permissions: %v", err)
+	}
+	if got, want := len(tenantViewerPermissions), len(tenantViewerDelegatedPermissions()); got != want {
+		t.Fatalf("Tenant Viewer permission count = %d, want %d", got, want)
+	}
+	tenantViewerPermissionSet := map[string]struct{}{}
+	for _, row := range tenantViewerPermissions {
+		tenantViewerPermissionSet[row.PermissionCode] = struct{}{}
+	}
+	for _, permission := range tenantViewerDelegatedPermissions() {
+		if _, ok := tenantViewerPermissionSet[string(permission)]; !ok {
+			t.Fatalf("Tenant Viewer missing read permission %q", permission)
+		}
+	}
+	for _, forbidden := range []Permission{
+		PermissionAll,
+		PermissionPeopleCreate,
+		PermissionPeopleUpdate,
+		PermissionCollaboratorsCreate,
+		PermissionCollaboratorsUpdate,
+		PermissionPlanningCreate,
+		PermissionPlanningUpdate,
+		PermissionEarningsCreate,
+		PermissionEarningsUpdate,
+		PermissionPriceListsCreate,
+		PermissionPriceListsUpdate,
+		PermissionGoldPricesManage,
+		PermissionGoldProductionManage,
+		PermissionReferenceDataManage,
+		PermissionExpensesCreate,
+		PermissionExpensesUpdate,
+		PermissionCurrentAccountsLedgerCreate,
+		PermissionCurrentAccountsSettingsUpdate,
+		PermissionLedgerReceiptsCreate,
+		PermissionLedgerReceiptsPrint,
+		PermissionLedgerReceiptsReturn,
+		PermissionLedgerCorrectionsCreate,
+		PermissionAuthzTenantActorsManage,
+		PermissionAuthzTenantRoleGrantsManage,
+		PermissionSupportAccessLeasesApprove,
+		PermissionSupportAccessLeasesTerminate,
+		PermissionJourneySettlementsClose,
+	} {
+		if _, ok := tenantViewerPermissionSet[string(forbidden)]; ok {
+			t.Fatalf("Tenant Viewer must not receive mutation permission %q", forbidden)
 		}
 	}
 
@@ -816,6 +869,8 @@ func TestDelegatedRoleIsolationBlocksMixedTenantRolesAcrossTenants(t *testing.T)
 	}{
 		{name: "operator then Tenant Administrator", firstRole: RoleExpenseOperator, secondRole: RoleTenantAdmin},
 		{name: "Tenant Administrator then operator", firstRole: RoleTenantAdmin, secondRole: RoleEarningsOperator},
+		{name: "Entity Executive then operator", firstRole: RoleTenantViewer, secondRole: RoleExpenseOperator},
+		{name: "operator then Entity Executive", firstRole: RoleEarningsOperator, secondRole: RoleTenantViewer},
 	}
 
 	for _, tt := range tests {

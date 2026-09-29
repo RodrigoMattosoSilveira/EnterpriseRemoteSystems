@@ -253,7 +253,7 @@ func TestGoldPriceAdministrationRequiresDedicatedTenantAdminPermission(t *testin
 	source := string(contents)
 
 	for _, route := range []string{
-		`goldPrices.Get("/", requirePermission(deps, authz.PermissionGoldPricesManage)`,
+		`goldPrices.Get("/", requirePermission(deps, authz.PermissionGoldPricesRead)`,
 		`goldPrices.Post("/", requirePermission(deps, authz.PermissionGoldPricesManage)`,
 		`goldPrices.Patch("/:id/deactivate", requirePermission(deps, authz.PermissionGoldPricesManage)`,
 	} {

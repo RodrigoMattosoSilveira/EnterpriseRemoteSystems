@@ -17,10 +17,7 @@ import {
 import { PageTitle } from "../../components/layout/PageHeading";
 import { useI18n } from "../../i18n";
 
-const roles: Array<{ code: TenantOperatorRoleCode; label: string }> = [
-  { code: "EARNINGS_OPERATOR", label: "Earnings Operator" },
-  { code: "EXPENSE_OPERATOR", label: "Expenses Operator" },
-];
+const roleCodes: TenantOperatorRoleCode[] = ["TENANT_VIEWER", "EARNINGS_OPERATOR", "EXPENSE_OPERATOR"];
 
 type TenantRoleFilter = "ALL" | "NONE" | TenantOperatorRoleCode;
 type ActorStateFilter = "ALL" | "ACTIVE" | "INACTIVE";
@@ -32,13 +29,14 @@ type TenantRoleActorFilters = {
   collaboratorsOnly: boolean;
 };
 
-export function TenantRoleDelegationPage() {
+export function TenantRoleDelegationPage({ readOnly = false }: { readOnly?: boolean } = {}) {
   const currentActor = useAuthorizationContext();
   const { t } = useI18n();
   const requestActor: AuthzAdminRequestActor = {
     actorId: currentActor.actorRecordId || currentActor.actorKey,
     tenantId: currentActor.tenantId,
   };
+  const roles: Array<{ code: TenantOperatorRoleCode; label: string }> = roleCodes.map((code) => ({ code, label: roleLabel(code, t) }));
   const actorsQuery = useTenantRoleActors(requestActor);
   const setActorActiveMutation = useSetTenantActorActive(requestActor);
   const grantMutation = useGrantTenantOperatorRole(requestActor);
@@ -91,7 +89,7 @@ export function TenantRoleDelegationPage() {
       setSelectedRoleByActor((current) => ({ ...current, [targetActorId]: undefined }));
       setGrantMessageByActor((current) => ({
         ...current,
-        [targetActorId]: `${roleLabel(roleCode)} granted.`,
+        [targetActorId]: `${roleLabel(roleCode, t)} granted.`,
       }));
     } catch {
       // ApiErrorPanel renders the mutation error.
@@ -103,7 +101,7 @@ export function TenantRoleDelegationPage() {
     setGrantMessageByActor((current) => ({ ...current, [targetActorId]: undefined }));
     try {
       await revokeMutation.mutateAsync({ targetActorId, grantId: grant.id });
-      setMessage(`${roleLabel(grant.roleCode as TenantOperatorRoleCode)} revoked.`);
+      setMessage(`${roleLabel(grant.roleCode as TenantOperatorRoleCode, t)} revoked.`);
     } catch {
       // ApiErrorPanel renders the mutation error.
     }
@@ -166,7 +164,8 @@ export function TenantRoleDelegationPage() {
               className="rounded-lg border bg-white px-3 py-2 font-normal text-gray-950"
             >
               <option value="ALL">All candidates</option>
-              <option value="NONE">No operator role</option>
+              <option value="NONE">No delegated role</option>
+              <option value="TENANT_VIEWER">{t("authz.tenantRoleDelegation.tenantViewer")}</option>
               <option value="EARNINGS_OPERATOR">Earnings Operator</option>
               <option value="EXPENSE_OPERATOR">Expenses Operator</option>
             </select>
@@ -252,7 +251,7 @@ export function TenantRoleDelegationPage() {
                 </div>
                 <button
                   type="button"
-                  disabled={lifecycleBusy || (actor.active && isCurrentActor) || (!actor.active && !membershipEligible)}
+                  disabled={readOnly || lifecycleBusy || (actor.active && isCurrentActor) || (!actor.active && !membershipEligible)}
                   onClick={() => void setActorActive(actor.id, !actor.active)}
                   className="rounded-lg border px-3 py-2 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-50"
                   title={actor.active && isCurrentActor ? "A Tenant Administrator cannot deactivate the Actor currently authorizing this session." : undefined}
@@ -261,7 +260,7 @@ export function TenantRoleDelegationPage() {
                 </button>
               </div>
 
-              <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+              <fieldset disabled={readOnly} className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] disabled:opacity-60">
                 <section className="rounded-xl border border-gray-200 bg-gray-50/60 p-3">
                   <h3 className="text-sm font-semibold text-gray-950">Grant a Role</h3>
                   <p className="mt-0.5 text-xs text-gray-600">
@@ -302,7 +301,7 @@ export function TenantRoleDelegationPage() {
                   {selectedRoleByActor[actor.id] &&
                     activeOperatorGrant(actor, selectedRoleByActor[actor.id]!) && (
                       <p className="mt-2 text-xs font-medium text-gray-600">
-                        {roleLabel(selectedRoleByActor[actor.id]!)} is already granted.
+                        {roleLabel(selectedRoleByActor[actor.id]!, t)} is already granted.
                       </p>
                     )}
                   <button
@@ -370,7 +369,7 @@ export function TenantRoleDelegationPage() {
                     })}
                   </div>
                 </section>
-              </div>
+              </fieldset>
             </article>
           );
         })}
@@ -602,6 +601,7 @@ function activeOperatorGrant(
   );
 }
 
-function roleLabel(roleCode: TenantOperatorRoleCode): string {
+function roleLabel(roleCode: TenantOperatorRoleCode, t: (key: any) => string): string {
+  if (roleCode === "TENANT_VIEWER") return t("authz.tenantRoleDelegation.tenantViewer");
   return roleCode === "EARNINGS_OPERATOR" ? "Earnings Operator" : "Expenses Operator";
 }

@@ -26,6 +26,7 @@ export function GoldPricesPage() {
   );
   const requestActor = useMemo(() => authorizationRequestContext(tenantId), [tenantId]);
   const currentActorQuery = useCurrentAuthzActor(requestActor);
+  const canManage = Boolean(currentActorQuery.data?.permissions.includes("*") || currentActorQuery.data?.permissions.includes("gold_prices.manage"));
 
   const goldPricesQuery = useGoldPrices(includeInactive);
   const latestGoldPriceQuery = useLatestGoldPrice();
@@ -132,12 +133,12 @@ export function GoldPricesPage() {
 
         <section className="grid gap-4 lg:grid-cols-[1fr_1fr]">
           <LatestGoldPriceCard goldPrice={latestGoldPriceQuery.data} isLoading={latestGoldPriceQuery.isLoading} />
-          <GoldPriceForm
+          {canManage ? <GoldPriceForm
             value={form}
             isPending={createMutation.isPending}
             onChange={setForm}
             onSubmit={handleCreate}
-          />
+          /> : null}
         </section>
 
         <section className="rounded-2xl border bg-white p-4 shadow-sm">
@@ -192,7 +193,7 @@ export function GoldPricesPage() {
                         </span>
                       </td>
                       <td className="p-3 text-right">
-                        {row.active ? (
+                        {row.active && canManage ? (
                           <button
                             className="rounded-xl border border-gray-300 bg-white px-3 py-1 text-xs font-semibold text-gray-800 disabled:opacity-60"
                             disabled={deactivateMutation.isPending}
