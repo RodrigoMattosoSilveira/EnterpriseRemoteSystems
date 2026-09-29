@@ -10,7 +10,6 @@ export type Collaborator = {
 
   journeyStartDate: string;
   defaultEndDate: string;
-  extensionDays: number;
   projectedEndDate: string;
 
   paymentMethodId: string;
@@ -83,6 +82,26 @@ export type UpdateCollaboratorWorkAssignmentInput = {
 
 export type ExtendCollaboratorJourneyInput = {
   additionalDays: number;
+  reason: string;
+};
+
+export type JourneyExtensionRequest = {
+  id: string;
+  collaboratorJourneyId: string;
+  receiptNumber: string;
+  previousEndDate: string;
+  proposedEndDate: string;
+  additionalDays: number;
+  reason: string;
+  status: "PENDING" | "ACCEPTED" | "REJECTED" | "CANCELLED";
+  requestedBy: string;
+  requestedAt: string;
+  acceptedBy?: string;
+  acceptedAt?: string;
+  rejectedBy?: string;
+  rejectedAt?: string;
+  cancelledBy?: string;
+  cancelledAt?: string;
 };
 
 export type CollaboratorListFilter = {

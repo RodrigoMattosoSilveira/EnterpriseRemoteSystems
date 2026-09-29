@@ -839,6 +839,7 @@ func PermissionCatalog() []PermissionCatalogEntry {
 		{PermissionCollaboratorsWorkAssignmentUpdate, "Update collaborator work assignment", "Update only Sector, Location, and Task on tenant collaborator Journeys."},
 		{PermissionCollaboratorsSelfRead, "Read own collaborator journeys", "Read current and historical collaborator journeys for the actor's tenant Membership."},
 		{PermissionWorkCreditEvidenceSelfRead, "Read own work and credit evidence", "Read work, accrual, and Journey-specific credit evidence for the actor's own current and historical Journeys."},
+		{PermissionJourneyExtensionsSelfRespond, "Respond to own Journey extensions", "Accept or reject pending Journey extension requests for the actor's own active Journey."},
 		{PermissionPlanningRead, "Read planning", "Read tenant planning records."},
 		{PermissionPlanningCreate, "Create planning", "Create tenant planning records."},
 		{PermissionPlanningUpdate, "Update planning", "Update tenant planning records."},
@@ -1233,6 +1234,7 @@ func intrinsicSelfServicePermissions(hasCollaboratorHistory bool, activeCollabor
 			PermissionAssignmentsSelfCurrentRead,
 			PermissionLedgerReceiptsSelfRead,
 			PermissionLedgerReceiptsSelfAccept,
+			PermissionJourneyExtensionsSelfRespond,
 		} {
 			permissions[permission] = struct{}{}
 		}

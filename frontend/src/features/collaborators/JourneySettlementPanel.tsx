@@ -330,6 +330,7 @@ function JourneyExtensionPanel({
 
   const extendJourney = useExtendCollaboratorJourney(collaboratorId);
   const [additionalDays, setAdditionalDays] = useState("7");
+  const [reason, setReason] = useState("");
   const parsedDays = Number(additionalDays);
   const validDays = Number.isInteger(parsedDays) && parsedDays > 0;
   const nextProjectedEndDate = validDays
@@ -345,12 +346,12 @@ function JourneyExtensionPanel({
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
-    if (!validDays) return;
-    const updated = await extendJourney.mutateAsync({ additionalDays: parsedDays });
+    if (!validDays || !reason.trim()) return;
+    const request = await extendJourney.mutateAsync({ additionalDays: parsedDays, reason: reason.trim() });
     onSuccess(
-      t(parsedDays === 1 ? "settlement.extendedOne" : "settlement.extendedMany", {
+      t(parsedDays === 1 ? "settlement.extensionRequestedOne" : "settlement.extensionRequestedMany", {
         count: parsedDays,
-        date: formatDate(updated.projectedEndDate),
+        date: formatDate(request.proposedEndDate),
       }),
     );
   }
@@ -390,6 +391,9 @@ function JourneyExtensionPanel({
               onChange={(event) => setAdditionalDays(event.target.value)}
             />
           </Field>
+          <Field label={t("journeyExtension.reason")}>
+            <textarea required className={inputClass} value={reason} onChange={(event) => setReason(event.target.value)} rows={3} />
+          </Field>
           <p className="rounded-xl bg-blue-50 p-3 text-sm text-blue-900">
             {t("settlement.extensionCumulativeHelp")}
           </p>
@@ -397,7 +401,7 @@ function JourneyExtensionPanel({
           <div className="flex flex-wrap gap-3">
             <button
               type="submit"
-              disabled={!validDays || extendJourney.isPending}
+              disabled={!validDays || !reason.trim() || extendJourney.isPending}
               className="rounded-xl bg-blue-700 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
             >
               {extendJourney.isPending ? t("settlement.extending") : t("settlement.confirmExtension")}

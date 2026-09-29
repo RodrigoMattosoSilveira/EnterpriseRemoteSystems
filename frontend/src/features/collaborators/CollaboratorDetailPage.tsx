@@ -11,6 +11,7 @@ import type {
 import type { ReferenceDataItem } from "../../types/referenceData";
 import { useReferenceDataByType } from "../reference-data/useReferenceData";
 import { JourneySettlementPanel } from "./JourneySettlementPanel";
+import { JourneyExtensionRequestsPanel } from "./JourneyExtensionRequestsPanel";
 import { WorkCreditEvidencePanel } from "./WorkCreditEvidencePanel";
 import {
   formatCollaboratorPaymentValue,
@@ -345,6 +346,8 @@ export function CollaboratorDetailPage() {
           <WorkCreditEvidencePanel journeyId={collaborator.id} />
         ) : null}
 
+        <JourneyExtensionRequestsPanel collaboratorId={collaborator.id} />
+
         {canPreviewSettlement && !collaborator.closedAt ? (
           <JourneySettlementPanel
             collaboratorId={collaborator.id}
@@ -532,7 +535,6 @@ type EditFormState = {
   taskId: string;
   paymentMethodId: string;
   paymentValue: string;
-  extensionDays: string;
 };
 
 function CollaboratorEditPanel({
@@ -612,7 +614,6 @@ function CollaboratorEditPanel({
     event.preventDefault();
 
     const paymentValue = paymentValueValidation.value;
-    const extensionDays = Number(form.extensionDays);
 
     if (
       !form.planningAvailability ||
@@ -628,15 +629,9 @@ function CollaboratorEditPanel({
       setClientError(paymentValueValidation.message);
       return;
     }
-    if (!Number.isInteger(extensionDays) || extensionDays < 0) {
-      setClientError(t("collaborator.validation.extensionDays"));
-      return;
-    }
-
     const input = collaboratorUpdateInput(
       form,
       paymentValue,
-      extensionDays,
       selectedPaymentMethod,
       collaborator,
     );
@@ -741,15 +736,6 @@ function CollaboratorEditPanel({
               value={form.paymentValue}
               onChange={(value) => update("paymentValue", value)}
             />
-            <Input
-              label={t("collaborator.extensionDays")}
-              required
-              type="number"
-              min="0"
-              step="1"
-              value={form.extensionDays}
-              onChange={(value) => update("extensionDays", value)}
-            />
           </div>
 
           <div className="flex justify-end gap-3">
@@ -782,14 +768,12 @@ function editFormFromCollaborator(collaborator: Collaborator): EditFormState {
     taskId: collaborator.taskId,
     paymentMethodId: collaborator.paymentMethodId,
     paymentValue: String(collaborator.paymentValue || ""),
-    extensionDays: String(collaborator.extensionDays ?? 0),
   };
 }
 
 function collaboratorUpdateInput(
   form: EditFormState,
   paymentValue: number,
-  extensionDays: number,
   selectedPaymentMethod: ReferenceDataItem | undefined,
   collaborator: Collaborator,
 ): UpdateCollaboratorInput {
@@ -801,7 +785,6 @@ function collaboratorUpdateInput(
     taskId: form.taskId,
     paymentMethodId: form.paymentMethodId,
     paymentValue,
-    extensionDays,
   };
 
   switch (normalizePaymentMethodCode(selectedPaymentMethod?.code)) {

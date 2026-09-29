@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"enterpriseremotesystems/backend/internal/authz"
 	"enterpriseremotesystems/backend/internal/db"
 	peoplepkg "enterpriseremotesystems/backend/internal/people"
 	"enterpriseremotesystems/backend/internal/shared/ids"
@@ -182,8 +183,6 @@ func (s *service) Update(ctx context.Context, id string, req UpdateCollaboratorR
 	}
 
 	row.UpdatedAt = time.Now().UTC()
-	row.ExtensionDays = req.ExtensionDays
-	row.ProjectedEndDate = row.DefaultEndDate.AddDate(0, 0, req.ExtensionDays)
 	row.PaymentMethodID = strings.TrimSpace(req.PaymentMethodID)
 	row.PaymentValue = paymentConfig.compatibilityValue()
 	row.FixedMonthlyBRLAmount = paymentConfig.FixedMonthlyBRLAmount
@@ -246,34 +245,158 @@ func (s *service) UpdateWorkAssignment(ctx context.Context, id string, req Updat
 	return ptr(ToDTO(*updated)), nil
 }
 
-func (s *service) ExtendJourney(ctx context.Context, id string, req ExtendCollaboratorJourneyRequest, actorUserID string) (*CollaboratorDTO, error) {
-	_ = actorUserID
+func (s *service) ExtendJourney(ctx context.Context, id string, req ExtendCollaboratorJourneyRequest, actorUserID string) (*JourneyExtensionRequestDTO, error) {
 	if err := ValidateExtendCollaboratorJourney(req); err != nil {
 		return nil, err
 	}
-
 	row, err := s.repo.FindByID(ctx, strings.TrimSpace(id))
 	if err != nil {
 		return nil, err
 	}
 	if row.ClosedAt != nil || strings.EqualFold(strings.TrimSpace(row.Status.Code), "FINISHED") {
-		return nil, ValidationError{Fields: map[string]string{
-			"additionalDays": "Closed Journeys cannot be extended",
-		}}
+		return nil, ValidationError{Fields: map[string]string{"additionalDays": "Closed Journeys cannot be extended"}}
 	}
-
-	row.ExtensionDays += req.AdditionalDays
-	row.ProjectedEndDate = row.DefaultEndDate.AddDate(0, 0, row.ExtensionDays)
-	row.UpdatedAt = time.Now().UTC()
-	if err := s.repo.UpdateExtension(ctx, row); err != nil {
-		return nil, err
-	}
-
-	updated, err := s.repo.FindByID(ctx, row.ID)
+	existing, err := s.repo.ListExtensionRequests(ctx, row.ID)
 	if err != nil {
 		return nil, err
 	}
-	return ptr(ToDTO(*updated)), nil
+	for _, candidate := range existing {
+		if candidate.Status == "PENDING" {
+			return nil, ValidationError{Fields: map[string]string{"additionalDays": "Resolve the pending Journey extension request before creating another"}}
+		}
+	}
+	now := time.Now().UTC()
+	requestID := ids.New()
+	request := &db.JourneyExtensionRequest{
+		BaseModel: db.BaseModel{ID: requestID, CreatedAt: now, UpdatedAt: now},
+		TenantID:  tenantctx.TenantID(ctx), CollaboratorJourneyID: row.ID,
+		ReceiptNumber: journeyExtensionReceiptNumber(requestID), PreviousEndDate: row.ProjectedEndDate,
+		ProposedEndDate: row.ProjectedEndDate.AddDate(0, 0, req.AdditionalDays), AdditionalDays: req.AdditionalDays,
+		Reason: strings.TrimSpace(req.Reason), Status: "PENDING", RequestedBy: strings.TrimSpace(actorUserID), RequestedAt: now,
+	}
+	if err := s.repo.CreateExtensionRequest(ctx, request); err != nil {
+		return nil, err
+	}
+	dto := journeyExtensionRequestDTO(*request)
+	return &dto, nil
+}
+
+func (s *service) ListExtensionRequests(ctx context.Context, id string) ([]JourneyExtensionRequestDTO, error) {
+	if _, err := s.repo.FindByID(ctx, strings.TrimSpace(id)); err != nil {
+		return nil, err
+	}
+	rows, err := s.repo.ListExtensionRequests(ctx, strings.TrimSpace(id))
+	if err != nil {
+		return nil, err
+	}
+	out := make([]JourneyExtensionRequestDTO, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, journeyExtensionRequestDTO(row))
+	}
+	return out, nil
+}
+
+func (s *service) ListSelfExtensionRequests(ctx context.Context, id, membershipID string) ([]JourneyExtensionRequestDTO, error) {
+	if _, err := s.repo.FindByIDForMembership(ctx, strings.TrimSpace(id), strings.TrimSpace(membershipID)); err != nil {
+		return nil, err
+	}
+	rows, err := s.repo.ListExtensionRequests(ctx, strings.TrimSpace(id))
+	if err != nil {
+		return nil, err
+	}
+	out := make([]JourneyExtensionRequestDTO, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, journeyExtensionRequestDTO(row))
+	}
+	return out, nil
+}
+
+func (s *service) AcceptExtensionRequest(ctx context.Context, id, requestID, actorCollaboratorID, actorUserID string) (*JourneyExtensionRequestDTO, error) {
+	if strings.TrimSpace(actorCollaboratorID) == "" || strings.TrimSpace(actorCollaboratorID) != strings.TrimSpace(id) {
+		return nil, authz.ErrForbidden
+	}
+	journey, err := s.repo.FindByID(ctx, strings.TrimSpace(id))
+	if err != nil {
+		return nil, err
+	}
+	request, err := s.repo.FindExtensionRequest(ctx, journey.ID, strings.TrimSpace(requestID))
+	if err != nil {
+		return nil, err
+	}
+	if request.Status != "PENDING" {
+		return nil, ValidationError{Fields: map[string]string{"status": "Only pending Journey extension requests can be accepted"}}
+	}
+	if journey.ClosedAt != nil || strings.EqualFold(strings.TrimSpace(journey.Status.Code), "FINISHED") {
+		return nil, ValidationError{Fields: map[string]string{"status": "Closed Journeys cannot accept extensions"}}
+	}
+	now := time.Now().UTC()
+	request.Status = "ACCEPTED"
+	request.AcceptedBy = strings.TrimSpace(actorUserID)
+	request.AcceptedAt = &now
+	request.UpdatedAt = now
+	journey.ExtensionDays += request.AdditionalDays
+	journey.ProjectedEndDate = request.ProposedEndDate
+	journey.UpdatedAt = now
+	if err := s.repo.AcceptExtensionRequest(ctx, journey, request); err != nil {
+		return nil, err
+	}
+	dto := journeyExtensionRequestDTO(*request)
+	return &dto, nil
+}
+
+func (s *service) RejectExtensionRequest(ctx context.Context, id, requestID, actorCollaboratorID, actorUserID string) (*JourneyExtensionRequestDTO, error) {
+	if strings.TrimSpace(actorCollaboratorID) == "" || strings.TrimSpace(actorCollaboratorID) != strings.TrimSpace(id) {
+		return nil, authz.ErrForbidden
+	}
+	request, err := s.repo.FindExtensionRequest(ctx, strings.TrimSpace(id), strings.TrimSpace(requestID))
+	if err != nil {
+		return nil, err
+	}
+	if request.Status != "PENDING" {
+		return nil, ValidationError{Fields: map[string]string{"status": "Only pending Journey extension requests can be rejected"}}
+	}
+	now := time.Now().UTC()
+	request.Status = "REJECTED"
+	request.RejectedBy = strings.TrimSpace(actorUserID)
+	request.RejectedAt = &now
+	request.UpdatedAt = now
+	if err := s.repo.UpdateExtensionRequest(ctx, request); err != nil {
+		return nil, err
+	}
+	dto := journeyExtensionRequestDTO(*request)
+	return &dto, nil
+}
+
+func (s *service) CancelExtensionRequest(ctx context.Context, id, requestID, actorUserID string) (*JourneyExtensionRequestDTO, error) {
+	request, err := s.repo.FindExtensionRequest(ctx, strings.TrimSpace(id), strings.TrimSpace(requestID))
+	if err != nil {
+		return nil, err
+	}
+	if request.Status != "PENDING" {
+		return nil, ValidationError{Fields: map[string]string{"status": "Only pending Journey extension requests can be cancelled"}}
+	}
+	now := time.Now().UTC()
+	request.Status = "CANCELLED"
+	request.CancelledBy = strings.TrimSpace(actorUserID)
+	request.CancelledAt = &now
+	request.UpdatedAt = now
+	if err := s.repo.UpdateExtensionRequest(ctx, request); err != nil {
+		return nil, err
+	}
+	dto := journeyExtensionRequestDTO(*request)
+	return &dto, nil
+}
+
+func journeyExtensionRequestDTO(row db.JourneyExtensionRequest) JourneyExtensionRequestDTO {
+	return JourneyExtensionRequestDTO{ID: row.ID, CollaboratorJourneyID: row.CollaboratorJourneyID, ReceiptNumber: row.ReceiptNumber, PreviousEndDate: formatDate(row.PreviousEndDate), ProposedEndDate: formatDate(row.ProposedEndDate), AdditionalDays: row.AdditionalDays, Reason: row.Reason, Status: row.Status, RequestedBy: row.RequestedBy, RequestedAt: row.RequestedAt.Format(time.RFC3339), AcceptedBy: row.AcceptedBy, AcceptedAt: formatDateTimePtr(row.AcceptedAt), RejectedBy: row.RejectedBy, RejectedAt: formatDateTimePtr(row.RejectedAt), CancelledBy: row.CancelledBy, CancelledAt: formatDateTimePtr(row.CancelledAt)}
+}
+
+func journeyExtensionReceiptNumber(id string) string {
+	clean := strings.ToUpper(strings.ReplaceAll(strings.TrimSpace(id), "-", ""))
+	if len(clean) > 12 {
+		clean = clean[:12]
+	}
+	return "JER-" + clean
 }
 
 func (s *service) GetByID(ctx context.Context, id string) (*CollaboratorDTO, error) {

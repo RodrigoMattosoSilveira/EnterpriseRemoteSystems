@@ -68,6 +68,18 @@ type apiCollaboratorResponse struct {
 	} `json:"data"`
 }
 
+type apiJourneyExtensionResponse struct {
+	Data struct {
+		ID              string `json:"id"`
+		ReceiptNumber   string `json:"receiptNumber"`
+		PreviousEndDate string `json:"previousEndDate"`
+		ProposedEndDate string `json:"proposedEndDate"`
+		AdditionalDays  int    `json:"additionalDays"`
+		Reason          string `json:"reason"`
+		Status          string `json:"status"`
+	} `json:"data"`
+}
+
 type apiReferenceDataResponse struct {
 	Data struct {
 		ID string `json:"id"`
@@ -385,7 +397,7 @@ func TestCreateDailyBRLCollaboratorRejectsTooManyAmountDecimals(t *testing.T) {
 	assertValidationError(t, res, "dailyBrlAmount", "Daily BRL amount can have at most two decimal places")
 }
 
-func TestUpdateCollaboratorEditsAssignmentPaymentAndExtensionDays(t *testing.T) {
+func TestUpdateCollaboratorEditsAssignmentPaymentWithoutBypassingExtensionGovernance(t *testing.T) {
 	server, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -436,15 +448,12 @@ func TestUpdateCollaboratorEditsAssignmentPaymentAndExtensionDays(t *testing.T) 
 	if body.Data.DailyBRLAmount != nil {
 		t.Fatalf("expected dailyBrlAmount to be cleared, got %#v", body.Data.DailyBRLAmount)
 	}
-	if body.Data.ExtensionDays != 12 {
-		t.Fatalf("expected extensionDays 12, got %d", body.Data.ExtensionDays)
-	}
-	if body.Data.ProjectedEndDate != "2026-09-11" {
-		t.Fatalf("expected projected end date with 12 extension days, got %q", body.Data.ProjectedEndDate)
+	if body.Data.ExtensionDays != created.Data.ExtensionDays || body.Data.ProjectedEndDate != created.Data.ProjectedEndDate {
+		t.Fatalf("general Collaborator update must not bypass governed Journey extension: before=%+v after=%+v", created.Data, body.Data)
 	}
 }
 
-func TestExtendCollaboratorJourneyAddsDaysWithoutChangingOtherAttributes(t *testing.T) {
+func TestExtendCollaboratorJourneyCreatesPendingProposalWithoutChangingJourney(t *testing.T) {
 	server, cleanup := newTestServer(t)
 	defer cleanup()
 
@@ -452,43 +461,33 @@ func TestExtendCollaboratorJourneyAddsDaysWithoutChangingOtherAttributes(t *test
 	created := createCollaborator(t, server, validCollaboratorPayload(person.Data.MembershipID, nil))
 
 	res := postJSON(t, server, http.MethodPost, collaboratorsURL+created.Data.ID+"/extend", map[string]any{
-		"additionalDays": 14,
+		"additionalDays": 14, "reason": "Operational continuity requires two additional weeks",
 	})
 	defer res.Body.Close()
 	if res.StatusCode != http.StatusOK {
 		var body apiErrorResponse
 		decodeJSON(t, res, &body)
-		t.Fatalf("expected extend Journey status %d, got %d with error %+v", http.StatusOK, res.StatusCode, body.Error)
+		t.Fatalf("expected extension proposal status %d, got %d with error %+v", http.StatusOK, res.StatusCode, body.Error)
+	}
+	var proposal apiJourneyExtensionResponse
+	decodeJSON(t, res, &proposal)
+	if proposal.Data.Status != "PENDING" || proposal.Data.AdditionalDays != 14 || proposal.Data.Reason == "" {
+		t.Fatalf("unexpected pending extension proposal: %+v", proposal.Data)
+	}
+	if proposal.Data.PreviousEndDate != created.Data.ProjectedEndDate || proposal.Data.ProposedEndDate != "2026-09-13" {
+		t.Fatalf("unexpected proposal dates: %+v", proposal.Data)
 	}
 
-	var extended apiCollaboratorResponse
-	decodeJSON(t, res, &extended)
-	if extended.Data.ExtensionDays != created.Data.ExtensionDays+14 {
-		t.Fatalf("expected cumulative extension %d, got %d", created.Data.ExtensionDays+14, extended.Data.ExtensionDays)
-	}
-	if extended.Data.ProjectedEndDate != "2026-09-13" {
-		t.Fatalf("expected projected end date 2026-09-13, got %q", extended.Data.ProjectedEndDate)
-	}
-	if extended.Data.PaymentMethodID != created.Data.PaymentMethodID || extended.Data.PaymentValue != created.Data.PaymentValue {
-		t.Fatalf("Journey extension must not change payment terms: before=%+v after=%+v", created.Data, extended.Data)
-	}
-	if extended.Data.SectorID != created.Data.SectorID || extended.Data.LocationID != created.Data.LocationID || extended.Data.TaskID != created.Data.TaskID {
-		t.Fatalf("Journey extension must not change work assignment: before=%+v after=%+v", created.Data, extended.Data)
+	current := getCollaborator(t, server, created.Data.ID)
+	if current.Data.ExtensionDays != created.Data.ExtensionDays || current.Data.ProjectedEndDate != created.Data.ProjectedEndDate {
+		t.Fatalf("pending proposal must not change Journey dates: before=%+v after=%+v", created.Data, current.Data)
 	}
 
-	res = postJSON(t, server, http.MethodPost, collaboratorsURL+created.Data.ID+"/extend", map[string]any{
-		"additionalDays": 7,
+	second := postJSON(t, server, http.MethodPost, collaboratorsURL+created.Data.ID+"/extend", map[string]any{
+		"additionalDays": 7, "reason": "Second proposal must wait",
 	})
-	defer res.Body.Close()
-	if res.StatusCode != http.StatusOK {
-		var body apiErrorResponse
-		decodeJSON(t, res, &body)
-		t.Fatalf("expected second extend Journey status %d, got %d with error %+v", http.StatusOK, res.StatusCode, body.Error)
-	}
-	decodeJSON(t, res, &extended)
-	if extended.Data.ExtensionDays != created.Data.ExtensionDays+21 || extended.Data.ProjectedEndDate != "2026-09-20" {
-		t.Fatalf("expected cumulative 21-day extension through 2026-09-20, got extensionDays=%d projectedEndDate=%q", extended.Data.ExtensionDays, extended.Data.ProjectedEndDate)
-	}
+	defer second.Body.Close()
+	assertValidationError(t, second, "additionalDays", "Resolve the pending Journey extension request before creating another")
 }
 
 func TestExtendCollaboratorJourneyRejectsNonPositiveDays(t *testing.T) {
@@ -500,6 +499,7 @@ func TestExtendCollaboratorJourneyRejectsNonPositiveDays(t *testing.T) {
 
 	res := postJSON(t, server, http.MethodPost, collaboratorsURL+created.Data.ID+"/extend", map[string]any{
 		"additionalDays": 0,
+		"reason":         "Invalid zero-day extension",
 	})
 	defer res.Body.Close()
 	assertValidationError(t, res, "additionalDays", "Additional days must be greater than zero")
@@ -782,25 +782,24 @@ func TestListCollaboratorsFiltersByPersonNameAndNickname(t *testing.T) {
 	}
 }
 
-func TestUpdateCollaboratorRejectsNegativeExtensionDays(t *testing.T) {
+func TestUpdateCollaboratorIgnoresLegacyExtensionDaysField(t *testing.T) {
 	server, cleanup := newTestServer(t)
 	defer cleanup()
-
 	person := createPerson(t, server, validCompletePersonPayload(1, nil))
 	created := createCollaborator(t, server, validCollaboratorPayload(person.Data.MembershipID, nil))
-
 	res := postJSON(t, server, http.MethodPut, collaboratorsURL+created.Data.ID, map[string]any{
-		"sectorId":        "ref-sector-mining",
-		"locationId":      "ref-location-main-mine",
-		"taskId":          "ref-task-miner",
-		"paymentMethodId": "ref-method-daily",
-		"paymentValue":    150.0,
-		"dailyBrlAmount":  150.0,
-		"extensionDays":   -1,
+		"sectorId": "ref-sector-mining", "locationId": "ref-location-main-mine", "taskId": "ref-task-miner",
+		"paymentMethodId": "ref-method-daily", "paymentValue": 150.0, "dailyBrlAmount": 150.0, "extensionDays": -1,
 	})
 	defer res.Body.Close()
-
-	assertValidationError(t, res, "extensionDays", "Extension days must be zero or greater")
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("expected legacy extensionDays to be ignored, got %d", res.StatusCode)
+	}
+	var body apiCollaboratorResponse
+	decodeJSON(t, res, &body)
+	if body.Data.ExtensionDays != created.Data.ExtensionDays || body.Data.ProjectedEndDate != created.Data.ProjectedEndDate {
+		t.Fatalf("general update changed governed Journey extension")
+	}
 }
 
 func TestCreateCollaboratorRejectsIncompletePerson(t *testing.T) {
@@ -936,6 +935,22 @@ func createCollaborator(t *testing.T, server *fiber.App, payload map[string]any)
 		t.Fatalf("expected create collaborator status %d, got %d with error %+v", http.StatusCreated, res.StatusCode, body.Error)
 	}
 
+	var body apiCollaboratorResponse
+	decodeJSON(t, res, &body)
+	return body
+}
+
+func getCollaborator(t *testing.T, server *fiber.App, id string) apiCollaboratorResponse {
+	t.Helper()
+	req := httptest.NewRequest(http.MethodGet, collaboratorsURL+id, nil)
+	res, err := server.Test(req, fiber.TestConfig{Timeout: 0, FailOnTimeout: false})
+	if err != nil {
+		t.Fatalf("GET collaborator: %v", err)
+	}
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("expected get collaborator status %d, got %d", http.StatusOK, res.StatusCode)
+	}
 	var body apiCollaboratorResponse
 	decodeJSON(t, res, &body)
 	return body
