@@ -4,6 +4,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { PriceListItem } from "../../types/priceList";
+import { AuthorizationProvider } from "../../components/layout/AuthorizationContext";
 import { PriceListPage } from "./PriceListPage";
 
 type FetchCall = {
@@ -259,6 +260,38 @@ describe("PriceListPage", () => {
     await waitForText("Reactivated price-list item: Document copy.");
     expect(fetchCalls.some((call) => call.url === "/api/v1/price-list-items/price-admin-copy/reactivate")).toBe(true);
   });
+
+  it("keeps price-list mutation controls disabled for a read-only Tenant Viewer", async () => {
+    mockPriceListFetch();
+
+    renderPage(["price_lists.read"], ["TENANT_VIEWER"]);
+
+    await waitForText("Document copy");
+
+    expect(buttonByName("Add Price List Item").disabled).toBe(true);
+
+    const editButtons = buttonsByName("Edit");
+    expect(editButtons.length).toBeGreaterThan(0);
+    expect(editButtons.every((button) => button.disabled)).toBe(true);
+
+    const deactivateButtons = buttonsByName("Deactivate");
+    expect(deactivateButtons.length).toBeGreaterThan(0);
+    expect(deactivateButtons.every((button) => button.disabled)).toBe(true);
+
+    await act(async () => {
+      editButtons[0].click();
+    });
+
+    expect(textNode("Edit Document copy")).toBeUndefined();
+    expect(fetchCalls.some((call) => call.method !== "GET")).toBe(false);
+
+    await clickCheckbox("Include inactive");
+    await waitForText("Old canteen item");
+
+    const reactivateButtons = buttonsByName("Reactivate");
+    expect(reactivateButtons.length).toBeGreaterThan(0);
+    expect(reactivateButtons.every((button) => button.disabled)).toBe(true);
+  });
 });
 
 function mockPriceListFetch() {
@@ -356,7 +389,10 @@ function mockPriceListFetch() {
   });
 }
 
-function renderPage() {
+function renderPage(
+  permissions = ["price_lists.read", "price_lists.create", "price_lists.update"],
+  roleCodes = ["TENANT_ADMIN"],
+) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
@@ -368,9 +404,20 @@ function renderPage() {
   act(() => {
     root = createRoot(container);
     root.render(
-      <QueryClientProvider client={queryClient}>
-        <RouterProvider router={router} />
-      </QueryClientProvider>,
+      <AuthorizationProvider
+        value={{
+          actorKey: "price-list-page-test",
+          actorRecordId: "actor-price-list-page-test",
+          tenantId: "default",
+          scope: "TENANT",
+          roleCodes,
+          permissions,
+        }}
+      >
+        <QueryClientProvider client={queryClient}>
+          <RouterProvider router={router} />
+        </QueryClientProvider>
+      </AuthorizationProvider>,
     );
   });
 }
@@ -467,10 +514,14 @@ async function submitFormByHeading(headingText: string) {
   });
 }
 
-function buttonByName(name: string) {
-  const button = Array.from(container.querySelectorAll("button")).find((element) =>
+function buttonsByName(name: string) {
+  return Array.from(container.querySelectorAll("button")).filter((element) =>
     element.textContent?.trim() === name,
-  ) as HTMLButtonElement | undefined;
+  ) as HTMLButtonElement[];
+}
+
+function buttonByName(name: string) {
+  const button = buttonsByName(name)[0];
   if (!button) throw new Error(`Button not found: ${name}`);
   return button;
 }
