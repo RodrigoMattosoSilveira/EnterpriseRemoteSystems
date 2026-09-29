@@ -1598,6 +1598,22 @@ export const enUSMessages = {
 
   "common.searching": "Searching…",
   "common.select": "Select",
+  'people.photo.title': 'Photo',
+  'people.photo.manageDescription': 'Add, replace, or remove the global Person photo. Changes are visible in every Entity where this Person is a member.',
+  'people.photo.readDescription': 'Person photo.',
+  'people.photo.createDescription': 'Optionally select a photo. It will be uploaded after the Person is created.',
+  'people.photo.add': 'Add Photo',
+  'people.photo.replace': 'Replace Photo',
+  'people.photo.remove': 'Remove Photo',
+  'people.photo.fileLabel': 'Choose person photo',
+  'people.photo.alt': 'Person photo',
+  'people.photo.previewAlt': 'Selected person photo preview',
+  'people.photo.none': 'No photo',
+  'people.photo.requirements': 'JPEG or PNG, maximum 5 MiB, dimensions 64–2048 pixels.',
+  'people.photo.invalidType': 'Choose a JPEG or PNG image.',
+  'people.photo.invalidSize': 'The photo must be no larger than 5 MiB.',
+  'people.photo.clearSelection': 'Clear selection',
+  "people.photo.uploadFailedAfterCreate": "Person created, but the photo could not be uploaded. You can retry from the Person page.",
 } as const;
 
 export type TranslationKey = keyof typeof enUSMessages;

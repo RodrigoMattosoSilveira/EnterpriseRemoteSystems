@@ -3,6 +3,9 @@ import {
   createPerson,
   createPersonMembership,
   getPerson,
+  getPersonPhoto,
+  setPersonPhoto,
+  deletePersonPhoto,
   listPeople,
   listPeoplePage,
   searchGlobalPeople,
@@ -87,5 +90,36 @@ export function useCreatePersonMembership() {
       queryClient.invalidateQueries({ queryKey: ["people"] });
       queryClient.invalidateQueries({ queryKey: ["collaborators", "candidates"] });
     },
+  });
+}
+
+export function usePersonPhoto(personId: string) {
+  return useQuery({
+    queryKey: ["people", personId, "photo"],
+    queryFn: async () => {
+      try { return await getPersonPhoto(personId); }
+      catch (error) {
+        if (error && typeof error === "object" && "status" in error && (error as { status?: number }).status === 404) return null;
+        throw error;
+      }
+    },
+    enabled: Boolean(personId),
+    retry: false,
+  });
+}
+
+export function useSetPersonPhoto(personId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (file: File) => setPersonPhoto(personId, file),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["people", personId, "photo"] }),
+  });
+}
+
+export function useDeletePersonPhoto(personId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => deletePersonPhoto(personId),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["people", personId, "photo"] }),
   });
 }

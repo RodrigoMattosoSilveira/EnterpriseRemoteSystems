@@ -12,6 +12,7 @@ func NewServer(deps routes.Dependencies) *fiber.App {
 	server := fiber.New(fiber.Config{
 		AppName:      "Enterprise Remote Systems API",
 		ServerHeader: "enterpriseremotesystems",
+		BodyLimit:    6 * 1024 * 1024,
 	})
 
 	server.Use(recover.New())
