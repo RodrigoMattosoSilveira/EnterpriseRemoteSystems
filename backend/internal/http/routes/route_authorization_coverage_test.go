@@ -49,6 +49,8 @@ func TestEveryRegisteredAPIRouteHasAuthorizationCoverage(t *testing.T) {
 		"ReverseEntry":                              {},
 		"ReplaceEntry":                              {},
 		"ZeroGold":                                  {},
+		"ListAuditLogs":                             {},
+		"ListTenantRoleActors":                      {},
 		"ListSupportAccessLeases":                   {},
 		"ListEligibleSupportAccessLeasePermissions": {},
 		"ListSupportAccessLeaseAuditLogs":           {},
