@@ -193,6 +193,42 @@ describe("JourneySettlementPanel", () => {
     });
   });
 
+  it("offers a governed Journey extension when the Tenant owes the Collaborator", async () => {
+    mockSettlementFetch({ preview: { brlBalance: 900, goldGramBalance: 2.5 } });
+
+    renderPanel();
+    await waitForText("Tenant owes Collaborator");
+    expect(textNode("Propose Journey Extension")).toBeTruthy();
+  });
+
+  it("allows a governed Journey extension proposal when all balances are zero", async () => {
+    const requests: Array<{ url: string; init?: RequestInit; body?: unknown }> = [];
+    mockSettlementFetch({
+      preview: {
+        brlBalance: 0,
+        goldGramBalance: 0,
+        outstandingReceipts: 0,
+        canClose: true,
+        blockingReasons: [],
+      },
+      onRequest: (request) => requests.push(request),
+    });
+
+    renderPanel();
+    await waitForText("Ready to close Journey");
+    await clickButton("Propose Journey Extension");
+    await setFieldValue("Additional days", "7");
+    await setFieldValue("Reason for extension", "Replacement worker has not arrived");
+    await clickSubmitButton("Submit Extension Proposal");
+    await waitForText("Collaborator acceptance is required");
+
+    const request = requests.find((candidate) => candidate.url.includes("/collaborators/collab-1/extend"));
+    expect(request?.body).toEqual({
+      additionalDays: 7,
+      reason: "Replacement worker has not arrived",
+    });
+  });
+
   it("presents the final settlement workflow according to balance direction", async () => {
     mockSettlementFetch({ preview: { brlBalance: -80, goldGramBalance: -1.25 } });
 
