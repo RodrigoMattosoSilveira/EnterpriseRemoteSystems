@@ -68,6 +68,9 @@ jobs:
       - name: Verify Bite 32 release coverage contract
         run: make bite32-release-coverage-check
 
+      - name: Verify Bite 32.6 release-hardening contract
+        run: make bite326-release-hardening-check
+
       - name: Rehearse pre-30I database through final 30I migration
         run: make migration-rehearsal-check
 

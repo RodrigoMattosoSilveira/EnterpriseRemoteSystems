@@ -61,6 +61,9 @@ jobs:
       - name: Verify Bite 32 release coverage contract
         run: make bite32-release-coverage-check
 
+      - name: Verify Bite 32.6 release-hardening contract
+        run: make bite326-release-hardening-check
+
       - name: Set up Go
         uses: actions/setup-go@v6
         with:
@@ -620,6 +623,10 @@ jobs:
       - name: Verify Bite 32 release coverage contract
         shell: bash
         run: python3 scripts/verify-bite32-release-coverage.py
+
+      - name: Verify Bite 32.6 release-hardening contract
+        shell: bash
+        run: python3 scripts/verify-bite326-release-coverage.py
 
       - name: Show deployed Playwright target
         shell: bash

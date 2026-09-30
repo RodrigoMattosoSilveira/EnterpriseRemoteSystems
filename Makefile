@@ -377,6 +377,10 @@ bite30l4-coverage-manifest-check:
 bite32-release-coverage-check:
 	python3 scripts/verify-bite32-release-coverage.py
 
+.PHONY: bite326-release-hardening-check
+bite326-release-hardening-check:
+	python3 scripts/verify-bite326-release-coverage.py
+
 .PHONY: post-bite30-backlog-reconciliation-check
 post-bite30-backlog-reconciliation-check:
 	python3 scripts/verify-post-bite-30-backlog-reconciliation.py
@@ -393,6 +397,7 @@ production-release-evidence-check:
 local-check:
 	$(MAKE) bite30l4-coverage-manifest-check
 	$(MAKE) bite32-release-coverage-check
+	$(MAKE) bite326-release-hardening-check
 	$(MAKE) post-bite30-backlog-reconciliation-check
 	$(MAKE) deployed-playwright-evidence-check
 	$(MAKE) production-release-evidence-check
@@ -451,7 +456,7 @@ local-docker-check: local-docker-check-image
 		-e GOMODCACHE=/tmp/gomod \
 		-e NPM_CONFIG_CACHE=/tmp/npm-cache \
 		$(LOCAL_DOCKER_CHECK_IMAGE) \
-		bash -lc 'set -euo pipefail; make bite30l4-coverage-manifest-check; make bite32-release-coverage-check; make post-bite30-backlog-reconciliation-check; make deployed-playwright-evidence-check; make production-release-evidence-check; make local-hot-reload-check; make local-auth-cookie-config-check; make server-authz-bootstrap-config-check; make legacy-identity-dependency-check; make brazilian-demo-presentation-check; make migration-rehearsal-check; cd backend && go clean -testcache && go test ./...; cd ../frontend && npm ci && npm run test:run && npx playwright install chromium && npx playwright test && npm run build'
+		bash -lc 'set -euo pipefail; make bite30l4-coverage-manifest-check; make bite32-release-coverage-check; make bite326-release-hardening-check; make post-bite30-backlog-reconciliation-check; make deployed-playwright-evidence-check; make production-release-evidence-check; make local-hot-reload-check; make local-auth-cookie-config-check; make server-authz-bootstrap-config-check; make legacy-identity-dependency-check; make brazilian-demo-presentation-check; make migration-rehearsal-check; cd backend && go clean -testcache && go test ./...; cd ../frontend && npm ci && npm run test:run && npx playwright install chromium && npx playwright test && npm run build'
 
 # ==============================================================================
 # Generic server environment targets
