@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"enterpriseremotesystems/backend/internal/authz"
 	"enterpriseremotesystems/backend/internal/db"
 	peoplepkg "enterpriseremotesystems/backend/internal/people"
 	"enterpriseremotesystems/backend/internal/shared/ids"
@@ -182,8 +183,6 @@ func (s *service) Update(ctx context.Context, id string, req UpdateCollaboratorR
 	}
 
 	row.UpdatedAt = time.Now().UTC()
-	row.ExtensionDays = req.ExtensionDays
-	row.ProjectedEndDate = row.DefaultEndDate.AddDate(0, 0, req.ExtensionDays)
 	row.PaymentMethodID = strings.TrimSpace(req.PaymentMethodID)
 	row.PaymentValue = paymentConfig.compatibilityValue()
 	row.FixedMonthlyBRLAmount = paymentConfig.FixedMonthlyBRLAmount
@@ -246,34 +245,158 @@ func (s *service) UpdateWorkAssignment(ctx context.Context, id string, req Updat
 	return ptr(ToDTO(*updated)), nil
 }
 
-func (s *service) ExtendJourney(ctx context.Context, id string, req ExtendCollaboratorJourneyRequest, actorUserID string) (*CollaboratorDTO, error) {
-	_ = actorUserID
+func (s *service) ExtendJourney(ctx context.Context, id string, req ExtendCollaboratorJourneyRequest, actorUserID string) (*JourneyExtensionRequestDTO, error) {
 	if err := ValidateExtendCollaboratorJourney(req); err != nil {
 		return nil, err
 	}
-
 	row, err := s.repo.FindByID(ctx, strings.TrimSpace(id))
 	if err != nil {
 		return nil, err
 	}
 	if row.ClosedAt != nil || strings.EqualFold(strings.TrimSpace(row.Status.Code), "FINISHED") {
-		return nil, ValidationError{Fields: map[string]string{
-			"additionalDays": "Closed Journeys cannot be extended",
-		}}
+		return nil, ValidationError{Fields: map[string]string{"additionalDays": "Closed Journeys cannot be extended"}}
 	}
-
-	row.ExtensionDays += req.AdditionalDays
-	row.ProjectedEndDate = row.DefaultEndDate.AddDate(0, 0, row.ExtensionDays)
-	row.UpdatedAt = time.Now().UTC()
-	if err := s.repo.UpdateExtension(ctx, row); err != nil {
-		return nil, err
-	}
-
-	updated, err := s.repo.FindByID(ctx, row.ID)
+	existing, err := s.repo.ListExtensionRequests(ctx, row.ID)
 	if err != nil {
 		return nil, err
 	}
-	return ptr(ToDTO(*updated)), nil
+	for _, candidate := range existing {
+		if candidate.Status == "PENDING" {
+			return nil, ValidationError{Fields: map[string]string{"additionalDays": "Resolve the pending Journey extension request before creating another"}}
+		}
+	}
+	now := time.Now().UTC()
+	requestID := ids.New()
+	request := &db.JourneyExtensionRequest{
+		BaseModel: db.BaseModel{ID: requestID, CreatedAt: now, UpdatedAt: now},
+		TenantID:  tenantctx.TenantID(ctx), CollaboratorJourneyID: row.ID,
+		ReceiptNumber: journeyExtensionReceiptNumber(requestID), PreviousEndDate: row.ProjectedEndDate,
+		ProposedEndDate: row.ProjectedEndDate.AddDate(0, 0, req.AdditionalDays), AdditionalDays: req.AdditionalDays,
+		Reason: strings.TrimSpace(req.Reason), Status: "PENDING", RequestedBy: strings.TrimSpace(actorUserID), RequestedAt: now,
+	}
+	if err := s.repo.CreateExtensionRequest(ctx, request); err != nil {
+		return nil, err
+	}
+	dto := journeyExtensionRequestDTO(*request)
+	return &dto, nil
+}
+
+func (s *service) ListExtensionRequests(ctx context.Context, id string) ([]JourneyExtensionRequestDTO, error) {
+	if _, err := s.repo.FindByID(ctx, strings.TrimSpace(id)); err != nil {
+		return nil, err
+	}
+	rows, err := s.repo.ListExtensionRequests(ctx, strings.TrimSpace(id))
+	if err != nil {
+		return nil, err
+	}
+	out := make([]JourneyExtensionRequestDTO, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, journeyExtensionRequestDTO(row))
+	}
+	return out, nil
+}
+
+func (s *service) ListSelfExtensionRequests(ctx context.Context, id, membershipID string) ([]JourneyExtensionRequestDTO, error) {
+	if _, err := s.repo.FindByIDForMembership(ctx, strings.TrimSpace(id), strings.TrimSpace(membershipID)); err != nil {
+		return nil, err
+	}
+	rows, err := s.repo.ListExtensionRequests(ctx, strings.TrimSpace(id))
+	if err != nil {
+		return nil, err
+	}
+	out := make([]JourneyExtensionRequestDTO, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, journeyExtensionRequestDTO(row))
+	}
+	return out, nil
+}
+
+func (s *service) AcceptExtensionRequest(ctx context.Context, id, requestID, actorCollaboratorID, actorUserID string) (*JourneyExtensionRequestDTO, error) {
+	if strings.TrimSpace(actorCollaboratorID) == "" || strings.TrimSpace(actorCollaboratorID) != strings.TrimSpace(id) {
+		return nil, authz.ErrForbidden
+	}
+	journey, err := s.repo.FindByID(ctx, strings.TrimSpace(id))
+	if err != nil {
+		return nil, err
+	}
+	request, err := s.repo.FindExtensionRequest(ctx, journey.ID, strings.TrimSpace(requestID))
+	if err != nil {
+		return nil, err
+	}
+	if request.Status != "PENDING" {
+		return nil, ValidationError{Fields: map[string]string{"status": "Only pending Journey extension requests can be accepted"}}
+	}
+	if journey.ClosedAt != nil || strings.EqualFold(strings.TrimSpace(journey.Status.Code), "FINISHED") {
+		return nil, ValidationError{Fields: map[string]string{"status": "Closed Journeys cannot accept extensions"}}
+	}
+	now := time.Now().UTC()
+	request.Status = "ACCEPTED"
+	request.AcceptedBy = strings.TrimSpace(actorUserID)
+	request.AcceptedAt = &now
+	request.UpdatedAt = now
+	journey.ExtensionDays += request.AdditionalDays
+	journey.ProjectedEndDate = request.ProposedEndDate
+	journey.UpdatedAt = now
+	if err := s.repo.AcceptExtensionRequest(ctx, journey, request); err != nil {
+		return nil, err
+	}
+	dto := journeyExtensionRequestDTO(*request)
+	return &dto, nil
+}
+
+func (s *service) RejectExtensionRequest(ctx context.Context, id, requestID, actorCollaboratorID, actorUserID string) (*JourneyExtensionRequestDTO, error) {
+	if strings.TrimSpace(actorCollaboratorID) == "" || strings.TrimSpace(actorCollaboratorID) != strings.TrimSpace(id) {
+		return nil, authz.ErrForbidden
+	}
+	request, err := s.repo.FindExtensionRequest(ctx, strings.TrimSpace(id), strings.TrimSpace(requestID))
+	if err != nil {
+		return nil, err
+	}
+	if request.Status != "PENDING" {
+		return nil, ValidationError{Fields: map[string]string{"status": "Only pending Journey extension requests can be rejected"}}
+	}
+	now := time.Now().UTC()
+	request.Status = "REJECTED"
+	request.RejectedBy = strings.TrimSpace(actorUserID)
+	request.RejectedAt = &now
+	request.UpdatedAt = now
+	if err := s.repo.UpdateExtensionRequest(ctx, request); err != nil {
+		return nil, err
+	}
+	dto := journeyExtensionRequestDTO(*request)
+	return &dto, nil
+}
+
+func (s *service) CancelExtensionRequest(ctx context.Context, id, requestID, actorUserID string) (*JourneyExtensionRequestDTO, error) {
+	request, err := s.repo.FindExtensionRequest(ctx, strings.TrimSpace(id), strings.TrimSpace(requestID))
+	if err != nil {
+		return nil, err
+	}
+	if request.Status != "PENDING" {
+		return nil, ValidationError{Fields: map[string]string{"status": "Only pending Journey extension requests can be cancelled"}}
+	}
+	now := time.Now().UTC()
+	request.Status = "CANCELLED"
+	request.CancelledBy = strings.TrimSpace(actorUserID)
+	request.CancelledAt = &now
+	request.UpdatedAt = now
+	if err := s.repo.UpdateExtensionRequest(ctx, request); err != nil {
+		return nil, err
+	}
+	dto := journeyExtensionRequestDTO(*request)
+	return &dto, nil
+}
+
+func journeyExtensionRequestDTO(row db.JourneyExtensionRequest) JourneyExtensionRequestDTO {
+	return JourneyExtensionRequestDTO{ID: row.ID, CollaboratorJourneyID: row.CollaboratorJourneyID, ReceiptNumber: row.ReceiptNumber, PreviousEndDate: formatDate(row.PreviousEndDate), ProposedEndDate: formatDate(row.ProposedEndDate), AdditionalDays: row.AdditionalDays, Reason: row.Reason, Status: row.Status, RequestedBy: row.RequestedBy, RequestedAt: row.RequestedAt.Format(time.RFC3339), AcceptedBy: row.AcceptedBy, AcceptedAt: formatDateTimePtr(row.AcceptedAt), RejectedBy: row.RejectedBy, RejectedAt: formatDateTimePtr(row.RejectedAt), CancelledBy: row.CancelledBy, CancelledAt: formatDateTimePtr(row.CancelledAt)}
+}
+
+func journeyExtensionReceiptNumber(id string) string {
+	clean := strings.ToUpper(strings.ReplaceAll(strings.TrimSpace(id), "-", ""))
+	if len(clean) > 12 {
+		clean = clean[:12]
+	}
+	return "JER-" + clean
 }
 
 func (s *service) GetByID(ctx context.Context, id string) (*CollaboratorDTO, error) {
@@ -477,3 +600,143 @@ func normalizePaymentMethodCode(code string) string {
 }
 
 func ptr[T any](value T) *T { return &value }
+
+func (s *service) CreateJourneyBonusAward(ctx context.Context, id string, req CreateJourneyBonusAwardRequest, actorID, actorUserID string) (*JourneyBonusAwardDTO, error) {
+	row, err := s.repo.FindByID(ctx, strings.TrimSpace(id))
+	if err != nil {
+		return nil, err
+	}
+	if row.ClosedAt != nil {
+		return nil, ValidationError{Fields: map[string]string{"journeyBonus": "Journey bonus awards can only be created while the Journey is open"}}
+	}
+	fields := map[string]string{}
+	unit := strings.ToUpper(strings.TrimSpace(req.ValueUnitCode))
+	if unit != "BRL" && unit != "GOLD_GRAM" {
+		fields["valueUnitCode"] = "Value unit must be BRL or GOLD_GRAM"
+	}
+	if req.Amount <= 0 {
+		fields["amount"] = "Bonus amount must be greater than zero"
+	} else if unit == "BRL" && !hasAtMostDecimalPlaces(req.Amount, brlPaymentDecimalPlaces) {
+		fields["amount"] = "BRL bonus amount supports at most 2 decimal places"
+	} else if unit == "GOLD_GRAM" && !hasAtMostDecimalPlaces(req.Amount, goldCommissionDecimalPlaces) {
+		fields["amount"] = "Gold bonus amount supports at most 8 decimal places"
+	}
+	effectiveDate, dateErr := parseDate(req.EffectiveDate)
+	if dateErr != nil {
+		fields["effectiveDate"] = "Effective date must be YYYY-MM-DD"
+	}
+	today := time.Now().UTC().Truncate(24 * time.Hour)
+	if dateErr == nil && (effectiveDate.Before(row.JourneyStartDate) || effectiveDate.After(today)) {
+		fields["effectiveDate"] = "Bonus effective date must be on or after the Journey start date and not in the future"
+	}
+	if len(fields) > 0 {
+		return nil, ValidationError{Fields: fields}
+	}
+	if _, err := s.repo.FindValueUnitByCode(ctx, unit); err != nil {
+		return nil, ValidationError{Fields: map[string]string{"valueUnitCode": "Selected bonus value unit is not active for this tenant"}}
+	}
+	now := time.Now().UTC()
+	award := &db.JourneyBonusAward{
+		BaseModel: db.BaseModel{ID: ids.New(), CreatedAt: now, UpdatedAt: now},
+		TenantID:  row.TenantID, CollaboratorJourneyID: row.ID,
+		ValueUnitCode: unit, Amount: req.Amount, EffectiveDate: effectiveDate,
+		Description: strings.TrimSpace(req.Description), Status: "PENDING_APPROVAL",
+		RequestedByActorID: strings.TrimSpace(actorID), RequestedByUserID: strings.TrimSpace(actorUserID), RequestedAt: now,
+	}
+	award.ReceiptNumber = journeyBonusReceiptNumber(award.ID)
+	if strings.TrimSpace(award.RequestedByActorID) == "" {
+		return nil, authz.ErrMissingActor
+	}
+	if err := s.repo.CreateJourneyBonusAward(ctx, award); err != nil {
+		return nil, err
+	}
+	dto := toJourneyBonusAwardDTO(*award)
+	return &dto, nil
+}
+
+func (s *service) ListJourneyBonusAwards(ctx context.Context, id string) ([]JourneyBonusAwardDTO, error) {
+	if _, err := s.repo.FindByID(ctx, strings.TrimSpace(id)); err != nil {
+		return nil, err
+	}
+	rows, err := s.repo.ListJourneyBonusAwards(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]JourneyBonusAwardDTO, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, toJourneyBonusAwardDTO(row))
+	}
+	return out, nil
+}
+
+func (s *service) ApproveJourneyBonusAward(ctx context.Context, id, awardID, actorID, actorUserID string) (*JourneyBonusAwardDTO, error) {
+	journey, err := s.repo.FindByID(ctx, strings.TrimSpace(id))
+	if err != nil {
+		return nil, err
+	}
+	if journey.ClosedAt != nil {
+		return nil, ValidationError{Fields: map[string]string{"journeyBonus": "Journey bonus awards can only be approved while the Journey is open"}}
+	}
+	award, err := s.repo.FindJourneyBonusAward(ctx, journey.ID, awardID)
+	if err != nil {
+		return nil, err
+	}
+	if award.Status != "PENDING_APPROVAL" {
+		return nil, ValidationError{Fields: map[string]string{"journeyBonus": "Journey bonus award is no longer pending approval"}}
+	}
+	actorID = strings.TrimSpace(actorID)
+	if actorID == "" {
+		return nil, authz.ErrMissingActor
+	}
+	if actorID == strings.TrimSpace(award.RequestedByActorID) {
+		return nil, ValidationError{Fields: map[string]string{"secondApprover": "A different Tenant Administrator must approve the Journey bonus award"}}
+	}
+	valueUnit, err := s.repo.FindValueUnitByCode(ctx, award.ValueUnitCode)
+	if err != nil {
+		return nil, err
+	}
+	now := time.Now().UTC()
+	description := strings.TrimSpace(award.Description)
+	if description == "" {
+		description = "Journey bonus award"
+	}
+	entryID := "ledger-journey-bonus-" + award.ID
+	entry := &db.LedgerEntry{
+		BaseModel: db.BaseModel{ID: entryID, CreatedAt: now, UpdatedAt: now},
+		TenantID:  journey.TenantID, PersonID: journey.Membership.PersonID, CollaboratorID: journey.ID,
+		ValueUnitID: valueUnit.ID, EntryType: "EARNING_CREDIT", Direction: "CREDIT", Amount: award.Amount,
+		EffectiveDate: award.EffectiveDate, SourceType: "JOURNEY_BONUS", SourceID: award.ID,
+		Description: description, Active: true, CorrectionType: "ORIGINAL",
+		AuthorizedBy: strings.TrimSpace(actorUserID), AuthorizedAt: &now,
+	}
+	award.Status = "POSTED"
+	award.ApprovedByActorID = actorID
+	award.ApprovedByUserID = strings.TrimSpace(actorUserID)
+	award.ApprovedAt = &now
+	award.LedgerEntryID = entryID
+	award.UpdatedAt = now
+	if err := s.repo.ApproveJourneyBonusAward(ctx, award, entry); err != nil {
+		return nil, err
+	}
+	dto := toJourneyBonusAwardDTO(*award)
+	return &dto, nil
+}
+
+func journeyBonusReceiptNumber(id string) string {
+	clean := strings.ToUpper(strings.ReplaceAll(strings.TrimSpace(id), "-", ""))
+	if len(clean) > 12 {
+		clean = clean[:12]
+	}
+	return "JBA-" + clean
+}
+
+func toJourneyBonusAwardDTO(row db.JourneyBonusAward) JourneyBonusAwardDTO {
+	return JourneyBonusAwardDTO{
+		ID: row.ID, CollaboratorJourneyID: row.CollaboratorJourneyID, ReceiptNumber: row.ReceiptNumber,
+		ValueUnitCode: row.ValueUnitCode, Amount: row.Amount, EffectiveDate: formatDate(row.EffectiveDate),
+		Description: strings.TrimSpace(row.Description), Status: row.Status,
+		RequestedByActorID: row.RequestedByActorID, RequestedByUserID: row.RequestedByUserID,
+		RequestedAt: row.RequestedAt.UTC().Format(time.RFC3339), ApprovedByActorID: row.ApprovedByActorID,
+		ApprovedByUserID: row.ApprovedByUserID, ApprovedAt: formatDateTimePtr(row.ApprovedAt), LedgerEntryID: row.LedgerEntryID,
+	}
+}

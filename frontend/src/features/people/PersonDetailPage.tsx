@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, useLocation, useParams, useSearchParams } from "react-router-dom";
 import { PersonForm } from "./PersonForm";
+import { PersonPhotoCard } from "./PersonPhotoCard";
 import { usePerson, useUpdatePerson } from "./usePeople";
 import { ApiErrorPanel } from "../../components/ApiErrorPanel";
 import { useAuthorizationContext } from "../../components/layout/AuthorizationContext";
@@ -177,6 +178,7 @@ export function PersonDetailPage() {
       </header>
 
       <section className="mx-auto max-w-4xl p-4">
+        <PersonPhotoCard personId={personQuery.data.id} canManage={canManageTenantAuthentication} displayName={`${personQuery.data.firstName} ${personQuery.data.lastName}`} />
         {successMessage && (
           <div
             className="mb-4 rounded border border-green-300 bg-green-50 p-3 text-green-800"

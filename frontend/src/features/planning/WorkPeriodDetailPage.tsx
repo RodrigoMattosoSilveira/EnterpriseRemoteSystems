@@ -25,12 +25,14 @@ import {
   useWorkPlanRoster,
 } from "./usePlanning";
 import { PageContextHeading, PageTitle } from "../../components/layout/PageHeading";
+import { useAuthorizationContext } from "../../components/layout/AuthorizationContext";
 import { useI18n } from "../../i18n";
 
 type Tab = "plan" | "inform" | "outcomes" | "accrual";
 
 export function WorkPeriodDetailPage() {
   const { t, formatDate, formatDateTime } = useI18n();
+  const actor = useAuthorizationContext();
   const { id = "" } = useParams();
   const [selectedTab, setSelectedTab] = useState<Tab | null>(null);
   const auth = useAuthState();
@@ -84,7 +86,9 @@ export function WorkPeriodDetailPage() {
         {t("planning.loadingPeriod")}
       </main>
     );
-  const editable = period.status !== "CLOSED";
+  const canUpdatePlanning =
+    actor.permissions.includes("*") || actor.permissions.includes("planning.update");
+  const editable = period.status !== "CLOSED" && canUpdatePlanning;
   const tenantName =
     tenantOptionsQuery.data?.find((tenant) => tenant.id === period.tenantId)
       ?.name ?? period.tenantId;
@@ -172,6 +176,7 @@ export function WorkPeriodDetailPage() {
             workPeriod={period}
             roster={rosterQuery.data}
             loading={rosterQuery.isLoading}
+            editable={editable}
             pending={informMutation.isPending}
             unreplacedAbsentees={unreplacedAbsentees}
             onInform={() => informMutation.mutate()}

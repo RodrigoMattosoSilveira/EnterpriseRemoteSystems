@@ -72,7 +72,6 @@ export type UpdateCollaboratorInput = {
   sectorId: string;
   locationId: string;
   taskId: string;
-  extensionDays: number;
 };
 
 export type UpdateCollaboratorWorkAssignmentInput = {
@@ -81,8 +80,53 @@ export type UpdateCollaboratorWorkAssignmentInput = {
   taskId: string;
 };
 
+export type JourneyBonusAward = {
+  id: string;
+  collaboratorJourneyId: string;
+  receiptNumber: string;
+  valueUnitCode: "BRL" | "GOLD_GRAM";
+  amount: number;
+  effectiveDate: string;
+  description?: string;
+  status: "PENDING_APPROVAL" | "POSTED";
+  requestedByActorId: string;
+  requestedByUserId: string;
+  requestedAt: string;
+  approvedByActorId?: string;
+  approvedByUserId?: string;
+  approvedAt?: string;
+  ledgerEntryId?: string;
+};
+
+export type CreateJourneyBonusAwardInput = {
+  valueUnitCode: "BRL" | "GOLD_GRAM";
+  amount: number;
+  effectiveDate: string;
+  description?: string;
+};
+
 export type ExtendCollaboratorJourneyInput = {
   additionalDays: number;
+  reason: string;
+};
+
+export type JourneyExtensionRequest = {
+  id: string;
+  collaboratorJourneyId: string;
+  receiptNumber: string;
+  previousEndDate: string;
+  proposedEndDate: string;
+  additionalDays: number;
+  reason: string;
+  status: "PENDING" | "ACCEPTED" | "REJECTED" | "CANCELLED";
+  requestedBy: string;
+  requestedAt: string;
+  acceptedBy?: string;
+  acceptedAt?: string;
+  rejectedBy?: string;
+  rejectedAt?: string;
+  cancelledBy?: string;
+  cancelledAt?: string;
 };
 
 export type CollaboratorListFilter = {

@@ -556,7 +556,7 @@ describe("PersonDetailPage", () => {
     await waitForText("Encerrada");
     await waitForText("Abrir Jornada");
     expect(container.textContent).toContain(
-      "Jornadas atuais e encerradas desta Pessoa no Locatário atual.",
+      "Jornadas atuais e encerradas desta Pessoa na Entidade atual.",
     );
   });
 
@@ -649,7 +649,7 @@ describe("PersonDetailPage", () => {
     renderPersonDetailRoute(personSelfServiceActor);
 
     await waitForText("Histórico de Jornadas");
-    await waitForText("Suas Jornadas de Colaborador atuais e encerradas neste Locatário.");
+    await waitForText("Suas Jornadas de Colaborador atuais e encerradas nesta Entidade.");
     await waitForText("Atual");
     await waitForText("Encerrada");
     await waitForText("Abrir Jornada");
@@ -736,6 +736,9 @@ function mockFetch(
   vi.spyOn(globalThis, "fetch").mockImplementation(
     async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = typeof input === "string" ? input : input.toString();
+      if (url === `/api/v1/people/${PERSON_ID}/photo` && methodOf(init) === "GET") {
+        return jsonResponse({ error: { code: "not_found", message: "Record not found" } }, { status: 404 });
+      }
       return handler(url, init);
     }
   );

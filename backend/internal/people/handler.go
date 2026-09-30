@@ -175,6 +175,35 @@ func (h *Handler) Update(c fiber.Ctx) error {
 	})
 }
 
+func (h *Handler) GetPhoto(c fiber.Ctx) error {
+	photo, err := h.service.GetPhoto(c.Context(), requestTenantID(c), c.Params("id"))
+	if err != nil {
+		return httpx.WriteError(c, err)
+	}
+	c.Set("Content-Type", photo.ContentType)
+	c.Set("Cache-Control", "private, max-age=300")
+	c.Set("X-Content-Type-Options", "nosniff")
+	return c.Send(photo.Data)
+}
+
+func (h *Handler) SetPhoto(c fiber.Ctx) error {
+	contentType := strings.TrimSpace(strings.Split(c.Get("Content-Type"), ";")[0])
+	photo, err := h.service.SetPhoto(c.Context(), requestTenantID(c), c.Params("id"), contentType, c.Body(), actorUserID(c))
+	if err != nil {
+		return httpx.WriteError(c, err)
+	}
+	h.recordAudit(c, authz.PermissionPeopleUpdate, "people.photo.replace", c.Params("id"), `{"contentType":"`+photo.ContentType+`"}`)
+	return c.JSON(httpx.APIResponse{Data: photo})
+}
+
+func (h *Handler) DeletePhoto(c fiber.Ctx) error {
+	if err := h.service.DeletePhoto(c.Context(), requestTenantID(c), c.Params("id")); err != nil {
+		return httpx.WriteError(c, err)
+	}
+	h.recordAudit(c, authz.PermissionPeopleUpdate, "people.photo.remove", c.Params("id"), "")
+	return c.SendStatus(fiber.StatusNoContent)
+}
+
 func (h *Handler) recordAudit(c fiber.Ctx, permission authz.Permission, operation, targetID, metadataJSON string) {
 	h.recordAuditTarget(c, permission, operation, "global_person", targetID, metadataJSON)
 }

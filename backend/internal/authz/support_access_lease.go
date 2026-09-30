@@ -159,14 +159,18 @@ func (s *GORMStore) ListSupportAccessLeaseAuditLogs(ctx context.Context, actor *
 			return nil, ErrForbidden
 		}
 	case ActorScopeTenant:
-		if actor.TenantID != lease.TenantID || !containsRoleCode(actor.RoleCodes, RoleTenantAdmin) || !actor.HasPermission(PermissionSupportAccessLeasesRead) {
+		if actor.TenantID != lease.TenantID || !actor.HasPermission(PermissionSupportAccessLeasesRead) {
 			return nil, ErrForbidden
 		}
-		canonical, err := isCanonicalTenantAdministrator(ctx, s.database, actor.RecordID, actor.TenantID)
-		if err != nil {
-			return nil, err
-		}
-		if !canonical {
+		if containsRoleCode(actor.RoleCodes, RoleTenantAdmin) {
+			canonical, err := isCanonicalTenantAdministrator(ctx, s.database, actor.RecordID, actor.TenantID)
+			if err != nil {
+				return nil, err
+			}
+			if !canonical {
+				return nil, ErrForbidden
+			}
+		} else if !containsRoleCode(actor.RoleCodes, RoleTenantViewer) {
 			return nil, ErrForbidden
 		}
 	default:
@@ -295,7 +299,7 @@ func (s *GORMStore) ListSupportAccessLeases(ctx context.Context, actor *Actor, f
 			query = query.Where("tenant_id = ?", requestedTenant)
 		}
 	case ActorScopeTenant:
-		if actor.TenantID == "" || actor.TenantID == GlobalTenantScope || !containsRoleCode(actor.RoleCodes, RoleTenantAdmin) || !actor.HasPermission(PermissionSupportAccessLeasesRead) {
+		if actor.TenantID == "" || actor.TenantID == GlobalTenantScope || !actor.HasPermission(PermissionSupportAccessLeasesRead) || (!containsRoleCode(actor.RoleCodes, RoleTenantAdmin) && !containsRoleCode(actor.RoleCodes, RoleTenantViewer)) {
 			return nil, ErrForbidden
 		}
 		if requestedTenant != "" && requestedTenant != actor.TenantID {

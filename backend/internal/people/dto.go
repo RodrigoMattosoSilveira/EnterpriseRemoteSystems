@@ -140,3 +140,11 @@ type CreatePersonMembershipRequest struct {
 	StatusID string `json:"statusId"`
 	Notes    string `json:"notes"`
 }
+
+type PersonPhotoDTO struct {
+	ContentType string `json:"contentType"`
+	ByteSize    int    `json:"byteSize"`
+	Width       int    `json:"width"`
+	Height      int    `json:"height"`
+	UpdatedAt   string `json:"updatedAt"`
+}

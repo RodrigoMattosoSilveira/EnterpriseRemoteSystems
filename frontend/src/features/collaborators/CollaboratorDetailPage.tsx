@@ -11,6 +11,8 @@ import type {
 import type { ReferenceDataItem } from "../../types/referenceData";
 import { useReferenceDataByType } from "../reference-data/useReferenceData";
 import { JourneySettlementPanel } from "./JourneySettlementPanel";
+import { JourneyExtensionRequestsPanel } from "./JourneyExtensionRequestsPanel";
+import { JourneyBonusAwardsPanel } from "./JourneyBonusAwardsPanel";
 import { WorkCreditEvidencePanel } from "./WorkCreditEvidencePanel";
 import {
   formatCollaboratorPaymentValue,
@@ -34,6 +36,7 @@ export function CollaboratorDetailPage() {
   const wildcard = actor.permissions.includes("*");
   const canBrowseCollaborators = wildcard || actor.permissions.includes("collaborators.read");
   const canEditCollaborator = wildcard || actor.permissions.includes("collaborators.update");
+  const isTenantAdministrator = actor.roleCodes.includes("TENANT_ADMIN");
   const canEditWorkAssignment =
     canEditCollaborator ||
     actor.permissions.includes("collaborators.work_assignment.update");
@@ -339,11 +342,21 @@ export function CollaboratorDetailPage() {
           </dl>
         </section>
 
+        {canBrowseCollaborators || actor.collaboratorId === collaborator.id ? (
+          <JourneyBonusAwardsPanel
+            collaboratorId={collaborator.id}
+            actorId={actor.actorKey}
+            canManage={isTenantAdministrator && !collaborator.closedAt}
+          />
+        ) : null}
+
         {actor.permissions.includes("work_credit_evidence.self.read") &&
         actor.membershipId &&
         actor.membershipId === collaborator.membershipId ? (
           <WorkCreditEvidencePanel journeyId={collaborator.id} />
         ) : null}
+
+        <JourneyExtensionRequestsPanel collaboratorId={collaborator.id} />
 
         {canPreviewSettlement && !collaborator.closedAt ? (
           <JourneySettlementPanel
@@ -532,7 +545,6 @@ type EditFormState = {
   taskId: string;
   paymentMethodId: string;
   paymentValue: string;
-  extensionDays: string;
 };
 
 function CollaboratorEditPanel({
@@ -612,7 +624,6 @@ function CollaboratorEditPanel({
     event.preventDefault();
 
     const paymentValue = paymentValueValidation.value;
-    const extensionDays = Number(form.extensionDays);
 
     if (
       !form.planningAvailability ||
@@ -628,15 +639,9 @@ function CollaboratorEditPanel({
       setClientError(paymentValueValidation.message);
       return;
     }
-    if (!Number.isInteger(extensionDays) || extensionDays < 0) {
-      setClientError(t("collaborator.validation.extensionDays"));
-      return;
-    }
-
     const input = collaboratorUpdateInput(
       form,
       paymentValue,
-      extensionDays,
       selectedPaymentMethod,
       collaborator,
     );
@@ -741,15 +746,6 @@ function CollaboratorEditPanel({
               value={form.paymentValue}
               onChange={(value) => update("paymentValue", value)}
             />
-            <Input
-              label={t("collaborator.extensionDays")}
-              required
-              type="number"
-              min="0"
-              step="1"
-              value={form.extensionDays}
-              onChange={(value) => update("extensionDays", value)}
-            />
           </div>
 
           <div className="flex justify-end gap-3">
@@ -782,14 +778,12 @@ function editFormFromCollaborator(collaborator: Collaborator): EditFormState {
     taskId: collaborator.taskId,
     paymentMethodId: collaborator.paymentMethodId,
     paymentValue: String(collaborator.paymentValue || ""),
-    extensionDays: String(collaborator.extensionDays ?? 0),
   };
 }
 
 function collaboratorUpdateInput(
   form: EditFormState,
   paymentValue: number,
-  extensionDays: number,
   selectedPaymentMethod: ReferenceDataItem | undefined,
   collaborator: Collaborator,
 ): UpdateCollaboratorInput {
@@ -801,7 +795,6 @@ function collaboratorUpdateInput(
     taskId: form.taskId,
     paymentMethodId: form.paymentMethodId,
     paymentValue,
-    extensionDays,
   };
 
   switch (normalizePaymentMethodCode(selectedPaymentMethod?.code)) {
@@ -912,6 +905,7 @@ function Input({
   inputMode,
   pattern,
   helperText,
+  disabled = false,
 }: {
   label: string;
   value: string;
@@ -924,6 +918,7 @@ function Input({
   inputMode?: "decimal" | "numeric" | "text";
   pattern?: string;
   helperText?: string;
+  disabled?: boolean;
 }) {
   return (
     <label className="block text-sm font-medium text-gray-700">
@@ -938,6 +933,7 @@ function Input({
         inputMode={inputMode}
         pattern={pattern}
         value={value}
+        disabled={disabled}
         onChange={(event) => onChange(event.target.value)}
         className="mt-1 w-full rounded-xl border border-gray-300 px-3 py-2 shadow-sm focus:border-gray-900 focus:outline-none focus:ring-2 focus:ring-gray-900/10"
       />

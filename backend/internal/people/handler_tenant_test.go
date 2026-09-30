@@ -10,6 +10,7 @@ import (
 	"github.com/gofiber/fiber/v3"
 
 	"enterpriseremotesystems/backend/internal/authz"
+	"enterpriseremotesystems/backend/internal/db"
 )
 
 type tenantRecordingService struct {
@@ -57,6 +58,18 @@ func (s *tenantRecordingService) CreateMembership(_ context.Context, tenantID st
 
 func (s *tenantRecordingService) Reactivate(_ context.Context, tenantID string, id string, _ string) (*PersonDTO, error) {
 	return &PersonDTO{ID: id, TenantID: tenantID}, nil
+}
+
+func (s *tenantRecordingService) GetPhoto(_ context.Context, _ string, _ string) (*db.GlobalPersonPhoto, error) {
+	return nil, nil
+}
+
+func (s *tenantRecordingService) SetPhoto(_ context.Context, _ string, _ string, _ string, _ []byte, _ string) (*PersonPhotoDTO, error) {
+	return nil, nil
+}
+
+func (s *tenantRecordingService) DeletePhoto(_ context.Context, _ string, _ string) error {
+	return nil
 }
 
 func TestHandlerUsesAuthoritativeSelectedTenantForPeopleOperations(t *testing.T) {

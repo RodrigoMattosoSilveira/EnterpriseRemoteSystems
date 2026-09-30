@@ -5,7 +5,7 @@ DB_PATH="${DATABASE_PATH:-/app/data/app.db}"
 MIGRATIONS_DIR="${MIGRATIONS_DIR:-/app/migrations}"
 EXPECTED_BASELINE_LAST_MIGRATION="${EXPECTED_BASELINE_LAST_MIGRATION:-000062_tenant_administrator_cardinality.up.sql}"
 EXPECTED_FIRST_REHEARSED_MIGRATION="${EXPECTED_FIRST_REHEARSED_MIGRATION:-000063_global_administration_control_plane.up.sql}"
-EXPECTED_FINAL_MIGRATION="${EXPECTED_FINAL_MIGRATION:-000071_cross_tenant_delegated_role_isolation.up.sql}"
+EXPECTED_FINAL_MIGRATION="${EXPECTED_FINAL_MIGRATION:-000077_journey_bonus_award_approval.up.sql}"
 
 if [ ! -f "$DB_PATH" ]; then
   echo "Missing database for migration verification: $DB_PATH" >&2
@@ -193,6 +193,44 @@ FROM (
     echo "Bite 32.4 cross-Tenant non-baseline Role isolation found ${cross_tenant_delegated_role_conflicts} conflicting Person(s)." >&2
     exit 1
   fi
+fi
+
+bite326_final_count="$(sqlite3 "$DB_PATH" "SELECT COUNT(*) FROM schema_migrations WHERE filename='000077_journey_bonus_award_approval.up.sql';")"
+if [ "$bite326_final_count" = "1" ]; then
+  tenant_viewer_role_count="$(sqlite3 "$DB_PATH" "SELECT COUNT(*) FROM authz_roles WHERE code='TENANT_VIEWER' AND scope_type='TENANT';")"
+  if [ "$tenant_viewer_role_count" != "1" ]; then
+    echo "Bite 32.6 requires exactly one TENANT_VIEWER Tenant Role." >&2
+    exit 1
+  fi
+
+  require_table global_person_photos
+  require_index idx_global_person_photos_updated_at
+  require_table journey_extension_requests
+  require_index idx_journey_extension_requests_journey
+  require_index ux_journey_extension_requests_pending
+  require_trigger trg_journey_extension_terminal_immutable
+  require_trigger trg_journey_extension_no_delete
+  require_trigger trg_journey_close_requires_extension_resolution
+
+  require_table journey_bonus_awards
+  require_index idx_journey_bonus_awards_journey_status
+  require_index ux_journey_bonus_awards_ledger_entry
+  require_index ux_collaborator_journey_bonus_ledger_entry
+  require_trigger trg_journey_bonus_award_terminal_immutable
+  require_trigger trg_journey_bonus_award_no_delete
+  require_trigger trg_journey_bonus_award_second_admin
+  require_trigger trg_journey_close_requires_bonus_resolution
+
+  bonus_legacy_unique_sql="$(sqlite3 "$DB_PATH" "SELECT sql FROM sqlite_master WHERE type='index' AND name='ux_collaborator_journey_bonus_ledger_entry';")"
+  case "$bonus_legacy_unique_sql" in
+    *"bonus_ledger_entry_id IS NOT NULL"*"trim(bonus_ledger_entry_id) <> ''"*) ;;
+    *)
+      echo "Bite 32.6 requires the repaired non-blank legacy bonus ledger uniqueness predicate." >&2
+      exit 1
+      ;;
+  esac
+
+  echo "Bite 32.6 release-hardening schema verified through 000077."
 fi
 
 audit_identity_migration_count="$(sqlite3 "$DB_PATH" "SELECT COUNT(*) FROM schema_migrations WHERE filename='000067_audit_identity_lifecycle_hardening.up.sql';")"

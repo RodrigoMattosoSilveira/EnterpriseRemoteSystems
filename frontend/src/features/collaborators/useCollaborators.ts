@@ -2,6 +2,13 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   createCollaborator,
   extendCollaboratorJourney,
+  listJourneyBonusAwards,
+  createJourneyBonusAward,
+  approveJourneyBonusAward,
+  listJourneyExtensionRequests,
+  acceptJourneyExtensionRequest,
+  rejectJourneyExtensionRequest,
+  cancelJourneyExtensionRequest,
   getCollaborator,
   getSelfCollaborator,
   getSelfWorkCreditEvidence,
@@ -19,6 +26,7 @@ import type {
   CollaboratorListFilter,
   CreateCollaboratorInput,
   ExtendCollaboratorJourneyInput,
+  CreateJourneyBonusAwardInput,
   UpdateCollaboratorInput,
   UpdateCollaboratorWorkAssignmentInput,
 } from "../../types/collaborators";
@@ -41,6 +49,8 @@ export const collaboratorQueryKeys = {
   detail: (id: string) => [...collaboratorQueryKeys.details(), id] as const,
   selfDetail: (id: string) =>
     [...collaboratorQueryKeys.details(), "self", id] as const,
+  extensionRequests: (id: string) => [...collaboratorQueryKeys.detail(id), "extension-requests"] as const,
+  bonusAwards: (id: string) => [...collaboratorQueryKeys.detail(id), "bonus-awards"] as const,
   selfWorkCreditEvidence: (id: string) =>
     [...collaboratorQueryKeys.details(), "self", id, "work-credit-evidence"] as const,
 };
@@ -193,23 +203,48 @@ export function useUpdateCollaboratorWorkAssignment(id: string) {
   });
 }
 
-export function useExtendCollaboratorJourney(id: string) {
-  const queryClient = useQueryClient();
+export function useJourneyBonusAwards(id: string) {
+  return useQuery({
+    queryKey: collaboratorQueryKeys.bonusAwards(id),
+    queryFn: () => listJourneyBonusAwards(id),
+    enabled: Boolean(id),
+  });
+}
 
+export function useCreateJourneyBonusAward(id: string) {
+  const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (input: ExtendCollaboratorJourneyInput) =>
-      extendCollaboratorJourney(id, input),
-    onSuccess: (collaborator) => {
-      queryClient.invalidateQueries({
-        queryKey: collaboratorQueryKeys.lists(),
-      });
-      queryClient.setQueryData(
-        collaboratorQueryKeys.detail(collaborator.id),
-        collaborator,
-      );
+    mutationFn: (input: CreateJourneyBonusAwardInput) => createJourneyBonusAward(id, input),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: collaboratorQueryKeys.bonusAwards(id) }),
+  });
+}
+
+export function useApproveJourneyBonusAward(id: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (awardId: string) => approveJourneyBonusAward(id, awardId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: collaboratorQueryKeys.bonusAwards(id) });
+      queryClient.invalidateQueries({ queryKey: ["current-account", id] });
+      queryClient.invalidateQueries({ queryKey: collaboratorQueryKeys.selfWorkCreditEvidence(id) });
     },
   });
 }
+
+export function useJourneyExtensionRequests(id: string, self = false) {
+  return useQuery({ queryKey: [...collaboratorQueryKeys.extensionRequests(id), self ? "self" : "tenant"], queryFn: () => listJourneyExtensionRequests(id, self), enabled: Boolean(id) });
+}
+export function useExtendCollaboratorJourney(id: string) {
+  const queryClient = useQueryClient();
+  return useMutation({ mutationFn: (input: ExtendCollaboratorJourneyInput) => extendCollaboratorJourney(id, input), onSuccess: () => queryClient.invalidateQueries({ queryKey: collaboratorQueryKeys.extensionRequests(id) }) });
+}
+function useExtensionResponse(id: string, action: "accept"|"reject"|"cancel") {
+  const queryClient = useQueryClient();
+  return useMutation({ mutationFn: (requestId: string) => action === "accept" ? acceptJourneyExtensionRequest(id, requestId) : action === "reject" ? rejectJourneyExtensionRequest(id, requestId) : cancelJourneyExtensionRequest(id, requestId), onSuccess: () => { queryClient.invalidateQueries({ queryKey: collaboratorQueryKeys.extensionRequests(id) }); queryClient.invalidateQueries({ queryKey: collaboratorQueryKeys.detail(id) }); queryClient.invalidateQueries({ queryKey: collaboratorQueryKeys.selfDetail(id) }); queryClient.invalidateQueries({ queryKey: collaboratorQueryKeys.lists() }); } });
+}
+export const useAcceptJourneyExtensionRequest = (id: string) => useExtensionResponse(id, "accept");
+export const useRejectJourneyExtensionRequest = (id: string) => useExtensionResponse(id, "reject");
+export const useCancelJourneyExtensionRequest = (id: string) => useExtensionResponse(id, "cancel");
 
 function mergeCollaboratorIntoCatalog(
   current: Collaborator[] | undefined,

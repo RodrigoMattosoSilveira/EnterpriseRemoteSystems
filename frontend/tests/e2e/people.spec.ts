@@ -115,7 +115,106 @@ test("Tenant Administrator can create a Person and define the initial temporary 
   }
 });
 
+test("Tenant Administrator can issue a Person password reset token without Application Administrator intervention", async ({ page, browser }) => {
+  const unique = Date.now().toString().slice(-8);
+  const firstName = `Reset${unique}`;
+  const lastName = "Person";
+  const nickname = `ResetNick${unique}`;
+  const cpf = generateCPF(`${Number(unique) + 1000}`);
+  const rg = `RR${unique}`;
+  const cellular = `119${unique.padStart(8, "0").slice(0, 8)}`;
+  const email = `tenant-reset-${unique}@example.com`;
+  const temporaryPassword = `Tenant-Reset-${unique}-Temporary!`;
+  const newPassword = `Tenant-Reset-${unique}-Permanent!`;
 
+  await page.goto("/people/new");
+  await expect(page.getByRole("heading", { name: "New Person" })).toBeVisible();
+
+  await page.getByLabel("First Name *").fill(firstName);
+  await page.getByLabel("Last Name *").fill(lastName);
+  await page.getByLabel("Nickname *").fill(nickname);
+  await page.getByLabel("CPF *").fill(cpf);
+  await page.getByLabel("RG *").fill(rg);
+  await page.getByLabel("Cellular *").fill(cellular);
+  await page.getByLabel("Email *").fill(email);
+  await page.getByLabel("Status *").selectOption(ACTIVE_STATUS_ID);
+  await page.getByRole("button", { name: "Create Person" }).click();
+
+  await expect(page).toHaveURL(/\/people\/[^#]+#authentication$/);
+  const authenticationSection = page.getByRole("region", { name: "Authentication" });
+  await expect(authenticationSection).toBeVisible();
+  await expect(authenticationSection.getByText("Status: Not enabled for this tenant")).toBeVisible();
+
+  await authenticationSection.getByLabel("Initial temporary password").fill(temporaryPassword);
+  await authenticationSection.getByLabel("Confirm temporary password").fill(temporaryPassword);
+  await authenticationSection.getByRole("button", { name: "Enable Authentication" }).click();
+  await expect(authenticationSection.getByText("Status: Enabled")).toBeVisible();
+  await expect(authenticationSection.getByText(email, { exact: true })).toBeVisible();
+
+  const resetTokenResponsePromise = page.waitForResponse((response) => {
+    const url = new URL(response.url());
+    return (
+      response.request().method() === "POST" &&
+      /\/api\/v1\/people\/[^/]+\/authentication\/password-reset-tokens$/.test(url.pathname)
+    );
+  });
+
+  await authenticationSection
+    .getByRole("button", { name: "Issue password reset token" })
+    .click();
+
+  const resetTokenResponse = await resetTokenResponsePromise;
+  expect(resetTokenResponse.status()).toBe(201);
+  const resetEnvelope = (await resetTokenResponse.json()) as {
+    data?: { login?: string; token?: string; expiresAt?: string };
+  };
+  expect(resetEnvelope.data?.login).toBe(email);
+  expect(resetEnvelope.data?.token).toBeTruthy();
+  expect(resetEnvelope.data?.expiresAt).toBeTruthy();
+
+  await expect(
+    authenticationSection.getByText(`One-time reset token for ${email}`),
+  ).toBeVisible();
+  const resetToken = await authenticationSection
+    .getByLabel("Password reset token")
+    .textContent();
+  expect(resetToken?.trim()).toBe(resetEnvelope.data?.token);
+
+  const baseURL = new URL(page.url()).origin;
+  const resetContext = await browser.newContext({
+    baseURL,
+    storageState: { cookies: [], origins: [] },
+  });
+  const resetPage = await resetContext.newPage();
+
+  try {
+    await resetPage.goto(`/password/reset?token=${encodeURIComponent(resetToken!.trim())}`);
+    await expect(resetPage.getByRole("heading", { name: "Reset password" })).toBeVisible();
+    await resetPage.getByLabel("New password", { exact: true }).fill(newPassword);
+    await resetPage.getByLabel("Confirm new password").fill(newPassword);
+    await resetPage.getByRole("button", { name: "Reset password" }).click();
+
+    await expect(resetPage).toHaveURL(/\/login$/);
+    await expect(resetPage.getByLabel("Login")).toHaveValue(email);
+    await expect(
+      resetPage.getByText(`Password reset for ${email}. Sign in with your new password.`),
+    ).toBeVisible();
+
+    await resetPage.getByLabel("Password").fill(newPassword);
+    await resetPage.getByRole("button", { name: "Sign in" }).click();
+    await expect(resetPage).not.toHaveURL(/\/password\/change$/);
+    await expect(resetPage.getByRole("button", { name: "Sign out" })).toBeVisible();
+    await resetPage.getByRole("button", { name: "Sign out" }).click();
+    await expect(resetPage).toHaveURL(/\/login$/);
+
+    await resetPage.getByLabel("Login").fill(email);
+    await resetPage.getByLabel("Password").fill(temporaryPassword);
+    await resetPage.getByRole("button", { name: "Sign in" }).click();
+    await expect(resetPage.getByRole("alert")).toContainText("The login or password is incorrect.");
+  } finally {
+    await resetContext.close();
+  }
+});
 
 test("user can filter and paginate the People page", async ({ page, request }) => {
   const suffix = uniqueSuffix();

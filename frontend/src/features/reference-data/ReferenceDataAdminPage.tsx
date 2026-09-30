@@ -15,6 +15,7 @@ import {
   useUpdateReferenceDataItem,
 } from "./useReferenceData";
 import { PageTitle } from "../../components/layout/PageHeading";
+import { useAuthorizationContext } from "../../components/layout/AuthorizationContext";
 
 const emptyForm: ReferenceDataInput = {
   code: "",
@@ -26,6 +27,8 @@ const emptyForm: ReferenceDataInput = {
 };
 
 export function ReferenceDataAdminPage() {
+  const actor = useAuthorizationContext();
+  const canManage = actor.permissions.includes("*") || actor.permissions.includes("reference_data.manage");
   const [selectedType, setSelectedType] = useState<string>(REFERENCE_DATA_TYPES[0].value);
   const [createForm, setCreateForm] = useState<ReferenceDataInput>(emptyForm);
   const [editing, setEditing] = useState<ReferenceDataItem | null>(null);
@@ -186,7 +189,7 @@ export function ReferenceDataAdminPage() {
         </section>
 
         <section className="grid gap-4 lg:grid-cols-[1fr_2fr]">
-          <form className="rounded-2xl border bg-white p-4 shadow-sm" onSubmit={handleCreate}>
+          {canManage ? <form className="rounded-2xl border bg-white p-4 shadow-sm" onSubmit={handleCreate}>
             <h2 className="text-lg font-semibold text-gray-950">
               Create {singularReferenceDataTypeLabel(selectedType)}
             </h2>
@@ -198,7 +201,7 @@ export function ReferenceDataAdminPage() {
             >
               {createMutation.isPending ? "Creating..." : "Create Item"}
             </button>
-          </form>
+          </form> : null}
 
           <section className="rounded-2xl border bg-white p-4 shadow-sm">
             <div className="flex items-center justify-between gap-3">
@@ -232,7 +235,7 @@ export function ReferenceDataAdminPage() {
                       <th className="p-3">Name</th>
                       <th className="p-3">Sort</th>
                       <th className="p-3">Status</th>
-                      <th className="p-3 text-right">Actions</th>
+                      {canManage ? <th className="p-3 text-right">Actions</th> : null}
                     </tr>
                   </thead>
                   <tbody className="divide-y">
@@ -249,7 +252,7 @@ export function ReferenceDataAdminPage() {
                         <td className="p-3">
                           <StatusBadge active={item.active} />
                         </td>
-                        <td className="p-3">
+                        {canManage ? <td className="p-3">
                           <div className="flex justify-end gap-2">
                             <button
                               className="rounded-lg border px-3 py-1 text-xs font-semibold"
@@ -276,7 +279,7 @@ export function ReferenceDataAdminPage() {
                               </button>
                             )}
                           </div>
-                        </td>
+                        </td> : null}
                       </tr>
                     ))}
                   </tbody>
@@ -286,7 +289,7 @@ export function ReferenceDataAdminPage() {
           </section>
         </section>
 
-        {editing && (
+        {canManage && editing && (
           <form className="rounded-2xl border bg-white p-4 shadow-sm" onSubmit={handleUpdate}>
             <div className="flex items-center justify-between gap-3">
               <h2 className="text-lg font-semibold text-gray-950">Edit {editing.label}</h2>

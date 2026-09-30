@@ -65,7 +65,31 @@ type UpdateCollaboratorRequest struct {
 	SectorID                       string   `json:"sectorId"`
 	LocationID                     string   `json:"locationId"`
 	TaskID                         string   `json:"taskId"`
-	ExtensionDays                  int      `json:"extensionDays"`
+}
+
+type CreateJourneyBonusAwardRequest struct {
+	ValueUnitCode string  `json:"valueUnitCode"`
+	Amount        float64 `json:"amount"`
+	EffectiveDate string  `json:"effectiveDate"`
+	Description   string  `json:"description"`
+}
+
+type JourneyBonusAwardDTO struct {
+	ID                    string  `json:"id"`
+	CollaboratorJourneyID string  `json:"collaboratorJourneyId"`
+	ReceiptNumber         string  `json:"receiptNumber"`
+	ValueUnitCode         string  `json:"valueUnitCode"`
+	Amount                float64 `json:"amount"`
+	EffectiveDate         string  `json:"effectiveDate"`
+	Description           string  `json:"description,omitempty"`
+	Status                string  `json:"status"`
+	RequestedByActorID    string  `json:"requestedByActorId"`
+	RequestedByUserID     string  `json:"requestedByUserId"`
+	RequestedAt           string  `json:"requestedAt"`
+	ApprovedByActorID     string  `json:"approvedByActorId,omitempty"`
+	ApprovedByUserID      string  `json:"approvedByUserId,omitempty"`
+	ApprovedAt            string  `json:"approvedAt,omitempty"`
+	LedgerEntryID         string  `json:"ledgerEntryId,omitempty"`
 }
 
 type UpdateCollaboratorWorkAssignmentRequest struct {
@@ -74,11 +98,30 @@ type UpdateCollaboratorWorkAssignmentRequest struct {
 	TaskID     string `json:"taskId"`
 }
 
-// ExtendCollaboratorJourneyRequest adds calendar days to an open Journey.
-// ExtensionDays on the Journey remains the cumulative extension from its
-// DefaultEndDate; callers provide only the additional days for this action.
+// ExtendCollaboratorJourneyRequest proposes additional calendar days for an open Journey.
+// The Journey itself is unchanged until the matching Collaborator accepts the proposal.
 type ExtendCollaboratorJourneyRequest struct {
-	AdditionalDays int `json:"additionalDays"`
+	AdditionalDays int    `json:"additionalDays"`
+	Reason         string `json:"reason"`
+}
+
+type JourneyExtensionRequestDTO struct {
+	ID                    string `json:"id"`
+	CollaboratorJourneyID string `json:"collaboratorJourneyId"`
+	ReceiptNumber         string `json:"receiptNumber"`
+	PreviousEndDate       string `json:"previousEndDate"`
+	ProposedEndDate       string `json:"proposedEndDate"`
+	AdditionalDays        int    `json:"additionalDays"`
+	Reason                string `json:"reason"`
+	Status                string `json:"status"`
+	RequestedBy           string `json:"requestedBy"`
+	RequestedAt           string `json:"requestedAt"`
+	AcceptedBy            string `json:"acceptedBy,omitempty"`
+	AcceptedAt            string `json:"acceptedAt,omitempty"`
+	RejectedBy            string `json:"rejectedBy,omitempty"`
+	RejectedAt            string `json:"rejectedAt,omitempty"`
+	CancelledBy           string `json:"cancelledBy,omitempty"`
+	CancelledAt           string `json:"cancelledAt,omitempty"`
 }
 
 type CollaboratorListFilter struct {

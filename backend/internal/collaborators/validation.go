@@ -48,9 +48,6 @@ func ValidateUpdateCollaborator(req UpdateCollaboratorRequest) error {
 	requireString(fields, "locationId", req.LocationID)
 	requireString(fields, "taskId", req.TaskID)
 
-	if req.ExtensionDays < 0 {
-		fields["extensionDays"] = "Extension days must be zero or greater"
-	}
 	validatePlanningAvailability(fields, req.PlanningAvailability)
 
 	if len(fields) > 0 {
@@ -73,10 +70,15 @@ func ValidateUpdateCollaboratorWorkAssignment(req UpdateCollaboratorWorkAssignme
 }
 
 func ValidateExtendCollaboratorJourney(req ExtendCollaboratorJourneyRequest) error {
+	fields := map[string]string{}
 	if req.AdditionalDays <= 0 {
-		return ValidationError{Fields: map[string]string{
-			"additionalDays": "Additional days must be greater than zero",
-		}}
+		fields["additionalDays"] = "Additional days must be greater than zero"
+	}
+	if strings.TrimSpace(req.Reason) == "" {
+		fields["reason"] = "Reason is required"
+	}
+	if len(fields) > 0 {
+		return ValidationError{Fields: fields}
 	}
 	return nil
 }

@@ -189,6 +189,103 @@ func (h *Handler) ExtendJourney(c fiber.Ctx) error {
 		return httpx.WriteError(c, err)
 	}
 
+	h.recordLifecycleAudit(c, authz.PermissionCollaboratorsUpdate, "collaborators.journey_extension.request", c.Params("id"), "", "")
+	return c.JSON(httpx.APIResponse{Data: updated})
+}
+
+func (h *Handler) ListExtensionRequests(c fiber.Ctx) error {
+	items, err := h.service.ListExtensionRequests(requesttenant.Context(c), c.Params("id"))
+	if err != nil {
+		return httpx.WriteError(c, err)
+	}
+	return c.JSON(httpx.APIResponse{Data: items})
+}
+
+func (h *Handler) ListSelfExtensionRequests(c fiber.Ctx) error {
+	actor, err := authz.RequestActorFromContext(c)
+	if err != nil {
+		return httpx.WriteError(c, err)
+	}
+	if strings.TrimSpace(actor.MembershipID) == "" {
+		return httpx.WriteError(c, authz.ErrForbidden)
+	}
+	items, err := h.service.ListSelfExtensionRequests(requesttenant.Context(c), c.Params("id"), actor.MembershipID)
+	if err != nil {
+		return httpx.WriteError(c, err)
+	}
+	return c.JSON(httpx.APIResponse{Data: items})
+}
+
+func (h *Handler) AcceptExtensionRequest(c fiber.Ctx) error {
+	actor, err := authz.RequestActorFromContext(c)
+	if err != nil {
+		return httpx.WriteError(c, err)
+	}
+	updated, err := h.service.AcceptExtensionRequest(requesttenant.Context(c), c.Params("id"), c.Params("requestId"), actor.CollaboratorID, actorUserID(c))
+	if err != nil {
+		return httpx.WriteError(c, err)
+	}
+	h.recordLifecycleAudit(c, authz.PermissionJourneyExtensionsSelfRespond, "collaborators.journey_extension.accept", c.Params("id"), actor.PersonID, actor.MembershipID)
+	return c.JSON(httpx.APIResponse{Data: updated})
+}
+
+func (h *Handler) RejectExtensionRequest(c fiber.Ctx) error {
+	actor, err := authz.RequestActorFromContext(c)
+	if err != nil {
+		return httpx.WriteError(c, err)
+	}
+	updated, err := h.service.RejectExtensionRequest(requesttenant.Context(c), c.Params("id"), c.Params("requestId"), actor.CollaboratorID, actorUserID(c))
+	if err != nil {
+		return httpx.WriteError(c, err)
+	}
+	h.recordLifecycleAudit(c, authz.PermissionJourneyExtensionsSelfRespond, "collaborators.journey_extension.reject", c.Params("id"), actor.PersonID, actor.MembershipID)
+	return c.JSON(httpx.APIResponse{Data: updated})
+}
+
+func (h *Handler) ListJourneyBonusAwards(c fiber.Ctx) error {
+	items, err := h.service.ListJourneyBonusAwards(requesttenant.Context(c), c.Params("id"))
+	if err != nil {
+		return httpx.WriteError(c, err)
+	}
+	return c.JSON(httpx.APIResponse{Data: items})
+}
+
+func (h *Handler) CreateJourneyBonusAward(c fiber.Ctx) error {
+	actor, err := authz.RequestActorFromContext(c)
+	if err != nil {
+		return httpx.WriteError(c, err)
+	}
+	var req CreateJourneyBonusAwardRequest
+	if err := c.Bind().Body(&req); err != nil {
+		return httpx.WriteError(c, err)
+	}
+	created, err := h.service.CreateJourneyBonusAward(requesttenant.Context(c), c.Params("id"), req, actor.ID, actorUserID(c))
+	if err != nil {
+		return httpx.WriteError(c, err)
+	}
+	h.recordLifecycleAudit(c, authz.PermissionEarningsCreate, "collaborators.journey_bonus.request", c.Params("id"), actor.PersonID, actor.MembershipID)
+	return c.Status(fiber.StatusCreated).JSON(httpx.APIResponse{Data: created})
+}
+
+func (h *Handler) ApproveJourneyBonusAward(c fiber.Ctx) error {
+	actor, err := authz.RequestActorFromContext(c)
+	if err != nil {
+		return httpx.WriteError(c, err)
+	}
+	approved, err := h.service.ApproveJourneyBonusAward(requesttenant.Context(c), c.Params("id"), c.Params("awardId"), actor.ID, actorUserID(c))
+	if err != nil {
+		return httpx.WriteError(c, err)
+	}
+	h.recordLifecycleAudit(c, authz.PermissionEarningsCreate, "collaborators.journey_bonus.approve", c.Params("id"), actor.PersonID, actor.MembershipID)
+	return c.JSON(httpx.APIResponse{Data: approved})
+}
+
+func (h *Handler) CancelExtensionRequest(c fiber.Ctx) error {
+	updated, err := h.service.CancelExtensionRequest(requesttenant.Context(c), c.Params("id"), c.Params("requestId"), actorUserID(c))
+	if err != nil {
+		return httpx.WriteError(c, err)
+	}
+	h.recordLifecycleAudit(c, authz.PermissionCollaboratorsUpdate, "collaborators.journey_extension.cancel", c.Params("id"), "", "")
 	return c.JSON(httpx.APIResponse{Data: updated})
 }
 

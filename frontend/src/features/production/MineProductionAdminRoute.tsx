@@ -1,10 +1,10 @@
-import { RequirePermission } from "../../components/guards/RequireRole";
+import { RequireAnyPermission } from "../../components/guards/RequireRole";
 import { MineProductionPage } from "./MineProductionPage";
 
 export function MineProductionAdminRoute() {
   return (
-    <RequirePermission permission="gold_production.manage">
+    <RequireAnyPermission permissions={["gold_production.read", "gold_production.manage"]}>
       <MineProductionPage />
-    </RequirePermission>
+    </RequireAnyPermission>
   );
 }

@@ -6,7 +6,7 @@
 
 Quatro diagramas simples acompanham esta apresentação. Eles foram desenhados para apoiar a conversa comercial, não para substituir a demonstração ao vivo:
 
-- [`Limite do Locatário`](../uml/demo/01-limite-do-tenant.puml) — use com o Diapositivo 2.
+- [`Limite da Entidade`](../uml/demo/01-limite-do-tenant.puml) — use com o Diapositivo 2.
 - [`Pessoa, Vínculo e Jornada`](../uml/demo/02-pessoa-vinculo-jornada.puml) — use com os Diapositivos 3 e 4.
 - [`História operacional conectada`](../uml/demo/03-cadeia-operacional.puml) — use com o Diapositivo 10.
 - [`Três histórias financeiras`](../uml/demo/04-tres-historias-financeiras.puml) — use entre os Diapositivos 8 e 11, conforme a conversa.
@@ -20,7 +20,7 @@ Quatro diagramas simples acompanham esta apresentação. Eles foram desenhados p
 - Pessoas e Jornadas separadas, com histórico preservado.
 - Planejamento e produção conectados à remuneração.
 - Despesas, Conta Corrente e Recibos com proveniência.
-- Dados isolados por Locatário.
+- Dados isolados por Entidade.
 
 **Objetivo do apresentador**
 
@@ -32,11 +32,11 @@ Apresente o problema de negócio: operações remotas geram muitos fatos relacio
 
 ---
 
-## Diapositivo 2 — O limite do Locatário vem primeiro
+## Diapositivo 2 — O limite da Entidade vem primeiro
 
-**Visual sugerido:** [`Limite do Locatário`](../uml/demo/01-limite-do-tenant.puml)
+**Visual sugerido:** [`Limite da Entidade`](../uml/demo/01-limite-do-tenant.puml)
 
-**Título principal:** Cada operação é vista dentro de um Locatário explícito.
+**Título principal:** Cada operação é vista dentro de uma Entidade explícita.
 
 **Referência da demonstração**
 
@@ -47,18 +47,18 @@ DEMO_BR_SERRA_DOURADA
 
 **Pontos exibidos**
 
-- O Locatário selecionado fica visível na estrutura principal da aplicação.
-- Pessoas e registros operacionais são carregados nesse contexto de Locatário.
-- O contexto do Locatário e a autorização são independentes do idioma de apresentação.
+- A Entidade selecionada fica visível na estrutura principal da aplicação.
+- Pessoas e registros operacionais são carregados nesse contexto de Entidade.
+- O contexto da Entidade e a autorização são independentes do idioma de apresentação.
 - A demonstração usa somente dados sintéticos.
 
 **Objetivo do apresentador**
 
-Estabeleça a história de segurança e isolamento de dados antes de mostrar Pessoas. Não sugira que o nome do Locatário seja apenas um filtro visual; ele representa o limite operacional dos registros demonstrados.
+Estabeleça a história de segurança e isolamento de dados antes de mostrar Pessoas. Não sugira que o nome da Entidade seja apenas um filtro visual; ele representa o limite operacional dos registros demonstrados.
 
 **Transição**
 
-“Com o limite do Locatário claro, começamos pela identidade permanente das pessoas.”
+“Com o limite da Entidade claro, começamos pela identidade permanente das pessoas.”
 
 ---
 
@@ -70,7 +70,7 @@ Estabeleça a história de segurança e isolamento de dados antes de mostrar Pes
 
 **Referências da demonstração**
 
-- Mariana Alves — Administradora do Locatário e Pessoa.
+- Mariana Alves — Administradora da Entidade e Pessoa.
 - João Ferreira — Colaborador ativo.
 - Camila Souza — Colaboradora ativa remunerada por comissão.
 - Rafael Lima — Jornada histórica e Jornada atual.
@@ -222,7 +222,7 @@ Contraste o trabalho pendente com a evidência concluída. O ponto importante n�
 **Cadeia exibida**
 
 ```text
-Locatário
+Entidade
 → Pessoa
 → Jornada
 → Período de Trabalho
@@ -248,7 +248,7 @@ Use o Diapositivo 11 para o encerramento executivo ou continue para o aprofundam
 
 **Pontos exibidos**
 
-- O limite do Locatário é explícito.
+- O limite da Entidade é explícito.
 - A identidade da Pessoa sobrevive às mudanças do ciclo de vida da Jornada.
 - Planejamento e trabalho realizado se conectam à remuneração.
 - Os saldos financeiros podem ser explicados a partir dos eventos de origem.

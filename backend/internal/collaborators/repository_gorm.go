@@ -2,6 +2,7 @@ package collaborators
 
 import (
 	"context"
+	"strings"
 
 	"enterpriseremotesystems/backend/internal/db"
 	"enterpriseremotesystems/backend/internal/shared/tenantctx"
@@ -144,6 +145,8 @@ func (r *gormRepository) Update(ctx context.Context, collaborator *db.Collaborat
 			"gold_commission_percent":             collaborator.GoldCommissionPercent,
 			"time_off_gold_split_percent":         collaborator.TimeOffGoldSplitPercent,
 			"sick_day_off_replacement_gold_grams": collaborator.SickDayOffReplacementGoldGrams,
+			"bonus_brl_amount":                    collaborator.BonusBRLAmount,
+			"bonus_description":                   collaborator.BonusDescription,
 			"planning_availability":               normalizePlanningAvailability(collaborator.PlanningAvailability),
 			"sector_id":                           collaborator.SectorID,
 			"location_id":                         collaborator.LocationID,
@@ -351,4 +354,115 @@ func (r *gormRepository) LoadWorkCreditEvidence(ctx context.Context, journeyID s
 		EarningsCalculated: accrualRows,
 		AccountPostings:    ledgerRows,
 	}, nil
+}
+
+func (r *gormRepository) CreateExtensionRequest(ctx context.Context, request *db.JourneyExtensionRequest) error {
+	return r.db.WithContext(ctx).Create(request).Error
+}
+
+func (r *gormRepository) ListExtensionRequests(ctx context.Context, collaboratorID string) ([]db.JourneyExtensionRequest, error) {
+	var rows []db.JourneyExtensionRequest
+	err := r.db.WithContext(ctx).Where("tenant_id = ? AND collaborator_journey_id = ?", tenantctx.TenantID(ctx), collaboratorID).Order("requested_at DESC").Find(&rows).Error
+	return rows, err
+}
+
+func (r *gormRepository) FindExtensionRequest(ctx context.Context, collaboratorID, requestID string) (*db.JourneyExtensionRequest, error) {
+	var row db.JourneyExtensionRequest
+	if err := r.db.WithContext(ctx).Where("tenant_id = ? AND collaborator_journey_id = ? AND id = ?", tenantctx.TenantID(ctx), collaboratorID, requestID).First(&row).Error; err != nil {
+		return nil, err
+	}
+	return &row, nil
+}
+
+func (r *gormRepository) AcceptExtensionRequest(ctx context.Context, collaborator *db.CollaboratorJourney, request *db.JourneyExtensionRequest) error {
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		result := tx.Model(&db.JourneyExtensionRequest{}).Where("id = ? AND tenant_id = ? AND status = ?", request.ID, tenantctx.TenantID(ctx), "PENDING").Updates(map[string]any{"status": request.Status, "accepted_by": request.AcceptedBy, "accepted_at": request.AcceptedAt, "updated_at": request.UpdatedAt})
+		if result.Error != nil {
+			return result.Error
+		}
+		if result.RowsAffected != 1 {
+			return gorm.ErrRecordNotFound
+		}
+		journeyResult := tx.Model(&db.CollaboratorJourney{}).Where("id = ? AND tenant_id = ? AND closed_at IS NULL", collaborator.ID, tenantctx.TenantID(ctx)).Updates(map[string]any{"extension_days": collaborator.ExtensionDays, "projected_end_date": collaborator.ProjectedEndDate, "updated_at": collaborator.UpdatedAt})
+		if journeyResult.Error != nil {
+			return journeyResult.Error
+		}
+		if journeyResult.RowsAffected != 1 {
+			return gorm.ErrRecordNotFound
+		}
+		return nil
+	})
+}
+
+func (r *gormRepository) UpdateExtensionRequest(ctx context.Context, request *db.JourneyExtensionRequest) error {
+	updates := map[string]any{"status": request.Status, "updated_at": request.UpdatedAt}
+	switch request.Status {
+	case "REJECTED":
+		updates["rejected_by"] = request.RejectedBy
+		updates["rejected_at"] = request.RejectedAt
+	case "CANCELLED":
+		updates["cancelled_by"] = request.CancelledBy
+		updates["cancelled_at"] = request.CancelledAt
+	default:
+		return gorm.ErrInvalidData
+	}
+	result := r.db.WithContext(ctx).Model(&db.JourneyExtensionRequest{}).Where("id = ? AND tenant_id = ? AND status = ?", request.ID, tenantctx.TenantID(ctx), "PENDING").Updates(updates)
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected != 1 {
+		return gorm.ErrRecordNotFound
+	}
+	return nil
+}
+
+func (r *gormRepository) FindValueUnitByCode(ctx context.Context, code string) (*db.ReferenceData, error) {
+	var row db.ReferenceData
+	err := r.db.WithContext(ctx).First(&row, "tenant_id = ? AND type = ? AND code = ? AND active = ?", tenantctx.TenantID(ctx), "value_unit", strings.TrimSpace(code), true).Error
+	if err != nil {
+		return nil, err
+	}
+	return &row, nil
+}
+
+func (r *gormRepository) CreateJourneyBonusAward(ctx context.Context, award *db.JourneyBonusAward) error {
+	return r.db.WithContext(ctx).Create(award).Error
+}
+
+func (r *gormRepository) ListJourneyBonusAwards(ctx context.Context, collaboratorID string) ([]db.JourneyBonusAward, error) {
+	var rows []db.JourneyBonusAward
+	err := r.db.WithContext(ctx).
+		Where("tenant_id = ? AND collaborator_journey_id = ?", tenantctx.TenantID(ctx), strings.TrimSpace(collaboratorID)).
+		Order("requested_at DESC, created_at DESC").
+		Find(&rows).Error
+	return rows, err
+}
+
+func (r *gormRepository) FindJourneyBonusAward(ctx context.Context, collaboratorID, awardID string) (*db.JourneyBonusAward, error) {
+	var row db.JourneyBonusAward
+	err := r.db.WithContext(ctx).
+		First(&row, "id = ? AND collaborator_journey_id = ? AND tenant_id = ?", strings.TrimSpace(awardID), strings.TrimSpace(collaboratorID), tenantctx.TenantID(ctx)).Error
+	if err != nil {
+		return nil, err
+	}
+	return &row, nil
+}
+
+func (r *gormRepository) ApproveJourneyBonusAward(ctx context.Context, award *db.JourneyBonusAward, entry *db.LedgerEntry) error {
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		result := tx.Model(&db.JourneyBonusAward{}).
+			Where("id = ? AND tenant_id = ? AND collaborator_journey_id = ? AND status = ?", award.ID, tenantctx.TenantID(ctx), award.CollaboratorJourneyID, "PENDING_APPROVAL").
+			Updates(map[string]any{
+				"status": award.Status, "approved_by_actor_id": award.ApprovedByActorID,
+				"approved_by_user_id": award.ApprovedByUserID, "approved_at": award.ApprovedAt,
+				"ledger_entry_id": award.LedgerEntryID, "updated_at": award.UpdatedAt,
+			})
+		if result.Error != nil {
+			return result.Error
+		}
+		if result.RowsAffected != 1 {
+			return gorm.ErrRecordNotFound
+		}
+		return tx.Create(entry).Error
+	})
 }

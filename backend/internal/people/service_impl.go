@@ -1,7 +1,11 @@
 package people
 
 import (
+	"bytes"
 	"context"
+	"image"
+	"image/jpeg"
+	"image/png"
 	"log"
 	"strings"
 	"time"
@@ -335,4 +339,53 @@ func stringPtrOrNil(value string) *string {
 		return nil
 	}
 	return &value
+}
+
+const maxPersonPhotoBytes = 5 * 1024 * 1024
+
+func (s *service) GetPhoto(ctx context.Context, tenantID string, id string) (*db.GlobalPersonPhoto, error) {
+	return s.repo.GetPhoto(ctx, tenantID, id)
+}
+
+func (s *service) SetPhoto(ctx context.Context, tenantID string, id string, contentType string, data []byte, actorUserID string) (*PersonPhotoDTO, error) {
+	if contentType != "image/jpeg" && contentType != "image/png" {
+		return nil, ValidationError{Fields: map[string]string{"photo": "Photo must be JPEG or PNG"}}
+	}
+	if len(data) == 0 || len(data) > maxPersonPhotoBytes {
+		return nil, ValidationError{Fields: map[string]string{"photo": "Photo must be between 1 byte and 5 MiB"}}
+	}
+	decoded, format, err := image.Decode(bytes.NewReader(data))
+	if err != nil {
+		return nil, ValidationError{Fields: map[string]string{"photo": "Photo is not a valid image"}}
+	}
+	if (contentType == "image/jpeg" && format != "jpeg") || (contentType == "image/png" && format != "png") {
+		return nil, ValidationError{Fields: map[string]string{"photo": "Photo content type does not match image data"}}
+	}
+	bounds := decoded.Bounds()
+	width, height := bounds.Dx(), bounds.Dy()
+	if width < 64 || width > 2048 || height < 64 || height > 2048 {
+		return nil, ValidationError{Fields: map[string]string{"photo": "Photo dimensions must be between 64 and 2048 pixels"}}
+	}
+	var normalized bytes.Buffer
+	if format == "jpeg" {
+		err = jpeg.Encode(&normalized, decoded, &jpeg.Options{Quality: 90})
+	} else {
+		err = png.Encode(&normalized, decoded)
+	}
+	if err != nil {
+		return nil, err
+	}
+	if normalized.Len() == 0 || normalized.Len() > maxPersonPhotoBytes {
+		return nil, ValidationError{Fields: map[string]string{"photo": "Normalized photo must be no larger than 5 MiB"}}
+	}
+	now := time.Now().UTC()
+	photo := &db.GlobalPersonPhoto{ContentType: contentType, Data: normalized.Bytes(), ByteSize: normalized.Len(), Width: width, Height: height, UpdatedBy: strings.TrimSpace(actorUserID), CreatedAt: now, UpdatedAt: now}
+	if err := s.repo.UpsertPhoto(ctx, tenantID, id, photo); err != nil {
+		return nil, err
+	}
+	return &PersonPhotoDTO{ContentType: photo.ContentType, ByteSize: photo.ByteSize, Width: photo.Width, Height: photo.Height, UpdatedAt: formatTime(photo.UpdatedAt)}, nil
+}
+
+func (s *service) DeletePhoto(ctx context.Context, tenantID string, id string) error {
+	return s.repo.DeletePhoto(ctx, tenantID, id)
 }

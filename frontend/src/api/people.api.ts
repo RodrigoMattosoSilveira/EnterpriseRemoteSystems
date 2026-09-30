@@ -1,4 +1,4 @@
-import { apiFetch } from "./client";
+import { apiFetch, apiFetchBlob } from "./client";
 import type { PasswordResetToken } from "../types/auth";
 import type {
   CreatePersonInput,
@@ -136,4 +136,22 @@ export function requestPersonAuthenticationReactivation(
   return apiFetch<{ status: string }>(`/people/${encodeURIComponent(personId)}/authentication/reactivation-request`, {
     method: "POST",
   });
+}
+
+export type PersonPhotoMetadata = { contentType: string; byteSize: number; width: number; height: number; updatedAt: string };
+
+export function getPersonPhoto(personId: string): Promise<Blob> {
+  return apiFetchBlob(`/people/${encodeURIComponent(personId)}/photo`, { cache: "no-store", suppressForbiddenNavigation: true });
+}
+
+export function setPersonPhoto(personId: string, file: File): Promise<PersonPhotoMetadata> {
+  return apiFetch<PersonPhotoMetadata>(`/people/${encodeURIComponent(personId)}/photo`, {
+    method: "PUT",
+    headers: { "Content-Type": file.type },
+    body: file,
+  });
+}
+
+export function deletePersonPhoto(personId: string): Promise<void> {
+  return apiFetch<void>(`/people/${encodeURIComponent(personId)}/photo`, { method: "DELETE" });
 }
