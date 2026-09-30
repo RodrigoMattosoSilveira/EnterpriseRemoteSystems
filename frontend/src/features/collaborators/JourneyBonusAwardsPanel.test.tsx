@@ -97,10 +97,20 @@ async function waitForText(text: string) {
 function changeInput(label: string, value: string) {
   const el = Array.from(container.querySelectorAll("label")).find((n) => n.textContent?.includes(label))?.querySelector("input");
   if (!el) throw new Error(`Input not found: ${label}`);
-  act(() => { el.value = value; el.dispatchEvent(new Event("input", { bubbles: true })); el.dispatchEvent(new Event("change", { bubbles: true })); });
+  const valueSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+  act(() => {
+    valueSetter?.call(el, value);
+    el.dispatchEvent(new Event("input", { bubbles: true }));
+    el.dispatchEvent(new Event("change", { bubbles: true }));
+  });
 }
 function changeSelect(label: string, value: string) {
   const el = Array.from(container.querySelectorAll("label")).find((n) => n.textContent?.includes(label))?.querySelector("select");
   if (!el) throw new Error(`Select not found: ${label}`);
-  act(() => { el.value = value; el.dispatchEvent(new Event("change", { bubbles: true })); });
+  const valueSetter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value")?.set;
+  act(() => {
+    valueSetter?.call(el, value);
+    el.dispatchEvent(new Event("input", { bubbles: true }));
+    el.dispatchEvent(new Event("change", { bubbles: true }));
+  });
 }
