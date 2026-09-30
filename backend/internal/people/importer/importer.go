@@ -179,7 +179,7 @@ func Run(ctx context.Context, database *gorm.DB, reader io.Reader, opts Options)
 				continue
 			}
 
-			_, err := svc.Create(ctx, tenantID, req, actorUserID)
+			_, err = svc.Create(ctx, tenantID, req, actorUserID)
 			if err != nil {
 				report.Errors = append(report.Errors, rowErrorsFromError(rowNumber, err)...)
 				continue
