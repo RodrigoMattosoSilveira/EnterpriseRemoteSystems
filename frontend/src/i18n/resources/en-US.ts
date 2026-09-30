@@ -1632,9 +1632,6 @@ export const enUSMessages = {
   'people.photo.invalidSize': 'The photo must be no larger than 5 MiB.',
   'people.photo.clearSelection': 'Clear selection',
   "people.photo.uploadFailedAfterCreate": "Person created, but the photo could not be uploaded. You can retry from the Person page.",
-} as const;
-
-export type TranslationKey = keyof typeof enUSMessages;
   'bonus.title': 'Journey Bonus',
   'bonus.help': 'Optional one-time BRL compensation configured with Journey earnings and postable at any time while the Journey is open.',
   'bonus.amount': 'Bonus (BRL)',
@@ -1650,3 +1647,6 @@ export type TranslationKey = keyof typeof enUSMessages;
   'bonus.post': 'Post Bonus',
   'bonus.posting': 'Posting Bonus...',
   'bonus.immutableAfterPost': 'Posted bonus compensation is immutable.',
+} as const;
+
+export type TranslationKey = keyof typeof enUSMessages;

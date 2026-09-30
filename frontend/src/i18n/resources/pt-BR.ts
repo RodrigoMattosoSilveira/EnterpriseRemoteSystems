@@ -1631,7 +1631,6 @@ export const ptBRMessages = {
   'people.photo.invalidSize': 'A foto deve ter no máximo 5 MiB.',
   'people.photo.clearSelection': 'Limpar seleção',
   "people.photo.uploadFailedAfterCreate": "Pessoa criada, mas não foi possível enviar a foto. Você pode tentar novamente na página da Pessoa.",
-} satisfies Record<TranslationKey, string>;
   'bonus.title': 'Bônus da Jornada',
   'bonus.help': 'Remuneração opcional única em BRL configurada com os ganhos da Jornada e lançável a qualquer momento enquanto a Jornada estiver aberta.',
   'bonus.amount': 'Bônus (BRL)',
@@ -1647,3 +1646,4 @@ export const ptBRMessages = {
   'bonus.post': 'Lançar bônus',
   'bonus.posting': 'Lançando bônus...',
   'bonus.immutableAfterPost': 'A remuneração de bônus lançada é imutável.',
+} satisfies Record<TranslationKey, string>;
