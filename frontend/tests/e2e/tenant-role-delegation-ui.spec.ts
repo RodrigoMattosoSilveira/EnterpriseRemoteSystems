@@ -45,7 +45,7 @@ test("Tenant Administrator Actor cards expose a filterable Role selector", async
   ).toBeVisible();
   await expect(
     roleChoices.getByRole("option", { name: /TENANT_ADMIN/ }),
-  ).toHaveCount(0);
+  ).toBeVisible();
 
   await roleFilter.fill("expense");
   await expect(roleChoices.getByRole("option")).toHaveCount(1);
@@ -63,7 +63,7 @@ test("Tenant Administrator Actor cards expose a filterable Role selector", async
   await expect(roleSelector).toContainText("EXPENSE_OPERATOR");
 
   await roleSelector.click();
-  await expect(roleChoices.getByRole("option")).toHaveCount(3);
+  await expect(roleChoices.getByRole("option")).toHaveCount(4);
   await roleFilter.press("Escape");
 
   await expect(roleSelector).toHaveAttribute("aria-expanded", "false");
