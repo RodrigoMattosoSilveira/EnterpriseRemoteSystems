@@ -2,6 +2,7 @@ package collaborators
 
 import (
 	"context"
+	"strings"
 
 	"enterpriseremotesystems/backend/internal/db"
 	"enterpriseremotesystems/backend/internal/shared/tenantctx"
@@ -144,6 +145,8 @@ func (r *gormRepository) Update(ctx context.Context, collaborator *db.Collaborat
 			"gold_commission_percent":             collaborator.GoldCommissionPercent,
 			"time_off_gold_split_percent":         collaborator.TimeOffGoldSplitPercent,
 			"sick_day_off_replacement_gold_grams": collaborator.SickDayOffReplacementGoldGrams,
+			"bonus_brl_amount":                    collaborator.BonusBRLAmount,
+			"bonus_description":                   collaborator.BonusDescription,
 			"planning_availability":               normalizePlanningAvailability(collaborator.PlanningAvailability),
 			"sector_id":                           collaborator.SectorID,
 			"location_id":                         collaborator.LocationID,
@@ -411,4 +414,28 @@ func (r *gormRepository) UpdateExtensionRequest(ctx context.Context, request *db
 		return gorm.ErrRecordNotFound
 	}
 	return nil
+}
+
+func (r *gormRepository) FindValueUnitByCode(ctx context.Context, code string) (*db.ReferenceData, error) {
+	var row db.ReferenceData
+	err := r.db.WithContext(ctx).First(&row, "tenant_id = ? AND type = ? AND code = ? AND active = ?", tenantctx.TenantID(ctx), "value_unit", strings.TrimSpace(code), true).Error
+	if err != nil {
+		return nil, err
+	}
+	return &row, nil
+}
+
+func (r *gormRepository) PostJourneyBonus(ctx context.Context, collaborator *db.CollaboratorJourney, entry *db.LedgerEntry) error {
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		result := tx.Model(&db.CollaboratorJourney{}).Where("id = ? AND tenant_id = ? AND closed_at IS NULL AND bonus_posted_at IS NULL", collaborator.ID, tenantctx.TenantID(ctx)).Updates(map[string]any{
+			"updated_at": collaborator.UpdatedAt, "bonus_posted_at": collaborator.BonusPostedAt, "bonus_ledger_entry_id": collaborator.BonusLedgerEntryID,
+		})
+		if result.Error != nil {
+			return result.Error
+		}
+		if result.RowsAffected != 1 {
+			return gorm.ErrRecordNotFound
+		}
+		return tx.Create(entry).Error
+	})
 }

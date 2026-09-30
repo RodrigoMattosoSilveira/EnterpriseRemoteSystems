@@ -126,6 +126,8 @@ func (s *service) Create(ctx context.Context, req CreateCollaboratorRequest, act
 		GoldCommissionPercent:          paymentConfig.GoldCommissionPercent,
 		TimeOffGoldSplitPercent:        paymentConfig.TimeOffGoldSplitPercent,
 		SickDayOffReplacementGoldGrams: paymentConfig.SickDayOffReplacementGoldGrams,
+		BonusBRLAmount:                 req.BonusBRLAmount,
+		BonusDescription:               strings.TrimSpace(req.BonusDescription),
 		PlanningAvailability:           normalizePlanningAvailability(req.PlanningAvailability),
 		SectorID:                       strings.TrimSpace(req.SectorID),
 		LocationID:                     strings.TrimSpace(req.LocationID),
@@ -190,6 +192,17 @@ func (s *service) Update(ctx context.Context, id string, req UpdateCollaboratorR
 	row.GoldCommissionPercent = paymentConfig.GoldCommissionPercent
 	row.TimeOffGoldSplitPercent = paymentConfig.TimeOffGoldSplitPercent
 	row.SickDayOffReplacementGoldGrams = paymentConfig.SickDayOffReplacementGoldGrams
+	if row.ClosedAt != nil && !bonusConfigEqual(row.BonusBRLAmount, req.BonusBRLAmount, row.BonusDescription, req.BonusDescription) {
+		return nil, ValidationError{Fields: map[string]string{"bonusBrlAmount": "Closed Journey bonus compensation is immutable"}}
+	}
+	if row.BonusPostedAt != nil {
+		if !bonusConfigEqual(row.BonusBRLAmount, req.BonusBRLAmount, row.BonusDescription, req.BonusDescription) {
+			return nil, ValidationError{Fields: map[string]string{"bonusBrlAmount": "Posted Journey bonus compensation is immutable"}}
+		}
+	} else {
+		row.BonusBRLAmount = req.BonusBRLAmount
+		row.BonusDescription = strings.TrimSpace(req.BonusDescription)
+	}
 	if strings.TrimSpace(req.PlanningAvailability) != "" {
 		row.PlanningAvailability = normalizePlanningAvailability(req.PlanningAvailability)
 	}
@@ -600,3 +613,64 @@ func normalizePaymentMethodCode(code string) string {
 }
 
 func ptr[T any](value T) *T { return &value }
+
+func (s *service) PostJourneyBonus(ctx context.Context, id string, req PostJourneyBonusRequest, actorUserID string) (*CollaboratorDTO, error) {
+	row, err := s.repo.FindByID(ctx, strings.TrimSpace(id))
+	if err != nil {
+		return nil, err
+	}
+	if row.ClosedAt != nil {
+		return nil, ValidationError{Fields: map[string]string{"bonusBrlAmount": "Journey bonus can only be posted while the Journey is open"}}
+	}
+	if row.BonusBRLAmount == nil || *row.BonusBRLAmount <= 0 {
+		return nil, ValidationError{Fields: map[string]string{"bonusBrlAmount": "Configure a Journey bonus before posting it"}}
+	}
+	if row.BonusPostedAt != nil || strings.TrimSpace(row.BonusLedgerEntryID) != "" {
+		return nil, ValidationError{Fields: map[string]string{"bonusBrlAmount": "Journey bonus has already been posted"}}
+	}
+	effectiveDate, err := parseDate(req.EffectiveDate)
+	if err != nil {
+		return nil, ValidationError{Fields: map[string]string{"effectiveDate": "Effective date must be YYYY-MM-DD"}}
+	}
+	today := time.Now().UTC().Truncate(24 * time.Hour)
+	if effectiveDate.Before(row.JourneyStartDate) || effectiveDate.After(today) {
+		return nil, ValidationError{Fields: map[string]string{"effectiveDate": "Bonus effective date must be on or after the Journey start date and not in the future"}}
+	}
+	brl, err := s.repo.FindValueUnitByCode(ctx, "BRL")
+	if err != nil {
+		return nil, err
+	}
+	now := time.Now().UTC()
+	description := strings.TrimSpace(row.BonusDescription)
+	if description == "" {
+		description = "Journey bonus compensation"
+	}
+	entry := &db.LedgerEntry{
+		BaseModel: db.BaseModel{ID: "ledger-journey-bonus-" + row.ID, CreatedAt: now, UpdatedAt: now},
+		TenantID:  row.TenantID, PersonID: row.Membership.PersonID, CollaboratorID: row.ID, ValueUnitID: brl.ID,
+		EntryType: "EARNING_CREDIT", Direction: "CREDIT", Amount: *row.BonusBRLAmount, EffectiveDate: effectiveDate,
+		SourceType: "JOURNEY_BONUS", SourceID: row.ID, Description: description, Active: true, CorrectionType: "ORIGINAL",
+		AuthorizedBy: strings.TrimSpace(actorUserID), AuthorizedAt: &now,
+	}
+	row.UpdatedAt = now
+	row.BonusPostedAt = &now
+	row.BonusLedgerEntryID = entry.ID
+	if err := s.repo.PostJourneyBonus(ctx, row, entry); err != nil {
+		return nil, err
+	}
+	updated, err := s.repo.FindByID(ctx, row.ID)
+	if err != nil {
+		return nil, err
+	}
+	return ptr(ToDTO(*updated)), nil
+}
+
+func bonusConfigEqual(current, requested *float64, currentDescription, requestedDescription string) bool {
+	if (current == nil) != (requested == nil) {
+		return false
+	}
+	if current != nil && requested != nil && math.Abs(*current-*requested) > 0.000001 {
+		return false
+	}
+	return strings.TrimSpace(currentDescription) == strings.TrimSpace(requestedDescription)
+}

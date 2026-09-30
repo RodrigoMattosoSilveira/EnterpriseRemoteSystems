@@ -20,6 +20,7 @@ func RegisterCollaboratorRoutes(v1 fiber.Router, deps Dependencies) {
 	r.Put("/:id", requirePermission(deps, authz.PermissionCollaboratorsUpdate), deps.CollaboratorHandler.Update)
 	r.Patch("/:id/work-assignment", requirePermission(deps, authz.PermissionCollaboratorsWorkAssignmentUpdate), deps.CollaboratorHandler.UpdateWorkAssignment)
 	r.Post("/:id/extend", requirePermission(deps, authz.PermissionCollaboratorsUpdate), deps.CollaboratorHandler.ExtendJourney)
+	r.Post("/:id/bonus/post", requireTenantAdministrator(deps), deps.CollaboratorHandler.PostJourneyBonus)
 	r.Get("/:id/extension-requests", requirePermissionOrSelfCollaborator(deps, authz.PermissionCollaboratorsRead, authz.PermissionCollaboratorsSelfRead, "id"), deps.CollaboratorHandler.ListExtensionRequests)
 	r.Post("/:id/extension-requests/:requestId/accept", requirePermission(deps, authz.PermissionJourneyExtensionsSelfRespond), deps.CollaboratorHandler.AcceptExtensionRequest)
 	r.Post("/:id/extension-requests/:requestId/reject", requirePermission(deps, authz.PermissionJourneyExtensionsSelfRespond), deps.CollaboratorHandler.RejectExtensionRequest)

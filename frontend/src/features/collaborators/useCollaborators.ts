@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   createCollaborator,
   extendCollaboratorJourney,
+  postJourneyBonus,
   listJourneyExtensionRequests,
   acceptJourneyExtensionRequest,
   rejectJourneyExtensionRequest,
@@ -23,6 +24,7 @@ import type {
   CollaboratorListFilter,
   CreateCollaboratorInput,
   ExtendCollaboratorJourneyInput,
+  PostJourneyBonusInput,
   UpdateCollaboratorInput,
   UpdateCollaboratorWorkAssignmentInput,
 } from "../../types/collaborators";
@@ -194,6 +196,20 @@ export function useUpdateCollaboratorWorkAssignment(id: string) {
         collaboratorQueryKeys.detail(collaborator.id),
         collaborator,
       );
+    },
+  });
+}
+
+export function usePostJourneyBonus(id: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: PostJourneyBonusInput) => postJourneyBonus(id, input),
+    onSuccess: (collaborator) => {
+      queryClient.setQueryData(collaboratorQueryKeys.detail(id), collaborator);
+      queryClient.invalidateQueries({ queryKey: collaboratorQueryKeys.selfDetail(id) });
+      queryClient.invalidateQueries({ queryKey: collaboratorQueryKeys.lists() });
+      queryClient.invalidateQueries({ queryKey: ["current-account", id] });
+      queryClient.invalidateQueries({ queryKey: collaboratorQueryKeys.selfWorkCreditEvidence(id) });
     },
   });
 }

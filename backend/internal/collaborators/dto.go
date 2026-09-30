@@ -19,6 +19,10 @@ type CollaboratorDTO struct {
 	GoldCommissionPercent          *float64 `json:"goldCommissionPercent,omitempty"`
 	TimeOffGoldSplitPercent        *float64 `json:"timeOffGoldSplitPercent,omitempty"`
 	SickDayOffReplacementGoldGrams *float64 `json:"sickDayOffReplacementGoldGrams,omitempty"`
+	BonusBRLAmount                 *float64 `json:"bonusBrlAmount,omitempty"`
+	BonusDescription               string   `json:"bonusDescription,omitempty"`
+	BonusPostedAt                  string   `json:"bonusPostedAt,omitempty"`
+	BonusLedgerEntryID             string   `json:"bonusLedgerEntryId,omitempty"`
 	PlanningAvailability           string   `json:"planningAvailability"`
 	SectorID                       string   `json:"sectorId"`
 	SectorLabel                    string   `json:"sectorLabel,omitempty"`
@@ -45,6 +49,8 @@ type CreateCollaboratorRequest struct {
 	GoldCommissionPercent          *float64 `json:"goldCommissionPercent"`
 	TimeOffGoldSplitPercent        *float64 `json:"timeOffGoldSplitPercent"`
 	SickDayOffReplacementGoldGrams *float64 `json:"sickDayOffReplacementGoldGrams"`
+	BonusBRLAmount                 *float64 `json:"bonusBrlAmount"`
+	BonusDescription               string   `json:"bonusDescription"`
 	PlanningAvailability           string   `json:"planningAvailability"`
 	SectorID                       string   `json:"sectorId"`
 	LocationID                     string   `json:"locationId"`
@@ -61,10 +67,16 @@ type UpdateCollaboratorRequest struct {
 	GoldCommissionPercent          *float64 `json:"goldCommissionPercent"`
 	TimeOffGoldSplitPercent        *float64 `json:"timeOffGoldSplitPercent"`
 	SickDayOffReplacementGoldGrams *float64 `json:"sickDayOffReplacementGoldGrams"`
+	BonusBRLAmount                 *float64 `json:"bonusBrlAmount"`
+	BonusDescription               string   `json:"bonusDescription"`
 	PlanningAvailability           string   `json:"planningAvailability"`
 	SectorID                       string   `json:"sectorId"`
 	LocationID                     string   `json:"locationId"`
 	TaskID                         string   `json:"taskId"`
+}
+
+type PostJourneyBonusRequest struct {
+	EffectiveDate string `json:"effectiveDate"`
 }
 
 type UpdateCollaboratorWorkAssignmentRequest struct {

@@ -27,6 +27,8 @@ type FormState = {
   journeyStartDate: string;
   paymentMethodId: string;
   paymentValue: string;
+  bonusBrlAmount: string;
+  bonusDescription: string;
   sectorId: string;
   locationId: string;
   taskId: string;
@@ -39,6 +41,8 @@ const initialForm: FormState = {
   journeyStartDate: todayISODate(),
   paymentMethodId: "",
   paymentValue: "",
+  bonusBrlAmount: "",
+  bonusDescription: "",
   sectorId: "",
   locationId: "",
   taskId: "",
@@ -286,6 +290,8 @@ export function CreateCollaboratorPage() {
       journeyStartDate: form.journeyStartDate,
       paymentMethodId: form.paymentMethodId,
       paymentValue,
+      bonusBrlAmount: form.bonusBrlAmount.trim() ? Number(form.bonusBrlAmount) : undefined,
+      bonusDescription: form.bonusDescription.trim() || undefined,
       sectorId: form.sectorId,
       locationId: form.locationId,
       taskId: form.taskId,
@@ -580,6 +586,22 @@ export function CreateCollaboratorPage() {
                   helperText={paymentValueConfig.helperText}
                   value={form.paymentValue}
                   onChange={(value) => update("paymentValue", value)}
+                />
+                <Input
+                  label={t("bonus.amount")}
+                  type="number"
+                  min="0.01"
+                  step="0.01"
+                  inputMode="decimal"
+                  value={form.bonusBrlAmount}
+                  onChange={(value) => update("bonusBrlAmount", value)}
+                  helperText={t("bonus.amountHelp")}
+                />
+                <Input
+                  label={t("bonus.description")}
+                  value={form.bonusDescription}
+                  onChange={(value) => update("bonusDescription", value)}
+                  helperText={t("bonus.descriptionHelp")}
                 />
               </div>
             </section>

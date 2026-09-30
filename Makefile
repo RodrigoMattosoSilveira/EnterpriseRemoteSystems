@@ -516,7 +516,7 @@ TEST_RELEASE_BASELINE_DB ?= $(SERVER_ROOT)/test/rehearsal-baselines/pre-bite30i.
 TEST_RELEASE_BASELINE_LAST_MIGRATION ?= 000062_tenant_administrator_cardinality.up.sql
 TEST_RELEASE_MIGRATION_UNDER_REHEARSAL ?= 000063_global_administration_control_plane.up.sql
 TEST_RELEASE_FINAL_MIGRATION ?= 000071_cross_tenant_delegated_role_isolation.up.sql
-DEPLOYMENT_FINAL_MIGRATION ?= 000074_journey_extension_acceptance.up.sql
+DEPLOYMENT_FINAL_MIGRATION ?= 000075_journey_bonus_compensation.up.sql
 TEST_RELEASE_REHEARSAL_MARKER_DIR ?= $(SERVER_ROOT)/test/release-rehearsal-passed
 
 .PHONY: server-test-rehearsal-capture-baseline

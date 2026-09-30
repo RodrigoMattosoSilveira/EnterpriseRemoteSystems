@@ -242,6 +242,19 @@ func (h *Handler) RejectExtensionRequest(c fiber.Ctx) error {
 	return c.JSON(httpx.APIResponse{Data: updated})
 }
 
+func (h *Handler) PostJourneyBonus(c fiber.Ctx) error {
+	var req PostJourneyBonusRequest
+	if err := c.Bind().Body(&req); err != nil {
+		return httpx.WriteError(c, err)
+	}
+	updated, err := h.service.PostJourneyBonus(requesttenant.Context(c), c.Params("id"), req, actorUserID(c))
+	if err != nil {
+		return httpx.WriteError(c, err)
+	}
+	h.recordLifecycleAudit(c, authz.PermissionEarningsCreate, "collaborators.journey_bonus.post", c.Params("id"), updated.PersonID, updated.MembershipID)
+	return c.JSON(httpx.APIResponse{Data: updated})
+}
+
 func (h *Handler) CancelExtensionRequest(c fiber.Ctx) error {
 	updated, err := h.service.CancelExtensionRequest(requesttenant.Context(c), c.Params("id"), c.Params("requestId"), actorUserID(c))
 	if err != nil {

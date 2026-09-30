@@ -33,6 +33,7 @@ func ValidateCreateCollaborator(req CreateCollaboratorRequest) error {
 		}
 	}
 	validatePlanningAvailability(fields, req.PlanningAvailability)
+	validateJourneyBonus(fields, req.BonusBRLAmount)
 
 	if len(fields) > 0 {
 		return ValidationError{Fields: fields}
@@ -49,6 +50,7 @@ func ValidateUpdateCollaborator(req UpdateCollaboratorRequest) error {
 	requireString(fields, "taskId", req.TaskID)
 
 	validatePlanningAvailability(fields, req.PlanningAvailability)
+	validateJourneyBonus(fields, req.BonusBRLAmount)
 
 	if len(fields) > 0 {
 		return ValidationError{Fields: fields}
@@ -113,5 +115,14 @@ func isKnownPlanningAvailability(value string) bool {
 		return true
 	default:
 		return false
+	}
+}
+
+func validateJourneyBonus(fields map[string]string, amount *float64) {
+	if amount == nil {
+		return
+	}
+	if *amount <= 0 {
+		fields["bonusBrlAmount"] = "Bonus amount must be greater than zero"
 	}
 }

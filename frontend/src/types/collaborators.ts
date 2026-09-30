@@ -21,6 +21,10 @@ export type Collaborator = {
   goldCommissionPercent?: number;
   timeOffGoldSplitPercent?: number;
   sickDayOffReplacementGoldGrams?: number;
+  bonusBrlAmount?: number;
+  bonusDescription?: string;
+  bonusPostedAt?: string;
+  bonusLedgerEntryId?: string;
   planningAvailability: "ACTIVE" | "DAY_OFF" | "LEAVE_OF_ABSENCE";
 
   sectorId: string;
@@ -52,6 +56,8 @@ export type CreateCollaboratorInput = {
   goldCommissionPercent?: number;
   timeOffGoldSplitPercent?: number;
   sickDayOffReplacementGoldGrams?: number;
+  bonusBrlAmount?: number;
+  bonusDescription?: string;
   planningAvailability?: "ACTIVE" | "DAY_OFF" | "LEAVE_OF_ABSENCE";
   sectorId: string;
   locationId: string;
@@ -68,6 +74,8 @@ export type UpdateCollaboratorInput = {
   goldCommissionPercent?: number;
   timeOffGoldSplitPercent?: number;
   sickDayOffReplacementGoldGrams?: number;
+  bonusBrlAmount?: number;
+  bonusDescription?: string;
   planningAvailability?: "ACTIVE" | "DAY_OFF" | "LEAVE_OF_ABSENCE";
   sectorId: string;
   locationId: string;
@@ -78,6 +86,10 @@ export type UpdateCollaboratorWorkAssignmentInput = {
   sectorId: string;
   locationId: string;
   taskId: string;
+};
+
+export type PostJourneyBonusInput = {
+  effectiveDate: string;
 };
 
 export type ExtendCollaboratorJourneyInput = {

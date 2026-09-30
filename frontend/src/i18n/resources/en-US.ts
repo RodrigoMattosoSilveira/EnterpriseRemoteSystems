@@ -1543,6 +1543,7 @@ export const enUSMessages = {
   "financial.source.JOURNEY_SETTLEMENT": "Journey settlement",
   "financial.source.LEDGER_CORRECTION": "ledger correction",
   "financial.source.ACCRUAL_ITEM": "accrual item",
+  "financial.source.JOURNEY_BONUS": "journey bonus",
   "financial.source.WORK_PERIOD_ASSIGNMENT": "Work Period assignment",
   "financial.receiptPurpose.LEDGER_DEBIT": "ledger debit",
   "financial.receiptPurpose.FINAL_SETTLEMENT_TENANT_PAYMENT": "final Tenant payment",
@@ -1634,3 +1635,18 @@ export const enUSMessages = {
 } as const;
 
 export type TranslationKey = keyof typeof enUSMessages;
+  'bonus.title': 'Journey Bonus',
+  'bonus.help': 'Optional one-time BRL compensation configured with Journey earnings and postable at any time while the Journey is open.',
+  'bonus.amount': 'Bonus (BRL)',
+  'bonus.amountHelp': 'Optional one-time BRL bonus. Leave blank when no Journey bonus applies.',
+  'bonus.description': 'Bonus description',
+  'bonus.descriptionHelp': 'Optional explanation shown with the bonus earning credit.',
+  'bonus.status': 'Bonus status',
+  'bonus.available': 'Available to post',
+  'bonus.posted': 'Posted',
+  'bonus.notConfigured': 'Not configured',
+  'bonus.postedAt': 'Posted at',
+  'bonus.effectiveDate': 'Bonus effective date',
+  'bonus.post': 'Post Bonus',
+  'bonus.posting': 'Posting Bonus...',
+  'bonus.immutableAfterPost': 'Posted bonus compensation is immutable.',

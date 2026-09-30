@@ -21,6 +21,7 @@ import type {
   CollaboratorListResponse,
   CreateCollaboratorInput,
   ExtendCollaboratorJourneyInput,
+  PostJourneyBonusInput,
   JourneyExtensionRequest,
   UpdateCollaboratorInput,
   UpdateCollaboratorWorkAssignmentInput,
@@ -163,6 +164,13 @@ export function extendCollaboratorJourney(
       body: JSON.stringify(input),
     },
   );
+}
+
+export function postJourneyBonus(id: string, input: PostJourneyBonusInput): Promise<Collaborator> {
+  return apiFetch<Collaborator>(`/collaborators/${encodeURIComponent(id)}/bonus/post`, {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
 }
 
 export function getCollaboratorFinancialProjection(
