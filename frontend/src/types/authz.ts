@@ -90,7 +90,7 @@ export type GrantAuthzActorRoleInput = {
   tenantId: string;
 };
 
-export type TenantOperatorRoleCode = "TENANT_VIEWER" | "EARNINGS_OPERATOR" | "EXPENSE_OPERATOR";
+export type TenantOperatorRoleCode = "TENANT_ADMIN" | "TENANT_VIEWER" | "EARNINGS_OPERATOR" | "EXPENSE_OPERATOR";
 
 export type GrantTenantOperatorRoleInput = {
   roleCode: TenantOperatorRoleCode;

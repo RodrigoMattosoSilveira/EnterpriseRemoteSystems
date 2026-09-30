@@ -706,8 +706,8 @@ func TestGORMStoreTenantRoleDelegationListsMembersWithNoRoleAndOnlyOperatorGrant
 	if got := byKey["expense-member@example.com"].RoleGrants; len(got) != 1 || got[0].RoleCode != string(RoleExpenseOperator) {
 		t.Fatalf("expected only expense operator grant, got %#v", got)
 	}
-	if got := byKey["tenant-admin-member@example.com"].RoleGrants; len(got) != 0 {
-		t.Fatalf("tenant delegation projection must not expose TENANT_ADMIN grants, got %#v", got)
+	if got := byKey["tenant-admin-member@example.com"].RoleGrants; len(got) != 1 || got[0].RoleCode != string(RoleTenantAdmin) {
+		t.Fatalf("tenant delegation projection must expose the active TENANT_ADMIN grant, got %#v", got)
 	}
 	if inactive := byKey["inactive-member@example.com"]; inactive.ID == "" || inactive.Active {
 		t.Fatalf("expected inactive tenant Actor to remain visible for lifecycle management, got %#v", inactive)
@@ -791,11 +791,23 @@ func TestGORMStoreTenantRoleDelegationRestrictsRoleAndTenant(t *testing.T) {
 		t.Fatalf("unexpected tenant operator grant: %#v", grant)
 	}
 
-	if _, err := store.GrantTenantOperatorRole(context.Background(), "tenant-a", actorID, string(RoleTenantAdmin)); err == nil {
-		t.Fatal("expected tenant administrator delegation to be rejected")
+	adminGrant, err := store.GrantTenantOperatorRole(context.Background(), "tenant-a", actorID, string(RoleTenantAdmin))
+	if err != nil {
+		t.Fatalf("grant tenant administrator through tenant delegation surface: %v", err)
+	}
+	if adminGrant.RoleCode != string(RoleTenantAdmin) || adminGrant.TenantID != "tenant-a" || !adminGrant.Active {
+		t.Fatalf("unexpected tenant administrator grant: %#v", adminGrant)
 	}
 	if _, err := store.GrantTenantOperatorRole(context.Background(), "tenant-b", actorID, string(RoleExpenseOperator)); err == nil {
 		t.Fatal("expected cross-tenant operator delegation to be rejected")
+	}
+
+	revokedAdmin, err := store.RevokeTenantOperatorRoleGrant(context.Background(), "tenant-a", actorID, adminGrant.ID)
+	if err != nil {
+		t.Fatalf("revoke tenant administrator: %v", err)
+	}
+	if revokedAdmin.Active {
+		t.Fatalf("expected revoked tenant administrator grant, got %#v", revokedAdmin)
 	}
 
 	revoked, err := store.RevokeTenantOperatorRoleGrant(context.Background(), "tenant-a", actorID, grant.ID)
