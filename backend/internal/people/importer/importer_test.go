@@ -10,8 +10,30 @@ import (
 	"gorm.io/gorm"
 
 	"enterpriseremotesystems/backend/internal/db"
+	"enterpriseremotesystems/backend/internal/people"
 	"enterpriseremotesystems/backend/internal/people/importer"
 )
+
+func TestTenantExportRoundTripsThroughImporterDryRun(t *testing.T) {
+	exported, err := people.EncodeCanonicalCSV([]people.PersonDTO{{
+		FirstName: "Joao", LastName: "Silva", Nickname: "Joao", CPF: "39053344705", RG: "RG-100001",
+		Cellular: "11998765432", Email: "joao@example.com", StatusID: "ref-person-status-active", Notes: "Round trip",
+		Street1: "Rua A 100", Street2: "Apto 1", City: "Sao Paulo", State: "SP", CEP: "01001000", Country: "Brasil",
+		BankName: "Banco do Brasil", BankNumber: "001", CheckingAccount: "12345-6", PIXKey: "joao@example.com",
+		EmergencyName: "Ana Silva", EmergencyCellular: "11991234567", EmergencyEmail: "ana@example.com",
+	}})
+	if err != nil {
+		t.Fatalf("encode export: %v", err)
+	}
+	database := newTestDB(t)
+	report, err := importer.Run(context.Background(), database, bytes.NewReader(exported), importer.Options{DryRun: true})
+	if err != nil {
+		t.Fatalf("expected exported CSV to pass importer dry-run, got %v report=%+v", err, report)
+	}
+	if report.RowsRead != 1 || report.RowsValidated != 1 || report.RowsInserted != 0 {
+		t.Fatalf("unexpected round-trip report: %+v", report)
+	}
+}
 
 func TestRunDryRunValidatesRowsWithoutInserting(t *testing.T) {
 	database := newTestDB(t)

@@ -9,6 +9,7 @@ import (
 func RegisterPeopleRoutes(v1 fiber.Router, deps Dependencies) {
 	r := v1.Group("/people")
 	r.Get("/", requirePermission(deps, authz.PermissionPeopleRead), deps.PeopleHandler.List)
+	r.Get("/export.csv", requireTenantAdministrator(deps), deps.PeopleHandler.ExportCSV)
 	// Global-directory and Membership paths are Tenant Administrator-only.
 	// Bite 30I.1 removes standing Tenant business-data permissions from the GLOBAL
 	// Application Administrator, so Tenant Person creation remains an explicit

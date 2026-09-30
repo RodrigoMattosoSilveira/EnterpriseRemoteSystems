@@ -20,10 +20,14 @@ type tenantRecordingService struct {
 	updateTenantID string
 	getStatusID    string
 	updateStatusID string
+	listItems      []PersonDTO
 }
 
 func (s *tenantRecordingService) List(_ context.Context, tenantID string, _ PersonListFilter) ([]PersonDTO, int64, error) {
 	s.listTenantID = tenantID
+	if s.listItems != nil {
+		return s.listItems, int64(len(s.listItems)), nil
+	}
 	return []PersonDTO{}, 0, nil
 }
 
@@ -70,6 +74,42 @@ func (s *tenantRecordingService) SetPhoto(_ context.Context, _ string, _ string,
 
 func (s *tenantRecordingService) DeletePhoto(_ context.Context, _ string, _ string) error {
 	return nil
+}
+
+func TestExportCSVUsesSelectedTenantAndCanonicalDownloadHeaders(t *testing.T) {
+	service := &tenantRecordingService{listItems: []PersonDTO{{
+		FirstName: "Ana", LastName: "Silva", Nickname: "Ana", CPF: "39053344705", RG: "RG-100001",
+		Cellular: "11998765432", Email: "ana@example.com", StatusID: "ref-person-status-active", Country: "Brasil",
+	}}}
+	handler := NewHandler(service)
+	app := fiber.New()
+	app.Use(func(c fiber.Ctx) error {
+		authz.SetRequestActor(c, &authz.Actor{RecordID: "actor-admin", TenantID: "tenant-selected", Scope: authz.ActorScopeTenant})
+		return c.Next()
+	})
+	app.Get("/people/export.csv", handler.ExportCSV)
+	request := httptest.NewRequest(http.MethodGet, "/people/export.csv", nil)
+	request.Header.Set(authz.HeaderTenantID, "tenant-spoofed")
+	response, err := app.Test(request)
+	if err != nil {
+		t.Fatalf("perform export: %v", err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", response.StatusCode)
+	}
+	if service.listTenantID != "tenant-selected" {
+		t.Fatalf("expected selected tenant, got %q", service.listTenantID)
+	}
+	if got := response.Header.Get("Content-Type"); got != "text/csv; charset=utf-8" {
+		t.Fatalf("content type=%q", got)
+	}
+	if got := response.Header.Get("Content-Disposition"); got != `attachment; filename="people-tenant-selected.csv"` {
+		t.Fatalf("content disposition=%q", got)
+	}
+	if got := response.Header.Get("Cache-Control"); got != "no-store" {
+		t.Fatalf("cache control=%q", got)
+	}
 }
 
 func TestHandlerUsesAuthoritativeSelectedTenantForPeopleOperations(t *testing.T) {

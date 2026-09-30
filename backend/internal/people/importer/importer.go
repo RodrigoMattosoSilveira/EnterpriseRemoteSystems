@@ -18,33 +18,7 @@ import (
 
 const defaultActorUserID = "people-csv-import"
 
-var requiredHeaders = []string{
-	"firstName",
-	"lastName",
-	"nickname",
-	"cpf",
-	"rg",
-	"cellular",
-	"email",
-	"statusId",
-	"notes",
-
-	"street1",
-	"street2",
-	"city",
-	"state",
-	"cep",
-	"country",
-
-	"bankName",
-	"bankNumber",
-	"checkingAccount",
-	"pixKey",
-
-	"emergencyName",
-	"emergencyCellular",
-	"emergencyEmail",
-}
+var requiredHeaders = people.CanonicalCSVHeaders()
 
 var optionalHeaders = []string{
 	"notes",

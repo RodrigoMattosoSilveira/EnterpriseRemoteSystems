@@ -3,6 +3,7 @@ package people
 import (
 	"encoding/json"
 	"errors"
+	"strconv"
 	"strings"
 
 	"github.com/gofiber/fiber/v3"
@@ -54,6 +55,54 @@ func (h *Handler) List(c fiber.Ctx) error {
 			"total": total,
 		},
 	})
+}
+
+func (h *Handler) ExportCSV(c fiber.Ctx) error {
+	const pageSize = 500
+	tenantID := requestTenantID(c)
+	items := make([]PersonDTO, 0)
+	for page := 1; ; page++ {
+		batch, total, err := h.service.List(c.Context(), tenantID, PersonListFilter{Page: page, PageSize: pageSize})
+		if err != nil {
+			return httpx.WriteError(c, err)
+		}
+		items = append(items, batch...)
+		if len(items) >= int(total) || len(batch) == 0 {
+			break
+		}
+	}
+	payload, err := EncodeCanonicalCSV(items)
+	if err != nil {
+		return httpx.WriteError(c, err)
+	}
+
+	h.recordAuditTarget(c, authz.PermissionPeopleRead, "people.export_csv", "tenant", tenantID, `{"rowCount":`+strconv.Itoa(len(items))+`}`)
+	c.Set("Content-Type", "text/csv; charset=utf-8")
+	c.Set("Content-Disposition", `attachment; filename="people-`+safeCSVFilenamePart(tenantID)+`.csv"`)
+	c.Set("Cache-Control", "no-store")
+	c.Set("X-Content-Type-Options", "nosniff")
+	return c.Send(payload)
+}
+
+func safeCSVFilenamePart(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return "tenant"
+	}
+	var b strings.Builder
+	for _, r := range value {
+		switch {
+		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9', r == '-', r == '_':
+			b.WriteRune(r)
+		default:
+			b.WriteRune('-')
+		}
+	}
+	cleaned := strings.Trim(b.String(), "-")
+	if cleaned == "" {
+		return "tenant"
+	}
+	return cleaned
 }
 
 // SearchGlobal returns global Person fields only and deliberately omits every
