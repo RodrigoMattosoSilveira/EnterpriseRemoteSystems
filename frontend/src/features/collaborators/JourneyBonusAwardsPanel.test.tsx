@@ -73,7 +73,7 @@ describe("JourneyBonusAwardsPanel", () => {
     root = null;
     renderPanel("tenant-admin-b");
     await waitForText("Safety milestone");
-    await act(async () => buttonByText("Approve Bonus")?.click());
+    await act(async () => buttonWithinText("Safety milestone", "Approve Bonus")?.click());
     expect(approved).toBe(true);
     await waitForText("Posted");
   });
@@ -90,6 +90,11 @@ function jsonResponse(body: unknown, status = 200) {
 }
 function textNode(text: string) { return Array.from(container.querySelectorAll("*")).find((n) => n.textContent?.trim() === text) ?? null; }
 function buttonByText(text: string) { return Array.from(container.querySelectorAll("button")).find((n) => n.textContent?.trim() === text) ?? null; }
+function buttonWithinText(text: string, buttonText: string) {
+  const node = textNode(text);
+  const article = node?.closest("article");
+  return article ? Array.from(article.querySelectorAll("button")).find((n) => n.textContent?.trim() === buttonText) ?? null : null;
+}
 async function waitForText(text: string) {
   for (let i = 0; i < 50; i += 1) { if (textNode(text)) return; await act(async () => { await new Promise((r) => setTimeout(r, 10)); }); }
   throw new Error(`Timed out waiting for ${text}`);
