@@ -19,8 +19,9 @@ func CanonicalCSVHeaders() []string {
 
 // EncodeCanonicalCSV writes Tenant-scoped Person projections in the exact
 // format accepted by import-people. Environment-specific IDs are deliberately
-// excluded; statusId is Membership data and all remaining fields are canonical
-// global Person data visible through this Tenant.
+// excluded. The legacy-named statusId column carries the stable Person-status
+// code when available so exports do not leak source-Tenant reference-data IDs.
+// All remaining fields are canonical global Person data visible through this Tenant.
 func EncodeCanonicalCSV(items []PersonDTO) ([]byte, error) {
 	var buffer bytes.Buffer
 	writer := csv.NewWriter(&buffer)
@@ -28,9 +29,13 @@ func EncodeCanonicalCSV(items []PersonDTO) ([]byte, error) {
 		return nil, err
 	}
 	for _, person := range items {
+		statusValue := person.StatusCode
+		if statusValue == "" {
+			statusValue = person.StatusID
+		}
 		if err := writer.Write([]string{
 			person.FirstName, person.LastName, person.Nickname, person.CPF, person.RG, person.Cellular, person.Email,
-			person.StatusID, person.Notes,
+			statusValue, person.Notes,
 			person.Street1, person.Street2, person.City, person.State, person.CEP, person.Country,
 			person.BankName, person.BankNumber, person.CheckingAccount, person.PIXKey,
 			person.EmergencyName, person.EmergencyCellular, person.EmergencyEmail,

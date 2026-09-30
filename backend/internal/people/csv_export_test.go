@@ -10,7 +10,7 @@ func TestEncodeCanonicalCSVUsesImporterContractAndExcludesEnvironmentIDs(t *test
 	data, err := EncodeCanonicalCSV([]PersonDTO{{
 		ID: "global-id", GlobalPersonID: "global-id", MembershipID: "membership-id", TenantID: "tenant-a",
 		FirstName: "Ana", LastName: "Silva", Nickname: "Ani", CPF: "39053344705", RG: "RG-100001",
-		Cellular: "11998765432", Email: "ana@example.com", StatusID: "ref-person-status-active", Notes: "portable,note",
+		Cellular: "11998765432", Email: "ana@example.com", StatusID: "seed-ref-source-tenant-person-status-active", StatusCode: "ACTIVE", Notes: "portable,note",
 		Street1: "Rua A 100", Street2: "Apto 1", City: "Sao Paulo", State: "SP", CEP: "01001000", Country: "Brasil",
 		BankName: "Banco do Brasil", BankNumber: "001", CheckingAccount: "12345-6", PIXKey: "ana@example.com",
 		EmergencyName: "Carlos Silva", EmergencyCellular: "11991234567", EmergencyEmail: "carlos@example.com",
@@ -33,10 +33,13 @@ func TestEncodeCanonicalCSVUsesImporterContractAndExcludesEnvironmentIDs(t *test
 		t.Fatalf("row width %d, want %d", got, want)
 	}
 	exported := strings.Join(rows[1], "|")
-	for _, forbidden := range []string{"global-id", "membership-id", "tenant-a"} {
+	for _, forbidden := range []string{"global-id", "membership-id", "tenant-a", "seed-ref-source-tenant-person-status-active"} {
 		if strings.Contains(exported, forbidden) {
 			t.Fatalf("export leaked environment-specific id %q", forbidden)
 		}
+	}
+	if rows[1][7] != "ACTIVE" {
+		t.Fatalf("expected portable status code ACTIVE, got %q", rows[1][7])
 	}
 	if rows[1][8] != "portable,note" {
 		t.Fatalf("CSV escaping did not preserve notes, got %q", rows[1][8])

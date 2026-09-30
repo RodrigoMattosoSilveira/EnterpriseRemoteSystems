@@ -36,6 +36,7 @@ type PersonDTO struct {
 	MissingSections         []string `json:"missingSections,omitempty"`
 
 	StatusID    string `json:"statusId"`
+	StatusCode  string `json:"statusCode,omitempty"`
 	StatusLabel string `json:"statusLabel,omitempty"`
 	Notes       string `json:"notes,omitempty"`
 

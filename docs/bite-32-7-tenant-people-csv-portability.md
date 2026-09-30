@@ -8,11 +8,13 @@ Provide a controlled way to move a prospect Tenant's People from Test to Product
 
 A Tenant Administrator can use **People → Export CSV**. `GET /api/v1/people/export.csv` exports only People having a Membership in the acting Tenant and returns the exact canonical column order consumed by `import-people`.
 
-The CSV contains Person identity/contact, address, bank/PIX, emergency-contact data, Membership `statusId`, and Membership notes. It deliberately excludes Person IDs, Membership IDs, Tenant IDs, Actor/Account identity, roles, photos, Journeys, Current Account/ledger data, expenses, and other operational evidence.
+The CSV contains Person identity/contact, address, bank/PIX, emergency-contact data, Membership status, and Membership notes. The legacy-named `statusId` column carries the stable Person-status code (for example `ACTIVE`, `INACTIVE`, or `DISCONTINUED`) instead of the source Tenant's reference-data ID. During import, `import-people` resolves that code to the target Tenant's local active Person-status ID. Existing CSVs that already contain a valid target-Tenant status ID remain accepted. The export deliberately excludes Person IDs, Membership IDs, Tenant IDs, Actor/Account identity, roles, photos, Journeys, Current Account/ledger data, expenses, and other operational evidence.
 
 Because the file contains sensitive personal and banking data, export is restricted to `TENANT_ADMIN`, uses `Cache-Control: no-store`, and should be handled as sensitive data. Do not commit exported CSV files to Git.
 
 ## Test → Production procedure
+
+The Brazilian demo fixture is **not** a valid source for the importer portability rehearsal: its synthetic CPF values deliberately have invalid check digits so they cannot be mistaken for real identity-verification data. Use the actual prospect Test Tenant, or a dedicated portability-test Tenant populated through normal ERS validation with importer-valid synthetic values. Do not weaken CPF validation and do not make the Brazilian demo CPFs valid for this rehearsal.
 
 1. In Test, sign in as the prospect Tenant's Tenant Administrator and export People CSV.
 2. Review the file and keep it in controlled temporary storage.

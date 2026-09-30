@@ -17,13 +17,19 @@ import (
 func TestTenantExportRoundTripsThroughImporterDryRun(t *testing.T) {
 	exported, err := people.EncodeCanonicalCSV([]people.PersonDTO{{
 		FirstName: "Joao", LastName: "Silva", Nickname: "Joao", CPF: "39053344705", RG: "RG-100001",
-		Cellular: "11998765432", Email: "joao@example.com", StatusID: "ref-person-status-active", Notes: "Round trip",
+		Cellular: "11998765432", Email: "joao@example.com", StatusID: "seed-ref-source-tenant-person-status-active", StatusCode: "ACTIVE", Notes: "Round trip",
 		Street1: "Rua A 100", Street2: "Apto 1", City: "Sao Paulo", State: "SP", CEP: "01001000", Country: "Brasil",
 		BankName: "Banco do Brasil", BankNumber: "001", CheckingAccount: "12345-6", PIXKey: "joao@example.com",
 		EmergencyName: "Ana Silva", EmergencyCellular: "11991234567", EmergencyEmail: "ana@example.com",
 	}})
 	if err != nil {
 		t.Fatalf("encode export: %v", err)
+	}
+	if bytes.Contains(exported, []byte("seed-ref-source-tenant-person-status-active")) {
+		t.Fatal("portable export leaked source-Tenant person status ID")
+	}
+	if !bytes.Contains(exported, []byte(",ACTIVE,")) {
+		t.Fatalf("portable export did not contain stable ACTIVE status code: %s", exported)
 	}
 	database := newTestDB(t)
 	report, err := importer.Run(context.Background(), database, bytes.NewReader(exported), importer.Options{DryRun: true})
@@ -32,6 +38,21 @@ func TestTenantExportRoundTripsThroughImporterDryRun(t *testing.T) {
 	}
 	if report.RowsRead != 1 || report.RowsValidated != 1 || report.RowsInserted != 0 {
 		t.Fatalf("unexpected round-trip report: %+v", report)
+	}
+}
+
+func TestRunResolvesPortableStatusCodeForTargetTenant(t *testing.T) {
+	database := newTestDB(t)
+	csvData := `firstName,lastName,nickname,cpf,rg,cellular,email,statusId,notes,street1,street2,city,state,cep,country,bankName,bankNumber,checkingAccount,pixKey,emergencyName,emergencyCellular,emergencyEmail
+Joao,Silva,Joao,39053344705,RG-100001,11998765432,joao@example.com,ACTIVE,Portable status,,,,,,Brasil,,,,,,,
+`
+
+	report, err := importer.Run(context.Background(), database, strings.NewReader(csvData), importer.Options{DryRun: true})
+	if err != nil {
+		t.Fatalf("expected portable status code import to succeed, got %v with report %+v", err, report)
+	}
+	if report.RowsRead != 1 || report.RowsValidated != 1 || report.RowsInserted != 0 {
+		t.Fatalf("unexpected portable status-code report: %+v", report)
 	}
 }
 

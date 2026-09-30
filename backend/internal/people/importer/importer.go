@@ -167,6 +167,13 @@ func Run(ctx context.Context, database *gorm.DB, reader io.Reader, opts Options)
 
 			req := requestFromRecord(record, indexes, opts.DefaultStatusID)
 
+			resolvedStatusID, err := resolveStatusID(tx, tenantID, req.StatusID)
+			if err != nil {
+				report.Errors = append(report.Errors, RowError{Row: rowNumber, Field: "statusId", Message: err.Error()})
+				continue
+			}
+			req.StatusID = resolvedStatusID
+
 			if semanticErrors := semanticCSVErrors(rowNumber, req); len(semanticErrors) > 0 {
 				report.Errors = append(report.Errors, semanticErrors...)
 				continue
@@ -255,6 +262,41 @@ func validateHeaders(headers []string) (map[string]int, []RowError) {
 	}
 
 	return indexes, errs
+}
+
+func resolveStatusID(tx *gorm.DB, tenantID string, value string) (string, error) {
+	statusValue := strings.TrimSpace(value)
+	if statusValue == "" {
+		return "", nil
+	}
+
+	var existingID string
+	byID := tx.Table("reference_data").
+		Select("id").
+		Where("id = ? AND tenant_id = ? AND type = ? AND active = ?", statusValue, tenantID, "person_status", true).
+		Limit(1).
+		Scan(&existingID)
+	if byID.Error != nil {
+		return "", byID.Error
+	}
+	if strings.TrimSpace(existingID) != "" {
+		return strings.TrimSpace(existingID), nil
+	}
+
+	var targetID string
+	byCode := tx.Table("reference_data").
+		Select("id").
+		Where("tenant_id = ? AND type = ? AND code = ? AND active = ?", tenantID, strings.ToUpper(statusValue), "person_status", true).
+		Limit(1).
+		Scan(&targetID)
+	if byCode.Error != nil {
+		return "", byCode.Error
+	}
+	if strings.TrimSpace(targetID) != "" {
+		return strings.TrimSpace(targetID), nil
+	}
+
+	return "", fmt.Errorf("Status must be an active person status ID or code for the target Tenant")
 }
 
 func requestFromRecord(record []string, indexes map[string]int, defaultStatusID string) people.CreatePersonRequest {
