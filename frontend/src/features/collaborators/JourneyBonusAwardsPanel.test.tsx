@@ -47,7 +47,14 @@ describe("JourneyBonusAwardsPanel", () => {
       }
       if (url.endsWith("/api/v1/collaborators/collab-1/bonus-awards") && init?.method === "POST") {
         createdPayload = JSON.parse(String(init.body));
-        const created = { ...pending, id: "award-2", receiptNumber: "JBA-AWARD2", valueUnitCode: "BRL", amount: 500, description: "Retention" };
+        const created: JourneyBonusAward = {
+          ...pending,
+          id: "award-2",
+          receiptNumber: "JBA-AWARD2",
+          valueUnitCode: "BRL",
+          amount: 500,
+          description: "Retention",
+        };
         awards = [created, ...awards];
         return jsonResponse({ data: created }, 201);
       }
