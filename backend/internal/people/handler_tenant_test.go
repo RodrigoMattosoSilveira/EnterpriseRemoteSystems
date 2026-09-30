@@ -84,7 +84,7 @@ func TestExportCSVUsesSelectedTenantAndCanonicalDownloadHeaders(t *testing.T) {
 	handler := NewHandler(service)
 	app := fiber.New()
 	app.Use(func(c fiber.Ctx) error {
-		authz.SetRequestActor(c, &authz.Actor{RecordID: "actor-admin", TenantID: "tenant-selected", Scope: authz.ActorScopeTenant})
+		authz.SetRequestActor(c, &authz.Actor{ID: "tenant-admin", RecordID: "actor-admin", TenantID: "tenant-selected", Scope: authz.ActorScopeTenant})
 		return c.Next()
 	})
 	app.Get("/people/export.csv", handler.ExportCSV)
