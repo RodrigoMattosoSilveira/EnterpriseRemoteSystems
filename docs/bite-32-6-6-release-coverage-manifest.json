@@ -1,0 +1,164 @@
+{
+  "bite": "32.6.6",
+  "title": "Integrated E2E, Migration, I18N, Authorization, and Release Hardening",
+  "requirements": [
+    {
+      "id": 1,
+      "status": "covered",
+      "requirement": "Brazilian Portuguese Entity terminology remains visible without legacy Locat\u00e1rio wording.",
+      "evidence": [
+        {
+          "file": "frontend/tests/e2e/bite32-6-release-hardening.spec.ts",
+          "testTitle": "32.6.1 through 32.6.5 surfaces remain integrated in en-US and pt-BR"
+        },
+        {
+          "file": "frontend/src/i18n/resources/pt-BR.ts",
+          "contains": "Executivo da Entidade (Somente Leitura)"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "status": "covered",
+      "requirement": "TENANT_VIEWER remains a Tenant-scoped read-only Entity Executive role and TENANT_ADMIN remains delegable under cardinality/isolation rules.",
+      "evidence": [
+        {
+          "file": "backend/internal/authz/store_test.go",
+          "contains": "TENANT_VIEWER"
+        },
+        {
+          "file": "frontend/tests/e2e/tenant-role-delegation-ui.spec.ts",
+          "contains": "TENANT_ADMIN"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "status": "covered",
+      "requirement": "Person photo management remains available to Tenant Administrators with read-only Person visibility preserved.",
+      "evidence": [
+        {
+          "file": "frontend/src/features/people/PersonPhotoCard.test.tsx",
+          "contains": "PersonPhotoCard"
+        },
+        {
+          "file": "backend/internal/http/routes/people.go",
+          "contains": "requireTenantAdministrator"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "status": "covered",
+      "requirement": "Journey extension proposals remain governed by explicit Collaborator acceptance/rejection and pending proposals block closure.",
+      "evidence": [
+        {
+          "file": "backend/internal/collaborators/journey_extension_test.go",
+          "contains": "Extension"
+        },
+        {
+          "file": "backend/migrations/000074_journey_extension_acceptance.up.sql",
+          "contains": "trg_journey_close_requires_extension_resolution"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "status": "covered",
+      "requirement": "Journey bonus awards support multiple BRL/GOLD_GRAM awards with a distinct Tenant Administrator approval before Current Account posting.",
+      "evidence": [
+        {
+          "file": "backend/internal/collaborators/journey_bonus_test.go",
+          "contains": "Bonus"
+        },
+        {
+          "file": "backend/migrations/000077_journey_bonus_award_approval.up.sql",
+          "contains": "trg_journey_bonus_award_second_admin"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "status": "covered",
+      "requirement": "Integrated browser coverage renders photo, Journey extension, Journey bonus, TENANT_VIEWER, TENANT_ADMIN, and pt-BR terminology in one release path.",
+      "evidence": [
+        {
+          "file": "frontend/tests/e2e/bite32-6-release-hardening.spec.ts",
+          "testTitle": "32.6.1 through 32.6.5 surfaces remain integrated in en-US and pt-BR"
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "status": "covered",
+      "requirement": "The migrated database is verified through migration 000077 with all 32.6 durable tables, indexes, triggers, and TENANT_VIEWER catalog state present.",
+      "evidence": [
+        {
+          "file": "backend/verify-migrated-db.sh",
+          "contains": "Bite 32.6 release-hardening schema verified"
+        },
+        {
+          "file": "backend/verify-migrated-db.sh",
+          "contains": "000077_journey_bonus_award_approval.up.sql"
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "status": "covered",
+      "requirement": "en-US and pt-BR keep exact translation-key parity and all 32.6 feature key families remain present.",
+      "evidence": [
+        {
+          "file": "frontend/src/i18n/resources.test.ts",
+          "contains": "keeps pt-BR and en-US on the same key contract"
+        },
+        {
+          "file": "scripts/verify-bite326-release-coverage.py",
+          "contains": "REQUIRED_I18N_KEYS"
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "status": "covered",
+      "requirement": "Authorization boundaries remain explicit for photo mutation, Journey extension response, read-only Entity Executive access, and bonus second-admin approval.",
+      "evidence": [
+        {
+          "file": "backend/internal/http/routes/people.go",
+          "contains": "requireTenantAdministrator"
+        },
+        {
+          "file": "backend/internal/http/routes/collaborators.go",
+          "contains": "requireTenantAdministrator"
+        },
+        {
+          "file": "backend/internal/authz/store_test.go",
+          "contains": "RoleTenantViewer"
+        }
+      ]
+    },
+    {
+      "id": 10,
+      "status": "covered",
+      "requirement": "LOCAL, feature CI, deployment quality gates, deployed Playwright, and Production release-evidence regressions require the Bite 32.6 release contract.",
+      "evidence": [
+        {
+          "file": "Makefile",
+          "makeTarget": "bite326-release-hardening-check"
+        },
+        {
+          "file": ".github/workflows/ci.yml",
+          "contains": "make bite326-release-hardening-check"
+        },
+        {
+          "file": ".github/workflows/deploy.yml",
+          "contains": "verify-bite326-release-coverage.py"
+        },
+        {
+          "file": "scripts/test-production-release-evidence.py",
+          "contains": "Bite 32.6.6 release coverage manifest"
+        }
+      ]
+    }
+  ]
+}

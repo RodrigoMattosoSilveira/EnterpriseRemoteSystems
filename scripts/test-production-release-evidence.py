@@ -104,6 +104,7 @@ def main() -> int:
     makefile = (ROOT / "Makefile").read_text()
     manifest = json.loads((ROOT / "docs" / "bite-30l4-coverage-manifest.json").read_text())
     bite32_manifest = json.loads((ROOT / "docs" / "bite-32-5-release-coverage-manifest.json").read_text())
+    bite326_manifest = json.loads((ROOT / "docs" / "bite-32-6-6-release-coverage-manifest.json").read_text())
 
     for marker in (
         "Capture required Test release evidence for Production",
@@ -114,6 +115,7 @@ def main() -> int:
         "scripts/verify-production-release-evidence.py",
         "production-release-gate-evidence-",
         "python3 scripts/verify-bite32-release-coverage.py",
+        "python3 scripts/verify-bite326-release-coverage.py",
     ):
         if marker not in workflow:
             raise AssertionError(f"deployment workflow is missing 30L.4C contract marker: {marker}")
@@ -123,12 +125,16 @@ def main() -> int:
         "production-release-evidence-check",
         "verify-bite30l4-coverage-manifest.py --require-complete",
         "bite32-release-coverage-check",
+        "bite326-release-hardening-check",
     ):
         if marker not in makefile:
             raise AssertionError(f"Makefile is missing 30L.4C contract marker: {marker}")
 
     if len(bite32_manifest.get("requirements", [])) != 8 or any(item.get("status") != "covered" for item in bite32_manifest["requirements"]):
         raise AssertionError("Bite 32.5 release coverage manifest must have 8 covered requirements")
+
+    if len(bite326_manifest.get("requirements", [])) != 10 or any(item.get("status") != "covered" for item in bite326_manifest["requirements"]):
+        raise AssertionError("Bite 32.6.6 release coverage manifest must have 10 covered requirements")
 
     requirement_13 = next(item for item in manifest["requirements"] if item["id"] == 13)
     if requirement_13["status"] != "covered":
