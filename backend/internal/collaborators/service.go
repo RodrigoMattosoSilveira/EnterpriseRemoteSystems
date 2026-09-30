@@ -23,4 +23,7 @@ type Service interface {
 	AcceptExtensionRequest(ctx context.Context, id, requestID, actorCollaboratorID, actorUserID string) (*JourneyExtensionRequestDTO, error)
 	RejectExtensionRequest(ctx context.Context, id, requestID, actorCollaboratorID, actorUserID string) (*JourneyExtensionRequestDTO, error)
 	CancelExtensionRequest(ctx context.Context, id, requestID, actorUserID string) (*JourneyExtensionRequestDTO, error)
+	CreateJourneyBonusAward(ctx context.Context, id string, req CreateJourneyBonusAwardRequest, actorID, actorUserID string) (*JourneyBonusAwardDTO, error)
+	ListJourneyBonusAwards(ctx context.Context, id string) ([]JourneyBonusAwardDTO, error)
+	ApproveJourneyBonusAward(ctx context.Context, id, awardID, actorID, actorUserID string) (*JourneyBonusAwardDTO, error)
 }

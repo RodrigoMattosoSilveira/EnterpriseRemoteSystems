@@ -104,6 +104,47 @@ describe("TenantRoleDelegationPage grant feedback", () => {
     const currentGrants = sectionWithHeading("Current Role Grants");
     expect(currentGrants?.textContent).toContain("EARNINGS_OPERATOR");
   });
+
+  it("allows a Tenant Administrator to grant TENANT_ADMIN to an eligible same-tenant Actor", async () => {
+    let roleGrants: AuthzActorRoleGrant[] = [];
+
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      const url = input.toString();
+      if (url === "/api/v1/authz/tenant-role-actors" && !init?.method) {
+        return json({ data: [{ ...targetActor, roleGrants }] });
+      }
+      if (
+        url === "/api/v1/authz/tenant-role-actors/actor-target/role-grants" &&
+        init?.method === "POST"
+      ) {
+        const body = JSON.parse(String(init.body ?? "{}")) as { roleCode?: string };
+        expect(body.roleCode).toBe("TENANT_ADMIN");
+        const grant: AuthzActorRoleGrant = {
+          id: "grant-tenant-admin",
+          actorId: "actor-target",
+          roleId: "role-tenant-admin",
+          roleCode: "TENANT_ADMIN",
+          tenantId: "tenant-a",
+          scopeType: "TENANT",
+          active: true,
+        };
+        roleGrants = [grant];
+        return json({ data: grant });
+      }
+      throw new Error(`Unhandled request: ${url}`);
+    });
+
+    renderPage();
+    await waitForText("Target Person");
+
+    await clickRoleSelector();
+    await clickRoleOption("TENANT_ADMIN");
+    await clickButton("Grant Role");
+
+    await waitForText("Tenant Administrator granted.");
+    const currentGrants = sectionWithHeading("Current Role Grants");
+    expect(currentGrants?.textContent).toContain("TENANT_ADMIN");
+  });
 });
 
 function renderPage() {

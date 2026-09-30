@@ -17,7 +17,7 @@ import {
 import { PageTitle } from "../../components/layout/PageHeading";
 import { useI18n } from "../../i18n";
 
-const roleCodes: TenantOperatorRoleCode[] = ["TENANT_VIEWER", "EARNINGS_OPERATOR", "EXPENSE_OPERATOR"];
+const roleCodes: TenantOperatorRoleCode[] = ["TENANT_ADMIN", "TENANT_VIEWER", "EARNINGS_OPERATOR", "EXPENSE_OPERATOR"];
 
 type TenantRoleFilter = "ALL" | "NONE" | TenantOperatorRoleCode;
 type ActorStateFilter = "ALL" | "ACTIVE" | "INACTIVE";
@@ -114,7 +114,7 @@ export function TenantRoleDelegationPage({ readOnly = false }: { readOnly?: bool
           <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Administration</p>
           <PageTitle>Tenant Authorization</PageTitle>
           <p className="text-sm text-gray-600">
-            Activate or deactivate this tenant&apos;s Account-bound Actors and grant or remove Earnings Operator and Expenses Operator authority.
+            Activate or deactivate this tenant&apos;s Account-bound Actors and grant or remove Tenant Administrator, Entity Executive, Earnings Operator, and Expenses Operator authority.
           </p>
           <p className="mt-1 text-xs text-gray-500">
             A missing Tenant Actor is created from the Person&apos;s Authentication section in People. Role grants require an ACTIVE Actor backed by an ACTIVE same-tenant Person–Tenant Membership.
@@ -165,6 +165,7 @@ export function TenantRoleDelegationPage({ readOnly = false }: { readOnly?: bool
             >
               <option value="ALL">All candidates</option>
               <option value="NONE">No delegated role</option>
+              <option value="TENANT_ADMIN">Tenant Administrator</option>
               <option value="TENANT_VIEWER">{t("authz.tenantRoleDelegation.tenantViewer")}</option>
               <option value="EARNINGS_OPERATOR">Earnings Operator</option>
               <option value="EXPENSE_OPERATOR">Expenses Operator</option>
@@ -335,7 +336,7 @@ export function TenantRoleDelegationPage({ readOnly = false }: { readOnly?: bool
                   <div className="mt-3 space-y-2">
                     {roles.every((role) => !activeOperatorGrant(actor, role.code)) && (
                       <p className="rounded-lg border border-dashed p-3 text-sm text-gray-500">
-                        No current operator Role Grants.
+                        No current Tenant Role Grants.
                       </p>
                     )}
                     {roles.map((role) => {
@@ -358,7 +359,8 @@ export function TenantRoleDelegationPage({ readOnly = false }: { readOnly?: bool
                           </div>
                           <button
                             type="button"
-                            disabled={busy}
+                            disabled={busy || (isCurrentActor && role.code === "TENANT_ADMIN")}
+                            title={isCurrentActor && role.code === "TENANT_ADMIN" ? "A Tenant Administrator cannot remove the TENANT_ADMIN Role currently authorizing this session." : undefined}
                             onClick={() => void revoke(actor.id, existingGrant)}
                             className="rounded-lg border px-3 py-2 text-sm font-semibold disabled:opacity-50"
                           >
@@ -602,6 +604,7 @@ function activeOperatorGrant(
 }
 
 function roleLabel(roleCode: TenantOperatorRoleCode, t: (key: any) => string): string {
+  if (roleCode === "TENANT_ADMIN") return "Tenant Administrator";
   if (roleCode === "TENANT_VIEWER") return t("authz.tenantRoleDelegation.tenantViewer");
   return roleCode === "EARNINGS_OPERATOR" ? "Earnings Operator" : "Expenses Operator";
 }

@@ -12,6 +12,7 @@ import type { ReferenceDataItem } from "../../types/referenceData";
 import { useReferenceDataByType } from "../reference-data/useReferenceData";
 import { JourneySettlementPanel } from "./JourneySettlementPanel";
 import { JourneyExtensionRequestsPanel } from "./JourneyExtensionRequestsPanel";
+import { JourneyBonusAwardsPanel } from "./JourneyBonusAwardsPanel";
 import { WorkCreditEvidencePanel } from "./WorkCreditEvidencePanel";
 import {
   formatCollaboratorPaymentValue,
@@ -35,6 +36,7 @@ export function CollaboratorDetailPage() {
   const wildcard = actor.permissions.includes("*");
   const canBrowseCollaborators = wildcard || actor.permissions.includes("collaborators.read");
   const canEditCollaborator = wildcard || actor.permissions.includes("collaborators.update");
+  const isTenantAdministrator = actor.roleCodes.includes("TENANT_ADMIN");
   const canEditWorkAssignment =
     canEditCollaborator ||
     actor.permissions.includes("collaborators.work_assignment.update");
@@ -339,6 +341,14 @@ export function CollaboratorDetailPage() {
             />
           </dl>
         </section>
+
+        {canBrowseCollaborators || actor.collaboratorId === collaborator.id ? (
+          <JourneyBonusAwardsPanel
+            collaboratorId={collaborator.id}
+            actorId={actor.actorKey}
+            canManage={isTenantAdministrator && !collaborator.closedAt}
+          />
+        ) : null}
 
         {actor.permissions.includes("work_credit_evidence.self.read") &&
         actor.membershipId &&
@@ -895,6 +905,7 @@ function Input({
   inputMode,
   pattern,
   helperText,
+  disabled = false,
 }: {
   label: string;
   value: string;
@@ -907,6 +918,7 @@ function Input({
   inputMode?: "decimal" | "numeric" | "text";
   pattern?: string;
   helperText?: string;
+  disabled?: boolean;
 }) {
   return (
     <label className="block text-sm font-medium text-gray-700">
@@ -921,6 +933,7 @@ function Input({
         inputMode={inputMode}
         pattern={pattern}
         value={value}
+        disabled={disabled}
         onChange={(event) => onChange(event.target.value)}
         className="mt-1 w-full rounded-xl border border-gray-300 px-3 py-2 shadow-sm focus:border-gray-900 focus:outline-none focus:ring-2 focus:ring-gray-900/10"
       />

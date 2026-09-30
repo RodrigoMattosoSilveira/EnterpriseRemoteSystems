@@ -68,6 +68,26 @@ type JourneyExtensionRequest struct {
 	CancelledAt           *time.Time `json:"cancelledAt,omitempty"`
 }
 
+type JourneyBonusAward struct {
+	BaseModel
+
+	TenantID              string     `gorm:"type:text;not null;index" json:"tenantId"`
+	CollaboratorJourneyID string     `gorm:"type:text;not null;index" json:"collaboratorJourneyId"`
+	ReceiptNumber         string     `gorm:"type:text;not null;uniqueIndex" json:"receiptNumber"`
+	ValueUnitCode         string     `gorm:"type:text;not null;index" json:"valueUnitCode"`
+	Amount                float64    `gorm:"not null" json:"amount"`
+	EffectiveDate         time.Time  `gorm:"type:date;not null;index" json:"effectiveDate"`
+	Description           string     `gorm:"type:text" json:"description,omitempty"`
+	Status                string     `gorm:"type:text;not null;index" json:"status"`
+	RequestedByActorID    string     `gorm:"type:text;not null" json:"requestedByActorId"`
+	RequestedByUserID     string     `gorm:"type:text;not null" json:"requestedByUserId"`
+	RequestedAt           time.Time  `gorm:"not null" json:"requestedAt"`
+	ApprovedByActorID     string     `gorm:"type:text" json:"approvedByActorId,omitempty"`
+	ApprovedByUserID      string     `gorm:"type:text" json:"approvedByUserId,omitempty"`
+	ApprovedAt            *time.Time `json:"approvedAt,omitempty"`
+	LedgerEntryID         string     `gorm:"type:text" json:"ledgerEntryId,omitempty"`
+}
+
 type CollaboratorJourney struct {
 	BaseModel
 
@@ -79,14 +99,18 @@ type CollaboratorJourney struct {
 	ExtensionDays    int       `gorm:"not null;default:0" json:"extensionDays"`
 	ProjectedEndDate time.Time `gorm:"type:date;not null;index" json:"projectedEndDate"`
 
-	PaymentMethodID                string   `gorm:"type:text;not null;index" json:"paymentMethodId"`
-	PaymentValue                   float64  `gorm:"not null" json:"paymentValue"` // Deprecated compatibility field. Use the explicit payment amount fields below.
-	FixedMonthlyBRLAmount          *float64 `gorm:"column:fixed_monthly_brl_amount" json:"fixedMonthlyBrlAmount,omitempty"`
-	DailyBRLAmount                 *float64 `gorm:"column:daily_brl_amount" json:"dailyBrlAmount,omitempty"`
-	GoldCommissionPercent          *float64 `gorm:"column:gold_commission_percent" json:"goldCommissionPercent,omitempty"`
-	TimeOffGoldSplitPercent        *float64 `gorm:"column:time_off_gold_split_percent" json:"timeOffGoldSplitPercent,omitempty"`
-	SickDayOffReplacementGoldGrams *float64 `gorm:"column:sick_day_off_replacement_gold_grams" json:"sickDayOffReplacementGoldGrams,omitempty"`
-	PlanningAvailability           string   `gorm:"column:planning_availability;type:text;not null;default:ACTIVE;index" json:"planningAvailability"`
+	PaymentMethodID                string     `gorm:"type:text;not null;index" json:"paymentMethodId"`
+	PaymentValue                   float64    `gorm:"not null" json:"paymentValue"` // Deprecated compatibility field. Use the explicit payment amount fields below.
+	FixedMonthlyBRLAmount          *float64   `gorm:"column:fixed_monthly_brl_amount" json:"fixedMonthlyBrlAmount,omitempty"`
+	DailyBRLAmount                 *float64   `gorm:"column:daily_brl_amount" json:"dailyBrlAmount,omitempty"`
+	GoldCommissionPercent          *float64   `gorm:"column:gold_commission_percent" json:"goldCommissionPercent,omitempty"`
+	TimeOffGoldSplitPercent        *float64   `gorm:"column:time_off_gold_split_percent" json:"timeOffGoldSplitPercent,omitempty"`
+	SickDayOffReplacementGoldGrams *float64   `gorm:"column:sick_day_off_replacement_gold_grams" json:"sickDayOffReplacementGoldGrams,omitempty"`
+	BonusBRLAmount                 *float64   `gorm:"column:bonus_brl_amount" json:"bonusBrlAmount,omitempty"`
+	BonusDescription               string     `gorm:"column:bonus_description;type:text" json:"bonusDescription,omitempty"`
+	BonusPostedAt                  *time.Time `gorm:"column:bonus_posted_at" json:"bonusPostedAt,omitempty"`
+	BonusLedgerEntryID             string     `gorm:"column:bonus_ledger_entry_id;type:text" json:"bonusLedgerEntryId,omitempty"`
+	PlanningAvailability           string     `gorm:"column:planning_availability;type:text;not null;default:ACTIVE;index" json:"planningAvailability"`
 
 	SectorID   string `gorm:"type:text;not null;index" json:"sectorId"`
 	LocationID string `gorm:"type:text;not null;index" json:"locationId"`

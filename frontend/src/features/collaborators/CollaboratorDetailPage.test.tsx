@@ -652,6 +652,7 @@ function mockFetch(
       const referenceData = referenceDataResponse(url);
       if (referenceData) return referenceData;
       if (url.includes("/extension-requests")) return jsonResponse({ data: [] });
+      if (url.includes("/bonus-awards") && (!init?.method || init.method === "GET")) return jsonResponse({ data: [] });
       return handler(url, init);
     },
   );

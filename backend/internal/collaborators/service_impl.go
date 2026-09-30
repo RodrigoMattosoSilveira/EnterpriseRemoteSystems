@@ -600,3 +600,143 @@ func normalizePaymentMethodCode(code string) string {
 }
 
 func ptr[T any](value T) *T { return &value }
+
+func (s *service) CreateJourneyBonusAward(ctx context.Context, id string, req CreateJourneyBonusAwardRequest, actorID, actorUserID string) (*JourneyBonusAwardDTO, error) {
+	row, err := s.repo.FindByID(ctx, strings.TrimSpace(id))
+	if err != nil {
+		return nil, err
+	}
+	if row.ClosedAt != nil {
+		return nil, ValidationError{Fields: map[string]string{"journeyBonus": "Journey bonus awards can only be created while the Journey is open"}}
+	}
+	fields := map[string]string{}
+	unit := strings.ToUpper(strings.TrimSpace(req.ValueUnitCode))
+	if unit != "BRL" && unit != "GOLD_GRAM" {
+		fields["valueUnitCode"] = "Value unit must be BRL or GOLD_GRAM"
+	}
+	if req.Amount <= 0 {
+		fields["amount"] = "Bonus amount must be greater than zero"
+	} else if unit == "BRL" && !hasAtMostDecimalPlaces(req.Amount, brlPaymentDecimalPlaces) {
+		fields["amount"] = "BRL bonus amount supports at most 2 decimal places"
+	} else if unit == "GOLD_GRAM" && !hasAtMostDecimalPlaces(req.Amount, goldCommissionDecimalPlaces) {
+		fields["amount"] = "Gold bonus amount supports at most 8 decimal places"
+	}
+	effectiveDate, dateErr := parseDate(req.EffectiveDate)
+	if dateErr != nil {
+		fields["effectiveDate"] = "Effective date must be YYYY-MM-DD"
+	}
+	today := time.Now().UTC().Truncate(24 * time.Hour)
+	if dateErr == nil && (effectiveDate.Before(row.JourneyStartDate) || effectiveDate.After(today)) {
+		fields["effectiveDate"] = "Bonus effective date must be on or after the Journey start date and not in the future"
+	}
+	if len(fields) > 0 {
+		return nil, ValidationError{Fields: fields}
+	}
+	if _, err := s.repo.FindValueUnitByCode(ctx, unit); err != nil {
+		return nil, ValidationError{Fields: map[string]string{"valueUnitCode": "Selected bonus value unit is not active for this tenant"}}
+	}
+	now := time.Now().UTC()
+	award := &db.JourneyBonusAward{
+		BaseModel: db.BaseModel{ID: ids.New(), CreatedAt: now, UpdatedAt: now},
+		TenantID:  row.TenantID, CollaboratorJourneyID: row.ID,
+		ValueUnitCode: unit, Amount: req.Amount, EffectiveDate: effectiveDate,
+		Description: strings.TrimSpace(req.Description), Status: "PENDING_APPROVAL",
+		RequestedByActorID: strings.TrimSpace(actorID), RequestedByUserID: strings.TrimSpace(actorUserID), RequestedAt: now,
+	}
+	award.ReceiptNumber = journeyBonusReceiptNumber(award.ID)
+	if strings.TrimSpace(award.RequestedByActorID) == "" {
+		return nil, authz.ErrMissingActor
+	}
+	if err := s.repo.CreateJourneyBonusAward(ctx, award); err != nil {
+		return nil, err
+	}
+	dto := toJourneyBonusAwardDTO(*award)
+	return &dto, nil
+}
+
+func (s *service) ListJourneyBonusAwards(ctx context.Context, id string) ([]JourneyBonusAwardDTO, error) {
+	if _, err := s.repo.FindByID(ctx, strings.TrimSpace(id)); err != nil {
+		return nil, err
+	}
+	rows, err := s.repo.ListJourneyBonusAwards(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]JourneyBonusAwardDTO, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, toJourneyBonusAwardDTO(row))
+	}
+	return out, nil
+}
+
+func (s *service) ApproveJourneyBonusAward(ctx context.Context, id, awardID, actorID, actorUserID string) (*JourneyBonusAwardDTO, error) {
+	journey, err := s.repo.FindByID(ctx, strings.TrimSpace(id))
+	if err != nil {
+		return nil, err
+	}
+	if journey.ClosedAt != nil {
+		return nil, ValidationError{Fields: map[string]string{"journeyBonus": "Journey bonus awards can only be approved while the Journey is open"}}
+	}
+	award, err := s.repo.FindJourneyBonusAward(ctx, journey.ID, awardID)
+	if err != nil {
+		return nil, err
+	}
+	if award.Status != "PENDING_APPROVAL" {
+		return nil, ValidationError{Fields: map[string]string{"journeyBonus": "Journey bonus award is no longer pending approval"}}
+	}
+	actorID = strings.TrimSpace(actorID)
+	if actorID == "" {
+		return nil, authz.ErrMissingActor
+	}
+	if actorID == strings.TrimSpace(award.RequestedByActorID) {
+		return nil, ValidationError{Fields: map[string]string{"secondApprover": "A different Tenant Administrator must approve the Journey bonus award"}}
+	}
+	valueUnit, err := s.repo.FindValueUnitByCode(ctx, award.ValueUnitCode)
+	if err != nil {
+		return nil, err
+	}
+	now := time.Now().UTC()
+	description := strings.TrimSpace(award.Description)
+	if description == "" {
+		description = "Journey bonus award"
+	}
+	entryID := "ledger-journey-bonus-" + award.ID
+	entry := &db.LedgerEntry{
+		BaseModel: db.BaseModel{ID: entryID, CreatedAt: now, UpdatedAt: now},
+		TenantID:  journey.TenantID, PersonID: journey.Membership.PersonID, CollaboratorID: journey.ID,
+		ValueUnitID: valueUnit.ID, EntryType: "EARNING_CREDIT", Direction: "CREDIT", Amount: award.Amount,
+		EffectiveDate: award.EffectiveDate, SourceType: "JOURNEY_BONUS", SourceID: award.ID,
+		Description: description, Active: true, CorrectionType: "ORIGINAL",
+		AuthorizedBy: strings.TrimSpace(actorUserID), AuthorizedAt: &now,
+	}
+	award.Status = "POSTED"
+	award.ApprovedByActorID = actorID
+	award.ApprovedByUserID = strings.TrimSpace(actorUserID)
+	award.ApprovedAt = &now
+	award.LedgerEntryID = entryID
+	award.UpdatedAt = now
+	if err := s.repo.ApproveJourneyBonusAward(ctx, award, entry); err != nil {
+		return nil, err
+	}
+	dto := toJourneyBonusAwardDTO(*award)
+	return &dto, nil
+}
+
+func journeyBonusReceiptNumber(id string) string {
+	clean := strings.ToUpper(strings.ReplaceAll(strings.TrimSpace(id), "-", ""))
+	if len(clean) > 12 {
+		clean = clean[:12]
+	}
+	return "JBA-" + clean
+}
+
+func toJourneyBonusAwardDTO(row db.JourneyBonusAward) JourneyBonusAwardDTO {
+	return JourneyBonusAwardDTO{
+		ID: row.ID, CollaboratorJourneyID: row.CollaboratorJourneyID, ReceiptNumber: row.ReceiptNumber,
+		ValueUnitCode: row.ValueUnitCode, Amount: row.Amount, EffectiveDate: formatDate(row.EffectiveDate),
+		Description: strings.TrimSpace(row.Description), Status: row.Status,
+		RequestedByActorID: row.RequestedByActorID, RequestedByUserID: row.RequestedByUserID,
+		RequestedAt: row.RequestedAt.UTC().Format(time.RFC3339), ApprovedByActorID: row.ApprovedByActorID,
+		ApprovedByUserID: row.ApprovedByUserID, ApprovedAt: formatDateTimePtr(row.ApprovedAt), LedgerEntryID: row.LedgerEntryID,
+	}
+}

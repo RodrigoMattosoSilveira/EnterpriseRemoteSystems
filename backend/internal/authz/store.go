@@ -819,7 +819,7 @@ func PermissionCatalog() []PermissionCatalogEntry {
 		{PermissionAuthzTenantActorsRead, "Read tenant Actors", "Read Account-bound Actors and lifecycle state for the selected tenant."},
 		{PermissionAuthzTenantActorsManage, "Manage tenant Actors", "Activate and deactivate Account-bound Actors for members of the selected tenant."},
 		{PermissionAuthzTenantRoleGrantsRead, "Read tenant role grants", "Read delegated Tenant Role Grants without authority to create or revoke them."},
-		{PermissionAuthzTenantRoleGrantsManage, "Manage tenant operator role grants", "Grant and revoke Earnings Operator and Expenses Operator roles for active Actors backed by ACTIVE Memberships in the selected tenant."},
+		{PermissionAuthzTenantRoleGrantsManage, "Manage tenant role grants", "Grant and revoke Tenant Administrator, Entity Executive, Earnings Operator, and Expenses Operator roles for active Actors backed by ACTIVE Memberships in the selected tenant."},
 		{PermissionAuthzTenantAuditRead, "Read tenant authorization audit", "Read authorization audit records for the selected tenant only."},
 		{PermissionSupportAccessLeasesRead, "Read Tenant support access leases", "Read Tenant Support Access Lease requests and lifecycle state within the actor's authorized scope."},
 		{PermissionSupportAccessLeasesRequest, "Request Tenant support access", "Request fixed-expiration, permission-scoped Tenant support access for the Application Administrator's GLOBAL Actor."},

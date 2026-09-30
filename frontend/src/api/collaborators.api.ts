@@ -21,6 +21,8 @@ import type {
   CollaboratorListResponse,
   CreateCollaboratorInput,
   ExtendCollaboratorJourneyInput,
+  CreateJourneyBonusAwardInput,
+  JourneyBonusAward,
   JourneyExtensionRequest,
   UpdateCollaboratorInput,
   UpdateCollaboratorWorkAssignmentInput,
@@ -163,6 +165,23 @@ export function extendCollaboratorJourney(
       body: JSON.stringify(input),
     },
   );
+}
+
+export function listJourneyBonusAwards(id: string): Promise<JourneyBonusAward[]> {
+  return apiFetch<JourneyBonusAward[]>(`/collaborators/${encodeURIComponent(id)}/bonus-awards`);
+}
+
+export function createJourneyBonusAward(id: string, input: CreateJourneyBonusAwardInput): Promise<JourneyBonusAward> {
+  return apiFetch<JourneyBonusAward>(`/collaborators/${encodeURIComponent(id)}/bonus-awards`, {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export function approveJourneyBonusAward(id: string, awardId: string): Promise<JourneyBonusAward> {
+  return apiFetch<JourneyBonusAward>(`/collaborators/${encodeURIComponent(id)}/bonus-awards/${encodeURIComponent(awardId)}/approve`, {
+    method: "POST",
+  });
 }
 
 export function getCollaboratorFinancialProjection(

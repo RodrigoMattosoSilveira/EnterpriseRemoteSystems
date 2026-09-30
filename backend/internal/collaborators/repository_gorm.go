@@ -2,6 +2,7 @@ package collaborators
 
 import (
 	"context"
+	"strings"
 
 	"enterpriseremotesystems/backend/internal/db"
 	"enterpriseremotesystems/backend/internal/shared/tenantctx"
@@ -144,6 +145,8 @@ func (r *gormRepository) Update(ctx context.Context, collaborator *db.Collaborat
 			"gold_commission_percent":             collaborator.GoldCommissionPercent,
 			"time_off_gold_split_percent":         collaborator.TimeOffGoldSplitPercent,
 			"sick_day_off_replacement_gold_grams": collaborator.SickDayOffReplacementGoldGrams,
+			"bonus_brl_amount":                    collaborator.BonusBRLAmount,
+			"bonus_description":                   collaborator.BonusDescription,
 			"planning_availability":               normalizePlanningAvailability(collaborator.PlanningAvailability),
 			"sector_id":                           collaborator.SectorID,
 			"location_id":                         collaborator.LocationID,
@@ -411,4 +414,55 @@ func (r *gormRepository) UpdateExtensionRequest(ctx context.Context, request *db
 		return gorm.ErrRecordNotFound
 	}
 	return nil
+}
+
+func (r *gormRepository) FindValueUnitByCode(ctx context.Context, code string) (*db.ReferenceData, error) {
+	var row db.ReferenceData
+	err := r.db.WithContext(ctx).First(&row, "tenant_id = ? AND type = ? AND code = ? AND active = ?", tenantctx.TenantID(ctx), "value_unit", strings.TrimSpace(code), true).Error
+	if err != nil {
+		return nil, err
+	}
+	return &row, nil
+}
+
+func (r *gormRepository) CreateJourneyBonusAward(ctx context.Context, award *db.JourneyBonusAward) error {
+	return r.db.WithContext(ctx).Create(award).Error
+}
+
+func (r *gormRepository) ListJourneyBonusAwards(ctx context.Context, collaboratorID string) ([]db.JourneyBonusAward, error) {
+	var rows []db.JourneyBonusAward
+	err := r.db.WithContext(ctx).
+		Where("tenant_id = ? AND collaborator_journey_id = ?", tenantctx.TenantID(ctx), strings.TrimSpace(collaboratorID)).
+		Order("requested_at DESC, created_at DESC").
+		Find(&rows).Error
+	return rows, err
+}
+
+func (r *gormRepository) FindJourneyBonusAward(ctx context.Context, collaboratorID, awardID string) (*db.JourneyBonusAward, error) {
+	var row db.JourneyBonusAward
+	err := r.db.WithContext(ctx).
+		First(&row, "id = ? AND collaborator_journey_id = ? AND tenant_id = ?", strings.TrimSpace(awardID), strings.TrimSpace(collaboratorID), tenantctx.TenantID(ctx)).Error
+	if err != nil {
+		return nil, err
+	}
+	return &row, nil
+}
+
+func (r *gormRepository) ApproveJourneyBonusAward(ctx context.Context, award *db.JourneyBonusAward, entry *db.LedgerEntry) error {
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		result := tx.Model(&db.JourneyBonusAward{}).
+			Where("id = ? AND tenant_id = ? AND collaborator_journey_id = ? AND status = ?", award.ID, tenantctx.TenantID(ctx), award.CollaboratorJourneyID, "PENDING_APPROVAL").
+			Updates(map[string]any{
+				"status": award.Status, "approved_by_actor_id": award.ApprovedByActorID,
+				"approved_by_user_id": award.ApprovedByUserID, "approved_at": award.ApprovedAt,
+				"ledger_entry_id": award.LedgerEntryID, "updated_at": award.UpdatedAt,
+			})
+		if result.Error != nil {
+			return result.Error
+		}
+		if result.RowsAffected != 1 {
+			return gorm.ErrRecordNotFound
+		}
+		return tx.Create(entry).Error
+	})
 }

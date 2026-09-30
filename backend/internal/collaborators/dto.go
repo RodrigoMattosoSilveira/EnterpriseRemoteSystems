@@ -67,6 +67,31 @@ type UpdateCollaboratorRequest struct {
 	TaskID                         string   `json:"taskId"`
 }
 
+type CreateJourneyBonusAwardRequest struct {
+	ValueUnitCode string  `json:"valueUnitCode"`
+	Amount        float64 `json:"amount"`
+	EffectiveDate string  `json:"effectiveDate"`
+	Description   string  `json:"description"`
+}
+
+type JourneyBonusAwardDTO struct {
+	ID                    string  `json:"id"`
+	CollaboratorJourneyID string  `json:"collaboratorJourneyId"`
+	ReceiptNumber         string  `json:"receiptNumber"`
+	ValueUnitCode         string  `json:"valueUnitCode"`
+	Amount                float64 `json:"amount"`
+	EffectiveDate         string  `json:"effectiveDate"`
+	Description           string  `json:"description,omitempty"`
+	Status                string  `json:"status"`
+	RequestedByActorID    string  `json:"requestedByActorId"`
+	RequestedByUserID     string  `json:"requestedByUserId"`
+	RequestedAt           string  `json:"requestedAt"`
+	ApprovedByActorID     string  `json:"approvedByActorId,omitempty"`
+	ApprovedByUserID      string  `json:"approvedByUserId,omitempty"`
+	ApprovedAt            string  `json:"approvedAt,omitempty"`
+	LedgerEntryID         string  `json:"ledgerEntryId,omitempty"`
+}
+
 type UpdateCollaboratorWorkAssignmentRequest struct {
 	SectorID   string `json:"sectorId"`
 	LocationID string `json:"locationId"`

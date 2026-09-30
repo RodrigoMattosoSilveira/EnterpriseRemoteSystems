@@ -23,7 +23,7 @@ BASELINE_SHA = "f" * 64
 BASELINE_LAST = "000062_tenant_administrator_cardinality.up.sql"
 FIRST_REHEARSED = "000063_global_administration_control_plane.up.sql"
 FINAL_MIGRATION = "000071_cross_tenant_delegated_role_isolation.up.sql"
-DEPLOYMENT_FINAL_MIGRATION = "000074_journey_extension_acceptance.up.sql"
+DEPLOYMENT_FINAL_MIGRATION = "000077_journey_bonus_award_approval.up.sql"
 
 
 def run(*args: str, expect_success: bool = True) -> subprocess.CompletedProcess[str]:
