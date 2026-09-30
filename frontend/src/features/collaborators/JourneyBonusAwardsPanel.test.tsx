@@ -3,6 +3,7 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { I18nProvider } from "../../i18n";
+import type { JourneyBonusAward } from "../../types/collaborators";
 import { JourneyBonusAwardsPanel } from "./JourneyBonusAwardsPanel";
 
 let container: HTMLDivElement;
@@ -22,7 +23,7 @@ afterEach(async () => {
 
 describe("JourneyBonusAwardsPanel", () => {
   it("requests multiple-unit bonus awards and requires a different Tenant Administrator to approve", async () => {
-    const pending = {
+    const pending: JourneyBonusAward = {
       id: "award-1",
       collaboratorJourneyId: "collab-1",
       receiptNumber: "JBA-AWARD1",
@@ -35,7 +36,7 @@ describe("JourneyBonusAwardsPanel", () => {
       requestedByUserId: "admin-a@example.test",
       requestedAt: "2026-09-29T12:00:00Z",
     };
-    let awards = [pending];
+    let awards: JourneyBonusAward[] = [pending];
     let createdPayload: Record<string, unknown> | undefined;
     let approved = false;
 
