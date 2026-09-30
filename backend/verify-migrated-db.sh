@@ -5,7 +5,7 @@ DB_PATH="${DATABASE_PATH:-/app/data/app.db}"
 MIGRATIONS_DIR="${MIGRATIONS_DIR:-/app/migrations}"
 EXPECTED_BASELINE_LAST_MIGRATION="${EXPECTED_BASELINE_LAST_MIGRATION:-000062_tenant_administrator_cardinality.up.sql}"
 EXPECTED_FIRST_REHEARSED_MIGRATION="${EXPECTED_FIRST_REHEARSED_MIGRATION:-000063_global_administration_control_plane.up.sql}"
-EXPECTED_FINAL_MIGRATION="${EXPECTED_FINAL_MIGRATION:-000075_journey_bonus_compensation.up.sql}"
+EXPECTED_FINAL_MIGRATION="${EXPECTED_FINAL_MIGRATION:-000076_journey_bonus_ledger_unique_index_repair.up.sql}"
 
 if [ ! -f "$DB_PATH" ]; then
   echo "Missing database for migration verification: $DB_PATH" >&2
