@@ -10,7 +10,7 @@ import (
 	"enterpriseremotesystems/backend/internal/shared/tenantctx"
 )
 
-func TestJourneyBonusPostsOnceIntoCurrentAccount(t *testing.T) {
+func TestJourneyBonusAwardsRequireDifferentTenantAdministratorAndSupportMultipleUnits(t *testing.T) {
 	database, err := db.Open(filepath.Join(t.TempDir(), "journey-bonus.db"))
 	if err != nil {
 		t.Fatal(err)
@@ -33,6 +33,7 @@ func TestJourneyBonusPostsOnceIntoCurrentAccount(t *testing.T) {
 		{BaseModel: db.BaseModel{ID: "task", CreatedAt: now, UpdatedAt: now}, TenantID: "default", Type: "task", Code: "MINER", Label: "Miner", Active: true},
 		{BaseModel: db.BaseModel{ID: "collab-active", CreatedAt: now, UpdatedAt: now}, TenantID: "default", Type: "collaborator_status", Code: "ACTIVE", Label: "Active", Active: true},
 		{BaseModel: db.BaseModel{ID: "brl", CreatedAt: now, UpdatedAt: now}, TenantID: "default", Type: "value_unit", Code: "BRL", Label: "BRL", Active: true},
+		{BaseModel: db.BaseModel{ID: "gold", CreatedAt: now, UpdatedAt: now}, TenantID: "default", Type: "value_unit", Code: "GOLD_GRAM", Label: "Gold gram", Active: true},
 	}
 	for i := range refs {
 		must(&refs[i])
@@ -42,30 +43,71 @@ func TestJourneyBonusPostsOnceIntoCurrentAccount(t *testing.T) {
 	membership := db.PersonTenantMembership{BaseModel: db.BaseModel{ID: "membership-1", CreatedAt: now, UpdatedAt: now}, TenantID: "default", PersonID: person.ID, StatusID: "person-active"}
 	must(&membership)
 	membershipID := membership.ID
-	bonus := 750.0
-	journey := db.CollaboratorJourney{BaseModel: db.BaseModel{ID: "journey-1", CreatedAt: now, UpdatedAt: now}, TenantID: "default", MembershipID: &membershipID, JourneyStartDate: time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC), DefaultEndDate: time.Date(2026, 11, 30, 0, 0, 0, 0, time.UTC), ProjectedEndDate: time.Date(2026, 11, 30, 0, 0, 0, 0, time.UTC), PaymentMethodID: "method", PaymentValue: 100, DailyBRLAmount: ptrFloat(100), BonusBRLAmount: &bonus, BonusDescription: "Retention bonus", PlanningAvailability: "ACTIVE", SectorID: "sector", LocationID: "location", TaskID: "task", StatusID: "collab-active"}
+	journey := db.CollaboratorJourney{BaseModel: db.BaseModel{ID: "journey-1", CreatedAt: now, UpdatedAt: now}, TenantID: "default", MembershipID: &membershipID, JourneyStartDate: time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC), DefaultEndDate: time.Date(2026, 11, 30, 0, 0, 0, 0, time.UTC), ProjectedEndDate: time.Date(2026, 11, 30, 0, 0, 0, 0, time.UTC), PaymentMethodID: "method", PaymentValue: 100, DailyBRLAmount: ptrFloat(100), PlanningAvailability: "ACTIVE", SectorID: "sector", LocationID: "location", TaskID: "task", StatusID: "collab-active"}
 	must(&journey)
+
 	svc := NewService(NewRepository(database))
 	ctx := tenantctx.WithTenantID(context.Background(), "default")
-	got, err := svc.PostJourneyBonus(ctx, journey.ID, PostJourneyBonusRequest{EffectiveDate: "2026-09-29"}, "tenant-admin@example.test")
+	brlAward, err := svc.CreateJourneyBonusAward(ctx, journey.ID, CreateJourneyBonusAwardRequest{ValueUnitCode: "BRL", Amount: 750, EffectiveDate: "2026-09-29", Description: "Retention bonus"}, "actor-admin-a", "admin-a@example.test")
 	if err != nil {
-		t.Fatalf("post bonus: %v", err)
+		t.Fatalf("create BRL award: %v", err)
 	}
-	if got.BonusPostedAt == "" || got.BonusLedgerEntryID == "" {
-		t.Fatalf("bonus not marked posted: %+v", got)
+	if brlAward.Status != "PENDING_APPROVAL" {
+		t.Fatalf("expected pending award, got %+v", brlAward)
 	}
-	var entry db.LedgerEntry
-	if err := database.First(&entry, "id = ?", got.BonusLedgerEntryID).Error; err != nil {
+	if _, err := svc.ApproveJourneyBonusAward(ctx, journey.ID, brlAward.ID, "actor-admin-a", "admin-a@example.test"); err == nil {
+		t.Fatal("requesting Tenant Administrator must not approve the same award")
+	}
+	postedBRL, err := svc.ApproveJourneyBonusAward(ctx, journey.ID, brlAward.ID, "actor-admin-b", "admin-b@example.test")
+	if err != nil {
+		t.Fatalf("approve BRL award: %v", err)
+	}
+	if postedBRL.Status != "POSTED" || postedBRL.LedgerEntryID == "" {
+		t.Fatalf("BRL award not posted: %+v", postedBRL)
+	}
+
+	goldAward, err := svc.CreateJourneyBonusAward(ctx, journey.ID, CreateJourneyBonusAwardRequest{ValueUnitCode: "GOLD_GRAM", Amount: 1.25, EffectiveDate: "2026-09-29", Description: "Safety milestone"}, "actor-admin-a", "admin-a@example.test")
+	if err != nil {
+		t.Fatalf("create gold award: %v", err)
+	}
+	postedGold, err := svc.ApproveJourneyBonusAward(ctx, journey.ID, goldAward.ID, "actor-admin-b", "admin-b@example.test")
+	if err != nil {
+		t.Fatalf("approve gold award: %v", err)
+	}
+
+	var entries []db.LedgerEntry
+	if err := database.Where("collaborator_id = ? AND source_type = ?", journey.ID, "JOURNEY_BONUS").Order("amount DESC").Find(&entries).Error; err != nil {
 		t.Fatal(err)
 	}
-	if entry.EntryType != "EARNING_CREDIT" || entry.Direction != "CREDIT" || entry.Amount != 750 || entry.SourceType != "JOURNEY_BONUS" || entry.PersonID != person.ID {
-		t.Fatalf("unexpected bonus ledger entry: %+v", entry)
+	if len(entries) != 2 {
+		t.Fatalf("expected two independent bonus credits, got %+v", entries)
 	}
-	if _, err := svc.PostJourneyBonus(ctx, journey.ID, PostJourneyBonusRequest{EffectiveDate: "2026-09-30"}, "tenant-admin@example.test"); err == nil {
-		t.Fatal("bonus must not post twice")
+	byUnit := map[string]db.LedgerEntry{}
+	for _, entry := range entries {
+		var unit db.ReferenceData
+		if err := database.First(&unit, "id = ?", entry.ValueUnitID).Error; err != nil {
+			t.Fatal(err)
+		}
+		byUnit[unit.Code] = entry
+		if entry.EntryType != "EARNING_CREDIT" || entry.Direction != "CREDIT" || entry.PersonID != person.ID || entry.SourceID == journey.ID {
+			t.Fatalf("unexpected bonus ledger provenance: %+v", entry)
+		}
 	}
-	update := UpdateCollaboratorRequest{PaymentMethodID: "method", PaymentValue: 100, DailyBRLAmount: ptrFloat(100), BonusBRLAmount: ptrFloat(800), BonusDescription: "changed", PlanningAvailability: "ACTIVE", SectorID: "sector", LocationID: "location", TaskID: "task"}
-	if _, err := svc.Update(ctx, journey.ID, update, "tenant-admin@example.test"); err == nil {
-		t.Fatal("posted bonus must be immutable")
+	if byUnit["BRL"].Amount != 750 || byUnit["GOLD_GRAM"].Amount != 1.25 {
+		t.Fatalf("unexpected bonus amounts: %+v", byUnit)
+	}
+	if postedGold.Status != "POSTED" || postedGold.ApprovedByActorID != "actor-admin-b" {
+		t.Fatalf("unexpected gold approval: %+v", postedGold)
+	}
+	if _, err := svc.ApproveJourneyBonusAward(ctx, journey.ID, brlAward.ID, "actor-admin-b", "admin-b@example.test"); err == nil {
+		t.Fatal("posted award must not be approved twice")
+	}
+
+	awards, err := svc.ListJourneyBonusAwards(ctx, journey.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(awards) != 2 {
+		t.Fatalf("expected durable award history, got %+v", awards)
 	}
 }

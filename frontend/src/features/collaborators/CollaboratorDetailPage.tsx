@@ -12,6 +12,7 @@ import type { ReferenceDataItem } from "../../types/referenceData";
 import { useReferenceDataByType } from "../reference-data/useReferenceData";
 import { JourneySettlementPanel } from "./JourneySettlementPanel";
 import { JourneyExtensionRequestsPanel } from "./JourneyExtensionRequestsPanel";
+import { JourneyBonusAwardsPanel } from "./JourneyBonusAwardsPanel";
 import { WorkCreditEvidencePanel } from "./WorkCreditEvidencePanel";
 import {
   formatCollaboratorPaymentValue,
@@ -23,7 +24,6 @@ import {
   useCollaborator,
   useUpdateCollaborator,
   useUpdateCollaboratorWorkAssignment,
-  usePostJourneyBonus,
 } from "./useCollaborators";
 import { useSettlementPreview } from "./useSettlements";
 import { PageContextHeading, PageTitle } from "../../components/layout/PageHeading";
@@ -342,10 +342,13 @@ export function CollaboratorDetailPage() {
           </dl>
         </section>
 
-        <JourneyBonusPanel
-          collaborator={collaborator}
-          canPost={isTenantAdministrator && !collaborator.closedAt}
-        />
+        {canBrowseCollaborators || actor.collaboratorId === collaborator.id ? (
+          <JourneyBonusAwardsPanel
+            collaboratorId={collaborator.id}
+            actorId={actor.actorKey}
+            canManage={isTenantAdministrator && !collaborator.closedAt}
+          />
+        ) : null}
 
         {actor.permissions.includes("work_credit_evidence.self.read") &&
         actor.membershipId &&
@@ -369,36 +372,6 @@ export function CollaboratorDetailPage() {
         />
       </section>
     </main>
-  );
-}
-
-function JourneyBonusPanel({ collaborator, canPost }: { collaborator: Collaborator; canPost: boolean }) {
-  const { t, formatCurrency, formatDateTime } = useI18n();
-  const mutation = usePostJourneyBonus(collaborator.id);
-  const [effectiveDate, setEffectiveDate] = useState(new Date().toISOString().slice(0, 10));
-  const configured = Boolean(collaborator.bonusBrlAmount && collaborator.bonusBrlAmount > 0);
-  const posted = Boolean(collaborator.bonusPostedAt);
-
-  return (
-    <section className="rounded-2xl border bg-white p-5 shadow-sm">
-      <h2 className="text-lg font-semibold text-gray-950">{t("bonus.title")}</h2>
-      <p className="mt-1 text-sm text-gray-500">{t("bonus.help")}</p>
-      <dl className="mt-5 grid gap-3 text-sm">
-        <Info label={t("bonus.amount")} value={configured ? formatCurrency(collaborator.bonusBrlAmount ?? 0, "BRL") : "—"} />
-        <Info label={t("bonus.description")} value={collaborator.bonusDescription || "—"} />
-        <Info label={t("bonus.status")} value={posted ? t("bonus.posted") : configured ? t("bonus.available") : t("bonus.notConfigured")} />
-        {posted ? <Info label={t("bonus.postedAt")} value={formatDateTime(collaborator.bonusPostedAt ?? "")} /> : null}
-      </dl>
-      {canPost && configured && !posted ? (
-        <div className="mt-5 space-y-3 border-t pt-4">
-          <Input label={t("bonus.effectiveDate")} type="date" value={effectiveDate} onChange={setEffectiveDate} />
-          <button type="button" disabled={mutation.isPending || !effectiveDate} onClick={() => mutation.mutate({ effectiveDate })} className="rounded-xl bg-gray-950 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60">
-            {mutation.isPending ? t("bonus.posting") : t("bonus.post")}
-          </button>
-          <ApiErrorPanel error={mutation.error} translate={t} />
-        </div>
-      ) : null}
-    </section>
   );
 }
 
@@ -572,8 +545,6 @@ type EditFormState = {
   taskId: string;
   paymentMethodId: string;
   paymentValue: string;
-  bonusBrlAmount: string;
-  bonusDescription: string;
 };
 
 function CollaboratorEditPanel({
@@ -775,24 +746,6 @@ function CollaboratorEditPanel({
               value={form.paymentValue}
               onChange={(value) => update("paymentValue", value)}
             />
-            <Input
-              label={t("bonus.amount")}
-              type="number"
-              min="0.01"
-              step="0.01"
-              inputMode="decimal"
-              value={form.bonusBrlAmount}
-              onChange={(value) => update("bonusBrlAmount", value)}
-              helperText={collaborator.bonusPostedAt ? t("bonus.immutableAfterPost") : t("bonus.amountHelp")}
-              disabled={Boolean(collaborator.bonusPostedAt || collaborator.closedAt)}
-            />
-            <Input
-              label={t("bonus.description")}
-              value={form.bonusDescription}
-              onChange={(value) => update("bonusDescription", value)}
-              helperText={t("bonus.descriptionHelp")}
-              disabled={Boolean(collaborator.bonusPostedAt || collaborator.closedAt)}
-            />
           </div>
 
           <div className="flex justify-end gap-3">
@@ -825,8 +778,6 @@ function editFormFromCollaborator(collaborator: Collaborator): EditFormState {
     taskId: collaborator.taskId,
     paymentMethodId: collaborator.paymentMethodId,
     paymentValue: String(collaborator.paymentValue || ""),
-    bonusBrlAmount: collaborator.bonusBrlAmount ? String(collaborator.bonusBrlAmount) : "",
-    bonusDescription: collaborator.bonusDescription ?? "",
   };
 }
 
@@ -844,8 +795,6 @@ function collaboratorUpdateInput(
     taskId: form.taskId,
     paymentMethodId: form.paymentMethodId,
     paymentValue,
-    bonusBrlAmount: form.bonusBrlAmount.trim() ? Number(form.bonusBrlAmount) : undefined,
-    bonusDescription: form.bonusDescription.trim() || undefined,
   };
 
   switch (normalizePaymentMethodCode(selectedPaymentMethod?.code)) {

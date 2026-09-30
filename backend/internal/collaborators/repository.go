@@ -19,7 +19,10 @@ type Repository interface {
 	FindExtensionRequest(ctx context.Context, collaboratorID, requestID string) (*db.JourneyExtensionRequest, error)
 	AcceptExtensionRequest(ctx context.Context, collaborator *db.CollaboratorJourney, request *db.JourneyExtensionRequest) error
 	UpdateExtensionRequest(ctx context.Context, request *db.JourneyExtensionRequest) error
-	PostJourneyBonus(ctx context.Context, collaborator *db.CollaboratorJourney, entry *db.LedgerEntry) error
+	CreateJourneyBonusAward(ctx context.Context, award *db.JourneyBonusAward) error
+	ListJourneyBonusAwards(ctx context.Context, collaboratorID string) ([]db.JourneyBonusAward, error)
+	FindJourneyBonusAward(ctx context.Context, collaboratorID, awardID string) (*db.JourneyBonusAward, error)
+	ApproveJourneyBonusAward(ctx context.Context, award *db.JourneyBonusAward, entry *db.LedgerEntry) error
 	FindValueUnitByCode(ctx context.Context, code string) (*db.ReferenceData, error)
 	FindByID(ctx context.Context, id string) (*db.CollaboratorJourney, error)
 	FindByIDForMembership(ctx context.Context, id string, membershipID string) (*db.CollaboratorJourney, error)

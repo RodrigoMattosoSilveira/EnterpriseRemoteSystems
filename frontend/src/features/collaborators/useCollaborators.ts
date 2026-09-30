@@ -2,7 +2,9 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   createCollaborator,
   extendCollaboratorJourney,
-  postJourneyBonus,
+  listJourneyBonusAwards,
+  createJourneyBonusAward,
+  approveJourneyBonusAward,
   listJourneyExtensionRequests,
   acceptJourneyExtensionRequest,
   rejectJourneyExtensionRequest,
@@ -24,7 +26,7 @@ import type {
   CollaboratorListFilter,
   CreateCollaboratorInput,
   ExtendCollaboratorJourneyInput,
-  PostJourneyBonusInput,
+  CreateJourneyBonusAwardInput,
   UpdateCollaboratorInput,
   UpdateCollaboratorWorkAssignmentInput,
 } from "../../types/collaborators";
@@ -48,6 +50,7 @@ export const collaboratorQueryKeys = {
   selfDetail: (id: string) =>
     [...collaboratorQueryKeys.details(), "self", id] as const,
   extensionRequests: (id: string) => [...collaboratorQueryKeys.detail(id), "extension-requests"] as const,
+  bonusAwards: (id: string) => [...collaboratorQueryKeys.detail(id), "bonus-awards"] as const,
   selfWorkCreditEvidence: (id: string) =>
     [...collaboratorQueryKeys.details(), "self", id, "work-credit-evidence"] as const,
 };
@@ -200,14 +203,28 @@ export function useUpdateCollaboratorWorkAssignment(id: string) {
   });
 }
 
-export function usePostJourneyBonus(id: string) {
+export function useJourneyBonusAwards(id: string) {
+  return useQuery({
+    queryKey: collaboratorQueryKeys.bonusAwards(id),
+    queryFn: () => listJourneyBonusAwards(id),
+    enabled: Boolean(id),
+  });
+}
+
+export function useCreateJourneyBonusAward(id: string) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (input: PostJourneyBonusInput) => postJourneyBonus(id, input),
-    onSuccess: (collaborator) => {
-      queryClient.setQueryData(collaboratorQueryKeys.detail(id), collaborator);
-      queryClient.invalidateQueries({ queryKey: collaboratorQueryKeys.selfDetail(id) });
-      queryClient.invalidateQueries({ queryKey: collaboratorQueryKeys.lists() });
+    mutationFn: (input: CreateJourneyBonusAwardInput) => createJourneyBonusAward(id, input),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: collaboratorQueryKeys.bonusAwards(id) }),
+  });
+}
+
+export function useApproveJourneyBonusAward(id: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (awardId: string) => approveJourneyBonusAward(id, awardId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: collaboratorQueryKeys.bonusAwards(id) });
       queryClient.invalidateQueries({ queryKey: ["current-account", id] });
       queryClient.invalidateQueries({ queryKey: collaboratorQueryKeys.selfWorkCreditEvidence(id) });
     },

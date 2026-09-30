@@ -68,6 +68,26 @@ type JourneyExtensionRequest struct {
 	CancelledAt           *time.Time `json:"cancelledAt,omitempty"`
 }
 
+type JourneyBonusAward struct {
+	BaseModel
+
+	TenantID              string     `gorm:"type:text;not null;index" json:"tenantId"`
+	CollaboratorJourneyID string     `gorm:"type:text;not null;index" json:"collaboratorJourneyId"`
+	ReceiptNumber         string     `gorm:"type:text;not null;uniqueIndex" json:"receiptNumber"`
+	ValueUnitCode         string     `gorm:"type:text;not null;index" json:"valueUnitCode"`
+	Amount                float64    `gorm:"not null" json:"amount"`
+	EffectiveDate         time.Time  `gorm:"type:date;not null;index" json:"effectiveDate"`
+	Description           string     `gorm:"type:text" json:"description,omitempty"`
+	Status                string     `gorm:"type:text;not null;index" json:"status"`
+	RequestedByActorID    string     `gorm:"type:text;not null" json:"requestedByActorId"`
+	RequestedByUserID     string     `gorm:"type:text;not null" json:"requestedByUserId"`
+	RequestedAt           time.Time  `gorm:"not null" json:"requestedAt"`
+	ApprovedByActorID     string     `gorm:"type:text" json:"approvedByActorId,omitempty"`
+	ApprovedByUserID      string     `gorm:"type:text" json:"approvedByUserId,omitempty"`
+	ApprovedAt            *time.Time `json:"approvedAt,omitempty"`
+	LedgerEntryID         string     `gorm:"type:text" json:"ledgerEntryId,omitempty"`
+}
+
 type CollaboratorJourney struct {
 	BaseModel
 

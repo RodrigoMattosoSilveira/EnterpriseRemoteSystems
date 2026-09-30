@@ -501,7 +501,7 @@ func (r *gormRepository) CloseJourneyWithAudit(ctx context.Context, collaborator
 		}
 		return tx.Create(settlement).Error
 	})
-	if err != nil && (strings.Contains(err.Error(), "collaborator_journey_non_zero_balance") || strings.Contains(err.Error(), "pending Journey extension request must be resolved before closure")) {
+	if err != nil && (strings.Contains(err.Error(), "collaborator_journey_non_zero_balance") || strings.Contains(err.Error(), "pending Journey extension request must be resolved before closure") || strings.Contains(err.Error(), "pending Journey bonus award must be approved before closure")) {
 		return ErrJourneyCloseBlocked
 	}
 	return err

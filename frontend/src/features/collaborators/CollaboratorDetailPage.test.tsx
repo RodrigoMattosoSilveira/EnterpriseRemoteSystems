@@ -177,45 +177,6 @@ describe("CollaboratorDetailPage", () => {
     expect(textNode("Primary mine operator.")).toBeTruthy();
   });
 
-  it("posts a configured Journey bonus once as Tenant Administrator", async () => {
-    let postPayload: Record<string, unknown> | undefined;
-    const configured = {
-      ...collaborator,
-      bonusBrlAmount: 750,
-      bonusDescription: "Retention bonus",
-    };
-
-    mockFetch(async (url, init) => {
-      if (url === "/api/v1/collaborators/collab-1/bonus/post" && init?.method === "POST") {
-        postPayload = JSON.parse(String(init.body)) as Record<string, unknown>;
-        return jsonResponse({
-          data: {
-            ...configured,
-            bonusPostedAt: "2026-06-01T12:00:00Z",
-            bonusLedgerEntryId: "ledger-journey-bonus-collab-1",
-          },
-        });
-      }
-      if (url === "/api/v1/collaborators/collab-1") {
-        return jsonResponse({ data: configured });
-      }
-      throw new Error(`Unhandled request: ${url}`);
-    });
-
-    renderCollaboratorDetailPage("/collaborators/collab-1");
-    await waitForText("Journey Bonus");
-    expect(textNode("Retention bonus")).toBeTruthy();
-    expect(textNode("Available to post")).toBeTruthy();
-
-    await act(async () => {
-      buttonByText("Post Bonus")?.click();
-    });
-
-    expect(postPayload).toEqual({ effectiveDate: expect.any(String) });
-    await waitForText("Posted");
-    expect(buttonByText("Post Bonus")).toBeFalsy();
-  });
-
   it("edits collaborator assignment and payment without bypassing Journey extension governance", async () => {
     let updatePayload: Record<string, unknown> | undefined;
 
@@ -691,6 +652,7 @@ function mockFetch(
       const referenceData = referenceDataResponse(url);
       if (referenceData) return referenceData;
       if (url.includes("/extension-requests")) return jsonResponse({ data: [] });
+      if (url.includes("/bonus-awards") && (!init?.method || init.method === "GET")) return jsonResponse({ data: [] });
       return handler(url, init);
     },
   );

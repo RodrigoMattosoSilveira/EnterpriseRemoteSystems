@@ -21,10 +21,6 @@ export type Collaborator = {
   goldCommissionPercent?: number;
   timeOffGoldSplitPercent?: number;
   sickDayOffReplacementGoldGrams?: number;
-  bonusBrlAmount?: number;
-  bonusDescription?: string;
-  bonusPostedAt?: string;
-  bonusLedgerEntryId?: string;
   planningAvailability: "ACTIVE" | "DAY_OFF" | "LEAVE_OF_ABSENCE";
 
   sectorId: string;
@@ -56,8 +52,6 @@ export type CreateCollaboratorInput = {
   goldCommissionPercent?: number;
   timeOffGoldSplitPercent?: number;
   sickDayOffReplacementGoldGrams?: number;
-  bonusBrlAmount?: number;
-  bonusDescription?: string;
   planningAvailability?: "ACTIVE" | "DAY_OFF" | "LEAVE_OF_ABSENCE";
   sectorId: string;
   locationId: string;
@@ -74,8 +68,6 @@ export type UpdateCollaboratorInput = {
   goldCommissionPercent?: number;
   timeOffGoldSplitPercent?: number;
   sickDayOffReplacementGoldGrams?: number;
-  bonusBrlAmount?: number;
-  bonusDescription?: string;
   planningAvailability?: "ACTIVE" | "DAY_OFF" | "LEAVE_OF_ABSENCE";
   sectorId: string;
   locationId: string;
@@ -88,8 +80,29 @@ export type UpdateCollaboratorWorkAssignmentInput = {
   taskId: string;
 };
 
-export type PostJourneyBonusInput = {
+export type JourneyBonusAward = {
+  id: string;
+  collaboratorJourneyId: string;
+  receiptNumber: string;
+  valueUnitCode: "BRL" | "GOLD_GRAM";
+  amount: number;
   effectiveDate: string;
+  description?: string;
+  status: "PENDING_APPROVAL" | "POSTED";
+  requestedByActorId: string;
+  requestedByUserId: string;
+  requestedAt: string;
+  approvedByActorId?: string;
+  approvedByUserId?: string;
+  approvedAt?: string;
+  ledgerEntryId?: string;
+};
+
+export type CreateJourneyBonusAwardInput = {
+  valueUnitCode: "BRL" | "GOLD_GRAM";
+  amount: number;
+  effectiveDate: string;
+  description?: string;
 };
 
 export type ExtendCollaboratorJourneyInput = {

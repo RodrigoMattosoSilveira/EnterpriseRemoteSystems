@@ -21,7 +21,8 @@ import type {
   CollaboratorListResponse,
   CreateCollaboratorInput,
   ExtendCollaboratorJourneyInput,
-  PostJourneyBonusInput,
+  CreateJourneyBonusAwardInput,
+  JourneyBonusAward,
   JourneyExtensionRequest,
   UpdateCollaboratorInput,
   UpdateCollaboratorWorkAssignmentInput,
@@ -166,10 +167,20 @@ export function extendCollaboratorJourney(
   );
 }
 
-export function postJourneyBonus(id: string, input: PostJourneyBonusInput): Promise<Collaborator> {
-  return apiFetch<Collaborator>(`/collaborators/${encodeURIComponent(id)}/bonus/post`, {
+export function listJourneyBonusAwards(id: string): Promise<JourneyBonusAward[]> {
+  return apiFetch<JourneyBonusAward[]>(`/collaborators/${encodeURIComponent(id)}/bonus-awards`);
+}
+
+export function createJourneyBonusAward(id: string, input: CreateJourneyBonusAwardInput): Promise<JourneyBonusAward> {
+  return apiFetch<JourneyBonusAward>(`/collaborators/${encodeURIComponent(id)}/bonus-awards`, {
     method: "POST",
     body: JSON.stringify(input),
+  });
+}
+
+export function approveJourneyBonusAward(id: string, awardId: string): Promise<JourneyBonusAward> {
+  return apiFetch<JourneyBonusAward>(`/collaborators/${encodeURIComponent(id)}/bonus-awards/${encodeURIComponent(awardId)}/approve`, {
+    method: "POST",
   });
 }
 

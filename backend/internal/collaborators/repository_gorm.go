@@ -425,11 +425,38 @@ func (r *gormRepository) FindValueUnitByCode(ctx context.Context, code string) (
 	return &row, nil
 }
 
-func (r *gormRepository) PostJourneyBonus(ctx context.Context, collaborator *db.CollaboratorJourney, entry *db.LedgerEntry) error {
+func (r *gormRepository) CreateJourneyBonusAward(ctx context.Context, award *db.JourneyBonusAward) error {
+	return r.db.WithContext(ctx).Create(award).Error
+}
+
+func (r *gormRepository) ListJourneyBonusAwards(ctx context.Context, collaboratorID string) ([]db.JourneyBonusAward, error) {
+	var rows []db.JourneyBonusAward
+	err := r.db.WithContext(ctx).
+		Where("tenant_id = ? AND collaborator_journey_id = ?", tenantctx.TenantID(ctx), strings.TrimSpace(collaboratorID)).
+		Order("requested_at DESC, created_at DESC").
+		Find(&rows).Error
+	return rows, err
+}
+
+func (r *gormRepository) FindJourneyBonusAward(ctx context.Context, collaboratorID, awardID string) (*db.JourneyBonusAward, error) {
+	var row db.JourneyBonusAward
+	err := r.db.WithContext(ctx).
+		First(&row, "id = ? AND collaborator_journey_id = ? AND tenant_id = ?", strings.TrimSpace(awardID), strings.TrimSpace(collaboratorID), tenantctx.TenantID(ctx)).Error
+	if err != nil {
+		return nil, err
+	}
+	return &row, nil
+}
+
+func (r *gormRepository) ApproveJourneyBonusAward(ctx context.Context, award *db.JourneyBonusAward, entry *db.LedgerEntry) error {
 	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		result := tx.Model(&db.CollaboratorJourney{}).Where("id = ? AND tenant_id = ? AND closed_at IS NULL AND bonus_posted_at IS NULL", collaborator.ID, tenantctx.TenantID(ctx)).Updates(map[string]any{
-			"updated_at": collaborator.UpdatedAt, "bonus_posted_at": collaborator.BonusPostedAt, "bonus_ledger_entry_id": collaborator.BonusLedgerEntryID,
-		})
+		result := tx.Model(&db.JourneyBonusAward{}).
+			Where("id = ? AND tenant_id = ? AND collaborator_journey_id = ? AND status = ?", award.ID, tenantctx.TenantID(ctx), award.CollaboratorJourneyID, "PENDING_APPROVAL").
+			Updates(map[string]any{
+				"status": award.Status, "approved_by_actor_id": award.ApprovedByActorID,
+				"approved_by_user_id": award.ApprovedByUserID, "approved_at": award.ApprovedAt,
+				"ledger_entry_id": award.LedgerEntryID, "updated_at": award.UpdatedAt,
+			})
 		if result.Error != nil {
 			return result.Error
 		}

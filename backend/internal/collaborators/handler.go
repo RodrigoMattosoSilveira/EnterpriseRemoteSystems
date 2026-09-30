@@ -242,17 +242,42 @@ func (h *Handler) RejectExtensionRequest(c fiber.Ctx) error {
 	return c.JSON(httpx.APIResponse{Data: updated})
 }
 
-func (h *Handler) PostJourneyBonus(c fiber.Ctx) error {
-	var req PostJourneyBonusRequest
-	if err := c.Bind().Body(&req); err != nil {
-		return httpx.WriteError(c, err)
-	}
-	updated, err := h.service.PostJourneyBonus(requesttenant.Context(c), c.Params("id"), req, actorUserID(c))
+func (h *Handler) ListJourneyBonusAwards(c fiber.Ctx) error {
+	items, err := h.service.ListJourneyBonusAwards(requesttenant.Context(c), c.Params("id"))
 	if err != nil {
 		return httpx.WriteError(c, err)
 	}
-	h.recordLifecycleAudit(c, authz.PermissionEarningsCreate, "collaborators.journey_bonus.post", c.Params("id"), updated.PersonID, updated.MembershipID)
-	return c.JSON(httpx.APIResponse{Data: updated})
+	return c.JSON(httpx.APIResponse{Data: items})
+}
+
+func (h *Handler) CreateJourneyBonusAward(c fiber.Ctx) error {
+	actor, err := authz.RequestActorFromContext(c)
+	if err != nil {
+		return httpx.WriteError(c, err)
+	}
+	var req CreateJourneyBonusAwardRequest
+	if err := c.Bind().Body(&req); err != nil {
+		return httpx.WriteError(c, err)
+	}
+	created, err := h.service.CreateJourneyBonusAward(requesttenant.Context(c), c.Params("id"), req, actor.ID, actorUserID(c))
+	if err != nil {
+		return httpx.WriteError(c, err)
+	}
+	h.recordLifecycleAudit(c, authz.PermissionEarningsCreate, "collaborators.journey_bonus.request", c.Params("id"), actor.PersonID, actor.MembershipID)
+	return c.Status(fiber.StatusCreated).JSON(httpx.APIResponse{Data: created})
+}
+
+func (h *Handler) ApproveJourneyBonusAward(c fiber.Ctx) error {
+	actor, err := authz.RequestActorFromContext(c)
+	if err != nil {
+		return httpx.WriteError(c, err)
+	}
+	approved, err := h.service.ApproveJourneyBonusAward(requesttenant.Context(c), c.Params("id"), c.Params("awardId"), actor.ID, actorUserID(c))
+	if err != nil {
+		return httpx.WriteError(c, err)
+	}
+	h.recordLifecycleAudit(c, authz.PermissionEarningsCreate, "collaborators.journey_bonus.approve", c.Params("id"), actor.PersonID, actor.MembershipID)
+	return c.JSON(httpx.APIResponse{Data: approved})
 }
 
 func (h *Handler) CancelExtensionRequest(c fiber.Ctx) error {
