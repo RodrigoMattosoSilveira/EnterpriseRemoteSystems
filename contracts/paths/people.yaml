@@ -125,3 +125,57 @@ personById:
         $ref: "../openapi.yaml#/components/responses/ValidationError"
       "404":
         $ref: "../openapi.yaml#/components/responses/NotFound"
+
+
+personPhoto:
+  get:
+    operationId: getPersonPhoto
+    description: Returns the current global Person photo for an authorized Person viewer.
+    parameters:
+      - $ref: "../openapi.yaml#/components/parameters/PersonID"
+    responses:
+      "200":
+        description: Person photo bytes
+        content:
+          image/jpeg:
+            schema: { type: string, format: binary }
+          image/png:
+            schema: { type: string, format: binary }
+      "404":
+        $ref: "../openapi.yaml#/components/responses/NotFound"
+  put:
+    operationId: replacePersonPhoto
+    description: Tenant Administrator-only add or replacement of the global Person photo.
+    parameters:
+      - $ref: "../openapi.yaml#/components/parameters/PersonID"
+    requestBody:
+      required: true
+      content:
+        image/jpeg:
+          schema: { type: string, format: binary }
+        image/png:
+          schema: { type: string, format: binary }
+    responses:
+      "200":
+        description: Photo metadata
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                data:
+                  $ref: "../openapi.yaml#/components/schemas/PersonPhotoMetadata"
+      "400":
+        $ref: "../openapi.yaml#/components/responses/ValidationError"
+      "404":
+        $ref: "../openapi.yaml#/components/responses/NotFound"
+  delete:
+    operationId: removePersonPhoto
+    description: Tenant Administrator-only removal of the global Person photo.
+    parameters:
+      - $ref: "../openapi.yaml#/components/parameters/PersonID"
+    responses:
+      "204":
+        description: Photo removed
+      "404":
+        $ref: "../openapi.yaml#/components/responses/NotFound"

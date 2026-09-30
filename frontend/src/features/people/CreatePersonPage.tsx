@@ -1,10 +1,14 @@
+import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { PersonForm } from "./PersonForm";
+import { PersonPhotoPicker } from "./PersonPhotoPicker";
+import { setPersonPhoto } from "../../api/people.api";
 import { useCreatePerson } from "./usePeople";
 import { ApiError } from "../../api/client";
 import { ApiErrorPanel } from "../../components/ApiErrorPanel";
 import { useReferenceDataByType } from "../reference-data/useReferenceData";
 import { PageTitle } from "../../components/layout/PageHeading";
+import { useAuthorizationContext } from "../../components/layout/AuthorizationContext";
 import { useI18n } from "../../i18n";
 import { personStatusLabel } from "./personPresentation";
 
@@ -13,7 +17,10 @@ const FALLBACK_ACTIVE_STATUS_ID = "ref-person-status-active";
 export function CreatePersonPage() {
   const { t } = useI18n();
   const navigate = useNavigate();
+  const actor = useAuthorizationContext();
+  const canManagePhoto = actor.scope === "TENANT" && actor.roleCodes.includes("TENANT_ADMIN");
   const mutation = useCreatePerson();
+  const [photoFile, setPhotoFile] = useState<File | null>(null);
   const statusesQuery = useReferenceDataByType("person_status");
   const activeStatuses = (statusesQuery.data ?? []).filter((status) => status.active);
   const activeStatus =
@@ -48,16 +55,24 @@ export function CreatePersonPage() {
           </div>
         )}
 
+        {canManagePhoto && <PersonPhotoPicker file={photoFile} onChange={setPhotoFile} />}
+
         <PersonForm
           defaultStatusId={defaultStatusId}
           statusOptions={statusOptions}
           submitting={mutation.isPending}
           onSubmit={async (input) => {
             const created = await mutation.mutateAsync(input);
+            let flash = t("people.new.flash", { name: `${created.firstName} ${created.lastName}` });
+            if (canManagePhoto && photoFile) {
+              try {
+                await setPersonPhoto(created.id, photoFile);
+              } catch {
+                flash = t("people.photo.uploadFailedAfterCreate");
+              }
+            }
             navigate(`/people/${created.id}#authentication`, {
-              state: {
-                flash: t("people.new.flash", { name: `${created.firstName} ${created.lastName}` }),
-              },
+              state: { flash },
             });
           }}
         />

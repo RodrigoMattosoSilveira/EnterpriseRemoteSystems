@@ -9,6 +9,7 @@ import (
 	"enterpriseremotesystems/backend/internal/db"
 	"enterpriseremotesystems/backend/internal/shared/ids"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 type gormRepository struct {
@@ -675,4 +676,39 @@ func globalPersonUpdateMap(person db.GlobalPerson) map[string]any {
 		"profile_completion_status": person.ProfileCompletionStatus, "can_create_collaborator": person.CanCreateCollaborator,
 		"updated_at": person.UpdatedAt,
 	}
+}
+
+func (r *gormRepository) GetPhoto(ctx context.Context, tenantID string, personID string) (*db.GlobalPersonPhoto, error) {
+	membership, err := r.findMembershipByPersonIdentifier(ctx, tenantID, personID)
+	if err != nil {
+		return nil, err
+	}
+	var photo db.GlobalPersonPhoto
+	if err := r.db.WithContext(ctx).Where("person_id = ?", membership.PersonID).First(&photo).Error; err != nil {
+		return nil, err
+	}
+	return &photo, nil
+}
+
+func (r *gormRepository) UpsertPhoto(ctx context.Context, tenantID string, personID string, photo *db.GlobalPersonPhoto) error {
+	if photo == nil {
+		return errors.New("photo is required")
+	}
+	membership, err := r.findMembershipByPersonIdentifier(ctx, tenantID, personID)
+	if err != nil {
+		return err
+	}
+	photo.PersonID = membership.PersonID
+	return r.db.WithContext(ctx).Clauses(clause.OnConflict{
+		Columns:   []clause.Column{{Name: "person_id"}},
+		DoUpdates: clause.AssignmentColumns([]string{"content_type", "data", "byte_size", "width", "height", "updated_by", "updated_at"}),
+	}).Create(photo).Error
+}
+
+func (r *gormRepository) DeletePhoto(ctx context.Context, tenantID string, personID string) error {
+	membership, err := r.findMembershipByPersonIdentifier(ctx, tenantID, personID)
+	if err != nil {
+		return err
+	}
+	return r.db.WithContext(ctx).Where("person_id = ?", membership.PersonID).Delete(&db.GlobalPersonPhoto{}).Error
 }

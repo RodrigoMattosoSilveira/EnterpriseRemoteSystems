@@ -21,9 +21,11 @@ type CategoryFilter = "ALL" | "CANTEEN" | "ADMINISTRATIVE";
 
 export function PriceListPage() {
   const actor = useOptionalAuthorizationContext();
-  const canManageGoldPrices = Boolean(
-    actor && (actor.permissions.includes("*") || actor.permissions.includes("gold_prices.manage")),
-  );
+  const hasPermission = (permission: string) =>
+    Boolean(actor && (actor.permissions.includes("*") || actor.permissions.includes(permission)));
+  const canManageGoldPrices = hasPermission("gold_prices.manage");
+  const canCreatePriceListItems = hasPermission("price_lists.create");
+  const canUpdatePriceListItems = hasPermission("price_lists.update");
   const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>("ALL");
   const [descriptionOrCodeFilter, setDescriptionOrCodeFilter] = useState("");
   const [includeInactive, setIncludeInactive] = useState(false);
@@ -220,7 +222,12 @@ export function PriceListPage() {
             </div>
             <button
               aria-expanded={isCreateFormOpen}
-              className="rounded-xl bg-gray-950 px-4 py-2 text-sm font-semibold text-white"
+              className={`rounded-xl px-4 py-2 text-sm font-semibold ${
+                canCreatePriceListItems
+                  ? "bg-gray-950 text-white"
+                  : "cursor-not-allowed bg-gray-200 text-gray-500"
+              }`}
+              disabled={!canCreatePriceListItems}
               onClick={isCreateFormOpen ? dismissCreateForm : openCreateForm}
               type="button"
             >
@@ -229,7 +236,7 @@ export function PriceListPage() {
           </div>
         </section>
 
-        {isCreateFormOpen && (
+        {isCreateFormOpen && canCreatePriceListItems && (
           <PriceListItemForm
             title="Create Price List Item"
             description="Create an active item that can be selected on the New Expense form. The list moves down while this panel is open."
@@ -331,7 +338,12 @@ export function PriceListPage() {
                         <div className="flex justify-end gap-2">
                           {item.active && (
                             <button
-                              className="rounded-lg border px-3 py-1 text-xs font-semibold"
+                              className={`rounded-lg border px-3 py-1 text-xs font-semibold ${
+                                canUpdatePriceListItems
+                                  ? ""
+                                  : "cursor-not-allowed bg-gray-100 text-gray-400"
+                              }`}
+                              disabled={!canUpdatePriceListItems}
                               onClick={() => startEditing(item)}
                               type="button"
                             >
@@ -340,7 +352,12 @@ export function PriceListPage() {
                           )}
                           {item.active ? (
                             <button
-                              className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-800"
+                              className={`rounded-lg border px-3 py-1 text-xs font-semibold ${
+                                canUpdatePriceListItems
+                                  ? "border-amber-200 bg-amber-50 text-amber-800"
+                                  : "cursor-not-allowed border-gray-200 bg-gray-100 text-gray-400"
+                              }`}
+                              disabled={!canUpdatePriceListItems}
                               onClick={() => handleDeactivate(item)}
                               type="button"
                             >
@@ -348,7 +365,12 @@ export function PriceListPage() {
                             </button>
                           ) : (
                             <button
-                              className="rounded-lg border border-green-200 bg-green-50 px-3 py-1 text-xs font-semibold text-green-800"
+                              className={`rounded-lg border px-3 py-1 text-xs font-semibold ${
+                                canUpdatePriceListItems
+                                  ? "border-green-200 bg-green-50 text-green-800"
+                                  : "cursor-not-allowed border-gray-200 bg-gray-100 text-gray-400"
+                              }`}
+                              disabled={!canUpdatePriceListItems}
                               onClick={() => handleReactivate(item)}
                               type="button"
                             >
@@ -365,7 +387,7 @@ export function PriceListPage() {
           )}
         </section>
 
-        {editing && (
+        {editing && canUpdatePriceListItems && (
           <PriceListItemForm
             title={`Edit ${editing.description}`}
             description="Update the item metadata and BRL unit price. Saving creates a new active version and keeps this version inactive for audit history."

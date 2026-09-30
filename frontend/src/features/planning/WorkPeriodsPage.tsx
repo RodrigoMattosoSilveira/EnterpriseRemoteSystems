@@ -27,9 +27,10 @@ export function WorkPeriodsPage() {
   const { t, formatDate, formatDateTime } = useI18n();
   const navigate = useNavigate();
   const actor = useAuthorizationContext();
-  const canManageGoldProduction =
-    actor.permissions.includes("*") ||
-    actor.permissions.includes("gold_production.manage");
+  const hasPermission = (permission: string) =>
+    actor.permissions.includes("*") || actor.permissions.includes(permission);
+  const canManageGoldProduction = hasPermission("gold_production.manage");
+  const canCreateWorkPeriods = hasPermission("planning.create");
   const [status, setStatus] = useState("");
   const [showCreate, setShowCreate] = useState(false);
   const [form, setForm] = useState<FormState>(initialForm);
@@ -40,6 +41,7 @@ export function WorkPeriodsPage() {
 
   function submit(event: FormEvent) {
     event.preventDefault();
+    if (!canCreateWorkPeriods) return;
     setValidation("");
     if (!form.workDate || !form.periodCode.trim() || !form.name.trim() || !form.startTime || !form.endTime) {
       setValidation(t("planning.validation.required"));
@@ -76,7 +78,13 @@ export function WorkPeriodsPage() {
             {canManageGoldProduction ? (
               <Link to="/gold-production" className="rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 shadow-sm">{t("planning.goldProduction")}</Link>
             ) : null}
-            <button onClick={() => setShowCreate((value) => !value)} className="rounded-xl bg-gray-950 px-4 py-2 text-sm font-semibold text-white shadow-sm">{showCreate ? t("common.close") : t("planning.addWorkPeriod")}</button>
+            <button
+              disabled={!canCreateWorkPeriods}
+              onClick={() => setShowCreate((value) => !value)}
+              className="rounded-xl bg-gray-950 px-4 py-2 text-sm font-semibold text-white shadow-sm disabled:cursor-not-allowed disabled:bg-gray-300 disabled:text-gray-500 disabled:shadow-none"
+            >
+              {showCreate ? t("common.close") : t("planning.addWorkPeriod")}
+            </button>
           </div>
         </div>
       </header>
@@ -85,7 +93,7 @@ export function WorkPeriodsPage() {
         <ApiErrorPanel error={query.error || createMutation.error} translate={t} />
         {validation && <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm font-medium text-red-800">{validation}</div>}
 
-        {showCreate && (
+        {showCreate && canCreateWorkPeriods && (
           <form onSubmit={submit} className="grid gap-4 rounded-2xl border bg-white p-5 shadow-sm sm:grid-cols-2 lg:grid-cols-5">
             <label className="text-sm font-medium text-gray-700">{t("planning.workDate")}<input type="date" value={form.workDate} onChange={(e) => setForm({ ...form, workDate: e.target.value })} className="mt-1 w-full rounded-xl border px-3 py-2" /></label>
             <label className="text-sm font-medium text-gray-700">{t("planning.periodCode")}<input value={form.periodCode} onChange={(e) => setForm({ ...form, periodCode: e.target.value })} className="mt-1 w-full rounded-xl border px-3 py-2" /></label>

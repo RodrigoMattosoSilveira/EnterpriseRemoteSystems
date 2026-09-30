@@ -21,6 +21,9 @@ import type {
   CollaboratorListResponse,
   CreateCollaboratorInput,
   ExtendCollaboratorJourneyInput,
+  CreateJourneyBonusAwardInput,
+  JourneyBonusAward,
+  JourneyExtensionRequest,
   UpdateCollaboratorInput,
   UpdateCollaboratorWorkAssignmentInput,
 } from "../types/collaborators";
@@ -154,14 +157,31 @@ export function updateCollaboratorWorkAssignment(
 export function extendCollaboratorJourney(
   id: string,
   input: ExtendCollaboratorJourneyInput,
-): Promise<Collaborator> {
-  return apiFetch<Collaborator>(
+): Promise<JourneyExtensionRequest> {
+  return apiFetch<JourneyExtensionRequest>(
     `/collaborators/${encodeURIComponent(id)}/extend`,
     {
       method: "POST",
       body: JSON.stringify(input),
     },
   );
+}
+
+export function listJourneyBonusAwards(id: string): Promise<JourneyBonusAward[]> {
+  return apiFetch<JourneyBonusAward[]>(`/collaborators/${encodeURIComponent(id)}/bonus-awards`);
+}
+
+export function createJourneyBonusAward(id: string, input: CreateJourneyBonusAwardInput): Promise<JourneyBonusAward> {
+  return apiFetch<JourneyBonusAward>(`/collaborators/${encodeURIComponent(id)}/bonus-awards`, {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export function approveJourneyBonusAward(id: string, awardId: string): Promise<JourneyBonusAward> {
+  return apiFetch<JourneyBonusAward>(`/collaborators/${encodeURIComponent(id)}/bonus-awards/${encodeURIComponent(awardId)}/approve`, {
+    method: "POST",
+  });
 }
 
 export function getCollaboratorFinancialProjection(
@@ -258,4 +278,18 @@ function recentReauthenticationHeaders(): Record<string, string> {
     "X-Reauthenticated-At": recent.reauthenticatedAt,
     "X-Reauthentication-Method": recent.method,
   };
+}
+
+export function listJourneyExtensionRequests(id: string, self = false): Promise<JourneyExtensionRequest[]> {
+  const prefix = self ? "/collaborators/self" : "/collaborators";
+  return apiFetch<JourneyExtensionRequest[]>(`${prefix}/${encodeURIComponent(id)}/extension-requests`);
+}
+export function acceptJourneyExtensionRequest(id: string, requestId: string): Promise<JourneyExtensionRequest> {
+  return apiFetch<JourneyExtensionRequest>(`/collaborators/${encodeURIComponent(id)}/extension-requests/${encodeURIComponent(requestId)}/accept`, { method: "POST" });
+}
+export function rejectJourneyExtensionRequest(id: string, requestId: string): Promise<JourneyExtensionRequest> {
+  return apiFetch<JourneyExtensionRequest>(`/collaborators/${encodeURIComponent(id)}/extension-requests/${encodeURIComponent(requestId)}/reject`, { method: "POST" });
+}
+export function cancelJourneyExtensionRequest(id: string, requestId: string): Promise<JourneyExtensionRequest> {
+  return apiFetch<JourneyExtensionRequest>(`/collaborators/${encodeURIComponent(id)}/extension-requests/${encodeURIComponent(requestId)}/cancel`, { method: "POST" });
 }

@@ -4,7 +4,7 @@ import { shouldRetryQuery } from "../../app/queryRetryPolicy";
 import type { AuthzCurrentActor } from "../../types/authz";
 import { AuthzAdminPage } from "./AuthzAdminPage";
 import { TenantRoleDelegationPage } from "./TenantRoleDelegationPage";
-import { canAccessAuthzAdministration, canManageTenantRoleDelegation } from "./authzAdminRouteAccess";
+import { canAccessAuthzAdministration, canManageTenantRoleDelegation, canReadTenantRoleDelegation } from "./authzAdminRouteAccess";
 
 export const authzAdminCurrentActorQueryKey = [
   "authz-admin-route",
@@ -38,8 +38,8 @@ export function AuthzAdminRoute() {
     return <AuthzAdminPage />;
   }
 
-  if (canManageTenantRoleDelegation(currentActorQuery.data)) {
-    return <TenantRoleDelegationPage />;
+  if (canReadTenantRoleDelegation(currentActorQuery.data)) {
+    return <TenantRoleDelegationPage readOnly={!canManageTenantRoleDelegation(currentActorQuery.data)} />;
   }
 
   throw new Response("Forbidden", {

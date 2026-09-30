@@ -20,8 +20,8 @@ func TestSeedAuthorizationCatalogCreatesCoreRolesAndGrants(t *testing.T) {
 	if err := database.Model(&AuthzRole{}).Count(&roles).Error; err != nil {
 		t.Fatalf("count roles: %v", err)
 	}
-	if roles != 4 {
-		t.Fatalf("expected 4 delegated roles after removal of PERSON self-service role, got %d", roles)
+	if roles != 5 {
+		t.Fatalf("expected 5 delegated roles after adding TENANT_VIEWER, got %d", roles)
 	}
 
 	var personRoles int64
@@ -134,6 +134,59 @@ func TestSeedAuthorizationCatalogCreatesCoreRolesAndGrants(t *testing.T) {
 	} {
 		if _, ok := tenantAdminPermissionSet[string(forbidden)]; ok {
 			t.Fatalf("Tenant Administrator must not receive %q as delegated authority", forbidden)
+		}
+	}
+
+	var tenantViewerPermissions []AuthzRolePermission
+	if err := database.
+		Joins("JOIN authz_roles ON authz_roles.id = authz_role_permissions.role_id").
+		Where("authz_roles.code = ?", string(RoleTenantViewer)).
+		Find(&tenantViewerPermissions).Error; err != nil {
+		t.Fatalf("list Tenant Viewer permissions: %v", err)
+	}
+	if got, want := len(tenantViewerPermissions), len(tenantViewerDelegatedPermissions()); got != want {
+		t.Fatalf("Tenant Viewer permission count = %d, want %d", got, want)
+	}
+	tenantViewerPermissionSet := map[string]struct{}{}
+	for _, row := range tenantViewerPermissions {
+		tenantViewerPermissionSet[row.PermissionCode] = struct{}{}
+	}
+	for _, permission := range tenantViewerDelegatedPermissions() {
+		if _, ok := tenantViewerPermissionSet[string(permission)]; !ok {
+			t.Fatalf("Tenant Viewer missing read permission %q", permission)
+		}
+	}
+	for _, forbidden := range []Permission{
+		PermissionAll,
+		PermissionPeopleCreate,
+		PermissionPeopleUpdate,
+		PermissionCollaboratorsCreate,
+		PermissionCollaboratorsUpdate,
+		PermissionPlanningCreate,
+		PermissionPlanningUpdate,
+		PermissionEarningsCreate,
+		PermissionEarningsUpdate,
+		PermissionPriceListsCreate,
+		PermissionPriceListsUpdate,
+		PermissionGoldPricesManage,
+		PermissionGoldProductionManage,
+		PermissionReferenceDataManage,
+		PermissionExpensesCreate,
+		PermissionExpensesUpdate,
+		PermissionCurrentAccountsLedgerCreate,
+		PermissionCurrentAccountsSettingsUpdate,
+		PermissionLedgerReceiptsCreate,
+		PermissionLedgerReceiptsPrint,
+		PermissionLedgerReceiptsReturn,
+		PermissionLedgerCorrectionsCreate,
+		PermissionAuthzTenantActorsManage,
+		PermissionAuthzTenantRoleGrantsManage,
+		PermissionSupportAccessLeasesApprove,
+		PermissionSupportAccessLeasesTerminate,
+		PermissionJourneySettlementsClose,
+	} {
+		if _, ok := tenantViewerPermissionSet[string(forbidden)]; ok {
+			t.Fatalf("Tenant Viewer must not receive mutation permission %q", forbidden)
 		}
 	}
 
@@ -653,8 +706,8 @@ func TestGORMStoreTenantRoleDelegationListsMembersWithNoRoleAndOnlyOperatorGrant
 	if got := byKey["expense-member@example.com"].RoleGrants; len(got) != 1 || got[0].RoleCode != string(RoleExpenseOperator) {
 		t.Fatalf("expected only expense operator grant, got %#v", got)
 	}
-	if got := byKey["tenant-admin-member@example.com"].RoleGrants; len(got) != 0 {
-		t.Fatalf("tenant delegation projection must not expose TENANT_ADMIN grants, got %#v", got)
+	if got := byKey["tenant-admin-member@example.com"].RoleGrants; len(got) != 1 || got[0].RoleCode != string(RoleTenantAdmin) {
+		t.Fatalf("tenant delegation projection must expose the active TENANT_ADMIN grant, got %#v", got)
 	}
 	if inactive := byKey["inactive-member@example.com"]; inactive.ID == "" || inactive.Active {
 		t.Fatalf("expected inactive tenant Actor to remain visible for lifecycle management, got %#v", inactive)
@@ -738,11 +791,23 @@ func TestGORMStoreTenantRoleDelegationRestrictsRoleAndTenant(t *testing.T) {
 		t.Fatalf("unexpected tenant operator grant: %#v", grant)
 	}
 
-	if _, err := store.GrantTenantOperatorRole(context.Background(), "tenant-a", actorID, string(RoleTenantAdmin)); err == nil {
-		t.Fatal("expected tenant administrator delegation to be rejected")
+	adminGrant, err := store.GrantTenantOperatorRole(context.Background(), "tenant-a", actorID, string(RoleTenantAdmin))
+	if err != nil {
+		t.Fatalf("grant tenant administrator through tenant delegation surface: %v", err)
+	}
+	if adminGrant.RoleCode != string(RoleTenantAdmin) || adminGrant.TenantID != "tenant-a" || !adminGrant.Active {
+		t.Fatalf("unexpected tenant administrator grant: %#v", adminGrant)
 	}
 	if _, err := store.GrantTenantOperatorRole(context.Background(), "tenant-b", actorID, string(RoleExpenseOperator)); err == nil {
 		t.Fatal("expected cross-tenant operator delegation to be rejected")
+	}
+
+	revokedAdmin, err := store.RevokeTenantOperatorRoleGrant(context.Background(), "tenant-a", actorID, adminGrant.ID)
+	if err != nil {
+		t.Fatalf("revoke tenant administrator: %v", err)
+	}
+	if revokedAdmin.Active {
+		t.Fatalf("expected revoked tenant administrator grant, got %#v", revokedAdmin)
 	}
 
 	revoked, err := store.RevokeTenantOperatorRoleGrant(context.Background(), "tenant-a", actorID, grant.ID)
@@ -816,6 +881,8 @@ func TestDelegatedRoleIsolationBlocksMixedTenantRolesAcrossTenants(t *testing.T)
 	}{
 		{name: "operator then Tenant Administrator", firstRole: RoleExpenseOperator, secondRole: RoleTenantAdmin},
 		{name: "Tenant Administrator then operator", firstRole: RoleTenantAdmin, secondRole: RoleEarningsOperator},
+		{name: "Entity Executive then operator", firstRole: RoleTenantViewer, secondRole: RoleExpenseOperator},
+		{name: "operator then Entity Executive", firstRole: RoleEarningsOperator, secondRole: RoleTenantViewer},
 	}
 
 	for _, tt := range tests {
@@ -1634,10 +1701,18 @@ func TestIntrinsicSelfServiceKeepsJourneyHistoryReadableAfterCurrentJourneyClose
 		PermissionAssignmentsSelfCurrentRead,
 		PermissionLedgerReceiptsSelfRead,
 		PermissionLedgerReceiptsSelfAccept,
+		PermissionJourneyExtensionsSelfRespond,
 	} {
 		if _, ok := permissions[permission]; ok {
 			t.Fatalf("closed Journey history must not preserve current Collaborator capability %s", permission)
 		}
+	}
+}
+
+func TestIntrinsicSelfServiceAllowsActiveCollaboratorToRespondToJourneyExtension(t *testing.T) {
+	permissions := intrinsicSelfServicePermissions(true, true)
+	if _, ok := permissions[PermissionJourneyExtensionsSelfRespond]; !ok {
+		t.Fatal("active Collaborator must be able to respond to own pending Journey extension")
 	}
 }
 

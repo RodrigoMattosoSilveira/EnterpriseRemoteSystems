@@ -29,6 +29,40 @@ afterEach(async () => {
 });
 
 describe("PlanTab", () => {
+
+  it("keeps planning mutation controls read-only when editable is false", async () => {
+    const onBulkPlan = vi.fn();
+
+    await renderPlanTab({
+      onBulkPlan,
+      onRefineAssignment: vi.fn(),
+      editable: false,
+    });
+
+    const candidateCheckbox = Array.from(
+      container.querySelectorAll<HTMLInputElement>('input[type="checkbox"]'),
+    ).find(
+      (item) =>
+        item.getAttribute("aria-label") === "Replacement candidate for Mineiro",
+    );
+    expect(candidateCheckbox).toBeTruthy();
+    expect(candidateCheckbox?.disabled).toBe(true);
+
+    const selectionCheckbox = selectionCheckboxForRow("Mineiro");
+    expect(selectionCheckbox.disabled).toBe(true);
+
+    const saveButton = Array.from(container.querySelectorAll("button")).find(
+      (item) => item.textContent?.trim() === "Save plan (1 selected)",
+    ) as HTMLButtonElement | undefined;
+    expect(saveButton).toBeTruthy();
+    expect(saveButton?.disabled).toBe(true);
+
+    candidateCheckbox?.click();
+    saveButton?.click();
+
+    expect(candidateCheckbox?.checked).toBe(false);
+    expect(onBulkPlan).not.toHaveBeenCalled();
+  });
   it("refines a collaborator assignment locally before selected-only plan save", async () => {
     const onBulkPlan = vi.fn();
     const onRefineAssignment = vi.fn(
@@ -464,6 +498,7 @@ async function renderPlanTab(props: {
     input: PlanAssignmentRefinementInput,
   ) => Promise<PlanAssignmentRefinementResult>;
   templateOverride?: WorkPeriodPlanningTemplate;
+  editable?: boolean;
 }) {
   await act(async () => {
     root = createRoot(container);
@@ -473,7 +508,7 @@ async function renderPlanTab(props: {
         sectors={sectors}
         locations={locations}
         tasks={tasks}
-        editable
+        editable={props.editable ?? true}
         loading={false}
         pending={false}
         onBulkPlan={props.onBulkPlan}

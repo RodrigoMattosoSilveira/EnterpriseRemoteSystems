@@ -18,21 +18,22 @@ type Tenant struct {
 	Description string `gorm:"type:text" json:"description,omitempty"`
 	Active      bool   `gorm:"not null;default:true;index" json:"active"`
 
-	ReferenceData         []ReferenceData          `gorm:"foreignKey:TenantID" json:"referenceData,omitempty"`
-	PersonMemberships     []PersonTenantMembership `gorm:"foreignKey:TenantID" json:"personMemberships,omitempty"`
-	Collaborators         []CollaboratorJourney    `gorm:"foreignKey:TenantID" json:"collaborators,omitempty"`
-	Expenses              []Expense                `gorm:"foreignKey:TenantID" json:"expenses,omitempty"`
-	ExpensePriceListItems []ExpensePriceListItem   `gorm:"foreignKey:TenantID" json:"expensePriceListItems,omitempty"`
-	GoldPrices            []GoldPrice              `gorm:"foreignKey:TenantID" json:"goldPrices,omitempty"`
-	WorkPeriods           []WorkPeriod             `gorm:"foreignKey:TenantID" json:"workPeriods,omitempty"`
-	WorkPeriodAssignments []WorkPeriodAssignment   `gorm:"foreignKey:TenantID" json:"workPeriodAssignments,omitempty"`
-	GoldProductionEntries []GoldProductionEntry    `gorm:"foreignKey:TenantID" json:"goldProductionEntries,omitempty"`
-	AccrualRuns           []AccrualRun             `gorm:"foreignKey:TenantID" json:"accrualRuns,omitempty"`
-	AccrualItems          []AccrualItem            `gorm:"foreignKey:TenantID" json:"accrualItems,omitempty"`
-	LedgerEntries         []LedgerEntry            `gorm:"foreignKey:TenantID" json:"ledgerEntries,omitempty"`
-	JourneySettlements    []JourneySettlement      `gorm:"foreignKey:TenantID" json:"journeySettlements,omitempty"`
-	LedgerReceipts        []LedgerReceipt          `gorm:"foreignKey:TenantID" json:"ledgerReceipts,omitempty"`
-	TenantSettings        []TenantSetting          `gorm:"foreignKey:TenantID" json:"tenantSettings,omitempty"`
+	ReferenceData            []ReferenceData           `gorm:"foreignKey:TenantID" json:"referenceData,omitempty"`
+	PersonMemberships        []PersonTenantMembership  `gorm:"foreignKey:TenantID" json:"personMemberships,omitempty"`
+	Collaborators            []CollaboratorJourney     `gorm:"foreignKey:TenantID" json:"collaborators,omitempty"`
+	Expenses                 []Expense                 `gorm:"foreignKey:TenantID" json:"expenses,omitempty"`
+	ExpensePriceListItems    []ExpensePriceListItem    `gorm:"foreignKey:TenantID" json:"expensePriceListItems,omitempty"`
+	GoldPrices               []GoldPrice               `gorm:"foreignKey:TenantID" json:"goldPrices,omitempty"`
+	WorkPeriods              []WorkPeriod              `gorm:"foreignKey:TenantID" json:"workPeriods,omitempty"`
+	WorkPeriodAssignments    []WorkPeriodAssignment    `gorm:"foreignKey:TenantID" json:"workPeriodAssignments,omitempty"`
+	GoldProductionEntries    []GoldProductionEntry     `gorm:"foreignKey:TenantID" json:"goldProductionEntries,omitempty"`
+	AccrualRuns              []AccrualRun              `gorm:"foreignKey:TenantID" json:"accrualRuns,omitempty"`
+	AccrualItems             []AccrualItem             `gorm:"foreignKey:TenantID" json:"accrualItems,omitempty"`
+	LedgerEntries            []LedgerEntry             `gorm:"foreignKey:TenantID" json:"ledgerEntries,omitempty"`
+	JourneySettlements       []JourneySettlement       `gorm:"foreignKey:TenantID" json:"journeySettlements,omitempty"`
+	JourneyExtensionRequests []JourneyExtensionRequest `gorm:"foreignKey:TenantID" json:"journeyExtensionRequests,omitempty"`
+	LedgerReceipts           []LedgerReceipt           `gorm:"foreignKey:TenantID" json:"ledgerReceipts,omitempty"`
+	TenantSettings           []TenantSetting           `gorm:"foreignKey:TenantID" json:"tenantSettings,omitempty"`
 }
 
 type TenantSetting struct {
@@ -47,6 +48,46 @@ type TenantSetting struct {
 	Tenant Tenant `gorm:"foreignKey:TenantID;constraint:OnUpdate:Restrict,OnDelete:Restrict;" json:"tenant,omitempty"`
 }
 
+type JourneyExtensionRequest struct {
+	BaseModel
+	TenantID              string     `gorm:"type:text;not null;index" json:"tenantId"`
+	CollaboratorJourneyID string     `gorm:"type:text;not null;index" json:"collaboratorJourneyId"`
+	ReceiptNumber         string     `gorm:"type:text;not null;uniqueIndex" json:"receiptNumber"`
+	PreviousEndDate       time.Time  `gorm:"type:date;not null" json:"previousEndDate"`
+	ProposedEndDate       time.Time  `gorm:"type:date;not null" json:"proposedEndDate"`
+	AdditionalDays        int        `gorm:"not null" json:"additionalDays"`
+	Reason                string     `gorm:"type:text;not null" json:"reason"`
+	Status                string     `gorm:"type:text;not null;index" json:"status"`
+	RequestedBy           string     `gorm:"type:text;not null" json:"requestedBy"`
+	RequestedAt           time.Time  `gorm:"not null" json:"requestedAt"`
+	AcceptedBy            string     `gorm:"type:text" json:"acceptedBy,omitempty"`
+	AcceptedAt            *time.Time `json:"acceptedAt,omitempty"`
+	RejectedBy            string     `gorm:"type:text" json:"rejectedBy,omitempty"`
+	RejectedAt            *time.Time `json:"rejectedAt,omitempty"`
+	CancelledBy           string     `gorm:"type:text" json:"cancelledBy,omitempty"`
+	CancelledAt           *time.Time `json:"cancelledAt,omitempty"`
+}
+
+type JourneyBonusAward struct {
+	BaseModel
+
+	TenantID              string     `gorm:"type:text;not null;index" json:"tenantId"`
+	CollaboratorJourneyID string     `gorm:"type:text;not null;index" json:"collaboratorJourneyId"`
+	ReceiptNumber         string     `gorm:"type:text;not null;uniqueIndex" json:"receiptNumber"`
+	ValueUnitCode         string     `gorm:"type:text;not null;index" json:"valueUnitCode"`
+	Amount                float64    `gorm:"not null" json:"amount"`
+	EffectiveDate         time.Time  `gorm:"type:date;not null;index" json:"effectiveDate"`
+	Description           string     `gorm:"type:text" json:"description,omitempty"`
+	Status                string     `gorm:"type:text;not null;index" json:"status"`
+	RequestedByActorID    string     `gorm:"type:text;not null" json:"requestedByActorId"`
+	RequestedByUserID     string     `gorm:"type:text;not null" json:"requestedByUserId"`
+	RequestedAt           time.Time  `gorm:"not null" json:"requestedAt"`
+	ApprovedByActorID     string     `gorm:"type:text" json:"approvedByActorId,omitempty"`
+	ApprovedByUserID      string     `gorm:"type:text" json:"approvedByUserId,omitempty"`
+	ApprovedAt            *time.Time `json:"approvedAt,omitempty"`
+	LedgerEntryID         string     `gorm:"type:text" json:"ledgerEntryId,omitempty"`
+}
+
 type CollaboratorJourney struct {
 	BaseModel
 
@@ -58,14 +99,18 @@ type CollaboratorJourney struct {
 	ExtensionDays    int       `gorm:"not null;default:0" json:"extensionDays"`
 	ProjectedEndDate time.Time `gorm:"type:date;not null;index" json:"projectedEndDate"`
 
-	PaymentMethodID                string   `gorm:"type:text;not null;index" json:"paymentMethodId"`
-	PaymentValue                   float64  `gorm:"not null" json:"paymentValue"` // Deprecated compatibility field. Use the explicit payment amount fields below.
-	FixedMonthlyBRLAmount          *float64 `gorm:"column:fixed_monthly_brl_amount" json:"fixedMonthlyBrlAmount,omitempty"`
-	DailyBRLAmount                 *float64 `gorm:"column:daily_brl_amount" json:"dailyBrlAmount,omitempty"`
-	GoldCommissionPercent          *float64 `gorm:"column:gold_commission_percent" json:"goldCommissionPercent,omitempty"`
-	TimeOffGoldSplitPercent        *float64 `gorm:"column:time_off_gold_split_percent" json:"timeOffGoldSplitPercent,omitempty"`
-	SickDayOffReplacementGoldGrams *float64 `gorm:"column:sick_day_off_replacement_gold_grams" json:"sickDayOffReplacementGoldGrams,omitempty"`
-	PlanningAvailability           string   `gorm:"column:planning_availability;type:text;not null;default:ACTIVE;index" json:"planningAvailability"`
+	PaymentMethodID                string     `gorm:"type:text;not null;index" json:"paymentMethodId"`
+	PaymentValue                   float64    `gorm:"not null" json:"paymentValue"` // Deprecated compatibility field. Use the explicit payment amount fields below.
+	FixedMonthlyBRLAmount          *float64   `gorm:"column:fixed_monthly_brl_amount" json:"fixedMonthlyBrlAmount,omitempty"`
+	DailyBRLAmount                 *float64   `gorm:"column:daily_brl_amount" json:"dailyBrlAmount,omitempty"`
+	GoldCommissionPercent          *float64   `gorm:"column:gold_commission_percent" json:"goldCommissionPercent,omitempty"`
+	TimeOffGoldSplitPercent        *float64   `gorm:"column:time_off_gold_split_percent" json:"timeOffGoldSplitPercent,omitempty"`
+	SickDayOffReplacementGoldGrams *float64   `gorm:"column:sick_day_off_replacement_gold_grams" json:"sickDayOffReplacementGoldGrams,omitempty"`
+	BonusBRLAmount                 *float64   `gorm:"column:bonus_brl_amount" json:"bonusBrlAmount,omitempty"`
+	BonusDescription               string     `gorm:"column:bonus_description;type:text" json:"bonusDescription,omitempty"`
+	BonusPostedAt                  *time.Time `gorm:"column:bonus_posted_at" json:"bonusPostedAt,omitempty"`
+	BonusLedgerEntryID             string     `gorm:"column:bonus_ledger_entry_id;type:text" json:"bonusLedgerEntryId,omitempty"`
+	PlanningAvailability           string     `gorm:"column:planning_availability;type:text;not null;default:ACTIVE;index" json:"planningAvailability"`
 
 	SectorID   string `gorm:"type:text;not null;index" json:"sectorId"`
 	LocationID string `gorm:"type:text;not null;index" json:"locationId"`
@@ -75,16 +120,17 @@ type CollaboratorJourney struct {
 	Notes    string     `gorm:"type:text" json:"notes,omitempty"`
 	ClosedAt *time.Time `json:"closedAt,omitempty"`
 
-	Tenant             Tenant                 `gorm:"foreignKey:TenantID;constraint:OnUpdate:Restrict,OnDelete:Restrict;" json:"tenant,omitempty"`
-	Membership         PersonTenantMembership `gorm:"foreignKey:MembershipID;constraint:OnUpdate:Restrict,OnDelete:Restrict;" json:"membership,omitempty"`
-	Person             Person                 `gorm:"-" json:"-"`
-	PaymentMethod      ReferenceData          `gorm:"foreignKey:PaymentMethodID;constraint:OnUpdate:Restrict,OnDelete:Restrict;" json:"paymentMethod,omitempty"`
-	Sector             ReferenceData          `gorm:"foreignKey:SectorID;constraint:OnUpdate:Restrict,OnDelete:Restrict;" json:"sector,omitempty"`
-	Location           ReferenceData          `gorm:"foreignKey:LocationID;constraint:OnUpdate:Restrict,OnDelete:Restrict;" json:"location,omitempty"`
-	Task               ReferenceData          `gorm:"foreignKey:TaskID;constraint:OnUpdate:Restrict,OnDelete:Restrict;" json:"task,omitempty"`
-	Status             ReferenceData          `gorm:"foreignKey:StatusID;constraint:OnUpdate:Restrict,OnDelete:Restrict;" json:"status,omitempty"`
-	JourneySettlements []JourneySettlement    `gorm:"foreignKey:CollaboratorID" json:"journeySettlements,omitempty"`
-	LedgerReceipts     []LedgerReceipt        `gorm:"foreignKey:CollaboratorID" json:"ledgerReceipts,omitempty"`
+	Tenant             Tenant                    `gorm:"foreignKey:TenantID;constraint:OnUpdate:Restrict,OnDelete:Restrict;" json:"tenant,omitempty"`
+	Membership         PersonTenantMembership    `gorm:"foreignKey:MembershipID;constraint:OnUpdate:Restrict,OnDelete:Restrict;" json:"membership,omitempty"`
+	Person             Person                    `gorm:"-" json:"-"`
+	PaymentMethod      ReferenceData             `gorm:"foreignKey:PaymentMethodID;constraint:OnUpdate:Restrict,OnDelete:Restrict;" json:"paymentMethod,omitempty"`
+	Sector             ReferenceData             `gorm:"foreignKey:SectorID;constraint:OnUpdate:Restrict,OnDelete:Restrict;" json:"sector,omitempty"`
+	Location           ReferenceData             `gorm:"foreignKey:LocationID;constraint:OnUpdate:Restrict,OnDelete:Restrict;" json:"location,omitempty"`
+	Task               ReferenceData             `gorm:"foreignKey:TaskID;constraint:OnUpdate:Restrict,OnDelete:Restrict;" json:"task,omitempty"`
+	Status             ReferenceData             `gorm:"foreignKey:StatusID;constraint:OnUpdate:Restrict,OnDelete:Restrict;" json:"status,omitempty"`
+	JourneySettlements []JourneySettlement       `gorm:"foreignKey:CollaboratorID" json:"journeySettlements,omitempty"`
+	ExtensionRequests  []JourneyExtensionRequest `gorm:"foreignKey:CollaboratorJourneyID" json:"extensionRequests,omitempty"`
+	LedgerReceipts     []LedgerReceipt           `gorm:"foreignKey:CollaboratorID" json:"ledgerReceipts,omitempty"`
 }
 
 type ReferenceData struct {
@@ -139,6 +185,22 @@ type GlobalPerson struct {
 }
 
 func (GlobalPerson) TableName() string { return "global_people" }
+
+// GlobalPersonPhoto stores the single current photo for one global Person.
+// The bytes are kept outside global_people so ordinary Person projections stay small.
+type GlobalPersonPhoto struct {
+	PersonID    string    `gorm:"column:person_id;type:text;primaryKey" json:"personId"`
+	ContentType string    `gorm:"column:content_type;type:text;not null" json:"contentType"`
+	Data        []byte    `gorm:"column:data;not null" json:"-"`
+	ByteSize    int       `gorm:"column:byte_size;not null" json:"byteSize"`
+	Width       int       `gorm:"column:width;not null" json:"width"`
+	Height      int       `gorm:"column:height;not null" json:"height"`
+	UpdatedBy   string    `gorm:"column:updated_by;type:text;not null" json:"updatedBy"`
+	CreatedAt   time.Time `gorm:"column:created_at;not null" json:"createdAt"`
+	UpdatedAt   time.Time `gorm:"column:updated_at;not null" json:"updatedAt"`
+}
+
+func (GlobalPersonPhoto) TableName() string { return "global_person_photos" }
 
 // PersonTenantMembership is the tenant-confidential relationship between one
 // global Person and one Tenant.

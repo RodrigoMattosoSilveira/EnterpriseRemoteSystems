@@ -61,6 +61,9 @@ jobs:
       - name: Verify Bite 32 release coverage contract
         run: make bite32-release-coverage-check
 
+      - name: Verify Bite 32.6 release-hardening contract
+        run: make bite326-release-hardening-check
+
       - name: Set up Go
         uses: actions/setup-go@v6
         with:
@@ -337,7 +340,7 @@ jobs:
             --expected-baseline-last-migration '000062_tenant_administrator_cardinality.up.sql' \
             --expected-first-rehearsed-migration '000063_global_administration_control_plane.up.sql' \
             --expected-final-migration '000071_cross_tenant_delegated_role_isolation.up.sql' \
-            --expected-deployment-final-migration '000071_cross_tenant_delegated_role_isolation.up.sql' \
+            --expected-deployment-final-migration '000077_journey_bonus_award_approval.up.sql' \
             --normalized-output "${NORMALIZED_FILE}"
 
           TEST_REVISION="$(jq -r '.testRevision' "${NORMALIZED_FILE}")"
@@ -620,6 +623,10 @@ jobs:
       - name: Verify Bite 32 release coverage contract
         shell: bash
         run: python3 scripts/verify-bite32-release-coverage.py
+
+      - name: Verify Bite 32.6 release-hardening contract
+        shell: bash
+        run: python3 scripts/verify-bite326-release-coverage.py
 
       - name: Show deployed Playwright target
         shell: bash

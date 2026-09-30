@@ -205,11 +205,15 @@ def main() -> int:
     for context, source in (("pt-BR resource", pt_br), ("Portuguese deck", deck), ("Portuguese presenter runbook", runbook_pt)):
         if re.search(r"\bTenants?\b", source):
             fail(f"{context} still exposes the English Tenant terminology")
+        if re.search(r"\bLocatári[oa]s?\b", source, flags=re.IGNORECASE):
+            fail(f"{context} still exposes the deprecated Locatário terminology")
     for path, source in diagrams.items():
         if re.search(r"\bTenants?\b", source):
             fail(f"demo diagram {path.name} still exposes the English Tenant terminology")
+        if re.search(r"\bLocatári[oa]s?\b", source, flags=re.IGNORECASE):
+            fail(f"demo diagram {path.name} still exposes the deprecated Locatário terminology")
 
-    if "O limite do Locatário vem primeiro" not in deck or "Encerramento executivo" not in deck:
+    if "O limite da Entidade vem primeiro" not in deck or "Encerramento executivo" not in deck:
         fail("deck no longer contains the required boundary-first executive sequence")
 
     for context, source in (("Portuguese presenter runbook", runbook_pt), ("English presenter runbook", runbook_en)):

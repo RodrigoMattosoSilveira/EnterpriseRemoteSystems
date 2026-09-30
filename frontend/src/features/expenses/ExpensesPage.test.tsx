@@ -252,6 +252,31 @@ describe("ExpensesPage", () => {
     expect(container.textContent).toContain("Receipt");
     expect(container.querySelector('a[href="/ledger-entries/ledger-expense-filtered-collaborator/receipt"]')).not.toBeNull();
   });
+
+  it("keeps Create Expense disabled for a read-only Tenant Viewer", async () => {
+    mockExpensePageFetch();
+    const viewer: AuthzCurrentActor = {
+      actorKey: "tenant-viewer",
+      actorRecordId: "actor-tenant-viewer",
+      tenantId: "default",
+      scope: "TENANT",
+      roleCodes: ["TENANT_VIEWER"],
+      permissions: ["expenses.read"],
+    };
+
+    renderExpensesPage("/expenses", viewer);
+
+    await waitForText("Showing 50 of 520 expense records.");
+
+    const createButton = Array.from(container.querySelectorAll("button")).find(
+      (candidate) => candidate.textContent?.trim() === "Create Expense",
+    ) as HTMLButtonElement | undefined;
+    expect(createButton).toBeDefined();
+    expect(createButton?.disabled).toBe(true);
+    expect(
+      Array.from(container.querySelectorAll('a[href="/expenses/new"]')).length,
+    ).toBe(0);
+  });
 });
 
 function mockExpensePageFetch() {

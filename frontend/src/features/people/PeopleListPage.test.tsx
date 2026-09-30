@@ -161,16 +161,16 @@ describe("PeopleListPage", () => {
     renderPeopleListRoute(supportLeaseActor);
     await waitForText("Elisa Pessoa");
 
-    const boundary = container.querySelector('[aria-label="Limite do Locatário para Pessoas"]');
+    const boundary = container.querySelector('[aria-label="Limite da Entidade para Pessoas"]');
     expect(boundary).toBeTruthy();
-    expect(boundary?.textContent).toContain("Limite do Locatário para Pessoas");
+    expect(boundary?.textContent).toContain("Limite da Entidade para Pessoas");
     expect(boundary?.textContent).toContain("Tenant A Manual Test");
     expect(boundary?.textContent).toContain("TENANT-A");
-    expect(boundary?.textContent).toContain("ID do Locatário: default");
-    expect(boundary?.textContent).toContain("Concessão de Acesso de Suporte ao Locatário");
+    expect(boundary?.textContent).toContain("ID da Entidade: default");
+    expect(boundary?.textContent).toContain("Concessão de Acesso de Suporte à Entidade");
     expect(boundary?.textContent).toContain("ID da Concessão de Acesso de Suporte: lease-tenant-a-people-read");
     expect(boundary?.textContent).toContain(
-      "O diretório de Pessoas abaixo é carregado neste contexto de Locatário. O nome ou apelido de uma Pessoa pode mencionar outro Locatário; esse texto do perfil não altera o limite de Locatário desta lista.",
+      "O diretório de Pessoas abaixo é carregado neste contexto de Entidade. O nome ou apelido de uma Pessoa pode mencionar outra Entidade; esse texto do perfil não altera o limite de Entidade desta lista.",
     );
     expect(boundary?.textContent).not.toContain("People tenant boundary");
   });

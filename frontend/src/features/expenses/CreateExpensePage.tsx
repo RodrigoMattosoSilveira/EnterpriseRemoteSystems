@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
-import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { Link, Navigate, useNavigate, useSearchParams } from "react-router-dom";
 import { ApiErrorPanel } from "../../components/ApiErrorPanel";
 import { JourneyDaysRemaining } from "../../components/JourneyDaysRemaining";
 import type { Collaborator } from "../../types/collaborators";
@@ -18,6 +18,7 @@ import {
 } from "./useExpenses";
 import { CurrentAndFutureEarningsModal } from "./CurrentAndFutureEarningsModal";
 import { PageTitle } from "../../components/layout/PageHeading";
+import { useOptionalAuthorizationContext } from "../../components/layout/AuthorizationContext";
 import { useI18n, translateEnglish, type Translate } from "../../i18n";
 
 type ExpenseCurrencyCode = "BRL" | "GOLD_GRAM";
@@ -62,6 +63,20 @@ const initialForm: FormState = {
 };
 
 export function CreateExpensePage() {
+  const actor = useOptionalAuthorizationContext();
+  const canCreateExpenses =
+    !actor ||
+    actor.permissions.includes("*") ||
+    actor.permissions.includes("expenses.create");
+
+  if (!canCreateExpenses) {
+    return <Navigate to="/forbidden" replace />;
+  }
+
+  return <AuthorizedCreateExpensePage />;
+}
+
+function AuthorizedCreateExpensePage() {
   const { t, formatCurrency, formatNumber } = useI18n();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();

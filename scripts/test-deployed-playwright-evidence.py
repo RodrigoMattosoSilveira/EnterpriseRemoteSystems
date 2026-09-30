@@ -75,12 +75,15 @@ def main() -> int:
         "overwrite: false",
         "PLAYWRIGHT_EVIDENCE_SHA256='${{ needs.deployed-playwright.outputs.evidence_sha256 }}'",
         "python3 scripts/verify-bite32-release-coverage.py",
+        "python3 scripts/verify-bite326-release-coverage.py",
     ]
     for marker in required_workflow_markers:
         if marker not in workflow:
             raise AssertionError(f"deployment workflow is missing 30L.4B contract marker: {marker}")
     if "bite32-release-coverage-check" not in makefile:
         raise AssertionError("Makefile is missing Bite 32 release coverage target")
+    if "bite326-release-hardening-check" not in makefile:
+        raise AssertionError("Makefile is missing Bite 32.6 release-hardening target")
 
     for marker in (
         "deployed_playwright_evidence_sha256=$(PLAYWRIGHT_EVIDENCE_SHA256)",

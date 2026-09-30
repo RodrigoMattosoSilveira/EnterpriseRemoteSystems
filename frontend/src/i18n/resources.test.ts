@@ -49,17 +49,20 @@ describe("ERS translation resources", () => {
       "This Person has one or more Roles in another Tenant. They must work with that Tenant to have every Role other than Membership and Collaborator removed before a Role can be assigned here.",
     );
     expect(messagesByLocale["pt-BR"]["authz.tenantRoleDelegation.crossTenantAuthorityBadge"]).toBe(
-      "Função em outro Locatário",
+      "Função em outra Entidade",
     );
     expect(messagesByLocale["pt-BR"]["authz.tenantRoleDelegation.crossTenantConflict"]).toBe(
-      "Esta Pessoa possui uma ou mais Funções em outro Locatário. Ela deve trabalhar com esse Locatário para que todas as Funções, exceto Vínculo e Colaborador, sejam removidas antes que uma Função possa ser atribuída aqui.",
+      "Esta Pessoa possui uma ou mais Funções em outra Entidade. Ela deve trabalhar com essa Entidade para que todas as Funções, exceto Vínculo e Colaborador, sejam removidas antes que uma Função possa ser atribuída aqui.",
     );
   });
 
-  it("uses Locatário terminology only in pt-BR while preserving English Tenant terminology", () => {
+  it("uses Entidade terminology only in pt-BR while preserving English Tenant terminology", () => {
     expect(messagesByLocale["en-US"]["common.tenant"]).toBe("Tenant");
     expect(messagesByLocale["en-US"]["common.tenants"]).toBe("Tenants");
-    expect(messagesByLocale["pt-BR"]["common.tenant"]).toBe("Locatário");
-    expect(messagesByLocale["pt-BR"]["common.tenants"]).toBe("Locatários");
+    expect(messagesByLocale["pt-BR"]["common.tenant"]).toBe("Entidade");
+    expect(messagesByLocale["pt-BR"]["common.tenants"]).toBe("Entidades");
+
+    const portugueseCopy = Object.values(messagesByLocale["pt-BR"]).join("\n");
+    expect(portugueseCopy).not.toMatch(/locatári[oa]s?/iu);
   });
 });

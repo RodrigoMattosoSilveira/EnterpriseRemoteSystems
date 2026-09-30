@@ -10,12 +10,13 @@ export function InformTab(props: {
   workPeriod: WorkPeriod;
   roster?: WorkPlanRoster;
   loading: boolean;
+  editable: boolean;
   pending: boolean;
   unreplacedAbsentees?: WorkPeriodAssignment[];
   onInform: () => void;
 }) {
   const { t, formatDate } = useI18n();
-  const canInform = props.workPeriod.status === "PLANNING";
+  const canInform = props.editable && props.workPeriod.status === "PLANNING";
   const unreplacedAbsentees = props.unreplacedAbsentees ?? [];
   return (
     <section className="space-y-4">

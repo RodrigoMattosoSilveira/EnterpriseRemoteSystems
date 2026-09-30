@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MineProductionPage } from "./MineProductionPage";
 import type { GoldProductionEntry } from "../../types/accruals";
 import { I18nProvider } from "../../i18n";
+import { AuthorizationProvider } from "../../components/layout/AuthorizationContext";
 
 type FetchCall = {
   url: string;
@@ -212,9 +213,20 @@ function renderPage() {
   act(() => {
     root = createRoot(container);
     root.render(
-      <I18nProvider><QueryClientProvider client={queryClient}>
-        <RouterProvider router={router} />
-      </QueryClientProvider></I18nProvider>,
+      <I18nProvider>
+        <AuthorizationProvider value={{
+          actorKey: "gold-production-page-test",
+          actorRecordId: "actor-gold-production-page-test",
+          tenantId: "default",
+          scope: "TENANT",
+          roleCodes: ["TENANT_ADMIN"],
+          permissions: ["gold_production.read", "gold_production.manage"],
+        }}>
+          <QueryClientProvider client={queryClient}>
+            <RouterProvider router={router} />
+          </QueryClientProvider>
+        </AuthorizationProvider>
+      </I18nProvider>,
     );
   });
 }

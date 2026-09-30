@@ -91,7 +91,7 @@ func (h *Handler) ListTenantActors(c fiber.Ctx) error {
 }
 
 func (h *Handler) ListTenantRoleActors(c fiber.Ctx) error {
-	actor, err := h.resolveTenantRoleManager(c)
+	actor, err := h.resolveTenantRoleReader(c)
 	if err != nil {
 		return writeAuthorizationHTTPError(c, err)
 	}
@@ -170,6 +170,20 @@ func (h *Handler) resolveTenantActorManager(c fiber.Ctx) (*Actor, error) {
 	return actor, nil
 }
 
+func (h *Handler) resolveTenantRoleReader(c fiber.Ctx) (*Actor, error) {
+	actor, err := h.resolveRequiredActor(c, PermissionAuthzTenantRoleGrantsRead)
+	if err != nil {
+		actor, err = h.resolveRequiredActor(c, PermissionAuthzTenantRoleGrantsManage)
+	}
+	if err != nil {
+		return nil, err
+	}
+	if actor.Scope != ActorScopeTenant || actor.TenantID == "" || actor.TenantID == GlobalTenantScope {
+		return nil, ErrForbidden
+	}
+	return actor, nil
+}
+
 func (h *Handler) resolveTenantRoleManager(c fiber.Ctx) (*Actor, error) {
 	actor, err := h.resolveRequiredActor(c, PermissionAuthzTenantRoleGrantsManage)
 	if err != nil {
@@ -182,12 +196,19 @@ func (h *Handler) resolveTenantRoleManager(c fiber.Ctx) (*Actor, error) {
 }
 
 func (h *Handler) ListAuditLogs(c fiber.Ctx) error {
-	if _, err := h.resolveRequiredActor(c, PermissionAuthzRead); err != nil {
+	actor, err := h.resolveRequiredActor(c, PermissionAuthzRead)
+	if err != nil {
+		actor, err = h.resolveRequiredActor(c, PermissionAuthzTenantAuditRead)
+	}
+	if err != nil {
 		return writeAuthorizationHTTPError(c, err)
 	}
 	var filter AuditLogFilter
 	if err := c.Bind().Query(&filter); err != nil {
 		return httpx.BadRequest(c, "invalid_query", "Invalid query parameters")
+	}
+	if actor.Scope == ActorScopeTenant {
+		filter.TenantID = actor.TenantID
 	}
 	logs, err := h.store.ListAuthorizationAuditLogs(c.Context(), filter)
 	if err != nil {

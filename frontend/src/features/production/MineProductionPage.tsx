@@ -16,9 +16,12 @@ import {
 } from "./useMineProduction";
 import { PageTitle } from "../../components/layout/PageHeading";
 import { useI18n } from "../../i18n";
+import { useAuthorizationContext } from "../../components/layout/AuthorizationContext";
 
 export function MineProductionPage() {
   const { t, formatDate, formatNumber } = useI18n();
+  const actor = useAuthorizationContext();
+  const canManage = actor.permissions.includes("*") || actor.permissions.includes("gold_production.manage");
   const [searchParams, setSearchParams] = useSearchParams();
   const selectedWorkPeriodId = searchParams.get("workPeriodId") ?? "";
   const [editingEntry, setEditingEntry] = useState<GoldProductionEntry | null>(
@@ -175,13 +178,13 @@ export function MineProductionPage() {
                         <p className="font-mono text-lg font-bold">
                           {formatNumber(entry.goldGramsProduced, { maximumFractionDigits: 8 })} g
                         </p>
-                        <button
+                        {canManage ? <button
                           type="button"
                           className="mt-2 text-sm font-semibold text-gray-900 underline"
                           onClick={() => setEditingEntry(entry)}
                         >
                           {t("common.edit")}
-                        </button>
+                        </button> : null}
                       </div>
                     </div>
                   </article>
@@ -191,7 +194,7 @@ export function MineProductionPage() {
           </section>
         </div>
 
-        <MineProductionForm
+        {canManage ? <MineProductionForm
           workDate={selectedWorkPeriod?.workDate}
           locations={locations}
           editingEntry={editingEntry}
@@ -199,7 +202,7 @@ export function MineProductionPage() {
           resetToken={resetToken}
           onSubmit={submit}
           onCancelEdit={() => setEditingEntry(null)}
-        />
+        /> : null}
       </section>
     </main>
   );

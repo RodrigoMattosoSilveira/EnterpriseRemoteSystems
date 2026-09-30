@@ -50,7 +50,7 @@ describe("WorkPeriodsPage", () => {
                 tenantId: "default",
                 scope: "TENANT",
                 roleCodes: ["TENANT_ADMIN"],
-                permissions: [],
+                permissions: ["planning.read", "planning.create", "planning.update"],
               }}
             >
               <WorkPeriodsPage />
@@ -82,6 +82,43 @@ describe("WorkPeriodsPage", () => {
     expect(endInput?.placeholder).toBe("HH:MM");
     expect(endInput?.value).toBe("18:00");
   });
+  it("disables Add Work Period for a read-only Tenant Viewer", async () => {
+    await act(async () => {
+      root = createRoot(container);
+      root.render(
+        <MemoryRouter>
+          <I18nProvider>
+            <AuthorizationProvider
+              value={{
+                actorKey: "tenant-viewer",
+                actorRecordId: "actor-viewer",
+                tenantId: "default",
+                scope: "TENANT",
+                roleCodes: ["TENANT_VIEWER"],
+                permissions: ["planning.read"],
+              }}
+            >
+              <WorkPeriodsPage />
+            </AuthorizationProvider>
+          </I18nProvider>
+        </MemoryRouter>,
+      );
+    });
+
+    const addButton = Array.from(container.querySelectorAll("button")).find(
+      (button) => button.textContent?.trim() === "Adicionar Período de Trabalho",
+    ) as HTMLButtonElement | undefined;
+
+    expect(addButton).toBeTruthy();
+    expect(addButton?.disabled).toBe(true);
+
+    await act(async () => {
+      addButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    expect(container.textContent).not.toContain("Criar Período de Trabalho");
+  });
+
 });
 
 function inputForLabel(text: string): HTMLInputElement | null {

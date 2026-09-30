@@ -5,6 +5,7 @@ import { createMemoryRouter, RouterProvider } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ReferenceDataAdminPage } from "./ReferenceDataAdminPage";
 import type { ReferenceDataItem } from "../../types/referenceData";
+import { AuthorizationProvider } from "../../components/layout/AuthorizationContext";
 
 const sectorRows: ReferenceDataItem[] = [
   {
@@ -280,9 +281,18 @@ function renderReferenceDataAdminPage() {
 
   act(() => {
     root?.render(
-      <QueryClientProvider client={queryClient}>
-        <RouterProvider router={router} />
-      </QueryClientProvider>
+      <AuthorizationProvider value={{
+        actorKey: "reference-data-page-test",
+        actorRecordId: "actor-reference-data-page-test",
+        tenantId: "default",
+        scope: "TENANT",
+        roleCodes: ["TENANT_ADMIN"],
+        permissions: ["reference_data.read", "reference_data.manage"],
+      }}>
+        <QueryClientProvider client={queryClient}>
+          <RouterProvider router={router} />
+        </QueryClientProvider>
+      </AuthorizationProvider>
     );
   });
 }

@@ -14,6 +14,9 @@ type Repository interface {
 	Create(ctx context.Context, person *db.Person) error
 	FindByID(ctx context.Context, tenantID string, id string) (*db.Person, error)
 	Update(ctx context.Context, tenantID string, person *db.Person) error
+	GetPhoto(ctx context.Context, tenantID string, personID string) (*db.GlobalPersonPhoto, error)
+	UpsertPhoto(ctx context.Context, tenantID string, personID string, photo *db.GlobalPersonPhoto) error
+	DeletePhoto(ctx context.Context, tenantID string, personID string) error
 	ExistsActivePersonStatus(ctx context.Context, tenantID string, statusID string) (bool, error)
 
 	// Global identity / Membership operations.

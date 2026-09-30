@@ -47,6 +47,41 @@ export type ApiFetchOptions = RequestInit & {
   suppressForbiddenNavigation?: boolean;
 };
 
+export async function apiFetchBlob(
+  path: string,
+  options: ApiFetchOptions = {},
+): Promise<Blob> {
+  const { suppressForbiddenNavigation = false, ...requestOptions } = options;
+  const url = `${API_BASE_URL}${path}`;
+  const headers = authenticatedRequestHeaders(requestOptions.headers);
+  const requestLocalSessionToken = headers[LOCAL_SESSION_TOKEN_HEADER] ?? "";
+  const response = await fetch(url, {
+    ...requestOptions,
+    credentials: requestOptions.credentials ?? "same-origin",
+    headers,
+  });
+  syncLocalSessionTransport(response, requestLocalSessionToken);
+  if (!response.ok) {
+    let payload: ApiEnvelope<unknown> | null = null;
+    try { payload = (await response.clone().json()) as ApiEnvelope<unknown>; } catch { payload = null; }
+    const errorCode = payload?.error?.code;
+    if (response.status === 401 && !isPublicAuthenticationRequest(path, requestOptions.method)) {
+      notifyAuthenticationRequired(authenticationInterruptionReason(errorCode));
+    }
+    if (response.status === 403 && errorCode === "forbidden" && !suppressForbiddenNavigation) notifyForbidden();
+    if (response.status === 403 && errorCode === "tenant_actor_unavailable") notifyTenantActorUnavailable();
+    throw new ApiError({
+      status: response.status,
+      code: errorCode,
+      message: payload?.error?.message || `API request failed with status ${response.status}`,
+      fields: payload?.error?.fields,
+      details: payload,
+      url,
+    });
+  }
+  return response.blob();
+}
+
 export async function apiFetch<T>(
   path: string,
   options: ApiFetchOptions = {}

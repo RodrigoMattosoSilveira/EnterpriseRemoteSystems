@@ -7,6 +7,8 @@ import type { Collaborator } from "../../types/collaborators";
 import type { PriceListItem } from "../../types/priceList";
 import { CreateExpensePage } from "./CreateExpensePage";
 import { I18nProvider } from "../../i18n";
+import { AuthorizationProvider } from "../../components/layout/AuthorizationContext";
+import type { AuthzCurrentActor } from "../../types/authz";
 
 type FetchCall = {
   url: string;
@@ -108,6 +110,24 @@ afterEach(async () => {
 });
 
 describe("CreateExpensePage", () => {
+  it("redirects a read-only Tenant Viewer away from the create workflow", async () => {
+    vi.stubGlobal("fetch", vi.fn());
+    const viewer: AuthzCurrentActor = {
+      actorKey: "tenant-viewer",
+      actorRecordId: "actor-tenant-viewer",
+      tenantId: "default",
+      scope: "TENANT",
+      roleCodes: ["TENANT_VIEWER"],
+      permissions: ["expenses.read"],
+    };
+
+    const router = renderCreateExpensePage("/expenses/new", viewer);
+
+    await waitForText("Access forbidden");
+    expect(router.state.location.pathname).toBe("/forbidden");
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
   it("submits a price-list expense in BRL", async () => {
     mockCreateExpenseFetch();
     renderCreateExpensePage();
@@ -557,7 +577,10 @@ function mockRecreateExpenseFetch() {
   });
 }
 
-function renderCreateExpensePage(initialEntry = "/expenses/new") {
+function renderCreateExpensePage(
+  initialEntry = "/expenses/new",
+  actor?: AuthzCurrentActor,
+) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
@@ -566,6 +589,7 @@ function renderCreateExpensePage(initialEntry = "/expenses/new") {
       { path: "/expenses/new", element: <CreateExpensePage /> },
       { path: "/expenses/:id", element: <div>Replacement detail</div> },
       { path: "/expenses", element: <div>Expenses landing</div> },
+      { path: "/forbidden", element: <div>Access forbidden</div> },
     ],
     { initialEntries: [initialEntry] },
   );
@@ -574,10 +598,18 @@ function renderCreateExpensePage(initialEntry = "/expenses/new") {
     root = createRoot(container);
     root.render(
       <I18nProvider><QueryClientProvider client={queryClient}>
-        <RouterProvider router={router} />
+        {actor ? (
+          <AuthorizationProvider value={actor}>
+            <RouterProvider router={router} />
+          </AuthorizationProvider>
+        ) : (
+          <RouterProvider router={router} />
+        )}
       </QueryClientProvider></I18nProvider>,
     );
   });
+
+  return router;
 }
 
 function priceListItem(
