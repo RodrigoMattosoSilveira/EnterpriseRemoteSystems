@@ -6,6 +6,7 @@ import { useOptionalAuthorizationContext } from "../../components/layout/Authori
 import { useReferenceDataByType } from "../reference-data/useReferenceData";
 
 import { useCreatePersonMembership, useGlobalPeopleSearch, usePeoplePage } from "./usePeople";
+import { exportPeopleCSV } from "../../api/people.api";
 
 import {
   CardViewIcon,
@@ -92,6 +93,8 @@ export function PeopleListPage() {
 
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
+  const [exportingPeople, setExportingPeople] = useState(false);
+  const [exportError, setExportError] = useState(false);
 
   const handleChange = (mode: "cards" | "list") => {
     setViewMode(mode);
@@ -156,6 +159,26 @@ export function PeopleListPage() {
   const pageStart = total === 0 ? 0 : (page - 1) * pageSize + 1;
   const pageEnd = total === 0 ? 0 : Math.min(total, page * pageSize);
 
+  async function handleExportPeople() {
+    setExportingPeople(true);
+    setExportError(false);
+    try {
+      const blob = await exportPeopleCSV();
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "ers-people-export.csv";
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    } catch {
+      setExportError(true);
+    } finally {
+      setExportingPeople(false);
+    }
+  }
+
   function clearFilters() {
     setSearch("");
     setDebouncedSearch("");
@@ -218,6 +241,16 @@ export function PeopleListPage() {
               </Link>
             )}
             {canManageMemberships && (
+              <button
+                type="button"
+                onClick={handleExportPeople}
+                disabled={exportingPeople}
+                className="rounded-xl border border-gray-950 bg-white px-4 py-2 text-sm font-semibold text-gray-950 shadow-sm disabled:opacity-60"
+              >
+                {exportingPeople ? t("people.export.exporting") : t("people.export.action")}
+              </button>
+            )}
+            {canManageMemberships && (
               <Link
                 to="/people/add-existing"
                 className="rounded-xl border border-gray-950 bg-white px-4 py-2 text-sm font-semibold text-gray-950 shadow-sm"
@@ -238,6 +271,12 @@ export function PeopleListPage() {
       </header>
 
       <section className="mx-auto max-w-4xl space-y-4 p-4">
+        {exportError && (
+          <div role="alert" className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm font-medium text-red-800">
+            {t("people.export.error")}
+          </div>
+        )}
+
         {listState.flash && (
           <div
             role="status"

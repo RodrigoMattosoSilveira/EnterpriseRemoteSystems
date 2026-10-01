@@ -181,6 +181,21 @@ func TestAuthenticationAccountRoutesRequireApplicationScope(t *testing.T) {
 	}
 }
 
+func TestTenantPeopleCSVExportRequiresTenantAdministrator(t *testing.T) {
+	t.Parallel()
+	_, currentFile, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("resolve route test directory")
+	}
+	contents, err := os.ReadFile(filepath.Join(filepath.Dir(currentFile), "people.go"))
+	if err != nil {
+		t.Fatalf("read People routes: %v", err)
+	}
+	if !strings.Contains(string(contents), `r.Get("/export.csv", requireTenantAdministrator(deps), deps.PeopleHandler.ExportCSV)`) {
+		t.Fatal("People CSV export must require Tenant Administrator scope")
+	}
+}
+
 func TestTenantAuthenticationProvisioningRoutesRequireTenantAdministrator(t *testing.T) {
 	t.Parallel()
 
