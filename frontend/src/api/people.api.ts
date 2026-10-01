@@ -37,6 +37,10 @@ export async function listPeoplePage(
   };
 }
 
+export function exportPeopleCSV(): Promise<Blob> {
+  return apiFetchBlob("/people/export.csv", { cache: "no-store" });
+}
+
 export function getPerson(id: string): Promise<Person> {
   return apiFetch<Person>(`/people/${id}`);
 }

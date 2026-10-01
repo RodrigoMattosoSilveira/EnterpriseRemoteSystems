@@ -50,6 +50,7 @@ func ToDTO(person db.Person) PersonDTO {
 		MissingSections:         completion.MissingSections,
 
 		StatusID:    person.StatusID,
+		StatusCode:  person.Status.Code,
 		StatusLabel: statusLabel,
 		Notes:       person.Notes,
 
