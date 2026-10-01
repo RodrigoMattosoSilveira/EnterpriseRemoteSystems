@@ -286,7 +286,7 @@ func resolveStatusID(tx *gorm.DB, tenantID string, value string) (string, error)
 	var targetID string
 	byCode := tx.Table("reference_data").
 		Select("id").
-		Where("tenant_id = ? AND type = ? AND code = ? AND active = ?", tenantID, strings.ToUpper(statusValue), "person_status", true).
+		Where("tenant_id = ? AND type = ? AND code = ? AND active = ?", tenantID, "person_status", strings.ToUpper(statusValue), true).
 		Limit(1).
 		Scan(&targetID)
 	if byCode.Error != nil {
