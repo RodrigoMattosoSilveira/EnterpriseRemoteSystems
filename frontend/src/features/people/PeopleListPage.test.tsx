@@ -69,6 +69,22 @@ describe("PeopleListPage", () => {
   });
 
 
+  it("offers Tenant Administrators a canonical People CSV export", async () => {
+    mockPeopleFetch({ items: [personFixture("person-1", "Maria")], total: 1 });
+    renderPeopleListRoute(tenantAdminActor);
+    await waitForText("Maria Pessoa");
+    expect(container.textContent).toContain("Export CSV");
+  });
+
+  it("does not expose bulk People CSV export to a read-only Tenant role", async () => {
+    mockPeopleFetch({ items: [personFixture("person-1", "Maria")], total: 1 });
+    renderPeopleListRoute({ ...tenantAdminActor, roleCodes: ["TENANT_VIEWER"], permissions: ["people.read"] });
+    await waitForText("Maria Pessoa");
+    expect(container.textContent).not.toContain("Export CSV");
+  });
+
+
+
   it("opens a people.read-only Support Lease workspace without requesting unleased reference data", async () => {
     mockPeopleFetch({ items: [personFixture("person-support", "Support")], total: 1 });
 
