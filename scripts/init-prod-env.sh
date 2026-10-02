@@ -26,19 +26,19 @@ set_or_update_env "APP_DOMAIN" "app.yourdomain.com"
 # Backend
 set_or_update_env "PORT" "8080"
 set_or_update_env "DATABASE_PATH" "/app/data/app.db"
+set_or_update_env "APP_AUTO_MIGRATE" "false"
+set_or_update_env "AUTHZ_DISABLE_ROUTE_AUTHORIZATION" "false"
 
 # JWT
 set_or_update_env "JWT_SECRET" "$(openssl rand -base64 48)"
 set_or_update_env "JWT_ISSUER" "call-it-cure-it"
 set_or_update_env "JWT_EXPIRATION_MINUTES" "480"
 
-# Initial admin bootstrap.
-# Keep DEV_SEED_ADMIN=true only for the first deployment.
-# After first successful admin login, change it to false.
-set_or_update_env "DEV_SEED_ADMIN" "true"
-set_or_update_env "DEV_ADMIN_EMAIL" "admin@example.com"
-set_or_update_env "DEV_ADMIN_PASSWORD" "change-this-password-immediately"
-set_or_update_env "DEV_ADMIN_NAME" "Admin User"
+# Production must not use development/test administrator seeding.
+set_or_update_env "DEV_SEED_ADMIN" "false"
+set_or_update_env "DEV_ADMIN_EMAIL" ""
+set_or_update_env "DEV_ADMIN_PASSWORD" ""
+set_or_update_env "DEV_ADMIN_NAME" ""
 
 # LLM
 set_or_update_env "LLM_COACHING_ENABLED" "false"
@@ -57,5 +57,4 @@ echo
 echo "IMPORTANT: Edit ${ENV_FILE} before production use:"
 echo "  1. Set APP_DOMAIN to your real domain."
 echo "  2. Set CORS_ALLOW_ORIGINS to https://your-real-domain."
-echo "  3. Set DEV_ADMIN_EMAIL and DEV_ADMIN_PASSWORD."
-echo "  4. After first successful admin login, set DEV_SEED_ADMIN=false."
+echo "  3. Keep DEV_SEED_ADMIN=false; Production administrator lifecycle is handled outside demo/test seeding."

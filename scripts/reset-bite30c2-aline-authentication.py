@@ -33,6 +33,8 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
+from ers_environment import require_non_production_data_mutation
+
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 ROOT = SCRIPT_DIR.parent
@@ -97,6 +99,7 @@ def one(rows: list[sqlite3.Row], description: str) -> sqlite3.Row:
 
 
 def main() -> int:
+    require_non_production_data_mutation('to reset Bite 30C.2 authentication test data')
     args = parse_args()
 
     db_path = Path(args.db_path).expanduser().resolve()

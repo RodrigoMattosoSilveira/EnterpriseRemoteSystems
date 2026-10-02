@@ -19,6 +19,8 @@ import sys
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
+from ers_environment import require_non_production_data_mutation
+
 ROOT = Path(__file__).resolve().parents[0]
 DEFAULT_DB = Path.cwd() / "backend" / "data" / "app.db"
 DEFAULT_TARGET_NAMES = ("Byte 28A Manual Test", "Bite 28A Manual Test")
@@ -518,6 +520,7 @@ def seed_multi_identity(
 
 
 def main() -> None:
+    require_non_production_data_mutation('to seed Bite 30C manual-test data')
     args = parse_args()
     if args.people < 8:
         raise SystemExit("--people must be at least 8 so collaborator/manual coverage remains useful.")

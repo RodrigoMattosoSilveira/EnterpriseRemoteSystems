@@ -31,6 +31,8 @@ import sqlite3
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
+
+from ers_environment import require_non_production_data_mutation
 from types import ModuleType
 
 SCRIPT_DIR = Path(__file__).resolve().parent
@@ -318,6 +320,7 @@ def create_existing_account(
 
 
 def main() -> int:
+    require_non_production_data_mutation('to seed Bite 30C.2 manual-test data')
     args = parse_args()
     batch = normalized_batch(args.batch)
     helper = load_base_helper()

@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+"${SCRIPT_DIR}/ers-environment-guard.sh" require-non-production "${APP_ENV:-}" "SQLite database reset"
+
 DATABASE_FILE="${1:-}"
 if [[ -z "${DATABASE_FILE}" ]]; then
   echo "Usage: $0 <sqlite-database-file>" >&2

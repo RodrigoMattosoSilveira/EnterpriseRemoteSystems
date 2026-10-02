@@ -63,6 +63,8 @@ if [[ -n "${EXPLICIT_ERS_BACKEND_WATCH}" ]]; then
   export ERS_BACKEND_WATCH="${EXPLICIT_ERS_BACKEND_WATCH}"
 fi
 
+"${PROJECT_ROOT}/scripts/ers-environment-guard.sh" require-non-production "${APP_ENV:-}" "local backend/test tooling"
+
 # make local-backend serves the browser over plain HTTP. Browsers treat
 # http://localhost as a special trustworthy origin, but a phone connecting to
 # http://<LAN-IP>:5173 will reject a Secure session cookie. Do not let a stale
