@@ -1,13 +1,13 @@
 #!/usr/bin/env sh
 set -eu
 
-ENVIRONMENT="${APP_ENV:-development}"
+ENVIRONMENT="${APP_ENV:-}"
 DB_PATH="${DATABASE_PATH:-/app/data/app.db}"
 MIGRATIONS_DIR="${MIGRATIONS_DIR:-/app/migrations}"
 TMP_DB="${DB_PATH}.building.$$"
 
 if [ "$ENVIRONMENT" != "development" ]; then
-  echo "Refusing disposable database build for APP_ENV=${ENVIRONMENT}. Only Development is replaced on deployment." >&2
+  echo "Refusing disposable database build for APP_ENV=${ENVIRONMENT:-unset}. Only Development is replaced on deployment." >&2
   exit 2
 fi
 

@@ -88,6 +88,7 @@ help:
 	@echo "  make local-check"
 	@echo "  make deployed-playwright-evidence-check"
 	@echo "  make production-release-evidence-check"
+	@echo "  make production-environment-guardrails-check"
 	@echo "  make migration-check"
 	@echo "  make migration-rehearsal-check"
 	@echo "  make local-docker-check"
@@ -121,7 +122,7 @@ help:
 	@echo "  make server-frontend-logs ENV=development|test|production"
 	@echo "  make server-caddy-logs ENV=development|test|production"
 	@echo "  make server-backend-health ENV=development|test|production"
-	@echo "  make server-provision-e2e-admin ENV=development|test|production < provision.json"
+	@echo "  make server-provision-e2e-admin ENV=development|test < provision.json"
 	@echo "  make server-smoke ENV=development|test|production"
 	@echo "  make server-protected-api-smoke ENV=development|test|production"
 	@echo "  make server-admin-test ENV=development|test|production"
@@ -160,7 +161,6 @@ help:
 	@echo "  make server-prod-smoke"
 	@echo "  make server-prod-protected-api-smoke"
 	@echo "  make server-prod-admin-test"
-	@echo "  make server-prod-provision-e2e-admin < provision.json"
 	@echo
 	@echo "Edge proxy:"
 	@echo "  make edge-init"
@@ -244,11 +244,13 @@ local-db-init:
 
 .PHONY: local-db-reset
 local-db-reset:
+	@./scripts/ers-environment-guard.sh require-non-production development "local session-data reset"
 	sqlite3 backend/data/app.db "DELETE FROM session_scores; DELETE FROM action_evaluations; DELETE FROM trainee_actions; DELETE FROM session_events; DELETE FROM sessions;"
 	@echo "Local session data reset."
 
 .PHONY: local-admin-reset
 local-admin-reset:
+	@./scripts/ers-environment-guard.sh require-non-production development "local administrator reset"
 	sqlite3 backend/data/app.db "DELETE FROM users WHERE email = 'admin@example.com';"
 	@echo "Local admin deleted. Restart backend to reseed."
 
@@ -344,7 +346,7 @@ local-sqlite-reset-check:
 	trap 'rm -rf "$$tmpdir"' EXIT; \
 	db="$$tmpdir/manual.db"; \
 	touch "$$db" "$$db-wal" "$$db-shm" "$$db-journal"; \
-	./scripts/reset-sqlite-database.sh "$$db"; \
+	APP_ENV=development ./scripts/reset-sqlite-database.sh "$$db"; \
 	for path in "$$db" "$$db-wal" "$$db-shm" "$$db-journal"; do \
 		if [ -e "$$path" ]; then echo "SQLite reset left stale file: $$path"; exit 1; fi; \
 	done; \
@@ -393,6 +395,10 @@ deployed-playwright-evidence-check:
 production-release-evidence-check:
 	python3 scripts/test-production-release-evidence.py
 
+.PHONY: production-environment-guardrails-check
+production-environment-guardrails-check:
+	python3 scripts/test-production-environment-guardrails.py
+
 .PHONY: local-check
 local-check:
 	$(MAKE) bite30l4-coverage-manifest-check
@@ -401,6 +407,7 @@ local-check:
 	$(MAKE) post-bite30-backlog-reconciliation-check
 	$(MAKE) deployed-playwright-evidence-check
 	$(MAKE) production-release-evidence-check
+	$(MAKE) production-environment-guardrails-check
 	$(MAKE) local-hot-reload-check
 	$(MAKE) local-auth-cookie-config-check
 	$(MAKE) server-public-smoke-script-check
@@ -456,7 +463,7 @@ local-docker-check: local-docker-check-image
 		-e GOMODCACHE=/tmp/gomod \
 		-e NPM_CONFIG_CACHE=/tmp/npm-cache \
 		$(LOCAL_DOCKER_CHECK_IMAGE) \
-		bash -lc 'set -euo pipefail; make bite30l4-coverage-manifest-check; make bite32-release-coverage-check; make bite326-release-hardening-check; make post-bite30-backlog-reconciliation-check; make deployed-playwright-evidence-check; make production-release-evidence-check; make local-hot-reload-check; make local-auth-cookie-config-check; make server-authz-bootstrap-config-check; make legacy-identity-dependency-check; make brazilian-demo-presentation-check; make migration-rehearsal-check; cd backend && go clean -testcache && go test ./...; cd ../frontend && npm ci && npm run test:run && npx playwright install chromium && npx playwright test && npm run build'
+		bash -lc 'set -euo pipefail; make bite30l4-coverage-manifest-check; make bite32-release-coverage-check; make bite326-release-hardening-check; make post-bite30-backlog-reconciliation-check; make deployed-playwright-evidence-check; make production-release-evidence-check; make production-environment-guardrails-check; make local-hot-reload-check; make local-auth-cookie-config-check; make server-authz-bootstrap-config-check; make legacy-identity-dependency-check; make brazilian-demo-presentation-check; make migration-rehearsal-check; cd backend && go clean -testcache && go test ./...; cd ../frontend && npm ci && npm run test:run && npx playwright install chromium && npx playwright test && npm run build'
 
 # ==============================================================================
 # Generic server environment targets
@@ -471,8 +478,16 @@ server-init-env:
 server-pull:
 	cd $(ENV_DIR) && git checkout $(BRANCH) && git pull
 
+.PHONY: server-environment-identity-check
+server-environment-identity-check:
+	./scripts/ers-environment-guard.sh require-server-identity "$(ENV)" "$(ENV_DIR)/$(ENV_FILE)"
+
+.PHONY: server-environment-contract-check
+server-environment-contract-check:
+	./scripts/ers-environment-guard.sh require-server-contract "$(ENV)" "$(ENV_DIR)/$(ENV_FILE)"
+
 .PHONY: server-build
-server-build: server-authz-bootstrap-config-check
+server-build: server-authz-bootstrap-config-check server-environment-contract-check
 	cd $(ENV_DIR) && $(SERVER_COMPOSE_BUILD) build
 
 .PHONY: server-remove-stale-containers
@@ -488,7 +503,7 @@ server-remove-stale-containers:
 	done
 
 .PHONY: server-up
-server-up: server-remove-stale-containers
+server-up: server-environment-contract-check server-remove-stale-containers
 	cd $(ENV_DIR) && $(SERVER_COMPOSE) up -d --build --force-recreate --remove-orphans
 
 .PHONY: server-down
@@ -497,6 +512,7 @@ server-down:
 
 .PHONY: server-down-volumes
 server-down-volumes:
+	@./scripts/ers-environment-guard.sh require-non-production "$(ENV)" "server volume deletion"
 	@echo "WARNING: this deletes the $(ENV) SQLite Docker volume."
 	@echo "Use only for development/test resets or after a backup."
 	cd $(ENV_DIR) && $(SERVER_COMPOSE) down -v
@@ -785,7 +801,9 @@ server-env-caddy-health:
 
 .PHONY: server-provision-e2e-admin
 server-provision-e2e-admin:
-	cd $(ENV_DIR) && $(SERVER_COMPOSE) exec -T backend /app/provision-e2e-admin $(if $(filter production,$(ENV)),--allow-production,)
+	@./scripts/ers-environment-guard.sh require-non-production "$(ENV)" "E2E/test administrator provisioning"
+	@$(MAKE) server-environment-contract-check ENV=$(ENV)
+	cd $(ENV_DIR) && $(SERVER_COMPOSE) exec -T backend /app/provision-e2e-admin
 
 .PHONY: server-smoke
 server-smoke:
@@ -829,6 +847,7 @@ server-cert-check:
 
 .PHONY: server-backup
 server-backup:
+	@$(MAKE) server-environment-identity-check ENV=$(ENV)
 	mkdir -p $(ENV_DIR)/backups
 	@TIMESTAMP=$$(date +%Y%m%d-%H%M%S); \
 	CONTAINER="$(CONTAINER_PREFIX)-backend"; \
@@ -865,6 +884,8 @@ server-backup:
 
 .PHONY: server-reset-admin
 server-reset-admin:
+	@./scripts/ers-environment-guard.sh require-non-production "$(ENV)" "server administrator reset"
+	@$(MAKE) server-environment-contract-check ENV=$(ENV)
 	cd $(ENV_DIR) && \
 	ADMIN_EMAIL=$$(grep '^DEV_ADMIN_EMAIL=' $(ENV_FILE) | cut -d '=' -f2-); \
 	docker exec $(CONTAINER_PREFIX)-backend sqlite3 /app/data/app.db \
@@ -1118,7 +1139,8 @@ server-prod-admin-test:
 
 .PHONY: server-prod-provision-e2e-admin
 server-prod-provision-e2e-admin:
-	$(MAKE) server-provision-e2e-admin ENV=production
+	@echo "Refusing E2E/test administrator provisioning in Production." >&2
+	@exit 2
 
 .PHONY: server-prod-dns-check
 server-prod-dns-check:
@@ -1134,7 +1156,8 @@ server-prod-backup:
 
 .PHONY: server-prod-reset-admin
 server-prod-reset-admin:
-	$(MAKE) server-reset-admin ENV=production
+	@echo "Refusing administrator reset tooling in Production." >&2
+	@exit 2
 
 # ==============================================================================
 # Edge proxy targets
@@ -1249,20 +1272,20 @@ brazilian-demo-presentation-check:
 brazilian-demo-local-seed:
 	@test "$(ENV)" != "production" || (echo "Refusing to seed Brazilian demo data with ENV=production" && exit 2)
 	chmod +x scripts/seed-brazilian-demo.py
-	DB_PATH="$(BRAZILIAN_DEMO_DB)" BRAZILIAN_DEMO_AS_OF="$(BRAZILIAN_DEMO_AS_OF)" ./scripts/seed-brazilian-demo.py
+	APP_ENV=development DB_PATH="$(BRAZILIAN_DEMO_DB)" BRAZILIAN_DEMO_AS_OF="$(BRAZILIAN_DEMO_AS_OF)" ./scripts/seed-brazilian-demo.py
 
 .PHONY: brazilian-demo-local-verify
 brazilian-demo-local-verify:
 	chmod +x scripts/seed-brazilian-demo.py
-	DB_PATH="$(BRAZILIAN_DEMO_DB)" BRAZILIAN_DEMO_AS_OF="$(BRAZILIAN_DEMO_AS_OF)" ./scripts/seed-brazilian-demo.py --verify-only
+	APP_ENV=development DB_PATH="$(BRAZILIAN_DEMO_DB)" BRAZILIAN_DEMO_AS_OF="$(BRAZILIAN_DEMO_AS_OF)" ./scripts/seed-brazilian-demo.py --verify-only
 
 .PHONY: brazilian-demo-local-reset
 brazilian-demo-local-reset:
 	@test "$(ENV)" != "production" || (echo "Refusing to reset Brazilian demo data with ENV=production" && exit 2)
 	@echo "Resetting deterministic Brazilian demo database: $(BRAZILIAN_DEMO_DB)"
-	rm -f "$(BRAZILIAN_DEMO_DB)" "$(BRAZILIAN_DEMO_DB)-wal" "$(BRAZILIAN_DEMO_DB)-shm"
+	APP_ENV=development ./scripts/reset-sqlite-database.sh "$(BRAZILIAN_DEMO_DB)"
 	mkdir -p "$$(dirname "$(BRAZILIAN_DEMO_DB)")"
-	DB_PATH="$(BRAZILIAN_DEMO_DB)" ./scripts/db-migrate.sh
+	APP_ENV=development DB_PATH="$(BRAZILIAN_DEMO_DB)" ./scripts/db-migrate.sh
 	$(MAKE) brazilian-demo-local-seed BRAZILIAN_DEMO_DB="$(BRAZILIAN_DEMO_DB)" BRAZILIAN_DEMO_AS_OF="$(BRAZILIAN_DEMO_AS_OF)"
 
 .PHONY: brazilian-demo-server-reset
@@ -1286,30 +1309,30 @@ brazilian-demo-server-reset:
 .PHONY: manual-testdata-local-seed
 manual-testdata-local-seed:
 	chmod +x scripts/seed-manual-testdata.py
-	./scripts/seed-manual-testdata.py --with-work-periods
+	APP_ENV=development ./scripts/seed-manual-testdata.py --with-work-periods
 
 .PHONY: manual-testdata-local-reset
 manual-testdata-local-reset:
 	@echo "Resetting local manual-test database: backend/data/app.db"
-	rm -f backend/data/app.db
+	APP_ENV=development ./scripts/reset-sqlite-database.sh backend/data/app.db
 	mkdir -p backend/data
-	DB_PATH=backend/data/app.db ./scripts/db-migrate.sh
+	APP_ENV=development DB_PATH=backend/data/app.db ./scripts/db-migrate.sh
 	chmod +x scripts/seed-manual-testdata.py
-	./scripts/seed-manual-testdata.py --with-work-periods
+	APP_ENV=development ./scripts/seed-manual-testdata.py --with-work-periods
 
 .PHONY: manual-testdata-local-reset-with-work-periods
 manual-testdata-local-reset-with-work-periods:
 	@echo "Resetting local manual-test database with recent Work Periods: backend/data/app.db"
-	rm -f backend/data/app.db
+	APP_ENV=development ./scripts/reset-sqlite-database.sh backend/data/app.db
 	mkdir -p backend/data
-	DB_PATH=backend/data/app.db ./scripts/db-migrate.sh
+	APP_ENV=development DB_PATH=backend/data/app.db ./scripts/db-migrate.sh
 	chmod +x scripts/seed-manual-testdata.py
-	./scripts/seed-manual-testdata.py --with-work-periods
+	APP_ENV=development ./scripts/seed-manual-testdata.py --with-work-periods
 
 .PHONY: testdata-local-reset
 testdata-local-reset:
 	chmod +x scripts/testdata-reset.sh
-	./scripts/testdata-reset.sh local
+	APP_ENV=development ./scripts/testdata-reset.sh local
 
 .PHONY: testdata-server-reset
 testdata-server-reset:

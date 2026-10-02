@@ -64,6 +64,9 @@ jobs:
       - name: Verify Bite 32.6 release-hardening contract
         run: make bite326-release-hardening-check
 
+      - name: Verify Bite 33.1 Production environment guardrails
+        run: make production-environment-guardrails-check
+
       - name: Set up Go
         uses: actions/setup-go@v6
         with:
@@ -215,8 +218,8 @@ jobs:
 
               # Do not run deployed Playwright against production.
               echo "run_playwright_post_deploy=false" >> "$GITHUB_OUTPUT"
-              echo "default_e2e_admin_email=e2e-admin@enterpriseremotesystems.com" >> "$GITHUB_OUTPUT"
-              echo "e2e_admin_display_name=Production Automation Administrator" >> "$GITHUB_OUTPUT"
+              echo "default_e2e_admin_email=" >> "$GITHUB_OUTPUT"
+              echo "e2e_admin_display_name=" >> "$GITHUB_OUTPUT"
               echo "database_strategy=migrate-in-place" >> "$GITHUB_OUTPUT"
               echo "test_release_rehearsal=false" >> "$GITHUB_OUTPUT"
               ;;
@@ -232,6 +235,12 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+
+          if [[ '${{ steps.target.outputs.env_name }}' == 'production' ]]; then
+            echo "email=not-provisioned-by-deployment" >> "$GITHUB_OUTPUT"
+            echo "Production deployment intentionally skips E2E/test administrator provisioning."
+            exit 0
+          fi
 
           email="${CONFIGURED_E2E_ADMIN_EMAIL:-${{ steps.target.outputs.default_e2e_admin_email }}}"
           password="${E2E_ADMIN_PASSWORD:-}"
@@ -419,7 +428,8 @@ jobs:
              make ${{ steps.target.outputs.make_prefix }}-env-caddy-health
             "
 
-      - name: Provision application administrator
+      - name: Provision non-Production E2E application administrator
+        if: ${{ steps.target.outputs.env_name != 'production' }}
         shell: bash
         env:
           RESOLVED_E2E_ADMIN_EMAIL: ${{ steps.e2e_admin.outputs.email }}
