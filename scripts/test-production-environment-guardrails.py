@@ -252,6 +252,22 @@ def test_static_production_barriers() -> None:
             raise AssertionError(f"{filename} is missing the shared Production mutation guard")
 
 
+def test_brazilian_demo_local_backend_contract() -> None:
+    makefile = (ROOT / "Makefile").read_text(encoding="utf-8")
+    expected = (
+        "brazilian-demo-local-backend: brazilian-demo-local-verify\n"
+        "\t@echo \"Starting LOCAL backend against deterministic Brazilian demo database: "
+        "$(abspath $(BRAZILIAN_DEMO_DB))\"\n"
+        "\tAPP_ENV=development ERS_DATABASE_PATH=\"$(abspath $(BRAZILIAN_DEMO_DB))\" "
+        "$(MAKE) local-backend"
+    )
+    if expected not in makefile:
+        raise AssertionError(
+            "Brazilian demo LOCAL backend must verify the fixture and pin local-backend "
+            "to the deterministic demo database with an explicit Development environment."
+        )
+
+
 def test_python_guard() -> None:
     sys.path.insert(0, str(ROOT / "scripts"))
     try:
@@ -280,6 +296,7 @@ def main() -> int:
     test_environment_initializers_are_production_safe()
     test_legacy_environment_initializer_refuses_production()
     test_static_production_barriers()
+    test_brazilian_demo_local_backend_contract()
     test_python_guard()
     print("Bite 33.1 Production environment/destructive-operation guardrails verified.")
     return 0

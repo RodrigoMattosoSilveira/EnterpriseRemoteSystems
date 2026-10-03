@@ -81,6 +81,7 @@ help:
 	@echo "  make brazilian-demo-local-reset [BRAZILIAN_DEMO_AS_OF=YYYY-MM-DD]"
 	@echo "  make brazilian-demo-local-seed [BRAZILIAN_DEMO_AS_OF=YYYY-MM-DD]"
 	@echo "  make brazilian-demo-local-verify [BRAZILIAN_DEMO_AS_OF=YYYY-MM-DD]"
+	@echo "  make brazilian-demo-local-backend [BRAZILIAN_DEMO_AS_OF=YYYY-MM-DD]"
 	@echo "  make brazilian-demo-presentation-check"
 	@echo "  make brazilian-demo-server-reset ENV=development|test [BRAZILIAN_DEMO_AS_OF=YYYY-MM-DD]"
 	@echo "  make local-admin-reset"
@@ -1288,6 +1289,11 @@ brazilian-demo-local-seed:
 brazilian-demo-local-verify:
 	chmod +x scripts/seed-brazilian-demo.py
 	APP_ENV=development DB_PATH="$(BRAZILIAN_DEMO_DB)" BRAZILIAN_DEMO_AS_OF="$(BRAZILIAN_DEMO_AS_OF)" ./scripts/seed-brazilian-demo.py --verify-only
+
+.PHONY: brazilian-demo-local-backend
+brazilian-demo-local-backend: brazilian-demo-local-verify
+	@echo "Starting LOCAL backend against deterministic Brazilian demo database: $(abspath $(BRAZILIAN_DEMO_DB))"
+	APP_ENV=development ERS_DATABASE_PATH="$(abspath $(BRAZILIAN_DEMO_DB))" $(MAKE) local-backend
 
 .PHONY: brazilian-demo-local-reset
 brazilian-demo-local-reset:

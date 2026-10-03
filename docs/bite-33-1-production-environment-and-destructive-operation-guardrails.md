@@ -107,3 +107,29 @@ The check verifies both behavior and integration, including:
 > No command whose primary purpose is reset, demo preparation, fixture generation, deterministic test setup, or E2E/test administrator provisioning may mutate a Production database.
 
 Environment uncertainty is treated as a refusal condition for destructive tooling.
+
+## Brazilian demo LOCAL backend contract
+
+The deterministic Brazilian demo remains isolated from the normal LOCAL database. `make local-backend` uses the ordinary LOCAL database (normally `backend/data/app.db`) and therefore does **not** guarantee that the Brazilian demo presenter account exists.
+
+After preparing the demo database with:
+
+```bash
+make brazilian-demo-local-reset
+make brazilian-demo-local-verify
+```
+
+start the backend with the dedicated target:
+
+```bash
+make brazilian-demo-local-backend
+```
+
+That target verifies the deterministic demo fixture first, then starts `local-backend` with `APP_ENV=development` and an explicit absolute `ERS_DATABASE_PATH` pointing at `backend/data/brazilian-demo.db`. This preserves the normal LOCAL database while making the documented presenter credential deterministic:
+
+```text
+Login:    demo.tenant-admin@example.test
+Password: Demo-31.4-Brasil!
+```
+
+For Bite 33.1 Manual Test 06, plain `make local-backend` is not the Brazilian demo startup command. The expected path is `make brazilian-demo-local-backend`.
