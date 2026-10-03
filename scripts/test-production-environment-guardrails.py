@@ -127,6 +127,19 @@ def test_make_reset_db_target() -> None:
             raise AssertionError(f"Development make reset-db left SQLite files behind: {remaining}")
 
 
+def test_production_volume_deletion_target() -> None:
+    proc = run(["make", "server-prod-down-volumes"])
+    require_failure(
+        proc,
+        "Production server volume deletion alias",
+        "Production data must not be modified by reset/demo/test tooling.",
+    )
+    if "docker compose" in proc.stdout.lower() or " down -v" in proc.stdout.lower():
+        raise AssertionError(
+            "Production server volume deletion reached Docker Compose after the guard should have refused it."
+        )
+
+
 def test_server_environment_contract() -> None:
     with tempfile.TemporaryDirectory(prefix="ers-33-1-env-") as tmp:
         env_file = Path(tmp) / ".env.production"
@@ -217,6 +230,7 @@ def test_static_production_barriers() -> None:
         'ers-environment-guard.sh require-non-production "$(ENV)" "server administrator reset"',
         'Refusing E2E/test administrator provisioning in Production.',
         'Refusing administrator reset tooling in Production.',
+        'server-prod-down-volumes:\n\t$(MAKE) server-down-volumes ENV=production',
     )
     for fragment in required_make_fragments:
         if fragment not in makefile:
@@ -292,6 +306,7 @@ def main() -> int:
     test_shared_shell_guard()
     test_reset_helper_cannot_touch_production()
     test_make_reset_db_target()
+    test_production_volume_deletion_target()
     test_server_environment_contract()
     test_environment_initializers_are_production_safe()
     test_legacy_environment_initializer_refuses_production()

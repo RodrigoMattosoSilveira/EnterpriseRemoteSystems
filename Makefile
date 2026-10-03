@@ -108,6 +108,7 @@ help:
 	@echo "  make server-build ENV=development|test|production"
 	@echo "  make server-up ENV=development|test|production"
 	@echo "  make server-down ENV=development|test|production"
+	@echo "  make server-down-volumes ENV=development|test (Production is refused)"
 	@echo "  make server-replace-development-db ENV=development"
 	@echo "  make server-test-rehearsal-capture-baseline"
 	@echo "  make server-test-rehearsal-ensure-baseline"
@@ -1107,6 +1108,10 @@ server-prod-up:
 .PHONY: server-prod-down
 server-prod-down:
 	$(MAKE) server-down ENV=production
+
+.PHONY: server-prod-down-volumes
+server-prod-down-volumes:
+	$(MAKE) server-down-volumes ENV=production
 
 .PHONY: server-prod-ps
 server-prod-ps:

@@ -68,6 +68,27 @@ shasum -a 256 /tmp/ers-331-manual/sentinel.db
 
 The two checksums must be identical. The expected refusal contains `Production data must not be modified by reset/demo/test tooling.`
 
+### Production volume-deletion refusal
+
+The supported manual probe for deployed Production volume deletion is:
+
+```bash
+make server-prod-down-volumes
+```
+
+This target intentionally delegates to the guarded `server-down-volumes` implementation with `ENV=production`. The expected result is a non-zero Make exit before Docker Compose is invoked, with a refusal containing `Production data must not be modified by reset/demo/test tooling.`
+
+For Bite 33.1 Manual Test 08, **failure is the expected PASS path**: ERS must refuse the Production volume-deletion operation before `docker compose down -v` can run. The operator may compare `docker volume ls` before and after as an additional observation, but the guard itself must fire before any Docker volume deletion is attempted.
+
+Development and Test retain their existing explicit aliases:
+
+```bash
+make server-dev-down-volumes
+make server-test-down-volumes
+```
+
+Those are destructive non-Production operations and should only be used against disposable Development/Test data.
+
 The legacy `scripts/init-env.sh` is now explicitly Development/Test-only. It refuses a Production template instead of creating a Production file containing Development administrator seed settings. Production environment initialization must use the Production-safe server initializer.
 
 ## Deployment behavior
