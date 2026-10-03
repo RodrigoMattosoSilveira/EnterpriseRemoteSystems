@@ -185,12 +185,13 @@ FROM (
     ON m.id = aa.membership_id
    AND m.tenant_id = aa.tenant_id
   WHERE g.active = 1
+    AND g.lifecycle_suspended = 0
   GROUP BY m.person_id
   HAVING COUNT(DISTINCT g.tenant_id) > 1
 );
 ")"
   if [ "$cross_tenant_delegated_role_conflicts" != "0" ]; then
-    echo "Bite 32.4 cross-Tenant non-baseline Role isolation found ${cross_tenant_delegated_role_conflicts} conflicting Person(s)." >&2
+    echo "Bite 32.4 cross-Tenant non-baseline Role isolation found ${cross_tenant_delegated_role_conflicts} Person(s) with effective delegated authority in multiple Tenants." >&2
     exit 1
   fi
 fi
