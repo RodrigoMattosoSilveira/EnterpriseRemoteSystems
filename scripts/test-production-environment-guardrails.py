@@ -84,6 +84,49 @@ def test_reset_helper_cannot_touch_production() -> None:
             raise AssertionError(f"Development reset left SQLite files behind: {remaining}")
 
 
+def test_make_reset_db_target() -> None:
+    with tempfile.TemporaryDirectory(prefix="ers-33-1-make-reset-") as tmp:
+        db = Path(tmp) / "sentinel.db"
+        sidecars = [db, Path(str(db) + "-wal"), Path(str(db) + "-shm"), Path(str(db) + "-journal")]
+        for path in sidecars:
+            path.write_text("sentinel", encoding="utf-8")
+
+        prod_env = {
+            **os.environ,
+            "APP_ENV": "production",
+            "ERS_DATABASE_PATH": str(db),
+        }
+        proc = run(["make", "reset-db"], env=prod_env)
+        require_failure(proc, "Production make reset-db", "Production data must not be modified")
+        changed = [str(path) for path in sidecars if not path.exists() or path.read_text(encoding="utf-8") != "sentinel"]
+        if changed:
+            raise AssertionError(f"make reset-db modified Production sentinel files before refusing: {changed}")
+
+        missing_env = {**os.environ, "ERS_DATABASE_PATH": str(db)}
+        missing_env.pop("APP_ENV", None)
+        proc = run(["make", "reset-db"], env=missing_env)
+        require_failure(proc, "make reset-db without APP_ENV", "must explicitly identify")
+        changed = [str(path) for path in sidecars if not path.exists() or path.read_text(encoding="utf-8") != "sentinel"]
+        if changed:
+            raise AssertionError(f"make reset-db modified files without an explicit environment: {changed}")
+
+        no_path_env = {**os.environ, "APP_ENV": "development"}
+        no_path_env.pop("ERS_DATABASE_PATH", None)
+        proc = run(["make", "reset-db"], env=no_path_env)
+        require_failure(proc, "make reset-db without ERS_DATABASE_PATH", "ERS_DATABASE_PATH must explicitly identify")
+
+        dev_env = {
+            **os.environ,
+            "APP_ENV": "development",
+            "ERS_DATABASE_PATH": str(db),
+        }
+        proc = run(["make", "reset-db"], env=dev_env)
+        require_success(proc, "Development make reset-db")
+        remaining = [str(path) for path in sidecars if path.exists()]
+        if remaining:
+            raise AssertionError(f"Development make reset-db left SQLite files behind: {remaining}")
+
+
 def test_server_environment_contract() -> None:
     with tempfile.TemporaryDirectory(prefix="ers-33-1-env-") as tmp:
         env_file = Path(tmp) / ".env.production"
@@ -232,6 +275,7 @@ def test_python_guard() -> None:
 def main() -> int:
     test_shared_shell_guard()
     test_reset_helper_cannot_touch_production()
+    test_make_reset_db_target()
     test_server_environment_contract()
     test_environment_initializers_are_production_safe()
     test_legacy_environment_initializer_refuses_production()

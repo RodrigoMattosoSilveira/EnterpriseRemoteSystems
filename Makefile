@@ -73,6 +73,7 @@ help:
 	@echo "  make local-init-env"
 	@echo "  make local-db-init"
 	@echo "  make local-db-reset"
+	@echo "  APP_ENV=development|test ERS_DATABASE_PATH=<path> make reset-db"
 	@echo "  make testdata-local-reset"
 	@echo "  make manual-testdata-local-reset"
 	@echo "  make manual-testdata-local-seed"
@@ -247,6 +248,15 @@ local-db-reset:
 	@./scripts/ers-environment-guard.sh require-non-production development "local session-data reset"
 	sqlite3 backend/data/app.db "DELETE FROM session_scores; DELETE FROM action_evaluations; DELETE FROM trainee_actions; DELETE FROM session_events; DELETE FROM sessions;"
 	@echo "Local session data reset."
+
+.PHONY: reset-db
+reset-db:
+	@if [[ -z "$${ERS_DATABASE_PATH:-}" ]]; then \
+		echo "Refusing SQLite database reset: ERS_DATABASE_PATH must explicitly identify the disposable database file." >&2; \
+		exit 2; \
+	fi
+	@APP_ENV="$${APP_ENV:-}" ./scripts/reset-sqlite-database.sh "$${ERS_DATABASE_PATH}"
+	@echo "SQLite database reset: $${ERS_DATABASE_PATH}"
 
 .PHONY: local-admin-reset
 local-admin-reset:

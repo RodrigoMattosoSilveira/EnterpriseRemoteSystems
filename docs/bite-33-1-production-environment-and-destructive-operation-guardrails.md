@@ -49,6 +49,25 @@ The following operations refuse Production before mutating data:
 
 Unknown or missing environment identity is also refused by destructive shared tooling. There is intentionally no `--allow-production` bypass for E2E provisioning.
 
+The supported Make wrapper for an explicit disposable SQLite-file reset is:
+
+```bash
+APP_ENV=development ERS_DATABASE_PATH=/absolute/or/relative/disposable.db make reset-db
+```
+
+`reset-db` requires both `APP_ENV` and `ERS_DATABASE_PATH`. `APP_ENV=production`, a missing/unknown `APP_ENV`, or a missing `ERS_DATABASE_PATH` is refused before the database file or its SQLite sidecars are removed. This target is distinct from `local-db-reset`, which only clears legacy LOCAL session-data tables in `backend/data/app.db`.
+
+For the Bite 33.1 Production-refusal manual probe, use a sentinel file and expect a non-zero exit **without changing its checksum**:
+
+```bash
+printf 'DO NOT DELETE\n' > /tmp/ers-331-manual/sentinel.db
+shasum -a 256 /tmp/ers-331-manual/sentinel.db
+APP_ENV=production ERS_DATABASE_PATH=/tmp/ers-331-manual/sentinel.db make reset-db
+shasum -a 256 /tmp/ers-331-manual/sentinel.db
+```
+
+The two checksums must be identical. The expected refusal contains `Production data must not be modified by reset/demo/test tooling.`
+
 The legacy `scripts/init-env.sh` is now explicitly Development/Test-only. It refuses a Production template instead of creating a Production file containing Development administrator seed settings. Production environment initialization must use the Production-safe server initializer.
 
 ## Deployment behavior
