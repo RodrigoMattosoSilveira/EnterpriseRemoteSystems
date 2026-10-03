@@ -50,6 +50,15 @@ set_or_update_env "OPENAI_TIMEOUT_SECONDS" "20"
 # CORS
 set_or_update_env "CORS_ALLOW_ORIGINS" "https://app.yourdomain.com"
 
+# Bite 33.3: Production backups must be replicated to a distinct SSH host.
+set_or_update_env "SERVER_OFFHOST_BACKUP_ENABLED" "true"
+set_or_update_env "SERVER_OFFHOST_BACKUP_HOST" ""
+set_or_update_env "SERVER_OFFHOST_BACKUP_USER" ""
+set_or_update_env "SERVER_OFFHOST_BACKUP_DIRECTORY" "/srv/ers-backups"
+set_or_update_env "SERVER_OFFHOST_BACKUP_PORT" "22"
+set_or_update_env "SERVER_OFFHOST_BACKUP_IDENTITY_FILE" "/opt/EnterpriseRemoteSystems/secrets/backup-ssh-key"
+set_or_update_env "SERVER_OFFHOST_BACKUP_KNOWN_HOSTS_FILE" "/opt/EnterpriseRemoteSystems/secrets/backup-known-hosts"
+
 rm -f "${ENV_FILE}.bak"
 
 echo "Created/updated ${ENV_FILE}"
@@ -58,3 +67,4 @@ echo "IMPORTANT: Edit ${ENV_FILE} before production use:"
 echo "  1. Set APP_DOMAIN to your real domain."
 echo "  2. Set CORS_ALLOW_ORIGINS to https://your-real-domain."
 echo "  3. Keep DEV_SEED_ADMIN=false; Production administrator lifecycle is handled outside demo/test seeding."
+echo "  4. Configure SERVER_OFFHOST_BACKUP_HOST/USER and install the SSH identity + pinned known_hosts files before Production build/up/deploy."

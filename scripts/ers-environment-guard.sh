@@ -87,6 +87,56 @@ require_server_identity() {
   fi
 }
 
+
+validate_production_offhost_backup_contract() {
+  local env_file="$1"
+  local value
+  value="$(read_env_value "$env_file" SERVER_OFFHOST_BACKUP_ENABLED || true)"
+  if [[ "$(lowercase "$value")" != "true" && "$value" != "1" ]]; then
+    echo "Production environment contract violation: SERVER_OFFHOST_BACKUP_ENABLED must be true." >&2
+    exit 2
+  fi
+
+  local key
+  for key in SERVER_OFFHOST_BACKUP_HOST SERVER_OFFHOST_BACKUP_USER SERVER_OFFHOST_BACKUP_DIRECTORY SERVER_OFFHOST_BACKUP_IDENTITY_FILE SERVER_OFFHOST_BACKUP_KNOWN_HOSTS_FILE; do
+    value="$(read_env_value "$env_file" "$key" || true)"
+    if [[ -z "$value" ]]; then
+      echo "Production environment contract violation: ${key} must be configured for off-host backup protection." >&2
+      exit 2
+    fi
+  done
+
+  value="$(read_env_value "$env_file" SERVER_OFFHOST_BACKUP_HOST || true)"
+  case "$(lowercase "$value")" in
+    localhost|localhost.|localhost.localdomain|localhost.localdomain.|127.*|::1|\[::1\])
+      echo "Production environment contract violation: SERVER_OFFHOST_BACKUP_HOST must identify a distinct non-loopback host." >&2
+      exit 2
+      ;;
+  esac
+
+  value="$(read_env_value "$env_file" SERVER_OFFHOST_BACKUP_DIRECTORY || true)"
+  if [[ "$value" != /* || "$value" == "/" ]]; then
+    echo "Production environment contract violation: SERVER_OFFHOST_BACKUP_DIRECTORY must be an absolute remote directory other than /." >&2
+    exit 2
+  fi
+  value="$(read_env_value "$env_file" SERVER_OFFHOST_BACKUP_IDENTITY_FILE || true)"
+  if [[ "$value" != /* ]]; then
+    echo "Production environment contract violation: SERVER_OFFHOST_BACKUP_IDENTITY_FILE must be an absolute path." >&2
+    exit 2
+  fi
+  value="$(read_env_value "$env_file" SERVER_OFFHOST_BACKUP_KNOWN_HOSTS_FILE || true)"
+  if [[ "$value" != /* ]]; then
+    echo "Production environment contract violation: SERVER_OFFHOST_BACKUP_KNOWN_HOSTS_FILE must be an absolute path." >&2
+    exit 2
+  fi
+  value="$(read_env_value "$env_file" SERVER_OFFHOST_BACKUP_PORT || true)"
+  value="${value:-22}"
+  if ! [[ "$value" =~ ^[0-9]+$ ]] || (( value < 1 || value > 65535 )); then
+    echo "Production environment contract violation: SERVER_OFFHOST_BACKUP_PORT must be an integer from 1 through 65535." >&2
+    exit 2
+  fi
+}
+
 require_server_contract() {
   local expected="${1:-}"
   local env_file="${2:-}"
@@ -109,6 +159,7 @@ require_server_contract() {
       echo "Production environment contract violation: DEV_SEED_ADMIN must be false." >&2
       exit 2
     fi
+    validate_production_offhost_backup_contract "$env_file"
   fi
 }
 

@@ -14,7 +14,7 @@ The Bite covers:
 - configurable retention that never intentionally removes every verified backup;
 - explicit CI/deployment regression coverage.
 
-Off-host replication is intentionally **not** part of 33.2. It belongs to Bite 33.3.
+Off-host replication is implemented by Bite 33.3. The verified 33.2 pair is the source artifact that 33.3 replicates and re-verifies outside the application host.
 
 ## Managed backup pair
 
