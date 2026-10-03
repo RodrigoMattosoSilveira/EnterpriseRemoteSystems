@@ -74,6 +74,9 @@ jobs:
       - name: Verify Bite 33.1 Production environment guardrails
         run: make production-environment-guardrails-check
 
+      - name: Verify Bite 33.2 backup creation, retention, and verification
+        run: make backup-creation-retention-verification-check
+
       - name: Rehearse pre-30I database through final 30I migration
         run: make migration-rehearsal-check
 

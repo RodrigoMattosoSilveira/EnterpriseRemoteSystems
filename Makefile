@@ -62,6 +62,12 @@ SERVER_SMOKE_DELAY_SECONDS ?= 5
 SERVER_SMOKE_CONNECT_TIMEOUT_SECONDS ?= 5
 SERVER_SMOKE_MAX_TIME_SECONDS ?= 15
 
+# Bite 33.2 verified-backup retention policy. Overrides may be supplied per
+# environment/invocation; defaults keep at least 14 verified snapshots and all
+# verified snapshots created in the last 30 days.
+SERVER_BACKUP_RETENTION_COUNT ?= 14
+SERVER_BACKUP_RETENTION_DAYS ?= 30
+
 # ==============================================================================
 # Help
 # ==============================================================================
@@ -94,6 +100,7 @@ help:
 	@echo "  make deployed-playwright-evidence-check"
 	@echo "  make production-release-evidence-check"
 	@echo "  make production-environment-guardrails-check"
+	@echo "  make backup-creation-retention-verification-check"
 	@echo "  make migration-check"
 	@echo "  make migration-rehearsal-check"
 	@echo "  make local-docker-check"
@@ -136,6 +143,8 @@ help:
 	@echo "  make server-dns-check ENV=development|test|production"
 	@echo "  make server-cert-check ENV=development|test|production"
 	@echo "  make server-backup ENV=development|test|production"
+	@echo "  make server-backup-verify ENV=development|test|production BACKUP_FILE=<path-to-app-*.db>"
+	@echo "  make server-backup-retention ENV=development|test|production [SERVER_BACKUP_RETENTION_COUNT=14 SERVER_BACKUP_RETENTION_DAYS=30]"
 	@echo "  Normal server targets force AUTHZ bootstrap off; deliberate recovery: SERVER_AUTHZ_BOOTSTRAP_ENABLED=true make server-up ENV=<env>"
 	@echo "  make testdata-server-reset ENV=development|test"
 	@echo
@@ -223,6 +232,8 @@ check-repo:
 	@test -f scripts/init-server-env.sh || (echo "Missing scripts/init-server-env.sh" && exit 1)
 	@test -f scripts/dev-backend.sh || (echo "Missing scripts/dev-backend.sh" && exit 1)
 	@test -f scripts/dev-frontend.sh || (echo "Missing scripts/dev-frontend.sh" && exit 1)
+	@test -f scripts/server-sqlite-backup.sh || (echo "Missing scripts/server-sqlite-backup.sh" && exit 1)
+	@test -f scripts/ers-backup.py || (echo "Missing scripts/ers-backup.py" && exit 1)
 	@test -f scripts/server-public-smoke.sh || (echo "Missing scripts/server-public-smoke.sh" && exit 1)
 	@test -f scripts/test-server-public-smoke.sh || (echo "Missing scripts/test-server-public-smoke.sh" && exit 1)
 	@if [ -d backend/cmd/create-admin ] || [ -d backend/cmd/create-admin.disabled ]; then \
@@ -415,6 +426,10 @@ production-release-evidence-check:
 production-environment-guardrails-check:
 	python3 scripts/test-production-environment-guardrails.py
 
+.PHONY: backup-creation-retention-verification-check
+backup-creation-retention-verification-check:
+	python3 scripts/test-backup-creation-retention-verification.py
+
 .PHONY: local-check
 local-check:
 	$(MAKE) bite30l4-coverage-manifest-check
@@ -424,6 +439,7 @@ local-check:
 	$(MAKE) deployed-playwright-evidence-check
 	$(MAKE) production-release-evidence-check
 	$(MAKE) production-environment-guardrails-check
+	$(MAKE) backup-creation-retention-verification-check
 	$(MAKE) local-hot-reload-check
 	$(MAKE) local-auth-cookie-config-check
 	$(MAKE) server-public-smoke-script-check
@@ -872,39 +888,41 @@ server-cert-check:
 .PHONY: server-backup
 server-backup:
 	@$(MAKE) server-environment-identity-check ENV=$(ENV)
-	mkdir -p $(ENV_DIR)/backups
-	@TIMESTAMP=$$(date +%Y%m%d-%H%M%S); \
-	CONTAINER="$(CONTAINER_PREFIX)-backend"; \
-	VOLUME="$(COMPOSE_PROJECT)_backend-data"; \
-	TARGET="$(ENV_DIR)/backups/app-$$TIMESTAMP.db"; \
-	if ! docker ps --format '{{.Names}}' | grep -qx "$$CONTAINER"; then \
-		if docker volume inspect "$$VOLUME" >/dev/null 2>&1; then \
-			echo "Cannot safely back up $(ENV): SQLite volume $$VOLUME exists but backend container $$CONTAINER is not running."; \
-			echo "Start/repair the existing environment or perform an explicit offline backup before deployment."; \
+	@container="$(CONTAINER_PREFIX)-backend"; \
+	volume="$(COMPOSE_PROJECT)_backend-data"; \
+	if ! docker ps --format '{{.Names}}' | grep -qx "$$container"; then \
+		if docker volume inspect "$$volume" >/dev/null 2>&1; then \
+			echo "Cannot safely back up $(ENV): SQLite volume $$volume exists but backend container $$container is not running."; \
+			echo "Start/repair the existing environment or perform an explicit offline recovery operation before deployment."; \
 			exit 2; \
 		fi; \
-		echo "No existing $(ENV) SQLite volume is present; no pre-migration backup is required for this first deployment."; \
+		echo "No existing $(ENV) SQLite volume is present; no backup is required for this first deployment."; \
 		exit 0; \
 	fi; \
-	docker exec "$$CONTAINER" rm -f /tmp/app-backup.db /tmp/app-backup.db-wal /tmp/app-backup.db-shm; \
-	docker exec "$$CONTAINER" sqlite3 /app/data/app.db ".backup '/tmp/app-backup.db'"; \
-	integrity="$$(docker exec "$$CONTAINER" sqlite3 /tmp/app-backup.db 'PRAGMA integrity_check;')"; \
-	if [[ "$$integrity" != "ok" ]]; then \
-		echo "Backup integrity_check failed: $$integrity"; \
-		docker exec "$$CONTAINER" rm -f /tmp/app-backup.db; \
-		exit 1; \
-	fi; \
-	foreign_keys="$$(docker exec "$$CONTAINER" sqlite3 /tmp/app-backup.db 'PRAGMA foreign_key_check;')"; \
-	if [[ -n "$$foreign_keys" ]]; then \
-		echo "Backup foreign_key_check failed:"; \
-		printf '%s\n' "$$foreign_keys"; \
-		docker exec "$$CONTAINER" rm -f /tmp/app-backup.db; \
-		exit 1; \
-	fi; \
-	docker cp "$$CONTAINER:/tmp/app-backup.db" "$$TARGET"; \
-	docker exec "$$CONTAINER" rm -f /tmp/app-backup.db; \
-	echo "Verified backup written to $$TARGET"; \
-	sha256sum "$$TARGET"
+	BACKUP_ENVIRONMENT="$(ENV)" \
+	BACKUP_CONTAINER="$$container" \
+	BACKUP_DIRECTORY="$(ENV_DIR)/backups" \
+	BACKUP_RETENTION_COUNT="$(SERVER_BACKUP_RETENTION_COUNT)" \
+	BACKUP_RETENTION_DAYS="$(SERVER_BACKUP_RETENTION_DAYS)" \
+		./scripts/server-sqlite-backup.sh
+
+.PHONY: server-backup-verify
+server-backup-verify:
+	@if [[ -z "$(BACKUP_FILE)" ]]; then \
+		echo "BACKUP_FILE is required. Example: make server-backup-verify ENV=$(ENV) BACKUP_FILE=$(ENV_DIR)/backups/app-<timestamp>.db" >&2; \
+		exit 2; \
+	fi
+	@python3 scripts/ers-backup.py verify \
+		--backup "$(BACKUP_FILE)" \
+		--manifest "$(BACKUP_FILE).manifest.json" \
+		--expected-environment "$(ENV)"
+
+.PHONY: server-backup-retention
+server-backup-retention:
+	@python3 scripts/ers-backup.py prune \
+		--directory "$(ENV_DIR)/backups" \
+		--retention-count "$(SERVER_BACKUP_RETENTION_COUNT)" \
+		--retention-days "$(SERVER_BACKUP_RETENTION_DAYS)"
 
 .PHONY: server-reset-admin
 server-reset-admin:

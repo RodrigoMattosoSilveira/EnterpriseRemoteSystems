@@ -1,19 +1,19 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Legacy convenience entry point retained for operators.  Bite 33.2 routes it
+# through the same verified backup/manifest/retention implementation used by
+# `make server-prod-backup` so there is no unverified Production backup path.
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
 BACKUP_DIR="${BACKUP_DIR:-backups}"
-CONTAINER="${CONTAINER:-ers-backend}"
-DB_PATH="${DB_PATH:-/app/data/app.db}"
+CONTAINER="${CONTAINER:-ers-prd-backend}"
+BACKUP_RETENTION_COUNT="${BACKUP_RETENTION_COUNT:-14}"
+BACKUP_RETENTION_DAYS="${BACKUP_RETENTION_DAYS:-30}"
 
-mkdir -p "$BACKUP_DIR"
-
-TIMESTAMP="$(date +%Y%m%d-%H%M%S)"
-BACKUP_FILE="${BACKUP_DIR}/app-${TIMESTAMP}.db"
-
-echo "Creating SQLite backup: ${BACKUP_FILE}"
-
-docker exec "$CONTAINER" sqlite3 "$DB_PATH" ".backup '/tmp/app-backup.db'"
-docker cp "${CONTAINER}:/tmp/app-backup.db" "$BACKUP_FILE"
-docker exec "$CONTAINER" rm -f /tmp/app-backup.db
-
-echo "Backup created: ${BACKUP_FILE}"
+BACKUP_ENVIRONMENT=production \
+BACKUP_CONTAINER="$CONTAINER" \
+BACKUP_DIRECTORY="$BACKUP_DIR" \
+BACKUP_RETENTION_COUNT="$BACKUP_RETENTION_COUNT" \
+BACKUP_RETENTION_DAYS="$BACKUP_RETENTION_DAYS" \
+  exec "$ROOT_DIR/scripts/server-sqlite-backup.sh"
