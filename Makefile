@@ -41,7 +41,10 @@ endif
 EDGE_DIR := $(SERVER_ROOT)/edge
 
 SERVER_AUTHZ_BOOTSTRAP_ENABLED ?= false
-SERVER_COMPOSE = AUTHZ_BOOTSTRAP_ENABLED=$(SERVER_AUTHZ_BOOTSTRAP_ENABLED) docker compose -p $(COMPOSE_PROJECT) --env-file $(ENV_FILE) -f docker-compose.server.yml
+# Safety-sensitive deployed runtime values must come from the selected env file,
+# not from an operator's ambient shell. AUTHZ_BOOTSTRAP_ENABLED remains the one
+# deliberate command-line override used for explicit recovery workflows.
+SERVER_COMPOSE = env -u APP_ENV -u APP_AUTO_MIGRATE -u AUTHZ_ACTOR_HEADER_MODE -u DEV_SEED_ADMIN AUTHZ_BOOTSTRAP_ENABLED=$(SERVER_AUTHZ_BOOTSTRAP_ENABLED) docker compose -p $(COMPOSE_PROJECT) --env-file $(ENV_FILE) -f docker-compose.server.yml
 SERVER_COMPOSE_BUILD = BUILDX_NO_DEFAULT_ATTESTATIONS=1 $(SERVER_COMPOSE) --progress plain
 SERVER_SERVICE_CONTAINERS = $(CONTAINER_PREFIX)-backend $(CONTAINER_PREFIX)-frontend $(CONTAINER_PREFIX)-caddy
 
@@ -104,6 +107,7 @@ help:
 	@echo
 	@echo "Generic server targets:"
 	@echo "  make server-init-env ENV=development|test|production"
+	@echo "  make server-environment-contract-probe ENV=development|test|production SERVER_ENV_PROBE_FILE=<path>"
 	@echo "  make server-pull ENV=development|test|production"
 	@echo "  make server-build ENV=development|test|production"
 	@echo "  make server-up ENV=development|test|production"
@@ -497,6 +501,14 @@ server-environment-identity-check:
 .PHONY: server-environment-contract-check
 server-environment-contract-check:
 	./scripts/ers-environment-guard.sh require-server-contract "$(ENV)" "$(ENV_DIR)/$(ENV_FILE)"
+
+.PHONY: server-environment-contract-probe
+server-environment-contract-probe:
+	@if [[ -z "$(SERVER_ENV_PROBE_FILE)" ]]; then \
+		echo "SERVER_ENV_PROBE_FILE must explicitly identify the environment file to validate." >&2; \
+		exit 2; \
+	fi
+	./scripts/ers-environment-guard.sh require-server-contract "$(ENV)" "$(SERVER_ENV_PROBE_FILE)"
 
 .PHONY: server-build
 server-build: server-authz-bootstrap-config-check server-environment-contract-check

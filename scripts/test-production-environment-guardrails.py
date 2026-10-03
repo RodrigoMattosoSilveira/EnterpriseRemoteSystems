@@ -177,6 +177,46 @@ def test_server_environment_contract() -> None:
         require_failure(proc, "missing Production APP_ENV", "must explicitly define APP_ENV=production")
 
 
+def test_server_environment_contract_probe() -> None:
+    with tempfile.TemporaryDirectory(prefix="ers-33-1-contract-probe-") as tmp:
+        env_file = Path(tmp) / "no-app-env.env"
+        env_file.write_text(
+            "DATABASE_PATH=/app/data/app.db\nAPP_AUTO_MIGRATE=false\nAUTHZ_ACTOR_HEADER_MODE=disabled\nDEV_SEED_ADMIN=false\n",
+            encoding="utf-8",
+        )
+        ambient = {**os.environ, "APP_ENV": "production"}
+        proc = run(
+            [
+                "make",
+                "server-environment-contract-probe",
+                "ENV=production",
+                f"SERVER_ENV_PROBE_FILE={env_file}",
+            ],
+            env=ambient,
+        )
+        require_failure(
+            proc,
+            "manual missing APP_ENV environment-file probe",
+            "must explicitly define APP_ENV=production",
+        )
+
+        env_file.write_text(
+            "APP_ENV=production\nDATABASE_PATH=/app/data/app.db\nAPP_AUTO_MIGRATE=false\nAUTHZ_ACTOR_HEADER_MODE=disabled\nDEV_SEED_ADMIN=false\n",
+            encoding="utf-8",
+        )
+        ambient = {**os.environ, "APP_ENV": "development", "APP_AUTO_MIGRATE": "true", "DEV_SEED_ADMIN": "true"}
+        proc = run(
+            [
+                "make",
+                "server-environment-contract-probe",
+                "ENV=production",
+                f"SERVER_ENV_PROBE_FILE={env_file}",
+            ],
+            env=ambient,
+        )
+        require_success(proc, "explicit Production environment-file probe despite ambient overrides")
+
+
 def test_environment_initializers_are_production_safe() -> None:
     with tempfile.TemporaryDirectory(prefix="ers-33-1-init-") as tmp:
         tmp_path = Path(tmp)
@@ -225,6 +265,8 @@ def test_static_production_barriers() -> None:
         'ers-environment-guard.sh require-server-identity "$(ENV)" "$(ENV_DIR)/$(ENV_FILE)"',
         '.PHONY: server-environment-contract-check',
         'ers-environment-guard.sh require-server-contract "$(ENV)" "$(ENV_DIR)/$(ENV_FILE)"',
+        '.PHONY: server-environment-contract-probe',
+        'ers-environment-guard.sh require-server-contract "$(ENV)" "$(SERVER_ENV_PROBE_FILE)"',
         'ers-environment-guard.sh require-non-production "$(ENV)" "server volume deletion"',
         'ers-environment-guard.sh require-non-production "$(ENV)" "E2E/test administrator provisioning"',
         'ers-environment-guard.sh require-non-production "$(ENV)" "server administrator reset"',
@@ -240,6 +282,12 @@ def test_static_production_barriers() -> None:
 
     if '${APP_ENV:?APP_ENV is required for deployed environments}' not in compose:
         raise AssertionError("deployed Compose still permits an implicit APP_ENV")
+    compose_command = next((line for line in makefile.splitlines() if line.startswith("SERVER_COMPOSE = ")), "")
+    for variable in ("APP_ENV", "APP_AUTO_MIGRATE", "AUTHZ_ACTOR_HEADER_MODE", "DEV_SEED_ADMIN"):
+        if f"-u {variable}" not in compose_command:
+            raise AssertionError(
+                f"deployed Compose can still inherit safety-sensitive ambient {variable} instead of the selected env file"
+            )
     if '--allow-production' in provision or '--allow-production' in makefile:
         raise AssertionError("E2E provisioning still contains a Production bypass")
     if "only local/development/test environments are permitted" not in provision:
@@ -308,6 +356,7 @@ def main() -> int:
     test_make_reset_db_target()
     test_production_volume_deletion_target()
     test_server_environment_contract()
+    test_server_environment_contract_probe()
     test_environment_initializers_are_production_safe()
     test_legacy_environment_initializer_refuses_production()
     test_static_production_barriers()

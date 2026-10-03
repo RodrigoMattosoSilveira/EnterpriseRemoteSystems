@@ -20,6 +20,8 @@ Any other non-empty `APP_ENV` is rejected by backend configuration loading. LOCA
 
 For deployed server Make targets, `ENV` must be exactly `development`, `test`, or `production`, and the matching `.env.<environment>` file must explicitly contain the same `APP_ENV`. `docker-compose.server.yml` requires `APP_ENV`; it no longer substitutes `development` when the value is absent.
 
+The server Make workflow also removes safety-sensitive `APP_ENV`, `APP_AUTO_MIGRATE`, `AUTHZ_ACTOR_HEADER_MODE`, and `DEV_SEED_ADMIN` values from the ambient shell before invoking Docker Compose. This makes the selected `.env.<environment>` file authoritative for those settings instead of allowing an operator shell export to override a file that already passed the environment-contract guard.
+
 The deployed database path, when declared through `DATABASE_PATH`, must be `/app/data/app.db`. Server startup/build uses the full safety contract. The non-destructive backup target uses the identity portion only, so an operator can still take a recovery copy before repairing an unsafe Production setting.
 
 ## Production runtime safeguards
@@ -67,6 +69,20 @@ shasum -a 256 /tmp/ers-331-manual/sentinel.db
 ```
 
 The two checksums must be identical. The expected refusal contains `Production data must not be modified by reset/demo/test tooling.`
+
+### Deployed environment-file manual probe
+
+Do not use raw `docker compose ... config` to prove that a particular environment file contains `APP_ENV`. Docker Compose resolves variables from multiple inputs and its rendered output proves the final value, not which source supplied it.
+
+For a deterministic Bite 33.1 manual probe, validate the disposable file itself:
+
+```bash
+make server-environment-contract-probe \
+  ENV=production \
+  SERVER_ENV_PROBE_FILE=/tmp/ers-331-manual/no-app-env.env
+```
+
+If that file does not explicitly contain `APP_ENV=production`, the command must fail with an environment-contract violation even if the calling shell contains `APP_ENV=production`. A valid file containing the explicit Production identity and safe Production settings must pass. This probe is read-only and is not used by deployment targets.
 
 ### Production volume-deletion refusal
 
