@@ -21,7 +21,7 @@ The fixture provisioning remains idempotent and Production continues to exclude 
 
 ## Migration and authorization coverage
 
-Migration `000071` remains the final migration for Bite 32. Its existing migration tests and `verify-migrated-db.sh` checks remain authoritative for direct-database INSERT/reactivation protection, pre-existing conflict rejection, trigger presence, and zero Person-level cross-Tenant `TENANT`-Role conflicts.
+Migration `000071` remains the final migration for Bite 32. Its migration tests and `verify-migrated-db.sh` checks remain authoritative for direct-database INSERT/reactivation/unsuspension protection, fail-closed quarantine of pre-existing conflicts, trigger presence, and zero Person-level effective cross-Tenant `TENANT`-Role conflicts.
 
 Authorization unit coverage remains the lower-level proof that the invariant is scope-based and applies automatically to future `TENANT`-scoped Roles.
 

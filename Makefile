@@ -41,7 +41,10 @@ endif
 EDGE_DIR := $(SERVER_ROOT)/edge
 
 SERVER_AUTHZ_BOOTSTRAP_ENABLED ?= false
-SERVER_COMPOSE = AUTHZ_BOOTSTRAP_ENABLED=$(SERVER_AUTHZ_BOOTSTRAP_ENABLED) docker compose -p $(COMPOSE_PROJECT) --env-file $(ENV_FILE) -f docker-compose.server.yml
+# Safety-sensitive deployed runtime values must come from the selected env file,
+# not from an operator's ambient shell. AUTHZ_BOOTSTRAP_ENABLED remains the one
+# deliberate command-line override used for explicit recovery workflows.
+SERVER_COMPOSE = env -u APP_ENV -u APP_AUTO_MIGRATE -u AUTHZ_ACTOR_HEADER_MODE -u DEV_SEED_ADMIN AUTHZ_BOOTSTRAP_ENABLED=$(SERVER_AUTHZ_BOOTSTRAP_ENABLED) docker compose -p $(COMPOSE_PROJECT) --env-file $(ENV_FILE) -f docker-compose.server.yml
 SERVER_COMPOSE_BUILD = BUILDX_NO_DEFAULT_ATTESTATIONS=1 $(SERVER_COMPOSE) --progress plain
 SERVER_SERVICE_CONTAINERS = $(CONTAINER_PREFIX)-backend $(CONTAINER_PREFIX)-frontend $(CONTAINER_PREFIX)-caddy
 
@@ -73,6 +76,7 @@ help:
 	@echo "  make local-init-env"
 	@echo "  make local-db-init"
 	@echo "  make local-db-reset"
+	@echo "  APP_ENV=development|test ERS_DATABASE_PATH=<path> make reset-db"
 	@echo "  make testdata-local-reset"
 	@echo "  make manual-testdata-local-reset"
 	@echo "  make manual-testdata-local-seed"
@@ -80,6 +84,7 @@ help:
 	@echo "  make brazilian-demo-local-reset [BRAZILIAN_DEMO_AS_OF=YYYY-MM-DD]"
 	@echo "  make brazilian-demo-local-seed [BRAZILIAN_DEMO_AS_OF=YYYY-MM-DD]"
 	@echo "  make brazilian-demo-local-verify [BRAZILIAN_DEMO_AS_OF=YYYY-MM-DD]"
+	@echo "  make brazilian-demo-local-backend [BRAZILIAN_DEMO_AS_OF=YYYY-MM-DD]"
 	@echo "  make brazilian-demo-presentation-check"
 	@echo "  make brazilian-demo-server-reset ENV=development|test [BRAZILIAN_DEMO_AS_OF=YYYY-MM-DD]"
 	@echo "  make local-admin-reset"
@@ -102,10 +107,12 @@ help:
 	@echo
 	@echo "Generic server targets:"
 	@echo "  make server-init-env ENV=development|test|production"
+	@echo "  make server-environment-contract-probe ENV=development|test|production SERVER_ENV_PROBE_FILE=<path>"
 	@echo "  make server-pull ENV=development|test|production"
 	@echo "  make server-build ENV=development|test|production"
 	@echo "  make server-up ENV=development|test|production"
 	@echo "  make server-down ENV=development|test|production"
+	@echo "  make server-down-volumes ENV=development|test (Production is refused)"
 	@echo "  make server-replace-development-db ENV=development"
 	@echo "  make server-test-rehearsal-capture-baseline"
 	@echo "  make server-test-rehearsal-ensure-baseline"
@@ -247,6 +254,15 @@ local-db-reset:
 	@./scripts/ers-environment-guard.sh require-non-production development "local session-data reset"
 	sqlite3 backend/data/app.db "DELETE FROM session_scores; DELETE FROM action_evaluations; DELETE FROM trainee_actions; DELETE FROM session_events; DELETE FROM sessions;"
 	@echo "Local session data reset."
+
+.PHONY: reset-db
+reset-db:
+	@if [[ -z "$${ERS_DATABASE_PATH:-}" ]]; then \
+		echo "Refusing SQLite database reset: ERS_DATABASE_PATH must explicitly identify the disposable database file." >&2; \
+		exit 2; \
+	fi
+	@APP_ENV="$${APP_ENV:-}" ./scripts/reset-sqlite-database.sh "$${ERS_DATABASE_PATH}"
+	@echo "SQLite database reset: $${ERS_DATABASE_PATH}"
 
 .PHONY: local-admin-reset
 local-admin-reset:
@@ -485,6 +501,14 @@ server-environment-identity-check:
 .PHONY: server-environment-contract-check
 server-environment-contract-check:
 	./scripts/ers-environment-guard.sh require-server-contract "$(ENV)" "$(ENV_DIR)/$(ENV_FILE)"
+
+.PHONY: server-environment-contract-probe
+server-environment-contract-probe:
+	@if [[ -z "$(SERVER_ENV_PROBE_FILE)" ]]; then \
+		echo "SERVER_ENV_PROBE_FILE must explicitly identify the environment file to validate." >&2; \
+		exit 2; \
+	fi
+	./scripts/ers-environment-guard.sh require-server-contract "$(ENV)" "$(SERVER_ENV_PROBE_FILE)"
 
 .PHONY: server-build
 server-build: server-authz-bootstrap-config-check server-environment-contract-check
@@ -1097,6 +1121,10 @@ server-prod-up:
 server-prod-down:
 	$(MAKE) server-down ENV=production
 
+.PHONY: server-prod-down-volumes
+server-prod-down-volumes:
+	$(MAKE) server-down-volumes ENV=production
+
 .PHONY: server-prod-ps
 server-prod-ps:
 	$(MAKE) server-ps ENV=production
@@ -1278,6 +1306,11 @@ brazilian-demo-local-seed:
 brazilian-demo-local-verify:
 	chmod +x scripts/seed-brazilian-demo.py
 	APP_ENV=development DB_PATH="$(BRAZILIAN_DEMO_DB)" BRAZILIAN_DEMO_AS_OF="$(BRAZILIAN_DEMO_AS_OF)" ./scripts/seed-brazilian-demo.py --verify-only
+
+.PHONY: brazilian-demo-local-backend
+brazilian-demo-local-backend: brazilian-demo-local-verify
+	@echo "Starting LOCAL backend against deterministic Brazilian demo database: $(abspath $(BRAZILIAN_DEMO_DB))"
+	APP_ENV=development ERS_DATABASE_PATH="$(abspath $(BRAZILIAN_DEMO_DB))" $(MAKE) local-backend
 
 .PHONY: brazilian-demo-local-reset
 brazilian-demo-local-reset:
