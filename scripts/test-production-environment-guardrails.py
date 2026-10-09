@@ -152,12 +152,13 @@ def test_server_environment_contract() -> None:
                     "AUTHZ_ACTOR_HEADER_MODE=disabled",
                     "DEV_SEED_ADMIN=false",
                     "SERVER_OFFHOST_BACKUP_ENABLED=true",
-                    "SERVER_OFFHOST_BACKUP_HOST=backup.example.test",
-                    "SERVER_OFFHOST_BACKUP_USER=ers-backup",
-                    "SERVER_OFFHOST_BACKUP_DIRECTORY=/srv/ers-backups",
-                    "SERVER_OFFHOST_BACKUP_PORT=22",
-                    "SERVER_OFFHOST_BACKUP_IDENTITY_FILE=/opt/EnterpriseRemoteSystems/secrets/backup-ssh-key",
-                    "SERVER_OFFHOST_BACKUP_KNOWN_HOSTS_FILE=/opt/EnterpriseRemoteSystems/secrets/backup-known-hosts",
+                    "SERVER_OFFHOST_BACKUP_TRANSPORT=s3",
+                    "SERVER_OFFHOST_BACKUP_S3_ENDPOINT=https://hel1.your-objectstorage.com",
+                    "SERVER_OFFHOST_BACKUP_S3_REGION=hel1",
+                    "SERVER_OFFHOST_BACKUP_S3_BUCKET=ers",
+                    "SERVER_OFFHOST_BACKUP_S3_PREFIX=ers-backups",
+                    "AWS_SHARED_CREDENTIALS_FILE=/opt/EnterpriseRemoteSystems/secrets/aws-credentials",
+                    "AWS_PROFILE=ers-backup",
                     "",
                 ]
             ),
@@ -170,7 +171,7 @@ def test_server_environment_contract() -> None:
         require_failure(proc, "mismatched selected/deployed environment", "selected ENV=test")
 
         env_file.write_text(
-            "APP_ENV=production\nDATABASE_PATH=/app/data/app.db\nAUTHZ_ACTOR_HEADER_MODE=disabled\nDEV_SEED_ADMIN=true\nSERVER_OFFHOST_BACKUP_ENABLED=true\nSERVER_OFFHOST_BACKUP_HOST=backup.example.test\nSERVER_OFFHOST_BACKUP_USER=ers-backup\nSERVER_OFFHOST_BACKUP_DIRECTORY=/srv/ers-backups\nSERVER_OFFHOST_BACKUP_PORT=22\nSERVER_OFFHOST_BACKUP_IDENTITY_FILE=/opt/EnterpriseRemoteSystems/secrets/backup-ssh-key\nSERVER_OFFHOST_BACKUP_KNOWN_HOSTS_FILE=/opt/EnterpriseRemoteSystems/secrets/backup-known-hosts\n",
+            "APP_ENV=production\nDATABASE_PATH=/app/data/app.db\nAUTHZ_ACTOR_HEADER_MODE=disabled\nDEV_SEED_ADMIN=true\nSERVER_OFFHOST_BACKUP_ENABLED=true\nSERVER_OFFHOST_BACKUP_TRANSPORT=s3\nSERVER_OFFHOST_BACKUP_S3_ENDPOINT=https://hel1.your-objectstorage.com\nSERVER_OFFHOST_BACKUP_S3_REGION=hel1\nSERVER_OFFHOST_BACKUP_S3_BUCKET=ers\nSERVER_OFFHOST_BACKUP_S3_PREFIX=ers-backups\nAWS_SHARED_CREDENTIALS_FILE=/opt/EnterpriseRemoteSystems/secrets/aws-credentials\nAWS_PROFILE=ers-backup\n",
             encoding="utf-8",
         )
         proc = run([str(SHELL_GUARD), "require-server-contract", "production", str(env_file)])
@@ -208,7 +209,7 @@ def test_server_environment_contract_probe() -> None:
         )
 
         env_file.write_text(
-            "APP_ENV=production\nDATABASE_PATH=/app/data/app.db\nAPP_AUTO_MIGRATE=false\nAUTHZ_ACTOR_HEADER_MODE=disabled\nDEV_SEED_ADMIN=false\nSERVER_OFFHOST_BACKUP_ENABLED=true\nSERVER_OFFHOST_BACKUP_HOST=backup.example.test\nSERVER_OFFHOST_BACKUP_USER=ers-backup\nSERVER_OFFHOST_BACKUP_DIRECTORY=/srv/ers-backups\nSERVER_OFFHOST_BACKUP_PORT=22\nSERVER_OFFHOST_BACKUP_IDENTITY_FILE=/opt/EnterpriseRemoteSystems/secrets/backup-ssh-key\nSERVER_OFFHOST_BACKUP_KNOWN_HOSTS_FILE=/opt/EnterpriseRemoteSystems/secrets/backup-known-hosts\n",
+            "APP_ENV=production\nDATABASE_PATH=/app/data/app.db\nAPP_AUTO_MIGRATE=false\nAUTHZ_ACTOR_HEADER_MODE=disabled\nDEV_SEED_ADMIN=false\nSERVER_OFFHOST_BACKUP_ENABLED=true\nSERVER_OFFHOST_BACKUP_TRANSPORT=s3\nSERVER_OFFHOST_BACKUP_S3_ENDPOINT=https://hel1.your-objectstorage.com\nSERVER_OFFHOST_BACKUP_S3_REGION=hel1\nSERVER_OFFHOST_BACKUP_S3_BUCKET=ers\nSERVER_OFFHOST_BACKUP_S3_PREFIX=ers-backups\nAWS_SHARED_CREDENTIALS_FILE=/opt/EnterpriseRemoteSystems/secrets/aws-credentials\nAWS_PROFILE=ers-backup\n",
             encoding="utf-8",
         )
         ambient = {**os.environ, "APP_ENV": "development", "APP_AUTO_MIGRATE": "true", "DEV_SEED_ADMIN": "true"}
@@ -238,7 +239,8 @@ def test_environment_initializers_are_production_safe() -> None:
             "AUTHZ_DISABLE_ROUTE_AUTHORIZATION=false",
             "AUTHZ_ACTOR_HEADER_MODE=disabled",
             "SERVER_OFFHOST_BACKUP_ENABLED=true",
-            "SERVER_OFFHOST_BACKUP_DIRECTORY=/srv/ers-backups",
+            "SERVER_OFFHOST_BACKUP_TRANSPORT=s3",
+        "SERVER_OFFHOST_BACKUP_S3_PREFIX=ers-backups",
         ):
             if expected not in text:
                 raise AssertionError(f"Production env initializer missing {expected!r}")
@@ -316,7 +318,8 @@ def test_static_production_barriers() -> None:
         "AUTHZ_DISABLE_ROUTE_AUTHORIZATION=false",
         "DEV_SEED_ADMIN=false",
         "SERVER_OFFHOST_BACKUP_ENABLED=true",
-        "SERVER_OFFHOST_BACKUP_DIRECTORY=/srv/ers-backups",
+        "SERVER_OFFHOST_BACKUP_TRANSPORT=s3",
+        "SERVER_OFFHOST_BACKUP_S3_PREFIX=ers-backups",
     ):
         if expected not in production_example:
             raise AssertionError(f"Production environment example is missing safe setting {expected!r}")

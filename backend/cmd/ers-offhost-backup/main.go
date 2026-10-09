@@ -72,7 +72,7 @@ func checkConfig(args []string) error {
 	fs := flag.NewFlagSet("check-config", flag.ContinueOnError)
 	environment := fs.String("environment", "", "environment")
 	envFile := fs.String("env-file", "", "environment file")
-	runtimeFiles := fs.Bool("runtime-files", false, "also require identity/known-hosts files to exist")
+	runtimeFiles := fs.Bool("runtime-files", false, "also require transport credential/config files to exist")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}

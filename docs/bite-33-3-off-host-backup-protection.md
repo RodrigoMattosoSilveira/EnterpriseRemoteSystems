@@ -2,56 +2,61 @@
 
 ## Purpose
 
-Bite 33.3 ensures a verified Bite 33.2 backup is not protected only by the same ERS deployment host. Production backups must be copied to a distinct SSH-accessible host and independently re-downloaded and verified before the off-host copy is accepted.
+Bite 33.3 ensures a verified Bite 33.2 backup is not protected only by the same ERS deployment host. Bite 33.3.2 makes Hetzner Object Storage, accessed through its S3-compatible API, the required Production off-host transport.
 
-A successful Production `make server-backup ENV=production` now means:
+A successful Production `make server-backup ENV=production` means:
 
 1. Bite 33.2 creates and verifies the local SQLite backup/manifest pair;
-2. ERS transfers that exact pair to the configured off-host SSH destination;
-3. the remote pair is published as one backup directory after both files arrive;
-4. ERS downloads the remote pair back into an isolated temporary directory;
+2. ERS uploads that exact pair to the configured Hetzner Object Storage bucket;
+3. each upload must return a non-null S3 `VersionId`;
+4. ERS downloads those exact database and manifest versions into an isolated temporary directory;
 5. the complete Bite 33.2 verification contract runs against the downloaded copy;
-6. its backup and manifest SHA-256 values must match the original verified local pair;
-7. ERS writes a local off-host receipt and a copy of that receipt beside the remote replica;
+6. database and manifest SHA-256 values must match the original verified local pair;
+7. ERS writes a local off-host receipt containing the exact S3 object keys and `VersionId`s and uploads the same receipt to Object Storage;
 8. any replication/verification failure makes the overall backup command fail while preserving the already verified local backup.
 
 ## Production configuration
 
-Production requires these keys in `.env.production`:
+Production requires:
 
 ```ini
 SERVER_OFFHOST_BACKUP_ENABLED=true
-SERVER_OFFHOST_BACKUP_HOST=backup-host.example.com
-SERVER_OFFHOST_BACKUP_USER=ers-backup
-SERVER_OFFHOST_BACKUP_DIRECTORY=/srv/ers-backups
-SERVER_OFFHOST_BACKUP_PORT=22
-SERVER_OFFHOST_BACKUP_IDENTITY_FILE=/opt/EnterpriseRemoteSystems/secrets/backup-ssh-key
-SERVER_OFFHOST_BACKUP_KNOWN_HOSTS_FILE=/opt/EnterpriseRemoteSystems/secrets/backup-known-hosts
+SERVER_OFFHOST_BACKUP_TRANSPORT=s3
+SERVER_OFFHOST_BACKUP_S3_ENDPOINT=https://hel1.your-objectstorage.com
+SERVER_OFFHOST_BACKUP_S3_REGION=hel1
+SERVER_OFFHOST_BACKUP_S3_BUCKET=<ers-backup-bucket>
+SERVER_OFFHOST_BACKUP_S3_PREFIX=ers-backups
+AWS_SHARED_CREDENTIALS_FILE=/opt/EnterpriseRemoteSystems/secrets/aws-credentials
+AWS_PROFILE=ers-backup
 ```
 
-The SSH private key and pinned `known_hosts` file live on the deployment host and must not be committed to source control. SSH uses batch mode, explicit identity selection, and strict host-key checking. Production build/up contract validation refuses `SERVER_OFFHOST_BACKUP_ENABLED=false` or missing off-host destination settings.
+Supported Hetzner Object Storage regions are `fsn1`, `nbg1`, and `hel1`. Production validation requires the HTTPS endpoint to match the selected region exactly.
 
-Development and Test default to off-host replication disabled, but may opt in by configuring the same keys.
+The credentials file lives on the deployment host outside source control and is mounted read-only into the one-off backup utility container. The Go implementation reads the named AWS-compatible credentials profile directly; neither Python nor AWS CLI is required in Production.
 
-## Remote layout
+Development and Test default to off-host replication disabled. They may explicitly enable either the S3 transport or the legacy SSH transport for deterministic/local testing. Production cannot select SSH.
 
-For a local managed backup:
+## S3 object layout
+
+For a managed backup:
 
 ```text
-app-20261003T220000Z.db
-app-20261003T220000Z.db.manifest.json
+app-20261009T220000Z.db
+app-20261009T220000Z.db.manifest.json
 ```
 
-Production stores the off-host replica under:
+with `SERVER_OFFHOST_BACKUP_S3_PREFIX=ers-backups`, Production stores:
 
 ```text
-<SERVER_OFFHOST_BACKUP_DIRECTORY>/production/app-20261003T220000Z.db/
-  app-20261003T220000Z.db
-  app-20261003T220000Z.db.manifest.json
-  app-20261003T220000Z.db.offhost.json
+ers-backups/
+  production/
+    app-20261009T220000Z.db/
+      app-20261009T220000Z.db
+      app-20261009T220000Z.db.manifest.json
+      app-20261009T220000Z.db.offhost.json
 ```
 
-The pair is uploaded into a temporary staging directory and the directory is renamed into place only after both backup and manifest have transferred. An existing remote backup directory is never overwritten blindly; it is re-downloaded and must verify against the local pair.
+The receipt records the exact database and manifest `VersionId`s. Later verification retrieves those exact versions, never merely the current/latest object at the key.
 
 ## Receipt evidence
 
@@ -61,27 +66,29 @@ After round-trip verification, ERS creates:
 <local-backup>.offhost.json
 ```
 
-The receipt records:
+The S3 receipt records:
 
-- environment;
-- replication UTC timestamp;
-- transport (`ssh`);
-- backup SHA-256 and size;
-- manifest SHA-256;
-- remote host/user/port and directory;
+- environment and replication UTC timestamp;
+- transport (`s3`);
+- endpoint, region, bucket, and prefix;
+- database object key, exact `VersionId`, size, and SHA-256;
+- manifest object key, exact `VersionId`, and SHA-256;
+- remote receipt object key;
 - verification method.
 
-It contains no SSH private key contents or application credentials.
+The receipt contains no S3 access key or secret key.
+
+## Retry behavior
+
+If a local S3 receipt already exists for the same source backup and manifest, ERS does not upload replacement database or manifest versions. It re-downloads and verifies the exact versions recorded in the receipt. This makes operator retries idempotent for an already accepted backup pair.
+
+If an upload fails before a verified receipt exists, Object Storage may contain incomplete/orphaned object versions. They are not accepted as recovery evidence because no verified receipt points to them. With Object Lock enabled, ERS does not attempt destructive cleanup of protected versions.
 
 ## Operator commands
-
-Create the normal verified backup and, when enabled, protect it off-host:
 
 ```bash
 make server-backup ENV=production
 ```
-
-Replicate an already-created verified backup explicitly:
 
 ```bash
 make server-offhost-backup \
@@ -89,33 +96,26 @@ make server-offhost-backup \
   BACKUP_FILE=/opt/EnterpriseRemoteSystems/production/backups/app-YYYYMMDDTHHMMSSZ.db
 ```
 
-Independently re-download and verify the off-host replica using its local receipt:
-
 ```bash
 make server-offhost-backup-verify \
   ENV=production \
   BACKUP_FILE=/opt/EnterpriseRemoteSystems/production/backups/app-YYYYMMDDTHHMMSSZ.db
 ```
 
-Production aliases are also available:
-
-```bash
-make server-prod-offhost-backup BACKUP_FILE=/opt/EnterpriseRemoteSystems/production/backups/app-YYYYMMDDTHHMMSSZ.db
-make server-prod-offhost-backup-verify BACKUP_FILE=/opt/EnterpriseRemoteSystems/production/backups/app-YYYYMMDDTHHMMSSZ.db
-```
+Production aliases remain available.
 
 ## Failure behavior
 
-If local Bite 33.2 backup creation fails, no off-host action starts.
+If local Bite 33.2 backup creation fails, no S3 action starts.
 
-If off-host configuration, SSH, transfer, publication, round-trip retrieval, checksum comparison, or full SQLite verification fails:
+If configuration, S3 authentication/signing, upload, exact-version retrieval, checksum comparison, or full SQLite verification fails:
 
 - the verified local backup remains intact;
 - the overall backup command exits non-zero;
-- a newly published remote pair that fails round-trip verification is removed rather than left as accepted recovery evidence;
-- an existing remote pair that fails verification is not automatically destroyed, preserving evidence for investigation.
+- no local verified off-host receipt is published for a newly failed replication;
+- already accepted exact S3 versions are never silently replaced during retry.
 
-Off-host replication does not automatically prune remote replicas in Bite 33.3. That choice is intentionally conservative: local retention must never imply deletion of the only copy outside the application host.
+Off-host replication does not prune remote replicas in Bite 33.3. Object Storage retention/version lifecycle policy remains an explicit operational concern separate from local Bite 33.2 retention.
 
 ## Automated regression
 
@@ -125,20 +125,22 @@ Run:
 make off-host-backup-protection-check
 ```
 
-The check uses a fake SSH endpoint and verifies:
+The regression builds the Go backup utilities and exercises an in-process S3-compatible test endpoint. It verifies:
 
-- transfer of the verified database + manifest pair;
-- round-trip re-download and Bite 33.2 verification;
-- backup and manifest checksum equality with the source pair;
-- local and remote receipt creation;
-- independent later remote verification;
-- remote tamper detection;
+- SigV4-authenticated PUT and exact-version GET requests;
+- database + manifest upload and non-null `VersionId` capture;
+- round-trip re-download and full Bite 33.2 verification;
+- receipt object/version/checksum evidence;
+- verification with the local backup pair temporarily unavailable;
+- idempotent retry without replacement database/manifest versions;
+- exact-version tamper detection;
 - Production refusal when off-host protection is disabled;
-- Makefile, environment-contract, initialization, CI, and deployment integration.
+- Production refusal of SSH transport;
+- Production Hetzner endpoint/region matching and HTTPS enforcement;
+- Makefile, initialization, CI, and deployment integration.
 
 The check is included in `make local-check`, CI, and the deployment quality gate.
 
-
 ## Production implementation language
 
-Bite 33.3.1 moves off-host configuration, SSH transport, receipt generation, round-trip retrieval, and Bite 33.2 re-verification from `scripts/ers-offhost-backup.py` into the compiled Go command `/app/ers-offhost-backup`. The backend image contains both Go backup commands plus the SSH client required by the current transport. `scripts/run-backup-go-tool.sh` launches the compiled commands from the newly built backend image for deployed environments; Python remains only in regression/test harnesses and is not part of the Production backup runtime.
+All Production backup/off-host behavior remains compiled Go. Python is used only by regression/test harnesses. The Production S3 client uses AWS Signature Version 4 over Go's standard HTTP/crypto libraries and therefore does not add an AWS CLI dependency to the Production runtime.
