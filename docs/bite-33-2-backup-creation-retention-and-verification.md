@@ -14,7 +14,7 @@ The Bite covers:
 - configurable retention that never intentionally removes every verified backup;
 - explicit CI/deployment regression coverage.
 
-Off-host replication is intentionally **not** part of 33.2. It belongs to Bite 33.3.
+Off-host replication is implemented by Bite 33.3. The verified 33.2 pair is the source artifact that 33.3 replicates and re-verifies outside the application host.
 
 ## Managed backup pair
 
@@ -51,7 +51,7 @@ When a backend container is running, backup creation:
 4. runs `PRAGMA integrity_check` inside the container snapshot;
 5. runs `PRAGMA foreign_key_check` inside the container snapshot;
 6. copies the snapshot to the host backup directory through a temporary file;
-7. independently opens the copied database read-only with Python's SQLite library;
+7. independently opens the copied database read-only with the compiled Go backup verifier;
 8. repeats integrity and foreign-key verification;
 9. verifies required canonical ERS tables are readable;
 10. records migration state and representative core record counts;
@@ -208,3 +208,8 @@ The regression verifies:
 - legacy Production backup routing through the hardened implementation.
 
 The check is included in `make local-check`, CI, and the deployment quality gate.
+
+
+## Production implementation language
+
+Bite 33.3.1 moves manifest creation, independent SQLite verification, SHA-256 validation, and retention from `scripts/ers-backup.py` into the compiled Go command `/app/ers-backup`. Deployed Make targets execute that command from the newly built backend image through `scripts/run-backup-go-tool.sh`, so the server host does not need Python or a Go compiler for Production backup operations.

@@ -87,6 +87,65 @@ require_server_identity() {
   fi
 }
 
+
+validate_production_offhost_backup_contract() {
+  local env_file="$1"
+  local value
+  value="$(read_env_value "$env_file" SERVER_OFFHOST_BACKUP_ENABLED || true)"
+  if [[ "$(lowercase "$value")" != "true" && "$value" != "1" ]]; then
+    echo "Production environment contract violation: SERVER_OFFHOST_BACKUP_ENABLED must be true." >&2
+    exit 2
+  fi
+
+  value="$(read_env_value "$env_file" SERVER_OFFHOST_BACKUP_TRANSPORT || true)"
+  if [[ "$(lowercase "$value")" != "s3" ]]; then
+    echo "Production environment contract violation: SERVER_OFFHOST_BACKUP_TRANSPORT must be s3 for Hetzner Object Storage." >&2
+    exit 2
+  fi
+
+  local endpoint region bucket prefix credentials_file profile expected_endpoint key
+  endpoint="$(read_env_value "$env_file" SERVER_OFFHOST_BACKUP_S3_ENDPOINT || true)"
+  region="$(lowercase "$(read_env_value "$env_file" SERVER_OFFHOST_BACKUP_S3_REGION || true)")"
+  bucket="$(read_env_value "$env_file" SERVER_OFFHOST_BACKUP_S3_BUCKET || true)"
+  prefix="$(read_env_value "$env_file" SERVER_OFFHOST_BACKUP_S3_PREFIX || true)"
+  credentials_file="$(read_env_value "$env_file" AWS_SHARED_CREDENTIALS_FILE || true)"
+  profile="$(read_env_value "$env_file" AWS_PROFILE || true)"
+
+  for key in SERVER_OFFHOST_BACKUP_S3_ENDPOINT SERVER_OFFHOST_BACKUP_S3_REGION SERVER_OFFHOST_BACKUP_S3_BUCKET SERVER_OFFHOST_BACKUP_S3_PREFIX AWS_SHARED_CREDENTIALS_FILE AWS_PROFILE; do
+    value="$(read_env_value "$env_file" "$key" || true)"
+    if [[ -z "$value" ]]; then
+      echo "Production environment contract violation: ${key} must be configured for Hetzner S3 off-host backup protection." >&2
+      exit 2
+    fi
+  done
+
+  case "$region" in
+    fsn1|nbg1|hel1) ;;
+    *)
+      echo "Production environment contract violation: SERVER_OFFHOST_BACKUP_S3_REGION must be fsn1, nbg1, or hel1." >&2
+      exit 2
+      ;;
+  esac
+  expected_endpoint="https://${region}.your-objectstorage.com"
+  endpoint="${endpoint%/}"
+  if [[ "$endpoint" != "$expected_endpoint" ]]; then
+    echo "Production environment contract violation: SERVER_OFFHOST_BACKUP_S3_ENDPOINT must be ${expected_endpoint} for region ${region}." >&2
+    exit 2
+  fi
+  if [[ "$bucket" =~ [[:space:]/] ]]; then
+    echo "Production environment contract violation: SERVER_OFFHOST_BACKUP_S3_BUCKET must be a bucket name without whitespace or slashes." >&2
+    exit 2
+  fi
+  if [[ "$prefix" == /* || "$prefix" == */ || "$prefix" == *//* ]]; then
+    echo "Production environment contract violation: SERVER_OFFHOST_BACKUP_S3_PREFIX must be a normalized non-empty object prefix without leading/trailing slash." >&2
+    exit 2
+  fi
+  if [[ "$credentials_file" != /* ]]; then
+    echo "Production environment contract violation: AWS_SHARED_CREDENTIALS_FILE must be an absolute path." >&2
+    exit 2
+  fi
+}
+
 require_server_contract() {
   local expected="${1:-}"
   local env_file="${2:-}"
@@ -109,6 +168,7 @@ require_server_contract() {
       echo "Production environment contract violation: DEV_SEED_ADMIN must be false." >&2
       exit 2
     fi
+    validate_production_offhost_backup_contract "$env_file"
   fi
 }
 

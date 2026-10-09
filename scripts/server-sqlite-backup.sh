@@ -7,6 +7,7 @@ BACKUP_CONTAINER="${BACKUP_CONTAINER:-}"
 BACKUP_DIRECTORY="${BACKUP_DIRECTORY:-}"
 BACKUP_RETENTION_COUNT="${BACKUP_RETENTION_COUNT:-14}"
 BACKUP_RETENTION_DAYS="${BACKUP_RETENTION_DAYS:-30}"
+BACKUP_RESULT_FILE="${BACKUP_RESULT_FILE:-}"
 
 if [[ -z "$BACKUP_ENVIRONMENT" ]]; then
   echo "BACKUP_ENVIRONMENT is required (development, test, or production)." >&2
@@ -43,6 +44,10 @@ fi
 
 mkdir -p "$BACKUP_DIRECTORY"
 BACKUP_DIRECTORY="$(cd "$BACKUP_DIRECTORY" && pwd)"
+if [[ -n "$BACKUP_RESULT_FILE" ]]; then
+  mkdir -p "$(dirname "$BACKUP_RESULT_FILE")"
+  rm -f "$BACKUP_RESULT_FILE"
+fi
 
 source_db="$(docker exec "$BACKUP_CONTAINER" sh -c 'printf "%s" "${DATABASE_PATH:-}"')"
 if [[ -z "$source_db" ]]; then
@@ -98,7 +103,7 @@ fi
 docker cp "$BACKUP_CONTAINER:$container_tmp" "$partial"
 mv "$partial" "$target"
 
-python3 "$ROOT_DIR/scripts/ers-backup.py" create-manifest \
+"$ROOT_DIR/scripts/run-backup-go-tool.sh" ers-backup create-manifest \
   --backup "$target" \
   --manifest "$manifest" \
   --environment "$BACKUP_ENVIRONMENT" \
@@ -111,10 +116,16 @@ python3 "$ROOT_DIR/scripts/ers-backup.py" create-manifest \
 # and fail the command so the operator can investigate without losing evidence.
 committed=1
 
-python3 "$ROOT_DIR/scripts/ers-backup.py" prune \
+"$ROOT_DIR/scripts/run-backup-go-tool.sh" ers-backup prune \
   --directory "$BACKUP_DIRECTORY" \
   --retention-count "$BACKUP_RETENTION_COUNT" \
   --retention-days "$BACKUP_RETENTION_DAYS"
+
+if [[ -n "$BACKUP_RESULT_FILE" ]]; then
+  result_tmp="${BACKUP_RESULT_FILE}.tmp-$$"
+  printf '%s\n' "$target" > "$result_tmp"
+  mv -f "$result_tmp" "$BACKUP_RESULT_FILE"
+fi
 
 echo "Verified backup: $target"
 echo "Backup manifest: $manifest"

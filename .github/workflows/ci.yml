@@ -77,6 +77,9 @@ jobs:
       - name: Verify Bite 33.2 backup creation, retention, and verification
         run: make backup-creation-retention-verification-check
 
+      - name: Verify Bite 33.3 off-host backup protection
+        run: make off-host-backup-protection-check
+
       - name: Rehearse pre-30I database through final 30I migration
         run: make migration-rehearsal-check
 

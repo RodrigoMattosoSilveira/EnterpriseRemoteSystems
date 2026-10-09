@@ -50,6 +50,16 @@ set_or_update_env "OPENAI_TIMEOUT_SECONDS" "20"
 # CORS
 set_or_update_env "CORS_ALLOW_ORIGINS" "https://app.yourdomain.com"
 
+# Bite 33.3.2: Production backups replicate to Hetzner Object Storage via S3.
+set_or_update_env "SERVER_OFFHOST_BACKUP_ENABLED" "true"
+set_or_update_env "SERVER_OFFHOST_BACKUP_TRANSPORT" "s3"
+set_or_update_env "SERVER_OFFHOST_BACKUP_S3_ENDPOINT" ""
+set_or_update_env "SERVER_OFFHOST_BACKUP_S3_REGION" ""
+set_or_update_env "SERVER_OFFHOST_BACKUP_S3_BUCKET" ""
+set_or_update_env "SERVER_OFFHOST_BACKUP_S3_PREFIX" "ers-backups"
+set_or_update_env "AWS_SHARED_CREDENTIALS_FILE" "/opt/EnterpriseRemoteSystems/secrets/aws-credentials"
+set_or_update_env "AWS_PROFILE" "ers-backup"
+
 rm -f "${ENV_FILE}.bak"
 
 echo "Created/updated ${ENV_FILE}"
@@ -58,3 +68,4 @@ echo "IMPORTANT: Edit ${ENV_FILE} before production use:"
 echo "  1. Set APP_DOMAIN to your real domain."
 echo "  2. Set CORS_ALLOW_ORIGINS to https://your-real-domain."
 echo "  3. Keep DEV_SEED_ADMIN=false; Production administrator lifecycle is handled outside demo/test seeding."
+echo "  4. Configure the Hetzner S3 endpoint/region/bucket and install AWS_SHARED_CREDENTIALS_FILE before Production build/up/deploy."

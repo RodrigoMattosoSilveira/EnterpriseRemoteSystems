@@ -68,6 +68,10 @@ SERVER_SMOKE_MAX_TIME_SECONDS ?= 15
 SERVER_BACKUP_RETENTION_COUNT ?= 14
 SERVER_BACKUP_RETENTION_DAYS ?= 30
 
+# Bite 33.3 off-host backup protection. Production requires this to be enabled
+# in the selected deployed environment file. Development/Test may opt in.
+SERVER_OFFHOST_BACKUP_RECEIPT_SUFFIX ?= .offhost.json
+
 # ==============================================================================
 # Help
 # ==============================================================================
@@ -101,6 +105,7 @@ help:
 	@echo "  make production-release-evidence-check"
 	@echo "  make production-environment-guardrails-check"
 	@echo "  make backup-creation-retention-verification-check"
+	@echo "  make off-host-backup-protection-check"
 	@echo "  make migration-check"
 	@echo "  make migration-rehearsal-check"
 	@echo "  make local-docker-check"
@@ -145,6 +150,8 @@ help:
 	@echo "  make server-backup ENV=development|test|production"
 	@echo "  make server-backup-verify ENV=development|test|production BACKUP_FILE=<path-to-app-*.db>"
 	@echo "  make server-backup-retention ENV=development|test|production [SERVER_BACKUP_RETENTION_COUNT=14 SERVER_BACKUP_RETENTION_DAYS=30]"
+	@echo "  make server-offhost-backup ENV=development|test|production BACKUP_FILE=<path-to-app-*.db>"
+	@echo "  make server-offhost-backup-verify ENV=development|test|production BACKUP_FILE=<path-to-app-*.db>"
 	@echo "  Normal server targets force AUTHZ bootstrap off; deliberate recovery: SERVER_AUTHZ_BOOTSTRAP_ENABLED=true make server-up ENV=<env>"
 	@echo "  make testdata-server-reset ENV=development|test"
 	@echo
@@ -177,6 +184,9 @@ help:
 	@echo "  make server-prod-smoke"
 	@echo "  make server-prod-protected-api-smoke"
 	@echo "  make server-prod-admin-test"
+	@echo "  make server-prod-backup"
+	@echo "  make server-prod-offhost-backup BACKUP_FILE=<path-to-app-*.db>"
+	@echo "  make server-prod-offhost-backup-verify BACKUP_FILE=<path-to-app-*.db>"
 	@echo
 	@echo "Edge proxy:"
 	@echo "  make edge-init"
@@ -233,7 +243,11 @@ check-repo:
 	@test -f scripts/dev-backend.sh || (echo "Missing scripts/dev-backend.sh" && exit 1)
 	@test -f scripts/dev-frontend.sh || (echo "Missing scripts/dev-frontend.sh" && exit 1)
 	@test -f scripts/server-sqlite-backup.sh || (echo "Missing scripts/server-sqlite-backup.sh" && exit 1)
-	@test -f scripts/ers-backup.py || (echo "Missing scripts/ers-backup.py" && exit 1)
+	@test -x scripts/run-backup-go-tool.sh || (echo "Missing executable scripts/run-backup-go-tool.sh" && exit 1)
+	@test -f backend/cmd/ers-backup/main.go || (echo "Missing backend/cmd/ers-backup/main.go" && exit 1)
+	@test -f backend/cmd/ers-offhost-backup/main.go || (echo "Missing backend/cmd/ers-offhost-backup/main.go" && exit 1)
+	@test ! -e scripts/ers-backup.py || (echo "Obsolete Production Python backup tool found: scripts/ers-backup.py" && exit 1)
+	@test ! -e scripts/ers-offhost-backup.py || (echo "Obsolete Production Python off-host tool found: scripts/ers-offhost-backup.py" && exit 1)
 	@test -f scripts/server-public-smoke.sh || (echo "Missing scripts/server-public-smoke.sh" && exit 1)
 	@test -f scripts/test-server-public-smoke.sh || (echo "Missing scripts/test-server-public-smoke.sh" && exit 1)
 	@if [ -d backend/cmd/create-admin ] || [ -d backend/cmd/create-admin.disabled ]; then \
@@ -430,6 +444,10 @@ production-environment-guardrails-check:
 backup-creation-retention-verification-check:
 	python3 scripts/test-backup-creation-retention-verification.py
 
+.PHONY: off-host-backup-protection-check
+off-host-backup-protection-check:
+	python3 scripts/test-off-host-backup-protection.py
+
 .PHONY: local-check
 local-check:
 	$(MAKE) bite30l4-coverage-manifest-check
@@ -440,6 +458,7 @@ local-check:
 	$(MAKE) production-release-evidence-check
 	$(MAKE) production-environment-guardrails-check
 	$(MAKE) backup-creation-retention-verification-check
+	$(MAKE) off-host-backup-protection-check
 	$(MAKE) local-hot-reload-check
 	$(MAKE) local-auth-cookie-config-check
 	$(MAKE) server-public-smoke-script-check
@@ -899,12 +918,26 @@ server-backup:
 		echo "No existing $(ENV) SQLite volume is present; no backup is required for this first deployment."; \
 		exit 0; \
 	fi; \
+	result_file="$(ENV_DIR)/backups/.last-created-backup-$$$$"; \
+	rm -f "$$result_file"; \
+	trap 'rm -f "$$result_file"' EXIT; \
 	BACKUP_ENVIRONMENT="$(ENV)" \
 	BACKUP_CONTAINER="$$container" \
 	BACKUP_DIRECTORY="$(ENV_DIR)/backups" \
 	BACKUP_RETENTION_COUNT="$(SERVER_BACKUP_RETENTION_COUNT)" \
 	BACKUP_RETENTION_DAYS="$(SERVER_BACKUP_RETENTION_DAYS)" \
-		./scripts/server-sqlite-backup.sh
+	BACKUP_RESULT_FILE="$$result_file" \
+	ERS_BACKUP_ENV_DIR="$(ENV_DIR)" \
+	ERS_BACKUP_ENV_FILE="$(ENV_FILE)" \
+	ERS_BACKUP_COMPOSE_PROJECT="$(COMPOSE_PROJECT)" \
+		./scripts/server-sqlite-backup.sh; \
+	backup_file="$$(cat "$$result_file")"; \
+	status="$$(ERS_BACKUP_ENV_DIR="$(ENV_DIR)" ERS_BACKUP_ENV_FILE="$(ENV_FILE)" ERS_BACKUP_COMPOSE_PROJECT="$(COMPOSE_PROJECT)" ./scripts/run-backup-go-tool.sh ers-offhost-backup status --environment "$(ENV)" --env-file "$(ENV_DIR)/$(ENV_FILE)")" || exit $$?; \
+	if [[ "$$status" == "enabled" ]]; then \
+		$(MAKE) server-offhost-backup ENV=$(ENV) BACKUP_FILE="$$backup_file"; \
+	else \
+		echo "Off-host backup is disabled for $(ENV); verified local backup retained at $$backup_file."; \
+	fi
 
 .PHONY: server-backup-verify
 server-backup-verify:
@@ -912,17 +945,52 @@ server-backup-verify:
 		echo "BACKUP_FILE is required. Example: make server-backup-verify ENV=$(ENV) BACKUP_FILE=$(ENV_DIR)/backups/app-<timestamp>.db" >&2; \
 		exit 2; \
 	fi
-	@python3 scripts/ers-backup.py verify \
+	@ERS_BACKUP_ENV_DIR="$(ENV_DIR)" \
+	ERS_BACKUP_ENV_FILE="$(ENV_FILE)" \
+	ERS_BACKUP_COMPOSE_PROJECT="$(COMPOSE_PROJECT)" \
+		./scripts/run-backup-go-tool.sh ers-backup verify \
 		--backup "$(BACKUP_FILE)" \
 		--manifest "$(BACKUP_FILE).manifest.json" \
 		--expected-environment "$(ENV)"
 
 .PHONY: server-backup-retention
 server-backup-retention:
-	@python3 scripts/ers-backup.py prune \
+	@ERS_BACKUP_ENV_DIR="$(ENV_DIR)" \
+	ERS_BACKUP_ENV_FILE="$(ENV_FILE)" \
+	ERS_BACKUP_COMPOSE_PROJECT="$(COMPOSE_PROJECT)" \
+		./scripts/run-backup-go-tool.sh ers-backup prune \
 		--directory "$(ENV_DIR)/backups" \
 		--retention-count "$(SERVER_BACKUP_RETENTION_COUNT)" \
 		--retention-days "$(SERVER_BACKUP_RETENTION_DAYS)"
+
+
+.PHONY: server-offhost-backup
+server-offhost-backup:
+	@if [[ -z "$(BACKUP_FILE)" ]]; then \
+		echo "BACKUP_FILE is required. Example: make server-offhost-backup ENV=$(ENV) BACKUP_FILE=$(ENV_DIR)/backups/app-<timestamp>.db" >&2; \
+		exit 2; \
+	fi
+	@ERS_BACKUP_ENV_DIR="$(ENV_DIR)" \
+	ERS_BACKUP_ENV_FILE="$(ENV_FILE)" \
+	ERS_BACKUP_COMPOSE_PROJECT="$(COMPOSE_PROJECT)" \
+		./scripts/run-backup-go-tool.sh ers-offhost-backup replicate \
+		--environment "$(ENV)" \
+		--env-file "$(ENV_DIR)/$(ENV_FILE)" \
+		--backup "$(BACKUP_FILE)"
+
+.PHONY: server-offhost-backup-verify
+server-offhost-backup-verify:
+	@if [[ -z "$(BACKUP_FILE)" ]]; then \
+		echo "BACKUP_FILE is required. Example: make server-offhost-backup-verify ENV=$(ENV) BACKUP_FILE=$(ENV_DIR)/backups/app-<timestamp>.db" >&2; \
+		exit 2; \
+	fi
+	@ERS_BACKUP_ENV_DIR="$(ENV_DIR)" \
+	ERS_BACKUP_ENV_FILE="$(ENV_FILE)" \
+	ERS_BACKUP_COMPOSE_PROJECT="$(COMPOSE_PROJECT)" \
+		./scripts/run-backup-go-tool.sh ers-offhost-backup verify-replica \
+		--environment "$(ENV)" \
+		--env-file "$(ENV_DIR)/$(ENV_FILE)" \
+		--receipt "$(BACKUP_FILE)$(SERVER_OFFHOST_BACKUP_RECEIPT_SUFFIX)"
 
 .PHONY: server-reset-admin
 server-reset-admin:
@@ -1199,6 +1267,15 @@ server-prod-cert-check:
 .PHONY: server-prod-backup
 server-prod-backup:
 	$(MAKE) server-backup ENV=production
+
+
+.PHONY: server-prod-offhost-backup
+server-prod-offhost-backup:
+	$(MAKE) server-offhost-backup ENV=production BACKUP_FILE="$(BACKUP_FILE)"
+
+.PHONY: server-prod-offhost-backup-verify
+server-prod-offhost-backup-verify:
+	$(MAKE) server-offhost-backup-verify ENV=production BACKUP_FILE="$(BACKUP_FILE)"
 
 .PHONY: server-prod-reset-admin
 server-prod-reset-admin:

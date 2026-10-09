@@ -102,6 +102,26 @@ set_or_update_env "AUTHZ_BOOTSTRAP_ROLE_CODE" "APPLICATION_ADMIN"
 set_or_update_env "AUTHZ_BOOTSTRAP_TENANT_ID" "*"
 set_or_update_env "AUTHZ_BOOTSTRAP_REQUIRE_EMPTY_ACTOR_TABLE" "false"
 
+if [[ "$APP_ENV" == "production" ]]; then
+  set_or_update_env "SERVER_OFFHOST_BACKUP_ENABLED" "true"
+  set_or_update_env "SERVER_OFFHOST_BACKUP_TRANSPORT" "s3"
+  set_or_update_env "SERVER_OFFHOST_BACKUP_S3_ENDPOINT" ""
+  set_or_update_env "SERVER_OFFHOST_BACKUP_S3_REGION" ""
+  set_or_update_env "SERVER_OFFHOST_BACKUP_S3_BUCKET" ""
+  set_or_update_env "SERVER_OFFHOST_BACKUP_S3_PREFIX" "ers-backups"
+  set_or_update_env "AWS_SHARED_CREDENTIALS_FILE" "/opt/EnterpriseRemoteSystems/secrets/aws-credentials"
+  set_or_update_env "AWS_PROFILE" "ers-backup"
+else
+  set_or_update_env "SERVER_OFFHOST_BACKUP_ENABLED" "false"
+  set_or_update_env "SERVER_OFFHOST_BACKUP_TRANSPORT" "ssh"
+  set_or_update_env "SERVER_OFFHOST_BACKUP_HOST" ""
+  set_or_update_env "SERVER_OFFHOST_BACKUP_USER" ""
+  set_or_update_env "SERVER_OFFHOST_BACKUP_DIRECTORY" "/srv/ers-backups"
+  set_or_update_env "SERVER_OFFHOST_BACKUP_PORT" "22"
+  set_or_update_env "SERVER_OFFHOST_BACKUP_IDENTITY_FILE" ""
+  set_or_update_env "SERVER_OFFHOST_BACKUP_KNOWN_HOSTS_FILE" ""
+fi
+
 AUTHZ_ACTOR_HEADER_MODE="disabled"
 if [[ "$APP_ENV" == "development" ]]; then
     AUTHZ_ACTOR_HEADER_MODE="bootstrap"
@@ -117,3 +137,4 @@ echo
 echo "IMPORTANT:"
 echo "  1. Edit ${ENV_FILE}."
 echo "  2. Production keeps DEV_SEED_ADMIN=false; demo/test provisioning is not a Production bootstrap path."
+echo "  3. Production requires SERVER_OFFHOST_BACKUP_ENABLED=true, SERVER_OFFHOST_BACKUP_TRANSPORT=s3, a Hetzner endpoint/region/bucket, and an external S3 credentials file before build/up/deploy."
