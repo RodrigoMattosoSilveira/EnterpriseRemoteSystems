@@ -7,12 +7,12 @@ require (
 	github.com/gofiber/fiber/v3 v3.1.0
 	github.com/google/uuid v1.6.0
 	github.com/joho/godotenv v1.5.1
+	github.com/ncruces/go-sqlite3 v0.34.0
 	golang.org/x/crypto v0.50.0
 	gorm.io/gorm v1.31.1
 )
 
 require (
-	github.com/ncruces/go-sqlite3 v0.34.0 // indirect
 	github.com/ncruces/go-sqlite3-wasm/v2 v2.1.35300 // indirect
 	github.com/ncruces/julianday v1.0.0 // indirect
 )

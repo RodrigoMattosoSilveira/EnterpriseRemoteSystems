@@ -137,3 +137,8 @@ The check uses a fake SSH endpoint and verifies:
 - Makefile, environment-contract, initialization, CI, and deployment integration.
 
 The check is included in `make local-check`, CI, and the deployment quality gate.
+
+
+## Production implementation language
+
+Bite 33.3.1 moves off-host configuration, SSH transport, receipt generation, round-trip retrieval, and Bite 33.2 re-verification from `scripts/ers-offhost-backup.py` into the compiled Go command `/app/ers-offhost-backup`. The backend image contains both Go backup commands plus the SSH client required by the current transport. `scripts/run-backup-go-tool.sh` launches the compiled commands from the newly built backend image for deployed environments; Python remains only in regression/test harnesses and is not part of the Production backup runtime.

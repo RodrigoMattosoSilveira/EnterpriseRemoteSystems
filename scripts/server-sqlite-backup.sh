@@ -103,7 +103,7 @@ fi
 docker cp "$BACKUP_CONTAINER:$container_tmp" "$partial"
 mv "$partial" "$target"
 
-python3 "$ROOT_DIR/scripts/ers-backup.py" create-manifest \
+"$ROOT_DIR/scripts/run-backup-go-tool.sh" ers-backup create-manifest \
   --backup "$target" \
   --manifest "$manifest" \
   --environment "$BACKUP_ENVIRONMENT" \
@@ -116,7 +116,7 @@ python3 "$ROOT_DIR/scripts/ers-backup.py" create-manifest \
 # and fail the command so the operator can investigate without losing evidence.
 committed=1
 
-python3 "$ROOT_DIR/scripts/ers-backup.py" prune \
+"$ROOT_DIR/scripts/run-backup-go-tool.sh" ers-backup prune \
   --directory "$BACKUP_DIRECTORY" \
   --retention-count "$BACKUP_RETENTION_COUNT" \
   --retention-days "$BACKUP_RETENTION_DAYS"
