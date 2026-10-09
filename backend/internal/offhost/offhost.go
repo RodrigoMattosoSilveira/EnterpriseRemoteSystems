@@ -2,19 +2,15 @@ package offhost
 
 import (
 	"bufio"
-	"crypto/rand"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"net"
+	"net/url"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
-	"time"
 
 	"enterpriseremotesystems/backend/internal/backup"
 )
@@ -22,23 +18,31 @@ import (
 const (
 	ReceiptSuffix        = ".offhost.json"
 	ReceiptFormatVersion = 1
+	TransportSSH         = "ssh"
+	TransportS3          = "s3"
 )
 
 type Config struct {
-	Environment    string
-	Enabled        bool
+	Environment string
+	Enabled     bool
+	Transport   string
+
 	Host           string
 	User           string
 	Directory      string
 	Port           int
 	IdentityFile   string
 	KnownHostsFile string
+
+	S3Endpoint         string
+	S3Region           string
+	S3Bucket           string
+	S3Prefix           string
+	AWSCredentialsFile string
+	AWSProfile         string
 }
 
-func (c Config) SSHTarget() string {
-	return c.User + "@" + c.Host
-}
-
+func (c Config) SSHTarget() string { return c.User + "@" + c.Host }
 func (c Config) EnvironmentDirectory() string {
 	return strings.TrimRight(c.Directory, "/") + "/" + c.Environment
 }
@@ -51,11 +55,25 @@ type ReceiptSource struct {
 	ManifestSHA256 string `json:"manifest_sha256"`
 }
 
+type S3ObjectRef struct {
+	Key       string `json:"key"`
+	VersionID string `json:"version_id"`
+	SHA256    string `json:"sha256"`
+}
+
 type ReceiptRemote struct {
-	Host      string `json:"host"`
-	User      string `json:"user"`
-	Port      int    `json:"port"`
-	Directory string `json:"directory"`
+	Host      string `json:"host,omitempty"`
+	User      string `json:"user,omitempty"`
+	Port      int    `json:"port,omitempty"`
+	Directory string `json:"directory,omitempty"`
+
+	Endpoint   string       `json:"endpoint,omitempty"`
+	Region     string       `json:"region,omitempty"`
+	Bucket     string       `json:"bucket,omitempty"`
+	Prefix     string       `json:"prefix,omitempty"`
+	Backup     *S3ObjectRef `json:"backup,omitempty"`
+	Manifest   *S3ObjectRef `json:"manifest,omitempty"`
+	ReceiptKey string       `json:"receipt_key,omitempty"`
 }
 
 type ReceiptVerification struct {
@@ -162,6 +180,32 @@ func LoadConfig(environment, envFile string, requireRuntimeFiles bool) (Config, 
 		return Config{}, errors.New("Production requires SERVER_OFFHOST_BACKUP_ENABLED=true so verified backups leave the application host.")
 	}
 
+	transport := strings.ToLower(strings.TrimSpace(values["SERVER_OFFHOST_BACKUP_TRANSPORT"]))
+	if transport == "" && enabled && normalized != "production" {
+		transport = TransportSSH
+	}
+	if normalized == "production" && transport != TransportS3 {
+		return Config{}, errors.New("Production requires SERVER_OFFHOST_BACKUP_TRANSPORT=s3 for Hetzner Object Storage.")
+	}
+	if enabled && transport != TransportSSH && transport != TransportS3 {
+		return Config{}, fmt.Errorf("SERVER_OFFHOST_BACKUP_TRANSPORT must be ssh or s3; got %q", transport)
+	}
+
+	config := Config{Environment: normalized, Enabled: enabled, Transport: transport}
+	if !enabled {
+		return config, nil
+	}
+	switch transport {
+	case TransportSSH:
+		return loadSSHConfig(config, values, requireRuntimeFiles)
+	case TransportS3:
+		return loadS3Config(config, values, requireRuntimeFiles)
+	default:
+		return Config{}, fmt.Errorf("unsupported off-host transport %q", transport)
+	}
+}
+
+func loadSSHConfig(config Config, values map[string]string, requireRuntimeFiles bool) (Config, error) {
 	host := strings.TrimSpace(values["SERVER_OFFHOST_BACKUP_HOST"])
 	user := strings.TrimSpace(values["SERVER_OFFHOST_BACKUP_USER"])
 	directory := strings.TrimSpace(values["SERVER_OFFHOST_BACKUP_DIRECTORY"])
@@ -171,18 +215,6 @@ func LoadConfig(environment, envFile string, requireRuntimeFiles bool) (Config, 
 	}
 	identity := strings.TrimSpace(values["SERVER_OFFHOST_BACKUP_IDENTITY_FILE"])
 	knownHosts := strings.TrimSpace(values["SERVER_OFFHOST_BACKUP_KNOWN_HOSTS_FILE"])
-	if !enabled {
-		return Config{
-			Environment:    normalized,
-			Enabled:        false,
-			Host:           host,
-			User:           user,
-			Directory:      directory,
-			Port:           22,
-			IdentityFile:   firstNonEmpty(identity, "/nonexistent"),
-			KnownHostsFile: firstNonEmpty(knownHosts, "/nonexistent"),
-		}, nil
-	}
 	if host == "" || strings.ContainsAny(host, " \t\r\n") {
 		return Config{}, errors.New("SERVER_OFFHOST_BACKUP_HOST must be a non-empty host name/address without whitespace")
 	}
@@ -206,16 +238,10 @@ func LoadConfig(environment, envFile string, requireRuntimeFiles bool) (Config, 
 	if err != nil || port < 1 || port > 65535 {
 		return Config{}, errors.New("SERVER_OFFHOST_BACKUP_PORT must be an integer from 1 through 65535")
 	}
-	if identity == "" {
-		return Config{}, errors.New("SERVER_OFFHOST_BACKUP_IDENTITY_FILE is required when off-host backup is enabled")
-	}
-	if knownHosts == "" {
-		return Config{}, errors.New("SERVER_OFFHOST_BACKUP_KNOWN_HOSTS_FILE is required when off-host backup is enabled")
-	}
-	if !filepath.IsAbs(identity) {
+	if identity == "" || !filepath.IsAbs(identity) {
 		return Config{}, errors.New("SERVER_OFFHOST_BACKUP_IDENTITY_FILE must be an absolute path")
 	}
-	if !filepath.IsAbs(knownHosts) {
+	if knownHosts == "" || !filepath.IsAbs(knownHosts) {
 		return Config{}, errors.New("SERVER_OFFHOST_BACKUP_KNOWN_HOSTS_FILE must be an absolute path")
 	}
 	if requireRuntimeFiles {
@@ -226,118 +252,89 @@ func LoadConfig(environment, envFile string, requireRuntimeFiles bool) (Config, 
 			return Config{}, fmt.Errorf("off-host SSH known-hosts file does not exist: %s", knownHosts)
 		}
 	}
-	return Config{
-		Environment:    normalized,
-		Enabled:        true,
-		Host:           host,
-		User:           user,
-		Directory:      strings.TrimRight(directory, "/"),
-		Port:           port,
-		IdentityFile:   identity,
-		KnownHostsFile: knownHosts,
-	}, nil
+	config.Host, config.User, config.Directory, config.Port = host, user, strings.TrimRight(directory, "/"), port
+	config.IdentityFile, config.KnownHostsFile = identity, knownHosts
+	return config, nil
 }
 
-func firstNonEmpty(value, fallback string) string {
-	if value != "" {
-		return value
+func loadS3Config(config Config, values map[string]string, requireRuntimeFiles bool) (Config, error) {
+	endpoint := strings.TrimSpace(values["SERVER_OFFHOST_BACKUP_S3_ENDPOINT"])
+	region := strings.ToLower(strings.TrimSpace(values["SERVER_OFFHOST_BACKUP_S3_REGION"]))
+	bucketName := strings.TrimSpace(values["SERVER_OFFHOST_BACKUP_S3_BUCKET"])
+	prefix := strings.Trim(strings.TrimSpace(values["SERVER_OFFHOST_BACKUP_S3_PREFIX"]), "/")
+	credentialsFile := strings.TrimSpace(values["AWS_SHARED_CREDENTIALS_FILE"])
+	profile := strings.TrimSpace(values["AWS_PROFILE"])
+	if prefix == "" {
+		prefix = "ers-backups"
 	}
-	return fallback
-}
-
-func sshBase(config Config) []string {
-	return []string{
-		"-i", config.IdentityFile,
-		"-p", strconv.Itoa(config.Port),
-		"-o", "BatchMode=yes",
-		"-o", "IdentitiesOnly=yes",
-		"-o", "StrictHostKeyChecking=yes",
-		"-o", "UserKnownHostsFile=" + config.KnownHostsFile,
-		config.SSHTarget(),
+	if endpoint == "" {
+		return Config{}, errors.New("SERVER_OFFHOST_BACKUP_S3_ENDPOINT is required when S3 off-host backup is enabled")
 	}
-}
-
-func runSSH(config Config, command string, stdin io.Reader, stdout io.Writer, check bool) ([]byte, error) {
-	args := append(sshBase(config), command)
-	cmd := exec.Command("ssh", args...)
-	if stdin != nil {
-		cmd.Stdin = stdin
+	parsed, err := url.Parse(endpoint)
+	if err != nil || parsed.Host == "" || parsed.User != nil || parsed.RawQuery != "" || parsed.Fragment != "" {
+		return Config{}, errors.New("SERVER_OFFHOST_BACKUP_S3_ENDPOINT must be an absolute S3 endpoint URL without credentials, query, or fragment")
 	}
-	var captured strings.Builder
-	if stdout != nil {
-		cmd.Stdout = stdout
-	} else {
-		cmd.Stdout = &captured
+	if parsed.Scheme != "https" && !(config.Environment != "production" && parsed.Scheme == "http") {
+		return Config{}, errors.New("SERVER_OFFHOST_BACKUP_S3_ENDPOINT must use HTTPS in Production")
 	}
-	var stderr strings.Builder
-	cmd.Stderr = &stderr
-	err := cmd.Run()
-	if check && err != nil {
-		exitCode := 1
-		if exitErr, ok := err.(*exec.ExitError); ok {
-			exitCode = exitErr.ExitCode()
+	if region == "" {
+		return Config{}, errors.New("SERVER_OFFHOST_BACKUP_S3_REGION is required when S3 off-host backup is enabled")
+	}
+	if bucketName == "" || strings.ContainsAny(bucketName, " /\t\r\n") {
+		return Config{}, errors.New("SERVER_OFFHOST_BACKUP_S3_BUCKET must be a non-empty bucket name without whitespace or slashes")
+	}
+	if strings.ContainsAny(prefix, "\r\n") || strings.Contains(prefix, "//") {
+		return Config{}, errors.New("SERVER_OFFHOST_BACKUP_S3_PREFIX must be a normalized object prefix")
+	}
+	if credentialsFile == "" || !filepath.IsAbs(credentialsFile) {
+		return Config{}, errors.New("AWS_SHARED_CREDENTIALS_FILE must be an absolute path for S3 off-host backup")
+	}
+	if profile == "" {
+		return Config{}, errors.New("AWS_PROFILE is required for S3 off-host backup")
+	}
+	if config.Environment == "production" {
+		allowed := map[string]bool{"fsn1": true, "nbg1": true, "hel1": true}
+		if !allowed[region] {
+			return Config{}, errors.New("Production SERVER_OFFHOST_BACKUP_S3_REGION must be fsn1, nbg1, or hel1")
 		}
-		detail := strings.TrimSpace(stderr.String())
-		if detail == "" {
-			detail = "no stderr"
+		expected := "https://" + region + ".your-objectstorage.com"
+		if strings.TrimRight(endpoint, "/") != expected {
+			return Config{}, fmt.Errorf("Production SERVER_OFFHOST_BACKUP_S3_ENDPOINT must be %s for region %s", expected, region)
 		}
-		return nil, fmt.Errorf("SSH transport failed with exit %d while running %q: %s", exitCode, command, detail)
 	}
-	if err != nil && !check {
-		return []byte(captured.String()), nil
+	if requireRuntimeFiles {
+		if info, err := os.Stat(credentialsFile); err != nil || !info.Mode().IsRegular() {
+			return Config{}, fmt.Errorf("S3 credentials file does not exist: %s", credentialsFile)
+		}
+		if _, err := loadS3Credentials(credentialsFile, profile); err != nil {
+			return Config{}, err
+		}
 	}
-	return []byte(captured.String()), nil
+	config.S3Endpoint = strings.TrimRight(endpoint, "/")
+	config.S3Region, config.S3Bucket, config.S3Prefix = region, bucketName, prefix
+	config.AWSCredentialsFile, config.AWSProfile = credentialsFile, profile
+	return config, nil
 }
 
-func shellQuote(value string) string {
-	if value == "" {
-		return "''"
-	}
-	return "'" + strings.ReplaceAll(value, "'", "'\"'\"'") + "'"
-}
+func ReceiptPathFor(backupPath string) string { return backupPath + ReceiptSuffix }
 
-func remotePaths(config Config, backupName string) (string, string, string, string, error) {
-	if filepath.Base(backupName) != backupName || !strings.HasPrefix(backupName, "app-") || !strings.HasSuffix(backupName, ".db") {
-		return "", "", "", "", fmt.Errorf("invalid managed backup filename for off-host storage: %q", backupName)
-	}
-	remoteDir := config.EnvironmentDirectory() + "/" + backupName
-	return remoteDir,
-		remoteDir + "/" + backupName,
-		remoteDir + "/" + backupName + backup.ManifestSuffix,
-		remoteDir + "/" + backupName + ReceiptSuffix,
-		nil
-}
-
-func remoteDirectoryState(config Config, remoteDir string) (string, error) {
-	command := fmt.Sprintf("if [ -d %s ]; then printf directory; elif [ -e %s ]; then printf collision; else printf missing; fi", shellQuote(remoteDir), shellQuote(remoteDir))
-	out, err := runSSH(config, command, nil, nil, true)
+func loadReceipt(path string) (Receipt, error) {
+	file, err := os.Open(path)
 	if err != nil {
-		return "", err
-	}
-	return strings.TrimSpace(string(out)), nil
-}
-
-func uploadFile(config Config, localPath, remotePath string) error {
-	file, err := os.Open(localPath)
-	if err != nil {
-		return err
+		if os.IsNotExist(err) {
+			return Receipt{}, fmt.Errorf("off-host receipt does not exist: %s", path)
+		}
+		return Receipt{}, fmt.Errorf("cannot read off-host receipt %s: %w", path, err)
 	}
 	defer file.Close()
-	_, err = runSSH(config, "umask 077; cat > "+shellQuote(remotePath), file, nil, true)
-	return err
-}
-
-func downloadFile(config Config, remotePath, localPath string) error {
-	file, err := os.Create(localPath)
-	if err != nil {
-		return err
+	var receipt Receipt
+	if err := json.NewDecoder(file).Decode(&receipt); err != nil {
+		return Receipt{}, fmt.Errorf("cannot read off-host receipt %s: %w", path, err)
 	}
-	_, runErr := runSSH(config, "cat -- "+shellQuote(remotePath), nil, file, true)
-	closeErr := file.Close()
-	if runErr != nil {
-		return runErr
+	if receipt.FormatVersion != ReceiptFormatVersion || receipt.Status != "verified" {
+		return Receipt{}, errors.New("off-host receipt format/status is invalid")
 	}
-	return closeErr
+	return receipt, nil
 }
 
 func verifyDownloadedPair(backupPath, manifestPath, environment, expectedBackupSHA, expectedManifestSHA string) (backup.Manifest, error) {
@@ -364,71 +361,6 @@ func verifyDownloadedPair(backupPath, manifestPath, environment, expectedBackupS
 	return payload, nil
 }
 
-func fetchAndVerifyRemote(config Config, backupName, expectedBackupSHA, expectedManifestSHA string) (backup.Manifest, error) {
-	remoteDir, remoteBackup, remoteManifest, _, err := remotePaths(config, backupName)
-	if err != nil {
-		return backup.Manifest{}, err
-	}
-	tempDir, err := os.MkdirTemp("", "ers-offhost-verify-")
-	if err != nil {
-		return backup.Manifest{}, err
-	}
-	defer os.RemoveAll(tempDir)
-	localBackup := filepath.Join(tempDir, backupName)
-	localManifest := filepath.Join(tempDir, backupName+backup.ManifestSuffix)
-	if err := downloadFile(config, remoteBackup, localBackup); err != nil {
-		return backup.Manifest{}, fmt.Errorf("cannot retrieve off-host backup pair from %s: %w", remoteDir, err)
-	}
-	if err := downloadFile(config, remoteManifest, localManifest); err != nil {
-		return backup.Manifest{}, fmt.Errorf("cannot retrieve off-host backup pair from %s: %w", remoteDir, err)
-	}
-	return verifyDownloadedPair(localBackup, localManifest, config.Environment, expectedBackupSHA, expectedManifestSHA)
-}
-
-func ReceiptPathFor(backupPath string) string {
-	return backupPath + ReceiptSuffix
-}
-
-func randomToken() (string, error) {
-	buf := make([]byte, 16)
-	if _, err := rand.Read(buf); err != nil {
-		return "", err
-	}
-	return hex.EncodeToString(buf), nil
-}
-
-func BuildReceipt(config Config, localBackup, localManifest string, payload backup.Manifest, remoteDir string) (Receipt, error) {
-	manifestSHA, err := backup.SHA256File(localManifest)
-	if err != nil {
-		return Receipt{}, err
-	}
-	return Receipt{
-		FormatVersion: ReceiptFormatVersion,
-		Status:        "verified",
-		ReplicatedAt:  time.Now().UTC().Format(time.RFC3339Nano),
-		Environment:   config.Environment,
-		Transport:     "ssh",
-		Source: ReceiptSource{
-			BackupFile:     filepath.Base(localBackup),
-			BackupSHA256:   payload.Backup.SHA256,
-			BackupSize:     payload.Backup.SizeBytes,
-			ManifestFile:   filepath.Base(localManifest),
-			ManifestSHA256: manifestSHA,
-		},
-		Remote: ReceiptRemote{
-			Host:      config.Host,
-			User:      config.User,
-			Port:      config.Port,
-			Directory: remoteDir,
-		},
-		Verification: ReceiptVerification{
-			Method:          "round-trip-download-plus-bite-33.2-full-verification",
-			IntegrityCheck:  "ok",
-			ForeignKeyCheck: []string{},
-		},
-	}, nil
-}
-
 func Replicate(environment, envFile, backupPath, manifestPath string) error {
 	absoluteEnv, err := filepath.Abs(envFile)
 	if err != nil {
@@ -441,99 +373,14 @@ func Replicate(environment, envFile, backupPath, manifestPath string) error {
 	if !config.Enabled {
 		return fmt.Errorf("off-host backup is disabled for %s; set SERVER_OFFHOST_BACKUP_ENABLED=true to replicate explicitly", config.Environment)
 	}
-	absoluteBackup, err := filepath.Abs(backupPath)
-	if err != nil {
-		return err
+	switch config.Transport {
+	case TransportSSH:
+		return replicateSSH(config, backupPath, manifestPath)
+	case TransportS3:
+		return replicateS3(config, backupPath, manifestPath)
+	default:
+		return fmt.Errorf("unsupported off-host transport %q", config.Transport)
 	}
-	absoluteManifest := manifestPath
-	if absoluteManifest == "" {
-		absoluteManifest = backup.ManifestPathFor(absoluteBackup)
-	} else if absoluteManifest, err = filepath.Abs(absoluteManifest); err != nil {
-		return err
-	}
-	payload, err := backup.VerifyPair(absoluteBackup, absoluteManifest, config.Environment, "")
-	if err != nil {
-		return err
-	}
-	localBackupSHA := payload.Backup.SHA256
-	localManifestSHA, err := backup.SHA256File(absoluteManifest)
-	if err != nil {
-		return err
-	}
-	backupName := filepath.Base(absoluteBackup)
-	remoteDir, _, _, remoteReceipt, err := remotePaths(config, backupName)
-	if err != nil {
-		return err
-	}
-	state, err := remoteDirectoryState(config, remoteDir)
-	if err != nil {
-		return err
-	}
-	created := false
-	if state == "collision" {
-		return fmt.Errorf("off-host destination collides with a non-directory path: %s", remoteDir)
-	}
-	if state == "missing" {
-		token, err := randomToken()
-		if err != nil {
-			return err
-		}
-		stage := config.EnvironmentDirectory() + "/.stage-" + backupName + "-" + token
-		if _, err := runSSH(config, "umask 077; mkdir -p -- "+shellQuote(config.EnvironmentDirectory())+" && mkdir -- "+shellQuote(stage), nil, nil, true); err != nil {
-			return err
-		}
-		cleanupStage := true
-		defer func() {
-			if cleanupStage {
-				_, _ = runSSH(config, "rm -rf -- "+shellQuote(stage), nil, nil, false)
-			}
-		}()
-		if err := uploadFile(config, absoluteBackup, stage+"/"+backupName); err != nil {
-			return err
-		}
-		if err := uploadFile(config, absoluteManifest, stage+"/"+filepath.Base(absoluteManifest)); err != nil {
-			return err
-		}
-		publish := "if [ -e " + shellQuote(remoteDir) + "]; then exit 73; fi; mv -- " + shellQuote(stage) + " " + shellQuote(remoteDir)
-		if _, err := runSSH(config, publish, nil, nil, true); err != nil {
-			return err
-		}
-		cleanupStage = false
-		created = true
-	}
-	remotePayload, err := fetchAndVerifyRemote(config, backupName, localBackupSHA, localManifestSHA)
-	if err != nil {
-		if created {
-			_, _ = runSSH(config, "rm -rf -- "+shellQuote(remoteDir), nil, nil, false)
-		}
-		return err
-	}
-	receipt, err := BuildReceipt(config, absoluteBackup, absoluteManifest, remotePayload, remoteDir)
-	if err != nil {
-		return err
-	}
-	tempDir, err := os.MkdirTemp("", "ers-offhost-receipt-")
-	if err != nil {
-		return err
-	}
-	defer os.RemoveAll(tempDir)
-	tempReceipt := filepath.Join(tempDir, filepath.Base(remoteReceipt))
-	if err := backup.WriteJSONAtomic(tempReceipt, receipt); err != nil {
-		return err
-	}
-	if err := uploadFile(config, tempReceipt, remoteReceipt); err != nil {
-		return err
-	}
-	localReceipt := ReceiptPathFor(absoluteBackup)
-	if err := backup.WriteJSONAtomic(localReceipt, receipt); err != nil {
-		return err
-	}
-	fmt.Printf("Off-host backup verification passed: %s\n", backupName)
-	fmt.Printf("Remote: ssh://%s@%s:%d%s\n", config.User, config.Host, config.Port, remoteDir)
-	fmt.Printf("Backup SHA-256: %s\n", localBackupSHA)
-	fmt.Printf("Manifest SHA-256: %s\n", localManifestSHA)
-	fmt.Printf("Receipt: %s\n", localReceipt)
-	return nil
 }
 
 func VerifyReplica(environment, envFile, receiptPath string) error {
@@ -552,21 +399,9 @@ func VerifyReplica(environment, envFile, receiptPath string) error {
 	if err != nil {
 		return err
 	}
-	file, err := os.Open(absoluteReceipt)
+	receipt, err := loadReceipt(absoluteReceipt)
 	if err != nil {
-		if os.IsNotExist(err) {
-			return fmt.Errorf("off-host receipt does not exist: %s", absoluteReceipt)
-		}
-		return fmt.Errorf("cannot read off-host receipt %s: %w", absoluteReceipt, err)
-	}
-	var receipt Receipt
-	decodeErr := json.NewDecoder(file).Decode(&receipt)
-	file.Close()
-	if decodeErr != nil {
-		return fmt.Errorf("cannot read off-host receipt %s: %w", absoluteReceipt, decodeErr)
-	}
-	if receipt.FormatVersion != ReceiptFormatVersion || receipt.Status != "verified" {
-		return errors.New("off-host receipt format/status is invalid")
+		return err
 	}
 	receiptEnvironment, err := normalizeEnvironment(receipt.Environment)
 	if err != nil {
@@ -575,23 +410,15 @@ func VerifyReplica(environment, envFile, receiptPath string) error {
 	if receiptEnvironment != config.Environment {
 		return errors.New("off-host receipt environment does not match the selected environment")
 	}
-	backupName := receipt.Source.BackupFile
-	remoteDir, _, _, _, err := remotePaths(config, backupName)
-	if err != nil {
-		return err
+	if receipt.Transport != config.Transport {
+		return fmt.Errorf("off-host receipt transport %s does not match configured transport %s", receipt.Transport, config.Transport)
 	}
-	if receipt.Remote.Host != config.Host || receipt.Remote.User != config.User || receipt.Remote.Port != config.Port {
-		return errors.New("off-host receipt remote SSH endpoint does not match current configuration")
+	switch config.Transport {
+	case TransportSSH:
+		return verifyReplicaSSH(config, receipt)
+	case TransportS3:
+		return verifyReplicaS3(config, receipt)
+	default:
+		return fmt.Errorf("unsupported off-host transport %q", config.Transport)
 	}
-	if receipt.Remote.Directory != remoteDir {
-		return errors.New("off-host receipt remote directory does not match current configuration")
-	}
-	payload, err := fetchAndVerifyRemote(config, backupName, receipt.Source.BackupSHA256, receipt.Source.ManifestSHA256)
-	if err != nil {
-		return err
-	}
-	fmt.Printf("Off-host replica verification passed: %s\n", backupName)
-	fmt.Printf("Remote: ssh://%s@%s:%d%s\n", config.User, config.Host, config.Port, remoteDir)
-	fmt.Printf("SHA-256: %s\n", payload.Backup.SHA256)
-	return nil
 }

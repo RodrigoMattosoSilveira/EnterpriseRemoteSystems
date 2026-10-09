@@ -54,7 +54,7 @@ Go compiler / go run
 
 The one-off utility container bind-mounts only the selected deployed environment read/write at the same absolute path. Referenced SSH/S3 credential/config files that live outside that environment are mounted individually read-only. This preserves the existing absolute-path contract without granting the backup utility write access to every ERS environment.
 
-The backend runtime image includes `openssh-client` because the current Bite 33.3 transport is SSH. A later S3 transport can reuse the same Go command boundary without reintroducing Python.
+Bite 33.3.2 reuses this Go command boundary for Hetzner S3 in Production. `openssh-client` remains only for optional Development/Test SSH compatibility; Production off-host backup uses the compiled Go S3 implementation and does not require Python or AWS CLI.
 
 ## Behavior preserved from Bite 33.2
 
@@ -74,19 +74,7 @@ The Go backup command preserves:
 
 ## Behavior preserved from Bite 33.3
 
-The Go off-host command preserves:
-
-- Production requirement for enabled off-host backup protection;
-- strict non-loopback destination validation;
-- explicit SSH identity and pinned `known_hosts` files;
-- BatchMode, IdentitiesOnly, and StrictHostKeyChecking;
-- staged remote publication;
-- round-trip re-download;
-- full Bite 33.2 verification of the downloaded copy;
-- backup and manifest SHA-256 equality checks;
-- local and remote receipt creation;
-- remote tamper detection;
-- preservation of an already-existing remote replica that later fails verification.
+The Go off-host command preserves the transport-independent contract: verified local source pair, round-trip re-download, full Bite 33.2 verification, SHA-256 equality, local/remote receipt evidence, and tamper detection. Bite 33.3.2 selects Hetzner S3 as the mandatory Production transport while retaining SSH only for Development/Test compatibility.
 
 ## Tests
 

@@ -97,42 +97,51 @@ validate_production_offhost_backup_contract() {
     exit 2
   fi
 
-  local key
-  for key in SERVER_OFFHOST_BACKUP_HOST SERVER_OFFHOST_BACKUP_USER SERVER_OFFHOST_BACKUP_DIRECTORY SERVER_OFFHOST_BACKUP_IDENTITY_FILE SERVER_OFFHOST_BACKUP_KNOWN_HOSTS_FILE; do
+  value="$(read_env_value "$env_file" SERVER_OFFHOST_BACKUP_TRANSPORT || true)"
+  if [[ "$(lowercase "$value")" != "s3" ]]; then
+    echo "Production environment contract violation: SERVER_OFFHOST_BACKUP_TRANSPORT must be s3 for Hetzner Object Storage." >&2
+    exit 2
+  fi
+
+  local endpoint region bucket prefix credentials_file profile expected_endpoint key
+  endpoint="$(read_env_value "$env_file" SERVER_OFFHOST_BACKUP_S3_ENDPOINT || true)"
+  region="$(lowercase "$(read_env_value "$env_file" SERVER_OFFHOST_BACKUP_S3_REGION || true)")"
+  bucket="$(read_env_value "$env_file" SERVER_OFFHOST_BACKUP_S3_BUCKET || true)"
+  prefix="$(read_env_value "$env_file" SERVER_OFFHOST_BACKUP_S3_PREFIX || true)"
+  credentials_file="$(read_env_value "$env_file" AWS_SHARED_CREDENTIALS_FILE || true)"
+  profile="$(read_env_value "$env_file" AWS_PROFILE || true)"
+
+  for key in SERVER_OFFHOST_BACKUP_S3_ENDPOINT SERVER_OFFHOST_BACKUP_S3_REGION SERVER_OFFHOST_BACKUP_S3_BUCKET SERVER_OFFHOST_BACKUP_S3_PREFIX AWS_SHARED_CREDENTIALS_FILE AWS_PROFILE; do
     value="$(read_env_value "$env_file" "$key" || true)"
     if [[ -z "$value" ]]; then
-      echo "Production environment contract violation: ${key} must be configured for off-host backup protection." >&2
+      echo "Production environment contract violation: ${key} must be configured for Hetzner S3 off-host backup protection." >&2
       exit 2
     fi
   done
 
-  value="$(read_env_value "$env_file" SERVER_OFFHOST_BACKUP_HOST || true)"
-  case "$(lowercase "$value")" in
-    localhost|localhost.|localhost.localdomain|localhost.localdomain.|127.*|::1|\[::1\])
-      echo "Production environment contract violation: SERVER_OFFHOST_BACKUP_HOST must identify a distinct non-loopback host." >&2
+  case "$region" in
+    fsn1|nbg1|hel1) ;;
+    *)
+      echo "Production environment contract violation: SERVER_OFFHOST_BACKUP_S3_REGION must be fsn1, nbg1, or hel1." >&2
       exit 2
       ;;
   esac
-
-  value="$(read_env_value "$env_file" SERVER_OFFHOST_BACKUP_DIRECTORY || true)"
-  if [[ "$value" != /* || "$value" == "/" ]]; then
-    echo "Production environment contract violation: SERVER_OFFHOST_BACKUP_DIRECTORY must be an absolute remote directory other than /." >&2
+  expected_endpoint="https://${region}.your-objectstorage.com"
+  endpoint="${endpoint%/}"
+  if [[ "$endpoint" != "$expected_endpoint" ]]; then
+    echo "Production environment contract violation: SERVER_OFFHOST_BACKUP_S3_ENDPOINT must be ${expected_endpoint} for region ${region}." >&2
     exit 2
   fi
-  value="$(read_env_value "$env_file" SERVER_OFFHOST_BACKUP_IDENTITY_FILE || true)"
-  if [[ "$value" != /* ]]; then
-    echo "Production environment contract violation: SERVER_OFFHOST_BACKUP_IDENTITY_FILE must be an absolute path." >&2
+  if [[ "$bucket" =~ [[:space:]/] ]]; then
+    echo "Production environment contract violation: SERVER_OFFHOST_BACKUP_S3_BUCKET must be a bucket name without whitespace or slashes." >&2
     exit 2
   fi
-  value="$(read_env_value "$env_file" SERVER_OFFHOST_BACKUP_KNOWN_HOSTS_FILE || true)"
-  if [[ "$value" != /* ]]; then
-    echo "Production environment contract violation: SERVER_OFFHOST_BACKUP_KNOWN_HOSTS_FILE must be an absolute path." >&2
+  if [[ "$prefix" == /* || "$prefix" == */ || "$prefix" == *//* ]]; then
+    echo "Production environment contract violation: SERVER_OFFHOST_BACKUP_S3_PREFIX must be a normalized non-empty object prefix without leading/trailing slash." >&2
     exit 2
   fi
-  value="$(read_env_value "$env_file" SERVER_OFFHOST_BACKUP_PORT || true)"
-  value="${value:-22}"
-  if ! [[ "$value" =~ ^[0-9]+$ ]] || (( value < 1 || value > 65535 )); then
-    echo "Production environment contract violation: SERVER_OFFHOST_BACKUP_PORT must be an integer from 1 through 65535." >&2
+  if [[ "$credentials_file" != /* ]]; then
+    echo "Production environment contract violation: AWS_SHARED_CREDENTIALS_FILE must be an absolute path." >&2
     exit 2
   fi
 }
