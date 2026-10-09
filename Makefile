@@ -243,8 +243,11 @@ check-repo:
 	@test -f scripts/dev-backend.sh || (echo "Missing scripts/dev-backend.sh" && exit 1)
 	@test -f scripts/dev-frontend.sh || (echo "Missing scripts/dev-frontend.sh" && exit 1)
 	@test -f scripts/server-sqlite-backup.sh || (echo "Missing scripts/server-sqlite-backup.sh" && exit 1)
-	@test -f scripts/ers-backup.py || (echo "Missing scripts/ers-backup.py" && exit 1)
-	@test -f scripts/ers-offhost-backup.py || (echo "Missing scripts/ers-offhost-backup.py" && exit 1)
+	@test -x scripts/run-backup-go-tool.sh || (echo "Missing executable scripts/run-backup-go-tool.sh" && exit 1)
+	@test -f backend/cmd/ers-backup/main.go || (echo "Missing backend/cmd/ers-backup/main.go" && exit 1)
+	@test -f backend/cmd/ers-offhost-backup/main.go || (echo "Missing backend/cmd/ers-offhost-backup/main.go" && exit 1)
+	@test ! -e scripts/ers-backup.py || (echo "Obsolete Production Python backup tool found: scripts/ers-backup.py" && exit 1)
+	@test ! -e scripts/ers-offhost-backup.py || (echo "Obsolete Production Python off-host tool found: scripts/ers-offhost-backup.py" && exit 1)
 	@test -f scripts/server-public-smoke.sh || (echo "Missing scripts/server-public-smoke.sh" && exit 1)
 	@test -f scripts/test-server-public-smoke.sh || (echo "Missing scripts/test-server-public-smoke.sh" && exit 1)
 	@if [ -d backend/cmd/create-admin ] || [ -d backend/cmd/create-admin.disabled ]; then \
@@ -924,9 +927,12 @@ server-backup:
 	BACKUP_RETENTION_COUNT="$(SERVER_BACKUP_RETENTION_COUNT)" \
 	BACKUP_RETENTION_DAYS="$(SERVER_BACKUP_RETENTION_DAYS)" \
 	BACKUP_RESULT_FILE="$$result_file" \
+	ERS_BACKUP_ENV_DIR="$(ENV_DIR)" \
+	ERS_BACKUP_ENV_FILE="$(ENV_FILE)" \
+	ERS_BACKUP_COMPOSE_PROJECT="$(COMPOSE_PROJECT)" \
 		./scripts/server-sqlite-backup.sh; \
 	backup_file="$$(cat "$$result_file")"; \
-	status="$$(python3 scripts/ers-offhost-backup.py status --environment "$(ENV)" --env-file "$(ENV_DIR)/$(ENV_FILE)")" || exit $$?; \
+	status="$$(ERS_BACKUP_ENV_DIR="$(ENV_DIR)" ERS_BACKUP_ENV_FILE="$(ENV_FILE)" ERS_BACKUP_COMPOSE_PROJECT="$(COMPOSE_PROJECT)" ./scripts/run-backup-go-tool.sh ers-offhost-backup status --environment "$(ENV)" --env-file "$(ENV_DIR)/$(ENV_FILE)")" || exit $$?; \
 	if [[ "$$status" == "enabled" ]]; then \
 		$(MAKE) server-offhost-backup ENV=$(ENV) BACKUP_FILE="$$backup_file"; \
 	else \
@@ -939,14 +945,20 @@ server-backup-verify:
 		echo "BACKUP_FILE is required. Example: make server-backup-verify ENV=$(ENV) BACKUP_FILE=$(ENV_DIR)/backups/app-<timestamp>.db" >&2; \
 		exit 2; \
 	fi
-	@python3 scripts/ers-backup.py verify \
+	@ERS_BACKUP_ENV_DIR="$(ENV_DIR)" \
+	ERS_BACKUP_ENV_FILE="$(ENV_FILE)" \
+	ERS_BACKUP_COMPOSE_PROJECT="$(COMPOSE_PROJECT)" \
+		./scripts/run-backup-go-tool.sh ers-backup verify \
 		--backup "$(BACKUP_FILE)" \
 		--manifest "$(BACKUP_FILE).manifest.json" \
 		--expected-environment "$(ENV)"
 
 .PHONY: server-backup-retention
 server-backup-retention:
-	@python3 scripts/ers-backup.py prune \
+	@ERS_BACKUP_ENV_DIR="$(ENV_DIR)" \
+	ERS_BACKUP_ENV_FILE="$(ENV_FILE)" \
+	ERS_BACKUP_COMPOSE_PROJECT="$(COMPOSE_PROJECT)" \
+		./scripts/run-backup-go-tool.sh ers-backup prune \
 		--directory "$(ENV_DIR)/backups" \
 		--retention-count "$(SERVER_BACKUP_RETENTION_COUNT)" \
 		--retention-days "$(SERVER_BACKUP_RETENTION_DAYS)"
@@ -958,7 +970,10 @@ server-offhost-backup:
 		echo "BACKUP_FILE is required. Example: make server-offhost-backup ENV=$(ENV) BACKUP_FILE=$(ENV_DIR)/backups/app-<timestamp>.db" >&2; \
 		exit 2; \
 	fi
-	@python3 scripts/ers-offhost-backup.py replicate \
+	@ERS_BACKUP_ENV_DIR="$(ENV_DIR)" \
+	ERS_BACKUP_ENV_FILE="$(ENV_FILE)" \
+	ERS_BACKUP_COMPOSE_PROJECT="$(COMPOSE_PROJECT)" \
+		./scripts/run-backup-go-tool.sh ers-offhost-backup replicate \
 		--environment "$(ENV)" \
 		--env-file "$(ENV_DIR)/$(ENV_FILE)" \
 		--backup "$(BACKUP_FILE)"
@@ -969,7 +984,10 @@ server-offhost-backup-verify:
 		echo "BACKUP_FILE is required. Example: make server-offhost-backup-verify ENV=$(ENV) BACKUP_FILE=$(ENV_DIR)/backups/app-<timestamp>.db" >&2; \
 		exit 2; \
 	fi
-	@python3 scripts/ers-offhost-backup.py verify-replica \
+	@ERS_BACKUP_ENV_DIR="$(ENV_DIR)" \
+	ERS_BACKUP_ENV_FILE="$(ENV_FILE)" \
+	ERS_BACKUP_COMPOSE_PROJECT="$(COMPOSE_PROJECT)" \
+		./scripts/run-backup-go-tool.sh ers-offhost-backup verify-replica \
 		--environment "$(ENV)" \
 		--env-file "$(ENV_DIR)/$(ENV_FILE)" \
 		--receipt "$(BACKUP_FILE)$(SERVER_OFFHOST_BACKUP_RECEIPT_SUFFIX)"
