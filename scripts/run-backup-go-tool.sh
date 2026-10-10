@@ -4,16 +4,16 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 if [[ $# -lt 1 ]]; then
-  echo "usage: $0 ers-backup|ers-offhost-backup [arguments...]" >&2
+  echo "usage: $0 ers-backup|ers-offhost-backup|ers-restore [arguments...]" >&2
   exit 2
 fi
 
 tool="$1"
 shift
 case "$tool" in
-  ers-backup|ers-offhost-backup) ;;
+  ers-backup|ers-offhost-backup|ers-restore) ;;
   *)
-    echo "unsupported ERS backup Go tool: $tool" >&2
+    echo "unsupported ERS backup/recovery Go tool: $tool" >&2
     exit 2
     ;;
 esac
@@ -23,7 +23,7 @@ esac
 if [[ -n "${ERS_BACKUP_TOOL_BINARY_DIR:-}" ]]; then
   binary="${ERS_BACKUP_TOOL_BINARY_DIR%/}/$tool"
   if [[ ! -x "$binary" ]]; then
-    echo "ERS backup Go binary is missing or not executable: $binary" >&2
+    echo "ERS backup/recovery Go binary is missing or not executable: $binary" >&2
     exit 2
   fi
   exec "$binary" "$@"

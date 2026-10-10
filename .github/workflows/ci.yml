@@ -80,6 +80,9 @@ jobs:
       - name: Verify Bite 33.3 off-host backup protection
         run: make off-host-backup-protection-check
 
+      - name: Verify Bite 33.4 restore tooling and recovery verification
+        run: make restore-tooling-recovery-verification-check
+
       - name: Rehearse pre-30I database through final 30I migration
         run: make migration-rehearsal-check
 

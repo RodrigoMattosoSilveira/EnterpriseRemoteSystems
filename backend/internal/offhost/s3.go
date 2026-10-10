@@ -248,6 +248,47 @@ func (c *s3Client) getFile(key, versionID, localPath string) error {
 	return closeErr
 }
 
+func (c *s3Client) getLatestFile(key, localPath string) (string, error) {
+	target, err := c.objectURL(key, "")
+	if err != nil {
+		return "", err
+	}
+	emptyHash := sha256HexBytes(nil)
+	req, err := http.NewRequest(http.MethodGet, target.String(), nil)
+	if err != nil {
+		return "", err
+	}
+	c.sign(req, emptyHash, time.Now())
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("S3 GET latest %s failed: %w", key, err)
+	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return "", responseError(resp, "GET latest "+key)
+	}
+	defer resp.Body.Close()
+	versionID := strings.TrimSpace(resp.Header.Get("x-amz-version-id"))
+	if versionID == "" || versionID == "null" {
+		return "", fmt.Errorf("S3 GET latest %s did not return a non-null x-amz-version-id", key)
+	}
+	if err := os.MkdirAll(filepath.Dir(localPath), 0o755); err != nil {
+		return "", err
+	}
+	out, err := os.Create(localPath)
+	if err != nil {
+		return "", err
+	}
+	_, copyErr := io.Copy(out, resp.Body)
+	closeErr := out.Close()
+	if copyErr != nil {
+		return "", copyErr
+	}
+	if closeErr != nil {
+		return "", closeErr
+	}
+	return versionID, nil
+}
+
 func s3Keys(config Config, backupName string) (string, string, string, error) {
 	if filepath.Base(backupName) != backupName || !strings.HasPrefix(backupName, "app-") || !strings.HasSuffix(backupName, ".db") {
 		return "", "", "", fmt.Errorf("invalid managed backup filename for off-host storage: %q", backupName)
@@ -382,7 +423,7 @@ func replicateS3(config Config, backupPath, manifestPath string) error {
 	return nil
 }
 
-func verifyReplicaS3(config Config, receipt Receipt) error {
+func validateS3ReceiptConfig(config Config, receipt Receipt) error {
 	if strings.TrimRight(receipt.Remote.Endpoint, "/") != config.S3Endpoint || receipt.Remote.Region != config.S3Region || receipt.Remote.Bucket != config.S3Bucket || strings.Trim(receipt.Remote.Prefix, "/") != strings.Trim(config.S3Prefix, "/") {
 		return errors.New("off-host receipt S3 endpoint/region/bucket/prefix does not match current configuration")
 	}
@@ -395,6 +436,13 @@ func verifyReplicaS3(config Config, receipt Receipt) error {
 	}
 	if receipt.Remote.Backup.Key != expectedDBKey || receipt.Remote.Manifest.Key != expectedManifestKey || receipt.Remote.ReceiptKey != expectedReceiptKey {
 		return errors.New("off-host receipt S3 object keys do not match current configuration")
+	}
+	return nil
+}
+
+func verifyReplicaS3(config Config, receipt Receipt) error {
+	if err := validateS3ReceiptConfig(config, receipt); err != nil {
+		return err
 	}
 	client, err := newS3Client(config)
 	if err != nil {
@@ -409,4 +457,100 @@ func verifyReplicaS3(config Config, receipt Receipt) error {
 	fmt.Printf("VersionId: %s\n", receipt.Remote.Backup.VersionID)
 	fmt.Printf("SHA-256: %s\n", payload.Backup.SHA256)
 	return nil
+}
+
+func materializeReplicaS3(config Config, receipt Receipt, outputDirectory string) (MaterializedReplica, error) {
+	if err := validateS3ReceiptConfig(config, receipt); err != nil {
+		return MaterializedReplica{}, err
+	}
+	client, err := newS3Client(config)
+	if err != nil {
+		return MaterializedReplica{}, err
+	}
+	backupPath := filepath.Join(outputDirectory, receipt.Source.BackupFile)
+	manifestPath := filepath.Join(outputDirectory, receipt.Source.ManifestFile)
+	receiptPath := filepath.Join(outputDirectory, receipt.Source.BackupFile+ReceiptSuffix)
+	for _, path := range []string{backupPath, manifestPath, receiptPath} {
+		if _, err := os.Stat(path); err == nil {
+			return MaterializedReplica{}, fmt.Errorf("refusing to overwrite existing recovery artifact: %s", path)
+		} else if !os.IsNotExist(err) {
+			return MaterializedReplica{}, err
+		}
+	}
+	tempDir, err := os.MkdirTemp(outputDirectory, ".ers-s3-recovery-")
+	if err != nil {
+		return MaterializedReplica{}, err
+	}
+	defer os.RemoveAll(tempDir)
+	tempBackup := filepath.Join(tempDir, receipt.Source.BackupFile)
+	tempManifest := filepath.Join(tempDir, receipt.Source.ManifestFile)
+	if err := client.getFile(receipt.Remote.Backup.Key, receipt.Remote.Backup.VersionID, tempBackup); err != nil {
+		return MaterializedReplica{}, err
+	}
+	if err := client.getFile(receipt.Remote.Manifest.Key, receipt.Remote.Manifest.VersionID, tempManifest); err != nil {
+		return MaterializedReplica{}, err
+	}
+	if _, err := verifyDownloadedPair(tempBackup, tempManifest, config.Environment, receipt.Source.BackupSHA256, receipt.Source.ManifestSHA256); err != nil {
+		return MaterializedReplica{}, err
+	}
+	if err := os.Chmod(tempBackup, 0o600); err != nil {
+		return MaterializedReplica{}, err
+	}
+	if err := os.Chmod(tempManifest, 0o600); err != nil {
+		return MaterializedReplica{}, err
+	}
+	if err := os.Rename(tempBackup, backupPath); err != nil {
+		return MaterializedReplica{}, err
+	}
+	if err := os.Rename(tempManifest, manifestPath); err != nil {
+		_ = os.Remove(backupPath)
+		return MaterializedReplica{}, err
+	}
+	return MaterializedReplica{BackupPath: backupPath, ManifestPath: manifestPath, ReceiptPath: receiptPath}, nil
+}
+
+func materializeS3ReplicaByBackupName(config Config, backupName, outputDirectory string) (MaterializedReplica, error) {
+	_, _, receiptKey, err := s3Keys(config, backupName)
+	if err != nil {
+		return MaterializedReplica{}, err
+	}
+	client, err := newS3Client(config)
+	if err != nil {
+		return MaterializedReplica{}, err
+	}
+	tempDir, err := os.MkdirTemp(outputDirectory, ".ers-s3-receipt-bootstrap-")
+	if err != nil {
+		return MaterializedReplica{}, err
+	}
+	defer os.RemoveAll(tempDir)
+	tempReceipt := filepath.Join(tempDir, backupName+ReceiptSuffix)
+	receiptVersionID, err := client.getLatestFile(receiptKey, tempReceipt)
+	if err != nil {
+		return MaterializedReplica{}, err
+	}
+	receipt, err := loadReceipt(tempReceipt)
+	if err != nil {
+		return MaterializedReplica{}, err
+	}
+	receiptEnvironment, err := normalizeEnvironment(receipt.Environment)
+	if err != nil {
+		return MaterializedReplica{}, err
+	}
+	if receiptEnvironment != config.Environment || receipt.Transport != TransportS3 {
+		return MaterializedReplica{}, errors.New("remote S3 receipt environment/transport does not match current configuration")
+	}
+	if receipt.Source.BackupFile != backupName {
+		return MaterializedReplica{}, fmt.Errorf("remote S3 receipt describes backup %q, expected %q", receipt.Source.BackupFile, backupName)
+	}
+	materialized, err := materializeReplicaS3(config, receipt, outputDirectory)
+	if err != nil {
+		return MaterializedReplica{}, err
+	}
+	if err := copyFileAtomic(tempReceipt, materialized.ReceiptPath, 0o600); err != nil {
+		_ = os.Remove(materialized.BackupPath)
+		_ = os.Remove(materialized.ManifestPath)
+		return MaterializedReplica{}, err
+	}
+	materialized.ReceiptVersionID = receiptVersionID
+	return materialized, nil
 }
