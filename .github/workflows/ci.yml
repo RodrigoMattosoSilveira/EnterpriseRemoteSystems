@@ -83,6 +83,9 @@ jobs:
       - name: Verify Bite 33.4 restore tooling and recovery verification
         run: make restore-tooling-recovery-verification-check
 
+      - name: Verify Bite 33.5 migration/deployment recovery gate
+        run: make migration-deployment-recovery-gate-check
+
       - name: Rehearse pre-30I database through final 30I migration
         run: make migration-rehearsal-check
 
