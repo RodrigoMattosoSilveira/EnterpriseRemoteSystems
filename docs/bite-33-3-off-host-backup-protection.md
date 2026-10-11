@@ -144,3 +144,7 @@ The check is included in `make local-check`, CI, and the deployment quality gate
 ## Production implementation language
 
 All Production backup/off-host behavior remains compiled Go. Python is used only by regression/test harnesses. The Production S3 client uses AWS Signature Version 4 over Go's standard HTTP/crypto libraries and therefore does not add an AWS CLI dependency to the Production runtime.
+
+## Bite 33.4 recovery handoff
+
+Bite 33.4 adds `ers-offhost-backup materialize`, which turns a verified 33.3 receipt into a local recovery candidate by retrieving the exact recorded database and manifest `VersionId`s and re-running the full Bite 33.2 verification contract. The materialized pair is then consumed by the 33.4 restore tooling; 33.3 itself still does not replace a live database.

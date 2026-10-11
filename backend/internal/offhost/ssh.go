@@ -257,3 +257,56 @@ func verifyReplicaSSH(config Config, receipt Receipt) error {
 	fmt.Printf("SHA-256: %s\n", payload.Backup.SHA256)
 	return nil
 }
+
+func materializeReplicaSSH(config Config, receipt Receipt, outputDirectory string) (MaterializedReplica, error) {
+	if receipt.Remote.Host != config.Host || receipt.Remote.User != config.User || receipt.Remote.Port != config.Port {
+		return MaterializedReplica{}, errors.New("off-host receipt SSH endpoint does not match current configuration")
+	}
+	remoteDir, remoteBackup, remoteManifest, _, err := remotePaths(config, receipt.Source.BackupFile)
+	if err != nil {
+		return MaterializedReplica{}, err
+	}
+	if receipt.Remote.Directory != remoteDir {
+		return MaterializedReplica{}, errors.New("off-host receipt SSH directory does not match current configuration")
+	}
+	backupPath := filepath.Join(outputDirectory, receipt.Source.BackupFile)
+	manifestPath := filepath.Join(outputDirectory, receipt.Source.ManifestFile)
+	receiptPath := filepath.Join(outputDirectory, receipt.Source.BackupFile+ReceiptSuffix)
+	for _, path := range []string{backupPath, manifestPath, receiptPath} {
+		if _, err := os.Stat(path); err == nil {
+			return MaterializedReplica{}, fmt.Errorf("refusing to overwrite existing recovery artifact: %s", path)
+		} else if !os.IsNotExist(err) {
+			return MaterializedReplica{}, err
+		}
+	}
+	tempDir, err := os.MkdirTemp(outputDirectory, ".ers-ssh-recovery-")
+	if err != nil {
+		return MaterializedReplica{}, err
+	}
+	defer os.RemoveAll(tempDir)
+	tempBackup := filepath.Join(tempDir, receipt.Source.BackupFile)
+	tempManifest := filepath.Join(tempDir, receipt.Source.ManifestFile)
+	if err := downloadFile(config, remoteBackup, tempBackup); err != nil {
+		return MaterializedReplica{}, err
+	}
+	if err := downloadFile(config, remoteManifest, tempManifest); err != nil {
+		return MaterializedReplica{}, err
+	}
+	if _, err := verifyDownloadedPair(tempBackup, tempManifest, config.Environment, receipt.Source.BackupSHA256, receipt.Source.ManifestSHA256); err != nil {
+		return MaterializedReplica{}, err
+	}
+	if err := os.Chmod(tempBackup, 0o600); err != nil {
+		return MaterializedReplica{}, err
+	}
+	if err := os.Chmod(tempManifest, 0o600); err != nil {
+		return MaterializedReplica{}, err
+	}
+	if err := os.Rename(tempBackup, backupPath); err != nil {
+		return MaterializedReplica{}, err
+	}
+	if err := os.Rename(tempManifest, manifestPath); err != nil {
+		_ = os.Remove(backupPath)
+		return MaterializedReplica{}, err
+	}
+	return MaterializedReplica{BackupPath: backupPath, ManifestPath: manifestPath, ReceiptPath: receiptPath}, nil
+}

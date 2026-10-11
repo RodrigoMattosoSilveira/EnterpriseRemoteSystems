@@ -18,7 +18,7 @@ func main() {
 
 func run(args []string) error {
 	if len(args) == 0 {
-		return fmt.Errorf("command is required: status, check-config, replicate, or verify-replica")
+		return fmt.Errorf("command is required: status, check-config, replicate, verify-replica, or materialize")
 	}
 	switch args[0] {
 	case "status":
@@ -29,6 +29,8 @@ func run(args []string) error {
 		return replicate(args[1:])
 	case "verify-replica":
 		return verifyReplica(args[1:])
+	case "materialize":
+		return materialize(args[1:])
 	default:
 		return fmt.Errorf("unknown command %q", args[0])
 	}
@@ -122,4 +124,43 @@ func verifyReplica(args []string) error {
 		return fmt.Errorf("--environment, --env-file, and --receipt are required")
 	}
 	return offhost.VerifyReplica(*environment, *envFile, *receipt)
+}
+
+func materialize(args []string) error {
+	fs := flag.NewFlagSet("materialize", flag.ContinueOnError)
+	environment := fs.String("environment", "", "environment")
+	envFile := fs.String("env-file", "", "environment file")
+	receipt := fs.String("receipt", "", "local off-host receipt path")
+	backupName := fs.String("backup-name", "", "managed backup filename used to bootstrap the protected S3 receipt when the local receipt is unavailable")
+	outputDirectory := fs.String("output-dir", "", "directory for verified recovery artifacts")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if *environment == "" || *envFile == "" || *outputDirectory == "" {
+		return fmt.Errorf("--environment, --env-file, and --output-dir are required")
+	}
+	if (*receipt == "") == (*backupName == "") {
+		return fmt.Errorf("exactly one of --receipt or --backup-name is required")
+	}
+
+	var (
+		payload offhost.MaterializedReplica
+		err     error
+	)
+	if *receipt != "" {
+		payload, err = offhost.MaterializeReplica(*environment, *envFile, *receipt, *outputDirectory)
+	} else {
+		payload, err = offhost.MaterializeS3ReplicaByBackupName(*environment, *envFile, *backupName, *outputDirectory)
+	}
+	if err != nil {
+		return err
+	}
+	fmt.Printf("Off-host recovery candidate materialized and verified.\n")
+	fmt.Printf("Backup: %s\n", payload.BackupPath)
+	fmt.Printf("Manifest: %s\n", payload.ManifestPath)
+	fmt.Printf("Receipt: %s\n", payload.ReceiptPath)
+	if payload.ReceiptVersionID != "" {
+		fmt.Printf("Receipt VersionId: %s\n", payload.ReceiptVersionID)
+	}
+	return nil
 }

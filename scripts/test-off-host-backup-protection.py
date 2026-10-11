@@ -96,8 +96,13 @@ class FakeS3State:
             self.versions.setdefault((bucket, key), []).append(version)
             return version
 
-    def get(self, bucket: str, key: str, version: str) -> bytes | None:
-        return self.objects.get((bucket, key, version))
+    def get(self, bucket: str, key: str, version: str) -> tuple[bytes | None, str]:
+        with self.lock:
+            resolved = version
+            if not resolved:
+                versions = self.versions.get((bucket, key), [])
+                resolved = versions[-1] if versions else ""
+            return self.objects.get((bucket, key, resolved)), resolved
 
 
 class FakeS3Handler(BaseHTTPRequestHandler):
@@ -173,10 +178,10 @@ class FakeS3Handler(BaseHTTPRequestHandler):
         if not self._authorized(b""):
             self.send_error(403, "bad signature"); return
         version = urllib.parse.parse_qs(parsed.query).get("versionId", [""])[0]
-        data = self.state.get(bucket, key, version)
+        data, resolved_version = self.state.get(bucket, key, version)
         if data is None:
             self.send_error(404); return
-        self.send_response(200); self.send_header("Content-Length", str(len(data))); self.send_header("x-amz-version-id", version); self.end_headers(); self.wfile.write(data)
+        self.send_response(200); self.send_header("Content-Length", str(len(data))); self.send_header("x-amz-version-id", resolved_version); self.end_headers(); self.wfile.write(data)
 
 
 def start_fake_s3():
@@ -206,14 +211,46 @@ def test_s3_round_trip(backup_tool: Path, offhost_tool: Path):
             db_ref = receipt["remote"]["backup"]; manifest_ref = receipt["remote"]["manifest"]
             before = (len(state.versions[("ers-test", db_ref["key"])]), len(state.versions[("ers-test", manifest_ref["key"])]))
             p = run([str(offhost_tool), "verify-replica", "--environment", "development", "--env-file", str(cfg), "--receipt", str(receipt_path)]); ok(p, "S3 exact-version verify")
+            recovery = root / "recovery"
+            bad(run([str(offhost_tool), "materialize", "--environment", "development", "--env-file", str(cfg), "--output-dir", str(root / "missing-source")]), "materialize missing source", "exactly one of --receipt or --backup-name is required")
+            bad(run([str(offhost_tool), "materialize", "--environment", "development", "--env-file", str(cfg), "--receipt", str(receipt_path), "--backup-name", b.name, "--output-dir", str(root / "two-sources")]), "materialize conflicting sources", "exactly one of --receipt or --backup-name is required")
+            p = run([str(offhost_tool), "materialize", "--environment", "development", "--env-file", str(cfg), "--receipt", str(receipt_path), "--output-dir", str(recovery)]); ok(p, "S3 exact-version recovery materialization")
+            recovered_db = recovery / b.name; recovered_manifest = recovery / m.name; recovered_receipt = recovery / receipt_path.name
+            if not recovered_db.is_file() or not recovered_manifest.is_file() or not recovered_receipt.is_file():
+                raise AssertionError("off-host materialization did not produce database, manifest, and receipt")
+            if hashlib.sha256(recovered_db.read_bytes()).hexdigest() != receipt["source"]["backup_sha256"]:
+                raise AssertionError("materialized S3 database checksum does not match receipt")
+            p = run([str(backup_tool), "verify", "--backup", str(recovered_db), "--manifest", str(recovered_manifest), "--expected-environment", "development"]); ok(p, "materialized S3 pair full verification")
+            bad(run([str(offhost_tool), "materialize", "--environment", "development", "--env-file", str(cfg), "--receipt", str(receipt_path), "--output-dir", str(recovery)]), "materialize overwrite refusal", "refusing to overwrite existing recovery artifact")
             hidden_db = root / "hidden.db"; hidden_manifest = root / "hidden.manifest.json"; b.rename(hidden_db); m.rename(hidden_manifest)
             p = run([str(offhost_tool), "verify-replica", "--environment", "development", "--env-file", str(cfg), "--receipt", str(receipt_path)]); ok(p, "S3 verify without local backup pair")
             hidden_db.rename(b); hidden_manifest.rename(m)
             p = run([str(offhost_tool), "replicate", "--environment", "development", "--env-file", str(cfg), "--backup", str(b)]); ok(p, "S3 idempotent retry")
             after = (len(state.versions[("ers-test", db_ref["key"])]), len(state.versions[("ers-test", manifest_ref["key"])]))
             if before != after: raise AssertionError(f"retry created replacement object versions: before={before} after={after}")
+
+            # Catastrophic-host-loss recovery must not depend on the local receipt.
+            # Bootstrap the protected receipt from S3 by the managed backup filename,
+            # then use its exact DB/manifest VersionIds to materialize the candidate.
+            receipt_path.unlink()
+            bootstrap_recovery = root / "bootstrap-recovery"
+            p = run([str(offhost_tool), "materialize", "--environment", "development", "--env-file", str(cfg), "--backup-name", b.name, "--output-dir", str(bootstrap_recovery)]); ok(p, "S3 recovery bootstrap by backup name")
+            if "Receipt VersionId:" not in p.stdout:
+                raise AssertionError("S3 recovery bootstrap did not report the protected receipt VersionId")
+            boot_db = bootstrap_recovery / b.name
+            boot_manifest = bootstrap_recovery / m.name
+            boot_receipt = bootstrap_recovery / (b.name + ".offhost.json")
+            if not boot_db.is_file() or not boot_manifest.is_file() or not boot_receipt.is_file():
+                raise AssertionError("S3 receipt bootstrap did not materialize database, manifest, and receipt")
+            if hashlib.sha256(boot_db.read_bytes()).hexdigest() != receipt["source"]["backup_sha256"]:
+                raise AssertionError("S3 bootstrap database checksum does not match original receipt")
+            boot_payload = json.loads(boot_receipt.read_text())
+            if boot_payload["remote"]["backup"]["version_id"] != db_ref["version_id"] or boot_payload["remote"]["manifest"]["version_id"] != manifest_ref["version_id"]:
+                raise AssertionError("S3 bootstrap receipt did not preserve exact database/manifest VersionIds")
+            p = run([str(backup_tool), "verify", "--backup", str(boot_db), "--manifest", str(boot_manifest), "--expected-environment", "development"]); ok(p, "bootstrapped S3 pair full verification")
+
             state.objects[("ers-test", db_ref["key"], db_ref["version_id"])] += b"tamper"
-            p = run([str(offhost_tool), "verify-replica", "--environment", "development", "--env-file", str(cfg), "--receipt", str(receipt_path)]); bad(p, "tampered exact S3 version", "mismatch")
+            p = run([str(offhost_tool), "verify-replica", "--environment", "development", "--env-file", str(cfg), "--receipt", str(boot_receipt)]); bad(p, "tampered exact S3 version", "mismatch")
             if state.authenticated_requests < 6: raise AssertionError("fake S3 endpoint did not observe signed requests")
     finally:
         server.shutdown(); server.server_close()
@@ -242,7 +279,7 @@ def test_config(offhost_tool: Path):
 
 def test_repository_contract():
     make = (ROOT / "Makefile").read_text(); docker = (BACKEND / "Dockerfile").read_text(); guard = (ROOT / "scripts" / "ers-environment-guard.sh").read_text(); ci = (ROOT / ".github/workflows/ci.yml").read_text(); deploy = (ROOT / ".github/workflows/deploy.yml").read_text(); example = (BACKEND / ".env.production.example").read_text()
-    for frag in ("server-offhost-backup:", "server-offhost-backup-verify:", "run-backup-go-tool.sh ers-offhost-backup status", "run-backup-go-tool.sh ers-offhost-backup replicate", "off-host-backup-protection-check"):
+    for frag in ("server-offhost-backup:", "server-offhost-backup-verify:", "run-backup-go-tool.sh ers-offhost-backup status", "run-backup-go-tool.sh ers-offhost-backup replicate", "ers-offhost-backup materialize", "off-host-backup-protection-check"):
         if frag not in make: raise AssertionError(f"Makefile missing {frag}")
     if "python3 scripts/ers-offhost-backup.py" in make or (ROOT / "scripts" / "ers-offhost-backup.py").exists(): raise AssertionError("Production off-host Python implementation still exists")
     for frag in ("go build -o /out/ers-offhost-backup ./cmd/ers-offhost-backup", "COPY --from=builder /out/ers-offhost-backup /app/ers-offhost-backup"):

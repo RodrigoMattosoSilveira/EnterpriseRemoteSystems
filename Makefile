@@ -72,6 +72,10 @@ SERVER_BACKUP_RETENTION_DAYS ?= 30
 # in the selected deployed environment file. Development/Test may opt in.
 SERVER_OFFHOST_BACKUP_RECEIPT_SUFFIX ?= .offhost.json
 
+# Bite 33.4 recovery workspace. Restore apply accepts only candidates staged
+# beneath this selected environment directory.
+SERVER_RECOVERY_DIR ?= $(ENV_DIR)/recovery
+
 # ==============================================================================
 # Help
 # ==============================================================================
@@ -106,6 +110,7 @@ help:
 	@echo "  make production-environment-guardrails-check"
 	@echo "  make backup-creation-retention-verification-check"
 	@echo "  make off-host-backup-protection-check"
+	@echo "  make restore-tooling-recovery-verification-check"
 	@echo "  make migration-check"
 	@echo "  make migration-rehearsal-check"
 	@echo "  make local-docker-check"
@@ -152,6 +157,11 @@ help:
 	@echo "  make server-backup-retention ENV=development|test|production [SERVER_BACKUP_RETENTION_COUNT=14 SERVER_BACKUP_RETENTION_DAYS=30]"
 	@echo "  make server-offhost-backup ENV=development|test|production BACKUP_FILE=<path-to-app-*.db>"
 	@echo "  make server-offhost-backup-verify ENV=development|test|production BACKUP_FILE=<path-to-app-*.db>"
+	@echo "  make server-restore-prepare-local ENV=development|test|production BACKUP_FILE=<verified-local-backup>"
+	@echo "  make server-restore-materialize-offhost ENV=development|test|production RECEIPT_FILE=<local-offhost-receipt>"
+	@echo "    or: make server-restore-materialize-offhost ENV=development|test|production OFFHOST_BACKUP_NAME=app-<timestamp>.db"
+	@echo "  make server-restore-verify ENV=development|test|production RECOVERY_BACKUP_FILE=<staged-recovery-app-*.db>"
+	@echo "  make server-restore-apply ENV=development|test|production RECOVERY_BACKUP_FILE=<staged-recovery-app-*.db> RESTORE_CONFIRM=RESTORE-<ENVIRONMENT>"
 	@echo "  Normal server targets force AUTHZ bootstrap off; deliberate recovery: SERVER_AUTHZ_BOOTSTRAP_ENABLED=true make server-up ENV=<env>"
 	@echo "  make testdata-server-reset ENV=development|test"
 	@echo
@@ -187,6 +197,11 @@ help:
 	@echo "  make server-prod-backup"
 	@echo "  make server-prod-offhost-backup BACKUP_FILE=<path-to-app-*.db>"
 	@echo "  make server-prod-offhost-backup-verify BACKUP_FILE=<path-to-app-*.db>"
+	@echo "  make server-prod-restore-prepare-local BACKUP_FILE=<verified-local-backup>"
+	@echo "  make server-prod-restore-materialize-offhost RECEIPT_FILE=<local-offhost-receipt>"
+	@echo "    or: make server-prod-restore-materialize-offhost OFFHOST_BACKUP_NAME=app-<timestamp>.db"
+	@echo "  make server-prod-restore-verify RECOVERY_BACKUP_FILE=<staged-recovery-app-*.db>"
+	@echo "  make server-prod-restore-apply RECOVERY_BACKUP_FILE=<staged-recovery-app-*.db> RESTORE_CONFIRM=RESTORE-PRODUCTION"
 	@echo
 	@echo "Edge proxy:"
 	@echo "  make edge-init"
@@ -246,6 +261,9 @@ check-repo:
 	@test -x scripts/run-backup-go-tool.sh || (echo "Missing executable scripts/run-backup-go-tool.sh" && exit 1)
 	@test -f backend/cmd/ers-backup/main.go || (echo "Missing backend/cmd/ers-backup/main.go" && exit 1)
 	@test -f backend/cmd/ers-offhost-backup/main.go || (echo "Missing backend/cmd/ers-offhost-backup/main.go" && exit 1)
+	@test -f backend/cmd/ers-restore/main.go || (echo "Missing backend/cmd/ers-restore/main.go" && exit 1)
+	@test -f backend/internal/restore/restore.go || (echo "Missing backend/internal/restore/restore.go" && exit 1)
+	@test -x scripts/server-sqlite-restore.sh || (echo "Missing executable scripts/server-sqlite-restore.sh" && exit 1)
 	@test ! -e scripts/ers-backup.py || (echo "Obsolete Production Python backup tool found: scripts/ers-backup.py" && exit 1)
 	@test ! -e scripts/ers-offhost-backup.py || (echo "Obsolete Production Python off-host tool found: scripts/ers-offhost-backup.py" && exit 1)
 	@test -f scripts/server-public-smoke.sh || (echo "Missing scripts/server-public-smoke.sh" && exit 1)
@@ -448,6 +466,10 @@ backup-creation-retention-verification-check:
 off-host-backup-protection-check:
 	python3 scripts/test-off-host-backup-protection.py
 
+.PHONY: restore-tooling-recovery-verification-check
+restore-tooling-recovery-verification-check:
+	python3 scripts/test-restore-tooling-recovery-verification.py
+
 .PHONY: local-check
 local-check:
 	$(MAKE) bite30l4-coverage-manifest-check
@@ -459,6 +481,7 @@ local-check:
 	$(MAKE) production-environment-guardrails-check
 	$(MAKE) backup-creation-retention-verification-check
 	$(MAKE) off-host-backup-protection-check
+	$(MAKE) restore-tooling-recovery-verification-check
 	$(MAKE) local-hot-reload-check
 	$(MAKE) local-auth-cookie-config-check
 	$(MAKE) server-public-smoke-script-check
@@ -514,7 +537,7 @@ local-docker-check: local-docker-check-image
 		-e GOMODCACHE=/tmp/gomod \
 		-e NPM_CONFIG_CACHE=/tmp/npm-cache \
 		$(LOCAL_DOCKER_CHECK_IMAGE) \
-		bash -lc 'set -euo pipefail; make bite30l4-coverage-manifest-check; make bite32-release-coverage-check; make bite326-release-hardening-check; make post-bite30-backlog-reconciliation-check; make deployed-playwright-evidence-check; make production-release-evidence-check; make production-environment-guardrails-check; make local-hot-reload-check; make local-auth-cookie-config-check; make server-authz-bootstrap-config-check; make legacy-identity-dependency-check; make brazilian-demo-presentation-check; make migration-rehearsal-check; cd backend && go clean -testcache && go test ./...; cd ../frontend && npm ci && npm run test:run && npx playwright install chromium && npx playwright test && npm run build'
+		bash -lc 'set -euo pipefail; make bite30l4-coverage-manifest-check; make bite32-release-coverage-check; make bite326-release-hardening-check; make post-bite30-backlog-reconciliation-check; make deployed-playwright-evidence-check; make production-release-evidence-check; make production-environment-guardrails-check; make backup-creation-retention-verification-check; make off-host-backup-protection-check; make restore-tooling-recovery-verification-check; make local-hot-reload-check; make local-auth-cookie-config-check; make server-authz-bootstrap-config-check; make legacy-identity-dependency-check; make brazilian-demo-presentation-check; make migration-rehearsal-check; cd backend && go clean -testcache && go test ./...; cd ../frontend && npm ci && npm run test:run && npx playwright install chromium && npx playwright test && npm run build'
 
 # ==============================================================================
 # Generic server environment targets
@@ -992,6 +1015,103 @@ server-offhost-backup-verify:
 		--env-file "$(ENV_DIR)/$(ENV_FILE)" \
 		--receipt "$(BACKUP_FILE)$(SERVER_OFFHOST_BACKUP_RECEIPT_SUFFIX)"
 
+
+.PHONY: server-restore-prepare-local
+server-restore-prepare-local:
+	@if [[ -z "$(BACKUP_FILE)" ]]; then \
+		echo "BACKUP_FILE is required. Example: make server-restore-prepare-local ENV=$(ENV) BACKUP_FILE=$(ENV_DIR)/backups/app-<timestamp>.db" >&2; \
+		exit 2; \
+	fi
+	@$(MAKE) server-environment-contract-check ENV=$(ENV)
+	@base="$$(basename "$(BACKUP_FILE)" .db)"; \
+	stamp="$$(date -u +%Y%m%dT%H%M%SZ)"; \
+	out="$(SERVER_RECOVERY_DIR)/local-$${stamp}-$${base}"; \
+	mkdir -p "$$out"; chmod 700 "$$out"; \
+	ERS_BACKUP_ENV_DIR="$(ENV_DIR)" ERS_BACKUP_ENV_FILE="$(ENV_FILE)" ERS_BACKUP_COMPOSE_PROJECT="$(COMPOSE_PROJECT)" \
+		./scripts/run-backup-go-tool.sh ers-restore stage \
+			--backup "$(BACKUP_FILE)" \
+			--manifest "$(BACKUP_FILE).manifest.json" \
+			--expected-environment "$(ENV)" \
+			--output-dir "$$out"; \
+	echo "Recovery candidate directory: $$out"
+
+.PHONY: server-restore-materialize-offhost
+server-restore-materialize-offhost:
+	@if [[ -z "$(RECEIPT_FILE)" && -z "$(OFFHOST_BACKUP_NAME)" ]]; then \
+		echo "Exactly one recovery source is required: RECEIPT_FILE=<local-offhost-receipt> or OFFHOST_BACKUP_NAME=app-<timestamp>.db" >&2; \
+		exit 2; \
+	fi
+	@if [[ -n "$(RECEIPT_FILE)" && -n "$(OFFHOST_BACKUP_NAME)" ]]; then \
+		echo "Specify only one of RECEIPT_FILE or OFFHOST_BACKUP_NAME, not both." >&2; \
+		exit 2; \
+	fi
+	@$(MAKE) server-environment-contract-check ENV=$(ENV)
+	@if [[ -n "$(RECEIPT_FILE)" ]]; then \
+		base="$$(basename "$(RECEIPT_FILE)" .offhost.json)"; \
+		source_args=(--receipt "$(RECEIPT_FILE)"); \
+	else \
+		base="$$(basename "$(OFFHOST_BACKUP_NAME)" .db)"; \
+		source_args=(--backup-name "$(OFFHOST_BACKUP_NAME)"); \
+	fi; \
+	stamp="$$(date -u +%Y%m%dT%H%M%SZ)"; \
+	out="$(SERVER_RECOVERY_DIR)/offhost-$${stamp}-$${base}"; \
+	mkdir -p "$$out"; chmod 700 "$$out"; \
+	ERS_BACKUP_ENV_DIR="$(ENV_DIR)" ERS_BACKUP_ENV_FILE="$(ENV_FILE)" ERS_BACKUP_COMPOSE_PROJECT="$(COMPOSE_PROJECT)" \
+		./scripts/run-backup-go-tool.sh ers-offhost-backup materialize \
+			--environment "$(ENV)" \
+			--env-file "$(ENV_DIR)/$(ENV_FILE)" \
+			"$${source_args[@]}" \
+			--output-dir "$$out"; \
+	echo "Recovery candidate directory: $$out"
+
+.PHONY: server-restore-verify
+server-restore-verify:
+	@if [[ -z "$(RECOVERY_BACKUP_FILE)" ]]; then \
+		echo "RECOVERY_BACKUP_FILE is required. It must point under $(SERVER_RECOVERY_DIR)." >&2; \
+		exit 2; \
+	fi
+	@$(MAKE) server-environment-contract-check ENV=$(ENV)
+	@case "$(RECOVERY_BACKUP_FILE)" in "$(SERVER_RECOVERY_DIR)"/*) ;; *) echo "Refusing recovery candidate outside $(SERVER_RECOVERY_DIR)/" >&2; exit 2 ;; esac
+	@ERS_BACKUP_ENV_DIR="$(ENV_DIR)" ERS_BACKUP_ENV_FILE="$(ENV_FILE)" ERS_BACKUP_COMPOSE_PROJECT="$(COMPOSE_PROJECT)" \
+		./scripts/run-backup-go-tool.sh ers-restore verify \
+			--backup "$(RECOVERY_BACKUP_FILE)" \
+			--manifest "$(RECOVERY_BACKUP_FILE).manifest.json" \
+			--expected-environment "$(ENV)"
+
+.PHONY: server-restore-apply
+server-restore-apply:
+	@if [[ -z "$(RECOVERY_BACKUP_FILE)" ]]; then \
+		echo "RECOVERY_BACKUP_FILE is required. Prepare/materialize a verified candidate under $(SERVER_RECOVERY_DIR) first." >&2; \
+		exit 2; \
+	fi
+	@if [[ -z "$(RESTORE_CONFIRM)" ]]; then \
+		echo "RESTORE_CONFIRM is required. Expected RESTORE-DEVELOPMENT, RESTORE-TEST, or RESTORE-PRODUCTION for the selected ENV." >&2; \
+		exit 2; \
+	fi
+	@expected="RESTORE-$$(printf '%s' "$(ENV)" | tr '[:lower:]' '[:upper:]')"; \
+	if [[ "$(RESTORE_CONFIRM)" != "$$expected" ]]; then \
+		echo "Restore confirmation mismatch: expected $$expected" >&2; \
+		exit 2; \
+	fi
+	@case "$(RECOVERY_BACKUP_FILE)" in "$(SERVER_RECOVERY_DIR)"/*) ;; *) echo "Refusing recovery candidate outside $(SERVER_RECOVERY_DIR)/" >&2; exit 2 ;; esac
+	@$(MAKE) server-environment-contract-check ENV=$(ENV)
+	@$(MAKE) server-restore-verify ENV=$(ENV) RECOVERY_BACKUP_FILE="$(RECOVERY_BACKUP_FILE)"
+	@container="$(CONTAINER_PREFIX)-backend"; \
+	if docker ps --format '{{.Names}}' | grep -qx "$$container"; then \
+		echo "Creating a fresh verified pre-restore backup of the running $(ENV) database."; \
+		$(MAKE) server-backup ENV=$(ENV); \
+	else \
+		echo "Backend $$container is not running; the restore tool will preserve the current volume database as an unverified pre-restore copy if it exists."; \
+	fi
+	@RESTORE_ENVIRONMENT="$(ENV)" \
+	RESTORE_ENV_DIR="$(ENV_DIR)" \
+	RESTORE_ENV_FILE="$(ENV_FILE)" \
+	RESTORE_COMPOSE_PROJECT="$(COMPOSE_PROJECT)" \
+	RESTORE_CONTAINER="$(CONTAINER_PREFIX)-backend" \
+	RESTORE_BACKUP_FILE="$(RECOVERY_BACKUP_FILE)" \
+	RESTORE_CONFIRM="$(RESTORE_CONFIRM)" \
+		./scripts/server-sqlite-restore.sh
+
 .PHONY: server-reset-admin
 server-reset-admin:
 	@./scripts/ers-environment-guard.sh require-non-production "$(ENV)" "server administrator reset"
@@ -1276,6 +1396,23 @@ server-prod-offhost-backup:
 .PHONY: server-prod-offhost-backup-verify
 server-prod-offhost-backup-verify:
 	$(MAKE) server-offhost-backup-verify ENV=production BACKUP_FILE="$(BACKUP_FILE)"
+
+
+.PHONY: server-prod-restore-prepare-local
+server-prod-restore-prepare-local:
+	$(MAKE) server-restore-prepare-local ENV=production BACKUP_FILE="$(BACKUP_FILE)"
+
+.PHONY: server-prod-restore-materialize-offhost
+server-prod-restore-materialize-offhost:
+	$(MAKE) server-restore-materialize-offhost ENV=production RECEIPT_FILE="$(RECEIPT_FILE)" OFFHOST_BACKUP_NAME="$(OFFHOST_BACKUP_NAME)"
+
+.PHONY: server-prod-restore-verify
+server-prod-restore-verify:
+	$(MAKE) server-restore-verify ENV=production RECOVERY_BACKUP_FILE="$(RECOVERY_BACKUP_FILE)"
+
+.PHONY: server-prod-restore-apply
+server-prod-restore-apply:
+	$(MAKE) server-restore-apply ENV=production RECOVERY_BACKUP_FILE="$(RECOVERY_BACKUP_FILE)" RESTORE_CONFIRM="$(RESTORE_CONFIRM)"
 
 .PHONY: server-prod-reset-admin
 server-prod-reset-admin:

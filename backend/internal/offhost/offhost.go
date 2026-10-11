@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"net/url"
 	"os"
@@ -91,6 +92,16 @@ type Receipt struct {
 	Source        ReceiptSource       `json:"source"`
 	Remote        ReceiptRemote       `json:"remote"`
 	Verification  ReceiptVerification `json:"verification"`
+}
+
+// MaterializedReplica is a locally materialized, fully verified copy of the exact
+// off-host backup evidence described by a receipt. Paths preserve the original
+// managed backup filenames so the Bite 33.2 manifest remains directly usable.
+type MaterializedReplica struct {
+	BackupPath       string
+	ManifestPath     string
+	ReceiptPath      string
+	ReceiptVersionID string
 }
 
 func normalizeEnvironment(raw string) (string, error) {
@@ -421,4 +432,132 @@ func VerifyReplica(environment, envFile, receiptPath string) error {
 	default:
 		return fmt.Errorf("unsupported off-host transport %q", config.Transport)
 	}
+}
+
+func MaterializeReplica(environment, envFile, receiptPath, outputDirectory string) (MaterializedReplica, error) {
+	absoluteEnv, err := filepath.Abs(envFile)
+	if err != nil {
+		return MaterializedReplica{}, err
+	}
+	config, err := LoadConfig(environment, absoluteEnv, true)
+	if err != nil {
+		return MaterializedReplica{}, err
+	}
+	if !config.Enabled {
+		return MaterializedReplica{}, fmt.Errorf("off-host backup is disabled for %s", config.Environment)
+	}
+	absoluteReceipt, err := filepath.Abs(receiptPath)
+	if err != nil {
+		return MaterializedReplica{}, err
+	}
+	receipt, err := loadReceipt(absoluteReceipt)
+	if err != nil {
+		return MaterializedReplica{}, err
+	}
+	receiptEnvironment, err := normalizeEnvironment(receipt.Environment)
+	if err != nil {
+		return MaterializedReplica{}, err
+	}
+	if receiptEnvironment != config.Environment {
+		return MaterializedReplica{}, errors.New("off-host receipt environment does not match the selected environment")
+	}
+	if receipt.Transport != config.Transport {
+		return MaterializedReplica{}, fmt.Errorf("off-host receipt transport %s does not match configured transport %s", receipt.Transport, config.Transport)
+	}
+	absoluteOutput, err := filepath.Abs(outputDirectory)
+	if err != nil {
+		return MaterializedReplica{}, err
+	}
+	if err := os.MkdirAll(absoluteOutput, 0o700); err != nil {
+		return MaterializedReplica{}, err
+	}
+	var materialized MaterializedReplica
+	switch config.Transport {
+	case TransportSSH:
+		materialized, err = materializeReplicaSSH(config, receipt, absoluteOutput)
+	case TransportS3:
+		materialized, err = materializeReplicaS3(config, receipt, absoluteOutput)
+	default:
+		err = fmt.Errorf("unsupported off-host transport %q", config.Transport)
+	}
+	if err != nil {
+		return MaterializedReplica{}, err
+	}
+	if err := copyFileAtomic(absoluteReceipt, materialized.ReceiptPath, 0o600); err != nil {
+		_ = os.Remove(materialized.BackupPath)
+		_ = os.Remove(materialized.ManifestPath)
+		return MaterializedReplica{}, err
+	}
+	return materialized, nil
+}
+
+func MaterializeS3ReplicaByBackupName(environment, envFile, backupName, outputDirectory string) (MaterializedReplica, error) {
+	absoluteEnv, err := filepath.Abs(envFile)
+	if err != nil {
+		return MaterializedReplica{}, err
+	}
+	config, err := LoadConfig(environment, absoluteEnv, true)
+	if err != nil {
+		return MaterializedReplica{}, err
+	}
+	if !config.Enabled {
+		return MaterializedReplica{}, fmt.Errorf("off-host backup is disabled for %s", config.Environment)
+	}
+	if config.Transport != TransportS3 {
+		return MaterializedReplica{}, errors.New("remote receipt bootstrap by backup name requires S3 off-host transport")
+	}
+	if filepath.Base(backupName) != backupName {
+		return MaterializedReplica{}, errors.New("--backup-name must be a managed backup filename without a path")
+	}
+	absoluteOutput, err := filepath.Abs(outputDirectory)
+	if err != nil {
+		return MaterializedReplica{}, err
+	}
+	if err := os.MkdirAll(absoluteOutput, 0o700); err != nil {
+		return MaterializedReplica{}, err
+	}
+	return materializeS3ReplicaByBackupName(config, backupName, absoluteOutput)
+}
+
+func copyFileAtomic(source, destination string, mode os.FileMode) error {
+	if _, err := os.Stat(destination); err == nil {
+		return fmt.Errorf("refusing to overwrite existing recovery artifact: %s", destination)
+	} else if !os.IsNotExist(err) {
+		return err
+	}
+	in, err := os.Open(source)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+	temp, err := os.CreateTemp(filepath.Dir(destination), ".ers-recovery-*")
+	if err != nil {
+		return err
+	}
+	tempPath := temp.Name()
+	cleanup := func() { _ = os.Remove(tempPath) }
+	if _, err := io.Copy(temp, in); err != nil {
+		temp.Close()
+		cleanup()
+		return err
+	}
+	if err := temp.Chmod(mode); err != nil {
+		temp.Close()
+		cleanup()
+		return err
+	}
+	if err := temp.Sync(); err != nil {
+		temp.Close()
+		cleanup()
+		return err
+	}
+	if err := temp.Close(); err != nil {
+		cleanup()
+		return err
+	}
+	if err := os.Rename(tempPath, destination); err != nil {
+		cleanup()
+		return err
+	}
+	return nil
 }

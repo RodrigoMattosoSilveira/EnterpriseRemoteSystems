@@ -10,7 +10,8 @@ RUN CGO_ENABLED=0 GOOS=linux \
     go build -o /out/import-people ./cmd/import-people && \
     go build -o /out/provision-e2e-admin ./cmd/provision-e2e-admin && \
     go build -o /out/ers-backup ./cmd/ers-backup && \
-    go build -o /out/ers-offhost-backup ./cmd/ers-offhost-backup
+    go build -o /out/ers-offhost-backup ./cmd/ers-offhost-backup && \
+    go build -o /out/ers-restore ./cmd/ers-restore
 
 FROM debian:bookworm-slim AS runtime
 RUN apt-get update \
@@ -22,6 +23,7 @@ COPY --from=builder /out/import-people /app/import-people
 COPY --from=builder /out/provision-e2e-admin /app/provision-e2e-admin
 COPY --from=builder /out/ers-backup /app/ers-backup
 COPY --from=builder /out/ers-offhost-backup /app/ers-offhost-backup
+COPY --from=builder /out/ers-restore /app/ers-restore
 COPY migrations /app/migrations
 COPY docker-entrypoint.sh /app/docker-entrypoint.sh
 COPY build-development-db.sh /app/build-development-db.sh

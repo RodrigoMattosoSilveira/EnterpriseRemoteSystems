@@ -369,29 +369,76 @@ func LoadManifest(path string) (Manifest, error) {
 	return manifest, nil
 }
 
-func VerifyPair(backupPath, manifestPath, expectedEnvironment, expectedSourceDatabasePath string) (Manifest, error) {
-	manifest, err := LoadManifest(manifestPath)
-	if err != nil {
-		return Manifest{}, err
-	}
+func VerifyDatabaseAgainstManifest(databasePath string, manifest Manifest, expectedEnvironment string) error {
 	if manifest.FormatVersion != FormatVersion {
-		return Manifest{}, fmt.Errorf("unsupported backup manifest format_version: %d", manifest.FormatVersion)
+		return fmt.Errorf("unsupported backup manifest format_version: %d", manifest.FormatVersion)
 	}
 	if manifest.Status != "verified" {
-		return Manifest{}, fmt.Errorf("backup manifest status is not verified: %q", manifest.Status)
+		return fmt.Errorf("backup manifest status is not verified: %q", manifest.Status)
 	}
 	environment, err := NormalizeEnvironment(manifest.Environment)
 	if err != nil {
-		return Manifest{}, err
+		return err
 	}
 	if expectedEnvironment != "" {
 		expected, err := NormalizeEnvironment(expectedEnvironment)
 		if err != nil {
-			return Manifest{}, err
+			return err
 		}
 		if environment != expected {
-			return Manifest{}, fmt.Errorf("backup environment mismatch: expected %s, manifest declares %s", expected, environment)
+			return fmt.Errorf("backup environment mismatch: expected %s, manifest declares %s", expected, environment)
 		}
+	}
+	info, err := os.Stat(databasePath)
+	actualSize := int64(-1)
+	if err == nil {
+		actualSize = info.Size()
+	}
+	if manifest.Backup.SizeBytes != actualSize {
+		return fmt.Errorf("backup size mismatch: manifest=%d actual=%d", manifest.Backup.SizeBytes, actualSize)
+	}
+	actualSHA, err := SHA256File(databasePath)
+	if err != nil {
+		return err
+	}
+	if manifest.Backup.SHA256 != actualSHA {
+		return fmt.Errorf("backup SHA-256 mismatch: manifest=%q actual=%s", manifest.Backup.SHA256, actualSHA)
+	}
+	inspection, err := Inspect(databasePath)
+	if err != nil {
+		return err
+	}
+	if !reflect.DeepEqual(manifest.Verification.RequiredTables, RequiredTables) {
+		return errors.New("backup manifest required_tables does not match the current 33.2 contract")
+	}
+	if manifest.Verification.IntegrityCheck != inspection.IntegrityCheck {
+		return errors.New("backup manifest integrity_check evidence does not match re-verification")
+	}
+	if manifest.Verification.ForeignKeyCheck != inspection.ForeignKeyCheck {
+		return errors.New("backup manifest foreign_key_check evidence does not match re-verification")
+	}
+	if manifest.Verification.SchemaMigrationCount != inspection.SchemaMigrationCount {
+		return errors.New("backup schema migration count changed since manifest creation")
+	}
+	if manifest.Verification.LatestSchemaMigration != inspection.LatestSchemaMigration {
+		return errors.New("backup latest schema migration changed since manifest creation")
+	}
+	if !reflect.DeepEqual(manifest.Verification.RecordCounts, inspection.RecordCounts) {
+		return errors.New("backup core record counts changed since manifest creation")
+	}
+	if _, err := ParseUTC(manifest.CreatedAt); err != nil {
+		return err
+	}
+	if _, err := ParseUTC(manifest.Verification.VerifiedAt); err != nil {
+		return err
+	}
+	return nil
+}
+
+func VerifyPair(backupPath, manifestPath, expectedEnvironment, expectedSourceDatabasePath string) (Manifest, error) {
+	manifest, err := LoadManifest(manifestPath)
+	if err != nil {
+		return Manifest{}, err
 	}
 	if manifest.Backup.File != filepath.Base(backupPath) {
 		return Manifest{}, fmt.Errorf("backup filename mismatch: manifest declares %q, actual file is %q", manifest.Backup.File, filepath.Base(backupPath))
@@ -399,47 +446,7 @@ func VerifyPair(backupPath, manifestPath, expectedEnvironment, expectedSourceDat
 	if expectedSourceDatabasePath != "" && manifest.Source.DatabasePath != expectedSourceDatabasePath {
 		return Manifest{}, fmt.Errorf("backup source database mismatch: expected %q, manifest declares %q", expectedSourceDatabasePath, manifest.Source.DatabasePath)
 	}
-	info, err := os.Stat(backupPath)
-	actualSize := int64(-1)
-	if err == nil {
-		actualSize = info.Size()
-	}
-	if manifest.Backup.SizeBytes != actualSize {
-		return Manifest{}, fmt.Errorf("backup size mismatch: manifest=%d actual=%d", manifest.Backup.SizeBytes, actualSize)
-	}
-	actualSHA, err := SHA256File(backupPath)
-	if err != nil {
-		return Manifest{}, err
-	}
-	if manifest.Backup.SHA256 != actualSHA {
-		return Manifest{}, fmt.Errorf("backup SHA-256 mismatch: manifest=%q actual=%s", manifest.Backup.SHA256, actualSHA)
-	}
-	inspection, err := Inspect(backupPath)
-	if err != nil {
-		return Manifest{}, err
-	}
-	if !reflect.DeepEqual(manifest.Verification.RequiredTables, RequiredTables) {
-		return Manifest{}, errors.New("backup manifest required_tables does not match the current 33.2 contract")
-	}
-	if manifest.Verification.IntegrityCheck != inspection.IntegrityCheck {
-		return Manifest{}, errors.New("backup manifest integrity_check evidence does not match re-verification")
-	}
-	if manifest.Verification.ForeignKeyCheck != inspection.ForeignKeyCheck {
-		return Manifest{}, errors.New("backup manifest foreign_key_check evidence does not match re-verification")
-	}
-	if manifest.Verification.SchemaMigrationCount != inspection.SchemaMigrationCount {
-		return Manifest{}, errors.New("backup schema migration count changed since manifest creation")
-	}
-	if manifest.Verification.LatestSchemaMigration != inspection.LatestSchemaMigration {
-		return Manifest{}, errors.New("backup latest schema migration changed since manifest creation")
-	}
-	if !reflect.DeepEqual(manifest.Verification.RecordCounts, inspection.RecordCounts) {
-		return Manifest{}, errors.New("backup core record counts changed since manifest creation")
-	}
-	if _, err := ParseUTC(manifest.CreatedAt); err != nil {
-		return Manifest{}, err
-	}
-	if _, err := ParseUTC(manifest.Verification.VerifiedAt); err != nil {
+	if err := VerifyDatabaseAgainstManifest(backupPath, manifest, expectedEnvironment); err != nil {
 		return Manifest{}, err
 	}
 	return manifest, nil
