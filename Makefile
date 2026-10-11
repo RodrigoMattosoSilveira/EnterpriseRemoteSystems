@@ -76,6 +76,10 @@ SERVER_OFFHOST_BACKUP_RECEIPT_SUFFIX ?= .offhost.json
 # beneath this selected environment directory.
 SERVER_RECOVERY_DIR ?= $(ENV_DIR)/recovery
 
+# Bite 33.5 migration/deployment recovery gate. A successful offline migration
+# remains armed until the newly started application passes health/schema checks.
+SERVER_MIGRATION_GATE_STATE ?= $(SERVER_RECOVERY_DIR)/migration-gates/current.state
+
 # ==============================================================================
 # Help
 # ==============================================================================
@@ -111,6 +115,7 @@ help:
 	@echo "  make backup-creation-retention-verification-check"
 	@echo "  make off-host-backup-protection-check"
 	@echo "  make restore-tooling-recovery-verification-check"
+	@echo "  make migration-deployment-recovery-gate-check"
 	@echo "  make migration-check"
 	@echo "  make migration-rehearsal-check"
 	@echo "  make local-docker-check"
@@ -162,6 +167,9 @@ help:
 	@echo "    or: make server-restore-materialize-offhost ENV=development|test|production OFFHOST_BACKUP_NAME=app-<timestamp>.db"
 	@echo "  make server-restore-verify ENV=development|test|production RECOVERY_BACKUP_FILE=<staged-recovery-app-*.db>"
 	@echo "  make server-restore-apply ENV=development|test|production RECOVERY_BACKUP_FILE=<staged-recovery-app-*.db> RESTORE_CONFIRM=RESTORE-<ENVIRONMENT>"
+	@echo "  make server-migration-recovery-gate ENV=development|test|production"
+	@echo "  make server-migration-recovery-commit ENV=development|test|production"
+	@echo "  make server-migration-recovery-rollback ENV=development|test|production"
 	@echo "  Normal server targets force AUTHZ bootstrap off; deliberate recovery: SERVER_AUTHZ_BOOTSTRAP_ENABLED=true make server-up ENV=<env>"
 	@echo "  make testdata-server-reset ENV=development|test"
 	@echo
@@ -470,6 +478,10 @@ off-host-backup-protection-check:
 restore-tooling-recovery-verification-check:
 	python3 scripts/test-restore-tooling-recovery-verification.py
 
+.PHONY: migration-deployment-recovery-gate-check
+migration-deployment-recovery-gate-check:
+	python3 scripts/test-migration-deployment-recovery-gate.py
+
 .PHONY: local-check
 local-check:
 	$(MAKE) bite30l4-coverage-manifest-check
@@ -482,6 +494,7 @@ local-check:
 	$(MAKE) backup-creation-retention-verification-check
 	$(MAKE) off-host-backup-protection-check
 	$(MAKE) restore-tooling-recovery-verification-check
+	$(MAKE) migration-deployment-recovery-gate-check
 	$(MAKE) local-hot-reload-check
 	$(MAKE) local-auth-cookie-config-check
 	$(MAKE) server-public-smoke-script-check
@@ -537,7 +550,7 @@ local-docker-check: local-docker-check-image
 		-e GOMODCACHE=/tmp/gomod \
 		-e NPM_CONFIG_CACHE=/tmp/npm-cache \
 		$(LOCAL_DOCKER_CHECK_IMAGE) \
-		bash -lc 'set -euo pipefail; make bite30l4-coverage-manifest-check; make bite32-release-coverage-check; make bite326-release-hardening-check; make post-bite30-backlog-reconciliation-check; make deployed-playwright-evidence-check; make production-release-evidence-check; make production-environment-guardrails-check; make backup-creation-retention-verification-check; make off-host-backup-protection-check; make restore-tooling-recovery-verification-check; make local-hot-reload-check; make local-auth-cookie-config-check; make server-authz-bootstrap-config-check; make legacy-identity-dependency-check; make brazilian-demo-presentation-check; make migration-rehearsal-check; cd backend && go clean -testcache && go test ./...; cd ../frontend && npm ci && npm run test:run && npx playwright install chromium && npx playwright test && npm run build'
+		bash -lc 'set -euo pipefail; make bite30l4-coverage-manifest-check; make bite32-release-coverage-check; make bite326-release-hardening-check; make post-bite30-backlog-reconciliation-check; make deployed-playwright-evidence-check; make production-release-evidence-check; make production-environment-guardrails-check; make backup-creation-retention-verification-check; make off-host-backup-protection-check; make restore-tooling-recovery-verification-check; make migration-deployment-recovery-gate-check; make local-hot-reload-check; make local-auth-cookie-config-check; make server-authz-bootstrap-config-check; make legacy-identity-dependency-check; make brazilian-demo-presentation-check; make migration-rehearsal-check; cd backend && go clean -testcache && go test ./...; cd ../frontend && npm ci && npm run test:run && npx playwright install chromium && npx playwright test && npm run build'
 
 # ==============================================================================
 # Generic server environment targets
@@ -1122,6 +1135,42 @@ server-reset-admin:
 		"DELETE FROM users WHERE email = '$$ADMIN_EMAIL';"; \
 	docker restart $(CONTAINER_PREFIX)-backend; \
 	echo "Deleted and reseeded admin for $(ENV): $$ADMIN_EMAIL"
+
+
+.PHONY: server-migration-recovery-gate
+server-migration-recovery-gate:
+	@$(MAKE) server-environment-contract-check ENV=$(ENV)
+	@MIGRATION_ENVIRONMENT="$(ENV)" \
+	MIGRATION_ENV_DIR="$(ENV_DIR)" \
+	MIGRATION_ENV_FILE="$(ENV_FILE)" \
+	MIGRATION_COMPOSE_PROJECT="$(COMPOSE_PROJECT)" \
+	MIGRATION_CONTAINER="$(CONTAINER_PREFIX)-backend" \
+	MIGRATION_VOLUME="$(COMPOSE_PROJECT)_backend-data" \
+	MIGRATION_EXPECTED_FINAL_MIGRATION="$(DEPLOYMENT_FINAL_MIGRATION)" \
+	MIGRATION_BACKUP_RETENTION_COUNT="$(SERVER_BACKUP_RETENTION_COUNT)" \
+	MIGRATION_BACKUP_RETENTION_DAYS="$(SERVER_BACKUP_RETENTION_DAYS)" \
+	MIGRATION_STATE_FILE="$(SERVER_MIGRATION_GATE_STATE)" \
+		./scripts/server-migration-recovery-gate.sh
+
+.PHONY: server-migration-recovery-rollback
+server-migration-recovery-rollback:
+	@MIGRATION_ENVIRONMENT="$(ENV)" \
+	MIGRATION_ENV_DIR="$(ENV_DIR)" \
+	MIGRATION_ENV_FILE="$(ENV_FILE)" \
+	MIGRATION_COMPOSE_PROJECT="$(COMPOSE_PROJECT)" \
+	MIGRATION_STATE_FILE="$(SERVER_MIGRATION_GATE_STATE)" \
+		./scripts/server-migration-recovery-rollback.sh
+
+.PHONY: server-migration-recovery-commit
+server-migration-recovery-commit:
+	@MIGRATION_ENVIRONMENT="$(ENV)" \
+	MIGRATION_ENV_DIR="$(ENV_DIR)" \
+	MIGRATION_ENV_FILE="$(ENV_FILE)" \
+	MIGRATION_COMPOSE_PROJECT="$(COMPOSE_PROJECT)" \
+	MIGRATION_CONTAINER="$(CONTAINER_PREFIX)-backend" \
+	MIGRATION_EXPECTED_FINAL_MIGRATION="$(DEPLOYMENT_FINAL_MIGRATION)" \
+	MIGRATION_STATE_FILE="$(SERVER_MIGRATION_GATE_STATE)" \
+		./scripts/server-migration-recovery-commit.sh
 
 # ==============================================================================
 # Development aliases

@@ -76,6 +76,9 @@ jobs:
       - name: Verify Bite 33.4 restore tooling and recovery verification
         run: make restore-tooling-recovery-verification-check
 
+      - name: Verify Bite 33.5 migration/deployment recovery gate
+        run: make migration-deployment-recovery-gate-check
+
       - name: Set up Go
         uses: actions/setup-go@v6
         with:
@@ -400,18 +403,22 @@ jobs:
 
              make ${{ steps.target.outputs.make_prefix }}-build
 
+             RECOVERY_GATE_REQUIRED=false
              case '${{ steps.target.outputs.database_strategy }}' in
                replace-fresh)
                  echo 'Replacing disposable Development database from the current migration chain.'
                  make server-replace-development-db ENV=development
                  ;;
                restore-baseline+migrate-in-place)
-                 echo 'Restoring the known pre-release Test baseline; backend startup will migrate it in place.'
+                 echo 'Restoring the known pre-release Test baseline before the explicit offline migration/recovery gate.'
                  make server-test-rehearsal-restore ENV=test
+                 make server-migration-recovery-gate ENV=test
+                 RECOVERY_GATE_REQUIRED=true
                  ;;
                migrate-in-place)
-                 echo 'Preserving ${{ steps.target.outputs.env_name }} database; taking a verified backup before in-place migration.'
-                 make server-backup ENV='${{ steps.target.outputs.env_name }}'
+                 echo 'Preparing verified backup/recovery evidence, rehearsing migrations on a clone, then migrating the live database offline.'
+                 make server-migration-recovery-gate ENV='${{ steps.target.outputs.env_name }}'
+                 RECOVERY_GATE_REQUIRED=true
                  ;;
                *)
                  echo 'Unsupported database strategy: ${{ steps.target.outputs.database_strategy }}'
@@ -419,22 +426,44 @@ jobs:
                  ;;
              esac
 
+             rollback_gate() {
+               if [[ "\$RECOVERY_GATE_REQUIRED" == 'true' ]]; then
+                 echo 'Deployment verification failed while the migration recovery gate is armed; restoring the pre-migration database.'
+                 make server-migration-recovery-rollback ENV='${{ steps.target.outputs.env_name }}' || true
+               fi
+             }
+
              if ! make ${{ steps.target.outputs.make_prefix }}-up; then
                echo 'Application stack failed to become healthy; collecting server diagnostics.'
                make server-diagnostics ENV='${{ steps.target.outputs.env_name }}' || true
+               rollback_gate
                exit 1
              fi
              if ! make ${{ steps.target.outputs.make_prefix }}-backend-health; then
                echo 'Backend health verification failed; collecting server diagnostics.'
                make server-diagnostics ENV='${{ steps.target.outputs.env_name }}' || true
+               rollback_gate
                exit 1
              fi
              if ! make server-migrated-db-verify ENV='${{ steps.target.outputs.env_name }}'; then
                echo 'Post-migration database verification failed; collecting server diagnostics.'
                make server-diagnostics ENV='${{ steps.target.outputs.env_name }}' || true
+               rollback_gate
                exit 1
              fi
-             make ${{ steps.target.outputs.make_prefix }}-env-caddy-health
+             if ! make ${{ steps.target.outputs.make_prefix }}-env-caddy-health; then
+               echo 'Environment/Caddy health verification failed; collecting server diagnostics.'
+               make server-diagnostics ENV='${{ steps.target.outputs.env_name }}' || true
+               rollback_gate
+               exit 1
+             fi
+             if [[ "\$RECOVERY_GATE_REQUIRED" == 'true' ]]; then
+               if ! make server-migration-recovery-commit ENV='${{ steps.target.outputs.env_name }}'; then
+                 echo 'Migration recovery gate commit failed; rolling back the pre-migration database.'
+                 rollback_gate
+                 exit 1
+               fi
+             fi
             "
 
       - name: Provision non-Production E2E application administrator

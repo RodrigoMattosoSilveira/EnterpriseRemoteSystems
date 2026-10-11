@@ -227,7 +227,7 @@ def test_server_backup(tool_dir: Path) -> None:
 
 
 def test_repository_contract() -> None:
-    makefile = (ROOT / "Makefile").read_text(); dockerfile = (BACKEND / "Dockerfile").read_text(); server = SERVER_BACKUP.read_text(); deploy = (ROOT / ".github/workflows/deploy.yml").read_text()
+    makefile = (ROOT / "Makefile").read_text(); dockerfile = (BACKEND / "Dockerfile").read_text(); server = SERVER_BACKUP.read_text(); deploy = (ROOT / ".github/workflows/deploy.yml").read_text(); migration_gate = (ROOT / "scripts" / "server-migration-recovery-gate.sh").read_text()
     for fragment in ("backend/cmd/ers-backup/main.go", "backend/cmd/ers-offhost-backup/main.go", "run-backup-go-tool.sh", "server-backup-verify:", "server-backup-retention:"):
         if fragment not in makefile:
             raise AssertionError(f"Makefile missing Go backup contract fragment {fragment!r}")
@@ -238,8 +238,18 @@ def test_repository_contract() -> None:
         raise AssertionError("Production backup path still invokes Python implementation")
     if (ROOT / "scripts" / "ers-backup.py").exists() or (ROOT / "scripts" / "ers-offhost-backup.py").exists():
         raise AssertionError("obsolete Production Python backup implementation still exists")
-    if "make server-backup ENV='${{ steps.target.outputs.env_name }}'" not in deploy:
-        raise AssertionError("deployment no longer takes pre-migration backup")
+    if "make server-migration-recovery-gate" not in deploy:
+        raise AssertionError("deployment no longer invokes the migration recovery gate before schema transition")
+    for fragment in (
+        '"$ROOT_DIR/scripts/server-sqlite-backup.sh"',
+        "create_offline_backup",
+        'replicate_if_enabled "$backup_file"',
+        'ers-restore stage',
+    ):
+        if fragment not in migration_gate:
+            raise AssertionError(
+                f"migration recovery gate no longer preserves the Bite 33.2 pre-migration backup contract: missing {fragment!r}"
+            )
 
 
 def main() -> int:
