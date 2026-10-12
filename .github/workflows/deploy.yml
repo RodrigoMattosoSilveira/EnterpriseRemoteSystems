@@ -79,6 +79,9 @@ jobs:
       - name: Verify Bite 33.5 migration/deployment recovery gate
         run: make migration-deployment-recovery-gate-check
 
+      - name: Verify Bite 33.6 recovery rehearsal and operational runbook
+        run: make recovery-rehearsal-operational-runbook-check
+
       - name: Set up Go
         uses: actions/setup-go@v6
         with:
@@ -388,6 +391,10 @@ jobs:
              echo 'Deploying ${{ steps.target.outputs.env_name }} from branch ${{ steps.target.outputs.branch }}'
              echo 'Pinned revision: ${{ steps.revision.outputs.sha }}'
 
+             PREVIOUS_REVISION=\"\$(git rev-parse HEAD)\"
+             PREVIOUS_TREE_SHA=\"\$(git rev-parse HEAD^{tree})\"
+             echo \"Previous server revision: \${PREVIOUS_REVISION} (tree \${PREVIOUS_TREE_SHA})\"
+
              git fetch origin '${{ steps.target.outputs.branch }}'
              git cat-file -e '${{ steps.revision.outputs.sha }}^{commit}'
              git checkout -B '${{ steps.target.outputs.branch }}' '${{ steps.revision.outputs.sha }}'
@@ -412,12 +419,12 @@ jobs:
                restore-baseline+migrate-in-place)
                  echo 'Restoring the known pre-release Test baseline before the explicit offline migration/recovery gate.'
                  make server-test-rehearsal-restore ENV=test
-                 make server-migration-recovery-gate ENV=test
+                 make server-migration-recovery-gate ENV=test MIGRATION_PREVIOUS_REVISION=\"\$PREVIOUS_REVISION\" MIGRATION_PREVIOUS_TREE_SHA=\"\$PREVIOUS_TREE_SHA\" MIGRATION_TARGET_REVISION='${{ steps.revision.outputs.sha }}' MIGRATION_TARGET_TREE_SHA='${{ steps.revision.outputs.tree_sha }}'
                  RECOVERY_GATE_REQUIRED=true
                  ;;
                migrate-in-place)
                  echo 'Preparing verified backup/recovery evidence, rehearsing migrations on a clone, then migrating the live database offline.'
-                 make server-migration-recovery-gate ENV='${{ steps.target.outputs.env_name }}'
+                 make server-migration-recovery-gate ENV='${{ steps.target.outputs.env_name }}' MIGRATION_PREVIOUS_REVISION=\"\$PREVIOUS_REVISION\" MIGRATION_PREVIOUS_TREE_SHA=\"\$PREVIOUS_TREE_SHA\" MIGRATION_TARGET_REVISION='${{ steps.revision.outputs.sha }}' MIGRATION_TARGET_TREE_SHA='${{ steps.revision.outputs.tree_sha }}'
                  RECOVERY_GATE_REQUIRED=true
                  ;;
                *)

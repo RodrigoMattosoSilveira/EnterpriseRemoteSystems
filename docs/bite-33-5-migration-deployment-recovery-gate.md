@@ -89,7 +89,18 @@ The gate state then changes from `armed` to `committed`.
 
 ## Recovery boundary
 
-33.5 protects database state during migration/deployment. It does not silently restart the new application after a rollback because the new code may require the migrated schema. A failed deployment that rolls the DB back therefore leaves services stopped; the operational code-revision recovery procedure belongs in the Bite 33.6 recovery rehearsal/runbook.
+33.5 protects database state during migration/deployment. It does not silently restart the new application after a rollback because the new code may require the migrated schema. A failed deployment that rolls the DB back therefore leaves services stopped.
+
+The gate state also preserves the deployment code identities used by Bite 33.6 recovery operations:
+
+```text
+previous_revision=
+previous_tree_sha=
+target_revision=
+target_tree_sha=
+```
+
+The deployment workflow captures the server revision/tree before checking out the target revision and supplies both previous and target identities to the gate. The deliberate code-revision recovery procedure is documented in `docs/database-recovery-runbook.md`.
 
 ## Automated regression
 

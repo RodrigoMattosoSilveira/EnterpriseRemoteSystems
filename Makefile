@@ -80,6 +80,16 @@ SERVER_RECOVERY_DIR ?= $(ENV_DIR)/recovery
 # remains armed until the newly started application passes health/schema checks.
 SERVER_MIGRATION_GATE_STATE ?= $(SERVER_RECOVERY_DIR)/migration-gates/current.state
 
+# Bite 33.6 non-destructive recovery rehearsal. Defaults establish the initial
+# operational objectives of RPO <= 24 hours and RTO <= 4 hours.
+SERVER_RECOVERY_REHEARSAL_DIR ?= $(SERVER_RECOVERY_DIR)/rehearsals
+RECOVERY_REHEARSAL_MAX_RPO_SECONDS ?= 86400
+RECOVERY_REHEARSAL_MAX_RTO_SECONDS ?= 14400
+RECOVERY_REHEARSAL_BACKUP_FILE ?=
+RECOVERY_REHEARSAL_RECEIPT_FILE ?=
+RECOVERY_REHEARSAL_OFFHOST_BACKUP_NAME ?=
+RECOVERY_REHEARSAL_REPORT_FILE ?=
+
 # ==============================================================================
 # Help
 # ==============================================================================
@@ -116,6 +126,7 @@ help:
 	@echo "  make off-host-backup-protection-check"
 	@echo "  make restore-tooling-recovery-verification-check"
 	@echo "  make migration-deployment-recovery-gate-check"
+	@echo "  make recovery-rehearsal-operational-runbook-check"
 	@echo "  make migration-check"
 	@echo "  make migration-rehearsal-check"
 	@echo "  make local-docker-check"
@@ -170,6 +181,9 @@ help:
 	@echo "  make server-migration-recovery-gate ENV=development|test|production"
 	@echo "  make server-migration-recovery-commit ENV=development|test|production"
 	@echo "  make server-migration-recovery-rollback ENV=development|test|production"
+	@echo "  make server-recovery-rehearsal ENV=development|test|production RECOVERY_REHEARSAL_BACKUP_FILE=<verified-local-backup>"
+	@echo "    or: make server-recovery-rehearsal ENV=... RECOVERY_REHEARSAL_RECEIPT_FILE=<offhost-receipt>"
+	@echo "    or: make server-recovery-rehearsal ENV=... RECOVERY_REHEARSAL_OFFHOST_BACKUP_NAME=app-<timestamp>.db"
 	@echo "  Normal server targets force AUTHZ bootstrap off; deliberate recovery: SERVER_AUTHZ_BOOTSTRAP_ENABLED=true make server-up ENV=<env>"
 	@echo "  make testdata-server-reset ENV=development|test"
 	@echo
@@ -482,6 +496,10 @@ restore-tooling-recovery-verification-check:
 migration-deployment-recovery-gate-check:
 	python3 scripts/test-migration-deployment-recovery-gate.py
 
+.PHONY: recovery-rehearsal-operational-runbook-check
+recovery-rehearsal-operational-runbook-check:
+	python3 scripts/test-recovery-rehearsal-operational-runbook.py
+
 .PHONY: local-check
 local-check:
 	$(MAKE) bite30l4-coverage-manifest-check
@@ -495,6 +513,7 @@ local-check:
 	$(MAKE) off-host-backup-protection-check
 	$(MAKE) restore-tooling-recovery-verification-check
 	$(MAKE) migration-deployment-recovery-gate-check
+	$(MAKE) recovery-rehearsal-operational-runbook-check
 	$(MAKE) local-hot-reload-check
 	$(MAKE) local-auth-cookie-config-check
 	$(MAKE) server-public-smoke-script-check
@@ -550,7 +569,7 @@ local-docker-check: local-docker-check-image
 		-e GOMODCACHE=/tmp/gomod \
 		-e NPM_CONFIG_CACHE=/tmp/npm-cache \
 		$(LOCAL_DOCKER_CHECK_IMAGE) \
-		bash -lc 'set -euo pipefail; make bite30l4-coverage-manifest-check; make bite32-release-coverage-check; make bite326-release-hardening-check; make post-bite30-backlog-reconciliation-check; make deployed-playwright-evidence-check; make production-release-evidence-check; make production-environment-guardrails-check; make backup-creation-retention-verification-check; make off-host-backup-protection-check; make restore-tooling-recovery-verification-check; make migration-deployment-recovery-gate-check; make local-hot-reload-check; make local-auth-cookie-config-check; make server-authz-bootstrap-config-check; make legacy-identity-dependency-check; make brazilian-demo-presentation-check; make migration-rehearsal-check; cd backend && go clean -testcache && go test ./...; cd ../frontend && npm ci && npm run test:run && npx playwright install chromium && npx playwright test && npm run build'
+		bash -lc 'set -euo pipefail; make bite30l4-coverage-manifest-check; make bite32-release-coverage-check; make bite326-release-hardening-check; make post-bite30-backlog-reconciliation-check; make deployed-playwright-evidence-check; make production-release-evidence-check; make production-environment-guardrails-check; make backup-creation-retention-verification-check; make off-host-backup-protection-check; make restore-tooling-recovery-verification-check; make migration-deployment-recovery-gate-check; make recovery-rehearsal-operational-runbook-check; make local-hot-reload-check; make local-auth-cookie-config-check; make server-authz-bootstrap-config-check; make legacy-identity-dependency-check; make brazilian-demo-presentation-check; make migration-rehearsal-check; cd backend && go clean -testcache && go test ./...; cd ../frontend && npm ci && npm run test:run && npx playwright install chromium && npx playwright test && npm run build'
 
 # ==============================================================================
 # Generic server environment targets
@@ -1147,6 +1166,10 @@ server-migration-recovery-gate:
 	MIGRATION_CONTAINER="$(CONTAINER_PREFIX)-backend" \
 	MIGRATION_VOLUME="$(COMPOSE_PROJECT)_backend-data" \
 	MIGRATION_EXPECTED_FINAL_MIGRATION="$(DEPLOYMENT_FINAL_MIGRATION)" \
+	MIGRATION_PREVIOUS_REVISION="$(MIGRATION_PREVIOUS_REVISION)" \
+	MIGRATION_PREVIOUS_TREE_SHA="$(MIGRATION_PREVIOUS_TREE_SHA)" \
+	MIGRATION_TARGET_REVISION="$(MIGRATION_TARGET_REVISION)" \
+	MIGRATION_TARGET_TREE_SHA="$(MIGRATION_TARGET_TREE_SHA)" \
 	MIGRATION_BACKUP_RETENTION_COUNT="$(SERVER_BACKUP_RETENTION_COUNT)" \
 	MIGRATION_BACKUP_RETENTION_DAYS="$(SERVER_BACKUP_RETENTION_DAYS)" \
 	MIGRATION_STATE_FILE="$(SERVER_MIGRATION_GATE_STATE)" \
@@ -1171,6 +1194,23 @@ server-migration-recovery-commit:
 	MIGRATION_EXPECTED_FINAL_MIGRATION="$(DEPLOYMENT_FINAL_MIGRATION)" \
 	MIGRATION_STATE_FILE="$(SERVER_MIGRATION_GATE_STATE)" \
 		./scripts/server-migration-recovery-commit.sh
+
+.PHONY: server-recovery-rehearsal
+server-recovery-rehearsal:
+	@$(MAKE) server-environment-contract-check ENV=$(ENV)
+	@REHEARSAL_ENVIRONMENT="$(ENV)" \
+	REHEARSAL_ENV_DIR="$(ENV_DIR)" \
+	REHEARSAL_ENV_FILE="$(ENV_FILE)" \
+	REHEARSAL_COMPOSE_PROJECT="$(COMPOSE_PROJECT)" \
+	REHEARSAL_MIGRATION_STATE_FILE="$(SERVER_MIGRATION_GATE_STATE)" \
+	REHEARSAL_EXPECTED_FINAL_MIGRATION="$(DEPLOYMENT_FINAL_MIGRATION)" \
+	REHEARSAL_BACKUP_FILE="$(RECOVERY_REHEARSAL_BACKUP_FILE)" \
+	REHEARSAL_RECEIPT_FILE="$(RECOVERY_REHEARSAL_RECEIPT_FILE)" \
+	REHEARSAL_OFFHOST_BACKUP_NAME="$(RECOVERY_REHEARSAL_OFFHOST_BACKUP_NAME)" \
+	REHEARSAL_MAX_RPO_SECONDS="$(RECOVERY_REHEARSAL_MAX_RPO_SECONDS)" \
+	REHEARSAL_MAX_RTO_SECONDS="$(RECOVERY_REHEARSAL_MAX_RTO_SECONDS)" \
+	REHEARSAL_REPORT_FILE="$(RECOVERY_REHEARSAL_REPORT_FILE)" \
+		./scripts/server-recovery-rehearsal.sh
 
 # ==============================================================================
 # Development aliases
