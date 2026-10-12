@@ -98,6 +98,16 @@ def test_preflight_script_behavior() -> None:
         credentials = temp / "aws-credentials"
         credentials.write_text("[ers-backup]\naws_access_key_id = test\naws_secret_access_key = test\n")
         credentials.chmod(0o600)
+
+        # Exercise lexical-vs-physical path aliases on every platform. macOS
+        # naturally exposes this via /var -> /private/var; this explicit
+        # symlink keeps the regression portable to Linux CI as well.
+        alias_root = temp / "path-alias"
+        alias_root.symlink_to(temp, target_is_directory=True)
+        alias_env_dir = alias_root / "production"
+        alias_env_file = alias_env_dir / ".env.production"
+        alias_credentials = alias_root / "aws-credentials"
+
         env_file = env_dir / ".env.production"
         env_file.write_text(
             "APP_ENV=production\n"
@@ -116,20 +126,20 @@ def test_preflight_script_behavior() -> None:
             "SERVER_OFFHOST_BACKUP_S3_REGION=hel1\n"
             "SERVER_OFFHOST_BACKUP_S3_BUCKET=ers\n"
             "SERVER_OFFHOST_BACKUP_S3_PREFIX=ers-backups\n"
-            f"AWS_SHARED_CREDENTIALS_FILE={credentials}\n"
+            f"AWS_SHARED_CREDENTIALS_FILE={alias_credentials}\n"
             "AWS_PROFILE=ers-backup\n"
         )
         manifest = temp / "recovery-access.env"
         text = MANIFEST.read_text()
-        text = text.replace("/opt/EnterpriseRemoteSystems/production/.env.production", str(env_file))
-        text = text.replace("/opt/EnterpriseRemoteSystems/production", str(env_dir))
-        text = text.replace("/opt/EnterpriseRemoteSystems/secrets/aws-credentials", str(credentials))
+        text = text.replace("/opt/EnterpriseRemoteSystems/production/.env.production", str(alias_env_file))
+        text = text.replace("/opt/EnterpriseRemoteSystems/production", str(alias_env_dir))
+        text = text.replace("/opt/EnterpriseRemoteSystems/secrets/aws-credentials", str(alias_credentials))
         manifest.write_text(text)
         proc = run(
             [str(script)],
             env={
                 "RECOVERY_ACCESS_ENVIRONMENT": "production",
-                "RECOVERY_ACCESS_ENV_DIR": str(env_dir),
+                "RECOVERY_ACCESS_ENV_DIR": str(alias_env_dir),
                 "RECOVERY_ACCESS_ENV_FILE": ".env.production",
                 "RECOVERY_ACCESS_MANIFEST_FILE": str(manifest),
             },
@@ -144,7 +154,7 @@ def test_preflight_script_behavior() -> None:
             [str(script)],
             env={
                 "RECOVERY_ACCESS_ENVIRONMENT": "production",
-                "RECOVERY_ACCESS_ENV_DIR": str(env_dir),
+                "RECOVERY_ACCESS_ENV_DIR": str(alias_env_dir),
                 "RECOVERY_ACCESS_ENV_FILE": ".env.production",
                 "RECOVERY_ACCESS_MANIFEST_FILE": str(bad),
             },

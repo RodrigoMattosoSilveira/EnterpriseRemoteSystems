@@ -45,6 +45,22 @@ read_value() {
   printf '%s\n' "$value"
 }
 
+canonical_existing_path() {
+  local path="$1" parent base
+  if [[ -d "$path" ]]; then
+    (cd "$path" && pwd -P)
+    return
+  fi
+  if [[ -e "$path" ]]; then
+    parent="$(dirname "$path")"
+    base="$(basename "$path")"
+    printf '%s/%s\n' "$(cd "$parent" && pwd -P)" "$base"
+    return
+  fi
+  echo "Recovery access path does not exist and cannot be canonicalized: $path" >&2
+  exit 2
+}
+
 required_manifest_keys=(
   RECOVERY_ACCESS_FORMAT_VERSION
   RECOVERY_OWNER_UNAVAILABLE_REQUIRED
@@ -157,8 +173,12 @@ manifest_credential_path="$(read_value "$RECOVERY_ACCESS_MANIFEST_FILE" RECOVERY
 
 "$ROOT_DIR/scripts/ers-environment-guard.sh" require-server-contract production "$ENV_PATH"
 
-[[ "$RECOVERY_ACCESS_ENV_DIR" == "$manifest_repository_install_path" ]] || { echo "Production repository install path does not match recovery access manifest: expected $manifest_repository_install_path, got $RECOVERY_ACCESS_ENV_DIR." >&2; exit 2; }
-[[ "$ENV_PATH" == "$manifest_env_install_path" ]] || { echo "Production environment install path does not match recovery access manifest: expected $manifest_env_install_path, got $ENV_PATH." >&2; exit 2; }
+canonical_manifest_repository_install_path="$(canonical_existing_path "$manifest_repository_install_path")"
+canonical_manifest_env_install_path="$(canonical_existing_path "$manifest_env_install_path")"
+canonical_env_path="$(canonical_existing_path "$ENV_PATH")"
+
+[[ "$RECOVERY_ACCESS_ENV_DIR" == "$canonical_manifest_repository_install_path" ]] || { echo "Production repository install path does not match recovery access manifest: expected $manifest_repository_install_path ($canonical_manifest_repository_install_path), got $RECOVERY_ACCESS_ENV_DIR." >&2; exit 2; }
+[[ "$canonical_env_path" == "$canonical_manifest_env_install_path" ]] || { echo "Production environment install path does not match recovery access manifest: expected $manifest_env_install_path ($canonical_manifest_env_install_path), got $ENV_PATH ($canonical_env_path)." >&2; exit 2; }
 [[ "$(read_value "$ENV_PATH" APP_ENV)" == "production" ]] || { echo "Restored environment file must declare APP_ENV=production." >&2; exit 2; }
 [[ "$(read_value "$ENV_PATH" APP_DOMAIN)" == "$manifest_domain" ]] || { echo "Restored APP_DOMAIN does not match recovery access manifest." >&2; exit 2; }
 [[ "$(read_value "$ENV_PATH" APP_AUTO_MIGRATE)" == "false" ]] || { echo "Restored Production APP_AUTO_MIGRATE must be false." >&2; exit 2; }
@@ -174,8 +194,10 @@ manifest_credential_path="$(read_value "$RECOVERY_ACCESS_MANIFEST_FILE" RECOVERY
 [[ "$(read_value "$ENV_PATH" SERVER_OFFHOST_BACKUP_S3_BUCKET)" == "$manifest_bucket" ]] || { echo "Restored S3 bucket does not match recovery access manifest." >&2; exit 2; }
 [[ "$(read_value "$ENV_PATH" AWS_PROFILE)" == "$manifest_profile" ]] || { echo "Restored AWS profile does not match recovery access manifest." >&2; exit 2; }
 credential_path="$(read_value "$ENV_PATH" AWS_SHARED_CREDENTIALS_FILE)"
-[[ "$credential_path" == "$manifest_credential_path" ]] || { echo "Restored AWS credentials path does not match recovery access manifest." >&2; exit 2; }
 [[ -f "$credential_path" ]] || { echo "Restored shared S3 credentials file is missing: $credential_path" >&2; exit 2; }
+canonical_credential_path="$(canonical_existing_path "$credential_path")"
+canonical_manifest_credential_path="$(canonical_existing_path "$manifest_credential_path")"
+[[ "$canonical_credential_path" == "$canonical_manifest_credential_path" ]] || { echo "Restored AWS credentials path does not match recovery access manifest: expected $manifest_credential_path ($canonical_manifest_credential_path), got $credential_path ($canonical_credential_path)." >&2; exit 2; }
 grep -q "^\[$manifest_profile\]$" "$credential_path" || { echo "Restored S3 credentials file does not contain profile [$manifest_profile]." >&2; exit 2; }
 
 credential_mode="$(stat -f '%Lp' "$credential_path" 2>/dev/null || stat -c '%a' "$credential_path" 2>/dev/null || true)"
