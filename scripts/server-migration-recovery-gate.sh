@@ -121,6 +121,14 @@ create_offline_backup() {
     --entrypoint sh backend -c \
     "set -eu; test -f /app/data/app.db; sqlite3 /app/data/app.db \".backup '$target'\"; test \"\$(sqlite3 '$target' 'PRAGMA integrity_check;')\" = ok; test -z \"\$(sqlite3 '$target' 'PRAGMA foreign_key_check;')\""
 
+  local manifest_repository_args=()
+  if [[ -n "$MIGRATION_PREVIOUS_REVISION" && -n "$MIGRATION_PREVIOUS_TREE_SHA" ]]; then
+    manifest_repository_args+=(
+      --repository-revision "$MIGRATION_PREVIOUS_REVISION"
+      --repository-tree-sha "$MIGRATION_PREVIOUS_TREE_SHA"
+    )
+  fi
+
   ERS_BACKUP_ENV_DIR="$MIGRATION_ENV_DIR" \
   ERS_BACKUP_ENV_FILE="$MIGRATION_ENV_FILE" \
   ERS_BACKUP_COMPOSE_PROJECT="$MIGRATION_COMPOSE_PROJECT" \
@@ -129,7 +137,8 @@ create_offline_backup() {
       --manifest "$target.manifest.json" \
       --environment "$MIGRATION_ENVIRONMENT" \
       --source-container "offline-$MIGRATION_COMPOSE_PROJECT" \
-      --source-database-path /app/data/app.db
+      --source-database-path /app/data/app.db \
+      "${manifest_repository_args[@]}"
 
   ERS_BACKUP_ENV_DIR="$MIGRATION_ENV_DIR" \
   ERS_BACKUP_ENV_FILE="$MIGRATION_ENV_FILE" \
@@ -172,6 +181,8 @@ else
     BACKUP_RETENTION_COUNT="$MIGRATION_BACKUP_RETENTION_COUNT" \
     BACKUP_RETENTION_DAYS="$MIGRATION_BACKUP_RETENTION_DAYS" \
     BACKUP_RESULT_FILE="$result_file" \
+    BACKUP_REPOSITORY_REVISION="$MIGRATION_PREVIOUS_REVISION" \
+    BACKUP_REPOSITORY_TREE_SHA="$MIGRATION_PREVIOUS_TREE_SHA" \
     ERS_BACKUP_ENV_DIR="$MIGRATION_ENV_DIR" \
     ERS_BACKUP_ENV_FILE="$MIGRATION_ENV_FILE" \
     ERS_BACKUP_COMPOSE_PROJECT="$MIGRATION_COMPOSE_PROJECT" \

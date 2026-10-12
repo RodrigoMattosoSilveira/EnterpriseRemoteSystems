@@ -10,7 +10,37 @@ It adds:
 - evidence that the selected restore point can be materialized, restored, migrated to the current schema, and booted by the current backend revision without touching the live SQLite database;
 - explicit default recovery objectives of **RPO <= 24 hours** and **RTO <= 4 hours** for the selected restore point;
 - revision/tree evidence in the migration recovery gate so a database rollback identifies the pre-deployment code revision that can be deliberately rebuilt and restarted;
-- the operator runbook in `docs/database-recovery-runbook.md`.
+- repository revision/tree evidence in every new verified backup manifest so complete host loss still identifies the application revision compatible with the selected restore point;
+- a committed non-secret recovery-access locator manifest at `ops/recovery-access.production.env`;
+- an owner-unavailable Production preflight/rehearsal that requires shared LastPass/GitHub/Hetzner/DNS access independent of the primary owner;
+- the operator runbook in `docs/database-recovery-runbook.md` and access-package guide in `docs/owner-unavailable-recovery-access.md`.
+
+
+## Owner-unavailable recovery readiness
+
+The Production readiness use case is stricter than ordinary database recovery:
+
+> A qualified designated technician, with the system owner completely unavailable, can recover ERS and prove the recovery using only documented shared administrative sources.
+
+The non-secret locator contract is `ops/recovery-access.production.env`. It standardizes the shared LastPass collection `ERS-Recovery`, GitHub repository source, Hetzner Object Storage identity, DNS/host/MFA source locators, and canonical install paths. Secret values are never committed.
+
+Run the artifact/access preflight with:
+
+```bash
+make server-owner-unavailable-recovery-preflight ENV=production
+```
+
+Quarterly, a designated technician other than the primary owner should run the strongest host-loss rehearsal:
+
+```bash
+make server-owner-unavailable-recovery-rehearsal \
+  ENV=production \
+  RECOVERY_REHEARSAL_OFFHOST_BACKUP_NAME=app-<timestamp>.db \
+  RECOVERY_TECHNICIAN_ID=<technician-identity> \
+  RECOVERY_SHARED_ACCESS_CONFIRM=OWNER-UNAVAILABLE-RECOVERY-ACCESS-CONFIRMED
+```
+
+This mode refuses local backup/receipt input, requires the shared-access preflight, and requires the selected backup manifest to identify a compatible Git revision/tree that can be resolved from the shared GitHub repository. If the technician must contact the owner for a password, MFA approval, file, key, hostname, or decision, the rehearsal fails.
 
 ## Recovery rehearsal
 
@@ -98,7 +128,7 @@ The JSON evidence includes:
 - selected environment;
 - repository revision and tree SHA;
 - source kind (`local-backup`, `offhost-receipt`, or `offhost-backup-name`);
-- backup filename, creation timestamp, and SHA-256;
+- backup filename, creation timestamp, SHA-256, and compatible repository revision/tree when recorded;
 - materialized receipt and exact S3 database/manifest object keys and VersionIds when available;
 - raw scratch restore path/SHA-256 and Bite 33.4 restore report;
 - current-schema migrated scratch path/SHA-256;
@@ -132,6 +162,12 @@ Run:
 make recovery-rehearsal-operational-runbook-check
 ```
 
-The regression verifies the rehearsal safety/orchestration contract, RPO/RTO defaults, exact-version host-loss recovery path, isolated backend boot contract, migration-gate revision evidence, runbook command coverage, CI wiring, and deployment quality-gate wiring.
+The regression verifies the rehearsal safety/orchestration contract, RPO/RTO defaults, exact-version host-loss recovery path, isolated backend boot contract, migration-gate revision evidence, backup-compatible revision evidence, explicit shared-source recovery access, owner-unavailable preflight/rehearsal commands, runbook command coverage, CI wiring, and deployment quality-gate wiring.
+
+Run the additional owner-unavailable contract regression with:
+
+```bash
+make owner-unavailable-recovery-readiness-check
+```
 
 It is included in `make local-check`, the containerized local check, CI, and the deployment quality gate.

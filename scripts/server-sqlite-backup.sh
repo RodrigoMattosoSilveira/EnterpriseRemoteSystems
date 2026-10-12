@@ -8,6 +8,8 @@ BACKUP_DIRECTORY="${BACKUP_DIRECTORY:-}"
 BACKUP_RETENTION_COUNT="${BACKUP_RETENTION_COUNT:-14}"
 BACKUP_RETENTION_DAYS="${BACKUP_RETENTION_DAYS:-30}"
 BACKUP_RESULT_FILE="${BACKUP_RESULT_FILE:-}"
+BACKUP_REPOSITORY_REVISION="${BACKUP_REPOSITORY_REVISION:-}"
+BACKUP_REPOSITORY_TREE_SHA="${BACKUP_REPOSITORY_TREE_SHA:-}"
 
 if [[ -z "$BACKUP_ENVIRONMENT" ]]; then
   echo "BACKUP_ENVIRONMENT is required (development, test, or production)." >&2
@@ -53,6 +55,19 @@ source_db="$(docker exec "$BACKUP_CONTAINER" sh -c 'printf "%s" "${DATABASE_PATH
 if [[ -z "$source_db" ]]; then
   echo "Cannot create backup: $BACKUP_CONTAINER does not declare DATABASE_PATH." >&2
   exit 2
+fi
+
+if [[ -z "$BACKUP_REPOSITORY_REVISION" && -z "$BACKUP_REPOSITORY_TREE_SHA" ]]; then
+  if git -C "$ROOT_DIR" rev-parse HEAD >/dev/null 2>&1; then
+    BACKUP_REPOSITORY_REVISION="$(git -C "$ROOT_DIR" rev-parse HEAD)"
+    BACKUP_REPOSITORY_TREE_SHA="$(git -C "$ROOT_DIR" rev-parse HEAD^{tree})"
+  fi
+fi
+if [[ -n "$BACKUP_REPOSITORY_REVISION" || -n "$BACKUP_REPOSITORY_TREE_SHA" ]]; then
+  if [[ ! "$BACKUP_REPOSITORY_REVISION" =~ ^[0-9a-f]{40}$ || ! "$BACKUP_REPOSITORY_TREE_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+    echo "Backup repository revision/tree evidence must be full lowercase 40-character Git object IDs." >&2
+    exit 2
+  fi
 fi
 
 created_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
@@ -103,12 +118,21 @@ fi
 docker cp "$BACKUP_CONTAINER:$container_tmp" "$partial"
 mv "$partial" "$target"
 
+manifest_repository_args=()
+if [[ -n "$BACKUP_REPOSITORY_REVISION" ]]; then
+  manifest_repository_args+=(
+    --repository-revision "$BACKUP_REPOSITORY_REVISION"
+    --repository-tree-sha "$BACKUP_REPOSITORY_TREE_SHA"
+  )
+fi
+
 "$ROOT_DIR/scripts/run-backup-go-tool.sh" ers-backup create-manifest \
   --backup "$target" \
   --manifest "$manifest" \
   --environment "$BACKUP_ENVIRONMENT" \
   --source-container "$BACKUP_CONTAINER" \
   --source-database-path "$source_db" \
+  "${manifest_repository_args[@]}" \
   --created-at "$created_at"
 
 # A successful create-manifest already re-verifies the host copy. Mark the pair
@@ -130,4 +154,8 @@ fi
 echo "Verified backup: $target"
 echo "Backup manifest: $manifest"
 echo "Source database: $source_db"
+if [[ -n "$BACKUP_REPOSITORY_REVISION" ]]; then
+  echo "Compatible repository revision: $BACKUP_REPOSITORY_REVISION"
+  echo "Compatible repository tree: $BACKUP_REPOSITORY_TREE_SHA"
+fi
 echo "Retention policy: keep at least $BACKUP_RETENTION_COUNT verified backup(s) and all verified backups from the last $BACKUP_RETENTION_DAYS day(s)."

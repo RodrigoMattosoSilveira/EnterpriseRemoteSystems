@@ -14,7 +14,38 @@ It covers:
 - failed restore handling;
 - recovery verification and evidence retention.
 
-This runbook does **not** recover application secrets or environment configuration from the database backup. A host-loss recovery still requires the correct ERS repository revision, deployed `.env.<environment>` file, S3 credential material, TLS/edge configuration, and other secrets to be restored from their normal administrative sources.
+## Owner-unavailable recovery contract
+
+Production recovery must be executable by a qualified designated technician while the system owner is completely unavailable. No recovery step may depend on the owner's memory, laptop, phone, personal password vault, or approval of an MFA prompt.
+
+The non-secret authoritative locator inventory is committed at:
+
+```text
+ops/recovery-access.production.env
+```
+
+The detailed access-package procedure is `docs/owner-unavailable-recovery-access.md`. The canonical shared secret collection is `ERS-Recovery` in LastPass. The exact required source locators are:
+
+```text
+lastpass-shared://ERS-Recovery/Production/.env.production
+lastpass-shared://ERS-Recovery/Production/Hetzner-S3-ers-backup
+lastpass-shared://ERS-Recovery/Production/Host-SSH
+lastpass-shared://ERS-Recovery/Infrastructure/Hetzner-Console
+lastpass-shared://ERS-Recovery/Infrastructure/DNS
+technician-controlled://independent-mfa-and-recovery-codes
+```
+
+Repository/edge configuration is recovered from the shared GitHub repository, not from the failed host. GitHub Actions secrets are not an authoritative recovery source because secret values cannot be read back by an operator; the recoverable SSH/account material must exist in the shared LastPass collection.
+
+A database backup does not contain `.env.production`, S3 credentials, SSH credentials, DNS/provider credentials, or MFA recovery material. Those prerequisites must be retrieved from the exact shared sources above. **Do not generate replacement Production secrets with `init-server-env.sh` and call that recovery.**
+
+Before any owner-unavailable recovery or rehearsal, run:
+
+```bash
+make server-owner-unavailable-recovery-preflight ENV=production
+```
+
+The preflight validates the recovered canonical Production environment, shared S3 credential installation, repository identity, edge source files, and the explicit shared-source locator contract. If the technician has to contact the system owner, the owner-unavailable rehearsal fails.
 
 ## 2. Recovery objectives
 
@@ -90,6 +121,18 @@ make server-recovery-rehearsal \
 
 Exactly one source must be supplied.
 
+For the quarterly owner-unavailable readiness proof, a designated technician other than the primary owner must use the host-loss source mode and the shared-access confirmation:
+
+```bash
+make server-owner-unavailable-recovery-rehearsal \
+  ENV=production \
+  RECOVERY_REHEARSAL_OFFHOST_BACKUP_NAME=app-<timestamp>.db \
+  RECOVERY_TECHNICIAN_ID=<technician-identity> \
+  RECOVERY_SHARED_ACCESS_CONFIRM=OWNER-UNAVAILABLE-RECOVERY-ACCESS-CONFIRMED
+```
+
+This mode refuses local backup/receipt input, requires the shared-access preflight, bootstraps the remote receipt from Hetzner, and requires the selected backup manifest to contain a Git-compatible application revision/tree that can be resolved from the shared GitHub repository.
+
 ### 5.2 Accept the rehearsal only when all gates pass
 
 Expected terminal summary includes:
@@ -120,6 +163,15 @@ Required evidence:
 - post-boot foreign keys are `clean`;
 - `rpo_met = true`;
 - `rto_met = true`.
+
+For owner-unavailable evidence also require:
+
+- `owner_unavailable.mode = true`;
+- `owner_unavailable.shared_access_confirmed = true`;
+- technician identity is recorded;
+- access-manifest SHA-256 and explicit source locators are recorded;
+- `.source.repository_revision` and `.source.repository_tree_sha` are full Git object IDs;
+- `.source.compatible_revision_available = true`.
 
 A failed RPO/RTO objective is an operational finding even when recovery mechanics succeed.
 
@@ -185,25 +237,59 @@ If the restored backup predates the currently deployed schema and the current ap
 
 ## 7. Host loss — local DB, backups, and receipts unavailable
 
-### 7.1 Rebuild the server prerequisites first
+### 7.1 Rebuild prerequisites from the documented shared sources
 
-Before database recovery, restore/provision:
+Assume the old host and all of `/opt/EnterpriseRemoteSystems` are gone. The technician must not use a file from the owner's workstation or personal vault.
 
-- `/opt/EnterpriseRemoteSystems/production` repository checkout;
-- `.env.production`;
-- Hetzner S3 credentials/profile referenced by that env file;
-- Docker/Compose runtime;
-- required edge/TLS configuration and secrets.
-
-The database backup does not contain those secrets/configuration files.
-
-Build the selected ERS revision before materialization/apply:
+1. Use the shared GitHub organizational account/access path to clone:
 
 ```bash
-make server-prod-build
+sudo mkdir -p /opt/EnterpriseRemoteSystems
+sudo chown "$USER" /opt/EnterpriseRemoteSystems
+git clone git@github.com:RodrigoMattosoSilveira/EnterpriseRemoteSystems.git \
+  /opt/EnterpriseRemoteSystems/production
+cd /opt/EnterpriseRemoteSystems/production
+git fetch origin --prune
 ```
 
-### 7.2 Recover using only the managed backup filename
+2. From `lastpass-shared://ERS-Recovery/Production/.env.production`, retrieve the canonical current `.env.production` file and install it exactly at:
+
+```text
+/opt/EnterpriseRemoteSystems/production/.env.production
+```
+
+Set mode `600`. Do **not** run `init-server-env.sh` as a substitute for retrieving the canonical Production configuration.
+
+3. From `lastpass-shared://ERS-Recovery/Production/Hetzner-S3-ers-backup`, install the S3 credential file at:
+
+```text
+/opt/EnterpriseRemoteSystems/secrets/aws-credentials
+```
+
+Set mode `600`; it must contain profile `[ers-backup]`.
+
+4. Obtain host/replacement-host access from `lastpass-shared://ERS-Recovery/Production/Host-SSH`, pre-authorized Hetzner project access from `lastpass-shared://ERS-Recovery/Infrastructure/Hetzner-Console`, and DNS access from `lastpass-shared://ERS-Recovery/Infrastructure/DNS`. Use the technician's own independent MFA/recovery capability documented as `technician-controlled://independent-mfa-and-recovery-codes`; do not depend on the owner's device and do not store the only LastPass recovery factor inside LastPass itself.
+
+5. Verify the recovered prerequisites before touching a database:
+
+```bash
+make server-owner-unavailable-recovery-preflight ENV=production
+make server-environment-contract-check ENV=production
+```
+
+6. Sync/start the repository-managed TLS edge when rebuilding the entire host:
+
+```bash
+make edge-init
+```
+
+Do not start the application yet. First identify and verify the database-compatible application revision from the selected backup manifest as described below.
+
+### 7.2 Recover using only the managed backup filename and identify compatible code
+
+Using Hetzner organizational access, inspect bucket `ers` under the Production prefix declared by the recovered `.env.production`. Managed objects are grouped as `<prefix>/production/app-<timestamp>.db/...`. Select the newest verified recovery point consistent with the incident and RPO objective; record its managed filename `app-<timestamp>.db`.
+
+Materialize it without any local receipt:
 
 ```bash
 make server-restore-materialize-offhost \
@@ -211,9 +297,32 @@ make server-restore-materialize-offhost \
   OFFHOST_BACKUP_NAME=app-<timestamp>.db
 ```
 
-This fetches the protected remote receipt, obtains its receipt VersionId, then downloads the exact DB and manifest VersionIds named by that receipt.
+This fetches the protected remote receipt, records its receipt VersionId, then downloads the exact DB and manifest VersionIds named by that receipt. Never substitute an S3 ETag for SHA-256 evidence.
 
-Verify and apply as in Sections 6.3–6.4.
+Set the materialized manifest path and read the application compatibility evidence:
+
+```bash
+MANIFEST=/opt/EnterpriseRemoteSystems/production/recovery/<candidate>/app-<timestamp>.db.manifest.json
+BACKUP_REVISION="$(jq -er '.repository.revision' "$MANIFEST")"
+BACKUP_TREE_SHA="$(jq -er '.repository.tree_sha' "$MANIFEST")"
+
+git fetch origin --prune
+git cat-file -e "${BACKUP_REVISION}^{commit}"
+test "$(git rev-parse "${BACKUP_REVISION}^{tree}")" = "$BACKUP_TREE_SHA"
+```
+
+If either repository field is absent, not a full Git object ID, unavailable from GitHub, or does not match the recorded tree, **stop and escalate**. Owner-unavailable recovery is not proven for that restore point. New Bite 33.6 backups record these fields automatically.
+
+Switch to the exact compatible application revision before build/restore:
+
+```bash
+git checkout --detach "$BACKUP_REVISION"
+test "$(git rev-parse HEAD)" = "$BACKUP_REVISION"
+test "$(git rev-parse HEAD^{tree})" = "$BACKUP_TREE_SHA"
+make server-prod-build
+```
+
+Verify and apply as in Sections 6.3–6.4. The restore now starts the application revision explicitly recorded as compatible with that backup. After service recovery is accepted, return to the normal Production deployment process to move forward through the migration/recovery gate.
 
 ### 7.3 Verify service recovery
 
@@ -382,6 +491,8 @@ For every Production rehearsal or incident retain, without secrets:
 Never retain S3 secret keys, JWT secrets, ledger keys, passwords, or API keys in recovery evidence.
 
 ## 13. When to stop and escalate
+
+Stop and escalate immediately if any owner-unavailable prerequisite can only be obtained from the system owner, an owner-only MFA device, a personal vault, or an undocumented source.
 
 Keep the application stopped and do not improvise if any of these occur:
 

@@ -41,6 +41,8 @@ func createManifest(args []string) error {
 	environment := fs.String("environment", "", "environment")
 	sourceContainer := fs.String("source-container", "", "source container")
 	sourceDatabasePath := fs.String("source-database-path", "", "source database path")
+	repositoryRevision := fs.String("repository-revision", "", "full Git revision compatible with this backup")
+	repositoryTreeSHA := fs.String("repository-tree-sha", "", "full Git tree SHA compatible with this backup")
 	createdAtRaw := fs.String("created-at", "", "UTC creation timestamp")
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -65,7 +67,7 @@ func createManifest(args []string) error {
 			return err
 		}
 	}
-	payload, err := backup.BuildManifest(absoluteBackup, *environment, *sourceContainer, *sourceDatabasePath, createdAt)
+	payload, err := backup.BuildManifest(absoluteBackup, *environment, *sourceContainer, *sourceDatabasePath, *repositoryRevision, *repositoryTreeSHA, createdAt)
 	if err != nil {
 		return err
 	}
@@ -78,6 +80,10 @@ func createManifest(args []string) error {
 	}
 	fmt.Printf("Verified backup manifest written to %s\n", absoluteManifest)
 	fmt.Printf("Backup SHA-256: %s\n", verified.Backup.SHA256)
+	if verified.Repository.Revision != "" {
+		fmt.Printf("Compatible repository revision: %s\n", verified.Repository.Revision)
+		fmt.Printf("Compatible repository tree: %s\n", verified.Repository.TreeSHA)
+	}
 	fmt.Printf("Latest schema migration: %s\n", verified.Verification.LatestSchemaMigration)
 	return nil
 }
@@ -112,6 +118,10 @@ func verify(args []string) error {
 	fmt.Printf("Manifest: %s\n", absoluteManifest)
 	fmt.Printf("Environment: %s\n", payload.Environment)
 	fmt.Printf("SHA-256: %s\n", payload.Backup.SHA256)
+	if payload.Repository.Revision != "" {
+		fmt.Printf("Compatible repository revision: %s\n", payload.Repository.Revision)
+		fmt.Printf("Compatible repository tree: %s\n", payload.Repository.TreeSHA)
+	}
 	fmt.Printf("Latest schema migration: %s\n", payload.Verification.LatestSchemaMigration)
 	return nil
 }

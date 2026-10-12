@@ -14,6 +14,10 @@ REHEARSAL_OFFHOST_BACKUP_NAME="${REHEARSAL_OFFHOST_BACKUP_NAME:-}"
 REHEARSAL_MAX_RPO_SECONDS="${REHEARSAL_MAX_RPO_SECONDS:-86400}"
 REHEARSAL_MAX_RTO_SECONDS="${REHEARSAL_MAX_RTO_SECONDS:-14400}"
 REHEARSAL_REPORT_FILE="${REHEARSAL_REPORT_FILE:-}"
+REHEARSAL_OWNER_UNAVAILABLE_MODE="${REHEARSAL_OWNER_UNAVAILABLE_MODE:-false}"
+REHEARSAL_ACCESS_MANIFEST_FILE="${REHEARSAL_ACCESS_MANIFEST_FILE:-}"
+REHEARSAL_TECHNICIAN_ID="${REHEARSAL_TECHNICIAN_ID:-}"
+REHEARSAL_SHARED_ACCESS_CONFIRM="${REHEARSAL_SHARED_ACCESS_CONFIRM:-}"
 
 for key in REHEARSAL_ENVIRONMENT REHEARSAL_ENV_DIR REHEARSAL_ENV_FILE REHEARSAL_COMPOSE_PROJECT; do
   [[ -n "${!key:-}" ]] || { echo "$key is required." >&2; exit 2; }
@@ -47,6 +51,65 @@ source_count=0
 if [[ $source_count -ne 1 ]]; then
   echo "Exactly one recovery rehearsal source is required: REHEARSAL_BACKUP_FILE, REHEARSAL_RECEIPT_FILE, or REHEARSAL_OFFHOST_BACKUP_NAME." >&2
   exit 2
+fi
+
+owner_mode="$(printf '%s' "$REHEARSAL_OWNER_UNAVAILABLE_MODE" | tr '[:upper:]' '[:lower:]')"
+case "$owner_mode" in
+  true|1|yes) owner_mode=true ;;
+  false|0|no|'') owner_mode=false ;;
+  *) echo "REHEARSAL_OWNER_UNAVAILABLE_MODE must be true or false." >&2; exit 2 ;;
+esac
+
+read_manifest_value() {
+  local file="$1" key="$2" line
+  line="$(grep -E "^[[:space:]]*${key}=" "$file" | tail -n 1 || true)"
+  [[ -n "$line" ]] || return 1
+  local value="${line#*=}"
+  value="${value%$'\r'}"
+  value="${value#\"}"; value="${value%\"}"
+  value="${value#\'}"; value="${value%\'}"
+  printf '%s\n' "$value"
+}
+
+access_manifest_sha256=""
+access_repository_source=""
+access_environment_source=""
+access_s3_source=""
+access_host_source=""
+access_hetzner_source=""
+access_dns_source=""
+access_mfa_source=""
+if [[ "$owner_mode" == true ]]; then
+  [[ "$REHEARSAL_ENVIRONMENT" == "production" ]] || { echo "Owner-unavailable recovery rehearsal must run against ENV=production." >&2; exit 2; }
+  [[ -n "$REHEARSAL_OFFHOST_BACKUP_NAME" && -z "$REHEARSAL_BACKUP_FILE" && -z "$REHEARSAL_RECEIPT_FILE" ]] || {
+    echo "Owner-unavailable recovery rehearsal must start from RECOVERY_REHEARSAL_OFFHOST_BACKUP_NAME only; local backup/receipt evidence is intentionally not accepted." >&2
+    exit 2
+  }
+  [[ -n "$REHEARSAL_TECHNICIAN_ID" ]] || { echo "REHEARSAL_TECHNICIAN_ID is required for owner-unavailable recovery evidence." >&2; exit 2; }
+  [[ "$REHEARSAL_SHARED_ACCESS_CONFIRM" == "OWNER-UNAVAILABLE-RECOVERY-ACCESS-CONFIRMED" ]] || {
+    echo "Owner-unavailable rehearsal requires REHEARSAL_SHARED_ACCESS_CONFIRM=OWNER-UNAVAILABLE-RECOVERY-ACCESS-CONFIRMED." >&2
+    exit 2
+  }
+  if [[ -z "$REHEARSAL_ACCESS_MANIFEST_FILE" ]]; then
+    REHEARSAL_ACCESS_MANIFEST_FILE="$REHEARSAL_ENV_DIR/ops/recovery-access.production.env"
+  fi
+  RECOVERY_ACCESS_ENVIRONMENT=production \
+  RECOVERY_ACCESS_ENV_DIR="$REHEARSAL_ENV_DIR" \
+  RECOVERY_ACCESS_ENV_FILE="$REHEARSAL_ENV_FILE" \
+  RECOVERY_ACCESS_MANIFEST_FILE="$REHEARSAL_ACCESS_MANIFEST_FILE" \
+    "$ROOT_DIR/scripts/server-owner-unavailable-recovery-preflight.sh"
+  if command -v sha256sum >/dev/null 2>&1; then
+    access_manifest_sha256="$(sha256sum "$REHEARSAL_ACCESS_MANIFEST_FILE" | awk '{print $1}')"
+  else
+    access_manifest_sha256="$(shasum -a 256 "$REHEARSAL_ACCESS_MANIFEST_FILE" | awk '{print $1}')"
+  fi
+  access_repository_source="$(read_manifest_value "$REHEARSAL_ACCESS_MANIFEST_FILE" RECOVERY_REPOSITORY_SOURCE)"
+  access_environment_source="$(read_manifest_value "$REHEARSAL_ACCESS_MANIFEST_FILE" RECOVERY_PRODUCTION_ENV_SOURCE)"
+  access_s3_source="$(read_manifest_value "$REHEARSAL_ACCESS_MANIFEST_FILE" RECOVERY_S3_CREDENTIAL_SOURCE)"
+  access_host_source="$(read_manifest_value "$REHEARSAL_ACCESS_MANIFEST_FILE" RECOVERY_HOST_ACCESS_SOURCE)"
+  access_hetzner_source="$(read_manifest_value "$REHEARSAL_ACCESS_MANIFEST_FILE" RECOVERY_HETZNER_CONSOLE_SOURCE)"
+  access_dns_source="$(read_manifest_value "$REHEARSAL_ACCESS_MANIFEST_FILE" RECOVERY_DNS_SOURCE)"
+  access_mfa_source="$(read_manifest_value "$REHEARSAL_ACCESS_MANIFEST_FILE" RECOVERY_MFA_RECOVERY_SOURCE)"
 fi
 
 read_state_value() {
@@ -192,6 +255,30 @@ rpo_seconds=$((started_epoch - backup_created_epoch))
 source_sha256="$(jq -er '.backup.sha256' "$manifest")"
 actual_source_sha256="$(sha256_file "$candidate")"
 [[ "$source_sha256" == "$actual_source_sha256" ]] || { echo "Materialized/staged source SHA-256 differs from manifest evidence." >&2; exit 2; }
+backup_repository_revision="$(jq -r '.repository.revision // ""' "$manifest")"
+backup_repository_tree_sha="$(jq -r '.repository.tree_sha // ""' "$manifest")"
+compatible_revision_available=false
+if [[ -n "$backup_repository_revision" && -n "$backup_repository_tree_sha" ]]; then
+  if git -C "$REHEARSAL_ENV_DIR" cat-file -e "${backup_repository_revision}^{commit}" >/dev/null 2>&1 \
+    && [[ "$(git -C "$REHEARSAL_ENV_DIR" rev-parse "${backup_repository_revision}^{tree}")" == "$backup_repository_tree_sha" ]]; then
+    compatible_revision_available=true
+  fi
+fi
+if [[ "$owner_mode" == true && "$compatible_revision_available" != true ]]; then
+  echo "Owner-unavailable recovery requires backup manifest repository revision/tree evidence that can be resolved from GitHub." >&2
+  echo "Fetching shared GitHub repository history before the final compatibility check." >&2
+  git -C "$REHEARSAL_ENV_DIR" fetch --quiet origin --prune
+  git -C "$REHEARSAL_ENV_DIR" cat-file -e "${backup_repository_revision}^{commit}" >/dev/null 2>&1 || {
+    echo "Compatible backup repository revision is unavailable after GitHub fetch: ${backup_repository_revision:-missing}" >&2
+    exit 2
+  }
+  actual_backup_tree="$(git -C "$REHEARSAL_ENV_DIR" rev-parse "${backup_repository_revision}^{tree}")"
+  [[ "$actual_backup_tree" == "$backup_repository_tree_sha" ]] || {
+    echo "Backup repository tree evidence does not match compatible revision." >&2
+    exit 2
+  }
+  compatible_revision_available=true
+fi
 
 confirm="RESTORE-$(printf '%s' "$REHEARSAL_ENVIRONMENT" | tr '[:lower:]' '[:upper:]')"
 restored_db="$rehearsal_dir/restored.db"
@@ -303,6 +390,9 @@ jq -n \
   --arg backup_file "$(basename "$candidate")" \
   --arg backup_created_at "$backup_created_at" \
   --arg backup_sha256 "$source_sha256" \
+  --arg backup_repository_revision "$backup_repository_revision" \
+  --arg backup_repository_tree_sha "$backup_repository_tree_sha" \
+  --argjson compatible_revision_available "$compatible_revision_available" \
   --arg manifest_file "$(basename "$manifest")" \
   --arg receipt_file "${source_receipt:+$(basename "$source_receipt")}" \
   --arg receipt_version_id "$receipt_version_id" \
@@ -319,6 +409,17 @@ jq -n \
   --arg post_boot_integrity "$post_boot_integrity" \
   --arg repository_revision "$repository_revision" \
   --arg repository_tree_sha "$repository_tree_sha" \
+  --argjson owner_unavailable_mode "$owner_mode" \
+  --arg technician_id "$REHEARSAL_TECHNICIAN_ID" \
+  --arg access_manifest_file "${REHEARSAL_ACCESS_MANIFEST_FILE:+$(basename "$REHEARSAL_ACCESS_MANIFEST_FILE")}" \
+  --arg access_manifest_sha256 "$access_manifest_sha256" \
+  --arg access_repository_source "$access_repository_source" \
+  --arg access_environment_source "$access_environment_source" \
+  --arg access_s3_source "$access_s3_source" \
+  --arg access_host_source "$access_host_source" \
+  --arg access_hetzner_source "$access_hetzner_source" \
+  --arg access_dns_source "$access_dns_source" \
+  --arg access_mfa_source "$access_mfa_source" \
   --argjson rpo_seconds "$rpo_seconds" \
   --argjson max_rpo_seconds "$REHEARSAL_MAX_RPO_SECONDS" \
   --argjson rpo_met "$rpo_met" \
@@ -335,11 +436,30 @@ jq -n \
       revision: $repository_revision,
       tree_sha: $repository_tree_sha
     },
+    owner_unavailable: {
+      mode: $owner_unavailable_mode,
+      technician_id: $technician_id,
+      shared_access_confirmed: $owner_unavailable_mode,
+      access_manifest_file: $access_manifest_file,
+      access_manifest_sha256: $access_manifest_sha256,
+      sources: {
+        repository: $access_repository_source,
+        production_environment: $access_environment_source,
+        s3_credentials: $access_s3_source,
+        host_access: $access_host_source,
+        hetzner_console: $access_hetzner_source,
+        dns: $access_dns_source,
+        mfa_recovery: $access_mfa_source
+      }
+    },
     source: {
       kind: $source_kind,
       backup_file: $backup_file,
       backup_created_at: $backup_created_at,
       backup_sha256: $backup_sha256,
+      repository_revision: $backup_repository_revision,
+      repository_tree_sha: $backup_repository_tree_sha,
+      compatible_revision_available: $compatible_revision_available,
       manifest_file: $manifest_file,
       receipt_file: $receipt_file,
       receipt_version_id: $receipt_version_id,
@@ -381,6 +501,11 @@ printf 'Source: %s (%s)\n' "$(basename "$candidate")" "$source_kind"
 printf 'Selected restore-point age / RPO: %ss (objective <= %ss): %s\n' "$rpo_seconds" "$REHEARSAL_MAX_RPO_SECONDS" "$rpo_met"
 printf 'Recovery rehearsal RTO: %ss (objective <= %ss): %s\n' "$rto_seconds" "$REHEARSAL_MAX_RTO_SECONDS" "$rto_met"
 printf 'Evidence: %s\n' "$REHEARSAL_REPORT_FILE"
+if [[ "$owner_mode" == true ]]; then
+  printf 'Owner-unavailable technician: %s\n' "$REHEARSAL_TECHNICIAN_ID"
+  printf 'Compatible backup revision: %s (tree %s)\n' "$backup_repository_revision" "$backup_repository_tree_sha"
+  printf 'Shared recovery access manifest: %s (SHA-256 %s)\n' "$REHEARSAL_ACCESS_MANIFEST_FILE" "$access_manifest_sha256"
+fi
 
 if [[ "$status" != "passed" ]]; then
   echo "Recovery mechanics verified, but one or more RPO/RTO objectives were not met. Review the evidence before accepting the rehearsal." >&2
