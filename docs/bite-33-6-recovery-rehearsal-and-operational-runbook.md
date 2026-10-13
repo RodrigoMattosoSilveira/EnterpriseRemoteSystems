@@ -13,7 +13,7 @@ It adds:
 - repository revision/tree evidence in every new verified backup manifest so complete host loss still identifies the application revision compatible with the selected restore point;
 - a committed non-secret recovery-access locator manifest at `ops/recovery-access.production.env`;
 - an owner-unavailable Production preflight/rehearsal that requires shared LastPass/GitHub/Hetzner/DNS access independent of the primary owner;
-- the operator runbook in `docs/database-recovery-runbook.md` and access-package guide in `docs/owner-unavailable-recovery-access.md`.
+- a single canonical operator runbook in `docs/database-recovery-runbook.md`, including the owner-unavailable access package; the machine-readable locator contract remains `ops/recovery-access.production.env`.
 
 
 ## Owner-unavailable recovery readiness

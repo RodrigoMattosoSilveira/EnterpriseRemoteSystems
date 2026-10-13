@@ -196,7 +196,7 @@ def test_owner_unavailable_rehearsal_contract() -> None:
 
 def test_runbook_and_initializer_contract() -> None:
     runbook = (ROOT / "docs" / "database-recovery-runbook.md").read_text()
-    access = (ROOT / "docs" / "owner-unavailable-recovery-access.md").read_text()
+    obsolete_access = ROOT / "docs" / "owner-unavailable-recovery-access.md"
     init_server = (ROOT / "scripts" / "init-server-env.sh").read_text()
     init_prod = (ROOT / "scripts" / "init-prod-env.sh").read_text()
     require(
@@ -217,7 +217,26 @@ def test_runbook_and_initializer_contract() -> None:
     )
     if "normal administrative sources" in runbook:
         raise AssertionError("runbook still uses vague 'normal administrative sources' wording")
-    require(access, ("ERS-Recovery", "Production/.env.production", "independent-mfa-and-recovery-codes", "No personal vault", "quarterly"), "owner-unavailable access guide")
+    require(
+        runbook,
+        (
+            "Owner-unavailable recovery access package",
+            "Operational standard",
+            "Canonical non-secret locator manifest",
+            "Required content of each shared source",
+            "Canonical Production Object Storage identity",
+            "Required access policy",
+            "Configuration-change discipline",
+            "Quarterly owner-unavailable access rehearsal",
+            "ERS-Recovery",
+            "Production/.env.production",
+            "independent-mfa-and-recovery-codes",
+            "No personal vault",
+        ),
+        "consolidated database recovery runbook",
+    )
+    if obsolete_access.exists():
+        raise AssertionError("owner-unavailable recovery access instructions must be consolidated into database-recovery-runbook.md")
     require(init_server, ("does NOT reconstruct the canonical Production recovery configuration", "ops/recovery-access.production.env"), "server env initializer warning")
     require(init_prod, ("does NOT reconstruct the canonical Production recovery configuration", "ops/recovery-access.production.env"), "legacy production env initializer warning")
 
