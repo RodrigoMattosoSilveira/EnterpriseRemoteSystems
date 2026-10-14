@@ -206,6 +206,15 @@ else
       --expected-environment "$MIGRATION_ENVIRONMENT" \
       --output-dir "$recovery_source_dir"
   recovery_backup="$recovery_source_dir/$(basename "$backup_file")"
+  # The restore utility runs as root in Docker and writes a 0600 staged SQLite
+  # file. The migration probe is copied by the invoking host deployment user,
+  # which cannot read that file until ownership is transferred. Retain 0600:
+  # never broaden backup access to other users or groups.
+  compose run --rm --no-deps \
+    -v "$gate_dir:$gate_dir" \
+    --entrypoint sh backend -c \
+    'set -eu; chown "$1:$2" "$3"; chmod 600 "$3"' \
+    sh "$(id -u)" "$(id -g)" "$recovery_backup"
 fi
 
 probe="$gate_dir/migration-probe.db"
