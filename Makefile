@@ -780,7 +780,7 @@ server-test-rehearsal-protect-existing-db:
 		TEST_REHEARSAL_VOLUME="$$volume" \
 		TEST_REHEARSAL_BACKUP_RETENTION_COUNT="$(SERVER_BACKUP_RETENTION_COUNT)" \
 		TEST_REHEARSAL_BACKUP_RETENTION_DAYS="$(SERVER_BACKUP_RETENTION_DAYS)" \
-			./scripts/server-test-rehearsal-offline-backup.sh; \
+			bash ./scripts/server-test-rehearsal-offline-backup.sh; \
 	else \
 		echo "No existing Test SQLite volume; no pre-rehearsal backup is required."; \
 	fi
