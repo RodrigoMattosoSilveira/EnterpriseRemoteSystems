@@ -9,6 +9,10 @@ MIGRATION_COMPOSE_PROJECT="${MIGRATION_COMPOSE_PROJECT:-}"
 MIGRATION_CONTAINER="${MIGRATION_CONTAINER:-}"
 MIGRATION_VOLUME="${MIGRATION_VOLUME:-}"
 MIGRATION_EXPECTED_FINAL_MIGRATION="${MIGRATION_EXPECTED_FINAL_MIGRATION:-000077_journey_bonus_award_approval.up.sql}"
+MIGRATION_PREVIOUS_REVISION="${MIGRATION_PREVIOUS_REVISION:-}"
+MIGRATION_PREVIOUS_TREE_SHA="${MIGRATION_PREVIOUS_TREE_SHA:-}"
+MIGRATION_TARGET_REVISION="${MIGRATION_TARGET_REVISION:-}"
+MIGRATION_TARGET_TREE_SHA="${MIGRATION_TARGET_TREE_SHA:-}"
 MIGRATION_BACKUP_RETENTION_COUNT="${MIGRATION_BACKUP_RETENTION_COUNT:-14}"
 MIGRATION_BACKUP_RETENTION_DAYS="${MIGRATION_BACKUP_RETENTION_DAYS:-30}"
 MIGRATION_STATE_FILE="${MIGRATION_STATE_FILE:-}"
@@ -28,6 +32,16 @@ case "$(printf '%s' "$MIGRATION_ENVIRONMENT" | tr '[:upper:]' '[:lower:]')" in
 esac
 
 MIGRATION_ENV_DIR="$(cd "$MIGRATION_ENV_DIR" && pwd -P)"
+if [[ -z "$MIGRATION_TARGET_REVISION" ]] && git -C "$MIGRATION_ENV_DIR" rev-parse HEAD >/dev/null 2>&1; then
+  MIGRATION_TARGET_REVISION="$(git -C "$MIGRATION_ENV_DIR" rev-parse HEAD)"
+  MIGRATION_TARGET_TREE_SHA="$(git -C "$MIGRATION_ENV_DIR" rev-parse HEAD^{tree})"
+fi
+for revision_value in "$MIGRATION_PREVIOUS_REVISION" "$MIGRATION_PREVIOUS_TREE_SHA" "$MIGRATION_TARGET_REVISION" "$MIGRATION_TARGET_TREE_SHA"; do
+  if [[ -n "$revision_value" && ( ${#revision_value} -ne 40 || "$revision_value" == *[!0-9a-fA-F]* ) ]]; then
+    echo "Migration recovery revision/tree evidence must be a 40-character Git SHA when provided: $revision_value" >&2
+    exit 2
+  fi
+done
 if [[ ! -f "$MIGRATION_ENV_DIR/$MIGRATION_ENV_FILE" ]]; then
   echo "Migration environment file does not exist: $MIGRATION_ENV_DIR/$MIGRATION_ENV_FILE" >&2
   exit 2
@@ -107,6 +121,14 @@ create_offline_backup() {
     --entrypoint sh backend -c \
     "set -eu; test -f /app/data/app.db; sqlite3 /app/data/app.db \".backup '$target'\"; test \"\$(sqlite3 '$target' 'PRAGMA integrity_check;')\" = ok; test -z \"\$(sqlite3 '$target' 'PRAGMA foreign_key_check;')\""
 
+  local manifest_repository_args=()
+  if [[ -n "$MIGRATION_PREVIOUS_REVISION" && -n "$MIGRATION_PREVIOUS_TREE_SHA" ]]; then
+    manifest_repository_args+=(
+      --repository-revision "$MIGRATION_PREVIOUS_REVISION"
+      --repository-tree-sha "$MIGRATION_PREVIOUS_TREE_SHA"
+    )
+  fi
+
   ERS_BACKUP_ENV_DIR="$MIGRATION_ENV_DIR" \
   ERS_BACKUP_ENV_FILE="$MIGRATION_ENV_FILE" \
   ERS_BACKUP_COMPOSE_PROJECT="$MIGRATION_COMPOSE_PROJECT" \
@@ -115,7 +137,8 @@ create_offline_backup() {
       --manifest "$target.manifest.json" \
       --environment "$MIGRATION_ENVIRONMENT" \
       --source-container "offline-$MIGRATION_COMPOSE_PROJECT" \
-      --source-database-path /app/data/app.db
+      --source-database-path /app/data/app.db \
+      "${manifest_repository_args[@]}"
 
   ERS_BACKUP_ENV_DIR="$MIGRATION_ENV_DIR" \
   ERS_BACKUP_ENV_FILE="$MIGRATION_ENV_FILE" \
@@ -158,6 +181,8 @@ else
     BACKUP_RETENTION_COUNT="$MIGRATION_BACKUP_RETENTION_COUNT" \
     BACKUP_RETENTION_DAYS="$MIGRATION_BACKUP_RETENTION_DAYS" \
     BACKUP_RESULT_FILE="$result_file" \
+    BACKUP_REPOSITORY_REVISION="$MIGRATION_PREVIOUS_REVISION" \
+    BACKUP_REPOSITORY_TREE_SHA="$MIGRATION_PREVIOUS_TREE_SHA" \
     ERS_BACKUP_ENV_DIR="$MIGRATION_ENV_DIR" \
     ERS_BACKUP_ENV_FILE="$MIGRATION_ENV_FILE" \
     ERS_BACKUP_COMPOSE_PROJECT="$MIGRATION_COMPOSE_PROJECT" \
@@ -248,6 +273,10 @@ rollback_live_database() {
     echo "source_sha256=$source_sha256"
     echo "probe_sha256=$probe_sha256"
     echo "expected_final_migration=$MIGRATION_EXPECTED_FINAL_MIGRATION"
+    echo "previous_revision=$MIGRATION_PREVIOUS_REVISION"
+    echo "previous_tree_sha=$MIGRATION_PREVIOUS_TREE_SHA"
+    echo "target_revision=$MIGRATION_TARGET_REVISION"
+    echo "target_tree_sha=$MIGRATION_TARGET_TREE_SHA"
     echo "failed_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   } > "$MIGRATION_STATE_FILE"
   exit "$failure_status"
@@ -280,6 +309,10 @@ fi
   echo "source_sha256=$source_sha256"
   echo "probe_sha256=$probe_sha256"
   echo "expected_final_migration=$MIGRATION_EXPECTED_FINAL_MIGRATION"
+  echo "previous_revision=$MIGRATION_PREVIOUS_REVISION"
+  echo "previous_tree_sha=$MIGRATION_PREVIOUS_TREE_SHA"
+  echo "target_revision=$MIGRATION_TARGET_REVISION"
+  echo "target_tree_sha=$MIGRATION_TARGET_TREE_SHA"
   echo "first_deployment=$first_deployment"
   echo "armed_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 } > "$MIGRATION_STATE_FILE"

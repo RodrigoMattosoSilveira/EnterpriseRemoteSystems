@@ -67,6 +67,11 @@ type BackupMetadata struct {
 	SHA256    string `json:"sha256"`
 }
 
+type RepositoryMetadata struct {
+	Revision string `json:"revision,omitempty"`
+	TreeSHA  string `json:"tree_sha,omitempty"`
+}
+
 type Verification struct {
 	VerifiedAt            string         `json:"verified_at"`
 	IntegrityCheck        string         `json:"integrity_check"`
@@ -78,13 +83,14 @@ type Verification struct {
 }
 
 type Manifest struct {
-	FormatVersion int            `json:"format_version"`
-	Status        string         `json:"status"`
-	CreatedAt     string         `json:"created_at"`
-	Environment   string         `json:"environment"`
-	Source        Source         `json:"source"`
-	Backup        BackupMetadata `json:"backup"`
-	Verification  Verification   `json:"verification"`
+	FormatVersion int                `json:"format_version"`
+	Status        string             `json:"status"`
+	CreatedAt     string             `json:"created_at"`
+	Environment   string             `json:"environment"`
+	Repository    RepositoryMetadata `json:"repository,omitempty"`
+	Source        Source             `json:"source"`
+	Backup        BackupMetadata     `json:"backup"`
+	Verification  Verification       `json:"verification"`
 }
 
 func NormalizeEnvironment(value string) (string, error) {
@@ -270,7 +276,29 @@ func Inspect(path string) (Inspection, error) {
 	}, nil
 }
 
-func BuildManifest(backupPath, environment, sourceContainer, sourceDatabasePath string, createdAt time.Time) (Manifest, error) {
+func validateRepositoryMetadata(repository RepositoryMetadata) error {
+	revision := strings.TrimSpace(repository.Revision)
+	treeSHA := strings.TrimSpace(repository.TreeSHA)
+	if (revision == "") != (treeSHA == "") {
+		return errors.New("repository revision and tree SHA must be supplied together")
+	}
+	if revision == "" {
+		return nil
+	}
+	if len(revision) != 40 || len(treeSHA) != 40 {
+		return errors.New("repository revision and tree SHA must be full 40-character Git object IDs")
+	}
+	for _, value := range []string{revision, treeSHA} {
+		for _, ch := range value {
+			if !((ch >= '0' && ch <= '9') || (ch >= 'a' && ch <= 'f')) {
+				return errors.New("repository revision and tree SHA must be lowercase hexadecimal Git object IDs")
+			}
+		}
+	}
+	return nil
+}
+
+func BuildManifest(backupPath, environment, sourceContainer, sourceDatabasePath, repositoryRevision, repositoryTreeSHA string, createdAt time.Time) (Manifest, error) {
 	environment, err := NormalizeEnvironment(environment)
 	if err != nil {
 		return Manifest{}, err
@@ -280,6 +308,11 @@ func BuildManifest(backupPath, environment, sourceContainer, sourceDatabasePath 
 	}
 	if strings.TrimSpace(sourceDatabasePath) == "" {
 		return Manifest{}, errors.New("source database path is required")
+	}
+	repositoryRevision = strings.TrimSpace(repositoryRevision)
+	repositoryTreeSHA = strings.TrimSpace(repositoryTreeSHA)
+	if err := validateRepositoryMetadata(RepositoryMetadata{Revision: repositoryRevision, TreeSHA: repositoryTreeSHA}); err != nil {
+		return Manifest{}, err
 	}
 	inspection, err := Inspect(backupPath)
 	if err != nil {
@@ -298,6 +331,10 @@ func BuildManifest(backupPath, environment, sourceContainer, sourceDatabasePath 
 		Status:        "verified",
 		CreatedAt:     FormatUTC(createdAt),
 		Environment:   environment,
+		Repository: RepositoryMetadata{
+			Revision: repositoryRevision,
+			TreeSHA:  repositoryTreeSHA,
+		},
 		Source: Source{
 			Container:    sourceContainer,
 			DatabasePath: sourceDatabasePath,
@@ -375,6 +412,9 @@ func VerifyDatabaseAgainstManifest(databasePath string, manifest Manifest, expec
 	}
 	if manifest.Status != "verified" {
 		return fmt.Errorf("backup manifest status is not verified: %q", manifest.Status)
+	}
+	if err := validateRepositoryMetadata(manifest.Repository); err != nil {
+		return fmt.Errorf("backup repository evidence is invalid: %w", err)
 	}
 	environment, err := NormalizeEnvironment(manifest.Environment)
 	if err != nil {

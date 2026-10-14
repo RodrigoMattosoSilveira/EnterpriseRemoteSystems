@@ -145,6 +145,10 @@ def test_repository_contract() -> None:
         "compose stop",
         "ers-restore apply",
         "status=armed",
+        "previous_revision=",
+        "previous_tree_sha=",
+        "target_revision=",
+        "target_tree_sha=",
     ):
         if fragment not in gate:
             raise AssertionError(f"migration gate missing safety fragment {fragment!r}")
@@ -161,6 +165,9 @@ def test_repository_contract() -> None:
     for fragment in (
         "make server-migration-recovery-gate ENV=test",
         "make server-migration-recovery-gate ENV='${{ steps.target.outputs.env_name }}'",
+        'PREVIOUS_REVISION=\\"\\$(git rev-parse HEAD)\\"',
+        'MIGRATION_PREVIOUS_REVISION=\\"\\$PREVIOUS_REVISION\\"',
+        "MIGRATION_TARGET_REVISION='${{ steps.revision.outputs.sha }}'",
         "make server-migration-recovery-rollback",
         "make server-migration-recovery-commit",
     ):

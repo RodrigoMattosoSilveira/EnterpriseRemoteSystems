@@ -86,6 +86,12 @@ jobs:
       - name: Verify Bite 33.5 migration/deployment recovery gate
         run: make migration-deployment-recovery-gate-check
 
+      - name: Verify Bite 33.6 recovery rehearsal and operational runbook
+        run: make recovery-rehearsal-operational-runbook-check
+
+      - name: Verify Bite 33.6 owner-unavailable recovery readiness
+        run: make owner-unavailable-recovery-readiness-check
+
       - name: Rehearse pre-30I database through final 30I migration
         run: make migration-rehearsal-check
 
