@@ -762,6 +762,29 @@ server-test-rehearsal-ensure-baseline:
 		-e EXPECTED_FINAL_MIGRATION="$(TEST_RELEASE_FINAL_MIGRATION)" \
 		--entrypoint /app/build-test-rehearsal-baseline.sh backend
 
+.PHONY: server-test-rehearsal-protect-existing-db
+server-test-rehearsal-protect-existing-db:
+	@if [[ "$(ENV)" != "test" ]]; then \
+		echo "Refusing Test rehearsal backup for ENV=$(ENV)." >&2; \
+		exit 2; \
+	fi
+	@container="$(CONTAINER_PREFIX)-backend"; \
+	volume="$(COMPOSE_PROJECT)_backend-data"; \
+	if docker ps --format '{{.Names}}' | grep -qx "$$container"; then \
+		$(MAKE) server-backup ENV=test; \
+	elif docker volume inspect "$$volume" >/dev/null 2>&1; then \
+		echo "Test backend is stopped; creating a verified offline backup before replacing its SQLite volume."; \
+		TEST_REHEARSAL_ENV_DIR="$(ENV_DIR)" \
+		TEST_REHEARSAL_ENV_FILE="$(ENV_FILE)" \
+		TEST_REHEARSAL_COMPOSE_PROJECT="$(COMPOSE_PROJECT)" \
+		TEST_REHEARSAL_VOLUME="$$volume" \
+		TEST_REHEARSAL_BACKUP_RETENTION_COUNT="$(SERVER_BACKUP_RETENTION_COUNT)" \
+		TEST_REHEARSAL_BACKUP_RETENTION_DAYS="$(SERVER_BACKUP_RETENTION_DAYS)" \
+			./scripts/server-test-rehearsal-offline-backup.sh; \
+	else \
+		echo "No existing Test SQLite volume; no pre-rehearsal backup is required."; \
+	fi
+
 .PHONY: server-test-rehearsal-restore
 server-test-rehearsal-restore:
 	@if [[ "$(ENV)" != "test" ]]; then \
@@ -769,7 +792,7 @@ server-test-rehearsal-restore:
 		exit 2; \
 	fi
 	@$(MAKE) server-test-rehearsal-ensure-baseline ENV=test
-	@$(MAKE) server-backup ENV=test
+	@$(MAKE) server-test-rehearsal-protect-existing-db ENV=test
 	@baseline="$(TEST_RELEASE_BASELINE_DB)"; \
 	if [[ ! -f "$$baseline" ]]; then \
 		echo "Missing Test release baseline: $$baseline"; \
