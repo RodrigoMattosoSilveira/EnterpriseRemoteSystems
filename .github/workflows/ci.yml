@@ -71,6 +71,27 @@ jobs:
       - name: Verify Bite 32.6 release-hardening contract
         run: make bite326-release-hardening-check
 
+      - name: Verify Bite 33.1 Production environment guardrails
+        run: make production-environment-guardrails-check
+
+      - name: Verify Bite 33.2 backup creation, retention, and verification
+        run: make backup-creation-retention-verification-check
+
+      - name: Verify Bite 33.3 off-host backup protection
+        run: make off-host-backup-protection-check
+
+      - name: Verify Bite 33.4 restore tooling and recovery verification
+        run: make restore-tooling-recovery-verification-check
+
+      - name: Verify Bite 33.5 migration/deployment recovery gate
+        run: make migration-deployment-recovery-gate-check
+
+      - name: Verify Bite 33.6 recovery rehearsal and operational runbook
+        run: make recovery-rehearsal-operational-runbook-check
+
+      - name: Verify Bite 33.6 owner-unavailable recovery readiness
+        run: make owner-unavailable-recovery-readiness-check
+
       - name: Rehearse pre-30I database through final 30I migration
         run: make migration-rehearsal-check
 

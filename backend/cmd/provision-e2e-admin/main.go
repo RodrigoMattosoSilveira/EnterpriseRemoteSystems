@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"flag"
 	"fmt"
 	"io"
 	"log"
@@ -24,19 +23,9 @@ type provisionInput struct {
 }
 
 func main() {
-	allowProduction := flag.Bool("allow-production", false, "allow provisioning when APP_ENV is production")
-	flag.Parse()
-
-	if flag.NArg() != 0 {
-		log.Fatalf("unexpected arguments: %s", strings.Join(flag.Args(), " "))
-	}
-
-	appEnv := strings.ToLower(strings.TrimSpace(os.Getenv("APP_ENV")))
-	if appEnv == "" {
-		appEnv = "development"
-	}
-	if (appEnv == "production" || appEnv == "prod") && !*allowProduction {
-		log.Fatal("refusing to provision an application administrator in production without --allow-production")
+	_, ok := normalizeProvisioningEnvironment(os.Getenv("APP_ENV"))
+	if !ok {
+		log.Fatalf("refusing E2E/test administrator provisioning for APP_ENV=%q; only local/development/test environments are permitted", strings.TrimSpace(os.Getenv("APP_ENV")))
 	}
 
 	input, err := readInput(os.Stdin)
@@ -68,11 +57,9 @@ func main() {
 		log.Fatalf("provision application administrator: %v", err)
 	}
 
-	if appEnv != "production" && appEnv != "prod" {
-		tenantAdminPassword := firstNonEmpty(os.Getenv("E2E_TENANT_ADMIN_PASSWORD"), input.Password)
-		if err := ensureE2ETenantFixtures(ctx, database, tenantAdminPassword, positiveInt(os.Getenv("AUTH_PASSWORD_HASH_COST"), 12)); err != nil {
-			log.Fatalf("provision E2E Tenant fixtures: %v", err)
-		}
+	tenantAdminPassword := firstNonEmpty(os.Getenv("E2E_TENANT_ADMIN_PASSWORD"), input.Password)
+	if err := ensureE2ETenantFixtures(ctx, database, tenantAdminPassword, positiveInt(os.Getenv("AUTH_PASSWORD_HASH_COST"), 12)); err != nil {
+		log.Fatalf("provision E2E Tenant fixtures: %v", err)
 	}
 
 	fmt.Printf(
@@ -87,6 +74,17 @@ func main() {
 		result.LoginUpdated,
 		result.PasswordUpdated,
 	)
+}
+
+func normalizeProvisioningEnvironment(value string) (string, bool) {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "local", "dev", "development":
+		return "development", true
+	case "test", "testing", "ci":
+		return "test", true
+	default:
+		return "", false
+	}
 }
 
 func readInput(reader io.Reader) (provisionInput, error) {

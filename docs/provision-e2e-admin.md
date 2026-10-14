@@ -2,13 +2,13 @@
 
 ## Purpose
 
-`provision-e2e-admin` is a database-internal, idempotent operation used by CI/CD to ensure that each deployed ERS environment has an authenticated application administrator.
+`provision-e2e-admin` is a database-internal, idempotent **Development/Test-only** operation used by CI/CD to ensure that non-Production ERS environments have an authenticated application administrator and the E2E tenant fixtures required by automated verification.
 
-It replaces the account-provisioning portion of `scripts/ers-b28c-prepare-test-data-final.sh` for deployed environments. It does not create People, Collaborators, secondary tenants, or other manual acceptance fixtures.
+Bite 33.1 makes this command unavailable in Production. It is test provisioning, not a Production administrator-lifecycle mechanism.
 
 ## Reconciled state
 
-Each run ensures that:
+In Development or Test, each run ensures that:
 
 - authorization actor `e2e-application-admin` exists and is active;
 - the actor has an active `APPLICATION_ADMIN` grant at global control-plane scope `*`;
@@ -16,16 +16,36 @@ Each run ensures that:
 - one active authentication account is linked to that actor;
 - the configured login is normalized and unique;
 - the configured password is current;
-- `must_change_password` is false; and
-- existing sessions and password-reset tokens are invalidated when the login, password, or active state changes.
+- `must_change_password` is false;
+- existing sessions and password-reset tokens are invalidated when login, password, or active state changes; and
+- the deterministic E2E Tenant fixtures required by deployed tests are present.
 
 Running the operation again with unchanged input does not replace the password hash or revoke sessions.
+
+## Environment guard
+
+`APP_ENV` must explicitly identify a non-Production environment:
+
+```text
+local | dev | development | test | testing | ci
+```
+
+`production`, `prod`, missing values, and unknown values are refused before the provisioning input is read or a database is opened. There is no Production override flag.
+
+The generic Make target is therefore limited to:
+
+```bash
+make server-provision-e2e-admin ENV=development < provision.json
+make server-provision-e2e-admin ENV=test < provision.json
+```
+
+`make server-prod-provision-e2e-admin` exists only as an explicit refusal target so an old operational command cannot silently become destructive.
 
 ## Secret handling
 
 The operation reads one JSON object from standard input. The password is never accepted as a command-line argument and is never printed.
 
-Example development invocation on the server:
+Example Development invocation on the server:
 
 ```bash
 payload="$(jq -cn \
@@ -39,55 +59,24 @@ printf '%s' "$payload" |
   make server-dev-provision-e2e-admin
 ```
 
-Production provisioning has an additional binary guard. The Make target supplies `--allow-production` only when `ENV=production`.
-
 ## GitHub environment configuration
 
-Each GitHub environment must define this secret:
+Development and Test GitHub environments require:
 
 ```text
 E2E_ADMIN_PASSWORD
 ```
 
-The password must satisfy the ERS authentication password requirements. No pre-existing administrator password is required: deployment creates the account or rotates it to this value.
+An optional non-secret `E2E_ADMIN_EMAIL` may override the default Development/Test login.
 
-Configure a unique password in each environment from a trusted local terminal:
-
-```bash
-gh secret set E2E_ADMIN_PASSWORD --env development
-gh secret set E2E_ADMIN_PASSWORD --env test
-gh secret set E2E_ADMIN_PASSWORD --env production
-```
-
-Each command prompts for the value without placing it in shell history.
-
-An optional non-secret environment variable can override the default login:
-
-```text
-E2E_ADMIN_EMAIL
-```
-
-Defaults are:
-
-| Environment | Default login |
-|---|---|
-| development | `e2e-admin-dev@enterpriseremotesystems.com` |
-| test | `e2e-admin-tst@enterpriseremotesystems.com` |
-| production | `e2e-admin@enterpriseremotesystems.com` |
+Production deployment does not resolve or use an E2E administrator password or login. Production administrator lifecycle must use an operationally controlled non-test workflow.
 
 ## Deployment sequence
 
-For development, test, and production, `deploy.yml` performs:
+For Development and Test, `deploy.yml` performs the quality gates, immutable revision checkout, image build/startup, health and migration verification, E2E administrator/fixture provisioning, and public/deployed automated checks.
 
-1. quality gates;
-2. immutable revision checkout;
-3. image build and application startup;
-4. backend health verification;
-5. administrator provisioning through the backend container; and
-6. public smoke tests.
-
-Development and test then run deployed Playwright using the provisioned login and the same environment secret. Production provisioning is performed, but deployed Playwright remains disabled.
+For Production, the deployment workflow performs the Production deployment and verification steps but **skips E2E/test administrator provisioning**. Deployed Playwright also remains disabled in Production.
 
 ## Failure behavior
 
-Deployment stops before changing the server when `E2E_ADMIN_PASSWORD` is missing. Provisioning also stops on login ownership conflicts rather than relinking an account that belongs to another actor.
+Provisioning stops immediately when environment identity is missing, unknown, or Production. Development/Test deployment also stops when its required E2E administrator secret is missing. Login ownership conflicts continue to fail rather than relinking an account that belongs to another actor.

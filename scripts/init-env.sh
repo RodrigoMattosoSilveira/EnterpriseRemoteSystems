@@ -1,13 +1,17 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ENV_EXAMPLE_FILE="${1:-backend/.env.production.example}"
-ENV_FILE="${2:-.env.production}"
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ENV_EXAMPLE_FILE="${1:-backend/.env.example}"
+ENV_FILE="${2:-backend/.env}"
 
 if [[ ! -f "$ENV_EXAMPLE_FILE" ]]; then
-  echo "Error: ${ENV_EXAMPLE_FILE} does not exist."
+  echo "Error: ${ENV_EXAMPLE_FILE} does not exist." >&2
   exit 1
 fi
+
+APP_ENV_VALUE="$(grep -E '^[[:space:]]*APP_ENV=' "$ENV_EXAMPLE_FILE" | tail -n 1 | cut -d= -f2- | tr -d '\r' | sed -e 's/^"//' -e 's/"$//' -e "s/^'//" -e "s/'$//")"
+"${ROOT_DIR}/scripts/ers-environment-guard.sh" require-non-production "$APP_ENV_VALUE" "legacy development/test environment initialization"
 
 if [[ ! -s "$ENV_FILE" ]]; then
   cp "$ENV_EXAMPLE_FILE" "$ENV_FILE"
@@ -41,4 +45,4 @@ rm -f "${ENV_FILE}.bak"
 
 echo
 echo "Updated ${ENV_FILE}:"
-grep -E "^(JWT_SECRET|DEV_ADMIN_EMAIL|DEV_ADMIN_PASSWORD|DEV_ADMIN_NAME|DEV_SEED_ADMIN|LLM_COACHING_ENABLED)=" "$ENV_FILE"e
+grep -E "^(APP_ENV|JWT_SECRET|DEV_ADMIN_EMAIL|DEV_ADMIN_PASSWORD|DEV_ADMIN_NAME|DEV_SEED_ADMIN|LLM_COACHING_ENABLED)=" "$ENV_FILE"

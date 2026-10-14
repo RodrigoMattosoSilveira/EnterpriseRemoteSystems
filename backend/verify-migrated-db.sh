@@ -5,7 +5,7 @@ DB_PATH="${DATABASE_PATH:-/app/data/app.db}"
 MIGRATIONS_DIR="${MIGRATIONS_DIR:-/app/migrations}"
 EXPECTED_BASELINE_LAST_MIGRATION="${EXPECTED_BASELINE_LAST_MIGRATION:-000062_tenant_administrator_cardinality.up.sql}"
 EXPECTED_FIRST_REHEARSED_MIGRATION="${EXPECTED_FIRST_REHEARSED_MIGRATION:-000063_global_administration_control_plane.up.sql}"
-EXPECTED_FINAL_MIGRATION="${EXPECTED_FINAL_MIGRATION:-000077_journey_bonus_award_approval.up.sql}"
+EXPECTED_FINAL_MIGRATION="${EXPECTED_FINAL_MIGRATION:-}"
 
 if [ ! -f "$DB_PATH" ]; then
   echo "Missing database for migration verification: $DB_PATH" >&2
@@ -14,6 +14,14 @@ fi
 if [ ! -d "$MIGRATIONS_DIR" ]; then
   echo "Missing migrations directory: $MIGRATIONS_DIR" >&2
   exit 2
+fi
+if [ -z "$EXPECTED_FINAL_MIGRATION" ]; then
+  latest_migration="$(find "$MIGRATIONS_DIR" -maxdepth 1 -type f -name '*.up.sql' | sort | tail -n 1)"
+  if [ -z "$latest_migration" ]; then
+    echo "No .up.sql migrations found in: $MIGRATIONS_DIR" >&2
+    exit 2
+  fi
+  EXPECTED_FINAL_MIGRATION="$(basename "$latest_migration")"
 fi
 
 has_schema_migrations="$(sqlite3 "$DB_PATH" "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='schema_migrations';")"
@@ -185,12 +193,13 @@ FROM (
     ON m.id = aa.membership_id
    AND m.tenant_id = aa.tenant_id
   WHERE g.active = 1
+    AND g.lifecycle_suspended = 0
   GROUP BY m.person_id
   HAVING COUNT(DISTINCT g.tenant_id) > 1
 );
 ")"
   if [ "$cross_tenant_delegated_role_conflicts" != "0" ]; then
-    echo "Bite 32.4 cross-Tenant non-baseline Role isolation found ${cross_tenant_delegated_role_conflicts} conflicting Person(s)." >&2
+    echo "Bite 32.4 cross-Tenant non-baseline Role isolation found ${cross_tenant_delegated_role_conflicts} Person(s) with effective delegated authority in multiple Tenants." >&2
     exit 1
   fi
 fi

@@ -15,6 +15,8 @@ import sqlite3
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
+from ers_environment import require_non_production_data_mutation
+
 ROOT_DIR = Path(__file__).resolve().parents[1]
 DEFAULT_DB_PATH = ROOT_DIR / "backend" / "data" / "app.db"
 TENANT_ID = "default"
@@ -784,6 +786,7 @@ def print_summary(conn: sqlite3.Connection, production_rows: int) -> None:
 
 
 def main() -> None:
+    require_non_production_data_mutation('to seed manual-test data')
     args = parse_args()
     rng = random.Random(args.seed)
     db_path = Path(args.db_path).expanduser().resolve()

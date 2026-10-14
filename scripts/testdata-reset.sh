@@ -5,7 +5,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DATASET_DIR="${DATASET_DIR:-${ROOT_DIR}/backend/testdata/datasets}"
 DATASET="${DATASET:-all}"
 MODE="${1:-local}"
-ENVIRONMENT="${ENV:-development}"
+ENVIRONMENT="${ENV:-}"
 DB_PATH="${DB_PATH:-${DATABASE_PATH:-${ROOT_DIR}/backend/data/app.db}}"
 
 usage() {
@@ -148,9 +148,11 @@ reset_server() {
 
 case "$MODE" in
   local)
+    "${ROOT_DIR}/scripts/ers-environment-guard.sh" require-non-production "${APP_ENV:-}" "test-data reset"
     reset_local
     ;;
   server)
+    "${ROOT_DIR}/scripts/ers-environment-guard.sh" require-non-production "$ENVIRONMENT" "test-data reset"
     reset_server
     ;;
   -h|--help|help)

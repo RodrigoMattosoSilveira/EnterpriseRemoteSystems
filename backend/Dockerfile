@@ -8,23 +8,30 @@ COPY . .
 RUN CGO_ENABLED=0 GOOS=linux \
     go build -o /out/enterprise-remote-systems-api ./cmd/api && \
     go build -o /out/import-people ./cmd/import-people && \
-    go build -o /out/provision-e2e-admin ./cmd/provision-e2e-admin
+    go build -o /out/provision-e2e-admin ./cmd/provision-e2e-admin && \
+    go build -o /out/ers-backup ./cmd/ers-backup && \
+    go build -o /out/ers-offhost-backup ./cmd/ers-offhost-backup && \
+    go build -o /out/ers-restore ./cmd/ers-restore
 
 FROM debian:bookworm-slim AS runtime
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends ca-certificates sqlite3 curl \
+    && apt-get install -y --no-install-recommends ca-certificates sqlite3 curl openssh-client \
     && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 COPY --from=builder /out/enterprise-remote-systems-api /app/enterprise-remote-systems-api
 COPY --from=builder /out/import-people /app/import-people
 COPY --from=builder /out/provision-e2e-admin /app/provision-e2e-admin
+COPY --from=builder /out/ers-backup /app/ers-backup
+COPY --from=builder /out/ers-offhost-backup /app/ers-offhost-backup
+COPY --from=builder /out/ers-restore /app/ers-restore
 COPY migrations /app/migrations
 COPY docker-entrypoint.sh /app/docker-entrypoint.sh
+COPY apply-sql-migrations.sh /app/apply-sql-migrations.sh
 COPY build-development-db.sh /app/build-development-db.sh
 COPY restore-test-rehearsal-db.sh /app/restore-test-rehearsal-db.sh
 COPY build-test-rehearsal-baseline.sh /app/build-test-rehearsal-baseline.sh
 COPY verify-migrated-db.sh /app/verify-migrated-db.sh
-RUN chmod +x /app/docker-entrypoint.sh /app/build-development-db.sh /app/restore-test-rehearsal-db.sh /app/build-test-rehearsal-baseline.sh /app/verify-migrated-db.sh \
+RUN chmod +x /app/docker-entrypoint.sh /app/apply-sql-migrations.sh /app/build-development-db.sh /app/restore-test-rehearsal-db.sh /app/build-test-rehearsal-baseline.sh /app/verify-migrated-db.sh \
     && mkdir -p /app/data
 RUN APP_ENV=development DATABASE_PATH=/tmp/development-db-build-check.db /app/build-development-db.sh \
     && rm -f /tmp/development-db-build-check.db /tmp/development-db-build-check.db-wal /tmp/development-db-build-check.db-shm

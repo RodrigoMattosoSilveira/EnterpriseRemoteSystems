@@ -61,7 +61,7 @@
     {
       "id": 5,
       "status": "covered",
-      "requirement": "Migration 000071 rejects existing conflicts and guards cross-Tenant INSERT/reactivation while explicit revocation releases the Person.",
+      "requirement": "Migration 000071 quarantines pre-existing conflicts fail-closed and guards cross-Tenant INSERT/reactivation while explicit revocation releases the Person.",
       "evidence": [
         {
           "file": "backend/internal/db/cross_tenant_delegated_role_isolation_migration_test.go",
@@ -69,7 +69,7 @@
         },
         {
           "file": "backend/internal/db/cross_tenant_delegated_role_isolation_migration_test.go",
-          "contains": "TestCrossTenantDelegatedRoleIsolationMigrationRejectsExistingConflict"
+          "contains": "TestCrossTenantDelegatedRoleIsolationMigrationQuarantinesExistingConflict"
         }
       ]
     },
@@ -91,7 +91,7 @@
     {
       "id": 7,
       "status": "covered",
-      "requirement": "Release migration verification requires migration 000071, both database triggers, and zero Person-level cross-Tenant TENANT-role conflicts.",
+      "requirement": "Release migration verification requires migration 000071, both database triggers, and zero Person-level effective cross-Tenant TENANT-role conflicts.",
       "evidence": [
         {
           "file": "backend/verify-migrated-db.sh",

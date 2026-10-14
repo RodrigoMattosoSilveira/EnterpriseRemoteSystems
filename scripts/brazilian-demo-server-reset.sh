@@ -1,13 +1,15 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ENVIRONMENT="${ENV:-development}"
+ENVIRONMENT="${ENV:-}"
 SERVER_ROOT="${SERVER_ROOT:-/opt/EnterpriseRemoteSystems}"
 AS_OF="${BRAZILIAN_DEMO_AS_OF:-2026-09-18}"
 DOCKER_BIN="${DOCKER_BIN:-docker}"
 PYTHON_BIN="${PYTHON_BIN:-python3}"
 HEALTH_ATTEMPTS="${BRAZILIAN_DEMO_HEALTH_ATTEMPTS:-60}"
 HEALTH_DELAY_SECONDS="${BRAZILIAN_DEMO_HEALTH_DELAY_SECONDS:-2}"
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 usage() {
   cat <<'USAGE'
@@ -54,6 +56,8 @@ case "$ENVIRONMENT" in
     fail "Brazilian demo server reset supports ENV=development or ENV=test. Got ENV=${ENVIRONMENT}."
     ;;
 esac
+
+"${SCRIPT_DIR}/ers-environment-guard.sh" require-non-production "$ENVIRONMENT" "to reset Brazilian demo data in Production"
 
 command -v "$DOCKER_BIN" >/dev/null 2>&1 || fail "docker is not installed or not on PATH."
 "$DOCKER_BIN" compose version >/dev/null 2>&1 || fail "docker compose is not available."

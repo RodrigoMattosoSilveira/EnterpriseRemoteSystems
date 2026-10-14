@@ -30,7 +30,7 @@ A Person cannot make themselves eligible in another Tenant merely by changing Te
 
 To become eligible for a non-baseline Role in another Tenant, the Person must work with the Tenant where the existing Roles are held so that **every non-baseline Tenant Role Grant there is explicitly revoked**.
 
-ERS never automatically chooses which Tenant should retain the Person's Role authority and never silently revokes another Tenant's Role.
+ERS never automatically chooses which Tenant should retain the Person's Role authority and never silently revokes another Tenant's Role. When migration encounters a historical conflict that predates this invariant, it lifecycle-suspends every conflicting active Tenant Role Grant so no Tenant keeps effective delegated authority by accident. The assignments remain present until administrators explicitly reconcile them.
 
 ## Lifecycle semantics
 
@@ -73,16 +73,17 @@ Existing same-Tenant Role Grants remain visible to administrators of that Tenant
 Migration `000071_cross_tenant_delegated_role_isolation.up.sql`:
 
 1. scans existing canonical AccountActor/Membership identity for a global Person with active `TENANT`-scoped Role Grants in more than one Tenant;
-2. aborts with `cross_tenant_delegated_role_conflict_existing` instead of arbitrarily choosing which Tenant retains the Roles;
-3. installs INSERT and UPDATE guards on `authz_actor_role_grants`;
-4. guards both new grants and reactivation of historical inactive grants;
-5. matches Roles by `scope_type = 'TENANT'`, not by a list of Role codes.
+2. lifecycle-suspends every active Tenant Role Grant for each such Person, preserving every assignment while making all conflicting delegated authority ineffective;
+3. verifies that no Person retains effective (`active=1`, `lifecycle_suspended=0`) Tenant delegated authority in more than one Tenant;
+4. installs INSERT and UPDATE guards on `authz_actor_role_grants`;
+5. guards both new grants and reactivation of historical inactive/suspended grants until explicit revocation resolves the assigned cross-Tenant conflict;
+6. matches Roles by `scope_type = 'TENANT'`, not by a list of Role codes.
 
 The down migration removes only the two Bite 32.4 triggers.
 
 ## Release verification
 
-The migrated-database verifier requires both Bite 32.4 triggers and proves that no global Person has active `TENANT`-scoped Role Grants in more than one Tenant. Test release rehearsal and Production release evidence advance through migration `000071`.
+The migrated-database verifier requires both Bite 32.4 triggers and proves that no global Person has effective (`active=1`, `lifecycle_suspended=0`) `TENANT`-scoped Role Grants in more than one Tenant. Historical assigned conflicts may remain only while lifecycle-suspended pending explicit administrator reconciliation. Test release rehearsal and Production release evidence advance through migration `000071`.
 
 ## Automated coverage
 
@@ -101,7 +102,7 @@ Backend/domain coverage proves:
 
 Migration coverage proves:
 
-- unresolved pre-existing conflicts stop migration;
+- pre-existing conflicts are quarantined fail-closed by lifecycle-suspending every conflicting grant without selecting a winning Tenant or revoking history;
 - direct INSERT cannot bypass the invariant;
 - reactivation cannot bypass the invariant;
 - a future/unlisted `TENANT`-scoped Role is governed by the trigger;

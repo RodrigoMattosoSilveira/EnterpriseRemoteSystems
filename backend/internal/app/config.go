@@ -38,7 +38,11 @@ type Config struct {
 
 func LoadConfig() (Config, error) {
 	_ = godotenv.Load()
-	env := getEnv("APP_ENV", "development")
+	rawEnv := getEnv("APP_ENV", "development")
+	env, err := normalizeAppEnvironment(rawEnv)
+	if err != nil {
+		return Config{}, err
+	}
 	authzBootstrapDefault := localAuthzBootstrapDefault(env)
 	cfg := Config{
 		Env:                              env,
@@ -68,6 +72,12 @@ func LoadConfig() (Config, error) {
 	if cfg.JWTSecret == "" {
 		return Config{}, fmt.Errorf("JWT_SECRET is required")
 	}
+	if cfg.Env == "production" && cfg.AutoMigrate {
+		return Config{}, fmt.Errorf("APP_AUTO_MIGRATE must be false in production")
+	}
+	if cfg.Env == "production" && cfg.DisableRouteAuthorization {
+		return Config{}, fmt.Errorf("AUTHZ_DISABLE_ROUTE_AUTHORIZATION must be false in production")
+	}
 	if cfg.AuthLocalSessionHeaderEnabled && !isLocalDevelopmentEnvironment(cfg.Env) {
 		return Config{}, fmt.Errorf("AUTH_LOCAL_SESSION_HEADER_ENABLED is permitted only in local development")
 	}
@@ -77,6 +87,19 @@ func LoadConfig() (Config, error) {
 	}
 	cfg.AuthzActorHeaderMode = mode
 	return cfg, nil
+}
+
+func normalizeAppEnvironment(env string) (string, error) {
+	switch strings.ToLower(strings.TrimSpace(env)) {
+	case "local", "dev", "development":
+		return "development", nil
+	case "test", "testing", "ci":
+		return "test", nil
+	case "production", "prod":
+		return "production", nil
+	default:
+		return "", fmt.Errorf("APP_ENV must be one of local/development, test/ci, or production; got %q", env)
+	}
 }
 
 func isLocalDevelopmentEnvironment(env string) bool {

@@ -41,7 +41,10 @@ endif
 EDGE_DIR := $(SERVER_ROOT)/edge
 
 SERVER_AUTHZ_BOOTSTRAP_ENABLED ?= false
-SERVER_COMPOSE = AUTHZ_BOOTSTRAP_ENABLED=$(SERVER_AUTHZ_BOOTSTRAP_ENABLED) docker compose -p $(COMPOSE_PROJECT) --env-file $(ENV_FILE) -f docker-compose.server.yml
+# Safety-sensitive deployed runtime values must come from the selected env file,
+# not from an operator's ambient shell. AUTHZ_BOOTSTRAP_ENABLED remains the one
+# deliberate command-line override used for explicit recovery workflows.
+SERVER_COMPOSE = env -u APP_ENV -u APP_AUTO_MIGRATE -u AUTHZ_ACTOR_HEADER_MODE -u DEV_SEED_ADMIN AUTHZ_BOOTSTRAP_ENABLED=$(SERVER_AUTHZ_BOOTSTRAP_ENABLED) docker compose -p $(COMPOSE_PROJECT) --env-file $(ENV_FILE) -f docker-compose.server.yml
 SERVER_COMPOSE_BUILD = BUILDX_NO_DEFAULT_ATTESTATIONS=1 $(SERVER_COMPOSE) --progress plain
 SERVER_SERVICE_CONTAINERS = $(CONTAINER_PREFIX)-backend $(CONTAINER_PREFIX)-frontend $(CONTAINER_PREFIX)-caddy
 
@@ -59,6 +62,41 @@ SERVER_SMOKE_DELAY_SECONDS ?= 5
 SERVER_SMOKE_CONNECT_TIMEOUT_SECONDS ?= 5
 SERVER_SMOKE_MAX_TIME_SECONDS ?= 15
 
+# Bite 33.2 verified-backup retention policy. Overrides may be supplied per
+# environment/invocation; defaults keep at least 14 verified snapshots and all
+# verified snapshots created in the last 30 days.
+SERVER_BACKUP_RETENTION_COUNT ?= 14
+SERVER_BACKUP_RETENTION_DAYS ?= 30
+
+# Bite 33.3 off-host backup protection. Production requires this to be enabled
+# in the selected deployed environment file. Development/Test may opt in.
+SERVER_OFFHOST_BACKUP_RECEIPT_SUFFIX ?= .offhost.json
+
+# Bite 33.4 recovery workspace. Restore apply accepts only candidates staged
+# beneath this selected environment directory.
+SERVER_RECOVERY_DIR ?= $(ENV_DIR)/recovery
+
+# Bite 33.5 migration/deployment recovery gate. A successful offline migration
+# remains armed until the newly started application passes health/schema checks.
+SERVER_MIGRATION_GATE_STATE ?= $(SERVER_RECOVERY_DIR)/migration-gates/current.state
+
+# Bite 33.6 non-destructive recovery rehearsal. Defaults establish the initial
+# operational objectives of RPO <= 24 hours and RTO <= 4 hours.
+SERVER_RECOVERY_REHEARSAL_DIR ?= $(SERVER_RECOVERY_DIR)/rehearsals
+RECOVERY_REHEARSAL_MAX_RPO_SECONDS ?= 86400
+RECOVERY_REHEARSAL_MAX_RTO_SECONDS ?= 14400
+RECOVERY_REHEARSAL_BACKUP_FILE ?=
+RECOVERY_REHEARSAL_RECEIPT_FILE ?=
+RECOVERY_REHEARSAL_OFFHOST_BACKUP_NAME ?=
+RECOVERY_REHEARSAL_REPORT_FILE ?=
+
+# Bite 33.6 owner-unavailable recovery readiness. The committed manifest contains
+# source locators only; secret values remain in the documented shared LastPass sources.
+RECOVERY_ACCESS_MANIFEST_FILE ?= $(ENV_DIR)/ops/recovery-access.production.env
+RECOVERY_TECHNICIAN_ID ?=
+RECOVERY_SHARED_ACCESS_CONFIRM ?=
+RECOVERY_OWNER_UNAVAILABLE_MODE ?= false
+
 # ==============================================================================
 # Help
 # ==============================================================================
@@ -73,6 +111,7 @@ help:
 	@echo "  make local-init-env"
 	@echo "  make local-db-init"
 	@echo "  make local-db-reset"
+	@echo "  APP_ENV=development|test ERS_DATABASE_PATH=<path> make reset-db"
 	@echo "  make testdata-local-reset"
 	@echo "  make manual-testdata-local-reset"
 	@echo "  make manual-testdata-local-seed"
@@ -80,6 +119,7 @@ help:
 	@echo "  make brazilian-demo-local-reset [BRAZILIAN_DEMO_AS_OF=YYYY-MM-DD]"
 	@echo "  make brazilian-demo-local-seed [BRAZILIAN_DEMO_AS_OF=YYYY-MM-DD]"
 	@echo "  make brazilian-demo-local-verify [BRAZILIAN_DEMO_AS_OF=YYYY-MM-DD]"
+	@echo "  make brazilian-demo-local-backend [BRAZILIAN_DEMO_AS_OF=YYYY-MM-DD]"
 	@echo "  make brazilian-demo-presentation-check"
 	@echo "  make brazilian-demo-server-reset ENV=development|test [BRAZILIAN_DEMO_AS_OF=YYYY-MM-DD]"
 	@echo "  make local-admin-reset"
@@ -88,6 +128,13 @@ help:
 	@echo "  make local-check"
 	@echo "  make deployed-playwright-evidence-check"
 	@echo "  make production-release-evidence-check"
+	@echo "  make production-environment-guardrails-check"
+	@echo "  make backup-creation-retention-verification-check"
+	@echo "  make off-host-backup-protection-check"
+	@echo "  make restore-tooling-recovery-verification-check"
+	@echo "  make migration-deployment-recovery-gate-check"
+	@echo "  make recovery-rehearsal-operational-runbook-check"
+	@echo "  make owner-unavailable-recovery-readiness-check"
 	@echo "  make migration-check"
 	@echo "  make migration-rehearsal-check"
 	@echo "  make local-docker-check"
@@ -101,10 +148,12 @@ help:
 	@echo
 	@echo "Generic server targets:"
 	@echo "  make server-init-env ENV=development|test|production"
+	@echo "  make server-environment-contract-probe ENV=development|test|production SERVER_ENV_PROBE_FILE=<path>"
 	@echo "  make server-pull ENV=development|test|production"
 	@echo "  make server-build ENV=development|test|production"
 	@echo "  make server-up ENV=development|test|production"
 	@echo "  make server-down ENV=development|test|production"
+	@echo "  make server-down-volumes ENV=development|test (Production is refused)"
 	@echo "  make server-replace-development-db ENV=development"
 	@echo "  make server-test-rehearsal-capture-baseline"
 	@echo "  make server-test-rehearsal-ensure-baseline"
@@ -121,13 +170,30 @@ help:
 	@echo "  make server-frontend-logs ENV=development|test|production"
 	@echo "  make server-caddy-logs ENV=development|test|production"
 	@echo "  make server-backend-health ENV=development|test|production"
-	@echo "  make server-provision-e2e-admin ENV=development|test|production < provision.json"
+	@echo "  make server-provision-e2e-admin ENV=development|test < provision.json"
 	@echo "  make server-smoke ENV=development|test|production"
 	@echo "  make server-protected-api-smoke ENV=development|test|production"
 	@echo "  make server-admin-test ENV=development|test|production"
 	@echo "  make server-dns-check ENV=development|test|production"
 	@echo "  make server-cert-check ENV=development|test|production"
 	@echo "  make server-backup ENV=development|test|production"
+	@echo "  make server-backup-verify ENV=development|test|production BACKUP_FILE=<path-to-app-*.db>"
+	@echo "  make server-backup-retention ENV=development|test|production [SERVER_BACKUP_RETENTION_COUNT=14 SERVER_BACKUP_RETENTION_DAYS=30]"
+	@echo "  make server-offhost-backup ENV=development|test|production BACKUP_FILE=<path-to-app-*.db>"
+	@echo "  make server-offhost-backup-verify ENV=development|test|production BACKUP_FILE=<path-to-app-*.db>"
+	@echo "  make server-restore-prepare-local ENV=development|test|production BACKUP_FILE=<verified-local-backup>"
+	@echo "  make server-restore-materialize-offhost ENV=development|test|production RECEIPT_FILE=<local-offhost-receipt>"
+	@echo "    or: make server-restore-materialize-offhost ENV=development|test|production OFFHOST_BACKUP_NAME=app-<timestamp>.db"
+	@echo "  make server-restore-verify ENV=development|test|production RECOVERY_BACKUP_FILE=<staged-recovery-app-*.db>"
+	@echo "  make server-restore-apply ENV=development|test|production RECOVERY_BACKUP_FILE=<staged-recovery-app-*.db> RESTORE_CONFIRM=RESTORE-<ENVIRONMENT>"
+	@echo "  make server-migration-recovery-gate ENV=development|test|production"
+	@echo "  make server-migration-recovery-commit ENV=development|test|production"
+	@echo "  make server-migration-recovery-rollback ENV=development|test|production"
+	@echo "  make server-recovery-rehearsal ENV=development|test|production RECOVERY_REHEARSAL_BACKUP_FILE=<verified-local-backup>"
+	@echo "    or: make server-recovery-rehearsal ENV=... RECOVERY_REHEARSAL_RECEIPT_FILE=<offhost-receipt>"
+	@echo "    or: make server-recovery-rehearsal ENV=... RECOVERY_REHEARSAL_OFFHOST_BACKUP_NAME=app-<timestamp>.db"
+	@echo "  make server-owner-unavailable-recovery-preflight ENV=production"
+	@echo "  make server-owner-unavailable-recovery-rehearsal ENV=production RECOVERY_REHEARSAL_OFFHOST_BACKUP_NAME=app-<timestamp>.db RECOVERY_TECHNICIAN_ID=<technician> RECOVERY_SHARED_ACCESS_CONFIRM=OWNER-UNAVAILABLE-RECOVERY-ACCESS-CONFIRMED"
 	@echo "  Normal server targets force AUTHZ bootstrap off; deliberate recovery: SERVER_AUTHZ_BOOTSTRAP_ENABLED=true make server-up ENV=<env>"
 	@echo "  make testdata-server-reset ENV=development|test"
 	@echo
@@ -160,7 +226,14 @@ help:
 	@echo "  make server-prod-smoke"
 	@echo "  make server-prod-protected-api-smoke"
 	@echo "  make server-prod-admin-test"
-	@echo "  make server-prod-provision-e2e-admin < provision.json"
+	@echo "  make server-prod-backup"
+	@echo "  make server-prod-offhost-backup BACKUP_FILE=<path-to-app-*.db>"
+	@echo "  make server-prod-offhost-backup-verify BACKUP_FILE=<path-to-app-*.db>"
+	@echo "  make server-prod-restore-prepare-local BACKUP_FILE=<verified-local-backup>"
+	@echo "  make server-prod-restore-materialize-offhost RECEIPT_FILE=<local-offhost-receipt>"
+	@echo "    or: make server-prod-restore-materialize-offhost OFFHOST_BACKUP_NAME=app-<timestamp>.db"
+	@echo "  make server-prod-restore-verify RECOVERY_BACKUP_FILE=<staged-recovery-app-*.db>"
+	@echo "  make server-prod-restore-apply RECOVERY_BACKUP_FILE=<staged-recovery-app-*.db> RESTORE_CONFIRM=RESTORE-PRODUCTION"
 	@echo
 	@echo "Edge proxy:"
 	@echo "  make edge-init"
@@ -216,6 +289,19 @@ check-repo:
 	@test -f scripts/init-server-env.sh || (echo "Missing scripts/init-server-env.sh" && exit 1)
 	@test -f scripts/dev-backend.sh || (echo "Missing scripts/dev-backend.sh" && exit 1)
 	@test -f scripts/dev-frontend.sh || (echo "Missing scripts/dev-frontend.sh" && exit 1)
+	@test -f scripts/server-sqlite-backup.sh || (echo "Missing scripts/server-sqlite-backup.sh" && exit 1)
+	@test -x scripts/server-owner-unavailable-recovery-preflight.sh || (echo "Missing executable scripts/server-owner-unavailable-recovery-preflight.sh" && exit 1)
+	@test -f ops/recovery-access.production.env || (echo "Missing ops/recovery-access.production.env" && exit 1)
+	@test -f docs/database-recovery-runbook.md || (echo "Missing docs/database-recovery-runbook.md" && exit 1)
+	@test ! -e docs/owner-unavailable-recovery-access.md || (echo "Obsolete split owner-unavailable recovery guide found: docs/owner-unavailable-recovery-access.md" && exit 1)
+	@test -x scripts/run-backup-go-tool.sh || (echo "Missing executable scripts/run-backup-go-tool.sh" && exit 1)
+	@test -f backend/cmd/ers-backup/main.go || (echo "Missing backend/cmd/ers-backup/main.go" && exit 1)
+	@test -f backend/cmd/ers-offhost-backup/main.go || (echo "Missing backend/cmd/ers-offhost-backup/main.go" && exit 1)
+	@test -f backend/cmd/ers-restore/main.go || (echo "Missing backend/cmd/ers-restore/main.go" && exit 1)
+	@test -f backend/internal/restore/restore.go || (echo "Missing backend/internal/restore/restore.go" && exit 1)
+	@test -x scripts/server-sqlite-restore.sh || (echo "Missing executable scripts/server-sqlite-restore.sh" && exit 1)
+	@test ! -e scripts/ers-backup.py || (echo "Obsolete Production Python backup tool found: scripts/ers-backup.py" && exit 1)
+	@test ! -e scripts/ers-offhost-backup.py || (echo "Obsolete Production Python off-host tool found: scripts/ers-offhost-backup.py" && exit 1)
 	@test -f scripts/server-public-smoke.sh || (echo "Missing scripts/server-public-smoke.sh" && exit 1)
 	@test -f scripts/test-server-public-smoke.sh || (echo "Missing scripts/test-server-public-smoke.sh" && exit 1)
 	@if [ -d backend/cmd/create-admin ] || [ -d backend/cmd/create-admin.disabled ]; then \
@@ -244,11 +330,22 @@ local-db-init:
 
 .PHONY: local-db-reset
 local-db-reset:
+	@./scripts/ers-environment-guard.sh require-non-production development "local session-data reset"
 	sqlite3 backend/data/app.db "DELETE FROM session_scores; DELETE FROM action_evaluations; DELETE FROM trainee_actions; DELETE FROM session_events; DELETE FROM sessions;"
 	@echo "Local session data reset."
 
+.PHONY: reset-db
+reset-db:
+	@if [[ -z "$${ERS_DATABASE_PATH:-}" ]]; then \
+		echo "Refusing SQLite database reset: ERS_DATABASE_PATH must explicitly identify the disposable database file." >&2; \
+		exit 2; \
+	fi
+	@APP_ENV="$${APP_ENV:-}" ./scripts/reset-sqlite-database.sh "$${ERS_DATABASE_PATH}"
+	@echo "SQLite database reset: $${ERS_DATABASE_PATH}"
+
 .PHONY: local-admin-reset
 local-admin-reset:
+	@./scripts/ers-environment-guard.sh require-non-production development "local administrator reset"
 	sqlite3 backend/data/app.db "DELETE FROM users WHERE email = 'admin@example.com';"
 	@echo "Local admin deleted. Restart backend to reseed."
 
@@ -344,7 +441,7 @@ local-sqlite-reset-check:
 	trap 'rm -rf "$$tmpdir"' EXIT; \
 	db="$$tmpdir/manual.db"; \
 	touch "$$db" "$$db-wal" "$$db-shm" "$$db-journal"; \
-	./scripts/reset-sqlite-database.sh "$$db"; \
+	APP_ENV=development ./scripts/reset-sqlite-database.sh "$$db"; \
 	for path in "$$db" "$$db-wal" "$$db-shm" "$$db-journal"; do \
 		if [ -e "$$path" ]; then echo "SQLite reset left stale file: $$path"; exit 1; fi; \
 	done; \
@@ -393,6 +490,34 @@ deployed-playwright-evidence-check:
 production-release-evidence-check:
 	python3 scripts/test-production-release-evidence.py
 
+.PHONY: production-environment-guardrails-check
+production-environment-guardrails-check:
+	python3 scripts/test-production-environment-guardrails.py
+
+.PHONY: backup-creation-retention-verification-check
+backup-creation-retention-verification-check:
+	python3 scripts/test-backup-creation-retention-verification.py
+
+.PHONY: off-host-backup-protection-check
+off-host-backup-protection-check:
+	python3 scripts/test-off-host-backup-protection.py
+
+.PHONY: restore-tooling-recovery-verification-check
+restore-tooling-recovery-verification-check:
+	python3 scripts/test-restore-tooling-recovery-verification.py
+
+.PHONY: migration-deployment-recovery-gate-check
+migration-deployment-recovery-gate-check:
+	python3 scripts/test-migration-deployment-recovery-gate.py
+
+.PHONY: recovery-rehearsal-operational-runbook-check
+recovery-rehearsal-operational-runbook-check:
+	python3 scripts/test-recovery-rehearsal-operational-runbook.py
+
+.PHONY: owner-unavailable-recovery-readiness-check
+owner-unavailable-recovery-readiness-check:
+	python3 scripts/test-owner-unavailable-recovery-readiness.py
+
 .PHONY: local-check
 local-check:
 	$(MAKE) bite30l4-coverage-manifest-check
@@ -401,6 +526,13 @@ local-check:
 	$(MAKE) post-bite30-backlog-reconciliation-check
 	$(MAKE) deployed-playwright-evidence-check
 	$(MAKE) production-release-evidence-check
+	$(MAKE) production-environment-guardrails-check
+	$(MAKE) backup-creation-retention-verification-check
+	$(MAKE) off-host-backup-protection-check
+	$(MAKE) restore-tooling-recovery-verification-check
+	$(MAKE) migration-deployment-recovery-gate-check
+	$(MAKE) recovery-rehearsal-operational-runbook-check
+	$(MAKE) owner-unavailable-recovery-readiness-check
 	$(MAKE) local-hot-reload-check
 	$(MAKE) local-auth-cookie-config-check
 	$(MAKE) server-public-smoke-script-check
@@ -456,7 +588,7 @@ local-docker-check: local-docker-check-image
 		-e GOMODCACHE=/tmp/gomod \
 		-e NPM_CONFIG_CACHE=/tmp/npm-cache \
 		$(LOCAL_DOCKER_CHECK_IMAGE) \
-		bash -lc 'set -euo pipefail; make bite30l4-coverage-manifest-check; make bite32-release-coverage-check; make bite326-release-hardening-check; make post-bite30-backlog-reconciliation-check; make deployed-playwright-evidence-check; make production-release-evidence-check; make local-hot-reload-check; make local-auth-cookie-config-check; make server-authz-bootstrap-config-check; make legacy-identity-dependency-check; make brazilian-demo-presentation-check; make migration-rehearsal-check; cd backend && go clean -testcache && go test ./...; cd ../frontend && npm ci && npm run test:run && npx playwright install chromium && npx playwright test && npm run build'
+		bash -lc 'set -euo pipefail; make bite30l4-coverage-manifest-check; make bite32-release-coverage-check; make bite326-release-hardening-check; make post-bite30-backlog-reconciliation-check; make deployed-playwright-evidence-check; make production-release-evidence-check; make production-environment-guardrails-check; make backup-creation-retention-verification-check; make off-host-backup-protection-check; make restore-tooling-recovery-verification-check; make migration-deployment-recovery-gate-check; make recovery-rehearsal-operational-runbook-check; make owner-unavailable-recovery-readiness-check; make local-hot-reload-check; make local-auth-cookie-config-check; make server-authz-bootstrap-config-check; make legacy-identity-dependency-check; make brazilian-demo-presentation-check; make migration-rehearsal-check; cd backend && go clean -testcache && go test ./...; cd ../frontend && npm ci && npm run test:run && npx playwright install chromium && npx playwright test && npm run build'
 
 # ==============================================================================
 # Generic server environment targets
@@ -471,8 +603,24 @@ server-init-env:
 server-pull:
 	cd $(ENV_DIR) && git checkout $(BRANCH) && git pull
 
+.PHONY: server-environment-identity-check
+server-environment-identity-check:
+	./scripts/ers-environment-guard.sh require-server-identity "$(ENV)" "$(ENV_DIR)/$(ENV_FILE)"
+
+.PHONY: server-environment-contract-check
+server-environment-contract-check:
+	./scripts/ers-environment-guard.sh require-server-contract "$(ENV)" "$(ENV_DIR)/$(ENV_FILE)"
+
+.PHONY: server-environment-contract-probe
+server-environment-contract-probe:
+	@if [[ -z "$(SERVER_ENV_PROBE_FILE)" ]]; then \
+		echo "SERVER_ENV_PROBE_FILE must explicitly identify the environment file to validate." >&2; \
+		exit 2; \
+	fi
+	./scripts/ers-environment-guard.sh require-server-contract "$(ENV)" "$(SERVER_ENV_PROBE_FILE)"
+
 .PHONY: server-build
-server-build: server-authz-bootstrap-config-check
+server-build: server-authz-bootstrap-config-check server-environment-contract-check
 	cd $(ENV_DIR) && $(SERVER_COMPOSE_BUILD) build
 
 .PHONY: server-remove-stale-containers
@@ -488,7 +636,7 @@ server-remove-stale-containers:
 	done
 
 .PHONY: server-up
-server-up: server-remove-stale-containers
+server-up: server-environment-contract-check server-remove-stale-containers
 	cd $(ENV_DIR) && $(SERVER_COMPOSE) up -d --build --force-recreate --remove-orphans
 
 .PHONY: server-down
@@ -497,6 +645,7 @@ server-down:
 
 .PHONY: server-down-volumes
 server-down-volumes:
+	@./scripts/ers-environment-guard.sh require-non-production "$(ENV)" "server volume deletion"
 	@echo "WARNING: this deletes the $(ENV) SQLite Docker volume."
 	@echo "Use only for development/test resets or after a backup."
 	cd $(ENV_DIR) && $(SERVER_COMPOSE) down -v
@@ -785,7 +934,9 @@ server-env-caddy-health:
 
 .PHONY: server-provision-e2e-admin
 server-provision-e2e-admin:
-	cd $(ENV_DIR) && $(SERVER_COMPOSE) exec -T backend /app/provision-e2e-admin $(if $(filter production,$(ENV)),--allow-production,)
+	@./scripts/ers-environment-guard.sh require-non-production "$(ENV)" "E2E/test administrator provisioning"
+	@$(MAKE) server-environment-contract-check ENV=$(ENV)
+	cd $(ENV_DIR) && $(SERVER_COMPOSE) exec -T backend /app/provision-e2e-admin
 
 .PHONY: server-smoke
 server-smoke:
@@ -829,48 +980,302 @@ server-cert-check:
 
 .PHONY: server-backup
 server-backup:
-	mkdir -p $(ENV_DIR)/backups
-	@TIMESTAMP=$$(date +%Y%m%d-%H%M%S); \
-	CONTAINER="$(CONTAINER_PREFIX)-backend"; \
-	VOLUME="$(COMPOSE_PROJECT)_backend-data"; \
-	TARGET="$(ENV_DIR)/backups/app-$$TIMESTAMP.db"; \
-	if ! docker ps --format '{{.Names}}' | grep -qx "$$CONTAINER"; then \
-		if docker volume inspect "$$VOLUME" >/dev/null 2>&1; then \
-			echo "Cannot safely back up $(ENV): SQLite volume $$VOLUME exists but backend container $$CONTAINER is not running."; \
-			echo "Start/repair the existing environment or perform an explicit offline backup before deployment."; \
+	@$(MAKE) server-environment-identity-check ENV=$(ENV)
+	@container="$(CONTAINER_PREFIX)-backend"; \
+	volume="$(COMPOSE_PROJECT)_backend-data"; \
+	if ! docker ps --format '{{.Names}}' | grep -qx "$$container"; then \
+		if docker volume inspect "$$volume" >/dev/null 2>&1; then \
+			echo "Cannot safely back up $(ENV): SQLite volume $$volume exists but backend container $$container is not running."; \
+			echo "Start/repair the existing environment or perform an explicit offline recovery operation before deployment."; \
 			exit 2; \
 		fi; \
-		echo "No existing $(ENV) SQLite volume is present; no pre-migration backup is required for this first deployment."; \
+		echo "No existing $(ENV) SQLite volume is present; no backup is required for this first deployment."; \
 		exit 0; \
 	fi; \
-	docker exec "$$CONTAINER" rm -f /tmp/app-backup.db /tmp/app-backup.db-wal /tmp/app-backup.db-shm; \
-	docker exec "$$CONTAINER" sqlite3 /app/data/app.db ".backup '/tmp/app-backup.db'"; \
-	integrity="$$(docker exec "$$CONTAINER" sqlite3 /tmp/app-backup.db 'PRAGMA integrity_check;')"; \
-	if [[ "$$integrity" != "ok" ]]; then \
-		echo "Backup integrity_check failed: $$integrity"; \
-		docker exec "$$CONTAINER" rm -f /tmp/app-backup.db; \
-		exit 1; \
+	result_file="$(ENV_DIR)/backups/.last-created-backup-$$$$"; \
+	rm -f "$$result_file"; \
+	trap 'rm -f "$$result_file"' EXIT; \
+	BACKUP_ENVIRONMENT="$(ENV)" \
+	BACKUP_CONTAINER="$$container" \
+	BACKUP_DIRECTORY="$(ENV_DIR)/backups" \
+	BACKUP_RETENTION_COUNT="$(SERVER_BACKUP_RETENTION_COUNT)" \
+	BACKUP_RETENTION_DAYS="$(SERVER_BACKUP_RETENTION_DAYS)" \
+	BACKUP_RESULT_FILE="$$result_file" \
+	ERS_BACKUP_ENV_DIR="$(ENV_DIR)" \
+	ERS_BACKUP_ENV_FILE="$(ENV_FILE)" \
+	ERS_BACKUP_COMPOSE_PROJECT="$(COMPOSE_PROJECT)" \
+		./scripts/server-sqlite-backup.sh; \
+	backup_file="$$(cat "$$result_file")"; \
+	status="$$(ERS_BACKUP_ENV_DIR="$(ENV_DIR)" ERS_BACKUP_ENV_FILE="$(ENV_FILE)" ERS_BACKUP_COMPOSE_PROJECT="$(COMPOSE_PROJECT)" ./scripts/run-backup-go-tool.sh ers-offhost-backup status --environment "$(ENV)" --env-file "$(ENV_DIR)/$(ENV_FILE)")" || exit $$?; \
+	if [[ "$$status" == "enabled" ]]; then \
+		$(MAKE) server-offhost-backup ENV=$(ENV) BACKUP_FILE="$$backup_file"; \
+	else \
+		echo "Off-host backup is disabled for $(ENV); verified local backup retained at $$backup_file."; \
+	fi
+
+.PHONY: server-backup-verify
+server-backup-verify:
+	@if [[ -z "$(BACKUP_FILE)" ]]; then \
+		echo "BACKUP_FILE is required. Example: make server-backup-verify ENV=$(ENV) BACKUP_FILE=$(ENV_DIR)/backups/app-<timestamp>.db" >&2; \
+		exit 2; \
+	fi
+	@ERS_BACKUP_ENV_DIR="$(ENV_DIR)" \
+	ERS_BACKUP_ENV_FILE="$(ENV_FILE)" \
+	ERS_BACKUP_COMPOSE_PROJECT="$(COMPOSE_PROJECT)" \
+		./scripts/run-backup-go-tool.sh ers-backup verify \
+		--backup "$(BACKUP_FILE)" \
+		--manifest "$(BACKUP_FILE).manifest.json" \
+		--expected-environment "$(ENV)"
+
+.PHONY: server-backup-retention
+server-backup-retention:
+	@ERS_BACKUP_ENV_DIR="$(ENV_DIR)" \
+	ERS_BACKUP_ENV_FILE="$(ENV_FILE)" \
+	ERS_BACKUP_COMPOSE_PROJECT="$(COMPOSE_PROJECT)" \
+		./scripts/run-backup-go-tool.sh ers-backup prune \
+		--directory "$(ENV_DIR)/backups" \
+		--retention-count "$(SERVER_BACKUP_RETENTION_COUNT)" \
+		--retention-days "$(SERVER_BACKUP_RETENTION_DAYS)"
+
+
+.PHONY: server-offhost-backup
+server-offhost-backup:
+	@if [[ -z "$(BACKUP_FILE)" ]]; then \
+		echo "BACKUP_FILE is required. Example: make server-offhost-backup ENV=$(ENV) BACKUP_FILE=$(ENV_DIR)/backups/app-<timestamp>.db" >&2; \
+		exit 2; \
+	fi
+	@ERS_BACKUP_ENV_DIR="$(ENV_DIR)" \
+	ERS_BACKUP_ENV_FILE="$(ENV_FILE)" \
+	ERS_BACKUP_COMPOSE_PROJECT="$(COMPOSE_PROJECT)" \
+		./scripts/run-backup-go-tool.sh ers-offhost-backup replicate \
+		--environment "$(ENV)" \
+		--env-file "$(ENV_DIR)/$(ENV_FILE)" \
+		--backup "$(BACKUP_FILE)"
+
+.PHONY: server-offhost-backup-verify
+server-offhost-backup-verify:
+	@if [[ -z "$(BACKUP_FILE)" ]]; then \
+		echo "BACKUP_FILE is required. Example: make server-offhost-backup-verify ENV=$(ENV) BACKUP_FILE=$(ENV_DIR)/backups/app-<timestamp>.db" >&2; \
+		exit 2; \
+	fi
+	@ERS_BACKUP_ENV_DIR="$(ENV_DIR)" \
+	ERS_BACKUP_ENV_FILE="$(ENV_FILE)" \
+	ERS_BACKUP_COMPOSE_PROJECT="$(COMPOSE_PROJECT)" \
+		./scripts/run-backup-go-tool.sh ers-offhost-backup verify-replica \
+		--environment "$(ENV)" \
+		--env-file "$(ENV_DIR)/$(ENV_FILE)" \
+		--receipt "$(BACKUP_FILE)$(SERVER_OFFHOST_BACKUP_RECEIPT_SUFFIX)"
+
+
+.PHONY: server-restore-prepare-local
+server-restore-prepare-local:
+	@if [[ -z "$(BACKUP_FILE)" ]]; then \
+		echo "BACKUP_FILE is required. Example: make server-restore-prepare-local ENV=$(ENV) BACKUP_FILE=$(ENV_DIR)/backups/app-<timestamp>.db" >&2; \
+		exit 2; \
+	fi
+	@$(MAKE) server-environment-contract-check ENV=$(ENV)
+	@base="$$(basename "$(BACKUP_FILE)" .db)"; \
+	stamp="$$(date -u +%Y%m%dT%H%M%SZ)"; \
+	out="$(SERVER_RECOVERY_DIR)/local-$${stamp}-$${base}"; \
+	mkdir -p "$$out"; chmod 700 "$$out"; \
+	ERS_BACKUP_ENV_DIR="$(ENV_DIR)" ERS_BACKUP_ENV_FILE="$(ENV_FILE)" ERS_BACKUP_COMPOSE_PROJECT="$(COMPOSE_PROJECT)" \
+		./scripts/run-backup-go-tool.sh ers-restore stage \
+			--backup "$(BACKUP_FILE)" \
+			--manifest "$(BACKUP_FILE).manifest.json" \
+			--expected-environment "$(ENV)" \
+			--output-dir "$$out"; \
+	echo "Recovery candidate directory: $$out"
+
+.PHONY: server-restore-materialize-offhost
+server-restore-materialize-offhost:
+	@if [[ -z "$(RECEIPT_FILE)" && -z "$(OFFHOST_BACKUP_NAME)" ]]; then \
+		echo "Exactly one recovery source is required: RECEIPT_FILE=<local-offhost-receipt> or OFFHOST_BACKUP_NAME=app-<timestamp>.db" >&2; \
+		exit 2; \
+	fi
+	@if [[ -n "$(RECEIPT_FILE)" && -n "$(OFFHOST_BACKUP_NAME)" ]]; then \
+		echo "Specify only one of RECEIPT_FILE or OFFHOST_BACKUP_NAME, not both." >&2; \
+		exit 2; \
+	fi
+	@$(MAKE) server-environment-contract-check ENV=$(ENV)
+	@if [[ -n "$(RECEIPT_FILE)" ]]; then \
+		base="$$(basename "$(RECEIPT_FILE)" .offhost.json)"; \
+		source_args=(--receipt "$(RECEIPT_FILE)"); \
+	else \
+		base="$$(basename "$(OFFHOST_BACKUP_NAME)" .db)"; \
+		source_args=(--backup-name "$(OFFHOST_BACKUP_NAME)"); \
 	fi; \
-	foreign_keys="$$(docker exec "$$CONTAINER" sqlite3 /tmp/app-backup.db 'PRAGMA foreign_key_check;')"; \
-	if [[ -n "$$foreign_keys" ]]; then \
-		echo "Backup foreign_key_check failed:"; \
-		printf '%s\n' "$$foreign_keys"; \
-		docker exec "$$CONTAINER" rm -f /tmp/app-backup.db; \
-		exit 1; \
-	fi; \
-	docker cp "$$CONTAINER:/tmp/app-backup.db" "$$TARGET"; \
-	docker exec "$$CONTAINER" rm -f /tmp/app-backup.db; \
-	echo "Verified backup written to $$TARGET"; \
-	sha256sum "$$TARGET"
+	stamp="$$(date -u +%Y%m%dT%H%M%SZ)"; \
+	out="$(SERVER_RECOVERY_DIR)/offhost-$${stamp}-$${base}"; \
+	mkdir -p "$$out"; chmod 700 "$$out"; \
+	ERS_BACKUP_ENV_DIR="$(ENV_DIR)" ERS_BACKUP_ENV_FILE="$(ENV_FILE)" ERS_BACKUP_COMPOSE_PROJECT="$(COMPOSE_PROJECT)" \
+		./scripts/run-backup-go-tool.sh ers-offhost-backup materialize \
+			--environment "$(ENV)" \
+			--env-file "$(ENV_DIR)/$(ENV_FILE)" \
+			"$${source_args[@]}" \
+			--output-dir "$$out"; \
+	echo "Recovery candidate directory: $$out"
+
+.PHONY: server-restore-verify
+server-restore-verify:
+	@if [[ -z "$(RECOVERY_BACKUP_FILE)" ]]; then \
+		echo "RECOVERY_BACKUP_FILE is required. It must point under $(SERVER_RECOVERY_DIR)." >&2; \
+		exit 2; \
+	fi
+	@$(MAKE) server-environment-contract-check ENV=$(ENV)
+	@case "$(RECOVERY_BACKUP_FILE)" in "$(SERVER_RECOVERY_DIR)"/*) ;; *) echo "Refusing recovery candidate outside $(SERVER_RECOVERY_DIR)/" >&2; exit 2 ;; esac
+	@ERS_BACKUP_ENV_DIR="$(ENV_DIR)" ERS_BACKUP_ENV_FILE="$(ENV_FILE)" ERS_BACKUP_COMPOSE_PROJECT="$(COMPOSE_PROJECT)" \
+		./scripts/run-backup-go-tool.sh ers-restore verify \
+			--backup "$(RECOVERY_BACKUP_FILE)" \
+			--manifest "$(RECOVERY_BACKUP_FILE).manifest.json" \
+			--expected-environment "$(ENV)"
+
+.PHONY: server-restore-apply
+server-restore-apply:
+	@if [[ -z "$(RECOVERY_BACKUP_FILE)" ]]; then \
+		echo "RECOVERY_BACKUP_FILE is required. Prepare/materialize a verified candidate under $(SERVER_RECOVERY_DIR) first." >&2; \
+		exit 2; \
+	fi
+	@if [[ -z "$(RESTORE_CONFIRM)" ]]; then \
+		echo "RESTORE_CONFIRM is required. Expected RESTORE-DEVELOPMENT, RESTORE-TEST, or RESTORE-PRODUCTION for the selected ENV." >&2; \
+		exit 2; \
+	fi
+	@expected="RESTORE-$$(printf '%s' "$(ENV)" | tr '[:lower:]' '[:upper:]')"; \
+	if [[ "$(RESTORE_CONFIRM)" != "$$expected" ]]; then \
+		echo "Restore confirmation mismatch: expected $$expected" >&2; \
+		exit 2; \
+	fi
+	@case "$(RECOVERY_BACKUP_FILE)" in "$(SERVER_RECOVERY_DIR)"/*) ;; *) echo "Refusing recovery candidate outside $(SERVER_RECOVERY_DIR)/" >&2; exit 2 ;; esac
+	@$(MAKE) server-environment-contract-check ENV=$(ENV)
+	@$(MAKE) server-restore-verify ENV=$(ENV) RECOVERY_BACKUP_FILE="$(RECOVERY_BACKUP_FILE)"
+	@container="$(CONTAINER_PREFIX)-backend"; \
+	if docker ps --format '{{.Names}}' | grep -qx "$$container"; then \
+		echo "Creating a fresh verified pre-restore backup of the running $(ENV) database."; \
+		$(MAKE) server-backup ENV=$(ENV); \
+	else \
+		echo "Backend $$container is not running; the restore tool will preserve the current volume database as an unverified pre-restore copy if it exists."; \
+	fi
+	@RESTORE_ENVIRONMENT="$(ENV)" \
+	RESTORE_ENV_DIR="$(ENV_DIR)" \
+	RESTORE_ENV_FILE="$(ENV_FILE)" \
+	RESTORE_COMPOSE_PROJECT="$(COMPOSE_PROJECT)" \
+	RESTORE_CONTAINER="$(CONTAINER_PREFIX)-backend" \
+	RESTORE_BACKUP_FILE="$(RECOVERY_BACKUP_FILE)" \
+	RESTORE_CONFIRM="$(RESTORE_CONFIRM)" \
+		./scripts/server-sqlite-restore.sh
 
 .PHONY: server-reset-admin
 server-reset-admin:
+	@./scripts/ers-environment-guard.sh require-non-production "$(ENV)" "server administrator reset"
+	@$(MAKE) server-environment-contract-check ENV=$(ENV)
 	cd $(ENV_DIR) && \
 	ADMIN_EMAIL=$$(grep '^DEV_ADMIN_EMAIL=' $(ENV_FILE) | cut -d '=' -f2-); \
 	docker exec $(CONTAINER_PREFIX)-backend sqlite3 /app/data/app.db \
 		"DELETE FROM users WHERE email = '$$ADMIN_EMAIL';"; \
 	docker restart $(CONTAINER_PREFIX)-backend; \
 	echo "Deleted and reseeded admin for $(ENV): $$ADMIN_EMAIL"
+
+
+.PHONY: server-migration-recovery-gate
+server-migration-recovery-gate:
+	@$(MAKE) server-environment-contract-check ENV=$(ENV)
+	@MIGRATION_ENVIRONMENT="$(ENV)" \
+	MIGRATION_ENV_DIR="$(ENV_DIR)" \
+	MIGRATION_ENV_FILE="$(ENV_FILE)" \
+	MIGRATION_COMPOSE_PROJECT="$(COMPOSE_PROJECT)" \
+	MIGRATION_CONTAINER="$(CONTAINER_PREFIX)-backend" \
+	MIGRATION_VOLUME="$(COMPOSE_PROJECT)_backend-data" \
+	MIGRATION_EXPECTED_FINAL_MIGRATION="$(DEPLOYMENT_FINAL_MIGRATION)" \
+	MIGRATION_PREVIOUS_REVISION="$(MIGRATION_PREVIOUS_REVISION)" \
+	MIGRATION_PREVIOUS_TREE_SHA="$(MIGRATION_PREVIOUS_TREE_SHA)" \
+	MIGRATION_TARGET_REVISION="$(MIGRATION_TARGET_REVISION)" \
+	MIGRATION_TARGET_TREE_SHA="$(MIGRATION_TARGET_TREE_SHA)" \
+	MIGRATION_BACKUP_RETENTION_COUNT="$(SERVER_BACKUP_RETENTION_COUNT)" \
+	MIGRATION_BACKUP_RETENTION_DAYS="$(SERVER_BACKUP_RETENTION_DAYS)" \
+	MIGRATION_STATE_FILE="$(SERVER_MIGRATION_GATE_STATE)" \
+		./scripts/server-migration-recovery-gate.sh
+
+.PHONY: server-migration-recovery-rollback
+server-migration-recovery-rollback:
+	@MIGRATION_ENVIRONMENT="$(ENV)" \
+	MIGRATION_ENV_DIR="$(ENV_DIR)" \
+	MIGRATION_ENV_FILE="$(ENV_FILE)" \
+	MIGRATION_COMPOSE_PROJECT="$(COMPOSE_PROJECT)" \
+	MIGRATION_STATE_FILE="$(SERVER_MIGRATION_GATE_STATE)" \
+		./scripts/server-migration-recovery-rollback.sh
+
+.PHONY: server-migration-recovery-commit
+server-migration-recovery-commit:
+	@MIGRATION_ENVIRONMENT="$(ENV)" \
+	MIGRATION_ENV_DIR="$(ENV_DIR)" \
+	MIGRATION_ENV_FILE="$(ENV_FILE)" \
+	MIGRATION_COMPOSE_PROJECT="$(COMPOSE_PROJECT)" \
+	MIGRATION_CONTAINER="$(CONTAINER_PREFIX)-backend" \
+	MIGRATION_EXPECTED_FINAL_MIGRATION="$(DEPLOYMENT_FINAL_MIGRATION)" \
+	MIGRATION_STATE_FILE="$(SERVER_MIGRATION_GATE_STATE)" \
+		./scripts/server-migration-recovery-commit.sh
+
+.PHONY: server-recovery-rehearsal
+server-recovery-rehearsal:
+	@$(MAKE) server-environment-contract-check ENV=$(ENV)
+	@REHEARSAL_ENVIRONMENT="$(ENV)" \
+	REHEARSAL_ENV_DIR="$(ENV_DIR)" \
+	REHEARSAL_ENV_FILE="$(ENV_FILE)" \
+	REHEARSAL_COMPOSE_PROJECT="$(COMPOSE_PROJECT)" \
+	REHEARSAL_MIGRATION_STATE_FILE="$(SERVER_MIGRATION_GATE_STATE)" \
+	REHEARSAL_EXPECTED_FINAL_MIGRATION="$(DEPLOYMENT_FINAL_MIGRATION)" \
+	REHEARSAL_BACKUP_FILE="$(RECOVERY_REHEARSAL_BACKUP_FILE)" \
+	REHEARSAL_RECEIPT_FILE="$(RECOVERY_REHEARSAL_RECEIPT_FILE)" \
+	REHEARSAL_OFFHOST_BACKUP_NAME="$(RECOVERY_REHEARSAL_OFFHOST_BACKUP_NAME)" \
+	REHEARSAL_MAX_RPO_SECONDS="$(RECOVERY_REHEARSAL_MAX_RPO_SECONDS)" \
+	REHEARSAL_MAX_RTO_SECONDS="$(RECOVERY_REHEARSAL_MAX_RTO_SECONDS)" \
+	REHEARSAL_REPORT_FILE="$(RECOVERY_REHEARSAL_REPORT_FILE)" \
+	REHEARSAL_OWNER_UNAVAILABLE_MODE="$(RECOVERY_OWNER_UNAVAILABLE_MODE)" \
+	REHEARSAL_ACCESS_MANIFEST_FILE="$(RECOVERY_ACCESS_MANIFEST_FILE)" \
+	REHEARSAL_TECHNICIAN_ID="$(RECOVERY_TECHNICIAN_ID)" \
+	REHEARSAL_SHARED_ACCESS_CONFIRM="$(RECOVERY_SHARED_ACCESS_CONFIRM)" \
+		./scripts/server-recovery-rehearsal.sh
+
+.PHONY: server-owner-unavailable-recovery-preflight
+server-owner-unavailable-recovery-preflight:
+	@if [[ "$(ENV)" != "production" ]]; then \
+		echo "Owner-unavailable recovery access preflight must use ENV=production." >&2; \
+		exit 2; \
+	fi
+	@RECOVERY_ACCESS_ENVIRONMENT="production" \
+	RECOVERY_ACCESS_ENV_DIR="$(ENV_DIR)" \
+	RECOVERY_ACCESS_ENV_FILE="$(ENV_FILE)" \
+	RECOVERY_ACCESS_MANIFEST_FILE="$(RECOVERY_ACCESS_MANIFEST_FILE)" \
+		./scripts/server-owner-unavailable-recovery-preflight.sh
+
+.PHONY: server-owner-unavailable-recovery-rehearsal
+server-owner-unavailable-recovery-rehearsal:
+	@if [[ "$(ENV)" != "production" ]]; then \
+		echo "Owner-unavailable recovery rehearsal must use ENV=production." >&2; \
+		exit 2; \
+	fi
+	@if [[ -z "$(RECOVERY_REHEARSAL_OFFHOST_BACKUP_NAME)" ]]; then \
+		echo "RECOVERY_REHEARSAL_OFFHOST_BACKUP_NAME=app-<timestamp>.db is required; owner-unavailable recovery intentionally starts without a local receipt." >&2; \
+		exit 2; \
+	fi
+	@if [[ -z "$(RECOVERY_TECHNICIAN_ID)" ]]; then \
+		echo "RECOVERY_TECHNICIAN_ID is required for owner-unavailable recovery evidence." >&2; \
+		exit 2; \
+	fi
+	@if [[ "$(RECOVERY_SHARED_ACCESS_CONFIRM)" != "OWNER-UNAVAILABLE-RECOVERY-ACCESS-CONFIRMED" ]]; then \
+		echo "RECOVERY_SHARED_ACCESS_CONFIRM=OWNER-UNAVAILABLE-RECOVERY-ACCESS-CONFIRMED is required after the technician obtains prerequisites from the documented shared sources." >&2; \
+		exit 2; \
+	fi
+	@$(MAKE) server-owner-unavailable-recovery-preflight ENV=production RECOVERY_ACCESS_MANIFEST_FILE="$(RECOVERY_ACCESS_MANIFEST_FILE)"
+	@$(MAKE) server-recovery-rehearsal \
+		ENV=production \
+		RECOVERY_REHEARSAL_OFFHOST_BACKUP_NAME="$(RECOVERY_REHEARSAL_OFFHOST_BACKUP_NAME)" \
+		RECOVERY_REHEARSAL_MAX_RPO_SECONDS="$(RECOVERY_REHEARSAL_MAX_RPO_SECONDS)" \
+		RECOVERY_REHEARSAL_MAX_RTO_SECONDS="$(RECOVERY_REHEARSAL_MAX_RTO_SECONDS)" \
+		RECOVERY_REHEARSAL_REPORT_FILE="$(RECOVERY_REHEARSAL_REPORT_FILE)" \
+		RECOVERY_OWNER_UNAVAILABLE_MODE=true \
+		RECOVERY_ACCESS_MANIFEST_FILE="$(RECOVERY_ACCESS_MANIFEST_FILE)" \
+		RECOVERY_TECHNICIAN_ID="$(RECOVERY_TECHNICIAN_ID)" \
+		RECOVERY_SHARED_ACCESS_CONFIRM="$(RECOVERY_SHARED_ACCESS_CONFIRM)"
 
 # ==============================================================================
 # Development aliases
@@ -1076,6 +1481,10 @@ server-prod-up:
 server-prod-down:
 	$(MAKE) server-down ENV=production
 
+.PHONY: server-prod-down-volumes
+server-prod-down-volumes:
+	$(MAKE) server-down-volumes ENV=production
+
 .PHONY: server-prod-ps
 server-prod-ps:
 	$(MAKE) server-ps ENV=production
@@ -1118,7 +1527,8 @@ server-prod-admin-test:
 
 .PHONY: server-prod-provision-e2e-admin
 server-prod-provision-e2e-admin:
-	$(MAKE) server-provision-e2e-admin ENV=production
+	@echo "Refusing E2E/test administrator provisioning in Production." >&2
+	@exit 2
 
 .PHONY: server-prod-dns-check
 server-prod-dns-check:
@@ -1132,9 +1542,36 @@ server-prod-cert-check:
 server-prod-backup:
 	$(MAKE) server-backup ENV=production
 
+
+.PHONY: server-prod-offhost-backup
+server-prod-offhost-backup:
+	$(MAKE) server-offhost-backup ENV=production BACKUP_FILE="$(BACKUP_FILE)"
+
+.PHONY: server-prod-offhost-backup-verify
+server-prod-offhost-backup-verify:
+	$(MAKE) server-offhost-backup-verify ENV=production BACKUP_FILE="$(BACKUP_FILE)"
+
+
+.PHONY: server-prod-restore-prepare-local
+server-prod-restore-prepare-local:
+	$(MAKE) server-restore-prepare-local ENV=production BACKUP_FILE="$(BACKUP_FILE)"
+
+.PHONY: server-prod-restore-materialize-offhost
+server-prod-restore-materialize-offhost:
+	$(MAKE) server-restore-materialize-offhost ENV=production RECEIPT_FILE="$(RECEIPT_FILE)" OFFHOST_BACKUP_NAME="$(OFFHOST_BACKUP_NAME)"
+
+.PHONY: server-prod-restore-verify
+server-prod-restore-verify:
+	$(MAKE) server-restore-verify ENV=production RECOVERY_BACKUP_FILE="$(RECOVERY_BACKUP_FILE)"
+
+.PHONY: server-prod-restore-apply
+server-prod-restore-apply:
+	$(MAKE) server-restore-apply ENV=production RECOVERY_BACKUP_FILE="$(RECOVERY_BACKUP_FILE)" RESTORE_CONFIRM="$(RESTORE_CONFIRM)"
+
 .PHONY: server-prod-reset-admin
 server-prod-reset-admin:
-	$(MAKE) server-reset-admin ENV=production
+	@echo "Refusing administrator reset tooling in Production." >&2
+	@exit 2
 
 # ==============================================================================
 # Edge proxy targets
@@ -1249,20 +1686,25 @@ brazilian-demo-presentation-check:
 brazilian-demo-local-seed:
 	@test "$(ENV)" != "production" || (echo "Refusing to seed Brazilian demo data with ENV=production" && exit 2)
 	chmod +x scripts/seed-brazilian-demo.py
-	DB_PATH="$(BRAZILIAN_DEMO_DB)" BRAZILIAN_DEMO_AS_OF="$(BRAZILIAN_DEMO_AS_OF)" ./scripts/seed-brazilian-demo.py
+	APP_ENV=development DB_PATH="$(BRAZILIAN_DEMO_DB)" BRAZILIAN_DEMO_AS_OF="$(BRAZILIAN_DEMO_AS_OF)" ./scripts/seed-brazilian-demo.py
 
 .PHONY: brazilian-demo-local-verify
 brazilian-demo-local-verify:
 	chmod +x scripts/seed-brazilian-demo.py
-	DB_PATH="$(BRAZILIAN_DEMO_DB)" BRAZILIAN_DEMO_AS_OF="$(BRAZILIAN_DEMO_AS_OF)" ./scripts/seed-brazilian-demo.py --verify-only
+	APP_ENV=development DB_PATH="$(BRAZILIAN_DEMO_DB)" BRAZILIAN_DEMO_AS_OF="$(BRAZILIAN_DEMO_AS_OF)" ./scripts/seed-brazilian-demo.py --verify-only
+
+.PHONY: brazilian-demo-local-backend
+brazilian-demo-local-backend: brazilian-demo-local-verify
+	@echo "Starting LOCAL backend against deterministic Brazilian demo database: $(abspath $(BRAZILIAN_DEMO_DB))"
+	APP_ENV=development ERS_DATABASE_PATH="$(abspath $(BRAZILIAN_DEMO_DB))" $(MAKE) local-backend
 
 .PHONY: brazilian-demo-local-reset
 brazilian-demo-local-reset:
 	@test "$(ENV)" != "production" || (echo "Refusing to reset Brazilian demo data with ENV=production" && exit 2)
 	@echo "Resetting deterministic Brazilian demo database: $(BRAZILIAN_DEMO_DB)"
-	rm -f "$(BRAZILIAN_DEMO_DB)" "$(BRAZILIAN_DEMO_DB)-wal" "$(BRAZILIAN_DEMO_DB)-shm"
+	APP_ENV=development ./scripts/reset-sqlite-database.sh "$(BRAZILIAN_DEMO_DB)"
 	mkdir -p "$$(dirname "$(BRAZILIAN_DEMO_DB)")"
-	DB_PATH="$(BRAZILIAN_DEMO_DB)" ./scripts/db-migrate.sh
+	APP_ENV=development DB_PATH="$(BRAZILIAN_DEMO_DB)" ./scripts/db-migrate.sh
 	$(MAKE) brazilian-demo-local-seed BRAZILIAN_DEMO_DB="$(BRAZILIAN_DEMO_DB)" BRAZILIAN_DEMO_AS_OF="$(BRAZILIAN_DEMO_AS_OF)"
 
 .PHONY: brazilian-demo-server-reset
@@ -1286,30 +1728,30 @@ brazilian-demo-server-reset:
 .PHONY: manual-testdata-local-seed
 manual-testdata-local-seed:
 	chmod +x scripts/seed-manual-testdata.py
-	./scripts/seed-manual-testdata.py --with-work-periods
+	APP_ENV=development ./scripts/seed-manual-testdata.py --with-work-periods
 
 .PHONY: manual-testdata-local-reset
 manual-testdata-local-reset:
 	@echo "Resetting local manual-test database: backend/data/app.db"
-	rm -f backend/data/app.db
+	APP_ENV=development ./scripts/reset-sqlite-database.sh backend/data/app.db
 	mkdir -p backend/data
-	DB_PATH=backend/data/app.db ./scripts/db-migrate.sh
+	APP_ENV=development DB_PATH=backend/data/app.db ./scripts/db-migrate.sh
 	chmod +x scripts/seed-manual-testdata.py
-	./scripts/seed-manual-testdata.py --with-work-periods
+	APP_ENV=development ./scripts/seed-manual-testdata.py --with-work-periods
 
 .PHONY: manual-testdata-local-reset-with-work-periods
 manual-testdata-local-reset-with-work-periods:
 	@echo "Resetting local manual-test database with recent Work Periods: backend/data/app.db"
-	rm -f backend/data/app.db
+	APP_ENV=development ./scripts/reset-sqlite-database.sh backend/data/app.db
 	mkdir -p backend/data
-	DB_PATH=backend/data/app.db ./scripts/db-migrate.sh
+	APP_ENV=development DB_PATH=backend/data/app.db ./scripts/db-migrate.sh
 	chmod +x scripts/seed-manual-testdata.py
-	./scripts/seed-manual-testdata.py --with-work-periods
+	APP_ENV=development ./scripts/seed-manual-testdata.py --with-work-periods
 
 .PHONY: testdata-local-reset
 testdata-local-reset:
 	chmod +x scripts/testdata-reset.sh
-	./scripts/testdata-reset.sh local
+	APP_ENV=development ./scripts/testdata-reset.sh local
 
 .PHONY: testdata-server-reset
 testdata-server-reset:

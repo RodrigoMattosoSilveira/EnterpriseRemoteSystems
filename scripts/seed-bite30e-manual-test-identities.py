@@ -84,6 +84,8 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
+from ers_environment import require_non_production_data_mutation
+
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 ROOT = SCRIPT_DIR.parent
@@ -1011,6 +1013,7 @@ def print_single_identity(
 
 
 def main() -> int:
+    require_non_production_data_mutation('to seed Bite 30E manual-test identities')
     args = parse_args()
     batch = normalize_batch(args.batch)
 

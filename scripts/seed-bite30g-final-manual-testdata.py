@@ -51,6 +51,8 @@ import sys
 from datetime import date, datetime, time, timedelta, timezone
 from pathlib import Path
 
+from ers_environment import require_non_production_data_mutation
+
 SCRIPT_DIR = Path(__file__).resolve().parent
 # When copied into <repo>/scripts, this resolves to the ERS root. When executed
 # from the downloaded promotion kit, --db-path should be supplied explicitly.
@@ -1123,6 +1125,7 @@ def restore_clean_backup(db_path: Path, batch: str) -> Path:
 
 
 def main() -> int:
+    require_non_production_data_mutation('to seed or reset Bite 30G manual-test data')
     args = parse_args()
     batch = normalize_batch(args.batch)
     db_path = Path(args.db_path).expanduser().resolve()

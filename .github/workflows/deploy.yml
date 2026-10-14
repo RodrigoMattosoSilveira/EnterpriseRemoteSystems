@@ -64,6 +64,27 @@ jobs:
       - name: Verify Bite 32.6 release-hardening contract
         run: make bite326-release-hardening-check
 
+      - name: Verify Bite 33.1 Production environment guardrails
+        run: make production-environment-guardrails-check
+
+      - name: Verify Bite 33.2 backup creation, retention, and verification
+        run: make backup-creation-retention-verification-check
+
+      - name: Verify Bite 33.3 off-host backup protection
+        run: make off-host-backup-protection-check
+
+      - name: Verify Bite 33.4 restore tooling and recovery verification
+        run: make restore-tooling-recovery-verification-check
+
+      - name: Verify Bite 33.5 migration/deployment recovery gate
+        run: make migration-deployment-recovery-gate-check
+
+      - name: Verify Bite 33.6 recovery rehearsal and operational runbook
+        run: make recovery-rehearsal-operational-runbook-check
+
+      - name: Verify Bite 33.6 owner-unavailable recovery readiness
+        run: make owner-unavailable-recovery-readiness-check
+
       - name: Set up Go
         uses: actions/setup-go@v6
         with:
@@ -215,8 +236,8 @@ jobs:
 
               # Do not run deployed Playwright against production.
               echo "run_playwright_post_deploy=false" >> "$GITHUB_OUTPUT"
-              echo "default_e2e_admin_email=e2e-admin@enterpriseremotesystems.com" >> "$GITHUB_OUTPUT"
-              echo "e2e_admin_display_name=Production Automation Administrator" >> "$GITHUB_OUTPUT"
+              echo "default_e2e_admin_email=" >> "$GITHUB_OUTPUT"
+              echo "e2e_admin_display_name=" >> "$GITHUB_OUTPUT"
               echo "database_strategy=migrate-in-place" >> "$GITHUB_OUTPUT"
               echo "test_release_rehearsal=false" >> "$GITHUB_OUTPUT"
               ;;
@@ -232,6 +253,12 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+
+          if [[ '${{ steps.target.outputs.env_name }}' == 'production' ]]; then
+            echo "email=not-provisioned-by-deployment" >> "$GITHUB_OUTPUT"
+            echo "Production deployment intentionally skips E2E/test administrator provisioning."
+            exit 0
+          fi
 
           email="${CONFIGURED_E2E_ADMIN_EMAIL:-${{ steps.target.outputs.default_e2e_admin_email }}}"
           password="${E2E_ADMIN_PASSWORD:-}"
@@ -367,6 +394,10 @@ jobs:
              echo 'Deploying ${{ steps.target.outputs.env_name }} from branch ${{ steps.target.outputs.branch }}'
              echo 'Pinned revision: ${{ steps.revision.outputs.sha }}'
 
+             PREVIOUS_REVISION=\"\$(git rev-parse HEAD)\"
+             PREVIOUS_TREE_SHA=\"\$(git rev-parse HEAD^{tree})\"
+             echo \"Previous server revision: \${PREVIOUS_REVISION} (tree \${PREVIOUS_TREE_SHA})\"
+
              git fetch origin '${{ steps.target.outputs.branch }}'
              git cat-file -e '${{ steps.revision.outputs.sha }}^{commit}'
              git checkout -B '${{ steps.target.outputs.branch }}' '${{ steps.revision.outputs.sha }}'
@@ -378,22 +409,28 @@ jobs:
                make server-require-test-release-rehearsal \
                  ENV=production \
                  TREE_SHA='${{ steps.revision.outputs.tree_sha }}'
+               echo 'Owner-unavailable Production recovery access preflight'
+               make server-owner-unavailable-recovery-preflight ENV=production
              fi
 
              make ${{ steps.target.outputs.make_prefix }}-build
 
+             RECOVERY_GATE_REQUIRED=false
              case '${{ steps.target.outputs.database_strategy }}' in
                replace-fresh)
                  echo 'Replacing disposable Development database from the current migration chain.'
                  make server-replace-development-db ENV=development
                  ;;
                restore-baseline+migrate-in-place)
-                 echo 'Restoring the known pre-release Test baseline; backend startup will migrate it in place.'
+                 echo 'Restoring the known pre-release Test baseline before the explicit offline migration/recovery gate.'
                  make server-test-rehearsal-restore ENV=test
+                 make server-migration-recovery-gate ENV=test MIGRATION_PREVIOUS_REVISION=\"\$PREVIOUS_REVISION\" MIGRATION_PREVIOUS_TREE_SHA=\"\$PREVIOUS_TREE_SHA\" MIGRATION_TARGET_REVISION='${{ steps.revision.outputs.sha }}' MIGRATION_TARGET_TREE_SHA='${{ steps.revision.outputs.tree_sha }}'
+                 RECOVERY_GATE_REQUIRED=true
                  ;;
                migrate-in-place)
-                 echo 'Preserving ${{ steps.target.outputs.env_name }} database; taking a verified backup before in-place migration.'
-                 make server-backup ENV='${{ steps.target.outputs.env_name }}'
+                 echo 'Preparing verified backup/recovery evidence, rehearsing migrations on a clone, then migrating the live database offline.'
+                 make server-migration-recovery-gate ENV='${{ steps.target.outputs.env_name }}' MIGRATION_PREVIOUS_REVISION=\"\$PREVIOUS_REVISION\" MIGRATION_PREVIOUS_TREE_SHA=\"\$PREVIOUS_TREE_SHA\" MIGRATION_TARGET_REVISION='${{ steps.revision.outputs.sha }}' MIGRATION_TARGET_TREE_SHA='${{ steps.revision.outputs.tree_sha }}'
+                 RECOVERY_GATE_REQUIRED=true
                  ;;
                *)
                  echo 'Unsupported database strategy: ${{ steps.target.outputs.database_strategy }}'
@@ -401,25 +438,48 @@ jobs:
                  ;;
              esac
 
+             rollback_gate() {
+               if [[ "\$RECOVERY_GATE_REQUIRED" == 'true' ]]; then
+                 echo 'Deployment verification failed while the migration recovery gate is armed; restoring the pre-migration database.'
+                 make server-migration-recovery-rollback ENV='${{ steps.target.outputs.env_name }}' || true
+               fi
+             }
+
              if ! make ${{ steps.target.outputs.make_prefix }}-up; then
                echo 'Application stack failed to become healthy; collecting server diagnostics.'
                make server-diagnostics ENV='${{ steps.target.outputs.env_name }}' || true
+               rollback_gate
                exit 1
              fi
              if ! make ${{ steps.target.outputs.make_prefix }}-backend-health; then
                echo 'Backend health verification failed; collecting server diagnostics.'
                make server-diagnostics ENV='${{ steps.target.outputs.env_name }}' || true
+               rollback_gate
                exit 1
              fi
              if ! make server-migrated-db-verify ENV='${{ steps.target.outputs.env_name }}'; then
                echo 'Post-migration database verification failed; collecting server diagnostics.'
                make server-diagnostics ENV='${{ steps.target.outputs.env_name }}' || true
+               rollback_gate
                exit 1
              fi
-             make ${{ steps.target.outputs.make_prefix }}-env-caddy-health
+             if ! make ${{ steps.target.outputs.make_prefix }}-env-caddy-health; then
+               echo 'Environment/Caddy health verification failed; collecting server diagnostics.'
+               make server-diagnostics ENV='${{ steps.target.outputs.env_name }}' || true
+               rollback_gate
+               exit 1
+             fi
+             if [[ "\$RECOVERY_GATE_REQUIRED" == 'true' ]]; then
+               if ! make server-migration-recovery-commit ENV='${{ steps.target.outputs.env_name }}'; then
+                 echo 'Migration recovery gate commit failed; rolling back the pre-migration database.'
+                 rollback_gate
+                 exit 1
+               fi
+             fi
             "
 
-      - name: Provision application administrator
+      - name: Provision non-Production E2E application administrator
+        if: ${{ steps.target.outputs.env_name != 'production' }}
         shell: bash
         env:
           RESOLVED_E2E_ADMIN_EMAIL: ${{ steps.e2e_admin.outputs.email }}
