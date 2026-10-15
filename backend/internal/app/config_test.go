@@ -191,3 +191,58 @@ func TestLoadConfigRejectsTestActorHeadersOutsideTestEnvironment(t *testing.T) {
 		t.Fatal("expected test actor-header mode to be rejected in production")
 	}
 }
+
+func TestLoadConfigNormalizesSupportedEnvironmentAliases(t *testing.T) {
+	tests := []struct {
+		raw      string
+		expected string
+	}{
+		{raw: "local", expected: "development"},
+		{raw: "dev", expected: "development"},
+		{raw: "testing", expected: "test"},
+		{raw: "ci", expected: "test"},
+		{raw: "prod", expected: "production"},
+	}
+	for _, test := range tests {
+		t.Run(test.raw, func(t *testing.T) {
+			t.Setenv("JWT_SECRET", "test-secret")
+			t.Setenv("APP_ENV", test.raw)
+			cfg, err := LoadConfig()
+			if err != nil {
+				t.Fatalf("load config: %v", err)
+			}
+			if cfg.Env != test.expected {
+				t.Fatalf("expected normalized environment %q, got %q", test.expected, cfg.Env)
+			}
+		})
+	}
+}
+
+func TestLoadConfigRejectsUnknownEnvironment(t *testing.T) {
+	t.Setenv("JWT_SECRET", "test-secret")
+	t.Setenv("APP_ENV", "prodution")
+	if _, err := LoadConfig(); err == nil {
+		t.Fatal("expected unknown APP_ENV to be rejected")
+	}
+}
+
+func TestLoadConfigRejectsDestructiveRuntimeSwitchesInProduction(t *testing.T) {
+	tests := []struct {
+		name  string
+		key   string
+		value string
+	}{
+		{name: "auto migrate", key: "APP_AUTO_MIGRATE", value: "true"},
+		{name: "route authorization disabled", key: "AUTHZ_DISABLE_ROUTE_AUTHORIZATION", value: "true"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Setenv("JWT_SECRET", "test-secret")
+			t.Setenv("APP_ENV", "production")
+			t.Setenv(test.key, test.value)
+			if _, err := LoadConfig(); err == nil {
+				t.Fatalf("expected production %s to be rejected", test.key)
+			}
+		})
+	}
+}

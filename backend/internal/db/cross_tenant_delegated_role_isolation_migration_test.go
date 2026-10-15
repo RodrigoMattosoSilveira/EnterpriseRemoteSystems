@@ -98,7 +98,7 @@ UPDATE authz_actor_role_grants SET active = 1 WHERE id = 'grant-a-expense'
 	}
 }
 
-func TestCrossTenantDelegatedRoleIsolationMigrationRejectsExistingConflict(t *testing.T) {
+func TestCrossTenantDelegatedRoleIsolationMigrationQuarantinesExistingConflict(t *testing.T) {
 	database, err := dbpkg.Open(filepath.Join(t.TempDir(), "app.db"))
 	if err != nil {
 		t.Fatalf("open database: %v", err)
@@ -116,12 +116,50 @@ VALUES ('grant-b-existing', 'actor-b', 'role-future', 'tenant-b', 1, 0);
 		t.Fatalf("create legacy cross-Tenant conflict fixture: %v", err)
 	}
 
-	contents, err := os.ReadFile(filepath.Join("..", "..", "migrations", "000071_cross_tenant_delegated_role_isolation.up.sql"))
+	applyCrossTenantDelegatedRoleMigration(t, sqlDB, "000071_cross_tenant_delegated_role_isolation.up.sql")
+
+	rows, err := sqlDB.Query(`
+SELECT id, active, lifecycle_suspended
+FROM authz_actor_role_grants
+WHERE id IN ('grant-a-expense', 'grant-b-existing')
+ORDER BY id
+`)
 	if err != nil {
-		t.Fatalf("read Bite 32.4 migration: %v", err)
+		t.Fatalf("query quarantined legacy grants: %v", err)
 	}
-	if _, err := sqlDB.Exec(string(contents)); err == nil || !strings.Contains(err.Error(), "cross_tenant_delegated_role_conflict_existing") {
-		t.Fatalf("expected migration to reject unresolved existing cross-Tenant delegated authority, got %v", err)
+	defer rows.Close()
+
+	seen := 0
+	for rows.Next() {
+		var id string
+		var active, suspended bool
+		if err := rows.Scan(&id, &active, &suspended); err != nil {
+			t.Fatalf("scan quarantined legacy grant: %v", err)
+		}
+		seen++
+		if !active || !suspended {
+			t.Fatalf("legacy conflicting grant %s must remain assigned but lifecycle-suspended, active=%v suspended=%v", id, active, suspended)
+		}
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("iterate quarantined legacy grants: %v", err)
+	}
+	if seen != 2 {
+		t.Fatalf("expected both legacy conflicting grants to remain present, got %d", seen)
+	}
+
+	// A quarantined assignment still reserves its Tenant. Unsuspending either
+	// side before the other Tenant explicitly revokes its assignment must fail.
+	if _, err := sqlDB.Exec(`UPDATE authz_actor_role_grants SET lifecycle_suspended = 0 WHERE id = 'grant-a-expense'`); err == nil || !strings.Contains(err.Error(), "delegated_role_person_cross_tenant") {
+		t.Fatalf("expected quarantined grant unsuspension to remain blocked by the other Tenant assignment, got %v", err)
+	}
+
+	// Explicit revocation in Tenant B resolves the assigned cross-Tenant conflict.
+	if _, err := sqlDB.Exec(`UPDATE authz_actor_role_grants SET active = 0 WHERE id = 'grant-b-existing'`); err != nil {
+		t.Fatalf("explicitly revoke quarantined Tenant B grant: %v", err)
+	}
+	if _, err := sqlDB.Exec(`UPDATE authz_actor_role_grants SET lifecycle_suspended = 0 WHERE id = 'grant-a-expense'`); err != nil {
+		t.Fatalf("resolved legacy conflict should permit retained Tenant A grant: %v", err)
 	}
 }
 
@@ -154,7 +192,8 @@ CREATE TABLE authz_actor_role_grants (
   role_id TEXT NOT NULL,
   tenant_id TEXT NOT NULL,
   active INTEGER NOT NULL DEFAULT 1,
-  lifecycle_suspended INTEGER NOT NULL DEFAULT 0
+  lifecycle_suspended INTEGER NOT NULL DEFAULT 0,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 `
 

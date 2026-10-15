@@ -15,6 +15,8 @@ import sys
 from datetime import date, datetime, time, timedelta, timezone
 from pathlib import Path
 
+from ers_environment import require_non_production_data_mutation
+
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_DB = ROOT / "backend" / "data" / "brazilian-demo.db"
 DEFAULT_AS_OF = date(2026, 9, 18)
@@ -62,12 +64,6 @@ def parse_as_of(value: str) -> date:
         return date.fromisoformat(value)
     except ValueError as exc:
         raise SystemExit("--as-of must be YYYY-MM-DD") from exc
-
-
-def guard_environment() -> None:
-    app_env = os.environ.get("APP_ENV", "development").strip().lower()
-    if app_env in {"production", "prod"}:
-        raise SystemExit("Refusing to seed the Brazilian demo dataset in Production.")
 
 
 def connect(path: Path) -> sqlite3.Connection:
@@ -685,8 +681,8 @@ def print_summary(as_of: date, db_path: Path) -> None:
 
 
 def main() -> int:
+    require_non_production_data_mutation('to seed Brazilian demo data')
     args = parse_args()
-    guard_environment()
     as_of = parse_as_of(args.as_of)
     db_path = Path(args.db_path).expanduser().resolve()
     conn = connect(db_path)

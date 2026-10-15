@@ -578,12 +578,16 @@
       "issueNumber": 840,
       "title": "[Use Case]: Production database backup should be backed up periodically - daily/weekly",
       "status": "PARTIALLY DONE",
-      "rationale": "Production deployments take and verify a pre-migration SQLite backup, and backup targets/scripts exist, but the repository does not install or enforce a periodic daily/weekly Production backup schedule.",
+      "rationale": "Production deployments enter the Bite 33.5 migration recovery gate, which creates and verifies a pre-migration SQLite backup (and off-host evidence when enabled), but the repository does not install or enforce a periodic daily/weekly Production backup schedule.",
       "recommendedDisposition": "keep-open",
       "evidence": [
         {
           "file": ".github/workflows/deploy.yml",
-          "contains": "make server-backup"
+          "contains": "make server-migration-recovery-gate"
+        },
+        {
+          "file": "scripts/server-migration-recovery-gate.sh",
+          "contains": "server-sqlite-backup.sh"
         },
         {
           "file": "Makefile",

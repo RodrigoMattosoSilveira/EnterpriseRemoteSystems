@@ -33,8 +33,8 @@ case "$ENV_NAME" in
     APP_DOMAIN="app.enterpriseremotesystems.com"
     CONTAINER_PREFIX="ers-prd"
     JWT_ISSUER="enterprise-remote-systems"
-    DEV_ADMIN_EMAIL="admin@enterpriseremotesystems.com"
-    DEV_ADMIN_NAME="Production Admin"
+    DEV_ADMIN_EMAIL=""
+    DEV_ADMIN_NAME=""
     ;;
   *)
     echo "Invalid environment: $ENV_NAME"
@@ -65,6 +65,8 @@ set_or_update_env "CONTAINER_PREFIX" "$CONTAINER_PREFIX"
 
 set_or_update_env "PORT" "8080"
 set_or_update_env "DATABASE_PATH" "/app/data/app.db"
+set_or_update_env "APP_AUTO_MIGRATE" "false"
+set_or_update_env "AUTHZ_DISABLE_ROUTE_AUTHORIZATION" "false"
 
 if ! grep -qE "^[[:space:]]*JWT_SECRET=.+" "$ENV_FILE"; then
   set_or_update_env "JWT_SECRET" "$(openssl rand -base64 48)"
@@ -73,10 +75,17 @@ fi
 set_or_update_env "JWT_ISSUER" "$JWT_ISSUER"
 set_or_update_env "JWT_EXPIRATION_MINUTES" "480"
 
-set_or_update_env "DEV_SEED_ADMIN" "true"
-set_or_update_env "DEV_ADMIN_EMAIL" "$DEV_ADMIN_EMAIL"
-set_or_update_env "DEV_ADMIN_PASSWORD" "change-this-password-immediately"
-set_or_update_env "DEV_ADMIN_NAME" "$DEV_ADMIN_NAME"
+if [[ "$APP_ENV" == "production" ]]; then
+  set_or_update_env "DEV_SEED_ADMIN" "false"
+  set_or_update_env "DEV_ADMIN_EMAIL" ""
+  set_or_update_env "DEV_ADMIN_PASSWORD" ""
+  set_or_update_env "DEV_ADMIN_NAME" ""
+else
+  set_or_update_env "DEV_SEED_ADMIN" "true"
+  set_or_update_env "DEV_ADMIN_EMAIL" "$DEV_ADMIN_EMAIL"
+  set_or_update_env "DEV_ADMIN_PASSWORD" "change-this-password-immediately"
+  set_or_update_env "DEV_ADMIN_NAME" "$DEV_ADMIN_NAME"
+fi
 
 set_or_update_env "LLM_COACHING_ENABLED" "false"
 set_or_update_env "OPENAI_API_KEY" ""
@@ -93,6 +102,26 @@ set_or_update_env "AUTHZ_BOOTSTRAP_ROLE_CODE" "APPLICATION_ADMIN"
 set_or_update_env "AUTHZ_BOOTSTRAP_TENANT_ID" "*"
 set_or_update_env "AUTHZ_BOOTSTRAP_REQUIRE_EMPTY_ACTOR_TABLE" "false"
 
+if [[ "$APP_ENV" == "production" ]]; then
+  set_or_update_env "SERVER_OFFHOST_BACKUP_ENABLED" "true"
+  set_or_update_env "SERVER_OFFHOST_BACKUP_TRANSPORT" "s3"
+  set_or_update_env "SERVER_OFFHOST_BACKUP_S3_ENDPOINT" ""
+  set_or_update_env "SERVER_OFFHOST_BACKUP_S3_REGION" ""
+  set_or_update_env "SERVER_OFFHOST_BACKUP_S3_BUCKET" ""
+  set_or_update_env "SERVER_OFFHOST_BACKUP_S3_PREFIX" "ers-backups"
+  set_or_update_env "AWS_SHARED_CREDENTIALS_FILE" "/opt/EnterpriseRemoteSystems/secrets/aws-credentials"
+  set_or_update_env "AWS_PROFILE" "ers-backup"
+else
+  set_or_update_env "SERVER_OFFHOST_BACKUP_ENABLED" "false"
+  set_or_update_env "SERVER_OFFHOST_BACKUP_TRANSPORT" "ssh"
+  set_or_update_env "SERVER_OFFHOST_BACKUP_HOST" ""
+  set_or_update_env "SERVER_OFFHOST_BACKUP_USER" ""
+  set_or_update_env "SERVER_OFFHOST_BACKUP_DIRECTORY" "/srv/ers-backups"
+  set_or_update_env "SERVER_OFFHOST_BACKUP_PORT" "22"
+  set_or_update_env "SERVER_OFFHOST_BACKUP_IDENTITY_FILE" ""
+  set_or_update_env "SERVER_OFFHOST_BACKUP_KNOWN_HOSTS_FILE" ""
+fi
+
 AUTHZ_ACTOR_HEADER_MODE="disabled"
 if [[ "$APP_ENV" == "development" ]]; then
     AUTHZ_ACTOR_HEADER_MODE="bootstrap"
@@ -107,5 +136,6 @@ echo "Created/updated ${ENV_FILE}"
 echo
 echo "IMPORTANT:"
 echo "  1. Edit ${ENV_FILE}."
-echo "  2. Set a strong DEV_ADMIN_PASSWORD."
-echo "  3. For production, after first successful admin login, set DEV_SEED_ADMIN=false."
+echo "  2. Production keeps DEV_SEED_ADMIN=false; demo/test provisioning is not a Production bootstrap path."
+echo "  3. Production requires SERVER_OFFHOST_BACKUP_ENABLED=true, SERVER_OFFHOST_BACKUP_TRANSPORT=s3, a Hetzner endpoint/region/bucket, and an external S3 credentials file before build/up/deploy."
+echo "  4. This initializer does NOT reconstruct the canonical Production recovery configuration. During recovery, retrieve .env.production and credentials from the shared sources documented by ops/recovery-access.production.env."
