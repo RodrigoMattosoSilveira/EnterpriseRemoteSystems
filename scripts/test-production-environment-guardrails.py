@@ -151,6 +151,7 @@ def test_server_environment_contract() -> None:
                     "APP_AUTO_MIGRATE=false",
                     "AUTHZ_ACTOR_HEADER_MODE=disabled",
                     "DEV_SEED_ADMIN=false",
+                    "AUTHZ_BOOTSTRAP_ENABLED=false",
                     "SERVER_OFFHOST_BACKUP_ENABLED=true",
                     "SERVER_OFFHOST_BACKUP_TRANSPORT=s3",
                     "SERVER_OFFHOST_BACKUP_S3_ENDPOINT=https://hel1.your-objectstorage.com",
@@ -166,6 +167,16 @@ def test_server_environment_contract() -> None:
         )
         proc = run([str(SHELL_GUARD), "require-server-contract", "production", str(env_file)])
         require_success(proc, "valid Production environment contract")
+        # Production must reject missing, enabled, or ambiguous bootstrap settings.
+        valid_text = env_file.read_text(encoding="utf-8")
+        for label, content in (
+            ("missing", valid_text.replace("AUTHZ_BOOTSTRAP_ENABLED=false\n", "")),
+            ("enabled", valid_text.replace("AUTHZ_BOOTSTRAP_ENABLED=false", "AUTHZ_BOOTSTRAP_ENABLED=true")),
+        ):
+            env_file.write_text(content, encoding="utf-8")
+            proc = run([str(SHELL_GUARD), "require-server-contract", "production", str(env_file)])
+            require_failure(proc, f"Production bootstrap {label}", "AUTHZ_BOOTSTRAP_ENABLED must explicitly be false")
+        env_file.write_text(valid_text, encoding="utf-8")
 
         proc = run([str(SHELL_GUARD), "require-server-contract", "test", str(env_file)])
         require_failure(proc, "mismatched selected/deployed environment", "selected ENV=test")
@@ -209,7 +220,7 @@ def test_server_environment_contract_probe() -> None:
         )
 
         env_file.write_text(
-            "APP_ENV=production\nDATABASE_PATH=/app/data/app.db\nAPP_AUTO_MIGRATE=false\nAUTHZ_ACTOR_HEADER_MODE=disabled\nDEV_SEED_ADMIN=false\nSERVER_OFFHOST_BACKUP_ENABLED=true\nSERVER_OFFHOST_BACKUP_TRANSPORT=s3\nSERVER_OFFHOST_BACKUP_S3_ENDPOINT=https://hel1.your-objectstorage.com\nSERVER_OFFHOST_BACKUP_S3_REGION=hel1\nSERVER_OFFHOST_BACKUP_S3_BUCKET=ers\nSERVER_OFFHOST_BACKUP_S3_PREFIX=ers-backups\nAWS_SHARED_CREDENTIALS_FILE=/opt/EnterpriseRemoteSystems/secrets/aws-credentials\nAWS_PROFILE=ers-backup\n",
+            "APP_ENV=production\nDATABASE_PATH=/app/data/app.db\nAPP_AUTO_MIGRATE=false\nAUTHZ_ACTOR_HEADER_MODE=disabled\nDEV_SEED_ADMIN=false\nAUTHZ_BOOTSTRAP_ENABLED=false\nSERVER_OFFHOST_BACKUP_ENABLED=true\nSERVER_OFFHOST_BACKUP_TRANSPORT=s3\nSERVER_OFFHOST_BACKUP_S3_ENDPOINT=https://hel1.your-objectstorage.com\nSERVER_OFFHOST_BACKUP_S3_REGION=hel1\nSERVER_OFFHOST_BACKUP_S3_BUCKET=ers\nSERVER_OFFHOST_BACKUP_S3_PREFIX=ers-backups\nAWS_SHARED_CREDENTIALS_FILE=/opt/EnterpriseRemoteSystems/secrets/aws-credentials\nAWS_PROFILE=ers-backup\n",
             encoding="utf-8",
         )
         ambient = {**os.environ, "APP_ENV": "development", "APP_AUTO_MIGRATE": "true", "DEV_SEED_ADMIN": "true"}
