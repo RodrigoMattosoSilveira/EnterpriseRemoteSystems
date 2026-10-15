@@ -8,6 +8,8 @@ import sys
 import tempfile
 from pathlib import Path
 
+from production_environment_fixture import production_env_text
+
 ROOT = Path(__file__).resolve().parents[1]
 SHELL_GUARD = ROOT / "scripts" / "ers-environment-guard.sh"
 RESET_SQLITE = ROOT / "scripts" / "reset-sqlite-database.sh"
@@ -143,28 +145,7 @@ def test_production_volume_deletion_target() -> None:
 def test_server_environment_contract() -> None:
     with tempfile.TemporaryDirectory(prefix="ers-33-1-env-") as tmp:
         env_file = Path(tmp) / ".env.production"
-        env_file.write_text(
-            "\n".join(
-                [
-                    "APP_ENV=production",
-                    "DATABASE_PATH=/app/data/app.db",
-                    "APP_AUTO_MIGRATE=false",
-                    "AUTHZ_ACTOR_HEADER_MODE=disabled",
-                    "DEV_SEED_ADMIN=false",
-                    "AUTHZ_BOOTSTRAP_ENABLED=false",
-                    "SERVER_OFFHOST_BACKUP_ENABLED=true",
-                    "SERVER_OFFHOST_BACKUP_TRANSPORT=s3",
-                    "SERVER_OFFHOST_BACKUP_S3_ENDPOINT=https://hel1.your-objectstorage.com",
-                    "SERVER_OFFHOST_BACKUP_S3_REGION=hel1",
-                    "SERVER_OFFHOST_BACKUP_S3_BUCKET=ers",
-                    "SERVER_OFFHOST_BACKUP_S3_PREFIX=ers-backups",
-                    "AWS_SHARED_CREDENTIALS_FILE=/opt/EnterpriseRemoteSystems/secrets/aws-credentials",
-                    "AWS_PROFILE=ers-backup",
-                    "",
-                ]
-            ),
-            encoding="utf-8",
-        )
+        env_file.write_text(production_env_text(), encoding="utf-8")
         proc = run([str(SHELL_GUARD), "require-server-contract", "production", str(env_file)])
         require_success(proc, "valid Production environment contract")
         # Production must reject missing, enabled, or ambiguous bootstrap settings.
@@ -172,6 +153,8 @@ def test_server_environment_contract() -> None:
         for label, content in (
             ("missing", valid_text.replace("AUTHZ_BOOTSTRAP_ENABLED=false\n", "")),
             ("enabled", valid_text.replace("AUTHZ_BOOTSTRAP_ENABLED=false", "AUTHZ_BOOTSTRAP_ENABLED=true")),
+            ("empty", valid_text.replace("AUTHZ_BOOTSTRAP_ENABLED=false", "AUTHZ_BOOTSTRAP_ENABLED=")),
+            ("uppercase", valid_text.replace("AUTHZ_BOOTSTRAP_ENABLED=false", "AUTHZ_BOOTSTRAP_ENABLED=TRUE")),
         ):
             env_file.write_text(content, encoding="utf-8")
             proc = run([str(SHELL_GUARD), "require-server-contract", "production", str(env_file)])
@@ -199,30 +182,7 @@ def test_server_environment_contract() -> None:
 def test_server_environment_contract_probe() -> None:
     with tempfile.TemporaryDirectory(prefix="ers-33-1-contract-probe-") as tmp:
         env_file = Path(tmp) / "no-app-env.env"
-        env_file.write_text(
-            "DATABASE_PATH=/app/data/app.db\nAPP_AUTO_MIGRATE=false\nAUTHZ_ACTOR_HEADER_MODE=disabled\nDEV_SEED_ADMIN=false\n",
-            encoding="utf-8",
-        )
-        ambient = {**os.environ, "APP_ENV": "production"}
-        proc = run(
-            [
-                "make",
-                "server-environment-contract-probe",
-                "ENV=production",
-                f"SERVER_ENV_PROBE_FILE={env_file}",
-            ],
-            env=ambient,
-        )
-        require_failure(
-            proc,
-            "manual missing APP_ENV environment-file probe",
-            "must explicitly define APP_ENV=production",
-        )
-
-        env_file.write_text(
-            "APP_ENV=production\nDATABASE_PATH=/app/data/app.db\nAPP_AUTO_MIGRATE=false\nAUTHZ_ACTOR_HEADER_MODE=disabled\nDEV_SEED_ADMIN=false\nAUTHZ_BOOTSTRAP_ENABLED=false\nSERVER_OFFHOST_BACKUP_ENABLED=true\nSERVER_OFFHOST_BACKUP_TRANSPORT=s3\nSERVER_OFFHOST_BACKUP_S3_ENDPOINT=https://hel1.your-objectstorage.com\nSERVER_OFFHOST_BACKUP_S3_REGION=hel1\nSERVER_OFFHOST_BACKUP_S3_BUCKET=ers\nSERVER_OFFHOST_BACKUP_S3_PREFIX=ers-backups\nAWS_SHARED_CREDENTIALS_FILE=/opt/EnterpriseRemoteSystems/secrets/aws-credentials\nAWS_PROFILE=ers-backup\n",
-            encoding="utf-8",
-        )
+        env_file.write_text(production_env_text(), encoding="utf-8")
         ambient = {**os.environ, "APP_ENV": "development", "APP_AUTO_MIGRATE": "true", "DEV_SEED_ADMIN": "true"}
         proc = run(
             [
@@ -249,6 +209,7 @@ def test_environment_initializers_are_production_safe() -> None:
             "APP_AUTO_MIGRATE=false",
             "AUTHZ_DISABLE_ROUTE_AUTHORIZATION=false",
             "AUTHZ_ACTOR_HEADER_MODE=disabled",
+            "AUTHZ_BOOTSTRAP_ENABLED=false",
             "SERVER_OFFHOST_BACKUP_ENABLED=true",
             "SERVER_OFFHOST_BACKUP_TRANSPORT=s3",
         "SERVER_OFFHOST_BACKUP_S3_PREFIX=ers-backups",

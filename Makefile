@@ -518,6 +518,23 @@ recovery-rehearsal-operational-runbook-check:
 owner-unavailable-recovery-readiness-check:
 	python3 scripts/test-owner-unavailable-recovery-readiness.py
 
+.PHONY: production-bootstrap-reconciliation-check
+production-bootstrap-reconciliation-check:
+	python3 scripts/test-production-bootstrap-reconciliation.py
+
+.PHONY: onepassword-materialization-check
+onepassword-materialization-check:
+	python3 scripts/test-ers-op-materialize.py
+
+.PHONY: promotion-readiness-check
+promotion-readiness-check:
+	$(MAKE) production-environment-guardrails-check
+	$(MAKE) owner-unavailable-recovery-readiness-check
+	$(MAKE) production-bootstrap-reconciliation-check
+	$(MAKE) onepassword-materialization-check
+	$(MAKE) migration-deployment-recovery-gate-check
+	python3 scripts/test-promotion-readiness.py
+
 .PHONY: local-check
 local-check:
 	$(MAKE) bite30l4-coverage-manifest-check
@@ -533,6 +550,8 @@ local-check:
 	$(MAKE) migration-deployment-recovery-gate-check
 	$(MAKE) recovery-rehearsal-operational-runbook-check
 	$(MAKE) owner-unavailable-recovery-readiness-check
+	$(MAKE) production-bootstrap-reconciliation-check
+	$(MAKE) onepassword-materialization-check
 	$(MAKE) local-hot-reload-check
 	$(MAKE) local-auth-cookie-config-check
 	$(MAKE) server-public-smoke-script-check

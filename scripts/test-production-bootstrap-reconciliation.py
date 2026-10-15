@@ -45,3 +45,34 @@ for valid, bound, success in [(True,False,True),(False,False,False),(True,True,F
     finally:
         db.close()
 print('Production bootstrap reconciliation offline regression PASS')
+
+# Adversarial fixtures: the repair must be refused without changing the grant
+# or appending an audit entry. Keep these database copies disposable.
+def assert_rejected(label, setup):
+    db = fixture()
+    try:
+        setup(db)
+        db.commit()
+        before = db.execute("SELECT active FROM authz_actor_role_grants WHERE id='authz-grant-bootstrap-admin-application-admin'").fetchone()[0]
+        try:
+            db.executescript(SQL)
+        except sqlite3.Error:
+            db.rollback()
+        else:
+            raise AssertionError(f'{label}: unsafe reconciliation accepted')
+        assert db.execute("SELECT active FROM authz_actor_role_grants WHERE id='authz-grant-bootstrap-admin-application-admin'").fetchone()[0] == before, label
+        assert db.execute('SELECT COUNT(*) FROM authz_audit_logs').fetchone()[0] == 0, label
+    finally:
+        db.close()
+
+assert_rejected('wrong grant role', lambda db: db.execute("UPDATE authz_roles SET code='TENANT_ADMIN' WHERE id='admin-role'"))
+assert_rejected('unexpected grant tenant', lambda db: db.execute("UPDATE authz_actor_role_grants SET tenant_id='tenant-a' WHERE id='authz-grant-bootstrap-admin-application-admin'"))
+assert_rejected('suspended legacy grant', lambda db: db.execute("UPDATE authz_actor_role_grants SET lifecycle_suspended=1 WHERE id='authz-grant-bootstrap-admin-application-admin'"))
+assert_rejected('canonical administrator inactive', lambda db: db.execute("UPDATE auth_user_accounts SET active=0 WHERE id='real-account'"))
+assert_rejected('canonical administrator suspended', lambda db: db.execute("UPDATE auth_user_accounts SET security_suspended=1 WHERE id='real-account'"))
+assert_rejected('canonical actor inactive', lambda db: db.execute("UPDATE authz_actors SET active=0 WHERE id='real-actor'"))
+assert_rejected('canonical grant inactive', lambda db: db.execute("UPDATE authz_actor_role_grants SET active=0 WHERE id='real-grant'"))
+assert_rejected('canonical account person-linked', lambda db: db.execute("INSERT INTO auth_account_people VALUES('real-account')"))
+assert_rejected('canonical tenant binding', lambda db: db.execute("INSERT INTO auth_account_actors VALUES('real-actor','real-account','TENANT','tenant-a','member-a')"))
+assert_rejected('legacy actor key changed', lambda db: db.execute("UPDATE authz_actors SET actor_key='unexpected' WHERE id='authz-actor-bootstrap-admin'"))
+print('Production bootstrap adversarial fixtures PASS')

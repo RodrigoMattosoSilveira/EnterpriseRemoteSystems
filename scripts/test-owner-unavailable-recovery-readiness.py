@@ -8,6 +8,8 @@ import subprocess
 import tempfile
 from pathlib import Path
 
+from production_environment_fixture import production_env_text
+
 ROOT = Path(__file__).resolve().parents[1]
 MANIFEST = ROOT / "ops" / "recovery-access.production.env"
 
@@ -110,25 +112,15 @@ def test_preflight_script_behavior() -> None:
 
         env_file = env_dir / ".env.production"
         env_file.write_text(
-            "APP_ENV=production\n"
-            "APP_DOMAIN=app.enterpriseremotesystems.com\n"
-            "CONTAINER_PREFIX=ers-prd\n"
-            "DATABASE_PATH=/app/data/app.db\n"
-            "APP_AUTO_MIGRATE=false\n"
-            "JWT_SECRET=test-recovery-secret\n"
-            "JWT_ISSUER=enterprise-remote-systems\n"
-            "CORS_ALLOW_ORIGINS=https://app.enterpriseremotesystems.com\n"
-            "AUTHZ_ACTOR_HEADER_MODE=disabled\n"
-            "AUTHZ_BOOTSTRAP_ENABLED=false\n"
-            "DEV_SEED_ADMIN=false\n"
-            "SERVER_OFFHOST_BACKUP_ENABLED=true\n"
-            "SERVER_OFFHOST_BACKUP_TRANSPORT=s3\n"
-            "SERVER_OFFHOST_BACKUP_S3_ENDPOINT=https://hel1.your-objectstorage.com\n"
-            "SERVER_OFFHOST_BACKUP_S3_REGION=hel1\n"
-            "SERVER_OFFHOST_BACKUP_S3_BUCKET=ers\n"
-            "SERVER_OFFHOST_BACKUP_S3_PREFIX=ers-backups\n"
-            f"AWS_SHARED_CREDENTIALS_FILE={alias_credentials}\n"
-            "AWS_PROFILE=ers-backup\n"
+            production_env_text(
+                APP_DOMAIN="app.enterpriseremotesystems.com",
+                CONTAINER_PREFIX="ers-prd",
+                JWT_SECRET="test-recovery-secret",
+                JWT_ISSUER="enterprise-remote-systems",
+                CORS_ALLOW_ORIGINS="https://app.enterpriseremotesystems.com",
+                AWS_SHARED_CREDENTIALS_FILE=str(alias_credentials),
+            ),
+            encoding="utf-8",
         )
         manifest = temp / "recovery-access.env"
         text = MANIFEST.read_text()
