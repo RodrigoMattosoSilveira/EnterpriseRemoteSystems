@@ -217,6 +217,25 @@ else
     sh "$(id -u)" "$(id -g)" "$recovery_backup"
 fi
 
+# The repair is restricted to Production and requires the Production contract
+# (including disabled authorization bootstrap) before any reconciliation.
+if [[ "$MIGRATION_ENVIRONMENT" == "production" ]]; then
+  "$ROOT_DIR/scripts/ers-environment-guard.sh" require-server-contract production "$MIGRATION_ENV_DIR/$MIGRATION_ENV_FILE"
+fi
+
+reconcile_legacy_bootstrap() {
+  local db_path="$1"
+  [[ "$MIGRATION_ENVIRONMENT" == "production" && "$first_deployment" == "0" ]] || return 0
+  echo "Reconciling orphaned Production bootstrap administrator on ${db_path}."
+  local volumes=()
+  if [[ "$db_path" != "/app/data/app.db" ]]; then
+    volumes=(-v "$gate_dir:$gate_dir")
+  fi
+  compose run --rm --no-deps -T "${volumes[@]}" \
+    --entrypoint sqlite3 backend "$db_path" \
+    < "$ROOT_DIR/scripts/reconcile-production-bootstrap-admin.sql"
+}
+
 probe="$gate_dir/migration-probe.db"
 if [[ -n "$recovery_backup" ]]; then
   cp "$recovery_backup" "$probe"
@@ -230,6 +249,7 @@ compose run --rm --no-deps \
   -e DATABASE_PATH="$probe" \
   -e EXPECTED_FINAL_MIGRATION="$MIGRATION_EXPECTED_FINAL_MIGRATION" \
   --entrypoint /app/apply-sql-migrations.sh backend
+reconcile_legacy_bootstrap "$probe"
 compose run --rm --no-deps \
   -v "$gate_dir:$gate_dir" \
   -e DATABASE_PATH="$probe" \
@@ -297,6 +317,10 @@ compose run --rm --no-deps \
   -e EXPECTED_FINAL_MIGRATION="$MIGRATION_EXPECTED_FINAL_MIGRATION" \
   --entrypoint /app/apply-sql-migrations.sh backend
 live_status=$?
+if [[ $live_status -eq 0 ]]; then
+  reconcile_legacy_bootstrap /app/data/app.db
+  live_status=$?
+fi
 if [[ $live_status -eq 0 ]]; then
   compose run --rm --no-deps \
     -e DATABASE_PATH=/app/data/app.db \
