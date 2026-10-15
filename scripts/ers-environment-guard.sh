@@ -168,6 +168,11 @@ require_server_contract() {
       echo "Production environment contract violation: DEV_SEED_ADMIN must be false." >&2
       exit 2
     fi
+    value="$(read_env_value "$env_file" AUTHZ_BOOTSTRAP_ENABLED || true)"
+    if [[ "$(lowercase "$value")" != "false" && "$value" != "0" ]]; then
+      echo "Production environment contract violation: AUTHZ_BOOTSTRAP_ENABLED must explicitly be false." >&2
+      exit 2
+    fi
     validate_production_offhost_backup_contract "$env_file"
   fi
 }
