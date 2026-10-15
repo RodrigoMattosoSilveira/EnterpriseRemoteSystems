@@ -72,6 +72,9 @@ func LoadConfig() (Config, error) {
 	if cfg.JWTSecret == "" {
 		return Config{}, fmt.Errorf("JWT_SECRET is required")
 	}
+	if cfg.Env == "production" && cfg.AuthzBootstrapEnabled {
+		return Config{}, fmt.Errorf("AUTHZ_BOOTSTRAP_ENABLED must be false in production")
+	}
 	if cfg.Env == "production" && cfg.AutoMigrate {
 		return Config{}, fmt.Errorf("APP_AUTO_MIGRATE must be false in production")
 	}

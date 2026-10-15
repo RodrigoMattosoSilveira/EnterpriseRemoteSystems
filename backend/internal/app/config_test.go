@@ -246,3 +246,12 @@ func TestLoadConfigRejectsDestructiveRuntimeSwitchesInProduction(t *testing.T) {
 		})
 	}
 }
+
+func TestLoadConfigRejectsProductionAuthorizationBootstrap(t *testing.T) {
+	t.Setenv("APP_ENV", "production")
+	t.Setenv("JWT_SECRET", "test-secret")
+	t.Setenv("AUTHZ_BOOTSTRAP_ENABLED", "true")
+	if _, err := LoadConfig(); err == nil {
+		t.Fatal("Production authorization bootstrap must be refused")
+	}
+}
