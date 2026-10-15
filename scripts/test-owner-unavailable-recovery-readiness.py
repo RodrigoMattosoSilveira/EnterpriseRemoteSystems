@@ -119,6 +119,7 @@ def test_preflight_script_behavior() -> None:
             "JWT_ISSUER=enterprise-remote-systems\n"
             "CORS_ALLOW_ORIGINS=https://app.enterpriseremotesystems.com\n"
             "AUTHZ_ACTOR_HEADER_MODE=disabled\n"
+            "AUTHZ_BOOTSTRAP_ENABLED=false\n"
             "DEV_SEED_ADMIN=false\n"
             "SERVER_OFFHOST_BACKUP_ENABLED=true\n"
             "SERVER_OFFHOST_BACKUP_TRANSPORT=s3\n"
