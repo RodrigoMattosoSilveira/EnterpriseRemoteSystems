@@ -85,6 +85,9 @@ jobs:
       - name: Verify Bite 33.6 owner-unavailable recovery readiness
         run: make owner-unavailable-recovery-readiness-check
 
+      - name: Verify Bite 33.6.5 Production credential cutover guards
+        run: make production-credential-cutover-check
+
       - name: Set up Go
         uses: actions/setup-go@v6
         with:

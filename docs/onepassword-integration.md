@@ -121,3 +121,65 @@ they must explicitly update the contract, deployment checks and regression
 suite. Full server-side runtime configuration remains enforced by the
 independent environment guard and deployed runtime contract. Never copy keys
 between environments and never silently rotate existing server values.
+
+## Bite 33.6.5 — explicit Production runtime credential installation
+
+No GitHub Action deploy job is permitted to overwrite Production `.env.production`
+(or AWS credential files) using scratch materialization. The new
+`scripts/ers-production-credential-cutover.py` is an **explicit, operator-run,
+fail-closed** installer, not a background deployment hook. No GitHub service
+account tokens are copied to Production by this feature.
+
+Prerequisites for a controlled cutover:
+
+1. A newly verified local and versioned off-host Production database backup;
+   written approval and the current approved Production environment contract.
+2. Install/authenticate the 1Password CLI in a private operator session on a
+   controlled host; never print or paste `OP_SERVICE_ACCOUNT_TOKEN`. Confirm
+   least privilege to `ers-production` (and `ers-deployment`) only.
+3. Preserve a protected, operator-held recovery copy of both existing files
+   before invoking `--apply`. The installer also keeps old bytes in memory for
+   immediate rollback on an I/O error, but it cannot recover from host failure
+   or lost power; retain the external secure copy until post-cutover validation.
+4. Materialize `ops/1password/production.env.tpl` and
+   `ops/1password/aws-credentials.production.tpl` into an operator-private
+   directory (mode 0700) using `scripts/ers-op-materialize.py` with
+   `--expected-root`. Files must be mode 0600 and owned by that operator.
+   Do not use `/tmp` with world-readable contents. Securely remove scratch files
+   after the operation. Avoid exporting materialized contents to shell history.
+5. From the **same checked-out revision** run this tool with the exact existing
+   `.env.production`, AWS target configured in that `.env`, and scratch files:
+
+```bash
+python3 scripts/ers-production-credential-cutover.py \
+  --env-file /opt/EnterpriseRemoteSystems/production/.env.production \
+  --aws-target /opt/EnterpriseRemoteSystems/secrets/aws-credentials \
+  --runtime-fragment "$PRIVATE_DIR/production.env" \
+  --aws-fragment "$PRIVATE_DIR/aws-credentials"
+```
+
+Only if this no-write preflight passes and ledger-key enablement has been
+separately approved, use `--approve-ledger-activation` if the existing ledger
+keys are empty. Following operator approval, repeat with `--apply --confirm
+INSTALL_PRODUCTION_CREDENTIALS` (and the same ledger flag if necessary).
+**The tool will NOT rotate nonempty JWT, ledger, or AWS credentials:** any
+mismatch fails closed. A distinct reviewed rotation is required, especially
+for JWT keys that affect session continuity. It also rejects unsafe/symlink
+paths, incorrect ownership and permissions, non-Production settings, AI or
+Development-admin enablement, and malformed fragments. The existing server
+`.env.production` must be mode 0600, owned by the invoking operator. If the
+ownership contract differs, use a properly approved operator account; do not
+make secrets globally readable to force the install.
+
+Once installed: verify the Production environment guard, execute the existing
+backup/off-host status and verification procedures, ensure protected rollback
+copies are available, then schedule **backend-only** recreation and health
+checks as a separately authorized deployment step. Merely editing an env file
+will not update an already running container. No database reset/migration or
+service restart is performed by the credential installer.
+
+Test offline with `make production-credential-cutover-check`; it checks
+no-write preflight, explicit approval, idempotency, 0600 output, mismatched
+JWT/AWS rejection, forbidden bootstrap and symlink/permissions failures.
+This does not prove a live 1Password token or Production service restart. The
+owner-unavailable LastPass-to-1Password recovery migration is still deferred.
