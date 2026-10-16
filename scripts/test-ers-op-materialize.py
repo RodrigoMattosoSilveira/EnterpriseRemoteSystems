@@ -32,6 +32,24 @@ for invalid, expected in [('', 'empty'), ('line\nsecret', 'newline or NUL')]:
         assert 'op://' not in str(exc) and invalid not in str(exc) if invalid else 'op://' not in str(exc)
     else:
         raise AssertionError('unsafe value accepted')
+# Lookup failures must identify the assignment, never the 1Password reference,
+# token, or subprocess diagnostic (which could contain sensitive material).
+def failing_fetch(_):
+    raise RuntimeError('op://secret/reference and sensitive provider error')
+
+for label, template in [
+    ('JWT_SECRET', 'JWT_SECRET={{op://ers-production/runtime-secrets/JWT_SECRET}}'),
+    ('aws_secret_access_key', 'aws_secret_access_key = {{op://ers-production/hetzner-object-storage/aws_secret_access_key}}'),
+]:
+    try:
+        module.render(template, failing_fetch)
+    except RuntimeError as exc:
+        assert label in str(exc)
+        assert 'op://' not in str(exc)
+        assert 'sensitive provider error' not in str(exc)
+    else:
+        raise AssertionError('failed 1Password lookup incorrectly accepted')
+
 for environment in ('development', 'test', 'production'):
     template = (root / 'ops/1password' / f'{environment}.env.tpl').read_text()
     assert 'JWT_SECRET={{op://ers-' + environment in template
