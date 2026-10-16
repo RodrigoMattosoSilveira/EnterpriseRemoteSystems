@@ -35,5 +35,9 @@ for invalid, expected in [('', 'empty'), ('line\nsecret', 'newline or NUL')]:
 for environment in ('development', 'test', 'production'):
     template = (root / 'ops/1password' / f'{environment}.env.tpl').read_text()
     assert 'JWT_SECRET={{op://ers-' + environment in template
+    assert 'OPENAI_API_KEY=' not in template
+    assert 'DEV_ADMIN_PASSWORD=' not in template
+    for key in ('LEDGER_CORRECTION_KEY', 'LEDGER_SETTLEMENT_KEY'):
+        assert f'{key}={{{{op://ers-{environment}/runtime-secrets/{key}}}}}' in template
     assert all(line.startswith('#') or not line.strip() or '{{op://' in line for line in template.splitlines())
 print('1Password secret-reference materialization tests passed')
