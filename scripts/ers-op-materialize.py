@@ -14,23 +14,31 @@ import tempfile
 REF = re.compile(r'\{\{(op://[A-Za-z0-9_. /-]+)\}\}')
 
 
+def assignment_name(template: str, ref: str) -> str:
+    """Identify a template assignment without displaying its secret reference."""
+    matching_lines = [line for line in template.splitlines()
+                      if '{{' + ref + '}}' in line]
+    names = sorted({line.split('=', 1)[0].strip()
+                    for line in matching_lines
+                    if '=' in line and re.fullmatch(
+                        r'[A-Za-z_][A-Za-z_0-9]*', line.split('=', 1)[0].strip())})
+    return ', '.join(names) if names else 'unknown template field'
+
+
 def render(template: str, fetch):
     refs = REF.findall(template)
     if '{{' in REF.sub('', template) or '}}' in REF.sub('', template):
         raise ValueError('invalid or unresolved secret placeholder')
     values = {}
     for ref in set(refs):
-        val = fetch(ref)
+        field = assignment_name(template, ref)
+        try:
+            val = fetch(ref)
+        except RuntimeError:
+            raise RuntimeError(
+                f'1Password lookup failed for {field} (secret reference and value suppressed)'
+            ) from None
         if not val or '\x00' in val or '\n' in val or '\r' in val:
-            # Report the template assignment name, never the secret reference/value.
-            # This lets operators repair a specific 1Password field safely.
-            matching_lines = [line for line in template.splitlines()
-                              if '{{' + ref + '}}' in line]
-            names = sorted({line.split('=', 1)[0].strip()
-                            for line in matching_lines
-                            if '=' in line and re.fullmatch(
-                                r'[A-Za-z_][A-Za-z_0-9]*', line.split('=', 1)[0].strip())})
-            field = ', '.join(names) if names else 'unknown template field'
             reason = 'empty' if not val else 'contains newline or NUL'
             raise ValueError(f'1Password value for {field} is {reason} (value suppressed)')
         values[ref] = val
