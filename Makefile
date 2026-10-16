@@ -530,6 +530,10 @@ onepassword-materialization-check:
 production-bootstrap-full-schema-check:
 	python3 scripts/test-production-bootstrap-full-schema.py
 
+.PHONY: onepassword-deployment-preflight-check
+onepassword-deployment-preflight-check:
+	python3 scripts/test-onepassword-deployment-preflight.py
+
 .PHONY: promotion-readiness-check
 promotion-readiness-check:
 	$(MAKE) production-environment-guardrails-check
@@ -537,6 +541,7 @@ promotion-readiness-check:
 	$(MAKE) production-bootstrap-reconciliation-check
 	$(MAKE) production-bootstrap-full-schema-check
 	$(MAKE) onepassword-materialization-check
+	$(MAKE) onepassword-deployment-preflight-check
 	$(MAKE) migration-deployment-recovery-gate-check
 	python3 scripts/test-promotion-readiness.py
 
@@ -558,6 +563,7 @@ local-check:
 	$(MAKE) production-bootstrap-reconciliation-check
 	$(MAKE) production-bootstrap-full-schema-check
 	$(MAKE) onepassword-materialization-check
+	$(MAKE) onepassword-deployment-preflight-check
 	$(MAKE) local-hot-reload-check
 	$(MAKE) local-auth-cookie-config-check
 	$(MAKE) server-public-smoke-script-check
