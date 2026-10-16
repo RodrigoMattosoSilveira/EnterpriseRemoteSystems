@@ -526,11 +526,16 @@ production-bootstrap-reconciliation-check:
 onepassword-materialization-check:
 	python3 scripts/test-ers-op-materialize.py
 
+.PHONY: production-bootstrap-full-schema-check
+production-bootstrap-full-schema-check:
+	python3 scripts/test-production-bootstrap-full-schema.py
+
 .PHONY: promotion-readiness-check
 promotion-readiness-check:
 	$(MAKE) production-environment-guardrails-check
 	$(MAKE) owner-unavailable-recovery-readiness-check
 	$(MAKE) production-bootstrap-reconciliation-check
+	$(MAKE) production-bootstrap-full-schema-check
 	$(MAKE) onepassword-materialization-check
 	$(MAKE) migration-deployment-recovery-gate-check
 	python3 scripts/test-promotion-readiness.py
@@ -551,6 +556,7 @@ local-check:
 	$(MAKE) recovery-rehearsal-operational-runbook-check
 	$(MAKE) owner-unavailable-recovery-readiness-check
 	$(MAKE) production-bootstrap-reconciliation-check
+	$(MAKE) production-bootstrap-full-schema-check
 	$(MAKE) onepassword-materialization-check
 	$(MAKE) local-hot-reload-check
 	$(MAKE) local-auth-cookie-config-check
