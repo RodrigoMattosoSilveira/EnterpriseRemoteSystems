@@ -47,6 +47,17 @@ def invariant(db, *, grant=0, audits=1):
     assert sql(db, 'PRAGMA foreign_key_check;') == ''
 
 
+def logical_snapshot(db):
+    """Snapshot committed schema and rows, ignoring SQLite file-layout changes.
+
+    SQLite may update header counters, freelist pages, and rollback-journal
+    housekeeping even when a failed transaction changes no committed data.
+    Byte-for-byte file equality is therefore not a valid atomicity assertion.
+    """
+    with sqlite3.connect(f'file:{db}?mode=ro', uri=True) as cx:
+        return '\n'.join(cx.iterdump())
+
+
 def prepare_schema(db):
     env = dict(os.environ, DATABASE_PATH=str(db), MIGRATIONS_DIR=str(MIGRATIONS), EXPECTED_FINAL_MIGRATION='000077_journey_bonus_award_approval.up.sql')
     run(['sh', str(ROOT / 'backend' / 'apply-sql-migrations.sh')], env=env)
@@ -113,10 +124,10 @@ def main():
         with sqlite3.connect(db) as cx:
             cx.execute("UPDATE authz_actor_role_grants SET active=1 WHERE id=?", (LEGACY,))
             cx.execute("UPDATE authz_actor_role_grants SET active=0 WHERE actor_id != 'authz-actor-bootstrap-admin' AND tenant_id='*' AND role_id IN (SELECT id FROM authz_roles WHERE code='APPLICATION_ADMIN')")
-        snap = db.read_bytes()
+        snap = logical_snapshot(db)
         failure = subprocess.run(['sqlite3','-bail',str(db)], input=REPAIR.read_text(), text=True, capture_output=True)
         assert failure.returncode != 0, 'unsafe reconciliation unexpectedly passed'
-        assert db.read_bytes() == snap, 'failed transaction modified database'
+        assert logical_snapshot(db) == snap, 'failed transaction changed committed schema or rows'
         assert sql(db,'PRAGMA integrity_check;') == 'ok'
         assert sql(db,'PRAGMA foreign_key_check;') == ''
     print('Production bootstrap full-schema SQLite CLI rehearsal PASS' + (' (verified Production backup copy)' if args.verified_production_backup else ' (complete migration-schema fixture)'))
