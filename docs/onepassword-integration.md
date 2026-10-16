@@ -97,3 +97,27 @@ Acceptance: run `make promotion-readiness-check` and `make local-check`, then
 confirm GitHub deployment preflight and deployed Playwright on Development and
 Test. Production deployment is a **separate approval** following Test release
 evidence and operator confirmation of Production backup/recovery readiness.
+
+## Bite 33.6.4 — current staged secret contract
+
+The deployment preflight deliberately materializes only `JWT_SECRET`,
+`LEDGER_CORRECTION_KEY`, and `LEDGER_SETTLEMENT_KEY` for each environment.
+These three fields must be nonempty, single-line values. This staging policy
+assumes the ledger keys have been deliberately provisioned as agreed, but
+**does not enable ledger operations** or replace any server runtime value.
+Do not equate populated 1Password items with activated runtime features.
+
+`OPENAI_API_KEY` is intentionally not materialized because AI has not been
+selected/enabled. `DEV_ADMIN_PASSWORD` is not materialized in any environment;
+Development/Test E2E provisioning uses the separate GitHub Environment
+`E2E_ADMIN_PASSWORD` secret. Production Development-admin seeding remains
+prohibited. Existing empty optional fields may stay in 1Password; the CLI does
+not read them. The validator rejects unexpected added fields (including these)
+in the scratch fragment to prevent accidental rollout.
+
+This is a *staged preflight contract*, not general-purpose conditional feature
+activation logic. If future changes enable AI or legacy Development seeding,
+they must explicitly update the contract, deployment checks and regression
+suite. Full server-side runtime configuration remains enforced by the
+independent environment guard and deployed runtime contract. Never copy keys
+between environments and never silently rotate existing server values.

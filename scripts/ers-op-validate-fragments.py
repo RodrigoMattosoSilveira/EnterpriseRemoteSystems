@@ -5,9 +5,9 @@ import re
 from pathlib import Path
 
 EXPECTED = {
-    'development': {'JWT_SECRET', 'LEDGER_CORRECTION_KEY', 'LEDGER_SETTLEMENT_KEY', 'OPENAI_API_KEY', 'DEV_ADMIN_PASSWORD'},
-    'test': {'JWT_SECRET', 'LEDGER_CORRECTION_KEY', 'LEDGER_SETTLEMENT_KEY', 'OPENAI_API_KEY', 'DEV_ADMIN_PASSWORD'},
-    'production': {'JWT_SECRET', 'LEDGER_CORRECTION_KEY', 'LEDGER_SETTLEMENT_KEY', 'OPENAI_API_KEY'},
+    'development': {'JWT_SECRET', 'LEDGER_CORRECTION_KEY', 'LEDGER_SETTLEMENT_KEY'},
+    'test': {'JWT_SECRET', 'LEDGER_CORRECTION_KEY', 'LEDGER_SETTLEMENT_KEY'},
+    'production': {'JWT_SECRET', 'LEDGER_CORRECTION_KEY', 'LEDGER_SETTLEMENT_KEY'},
 }
 
 def validate(text, environment, aws=False):
@@ -24,10 +24,15 @@ def validate(text, environment, aws=False):
     for line in fields:
         if '=' not in line:
             raise ValueError('malformed materialized assignment')
-        key, value = (part.strip() for part in line.split('=', 1))
+        key, value = line.split('=', 1)
+        key = key.strip()
+        # Do not normalize secret values: whitespace-only or surrounding
+        # whitespace in a signing/authorization key is unsafe.
+        if not aws and (value != value.strip() or not value.strip()):
+            raise ValueError('empty or whitespace-padded materialized value')
         if not re.fullmatch(r'[A-Za-z_][A-Za-z_0-9]*', key) or key in seen or key not in expected:
             raise ValueError('unexpected or repeated materialized key')
-        if not value or '{{' in value or '}}' in value or 'op://' in value or '\x00' in value:
+        if not value or '{{' in value or '}}' in value or 'op://' in value or '\x00' in value or '\r' in value:
             raise ValueError('empty or unresolved materialized value')
         seen[key] = True
     if set(seen) != expected:

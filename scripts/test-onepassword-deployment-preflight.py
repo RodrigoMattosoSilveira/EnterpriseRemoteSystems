@@ -19,6 +19,30 @@ for env, keys in module.EXPECTED.items():
             pass
         else:
             raise AssertionError('unsafe 1Password fragment was accepted')
+# The staged preflight requires only the three active credentials. The
+# intentionally empty OpenAI/DEV admin fields must not be materialized.
+for env, keys in module.EXPECTED.items():
+    assert keys == {'JWT_SECRET', 'LEDGER_CORRECTION_KEY', 'LEDGER_SETTLEMENT_KEY'}
+    template = (ROOT / 'ops/1password' / f'{env}.env.tpl').read_text()
+    assignments = {line.split('=', 1)[0] for line in template.splitlines()
+                   if line.strip() and not line.lstrip().startswith('#')}
+    assert assignments == keys, (env, assignments)
+    for extra in ('OPENAI_API_KEY=', 'DEV_ADMIN_PASSWORD='):
+        assert extra not in template, (env, extra)
+    base = ''.join(f'{key}=independent-secret\n' for key in sorted(keys))
+    for bad in (base.replace('JWT_SECRET=independent-secret', 'JWT_SECRET='),
+                base.replace('LEDGER_CORRECTION_KEY=independent-secret', 'LEDGER_CORRECTION_KEY='),
+                base.replace('LEDGER_SETTLEMENT_KEY=independent-secret', 'LEDGER_SETTLEMENT_KEY='),
+                base + 'OPENAI_API_KEY=unapproved\n',
+                base + 'DEV_ADMIN_PASSWORD=unapproved\n',
+                base.replace('independent-secret', ' leading-space', 1),
+                base.replace('independent-secret', 'trailing-space ', 1)):
+        try:
+            module.validate(bad, env)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError(f'{env} accepted invalid fragment')
 module.validate('[ers-backup]\naws_access_key_id = placeholder\naws_secret_access_key = placeholder\n', 'production', aws=True)
 workflow = (ROOT/'.github/workflows/deploy.yml').read_text()
 assert '  onepassword-preflight:' in workflow
