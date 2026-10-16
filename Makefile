@@ -534,6 +534,10 @@ production-bootstrap-full-schema-check:
 onepassword-deployment-preflight-check:
 	python3 scripts/test-onepassword-deployment-preflight.py
 
+.PHONY: production-credential-cutover-check
+production-credential-cutover-check:
+	python3 scripts/test-production-credential-cutover.py
+
 .PHONY: promotion-readiness-check
 promotion-readiness-check:
 	$(MAKE) production-environment-guardrails-check
@@ -542,6 +546,7 @@ promotion-readiness-check:
 	$(MAKE) production-bootstrap-full-schema-check
 	$(MAKE) onepassword-materialization-check
 	$(MAKE) onepassword-deployment-preflight-check
+	$(MAKE) production-credential-cutover-check
 	$(MAKE) migration-deployment-recovery-gate-check
 	python3 scripts/test-promotion-readiness.py
 
@@ -564,6 +569,7 @@ local-check:
 	$(MAKE) production-bootstrap-full-schema-check
 	$(MAKE) onepassword-materialization-check
 	$(MAKE) onepassword-deployment-preflight-check
+	$(MAKE) production-credential-cutover-check
 	$(MAKE) local-hot-reload-check
 	$(MAKE) local-auth-cookie-config-check
 	$(MAKE) server-public-smoke-script-check
