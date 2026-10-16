@@ -31,12 +31,12 @@ DROP TABLE _bootstrap_repair_gate;
 -- Append audit only on the transition; reruns do not duplicate audit.
 INSERT INTO authz_audit_logs
   (id,occurred_at,actor_id,actor_record_id,tenant_id,permission_code,operation,
-   target_type,target_id,decision,reason,created_at)
+   target_type,target_id,decision,reason,created_at,correlation_id,authorization_source)
 SELECT 'ops-bootstrap-revoke-' || lower(hex(randomblob(16))),CURRENT_TIMESTAMP,
   NULL,NULL,'*',NULL,'production.bootstrap_admin_grant.revoke',
   'authz_actor_role_grant',g.id,'allowed',
   'Bite 33.6.3: revoke orphaned legacy bootstrap authority after canonical account validation',
-  CURRENT_TIMESTAMP
+  CURRENT_TIMESTAMP, 'ops-bootstrap-revoke-' || lower(hex(randomblob(16))), 'NONE'
 FROM authz_actor_role_grants g
 WHERE g.id='authz-grant-bootstrap-admin-application-admin' AND g.active=1;
 UPDATE authz_actor_role_grants
