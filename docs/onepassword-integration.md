@@ -69,3 +69,31 @@ Do not treat a GitHub Service Account token as the recovery mechanism.
 Production may only be declared fully recoverable when a new off-host
 Production backup includes `repository.revision` and `repository.tree_sha`
 and Phase B proves RPO ≤ 24 hours and RTO ≤ 4 hours after deployment.
+
+## Bite 33.6.4 — guarded GitHub deployment preflight
+
+The standard deployment workflow now requires a successful environment-scoped
+`onepassword-preflight` job before the deploy job. This job confirms the intended
+Development, Test, or Production vault and shared deployment vault are readable,
+and all other environment/recovery/bootstrap vaults are denied. It resolves
+`op://` templates into a private temporary directory on the GitHub runner,
+checks required key names and nonempty values without printing values, and
+removes the directory on exit. Production additionally checks a scratch AWS
+credential profile. A missing token, unreadable required item, or accidental
+cross-environment vault grant **blocks deployment**.
+
+**This is deliberately validation-only.** No materialized bytes are copied to
+the Hetzner server, written to a GitHub output/artifact, or substituted into
+server `.env`/AWS credentials. The existing independently maintained server
+secrets and runtime remain in use until Bite 33.6.5 implements the separately
+reviewed materialization cutover. No recovery-provider migration occurs here.
+
+Before checkout/deployment mutation, the workflow checks the currently deployed
+server environment file with the existing guard. Production continues requiring
+Test release evidence, owner-unavailable recovery preflight, verified backup,
+off-host copy, migration clone rehearsal, rollback handling and health checks.
+
+Acceptance: run `make promotion-readiness-check` and `make local-check`, then
+confirm GitHub deployment preflight and deployed Playwright on Development and
+Test. Production deployment is a **separate approval** following Test release
+evidence and operator confirmation of Production backup/recovery readiness.

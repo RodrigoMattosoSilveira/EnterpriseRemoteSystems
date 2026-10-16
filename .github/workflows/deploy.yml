@@ -118,12 +118,63 @@ jobs:
           npm ci
           npm run check
 
+  onepassword-preflight:
+    name: Validate 1Password deployment references (scratch only)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: quality-gate
+    environment: ${{ github.event_name == 'workflow_dispatch' && inputs.environment || github.ref_name }}
+    steps:
+      - uses: actions/checkout@v6
+      - name: Install 1Password CLI
+        uses: 1password/install-cli-action@v4
+      - name: Validate least privilege and materialize into disposable runner storage
+        shell: bash
+        env:
+          OP_SERVICE_ACCOUNT_TOKEN: ${{ secrets.OP_SERVICE_ACCOUNT_TOKEN }}
+          TARGET_ENV: ${{ github.event_name == 'workflow_dispatch' && inputs.environment || github.ref_name }}
+        run: |
+          set -euo pipefail
+          umask 077
+          [[ -n "${OP_SERVICE_ACCOUNT_TOKEN:-}" ]] || { echo 'Missing environment-scoped 1Password token' >&2; exit 1; }
+          case "$TARGET_ENV" in
+            development|test|production) ;;
+            *) echo 'Invalid 1Password deployment environment' >&2; exit 1 ;;
+          esac
+          op vault get "ers-$TARGET_ENV" >/dev/null
+          op vault get ers-deployment >/dev/null
+          for forbidden in ers-development ers-test ers-production ers-recovery ers-automation-bootstrap; do
+            [[ "$forbidden" == "ers-$TARGET_ENV" ]] && continue
+            if op vault get "$forbidden" >/dev/null 2>&1; then
+              echo "Forbidden vault unexpectedly accessible: $forbidden" >&2
+              exit 1
+            fi
+          done
+          scratch="$(mktemp -d "${RUNNER_TEMP}/ers-op-preflight.XXXXXXXX")"
+          trap 'rm -rf -- "$scratch"' EXIT
+          python3 scripts/ers-op-materialize.py \
+            --template "ops/1password/${TARGET_ENV}.env.tpl" \
+            --output "$scratch/runtime.env" --expected-root "$scratch"
+          if [[ "$TARGET_ENV" == production ]]; then
+            python3 scripts/ers-op-materialize.py \
+              --template ops/1password/aws-credentials.production.tpl \
+              --output "$scratch/aws-credentials" --expected-root "$scratch"
+            python3 scripts/ers-op-validate-fragments.py \
+              --environment "$TARGET_ENV" --fragment "$scratch/runtime.env" \
+              --aws-credentials "$scratch/aws-credentials"
+          else
+            python3 scripts/ers-op-validate-fragments.py \
+              --environment "$TARGET_ENV" --fragment "$scratch/runtime.env"
+          fi
+          echo '1Password deployment preflight passed; no runtime secrets were deployed.'
+
   deploy:
     name: Deploy environment
     runs-on: ubuntu-latest
     timeout-minutes: 60
     needs:
       - quality-gate
+      - onepassword-preflight
 
     environment: ${{ github.event_name == 'workflow_dispatch' && inputs.environment || github.ref_name }}
 
@@ -341,6 +392,8 @@ jobs:
              test -f '${{ steps.target.outputs.env_dir }}/docker-compose.server.yml'
              test -f '${{ steps.target.outputs.env_dir }}/deploy/Caddyfile'
              test -f '${{ steps.target.outputs.env_dir }}/scripts/init-server-env.sh'
+             test -f '${{ steps.target.outputs.env_dir }}/.env.${{ steps.target.outputs.env_name }}'
+             bash '${{ steps.target.outputs.env_dir }}/scripts/ers-environment-guard.sh' require-server-contract '${{ steps.target.outputs.env_name }}' '${{ steps.target.outputs.env_dir }}/.env.${{ steps.target.outputs.env_name }}'
              echo 'Preflight checks passed for ${{ steps.target.outputs.env_name }}'
             "
 
