@@ -8,12 +8,14 @@ ROOT = Path(__file__).resolve().parents[1]
 makefile = (ROOT / "Makefile").read_text()
 ci = (ROOT / ".github/workflows/ci.yml").read_text()
 smoke = (ROOT / ".github/workflows/onepassword-smoke.yml").read_text()
-for name in ("production-bootstrap-reconciliation-check", "production-bootstrap-full-schema-check", "onepassword-materialization-check", "promotion-readiness-check"):
+for name in ("production-bootstrap-reconciliation-check", "production-bootstrap-full-schema-check", "onepassword-materialization-check", "onepassword-deployment-preflight-check", "promotion-readiness-check"):
     assert f".PHONY: {name}" in makefile, name
 assert "$(MAKE) production-bootstrap-reconciliation-check" in makefile.split("local-check:", 1)[1], "missing local-check bootstrap coverage"
 assert "$(MAKE) production-bootstrap-full-schema-check" in makefile.split("local-check:", 1)[1]
 assert "$(MAKE) production-bootstrap-full-schema-check" in makefile.split("promotion-readiness-check:", 1)[1]
 assert "$(MAKE) onepassword-materialization-check" in makefile.split("local-check:", 1)[1], "missing local-check materialization coverage"
+assert "$(MAKE) onepassword-deployment-preflight-check" in makefile.split("local-check:", 1)[1]
+assert "$(MAKE) onepassword-deployment-preflight-check" in makefile.split("promotion-readiness-check:", 1)[1]
 assert "make promotion-readiness-check" in ci, "CI must run readiness checks"
 assert "ers-development ers-test ers-production ers-recovery ers-automation-bootstrap" in smoke, "cross-vault denials missing"
 assert '[[ "$forbidden" == "$EXPECTED_VAULT" ]] && continue' in smoke, "expected-vault exclusion missing"
