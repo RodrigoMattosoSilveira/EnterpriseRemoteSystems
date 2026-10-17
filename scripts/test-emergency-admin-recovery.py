@@ -53,12 +53,12 @@ def main():
         # part of the Production tool or any repository fixture.
         trust=root/'trust';trust.mkdir()
         sigdir=root/'signatures';sigdir.mkdir()
-        for owner in ('owner-a','owner-b'):
-            key=root/(owner+'.key')
-            pub=trust/(owner+'.pem')
-            subprocess.run(['openssl','genpkey','-algorithm','ED25519','-out',str(key)],check=True,capture_output=True)
-            subprocess.run(['openssl','pkey','-in',str(key),'-pubout','-out',str(pub)],check=True,capture_output=True)
-            subprocess.run(['openssl','pkeyutl','-sign','-rawin','-inkey',str(key),'-in',str(request),'-out',str(sigdir/(owner+'.sig'))],check=True,capture_output=True)
+        # Generate ephemeral private keys in memory using Go's Ed25519 implementation.
+        # Only public keys and detached signatures reach the test fixture on disk.
+        # This avoids macOS system OpenSSL builds without Ed25519 keygen support.
+        subprocess.run(['go', 'run', str(Path(__file__).with_name('testdata') / 'emergency-admin-sign.go'),
+                        str(request), str(trust), str(sigdir)],
+                       check=True, capture_output=True)
         # Trust ownership is enforced in Production. The synthetic test verifies
         # cryptographic signatures with an independent verifier, even as non-root.
         for owner in ('owner-a','owner-b'):
