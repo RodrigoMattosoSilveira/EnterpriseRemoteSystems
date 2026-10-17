@@ -92,6 +92,9 @@ jobs:
       - name: Verify Bite 33.6 owner-unavailable recovery readiness
         run: make owner-unavailable-recovery-readiness-check
 
+      - name: Verify emergency administrator recovery safeguards
+        run: make emergency-admin-recovery-check
+
       - name: Validate promotion readiness and 1Password isolation workflow contract
         run: make promotion-readiness-check
 

@@ -88,6 +88,9 @@ jobs:
       - name: Verify Bite 33.6.5 Production credential cutover guards
         run: make production-credential-cutover-check
 
+      - name: Verify Bite 33.6.6A emergency administrator recovery safeguards
+        run: make emergency-admin-recovery-check
+
       - name: Set up Go
         uses: actions/setup-go@v6
         with:

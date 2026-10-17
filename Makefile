@@ -538,6 +538,10 @@ onepassword-deployment-preflight-check:
 production-credential-cutover-check:
 	python3 scripts/test-production-credential-cutover.py
 
+.PHONY: emergency-admin-recovery-check
+emergency-admin-recovery-check:
+	python3 scripts/test-emergency-admin-recovery.py
+
 .PHONY: promotion-readiness-check
 promotion-readiness-check:
 	$(MAKE) production-environment-guardrails-check
@@ -547,6 +551,7 @@ promotion-readiness-check:
 	$(MAKE) onepassword-materialization-check
 	$(MAKE) onepassword-deployment-preflight-check
 	$(MAKE) production-credential-cutover-check
+	$(MAKE) emergency-admin-recovery-check
 	$(MAKE) migration-deployment-recovery-gate-check
 	python3 scripts/test-promotion-readiness.py
 
@@ -570,6 +575,7 @@ local-check:
 	$(MAKE) onepassword-materialization-check
 	$(MAKE) onepassword-deployment-preflight-check
 	$(MAKE) production-credential-cutover-check
+	$(MAKE) emergency-admin-recovery-check
 	$(MAKE) local-hot-reload-check
 	$(MAKE) local-auth-cookie-config-check
 	$(MAKE) server-public-smoke-script-check
