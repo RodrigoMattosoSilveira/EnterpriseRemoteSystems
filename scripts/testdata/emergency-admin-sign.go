@@ -6,11 +6,32 @@ import (
     "crypto/ed25519"
     "crypto/rand"
     "crypto/x509"
+    "bytes"
     "encoding/pem"
     "fmt"
     "os"
     "path/filepath"
 )
+
+func verify() error {
+    if len(os.Args) != 5 {
+        return fmt.Errorf("usage: emergency-admin-sign verify REQUEST PUBLIC_KEY SIGNATURE")
+    }
+    message, err := os.ReadFile(os.Args[2]); if err != nil { return err }
+    publicPEM, err := os.ReadFile(os.Args[3]); if err != nil { return err }
+    block, rest := pem.Decode(publicPEM)
+    if block == nil || block.Type != "PUBLIC KEY" || len(bytes.TrimSpace(rest)) != 0 {
+        return fmt.Errorf("invalid PEM public key")
+    }
+    parsed, err := x509.ParsePKIXPublicKey(block.Bytes); if err != nil { return err }
+    public, ok := parsed.(ed25519.PublicKey)
+    if !ok { return fmt.Errorf("expected Ed25519 public key") }
+    signature, err := os.ReadFile(os.Args[4]); if err != nil { return err }
+    if !ed25519.Verify(public, message, signature) {
+        return fmt.Errorf("Ed25519 signature verification failed")
+    }
+    return nil
+}
 
 func run() error {
     if len(os.Args) != 4 {
@@ -31,7 +52,9 @@ func run() error {
 }
 
 func main() {
-    if err := run(); err != nil {
+    var err error
+    if len(os.Args)>1 && os.Args[1]=="verify" { err=verify() } else { err=run() }
+    if err != nil {
         fmt.Fprintln(os.Stderr, err)
         os.Exit(1)
     }

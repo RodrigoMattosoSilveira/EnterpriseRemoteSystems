@@ -61,8 +61,21 @@ def main():
                        check=True, capture_output=True)
         # Trust ownership is enforced in Production. The synthetic test verifies
         # cryptographic signatures with an independent verifier, even as non-root.
-        for owner in ('owner-a','owner-b'):
-            assert subprocess.run(['openssl','pkeyutl','-verify','-pubin','-inkey',str(trust/(owner+'.pem')),'-rawin','-in',str(request),'-sigfile',str(sigdir/(owner+'.sig'))],capture_output=True).returncode==0
+        signer=Path(__file__).with_name('testdata') / 'emergency-admin-sign.go'
+        def verified(owner, message=request, signature=None):
+            return subprocess.run(['go', 'run', str(signer), 'verify', str(message),
+                str(trust/(owner+'.pem')), str(signature or sigdir/(owner+'.sig'))],
+                capture_output=True).returncode == 0
+        for owner in ('owner-a', 'owner-b'):
+            assert verified(owner), f'{owner} Ed25519 approval verification failed'
+        # Negative cryptographic checks: no signature may validate altered request
+        # content, a forged signature, or a different owner's public key.
+        altered=root/'altered-request.json'
+        altered.write_bytes(request.read_bytes()+b' ')
+        for owner in ('owner-a', 'owner-b'):
+            assert not verified(owner, altered), f'{owner} signature accepted modified request'
+            assert not verified(owner, signature=sigdir/(('owner-b' if owner=='owner-a' else 'owner-a')+'.sig')), 'cross-owner signature accepted'
+        assert (trust/'owner-a.pem').read_bytes() != (trust/'owner-b.pem').read_bytes()
         if mod.os.geteuid()==0:
             mod.check_approvals(req,sigdir,trust)
             modified=dict(req,login='evil@example.invalid')
