@@ -541,6 +541,7 @@ production-credential-cutover-check:
 .PHONY: emergency-admin-recovery-check
 emergency-admin-recovery-check:
 	python3 scripts/test-emergency-admin-recovery.py
+	@printf 'ERS_VALIDATION emergency-admin-recovery-check PASS\n'
 
 .PHONY: promotion-readiness-check
 promotion-readiness-check:
@@ -554,6 +555,7 @@ promotion-readiness-check:
 	$(MAKE) emergency-admin-recovery-check
 	$(MAKE) migration-deployment-recovery-gate-check
 	python3 scripts/test-promotion-readiness.py
+	@printf 'ERS_VALIDATION promotion-readiness-check PASS\n'
 
 .PHONY: local-check
 local-check:
@@ -589,6 +591,7 @@ local-check:
 	cd frontend && npm run test:run
 	cd frontend && npx playwright test
 	cd frontend && npm run build
+	@printf 'ERS_VALIDATION local-check PASS\n'
 
 .PHONY: local-docker-doctor
 local-docker-doctor:

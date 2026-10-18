@@ -18,7 +18,49 @@ The host administrator must independently authorize any use. Root privileges are
 
 ## Before Production operation
 
-1. Run `make emergency-admin-recovery-check`, `make promotion-readiness-check`, `make local-check` and CI on the final SHA.
+1. **Verify the exact committed HEAD SHA and validation results.** Do this in the reviewed source checkout used for LOCAL validation, **not by running LOCAL checks on the Production host**. The "approved HEAD SHA" means the exact Git commit proposed for promotion or for the recovery rehearsal. It is not a separate type of SHA. A new commit after a fix requires revalidation and new CI evidence against the new HEAD SHA.
+
+   First, replace `PASTE_APPROVED_HEAD_SHA_HERE` with the full 40-character SHA identified in the release evidence. Run:
+
+   ```sh
+   APPROVED_HEAD_SHA='PASTE_APPROVED_HEAD_SHA_HERE'
+   ACTUAL_HEAD_SHA="$(git rev-parse HEAD)"
+   printf 'ACTUAL_HEAD_SHA=%s\n' "$ACTUAL_HEAD_SHA"
+   if [ "$APPROVED_HEAD_SHA" = "$ACTUAL_HEAD_SHA" ]; then
+       printf 'ERS_VALIDATION HEAD_SHA_MATCH PASS\n'
+   else
+       printf 'ERS_VALIDATION HEAD_SHA_MATCH FAIL (expected %s)\n' "$APPROVED_HEAD_SHA"
+   fi
+   ```
+
+   **Expected:** The printed SHA matches the approved commit exactly and `ERS_VALIDATION HEAD_SHA_MATCH PASS` appears. **Stop if FAIL appears.** In addition, run `git status --porcelain` and require **no output** to demonstrate the tested checkout has no uncommitted changes; if output appears, record `WORKTREE_CLEAN=FAIL` and resolve before treating the checks as promotion evidence.
+
+   Run these three commands **one at a time**, checking each command's **last successful output** before starting the next:
+
+   ```sh
+   make emergency-admin-recovery-check
+   ```
+
+   **Expected final success indicator:** `ERS_VALIDATION emergency-admin-recovery-check PASS`.
+
+   ```sh
+   make promotion-readiness-check
+   ```
+
+   **Expected final success indicator:** `ERS_VALIDATION promotion-readiness-check PASS`.
+
+   ```sh
+   make local-check
+   ```
+
+   **Expected final success indicator:** `ERS_VALIDATION local-check PASS`.
+
+   Each marker is printed **only after** its complete Make target exits successfully. If a command fails, the marker for that invocation is absent; stop, record the command and error output, and treat the gate as FAIL. Do not infer success from earlier subtest PASS messages (the promotion and local checks invoke many nested checks). For each invocation, also confirm its shell exit status is `0` (for example, `echo $?` immediately afterward, before any other command).
+
+   **CI is a separate fourth gate, not a `make` command.** In the GitHub repository, open **Actions → CI** and open the run for the approved branch commit. Confirm the run finished **Success**, every required job is successful, and the run's **source HEAD SHA matches `APPROVED_HEAD_SHA`**. A Pull Request merge SHA may differ from the source-branch HEAD SHA; inspect the run's source commit rather than assuming they are identical. Record the run URL, source commit, conclusion, and date. Record `ERS_VALIDATION CI PASS` in the operator's acceptance evidence **only after** that comparison; the Makefile does not print a CI marker.
+
+   **Acceptance for item 1:** HEAD match PASS, all three Make success markers observed with exit code `0`, and CI PASS on the same source commit. If any is missing, this item is **BLOCKED/FAIL**, not completed.
+
 2. Rehearse issuance and reset **on an isolated restored verified Production backup** with `APP_ENV=test` and a local-only harness; never point the test harness at live Production. The CLI's actual `issue` operation is deliberately Production-root-only.
 3. Independently enroll two owner signing keys. Each owner creates and retains an Ed25519 private key separately and securely. Transfer **only** their corresponding public `.pem` files to a root-owned trust directory (for example `/opt/EnterpriseRemoteSystems/recovery/admin-approval-trust/`) and ensure permissions are restrictive. Never commit keys or trust contents to Git or place them in `ers-deployment`.
 4. Take a fresh verified local and off-host database backup, record both version IDs and manifest checksum. Confirm owner-unavailable access to host, 1Password and backup. Plan a short maintenance window: the backend must be stopped and restart within the reset token's 10-minute lifetime.
