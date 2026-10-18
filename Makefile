@@ -538,9 +538,15 @@ onepassword-deployment-preflight-check:
 production-credential-cutover-check:
 	python3 scripts/test-production-credential-cutover.py
 
+.PHONY: emergency-admin-isolated-rehearsal-check
+emergency-admin-isolated-rehearsal-check:
+	python3 scripts/test-emergency-admin-isolated-rehearsal.py
+	@printf 'ERS_VALIDATION emergency-admin-isolated-rehearsal-check PASS\n'
+
 .PHONY: emergency-admin-recovery-check
 emergency-admin-recovery-check:
 	python3 scripts/test-emergency-admin-recovery.py
+	$(MAKE) emergency-admin-isolated-rehearsal-check
 	@printf 'ERS_VALIDATION emergency-admin-recovery-check PASS\n'
 
 .PHONY: promotion-readiness-check

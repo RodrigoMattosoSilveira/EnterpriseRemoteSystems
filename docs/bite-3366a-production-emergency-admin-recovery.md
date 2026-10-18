@@ -16,6 +16,18 @@ Issuance requires all of:
 
 The host administrator must independently authorize any use. Root privileges are inherently trusted and require OS/SSH/Hetzner controls and audit trails. Signatures prevent a lone deploy user from issuing recovery tokens, not a compromised root or two colluding owner keys. This is an emergency credential recovery procedure, not a mechanism for permanently provisioning a named human administrator; use the application's authorized administrative UI afterward to complete the human-account transition.
 
+## Mandatory 33.6.6A pre-promotion acceptance
+
+The complete operator procedure and separate execution evidence are specified in
+[`bite-3366a-isolated-end-to-end-acceptance.md`](bite-3366a-isolated-end-to-end-acceptance.md).
+Run **Gates A–E and cleanup** before accepting this Bite. A synthetic automated
+fixture is **not** a substitute for the real approved, verified, fresh Production
+backup restored into protected scratch storage, live Hetzner S3 VersionId checks,
+independently witnessed custody, and real password reset/login/session revocation.
+The separate read-only Production writer gate applies to an authorized Production
+maintenance window, not the isolated rehearsal. The real `issue` Production guards
+are not bypassed or relaxed by the rehearsal runner.
+
 ## Before Production operation
 
 1. **Verify the exact committed HEAD SHA and validation results.** Do this in the reviewed source checkout used for LOCAL validation, **not by running LOCAL checks on the Production host**. The "approved HEAD SHA" means the exact Git commit proposed for promotion or for the recovery rehearsal. It is not a separate type of SHA. A new commit after a fix requires revalidation and new CI evidence against the new HEAD SHA.
