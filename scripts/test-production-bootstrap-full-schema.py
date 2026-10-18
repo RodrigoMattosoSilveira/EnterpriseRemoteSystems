@@ -82,7 +82,13 @@ def verify_manifest(backup, manifest):
         raise AssertionError('Require a verified Production backup manifest')
     if doc.get('backup', {}).get('size_bytes') != backup.stat().st_size:
         raise AssertionError('Production backup size mismatch')
-    digest = hashlib.file_digest(backup.open('rb'), 'sha256').hexdigest()
+    # Python 3.9 (macOS system Python) has no hashlib.file_digest.
+    # Hash in bounded chunks to keep verification portable for large backups.
+    hasher = hashlib.sha256()
+    with backup.open('rb') as stream:
+        for chunk in iter(lambda: stream.read(1024 * 1024), b''):
+            hasher.update(chunk)
+    digest = hasher.hexdigest()
     if doc.get('backup', {}).get('sha256') != digest:
         raise AssertionError('Production backup SHA256 mismatch')
     if doc.get('verification', {}).get('integrity_check') != 'ok':

@@ -73,7 +73,18 @@ def run():
                 return SimpleNamespace(returncode=0)
             return real_run(cmd,*pos,**kwargs)
         with mock.patch.object(rehearsal.subprocess,'run',side_effect=mocked):
-            evidence=rehearsal.backup_evidence(backup,manifest,receipt,24,env_file)
+            # Simulate Python 3.9, where hashlib.file_digest is unavailable.
+            # Both the shared manifest check and the isolated backup verifier
+            # must work without calling that newer API.
+            with mock.patch.object(hashlib, 'file_digest', None, create=True):
+                evidence=rehearsal.backup_evidence(backup,manifest,receipt,24,env_file)
+                mismatched=source/'bad-digest.manifest.json'
+                bad=json.loads(manifest.read_text())
+                bad['backup']['sha256']='0'*64
+                dumps(mismatched,bad)
+                try: rehearsal.mod.check_backup(backup,mismatched)
+                except AssertionError: pass
+                else: raise AssertionError('mismatched backup digest accepted')
             assert evidence['exact_s3_versions_verified']
             rehearsal.prepare(args)
             dirs=list(workroot.glob('ers-admin-rehearsal-*'))
