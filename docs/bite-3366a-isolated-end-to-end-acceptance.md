@@ -55,7 +55,27 @@ This document is an executable operator procedure, not a claim of having rehears
 
    This executes **the Production verifier's actual OpenSSL commands** (`pkeyutl -verify -rawin` and `pkey -pubin -outform DER`) against a committed synthetic public key/signature. A modified message must fail. It does not require OpenSSL Ed25519 *key generation* on the recovery host.
 
-   **PASS:** Exactly the success marker and exit code `0`. **FAIL:** any other outcome. Record `openssl version`, the machine/OS identifier, operator, UTC timestamp, and approved HEAD SHA; do not record secrets.
+   **PASS:** Exactly the success marker and exit code `0`. **FAIL:** any other outcome. The command also prints `ERS_REHEARSAL HOST_OPENSSL_PATH=` and `ERS_REHEARSAL HOST_OPENSSL_VERSION=`. Record these two public values, the machine/OS identifier, operator, UTC timestamp, and approved HEAD SHA; do not record secrets.
+
+   **If Gate B fails:** The failure line now identifies the precise stage (`HOST_ED25519_VALID_SIGNATURE_REJECTED`, `HOST_ED25519_PUBLIC_KEY_DER_FAILED`, or `HOST_ED25519_TAMPERED_SIGNATURE_ACCEPTED`). This is a **failed recovery-host prerequisite**, not evidence that the Production recovery tool should bypass its OpenSSL verifier. On macOS, the system `/usr/bin/openssl` may lack required Ed25519 functionality. Determine which executable is selected:
+
+   ```bash
+   command -v openssl
+   openssl version
+   ```
+
+   If your organization's approved recovery-host policy allows Homebrew OpenSSL 3, install/provision that version through your approved process, then use it **in the same shell** for the probe:
+
+   ```bash
+   brew --prefix openssl@3
+   export PATH="$(brew --prefix openssl@3)/bin:$PATH"
+   command -v openssl
+   openssl version
+   python3 scripts/ers-emergency-admin-isolated-rehearsal.py host-check
+   echo $?
+   ```
+
+   The expected `command -v openssl` path is the approved Homebrew `openssl@3/bin/openssl`, and the last two outputs must be `ERS_REHEARSAL RECOVERY_HOST_OPENSSL PASS` and `0`. If OpenSSL 3 has not yet been installed, `brew --prefix openssl@3` may fail: **do not continue** until it is installed/approved. Do not replace or symlink the operating system's OpenSSL. For the eventual authorized recovery operation, ensure the **same tested OpenSSL executable is the one that the real Production recovery tool will resolve**, including when privilege escalation might change `PATH`. If macOS is not the designated recovery host, execute Gate B on the actual designated host instead.
 
 2. **Each actual owner**, on their **own** trusted signing device, must separately verify their own Ed25519 `pkeyutl -sign -rawin` operation during Gate E. Owner private keys must remain on their respective devices.
 

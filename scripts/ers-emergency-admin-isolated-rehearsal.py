@@ -304,21 +304,33 @@ def finish(args):
 
 def host_check(_args):
     # The Production recovery host NEVER signs or generates private keys.
-    # The committed synthetic public key/signature fixture exercises precisely
-    # the OpenSSL read-only operations used by check_approvals().
+    # Probe the SAME `openssl` executable resolved by PATH that the actual
+    # Production check_approvals() invokes. Do not substitute Go or skip the
+    # Ed25519 verification merely to make a platform compatibility test pass.
+    binary = shutil.which('openssl')
+    require(binary is not None, 'HOST_OPENSSL_NOT_FOUND')
+    version = subprocess.run(['openssl', 'version'], capture_output=True, text=True)
+    require(version.returncode == 0, 'HOST_OPENSSL_VERSION_FAILED')
+    print('ERS_REHEARSAL HOST_OPENSSL_PATH=' + binary)
+    print('ERS_REHEARSAL HOST_OPENSSL_VERSION=' + version.stdout.strip()[:160])
+
     fixture=ROOT/'scripts/testdata/emergency-recovery-host-probe'
     original=fixture/'message.txt';key=fixture/'owner-public.txt';sig=fixture/'owner-signature.bin'
     with tempfile.TemporaryDirectory(prefix='ers-admin-host-crypto-') as t:
         altered=Path(t)/'altered-message'
         altered.write_bytes(original.read_bytes()+b'X')
-        def openssl(*cmd):
-            result=subprocess.run(['openssl',*map(str,cmd)],capture_output=True)
-            require(result.returncode==0, 'required OpenSSL operation failed: '+str(cmd[0]))
-        openssl('pkeyutl','-verify','-pubin','-inkey',key,'-rawin','-in',original,'-sigfile',sig)
-        openssl('pkey','-pubin','-in',key,'-outform','DER')
-        result=subprocess.run(['openssl','pkeyutl','-verify','-pubin','-inkey',str(key),
-                               '-rawin','-in',str(altered),'-sigfile',str(sig)],capture_output=True)
-        require(result.returncode!=0,'tampered request incorrectly verified')
+        verified=subprocess.run(['openssl','pkeyutl','-verify','-pubin','-inkey',str(key),
+                                '-rawin','-in',str(original),'-sigfile',str(sig)],
+                               capture_output=True)
+        require(verified.returncode == 0, 'HOST_ED25519_VALID_SIGNATURE_REJECTED')
+        public=subprocess.run(['openssl','pkey','-pubin','-in',str(key),'-outform','DER'],
+                              capture_output=True)
+        require(public.returncode == 0 and len(public.stdout) > 0,
+                'HOST_ED25519_PUBLIC_KEY_DER_FAILED')
+        invalid=subprocess.run(['openssl','pkeyutl','-verify','-pubin','-inkey',str(key),
+                                '-rawin','-in',str(altered),'-sigfile',str(sig)],
+                               capture_output=True)
+        require(invalid.returncode != 0, 'HOST_ED25519_TAMPERED_SIGNATURE_ACCEPTED')
     print('ERS_REHEARSAL RECOVERY_HOST_OPENSSL PASS')
 
 
@@ -380,7 +392,14 @@ def main():
         elif args.command=='finish':finish(args)
         else:host_check(args)
     except (OSError,ValueError,KeyError,sqlite3.Error,subprocess.SubprocessError,AssertionError) as exc:
-        print('ERS_REHEARSAL FAIL: '+type(exc).__name__+' (no secret values printed)',file=sys.stderr)
+        if args.command == 'host-check':
+            # Host-check only processes committed, public, synthetic fixtures.
+            # Report a stable failure code without exposing subprocess stderr.
+            code = str(exc) if isinstance(exc, ValueError) and str(exc).startswith('HOST_') else 'HOST_CHECK_EXCEPTION'
+            print('ERS_REHEARSAL RECOVERY_HOST_OPENSSL FAIL: '+code,file=sys.stderr)
+            print('ERS_REHEARSAL HOST_CHECK_ACTION: select an approved OpenSSL build that supports Ed25519 pkeyutl verify -rawin and public-key DER export; run this gate again with that same openssl on PATH on the designated recovery host.',file=sys.stderr)
+        else:
+            print('ERS_REHEARSAL FAIL: '+type(exc).__name__+' (no secret values printed)',file=sys.stderr)
         return 2
     return 0
 

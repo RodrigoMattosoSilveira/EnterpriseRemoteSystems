@@ -145,6 +145,51 @@ def run():
             rehearsal.offline_writer_check(SimpleNamespace(db=str(backup),confirm='READ-ONLY-PRODUCTION-WRITER-CHECK'))
         except ValueError:pass
         else:raise AssertionError('host writer gate accepted non-Production context')
+    # Gate B must report exactly which OpenSSL operation failed; never convert
+    # an unsupported Ed25519 verifier into a synthetic PASS or reveal stderr.
+    def host_probe(command, *pos, **kwargs):
+        if command[1] == 'version':
+            return SimpleNamespace(returncode=0, stdout='OpenSSL 3.0.0 synthetic\n')
+        if command[1] == 'pkey':
+            return SimpleNamespace(returncode=0, stdout=b'\x30\x01\x00')
+        if 'altered-message' in str(command[command.index('-in')+1]):
+            return SimpleNamespace(returncode=1, stdout=b'')
+        return SimpleNamespace(returncode=0, stdout=b'')
+    with mock.patch.object(rehearsal.shutil, 'which', return_value='/test-only/openssl'):
+        with mock.patch.object(rehearsal.subprocess, 'run', side_effect=host_probe):
+            output=io.StringIO()
+            with contextlib.redirect_stdout(output):
+                rehearsal.host_check(SimpleNamespace())
+            assert 'HOST_OPENSSL_PATH=/test-only/openssl' in output.getvalue()
+            assert 'RECOVERY_HOST_OPENSSL PASS' in output.getvalue()
+
+        def unsupported_verify(command, *pos, **kwargs):
+            result=host_probe(command,*pos,**kwargs)
+            if command[1]=='pkeyutl':
+                return SimpleNamespace(returncode=1,stdout=b'',stderr=b'PRIVATE_DIAGNOSTIC')
+            return result
+        with mock.patch.object(rehearsal.subprocess, 'run', side_effect=unsupported_verify):
+            try:
+                rehearsal.host_check(SimpleNamespace())
+            except ValueError as exc:
+                assert str(exc)=='HOST_ED25519_VALID_SIGNATURE_REJECTED'
+                assert 'PRIVATE_DIAGNOSTIC' not in str(exc)
+            else:
+                raise AssertionError('unsupported OpenSSL accepted as compatible')
+
+        def accepts_tampering(command, *pos, **kwargs):
+            result=host_probe(command,*pos,**kwargs)
+            if command[1]=='pkeyutl':
+                return SimpleNamespace(returncode=0,stdout=b'')
+            return result
+        with mock.patch.object(rehearsal.subprocess, 'run', side_effect=accepts_tampering):
+            try:
+                rehearsal.host_check(SimpleNamespace())
+            except ValueError as exc:
+                assert str(exc)=='HOST_ED25519_TAMPERED_SIGNATURE_ACCEPTED'
+            else:
+                raise AssertionError('tampered message acceptance did not fail Gate B')
+
     print('Bite 33.6.6A isolated rehearsal safety regressions PASS')
 
 if __name__=='__main__':run()
