@@ -125,15 +125,16 @@ def read_custody(value):
 
 
 def verify_openssl_signatures(request, approvals, trust):
+    openssl = mod.configured_openssl()
     sigs, pubs = Path(approvals), Path(trust)
     require(sigs.is_dir() and pubs.is_dir(), 'approvals/trust directories missing')
     keys=[]
     for slot in ('owner-a','owner-b'):
         key, sig = input_file(pubs/(slot+'.pem')), input_file(sigs/(slot+'.sig'))
-        check = subprocess.run(['openssl','pkeyutl','-verify','-pubin','-inkey',str(key),
+        check = subprocess.run([openssl,'pkeyutl','-verify','-pubin','-inkey',str(key),
                                 '-rawin','-in',str(request),'-sigfile',str(sig)],capture_output=True)
         require(check.returncode == 0, 'designated OpenSSL rejected signature for '+slot)
-        fp = subprocess.run(['openssl','pkey','-pubin','-in',str(key),'-outform','DER'],capture_output=True)
+        fp = subprocess.run([openssl,'pkey','-pubin','-in',str(key),'-outform','DER'],capture_output=True)
         require(fp.returncode == 0, 'invalid public key for '+slot)
         keys.append(hashlib.sha256(fp.stdout).hexdigest())
     require(keys[0] != keys[1], 'recovery requires distinct owner public keys')
@@ -302,14 +303,13 @@ def finish(args):
     print('ERS_REHEARSAL ISOLATED_END_TO_END PASS')
 
 
-def host_check(_args):
+def host_check(args):
     # The Production recovery host NEVER signs or generates private keys.
-    # Probe the SAME `openssl` executable resolved by PATH that the actual
-    # Production check_approvals() invokes. Do not substitute Go or skip the
-    # Ed25519 verification merely to make a platform compatibility test pass.
-    binary = shutil.which('openssl')
-    require(binary is not None, 'HOST_OPENSSL_NOT_FOUND')
-    version = subprocess.run(['openssl', 'version'], capture_output=True, text=True)
+    # Probe the EXACT executable selected by the Production verifier; no PATH
+    # lookup and no alternative Ed25519 implementation or fallback.
+    binary = mod.configured_openssl(
+        require_privileged_safe_path=args.require_privileged_safe_path)
+    version = subprocess.run([binary, 'version'], capture_output=True, text=True)
     require(version.returncode == 0, 'HOST_OPENSSL_VERSION_FAILED')
     print('ERS_REHEARSAL HOST_OPENSSL_PATH=' + binary)
     print('ERS_REHEARSAL HOST_OPENSSL_VERSION=' + version.stdout.strip()[:160])
@@ -319,18 +319,20 @@ def host_check(_args):
     with tempfile.TemporaryDirectory(prefix='ers-admin-host-crypto-') as t:
         altered=Path(t)/'altered-message'
         altered.write_bytes(original.read_bytes()+b'X')
-        verified=subprocess.run(['openssl','pkeyutl','-verify','-pubin','-inkey',str(key),
+        verified=subprocess.run([binary,'pkeyutl','-verify','-pubin','-inkey',str(key),
                                 '-rawin','-in',str(original),'-sigfile',str(sig)],
                                capture_output=True)
         require(verified.returncode == 0, 'HOST_ED25519_VALID_SIGNATURE_REJECTED')
-        public=subprocess.run(['openssl','pkey','-pubin','-in',str(key),'-outform','DER'],
+        public=subprocess.run([binary,'pkey','-pubin','-in',str(key),'-outform','DER'],
                               capture_output=True)
         require(public.returncode == 0 and len(public.stdout) > 0,
                 'HOST_ED25519_PUBLIC_KEY_DER_FAILED')
-        invalid=subprocess.run(['openssl','pkeyutl','-verify','-pubin','-inkey',str(key),
+        invalid=subprocess.run([binary,'pkeyutl','-verify','-pubin','-inkey',str(key),
                                 '-rawin','-in',str(altered),'-sigfile',str(sig)],
                                capture_output=True)
         require(invalid.returncode != 0, 'HOST_ED25519_TAMPERED_SIGNATURE_ACCEPTED')
+    if args.require_privileged_safe_path:
+        print('ERS_REHEARSAL HOST_OPENSSL_PRIVILEGED_PATH PASS')
     print('ERS_REHEARSAL RECOVERY_HOST_OPENSSL PASS')
 
 
@@ -371,7 +373,9 @@ def offline_writer_check(args):
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
     subs=parser.add_subparsers(dest='command',required=True)
-    p=subs.add_parser('host-check',help='Run on designated recovery host (no Production credentials)')
+    p=subs.add_parser('host-check',help='Check explicitly configured verifier on designated recovery host')
+    p.add_argument('--require-privileged-safe-path', action='store_true',
+                   help='Also enforce root ownership and path-component protection required for root issuance')
     p=subs.add_parser('host-writers',help='READ-ONLY Production host writer inspection; never runs for rehearsal')
     p.add_argument('--db',required=True);p.add_argument('--confirm',required=True)
     p=subs.add_parser('prepare')
@@ -397,7 +401,7 @@ def main():
             # Report a stable failure code without exposing subprocess stderr.
             code = str(exc) if isinstance(exc, ValueError) and str(exc).startswith('HOST_') else 'HOST_CHECK_EXCEPTION'
             print('ERS_REHEARSAL RECOVERY_HOST_OPENSSL FAIL: '+code,file=sys.stderr)
-            print('ERS_REHEARSAL HOST_CHECK_ACTION: select an approved OpenSSL build that supports Ed25519 pkeyutl verify -rawin and public-key DER export; run this gate again with that same openssl on PATH on the designated recovery host.',file=sys.stderr)
+            print('ERS_REHEARSAL HOST_CHECK_ACTION: set ERS_RECOVERY_OPENSSL_BIN to an approved absolute OpenSSL executable; privileged use additionally requires root-controlled path components. Do not rely on PATH.',file=sys.stderr)
         else:
             print('ERS_REHEARSAL FAIL: '+type(exc).__name__+' (no secret values printed)',file=sys.stderr)
         return 2

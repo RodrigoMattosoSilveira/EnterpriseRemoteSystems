@@ -145,9 +145,13 @@ def run():
             rehearsal.offline_writer_check(SimpleNamespace(db=str(backup),confirm='READ-ONLY-PRODUCTION-WRITER-CHECK'))
         except ValueError:pass
         else:raise AssertionError('host writer gate accepted non-Production context')
-    # Gate B must report exactly which OpenSSL operation failed; never convert
-    # an unsupported Ed25519 verifier into a synthetic PASS or reveal stderr.
+    # Gate B must select ONLY an explicit absolute verifier executable; no PATH
+    # fallback. Use a harmless executable while mocking subprocess results to
+    # test invocation without depending on macOS/Linux OpenSSL capability.
+    executable=Path('/usr/bin/env')
+    assert executable.is_file() and os.access(executable,os.X_OK)
     def host_probe(command, *pos, **kwargs):
+        assert command[0] == str(executable.resolve()), 'verifier escaped configured executable'
         if command[1] == 'version':
             return SimpleNamespace(returncode=0, stdout='OpenSSL 3.0.0 synthetic\n')
         if command[1] == 'pkey':
@@ -155,41 +159,82 @@ def run():
         if 'altered-message' in str(command[command.index('-in')+1]):
             return SimpleNamespace(returncode=1, stdout=b'')
         return SimpleNamespace(returncode=0, stdout=b'')
-    with mock.patch.object(rehearsal.shutil, 'which', return_value='/test-only/openssl'):
-        with mock.patch.object(rehearsal.subprocess, 'run', side_effect=host_probe):
+
+    # Unset, empty, relative, missing and non-executable paths must be rejected.
+    # Replacing PATH with a valid executable must never rescue missing config.
+    for configured, reason in (('', 'HOST_OPENSSL_CONFIG_REQUIRED'),
+                               ('openssl', 'HOST_OPENSSL_CONFIG_NOT_ABSOLUTE'),
+                               ('/nonexistent/ers-recovery-openssl', 'HOST_OPENSSL_PATH_RESOLUTION_FAILED')):
+        with mock.patch.dict(os.environ, {'ERS_RECOVERY_OPENSSL_BIN':configured,'PATH':'/usr/bin'}, clear=False):
+            try: rehearsal.host_check(SimpleNamespace(require_privileged_safe_path=False))
+            except ValueError as exc: assert str(exc).startswith(reason), (configured,str(exc))
+            else: raise AssertionError('host accepted unsafe OpenSSL configuration')
+            try: rehearsal.mod.check_approvals({},root/'approvals',root/'trust')
+            except ValueError as exc: assert str(exc).startswith(reason)
+            else: raise AssertionError('Production approval check accepted unsafe OpenSSL configuration')
+
+    with tempfile.TemporaryDirectory(prefix='ers-openssl-config-unit-') as t:
+        nonexe=Path(t)/'noexec';nonexe.write_text('#!/bin/sh\nexit 0\n')
+        with mock.patch.dict(os.environ, {'ERS_RECOVERY_OPENSSL_BIN':str(nonexe)}):
+            try: rehearsal.mod.configured_openssl()
+            except ValueError as exc: assert str(exc)=='HOST_OPENSSL_NOT_EXECUTABLE'
+            else: raise AssertionError('non-executable OpenSSL accepted')
+        alias=Path(t)/'alias';alias.symlink_to(executable)
+        with mock.patch.dict(os.environ, {'ERS_RECOVERY_OPENSSL_BIN':str(alias)}):
+            # Privileged paths must not traverse user-controlled symlinks or
+            # world-writable /tmp, even if the canonical binary is root-owned.
+            try: rehearsal.mod.configured_openssl(require_privileged_safe_path=True)
+            except ValueError as exc: assert str(exc)=='HOST_OPENSSL_UNTRUSTED_PRIVILEGED_PATH'
+            else: raise AssertionError('privileged verifier accepted writable ancestor')
+
+    args=SimpleNamespace(require_privileged_safe_path=True)
+    with mock.patch.dict(os.environ, {'ERS_RECOVERY_OPENSSL_BIN':str(executable), 'PATH':'/nowhere'}):
+        with mock.patch.object(rehearsal.subprocess, 'run', side_effect=host_probe) as calls:
             output=io.StringIO()
-            with contextlib.redirect_stdout(output):
-                rehearsal.host_check(SimpleNamespace())
-            assert 'HOST_OPENSSL_PATH=/test-only/openssl' in output.getvalue()
+            with contextlib.redirect_stdout(output): rehearsal.host_check(args)
+            assert 'HOST_OPENSSL_PATH='+str(executable.resolve()) in output.getvalue()
+            assert 'HOST_OPENSSL_PRIVILEGED_PATH PASS' in output.getvalue()
             assert 'RECOVERY_HOST_OPENSSL PASS' in output.getvalue()
+            assert len(calls.call_args_list)==4
 
         def unsupported_verify(command, *pos, **kwargs):
             result=host_probe(command,*pos,**kwargs)
             if command[1]=='pkeyutl':
                 return SimpleNamespace(returncode=1,stdout=b'',stderr=b'PRIVATE_DIAGNOSTIC')
             return result
-        with mock.patch.object(rehearsal.subprocess, 'run', side_effect=unsupported_verify):
-            try:
-                rehearsal.host_check(SimpleNamespace())
+        with mock.patch.object(rehearsal.subprocess,'run',side_effect=unsupported_verify):
+            try: rehearsal.host_check(args)
             except ValueError as exc:
                 assert str(exc)=='HOST_ED25519_VALID_SIGNATURE_REJECTED'
                 assert 'PRIVATE_DIAGNOSTIC' not in str(exc)
-            else:
-                raise AssertionError('unsupported OpenSSL accepted as compatible')
+            else: raise AssertionError('unsupported OpenSSL accepted as compatible')
 
         def accepts_tampering(command, *pos, **kwargs):
             result=host_probe(command,*pos,**kwargs)
-            if command[1]=='pkeyutl':
-                return SimpleNamespace(returncode=0,stdout=b'')
+            if command[1]=='pkeyutl':return SimpleNamespace(returncode=0,stdout=b'')
             return result
-        with mock.patch.object(rehearsal.subprocess, 'run', side_effect=accepts_tampering):
-            try:
-                rehearsal.host_check(SimpleNamespace())
-            except ValueError as exc:
-                assert str(exc)=='HOST_ED25519_TAMPERED_SIGNATURE_ACCEPTED'
-            else:
-                raise AssertionError('tampered message acceptance did not fail Gate B')
+        with mock.patch.object(rehearsal.subprocess,'run',side_effect=accepts_tampering):
+            try: rehearsal.host_check(args)
+            except ValueError as exc: assert str(exc)=='HOST_ED25519_TAMPERED_SIGNATURE_ACCEPTED'
+            else: raise AssertionError('tampered message acceptance did not fail Gate B')
 
+        # Isolated approval verification also selects the configured executable.
+        with tempfile.TemporaryDirectory(prefix='ers-owner-sig-fixtures-') as tmp:
+            pub=Path(tmp)/'trust';pub.mkdir()
+            signatures=Path(tmp)/'approvals';signatures.mkdir()
+            for slot in ('owner-a','owner-b'):
+                (pub/(slot+'.pem')).write_text('synthetic-key')
+                (signatures/(slot+'.sig')).write_bytes(b'synthetic-signature')
+            request=Path(tmp)/'request.json';request.write_text('{}\n')
+            def check_signatures(command,*pos,**kwargs):
+                assert command[0]==str(executable.resolve()),'isolated verification changed verifier'
+                if command[1]=='pkey':
+                    owner=Path(command[command.index('-in')+1]).stem
+                    return SimpleNamespace(returncode=0,stdout=owner.encode())
+                return SimpleNamespace(returncode=0,stdout=b'')
+            with mock.patch.object(rehearsal.subprocess,'run',side_effect=check_signatures):
+                verified=rehearsal.verify_openssl_signatures(request,signatures,pub)
+                assert verified['owner_public_key_sha256']['owner-a'] != verified['owner_public_key_sha256']['owner-b']
     print('Bite 33.6.6A isolated rehearsal safety regressions PASS')
 
 if __name__=='__main__':run()

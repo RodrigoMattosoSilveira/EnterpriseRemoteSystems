@@ -11,6 +11,7 @@ Issuance requires all of:
 * A canonical active, non-suspended global `APPLICATION_ADMIN` AccountActor and active grant, with no Person or Tenant Actor association.
 * A request expiring within 15 minutes, approved by **both** independent owners using Ed25519 signatures.
 * Two distinct, pre-enrolled owner public keys in a root-owned, non-group-writable, non-world-writable trust directory. No owner private key on the host.
+* Explicit `ERS_RECOVERY_OPENSSL_BIN` set to the absolute approved OpenSSL executable for **every** Production signature verification. The tool does **not** look up `openssl` through `PATH` or use a fallback. For privileged recovery, every component of both the configured path and its canonical symlink target must be root-owned and not writable by group/other users. Fail closed if missing or unsafe. Root-executed user-managed Homebrew installations generally do not meet this standard without secure administrative provisioning.
 * A new token output file in a private (0700) root-owned directory; mode 0600; no terminal, CI log, or chat token disclosure.
 * Atomic SQLite transaction inserting the hashed reset token plus a correlation-bound, append-only `authz_audit_logs` event. The immutable audit correlation prevents reuse of the request even if the reset token has already been consumed.
 
@@ -77,6 +78,19 @@ are not bypassed or relaxed by the rehearsal runner.
 3. Independently enroll two owner signing keys. Each owner creates and retains an Ed25519 private key separately and securely. Transfer **only** their corresponding public `.pem` files to a root-owned trust directory (for example `/opt/EnterpriseRemoteSystems/recovery/admin-approval-trust/`) and ensure permissions are restrictive. Never commit keys or trust contents to Git or place them in `ers-deployment`.
 4. Take a fresh verified local and off-host database backup, record both version IDs and manifest checksum. Confirm owner-unavailable access to host, 1Password and backup. Plan a short maintenance window: the backend must be stopped and restart within the reset token's 10-minute lifetime.
 
+## Approved OpenSSL configuration (mandatory on recovery host)
+
+On the designated recovery host, an administrator must provision the approved OpenSSL build and its runtime dependencies in root-controlled directories. **Do not depend on the shell PATH or assume that ordinary user-owned Homebrew directories are safe for root execution.** Select and record the full absolute executable path:
+
+```sh
+export ERS_RECOVERY_OPENSSL_BIN='/REPLACE/WITH/ROOT-CONTROLLED/openssl'
+test -x "$ERS_RECOVERY_OPENSSL_BIN" || { echo 'OPENSSL_CONFIG_FAIL'; exit 1; }
+python3 scripts/ers-emergency-admin-isolated-rehearsal.py host-check --require-privileged-safe-path
+echo "HOST_CHECK_EXIT=$?"
+```
+
+**Expected:** `ERS_REHEARSAL HOST_OPENSSL_PRIVILEGED_PATH PASS`, `ERS_REHEARSAL RECOVERY_HOST_OPENSSL PASS`, and `HOST_CHECK_EXIT=0`. **FAIL/BLOCKED:** anything else. The path above is deliberately an invalid placeholder: replace it with the individually approved and verified executable. The host check operates only on committed synthetic fixtures; it does not connect to Production.
+
 ## Example operator sequence (only after all approvals and rehearsal)
 
 Use the reviewed Bite 33.6.6A checkout on the Production server. The following paths are examples; verify exact paths and ownership before running. Replace `administrator@example.com` with the previously verified existing Production Application Administrator login. Run the read-only prepare step first; it cannot modify a database:
@@ -99,7 +113,7 @@ openssl pkeyutl -sign -rawin -inkey owner-a-private.pem \
 Transfer both `.sig` files into `/secure/operator/approvals/`. After independently validating approvals, backup, service outage, and the exact login, issue with no secrets in command-line arguments (the `--token-output` path must be root-owned and private):
 
 ```sh
-sudo env APP_ENV=production python3 scripts/ers-emergency-admin-recovery.py issue \
+sudo env APP_ENV=production ERS_RECOVERY_OPENSSL_BIN="$ERS_RECOVERY_OPENSSL_BIN" python3 scripts/ers-emergency-admin-recovery.py issue \
   --db /opt/EnterpriseRemoteSystems/production/data/app.db \
   --request /secure/operator/recovery-request.json \
   --approvals /secure/operator/approvals \
@@ -108,6 +122,8 @@ sudo env APP_ENV=production python3 scripts/ers-emergency-admin-recovery.py issu
   --manifest /opt/EnterpriseRemoteSystems/production/backups/app-YYYYMMDDTHHMMSSZ.db.manifest.json \
   --token-output /secure/root-only/recovery-token
 ```
+
+**Verify the privileged root invocation uses the same configured verifier:** the tool resolves and validates `ERS_RECOVERY_OPENSSL_BIN` anew as root. Do not use `sudo` to bypass a rejected writable binary path; provision a protected installation first. Never place private keys on this host.
 
 **Do not use the illustrative host database path without verifying the actual host-mounted Production SQLite database path** with Docker/Compose. It may be in a Docker volume, not in `production/data/`. Do not directly mount or write to the database while any backend instance is running. Confirm all application writer containers are stopped (the tool verifies the named backend only, so the operator must check other possible writers). Do not use the tool on backup originals.
 

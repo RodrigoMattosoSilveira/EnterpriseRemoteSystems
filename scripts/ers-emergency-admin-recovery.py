@@ -71,7 +71,41 @@ def plan(db_path, login, output):
     os.chmod(output, 0o600)
     print('Recovery request created; obtain two independent signed approvals. No database changes.')
 
+def configured_openssl(*, require_privileged_safe_path=False):
+    """Resolve the single approved verifier; never search PATH or silently fall back.
+
+    Privileged use requires root control of every path component, including
+    symlink components and the canonical target. Homebrew's ordinary user-owned
+    tree must not become a root-executed program without trusted provisioning.
+    """
+    value = os.environ.get('ERS_RECOVERY_OPENSSL_BIN', '')
+    if not value:
+        fail('HOST_OPENSSL_CONFIG_REQUIRED: set ERS_RECOVERY_OPENSSL_BIN')
+    configured = Path(value)
+    if not configured.is_absolute():
+        fail('HOST_OPENSSL_CONFIG_NOT_ABSOLUTE')
+    try:
+        binary = configured.resolve(strict=True)
+    except (OSError, RuntimeError):
+        fail('HOST_OPENSSL_PATH_RESOLUTION_FAILED')
+    if not binary.is_file() or not os.access(binary, os.X_OK):
+        fail('HOST_OPENSSL_NOT_EXECUTABLE')
+    if require_privileged_safe_path or os.geteuid() == 0:
+        # Check original and resolved paths, not just the binary's final mode:
+        # a user-writable parent or replaceable symlink can redirect root.
+        for path in (configured, binary):
+            components = [path]
+            while components[-1] != components[-1].parent:
+                components.append(components[-1].parent)
+            for item in reversed(components):
+                info = item.lstat()
+                if info.st_uid != 0 or info.st_mode & 0o022:
+                    fail('HOST_OPENSSL_UNTRUSTED_PRIVILEGED_PATH')
+    return str(binary)
+
+
 def check_approvals(request, approval_dir, trust_dir):
+    openssl = configured_openssl()
     trust=Path(trust_dir)
     if not trust.is_absolute() or trust.is_symlink() or trust.stat().st_uid != 0 or trust.stat().st_mode & 0o022:
         fail('trusted approval directory must be root-owned and not writable by group/others')
@@ -86,13 +120,13 @@ def check_approvals(request, approval_dir, trust_dir):
             fail('trusted approval public key must be root-owned and protected')
         with tempfile.NamedTemporaryFile(mode='wb') as f:
             f.write(json_bytes(request)); f.flush()
-            result=subprocess.run(['openssl','pkeyutl','-verify','-pubin','-inkey',str(key),
+            result=subprocess.run([openssl,'pkeyutl','-verify','-pubin','-inkey',str(key),
                 '-rawin','-in',f.name,'-sigfile',str(signature)], capture_output=True)
         if result.returncode:
             fail('independent owner signature validation failed')
     fingerprints=[]
     for owner in ('owner-a','owner-b'):
-        result=subprocess.run(['openssl','pkey','-pubin','-in',str(trust/(owner+'.pem')),'-outform','DER'],capture_output=True)
+        result=subprocess.run([openssl,'pkey','-pubin','-in',str(trust/(owner+'.pem')),'-outform','DER'],capture_output=True)
         if result.returncode: fail('invalid trusted public key')
         fingerprints.append(hashlib.sha256(result.stdout).digest())
     if fingerprints[0]==fingerprints[1]:

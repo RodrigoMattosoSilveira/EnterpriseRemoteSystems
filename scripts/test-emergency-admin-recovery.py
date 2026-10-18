@@ -4,6 +4,8 @@ import importlib.util
 import json
 from pathlib import Path
 import sqlite3
+import os
+import shutil
 import subprocess
 import tempfile
 from unittest import mock
@@ -77,11 +79,15 @@ def main():
             assert not verified(owner, signature=sigdir/(('owner-b' if owner=='owner-a' else 'owner-a')+'.sig')), 'cross-owner signature accepted'
         assert (trust/'owner-a.pem').read_bytes() != (trust/'owner-b.pem').read_bytes()
         if mod.os.geteuid()==0:
-            mod.check_approvals(req,sigdir,trust)
-            modified=dict(req,login='evil@example.invalid')
-            try:mod.check_approvals(modified,sigdir,trust)
-            except ValueError:pass
-            else:raise AssertionError('altered signed approval accepted')
+            # Explicit test-only selection; no implicit OpenSSL resolution.
+            openssl = shutil.which('openssl')
+            assert openssl is not None
+            with mock.patch.dict(os.environ, {'ERS_RECOVERY_OPENSSL_BIN':str(Path(openssl).resolve())}):
+                mod.check_approvals(req,sigdir,trust)
+                modified=dict(req,login='evil@example.invalid')
+                try:mod.check_approvals(modified,sigdir,trust)
+                except ValueError:pass
+                else:raise AssertionError('altered signed approval accepted')
         # Mock ONLY external offline/server and backup verification gates, never
         # the signed request identity or database/audit/rollback behavior.
         with mock.patch.object(mod,'require_offline'), mock.patch.object(mod,'check_backup'),mock.patch.object(mod,'check_approvals'):

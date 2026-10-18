@@ -29,55 +29,70 @@ This document is an executable operator procedure, not a claim of having rehears
    make local-check
    ```
 
-2. Compare the SHA from `git rev-parse HEAD` to the **new commit created after applying this patch**. Do not reuse baseline `2de1f4043ec8211f80ca1914ed735109a99e6f1d` after committing changes. Confirm CI is green for **the same commit**, not just the branch name.
+2. Compare the SHA from `git rev-parse HEAD` to the **new commit created after applying the OpenSSL configuration patch**. Do not reuse baseline `b851db9df90b4a15dd54eddaf8911625aafac5ff` after committing changes. Confirm CI is green for **the same commit**, not just the branch name.
 
    **Expected:** all commands exit `0`, the worktree is clean, `ERS_VALIDATION emergency-admin-recovery-check PASS`, `ERS_VALIDATION promotion-readiness-check PASS`, and `ERS_VALIDATION local-check PASS` are observed, and required CI jobs succeed against the same SHA.
 
    **PASS:** Exact-SHA match and all four gates evidenced. **BLOCKED:** missing result, nonzero exit, dirty tree, or mismatched CI SHA.
 
-## Gate B — Designated recovery host OpenSSL verification
+## Gate B — Designated recovery host: explicit OpenSSL configuration and verification
 
-**Actor:** authorized recovery operator, **on the actual computer designated to verify signatures**. No database or Production credentials required.
+**Actor:** authorized recovery operator on the **actual designated recovery computer** (currently the operator's Mac). **No Production database, passwords, signing private keys or S3 credentials are required.** Execute Gate B on the same approved source checkout as the later rehearsal.
 
-1. In the approved ERS checkout, run:
+**This Gate has TWO required passes.** The first proves cryptographic compatibility; the second proves the configured executable cannot be replaced by an unprivileged user when root performs real Production issuance. A normal user-installed Homebrew binary can pass the first check and fail the second. That is intentional and must **not** be marked as overall PASS.
+
+1. **Set the exact approved executable path.** Do not alter the global shell `PATH` and do not replace macOS system OpenSSL. For a compatibility check of a Homebrew installation on macOS, use:
+
+   ```bash
+   export ERS_RECOVERY_OPENSSL_BIN="$(brew --prefix openssl@3)/bin/openssl"
+   test -x "$ERS_RECOVERY_OPENSSL_BIN" && printf 'OPENSSL_CONFIG_EXECUTABLE PASS\n'
+   printf 'CONFIGURED_OPENSSL=%s\n' "$ERS_RECOVERY_OPENSSL_BIN"
+   ```
+
+   **Expected:** `OPENSSL_CONFIG_EXECUTABLE PASS` and an **absolute** path to the approved binary. If Homebrew OpenSSL 3 is absent or `test -x` fails, **STOP** and provision the approved executable before continuing. This Homebrew path is an example for the compatibility stage only; it is *not* automatically suitable for privileged Production execution.
+
+2. **Run the cryptographic compatibility check** in the same Terminal session:
 
    ```bash
    python3 scripts/ers-emergency-admin-isolated-rehearsal.py host-check
-   echo $?
+   echo "HOST_CRYPTO_EXIT=$?"
    ```
 
-   **Expected:**
+   **Expected:** output includes these three lines (actual path/version values vary):
 
    ```text
+   ERS_REHEARSAL HOST_OPENSSL_PATH=/absolute/path/to/approved/openssl
+   ERS_REHEARSAL HOST_OPENSSL_VERSION=OpenSSL 3.x.x ...
    ERS_REHEARSAL RECOVERY_HOST_OPENSSL PASS
-   0
+   HOST_CRYPTO_EXIT=0
    ```
 
-   This executes **the Production verifier's actual OpenSSL commands** (`pkeyutl -verify -rawin` and `pkey -pubin -outform DER`) against a committed synthetic public key/signature. A modified message must fail. It does not require OpenSSL Ed25519 *key generation* on the recovery host.
+   The host probe uses the **same configured executable** as the real Production approval verifier to verify a valid Ed25519 signature, export a public key as DER, and reject an altered message. **PASS for compatibility only:** all required lines appear, `HOST_CRYPTO_EXIT=0`, and the path is the expected canonical path. A failing command or missing PASS marker is FAIL, not partial success.
 
-   **PASS:** Exactly the success marker and exit code `0`. **FAIL:** any other outcome. The command also prints `ERS_REHEARSAL HOST_OPENSSL_PATH=` and `ERS_REHEARSAL HOST_OPENSSL_VERSION=`. Record these two public values, the machine/OS identifier, operator, UTC timestamp, and approved HEAD SHA; do not record secrets.
-
-   **If Gate B fails:** The failure line now identifies the precise stage (`HOST_ED25519_VALID_SIGNATURE_REJECTED`, `HOST_ED25519_PUBLIC_KEY_DER_FAILED`, or `HOST_ED25519_TAMPERED_SIGNATURE_ACCEPTED`). This is a **failed recovery-host prerequisite**, not evidence that the Production recovery tool should bypass its OpenSSL verifier. On macOS, the system `/usr/bin/openssl` may lack required Ed25519 functionality. Determine which executable is selected:
+3. **Verify the privileged executable-path security requirement** *without running Python as root*:
 
    ```bash
-   command -v openssl
-   openssl version
+   python3 scripts/ers-emergency-admin-isolated-rehearsal.py host-check --require-privileged-safe-path
+   echo "HOST_PRIVILEGED_EXIT=$?"
    ```
 
-   If your organization's approved recovery-host policy allows Homebrew OpenSSL 3, install/provision that version through your approved process, then use it **in the same shell** for the probe:
+   **Expected for the approved, securely provisioned executable:**
 
-   ```bash
-   brew --prefix openssl@3
-   export PATH="$(brew --prefix openssl@3)/bin:$PATH"
-   command -v openssl
-   openssl version
-   python3 scripts/ers-emergency-admin-isolated-rehearsal.py host-check
-   echo $?
+   ```text
+   ERS_REHEARSAL HOST_OPENSSL_PRIVILEGED_PATH PASS
+   ERS_REHEARSAL RECOVERY_HOST_OPENSSL PASS
+   HOST_PRIVILEGED_EXIT=0
    ```
 
-   The expected `command -v openssl` path is the approved Homebrew `openssl@3/bin/openssl`, and the last two outputs must be `ERS_REHEARSAL RECOVERY_HOST_OPENSSL PASS` and `0`. If OpenSSL 3 has not yet been installed, `brew --prefix openssl@3` may fail: **do not continue** until it is installed/approved. Do not replace or symlink the operating system's OpenSSL. For the eventual authorized recovery operation, ensure the **same tested OpenSSL executable is the one that the real Production recovery tool will resolve**, including when privilege escalation might change `PATH`. If macOS is not the designated recovery host, execute Gate B on the actual designated host instead.
+   **FAIL/BLOCKED:** `HOST_OPENSSL_UNTRUSTED_PRIVILEGED_PATH`, any other error, missing marker, or nonzero exit. This requires every original and symlink-resolved path component (including the executable itself) to be root-owned and not writable by group/other users. **Ordinary user-managed Homebrew trees may fail** even if their Ed25519 implementation is compatible. Do not solve this by using `sudo` to execute a user-writable binary, relaxing file permissions, or suppressing the check. Have the host administrator provision an approved, root-controlled OpenSSL build and all necessary runtime library dependencies in protected locations; then update `ERS_RECOVERY_OPENSSL_BIN` to its absolute path and rerun **Steps 2 and 3**. Never blindly copy a dynamically linked Homebrew binary as a purportedly complete secure installation.
 
-2. **Each actual owner**, on their **own** trusted signing device, must separately verify their own Ed25519 `pkeyutl -sign -rawin` operation during Gate E. Owner private keys must remain on their respective devices.
+4. **Record Gate B evidence:** approved committed HEAD SHA, designated host identifier, operator, UTC timestamp, exported `ERS_RECOVERY_OPENSSL_BIN` path, resolved executable path and version, success markers, and both exit codes. Do not include private keys, signatures, tokens or database contents.
+
+   **Gate B overall PASS:** *both* Step 2 and Step 3 pass with the **same resolved executable** and `0` exit codes. Until then Gate B is **BLOCKED**, even when cryptographic compatibility passes.
+
+5. **For actual Production issuance:** the root operator must explicitly pass the **same approved absolute executable** to the real recovery tool using `sudo env ERS_RECOVERY_OPENSSL_BIN=...` (see the Production runbook). The tool independently repeats the privileged owner/mode check; it does not read the caller's PATH and will not silently fall back. The isolated rehearsal `finish` also reads the same environment variable. Neither case may fall back to `openssl` on PATH.
+
+**On separate signing devices:** Each owner uses their *own* approved signing tool and retains their private key there. The `ERS_RECOVERY_OPENSSL_BIN` setting applies to the **recovery host's verification tooling**, not an owner's independently administered signing device.
 
 ## Gate C — Independent human custody attestation
 
@@ -86,8 +101,9 @@ This document is an executable operator procedure, not a claim of having rehears
 1. Locate the pre-enrolled public keys corresponding to the logical slots `owner-a` and `owner-b`. Do **not** send private keys. Independently compute each fingerprint on the recovery operator's trusted computer:
 
    ```bash
-   openssl pkey -pubin -in /PATH/TO/TRUST/owner-a.pem -outform DER | shasum -a 256
-   openssl pkey -pubin -in /PATH/TO/TRUST/owner-b.pem -outform DER | shasum -a 256
+   set -o pipefail
+   "$ERS_RECOVERY_OPENSSL_BIN" pkey -pubin -in /PATH/TO/TRUST/owner-a.pem -outform DER | shasum -a 256
+   "$ERS_RECOVERY_OPENSSL_BIN" pkey -pubin -in /PATH/TO/TRUST/owner-b.pem -outform DER | shasum -a 256
    ```
 
    **Expected:** both commands exit `0`, output a 64-character lowercase hexadecimal SHA-256 and the digests **differ**. Record each digest, never any private key.
@@ -240,7 +256,7 @@ This document is an executable operator procedure, not a claim of having rehears
    test ! -e "$REPORT" && echo NEW_REPORT_PATH_PASS
    ```
 
-4. **Before request expiry**, run `finish`:
+4. **Before request expiry**, run `finish`. Keep `ERS_RECOVERY_OPENSSL_BIN` set to the exact Gate B-approved executable; `finish` fails if it is unset or invalid:
 
    ```bash
    unset APP_ENV
