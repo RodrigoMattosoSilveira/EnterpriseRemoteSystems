@@ -548,6 +548,21 @@ recovery-container-gateb-check:
 	python3 scripts/test-recovery-container-gateb.py
 	@printf 'ERS_VALIDATION recovery-container-gateb-check PASS\n'
 
+# Gate B.4/B.5: Docker-host controls are validated offline in every CI run;
+# actual image build / locked cryptography require a Docker-enabled operator host.
+.PHONY: recovery-container-locked-launcher-check
+recovery-container-locked-launcher-check:
+	python3 scripts/test-recovery-container-host.py
+	@printf 'ERS_VALIDATION recovery-container-locked-launcher-check PASS\n'
+
+.PHONY: recovery-container-locked-build
+recovery-container-locked-build:
+	python3 scripts/ers-recovery-container-host.py build-lock --lock "$(ERS_RECOVERY_LOCK)"
+
+.PHONY: recovery-container-locked-host-check
+recovery-container-locked-host-check:
+	python3 scripts/ers-recovery-container-host.py local-host-check --lock "$(ERS_RECOVERY_LOCK)"
+
 .PHONY: recovery-container-gateb-smoke
 recovery-container-gateb-smoke:
 	bash scripts/ers-recovery-container-smoke.sh
@@ -569,6 +584,7 @@ promotion-readiness-check:
 	$(MAKE) production-credential-cutover-check
 	$(MAKE) emergency-admin-recovery-check
 	$(MAKE) recovery-container-gateb-check
+	$(MAKE) recovery-container-locked-launcher-check
 	$(MAKE) migration-deployment-recovery-gate-check
 	python3 scripts/test-promotion-readiness.py
 	@printf 'ERS_VALIDATION promotion-readiness-check PASS\n'
@@ -595,6 +611,7 @@ local-check:
 	$(MAKE) production-credential-cutover-check
 	$(MAKE) emergency-admin-recovery-check
 	$(MAKE) recovery-container-gateb-check
+	$(MAKE) recovery-container-locked-launcher-check
 	$(MAKE) local-hot-reload-check
 	$(MAKE) local-auth-cookie-config-check
 	$(MAKE) server-public-smoke-script-check

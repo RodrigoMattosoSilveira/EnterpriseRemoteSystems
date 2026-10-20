@@ -98,6 +98,9 @@ jobs:
       - name: Verify Gate B container security contract (offline)
         run: make recovery-container-gateb-check
 
+      - name: Verify Gate B.4/B.5 image lock and protected launcher contract (offline)
+        run: make recovery-container-locked-launcher-check
+
       - name: Validate promotion readiness and 1Password isolation workflow contract
         run: make promotion-readiness-check
 
