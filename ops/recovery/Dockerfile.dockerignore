@@ -1,0 +1,14 @@
+# Dockerfile-specific build context: avoid sending .env, credentials,
+# backups, databases, .git, user files, or unrelated application source
+# to Docker daemon or a remote BuildKit builder.
+**
+!ops/
+!ops/recovery/
+!ops/recovery/Dockerfile
+!ops/recovery/verify.sh
+!scripts/
+!scripts/ers-emergency-admin-recovery.py
+!scripts/ers-emergency-admin-isolated-rehearsal.py
+!scripts/testdata/
+!scripts/testdata/emergency-recovery-host-probe/
+!scripts/testdata/emergency-recovery-host-probe/**
