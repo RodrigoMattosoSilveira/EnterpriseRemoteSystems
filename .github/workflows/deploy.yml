@@ -91,6 +91,9 @@ jobs:
       - name: Verify Bite 33.6.6A emergency administrator recovery safeguards
         run: make emergency-admin-recovery-check
 
+      - name: Verify Gate B container security contract (offline)
+        run: make recovery-container-gateb-check
+
       - name: Set up Go
         uses: actions/setup-go@v6
         with:

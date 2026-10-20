@@ -543,6 +543,15 @@ emergency-admin-isolated-rehearsal-check:
 	python3 scripts/test-emergency-admin-isolated-rehearsal.py
 	@printf 'ERS_VALIDATION emergency-admin-isolated-rehearsal-check PASS\n'
 
+.PHONY: recovery-container-gateb-check
+recovery-container-gateb-check:
+	python3 scripts/test-recovery-container-gateb.py
+	@printf 'ERS_VALIDATION recovery-container-gateb-check PASS\n'
+
+.PHONY: recovery-container-gateb-smoke
+recovery-container-gateb-smoke:
+	bash scripts/ers-recovery-container-smoke.sh
+
 .PHONY: emergency-admin-recovery-check
 emergency-admin-recovery-check:
 	python3 scripts/test-emergency-admin-recovery.py
@@ -559,6 +568,7 @@ promotion-readiness-check:
 	$(MAKE) onepassword-deployment-preflight-check
 	$(MAKE) production-credential-cutover-check
 	$(MAKE) emergency-admin-recovery-check
+	$(MAKE) recovery-container-gateb-check
 	$(MAKE) migration-deployment-recovery-gate-check
 	python3 scripts/test-promotion-readiness.py
 	@printf 'ERS_VALIDATION promotion-readiness-check PASS\n'
@@ -584,6 +594,7 @@ local-check:
 	$(MAKE) onepassword-deployment-preflight-check
 	$(MAKE) production-credential-cutover-check
 	$(MAKE) emergency-admin-recovery-check
+	$(MAKE) recovery-container-gateb-check
 	$(MAKE) local-hot-reload-check
 	$(MAKE) local-auth-cookie-config-check
 	$(MAKE) server-public-smoke-script-check

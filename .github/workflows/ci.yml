@@ -95,6 +95,9 @@ jobs:
       - name: Verify emergency administrator recovery safeguards
         run: make emergency-admin-recovery-check
 
+      - name: Verify Gate B container security contract (offline)
+        run: make recovery-container-gateb-check
+
       - name: Validate promotion readiness and 1Password isolation workflow contract
         run: make promotion-readiness-check
 

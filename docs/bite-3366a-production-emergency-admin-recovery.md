@@ -130,3 +130,10 @@ sudo env APP_ENV=production ERS_RECOVERY_OPENSSL_BIN="$ERS_RECOVERY_OPENSSL_BIN"
 Restart the backend under the standard Compose configuration (without changing `AUTHZ_BOOTSTRAP_ENABLED=false`). Open `https://app.enterpriseremotesystems.com/password/reset` **without a token query parameter** in a controlled private browser. Transfer the token over an approved private channel, paste it into the **Reset token** field, enter a newly chosen unique password and its confirmation, and submit. The existing `ResetPasswordPage` calls the `/auth/password/reset` API and navigates to login on success. Never put a token in a URL, shell history, GitHub Actions, chat, or deployment log. Revoke/expire unused recovery tokens under the documented auth lifecycle controls; avoid ad hoc SQL.
 
 Finally verify authenticated login, effective global administration, required account-name transition, token single use, prior-session invalidation, database/audit integrity, and successful fresh off-host backup. Store signed request, correlation ID and audit result in a restricted incident record, not the reset token. Notify both owners. **Do not close Bite 33.6.6A until a human operator has successfully rehearsed end-to-end recovery and a legitimate named human administrator is established.**
+
+## Gate B container environment
+
+For the standardized, isolated dependency build and platform-pinned smoke procedure, see
+[`bite-3366a-gate-b-container-recovery.md`](bite-3366a-gate-b-container-recovery.md).
+The container smoke is an additional prerequisite, not a replacement for a verified
+Production-backup rehearsal, owner approvals, or independent root-controlled host checks.
