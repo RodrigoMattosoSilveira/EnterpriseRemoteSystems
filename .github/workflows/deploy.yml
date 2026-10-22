@@ -94,6 +94,9 @@ jobs:
       - name: Verify Gate B container security contract (offline)
         run: make recovery-container-gateb-check
 
+      - name: Verify Gate C owner enrollment and Python 3.9 compatibility (offline)
+        run: make recovery-owner-gatec-check
+
       - name: Verify Gate B.4/B.5 image lock and protected launcher contract (offline)
         run: make recovery-container-locked-launcher-check
 

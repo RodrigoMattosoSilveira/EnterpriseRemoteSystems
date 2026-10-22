@@ -550,6 +550,12 @@ recovery-container-gateb-check:
 
 # Gate B.4/B.5: Docker-host controls are validated offline in every CI run;
 # actual image build / locked cryptography require a Docker-enabled operator host.
+# Gate C: portable Python 3.9+ offline contract; no Docker daemon, owner keys or Production data.
+.PHONY: recovery-owner-gatec-check
+recovery-owner-gatec-check:
+	python3 scripts/test-gatec-offline.py
+	@printf 'ERS_VALIDATION recovery-owner-gatec-check PASS\n'
+
 .PHONY: recovery-container-locked-launcher-check
 recovery-container-locked-launcher-check:
 	python3 scripts/test-recovery-container-host.py
@@ -585,6 +591,7 @@ promotion-readiness-check:
 	$(MAKE) emergency-admin-recovery-check
 	$(MAKE) recovery-container-gateb-check
 	$(MAKE) recovery-container-locked-launcher-check
+	$(MAKE) recovery-owner-gatec-check
 	$(MAKE) migration-deployment-recovery-gate-check
 	python3 scripts/test-promotion-readiness.py
 	@printf 'ERS_VALIDATION promotion-readiness-check PASS\n'
@@ -612,6 +619,7 @@ local-check:
 	$(MAKE) emergency-admin-recovery-check
 	$(MAKE) recovery-container-gateb-check
 	$(MAKE) recovery-container-locked-launcher-check
+	$(MAKE) recovery-owner-gatec-check
 	$(MAKE) local-hot-reload-check
 	$(MAKE) local-auth-cookie-config-check
 	$(MAKE) server-public-smoke-script-check

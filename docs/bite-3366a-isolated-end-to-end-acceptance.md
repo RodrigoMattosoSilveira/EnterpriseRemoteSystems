@@ -68,6 +68,8 @@ cryptographic verification.
 
 ## Gate C — Independent human custody attestation
 
+**Gate C Docker owner-enrollment procedure:** `docs/bite-3366a-gate-c-owner-enrollment.md` (the canonical, tested local path for the two owner keys and public-key enrollment). The commands below define the original evidence contract and are not a substitute for that procedure; do not attempt to use macOS host-privileged OpenSSL for LOCAL key enrollment.
+
 **Actors:** Owner A, Owner B (two distinct real authorized people), and designated independent witness(es). **No shared private signing key**.
 
 1. Locate the pre-enrolled public keys corresponding to the logical slots `owner-a` and `owner-b`. Do **not** send private keys. Independently compute each fingerprint on the recovery operator's trusted computer:
