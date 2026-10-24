@@ -114,6 +114,11 @@ python3 "$HOME/Downloads/ers-gatec-tools/ers-gatec-package.py" --role recipient 
 
 **PASS:** `ERS_GATEC RECIPIENT_IMAGE_VERIFIED PASS` and `ERS_GATEC PACKAGE_VERIFICATION_COMPLETE PASS`. The archive must match the **independently authenticated digest**; the command refuses malformed OCI blobs and does not execute an image before verifying it. Owner B must not use any older scripts downloaded from chat.
 
+**Docker Desktop OCI attestation compatibility:** The approved archive may have an OCI image index that contains **one** runnable `linux/arm64` or `linux/amd64` image and one or more BuildKit `unknown/unknown` attestation manifests. This is not a second runnable platform. The recipient verifier now validates the attestation blobs and their reference to the unique runnable image. It still rejects a second runnable platform, unclassified index children, corrupted blobs, or a mismatched independently authenticated archive checksum. **Do not disable verification or invent a recipient-side image lock.**
+
+**If Owner B previously encountered `OCI_MULTI_PLATFORM_REQUIRES_APPROVED_LOCK FAIL`:** The archive checksum and Gate B image lock do not need to change. After the operator applies and tests the approved OCI-verifier correction, create a **new, versioned tools ZIP** from the revised four repository scripts. Send only that ZIP and its newly calculated SHA-256 to Owner B over the established authenticated transfer and independent-digest channels. Owner B must verify the new ZIP checksum, preserve their previous `~/Downloads/ers-gatec-tools` directory under a distinct backup name, extract the new verified scripts, run `python3 -m py_compile` on all four files, and repeat C.3's **recipient verification command**. Do not repeat the Docker image export or any owner-key generation that previously completed. If the updated recipient check fails, stop and retain the error output for diagnosis.
+
+
 ## C.4 — Owner B independently creates their key (Owner B's Mac only)
 
 From Owner B's own Terminal, using the **same `ARCHIVE_SHA`** authenticated above:

@@ -56,6 +56,55 @@ def read_blob(tar, desc, *, json_blob=True):
     require(h.hexdigest()==d[7:],'OCI_BLOB_DIGEST_MISMATCH')
     return member_json(tar,member.name) if json_blob else None
 
+def select_index_child(tar, children, expected_platform):
+    """Select exactly one executable image; allow only verified BuildKit attestations.
+
+    Docker Desktop can save an OCI index with one linux image and a separate
+    unknown/unknown attestation manifest. The independently authenticated TAR
+    SHA anchors the entire index; verify every referenced attestation blob too.
+    Neither an extra executable platform nor an unclassified child is safe to
+    choose implicitly on the recipient's device.
+    """
+    require(isinstance(children, list) and bool(children), 'OCI_MANIFEST_MISSING')
+    runnable = []
+    attestations = []
+    for child in children:
+        require(isinstance(child, dict), 'OCI_DESCRIPTOR_INVALID')
+        platform = child.get('platform') or {}
+        require(isinstance(platform, dict), 'OCI_PLATFORM_DESCRIPTOR_INVALID')
+        os_name, arch = platform.get('os'), platform.get('architecture')
+        annotation = child.get('annotations') or {}
+        require(isinstance(annotation, dict), 'OCI_ANNOTATIONS_INVALID')
+        if (os_name, arch) in (('linux', 'arm64'), ('linux', 'amd64')):
+            runnable.append(child)
+        elif (os_name, arch) == ('unknown', 'unknown') and annotation.get('vnd.docker.reference.type') == 'attestation-manifest':
+            attestations.append(child)
+        elif len(children) == 1 and not platform:
+            # Older single-manifest OCI archives may omit platform metadata;
+            # the referenced config will still undergo mandatory platform checks.
+            runnable.append(child)
+        else:
+            raise Failure('OCI_UNAPPROVED_INDEX_CHILD')
+    require(len(runnable) == 1, 'OCI_RUNNABLE_IMAGE_AMBIGUOUS')
+    selected = runnable[0]
+    platform = selected.get('platform') or {}
+    if expected_platform and platform:
+        require(f"{platform.get('os')}/{platform.get('architecture')}" == expected_platform,
+                'OCI_PLATFORM_MISMATCH')
+    for desc in attestations:
+        # Metadata-only companions must be attestation manifests, not alternate
+        # runnable programs. Verify config/layers as content-addressed blobs.
+        att = read_blob(tar, desc)
+        require(isinstance(att, dict) and isinstance(att.get('config'), dict) and
+                isinstance(att.get('layers'), list), 'OCI_ATTESTATION_MANIFEST_INVALID')
+        read_blob(tar, att['config'], json_blob=False)
+        for layer in att['layers']:
+            read_blob(tar, layer, json_blob=False)
+        reference = (desc.get('annotations') or {}).get('vnd.docker.reference.digest')
+        if reference is not None:
+            require(reference == selected.get('digest'), 'OCI_ATTESTATION_TARGET_MISMATCH')
+    return selected
+
 def verify_archive(path, image_id, expected_platform=None, expected_source=None, expected_base=None):
     with tarfile.open(path, 'r:*') as tar:
         index=member_json(tar,'index.json')
@@ -76,15 +125,7 @@ def verify_archive(path, image_id, expected_platform=None, expected_source=None,
                 if expected_base: require(labels.get('org.enterpriseremotesystems.recovery.base-image')==expected_base,'OCI_BASE_LABEL_MISMATCH')
                 for layer in obj.get('layers',[]): read_blob(tar,layer,json_blob=False)
                 break
-            children=obj.get('manifests')
-            require(isinstance(children,list) and len(children)>0,'OCI_MANIFEST_MISSING')
-            if expected_platform:
-                found=[x for x in children if (x.get('platform') or {}).get('os')+'/'+(x.get('platform') or {}).get('architecture')==expected_platform]
-                require(len(found)==1 or (len(children)==1 and not found),'OCI_PLATFORM_AMBIGUOUS')
-                desc=found[0] if found else children[0]
-            else:
-                require(len(children)==1,'OCI_MULTI_PLATFORM_REQUIRES_APPROVED_LOCK')
-                desc=children[0]
+            desc=select_index_child(tar,obj.get('manifests'),expected_platform)
         else: raise Failure('OCI_NESTING_INVALID')
     return platform_from_image
 

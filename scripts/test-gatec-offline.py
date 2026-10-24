@@ -42,7 +42,7 @@ def add(tar, name, raw):
     info.mode = 0o600
     tar.addfile(info, io.BytesIO(raw))
 
-def fixture(root):
+def fixture(root, *, attestation=False, second_platform=False, bad_attestation_target=False):
     root.mkdir(parents=True, exist_ok=True)
     conf = json.dumps({'os': 'linux', 'architecture': 'arm64', 'config': {'Labels': {
         'org.opencontainers.image.revision': SOURCE,
@@ -50,11 +50,29 @@ def fixture(root):
     }}}).encode()
     layer = b'example OCI layer data\0'
     manifest = json.dumps({'schemaVersion': 2, 'config': blob(conf), 'layers': [blob(layer)]}).encode()
-    inner = json.dumps({'schemaVersion': 2, 'manifests': [dict(blob(manifest), platform={'os': 'linux', 'architecture': 'arm64'})]}).encode()
+    children = [dict(blob(manifest), platform={'os': 'linux', 'architecture': 'arm64'})]
+    extra_blobs = []
+    if attestation or bad_attestation_target:
+        att_config = b'{}'
+        att_layer = b'{"predicateType":"https://slsa.dev/provenance/v1"}'
+        att_manifest = json.dumps({'schemaVersion': 2, 'config': blob(att_config),
+                                   'layers': [blob(att_layer)]}).encode()
+        children.append(dict(blob(att_manifest),
+                             platform={'os': 'unknown', 'architecture': 'unknown'},
+                             annotations={'vnd.docker.reference.type': 'attestation-manifest',
+                                          'vnd.docker.reference.digest': ('sha256:'+'f'*64) if bad_attestation_target else blob(manifest)['digest']}))
+        extra_blobs.extend((att_config, att_layer, att_manifest))
+    if second_platform:
+        # Two runnable images must never be chosen implicitly by Owner B.
+        conf2 = json.dumps({'os': 'linux', 'architecture': 'amd64', 'config': {'Labels': {}}}).encode()
+        manifest2 = json.dumps({'schemaVersion': 2, 'config': blob(conf2), 'layers': []}).encode()
+        children.append(dict(blob(manifest2), platform={'os': 'linux', 'architecture': 'amd64'}))
+        extra_blobs.extend((conf2, manifest2))
+    inner = json.dumps({'schemaVersion': 2, 'manifests': children}).encode()
     index = json.dumps({'schemaVersion': 2, 'manifests': [blob(inner)]}).encode()
     with tarfile.open(root / 'ers-approved-image.tar', 'w') as t:
         add(t, 'index.json', index)
-        for data in (conf, layer, manifest, inner):
+        for data in (conf, layer, manifest, inner, *extra_blobs):
             add(t, 'blobs/sha256/' + blob(data)['digest'][7:], data)
     image_id = blob(inner)['digest']
     (root / 'ers-approved-image-id.txt').write_text(image_id + '\n')
@@ -89,6 +107,40 @@ def package_tests(root):
     (d / 'ers-approved-image.tar').unlink()
     fixture(d)
     assert pkg.load_package(d, expected_sha=pkg.digest_file(d / 'ers-approved-image.tar')) == image_id
+    # Docker Desktop BuildKit exports a runnable arm64 image plus an
+    # unknown/unknown provenance attestation in the same OCI image index.
+    # The recipient has no local approval lock: authenticated TAR SHA +
+    # unambiguous runnable platform + a verified attestation chain suffice.
+    multi = root / 'buildkit-attestation'
+    multi_id, multi_sha = fixture(multi, attestation=True)
+    assert pkg.load_package(multi, expected_sha=multi_sha) == multi_id
+    assert pkg.load_package(multi, multi_id, platform='linux/arm64', source=SOURCE, base=BASE) == multi_id
+    refused(pkg.load_package, multi, expected_sha='1' * 64)
+    # Authentication alone must NOT permit an ambiguous second runnable image.
+    ambiguous = root / 'two-runnable-platforms'
+    _, ambiguous_sha = fixture(ambiguous, second_platform=True)
+    refused(pkg.load_package, ambiguous, expected_sha=ambiguous_sha)
+    refused(pkg.load_package, ambiguous, platform='linux/arm64')
+    # An attestation pointing at an unexpected manifest must fail closed.
+    bad_reference = root / 'attestation-wrong-target'
+    _, ref_sha = fixture(bad_reference, bad_attestation_target=True)
+    refused(pkg.load_package, bad_reference, expected_sha=ref_sha)
+    # Corrupt an attestation blob while updating the envelope checksum: the
+    # internal content-address chain MUST reject it.
+    altered = root / 'corrupted-attestation'
+    att_id, _ = fixture(altered, attestation=True)
+    tampered = altered / 'changed.tar'
+    with tarfile.open(altered / 'ers-approved-image.tar', 'r') as orig, tarfile.open(tampered, 'w') as out:
+        for item in orig:
+            if not item.isfile():
+                continue
+            data = orig.extractfile(item).read()
+            if item.name.startswith('blobs/sha256/') and b'slsa.dev' in data:
+                data = data.replace(b'slsa.dev', b'invalid!')
+            add(out, item.name, data)
+    tampered.replace(altered / 'ers-approved-image.tar')
+    (altered / 'ers-approved-image-sha256.txt').write_text(pkg.digest_file(altered / 'ers-approved-image.tar') + '\n')
+    refused(pkg.load_package, altered, expected_image_id=att_id)
     # Damage a referenced blob but update the outer TAR checksum: internal OCI digest MUST fail.
     image_id, original_sha = fixture(d)
     altered = d / 'damaged.tar'
