@@ -554,7 +554,27 @@ func (r *GORMRepository) ConsumePasswordResetToken(ctx context.Context, tokenID 
 		if err := invalidatePasswordResetTokens(tx, token.AccountID, now); err != nil {
 			return err
 		}
-		return revokeSessions(tx, token.AccountID, now)
+		if err := revokeSessions(tx, token.AccountID, now); err != nil {
+			return err
+		}
+		// This public token-consumption operation has no authenticated initiating
+		// Actor. Attribute it to possession of the single-use token rather than
+		// inventing an authenticated identity; audit together with the password
+		// and session changes, so an audit-write failure rolls everything back.
+		audit := authz.AuthzAuditLog{
+			ID: ids.New(), OccurredAt: now, AccountID: token.AccountID,
+			ActorID:             "password-reset-token-holder",
+			AuthorizationSource: string(authz.AuthorizationSourceNone),
+			Operation:           "authentication.password_reset_tokens.consume",
+			TargetType:          "auth_user_account", TargetID: token.AccountID,
+			Decision:  authz.AuditDecisionAuthorized,
+			Reason:    "single-use reset token consumed; prior account sessions revoked",
+			CreatedAt: now,
+		}
+		if err := tx.Create(&audit).Error; err != nil {
+			return fmt.Errorf("record password reset consumption audit: %w", err)
+		}
+		return nil
 	})
 }
 
