@@ -559,10 +559,13 @@ func (r *GORMRepository) ConsumePasswordResetToken(ctx context.Context, tokenID 
 		}
 		// This public token-consumption operation has no authenticated initiating
 		// Actor. Attribute it to possession of the single-use token rather than
-		// inventing an authenticated identity; audit together with the password
-		// and session changes, so an audit-write failure rolls everything back.
+		// inventing an authenticated identity. Use the server-generated *record ID*
+		// (never the raw token or its hash) as the mandatory audit correlation ID.
+		// Keep the audit in this transaction so an audit-write failure rolls back
+		// the password, token consumption, and session revocation together.
 		audit := authz.AuthzAuditLog{
 			ID: ids.New(), OccurredAt: now, AccountID: token.AccountID,
+			CorrelationID:       token.ID,
 			ActorID:             "password-reset-token-holder",
 			AuthorizationSource: string(authz.AuthorizationSourceNone),
 			Operation:           "authentication.password_reset_tokens.consume",

@@ -188,7 +188,10 @@ func TestEnrollTwoHumanApplicationAdministratorsRequiresMigratedCatalogAndImmuta
 }
 
 func TestEnrolledHumanAdministratorsIndependentLoginAndMutualPasswordRecovery(t *testing.T) {
-	database := humanAdminDatabase(t)
+	// Login hydrates GLOBAL and TENANT AccountActor projections through the
+	// migrated core Person/Membership/Collaborator/Tenant tables even when this
+	// test's two human administrators are GLOBAL-only.
+	database := accountActorFoundationTestDatabase(t)
 	result, err := EnrollTwoHumanApplicationAdministrators(context.Background(), database, humanAdminInput(), humanAdminEvidence())
 	if err != nil {
 		t.Fatal(err)
@@ -228,8 +231,15 @@ func TestEnrolledHumanAdministratorsIndependentLoginAndMutualPasswordRecovery(t 
 		if err := database.Where("operation = ? AND target_id = ?", "authentication.password_reset_tokens.consume", row.AccountID).First(&consumeAudit).Error; err != nil {
 			t.Fatalf("recovery consumption must have append-only target attribution: %v", err)
 		}
-		if consumeAudit.ActorID != "password-reset-token-holder" || consumeAudit.Decision != authz.AuditDecisionAuthorized {
-			t.Fatalf("recovery consumption must not invent an authenticated actor: %#v", consumeAudit)
+		if consumeAudit.ActorID != "password-reset-token-holder" || consumeAudit.Decision != authz.AuditDecisionAuthorized || consumeAudit.CorrelationID == "" {
+			t.Fatalf("recovery consumption requires correct attribution and audit correlation: %#v", consumeAudit)
+		}
+		var storedResetToken PasswordResetToken
+		if err := database.Where("account_id = ?", row.AccountID).Order("created_at DESC").First(&storedResetToken).Error; err != nil {
+			t.Fatalf("read persisted single-use reset token record: %v", err)
+		}
+		if consumeAudit.CorrelationID != storedResetToken.ID || consumeAudit.CorrelationID == reset.Token || consumeAudit.CorrelationID == storedResetToken.TokenHash {
+			t.Fatalf("audit must correlate by server-generated record ID without disclosing reset token credential")
 		}
 		login, err := service.Login(context, LoginRequest{Login: row.Login, Password: newPassword}, "", "")
 		if err != nil || login.Session.MustChangePassword {
