@@ -1,6 +1,6 @@
 # Bite 33.6.7 — Manual Acceptance Test Suite
 
-**Manual revision marker: MT3367-ONE-PATH-20261027-TERMINAL-LABELS**
+**Manual revision marker: MT3367-ONE-PATH-20261027-ZSH-SAFE-LABELS**
 **Revision:** replacement for previous copy-based and partial-rebuild MT manuals; branch `994-bite-3367-two-human-administrators`, source HEAD `13bca9059e477e4a3eba96b5d778091d8cee9f5e`
 **Issue:** #945 — Two Human Application Administrators
 **Owner:** named ERS test operator; the two enrolled humans perform their own interactive account tests
@@ -10,9 +10,9 @@
 
 ## Read this once: test contract and boundaries
 
-**Command block convention:** Every executable command is in a `zsh` fenced command box whose **first line is a comment identifying Terminal A, B, or C**. Copy commands within those boxes exactly, including their leading comment, in the named terminal only. Blocks labeled `text` show **expected output** and must **not** be run. Terminal A is the repository-root operator window; Terminal B hosts the backend; Terminal C hosts the frontend. Commands are not supplied separately in chat.
+**Command block convention (interactive macOS/zsh safe):** Every executable command is in a `zsh` fenced command box whose **first line is a quoted terminal-identification annotation**, such as `: '# Terminal A (macOS/zsh, repository root) - MT-00'`. The `:` built-in does nothing; the quoted `# Terminal ...` identifies where to paste the commands. This form works even when interactive zsh has not enabled `INTERACTIVE_COMMENTS`. Copy the entire block, including its first line, into the named terminal only. Do **not** replace the first line with an unquoted `# Terminal ...`, because interactive zsh may interpret it as a command. Blocks labeled `text` show **expected output** and must **not** be run. Terminal A is the repository-root operator window; Terminal B hosts the backend; Terminal C hosts the frontend. Commands are not supplied separately in chat.
 
-**The *only* LOCAL test manual is this file at `docs/bite-3367/manual-acceptance-tests.md`, bearing revision marker `MT3367-ONE-PATH-20261027-TERMINAL-LABELS`.** Earlier copies titled `Part 1C: Create and migrate the disposable copy`, any commands containing `NORMAL_DB`, and the `~/ers-3367-mt-072a5628` location are **superseded and must not be followed**. The rebuilt procedure has **no copy-from-normal-database step**. After applying the documentation patch, verify the revision marker in MT-00 before executing MT-01. Do not mix documents or chat snippets. This file replaces them. Each MT case below contains its own starting state, non-secret variable definitions when commands use variables, actions, precise outputs, completion state, blocking conditions, and execution record. The transition audit at the end verifies the *whole sequence*. A skipped mandatory test is **BLOCKED**; an explicitly inapplicable subcheck is **N/A with reason**, not PASS.
+**The *only* LOCAL test manual is this file at `docs/bite-3367/manual-acceptance-tests.md`, bearing revision marker `MT3367-ONE-PATH-20261027-ZSH-SAFE-LABELS`.** Earlier copies titled `Part 1C: Create and migrate the disposable copy`, any commands containing `NORMAL_DB`, and the `~/ers-3367-mt-072a5628` location are **superseded and must not be followed**. The rebuilt procedure has **no copy-from-normal-database step**. After applying the documentation patch, verify the revision marker in MT-00 before executing MT-01. Do not mix documents or chat snippets. This file replaces them. Each MT case below contains its own starting state, non-secret variable definitions when commands use variables, actions, precise outputs, completion state, blocking conditions, and execution record. The transition audit at the end verifies the *whole sequence*. A skipped mandatory test is **BLOCKED**; an explicitly inapplicable subcheck is **N/A with reason**, not PASS.
 
 **One LOCAL run and one database:** `~/ers-3367-acceptance-13bca905/isolated.db` (shown below as `$MT_DB`). This is **new and disposable**; do **not** copy, reset, or migrate your everyday LOCAL database. This path is intentionally new to avoid the previously used `ers-3367-mt-072a5628` directory. If the new path already exists, **STOP and inspect it**—never overwrite or blindly rerun enrollment. No E2E provisioner, bootstrap access, Production database, or Production password is used.
 
@@ -61,16 +61,16 @@ These identifiers are exclusively for the **isolated LOCAL** rehearsal. In MT-02
 **Start timestamp — Terminal A:** Record the following UTC value before beginning MT-00.
 
 ```zsh
-# Terminal A (macOS/zsh, repository root) - MT-00 START UTC
+: '# Terminal A (macOS/zsh, repository root) - MT-00 START UTC'
 date -u '+%Y-%m-%dT%H:%M:%SZ'
 ```
 
 1. In **Terminal A**, open the repository root. Verify you are reading the *new* on-disk manual (not an older downloaded copy), then check the branch. Run:
 
    ```zsh
-   # Terminal A (macOS/zsh, repository root) - MT-00 command block
-   if grep -Fq "**Manual revision marker: MT3367-ONE-PATH-20261027-TERMINAL-LABELS**" docs/bite-3367/manual-acceptance-tests.md; then
-     echo "PASS: authoritative manual revision MT3367-ONE-PATH-20261027-TERMINAL-LABELS"
+   : '# Terminal A (macOS/zsh, repository root) - MT-00 command block'
+   if grep -Fq "**Manual revision marker: MT3367-ONE-PATH-20261027-ZSH-SAFE-LABELS**" docs/bite-3367/manual-acceptance-tests.md; then
+     echo "PASS: authoritative manual revision MT3367-ONE-PATH-20261027-ZSH-SAFE-LABELS"
    else
      echo "STOP: outdated manual. Do not execute MT-01. Apply the replacement documentation patch first."
    fi
@@ -80,12 +80,12 @@ date -u '+%Y-%m-%dT%H:%M:%SZ'
    git status --short
    ```
 
-   **Expected:** `PASS: authoritative manual revision MT3367-ONE-PATH-20261027-TERMINAL-LABELS`, and current branch is `994-bite-3367-two-human-administrators`. If `STOP` prints, **end MT-00 here** (do not continue to MT-01); before this documentation patch is committed, HEAD is `13bca9059e477e4a3eba96b5d778091d8cee9f5e`. After committing this patch, HEAD necessarily changes: record the new SHA and confirm CI for **that** SHA. `git status --short` must be empty for clean-run acceptance. Do not reset work to force cleanliness.
+   **Expected:** `PASS: authoritative manual revision MT3367-ONE-PATH-20261027-ZSH-SAFE-LABELS`, and current branch is `994-bite-3367-two-human-administrators`. If `STOP` prints, **end MT-00 here** (do not continue to MT-01); before this documentation patch is committed, HEAD is `13bca9059e477e4a3eba96b5d778091d8cee9f5e`. After committing this patch, HEAD necessarily changes: record the new SHA and confirm CI for **that** SHA. `git status --short` must be empty for clean-run acceptance. Do not reset work to force cleanliness.
 
 2. Verify required LOCAL programs (do not install anything in this test):
 
    ```zsh
-   # Terminal A (macOS/zsh, repository root) - MT-00 command block
+   : '# Terminal A (macOS/zsh, repository root) - MT-00 command block'
    for name in zsh python3 sqlite3 go node npm lsof; do
      if command -v "$name" >/dev/null 2>&1; then
        printf 'PASS: %s available\n' "$name"
@@ -101,7 +101,7 @@ date -u '+%Y-%m-%dT%H:%M:%SZ'
 3. In Terminal A run standard regression gates from the exact checked-out commit; do not run this on Production:
 
    ```zsh
-   # Terminal A (macOS/zsh, repository root) - MT-00 command block
+   : '# Terminal A (macOS/zsh, repository root) - MT-00 command block'
    make two-human-administrators-check
    make promotion-readiness-check
    make local-check
@@ -112,7 +112,7 @@ date -u '+%Y-%m-%dT%H:%M:%SZ'
 4. Inspect port 8080 before MT-01 (do not stop anything automatically):
 
    ```zsh
-   # Terminal A (macOS/zsh, repository root) - MT-00 command block
+   : '# Terminal A (macOS/zsh, repository root) - MT-00 command block'
    lsof -nP -iTCP:8080 -sTCP:LISTEN
    ```
 
@@ -121,7 +121,7 @@ date -u '+%Y-%m-%dT%H:%M:%SZ'
 5. **Terminal A — optional read-only Docker inventory.** Do not start Docker merely for this test. Execute this command block only as written; it does not stop or remove containers.
 
    ```zsh
-   # Terminal A (macOS/zsh, repository root) - MT-00 optional Docker inventory
+   : '# Terminal A (macOS/zsh, repository root) - MT-00 optional Docker inventory'
    if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
      MT_CONTAINERS="$(docker ps -a --filter 'name=ers-3367-' --format '{{.ID}} {{.Names}}')"
      if [ -n "$MT_CONTAINERS" ]; then
@@ -142,7 +142,7 @@ date -u '+%Y-%m-%dT%H:%M:%SZ'
 **End timestamp — Terminal A:** After completing MT-00 actions and checking the exit state, record this UTC value.
 
 ```zsh
-# Terminal A (macOS/zsh, repository root) - MT-00 END UTC
+: '# Terminal A (macOS/zsh, repository root) - MT-00 END UTC'
 date -u '+%Y-%m-%dT%H:%M:%SZ'
 ```
 
@@ -173,14 +173,14 @@ date -u '+%Y-%m-%dT%H:%M:%SZ'
 **Start timestamp — Terminal A:** Record the following UTC value before beginning MT-01.
 
 ```zsh
-# Terminal A (macOS/zsh, repository root) - MT-01 START UTC
+: '# Terminal A (macOS/zsh, repository root) - MT-01 START UTC'
 date -u '+%Y-%m-%dT%H:%M:%SZ'
 ```
 
 1. **Terminal A — preflight: check the directory and stopped backend.** Copy the complete block (including parentheses). The parentheses create a short-lived subprocess: an `exit 1` stops this block **without closing Terminal A**. If `STOP` prints, **do not execute step 2**.
 
    ```zsh
-   # Terminal A (macOS/zsh, repository root) - MT-01 command block
+   : '# Terminal A (macOS/zsh, repository root) - MT-01 command block'
    (
      set -e
      MT_DIR="$HOME/ers-3367-acceptance-13bca905"
@@ -203,7 +203,7 @@ date -u '+%Y-%m-%dT%H:%M:%SZ'
 2. **Terminal A — create the fresh database from the repository's SQL migrations, never by copying another database.** Run **only after step 1 PASS**; this block refuses an existing directory *again* to prevent an accidental rerun. It requires no `MT_BACKUP`, `NORMAL_DB`, ERS administrator login, or second terminal.
 
    ```zsh
-   # Terminal A (macOS/zsh, repository root) - MT-01 command block
+   : '# Terminal A (macOS/zsh, repository root) - MT-01 command block'
    (
      set -e
      umask 077
@@ -229,7 +229,7 @@ date -u '+%Y-%m-%dT%H:%M:%SZ'
 3. **Terminal A — print and assert every database result.** This is an independent block with no reliance on an exported variable from step 1 or step 2.
 
    ```zsh
-   # Terminal A (macOS/zsh, repository root) - MT-01 command block
+   : '# Terminal A (macOS/zsh, repository root) - MT-01 command block'
    (
      set -e
      MT_DB="$HOME/ers-3367-acceptance-13bca905/isolated.db"
@@ -271,7 +271,7 @@ date -u '+%Y-%m-%dT%H:%M:%SZ'
 4. **Terminal A — mandatory read-only collision check for the four fixed test identities.** No administrator UI login or interactive shell-variable prompts are necessary. Keep the backend stopped.
 
    ```zsh
-   # Terminal A (macOS/zsh, repository root) - MT-01 command block
+   : '# Terminal A (macOS/zsh, repository root) - MT-01 command block'
    export MT_DB="$HOME/ers-3367-acceptance-13bca905/isolated.db"
    python3 - <<'PYSQL'
    import sqlite3, os
@@ -302,7 +302,7 @@ date -u '+%Y-%m-%dT%H:%M:%SZ'
 **End timestamp — Terminal A:** After completing MT-01 actions and checking the exit state, record this UTC value.
 
 ```zsh
-# Terminal A (macOS/zsh, repository root) - MT-01 END UTC
+: '# Terminal A (macOS/zsh, repository root) - MT-01 END UTC'
 date -u '+%Y-%m-%dT%H:%M:%SZ'
 ```
 
@@ -331,14 +331,14 @@ date -u '+%Y-%m-%dT%H:%M:%SZ'
 **Start timestamp — Terminal A:** Record the following UTC value before beginning MT-02.
 
 ```zsh
-# Terminal A (macOS/zsh, repository root) - MT-02 START UTC
+: '# Terminal A (macOS/zsh, repository root) - MT-02 START UTC'
 date -u '+%Y-%m-%dT%H:%M:%SZ'
 ```
 
 1. **Terminal A — confirm the exact MT-01 output state before enrollment.** This is a safe read-only check. If it prints `STOP`, do **not** execute steps 2 or 3.
 
    ```zsh
-   # Terminal A (macOS/zsh, repository root) - MT-02 command block
+   : '# Terminal A (macOS/zsh, repository root) - MT-02 command block'
    (
      set -e
      MT_DIR="$HOME/ers-3367-acceptance-13bca905"
@@ -376,7 +376,7 @@ date -u '+%Y-%m-%dT%H:%M:%SZ'
 2. **Terminal A — take a non-overwriting pre-enrollment backup and verify the exact result.** Execute this block **only after step 1 PASS**.
 
    ```zsh
-   # Terminal A (macOS/zsh, repository root) - MT-02 command block
+   : '# Terminal A (macOS/zsh, repository root) - MT-02 command block'
    (
      set -e
      umask 077
@@ -410,7 +410,7 @@ date -u '+%Y-%m-%dT%H:%M:%SZ'
 3. Exactly **once**, run the guarded Go enrollment program. In Terminal A execute the following **as one pipeline** (not in a second terminal). This does not print or save passwords:
 
    ```zsh
-   # Terminal A (macOS/zsh, repository root) - MT-02 command block
+   : '# Terminal A (macOS/zsh, repository root) - MT-02 command block'
    set -o pipefail
    umask 077
    export MT_DB="$HOME/ers-3367-acceptance-13bca905/isolated.db"
@@ -440,7 +440,7 @@ date -u '+%Y-%m-%dT%H:%M:%SZ'
 4. Inspect persisted enrollment **read-only** (safe even after uncertain step 3):
 
    ```zsh
-   # Terminal A (macOS/zsh, repository root) - MT-02 command block
+   : '# Terminal A (macOS/zsh, repository root) - MT-02 command block'
    export MT_DB="$HOME/ers-3367-acceptance-13bca905/isolated.db"
    python3 -B scripts/ers-two-human-admin-status.py --db "$MT_DB" \
      --actor-key 'ers3367-local-human-a' \
@@ -461,7 +461,7 @@ Do not execute Path T unless you are on the approved **deployed Test host**, hav
 **End timestamp — Terminal A:** After completing MT-02 actions and checking the exit state, record this UTC value.
 
 ```zsh
-# Terminal A (macOS/zsh, repository root) - MT-02 END UTC
+: '# Terminal A (macOS/zsh, repository root) - MT-02 END UTC'
 date -u '+%Y-%m-%dT%H:%M:%SZ'
 ```
 
@@ -490,14 +490,14 @@ date -u '+%Y-%m-%dT%H:%M:%SZ'
 **Start timestamp — Terminal A:** Record the following UTC value before beginning MT-03.
 
 ```zsh
-# Terminal A (macOS/zsh, repository root) - MT-03 START UTC
+: '# Terminal A (macOS/zsh, repository root) - MT-03 START UTC'
 date -u '+%Y-%m-%dT%H:%M:%SZ'
 ```
 
 1. Check port 8080 is free in **Terminal B** (repository root):
 
    ```zsh
-   # Terminal B (macOS/zsh, repository root) - MT-03 command block
+   : '# Terminal B (macOS/zsh, repository root) - MT-03 command block'
    export MT_DB="$HOME/ers-3367-acceptance-13bca905/isolated.db"
    printf 'MT-03 BACKEND DB=%s\n' "$MT_DB"
    ls -l "$MT_DB"
@@ -509,7 +509,7 @@ date -u '+%Y-%m-%dT%H:%M:%SZ'
 2. In **Terminal B**, start backend with **explicit safe LOCAL overrides**, and **leave this terminal running**:
 
    ```zsh
-   # Terminal B (macOS/zsh, repository root) - MT-03 command block
+   : '# Terminal B (macOS/zsh, repository root) - MT-03 command block'
    export MT_DB="$HOME/ers-3367-acceptance-13bca905/isolated.db"
    APP_ENV=local ERS_DATABASE_PATH="$MT_DB" ERS_RESET_DATABASE=false \
      ERS_PROVISION_E2E_ADMIN=false DEV_SEED_ADMIN=false \
@@ -522,7 +522,7 @@ date -u '+%Y-%m-%dT%H:%M:%SZ'
 3. In **Terminal C**, from repository root start frontend with the target explicitly set (leave running):
 
    ```zsh
-   # Terminal C (macOS/zsh, repository root) - MT-03 command block
+   : '# Terminal C (macOS/zsh, repository root) - MT-03 command block'
    ERS_API_PROXY_TARGET='http://127.0.0.1:8080' make local-frontend
    ```
 
@@ -539,7 +539,7 @@ date -u '+%Y-%m-%dT%H:%M:%SZ'
 **End timestamp — Terminal A:** After completing MT-03 actions and checking the exit state, record this UTC value.
 
 ```zsh
-# Terminal A (macOS/zsh, repository root) - MT-03 END UTC
+: '# Terminal A (macOS/zsh, repository root) - MT-03 END UTC'
 date -u '+%Y-%m-%dT%H:%M:%SZ'
 ```
 
@@ -568,14 +568,14 @@ date -u '+%Y-%m-%dT%H:%M:%SZ'
 **Start timestamp — Terminal A:** Record the following UTC value before beginning MT-04.
 
 ```zsh
-# Terminal A (macOS/zsh, repository root) - MT-04 START UTC
+: '# Terminal A (macOS/zsh, repository root) - MT-04 START UTC'
 date -u '+%Y-%m-%dT%H:%M:%SZ'
 ```
 
 1. In Terminal A check service reachability without revealing sessions:
 
    ```zsh
-   # Terminal A (macOS/zsh, repository root) - MT-04 command block
+   : '# Terminal A (macOS/zsh, repository root) - MT-04 command block'
    curl -fsS http://127.0.0.1:8080/api/v1/healthz >/dev/null && echo 'PASS: isolated backend healthz reachable'
    curl -fsS http://127.0.0.1:5173/ >/dev/null && echo 'PASS: LOCAL frontend reachable'
    ```
@@ -592,7 +592,7 @@ date -u '+%Y-%m-%dT%H:%M:%SZ'
 **End timestamp — Terminal A:** After completing MT-04 actions and checking the exit state, record this UTC value.
 
 ```zsh
-# Terminal A (macOS/zsh, repository root) - MT-04 END UTC
+: '# Terminal A (macOS/zsh, repository root) - MT-04 END UTC'
 date -u '+%Y-%m-%dT%H:%M:%SZ'
 ```
 
@@ -621,7 +621,7 @@ date -u '+%Y-%m-%dT%H:%M:%SZ'
 **Start timestamp — Terminal A:** Record the following UTC value before beginning MT-05.
 
 ```zsh
-# Terminal A (macOS/zsh, repository root) - MT-05 START UTC
+: '# Terminal A (macOS/zsh, repository root) - MT-05 START UTC'
 date -u '+%Y-%m-%dT%H:%M:%SZ'
 ```
 
@@ -633,7 +633,7 @@ date -u '+%Y-%m-%dT%H:%M:%SZ'
 6. Optional, read-only backend confirmation (required if UI omits actor details): in Terminal A run:
 
    ```zsh
-   # Terminal A (macOS/zsh, repository root) - MT-05 command block
+   : '# Terminal A (macOS/zsh, repository root) - MT-05 command block'
    export MT_DB="$HOME/ers-3367-acceptance-13bca905/isolated.db"
    python3 -B scripts/ers-two-human-admin-status.py --db "$MT_DB" \
      --actor-key ers3367-local-human-a --actor-key ers3367-local-human-b
@@ -646,7 +646,7 @@ date -u '+%Y-%m-%dT%H:%M:%SZ'
 **End timestamp — Terminal A:** After completing MT-05 actions and checking the exit state, record this UTC value.
 
 ```zsh
-# Terminal A (macOS/zsh, repository root) - MT-05 END UTC
+: '# Terminal A (macOS/zsh, repository root) - MT-05 END UTC'
 date -u '+%Y-%m-%dT%H:%M:%SZ'
 ```
 
@@ -675,7 +675,7 @@ date -u '+%Y-%m-%dT%H:%M:%SZ'
 **Start timestamp — Terminal A:** Record the following UTC value before beginning MT-06.
 
 ```zsh
-# Terminal A (macOS/zsh, repository root) - MT-06 START UTC
+: '# Terminal A (macOS/zsh, repository root) - MT-06 START UTC'
 date -u '+%Y-%m-%dT%H:%M:%SZ'
 ```
 
@@ -693,7 +693,7 @@ date -u '+%Y-%m-%dT%H:%M:%SZ'
 **End timestamp — Terminal A:** After completing MT-06 actions and checking the exit state, record this UTC value.
 
 ```zsh
-# Terminal A (macOS/zsh, repository root) - MT-06 END UTC
+: '# Terminal A (macOS/zsh, repository root) - MT-06 END UTC'
 date -u '+%Y-%m-%dT%H:%M:%SZ'
 ```
 
@@ -722,7 +722,7 @@ date -u '+%Y-%m-%dT%H:%M:%SZ'
 **Start timestamp — Terminal A:** Record the following UTC value before beginning MT-07.
 
 ```zsh
-# Terminal A (macOS/zsh, repository root) - MT-07 START UTC
+: '# Terminal A (macOS/zsh, repository root) - MT-07 START UTC'
 date -u '+%Y-%m-%dT%H:%M:%SZ'
 ```
 
@@ -739,7 +739,7 @@ date -u '+%Y-%m-%dT%H:%M:%SZ'
 **End timestamp — Terminal A:** After completing MT-07 actions and checking the exit state, record this UTC value.
 
 ```zsh
-# Terminal A (macOS/zsh, repository root) - MT-07 END UTC
+: '# Terminal A (macOS/zsh, repository root) - MT-07 END UTC'
 date -u '+%Y-%m-%dT%H:%M:%SZ'
 ```
 
@@ -768,7 +768,7 @@ date -u '+%Y-%m-%dT%H:%M:%SZ'
 **Start timestamp — Terminal A:** Record the following UTC value before beginning MT-08.
 
 ```zsh
-# Terminal A (macOS/zsh, repository root) - MT-08 START UTC
+: '# Terminal A (macOS/zsh, repository root) - MT-08 START UTC'
 date -u '+%Y-%m-%dT%H:%M:%SZ'
 ```
 
@@ -776,7 +776,7 @@ date -u '+%Y-%m-%dT%H:%M:%SZ'
 2. In **Terminal A** take a new SQLite-consistent copy (not a filesystem `cp` of a live WAL database):
 
    ```zsh
-   # Terminal A (macOS/zsh, repository root) - MT-08 command block
+   : '# Terminal A (macOS/zsh, repository root) - MT-08 command block'
    export MT_DIR="$HOME/ers-3367-acceptance-13bca905"
    export MT_DB="$MT_DIR/isolated.db"
    export AUDIT_DIR="$MT_DIR/audit-inspection"
@@ -794,7 +794,7 @@ date -u '+%Y-%m-%dT%H:%M:%SZ'
 3. Run a **parameterized read-only audit summary**. It prints event IDs and non-secret correlation IDs, never reset-token values:
 
    ```zsh
-   # Terminal A (macOS/zsh, repository root) - MT-08 command block
+   : '# Terminal A (macOS/zsh, repository root) - MT-08 command block'
    export AUDIT_DB="$HOME/ers-3367-acceptance-13bca905/audit-inspection/app.db"
    python3 - <<'PYAUDIT'
    import sqlite3,os
@@ -819,7 +819,7 @@ date -u '+%Y-%m-%dT%H:%M:%SZ'
 4. **Only after recording non-secret events**, remove the known snapshot files (not the primary test DB):
 
    ```zsh
-   # Terminal A (macOS/zsh, repository root) - MT-08 command block
+   : '# Terminal A (macOS/zsh, repository root) - MT-08 command block'
    export AUDIT_DIR="$HOME/ers-3367-acceptance-13bca905/audit-inspection"
    if [ "$AUDIT_DIR" = "$HOME/ers-3367-acceptance-13bca905/audit-inspection" ] && [ -f "$AUDIT_DIR/app.db" ]; then
      rm -f "$AUDIT_DIR/app.db"
@@ -835,7 +835,7 @@ date -u '+%Y-%m-%dT%H:%M:%SZ'
 **End timestamp — Terminal A:** After completing MT-08 actions and checking the exit state, record this UTC value.
 
 ```zsh
-# Terminal A (macOS/zsh, repository root) - MT-08 END UTC
+: '# Terminal A (macOS/zsh, repository root) - MT-08 END UTC'
 date -u '+%Y-%m-%dT%H:%M:%SZ'
 ```
 
@@ -866,7 +866,7 @@ date -u '+%Y-%m-%dT%H:%M:%SZ'
 **Start timestamp — Terminal A:** Record the following UTC value before beginning MT-09.
 
 ```zsh
-# Terminal A (macOS/zsh, repository root) - MT-09 START UTC
+: '# Terminal A (macOS/zsh, repository root) - MT-09 START UTC'
 date -u '+%Y-%m-%dT%H:%M:%SZ'
 ```
 
@@ -887,7 +887,7 @@ date -u '+%Y-%m-%dT%H:%M:%SZ'
 **End timestamp — Terminal A:** After completing MT-09 actions and checking the exit state, record this UTC value.
 
 ```zsh
-# Terminal A (macOS/zsh, repository root) - MT-09 END UTC
+: '# Terminal A (macOS/zsh, repository root) - MT-09 END UTC'
 date -u '+%Y-%m-%dT%H:%M:%SZ'
 ```
 
@@ -916,7 +916,7 @@ date -u '+%Y-%m-%dT%H:%M:%SZ'
 **Start timestamp — Terminal A:** Record the following UTC value before beginning MT-10.
 
 ```zsh
-# Terminal A (macOS/zsh, repository root) - MT-10 START UTC
+: '# Terminal A (macOS/zsh, repository root) - MT-10 START UTC'
 date -u '+%Y-%m-%dT%H:%M:%SZ'
 ```
 
@@ -925,7 +925,7 @@ date -u '+%Y-%m-%dT%H:%M:%SZ'
 3. From Terminal A, rerun the focused automated negative-case suite against the repository commit (this does not operate on the acceptance DB):
 
    ```zsh
-   # Terminal A (macOS/zsh, repository root) - MT-10 command block
+   : '# Terminal A (macOS/zsh, repository root) - MT-10 command block'
    make two-human-administrators-check
    ```
 
@@ -933,7 +933,7 @@ date -u '+%Y-%m-%dT%H:%M:%SZ'
 4. Confirm **no new LOCAL grants** were issued outside the two humans by read-only query:
 
    ```zsh
-   # Terminal A (macOS/zsh, repository root) - MT-10 command block
+   : '# Terminal A (macOS/zsh, repository root) - MT-10 command block'
    export MT_DB="$HOME/ers-3367-acceptance-13bca905/isolated.db"
    sqlite3 "$MT_DB" 'SELECT COUNT(*) FROM auth_user_accounts;'
    sqlite3 "$MT_DB" "SELECT COUNT(*) FROM authz_actor_role_grants g JOIN authz_roles r ON r.id=g.role_id WHERE r.code='APPLICATION_ADMIN' AND g.tenant_id='*' AND g.active=1;"
@@ -946,7 +946,7 @@ date -u '+%Y-%m-%dT%H:%M:%SZ'
 **End timestamp — Terminal A:** After completing MT-10 actions and checking the exit state, record this UTC value.
 
 ```zsh
-# Terminal A (macOS/zsh, repository root) - MT-10 END UTC
+: '# Terminal A (macOS/zsh, repository root) - MT-10 END UTC'
 date -u '+%Y-%m-%dT%H:%M:%SZ'
 ```
 
@@ -975,7 +975,7 @@ date -u '+%Y-%m-%dT%H:%M:%SZ'
 **Start timestamp — Terminal A:** Record the following UTC value before beginning MT-11.
 
 ```zsh
-# Terminal A (macOS/zsh, repository root) - MT-11 START UTC
+: '# Terminal A (macOS/zsh, repository root) - MT-11 START UTC'
 date -u '+%Y-%m-%dT%H:%M:%SZ'
 ```
 
@@ -983,7 +983,7 @@ date -u '+%Y-%m-%dT%H:%M:%SZ'
 2. In Terminal A verify final canonical status against the correct isolated database:
 
    ```zsh
-   # Terminal A (macOS/zsh, repository root) - MT-11 command block
+   : '# Terminal A (macOS/zsh, repository root) - MT-11 command block'
    export MT_DB="$HOME/ers-3367-acceptance-13bca905/isolated.db"
    python3 -B scripts/ers-two-human-admin-status.py --db "$MT_DB" \
      --actor-key ers3367-local-human-a --actor-key ers3367-local-human-b
@@ -995,7 +995,7 @@ date -u '+%Y-%m-%dT%H:%M:%SZ'
 3. **Stop only the processes created by this LOCAL test:** In Terminal B press **Ctrl+C** and wait for backend to exit; in Terminal C press **Ctrl+C** and wait for frontend to exit. Then in Terminal A:
 
    ```zsh
-   # Terminal A (macOS/zsh, repository root) - MT-11 command block
+   : '# Terminal A (macOS/zsh, repository root) - MT-11 command block'
    lsof -nP -iTCP:8080 -sTCP:LISTEN
    lsof -nP -iTCP:5173 -sTCP:LISTEN
    lsof -nP "$HOME/ers-3367-acceptance-13bca905/isolated.db"
@@ -1005,7 +1005,7 @@ date -u '+%Y-%m-%dT%H:%M:%SZ'
 4. **Docker cleanup:** The LOCAL path created **zero Docker containers**; if Docker Desktop is installed/running, perform a read-only check (do not start Docker merely for this):
 
    ```zsh
-   # Terminal A (macOS/zsh, repository root) - MT-11 command block
+   : '# Terminal A (macOS/zsh, repository root) - MT-11 command block'
    if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
      docker ps -a --filter 'name=ers-3367-' --format '{{.ID}} {{.Names}}'
    else
@@ -1022,7 +1022,7 @@ date -u '+%Y-%m-%dT%H:%M:%SZ'
 **End timestamp — Terminal A:** After completing MT-11 actions and checking the exit state, record this UTC value.
 
 ```zsh
-# Terminal A (macOS/zsh, repository root) - MT-11 END UTC
+: '# Terminal A (macOS/zsh, repository root) - MT-11 END UTC'
 date -u '+%Y-%m-%dT%H:%M:%SZ'
 ```
 
