@@ -69,7 +69,7 @@ The work does not implement the post-launch isolated emergency-authority cryptog
 ## 4. Validation and deployment boundaries
 
 - **Code and CI:** `make two-human-administrators-check`, `make promotion-readiness-check`, `make local-check`, and repository CI at the actual candidate SHA.
-- **Manual acceptance:** Follow [Manual Acceptance Test Suite](manual-acceptance-tests.md). Its LOCAL database is a *disposable SQLite copy*, not the normal LOCAL database or a deployed Test or Production volume. Follow the test suite's Environment Initialization *before* referring to `$MT_DB`.
+- **Manual acceptance:** Follow [Manual Acceptance Test Suite](manual-acceptance-tests.md). Its LOCAL database is a *fresh disposable SQLite file created from committed migrations*, not a copy of the normal LOCAL database or a deployed Test/Production volume. The manual defines the test directory and every database variable inside the relevant MT case before its first use.
 - **Production operation:** Follow [Production Operational Runbook](production-operational-runbook.md), which additionally requires approved change, 1Password access, verified backup and Hetzner S3 evidence, isolated recovery rehearsal, stopped writers, and authorized enrollment. Passing LOCAL/CI never authorizes a Production write.
 - **Deployments:** Test and Production require HTTPS; LOCAL may run HTTP for development. Never copy a Production database into an untrusted LOCAL browser/test host.
 

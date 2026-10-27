@@ -1,1179 +1,1075 @@
 # Bite 33.6.7 — Manual Acceptance Test Suite
 
-**Complete, self-contained procedures — isolated LOCAL and deployed Test; MT-00–MT-11**
+**Manual revision marker: MT3367-ONE-PATH-20261027-TERMINAL-LABELS**
+**Revision:** replacement for previous copy-based and partial-rebuild MT manuals; branch `994-bite-3367-two-human-administrators`, source HEAD `13bca9059e477e4a3eba96b5d778091d8cee9f5e`
+**Issue:** #945 — Two Human Application Administrators
+**Owner:** named ERS test operator; the two enrolled humans perform their own interactive account tests
+**Primary execution path:** a **fresh disposable LOCAL SQLite database** on macOS, with no existing ERS Application Administrator credential required.
+**Secondary path:** a separately approved deployed Test rehearsal, with its own enrollment and access evidence. **Production is not a test target.**
+**Other documents:** [Implementation and Architecture](implementation-and-architecture.md) (technical rationale); [Production Operational Runbook](production-operational-runbook.md) (actual approved Production operations). Neither must be consulted for *LOCAL manual execution*.
 
-**Feature branch:** `994-bite-3367-two-human-administrators`
-**Current documentation correction baseline:** `c0e68410a3720d71bae5bbc9ae8ce6d2edd94ab2` (the repository ZIP against which this documentation repair was prepared).
-**Historical implementation baseline:** `072a5628eab19bf8d496bc653d7c4a38e25dfc3a`. For acceptance, always record the *actual* current commit SHA and passing CI at that commit.
-**Status at preparation:** Developer reports LOCAL and feature-branch CI passing. This manual suite is **not** a report that any manual or Production test has passed.
-**Purpose:** Perform and record software acceptance. This checked-in document includes initialization, terminal ownership, disposable SQLite database preparation, optional UI observation, authoritative LOCAL read-only collision verification, Test alternatives, execution forms, and teardown in a single run order. It is **not** a Production change authorization.
+## Read this once: test contract and boundaries
 
-**Companion documents (same directory):** [Implementation and Architecture](implementation-and-architecture.md) (what we built), and [Production Operational Runbook](production-operational-runbook.md) (separately approved Production enrollment). Neither document must be reconciled to execute the LOCAL sequence below.
-**Test instruction placement rule:** All case-specific variable prompts, commands, setup, environment transitions, expected results, evidence, and cleanup are placed under the MT case that uses them. The initial database preparation and identity prompts belong to MT-01, offline enrollment and access checks to MT-02, LOCAL backend restart to MT-03, and final teardown to MT-11. Only shared safety conventions and the final promotion summary are outside individual test cases.
-**Supersedes:** Prior standalone downloaded manual-test editions and isolated-database preparation guides; do not interleave their steps with this document.
-**Scope:** Two individually controlled human GLOBAL Application Administrators, create-only offline enrollment, independent login, mutually assisted password recovery, auditability, 1Password access, and protection of pre-existing administrators. **Gate C is deferred.**
+**Command block convention:** Every executable command is in a `zsh` fenced command box whose **first line is a comment identifying Terminal A, B, or C**. Copy commands within those boxes exactly, including their leading comment, in the named terminal only. Blocks labeled `text` show **expected output** and must **not** be run. Terminal A is the repository-root operator window; Terminal B hosts the backend; Terminal C hosts the frontend. Commands are not supplied separately in chat.
 
-> **START HERE — run order:** MT-00 → MT-01 (including isolated LOCAL database preparation and the four proposed identity prompts) → MT-02 (including offline transition and enrollment) → MT-03 (including isolated backend restart) → MT-04–MT-10 → MT-11 (including teardown). Keep the same isolated database throughout. For a deployed Test rehearsal, substitute the deployed Test procedure under MT-02; never mix environments. Do **not** execute Production enrollment as part of this LOCAL test.
+**The *only* LOCAL test manual is this file at `docs/bite-3367/manual-acceptance-tests.md`, bearing revision marker `MT3367-ONE-PATH-20261027-TERMINAL-LABELS`.** Earlier copies titled `Part 1C: Create and migrate the disposable copy`, any commands containing `NORMAL_DB`, and the `~/ers-3367-mt-072a5628` location are **superseded and must not be followed**. The rebuilt procedure has **no copy-from-normal-database step**. After applying the documentation patch, verify the revision marker in MT-00 before executing MT-01. Do not mix documents or chat snippets. This file replaces them. Each MT case below contains its own starting state, non-secret variable definitions when commands use variables, actions, precise outputs, completion state, blocking conditions, and execution record. The transition audit at the end verifies the *whole sequence*. A skipped mandatory test is **BLOCKED**; an explicitly inapplicable subcheck is **N/A with reason**, not PASS.
 
-> **IMPORTANT — which tests to do now:** For **promotion/merge of branch 994 into the approved Bite 33.6 branch 945**, complete the branch checks in **MT-00** and, where an isolated, enrolled LOCAL/Test environment is available, the human acceptance tests **MT-03 through MT-10**. Execute **MT-01 and MT-02** only if two human identities have **not** already been enrolled on the chosen disposable/Test database: enrollment is *create-only*, not a repeatable test fixture. The separate **Test deployment rehearsal**, **Production enrollment**, and **Production sign-off** remain mandatory gates before launch; they are *not* a prerequisite to the feature-branch merge. Do not enroll human administrators in Production merely to close a feature-branch manual test.
+**One LOCAL run and one database:** `~/ers-3367-acceptance-13bca905/isolated.db` (shown below as `$MT_DB`). This is **new and disposable**; do **not** copy, reset, or migrate your everyday LOCAL database. This path is intentionally new to avoid the previously used `ers-3367-mt-072a5628` directory. If the new path already exists, **STOP and inspect it**—never overwrite or blindly rerun enrollment. No E2E provisioner, bootstrap access, Production database, or Production password is used.
 
----
+**Fixed non-secret LOCAL identifiers (no interactive identity-variable prompts, no cross-terminal state):**
 
-## Execution map — use this file in order
-
-| Stage | Section | What you do | Environment |
+| Identity | Login | Actor key | Display name |
 |---|---|---|---|
-| 1 | MT-00 | Confirm exact feature SHA, tests, and CI | LOCAL repository |
-| 2 | MT-01, Part 1 | Define `MT_DB` before first use; verify normal database, stop writers, prepare/migrate isolated copy | LOCAL |
-| 3 | MT-01, Parts 2–4 | Enter A/B proposed logins and actor keys **inside MT-01**, then perform the required read-only collision/baseline check; UI observations are optional. | LOCAL isolated |
-| 4 | MT-02 LOCAL | Stop backend, verify pre-enrollment backup, enroll both offline, inspect status/audit | LOCAL isolated |
-| 5 | MT-03, LOCAL startup | Restart backend against same `MT_DB`; choose separate A/B/C browser profiles | LOCAL isolated |
-| 6 | MT-03–MT-10 | Independent logins, reset, grants, audits, 1Password/refusal checks; record N/A for deployed-only controls | LOCAL isolated |
-| 7 | MT-11 | Final login/status, evidence, **explicit teardown and cleanup** | LOCAL isolated |
-| Later | MT-02 Test plus MT-03–MT-11 | Separately rehearse against deployed Test with guarded container workflow | Deployed Test |
-| Later | Production acceptance section | Authorized operational Production enrollment and acceptance (independent release gate) | Production |
+| Human A (LOCAL rehearsal) | `ers3367.a@local.invalid` | `ers3367-local-human-a` | `ERS 33.6.7 LOCAL Human A` |
+| Human B (LOCAL rehearsal) | `ers3367.b@local.invalid` | `ers3367-local-human-b` | `ERS 33.6.7 LOCAL Human B` |
 
-**Never mix LOCAL and deployed Test/Production steps.** Every executable preparation and test-specific command is within the MT case that needs it; all shell `export` assignments are per terminal. A command naming `$MT_DB` must never be run if `printf '%s\n' "$MT_DB"` is blank or names the everyday database. MT-00–MT-11 each include an execution record; mark any unmet mandatory gate *BLOCKED*, not PASS. Retain the operational runbook as the Production-controlled reference, not as a prerequisite to execute the LOCAL sequence.
+These identifiers are exclusively for the **isolated LOCAL** rehearsal. In MT-02 type them **exactly** when the credential input program prompts. Initial passwords are two distinct, private 12–72-byte values and are never put into this document, shell variables, logs, Git, tickets, or screenshots. Each human controls their own credential. Real Test/Production identities require separately approved identifiers; never reuse these LOCAL logins as real addresses.
 
-## A. Safety boundaries and execution rules
+**Terminals and browsers:** **Open Terminal A (your macOS Terminal/zsh window) at the ERS repository root before MT-00. Run *every* MT-00, MT-01 and MT-02 command in Terminal A.** Do not use Terminal B or Terminal C during database preparation or offline enrollment. Terminal A = the one macOS Terminal/zsh window at the repository root for short commands; Terminal B = dedicated backend window **only from MT-03 onward**; Terminal C = dedicated frontend window **only from MT-03 onward**. Browser A and Browser B must use **different browser profiles** (not just two tabs of one profile), each operated by its respective human. Browser C is a distinct unauthenticated profile for one-time resets. Set locale to `en-US` when checking labels. The browser LOCAL entry URL is `http://localhost:5173`; deployed Test and Production always use HTTPS.
 
-1. **Use the real UI for user behavior**. Navigate using displayed menus rather than typing internal application URLs, except for the published environment entry URL or when a reset link specifically opens the public password-reset screen. The reset link itself is confidential.
-2. **Use three isolated browser profiles**, not two tabs sharing cookies: **Browser A** for Human Administrator A, **Browser B** for Human Administrator B, and **Browser C** for the unauthenticated reset recipient. Browser C can be an InPrivate/Incognito profile. Keep A and B independent throughout.
-3. **Set the UI locale to `en-US`** for exact labels in this checklist. If using `pt-BR`, record actual labels and follow the same workflow. This suite does not evaluate translation parity.
-4. **Never record** initial/replacement passwords, reset tokens, reset URLs containing tokens, 1Password secret values, session cookies, or bearer headers in the release ticket, screenshots, logs, terminal output, or chat. Private passwords should be at least **12 characters and no more than 72 UTF-8 bytes**, and A and B must not share one.
-5. **Use Test-only identity and 1Password material for Test**. Never reuse the Production humans' initial passwords or Production database in a developer machine or Test environment.
-6. **Do not change live Production roles, deactivate Production administrators, modify database triggers, or run destructive refusal tests on Production.** Negative enrollment and rollback tests belong in disposable fully migrated databases or unit/integration tests.
-7. **Keep recovery mandatory**. Verified backup, off-host object, isolated restore, accepted RPO ≤ 24 hours, RTO ≤ 4 hours, and 1Password remain launch prerequisites. These tests do not replace the disaster-recovery runbook.
-8. **Do not merge deferred branches `990` or `991`** for this release.
+**No destructive surprises:** `rm`, schema alteration, `ERS_RESET_DATABASE=true`, Production confirmation, Docker-volume deletion, and `git reset --hard` are **never** part of routine tests. MT-11 explicitly distinguishes stopping processes from optional later disposal of the dedicated database. Never stop or remove unrelated Docker containers or port listeners. During token tests never photograph, transmit via chat, record, or persist token values.
 
-## B. Test identities, environment, and evidence form
+**Known limits of the delivery-time verification:** Source inspection, static shell checks, a full fresh-SQL-migration execution and a schema-level rollback/replay/status *simulation* were run. An actual Go 1.26.2 LOCAL binary, actual zsh-on-macOS, browser UI, 1Password accounts, Docker Test deployment, and Production recovery **were not executable in the authoring container**. These are **not** reported as passed by this document; the named human operators must execute/record them.
 
-**Identify actual people by real names in your private change record; do not substitute generic credentials such as `bootstrap-admin` for either human.** Fill the following before tests:
+### Sequence and state contract (do not jump forward)
 
-| Record | Value to enter in private change/release record |
-|---|---|
-| Test environment designation | **Choose one**: `LOCAL isolated` now, `deployed Test` later. Never mix evidence. |
-| Test environment browser entry URL | `<actual HTTPS Test URL>`; LOCAL may use its configured HTTP origin |
-| Feature-branch candidate commit SHA | _Record actual `git rev-parse HEAD` after the documentation patch is committed; the source ZIP SHA `072a5628...` is history only_ |
-| Human A full name / Test login | `<actual person>` / `<test-login-A>` |
-| Human A actor key | `<actor-key-A>` |
-| Human A account ID / Actor ID | `<account-A-id>` / `<actor-A-id>` |
-| Human B full name / Test login | `<actual person>` / `<test-login-B>` |
-| Human B actor key | `<actor-key-B>` |
-| Human B account ID / Actor ID | `<account-B-id>` / `<actor-B-id>` |
-| Existing Test automation Application Administrator, if present | `<login, account ID, actor key, and role/grant state; no passwords>` |
-| Test enrollment approval / operator / verified backup references | `<APPROVAL_REF>` / `<OPERATOR_REF>` / `<BACKUP_REF>` |
-| Test image ID / Docker volume | `N/A — LOCAL isolated, no Docker volume` OR actual deployed Test image/volume IDs |
-| Browser A / B / C profiles | `<independently named profiles>` |
-| Test operator and UTC execution time | `<person>` / `<UTC timestamp>` |
+| Test | Entry condition | Exit condition needed by next case |
+|---|---|---|
+| MT-00 | Repository checkout available | Correct branch and passing checks recorded; no acceptance DB touched |
+| MT-01 | Test backend stopped, fresh path absent | 76 migrations and clean catalog; 0 accounts / collisions; database offline |
+| MT-02 | MT-01 PASS, backend stopped | One atomic enrollment; two usable GLOBAL accounts, first password changes pending; backend stopped |
+| MT-03 | MT-02 PASS | Backend and frontend confirmed on isolated DB; A changed password and reauthenticated |
+| MT-04 | MT-03 PASS | B changed password and reauthenticated in separate profile; A still signed in |
+| MT-05 | MT-04 PASS | Canonical grants confirmed; A/B sessions remain usable |
+| MT-06 | MT-05 PASS | A issued token to B; B redeemed once; B reauthenticated; A unaffected |
+| MT-07 | MT-06 PASS | B issued token to A; A redeemed once; A reauthenticated; B unaffected |
+| MT-08 | MT-07 PASS | Audit evidence verified on fresh read-only snapshot; both sessions usable |
+| MT-09 | MT-08 PASS | LOCAL subcheck N/A with reason; Test vault acceptance only after actual human verification |
+| MT-10 | MT-09 recorded | Existing-admin preservation subcheck N/A if clean DB; A/B self-action constraints verified |
+| MT-11 | MT-10 recorded | Independent final checks; evidence signed; only test-created processes stopped; data retained until explicit disposal |
 
-**Complete the individual Execution Record immediately following every MT case (MT-00 through MT-11).** The forms are the primary test evidence. Enter the actual human operator, environment, UTC start/end times, actual Administration/Tenant context displayed, exact non-secret target login and Account ID (if applicable), observed behavior, non-secret audit event/correlation IDs (if applicable), verdict, evidence references, and defect link. **An execution record is required for PASS, FAIL, and N/A.** When a field or a whole test is not applicable, write `N/A — <specific reason>`; do not leave fields blank in the completed record. **A defect report is separate** and needed only if a failure or unexpected behavior is found; enter `None — no defect observed` when appropriate. Any FAIL is a promotion/release blocker until corrected and retested. Never enter passwords, reset tokens/URLs, session cookies, or 1Password secret values in these forms.
+**State recovery rule:** If a test FAILS, stop at that test and preserve the database and evidence. Do not skip ahead or re-enroll. In particular, after an uncertain MT-02 result, inspect the existing accounts with the read-only status tool; do not repeat the create-only command. If you have previously enrolled A/B on this exact disposable DB, MT-01/02 **must not be replayed**: cite that earlier successful evidence and resume at MT-03. For a fresh full run create a *new, separately named* disposable directory under an approved procedure; do not delete evidence merely to make the test pass.
 
-
-
-## MT-00 — Confirm passing branch, release artifact, and no residue
-
-**When:** Now, before merging branch 994.
-**Operator/role:** Developer/release engineer with repository and CI access. **Context:** LOCAL repository; no ERS Tenant or human Administrator session needed.
-
-**Preconditions:** The documentation patch is applied and committed. Record that new commit SHA, verify the working tree is clean, and confirm tests/CI at that **current** SHA; the `072a5628...` source ZIP was the pre-patch baseline, not the expected post-patch HEAD.
-
-**Steps**
-
-1. Open Terminal in the ERS repository root.
-2. Execute:
-   ```bash
-   git branch --show-current
-   git rev-parse HEAD
-   git status --short
-   ```
-3. Verify branch exactly `994-bite-3367-two-human-administrators`. Record the **actual** full SHA (`git rev-parse HEAD`) of the new documentation commit; it is expected to **differ from** the source ZIP SHA `072a5628...`. Verify `git status --short` is empty. Confirm the change consists only of the approved documentation refactor, and evaluate CI at the new SHA. Stop on an unauthorized code change or dirty worktree.
-4. Open the feature-branch CI workflow for **this SHA**. Identify and record the actual passing job names and workflow URL; confirm there are **no skipped required tests**.
-5. Verify LOCAL command results for this SHA, or execute again if results were not retained:
-   ```bash
-   make two-human-administrators-check
-   make promotion-readiness-check
-   make local-check
-   cd frontend && npx playwright test && cd ..
-   ```
-6. From repository root run `git status --short` again. Note any generated/untracked file, and do not commit passwords, copied databases, or test outputs.
-7. Execute `docker ps -a --filter 'name=ers-3367-' --format '{{.ID}} {{.Names}}'` to look for leftover **Bite 33.6.7-created** containers. Do not remove unrelated containers.
-
-**Expected:** All checks exit 0, required CI is green for the exact commit, clean branch, and no stray 33.6.7 containers.
-**PASS:** Every expected result recorded. **FAIL/block:** Wrong SHA, missing CI job, failed regression, uncommitted sensitive artifact, or leftover container that cannot safely be removed.
-**Record:** commit and CI URL, command exit codes, names/IDs of any leftover 33.6.7 container, PASS/FAIL.
+**Acceptance record timestamps:** At the start and end of **each MT case**, execute the timestamp command block located **within that test** in Terminal A; copy the printed UTC value into its execution record. Do not estimate timestamps or depend on another test's shell state.
 
 ---
 
-### MT-00 — Execution Record (complete after this test)
+## MT-00 — Branch, test baseline, toolchain and LOCAL isolation
 
-| Required field | Actual result / reference |
-|---|---|
-| Test ID | `MT-00` |
-| Execution environment and entry URL / host | _Enter actual LOCAL or Test environment and non-secret URL/host_ |
-| UTC started | _YYYY-MM-DD HH:MM:SS UTC_ |
-| UTC completed | _YYYY-MM-DD HH:MM:SS UTC_ |
-| Human(s) actually operating and role | _Enter names and roles (expected participants: Release engineer / developer)_ |
-| Actual Administration / Tenant context shown | _Enter value actually seen (expected test context: Repository / CI (no ERS Administration session))_ |
-| Exact non-secret target login(s), Account ID(s), Actor ID(s) | _Enter verified identifiers (targets: Branch `994...` and HEAD commit / CI run)_ |
-| Observed behavior, including actual outcomes of critical steps | _Record results in enough detail to establish PASS/FAIL; `N/A — no authentication account targeted`_ |
-| Non-secret audit event ID(s) and correlation ID(s) | _Enter actual IDs where applicable; otherwise N/A and reason_ |
-| Screenshot, terminal output, CI link, or other evidence reference | _Private evidence locator; scrub tokens, secrets, and session values_ |
-| Verdict | _PASS / FAIL / N/A — select one_ |
-| Defect link or ID | _Enter defect reference if observed; otherwise `None — no defect observed`_ |
-| N/A or blocked reason (if applicable) | _Specific reason and prerequisite / approval needed, or `N/A — test executed`_ |
-| Retest details (if applicable) | _Retest UTC time, new SHA/environment, corrected defect link, outcome; otherwise N/A_ |
+**Operator:** named LOCAL test operator (not an authenticated ERS user). **Context:** repository and host; Administration context N/A. **Initial process state:** do not start anything in this test. **Database:** no test DB is created in MT-00. **Credentials:** none. **Shell variables:** no prior variables required.
 
-**Do not mark PASS if evidence is missing or a required step was not performed.** A skipped or unauthorized operation must be reported as N/A/blocked with its reason; this does not automatically satisfy a mandatory acceptance gate.
+**Start timestamp — Terminal A:** Record the following UTC value before beginning MT-00.
 
-
-## MT-01 — Pre-enrollment identity collision and existing-administrator baseline
-
-**When:** Before a *new*, create-only enrollment on the isolated LOCAL database. If A/B are already enrolled, do **not** repeat enrollment; reference the earlier MT-01/MT-02 evidence. Deployed Test has a separate approved gate, not this LOCAL-only SQL procedure.
-**Operator/role:** Named LOCAL test operator executing read-only verification (Path B). Optional UI Path A uses an existing authorized LOCAL Application Administrator. **Context:** Path B = offline LOCAL database, no ERS session. Optional Path A = Global administration (`*`). **Deployed Test:** requires separately approved Test access/inspection and its own evidence; do not run this LOCAL-only database procedure against a deployed volume.
-
-**Preconditions:** A verified normal LOCAL SQLite database and permission to prepare a separate, fully migrated LOCAL copy; two proposed distinct login names and actor keys; a stopped database writer before read-only Path B. An existing administrator login is needed only for optional Path A. Follow every preparation step under this test before attempting the collision check.
-
-
-### MT-01 — Part 1: LOCAL isolated database preparation
-
-**Execute this preparation as the first part of MT-01, after completing MT-00.** These steps belong to MT-01 and are mandatory when rehearsing new enrollment in LOCAL; perform them in order. If you previously created `isolated.db`, **do not overwrite it or repeat the copying step**; re-establish the variables below, verify its path and integrity, determine whether A/B were already enrolled, and resume at the appropriate test. An existing `pre-enrollment.db` is evidence to preserve, not a reason to reset automatically. If `$MT_DB` already exists: (1) run the initialization commands in this test; (2) use the read-only integrity and status commands in this test and MT-02; (3) check whether actor A/B have already been enrolled; (4) if enrolled, do **not** repeat MT-02 and proceed to MT-03 LOCAL startup after recording MT-02 as previously completed with a valid evidence reference; (5) if enrollment state is uncertain, **STOP** and investigate rather than overwriting the database.
-
-**Terminal names:** Terminal A = setup/inspection/enrollment; Terminal B = isolated backend; Terminal C = LOCAL frontend. Each terminal is a separate shell: environment variables from Terminal A do **not** automatically carry into Terminal B or C.
-
-**Variable initialization — first command block for Terminal A** (after confirming the repository root):
-
-**Do not start at MT-02 or copy shell commands from a different document.** In a new terminal, environment variables such as `MT_DB` are not inherited. This section defines them before they are used; any later command referring to a `$VARIABLE` presupposes its assignment in **that same terminal**. At the top of each independent terminal, use the explicit assignments shown for that terminal; never assume `export` in Terminal A propagates to Terminal B or C.
-
-```bash
-export MT_DIR="$HOME/ers-3367-mt-072a5628"
-export MT_DB="$MT_DIR/isolated.db"
-export MT_BACKUP="$MT_DIR/pre-enrollment.db"
-printf 'MT_DIR=%s\nMT_DB=%s\nMT_BACKUP=%s\n' "$MT_DIR" "$MT_DB" "$MT_BACKUP"
+```zsh
+# Terminal A (macOS/zsh, repository root) - MT-00 START UTC
+date -u '+%Y-%m-%dT%H:%M:%SZ'
 ```
 
-**Expected:** Three absolute paths under your home directory; `MT_DB` is **defined by this command** and is *not* a built-in ERS setting. It is the manual-test database path used later as `ERS_DATABASE_PATH="$MT_DB"` and `--db "$MT_DB"`. If `echo "$MT_DB"` is blank in any terminal, initialize the variable there before continuing. The `NORMAL_DB` variable is separate: it names the **source** everyday LOCAL database that will remain untouched by enrollment.
+1. In **Terminal A**, open the repository root. Verify you are reading the *new* on-disk manual (not an older downloaded copy), then check the branch. Run:
 
-#### MT-01 — Part 1A: Safety and identity contract
-
-- **Human operator:** The developer performing Bite 33.6.7 LOCAL acceptance. Record their actual name in the test evidence.
-- **Normal LOCAL database:** The SQLite database actually used by your everyday LOCAL backend; determine its absolute path from the `DATABASE_PATH=...` startup line and paste it when prompted. **No default is assumed.**
-- **Isolated database:** `$HOME/ers-3367-mt-072a5628/isolated.db` (a newly created, disposable copy).
-- **Pre-enrollment administrator:** An existing authorized LOCAL Application Administrator *may* be available in the copied database, but is **not required** for a new, offline two-human enrollment. If you know a working login, you may also use the MT-01 optional UI observations. **Regardless of UI availability, the authoritative LOCAL collision check is the read-only offline inspection in MT-01.** The code requires a fully migrated authorization catalog, not an already authenticated administrator. **Do not** provision an E2E account, bypass bootstrap, or change any account to satisfy this test.
-- **A Git SHA does not carry administrator credentials.** Whether an existing administrator is present or usable depends on the selected LOCAL database, not on the software branch or SHA.
-- **Administrators A and B:** Two new distinct LOCAL-only identities, operated independently, with different logins, actor keys, and initial passwords. Do not copy Production credentials or reuse passwords between A and B.
-- **Context:** MT-01 uses Global administration (`*`) **only if testing through the UI**. For the LOCAL offline inspection alternative, record `Offline LOCAL database / no ERS Administration context`. MT-03–MT-10 use authenticated Global administration (`*`); enrollment itself has no ERS browser session.
-- **Prerequisites:** Go 1.26.2, Python 3, SQLite CLI, LOCAL frontend tooling, a clean branch, and permissions to create a private directory beneath your home directory. A Docker container is **not required** for this LOCAL-specific path.
-- **Safety:** Never point `ERS_DATABASE_PATH` or `--db` to Test/Production or your normal database during these tests. Do not run `ERS_RESET_DATABASE=true`, `make reset-db`, or `make local-db-init` against your everyday database. Never use `docker compose down -v` as cleanup.
-
-#### MT-01 — Part 1B: Identify normal database and stop its writers
-
-1. From the ERS repository root, verify:
-
-   ```bash
+   ```zsh
+   # Terminal A (macOS/zsh, repository root) - MT-00 command block
+   if grep -Fq "**Manual revision marker: MT3367-ONE-PATH-20261027-TERMINAL-LABELS**" docs/bite-3367/manual-acceptance-tests.md; then
+     echo "PASS: authoritative manual revision MT3367-ONE-PATH-20261027-TERMINAL-LABELS"
+   else
+     echo "STOP: outdated manual. Do not execute MT-01. Apply the replacement documentation patch first."
+   fi
+   pwd
    git branch --show-current
    git rev-parse HEAD
    git status --short
-   command -v sqlite3
+   ```
+
+   **Expected:** `PASS: authoritative manual revision MT3367-ONE-PATH-20261027-TERMINAL-LABELS`, and current branch is `994-bite-3367-two-human-administrators`. If `STOP` prints, **end MT-00 here** (do not continue to MT-01); before this documentation patch is committed, HEAD is `13bca9059e477e4a3eba96b5d778091d8cee9f5e`. After committing this patch, HEAD necessarily changes: record the new SHA and confirm CI for **that** SHA. `git status --short` must be empty for clean-run acceptance. Do not reset work to force cleanliness.
+
+2. Verify required LOCAL programs (do not install anything in this test):
+
+   ```zsh
+   # Terminal A (macOS/zsh, repository root) - MT-00 command block
+   for name in zsh python3 sqlite3 go node npm lsof; do
+     if command -v "$name" >/dev/null 2>&1; then
+       printf 'PASS: %s available\n' "$name"
+     else
+       printf 'FAIL: %s unavailable\n' "$name"
+     fi
+   done
    go version
    ```
 
-   **Expected:** branch and current HEAD SHA match the results recorded in MT-00; the working tree is clean; SQLite CLI and Go 1.26.2 are available.
-2. Find the `DATABASE_PATH=...` line in the output of your current normal `make local-backend` process. Record that **actual** path as your normal database path.
-3. Stop the normal LOCAL backend with **Ctrl+C in its own terminal**. Stop any other processes known to write to that same SQLite file. You may also stop the LOCAL frontend. Do not stop unrelated Docker containers or services.
-4. In Terminal A at the repository root, confirm the `MT_*` values established above, identify the verified source path, then enter:
+   **Expected:** seven `PASS` messages and Go **1.26.2 or the repository-compatible version**. If any program is missing, mark MT-00 BLOCKED; do not improvise a SQLite substitute on your Mac.
 
-   ```bash
-   set -o pipefail
-   umask 077
-   printf 'Paste the FULL absolute DATABASE_PATH printed by your everyday LOCAL backend: '
-   IFS= read -r NORMAL_DB
-   export NORMAL_DB
-   case "$NORMAL_DB" in /*) ;; *) echo 'STOP: NORMAL_DB must be an absolute path'; exit 1 ;; esac
-   export MT_DIR="$HOME/ers-3367-mt-072a5628"
-   export MT_DB="$MT_DIR/isolated.db"
-   export MT_BACKUP="$MT_DIR/pre-enrollment.db"
-   test -f "$NORMAL_DB" || { echo 'STOP: normal LOCAL database not found'; exit 1; }
-   test "$NORMAL_DB" != "$MT_DB" || { echo 'STOP: paths must differ'; exit 1; }
-   lsof -nP -iTCP:8080 -sTCP:LISTEN || true
-   lsof -nP "$NORMAL_DB" || true
+3. In Terminal A run standard regression gates from the exact checked-out commit; do not run this on Production:
+
+   ```zsh
+   # Terminal A (macOS/zsh, repository root) - MT-00 command block
+   make two-human-administrators-check
+   make promotion-readiness-check
+   make local-check
    ```
 
-   **STOP/VERIFY:** Enter only the full path actually recorded in step 2. Do not assume `backend/data/app.db` is the database in use. Do not proceed if an ERS backend or another writer still holds the normal database, or if the port 8080 listener would conflict with the isolated backend. A blank `lsof` response is expected after shutdown.
+   **Expected:** all exit 0. Record the actual commit SHA and corresponding **CI job URL / green result**. If a gate fails, stop before MT-01; save non-secret log excerpts.
 
-#### MT-01 — Part 1C: Create and migrate the disposable copy
+4. Inspect port 8080 before MT-01 (do not stop anything automatically):
 
-1. With the normal backend stopped, run the following **once**:
-
-   ```bash
-   test ! -e "$MT_DB" && test ! -e "$MT_BACKUP" || {
-     echo 'STOP: an existing MT database or pre-enrollment backup was found; do not overwrite it'; exit 1;
-   }
-   mkdir -p -m 700 "$MT_DIR"
-   sqlite3 "$NORMAL_DB" ".backup '$MT_DB'"
-   chmod 600 "$MT_DB"
-   DB_PATH="$MT_DB" MIGRATIONS_DIR="$PWD/backend/migrations" ./scripts/db-migrate.sh
+   ```zsh
+   # Terminal A (macOS/zsh, repository root) - MT-00 command block
+   lsof -nP -iTCP:8080 -sTCP:LISTEN
    ```
 
-   **Expected:** SQLite creates `isolated.db`; the migration script prints `Applying migrations to: <...>/isolated.db` and concludes `✅ Migrations applied.` It must **not** report the normal LOCAL database as its target.
-2. Verify the isolated copy:
+   **Expected:** no rows. If another backend listens, identify it and stop it through its own terminal first; repeat until no rows. Do not kill unrelated services. Record any findings.
 
-   ```bash
-   test "$(sqlite3 "$MT_DB" 'PRAGMA integrity_check;')" = 'ok' || { echo 'FAIL: integrity_check'; exit 1; }
-   test -z "$(sqlite3 "$MT_DB" 'PRAGMA foreign_key_check;')" || { echo 'FAIL: foreign keys'; exit 1; }
-   sqlite3 "$MT_DB" 'SELECT COUNT(*) AS applied_migrations FROM schema_migrations;'
-   sqlite3 "$MT_DB" "SELECT COUNT(*) FROM authz_roles WHERE code='APPLICATION_ADMIN' AND active=1 AND scope_type='APPLICATION';"
-   sqlite3 "$MT_DB" "SELECT COUNT(*) FROM sqlite_master WHERE type='trigger' AND name IN ('trg_authz_audit_logs_no_update','trg_authz_audit_logs_no_delete');"
+5. **Terminal A — optional read-only Docker inventory.** Do not start Docker merely for this test. Execute this command block only as written; it does not stop or remove containers.
+
+   ```zsh
+   # Terminal A (macOS/zsh, repository root) - MT-00 optional Docker inventory
+   if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
+     MT_CONTAINERS="$(docker ps -a --filter 'name=ers-3367-' --format '{{.ID}} {{.Names}}')"
+     if [ -n "$MT_CONTAINERS" ]; then
+       printf '%s\n' "$MT_CONTAINERS"
+       echo 'STOP: ERS 33.6.7 containers present; investigate ownership before MT-01'
+     else
+       echo 'PASS: no ERS 33.6.7 test containers present'
+     fi
+   else
+     echo 'N/A: Docker unavailable or stopped; no Docker containers are required for LOCAL MT-00'
+   fi
    ```
 
-   **Expected:** integrity `ok`; foreign-key check empty; applied migration count nonzero; active application-administrator role count `1`; required audit-trigger count `2`. Any discrepancy **blocks enrollment**.
-3. Record the **isolated database path**, original database path, migration count, and verification results. Do **not** attach either SQLite database file to the test evidence or to Git.
+   **Expected:** `PASS: no ERS 33.6.7 test containers present`, or explicit `N/A` if Docker is unavailable/stopped. If `STOP` appears, resolve ownership and repeat the check before MT-01. Never stop unrelated containers.
 
-#### MT-01 — Part 1D: Optional LOCAL UI startup (only when executing Path A)
+**Exit state:** no backend listening on 8080; repository baseline, toolchain and green tests/CI recorded. **PASS:** all checks met. **BLOCKED/FAIL:** missing tool, wrong branch, unexplained dirty tree, failed gate, unknown process, or unverified CI. **No test data or cleanup created by MT-00.**
 
-**The UI is optional, not the pre-enrollment gate.** A working, authorized LOCAL Application Administrator login is **not** a prerequisite for the required offline database check. Follow the sequence that applies to you:
+**End timestamp — Terminal A:** After completing MT-00 actions and checking the exit state, record this UTC value.
 
-- **No existing LOCAL Application Administrator login (your current scenario):** Skip the three Path-A-only startup steps immediately below and **keep the backend and frontend stopped**. **Next execute MT-01 Part 2** in Terminal A to enter and export the four proposed non-secret A/B logins and actor keys. **Then skip MT-01 Part 3 (Path A, optional)** and **execute MT-01 Part 4 (Path B, required)** in the **same Terminal A**. Do not jump directly from Part 1D to Part 4: Part 4 depends on the values collected in Part 2.
-- **Existing authorized LOCAL Application Administrator login available:** Execute the Path-A-only startup steps below; then **execute MT-01 Part 2** in Terminal A; then **execute MT-01 Part 3 (Path A, optional)** and stop the backend as instructed there; finally **execute MT-01 Part 4 (Path B, required)** in Terminal A.
-
-**Expected before Part 4:** `MT_DB`, `LOGIN_A`, `LOGIN_B`, `ACTOR_A`, and `ACTOR_B` have been defined in Terminal A by Part 2, and no backend is writing to the isolated database. A UI filter cannot certify that an unbound actor key is absent, so Path B is mandatory even when Path A is performed. Do not provision a test account or reset the normal LOCAL database to satisfy an optional UI step.
-
-1. **For Path A only:** In a separate Terminal B, run from the repository root:
-
-   ```bash
-   export MT_DB="$HOME/ers-3367-mt-072a5628/isolated.db"
-   test -f "$MT_DB" || { echo 'STOP: isolated database missing'; exit 1; }
-   APP_ENV=local ERS_DATABASE_PATH="$MT_DB" ERS_RESET_DATABASE=false \
-     ERS_PROVISION_E2E_ADMIN=false DEV_SEED_ADMIN=false \
-     AUTHZ_BOOTSTRAP_ENABLED=false ERS_BACKEND_WATCH=false \
-     make local-backend
-   ```
-
-   **Expected:** backend prints `DATABASE_PATH=<your isolated.db path>`, `APP_ENV=local`, and starts on port 8080. If the printed database path differs, stop immediately.
-2. **For Path A only:** In Terminal C at the repository root, run `make local-frontend` (unless already directed to the correct LOCAL backend). Confirm the LOCAL origin, usually `http://localhost:5173`, is pointed at the isolated port-8080 backend.
-3. **For Path A only:** Leave Terminal B running until you complete MT-01 Path A, then stop it as instructed below. **For Path B:** do not start either process solely for collision verification; the offline read-only procedure inspects the same isolated database without needing an authenticated ERS session.
-
-
-
-### MT-01 — Part 2: Enter proposed A/B login names and actor keys (Terminal A)
-
-1. In Terminal A, at the repository root, establish the database path and enter the **four non-secret proposed identifiers**, which you will reuse *unchanged* during MT-02:
-
-   ```bash
-   export MT_DIR="$HOME/ers-3367-mt-072a5628"
-   export MT_DB="$MT_DIR/isolated.db"
-   test -f "$MT_DB" || { echo 'STOP: isolated LOCAL database missing'; exit 1; }
-   printf 'Proposed Human A login (LOCAL-only, no password): '
-   IFS= read -r LOGIN_A
-   printf 'Proposed Human A actor key: '
-   IFS= read -r ACTOR_A
-   printf 'Proposed Human B login (LOCAL-only, no password): '
-   IFS= read -r LOGIN_B
-   printf 'Proposed Human B actor key: '
-   IFS= read -r ACTOR_B
-   export LOGIN_A LOGIN_B ACTOR_A ACTOR_B
-   test -n "$LOGIN_A" && test -n "$LOGIN_B" && test -n "$ACTOR_A" && test -n "$ACTOR_B" || {
-     echo 'STOP: all four identifiers are required'; exit 1;
-   }
-   test "$LOGIN_A" != "$LOGIN_B" && test "$ACTOR_A" != "$ACTOR_B" || {
-     echo 'STOP: the two humans need distinct logins and actor keys'; exit 1;
-   }
-   ```
-
-   **Expected:** Four non-secret values recorded privately, no password requested. The enrollment command will separately validate their format, normalized uniqueness and other security requirements. Do not enter password values into any shell variable.
-
-### MT-01 — Part 3, Path A (OPTIONAL): Observe existing accounts through the UI
-
-1. Follow MT-01 Part 1D above to start the isolated LOCAL ERS backend and frontend; verify the displayed backend database path equals `$MT_DB`.
-2. Open **Browser C** at the verified LOCAL origin and sign in as the existing authorized LOCAL Application Administrator (not A or B).
-3. From the top bar choose **Administration context → Global administration**, then choose **Authentication → Authentication Accounts**.
-4. In the **Actor/account filter**, locate the field labeled **Filter by Person name, nickname, or email, Tenant display name, Actor, or account**. Enter the exact proposed `$LOGIN_A`, then clear the field. Repeat with `$LOGIN_B`, `$ACTOR_A`, and `$ACTOR_B`, clearing it between entries. Record the visible matches and any unexpected results. **Important:** This is only an observation of Authentication Accounts already loaded by the UI. An unbound Actor can be absent from this page. Do not use a no-match result here as proof of no collision.
-5. Record the existing administrator's login, Account ID, Actor ID/key and current authorization, where shown. If any other pre-existing automation Application Administrator is present, record it too, without changing it.
-6. Sign out of Browser C. Confirm the session ended, then stop Terminal B with Ctrl+C. Verify that no backend/listener or database writer remains. **Now execute Path B below. MT-01 is not complete without Path B.**
-
-### MT-01 — Part 4, Path B (REQUIRED): Read-only LOCAL database collision and grant inspection
-
-1. **Do not** create, provision, or reset an administrator. This path is performed by the named LOCAL test operator, **without any ERS sign-in**. Verify Terminal B is stopped and there is no LOCAL backend writer accessing the isolated database:
-
-   ```bash
-   export MT_DB="$HOME/ers-3367-mt-072a5628/isolated.db"
-   test -f "$MT_DB" || { echo 'STOP: isolated database missing'; exit 1; }
-   lsof -nP "$MT_DB" || true
-   lsof -nP -iTCP:8080 -sTCP:LISTEN || true
-   ```
-
-   **Expected:** No writer on `$MT_DB`. If the database is still in use, identify and stop only the test-created process before proceeding. Do not stop unrelated services.
-2. **In Terminal A**, where `LOGIN_A`, `LOGIN_B`, `ACTOR_A`, `ACTOR_B`, and `MT_DB` were defined in the Shared input preparation, first confirm they are all set in **this terminal**:
-
-   ```bash
-   : "${MT_DB:?STOP: set MT_DB in this terminal}"
-   : "${LOGIN_A:?STOP: supply proposed A login}"
-   : "${LOGIN_B:?STOP: supply proposed B login}"
-   : "${ACTOR_A:?STOP: supply proposed A actor key}"
-   : "${ACTOR_B:?STOP: supply proposed B actor key}"
-   printf 'Read-only check database: %s\n' "$MT_DB"
-   ```
-
-   If you closed Terminal A, re-enter the **same four non-secret proposed identifiers** using MT-01 Part 2 above. Do **not** silently choose replacements. Now execute this read-only, parameterized inspection:
-
-   ```bash
-   python3 - <<'PYTHON'
-   import os
-   import sqlite3
-   from pathlib import Path
-   from urllib.parse import quote
-
-   db = Path(os.environ['MT_DB']).resolve(strict=True)
-   expected = (Path.home() / 'ers-3367-mt-072a5628' / 'isolated.db').resolve()
-   if db != expected or not db.is_file():
-       raise SystemExit('STOP: wrong or missing isolated LOCAL database')
-   uri = 'file:' + quote(str(db), safe='/') + '?mode=ro'
-   with sqlite3.connect(uri, uri=True) as conn:
-       proposed_logins = [os.environ['LOGIN_A'].strip().lower(), os.environ['LOGIN_B'].strip().lower()]
-       proposed_keys = [os.environ['ACTOR_A'].strip().lower(), os.environ['ACTOR_B'].strip().lower()]
-       if proposed_logins[0] == proposed_logins[1] or proposed_keys[0] == proposed_keys[1]:
-           raise SystemExit('FAIL: A/B identifiers are not distinct after normalization. STOP.')
-       duplicates = []
-       for label, login in [('A', os.environ['LOGIN_A']), ('B', os.environ['LOGIN_B'])]:
-           rows = conn.execute(
-               'SELECT id, login FROM auth_user_accounts WHERE login = ? COLLATE NOCASE',
-               (login.strip().lower(),)
-           ).fetchall()
-           print(f'Human {label} login matches: {len(rows)}')
-           duplicates.extend(('login', label, row) for row in rows)
-       for label, actor_key in [('A', os.environ['ACTOR_A']), ('B', os.environ['ACTOR_B'])]:
-           rows = conn.execute(
-               'SELECT id, actor_key FROM authz_actors WHERE actor_key = ? COLLATE NOCASE',
-               (actor_key.strip(),)
-           ).fetchall()
-           print(f'Human {label} actor-key matches: {len(rows)}')
-           duplicates.extend(('actor key', label, row) for row in rows)
-       print('PRE-EXISTING APPLICATION_ADMIN GRANTS (including inactive):')
-       rows = conn.execute('''
-           SELECT COALESCE(u.login, '(no account)'), COALESCE(u.id, '(no account ID)'),
-                  a.actor_key, a.id, g.id, g.active, r.active
-             FROM authz_actor_role_grants g
-             JOIN authz_roles r ON r.id = g.role_id
-             JOIN authz_actors a ON a.id = g.actor_id
-             LEFT JOIN auth_account_actors b ON b.actor_id = a.id
-             LEFT JOIN auth_user_accounts u ON u.id = b.account_id
-            WHERE r.code = 'APPLICATION_ADMIN' AND g.tenant_id = '*'
-            ORDER BY a.actor_key, g.id
-       ''').fetchall()
-       print(f'Existing GLOBAL administrator grant rows: {len(rows)}')
-       for row in rows:
-           print('login=%s account_id=%s actor_key=%s actor_id=%s grant_id=%s grant_active=%s role_active=%s' % row)
-       if duplicates:
-           raise SystemExit('FAIL: at least one proposed login or actor key already exists. STOP enrollment.')
-       print('PASS: both proposed logins and both actor keys are unused.')
-   PYTHON
-   ```
-
-   **Expected:** Exactly `0` matches for all four proposed identifiers, followed by `PASS: both proposed logins and both actor keys are unused.` The pre-existing GLOBAL administrator-grant list may contain **zero or more** records; record the actual count, grant state, and IDs. **Zero is an acceptable baseline; no existing human administrator is required for LOCAL enrollment.** A lack of known credentials does **not** prove that the database has no administrator. The code opens the isolated database with SQLite `mode=ro`, performs only SELECTs, and does not request or log passwords. If a query fails or a collision is found, **STOP**; do not mark MT-01 PASS.
-3. Record non-secret output and classify the Administration context as **`N/A — offline LOCAL database inspection; no ERS browser session`**. This is an acceptable LOCAL-specific pre-enrollment test method. There is no sign-out or backend to stop for this path.
-
-**Expected/PASS:** Path B was completed successfully (whether or not optional Path A was used); each of the four normalized identifier searches returned `0`; pre-existing GLOBAL administrator grants were counted and recorded even if the count is `0`; the isolated database path was verified; no database records were changed. The UI is optional and cannot replace Path B.
-**FAIL/block:** Any collision; wrong database; missing schema; inability to confirm four identifiers; unexpectedly running backend writer; unauthorized data modification. Do not use this LOCAL-only pathway for deployed Test; follow the environment's approved access/inspection policy.
-
----
-
-### MT-01 — Execution Record (complete after this test)
-
-| Required field | Actual result / reference |
-|---|---|
-| Test ID | `MT-01` |
-| Execution environment and entry URL / host | _Enter actual LOCAL or Test environment and non-secret URL/host_ |
-| UTC started | _YYYY-MM-DD HH:MM:SS UTC_ |
-| UTC completed | _YYYY-MM-DD HH:MM:SS UTC_ |
-| Human(s) actually operating and role | _Named LOCAL test operator for required Path B; add existing authorized admin only if optional UI Path A performed_ |
-| Actual Administration / Tenant context shown | _Required Path B: N/A — offline LOCAL database, no UI session; if optional Path A also ran, additionally record the displayed Global administration (`*`) context_ |
-| Exact non-secret target login(s), Account ID(s), Actor ID(s) | _Enter verified proposed A/B logins and actor keys; Account IDs N/A before enrollment; existing admin IDs or N/A with zero-baseline evidence_ |
-| Observed behavior, including actual outcomes of critical steps | _Record Path B four normalized collision counts (all 0), existing GLOBAL grant count including 0, the exact verified isolated database path, and any optional Path A results; A/B Account IDs are N/A before enrollment_ |
-| Non-secret audit event ID(s) and correlation ID(s) | _Enter actual IDs where applicable; otherwise N/A and reason_ |
-| Screenshot, terminal output, CI link, or other evidence reference | _Private evidence locator; scrub tokens, secrets, and session values_ |
-| Verdict | _PASS / FAIL / N/A — select one_ |
-| Defect link or ID | _Enter defect reference if observed; otherwise `None — no defect observed`_ |
-| N/A or blocked reason (if applicable) | _Specific reason and prerequisite / approval needed, or `N/A — test executed`_ |
-| Retest details (if applicable) | _Retest UTC time, new SHA/environment, corrected defect link, outcome; otherwise N/A_ |
-
-**Do not mark PASS if evidence is missing or a required step was not performed.** A skipped or unauthorized operation must be reported as N/A/blocked with its reason; this does not automatically satisfy a mandatory acceptance gate.
-
-
-## MT-02 — Isolated LOCAL / deployed Test enrollment and read-only verification
-
-**Choose exactly one execution path for MT-02:**
-
-- **LOCAL isolated rehearsal (what you are doing now):** Execute the complete MT-02 LOCAL Steps A and B immediately below. No Docker or deployed Test service is needed. Mark deployed Test-only image/volume/backup evidence as `N/A — LOCAL isolated`; do **not** interpret this as Test gate acceptance.
-- **Deployed Test acceptance (later):** Execute the Test-specific steps in this MT-02 section, including the guarded Docker pipeline and offline inspection copy. Do not run LOCAL Go enrollment against the deployed Test data volume.
-
-**Do not repeat enrollment** against any database where A/B already exist; if an enrollment is complete, record the prior evidence and skip directly to independent login validation.
-
-**When:** Once, per *new isolated LOCAL or Test database*. **Not a recurring manual test.**
-**Operator/role:** Named LOCAL acceptance operator for the LOCAL path; approved Test deployment operator for the deployed Test path. **Context:** Offline database maintenance in the **chosen environment**; no ERS browser user session can authorize enrollment.
-**Preconditions:** MT-01 passed by the required LOCAL read-only path (optional UI observations are supplementary), or by the separately authorized Test procedure; environment-specific approval/operator/backup references; fully migrated selected database; two new LOCAL-only identities for LOCAL (or two Test-only identities for deployed Test). An accepted image and deployed Test volume are required for **deployed Test only**.
-
-### MT-02 — LOCAL isolated execution (perform these steps, then complete this test's record)
-
-#### MT-02 LOCAL — Preliminary step: Verify exclusive database access
-
-**Only after recording MT-01 PASS:** If you used Path A, the isolated backend was stopped in MT-01; if you used Path B, it was never started. From Terminal A confirm the exact database name and that no process is writing to it:
-
-```bash
-export MT_DB="$HOME/ers-3367-mt-072a5628/isolated.db"
-printf 'OFFLINE DATABASE = %s\n' "$MT_DB"
-test -f "$MT_DB" || { echo 'STOP: isolated database missing'; exit 1; }
-lsof -nP -iTCP:8080 -sTCP:LISTEN || true
-lsof -nP "$MT_DB" || true
+```zsh
+# Terminal A (macOS/zsh, repository root) - MT-00 END UTC
+date -u '+%Y-%m-%dT%H:%M:%SZ'
 ```
 
-**Expected:** No ERS backend listening on port 8080 and no process holding `isolated.db`. If a listener or writer remains, identify it and **STOP**; do not enroll while any writer is present. Do not stop unrelated processes.
+### MT-00 — Individual execution record (complete immediately after test)
 
+| Required evidence field | Actual value (fill in; do not leave blank) |
+|---|---|
+| Test ID / environment | `MT-00` / `LOCAL isolated` or explicit separately approved Test |
+| UTC start / UTC end (from this test’s Terminal A timestamp blocks) | _Start: ... / End: ..._ |
+| Actual operator/human and role | _Non-secret identity; A/B/operator as applicable_ |
+| Administration / Tenant context actually shown | _GLOBAL `*`, unauthenticated, offline N/A, 1Password, etc. — record observed_ |
+| Exact non-secret A/B login, Account IDs, Actor IDs, or affected resource | _Values; or N/A with reason_ |
+| Process state and DB path BEFORE / AFTER | _Expected vs observed listener, database, session and shell-state transition_ |
+| Actual terminal/UI outputs, including failures | _Record exact relevant PASS/FAIL strings and UI behavior_ |
+| Non-secret audit event ID / correlation | _Actual event ID / correlation, or N/A and reason; never token_ |
+| Screenshot, CI, log or private evidence reference | _Exact private locator; redact credentials and tokens_ |
+| Verdict (PASS / FAIL / BLOCKED / N/A) | _Choose one; N/A reason is mandatory_ |
+| Defect link / fix SHA / retest time | _Actual reference or None — no defect observed_ |
 
-#### MT-02 LOCAL — Step A: Preserve a verified pre-enrollment snapshot
+**A case is not PASS until its exit state and evidence have been confirmed.**
 
-1. In **Terminal A**, with the backend stopped, run:
+## MT-01 — Prepare and verify the completely isolated, clean LOCAL database
 
-   ```bash
-   export MT_DIR="$HOME/ers-3367-mt-072a5628"
-   export MT_DB="$MT_DIR/isolated.db"
-   export MT_BACKUP="$MT_DIR/pre-enrollment.db"
-   test -f "$MT_DB" && test ! -e "$MT_BACKUP" || { echo 'STOP: missing database or existing backup'; exit 1; }
-   sqlite3 "$MT_DB" ".backup '$MT_BACKUP'"
-   chmod 600 "$MT_BACKUP"
-   test "$(sqlite3 "$MT_BACKUP" 'PRAGMA integrity_check;')" = 'ok' || { echo 'FAIL: backup integrity'; exit 1; }
-   test -z "$(sqlite3 "$MT_BACKUP" 'PRAGMA foreign_key_check;')" || { echo 'FAIL: backup foreign keys'; exit 1; }
-   shasum -a 256 "$MT_BACKUP"
+**Operator:** named LOCAL test operator. **Context:** offline LOCAL database maintenance; no ERS UI or admin login. **Starting state:** MT-00 PASS, no backend writer/listener on 8080, repository root open in Terminal A. **Credentials:** no ERS password or existing admin is needed. **Shell variables:** initialized *below in this test*; no previous exports assumed. **Database:** a new file at `~/ers-3367-acceptance-13bca905/isolated.db`, never your normal `backend/data/app.db`.
+
+**Terminal assignment for the entire test:** Terminal A only, in the ERS repository root, macOS **zsh**. **Terminal B and Terminal C must remain unused and the backend/frontend stopped throughout MT-01.** The four blocks below are independent: each defines its own database path. **Execute steps 1, 2, 3, 4 in order, exactly once; do not skip any step.** Do not use the obsolete `Part 1C` instruction that copies `$NORMAL_DB`.
+
+**Start timestamp — Terminal A:** Record the following UTC value before beginning MT-01.
+
+```zsh
+# Terminal A (macOS/zsh, repository root) - MT-01 START UTC
+date -u '+%Y-%m-%dT%H:%M:%SZ'
+```
+
+1. **Terminal A — preflight: check the directory and stopped backend.** Copy the complete block (including parentheses). The parentheses create a short-lived subprocess: an `exit 1` stops this block **without closing Terminal A**. If `STOP` prints, **do not execute step 2**.
+
+   ```zsh
+   # Terminal A (macOS/zsh, repository root) - MT-01 command block
+   (
+     set -e
+     MT_DIR="$HOME/ers-3367-acceptance-13bca905"
+     MT_DB="$MT_DIR/isolated.db"
+     printf 'TEST DIRECTORY: %s\nTEST DATABASE: %s\n' "$MT_DIR" "$MT_DB"
+     if [ -e "$MT_DIR" ]; then
+       echo 'STOP: acceptance directory already exists; preserve it and inspect its state.'
+       exit 1
+     fi
+     if lsof -nP -iTCP:8080 -sTCP:LISTEN | grep -q .; then
+       echo 'STOP: port 8080 has a listener. Identify its owner; do not stop unrelated services.'
+       exit 1
+     fi
+     echo 'PASS: new acceptance directory available; no backend listener on 8080'
+   )
    ```
 
-2. Record the **SHA-256 digest** and full path of this verified snapshot privately. The pre-enrollment backup is local evidence and **does not constitute Production off-host backup verification**.
-3. Before enrollment, record the pre-existing audit count so the test is repeatable even when the copied database contains older audit evidence:
+   **Expected:** the directory and database paths both end in `ers-3367-acceptance-13bca905` / `isolated.db`, followed by **exactly** `PASS: new acceptance directory available; no backend listener on 8080`. An existing test directory is not a failure of your normal LOCAL database; it means **this one-time test has been started before**. Do not erase it, copy from it, or rerun migrations/enrollment. Preserve it for state inspection.
 
-   ```bash
-   sqlite3 "$MT_DB" "SELECT COUNT(*) AS enrollment_events_before FROM authz_audit_logs WHERE operation='authentication.human_admins.offline_enroll';"
+2. **Terminal A — create the fresh database from the repository's SQL migrations, never by copying another database.** Run **only after step 1 PASS**; this block refuses an existing directory *again* to prevent an accidental rerun. It requires no `MT_BACKUP`, `NORMAL_DB`, ERS administrator login, or second terminal.
+
+   ```zsh
+   # Terminal A (macOS/zsh, repository root) - MT-01 command block
+   (
+     set -e
+     umask 077
+     MT_DIR="$HOME/ers-3367-acceptance-13bca905"
+     MT_DB="$MT_DIR/isolated.db"
+     if [ -e "$MT_DIR" ]; then
+       echo 'STOP: directory exists. Do not rerun initial database creation.'
+       exit 1
+     fi
+     mkdir -m 700 "$MT_DIR"
+     DB_PATH="$MT_DB" MIGRATIONS_DIR="$PWD/backend/migrations" ./scripts/db-migrate.sh
+     if [ ! -s "$MT_DB" ]; then
+       echo 'FAIL: expected migrated isolated database was not created.'
+       exit 1
+     fi
+     chmod 600 "$MT_DB"
+     printf 'PASS: migrated disposable database created at %s\n' "$MT_DB"
+   )
    ```
 
-   Record the integer in the private MT-02 execution record. **Do not create additional administrators to make the count appear to be two.**
+   **Expected:** the migration script displays `Applying migrations to: <your home>/ers-3367-acceptance-13bca905/isolated.db` and `✅ Migrations applied.`, then prints `PASS: migrated disposable database created at .../isolated.db`. The migrations are allowed to print a long list of tables. **If a command fails or a different database path appears, stop MT-01 and preserve the test directory for diagnosis.** Do not rerun the create-once step.
 
-4. Enter **non-secret** operator references in Terminal A:
+3. **Terminal A — print and assert every database result.** This is an independent block with no reliance on an exported variable from step 1 or step 2.
 
-   ```bash
-   export APPROVAL_REF='LOCAL-MT3367-ACCEPTANCE'
-   export OPERATOR_REF='LOCAL-MT3367-OPERATOR'
-   export BACKUP_REF="LOCAL-MT3367-BKP-$(date -u +%Y%m%dT%H%M%SZ)"
-   # If Terminal A has been reopened, type the *same* actor keys already
-   # recorded by MT-01 (never invent replacements or use example actor keys).
-   if [ -z "${ACTOR_A:-}" ]; then
-     printf 'Exact Human A actor key from MT-01 execution record: '
-     IFS= read -r ACTOR_A
-   fi
-   if [ -z "${ACTOR_B:-}" ]; then
-     printf 'Exact Human B actor key from MT-01 execution record: '
-     IFS= read -r ACTOR_B
-   fi
-   export ACTOR_A ACTOR_B
-   : "${ACTOR_A:?STOP: missing MT-01 actor A key}"
-   : "${ACTOR_B:?STOP: missing MT-01 actor B key}"
-   test "$ACTOR_A" != "$ACTOR_B" || { echo 'STOP: A/B actor keys must differ'; exit 1; }
+   ```zsh
+   # Terminal A (macOS/zsh, repository root) - MT-01 command block
+   (
+     set -e
+     MT_DB="$HOME/ers-3367-acceptance-13bca905/isolated.db"
+     if [ ! -s "$MT_DB" ]; then
+       echo 'STOP: migrated test database missing or empty'
+       exit 1
+     fi
+     INTEGRITY="$(sqlite3 -bail "$MT_DB" 'PRAGMA integrity_check;')"
+     FK="$(sqlite3 -bail "$MT_DB" 'PRAGMA foreign_key_check;')"
+     MIGRATIONS="$(sqlite3 -bail "$MT_DB" 'SELECT COUNT(*) FROM schema_migrations;')"
+     ROLE="$(sqlite3 -bail "$MT_DB" "SELECT COUNT(*) FROM authz_roles WHERE code='APPLICATION_ADMIN' AND active=1 AND scope_type='APPLICATION';")"
+     TRIGGERS="$(sqlite3 -bail "$MT_DB" "SELECT COUNT(*) FROM sqlite_master WHERE type='trigger' AND name IN ('trg_authz_audit_logs_no_update','trg_authz_audit_logs_no_delete');")"
+     ACCOUNTS="$(sqlite3 -bail "$MT_DB" 'SELECT COUNT(*) FROM auth_user_accounts;')"
+     ACTORS="$(sqlite3 -bail "$MT_DB" 'SELECT COUNT(*) FROM authz_actors;')"
+     printf 'integrity_check=%s\nforeign_key_check=%s\napplied_migrations=%s\napplication_admin_roles=%s\naudit_triggers=%s\naccounts=%s\nactors=%s\n' "$INTEGRITY" "${FK:-<empty>}" "$MIGRATIONS" "$ROLE" "$TRIGGERS" "$ACCOUNTS" "$ACTORS"
+     if [ "$INTEGRITY" != ok ] || [ -n "$FK" ] || [ "$MIGRATIONS" != 76 ] || [ "$ROLE" != 1 ] || [ "$TRIGGERS" != 2 ] || [ "$ACCOUNTS" != 0 ] || [ "$ACTORS" != 0 ]; then
+       echo 'FAIL: migrated database baseline does not meet the expected values'
+       exit 1
+     fi
+     echo 'PASS: integrity, foreign keys, 76 migrations, role, triggers, zero accounts/actors'
+   )
    ```
 
-   These are LOCAL evidence identifiers; replace `OPERATOR_REF` with an approved non-secret identifier for the actual operator if applicable. Associate `BACKUP_REF` with the recorded backup path and digest. **Do not overwrite the actor keys verified in MT-01 with hard-coded examples.** If Terminal A was closed, restore the exact recorded values and verify collisions again on the isolated database before continuing.
+   **Expected terminal output** (after the exact output lines, with no silently successful checks):
 
-#### MT-02 LOCAL — Step B: Enroll two new human administrators, once and offline
+   ```text
+   integrity_check=ok
+   foreign_key_check=<empty>
+   applied_migrations=76
+   application_admin_roles=1
+   audit_triggers=2
+   accounts=0
+   actors=0
+   PASS: integrity, foreign keys, 76 migrations, role, triggers, zero accounts/actors
+   ```
 
-1. Confirm that the isolated backend is **stopped** and `lsof` shows no process holding `$MT_DB`. Confirm `$MT_DB` points to `isolated.db`, **not** `backend/data/app.db` or any deployed database. No Production confirmation flag is used.
-2. In **Terminal A**, still at repository root, run the following pipeline:
+   **Do not proceed on `FAIL` or a nonzero exit status.** An empty foreign-key result is shown explicitly as `<empty>` instead of a blank line.
 
-   ```bash
+4. **Terminal A — mandatory read-only collision check for the four fixed test identities.** No administrator UI login or interactive shell-variable prompts are necessary. Keep the backend stopped.
+
+   ```zsh
+   # Terminal A (macOS/zsh, repository root) - MT-01 command block
+   export MT_DB="$HOME/ers-3367-acceptance-13bca905/isolated.db"
+   python3 - <<'PYSQL'
+   import sqlite3, os
+   from pathlib import Path
+   from urllib.parse import quote
+   p=Path(os.environ['MT_DB']).resolve(strict=True)
+   assert p==Path.home()/'ers-3367-acceptance-13bca905'/'isolated.db', 'STOP: wrong DB path'
+   uri='file:'+quote(str(p),safe='/')+'?mode=ro'
+   expected=[('A login','auth_user_accounts','login','ers3367.a@local.invalid'),
+             ('B login','auth_user_accounts','login','ers3367.b@local.invalid'),
+             ('A actor key','authz_actors','actor_key','ers3367-local-human-a'),
+             ('B actor key','authz_actors','actor_key','ers3367-local-human-b')]
+   with sqlite3.connect(uri,uri=True) as conn:
+       for label,table,column,value in expected:
+           n=conn.execute(f'SELECT COUNT(*) FROM {table} WHERE {column}=? COLLATE NOCASE',(value,)).fetchone()[0]
+           print(f'{label}: matches={n}')
+           if n: raise SystemExit('FAIL: existing identity collision; STOP before MT-02')
+       print('PASS: all four proposed identifiers unused')
+   PYSQL
+   ```
+
+   **Expected:** `A login: matches=0`, `B login: matches=0`, `A actor key: matches=0`, `B actor key: matches=0`, followed by `PASS: all four proposed identifiers unused`. The Python process must exit with status 0. Any collision, missing table, bad path, or read-only open failure **blocks MT-02**. No identity input from earlier terminals is assumed.
+
+5. Capture non-secret output location, actual database path, UTC start/end, migration count, role and trigger counts in the MT-01 record. **Do not attach the SQLite file or password material.** Keep the backend stopped.
+
+**Exit state to MT-02:** migrated, offline, zero-account disposable database; four proposed keys/logins unused. **PASS:** each explicit expected PASS printed. **FAIL/BLOCK:** existing test directory, bad migration/integrity, identity collision, nonempty account baseline, database writer, or wrong DB path. **Recovery:** inspect/preserve the directory; do not overwrite. No application credentials needed.
+
+**End timestamp — Terminal A:** After completing MT-01 actions and checking the exit state, record this UTC value.
+
+```zsh
+# Terminal A (macOS/zsh, repository root) - MT-01 END UTC
+date -u '+%Y-%m-%dT%H:%M:%SZ'
+```
+
+### MT-01 — Individual execution record (complete immediately after test)
+
+| Required evidence field | Actual value (fill in; do not leave blank) |
+|---|---|
+| Test ID / environment | `MT-01` / `LOCAL isolated` or explicit separately approved Test |
+| UTC start / UTC end (from this test’s Terminal A timestamp blocks) | _Start: ... / End: ..._ |
+| Actual operator/human and role | _Non-secret identity; A/B/operator as applicable_ |
+| Administration / Tenant context actually shown | _GLOBAL `*`, unauthenticated, offline N/A, 1Password, etc. — record observed_ |
+| Exact non-secret A/B login, Account IDs, Actor IDs, or affected resource | _Values; or N/A with reason_ |
+| Process state and DB path BEFORE / AFTER | _Expected vs observed listener, database, session and shell-state transition_ |
+| Actual terminal/UI outputs, including failures | _Record exact relevant PASS/FAIL strings and UI behavior_ |
+| Non-secret audit event ID / correlation | _Actual event ID / correlation, or N/A and reason; never token_ |
+| Screenshot, CI, log or private evidence reference | _Exact private locator; redact credentials and tokens_ |
+| Verdict (PASS / FAIL / BLOCKED / N/A) | _Choose one; N/A reason is mandatory_ |
+| Defect link / fix SHA / retest time | _Actual reference or None — no defect observed_ |
+
+**A case is not PASS until its exit state and evidence have been confirmed.**
+
+## MT-02 — Create-only atomic offline enrollment and immediate verification (LOCAL Path L)
+
+**Operator:** named LOCAL enrollment operator, recording a LOCAL test approval reference. **Context:** offline LOCAL; no ERS UI. **Starting state:** MT-01 PASS, same `~/ers-3367-acceptance-13bca905/isolated.db`, exactly 0 accounts, backend and frontend stopped. **Credentials:** A and B separately choose distinct temporary passwords during the protected prompt; no pre-existing admin credentials. **Shell variables:** all initialized below in this test. **Important:** this test is **one-time** on this database.
+
+**Start timestamp — Terminal A:** Record the following UTC value before beginning MT-02.
+
+```zsh
+# Terminal A (macOS/zsh, repository root) - MT-02 START UTC
+date -u '+%Y-%m-%dT%H:%M:%SZ'
+```
+
+1. **Terminal A — confirm the exact MT-01 output state before enrollment.** This is a safe read-only check. If it prints `STOP`, do **not** execute steps 2 or 3.
+
+   ```zsh
+   # Terminal A (macOS/zsh, repository root) - MT-02 command block
+   (
+     set -e
+     MT_DIR="$HOME/ers-3367-acceptance-13bca905"
+     MT_DB="$MT_DIR/isolated.db"
+     MT_BACKUP="$MT_DIR/pre-enrollment.db"
+     printf 'Enrollment environment: LOCAL\nDatabase: %s\n' "$MT_DB"
+     if [ ! -s "$MT_DB" ]; then
+       echo 'STOP: isolated database missing or empty'
+       exit 1
+     fi
+     if [ -e "$MT_BACKUP" ]; then
+       echo 'STOP: prior pre-enrollment backup exists; enrollment state may already have changed'
+       exit 1
+     fi
+     if lsof -nP "$MT_DB" | grep -q .; then
+       echo 'STOP: database has open file handles; stop only the test-owned writer'
+       exit 1
+     fi
+     if lsof -nP -iTCP:8080 -sTCP:LISTEN | grep -q .; then
+       echo 'STOP: port 8080 has a listener; identify it without killing unrelated processes'
+       exit 1
+     fi
+     COUNT="$(sqlite3 -bail "$MT_DB" 'SELECT COUNT(*) FROM auth_user_accounts;')"
+     printf 'account_count_before=%s\n' "$COUNT"
+     if [ "$COUNT" != 0 ]; then
+       echo 'STOP: database already contains accounts; never repeat create-only enrollment'
+       exit 1
+     fi
+     echo 'PASS: stopped backend, zero accounts and no prior backup; enrollment preconditions met'
+   )
+   ```
+
+   **Expected:** `Enrollment environment: LOCAL`, correct database path, `account_count_before=0`, then `PASS: stopped backend, zero accounts and no prior backup; enrollment preconditions met`. No output from `lsof` is expected. If `STOP` appears, preserve the data and investigate; do not execute enrollment automatically.
+
+2. **Terminal A — take a non-overwriting pre-enrollment backup and verify the exact result.** Execute this block **only after step 1 PASS**.
+
+   ```zsh
+   # Terminal A (macOS/zsh, repository root) - MT-02 command block
+   (
+     set -e
+     umask 077
+     MT_DIR="$HOME/ers-3367-acceptance-13bca905"
+     MT_DB="$MT_DIR/isolated.db"
+     MT_BACKUP="$MT_DIR/pre-enrollment.db"
+     if [ -e "$MT_BACKUP" ]; then
+       echo 'STOP: backup already exists; do not overwrite or rerun enrollment'
+       exit 1
+     fi
+     if [ ! -s "$MT_DB" ]; then
+       echo 'STOP: source database missing'
+       exit 1
+     fi
+     sqlite3 -bail "$MT_DB" ".backup '$MT_BACKUP'"
+     chmod 600 "$MT_BACKUP"
+     INTEGRITY="$(sqlite3 -bail "$MT_BACKUP" 'PRAGMA integrity_check;')"
+     FK="$(sqlite3 -bail "$MT_BACKUP" 'PRAGMA foreign_key_check;')"
+     printf 'backup_integrity_check=%s\nbackup_foreign_key_check=%s\n' "$INTEGRITY" "${FK:-<empty>}"
+     if [ "$INTEGRITY" != ok ] || [ -n "$FK" ]; then
+       echo 'FAIL: backup integrity or foreign key check'
+       exit 1
+     fi
+     shasum -a 256 "$MT_BACKUP"
+     echo 'PASS: private pre-enrollment backup verified; ready for exactly one enrollment'
+   )
+   ```
+
+   **Expected:** `backup_integrity_check=ok`, `backup_foreign_key_check=<empty>`, a SHA-256 digest for the `pre-enrollment.db` file, and `PASS: private pre-enrollment backup verified; ready for exactly one enrollment`. **If STOP or FAIL appears, do not execute step 3.** This is a LOCAL snapshot, not a Production off-host backup. Record the digest privately in the MT-02 execution record.
+
+3. Exactly **once**, run the guarded Go enrollment program. In Terminal A execute the following **as one pipeline** (not in a second terminal). This does not print or save passwords:
+
+   ```zsh
+   # Terminal A (macOS/zsh, repository root) - MT-02 command block
    set -o pipefail
    umask 077
+   export MT_DB="$HOME/ers-3367-acceptance-13bca905/isolated.db"
+   export APPROVAL_REF='LOCAL-MT3367-13BCA905'
+   export OPERATOR_REF='LOCAL-MT3367-OPERATOR'
+   export BACKUP_REF='LOCAL-MT3367-PREENROLL'
    python3 -B scripts/ers-two-human-admin-input.py | (
      cd backend && APP_ENV=local go run ./cmd/enroll-human-admins \
-       --db "$MT_DB" \
-       --environment local \
-       --offline-confirmed \
+       --db "$MT_DB" --environment local --offline-confirmed \
        --approval-reference "$APPROVAL_REF" \
        --operator-reference "$OPERATOR_REF" \
        --backup-evidence-reference "$BACKUP_REF"
    )
    ```
 
-   Enter **two distinct LOCAL-only humans** when prompted: actor key (`$ACTOR_A` for A, `$ACTOR_B` for B), display name, unused login, and separate initial passwords. The script collects passwords privately; do not use `tee`, redirect its JSON, enable shell `set -x`, or capture passwords/reset tokens in screenshots.
-3. **Expected:** command exits `0`, printing exactly two non-secret `enrolled login=... actor_key=... account_id=... actor_id=... must_change_password=true` lines. Both Account IDs and Actor IDs must differ. If it fails, **STOP**, preserve evidence, and diagnose; do **not** rerun automatically.
-4. Before restarting the backend, run:
+   The private prompt **must** be answered in this order, using the exact values:
 
-   ```bash
-   python3 -B scripts/ers-two-human-admin-status.py \
-     --db "$MT_DB" \
-     --actor-key "$ACTOR_A" \
-     --actor-key "$ACTOR_B"
+   | Prompt | First human | Second human |
+   |---|---|---|
+   | Actor key | `ers3367-local-human-a` | `ers3367-local-human-b` |
+   | Display name | `ERS 33.6.7 LOCAL Human A` | `ERS 33.6.7 LOCAL Human B` |
+   | Login | `ers3367.a@local.invalid` | `ers3367.b@local.invalid` |
+   | Initial password and repeat | Human A enters their own unique secret twice | Human B enters a different unique secret twice |
+
+   **Expected terminal output after prompts:** **exactly two** non-secret lines beginning `enrolled login=... actor_key=... account_id=... actor_id=... must_change_password=true`, once for A and once for B. IDs must differ. **No credential text** may appear. A nonzero exit code, absence of exactly two lines, or uncertainty is **BLOCKED**: do not run the command again; continue only with the read-only inspection in step 4 to determine what committed.
+
+4. Inspect persisted enrollment **read-only** (safe even after uncertain step 3):
+
+   ```zsh
+   # Terminal A (macOS/zsh, repository root) - MT-02 command block
+   export MT_DB="$HOME/ers-3367-acceptance-13bca905/isolated.db"
+   python3 -B scripts/ers-two-human-admin-status.py --db "$MT_DB" \
+     --actor-key 'ers3367-local-human-a' \
+     --actor-key 'ers3367-local-human-b'
    sqlite3 "$MT_DB" "SELECT COUNT(*) FROM authz_audit_logs WHERE operation='authentication.human_admins.offline_enroll';"
    ```
 
-   **Expected:** status command exit `0`, JSON `"ready": true`, two distinct active GLOBAL AccountActors, both `"usable": true` and `"mustChangePassword": true`; exactly **two** new `authentication.human_admins.offline_enroll` audit records if this was a clean snapshot without prior manual enrollment. Where the original database already had earlier events, compare counts before/after and require an increase of exactly two.
-5. In the MT-02 execution record write **`LOCAL isolated — non-Docker alternative`** as the environment. Docker image/volume and deployed Test backup steps are **`N/A — this is LOCAL; the deployed Test gate remains pending`**. Record the isolated path, actual operator, backup checksum/reference, Account/Actor IDs, and verdict. **Do not claim the deployed Test-environment Gate 2 passed based only on LOCAL testing.**
+   **Expected after a successful one-time enrollment:** status JSON `"ready": true`, **two** distinct usable accounts, `"mustChangePassword": true` for both; audit query prints `2`. If status says `ready=false`, returns nonzero, or audit is not 2, mark **FAIL** and preserve evidence. If after a failed step 3 it says `ready=true`, investigate why the success output was uncertain; **never automatically rerun**.
 
+5. Record the non-secret A/B Account IDs, Actor IDs, actor keys, two event IDs (from MT-08 later), backup digest and references; no passwords. No UI process is running yet.
 
-**LOCAL PASS criteria:** Pre-enrollment backup exists and passes integrity/foreign-key checks; offline enrollment commits exactly two independently identified GLOBAL accounts; status shows both usable with mandatory password change pending; audit count increases by exactly two; backend was stopped during writes. **Stop on any deviation.** The LOCAL backend restart for browser tests is entirely inside MT-03.
+**Exit state to MT-03:** two new accounts, two GLOBAL grants, pending first-password changes, exactly two enrollment audit rows, backend stopped. **PASS:** all verified. **FAIL/BLOCK:** any partial result, bad backup, unexpected pre-existing account, incorrect target path, audit absence or leak. **Recovery:** preserve database/backup; never replay create-only enrollment.
 
-### MT-02 — Deployed Test execution (different environment; do not run for LOCAL)
+### Deployed Test — separate MT-02 Path T (not part of today's LOCAL execution)
 
-**Steps**
+Do not execute Path T unless you are on the approved **deployed Test host**, have completed Test-specific backup and approval gates, and verified its actual container image/volume. LOCAL Path L cannot substitute for Test. The Test runbook is not executed by shell commands in LOCAL and its Docker workflows were **not** exercised in the authoring environment. Prior to an actual deployed Test enrollment, confirm the release operator has an approved Test change record and verified Test backup, a matching image digest, a non-Production volume, and an isolated stopped Test service. Use the Test deployment instructions already maintained in the [Production Operational Runbook](production-operational-runbook.md) Gate 2 (Test rehearsal). Do **not** copy the LOCAL SQLite file or credentials to Test. Record this entire Path T as **N/A — LOCAL-only run, deployed Test gate pending** rather than PASS; the Test gate remains mandatory before Production launch.
 
-1. Sign out Test users or notify them of a planned maintenance window. **Verify the deployment host is Test, not Production.** Record Test browser origin, deploy SHA, image ID, and inspected volume name.
-2. In repository root on the authorized deployment host, set **non-secret references only** using these *Test-only* non-secret references:
-   ```bash
-   export APPROVAL_REF='CHG-<approved-Test-change-id>'
-   export OPERATOR_REF='<named-Test-operator-id>'
-   export BACKUP_REF='BKP-<verified-Test-backup-reference>'
-   export ACTOR_A='<new-Test-human-A-actor-key>'
-   export ACTOR_B='<new-Test-human-B-actor-key>'
-   ```
-3. **Check the actual Test deployment volume name** before using the value in commands; the previously documented default is `ers-tst_backend-data`. If it differs, use the inspected value and record why. Then:
-   ```bash
-   export ENVIRONMENT=test
-   export PRODUCTION_CONFIRMATION=''
-   export DB_VOLUME=ers-tst_backend-data
-   export IMAGE="$(docker inspect ers-tst-backend --format '{{.Image}}')"
-   docker volume inspect "$DB_VOLUME"
-   docker image inspect "$IMAGE" --format '{{.Id}}'
-   ```
-4. Back up and verify **while Test is still running**, using the existing targets:
-   ```bash
-   make server-backup ENV=test
-   make server-backup-verify ENV=test BACKUP_FILE='<actual absolute Test backup path from previous output>'
-   ```
-   Inspect the evidence and ensure `BACKUP_REF` actually refers to this verified backup. **If any command fails, STOP.**
-5. Shut down Test without deleting volumes:
-   ```bash
-   make server-test-down
-   docker ps --filter "volume=$DB_VOLUME" --format '{{.ID}} {{.Names}}'
-   ```
-   Expected: **no running container** using that volume. Independently ensure no host-side SQLite process or one-off recovery task is writing to it. If unsure, STOP.
-6. Perform exactly **one** enrollment using these commands, **only after** the Test volume is confirmed isolated, Test backup verified, and variables set in step 2–3. Run from the authorized Test deployment host in a Bash shell (if needed first enter `bash`), with no shell tracing and no redirected credential JSON:
+**End timestamp — Terminal A:** After completing MT-02 actions and checking the exit state, record this UTC value.
 
-```bash
-# Test environment only; never point DB_VOLUME or IMAGE to Production.
-# IMAGE: copy the exact repository-promoted backend image ID while the backend runs.
-# DB_VOLUME: inspect the existing deployment volume name before stopping.
-# ENROLL_CONTAINER: unique name; never reuse a container unrelated to this test.
-set -euo pipefail
-umask 077
-export ENROLL_CONTAINER="ers-3367-enroll-${ENVIRONMENT}-$$"
-trap 'docker rm -f "$ENROLL_CONTAINER" >/dev/null 2>&1 || true' EXIT
-
-python3 scripts/ers-two-human-admin-input.py | docker run \
-  --name "$ENROLL_CONTAINER" --rm --interactive --network none \
-  --mount "type=volume,src=${DB_VOLUME},dst=/app/data" \
-  --env "APP_ENV=${ENVIRONMENT}" \
-  --entrypoint /app/enroll-human-admins "$IMAGE" \
-  --db /app/data/app.db \
-  --environment "$ENVIRONMENT" \
-  --offline-confirmed \
-  --approval-reference "$APPROVAL_REF" \
-  --operator-reference "$OPERATOR_REF" \
-  --backup-evidence-reference "$BACKUP_REF"
-
-# Teardown: --rm removes a successful/failed run container; trap is a fallback.
-docker ps -a --filter "name=$ENROLL_CONTAINER" --format '{{.Names}}'
-# Expected: NO lines (if any line appears: FAIL, remove ONLY that test container).
+```zsh
+# Terminal A (macOS/zsh, repository root) - MT-02 END UTC
+date -u '+%Y-%m-%dT%H:%M:%SZ'
 ```
 
-   Enter administrator 1 = Test Human A and administrator 2 = Test Human B. The two initial passwords must be distinct. **Never rerun automatically.** If the command or any input fails, stop and investigate using non-secret evidence.
-7. Confirm the pipeline exit code is `0`; record exactly two success records containing non-secret login, actor key, Account ID, and Actor ID. The two Account IDs differ, and the two Actor IDs differ. **Never automatically rerun enrollment.**
-8. While Test is still offline, create a **private, consistent** copy of its volume database, then inspect it. Do not use the earlier pre-enrollment backup as the status copy.
+### MT-02 — Individual execution record (complete immediately after test)
 
-```bash
-STATUS_DIR="$(mktemp -d "${TMPDIR:-/tmp}/ers-3367-status.XXXXXXXX")"
-chmod 0700 "$STATUS_DIR"
-docker run --rm --network none \
-  --mount "type=volume,src=${DB_VOLUME},dst=/app/data,readonly" \
-  --mount "type=bind,src=${STATUS_DIR},dst=/out" \
-  --env "HOST_UID=$(id -u)" --env "HOST_GID=$(id -g)" \
-  --entrypoint /bin/sh "$IMAGE" -ec \
-    'umask 077; sqlite3 /app/data/app.db ".backup /out/app.db"; chown "$HOST_UID:$HOST_GID" /out/app.db'
-chmod 0600 "$STATUS_DIR/app.db"
-python3 scripts/ers-two-human-admin-status.py --db "$STATUS_DIR/app.db" \
-  --actor-key "$ACTOR_A" --actor-key "$ACTOR_B"
-```
-
-   Verify `ready=true`, two `usable=true` results, distinct Account/Actor IDs, and two `mustChangePassword=true` flags before their first sign-in. If any result fails, STOP without declaring enrollment successful.
-9. Remove the **verified, test-created** private inspection copy on the Test host before restart. Confirm that `$STATUS_DIR` equals the previously recorded scratch directory created in step 8 and is **not** a deployment/data-volume path:
-   ```bash
-   test -f "$STATUS_DIR/app.db" || { echo 'STOP: expected status copy missing'; exit 1; }
-   rm -f "$STATUS_DIR/app.db"
-   rmdir "$STATUS_DIR"
-   ```
-   Follow the organization's secure storage/deletion policy for sensitive test copies. Restart Test:
-   ```bash
-   make server-test-up
-   make server-ps ENV=test
-   ```
-10. Confirm Test is healthy at its known browser entry URL and the **only** 33.6.7-created enrollment container has been removed. Do not delete the Test data volume.
-
-
-**STOP** if Test backup, image ID, DB volume, or offline status cannot be verified; do not proceed to Production or silently substitute LOCAL evidence.
-
-**Expected/PASS:** A and B created atomically, separate canonical accounts, no live database writer during enrollment, correct pre-login password-change flags, verified backup, successful restart.
-**FAIL/block:** Backup or isolation failure, nonzero enrollment, unexpected third account, duplicate IDs, absent audit, wrong volume/image/environment, exposed credentials, or startup failure. **A failed enrollment requires investigation before any retry.**
-**Record:** approval/operator/backup references, image/volume, non-secret enrollment output, status results, downtime, cleanup, and PASS/FAIL.
-
----
-
-### MT-02 — Execution Record (complete after this test)
-
-| Required field | Actual result / reference |
+| Required evidence field | Actual value (fill in; do not leave blank) |
 |---|---|
-| Test ID | `MT-02` |
-| Execution environment and entry URL / host | _Enter actual LOCAL or Test environment and non-secret URL/host_ |
-| UTC started | _YYYY-MM-DD HH:MM:SS UTC_ |
-| UTC completed | _YYYY-MM-DD HH:MM:SS UTC_ |
-| Human(s) actually operating and role | _Enter names and roles (expected participants: Approved Test enrollment operator)_ |
-| Actual Administration / Tenant context shown | _Enter value actually seen (expected test context: Offline LOCAL/Test maintenance (no ERS UI Administration session))_ |
-| Exact non-secret target login(s), Account ID(s), Actor ID(s) | _Enter verified identifiers (targets: New A and B logins, Account IDs, Actor IDs; approval/backup references)_ |
-| Observed behavior, including actual outcomes of critical steps | _Record results in enough detail to establish PASS/FAIL; Enrollment and status results; Test image/volume; cleanup evidence_ |
-| Non-secret audit event ID(s) and correlation ID(s) | _Enter actual IDs where applicable; otherwise N/A and reason_ |
-| Screenshot, terminal output, CI link, or other evidence reference | _Private evidence locator; scrub tokens, secrets, and session values_ |
-| Verdict | _PASS / FAIL / N/A — select one_ |
-| Defect link or ID | _Enter defect reference if observed; otherwise `None — no defect observed`_ |
-| N/A or blocked reason (if applicable) | _Specific reason and prerequisite / approval needed, or `N/A — test executed`_ |
-| Retest details (if applicable) | _Retest UTC time, new SHA/environment, corrected defect link, outcome; otherwise N/A_ |
+| Test ID / environment | `MT-02` / `LOCAL isolated` or explicit separately approved Test |
+| UTC start / UTC end (from this test’s Terminal A timestamp blocks) | _Start: ... / End: ..._ |
+| Actual operator/human and role | _Non-secret identity; A/B/operator as applicable_ |
+| Administration / Tenant context actually shown | _GLOBAL `*`, unauthenticated, offline N/A, 1Password, etc. — record observed_ |
+| Exact non-secret A/B login, Account IDs, Actor IDs, or affected resource | _Values; or N/A with reason_ |
+| Process state and DB path BEFORE / AFTER | _Expected vs observed listener, database, session and shell-state transition_ |
+| Actual terminal/UI outputs, including failures | _Record exact relevant PASS/FAIL strings and UI behavior_ |
+| Non-secret audit event ID / correlation | _Actual event ID / correlation, or N/A and reason; never token_ |
+| Screenshot, CI, log or private evidence reference | _Exact private locator; redact credentials and tokens_ |
+| Verdict (PASS / FAIL / BLOCKED / N/A) | _Choose one; N/A reason is mandatory_ |
+| Defect link / fix SHA / retest time | _Actual reference or None — no defect observed_ |
 
-**Do not mark PASS if evidence is missing or a required step was not performed.** A skipped or unauthorized operation must be reported as N/A/blocked with its reason; this does not automatically satisfy a mandatory acceptance gate.
+**A case is not PASS until its exit state and evidence have been confirmed.**
 
+## MT-03 — Start isolated LOCAL ERS; Human A changes initial password
 
-## MT-03 — Human A's own first login and mandatory password change
+**Operator:** Human A controls Browser A; named LOCAL operator controls the terminals. **Context:** LOCAL Global administration (`*`) after login. **Starting state:** MT-02 PASS, two accounts enrolled, A `mustChangePassword=true`; backend/frontend not running; same isolated DB, no old session. **Credentials:** A independently knows A's **initial** secret; no one shares it. **Variables:** defined anew in Terminal B below, not inherited from Terminal A.
 
-**Operator/role:** **Actual Human Application Administrator A for the selected LOCAL/Test environment**, not the enrollment operator and not the existing automation admin. **Context:** GLOBAL `*`. **Browser:** A only.
-**Preconditions:** A's account newly enrolled in the selected **LOCAL isolated or deployed Test** environment, `mustChangePassword=true`; A alone holds A's initial credential. For LOCAL, perform the MT-03 startup below before the numbered browser steps; for deployed Test, use the already-approved Test deployment.
+**Start timestamp — Terminal A:** Record the following UTC value before beginning MT-03.
 
+```zsh
+# Terminal A (macOS/zsh, repository root) - MT-03 START UTC
+date -u '+%Y-%m-%dT%H:%M:%SZ'
+```
 
-### MT-03 — LOCAL startup before browser acceptance (skip for deployed Test)
+1. Check port 8080 is free in **Terminal B** (repository root):
 
-1. In **Terminal B**, from the repository root, initialize this terminal explicitly and start the isolated backend. The variables defined in MT-01 Terminal A are **not** automatically present here:
+   ```zsh
+   # Terminal B (macOS/zsh, repository root) - MT-03 command block
+   export MT_DB="$HOME/ers-3367-acceptance-13bca905/isolated.db"
+   printf 'MT-03 BACKEND DB=%s\n' "$MT_DB"
+   ls -l "$MT_DB"
+   lsof -nP -iTCP:8080 -sTCP:LISTEN
+   ```
 
-   ```bash
-   export MT_DB="$HOME/ers-3367-mt-072a5628/isolated.db"
-   test -f "$MT_DB" || { echo 'STOP: isolated LOCAL database missing'; exit 1; }
-   printf 'MT-03 isolated database: %s\n' "$MT_DB"
+   **Expected:** correct existing file, **no listener**. If there is any listener, identify and stop **only the known test backend**, or stop this test until port ownership is resolved. Do not kill an unknown process.
+
+2. In **Terminal B**, start backend with **explicit safe LOCAL overrides**, and **leave this terminal running**:
+
+   ```zsh
+   # Terminal B (macOS/zsh, repository root) - MT-03 command block
+   export MT_DB="$HOME/ers-3367-acceptance-13bca905/isolated.db"
    APP_ENV=local ERS_DATABASE_PATH="$MT_DB" ERS_RESET_DATABASE=false \
      ERS_PROVISION_E2E_ADMIN=false DEV_SEED_ADMIN=false \
      AUTHZ_BOOTSTRAP_ENABLED=false ERS_BACKEND_WATCH=false \
      make local-backend
    ```
 
-   **Expected:** backend logs `DATABASE_PATH` equal to the exact value printed above and starts LOCAL on port 8080. If it reports a different database, STOP.
-2. In **Terminal C**, from the repository root, start the LOCAL frontend with `make local-frontend` if it is not already running against the isolated port-8080 backend. Confirm that the browser origin is your approved LOCAL origin, usually `http://localhost:5173`. Do not use a deployed Test or Production URL.
-3. Keep the frontend on the LOCAL origin. Use three independent browser profiles as instructed in the test cases below (A for Human A, B for Human B, C for the unauthenticated reset recipient). Avoid browser/profile contamination from the earlier existing-admin sign-in.
-4. Have A and B independently execute MT-03–MT-10 with their own LOCAL-only identities. Complete each individual execution record, including actual Global administration context, evidence references, and PASS/FAIL. If a case requires a deployed Test control unavailable in LOCAL, mark **N/A with the specific reason**; do not mark PASS without executing it.
-5. Verify no Production/remote environment was accessed, no normal LOCAL database was modified by these acceptance operations, and all non-secret audit and recovery checks meet the test cases below's criteria.
+   **Expected startup lines:** `APP_ENV=local`, `DATABASE_PATH=/Users/<you>/ers-3367-acceptance-13bca905/isolated.db`, the command explicitly sets `AUTHZ_BOOTSTRAP_ENABLED=false`; `Starting backend without Air...`, listening on 8080. If the database path differs, immediately Ctrl+C and **FAIL**. If a Go build fails, MT-03 is BLOCKED, not a completed browser test.
 
+3. In **Terminal C**, from repository root start frontend with the target explicitly set (leave running):
 
+   ```zsh
+   # Terminal C (macOS/zsh, repository root) - MT-03 command block
+   ERS_API_PROXY_TARGET='http://127.0.0.1:8080' make local-frontend
+   ```
 
-**Steps**
+   **Expected:** frontend startup prints `ERS_API_PROXY_TARGET=http://127.0.0.1:8080` and the Vite LOCAL URL (normally `http://localhost:5173`). Open **only** that LOCAL URL. Never use a deployed domain during this test.
 
-1. Open a **new, empty Browser A profile** (do not use Browser C from MT-01). Open the entry URL of the **environment selected and recorded for this execution** (LOCAL or deployed Test; never Production for these steps).
-2. On **Sign in**, enter **A's own login** into **Login** and A's **initial password** into **Password**. Select **Sign in**.
-3. Confirm the application routes to **Change password** before offering normal navigation.
-4. On **Change password**, enter A's initial password in **Current password**; a new *private, unique* A password in **New password**; and the identical new password in **Confirm password**. Select **Change password**.
-5. Confirm the application returns to **Sign in** after the change (the prior session is ended).
-6. Sign in with **A's new password**. Confirm ordinary administration navigation is now available.
-7. Open top-bar **Administration context** and select **Global administration** (`*`). Choose **Authentication** and verify **Authentication Accounts** loads. Choose **Authorization** and verify **Application Authorization** loads and shows an authenticated actor with `APPLICATION_ADMIN` in the Roles display.
-8. In a separate, unauthenticated browser profile (not Browser A), attempt a sign-in using A's **initial** password. Confirm sign-in is rejected; do not make repeated attempts that could lock the account. Close that profile.
+4. In a *new independent* **Browser A profile**, open `http://localhost:5173`; select `en-US`. On **Sign in**, enter `ers3367.a@local.invalid` and A's own initial password. Select **Sign in** **once**. **Expected:** forced **Change password** before ordinary navigation.
+5. On **Change password**, type A's current initial password, a new private password, and the same new password in **Confirm password**; submit once. **Expected:** return to **Sign in**. Sign in again with A's new password. **Expected:** authorized navigation is available.
+6. Open **Administration context → Global administration**, then navigate via displayed menu to **Authentication → Authentication Accounts** and **Authorization → Application Authorization**. Confirm both load without HTTP 500 and the effective role includes `APPLICATION_ADMIN` and scope `APPLICATION`/`*`.
+7. In an **unauthenticated** separate Browser C profile, try A's *old initial password once*. **Expected:** rejection; do not keep retrying. Close that Browser C tab/profile, without disturbing A.
+8. Record actual A login, Account ID, Actor key/ID, UTC times, UI navigation labels, independent password-change observation and evidence references. Never record either password.
 
-**Expected/PASS:** Initial credential forces change; change ends the old session; new password works, old password does not; GLOBAL Administration works with A's own session.
-**FAIL/block:** Any access without the required password change, failed logout, usable old password, Tenant-only actor context, HTTP 500, or inability to reach Authentication/Authorization.
-**Record:** A login/Account ID/Actor ID, timestamp, screen/context verification, outcome (no passwords).
+**Exit to MT-04:** Terminal B backend and Terminal C frontend still running against isolated DB; A independently authenticated in Browser A with new password; B has not signed in yet. **PASS:** forced change and old-password refusal plus authorized global session. **FAIL:** unexpected normal navigation before password change, incorrect DB, missing grant, old password still accepted, or HTTP 500. **No cleanup yet**—MT-11 owns process teardown.
 
----
+**End timestamp — Terminal A:** After completing MT-03 actions and checking the exit state, record this UTC value.
 
-### MT-03 — Execution Record (complete after this test)
+```zsh
+# Terminal A (macOS/zsh, repository root) - MT-03 END UTC
+date -u '+%Y-%m-%dT%H:%M:%SZ'
+```
 
-| Required field | Actual result / reference |
+### MT-03 — Individual execution record (complete immediately after test)
+
+| Required evidence field | Actual value (fill in; do not leave blank) |
 |---|---|
-| Test ID | `MT-03` |
-| Execution environment and entry URL / host | _Enter actual LOCAL or Test environment and non-secret URL/host_ |
-| UTC started | _YYYY-MM-DD HH:MM:SS UTC_ |
-| UTC completed | _YYYY-MM-DD HH:MM:SS UTC_ |
-| Human(s) actually operating and role | _Enter names and roles (expected participants: Actual Human A)_ |
-| Actual Administration / Tenant context shown | _Enter value actually seen (expected test context: Global administration (`*`) — record actually displayed)_ |
-| Exact non-secret target login(s), Account ID(s), Actor ID(s) | _Enter verified identifiers (targets: A login, Account ID, Actor ID)_ |
-| Observed behavior, including actual outcomes of critical steps | _Record results in enough detail to establish PASS/FAIL; Forced password change; old vs new password outcomes (never record passwords)_ |
-| Non-secret audit event ID(s) and correlation ID(s) | _Enter actual IDs where applicable; otherwise N/A and reason_ |
-| Screenshot, terminal output, CI link, or other evidence reference | _Private evidence locator; scrub tokens, secrets, and session values_ |
-| Verdict | _PASS / FAIL / N/A — select one_ |
-| Defect link or ID | _Enter defect reference if observed; otherwise `None — no defect observed`_ |
-| N/A or blocked reason (if applicable) | _Specific reason and prerequisite / approval needed, or `N/A — test executed`_ |
-| Retest details (if applicable) | _Retest UTC time, new SHA/environment, corrected defect link, outcome; otherwise N/A_ |
+| Test ID / environment | `MT-03` / `LOCAL isolated` or explicit separately approved Test |
+| UTC start / UTC end (from this test’s Terminal A timestamp blocks) | _Start: ... / End: ..._ |
+| Actual operator/human and role | _Non-secret identity; A/B/operator as applicable_ |
+| Administration / Tenant context actually shown | _GLOBAL `*`, unauthenticated, offline N/A, 1Password, etc. — record observed_ |
+| Exact non-secret A/B login, Account IDs, Actor IDs, or affected resource | _Values; or N/A with reason_ |
+| Process state and DB path BEFORE / AFTER | _Expected vs observed listener, database, session and shell-state transition_ |
+| Actual terminal/UI outputs, including failures | _Record exact relevant PASS/FAIL strings and UI behavior_ |
+| Non-secret audit event ID / correlation | _Actual event ID / correlation, or N/A and reason; never token_ |
+| Screenshot, CI, log or private evidence reference | _Exact private locator; redact credentials and tokens_ |
+| Verdict (PASS / FAIL / BLOCKED / N/A) | _Choose one; N/A reason is mandatory_ |
+| Defect link / fix SHA / retest time | _Actual reference or None — no defect observed_ |
 
-**Do not mark PASS if evidence is missing or a required step was not performed.** A skipped or unauthorized operation must be reported as N/A/blocked with its reason; this does not automatically satisfy a mandatory acceptance gate.
+**A case is not PASS until its exit state and evidence have been confirmed.**
 
+## MT-04 — Human B changes initial password independently
 
-## MT-04 — Human B's own first login, independent of A
+**Operator:** Human B in **Browser B** (different browser profile), with Human A observing only A's Browser A. **Context:** LOCAL GLOBAL `*`. **Entry:** MT-03 PASS; backend 8080/frontend 5173 running on isolated database; A signed in; B still `mustChangePassword=true`. **Credentials:** B owns B's distinct initial password; A's new password is not shared. **Variables:** none required.
 
-**Operator/role:** **Actual Human Application Administrator B for the selected LOCAL/Test environment**. **Context:** GLOBAL `*`. **Browser:** B only.
-**Preconditions:** MT-03 passed, A remains signed in Browser A; B's new Test account still has `mustChangePassword=true`.
+**Start timestamp — Terminal A:** Record the following UTC value before beginning MT-04.
 
-**Steps**
+```zsh
+# Terminal A (macOS/zsh, repository root) - MT-04 START UTC
+date -u '+%Y-%m-%dT%H:%M:%SZ'
+```
 
-1. Open a **different normal browser profile B**, with no shared cookies or password-manager login from A.
-2. Open the Test entry URL and sign in with **B's own initial login/password**.
-3. Confirm mandatory **Change password** appears. Enter B's initial password in **Current password** and a **different new private password** in **New password** and **Confirm password**. Submit.
-4. Confirm return to **Sign in**. Sign in with B's new password.
-5. Open **Administration context** and select **Global administration** (`*`). From the app's navigation choose **Authentication** and **Authorization**; verify both load and show B's authorized global actor.
-6. Return to Browser A, refresh **Authentication Accounts**, and verify A **remains independently signed in**. Return to Browser B and refresh; B must remain signed in.
-7. From **Authentication Accounts**, use **Actor/account filter** to locate A and then B separately. Confirm distinct Account IDs and distinct GLOBAL Actor IDs/keys. Clear the filter between searches.
-8. Optionally verify B's initial password is rejected using a third *unauthenticated* browser profile, avoiding changes to A or B's authenticated sessions.
+1. In Terminal A check service reachability without revealing sessions:
 
-**Expected/PASS:** B completes forced change with B's own identity, independently manages GLOBAL Administration, A and B sessions coexist, and A/B identifiers differ.
-**FAIL/block:** Shared cookies/account, one administrator requiring the other's session, duplicate ID, Tenant-only access, or old B password still valid.
+   ```zsh
+   # Terminal A (macOS/zsh, repository root) - MT-04 command block
+   curl -fsS http://127.0.0.1:8080/api/v1/healthz >/dev/null && echo 'PASS: isolated backend healthz reachable'
+   curl -fsS http://127.0.0.1:5173/ >/dev/null && echo 'PASS: LOCAL frontend reachable'
+   ```
 
----
+   **Expected:** both PASS messages. If either fails, stop MT-04; do not switch to an unrelated deployed server.
+2. In a **different browser profile B**, open `http://localhost:5173`. Sign in as `ers3367.b@local.invalid` with B's own initial secret. **Expected:** mandatory **Change password**.
+3. B supplies initial password and a **new, distinct B-only** password twice; submit once. Confirm return to **Sign in**. Re-login with B's changed password. In the top context selector choose **Global administration**. Open **Authentication Accounts** and **Application Authorization** through the UI. Confirm B's active `APPLICATION_ADMIN` actor.
+4. In Browser A refresh the open protected page. **Expected:** A remains signed in and sees A's own actor. In Browser B refresh. **Expected:** B remains signed in as B, not A.
+5. On Authentication Accounts use **Actor/account filter** to locate `ers3367.a@local.invalid`, then clear and search `ers3367.b@local.invalid`. Record different Account IDs and GLOBAL Actor IDs. No filtering result is used to justify enrollment here (already completed).
+6. B's old initial password should be rejected **once** in a fresh unauthenticated Browser C profile; clear it afterward.
 
-### MT-04 — Execution Record (complete after this test)
+**Exit to MT-05:** Browser A/A and Browser B/B both independently signed in; B first-password-change complete; backend/frontend remain running. **PASS:** all steps including independent sessions and unique accounts. **FAIL:** shared sessions, cross-user actor, stale initial password accepted, unavailable Global Administration, or failure to load page.
 
-| Required field | Actual result / reference |
+**End timestamp — Terminal A:** After completing MT-04 actions and checking the exit state, record this UTC value.
+
+```zsh
+# Terminal A (macOS/zsh, repository root) - MT-04 END UTC
+date -u '+%Y-%m-%dT%H:%M:%SZ'
+```
+
+### MT-04 — Individual execution record (complete immediately after test)
+
+| Required evidence field | Actual value (fill in; do not leave blank) |
 |---|---|
-| Test ID | `MT-04` |
-| Execution environment and entry URL / host | _Enter actual LOCAL or Test environment and non-secret URL/host_ |
-| UTC started | _YYYY-MM-DD HH:MM:SS UTC_ |
-| UTC completed | _YYYY-MM-DD HH:MM:SS UTC_ |
-| Human(s) actually operating and role | _Enter names and roles (expected participants: Actual Human B)_ |
-| Actual Administration / Tenant context shown | _Enter value actually seen (expected test context: Global administration (`*`) — record actually displayed)_ |
-| Exact non-secret target login(s), Account ID(s), Actor ID(s) | _Enter verified identifiers (targets: B login/Account ID/Actor ID; A session independent)_ |
-| Observed behavior, including actual outcomes of critical steps | _Record results in enough detail to establish PASS/FAIL; Independent logins and forced change outcomes_ |
-| Non-secret audit event ID(s) and correlation ID(s) | _Enter actual IDs where applicable; otherwise N/A and reason_ |
-| Screenshot, terminal output, CI link, or other evidence reference | _Private evidence locator; scrub tokens, secrets, and session values_ |
-| Verdict | _PASS / FAIL / N/A — select one_ |
-| Defect link or ID | _Enter defect reference if observed; otherwise `None — no defect observed`_ |
-| N/A or blocked reason (if applicable) | _Specific reason and prerequisite / approval needed, or `N/A — test executed`_ |
-| Retest details (if applicable) | _Retest UTC time, new SHA/environment, corrected defect link, outcome; otherwise N/A_ |
+| Test ID / environment | `MT-04` / `LOCAL isolated` or explicit separately approved Test |
+| UTC start / UTC end (from this test’s Terminal A timestamp blocks) | _Start: ... / End: ..._ |
+| Actual operator/human and role | _Non-secret identity; A/B/operator as applicable_ |
+| Administration / Tenant context actually shown | _GLOBAL `*`, unauthenticated, offline N/A, 1Password, etc. — record observed_ |
+| Exact non-secret A/B login, Account IDs, Actor IDs, or affected resource | _Values; or N/A with reason_ |
+| Process state and DB path BEFORE / AFTER | _Expected vs observed listener, database, session and shell-state transition_ |
+| Actual terminal/UI outputs, including failures | _Record exact relevant PASS/FAIL strings and UI behavior_ |
+| Non-secret audit event ID / correlation | _Actual event ID / correlation, or N/A and reason; never token_ |
+| Screenshot, CI, log or private evidence reference | _Exact private locator; redact credentials and tokens_ |
+| Verdict (PASS / FAIL / BLOCKED / N/A) | _Choose one; N/A reason is mandatory_ |
+| Defect link / fix SHA / retest time | _Actual reference or None — no defect observed_ |
 
-**Do not mark PASS if evidence is missing or a required step was not performed.** A skipped or unauthorized operation must be reported as N/A/blocked with its reason; this does not automatically satisfy a mandatory acceptance gate.
+**A case is not PASS until its exit state and evidence have been confirmed.**
 
+## MT-05 — Canonical GLOBAL bindings, authorization and self-suspension protection
 
-## MT-05 — Canonical GLOBAL AccountActor binding and self-suspension safeguard
+**Operators:** A in Browser A; B in Browser B, each acting personally. **Starting state:** MT-04 PASS, both independent sessions live, backend/frontend still on the isolated DB. **Context:** both show **Global administration**, effective Tenant `*` and actor scope `APPLICATION`. **Credentials:** only current private A and B passwords; no shell secrets or new logins. **Variables:** none.
 
-**Operator/role:** First A in Browser A, then B in Browser B. **Context:** GLOBAL `*`; **do not select Tenant A, B, or `default` as an ordinary tenant**.
-**Preconditions:** MT-03 and MT-04 passed.
+**Start timestamp — Terminal A:** Record the following UTC value before beginning MT-05.
 
-**Steps**
+```zsh
+# Terminal A (macOS/zsh, repository root) - MT-05 START UTC
+date -u '+%Y-%m-%dT%H:%M:%SZ'
+```
 
-1. In Browser A choose **Authentication**. In **Actor/account filter**, enter A's exact login.
-2. In A's matching Authentication Account card, locate **Account identity boundary**. Verify: **Person binding** says none; **Tenant Actor bindings** says none; **Global Actor bindings** indicates exactly **1**.
-3. Under **Actors**, verify A's linked Actor is **Application-wide** and its **Actor ID** and **Actor Key** match the enrollment output. Record the non-secret ID/key. Verify **Account active** and the absence of **Password change required**.
-4. In A's account card find **Security suspend**. Because this is A's currently authenticated account, the button must be **disabled**. **Do not try to bypass it.**
-5. Clear the filter. Enter B's login; verify the equivalent single GLOBAL binding/no Person/no Tenant bindings and the exact B Actor ID/key.
-6. Using application navigation choose **Authorization**. In **Authenticated authorization context**, set **Selected Tenant ID** to `*` if not already shown. Verify the authenticated actor summary shows A's actor key, **scope `APPLICATION`**, and **Roles** containing `APPLICATION_ADMIN`.
-7. In the actor search/filter, find A and B by actor key. Inspect each active actor's listed role grants. Confirm each has an active `APPLICATION_ADMIN` grant for tenant `*`. **Do not click revoke, deactivate, or grant.**
-8. Repeat steps 1–7 in Browser B for B's own authenticated context and **disabled** self-suspension control.
+1. In Browser A open **Authentication → Authentication Accounts**. Filter `ers3367.a@local.invalid`. In **Account identity boundary** check: no Person binding, no Tenant Actor binding, exactly one GLOBAL binding, account active, password change no longer required. Record A's Account ID and actor key `ers3367-local-human-a` and Actor ID.
+2. On **A's own** card find **Security suspend**. **Expected:** disabled. Do **not** try to bypass the UI or suspend either administrator.
+3. Clear filter, find B and repeat the boundary checks. Verify B has a **different** Account ID, Actor ID and actor key `ers3367-local-human-b`.
+4. Navigate **Authorization → Application Authorization**. In authenticated authorization context verify selected Tenant ID `*`, current actor scope `APPLICATION`, role `APPLICATION_ADMIN`. Search each actor key and confirm an **active** `APPLICATION_ADMIN` grant scoped to `*` for each, without modifying any grant.
+5. Repeat steps 1–4 in Browser B, checking that B sees B's own signed-in actor and **B's own** Security suspend is disabled.
+6. Optional, read-only backend confirmation (required if UI omits actor details): in Terminal A run:
 
-**Expected/PASS:** Both account boundaries are canonical GLOBAL-only, each has `APPLICATION_ADMIN` for `*`, and neither human can security-suspend their own current account through the UI.
-**FAIL/block:** Missing grant, mixed Tenant/GLOBAL bindings, Person binding, wrong actor key, cross-account identity confusion, or working self-suspend control.
+   ```zsh
+   # Terminal A (macOS/zsh, repository root) - MT-05 command block
+   export MT_DB="$HOME/ers-3367-acceptance-13bca905/isolated.db"
+   python3 -B scripts/ers-two-human-admin-status.py --db "$MT_DB" \
+     --actor-key ers3367-local-human-a --actor-key ers3367-local-human-b
+   ```
 
----
+   **Expected:** `"ready": true`, each `"usable": true`, distinct nonempty `accountId` / `actorId`, each `"mustChangePassword": false`. If the command outputs `ready: false` mark FAIL.
 
-### MT-05 — Execution Record (complete after this test)
+**Exit to MT-06:** active separate global A/B sessions, canonical grants verified, no roles changed. **PASS:** all mandatory UI or supplemental status checks and disabled self-suspend controls. **FAIL:** cross-scope binding, absent grant, mismatched actor, active self-suspend or unexpected HTTP 500. **No cleanup** until MT-11.
 
-| Required field | Actual result / reference |
+**End timestamp — Terminal A:** After completing MT-05 actions and checking the exit state, record this UTC value.
+
+```zsh
+# Terminal A (macOS/zsh, repository root) - MT-05 END UTC
+date -u '+%Y-%m-%dT%H:%M:%SZ'
+```
+
+### MT-05 — Individual execution record (complete immediately after test)
+
+| Required evidence field | Actual value (fill in; do not leave blank) |
 |---|---|
-| Test ID | `MT-05` |
-| Execution environment and entry URL / host | _Enter actual LOCAL or Test environment and non-secret URL/host_ |
-| UTC started | _YYYY-MM-DD HH:MM:SS UTC_ |
-| UTC completed | _YYYY-MM-DD HH:MM:SS UTC_ |
-| Human(s) actually operating and role | _Enter names and roles (expected participants: Actual Human A, then Human B)_ |
-| Actual Administration / Tenant context shown | _Enter value actually seen (expected test context: Global administration (`*`) — record both actually displayed)_ |
-| Exact non-secret target login(s), Account ID(s), Actor ID(s) | _Enter verified identifiers (targets: Both Account IDs, GLOBAL Actor IDs/keys, grant IDs)_ |
-| Observed behavior, including actual outcomes of critical steps | _Record results in enough detail to establish PASS/FAIL; Self-suspend disabled and canonical binding/grant observations_ |
-| Non-secret audit event ID(s) and correlation ID(s) | _Enter actual IDs where applicable; otherwise N/A and reason_ |
-| Screenshot, terminal output, CI link, or other evidence reference | _Private evidence locator; scrub tokens, secrets, and session values_ |
-| Verdict | _PASS / FAIL / N/A — select one_ |
-| Defect link or ID | _Enter defect reference if observed; otherwise `None — no defect observed`_ |
-| N/A or blocked reason (if applicable) | _Specific reason and prerequisite / approval needed, or `N/A — test executed`_ |
-| Retest details (if applicable) | _Retest UTC time, new SHA/environment, corrected defect link, outcome; otherwise N/A_ |
+| Test ID / environment | `MT-05` / `LOCAL isolated` or explicit separately approved Test |
+| UTC start / UTC end (from this test’s Terminal A timestamp blocks) | _Start: ... / End: ..._ |
+| Actual operator/human and role | _Non-secret identity; A/B/operator as applicable_ |
+| Administration / Tenant context actually shown | _GLOBAL `*`, unauthenticated, offline N/A, 1Password, etc. — record observed_ |
+| Exact non-secret A/B login, Account IDs, Actor IDs, or affected resource | _Values; or N/A with reason_ |
+| Process state and DB path BEFORE / AFTER | _Expected vs observed listener, database, session and shell-state transition_ |
+| Actual terminal/UI outputs, including failures | _Record exact relevant PASS/FAIL strings and UI behavior_ |
+| Non-secret audit event ID / correlation | _Actual event ID / correlation, or N/A and reason; never token_ |
+| Screenshot, CI, log or private evidence reference | _Exact private locator; redact credentials and tokens_ |
+| Verdict (PASS / FAIL / BLOCKED / N/A) | _Choose one; N/A reason is mandatory_ |
+| Defect link / fix SHA / retest time | _Actual reference or None — no defect observed_ |
 
-**Do not mark PASS if evidence is missing or a required step was not performed.** A skipped or unauthorized operation must be reported as N/A/blocked with its reason; this does not automatically satisfy a mandatory acceptance gate.
+**A case is not PASS until its exit state and evidence have been confirmed.**
 
+## MT-06 — A issues B a one-use reset token; B recovers and prior session is revoked
 
-## MT-06 — Human A issues a single-use password reset for B
+**Operators:** issuer A in Browser A; recipient B in separate Browser C; Browser B holds B's *old* authenticated session. **Starting state:** MT-05 PASS; backend/frontend running, both A and B signed in. **Context:** A in Global administration (`*`); Browser C public **Reset password**, unauthenticated. **Credentials:** A and B each know their current credentials; B privately chooses a new replacement password. **Variables:** none.
 
-**Operator/role:** Issuer **Human A** using Browser A; recipient **Human B** using Browser C for reset. **Context:** A in GLOBAL Administration `*`; B's public reset screen is unauthenticated.
-**Preconditions:** Both humans completed first password changes; B is signed in Browser B with B's current password. Browser C has **no B session**. Have a private approved short-lived channel for the reset token. **Do not put token in a ticket.**
+**Start timestamp — Terminal A:** Record the following UTC value before beginning MT-06.
 
-**Steps**
+```zsh
+# Terminal A (macOS/zsh, repository root) - MT-06 START UTC
+date -u '+%Y-%m-%dT%H:%M:%SZ'
+```
 
-1. In Browser B verify B can currently open **Authentication Accounts**, and leave that authenticated tab open for subsequent revocation verification.
-2. In Browser A choose **Authentication**, then **Authentication Accounts**. In **Actor/account filter**, enter **B's exact login**.
-3. Verify the **matching card's login and Account ID** are B's, **not A's**. Do not act if ambiguous.
-4. On B's matching card, select **Issue reset token** **once**. A section **One-time reset token for [B login]** should appear, with an expiry and **Open reset page** link.
-5. Privately give **only B** the token or one-time reset URL. Do not screenshot it, copy it into a persistent note, or include it in a browser recording.
-6. In **Browser C**, open the provided reset link. Confirm the public page heading is **Reset password**; the token field should be prefilled when opened from a link. If exchanging just the token, navigate from the sign-in screen via **Reset password** and paste the token into the field. Use B's *new*, private replacement password in **New password** and **Confirm password**. Select **Reset password** **once**.
-7. Confirm the UI returns to **Sign in** with a reset-success indication for B's login.
-8. Return to **Browser B** and refresh the previously authenticated Authentication Accounts page. Verify B's old session can no longer access the protected page and B must sign in again.
-9. In Browser B sign in with B's **previous** password (the one used before step 6). Verify rejection. Sign in with B's **replacement** password, confirm GLOBAL Administration opens again.
-10. In Browser C, without saving the token in evidence, attempt to submit **the same consumed token** with a *different* new password via the public Reset password form. Confirm the app rejects it. Verify B's replacement password from step 6 still works. Then clear Browser C's token-bearing tab/history/clipboard using the approved secure process.
-11. In Browser A refresh Authentication Accounts; confirm **A remains authenticated** and did not lose A's own session.
+1. In Browser B refresh **Authentication Accounts** and confirm it still works as B; **leave this tab open** to test session revocation.
+2. In Browser A open **Authentication Accounts**, filter **exact** `ers3367.b@local.invalid`, and verify B's Account ID from MT-04. On **B's card only** select **Issue reset token** **once**. **Expected:** **One-time reset token for ers3367.b@local.invalid**, expiry and **Open reset page**. If the account ID is ambiguous, STOP without issuing.
+3. Pass the one-time token or reset link **only to B in an approved private channel**, not in Git/screenshots/chat/test record. B opens it in **Browser C**. On **Reset password** confirm the token is filled (or B pastes it manually). Before consuming, **duplicate this reset tab inside Browser C** for the later one-time-reuse check; keep both private.
+4. In the first Browser C tab, enter B's **different replacement password** twice, select **Reset password** once. **Expected:** success and return to Sign in. The other token tab is still available for **one** negative reuse check without storing the secret.
+5. In Browser B refresh the page which was authenticated before reset. **Expected:** session is invalidated and login is required. Attempt B's old password once (rejected), then sign in with B's replacement password (accepted). Confirm Global Administration still accessible.
+6. In Browser C's saved second reset tab submit the **same token once** with another distinct candidate password. **Expected:** failure (token already consumed). Do not repeat. Confirm B's successful replacement password still works. Close both token-bearing Browser C tabs and clear their history/clipboard according to your browser policy.
+7. Refresh Browser A's protected page. **Expected:** A remains authenticated, unrevoked.
+8. Record B Account ID, A issuing actor key, UTC time, one-use behavior, old-session rejection, non-secret evidence; audit event IDs are collected in MT-08. **Never save/reset token or passwords.**
 
-**Expected/PASS:** A can authorize issuance for B; one successful redemption only; B's prior session invalidated; old B password rejected; new B password effective; A unaffected.
-**FAIL/block:** HTTP 500, reset for wrong Account ID, reusable token, B session remains usable, previous B password works, A unexpectedly revoked, or token appears in evidence.
-**Record:** issuer A actor key, B Account ID, time, issuance/consumption audit event IDs (obtained in MT-08), PASS/FAIL. **Never record token.**
+**Exit to MT-07:** A still signed in; B signed in with newly recovered password; token consumed; B's previous session invalid. **PASS:** all assertions. **FAIL:** wrong target, multiple successful redemptions, B session alive, A invalidated, old password accepted, audit/HTTP errors. **No process teardown.**
 
----
+**End timestamp — Terminal A:** After completing MT-06 actions and checking the exit state, record this UTC value.
 
-### MT-06 — Execution Record (complete after this test)
+```zsh
+# Terminal A (macOS/zsh, repository root) - MT-06 END UTC
+date -u '+%Y-%m-%dT%H:%M:%SZ'
+```
 
-| Required field | Actual result / reference |
+### MT-06 — Individual execution record (complete immediately after test)
+
+| Required evidence field | Actual value (fill in; do not leave blank) |
 |---|---|
-| Test ID | `MT-06` |
-| Execution environment and entry URL / host | _Enter actual LOCAL or Test environment and non-secret URL/host_ |
-| UTC started | _YYYY-MM-DD HH:MM:SS UTC_ |
-| UTC completed | _YYYY-MM-DD HH:MM:SS UTC_ |
-| Human(s) actually operating and role | _Enter names and roles (expected participants: Issuer Human A; recipient Human B)_ |
-| Actual Administration / Tenant context shown | _Enter value actually seen (expected test context: A GLOBAL (`*`); B public reset context; record actual)_ |
-| Exact non-secret target login(s), Account ID(s), Actor ID(s) | _Enter verified identifiers (targets: Target B login/Account ID; issuer A Actor ID/key)_ |
-| Observed behavior, including actual outcomes of critical steps | _Record results in enough detail to establish PASS/FAIL; Issue and consumption event IDs; single-use and session revocation observations_ |
-| Non-secret audit event ID(s) and correlation ID(s) | _Enter actual IDs where applicable; otherwise N/A and reason_ |
-| Screenshot, terminal output, CI link, or other evidence reference | _Private evidence locator; scrub tokens, secrets, and session values_ |
-| Verdict | _PASS / FAIL / N/A — select one_ |
-| Defect link or ID | _Enter defect reference if observed; otherwise `None — no defect observed`_ |
-| N/A or blocked reason (if applicable) | _Specific reason and prerequisite / approval needed, or `N/A — test executed`_ |
-| Retest details (if applicable) | _Retest UTC time, new SHA/environment, corrected defect link, outcome; otherwise N/A_ |
+| Test ID / environment | `MT-06` / `LOCAL isolated` or explicit separately approved Test |
+| UTC start / UTC end (from this test’s Terminal A timestamp blocks) | _Start: ... / End: ..._ |
+| Actual operator/human and role | _Non-secret identity; A/B/operator as applicable_ |
+| Administration / Tenant context actually shown | _GLOBAL `*`, unauthenticated, offline N/A, 1Password, etc. — record observed_ |
+| Exact non-secret A/B login, Account IDs, Actor IDs, or affected resource | _Values; or N/A with reason_ |
+| Process state and DB path BEFORE / AFTER | _Expected vs observed listener, database, session and shell-state transition_ |
+| Actual terminal/UI outputs, including failures | _Record exact relevant PASS/FAIL strings and UI behavior_ |
+| Non-secret audit event ID / correlation | _Actual event ID / correlation, or N/A and reason; never token_ |
+| Screenshot, CI, log or private evidence reference | _Exact private locator; redact credentials and tokens_ |
+| Verdict (PASS / FAIL / BLOCKED / N/A) | _Choose one; N/A reason is mandatory_ |
+| Defect link / fix SHA / retest time | _Actual reference or None — no defect observed_ |
 
-**Do not mark PASS if evidence is missing or a required step was not performed.** A skipped or unauthorized operation must be reported as N/A/blocked with its reason; this does not automatically satisfy a mandatory acceptance gate.
+**A case is not PASS until its exit state and evidence have been confirmed.**
 
+## MT-07 — B issues A a one-use reset token (reverse recovery)
 
-## MT-07 — Human B performs the reverse reset for A
+**Operators:** issuer B in Browser B; recipient A in separate Browser C. **Starting state:** MT-06 PASS; A's previous authenticated session still active, B authenticated using B's recovered password. **Context:** B Global administration (`*`), A's Browser C unauthenticated public reset. **Credentials:** A independently chooses new A replacement password. **Variables:** none.
 
-**Operator/role:** Issuer **Human B** in Browser B; recipient **Human A** in Browser C. **Context:** GLOBAL Administration `*` for B.
-**Preconditions:** MT-06 passed; A remains signed in Browser A; B has B's recovered password.
+**Start timestamp — Terminal A:** Record the following UTC value before beginning MT-07.
 
-**Steps**
+```zsh
+# Terminal A (macOS/zsh, repository root) - MT-07 START UTC
+date -u '+%Y-%m-%dT%H:%M:%SZ'
+```
 
-1. In Browser A verify A's authenticated Administration page works and leave the session active.
-2. In Browser B choose **Authentication**, filter **Authentication Accounts** by **A's exact login**, and verify A's exact Account ID in the matching card.
-3. Select **Issue reset token** **once** on **A's card**, not B's.
-4. Transfer the newly issued token privately to **A**. In Browser C, use **Reset password** with that token and A's new private replacement password. Submit once. Confirm success and return to Sign in.
-5. Refresh Browser A's previously authenticated Administration page; confirm the earlier A session is rejected. Confirm A's former password no longer works and A's recovered password does.
-6. Try to redeem the **same** A reset token again in Browser C and confirm refusal. Confirm A's successfully recovered password continues working.
-7. Return to Browser B and refresh the protected Administration page; B must remain authenticated.
-8. Dispose of the token, browser tab/history, and clipboard copy. Do not record the secret.
+1. In Browser A refresh a protected page and confirm A's **old session works before this reset**; leave that tab open.
+2. In Browser B open **Authentication Accounts**, filter `ers3367.a@local.invalid`, verify A's previously recorded Account ID, select **Issue reset token** **once** on **A's card**.
+3. Privately transfer reset link/token to A. In unauthenticated Browser C open the public **Reset password** page, confirm correct token is populated, **duplicate the token tab** before submitting. In the first tab A enters A's new private replacement password twice and submits once. **Expected:** success back to Sign in.
+4. Refresh Browser A's previously authenticated page. **Expected:** it demands sign-in; A's prior session is revoked. Attempt previous A password once (rejected); sign in with A's replacement password (accepted). Verify A's GLOBAL Administration still works.
+5. In the second Browser C tab submit the same token once with another new candidate password. **Expected:** rejection. Verify the successful replacement password still authenticates A.
+6. Browser B refreshes protected page. **Expected:** B remains independently logged in. Close Browser C token tabs and clear transient history/clipboard.
+7. Record issuer B Actor ID, recipient A Account ID, UTC times and non-secret outcomes for audit correlation in MT-08.
 
-**Expected/PASS:** Recovery works in *both* directions with identical single-use, session-revocation, and issuer-attribution guarantees.
-**FAIL/block:** B cannot assist A, incorrect account target, token reuse, A's old session remains, or B loses their session.
+**Exit to MT-08:** A and B newly authenticated and independently usable, both reset tokens consumed once, previous recipient sessions revoked. **PASS:** full mirror of MT-06. **FAIL:** any unauthorized/reusable reset, wrong account, unexpected issuer-session revocation, or old-password success. **No cleanup until MT-11.**
 
----
+**End timestamp — Terminal A:** After completing MT-07 actions and checking the exit state, record this UTC value.
 
-### MT-07 — Execution Record (complete after this test)
+```zsh
+# Terminal A (macOS/zsh, repository root) - MT-07 END UTC
+date -u '+%Y-%m-%dT%H:%M:%SZ'
+```
 
-| Required field | Actual result / reference |
+### MT-07 — Individual execution record (complete immediately after test)
+
+| Required evidence field | Actual value (fill in; do not leave blank) |
 |---|---|
-| Test ID | `MT-07` |
-| Execution environment and entry URL / host | _Enter actual LOCAL or Test environment and non-secret URL/host_ |
-| UTC started | _YYYY-MM-DD HH:MM:SS UTC_ |
-| UTC completed | _YYYY-MM-DD HH:MM:SS UTC_ |
-| Human(s) actually operating and role | _Enter names and roles (expected participants: Issuer Human B; recipient Human A)_ |
-| Actual Administration / Tenant context shown | _Enter value actually seen (expected test context: B GLOBAL (`*`); A public reset context; record actual)_ |
-| Exact non-secret target login(s), Account ID(s), Actor ID(s) | _Enter verified identifiers (targets: Target A login/Account ID; issuer B Actor ID/key)_ |
-| Observed behavior, including actual outcomes of critical steps | _Record results in enough detail to establish PASS/FAIL; Issue and consumption event IDs; single-use and session revocation observations_ |
-| Non-secret audit event ID(s) and correlation ID(s) | _Enter actual IDs where applicable; otherwise N/A and reason_ |
-| Screenshot, terminal output, CI link, or other evidence reference | _Private evidence locator; scrub tokens, secrets, and session values_ |
-| Verdict | _PASS / FAIL / N/A — select one_ |
-| Defect link or ID | _Enter defect reference if observed; otherwise `None — no defect observed`_ |
-| N/A or blocked reason (if applicable) | _Specific reason and prerequisite / approval needed, or `N/A — test executed`_ |
-| Retest details (if applicable) | _Retest UTC time, new SHA/environment, corrected defect link, outcome; otherwise N/A_ |
+| Test ID / environment | `MT-07` / `LOCAL isolated` or explicit separately approved Test |
+| UTC start / UTC end (from this test’s Terminal A timestamp blocks) | _Start: ... / End: ..._ |
+| Actual operator/human and role | _Non-secret identity; A/B/operator as applicable_ |
+| Administration / Tenant context actually shown | _GLOBAL `*`, unauthenticated, offline N/A, 1Password, etc. — record observed_ |
+| Exact non-secret A/B login, Account IDs, Actor IDs, or affected resource | _Values; or N/A with reason_ |
+| Process state and DB path BEFORE / AFTER | _Expected vs observed listener, database, session and shell-state transition_ |
+| Actual terminal/UI outputs, including failures | _Record exact relevant PASS/FAIL strings and UI behavior_ |
+| Non-secret audit event ID / correlation | _Actual event ID / correlation, or N/A and reason; never token_ |
+| Screenshot, CI, log or private evidence reference | _Exact private locator; redact credentials and tokens_ |
+| Verdict (PASS / FAIL / BLOCKED / N/A) | _Choose one; N/A reason is mandatory_ |
+| Defect link / fix SHA / retest time | _Actual reference or None — no defect observed_ |
 
-**Do not mark PASS if evidence is missing or a required step was not performed.** A skipped or unauthorized operation must be reported as N/A/blocked with its reason; this does not automatically satisfy a mandatory acceptance gate.
+**A case is not PASS until its exit state and evidence have been confirmed.**
 
+## MT-08 — Enrollment and mutual-recovery audit attribution
 
-## MT-08 — Audit evidence: offline enrollment, issuer attribution, consumption
+**Operator:** named auditor plus A or B as authenticated GLOBAL administrator. **Starting state:** MT-07 PASS; isolated backend/frontend still running; A/B independently authenticated. **Database:** **same** LOCAL isolated DB; query a fresh read-only SQLite **snapshot**, not live Production data. **Credentials:** UI session only; no passwords or tokens in queries. **Shell variables:** defined below within this test.
 
-**Operator/role:** Existing LOCAL/Test Application Administrator or Human A/B with audit-read authorization. **Context:** GLOBAL `*`.
-**Preconditions:** MT-02, MT-06, MT-07 completed. Have non-secret A/B Account IDs and Actor IDs.
+**Start timestamp — Terminal A:** Record the following UTC value before beginning MT-08.
 
-**UI-first steps**
+```zsh
+# Terminal A (macOS/zsh, repository root) - MT-08 START UTC
+date -u '+%Y-%m-%dT%H:%M:%SZ'
+```
 
-1. Sign in as Human A or B and select **Global administration** in the context selector.
-2. Navigate using app navigation to **Audit logs** (page heading **Audit Log Viewer**).
-3. In **Authenticated authorization context**, set **Selected Tenant ID** to `*` if it is not already `*`.
-4. Under **Sensitive event filters**, leave **Operation** at **All sensitive and authorization events**: the current dropdown does **not** contain dedicated menu entries for the new human-enrollment/password-consumption operation names. Set **Target ID** to **B's Account ID**, select the form's filter/apply control, and examine the recent entries (newest first). Record the visible `authentication.password_reset_tokens.issue` and `authentication.password_reset_tokens.consume` event IDs/timestamps if returned.
-5. Repeat with **A's Account ID**. Record the same evidence from reverse recovery. If the event list limit/time window does not show all events, do not incorrectly mark them absent; use the **read-only offline-copy inspection below**.
-6. Where displayed, verify issuance events refer to the authenticated **issuing** administrator (A issued B; B issued A) and consumption events target the **recipient Account ID**. Consumption is attributed to a public reset-token holder, **not falsely recorded as the issuing human**.
+1. In Browser A open **Global administration → Audit logs / Audit Log Viewer** via displayed navigation. In **Sensitive event filters**, leave **Operation** at **All sensitive and authorization events** (the current dropdown may not include the exact new operation names). Filter **Target ID** to B's Account ID from MT-04, apply, and record non-secret event IDs if visible. Repeat for A's Account ID. **If the UI limits results, use the read-only snapshot below, not an invented operation option.**
+2. In **Terminal A** take a new SQLite-consistent copy (not a filesystem `cp` of a live WAL database):
 
-**Read-only copy inspection (only if the UI cannot expose all evidence; recommended at Gate 2):**
-
-7. Create a **private, SQLite-consistent inspection copy** of the selected environment database. For **LOCAL**, in Terminal A run the following while `MT_DB` still points to the isolated database:
-
-   ```bash
-   export MT_DIR="$HOME/ers-3367-mt-072a5628"
+   ```zsh
+   # Terminal A (macOS/zsh, repository root) - MT-08 command block
+   export MT_DIR="$HOME/ers-3367-acceptance-13bca905"
    export MT_DB="$MT_DIR/isolated.db"
-   test -f "$MT_DB" || { echo 'STOP: isolated DB missing'; exit 1; }
-   STATUS_DIR="$(mktemp -d "$MT_DIR/audit.XXXXXXXX")"
-   chmod 0700 "$STATUS_DIR"
-   sqlite3 "$MT_DB" ".backup '$STATUS_DIR/app.db'"
-   chmod 0600 "$STATUS_DIR/app.db"
-   test "$(sqlite3 "$STATUS_DIR/app.db" 'PRAGMA integrity_check;')" = 'ok' || { echo 'FAIL: invalid inspection copy'; exit 1; }
-   ```
-
-   For **deployed Test**, use the exact mounted-volume offline-copy Docker commands included in MT-02, taking a **fresh copy after the recovery tests** (the pre-login copy is stale). Never query, copy, or share the Production live SQLite/WAL files through an unsafe path. All copies require `0600` file and `0700` directory permissions.
-8. From the same host with `sqlite3` installed, enter:
-   ```bash
-   sqlite3 -readonly -header -column "$STATUS_DIR/app.db" "
-   SELECT id, occurred_at, account_id, actor_id, actor_scope,
-          correlation_id, operation, target_type, target_id, decision, reason
-   FROM authz_audit_logs
-   WHERE operation IN (
-     'authentication.human_admins.offline_enroll',
-     'authentication.password_reset_tokens.issue',
-     'authentication.password_reset_tokens.consume'
-   )
-   ORDER BY occurred_at DESC
-   LIMIT 60;
-   "
-   ```
-   **No `UPDATE`, `DELETE`, `INSERT`, or trigger changes.** Inspect only data belonging to the Test rehearsal.
-9. Confirm **two** `authentication.human_admins.offline_enroll` records, each targeting one enrolled Account ID and attributed to **offline operator evidence** (not a fabricated logged-in session); and a pair of issuance/consumption events for each completed mutual recovery. Compare the recorded approval/operator/backup references to the change ticket.
-10. Verify issuer audit attribution (A issued B; B issued A); consumption events target the correct account and carry a nonempty correlation ID. No raw password or secret token may be present in audit output. Record only event IDs and non-secret fields; delete the temporary inspection copy after recording the non-secret evidence: `rm -f "$STATUS_DIR/app.db"; rmdir "$STATUS_DIR"` (only if `STATUS_DIR` is the verified test-specific scratch directory).
-
-**Expected/PASS:** Correct two enrollment events, both distinct grant/identity targets, valid mutual-reset audit records, accurate issuer/recipient attribution, and no secret disclosure.
-**FAIL/block:** Missing audit, forged issuer identity, empty audit correlation where required, unexpected account target, or secret leakage. If the UI did not show all records but the approved read-only query did, record **UI limitation** separately rather than marking audit persistence failed.
-
----
-
-### MT-08 — Execution Record (complete after this test)
-
-| Required field | Actual result / reference |
-|---|---|
-| Test ID | `MT-08` |
-| Execution environment and entry URL / host | _Enter actual LOCAL or Test environment and non-secret URL/host_ |
-| UTC started | _YYYY-MM-DD HH:MM:SS UTC_ |
-| UTC completed | _YYYY-MM-DD HH:MM:SS UTC_ |
-| Human(s) actually operating and role | _Enter names and roles (expected participants: Human with audit-read authorization)_ |
-| Actual Administration / Tenant context shown | _Enter value actually seen (expected test context: Global administration (`*`) and approved read-only LOCAL/Test DB copy)_ |
-| Exact non-secret target login(s), Account ID(s), Actor ID(s) | _Enter verified identifiers (targets: A and B Account IDs / enrollment audit targets)_ |
-| Observed behavior, including actual outcomes of critical steps | _Record results in enough detail to establish PASS/FAIL; Enrollment, reset issuance/consumption event IDs; correlation IDs (non-secret)_ |
-| Non-secret audit event ID(s) and correlation ID(s) | _Enter actual IDs where applicable; otherwise N/A and reason_ |
-| Screenshot, terminal output, CI link, or other evidence reference | _Private evidence locator; scrub tokens, secrets, and session values_ |
-| Verdict | _PASS / FAIL / N/A — select one_ |
-| Defect link or ID | _Enter defect reference if observed; otherwise `None — no defect observed`_ |
-| N/A or blocked reason (if applicable) | _Specific reason and prerequisite / approval needed, or `N/A — test executed`_ |
-| Retest details (if applicable) | _Retest UTC time, new SHA/environment, corrected defect link, outcome; otherwise N/A_ |
-
-**Do not mark PASS if evidence is missing or a required step was not performed.** A skipped or unauthorized operation must be reported as N/A/blocked with its reason; this does not automatically satisfy a mandatory acceptance gate.
-
-
-## MT-09 — Independent 1Password access, no shared credentials
-
-**Operator/role:** Actual **Human A** and then actual **Human B**, each separately. **Context:** Authorized deployed Test 1Password vault(s); Production vault(s) later at the Production gate. **LOCAL-only note:** This test is not satisfied merely by a LOCAL SQLite rehearsal; record `N/A — deployed Test 1Password acceptance pending` until both authorized humans have actually verified their Test vault access. Do not use Production credentials for a LOCAL rehearsal.
-**Preconditions:** The approved access matrix specifies environment vault name(s), allowed item identifier(s), allowed deployment service-account scope, and which administrator has which access.
-
-**Steps**
-
-1. Human A opens **1Password** and signs in with **A's own 1Password identity/MFA**. Do not use B's login, shared human credential, or an automation service-account token.
-2. A selects the exact approved **Test** vault; locates the item by its recorded name; confirms it is accessible and sufficient for A's assigned operational recovery duty. **Do not copy or show secret values in evidence.**
-3. Record A's 1Password identity (non-secret identifier), vault/item names, timestamp, and access result. Sign out/lock A's vault.
-4. Human B independently opens 1Password with B's **own identity/MFA**; repeats the same documented access verification for B's assigned Test vault items. Record result; sign out/lock.
-5. The deployment operator cross-checks the environment-specific deployment service-account permissions against the approved scope. A Test deployment credential must **not** grant Production secrets access by accident.
-6. Confirm that any older **LastPass** references in the recovery runbook/ops configuration have a documented accepted disposition. **Do not claim 1Password readiness merely from passing a LastPass-oriented check.**
-7. Later at the authorized Production gate, repeat under Production vaults with separate Production access records—**do not test Production by copying secrets into Test or LOCAL**.
-
-**Expected/PASS:** Both humans can independently access their approved material without sharing their identity, secrets or MFA; environment separation preserved.
-**FAIL/block:** One human depends on the other's credentials; missing material; excessive scope; expired service access; or unresolved LastPass/1Password documentation/process conflict.
-
----
-
-### MT-09 — Execution Record (complete after this test)
-
-| Required field | Actual result / reference |
-|---|---|
-| Test ID | `MT-09` |
-| Execution environment and entry URL / host | _Enter actual LOCAL or Test environment and non-secret URL/host_ |
-| UTC started | _YYYY-MM-DD HH:MM:SS UTC_ |
-| UTC completed | _YYYY-MM-DD HH:MM:SS UTC_ |
-| Human(s) actually operating and role | _Enter names and roles (expected participants: Actual Human A and Human B individually)_ |
-| Actual Administration / Tenant context shown | _Enter value actually seen (expected test context: 1Password Test vaults; no ERS Tenant context)_ |
-| Exact non-secret target login(s), Account ID(s), Actor ID(s) | _Enter verified identifiers (targets: A/B 1Password identities, approved Test vault/item identifiers)_ |
-| Observed behavior, including actual outcomes of critical steps | _Record results in enough detail to establish PASS/FAIL; Independent access verification; environment separation evidence (no secrets)_ |
-| Non-secret audit event ID(s) and correlation ID(s) | _Enter actual IDs where applicable; otherwise N/A and reason_ |
-| Screenshot, terminal output, CI link, or other evidence reference | _Private evidence locator; scrub tokens, secrets, and session values_ |
-| Verdict | _PASS / FAIL / N/A — select one_ |
-| Defect link or ID | _Enter defect reference if observed; otherwise `None — no defect observed`_ |
-| N/A or blocked reason (if applicable) | _Specific reason and prerequisite / approval needed, or `N/A — test executed`_ |
-| Retest details (if applicable) | _Retest UTC time, new SHA/environment, corrected defect link, outcome; otherwise N/A_ |
-
-**Do not mark PASS if evidence is missing or a required step was not performed.** A skipped or unauthorized operation must be reported as N/A/blocked with its reason; this does not automatically satisfy a mandatory acceptance gate.
-
-
-## MT-10 — Preserve existing automation administrator and refuse unsafe self-action
-
-**Operator/role:** Human A and/or an existing authorized LOCAL or Test Application Administrator. **Context:** GLOBAL `*` in the chosen test environment.
-**Preconditions:** MT-01 recorded the actual pre-existing GLOBAL administrator/grant baseline (possibly zero rows), and MT-05 already checked disabled self-security-suspension. In LOCAL, MT-01 Path B is valid if no existing admin credentials are available.
-
-**Steps**
-
-1. **If MT-01 recorded a pre-existing administrator Account/Actor:** In Browser A open **Authentication Accounts** under GLOBAL Administration. Search the pre-existing administrator login and confirm the same Account ID, active status, and canonical Actor binding. **Do not suspend or issue a reset token for it.** If MT-01 recorded **zero** administrator grants, write `N/A — no pre-existing GLOBAL administrator in isolated database` for this preservation subcheck; do not invent or provision one.
-2. **If MT-01 recorded pre-existing grants:** Open **Authorization**, find each recorded actor and verify that its grants are unchanged. Record IDs and scopes. If the baseline was zero grants, note the preservation subcheck is N/A, and proceed with the mandatory A/B self-suspension and regression checks.
-3. Return to A's own Authentication Account card and verify the **Security suspend** action remains disabled for the signed-in Account. Repeat in B's own profile for B. **Do not attempt role revocation or deactivation against live Test or Production to prove final-admin safety.**
-4. On disposable LOCAL/Test databases only, confirm the passing Go regression suite includes duplicate login/actor refusal, create-only replay refusal, forced second-audit failure atomic rollback, and final-administrator protection. The intentionally induced database errors in those passing tests are expected negative-case evidence.
-5. Compare the chosen LOCAL/Test before/after baseline. **If any pre-existing administrator/grant existed**, require its original Account ID, Actor ID, and grants unchanged. If none existed, preserve MT-01 evidence of the zero baseline and mark only this preservation subcheck `N/A — no pre-existing admin`; A/B checks are still mandatory.
-
-**Expected/PASS:** Any existing administrator remains unchanged (or preservation subcheck documented N/A because baseline had none), A/B self-suspension disabled, unsafe operations refused by passing regressions.
-**FAIL/block:** Any pre-existing administrator changed or disabled, new A/B account linked to a pre-existing actor, self-suspend enabled, or any failed final-admin regression. Missing pre-existing admin credentials alone is not a FAIL for the LOCAL-only offline path.
-
----
-
-### MT-10 — Execution Record (complete after this test)
-
-| Required field | Actual result / reference |
-|---|---|
-| Test ID | `MT-10` |
-| Execution environment and entry URL / host | _Enter actual LOCAL or Test environment and non-secret URL/host_ |
-| UTC started | _YYYY-MM-DD HH:MM:SS UTC_ |
-| UTC completed | _YYYY-MM-DD HH:MM:SS UTC_ |
-| Human(s) actually operating and role | _Enter actual Human A/B tester; pre-existing administrator only if available_ |
-| Actual Administration / Tenant context shown | _Enter value actually seen (expected test context: Global administration (`*`) — record actually displayed)_ |
-| Exact non-secret target login(s), Account ID(s), Actor ID(s) | _Enter A/B IDs and any existing admin IDs from MT-01, or N/A if no prior admin was present_ |
-| Observed behavior, including actual outcomes of critical steps | _Record results in enough detail to establish PASS/FAIL; Preserved actor/grant and disabled self-suspend evidence_ |
-| Non-secret audit event ID(s) and correlation ID(s) | _Enter actual IDs where applicable; otherwise N/A and reason_ |
-| Screenshot, terminal output, CI link, or other evidence reference | _Private evidence locator; scrub tokens, secrets, and session values_ |
-| Verdict | _PASS / FAIL / N/A — select one_ |
-| Defect link or ID | _Enter defect reference if observed; otherwise `None — no defect observed`_ |
-| N/A or blocked reason (if applicable) | _Specific reason and prerequisite / approval needed, or `N/A — test executed`_ |
-| Retest details (if applicable) | _Retest UTC time, new SHA/environment, corrected defect link, outcome; otherwise N/A_ |
-
-**Do not mark PASS if evidence is missing or a required step was not performed.** A skipped or unauthorized operation must be reported as N/A/blocked with its reason; this does not automatically satisfy a mandatory acceptance gate.
-
-
-## MT-11 — Repeatable release-state verification, cleanup, and sign-off
-
-**Operator/role:** LOCAL test operator or deployed Test release operator plus both human administrators. **Context:** GLOBAL `*` in the chosen LOCAL isolated or deployed Test environment; no Production database modifications.
-
-**Steps**
-
-1. After MT-03–MT-10, confirm Human A and Human B can **separately sign in again** with their latest changed/recovered passwords, without issuing additional reset tokens. Each must open **Authentication** and **Authorization** under GLOBAL `*`.
-2. Create a **fresh** private, SQLite-consistent inspection copy after all password changes. In **LOCAL Terminal A**, confirm `MT_DB`, `ACTOR_A`, and `ACTOR_B` (set during MT-02) are defined, then run:
-   ```bash
-   export MT_DIR="$HOME/ers-3367-mt-072a5628"
-   export MT_DB="$MT_DIR/isolated.db"
-   # Actor keys MUST match the exact non-secret values recorded in MT-02.
-   # In a new terminal, obtain those values from the MT-02 execution record.
-   if [ -z "${ACTOR_A:-}" ]; then
-     printf 'Exact Human A actor key from MT-02 execution record: '
-     IFS= read -r ACTOR_A
+   export AUDIT_DIR="$MT_DIR/audit-inspection"
+   if [ -e "$AUDIT_DIR" ]; then
+     echo 'STOP: inspection directory already exists; inspect before reuse'
+   else
+     mkdir -m 700 "$AUDIT_DIR"
+     sqlite3 "$MT_DB" ".backup '$AUDIT_DIR/app.db'"
+     chmod 600 "$AUDIT_DIR/app.db"
+     printf 'snapshot_integrity=%s\n' "$(sqlite3 "$AUDIT_DIR/app.db" 'PRAGMA integrity_check;')"
    fi
-   if [ -z "${ACTOR_B:-}" ]; then
-     printf 'Exact Human B actor key from MT-02 execution record: '
-     IFS= read -r ACTOR_B
+   ```
+
+   **Expected:** `snapshot_integrity=ok`. If existing directory or incorrect output, STOP; do not delete unknown files to retry.
+3. Run a **parameterized read-only audit summary**. It prints event IDs and non-secret correlation IDs, never reset-token values:
+
+   ```zsh
+   # Terminal A (macOS/zsh, repository root) - MT-08 command block
+   export AUDIT_DB="$HOME/ers-3367-acceptance-13bca905/audit-inspection/app.db"
+   python3 - <<'PYAUDIT'
+   import sqlite3,os
+   from pathlib import Path
+   from urllib.parse import quote
+   p=Path(os.environ['AUDIT_DB']).resolve(strict=True)
+   assert p.name=='app.db' and p.parent.name=='audit-inspection'
+   con=sqlite3.connect('file:'+quote(str(p),safe='/')+'?mode=ro',uri=True)
+   ops=('authentication.human_admins.offline_enroll','authentication.password_reset_tokens.issue','authentication.password_reset_tokens.consume')
+   for op in ops:
+       rows=con.execute('SELECT id,occurred_at,actor_id,correlation_id,target_id FROM authz_audit_logs WHERE operation=? ORDER BY occurred_at,id',(op,)).fetchall()
+       print('operation=',op,'count=',len(rows))
+       for event_id,at,issuer,corr,target in rows:
+           print('  event=',event_id,'at=',at,'actor=',issuer,'correlation=',corr or '<empty>','target=',target)
+       if len(rows)<(2 if op==ops[0] else 2): raise SystemExit('FAIL: missing expected audit events')
+   con.close()
+   print('PASS: enrollment and both recovery directions have audit entries')
+   PYAUDIT
+   ```
+
+   **Expected:** 2 enrollment events and **at least 2** reset-issue events and **at least 2** reset-consume events; explicit PASS. Record actual IDs and confirm recipient Account targets correspond A and B, issuer attribution A→B and B→A, consumption audit identifies a public token holder rather than impersonating either issuer; consumption correlations must be nonempty. Missing or mismatched attribution is FAIL even if count passes.
+4. **Only after recording non-secret events**, remove the known snapshot files (not the primary test DB):
+
+   ```zsh
+   # Terminal A (macOS/zsh, repository root) - MT-08 command block
+   export AUDIT_DIR="$HOME/ers-3367-acceptance-13bca905/audit-inspection"
+   if [ "$AUDIT_DIR" = "$HOME/ers-3367-acceptance-13bca905/audit-inspection" ] && [ -f "$AUDIT_DIR/app.db" ]; then
+     rm -f "$AUDIT_DIR/app.db"
+     rmdir "$AUDIT_DIR"
+     echo 'PASS: audit inspection copy removed'
+   else
+     echo 'STOP: audit snapshot cleanup path/state unexpected'
    fi
-   export ACTOR_A ACTOR_B
-   : "${ACTOR_A:?STOP: missing MT-02 actor A key}"
-   : "${ACTOR_B:?STOP: missing MT-02 actor B key}"
-   test "$ACTOR_A" != "$ACTOR_B" || { echo 'STOP: actor keys must differ'; exit 1; }
-   STATUS_DIR="$(mktemp -d "$MT_DIR/final-status.XXXXXXXX")"
-   chmod 0700 "$STATUS_DIR"
-   sqlite3 "$MT_DB" ".backup '$STATUS_DIR/app.db'"
-   chmod 0600 "$STATUS_DIR/app.db"
-   python3 -B scripts/ers-two-human-admin-status.py \
-     --db "$STATUS_DIR/app.db" --actor-key "$ACTOR_A" --actor-key "$ACTOR_B"
-   rm -f "$STATUS_DIR/app.db"
-   rmdir "$STATUS_DIR"
    ```
-   For **deployed Test**, use the deployed Test offline-copy procedure within MT-02 with a **new** private copy; do not reuse the pre-login snapshot.
-   **Create a fresh consistent copy after the password changes.** Verify `ready=true`, `usable=true` twice, distinct IDs, and now `mustChangePassword=false` for both. Delete the copied DB and temporary directory securely after recording the non-secret result. Do not reuse the pre-login snapshot.
-3. With the Test service restored, run:
-   ```bash
-   docker ps -a --filter 'name=ers-3367-' --format '{{.ID}} {{.Names}}'
+
+**Exit to MT-09:** A/B sessions still running; no snapshot left; non-secret audit IDs and attribution recorded. **PASS:** required events, correlation/targets, no secrets, cleanup. **FAIL:** absent events, incorrect A/B target or identity, empty required correlation, unsafe copy, or leaked secrets.
+
+**End timestamp — Terminal A:** After completing MT-08 actions and checking the exit state, record this UTC value.
+
+```zsh
+# Terminal A (macOS/zsh, repository root) - MT-08 END UTC
+date -u '+%Y-%m-%dT%H:%M:%SZ'
+```
+
+### MT-08 — Individual execution record (complete immediately after test)
+
+| Required evidence field | Actual value (fill in; do not leave blank) |
+|---|---|
+| Test ID / environment | `MT-08` / `LOCAL isolated` or explicit separately approved Test |
+| UTC start / UTC end (from this test’s Terminal A timestamp blocks) | _Start: ... / End: ..._ |
+| Actual operator/human and role | _Non-secret identity; A/B/operator as applicable_ |
+| Administration / Tenant context actually shown | _GLOBAL `*`, unauthenticated, offline N/A, 1Password, etc. — record observed_ |
+| Exact non-secret A/B login, Account IDs, Actor IDs, or affected resource | _Values; or N/A with reason_ |
+| Process state and DB path BEFORE / AFTER | _Expected vs observed listener, database, session and shell-state transition_ |
+| Actual terminal/UI outputs, including failures | _Record exact relevant PASS/FAIL strings and UI behavior_ |
+| Non-secret audit event ID / correlation | _Actual event ID / correlation, or N/A and reason; never token_ |
+| Screenshot, CI, log or private evidence reference | _Exact private locator; redact credentials and tokens_ |
+| Verdict (PASS / FAIL / BLOCKED / N/A) | _Choose one; N/A reason is mandatory_ |
+| Defect link / fix SHA / retest time | _Actual reference or None — no defect observed_ |
+
+**A case is not PASS until its exit state and evidence have been confirmed.**
+
+## MT-09 — Independent 1Password custody (LOCAL N/A; deployed Test/Production separately required)
+
+**Operators:** actual Human A and Human B, independently, plus approved access reviewer. **Starting state:** MT-08 PASS; LOCAL database and A/B sessions unaffected. **Context:** 1Password environment-specific vaults; **no ERS tenant context**. **Credentials:** each human's *own* 1Password identity and MFA; never share an account. **Shell variables:** none.
+
+**LOCAL path L (the current isolated rehearsal):**
+
+**Start timestamp — Terminal A:** Record the following UTC value before beginning MT-09.
+
+```zsh
+# Terminal A (macOS/zsh, repository root) - MT-09 START UTC
+date -u '+%Y-%m-%dT%H:%M:%SZ'
+```
+
+1. Verify **you are still working only with LOCAL** (`http://localhost:5173` and disposable `isolated.db` from MT-01). **Do not** log into Production 1Password vaults just to satisfy a LOCAL test.
+2. Record `MT-09 LOCAL subcheck: N/A — real deployed Test and Production 1Password custody cannot be validated from disposable LOCAL accounts`. No fake PASS is permitted. A/B ERS browser sessions remain untouched.
+3. Record pending evidence owner, Test vault approval reference, and later Test date. **The deployed Test and Production readiness gates stay OPEN** until the next path is separately performed.
+
+**Deployed Test Path T (only on the explicitly approved Test gate):**
+
+1. Have the approved Test access matrix in hand: exact vault names, item names, environment restrictions and reviewer. If unavailable, **BLOCKED**.
+2. Human A signs into **1Password using A's own identity/MFA**, opens the approved Test vault and the named required recovery/deployment item without disclosing its secret. Reviewer records only A identity, item/vault identifiers and UTC observation. A locks/signs out.
+3. Human B repeats independently under B's *different* 1Password identity/MFA and the approved Test permissions. Reviewer records B identity, vault/item identifiers and UTC observation; B locks/signs out.
+4. Reviewer verifies the Test deployment service-account authorization **does not grant Production secrets access**, and resolves any older LastPass-oriented documentation discrepancy before marking Test readiness.
+5. **Expected/PASS Test:** individually controlled access for both humans, least-privilege separation and non-secret recorded evidence. **FAIL/BLOCK:** shared login/MFA, inaccessible material, excessive Test→Production scope, unresolved custody discrepancy. **Production vault acceptance repeats later under approved Production operations; do not reuse Test evidence as Production proof.**
+
+**Exit to MT-10:** in LOCAL, N/A properly recorded with Test follow-up outstanding; A/B ERS sessions unchanged. MT-09 N/A does **not** fail isolated LOCAL functional rehearsal, but **blocks claiming full Production readiness**.
+
+**End timestamp — Terminal A:** After completing MT-09 actions and checking the exit state, record this UTC value.
+
+```zsh
+# Terminal A (macOS/zsh, repository root) - MT-09 END UTC
+date -u '+%Y-%m-%dT%H:%M:%SZ'
+```
+
+### MT-09 — Individual execution record (complete immediately after test)
+
+| Required evidence field | Actual value (fill in; do not leave blank) |
+|---|---|
+| Test ID / environment | `MT-09` / `LOCAL isolated` or explicit separately approved Test |
+| UTC start / UTC end (from this test’s Terminal A timestamp blocks) | _Start: ... / End: ..._ |
+| Actual operator/human and role | _Non-secret identity; A/B/operator as applicable_ |
+| Administration / Tenant context actually shown | _GLOBAL `*`, unauthenticated, offline N/A, 1Password, etc. — record observed_ |
+| Exact non-secret A/B login, Account IDs, Actor IDs, or affected resource | _Values; or N/A with reason_ |
+| Process state and DB path BEFORE / AFTER | _Expected vs observed listener, database, session and shell-state transition_ |
+| Actual terminal/UI outputs, including failures | _Record exact relevant PASS/FAIL strings and UI behavior_ |
+| Non-secret audit event ID / correlation | _Actual event ID / correlation, or N/A and reason; never token_ |
+| Screenshot, CI, log or private evidence reference | _Exact private locator; redact credentials and tokens_ |
+| Verdict (PASS / FAIL / BLOCKED / N/A) | _Choose one; N/A reason is mandatory_ |
+| Defect link / fix SHA / retest time | _Actual reference or None — no defect observed_ |
+
+**A case is not PASS until its exit state and evidence have been confirmed.**
+
+## MT-10 — Protect existing administrators and reject unsafe self-action
+
+**Operators:** A in Browser A, B in Browser B; named LOCAL operator checks regression evidence. **Starting state:** MT-09 recorded; A/B sessions still active; primary acceptance DB was constructed fresh by MT-01 with **zero** pre-existing accounts. **Context:** GLOBAL `*`. **Credentials:** own A/B sessions only. **Shell variables:** none.
+
+**Start timestamp — Terminal A:** Record the following UTC value before beginning MT-10.
+
+```zsh
+# Terminal A (macOS/zsh, repository root) - MT-10 START UTC
+date -u '+%Y-%m-%dT%H:%M:%SZ'
+```
+
+1. **Existing-automation preservation subcheck:** Read MT-01 `accounts=0`, `actors=0` evidence. Because this newly constructed disposable database had **no** previous automation administrator, record `N/A — zero pre-existing administrators in the fresh LOCAL baseline`. Do not invent or provision an E2E admin to manufacture a preservation test. Preservation remains covered by LOCAL/CI regressions and must be separately inspected in the deployed Test acceptance where pre-existing identities exist.
+2. In Browser A → **Authentication Accounts**, search A's **own** account; confirm **Security suspend** is disabled. In Browser B search B's own account; confirm the corresponding button is also disabled. **Do not attempt suspension or role revocation** of real admins.
+3. From Terminal A, rerun the focused automated negative-case suite against the repository commit (this does not operate on the acceptance DB):
+
+   ```zsh
+   # Terminal A (macOS/zsh, repository root) - MT-10 command block
+   make two-human-administrators-check
    ```
-   Expected: **no rows** for test-created enrollment/status containers. If a named test container remains, stop/remove only that **recorded container ID**, not unrelated containers or deployment services.
-4. If a **temporary** Test/LOCAL backend was created solely for this test and is no longer needed, stop that exact container/process and verify port 8080 is free:
-   ```bash
+
+   **Expected:** Python credential input/status regressions PASS; Go authentication and enrollment packages PASS. Intentionally injected SQLite constraint-failure messages inside passing negative tests are expected; any `FAIL` line or nonzero process exit is blocking. Record the exact SHA and command log reference; do not assert an unexecuted test passed.
+4. Confirm **no new LOCAL grants** were issued outside the two humans by read-only query:
+
+   ```zsh
+   # Terminal A (macOS/zsh, repository root) - MT-10 command block
+   export MT_DB="$HOME/ers-3367-acceptance-13bca905/isolated.db"
+   sqlite3 "$MT_DB" 'SELECT COUNT(*) FROM auth_user_accounts;'
+   sqlite3 "$MT_DB" "SELECT COUNT(*) FROM authz_actor_role_grants g JOIN authz_roles r ON r.id=g.role_id WHERE r.code='APPLICATION_ADMIN' AND g.tenant_id='*' AND g.active=1;"
+   ```
+
+   **Expected:** prints `2` then `2` on this fresh isolated baseline. Any unexpected count is FAIL and requires investigation; do not delete accounts to force it.
+
+**Exit to MT-11:** two intact A/B sessions, two accounts/grants, no administrator action performed. **PASS:** self-suspension controls disabled, negative-case regressions pass, correct counts; preservation subcheck N/A with concrete reason. **BLOCK:** any self-suspension enabled, failed regression, unexpected account/grant or unexplained change.
+
+**End timestamp — Terminal A:** After completing MT-10 actions and checking the exit state, record this UTC value.
+
+```zsh
+# Terminal A (macOS/zsh, repository root) - MT-10 END UTC
+date -u '+%Y-%m-%dT%H:%M:%SZ'
+```
+
+### MT-10 — Individual execution record (complete immediately after test)
+
+| Required evidence field | Actual value (fill in; do not leave blank) |
+|---|---|
+| Test ID / environment | `MT-10` / `LOCAL isolated` or explicit separately approved Test |
+| UTC start / UTC end (from this test’s Terminal A timestamp blocks) | _Start: ... / End: ..._ |
+| Actual operator/human and role | _Non-secret identity; A/B/operator as applicable_ |
+| Administration / Tenant context actually shown | _GLOBAL `*`, unauthenticated, offline N/A, 1Password, etc. — record observed_ |
+| Exact non-secret A/B login, Account IDs, Actor IDs, or affected resource | _Values; or N/A with reason_ |
+| Process state and DB path BEFORE / AFTER | _Expected vs observed listener, database, session and shell-state transition_ |
+| Actual terminal/UI outputs, including failures | _Record exact relevant PASS/FAIL strings and UI behavior_ |
+| Non-secret audit event ID / correlation | _Actual event ID / correlation, or N/A and reason; never token_ |
+| Screenshot, CI, log or private evidence reference | _Exact private locator; redact credentials and tokens_ |
+| Verdict (PASS / FAIL / BLOCKED / N/A) | _Choose one; N/A reason is mandatory_ |
+| Defect link / fix SHA / retest time | _Actual reference or None — no defect observed_ |
+
+**A case is not PASS until its exit state and evidence have been confirmed.**
+
+## MT-11 — Independent final login, read-only status, evidence, and safe teardown
+
+**Operators:** A and B separately plus named test operator. **Starting state:** MT-10 complete; backend Terminal B and frontend Terminal C still run against isolated DB; both A/B have changed/recovered passwords, browsers A/B independent. **Context:** GLOBAL `*` and LOCAL host. **Credentials:** each human's latest private credential; never use initial or intermediate passwords. **Shell variables:** defined anew below.
+
+**Start timestamp — Terminal A:** Record the following UTC value before beginning MT-11.
+
+```zsh
+# Terminal A (macOS/zsh, repository root) - MT-11 START UTC
+date -u '+%Y-%m-%dT%H:%M:%SZ'
+```
+
+1. **Final independent sign-in:** In Browser A sign out and back in using A's latest password. In Browser B sign out and back in using B's latest password. In each, choose **Global administration**, open **Authentication Accounts** and **Application Authorization**, and record displayed actor. **Expected:** both independent accounts usable without forced password change or new reset. If either needs recovery again, STOP and investigate rather than casually issuing more reset tokens.
+2. In Terminal A verify final canonical status against the correct isolated database:
+
+   ```zsh
+   # Terminal A (macOS/zsh, repository root) - MT-11 command block
+   export MT_DB="$HOME/ers-3367-acceptance-13bca905/isolated.db"
+   python3 -B scripts/ers-two-human-admin-status.py --db "$MT_DB" \
+     --actor-key ers3367-local-human-a --actor-key ers3367-local-human-b
+   printf 'integrity_check=%s\n' "$(sqlite3 "$MT_DB" 'PRAGMA integrity_check;')"
+   printf 'foreign_key_check=%s\n' "$(sqlite3 "$MT_DB" 'PRAGMA foreign_key_check;')"
+   ```
+
+   **Expected:** `"ready": true`, both `"usable": true`, two different Account/Actor IDs and both `"mustChangePassword": false`; `integrity_check=ok`, `foreign_key_check=` empty.
+3. **Stop only the processes created by this LOCAL test:** In Terminal B press **Ctrl+C** and wait for backend to exit; in Terminal C press **Ctrl+C** and wait for frontend to exit. Then in Terminal A:
+
+   ```zsh
+   # Terminal A (macOS/zsh, repository root) - MT-11 command block
    lsof -nP -iTCP:8080 -sTCP:LISTEN
-   ```
-   Expected: no listener **only if** the temporary test backend is supposed to be stopped. If the shared Test deployment intentionally remains running, its port listener is expected and **must not be killed**.
-5. Confirm private temporary SQLite files and token-bearing Browser C tabs/history/clipboard are cleaned according to policy. Confirm no credentials, token values, or Production secrets entered logs, screenshots or Git.
-6. Record all case verdicts, Test deployment SHA/image ID, backup verification, restore/rehearsal references, 1Password access evidence, unresolved discrepancies, and both human sign-offs.
-
-**Expected/PASS:** Both humans usable with no forced password change pending; test artifacts cleaned; deployment remains healthy; release evidence complete.
-**FAIL/block:** Any administrator unusable, missing required evidence, leftover Test container/secret, or cleanup that could destroy unrelated operational state.
-
----
-
-### MT-11 — Required LOCAL cleanup / teardown (complete before recording PASS)
-
-1. After both administrators have completed MT-11 independent re-login/status checks, stop **Terminal B** backend (Ctrl+C). Stop Terminal C frontend (Ctrl+C) if created exclusively for this rehearsal. Confirm `lsof -nP -iTCP:8080 -sTCP:LISTEN` shows no leftover ERS listener (also inspect 5173 if you stopped the frontend). Do not kill unrelated listeners.
-2. No Docker container was created by this LOCAL procedure; nevertheless, if Docker is running, check `docker ps -a --filter 'name=ers-3367-' --format '{{.ID}} {{.Names}}'`. Only remove an **identified, test-created** ERS 33.6.7 container left behind from another test; leave unrelated containers alone.
-3. Preserve the isolated DB while testing or investigating failures. Once complete, record final test verdicts and the evidence references **without copying the SQLite database into Git, tickets, or chat**.
-4. When you explicitly decide to discard the isolated data, run from the repository root:
-
-   ```bash
-   MT_DIR="$HOME/ers-3367-mt-072a5628"
-   test "$MT_DIR" = "$HOME/ers-3367-mt-072a5628" || { echo 'STOP: unexpected directory'; exit 1; }
-   ls -la "$MT_DIR"
-   # ONLY after confirming no test process still uses this database and you no longer need evidence:
-   rm -f "$MT_DIR/isolated.db" "$MT_DIR/isolated.db-wal" "$MT_DIR/isolated.db-shm" "$MT_DIR/isolated.db-journal"
-   rm -f "$MT_DIR/pre-enrollment.db" "$MT_DIR/pre-enrollment.db-wal" "$MT_DIR/pre-enrollment.db-shm" "$MT_DIR/pre-enrollment.db-journal"
-   rmdir "$MT_DIR"
+   lsof -nP -iTCP:5173 -sTCP:LISTEN
+   lsof -nP "$HOME/ers-3367-acceptance-13bca905/isolated.db"
    ```
 
-   This removes **only** the specifically named disposable test files; never run these commands against the normal LOCAL database. Follow your organization's secure storage/deletion practice when disposing of credential-bearing SQLite copies.
-5. Restore normal LOCAL operation using your ordinary `make local-backend` process **without** the temporary `ERS_DATABASE_PATH` override. Verify its startup `DATABASE_PATH` once more matches your original normal LOCAL database.
+   **Expected:** **no output** for all three after *our* processes have stopped. A remaining listener/file handle is not permission to kill arbitrary processes—identify owner first, then resolve through the original terminal.
+4. **Docker cleanup:** The LOCAL path created **zero Docker containers**; if Docker Desktop is installed/running, perform a read-only check (do not start Docker merely for this):
 
+   ```zsh
+   # Terminal A (macOS/zsh, repository root) - MT-11 command block
+   if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
+     docker ps -a --filter 'name=ers-3367-' --format '{{.ID}} {{.Names}}'
+   else
+     echo 'N/A: Docker daemon unavailable and no LOCAL test containers were created'
+   fi
+   ```
 
+   **Expected:** no test-created container rows; or explicit N/A. If any row appears, inspect it and remove only a container **provably created by this suite**, never unrelated containers or deployed services. Verify relevant ports have been released.
+5. **Keep the acceptance database and backup** until evidence review is signed off; do not run a deletion command as part of PASS. Confirm no secret-token tab remains in Browser C; securely clear Browser C reset history/clipboard, close private profiles when evidence capture is complete. Confirm no credentials, SQLite database files or token URLs appear in Git, screenshots, logs, or ticket attachments.
+6. Enter UTC completion time; review **all 12 MT execution records**. Mark any executed failure FAIL; any deferred mandatory release gate BLOCKED, with its owner and schedule. LOCAL MT-09 is N/A with reason; Test and Production gates are **not yet accepted** from LOCAL evidence alone. Record the updated feature-branch commit SHA and passing CI, if a docs patch has been committed.
 
-### MT-11 — Execution Record (complete after this test)
+**Exit state:** no test-created LOCAL processes/containers, isolated credential-bearing database preserved privately for sign-off, A/B usability verified immediately before shutdown. **PASS LOCAL teardown:** independent sign-in, status and SQLite checks, clean process/container status, evidence complete. **FAIL/BLOCK:** active test writer, wrong DB, unusable human admin, leaked secret, untracked container, or missing evidence. **Optional later disposal:** only after explicit review/approval, manually identify the exact test directory and contents; do not delete it as part of MT-11 or while investigating defects.
 
-| Required field | Actual result / reference |
+**End timestamp — Terminal A:** After completing MT-11 actions and checking the exit state, record this UTC value.
+
+```zsh
+# Terminal A (macOS/zsh, repository root) - MT-11 END UTC
+date -u '+%Y-%m-%dT%H:%M:%SZ'
+```
+
+### MT-11 — Individual execution record (complete immediately after test)
+
+| Required evidence field | Actual value (fill in; do not leave blank) |
 |---|---|
-| Test ID | `MT-11` |
-| Execution environment and entry URL / host | _Enter actual LOCAL or Test environment and non-secret URL/host_ |
-| UTC started | _YYYY-MM-DD HH:MM:SS UTC_ |
-| UTC completed | _YYYY-MM-DD HH:MM:SS UTC_ |
-| Human(s) actually operating and role | _Enter names and roles (expected participants: Test release operator; both humans individually)_ |
-| Actual Administration / Tenant context shown | _Enter value actually seen (expected test context: selected LOCAL/Test Global administration (`*`) and cleanup host)_ |
-| Exact non-secret target login(s), Account ID(s), Actor ID(s) | _Enter verified identifiers (targets: A/B Account IDs; Test image/container/volume IDs)_ |
-| Observed behavior, including actual outcomes of critical steps | _Record results in enough detail to establish PASS/FAIL; Independent final login, status, cleanup, and sign-off evidence_ |
-| Non-secret audit event ID(s) and correlation ID(s) | _Enter actual IDs where applicable; otherwise N/A and reason_ |
-| Screenshot, terminal output, CI link, or other evidence reference | _Private evidence locator; scrub tokens, secrets, and session values_ |
-| Verdict | _PASS / FAIL / N/A — select one_ |
-| Defect link or ID | _Enter defect reference if observed; otherwise `None — no defect observed`_ |
-| N/A or blocked reason (if applicable) | _Specific reason and prerequisite / approval needed, or `N/A — test executed`_ |
-| Retest details (if applicable) | _Retest UTC time, new SHA/environment, corrected defect link, outcome; otherwise N/A_ |
+| Test ID / environment | `MT-11` / `LOCAL isolated` or explicit separately approved Test |
+| UTC start / UTC end (from this test’s Terminal A timestamp blocks) | _Start: ... / End: ..._ |
+| Actual operator/human and role | _Non-secret identity; A/B/operator as applicable_ |
+| Administration / Tenant context actually shown | _GLOBAL `*`, unauthenticated, offline N/A, 1Password, etc. — record observed_ |
+| Exact non-secret A/B login, Account IDs, Actor IDs, or affected resource | _Values; or N/A with reason_ |
+| Process state and DB path BEFORE / AFTER | _Expected vs observed listener, database, session and shell-state transition_ |
+| Actual terminal/UI outputs, including failures | _Record exact relevant PASS/FAIL strings and UI behavior_ |
+| Non-secret audit event ID / correlation | _Actual event ID / correlation, or N/A and reason; never token_ |
+| Screenshot, CI, log or private evidence reference | _Exact private locator; redact credentials and tokens_ |
+| Verdict (PASS / FAIL / BLOCKED / N/A) | _Choose one; N/A reason is mandatory_ |
+| Defect link / fix SHA / retest time | _Actual reference or None — no defect observed_ |
 
-**Do not mark PASS if evidence is missing or a required step was not performed.** A skipped or unauthorized operation must be reported as N/A/blocked with its reason; this does not automatically satisfy a mandatory acceptance gate.
-
-
-## Production acceptance — separate gate, not a feature-branch manual test
-
-**Production enrollment is not a LOCAL manual test. Use a separately approved Production maintenance procedure and change record. Do not execute this section until branch 994 has been merged through the approved Bite 33.6 hierarchy and the exact accepted software has been promoted to Test and subsequently approved for Production.** Use the [Production Operational Runbook](production-operational-runbook.md) for the complete guarded Production steps, not an invented shortcut.
-
-**Required Production operator checks before enrollment ([Production Operational Runbook](production-operational-runbook.md) Gate 3):** named change approval; accepted release/image ID; two distinct human administrators; individually verified Production 1Password access; verified Production backup and **Hetzner S3** off-host evidence; independent isolated-restore/rehearsal evidence; migration integrity; RPO ≤ 24 hours and RTO ≤ 4 hours; documented risk acceptance; resolved LastPass/1Password references; stopped Production writers; inspected correct Production volume; explicit Production enrollment confirmation. Enrollment is once, offline, create-only and transactional. **Never run E2E provisioning or bypass bootstrap controls in Production.**
-
-**Human acceptance after Production restarts:** Re-execute **MT-03 through MT-09** with the *two actual Production human identities* and individual approved Production browsers; use Production-only passwords and 1Password items. Repeat the read-only verification and audit checks without copying a Production database to an untrusted LOCAL host. **Do not repeat MT-02** on already enrolled Production identities. A/B mutual resets are real credential-changing operations and require an approved Production acceptance window and coordination; if not authorized, record this Production test as blocked and do not claim acceptance. Verify pre-existing Production automation administrator access remains unchanged. Obtain operational sign-off and record the accepted simultaneous-administrator-unavailability risk.
+**A case is not PASS until its exit state and evidence have been confirmed.**
 
 ---
 
-## Promotion decision / checklist
+## Deployed Test / Production acceptance boundary and release decision
 
-**Source of truth:** Complete all twelve MT execution forms above, including N/A reasons. This summary is a sign-off index only and is **not a substitute for each test execution record**. Where MT-01/MT-02 are N/A because Test enrollment has already occurred, cite earlier enrollment evidence. Where a later mandatory release-gate test is pending, label it **BLOCKED / NOT YET ACCEPTED** rather than PASS.
+**LOCAL functional acceptance:** MT-00 through MT-08, MT-10 and MT-11 require PASS; MT-09 LOCAL is N/A with the recorded reason. The LOCAL rehearsal must not be represented as deployed Test or Production recovery evidence. An actual deployed Test rehearsal requires an approved non-Production change, independent Test backup, verified matching Test image and database volume, stopped-writer offline enrollment, Test-only credentials, Test UI mutual recovery and audit verification, per-operator vault access, non-secret evidence, and targeted Docker cleanup. The former multi-container procedures were not executed in this authoring environment; **Test gate remains UNVERIFIED/PENDING** until conducted by the authorized Test operator. Never launch the LOCAL enrollment CLI against a live deployed volume.
 
-Mark after execution:
+**Production:** [Production Operational Runbook](production-operational-runbook.md) is the separately approved Production change-control procedure (off-host backup, restore rehearsal, access custody, downtime, database isolation, approval, enrollment, acceptance, RPO/RTO). No Production write is authorized by this manual or by passing LOCAL/CI. Do not merge deferred emergency recovery branches 990/991 into the initial launch.
 
-- [ ] MT-00 — branch `994` at **actual documentation-commit SHA**, LOCAL and CI accepted (source ZIP baseline: `072a5628…`).
-- [ ] MT-01 — no LOCAL/Test identity/actor collision (LOCAL UI or offline read-only path recorded; or **N/A: already enrolled**, with evidence).
-- [ ] MT-02 — one-time isolated Test enrollment/verification (or **N/A: already enrolled**, with evidence).
-- [ ] MT-03 — Human A forced change and independent GLOBAL sign-in.
-- [ ] MT-04 — Human B forced change and independent GLOBAL sign-in.
-- [ ] MT-05 — canonical grants and self-suspend safeguards.
-- [ ] MT-06 — A issues/reset for B; single-use and session revocation.
-- [ ] MT-07 — B issues/reset for A; single-use and session revocation.
-- [ ] MT-08 — accurate enrollment/issuance/consumption audit, read-only evidence.
-- [ ] MT-09 — A/B individual 1Password authorization and environment isolation.
-- [ ] MT-10 — existing automation admin preserved; negative regression evidence.
-- [ ] MT-11 — independent re-login, latest status, and Docker/secret cleanup.
-- [ ] **Branch promotion:** review all applicable manual results; merge to `945` only under approved branch hierarchy. No unfinished Gate C branches.
-- [ ] **Test-to-Production gate:** [Production Operational Runbook](production-operational-runbook.md) Gates 2 and 3 approved at exact promoted SHA, with complete backup/off-host/restore evidence.
-- [ ] **Production launch gate:** [Production Operational Runbook](production-operational-runbook.md) Gate 4 completed by actual A and B, Production mutual recovery verified if authorized, 1Password verified, accepted risk signed, remaining defects closed.
+**Promotion gate:** A failure in an applicable MT case blocks the corresponding promotion until fixed and retested. For feature-branch merge, document which LOCAL checks passed and which **deployed Test/Production** checks are pending; do not mislabel a pending launch gate as PASS. Store the twelve completed records with evidence references outside secrets storage. Each defect must have a link and retest SHA/date.
 
-**Promotion-blocking conditions:** inconsistent branch/SHA or CI; inability to enroll two distinct accounts atomically; any non-canonical or Tenant-scoped administrator identity; skipped forced password change; one administrator cannot operate independently; reset token reuse, non-revoked sessions or wrong-account resets; missing or incorrect audit; existing automation admin changed; inadequate 1Password access; missing verified backup/restore evidence; unauthorized Production test; incomplete Docker cleanup; secret disclosure; or any unresolved FAIL.
+## Mandatory ERS manual-test engineering standard (added)
 
-## Glossary impact
+> **A manual test suite is not ready for delivery merely because its commands are syntactically correct and its procedures appear reasonable. Its execution sequence, prerequisites, environment transitions, expected outputs, and cleanup must be validated together. Any portion that cannot be executed must be explicitly identified as unverified.**
 
-**None.** This file is a manual acceptance checklist; it does not change Bite 33.6.7's agreed domain model. Retain the **ADD** definitions in [Implementation and Architecture](implementation-and-architecture.md) for **Mutual Administrator Account Recovery**, **Two-Human Administrator Launch Model**, and the deferred **Offline Emergency Administrator Recovery**.
+Furthermore, **all test-specific instructions belong within their own test** (and every executable command must have a fenced `zsh` block starting with a Terminal A/B/C comment): every test must identify the real actor/role and Tenant/Global context; starting process/database/session state; exact identifiers and variables; prerequisites; ordered commands and UI actions; explicit normal/failure branches and join points; observable output; end-state handoff; evidence form; PASS, FAIL and BLOCKED criteria; and targeted teardown. The only exception is the standard patch-wide validation commands given with the software patch delivery. Do not send operators to scattered chat instructions to complete any test.
+
+**This delivery's verification ledger:**
+
+| Scope | Performed? | Outcome / limitation |
+|---|---|---|
+| Source ZIP identification | YES | Embedded commit matches `13bca9059e477e4a3eba96b5d778091d8cee9f5e` |
+| Fresh 76-migration SQLite schema sequence | YES, via Python `sqlite3` executing committed SQL | 76 applied; integrity `ok`, foreign keys empty, one role, two audit triggers, zero accounts |
+| Schema-level two-human enrollment simulation and read-only status | YES, simulated SQL only | Deliberate second-audit failure rolled back; successful synthetic two-account rows passed status helper; duplicate login rejected. **No real Go enrollment was run** |
+| Actual `scripts/db-migrate.sh` using macOS `sqlite3` CLI | NO | Authoring container lacks SQLite CLI; migration SQL was executed with Python sqlite3 instead |
+| `go run ./cmd/enroll-human-admins` and password UI | NO | Required Go 1.26.2 unavailable here; no browser/backend running |
+| macOS zsh runtime | NO | zsh is unavailable in authoring Linux container; Bash/static syntax was checked but must be verified on macOS |
+| 1Password/Test Docker/Production enrollment | NO | External controlled environments; remain explicitly UNVERIFIED |
+
+**Glossary impact:** none. Architecture terms remain defined in [Implementation and Architecture](implementation-and-architecture.md).
