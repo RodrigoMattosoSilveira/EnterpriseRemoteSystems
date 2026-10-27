@@ -231,7 +231,12 @@ printf 'MT_DIR=%s\nMT_DB=%s\nMT_BACKUP=%s\n' "$MT_DIR" "$MT_DB" "$MT_BACKUP"
 
 #### MT-01 — Part 1D: Optional LOCAL UI startup (only when executing Path A)
 
-**The UI is optional, not the pre-enrollment gate.** If you already have a working, authorized LOCAL Application Administrator login in the source database, you may perform **MT-01 Path A (optional UI observations)** and start ERS as follows. If you do not have one, **skip this optional UI startup entirely**, leave the backend offline, and execute **MT-01 Path B (required LOCAL read-only database check)**. If you perform Path A, still stop the backend and execute Path B to finish MT-01. A UI filter cannot certify that an unbound actor key does not exist in the database. An unavailable administrator login is not a reason to provision a test account or reset your normal LOCAL database.
+**The UI is optional, not the pre-enrollment gate.** A working, authorized LOCAL Application Administrator login is **not** a prerequisite for the required offline database check. Follow the sequence that applies to you:
+
+- **No existing LOCAL Application Administrator login (your current scenario):** Skip the three Path-A-only startup steps immediately below and **keep the backend and frontend stopped**. **Next execute MT-01 Part 2** in Terminal A to enter and export the four proposed non-secret A/B logins and actor keys. **Then skip MT-01 Part 3 (Path A, optional)** and **execute MT-01 Part 4 (Path B, required)** in the **same Terminal A**. Do not jump directly from Part 1D to Part 4: Part 4 depends on the values collected in Part 2.
+- **Existing authorized LOCAL Application Administrator login available:** Execute the Path-A-only startup steps below; then **execute MT-01 Part 2** in Terminal A; then **execute MT-01 Part 3 (Path A, optional)** and stop the backend as instructed there; finally **execute MT-01 Part 4 (Path B, required)** in Terminal A.
+
+**Expected before Part 4:** `MT_DB`, `LOGIN_A`, `LOGIN_B`, `ACTOR_A`, and `ACTOR_B` have been defined in Terminal A by Part 2, and no backend is writing to the isolated database. A UI filter cannot certify that an unbound actor key is absent, so Path B is mandatory even when Path A is performed. Do not provision a test account or reset the normal LOCAL database to satisfy an optional UI step.
 
 1. **For Path A only:** In a separate Terminal B, run from the repository root:
 
