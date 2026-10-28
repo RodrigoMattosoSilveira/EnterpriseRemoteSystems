@@ -437,18 +437,38 @@ date -u '+%Y-%m-%dT%H:%M:%SZ'
 
    **Expected terminal output after prompts:** **exactly two** non-secret lines beginning `enrolled login=... actor_key=... account_id=... actor_id=... must_change_password=true`, once for A and once for B. IDs must differ. **No credential text** may appear. A nonzero exit code, absence of exactly two lines, or uncertainty is **BLOCKED**: do not run the command again; continue only with the read-only inspection in step 4 to determine what committed.
 
-4. Inspect persisted enrollment **read-only** (safe even after uncertain step 3):
+4. **Terminal A — read-only enrollment verification, including a decisive STOP on any failure.** This is safe even if Step 3's output was uncertain. **Do not re-run Step 3.** Execute the entire command box, from its opening `(` to its closing `)`, in Terminal A at the repository root. The commands run inside a subshell so a failure stops this check without closing your interactive Terminal A.
 
    ```zsh
-   : '# Terminal A (macOS/zsh, repository root) - MT-02 command block'
-   export MT_DB="$HOME/ers-3367-acceptance-13bca905/isolated.db"
-   python3 -B scripts/ers-two-human-admin-status.py --db "$MT_DB" \
-     --actor-key 'ers3367-local-human-a' \
-     --actor-key 'ers3367-local-human-b'
-   sqlite3 "$MT_DB" "SELECT COUNT(*) FROM authz_audit_logs WHERE operation='authentication.human_admins.offline_enroll';"
+   : '# Terminal A (macOS/zsh, repository root) - MT-02 Step 4 read-only verification'
+   (
+     set -e
+     MT_DB="$HOME/ers-3367-acceptance-13bca905/isolated.db"
+     if [ ! -s "$MT_DB" ]; then
+       echo 'BLOCKED: expected isolated database is missing or empty; preserve evidence'
+       exit 1
+     fi
+     printf 'status_database=%s\n' "$MT_DB"
+     if ! python3 -B scripts/ers-two-human-admin-status.py --db "$MT_DB" \
+       --actor-key 'ers3367-local-human-a' \
+       --actor-key 'ers3367-local-human-b'; then
+       echo 'BLOCKED: status verification failed; preserve database and backup; do not re-enroll'
+       exit 1
+     fi
+     echo 'PASS: both GLOBAL administrators are usable according to read-only status check'
+     AUDIT_COUNT="$(sqlite3 -bail "$MT_DB" "SELECT COUNT(*) FROM authz_audit_logs WHERE operation='authentication.human_admins.offline_enroll';")"
+     printf 'enrollment_audit_count=%s\n' "$AUDIT_COUNT"
+     if [ "$AUDIT_COUNT" != '2' ]; then
+       echo 'BLOCKED: expected exactly two enrollment audit events; preserve database and backup'
+       exit 1
+     fi
+     echo 'PASS: two enrollment audit events verified; MT-02 Step 4 complete'
+   )
    ```
 
-   **Expected after a successful one-time enrollment:** status JSON `"ready": true`, **two** distinct usable accounts, `"mustChangePassword": true` for both; audit query prints `2`. If status says `ready=false`, returns nonzero, or audit is not 2, mark **FAIL** and preserve evidence. If after a failed step 3 it says `ready=true`, investigate why the success output was uncertain; **never automatically rerun**.
+   **Expected after successful enrollment:** the status checker prints JSON containing `"ready": true`, two **distinct** nonempty Account/Actor IDs, `"usable": true` for each, and `"mustChangePassword": true` for each; then `PASS: both GLOBAL administrators are usable according to read-only status check`, `enrollment_audit_count=2`, and `PASS: two enrollment audit events verified; MT-02 Step 4 complete`.
+
+   **When the status checker fails:** it prints a specific safe diagnostic such as `missing required column: ...` or `SQLite SQLITE_CANTOPEN; database access or query error`; then the command box prints `BLOCKED: status verification failed...` and **does not treat the audit count as acceptance**. The previously observed audit count of `2` suggests audit records were committed, but proves neither account usability nor cause of the status failure. Mark MT-02 **BLOCKED** and retain the database, pre-enrollment backup, and non-secret terminal evidence. Do not restart enrollment. If Step 3 failed but Step 4 passes, reconcile the uncertain Step 3 output before marking MT-02 PASS. If the diagnostic reports missing schema or unreadable database, investigate using the existing read-only migrations/integrity checks; do not apply migrations or restore a backup to this already enrolled file merely to make the test pass.
 
 5. Record the non-secret A/B Account IDs, Actor IDs, actor keys, two event IDs (from MT-08 later), backup digest and references; no passwords. No UI process is running yet.
 
@@ -635,8 +655,14 @@ date -u '+%Y-%m-%dT%H:%M:%SZ'
    ```zsh
    : '# Terminal A (macOS/zsh, repository root) - MT-05 command block'
    export MT_DB="$HOME/ers-3367-acceptance-13bca905/isolated.db"
-   python3 -B scripts/ers-two-human-admin-status.py --db "$MT_DB" \
-     --actor-key ers3367-local-human-a --actor-key ers3367-local-human-b
+   (
+     if ! python3 -B scripts/ers-two-human-admin-status.py --db "$MT_DB" \
+       --actor-key ers3367-local-human-a --actor-key ers3367-local-human-b; then
+       echo 'BLOCKED: read-only administrator status check failed; do not mark this MT test PASS'
+       exit 1
+     fi
+     echo 'PASS: both GLOBAL administrators verified read-only'
+   )
    ```
 
    **Expected:** `"ready": true`, each `"usable": true`, distinct nonempty `accountId` / `actorId`, each `"mustChangePassword": false`. If the command outputs `ready: false` mark FAIL.
@@ -985,10 +1011,16 @@ date -u '+%Y-%m-%dT%H:%M:%SZ'
    ```zsh
    : '# Terminal A (macOS/zsh, repository root) - MT-11 command block'
    export MT_DB="$HOME/ers-3367-acceptance-13bca905/isolated.db"
-   python3 -B scripts/ers-two-human-admin-status.py --db "$MT_DB" \
-     --actor-key ers3367-local-human-a --actor-key ers3367-local-human-b
-   printf 'integrity_check=%s\n' "$(sqlite3 "$MT_DB" 'PRAGMA integrity_check;')"
-   printf 'foreign_key_check=%s\n' "$(sqlite3 "$MT_DB" 'PRAGMA foreign_key_check;')"
+   (
+     set -e
+     if ! python3 -B scripts/ers-two-human-admin-status.py --db "$MT_DB" \
+       --actor-key ers3367-local-human-a --actor-key ers3367-local-human-b; then
+       echo 'BLOCKED: final administrator status check failed; preserve evidence'
+       exit 1
+     fi
+     printf 'integrity_check=%s\n' "$(sqlite3 -bail "$MT_DB" 'PRAGMA integrity_check;')"
+     printf 'foreign_key_check=%s\n' "$(sqlite3 -bail "$MT_DB" 'PRAGMA foreign_key_check;')"
+   )
    ```
 
    **Expected:** `"ready": true`, both `"usable": true`, two different Account/Actor IDs and both `"mustChangePassword": false`; `integrity_check=ok`, `foreign_key_check=` empty.

@@ -8,15 +8,55 @@ import sys
 from urllib.parse import quote
 
 
+# Inspect only known schema identifiers. Do not print account secrets, SQL values,
+# connection strings or arbitrary database exception text in diagnostic output.
+REQUIRED_SCHEMA = {
+    "authz_actors": ("id", "actor_key", "active"),
+    "auth_user_accounts": ("id", "login", "active", "security_suspended", "must_change_password"),
+    "auth_account_actors": ("actor_id", "account_id", "scope_type", "tenant_id", "membership_id"),
+    "authz_roles": ("id", "code", "active", "scope_type"),
+    "authz_actor_role_grants": ("actor_id", "role_id", "tenant_id", "active", "lifecycle_suspended"),
+}
+
+
+class StatusSchemaError(ValueError):
+    """Safe to display: refers only to fixed schema names from this program."""
+
+
+def check_required_schema(conn):
+    for table, required_columns in REQUIRED_SCHEMA.items():
+        exists = conn.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (table,)
+        ).fetchone()
+        if not exists:
+            raise StatusSchemaError(f"missing required table: {table}")
+        # Table names are constants declared above, not user supplied.
+        columns = {row[1] for row in conn.execute(f'PRAGMA table_info("{table}")')}
+        for column in required_columns:
+            if column not in columns:
+                raise StatusSchemaError(f"missing required column: {table}.{column}")
+
+
+def safe_sqlite_error(exc):
+    # No raw query/exception text is emitted; the SQLite error code is enough
+    # to distinguish access/locking from an unexpected query failure.
+    code = getattr(exc, "sqlite_errorname", "SQLITE_ERROR")
+    return str(code) if str(code).isidentifier() else "SQLITE_ERROR"
+
+
 def status(database, actor_keys):
-    path = Path(database).resolve(strict=True)
+    try:
+        path = Path(database).resolve(strict=True)
+    except FileNotFoundError as exc:
+        raise StatusSchemaError("database file does not exist") from exc
     if not path.is_file():
-        raise ValueError("database must be an existing regular file")
+        raise StatusSchemaError("database path is not a regular file")
     # URI read-only; do not create files or modify the application database.
     uri = "file:" + quote(str(path), safe="/") + "?mode=ro"
     conn = sqlite3.connect(uri, uri=True)
     conn.row_factory = sqlite3.Row
     try:
+        check_required_schema(conn)
         result = []
         for key in actor_keys:
             rows = conn.execute("""
@@ -72,8 +112,14 @@ def main():
         parser.error('provide two distinct --actor-key values')
     try:
         results = status(args.db, args.actor_key)
-    except (OSError, ValueError, sqlite3.Error) as exc:
-        print('Read-only administrator status check failed (database/schema unavailable).', file=sys.stderr)
+    except StatusSchemaError as exc:
+        print(f'Read-only administrator status check failed: {exc}.', file=sys.stderr)
+        return 2
+    except sqlite3.Error as exc:
+        print(f'Read-only administrator status check failed: SQLite {safe_sqlite_error(exc)}; database access or query error.', file=sys.stderr)
+        return 2
+    except (OSError, ValueError):
+        print('Read-only administrator status check failed: cannot inspect the database file.', file=sys.stderr)
         return 2
     print(json.dumps({"administrators": results, "ready": all(row['usable'] for row in results)}, indent=2))
     return 0 if all(row['usable'] for row in results) else 1

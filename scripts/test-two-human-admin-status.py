@@ -3,10 +3,13 @@
 import importlib.util
 from pathlib import Path
 import sqlite3
+import subprocess
+import sys
 import tempfile
 import unittest
 
-spec = importlib.util.spec_from_file_location('two_human_status', Path(__file__).with_name('ers-two-human-admin-status.py'))
+MODULE_PATH = Path(__file__).with_name('ers-two-human-admin-status.py')
+spec = importlib.util.spec_from_file_location('two_human_status', MODULE_PATH)
 module = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(module)
 
@@ -42,6 +45,36 @@ class StatusTests(unittest.TestCase):
             db.execute("UPDATE auth_account_actors SET scope_type='TENANT' WHERE actor_id='a'")
             db.execute("UPDATE authz_actor_role_grants SET lifecycle_suspended=1 WHERE actor_id='b'")
         self.assertFalse(any(r['usable'] for r in module.status(self.database, ['human-a', 'human-b'])))
+
+    def test_missing_schema_column_is_reported_without_sensitive_values(self):
+        with sqlite3.connect(self.database) as db:
+            db.execute('DROP TABLE auth_user_accounts')
+            db.execute('CREATE TABLE auth_user_accounts (id TEXT, login TEXT, active BOOLEAN, must_change_password BOOLEAN)')
+        result = subprocess.run([
+            sys.executable, '-B', str(MODULE_PATH), '--db', str(self.database),
+            '--actor-key', 'human-a', '--actor-key', 'human-b',
+        ], text=True, capture_output=True)
+        self.assertEqual(result.returncode, 2)
+        self.assertEqual(result.stdout, '')
+        self.assertIn('missing required column: auth_user_accounts.security_suspended', result.stderr)
+        self.assertNotIn('a@example.com', result.stderr)
+
+    def test_missing_database_is_reported_and_never_created(self):
+        missing = Path(self.tmp.name) / 'missing.db'
+        result = subprocess.run([
+            sys.executable, '-B', str(MODULE_PATH), '--db', str(missing),
+            '--actor-key', 'human-a', '--actor-key', 'human-b',
+        ], text=True, capture_output=True)
+        self.assertEqual(result.returncode, 2)
+        self.assertEqual(result.stdout, '')
+        self.assertIn('database file does not exist', result.stderr)
+        self.assertFalse(missing.exists())
+
+    def test_missing_required_table_is_reported(self):
+        with sqlite3.connect(self.database) as db:
+            db.execute('DROP TABLE authz_roles')
+        with self.assertRaisesRegex(module.StatusSchemaError, 'missing required table: authz_roles'):
+            module.status(self.database, ['human-a', 'human-b'])
 
     def test_missing_identity(self):
         rows = module.status(self.database, ['human-a', 'absent'])
