@@ -9,6 +9,7 @@ RUN CGO_ENABLED=0 GOOS=linux \
     go build -o /out/enterprise-remote-systems-api ./cmd/api && \
     go build -o /out/import-people ./cmd/import-people && \
     go build -o /out/provision-e2e-admin ./cmd/provision-e2e-admin && \
+    go build -o /out/enroll-human-admins ./cmd/enroll-human-admins && \
     go build -o /out/ers-backup ./cmd/ers-backup && \
     go build -o /out/ers-offhost-backup ./cmd/ers-offhost-backup && \
     go build -o /out/ers-restore ./cmd/ers-restore
@@ -21,6 +22,7 @@ WORKDIR /app
 COPY --from=builder /out/enterprise-remote-systems-api /app/enterprise-remote-systems-api
 COPY --from=builder /out/import-people /app/import-people
 COPY --from=builder /out/provision-e2e-admin /app/provision-e2e-admin
+COPY --from=builder /out/enroll-human-admins /app/enroll-human-admins
 COPY --from=builder /out/ers-backup /app/ers-backup
 COPY --from=builder /out/ers-offhost-backup /app/ers-offhost-backup
 COPY --from=builder /out/ers-restore /app/ers-restore

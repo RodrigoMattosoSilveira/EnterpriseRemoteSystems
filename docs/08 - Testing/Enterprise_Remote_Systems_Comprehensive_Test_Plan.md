@@ -60,6 +60,18 @@ The test effort should validate that:
 
 ---
 
+## Mandatory Manual Test Delivery Acceptance Standard
+
+A manual test suite is not ready for delivery merely because its commands are syntactically correct and its procedures appear reasonable. Its **execution sequence, prerequisites, environment transitions, expected outputs, and cleanup must be validated together**. Any portion that cannot be executed must be **explicitly identified as unverified**.
+
+Each manual test must be self-contained: identify the operating human and role, exact Tenant/Global context, required starting processes/database/sessions/credentials, its own shell variables and commands, UI navigation, conditional path and rejoin point, observable expected outputs, precise end-state handoff, individual execution record, PASS/FAIL/BLOCKED/N/A criteria, and targeted cleanup. Do not place test-specific instructions only in chat messages or unrelated preparation documents. The standard patch-wide validation commands are the sole exception. Never present a syntactic-only check as a full manual rehearsal.
+
+All executable test commands must appear in fenced command blocks. **The first line inside every command block must name the exact terminal (Terminal A, B, C, etc.) using an interactive-shell-safe annotation, for example `: '# Terminal A (macOS/zsh, repository root)'`.** An unquoted `# Terminal ...` line alone is not acceptable in an interactive zsh session unless `INTERACTIVE_COMMENTS` has deliberately been enabled; the quoted `:` annotation requires no such configuration. Expected terminal output must use a separate output block, not a runnable command block. If a terminal changes between commands, the next command block must say so explicitly; command instructions must not be hidden in prose.
+
+The [Bite 33.6.7 acceptance manual](../bite-3367/manual-acceptance-tests.md) demonstrates this rule and records which transitions were verified versus unverified.
+
+---
+
 ## 4. Test Levels
 
 ### 4.1 Unit Tests

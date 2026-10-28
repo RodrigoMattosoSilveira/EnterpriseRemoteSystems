@@ -538,8 +538,18 @@ onepassword-deployment-preflight-check:
 production-credential-cutover-check:
 	python3 scripts/test-production-credential-cutover.py
 
+.PHONY: two-human-administrators-preflight-check
+two-human-administrators-preflight-check:
+	python3 -B scripts/test-two-human-admin-input.py
+	python3 -B scripts/test-two-human-admin-status.py
+
+.PHONY: two-human-administrators-check
+two-human-administrators-check: two-human-administrators-preflight-check
+	cd backend && go test ./internal/authentication ./cmd/enroll-human-admins
+
 .PHONY: promotion-readiness-check
 promotion-readiness-check:
+	$(MAKE) two-human-administrators-preflight-check
 	$(MAKE) production-environment-guardrails-check
 	$(MAKE) owner-unavailable-recovery-readiness-check
 	$(MAKE) production-bootstrap-reconciliation-check
@@ -552,6 +562,7 @@ promotion-readiness-check:
 
 .PHONY: local-check
 local-check:
+	$(MAKE) two-human-administrators-check
 	$(MAKE) bite30l4-coverage-manifest-check
 	$(MAKE) bite32-release-coverage-check
 	$(MAKE) bite326-release-hardening-check
