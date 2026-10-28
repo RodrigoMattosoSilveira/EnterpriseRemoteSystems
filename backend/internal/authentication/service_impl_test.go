@@ -361,6 +361,80 @@ func TestAuthenticationPasswordResetTokenIsOneTimeAndRevokesSessions(t *testing.
 	}
 }
 
+// The audit identity requirement is a database gate, not best-effort logging.
+// If an audit write fails, reset-token consumption, password modification, and
+// active-session revocation must all roll back. A retry after the DB fault is
+// removed must succeed using the same still-valid token.
+func TestAuthenticationPasswordResetAuditFailureRollsBackAllChanges(t *testing.T) {
+	database, _, service, _ := authenticationTestService(t)
+	ctx := context.Background()
+	account, err := service.CreateAccount(ctx, CreateAccountRequest{
+		TenantID: appdb.DefaultTenantID, Login: "audited@example.com", TemporaryPassword: "Original-Password-1",
+	})
+	if err != nil {
+		t.Fatalf("create rollback-test account: %v", err)
+	}
+	login, err := service.Login(ctx, LoginRequest{Login: account.Login, Password: "Original-Password-1"}, "", "")
+	if err != nil {
+		t.Fatalf("login before reset: %v", err)
+	}
+	reset, err := service.IssuePasswordResetToken(ctx, account.ID)
+	if err != nil {
+		t.Fatalf("issue reset token: %v", err)
+	}
+	var before Account
+	if err := database.First(&before, "id = ?", account.ID).Error; err != nil {
+		t.Fatal(err)
+	}
+	var token PasswordResetToken
+	if err := database.First(&token, "account_id = ?", account.ID).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := database.Exec(`CREATE TRIGGER reject_password_reset_consumption_audit
+BEFORE INSERT ON authz_audit_logs
+WHEN NEW.operation = 'authentication.password_reset_tokens.consume'
+BEGIN SELECT RAISE(ABORT, 'injected reset audit failure'); END`).Error; err != nil {
+		t.Fatalf("install test-only audit fault: %v", err)
+	}
+	_, err = service.ResetPassword(ctx, ResetPasswordRequest{Token: reset.Token, NewPassword: "Recovered-Password-2"})
+	if err == nil || !strings.Contains(err.Error(), "injected reset audit failure") {
+		t.Fatalf("expected audit failure to abort password reset, got %v", err)
+	}
+	var accountAfter Account
+	if err := database.First(&accountAfter, "id = ?", account.ID).Error; err != nil {
+		t.Fatal(err)
+	}
+	if accountAfter.PasswordHash != before.PasswordHash {
+		t.Fatal("audit write failure must roll back password change")
+	}
+	var tokenAfter PasswordResetToken
+	if err := database.First(&tokenAfter, "id = ?", token.ID).Error; err != nil {
+		t.Fatal(err)
+	}
+	if tokenAfter.UsedAt != nil {
+		t.Fatal("audit write failure must not consume the reset token")
+	}
+	if _, err := service.ResolveSession(ctx, login.Token); err != nil {
+		t.Fatalf("audit write failure must not revoke the previous session: %v", err)
+	}
+	if err := database.Exec("DROP TRIGGER reject_password_reset_consumption_audit").Error; err != nil {
+		t.Fatalf("remove test-only audit fault: %v", err)
+	}
+	if _, err := service.ResetPassword(ctx, ResetPasswordRequest{Token: reset.Token, NewPassword: "Recovered-Password-2"}); err != nil {
+		t.Fatalf("retry with same unconsumed token: %v", err)
+	}
+	if _, err := service.ResolveSession(ctx, login.Token); err != ErrAuthenticationRequired {
+		t.Fatalf("successful recovery must revoke original session, got %v", err)
+	}
+	var audit authz.AuthzAuditLog
+	if err := database.Where("operation = ? AND target_id = ?", "authentication.password_reset_tokens.consume", account.ID).First(&audit).Error; err != nil {
+		t.Fatalf("find successful reset consumption audit: %v", err)
+	}
+	if audit.CorrelationID != token.ID || audit.AccountID != account.ID || audit.AuthorizationSource != string(authz.AuthorizationSourceNone) {
+		t.Fatalf("successful reset must have full audit identity without exposing the token: %#v", audit)
+	}
+}
+
 func TestAuthenticationSessionExpires(t *testing.T) {
 	database, err := appdb.Open(filepath.Join(t.TempDir(), "app.db"))
 	if err != nil {
