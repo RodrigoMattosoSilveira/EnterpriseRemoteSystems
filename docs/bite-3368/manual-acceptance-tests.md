@@ -136,9 +136,13 @@ elif ! make server-ps ENV=test || ! make server-backend-health ENV=test; then
 else
   TEST_RECEIPT_CANDIDATES=()
   if [[ -d "$TEST_BACKUP_DIR" ]]; then
-    mapfile -d '' -t TEST_RECEIPT_CANDIDATES < <(
-      find "$TEST_BACKUP_DIR" -maxdepth 1 -type f -name 'app-*.db.offhost.json' -print0 | sort -zr
-    )
+    # Bash 3.2-compatible receipt inventory: glob sorts timestamped names in ascending order.
+    # Prepend each regular, non-symlink file so the newest named receipt is listed first.
+    for TEST_CANDIDATE in "$TEST_BACKUP_DIR"/app-*.db.offhost.json; do
+      if [[ -f "$TEST_CANDIDATE" && ! -L "$TEST_CANDIDATE" ]]; then
+        TEST_RECEIPT_CANDIDATES=("$TEST_CANDIDATE" "${TEST_RECEIPT_CANDIDATES[@]}")
+      fi
+    done
   else
     printf 'No Test backups directory yet; an authorized first backup will create it\n'
   fi
@@ -148,6 +152,8 @@ else
   done
 fi
 ```
+
+**Execution portability:** Commands on the deployed Test server run under Linux Bash. The LOCAL regression harness also executes these shell blocks under the installed macOS Bash (often version 3.2); receipt discovery therefore avoids Linux-only `sort -z` and Bash 4-only `mapfile`. The test harness resolves temporary checkout paths to their physical location (macOS can alias `/var` to `/private/var`).
 
 **Expected:** Test branch, the authorized deployed Test revision/tree and healthy `ers-tst-backend`. Either receipt candidates are listed or `Managed Test off-host receipts found: 0`. The backup directory may legitimately be absent before the first backup. Verify the printed revision/tree against the release approved for this test. **STOP** for a wrong checkout or unhealthy backend. If a suitable receipt exists, **skip Steps 1B and 1C** and continue to Step 1D; otherwise proceed to Step 1B. No backup or restore occurs in Step 1A.
 
@@ -217,14 +223,15 @@ if [[ "$(pwd -P)" != /opt/EnterpriseRemoteSystems/test || "$(git branch --show-c
 elif ! make server-ps ENV=test || ! make server-backend-health ENV=test; then
   printf 'BLOCKED: Test backend not healthy; do not attempt backup\n' >&2
 else
-  TEST_OFFHOST_STATUS="$(
+  if ! TEST_OFFHOST_STATUS="$(
     ERS_BACKUP_ENV_DIR=/opt/EnterpriseRemoteSystems/test \
     ERS_BACKUP_ENV_FILE=.env.test \
     ERS_BACKUP_COMPOSE_PROJECT=ers-tst \
       ./scripts/run-backup-go-tool.sh ers-offhost-backup status \
       --environment test --env-file /opt/EnterpriseRemoteSystems/test/.env.test
-  )"
-  if [[ "$TEST_OFFHOST_STATUS" != enabled ]]; then
+  )"; then
+    printf 'BLOCKED: Test off-host status probe failed; do not start a backup\n' >&2
+  elif [[ "$TEST_OFFHOST_STATUS" != enabled ]]; then
     printf 'BLOCKED: Test off-host backup status is not enabled; return to Step 1B\n' >&2
   else
     printf 'Enter the authorized Test backup change/approval reference (empty to stop): '
@@ -255,9 +262,13 @@ if [[ "$(pwd -P)" != /opt/EnterpriseRemoteSystems/test || "$(git branch --show-c
 elif [[ ! -d "$TEST_BACKUP_DIR" ]]; then
   printf 'BLOCKED: managed Test backup directory missing\n' >&2
 else
-  mapfile -d '' -t TEST_RECEIPT_CANDIDATES < <(
-    find "$TEST_BACKUP_DIR" -maxdepth 1 -type f -name 'app-*.db.offhost.json' -print0 | sort -zr
-  )
+  TEST_RECEIPT_CANDIDATES=()
+  # Use portable Bash globbing rather than GNU sort -z or Bash 4's mapfile.
+  for TEST_CANDIDATE in "$TEST_BACKUP_DIR"/app-*.db.offhost.json; do
+    if [[ -f "$TEST_CANDIDATE" && ! -L "$TEST_CANDIDATE" ]]; then
+      TEST_RECEIPT_CANDIDATES=("$TEST_CANDIDATE" "${TEST_RECEIPT_CANDIDATES[@]}")
+    fi
+  done
   if (( ${#TEST_RECEIPT_CANDIDATES[@]} == 0 )); then
     printf 'BLOCKED: no Test .offhost.json receipts found in %s; return to Step 1B\n' "$TEST_BACKUP_DIR" >&2
   else
