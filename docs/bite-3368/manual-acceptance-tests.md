@@ -109,30 +109,59 @@ The deployed **Test** environment is distinct from Production, but it is **not**
 
 **Entry:** IT-00–IT-02 PASS, approved and completed deployment to `test`; Test backend remains running; Test users have been warned about the rehearsal if required by the change; no Test recovery/migration gate is armed. **Operator:** named, authorized Test operator. **Context:** Test server checkout and `ENV=test`, never Production. **Terminal D:** bash on the Test host, in the repository used for Test deployment. **Credentials:** approved Test off-host read authority via the existing environment configuration; never place credentials in commands/evidence. **Variables:** none inherited from prior tests. **STOP** if the deployed revision/tree or Test receipt cannot be verified.
 
-### Step 1 — Record the exact Test environment and recovery receipt (Terminal D)
+### Step 1 — Discover, select, and verify the Test off-host receipt (Terminal D)
+
+**Why the receipt is needed:** IT-03 proves restoration from an actual remote Test replica, rather than merely copying a local SQLite database. A receipt named `app-<UTC-timestamp>.db.offhost.json` was created by a successful off-host replication. It identifies the remote objects and versions to verify and later recover. The receipt lives in the **managed Test backups directory**, `/opt/EnterpriseRemoteSystems/test/backups/`. It is not the database or the database backup itself.
+
+**Before pasting the command:** Be in **Terminal D**, inside the deployed **Test** repository on the Linux host. The command prints all existing managed Test receipt candidates with numbers. **When it asks for a number, type one of the printed numbers and press Enter** (for example, `1` if candidate 1 is the authorized Test recovery point), or type `0` to stop. You are **not** being asked for a password, a file to create, or an arbitrary path. The choice is then independently checked against the off-host replica. The newest filename is not automatically an acceptable backup: select one associated with the approved Test recovery point and verify it.
 
 ```bash
 : 'Terminal D (Test Linux host/bash, Test deployment repository root) — IT-03 Step 1'
+unset TEST_RECEIPT TEST_RECEIPT_VERIFIED
+printf 'IT-03: looking for an existing, managed Test off-host receipt\n'
 date -u '+IT-03 UTC start: %Y-%m-%dT%H:%M:%SZ'
 pwd
 git rev-parse HEAD
 git rev-parse 'HEAD^{tree}'
-make server-ps ENV=test
-printf 'Enter the absolute path to the existing, verified TEST .offhost.json receipt: '
-IFS= read -r TEST_RECEIPT
-if [[ -f "$TEST_RECEIPT" && "$TEST_RECEIPT" == /opt/EnterpriseRemoteSystems/test/backups/*.offhost.json ]]; then
-  if make server-offhost-backup-verify ENV=test BACKUP_FILE="${TEST_RECEIPT%.offhost.json}"; then
-    export TEST_RECEIPT_VERIFIED=1
-    printf 'PASS: verified Test off-host receipt: %s\n' "$(basename "$TEST_RECEIPT")"
-  else
-    printf 'STOP: Test off-host replica verification failed\n' >&2
-  fi
+if ! make server-ps ENV=test; then
+  printf 'BLOCKED: could not inspect the deployed Test containers\n' >&2
 else
-  printf 'STOP: receipt is missing or not in the managed Test backups directory\n' >&2
+  TEST_BACKUP_DIR=/opt/EnterpriseRemoteSystems/test/backups
+  if [[ ! -d "$TEST_BACKUP_DIR" ]]; then
+    printf 'BLOCKED: managed Test backup directory does not exist: %s\n' "$TEST_BACKUP_DIR" >&2
+  else
+    mapfile -d '' -t TEST_RECEIPT_CANDIDATES < <(
+      find "$TEST_BACKUP_DIR" -maxdepth 1 -type f -name 'app-*.db.offhost.json' -print0 | sort -zr
+    )
+    if (( ${#TEST_RECEIPT_CANDIDATES[@]} == 0 )); then
+      printf 'BLOCKED: no Test .offhost.json receipts found in %s\n' "$TEST_BACKUP_DIR" >&2
+    else
+      printf 'Available Test receipt candidates (newest filename first):\n'
+      for (( i=0; i<${#TEST_RECEIPT_CANDIDATES[@]}; i++ )); do
+        printf '  %d) %s\n' "$((i+1))" "${TEST_RECEIPT_CANDIDATES[i]}"
+      done
+      printf 'Type the receipt number corresponding to the approved Test recovery point (0 to stop), then press Enter: '
+      IFS= read -r TEST_RECEIPT_CHOICE
+      if [[ "$TEST_RECEIPT_CHOICE" =~ ^[1-9][0-9]*$ ]] && (( TEST_RECEIPT_CHOICE <= ${#TEST_RECEIPT_CANDIDATES[@]} )); then
+        TEST_RECEIPT="${TEST_RECEIPT_CANDIDATES[TEST_RECEIPT_CHOICE-1]}"
+        if make server-offhost-backup-verify ENV=test BACKUP_FILE="${TEST_RECEIPT%.offhost.json}"; then
+          export TEST_RECEIPT TEST_RECEIPT_VERIFIED=1
+          printf 'PASS: verified Test off-host receipt: %s\n' "$(basename "$TEST_RECEIPT")"
+        else
+          unset TEST_RECEIPT TEST_RECEIPT_VERIFIED
+          printf 'BLOCKED: remote Test replica verification failed; preserve the output and investigate\n' >&2
+        fi
+      else
+        printf 'BLOCKED: no valid receipt number selected; no recovery was started\n' >&2
+      fi
+    fi
+  fi
 fi
 ```
 
-**Expected:** The recorded Git revision/tree match the Test release being accepted, the Test backend is running, and `PASS: verified Test off-host receipt`. The verifier must exit `0` using the actual Test backup receipt; record its non-secret object-version and receipt verification evidence. Existence of the receipt alone is insufficient. If verification fails, record BLOCKED. Do not use a Production receipt.
+**Expected:** The Test commit/tree match the release under acceptance, the `ers-tst-backend` remains running, a numbered candidate list is displayed, and after your explicit choice the command prints `PASS: verified Test off-host receipt: app-...db.offhost.json`. Record the selected receipt basename and the verifier's non-secret object-version evidence. The `TEST_RECEIPT` and `TEST_RECEIPT_VERIFIED=1` variables become available to **Step 2 in the same Terminal D shell** only after successful independent verification.
+
+**If no candidate is printed, the backup directory is unavailable, or verification fails:** Record **IT-03 BLOCKED**; do not proceed to Step 2, invent a receipt, use a Production receipt, or substitute a local-only `.db` backup. An authorized Test operator must investigate off-host configuration and create/verify a fresh Test off-host backup under the approved backup procedure before rerunning this step. Do not change the live Test database, reset Test, or run Production operations to satisfy this prerequisite.
 
 ### Step 2 — Rehearse an off-host restore into the *isolated* Test recovery workspace (Terminal D)
 

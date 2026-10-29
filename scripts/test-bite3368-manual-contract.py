@@ -16,6 +16,22 @@ for n in range(9):
     for term in ('**Entry:', '**Expected:', '**Execution record — IT-'):
         assert term in segment or (term == '**Expected:' and '**Expected stdout:' in segment), (n, term)
 
+# IT-03 must explain and enumerate its managed receipt candidates before interactive selection.
+it03_start = text.index('## IT-03 — ')
+it03_end = text.index('## IT-04 — ', it03_start)
+it03 = text[it03_start:it03_end]
+for required in (
+    "find \"$TEST_BACKUP_DIR\" -maxdepth 1 -type f -name 'app-*.db.offhost.json' -print0",
+    'Available Test receipt candidates',
+    'Type the receipt number corresponding to the approved Test recovery point',
+    'BLOCKED: no Test .offhost.json receipts found',
+    'unset TEST_RECEIPT TEST_RECEIPT_VERIFIED',
+    'make server-offhost-backup-verify ENV=test',
+    'export TEST_RECEIPT TEST_RECEIPT_VERIFIED=1',
+):
+    assert required in it03, f'IT-03 receipt discovery/verification instruction missing: {required}'
+assert 'Enter the absolute path to the existing, verified TEST' not in it03, 'IT-03 restored opaque receipt prompt'
+
 blocks = re.findall(r'^```(bash|zsh)\n(.*?)^```', text, re.M | re.S)
 assert len(blocks) >= 8, 'expected executable fenced shell blocks'
 for i, (language, block) in enumerate(blocks):
