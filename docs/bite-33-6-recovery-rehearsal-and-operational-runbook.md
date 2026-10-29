@@ -171,3 +171,7 @@ make owner-unavailable-recovery-readiness-check
 ```
 
 It is included in `make local-check`, the containerized local check, CI, and the deployment quality gate.
+
+## Bite 33.6.8 final integrated acceptance
+
+For the exact-release, two-human-administrator, 1Password custody, off-host rehearsal, and RPO/RTO *evidence-consistency* checks, see [Bite 33.6.8 integrated acceptance](bite-3368/implementation-and-architecture.md) and its [manual acceptance procedure](bite-3368/manual-acceptance-tests.md). These do **not** replace the existing operational recovery script. Historical owner-unavailable/LastPass examples in this Bite 33.6 document are not evidence of 1Password access under the accepted two-human launch model; the discrepancy requires documented operational reconciliation before final Production approval. Deferred Gate C is not a launch condition.

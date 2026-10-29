@@ -1,0 +1,48 @@
+{
+  "format_version": 1,
+  "environment": "REPLACE_WITH_test_OR_production",
+  "release": {
+    "revision": "REPLACE_WITH_FULL_PROMOTED_SHA",
+    "tree_sha": "REPLACE_WITH_FULL_PROMOTED_TREE_SHA",
+    "ci_status": "REPLACE_WITH_passed_AFTER_REVIEW",
+    "ci_url": "REPLACE_WITH_CI_RUN_URL",
+    "integrated_regression": "REPLACE_WITH_passed_AFTER_REVIEW",
+    "integrated_regression_ref": "REPLACE_WITH_INTEGRATED_TEST_EVIDENCE_REFERENCE"
+  },
+  "human_administrators": [
+    {
+      "label": "A", "actor_key": "REPLACE_WITH_A_ACTOR_KEY",
+      "account_id": "REPLACE_WITH_A_ACCOUNT_ID", "login": "REPLACE_WITH_A_LOGIN",
+      "first_login_ref": "REPLACE_WITH_A_LOGIN_ACCEPTANCE_EVIDENCE",
+      "mutual_recovery_ref": "REPLACE_WITH_A_RECOVERY_ACCEPTANCE_EVIDENCE",
+      "audit_ref": "REPLACE_WITH_A_AUDIT_EVIDENCE"
+    },
+    {
+      "label": "B", "actor_key": "REPLACE_WITH_B_ACTOR_KEY",
+      "account_id": "REPLACE_WITH_B_ACCOUNT_ID", "login": "REPLACE_WITH_B_LOGIN",
+      "first_login_ref": "REPLACE_WITH_B_LOGIN_ACCEPTANCE_EVIDENCE",
+      "mutual_recovery_ref": "REPLACE_WITH_B_RECOVERY_ACCEPTANCE_EVIDENCE",
+      "audit_ref": "REPLACE_WITH_B_AUDIT_EVIDENCE"
+    }
+  ],
+  "onepassword": {
+    "human_a_review_ref": "REPLACE_WITH_A_INDIVIDUAL_VAULT_ACCESS_EVIDENCE",
+    "human_b_review_ref": "REPLACE_WITH_B_INDIVIDUAL_VAULT_ACCESS_EVIDENCE",
+    "service_account_isolation_ref": "REPLACE_WITH_PERMISSIONS_REVIEW",
+    "legacy_custody_resolution_ref": "REPLACE_WITH_LASTPASS_TO_1PASSWORD_RECONCILIATION_DECISION"
+  },
+  "operations": {
+    "change_approval_ref": "REPLACE_WITH_APPROVAL_ID",
+    "approver_id": "REPLACE_WITH_APPROVER_ID",
+    "backup_verification_ref": "REPLACE_WITH_VERIFIED_BACKUP_REFERENCE",
+    "off_host_receipt_ref": "REPLACE_WITH_VERIFIED_OFFHOST_RECEIPT_REFERENCE",
+    "migration_gate_ref": "REPLACE_WITH_MIGRATION_GATE_EVIDENCE",
+    "deployed_smoke_ref": "REPLACE_WITH_TEST_OR_PRODUCTION_SMOKE_REFERENCE",
+    "risk_acceptance_ref": "REPLACE_WITH_SIMULTANEOUS_ADMIN_UNAVAILABILITY_RISK_RECORD",
+    "simultaneous_unavailability_risk_accepted": false
+  },
+  "recovery": {
+    "report_file": "rehearsal.json",
+    "sha256": "REPLACE_WITH_SHA256_OF_SAVED_SERVER_REHEARSAL_REPORT"
+  }
+}

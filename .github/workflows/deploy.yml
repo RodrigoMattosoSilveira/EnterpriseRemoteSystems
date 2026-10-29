@@ -82,6 +82,11 @@ jobs:
       - name: Verify Bite 33.6 recovery rehearsal and operational runbook
         run: make recovery-rehearsal-operational-runbook-check
 
+      - name: Verify Bite 33.6.7 private input and read-only status checks
+        run: |
+          python3 scripts/test-two-human-admin-input.py
+          python3 scripts/test-two-human-admin-status.py
+
       - name: Verify Bite 33.6 owner-unavailable recovery readiness
         run: make owner-unavailable-recovery-readiness-check
 
