@@ -75,25 +75,22 @@ python3 -B scripts/ers-bite3368-integrated-rehearsal.py
 
 ## IT-02 — Two independent human administrators and existing regression preservation (LOCAL)
 
-**Entry:** IT-01 PASS, Terminal A at repo root. **Operator:** developer; **Context:** LOCAL automated regressions, NOT administrator enrollment. **Secrets:** none. No need for prior shell variables or a deployed administrator login.
+**Entry:** IT-01 PASS, **Terminal A** on the Mac, at the feature-branch repository root. **Operator:** developer. **Context:** LOCAL focused regression checks, **not** human enrollment. **Secrets:** none. No prior shell variables, deployed Test login, or Docker restart is required. **Go version requirement:** 1.26.2. These checks do not touch the deployed Test or Production databases.
 
-**Actions — Terminal A:**
+**Step 1 — Run the four focused checks and capture their individual outcomes.** Paste this entire command box into **Terminal A (macOS interactive zsh)** from the repository root. It runs each existing `make` target, stops running further targets if any fails, and explicitly labels the subsequent targets `SKIPPED`. Each completed target receives its own private log and SHA-256 digest. The tool prints the current Git revision/tree, whether the working tree is clean, actual `go version`, four named results, and evidence references. It does **not** fabricate a result for a skipped target.
 
 ```zsh
-: 'Terminal A (macOS/zsh, repository root) — IT-02 canonical administrator and custody regressions'
-if make two-human-administrators-check && \
-   make production-bootstrap-reconciliation-check && \
-   make onepassword-deployment-preflight-check && \
-   make production-credential-cutover-check; then
-  printf 'PASS: IT-02 four focused checks completed\n'
-else
-  printf 'STOP: IT-02 failed; record error and do not proceed\n' >&2
-fi
+: 'Terminal A (macOS/zsh, repository root) — IT-02 four focused checks and evidence'
+python3 -B scripts/ers-bite3368-it02-evidence.py
 ```
 
-**Expected:** all commands exit `0`. The first includes actual Go enrollment atomicity/rollback and mutual recovery regressions; the remaining checks cover bootstrap reconciliation and 1Password deployment staging. These checks **do not** enroll Test/Production administrators and **do not** prove actual human vault permissions. If Go cannot execute, mark BLOCKED; do not substitute source parsing. **Exit:** no account writes to a deployed DB; evidence available for IT-06.
+**Expected:** output contains `IT-02 GO VERSION: go version go1.26.2 ...`, four lines `IT-02 RESULT 1/4` through `IT-02 RESULT 4/4`, each showing `PASS exit=0`, and four matching `IT-02 EVIDENCE REF` lines with a real log path and SHA-256 digest. The final lines show `IT-02 SUMMARY: PASS (4/4 passed)` and `IT-02 EVIDENCE INDEX: .../it02-evidence.json`. The underlying tests may print `OK`, `(cached)` and their original PASS messages; these are not the four named exit results. A missing/wrong Go version, any `FAIL`, or any `SKIPPED` result means **IT-02 BLOCKED/FAIL**; do not proceed to IT-03. Do not mark the test PASS merely because earlier versions of the combined command printed one final PASS line.
 
-**Execution record — IT-02:** UTC start/end: ___ / ___; operator: ___; context: LOCAL regressions; four test exit results: ___; Go version: ___; evidence refs: ___; verdict/defect: ___; next-state: ___.
+**Step 2 — Record evidence without exposing secrets.** Copy the printed `IT-02 EVIDENCE INDEX` absolute path, its Git SHA/tree, Go version, and four `RESULT`/`EVIDENCE REF` values into the IT-02 execution record below. The index is a JSON inventory of the actual exit codes and the four local log file references; it is **not** a GitHub CI run or a deployed recovery record. Logs are saved under `~/ers-bite3368-acceptance/<revision>/IT-02-.../`, **outside the Git repository**, with private permissions. Review logs for accidental sensitive output before sharing them; never commit logs, passwords, or credentials. If the tool reports `IT-02 WORKTREE: MODIFIED`, the run is valid pre-commit feedback but **not final-SHA evidence**; rerun IT-02 after committing, before final acceptance. The exact GitHub Actions CI run URL belongs to **IT-00**; reference that accepted IT-00 record instead of inventing a CI URL here.
+
+**Expected:** four identifiable target results and four authentic evidence references, all traceable to the printed Git revision. **Exit state:** no Test/Production database change, no administrator enrollment, no Docker container created by this IT-02 runner. Preserve any failing logs for diagnosis.
+
+**Execution record — IT-02:** UTC start/end (from evidence index): ___ / ___; operator: ___; context: LOCAL regressions; exact HEAD/tree: ___ / ___; Go version: ___; worktree CLEAN/MODIFIED: ___; `two-human-administrators-check` result/exit/log ref: ___; `production-bootstrap-reconciliation-check` result/exit/log ref: ___; `onepassword-deployment-preflight-check` result/exit/log ref: ___; `production-credential-cutover-check` result/exit/log ref: ___; `it02-evidence.json` ref: ___; IT-00 CI evidence ref: ___; verdict/defect: ___; next-state: ___.
 
 ## IT-03 — Actual off-host Test recovery rehearsal with RPO/RTO (DEPLOYED TEST ONLY)
 

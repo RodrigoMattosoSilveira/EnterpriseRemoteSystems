@@ -16,6 +16,22 @@ for n in range(9):
     for term in ('**Entry:', '**Expected:', '**Execution record — IT-'):
         assert term in segment or (term == '**Expected:' and '**Expected stdout:' in segment), (n, term)
 
+# IT-02 must print individual results, actual toolchain and real evidence refs;
+# a single four-target && result hides these required acceptance fields.
+it02 = text[text.index('## IT-02 — '):text.index('## IT-03 — ')]
+for required in (
+    'python3 -B scripts/ers-bite3368-it02-evidence.py',
+    'IT-02 GO VERSION:',
+    'IT-02 RESULT 1/4',
+    'IT-02 RESULT 4/4',
+    'IT-02 EVIDENCE REF',
+    'IT-02 EVIDENCE INDEX:',
+    'IT-02 SUMMARY: PASS (4/4 passed)',
+):
+    assert required in it02, f'IT-02 missing named regression evidence: {required}'
+assert 'if make two-human-administrators-check &&' not in it02, 'IT-02 lost individual exit-code evidence'
+assert (ROOT / 'scripts/ers-bite3368-it02-evidence.py').is_file()
+
 # IT-03 must provide the whole lifecycle: no receipt -> gated Test-only creation -> independent verification.
 it03_start = text.index('## IT-03 — ')
 it03_end = text.index('## IT-04 — ', it03_start)
