@@ -135,6 +135,8 @@ help:
 	@echo "  make migration-deployment-recovery-gate-check"
 	@echo "  make recovery-rehearsal-operational-runbook-check"
 	@echo "  make owner-unavailable-recovery-readiness-check"
+	@echo "  make bite3368-core-check"
+	@echo "  make bite3368-integrated-check"
 	@echo "  make migration-check"
 	@echo "  make migration-rehearsal-check"
 	@echo "  make local-docker-check"
@@ -547,8 +549,29 @@ two-human-administrators-preflight-check:
 two-human-administrators-check: two-human-administrators-preflight-check
 	cd backend && go test ./internal/authentication ./cmd/enroll-human-admins
 
+.PHONY: bite3368-core-check
+bite3368-core-check:
+	python3 -B scripts/test-bite3368-manual-contract.py
+	python3 -B scripts/test-bite3368-integrated-acceptance.py
+	python3 -B scripts/ers-bite3368-integrated-rehearsal.py
+
+# Operator-invoked integrated suite: distinct from the release evidence gate,
+# which additionally needs real Test/Production rehearsal and human sign-off.
+.PHONY: bite3368-integrated-check
+bite3368-integrated-check: bite3368-core-check
+	$(MAKE) two-human-administrators-check
+	$(MAKE) backup-creation-retention-verification-check
+	$(MAKE) off-host-backup-protection-check
+	$(MAKE) restore-tooling-recovery-verification-check
+	$(MAKE) migration-deployment-recovery-gate-check
+	$(MAKE) recovery-rehearsal-operational-runbook-check
+	$(MAKE) onepassword-deployment-preflight-check
+	$(MAKE) production-credential-cutover-check
+	$(MAKE) production-release-evidence-check
+
 .PHONY: promotion-readiness-check
 promotion-readiness-check:
+	$(MAKE) bite3368-core-check
 	$(MAKE) two-human-administrators-preflight-check
 	$(MAKE) production-environment-guardrails-check
 	$(MAKE) owner-unavailable-recovery-readiness-check
@@ -562,6 +585,7 @@ promotion-readiness-check:
 
 .PHONY: local-check
 local-check:
+	$(MAKE) bite3368-core-check
 	$(MAKE) two-human-administrators-check
 	$(MAKE) bite30l4-coverage-manifest-check
 	$(MAKE) bite32-release-coverage-check
@@ -636,7 +660,7 @@ local-docker-check: local-docker-check-image
 		-e GOMODCACHE=/tmp/gomod \
 		-e NPM_CONFIG_CACHE=/tmp/npm-cache \
 		$(LOCAL_DOCKER_CHECK_IMAGE) \
-		bash -lc 'set -euo pipefail; make bite30l4-coverage-manifest-check; make bite32-release-coverage-check; make bite326-release-hardening-check; make post-bite30-backlog-reconciliation-check; make deployed-playwright-evidence-check; make production-release-evidence-check; make production-environment-guardrails-check; make backup-creation-retention-verification-check; make off-host-backup-protection-check; make restore-tooling-recovery-verification-check; make migration-deployment-recovery-gate-check; make recovery-rehearsal-operational-runbook-check; make owner-unavailable-recovery-readiness-check; make local-hot-reload-check; make local-auth-cookie-config-check; make server-authz-bootstrap-config-check; make legacy-identity-dependency-check; make brazilian-demo-presentation-check; make migration-rehearsal-check; cd backend && go clean -testcache && go test ./...; cd ../frontend && npm ci && npm run test:run && npx playwright install chromium && npx playwright test && npm run build'
+		bash -lc 'set -euo pipefail; make bite3368-core-check; make bite30l4-coverage-manifest-check; make bite32-release-coverage-check; make bite326-release-hardening-check; make post-bite30-backlog-reconciliation-check; make deployed-playwright-evidence-check; make production-release-evidence-check; make production-environment-guardrails-check; make backup-creation-retention-verification-check; make off-host-backup-protection-check; make restore-tooling-recovery-verification-check; make migration-deployment-recovery-gate-check; make recovery-rehearsal-operational-runbook-check; make owner-unavailable-recovery-readiness-check; make local-hot-reload-check; make local-auth-cookie-config-check; make server-authz-bootstrap-config-check; make legacy-identity-dependency-check; make brazilian-demo-presentation-check; make migration-rehearsal-check; cd backend && go clean -testcache && go test ./...; cd ../frontend && npm ci && npm run test:run && npx playwright install chromium && npx playwright test && npm run build'
 
 # ==============================================================================
 # Generic server environment targets
