@@ -2,7 +2,7 @@
 
 **Issue:** #998. **Baseline:** `998-bite-3368--integrated-regression-testing-recovery-rehearsal-and-final-acceptance` at `17cedf7183834740533bd5e12d8c115b61d0f496` (patch input, NOT an expected HEAD after committing). **This manual does not authorize Production operations.**
 
-**Sequence:** IT-00 → IT-01 → IT-02 (LOCAL) → IT-03 → IT-04 → IT-05 → IT-06 (deployed Test) → IT-07 (separately approved Production) → IT-08 (cleanup/decision). Do not jump past BLOCKED tests. A LOCAL pass supports branch promotion but cannot satisfy deployed Test or Production release gates. Each test below defines its own commands and state, and a distinct execution record. If an earlier step already succeeded, record its evidence rather than rerunning any create-only operation. All `: 'Terminal ...'` annotations are safe to paste into **interactive zsh** (ordinary leading `#` comments are not).
+**Sequence:** IT-00 → IT-01 → IT-02 (LOCAL) → IT-03 (isolated *deployed Test* off-host recovery) → IT-04 (existing/newly enrolled *deployed Test* humans) → IT-05 → IT-06 (Test evidence) → IT-07 (separate Production evidence/authorization review) → IT-08 (cleanup/decision). Do not jump past BLOCKED tests. A LOCAL pass supports branch promotion but cannot satisfy deployed Test or Production release gates. Each test below defines its own commands and state, and a distinct execution record. If an earlier step already succeeded, record its evidence rather than rerunning any create-only operation. All `: 'Terminal ...'` annotations are safe to paste into **interactive zsh** (ordinary leading `#` comments are not).
 
 **Terminals:** **A** = your macOS Terminal, repo root, zsh. **D** = specifically authorized Test deployment host, in its *Test* checkout, bash. **P** = specifically authorized Production deployment host, in its *Production* checkout, bash, only after separate approval. **Browser A/B** = separate normal browser sessions for distinct human administrators. Never paste passwords, reset tokens, private keys, 1Password secrets or raw databases into test records or ChatGPT.
 
@@ -97,76 +97,299 @@ fi
 
 ## IT-03 — Actual off-host Test recovery rehearsal with RPO/RTO (DEPLOYED TEST ONLY)
 
-**Entry:** IT-00–IT-02 PASS, Test deployment available, authorized Test operator with access to the Test host and its managed off-host receipt. The Test backend and data are **not** stopped or reset for this non-destructive rehearsal. **Do not use Production credentials or paths.** **Operator:** named Test operator. **Context:** Test deployment host and `ENV=test`. Terminal D must be in the checked-out *Test deployment* repository directory. **No previously defined variables are assumed.** The original service's rehearsal tool checks the migration recovery gate is not armed; do not bypass it.
+**What is being tested and where (read before running):** There are **three different databases/workspaces**, and they must not be confused:
 
-**Actions — Terminal D (Test deployment host, bash):**
+| State | Database/location | May this test replace it? | Purpose |
+|---|---|---|---|
+| IT-01, LOCAL | Temporary SQLite database created and removed by `ers-bite3368-integrated-rehearsal.py` | Yes: test-created and disposable | Regression simulation only; no real Test users |
+| IT-03, Test recovery rehearsal | Private `.../test/recovery/rehearsals/rehearsal-*/` restore/boot workspace created by the recovery script | Yes: the script creates and tears down its *own* isolated recovery resources | Prove actual Test off-host backup restores and boots within RPO/RTO |
+| IT-04, deployed Test | **Persistent** Docker volume `ers-tst_backend-data`, mounted at `/app/data/app.db` by `ers-tst-backend` | **NO** as part of IT-03; **no reset** in IT-04 | Test application and the two Test human administrator accounts |
+
+The deployed **Test** environment is distinct from Production, but it is **not** an arbitrary disposable database. Its data can be deliberately restored from a deterministic baseline by the approved Test *deployment* workflow; such deployment can remove previously enrolled Test humans. IT-03 never performs that reset. IT-04 separately checks the Test accounts **after the last Test deployment**. Do not copy the LOCAL database, or enroll humans into an IT-03 isolated restore (their accounts would not become deployed Test accounts).
+
+**Entry state:** IT-00–IT-02 PASS, approved and completed deployment to `test`; Test backend remains running; Test users have been warned about the rehearsal if required by the change; no Test recovery/migration gate is armed. **Operator:** named, authorized Test operator. **Context:** Test server checkout and `ENV=test`, never Production. **Terminal D:** bash on the Test host, in the repository used for Test deployment. **Credentials:** approved Test off-host read authority via the existing environment configuration; never place credentials in commands/evidence. **Variables:** none inherited from prior tests. **STOP** if the deployed revision/tree or Test receipt cannot be verified.
+
+### Step 1 — Record the exact Test environment and recovery receipt (Terminal D)
 
 ```bash
-: 'Terminal D (TEST server/bash, Test checkout root) — IT-03 identify environment and receipt'
+: 'Terminal D (Test Linux host/bash, Test deployment repository root) — IT-03 Step 1'
+date -u '+IT-03 UTC start: %Y-%m-%dT%H:%M:%SZ'
 pwd
 git rev-parse HEAD
-git rev-parse HEAD^{tree}
-printf 'Enter the fully qualified path of an existing, verified TEST .offhost.json receipt: '
+git rev-parse 'HEAD^{tree}'
+make server-ps ENV=test
+printf 'Enter the absolute path to the existing, verified TEST .offhost.json receipt: '
 IFS= read -r TEST_RECEIPT
-if [[ ! -f "$TEST_RECEIPT" || "$TEST_RECEIPT" != *.offhost.json ]]; then
-  printf 'STOP: verified Test off-host receipt not located\n' >&2
-else
-  printf 'PASS: Test receipt selected: %s\n' "$(basename "$TEST_RECEIPT")"
-fi
-```
-
-**Expected:** verified receipt exists under this Test environment's managed backup directory. Verify its non-secret associated backup verification evidence and object-version receipt before proceeding. Do not invent a path or accept a Production receipt. The Test server revision/tree should be the release under acceptance; otherwise STOP.
-
-**Actions — Terminal D:**
-
-```bash
-: 'Terminal D (TEST server/bash, Test checkout root) — IT-03 non-destructive off-host recovery rehearsal'
-make server-recovery-rehearsal ENV=test RECOVERY_REHEARSAL_RECEIPT_FILE="$TEST_RECEIPT"
-```
-
-**Expected:** exit `0`, `Recovery rehearsal passed.`, a printed `Evidence:` report path, off-host source, objective calculations with `true` for both RPO ≤ 86,400 s and RTO ≤ 14,400 s. The tool verifies restore/migration and isolated backend health. Record the report's **actual** path and server revision/tree and copy this non-secret JSON to restricted Test acceptance-evidence storage. Do **not** put secrets or the restored DB in Git. No Prod/S3 object is modified by this rehearsal; see `docs/database-recovery-runbook.md` for incident-only procedures. If result is `objective_failed`, STOP; never relax the limits to produce PASS.
-
-**Action — Terminal D (paste actual report path printed above):**
-
-```bash
-: 'Terminal D (TEST server/bash, Test checkout root) — IT-03 verify rehearsal JSON'
-printf 'Paste the absolute Evidence: report path printed by the rehearsal: '
-IFS= read -r TEST_REPORT
-if [[ ! -f "$TEST_REPORT" ]]; then
-  printf 'STOP: report not found\n' >&2
-else
-  if jq -e '.status == "passed" and .environment == "test" and .objectives.rpo_met == true and .objectives.rto_met == true and .recovery.isolated_backend_health == "passed" and .recovery.post_boot_integrity_check == "ok" and .recovery.post_boot_foreign_key_check == "clean"' "$TEST_REPORT" >/dev/null; then
-    printf 'PASS: off-host Test rehearsal and recovered database evidence
-'
-    sha256sum "$TEST_REPORT"
+if [[ -f "$TEST_RECEIPT" && "$TEST_RECEIPT" == /opt/EnterpriseRemoteSystems/test/backups/*.offhost.json ]]; then
+  if make server-offhost-backup-verify ENV=test BACKUP_FILE="${TEST_RECEIPT%.offhost.json}"; then
+    export TEST_RECEIPT_VERIFIED=1
+    printf 'PASS: verified Test off-host receipt: %s\n' "$(basename "$TEST_RECEIPT")"
   else
-    printf 'STOP: report is incomplete or failed; do not proceed
-' >&2
+    printf 'STOP: Test off-host replica verification failed\n' >&2
   fi
+else
+  printf 'STOP: receipt is missing or not in the managed Test backups directory\n' >&2
 fi
 ```
 
-**Expected:** `PASS: off-host Test rehearsal and recovered database evidence`, then a SHA-256 digest and filename (Linux Test server uses `sha256sum`); otherwise `STOP` and no acceptance.
+**Expected:** The recorded Git revision/tree match the Test release being accepted, the Test backend is running, and `PASS: verified Test off-host receipt`. The verifier must exit `0` using the actual Test backup receipt; record its non-secret object-version and receipt verification evidence. Existence of the receipt alone is insufficient. If verification fails, record BLOCKED. Do not use a Production receipt.
 
-**Exit:** report and hash recorded; Test services left in their original state; no Test database replaced; next IT-04 begins in separate browsers. **Cleanup:** inspect only newly named `recovery-rehearsal` containers belonging to this run and confirm that the source script's trap removed them; if one remains, STOP for operator investigation rather than stopping unrelated containers. Record actual container names and report path. The original script attempts cleanup even on failure; a failed cleanup is BLOCKED.
+### Step 2 — Rehearse an off-host restore into the *isolated* Test recovery workspace (Terminal D)
 
-**Execution record — IT-03:** UTC start/end: ___ / ___; Test operator: ___; Test server revision/tree: ___ / ___; exact receipt basename and verification ref: ___; report path/SHA-256: ___; RPO seconds/limit: ___ / ___; RTO seconds/limit: ___ / ___; Docker cleanup evidence: ___; result/defect: ___; exit-state: ___.
+```bash
+: 'Terminal D (Test Linux host/bash, Test deployment repository root) — IT-03 Step 2'
+if [[ "${TEST_RECEIPT_VERIFIED:-}" == 1 && -n "${TEST_RECEIPT:-}" && -f "$TEST_RECEIPT" ]]; then
+  make server-recovery-rehearsal ENV=test RECOVERY_REHEARSAL_RECEIPT_FILE="$TEST_RECEIPT"
+else
+  printf 'STOP: Step 1 did not establish a verified Test receipt\n' >&2
+fi
+```
 
-## IT-04 — Deployed Test human administrators, mutual recovery, and audit (UI FIRST)
+**Expected:** Exit status `0`, `Recovery rehearsal passed.`, an `Evidence:` report path, actual off-host source, isolated restored-backend health, and objective checks `RPO <= 86400 seconds` and `RTO <= 14400 seconds`. If a step fails, record BLOCKED and preserve its non-secret error/report. **Do not** invoke `server-restore-apply`, `server-test-rehearsal-restore`, `server-test-down`, or any database reset here. The live Test database must be unchanged.
 
-**Entry:** IT-03 PASS. Two **already enrolled** distinct Test human GLOBAL Application Administrators (A/B), each with their own credentials and browser session; Test origin verified, no Production sessions. If these Test identities have not been enrolled, STOP — perform separately authorized Bite 33.6.7 *Test Gate 2* first; **never invoke create-only enrollment again without state inspection**. **Operator:** independent Human A and Human B, with a witness/reviewer. **Context:** **GLOBAL Administration** in Test, not a Tenant actor. **Terminal:** none. **Secrets:** use approved Test-only credentials privately.
+### Step 3 — Inspect evidence and verify the live Test service remains available (Terminal D)
 
-**Actions:**
+```bash
+: 'Terminal D (Test Linux host/bash, Test deployment repository root) — IT-03 Step 3'
+printf 'Paste the absolute Evidence: report path from Step 2: '
+IFS= read -r TEST_REPORT
+if [[ -f "$TEST_REPORT" ]] && jq -e '.status == "passed" and .environment == "test" and .objectives.rpo_met == true and .objectives.rto_met == true and .recovery.isolated_backend_health == "passed" and .recovery.post_boot_integrity_check == "ok" and .recovery.post_boot_foreign_key_check == "clean"' "$TEST_REPORT" >/dev/null; then
+  printf 'PASS: Test off-host rehearsal, isolated boot and objectives\n'
+  sha256sum "$TEST_REPORT"
+else
+  printf 'STOP: report missing or failed one or more required checks\n' >&2
+fi
+make server-ps ENV=test
+make server-backend-health ENV=test
+docker ps -a --format '{{.ID}} {{.Names}}' | grep -E 'ers.*(recovery-rehearsal|3368)' || true
+date -u '+IT-03 UTC end: %Y-%m-%dT%H:%M:%SZ'
+```
 
-1. Browser A: open the exact authorized Test URL. Sign in as Human A. If first-password change is required, complete it using A's own password; record only that the change succeeded. Confirm the Administration context displays **Global administration**, and open **Administration → Authentication Accounts**. Record A's login and visible global administrator status; do not record a password.
-2. Browser B (different browser profile/private window): independently sign in as Human B, perform any required first-password change, confirm **Global administration**, and open **Administration → Authentication Accounts**. Verify B is a distinct Account, not an alternate Tenant actor attached to A.
-3. In Browser A, from Authentication Accounts locate B's account and select **Issue reset token**. Record a non-secret action/audit reference only; convey the token directly and privately to B, never in screenshot/evidence. Browser B follows the **Reset password** workflow and signs in with a new B-only password; confirm a previously existing B session is invalidated. Confirm token reuse is refused.
-4. In Browser B, issue a reset token for A through Authentication Accounts. Browser A uses **Reset password** and signs back in with A's new password; verify the old session is revoked and the token is single-use.
-5. In **Administration → Audit Logs**, inspect available identity/audit filters and record actual non-secret event/correlation IDs or, if the viewer cannot display the specific recovery events, record a read-only audit verification reference under authorized Test evidence access. Never assert an event exists based solely on an unfiltered UI search. Verify the actions are attributable and neither Account became a Tenant Actor.
+**Expected:** `PASS` and a 64-digit SHA-256 digest, with the original `ers-tst-backend` still running/healthy; no rehearsal-created containers remain. Record the actual RPO/RTO seconds from the report, not just the booleans. Inspect `docker ps -a --format '{{.ID}} {{.Names}}'` for only *this run's* recovery-rehearsal containers; if any remain, identify and investigate them without touching unrelated containers. Store the non-secret report only in approved restricted Test evidence. **Exit state:** original Test backend/data continue unchanged, rehearsal artifacts/evidence retained as required, IT-04 may start. **PASS:** all checks plus cleanup verified. **BLOCKED:** failed restore, objectives, health, receipt, mismatched release, or unclear cleanup.
 
-**Expected:** two independent logins and canonical GLOBAL administrator access; both recovery directions work; tokens are one-use; old sessions do not survive; audit attribution is present. A missing identity or unexpected server error is FAIL. **Exit:** A/B independent Test credentials remain active; no other account affected; preserved audit references for the acceptance bundle.
+**IT-03 execution record:** UTC start/end: ___/___; authorized operator: ___; environment/URL: Test/___; Test revision/tree: ___/___; managed receipt basename and independent verification/object-version ref: ___; report path/hash: ___/___; RPO seconds/limit: ___/86400; RTO seconds/limit: ___/14400; isolated backend integrity/health: ___; original live Test backend remained running: ___; container cleanup: ___; PASS/FAIL/BLOCKED with evidence/defect: ___; next-state: ___.
 
-**Execution record — IT-04:** UTC start/end: ___ / ___; A real identity/login/account/actor key: ___; B real identity/login/account/actor key: ___; Test URL and GLOBAL context: ___; A→B recovery evidence: ___; B→A recovery evidence: ___; old session/token results: ___; audit refs: ___; UI screenshots (no secrets): ___; result/defect: ___; exit-state: ___.
+## IT-04 — Deployed Test human administrator enrollment (if needed), independent logins, mutual recovery, and audit (UI FIRST AFTER ENROLLMENT)
+
+**Why this is different from IT-01 and IT-03:** This test verifies **actual human accounts on the deployed Test application**, not on a disposable LOCAL file or isolated restore. The two approved Test humans, if absent, must be enrolled **once** into the persistent Test database volume `ers-tst_backend-data` during an authorized Test maintenance window. Accounts enrolled into this Test volume can disappear if the separately approved deployment pipeline later restores the deterministic Test baseline. **Do not automatically rerun enrollment:** recheck the deployed database state after each such deployment.
+
+**Entry state:** IT-03 PASS; deployed Test is healthy; its latest deployment SHA/tree and Test URL recorded; two named, distinct real human administrators A and B have agreed to participate; an approved **Test-only** change/maintenance window and operator are available if enrollment is required. **Environment:** TEST only, GLOBAL Administration (no Tenant actor). **Terminal D:** Test Linux host/bash and repository root for offline steps. **Browser A/B:** separate profiles for the *two different people*. **Passwords:** supplied interactively and privately, never as flags, environment variables, screenshots, log files, or chat text. **Do not presume** either human already exists. The operator must select either Path E (both already enrolled) or Path N (neither enrolled). A partial/mismatched state is BLOCKED, never an automatic repair.
+
+### Step 1 — Identify release, Test image/volume and prospective humans (Terminal D)
+
+```bash
+: 'Terminal D (Test Linux host/bash, Test deployment repository root) — IT-04 Step 1'
+date -u '+IT-04 UTC start: %Y-%m-%dT%H:%M:%SZ'
+printf 'Test checkout: '; pwd
+printf 'Test revision: '; git rev-parse HEAD
+printf 'Test tree: '; git rev-parse 'HEAD^{tree}'
+make server-ps ENV=test
+export TEST_VOLUME='ers-tst_backend-data'
+export TEST_IMAGE="$(docker inspect ers-tst-backend --format '{{.Image}}')"
+docker volume inspect "$TEST_VOLUME" --format 'Test volume: {{.Name}}'
+docker image inspect "$TEST_IMAGE" --format 'Backend image: {{.Id}}'
+printf 'Enter Human A approved TEST login: '; IFS= read -r TEST_LOGIN_A
+printf 'Enter Human A approved TEST actor key: '; IFS= read -r TEST_ACTOR_A
+printf 'Enter Human B approved TEST login: '; IFS= read -r TEST_LOGIN_B
+printf 'Enter Human B approved TEST actor key: '; IFS= read -r TEST_ACTOR_B
+export TEST_LOGIN_A TEST_ACTOR_A TEST_LOGIN_B TEST_ACTOR_B
+if [[ -n "$TEST_LOGIN_A" && -n "$TEST_LOGIN_B" && -n "$TEST_ACTOR_A" && -n "$TEST_ACTOR_B" && "$TEST_LOGIN_A" != "$TEST_LOGIN_B" && "$TEST_ACTOR_A" != "$TEST_ACTOR_B" ]]; then
+  printf 'PASS: two distinct proposed Test human identifiers recorded\n'
+else
+  printf 'STOP: missing or identical Test human identifiers\n' >&2
+fi
+```
+
+**Expected:** deployed Test container `ers-tst-backend` running, the exact approved Test release/tree, `ers-tst_backend-data` volume, backend image ID, and `PASS: two distinct...`. Human A and B logins/keys are **Test-only** and already approved, not invented example identities. If the live deployment is unexpectedly unavailable, stop; do not initialize a new database or use Production. This command does not enroll anyone.
+
+### Step 2 — Create and verify a consistent *inspection/rollback* backup while Test is running (Terminal D)
+
+```bash
+: 'Terminal D (Test Linux host/bash, Test deployment repository root) — IT-04 Step 2'
+make server-backup ENV=test
+printf 'Enter the absolute path of the NEW Test backup printed by the backup command: '
+IFS= read -r TEST_BACKUP
+if [[ "$TEST_BACKUP" == /opt/EnterpriseRemoteSystems/test/backups/app-*.db && -f "$TEST_BACKUP" && -f "$TEST_BACKUP.manifest.json" ]]; then
+  make server-backup-verify ENV=test BACKUP_FILE="$TEST_BACKUP"
+else
+  printf 'STOP: exact managed Test backup and manifest not identified\n' >&2
+fi
+```
+
+**Expected:** actual new `app-*.db` backup and matching manifest; `make server-backup-verify` exits zero. Store the full backup path in **Terminal D's session only** and in restricted Test operational evidence. The backup is a **snapshot of the running Test database**, not the disposable LOCAL rehearsal database. If the backup cannot be independently verified, STOP; do not stop Test or enroll anyone. Retain the backup as the maintenance rollback point; no automatic restore is authorized by this test.
+
+### Step 3 — Determine actual Test enrollment state from the read-only backup (Terminal D)
+
+```bash
+: 'Terminal D (Test Linux host/bash, Test deployment repository root) — IT-04 Step 3'
+python3 - "$TEST_BACKUP" "$TEST_LOGIN_A" "$TEST_ACTOR_A" "$TEST_LOGIN_B" "$TEST_ACTOR_B" <<'PY'
+import sqlite3, sys
+from pathlib import Path
+from urllib.parse import quote
+path, login_a, actor_a, login_b, actor_b = sys.argv[1:]
+if not Path(path).is_file():
+    raise SystemExit('STOP: Test backup missing')
+uri = 'file:' + quote(str(Path(path).resolve()), safe='/') + '?mode=ro'
+con = sqlite3.connect(uri, uri=True)
+try:
+    def count(table, col, val):
+        return con.execute(f'SELECT COUNT(*) FROM {table} WHERE {col}=? COLLATE NOCASE', (val,)).fetchone()[0]
+    counts = [count('auth_user_accounts', 'login', login_a), count('authz_actors', 'actor_key', actor_a),
+              count('auth_user_accounts', 'login', login_b), count('authz_actors', 'actor_key', actor_b)]
+    print('Test identity counts [A login, A actor, B login, B actor]:', *counts)
+    if counts == [0, 0, 0, 0]:
+        print('PATH N: neither Test human exists; guarded enrollment may be authorized')
+    elif counts == [1, 1, 1, 1]:
+        pairs = []
+        for key in (actor_a, actor_b):
+            pairs.append(con.execute('SELECT u.login FROM authz_actors a JOIN auth_account_actors aa ON aa.actor_id=a.id JOIN auth_user_accounts u ON u.id=aa.account_id WHERE a.actor_key=? COLLATE NOCASE AND aa.scope_type=?', (key, 'GLOBAL')).fetchall())
+        if len(pairs[0]) == len(pairs[1]) == 1 and pairs[0][0][0].lower() == login_a.lower() and pairs[1][0][0].lower() == login_b.lower():
+            print('PATH E: both Test human keys map to their expected distinct logins; verify grants next')
+        else:
+            raise SystemExit('STOP: account/actor association mismatch; do not enroll')
+    else:
+        raise SystemExit('STOP: partial or colliding Test identity state; do not enroll')
+finally:
+    con.close()
+PY
+```
+
+**Expected exactly one path:** **PATH E** (both existing identities) or **PATH N** (all four absent). Any `STOP`, database error, or nonzero command is BLOCKED. Do not use a partial match to infer completion. The contents of the backup are sensitive: do not share or commit it. The counting script performs read-only inspection and does **not** modify Test.
+
+**PATH E:** Run the repository status checker on this same Test backup before proceeding. It must report `"ready": true`, two distinct usable GLOBAL accounts with the approved logins/keys. If not, STOP. If ready, **skip Steps 4–7** and proceed directly to Step 8. The two humans may already have changed their initial passwords; `mustChangePassword` need not still be true.
+
+```bash
+: 'Terminal D (Test Linux host/bash, Test deployment repository root) — IT-04 Path E'
+python3 -B scripts/ers-two-human-admin-status.py --db "$TEST_BACKUP" \
+  --actor-key "$TEST_ACTOR_A" --actor-key "$TEST_ACTOR_B"
+```
+
+**PATH N:** Steps 4–7 are *mandatory* and must occur only after named Test change approval. **No Test enrollment is permitted without approval or if another process is writing the database.**
+
+### Step 4 — PATH N only: capture approval and verify the offline maintenance boundary (Terminal D)
+
+```bash
+: 'Terminal D (Test Linux host/bash, Test deployment repository root) — IT-04 Step 4, PATH N ONLY'
+printf 'Enter approved Test change reference (non-secret): '; IFS= read -r TEST_APPROVAL_REF
+printf 'Enter named Test operator reference (non-secret): '; IFS= read -r TEST_OPERATOR_REF
+printf 'Enter verified Test backup/off-host evidence reference (non-secret): '; IFS= read -r TEST_BACKUP_REF
+export TEST_APPROVAL_REF TEST_OPERATOR_REF TEST_BACKUP_REF
+if [[ -n "$TEST_APPROVAL_REF" && -n "$TEST_OPERATOR_REF" && -n "$TEST_BACKUP_REF" ]]; then
+  printf 'PASS: Test change, operator and backup evidence references provided\n'
+else
+  printf 'STOP: Test enrollment is not authorized without all three references\n' >&2
+fi
+```
+
+**Before stopping Test:** Independently check that the recorded approval authorizes **enrollment of two Test human GLOBAL Application Administrators**, the maintenance window is active, the backup is verified, off-host protections and restore evidence are available, the Test migration gate is not armed, and users know the Test UI will be unavailable. The command checks nonempty references **only**; it cannot verify their legitimacy. Missing evidence = BLOCKED. Record the image and volume from Step 1. Do not change Production or issue reset tokens here.
+
+### Step 5 — PATH N only: stop Test database writers without deleting volumes (Terminal D)
+
+```bash
+: 'Terminal D (Test Linux host/bash, Test deployment repository root) — IT-04 Step 5, PATH N ONLY'
+make server-test-down
+printf 'Expected no Test backend container and no containers using Test DB volume:\n'
+docker ps --format '{{.Names}}' | grep -x 'ers-tst-backend' || true
+docker ps --filter "volume=$TEST_VOLUME" --format '{{.ID}} {{.Names}}'
+```
+
+**Expected:** `make server-test-down` exits `0`; both inspection queries return **no rows**. If any process/container still accesses the Test volume, STOP and investigate. `server-test-down` does **not** remove the persistent Test volume. Never run `server-test-down-volumes`, `docker volume rm`, or Test baseline restore to perform enrollment. **Exit:** authorized Test downtime, backed-up persistent Test database with all writers stopped.
+
+### Step 6 — PATH N only: invoke create-only enrollment **exactly once** (Terminal D)
+
+Before entering this command, verify that **Steps 1–5 all passed**, the authorized A/B humans are ready to privately enter distinct temporary passwords, and `/app/enroll-human-admins` exists in the exact image recorded in Step 1. At the input helper's **Actor key** and **Login** prompts enter the *exact* `TEST_ACTOR_A`, `TEST_LOGIN_A`, `TEST_ACTOR_B`, and `TEST_LOGIN_B` from Step 1; enter approved human display names and distinct private temporary passwords. Do not substitute different identifiers. Do not run if there has been any partial enrollment, unexpected container, or uncertain database state. **Never retry automatically** if the result is ambiguous.
+
+```bash
+: 'Terminal D (Test Linux host/bash, Test deployment repository root) — IT-04 Step 6, PATH N ONLY'
+if [[ -n "${TEST_APPROVAL_REF:-}" && -n "${TEST_OPERATOR_REF:-}" && -n "${TEST_BACKUP_REF:-}" && -n "${TEST_IMAGE:-}" && "${TEST_VOLUME:-}" == 'ers-tst_backend-data' ]]; then
+  ( set -euo pipefail
+    python3 scripts/ers-two-human-admin-input.py | docker run \
+      --name "ers-3368-test-enroll-$$" --rm -i --network none \
+      --mount "type=volume,src=${TEST_VOLUME},dst=/app/data" \
+      --env APP_ENV=test --entrypoint /app/enroll-human-admins "$TEST_IMAGE" \
+      --db /app/data/app.db --environment test --offline-confirmed \
+      --approval-reference "$TEST_APPROVAL_REF" \
+      --operator-reference "$TEST_OPERATOR_REF" \
+      --backup-evidence-reference "$TEST_BACKUP_REF"
+  )
+else
+  printf 'STOP: required Test enrollment evidence, image or volume absent\n' >&2
+fi
+```
+
+**Expected on success:** **exactly two** `enrolled login=... actor_key=... account_id=... actor_id=... must_change_password=true` lines for the two approved Test humans. Passwords must not appear in stdout, logs, evidence or shell history. Confirm the named Test enrollment container has been removed with `docker ps -a --filter 'name=ers-3368-test-enroll-'`. If enrollment fails, **do not rerun the command**: retain the Test backup and the stopped-writer state, record error, investigate with authorized read-only tools, and mark BLOCKED. No E2E provisioner or bootstrap bypass may be used. This is the *only* create operation in IT-04.
+
+### Step 7 — PATH N only: verify canonical grants from a private offline snapshot (Terminal D)
+
+This verification runs while the Test backend is still stopped. It creates a **temporary inspection copy** from the deployed Test volume; it does not point the Test application at that copy. It must print `"ready": true` for A and B before Test is restarted. For this new enrollment both `mustChangePassword` values must be `true`. A second failed status check is not permission to rerun enrollment.
+
+```bash
+: 'Terminal D (Test Linux host/bash, Test deployment repository root) — IT-04 Step 7, PATH N ONLY'
+( set -euo pipefail
+  STATUS_DIR="$(mktemp -d /tmp/ers-3368-test-status.XXXXXXXX)"
+  chmod 700 "$STATUS_DIR"
+  trap 'rm -f "$STATUS_DIR/app.db"; rmdir "$STATUS_DIR"' EXIT
+  docker run --rm --network none \
+    --mount "type=volume,src=${TEST_VOLUME},dst=/app/data,readonly" \
+    --mount "type=bind,src=${STATUS_DIR},dst=/out" \
+    --env "HOST_UID=$(id -u)" --env "HOST_GID=$(id -g)" \
+    --entrypoint /bin/sh "$TEST_IMAGE" -ec \
+      'umask 077; sqlite3 /app/data/app.db ".backup /out/app.db"; chown "$HOST_UID:$HOST_GID" /out/app.db'
+  STATUS_JSON="$(python3 -B scripts/ers-two-human-admin-status.py --db "$STATUS_DIR/app.db" \
+    --actor-key "$TEST_ACTOR_A" --actor-key "$TEST_ACTOR_B")"
+  printf '%s\n' "$STATUS_JSON"
+  printf '%s\n' "$STATUS_JSON" | jq -e \
+    --arg a "$TEST_LOGIN_A" --arg b "$TEST_LOGIN_B" \
+    '.ready == true and (.administrators | length == 2) and
+     .administrators[0].usable == true and .administrators[1].usable == true and
+     .administrators[0].mustChangePassword == true and .administrators[1].mustChangePassword == true and
+     .administrators[0].login == ($a | ascii_downcase) and
+     .administrators[1].login == ($b | ascii_downcase) and
+     .administrators[0].accountId != .administrators[1].accountId and
+     .administrators[0].actorId != .administrators[1].actorId' >/dev/null
+  printf 'PASS: two new Test GLOBAL human administrators with intended logins and distinct identities\n'
+)
+```
+
+**Expected:** `"ready": true`, two independent usable account IDs/actor IDs, distinct Test logins, `mustChangePassword: true` for each before first login, and no security-suspended account. Verify and record the two `authentication.human_admins.offline_enroll` audit records using authorized non-secret audit inspection if applicable. The snapshot is automatically removed even if status verification fails; store no database copies or passwords in evidence. If any check fails, STOP: do not claim accepted enrollment. Verify Docker has no leftover `ers-3368-test-enroll-*` or `ers-3368-test-status-*` test containers; do not delete any unrelated container.
+
+### Step 8 — Return to Test service and execute human-facing acceptance (Terminal D, Browsers A/B)
+
+For **PATH N**, only after Step 7 PASS, restart Test and confirm health:
+
+```bash
+: 'Terminal D (Test Linux host/bash, Test deployment repository root) — IT-04 Step 8 PATH N restart'
+make server-test-up
+make server-ps ENV=test
+make server-backend-health ENV=test
+```
+
+**Expected:** `ers-tst-backend` running/healthy and normal Test frontend available over its approved HTTPS origin. **PATH E** must *not* stop/restart a healthy Test environment; instead confirm its existing backend remains healthy with the same commands' read-only `server-ps` and health checks:
+
+```bash
+: 'Terminal D (Test Linux host/bash, Test deployment repository root) — IT-04 Step 8 PATH E health only'
+make server-ps ENV=test
+make server-backend-health ENV=test
+```
+
+Now the two **actual human operators** execute the following UI steps in order, using separate browser profiles and never sharing credentials:
+
+1. **Human A, Browser A, Test HTTPS URL:** Sign in with A's own Test login. If this is the first login, complete the required **Change password** screen with an A-only private password; sign in again if instructed. Confirm **Global administration** context and open **Administration → Authentication Accounts**. Record only A's login and non-secret Account/Actor IDs. **PASS** only if A can independently access GLOBAL Administration (not as a Tenant Actor).
+2. **Human B, Browser B, same Test HTTPS URL:** Independently sign in with B's different Test login. If first login, complete **Change password** with B-only password. Confirm **Global administration** and open **Administration → Authentication Accounts**. Confirm B's Account ID and Actor ID differ from A's. **PASS** only if neither profile borrows the other's cookies or credentials.
+3. **A recovers B:** Ensure B has an active authenticated session. In Browser A navigate **Administration → Authentication Accounts**, locate **B's exact login**, verify its Account ID, and select **Issue reset token**. Deliver the token/link privately to B without saving it in evidence. B opens the application's **Reset password** screen in a **third unauthenticated browser profile**, enters B's own new password and completes the reset. Refresh B's *old* authenticated Browser B tab: it must require sign-in. Verify B's old password fails and B's new password works; reuse the same reset token/link only to confirm it is rejected. Record non-secret action/audit reference. **Never screenshot or log the token.**
+4. **B recovers A:** Repeat Step 3 in reverse, with B issuing a reset token for **A's exact Account ID**. A resets in a third unauthenticated browser profile. A's former Browser A session must be invalidated, A's old password must fail, A's new password must work, and token reuse must fail.
+5. **Audit and canonical scope:** In **Administration → Audit Logs**, locate the available issuance and recovery audit evidence and confirm the authenticated issuer is the correct A or B. If the UI cannot show the event type, obtain an **approved read-only audit inspection** of a safe Test snapshot with a named operator; do not claim an event without evidence. In **Administration → Authorization** verify both humans' active GLOBAL `APPLICATION_ADMIN` grants scoped to `*`, with no Tenant actor/Person binding, and that previously existing automation administrator access was not silently revoked.
+
+**PASS:** Both independent Test humans can authenticate in GLOBAL context, recover each other, single-use tokens are rejected on reuse, sessions are invalidated, authorization and audit evidence are correct, and Test services recover cleanly. **FAIL/BLOCKED:** unauthorized Test enrollment, partial identities, incorrect grants, bad recovery/audit/session results, or wrong Test deployment. **Exit state:** Two Test human administrators operational (each with their own updated password), no Test maintenance containers, no unexpected Test data reset, non-secret evidence retained for IT-05. **Note:** The Test deployment workflow may restore its baseline on a later release; retest account existence after any new Test promotion.
+
+**IT-04 completion timestamp — Terminal D after the browser steps:**
+
+```bash
+: 'Terminal D (Test Linux host/bash, Test deployment repository root) — IT-04 completion time'
+date -u '+IT-04 UTC end: %Y-%m-%dT%H:%M:%SZ'
+```
+
+**IT-04 execution record:** UTC start/end: ___/___; Test operator/change approval/window: ___; environment/URL/release/tree: ___; Test image/volume: ___; path selected (E existing / N newly enrolled): ___; backup/manifest/off-host refs: ___; actor keys and logins (non-secret): ___; offline status/recorded distinct account+actor IDs: ___; independent A/B GLOBAL sign-in: ___/___; A→B, B→A reset/token/session results: ___/___; audit/canonical grant refs: ___; original automation access preserved: ___; Docker/test-copy cleanup: ___; PASS/FAIL/BLOCKED evidence+defect: ___; exit-state handed to IT-05: ___.
 
 ## IT-05 — Individually verified 1Password custody and legacy-source reconciliation (DEPLOYED TEST)
 
@@ -230,16 +453,18 @@ fi
 
 **Execution record — IT-06:** UTC start/end: ___ / ___; reviewer: ___; environment/context: Test evidence reviewed on LOCAL; Test revision/tree: ___ / ___; report SHA: ___; verifier output ref: ___; independent record review decision/ref: ___; result/defect: ___; exit-state: ___.
 
-## IT-07 — Production gate (SEPARATELY APPROVED; NOT PART OF LOCAL/TEST EXECUTION)
+## IT-07 — Production evidence and authorization gate (SEPARATELY APPROVED; NOT PART OF LOCAL/TEST EXECUTION)
+
+**This test is a review of Production acceptance evidence, NOT a command to carry out enrollment, restore, or deployment.** If Production operations have not independently been authorized and completed, record `BLOCKED — Production acceptance outstanding` without performing them. The dedicated Production operational procedure is still mandatory for actual operational work, but it is not a prerequisite for running IT-03/IT-04 in deployed Test.
 
 **Entry:** IT-06 PASS and independently approved. **Operator:** authorized Production change owner plus two independently authorized Production Human Administrators, with separately reviewed Production 1Password and S3 evidence. **Context:** Production GLOBAL Administration and Production recovery environment. **Terminal:** P only under approved maintenance window. **No Production action is authorized by this test document.**
 
 **Actions:**
 
 1. Review the **actual approved** Production change, its maintenance window, recovery owner, rollback decision, off-host receipt and backup verification, last accepted Test evidence, and exact promoted Production SHA/tree. If any are missing, record BLOCKED; do not stop Production or provision an E2E/bootstrap account.
-2. Follow `docs/bite-3367/production-operational-runbook.md` for Production human enrollment **only if not yet enrolled**, with its backups, offline isolation, create-only behavior and restart safeguards. Never rerun enrollment on an uncertain database state. Verify A/B independently using the Production human acceptance checks and non-secret audit records.
+2. **Review** actual Production human enrollment and acceptance evidence (if the independently authorized enrollment occurred): signed approval, verified backup, stopped-writer evidence, exactly two distinct independent GLOBAL AccountActor bindings, first-password change, A/B mutual recovery, token/session checks, immutable audit IDs and no accidental automation-admin revocation. If humans have not been enrolled or any proof is absent, record BLOCKED. **Do not enroll administrators as part of this review.**
 3. Independently verify each Production human's individual approved 1Password access and effective Production service-account isolation; explicitly reconcile the legacy LastPass recovery references. Record review IDs. Do not treat Test findings as Production acceptance.
-4. Conduct the **existing non-destructive** Production off-host recovery rehearsal under the recovery runbook. Accept only actual `status=passed`, Production environment, matching Production SHA/tree, off-host source, health/integrity evidence, RPO ≤24h and RTO ≤4h. Do not weaken thresholds. Record output `rehearsal.json` and SHA-256 in separately protected Production evidence storage.
+4. **Review** the completed, separately authorized **non-destructive** Production off-host recovery rehearsal report. Accept only actual `status=passed`, Production environment, matching Production SHA/tree, off-host source, health/integrity evidence, RPO ≤24h and RTO ≤4h. Do not weaken thresholds. Record the restricted `rehearsal.json` evidence reference and SHA-256. **Do not initiate a Production rehearsal from this review test.**
 5. In an authorized verification session, populate **a separate Production copy** of `docs/bite-3368/final-acceptance-template.json` with Production-specific references. Run the exact same verifier as IT-06 but with `--environment production` and the full Production SHA. The verifier has no remote access and does not approve a release on behalf of the reviewer.
 6. Approver records explicit GO/NO-GO decision and the accepted residual risk of concurrent human administrator unavailability. Until this is completed, mark **IT-07 BLOCKED — not yet performed**, not PASS or LOCAL N/A.
 
