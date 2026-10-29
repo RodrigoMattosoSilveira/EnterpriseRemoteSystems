@@ -883,57 +883,243 @@ date -u '+%Y-%m-%dT%H:%M:%SZ'
 
 **A case is not PASS until its exit state and evidence have been confirmed.**
 
-## MT-09 — Independent 1Password custody (LOCAL N/A; deployed Test/Production separately required)
+## MT-09 — Independent 1Password Access and Custody (LOCAL / deployed Test / Production)
 
-**Operators:** actual Human A and Human B, independently, plus approved access reviewer. **Starting state:** MT-08 PASS; LOCAL database and A/B sessions unaffected. **Context:** 1Password environment-specific vaults; **no ERS tenant context**. **Credentials:** each human's *own* 1Password identity and MFA; never share an account. **Shell variables:** none.
+**Purpose.** Verify the two-human administrator operating model's 1Password access at the *appropriate environment gate*. This is an **external custody check**, not an ERS application feature test. Never use LOCAL execution to claim Test or Production readiness.
 
-**LOCAL path L (the current isolated rehearsal):**
+**Execution choice (select exactly one path for each execution):**
 
-**Start timestamp — Terminal A:** Record the following UTC value before beginning MT-09.
+- **MT-09-L — LOCAL isolated acceptance:** **execute now** if you are continuing the current MT-00–MT-11 LOCAL sequence. It records a deliberate **N/A** for actual 1Password authorization and hands off to MT-10.
+- **MT-09-T — deployed Test:** execute later, only under a documented, approved Test access review. This is a separate acceptance record, not a continuation of LOCAL MT-09-L.
+- **MT-09-P — Production:** execute later under an approved Production change and the Production Operational Runbook. This is a separate acceptance record; neither LOCAL nor Test proves Production readiness.
+
+Do not switch paths mid-test. If you are conducting LOCAL acceptance, complete **MT-09-L only**, then proceed directly to **MT-10**.
+
+### MT-09-L — LOCAL isolated acceptance (execute during the current LOCAL sequence)
+
+#### Starting state, identity, context, and terminals
+
+- **Actual operator:** the human currently executing the Bite 33.6.7 LOCAL manual acceptance suite. Identify that person in the execution record.
+- **ERS identities:** Human A in Browser A and Human B in Browser B, left in their existing MT-08 end state. No new sign-in, impersonation, or password change is performed.
+- **Administration / Tenant context:** not navigated during this test. Record `N/A — 1Password is external; ERS browser sessions left unchanged`.
+- **Expected prerequisite:** MT-08 has an execution record with verdict **PASS**; the dedicated database created in MT-01 still exists; the backend and frontend started for the LOCAL UI testing remain running; the A/B browsers stay open. If any prerequisite is false, record **BLOCKED** and investigate before MT-10.
+- **Terminal A:** macOS **interactive zsh**, at the ERS repository root. **Terminal B:** existing LOCAL backend; **Terminal C:** existing LOCAL frontend. Do not start, stop, or restart these processes in MT-09.
+- **Secrets:** none. No 1Password account, CLI token, service-account token, vault content, or ERS password is required.
+- **Variables:** `MT_DB` is defined explicitly below. Do not depend on an earlier terminal's exported variables.
+
+#### Step L1 — Verify prerequisite evidence and capture UTC start
+
+1. Locate your completed **MT-08 execution record** and read its verdict. **Proceed only when it says PASS.** Record the MT-08 evidence reference in the MT-09-L record below.
+2. In **Terminal A**, from the repository root, paste the entire command box:
 
 ```zsh
-: '# Terminal A (macOS/zsh, repository root) - MT-09 START UTC'
-date -u '+%Y-%m-%dT%H:%M:%SZ'
+: 'Terminal A (macOS interactive zsh, ERS repository root) — MT-09-L Step L1'
+export MT_DB="$HOME/ers-3367-acceptance-13bca905/isolated.db"
+printf 'MT-09-L environment: LOCAL isolated\n'
+printf 'MT-09-L database: %s\n' "$MT_DB"
+if [ -f "$MT_DB" ] && [ -r "$MT_DB" ]; then
+  printf 'PASS: isolated LOCAL database exists and is readable\n'
+else
+  printf 'STOP: isolated LOCAL database missing or unreadable; MT-09-L BLOCKED\n'
+fi
+if lsof -nP -iTCP:8080 -sTCP:LISTEN >/dev/null 2>&1; then
+  printf 'PASS: LOCAL backend port 8080 has a listener\n'
+else
+  printf 'STOP: expected backend listener on port 8080 is absent; MT-09-L BLOCKED\n'
+fi
+if lsof -nP -iTCP:5173 -sTCP:LISTEN >/dev/null 2>&1; then
+  printf 'PASS: LOCAL frontend port 5173 has a listener\n'
+else
+  printf 'STOP: expected frontend listener on port 5173 is absent; MT-09-L BLOCKED\n'
+fi
+date -u '+MT-09-L UTC start: %Y-%m-%dT%H:%M:%SZ'
 ```
 
-1. Verify **you are still working only with LOCAL** (`http://localhost:5173` and disposable `isolated.db` from MT-01). **Do not** log into Production 1Password vaults just to satisfy a LOCAL test.
-2. Record `MT-09 LOCAL subcheck: N/A — real deployed Test and Production 1Password custody cannot be validated from disposable LOCAL accounts`. No fake PASS is permitted. A/B ERS browser sessions remain untouched.
-3. Record pending evidence owner, Test vault approval reference, and later Test date. **The deployed Test and Production readiness gates stay OPEN** until the next path is separately performed.
+**Expected observable output:** the `LOCAL isolated` line, the exact isolated database path, all three `PASS:` lines, and a UTC timestamp. The database path is `~/ers-3367-acceptance-13bca905/isolated.db` (with `~` expanded to your home directory). **Any `STOP:` means BLOCKED**; do not simply record N/A and proceed. A port listener does not independently prove the listener is ERS: also confirm that Terminals B and C remain the ERS processes you started in MT-03.
 
-**Deployed Test Path T (only on the explicitly approved Test gate):**
+**Exit state after L1:** no data changed; both ERS processes and browser sessions remain as before.
 
-1. Have the approved Test access matrix in hand: exact vault names, item names, environment restrictions and reviewer. If unavailable, **BLOCKED**.
-2. Human A signs into **1Password using A's own identity/MFA**, opens the approved Test vault and the named required recovery/deployment item without disclosing its secret. Reviewer records only A identity, item/vault identifiers and UTC observation. A locks/signs out.
-3. Human B repeats independently under B's *different* 1Password identity/MFA and the approved Test permissions. Reviewer records B identity, vault/item identifiers and UTC observation; B locks/signs out.
-4. Reviewer verifies the Test deployment service-account authorization **does not grant Production secrets access**, and resolves any older LastPass-oriented documentation discrepancy before marking Test readiness.
-5. **Expected/PASS Test:** individually controlled access for both humans, least-privilege separation and non-secret recorded evidence. **FAIL/BLOCK:** shared login/MFA, inaccessible material, excessive Test→Production scope, unresolved custody discrepancy. **Production vault acceptance repeats later under approved Production operations; do not reuse Test evidence as Production proof.**
+#### Step L2 — Record the actual LOCAL scope; perform no 1Password operations
 
-**Exit to MT-10:** in LOCAL, N/A properly recorded with Test follow-up outstanding; A/B ERS sessions unchanged. MT-09 N/A does **not** fail isolated LOCAL functional rehearsal, but **blocks claiming full Production readiness**.
+1. **Do not** open 1Password, sign in, create a vault, copy a password, display a secret, grant a permission, run the 1Password CLI, or access Test/Production vaults.
+2. Leave Browser A, Browser B, Terminal B, and Terminal C as they are. Do not sign out of ERS.
+3. Copy the following observation into the **MT-09-L execution record**, exactly, then fill in the actual operator and evidence references:
 
-**End timestamp — Terminal A:** After completing MT-09 actions and checking the exit state, record this UTC value.
+> `MT-09-L: N/A — by design for LOCAL isolated acceptance. The disposable LOCAL ERS database cannot establish effective permissions to the organization's deployed Test or Production 1Password vaults. No 1Password operation was performed. MT-09-T and MT-09-P remain outstanding.`
+
+4. Record the future Test-review owner and approval reference **only if they actually exist**. Otherwise write `Not assigned / not approved — outstanding`. Do not invent names, vault names, or approval records.
+
+**Expected:** the LOCAL result is **N/A**, not PASS and not FAIL; the separate deployed Test and Production custody gates stay **OPEN**. No new ERS audit event is expected from this test.
+
+#### Step L3 — Capture UTC end and verify unchanged handoff to MT-10
+
+In **Terminal A**, paste:
 
 ```zsh
-: '# Terminal A (macOS/zsh, repository root) - MT-09 END UTC'
-date -u '+%Y-%m-%dT%H:%M:%SZ'
+: 'Terminal A (macOS interactive zsh, ERS repository root) — MT-09-L Step L3'
+printf 'MT-09-L verdict: N/A — LOCAL by design\n'
+printf 'MT-09-T: OUTSTANDING (deployed Test review not performed)\n'
+printf 'MT-09-P: OUTSTANDING (Production review not performed)\n'
+printf 'MT-09-L exit: no 1Password access, enrollment, or ERS session changes performed\n'
+date -u '+MT-09-L UTC end: %Y-%m-%dT%H:%M:%SZ'
 ```
 
-### MT-09 — Individual execution record (complete immediately after test)
+**Expected observable output:** the four explanatory lines followed by a UTC timestamp. Confirm Terminals B/C and Browser A/B are unchanged. No process or Docker cleanup is performed here: those resources are needed by MT-10 and are disposed of under MT-11.
 
-| Required evidence field | Actual value (fill in; do not leave blank) |
+**Final LOCAL verdict:** **N/A — by design**, but **only** when MT-08 was PASS, the L1 prerequisites passed, the observation is recorded, and the exit state is unchanged. Missing or inconsistent prerequisites → **BLOCKED**, with evidence. **Next test: MT-10**. Do not execute MT-09-T or MT-09-P during LOCAL acceptance.
+
+#### MT-09-L — Individual execution record (complete now, before MT-10)
+
+| Required field | Actual value — operator to complete |
 |---|---|
-| Test ID / environment | `MT-09` / `LOCAL isolated` or explicit separately approved Test |
-| UTC start / UTC end (from this test’s Terminal A timestamp blocks) | _Start: ... / End: ..._ |
-| Actual operator/human and role | _Non-secret identity; A/B/operator as applicable_ |
-| Administration / Tenant context actually shown | _GLOBAL `*`, unauthenticated, offline N/A, 1Password, etc. — record observed_ |
-| Exact non-secret A/B login, Account IDs, Actor IDs, or affected resource | _Values; or N/A with reason_ |
-| Process state and DB path BEFORE / AFTER | _Expected vs observed listener, database, session and shell-state transition_ |
-| Actual terminal/UI outputs, including failures | _Record exact relevant PASS/FAIL strings and UI behavior_ |
-| Non-secret audit event ID / correlation | _Actual event ID / correlation, or N/A and reason; never token_ |
-| Screenshot, CI, log or private evidence reference | _Exact private locator; redact credentials and tokens_ |
-| Verdict (PASS / FAIL / BLOCKED / N/A) | _Choose one; N/A reason is mandatory_ |
-| Defect link / fix SHA / retest time | _Actual reference or None — no defect observed_ |
+| Test ID / environment | `MT-09-L / LOCAL isolated` |
+| UTC start / end | _Actual L1 and L3 output_ |
+| Human actually operating / role | _Name; LOCAL acceptance operator_ |
+| ERS Administration/Tenant context | `N/A — not navigated; A/B sessions unchanged from MT-08` |
+| MT-08 result and evidence reference | _Actual PASS record and locator_ |
+| Isolated database path | _Actual printed MT_DB_ |
+| Backend / frontend / browsers entry state | _Terminal B/C and Browser A/B observed state_ |
+| Three Step L1 checks | _Exact PASS/STOP observations_ |
+| Human A and B ERS Account IDs | `N/A — no account operation in this test` |
+| 1Password action | `None — LOCAL scope intentionally N/A` |
+| Audit event or correlation ID | `N/A — no ERS mutation or authentication operation` |
+| Actual observations / evidence | _Non-secret terminal output, MT-08 evidence, execution record locator_ |
+| Future Test review owner and approval | _Actual reference, or Not assigned / outstanding_ |
+| MT-09-T and MT-09-P status | `OUTSTANDING / OUTSTANDING` |
+| Verdict | `N/A — by design` OR `BLOCKED — reason` |
+| Defect link / remediation | _None, or exact reference_ |
+| Exit state / handoff | _A/B sessions and backend/frontend unchanged; proceed MT-10 only if prerequisites satisfied_ |
 
-**A case is not PASS until its exit state and evidence have been confirmed.**
+---
+
+### MT-09-T — Deployed Test 1Password access acceptance (future; do not execute in LOCAL)
+
+#### Starting state, approval, identity, and context
+
+- **Environment:** deployed **Test**, not LOCAL and not Production. This is **not** the Test ERS login/recovery test; it evaluates the *external 1Password custody boundary*.
+- **Operators:** Human A and Human B as two separate natural persons with **different individual 1Password identities**, each subject to the organization’s approved authentication/MFA policy; an explicitly named, authorized reviewer of the Test custody evidence. The reviewer role does not establish a new emergency signing custodian or Gate C requirement.
+- **ERS Administration/Tenant context:** `N/A — 1Password external access review; no ERS context switching`.
+- **Terminals:** none; review uses the 1Password app and authorized 1Password administrative web UI. No ERS backend/frontend restart or database change.
+- **Entry prerequisites, all mandatory:** (a) Test gate approval/change reference and scheduled observation; (b) an approved **Test access matrix** giving *exact* organization/account, vault and item names, required rights, Human A's and B's separate 1Password identities, approved Test deployment service account, and vaults that service account must **not** access; (c) a named reviewer authorized to inspect effective permissions; (d) a secure place to retain **non-secret evidence**. If any is absent, record **BLOCKED** and do not improvise vault/item names, share credentials, or browse Production vaults to investigate.
+- **Required first operation:** record UTC start using the organization's approved evidence timestamp mechanism; record the matrix version and change approval ID. If no reliable UTC timestamp source is available, mark BLOCKED.
+
+#### Step T1 — Inspect the approved access matrix (reviewer)
+
+1. Open the approved Test access matrix (not a proposed draft); record its **document reference and revision**.
+2. Write the exact expected **Test vault name(s)** and required **item title(s)** in the MT-09-T record, without item contents. Record the exact identities of A and B and the Test deployment service account. Record expected rights separately for A, B, and the service account.
+3. Compare the two human identities: A and B must not share a 1Password login, authenticator, or account-recovery material. An MFA challenge may not appear on every unlock of an already trusted device; record the authentication method actually observed and verify MFA policy separately through the approved administrative view when that is a requirement. **STOP/BLOCKED** if the approved matrix cannot identify them individually.
+
+**Expected:** a complete, approved set of permissions against which observations can be judged. This step changes nothing in 1Password.
+
+#### Step T2 — Human A independently verifies required Test-vault access
+
+1. **Human A** unlocks or signs in to the **1Password desktop application** using **A's own** identity and the authentication method required for that device/account (including MFA when prompted), not another person's session. Reviewer records the observed 1Password account identity (never the password, secret key, recovery code, or MFA value).
+2. In the 1Password sidebar, select the specific **Test organization/account** from the account selector if multiple accounts are present, then select the **exact Test vault** named in the approved matrix. Do not use `All Accounts` as proof of which organization supplied access.
+3. Locate the exact required item title and select the item to confirm that the item is available. **Do not reveal, copy, export, screenshot, or transmit concealed secret fields.** Record only the item title, vault, identity, and UTC observation time.
+4. Repeat Step 2–3 for every Test vault/item that the approved matrix requires Human A to access. Do not test unauthorized vaults by trial-and-error sign-ins.
+5. Lock A's 1Password session before Human B begins. Record the lock observation. Do not unlink a device or sign out of a sole trusted SSO device merely for testing.
+
+**Expected:** A independently reaches every required named Test vault/item and then locks/signs out. Missing required access → **FAIL**, with a non-secret record; do not grant new permissions as an unapproved test repair.
+
+#### Step T3 — Human B independently verifies required Test-vault access
+
+1. **Human B** independently unlocks or signs in using **B's different** 1Password identity and the authentication method required for B's device/account (including MFA when prompted). Do not reuse A's session, credentials, or MFA.
+2. Select the specific **Test organization/account**, then the **exact Test vault** in the approved matrix. Open each named required item without revealing/copying secrets. Reviewer records B's own identity, actual vault/item names, and UTC time.
+3. Compare with the matrix for B's rights, not merely A's rights.
+4. Lock B's session; reviewer records the result. Do not unlink a device or sign out of a sole trusted SSO device merely for testing.
+
+**Expected:** B has the required independently controlled Test access. Shared identity or authenticator, inaccessible required item, or accidental secret disclosure → **FAIL**.
+
+#### Step T4 — Reviewer inspects effective human and Test service-account permissions
+
+1. **Reviewer** signs into the **authorized organization's** 1Password administration interface using the reviewer's **own** approved identity. On 1Password.com, open **Vaults**, then select the exact Test vault specified by the approved matrix. Inspect the listed members/groups and permissions. Repeat for all Test vaults involved.
+2. If A or B receives group-based access, inspect the applicable group memberships and permissions as well. Compare **effective** rights (including group grants) with the approved matrix. **Do not modify permissions.**
+3. Inspect the **Test deployment service account's** authorized vault access using the organization's approved administrative view (including the Test vault's service-account access controls where available). Compare its effective access with the matrix. Confirm that it has access only to its authorized Test/shared deployment vaults, and **not** to Production or human-only recovery/bootstrap vaults.
+4. Record the **non-secret permission-evidence reference**, not service tokens or vault contents. If the available interface cannot prove a required *negative* access claim, mark that subcheck **BLOCKED**; **do not** infer absence of access from a missing item in Human A/B's app, and do not test with live Production credentials.
+
+**Expected:** observed human and service-account permissions match the approved matrix, including inherited group rights and service-account isolation. Unexpected excess privilege → **FAIL and Test release blocker**.
+
+#### Step T5 — Documentation and evidence completion
+
+1. Reviewer records the approved resolution/reference for any applicable **legacy LastPass vs. 1Password operational documentation discrepancy**. If no approved resolution exists where the older recovery material still applies, record **BLOCKED — custody documentation unresolved**.
+2. Confirm no secret values, service-account tokens, MFA codes, or recovery keys appear in the evidence. Redact or securely remove any exposed secret before evidence handling; **treat a real secret disclosure as a security incident**, not a passed test.
+3. Record UTC end; ensure A and B's 1Password sessions are locked/signed out, the reviewer locks their account, and no ERS process, account, or database was modified.
+
+**MT-09-T PASS:** approved matrix and change; distinct A/B accounts and compliance with approved authentication/MFA policy; each human independently accesses the exact authorized Test items; actual human/group/service-account effective rights match approval; Production/human-only isolation demonstrably checked; any applicable legacy documentation issue resolved; non-secret evidence retained; safe exit state. Missing approval/inspection capability → **BLOCKED**. Observed unauthorized access, shared authentication, missing required item, or disclosed secrets → **FAIL**. **Production remains OUTSTANDING regardless of Test PASS.**
+
+#### MT-09-T — Individual execution record (complete during the approved Test gate)
+
+| Required field | Actual value — reviewer to complete |
+|---|---|
+| Test ID / environment | `MT-09-T / deployed Test` |
+| UTC start / end | _Actual observation timestamps_ |
+| Test approval/change ID and access matrix revision | _Actual references_ |
+| Operator A / individual 1Password identity | _Actual non-secret identity_ |
+| Operator B / individual 1Password identity | _Actual non-secret identity_ |
+| Authorized reviewer and identity | _Actual non-secret identity_ |
+| Administration/Tenant context | `N/A — external 1Password review` |
+| Approved Test vault/item names | _Exact names from approved matrix; no secret values_ |
+| Human A per-item observations and verdict | _Vault/item/reference + PASS/FAIL_ |
+| Human B per-item observations and verdict | _Vault/item/reference + PASS/FAIL_ |
+| Group grants and effective rights observed | _Evidence reference; deviations_ |
+| Test service-account identity, rights and isolation | _Evidence reference; exact non-secret finding_ |
+| Legacy documentation discrepancy resolution | _Reference or BLOCKED with reason_ |
+| Secret exposure / cleanup | _None / incident reference; confirm sessions locked_ |
+| Audit/correlation ID | `N/A for ERS; 1Password audit/evidence reference if available` |
+| Evidence location | _Private non-secret record locator_ |
+| Verdict | _PASS / FAIL / BLOCKED_ |
+| Defect/change link | _Actual reference or None_ |
+| Production gate status | `OUTSTANDING` |
+
+---
+
+### MT-09-P — Production 1Password access acceptance (future Production gate only)
+
+#### Starting state, authority, identity, and context
+
+- **Environment:** actual Production custody review; this is **not** a LOCAL or deployed Test step.
+- **Authority:** the separately approved Production change and `docs/bite-3367/production-operational-runbook.md`; obtain that authorization **before** interacting with Production vaults. Successful LOCAL or Test acceptance does not grant it.
+- **Operators:** two individually identified human Application Administrators (A and B), each using their **own** 1Password account and approved authentication/MFA method, plus a named authorized Production permissions reviewer. This is an evidence-review role, not an additional Gate C custodian.
+- **ERS Administration/Tenant context:** `N/A — external 1Password custody review`.
+- **Terminals:** none for this 1Password inspection; do not run enrollment commands or restart Production services as part of MT-09-P.
+- **Entry prerequisites:** approved Production change, authorized review window, **Production-specific approved access matrix** containing exact vault/item names and expected A/B/deployment service-account rights, separately approved reviewer, secure non-secret evidence destination. Missing anything → **BLOCKED**, without exploratory Production access.
+
+#### Steps P1–P4 — Approved Production access review
+
+1. **P1 — Reviewer:** record approval reference, Production matrix revision, identities, exact vault/item names, UTC start. Ensure evidence contains no secrets.
+2. **P2 — Human A:** individually sign into 1Password, select the approved Production organization/account and its exact matrix-listed vaults, open required item titles without revealing/copying secret values, and lock/sign out. Reviewer records identity, vault/item title, observation and result.
+3. **P3 — Human B:** independently repeat with B's distinct identity/MFA, no reused session; reviewer records B's separate results; B locks/signs out.
+4. **P4 — Authorized reviewer:** using 1Password's approved administrative vault/permissions views, inspect effective human/group and **Production deployment service-account** rights against the Production matrix. Confirm Production service credentials have **only** the approved Production/shared scope, with no unintended broader cross-environment or human-only recovery access. Record non-secret evidence and UTC end. Sign out; do not mutate vault permissions or ERS data.
+
+**MT-09-P PASS** requires all Production-specific prerequisites, both independently verified human access paths, effective least-privilege service-account authorization, no unapproved exposure, explicit reviewer sign-off and stored non-secret evidence. Missing authorization or unverifiable rights → **BLOCKED**; actual excess rights, shared credentials, missing required access or secret disclosure → **FAIL**. The **Production Operational Runbook remains authoritative** for the broader Production enrollment/recovery operation; MT-09-P does not authorize or execute that operation.
+
+#### MT-09-P — Individual execution record (complete under approved Production change)
+
+| Required field | Actual value — authorized reviewer to complete |
+|---|---|
+| Test ID / environment | `MT-09-P / Production` |
+| Production approval/change and runbook revision | _Actual references_ |
+| UTC start / end | _Actual observations_ |
+| Human A / individual 1Password identity | _Actual non-secret identity_ |
+| Human B / individual 1Password identity | _Actual non-secret identity_ |
+| Authorized reviewer | _Actual person and scope of authorization_ |
+| Administration/Tenant context | `N/A — external 1Password review` |
+| Approved Production matrix / exact vault-item names | _Document reference and non-secret titles_ |
+| A's independent access evidence | _Exact non-secret record_ |
+| B's independent access evidence | _Exact non-secret record_ |
+| Group/service-account permissions and isolation evidence | _Exact non-secret record_ |
+| No-secret-disclosure and session cleanup | _Actual observations_ |
+| Audit/correlation reference | _Non-secret 1Password/change evidence or N/A with reason_ |
+| Verdict | _PASS / FAIL / BLOCKED_ |
+| Release blocker / defect link | _Actual reference or None_ |
+| Exit state | _No ERS DB/process changes; Production review completed or blocked_ |
+
+### MT-09 — Final state and routing
+
+- After **MT-09-L**, record LOCAL N/A and continue to **MT-10** only when L1–L3 prerequisites and evidence are satisfied. Test and Production 1Password acceptance remain outstanding.
+- **MT-09-T** and **MT-09-P** must be executed and recorded as separate future gate activities; they do not replace MT-09-L in the LOCAL MT-00–MT-11 sequence.
+- Do not mark Bite 33.6.7 **fully Production accepted** merely because MT-09-L is N/A or because MT-09-T passes.
+
 
 ## MT-10 — Protect existing administrators and reject unsafe self-action
 
