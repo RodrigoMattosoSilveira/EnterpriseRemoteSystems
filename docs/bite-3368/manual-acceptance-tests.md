@@ -109,59 +109,181 @@ The deployed **Test** environment is distinct from Production, but it is **not**
 
 **Entry:** IT-00–IT-02 PASS, approved and completed deployment to `test`; Test backend remains running; Test users have been warned about the rehearsal if required by the change; no Test recovery/migration gate is armed. **Operator:** named, authorized Test operator. **Context:** Test server checkout and `ENV=test`, never Production. **Terminal D:** bash on the Test host, in the repository used for Test deployment. **Credentials:** approved Test off-host read authority via the existing environment configuration; never place credentials in commands/evidence. **Variables:** none inherited from prior tests. **STOP** if the deployed revision/tree or Test receipt cannot be verified.
 
-### Step 1 — Discover, select, and verify the Test off-host receipt (Terminal D)
+### Step 1 — Establish a verified Test off-host backup (Terminal D; REQUIRED before restore)
 
-**Why the receipt is needed:** IT-03 proves restoration from an actual remote Test replica, rather than merely copying a local SQLite database. A receipt named `app-<UTC-timestamp>.db.offhost.json` was created by a successful off-host replication. It identifies the remote objects and versions to verify and later recover. The receipt lives in the **managed Test backups directory**, `/opt/EnterpriseRemoteSystems/test/backups/`. It is not the database or the database backup itself.
+**Why this preparation is necessary:** `IT-01` tested a disposable LOCAL SQLite file; it did not create a deployed Test backup. The Test release pipeline can restore a deterministic baseline, but that is **not** an off-host backup of the currently deployed Test database. Development and Test default to `SERVER_OFFHOST_BACKUP_ENABLED=false`, so an ordinary Test deployment may leave **no** `.offhost.json` receipt at all. This is an expected initial **BLOCKED** state, not evidence that an off-host restore was attempted. IT-03 must establish off-host evidence *before* any recovery rehearsal.
 
-**Before pasting the command:** Be in **Terminal D**, inside the deployed **Test** repository on the Linux host. The command prints all existing managed Test receipt candidates with numbers. **When it asks for a number, type one of the printed numbers and press Enter** (for example, `1` if candidate 1 is the authorized Test recovery point), or type `0` to stop. You are **not** being asked for a password, a file to create, or an arbitrary path. The choice is then independently checked against the off-host replica. The newest filename is not automatically an acceptable backup: select one associated with the approved Test recovery point and verify it.
+The path below deliberately separates **inventory**, **approved configuration**, **backup creation**, and **remote verification**. An approved Test recovery source may be an existing verified receipt or a freshly generated, independently verified Test receipt. If none exists, **do not use Production storage, fabricate receipts, change database volumes, reset Test, or start a local-only restore to make the test pass**.
+
+#### Step 1A — Confirm Test identity and find existing receipts (read-only)
+
+In **Terminal D (Linux/bash)**, in `/opt/EnterpriseRemoteSystems/test`, paste this whole command box. Do not use Terminal A on the Mac.
 
 ```bash
-: 'Terminal D (Test Linux host/bash, Test deployment repository root) — IT-03 Step 1'
-unset TEST_RECEIPT TEST_RECEIPT_VERIFIED
-printf 'IT-03: looking for an existing, managed Test off-host receipt\n'
-date -u '+IT-03 UTC start: %Y-%m-%dT%H:%M:%SZ'
-pwd
+: 'Terminal D (Test Linux host/bash, Test deployment repository root) — IT-03 Step 1A'
+unset TEST_RECEIPT TEST_RECEIPT_VERIFIED TEST_RECEIPT_CHOICE
+export TEST_BACKUP_DIR=/opt/EnterpriseRemoteSystems/test/backups
+printf 'IT-03 UTC start: '; date -u '+%Y-%m-%dT%H:%M:%SZ'
+printf 'Checkout: '; pwd -P
+printf 'Branch: '; git branch --show-current
+printf 'Release revision/tree:\n'
 git rev-parse HEAD
 git rev-parse 'HEAD^{tree}'
-if ! make server-ps ENV=test; then
-  printf 'BLOCKED: could not inspect the deployed Test containers\n' >&2
+if [[ "$(pwd -P)" != /opt/EnterpriseRemoteSystems/test || "$(git branch --show-current)" != test ]]; then
+  printf 'BLOCKED: this is not the deployed Test checkout; do not run backup commands here\n' >&2
+elif ! make server-ps ENV=test || ! make server-backend-health ENV=test; then
+  printf 'BLOCKED: Test service identity or health could not be confirmed\n' >&2
 else
-  TEST_BACKUP_DIR=/opt/EnterpriseRemoteSystems/test/backups
-  if [[ ! -d "$TEST_BACKUP_DIR" ]]; then
-    printf 'BLOCKED: managed Test backup directory does not exist: %s\n' "$TEST_BACKUP_DIR" >&2
-  else
+  TEST_RECEIPT_CANDIDATES=()
+  if [[ -d "$TEST_BACKUP_DIR" ]]; then
     mapfile -d '' -t TEST_RECEIPT_CANDIDATES < <(
       find "$TEST_BACKUP_DIR" -maxdepth 1 -type f -name 'app-*.db.offhost.json' -print0 | sort -zr
     )
-    if (( ${#TEST_RECEIPT_CANDIDATES[@]} == 0 )); then
-      printf 'BLOCKED: no Test .offhost.json receipts found in %s\n' "$TEST_BACKUP_DIR" >&2
+  else
+    printf 'No Test backups directory yet; an authorized first backup will create it\n'
+  fi
+  printf 'Managed Test off-host receipts found: %d\n' "${#TEST_RECEIPT_CANDIDATES[@]}"
+  for (( i=0; i<${#TEST_RECEIPT_CANDIDATES[@]}; i++ )); do
+    printf '  %d) %s\n' "$((i+1))" "${TEST_RECEIPT_CANDIDATES[i]}"
+  done
+fi
+```
+
+**Expected:** Test branch, the authorized deployed Test revision/tree and healthy `ers-tst-backend`. Either receipt candidates are listed or `Managed Test off-host receipts found: 0`. The backup directory may legitimately be absent before the first backup. Verify the printed revision/tree against the release approved for this test. **STOP** for a wrong checkout or unhealthy backend. If a suitable receipt exists, **skip Steps 1B and 1C** and continue to Step 1D; otherwise proceed to Step 1B. No backup or restore occurs in Step 1A.
+
+#### Step 1B — Establish approved Test-only off-host configuration (only when no receipt exists)
+
+**Operator and approval gate:** A named Test operator must obtain approval to create a verified backup of the currently deployed Test database and replicate it to the approved, access-controlled **Test-only** remote backup destination. Record the approval reference, Test S3 bucket/prefix, authorized credential custody reference, and expected recovery point (non-secret details only). **If any are missing, record `IT-03 BLOCKED — off-host Test backup destination/authorization missing` and stop.** Do not use Production credentials or alter Production storage.
+
+In the same **Terminal D** shell, check the deployed Test off-host status. This command reads the existing Test configuration via the compiled server utility; it does not print credentials or make backups.
+
+```bash
+: 'Terminal D (Test Linux host/bash, Test deployment repository root) — IT-03 Step 1B status'
+if [[ "$(pwd -P)" == /opt/EnterpriseRemoteSystems/test && "$(git branch --show-current)" == test ]]; then
+  ERS_BACKUP_ENV_DIR=/opt/EnterpriseRemoteSystems/test \
+  ERS_BACKUP_ENV_FILE=.env.test \
+  ERS_BACKUP_COMPOSE_PROJECT=ers-tst \
+    ./scripts/run-backup-go-tool.sh ers-offhost-backup status \
+    --environment test --env-file /opt/EnterpriseRemoteSystems/test/.env.test
+else
+  printf 'BLOCKED: Test checkout identity mismatch\n' >&2
+fi
+```
+
+**Expected:** Exactly `enabled` or `disabled` from the utility (a preceding Docker Compose command line may also appear). On error, record `BLOCKED` and investigate the non-secret diagnostic. `disabled` means **do not run Step 1C yet**: the default Test configuration cannot create an acceptable remote receipt.
+
+If disabled, an **authorized Test operator** must configure the Test environment file `/opt/EnterpriseRemoteSystems/test/.env.test` using an approved private, versioned Test backup destination and credentials already provisioned through the organization's secret-management process. Required Test S3 keys are shown below; the values must be the **actual approved Test values**, not examples copied from Production:
+
+```text
+SERVER_OFFHOST_BACKUP_ENABLED=true
+SERVER_OFFHOST_BACKUP_TRANSPORT=s3
+SERVER_OFFHOST_BACKUP_S3_ENDPOINT=<approved Test HTTPS endpoint>
+SERVER_OFFHOST_BACKUP_S3_REGION=<approved Test region>
+SERVER_OFFHOST_BACKUP_S3_BUCKET=<approved Test bucket>
+SERVER_OFFHOST_BACKUP_S3_PREFIX=<approved Test-only object prefix>
+AWS_SHARED_CREDENTIALS_FILE=<absolute path to approved Test credentials file outside Git>
+AWS_PROFILE=<approved Test credentials profile>
+```
+
+The endpoint, bucket, and prefix identify storage; the actual secret key belongs **only** in the protected credentials file, not `.env.test`, terminal output, test evidence, Git, or chat. The Test bucket must support exact-version recovery, and the Test credentials must have the necessary scoped permissions. Use the approved host configuration/credential installation procedure; if the destination, access control, or credentials have not been provisioned, leave IT-03 **BLOCKED** instead of improvising storage. A configuration edit is an **authorized Test operational change**, not a repository patch; preserve any previous configuration through the approved secret-safe change-control mechanism. No backend or volume reset is required merely to enable this backup utility.
+
+After authorized configuration exists (or if the first status already said `enabled`), check the real runtime configuration and credential-file availability:
+
+```bash
+: 'Terminal D (Test Linux host/bash, Test deployment repository root) — IT-03 Step 1B validate configuration'
+if [[ "$(pwd -P)" == /opt/EnterpriseRemoteSystems/test && "$(git branch --show-current)" == test ]]; then
+  ERS_BACKUP_ENV_DIR=/opt/EnterpriseRemoteSystems/test \
+  ERS_BACKUP_ENV_FILE=.env.test \
+  ERS_BACKUP_COMPOSE_PROJECT=ers-tst \
+    ./scripts/run-backup-go-tool.sh ers-offhost-backup check-config \
+    --environment test --env-file /opt/EnterpriseRemoteSystems/test/.env.test --runtime-files
+else
+  printf 'BLOCKED: Test checkout identity mismatch\n' >&2
+fi
+```
+
+**Expected:** `Off-host backup configuration valid for test: enabled`. `disabled`, unavailable files, unavailable Docker, or any nonzero result means **BLOCKED**. Successful configuration validation is not yet proof that a remote copy exists.
+
+#### Step 1C — Create a verified on-host Test backup and its off-host replica (only when no receipt exists)
+
+**This is an intentional write to Test backup storage and the approved remote Test destination.** It uses SQLite's consistent online backup API and does **not** replace the deployed database or stop its containers. The existing `server-backup` target also applies the configured **local backup retention policy**, so obtain the required authorization before executing it. Preserve all evidence required by retention and previous rehearsals. Do not execute repeatedly after a failure without investigating what was already created.
+
+With Test backup approval recorded, a healthy deployed Test backend, and Step 1B showing `enabled`, execute in **Terminal D**. The command independently rechecks the off-host status and asks for the actual non-secret approval reference **before** creating any backup:
+
+```bash
+: 'Terminal D (Test Linux host/bash, Test deployment repository root) — IT-03 Step 1C create Test off-host backup'
+if [[ "$(pwd -P)" != /opt/EnterpriseRemoteSystems/test || "$(git branch --show-current)" != test ]]; then
+  printf 'BLOCKED: cannot create a backup from a non-Test checkout\n' >&2
+elif ! make server-ps ENV=test || ! make server-backend-health ENV=test; then
+  printf 'BLOCKED: Test backend not healthy; do not attempt backup\n' >&2
+else
+  TEST_OFFHOST_STATUS="$(
+    ERS_BACKUP_ENV_DIR=/opt/EnterpriseRemoteSystems/test \
+    ERS_BACKUP_ENV_FILE=.env.test \
+    ERS_BACKUP_COMPOSE_PROJECT=ers-tst \
+      ./scripts/run-backup-go-tool.sh ers-offhost-backup status \
+      --environment test --env-file /opt/EnterpriseRemoteSystems/test/.env.test
+  )"
+  if [[ "$TEST_OFFHOST_STATUS" != enabled ]]; then
+    printf 'BLOCKED: Test off-host backup status is not enabled; return to Step 1B\n' >&2
+  else
+    printf 'Enter the authorized Test backup change/approval reference (empty to stop): '
+    IFS= read -r TEST_BACKUP_APPROVAL
+    if [[ -z "${TEST_BACKUP_APPROVAL//[[:space:]]/}" ]]; then
+      printf 'BLOCKED: no Test backup authorization reference supplied; no backup started\n' >&2
+    elif make server-backup ENV=test; then
+      printf 'PASS: Test backup command completed under approval %s; independently verify its off-host receipt in Step 1D\n' "$TEST_BACKUP_APPROVAL"
     else
-      printf 'Available Test receipt candidates (newest filename first):\n'
-      for (( i=0; i<${#TEST_RECEIPT_CANDIDATES[@]}; i++ )); do
-        printf '  %d) %s\n' "$((i+1))" "${TEST_RECEIPT_CANDIDATES[i]}"
-      done
-      printf 'Type the receipt number corresponding to the approved Test recovery point (0 to stop), then press Enter: '
-      IFS= read -r TEST_RECEIPT_CHOICE
-      if [[ "$TEST_RECEIPT_CHOICE" =~ ^[1-9][0-9]*$ ]] && (( TEST_RECEIPT_CHOICE <= ${#TEST_RECEIPT_CANDIDATES[@]} )); then
-        TEST_RECEIPT="${TEST_RECEIPT_CANDIDATES[TEST_RECEIPT_CHOICE-1]}"
-        if make server-offhost-backup-verify ENV=test BACKUP_FILE="${TEST_RECEIPT%.offhost.json}"; then
-          export TEST_RECEIPT TEST_RECEIPT_VERIFIED=1
-          printf 'PASS: verified Test off-host receipt: %s\n' "$(basename "$TEST_RECEIPT")"
-        else
-          unset TEST_RECEIPT TEST_RECEIPT_VERIFIED
-          printf 'BLOCKED: remote Test replica verification failed; preserve the output and investigate\n' >&2
-        fi
-      else
-        printf 'BLOCKED: no valid receipt number selected; no recovery was started\n' >&2
-      fi
+      printf 'BLOCKED: backup/replication failed; preserve output and inspect local backups before any retry\n' >&2
     fi
   fi
 fi
 ```
 
-**Expected:** The Test commit/tree match the release under acceptance, the `ers-tst-backend` remains running, a numbered candidate list is displayed, and after your explicit choice the command prints `PASS: verified Test off-host receipt: app-...db.offhost.json`. Record the selected receipt basename and the verifier's non-secret object-version evidence. The `TEST_RECEIPT` and `TEST_RECEIPT_VERIFIED=1` variables become available to **Step 2 in the same Terminal D shell** only after successful independent verification.
+**Expected:** `Verified backup: .../test/backups/app-...db`, a manifest path, and successful off-host replication/verification and receipt creation. Do **not** regard a message such as `Off-host backup is disabled for test; verified local backup retained` as PASS: it is **BLOCKED** for IT-03 even if `make server-backup` exits zero. If no receipt appears afterward, remain BLOCKED and inspect the off-host configuration and backup output. A local `.db` alone never satisfies IT-03.
 
-**If no candidate is printed, the backup directory is unavailable, or verification fails:** Record **IT-03 BLOCKED**; do not proceed to Step 2, invent a receipt, use a Production receipt, or substitute a local-only `.db` backup. An authorized Test operator must investigate off-host configuration and create/verify a fresh Test off-host backup under the approved backup procedure before rerunning this step. Do not change the live Test database, reset Test, or run Production operations to satisfy this prerequisite.
+#### Step 1D — Select and independently verify an existing or newly created remote receipt
+
+In **Terminal D**, after Step 1A found a suitable receipt **or** Step 1C completed successfully, run this block. Type the printed receipt number (e.g. `1`) corresponding to the authorized Test recovery point; enter `0` to stop. Do not type a filename, password, or secret. A new backup must have an actual receipt on disk to be selectable.
+
+```bash
+: 'Terminal D (Test Linux host/bash, Test deployment repository root) — IT-03 Step 1D'
+unset TEST_RECEIPT TEST_RECEIPT_VERIFIED TEST_RECEIPT_CHOICE
+export TEST_BACKUP_DIR=/opt/EnterpriseRemoteSystems/test/backups
+if [[ "$(pwd -P)" != /opt/EnterpriseRemoteSystems/test || "$(git branch --show-current)" != test ]]; then
+  printf 'BLOCKED: not the deployed Test checkout\n' >&2
+elif [[ ! -d "$TEST_BACKUP_DIR" ]]; then
+  printf 'BLOCKED: managed Test backup directory missing\n' >&2
+else
+  mapfile -d '' -t TEST_RECEIPT_CANDIDATES < <(
+    find "$TEST_BACKUP_DIR" -maxdepth 1 -type f -name 'app-*.db.offhost.json' -print0 | sort -zr
+  )
+  if (( ${#TEST_RECEIPT_CANDIDATES[@]} == 0 )); then
+    printf 'BLOCKED: no Test .offhost.json receipts found in %s; return to Step 1B\n' "$TEST_BACKUP_DIR" >&2
+  else
+    printf 'Available Test receipt candidates (newest filename first):\n'
+    for (( i=0; i<${#TEST_RECEIPT_CANDIDATES[@]}; i++ )); do
+      printf '  %d) %s\n' "$((i+1))" "${TEST_RECEIPT_CANDIDATES[i]}"
+    done
+    printf 'Type the receipt number corresponding to the approved Test recovery point (0 to stop), then press Enter: '
+    IFS= read -r TEST_RECEIPT_CHOICE
+    if [[ "$TEST_RECEIPT_CHOICE" =~ ^[1-9][0-9]*$ ]] && (( TEST_RECEIPT_CHOICE <= ${#TEST_RECEIPT_CANDIDATES[@]} )); then
+      TEST_RECEIPT="${TEST_RECEIPT_CANDIDATES[TEST_RECEIPT_CHOICE-1]}"
+      if make server-offhost-backup-verify ENV=test BACKUP_FILE="${TEST_RECEIPT%.offhost.json}"; then
+        export TEST_RECEIPT TEST_RECEIPT_VERIFIED=1
+        printf 'PASS: verified Test off-host receipt: %s\n' "$(basename "$TEST_RECEIPT")"
+      else
+        unset TEST_RECEIPT TEST_RECEIPT_VERIFIED
+        printf 'BLOCKED: remote Test replica verification failed; preserve output and investigate\n' >&2
+      fi
+    else
+      printf 'BLOCKED: no valid receipt number selected; no recovery was started\n' >&2
+    fi
+  fi
+fi
+```
+
+**PASS for Step 1:** Only after `PASS: verified Test off-host receipt: ...` from Step 1D, and after confirming the remote receipt's recovery point is within the approved RPO budget. Record the approval reference, actual backup timestamp, remote transport/destination identification (non-secret), exact-version verification evidence, and any newly created local backup/manifest paths. The `TEST_RECEIPT` and `TEST_RECEIPT_VERIFIED=1` variables must remain set **in the same Terminal D shell** for Step 2. **BLOCKED:** missing approval, disabled Test off-host protection, missing remote credential files, local-only backup, absent receipt, failed remote verification, or mismatched Test release. Do not start Step 2 while BLOCKED.
 
 ### Step 2 — Rehearse an off-host restore into the *isolated* Test recovery workspace (Terminal D)
 
@@ -196,7 +318,7 @@ date -u '+IT-03 UTC end: %Y-%m-%dT%H:%M:%SZ'
 
 **Expected:** `PASS` and a 64-digit SHA-256 digest, with the original `ers-tst-backend` still running/healthy; no rehearsal-created containers remain. Record the actual RPO/RTO seconds from the report, not just the booleans. Inspect `docker ps -a --format '{{.ID}} {{.Names}}'` for only *this run's* recovery-rehearsal containers; if any remain, identify and investigate them without touching unrelated containers. Store the non-secret report only in approved restricted Test evidence. **Exit state:** original Test backend/data continue unchanged, rehearsal artifacts/evidence retained as required, IT-04 may start. **PASS:** all checks plus cleanup verified. **BLOCKED:** failed restore, objectives, health, receipt, mismatched release, or unclear cleanup.
 
-**Execution record — IT-03:** UTC start/end: ___/___; authorized operator: ___; environment/URL: Test/___; Test revision/tree: ___/___; managed receipt basename and independent verification/object-version ref: ___; report path/hash: ___/___; RPO seconds/limit: ___/86400; RTO seconds/limit: ___/14400; isolated backend integrity/health: ___; original live Test backend remained running: ___; container cleanup: ___; PASS/FAIL/BLOCKED with evidence/defect: ___; next-state: ___.
+**Execution record — IT-03:** UTC start/end: ___/___; authorized operator: ___; backup approval/configuration/destination evidence: ___; backup creation result and local retention impact: ___; environment/URL: Test/___; Test revision/tree: ___/___; managed receipt basename and independent verification/object-version ref: ___; report path/hash: ___/___; RPO seconds/limit: ___/86400; RTO seconds/limit: ___/14400; isolated backend integrity/health: ___; original live Test backend remained running: ___; container cleanup: ___; PASS/FAIL/BLOCKED with evidence/defect: ___; next-state: ___.
 
 ## IT-04 — Deployed Test human administrator enrollment (if needed), independent logins, mutual recovery, and audit (UI FIRST AFTER ENROLLMENT)
 
