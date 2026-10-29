@@ -21,7 +21,9 @@ it03_start = text.index('## IT-03 — ')
 it03_end = text.index('## IT-04 — ', it03_start)
 it03 = text[it03_start:it03_end]
 for required in (
-    "find \"$TEST_BACKUP_DIR\" -maxdepth 1 -type f -name 'app-*.db.offhost.json' -print0",
+    'for TEST_CANDIDATE in "$TEST_BACKUP_DIR"/app-*.db.offhost.json;',
+    'TEST_RECEIPT_CANDIDATES=("$TEST_CANDIDATE" "${TEST_RECEIPT_CANDIDATES[@]}")',
+    'BLOCKED: Test off-host status probe failed;',
     'Available Test receipt candidates',
     'Type the receipt number corresponding to the approved Test recovery point',
     'Managed Test off-host receipts found:',
@@ -46,6 +48,7 @@ for required in (
 ):
     assert required in it03, f'IT-03 receipt discovery/verification instruction missing: {required}'
 assert 'Enter the absolute path to the existing, verified TEST' not in it03, 'IT-03 restored opaque receipt prompt'
+assert not re.search(r'^\s*(?:mapfile|readarray)\b|\| sort -z', it03, re.M), 'IT-03 executable commands must not require macOS-unavailable Bash/GNU utilities'
 # This should fail if a future rewrite once again assumes a receipt exists without an authorized
 # creation path or accidentally tries to restore a local-only backup as remote evidence.
 for forbidden in ('make server-test-rehearsal-restore ENV=test', 'make server-restore-apply ENV=test', 'make server-down-volumes ENV=test'):
