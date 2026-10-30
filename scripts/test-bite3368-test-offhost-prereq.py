@@ -24,6 +24,11 @@ class TestIT03Prerequisite(unittest.TestCase):
         self.root.mkdir()
         self.secrets = base / 'secrets'
         self.secrets.mkdir(mode=0o711)
+        # mkdir's mode is filtered through the operator's umask. macOS
+        # developers often run with umask 077, which yields mode 700 and
+        # prevents the nominally valid Test fixture from reaching Go checks.
+        # The real Test-host ownership/mode guard remains unchanged.
+        self.secrets.chmod(0o711)
         self.cred = self.secrets / 'aws-credentials-test'
         self.cred.write_text('[ers-test-backup]\naws_access_key_id=TEST_ONLY\naws_secret_access_key=TEST_ONLY_NOT_REAL\n')
         self.cred.chmod(0o600)
@@ -110,6 +115,24 @@ else:
         self.assertEqual(r.returncode, 0, (r.stdout, r.stderr))
         self.assertIn('READY FOR AUTHORIZED TEST BACKUP', r.stdout)
         self.assertNotIn('TEST_ONLY', r.stdout)
+
+    def test_success_and_go_failure_under_restrictive_umask(self):
+        # Run fixture creation in a fresh process with the restrictive mask
+        # that previously caused two false failures on macOS. This tests
+        # actual filesystem permissions rather than mocking os.umask.
+        for method in ('test_preflight_succeeds_with_go_checker',
+                       'test_go_config_failure_blocks'):
+            with self.subTest(method=method):
+                result = subprocess.run(
+                    ['bash', '-c', 'umask 077; exec "$@"',
+                     'ers-it03-restrictive-umask', sys.executable, '-B',
+                     str(pathlib.Path(__file__).resolve()),
+                     'TestIT03Prerequisite.' + method],
+                    cwd=ROOT, stdin=subprocess.DEVNULL,
+                    capture_output=True, text=True, timeout=20)
+                self.assertEqual(result.returncode, 0,
+                                 (method, result.stdout, result.stderr))
+                self.assertIn('OK', result.stderr)
 
     def test_missing_env_blocks(self):
         self.envfile.unlink()
