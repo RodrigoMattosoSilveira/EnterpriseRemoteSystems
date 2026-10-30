@@ -89,4 +89,20 @@ ci = (ROOT / '.github/workflows/ci.yml').read_text()
 for target in ('bite3368-core-check', 'bite3368-integrated-check'):
     assert f'{target}:' in make
 assert 'make bite3368-core-check' in ci
+
+# IT-03 must include its own Test-only, one-time provider/credential/configuration procedure.
+for marker in (
+    'Step 0 — Test off-host infrastructure prerequisite',
+    'Step 0B — One-time provider-side Test bucket',
+    'Step 0C — Install the Test S3 credential file',
+    'Step 0D — Write the non-secret Test S3 configuration',
+    'Step 0E — Validate the real Test host',
+    'ers-bite3368-test-offhost-prereq.sh install-credentials',
+    'ers-bite3368-test-offhost-prereq.sh configure',
+    'ers-bite3368-test-offhost-prereq.sh preflight',
+    'root-owned',
+    'READY FOR AUTHORIZED TEST BACKUP',
+    'one-time infrastructure changes',
+):
+    assert marker in it03, f'IT-03 self-contained Test provisioning missing: {marker}'
 print(f'PASS: Bite 33.6.8 manual contract, {len(blocks)} safe terminal-labeled command blocks; zsh available={bool(shutil.which("zsh"))}')

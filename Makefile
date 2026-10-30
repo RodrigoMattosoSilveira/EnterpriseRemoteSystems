@@ -554,6 +554,7 @@ bite3368-core-check:
 	python3 -B scripts/test-bite3368-manual-contract.py
 	python3 -B scripts/test-bite3368-it02-evidence.py
 	python3 -B scripts/test-bite3368-test-backup-gate.py
+	python3 -B scripts/test-bite3368-test-offhost-prereq.py
 	python3 -B scripts/test-bite3368-integrated-acceptance.py
 	python3 -B scripts/ers-bite3368-integrated-rehearsal.py
 

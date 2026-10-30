@@ -106,6 +106,92 @@ The deployed **Test** environment is distinct from Production, but it is **not**
 
 **Entry:** IT-00–IT-02 PASS, approved and completed deployment to `test`; Test backend remains running; Test users have been warned about the rehearsal if required by the change; no Test recovery/migration gate is armed. **Operator:** named, authorized Test operator. **Context:** Test server checkout and `ENV=test`, never Production. **Terminal D:** bash on the Test host, in the repository used for Test deployment. **Credentials:** approved Test off-host read authority via the existing environment configuration; never place credentials in commands/evidence. **Variables:** none inherited from prior tests. **STOP** if the deployed revision/tree or Test receipt cannot be verified.
 
+### Step 0 — Test off-host infrastructure prerequisite (ONE-TIME PROVISIONING; not the repeatable IT-03 recovery rehearsal)
+
+**Why this exists:** Test normally has `SERVER_OFFHOST_BACKUP_ENABLED=false`. Neither the disposable LOCAL database exercise (IT-01) nor a successful Test deployment establishes a Test S3 bucket, versioned remote storage, or Test credentials on the Linux server. The absence of a Test `.offhost.json` receipt is therefore **BLOCKED — prerequisite not provisioned**, not an off-host restore failure. **Do not invent a backup receipt, use the Production S3 key, copy a Production database, or continue to Step 2 to make the test pass.**
+
+**Identity / context / boundaries:** A named authorized infrastructure operator and a separately identified reviewer; Test Hetzner Object Storage and `ers-test` 1Password custody only. No ERS user signs in for Step 0. Terminal D = deployed Test Linux host, **Bash**, checkout `/opt/EnterpriseRemoteSystems/test`, branch `test`. Provider setup happens in the authorized Hetzner Console/1Password UIs, not the ERS UI. **This phase is not a Docker database reset and makes no change to the live Test SQLite volume.** It does modify an external Test backup destination, a Test-only credential file, and `.env.test` after approval. These changes are separate from IT-03's repeatable backup and isolated restore rehearsal.
+
+**Before beginning:** Complete and record the formal promotion of the Bite 33.6.8 prerequisite-helper patch through `998 → 945 → development → test` and verify Test CI/deployment success. `test` deployment can restore the deterministic Test database baseline; make sure this is approved *before* promoting. No Test server Git edits or copied helper scripts are permitted. In Terminal D:
+
+```bash
+: 'Terminal D (Test Linux/bash, Test deployment checkout) — IT-03 Step 0A confirm deployed helper'
+cd /opt/EnterpriseRemoteSystems/test || exit 1
+git branch --show-current
+git rev-parse HEAD
+git rev-parse 'HEAD^{tree}'
+test -x scripts/ers-bite3368-test-offhost-prereq.sh && printf 'PASS: Test prerequisite helper deployed\n' || printf 'BLOCKED: prerequisite helper not deployed\n'
+```
+
+**Expected:** `test`, approved deployed revision/tree, `PASS: Test prerequisite helper deployed`. Otherwise **BLOCKED**; do not copy the script manually from the Mac to evade the formal deployment gate. Preserve the exact deployed revision and authorized change reference.
+
+#### Step 0B — One-time provider-side Test bucket, versioning, policy, 1Password custody
+
+The authorized infrastructure operator and reviewer perform these UI tasks in this order, recording **non-secret evidence references only**:
+
+1. In the **Hetzner Console**, sign in as an authorized infrastructure administrator. Select the explicitly approved **Test** project, *not* the Production project. Prefer a **separate Hetzner project** for Test because Hetzner S3 keys are project-wide by default; otherwise require a reviewer-verified bucket policy that denies the Test key access to Production buckets. Record the Test project and change-approval reference, without access keys.
+2. Open **Object Storage → Buckets**, create or select an approved **private Test-only** bucket in the selected region `fsn1`, `nbg1`, or `hel1`; use a lower-case bucket name without dots (the ERS client's virtual-host HTTPS naming is not designed for dotted bucket names). Confirm this is **not** the Production bucket. If the approved retention policy requires **Object Lock**, enable it *during bucket creation*; it cannot be added later. Record bucket name/region and non-secret evidence of privacy and retention controls.
+3. Enable and independently verify **S3 bucket Versioning** through an authorized S3-compatible administrator client (Hetzner's documented versioning API/CLI procedure). Record actual `Status: Enabled` evidence. `Suspended`, no versioning proof, or missing retention authorization = **BLOCKED**. This cannot be inferred from a bucket name. The later ERS remote backup must also produce non-null, exact S3 `VersionId`s.
+4. In **Hetzner Console → Object Storage → S3 credentials**, create an approved Test-specific access/secret key within the approved project and record its non-secret key reference. Never reuse Production credentials. If the project has access to Production buckets and policy isolation has not been independently verified, **BLOCKED**. Ensure the approved key policy permits the required Test bucket and exact-version object operations; Hetzner requires `s3:GetObjectVersion` where versioned reads are restricted.
+5. In **1Password**, create a private Test-vault item for this **Test S3** credential, accessible to the specifically authorized Test operators and independent reviewer. Confirm the item is in an approved `ers-test` vault or equivalent approved Test custody location, *not* a Production vault. Record only the vault/item reference and the two approvals. Never enter secret values, key IDs, recovery items, or screenshots of secret fields into Git, Markdown execution evidence, CI, or chat.
+
+**PASS for Step 0B:** Approval reference, dedicated Test bucket and region, private/versioned/retention evidence, verified Test/Production isolation, Test-only key policy, and 1Password custody reference are all recorded. **BLOCKED:** any missing prerequisite. It is not acceptable to configure a new Test backup to use the Production project/key simply because that key already works.
+
+Official provider procedures: [Hetzner S3 credentials](https://docs.hetzner.com/storage/object-storage/faq/s3-credentials/), [Hetzner bucket Versioning](https://docs.hetzner.com/storage/object-storage/howto-protect-objects/protect-versioning/), and [Object Lock at bucket creation](https://docs.hetzner.com/storage/object-storage/faq/buckets-objects/).
+
+#### Step 0C — Install the Test S3 credential file outside Git (ONE TIME)
+
+In **Terminal D**, use the deployed helper. Obtain the two key strings **privately** from the authorized Test 1Password item. Do not put keys in the command line, shell history, `.env.test`, or test records. Do not use `set -x`, shell debugging, recording tools, screen sharing, or pipe this command through `tee`. The helper requires an interactive Bash terminal, asks for the Test change reference, then prompts separately for the access key and secret key **without echo**, and installs an owner-root, mode-600, Test-specific file under a root-owned, mode-711 Test-only secrets directory. It **refuses to overwrite** an existing credential file; rotation must be a separately approved operation.
+
+```bash
+: 'Terminal D (Test Linux/bash, Test deployment checkout) — IT-03 Step 0C install Test S3 credentials'
+cd /opt/EnterpriseRemoteSystems/test || exit 1
+./scripts/ers-bite3368-test-offhost-prereq.sh install-credentials
+```
+
+**Expected:** `PASS: new Test-only credential file installed outside Git ...` and `STOP: complete configuration and run preflight`. File path: `/opt/EnterpriseRemoteSystems/test-secrets/aws-credentials-test`; profile: `ers-test-backup`. The helper never outputs key values. If it reports `BLOCKED` (including an existing file), **do not delete or overwrite an existing credential**; proceed to Step 0E to inspect existing configuration or obtain an authorized rotation procedure. For a new installation, securely clear the 1Password clipboard after use. The protected file is never added to Git. The dedicated Test secrets directory uses root ownership and mode `711` (traverse-only, no listing): this permits the unprivileged Test deployment operator to detect the credential file for the existing Docker mount helper while the root-owned, mode-`600` file cannot be read by that operator. Do **not** change the permissions of the existing shared Production secrets directory.
+
+#### Step 0D — Write the non-secret Test S3 configuration (ONE TIME)
+
+After Step 0B approval and a confirmed Test-only credential file, run the configuration helper **in Terminal D**. It requires the actual approved change reference, region, dedicated Test bucket and prefix, and an explicit typed Test isolation/versioning confirmation. It preserves unrelated `.env.test` settings, replaces only the eight Test S3 settings, makes a private **pre-change `.env.test` rollback copy** outside Git, and writes the resulting `.env.test` with mode 600. That rollback copy may contain unrelated application secrets: do not display, share, or commit it.
+
+```bash
+: 'Terminal D (Test Linux/bash, Test deployment checkout) — IT-03 Step 0D configure approved Test S3'
+cd /opt/EnterpriseRemoteSystems/test || exit 1
+./scripts/ers-bite3368-test-offhost-prereq.sh configure
+```
+
+**Expected:** `PASS: Test off-host configuration updated under <actual approval reference>` and `PRIVATE ROLLBACK COPY: /opt/EnterpriseRemoteSystems/test-secrets/...bak`. Record only the approval reference and a protected, non-secret evidence pointer; **do not expose the rollback file**. The resulting `.env.test` contains:
+
+```text
+SERVER_OFFHOST_BACKUP_ENABLED=true
+SERVER_OFFHOST_BACKUP_TRANSPORT=s3
+SERVER_OFFHOST_BACKUP_S3_ENDPOINT=https://<region>.your-objectstorage.com
+SERVER_OFFHOST_BACKUP_S3_REGION=<approved region>
+SERVER_OFFHOST_BACKUP_S3_BUCKET=<approved Test-only bucket>
+SERVER_OFFHOST_BACKUP_S3_PREFIX=<approved Test-only prefix>
+AWS_SHARED_CREDENTIALS_FILE=/opt/EnterpriseRemoteSystems/test-secrets/aws-credentials-test
+AWS_PROFILE=ers-test-backup
+```
+
+The `<...>` values above are documentation placeholders, **not** values to paste. The helper derives the HTTPS endpoint from the approved region and requests the actual bucket/prefix interactively. `.env.test` must retain `APP_ENV=test`. Do not set `AWS_ACCESS_KEY_ID` or `AWS_SECRET_ACCESS_KEY` in `.env.test` and do not use Production values. A failure means **BLOCKED**; preserve the pre-change backup for authorized rollback, but do not perform an unreviewed restoration of `.env.test`.
+
+#### Step 0E — Validate the real Test host, credentials and compiled Go backup tool (read-only)
+
+Run this **after** Step 0C/0D (or immediately, if the infrastructure was provisioned previously and has not changed). The helper checks the exact Test checkout, `APP_ENV=test`, eight non-secret S3 settings, HTTPS region/endpoint matching, root ownership/strict modes of the separate credential file, and the existing **compiled Go** `check-config --runtime-files` command inside the Test backend image. It does **not** upload objects, create a local backup, stop containers, expose keys, or change the Test database.
+
+```bash
+: 'Terminal D (Test Linux/bash, Test deployment checkout) — IT-03 Step 0E verify prerequisite'
+cd /opt/EnterpriseRemoteSystems/test || exit 1
+./scripts/ers-bite3368-test-offhost-prereq.sh preflight
+```
+
+**Expected:** `PASS: IT-03 Test configuration, external credential location, and host permissions verified`, `Off-host backup configuration valid for test: enabled`, `PASS: IT-03 Test Go off-host configuration and credentials profile validated`, and `READY FOR AUTHORIZED TEST BACKUP (NOT YET A BACKUP OR REMOTE RESTORE PASS)`. Any nonzero result, missing Docker image, missing profile, wrong path, insecure permissions, or secret-file mismatch is **BLOCKED**; do not run Step 1C. Never interpret configuration validation alone as proof of bucket connectivity or versioning. Step 1C + Step 1D will independently prove real Test remote replication and exact-version retrieval.
+
+**Step 0 execution record (mandatory):** UTC start/end ___; Test server branch/HEAD/tree ___; real infrastructure operator/reviewer ___ / ___; approved Test change reference ___; Hetzner Test project/bucket/region (non-secret) ___; privacy/Versioning/Object Lock or retention evidence reference ___; Test-versus-Production isolation/policy evidence reference ___; separate Test key policy evidence ref ___; authorized 1Password vault/item *reference only* ___; credential install EXISTING/NEW ___; config update EXISTING/NEW ___; protected `.env.test` rollback reference (no contents) ___; preflight result/Go exit code ___; verdict **PASS/BLOCKED** ___; evidence location ___; Test database unchanged confirmation ___; next state `IT-03 Step 1A` only if PASS.
+
+**Repeatability:** Step 0B/0C/0D are **one-time infrastructure changes** and should not be repeated just because IT-03 is rerun. On later rehearsals, verify their existing approval and execute Step 0E, then repeat **Step 1A → 1D → Step 2 → Step 3** for the approved Test recovery point. Only authorized credential rotation, storage-policy changes or a newly provisioned Test host justify repeating a corresponding Step 0 change. Cleanup must not delete Test storage credentials, Test remote backup versions, required receipts/evidence, or the running Test database.
+
 ### Step 1 — Establish a verified Test off-host backup (Terminal D; REQUIRED before restore)
 
 **Why this preparation is necessary:** `IT-01` tested a disposable LOCAL SQLite file; it did not create a deployed Test backup. The Test release pipeline can restore a deterministic baseline, but that is **not** an off-host backup of the currently deployed Test database. Development and Test default to `SERVER_OFFHOST_BACKUP_ENABLED=false`, so an ordinary Test deployment may leave **no** `.offhost.json` receipt at all. This is an expected initial **BLOCKED** state, not evidence that an off-host restore was attempted. IT-03 must establish off-host evidence *before* any recovery rehearsal.
