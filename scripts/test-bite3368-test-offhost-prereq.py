@@ -2,10 +2,14 @@
 """Offline Linux/Bash fixture tests for the Test-only IT-03 provisioning helper."""
 import os
 import pathlib
+import pty
 import shutil
+import signal
 import subprocess
+import sys
 import tempfile
 import unittest
+from unittest import mock
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 SOURCE = (ROOT / 'scripts/ers-bite3368-test-offhost-prereq.sh').read_text()
@@ -89,8 +93,12 @@ else:
         self.envfile.write_text('\n'.join(f'{key}={v}' for key, v in self.fields.items()) + '\n')
 
     def call(self, action='preflight', cwd=None, **env):
+        # Never inherit the developer's interactive terminal. On macOS the
+        # inherited stdin is a TTY even with capture_output=True, which lets
+        # the Linux-only helper enter read -p and hang the LOCAL regression.
         return subprocess.run(['bash', str(self.script), action], cwd=cwd or self.root,
-                              env={**os.environ, 'PATH': str(self.mock_bin)+os.pathsep+os.environ['PATH'], **env}, text=True, capture_output=True)
+                              env={**os.environ, 'PATH': str(self.mock_bin)+os.pathsep+os.environ['PATH'], **env},
+                              stdin=subprocess.DEVNULL, text=True, capture_output=True, timeout=15)
 
     def assert_blocked(self, result, fragment):
         self.assertEqual(result.returncode, 2, (result.stdout, result.stderr))
@@ -163,7 +171,7 @@ else:
         fixture.write_text(self.script.read_text().replace('[[ -t 0 ]] ||', 'true ||'))
         fixture.chmod(0o755)
         return subprocess.run(['bash', str(fixture), command], cwd=self.root,
-                              input='\n'.join(lines) + '\n', text=True, capture_output=True,
+                              input='\n'.join(lines) + '\n', text=True, capture_output=True, timeout=15,
                               env={**os.environ, 'PATH': str(self.mock_bin)+os.pathsep+os.environ['PATH']})
 
     def test_configure_branch_keeps_other_settings_and_private_backup(self):
@@ -197,6 +205,61 @@ else:
 
     def test_configure_requires_interactive_terminal(self):
         self.assert_blocked(self.call('configure'), 'interactive Test operator required')
+
+    def test_offline_call_explicitly_disables_stdin_and_has_timeout(self):
+        # A subprocess with captured stdout/stderr can still inherit stdin.
+        # Check both protections independently of the shell's current TTY.
+        with mock.patch('subprocess.run', wraps=subprocess.run) as runner:
+            self.assert_blocked(self.call('configure'), 'interactive Test operator required')
+        kwargs = runner.call_args.kwargs
+        self.assertEqual(kwargs['stdin'], subprocess.DEVNULL)
+        self.assertGreater(kwargs['timeout'], 0)
+        self.assertLessEqual(kwargs['timeout'], 20)
+
+    def test_offline_tty_inherited_by_parent_does_not_hang(self):
+        # Reproduce macOS 'make' invoked from an interactive terminal: the
+        # test process has an actual pseudo-TTY on fd 0. Without explicit
+        # stdin=DEVNULL in call(), the helper prompts invisibly and hangs.
+        for method in ('test_configure_requires_interactive_terminal',
+                       'test_install_requires_interactive_terminal'):
+            with self.subTest(method=method):
+                master, slave = pty.openpty()
+                process = None
+                try:
+                    process = subprocess.Popen(
+                        [sys.executable, '-B', str(pathlib.Path(__file__).resolve()),
+                         'TestIT03Prerequisite.' + method],
+                        cwd=ROOT, stdin=slave, stdout=subprocess.PIPE,
+                        stderr=subprocess.PIPE, text=True, start_new_session=True)
+                    os.close(slave)
+                    slave = -1
+                    try:
+                        out, err = process.communicate(timeout=10)
+                    except subprocess.TimeoutExpired:
+                        # Kill the entire group so a blocking child Bash is
+                        # not left behind holding the pseudo-terminal open.
+                        os.killpg(process.pid, signal.SIGKILL)
+                        process.communicate(timeout=5)
+                        self.fail('LOCAL prerequisite regression inherited a TTY and hung')
+                    self.assertEqual(process.returncode, 0, (out, err))
+                    self.assertIn('OK', err)
+                finally:
+                    if slave >= 0:
+                        os.close(slave)
+                    os.close(master)
+
+    def test_scripted_operator_input_has_timeout(self):
+        # Only this explicit fixture may supply operator responses; it also
+        # needs a limit so fixture mistakes cannot block the LOCAL suite.
+        with mock.patch('subprocess.run', wraps=subprocess.run) as runner:
+            result = self.scripted_input('configure',
+                ('CHG-TEST-TIMEOUT', 'fsn1', 'ers-test-integration',
+                 'ers-backups', 'APPROVED-TEST'))
+        self.assertEqual(result.returncode, 0, (result.stdout, result.stderr))
+        kwargs = runner.call_args.kwargs
+        self.assertTrue(kwargs['input'].endswith('\n'))
+        self.assertGreater(kwargs['timeout'], 0)
+        self.assertLessEqual(kwargs['timeout'], 20)
 
 
 if __name__ == '__main__':
