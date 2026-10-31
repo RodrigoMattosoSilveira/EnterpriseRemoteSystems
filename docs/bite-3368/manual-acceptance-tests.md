@@ -104,7 +104,105 @@ python3 -B scripts/ers-bite3368-it02-evidence.py
 
 The deployed **Test** environment is distinct from Production, but it is **not** an arbitrary disposable database. Its data can be deliberately restored from a deterministic baseline by the approved Test *deployment* workflow; such deployment can remove previously enrolled Test humans. IT-03 never performs that reset. IT-04 separately checks the Test accounts **after the last Test deployment**. Do not copy the LOCAL database, or enroll humans into an IT-03 isolated restore (their accounts would not become deployed Test accounts).
 
-**Entry:** IT-00–IT-02 PASS, approved and completed deployment to `test`; Test backend remains running; Test users have been warned about the rehearsal if required by the change; no Test recovery/migration gate is armed. **Operator:** named, authorized Test operator. **Context:** Test server checkout and `ENV=test`, never Production. **Terminal D:** bash on the Test host, in the repository used for Test deployment. **Credentials:** approved Test off-host read authority via the existing environment configuration; never place credentials in commands/evidence. **Variables:** none inherited from prior tests. **STOP** if the deployed revision/tree or Test receipt cannot be verified.
+**Entry:** IT-00–IT-02 PASS for the committed feature revision. **First execute Step P** to approve and verify its formal promotion to deployed Test; the Test deployment and its database-baseline restore are *not presumed complete at entry*. After Step P PASS, confirm the Test backend remains running, Test users have been warned about the rehearsal if required by the change, and no Test recovery/migration gate is armed. **Operator:** named, authorized Test operator. **Context:** Test server checkout; supply `ENV=test` to each environment-sensitive Make command (the Bash variable `ENV` need not be set), never Production. **Terminal D:** bash on the Test host, in the repository used for Test deployment. **Credentials:** approved Test off-host read authority via existing Test configuration, after Step 0 provisioning if needed; never place credentials in commands/evidence. **Variables:** none inherited from prior tests. **STOP** if the deployed revision/tree or Test receipt cannot be verified.
+
+### Step P — Formal promotion of the prerequisite helper into deployed Test (REQUIRED BEFORE STEP 0; ONE PROMOTION PER ACCEPTED REVISION)
+
+**Purpose and execution boundary:** This is the complete procedure for the earlier instruction "promote `998 → 945 → development → test`". Do **not** assume the feature-branch commit is already on the Test server. The promotion is executed in the **Mac repository and GitHub UI** by the authorized release operator/reviewers, then **verified read-only** in Terminal D (Test Linux/Bash). It is **not** a Test-server Git-edit procedure. This section is required when the accepted Bite 33.6.8 changes are not yet deployed; if they are already deployed, inspect and record the existing PR/workflow evidence and still perform Step P5. Do not recreate merges or rerun a destructive release just to produce new evidence.
+
+**Identity and context:** Name the developer/release operator with permission to open PRs, the authorized reviewers, and the Test environment owner who can approve a baseline restore. The application context is **GitHub repository and Test deployment**, not an ERS Tenant or Production account. No Test S3 keys, application passwords, 1Password secrets, or database files are used in this promotion procedure. **Terminal A** = macOS/zsh at the LOCAL repository root. **Terminal D** = Linux/Bash at `/opt/EnterpriseRemoteSystems/test`, *only after deployment*. **Do not run the GitHub or Mac commands on the server.** Use normal GitHub protected-branch approvals; never use force pushes, bypasses, direct Test-server edits, or copied scripts.
+
+**Required entry evidence (record before promotion):** IT-00–IT-02 PASS for the feature revision to be promoted, including the actual CI URL and four IT-02 evidence references; current feature HEAD SHA and tree; code-review owner; authorization reference for the Test deployment's deterministic database restore; and the Test owner's decision on what Test data, previous administrator enrollments, and acceptance evidence must be preserved. A LOCAL PASS is not permission to reset Test. If the latest commits have not yet passed LOCAL and required feature CI checks, **BLOCKED**. If Test reset authorization or retention decision is missing, **BLOCKED** before the final merge to `test`.
+
+#### Step P1 — Verify the exact published feature revision (Terminal A, macOS/zsh)
+
+In **Terminal A**, run this box from the feature checkout **after committing all accepted changes**. No local modification, incomplete patch, or unpublished commit is eligible. This operation fetches remote *references on the Mac*; it does not deploy or reset a database.
+
+```zsh
+: 'Terminal A (macOS/zsh, feature repository root) — IT-03 Step P1 verify published source'
+FEATURE_BRANCH='998-bite-3368--integrated-regression-testing-recovery-rehearsal-and-final-acceptance'
+PARENT_BRANCH='945-bite-336-recovery-rehearsal-and-operational-runbook'
+if [[ "$(git branch --show-current)" != "$FEATURE_BRANCH" || -n "$(git status --porcelain)" ]]; then
+  printf 'BLOCKED: feature checkout must be on branch 998 with a clean committed working tree\n' >&2
+elif ! git fetch origin --prune; then
+  printf 'BLOCKED: origin fetch failed; cannot confirm published branch revisions\n' >&2
+elif ! git show-ref --verify --quiet "refs/remotes/origin/$FEATURE_BRANCH" || ! git show-ref --verify --quiet "refs/remotes/origin/$PARENT_BRANCH" || ! git show-ref --verify --quiet refs/remotes/origin/development || ! git show-ref --verify --quiet refs/remotes/origin/test; then
+  printf 'BLOCKED: one or more required remote promotion branches are absent\n' >&2
+elif [[ "$(git rev-parse HEAD)" != "$(git rev-parse "origin/$FEATURE_BRANCH")" ]]; then
+  printf 'BLOCKED: LOCAL HEAD is not the published origin feature revision\n' >&2
+elif ! git cat-file -e "origin/$FEATURE_BRANCH:scripts/ers-bite3368-test-offhost-prereq.sh"; then
+  printf 'BLOCKED: published feature revision lacks the Test prerequisite helper\n' >&2
+else
+  printf 'PASS: feature revision published and clean\n'
+  printf 'Feature revision: '; git rev-parse HEAD
+  printf 'Feature tree: '; git rev-parse 'HEAD^{tree}'
+  printf 'Parent 945 revision: '; git rev-parse "origin/$PARENT_BRANCH"
+  printf 'Development revision: '; git rev-parse origin/development
+  printf 'Test revision BEFORE promotion: '; git rev-parse origin/test
+fi
+```
+
+**Expected:** `PASS: feature revision published and clean`, real commit/tree values, and four actual remote branch revisions. Record them. **BLOCKED** for wrong branch, working-tree modifications, unpublished revision, missing helper, missing remote branch, or fetch error. **Do not** force push or manually alter the Test checkout to work around a failure. The source SHA will normally differ from the eventual merge SHA on branches 945, Development, and Test.
+
+**GitHub UI checkpoint — source CI (same revision):** Sign in to GitHub as the authorized repository maintainer, open this repository, select **Actions → CI** (not the Deploy workflow), and locate the successful feature-branch run for the exact Step P1 revision. Open it and verify required jobs show success; record the run URL and revision. A green run for a different feature SHA does not count. An automatic `CI` *pull-request* run is not guaranteed for a PR **targeting 945**, because this repository's `ci.yml` pull-request triggers cover Development, Test, and Production; the feature-branch **push** CI result is the applicable source evidence. If it is absent or unsuccessful, **BLOCKED**.
+
+#### Step P2 — Review and merge 998 into parent branch 945 (GitHub UI; no server operations)
+
+1. In the same GitHub repository, select **Pull requests → New pull request**. Set **base** to `945-bite-336-recovery-rehearsal-and-operational-runbook` and **compare** to `998-bite-3368--integrated-regression-testing-recovery-rehearsal-and-final-acceptance`. Confirm direction in the page header. If an open PR already exists for this exact pair, use that PR instead of creating another.
+2. Open **Files changed** and confirm the intended Bite 33.6.8 helper, tests, and the **repository** manual are included. Check for unintended secret, credential, raw DB, or evidence uploads. Record the PR number/URL and reviewer. The PR description must reference IT-00–IT-02 evidence, the source revision/tree, the acceptance scope, and the Test baseline-restore warning. Do not paste secret values.
+3. Obtain the repository-required approvals and required checks. Only the authorized maintainer selects **Merge pull request** (or the project's approved merge method) and confirms. If GitHub shows conflicts, required-review failures, or unexpected files, **BLOCKED**; resolve through normal reviewed Git changes, not a force merge.
+4. Confirm the PR shows **Merged** into branch 945. Record the resulting **945 head SHA**, PR URL, approver and actual merge time. A PR marked **Closed** without a merge is not a PASS. If already merged, use the existing merged PR and its recorded head, rather than merging again.
+5. In **Actions → CI**, locate the **945 branch push** run associated with this merged revision (branch 945 is covered by the repository's push CI trigger). Open it, confirm required jobs succeeded, and record its URL and exact head SHA. If CI is absent, still running, or failed, **BLOCKED**; do not open or merge 945→Development as a substitute for the missing 945 verification.
+
+**Expected:** a reviewed, merged PR with the accepted helper in the parent branch, **successful 945 push CI**, and no Test deployment yet. **PASS** only after the actual resulting parent SHA is recorded; otherwise **BLOCKED**.
+
+#### Step P3 — Promote parent branch 945 to Development and verify deployed checks (GitHub UI)
+
+1. Select **Pull requests → New pull request**; set **base** = `development`, **compare** = `945-bite-336-recovery-rehearsal-and-operational-runbook`. Use an existing matching open PR instead of creating a duplicate. Verify the PR contains the accepted Bite 33.6.8 files and does not carry unintended secrets or database artifacts.
+2. Obtain the required reviews and a successful **CI** workflow for this PR (the repository does run CI for PRs targeting Development). Open the run and verify the required jobs, including the Bite 33.6.8 core regression, completed successfully. Record PR URL, CI URL and head revision.
+3. After authorization, merge the PR into `development`. **This push automatically triggers** the GitHub Actions workflow **Deploy Enterprise Remote Systems** for Development; its disposable database strategy may replace Development data. Do not assume a merge alone constitutes a successful deployment.
+4. In **Actions → Deploy Enterprise Remote Systems**, locate the run whose branch/environment is `development` and whose revision equals the new Development branch head. Confirm the **Quality gate**, **Validate 1Password deployment references (scratch only)**, **Deploy environment**, and **Deployed Playwright E2E** jobs all succeeded. Open **Deployment summary** and record the actual revision, source tree, and run URL. Verify the deployment uses Development rather than Test or Production. If it fails, **BLOCKED**; do not promote its unverified revision to Test.
+
+**Expected:** merged 945→Development PR, successful PR CI and successful *Development* deployment/Playwright with matching revision/tree. Record PR, CI, deployment run and reviewer evidence. If the branch has already been merged/deployed, verify that exact accepted revision and existing job results; do not redeploy unnecessarily.
+
+#### Step P4 — Authorize Test baseline restore, then promote Development to Test (GitHub UI)
+
+**Mandatory before opening/merging Test:** The Test environment owner must explicitly approve the *effect* of this promotion. A **push to `test` automatically sets `test_release_rehearsal=true`**, executes `server-test-rehearsal-restore ENV=test` using the pre-release baseline, then migrations and deployed Playwright. This **replaces Test's existing application database state**; previous Test-only data and human administrator enrollments may disappear. Record the Test change/approval reference, owner, maintenance window or notification (if required), which Test data/evidence must be retained and where it is already protected, and the plan to inspect or enroll human administrators in IT-04 **after** deployment. Existing Test off-host credentials/backup infrastructure must be evaluated separately; **do not require an IT-03 off-host receipt as a prerequisite to this promotion**, because IT-03 is intended to establish the first one. If the Test owner has not approved the database restore or relevant data is not protected, **BLOCKED: DO NOT MERGE INTO `test`**.
+
+1. With approval already recorded, in GitHub select **Pull requests → New pull request**; set **base** = `test`, **compare** = `development`. Use the existing matching PR if one is already open. Inspect **Files changed**, target, source, accepted feature content and absence of secrets.
+2. Obtain required reviewers and a passing **CI** workflow for the PR targeting `test`; record its run URL and SHA. If there is a conflict, unresolved test, or missing approval, **BLOCKED**.
+3. Have the authorized release operator merge **Development → Test**. This **push automatically initiates the Test release rehearsal and database baseline restore**. Do not manually rerun the deployment, restore, or Git commands on the Test host to "help" the workflow.
+4. In **Actions → Deploy Enterprise Remote Systems**, locate the new **test** deployment run. Verify all required jobs succeeded: **Quality gate**, **Validate 1Password deployment references (scratch only)**, **Deploy environment**, **Deployed Playwright E2E**, and **Record successful Test release rehearsal**. Check its **Deployment summary** shows `Environment: test`, `Test release rehearsal: true`, the actual revision, and source tree. Record the PR URL, reviewer/approval, CI URL, deployment run URL, Test commit SHA/tree, and the Playwright evidence artifact reference. A passing CI run alone is **not** a successful deployed Test rehearsal.
+
+**Expected:** reviewed and approved merge, successful Test release/deployed verification and rehearsal marker, correct source revision/tree; **BLOCKED** if reset approval or any required job/evidence is absent or unsuccessful. **Do not** promote to Production here.
+
+#### Step P5 — Independently confirm the deployed Test checkout (Terminal D, Linux/Bash, read-only)
+
+After Step P4 succeeded, log into the authorized **Test Linux host** and run this box in **Terminal D**. This does not provision credentials, write `.env.test`, modify Git, or touch the database; it checks that the exact helper code really reached the deployed Test checkout.
+
+```bash
+: 'Terminal D (Test Linux/bash, deployed Test checkout) — IT-03 Step P5 verify deployment'
+if ! cd /opt/EnterpriseRemoteSystems/test; then
+  printf 'BLOCKED: Test deployment checkout not accessible\n' >&2
+elif [[ "$(pwd -P)" != /opt/EnterpriseRemoteSystems/test || "$(git branch --show-current)" != test ]]; then
+  printf 'BLOCKED: not in the authorized deployed Test checkout\n' >&2
+elif ! test -x scripts/ers-bite3368-test-offhost-prereq.sh; then
+  printf 'BLOCKED: Test prerequisite helper missing or not executable\n' >&2
+elif ! make server-ps ENV=test || ! make server-backend-health ENV=test; then
+  printf 'BLOCKED: Test containers/backend are not healthy\n' >&2
+else
+  printf 'PASS: deployed Test checkout contains executable prerequisite helper\n'
+  printf 'Deployed Test revision: '; git rev-parse HEAD
+  printf 'Deployed Test tree: '; git rev-parse 'HEAD^{tree}'
+  printf 'Test deploy source: GitHub Actions Deploy environment; compare revision/tree above to Step P4 summary\n'
+fi
+```
+
+**Expected:** Test branch, a healthy Test backend, `PASS: deployed Test checkout contains executable prerequisite helper`, and the *same full revision and tree values* recorded in the successful Step P4 GitHub deployment summary. A different commit or tree is **BLOCKED** even when the helper exists; reconcile through the approved GitHub deployment, never `git checkout`, `git reset`, or copying scripts on the Test host. Other `git status` untracked directories such as `backups/`, `recovery/`, or `release-rehearsal-passed/` can contain operational evidence; do not delete them to make a checkout appear clean. If the Docker Compose warning mentions an existing external volume, record the actual containers' health and review the log; do not delete volumes as a cleanup attempt.
+
+**Step P PASS:** Every promotion/approval/CI/deployment checkpoint is evidenced, Step P4 Test release rehearsal succeeded, and Step P5 revision/tree and helper/health match. **Step P BLOCKED:** Any absent approval, unsuccessful or unverified required job, incorrect branch, unknown commit/tree, or helper absent. Only after Step P PASS may the authorized operator continue with **Step 0** (one-time Test off-host provisioning) or, when already provisioned and confirmed, proceed to Step 1. Do not repeat the promotion merely because off-host configuration remains disabled; that is a separate Step 0 preflight result.
+
+**Execution record — IT-03 Step P:** UTC start/end: ___ / ___; authorized release operator: ___; feature HEAD/tree: ___ / ___; feature CI URL: ___; 998→945 PR/reviewer/merged SHA and 945 push CI URL: ___; 945→Development PR/CI/reviewer/merged SHA: ___; Development deployment run/revision/tree: ___; Test baseline restore authorization/retention/evidence location: ___; Development→Test PR/CI/reviewer/merged SHA: ___; Test deployment run, Test revision/tree, Playwright artifact, rehearsal marker evidence: ___; Terminal D revision/tree/helper/health: ___; verdict PASS/BLOCKED and defect/approver: ___; handoff to Step 0: ___ . Keep all references non-secret and outside the repository when they include operational data.
 
 ### Step 0 — Test off-host infrastructure prerequisite (ONE-TIME PROVISIONING; not the repeatable IT-03 recovery rehearsal)
 
@@ -112,7 +210,7 @@ The deployed **Test** environment is distinct from Production, but it is **not**
 
 **Identity / context / boundaries:** A named authorized infrastructure operator and a separately identified reviewer; Test Hetzner Object Storage and `ers-test` 1Password custody only. No ERS user signs in for Step 0. Terminal D = deployed Test Linux host, **Bash**, checkout `/opt/EnterpriseRemoteSystems/test`, branch `test`. Provider setup happens in the authorized Hetzner Console/1Password UIs, not the ERS UI. **This phase is not a Docker database reset and makes no change to the live Test SQLite volume.** It does modify an external Test backup destination, a Test-only credential file, and `.env.test` after approval. These changes are separate from IT-03's repeatable backup and isolated restore rehearsal.
 
-**Before beginning:** Complete and record the formal promotion of the Bite 33.6.8 prerequisite-helper patch through `998 → 945 → development → test` and verify Test CI/deployment success. `test` deployment can restore the deterministic Test database baseline; make sure this is approved *before* promoting. No Test server Git edits or copied helper scripts are permitted. In Terminal D:
+**Before beginning:** **Step P must be PASS** with the recorded reviewed promotion chain, approved Test baseline restore, passing Test CI/deployment/rehearsal, and matching deployed SHA/tree. The Test repository must already contain the helper through normal deployment. Never copy helper scripts or edit Git on the Test server. Then, in Terminal D:
 
 ```bash
 : 'Terminal D (Test Linux/bash, Test deployment checkout) — IT-03 Step 0A confirm deployed helper'
