@@ -35,7 +35,10 @@ class IsolationTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory(prefix='ers-3368a-')
         self.addCleanup(self.tmp.cleanup)
-        self.root = pathlib.Path(self.tmp.name)
+        # macOS can expose the same temporary directory as /var/... and
+        # /private/var/.... Docker mounts use the physical path (pwd -P), so
+        # mock inspect data and expected mount paths must use it too.
+        self.root = pathlib.Path(self.tmp.name).resolve(strict=True)
         self.work = self.root / 'rehearsal-1'
         self.boot = self.work / 'boot-data'
         self.boot.mkdir(parents=True)
@@ -100,6 +103,30 @@ class IsolationTests(unittest.TestCase):
         self.assertIn('--env-file',cmd)
         self.assertEqual(cmd[cmd.index('--network')+1],'none')
         self.assertEqual(self.call('inspect').returncode,0)
+
+    def test_symlinked_workspace_uses_physical_mount_sources(self):
+        # Exercise the /var -> /private/var class of alias explicitly rather
+        # than relying on the runner's TMPDIR to be symlinked.
+        alias = self.root / 'workspace-alias'
+        alias.symlink_to(self.root, target_is_directory=True)
+        alias_work = alias / 'rehearsal-1'
+        alias_boot = alias_work / 'boot-data'
+        overrides = {
+            'ERS_RECOVERY_WORKDIR': str(alias_work),
+            'ERS_RECOVERY_BOOT_DIR': str(alias_boot),
+        }
+        self.assertNotEqual(str(alias_work), str(self.work))
+        self.assertEqual(alias_work.resolve(strict=True), self.work)
+        migration = self.call('migrate', **overrides)
+        self.assertEqual(migration.returncode, 0, migration.stderr)
+        start = self.call('start', FAKE_CONTAINER_ABSENT='1', **overrides)
+        self.assertEqual(start.returncode, 0, start.stderr)
+        commands = [c for c in self.calls() if c[0] == 'run']
+        self.assertEqual(len(commands), 2)
+        self.assertIn(f'type=bind,src={self.work},dst=/rehearsal', commands[0])
+        self.assertIn(f'type=bind,src={self.boot},dst=/rehearsal-data', commands[1])
+        self.assertFalse(any('workspace-alias' in part for cmd in commands for part in cmd))
+        self.assertEqual(self.call('inspect', **overrides).returncode, 0)
 
     def test_existing_container_never_removed_or_replaced(self):
         self.assertNotEqual(self.call('start').returncode,0)
