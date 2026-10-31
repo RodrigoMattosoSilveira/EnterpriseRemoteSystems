@@ -104,7 +104,29 @@ python3 -B scripts/ers-bite3368-it02-evidence.py
 
 The deployed **Test** environment is distinct from Production, but it is **not** an arbitrary disposable database. Its data can be deliberately restored from a deterministic baseline by the approved Test *deployment* workflow; such deployment can remove previously enrolled Test humans. IT-03 never performs that reset. IT-04 separately checks the Test accounts **after the last Test deployment**. Do not copy the LOCAL database, or enroll humans into an IT-03 isolated restore (their accounts would not become deployed Test accounts).
 
-**Entry:** IT-00–IT-02 PASS for the committed feature revision. **First execute Step P** to approve and verify its formal promotion to deployed Test; the Test deployment and its database-baseline restore are *not presumed complete at entry*. After Step P PASS, confirm the Test backend remains running, Test users have been warned about the rehearsal if required by the change, and no Test recovery/migration gate is armed. **Operator:** named, authorized Test operator. **Context:** Test server checkout; supply `ENV=test` to each environment-sensitive Make command (the Bash variable `ENV` need not be set), never Production. **Terminal D:** bash on the Test host, in the repository used for Test deployment. **Credentials:** approved Test off-host read authority via existing Test configuration, after Step 0 provisioning if needed; never place credentials in commands/evidence. **Variables:** none inherited from prior tests. **STOP** if the deployed revision/tree or Test receipt cannot be verified.
+**Entry:** If 33.6.8A is being developed on its 1019 sub-bite branch, complete Step A0 first, then complete IT-00–IT-02 on the resulting merged 998 feature revision. **Then execute Step P** to approve and verify its formal promotion to deployed Test; the Test deployment and its database-baseline restore are *not presumed complete at entry*. After Step P PASS, confirm the Test backend remains running, Test users have been warned about the rehearsal if required by the change, and no Test recovery/migration gate is armed. **Operator:** named, authorized Test operator. **Context:** Test server checkout; supply `ENV=test` to each environment-sensitive Make command (the Bash variable `ENV` need not be set), never Production. **Terminal D:** bash on the Test host, in the repository used for Test deployment. **Credentials:** approved Test off-host read authority via existing Test configuration, after Step 0 provisioning if needed; never place credentials in commands/evidence. **Variables:** none inherited from prior tests. **STOP** if the deployed revision/tree or Test receipt cannot be verified.
+
+### Step A0 — Integrate Bite 33.6.8A into Bite 33.6.8 (ONE-TIME, BEFORE STEP P)
+
+**Operator:** authorized repository maintainer/reviewer using the LOCAL Mac repository and GitHub UI; no Test server changes. If the 33.6.8A changes are already merged into 998, inspect the existing PR and CI evidence instead of repeating the merge. Do not promote 1019 directly to Development, Test, or Production. The intended order is **1019 → 998 → 945 → development → test**. This sub-bite is not a separate deployed Test acceptance cycle.
+
+**Terminal A — macOS/zsh, branch 1019 working repository root:** Complete all 33.6.8A source changes and record the exact revision and its CI run. The working tree must be committed, clean, and published before opening the PR.
+
+```zsh
+: 'Terminal A (macOS/zsh, repository root) — Bite 33.6.8A verify sub-bite source'
+if [[ "$(git branch --show-current)" != '1019-bite-3368a-recovery-isolation-and-data-protection' || -n "$(git status --porcelain)" ]]; then
+  printf 'BLOCKED: 33.6.8A source branch is not committed and clean\n' >&2
+else
+  git fetch origin --prune && git rev-parse HEAD && git rev-parse 'HEAD^{tree}'
+  git rev-parse origin/1019-bite-3368a-recovery-isolation-and-data-protection
+  make bite3368a-isolation-check
+  make bite3368a-docker-check
+fi
+```
+
+**Expected:** Local HEAD matches `origin/1019-bite-3368a-recovery-isolation-and-data-protection`; both isolation checks PASS; the real Docker check has no remaining test-created container/volume/image. **BLOCKED** for missing Docker, failed cleanup, unpublished changes or CI failure. In GitHub **Actions → CI**, verify the exact 1019 HEAD passed all required jobs and record its URL; don't substitute another commit's result.
+
+**GitHub UI:** Select **Pull requests → New pull request**, set **base** to `998-bite-3368--integrated-regression-testing-recovery-rehearsal-and-final-acceptance` and **compare** to `1019-bite-3368a-recovery-isolation-and-data-protection`. Review the diff, require authorized approvals, confirm source CI, and merge through the protected-branch procedure. Record PR URL, reviewers, merge commit and resulting 998 tree SHA. After merge, use the normal LOCAL `998` checkout to validate the merged feature as required by IT-00–IT-02, then continue to Step P1. A CI workflow is not proof that the real deployed Test recovery has passed. **BLOCKED:** missing PR approval, wrong merge target, wrong revision/tree, or any regression/required CI failure. No Test database reset occurs in Step A0.
 
 ### Step P — Formal promotion of the prerequisite helper into deployed Test (REQUIRED BEFORE STEP 0; ONE PROMOTION PER ACCEPTED REVISION)
 
@@ -477,6 +499,28 @@ fi
 
 **PASS for Step 1:** Only after `PASS: verified Test off-host receipt: ...` from Step 1D, and after confirming the remote receipt's recovery point is within the approved RPO budget. Record the approval reference, actual backup timestamp, remote transport/destination identification (non-secret), exact-version verification evidence, and any newly created local backup/manifest paths. The `TEST_RECEIPT` and `TEST_RECEIPT_VERIFIED=1` variables must remain set **in the same Terminal D shell** for Step 2. **BLOCKED:** missing approval, disabled Test off-host protection, missing remote credential files, local-only backup, absent receipt, failed remote verification, or mismatched Test release. Do not start Step 2 while BLOCKED.
 
+### Bite 33.6.8A — Recovery Isolation and Data Protection acceptance (before IT-03 Step 2)
+
+**Scope and gating:** This is a required safety check for the *same* IT-03 recovered-database rehearsal, not an additional database restore. The 33.6.8A patch must first pass LOCAL/CI review and be formally promoted under IT-03 Step P; do **not** copy scripts onto the Test host or run a recovery before Test deployment includes the accepted revision. IT-03 Step 1's genuine Test off-host receipt and authorization are still required. **Production operations are prohibited.**
+
+**Isolated execution contract:** The recovery runner now uses the *already-built* backend image directly, not `docker compose run backend`. Both migration/verification and boot containers use read-only root filesystems, no network, and only explicitly authorized private rehearsal bind mounts. They must have **zero named Docker volumes**, especially no `ers-tst_backend-data`. The API's `DATABASE_PATH` **and** `DB_PATH` and the post-boot integrity queries point to the private recovered database. A healthy live Test database cannot substitute for a damaged restored database. The script disposes generated `.db`, `-wal`, `-shm`, and journal copies on success and failure; it preserves the restricted non-secret evidence report and cleanup marker. Cleanup targets only the named rehearsal container and that invocation's unique workspace; never prune Docker or remove unrelated containers/volumes.
+
+**LOCAL prerequisite — Terminal A (macOS/zsh, repository root):** Operator is the developer on the accepted Bite 33.6.8A source revision, with Docker Desktop running. No ERS login, Test S3 access, or real backup file is used. Run the following **before** accepting the A sub-bite and promoting to the Test environment:
+
+```zsh
+: 'Terminal A (macOS/zsh, repository root) — Bite 33.6.8A isolated Docker regression'
+make bite3368a-isolation-check
+make bite3368a-docker-check
+```
+
+**Expected:** The offline tests report success. The Docker test builds an image from the current backend source, creates its own temporary workspace and decoy volume, verifies a migrated and healthy recovered database, then proves a deliberately corrupted recovered database **cannot** become healthy or inherit the decoy volume. The final line reports `PASS: Docker real-image isolation, recovered DB integrity, invalid DB refusal, and decoy volume preservation.` The test removes only its own image, containers, volume, and workspace, even after failure. **BLOCKED** if Docker is unavailable, any image cannot build, the database test fails, or cleanup fails; do not substitute a mocked PASS for an actual Docker PASS. Keep the actual full output or non-secret reference in the IT-03 record. Docker images and resources belong to LOCAL, not the Test deployment.
+
+**DEPLOYED TEST prerequisite — Terminal D (Linux Bash):** The normal IT-03 Step P and Step 1 must be PASS, and the deployed `test` checkout must contain `scripts/ers-recovery-isolated-container.sh` from the approved revision. No extra Test server Git edits or manual image builds are permitted. The first actual `make server-recovery-rehearsal ENV=test` call in IT-03 Step 2 automatically verifies the container's Docker image, effective mounts, network isolation, root filesystem, and exact database path **before** its health check. A mismatch is **BLOCKED**, with the private recovery workspace cleaned up; never bypass these checks.
+
+**IT-03 Step 3 acceptance extension:** In addition to the pre-existing checks, the rehearsal evidence must contain `.recovery.isolation.docker_effective_mounts_verified == true`, `.recovery.isolation.named_volumes_present == false`, `.recovery.isolation.network_disabled == true`, `.recovery.isolation.backend_database_path == "/rehearsal-data/app.db"`, `.recovery.isolation.database_checked_path == "/rehearsal-data/app.db"`, `.recovery.isolation.private_database_copies_disposed == true`, and `.recovery.isolation.rehearsal_container_removed == true`. The run's `cleanup.txt` must exist and record `PASS: rehearsal container removed and private SQLite copies disposed`; no `.db`/SQLite journal copies may remain beneath that invocation's private workspace. Any deviation is **BLOCKED**; retain non-secret diagnostics and do not proceed to IT-04. Record the exact report path/hash, cleanup marker path, Docker isolation outcome, and LOCAL Docker regression evidence in the IT-03 execution record.
+
+**Note on scope:** 33.6.8A does not change RPO/RTO calculation or establish Test S3 provisioning; those remain the existing IT-03 prerequisites and the later 33.6.8B/C work. A LOCAL Docker PASS does not replace a real off-host Test restore.
+
 ### Step 2 — Rehearse an off-host restore into the *isolated* Test recovery workspace (Terminal D)
 
 ```bash
@@ -494,18 +538,40 @@ fi
 
 ```bash
 : 'Terminal D (Test Linux host/bash, Test deployment repository root) — IT-03 Step 3'
-printf 'Paste the absolute Evidence: report path from Step 2: '
-IFS= read -r TEST_REPORT
-if [[ -f "$TEST_REPORT" ]] && jq -e '.status == "passed" and .environment == "test" and .objectives.rpo_met == true and .objectives.rto_met == true and .recovery.isolated_backend_health == "passed" and .recovery.post_boot_integrity_check == "ok" and .recovery.post_boot_foreign_key_check == "clean"' "$TEST_REPORT" >/dev/null; then
-  printf 'PASS: Test off-host rehearsal, isolated boot and objectives\n'
+(
+  set -euo pipefail
+  printf 'Paste the absolute Evidence: report path from Step 2: '
+  IFS= read -r TEST_REPORT
+  if [[ "$TEST_REPORT" != /opt/EnterpriseRemoteSystems/test/recovery/rehearsals/rehearsal-*/rehearsal.json || ! -f "$TEST_REPORT" ]]; then
+    printf 'BLOCKED: report must be inside the managed Test rehearsal workspace\n' >&2
+    exit 1
+  fi
+  if ! jq -e '.status == "passed" and .environment == "test" and .objectives.rpo_met == true and .objectives.rto_met == true and .recovery.isolated_backend_health == "passed" and .recovery.post_boot_integrity_check == "ok" and .recovery.post_boot_foreign_key_check == "clean" and .recovery.isolation.docker_effective_mounts_verified == true and .recovery.isolation.named_volumes_present == false and .recovery.isolation.network_disabled == true and .recovery.isolation.backend_database_path == "/rehearsal-data/app.db" and .recovery.isolation.database_checked_path == "/rehearsal-data/app.db" and .recovery.isolation.private_database_copies_disposed == true and .recovery.isolation.rehearsal_container_removed == true' "$TEST_REPORT" >/dev/null; then
+    printf 'BLOCKED: recovered database, Docker isolation, objectives, or cleanup evidence failed\n' >&2
+    exit 1
+  fi
+  TEST_RUN_DIR="$(dirname "$TEST_REPORT")"
+  if [[ ! -f "$TEST_RUN_DIR/cleanup.txt" ]] || ! grep -Fxq 'PASS: rehearsal container removed and private SQLite copies disposed' "$TEST_RUN_DIR/cleanup.txt"; then
+    printf 'BLOCKED: this run has no verified cleanup marker\n' >&2
+    exit 1
+  fi
+  TEST_LEFTOVERS="$(find "$TEST_RUN_DIR" -type f \( -name '*.db' -o -name '*.db-wal' -o -name '*.db-shm' -o -name '*.db-journal' \) -print)" || {
+    printf 'BLOCKED: cannot inspect the full private recovery workspace\n' >&2
+    exit 1
+  }
+  if [[ -n "$TEST_LEFTOVERS" ]]; then
+    printf 'BLOCKED: recovered database copies remain in this run\n' >&2
+    exit 1
+  fi
+  printf 'PASS: recovered Test database verified; no persistent Test volume mounted; SQLite copies disposed\n'
   sha256sum "$TEST_REPORT"
-else
-  printf 'STOP: report missing or failed one or more required checks\n' >&2
-fi
-make server-ps ENV=test
-make server-backend-health ENV=test
-docker ps -a --format '{{.ID}} {{.Names}}' | grep -E 'ers.*(recovery-rehearsal|3368)' || true
-date -u '+IT-03 UTC end: %Y-%m-%dT%H:%M:%SZ'
+  jq -r '"RPO seconds: \(.objectives.rpo_seconds); RTO seconds: \(.objectives.rto_seconds)"' "$TEST_REPORT"
+  make server-ps ENV=test
+  make server-backend-health ENV=test
+  printf 'Rehearsal-created containers still present (expected none):\n'
+  docker ps -a --format '{{.ID}} {{.Names}}' | grep -E 'ers.*(recovery-rehearsal|3368)' || true
+  date -u '+IT-03 UTC end: %Y-%m-%dT%H:%M:%SZ'
+)
 ```
 
 **Expected:** `PASS` and a 64-digit SHA-256 digest, with the original `ers-tst-backend` still running/healthy; no rehearsal-created containers remain. Record the actual RPO/RTO seconds from the report, not just the booleans. Inspect `docker ps -a --format '{{.ID}} {{.Names}}'` for only *this run's* recovery-rehearsal containers; if any remain, identify and investigate them without touching unrelated containers. Store the non-secret report only in approved restricted Test evidence. **Exit state:** original Test backend/data continue unchanged, rehearsal artifacts/evidence retained as required, IT-04 may start. **PASS:** all checks plus cleanup verified. **BLOCKED:** failed restore, objectives, health, receipt, mismatched release, or unclear cleanup.

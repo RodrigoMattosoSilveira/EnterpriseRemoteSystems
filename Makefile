@@ -549,8 +549,20 @@ two-human-administrators-preflight-check:
 two-human-administrators-check: two-human-administrators-preflight-check
 	cd backend && go test ./internal/authentication ./cmd/enroll-human-admins
 
+# Bite 33.6.8A: fast, fully offline adversarial container-contract tests.
+.PHONY: bite3368a-isolation-check
+bite3368a-isolation-check:
+	python3 -B scripts/test-bite3368a-cleanup.py
+	python3 -B scripts/test-bite3368a-isolation.py
+	python3 -B scripts/test-recovery-rehearsal-operational-runbook.py
+
+# Docker engine required: builds a throwaway backend image, never mounts Test data.
+.PHONY: bite3368a-docker-check
+bite3368a-docker-check:
+	bash scripts/test-bite3368a-docker.sh
+
 .PHONY: bite3368-core-check
-bite3368-core-check:
+bite3368-core-check: bite3368a-isolation-check
 	python3 -B scripts/test-bite3368-manual-contract.py
 	python3 -B scripts/test-bite3368-it02-evidence.py
 	python3 -B scripts/test-bite3368-test-backup-gate.py

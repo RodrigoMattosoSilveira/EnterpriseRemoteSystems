@@ -106,6 +106,22 @@ jobs:
       - name: Rehearse pre-30I database through final 30I migration
         run: make migration-rehearsal-check
 
+  recovery-isolation:
+    name: Bite 33.6.8A real Docker database isolation
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+      - name: Install Docker verification dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends jq
+          docker info
+      - name: Prove recovery isolation with real Docker mounts and corrupted database
+        run: make bite3368a-docker-check
+
   frontend:
     name: Frontend checks
     runs-on: ubuntu-latest
@@ -147,6 +163,7 @@ jobs:
     needs:
       - backend
       - migration-rehearsal
+      - recovery-isolation
       - frontend
 
     steps:
