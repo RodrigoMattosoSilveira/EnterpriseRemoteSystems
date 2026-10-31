@@ -5,6 +5,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
 command -v docker >/dev/null || { echo 'BLOCKED: Docker is required' >&2; exit 2; }
 command -v jq >/dev/null || { echo 'BLOCKED: jq is required' >&2; exit 2; }
+command -v python3 >/dev/null || { echo 'BLOCKED: Python 3 is required for portable workspace verification' >&2; exit 2; }
 docker info >/dev/null || { echo 'BLOCKED: Docker engine unavailable' >&2; exit 2; }
 umask 077
 workspace="$(mktemp -d "${TMPDIR:-/tmp}/ers-3368a-docker.XXXXXXXX")"
@@ -51,6 +52,15 @@ ERS_RECOVERY_EXPECTED_MIGRATION="$(ls "$ROOT"/backend/migrations/*.up.sql | sort
 export ERS_RECOVERY_EXPECTED_MIGRATION="$(basename "$ERS_RECOVERY_EXPECTED_MIGRATION")"
 helper="$ROOT/scripts/ers-recovery-isolated-container.sh"
 
+# Private workspace (700) and database files (600) remain runner-owned.
+# The isolated Docker helper must match this UID:GID even with all Linux
+# capabilities dropped; do not broaden filesystem permissions for CI.
+python3 - "$workspace" <<'PY_CHECK_WORKSPACE'
+import os, stat, sys
+workspace = os.stat(sys.argv[1])
+if workspace.st_uid != os.getuid() or stat.S_IMODE(workspace.st_mode) != 0o700:
+    raise SystemExit('BLOCKED: private workspace owner or mode is incorrect')
+PY_CHECK_WORKSPACE
 # Poison a distinct named volume to show the healthy backend is independent.
 docker volume create "$poison_volume" >/dev/null
 volume_created=true
@@ -58,11 +68,14 @@ docker run --rm --network none --mount "type=volume,src=$poison_volume,dst=/app/
   --entrypoint /bin/sh "$image_id" -c 'printf "definitely-not-sqlite" > /app/data/app.db'
 
 : > "$workspace/migrated.db"
-"$helper" migrate >/dev/null
+"$helper" migrate >/dev/null || { echo 'BLOCKED: private migrated DB cannot be written by isolated container; check UID:GID and 700/600 permissions' >&2; exit 1; }
 "$helper" verify >/dev/null
 cp "$workspace/migrated.db" "$workspace/boot-data/app.db"
 "$helper" start >/dev/null
 "$helper" inspect
+[[ "$(docker inspect "$container" --format '{{.Config.User}}')" == "$(id -u):$(id -g)" ]] || {
+  echo 'BLOCKED: recovery backend is not running as private workspace owner' >&2; exit 1;
+}
 healthy=false
 for i in {1..15}; do
   if docker exec "$container" curl -fsS http://localhost:8080/healthz >/dev/null 2>&1; then

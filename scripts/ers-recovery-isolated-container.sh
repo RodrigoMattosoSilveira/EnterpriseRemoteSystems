@@ -23,9 +23,16 @@ bootdir="$(cd "$ERS_RECOVERY_BOOT_DIR" && pwd -P)"
 image_id="$(docker image inspect "$ERS_RECOVERY_IMAGE" --format '{{.Id}}')"
 [[ "$image_id" == "$ERS_RECOVERY_IMAGE" ]] || { echo 'Image identity mismatch' >&2; exit 2; }
 
+# The workspace is private to the invoking host operator (mode 700; databases
+# mode 600). Root *inside* a container with --cap-drop ALL cannot bypass that
+# operator's filesystem permissions on a rootful Linux Docker host. Run with
+# the invoking operator's numeric UID:GID instead of weakening directory modes
+# or restoring DAC_OVERRIDE. This identity must apply to migrations AND boot.
+rehearsal_user="$(id -u):$(id -g)"
+[[ "$rehearsal_user" =~ ^[0-9]+:[0-9]+$ ]] || { echo 'Invalid rehearsal user identity' >&2; exit 2; }
 # Every transient process has no network, a read-only root, and precisely one
 # private bind mount. In particular, no Compose backend-data named volume.
-common=(--network none --read-only --tmpfs /tmp:rw,nosuid,nodev --cap-drop ALL --security-opt no-new-privileges)
+common=(--user "$rehearsal_user" --network none --read-only --tmpfs /tmp:rw,nosuid,nodev --cap-drop ALL --security-opt no-new-privileges)
 case "$operation" in
   migrate|verify)
     db=/rehearsal/migrated.db
@@ -57,9 +64,11 @@ case "$operation" in
     # Fail before any health or data-integrity check when effective mounts,
     # network, image identity, or database environment differ.
     docker inspect "$ERS_RECOVERY_CONTAINER" | jq -e \
-      --arg boot "$bootdir" --arg image "$image_id" --arg app "$ERS_RECOVERY_ENVIRONMENT" '
+      --arg boot "$bootdir" --arg image "$image_id" --arg app "$ERS_RECOVERY_ENVIRONMENT" \
+      --arg user "$rehearsal_user" '
       length == 1 and
       .[0].Image == $image and
+      .[0].Config.User == $user and
       .[0].HostConfig.NetworkMode == "none" and
       .[0].HostConfig.ReadonlyRootfs == true and
       (.[0].HostConfig.VolumesFrom // [] | length) == 0 and

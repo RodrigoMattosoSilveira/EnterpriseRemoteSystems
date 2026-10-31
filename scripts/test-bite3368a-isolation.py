@@ -67,7 +67,7 @@ class IsolationTests(unittest.TestCase):
             'Image':IMAGE,
             'HostConfig':{'NetworkMode':'none','ReadonlyRootfs':True,'VolumesFrom':[]},
             'Mounts':[{'Type':'bind','Source':str(self.boot),'Destination':'/rehearsal-data','RW':True}],
-            'Config':{'Env':['DATABASE_PATH=/rehearsal-data/app.db','DB_PATH=/rehearsal-data/app.db',
+            'Config':{'User':f'{os.getuid()}:{os.getgid()}', 'Env':['DATABASE_PATH=/rehearsal-data/app.db','DB_PATH=/rehearsal-data/app.db',
                             'APP_ENV=test','APP_AUTO_MIGRATE=false','AUTHZ_BOOTSTRAP_ENABLED=false']}}]
         self.env['FAKE_INSPECT'] = json.dumps(self.base_inspect)
 
@@ -86,6 +86,9 @@ class IsolationTests(unittest.TestCase):
         self.assertEqual(len(commands),2)
         for cmd in commands:
             self.assertIn('--read-only',cmd)
+            self.assertEqual(cmd[cmd.index('--user')+1], f'{os.getuid()}:{os.getgid()}')
+            self.assertIn('--cap-drop',cmd)
+            self.assertEqual(cmd[cmd.index('--cap-drop')+1], 'ALL')
             self.assertEqual(cmd[cmd.index('--network')+1],'none')
             self.assertIn(f'type=bind,src={self.work},dst=/rehearsal',cmd)
             self.assertNotIn('backend-data',repr(cmd))
@@ -100,6 +103,7 @@ class IsolationTests(unittest.TestCase):
         self.assertIn('DB_PATH=/rehearsal-data/app.db',cmd)
         self.assertIn('DATABASE_PATH=/rehearsal-data/app.db',cmd)
         self.assertIn('--read-only',cmd)
+        self.assertEqual(cmd[cmd.index('--user')+1], f'{os.getuid()}:{os.getgid()}')
         self.assertIn('--env-file',cmd)
         self.assertEqual(cmd[cmd.index('--network')+1],'none')
         self.assertEqual(self.call('inspect').returncode,0)
@@ -139,6 +143,25 @@ class IsolationTests(unittest.TestCase):
         r=self.call('inspect',FAKE_INSPECT=json.dumps(obj))
         self.assertNotEqual(r.returncode,0)
         self.assertIn('BLOCKED',r.stderr)
+
+    def test_wrong_container_user_rejected(self):
+        obj=json.loads(json.dumps(self.base_inspect))
+        obj[0]['Config']['User']='0:0' if os.getuid() != 0 else '1001:1001'
+        result=self.call('inspect', FAKE_INSPECT=json.dumps(obj))
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('BLOCKED', result.stderr)
+
+    def test_migration_and_boot_preserve_private_permissions_without_dac_override(self):
+        # Both phases use the invoking host user, and never add DAC_OVERRIDE.
+        self.assertEqual(self.call('migrate').returncode,0)
+        self.assertEqual(self.call('start',FAKE_CONTAINER_ABSENT='1').returncode,0)
+        commands=[c for c in self.calls() if c[0]=='run']
+        self.assertEqual(len(commands),2)
+        for args in commands:
+            self.assertEqual(args[args.index('--user')+1], f'{os.getuid()}:{os.getgid()}')
+            self.assertEqual(args[args.index('--cap-drop')+1], 'ALL')
+            self.assertNotIn('--cap-add', args)
+            self.assertIn('--read-only', args)
 
     def test_wrong_database_environment_rejected(self):
         obj=json.loads(json.dumps(self.base_inspect))
