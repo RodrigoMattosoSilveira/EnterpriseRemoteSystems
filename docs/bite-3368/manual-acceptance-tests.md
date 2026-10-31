@@ -937,3 +937,58 @@ make local-check
 **Expected:** Every command exits zero with explicit PASS output. The real Docker test must confirm no test-created containers, test-owned volumes or occupied ports remain. **FAIL:** any assertion failure, any remaining test-owned container/port, or backup failure followed by off-host replication. **BLOCKED:** Docker Desktop not available, CI unavailable, or approvals/evidence missing; do not replace these results with mocked regression passes. Record UTC completion and individual results.
 
 **Deployed Test evidence:** The authorized Test operator follows IT-03 and IT-06 using an actual versioned S3 database+manifest pair; preserve exact database and manifest VersionIds in the receipt, record the restored health/integrity and isolation/cleanup artifacts, and independently verify off-host objects. Record recurring backup executions across distinct timestamps, enforced retention, and repeated off-host replication; a single new backup is insufficient. Have the independent approver review these references before setting `backup_continuity.verified` to true in `final-acceptance-template.json`. For RPO compare backup creation UTC with rehearsal start; for RTO compare rehearsal start with recovered-at UTC, not cleanup completion. Run the final verifier as already specified in IT-06 and ensure it rejects any missing version, cleanup, continuity, or timing evidence. **PASS** requires exact versioned remote evidence, complete consistent JSON, authorized human review, and separately recorded acceptance. **BLOCKED** on unverifiable S3 versions, missing continuity, absent reviewer, or Test/Production environment confusion. Do not perform any unapproved Production operation.
+
+### Bite 33.6.8C — Exact release gate and end-to-end acceptance (canonical supplemental procedure)
+
+**Entry:** Work from the committed `1023-bite-3368c-operational-procedure-and-end-to-end-verification` branch; baseline SHA `e0811170b454c1d77b1675fb70a6ea3118bed00d` is the patch input, **not** the new release SHA after merge. Operator is the LOCAL release engineer; environment LOCAL, no ERS sign-in, no production credentials. IT-00 through IT-08 above remain the authoritative step-by-step operational procedure, including Test administration identities, 1Password custody, Test off-host rehearsal, reviewed continuity, Docker cleanup, and the independent Production approval boundary. **Do not equate an offline gate result with deployed IT-03–IT-08 PASS.**
+
+**Step C1 — LOCAL deterministic tests (Terminal A, macOS/zsh, repository root):**
+
+```bash
+: 'Terminal A, macOS/zsh, LOCAL release branch — C1 offline regression'
+make bite3368c-gate-check
+make bite3368-core-check
+make bite3368-integrated-check
+make promotion-readiness-check
+make local-check
+```
+
+**Expected:** each exits 0 and the 33.6.8C suite reports 14 tests. If any fails, STOP. Run the separate `make bite3368a-docker-check` on a Docker-enabled host, review actual mount-isolation results, clean up test-created containers (never unrelated containers), and verify port 8080 is free after any dedicated test listener stops. Inspect and record actual GitHub CI for the exact later merge SHA. LOCAL and CI success alone cannot authorize Production operations. Do not commit logs, database files, or credentials.
+
+**Step C2 — Independently establish deployed release identity (authorized Test operator and reviewer):** After the approved Test deployment, record the *actual* deployed `git rev-parse HEAD` and `git rev-parse HEAD^{tree}` from the version-controlled deployed source, and the relevant GitHub CI run. Use a clean checkout at that **same** revision and tree (do not use the original 1023 baseline SHA if the release was subsequently merged). Record independent evidence of the deployed runtime's image/revision binding; the gate does not obtain this from the remote host. STOP if image/runtime evidence cannot be reconciled to the checkout.
+
+**Step C3 — Verify exact checkout before reviewing evidence (Terminal A, macOS/zsh, clean checkout at deployed Test SHA):**
+
+```bash
+: 'Terminal A, macOS/zsh, exact clean Test release checkout — C3 identity preflight'
+TEST_SHA="$(git rev-parse HEAD)"
+TEST_TREE="$(git rev-parse 'HEAD^{tree}')"
+git status --short
+python3 -B scripts/ers-bite3368c-release-gate.py \
+  --environment test \
+  --expected-revision "$TEST_SHA" \
+  --expected-tree "$TEST_TREE"
+```
+
+**Expected:** `PASS: ... exact test Git identity` followed by `NOT ACCEPTED`. These locally obtained values **must first** be compared with the independently recorded deployed values from Step C2; matching the local checkout to itself does not prove the deployment identity. An unexpected untracked file, different SHA/tree, missing deployed identity, or nonzero exit is BLOCKED.
+
+**Step C4 — Complete IT-03 through IT-06, then verify the real evidence bundle (authorized Test reviewer):** Execute the exact Test off-host selection, immutable object version confirmation, isolated restored-database boot and verification, cleanup, RPO/RTO evaluation, independent two-human logins/recovery, separate vault reviews, CI, continuity and risk acceptance steps in IT-03–IT-06 above. Store only non-secret references and the real `rehearsal.json` in the separate private acceptance directory. Never generate a fabricated report to satisfy the gate. With the same committed clean checkout at the deployed Test SHA, run:
+
+```bash
+: 'Terminal A, macOS/zsh, exact clean Test checkout — C4 evidence consistency'
+TEST_SHA="$(git rev-parse HEAD)"
+TEST_TREE="$(git rev-parse 'HEAD^{tree}')"
+python3 -B scripts/ers-bite3368c-release-gate.py \
+  --environment test \
+  --expected-revision "$TEST_SHA" \
+  --expected-tree "$TEST_TREE" \
+  --evidence-file "$HOME/ers-3368-final-test-evidence/acceptance.json"
+```
+
+**Expected:** `PASS: ... release identity AND evidence consistency` **and** `REVIEW REQUIRED`. The reviewer independently authenticates original external systems and signs a Test GO/NO-GO in approved change-management storage. Any mismatch, missing external original, incomplete isolation/cleanup, or weakened RPO/RTO is BLOCKED. This tool does not sign acceptance.
+
+**Step C5 — Production is a separate gate (authorized Production reviewer ONLY):** Follow IT-07 without initiating an unapproved Production operation. Once independently authorized Production rehearsal and the distinct Production evidence bundle exist, repeat C2–C4 with `--environment production`, the exact Production checkout revision/tree and a **separate** `--evidence-file` in the approved Production evidence directory. Never reuse Test evidence or approval. If Production operations have not been approved and executed, record **BLOCKED / NOT PERFORMED**, not PASS. Actual Production GO requires independent review and signed authorization.
+
+**Step C6 — Final cleanup/reconciliation (IT-08):** Inspect Docker containers created by each executed test and remove **only** those whose IDs were recorded for that test. Confirm no test-owned containers remain and no test-owned port 8080 listener remains (an independently operated LOCAL listener must not be stopped). Record each exact result/exit code, logs and hash, CI SHA, Test GO/NO-GO, Production GO/NO-GO, cleanup and named reviewer. Do not merge 998 → 945 or promote before all required parent-bite acceptance gates are complete.
+
+**Execution record — C1–C6:** Operator/reviewer identity: ___; UTC start/end: ___; LOCAL regression exit codes: ___; Docker test-created IDs and final removal: ___; listener/port 8080 check: ___; CI workflow URL and SHA: ___; deployed Test runtime image/ref and SHA/tree: ___; Test rehearsal receipt object/version IDs (non-secret refs only): ___; Test evidence digest: ___; independent review ref and GO/NO-GO: ___; Production runtime SHA/tree: ___; Production evidence digest/review GO/NO-GO or BLOCKED: ___; outstanding defect and next-state: ___.

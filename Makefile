@@ -567,8 +567,14 @@ bite3368b-evidence-check:
 	python3 -B scripts/test-bite3368b-backup-failure.py
 	python3 -B scripts/test-bite3368-integrated-acceptance.py
 
+# Bite 33.6.8C offline release-identity and acceptance-gate regressions.
+# Deployed acceptance is operator-invoked only; no CI fixture implies human approval.
+.PHONY: bite3368c-gate-check
+bite3368c-gate-check:
+	python3 -B scripts/test-bite3368c-release-gate.py
+
 .PHONY: bite3368-core-check
-bite3368-core-check: bite3368a-isolation-check bite3368b-evidence-check
+bite3368-core-check: bite3368a-isolation-check bite3368b-evidence-check bite3368c-gate-check
 	python3 -B scripts/test-bite3368-manual-contract.py
 	python3 -B scripts/test-bite3368-it02-evidence.py
 	python3 -B scripts/test-bite3368-test-backup-gate.py

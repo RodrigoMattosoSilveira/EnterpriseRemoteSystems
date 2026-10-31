@@ -94,6 +94,9 @@ jobs:
       - name: Verify Bite 33.6 recovery rehearsal and operational runbook
         run: make recovery-rehearsal-operational-runbook-check
 
+      - name: Verify Bite 33.6.8C release-identity and acceptance fail-closed gate
+        run: make bite3368c-gate-check
+
       - name: Verify Bite 33.6.8 integrated isolated regression and final-acceptance contract
         run: make bite3368-core-check
 
