@@ -561,8 +561,14 @@ bite3368a-isolation-check:
 bite3368a-docker-check:
 	bash scripts/test-bite3368a-docker.sh
 
+.PHONY: bite3368b-evidence-check
+bite3368b-evidence-check:
+	python3 -B scripts/test-bite3368b-receipt-gate.py
+	python3 -B scripts/test-bite3368b-backup-failure.py
+	python3 -B scripts/test-bite3368-integrated-acceptance.py
+
 .PHONY: bite3368-core-check
-bite3368-core-check: bite3368a-isolation-check
+bite3368-core-check: bite3368a-isolation-check bite3368b-evidence-check
 	python3 -B scripts/test-bite3368-manual-contract.py
 	python3 -B scripts/test-bite3368-it02-evidence.py
 	python3 -B scripts/test-bite3368-test-backup-gate.py
@@ -1114,8 +1120,10 @@ server-backup:
 	ERS_BACKUP_ENV_DIR="$(ENV_DIR)" \
 	ERS_BACKUP_ENV_FILE="$(ENV_FILE)" \
 	ERS_BACKUP_COMPOSE_PROJECT="$(COMPOSE_PROJECT)" \
-		./scripts/server-sqlite-backup.sh; \
+		./scripts/server-sqlite-backup.sh || exit $$?; \
+	if [ ! -s "$$result_file" ]; then echo "BLOCKED: backup result missing" >&2; exit 2; fi; \
 	backup_file="$$(cat "$$result_file")"; \
+	if [ ! -f "$$backup_file" ] || [ ! -s "$$backup_file" ]; then echo "BLOCKED: backup artifact missing or empty" >&2; exit 2; fi; \
 	status="$$(ERS_BACKUP_ENV_DIR="$(ENV_DIR)" ERS_BACKUP_ENV_FILE="$(ENV_FILE)" ERS_BACKUP_COMPOSE_PROJECT="$(COMPOSE_PROJECT)" ./scripts/run-backup-go-tool.sh ers-offhost-backup status --environment "$(ENV)" --env-file "$(ENV_DIR)/$(ENV_FILE)")" || exit $$?; \
 	if [[ "$$status" == "enabled" ]]; then \
 		$(MAKE) server-offhost-backup ENV=$(ENV) BACKUP_FILE="$$backup_file"; \

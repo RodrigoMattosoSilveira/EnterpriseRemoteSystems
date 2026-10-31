@@ -916,3 +916,24 @@ printf 'Confirm evidence remains in its private authorized location; do not comm
 - For an implementation change: verify exact patch SHA, run `git apply --check`, apply, `git diff --check`, and perform canonical `make local-check` and CI. These are standard patch validation steps and are not a substitute for per-test instructions above.
 
 **Glossary impact:** see [Implementation and Architecture](implementation-and-architecture.md).
+
+### Bite 33.6.8B supplemental acceptance gate (inside the canonical manual)
+
+**Entry:** Signed-in release operator at the LOCAL 1021 feature checkout, with exact committed SHA `fcb53a36813077265f7665afa2f7e3683679194f`; Test and Production are not authorized by this LOCAL test. Record operator identity, Git revision, UTC start time, and CI URL. Stop if the source tree differs.
+
+Run the following in Terminal A at the repository root before merging 1021 into 998:
+
+```bash
+: 'Terminal A, macOS/zsh, LOCAL checkout'
+make bite3368b-evidence-check
+make bite3368a-isolation-check
+make bite3368a-docker-check
+make bite3368-core-check
+make bite3368-integrated-check
+make promotion-readiness-check
+make local-check
+```
+
+**Expected:** Every command exits zero with explicit PASS output. The real Docker test must confirm no test-created containers, test-owned volumes or occupied ports remain. **FAIL:** any assertion failure, any remaining test-owned container/port, or backup failure followed by off-host replication. **BLOCKED:** Docker Desktop not available, CI unavailable, or approvals/evidence missing; do not replace these results with mocked regression passes. Record UTC completion and individual results.
+
+**Deployed Test evidence:** The authorized Test operator follows IT-03 and IT-06 using an actual versioned S3 database+manifest pair; preserve exact database and manifest VersionIds in the receipt, record the restored health/integrity and isolation/cleanup artifacts, and independently verify off-host objects. Record recurring backup executions across distinct timestamps, enforced retention, and repeated off-host replication; a single new backup is insufficient. Have the independent approver review these references before setting `backup_continuity.verified` to true in `final-acceptance-template.json`. For RPO compare backup creation UTC with rehearsal start; for RTO compare rehearsal start with recovered-at UTC, not cleanup completion. Run the final verifier as already specified in IT-06 and ensure it rejects any missing version, cleanup, continuity, or timing evidence. **PASS** requires exact versioned remote evidence, complete consistent JSON, authorized human review, and separately recorded acceptance. **BLOCKED** on unverifiable S3 versions, missing continuity, absent reviewer, or Test/Production environment confusion. Do not perform any unapproved Production operation.

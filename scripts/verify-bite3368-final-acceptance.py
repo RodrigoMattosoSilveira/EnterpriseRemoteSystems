@@ -51,6 +51,26 @@ def load(path: Path) -> dict:
     return object_at(data, 'evidence')
 
 
+def version_id(value: object, label: str) -> str:
+    require(isinstance(value, str) and 1 <= len(value) <= 512
+            and value.lower() != 'null' and not any(ch.isspace() or ord(ch) < 33 for ch in value)
+            and '<' not in value and '>' not in value
+            and not value.upper().startswith('REPLACE_'),
+            f'{label} requires a valid immutable S3 VersionId')
+    return value
+
+
+def utc_epoch(value: object, label: str) -> int:
+    from datetime import datetime, timezone
+    require(isinstance(value, str) and bool(re.fullmatch(r'\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z', value)),
+            f'{label} must be UTC ISO-8601 seconds')
+    try:
+        dt = datetime.strptime(value, '%Y-%m-%dT%H:%M:%SZ').replace(tzinfo=timezone.utc)
+    except ValueError as exc:
+        raise EvidenceError(f'{label} invalid timestamp') from exc
+    return int(dt.timestamp())
+
+
 def verify(path: Path, expected_revision: str, environment: str) -> None:
     require(bool(HEX40.fullmatch(expected_revision)), 'expected revision must be a full 40-digit Git SHA')
     root = load(path)
@@ -115,11 +135,36 @@ def verify(path: Path, expected_revision: str, environment: str) -> None:
     remote = object_at(source.get('remote'), 'rehearsal.source.remote')
     reference(remote.get('backup_key'), 'off-host backup object key')
     reference(remote.get('manifest_key'), 'off-host manifest object key')
+    version_id(remote.get('backup_version_id'), 'off-host backup')
+    version_id(remote.get('manifest_version_id'), 'off-host manifest')
+    require(remote['backup_key'] != remote['manifest_key'], 'off-host object keys must differ')
+    require(source.get('backup_created_at'), 'backup creation time missing')
+    start = utc_epoch(report.get('started_at'), 'rehearsal.started_at')
+    recovered = utc_epoch(report.get('recovered_at'), 'rehearsal.recovered_at')
+    finished = utc_epoch(report.get('completed_at'), 'rehearsal.completed_at')
+    created = utc_epoch(source['backup_created_at'], 'backup_created_at')
+    require(created <= start <= recovered <= finished, 'recovery timestamp order invalid')
     recovery = object_at(report.get('recovery'), 'rehearsal.recovery')
+    isolation = object_at(recovery.get('isolation'), 'rehearsal.recovery.isolation')
+    for key in ('docker_effective_mounts_verified', 'private_database_copies_disposed',
+                'rehearsal_container_removed', 'network_disabled'):
+        require(isolation.get(key) is True, f'recovery isolation/cleanup not verified: {key}')
+    require(isolation.get('named_volumes_present') is False, 'recovery used a named volume')
+    require(isolation.get('database_checked_path') == isolation.get('backend_database_path') == '/rehearsal-data/app.db',
+            'recovered database path mismatch')
     require(recovery.get('isolated_backend_health') == 'passed', 'isolated backend boot not verified')
     require(recovery.get('post_boot_integrity_check') == 'ok', 'restored database integrity not verified')
     require(recovery.get('post_boot_foreign_key_check') == 'clean', 'restored foreign key integrity not verified')
     obj = object_at(report.get('objectives'), 'rehearsal.objectives')
+    require(obj.get('rpo_basis') == 'selected_backup_age_at_rehearsal_start', 'RPO basis mismatch')
+    require(obj.get('rto_basis') == 'rehearsal_start_to_isolated_backend_health_and_database_verification', 'RTO basis mismatch')
+    require(obj.get('rpo_seconds') == start-created, 'RPO not consistent with timestamps')
+    require(obj.get('rto_seconds') == recovered-start, 'RTO not consistent with timestamps')
+    continuity = object_at(root.get('backup_continuity'), 'backup_continuity')
+    for key in ('recurring_backup_history_ref', 'retention_verification_ref',
+                'offhost_replication_history_ref', 'continuity_review_ref'):
+        reference(continuity.get(key), f'backup_continuity.{key}')
+    require(continuity.get('verified') is True, 'backup continuity not accepted')
     for kind, cap in (('rpo', 86400), ('rto', 14400)):
         value = obj.get(f'{kind}_seconds')
         limit = obj.get(f'max_{kind}_seconds')

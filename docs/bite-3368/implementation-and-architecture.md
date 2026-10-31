@@ -45,3 +45,7 @@ The rehearsal must report `status=passed` for the same environment and exact cod
 ## Glossary impact
 
 **ADD** to the release/operations glossary (if not already present): **Integrated Recovery Acceptance Evidence** — a non-secret, SHA-linked set of regression, Test/Production recovery-rehearsal, identity, secret-custody, and release-approval references reviewed for the exact release SHA. Evidence consistency verification does not replace independently authorized human approval.
+
+### Bite 33.6.8B — Immutable recovery evidence and acceptance
+
+The off-host database and manifest must each have a real, non-null immutable S3 VersionId. The final verifier checks both distinct object keys, version IDs, the recovered database's Docker isolation and scoped cleanup attestations, and RPO/RTO values reconciled to UTC backup, start, recovered, and completion timestamps. RTO ends at successful health plus database integrity verification, before cleanup; completion is independently recorded afterward. Backup continuity requires reviewed recurring history, retention, off-host replication, and approval references in the acceptance evidence. This file is architecture context, not a second executable manual. JSON consistency cannot independently authenticate the remote S3 objects or approvals.
