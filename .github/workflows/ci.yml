@@ -65,6 +65,11 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends sqlite3
 
+      - name: Install jq for Bite 33.6.8 recovery evidence checks
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends jq
+
       - name: Verify Bite 32 release coverage contract
         run: make bite32-release-coverage-check
 

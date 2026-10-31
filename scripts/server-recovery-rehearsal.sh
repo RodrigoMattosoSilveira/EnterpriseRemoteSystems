@@ -398,6 +398,9 @@ fi
 "$isolated" inspect
 "$isolated" check-db
 post_boot_integrity=ok
+recovered_epoch="$(date +%s)"
+recovered_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+rto_seconds=$((recovered_epoch - started_epoch))
 "$isolated" stop
 container_owned=false
 # Dispose private database copies before recording a successful rehearsal.
@@ -408,7 +411,6 @@ fi
 
 completed_epoch="$(date +%s)"
 completed_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-rto_seconds=$((completed_epoch - started_epoch))
 rpo_met=false
 rto_met=false
 [[ $rpo_seconds -le $REHEARSAL_MAX_RPO_SECONDS ]] && rpo_met=true
@@ -426,6 +428,12 @@ if [[ -n "$source_receipt" && -f "$source_receipt" ]]; then
   remote_manifest_key="$(jq -r '.remote.manifest.key // ""' "$source_receipt")"
   remote_manifest_version="$(jq -r '.remote.manifest.version_id // ""' "$source_receipt")"
 fi
+# S3 version IDs must be immutable, real object versions (not null/unversioned).
+for entry in "$remote_db_version" "$remote_manifest_version"; do
+  if [[ -z "$entry" || "$entry" == "null" || "$entry" =~ [[:space:][:cntrl:]] || "$entry" == *\<* || "$entry" == *\>* ]]; then
+    echo "BLOCKED: off-host recovery source lacks a valid exact object VersionId" >&2; exit 2
+  fi
+done
 
 repository_revision="unknown"
 repository_tree_sha="unknown"
@@ -440,6 +448,7 @@ jq -n \
   --arg environment "$REHEARSAL_ENVIRONMENT" \
   --arg started_at "$started_at" \
   --arg completed_at "$completed_at" \
+  --arg recovered_at "$recovered_at" \
   --arg source_kind "$source_kind" \
   --arg backup_file "$(basename "$candidate")" \
   --arg backup_created_at "$backup_created_at" \
@@ -486,6 +495,7 @@ jq -n \
     environment: $environment,
     started_at: $started_at,
     completed_at: $completed_at,
+    recovered_at: $recovered_at,
     repository: {
       revision: $repository_revision,
       tree_sha: $repository_tree_sha
