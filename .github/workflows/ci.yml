@@ -65,6 +65,11 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends sqlite3
 
+      - name: Install jq for Bite 33.6.8 recovery evidence checks
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends jq
+
       - name: Verify Bite 32 release coverage contract
         run: make bite32-release-coverage-check
 
@@ -89,6 +94,9 @@ jobs:
       - name: Verify Bite 33.6 recovery rehearsal and operational runbook
         run: make recovery-rehearsal-operational-runbook-check
 
+      - name: Verify Bite 33.6.8C release-identity and acceptance fail-closed gate
+        run: make bite3368c-gate-check
+
       - name: Verify Bite 33.6.8 integrated isolated regression and final-acceptance contract
         run: make bite3368-core-check
 
@@ -105,6 +113,22 @@ jobs:
 
       - name: Rehearse pre-30I database through final 30I migration
         run: make migration-rehearsal-check
+
+  recovery-isolation:
+    name: Bite 33.6.8A real Docker database isolation
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+      - name: Install Docker verification dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends jq
+          docker info
+      - name: Prove recovery isolation with real Docker mounts and corrupted database
+        run: make bite3368a-docker-check
 
   frontend:
     name: Frontend checks
@@ -147,6 +171,7 @@ jobs:
     needs:
       - backend
       - migration-rehearsal
+      - recovery-isolation
       - frontend
 
     steps:

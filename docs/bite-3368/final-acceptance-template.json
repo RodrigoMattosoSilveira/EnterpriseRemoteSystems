@@ -11,15 +11,19 @@
   },
   "human_administrators": [
     {
-      "label": "A", "actor_key": "REPLACE_WITH_A_ACTOR_KEY",
-      "account_id": "REPLACE_WITH_A_ACCOUNT_ID", "login": "REPLACE_WITH_A_LOGIN",
+      "label": "A",
+      "actor_key": "REPLACE_WITH_A_ACTOR_KEY",
+      "account_id": "REPLACE_WITH_A_ACCOUNT_ID",
+      "login": "REPLACE_WITH_A_LOGIN",
       "first_login_ref": "REPLACE_WITH_A_LOGIN_ACCEPTANCE_EVIDENCE",
       "mutual_recovery_ref": "REPLACE_WITH_A_RECOVERY_ACCEPTANCE_EVIDENCE",
       "audit_ref": "REPLACE_WITH_A_AUDIT_EVIDENCE"
     },
     {
-      "label": "B", "actor_key": "REPLACE_WITH_B_ACTOR_KEY",
-      "account_id": "REPLACE_WITH_B_ACCOUNT_ID", "login": "REPLACE_WITH_B_LOGIN",
+      "label": "B",
+      "actor_key": "REPLACE_WITH_B_ACTOR_KEY",
+      "account_id": "REPLACE_WITH_B_ACCOUNT_ID",
+      "login": "REPLACE_WITH_B_LOGIN",
       "first_login_ref": "REPLACE_WITH_B_LOGIN_ACCEPTANCE_EVIDENCE",
       "mutual_recovery_ref": "REPLACE_WITH_B_RECOVERY_ACCEPTANCE_EVIDENCE",
       "audit_ref": "REPLACE_WITH_B_AUDIT_EVIDENCE"
@@ -44,5 +48,12 @@
   "recovery": {
     "report_file": "rehearsal.json",
     "sha256": "REPLACE_WITH_SHA256_OF_SAVED_SERVER_REHEARSAL_REPORT"
+  },
+  "backup_continuity": {
+    "verified": false,
+    "recurring_backup_history_ref": "REPLACE_WITH_PERIODIC_BACKUP_HISTORY",
+    "retention_verification_ref": "REPLACE_WITH_RETENTION_EVIDENCE",
+    "offhost_replication_history_ref": "REPLACE_WITH_OFFHOST_REPLICATION_HISTORY",
+    "continuity_review_ref": "REPLACE_WITH_AUTHORIZED_REVIEW"
   }
 }
