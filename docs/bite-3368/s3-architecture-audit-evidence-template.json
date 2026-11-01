@@ -1,0 +1,15 @@
+{
+  "project": "ERS Backups",
+  "bucket": "ers",
+  "region": "hel1",
+  "versioning": {"status": "verified", "evidence_ref": "observed-2026-11-01"},
+  "object_lock": {"status": "verified", "evidence_ref": "observed-2026-11-01"},
+  "default_retention": {"status": "verified", "evidence_ref": "observed-2026-11-01"},
+  "bucket_policy": {"status": "absent", "evidence_ref": "observed-2026-11-01"},
+  "environments": {
+    "development": {"prefix": "ers-backups/development", "backup_config": "unknown", "credential_custody": "unknown", "same_env_access": "unknown", "cross_env_denied": "unknown", "evidence_ref": null},
+    "test": {"prefix": "ers-backups/test", "backup_config": "unknown", "credential_custody": "unknown", "same_env_access": "unknown", "cross_env_denied": "unknown", "evidence_ref": null},
+    "production": {"prefix": "ers-backups/production", "backup_config": "unknown", "credential_custody": "unknown", "same_env_access": "verified", "cross_env_denied": "unknown", "evidence_ref": "observed-2026-11-01"}
+  },
+  "review": {"operator_ref": null, "reviewer_ref": null, "approval_ref": null}
+}

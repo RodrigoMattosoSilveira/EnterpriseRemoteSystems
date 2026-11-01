@@ -992,3 +992,46 @@ python3 -B scripts/ers-bite3368c-release-gate.py \
 **Step C6 — Final cleanup/reconciliation (IT-08):** Inspect Docker containers created by each executed test and remove **only** those whose IDs were recorded for that test. Confirm no test-owned containers remain and no test-owned port 8080 listener remains (an independently operated LOCAL listener must not be stopped). Record each exact result/exit code, logs and hash, CI SHA, Test GO/NO-GO, Production GO/NO-GO, cleanup and named reviewer. Do not merge 998 → 945 or promote before all required parent-bite acceptance gates are complete.
 
 **Execution record — C1–C6:** Operator/reviewer identity: ___; UTC start/end: ___; LOCAL regression exit codes: ___; Docker test-created IDs and final removal: ___; listener/port 8080 check: ___; CI workflow URL and SHA: ___; deployed Test runtime image/ref and SHA/tree: ___; Test rehearsal receipt object/version IDs (non-secret refs only): ___; Test evidence digest: ___; independent review ref and GO/NO-GO: ___; Production runtime SHA/tree: ___; Production evidence digest/review GO/NO-GO or BLOCKED: ___; outstanding defect and next-state: ___.
+
+---
+
+## Bite 33.6.8D — Existing S3 architecture and credential isolation audit (D-01 through D-05)
+
+**Environment:** LOCAL repository at the committed 33.6.8D revision; Hetzner Console read-only inspection under an authorized operator account; 1Password item *names/custody only*. This is not an IT-03 acceptance substitute. **Identity:** operator is the existing authorized ERS infrastructure administrator; independent reviewer is a separate person when available. If independent review is not available, record BLOCKED rather than inventing approval. **No Test or Production S3 mutation is authorized by D.**
+
+### D-01 — Verify source and offline regressions
+
+1. In Terminal at the repository root, execute `git branch --show-current`, `git rev-parse HEAD`, and `git status --short`; compare with the exact committed revision being audited. STOP on wrong branch/revision or unexpected changes.
+2. Execute `make bite3368d-audit-check`.
+3. **PASS:** the dedicated suite passes, no network credentials are requested, and the test returns zero. **FAIL:** nonzero exit. Do not interpret this as remote S3 authorization verified.
+
+### D-02 — Inventory actual provider resources (UI-first)
+
+1. Sign in to the **Hetzner Console**, open Projects, and record the observed project names. Previous operator observation: `ERS-Servers` and `ERS Backups`; verify again.
+2. Select `ERS Backups` → Object Storage → `ers`, record region, bucket visibility, and *actual* top-level objects/prefixes. Do not mistake a prospective `test/` prefix for an existing one. Previous observation: `ers-backups/production/` only.
+3. Under Security → S3 Credentials, record descriptions and **redacted references only**, not access IDs, secret keys or fingerprints. Repeat for `ERS-Servers` to reconcile distinct credential descriptions.
+4. Consult the provider's read-only S3 API tools to verify versioning, Object Lock, retention, lifecycle and policies; a CLI error is **UNKNOWN** until resolved. Avoid displaying entire bucket policies in the execution record if they include identifiers.
+5. **PASS:** each claim links to non-secret current evidence; missing configuration is recorded as `absent`/`unknown`, never inferred. **BLOCKED:** no authorized access or insufficient evidence.
+
+### D-03 — Trace software and 1Password custody (do not expose secrets)
+
+1. In the committed repository review `scripts/server-sqlite-backup.sh`, `scripts/run-backup-go-tool.sh`, `scripts/ers-bite3368-test-offhost-prereq.sh`, and `docs/bite-33-3-2-hetzner-s3-object-storage-transport.md`. Record actual environment variables that select the endpoint/bucket/prefix; distinguish defaults, deployment configuration, and observed runtime values.
+2. In 1Password, verify existence of `ers-development`, `ers-test`, and `ers-production` custody locations. Record non-secret vault/item references and permission-review references; do **not** share vault contents, credential values, screenshots with secrets or full key IDs.
+3. Inspect authorized deployed environment configuration *by key name and redacted values only*. Confirm whether Development/Test off-host transport is actually enabled before declaring its backup path operational.
+4. **PASS:** inventory accounts for existing/absent/unverified environments without leaking sensitive material. **BLOCKED:** inability to verify any required source is explicitly recorded.
+
+### D-04 — Record access boundary evidence without changing infrastructure
+
+1. For each environment separately, record credential custody, allowed object prefix, same-environment read/list/version permissions, and independently observed cross-environment denial evidence. A prefix string is not access control. An absent bucket policy is not an isolation PASS.
+2. Do **not** perform live unauthorized cross-prefix operations as part of this read-only audit. Mark `cross_env_denied` as `unknown` until a separately approved, controlled negative test or sufficient provider policy evidence proves denial. Controlled negative tests and any necessary policy changes belong to 33.6.8E.
+3. Copy `docs/bite-3368/s3-architecture-audit-evidence-template.json` **outside the repository** to an authorized evidence location. Update only the whitelisted non-secret fields and references. Never enter secrets or actual access key IDs.
+4. Run `python3 -B scripts/ers-bite3368d-s3-audit.py --evidence /absolute/path/to/private-audit-evidence.json`.
+5. **Expected for currently observed infrastructure:** `BLOCKED`, because Test/Development authorization denial and independent review are unproven. A `EVIDENCE_COMPLETE_REVIEW_REQUIRED` result means only that all fields claim evidence; it does not independently authenticate them.
+
+### D-05 — Review and handoff to 33.6.8E
+
+1. Record the audit script output in the approved evidence store and link its non-secret reference; keep the underlying evidence private.
+2. Record unresolved items: Test/Development destinations not present, Test dedicated-bucket assumption conflicts with observed single-bucket topology, no bucket policy observed, lifecycle unresolved, no demonstrated cross-environment denial, and live source configuration still to verify.
+3. The independent reviewer must evaluate original provider, deployment and 1Password records and explicitly record an authorization decision before E makes infrastructure changes.
+4. **D audit PASS:** all findings and unknowns accurately captured; offline regression PASS; no secret disclosures or infrastructure mutation. **E isolation gate:** remains BLOCKED until authorization and actual deny evidence. **FAIL:** fabricated PASS, unrecorded unknowns, or changes to remote data/policies.
+5. **Cleanup:** D creates no containers, credentials, S3 objects or deployed files. If a private temporary evidence copy was created, retain it according to the approved evidence policy; do not delete real backups. Confirm no D-created Docker containers exist (none expected) and no ports were opened by D (none expected).
