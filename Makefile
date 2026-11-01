@@ -549,8 +549,32 @@ two-human-administrators-preflight-check:
 two-human-administrators-check: two-human-administrators-preflight-check
 	cd backend && go test ./internal/authentication ./cmd/enroll-human-admins
 
+# Bite 33.6.8A: fast, fully offline adversarial container-contract tests.
+.PHONY: bite3368a-isolation-check
+bite3368a-isolation-check:
+	python3 -B scripts/test-bite3368a-cleanup.py
+	python3 -B scripts/test-bite3368a-isolation.py
+	python3 -B scripts/test-recovery-rehearsal-operational-runbook.py
+
+# Docker engine required: builds a throwaway backend image, never mounts Test data.
+.PHONY: bite3368a-docker-check
+bite3368a-docker-check:
+	bash scripts/test-bite3368a-docker.sh
+
+.PHONY: bite3368b-evidence-check
+bite3368b-evidence-check:
+	python3 -B scripts/test-bite3368b-receipt-gate.py
+	python3 -B scripts/test-bite3368b-backup-failure.py
+	python3 -B scripts/test-bite3368-integrated-acceptance.py
+
+# Bite 33.6.8C offline release-identity and acceptance-gate regressions.
+# Deployed acceptance is operator-invoked only; no CI fixture implies human approval.
+.PHONY: bite3368c-gate-check
+bite3368c-gate-check:
+	python3 -B scripts/test-bite3368c-release-gate.py
+
 .PHONY: bite3368-core-check
-bite3368-core-check:
+bite3368-core-check: bite3368a-isolation-check bite3368b-evidence-check bite3368c-gate-check
 	python3 -B scripts/test-bite3368-manual-contract.py
 	python3 -B scripts/test-bite3368-it02-evidence.py
 	python3 -B scripts/test-bite3368-test-backup-gate.py
@@ -1102,8 +1126,10 @@ server-backup:
 	ERS_BACKUP_ENV_DIR="$(ENV_DIR)" \
 	ERS_BACKUP_ENV_FILE="$(ENV_FILE)" \
 	ERS_BACKUP_COMPOSE_PROJECT="$(COMPOSE_PROJECT)" \
-		./scripts/server-sqlite-backup.sh; \
+		./scripts/server-sqlite-backup.sh || exit $$?; \
+	if [ ! -s "$$result_file" ]; then echo "BLOCKED: backup result missing" >&2; exit 2; fi; \
 	backup_file="$$(cat "$$result_file")"; \
+	if [ ! -f "$$backup_file" ] || [ ! -s "$$backup_file" ]; then echo "BLOCKED: backup artifact missing or empty" >&2; exit 2; fi; \
 	status="$$(ERS_BACKUP_ENV_DIR="$(ENV_DIR)" ERS_BACKUP_ENV_FILE="$(ENV_FILE)" ERS_BACKUP_COMPOSE_PROJECT="$(COMPOSE_PROJECT)" ./scripts/run-backup-go-tool.sh ers-offhost-backup status --environment "$(ENV)" --env-file "$(ENV_DIR)/$(ENV_FILE)")" || exit $$?; \
 	if [[ "$$status" == "enabled" ]]; then \
 		$(MAKE) server-offhost-backup ENV=$(ENV) BACKUP_FILE="$$backup_file"; \

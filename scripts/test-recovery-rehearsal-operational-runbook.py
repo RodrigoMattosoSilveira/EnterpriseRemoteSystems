@@ -44,15 +44,17 @@ def test_rehearsal_script_contract() -> None:
             "ers-restore verify",
             "ers-restore apply",
             "Refusing recovery rehearsal while a migration/deployment recovery gate remains armed",
-            "Rehearsing current repository migrations against the recovered database copy.",
-            "--entrypoint /app/apply-sql-migrations.sh",
-            "--entrypoint /app/verify-migrated-db.sh",
-            '"$rehearsal_dir/boot-data:/rehearsal-data"',
-            "DATABASE_PATH=/rehearsal-data/app.db",
-            "APP_AUTO_MIGRATE=false",
+            "Rehearsing migrations in a volume-free, network-isolated container.",
+            '"$isolated" migrate',
+            '"$isolated" verify',
+            '"$isolated" start',
+            '"$isolated" inspect',
+            '"$isolated" check-db',
+            '"$isolated" stop',
+            'scripts/ers-recovery-isolated-container.sh',
+            'private_database_copies_disposed: true',
+            'docker_effective_mounts_verified: true',
             "curl -fsS http://localhost:8080/healthz",
-            "PRAGMA integrity_check",
-            "PRAGMA foreign_key_check",
             "rpo_seconds",
             "rto_seconds",
             "objective_failed",
@@ -61,7 +63,18 @@ def test_rehearsal_script_contract() -> None:
         ),
         "recovery rehearsal script",
     )
+    helper = (ROOT / "scripts" / "ers-recovery-isolated-container.sh").read_text()
+    require(helper, (
+        'docker run --rm "${common[@]}"',
+        '--network none --read-only',
+        '--mount "type=bind,src=$workdir,dst=/rehearsal"',
+        '--mount "type=bind,src=$bootdir,dst=/rehearsal-data"',
+        'sqlite3 -bail /rehearsal-data/app.db',
+        '.HostConfig.ReadonlyRootfs == true',
+        '(.[0].Mounts | length) == 1',
+    ), "isolated recovery container helper")
     ok(run(["bash", "-n", str(script_path)]), "recovery rehearsal shell syntax")
+    ok(run(["bash", "-n", str(ROOT / "scripts" / "ers-recovery-isolated-container.sh")]), "isolated recovery helper syntax")
 
 
 def test_make_and_workflow_contract() -> None:
