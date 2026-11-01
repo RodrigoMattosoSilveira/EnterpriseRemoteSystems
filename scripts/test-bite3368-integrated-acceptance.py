@@ -25,11 +25,21 @@ DIGEST = 'c' * 64
 def baseline():
     report = {
         'status': 'passed', 'environment': 'test', 'repository': {'revision': REV, 'tree_sha': TREE},
+        'started_at': '2026-10-31T12:00:00Z', 'recovered_at': '2026-10-31T12:04:10Z',
+        'completed_at': '2026-10-31T12:05:00Z',
         'source': {'kind': 'offhost-receipt', 'backup_sha256': DIGEST,
-                   'remote': {'backup_key': 'test/backup.db', 'manifest_key': 'test/backup.manifest.json'}},
-        'recovery': {'isolated_backend_health': 'passed', 'post_boot_integrity_check': 'ok',
+                   'backup_created_at': '2026-10-31T11:56:40Z',
+                   'remote': {'backup_key': 'test/backup.db', 'manifest_key': 'test/backup.manifest.json',
+                              'backup_version_id': 'db-version-123', 'manifest_version_id': 'manifest-version-123'}},
+        'recovery': {'isolation': {'docker_effective_mounts_verified': True, 'named_volumes_present': False,
+                                     'network_disabled': True, 'backend_database_path': '/rehearsal-data/app.db',
+                                     'database_checked_path': '/rehearsal-data/app.db',
+                                     'private_database_copies_disposed': True, 'rehearsal_container_removed': True},
+                     'isolated_backend_health': 'passed', 'post_boot_integrity_check': 'ok',
                      'post_boot_foreign_key_check': 'clean'},
-        'objectives': {'rpo_seconds': 200, 'max_rpo_seconds': 86400, 'rpo_met': True,
+        'objectives': {'rpo_basis': 'selected_backup_age_at_rehearsal_start',
+                       'rto_basis': 'rehearsal_start_to_isolated_backend_health_and_database_verification',
+                       'rpo_seconds': 200, 'max_rpo_seconds': 86400, 'rpo_met': True,
                        'rto_seconds': 250, 'max_rto_seconds': 14400, 'rto_met': True},
     }
     people = []
@@ -46,6 +56,10 @@ def baseline():
         'onepassword': {'human_a_review_ref': 'REVIEW-A', 'human_b_review_ref': 'REVIEW-B',
                         'service_account_isolation_ref': 'REVIEW-SVC',
                         'legacy_custody_resolution_ref': 'REVIEW-CUSTODY'},
+        'backup_continuity': {'verified': True, 'recurring_backup_history_ref': 'HISTORY-123',
+                              'retention_verification_ref': 'RETENTION-123',
+                              'offhost_replication_history_ref': 'REPLICATION-123',
+                              'continuity_review_ref': 'REVIEW-123'},
         'operations': {'change_approval_ref': 'CHG-123', 'approver_id': 'operator-1',
                        'backup_verification_ref': 'BACKUP-123', 'off_host_receipt_ref': 'S3-123',
                        'migration_gate_ref': 'MIGRATE-123', 'deployed_smoke_ref': 'SMOKE-123',
@@ -74,6 +88,46 @@ class IntegratedAcceptanceTests(unittest.TestCase):
     def reject(self):
         with self.assertRaises(module.EvidenceError):
             self.check()
+
+    def test_missing_backup_version(self):
+        self.report['source']['remote']['backup_version_id'] = ''
+        self.reject()
+
+    def test_null_manifest_version(self):
+        self.report['source']['remote']['manifest_version_id'] = 'null'
+        self.reject()
+
+    def test_backup_version_placeholder(self):
+        self.report['source']['remote']['backup_version_id'] = 'REPLACE_ME'
+        self.reject()
+
+    def test_rto_timestamp_mismatch(self):
+        self.report['objectives']['rto_seconds'] = 251
+        self.reject()
+
+    def test_rpo_timestamp_mismatch(self):
+        self.report['objectives']['rpo_seconds'] = 201
+        self.reject()
+
+    def test_cleanup_missing(self):
+        self.report['recovery']['isolation']['rehearsal_container_removed'] = False
+        self.reject()
+
+    def test_live_volume_used(self):
+        self.report['recovery']['isolation']['named_volumes_present'] = True
+        self.reject()
+
+    def test_missing_continuity(self):
+        del self.record['backup_continuity']
+        self.reject()
+
+    def test_continuity_review_missing(self):
+        self.record['backup_continuity']['continuity_review_ref'] = ''
+        self.reject()
+
+    def test_recovery_after_completion(self):
+        self.report['recovered_at'] = '2026-10-31T12:06:00Z'
+        self.reject()
 
     def test_positive(self):
         self.check()

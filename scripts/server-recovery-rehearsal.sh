@@ -151,12 +151,59 @@ compose() {
   )
 }
 
-run_tool() {
-  ERS_BACKUP_ENV_DIR="$REHEARSAL_ENV_DIR" \
-  ERS_BACKUP_ENV_FILE="$REHEARSAL_ENV_FILE" \
-  ERS_BACKUP_COMPOSE_PROJECT="$REHEARSAL_COMPOSE_PROJECT" \
-    "$ROOT_DIR/scripts/run-backup-go-tool.sh" "$@"
+# Resolve the deployed image once. No rehearsal process may inherit the
+# backend service's named SQLite volume via `docker compose run backend`.
+rehearsal_image_ref="$(compose images -q backend)"
+[[ -n "$rehearsal_image_ref" && "$rehearsal_image_ref" != *$'\n'* ]] || {
+  echo 'BLOCKED: expected one deployed backend image for recovery rehearsal' >&2; exit 2;
 }
+rehearsal_image="$(docker image inspect "$rehearsal_image_ref" --format '{{.Id}}')"
+[[ "$rehearsal_image" == sha256:* ]] || { echo 'BLOCKED: unable to resolve backend image ID' >&2; exit 2; }
+
+# Tools need a read-only view of backup receipts and the deployment environment;
+# only the new private rehearsal workspace is writable. Off-host materialization
+# needs S3 egress; local restore/stage/verify must have no network.
+run_tool() {
+  local tool="$1" key value
+  shift
+  case "$tool" in ers-restore|ers-offhost-backup) ;; *) echo 'Unexpected recovery tool' >&2; return 2 ;; esac
+  local network=(--network none)
+  if [[ "$tool" == ers-offhost-backup ]]; then network=(--network bridge); fi
+  local args=(run --rm "${network[@]}" --read-only --tmpfs /tmp:rw,nosuid,nodev
+    --cap-drop ALL --security-opt no-new-privileges
+    --mount "type=bind,src=$REHEARSAL_ENV_DIR,dst=$REHEARSAL_ENV_DIR,readonly"
+    --mount "type=bind,src=$rehearsal_dir,dst=$rehearsal_dir"
+    --env-file "$REHEARSAL_ENV_DIR/$REHEARSAL_ENV_FILE")
+  for key in SERVER_OFFHOST_BACKUP_IDENTITY_FILE SERVER_OFFHOST_BACKUP_KNOWN_HOSTS_FILE AWS_SHARED_CREDENTIALS_FILE AWS_CONFIG_FILE; do
+    value="$(grep -E "^${key}=" "$REHEARSAL_ENV_DIR/$REHEARSAL_ENV_FILE" | tail -n 1 | cut -d= -f2- | sed -e 's/^"//' -e 's/"$//' -e "s/^'//" -e "s/'$//" || true)"
+    if [[ -n "$value" && "$value" == /* && -f "$value" && "$value" != "$REHEARSAL_ENV_DIR"/* ]]; then
+      args+=(--mount "type=bind,src=$value,dst=$value,readonly")
+    fi
+  done
+  docker "${args[@]}" --entrypoint "/app/$tool" "$rehearsal_image" "$@"
+}
+
+# All newly created rehearsal data uses restrictive permissions regardless of
+# the caller's umask. Cleanup is scoped to this invocation's unique workspace.
+umask 077
+rehearsal_container=""
+container_owned=false
+rehearsal_dir=""
+cleanup_rehearsal() {
+  local original_exit="$1"
+  trap - EXIT INT TERM
+  if [[ -n "$rehearsal_dir" && -d "$rehearsal_dir" ]]; then
+    if ! "$ROOT_DIR/scripts/ers-recovery-private-cleanup.sh" \
+      "$rehearsal_root" "$rehearsal_dir" "$rehearsal_container" "$container_owned"; then
+      echo 'BLOCKED: rehearsal cleanup is incomplete; investigate this run only' >&2
+      exit 1
+    fi
+  fi
+  exit "$original_exit"
+}
+trap 'cleanup_rehearsal "$?"' EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 
 started_epoch="$(date +%s)"
 started_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
@@ -168,8 +215,15 @@ while [[ -e "$rehearsal_dir" ]]; do
   rehearsal_dir="$rehearsal_root/rehearsal-$stamp-$sequence"
   sequence=$((sequence + 1))
 done
+for protected in "$REHEARSAL_ENV_DIR/recovery" "$rehearsal_root" "$rehearsal_dir"; do
+  [[ ! -L "$protected" ]] || { echo "Refusing symlinked recovery workspace: $protected" >&2; exit 2; }
+done
 mkdir -p "$rehearsal_dir/source" "$rehearsal_dir/boot-data"
-chmod 700 "$REHEARSAL_ENV_DIR/recovery" "$rehearsal_root" "$rehearsal_dir" "$rehearsal_dir/source" "$rehearsal_dir/boot-data" 2>/dev/null || true
+for protected in "$REHEARSAL_ENV_DIR/recovery" "$rehearsal_root" "$rehearsal_dir" "$rehearsal_dir/source" "$rehearsal_dir/boot-data"; do
+  [[ ! -L "$protected" ]] || { echo "Refusing symlinked recovery workspace: $protected" >&2; exit 2; }
+  chmod 700 "$protected" || { echo "Cannot secure private recovery directory: $protected" >&2; exit 2; }
+  [[ "$(stat -c %a "$protected")" == 700 ]] || { echo "Unexpected recovery directory mode: $protected" >&2; exit 2; }
+done
 
 if [[ -z "$REHEARSAL_REPORT_FILE" ]]; then
   REHEARSAL_REPORT_FILE="$rehearsal_dir/rehearsal.json"
@@ -295,66 +349,68 @@ restored_sha256="$(sha256_file "$restored_db")"
 [[ "$restored_sha256" == "$source_sha256" ]] || { echo "Rehearsal restore target differs from selected source SHA-256." >&2; exit 2; }
 
 migrated_db="$rehearsal_dir/migrated.db"
+
+# The same exact deployed backend image powers migrations and application boot.
+export ERS_RECOVERY_IMAGE="$rehearsal_image"
+export ERS_RECOVERY_WORKDIR="$rehearsal_dir"
+export ERS_RECOVERY_BOOT_DIR="$rehearsal_dir/boot-data"
+export ERS_RECOVERY_ENV_FILE="$REHEARSAL_ENV_DIR/$REHEARSAL_ENV_FILE"
+export ERS_RECOVERY_ENVIRONMENT="$REHEARSAL_ENVIRONMENT"
+export ERS_RECOVERY_EXPECTED_MIGRATION="$REHEARSAL_EXPECTED_FINAL_MIGRATION"
+isolated="$ROOT_DIR/scripts/ers-recovery-isolated-container.sh"
+
+chmod 600 "$restored_db"
 cp "$restored_db" "$migrated_db"
-chmod 600 "$migrated_db" 2>/dev/null || true
-
-echo "Rehearsing current repository migrations against the recovered database copy."
-compose run --rm --no-deps \
-  -v "$rehearsal_dir:$rehearsal_dir" \
-  -e DATABASE_PATH="$migrated_db" \
-  -e EXPECTED_FINAL_MIGRATION="$REHEARSAL_EXPECTED_FINAL_MIGRATION" \
-  --entrypoint /app/apply-sql-migrations.sh backend
-compose run --rm --no-deps \
-  -v "$rehearsal_dir:$rehearsal_dir" \
-  -e DATABASE_PATH="$migrated_db" \
-  -e EXPECTED_FINAL_MIGRATION="$REHEARSAL_EXPECTED_FINAL_MIGRATION" \
-  --entrypoint /app/verify-migrated-db.sh backend
+chmod 600 "$migrated_db"
+echo 'Rehearsing migrations in a volume-free, network-isolated container.'
+"$isolated" migrate
+"$isolated" verify
 migrated_sha256="$(sha256_file "$migrated_db")"
-
-# Prove the current backend revision can boot against a disposable copy of the
-# recovered/current-schema database without touching the live SQLite volume.
 cp "$migrated_db" "$rehearsal_dir/boot-data/app.db"
+chmod 600 "$rehearsal_dir/boot-data/app.db"
+[[ "$(sha256_file "$rehearsal_dir/boot-data/app.db")" == "$migrated_sha256" ]] || {
+  echo 'BLOCKED: isolated boot database differs from migrated candidate' >&2; exit 1;
+}
 rehearsal_stamp="$(printf '%s' "$stamp" | tr '[:upper:]' '[:lower:]')"
 rehearsal_container="${REHEARSAL_COMPOSE_PROJECT}-recovery-rehearsal-${rehearsal_stamp}"
 rehearsal_container="${rehearsal_container//_/-}"
-cleanup_rehearsal_container() {
-  docker rm -f "$rehearsal_container" >/dev/null 2>&1 || true
-}
-trap cleanup_rehearsal_container EXIT INT TERM
-cleanup_rehearsal_container
-
-echo "Starting an isolated backend health rehearsal against the recovered database copy."
-compose run -d --no-deps \
-  --name "$rehearsal_container" \
-  -v "$rehearsal_dir/boot-data:/rehearsal-data" \
-  -e DATABASE_PATH=/rehearsal-data/app.db \
-  -e APP_AUTO_MIGRATE=false \
-  -e AUTHZ_BOOTSTRAP_ENABLED=false \
-  backend >/dev/null
-
+export ERS_RECOVERY_CONTAINER="$rehearsal_container"
+if docker container inspect "$rehearsal_container" >/dev/null 2>&1; then
+  echo 'BLOCKED: rehearsal container name is already in use; refusing to remove it' >&2
+  exit 2
+fi
+echo 'Starting a backend using only the private recovered database, without Test volumes.'
+"$isolated" start >/dev/null
+container_owned=true
+"$isolated" inspect
 healthy=0
 for ((attempt=1; attempt<=12; attempt++)); do
   if docker exec "$rehearsal_container" curl -fsS http://localhost:8080/healthz >/dev/null 2>&1; then
-    healthy=1
-    break
+    healthy=1; break
   fi
   sleep 5
 done
 if [[ $healthy -ne 1 ]]; then
-  echo "Recovered database passed restore/migration verification, but the isolated current backend revision did not become healthy." >&2
+  echo 'Recovered database backend did not become healthy; preserving no live volume access.' >&2
   docker logs "$rehearsal_container" >&2 || true
   exit 1
 fi
-post_boot_integrity="$(docker exec "$rehearsal_container" sqlite3 /app/data/app.db 'PRAGMA integrity_check;')"
-[[ "$post_boot_integrity" == "ok" ]] || { echo "Isolated recovered backend integrity_check failed: $post_boot_integrity" >&2; exit 1; }
-post_boot_foreign_keys="$(docker exec "$rehearsal_container" sqlite3 /app/data/app.db 'PRAGMA foreign_key_check;')"
-[[ -z "$post_boot_foreign_keys" ]] || { echo "Isolated recovered backend foreign_key_check returned violations:" >&2; printf '%s\n' "$post_boot_foreign_keys" >&2; exit 1; }
-cleanup_rehearsal_container
-trap - EXIT INT TERM
+"$isolated" inspect
+"$isolated" check-db
+post_boot_integrity=ok
+recovered_epoch="$(date +%s)"
+recovered_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+rto_seconds=$((recovered_epoch - started_epoch))
+"$isolated" stop
+container_owned=false
+# Dispose private database copies before recording a successful rehearsal.
+find "$rehearsal_dir" -type f \( -name '*.db' -o -name '*.db-wal' -o -name '*.db-shm' -o -name '*.db-journal' \) -delete
+if find "$rehearsal_dir" -type f \( -name '*.db' -o -name '*.db-wal' -o -name '*.db-shm' -o -name '*.db-journal' \) | grep -q .; then
+  echo 'BLOCKED: private recovered SQLite copies remain after cleanup' >&2; exit 1
+fi
 
 completed_epoch="$(date +%s)"
 completed_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-rto_seconds=$((completed_epoch - started_epoch))
 rpo_met=false
 rto_met=false
 [[ $rpo_seconds -le $REHEARSAL_MAX_RPO_SECONDS ]] && rpo_met=true
@@ -372,6 +428,12 @@ if [[ -n "$source_receipt" && -f "$source_receipt" ]]; then
   remote_manifest_key="$(jq -r '.remote.manifest.key // ""' "$source_receipt")"
   remote_manifest_version="$(jq -r '.remote.manifest.version_id // ""' "$source_receipt")"
 fi
+# S3 version IDs must be immutable, real object versions (not null/unversioned).
+for entry in "$remote_db_version" "$remote_manifest_version"; do
+  if [[ -z "$entry" || "$entry" == "null" || "$entry" =~ [[:space:][:cntrl:]] || "$entry" == *\<* || "$entry" == *\>* ]]; then
+    echo "BLOCKED: off-host recovery source lacks a valid exact object VersionId" >&2; exit 2
+  fi
+done
 
 repository_revision="unknown"
 repository_tree_sha="unknown"
@@ -386,6 +448,7 @@ jq -n \
   --arg environment "$REHEARSAL_ENVIRONMENT" \
   --arg started_at "$started_at" \
   --arg completed_at "$completed_at" \
+  --arg recovered_at "$recovered_at" \
   --arg source_kind "$source_kind" \
   --arg backup_file "$(basename "$candidate")" \
   --arg backup_created_at "$backup_created_at" \
@@ -432,6 +495,7 @@ jq -n \
     environment: $environment,
     started_at: $started_at,
     completed_at: $completed_at,
+    recovered_at: $recovered_at,
     repository: {
       revision: $repository_revision,
       tree_sha: $repository_tree_sha
@@ -478,6 +542,15 @@ jq -n \
       migrated_sha256: $migrated_sha256,
       expected_final_migration: $expected_final_migration,
       isolated_backend_health: "passed",
+      isolation: {
+        docker_effective_mounts_verified: true,
+        named_volumes_present: false,
+        network_disabled: true,
+        backend_database_path: "/rehearsal-data/app.db",
+        database_checked_path: "/rehearsal-data/app.db",
+        private_database_copies_disposed: true,
+        rehearsal_container_removed: true
+      },
       post_boot_integrity_check: $post_boot_integrity,
       post_boot_foreign_key_check: "clean"
     },
@@ -493,7 +566,7 @@ jq -n \
     }
   }' > "$REHEARSAL_REPORT_FILE.tmp"
 mv "$REHEARSAL_REPORT_FILE.tmp" "$REHEARSAL_REPORT_FILE"
-chmod 600 "$REHEARSAL_REPORT_FILE" 2>/dev/null || true
+chmod 600 "$REHEARSAL_REPORT_FILE"
 
 printf 'Recovery rehearsal %s.\n' "$status"
 printf 'Environment: %s\n' "$REHEARSAL_ENVIRONMENT"
