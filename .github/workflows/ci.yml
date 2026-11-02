@@ -100,6 +100,9 @@ jobs:
       - name: Bite 33.6.8D read-only audit regressions
         run: make bite3368d-audit-check
 
+      - name: Bite 33.6.8E shared-bucket policy contract regressions
+        run: make bite3368e-policy-check
+
       - name: Verify Bite 33.6.8 integrated isolated regression and final-acceptance contract
         run: make bite3368-core-check
 

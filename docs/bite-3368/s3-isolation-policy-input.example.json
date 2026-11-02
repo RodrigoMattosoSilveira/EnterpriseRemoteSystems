@@ -1,0 +1,10 @@
+{
+  "bucket": "ers",
+  "prefix_root": "ers-backups",
+  "environment_principals": {
+    "development": "arn:aws:iam:::user/p123456:DEVKEYPLACEHOLDER",
+    "test": "arn:aws:iam:::user/p123456:TESTKEYPLACEHOLDER",
+    "production": "arn:aws:iam:::user/p123456:PRODKEYPLACEHOLDER"
+  },
+  "recovery_principal": "arn:aws:iam:::user/p123456:RECOVERYKEYPLACEHOLDER"
+}

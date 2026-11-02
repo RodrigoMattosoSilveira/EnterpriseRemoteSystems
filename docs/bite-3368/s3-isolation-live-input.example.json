@@ -1,0 +1,10 @@
+{
+  "endpoint": "https://hel1.your-objectstorage.com",
+  "bucket": "ers",
+  "profiles": {"development": "ers-development-audit", "test": "ers-test-audit", "production": "ers-production-audit"},
+  "known_keys": {
+    "development": "ers-backups/development/approved-probe-object",
+    "test": "ers-backups/test/approved-probe-object",
+    "production": "ers-backups/production/approved-probe-object"
+  }
+}

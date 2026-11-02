@@ -1035,3 +1035,62 @@ python3 -B scripts/ers-bite3368c-release-gate.py \
 3. The independent reviewer must evaluate original provider, deployment and 1Password records and explicitly record an authorization decision before E makes infrastructure changes.
 4. **D audit PASS:** all findings and unknowns accurately captured; offline regression PASS; no secret disclosures or infrastructure mutation. **E isolation gate:** remains BLOCKED until authorization and actual deny evidence. **FAIL:** fabricated PASS, unrecorded unknowns, or changes to remote data/policies.
 5. **Cleanup:** D creates no containers, credentials, S3 objects or deployed files. If a private temporary evidence copy was created, retain it according to the approved evidence policy; do not delete real backups. Confirm no D-created Docker containers exist (none expected) and no ports were opened by D (none expected).
+
+## Bite 33.6.8E — Shared-bucket environment isolation enforcement (E-01–E-06)
+
+**Status and safety:** This is a proposed controlled change, not evidence that shared-bucket isolation already works. Preserve existing Hetzner project **ERS Backups**, bucket `ers`, versioning and Object Lock. Do **not** change Production credentials, policy, lifecycle or objects during LOCAL testing. Existing IT-03 Step 0B dedicated-Test-bucket instruction remains **BLOCKED** until the E-06 review explicitly accepts a verified replacement; do not bypass the older helper by editing a deployed script. The policy candidate uses `NotPrincipal`, `NotResource`, and `s3:prefix`; Hetzner behavior for the exact combination must be empirically verified. Credentials in a project are broadly privileged by default. **No policy application is automated.**
+
+### E-01 — LOCAL committed-baseline and offline regressions
+
+**Identity/context:** LOCAL software developer; no ERS browser sign-in, no Hetzner credential needed. At the exact committed 33.6.8E SHA, ensure `git status --short` is empty. Execute `make bite3368e-policy-check`, `make bite3368-core-check`, `make bite3368-integrated-check`, `make promotion-readiness-check`, `make local-check`, and `make bite3368a-docker-check` on a Docker-enabled host. Record each process exit code and the Git SHA. **PASS:** all applicable checks exit zero, real Docker tests clean up only their own containers/images/volumes and port use, and no test resources remain. **BLOCKED:** Docker unavailable, missing tools or evidence; **FAIL:** regressions or cleanup errors. Never treat CI as a deployed isolation PASS.
+
+### E-02 — Independent principal inventory and recovery authorization
+
+**Identity/context:** authorized Hetzner infrastructure operator, using Hetzner Console → project **ERS Backups** → Security → S3 Credentials, and individually accessible 1Password custody records. Do not copy keys into Git or chat.
+
+1. In the Console, record the bucket project ID from the Console URL privately, the credential *descriptions*, and the four approved credential identities: Development, Test, Production, and independently held emergency recovery. Obtain **full Access Key IDs privately**, not just their suffixes; each principal ARN must be `arn:aws:iam:::user/p<project-id>:<access-key-id>`. IDs are sensitive operational identifiers: keep populated config and the generated policy in a private restrictive directory, never in the repository.
+2. Check that all four keys are distinct, individually controlled, and actually exist in Hetzner. If Development or Test does not have an S3 key, record **BLOCKED**, do not substitute Production keys. Verify the recovery key can access existing Production-labeled backup versions **before** any policy change. Record its protected 1Password custody reference and recovery operator, not secrets.
+3. Obtain explicit authorization for a shared-bucket policy change, independent reviewer approval and a rollback operator; record approval reference, approved maintenance window, immutable backup evidence references and an approved rollback plan. If no independent approver is available, record **BLOCKED**. No application to Production-labelled storage without authorization.
+
+**PASS:** four valid distinct principals and recovery/rollback path independently confirmed. **BLOCKED:** any missing credential, approval, custody, or recovery test. **FAIL:** identity misattribution or secret exposure.
+
+### E-03 — Generate and inspect a candidate policy OFFLINE
+
+**Identity/context:** LOCAL release engineer in a private working directory (do not commit populated policy or configuration). Make a copy of `docs/bite-3368/s3-isolation-policy-input.example.json` outside the repository. Replace only placeholder principal ARNs using the verified private identifiers; keep bucket `ers` and prefix root `ers-backups`. Use restrictive file permissions (owner read/write). Example:
+
+```bash
+: 'Terminal A (LOCAL Mac, repository root) — E-03 offline candidate generation'
+umask 077
+mkdir -p "$HOME/.ers-private/3368e"
+cp docs/bite-3368/s3-isolation-policy-input.example.json "$HOME/.ers-private/3368e/input.json"
+chmod 600 "$HOME/.ers-private/3368e/input.json"
+# Edit this local private file, do not edit the tracked template.
+python3 scripts/ers-bite3368e-policy.py \
+  --config "$HOME/.ers-private/3368e/input.json" \
+  --output "$HOME/.ers-private/3368e/candidate.json"
+python3 -m json.tool "$HOME/.ers-private/3368e/candidate.json" >/dev/null
+shasum -a 256 "$HOME/.ers-private/3368e/candidate.json"
+```
+
+**Expected:** `POLICY CANDIDATE GENERATED (NOT APPLIED; LIVE DENIAL VERIFICATION REQUIRED)`; ten Deny statements. Candidate denies *unlisted project credentials*, denies each environment's non-matching object resources and unauthorized listing, and denies environment credentials from bucket administration. The recovery principal is not subject to these environment-specific denies. **Crucial:** this is a **candidate**, not a proved provider-supported policy or a stand-alone safe-to-apply instruction. Reviewer must ensure `NotResource` and `s3:prefix` semantics are supported by the actual Hetzner service. **BLOCKED** if there are credentials not accounted for, unsupported policy syntax/actions, policy size issues, insufficient rollback permissions, or conflicts with existing uploads. Never use `aws s3api put-bucket-policy` merely because the generator succeeded.
+
+### E-04 — Approved provider-side change (separate change-control gate)
+
+**Identity/context:** authorized infrastructure operator and independent reviewer during an approved maintenance window. Do not execute this step in routine LOCAL/CI validation. **No command in this repository automatically changes Hetzner bucket policy.** Before any change, privately preserve the existing policy/absence record, existing database+manifest+receipt VersionIds, authenticated recovery access, and approved restore instructions. Avoid Hetzner Console 'Reset visibility/policy' during this procedure; it can overwrite policy configuration. Have a second operator ready to restore the prior state using an unaffected recovery principal. Have the provider documentation for supported IAM actions and condition keys available. An actual policy deployment must be authorized and recorded separately; if the provider rejects or ignores the essential denies, restore the previous state and record **BLOCKED**. Do not guess unsupported actions or weaken denies to make the policy apply. The existing Console object listing may stop working when restrictive policies are applied. **PASS:** change evidence and rollback assurance independently reviewed; **BLOCKED:** absent approvals or uncertain enforcement; **FAIL:** lost recovery access or unauthorized change.
+
+### E-05 — Prove positive and negative isolation, with controlled objects
+
+**Identity/context:** authorized Test infrastructure operator, with independently held Development, Test and Production credentials on a controlled host. Use three *dedicated disposable test objects*, created only under approved environment prefixes, **never** an existing database, receipt or manifest. Creation of probe objects is an explicitly authorized infrastructure mutation, not part of the offline audit. Record full exact keys privately and immutable versions where applicable. Do not use full credential values in logs.
+
+1. Once objects exist, copy `docs/bite-3368/s3-isolation-live-input.example.json` to a private directory. Replace profiles with actual **distinct non-production-test** credential profiles and known keys with the three existing disposable object keys. Do not write secret access keys into JSON.
+2. Run `python3 scripts/ers-bite3368e-live-readonly.py --config "$HOME/.ers-private/3368e/live.json"`. This performs nine read-only `HeadObject` operations and prints statuses without raw provider errors or secret values.
+3. **Expected:** all three own-object reads succeed and six cross-environment reads fail with an explicit AccessDenied/403, not 404 or network errors. The tool's `PASS_READ_ONLY_PROBES_ONLY` is **not** full access-isolation acceptance.
+4. Under the approved change record, independently verify environment-specific listing boundaries; prohibited `GetObjectVersion`, `PutObject`, `DeleteObject`, `DeleteObjectVersion`, `PutObjectRetention`, policy edits, and retention bypass attempts. Use disposable probe versions only; do not test deletion or retention modification against real backup objects. Where denial would conflict with Object Lock, distinguish a retention denial from a credential-isolation denial and do not count the former as isolation proof. Record exact command, principal identity reference, target environment, request outcome and provider response category in the private evidence record. Verify authorized own-prefix backups and exact-version restores without altering Production data.
+5. Explicitly test that a credential **not on the four-principal allowlist** is denied. Record whether the Hetzner Console's bucket listing changes, and preserve emergency recovery access.
+6. Remove only disposable E-created probe objects **when retention and approved cleanup allow**; do not attempt governance bypass to clean them up. Retained test versions must be recorded with an authorized expiration/cleanup disposition. No E-created Docker resources are expected for this live S3 probe; any Docker created by E-01 tests must be cleaned by its own test procedure.
+
+**PASS:** all positive/negative operations, versions, administrative restrictions, and recovery controls validated independently; **BLOCKED:** any missing profiles, actual denial evidence, or immutable version limitation; **FAIL:** cross-environment access works, recovery lost, or existing data modified. Stop and initiate approved rollback after any FAIL.
+
+### E-06 — Handoff and acceptance decision
+
+**Identity/context:** operator and separate reviewer. Compare the generated candidate SHA-256, deployed policy hash, observed S3 authorization behavior, retained Object Lock/Versioning state, existing Production-labelled backup VersionIds, and post-test cleanup. Document precisely which IT-03 Step 0B assumptions must be rewritten in 33.6.8F; current dedicated-bucket helper still blocks shared-bucket acceptance. Do not mark IT-03 PASS solely from this bite. **PASS:** independent reviewed evidence of enforcement with no Production impact and a clear F handoff. **BLOCKED:** provider inability to enforce prefix isolation; escalate explicit architectural decision about separate buckets/projects instead of silently weakening scope. **FAIL:** unapproved changes, evidence fabrication, or loss of protected data.
