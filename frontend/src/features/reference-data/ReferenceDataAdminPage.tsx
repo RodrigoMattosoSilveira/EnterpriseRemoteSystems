@@ -1,3 +1,4 @@
+import { useI18n } from "../../i18n";
 import { FormEvent, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { ApiErrorPanel } from "../../components/ApiErrorPanel";
@@ -27,6 +28,7 @@ const emptyForm: ReferenceDataInput = {
 };
 
 export function ReferenceDataAdminPage() {
+  const { t } = useI18n();
   const actor = useAuthorizationContext();
   const canManage = actor.permissions.includes("*") || actor.permissions.includes("reference_data.manage");
   const [selectedType, setSelectedType] = useState<string>(REFERENCE_DATA_TYPES[0].value);
@@ -137,26 +139,26 @@ export function ReferenceDataAdminPage() {
         <div className="mx-auto flex max-w-5xl items-center justify-between gap-3">
           <div>
             <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
-              Administration
+              {t("admin.reference.administration_b8be3d")}
             </p>
-            <PageTitle>Reference Data</PageTitle>
+            <PageTitle>{t("admin.reference.reference.data_3d3f15")}</PageTitle>
             <p className="text-sm text-gray-500">
-              Manage tenant-ready Collaborator and Person dropdown values.
+              {t("admin.reference.manage.tenant.ready.collaborator.and.person.dropdown.va_0fd8c9")}
             </p>
           </div>
 
           <div className="flex flex-wrap items-center justify-end gap-2">
             <Link className="text-sm font-semibold text-gray-700 underline" to="/admin/tenants">
-              Tenants
+              {t("admin.reference.tenants_1f7ae7")}
             </Link>
             <Link className="text-sm font-semibold text-gray-700 underline" to="/admin/gold-prices">
-              Gold Prices
+              {t("admin.reference.gold.prices_d529be")}
             </Link>
             <Link className="text-sm font-semibold text-gray-700 underline" to="/admin/price-list-items">
-              Price List
+              {t("admin.reference.price.list_760d09")}
             </Link>
             <Link className="text-sm font-semibold text-gray-700 underline" to="/people">
-              Back to People
+              {t("admin.reference.back.to.people_59f4cb")}
             </Link>
           </div>
         </div>
@@ -173,7 +175,7 @@ export function ReferenceDataAdminPage() {
 
         <section className="rounded-2xl border bg-white p-4 shadow-sm">
           <label className="block text-sm font-semibold text-gray-700">
-            Reference data type
+            {t("admin.reference.reference.data.type_1a70cf")}
             <select
               className="mt-2 block w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm"
               value={selectedType}
@@ -191,7 +193,7 @@ export function ReferenceDataAdminPage() {
         <section className="grid gap-4 lg:grid-cols-[1fr_2fr]">
           {canManage ? <form className="rounded-2xl border bg-white p-4 shadow-sm" onSubmit={handleCreate}>
             <h2 className="text-lg font-semibold text-gray-950">
-              Create {singularReferenceDataTypeLabel(selectedType)}
+              {t("reference.fragments.create_6e157c")} {singularReferenceDataTypeLabel(selectedType)}
             </h2>
             <ReferenceDataFields value={createForm} onChange={setCreateForm} />
             <button
@@ -210,19 +212,19 @@ export function ReferenceDataAdminPage() {
                   {referenceDataTypeLabel(selectedType)}
                 </h2>
                 <p className="text-sm text-gray-500">
-                  Values are unique within tenant, type, code, and name/label.
+                  {t("admin.reference.values.are.unique.within.tenant.type.code.and.name.labe_7476d5")}
                 </p>
               </div>
               <span className="rounded-full bg-gray-100 px-3 py-1 text-xs font-semibold text-gray-700">
-                {items.length} items
+                {items.length} {t("reference.fragments.items_7316c8")}
               </span>
             </div>
 
-            {isLoading && <p className="mt-4 text-sm text-gray-500">Loading reference data...</p>}
+            {isLoading && <p className="mt-4 text-sm text-gray-500">{t("admin.reference.loading.reference.data_a8db29")}</p>}
 
             {!isLoading && items.length === 0 && (
               <p className="mt-4 rounded-xl border border-dashed p-4 text-center text-sm text-gray-500">
-                No reference data found for this type.
+                {t("admin.reference.no.reference.data.found.for.this.type_d98014")}
               </p>
             )}
 
@@ -231,11 +233,11 @@ export function ReferenceDataAdminPage() {
                 <table className="w-full text-left text-sm">
                   <thead className="bg-gray-50 text-xs uppercase tracking-wide text-gray-500">
                     <tr>
-                      <th className="p-3">Code</th>
-                      <th className="p-3">Name</th>
-                      <th className="p-3">Sort</th>
-                      <th className="p-3">Status</th>
-                      {canManage ? <th className="p-3 text-right">Actions</th> : null}
+                      <th className="p-3">{t("admin.reference.code_adac69")}</th>
+                      <th className="p-3">{t("admin.reference.name_709a23")}</th>
+                      <th className="p-3">{t("admin.reference.sort_adc4e9")}</th>
+                      <th className="p-3">{t("admin.reference.status_bae7d5")}</th>
+                      {canManage ? <th className="p-3 text-right">{t("admin.reference.actions_c3cd63")}</th> : null}
                     </tr>
                   </thead>
                   <tbody className="divide-y">
@@ -259,7 +261,7 @@ export function ReferenceDataAdminPage() {
                               onClick={() => startEditing(item)}
                               type="button"
                             >
-                              Edit
+                              {t("admin.reference.edit_530164")}
                             </button>
                             {item.active ? (
                               <button
@@ -267,7 +269,7 @@ export function ReferenceDataAdminPage() {
                                 onClick={() => handleDeactivate(item)}
                                 type="button"
                               >
-                                Deactivate
+                                {t("admin.reference.deactivate_d65ded")}
                               </button>
                             ) : (
                               <button
@@ -275,7 +277,7 @@ export function ReferenceDataAdminPage() {
                                 onClick={() => handleReactivate(item)}
                                 type="button"
                               >
-                                Reactivate
+                                {t("admin.reference.reactivate_cd28a1")}
                               </button>
                             )}
                           </div>
@@ -292,13 +294,13 @@ export function ReferenceDataAdminPage() {
         {canManage && editing && (
           <form className="rounded-2xl border bg-white p-4 shadow-sm" onSubmit={handleUpdate}>
             <div className="flex items-center justify-between gap-3">
-              <h2 className="text-lg font-semibold text-gray-950">Edit {editing.label}</h2>
+              <h2 className="text-lg font-semibold text-gray-950">{t("reference.fragments.edit_530164")} {editing.label}</h2>
               <button
                 className="rounded-lg border px-3 py-1 text-xs font-semibold"
                 onClick={() => setEditing(null)}
                 type="button"
               >
-                Cancel
+                {t("admin.reference.cancel_77dfd2")}
               </button>
             </div>
             <ReferenceDataFields value={editForm} onChange={setEditForm} />
@@ -323,10 +325,11 @@ function ReferenceDataFields({
   value: ReferenceDataInput;
   onChange: (value: ReferenceDataInput) => void;
 }) {
+  const { t } = useI18n();
   return (
     <div className="mt-4 grid gap-3 sm:grid-cols-2">
       <label className="block text-sm font-semibold text-gray-700">
-        Code
+        {t("admin.reference.code_adac69")}
         <input
           className="mt-1 block w-full rounded-xl border border-gray-300 px-3 py-2 text-sm"
           value={value.code}
@@ -335,7 +338,7 @@ function ReferenceDataFields({
       </label>
 
       <label className="block text-sm font-semibold text-gray-700">
-        Name
+        {t("admin.reference.name_709a23")}
         <input
           className="mt-1 block w-full rounded-xl border border-gray-300 px-3 py-2 text-sm"
           value={value.label}
@@ -344,7 +347,7 @@ function ReferenceDataFields({
       </label>
 
       <label className="block text-sm font-semibold text-gray-700 sm:col-span-2">
-        Description
+        {t("admin.reference.description_55f8eb")}
         <input
           className="mt-1 block w-full rounded-xl border border-gray-300 px-3 py-2 text-sm"
           value={value.description ?? ""}
@@ -353,7 +356,7 @@ function ReferenceDataFields({
       </label>
 
       <label className="block text-sm font-semibold text-gray-700">
-        Sort Order
+        {t("admin.reference.sort.order_5b5417")}
         <input
           className="mt-1 block w-full rounded-xl border border-gray-300 px-3 py-2 text-sm"
           type="number"
@@ -370,11 +373,11 @@ function ReferenceDataFields({
           onChange={(event) => onChange({ ...value, active: event.target.checked })}
           type="checkbox"
         />
-        Active
+        {t("admin.reference.active_a733b8")}
       </label>
 
       <label className="block text-sm font-semibold text-gray-700 sm:col-span-2">
-        Metadata JSON
+        {t("admin.reference.metadata.json_b0e4c2")}
         <textarea
           className="mt-1 block min-h-20 w-full rounded-xl border border-gray-300 px-3 py-2 text-sm"
           value={value.metadataJson ?? ""}
@@ -386,6 +389,7 @@ function ReferenceDataFields({
 }
 
 function StatusBadge({ active }: { active: boolean }) {
+  const { t } = useI18n();
   return (
     <span
       className={`rounded-full px-3 py-1 text-xs font-semibold ${

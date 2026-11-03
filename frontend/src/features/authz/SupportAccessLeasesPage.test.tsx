@@ -1,3 +1,4 @@
+import { I18nProvider } from "../../i18n";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -528,15 +529,16 @@ const tenantAdminContext: AuthorizationContextValue = {
 };
 
 function renderPage(actor: AuthorizationContextValue) {
+  window.localStorage.setItem("ers.i18n.locale", "en-US");
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
   act(() => {
     root = createRoot(container);
     root.render(
-      <QueryClientProvider client={queryClient}>
+      <I18nProvider><QueryClientProvider client={queryClient}>
         <AuthorizationProvider value={actor}>
           <SupportAccessLeasesPage />
         </AuthorizationProvider>
-      </QueryClientProvider>,
+      </QueryClientProvider></I18nProvider>,
     );
   });
 }

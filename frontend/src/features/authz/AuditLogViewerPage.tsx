@@ -1,3 +1,4 @@
+import { useI18n } from "../../i18n";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { ApiErrorPanel } from "../../components/ApiErrorPanel";
@@ -56,6 +57,7 @@ const sensitiveOperationOptions = [
 const operationLabels = new Map(sensitiveOperationOptions.map((option) => [option.value, option.label]));
 
 export function AuditLogViewerPage() {
+  const { t } = useI18n();
   const [tenantId, setTenantId] = useState(() =>
     typeof window === "undefined" ? "default" : readSelectedTenantId(window.localStorage),
   );
@@ -88,29 +90,29 @@ export function AuditLogViewerPage() {
         <div className="mx-auto flex max-w-7xl items-center justify-between gap-3">
           <div>
             <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
-              Administration
+              {t("admin.audit.administration_b8be3d")}
             </p>
-            <PageTitle>Audit Log Viewer</PageTitle>
+            <PageTitle>{t("admin.audit.audit.log.viewer_d307e6")}</PageTitle>
             <p className="text-sm text-gray-500">
-              Review append-only authorization audit events for sensitive current-account, receipt, and authorization workflows.
+              {t("admin.audit.review.append.only.authorization.audit.events.for.sensi_8a1ba6")}
             </p>
           </div>
 
           <div className="flex flex-wrap items-center justify-end gap-2">
             <Link className="text-sm font-semibold text-gray-700 underline" to="/admin/authorization">
-              Authorization
+              {t("admin.audit.authorization_5e25ce")}
             </Link>
             <Link className="text-sm font-semibold text-gray-700 underline" to="/admin/current-account-settings">
-              Current Account Settings
+              {t("admin.audit.current.account.settings_ba8f33")}
             </Link>
             <Link className="text-sm font-semibold text-gray-700 underline" to="/admin/gold-prices">
-              Gold Prices
+              {t("admin.audit.gold.prices_d529be")}
             </Link>
             <Link className="text-sm font-semibold text-gray-700 underline" to="/admin/price-list-items">
-              Price List
+              {t("admin.audit.price.list_760d09")}
             </Link>
             <Link className="text-sm font-semibold text-gray-700 underline" to="/people">
-              Back to People
+              {t("admin.audit.back.to.people_59f4cb")}
             </Link>
           </div>
         </div>
@@ -120,12 +122,12 @@ export function AuditLogViewerPage() {
         <ApiErrorPanel error={auditQuery.error} />
 
         <section className="rounded-2xl border bg-white p-4 shadow-sm">
-          <h2 className="text-lg font-semibold text-gray-950">Authenticated authorization context</h2>
+          <h2 className="text-lg font-semibold text-gray-950">{t("admin.audit.authenticated.authorization.context_baa0e6")}</h2>
           <p className="mt-1 text-sm text-gray-500">
-            The session identifies the actor. Audit-log access uses the selected tenant only after the server validates that tenant against the actor&apos;s persisted grants.
+            {t("audit.fragments.the.session.identifies.the.actor.audit.log.acc_8dafb7")}
           </p>
           <label className="mt-4 block max-w-md text-sm font-semibold text-gray-700">
-            Selected Tenant ID
+            {t("admin.audit.selected.tenant.id_f0aa67")}
             <input
               className="mt-2 block w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm"
               value={tenantId}
@@ -137,19 +139,19 @@ export function AuditLogViewerPage() {
         <form className="rounded-2xl border bg-white p-4 shadow-sm" onSubmit={handleSubmit}>
           <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
             <div>
-              <h2 className="text-lg font-semibold text-gray-950">Sensitive event filters</h2>
+              <h2 className="text-lg font-semibold text-gray-950">{t("admin.audit.sensitive.event.filters_b42a76")}</h2>
               <p className="mt-1 text-sm text-gray-500">
-                Filter by operation, decision, actor, or target. Results are newest first and read-only.
+                {t("admin.audit.filter.by.operation.decision.actor.or.target.results.ar_371a1c")}
               </p>
             </div>
             <span className="rounded-full bg-gray-100 px-3 py-1 text-xs font-semibold text-gray-700">
-              Append-only audit trail
+              {t("admin.audit.append.only.audit.trail_b2ca9c")}
             </span>
           </div>
 
           <div className="mt-4 grid gap-3 lg:grid-cols-3">
             <label className="block text-sm font-semibold text-gray-700">
-              Operation
+              {t("admin.audit.operation_430d32")}
               <select
                 className="mt-2 block w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm"
                 value={draftFilters.operation}
@@ -164,20 +166,20 @@ export function AuditLogViewerPage() {
             </label>
 
             <label className="block text-sm font-semibold text-gray-700">
-              Decision
+              {t("admin.audit.decision_7f59a1")}
               <select
                 className="mt-2 block w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm"
                 value={draftFilters.decision}
                 onChange={(event) => setDraftFilters((current) => ({ ...current, decision: event.target.value }))}
               >
-                <option value="">All decisions</option>
-                <option value="AUTHORIZED">Authorized</option>
-                <option value="DENIED">Denied</option>
+                <option value="">{t("admin.audit.all.decisions_cc26b5")}</option>
+                <option value="AUTHORIZED">{t("admin.audit.authorized_991f4c")}</option>
+                <option value="DENIED">{t("admin.audit.denied_63b16b")}</option>
               </select>
             </label>
 
             <label className="block text-sm font-semibold text-gray-700">
-              Limit
+              {t("admin.audit.limit_24d948")}
               <input
                 className="mt-2 block w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm"
                 min={1}
@@ -191,7 +193,7 @@ export function AuditLogViewerPage() {
             </label>
 
             <label className="block text-sm font-semibold text-gray-700">
-              Actor ID / key
+              {t("admin.audit.actor.id.key_2e9aa7")}
               <input
                 className="mt-2 block w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm"
                 placeholder="bootstrap-admin"
@@ -201,30 +203,30 @@ export function AuditLogViewerPage() {
             </label>
 
             <label className="block text-sm font-semibold text-gray-700">
-              Support Lease ID
+              {t("admin.audit.support.lease.id_c64aa5")}
               <input
                 className="mt-2 block w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm"
-                placeholder="Tenant Support Access Lease ID"
+                placeholder={t("audit.fragments.tenant.support.access.lease.id_01e555")}
                 value={draftFilters.supportLeaseId}
                 onChange={(event) => setDraftFilters((current) => ({ ...current, supportLeaseId: event.target.value }))}
               />
             </label>
 
             <label className="block text-sm font-semibold text-gray-700">
-              Target type
+              {t("admin.audit.target.type_a45f80")}
               <input
                 className="mt-2 block w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm"
-                placeholder="collaborator, ledger_entry, ledger_receipt"
+                placeholder={t("audit.fragments.collaborator.ledger.entry.ledger.receipt_405441")}
                 value={draftFilters.targetType}
                 onChange={(event) => setDraftFilters((current) => ({ ...current, targetType: event.target.value }))}
               />
             </label>
 
             <label className="block text-sm font-semibold text-gray-700">
-              Target ID
+              {t("admin.audit.target.id_00960a")}
               <input
                 className="mt-2 block w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm"
-                placeholder="collaborator or ledger entry id"
+                placeholder={t("audit.fragments.collaborator.or.ledger.entry.id_a12547")}
                 value={draftFilters.targetId}
                 onChange={(event) => setDraftFilters((current) => ({ ...current, targetId: event.target.value }))}
               />
@@ -233,14 +235,14 @@ export function AuditLogViewerPage() {
 
           <div className="mt-4 flex flex-wrap gap-2">
             <button className="rounded-xl bg-gray-950 px-4 py-2 text-sm font-semibold text-white" type="submit">
-              Apply Filters
+              {t("admin.audit.apply.filters_6b2a78")}
             </button>
             <button
               className="rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-800"
               type="button"
               onClick={handleReset}
             >
-              Reset
+              {t("admin.audit.reset_44c57a")}
             </button>
             <button
               className="rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-800 disabled:opacity-60"
@@ -248,7 +250,7 @@ export function AuditLogViewerPage() {
               type="button"
               onClick={() => void auditQuery.refetch()}
             >
-              Refresh
+              {t("admin.audit.refresh_56e3ba")}
             </button>
           </div>
         </form>
@@ -256,21 +258,21 @@ export function AuditLogViewerPage() {
         <section className="rounded-2xl border bg-white p-4 shadow-sm">
           <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
             <div>
-              <h2 className="text-lg font-semibold text-gray-950">Audit events</h2>
+              <h2 className="text-lg font-semibold text-gray-950">{t("admin.audit.audit.events_9e7d8c")}</h2>
               <p className="text-sm text-gray-500">
                 {auditQuery.isLoading ? "Loading audit events..." : `${logs.length} event${logs.length === 1 ? "" : "s"} shown`}
               </p>
             </div>
             {auditQuery.isFetching && !auditQuery.isLoading && (
               <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700">
-                Refreshing
+                {t("admin.audit.refreshing_505ddd")}
               </span>
             )}
           </div>
 
           {!auditQuery.isLoading && logs.length === 0 && (
             <div className="mt-4 rounded-2xl border border-dashed p-6 text-center text-sm text-gray-500">
-              No audit logs match the current filters.
+              {t("admin.audit.no.audit.logs.match.the.current.filters_74e553")}
             </div>
           )}
 
@@ -279,12 +281,12 @@ export function AuditLogViewerPage() {
               <table className="min-w-full divide-y divide-gray-200 text-left text-sm">
                 <thead className="bg-gray-50 text-xs uppercase tracking-wide text-gray-500">
                   <tr>
-                    <th className="px-3 py-2">When</th>
-                    <th className="px-3 py-2">Decision</th>
-                    <th className="px-3 py-2">Operation</th>
-                    <th className="px-3 py-2">Actor</th>
-                    <th className="px-3 py-2">Target</th>
-                    <th className="px-3 py-2">Evidence</th>
+                    <th className="px-3 py-2">{t("admin.audit.when_769bb1")}</th>
+                    <th className="px-3 py-2">{t("admin.audit.decision_7f59a1")}</th>
+                    <th className="px-3 py-2">{t("admin.audit.operation_430d32")}</th>
+                    <th className="px-3 py-2">{t("admin.audit.actor_cbd19b")}</th>
+                    <th className="px-3 py-2">{t("admin.audit.target_61ad50")}</th>
+                    <th className="px-3 py-2">{t("admin.audit.evidence_7ea014")}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
@@ -301,11 +303,11 @@ export function AuditLogViewerPage() {
                       </td>
                       <td className="px-3 py-3 text-gray-700">
                         <p className="font-medium">{log.actorId || "—"}</p>
-                        {log.tenantId && <p className="mt-1 text-xs text-gray-500">Tenant: {log.tenantId}</p>}
-                        {log.actorRecordId && <p className="mt-1 text-xs text-gray-500">Record: {log.actorRecordId}</p>}
+                        {log.tenantId && <p className="mt-1 text-xs text-gray-500">{t("audit.fragments.tenant_be7b76")} {log.tenantId}</p>}
+                        {log.actorRecordId && <p className="mt-1 text-xs text-gray-500">{t("audit.fragments.record_9b5e24")} {log.actorRecordId}</p>}
                         {log.supportLeaseId && (
                           <p className="mt-1 break-all text-xs font-semibold text-amber-700">
-                            Support Lease: {log.supportLeaseId}
+                            {t("audit.fragments.support.lease_b18df5")} {log.supportLeaseId}
                           </p>
                         )}
                       </td>
@@ -329,11 +331,12 @@ export function AuditLogViewerPage() {
 }
 
 function AuditEvidence({ log }: { log: AuthzAuditLog }) {
+  const { t } = useI18n();
   const metadata = parseMetadata(log.metadataJson);
   const items = auditEvidenceItems(log, metadata);
 
   if (items.length === 0 && !log.metadataJson) {
-    return <span className="text-gray-500">No extra evidence recorded.</span>;
+    return <span className="text-gray-500">{t("admin.audit.no.extra.evidence.recorded_2a416c")}</span>;
   }
 
   return (
@@ -351,7 +354,7 @@ function AuditEvidence({ log }: { log: AuthzAuditLog }) {
 
       {log.metadataJson && (
         <details className="rounded-xl bg-gray-50 p-2 text-xs text-gray-600">
-          <summary className="cursor-pointer font-semibold">Raw metadata</summary>
+          <summary className="cursor-pointer font-semibold">{t("admin.audit.raw.metadata_21770c")}</summary>
           <pre className="mt-2 max-w-md overflow-x-auto whitespace-pre-wrap break-words">{prettyMetadata(log.metadataJson)}</pre>
         </details>
       )}
@@ -360,6 +363,7 @@ function AuditEvidence({ log }: { log: AuthzAuditLog }) {
 }
 
 function DecisionBadge({ decision }: { decision: string }) {
+  const { t } = useI18n();
   const normalized = decision.toUpperCase();
   const className =
     normalized === "AUTHORIZED"

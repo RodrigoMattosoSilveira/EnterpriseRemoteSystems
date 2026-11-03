@@ -49,3 +49,7 @@ A gate is **BLOCKED**, not passed, until actual evidence exists. No changes to d
 Create successive leaf branches from the latest accepted Bite 35 parent, supply committed HEAD ZIP and exact SHA, validate, and merge each into parent. Parent promotion follows the established deployment process; never use an unfinished feature branch for direct Production deployment. Verify the current revision, migrations, data preservation, real backup and restore, and human authorization at the final cutover.
 
 For **35.1-only manual acceptance**, follow [`manual-acceptance-tests.md`](manual-acceptance-tests.md). For existing deployed recovery procedures, the authoritative historical reference remains `docs/bite-3368/manual-acceptance-tests.md` until explicitly revised in Bite 35.6/35.7.
+
+## Byte 35.2 translation implementation notes
+
+The frontend keeps `en-US` and `pt-BR` as the only supported locales. Financial administration, authorization, support-access, reference-data, and login-shell static copy is moved into the typed locale resources. The local CI check `make byte352-i18n-check` enforces matching keys and interpolation placeholders and rejects new static JSX/attribute text outside an explicit list of stable identifiers and units. These automated checks **do not** establish translation completeness for dynamic API/error messages or all conditional UI branches; B35.2-02 through -05 in the canonical manual are required before declaring this bite complete. No ledger, authorization, or deployment behavior should change as part of translation.

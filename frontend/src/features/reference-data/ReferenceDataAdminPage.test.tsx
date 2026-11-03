@@ -1,3 +1,4 @@
+import { I18nProvider } from "../../i18n";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -265,6 +266,7 @@ describe("ReferenceDataAdminPage", () => {
 });
 
 function renderReferenceDataAdminPage() {
+  window.localStorage.setItem("ers.i18n.locale", "en-US");
   const queryClient = new QueryClient({
     defaultOptions: {
       queries: { retry: false },
@@ -289,9 +291,9 @@ function renderReferenceDataAdminPage() {
         roleCodes: ["TENANT_ADMIN"],
         permissions: ["reference_data.read", "reference_data.manage"],
       }}>
-        <QueryClientProvider client={queryClient}>
+        <I18nProvider><QueryClientProvider client={queryClient}>
           <RouterProvider router={router} />
-        </QueryClientProvider>
+        </QueryClientProvider></I18nProvider>
       </AuthorizationProvider>
     );
   });

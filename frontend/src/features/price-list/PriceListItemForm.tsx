@@ -1,3 +1,4 @@
+import { useI18n } from "../../i18n";
 import type { FormEvent } from "react";
 
 type PriceListFormItemType = "CANTEEN" | "ADMINISTRATIVE";
@@ -44,6 +45,7 @@ export function PriceListItemForm({
   onCancel?: () => void;
   layout?: PriceListItemFormLayout;
 }) {
+  const { t } = useI18n();
   const isWide = layout === "wide";
   const submitDisabled = isPending || isSubmitDisabled;
   const submitClassName = [
@@ -87,14 +89,14 @@ export function PriceListItemForm({
             onClick={onCancel}
             type="button"
           >
-            {isWide ? "Dismiss" : "Cancel"}
+            {isWide ? t("byte352.form.dismiss") : t("byte352.form.cancel")}
           </button>
         )}
       </div>
 
       <div className={fieldGridClassName}>
         <label className={categoryClassName}>
-          Category
+          {t("price.form.category_a3c686")}
           <select
             className="mt-1 block w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm"
             required
@@ -103,13 +105,13 @@ export function PriceListItemForm({
               onChange({ ...value, itemType: event.target.value as PriceListFormItemType })
             }
           >
-            <option value="CANTEEN">Canteen</option>
-            <option value="ADMINISTRATIVE">Administrative</option>
+            <option value="CANTEEN">{t("price.form.canteen_65336b")}</option>
+            <option value="ADMINISTRATIVE">{t("price.form.administrative_67c743")}</option>
           </select>
         </label>
 
         <label className={codeClassName}>
-          Code
+          {t("price.form.code_adac69")}
           <input
             className="mt-1 block w-full rounded-xl border border-gray-300 px-3 py-2 text-sm"
             required
@@ -120,18 +122,18 @@ export function PriceListItemForm({
         </label>
 
         <label className={descriptionClassName}>
-          Description
+          {t("price.form.description_55f8eb")}
           <input
             className="mt-1 block w-full rounded-xl border border-gray-300 px-3 py-2 text-sm"
             required
             value={value.description}
             onChange={(event) => onChange({ ...value, description: event.target.value })}
-            placeholder="Snack"
+            placeholder={t("byte352.form.snack")}
           />
         </label>
 
         <label className={unitPriceClassName}>
-          BRL Unit Price
+          {t("price.form.brl.unit.price_ea89e7")}
           <input
             className="mt-1 block w-full rounded-xl border border-gray-300 px-3 py-2 text-sm"
             min="0.01"
@@ -145,7 +147,7 @@ export function PriceListItemForm({
         </label>
 
         <label className={sortOrderClassName}>
-          Sort Order
+          {t("price.form.sort.order_5b5417")}
           <input
             className="mt-1 block w-full rounded-xl border border-gray-300 px-3 py-2 text-sm"
             step="1"
@@ -157,7 +159,7 @@ export function PriceListItemForm({
       </div>
 
       <p className="mt-3 rounded-xl border border-blue-100 bg-blue-50 px-3 py-2 text-xs font-medium text-blue-950">
-        Price-list prices are stored in BRL. Grams-of-gold expenses convert this BRL price by using the latest active gold price at expense creation time.
+        {t("price.form.price.list.prices.are.stored.in.brl.grams.of.gold.expenses.conver_f4df6e")}
       </p>
 
       <button
