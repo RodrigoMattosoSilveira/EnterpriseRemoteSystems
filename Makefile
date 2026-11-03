@@ -1881,3 +1881,9 @@ testdata-local-reset:
 testdata-server-reset:
 	chmod +x scripts/testdata-reset.sh
 	ENV=$(ENV) ./scripts/testdata-reset.sh server
+
+# Bite 35.1 — offline baseline and frozen scope; no deployed state changes.
+.PHONY: byte351-baseline-check
+byte351-baseline-check:
+	python3 -B scripts/ers-byte351-baseline-check.py
+	python3 -B scripts/test-byte351-baseline.py
