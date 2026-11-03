@@ -1,0 +1,51 @@
+# Bite 35 — Mineração Carará Production Go-Live: accepted scope
+
+**Status:** Bite 35.1 baseline and scope freeze. **Origin:** `development` at `9ecd5b075d08ec19c1f368690e95bc621b984fb1`. The operator observed `origin/development` and `origin/test` had identical tracked contents (`git diff --quiet` exit 0); their HEAD commits were distinct. This observation is historical and must not be represented as a current CI or deployment result.
+
+The machine-checked scope ledger is [`launch-baseline.json`](launch-baseline.json). This document explains business decisions; it does **not** represent completed feature acceptance, a Production deployment approval, or an override of existing security gates. The last accepted `development` starting point deliberately excludes the unaccepted 33.6.8D/E experimental work.
+
+## One goal and seven bounded sub-bites
+
+| Bite | Deliverable | Acceptance boundary |
+|---|---|---|
+| 35.1 | Record stable baseline and freeze launch scope | Documentation + offline invariant check; no infrastructure change |
+| 35.2 (former 34.1) | Brazilian Portuguese translation completion | All customer-facing flows translated; `en-US`/`pt-BR` parity |
+| 35.3 (former 34.3) | Actual work Sector/Location override | Preserve informed assignment; compensation **always** uses informed assignment; last assignment is next plan default |
+| 35.4 (former 34.2) | Functional and Operational readiness and training | Brazilian Portuguese UI-first customer manual; separately explicit technical operations |
+| 35.5 | Guarded Production database initialization | Test rehearsal then protected Production initialization; People/Journeys and signed historical BRL/Gold `OPENING_BALANCE` CSV import, checksum-bound approval, dry run, duplicate protection, ledger reconciliation |
+| 35.6 | Human administrator and runbooks | Named Application Administrator through controlled enrollment, 1Password-only custody, application and usable database recovery procedures |
+| 35.7 | Six launch gates and controlled Production activation | Actual measured evidence, authorization, first tenant pilot; do not infer PASS from local or CI results |
+
+**Opening-balance rule:** Historical amounts owed **to** and **by** Collaborators are not bonuses. New Journeys start at zero; approved separately classified ledger entries establish positive or negative BRL and GOLD_GRAM opening positions. No self-approval bypass or direct database balance alteration.
+
+**Training split:** Functional readiness never demands SQL, APIs, Docker or Git from customers; Operational readiness includes those tools where appropriate with executable commands, precise actor, environment, expected outputs, STOP and cleanup criteria.
+
+## Freeze and exceptions
+
+Allowed before launch: fixes that directly satisfy a listed Bite 35 deliverable or one of the six minimum safety gates. Everything else becomes a post-launch proposal. Record any launch-scope exception in a reviewed change record with rationale and effect on customer activation; do not silently append a new sub-bite, weaken an existing safeguard or claim a non-executed check passed.
+
+### Deferred, not accepted or erased
+
+- **34.5:** Work Period Assignment Summary.
+- **34.4:** Assignment Notification and Collaborator Acceptance.
+- **33.6.6+:** Additional emergency recovery hardening.
+- **33.6.8E/F:** Advanced shared-bucket access isolation and expanded acceptance. The experimental branch is not in the accepted starting commit; no S3 policy is authorized by Bite 35.1.
+
+Current Hetzner observations: project `ERS Backups`, bucket `ers`, existing `ers-backups/production/` backup objects, versioning enabled, Object Lock enabled, Governance default 30 days, no lifecycle configuration and no bucket policy in the observed checks. The actual deployed Test/Development `.env` files inspected previously had no S3 backup configuration. Those observations are not evidence of a live Production restore or enforced environment isolation.
+
+## Six Minimum Safe Launch Gates
+
+1. **Release integrity:** accepted SHA, LOCAL and CI checks, deployed smoke.
+2. **Security:** HTTPS, authentication, role boundaries, tenant isolation, named administrator.
+3. **Data preservation:** safeguarded reset/initialization; migrations/deployment cannot silently replace real data.
+4. **Backup and restore:** a real verified off-host backup and isolated recovery, never on the live DB.
+5. **Operational continuity:** scheduled backups, visible failures, documented retention/recovery owner.
+6. **Administrator recovery:** named human account and actually tested emergency access.
+
+A gate is **BLOCKED**, not passed, until actual evidence exists. No changes to deployed infrastructure or Production database are part of 35.1. Keep production guards and existing automated tests intact. Do not assert the older two-human criterion passed when only one human is available; 35.7 must explicitly resolve or authorize residual risk before activation, without faking signoff.
+
+## Promotion
+
+Create successive leaf branches from the latest accepted Bite 35 parent, supply committed HEAD ZIP and exact SHA, validate, and merge each into parent. Parent promotion follows the established deployment process; never use an unfinished feature branch for direct Production deployment. Verify the current revision, migrations, data preservation, real backup and restore, and human authorization at the final cutover.
+
+For **35.1-only manual acceptance**, follow [`manual-acceptance-tests.md`](manual-acceptance-tests.md). For existing deployed recovery procedures, the authoritative historical reference remains `docs/bite-3368/manual-acceptance-tests.md` until explicitly revised in Bite 35.6/35.7.
