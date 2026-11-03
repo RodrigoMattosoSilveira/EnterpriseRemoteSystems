@@ -32,7 +32,6 @@ type TenantRoleActorFilters = {
 export function TenantRoleDelegationPage({ readOnly = false }: { readOnly?: boolean } = {}) {
   const { t } = useI18n();
   const currentActor = useAuthorizationContext();
-  const { t } = useI18n();
   const requestActor: AuthzAdminRequestActor = {
     actorId: currentActor.actorRecordId || currentActor.actorKey,
     tenantId: currentActor.tenantId,

@@ -402,7 +402,7 @@ describe("SupportAccessLeasesPage", () => {
     await waitForText("lease-pending");
 
     expect(container.querySelector("#support-access-history-panel")).not.toBeNull();
-    expect(container.textContent).toContain("PENDING");
+    expect(container.textContent).toContain("Pending");
   });
 
   it("opens with both cards collapsed and keeps only one Support access card open at a time", async () => {

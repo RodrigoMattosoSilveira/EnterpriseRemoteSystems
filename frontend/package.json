@@ -15,7 +15,7 @@
     "test:e2e": "playwright test",
     "i18n:check": "node scripts/byte352-i18n-check.cjs --require-complete",
     "i18n:report": "node scripts/byte352-i18n-check.cjs --report",
-    "i18n:test": "node --test scripts/byte352-i18n-check.test.cjs"
+    "i18n:test": "node --test scripts/byte352-i18n-check.node.cjs"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.100.5",
