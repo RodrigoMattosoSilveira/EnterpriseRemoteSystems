@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"enterpriseremotesystems/backend/internal/authentication"
@@ -185,5 +186,114 @@ func TestByte352AdministratorCredentialConsentAndRollback(t *testing.T) {
 	}
 	if err := ensureByte352Fixtures(context.Background(), db, input, bcrypt.MinCost); err != nil {
 		t.Fatal("idempotent rerun failed:", err)
+	}
+}
+
+// TestByte352AdministratorActorKeyCompatibility protects existing E2E
+// Administrator identities, including their canonical Actor IDs and bindings.
+func TestByte352AdministratorActorKeyCompatibility(t *testing.T) {
+	db := byte352TestDB(t)
+	input := byte352TestInput()
+	input.Credentials[byte352Administrators[0].Login] = "administrator-password-to-preserve"
+	input.Credentials[byte352Administrators[1].Login] = "administrator-password-to-preserve-B"
+
+	type snapshot struct {
+		actor   authz.AuthzActor
+		binding authentication.AccountActor
+		account authentication.Account
+	}
+	before := make(map[string]snapshot)
+	for _, spec := range byte352Administrators {
+		actorID := spec.Stem + "-actor"
+		var actor authz.AuthzActor
+		if err := db.First(&actor, "id = ?", actorID).Error; err != nil {
+			t.Fatal(err)
+		}
+		if actor.ActorKey != spec.Stem || !actor.Active {
+			t.Fatalf("unexpected seeded Actor: %+v", actor)
+		}
+		var binding authentication.AccountActor
+		if err := db.First(&binding, "actor_id = ?", actorID).Error; err != nil {
+			t.Fatal(err)
+		}
+		var account authentication.Account
+		if err := db.First(&account, "id = ?", spec.Stem+"-account").Error; err != nil {
+			t.Fatal(err)
+		}
+		before[actorID] = snapshot{actor, binding, account}
+	}
+	for run := 0; run < 2; run++ {
+		if err := ensureByte352Fixtures(context.Background(), db, input, bcrypt.MinCost); err != nil {
+			t.Fatalf("provisioning run %d: %v", run, err)
+		}
+	}
+	for actorID, previous := range before {
+		var actor authz.AuthzActor
+		if err := db.First(&actor, "id = ?", actorID).Error; err != nil {
+			t.Fatal(err)
+		}
+		if actor.ID != previous.actor.ID || actor.ActorKey != previous.actor.ActorKey || actor.Active != previous.actor.Active {
+			t.Fatalf("Actor changed: before=%+v after=%+v", previous.actor, actor)
+		}
+		var binding authentication.AccountActor
+		if err := db.First(&binding, "actor_id = ?", actorID).Error; err != nil {
+			t.Fatal(err)
+		}
+		if binding.AccountID != previous.binding.AccountID || binding.ScopeType != previous.binding.ScopeType ||
+			binding.TenantID == nil || previous.binding.TenantID == nil || *binding.TenantID != *previous.binding.TenantID ||
+			binding.MembershipID == nil || previous.binding.MembershipID == nil || *binding.MembershipID != *previous.binding.MembershipID {
+			t.Fatalf("canonical Actor binding changed for %s", actorID)
+		}
+		var account authentication.Account
+		if err := db.First(&account, "id = ?", previous.account.ID).Error; err != nil {
+			t.Fatal(err)
+		}
+		if account.PasswordHash != previous.account.PasswordHash {
+			t.Fatalf("administrator password changed for %s", actorID)
+		}
+	}
+}
+
+func TestByte352RejectsConflictingAdministratorActorKeys(t *testing.T) {
+	for _, spec := range byte352Administrators {
+		t.Run(spec.Stem, func(t *testing.T) {
+			db := byte352TestDB(t)
+			input := byte352TestInput()
+			input.Credentials[byte352Administrators[0].Login] = "administrator-password-to-preserve"
+			input.Credentials[byte352Administrators[1].Login] = "administrator-password-to-preserve-B"
+			actorID := spec.Stem + "-actor"
+			if err := db.Model(&authz.AuthzActor{}).Where("id = ?", actorID).Update("actor_key", "conflicting-actor-key").Error; err != nil {
+				t.Fatal(err)
+			}
+			var before authentication.Account
+			if err := db.First(&before, "id = ?", spec.Stem+"-account").Error; err != nil {
+				t.Fatal(err)
+			}
+			err := ensureByte352Fixtures(context.Background(), db, input, bcrypt.MinCost)
+			if err == nil || !strings.Contains(err.Error(), "existing Actor conflicted or inactive") {
+				t.Fatalf("expected Actor Key conflict, got %v", err)
+			}
+			var actor authz.AuthzActor
+			if err := db.First(&actor, "id = ?", actorID).Error; err != nil {
+				t.Fatal(err)
+			}
+			if actor.ActorKey != "conflicting-actor-key" {
+				t.Fatal("conflicting Actor Key was overwritten")
+			}
+			var after authentication.Account
+			if err := db.First(&after, "id = ?", before.ID).Error; err != nil {
+				t.Fatal(err)
+			}
+			if after.PasswordHash != before.PasswordHash {
+				t.Fatal("failed transaction changed password")
+			}
+			var count int64
+			if err := db.Model(&authentication.Account{}).Where("id = ?", byte352Identities[0].Stem+"-account").Count(&count).Error; err != nil {
+				t.Fatal(err)
+			}
+			if count != 0 {
+				t.Fatal("failed transaction persisted a partial fixture")
+			}
+		})
 	}
 }

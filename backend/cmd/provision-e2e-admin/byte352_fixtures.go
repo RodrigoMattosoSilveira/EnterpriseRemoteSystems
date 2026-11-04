@@ -197,16 +197,23 @@ func ensureByte352Identity(tx *gorm.DB, spec byte352Identity, password string, c
 		if spec.Administrator {
 			actorID = spec.Stem + "-actor"
 		}
+		// Existing E2E Tenant Administrators use their stem as Actor Key,
+		// while their stable Actor ID includes the "-actor" suffix.
+		// Other Byte 35.2 identities retain the Actor ID as Actor Key.
+		actorKey := actorID
+		if spec.Administrator {
+			actorKey = spec.Stem
+		}
 		var actor authz.AuthzActor
 		if err := tx.Where("id = ?", actorID).Limit(1).Find(&actor).Error; err != nil {
 			return err
 		}
 		if actor.ID == "" {
-			actor = authz.AuthzActor{ID: actorID, ActorKey: actorID, DisplayName: spec.Name, Active: true, CreatedAt: now, UpdatedAt: now}
+			actor = authz.AuthzActor{ID: actorID, ActorKey: actorKey, DisplayName: spec.Name, Active: true, CreatedAt: now, UpdatedAt: now}
 			if err := tx.Create(&actor).Error; err != nil {
 				return err
 			}
-		} else if actor.ActorKey != actorID || !actor.Active {
+		} else if actor.ActorKey != actorKey || !actor.Active {
 			return fmt.Errorf("existing Actor conflicted or inactive")
 		}
 		var binding authentication.AccountActor
