@@ -323,12 +323,7 @@ local-init-env:
 
 .PHONY: local-db-init
 local-db-init:
-	mkdir -p backend/data
-	@for migration in backend/migrations/*.up.sql; do \
-		echo "Applying $$migration"; \
-		sqlite3 backend/data/app.db < "$$migration"; \
-	done
-	sqlite3 backend/data/app.db ".tables"
+	DB_PATH="$(CURDIR)/backend/data/app.db" ./scripts/db-migrate.sh
 
 .PHONY: local-db-reset
 local-db-reset:

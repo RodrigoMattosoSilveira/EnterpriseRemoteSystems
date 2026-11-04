@@ -15,6 +15,18 @@ Bite 28A introduced the application-admin tenant lifecycle and tenant-administra
 - Tenant records cannot be hard-deleted. API deletion returns `tenant_deletion_not_allowed`, and migration `000040_protect_tenant_history` installs a database trigger that rejects direct SQL deletion.
 - Deactivation preserves all historical records.
 
+## First Tenant Administrator
+
+A new Tenant has no People, and only a Tenant Administrator (or a Support Access Lease that a Tenant Administrator approves) can add People. Without a starting administrator, a new Tenant would stay `ACTIVE_NO_TENANT_ADMIN` with no way to add one.
+
+`POST /api/v1/tenants` therefore accepts an optional `firstAdministrator` (first name, last name, optional nickname, CPF, RG, cellular, email, temporary password). The `/admin/tenants` form always sends it. In the same transaction as the Tenant and its seed data, the server:
+
+1. creates a new canonical Person with an ACTIVE Membership in the new Tenant, using the ordinary People validation and global uniqueness rules;
+2. creates an Authentication Account whose login is the Person's email, with the temporary password and `mustChangePassword = true`;
+3. grants `TENANT_ADMIN` through the ordinary assignment path, so the cardinality and cross-Tenant Role rules below still apply.
+
+Any failure rolls back the whole request, including the Tenant row. Field errors are returned as `firstAdministrator.<field>`, for example `firstAdministrator.cpf: CPF already exists`. Reusing an existing Person is not supported here; use the Tenant detail page for that once the Tenant has an administrator.
+
 ## Operational status
 
 The API derives one of three status values:

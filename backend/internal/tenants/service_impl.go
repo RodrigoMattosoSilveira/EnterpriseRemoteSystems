@@ -25,9 +25,27 @@ type ValidationError struct {
 func (e ValidationError) Error() string                       { return "validation failed" }
 func (e ValidationError) ValidationFields() map[string]string { return e.Fields }
 
-type service struct{ repo Repository }
+// FirstAdministratorProvisioner creates a new Tenant's first Tenant
+// Administrator inside the Tenant creation transaction. The implementation
+// lives outside this package because People and Authentication depend on it.
+type FirstAdministratorProvisioner interface {
+	// ValidateFirstAdministrator returns field errors keyed by request field.
+	ValidateFirstAdministrator(req FirstAdministratorRequest) map[string]string
+	// ProvisionFirstAdministrator creates the Person, ACTIVE Membership and
+	// Authentication Account, and returns the Tenant Actor to assign.
+	ProvisionFirstAdministrator(ctx context.Context, tx *gorm.DB, tenantID string, req FirstAdministratorRequest) (string, error)
+}
 
-func NewService(repo Repository) Service { return &service{repo: repo} }
+const firstAdministratorFieldPrefix = "firstAdministrator."
+
+type service struct {
+	repo               Repository
+	firstAdministrator FirstAdministratorProvisioner
+}
+
+func NewService(repo Repository, firstAdministrator FirstAdministratorProvisioner) Service {
+	return &service{repo: repo, firstAdministrator: firstAdministrator}
+}
 
 func (s *service) List(ctx context.Context) ([]TenantDTO, error) {
 	rows, err := s.repo.List(ctx)
@@ -60,6 +78,15 @@ func (s *service) GetCurrent(ctx context.Context, tenantID string) (*TenantDTO, 
 
 func (s *service) Create(ctx context.Context, req CreateTenantRequest) (*TenantDTO, error) {
 	code, name, description, fields := normalizeAndValidate(req.Code, req.Name, req.Description)
+	if req.FirstAdministrator != nil {
+		if s.firstAdministrator == nil {
+			fields["firstAdministrator"] = "First Tenant Administrator provisioning is not available"
+		} else {
+			for field, message := range s.firstAdministrator.ValidateFirstAdministrator(*req.FirstAdministrator) {
+				fields[firstAdministratorFieldPrefix+field] = message
+			}
+		}
+	}
 	if err := newValidationError(fields); err != nil {
 		return nil, err
 	}
@@ -83,7 +110,23 @@ func (s *service) Create(ctx context.Context, req CreateTenantRequest) (*TenantD
 		Description: description,
 		Active:      active,
 	}
-	if err := s.repo.Create(ctx, &tenant); err != nil {
+	var provisionFirstAdministrator func(tx *gorm.DB) (string, error)
+	if req.FirstAdministrator != nil {
+		firstAdministrator := *req.FirstAdministrator
+		provisionFirstAdministrator = func(tx *gorm.DB) (string, error) {
+			actorID, err := s.firstAdministrator.ProvisionFirstAdministrator(ctx, tx, tenant.ID, firstAdministrator)
+			var validationErr ValidationError
+			if errors.As(err, &validationErr) {
+				prefixed := make(map[string]string, len(validationErr.Fields))
+				for field, message := range validationErr.Fields {
+					prefixed[firstAdministratorFieldPrefix+field] = message
+				}
+				return "", ValidationError{Fields: prefixed}
+			}
+			return actorID, err
+		}
+	}
+	if err := s.repo.Create(ctx, &tenant, provisionFirstAdministrator); err != nil {
 		return nil, err
 	}
 	return s.GetByID(ctx, tenant.ID)

@@ -84,16 +84,69 @@ describe("TenantsAdminPage", () => {
 
     renderPage();
     await waitForText("Default Tenant");
+    expect(container.textContent).toContain("First Tenant Administrator");
     await setInput("Code", "NORTH");
     await setInput("Name", "North Site");
+    await fillFirstAdministrator(" Marina.Souza@Example.com ");
     await click("Create Tenant");
-    await waitForText("North Site created.");
+    await waitForText("North Site created. marina.souza@example.com is its Tenant Administrator");
 
     expect(calls.find((call) => call.method === "POST")?.body).toMatchObject({
       code: "NORTH",
       name: "North Site",
       active: true,
+      firstAdministrator: {
+        firstName: "Marina",
+        lastName: "Souza",
+        cpf: "390.533.447-05",
+        rg: "RG-410001",
+        cellular: "(11) 99876-5432",
+        email: "marina.souza@example.com",
+        temporaryPassword: "Temporary-Password-01",
+      },
     });
+    expect(findInput("First Name").value).toBe("");
+    expect(findInput("Temporary password").value).toBe("");
+  });
+
+  it("shows first Tenant Administrator errors beneath their inputs", async () => {
+    mockFetch(async (url, init) => {
+      calls.push({ url, method: init?.method ?? "GET", body: parseBody(init?.body) });
+      if (url === "/api/v1/tenants" && !init?.method) return json({ data: [tenant] });
+      if (url === "/api/v1/tenants" && init?.method === "POST") {
+        return json(
+          {
+            error: {
+              code: "validation_failed",
+              message: "Validation failed",
+              fields: {
+                "firstAdministrator.cpf": "CPF already exists",
+                "firstAdministrator.temporaryPassword": "Password must contain at least 12 characters",
+              },
+            },
+          },
+          400,
+        );
+      }
+      throw new Error(`Unhandled request: ${url}`);
+    });
+
+    renderPage();
+    await waitForText("Default Tenant");
+    await setInput("Code", "NORTH");
+    await setInput("Name", "North Site");
+    await fillFirstAdministrator("marina.souza@example.com");
+    await click("Create Tenant");
+    await waitForText("CPF already exists");
+
+    const cpfInput = findInput("CPF");
+    expect(cpfInput.getAttribute("aria-invalid")).toBe("true");
+    expect(cpfInput.closest("label")?.textContent).toContain("CPF already exists");
+    expect(findInput("Temporary password").closest("label")?.textContent).toContain(
+      "Password must contain at least 12 characters",
+    );
+    // Inline field errors replace the generic panel.
+    expect(container.textContent).not.toContain("Validation failed");
   });
 
   it("filters the tenant catalog by name, code, id, or description", async () => {
@@ -318,11 +371,13 @@ describe("TenantsAdminPage", () => {
 
     await setInput("Code", "NORTH");
     await setInput("Name", "North Site");
+    await fillFirstAdministrator("marina.souza@example.com");
     await click("Create Tenant");
     await waitForText("North Site created.");
 
     await setInput("Code", "NORTH");
     await setInput("Name", "Duplicate North Site");
+    await fillFirstAdministrator("other.admin@example.com");
     await click("Create Tenant");
     await waitForText("Tenant code must be unique");
 
@@ -388,6 +443,16 @@ async function setInput(label: string, value: string) {
     input.dispatchEvent(new Event("input", { bubbles: true }));
     input.dispatchEvent(new Event("change", { bubbles: true }));
   });
+}
+
+async function fillFirstAdministrator(email: string) {
+  await setInput("First Name", "Marina");
+  await setInput("Last Name", "Souza");
+  await setInput("CPF", "390.533.447-05");
+  await setInput("RG", "RG-410001");
+  await setInput("Cellular", "(11) 99876-5432");
+  await setInput("Email", email);
+  await setInput("Temporary password", "Temporary-Password-01");
 }
 
 async function click(text: string) {

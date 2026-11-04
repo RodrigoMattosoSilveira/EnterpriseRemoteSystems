@@ -841,12 +841,49 @@ paths:
           application/json:
             schema:
               type: object
-              required: [name, slug]
+              required: [code, name]
               properties:
+                code:
+                  type: string
+                  description: 2-32 characters; normalized to uppercase and unique.
                 name:
                   type: string
-                slug:
+                  maxLength: 120
+                description:
                   type: string
+                  maxLength: 500
+                active:
+                  type: boolean
+                  default: true
+                firstAdministrator:
+                  type: object
+                  description: >-
+                    Optional. Creates a new Person with an ACTIVE Membership, an
+                    Authentication Account that must change its temporary password,
+                    and the TENANT_ADMIN grant in the same transaction as the Tenant.
+                    Validation errors are reported as firstAdministrator.<field>.
+                  required: [firstName, lastName, cpf, rg, cellular, email, temporaryPassword]
+                  properties:
+                    firstName:
+                      type: string
+                    lastName:
+                      type: string
+                    nickname:
+                      type: string
+                      description: Defaults to firstName.
+                    cpf:
+                      type: string
+                    rg:
+                      type: string
+                    cellular:
+                      type: string
+                    email:
+                      type: string
+                      format: email
+                      description: Becomes the Authentication Account login.
+                    temporaryPassword:
+                      type: string
+                      minLength: 12
       responses:
         "201":
           description: Tenant created

@@ -21,6 +21,18 @@ export type CreateTenantInput = {
   name: string;
   description?: string;
   active?: boolean;
+  firstAdministrator?: FirstAdministratorInput;
+};
+
+export type FirstAdministratorInput = {
+  firstName: string;
+  lastName: string;
+  nickname?: string;
+  cpf: string;
+  rg: string;
+  cellular: string;
+  email: string;
+  temporaryPassword: string;
 };
 
 export type UpdateTenantInput = {

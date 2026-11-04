@@ -28,6 +28,24 @@ type CreateTenantRequest struct {
 	Name        string `json:"name"`
 	Description string `json:"description"`
 	Active      *bool  `json:"active"`
+
+	// FirstAdministrator provisions the new Tenant's first Tenant Administrator
+	// in the same transaction. Without it the Tenant starts as
+	// ACTIVE_NO_TENANT_ADMIN and nobody can add People to it.
+	FirstAdministrator *FirstAdministratorRequest `json:"firstAdministrator,omitempty"`
+}
+
+// FirstAdministratorRequest describes a new canonical Person who becomes the
+// Tenant's first Tenant Administrator with a temporary password.
+type FirstAdministratorRequest struct {
+	FirstName         string `json:"firstName"`
+	LastName          string `json:"lastName"`
+	Nickname          string `json:"nickname"`
+	CPF               string `json:"cpf"`
+	RG                string `json:"rg"`
+	Cellular          string `json:"cellular"`
+	Email             string `json:"email"`
+	TemporaryPassword string `json:"temporaryPassword"`
 }
 
 type UpdateTenantRequest struct {

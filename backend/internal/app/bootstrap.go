@@ -17,6 +17,7 @@ import (
 	"enterpriseremotesystems/backend/internal/people"
 	"enterpriseremotesystems/backend/internal/pricelists"
 	"enterpriseremotesystems/backend/internal/referencedata"
+	"enterpriseremotesystems/backend/internal/tenantonboarding"
 	"enterpriseremotesystems/backend/internal/tenants"
 	"enterpriseremotesystems/backend/internal/workperiodassignments"
 	"enterpriseremotesystems/backend/internal/workperiods"
@@ -96,7 +97,7 @@ func Bootstrap(cfg Config) (*fiber.App, func(), error) {
 	}, actorStore, actorStore)
 
 	tenantRepo := tenants.NewRepository(database)
-	tenantSvc := tenants.NewService(tenantRepo)
+	tenantSvc := tenants.NewService(tenantRepo, tenantonboarding.NewProvisioner(cfg.AuthPasswordHashCost))
 	tenantHandler := tenants.NewHandler(tenantSvc, actorStore, actorStore)
 
 	refRepo := referencedata.NewGormRepository(database)

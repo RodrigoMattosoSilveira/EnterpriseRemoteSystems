@@ -532,6 +532,15 @@ func validateNewPassword(password string) error {
 	return nil
 }
 
+// ValidateTemporaryPassword applies the Account password policy for callers
+// that provision credentials outside this service, such as Tenant onboarding.
+func ValidateTemporaryPassword(password string, field string) map[string]string {
+	if validationError := validatePasswordValue(password, field); validationError != nil {
+		return validationError.Fields
+	}
+	return nil
+}
+
 func validatePasswordValue(password string, field string) *ValidationError {
 	length := utf8.RuneCountInString(password)
 	if length < minimumPasswordLength {

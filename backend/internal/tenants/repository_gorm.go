@@ -65,7 +65,7 @@ func (r *gormRepository) CodeExists(ctx context.Context, code string, excludeID 
 	return count > 0, nil
 }
 
-func (r *gormRepository) Create(ctx context.Context, tenant *db.Tenant) error {
+func (r *gormRepository) Create(ctx context.Context, tenant *db.Tenant, provisionFirstAdministrator func(tx *gorm.DB) (string, error)) error {
 	return r.database.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		if err := tx.Create(tenant).Error; err != nil {
 			return err
@@ -73,7 +73,16 @@ func (r *gormRepository) Create(ctx context.Context, tenant *db.Tenant) error {
 		if err := db.SeedTenantData(tx, tenant.ID); err != nil {
 			return fmt.Errorf("provision tenant seed data: %w", err)
 		}
-		return nil
+		if provisionFirstAdministrator == nil {
+			return nil
+		}
+		actorID, err := provisionFirstAdministrator(tx)
+		if err != nil {
+			return err
+		}
+		// Reuse the ordinary assignment path so the cardinality and
+		// cross-Tenant Role rules apply to the first administrator too.
+		return (&gormRepository{database: tx}).AssignTenantAdmin(ctx, tenant.ID, actorID)
 	})
 }
 
