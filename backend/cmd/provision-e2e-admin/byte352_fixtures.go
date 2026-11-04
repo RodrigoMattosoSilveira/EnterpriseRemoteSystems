@@ -38,13 +38,13 @@ var byte352Administrators = []byte352Identity{
 }
 
 var byte352Identities = []byte352Identity{
-	{"e2e-authz-admin-earnings-operator", "e2e-authz-admin-earnings-operator@example.com", "Earnings Operator A", []string{byte352TenantA}, authz.RoleEarningsOperator, false},
-	{"e2e-authz-admin-expenses-operator", "e2e-authz-admin-expenses-operator@example.com", "Expenses Operator A", []string{byte352TenantA}, authz.RoleExpenseOperator, false},
-	{"e2e-isolation-earnings-operator", "e2e-isolation-earnings-operator@example.com", "Earnings Operator B", []string{byte352TenantB}, authz.RoleEarningsOperator, false},
-	{"e2e-isolation-expenses-operator", "e2e-isolation-expenses-operator@example.com", "Expenses Operator B", []string{byte352TenantB}, authz.RoleExpenseOperator, false},
-	{"e2e-byte352-collaborator-a", "e2e-byte352-collaborator-a@example.com", "Collaborator A", []string{byte352TenantA}, "", true},
-	{"e2e-byte352-collaborator-b", "e2e-byte352-collaborator-b@example.com", "Collaborator B", []string{byte352TenantB}, "", true},
-	{"e2e-byte352-shared", "e2e-byte352-shared@example.com", "Shared Person", []string{byte352TenantA, byte352TenantB}, "", true},
+	{Stem: "e2e-authz-admin-earnings-operator", Login: "e2e-authz-admin-earnings-operator@example.com", Name: "Earnings Operator A", Tenants: []string{byte352TenantA}, Role: authz.RoleEarningsOperator},
+	{Stem: "e2e-authz-admin-expenses-operator", Login: "e2e-authz-admin-expenses-operator@example.com", Name: "Expenses Operator A", Tenants: []string{byte352TenantA}, Role: authz.RoleExpenseOperator},
+	{Stem: "e2e-isolation-earnings-operator", Login: "e2e-isolation-earnings-operator@example.com", Name: "Earnings Operator B", Tenants: []string{byte352TenantB}, Role: authz.RoleEarningsOperator},
+	{Stem: "e2e-isolation-expenses-operator", Login: "e2e-isolation-expenses-operator@example.com", Name: "Expenses Operator B", Tenants: []string{byte352TenantB}, Role: authz.RoleExpenseOperator},
+	{Stem: "e2e-byte352-collaborator-a", Login: "e2e-byte352-collaborator-a@example.com", Name: "Collaborator A", Tenants: []string{byte352TenantA}, Collaborator: true},
+	{Stem: "e2e-byte352-collaborator-b", Login: "e2e-byte352-collaborator-b@example.com", Name: "Collaborator B", Tenants: []string{byte352TenantB}, Collaborator: true},
+	{Stem: "e2e-byte352-shared", Login: "e2e-byte352-shared@example.com", Name: "Shared Person", Tenants: []string{byte352TenantA, byte352TenantB}, Collaborator: true},
 }
 
 func validateByte352Input(input byte352FixtureInput) error {
