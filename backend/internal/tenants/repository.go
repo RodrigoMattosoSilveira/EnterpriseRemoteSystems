@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"enterpriseremotesystems/backend/internal/db"
+	"gorm.io/gorm"
 )
 
 type TenantRecord struct {
@@ -31,7 +32,10 @@ type Repository interface {
 	List(ctx context.Context) ([]TenantRecord, error)
 	FindByID(ctx context.Context, id string) (*TenantRecord, error)
 	CodeExists(ctx context.Context, code string, excludeID string) (bool, error)
-	Create(ctx context.Context, tenant *db.Tenant) error
+	// Create inserts and seeds the Tenant. When provisionFirstAdministrator is
+	// non-nil it runs in the same transaction and the returned Actor is
+	// assigned as Tenant Administrator before commit.
+	Create(ctx context.Context, tenant *db.Tenant, provisionFirstAdministrator func(tx *gorm.DB) (string, error)) error
 	Update(ctx context.Context, tenant *db.Tenant) error
 	SetActive(ctx context.Context, tenantID string, active bool) error
 	ExistsByID(ctx context.Context, id string) (bool, error)

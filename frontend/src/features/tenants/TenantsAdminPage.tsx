@@ -2,34 +2,95 @@ import { FormEvent, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { ApiError } from "../../api/client";
 import { ApiErrorPanel } from "../../components/ApiErrorPanel";
-import type { CreateTenantInput, Tenant, TenantOperationalStatus } from "../../types/tenants";
+import type {
+  CreateTenantInput,
+  FirstAdministratorInput,
+  Tenant,
+  TenantOperationalStatus,
+} from "../../types/tenants";
 import { useCreateTenant, useTenants } from "./useTenants";
 import { PageContextHeading, PageTitle } from "../../components/layout/PageHeading";
 import { useOptionalAuthorizationContext } from "../../components/layout/AuthorizationContext";
 import { ReactivationRequestsAlert } from "../auth/ReactivationRequestsAlert";
-import { useI18n } from "../../i18n";
+import { useI18n, type TranslationKey } from "../../i18n";
 
-const emptyForm: CreateTenantInput = {
+const emptyFirstAdministrator: FirstAdministratorInput = {
+  firstName: "",
+  lastName: "",
+  nickname: "",
+  cpf: "",
+  rg: "",
+  cellular: "",
+  email: "",
+  temporaryPassword: "",
+};
+
+const emptyForm: Required<Omit<CreateTenantInput, "firstAdministrator">> & {
+  firstAdministrator: FirstAdministratorInput;
+} = {
   code: "",
   name: "",
   description: "",
   active: true,
+  firstAdministrator: emptyFirstAdministrator,
 };
+
+const firstAdministratorFieldPrefix = "firstAdministrator.";
+
+type FirstAdministratorField = {
+  key: keyof FirstAdministratorInput;
+  labelKey: TranslationKey;
+  type?: "email" | "password" | "tel";
+  required: boolean;
+  autoComplete?: string;
+  hintKey?: TranslationKey;
+};
+
+const firstAdministratorFields: FirstAdministratorField[] = [
+  { key: "firstName", labelKey: "people.form.firstName", required: true },
+  { key: "lastName", labelKey: "people.form.lastName", required: true },
+  { key: "nickname", labelKey: "admin.tenants.firstAdmin.nickname", required: false },
+  { key: "cpf", labelKey: "admin.tenants.firstAdmin.cpf", required: true },
+  { key: "rg", labelKey: "admin.tenants.firstAdmin.rg", required: true },
+  { key: "cellular", labelKey: "people.form.cellular", type: "tel", required: true },
+  { key: "email", labelKey: "people.form.email", type: "email", required: true },
+  {
+    key: "temporaryPassword",
+    labelKey: "admin.tenants.firstAdmin.temporaryPassword",
+    type: "password",
+    required: true,
+    autoComplete: "new-password",
+    hintKey: "admin.tenants.firstAdmin.temporaryPasswordHint",
+  },
+];
 
 export function TenantsAdminPage() {
   const { t } = useI18n();
   const actor = useOptionalAuthorizationContext();
   const isApplicationAdministrator =
     actor?.scope === "APPLICATION" && actor.roleCodes.includes("APPLICATION_ADMIN");
-  const [form, setForm] = useState<CreateTenantInput>(emptyForm);
+  const [form, setForm] = useState(emptyForm);
   const [tenantFilter, setTenantFilter] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
   const tenantsQuery = useTenants();
   const createMutation = useCreateTenant();
   const createError = createMutation.error;
-  const tenantCodeError =
-    createError instanceof ApiError ? createError.fields?.code : undefined;
-  const createFormError = tenantCodeError ? null : createError;
+  const createFieldErrors =
+    createError instanceof ApiError ? (createError.fields ?? {}) : {};
+  const tenantCodeError = createFieldErrors.code;
+  // Errors shown beside their own input do not need the generic panel too.
+  const createErrorFields = Object.keys(createFieldErrors);
+  const allFieldErrorsInline =
+    createErrorFields.length > 0 &&
+    createErrorFields.every(
+      (field) => field === "code" || field.startsWith(firstAdministratorFieldPrefix),
+    );
+  const createFormError = allFieldErrorsInline ? null : createError;
+
+  function setFirstAdministratorField(key: keyof FirstAdministratorInput, value: string) {
+    createMutation.reset();
+    setForm({ ...form, firstAdministrator: { ...form.firstAdministrator, [key]: value } });
+  }
 
   const allTenants = useMemo(
     () => [...(tenantsQuery.data ?? [])].sort((a, b) => a.code.localeCompare(b.code)),
@@ -51,15 +112,28 @@ export function TenantsAdminPage() {
     event.preventDefault();
     setSuccessMessage("");
     createMutation.reset();
+    const admin = form.firstAdministrator;
+    const email = admin.email.trim().toLowerCase();
     try {
       const created = await createMutation.mutateAsync({
         code: form.code.trim(),
         name: form.name.trim(),
         description: form.description?.trim(),
         active: form.active ?? true,
+        firstAdministrator: {
+          firstName: admin.firstName.trim(),
+          lastName: admin.lastName.trim(),
+          nickname: admin.nickname?.trim(),
+          cpf: admin.cpf.trim(),
+          rg: admin.rg.trim(),
+          cellular: admin.cellular.trim(),
+          email,
+          // Passwords are used exactly as typed.
+          temporaryPassword: admin.temporaryPassword,
+        },
       });
       setForm(emptyForm);
-      setSuccessMessage(t("admin.tenants.created", { name: created.name }));
+      setSuccessMessage(t("admin.tenants.createdWithAdmin", { name: created.name, email }));
     } catch {
       // Mutation error is rendered in the Create Tenant card.
     }
@@ -161,6 +235,45 @@ export function TenantsAdminPage() {
               {t("admin.tenants.activateImmediately")}
             </label>
           </div>
+
+          <fieldset className="mt-5 grid gap-3 border-t pt-4">
+            <legend className="sr-only">{t("admin.tenants.firstAdmin.title")}</legend>
+            <h3 aria-hidden="true" className="text-base font-semibold text-gray-950">
+              {t("admin.tenants.firstAdmin.title")}
+            </h3>
+            <p className="-mt-2 text-sm text-gray-500">{t("admin.tenants.firstAdmin.description")}</p>
+            {firstAdministratorFields.map((field) => {
+              const error = createFieldErrors[firstAdministratorFieldPrefix + field.key];
+              const errorId = `first-admin-${field.key}-error`;
+              const hintId = field.hintKey ? `first-admin-${field.key}-hint` : undefined;
+              const describedBy = [error ? errorId : undefined, hintId].filter(Boolean).join(" ");
+              return (
+                <label className="grid gap-1 text-sm font-medium text-gray-700" key={field.key}>
+                  {t(field.labelKey)}
+                  <input
+                    aria-describedby={describedBy || undefined}
+                    aria-invalid={Boolean(error)}
+                    autoComplete={field.autoComplete}
+                    className="rounded-xl border border-gray-300 px-3 py-2"
+                    onChange={(event) => setFirstAdministratorField(field.key, event.target.value)}
+                    required={field.required}
+                    type={field.type ?? "text"}
+                    value={form.firstAdministrator[field.key] ?? ""}
+                  />
+                  {field.hintKey && (
+                    <span className="text-xs font-normal text-gray-500" id={hintId}>
+                      {t(field.hintKey)}
+                    </span>
+                  )}
+                  {error && (
+                    <span className="text-sm font-medium text-red-700" id={errorId} role="alert">
+                      {error}
+                    </span>
+                  )}
+                </label>
+              );
+            })}
+          </fieldset>
 
           <div className="mt-4">
             <ApiErrorPanel error={createFormError} translate={t} />
