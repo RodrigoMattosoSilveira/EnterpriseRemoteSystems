@@ -21,12 +21,20 @@ const byte352TenantB = "e2e-isolation-tenant"
 type byte352FixtureInput struct {
 	DatabasePath string            `json:"databasePath"`
 	Credentials  map[string]string `json:"credentials"`
+	// Explicit consent applies only to the two known E2E Tenant Administrators.
+	RotateTenantAdministratorPasswords bool `json:"rotateTenantAdministratorPasswords"`
 }
 type byte352Identity struct {
 	Stem, Login, Name string
 	Tenants           []string
 	Role              authz.RoleCode // empty = collaborator, no delegated grants
 	Collaborator      bool
+	Administrator     bool
+}
+
+var byte352Administrators = []byte352Identity{
+	{Stem: "e2e-authz-admin-tenant-admin", Login: "e2e-authz-admin-tenant-admin@example.com", Name: "Tenant Administrator A", Tenants: []string{byte352TenantA}, Role: authz.RoleTenantAdmin, Administrator: true},
+	{Stem: "e2e-isolation-tenant-admin", Login: "e2e-isolation-tenant-admin@example.com", Name: "Tenant Administrator B", Tenants: []string{byte352TenantB}, Role: authz.RoleTenantAdmin, Administrator: true},
 }
 
 var byte352Identities = []byte352Identity{
@@ -43,11 +51,11 @@ func validateByte352Input(input byte352FixtureInput) error {
 	if strings.TrimSpace(input.DatabasePath) == "" {
 		return fmt.Errorf("databasePath is required")
 	}
-	if len(input.Credentials) != len(byte352Identities) {
-		return fmt.Errorf("exactly %d separate fixture credentials required", len(byte352Identities))
+	if len(input.Credentials) != len(byte352Identities)+len(byte352Administrators) {
+		return fmt.Errorf("exactly %d separate fixture credentials required, including two Tenant Administrators", len(byte352Identities)+len(byte352Administrators))
 	}
 	seen := map[string]bool{}
-	for _, spec := range byte352Identities {
+	for _, spec := range append(append([]byte352Identity{}, byte352Administrators...), byte352Identities...) {
 		pw, ok := input.Credentials[spec.Login]
 		if !ok || len(pw) < 16 || strings.TrimSpace(pw) != pw || strings.ContainsAny(pw, "\r\n") {
 			return fmt.Errorf("missing or invalid password for %s (minimum 16 characters)", spec.Login)
@@ -80,8 +88,8 @@ func ensureByte352Fixtures(ctx context.Context, database *gorm.DB, input byte352
 				return fmt.Errorf("unexpected Tenant code for %s", tenantID)
 			}
 		}
-		for _, spec := range byte352Identities {
-			if err := ensureByte352Identity(tx, spec, input.Credentials[spec.Login], cost); err != nil {
+		for _, spec := range append(append([]byte352Identity{}, byte352Administrators...), byte352Identities...) {
+			if err := ensureByte352Identity(tx, spec, input.Credentials[spec.Login], cost, input.RotateTenantAdministratorPasswords); err != nil {
 				return fmt.Errorf("%s: %w", spec.Login, err)
 			}
 		}
@@ -89,7 +97,7 @@ func ensureByte352Fixtures(ctx context.Context, database *gorm.DB, input byte352
 	})
 }
 
-func ensureByte352Identity(tx *gorm.DB, spec byte352Identity, password string, cost int) error {
+func ensureByte352Identity(tx *gorm.DB, spec byte352Identity, password string, cost int, rotateAdministrator bool) error {
 	now := time.Now().UTC()
 	personID, accountID := spec.Stem+"-person", spec.Stem+"-account"
 	var other authentication.Account
@@ -140,7 +148,16 @@ func ensureByte352Identity(tx *gorm.DB, spec byte352Identity, password string, c
 			return fmt.Errorf("fixture Account inactive: resolve manually")
 		}
 		if bcrypt.CompareHashAndPassword([]byte(account.PasswordHash), []byte(password)) != nil {
-			return fmt.Errorf("existing fixture password differs; refusing rotation")
+			if !spec.Administrator || !rotateAdministrator {
+				return fmt.Errorf("existing fixture password differs for %s; refusing rotation (Tenant Administrators require explicit rotateTenantAdministratorPasswords consent)", spec.Login)
+			}
+			hash, err := bcrypt.GenerateFromPassword([]byte(password), cost)
+			if err != nil {
+				return err
+			}
+			if err := tx.Model(&authentication.Account{}).Where("id = ? AND login = ? AND active = ?", accountID, spec.Login, true).Updates(map[string]any{"password_hash": string(hash), "password_changed_at": now, "updated_at": now}).Error; err != nil {
+				return err
+			}
 		}
 	}
 	var ap authentication.AccountPerson
@@ -161,6 +178,9 @@ func ensureByte352Identity(tx *gorm.DB, spec byte352Identity, password string, c
 			return err
 		}
 		membershipID := spec.Stem + "-membership-" + tenantID
+		if spec.Administrator {
+			membershipID = spec.Stem + "-membership"
+		}
 		var member dbpkg.PersonTenantMembership
 		if err := tx.Where("id = ?", membershipID).Limit(1).Find(&member).Error; err != nil {
 			return err
@@ -174,6 +194,9 @@ func ensureByte352Identity(tx *gorm.DB, spec byte352Identity, password string, c
 			return fmt.Errorf("existing Membership does not match expected active Person/Tenant")
 		}
 		actorID := spec.Stem + "-actor-" + tenantID
+		if spec.Administrator {
+			actorID = spec.Stem + "-actor"
+		}
 		var actor authz.AuthzActor
 		if err := tx.Where("id = ?", actorID).Limit(1).Find(&actor).Error; err != nil {
 			return err

@@ -15,7 +15,7 @@ import (
 
 func byte352TestInput() byte352FixtureInput {
 	input := byte352FixtureInput{DatabasePath: "/tmp/test-app.db", Credentials: map[string]string{}}
-	for i, spec := range byte352Identities {
+	for i, spec := range append(append([]byte352Identity{}, byte352Administrators...), byte352Identities...) {
 		input.Credentials[spec.Login] = fmt.Sprintf("unique-byte352-password-%02d!", i)
 	}
 	return input
@@ -56,7 +56,7 @@ func byte352TestDB(t *testing.T) *gorm.DB {
 		{TenantID: byte352TenantA, TenantCode: "E2EAUTHZADMIN", TenantName: "E2E Authorization Admin Boundary", ActorKey: "e2e-authz-admin-tenant-admin", Login: "e2e-authz-admin-tenant-admin@example.com", Stem: "e2e-authz-admin-tenant-admin"},
 		{TenantID: byte352TenantB, TenantCode: "E2EISOLATION", TenantName: "E2E Operational Isolation", ActorKey: "e2e-isolation-tenant-admin", Login: "e2e-isolation-tenant-admin@example.com", Stem: "e2e-isolation-tenant-admin"},
 	} {
-		if err := ensureE2ETenantAdministrator(context.Background(), database, spec, "administrator-password-to-preserve", bcrypt.MinCost); err != nil {
+		if err := ensureE2ETenantAdministrator(context.Background(), database, spec, map[string]string{"e2e-authz-admin-tenant-admin": "administrator-password-to-preserve", "e2e-isolation-tenant-admin": "administrator-password-to-preserve-B"}[spec.Stem], bcrypt.MinCost); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -65,6 +65,9 @@ func byte352TestDB(t *testing.T) *gorm.DB {
 func TestByte352IdentityAndIdempotency(t *testing.T) {
 	db := byte352TestDB(t)
 	input := byte352TestInput()
+	// Pre-existing administrator passwords are not rotated unless explicitly requested.
+	input.Credentials[byte352Administrators[0].Login] = "administrator-password-to-preserve"
+	input.Credentials[byte352Administrators[1].Login] = "administrator-password-to-preserve-B"
 	var adminBefore authentication.Account
 	if err := db.First(&adminBefore, "id = ?", "e2e-authz-admin-tenant-admin-account").Error; err != nil {
 		t.Fatal(err)
@@ -74,7 +77,7 @@ func TestByte352IdentityAndIdempotency(t *testing.T) {
 			t.Fatalf("run %d: %v", run, err)
 		}
 	}
-	for _, spec := range byte352Identities {
+	for _, spec := range append(append([]byte352Identity{}, byte352Administrators...), byte352Identities...) {
 		var account authentication.Account
 		if err := db.First(&account, "id = ?", spec.Stem+"-account").Error; err != nil {
 			t.Fatal(err)
@@ -118,7 +121,11 @@ func TestByte352IdentityAndIdempotency(t *testing.T) {
 	if adminAfter.PasswordHash != adminBefore.PasswordHash {
 		t.Fatal("Tenant Administrator password rotated")
 	}
-	modified := byte352TestInput()
+	modified := input
+	modified.Credentials = make(map[string]string)
+	for k, v := range input.Credentials {
+		modified.Credentials[k] = v
+	}
 	modified.Credentials[byte352Identities[0].Login] = "some-other-unique-password-35!"
 	if err := ensureByte352Fixtures(context.Background(), db, modified, bcrypt.MinCost); err == nil {
 		t.Fatal("password rotation was allowed")
@@ -144,5 +151,39 @@ func TestByte352MissingTenantsAndDuplicateIdentityFailClosed(t *testing.T) {
 	db.Model(&authentication.Account{}).Where("id = ?", byte352Identities[0].Stem+"-account").Count(&count)
 	if count != 0 {
 		t.Fatal("partial fixture creation on missing Tenant")
+	}
+}
+
+func TestByte352AdministratorCredentialConsentAndRollback(t *testing.T) {
+	db := byte352TestDB(t)
+	input := byte352TestInput()
+	input.Credentials[byte352Administrators[0].Login] = "new-administrator-a-password-35!"
+	input.Credentials[byte352Administrators[1].Login] = "new-administrator-b-password-35!"
+	var beforeA, beforeB authentication.Account
+	db.First(&beforeA, "id = ?", byte352Administrators[0].Stem+"-account")
+	db.First(&beforeB, "id = ?", byte352Administrators[1].Stem+"-account")
+	if err := ensureByte352Fixtures(context.Background(), db, input, bcrypt.MinCost); err == nil {
+		t.Fatal("changed existing admin password without consent")
+	}
+	var afterA authentication.Account
+	db.First(&afterA, "id = ?", beforeA.ID)
+	if beforeA.PasswordHash != afterA.PasswordHash {
+		t.Fatal("rollback failed")
+	}
+	input.RotateTenantAdministratorPasswords = true
+	if err := ensureByte352Fixtures(context.Background(), db, input, bcrypt.MinCost); err != nil {
+		t.Fatal(err)
+	}
+	db.First(&afterA, "id = ?", beforeA.ID)
+	if bcrypt.CompareHashAndPassword([]byte(afterA.PasswordHash), []byte(input.Credentials[byte352Administrators[0].Login])) != nil {
+		t.Fatal("admin A password not updated")
+	}
+	var afterB authentication.Account
+	db.First(&afterB, "id = ?", beforeB.ID)
+	if bcrypt.CompareHashAndPassword([]byte(afterB.PasswordHash), []byte(input.Credentials[byte352Administrators[1].Login])) != nil {
+		t.Fatal("admin B password not updated")
+	}
+	if err := ensureByte352Fixtures(context.Background(), db, input, bcrypt.MinCost); err != nil {
+		t.Fatal("idempotent rerun failed:", err)
 	}
 }

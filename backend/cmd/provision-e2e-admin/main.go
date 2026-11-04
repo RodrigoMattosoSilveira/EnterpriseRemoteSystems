@@ -25,7 +25,7 @@ type provisionInput struct {
 }
 
 func main() {
-	byte352Only := flag.Bool("byte352-fixtures-only", false, "provision only Byte 35.2 non-production role fixtures (never administrators)")
+	byte352Only := flag.Bool("byte352-fixtures-only", false, "provision Byte 35.2 non-production fixture accounts; Tenant Administrator changes require explicit consent")
 	flag.Parse()
 	if *byte352Only {
 		runByte352Only()
@@ -171,5 +171,5 @@ func runByte352Only() {
 	if err := ensureByte352Fixtures(context.Background(), database, input, positiveInt(os.Getenv("AUTH_PASSWORD_HASH_COST"), 12)); err != nil {
 		log.Fatalf("Byte 35.2 fixture transaction rolled back: %v", err)
 	}
-	fmt.Println("Byte 35.2 non-Production role fixture provisioning complete; administrator credentials untouched")
+	fmt.Println("Byte 35.2 non-Production fixture provisioning complete; Application Administrator untouched; Tenant Administrator password changes only with explicit consent")
 }
