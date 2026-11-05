@@ -2105,7 +2105,7 @@ export const ptBRMessages = {
   "byte352.support.requestBusy": "Solicitando…",
   "byte352.support.requestAccess": "Solicitar acesso de suporte",
 
-  // Byte 35.2 — Tenant Support Access Lease permission explanations (server codes remain unchanged).
+  // Byte 35.2 — descrições das permissões de acesso de suporte à Entidade (os códigos do servidor permanecem inalterados).
   "byte352.support.permission.people.read.label": "Consultar Pessoas",
   "byte352.support.permission.people.read.description": "Consultar os registros de Pessoas da Entidade.",
   "byte352.support.permission.people.create.label": "Cadastrar Pessoas",
