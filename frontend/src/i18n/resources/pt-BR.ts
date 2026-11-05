@@ -2191,11 +2191,13 @@ export const ptBRMessages = {
 
   "native.validation.required": "Preencha este campo.",
   "native.validation.numberOrType": "Informe um valor válido.",
-  "native.validation.minimum": "O valor está abaixo do mínimo permitido.",
-  "native.validation.maximum": "O valor excede o máximo permitido.",
-  "native.validation.step": "Informe um valor com o incremento permitido.",
+  "native.validation.minimum": "Use um valor igual ou maior que {minimum}.",
+  "native.validation.maximum": "Use um valor igual ou menor que {maximum}.",
+  "native.validation.step": "Use incrementos de {step} a partir do mínimo permitido.",
   "native.validation.tooShort": "O valor informado é muito curto.",
   "native.validation.tooLong": "O valor informado é muito longo.",
   "native.validation.pattern": "Informe um valor no formato exigido.",
-  "native.validation.number": "Informe um número válido.",
+  "native.validation.number": "Use um número válido.",
+  "native.validation.email": "Informe um endereço de e-mail válido.",
+  "native.validation.url": "Informe um endereço de site válido (URL).",
 } satisfies Record<TranslationKey, string>;

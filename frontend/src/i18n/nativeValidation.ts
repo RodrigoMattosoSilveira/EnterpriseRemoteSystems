@@ -27,17 +27,27 @@ export function installNativeValidationTranslations(locale: AppLocale, root: Doc
     if (control.validity.customError && !owned.has(control)) return;
     clear(control);
     const validity = control.validity;
-    const key = validity.valueMissing ? "native.validation.required" :
-      validity.badInput || validity.typeMismatch ? "native.validation.numberOrType" :
+    // A number input with unparseable text (such as "e") can be both badInput
+    // and valueMissing. Explain the invalid content before asking for a value.
+    const isNumber = control instanceof HTMLInputElement && control.type === "number";
+    const key = validity.badInput ? (isNumber ? "native.validation.number" : "native.validation.numberOrType") :
+      validity.typeMismatch ? control instanceof HTMLInputElement && control.type === "email"
+        ? "native.validation.email" : control instanceof HTMLInputElement && control.type === "url"
+          ? "native.validation.url" : "native.validation.numberOrType" :
       validity.rangeUnderflow ? "native.validation.minimum" :
       validity.rangeOverflow ? "native.validation.maximum" :
       validity.stepMismatch ? "native.validation.step" :
       validity.tooShort ? "native.validation.tooShort" :
       validity.tooLong ? "native.validation.tooLong" :
-      validity.patternMismatch ? "native.validation.pattern" : null;
+      validity.patternMismatch ? "native.validation.pattern" :
+      validity.valueMissing ? "native.validation.required" : null;
     if (!key) return;
-    const message = translateForLocale(locale, key === "native.validation.numberOrType" && control instanceof HTMLInputElement && control.type === "number"
-      ? "native.validation.number" : key);
+    const numeric = control instanceof HTMLInputElement ? control : null;
+    const message = translateForLocale(locale, key, {
+      minimum: numeric?.min || "",
+      maximum: numeric?.max || "",
+      step: numeric?.step || "1",
+    });
     control.setCustomValidity(message);
     owned.add(control);
   };

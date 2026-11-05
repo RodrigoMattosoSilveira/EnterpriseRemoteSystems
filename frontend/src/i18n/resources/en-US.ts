@@ -2192,13 +2192,15 @@ export const enUSMessages = {
 
   "native.validation.required": "Fill out this field.",
   "native.validation.numberOrType": "Enter a valid value.",
-  "native.validation.minimum": "The value is below the permitted minimum.",
-  "native.validation.maximum": "The value exceeds the permitted maximum.",
-  "native.validation.step": "Enter a value using the permitted increment.",
+  "native.validation.minimum": "Enter a value of at least {minimum}.",
+  "native.validation.maximum": "Enter a value no greater than {maximum}.",
+  "native.validation.step": "Use increments of {step} starting at the permitted minimum.",
   "native.validation.tooShort": "The value is too short.",
   "native.validation.tooLong": "The value is too long.",
   "native.validation.pattern": "Enter a value in the required format.",
   "native.validation.number": "Enter a valid number.",
+  "native.validation.email": "Enter a valid email address.",
+  "native.validation.url": "Enter a valid website address (URL).",
 } as const;
 
 export type TranslationKey = keyof typeof enUSMessages;
