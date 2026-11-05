@@ -20,12 +20,14 @@ describe("localized native constraint validation", () => {
     input.type = "number";
     input.required = true;
     input.min = "0.01";
+    input.step = "0.01"; // Match GoldPriceForm: 10 is valid only with this increment.
     document.body.appendChild(input);
     input.value = "0";
     input.dispatchEvent(new Event("invalid", { cancelable: true }));
     expect(input.validationMessage).toBe("O valor está abaixo do mínimo permitido.");
     input.value = "10";
     input.dispatchEvent(new Event("input", { bubbles: true }));
+    expect(input.validity.stepMismatch).toBe(false);
     expect(input.checkValidity()).toBe(true);
   });
 
