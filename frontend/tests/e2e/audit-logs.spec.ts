@@ -85,22 +85,29 @@ test("admin can view and filter sensitive audit logs", async ({ page }) => {
     .filter({ hasText: "Partial payout" })
     .first();
   await expect(authorizedPayoutRow).toBeVisible();
+  // Evidence is the full-width table row immediately following its event summary.
+  const authorizedPayoutEvidence = authorizedPayoutRow.locator("xpath=following-sibling::tr[1]");
+  await expect(authorizedPayoutEvidence).toHaveAttribute("data-testid", "audit-log-evidence-row");
+  await expect(authorizedPayoutEvidence.locator("td")).toHaveAttribute("colspan", "5");
   await expect(
-    authorizedPayoutRow.locator("dd").filter({ hasText: "COLLABORATOR_REQUESTED_PAYOUT" }).first(),
+    authorizedPayoutEvidence.locator("dd").filter({ hasText: "COLLABORATOR_REQUESTED_PAYOUT" }).first(),
   ).toBeVisible();
   await expect(
-    authorizedPayoutRow.locator("dd").filter({ hasText: "second-admin@example.com" }).first(),
+    authorizedPayoutEvidence.locator("dd").filter({ hasText: "second-admin@example.com" }).first(),
   ).toBeVisible();
-  await expect(authorizedPayoutRow).toContainText("account-bootstrap-admin");
-  await expect(authorizedPayoutRow).toContainText("session-bootstrap-admin");
-  await expect(authorizedPayoutRow).toContainText("correlation-partial-payout");
-  await expect(authorizedPayoutRow).toContainText("GLOBAL_CONTROL_PLANE · APPLICATION_ADMIN · grant-bootstrap-admin");
+  await expect(authorizedPayoutEvidence).toContainText("account-bootstrap-admin");
+  await expect(authorizedPayoutEvidence).toContainText("session-bootstrap-admin");
+  await expect(authorizedPayoutEvidence).toContainText("correlation-partial-payout");
+  await expect(authorizedPayoutEvidence).toContainText("GLOBAL_CONTROL_PLANE · APPLICATION_ADMIN · grant-bootstrap-admin");
 
   const deniedReversalRow = page
     .getByTestId("audit-log-row")
-    .filter({ hasText: "recent reauthentication is required" })
+    .filter({ hasText: "Ledger reversal" })
     .first();
   await expect(deniedReversalRow).toBeVisible();
+  const deniedReversalEvidence = deniedReversalRow.locator("xpath=following-sibling::tr[1]");
+  await expect(deniedReversalEvidence).toHaveAttribute("data-testid", "audit-log-evidence-row");
+  await expect(deniedReversalEvidence).toContainText("recent reauthentication is required");
 
   await page.getByLabel("Operation").selectOption("ledger_entries.reverse");
   await page.getByLabel("Decision").selectOption("DENIED");
