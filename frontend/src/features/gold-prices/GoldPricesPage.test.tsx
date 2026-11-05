@@ -1,3 +1,4 @@
+import { I18nProvider } from "../../i18n";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -74,6 +75,26 @@ describe("GoldPricesPage", () => {
 
     expect(fetchCalls.some((call) => call.url === "/api/v1/gold-prices/latest" && call.method === "GET")).toBe(true);
     expect(fetchCalls.some((call) => call.url === "/api/v1/gold-prices" && call.method === "GET")).toBe(true);
+  });
+
+  it("keeps a zero gold price visible, explains the minimum, and clears the error when corrected", async () => {
+    mockGoldPriceFetch();
+    renderPage();
+    await waitForText("Daily admin rate");
+
+    const field = controlByLabel<HTMLInputElement>(formByHeading("Record Gold Price"), "BRL per Gram", "input");
+    expect(field.value).toBe("");
+
+    await changeInputInForm("Record Gold Price", "BRL per Gram", "0");
+    expect(field.value).toBe("0");
+    expect(field.getAttribute("aria-invalid")).toBe("true");
+    expect(formByHeading("Record Gold Price").querySelector('[role="alert"]')?.textContent).toContain("0.01");
+    expect(fetchCalls.filter((call) => call.method === "POST")).toHaveLength(0);
+
+    await changeInputInForm("Record Gold Price", "BRL per Gram", "10");
+    expect(field.value).toBe("10");
+    expect(field.getAttribute("aria-invalid")).toBe("false");
+    expect(formByHeading("Record Gold Price").querySelector('[role="alert"]')).toBeNull();
   });
 
   it("records a new administrator gold price", async () => {
@@ -208,6 +229,7 @@ function latestActiveGoldPrice() {
 }
 
 function renderPage() {
+  window.localStorage.setItem("ers.i18n.locale", "en-US");
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
@@ -219,9 +241,9 @@ function renderPage() {
   act(() => {
     root = createRoot(container);
     root.render(
-      <QueryClientProvider client={queryClient}>
+      <I18nProvider><QueryClientProvider client={queryClient}>
         <RouterProvider router={router} />
-      </QueryClientProvider>,
+      </QueryClientProvider></I18nProvider>,
     );
   });
 }

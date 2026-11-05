@@ -1,3 +1,4 @@
+import { useI18n } from "../../i18n";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { ApiErrorPanel } from "../../components/ApiErrorPanel";
@@ -18,9 +19,11 @@ import { PageTitle } from "../../components/layout/PageHeading";
 
 
 export function GoldPricesPage() {
+  const { t } = useI18n();
   const [includeInactive, setIncludeInactive] = useState(false);
   const [successMessage, setSuccessMessage] = useState("");
   const [form, setForm] = useState<CreateGoldPriceInput>(() => emptyForm());
+  const [formResetToken, setFormResetToken] = useState(0);
   const [tenantId] = useState(() =>
     typeof window === "undefined" ? "default" : readSelectedTenantId(window.localStorage),
   );
@@ -62,9 +65,10 @@ export function GoldPricesPage() {
         notes: form.notes?.trim() ?? "",
       });
       setForm(emptyForm());
+      setFormResetToken((current) => current + 1);
       setSuccessMessage(created.supersededGoldPriceId
-        ? `Gold price for ${created.priceDate} replaced. Previous value was deactivated and retained for audit history.`
-        : `Gold price for ${created.priceDate} recorded.`);
+        ? t("byte352.gold.replaced", { date: created.priceDate })
+        : t("byte352.gold.recorded", { date: created.priceDate }));
     } catch {
       // Existing mutation error state is rendered by ApiErrorPanel.
     }
@@ -76,7 +80,7 @@ export function GoldPricesPage() {
 
     try {
       const updated = await deactivateMutation.mutateAsync(row.id);
-      setSuccessMessage(`Gold price for ${updated.priceDate} deactivated.`);
+      setSuccessMessage(t("byte352.gold.deactivated", { date: updated.priceDate }));
     } catch {
       // Existing mutation error state is rendered by ApiErrorPanel.
     }
@@ -88,26 +92,26 @@ export function GoldPricesPage() {
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-3">
           <div>
             <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
-              Administration
+              {t("gold.page.administration_b8be3d")}
             </p>
-            <PageTitle>Gold Prices</PageTitle>
+            <PageTitle>{t("gold.page.gold.prices_d529be")}</PageTitle>
             <p className="text-sm text-gray-500">
-              Record the tenant gold-price source used when BRL price-list expenses are converted to grams of gold.
+              {t("gold.page.record.the.tenant.gold.price.source.used.when.brl.price.list.expe_c7f462")}
             </p>
           </div>
 
           <div className="flex flex-wrap items-center justify-end gap-2">
             <Link className="text-sm font-semibold text-gray-700 underline" to="/admin/authorization">
-              Authorization
+              {t("gold.page.authorization_5e25ce")}
             </Link>
             <Link className="text-sm font-semibold text-gray-700 underline" to="/admin/reference-data">
-              Reference Data
+              {t("gold.page.reference.data_3d3f15")}
             </Link>
             <Link className="text-sm font-semibold text-gray-700 underline" to="/admin/price-list-items">
-              Price List
+              {t("gold.page.price.list_760d09")}
             </Link>
             <Link className="text-sm font-semibold text-gray-700 underline" to="/people">
-              Back to People
+              {t("gold.page.back.to.people_59f4cb")}
             </Link>
           </div>
         </div>
@@ -124,9 +128,9 @@ export function GoldPricesPage() {
 
         {latestError && !latestGoldPriceQuery.data && (
           <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
-            <p className="font-semibold">No active gold price source yet</p>
+            <p className="font-semibold">{t("gold.page.no.active.gold.price.source.yet_a0c252")}</p>
             <p className="mt-1">
-              Gold-gram expense conversion will be blocked until an administrator records an active BRL-per-gram price.
+              {t("gold.page.gold.gram.expense.conversion.will.be.blocked.until.an.administrat_6acc8f")}
             </p>
           </div>
         )}
@@ -135,6 +139,7 @@ export function GoldPricesPage() {
           <LatestGoldPriceCard goldPrice={latestGoldPriceQuery.data} isLoading={latestGoldPriceQuery.isLoading} />
           {canManage ? <GoldPriceForm
             value={form}
+            resetToken={formResetToken}
             isPending={createMutation.isPending}
             onChange={setForm}
             onSubmit={handleCreate}
@@ -144,9 +149,9 @@ export function GoldPricesPage() {
         <section className="rounded-2xl border bg-white p-4 shadow-sm">
           <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
             <div>
-              <h2 className="text-lg font-semibold text-gray-950">Gold Price History</h2>
+              <h2 className="text-lg font-semibold text-gray-950">{t("gold.page.gold.price.history_6e7a9c")}</h2>
               <p className="text-sm text-gray-500">
-                The latest active date is selected automatically for new GOLD_GRAM expense conversions and stored on the expense for auditability.
+                {t("gold.page.the.latest.active.date.is.selected.automatically.for.new.gold.gra_c84d13")}
               </p>
             </div>
             <label className="flex items-center gap-2 text-sm font-semibold text-gray-700">
@@ -155,15 +160,15 @@ export function GoldPricesPage() {
                 type="checkbox"
                 onChange={(event) => setIncludeInactive(event.target.checked)}
               />
-              Include inactive
+              {t("gold.page.include.inactive_1ccb27")}
             </label>
           </div>
 
-          {goldPricesQuery.isLoading && <p className="mt-4 text-sm text-gray-500">Loading gold prices...</p>}
+          {goldPricesQuery.isLoading && <p className="mt-4 text-sm text-gray-500">{t("gold.page.loading.gold.prices_d80cc6")}</p>}
 
           {!goldPricesQuery.isLoading && rows.length === 0 && (
             <p className="mt-4 rounded-xl border border-dashed p-4 text-center text-sm text-gray-500">
-              No gold prices found.
+              {t("gold.page.no.gold.prices.found_595788")}
             </p>
           )}
 
@@ -172,12 +177,12 @@ export function GoldPricesPage() {
               <table className="w-full text-left text-sm" data-testid="gold-prices-table">
                 <thead className="bg-gray-50 text-xs uppercase tracking-wide text-gray-500">
                   <tr>
-                    <th className="p-3">Date</th>
-                    <th className="p-3">BRL per Gram</th>
-                    <th className="p-3">Recorded By</th>
-                    <th className="p-3">Notes</th>
-                    <th className="p-3">Status</th>
-                    <th className="p-3 text-right">Actions</th>
+                    <th className="p-3">{t("gold.page.date_eb9a4b")}</th>
+                    <th className="p-3">{t("gold.page.brl.per.gram_fc2286")}</th>
+                    <th className="p-3">{t("gold.page.recorded.by_b19313")}</th>
+                    <th className="p-3">{t("gold.page.notes_704400")}</th>
+                    <th className="p-3">{t("gold.page.status_bae7d5")}</th>
+                    <th className="p-3 text-right">{t("gold.page.actions_c3cd63")}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y">
@@ -189,7 +194,7 @@ export function GoldPricesPage() {
                       <td className="p-3 text-gray-600">{row.notes || "—"}</td>
                       <td className="p-3">
                         <span className={row.active ? "rounded-full bg-green-100 px-2 py-1 text-xs font-semibold text-green-700" : "rounded-full bg-gray-100 px-2 py-1 text-xs font-semibold text-gray-700"}>
-                          {row.active ? "Active" : "Inactive"}
+                          {row.active ? t("gold.page.active_a733b8") : t("byte352.common.inactive")}
                         </span>
                       </td>
                       <td className="p-3 text-right">
@@ -200,7 +205,7 @@ export function GoldPricesPage() {
                             type="button"
                             onClick={() => handleDeactivate(row)}
                           >
-                            Deactivate
+                            {t("gold.page.deactivate_d65ded")}
                           </button>
                         ) : (
                           <span className="text-xs text-gray-400">—</span>
@@ -219,11 +224,12 @@ export function GoldPricesPage() {
 }
 
 function LatestGoldPriceCard({ goldPrice, isLoading }: { goldPrice?: GoldPrice; isLoading: boolean }) {
+  const { t } = useI18n();
   if (isLoading) {
     return (
       <section className="rounded-2xl border bg-white p-4 shadow-sm">
-        <h2 className="text-lg font-semibold text-gray-950">Current Conversion Source</h2>
-        <p className="mt-4 text-sm text-gray-500">Loading latest gold price...</p>
+        <h2 className="text-lg font-semibold text-gray-950">{t("gold.page.current.conversion.source_da29a2")}</h2>
+        <p className="mt-4 text-sm text-gray-500">{t("gold.page.loading.latest.gold.price_2605fd")}</p>
       </section>
     );
   }
@@ -231,9 +237,9 @@ function LatestGoldPriceCard({ goldPrice, isLoading }: { goldPrice?: GoldPrice; 
   if (!goldPrice) {
     return (
       <section className="rounded-2xl border border-amber-200 bg-amber-50 p-4 shadow-sm">
-        <h2 className="text-lg font-semibold text-amber-950">Current Conversion Source</h2>
+        <h2 className="text-lg font-semibold text-amber-950">{t("gold.page.current.conversion.source_da29a2")}</h2>
         <p className="mt-2 text-sm text-amber-900">
-          No active BRL-per-gram price has been recorded. GOLD_GRAM expenses cannot be calculated yet.
+          {t("gold.page.no.active.brl.per.gram.price.has.been.recorded.gold.gram.expenses_aea726")}
         </p>
       </section>
     );
@@ -245,37 +251,37 @@ function LatestGoldPriceCard({ goldPrice, isLoading }: { goldPrice?: GoldPrice; 
     <section className="rounded-2xl border bg-white p-4 shadow-sm">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <h2 className="text-lg font-semibold text-gray-950">Current Conversion Source</h2>
+          <h2 className="text-lg font-semibold text-gray-950">{t("gold.page.current.conversion.source_da29a2")}</h2>
           <p className="mt-1 text-sm text-gray-500">
-            Latest active administrator-recorded gold price.
+            {t("gold.page.latest.active.administrator.recorded.gold.price_166be0")}
           </p>
         </div>
         <span className="rounded-full bg-green-100 px-3 py-1 text-xs font-semibold text-green-700">
-          Active
+          {t("gold.page.active_a733b8")}
         </span>
       </div>
 
       <dl className="mt-4 grid gap-3 text-sm md:grid-cols-2">
         <div className="rounded-xl bg-gray-50 p-3">
-          <dt className="font-semibold text-gray-700">Price date</dt>
+          <dt className="font-semibold text-gray-700">{t("gold.page.price.date_353d32")}</dt>
           <dd className="mt-1 text-gray-900">{goldPrice.priceDate}</dd>
         </div>
         <div className="rounded-xl bg-gray-50 p-3">
-          <dt className="font-semibold text-gray-700">BRL per gram</dt>
+          <dt className="font-semibold text-gray-700">{t("gold.page.brl.per.gram_b8fa59")}</dt>
           <dd className="mt-1 text-gray-900">{formatBRL(goldPrice.brlPerGram)}</dd>
         </div>
         <div className="rounded-xl bg-gray-50 p-3">
-          <dt className="font-semibold text-gray-700">Recorded by</dt>
+          <dt className="font-semibold text-gray-700">{t("gold.page.recorded.by_664aa7")}</dt>
           <dd className="mt-1 text-gray-900">{goldPrice.recordedBy}</dd>
         </div>
         <div className="rounded-xl bg-gray-50 p-3">
-          <dt className="font-semibold text-gray-700">Conversion rule</dt>
-          <dd className="mt-1 text-gray-900">BRL ÷ {formatDecimal(goldPrice.brlPerGram)} = grams</dd>
+          <dt className="font-semibold text-gray-700">{t("gold.page.conversion.rule_21d123")}</dt>
+          <dd className="mt-1 text-gray-900">BRL ÷ {formatDecimal(goldPrice.brlPerGram)} = {t("byte352.gold.grams")}</dd>
         </div>
       </dl>
 
       <p className="mt-4 rounded-xl border border-blue-100 bg-blue-50 p-3 text-sm text-blue-900">
-        Example: R$ 1.00 converts to {formatDecimal(gramsPerBrl, 6)} g using this source.
+        {t("byte352.gold.example", { grams: formatDecimal(gramsPerBrl, 6) })}
       </p>
     </section>
   );

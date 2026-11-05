@@ -4,10 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"flag"
 	"fmt"
 	"io"
 	"log"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -23,6 +25,13 @@ type provisionInput struct {
 }
 
 func main() {
+	byte352Only := flag.Bool("byte352-fixtures-only", false, "provision Byte 35.2 non-production fixture accounts; Tenant Administrator changes require explicit consent")
+	flag.Parse()
+	if *byte352Only {
+		runByte352Only()
+		return
+	}
+
 	_, ok := normalizeProvisioningEnvironment(os.Getenv("APP_ENV"))
 	if !ok {
 		log.Fatalf("refusing E2E/test administrator provisioning for APP_ENV=%q; only local/development/test environments are permitted", strings.TrimSpace(os.Getenv("APP_ENV")))
@@ -123,4 +132,44 @@ func firstNonEmpty(values ...string) string {
 		}
 	}
 	return ""
+}
+
+// Byte 35.2 has an isolated explicit mode: stdin JSON never contains an admin
+// password. No migration, default DB fallback, or general E2E fixture call.
+func runByte352Only() {
+	if _, ok := normalizeProvisioningEnvironment(os.Getenv("APP_ENV")); !ok {
+		log.Fatal("Byte 35.2 fixtures forbidden outside LOCAL/Development/Test")
+	}
+	var input byte352FixtureInput
+	decoder := json.NewDecoder(io.LimitReader(os.Stdin, 65536))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&input); err != nil {
+		log.Fatalf("read Byte 35.2 fixture input: %v", err)
+	}
+	var trailing any
+	if err := decoder.Decode(&trailing); !errors.Is(err, io.EOF) {
+		log.Fatal("Byte 35.2 input must contain exactly one JSON object")
+	}
+	if err := validateByte352Input(input); err != nil {
+		log.Fatalf("invalid Byte 35.2 fixture input: %v", err)
+	}
+	dbPath := os.Getenv("DB_PATH")
+	if !filepath.IsAbs(input.DatabasePath) || !filepath.IsAbs(dbPath) || filepath.Clean(dbPath) != filepath.Clean(input.DatabasePath) {
+		log.Fatal("DB_PATH and input databasePath must be identical absolute paths")
+	}
+	info, err := os.Stat(dbPath)
+	if err != nil || !info.Mode().IsRegular() {
+		log.Fatal("existing regular database file required; refusing to create database")
+	}
+	database, err := db.Open(dbPath)
+	if err != nil {
+		log.Fatalf("open existing fixture database: %v", err)
+	}
+	if sqlDB, err := database.DB(); err == nil {
+		defer sqlDB.Close()
+	}
+	if err := ensureByte352Fixtures(context.Background(), database, input, positiveInt(os.Getenv("AUTH_PASSWORD_HASH_COST"), 12)); err != nil {
+		log.Fatalf("Byte 35.2 fixture transaction rolled back: %v", err)
+	}
+	fmt.Println("Byte 35.2 non-Production fixture provisioning complete; Application Administrator untouched; Tenant Administrator password changes only with explicit consent")
 }

@@ -1,3 +1,4 @@
+import { useI18n } from "../../i18n";
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { ApiError } from "../../api/client";
@@ -36,6 +37,7 @@ const emptyActorForm: CreateAuthzActorInput = {
 type TenantRoleEligibilityFilter = "ALL" | "ELIGIBLE" | "INELIGIBLE";
 
 export function AuthzAdminPage() {
+  const { t } = useI18n();
   const [requestActor, setRequestActor] = useState<AuthzAdminRequestActor>(() =>
     loadRequestActor(),
   );
@@ -178,21 +180,21 @@ export function AuthzAdminPage() {
       <header className="sticky top-0 z-10 border-b bg-white/95 px-4 py-4 backdrop-blur">
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-3">
           <div>
-            <PageTitle>Application Authorization</PageTitle>
+            <PageTitle>{t("admin.authz.application.authorization_9b7457")}</PageTitle>
             <p className="mt-1 text-sm text-gray-500">
-              Manage authorization actors, role grants, and available permissions.
+              {t("admin.authz.manage.authorization.actors.role.grants.and.available.p_3b7aba")}
             </p>
           </div>
 
           <div className="flex items-center gap-2">
             <Link className="text-sm font-semibold text-gray-700 underline" to="/admin/tenants">
-              Tenants
+              {t("admin.authz.tenants_1f7ae7")}
             </Link>
             <Link className="text-sm font-semibold text-gray-700 underline" to="/admin/authentication">
-              Authentication
+              {t("admin.authz.authentication_ee1acf")}
             </Link>
             <Link className="text-sm font-semibold text-gray-700 underline" to="/admin/audit-logs">
-              Audit Logs
+              {t("admin.authz.audit.logs_344c7f")}
             </Link>
           </div>
         </div>
@@ -211,14 +213,14 @@ export function AuthzAdminPage() {
 
         <section className="rounded-2xl border bg-white p-4 shadow-sm">
           <h2 className="text-lg font-semibold text-gray-950">
-            Authenticated authorization context
+            {t("admin.authz.authenticated.authorization.context_baa0e6")}
           </h2>
           <p className="mt-1 text-sm text-gray-500">
-            The session cookie identifies the actor. The tenant value is only a selection hint and is validated against that actor&apos;s persisted grants.
+            {t("authz.fragments.the.session.cookie.identifies.the.actor.the.te_b60ba0")}
           </p>
           <div className="mt-4 max-w-md">
             <label className="block text-sm font-semibold text-gray-700">
-              Selected Tenant ID
+              {t("admin.authz.selected.tenant.id_f0aa67")}
               <input
                 className="mt-2 block w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm"
                 value={requestActor.tenantId}
@@ -233,47 +235,47 @@ export function AuthzAdminPage() {
           </div>
           {currentActorQuery.data && (
             <div className="mt-4 rounded-xl border border-green-200 bg-green-50 p-4 text-sm text-green-900">
-              <p className="font-semibold">Authenticated actor verified</p>
+              <p className="font-semibold">{t("admin.authz.authenticated.actor.verified_4f2f42")}</p>
               <p className="mt-1">
                 {currentActorQuery.data.actorKey} · {currentActorQuery.data.tenantId} · {currentActorQuery.data.scope}
               </p>
               <p className="mt-1 text-xs">
-                Roles: {currentActorQuery.data.roleCodes.join(", ") || "No active roles"}
+                {t("authz.fragments.roles_04feda")} {currentActorQuery.data.roleCodes.join(", ") || t("byte352.authz.noRoles")}
               </p>
               <p className="mt-1 text-xs">
-                Intrinsic permissions: {currentActorQuery.data.intrinsicPermissions?.join(", ") || "None"}
+                {t("authz.fragments.intrinsic.permissions_86e2f6")} {currentActorQuery.data.intrinsicPermissions?.join(", ") || t("byte352.authz.none")}
               </p>
               <p className="mt-1 text-xs">
-                Delegated permissions: {currentActorQuery.data.delegatedPermissions?.join(", ") || "None"}
+                {t("authz.fragments.delegated.permissions_c4712f")} {currentActorQuery.data.delegatedPermissions?.join(", ") || t("byte352.authz.none")}
               </p>
               <p className="mt-1 text-xs">
-                Effective permissions: {currentActorQuery.data.permissions.join(", ") || "None"}
+                {t("authz.fragments.effective.permissions_7ee095")} {currentActorQuery.data.permissions.join(", ") || t("byte352.authz.none")}
               </p>
             </div>
           )}
 
           <div className="mt-4 rounded-xl border border-gray-200 bg-gray-950 p-4 text-sm text-gray-100">
             <div className="flex flex-col gap-1 md:flex-row md:items-center md:justify-between">
-              <p className="font-semibold">Current actor curl</p>
-              <p className="text-xs text-gray-300">Uses an authenticated session cookie.</p>
+              <p className="font-semibold">{t("admin.authz.current.actor.curl_b06cd0")}</p>
+              <p className="text-xs text-gray-300">{t("admin.authz.uses.an.authenticated.session.cookie_74b634")}</p>
             </div>
             <pre
-              aria-label="Current actor curl command"
+              aria-label={t("authz.extra.current.actor.curl.command_1f2cf8")}
               className="mt-3 overflow-x-auto whitespace-pre-wrap rounded-lg bg-black/30 p-3 text-xs leading-5"
             >
               {currentActorCurlCommand(requestActor)}
             </pre>
             <p className="mt-2 text-xs text-gray-300">
-              Actor headers are ignored during normal application traffic. The server derives identity from the session and validates the selected tenant.
+              {t("admin.authz.actor.headers.are.ignored.during.normal.application.tra_2da956")}
             </p>
           </div>
         </section>
 
         <section className="grid gap-4 lg:grid-cols-[1fr_2fr]">
           <form className="rounded-2xl border bg-white p-4 shadow-sm" onSubmit={handleCreateActor}>
-            <h2 className="text-lg font-semibold text-gray-950">Create actor</h2>
+            <h2 className="text-lg font-semibold text-gray-950">{t("admin.authz.create.actor_877a90")}</h2>
             <p className="mt-1 text-sm text-gray-500">
-              Create a global/control-plane security actor here. Tenant delegated roles can be granted only to Actors already bound to that tenant through an Authentication Account and active Membership.
+              {t("admin.authz.create.a.global.control.plane.security.actor.here.tenan_e79629")}
             </p>
 
             {createActorForbidden ? (
@@ -298,13 +300,13 @@ export function AuthzAdminPage() {
             <section className="rounded-2xl border bg-white p-4 shadow-sm">
               <div className="flex flex-col gap-4">
                 <div>
-                  <h2 className="text-lg font-semibold text-gray-950">Actors</h2>
+                  <h2 className="text-lg font-semibold text-gray-950">{t("admin.authz.actors_a70d36")}</h2>
                   <p className="text-sm text-gray-500">
-                    Tenant Role Grants require an Account-bound active Actor with an ACTIVE Person–Tenant Membership in the same tenant; global roles use *.
+                    {t("authz.fragments.tenant.role.grants.require.an.account.bound.ac_5f1f57")}
                   </p>
                   <p className="mt-1 text-xs text-gray-500">
-                    Showing {filteredActors.length} of {actors.length} actor records ·{" "}
-                    {tenantRoleEligibleActorCount} eligible for tenant Role Grants.
+                    {t("authz.fragments.showing_163d81")} {filteredActors.length} {t("authz.fragments.of_de04fa")} {actors.length} {t("authz.fragments.actor.records_c652e0")}{" "}
+                    {tenantRoleEligibleActorCount} {t("authz.fragments.eligible.for.tenant.role.grants_7a006b")}
                   </p>
                 </div>
 
@@ -315,14 +317,14 @@ export function AuthzAdminPage() {
                         htmlFor="authz-actor-nickname-filter"
                         className="text-xs font-semibold uppercase tracking-wide text-gray-500"
                       >
-                        Filter actors by Actor Key or display name
+                        {t("admin.authz.filter.actors.by.actor.key.or.display.name_3a6779")}
                       </label>
                       <input
                         id="authz-actor-nickname-filter"
                         type="search"
                         value={actorFilter}
                         onChange={(event) => setActorFilter(event.target.value)}
-                        placeholder="Type any part of an Actor Key or display name"
+                        placeholder={t("authz.extra.type.any.part.of.an.actor.key.or.display.name_3e9cd8")}
                         className="mt-1 w-full rounded-xl border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-gray-950 focus:outline-none focus:ring-1 focus:ring-gray-950"
                       />
                     </div>
@@ -331,7 +333,7 @@ export function AuthzAdminPage() {
                         htmlFor="authz-actor-tenant-role-eligibility-filter"
                         className="text-xs font-semibold uppercase tracking-wide text-gray-500"
                       >
-                        Tenant Role Grant eligibility
+                        {t("admin.authz.tenant.role.grant.eligibility_c7c2a9")}
                       </label>
                       <select
                         id="authz-actor-tenant-role-eligibility-filter"
@@ -343,9 +345,9 @@ export function AuthzAdminPage() {
                         }
                         className="mt-1 block w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm shadow-sm focus:border-gray-950 focus:outline-none focus:ring-1 focus:ring-gray-950"
                       >
-                        <option value="ALL">All actors</option>
-                        <option value="ELIGIBLE">Eligible only</option>
-                        <option value="INELIGIBLE">Ineligible only</option>
+                        <option value="ALL">{t("admin.authz.all.actors_f89ae5")}</option>
+                        <option value="ELIGIBLE">{t("admin.authz.eligible.only_013dcd")}</option>
+                        <option value="INELIGIBLE">{t("admin.authz.ineligible.only_c31d69")}</option>
                       </select>
                     </div>
                     {hasActorFilters && (
@@ -358,7 +360,7 @@ export function AuthzAdminPage() {
                           }}
                           className="rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 shadow-sm"
                         >
-                          Clear
+                          {t("admin.authz.clear_719ea3")}
                         </button>
                       </div>
                     )}
@@ -370,15 +372,15 @@ export function AuthzAdminPage() {
                 <CardPermissionNotice cardName="Actors" />
               ) : (
                 <>
-                  {actorsQuery.isLoading && <p className="mt-4 text-sm text-gray-500">Loading actors...</p>}
+                  {actorsQuery.isLoading && <p className="mt-4 text-sm text-gray-500">{t("admin.authz.loading.actors_ddec70")}</p>}
                   {!actorsQuery.isLoading && actors.length === 0 && (
                     <p className="mt-4 rounded-xl border border-dashed p-4 text-center text-sm text-gray-500">
-                      No authorization actors found.
+                      {t("admin.authz.no.authorization.actors.found_6a89f9")}
                     </p>
                   )}
                   {!actorsQuery.isLoading && actors.length > 0 && filteredActors.length === 0 && (
                     <p className="mt-4 rounded-xl border border-dashed p-4 text-center text-sm text-gray-500">
-                      No actors match these filters.
+                      {t("admin.authz.no.actors.match.these.filters_1604b6")}
                     </p>
                   )}
                   <div className="mt-4 space-y-3">
@@ -415,15 +417,15 @@ export function AuthzAdminPage() {
 
         <section className="grid gap-4 lg:grid-cols-2">
           <section data-testid="authz-roles-section" className="rounded-2xl border bg-white p-4 shadow-sm">
-            <h2 className="text-lg font-semibold text-gray-950">Roles</h2>
+            <h2 className="text-lg font-semibold text-gray-950">{t("admin.authz.roles_47dcc2")}</h2>
             <p className="mt-1 text-sm text-gray-500">
-              Role bundles available for actor grants.
+              {t("admin.authz.role.bundles.available.for.actor.grants_cf0112")}
             </p>
             {rolesForbidden ? (
               <CardPermissionNotice cardName="Roles" />
             ) : (
               <>
-                {rolesQuery.isLoading && <p className="mt-4 text-sm text-gray-500">Loading roles...</p>}
+                {rolesQuery.isLoading && <p className="mt-4 text-sm text-gray-500">{t("admin.authz.loading.roles_2ad48b")}</p>}
                 <div className="mt-4 space-y-3">
                   {roles.map((role) => (
                     <article key={role.id} className="rounded-xl border p-3">
@@ -450,15 +452,15 @@ export function AuthzAdminPage() {
           </section>
 
           <section data-testid="authz-permissions-section" className="rounded-2xl border bg-white p-4 shadow-sm">
-            <h2 className="text-lg font-semibold text-gray-950">Permissions</h2>
+            <h2 className="text-lg font-semibold text-gray-950">{t("admin.authz.permissions_d06d55")}</h2>
             <p className="mt-1 text-sm text-gray-500">
-              Fine-grained operations that roles can grant.
+              {t("admin.authz.fine.grained.operations.that.roles.can.grant_70f972")}
             </p>
             {permissionsForbidden ? (
               <CardPermissionNotice cardName="Permissions" />
             ) : (
               <>
-                {permissionsQuery.isLoading && <p className="mt-4 text-sm text-gray-500">Loading permissions...</p>}
+                {permissionsQuery.isLoading && <p className="mt-4 text-sm text-gray-500">{t("admin.authz.loading.permissions_0e89e7")}</p>}
                 <div className="mt-4 max-h-[34rem] space-y-2 overflow-auto pr-2">
                   {permissions.map((permission) => (
                     <article key={permission.code} className="rounded-xl border p-3">
@@ -478,26 +480,27 @@ export function AuthzAdminPage() {
 }
 
 function LimitedAuthorizationNotice() {
+  const { t } = useI18n();
   return (
     <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
-      <p className="font-semibold">Selected actor has limited authorization</p>
+      <p className="font-semibold">{t("admin.authz.selected.actor.has.limited.authorization_3cc29a")}</p>
       <p className="mt-1">
-        This actor is valid, but it does not have permission to read or manage authorization administration data.
-        Cards that require authorization administration permissions are shown with limited-access guidance instead of a raw API error.
+        {t("admin.authz.this.actor.is.valid.but.it.does.not.have.permission.to._59e777")}
       </p>
       <p className="mt-1 text-xs">
-        Switch to an actor with authz.read or authz.manage to create actors, grant roles, or inspect role and permission catalogs.
+        {t("admin.authz.switch.to.an.actor.with.authz.read.or.authz.manage.to.c_29d32f")}
       </p>
     </div>
   );
 }
 
 function CardPermissionNotice({ cardName }: { cardName: string }) {
+  const { t } = useI18n();
   return (
     <div className="mt-4 rounded-xl border border-dashed border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">
-      <p className="font-semibold">{cardName} unavailable for this actor</p>
+      <p className="font-semibold">{cardName} {t("authz.fragments.unavailable.for.this.actor_38693b")}</p>
       <p className="mt-1">
-        The selected operating actor does not have permission to use this card.
+        {t("admin.authz.the.selected.operating.actor.does.not.have.permission.t_e17df1")}
       </p>
     </div>
   );
@@ -510,10 +513,11 @@ function ActorFields({
   value: CreateAuthzActorInput;
   onChange: (value: CreateAuthzActorInput) => void;
 }) {
+  const { t } = useI18n();
   return (
     <div className="mt-4 space-y-3">
       <label className="block text-sm font-semibold text-gray-700">
-        Actor Key
+        {t("admin.authz.actor.key_ee9fe5")}
         <input
           type="text"
           value={value.actorKey}
@@ -526,20 +530,20 @@ function ActorFields({
       </label>
 
       <label className="block text-sm font-semibold text-gray-700">
-        Display Name
+        {t("admin.authz.display.name_8d6b34")}
         <input
           type="text"
           value={value.displayName}
           onChange={(event) =>
             onChange({ ...value, displayName: event.target.value })
           }
-          placeholder="Global Support Operator"
+          placeholder={t("authz.extra.global.support.operator_48e23b")}
           className="mt-2 block w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-base leading-6 text-gray-950"
         />
       </label>
 
       <p className="text-xs text-gray-500">
-        Global/control-plane Actors are created without Tenant Person or Collaborator bindings. Tenant role eligibility appears only after an Authentication Account binds an Actor to an ACTIVE Person–Tenant Membership.
+        {t("admin.authz.global.control.plane.actors.are.created.without.tenant._3a8737")}
       </p>
     </div>
   );
@@ -568,6 +572,7 @@ function ActorCard({
   onRevokeGrant: (targetActorId: string, grant: AuthzActorRoleGrant) => Promise<void>;
   onSetActive: (targetActorId: string, actorKey: string, active: boolean) => Promise<void>;
 }) {
+  const { t } = useI18n();
   // The Account -> Actor binding is authoritative for grant scope. A tenant
   // Actor belongs to exactly one tenant, so the UI must never offer an
   // application Role for it or derive the grant tenant from transient page
@@ -634,7 +639,7 @@ function ActorCard({
           <h3 className="font-semibold text-gray-950">{actor.actorKey}</h3>
           <p className="text-sm text-gray-600">{actor.displayName || "—"}</p>
           <p className="mt-1 text-xs text-gray-500">
-            {actor.active ? "Active" : "Inactive"}
+            {actor.active ? t("byte352.authz.active") : t("byte352.authz.inactive")}
             {actor.personId ? ` · Person ${actor.personId}` : ""}
             {actor.collaboratorId ? ` · Collaborator ${actor.collaboratorId}` : ""}
           </p>
@@ -647,16 +652,16 @@ function ActorCard({
             type="button"
             onClick={() => onSetActive(actor.id, actor.actorKey, !actor.active)}
           >
-            {actor.active ? "Deactivate" : "Activate"}
+            {actor.active ? t("byte352.authz.deactivate") : t("byte352.authz.activate")}
           </button>
         </div>
       </div>
 
       <section className="mt-4 rounded-xl border border-gray-200 bg-gray-50/60 p-3">
         <div className="mb-3">
-          <h4 className="text-sm font-semibold text-gray-950">Grant a Role</h4>
+          <h4 className="text-sm font-semibold text-gray-950">{t("admin.authz.grant.a.role_73d1f0")}</h4>
           <p className="mt-0.5 text-xs text-gray-600">
-            Choose one compatible Role from the selector, then grant it to this Actor.
+            {t("admin.authz.choose.one.compatible.role.from.the.selector.then.grant_7213e1")}
           </p>
         </div>
 
@@ -669,7 +674,7 @@ function ActorCard({
             disabled={compatibleRoles.length === 0}
           />
           <label className="block text-sm font-semibold text-gray-700">
-            Grant tenant
+            {t("admin.authz.grant.tenant_d351da")}
             <input
               className="mt-1 block w-full rounded-xl border border-gray-300 bg-gray-100 px-3 py-2 text-sm text-gray-700"
               value={targetTenantId}
@@ -689,37 +694,37 @@ function ActorCard({
             }
             type="submit"
           >
-            Grant Role
+            {t("admin.authz.grant.role_850973")}
           </button>
         </form>
         {tenantRoleIneligible && (
           <p className="mt-2 text-xs font-medium text-amber-700">
-            Tenant Role grant unavailable: {tenantEligibility.reason}
+            {t("authz.fragments.tenant.role.grant.unavailable_1ce1ee")} {tenantEligibility.reason}
           </p>
         )}
         {tenantAdminCardinalityBlocker && !alreadyGranted && (
           <p className="mt-2 text-xs font-medium text-amber-700">
-            TENANT_ADMIN grant unavailable: {tenantAdminCardinalityBlocker}
+            {t("authz.fragments.tenant.admin.grant.unavailable_213323")} {tenantAdminCardinalityBlocker}
           </p>
         )}
         {alreadyGranted && (
           <p className="mt-2 text-xs font-medium text-gray-500">
-            {roleCode} is already granted for {targetTenantId}.
+            {roleCode} {t("authz.fragments.is.already.granted.for_ba1162")} {targetTenantId}.
           </p>
         )}
       </section>
 
       <section className="mt-4">
         <div className="mb-2">
-          <h4 className="text-sm font-semibold text-gray-950">Current Role Grants</h4>
+          <h4 className="text-sm font-semibold text-gray-950">{t("admin.authz.current.role.grants_24dd80")}</h4>
           <p className="mt-0.5 text-xs text-gray-500">
-            Roles already granted to this Actor are listed here and can be revoked individually.
+            {t("admin.authz.roles.already.granted.to.this.actor.are.listed.here.and_7c8592")}
           </p>
         </div>
         <div className="space-y-2">
           {(actor.roleGrants ?? []).length === 0 && (
             <p className="rounded-xl border border-dashed p-3 text-sm text-gray-500">
-              No current Role Grants.
+              {t("admin.authz.no.current.role.grants_7347da")}
             </p>
           )}
           {(actor.roleGrants ?? []).map((grant) => (
@@ -728,7 +733,7 @@ function ActorCard({
                 <span className="font-semibold text-gray-950">{grant.roleCode}</span>
                 <span className="text-gray-500"> · {grant.tenantId} · {grant.scopeType}</span>
                 {grant.lifecycleSuspended && (
-                  <span className="ml-2 rounded bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-900">Lifecycle suspended</span>
+                  <span className="ml-2 rounded bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-900">{t("admin.authz.lifecycle.suspended_850341")}</span>
                 )}
               </div>
               <button
@@ -737,7 +742,7 @@ function ActorCard({
                 type="button"
                 onClick={() => onRevokeGrant(actor.id, grant)}
               >
-                Revoke
+                {t("admin.authz.revoke_0be720")}
               </button>
             </div>
           ))}
@@ -760,6 +765,7 @@ function RoleSelector({
   onChange: (roleCode: string) => void;
   disabled: boolean;
 }) {
+  const { t } = useI18n();
   const [open, setOpen] = useState(false);
   const [filterText, setFilterText] = useState("");
   const rootRef = useRef<HTMLDivElement>(null);
@@ -781,7 +787,7 @@ function RoleSelector({
     if (restoreFocus) {
       window.requestAnimationFrame(() => {
         rootRef.current
-          ?.querySelector<HTMLButtonElement>('button[aria-label="Role selector"]')
+          ?.querySelector<HTMLButtonElement>('button[aria-label={t("authz.extra.role.selector_d23819")}]')
           ?.focus();
       });
     }
@@ -813,10 +819,10 @@ function RoleSelector({
         }
       }}
     >
-      <p className="text-sm font-semibold text-gray-700">Role selector</p>
+      <p className="text-sm font-semibold text-gray-700">{t("admin.authz.role.selector_d23819")}</p>
       <button
         type="button"
-        aria-label="Role selector"
+        aria-label={t("authz.extra.role.selector_d23819")}
         aria-haspopup="listbox"
         aria-expanded={open}
         aria-controls={open ? optionsId : undefined}
@@ -843,12 +849,12 @@ function RoleSelector({
         <div className="absolute left-0 right-0 z-30 mt-1 overflow-hidden rounded-xl border border-gray-300 bg-white shadow-lg">
           <div className="border-b border-gray-200 p-2">
             <label className="grid gap-1 text-xs font-semibold text-gray-700">
-              Filter roles
+              {t("admin.authz.filter.roles_41c1af")}
               <input
                 ref={filterRef}
                 type="search"
                 role="combobox"
-                aria-label="Filter roles"
+                aria-label={t("authz.extra.filter.roles_41c1af")}
                 aria-autocomplete="list"
                 aria-controls={optionsId}
                 aria-expanded="true"
@@ -860,24 +866,24 @@ function RoleSelector({
                     closeSelector({ restoreFocus: true });
                   }
                 }}
-                placeholder="Role code, name, or description"
+                placeholder={t("authz.extra.role.code.name.or.description_aab641")}
                 className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-950 outline-none focus:border-gray-500 focus:ring-2 focus:ring-gray-200"
               />
             </label>
             <p className="mt-1 text-xs text-gray-500" aria-live="polite">
-              {visibleRoles.length} of {roles.length} compatible Roles
+              {visibleRoles.length} {t("authz.fragments.of_de04fa")} {roles.length} {t("authz.fragments.compatible.roles_36ef17")}
             </p>
           </div>
 
           <div
             id={optionsId}
             role="listbox"
-            aria-label="Role choices"
+            aria-label={t("authz.extra.role.choices_855376")}
             className="max-h-64 overflow-y-auto p-1"
           >
             {visibleRoles.length === 0 ? (
               <p className="px-3 py-4 text-sm text-gray-500">
-                No matching Roles.
+                {t("admin.authz.no.matching.roles_60595e")}
               </p>
             ) : (
               visibleRoles.map((role) => (
@@ -913,6 +919,7 @@ function RoleSelector({
 }
 
 function ActorBindingSummary({ actor }: { actor: AuthzActor }) {
+  const { t } = useI18n();
   const eligibility = tenantRoleGrantEligibility(actor);
   const binding = actor.binding;
   const accountLabel = binding?.accountLogin?.trim() || binding?.accountId?.trim();
@@ -920,10 +927,10 @@ function ActorBindingSummary({ actor }: { actor: AuthzActor }) {
   return (
     <div className="mt-2 space-y-1 text-xs">
       <p className="font-medium text-gray-600">
-        Authentication Account:{" "}
+        {t("authz.fragments.authentication.account_e8ea76")}{" "}
         {binding ? (
           <>
-            Bound{accountLabel ? ` · ${accountLabel}` : ""}
+            {t("authz.fragments.bound_2c346a")}{accountLabel ? ` · ${accountLabel}` : ""}
           </>
         ) : (
           "Not bound"
@@ -932,15 +939,15 @@ function ActorBindingSummary({ actor }: { actor: AuthzActor }) {
 
       {!binding ? (
         <p className="font-medium text-gray-500">
-          Actor scope: Unbound control-plane Actor
+          {t("admin.authz.actor.scope.unbound.control.plane.actor_e58529")}
         </p>
       ) : binding.scopeType.trim().toUpperCase() === "TENANT" ? (
         <>
           <p className="font-medium text-gray-500">
-            Authentication binding: TENANT · {binding.tenantId || "—"}
+            {t("authz.fragments.authentication.binding.tenant_384cf7")} {binding.tenantId || "—"}
           </p>
           <p className="font-medium text-gray-500">
-            Person–Tenant Membership:{" "}
+            {t("authz.fragments.person.tenant.membership_0882cd")}{" "}
             {binding.membershipId
               ? binding.membershipActive
                 ? "ACTIVE"
@@ -961,10 +968,10 @@ function ActorBindingSummary({ actor }: { actor: AuthzActor }) {
       ) : (
         <>
           <p className="font-medium text-gray-500">
-            Authentication binding: {binding.scopeType.trim().toUpperCase() || "GLOBAL"}
+            {t("authz.fragments.authentication.binding_9847ab")} {binding.scopeType.trim().toUpperCase() || "GLOBAL"}
           </p>
           <p className="font-medium text-gray-500">
-            Person–Tenant Membership: Not applicable
+            {t("admin.authz.person.tenant.membership.not.applicable_35981a")}
           </p>
         </>
       )}
@@ -978,7 +985,7 @@ function ActorBindingSummary({ actor }: { actor: AuthzActor }) {
               : "rounded-full bg-amber-100 px-2 py-1 font-semibold text-amber-800"
           }
         >
-          Tenant Role Grants: {eligibility.eligible ? "ELIGIBLE" : "INELIGIBLE"}
+          {t("authz.fragments.tenant.role.grants_e3d2c2")} {eligibility.eligible ? "ELIGIBLE" : "INELIGIBLE"}
         </span>
         {!eligibility.eligible && (
           <span className="font-medium text-gray-500">{eligibility.reason}</span>

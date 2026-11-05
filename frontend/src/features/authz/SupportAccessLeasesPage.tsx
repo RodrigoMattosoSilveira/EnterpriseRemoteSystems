@@ -1,3 +1,5 @@
+import { useI18n } from "../../i18n";
+import { supportAccessPermissionText } from "./supportAccessPermissionText";
 import { FormEvent, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { ApiError } from "../../api/client";
@@ -22,15 +24,15 @@ import {
   useTerminateSupportAccessLease,
 } from "./useSupportAccessLeases";
 
-const statusOptions: Array<{ value: string; label: string }> = [
-  { value: "", label: "All statuses" },
-  { value: "PENDING", label: "Pending" },
-  { value: "APPROVED", label: "Approved" },
-  { value: "EXPIRED", label: "Expired" },
-  { value: "TERMINATED", label: "Terminated" },
-];
-
 export function SupportAccessLeasesPage() {
+  const { t } = useI18n();
+  const statusOptions: Array<{ value: string; label: string }> = [
+    { value: "", label: t("byte352.support.allStatuses") },
+    { value: "PENDING", label: t("byte352.support.pending") },
+    { value: "APPROVED", label: t("byte352.support.approved") },
+    { value: "EXPIRED", label: t("byte352.support.expired") },
+    { value: "TERMINATED", label: t("byte352.support.terminated") },
+  ];
   const actor = useAuthorizationContext();
   const globalApplicationAdmin =
     actor.scope === "APPLICATION" && actor.tenantId === "*" && !actor.supportLeaseId;
@@ -92,15 +94,15 @@ export function SupportAccessLeasesPage() {
     return (
       <main className="min-h-screen bg-slate-50 p-4 sm:p-6">
         <section className="mx-auto max-w-4xl rounded-2xl border bg-white p-6 shadow-sm">
-          <PageTitle>Support access</PageTitle>
+          <PageTitle>{t("admin.support.support.access_eff1f5")}</PageTitle>
           <p className="mt-2 text-sm text-slate-600">
-            Tenant Support Access Lease lifecycle actions are available only from Global administration for the Application Administrator or from the exact Tenant Administrator context.
+            {t("admin.support.tenant.support.access.lease.lifecycle.actions.are.avail_981f3a")}
           </p>
           {actor.supportLeaseId && (
             <div className="mt-4 rounded-2xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950">
-              <p className="font-semibold">Support access is currently active.</p>
+              <p className="font-semibold">{t("admin.support.support.access.is.currently.active_a83c7e")}</p>
               <p className="mt-1">
-                Lease <span className="font-mono">{actor.supportLeaseId}</span> authorizes Tenant work only. Select <strong>Global administration</strong> in Administration context to request or review support leases.
+                {t("admin.support.lease_b24ef8")} <span className="font-mono">{actor.supportLeaseId}</span> {t("admin.support.authorizes.tenant.work.only.select_1a8d52")} <strong>{t("admin.support.global.administration_6c5f04")}</strong> {t("admin.support.in.administration.context.to.request.or.review.support._b18550")}
               </p>
             </div>
           )}
@@ -113,14 +115,14 @@ export function SupportAccessLeasesPage() {
     <main className="min-h-screen bg-slate-50 p-4 sm:p-6">
       <section className="mx-auto max-w-7xl space-y-6">
         <header>
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Administration</p>
-          <PageTitle>Support access</PageTitle>
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{t("admin.support.administration_b8be3d")}</p>
+          <PageTitle>{t("admin.support.support.access_eff1f5")}</PageTitle>
           <p className="mt-2 max-w-4xl text-sm text-slate-600">
-            Request, review, approve, terminate, and audit temporary Tenant access without creating a Tenant Actor, Person, Membership, Collaborator, or Role Grant for the Application Administrator.
+            {t("admin.support.request.review.approve.terminate.and.audit.temporary.te_62f718")}
           </p>
           {tenantAdministrator && (
             <p className="mt-2 text-sm font-semibold text-slate-800">
-              Tenant boundary: {actor.selectedTenantName || actor.tenantId} · Tenant ID: {actor.tenantId}
+              {t("support.fragments.tenant.boundary_23531c")} {actor.selectedTenantName || actor.tenantId} {t("support.fragments.tenant.id_2a6e7f")} {actor.tenantId}
             </p>
           )}
         </header>
@@ -135,7 +137,7 @@ export function SupportAccessLeasesPage() {
                 aria-controls="support-access-request-panel"
                 onClick={() => togglePanel("request")}
               >
-                <span>Request Tenant support access</span>
+                <span>{t("admin.support.request.tenant.support.access_1f0b47")}</span>
                 <span aria-hidden="true" className="text-2xl font-normal text-slate-500">
                   {openPanel === "request" ? "−" : "+"}
                 </span>
@@ -166,7 +168,7 @@ export function SupportAccessLeasesPage() {
               aria-controls="support-access-history-panel"
               onClick={() => togglePanel("history")}
             >
-              <span>Lease history</span>
+              <span>{t("admin.support.lease.history_0e967a")}</span>
               <span aria-hidden="true" className="text-2xl font-normal text-slate-500">
                 {openPanel === "history" ? "−" : "+"}
               </span>
@@ -177,7 +179,7 @@ export function SupportAccessLeasesPage() {
             <div id="support-access-history-panel" className="border-t border-slate-200 p-5">
               <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
                 <p className="max-w-3xl text-sm text-slate-600">
-                  Lease records are retained. Expiration is derived from the immutable requested expiration; it is not a persisted lifecycle rewrite.
+                  {t("support.fragments.lease.records.are.retained.expiration.is.deriv_e78db0")}
                 </p>
                 <div className="flex flex-wrap gap-3">
                   {globalApplicationAdmin && (
@@ -188,7 +190,7 @@ export function SupportAccessLeasesPage() {
                     />
                   )}
                   <label className="text-sm font-semibold text-slate-700">
-                    Status
+                    {t("admin.support.status_bae7d5")}
                     <select
                       className="mt-1 block min-w-44 rounded-xl border border-slate-300 bg-white px-3 py-2"
                       value={statusFilter}
@@ -205,17 +207,17 @@ export function SupportAccessLeasesPage() {
                     disabled={leasesQuery.isFetching}
                     onClick={() => void leasesQuery.refetch()}
                   >
-                    Refresh
+                    {t("admin.support.refresh_56e3ba")}
                   </button>
                 </div>
               </div>
 
               <ApiErrorPanel error={leasesQuery.error || approveMutation.error || terminateMutation.error} />
 
-              {leasesQuery.isLoading && <p className="mt-4 text-sm text-slate-500">Loading support leases…</p>}
+              {leasesQuery.isLoading && <p className="mt-4 text-sm text-slate-500">{t("admin.support.loading.support.leases_4a0745")}</p>}
               {!leasesQuery.isLoading && leases.length === 0 && (
                 <div className="mt-4 rounded-2xl border border-dashed p-6 text-center text-sm text-slate-500">
-                  No support leases match the current filters.
+                  {t("admin.support.no.support.leases.match.the.current.filters_de1918")}
                 </div>
               )}
 
@@ -259,7 +261,7 @@ export function SupportAccessLeasesPage() {
 
       {approvedLeaseId && (
         <ActionSuccessDialog
-          title="Tenant Support Access request approved"
+          title={t("support.extra.tenant.support.access.request.approved_6b8ee2")}
           message={`Tenant Support Access Lease ${approvedLeaseId} was approved.`}
           onDismiss={() => {
             setApprovedLeaseId("");
@@ -280,6 +282,7 @@ function LeaseHistoryTenantFilter({
   selectedTenantId: string;
   onChange: (tenantId: string) => void;
 }) {
+  const { t } = useI18n();
   const [search, setSearch] = useState("");
   const [open, setOpen] = useState(false);
   const normalizedSearch = search.trim().toLocaleLowerCase();
@@ -315,11 +318,11 @@ function LeaseHistoryTenantFilter({
       }}
     >
       <label className="block text-sm font-semibold text-slate-700">
-        Tenant
+        {t("admin.support.tenant_3ca93c")}
         <input
           type="search"
           role="combobox"
-          aria-label="Lease history Tenant filter"
+          aria-label={t("support.extra.lease.history.tenant.filter_e96a20")}
           aria-autocomplete="list"
           aria-controls={open ? "support-access-history-tenant-options" : undefined}
           aria-expanded={open}
@@ -347,12 +350,12 @@ function LeaseHistoryTenantFilter({
         <div
           id="support-access-history-tenant-options"
           role="listbox"
-          aria-label="Lease history Tenant choices"
+          aria-label={t("support.extra.lease.history.tenant.choices_24cebf")}
           className="absolute left-0 right-0 z-30 mt-1 max-h-72 overflow-y-auto rounded-xl border border-slate-300 bg-white p-1 shadow-lg"
         >
           <p className="px-3 py-2 text-xs font-semibold text-slate-500">
             {normalizedSearch
-              ? `${visibleTenants.length} of ${tenants.length} active Tenants`
+              ? t("byte352.support.filteredActiveTenants", { shown: visibleTenants.length, total: tenants.length })
               : `${tenants.length} active Tenant${tenants.length === 1 ? "" : "s"}`}
           </p>
 
@@ -365,9 +368,9 @@ function LeaseHistoryTenantFilter({
               className="block w-full rounded-lg px-3 py-2 text-left hover:bg-slate-50 focus:bg-slate-100 focus:outline-none"
               onClick={() => chooseTenant("")}
             >
-              <span className="block text-sm font-semibold text-slate-900">All Tenants</span>
+              <span className="block text-sm font-semibold text-slate-900">{t("admin.support.all.tenants_1cf814")}</span>
               <span className="block text-xs text-slate-500">
-                Show retained support leases from every Tenant.
+                {t("admin.support.show.retained.support.leases.from.every.tenant_cfd19b")}
               </span>
             </button>
           )}
@@ -384,13 +387,13 @@ function LeaseHistoryTenantFilter({
             >
               <span className="block text-sm font-semibold text-slate-900">{tenant.name}</span>
               <span className="block text-xs text-slate-600">{tenant.code}</span>
-              <span className="block font-mono text-xs text-slate-500">Tenant ID: {tenant.id}</span>
+              <span className="block font-mono text-xs text-slate-500">{t("support.fragments.tenant.id_3aeace")} {tenant.id}</span>
             </button>
           ))}
 
           {normalizedSearch && visibleTenants.length === 0 && !showAllTenantsOption && (
             <p className="px-3 py-5 text-center text-sm text-slate-500">
-              No active Tenants match the current history filter.
+              {t("admin.support.no.active.tenants.match.the.current.history.filter_8dbfca")}
             </p>
           )}
         </div>
@@ -416,6 +419,7 @@ function RequestLeasePanel({
   onResetError: () => void;
   onSubmit: (input: { tenantId: string; expiresAt: string; reason: string; permissions: string[] }) => Promise<void>;
 }) {
+  const { t, locale } = useI18n();
   const [tenantId, setTenantId] = useState("");
   const [tenantSearch, setTenantSearch] = useState("");
   const [expiresAt, setExpiresAt] = useState(defaultExpirationInput());
@@ -493,23 +497,23 @@ function RequestLeasePanel({
   return (
     <div className="p-5">
       <p className="text-sm text-slate-600">
-        Choose exactly one Tenant, an immutable expiration, a support reason, and only the Tenant permissions required for the case. Approval does not extend the requested expiration.
+        {t("admin.support.choose.exactly.one.tenant.an.immutable.expiration.a.sup_be792d")}
       </p>
       <ApiErrorPanel error={inlineError} />
       <form className="mt-4 space-y-5" onSubmit={handleSubmit}>
         <div className="grid gap-4 lg:grid-cols-[minmax(0,1.35fr)_minmax(16rem,0.65fr)]">
           <fieldset>
-            <legend className="text-sm font-semibold text-slate-700">Tenant</legend>
+            <legend className="text-sm font-semibold text-slate-700">{t("admin.support.tenant_3ca93c")}</legend>
             <p className="mt-1 text-xs text-slate-500">
-              Filter by Tenant name, code, or ID, then choose exactly one Tenant. All active Tenants are shown until you enter a filter.
+              {t("admin.support.filter.by.tenant.name.code.or.id.then.choose.exactly.on_540dd0")}
             </p>
             <div className="mt-3 flex flex-wrap items-end gap-2">
               <label className="min-w-0 flex-1 text-sm font-semibold text-slate-700">
-                Filter tenants
+                {t("admin.support.filter.tenants_709c84")}
                 <input
                   className="mt-1 block w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm"
                   onChange={(event) => setTenantSearch(event.target.value)}
-                  placeholder="Name, code, or Tenant ID"
+                  placeholder={t("support.extra.name.code.or.tenant.id_7f40de")}
                   type="search"
                   value={tenantSearch}
                 />
@@ -520,34 +524,34 @@ function RequestLeasePanel({
                   onClick={() => setTenantSearch("")}
                   type="button"
                 >
-                  Clear filter
+                  {t("admin.support.clear.filter_b667d6")}
                 </button>
               )}
             </div>
             <div className="mt-3 flex items-center justify-between gap-3 text-xs text-slate-500">
               <span>
                 {normalizedTenantSearch
-                  ? `${visibleTenants.length} of ${tenants.length} active Tenants`
-                  : `${tenants.length} active Tenants`}
+                  ? t("byte352.support.filteredActiveTenants", { shown: visibleTenants.length, total: tenants.length })
+                  : t("byte352.support.activeTenants", { count: tenants.length })}
               </span>
               {selectedTenant && (
                 <span>
-                  Selected: <strong className="text-slate-700">{selectedTenant.name}</strong>
+                  {t("admin.support.selected_2e0844")} <strong className="text-slate-700">{selectedTenant.name}</strong>
                 </span>
               )}
             </div>
             {tenants.length === 0 && (
               <p className="mt-3 rounded-xl border border-dashed p-4 text-center text-sm text-slate-500">
-                No active Tenants are available for support access.
+                {t("admin.support.no.active.tenants.are.available.for.support.access_b775e5")}
               </p>
             )}
             {tenants.length > 0 && visibleTenants.length === 0 && (
               <p className="mt-3 rounded-xl border border-dashed p-4 text-center text-sm text-slate-500">
-                No active Tenants match the current filter.
+                {t("admin.support.no.active.tenants.match.the.current.filter_733660")}
               </p>
             )}
             {visibleTenants.length > 0 && (
-              <div className="mt-3 max-h-72 space-y-2 overflow-y-auto pr-1" role="radiogroup" aria-label="Tenant choices">
+              <div className="mt-3 max-h-72 space-y-2 overflow-y-auto pr-1" role="radiogroup" aria-label={t("support.extra.tenant.choices_8ad996")}>
                 {visibleTenants.map((tenant) => (
                   <label
                     key={tenant.id}
@@ -568,7 +572,7 @@ function RequestLeasePanel({
                     <span className="min-w-0">
                       <span className="block text-sm font-semibold text-slate-900">{tenant.name}</span>
                       <span className="block text-xs text-slate-600">{tenant.code}</span>
-                      <span className="block break-all font-mono text-xs text-slate-500">Tenant ID: {tenant.id}</span>
+                      <span className="block break-all font-mono text-xs text-slate-500">{t("support.fragments.tenant.id_3aeace")} {tenant.id}</span>
                     </span>
                   </label>
                 ))}
@@ -576,7 +580,7 @@ function RequestLeasePanel({
             )}
           </fieldset>
           <label className="text-sm font-semibold text-slate-700">
-            Fixed expiration
+            {t("admin.support.fixed.expiration_8af1c2")}
             <input
               className="mt-1 block w-full rounded-xl border border-slate-300 px-3 py-2"
               type="datetime-local"
@@ -587,25 +591,27 @@ function RequestLeasePanel({
           </label>
         </div>
         <label className="block text-sm font-semibold text-slate-700">
-          Support reason / case
+          {t("admin.support.support.reason.case_d489bb")}
           <textarea
             className="mt-1 block min-h-24 w-full rounded-xl border border-slate-300 px-3 py-2"
             required
             value={reason}
             onChange={(event) => setReason(event.target.value)}
-            placeholder="Describe the Tenant support purpose and why this access is required."
+            placeholder={t("support.extra.describe.the.tenant.support.purpose.and.why.this.access_111183")}
           />
         </label>
         <fieldset>
-          <legend className="text-sm font-semibold text-slate-700">Requested Tenant permissions</legend>
+          <legend className="text-sm font-semibold text-slate-700">{t("admin.support.requested.tenant.permissions_963009")}</legend>
           <p className="mt-1 text-xs text-slate-500">
-            This catalog is supplied by the backend allowlist. Control-plane and Tenant Administrator authority cannot be leased.
+            {t("admin.support.this.catalog.is.supplied.by.the.backend.allowlist.contr_c0f7d2")}
           </p>
           {permissionsLoading ? (
-            <p className="mt-3 text-sm text-slate-500">Loading eligible permissions…</p>
+            <p className="mt-3 text-sm text-slate-500">{t("admin.support.loading.eligible.permissions_d417fe")}</p>
           ) : (
             <div className="mt-3 grid gap-2 lg:grid-cols-2">
-              {permissions.map((permission) => (
+              {permissions.map((permission) => {
+                const localized = supportAccessPermissionText(locale, permission);
+                return (
                 <label key={permission.code} className="flex gap-3 rounded-xl border border-slate-200 p-3">
                   <input
                     type="checkbox"
@@ -613,12 +619,13 @@ function RequestLeasePanel({
                     onChange={() => togglePermission(permission.code)}
                   />
                   <span>
-                    <span className="block text-sm font-semibold text-slate-900">{permission.label || permission.code}</span>
+                    <span className="block text-sm font-semibold text-slate-900">{localized.label}</span>
                     <span className="block font-mono text-xs text-slate-500">{permission.code}</span>
-                    {permission.description && <span className="mt-1 block text-xs text-slate-600">{permission.description}</span>}
+                    {localized.description && <span className="mt-1 block text-xs text-slate-600">{localized.description}</span>}
                   </span>
                 </label>
-              ))}
+                );
+              })}
             </div>
           )}
         </fieldset>
@@ -627,7 +634,7 @@ function RequestLeasePanel({
           type="submit"
           disabled={submitting || !requestReady}
         >
-          {submitting ? "Requesting…" : "Request support access"}
+          {submitting ? t("byte352.support.requestBusy") : t("byte352.support.requestAccess")}
         </button>
       </form>
       {conflictDialogMessage && (
@@ -651,6 +658,7 @@ function SupportAccessLeaseConflictDialog({
   message: string;
   onDismiss: () => void;
 }) {
+  const { t } = useI18n();
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-950/60 p-4">
       <div
@@ -661,7 +669,7 @@ function SupportAccessLeaseConflictDialog({
         role="alertdialog"
       >
         <h2 id="support-access-conflict-title" className="text-xl font-bold text-amber-950">
-          Support access request already open
+          {t("admin.support.support.access.request.already.open_3e750d")}
         </h2>
         <p
           id="support-access-conflict-description"
@@ -676,7 +684,7 @@ function SupportAccessLeaseConflictDialog({
             onClick={onDismiss}
             type="button"
           >
-            Close
+            {t("admin.support.close_bbfa77")}
           </button>
         </div>
       </div>
@@ -717,6 +725,7 @@ function LeaseCard({
   onTerminate: () => void;
   onToggleAudit: () => void;
 }) {
+  const { t, locale } = useI18n();
   const permissionMap = useMemo(() => new Map(permissions.map((item) => [item.code, item])), [permissions]);
   const expiredPending = lease.status === "PENDING" && lease.effectiveStatus === "EXPIRED";
   const canApprove = tenantAdministrator && lease.effectiveStatus === "PENDING";
@@ -728,42 +737,43 @@ function LeaseCard({
         <div>
           <div className="flex flex-wrap items-center gap-2">
             <StatusBadge status={expiredPending ? "EXPIRED" : lease.effectiveStatus} />
-            {expiredPending && <span className="text-xs font-bold uppercase tracking-wide text-amber-700">Expired request</span>}
+            {expiredPending && <span className="text-xs font-bold uppercase tracking-wide text-amber-700">{t("admin.support.expired.request_cfeb79")}</span>}
           </div>
           <p className="mt-2 font-mono text-sm font-semibold text-slate-900">{lease.id}</p>
           <p className="mt-1 text-sm text-slate-700">
-            Tenant: <strong>{tenantName || lease.tenantId}</strong> · ID: <span className="font-mono">{lease.tenantId}</span>
+            {t("admin.support.tenant_be7b76")} <strong>{tenantName || lease.tenantId}</strong> {t("admin.support.id_381d7c")} <span className="font-mono">{lease.tenantId}</span>
           </p>
         </div>
         <button className="text-sm font-semibold text-slate-700 underline" type="button" onClick={onToggleAudit}>
-          {auditOpen ? "Hide audit trail" : "Review audit trail"}
+          {auditOpen ? t("byte352.support.hideAudit") : t("byte352.support.reviewAudit")}
         </button>
       </div>
 
       <dl className="mt-4 grid gap-3 text-sm md:grid-cols-2 xl:grid-cols-3">
-        <Fact label="Application Actor" value={lease.applicationActorId} mono />
-        <Fact label="Requested" value={formatDateTime(lease.requestedAt)} />
+        <Fact label={t("byte352.support.applicationActor")} value={lease.applicationActorId} mono />
+        <Fact label={t("byte352.support.requested")} value={formatDateTime(lease.requestedAt)} />
         <Fact label="Fixed expiration" value={formatDateTime(lease.expiresAt)} />
-        <Fact label="Approved by" value={lease.approvedByActorId || "—"} mono={Boolean(lease.approvedByActorId)} />
-        <Fact label="Terminated by" value={lease.terminatedByActorId || "—"} mono={Boolean(lease.terminatedByActorId)} />
-        <Fact label="Termination reason" value={lease.terminationReason || "—"} />
+        <Fact label={t("byte352.support.approvedBy")} value={lease.approvedByActorId || "—"} mono={Boolean(lease.approvedByActorId)} />
+        <Fact label={t("byte352.support.terminatedBy")} value={lease.terminatedByActorId || "—"} mono={Boolean(lease.terminatedByActorId)} />
+        <Fact label={t("byte352.support.terminationReason")} value={lease.terminationReason || "—"} />
       </dl>
 
       <div className="mt-4 rounded-xl bg-white p-3">
-        <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Support reason</p>
+        <p className="text-xs font-bold uppercase tracking-wide text-slate-500">{t("admin.support.support.reason_45f159")}</p>
         <p className="mt-1 text-sm text-slate-800">{lease.reason}</p>
       </div>
 
       <div className="mt-4">
-        <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Immutable permission scope</p>
+        <p className="text-xs font-bold uppercase tracking-wide text-slate-500">{t("admin.support.immutable.permission.scope_fd6d3d")}</p>
         <ul className="mt-2 grid gap-2 lg:grid-cols-2">
           {lease.permissions.map((code) => {
             const permission = permissionMap.get(code);
+            const localized = permission ? supportAccessPermissionText(locale, permission) : null;
             return (
               <li key={code} className="rounded-xl border bg-white p-3 text-sm">
-                <p className="font-semibold text-slate-900">{permission?.label || code}</p>
+                <p className="font-semibold text-slate-900">{localized?.label || code}</p>
                 <p className="font-mono text-xs text-slate-500">{code}</p>
-                {permission?.description && <p className="mt-1 text-xs text-slate-600">{permission.description}</p>}
+                {localized?.description && <p className="mt-1 text-xs text-slate-600">{localized.description}</p>}
               </li>
             );
           })}
@@ -777,25 +787,25 @@ function LeaseCard({
           disabled={approvalPending}
           onClick={onApprove}
         >
-          {approvalPending ? "Approving…" : "Approve support access"}
+          {approvalPending ? t("byte352.support.approveBusy") : t("byte352.support.approveAccess")}
         </button>
       )}
 
       {expiredPending && tenantAdministrator && (
         <p className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
-          This pending request passed its immutable expiration and can no longer be approved. Its historical PENDING record remains retained.
+          {t("admin.support.this.pending.request.passed.its.immutable.expiration.an_707af5")}
         </p>
       )}
 
       {canTerminate && (
         <div className="mt-4 rounded-xl border border-red-200 bg-red-50 p-3">
           <label className="block text-sm font-semibold text-red-950">
-            Immediate termination reason
+            {t("admin.support.immediate.termination.reason_6d0083")}
             <input
               className="mt-1 block w-full rounded-xl border border-red-200 bg-white px-3 py-2 text-sm"
               value={terminationReason}
               onChange={(event) => onTerminationReasonChange(event.target.value)}
-              placeholder="Why is this support session ending?"
+              placeholder={t("support.extra.why.is.this.support.session.ending_948bc8")}
             />
           </label>
           <button
@@ -804,29 +814,29 @@ function LeaseCard({
             disabled={terminationPending || !terminationReason.trim()}
             onClick={onTerminate}
           >
-            {terminationPending ? "Terminating…" : "Terminate immediately"}
+            {terminationPending ? t("byte352.support.terminateBusy") : t("byte352.support.terminateNow")}
           </button>
         </div>
       )}
 
       {auditOpen && (
         <div className="mt-4 rounded-xl border bg-white p-3">
-          <h3 className="font-bold text-slate-950">Lease audit trail</h3>
+          <h3 className="font-bold text-slate-950">{t("admin.support.lease.audit.trail_334688")}</h3>
           <ApiErrorPanel error={auditError} />
           {auditLoading ? (
-            <p className="mt-2 text-sm text-slate-500">Loading audit events…</p>
+            <p className="mt-2 text-sm text-slate-500">{t("admin.support.loading.audit.events_813d81")}</p>
           ) : auditLogs.length === 0 ? (
-            <p className="mt-2 text-sm text-slate-500">No audit events are recorded for this lease yet.</p>
+            <p className="mt-2 text-sm text-slate-500">{t("admin.support.no.audit.events.are.recorded.for.this.lease.yet_89cc21")}</p>
           ) : (
             <div className="mt-3 overflow-x-auto">
               <table className="min-w-full divide-y divide-slate-200 text-left text-sm">
                 <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
                   <tr>
-                    <th className="px-2 py-2">When</th>
-                    <th className="px-2 py-2">Decision</th>
-                    <th className="px-2 py-2">Operation</th>
-                    <th className="px-2 py-2">Actor</th>
-                    <th className="px-2 py-2">Request</th>
+                    <th className="px-2 py-2">{t("admin.support.when_769bb1")}</th>
+                    <th className="px-2 py-2">{t("admin.support.decision_7f59a1")}</th>
+                    <th className="px-2 py-2">{t("admin.support.operation_430d32")}</th>
+                    <th className="px-2 py-2">{t("admin.support.actor_cbd19b")}</th>
+                    <th className="px-2 py-2">{t("admin.support.request_4aed03")}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
@@ -853,6 +863,7 @@ function LeaseCard({
 }
 
 function Fact({ label, value, mono = false }: { label: string; value: string; mono?: boolean }) {
+  const { t } = useI18n();
   return (
     <div>
       <dt className="text-xs font-bold uppercase tracking-wide text-slate-500">{label}</dt>
@@ -862,6 +873,7 @@ function Fact({ label, value, mono = false }: { label: string; value: string; mo
 }
 
 function StatusBadge({ status }: { status: string }) {
+  const { t } = useI18n();
   const normalized = status.toUpperCase();
   const className =
     normalized === "APPROVED"
@@ -871,7 +883,7 @@ function StatusBadge({ status }: { status: string }) {
         : normalized === "TERMINATED"
           ? "bg-slate-200 text-slate-800"
           : "bg-amber-100 text-amber-800";
-  return <span className={`rounded-full px-2.5 py-1 text-xs font-bold ${className}`}>{normalized}</span>;
+  return <span className={`rounded-full px-2.5 py-1 text-xs font-bold ${className}`}>{({ PENDING: t("byte352.support.pending"), APPROVED: t("byte352.support.approved"), EXPIRED: t("byte352.support.expired"), TERMINATED: t("byte352.support.terminated") } as Record<string, string>)[normalized] || normalized}</span>;
 }
 
 function dateTimeLocalInput(date: Date): string {

@@ -1,3 +1,4 @@
+import { I18nProvider } from "../../i18n";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -148,6 +149,7 @@ describe("AuthzAdminRoute", () => {
 });
 
 function renderRoute(queryClient = createQueryClient()) {
+  window.localStorage.setItem("ers.i18n.locale", "en-US");
   const router = createMemoryRouter(
     [
       {
@@ -162,9 +164,9 @@ function renderRoute(queryClient = createQueryClient()) {
   root = createRoot(container);
   act(() => {
     root?.render(
-      <QueryClientProvider client={queryClient}>
+      <I18nProvider><QueryClientProvider client={queryClient}>
         <RouterProvider router={router} />
-      </QueryClientProvider>,
+      </QueryClientProvider></I18nProvider>,
     );
   });
 }

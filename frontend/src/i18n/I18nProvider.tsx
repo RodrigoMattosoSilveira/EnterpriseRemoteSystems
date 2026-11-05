@@ -28,6 +28,7 @@ import {
 import type { TranslationKey } from "./resources";
 import type { TranslationParameters } from "./translate";
 import { translateForLocale } from "./translateResource";
+import { installNativeValidationTranslations } from "./nativeValidation";
 
 export interface I18nContextValue {
   locale: AppLocale;
@@ -123,6 +124,11 @@ export function I18nProvider({ children }: { children: ReactNode }) {
     if (typeof document !== "undefined") {
       document.documentElement.lang = locale;
     }
+  }, [locale]);
+
+  useEffect(() => {
+    if (typeof document === "undefined") return undefined;
+    return installNativeValidationTranslations(locale, document);
   }, [locale]);
 
   useEffect(() => {

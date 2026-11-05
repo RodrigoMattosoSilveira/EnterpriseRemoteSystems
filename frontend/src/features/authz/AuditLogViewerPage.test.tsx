@@ -1,3 +1,4 @@
+import { I18nProvider } from "../../i18n";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -107,6 +108,32 @@ describe("AuditLogViewerPage", () => {
     expect(getCall?.headers["X-Tenant-ID"]).toBe("default");
   });
 
+  it("renders evidence on a full-width second row for every audit event", async () => {
+    mockAuditFetch(auditLogs);
+    renderPage();
+
+    await waitForText("COLLABORATOR_REQUESTED_PAYOUT");
+
+    const summaryRows = container.querySelectorAll('tr[data-testid="audit-log-row"]');
+    const evidenceRows = container.querySelectorAll('tr[data-testid="audit-log-evidence-row"]');
+    expect(summaryRows).toHaveLength(auditLogs.length);
+    expect(evidenceRows).toHaveLength(auditLogs.length);
+
+    summaryRows.forEach((summaryRow, index) => {
+      expect((summaryRow as HTMLTableRowElement).cells).toHaveLength(5);
+      const evidenceRow = evidenceRows[index] as HTMLTableRowElement;
+      expect(summaryRow.nextElementSibling).toBe(evidenceRow);
+      expect(evidenceRow.cells).toHaveLength(1);
+      expect(evidenceRow.cells[0].colSpan).toBe(5);
+      expect(evidenceRow.textContent).toContain("Evidence");
+    });
+
+    expect(evidenceRows[0].textContent).toContain("account-bootstrap-admin");
+    expect(evidenceRows[0].textContent).toContain("COLLABORATOR_REQUESTED_PAYOUT");
+    expect(evidenceRows[0].querySelector("details summary")?.textContent).toContain("Raw metadata");
+    expect(evidenceRows[1].textContent).toContain("recent reauthentication is required");
+  });
+
   it("applies operation and decision filters", async () => {
     mockAuditFetch(auditLogs);
 
@@ -163,6 +190,7 @@ function mockAuditFetch(logs: AuthzAuditLog[]) {
 }
 
 function renderPage() {
+  window.localStorage.setItem("ers.i18n.locale", "en-US");
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
@@ -174,9 +202,9 @@ function renderPage() {
   act(() => {
     root = createRoot(container);
     root.render(
-      <QueryClientProvider client={queryClient}>
+      <I18nProvider><QueryClientProvider client={queryClient}>
         <RouterProvider router={router} />
-      </QueryClientProvider>,
+      </QueryClientProvider></I18nProvider>,
     );
   });
 }
