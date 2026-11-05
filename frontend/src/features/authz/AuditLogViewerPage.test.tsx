@@ -108,6 +108,32 @@ describe("AuditLogViewerPage", () => {
     expect(getCall?.headers["X-Tenant-ID"]).toBe("default");
   });
 
+  it("renders evidence on a full-width second row for every audit event", async () => {
+    mockAuditFetch(auditLogs);
+    renderPage();
+
+    await waitForText("COLLABORATOR_REQUESTED_PAYOUT");
+
+    const summaryRows = container.querySelectorAll('tr[data-testid="audit-log-row"]');
+    const evidenceRows = container.querySelectorAll('tr[data-testid="audit-log-evidence-row"]');
+    expect(summaryRows).toHaveLength(auditLogs.length);
+    expect(evidenceRows).toHaveLength(auditLogs.length);
+
+    summaryRows.forEach((summaryRow, index) => {
+      expect((summaryRow as HTMLTableRowElement).cells).toHaveLength(5);
+      const evidenceRow = evidenceRows[index] as HTMLTableRowElement;
+      expect(summaryRow.nextElementSibling).toBe(evidenceRow);
+      expect(evidenceRow.cells).toHaveLength(1);
+      expect(evidenceRow.cells[0].colSpan).toBe(5);
+      expect(evidenceRow.textContent).toContain("Evidence");
+    });
+
+    expect(evidenceRows[0].textContent).toContain("account-bootstrap-admin");
+    expect(evidenceRows[0].textContent).toContain("COLLABORATOR_REQUESTED_PAYOUT");
+    expect(evidenceRows[0].querySelector("details summary")?.textContent).toContain("Raw metadata");
+    expect(evidenceRows[1].textContent).toContain("recent reauthentication is required");
+  });
+
   it("applies operation and decision filters", async () => {
     mockAuditFetch(auditLogs);
 

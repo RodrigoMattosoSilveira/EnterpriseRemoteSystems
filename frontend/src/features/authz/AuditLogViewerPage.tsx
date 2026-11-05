@@ -1,5 +1,5 @@
 import { useI18n } from "../../i18n";
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { Fragment, FormEvent, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { ApiErrorPanel } from "../../components/ApiErrorPanel";
 import {
@@ -286,39 +286,47 @@ export function AuditLogViewerPage() {
                     <th className="px-3 py-2">{t("admin.audit.operation_430d32")}</th>
                     <th className="px-3 py-2">{t("admin.audit.actor_cbd19b")}</th>
                     <th className="px-3 py-2">{t("admin.audit.target_61ad50")}</th>
-                    <th className="px-3 py-2">{t("admin.audit.evidence_7ea014")}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
                   {logs.map((log) => (
-                    <tr key={log.id} data-testid="audit-log-row" className="align-top">
-                      <td className="whitespace-nowrap px-3 py-3 text-gray-700">{formatDateTime(log.occurredAt)}</td>
-                      <td className="px-3 py-3">
-                        <DecisionBadge decision={log.decision} />
-                      </td>
-                      <td className="px-3 py-3">
-                        <p className="font-semibold text-gray-950">{operationLabel(log.operation)}</p>
-                        <p className="mt-1 text-xs text-gray-500">{log.operation}</p>
-                        {log.permissionCode && <p className="mt-1 text-xs text-gray-500">{log.permissionCode}</p>}
-                      </td>
-                      <td className="px-3 py-3 text-gray-700">
-                        <p className="font-medium">{log.actorId || "—"}</p>
-                        {log.tenantId && <p className="mt-1 text-xs text-gray-500">{t("audit.fragments.tenant_be7b76")} {log.tenantId}</p>}
-                        {log.actorRecordId && <p className="mt-1 text-xs text-gray-500">{t("audit.fragments.record_9b5e24")} {log.actorRecordId}</p>}
-                        {log.supportLeaseId && (
-                          <p className="mt-1 break-all text-xs font-semibold text-amber-700">
-                            {t("audit.fragments.support.lease_b18df5")} {log.supportLeaseId}
-                          </p>
-                        )}
-                      </td>
-                      <td className="px-3 py-3 text-gray-700">
-                        <p>{log.targetType || "—"}</p>
-                        {log.targetId && <p className="mt-1 break-all text-xs text-gray-500">{log.targetId}</p>}
-                      </td>
-                      <td className="min-w-72 px-3 py-3 text-gray-700">
-                        <AuditEvidence log={log} />
-                      </td>
-                    </tr>
+                    <Fragment key={log.id}>
+                      <tr data-testid="audit-log-row" className="align-top">
+                        <td className="whitespace-nowrap px-3 py-3 text-gray-700">{formatDateTime(log.occurredAt)}</td>
+                        <td className="px-3 py-3">
+                          <DecisionBadge decision={log.decision} />
+                        </td>
+                        <td className="px-3 py-3">
+                          <p className="font-semibold text-gray-950">{operationLabel(log.operation)}</p>
+                          <p className="mt-1 text-xs text-gray-500">{log.operation}</p>
+                          {log.permissionCode && <p className="mt-1 text-xs text-gray-500">{log.permissionCode}</p>}
+                        </td>
+                        <td className="px-3 py-3 text-gray-700">
+                          <p className="font-medium">{log.actorId || "—"}</p>
+                          {log.tenantId && <p className="mt-1 text-xs text-gray-500">{t("audit.fragments.tenant_be7b76")} {log.tenantId}</p>}
+                          {log.actorRecordId && <p className="mt-1 text-xs text-gray-500">{t("audit.fragments.record_9b5e24")} {log.actorRecordId}</p>}
+                          {log.supportLeaseId && (
+                            <p className="mt-1 break-all text-xs font-semibold text-amber-700">
+                              {t("audit.fragments.support.lease_b18df5")} {log.supportLeaseId}
+                            </p>
+                          )}
+                        </td>
+                        <td className="px-3 py-3 text-gray-700">
+                          <p>{log.targetType || "—"}</p>
+                          {log.targetId && <p className="mt-1 break-all text-xs text-gray-500">{log.targetId}</p>}
+                        </td>
+                      </tr>
+                      <tr data-testid="audit-log-evidence-row">
+                        <td colSpan={5} className="bg-gray-50/60 px-3 pb-4 pt-2 text-gray-700">
+                          <div className="min-w-0 rounded-lg border border-gray-200 bg-white p-3">
+                            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-600">
+                              {t("admin.audit.evidence_7ea014")}
+                            </p>
+                            <AuditEvidence log={log} />
+                          </div>
+                        </td>
+                      </tr>
+                    </Fragment>
                   ))}
                 </tbody>
               </table>
@@ -346,7 +354,7 @@ function AuditEvidence({ log }: { log: AuthzAuditLog }) {
           {items.map((item) => (
             <div key={item.label}>
               <dt className="text-xs font-semibold uppercase tracking-wide text-gray-500">{item.label}</dt>
-              <dd className="break-words text-sm text-gray-800">{item.value}</dd>
+              <dd className="break-all text-sm text-gray-800">{item.value}</dd>
             </div>
           ))}
         </dl>
