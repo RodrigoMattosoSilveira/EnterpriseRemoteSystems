@@ -23,6 +23,7 @@ export function GoldPricesPage() {
   const [includeInactive, setIncludeInactive] = useState(false);
   const [successMessage, setSuccessMessage] = useState("");
   const [form, setForm] = useState<CreateGoldPriceInput>(() => emptyForm());
+  const [formResetToken, setFormResetToken] = useState(0);
   const [tenantId] = useState(() =>
     typeof window === "undefined" ? "default" : readSelectedTenantId(window.localStorage),
   );
@@ -64,6 +65,7 @@ export function GoldPricesPage() {
         notes: form.notes?.trim() ?? "",
       });
       setForm(emptyForm());
+      setFormResetToken((current) => current + 1);
       setSuccessMessage(created.supersededGoldPriceId
         ? t("byte352.gold.replaced", { date: created.priceDate })
         : t("byte352.gold.recorded", { date: created.priceDate }));
@@ -137,6 +139,7 @@ export function GoldPricesPage() {
           <LatestGoldPriceCard goldPrice={latestGoldPriceQuery.data} isLoading={latestGoldPriceQuery.isLoading} />
           {canManage ? <GoldPriceForm
             value={form}
+            resetToken={formResetToken}
             isPending={createMutation.isPending}
             onChange={setForm}
             onSubmit={handleCreate}

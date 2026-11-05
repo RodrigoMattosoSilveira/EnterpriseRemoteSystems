@@ -77,6 +77,26 @@ describe("GoldPricesPage", () => {
     expect(fetchCalls.some((call) => call.url === "/api/v1/gold-prices" && call.method === "GET")).toBe(true);
   });
 
+  it("keeps a zero gold price visible, explains the minimum, and clears the error when corrected", async () => {
+    mockGoldPriceFetch();
+    renderPage();
+    await waitForText("Daily admin rate");
+
+    const field = controlByLabel<HTMLInputElement>(formByHeading("Record Gold Price"), "BRL per Gram", "input");
+    expect(field.value).toBe("");
+
+    await changeInputInForm("Record Gold Price", "BRL per Gram", "0");
+    expect(field.value).toBe("0");
+    expect(field.getAttribute("aria-invalid")).toBe("true");
+    expect(formByHeading("Record Gold Price").querySelector('[role="alert"]')?.textContent).toContain("0.01");
+    expect(fetchCalls.filter((call) => call.method === "POST")).toHaveLength(0);
+
+    await changeInputInForm("Record Gold Price", "BRL per Gram", "10");
+    expect(field.value).toBe("10");
+    expect(field.getAttribute("aria-invalid")).toBe("false");
+    expect(formByHeading("Record Gold Price").querySelector('[role="alert"]')).toBeNull();
+  });
+
   it("records a new administrator gold price", async () => {
     mockGoldPriceFetch();
 
