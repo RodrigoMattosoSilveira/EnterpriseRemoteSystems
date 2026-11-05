@@ -580,6 +580,11 @@ describe("AuthzAdminPage", () => {
     expect(roleSelectorButtonInArticle("expense-admin").textContent).toContain(
       "TENANT_ADMIN",
     );
+    // Escape must restore keyboard focus to the Role selector trigger.
+    // This also catches errors thrown asynchronously by requestAnimationFrame.
+    await vi.waitFor(() => {
+      expect(document.activeElement).toBe(roleSelectorButtonInArticle("expense-admin"));
+    });
   });
 
   it("derives a tenant grant from the Actor binding instead of the application wildcard", async () => {

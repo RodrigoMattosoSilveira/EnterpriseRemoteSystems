@@ -769,6 +769,7 @@ function RoleSelector({
   const [open, setOpen] = useState(false);
   const [filterText, setFilterText] = useState("");
   const rootRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
   const filterRef = useRef<HTMLInputElement>(null);
   const selectedRole = roles.find((role) => role.code === selectedRoleCode);
   const normalizedFilter = filterText.trim().toLocaleLowerCase();
@@ -786,9 +787,7 @@ function RoleSelector({
     setOpen(false);
     if (restoreFocus) {
       window.requestAnimationFrame(() => {
-        rootRef.current
-          ?.querySelector<HTMLButtonElement>('button[aria-label={t("authz.extra.role.selector_d23819")}]')
-          ?.focus();
+        triggerRef.current?.focus();
       });
     }
   }
@@ -821,6 +820,7 @@ function RoleSelector({
     >
       <p className="text-sm font-semibold text-gray-700">{t("admin.authz.role.selector_d23819")}</p>
       <button
+        ref={triggerRef}
         type="button"
         aria-label={t("authz.extra.role.selector_d23819")}
         aria-haspopup="listbox"
