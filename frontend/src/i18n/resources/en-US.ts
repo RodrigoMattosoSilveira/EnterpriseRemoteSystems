@@ -2189,6 +2189,16 @@ export const enUSMessages = {
   "byte352.support.permission.journey.settlements.final_collaborator_payment.description": "Record the full negative Journey balance paid by the Collaborator to the Tenant.",
   "byte352.support.permission.journey.settlements.close.label": "Close journey",
   "byte352.support.permission.journey.settlements.close.description": "Close tenant journeys.",
+
+  "native.validation.required": "Fill out this field.",
+  "native.validation.numberOrType": "Enter a valid value.",
+  "native.validation.minimum": "The value is below the permitted minimum.",
+  "native.validation.maximum": "The value exceeds the permitted maximum.",
+  "native.validation.step": "Enter a value using the permitted increment.",
+  "native.validation.tooShort": "The value is too short.",
+  "native.validation.tooLong": "The value is too long.",
+  "native.validation.pattern": "Enter a value in the required format.",
+  "native.validation.number": "Enter a valid number.",
 } as const;
 
 export type TranslationKey = keyof typeof enUSMessages;

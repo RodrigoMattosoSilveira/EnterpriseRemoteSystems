@@ -2188,4 +2188,14 @@ export const ptBRMessages = {
   "byte352.support.permission.journey.settlements.final_collaborator_payment.description": "Registrar o pagamento do saldo negativo integral da Jornada feito pelo Colaborador à Entidade.",
   "byte352.support.permission.journey.settlements.close.label": "Encerrar Jornada",
   "byte352.support.permission.journey.settlements.close.description": "Encerrar Jornadas da Entidade.",
+
+  "native.validation.required": "Preencha este campo.",
+  "native.validation.numberOrType": "Informe um valor válido.",
+  "native.validation.minimum": "O valor está abaixo do mínimo permitido.",
+  "native.validation.maximum": "O valor excede o máximo permitido.",
+  "native.validation.step": "Informe um valor com o incremento permitido.",
+  "native.validation.tooShort": "O valor informado é muito curto.",
+  "native.validation.tooLong": "O valor informado é muito longo.",
+  "native.validation.pattern": "Informe um valor no formato exigido.",
+  "native.validation.number": "Informe um número válido.",
 } satisfies Record<TranslationKey, string>;
