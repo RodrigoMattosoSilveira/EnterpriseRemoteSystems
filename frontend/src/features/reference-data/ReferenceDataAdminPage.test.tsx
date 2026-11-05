@@ -62,6 +62,38 @@ afterEach(async () => {
 });
 
 describe("ReferenceDataAdminPage", () => {
+  it("shows Portuguese type options and standard Value Units without altering persisted values", async () => {
+    const valueUnits: ReferenceDataItem[] = [
+      { id: "ref-value-unit-brl", tenantId: "default", type: "value_unit", code: "BRL", label: "Brazilian Real", description: "Brazilian Real monetary value", active: true, sortOrder: 10 },
+      { id: "ref-value-unit-gold-gram", tenantId: "default", type: "value_unit", code: "GOLD_GRAM", label: "Gold Gram", description: "Grams of gold", active: true, sortOrder: 20 },
+      { id: "custom-unit", tenantId: "default", type: "value_unit", code: "CUSTOM", label: "Custom unit", description: "Custom description", active: true, sortOrder: 30 },
+    ];
+    mockFetch(async (url, init) => {
+      recordFetchCall(url, init);
+      if (url === "/api/v1/reference-data/person_status") return jsonResponse({ data: personStatusRows });
+      if (url === "/api/v1/reference-data/value_unit") return jsonResponse({ data: valueUnits });
+      throw new Error(`Unhandled request: ${url}`);
+    });
+
+    renderReferenceDataAdminPage("pt-BR");
+    await waitForText("Situações das Pessoas");
+    const selector = controlByLabel<HTMLSelectElement>(container, "Tipo de dado de referência", "select");
+    expect(Array.from(selector.options).find((option) => option.value === "value_unit")?.textContent).toBe("Unidades de valor");
+    expect(Array.from(selector.options).every((option) => !option.textContent?.includes("Statuses"))).toBe(true);
+
+    await changeSelect("Tipo de dado de referência", "value_unit");
+    await waitForText("Real brasileiro");
+    expect(textNode("Valor monetário em reais brasileiros")).toBeTruthy();
+    expect(textNode("Grama de ouro")).toBeTruthy();
+    expect(textNode("Quantidade em gramas de ouro")).toBeTruthy();
+    expect(textNode("Custom unit")).toBeTruthy();
+    expect(textNode("Custom description")).toBeTruthy();
+    expect(fetchCalls.some((call) => call.url === "/api/v1/reference-data/value_unit")).toBe(true);
+    expect(selector.value).toBe("value_unit");
+    expect(textNode("BRL")).toBeTruthy();
+    expect(textNode("GOLD_GRAM")).toBeTruthy();
+  });
+
   it("lists reference data filtered by type", async () => {
     mockFetch(async (url, init) => {
       recordFetchCall(url, init);
@@ -265,8 +297,8 @@ describe("ReferenceDataAdminPage", () => {
   });
 });
 
-function renderReferenceDataAdminPage() {
-  window.localStorage.setItem("ers.i18n.locale", "en-US");
+function renderReferenceDataAdminPage(locale: "en-US" | "pt-BR" = "en-US") {
+  window.localStorage.setItem("ers.i18n.locale", locale);
   const queryClient = new QueryClient({
     defaultOptions: {
       queries: { retry: false },

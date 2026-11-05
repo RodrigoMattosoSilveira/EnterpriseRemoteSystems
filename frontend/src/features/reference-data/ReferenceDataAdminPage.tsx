@@ -1,4 +1,4 @@
-import { useI18n } from "../../i18n";
+import { useI18n, type TranslationKey } from "../../i18n";
 import { FormEvent, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { ApiErrorPanel } from "../../components/ApiErrorPanel";
@@ -6,7 +6,6 @@ import {
   REFERENCE_DATA_TYPES,
   type ReferenceDataInput,
   type ReferenceDataItem,
-  referenceDataTypeLabel,
 } from "../../types/referenceData";
 import {
   useCreateReferenceDataItem,
@@ -69,7 +68,7 @@ export function ReferenceDataAdminPage() {
     try {
       const created = await createMutation.mutateAsync(toPayload(createForm));
       setCreateForm(emptyForm);
-      setSuccessMessage(`${created.label} created.`);
+      setSuccessMessage(t("reference.feedback.created", { name: created.label }));
     } catch {
       // Existing mutation error state is rendered by ApiErrorPanel.
     }
@@ -103,7 +102,7 @@ export function ReferenceDataAdminPage() {
       });
       setEditing(null);
       setEditForm(emptyForm);
-      setSuccessMessage(`${updated.label} updated.`);
+      setSuccessMessage(t("reference.feedback.updated", { name: updated.label }));
     } catch {
       // Existing mutation error state is rendered by ApiErrorPanel.
     }
@@ -115,7 +114,7 @@ export function ReferenceDataAdminPage() {
 
     try {
       const updated = await deactivateMutation.mutateAsync(item.id);
-      setSuccessMessage(`${updated.label} deactivated.`);
+      setSuccessMessage(t("reference.feedback.deactivated", { name: updated.label }));
     } catch {
       // Existing mutation error state is rendered by ApiErrorPanel.
     }
@@ -127,7 +126,7 @@ export function ReferenceDataAdminPage() {
 
     try {
       const updated = await reactivateMutation.mutateAsync(item.id);
-      setSuccessMessage(`${updated.label} reactivated.`);
+      setSuccessMessage(t("reference.feedback.reactivated", { name: updated.label }));
     } catch {
       // Existing mutation error state is rendered by ApiErrorPanel.
     }
@@ -183,7 +182,7 @@ export function ReferenceDataAdminPage() {
             >
               {REFERENCE_DATA_TYPES.map((option) => (
                 <option key={option.value} value={option.value}>
-                  {option.label}
+                  {t(referenceDataTypeTranslationKey(option.value))}
                 </option>
               ))}
             </select>
@@ -193,7 +192,7 @@ export function ReferenceDataAdminPage() {
         <section className="grid gap-4 lg:grid-cols-[1fr_2fr]">
           {canManage ? <form className="rounded-2xl border bg-white p-4 shadow-sm" onSubmit={handleCreate}>
             <h2 className="text-lg font-semibold text-gray-950">
-              {t("reference.fragments.create_6e157c")} {singularReferenceDataTypeLabel(selectedType)}
+              {t("reference.fragments.create_6e157c")} {t(referenceDataTypeTranslationKey(selectedType, true))}
             </h2>
             <ReferenceDataFields value={createForm} onChange={setCreateForm} />
             <button
@@ -201,7 +200,7 @@ export function ReferenceDataAdminPage() {
               disabled={createMutation.isPending}
               type="submit"
             >
-              {createMutation.isPending ? "Creating..." : "Create Item"}
+              {createMutation.isPending ? t("common.creatingDots") : t("reference.actions.createItem")}
             </button>
           </form> : null}
 
@@ -209,7 +208,7 @@ export function ReferenceDataAdminPage() {
             <div className="flex items-center justify-between gap-3">
               <div>
                 <h2 className="text-lg font-semibold text-gray-950">
-                  {referenceDataTypeLabel(selectedType)}
+                  {t(referenceDataTypeTranslationKey(selectedType))}
                 </h2>
                 <p className="text-sm text-gray-500">
                   {t("admin.reference.values.are.unique.within.tenant.type.code.and.name.labe_7476d5")}
@@ -245,9 +244,9 @@ export function ReferenceDataAdminPage() {
                       <tr key={item.id}>
                         <td className="p-3 font-mono text-xs">{item.code}</td>
                         <td className="p-3">
-                          <div className="font-medium text-gray-950">{item.label}</div>
+                          <div className="font-medium text-gray-950">{displayReferenceValue(item, "label", t)}</div>
                           {item.description && (
-                            <div className="text-xs text-gray-500">{item.description}</div>
+                            <div className="text-xs text-gray-500">{displayReferenceValue(item, "description", t)}</div>
                           )}
                         </td>
                         <td className="p-3">{item.sortOrder}</td>
@@ -309,7 +308,7 @@ export function ReferenceDataAdminPage() {
               disabled={updateMutation.isPending}
               type="submit"
             >
-              {updateMutation.isPending ? "Saving..." : "Save Changes"}
+              {updateMutation.isPending ? t("common.savingDots") : t("reference.actions.saveChanges")}
             </button>
           </form>
         )}
@@ -396,17 +395,48 @@ function StatusBadge({ active }: { active: boolean }) {
         active ? "bg-green-100 text-green-800" : "bg-gray-100 text-gray-600"
       }`}
     >
-      {active ? "Active" : "Inactive"}
+      {active ? t("common.active") : t("common.inactive")}
     </span>
   );
 }
 
-function singularReferenceDataTypeLabel(type: string) {
-  const label = referenceDataTypeLabel(type);
-  if (label.endsWith("Statuses")) return label.replace("Statuses", "Status");
-  if (label.endsWith("ies")) return `${label.slice(0, -3)}y`;
-  if (label.endsWith("s")) return label.slice(0, -1);
-  return label;
+// Stable codes select presentation text only. API values and editable item fields
+// always retain their original data, irrespective of the selected locale.
+const referenceTypeKeys = {
+  person_status: ["reference.type.personStatuses", "reference.type.personStatus"],
+  collaborator_status: ["reference.type.collaboratorStatuses", "reference.type.collaboratorStatus"],
+  method: ["reference.type.paymentMethods", "reference.type.paymentMethod"],
+  sector: ["reference.type.sectors", "reference.type.sector"],
+  location: ["reference.type.locations", "reference.type.location"],
+  task: ["reference.type.tasks", "reference.type.task"],
+  expense_category: ["reference.type.expenseCategories", "reference.type.expenseCategory"],
+  value_unit: ["reference.type.valueUnits", "reference.type.valueUnit"],
+} as const;
+
+type Translate = ReturnType<typeof useI18n>["t"];
+
+function referenceDataTypeTranslationKey(type: string, singular = false): TranslationKey {
+  const keys = referenceTypeKeys[type as keyof typeof referenceTypeKeys];
+  return (keys ? keys[singular ? 1 : 0] : "reference.type.valueUnits") as TranslationKey;
+}
+
+const standardValueUnits = {
+  BRL: {
+    label: ["Brazilian Real", "reference.valueUnit.brl.label"],
+    description: ["Brazilian Real monetary value", "reference.valueUnit.brl.description"],
+  },
+  GOLD_GRAM: {
+    label: ["Gold Gram", "reference.valueUnit.goldGram.label"],
+    description: ["Grams of gold", "reference.valueUnit.goldGram.description"],
+  },
+} as const;
+
+function displayReferenceValue(item: ReferenceDataItem, field: "label" | "description", t: Translate): string {
+  const original = item[field] ?? "";
+  if (item.type !== "value_unit") return original;
+  const known = standardValueUnits[item.code as keyof typeof standardValueUnits];
+  if (!known || original !== known[field][0]) return original;
+  return t(known[field][1]);
 }
 
 function bySortOrderThenLabel(a: ReferenceDataItem, b: ReferenceDataItem) {
