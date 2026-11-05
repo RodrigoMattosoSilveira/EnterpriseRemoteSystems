@@ -1,4 +1,5 @@
 import { useI18n } from "../../i18n";
+import { supportAccessPermissionText } from "./supportAccessPermissionText";
 import { FormEvent, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { ApiError } from "../../api/client";
@@ -354,7 +355,7 @@ function LeaseHistoryTenantFilter({
         >
           <p className="px-3 py-2 text-xs font-semibold text-slate-500">
             {normalizedSearch
-              ? `${visibleTenants.length} of ${tenants.length} active Tenants`
+              ? t("byte352.support.filteredActiveTenants", { shown: visibleTenants.length, total: tenants.length })
               : `${tenants.length} active Tenant${tenants.length === 1 ? "" : "s"}`}
           </p>
 
@@ -418,7 +419,7 @@ function RequestLeasePanel({
   onResetError: () => void;
   onSubmit: (input: { tenantId: string; expiresAt: string; reason: string; permissions: string[] }) => Promise<void>;
 }) {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const [tenantId, setTenantId] = useState("");
   const [tenantSearch, setTenantSearch] = useState("");
   const [expiresAt, setExpiresAt] = useState(defaultExpirationInput());
@@ -530,8 +531,8 @@ function RequestLeasePanel({
             <div className="mt-3 flex items-center justify-between gap-3 text-xs text-slate-500">
               <span>
                 {normalizedTenantSearch
-                  ? `${visibleTenants.length} of ${tenants.length} active Tenants`
-                  : `${tenants.length} active Tenants`}
+                  ? t("byte352.support.filteredActiveTenants", { shown: visibleTenants.length, total: tenants.length })
+                  : t("byte352.support.activeTenants", { count: tenants.length })}
               </span>
               {selectedTenant && (
                 <span>
@@ -608,7 +609,9 @@ function RequestLeasePanel({
             <p className="mt-3 text-sm text-slate-500">{t("admin.support.loading.eligible.permissions_d417fe")}</p>
           ) : (
             <div className="mt-3 grid gap-2 lg:grid-cols-2">
-              {permissions.map((permission) => (
+              {permissions.map((permission) => {
+                const localized = supportAccessPermissionText(locale, permission);
+                return (
                 <label key={permission.code} className="flex gap-3 rounded-xl border border-slate-200 p-3">
                   <input
                     type="checkbox"
@@ -616,12 +619,13 @@ function RequestLeasePanel({
                     onChange={() => togglePermission(permission.code)}
                   />
                   <span>
-                    <span className="block text-sm font-semibold text-slate-900">{permission.label || permission.code}</span>
+                    <span className="block text-sm font-semibold text-slate-900">{localized.label}</span>
                     <span className="block font-mono text-xs text-slate-500">{permission.code}</span>
-                    {permission.description && <span className="mt-1 block text-xs text-slate-600">{permission.description}</span>}
+                    {localized.description && <span className="mt-1 block text-xs text-slate-600">{localized.description}</span>}
                   </span>
                 </label>
-              ))}
+                );
+              })}
             </div>
           )}
         </fieldset>
@@ -630,7 +634,7 @@ function RequestLeasePanel({
           type="submit"
           disabled={submitting || !requestReady}
         >
-          {submitting ? "Requesting…" : "Request support access"}
+          {submitting ? t("byte352.support.requestBusy") : t("byte352.support.requestAccess")}
         </button>
       </form>
       {conflictDialogMessage && (
@@ -721,7 +725,7 @@ function LeaseCard({
   onTerminate: () => void;
   onToggleAudit: () => void;
 }) {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const permissionMap = useMemo(() => new Map(permissions.map((item) => [item.code, item])), [permissions]);
   const expiredPending = lease.status === "PENDING" && lease.effectiveStatus === "EXPIRED";
   const canApprove = tenantAdministrator && lease.effectiveStatus === "PENDING";
@@ -764,11 +768,12 @@ function LeaseCard({
         <ul className="mt-2 grid gap-2 lg:grid-cols-2">
           {lease.permissions.map((code) => {
             const permission = permissionMap.get(code);
+            const localized = permission ? supportAccessPermissionText(locale, permission) : null;
             return (
               <li key={code} className="rounded-xl border bg-white p-3 text-sm">
-                <p className="font-semibold text-slate-900">{permission?.label || code}</p>
+                <p className="font-semibold text-slate-900">{localized?.label || code}</p>
                 <p className="font-mono text-xs text-slate-500">{code}</p>
-                {permission?.description && <p className="mt-1 text-xs text-slate-600">{permission.description}</p>}
+                {localized?.description && <p className="mt-1 text-xs text-slate-600">{localized.description}</p>}
               </li>
             );
           })}
