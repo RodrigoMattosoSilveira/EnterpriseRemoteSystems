@@ -133,6 +133,9 @@ describe("TenantRoleDelegationPage grant feedback", () => {
     expect(document.activeElement).toBe(filter);
     await setInputValue(filter, "tenant");
     expect([...container.querySelectorAll<HTMLButtonElement>('button[role="option"]')]
+      .map((option) => option.dataset.roleCode)).toEqual(["TENANT_ADMIN", "TENANT_VIEWER"]);
+    await setInputValue(filter, "TENANT_ADMIN");
+    expect([...container.querySelectorAll<HTMLButtonElement>('button[role="option"]')]
       .map((option) => option.dataset.roleCode)).toEqual(["TENANT_ADMIN"]);
 
     await act(async () => {
