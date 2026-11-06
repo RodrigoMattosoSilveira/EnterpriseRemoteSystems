@@ -64,6 +64,9 @@ jobs:
       - name: Verify Bite 32.6 release-hardening contract
         run: make bite326-release-hardening-check
 
+      - name: Verify deployed migration head matches repository
+        run: make deployment-migration-head-check
+
       - name: Verify Bite 33.1 Production environment guardrails
         run: make production-environment-guardrails-check
 
