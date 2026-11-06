@@ -105,6 +105,50 @@ describe("TenantRoleDelegationPage grant feedback", () => {
     expect(currentGrants?.textContent).toContain("EARNINGS_OPERATOR");
   });
 
+  it("restores focus to the tenant Role selector after Escape without changing its Role", async () => {
+    const queuedFrames: FrameRequestCallback[] = [];
+    vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => {
+      queuedFrames.push(callback);
+      return queuedFrames.length;
+    });
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      const url = input.toString();
+      if (url === "/api/v1/authz/tenant-role-actors" && !init?.method) {
+        return json({ data: [targetActor] });
+      }
+      throw new Error(`Unexpected request: ${url}`);
+    });
+
+    renderPage();
+    await waitForText("Target Person");
+    await clickRoleSelector();
+    await flushQueuedAnimationFrames(queuedFrames);
+    await clickRoleOption("EARNINGS_OPERATOR");
+
+    const trigger = roleSelectorButton();
+    await clickRoleSelector();
+    await flushQueuedAnimationFrames(queuedFrames);
+    const filter = container.querySelector<HTMLInputElement>('input[role="combobox"]');
+    if (!filter) throw new Error("Tenant Role filter not found");
+    expect(document.activeElement).toBe(filter);
+    await setInputValue(filter, "tenant");
+    expect([...container.querySelectorAll<HTMLButtonElement>('button[role="option"]')]
+      .map((option) => option.dataset.roleCode)).toEqual(["TENANT_ADMIN"]);
+
+    await act(async () => {
+      filter.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    });
+    expect(trigger.getAttribute("aria-expanded")).toBe("false");
+    expect(trigger.textContent).toContain("EARNINGS_OPERATOR");
+    expect(queuedFrames).toHaveLength(1);
+    await flushQueuedAnimationFrames(queuedFrames);
+    expect(document.activeElement).toBe(trigger);
+    expect(fetchMock).not.toHaveBeenCalledWith(
+      expect.stringContaining("role-grants"),
+      expect.objectContaining({ method: "POST" }),
+    );
+  });
+
   it("allows a Tenant Administrator to grant TENANT_ADMIN to an eligible same-tenant Actor", async () => {
     let roleGrants: AuthzActorRoleGrant[] = [];
 
@@ -185,10 +229,29 @@ function json(body: unknown, status = 200) {
   );
 }
 
-async function clickRoleSelector() {
+function roleSelectorButton() {
   const button = container.querySelector<HTMLButtonElement>('button[aria-label="Role selector"]');
   if (!button) throw new Error("Role selector not found");
-  await act(async () => button.click());
+  return button;
+}
+
+async function flushQueuedAnimationFrames(queuedFrames: FrameRequestCallback[]) {
+  await act(async () => {
+    for (const callback of queuedFrames.splice(0)) callback(0);
+  });
+}
+
+async function setInputValue(input: HTMLInputElement, value: string) {
+  const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+  await act(async () => {
+    setter?.call(input, value);
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+}
+
+async function clickRoleSelector() {
+  await act(async () => roleSelectorButton().click());
 }
 
 async function clickRoleOption(roleCode: string) {
