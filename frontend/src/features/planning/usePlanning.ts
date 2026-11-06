@@ -154,10 +154,16 @@ export function useMarkOutcome(workPeriodId: string) {
     mutationFn: ({
       assignmentId,
       actualStatus,
+      actualSectorId,
+      actualLocationId,
+      actualTaskId,
     }: {
       assignmentId: string;
       actualStatus: ActualStatus;
-    }) => markWorkPeriodAssignmentOutcome(assignmentId, actualStatus),
+      actualSectorId?: string;
+      actualLocationId?: string;
+      actualTaskId?: string;
+    }) => markWorkPeriodAssignmentOutcome(assignmentId, actualStatus, actualSectorId, actualLocationId, actualTaskId),
     onSuccess: () =>
       queryClient.invalidateQueries({
         queryKey: workPeriodKeys.assignments(workPeriodId),

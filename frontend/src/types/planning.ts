@@ -60,6 +60,9 @@ export type WorkPeriodAssignment = {
   plannedStatus: PlannedStatus;
   planningAvailability: PlanningAvailability;
   actualStatus?: ActualStatus;
+  actualSectorId?: string;
+  actualLocationId?: string;
+  actualTaskId?: string;
   replacementForAssignmentId?: string;
   sectorId: string;
   sectorLabel?: string;

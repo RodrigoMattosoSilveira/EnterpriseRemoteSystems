@@ -81,6 +81,12 @@ type apiAccrualItemListResponse struct {
 			GoldGramAmount         *float64 `json:"goldGramAmount"`
 			Status                 string   `json:"status"`
 			PendingReason          string   `json:"pendingReason"`
+			WorkSectorID           string   `json:"workSectorId"`
+			WorkSectorLabel        string   `json:"workSectorLabel"`
+			WorkLocationID         string   `json:"workLocationId"`
+			WorkLocationLabel      string   `json:"workLocationLabel"`
+			WorkTaskID             string   `json:"workTaskId"`
+			WorkTaskLabel          string   `json:"workTaskLabel"`
 		} `json:"items"`
 		Total int `json:"total"`
 	} `json:"data"`
@@ -103,6 +109,12 @@ type apiLedgerEntryListResponse struct {
 			SourceWorkDate       string  `json:"sourceWorkDate"`
 			SourceWorkPeriodName string  `json:"sourceWorkPeriodName"`
 			EffectiveDate        string  `json:"effectiveDate"`
+			WorkSectorID         string  `json:"workSectorId"`
+			WorkSectorLabel      string  `json:"workSectorLabel"`
+			WorkLocationID       string  `json:"workLocationId"`
+			WorkLocationLabel    string  `json:"workLocationLabel"`
+			WorkTaskID           string  `json:"workTaskId"`
+			WorkTaskLabel        string  `json:"workTaskLabel"`
 		} `json:"items"`
 		Total int `json:"total"`
 	} `json:"data"`
@@ -130,6 +142,12 @@ type apiCurrentAccountDetailResponse struct {
 				SourceWorkPeriodID   string  `json:"sourceWorkPeriodId"`
 				SourceWorkDate       string  `json:"sourceWorkDate"`
 				SourceWorkPeriodName string  `json:"sourceWorkPeriodName"`
+				WorkSectorID         string  `json:"workSectorId"`
+				WorkSectorLabel      string  `json:"workSectorLabel"`
+				WorkLocationID       string  `json:"workLocationId"`
+				WorkLocationLabel    string  `json:"workLocationLabel"`
+				WorkTaskID           string  `json:"workTaskId"`
+				WorkTaskLabel        string  `json:"workTaskLabel"`
 			} `json:"items"`
 			Total int `json:"total"`
 		} `json:"ledgerEntries"`

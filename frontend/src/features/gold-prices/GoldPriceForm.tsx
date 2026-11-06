@@ -1,24 +1,34 @@
-import type { FormEvent } from "react";
+import { useI18n } from "../../i18n";
+import { useEffect, useState, type FormEvent } from "react";
 import type { CreateGoldPriceInput } from "../../types/goldPrices";
 
 type GoldPriceFormProps = {
   value: CreateGoldPriceInput;
   isPending?: boolean;
+  resetToken?: number;
   onChange: (value: CreateGoldPriceInput) => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
 };
 
-export function GoldPriceForm({ value, isPending = false, onChange, onSubmit }: GoldPriceFormProps) {
+export function GoldPriceForm({ value, isPending = false, resetToken = 0, onChange, onSubmit }: GoldPriceFormProps) {
+  const { t } = useI18n();
+  // Keep the entered text separate from the numeric API model: zero is an
+  // invalid price, but it must remain visible so the user can correct it.
+  const [priceText, setPriceText] = useState(() => value.brlPerGram > 0 ? String(value.brlPerGram) : "");
+  useEffect(() => {
+    setPriceText("");
+  }, [resetToken]);
+  const belowMinimum = priceText.trim() !== "" && Number.isFinite(Number(priceText)) && Number(priceText) < 0.01;
   return (
     <form className="rounded-2xl border bg-white p-4 shadow-sm" onSubmit={onSubmit}>
-      <h2 className="text-lg font-semibold text-gray-950">Record Gold Price</h2>
+      <h2 className="text-lg font-semibold text-gray-950">{t("gold.form.record.gold.price_9db12e")}</h2>
       <p className="mt-1 text-sm text-gray-500">
-        This administrator-recorded BRL-per-gram value is the conversion source for new gold-gram expenses.
+        {t("gold.form.this.administrator.recorded.brl.per.gram.value.is.the.conversion._7db5d3")}
       </p>
 
       <div className="mt-4 grid gap-3 md:grid-cols-2">
         <label className="block text-sm font-semibold text-gray-700">
-          Price Date
+          {t("gold.form.price.date_7404d8")}
           <input
             className="mt-2 block w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm"
             required
@@ -29,7 +39,7 @@ export function GoldPriceForm({ value, isPending = false, onChange, onSubmit }: 
         </label>
 
         <label className="block text-sm font-semibold text-gray-700">
-          BRL per Gram
+          {t("gold.form.brl.per.gram_fc2286")}
           <input
             className="mt-2 block w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm"
             inputMode="decimal"
@@ -37,27 +47,38 @@ export function GoldPriceForm({ value, isPending = false, onChange, onSubmit }: 
             required
             step="0.01"
             type="number"
-            value={Number.isFinite(value.brlPerGram) && value.brlPerGram > 0 ? value.brlPerGram : ""}
-            onChange={(event) => onChange({ ...value, brlPerGram: Number(event.target.value) })}
+            value={priceText}
+            aria-describedby={belowMinimum ? "gold-price-minimum-error" : undefined}
+            aria-invalid={belowMinimum}
+            onChange={(event) => {
+              const text = event.target.value;
+              setPriceText(text);
+              onChange({ ...value, brlPerGram: text === "" ? 0 : Number(text) });
+            }}
           />
+          {belowMinimum && (
+            <span id="gold-price-minimum-error" role="alert" className="mt-1 block text-xs font-normal text-red-700">
+              {t("native.validation.minimum", { minimum: "0.01" })}
+            </span>
+          )}
         </label>
 
         <label className="block text-sm font-semibold text-gray-700">
-          Recorded By
+          {t("gold.form.recorded.by_b19313")}
           <input
             className="mt-2 block w-full rounded-xl border border-gray-300 bg-gray-50 px-3 py-2 text-sm text-gray-700"
             readOnly
             required
             value={value.recordedBy}
-            placeholder="Loading authenticated actor…"
+            placeholder={t("byte352.gold.loadingActor")}
           />
           <span className="mt-1 block text-xs font-normal text-gray-500">
-            Derived from the authenticated session and enforced by the server.
+            {t("gold.form.derived.from.the.authenticated.session.and.enforced.by.the.server_5147c0")}
           </span>
         </label>
 
         <label className="block text-sm font-semibold text-gray-700 md:col-span-2">
-          Notes
+          {t("gold.form.notes_704400")}
           <textarea
             className="mt-2 block min-h-24 w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm"
             value={value.notes ?? ""}
@@ -71,7 +92,7 @@ export function GoldPriceForm({ value, isPending = false, onChange, onSubmit }: 
         disabled={isPending}
         type="submit"
       >
-        {isPending ? "Recording..." : "Record Gold Price"}
+        {isPending ? t("byte352.gold.recording") : t("gold.form.record.gold.price_9db12e")}
       </button>
     </form>
   );

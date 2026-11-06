@@ -1,3 +1,4 @@
+import { WorkAttributionDetails } from "../../components/WorkAttributionDetails";
 import { useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { ApiErrorPanel } from "../../components/ApiErrorPanel";
@@ -342,6 +343,7 @@ function LedgerEntryRow({
         {entry.description ? (
           <p className="mt-1 text-sm text-gray-600">{entry.description}</p>
         ) : null}
+        <WorkAttributionDetails entry={entry} />
         <dl className="mt-2 grid gap-1 rounded-xl border border-gray-100 bg-gray-50 p-3 text-xs text-gray-700 sm:grid-cols-2">
           <div>
             <dt className="inline font-semibold text-gray-900">{t("account.personOwner")} </dt>

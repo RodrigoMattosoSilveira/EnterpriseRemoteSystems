@@ -1,3 +1,4 @@
+import { I18nProvider } from "../../i18n";
 import { StrictMode, act, useEffect } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import {
@@ -155,9 +156,10 @@ function renderGuard(initialEntry: string, strictMode = false) {
     { initialEntries: [initialEntry] },
   );
 
+  window.localStorage.setItem("ers.i18n.locale", "en-US");
   root = createRoot(container);
   act(() => {
-    const app = <RouterProvider router={router} />;
+    const app = <I18nProvider><RouterProvider router={router} /></I18nProvider>;
     root?.render(strictMode ? <StrictMode>{app}</StrictMode> : app);
   });
 }

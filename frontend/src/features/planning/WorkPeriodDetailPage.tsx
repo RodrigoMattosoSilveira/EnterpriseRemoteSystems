@@ -27,6 +27,7 @@ import {
 import { PageContextHeading, PageTitle } from "../../components/layout/PageHeading";
 import { useAuthorizationContext } from "../../components/layout/AuthorizationContext";
 import { useI18n } from "../../i18n";
+import type { ReferenceDataItem } from "../../types/referenceData";
 
 type Tab = "plan" | "inform" | "outcomes" | "accrual";
 
@@ -196,43 +197,16 @@ export function WorkPeriodDetailPage() {
               </div>
             )}
             {included.map((row) => (
-              <article
+              <ActualWorkOutcomeEditor
                 key={row.id}
-                className="flex flex-col gap-3 rounded-2xl border bg-white p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between"
-              >
-                <div>
-                  <h3 className="font-semibold">
-                    {row.collaboratorName ||
-                      row.collaboratorNickname ||
-                      row.collaboratorId}
-                  </h3>
-                  <p className="text-sm text-gray-500">
-                    {row.sectorLabel} · {row.locationLabel} · {row.taskLabel}
-                  </p>
-                </div>
-                <label className="text-sm font-medium text-gray-700">
-                  {t("planning.outcome")}
-                  <select
-                    value={row.actualStatus ?? ""}
-                    disabled={!editable || outcomeMutation.isPending}
-                    onChange={(event) =>
-                      event.target.value &&
-                      outcomeMutation.mutate({
-                        assignmentId: row.id,
-                        actualStatus: event.target.value as ActualStatus,
-                      })
-                    }
-                    className="ml-3 rounded-xl border bg-white px-3 py-2"
-                  >
-                    <option value="">{t("planning.notMarked")}</option>
-                    {ACTUAL_STATUSES.map((status) => (
-                      <option key={status} value={status}>
-                        {humanizePlanningCode(status, t)}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              </article>
+                row={row}
+                sectors={sectorsQuery.data ?? []}
+                locations={locationsQuery.data ?? []}
+                tasks={tasksQuery.data ?? []}
+                editable={editable && !outcomeMutation.isPending}
+                saving={outcomeMutation.isPending}
+                onSave={(input) => outcomeMutation.mutate({ assignmentId: row.id, ...input })}
+              />
             ))}
           </section>
         )}
@@ -274,5 +248,72 @@ function unreplacedAbsenteeAssignments(assignments: WorkPeriodAssignment[]) {
       (row.planningAvailability === "DAY_OFF" ||
         row.planningAvailability === "LEAVE_OF_ABSENCE") &&
       !replacedAssignmentIds.has(row.id),
+  );
+}
+
+// Outcome edits are saved together, so a changed location cannot accidentally
+// overwrite an informed assignment or be confused with a planning refinement.
+function ActualWorkOutcomeEditor({ row, sectors, locations, tasks, editable, saving, onSave }: {
+  row: WorkPeriodAssignment;
+  sectors: ReferenceDataItem[];
+  locations: ReferenceDataItem[];
+  tasks: ReferenceDataItem[];
+  editable: boolean;
+  saving: boolean;
+  onSave: (value: { actualStatus: ActualStatus; actualSectorId: string; actualLocationId: string; actualTaskId: string }) => void;
+}) {
+  const { t } = useI18n();
+  const [status, setStatus] = useState<ActualStatus | "">(row.actualStatus ?? "");
+  const [sectorId, setSectorId] = useState(row.actualSectorId || row.sectorId);
+  const [locationId, setLocationId] = useState(row.actualLocationId || row.locationId);
+  const [taskId, setTaskId] = useState(row.actualTaskId || row.taskId);
+  const different = status !== (row.actualStatus ?? "") ||
+    sectorId !== (row.actualSectorId || row.sectorId) ||
+    locationId !== (row.actualLocationId || row.locationId) ||
+    taskId !== (row.actualTaskId || row.taskId);
+  return (
+    <article className="space-y-3 rounded-2xl border bg-white p-4 shadow-sm">
+      <h3 className="font-semibold">{row.collaboratorName || row.collaboratorNickname || row.collaboratorId}</h3>
+      <p className="text-sm text-gray-600">
+        {t("byte353.informed")}: {row.sectorLabel} · {row.locationLabel} · {row.taskLabel}
+      </p>
+      <p className="text-xs text-gray-500">{t("byte353.compensation")}</p>
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <label className="text-sm font-medium">
+          {t("planning.outcome")}
+          <select aria-label={t("planning.outcome")} className="mt-1 block w-full rounded-xl border p-2" value={status}
+            disabled={!editable} onChange={(event) => setStatus(event.target.value as ActualStatus | "")}>
+            <option value="">{t("planning.notMarked")}</option>
+            {ACTUAL_STATUSES.map((item) => <option key={item} value={item}>{humanizePlanningCode(item, t)}</option>)}
+          </select>
+        </label>
+        <label className="text-sm font-medium">
+          {t("byte353.actualSector")}
+          <select aria-label={t("byte353.actualSector")} className="mt-1 block w-full rounded-xl border p-2" value={sectorId}
+            disabled={!editable} onChange={(event) => setSectorId(event.target.value)}>
+            {sectors.filter((item) => item.active || item.id === sectorId).map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}
+          </select>
+        </label>
+        <label className="text-sm font-medium">
+          {t("byte353.actualLocation")}
+          <select aria-label={t("byte353.actualLocation")} className="mt-1 block w-full rounded-xl border p-2" value={locationId}
+            disabled={!editable} onChange={(event) => setLocationId(event.target.value)}>
+            {locations.filter((item) => item.active || item.id === locationId).map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}
+          </select>
+        </label>
+        <label className="text-sm font-medium">
+          {t("byte353.actualTask")}
+          <select aria-label={t("byte353.actualTask")} className="mt-1 block w-full rounded-xl border p-2" value={taskId}
+            disabled={!editable} onChange={(event) => setTaskId(event.target.value)}>
+            {tasks.filter((item) => item.active || item.id === taskId).map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}
+          </select>
+        </label>
+      </div>
+      <button className="rounded-xl bg-gray-950 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+        disabled={!editable || saving || !status || !sectorId || !locationId || !taskId || !different}
+        onClick={() => { if (status) onSave({ actualStatus: status, actualSectorId: sectorId, actualLocationId: locationId, actualTaskId: taskId }); }}>
+        {t("byte353.saveActual")}
+      </button>
+    </article>
   );
 }

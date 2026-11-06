@@ -23,7 +23,7 @@
     {"id": "35.7", "title": "Six Minimum Launch Gates and Controlled Activation", "status": "planned"}
   ],
   "non_negotiable_contracts": [
-    "Actual work Sector/Location overrides never change compensation based on the informed assignment; the latest assignment is the next planning default.",
+    "Actual work overrides never change compensation based on the informed assignment. For a new same-code Work Period, the latest prior WORKED assignment supplies actual Sector, Location and Task as proposed values, with per-field informed fallback; existing assignments and Journey defaults are not rewritten.",
     "Bite 35.4 contains separate customer-facing functional and technical operational readiness; customer training is in Brazilian Portuguese.",
     "Initial Journeys start at zero; historical BRL and GOLD_GRAM amounts owed to or by Collaborators are introduced through an explicitly approved, auditable, one-time Opening Balance Adjustment CSV import, not Bonuses.",
     "Initialize Production only through a guarded procedure rehearsed on Test; do not use demo/reset commands to replace the live Production database.",

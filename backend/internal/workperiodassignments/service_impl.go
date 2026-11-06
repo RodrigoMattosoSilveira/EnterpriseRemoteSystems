@@ -131,12 +131,21 @@ func (s *service) GetPlanningTemplate(ctx context.Context, workPeriodID string) 
 			if !planningRow.Selected {
 				planningRow.PlanningAvailability = normalizePlanningAvailability(template.PlanningAvailability)
 			}
+			// Preserve the informed assignment of the previous Work Period (and its
+			// compensation basis). Only the proposed values for the new plan may
+			// inherit the actual work recorded for a WORKED outcome. Missing or
+			// no-longer-active overrides fall back independently to informed values.
 			planningRow.SectorID = template.SectorID
 			planningRow.SectorLabel = template.Sector.Label
 			planningRow.LocationID = template.LocationID
 			planningRow.LocationLabel = template.Location.Label
 			planningRow.TaskID = template.TaskID
 			planningRow.TaskLabel = template.Task.Label
+			if template.PlannedStatus == PlannedStatusIncluded && nilString(template.ActualStatus) == ActualStatusWorked {
+				planningRow.SectorID, planningRow.SectorLabel = nextPlanWorkReference(template.SectorID, template.Sector.Label, template.ActualSectorID, template.ActualSector, template.TenantID, "sector")
+				planningRow.LocationID, planningRow.LocationLabel = nextPlanWorkReference(template.LocationID, template.Location.Label, template.ActualLocationID, template.ActualLocation, template.TenantID, "location")
+				planningRow.TaskID, planningRow.TaskLabel = nextPlanWorkReference(template.TaskID, template.Task.Label, template.ActualTaskID, template.ActualTask, template.TenantID, "task")
+			}
 		}
 		rows = append(rows, planningRow)
 	}
@@ -151,6 +160,22 @@ func (s *service) GetPlanningTemplate(ctx context.Context, workPeriodID string) 
 		result.SourcePeriodName = sourceWorkPeriod.Name
 	}
 	return ptr(result), nil
+}
+
+// nextPlanWorkReference uses a saved actual override only when the reference
+// still belongs to the same Tenant, has the expected type and is active. The
+// caller is responsible for restricting this to INCLUDED/WORKED outcomes.
+// This projects a new period's template; it never updates Journey defaults or
+// edits the preceding period's informed assignment / financial evidence.
+func nextPlanWorkReference(informedID, informedLabel string, actualID *string, actual *db.ReferenceData, tenantID, typ string) (string, string) {
+	if actualID == nil || actual == nil {
+		return informedID, informedLabel
+	}
+	id := strings.TrimSpace(*actualID)
+	if id == "" || actual.ID != id || actual.TenantID != tenantID || actual.Type != typ || !actual.Active {
+		return informedID, informedLabel
+	}
+	return id, actual.Label
 }
 
 func (s *service) BulkPlan(ctx context.Context, workPeriodID string, req BulkPlanWorkPeriodAssignmentsRequest, actorUserID string) (*BulkPlanWorkPeriodAssignmentsResult, error) {
@@ -541,8 +566,43 @@ func (s *service) MarkActualOutcome(ctx context.Context, id string, req MarkActu
 		return nil, err
 	}
 
+	// Actual work evidence is independent of the informed assignment used for pay.
+	// Only active references of the right type in the selected Tenant are permitted.
+	actualSectorID := strings.TrimSpace(req.ActualSectorID)
+	actualLocationID := strings.TrimSpace(req.ActualLocationID)
+	actualTaskID := strings.TrimSpace(req.ActualTaskID)
+	for _, reference := range []struct{ id, typ, field string }{
+		{actualSectorID, "sector", "actualSectorId"},
+		{actualLocationID, "location", "actualLocationId"},
+		{actualTaskID, "task", "actualTaskId"},
+	} {
+		if reference.id == "" || (reference.field == "actualSectorId" && reference.id == existing.SectorID) || (reference.field == "actualLocationId" && reference.id == existing.LocationID) || (reference.field == "actualTaskId" && reference.id == existing.TaskID) {
+			continue
+		}
+		valid, err := s.repo.ExistsActiveReference(ctx, reference.id, reference.typ)
+		if err != nil {
+			return nil, err
+		}
+		if !valid {
+			return nil, ValidationError{Fields: map[string]string{reference.field: "Select an active reference in the current Tenant"}}
+		}
+	}
 	status := strings.ToUpper(strings.TrimSpace(req.ActualStatus))
 	existing.ActualStatus = &status
+	// Blank or equal to the informed value means no override. Do not rewrite
+	// the original SectorID/LocationID, even when actual work differs.
+	existing.ActualSectorID = nil
+	if actualSectorID != "" && actualSectorID != existing.SectorID {
+		existing.ActualSectorID = &actualSectorID
+	}
+	existing.ActualLocationID = nil
+	if actualLocationID != "" && actualLocationID != existing.LocationID {
+		existing.ActualLocationID = &actualLocationID
+	}
+	existing.ActualTaskID = nil
+	if actualTaskID != "" && actualTaskID != existing.TaskID {
+		existing.ActualTaskID = &actualTaskID
+	}
 	existing.UpdatedAt = time.Now().UTC()
 
 	if err := s.repo.Update(ctx, existing); err != nil {

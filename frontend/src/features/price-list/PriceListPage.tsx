@@ -1,3 +1,4 @@
+import { useI18n, type I18nContextValue } from "../../i18n";
 import { useMemo, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { ApiErrorPanel } from "../../components/ApiErrorPanel";
@@ -20,6 +21,7 @@ import { PageTitle } from "../../components/layout/PageHeading";
 type CategoryFilter = "ALL" | "CANTEEN" | "ADMINISTRATIVE";
 
 export function PriceListPage() {
+  const { t } = useI18n();
   const actor = useOptionalAuthorizationContext();
   const hasPermission = (permission: string) =>
     Boolean(actor && (actor.permissions.includes("*") || actor.permissions.includes(permission)));
@@ -81,7 +83,7 @@ export function PriceListPage() {
     const input = formValueToInput(createForm);
     const validationError = validatePriceListItemInput(input);
     if (validationError) {
-      setClientValidationError(validationError);
+      setClientValidationError(translatePriceValidation(validationError, t));
       return;
     }
 
@@ -89,7 +91,7 @@ export function PriceListPage() {
       const created = await createMutation.mutateAsync(input);
       setCreateForm({ ...emptyPriceListItemFormValue, itemType: created.itemType as "CANTEEN" | "ADMINISTRATIVE" });
       setIsCreateFormOpen(false);
-      setSuccessMessage(`Created price-list item: ${created.description}.`);
+      setSuccessMessage(t("byte352.price.created", { description: created.description }));
     } catch {
       // Existing mutation error state is rendered by ApiErrorPanel.
     }
@@ -105,14 +107,14 @@ export function PriceListPage() {
     const input = formValueToInput(editForm);
     const validationError = validatePriceListItemInput(input);
     if (validationError) {
-      setClientValidationError(validationError);
+      setClientValidationError(translatePriceValidation(validationError, t));
       return;
     }
 
     try {
       const updated = await updateMutation.mutateAsync({ id: editing.id, input });
       setEditing(null);
-      setSuccessMessage(`Updated price-list item: ${updated.description}. The previous version was retained as inactive history.`);
+      setSuccessMessage(t("byte352.price.updated", { description: updated.description }));
     } catch {
       // Existing mutation error state is rendered by ApiErrorPanel.
     }
@@ -125,7 +127,7 @@ export function PriceListPage() {
 
     try {
       const updated = await deactivateMutation.mutateAsync(item.id);
-      setSuccessMessage(`Deactivated price-list item: ${updated.description}.`);
+      setSuccessMessage(t("byte352.price.deactivated", { description: updated.description }));
     } catch {
       // Existing mutation error state is rendered by ApiErrorPanel.
     }
@@ -138,7 +140,7 @@ export function PriceListPage() {
 
     try {
       const updated = await reactivateMutation.mutateAsync(item.id);
-      setSuccessMessage(`Reactivated price-list item: ${updated.description}.`);
+      setSuccessMessage(t("byte352.price.reactivated", { description: updated.description }));
     } catch {
       // Existing mutation error state is rendered by ApiErrorPanel.
     }
@@ -170,28 +172,28 @@ export function PriceListPage() {
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-3">
           <div>
             <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
-              Administration
+              {t("price.page.administration_b8be3d")}
             </p>
-            <PageTitle>Price List Items</PageTitle>
+            <PageTitle>{t("price.page.price.list.items_836800")}</PageTitle>
             <p className="text-sm text-gray-500">
-              Manage Canteen and Administrative items used by the New Expense workflow.
+              {t("price.page.manage.canteen.and.administrative.items.used.by.the.new.expense.w_d8262a")}
             </p>
           </div>
 
           <div className="flex flex-wrap items-center justify-end gap-2">
             {canManageGoldPrices && (
               <Link className="text-sm font-semibold text-gray-700 underline" to="/admin/gold-prices">
-                Gold Prices
+                {t("price.page.gold.prices_d529be")}
               </Link>
             )}
             <Link className="text-sm font-semibold text-gray-700 underline" to="/admin/reference-data">
-              Reference Data
+              {t("price.page.reference.data_3d3f15")}
             </Link>
             <Link className="text-sm font-semibold text-gray-700 underline" to="/expenses/new">
-              New Expense
+              {t("price.page.new.expense_7c3ae0")}
             </Link>
             <Link className="text-sm font-semibold text-gray-700 underline" to="/people">
-              Back to People
+              {t("price.page.back.to.people_59f4cb")}
             </Link>
           </div>
         </div>
@@ -215,9 +217,9 @@ export function PriceListPage() {
         <section className="rounded-2xl border bg-white p-4 shadow-sm">
           <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
             <div>
-              <h2 className="text-lg font-semibold text-gray-950">Price List Administration</h2>
+              <h2 className="text-lg font-semibold text-gray-950">{t("price.page.price.list.administration_8ae3f0")}</h2>
               <p className="text-sm text-gray-500">
-                Add new items here. Editing an active item creates a new version and keeps the previous version for audit history.
+                {t("price.page.add.new.items.here.editing.an.active.item.creates.a.new.version.a_440b84")}
               </p>
             </div>
             <button
@@ -231,20 +233,20 @@ export function PriceListPage() {
               onClick={isCreateFormOpen ? dismissCreateForm : openCreateForm}
               type="button"
             >
-              {isCreateFormOpen ? "Hide Create Form" : "Add Price List Item"}
+              {isCreateFormOpen ? t("byte352.price.hideCreate") : t("byte352.price.addItem")}
             </button>
           </div>
         </section>
 
         {isCreateFormOpen && canCreatePriceListItems && (
           <PriceListItemForm
-            title="Create Price List Item"
-            description="Create an active item that can be selected on the New Expense form. The list moves down while this panel is open."
+            title={t("byte352.price.createTitle")}
+            description={t("byte352.price.createDescription")}
             value={createForm}
             isPending={createMutation.isPending}
             isSubmitDisabled={!createFormIsValid}
-            submitLabel="Create Item"
-            pendingLabel="Creating..."
+            submitLabel={t("byte352.price.createItem")}
+            pendingLabel={t("byte352.price.creating")}
             onChange={setCreateForm}
             onSubmit={handleCreate}
             onCancel={dismissCreateForm}
@@ -255,38 +257,38 @@ export function PriceListPage() {
         <section className="rounded-2xl border bg-white p-4 shadow-sm">
           <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
             <div>
-              <h2 className="text-lg font-semibold text-gray-950">Price List</h2>
+              <h2 className="text-lg font-semibold text-gray-950">{t("price.page.price.list_760d09")}</h2>
               <p className="text-sm text-gray-500">
-                Active items appear in /expenses/new. Inactive items are retained here as price history and remain linked to any existing expense snapshots.
+                {t("price.page.active.items.appear.in.expenses.new.inactive.items.are.retained.h_963e8e")}
               </p>
             </div>
             <span className="rounded-full bg-gray-100 px-3 py-1 text-xs font-semibold text-gray-700">
-              {rows.length} items
+              {t("byte352.price.itemsCount", { count: rows.length })}
             </span>
           </div>
 
           <div className="mt-4 grid gap-3 md:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_auto] md:items-end">
             <label className="block text-sm font-semibold text-gray-700">
-              Description or code
+              {t("price.page.description.or.code_64c47d")}
               <input
                 className="mt-1 block w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm"
                 type="search"
                 value={descriptionOrCodeFilter}
-                placeholder="Search description or code"
+                placeholder={t("byte352.price.search")}
                 onChange={(event) => setDescriptionOrCodeFilter(event.target.value)}
               />
             </label>
 
             <label className="block text-sm font-semibold text-gray-700">
-              Category filter
+              {t("price.page.category.filter_b5ad78")}
               <select
                 className="mt-1 block w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm"
                 value={categoryFilter}
                 onChange={(event) => setCategoryFilter(event.target.value as CategoryFilter)}
               >
-                <option value="ALL">All categories</option>
-                <option value="CANTEEN">Canteen</option>
-                <option value="ADMINISTRATIVE">Administrative</option>
+                <option value="ALL">{t("price.page.all.categories_060be0")}</option>
+                <option value="CANTEEN">{t("price.page.canteen_65336b")}</option>
+                <option value="ADMINISTRATIVE">{t("price.page.administrative_67c743")}</option>
               </select>
             </label>
 
@@ -296,16 +298,16 @@ export function PriceListPage() {
                 type="checkbox"
                 onChange={(event) => setIncludeInactive(event.target.checked)}
               />
-              Include inactive
+              {t("price.page.include.inactive_1ccb27")}
             </label>
           </div>
 
-          {priceListQuery.isLoading && <p className="mt-4 text-sm text-gray-500">Loading price-list items...</p>}
+          {priceListQuery.isLoading && <p className="mt-4 text-sm text-gray-500">{t("price.page.loading.price.list.items_3d6805")}</p>}
 
           {!priceListQuery.isLoading && rows.length === 0 && (
             <div className="mt-4 rounded-xl border border-dashed p-4 text-center text-sm text-gray-500">
-              <p className="font-semibold text-gray-700">No price-list items match the current filters.</p>
-              <p className="mt-1">Change the Description or code, Category, or Include inactive filters to see other items.</p>
+              <p className="font-semibold text-gray-700">{t("price.page.no.price.list.items.match.the.current.filters_543dc2")}</p>
+              <p className="mt-1">{t("price.page.change.the.description.or.code.category.or.include.inactive.filte_c81454")}</p>
             </div>
           )}
 
@@ -314,19 +316,19 @@ export function PriceListPage() {
               <table className="w-full text-left text-sm">
                 <thead className="bg-gray-50 text-xs uppercase tracking-wide text-gray-500">
                   <tr>
-                    <th className="p-3">Category</th>
-                    <th className="p-3">Code</th>
-                    <th className="p-3">Description</th>
-                    <th className="p-3">BRL Unit Price</th>
-                    <th className="p-3">Sort</th>
-                    <th className="p-3">Status</th>
-                    <th className="p-3 text-right">Actions</th>
+                    <th className="p-3">{t("price.page.category_a3c686")}</th>
+                    <th className="p-3">{t("price.page.code_adac69")}</th>
+                    <th className="p-3">{t("price.page.description_55f8eb")}</th>
+                    <th className="p-3">{t("price.page.brl.unit.price_ea89e7")}</th>
+                    <th className="p-3">{t("price.page.sort_adc4e9")}</th>
+                    <th className="p-3">{t("price.page.status_bae7d5")}</th>
+                    <th className="p-3 text-right">{t("price.page.actions_c3cd63")}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y">
                   {rows.map((item) => (
                     <tr key={item.id}>
-                      <td className="p-3">{categoryLabel(item.itemType)}</td>
+                      <td className="p-3">{item.itemType === "ADMINISTRATIVE" ? t("price.page.administrative_67c743") : t("price.page.canteen_65336b")}</td>
                       <td className="p-3 font-mono text-xs">{item.code}</td>
                       <td className="p-3 font-medium text-gray-950">{item.description}</td>
                       <td className="p-3">{formatBRL(item.unitPriceBrl)}</td>
@@ -347,7 +349,7 @@ export function PriceListPage() {
                               onClick={() => startEditing(item)}
                               type="button"
                             >
-                              Edit
+                              {t("price.page.edit_530164")}
                             </button>
                           )}
                           {item.active ? (
@@ -361,7 +363,7 @@ export function PriceListPage() {
                               onClick={() => handleDeactivate(item)}
                               type="button"
                             >
-                              Deactivate
+                              {t("price.page.deactivate_d65ded")}
                             </button>
                           ) : (
                             <button
@@ -374,7 +376,7 @@ export function PriceListPage() {
                               onClick={() => handleReactivate(item)}
                               type="button"
                             >
-                              Reactivate
+                              {t("price.page.reactivate_cd28a1")}
                             </button>
                           )}
                         </div>
@@ -389,13 +391,13 @@ export function PriceListPage() {
 
         {editing && canUpdatePriceListItems && (
           <PriceListItemForm
-            title={`Edit ${editing.description}`}
-            description="Update the item metadata and BRL unit price. Saving creates a new active version and keeps this version inactive for audit history."
+            title={t("byte352.price.editItem", { description: editing.description })}
+            description={t("byte352.price.editDescription")}
             value={editForm}
             isPending={updateMutation.isPending}
             isSubmitDisabled={!editFormIsDirty || !editFormIsValid}
-            submitLabel="Save Changes"
-            pendingLabel="Saving..."
+            submitLabel={t("byte352.price.saveChanges")}
+            pendingLabel={t("byte352.price.saving")}
             onChange={setEditForm}
             onSubmit={handleUpdate}
             onCancel={() => setEditing(null)}
@@ -468,6 +470,7 @@ function categoryLabel(value: PriceListItemType) {
 }
 
 function StatusBadge({ active }: { active: boolean }) {
+  const { t } = useI18n();
   return (
     <span
       className={
@@ -476,7 +479,7 @@ function StatusBadge({ active }: { active: boolean }) {
           : "rounded-full bg-gray-100 px-2 py-1 text-xs font-semibold text-gray-700"
       }
     >
-      {active ? "Active" : "Inactive"}
+      {active ? t("byte352.common.active") : t("byte352.common.inactive")}
     </span>
   );
 }
@@ -487,4 +490,16 @@ function formatBRL(value: number) {
     currency: "BRL",
     minimumFractionDigits: 2,
   }).format(value);
+}
+
+// Presentation-only translation; the domain validation messages remain unchanged.
+function translatePriceValidation(message: string, t: I18nContextValue["t"]): string {
+  switch (message) {
+    case "Select a category.": return t("byte352.price.validation.category");
+    case "Code is required.": return t("byte352.price.validation.code");
+    case "Description is required.": return t("byte352.price.validation.description");
+    case "BRL unit price must be greater than zero.": return t("byte352.price.validation.unitPrice");
+    case "Sort order must be a number.": return t("byte352.price.validation.sort");
+    default: return message;
+  }
 }

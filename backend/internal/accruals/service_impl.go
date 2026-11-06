@@ -226,6 +226,27 @@ func (s *service) calculateItems(ctx context.Context, run db.AccrualRun) ([]db.A
 			items = appendAllIfNotPosted(items, replacementItems, postedItemKeys)
 		}
 	}
+	// Also cover replacement/transfer items whose source Collaborator actually
+	// worked. Payouts for absence, time off or sick days carry no performed-work
+	// attribution. This post-pass never influences compensation calculations.
+	byAssignmentID := make(map[string]db.WorkPeriodAssignment, len(assignments))
+	for _, assignment := range assignments {
+		byAssignmentID[assignment.ID] = assignment
+	}
+	for i := range items {
+		if items[i].WorkPeriodAssignmentID == nil {
+			continue
+		}
+		a, exists := byAssignmentID[*items[i].WorkPeriodAssignmentID]
+		if !exists || strings.TrimSpace(stringValue(a.ActualStatus)) != workperiodassignments.ActualStatusWorked {
+			continue
+		}
+		attribution, err := performedWorkAttribution(a, run.TenantID)
+		if err != nil {
+			return nil, err
+		}
+		items[i].WorkAttribution = attribution
+	}
 	return items, nil
 }
 
@@ -463,19 +484,20 @@ func accrualLedgerEntry(item db.AccrualItem, valueUnit db.ReferenceData, directi
 			CreatedAt: now,
 			UpdatedAt: now,
 		},
-		TenantID:       item.TenantID,
-		PersonID:       item.PersonID,
-		CollaboratorID: item.CollaboratorID,
-		ValueUnitID:    valueUnit.ID,
-		EntryType:      entryType,
-		Direction:      direction,
-		Amount:         amount,
-		EffectiveDate:  effectiveDate,
-		SourceType:     sourceType,
-		SourceID:       sourceID,
-		Description:    item.Description,
-		Active:         true,
-		CorrectionType: "ORIGINAL",
+		TenantID:        item.TenantID,
+		PersonID:        item.PersonID,
+		CollaboratorID:  item.CollaboratorID,
+		ValueUnitID:     valueUnit.ID,
+		EntryType:       entryType,
+		Direction:       direction,
+		Amount:          amount,
+		EffectiveDate:   effectiveDate,
+		SourceType:      sourceType,
+		SourceID:        sourceID,
+		Description:     item.Description,
+		WorkAttribution: item.WorkAttribution,
+		Active:          true,
+		CorrectionType:  "ORIGINAL",
 	}
 }
 

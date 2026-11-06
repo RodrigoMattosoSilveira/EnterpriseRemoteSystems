@@ -424,6 +424,9 @@ type WorkPeriodAssignment struct {
 	PlannedStatus              string  `gorm:"type:text;not null;index" json:"plannedStatus"`
 	PlanningAvailability       string  `gorm:"type:text;not null;default:ACTIVE;index" json:"planningAvailability"`
 	ActualStatus               *string `gorm:"type:text" json:"actualStatus,omitempty"`
+	ActualSectorID             *string `gorm:"type:text" json:"actualSectorId,omitempty"`
+	ActualTaskID               *string `gorm:"type:text" json:"actualTaskId,omitempty"`
+	ActualLocationID           *string `gorm:"type:text" json:"actualLocationId,omitempty"`
 	ReplacementForAssignmentID *string `gorm:"type:text;index" json:"replacementForAssignmentId,omitempty"`
 	SectorID                   string  `gorm:"type:text;not null;index" json:"sectorId"`
 	LocationID                 string  `gorm:"type:text;not null;index" json:"locationId"`
@@ -437,6 +440,9 @@ type WorkPeriodAssignment struct {
 	Sector                   ReferenceData         `gorm:"foreignKey:SectorID;constraint:OnUpdate:Restrict,OnDelete:Restrict;" json:"sector,omitempty"`
 	Location                 ReferenceData         `gorm:"foreignKey:LocationID;constraint:OnUpdate:Restrict,OnDelete:Restrict;" json:"location,omitempty"`
 	Task                     ReferenceData         `gorm:"foreignKey:TaskID;constraint:OnUpdate:Restrict,OnDelete:Restrict;" json:"task,omitempty"`
+	ActualSector             *ReferenceData        `gorm:"foreignKey:ActualSectorID;references:ID" json:"actualSector,omitempty"`
+	ActualLocation           *ReferenceData        `gorm:"foreignKey:ActualLocationID;references:ID" json:"actualLocation,omitempty"`
+	ActualTask               *ReferenceData        `gorm:"foreignKey:ActualTaskID;references:ID" json:"actualTask,omitempty"`
 }
 
 type GoldProductionEntry struct {
@@ -485,6 +491,7 @@ type AccrualItem struct {
 	Status                 string   `gorm:"type:text;not null;index" json:"status"`
 	PendingReason          string   `gorm:"type:text;index" json:"pendingReason,omitempty"`
 	Description            string   `gorm:"type:text" json:"description,omitempty"`
+	WorkAttribution        `gorm:"embedded"`
 
 	Tenant               Tenant                `gorm:"foreignKey:TenantID;constraint:OnUpdate:Restrict,OnDelete:Restrict;" json:"tenant,omitempty"`
 	Person               GlobalPerson          `gorm:"foreignKey:PersonID;constraint:OnUpdate:Restrict,OnDelete:Restrict;" json:"person,omitempty"`
@@ -497,17 +504,18 @@ type AccrualItem struct {
 type LedgerEntry struct {
 	BaseModel
 
-	TenantID             string     `gorm:"type:text;not null;default:default;uniqueIndex:ux_ledger_tenant_source_unit_direction,priority:1;index" json:"tenantId"`
-	PersonID             string     `gorm:"type:text;not null;index" json:"personId"`
-	CollaboratorID       string     `gorm:"type:text;not null;index" json:"collaboratorId"`
-	ValueUnitID          string     `gorm:"type:text;not null;uniqueIndex:ux_ledger_tenant_source_unit_direction,priority:4;index" json:"valueUnitId"`
-	EntryType            string     `gorm:"type:text;not null;index" json:"entryType"`
-	Direction            string     `gorm:"type:text;not null;uniqueIndex:ux_ledger_tenant_source_unit_direction,priority:5;index" json:"direction"`
-	Amount               float64    `gorm:"not null" json:"amount"`
-	EffectiveDate        time.Time  `gorm:"type:date;not null;index" json:"effectiveDate"`
-	SourceType           string     `gorm:"type:text;not null;uniqueIndex:ux_ledger_tenant_source_unit_direction,priority:2;index" json:"sourceType"`
-	SourceID             string     `gorm:"type:text;not null;uniqueIndex:ux_ledger_tenant_source_unit_direction,priority:3;index" json:"sourceId"`
-	Description          string     `gorm:"type:text" json:"description,omitempty"`
+	TenantID             string    `gorm:"type:text;not null;default:default;uniqueIndex:ux_ledger_tenant_source_unit_direction,priority:1;index" json:"tenantId"`
+	PersonID             string    `gorm:"type:text;not null;index" json:"personId"`
+	CollaboratorID       string    `gorm:"type:text;not null;index" json:"collaboratorId"`
+	ValueUnitID          string    `gorm:"type:text;not null;uniqueIndex:ux_ledger_tenant_source_unit_direction,priority:4;index" json:"valueUnitId"`
+	EntryType            string    `gorm:"type:text;not null;index" json:"entryType"`
+	Direction            string    `gorm:"type:text;not null;uniqueIndex:ux_ledger_tenant_source_unit_direction,priority:5;index" json:"direction"`
+	Amount               float64   `gorm:"not null" json:"amount"`
+	EffectiveDate        time.Time `gorm:"type:date;not null;index" json:"effectiveDate"`
+	SourceType           string    `gorm:"type:text;not null;uniqueIndex:ux_ledger_tenant_source_unit_direction,priority:2;index" json:"sourceType"`
+	SourceID             string    `gorm:"type:text;not null;uniqueIndex:ux_ledger_tenant_source_unit_direction,priority:3;index" json:"sourceId"`
+	Description          string    `gorm:"type:text" json:"description,omitempty"`
+	WorkAttribution      `gorm:"embedded"`
 	Active               bool       `gorm:"not null;default:true;index" json:"active"`
 	CorrectionType       string     `gorm:"type:text;not null;default:ORIGINAL;index" json:"correctionType"`
 	RelatedEntryID       *string    `gorm:"type:text;index" json:"relatedEntryId,omitempty"`

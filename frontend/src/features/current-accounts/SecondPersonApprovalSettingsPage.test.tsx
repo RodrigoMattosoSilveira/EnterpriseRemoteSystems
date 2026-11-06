@@ -1,3 +1,4 @@
+import { I18nProvider } from "../../i18n";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -136,6 +137,7 @@ function mockPolicyFetch() {
 }
 
 function renderPage() {
+  window.localStorage.setItem("ers.i18n.locale", "en-US");
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
@@ -147,9 +149,9 @@ function renderPage() {
   act(() => {
     root = createRoot(container);
     root.render(
-      <QueryClientProvider client={queryClient}>
+      <I18nProvider><QueryClientProvider client={queryClient}>
         <RouterProvider router={router} />
-      </QueryClientProvider>,
+      </QueryClientProvider></I18nProvider>,
     );
   });
 }

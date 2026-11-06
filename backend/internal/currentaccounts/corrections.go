@@ -128,6 +128,7 @@ func newCorrectionEntry(original db.LedgerEntry, direction, valueUnitID, entryTy
 		SourceType:           "LEDGER_CORRECTION",
 		SourceID:             ids.New(),
 		Description:          description,
+		WorkAttribution:      original.WorkAttribution,
 		Active:               true,
 		CorrectionType:       correctionType,
 		RelatedEntryID:       &originalID,

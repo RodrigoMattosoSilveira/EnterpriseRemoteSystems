@@ -46,6 +46,12 @@ type LedgerEntryDTO struct {
 	SourceWorkDate       string                 `json:"sourceWorkDate,omitempty"`
 	SourceWorkPeriodName string                 `json:"sourceWorkPeriodName,omitempty"`
 	Description          string                 `json:"description,omitempty"`
+	WorkSectorID         string                 `json:"workSectorId,omitempty"`
+	WorkSectorLabel      string                 `json:"workSectorLabel,omitempty"`
+	WorkLocationID       string                 `json:"workLocationId,omitempty"`
+	WorkLocationLabel    string                 `json:"workLocationLabel,omitempty"`
+	WorkTaskID           string                 `json:"workTaskId,omitempty"`
+	WorkTaskLabel        string                 `json:"workTaskLabel,omitempty"`
 	Active               bool                   `json:"active"`
 	CorrectionType       string                 `json:"correctionType"`
 	RelatedEntryID       string                 `json:"relatedEntryId,omitempty"`

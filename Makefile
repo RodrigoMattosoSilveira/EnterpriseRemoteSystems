@@ -1887,3 +1887,7 @@ testdata-server-reset:
 byte351-baseline-check:
 	python3 -B scripts/ers-byte351-baseline-check.py
 	python3 -B scripts/test-byte351-baseline.py
+
+.PHONY: byte352-i18n-check
+byte352-i18n-check:
+	cd frontend && npm run i18n:check && npm run i18n:test
