@@ -587,6 +587,59 @@ describe("AuthzAdminPage", () => {
     });
   });
 
+  it("restores focus to the Role selector after Escape without changing the selected Role", async () => {
+    actors.push({
+      id: "actor-expense-admin",
+      actorKey: "expense-admin",
+      displayName: "Expense Admin",
+      personId: "person-expense-admin",
+      globalPersonId: "person-expense-admin",
+      active: true,
+      roleGrants: [],
+      binding: activeTenantBinding("default"),
+    });
+    mockAuthzFetch();
+    const queuedFrames: FrameRequestCallback[] = [];
+    vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => {
+      queuedFrames.push(callback);
+      return queuedFrames.length;
+    });
+
+    renderAuthzAdminPage();
+    await waitForText("Expense Admin");
+    await openRoleSelectorInArticle("expense-admin");
+    await flushQueuedAnimationFrames(queuedFrames);
+    await chooseOpenRoleOptionInArticle("expense-admin", "TENANT_ADMIN");
+
+    const trigger = roleSelectorButtonInArticle("expense-admin");
+    await openRoleSelectorInArticle("expense-admin");
+    await flushQueuedAnimationFrames(queuedFrames);
+    const filter = controlByLabel<HTMLInputElement>(
+      articleByText("expense-admin"),
+      "Filter roles",
+      "input",
+    );
+    expect(document.activeElement).toBe(filter);
+    await setInputValue(filter, "expense");
+    expect(roleChoicesInArticle("expense-admin")).toEqual(["EXPENSE_OPERATOR"]);
+
+    await act(async () => {
+      filter.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    });
+    expect(trigger.getAttribute("aria-expanded")).toBe("false");
+    expect(trigger.textContent).toContain("TENANT_ADMIN");
+    expect(queuedFrames).toHaveLength(1);
+    await flushQueuedAnimationFrames(queuedFrames);
+    expect(document.activeElement).toBe(trigger);
+    expect(
+      fetchCalls.some(
+        (call) =>
+          call.url === "/api/v1/authz/actors/actor-expense-admin/role-grants" &&
+          call.method === "POST",
+      ),
+    ).toBe(false);
+  });
+
   it("derives a tenant grant from the Actor binding instead of the application wildcard", async () => {
     const tenantId = "b16647b4-82a3-4d4e-99d0-c15ede05840b";
     window.localStorage.setItem("ers.auth.selectedTenantId", "*");
@@ -1290,6 +1343,12 @@ async function setSelectValue(select: HTMLSelectElement, value: string) {
     valueSetter?.call(select, value);
     select.dispatchEvent(new Event("input", { bubbles: true }));
     select.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+}
+
+async function flushQueuedAnimationFrames(queuedFrames: FrameRequestCallback[]) {
+  await act(async () => {
+    for (const callback of queuedFrames.splice(0)) callback(0);
   });
 }
 

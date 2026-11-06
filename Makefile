@@ -508,6 +508,10 @@ off-host-backup-protection-check:
 restore-tooling-recovery-verification-check:
 	python3 scripts/test-restore-tooling-recovery-verification.py
 
+.PHONY: deployment-migration-head-check
+deployment-migration-head-check:
+	python3 scripts/test-deployment-migration-head.py
+
 .PHONY: migration-deployment-recovery-gate-check
 migration-deployment-recovery-gate-check:
 	python3 scripts/test-migration-deployment-recovery-gate.py
@@ -590,6 +594,7 @@ bite3368-integrated-check: bite3368-core-check
 	$(MAKE) backup-creation-retention-verification-check
 	$(MAKE) off-host-backup-protection-check
 	$(MAKE) restore-tooling-recovery-verification-check
+	$(MAKE) deployment-migration-head-check
 	$(MAKE) migration-deployment-recovery-gate-check
 	$(MAKE) recovery-rehearsal-operational-runbook-check
 	$(MAKE) onepassword-deployment-preflight-check
@@ -607,6 +612,7 @@ promotion-readiness-check:
 	$(MAKE) onepassword-materialization-check
 	$(MAKE) onepassword-deployment-preflight-check
 	$(MAKE) production-credential-cutover-check
+	$(MAKE) deployment-migration-head-check
 	$(MAKE) migration-deployment-recovery-gate-check
 	python3 scripts/test-promotion-readiness.py
 
@@ -624,6 +630,7 @@ local-check:
 	$(MAKE) backup-creation-retention-verification-check
 	$(MAKE) off-host-backup-protection-check
 	$(MAKE) restore-tooling-recovery-verification-check
+	$(MAKE) deployment-migration-head-check
 	$(MAKE) migration-deployment-recovery-gate-check
 	$(MAKE) recovery-rehearsal-operational-runbook-check
 	$(MAKE) owner-unavailable-recovery-readiness-check
@@ -687,7 +694,7 @@ local-docker-check: local-docker-check-image
 		-e GOMODCACHE=/tmp/gomod \
 		-e NPM_CONFIG_CACHE=/tmp/npm-cache \
 		$(LOCAL_DOCKER_CHECK_IMAGE) \
-		bash -lc 'set -euo pipefail; make bite3368-core-check; make bite30l4-coverage-manifest-check; make bite32-release-coverage-check; make bite326-release-hardening-check; make post-bite30-backlog-reconciliation-check; make deployed-playwright-evidence-check; make production-release-evidence-check; make production-environment-guardrails-check; make backup-creation-retention-verification-check; make off-host-backup-protection-check; make restore-tooling-recovery-verification-check; make migration-deployment-recovery-gate-check; make recovery-rehearsal-operational-runbook-check; make owner-unavailable-recovery-readiness-check; make local-hot-reload-check; make local-auth-cookie-config-check; make server-authz-bootstrap-config-check; make legacy-identity-dependency-check; make brazilian-demo-presentation-check; make migration-rehearsal-check; cd backend && go clean -testcache && go test ./...; cd ../frontend && npm ci && npm run test:run && npx playwright install chromium && npx playwright test && npm run build'
+		bash -lc 'set -euo pipefail; make bite3368-core-check; make bite30l4-coverage-manifest-check; make bite32-release-coverage-check; make bite326-release-hardening-check; make deployment-migration-head-check; make post-bite30-backlog-reconciliation-check; make deployed-playwright-evidence-check; make production-release-evidence-check; make production-environment-guardrails-check; make backup-creation-retention-verification-check; make off-host-backup-protection-check; make restore-tooling-recovery-verification-check; make migration-deployment-recovery-gate-check; make recovery-rehearsal-operational-runbook-check; make owner-unavailable-recovery-readiness-check; make local-hot-reload-check; make local-auth-cookie-config-check; make server-authz-bootstrap-config-check; make legacy-identity-dependency-check; make brazilian-demo-presentation-check; make migration-rehearsal-check; cd backend && go clean -testcache && go test ./...; cd ../frontend && npm ci && npm run test:run && npx playwright install chromium && npx playwright test && npm run build'
 
 # ==============================================================================
 # Generic server environment targets
@@ -769,7 +776,7 @@ TEST_RELEASE_BASELINE_DB ?= $(SERVER_ROOT)/test/rehearsal-baselines/pre-bite30i.
 TEST_RELEASE_BASELINE_LAST_MIGRATION ?= 000062_tenant_administrator_cardinality.up.sql
 TEST_RELEASE_MIGRATION_UNDER_REHEARSAL ?= 000063_global_administration_control_plane.up.sql
 TEST_RELEASE_FINAL_MIGRATION ?= 000071_cross_tenant_delegated_role_isolation.up.sql
-DEPLOYMENT_FINAL_MIGRATION ?= 000077_journey_bonus_award_approval.up.sql
+DEPLOYMENT_FINAL_MIGRATION ?= 000079_work_attribution_evidence.up.sql
 TEST_RELEASE_REHEARSAL_MARKER_DIR ?= $(SERVER_ROOT)/test/release-rehearsal-passed
 
 .PHONY: server-test-rehearsal-capture-baseline

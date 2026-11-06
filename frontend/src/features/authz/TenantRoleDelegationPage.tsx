@@ -397,7 +397,7 @@ function TenantOperatorRoleSelector({
   const { t } = useI18n();
   const [open, setOpen] = useState(false);
   const [filterText, setFilterText] = useState("");
-  const rootRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
   const filterRef = useRef<HTMLInputElement>(null);
   const selectedRole = roles.find((role) => role.code === selectedRoleCode);
   const normalizedFilter = filterText.trim().toLocaleLowerCase();
@@ -415,9 +415,7 @@ function TenantOperatorRoleSelector({
     setOpen(false);
     if (restoreFocus) {
       window.requestAnimationFrame(() => {
-        rootRef.current
-          ?.querySelector<HTMLButtonElement>('button[aria-label={t("roles.extra.role.selector_d23819")}]')
-          ?.focus();
+        triggerRef.current?.focus();
       });
     }
   }
@@ -431,7 +429,6 @@ function TenantOperatorRoleSelector({
 
   return (
     <div
-      ref={rootRef}
       className="relative"
       onBlur={(event) => {
         const nextTarget = event.relatedTarget;
@@ -446,6 +443,7 @@ function TenantOperatorRoleSelector({
       <p className="text-sm font-semibold text-gray-800">{t("admin.roles.role_c3f104")}</p>
       <button
         type="button"
+        ref={triggerRef}
         aria-label={t("roles.extra.role.selector_d23819")}
         aria-haspopup="listbox"
         aria-expanded={open}
