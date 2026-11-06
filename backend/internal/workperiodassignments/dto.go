@@ -10,6 +10,9 @@ type WorkPeriodAssignmentDTO struct {
 	PlannedStatus              string `json:"plannedStatus"`
 	PlanningAvailability       string `json:"planningAvailability"`
 	ActualStatus               string `json:"actualStatus,omitempty"`
+	ActualSectorID             string `json:"actualSectorId,omitempty"`
+	ActualLocationID           string `json:"actualLocationId,omitempty"`
+	ActualTaskID               string `json:"actualTaskId,omitempty"`
 	ReplacementForAssignmentID string `json:"replacementForAssignmentId,omitempty"`
 	SectorID                   string `json:"sectorId"`
 	SectorLabel                string `json:"sectorLabel,omitempty"`
@@ -114,7 +117,10 @@ type WorkPeriodPlanningTemplateRow struct {
 }
 
 type MarkActualOutcomeRequest struct {
-	ActualStatus string `json:"actualStatus"`
+	ActualStatus     string `json:"actualStatus"`
+	ActualSectorID   string `json:"actualSectorId"`
+	ActualLocationID string `json:"actualLocationId"`
+	ActualTaskID     string `json:"actualTaskId"`
 }
 
 type WorkPeriodAssignmentListFilter struct {

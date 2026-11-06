@@ -113,6 +113,47 @@ describe("PlanTab", () => {
     });
   });
 
+  it("shows inherited performed work and saves it as the new informed plan", async () => {
+    const onBulkPlan = vi.fn();
+    await renderPlanTab({
+      onBulkPlan,
+      onRefineAssignment: vi.fn(),
+      templateOverride: {
+        ...template,
+        rows: [
+          {
+            ...template.rows[0],
+            sectorId: "sector-processing",
+            sectorLabel: "Processing",
+            locationId: "location-yard",
+            locationLabel: "Yard",
+            taskId: "task-loader",
+            taskLabel: "Loader",
+          },
+        ],
+      },
+    });
+
+    const row = visibleBodyRows()[0];
+    expect(row?.textContent).toContain("Processing");
+    expect(row?.textContent).toContain("Yard");
+    expect(row?.textContent).toContain("Loader");
+    await clickButton("Save plan (1 selected)");
+    expect(onBulkPlan).toHaveBeenCalledWith({
+      rows: [
+        {
+          collaboratorId: "collab-selected",
+          selected: true,
+          sectorId: "sector-processing",
+          locationId: "location-yard",
+          taskId: "task-loader",
+          planningAvailability: "ACTIVE",
+          availabilityChanged: false,
+        },
+      ],
+    });
+  });
+
   it("updates future planning defaults only when explicitly selected", async () => {
     const onBulkPlan = vi.fn();
     const onRefineAssignment = vi.fn(

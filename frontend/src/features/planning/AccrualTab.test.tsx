@@ -95,6 +95,12 @@ describe("AccrualTab", () => {
                 direction: "CREDIT",
                 status: "PENDING",
                 pendingReason: "GOLD_PRODUCTION_MISSING",
+                workSectorId: "sector-2",
+                workSectorLabel: "Processing",
+                workLocationId: "location-2",
+                workLocationLabel: "North Pit",
+                workTaskId: "task-2",
+                workTaskLabel: "Drilling",
                 createdAt: "x",
                 updatedAt: "x",
               },
@@ -150,6 +156,13 @@ describe("AccrualTab", () => {
     expect(container.textContent).toContain("Person owner: person-1");
     expect(container.textContent).toContain("Journey provenance: c-1");
     expect(container.textContent).toContain("Tenant: default");
+    expect(container.textContent).toContain("Work performed");
+    expect(container.textContent).toContain("Actual Sector");
+    expect(container.textContent).toContain("Processing");
+    expect(container.textContent).toContain("Actual Location");
+    expect(container.textContent).toContain("North Pit");
+    expect(container.textContent).toContain("Actual Task");
+    expect(container.textContent).toContain("Drilling");
   });
 
   it("requires notes and returns Run Accrual to disabled after a successful run", async () => {

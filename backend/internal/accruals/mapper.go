@@ -20,7 +20,7 @@ func ToRunDTOList(rows []db.AccrualRun, summaries map[string]AccrualSummaryDTO) 
 }
 
 func ToItemDTO(row db.AccrualItem) AccrualItemDTO {
-	return AccrualItemDTO{ID: row.ID, TenantID: row.TenantID, PersonID: row.PersonID, AccrualRunID: row.AccrualRunID, WorkPeriodID: row.WorkPeriodID, WorkPeriodAssignmentID: nilString(row.WorkPeriodAssignmentID), CollaboratorID: row.CollaboratorID, CollaboratorName: collaboratorName(row.Collaborator), CalculationType: row.CalculationType, Direction: row.Direction, BRLAmount: row.BRLAmount, GoldGramAmount: row.GoldGramAmount, Status: row.Status, PendingReason: row.PendingReason, Description: row.Description, CreatedAt: formatTime(row.CreatedAt), UpdatedAt: formatTime(row.UpdatedAt)}
+	return AccrualItemDTO{ID: row.ID, TenantID: row.TenantID, PersonID: row.PersonID, AccrualRunID: row.AccrualRunID, WorkPeriodID: row.WorkPeriodID, WorkPeriodAssignmentID: nilString(row.WorkPeriodAssignmentID), CollaboratorID: row.CollaboratorID, CollaboratorName: collaboratorName(row.Collaborator), CalculationType: row.CalculationType, Direction: row.Direction, BRLAmount: row.BRLAmount, GoldGramAmount: row.GoldGramAmount, Status: row.Status, PendingReason: row.PendingReason, Description: row.Description, WorkSectorID: row.WorkSectorID, WorkSectorLabel: row.WorkSectorLabel, WorkLocationID: row.WorkLocationID, WorkLocationLabel: row.WorkLocationLabel, WorkTaskID: row.WorkTaskID, WorkTaskLabel: row.WorkTaskLabel, CreatedAt: formatTime(row.CreatedAt), UpdatedAt: formatTime(row.UpdatedAt)}
 }
 
 func ToItemDTOList(rows []db.AccrualItem) []AccrualItemDTO {

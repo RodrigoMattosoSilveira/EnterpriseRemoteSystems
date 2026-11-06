@@ -10,7 +10,7 @@ The machine-checked scope ledger is [`launch-baseline.json`](launch-baseline.jso
 |---|---|---|
 | 35.1 | Record stable baseline and freeze launch scope | Documentation + offline invariant check; no infrastructure change |
 | 35.2 (former 34.1) | Brazilian Portuguese translation completion | All customer-facing flows translated; `en-US`/`pt-BR` parity |
-| 35.3 (former 34.3) | Actual work Sector/Location override | Preserve informed assignment; compensation **always** uses informed assignment; last assignment is next plan default |
+| 35.3 (former 34.3) | Actual work Sector/Location override | Preserve informed assignment and calculate compensation from it; a new same-code plan carries forward prior performed work (actual overrides with informed fallback) for WORKED outcomes |
 | 35.4 (former 34.2) | Functional and Operational readiness and training | Brazilian Portuguese UI-first customer manual; separately explicit technical operations |
 | 35.5 | Guarded Production database initialization | Test rehearsal then protected Production initialization; People/Journeys and signed historical BRL/Gold `OPENING_BALANCE` CSV import, checksum-bound approval, dry run, duplicate protection, ledger reconciliation |
 | 35.6 | Human administrator and runbooks | Named Application Administrator through controlled enrollment, 1Password-only custody, application and usable database recovery procedures |

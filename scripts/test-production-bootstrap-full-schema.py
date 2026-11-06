@@ -59,7 +59,7 @@ def logical_snapshot(db):
 
 
 def prepare_schema(db):
-    env = dict(os.environ, DATABASE_PATH=str(db), MIGRATIONS_DIR=str(MIGRATIONS), EXPECTED_FINAL_MIGRATION='000077_journey_bonus_award_approval.up.sql')
+    env = dict(os.environ, DATABASE_PATH=str(db), MIGRATIONS_DIR=str(MIGRATIONS), EXPECTED_FINAL_MIGRATION='000078_actual_work_location_override.up.sql')
     run(['sh', str(ROOT / 'backend' / 'apply-sql-migrations.sh')], env=env)
     # Seed the precise historical Production condition into the *disposable* DB.
     # The canonical administrator is created solely inside this isolated fixture.
@@ -115,7 +115,7 @@ def main():
         invariant(db, grant=1, audits=0)
         run(['sqlite3', '-bail', str(db)], input=REPAIR.read_text())
         invariant(db)
-        verify_env = dict(os.environ, DATABASE_PATH=str(db), MIGRATIONS_DIR=str(MIGRATIONS), EXPECTED_FINAL_MIGRATION='000077_journey_bonus_award_approval.up.sql')
+        verify_env = dict(os.environ, DATABASE_PATH=str(db), MIGRATIONS_DIR=str(MIGRATIONS), EXPECTED_FINAL_MIGRATION='000078_actual_work_location_override.up.sql')
         run(['sh', str(VERIFY)], env=verify_env)
         run(['sqlite3', '-bail', str(db)], input=REPAIR.read_text())
         invariant(db)
