@@ -56,6 +56,9 @@ func (r *gormRepository) ListActiveAssignmentsForWorkPeriod(ctx context.Context,
 		Preload("Sector").
 		Preload("Location").
 		Preload("Task").
+		Preload("ActualSector").
+		Preload("ActualLocation").
+		Preload("ActualTask").
 		Order("created_at ASC").
 		Find(&rows).Error
 	return rows, err

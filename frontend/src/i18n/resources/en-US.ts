@@ -1105,7 +1105,7 @@ export const enUSMessages = {
   'planning.noIncluded': 'No included assignments.',
   'planning.outcome': 'Outcome',
   // Bite 31.3 — Planning assignment flow
-  'planning.planHelp': 'Select Collaborators for this Work Period. New plans start from the most recent Work Period with the same period code. Saving applies the selected rows only; unselected rows are ignored unless their Availability was changed for inheritance by the next plan.',
+  'planning.planHelp': 'Select Collaborators for this Work Period. New plans use the most recent prior Work Period with the same period code. For Collaborators who worked, recorded actual Sector, Local and Task are proposed for the next plan; missing overrides use informed values. Saving applies selected rows only, except Availability changes saved for the next plan.',
   'planning.refinementHelp': 'Use Plan Assignment to refine a Collaborator\'s sector, local, and task before saving the Work Period plan. Use Cand. and Repl. to mark temporary replacements for this Work Period only. Future defaults are updated only when explicitly selected in that refinement workflow.',
   'planning.templateSource': 'Template source: {date} · {name}',
   'planning.noTemplate': 'No prior same-type Work Period template was found, or this Work Period already has saved assignments.',

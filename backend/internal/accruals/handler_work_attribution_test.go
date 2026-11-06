@@ -67,6 +67,45 @@ func TestByte353WorkAttributionIsRecordedInAccrualAndCurrentAccount(t *testing.T
 	if again.Data.Total != 1 || again.Data.Items[0].WorkLocationLabel != "Work Location Beta" {
 		t.Fatalf("repeat post lost or duplicated financial attribution: %+v", again.Data)
 	}
+
+	// The exact customer sequence: record actual work, execute Accrual, then
+	// create a later same-code period. Its proposed plan must carry performed
+	// work forward, without changing the posted financial evidence above.
+	next := createWorkPeriod(t, server, map[string]any{
+		"workDate": "2026-06-06", "startsAt": "2026-06-06T06:00:00Z", "endsAt": "2026-06-06T18:00:00Z",
+	})
+	planning := getJSON(t, server, workPeriodsURL+next.Data.ID+"/assignments/planning-template")
+	defer planning.Body.Close()
+	if planning.StatusCode != http.StatusOK {
+		t.Fatalf("planning after accrual: %d", planning.StatusCode)
+	}
+	var nextPlan struct {
+		Data struct {
+			SourceWorkPeriodID string `json:"sourceWorkPeriodId"`
+			Rows               []struct {
+				CollaboratorID string `json:"collaboratorId"`
+				SectorID       string `json:"sectorId"`
+				LocationID     string `json:"locationId"`
+				TaskID         string `json:"taskId"`
+			} `json:"rows"`
+		} `json:"data"`
+	}
+	decodeJSON(t, planning, &nextPlan)
+	if nextPlan.Data.SourceWorkPeriodID != period.Data.ID {
+		t.Fatalf("new plan used unexpected source period %q", nextPlan.Data.SourceWorkPeriodID)
+	}
+	found := false
+	for _, row := range nextPlan.Data.Rows {
+		if row.CollaboratorID == worker.Data.ID {
+			found = true
+			if row.SectorID != sectorID || row.LocationID != locationID || row.TaskID != taskID {
+				t.Fatalf("new plan did not carry actual work through accrual posting: %+v", row)
+			}
+		}
+	}
+	if !found {
+		t.Fatalf("new plan lacks collaborator from prior posted period: %+v", nextPlan.Data.Rows)
+	}
 }
 
 // The operational location must be visible, but it must not replace the

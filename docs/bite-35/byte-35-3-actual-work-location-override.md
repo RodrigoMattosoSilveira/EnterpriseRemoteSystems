@@ -4,7 +4,7 @@
 
 ## 0. Contract, identities and safety
 
-**Business contract.** An informed assignment (`sectorId`, `locationId`, `taskId`) and its actual work (`actualSectorId`, `actualLocationId`, `actualTaskId`) are separate. When an actual override is absent, the informed assignment is effective. Overrides must never change informed values, accrual/compensation basis, or the next planning default. CLOSED periods are read-only. The three actual references must be active and Tenant-scoped.
+**Business contract.** An informed assignment (`sectorId`, `locationId`, `taskId`) and its actual work (`actualSectorId`, `actualLocationId`, `actualTaskId`) are separate. When an actual override is absent, the informed assignment is effective. Overrides must never change existing informed values or accrual/compensation basis. For a new same-code Work Period with no saved assignments, a previous INCLUDED/WORKED assignment supplies actual Sector, Location and Task as proposed planning values; absent actual overrides fall back independently to informed values. Existing new-period assignments and Journey-wide defaults are unchanged. CLOSED periods are read-only. The three actual references must be active and Tenant-scoped.
 
 **Authorized tester:** LOCAL Tenant A Administrator, `e2e-authz-admin-tenant-admin@example.com`; credential: 1Password **ers-development**, separately labeled LOCAL ADMIN-A. **Tenant A** is `E2E Authorization Admin Boundary`. For the authorization spot-check, use LOCAL Tenant B Administrator `e2e-isolation-tenant-admin@example.com` from the same vault, in **Tenant B** `E2E Operational Isolation`. The Application Administrator is not a substitute for either Tenant Administrator. Never record passwords or session tokens.
 
@@ -153,15 +153,17 @@ make local-smoke
 
 **PASS:** exactly the Task selection changes. **FAIL:** any unrelated value changes or Task fails to persist. **BLOCKED:** a second selectable Task is unavailable or period became CLOSED. **Handoff:** independently edited Task persisted.
 
-## 5. MT-03 — Next planning default comes from informed assignment
+## 5. MT-03 — Next planning proposal carries forward the actual work performed
 
-**Identity/context:** ADMIN-A / Tenant A / Português (Brasil). **Starting state:** MT-01 PASS; an appropriate same-period-code successor is available. This test is **read-only**.
+**Identity/context:** ADMIN-A / Tenant A / Português (Brasil), using the credentials from Section 0. **Starting state:** MT-02 PASS; the source Work Period and Collaborator are recorded; an approved, synthetic, *later* same-period-code Work Period with **no saved plan assignments** is available. This test is **read-only**. Do not create a financial or historical Work Period solely to satisfy the prerequisite.
 
-1. From **Períodos de trabalho**, use the visible period cards to open the recorded successor Work Period; confirm its displayed period code matches the test period's code. Open **Plano**.
-2. Find the same Collaborator in the planning template or informed roster, when displayed. Record proposed/default Sector, Location and Task.
-3. Compare against MT-01's *informed* triple and MT-01's *actual* triple. Do **not** save/refine a plan or create a new period for this check.
+1. In **Períodos de trabalho**, open the later synthetic Work Period card. Check that its visible period code matches the source period, its work date is later, and that it has no saved planning assignments. If these conditions are not met, mark **BLOCKED** rather than modifying the wrong period.
+2. Select **Plano**. Locate the **Fonte do modelo** label, and confirm it identifies the Work Period whose **Resultados Reais** you changed in MT-01/MT-02. If another more recent same-code period supplies the template, mark this check **BLOCKED** until the correct source/target pair is available.
+3. Locate the same Collaborator by name. Write down the proposed **Setor**, **Local** and **Tarefa** in the planning row, along with the source period's original **Atribuição informada** and final recorded **Setor real**, **Local real**, **Tarefa real** values from MT-02.
+4. For **Trabalhou**, confirm each proposed value equals the saved actual value from the previous period, falling back to the previous *informed* value independently for any attribute with no actual override. Refresh and repeat. Do not click **Salvar plano** or **Atribuição do Plano**; this is only a proposal.
+5. Return to the original Work Period → **Resultados Reais** and **Plano**, without saving. Confirm its original informed values remain unchanged. The calculated amount in **Acúmulo** must still be based on that original informed assignment; no accrual needs to be executed for this check.
 
-**PASS:** when this period genuinely derives defaults from the tested prior period, defaults match the informed values and do not inherit actual overrides. **FAIL:** proven inheritance of an actual override rather than the informed values. **BLOCKED:** no successor exists, source of template cannot be established, or the same Collaborator is unavailable. **Handoff:** no saved changes to successor.
+**PASS:** the next unsaved same-code plan shows the previous performed-work values (with independent informed fallback), they survive refresh, the source is correct, and prior informed values are unchanged. **FAIL:** the next plan displays the old informed values instead of saved actual overrides, changes the source assignment, or loses values on refresh. **BLOCKED:** no safe successor, saved assignments on the successor, ambiguous source, or concurrent edits. **Handoff:** successor plan remains unsaved; no financial posting or Journey-default edit.
 
 ## 6. MT-04 — Compensation boundary without financial writes
 
@@ -232,4 +234,4 @@ make local-check
 
 ## Glossary impact
 
-Keep *Informed Sector/Location/Task* distinct from *Actual Sector/Location/Task*. Add **Actual Task / Tarefa real** alongside **Actual Sector / Setor real** and **Actual Location / Local real** under Work Period Assignment / Actual Outcomes. An actual override never changes the informed assignment, compensation basis, or next-period planning default. No other domain definition changes are authorized by this test document.
+Keep *Informed Sector/Location/Task* distinct from *Actual Sector/Location/Task*. Add **Actual Task / Tarefa real** alongside **Actual Sector / Setor real** and **Actual Location / Local real** under Work Period Assignment / Actual Outcomes. An actual override never changes the existing informed assignment or compensation basis. A new same-code period can propose the effective actual-work values from the latest prior INCLUDED/WORKED period; it does not automatically change Journey-wide defaults or any already-saved period. The previous informed assignment remains the authoritative compensation basis for that previous period. No other domain definition changes are authorized by this test document.
