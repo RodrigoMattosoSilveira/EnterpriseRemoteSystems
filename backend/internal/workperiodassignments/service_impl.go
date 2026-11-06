@@ -541,8 +541,43 @@ func (s *service) MarkActualOutcome(ctx context.Context, id string, req MarkActu
 		return nil, err
 	}
 
+	// Actual work evidence is independent of the informed assignment used for pay.
+	// Only active references of the right type in the selected Tenant are permitted.
+	actualSectorID := strings.TrimSpace(req.ActualSectorID)
+	actualLocationID := strings.TrimSpace(req.ActualLocationID)
+	actualTaskID := strings.TrimSpace(req.ActualTaskID)
+	for _, reference := range []struct{ id, typ, field string }{
+		{actualSectorID, "sector", "actualSectorId"},
+		{actualLocationID, "location", "actualLocationId"},
+		{actualTaskID, "task", "actualTaskId"},
+	} {
+		if reference.id == "" || (reference.field == "actualSectorId" && reference.id == existing.SectorID) || (reference.field == "actualLocationId" && reference.id == existing.LocationID) || (reference.field == "actualTaskId" && reference.id == existing.TaskID) {
+			continue
+		}
+		valid, err := s.repo.ExistsActiveReference(ctx, reference.id, reference.typ)
+		if err != nil {
+			return nil, err
+		}
+		if !valid {
+			return nil, ValidationError{Fields: map[string]string{reference.field: "Select an active reference in the current Tenant"}}
+		}
+	}
 	status := strings.ToUpper(strings.TrimSpace(req.ActualStatus))
 	existing.ActualStatus = &status
+	// Blank or equal to the informed value means no override. Do not rewrite
+	// the original SectorID/LocationID, even when actual work differs.
+	existing.ActualSectorID = nil
+	if actualSectorID != "" && actualSectorID != existing.SectorID {
+		existing.ActualSectorID = &actualSectorID
+	}
+	existing.ActualLocationID = nil
+	if actualLocationID != "" && actualLocationID != existing.LocationID {
+		existing.ActualLocationID = &actualLocationID
+	}
+	existing.ActualTaskID = nil
+	if actualTaskID != "" && actualTaskID != existing.TaskID {
+		existing.ActualTaskID = &actualTaskID
+	}
 	existing.UpdatedAt = time.Now().UTC()
 
 	if err := s.repo.Update(ctx, existing); err != nil {

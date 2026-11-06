@@ -424,6 +424,9 @@ type WorkPeriodAssignment struct {
 	PlannedStatus              string  `gorm:"type:text;not null;index" json:"plannedStatus"`
 	PlanningAvailability       string  `gorm:"type:text;not null;default:ACTIVE;index" json:"planningAvailability"`
 	ActualStatus               *string `gorm:"type:text" json:"actualStatus,omitempty"`
+	ActualSectorID             *string `gorm:"type:text" json:"actualSectorId,omitempty"`
+	ActualTaskID               *string `gorm:"type:text" json:"actualTaskId,omitempty"`
+	ActualLocationID           *string `gorm:"type:text" json:"actualLocationId,omitempty"`
 	ReplacementForAssignmentID *string `gorm:"type:text;index" json:"replacementForAssignmentId,omitempty"`
 	SectorID                   string  `gorm:"type:text;not null;index" json:"sectorId"`
 	LocationID                 string  `gorm:"type:text;not null;index" json:"locationId"`

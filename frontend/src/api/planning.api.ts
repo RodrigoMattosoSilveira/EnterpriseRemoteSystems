@@ -42,10 +42,13 @@ export function updateWorkPeriodAssignment(
 export function markWorkPeriodAssignmentOutcome(
   assignmentId: string,
   actualStatus: ActualStatus,
+  actualSectorId?: string,
+  actualLocationId?: string,
+  actualTaskId?: string,
 ): Promise<WorkPeriodAssignment> {
   return apiFetch<WorkPeriodAssignment>(
     `/work-period-assignments/${encodeURIComponent(assignmentId)}/outcome`,
-    { method: "PATCH", body: JSON.stringify({ actualStatus }) },
+    { method: "PATCH", body: JSON.stringify({ actualStatus, actualSectorId, actualLocationId, actualTaskId }) },
   );
 }
 
