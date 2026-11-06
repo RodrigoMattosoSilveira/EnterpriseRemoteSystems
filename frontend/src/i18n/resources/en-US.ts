@@ -923,6 +923,7 @@ export const enUSMessages = {
   'planning.tabOutcomes': 'Actual Outcomes',
   'planning.tabAccrual': 'Accrual',
   "byte353.informed": "Informed assignment",
+  "byte353.workPerformed": "Work performed",
   "byte353.actualSector": "Actual Sector",
   "byte353.actualLocation": "Actual Location",
   "byte353.actualTask": "Actual Task",

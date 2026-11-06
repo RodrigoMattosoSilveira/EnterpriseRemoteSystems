@@ -925,6 +925,7 @@ export const ptBRMessages = {
   'planning.tabOutcomes': 'Resultados Reais',
   'planning.tabAccrual': 'Acúmulo',
   "byte353.informed": "Atribuição informada",
+  "byte353.workPerformed": "Trabalho realizado",
   "byte353.actualSector": "Setor real",
   "byte353.actualLocation": "Local real",
   "byte353.actualTask": "Tarefa real",

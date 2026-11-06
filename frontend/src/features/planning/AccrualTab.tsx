@@ -6,6 +6,7 @@ import { useI18n, translateEnglish, type Translate } from "../../i18n";
 import type { WorkPeriod } from "../../types/planning";
 import type { ReferenceDataItem } from "../../types/referenceData";
 import type { AccrualItem, AccrualRun } from "../../types/accruals";
+import { WorkAttributionDetails } from "../../components/WorkAttributionDetails";
 import { humanizePlanningCode } from "./planningSchemas";
 import {
   useAccrualItems,
@@ -372,6 +373,7 @@ function AccrualItemsTable({ items }: { items: AccrualItem[] }) {
                     <dd className="inline font-mono">{item.tenantId}</dd>
                   </div>
                 </dl>
+                <WorkAttributionDetails entry={item} />
               </td>
               <td className="px-2 py-3">
                 {humanizePlanningCode(item.calculationType, t)}

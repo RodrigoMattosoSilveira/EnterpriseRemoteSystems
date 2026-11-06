@@ -43,6 +43,12 @@ export type AccrualItem = {
   status: AccrualItemStatus;
   pendingReason?: string;
   description?: string;
+  workSectorId?: string;
+  workSectorLabel?: string;
+  workLocationId?: string;
+  workLocationLabel?: string;
+  workTaskId?: string;
+  workTaskLabel?: string;
   createdAt: string;
   updatedAt: string;
 };
