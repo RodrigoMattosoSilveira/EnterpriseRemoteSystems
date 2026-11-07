@@ -2,7 +2,7 @@
 
 **Material de apoio à operação da Entidade · Português (Brasil) · Byte 35.4A**
 
-Este cartão complementa o [Manual completo — Capítulo 05](byte-35-4-manual-do-tenant-pt-br.md). Use no treinamento e na preparação de um Período de Trabalho; não substitui aprovação de escala, registro real de resultados ou regras de Acúmulo.
+Este cartão complementa o [Manual completo — Capítulo 05](byte-35-4-manual-da-entidade-pt-br.md). Use no treinamento e na preparação de um Período de Trabalho; não substitui aprovação de escala, registro real de resultados ou regras de Acúmulo.
 
 ## A regra que evita inverter a substituição
 

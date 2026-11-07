@@ -65,4 +65,20 @@ describe("ERS translation resources", () => {
     const portugueseCopy = Object.values(messagesByLocale["pt-BR"]).join("\n");
     expect(portugueseCopy).not.toMatch(/locatári[oa]s?/iu);
   });
+
+  it("preserves technical codes and all Byte 35.4B translation placeholders in both locales", () => {
+    const keys = Object.keys(enUSMessages).filter((key) => key.startsWith("byte354b."));
+    expect(keys.length).toBeGreaterThanOrEqual(90);
+    for (const key of keys) {
+      const source = enUSMessages[key as keyof typeof enUSMessages];
+      const translated = ptBRMessages[key as keyof typeof ptBRMessages];
+      expect([...source.matchAll(/\{[a-zA-Z]+\}/g)].map((match) => match[0]).sort()).toEqual(
+        [...translated.matchAll(/\{[a-zA-Z]+\}/g)].map((match) => match[0]).sort(),
+      );
+      expect(translated).not.toMatch(/\bTenants?\b/i);
+    }
+    expect(ptBRMessages["byte354b.audit.operation.17"]).toBe("Ator da Entidade ativado");
+    expect(enUSMessages["byte354b.audit.operation.17"]).toBe("Tenant Actor activated");
+  });
+
 });

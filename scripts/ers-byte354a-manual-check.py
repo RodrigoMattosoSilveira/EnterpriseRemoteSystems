@@ -12,7 +12,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-MANUAL = Path("docs/bite-35/byte-35-4-manual-do-tenant-pt-br.md")
+MANUAL = Path("docs/bite-35/byte-35-4-manual-da-entidade-pt-br.md")
 APP_PLAN = Path("frontend/src/features/planning/PlanTab.tsx")
 APP_PERIOD = Path("frontend/src/features/planning/WorkPeriodDetailPage.tsx")
 APP_LOCALE = Path("frontend/src/i18n/resources/pt-BR.ts")

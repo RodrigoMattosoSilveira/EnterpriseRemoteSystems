@@ -24,7 +24,7 @@ Record one line per test in the [readiness evidence template](byte-35-4-readines
 
 ## Functional customer training — UI only, in Portuguese
 
-The trainer uses [Manual completo de treinamento e operação da Entidade](byte-35-4-manual-do-tenant-pt-br.md); the customer is never asked to run CLI, SQL, Docker or API calls. Unless a test says otherwise, exercise read-only navigation and **Cancel** before any final save or signature. Do not leave a browser authenticated between different identities.
+The trainer uses [Manual completo de treinamento e operação da Entidade](byte-35-4-manual-da-entidade-pt-br.md); the customer is never asked to run CLI, SQL, Docker or API calls. Unless a test says otherwise, exercise read-only navigation and **Cancel** before any final save or signature. Do not leave a browser authenticated between different identities.
 
 ### F01 — Login, language and selected Tenant
 
@@ -62,7 +62,7 @@ The trainer uses [Manual completo de treinamento e operação da Entidade](byte-
 
 **Identity/context:** EARN-A / Entidade A / Período de Trabalho sintético em Planejamento, com permissão de edição de plano. **Pré-requisito para gravação:** período descartável aprovado, duas ou quatro Pessoas elegíveis e autorização específica para salvar a atribuição. Para comparar proposta herdada, exigir período anterior com mesmo código e resultado real `WORKED`. Sem esses dados, marcar o subcaso `BLOCKED`, nunca criar lançamentos financeiros para forçar cobertura.
 
-Use o [Manual completo de treinamento e operação da Entidade](byte-35-4-manual-do-tenant-pt-br.md), **Capítulos 04 e 05**, incluindo os exercícios **F04-S01 a F04-S08**. Todos os passos a seguir são UI-first:
+Use o [Manual completo de treinamento e operação da Entidade](byte-35-4-manual-da-entidade-pt-br.md), **Capítulos 04 e 05**, incluindo os exercícios **F04-S01 a F04-S08**. Todos os passos a seguir são UI-first:
 
 1. Entre como **EARN-A**, selecione A → **Períodos de Trabalho** → período **editável** → **Plano**. Registre data, código, nome e estado; use **Limpar filtros** para visualizar todas as linhas.
 2. Em cada linha, explique a diferença entre **✓ (incluído)**, **Disp. A/F/L**, **Cand.** e **Repl.**. Em `pt-BR`, **F significa Folga** (o inglês usa D), e a coluna de substituição ainda exibe o cabeçalho compacto **Repl.**.

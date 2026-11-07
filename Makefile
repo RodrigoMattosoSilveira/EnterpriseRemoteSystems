@@ -622,6 +622,7 @@ local-check:
 	$(MAKE) two-human-administrators-check
 	$(MAKE) byte354-readiness-check
 	$(MAKE) byte354a-training-check
+	$(MAKE) byte354b-terminology-check
 	$(MAKE) bite30l4-coverage-manifest-check
 	$(MAKE) bite32-release-coverage-check
 	$(MAKE) bite326-release-hardening-check
@@ -1912,3 +1913,9 @@ byte354-readiness-check:
 byte354a-training-check:
 	python3 -B scripts/ers-byte354a-manual-check.py
 	python3 -B scripts/test-byte354a-manual.py
+
+# Byte 35.4B — presentation terminology and negative, fail-closed regression tests.
+.PHONY: byte354b-terminology-check
+byte354b-terminology-check:
+	python3 -B scripts/ers-byte354b-terminology-check.py
+	python3 -B scripts/test-byte354b-terminology.py

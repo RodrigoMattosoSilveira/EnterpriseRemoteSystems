@@ -1,4 +1,5 @@
 import { useI18n } from "../../i18n";
+import type { TranslationKey } from "../../i18n/resources";
 import { Fragment, FormEvent, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { ApiErrorPanel } from "../../components/ApiErrorPanel";
@@ -21,40 +22,40 @@ const defaultFilters: Required<Pick<AuthzAuditLogFilters, "operation" | "decisio
   limit: 100,
 };
 
-const sensitiveOperationOptions = [
-  { value: "", label: "All sensitive and authorization events" },
-  { value: "current_accounts.zero_gold", label: "Zero gold settlement" },
-  { value: "current_accounts.partial_payout", label: "Partial payout" },
-  { value: "current_accounts.close_journey", label: "Close journey settlement" },
-  { value: "ledger_entries.reverse", label: "Ledger reversal" },
-  { value: "ledger_entries.replace", label: "Ledger replacement" },
-  { value: "ledger_receipts.print", label: "Receipt print" },
-  { value: "ledger_receipts.return", label: "Receipt return" },
-  { value: "ledger_receipts.backfill_debit_entries", label: "Receipt debit-ledger backfill" },
-  { value: "authentication.accounts.create", label: "Authentication Account created" },
-  { value: "authz.actors.create", label: "Authorization actor created" },
-  { value: "authz.role_grants.create", label: "Authorization role granted" },
-  { value: "authz.role_grants.revoke", label: "Authorization role revoked" },
-  { value: "authentication.accounts.security_suspend", label: "Authentication Account suspended" },
-  { value: "authentication.accounts.security_suspension_clear", label: "Authentication Account suspension cleared" },
-  { value: "authz.actors.activate", label: "Authorization Actor activated" },
-  { value: "authz.actors.deactivate", label: "Authorization Actor deactivated" },
-  { value: "authz.tenant_actors.activate", label: "Tenant Actor activated" },
-  { value: "authz.tenant_actors.deactivate", label: "Tenant Actor deactivated" },
-  { value: "authz.tenant_role_grants.create", label: "Tenant Role Grant created" },
-  { value: "authz.tenant_role_grants.revoke", label: "Tenant Role Grant revoked" },
-  { value: "people.memberships.create", label: "Person–Tenant Membership created" },
-  { value: "people.memberships.status_change", label: "Person–Tenant Membership status changed" },
-  { value: "people.memberships.reactivate", label: "Person–Tenant Membership reactivated" },
-  { value: "collaborators.journey.create", label: "Collaborator Journey created" },
-  { value: "collaborators.journey.close", label: "Collaborator Journey closed" },
-  { value: "support_access_leases.request", label: "Support lease requested" },
-  { value: "support_access_leases.approve", label: "Support lease approved" },
-  { value: "support_access_leases.terminate", label: "Support lease terminated" },
-  { value: "support_access.use", label: "Support-authorized request" },
+const sensitiveOperationOptions: Array<{ value: string; key: TranslationKey }> = [
+  { value: "", key: "byte354b.audit.operation.00" },
+  { value: "current_accounts.zero_gold", key: "byte354b.audit.operation.01" },
+  { value: "current_accounts.partial_payout", key: "byte354b.audit.operation.02" },
+  { value: "current_accounts.close_journey", key: "byte354b.audit.operation.03" },
+  { value: "ledger_entries.reverse", key: "byte354b.audit.operation.04" },
+  { value: "ledger_entries.replace", key: "byte354b.audit.operation.05" },
+  { value: "ledger_receipts.print", key: "byte354b.audit.operation.06" },
+  { value: "ledger_receipts.return", key: "byte354b.audit.operation.07" },
+  { value: "ledger_receipts.backfill_debit_entries", key: "byte354b.audit.operation.08" },
+  { value: "authentication.accounts.create", key: "byte354b.audit.operation.09" },
+  { value: "authz.actors.create", key: "byte354b.audit.operation.10" },
+  { value: "authz.role_grants.create", key: "byte354b.audit.operation.11" },
+  { value: "authz.role_grants.revoke", key: "byte354b.audit.operation.12" },
+  { value: "authentication.accounts.security_suspend", key: "byte354b.audit.operation.13" },
+  { value: "authentication.accounts.security_suspension_clear", key: "byte354b.audit.operation.14" },
+  { value: "authz.actors.activate", key: "byte354b.audit.operation.15" },
+  { value: "authz.actors.deactivate", key: "byte354b.audit.operation.16" },
+  { value: "authz.tenant_actors.activate", key: "byte354b.audit.operation.17" },
+  { value: "authz.tenant_actors.deactivate", key: "byte354b.audit.operation.18" },
+  { value: "authz.tenant_role_grants.create", key: "byte354b.audit.operation.19" },
+  { value: "authz.tenant_role_grants.revoke", key: "byte354b.audit.operation.20" },
+  { value: "people.memberships.create", key: "byte354b.audit.operation.21" },
+  { value: "people.memberships.status_change", key: "byte354b.audit.operation.22" },
+  { value: "people.memberships.reactivate", key: "byte354b.audit.operation.23" },
+  { value: "collaborators.journey.create", key: "byte354b.audit.operation.24" },
+  { value: "collaborators.journey.close", key: "byte354b.audit.operation.25" },
+  { value: "support_access_leases.request", key: "byte354b.audit.operation.26" },
+  { value: "support_access_leases.approve", key: "byte354b.audit.operation.27" },
+  { value: "support_access_leases.terminate", key: "byte354b.audit.operation.28" },
+  { value: "support_access.use", key: "byte354b.audit.operation.29" },
 ];
 
-const operationLabels = new Map(sensitiveOperationOptions.map((option) => [option.value, option.label]));
+const operationLabels = new Map(sensitiveOperationOptions.map((option) => [option.value, option.key]));
 
 export function AuditLogViewerPage() {
   const { t } = useI18n();
@@ -159,7 +160,7 @@ export function AuditLogViewerPage() {
               >
                 {sensitiveOperationOptions.map((option) => (
                   <option key={option.value || "all"} value={option.value}>
-                    {option.label}
+                    {t(option.key)}
                   </option>
                 ))}
               </select>
@@ -297,7 +298,7 @@ export function AuditLogViewerPage() {
                           <DecisionBadge decision={log.decision} />
                         </td>
                         <td className="px-3 py-3">
-                          <p className="font-semibold text-gray-950">{operationLabel(log.operation)}</p>
+                          <p className="font-semibold text-gray-950">{operationLabel(log.operation, t)}</p>
                           <p className="mt-1 text-xs text-gray-500">{log.operation}</p>
                           {log.permissionCode && <p className="mt-1 text-xs text-gray-500">{log.permissionCode}</p>}
                         </td>
@@ -341,7 +342,7 @@ export function AuditLogViewerPage() {
 function AuditEvidence({ log }: { log: AuthzAuditLog }) {
   const { t } = useI18n();
   const metadata = parseMetadata(log.metadataJson);
-  const items = auditEvidenceItems(log, metadata);
+  const items = auditEvidenceItems(log, metadata, t);
 
   if (items.length === 0 && !log.metadataJson) {
     return <span className="text-gray-500">{t("admin.audit.no.extra.evidence.recorded_2a416c")}</span>;
@@ -385,18 +386,18 @@ function DecisionBadge({ decision }: { decision: string }) {
 
 type Metadata = Record<string, unknown>;
 
-function auditEvidenceItems(log: AuthzAuditLog, metadata: Metadata): Array<{ label: string; value: string }> {
+function auditEvidenceItems(log: AuthzAuditLog, metadata: Metadata, t: ReturnType<typeof useI18n>["t"]): Array<{ label: string; value: string }> {
   const items: Array<{ label: string; value: string }> = [];
 
-  if (log.accountId) items.push({ label: "Authentication Account", value: log.accountId });
-  if (log.actorScope) items.push({ label: "Actor scope", value: log.actorScope });
-  if (log.personId) items.push({ label: "Acting Person", value: log.personId });
-  if (log.membershipId) items.push({ label: "Acting Membership", value: log.membershipId });
-  if (log.sessionId) items.push({ label: "Session", value: log.sessionId });
-  if (log.correlationId) items.push({ label: "Correlation", value: log.correlationId });
+  if (log.accountId) items.push({ label: t("byte354b.audit.evidence.00"), value: log.accountId });
+  if (log.actorScope) items.push({ label: t("byte354b.audit.evidence.01"), value: log.actorScope });
+  if (log.personId) items.push({ label: t("byte354b.audit.evidence.02"), value: log.personId });
+  if (log.membershipId) items.push({ label: t("byte354b.audit.evidence.03"), value: log.membershipId });
+  if (log.sessionId) items.push({ label: t("byte354b.audit.evidence.04"), value: log.sessionId });
+  if (log.correlationId) items.push({ label: t("byte354b.audit.evidence.05"), value: log.correlationId });
   if (log.authorizationSource) {
     items.push({
-      label: "Authorization source",
+      label: t("byte354b.audit.evidence.06"),
       value: [log.authorizationSource, log.authorizationRoleCode, log.authorizationSourceId]
         .filter(Boolean)
         .join(" · "),
@@ -404,21 +405,21 @@ function auditEvidenceItems(log: AuthzAuditLog, metadata: Metadata): Array<{ lab
   }
 
   if (log.reason) {
-    items.push({ label: "Decision reason", value: log.reason });
+    items.push({ label: t("byte354b.audit.evidence.07"), value: log.reason });
   }
 
   const reasonCode = stringValue(metadata.reasonCode);
   const reasonText = stringValue(metadata.reasonText);
-  if (reasonCode) items.push({ label: "Reason code", value: reasonCode });
-  if (reasonText) items.push({ label: "Reason text", value: reasonText });
+  if (reasonCode) items.push({ label: t("byte354b.audit.evidence.08"), value: reasonCode });
+  if (reasonText) items.push({ label: t("byte354b.audit.evidence.09"), value: reasonText });
 
   const recentReauthentication = recordValue(metadata.recentReauthentication);
   if (recentReauthentication) {
     const method = stringValue(recentReauthentication.method);
     const authenticatedAt = stringValue(recentReauthentication.authenticatedAt);
     items.push({
-      label: "Recent reauthentication",
-      value: [method, formatDateTime(authenticatedAt)].filter(Boolean).join(" · ") || "Recorded",
+      label: t("byte354b.audit.evidence.10"),
+      value: [method, formatDateTime(authenticatedAt)].filter(Boolean).join(" · ") || t("byte354b.audit.evidence.11"),
     });
   }
 
@@ -427,14 +428,14 @@ function auditEvidenceItems(log: AuthzAuditLog, metadata: Metadata): Array<{ lab
     const approvedBy = stringValue(secondApproval.approvedBy);
     const notes = stringValue(secondApproval.notes);
     items.push({
-      label: "Second approval",
-      value: [approvedBy, notes].filter(Boolean).join(" · ") || "Recorded",
+      label: t("byte354b.audit.evidence.12"),
+      value: [approvedBy, notes].filter(Boolean).join(" · ") || t("byte354b.audit.evidence.11"),
     });
   }
 
   if (log.requestMethod || log.requestPath) {
     items.push({
-      label: "Request",
+      label: t("byte354b.audit.evidence.13"),
       value: [log.requestMethod, log.requestPath].filter(Boolean).join(" "),
     });
   }
@@ -472,8 +473,9 @@ function prettyMetadata(metadataJson: string): string {
   }
 }
 
-function operationLabel(operation: string): string {
-  return operationLabels.get(operation) || operation || "Unknown operation";
+function operationLabel(operation: string, t: ReturnType<typeof useI18n>["t"]): string {
+  const key = operationLabels.get(operation);
+  return key ? t(key) : operation || t("byte354b.audit.unknown");
 }
 
 function cleanFilters(filters: typeof defaultFilters): AuthzAuditLogFilters {

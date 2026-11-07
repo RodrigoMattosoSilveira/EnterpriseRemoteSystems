@@ -192,6 +192,30 @@ describe("TenantRoleDelegationPage grant feedback", () => {
     const currentGrants = sectionWithHeading("Current Role Grants");
     expect(currentGrants?.textContent).toContain("TENANT_ADMIN");
   });
+
+  it("shows Entidade terminology in pt-BR without changing canonical Actor or Role codes", async () => {
+    window.localStorage.setItem("ers.i18n.locale", "pt-BR");
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      const url = input.toString();
+      if (url === "/api/v1/authz/tenant-role-actors" && !init?.method) {
+        return json({ data: [targetActor] });
+      }
+      throw new Error(`Unexpected request: ${url}`);
+    });
+
+    renderPage();
+    await waitForText("Target Person");
+    await waitForText("Membro da Entidade");
+    expect(container.textContent).toContain("Desative apenas esta identidade da Entidade");
+    expect(container.textContent).toContain("actor-target");
+    expect(container.textContent).not.toContain("Tenant member");
+    const selector = container.querySelector<HTMLButtonElement>('button[aria-haspopup="listbox"]');
+    expect(selector).not.toBeNull();
+    await act(async () => selector?.click());
+    await waitForText("Administrador da Entidade");
+    expect(container.textContent).not.toContain("Tenant Administrator");
+  });
+
 });
 
 function renderPage() {

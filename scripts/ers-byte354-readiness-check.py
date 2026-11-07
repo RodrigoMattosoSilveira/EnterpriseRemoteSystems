@@ -15,7 +15,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 MANIFEST = "docs/bite-35/byte-35-4-readiness-contract.json"
 REQUIRED_DOCUMENTS = {
-    "customer_manual": "docs/bite-35/byte-35-4-manual-do-tenant-pt-br.md",
+    "customer_manual": "docs/bite-35/byte-35-4-manual-da-entidade-pt-br.md",
     "technical_runbook": "docs/bite-35/byte-35-4-operational-readiness.md",
     "manual_acceptance": "docs/bite-35/byte-35-4-manual-acceptance.md",
     "evidence_template": "docs/bite-35/byte-35-4-readiness-evidence.template.json",
