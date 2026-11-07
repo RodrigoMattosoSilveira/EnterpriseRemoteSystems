@@ -56,6 +56,7 @@ LOCAL_DOCKER ?= docker
 
 BRAZILIAN_DEMO_DB ?= backend/data/brazilian-demo.db
 BRAZILIAN_DEMO_AS_OF ?= 2026-09-18
+BYTE354C_DB ?= backend/data/byte354c-training.db
 
 SERVER_SMOKE_ATTEMPTS ?= 12
 SERVER_SMOKE_DELAY_SECONDS ?= 5
@@ -116,6 +117,10 @@ help:
 	@echo "  make manual-testdata-local-reset"
 	@echo "  make manual-testdata-local-seed"
 	@echo "  make manual-testdata-local-reset-with-work-periods"
+	@echo "  make byte354c-training-check"
+	@echo "  make byte354c-training-build [BYTE354C_DB=backend/data/byte354c-training-sessao02.db]"
+	@echo "  make byte354c-training-verify [BYTE354C_DB=...]"
+	@echo "  make byte354c-training-backend [BYTE354C_DB=...]"
 	@echo "  make brazilian-demo-local-reset [BRAZILIAN_DEMO_AS_OF=YYYY-MM-DD]"
 	@echo "  make brazilian-demo-local-seed [BRAZILIAN_DEMO_AS_OF=YYYY-MM-DD]"
 	@echo "  make brazilian-demo-local-verify [BRAZILIAN_DEMO_AS_OF=YYYY-MM-DD]"
@@ -623,6 +628,7 @@ local-check:
 	$(MAKE) byte354-readiness-check
 	$(MAKE) byte354a-training-check
 	$(MAKE) byte354b-terminology-check
+	$(MAKE) byte354c-training-check
 	$(MAKE) bite30l4-coverage-manifest-check
 	$(MAKE) bite32-release-coverage-check
 	$(MAKE) bite326-release-hardening-check
@@ -1919,3 +1925,19 @@ byte354a-training-check:
 byte354b-terminology-check:
 	python3 -B scripts/ers-byte354b-terminology-check.py
 	python3 -B scripts/test-byte354b-terminology.py
+
+# Byte 35.4C — separate non-destructive synthetic training database (LOCAL only).
+.PHONY: byte354c-training-check byte354c-training-build byte354c-training-verify byte354c-training-backend
+byte354c-training-check:
+	python3 -B scripts/test-byte354c-training-db.py
+
+byte354c-training-build:
+	@mkdir -p "$$(dirname "$(BYTE354C_DB)")"
+	APP_ENV=development python3 -B scripts/ers-byte354c-training-db.py --output "$(BYTE354C_DB)"
+
+byte354c-training-verify:
+	APP_ENV=development python3 -B scripts/ers-byte354c-training-db.py --output "$(BYTE354C_DB)" --verify-only
+
+byte354c-training-backend: byte354c-training-verify
+	@echo "Starting LOCAL backend with the isolated training file: $(abspath $(BYTE354C_DB))"
+	APP_ENV=development ERS_DATABASE_PATH="$(abspath $(BYTE354C_DB))" ERS_RESET_DATABASE=false ERS_PROVISION_E2E_ADMIN=false AUTHZ_BOOTSTRAP_ENABLED=false APP_AUTO_MIGRATE=false $(MAKE) local-backend
