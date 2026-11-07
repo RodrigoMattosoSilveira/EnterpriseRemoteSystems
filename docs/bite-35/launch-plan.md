@@ -56,7 +56,7 @@ The frontend keeps `en-US` and `pt-BR` as the only supported locales. Financial 
 
 ## Byte 35.4 training and operational readiness deliverables
 
-- **Customer (Brazilian Portuguese, UI-only):** [Manual completo de treinamento e operação da Entidade](byte-35-4-manual-do-tenant-pt-br.md). This covers identity/context, People/Journeys, planning, informed versus actual work, accrual, expenses, receipts and financial evidence; it never requires customer SQL, Git or infrastructure operations.
+- **Customer (Brazilian Portuguese, UI-only):** [Manual completo de treinamento e operação da Entidade](byte-35-4-manual-da-entidade-pt-br.md). This covers identity/context, People/Journeys, planning, informed versus actual work, accrual, expenses, receipts and financial evidence; it never requires customer SQL, Git or infrastructure operations.
 - **Authorized technical operators:** [Technical Tenant Operational Readiness](byte-35-4-operational-readiness.md), with environment ownership, daily checks, backup and isolated recovery evidence, incident STOP/escalation, and teardown.
 - **Independent acceptance:** [Byte 35.4 manual acceptance](byte-35-4-manual-acceptance.md), [redacted evidence template](byte-35-4-readiness-evidence.template.json), and [offline coverage contract](byte-35-4-readiness-contract.json). `make byte354-readiness-check` validates document sections, navigation references and fail-closed placeholders, **not** operational pass or launch authorization.
 

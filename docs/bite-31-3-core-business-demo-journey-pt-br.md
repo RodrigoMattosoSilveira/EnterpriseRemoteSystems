@@ -35,7 +35,10 @@ Localization changes presentation only. ERS does not translate or mutate:
 - authorization role/scope codes;
 - persisted enum/code values or financial amounts.
 
-`Tenant` remains the intentional ERS domain term in Brazilian Portuguese.
+`Tenant` remains an internal domain identifier in ERS. The customer-facing Brazilian
+Portuguese name for this organizational context is **Entidade** (plural **Entidades**),
+including **Administrador da Entidade**, **Ator da Entidade** and **Vínculo da Pessoa
+com a Entidade**. Internal identifiers, codes and API contracts stay unchanged.
 Known persisted/status codes are translated only at their display boundary.
 
 ## Formatting

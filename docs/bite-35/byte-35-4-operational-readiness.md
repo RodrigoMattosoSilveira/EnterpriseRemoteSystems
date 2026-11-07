@@ -1,6 +1,6 @@
 # ERS — Byte 35.4: Technical Tenant Operational Readiness
 
-**Audience:** authorized ERS operator, release owner, Tenant Administrator for business signoff; **not** a customer training handout. Customer-facing instructions are exclusively in [Manual de operação do Tenant (pt-BR)](byte-35-4-manual-do-tenant-pt-br.md). Do not give customers Git, Docker, SQL, API or host-admin tasks.
+**Audience:** authorized ERS operator, release owner, Tenant Administrator for business signoff; **not** a customer training handout. Customer-facing instructions are exclusively in [Manual de operação da Entidade (pt-BR)](byte-35-4-manual-da-entidade-pt-br.md). Do not give customers Git, Docker, SQL, API or host-admin tasks.
 
 **Status:** operational procedure and readiness assessment only; **no deployed state has been verified by writing this document**. The actual six Production launch gates are decided in **Byte 35.7**. Database initialization and opening-balance import belong to **35.5**. Named human admin enrollment and recovery/credential handoff belong to **35.6**. Do not treat this document or a successful static CI check as evidence those tasks are complete.
 
