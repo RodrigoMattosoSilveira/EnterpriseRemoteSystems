@@ -53,3 +53,11 @@ For **35.1-only manual acceptance**, follow [`manual-acceptance-tests.md`](manua
 ## Byte 35.2 translation implementation notes
 
 The frontend keeps `en-US` and `pt-BR` as the only supported locales. Financial administration, authorization, support-access, reference-data, and login-shell static copy is moved into the typed locale resources. The local CI check `make byte352-i18n-check` enforces matching keys and interpolation placeholders and rejects new static JSX/attribute text outside an explicit list of stable identifiers and units. These automated checks **do not** establish translation completeness for dynamic API/error messages or all conditional UI branches; B35.2-02 through -05 in the canonical manual are required before declaring this bite complete. No ledger, authorization, or deployment behavior should change as part of translation.
+
+## Byte 35.4 training and operational readiness deliverables
+
+- **Customer (Brazilian Portuguese, UI-only):** [Manual completo de treinamento e operação da Entidade](byte-35-4-manual-da-entidade-pt-br.md). This covers identity/context, People/Journeys, planning, informed versus actual work, accrual, expenses, receipts and financial evidence; it never requires customer SQL, Git or infrastructure operations.
+- **Authorized technical operators:** [Technical Tenant Operational Readiness](byte-35-4-operational-readiness.md), with environment ownership, daily checks, backup and isolated recovery evidence, incident STOP/escalation, and teardown.
+- **Independent acceptance:** [Byte 35.4 manual acceptance](byte-35-4-manual-acceptance.md), [redacted evidence template](byte-35-4-readiness-evidence.template.json), and [offline coverage contract](byte-35-4-readiness-contract.json). `make byte354-readiness-check` validates document sections, navigation references and fail-closed placeholders, **not** operational pass or launch authorization.
+
+**Known 35.6 dependency:** historical recovery-source references to LastPass are not reconciled with the Bite 35 1Password-only commitment. Keep that issue **BLOCKED** until the canonical recovery access contract and actual human recovery tests are updated and verified in 35.6. This 35.4 documentation neither changes secret custody nor authorizes Production activation.

@@ -262,7 +262,7 @@ export function SupportAccessLeasesPage() {
       {approvedLeaseId && (
         <ActionSuccessDialog
           title={t("support.extra.tenant.support.access.request.approved_6b8ee2")}
-          message={`Tenant Support Access Lease ${approvedLeaseId} was approved.`}
+          message={t("byte354b.support.approvedMessage", { id: approvedLeaseId })}
           onDismiss={() => {
             setApprovedLeaseId("");
             approveMutation.reset();
@@ -296,9 +296,9 @@ function LeaseHistoryTenantFilter({
   const selectedTenant = tenants.find((tenant) => tenant.id === selectedTenantId);
   const selectedLabel = selectedTenant
     ? `${selectedTenant.name} (${selectedTenant.code})`
-    : "All Tenants";
+    : t("byte354b.support.allTenants");
   const showAllTenantsOption =
-    !normalizedSearch || "all tenants".includes(normalizedSearch);
+    !normalizedSearch || [t("byte354b.support.allTenantsSearch"), "all tenants"].some((label) => label.includes(normalizedSearch));
 
   function chooseTenant(tenantId: string) {
     onChange(tenantId);
@@ -356,7 +356,7 @@ function LeaseHistoryTenantFilter({
           <p className="px-3 py-2 text-xs font-semibold text-slate-500">
             {normalizedSearch
               ? t("byte352.support.filteredActiveTenants", { shown: visibleTenants.length, total: tenants.length })
-              : `${tenants.length} active Tenant${tenants.length === 1 ? "" : "s"}`}
+              : t(tenants.length === 1 ? "byte354b.support.activeTenants" : "byte354b.support.activeTenantsPlural", { count: tenants.length })}
           </p>
 
           {showAllTenantsOption && (
@@ -752,7 +752,7 @@ function LeaseCard({
       <dl className="mt-4 grid gap-3 text-sm md:grid-cols-2 xl:grid-cols-3">
         <Fact label={t("byte352.support.applicationActor")} value={lease.applicationActorId} mono />
         <Fact label={t("byte352.support.requested")} value={formatDateTime(lease.requestedAt)} />
-        <Fact label="Fixed expiration" value={formatDateTime(lease.expiresAt)} />
+        <Fact label={t("byte354b.support.fixedExpiration")} value={formatDateTime(lease.expiresAt)} />
         <Fact label={t("byte352.support.approvedBy")} value={lease.approvedByActorId || "—"} mono={Boolean(lease.approvedByActorId)} />
         <Fact label={t("byte352.support.terminatedBy")} value={lease.terminatedByActorId || "—"} mono={Boolean(lease.terminatedByActorId)} />
         <Fact label={t("byte352.support.terminationReason")} value={lease.terminationReason || "—"} />

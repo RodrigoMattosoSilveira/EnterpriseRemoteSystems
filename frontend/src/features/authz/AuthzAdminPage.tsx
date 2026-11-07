@@ -1,4 +1,5 @@
 import { useI18n } from "../../i18n";
+import type { TranslationKey } from "../../i18n/resources";
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { ApiError } from "../../api/client";
@@ -37,7 +38,7 @@ const emptyActorForm: CreateAuthzActorInput = {
 type TenantRoleEligibilityFilter = "ALL" | "ELIGIBLE" | "INELIGIBLE";
 
 export function AuthzAdminPage() {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const [requestActor, setRequestActor] = useState<AuthzAdminRequestActor>(() =>
     loadRequestActor(),
   );
@@ -130,7 +131,7 @@ export function AuthzAdminPage() {
         active: true,
       });
       setActorForm(emptyActorForm);
-      setSuccessMessage(`${created.actorKey} created.`);
+      setSuccessMessage(t("byte354b.authz.feedback.created", { code: created.actorKey }));
     } catch {
       // Mutation error is rendered by ApiErrorPanel.
     }
@@ -145,7 +146,7 @@ export function AuthzAdminPage() {
         targetActorId,
         input: { roleCode, tenantId },
       });
-      setSuccessMessage(`${grant.roleCode} granted.`);
+      setSuccessMessage(t("byte354b.authz.feedback.granted", { code: grant.roleCode }));
     } catch {
       // Mutation error is rendered by ApiErrorPanel.
     }
@@ -157,7 +158,7 @@ export function AuthzAdminPage() {
 
     try {
       await revokeGrantMutation.mutateAsync({ targetActorId, grantId: grant.id });
-      setSuccessMessage(`${grant.roleCode} revoked.`);
+      setSuccessMessage(t("byte354b.authz.feedback.revoked", { code: grant.roleCode }));
     } catch {
       // Mutation error is rendered by ApiErrorPanel.
     }
@@ -169,7 +170,7 @@ export function AuthzAdminPage() {
 
     try {
       await setActorActiveMutation.mutateAsync({ targetActorId, active });
-      setSuccessMessage(`${actorKey} ${active ? "activated" : "deactivated"}.`);
+      setSuccessMessage(t(active ? "byte354b.authz.feedback.activated" : "byte354b.authz.feedback.deactivated", { code: actorKey }));
     } catch {
       // Mutation error is rendered by ApiErrorPanel.
     }
@@ -432,8 +433,8 @@ export function AuthzAdminPage() {
                       <div className="flex items-start justify-between gap-3">
                         <div>
                           <h3 className="font-semibold text-gray-950">{role.code}</h3>
-                          <p className="text-sm text-gray-600">{role.label}</p>
-                          {role.description && <p className="mt-1 text-xs text-gray-500">{role.description}</p>}
+                          <p className="text-sm text-gray-600">{localizedAdminRoleLabel(role, t, locale)}</p>
+                          {role.description && <p className="mt-1 text-xs text-gray-500">{localizedAdminRoleDescription(role, t, locale)}</p>}
                         </div>
                         <span className="rounded-full bg-gray-100 px-2 py-1 text-xs font-semibold text-gray-700">
                           {role.scopeType}
@@ -699,12 +700,12 @@ function ActorCard({
         </form>
         {tenantRoleIneligible && (
           <p className="mt-2 text-xs font-medium text-amber-700">
-            {t("authz.fragments.tenant.role.grant.unavailable_1ce1ee")} {tenantEligibility.reason}
+            {t("authz.fragments.tenant.role.grant.unavailable_1ce1ee")} {localizeAuthzReason(tenantEligibility.reason, t)}
           </p>
         )}
         {tenantAdminCardinalityBlocker && !alreadyGranted && (
           <p className="mt-2 text-xs font-medium text-amber-700">
-            {t("authz.fragments.tenant.admin.grant.unavailable_213323")} {tenantAdminCardinalityBlocker}
+            {t("authz.fragments.tenant.admin.grant.unavailable_213323")} {localizeAuthzReason(tenantAdminCardinalityBlocker, t)}
           </p>
         )}
         {alreadyGranted && (
@@ -765,7 +766,7 @@ function RoleSelector({
   onChange: (roleCode: string) => void;
   disabled: boolean;
 }) {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const [open, setOpen] = useState(false);
   const [filterText, setFilterText] = useState("");
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -774,7 +775,7 @@ function RoleSelector({
   const normalizedFilter = filterText.trim().toLocaleLowerCase();
   const visibleRoles = normalizedFilter
     ? roles.filter((role) =>
-        [role.code, role.label, role.description].some((value) =>
+        [role.code, role.label, role.description, localizedAdminRoleLabel(role, t, locale)].some((value) =>
           value.toLocaleLowerCase().includes(normalizedFilter),
         ),
       )
@@ -830,11 +831,11 @@ function RoleSelector({
       >
         <span className="min-w-0">
           <span className="block truncate font-semibold">
-            {selectedRole?.code ?? (disabled ? "No compatible Roles" : "Select a Role")}
+            {selectedRole?.code ?? (disabled ? t("byte354b.authz.noCompatible") : t("byte354b.authz.selectRole"))}
           </span>
           {selectedRole && (
             <span className="block truncate text-xs text-gray-500">
-              {selectedRole.label}
+              {localizedAdminRoleLabel(selectedRole, t, locale)}
             </span>
           )}
         </span>
@@ -899,11 +900,11 @@ function RoleSelector({
                     {role.code}
                   </span>
                   <span className="block text-xs font-medium text-gray-600">
-                    {role.label}
+                    {localizedAdminRoleLabel(role, t, locale)}
                   </span>
                   {role.description && (
                     <span className="mt-0.5 block text-xs text-gray-500">
-                      {role.description}
+                      {localizedAdminRoleDescription(role, t, locale)}
                     </span>
                   )}
                 </button>
@@ -931,7 +932,7 @@ function ActorBindingSummary({ actor }: { actor: AuthzActor }) {
             {t("authz.fragments.bound_2c346a")}{accountLabel ? ` · ${accountLabel}` : ""}
           </>
         ) : (
-          "Not bound"
+          t("byte354b.authz.notBound")
         )}
       </p>
 
@@ -950,11 +951,11 @@ function ActorBindingSummary({ actor }: { actor: AuthzActor }) {
               ? binding.membershipActive
                 ? "ACTIVE"
                 : "INACTIVE"
-              : "Missing"}
+              : t("byte354b.authz.missing")}
             {binding.membershipId
               ? binding.membershipSameTenant
-                ? " · same tenant"
-                : ` · tenant mismatch${
+                ? t("byte354b.authz.sameTenant")
+                : `${t("byte354b.authz.mismatch")}${
                     binding.membershipTenantId
                       ? ` (${binding.membershipTenantId})`
                       : ""
@@ -983,10 +984,10 @@ function ActorBindingSummary({ actor }: { actor: AuthzActor }) {
               : "rounded-full bg-amber-100 px-2 py-1 font-semibold text-amber-800"
           }
         >
-          {t("authz.fragments.tenant.role.grants_e3d2c2")} {eligibility.eligible ? "ELIGIBLE" : "INELIGIBLE"}
+          {t("authz.fragments.tenant.role.grants_e3d2c2")} {eligibility.eligible ? t("byte354b.authz.eligible") : t("byte354b.authz.ineligible")}
         </span>
         {!eligibility.eligible && (
-          <span className="font-medium text-gray-500">{eligibility.reason}</span>
+          <span className="font-medium text-gray-500">{localizeAuthzReason(eligibility.reason, t)}</span>
         )}
       </div>
     </div>
@@ -997,6 +998,49 @@ type TenantRoleGrantEligibility = {
   eligible: boolean;
   reason: string;
 };
+
+// Preserve eligibility and cardinality decisions; translate only their display text.
+const authzReasonKeys: Record<string, TranslationKey> = {
+  "Actor is inactive.": "byte354b.authz.reason.00",
+  "Authentication Account binding is required.": "byte354b.authz.reason.01",
+  "Actor is not tenant-bound.": "byte354b.authz.reason.02",
+  "A specific tenant binding is required.": "byte354b.authz.reason.03",
+  "Person–Tenant Membership is required.": "byte354b.authz.reason.04",
+  "Membership must belong to the Actor's bound tenant.": "byte354b.authz.reason.05",
+  "Person–Tenant Membership must be ACTIVE.": "byte354b.authz.reason.06",
+  "Account-bound with an ACTIVE Membership in the same tenant.": "byte354b.authz.reason.07",
+  "Tenant Administrator authority requires a tenant Actor bound to a canonical Person Membership.": "byte354b.authz.reason.08",
+  "Tenant already has the maximum of two active Tenant Administrators.": "byte354b.authz.reason.09",
+  "The second Tenant Administrator slot must belong to a different Person.": "byte354b.authz.reason.10",
+};
+
+
+// Catalog role metadata is server-provided. Localize known system Role codes
+// only at display boundaries; keep codes, grants, and arbitrary custom text intact.
+function localizedAdminRoleLabel(role: AuthzRole, t: ReturnType<typeof useI18n>["t"], locale: ReturnType<typeof useI18n>["locale"]): string {
+  if (locale === "en-US") return role.label;
+  switch (role.code) {
+    case "TENANT_ADMIN": return t("byte354b.roles.tenantAdministrator");
+    case "TENANT_VIEWER": return t("byte354b.authz.role.tenantViewer");
+    case "EARNINGS_OPERATOR": return t("byte354b.roles.earningsOperator");
+    case "EXPENSE_OPERATOR": return t("byte354b.roles.expensesOperator");
+    default: return role.label;
+  }
+}
+
+function localizedAdminRoleDescription(role: AuthzRole, t: ReturnType<typeof useI18n>["t"], locale: ReturnType<typeof useI18n>["locale"]): string {
+  if (locale === "en-US") return role.description;
+  return role.code === "TENANT_ADMIN" && role.description === "Tenant administration"
+    ? t("byte354b.authz.role.tenantDescription")
+    : role.description;
+}
+
+function localizeAuthzReason(reason: string, t: ReturnType<typeof useI18n>["t"]): string {
+  const key = authzReasonKeys[reason];
+  if (key) return t(key);
+  const match = /^This Person already administers tenant (.*); a Person may administer only one Tenant at a time\.$/.exec(reason);
+  return match ? t("byte354b.authz.otherTenant", { tenantId: match[1] }) : reason;
+}
 
 function tenantRoleGrantEligibility(actor: AuthzActor): TenantRoleGrantEligibility {
   if (!actor.active) {

@@ -620,6 +620,9 @@ promotion-readiness-check:
 local-check:
 	$(MAKE) bite3368-core-check
 	$(MAKE) two-human-administrators-check
+	$(MAKE) byte354-readiness-check
+	$(MAKE) byte354a-training-check
+	$(MAKE) byte354b-terminology-check
 	$(MAKE) bite30l4-coverage-manifest-check
 	$(MAKE) bite32-release-coverage-check
 	$(MAKE) bite326-release-hardening-check
@@ -1898,3 +1901,21 @@ byte351-baseline-check:
 .PHONY: byte352-i18n-check
 byte352-i18n-check:
 	cd frontend && npm run i18n:check && npm run i18n:test
+
+# Byte 35.4 — offline documentation contract only; never attests to operational readiness.
+.PHONY: byte354-readiness-check
+byte354-readiness-check:
+	python3 -B scripts/ers-byte354-readiness-check.py
+	python3 -B scripts/test-byte354-readiness.py
+
+# Byte 35.4A — substantive customer manual and substitution training, offline only.
+.PHONY: byte354a-training-check
+byte354a-training-check:
+	python3 -B scripts/ers-byte354a-manual-check.py
+	python3 -B scripts/test-byte354a-manual.py
+
+# Byte 35.4B — presentation terminology and negative, fail-closed regression tests.
+.PHONY: byte354b-terminology-check
+byte354b-terminology-check:
+	python3 -B scripts/ers-byte354b-terminology-check.py
+	python3 -B scripts/test-byte354b-terminology.py

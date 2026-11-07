@@ -97,6 +97,15 @@ jobs:
       - name: Verify Bite 35.1 launch baseline and scope freeze
         run: make byte351-baseline-check
 
+      - name: Verify Byte 35.4 training and operational readiness documentation contract
+        run: make byte354-readiness-check
+
+      - name: Verify Byte 35.4A comprehensive customer manual and substitution training
+        run: make byte354a-training-check
+
+      - name: Verify Byte 35.4B Portuguese Entidade terminology and negative regression suite
+        run: make byte354b-terminology-check
+
       - name: Verify Bite 33.6.8C release-identity and acceptance fail-closed gate
         run: make bite3368c-gate-check
 
