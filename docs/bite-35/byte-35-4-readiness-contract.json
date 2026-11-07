@@ -1,0 +1,109 @@
+{
+  "schema_version": 1,
+  "byte": "35.4",
+  "training_language": "pt-BR",
+  "customer_manual": "docs/bite-35/byte-35-4-manual-do-tenant-pt-br.md",
+  "technical_runbook": "docs/bite-35/byte-35-4-operational-readiness.md",
+  "manual_acceptance": "docs/bite-35/byte-35-4-manual-acceptance.md",
+  "evidence_template": "docs/bite-35/byte-35-4-readiness-evidence.template.json",
+  "functional_case_ids": [
+    "F01",
+    "F02",
+    "F03",
+    "F04",
+    "F05",
+    "F06",
+    "F07",
+    "F08",
+    "F09",
+    "F10",
+    "F11",
+    "F12"
+  ],
+  "operational_case_ids": [
+    "O01",
+    "O02",
+    "O03",
+    "O04",
+    "O05",
+    "O06",
+    "O07",
+    "O08",
+    "O09"
+  ],
+  "navigation_routes": [
+    {
+      "route": "people",
+      "case": "F02"
+    },
+    {
+      "route": "collaborators",
+      "case": "F03"
+    },
+    {
+      "route": "work-periods",
+      "case": "F04"
+    },
+    {
+      "route": "gold-production",
+      "case": "F07"
+    },
+    {
+      "route": "expenses",
+      "case": "F08"
+    },
+    {
+      "route": "collaborators/:id/current-account",
+      "case": "F09"
+    },
+    {
+      "route": "receipts/outstanding",
+      "case": "F10"
+    },
+    {
+      "route": "admin/authorization",
+      "case": "F11"
+    },
+    {
+      "route": "admin/reference-data",
+      "case": "F11"
+    },
+    {
+      "route": "admin/gold-prices",
+      "case": "F11"
+    },
+    {
+      "route": "admin/price-list-items",
+      "case": "F11"
+    },
+    {
+      "route": "admin/current-account-settings",
+      "case": "F11"
+    },
+    {
+      "route": "admin/support-access-leases",
+      "case": "O06"
+    }
+  ],
+  "launch_gates": [
+    "release_integrity",
+    "security",
+    "data_preservation",
+    "backup_restore",
+    "operational_continuity",
+    "administrator_recovery"
+  ],
+  "uncompleted_bites": [
+    "35.5",
+    "35.6",
+    "35.7"
+  ],
+  "deferred": [
+    "34.5",
+    "34.4",
+    "33.6.6+",
+    "33.6.8E/F"
+  ],
+  "known_blocker": "Historical LastPass recovery locators must be reconciled to 1Password-only custody in Byte 35.6",
+  "production_launch_authorized": false
+}

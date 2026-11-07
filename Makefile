@@ -620,6 +620,7 @@ promotion-readiness-check:
 local-check:
 	$(MAKE) bite3368-core-check
 	$(MAKE) two-human-administrators-check
+	$(MAKE) byte354-readiness-check
 	$(MAKE) bite30l4-coverage-manifest-check
 	$(MAKE) bite32-release-coverage-check
 	$(MAKE) bite326-release-hardening-check
@@ -1898,3 +1899,9 @@ byte351-baseline-check:
 .PHONY: byte352-i18n-check
 byte352-i18n-check:
 	cd frontend && npm run i18n:check && npm run i18n:test
+
+# Byte 35.4 — offline documentation contract only; never attests to operational readiness.
+.PHONY: byte354-readiness-check
+byte354-readiness-check:
+	python3 -B scripts/ers-byte354-readiness-check.py
+	python3 -B scripts/test-byte354-readiness.py
