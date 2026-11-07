@@ -108,7 +108,7 @@ def validate(root: Path = ROOT, manifest_path: str = MANIFEST) -> list[str]:
         errors.append("manual acceptance must have O01-O09 tests exactly once")
     if "```" in manual:
         errors.append("customer manual must be UI-only and have no executable code blocks")
-    for fragment in ["Português (Brasil)", "Tenant", "Jornada", "Conta Corrente", "Setor", "Local", "Tarefa", "informad", "efetiv", "Recibo", "34.4", "35.7"]:
+    for fragment in ["Português (Brasil)", "Entidade", "Jornada", "Conta Corrente", "Setor", "Local", "Tarefa", "informad", "efetiv", "Recibo", "34.4", "35.7"]:
         if fragment not in manual:
             errors.append(f"customer manual missing terminology: {fragment}")
     for fragment in ["35.5", "35.6", "35.7", "1Password", "LastPass", "RPO", "RTO", "BLOCKED", "Docker", "integrity_check", "off-host", "make local-check"]:

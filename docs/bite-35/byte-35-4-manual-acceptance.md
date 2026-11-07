@@ -24,7 +24,7 @@ Record one line per test in the [readiness evidence template](byte-35-4-readines
 
 ## Functional customer training — UI only, in Portuguese
 
-The trainer uses [Manual de operação funcional do Tenant](byte-35-4-manual-do-tenant-pt-br.md); the customer is never asked to run CLI, SQL, Docker or API calls. Unless a test says otherwise, exercise read-only navigation and **Cancel** before any final save or signature. Do not leave a browser authenticated between different identities.
+The trainer uses [Manual completo de treinamento e operação da Entidade](byte-35-4-manual-do-tenant-pt-br.md); the customer is never asked to run CLI, SQL, Docker or API calls. Unless a test says otherwise, exercise read-only navigation and **Cancel** before any final save or signature. Do not leave a browser authenticated between different identities.
 
 ### F01 — Login, language and selected Tenant
 
@@ -58,16 +58,21 @@ The trainer uses [Manual de operação funcional do Tenant](byte-35-4-manual-do-
 
 **PASS:** selected Journey belongs to Tenant A, closed Journey read-only, no nonzero-balance closure available. **BLOCKED:** no matching fixtures for the active/closed checks. **FAIL:** cross-Tenant or invalid closure behavior.
 
-### F04 — Plano and proposed work carry-forward
+### F04 — Plano, substituições e proposta de trabalho do período seguinte
 
-**Identity/context:** EARN-A / Tenant A / approved synthetic Work Periods with the same code; one prior `WORKED` outcome and a new period with no saved assignments.
+**Identity/context:** EARN-A / Entidade A / Período de Trabalho sintético em Planejamento, com permissão de edição de plano. **Pré-requisito para gravação:** período descartável aprovado, duas ou quatro Pessoas elegíveis e autorização específica para salvar a atribuição. Para comparar proposta herdada, exigir período anterior com mesmo código e resultado real `WORKED`. Sem esses dados, marcar o subcaso `BLOCKED`, nunca criar lançamentos financeiros para forçar cobertura.
 
-1. Sign in EARN-A, choose A → **Períodos de trabalho** → new synthetic period → **Plano**.
-2. Record previous informed/effective Setor, Local and Tarefa, including one missing effective override. Verify per-field fallback to informed assignment.
-3. Open the selection control, type a filter, press Escape, reopen; confirm full options and original selection.
-4. Verify existing saved assignments are not overwritten and Journey defaults are unchanged. Do not save new assignments in this read-only case.
+Use o [Manual completo de treinamento e operação da Entidade](byte-35-4-manual-do-tenant-pt-br.md), **Capítulos 04 e 05**, incluindo os exercícios **F04-S01 a F04-S08**. Todos os passos a seguir são UI-first:
 
-**PASS:** correct same-code previous `WORKED` proposal, fallback independently by field, selector behavior and no unintended change. **BLOCKED:** missing paired-period fixture. **FAIL:** incorrect carry-forward or silent selection change.
+1. Entre como **EARN-A**, selecione A → **Períodos de Trabalho** → período **editável** → **Plano**. Registre data, código, nome e estado; use **Limpar filtros** para visualizar todas as linhas.
+2. Em cada linha, explique a diferença entre **✓ (incluído)**, **Disp. A/F/L**, **Cand.** e **Repl.**. Em `pt-BR`, **F significa Folga** (o inglês usa D), e a coluna de substituição ainda exibe o cabeçalho compacto **Repl.**.
+3. Execute **F04-S01 e F04-S02** para verificar plano normal e candidato local sem vínculo salvo. Não afirme que só marcar Cand. grava substituição.
+4. Em **F04-S03**, prepare a Pessoa afastada (Ana, **F**) e a Pessoa que vai trabalhar (Bruno, **A**, **✓**, **Cand.**). Escolha **Ana em Repl. da linha de Bruno**. A substituição tem direção **Bruno → Ana**. Só salve no período descartável aprovado; reabra e comprove persistência.
+5. Em exercícios separados, execute **F04-S04 a F04-S07**: alvo em Licença, proibição de alvo duplicado, ausência de alvo A e retirada de vínculo. Registre quais foram apenas lidos e quais foram efetivamente salvos.
+6. Em **F04-S08**, abra um novo período sem atribuição salva e com o **mesmo código** de um anterior. Compare atribuição informada, trabalho real de `WORKED` e campos que usam fallback; não marque a opção de atualizar **padrões futuros** apenas para verificar a proposta.
+7. Em **Informar / Imprimir**, confira a lista de afastados F/L sem substituto. Não marque a escala como informada a menos que exista aprovação de escrita específica. Registre evidência redigida por cenário.
+
+**PASS:** direção correta, eligibilidade e persistência de substituições aprovadas, proposta de trabalho real sem reescrever histórico e ausência de mutação não autorizada. **BLOCKED:** falta período descartável, Pessoas ou histórico de mesmo código; indicar precisamente os cenários S01–S08 não executados. **FAIL:** substituição invertida, vínculo perdido após salvar, alvo duplicado ou mudança silenciosa de dados financeiros/Jornada.
 
 ### F05 — Informar and print, without pretending acceptance
 
@@ -92,16 +97,17 @@ The trainer uses [Manual de operação funcional do Tenant](byte-35-4-manual-do-
 
 **PASS:** effective evidence persists without changing informed values or earnings basis, CLOSED read-only. **BLOCKED:** no approved writable record. **FAIL:** compensation changes only because effective work differs.
 
-### F07 — Gold production / Acúmulo / attribution evidence
+### F07 — Produção de Ouro / Acúmulo / evidências conforme o papel
 
-**Identity/context:** EARN-A / Tenant A / approved synthetic period with relevant recorded production or prior posted Acúmulo.
+**Identidades/contextos:** primeiro **EARN-A / Entidade A** (consulta de produção no Acúmulo, sem pressupor `gold_production.read` ou `.manage`); depois, em nova sessão, **ADMIN-A / Entidade A**, com permissão de produção/Conta Corrente, se efetivamente concedida. **Pré-requisito:** período sintético com produção registrada; para conciliação financeira, item de Acúmulo já lançado, sem criar dados para passar no teste.
 
-1. Navigate **Produção de ouro**, select the period, review entries (no edit unless approved).
-2. Open **Períodos de trabalho** → same period → **Acúmulo**; read notes, totals and statuses.
-3. With an already-existing synthetic accrual, open the related **Conta Corrente** entry; compare informed/effective work attribution.
-4. Do not run a new accrual without explicit disposable fixture permission and reconciliation plan.
+1. Entre como **EARN-A**, selecione A → **Períodos de Trabalho** → período aprovado → **Acúmulo** → **Ouro Produzido**. Leia Local, data, gramas e observações. A falta do menu administrativo **Produção de Ouro** para EARN-A **não é falha**.
+2. Revise os itens do Acúmulo, observações, estados e pendências. Não execute novo Acúmulo nem lance itens nesse exercício.
+3. Saia completamente. Entre como **ADMIN-A** na mesma Entidade e, **se autorizado**, abra **Produção de Ouro**. Compare os registros com o mesmo período, sem salvar alteração.
+4. Ainda como ADMIN-A, abra a Jornada fictícia com item de Acúmulo **já lançado** em **Conta Corrente**. Inspecione a atribuição informada e o trabalho realizado sem modificar saldos.
+5. Se faltar produção ou lançamento histórico, registre o respectivo subcaso **BLOCKED**. Não modifique permissões, produção ou finanças para completar a evidência.
 
-**PASS:** work attribution is traceable while amounts use informed basis; no unexpected ledger mutation. **BLOCKED:** no posted synthetic entry. **FAIL:** attribution absent where contract requires it or financial mismatch.
+**PASS:** interface coerente com cada permissão, produção consultável em Acúmulo e histórico financeiro rastreável sem reescrever remuneração informada. **BLOCKED:** falta registro ou papel autorizado e verificado. **FAIL:** acesso indevido, contexto incorreto ou valores alterados pela simples mudança de Setor/Local/Tarefa efetivos.
 
 ### F08 — Expenses and correction discipline
 
