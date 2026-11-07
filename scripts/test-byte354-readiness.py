@@ -22,7 +22,9 @@ with tempfile.TemporaryDirectory(prefix="ers-byte354-test-") as work:
              "docs/bite-35/launch-baseline.json", "frontend/src/app/router.tsx",
              "docs/database-recovery-runbook.md",
              "docs/bite-3368/manual-acceptance-tests.md",
-             "docs/bite-33-6-recovery-rehearsal-and-operational-runbook.md"]
+             "docs/bite-33-6-recovery-rehearsal-and-operational-runbook.md",
+             "docs/bite-35/byte-35-3-actual-work-location-override.md",
+             "docs/bite-35/byte-35-4a-cartao-substituicoes-pt-br.md"]
     for relative in files:
         source = ROOT / relative
         destination = target / relative
