@@ -97,7 +97,7 @@ def validate(root: Path = ROOT) -> list[str]:
     # Smoke-check that core terminology corresponds to the *committed* UI and
     # backend, not an obsolete manual test. This is not a complete UI audit.
     ui_anchors = [
-        ("label=\"Cand.\"", plan), ("label=\"Repl.\"", plan),
+        ("t(\"planning.replacementCandidateShort\")", plan), ("t(\"planning.temporaryReplacementShort\")", plan),
         ("replacementCandidate", plan), ("temporaryReplacementForCollaboratorId", plan),
         ("planning.savePlan", plan), ("planning.availability.dayOff", plan),
         ("planning.informPrint", detail), ("planning.tabOutcomes", detail),
