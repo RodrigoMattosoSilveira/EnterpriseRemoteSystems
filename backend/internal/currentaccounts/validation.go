@@ -3,37 +3,62 @@ package currentaccounts
 import (
 	"math"
 	"strings"
+
+	"enterpriseremotesystems/backend/internal/shared/fielderrors"
 )
 
-type ValidationError struct{ Fields map[string]string }
+type ValidationError struct {
+	Fields map[string]string
+	Codes  map[string]string
+}
 
-func (e ValidationError) Error() string                       { return "validation failed" }
-func (e ValidationError) ValidationFields() map[string]string { return e.Fields }
+func (e ValidationError) Error() string                           { return "validation failed" }
+func (e ValidationError) ValidationFields() map[string]string     { return e.Fields }
+func (e ValidationError) ValidationFieldCodes() map[string]string { return e.Codes }
+
+// Stable rule codes returned as `fieldCodes` (shared ones live in
+// internal/shared/fielderrors). Renaming one is an API change.
+const (
+	RuleConfirmationRequired      = "confirmation_required"
+	RuleDifferentApproverRequired = "different_approver_required"
+	RuleInvalidDirection          = "invalid_direction"
+	RuleInvalidSourceType         = "invalid_source_type"
+	RuleMustNotBeNegative         = "must_not_be_negative"
+	RulePayoutAmountRequired      = "payout_amount_required"
+	RuleSecondApprovalRequired    = "second_approval_required"
+	RuleTooManyDecimals           = "too_many_decimals"
+	RuleUnknownStatus             = "unknown_status"
+)
+
+func fieldError(field string, rule string, message string) ValidationError {
+	fields, codes := fielderrors.Single(field, rule, message)
+	return ValidationError{Fields: fields, Codes: codes}
+}
 
 func ValidateLedgerEntryListFilter(filter LedgerEntryListFilter) error {
-	fields := map[string]string{}
+	errs := fielderrors.New()
 	if strings.TrimSpace(filter.DateFrom) != "" {
 		if _, err := parseDate(filter.DateFrom); err != nil {
-			fields["dateFrom"] = "Date from must be YYYY-MM-DD"
+			errs.Add("dateFrom", fielderrors.InvalidDate, "Date from must be YYYY-MM-DD")
 		}
 	}
 	if strings.TrimSpace(filter.DateTo) != "" {
 		if _, err := parseDate(filter.DateTo); err != nil {
-			fields["dateTo"] = "Date to must be YYYY-MM-DD"
+			errs.Add("dateTo", fielderrors.InvalidDate, "Date to must be YYYY-MM-DD")
 		}
 	}
 	direction := strings.ToUpper(strings.TrimSpace(filter.Direction))
 	if direction != "" && direction != "CREDIT" && direction != "DEBIT" {
-		fields["direction"] = "Direction must be CREDIT or DEBIT"
+		errs.Add("direction", RuleInvalidDirection, "Direction must be CREDIT or DEBIT")
 	}
 	if filter.Page < 0 {
-		fields["page"] = "Page must be greater than zero"
+		errs.Add("page", fielderrors.MustBePositive, "Page must be greater than zero")
 	}
 	if filter.PageSize < 0 {
-		fields["pageSize"] = "Page size must be greater than zero"
+		errs.Add("pageSize", fielderrors.MustBePositive, "Page size must be greater than zero")
 	}
-	if len(fields) > 0 {
-		return ValidationError{Fields: fields}
+	if !errs.Empty() {
+		return ValidationError{Fields: errs.Fields, Codes: errs.Codes}
 	}
 	return nil
 }
@@ -50,13 +75,13 @@ func normalizedCorrectionReason(req CorrectionReasonRequest) (string, string) {
 	return code, text
 }
 
-func validateCorrectionReason(fields map[string]string, req CorrectionReasonRequest) {
+func validateCorrectionReason(errs *fielderrors.Collector, req CorrectionReasonRequest) {
 	code, text := normalizedCorrectionReason(req)
 	if code == "" {
-		fields["reasonCode"] = "Required"
+		errs.Add("reasonCode", fielderrors.Required, "Required")
 	}
 	if text == "" {
-		fields["reasonText"] = "Required"
+		errs.Add("reasonText", fielderrors.Required, "Required")
 	}
 }
 
@@ -67,120 +92,120 @@ func normalizedSecondApproval(req CorrectionReasonRequest) (string, string) {
 	return strings.TrimSpace(req.SecondApproval.ApprovedBy), strings.TrimSpace(req.SecondApproval.Notes)
 }
 
-func validateRequiredSecondApproval(fields map[string]string, req CorrectionReasonRequest, authorizedBy string) {
+func validateRequiredSecondApproval(errs *fielderrors.Collector, req CorrectionReasonRequest, authorizedBy string) {
 	if req.SecondApproval == nil {
-		fields["secondApproval.approvedBy"] = "Required when second-person approval is configured for sensitive operations"
+		errs.Add("secondApproval.approvedBy", RuleSecondApprovalRequired, "Required when second-person approval is configured for sensitive operations")
 		return
 	}
-	validateOptionalSecondApproval(fields, req, authorizedBy)
+	validateOptionalSecondApproval(errs, req, authorizedBy)
 }
 
-func validateOptionalSecondApproval(fields map[string]string, req CorrectionReasonRequest, authorizedBy string) {
+func validateOptionalSecondApproval(errs *fielderrors.Collector, req CorrectionReasonRequest, authorizedBy string) {
 	approvedBy, _ := normalizedSecondApproval(req)
 	if req.SecondApproval == nil {
 		return
 	}
 	if approvedBy == "" {
-		fields["secondApproval.approvedBy"] = "Required"
+		errs.Add("secondApproval.approvedBy", fielderrors.Required, "Required")
 		return
 	}
 	if strings.EqualFold(approvedBy, strings.TrimSpace(authorizedBy)) {
-		fields["secondApproval.approvedBy"] = "Second approver must be different from the authorizing actor"
+		errs.Add("secondApproval.approvedBy", RuleDifferentApproverRequired, "Second approver must be different from the authorizing actor")
 	}
 }
 
 func ValidateReverseLedgerEntryRequest(req ReverseLedgerEntryRequest, authorizedBy string) error {
-	fields := map[string]string{}
+	errs := fielderrors.New()
 	if strings.TrimSpace(authorizedBy) == "" {
-		fields["authorizedBy"] = "Required"
+		errs.Add("authorizedBy", fielderrors.Required, "Required")
 	}
-	validateCorrectionReason(fields, req.CorrectionReasonRequest)
-	validateOptionalSecondApproval(fields, req.CorrectionReasonRequest, authorizedBy)
+	validateCorrectionReason(errs, req.CorrectionReasonRequest)
+	validateOptionalSecondApproval(errs, req.CorrectionReasonRequest, authorizedBy)
 	if _, err := parseDate(req.EffectiveDate); err != nil {
-		fields["effectiveDate"] = "Effective date must be YYYY-MM-DD"
+		errs.Add("effectiveDate", fielderrors.InvalidDate, "Effective date must be YYYY-MM-DD")
 	}
-	if len(fields) > 0 {
-		return ValidationError{Fields: fields}
+	if !errs.Empty() {
+		return ValidationError{Fields: errs.Fields, Codes: errs.Codes}
 	}
 	return nil
 }
 
 func ValidateReplaceLedgerEntryRequest(req ReplaceLedgerEntryRequest, authorizedBy string) error {
-	fields := map[string]string{}
+	errs := fielderrors.New()
 	if strings.TrimSpace(authorizedBy) == "" {
-		fields["authorizedBy"] = "Required"
+		errs.Add("authorizedBy", fielderrors.Required, "Required")
 	}
-	validateCorrectionReason(fields, req.CorrectionReasonRequest)
-	validateOptionalSecondApproval(fields, req.CorrectionReasonRequest, authorizedBy)
+	validateCorrectionReason(errs, req.CorrectionReasonRequest)
+	validateOptionalSecondApproval(errs, req.CorrectionReasonRequest, authorizedBy)
 	if strings.TrimSpace(req.ValueUnitID) == "" {
-		fields["valueUnitId"] = "Required"
+		errs.Add("valueUnitId", fielderrors.Required, "Required")
 	}
 	if strings.TrimSpace(req.EntryType) == "" {
-		fields["entryType"] = "Required"
+		errs.Add("entryType", fielderrors.Required, "Required")
 	}
 	direction := strings.ToUpper(strings.TrimSpace(req.Direction))
 	if direction != "CREDIT" && direction != "DEBIT" {
-		fields["direction"] = "Direction must be CREDIT or DEBIT"
+		errs.Add("direction", RuleInvalidDirection, "Direction must be CREDIT or DEBIT")
 	}
 	if req.Amount <= 0 {
-		fields["amount"] = "Amount must be greater than zero"
+		errs.Add("amount", fielderrors.MustBePositive, "Amount must be greater than zero")
 	}
 	if _, err := parseDate(req.EffectiveDate); err != nil {
-		fields["effectiveDate"] = "Effective date must be YYYY-MM-DD"
+		errs.Add("effectiveDate", fielderrors.InvalidDate, "Effective date must be YYYY-MM-DD")
 	}
-	if len(fields) > 0 {
-		return ValidationError{Fields: fields}
+	if !errs.Empty() {
+		return ValidationError{Fields: errs.Fields, Codes: errs.Codes}
 	}
 	return nil
 }
 
 func ValidateZeroGoldRequest(req ZeroGoldRequest, authorizedBy string) error {
-	fields := map[string]string{}
+	errs := fielderrors.New()
 	if strings.TrimSpace(authorizedBy) == "" {
-		fields["authorizedBy"] = "Required"
+		errs.Add("authorizedBy", fielderrors.Required, "Required")
 	}
 	if strings.TrimSpace(req.RequestID) == "" {
-		fields["requestId"] = "Required"
+		errs.Add("requestId", fielderrors.Required, "Required")
 	}
-	validateCorrectionReason(fields, req.CorrectionReasonRequest)
-	validateOptionalSecondApproval(fields, req.CorrectionReasonRequest, authorizedBy)
+	validateCorrectionReason(errs, req.CorrectionReasonRequest)
+	validateOptionalSecondApproval(errs, req.CorrectionReasonRequest, authorizedBy)
 	if _, err := parseDate(req.EffectiveDate); err != nil {
-		fields["effectiveDate"] = "Effective date must be YYYY-MM-DD"
+		errs.Add("effectiveDate", fielderrors.InvalidDate, "Effective date must be YYYY-MM-DD")
 	}
-	if len(fields) > 0 {
-		return ValidationError{Fields: fields}
+	if !errs.Empty() {
+		return ValidationError{Fields: errs.Fields, Codes: errs.Codes}
 	}
 	return nil
 }
 
 func ValidatePartialPayoutRequest(req PartialPayoutRequest, authorizedBy string) error {
-	fields := map[string]string{}
+	errs := fielderrors.New()
 	if strings.TrimSpace(authorizedBy) == "" {
-		fields["authorizedBy"] = "Required"
+		errs.Add("authorizedBy", fielderrors.Required, "Required")
 	}
 	if strings.TrimSpace(req.RequestID) == "" {
-		fields["requestId"] = "Required"
+		errs.Add("requestId", fielderrors.Required, "Required")
 	}
-	validateCorrectionReason(fields, req.CorrectionReasonRequest)
-	validateOptionalSecondApproval(fields, req.CorrectionReasonRequest, authorizedBy)
+	validateCorrectionReason(errs, req.CorrectionReasonRequest)
+	validateOptionalSecondApproval(errs, req.CorrectionReasonRequest, authorizedBy)
 	if _, err := parseDate(req.EffectiveDate); err != nil {
-		fields["effectiveDate"] = "Effective date must be YYYY-MM-DD"
+		errs.Add("effectiveDate", fielderrors.InvalidDate, "Effective date must be YYYY-MM-DD")
 	}
 	if req.BRLAmount < 0 {
-		fields["brlAmount"] = "BRL amount cannot be negative"
+		errs.Add("brlAmount", RuleMustNotBeNegative, "BRL amount cannot be negative")
 	} else if !hasAtMostDecimalPlaces(req.BRLAmount, 2) {
-		fields["brlAmount"] = "BRL amount supports at most 2 decimal places"
+		errs.Add("brlAmount", RuleTooManyDecimals, "BRL amount supports at most 2 decimal places")
 	}
 	if req.GoldGramAmount < 0 {
-		fields["goldGramAmount"] = "Gold amount cannot be negative"
+		errs.Add("goldGramAmount", RuleMustNotBeNegative, "Gold amount cannot be negative")
 	} else if !hasAtMostDecimalPlaces(req.GoldGramAmount, 8) {
-		fields["goldGramAmount"] = "Gold amount supports at most 8 decimal places"
+		errs.Add("goldGramAmount", RuleTooManyDecimals, "Gold amount supports at most 8 decimal places")
 	}
 	if req.BRLAmount <= 0 && req.GoldGramAmount <= 0 {
-		fields["amount"] = "At least one payout amount must be greater than zero"
+		errs.Add("amount", RulePayoutAmountRequired, "At least one payout amount must be greater than zero")
 	}
-	if len(fields) > 0 {
-		return ValidationError{Fields: fields}
+	if !errs.Empty() {
+		return ValidationError{Fields: errs.Fields, Codes: errs.Codes}
 	}
 	return nil
 }
@@ -194,55 +219,55 @@ func hasAtMostDecimalPlaces(value float64, places int) bool {
 	return math.Abs(scaled-math.Round(scaled)) < 0.0000001
 }
 func ValidateCloseJourneyRequest(req CloseJourneyRequest, authorizedBy string) error {
-	fields := map[string]string{}
+	errs := fielderrors.New()
 	if strings.TrimSpace(authorizedBy) == "" {
-		fields["authorizedBy"] = "Required"
+		errs.Add("authorizedBy", fielderrors.Required, "Required")
 	}
 	if strings.TrimSpace(req.RequestID) == "" {
-		fields["requestId"] = "Required"
+		errs.Add("requestId", fielderrors.Required, "Required")
 	}
-	validateCorrectionReason(fields, req.CorrectionReasonRequest)
-	validateOptionalSecondApproval(fields, req.CorrectionReasonRequest, authorizedBy)
+	validateCorrectionReason(errs, req.CorrectionReasonRequest)
+	validateOptionalSecondApproval(errs, req.CorrectionReasonRequest, authorizedBy)
 	if _, err := parseDate(req.EffectiveDate); err != nil {
-		fields["effectiveDate"] = "Effective date must be YYYY-MM-DD"
+		errs.Add("effectiveDate", fielderrors.InvalidDate, "Effective date must be YYYY-MM-DD")
 	}
 	if !req.Confirm {
-		fields["confirm"] = "Confirmation is required"
+		errs.Add("confirm", RuleConfirmationRequired, "Confirmation is required")
 	}
-	if len(fields) > 0 {
-		return ValidationError{Fields: fields}
+	if !errs.Empty() {
+		return ValidationError{Fields: errs.Fields, Codes: errs.Codes}
 	}
 	return nil
 }
 
 func ValidateReceiptBackfillRequest(req ReceiptBackfillRequest, authorizedBy string) error {
-	fields := map[string]string{}
+	errs := fielderrors.New()
 	if strings.TrimSpace(authorizedBy) == "" {
-		fields["authorizedBy"] = "Required"
+		errs.Add("authorizedBy", fielderrors.Required, "Required")
 	}
-	validateCorrectionReason(fields, req.CorrectionReasonRequest)
-	validateOptionalSecondApproval(fields, req.CorrectionReasonRequest, authorizedBy)
-	if len(fields) > 0 {
-		return ValidationError{Fields: fields}
+	validateCorrectionReason(errs, req.CorrectionReasonRequest)
+	validateOptionalSecondApproval(errs, req.CorrectionReasonRequest, authorizedBy)
+	if !errs.Empty() {
+		return ValidationError{Fields: errs.Fields, Codes: errs.Codes}
 	}
 	return nil
 }
 
 func ValidateFinalSettlementRequest(req FinalSettlementRequest, authorizedBy string) error {
-	fields := map[string]string{}
+	errs := fielderrors.New()
 	if strings.TrimSpace(authorizedBy) == "" {
-		fields["authorizedBy"] = "Required"
+		errs.Add("authorizedBy", fielderrors.Required, "Required")
 	}
 	if strings.TrimSpace(req.RequestID) == "" {
-		fields["requestId"] = "Required"
+		errs.Add("requestId", fielderrors.Required, "Required")
 	}
-	validateCorrectionReason(fields, req.CorrectionReasonRequest)
-	validateOptionalSecondApproval(fields, req.CorrectionReasonRequest, authorizedBy)
+	validateCorrectionReason(errs, req.CorrectionReasonRequest)
+	validateOptionalSecondApproval(errs, req.CorrectionReasonRequest, authorizedBy)
 	if _, err := parseDate(req.EffectiveDate); err != nil {
-		fields["effectiveDate"] = "Effective date must be YYYY-MM-DD"
+		errs.Add("effectiveDate", fielderrors.InvalidDate, "Effective date must be YYYY-MM-DD")
 	}
-	if len(fields) > 0 {
-		return ValidationError{Fields: fields}
+	if !errs.Empty() {
+		return ValidationError{Fields: errs.Fields, Codes: errs.Codes}
 	}
 	return nil
 }
@@ -251,5 +276,5 @@ func ValidateAcceptReceiptRequest(req AcceptReceiptRequest) error {
 	if req.Confirm {
 		return nil
 	}
-	return ValidationError{Fields: map[string]string{"confirm": "Confirmation is required"}}
+	return fieldError("confirm", RuleConfirmationRequired, "Confirmation is required")
 }

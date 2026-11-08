@@ -9,6 +9,7 @@ import (
 	"unicode/utf8"
 
 	"enterpriseremotesystems/backend/internal/authz"
+	"enterpriseremotesystems/backend/internal/shared/fielderrors"
 	"enterpriseremotesystems/backend/internal/shared/ids"
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
@@ -45,16 +46,16 @@ func ProvisionApplicationAdmin(ctx context.Context, database *gorm.DB, cfg Provi
 	cfg.DisplayName = strings.TrimSpace(cfg.DisplayName)
 	cfg.Login = normalizeLogin(cfg.Login)
 	if cfg.ActorKey == "" {
-		return ProvisionApplicationAdminResult{}, &ValidationError{Fields: map[string]string{"actorKey": "Authorization actor key is required"}}
+		return ProvisionApplicationAdminResult{}, fieldError("actorKey", fielderrors.Required, "Authorization actor key is required")
 	}
 	if cfg.DisplayName == "" {
 		cfg.DisplayName = cfg.ActorKey
 	}
 	if cfg.Login == "" {
-		return ProvisionApplicationAdminResult{}, &ValidationError{Fields: map[string]string{"login": "Login is required"}}
+		return ProvisionApplicationAdminResult{}, fieldError("login", fielderrors.Required, "Login is required")
 	}
 	if utf8.RuneCountInString(cfg.Login) > maximumLoginLength {
-		return ProvisionApplicationAdminResult{}, &ValidationError{Fields: map[string]string{"login": "Login must be 254 characters or fewer"}}
+		return ProvisionApplicationAdminResult{}, fieldError("login", RuleTooLong, "Login must be 254 characters or fewer")
 	}
 	if err := validatePasswordValue(cfg.Password, "password"); err != nil {
 		return ProvisionApplicationAdminResult{}, err

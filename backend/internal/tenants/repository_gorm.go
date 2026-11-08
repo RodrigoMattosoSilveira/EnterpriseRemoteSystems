@@ -263,7 +263,7 @@ func (r *gormRepository) AssignTenantAdmin(ctx context.Context, tenantID string,
 			return err
 		}
 		if !actor.Active {
-			return ValidationError{Fields: map[string]string{"actorId": "Tenant administrators must be active actors"}}
+			return fieldError("actorId", RuleTenantAdminActorNotActive, "Tenant administrators must be active actors")
 		}
 
 		var role authz.AuthzRole

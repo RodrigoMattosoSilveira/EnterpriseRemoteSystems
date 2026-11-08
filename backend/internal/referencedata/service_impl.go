@@ -7,14 +7,31 @@ import (
 
 	"enterpriseremotesystems/backend/internal/db"
 	"enterpriseremotesystems/backend/internal/shared/ids"
+
+	"enterpriseremotesystems/backend/internal/shared/fielderrors"
 )
 
 type ValidationError struct {
 	Fields map[string]string
+	Codes  map[string]string
 }
 
-func (e ValidationError) Error() string                       { return "validation failed" }
-func (e ValidationError) ValidationFields() map[string]string { return e.Fields }
+func (e ValidationError) Error() string                           { return "validation failed" }
+func (e ValidationError) ValidationFields() map[string]string     { return e.Fields }
+func (e ValidationError) ValidationFieldCodes() map[string]string { return e.Codes }
+
+// Stable rule codes returned as `fieldCodes` (shared ones live in
+// internal/shared/fielderrors). Renaming one is an API change.
+const (
+	RuleAlreadyExists         = "already_exists"
+	RuleReferenceTypeMismatch = "reference_type_mismatch"
+	RuleTenantNotActive       = "tenant_not_active"
+)
+
+func fieldError(field string, rule string, message string) ValidationError {
+	fields, codes := fielderrors.Single(field, rule, message)
+	return ValidationError{Fields: fields, Codes: codes}
+}
 
 type service struct{ repo Repository }
 
@@ -139,27 +156,27 @@ func (s *service) findTyped(ctx context.Context, tenantID string, typ string, id
 		return nil, err
 	}
 	if row.Type != typ {
-		return nil, ValidationError{Fields: map[string]string{"id": "Reference data item does not belong to this type"}}
+		return nil, fieldError("id", RuleReferenceTypeMismatch, "Reference data item does not belong to this type")
 	}
 	return row, nil
 }
 
 func (s *service) validateReferenceData(ctx context.Context, tenantID string, typ string, code string, label string, excludeID string) error {
-	fields := map[string]string{}
+	errs := fielderrors.New()
 	if strings.TrimSpace(tenantID) == "" {
-		fields["tenantId"] = "Required"
+		errs.Add("tenantId", fielderrors.Required, "Required")
 	}
 	if strings.TrimSpace(typ) == "" {
-		fields["type"] = "Required"
+		errs.Add("type", fielderrors.Required, "Required")
 	}
 	if strings.TrimSpace(code) == "" {
-		fields["code"] = "Required"
+		errs.Add("code", fielderrors.Required, "Required")
 	}
 	if strings.TrimSpace(label) == "" {
-		fields["label"] = "Required"
+		errs.Add("label", fielderrors.Required, "Required")
 	}
-	if len(fields) > 0 {
-		return ValidationError{Fields: fields}
+	if !errs.Empty() {
+		return ValidationError{Fields: errs.Fields, Codes: errs.Codes}
 	}
 
 	tenantExists, err := s.repo.ExistsActiveTenantByID(ctx, tenantID)
@@ -167,8 +184,8 @@ func (s *service) validateReferenceData(ctx context.Context, tenantID string, ty
 		return err
 	}
 	if !tenantExists {
-		fields["tenantId"] = "Selected tenant must exist and be active"
-		return ValidationError{Fields: fields}
+		errs.Add("tenantId", RuleTenantNotActive, "Selected tenant must exist and be active")
+		return ValidationError{Fields: errs.Fields, Codes: errs.Codes}
 	}
 
 	codeExists, err := s.repo.ExistsByTenantTypeCode(ctx, tenantID, typ, code, excludeID)
@@ -176,7 +193,7 @@ func (s *service) validateReferenceData(ctx context.Context, tenantID string, ty
 		return err
 	}
 	if codeExists {
-		fields["code"] = "Code already exists for this type"
+		errs.Add("code", RuleAlreadyExists, "Code already exists for this type")
 	}
 
 	labelExists, err := s.repo.ExistsByTenantTypeLabel(ctx, tenantID, typ, label, excludeID)
@@ -184,25 +201,25 @@ func (s *service) validateReferenceData(ctx context.Context, tenantID string, ty
 		return err
 	}
 	if labelExists {
-		fields["label"] = "Name already exists for this type"
+		errs.Add("label", RuleAlreadyExists, "Name already exists for this type")
 	}
 
-	if len(fields) > 0 {
-		return ValidationError{Fields: fields}
+	if !errs.Empty() {
+		return ValidationError{Fields: errs.Fields, Codes: errs.Codes}
 	}
 	return nil
 }
 
 func validateTenantAndType(tenantID string, typ string) error {
-	fields := map[string]string{}
+	errs := fielderrors.New()
 	if strings.TrimSpace(tenantID) == "" {
-		fields["tenantId"] = "Required"
+		errs.Add("tenantId", fielderrors.Required, "Required")
 	}
 	if strings.TrimSpace(typ) == "" {
-		fields["type"] = "Required"
+		errs.Add("type", fielderrors.Required, "Required")
 	}
-	if len(fields) > 0 {
-		return ValidationError{Fields: fields}
+	if !errs.Empty() {
+		return ValidationError{Fields: errs.Fields, Codes: errs.Codes}
 	}
 	return nil
 }
