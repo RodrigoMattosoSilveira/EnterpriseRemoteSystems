@@ -1,11 +1,35 @@
 package accruals
 
-import "strings"
+import (
+	"strings"
 
-type ValidationError struct{ Fields map[string]string }
+	"enterpriseremotesystems/backend/internal/shared/fielderrors"
+)
 
-func (e ValidationError) Error() string                       { return "validation failed" }
-func (e ValidationError) ValidationFields() map[string]string { return e.Fields }
+type ValidationError struct {
+	Fields map[string]string
+	Codes  map[string]string
+}
+
+func (e ValidationError) Error() string                           { return "validation failed" }
+func (e ValidationError) ValidationFields() map[string]string     { return e.Fields }
+func (e ValidationError) ValidationFieldCodes() map[string]string { return e.Codes }
+
+// Stable rule codes returned as `fieldCodes` (shared ones live in
+// internal/shared/fielderrors). Renaming one is an API change.
+const (
+	RuleAccrualRunNotRecalculable = "accrual_run_not_recalculable"
+	RuleAccrualRunVoided          = "accrual_run_voided"
+	RuleNoPositiveAccrualAmounts  = "no_positive_accrual_amounts"
+	RuleNoReadyAccrualItems       = "no_ready_accrual_items"
+	RuleUnknownStatus             = "unknown_status"
+	RuleWorkPeriodClosed          = "work_period_closed"
+)
+
+func fieldError(field string, rule string, message string) ValidationError {
+	fields, codes := fielderrors.Single(field, rule, message)
+	return ValidationError{Fields: fields, Codes: codes}
+}
 
 const (
 	RunStatusDraft        = "DRAFT"
@@ -39,48 +63,48 @@ const (
 const dateLayout = "2006-01-02"
 
 func ValidateCreateAccrualRun(req CreateAccrualRunRequest) error {
-	fields := map[string]string{}
+	errs := fielderrors.New()
 	if strings.TrimSpace(req.AccrualDate) != "" {
 		if _, err := parseDate(req.AccrualDate); err != nil {
-			fields["accrualDate"] = "Accrual date must be YYYY-MM-DD"
+			errs.Add("accrualDate", fielderrors.InvalidDate, "Accrual date must be YYYY-MM-DD")
 		}
 	}
-	if len(fields) > 0 {
-		return ValidationError{Fields: fields}
+	if !errs.Empty() {
+		return ValidationError{Fields: errs.Fields, Codes: errs.Codes}
 	}
 	return nil
 }
 
 func ValidateRunListFilter(filter AccrualRunListFilter) error {
-	fields := map[string]string{}
+	errs := fielderrors.New()
 	if strings.TrimSpace(filter.Status) != "" && !isKnownRunStatus(strings.ToUpper(strings.TrimSpace(filter.Status))) {
-		fields["status"] = "Unknown accrual run status"
+		errs.Add("status", RuleUnknownStatus, "Unknown accrual run status")
 	}
 	if filter.Page < 0 {
-		fields["page"] = "Page must be greater than zero"
+		errs.Add("page", fielderrors.MustBePositive, "Page must be greater than zero")
 	}
 	if filter.PageSize < 0 {
-		fields["pageSize"] = "Page size must be greater than zero"
+		errs.Add("pageSize", fielderrors.MustBePositive, "Page size must be greater than zero")
 	}
-	if len(fields) > 0 {
-		return ValidationError{Fields: fields}
+	if !errs.Empty() {
+		return ValidationError{Fields: errs.Fields, Codes: errs.Codes}
 	}
 	return nil
 }
 
 func ValidateItemListFilter(filter AccrualItemListFilter) error {
-	fields := map[string]string{}
+	errs := fielderrors.New()
 	if strings.TrimSpace(filter.Status) != "" && !isKnownItemStatus(strings.ToUpper(strings.TrimSpace(filter.Status))) {
-		fields["status"] = "Unknown accrual item status"
+		errs.Add("status", RuleUnknownStatus, "Unknown accrual item status")
 	}
 	if filter.Page < 0 {
-		fields["page"] = "Page must be greater than zero"
+		errs.Add("page", fielderrors.MustBePositive, "Page must be greater than zero")
 	}
 	if filter.PageSize < 0 {
-		fields["pageSize"] = "Page size must be greater than zero"
+		errs.Add("pageSize", fielderrors.MustBePositive, "Page size must be greater than zero")
 	}
-	if len(fields) > 0 {
-		return ValidationError{Fields: fields}
+	if !errs.Empty() {
+		return ValidationError{Fields: errs.Fields, Codes: errs.Codes}
 	}
 	return nil
 }

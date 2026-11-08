@@ -1,13 +1,34 @@
 package workperiods
 
-import "strings"
+import (
+	"strings"
+
+	"enterpriseremotesystems/backend/internal/shared/fielderrors"
+)
 
 type ValidationError struct {
 	Fields map[string]string
+	Codes  map[string]string
 }
 
-func (e ValidationError) Error() string                       { return "validation failed" }
-func (e ValidationError) ValidationFields() map[string]string { return e.Fields }
+func (e ValidationError) Error() string                           { return "validation failed" }
+func (e ValidationError) ValidationFields() map[string]string     { return e.Fields }
+func (e ValidationError) ValidationFieldCodes() map[string]string { return e.Codes }
+
+// Stable rule codes returned as `fieldCodes` (shared ones live in
+// internal/shared/fielderrors). Renaming one is an API change.
+const (
+	RuleEndBeforeStart        = "end_before_start"
+	RuleInvalidTime           = "invalid_time"
+	RuleUnknownStatus         = "unknown_status"
+	RuleWorkPeriodExists      = "work_period_exists"
+	RuleWorkPeriodNotPlanning = "work_period_not_planning"
+)
+
+func fieldError(field string, rule string, message string) ValidationError {
+	fields, codes := fielderrors.Single(field, rule, message)
+	return ValidationError{Fields: fields, Codes: codes}
+}
 
 const (
 	StatusPlanning        = "PLANNING"
@@ -19,68 +40,62 @@ const (
 )
 
 func ValidateCreateWorkPeriod(req CreateWorkPeriodRequest) error {
-	fields := map[string]string{}
-	requireString(fields, "workDate", req.WorkDate)
-	requireString(fields, "periodCode", req.PeriodCode)
-	requireString(fields, "name", req.Name)
-	requireString(fields, "startsAt", req.StartsAt)
-	requireString(fields, "endsAt", req.EndsAt)
+	errs := fielderrors.New()
+	errs.Require("workDate", req.WorkDate)
+	errs.Require("periodCode", req.PeriodCode)
+	errs.Require("name", req.Name)
+	errs.Require("startsAt", req.StartsAt)
+	errs.Require("endsAt", req.EndsAt)
 
 	if strings.TrimSpace(req.WorkDate) != "" {
 		if _, err := parseDate(req.WorkDate); err != nil {
-			fields["workDate"] = "Work date must be YYYY-MM-DD"
+			errs.Add("workDate", fielderrors.InvalidDate, "Work date must be YYYY-MM-DD")
 		}
 	}
 
 	startsAt, startsAtErr := parseTimestamp(req.StartsAt)
 	endsAt, endsAtErr := parseTimestamp(req.EndsAt)
 	if strings.TrimSpace(req.StartsAt) != "" && startsAtErr != nil {
-		fields["startsAt"] = "Start time must be RFC3339"
+		errs.Add("startsAt", RuleInvalidTime, "Start time must be RFC3339")
 	}
 	if strings.TrimSpace(req.EndsAt) != "" && endsAtErr != nil {
-		fields["endsAt"] = "End time must be RFC3339"
+		errs.Add("endsAt", RuleInvalidTime, "End time must be RFC3339")
 	}
 	if strings.TrimSpace(req.StartsAt) != "" && strings.TrimSpace(req.EndsAt) != "" && startsAtErr == nil && endsAtErr == nil && !startsAt.Before(endsAt) {
-		fields["endsAt"] = "End time must be after start time"
+		errs.Add("endsAt", RuleEndBeforeStart, "End time must be after start time")
 	}
 
-	if len(fields) > 0 {
-		return ValidationError{Fields: fields}
+	if !errs.Empty() {
+		return ValidationError{Fields: errs.Fields, Codes: errs.Codes}
 	}
 	return nil
 }
 
 func ValidateListFilter(filter WorkPeriodListFilter) error {
-	fields := map[string]string{}
+	errs := fielderrors.New()
 	if strings.TrimSpace(filter.DateFrom) != "" {
 		if _, err := parseDate(filter.DateFrom); err != nil {
-			fields["dateFrom"] = "Date from must be YYYY-MM-DD"
+			errs.Add("dateFrom", fielderrors.InvalidDate, "Date from must be YYYY-MM-DD")
 		}
 	}
 	if strings.TrimSpace(filter.DateTo) != "" {
 		if _, err := parseDate(filter.DateTo); err != nil {
-			fields["dateTo"] = "Date to must be YYYY-MM-DD"
+			errs.Add("dateTo", fielderrors.InvalidDate, "Date to must be YYYY-MM-DD")
 		}
 	}
 	if strings.TrimSpace(filter.Status) != "" && !isKnownStatus(strings.ToUpper(strings.TrimSpace(filter.Status))) {
-		fields["status"] = "Unknown work period status"
+		errs.Add("status", RuleUnknownStatus, "Unknown work period status")
 	}
 	if filter.Page < 0 {
-		fields["page"] = "Page must be greater than zero"
+		errs.Add("page", fielderrors.MustBePositive, "Page must be greater than zero")
 	}
 	if filter.PageSize < 0 {
-		fields["pageSize"] = "Page size must be greater than zero"
+		errs.Add("pageSize", fielderrors.MustBePositive, "Page size must be greater than zero")
 	}
-	if len(fields) > 0 {
-		return ValidationError{Fields: fields}
+	if !errs.Empty() {
+		return ValidationError{Fields: errs.Fields, Codes: errs.Codes}
 	}
 	return nil
-}
-
-func requireString(fields map[string]string, key string, value string) {
-	if strings.TrimSpace(value) == "" {
-		fields[key] = "Required"
-	}
 }
 
 func isKnownStatus(status string) bool {

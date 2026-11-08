@@ -54,7 +54,7 @@ func (s *service) CreateRun(ctx context.Context, workPeriodID string, req Create
 		return nil, err
 	}
 	if workPeriod.Status == workperiods.StatusClosed {
-		return nil, ValidationError{Fields: map[string]string{"workPeriodId": "Closed work periods cannot be accrued"}}
+		return nil, fieldError("workPeriodId", RuleWorkPeriodClosed, "Closed work periods cannot be accrued")
 	}
 	accrualDate := workPeriod.WorkDate
 	if strings.TrimSpace(req.AccrualDate) != "" {
@@ -86,10 +86,10 @@ func (s *service) RecalculateRun(ctx context.Context, id string, actorUserID str
 		return nil, err
 	}
 	if run.Status == RunStatusPosted || run.Status == RunStatusVoided {
-		return nil, ValidationError{Fields: map[string]string{"status": "Posted or voided accrual runs cannot be recalculated"}}
+		return nil, fieldError("status", RuleAccrualRunNotRecalculable, "Posted or voided accrual runs cannot be recalculated")
 	}
 	if run.WorkPeriod.Status == workperiods.StatusClosed {
-		return nil, ValidationError{Fields: map[string]string{"workPeriodId": "Closed work periods cannot be accrued"}}
+		return nil, fieldError("workPeriodId", RuleWorkPeriodClosed, "Closed work periods cannot be accrued")
 	}
 	items, err := s.calculateItems(ctx, *run)
 	if err != nil {
@@ -112,24 +112,24 @@ func (s *service) PostRun(ctx context.Context, id string, actorUserID string) (*
 		return s.GetRunByID(ctx, run.ID)
 	}
 	if run.Status == RunStatusVoided {
-		return nil, ValidationError{Fields: map[string]string{"status": "Voided accrual runs cannot be posted"}}
+		return nil, fieldError("status", RuleAccrualRunVoided, "Voided accrual runs cannot be posted")
 	}
 	if run.WorkPeriod.Status == workperiods.StatusClosed {
-		return nil, ValidationError{Fields: map[string]string{"workPeriodId": "Closed work periods cannot be posted"}}
+		return nil, fieldError("workPeriodId", RuleWorkPeriodClosed, "Closed work periods cannot be posted")
 	}
 	readyItems, err := s.repo.ListReadyItemsByRun(ctx, run.ID)
 	if err != nil {
 		return nil, err
 	}
 	if len(readyItems) == 0 {
-		return nil, ValidationError{Fields: map[string]string{"status": "No READY accrual items are available to post"}}
+		return nil, fieldError("status", RuleNoReadyAccrualItems, "No READY accrual items are available to post")
 	}
 	entries, err := s.ledgerEntriesForReadyItems(ctx, *run, readyItems)
 	if err != nil {
 		return nil, err
 	}
 	if len(entries) == 0 {
-		return nil, ValidationError{Fields: map[string]string{"items": "READY accrual items do not contain positive BRL or gold amounts"}}
+		return nil, fieldError("items", RuleNoPositiveAccrualAmounts, "READY accrual items do not contain positive BRL or gold amounts")
 	}
 	pendingCount, err := s.repo.PendingItemCountByRun(ctx, run.ID)
 	if err != nil {
