@@ -57,7 +57,9 @@ def execute(path: Path, *, target='development', app_env='development',
 
 def main() -> int:
     with tempfile.TemporaryDirectory(prefix='ers-354c-additive-check-') as directory:
-        tmp = Path(directory)
+        # macOS may expose temporary directories through /var -> /private/var.
+        # Use the canonical parent path without weakening the seeder's guard.
+        tmp = Path(directory).resolve(strict=True)
         # Two existing migrated databases, with a foreign existing Tenant and
         # an unrelated record. Their bytes before/after are inspected by SQL.
         dbs = []
@@ -98,6 +100,10 @@ def main() -> int:
         symlink = tmp/'link-app.db'
         symlink.symlink_to(a)
         assert 'non-symlink' in execute(symlink, good=False)
+        # A symbolic parent directory still must be refused by the seeder.
+        linked_parent = tmp/'linked-alpha'
+        linked_parent.symlink_to(a.parent, target_is_directory=True)
+        assert 'symbolic-link path components' in execute(linked_parent/'app.db', good=False)
         assert 'LOCAL target' in execute(a, target='local', good=False)
         assert 'Refusing' in execute(a, app_env='production', good=False)
         assert 'Production' in execute(a, extra_env={'DEPLOY_ENV':'production'}, good=False)
