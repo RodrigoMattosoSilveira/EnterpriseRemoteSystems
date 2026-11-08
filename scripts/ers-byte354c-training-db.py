@@ -77,7 +77,7 @@ def validate_target(options: argparse.Namespace) -> None:
         raise SystemExit('STOP: APP_ENV declares Production')
 
 
-def safe_path(path: Path, target: str) -> Path:
+def safe_path(path: Path) -> Path:
     requested = path.expanduser().absolute()
     if requested.is_symlink() or not requested.is_file():
         raise SystemExit('STOP: target must be an existing regular non-symlink SQLite file')
@@ -87,8 +87,9 @@ def safe_path(path: Path, target: str) -> Path:
         raise SystemExit('STOP: Production or backup path is prohibited')
     if requested != resolved:
         raise SystemExit('STOP: symbolic-link path components are not permitted')
-    if target == 'local' and resolved != (ROOT/'backend/data/app.db').resolve():
-        raise SystemExit("STOP: LOCAL target must use this worktree\'s backend/data/app.db")
+    # LOCAL may run from a linked Git worktree while sharing the primary
+    # worktree's existing database. Caller supplies the explicit path; the
+    # existing-file, no-symlink, non-Production and app.db guards still apply.
     if resolved.name != 'app.db':
         raise SystemExit('STOP: target must be an existing app.db, never a scratch or backup database')
     return resolved
@@ -447,7 +448,7 @@ def verify(conn: sqlite3.Connection) -> str:
 def main() -> int:
     options = args_parser()
     validate_target(options)
-    dest = safe_path(options.database, options.target)
+    dest = safe_path(options.database)
     # mode=rw prevents SQLite from creating a new file if a path is wrong.
     with sqlite3.connect(dest.as_uri() + ('?mode=ro' if options.verify_only else '?mode=rw'),
                          uri=True, timeout=15) as conn:

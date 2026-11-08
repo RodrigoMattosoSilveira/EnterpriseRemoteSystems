@@ -6,7 +6,7 @@
 
 ## 1. Contrato de operação e segurança
 
-- **LOCAL:** acrescentar registros fictícios ao `backend/data/app.db` do **worktree 35.4C**. O backend normal continua usando este banco; nenhum backend especial.
+- **LOCAL:** acrescentar registros fictícios ao **único** `backend/data/app.db` do worktree principal `~/projects/EnterpriseRemoteSystems`, mesmo quando o código de 35.4C é executado em `~/projects/EnterpriseRemoteSystems-35.4C`. Não criar nem usar um banco no worktree de 35.4C.
 - **DEV e TST:** acrescentar os mesmos registros ao `/app/data/app.db` já utilizado pelo backend **daquele ambiente**, acessando o volume Docker já montado. Não copiar, importar, restaurar ou substituir o banco.
 - **PRD:** absolutamente proibido. Rejeitar `APP_ENV=production`, nomes de caminho de Produção/backup, confirmação conflitante e ambiente ausente. Nunca executar em `/opt/EnterpriseRemoteSystems/production`.
 - **Explicitamente manual:** o provisionamento não faz parte de startup, migração nem deploy; executar apenas após autorização da pessoa responsável pelo ambiente e identificação exata do banco.
@@ -17,37 +17,76 @@
 - **Determinismo:** data âncora `2026-11-07`; IDs, valores, referências e checksum lógico da carga são iguais em LOCAL, DEV e TST (o checksum normaliza campos de senha e última autenticação, e ignora registros alheios). A verificação inicial após operações de treinamento pode indicar alterações; isso é esperado, mas **nunca** autoriza reescrever a carga.
 - **SOP de preservação:** não executar reset, `rm app.db`, migração ad hoc, restauração ou cópia de produção. Seguir o procedimento de backup já aprovado para o ambiente, sem inventar novas etapas de manutenção da base.
 
-## 2. LOCAL — worktree explícito, banco existente
+## 2. LOCAL — código no worktree 35.4C, banco LOCAL existente no worktree principal
 
-**Identidade:** operador técnico LOCAL; sem login ERS para este passo. **Contexto:** diretório `~/projects/EnterpriseRemoteSystems-35.4C`, não o worktree principal. Antes, confirme que `backend/data/app.db` **já existe**, está migrado e pertence ao backend LOCAL utilizado. Não substitua o arquivo.
+**Identidade:** operador técnico LOCAL, sem login ERS nesta etapa. **Contexto de código:** `~/projects/EnterpriseRemoteSystems-35.4C`. **Banco selecionado:** `~/projects/EnterpriseRemoteSystems/backend/data/app.db` (worktree **principal**). Estes são caminhos diferentes por intenção: somente o código é versionado por worktree; existe **um único banco LOCAL**. O Makefile resolve o worktree principal pelo `git rev-parse --git-common-dir`, e mostra o caminho antes do provisionamento.
+
+**Antes de modificar o banco:** confirme que é o banco LOCAL operacional correto, já migrado e autorizado; pare somente o backend LOCAL que você iniciou para não misturar processos ou disputar gravações. Não copie, restaure, apague ou recrie `app.db`. Siga a política de proteção de dados LOCAL existente.
 
 ```bash
+(
+set -e
 cd ~/projects/EnterpriseRemoteSystems-35.4C
+
 git branch --show-current
 git rev-parse HEAD
 git status --short
+
+MAIN_WORKTREE="$(cd "$(git rev-parse --git-common-dir)/.." && pwd -P)"
+MAIN_DB="$MAIN_WORKTREE/backend/data/app.db"
+printf 'Código: %s\nBanco LOCAL: %s\n' "$PWD" "$MAIN_DB"
+test "$MAIN_WORKTREE" = "$HOME/projects/EnterpriseRemoteSystems" || { echo 'STOP: worktree principal inesperado'; exit 1; }
+test -f "$MAIN_DB" || { echo 'STOP: banco LOCAL existente não encontrado'; exit 1; }
+
 make byte354c-training-check
 make byte354c-training-provision-local
 make byte354c-training-verify-local
+make byte354c-training-provision-local
+)
 ```
 
-**PASSOU:** os três targets finalizam com código 0; o último relata checksum lógico fixo da carga; o banco original foi preservado. Na segunda execução de `make byte354c-training-provision-local`, a resposta deve informar `already present; no writes`. **FALHOU:** duplicação, integridade/FK inválidas, conflito não resolvido, dados de outras Entidades modificados. **BLOQUEADO:** banco não existe, schema antigo, ambiente não confirmado, identidade da base desconhecida ou carga de treinamento já modificada.
+**PASSOU:** o target informa exatamente `$MAIN_DB`, os testes e a verificação final terminam com código 0 e a repetição relata `already present; no writes`. Nenhum banco é criado no worktree 35.4C. **FALHOU:** banco selecionado diferente, duplicação, integridade/FK inválidas ou modificação de registros alheios. **BLOQUEADO:** banco ausente/não migrado, configuração desconhecida ou cenário de treinamento já modificado. **Não** execute reset, restore, cópia de banco nem provisionamento corretivo automático.
 
-Para usar a interface, **não** execute `make byte354c-training-backend` (target retirado). Use os processos LOCAL habituais, em terminais dedicados **somente quando não houver sessão já ativa**:
+### Backend e frontend LOCAL — reutilize a configuração existente
+
+O Git não compartilha arquivos ignorados como `backend/.env` entre worktrees. Portanto, o backend de 35.4C precisa ler a **configuração LOCAL já existente** do worktree principal, sem duplicar segredos nem gerar novas configurações. Execute uma única vez, no worktree **35.4C**, depois de verificar que a configuração do principal é a desejada:
 
 ```bash
-# Terminal do backend, se necessário
+(
+set -e
 cd ~/projects/EnterpriseRemoteSystems-35.4C
-make local-backend
+MAIN_WORKTREE="$(cd "$(git rev-parse --git-common-dir)/.." && pwd -P)"
+MAIN_DB="$MAIN_WORKTREE/backend/data/app.db"
+test -f "$MAIN_WORKTREE/backend/.env" || { echo 'STOP: configure o backend LOCAL principal antes de iniciar'; exit 1; }
+test -f "$MAIN_DB" || { echo 'STOP: banco LOCAL existente não encontrado'; exit 1; }
+# Crie somente o vínculo para a configuração, nunca um vínculo para o banco.
+if [ ! -e backend/.env ] && [ ! -L backend/.env ]; then
+  ln -s "$MAIN_WORKTREE/backend/.env" backend/.env
+fi
+)
 ```
 
+**Terminal 1 — backend, com os controles de banco explícitos:**
+
 ```bash
-# Terminal do frontend, se necessário
+cd ~/projects/EnterpriseRemoteSystems-35.4C
+MAIN_WORKTREE="$(cd "$(git rev-parse --git-common-dir)/.." && pwd -P)"
+MAIN_DB="$MAIN_WORKTREE/backend/data/app.db"
+APP_ENV=development ERS_DATABASE_PATH="$MAIN_DB" \
+  ERS_RESET_DATABASE=false ERS_PROVISION_E2E_ADMIN=false \
+  make local-backend
+```
+
+**Terminal 2 — frontend, no mesmo worktree de código:**
+
+```bash
 cd ~/projects/EnterpriseRemoteSystems-35.4C
 make local-frontend
 ```
 
-A URL normalmente é `http://localhost:5173` em LOCAL; DEV/TST implantados permanecem HTTPS. A autenticação LOCAL das contas fictícias usa as senhas públicas do demo 31.4 **exclusivamente neste worktree LOCAL**; a senha de administrador fictício difere da senha de Pessoa fictícia. Nunca reutilize essas senhas em DEV/TST.
+Não inicie um segundo backend na porta 8080. **A inicialização normal do backend verifica/aplica migrações pendentes**; por isso só a faça após confirmar que a manutenção normal do banco LOCAL está autorizada. Se `backend/.env` já existir no worktree 35.4C, verifique que é configuração de desenvolvimento antes de iniciar; não sobrescreva arquivos de configuração preexistentes. O frontend LOCAL normalmente usa `http://localhost:5173`; DEV/TST implantados usam HTTPS.
+
+As credenciais públicas do demo 31.4 são permitidas somente para contas fictícias LOCAL, nunca DEV/TST.
 
 ## 3. DEV/TST — mesmo banco implantado, sem modificar a imagem da aplicação
 

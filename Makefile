@@ -1924,13 +1924,18 @@ byte354b-terminology-check:
 	python3 -B scripts/ers-byte354b-terminology-check.py
 	python3 -B scripts/test-byte354b-terminology.py
 
-# Byte 35.4C — separate non-destructive synthetic training database (LOCAL only).
+# Byte 35.4C — additive training data in the existing non-Production databases.
+# Git's common directory belongs to the primary worktree even when make runs
+# inside a linked worktree. Both LOCAL targets therefore select the SAME app.db.
+BYTE354C_LOCAL_DB ?= $(abspath $(shell git rev-parse --git-common-dir)/../backend/data/app.db)
 .PHONY: byte354c-training-check byte354c-training-provision-local byte354c-training-verify-local
 byte354c-training-check:
 	python3 -B scripts/test-byte354c-training-db.py
 
 byte354c-training-provision-local:
-	APP_ENV=development python3 -B scripts/ers-byte354c-training-db.py --database backend/data/app.db --target local --confirm-target local
+	@echo "LOCAL training database: $(BYTE354C_LOCAL_DB)"
+	APP_ENV=development python3 -B scripts/ers-byte354c-training-db.py --database "$(BYTE354C_LOCAL_DB)" --target local --confirm-target local
 
 byte354c-training-verify-local:
-	APP_ENV=development python3 -B scripts/ers-byte354c-training-db.py --database backend/data/app.db --target local --confirm-target local --verify-only
+	@echo "LOCAL training database: $(BYTE354C_LOCAL_DB)"
+	APP_ENV=development python3 -B scripts/ers-byte354c-training-db.py --database "$(BYTE354C_LOCAL_DB)" --target local --confirm-target local --verify-only

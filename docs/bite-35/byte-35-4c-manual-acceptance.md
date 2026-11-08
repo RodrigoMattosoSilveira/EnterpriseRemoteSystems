@@ -2,7 +2,7 @@
 
 **Worktree do desenvolvimento LOCAL:** `~/projects/EnterpriseRemoteSystems-35.4C`. **Branch:** `1055-byte-354c-deterministic-fictitious-training-database`. **SHA de origem:** `b448e4e98c3c5f4bd7ffd1d7d2f029e60ec2b059` (registrar SHA do commit depois de aplicar a correção). **Referência técnica:** [provisionamento aditivo 35.4C](byte-35-4c-training-database.md).
 
-**Contextos:** LOCAL usa `backend/data/app.db` do worktree 35.4C; DEV e TST usam o **banco persistente já existente** de seu respectivo backend. Não existe banco nem backend paralelo de treinamento. Produção é **proibida**. O responsável técnico escolhe e registra qual ambiente recebeu autorização antes de executar T01–T10. Para cada teste, anote ambiente, identidade, Entidade, passos executados, observado versus esperado, evidência sem segredos e **PASSOU / FALHOU / BLOQUEADO**. Não substitua identidade de um teste por APP.
+**Contextos:** LOCAL executa o código no worktree 35.4C e utiliza **o mesmo** `backend/data/app.db` do worktree principal `~/projects/EnterpriseRemoteSystems`; DEV e TST usam o **banco persistente já existente** de seu respectivo backend. Não existe banco nem backend paralelo de treinamento. Produção é **proibida**. O responsável técnico escolhe e registra qual ambiente recebeu autorização antes de executar T01–T10. Para cada teste, anote ambiente, identidade, Entidade, passos executados, observado versus esperado, evidência sem segredos e **PASSOU / FALHOU / BLOQUEADO**. Não substitua identidade de um teste por APP.
 
 ## T01 — Preservação, determinismo e repetição (técnico)
 

@@ -78,7 +78,9 @@ def main() -> int:
         # must not clone it, and the training checksum must remain identical.
         with sqlite3.connect(b) as conn:
             conn.execute("INSERT INTO reference_data (id,tenant_id,type,code,label,active,sort_order,created_at,updated_at) VALUES ('independent-default-ref','default','task','UNRELATED_TRAINING_CHECK','Unrelated existing task',1,999,'2026-01-01','2026-01-01')")
-        first = DIGEST.search(execute(a))
+        # LOCAL provisioner must also accept an existing app.db outside the
+        # source worktree. This is how a linked worktree shares the primary DB.
+        first = DIGEST.search(execute(a, target='local'))
         second = DIGEST.search(execute(b, target='test', app_env='test', extra_env={
             'BYTE354C_ADMIN_BCRYPT_HASH': '$2b$12$' + 'C' * 53,
             'BYTE354C_PERSON_BCRYPT_HASH': '$2b$12$' + 'D' * 53}))
@@ -104,7 +106,7 @@ def main() -> int:
         linked_parent = tmp/'linked-alpha'
         linked_parent.symlink_to(a.parent, target_is_directory=True)
         assert 'symbolic-link path components' in execute(linked_parent/'app.db', good=False)
-        assert 'LOCAL target' in execute(a, target='local', good=False)
+        assert 'no writes' in execute(a, target='local')
         assert 'Refusing' in execute(a, app_env='production', good=False)
         assert 'Production' in execute(a, extra_env={'DEPLOY_ENV':'production'}, good=False)
         assert 'target confirmation mismatch' in execute(a, confirm='test', good=False)
