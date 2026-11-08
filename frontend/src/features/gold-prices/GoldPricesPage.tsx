@@ -19,7 +19,7 @@ import { PageTitle } from "../../components/layout/PageHeading";
 
 
 export function GoldPricesPage() {
-  const { t } = useI18n();
+  const { t, formatCurrency } = useI18n();
   const [includeInactive, setIncludeInactive] = useState(false);
   const [successMessage, setSuccessMessage] = useState("");
   const [form, setForm] = useState<CreateGoldPriceInput>(() => emptyForm());
@@ -189,7 +189,7 @@ export function GoldPricesPage() {
                   {rows.map((row) => (
                     <tr key={row.id} className={!row.active ? "bg-gray-50 text-gray-500" : undefined}>
                       <td className="p-3 font-medium text-gray-900">{row.priceDate}</td>
-                      <td className="p-3 text-gray-700">{formatBRL(row.brlPerGram)}</td>
+                      <td className="p-3 text-gray-700">{formatCurrency(row.brlPerGram, "BRL", { minimumFractionDigits: 2 })}</td>
                       <td className="p-3 text-gray-700">{row.recordedBy}</td>
                       <td className="p-3 text-gray-600">{row.notes || "—"}</td>
                       <td className="p-3">
@@ -224,7 +224,7 @@ export function GoldPricesPage() {
 }
 
 function LatestGoldPriceCard({ goldPrice, isLoading }: { goldPrice?: GoldPrice; isLoading: boolean }) {
-  const { t } = useI18n();
+  const { t, formatCurrency, formatNumber } = useI18n();
   if (isLoading) {
     return (
       <section className="rounded-2xl border bg-white p-4 shadow-sm">
@@ -268,7 +268,7 @@ function LatestGoldPriceCard({ goldPrice, isLoading }: { goldPrice?: GoldPrice; 
         </div>
         <div className="rounded-xl bg-gray-50 p-3">
           <dt className="font-semibold text-gray-700">{t("gold.page.brl.per.gram_b8fa59")}</dt>
-          <dd className="mt-1 text-gray-900">{formatBRL(goldPrice.brlPerGram)}</dd>
+          <dd className="mt-1 text-gray-900">{formatCurrency(goldPrice.brlPerGram, "BRL", { minimumFractionDigits: 2 })}</dd>
         </div>
         <div className="rounded-xl bg-gray-50 p-3">
           <dt className="font-semibold text-gray-700">{t("gold.page.recorded.by_664aa7")}</dt>
@@ -276,12 +276,12 @@ function LatestGoldPriceCard({ goldPrice, isLoading }: { goldPrice?: GoldPrice; 
         </div>
         <div className="rounded-xl bg-gray-50 p-3">
           <dt className="font-semibold text-gray-700">{t("gold.page.conversion.rule_21d123")}</dt>
-          <dd className="mt-1 text-gray-900">BRL ÷ {formatDecimal(goldPrice.brlPerGram)} = {t("byte352.gold.grams")}</dd>
+          <dd className="mt-1 text-gray-900">BRL ÷ {formatNumber(goldPrice.brlPerGram, { maximumFractionDigits: 4 })} = {t("byte352.gold.grams")}</dd>
         </div>
       </dl>
 
       <p className="mt-4 rounded-xl border border-blue-100 bg-blue-50 p-3 text-sm text-blue-900">
-        {t("byte352.gold.example", { grams: formatDecimal(gramsPerBrl, 6) })}
+        {t("byte352.gold.example", { grams: formatNumber(gramsPerBrl, { maximumFractionDigits: 6 }) })}
       </p>
     </section>
   );
@@ -304,19 +304,4 @@ function byPriceDateThenCreatedAt(a: GoldPrice, b: GoldPrice) {
   const dateCompare = b.priceDate.localeCompare(a.priceDate);
   if (dateCompare !== 0) return dateCompare;
   return b.createdAt.localeCompare(a.createdAt);
-}
-
-function formatBRL(value: number) {
-  return new Intl.NumberFormat("pt-BR", {
-    style: "currency",
-    currency: "BRL",
-    minimumFractionDigits: 2,
-  }).format(value);
-}
-
-function formatDecimal(value: number, maximumFractionDigits = 4) {
-  return new Intl.NumberFormat("en-US", {
-    minimumFractionDigits: 0,
-    maximumFractionDigits,
-  }).format(value);
 }

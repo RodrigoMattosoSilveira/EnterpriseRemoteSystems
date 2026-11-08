@@ -454,7 +454,7 @@ function TenantOperatorRoleSelector({
       >
         <span>
           <span className="block font-semibold">
-            {selectedRole?.code ?? (disabled ? "Role selection unavailable" : "Select a Role")}
+            {selectedRole?.code ?? (disabled ? t("authz.roleSelector.unavailable") : t("authz.roleSelector.placeholder"))}
           </span>
           {selectedRole && (
             <span className="block text-xs text-gray-500">{selectedRole.label}</span>

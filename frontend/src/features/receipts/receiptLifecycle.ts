@@ -1,5 +1,10 @@
 import type { PrintableReceipt } from "../../types/receipts";
-import { translateEnglish, type Translate } from "../../i18n";
+import {
+  DEFAULT_LOCALE,
+  formatDateTime as formatDateTimeForLocale,
+  translateEnglish,
+  type Translate,
+} from "../../i18n";
 
 const statusRanks: Record<string, number> = {
   PENDING_ISSUE: 0,
@@ -83,7 +88,7 @@ export function nextReceiptAction(
 export function receiptLifecycleSteps(
   receipt: PrintableReceipt,
   t: Translate = translateEnglish,
-  formatDateTime: (value: string) => string = defaultFormatDateTime,
+  formatDateTime: (value: string) => string = (value) => formatDateTimeForLocale(DEFAULT_LOCALE, value),
 ): ReceiptLifecycleStep[] {
   return [
     {
@@ -128,11 +133,4 @@ function isAtLeast(status: string, threshold: string): boolean {
 
 function humanize(value: string): string {
   return value.toLowerCase().replaceAll("_", " ");
-}
-
-function defaultFormatDateTime(value: string): string {
-  return new Intl.DateTimeFormat("en-US", {
-    dateStyle: "medium",
-    timeStyle: "short",
-  }).format(new Date(value));
 }

@@ -58,7 +58,7 @@ const sensitiveOperationOptions: Array<{ value: string; key: TranslationKey }> =
 const operationLabels = new Map(sensitiveOperationOptions.map((option) => [option.value, option.key]));
 
 export function AuditLogViewerPage() {
-  const { t } = useI18n();
+  const { t, formatDateTime } = useI18n();
   const [tenantId, setTenantId] = useState(() =>
     typeof window === "undefined" ? "default" : readSelectedTenantId(window.localStorage),
   );
@@ -261,7 +261,9 @@ export function AuditLogViewerPage() {
             <div>
               <h2 className="text-lg font-semibold text-gray-950">{t("admin.audit.audit.events_9e7d8c")}</h2>
               <p className="text-sm text-gray-500">
-                {auditQuery.isLoading ? "Loading audit events..." : `${logs.length} event${logs.length === 1 ? "" : "s"} shown`}
+                {auditQuery.isLoading
+                  ? t("audit.events.loading")
+                  : t(logs.length === 1 ? "audit.events.shownOne" : "audit.events.shownMany", { count: logs.length })}
               </p>
             </div>
             {auditQuery.isFetching && !auditQuery.isLoading && (
@@ -293,7 +295,7 @@ export function AuditLogViewerPage() {
                   {logs.map((log) => (
                     <Fragment key={log.id}>
                       <tr data-testid="audit-log-row" className="align-top">
-                        <td className="whitespace-nowrap px-3 py-3 text-gray-700">{formatDateTime(log.occurredAt)}</td>
+                        <td className="whitespace-nowrap px-3 py-3 text-gray-700">{formatOptionalDateTime(log.occurredAt, formatDateTime)}</td>
                         <td className="px-3 py-3">
                           <DecisionBadge decision={log.decision} />
                         </td>
@@ -340,9 +342,9 @@ export function AuditLogViewerPage() {
 }
 
 function AuditEvidence({ log }: { log: AuthzAuditLog }) {
-  const { t } = useI18n();
+  const { t, formatDateTime } = useI18n();
   const metadata = parseMetadata(log.metadataJson);
-  const items = auditEvidenceItems(log, metadata, t);
+  const items = auditEvidenceItems(log, metadata, t, formatDateTime);
 
   if (items.length === 0 && !log.metadataJson) {
     return <span className="text-gray-500">{t("admin.audit.no.extra.evidence.recorded_2a416c")}</span>;
@@ -386,7 +388,12 @@ function DecisionBadge({ decision }: { decision: string }) {
 
 type Metadata = Record<string, unknown>;
 
-function auditEvidenceItems(log: AuthzAuditLog, metadata: Metadata, t: ReturnType<typeof useI18n>["t"]): Array<{ label: string; value: string }> {
+function auditEvidenceItems(
+  log: AuthzAuditLog,
+  metadata: Metadata,
+  t: ReturnType<typeof useI18n>["t"],
+  formatDateTime: (date: Date) => string,
+): Array<{ label: string; value: string }> {
   const items: Array<{ label: string; value: string }> = [];
 
   if (log.accountId) items.push({ label: t("byte354b.audit.evidence.00"), value: log.accountId });
@@ -419,7 +426,7 @@ function auditEvidenceItems(log: AuthzAuditLog, metadata: Metadata, t: ReturnTyp
     const authenticatedAt = stringValue(recentReauthentication.authenticatedAt);
     items.push({
       label: t("byte354b.audit.evidence.10"),
-      value: [method, formatDateTime(authenticatedAt)].filter(Boolean).join(" · ") || t("byte354b.audit.evidence.11"),
+      value: [method, formatOptionalDateTime(authenticatedAt, formatDateTime)].filter(Boolean).join(" · ") || t("byte354b.audit.evidence.11"),
     });
   }
 
@@ -495,9 +502,9 @@ function clampLimit(limit: number): number {
   return Math.min(500, Math.max(1, Math.trunc(limit)));
 }
 
-function formatDateTime(value: string | undefined): string {
+function formatOptionalDateTime(value: string | undefined, formatDateTime: (date: Date) => string): string {
   if (!value) return "";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
-  return date.toLocaleString();
+  return formatDateTime(date);
 }

@@ -2608,4 +2608,16 @@ export const ptBRMessages = {
   "apiField.leaseId": "Concessão de Acesso de Suporte",
   "apiField.expiresAt": "Vencimento",
   "apiField.permissions": "Permissões",
+
+  // Bite 34.1 (#1056) — textos de tela restantes.
+  "audit.events.loading": "Carregando eventos de auditoria...",
+  "audit.events.shownOne": "{count} evento exibido",
+  "audit.events.shownMany": "{count} eventos exibidos",
+  "authz.roleSelector.unavailable": "Seleção de Função indisponível",
+  "authz.roleSelector.placeholder": "Selecione uma Função",
+  "authz.createActor.submit": "Criar Ator",
+  "planning.replacementCandidateShort": "Cand.",
+  "planning.temporaryReplacementShort": "Subst.",
+  "planning.replacementCandidateFor": "Candidato a substituição para {name}",
+  "planning.temporaryReplacementFor": "Destino de substituição temporária para {name}",
 } satisfies Record<TranslationKey, string>;
