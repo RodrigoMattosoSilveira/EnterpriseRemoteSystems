@@ -7,6 +7,8 @@ import (
 	"strings"
 
 	"enterpriseremotesystems/backend/internal/db"
+
+	"enterpriseremotesystems/backend/internal/shared/fielderrors"
 )
 
 const (
@@ -271,14 +273,14 @@ func normalizeListFilter(filter LedgerEntryListFilter) (normalizedLedgerEntryLis
 	if strings.TrimSpace(filter.DateFrom) != "" {
 		value, err := parseDate(filter.DateFrom)
 		if err != nil {
-			return normalizedLedgerEntryListFilter{}, ValidationError{Fields: map[string]string{"dateFrom": "Date from must be YYYY-MM-DD"}}
+			return normalizedLedgerEntryListFilter{}, fieldError("dateFrom", fielderrors.InvalidDate, "Date from must be YYYY-MM-DD")
 		}
 		out.DateFrom = &value
 	}
 	if strings.TrimSpace(filter.DateTo) != "" {
 		value, err := parseDate(filter.DateTo)
 		if err != nil {
-			return normalizedLedgerEntryListFilter{}, ValidationError{Fields: map[string]string{"dateTo": "Date to must be YYYY-MM-DD"}}
+			return normalizedLedgerEntryListFilter{}, fieldError("dateTo", fielderrors.InvalidDate, "Date to must be YYYY-MM-DD")
 		}
 		out.DateTo = &value
 	}

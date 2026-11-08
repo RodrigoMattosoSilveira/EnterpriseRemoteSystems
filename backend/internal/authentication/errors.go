@@ -1,6 +1,10 @@
 package authentication
 
-import "errors"
+import (
+	"errors"
+
+	"enterpriseremotesystems/backend/internal/shared/fielderrors"
+)
 
 var (
 	ErrInvalidCredentials           = errors.New("invalid login or password")
@@ -24,9 +28,40 @@ var (
 	ErrReactivationNotPending       = errors.New("account reactivation request is not pending")
 )
 
+// ValidationError carries English field messages plus a stable rule code per
+// field (Codes), which clients translate. See internal/shared/fielderrors.
 type ValidationError struct {
 	Fields map[string]string
+	Codes  map[string]string
 }
 
-func (e *ValidationError) Error() string                       { return "authentication validation failed" }
-func (e *ValidationError) ValidationFields() map[string]string { return e.Fields }
+func (e *ValidationError) Error() string                           { return "authentication validation failed" }
+func (e *ValidationError) ValidationFields() map[string]string     { return e.Fields }
+func (e *ValidationError) ValidationFieldCodes() map[string]string { return e.Codes }
+
+// Stable Authentication rule codes returned as `fieldCodes` (shared ones live
+// in fielderrors). Renaming one is an API change.
+const (
+	RuleTooLong                 = "too_long"
+	RulePasswordTooShort        = "password_too_short"
+	RulePasswordTooLong         = "password_too_long"
+	RulePasswordUnchanged       = "password_unchanged"
+	RuleTenantSelectionRequired = "tenant_selection_required"
+	RulePersonLoginNotFound     = "person_login_not_found"
+	RuleMembershipNotActive     = "membership_not_active"
+	RulePersonActorInactive     = "person_actor_inactive"
+	RuleTenantUnavailable       = "tenant_unavailable"
+	RuleAccountNotActive        = "account_not_active"
+)
+
+func fieldError(field string, rule string, message string) *ValidationError {
+	fields, codes := fielderrors.Single(field, rule, message)
+	return &ValidationError{Fields: fields, Codes: codes}
+}
+
+func validationError(errs *fielderrors.Collector) error {
+	if errs.Empty() {
+		return nil
+	}
+	return &ValidationError{Fields: errs.Fields, Codes: errs.Codes}
+}

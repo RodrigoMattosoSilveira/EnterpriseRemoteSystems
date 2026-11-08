@@ -5,6 +5,7 @@ import (
 	"errors"
 	"strings"
 
+	"enterpriseremotesystems/backend/internal/shared/fielderrors"
 	"enterpriseremotesystems/backend/internal/shared/ids"
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
@@ -150,18 +151,18 @@ func (s *service) ReviewReactivationRequest(ctx context.Context, requestID strin
 	requestID = strings.TrimSpace(requestID)
 	reviewerActorID = strings.TrimSpace(reviewerActorID)
 	reason := strings.TrimSpace(req.Reason)
-	fields := map[string]string{}
+	errs := fielderrors.New()
 	if requestID == "" {
-		fields["requestId"] = "Account reactivation request is required"
+		errs.Add("requestId", fielderrors.Required, "Account reactivation request is required")
 	}
 	if reviewerActorID == "" {
-		fields["reviewerActorId"] = "Application Administrator identity is required"
+		errs.Add("reviewerActorId", fielderrors.Required, "Application Administrator identity is required")
 	}
 	if reason == "" {
-		fields["reason"] = "Review reason is required"
+		errs.Add("reason", fielderrors.Required, "Review reason is required")
 	}
-	if len(fields) > 0 {
-		return AccountReactivationRequestResponse{}, &ValidationError{Fields: fields}
+	if err := validationError(errs); err != nil {
+		return AccountReactivationRequestResponse{}, err
 	}
 	record, err := s.repository.ReviewReactivationRequest(ctx, requestID, reviewerActorID, req.Approve, reason, s.clock().UTC())
 	if err != nil {

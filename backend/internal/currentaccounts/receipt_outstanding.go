@@ -57,11 +57,11 @@ func (s *service) ListOutstandingReceipts(ctx context.Context, filter ReceiptLis
 func normalizeReceiptListFilter(filter ReceiptListFilter) (normalizedReceiptListFilter, error) {
 	status := strings.ToUpper(strings.TrimSpace(filter.Status))
 	if status != "" && !outstandingReceiptStatuses[status] {
-		return normalizedReceiptListFilter{}, ValidationError{Fields: map[string]string{"status": "Status must be one of PENDING_ISSUE, ISSUED, PRINTED, or SIGNED"}}
+		return normalizedReceiptListFilter{}, fieldError("status", RuleUnknownStatus, "Status must be one of PENDING_ISSUE, ISSUED, PRINTED, or SIGNED")
 	}
 	sourceType := strings.ToUpper(strings.TrimSpace(filter.SourceType))
 	if sourceType != "" && !allowedOutstandingReceiptSourceTypes[sourceType] {
-		return normalizedReceiptListFilter{}, ValidationError{Fields: map[string]string{"sourceType": "Source type must be one of EXPENSE, EXPENSE_REPLACEMENT, JOURNEY_SETTLEMENT, LEDGER_CORRECTION, or ACCRUAL_ITEM"}}
+		return normalizedReceiptListFilter{}, fieldError("sourceType", RuleInvalidSourceType, "Source type must be one of EXPENSE, EXPENSE_REPLACEMENT, JOURNEY_SETTLEMENT, LEDGER_CORRECTION, or ACCRUAL_ITEM")
 	}
 	page := filter.Page
 	if page <= 0 {

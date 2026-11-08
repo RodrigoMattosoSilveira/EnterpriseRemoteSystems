@@ -13,6 +13,7 @@ import (
 	"unicode/utf8"
 
 	"enterpriseremotesystems/backend/internal/authz"
+	"enterpriseremotesystems/backend/internal/shared/fielderrors"
 	"enterpriseremotesystems/backend/internal/shared/ids"
 	"golang.org/x/crypto/bcrypt"
 )
@@ -276,7 +277,7 @@ func (s *service) Logout(ctx context.Context, rawToken string) error {
 
 func (s *service) ChangePassword(ctx context.Context, rawToken string, req ChangePasswordRequest) error {
 	if strings.TrimSpace(req.CurrentPassword) == "" {
-		return &ValidationError{Fields: map[string]string{"currentPassword": "Current password is required"}}
+		return fieldError("currentPassword", fielderrors.Required, "Current password is required")
 	}
 	if err := validateNewPassword(req.NewPassword); err != nil {
 		return err
@@ -295,7 +296,7 @@ func (s *service) ChangePassword(ctx context.Context, rawToken string, req Chang
 		return ErrInvalidCredentials
 	}
 	if bcrypt.CompareHashAndPassword([]byte(record.PasswordHash), []byte(req.NewPassword)) == nil {
-		return &ValidationError{Fields: map[string]string{"newPassword": "New password must differ from the current password"}}
+		return fieldError("newPassword", RulePasswordUnchanged, "New password must differ from the current password")
 	}
 	passwordHash, err := s.hashPassword(req.NewPassword)
 	if err != nil {
@@ -306,7 +307,7 @@ func (s *service) ChangePassword(ctx context.Context, rawToken string, req Chang
 
 func (s *service) ResetPassword(ctx context.Context, req ResetPasswordRequest) (PasswordResetResult, error) {
 	if strings.TrimSpace(req.Token) == "" {
-		return PasswordResetResult{}, &ValidationError{Fields: map[string]string{"token": "Password reset token is required"}}
+		return PasswordResetResult{}, fieldError("token", fielderrors.Required, "Password reset token is required")
 	}
 	if err := validateNewPassword(req.NewPassword); err != nil {
 		return PasswordResetResult{}, err
@@ -382,22 +383,22 @@ func (s *service) GetAccount(ctx context.Context, id string) (AccountResponse, e
 func (s *service) CreateAccount(ctx context.Context, req CreateAccountRequest) (AccountResponse, error) {
 	tenantID := strings.TrimSpace(req.TenantID)
 	login := normalizeLogin(req.Login)
-	fields := map[string]string{}
+	errs := fielderrors.New()
 	if tenantID == "" || tenantID == authz.GlobalTenantScope {
-		fields["tenantId"] = "Select a specific tenant for the Person whose authentication account is being provisioned"
+		errs.Add("tenantId", RuleTenantSelectionRequired, "Select a specific tenant for the Person whose authentication account is being provisioned")
 	}
 	if login == "" {
-		fields["login"] = "Login is required"
+		errs.Add("login", fielderrors.Required, "Login is required")
 	} else if utf8.RuneCountInString(login) > maximumLoginLength {
-		fields["login"] = "Login must be 254 characters or fewer"
+		errs.Add("login", RuleTooLong, "Login must be 254 characters or fewer")
 	}
 	if err := validatePasswordValue(req.TemporaryPassword, "temporaryPassword"); err != nil {
 		for key, value := range err.ValidationFields() {
-			fields[key] = value
+			errs.Add(key, err.Codes[key], value)
 		}
 	}
-	if len(fields) > 0 {
-		return AccountResponse{}, &ValidationError{Fields: fields}
+	if err := validationError(errs); err != nil {
+		return AccountResponse{}, err
 	}
 
 	passwordHash, err := s.hashPassword(req.TemporaryPassword)
@@ -423,21 +424,17 @@ func (s *service) CreateAccount(ctx context.Context, req CreateAccountRequest) (
 	account, err := s.repository.CreatePersonAccount(ctx, tenantID, "", accountInput)
 	switch {
 	case errors.Is(err, ErrPersonLoginNotFound):
-		return AccountResponse{}, &ValidationError{Fields: map[string]string{
-			"login": "No canonical Person with this login email has a Membership in the selected tenant",
-		}}
+		return AccountResponse{}, fieldError("login", RulePersonLoginNotFound,
+			"No canonical Person with this login email has a Membership in the selected tenant")
 	case errors.Is(err, ErrPersonMembershipRequired):
-		return AccountResponse{}, &ValidationError{Fields: map[string]string{
-			"tenantId": "The Person must have an ACTIVE Person-Tenant Membership in the selected tenant",
-		}}
+		return AccountResponse{}, fieldError("tenantId", RuleMembershipNotActive,
+			"The Person must have an ACTIVE Person-Tenant Membership in the selected tenant")
 	case errors.Is(err, ErrPersonActorInactive):
-		return AccountResponse{}, &ValidationError{Fields: map[string]string{
-			"tenantId": "The Person's canonical Tenant Actor is inactive; reactivate it before enabling authentication",
-		}}
+		return AccountResponse{}, fieldError("tenantId", RulePersonActorInactive,
+			"The Person's canonical Tenant Actor is inactive; reactivate it before enabling authentication")
 	case errors.Is(err, ErrTenantUnavailable):
-		return AccountResponse{}, &ValidationError{Fields: map[string]string{
-			"tenantId": "The selected tenant is inactive or unavailable",
-		}}
+		return AccountResponse{}, fieldError("tenantId", RuleTenantUnavailable,
+			"The selected tenant is inactive or unavailable")
 	case err != nil:
 		return AccountResponse{}, err
 	}
@@ -455,16 +452,15 @@ func (s *service) SetAccountActive(ctx context.Context, id string, active bool) 
 func (s *service) IssuePasswordResetToken(ctx context.Context, accountID string) (PasswordResetTokenResponse, error) {
 	accountID = strings.TrimSpace(accountID)
 	if accountID == "" {
-		return PasswordResetTokenResponse{}, &ValidationError{Fields: map[string]string{"accountId": "Authentication account is required"}}
+		return PasswordResetTokenResponse{}, fieldError("accountId", fielderrors.Required, "Authentication account is required")
 	}
 	account, err := s.repository.FindAccountByID(ctx, accountID)
 	if err != nil {
 		return PasswordResetTokenResponse{}, err
 	}
 	if !account.Active {
-		return PasswordResetTokenResponse{}, &ValidationError{Fields: map[string]string{
-			"accountId": "Password reset tokens can only be issued for active authentication accounts",
-		}}
+		return PasswordResetTokenResponse{}, fieldError("accountId", RuleAccountNotActive,
+			"Password reset tokens can only be issued for active authentication accounts")
 	}
 	rawToken, tokenHash, err := s.newToken("ers_pr_")
 	if err != nil {
@@ -511,17 +507,14 @@ func normalizeLogin(login string) string {
 }
 
 func validateLoginAndPassword(login string, password string) error {
-	fields := map[string]string{}
+	errs := fielderrors.New()
 	if login == "" {
-		fields["login"] = "Login is required"
+		errs.Add("login", fielderrors.Required, "Login is required")
 	}
 	if strings.TrimSpace(password) == "" {
-		fields["password"] = "Password is required"
+		errs.Add("password", fielderrors.Required, "Password is required")
 	}
-	if len(fields) > 0 {
-		return &ValidationError{Fields: fields}
-	}
-	return nil
+	return validationError(errs)
 }
 
 func validateNewPassword(password string) error {
@@ -535,10 +528,10 @@ func validateNewPassword(password string) error {
 func validatePasswordValue(password string, field string) *ValidationError {
 	length := utf8.RuneCountInString(password)
 	if length < minimumPasswordLength {
-		return &ValidationError{Fields: map[string]string{field: "Password must contain at least 12 characters"}}
+		return fieldError(field, RulePasswordTooShort, "Password must contain at least 12 characters")
 	}
 	if len([]byte(password)) > maximumBcryptPasswordLen {
-		return &ValidationError{Fields: map[string]string{field: "Password must contain no more than 72 UTF-8 bytes"}}
+		return fieldError(field, RulePasswordTooLong, "Password must contain no more than 72 UTF-8 bytes")
 	}
 	return nil
 }

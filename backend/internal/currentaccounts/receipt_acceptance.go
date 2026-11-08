@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	"enterpriseremotesystems/backend/internal/shared/fielderrors"
 )
 
 const (
@@ -29,7 +31,7 @@ func (s *service) AcceptReceipt(ctx context.Context, ledgerEntryID, acceptedBy, 
 	}
 	acceptedBy = strings.TrimSpace(acceptedBy)
 	if acceptedBy == "" {
-		return nil, ValidationError{Fields: map[string]string{"authorizedBy": "Required"}}
+		return nil, fieldError("authorizedBy", fielderrors.Required, "Required")
 	}
 	receipt, err := s.repo.FindReceiptByLedgerEntryID(ctx, strings.TrimSpace(ledgerEntryID))
 	if err != nil {
