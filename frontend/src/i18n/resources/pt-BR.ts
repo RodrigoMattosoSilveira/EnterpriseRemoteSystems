@@ -2617,7 +2617,7 @@ export const ptBRMessages = {
   "authz.roleSelector.placeholder": "Selecione uma Função",
   "authz.createActor.submit": "Criar Ator",
   "planning.replacementCandidateShort": "Cand.",
-  "planning.temporaryReplacementShort": "Subst.",
+  "planning.temporaryReplacementShort": "Repl.",
   "planning.replacementCandidateFor": "Candidato a substituição para {name}",
   "planning.temporaryReplacementFor": "Destino de substituição temporária para {name}",
   "planning.selectCollaborator": "Selecionar {name}",
