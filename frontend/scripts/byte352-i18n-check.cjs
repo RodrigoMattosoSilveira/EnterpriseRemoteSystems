@@ -94,6 +94,59 @@ function backendErrorCodes(root = backendRoot) {
   }
   return codes;
 }
+// Packages that expose ValidationFieldCodes() have adopted rule codes; inside
+// them, a field error built without a code would reach users untranslated.
+const UNCODED_FIELD_ERROR = [
+  /ValidationError\{\s*Fields:\s*map\[string\]string\{/,
+  /\bfields\[[^\]]+\]\s*=\s*"/,
+];
+function uncodedFieldErrors(root = backendRoot) {
+  if (!fs.existsSync(root)) return [];
+  const byDir = new Map();
+  for (const file of goSourceFiles(root)) {
+    const dir = path.dirname(file);
+    if (!byDir.has(dir)) byDir.set(dir, []);
+    byDir.get(dir).push(file);
+  }
+  const findings = [];
+  for (const [, files] of byDir) {
+    const contents = files.map((file) => [file, fs.readFileSync(file, 'utf8')]);
+    if (!contents.some(([, text]) => text.includes('ValidationFieldCodes()'))) continue;
+    for (const [file, text] of contents) {
+      text.split('\n').forEach((line, index) => {
+        if (UNCODED_FIELD_ERROR.some((pattern) => pattern.test(line))) {
+          findings.push(`${path.relative(root, file)}:${index + 1}: ${line.trim().slice(0, 100)}`);
+        }
+      });
+    }
+  }
+  return findings;
+}
+// Every declared field rule code (`RuleX = "..."` constants, plus the shared
+// constants in shared/fielderrors) must have an `apiError.rule.<code>` key.
+function backendRuleCodes(root = backendRoot) {
+  if (!fs.existsSync(root)) return null;
+  const codes = new Map();
+  for (const file of goSourceFiles(root)) {
+    const content = fs.readFileSync(file, 'utf8');
+    const shared = file.split(path.sep).join('/').endsWith('shared/fielderrors/fielderrors.go');
+    const pattern = shared ? /^\s*[A-Z][A-Za-z0-9]*\s*=\s*"([a-z][a-z0-9_]*)"/gm : /\bRule[A-Za-z0-9]+\s*=\s*"([a-z][a-z0-9_]*)"/g;
+    for (const match of content.matchAll(pattern)) {
+      if (!codes.has(match[1])) {
+        const line = content.slice(0, match.index).split('\n').length;
+        codes.set(match[1], `${path.relative(root, file)}:${line}`);
+      }
+    }
+  }
+  return codes;
+}
+function missingBackendRuleKeys(en, root = backendRoot) {
+  const codes = backendRuleCodes(root);
+  if (codes === null) return {checked: 0, missing: []};
+  const missing = [];
+  for (const [code, where] of codes) if (!en.has(`apiError.rule.${code}`)) missing.push(`${code} (${where})`);
+  return {checked: codes.size, missing};
+}
 function missingBackendErrorCodeKeys(en, root = backendRoot) {
   const codes = backendErrorCodes(root);
   if (codes === null) return {checked: 0, missing: []};
@@ -106,6 +159,9 @@ function inspect() {
   const failures=[];
   const backend = missingBackendErrorCodeKeys(en);
   for (const item of backend.missing) failures.push('backend error code without apiError.code translation: '+item);
+  for (const item of uncodedFieldErrors()) failures.push('backend field error without a rule code: '+item);
+  const rules = missingBackendRuleKeys(en);
+  for (const item of rules.missing) failures.push('backend rule code without apiError.rule translation: '+item);
   for(const key of en.keys()) if(!pt.has(key)) failures.push('pt-BR missing '+key);
   for(const key of pt.keys()) if(!en.has(key)) failures.push('en-US missing '+key);
   const params = s => [...new Set([...s.matchAll(/\{([a-zA-Z_][a-zA-Z_0-9]*)\}/g)].map(x=>x[1]))].sort().join(',');
@@ -127,12 +183,12 @@ function inspect() {
   const pending=[];
   const coveredSet=new Set(covered);
   for(const file of walk(sourceRoot)) if(!coveredSet.has(path.relative(sourceRoot,file))) pending.push(...jsxLiteralFindings(file));
-  return {failures, entries:en.size, guarded:covered.length, pending, backendCodes:backend.checked};
+  return {failures, entries:en.size, guarded:covered.length, pending, backendCodes:backend.checked, backendRules:rules.checked};
 }
 if (require.main === module) {
   try {
     const result=inspect();
-    console.log(`Translation keys: ${result.entries}; guarded files: ${result.guarded}; backend error codes checked: ${result.backendCodes}`);
+    console.log(`Translation keys: ${result.entries}; guarded files: ${result.guarded}; backend error codes checked: ${result.backendCodes}; field rule codes checked: ${result.backendRules}`);
     console.log(`Remaining untranslated JSX/attribute literals elsewhere: ${result.pending.length}`);
     if(process.argv.includes('--report')) for(const item of result.pending) console.log('PENDING: '+item);
     if(process.argv.includes('--require-complete') && result.pending.length) result.failures.push(`${result.pending.length} unconverted JSX/attribute literals remain`);
@@ -141,4 +197,4 @@ if (require.main === module) {
     else console.log('PASS: catalog parity and static JSX text gate (runtime/manual acceptance remains separate)');
   }catch(err){console.error('FAIL:',err.message);process.exitCode=1;}
 }
-module.exports={readResource,jsxLiteralFindings,inspect,backendErrorCodes,missingBackendErrorCodeKeys};
+module.exports={readResource,jsxLiteralFindings,inspect,backendErrorCodes,missingBackendErrorCodeKeys,uncodedFieldErrors,backendRuleCodes,missingBackendRuleKeys};

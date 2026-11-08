@@ -4,7 +4,32 @@ const assert=require('node:assert/strict');
 const fs=require('node:fs');
 const os=require('node:os');
 const path=require('node:path');
-const {inspect,jsxLiteralFindings,readResource,backendErrorCodes,missingBackendErrorCodeKeys}=require('./byte352-i18n-check.cjs');
+const {inspect,jsxLiteralFindings,readResource,backendErrorCodes,missingBackendErrorCodeKeys,uncodedFieldErrors,missingBackendRuleKeys}=require('./byte352-i18n-check.cjs');
+
+test('every backend field rule code has an apiError.rule translation (Bite 34.1)',()=>{
+ const result=inspect();
+ assert.ok(result.backendRules>=50,`expected the backend rule codes to be scanned, got ${result.backendRules}`);
+ assert.deepEqual(result.failures.filter(x=>x.startsWith('backend rule code')),[]);
+ const dir=fs.mkdtempSync(path.join(os.tmpdir(),'ers341-rules-'));
+ try {
+  fs.writeFileSync(path.join(dir,'v.go'),'package v\nconst (\n\tRuleShiny = "shiny_new_rule"\n\tRuleOld = "required"\n)\n');
+  const {missing}=missingBackendRuleKeys(readResource('en-US.ts'),dir);
+  assert.deepEqual(missing,['shiny_new_rule (v.go:3)']);
+ }finally{fs.rmSync(dir,{recursive:true,force:true});}
+});
+
+test('packages with rule codes cannot add an uncoded field error (Bite 34.1)',()=>{
+ const dir=fs.mkdtempSync(path.join(os.tmpdir(),'ers341-fields-'));
+ try {
+  fs.mkdirSync(path.join(dir,'coded'));fs.mkdirSync(path.join(dir,'legacy'));
+  fs.writeFileSync(path.join(dir,'coded','validation.go'),'package coded\nfunc (e ValidationError) ValidationFieldCodes() map[string]string { return e.Codes }\n');
+  fs.writeFileSync(path.join(dir,'coded','service.go'),'package coded\nfunc a() error { return ValidationError{Fields: map[string]string{"x": "Bad"}} }\nfunc b(fields map[string]string) { fields["y"] = "Bad" }\nfunc c() error { return fieldError("z", "rule", "Bad") }\n');
+  fs.writeFileSync(path.join(dir,'legacy','service.go'),'package legacy\nfunc a() error { return ValidationError{Fields: map[string]string{"x": "Bad"}} }\n');
+  const findings=uncodedFieldErrors(dir);
+  assert.equal(findings.length,2,findings.join('\n'));
+  assert.ok(findings.every(x=>x.startsWith('coded'+path.sep+'service.go:')));
+ }finally{fs.rmSync(dir,{recursive:true,force:true});}
+});
 
 test('every backend error code has an apiError.code translation (Bite 34.1)',()=>{
  const result=inspect();
