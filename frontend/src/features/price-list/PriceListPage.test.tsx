@@ -236,7 +236,9 @@ describe("PriceListPage", () => {
     await submitFormByHeading("Edit Document copy");
 
     await waitForText("Updated price-list item: Document copy updated. The previous version was retained as inactive history.");
-    await waitForText("6,25");
+    // Byte 35.2: money follows the selected language (en-US here); the
+    // currency stays BRL.
+    await waitForText("R$6.25");
 
     const updateCall = fetchCalls.find((call) => call.method === "PATCH" && call.url === "/api/v1/price-list-items/price-admin-copy");
     expect(updateCall?.body).toMatchObject({
