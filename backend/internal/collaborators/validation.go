@@ -1,6 +1,10 @@
 package collaborators
 
-import "strings"
+import (
+	"strings"
+
+	"enterpriseremotesystems/backend/internal/shared/fielderrors"
+)
 
 const (
 	PlanningAvailabilityActive         = "ACTIVE"
@@ -8,94 +12,108 @@ const (
 	PlanningAvailabilityLeaveOfAbsence = "LEAVE_OF_ABSENCE"
 )
 
+// ValidationError carries English field messages plus a stable rule code per
+// field (Codes), which clients translate. See internal/shared/fielderrors.
 type ValidationError struct {
 	Fields map[string]string
+	Codes  map[string]string
 }
 
-func (e ValidationError) Error() string                       { return "validation failed" }
-func (e ValidationError) ValidationFields() map[string]string { return e.Fields }
+func (e ValidationError) Error() string                           { return "validation failed" }
+func (e ValidationError) ValidationFields() map[string]string     { return e.Fields }
+func (e ValidationError) ValidationFieldCodes() map[string]string { return e.Codes }
+
+// Stable Collaborator rule codes returned as `fieldCodes` (shared ones live in
+// fielderrors). Renaming one is an API change.
+const (
+	RuleInvalidPlanningAvailability = "invalid_planning_availability"
+	RuleMembershipNotActive         = "membership_not_active"
+	RulePersonProfileIncomplete     = "person_profile_incomplete"
+	RuleJourneyAlreadyOpen          = "journey_already_open"
+	RuleJourneyClosed               = "journey_closed"
+	RuleExtensionPending            = "extension_already_pending"
+	RuleExtensionNotPending         = "extension_not_pending"
+	RuleInactiveReference           = "inactive_reference"
+	RuleAmountRequiredForMethod     = "amount_required_for_payment_method"
+	RuleTooManyDecimals             = "too_many_decimals"
+	RulePercentOutOfRange           = "percent_out_of_range"
+	RuleInvalidPaymentMethod        = "invalid_payment_method"
+	RuleInvalidValueUnit            = "invalid_value_unit"
+	RuleBonusDateOutOfRange         = "bonus_date_out_of_range"
+	RuleBonusNotPending             = "bonus_not_pending"
+	RuleDifferentApproverRequired   = "different_approver_required"
+)
+
+func validationError(errs *fielderrors.Collector) error {
+	if errs.Empty() {
+		return nil
+	}
+	return ValidationError{Fields: errs.Fields, Codes: errs.Codes}
+}
+
+func fieldError(field string, rule string, message string) ValidationError {
+	fields, codes := fielderrors.Single(field, rule, message)
+	return ValidationError{Fields: fields, Codes: codes}
+}
 
 func ValidateCreateCollaborator(req CreateCollaboratorRequest) error {
-	fields := map[string]string{}
-	if strings.TrimSpace(req.MembershipID) == "" {
-		fields["membershipId"] = "Required"
-	}
-	requireString(fields, "journeyStartDate", req.JourneyStartDate)
-	requireString(fields, "paymentMethodId", req.PaymentMethodID)
-	requireString(fields, "sectorId", req.SectorID)
-	requireString(fields, "locationId", req.LocationID)
-	requireString(fields, "taskId", req.TaskID)
-	requireString(fields, "statusId", req.StatusID)
+	errs := fielderrors.New()
+	errs.Require("membershipId", req.MembershipID)
+	errs.Require("journeyStartDate", req.JourneyStartDate)
+	errs.Require("paymentMethodId", req.PaymentMethodID)
+	errs.Require("sectorId", req.SectorID)
+	errs.Require("locationId", req.LocationID)
+	errs.Require("taskId", req.TaskID)
+	errs.Require("statusId", req.StatusID)
 
 	if strings.TrimSpace(req.JourneyStartDate) != "" {
 		if _, err := parseDate(req.JourneyStartDate); err != nil {
-			fields["journeyStartDate"] = "Journey start date must be YYYY-MM-DD"
+			errs.Add("journeyStartDate", fielderrors.InvalidDate, "Journey start date must be YYYY-MM-DD")
 		}
 	}
-	validatePlanningAvailability(fields, req.PlanningAvailability)
+	validatePlanningAvailability(errs, req.PlanningAvailability)
 
-	if len(fields) > 0 {
-		return ValidationError{Fields: fields}
-	}
-
-	return nil
+	return validationError(errs)
 }
 
 func ValidateUpdateCollaborator(req UpdateCollaboratorRequest) error {
-	fields := map[string]string{}
-	requireString(fields, "paymentMethodId", req.PaymentMethodID)
-	requireString(fields, "sectorId", req.SectorID)
-	requireString(fields, "locationId", req.LocationID)
-	requireString(fields, "taskId", req.TaskID)
+	errs := fielderrors.New()
+	errs.Require("paymentMethodId", req.PaymentMethodID)
+	errs.Require("sectorId", req.SectorID)
+	errs.Require("locationId", req.LocationID)
+	errs.Require("taskId", req.TaskID)
 
-	validatePlanningAvailability(fields, req.PlanningAvailability)
+	validatePlanningAvailability(errs, req.PlanningAvailability)
 
-	if len(fields) > 0 {
-		return ValidationError{Fields: fields}
-	}
-
-	return nil
+	return validationError(errs)
 }
 
 func ValidateUpdateCollaboratorWorkAssignment(req UpdateCollaboratorWorkAssignmentRequest) error {
-	fields := map[string]string{}
-	requireString(fields, "sectorId", req.SectorID)
-	requireString(fields, "locationId", req.LocationID)
-	requireString(fields, "taskId", req.TaskID)
-
-	if len(fields) > 0 {
-		return ValidationError{Fields: fields}
-	}
-	return nil
+	errs := fielderrors.New()
+	errs.Require("sectorId", req.SectorID)
+	errs.Require("locationId", req.LocationID)
+	errs.Require("taskId", req.TaskID)
+	return validationError(errs)
 }
 
 func ValidateExtendCollaboratorJourney(req ExtendCollaboratorJourneyRequest) error {
-	fields := map[string]string{}
+	errs := fielderrors.New()
 	if req.AdditionalDays <= 0 {
-		fields["additionalDays"] = "Additional days must be greater than zero"
+		errs.Add("additionalDays", fielderrors.MustBePositive, "Additional days must be greater than zero")
 	}
 	if strings.TrimSpace(req.Reason) == "" {
-		fields["reason"] = "Reason is required"
+		errs.Add("reason", fielderrors.Required, "Reason is required")
 	}
-	if len(fields) > 0 {
-		return ValidationError{Fields: fields}
-	}
-	return nil
+	return validationError(errs)
 }
 
-func requireString(fields map[string]string, key string, value string) {
-	if strings.TrimSpace(value) == "" {
-		fields[key] = "Required"
-	}
-}
-
-func validatePlanningAvailability(fields map[string]string, value string) {
+func validatePlanningAvailability(errs *fielderrors.Collector, value string) {
 	trimmed := strings.TrimSpace(value)
 	if trimmed == "" {
 		return
 	}
 	if !isKnownPlanningAvailability(strings.ToUpper(trimmed)) {
-		fields["planningAvailability"] = "Planning availability must be ACTIVE, DAY_OFF, or LEAVE_OF_ABSENCE"
+		errs.Add("planningAvailability", RuleInvalidPlanningAvailability, "Planning availability must be ACTIVE, DAY_OFF, or LEAVE_OF_ABSENCE")
 	}
 }
 
