@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { translateEnglish } from "../../i18n";
 import type { AuthzActor } from "../../types/authz";
 import type { AuthAccount } from "../../types/auth";
 import type { Collaborator } from "../../types/collaborators";
@@ -234,7 +235,7 @@ describe("authentication account collaborator selection", () => {
     expect(authenticationAccountForActor(eligibleActor, [account])).toEqual(account);
     expect(authenticationAccountMatchesSearch(account, "legacy-single-actor-key")).toBe(false);
     expect(
-      authenticationCollaboratorStatusLabel(eligibleActor, account),
+      authenticationCollaboratorStatusLabel(eligibleActor, account, translateEnglish),
     ).toBe(
       "Already has authentication account mari@example.com (active)",
     );
@@ -244,23 +245,25 @@ describe("authentication account collaborator selection", () => {
   });
 
   it("explains why a matching collaborator cannot yet be used for account creation", () => {
-    expect(authenticationCollaboratorStatusLabel(undefined, undefined)).toBe(
+    expect(authenticationCollaboratorStatusLabel(undefined, undefined, translateEnglish)).toBe(
       "No authorization actor",
     );
     expect(
       authenticationCollaboratorStatusLabel(
         { ...eligibleActor, active: false },
         undefined,
+        translateEnglish,
       ),
     ).toBe("Authorization actor is inactive");
     expect(
       authenticationCollaboratorStatusLabel(
         { ...eligibleActor, roleGrants: [] },
         undefined,
+        translateEnglish,
       ),
     ).toBe("Authorization actor has no active role grant");
     expect(
-      authenticationCollaboratorStatusLabel(eligibleActor, undefined),
+      authenticationCollaboratorStatusLabel(eligibleActor, undefined, translateEnglish),
     ).toBe("Eligible for account creation");
   });
 });
@@ -400,7 +403,7 @@ describe("authentication account actor/account filter", () => {
       ],
     };
 
-    expect(authenticationAccountIdentityBoundary(globalAdminAccount)).toEqual({
+    expect(authenticationAccountIdentityBoundary(globalAdminAccount, translateEnglish)).toEqual({
       personBinding: "None — no Person linked",
       tenantActorBindings: "None — no Tenant Actors linked",
       globalActorBindings: "1",
@@ -408,7 +411,7 @@ describe("authentication account actor/account filter", () => {
   });
 
   it("lists exact Tenant Actor boundaries when an account legitimately has Tenant Actors", () => {
-    expect(authenticationAccountIdentityBoundary(personAccount)).toEqual({
+    expect(authenticationAccountIdentityBoundary(personAccount, translateEnglish)).toEqual({
       personBinding: "Bound — Marina Oliveira · global-person-marina",
       tenantActorBindings:
         "2 — Byte 28A Manual Test (tenant-a); default (tenant-b)",
@@ -417,7 +420,7 @@ describe("authentication account actor/account filter", () => {
   });
 
   it("exposes explicit Actor ID and Actor Key labels for manual identity inspection", () => {
-    expect(authenticationActorIdentityRows(personAccount.actors![0])).toEqual([
+    expect(authenticationActorIdentityRows(personAccount.actors![0], translateEnglish)).toEqual([
       { label: "Actor ID", value: "actor-person-a" },
       { label: "Actor Key", value: "person-a" },
     ]);
@@ -426,7 +429,7 @@ describe("authentication account actor/account filter", () => {
       authenticationActorIdentityRows({
         actorId: "global-admin-record",
         actorKey: "bootstrap-admin",
-      }),
+      }, translateEnglish),
     ).toEqual([
       { label: "Actor ID", value: "global-admin-record" },
       { label: "Actor Key", value: "bootstrap-admin" },
@@ -438,7 +441,7 @@ describe("authentication account actor/account filter", () => {
     expect(target?.actorId).toBe("actor-person-a");
     expect(target?.personId).toBe("global-person-marina");
     expect(target?.membershipId).toBe("membership-person-a");
-    expect(authenticationActorTenantLabel(target!)).toBe(
+    expect(authenticationActorTenantLabel(target!, translateEnglish)).toBe(
       "Byte 28A Manual Test (tenant-a)",
     );
     expect(
@@ -448,7 +451,7 @@ describe("authentication account actor/account filter", () => {
         displayName: "Application Administrator",
         scope: "GLOBAL",
         active: true,
-      }),
+      }, translateEnglish),
     ).toBe("Application-wide");
   });
 });

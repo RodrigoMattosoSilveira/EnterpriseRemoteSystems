@@ -27,7 +27,7 @@ import {
 } from "./useCollaborators";
 import { useSettlementPreview } from "./useSettlements";
 import { PageContextHeading, PageTitle } from "../../components/layout/PageHeading";
-import { translateEnglish, type Translate, useI18n } from "../../i18n";
+import { type Translate, useI18n } from "../../i18n";
 
 export function CollaboratorDetailPage() {
   const { t, formatDate, formatCurrency } = useI18n();
@@ -120,7 +120,7 @@ export function CollaboratorDetailPage() {
                 {t("collaborator.journeyTitle")}
               </PageTitle>
               <PageContextHeading>
-                {displayPersonName(collaborator)}
+                {displayPersonName(collaborator, t)}
               </PageContextHeading>
               <p className="mt-1 text-sm text-gray-600">
                 <span className="font-semibold">{t("collaborator.journeyId")}:</span>{" "}
@@ -212,7 +212,7 @@ export function CollaboratorDetailPage() {
             onSaved={(updated) => {
               setEditMode(null);
               setFlash(
-                t("collaborator.updated", { name: displayPersonName(updated) }),
+                t("collaborator.updated", { name: displayPersonName(updated, t) }),
               );
             }}
           />
@@ -225,7 +225,7 @@ export function CollaboratorDetailPage() {
             onSaved={(updated) => {
               setEditMode(null);
               setFlash(
-                t("collaborator.assignmentUpdated", { name: displayPersonName(updated) }),
+                t("collaborator.assignmentUpdated", { name: displayPersonName(updated, t) }),
               );
             }}
           />
@@ -984,7 +984,7 @@ function hasStoredGoldBalanceNote(notes: string) {
 function notesWithCurrentGoldBalance(
   notes: string,
   goldGramBalance: number | undefined,
-  t: Translate = translateEnglish,
+  t: Translate,
 ) {
   if (goldGramBalance === undefined || !Number.isFinite(goldGramBalance)) {
     return notes || t("collaborator.noNotes");
@@ -1073,11 +1073,11 @@ function Info({ label, value }: { label: string; value: string }) {
   );
 }
 
-function displayPersonName(collaborator: Collaborator) {
-  return personDisplayName(collaborator);
+function displayPersonName(collaborator: Collaborator, t: Translate) {
+  return personDisplayName(collaborator, t);
 }
 
-function personDisplayName(collaborator: Collaborator, t: Translate = translateEnglish) {
+function personDisplayName(collaborator: Collaborator, t: Translate) {
   return (
     collaborator.personNickname?.trim() ||
     collaborator.personName?.trim() ||

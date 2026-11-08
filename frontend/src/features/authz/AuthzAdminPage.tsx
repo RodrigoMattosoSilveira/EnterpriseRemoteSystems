@@ -1,4 +1,4 @@
-import { useI18n, type TranslationParameters } from "../../i18n";
+import { SERVER_MESSAGE_LOCALE, useI18n, type TranslationParameters } from "../../i18n";
 import type { TranslationKey } from "../../i18n/resources";
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
@@ -1010,7 +1010,8 @@ type TenantRoleGrantEligibility = {
 // Catalog role metadata is server-provided. Localize known system Role codes
 // only at display boundaries; keep codes, grants, and arbitrary custom text intact.
 function localizedAdminRoleLabel(role: AuthzRole, t: ReturnType<typeof useI18n>["t"], locale: ReturnType<typeof useI18n>["locale"]): string {
-  if (locale === "en-US") return role.label;
+  // The server writes role metadata in SERVER_MESSAGE_LOCALE; every other locale translates known codes.
+  if (locale === SERVER_MESSAGE_LOCALE) return role.label;
   switch (role.code) {
     case "TENANT_ADMIN": return t("byte354b.roles.tenantAdministrator");
     case "TENANT_VIEWER": return t("byte354b.authz.role.tenantViewer");
@@ -1021,7 +1022,7 @@ function localizedAdminRoleLabel(role: AuthzRole, t: ReturnType<typeof useI18n>[
 }
 
 function localizedAdminRoleDescription(role: AuthzRole, t: ReturnType<typeof useI18n>["t"], locale: ReturnType<typeof useI18n>["locale"]): string {
-  if (locale === "en-US") return role.description;
+  if (locale === SERVER_MESSAGE_LOCALE) return role.description;
   return role.code === "TENANT_ADMIN" && role.description === "Tenant administration"
     ? t("byte354b.authz.role.tenantDescription")
     : role.description;

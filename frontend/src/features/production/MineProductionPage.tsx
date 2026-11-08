@@ -132,7 +132,7 @@ export function MineProductionPage() {
                 {workPeriods.map((row) => (
                   <option key={row.id} value={row.id}>
                     {formatDate(row.workDate)} · {row.name} ·{" "}
-                    {humanizePlanningCode(row.status)}
+                    {humanizePlanningCode(row.status, t)}
                   </option>
                 ))}
               </select>

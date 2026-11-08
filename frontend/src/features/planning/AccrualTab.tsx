@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { ApiErrorPanel } from "../../components/ApiErrorPanel";
 import { useAuthorizationContext } from "../../components/layout/AuthorizationContext";
-import { useI18n, translateEnglish, type Translate } from "../../i18n";
+import { useI18n, type Translate } from "../../i18n";
 import type { WorkPeriod } from "../../types/planning";
 import type { ReferenceDataItem } from "../../types/referenceData";
 import type { AccrualItem, AccrualRun } from "../../types/accruals";
@@ -425,7 +425,7 @@ function currentAccountHref(item: AccrualItem) {
   return isAssignmentEarning(item) ? `${base}?filter=earnings` : base;
 }
 
-function ledgerVisibilityLabel(item: AccrualItem, t: Translate = translateEnglish) {
+function ledgerVisibilityLabel(item: AccrualItem, t: Translate) {
   if (item.status === "POSTED") {
     return isAssignmentEarning(item)
       ? t("accrual.postedEarning")

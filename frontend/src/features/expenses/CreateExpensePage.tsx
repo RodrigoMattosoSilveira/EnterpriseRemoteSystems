@@ -19,7 +19,7 @@ import {
 import { CurrentAndFutureEarningsModal } from "./CurrentAndFutureEarningsModal";
 import { PageTitle } from "../../components/layout/PageHeading";
 import { useOptionalAuthorizationContext } from "../../components/layout/AuthorizationContext";
-import { useI18n, translateEnglish, type Translate } from "../../i18n";
+import { useI18n, type Translate } from "../../i18n";
 
 type ExpenseCurrencyCode = "BRL" | "GOLD_GRAM";
 type ExpenseItemType = "CANTEEN" | "ADMINISTRATIVE";
@@ -1066,7 +1066,7 @@ function comparePriceListItems(a: PriceListItem, b: PriceListItem, t: Translate)
   );
 }
 
-function collaboratorLabel(collaborator: Collaborator, t: Translate = translateEnglish) {
+function collaboratorLabel(collaborator: Collaborator, t: Translate) {
   const primary =
     collaborator.personNickname?.trim() ||
     collaborator.personName?.trim() ||
@@ -1082,7 +1082,7 @@ function priceListItemLabel(item: PriceListItem) {
   return `${item.description} · ${item.code}`;
 }
 
-function categoryLabel(value: PriceListItemType, t: Translate = translateEnglish) {
+function categoryLabel(value: PriceListItemType, t: Translate) {
   return value === "ADMINISTRATIVE" ? t("expense.administrative") : t("expense.canteen");
 }
 

@@ -1,5 +1,5 @@
 import type { AppLocale } from "../../i18n";
-import { translateForLocale, type TranslationKey } from "../../i18n";
+import { SERVER_MESSAGE_LOCALE, translateForLocale, type TranslationKey } from "../../i18n";
 import type { AuthzPermission } from "../../types/authz";
 
 // Only the presentation is localized. Permission codes remain server-authoritative.
@@ -50,7 +50,8 @@ const permissionTranslationKeys: Record<string, readonly [TranslationKey, Transl
 
 export function supportAccessPermissionText(locale: AppLocale, permission: AuthzPermission) {
   const keys = permissionTranslationKeys[permission.code];
-  if (locale !== "pt-BR" || !keys) {
+  // The server writes permission text in SERVER_MESSAGE_LOCALE; every other locale uses the catalog.
+  if (locale === SERVER_MESSAGE_LOCALE || !keys) {
     return { label: permission.label || permission.code, description: permission.description };
   }
   return {

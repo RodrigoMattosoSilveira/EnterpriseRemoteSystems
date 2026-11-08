@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { translateEnglish } from "../../i18n";
 import { ApiError } from "../../api/client";
 import {
   loginFailurePresentation,
@@ -85,6 +86,7 @@ describe("loginFailurePresentation", () => {
           code: "invalid_credentials",
           message: "Login or password is invalid",
         }),
+        translateEnglish,
       ),
     ).toEqual({
       code: "invalid_credentials",
@@ -100,6 +102,7 @@ describe("loginFailurePresentation", () => {
           code: "account_operationally_inactive",
           message: "operationally inactive",
         }),
+        translateEnglish,
       ),
     ).toEqual({
       code: "account_operationally_inactive",
@@ -115,6 +118,7 @@ describe("loginFailurePresentation", () => {
           code: "account_security_suspended",
           message: "security suspended",
         }),
+        translateEnglish,
       ),
     ).toEqual({
       code: "account_security_suspended",
@@ -130,6 +134,7 @@ describe("loginFailurePresentation", () => {
           code: "account_inactive",
           message: "The authentication account is inactive",
         }),
+        translateEnglish,
       ),
     ).toEqual({
       code: "account_inactive",
@@ -145,10 +150,34 @@ describe("loginFailurePresentation", () => {
           code: "actor_inactive",
           message: "The authorization actor is inactive",
         }),
+        translateEnglish,
       ),
     ).toEqual({
       code: "actor_inactive",
       message: "Your authorization access is inactive. Contact a Tenant Administrator.",
+    });
+  });
+
+  it("translates an incomplete sign-in request instead of showing server text", () => {
+    expect(
+      loginFailurePresentation(
+        new ApiError({
+          status: 400,
+          code: "validation_failed",
+          message: "Login is required",
+        }),
+        translateEnglish,
+      ),
+    ).toEqual({
+      code: "validation_failed",
+      message: "The sign-in request was incomplete. Enter your login and password again.",
+    });
+  });
+
+  it("never shows raw network or server text for unknown failures", () => {
+    expect(loginFailurePresentation(new TypeError("Failed to fetch"), translateEnglish)).toEqual({
+      code: null,
+      message: "Unable to sign in.",
     });
   });
 });

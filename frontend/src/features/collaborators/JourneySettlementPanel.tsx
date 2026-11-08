@@ -11,7 +11,7 @@ import {
   readSelectedTenantId,
 } from "../../api/tenantSelection";
 import { JourneyDaysRemaining } from "../../components/JourneyDaysRemaining";
-import { useI18n, translateEnglish, type Translate, type TranslationKey } from "../../i18n";
+import { useI18n, type Translate, type TranslationKey } from "../../i18n";
 import type { AuthzActor } from "../../types/authz";
 import type { SettlementPreview, SecondApprovalInput } from "../../types/settlements";
 import { useCurrentAuthzActor, useTenantAuthzActors } from "../authz/useAuthzAdmin";
@@ -946,14 +946,14 @@ function Field({
 }
 const inputClass =
   "rounded-xl border border-gray-300 px-3 py-2 shadow-sm focus:border-gray-900 focus:outline-none focus:ring-2 focus:ring-gray-900/10";
-function actionTitle(action: SensitiveAction, t: Translate = translateEnglish) {
+function actionTitle(action: SensitiveAction, t: Translate) {
   if (action === "ZERO_GOLD") return t("settlement.zeroGold");
   if (action === "PARTIAL_PAYOUT") return t("settlement.partialPayout");
   if (action === "FINAL_TENANT_PAYMENT") return t("settlement.finalTenant");
   if (action === "FINAL_COLLABORATOR_PAYMENT") return t("settlement.finalCollaborator");
   return t("settlement.closeJourney");
 }
-function actionButton(action: SensitiveAction, t: Translate = translateEnglish) {
+function actionButton(action: SensitiveAction, t: Translate) {
   if (action === "ZERO_GOLD") return t("settlement.postGold");
   if (action === "PARTIAL_PAYOUT") return t("settlement.postPayout");
   if (action === "FINAL_TENANT_PAYMENT") return t("settlement.postFinalTenant");
@@ -963,7 +963,7 @@ function actionButton(action: SensitiveAction, t: Translate = translateEnglish) 
 function actionDescription(
   action: SensitiveAction,
   preview: SettlementPreview,
-  t: Translate = translateEnglish,
+  t: Translate,
 ) {
   if (action === "ZERO_GOLD") {
     return t("settlement.action.zeroGoldHelp", {
@@ -975,7 +975,7 @@ function actionDescription(
   if (action === "FINAL_COLLABORATOR_PAYMENT") return t("settlement.action.finalCollaboratorHelp");
   return t("settlement.action.closeHelp");
 }
-function formatReason(value: string, t: Translate = translateEnglish) {
+function formatReason(value: string, t: Translate) {
   if (value === "NON_ZERO_BALANCE") return t("settlement.blocker.nonZeroBalance");
   return value.toLowerCase().replaceAll("_", " ");
 }
