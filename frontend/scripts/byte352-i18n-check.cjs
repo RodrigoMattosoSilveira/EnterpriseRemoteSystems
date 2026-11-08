@@ -99,6 +99,7 @@ function backendErrorCodes(root = backendRoot) {
 const UNCODED_FIELD_ERROR = [
   /ValidationError\{\s*Fields:\s*map\[string\]string\{/,
   /\bfields\[[^\]]+\]\s*=\s*"/,
+  /\bNewValidationError\(map\[string\]string\{/,
 ];
 function uncodedFieldErrors(root = backendRoot) {
   if (!fs.existsSync(root)) return [];

@@ -2588,6 +2588,28 @@ export const enUSMessages = {
   "apiField.token": "Reset token",
   "apiField.accountId": "Authentication Account",
   "apiField.reviewerActorId": "Reviewer",
+
+  // Bite 34.1 (#1056) — Authorization (Actors, Role grants, Support Access Leases).
+  "apiError.rule.actor_not_in_tenant": "The Actor must belong to the selected Tenant",
+  "apiError.rule.role_not_delegable": "Tenant Administrators can grant only Tenant Administrator, Entity Executive, Earnings Operator or Expenses Operator",
+  "apiError.rule.grant_not_revocable": "Tenant Administrators can revoke only Tenant Administrator, Entity Executive, Earnings Operator or Expenses Operator grants in their Tenant",
+  "apiError.rule.actor_not_eligible": "The Actor must be active and have an active Membership in this Tenant",
+  "apiError.rule.last_application_admin": "At least one active Application Administrator must remain",
+  "apiError.rule.role_not_grantable": "This Role cannot be granted",
+  "apiError.rule.application_role_scope": "Application Roles must use the global scope",
+  "apiError.rule.actor_scope_mismatch": "This Role cannot be granted to this kind of Actor",
+  "apiError.rule.cross_tenant_role_conflict": "This Person has one or more Roles in another Tenant. They must work with that Tenant to have every Role other than Membership and Collaborator removed before a Role can be assigned here.",
+  "apiError.rule.tenant_admin_limit": "This Tenant already has the maximum of two active Tenant Administrators",
+  "apiError.rule.tenant_admin_distinct_persons": "The two Tenant Administrator slots must belong to different Persons",
+  "apiError.rule.person_administers_other_tenant": "This Person already administers another Tenant; a Person may administer only one Tenant",
+  "apiError.rule.must_be_future": "Must be in the future",
+  "apiError.rule.permission_not_eligible": "One of the selected permissions is not available for Tenant Support Access",
+  "apiError.rule.permissions_required": "Select at least one support permission",
+  "apiField.grantId": "Role grant",
+  "apiField.roleCode": "Role",
+  "apiField.leaseId": "Support Access Lease",
+  "apiField.expiresAt": "Expiration",
+  "apiField.permissions": "Permissions",
 } as const;
 
 export type TranslationKey = keyof typeof enUSMessages;
