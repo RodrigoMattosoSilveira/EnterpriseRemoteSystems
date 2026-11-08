@@ -486,9 +486,9 @@ export function PlanTab(props: {
                     <td className="px-2 py-3 text-right align-top">
                       <label className="inline-flex items-center justify-end">
                         <span className="sr-only">
-                          {row.selected
-                            ? `Unselect ${row.collaboratorNickname || row.collaboratorName || row.collaboratorId}`
-                            : `Select ${row.collaboratorNickname || row.collaboratorName || row.collaboratorId}`}
+                          {t(row.selected ? "planning.unselectCollaborator" : "planning.selectCollaborator", {
+                            name: row.collaboratorNickname || row.collaboratorName || row.collaboratorId,
+                          })}
                         </span>
                         <input
                           type="checkbox"

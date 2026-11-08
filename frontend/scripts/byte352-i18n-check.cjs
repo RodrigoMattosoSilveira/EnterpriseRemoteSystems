@@ -5,6 +5,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const ts = require('typescript');
+const uiLiterals = require('./i18n-ui-literals.cjs');
 const sourceRoot = path.resolve(__dirname, '..', 'src');
 const intentionalIdentifiers = new Set([
   'CPF', 'CPF:', 'RG:', 'ID', 'BRL', 'g', '×', 'Pará',
@@ -163,6 +164,11 @@ function inspect() {
   for (const item of uncodedFieldErrors()) failures.push('backend field error without a rule code: '+item);
   const rules = missingBackendRuleKeys(en);
   for (const item of rules.missing) failures.push('backend rule code without apiError.rule translation: '+item);
+  // Bite 34.1: broader scan of every frontend source file (see i18n-ui-literals.cjs).
+  const uiFindings = uiLiterals.scanSource(sourceRoot);
+  const ui = uiLiterals.applyExceptions(uiFindings, uiLiterals.readExceptions());
+  for (const item of ui.untranslated) failures.push(`untranslated UI text: ${item.file}:${item.line} ${item.category} "${item.text}"`);
+  for (const problem of ui.problems) failures.push('i18n-exceptions.json: '+problem);
   for(const key of en.keys()) if(!pt.has(key)) failures.push('pt-BR missing '+key);
   for(const key of pt.keys()) if(!en.has(key)) failures.push('en-US missing '+key);
   const params = s => [...new Set([...s.matchAll(/\{([a-zA-Z_][a-zA-Z_0-9]*)\}/g)].map(x=>x[1]))].sort().join(',');
@@ -184,18 +190,20 @@ function inspect() {
   const pending=[];
   const coveredSet=new Set(covered);
   for(const file of walk(sourceRoot)) if(!coveredSet.has(path.relative(sourceRoot,file))) pending.push(...jsxLiteralFindings(file));
-  return {failures, entries:en.size, guarded:covered.length, pending, backendCodes:backend.checked, backendRules:rules.checked};
+  return {failures, entries:en.size, guarded:covered.length, pending, backendCodes:backend.checked, backendRules:rules.checked,
+    uiFindings:uiFindings.length, uiUntranslated:ui.untranslated.length};
 }
 if (require.main === module) {
   try {
     const result=inspect();
     console.log(`Translation keys: ${result.entries}; guarded files: ${result.guarded}; backend error codes checked: ${result.backendCodes}; field rule codes checked: ${result.backendRules}`);
     console.log(`Remaining untranslated JSX/attribute literals elsewhere: ${result.pending.length}`);
+    console.log(`UI text scan: ${result.uiFindings} candidate literals, ${result.uiUntranslated} not translated and not excepted`);
     if(process.argv.includes('--report')) for(const item of result.pending) console.log('PENDING: '+item);
     if(process.argv.includes('--require-complete') && result.pending.length) result.failures.push(`${result.pending.length} unconverted JSX/attribute literals remain`);
     for(const issue of result.failures) console.error('FAIL: '+issue);
     if(result.failures.length) process.exitCode=1;
-    else console.log('PASS: catalog parity and static JSX text gate (runtime/manual acceptance remains separate)');
+    else console.log('PASS: catalog parity, backend codes and UI text scan (runtime/manual acceptance remains separate)');
   }catch(err){console.error('FAIL:',err.message);process.exitCode=1;}
 }
 module.exports={readResource,jsxLiteralFindings,inspect,backendErrorCodes,missingBackendErrorCodeKeys,uncodedFieldErrors,backendRuleCodes,missingBackendRuleKeys};
