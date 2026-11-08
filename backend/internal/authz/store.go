@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"enterpriseremotesystems/backend/internal/shared/fielderrors"
 	"gorm.io/gorm"
 )
 
@@ -517,14 +518,14 @@ func ValidateDelegatedRoleGrant(database *gorm.DB, actorID string, role AuthzRol
 	actorID = strings.TrimSpace(actorID)
 	tenantID = strings.TrimSpace(tenantID)
 	if actorID == "" {
-		return NewValidationError(map[string]string{"actorId": "Actor ID is required"})
+		return newFieldError("actorId", fielderrors.Required, "Actor ID is required")
 	}
 	if role.Code == string(RolePerson) || role.ScopeType == string(ActorScopeSelf) {
-		return NewValidationError(map[string]string{"roleCode": "Self-service authorization is intrinsic and cannot be granted as a Role"})
+		return newFieldError("roleCode", RuleRoleNotGrantable, "Self-service authorization is intrinsic and cannot be granted as a Role")
 	}
 	if role.ScopeType == string(ActorScopeApplication) {
 		if tenantID != GlobalTenantScope {
-			return NewValidationError(map[string]string{"tenantId": "Application-scoped roles must use the global tenant scope (*)"})
+			return newFieldError("tenantId", RuleApplicationRoleScope, "Application-scoped roles must use the global tenant scope (*)")
 		}
 		if database != nil && database.Migrator().HasTable("auth_account_actors") {
 			var tenantBindings int64
@@ -532,7 +533,7 @@ func ValidateDelegatedRoleGrant(database *gorm.DB, actorID string, role AuthzRol
 				return fmt.Errorf("check application Actor scope: %w", err)
 			}
 			if tenantBindings > 0 {
-				return NewValidationError(map[string]string{"actorId": "Application roles cannot be granted to a tenant Actor"})
+				return newFieldError("actorId", RuleActorScopeMismatch, "Application roles cannot be granted to a tenant Actor")
 			}
 			if requireTenantBinding {
 				var globalBindings int64
@@ -540,17 +541,17 @@ func ValidateDelegatedRoleGrant(database *gorm.DB, actorID string, role AuthzRol
 					return fmt.Errorf("check application Actor AccountActor binding: %w", err)
 				}
 				if globalBindings == 0 {
-					return NewValidationError(map[string]string{"actorId": "Application roles require a GLOBAL Actor owned by an Authentication Account"})
+					return newFieldError("actorId", RuleActorScopeMismatch, "Application roles require a GLOBAL Actor owned by an Authentication Account")
 				}
 			}
 		}
 		return nil
 	}
 	if role.ScopeType != string(ActorScopeTenant) {
-		return NewValidationError(map[string]string{"roleCode": "Only tenant or application delegated Roles are supported"})
+		return newFieldError("roleCode", RuleRoleNotGrantable, "Only tenant or application delegated Roles are supported")
 	}
 	if tenantID == "" || tenantID == GlobalTenantScope {
-		return NewValidationError(map[string]string{"tenantId": "Tenant roles require a specific tenant ID"})
+		return newFieldError("tenantId", RuleTenantSelectionRequired, "Tenant roles require a specific tenant ID")
 	}
 	if requireTenantBinding && database != nil && database.Migrator().HasTable("auth_account_actors") {
 		type bindingProjection struct {
@@ -567,10 +568,10 @@ func ValidateDelegatedRoleGrant(database *gorm.DB, actorID string, role AuthzRol
 			return fmt.Errorf("check tenant Actor binding: %w", result.Error)
 		}
 		if result.RowsAffected == 0 {
-			return NewValidationError(map[string]string{"actorId": "Tenant roles require an Actor bound to the target tenant"})
+			return newFieldError("actorId", RuleActorNotInTenant, "Tenant roles require an Actor bound to the target tenant")
 		}
 		if binding.ScopeType != "TENANT" || binding.TenantID == nil || strings.TrimSpace(*binding.TenantID) != tenantID {
-			return NewValidationError(map[string]string{"tenantId": "Tenant Role Grant must match the Actor's tenant"})
+			return newFieldError("tenantId", RuleActorNotInTenant, "Tenant Role Grant must match the Actor's tenant")
 		}
 	}
 
@@ -616,9 +617,7 @@ func validateCrossTenantDelegatedRoleIsolation(database *gorm.DB, actorID string
 	if !conflict {
 		return nil
 	}
-	return NewValidationError(map[string]string{
-		"roleCode": CrossTenantRoleConflictMessage,
-	})
+	return newFieldError("roleCode", RuleCrossTenantRoleConflict, CrossTenantRoleConflictMessage)
 }
 
 func delegatedRoleGlobalPersonID(database *gorm.DB, actorID string, tenantID string) (string, error) {
@@ -722,9 +721,7 @@ func validateTenantAdministratorCardinality(database *gorm.DB, actorID string, t
 		return fmt.Errorf("count Tenant Administrators: %w", err)
 	}
 	if otherTenantAdmins >= 2 {
-		return NewValidationError(map[string]string{
-			"tenantId": "Tenant already has the maximum of two active Tenant Administrators",
-		})
+		return newFieldError("tenantId", RuleTenantAdminLimit, "Tenant already has the maximum of two active Tenant Administrators")
 	}
 
 	var samePersonSameTenant int64
@@ -736,9 +733,7 @@ func validateTenantAdministratorCardinality(database *gorm.DB, actorID string, t
 		return fmt.Errorf("check Tenant Administrator global Person uniqueness: %w", err)
 	}
 	if samePersonSameTenant > 0 {
-		return NewValidationError(map[string]string{
-			"actorId": "Tenant Administrator slots must belong to two distinct Persons",
-		})
+		return newFieldError("actorId", RuleTenantAdminDistinctPersons, "Tenant Administrator slots must belong to two distinct Persons")
 	}
 
 	var otherTenantID string
@@ -754,9 +749,8 @@ func validateTenantAdministratorCardinality(database *gorm.DB, actorID string, t
 		return fmt.Errorf("check cross-tenant Tenant Administrator Person cardinality: %w", result.Error)
 	}
 	if strings.TrimSpace(otherTenantID) != "" {
-		return NewValidationError(map[string]string{
-			"actorId": fmt.Sprintf("Person already administers tenant %s; a Person may administer only one Tenant at a time", otherTenantID),
-		})
+		return newFieldError("actorId", RulePersonAdministersOtherTenant,
+			fmt.Sprintf("Person already administers tenant %s; a Person may administer only one Tenant at a time", otherTenantID))
 	}
 
 	return nil
@@ -787,16 +781,14 @@ func tenantAdministratorGlobalPersonID(database *gorm.DB, actorID string, tenant
 			return globalPersonID, nil
 		}
 		if requireTenantBinding {
-			return "", NewValidationError(map[string]string{
-				"actorId": "Tenant Administrator authority requires a tenant Actor bound to a canonical Person Membership",
-			})
+			return "", newFieldError("actorId", RuleActorNotEligible,
+				"Tenant Administrator authority requires a tenant Actor bound to a canonical Person Membership")
 		}
 	}
 
 	if requireTenantBinding {
-		return "", NewValidationError(map[string]string{
-			"actorId": "Tenant Administrator authority requires the Account/Actor and Person Membership foundation",
-		})
+		return "", newFieldError("actorId", RuleActorNotEligible,
+			"Tenant Administrator authority requires the Account/Actor and Person Membership foundation")
 	}
 
 	// Internal seed/test callers that do not require a canonical binding cannot

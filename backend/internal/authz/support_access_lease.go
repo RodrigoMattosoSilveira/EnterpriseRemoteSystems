@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"enterpriseremotesystems/backend/internal/shared/fielderrors"
 	"enterpriseremotesystems/backend/internal/shared/ids"
 	"gorm.io/gorm"
 )
@@ -147,7 +148,7 @@ func (s *GORMStore) ListSupportAccessLeaseAuditLogs(ctx context.Context, actor *
 	}
 	leaseID = strings.TrimSpace(leaseID)
 	if leaseID == "" {
-		return nil, NewValidationError(map[string]string{"leaseId": "Lease ID is required"})
+		return nil, newFieldError("leaseId", fielderrors.Required, "Lease ID is required")
 	}
 	var lease TenantSupportAccessLease
 	if err := s.database.WithContext(ctx).Where("id = ?", leaseID).First(&lease).Error; err != nil {
@@ -197,24 +198,21 @@ func (s *GORMStore) CreateSupportAccessLease(ctx context.Context, actor *Actor, 
 
 	tenantID := strings.TrimSpace(req.TenantID)
 	reason := strings.TrimSpace(req.Reason)
-	fields := map[string]string{}
+	errs := fielderrors.New()
 	if tenantID == "" || tenantID == GlobalTenantScope {
-		fields["tenantId"] = "A specific Tenant is required"
+		errs.Add("tenantId", RuleTenantSelectionRequired, "A specific Tenant is required")
 	}
 	if reason == "" {
-		fields["reason"] = "Support reason is required"
+		errs.Add("reason", fielderrors.Required, "Support reason is required")
 	}
 	expiresAt, err := time.Parse(time.RFC3339, strings.TrimSpace(req.ExpiresAt))
 	if err != nil {
-		fields["expiresAt"] = "Expiration must be an RFC3339 timestamp"
+		errs.Add("expiresAt", RuleInvalidTime, "Expiration must be an RFC3339 timestamp")
 	} else if !expiresAt.After(time.Now().UTC()) {
-		fields["expiresAt"] = "Expiration must be in the future"
+		errs.Add("expiresAt", RuleMustBeFuture, "Expiration must be in the future")
 	}
-	permissions, permissionFields := normalizeSupportAccessLeasePermissions(req.Permissions)
-	for key, value := range permissionFields {
-		fields[key] = value
-	}
-	if err := NewValidationError(fields); err != nil {
+	permissions := normalizeSupportAccessLeasePermissions(req.Permissions, errs)
+	if err := newFieldErrors(errs); err != nil {
 		return SupportAccessLeaseResponse{}, err
 	}
 
@@ -227,7 +225,7 @@ func (s *GORMStore) CreateSupportAccessLease(ctx context.Context, actor *Actor, 
 			return fmt.Errorf("validate support lease Tenant: %w", err)
 		}
 		if tenantCount != 1 {
-			return NewValidationError(map[string]string{"tenantId": "Tenant must exist and be active"})
+			return newFieldError("tenantId", RuleTenantNotActive, "Tenant must exist and be active")
 		}
 
 		var openCount int64
@@ -326,7 +324,7 @@ func (s *GORMStore) ListSupportAccessLeases(ctx context.Context, actor *Actor, f
 			SupportAccessLeaseStatusApproved,
 		}, now)
 	default:
-		return nil, NewValidationError(map[string]string{"status": "Status must be PENDING, APPROVED, TERMINATED, or EXPIRED"})
+		return nil, newFieldError("status", RuleUnknownStatus, "Status must be PENDING, APPROVED, TERMINATED, or EXPIRED")
 	}
 
 	var rows []TenantSupportAccessLease
@@ -367,7 +365,7 @@ func (s *GORMStore) transitionSupportAccessLease(ctx context.Context, actor *Act
 		return SupportAccessLeaseResponse{}, ErrForbidden
 	}
 	if leaseID == "" {
-		return SupportAccessLeaseResponse{}, NewValidationError(map[string]string{"leaseId": "Lease ID is required"})
+		return SupportAccessLeaseResponse{}, newFieldError("leaseId", fielderrors.Required, "Lease ID is required")
 	}
 
 	now := time.Now().UTC()
@@ -394,7 +392,7 @@ func (s *GORMStore) transitionSupportAccessLease(ctx context.Context, actor *Act
 				return fmt.Errorf("validate support lease Tenant for approval: %w", err)
 			}
 			if tenantCount != 1 {
-				return NewValidationError(map[string]string{"tenantId": "Tenant must be active before support access can be approved"})
+				return newFieldError("tenantId", RuleTenantNotActive, "Tenant must be active before support access can be approved")
 			}
 			if lease.Status != SupportAccessLeaseStatusPending {
 				return ErrSupportAccessLeaseInvalidState
@@ -478,18 +476,19 @@ func (s *GORMStore) findActiveSupportAccessLease(ctx context.Context, applicatio
 	return &activeSupportAccessLease{ID: lease.ID, TenantID: lease.TenantID, ExpiresAt: lease.ExpiresAt, Permissions: permissions}, nil
 }
 
-func normalizeSupportAccessLeasePermissions(raw []string) ([]Permission, map[string]string) {
+func normalizeSupportAccessLeasePermissions(raw []string, errs *fielderrors.Collector) []Permission {
 	allowed := supportAccessLeasePermissionSet()
 	seen := map[Permission]struct{}{}
 	permissions := make([]Permission, 0, len(raw))
-	fields := map[string]string{}
+	ineligible := false
 	for _, value := range raw {
 		permission := Permission(strings.TrimSpace(value))
 		if permission == "" {
 			continue
 		}
 		if _, ok := allowed[permission]; !ok {
-			fields["permissions"] = fmt.Sprintf("Permission %q is not eligible for Tenant Support Access", permission)
+			errs.Add("permissions", RulePermissionNotEligible, fmt.Sprintf("Permission %q is not eligible for Tenant Support Access", permission))
+			ineligible = true
 			continue
 		}
 		if _, duplicate := seen[permission]; duplicate {
@@ -498,11 +497,11 @@ func normalizeSupportAccessLeasePermissions(raw []string) ([]Permission, map[str
 		seen[permission] = struct{}{}
 		permissions = append(permissions, permission)
 	}
-	if len(permissions) == 0 && fields["permissions"] == "" {
-		fields["permissions"] = "At least one Tenant support permission is required"
+	if len(permissions) == 0 && !ineligible {
+		errs.Add("permissions", RulePermissionsRequired, "At least one Tenant support permission is required")
 	}
 	sort.Slice(permissions, func(i, j int) bool { return permissions[i] < permissions[j] })
-	return permissions, fields
+	return permissions
 }
 
 func permissionSliceToSet(permissions []Permission) map[Permission]struct{} {
