@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { translateEnglish } from "../i18n";
 import { describeRouteError } from "./routeErrorPresentation";
 
 describe("describeRouteError", () => {
@@ -9,7 +10,7 @@ describe("describeRouteError", () => {
         statusText: "Forbidden",
         internal: false,
         data: null,
-      }),
+      }, translateEnglish),
     ).toEqual({
       title: "Access denied",
       message:
@@ -22,7 +23,7 @@ describe("describeRouteError", () => {
       describeRouteError({
         code: "forbidden",
         message: "Forbidden",
-      }),
+      }, translateEnglish),
     ).toEqual({
       title: "Access denied",
       message:
@@ -37,7 +38,7 @@ describe("describeRouteError", () => {
         statusText: "Not Found",
         internal: true,
         data: null,
-      }),
+      }, translateEnglish),
     ).toEqual({
       title: "Page not found",
       message: "The requested page could not be found.",
@@ -49,7 +50,7 @@ describe("describeRouteError", () => {
       describeRouteError({
         code: "authentication_required",
         message: "An authenticated session is required",
-      }),
+      }, translateEnglish),
     ).toEqual({
       title: "Authentication required",
       message: "Sign in with an authorized account to access this page.",
@@ -57,7 +58,7 @@ describe("describeRouteError", () => {
   });
 
   it("does not expose an unknown thrown value as raw JSON", () => {
-    expect(describeRouteError({ unexpected: true })).toEqual({
+    expect(describeRouteError({ unexpected: true }, translateEnglish)).toEqual({
       title: "Something went wrong",
       message: "An unexpected error occurred.",
     });

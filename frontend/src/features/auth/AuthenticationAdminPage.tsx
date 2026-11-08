@@ -16,7 +16,7 @@ import type { Collaborator } from "../../types/collaborators";
 import type { Person } from "../../types/people";
 import { ReactivationRequestsPanel } from "./ReactivationRequestsPanel";
 import { PageTitle } from "../../components/layout/PageHeading";
-import { translateEnglish, useI18n, type Translate } from "../../i18n";
+import { useI18n, type Translate } from "../../i18n";
 
 export function activeAuthenticationGrants(
   actor: AuthzActor,
@@ -120,7 +120,7 @@ export function authenticationAccountForPerson(
 export function authenticationCollaboratorStatusLabel(
   actor: AuthzActor | undefined,
   account: AuthAccount | undefined,
-  t: Translate = translateEnglish,
+  t: Translate,
 ): string {
   if (!actor) return t("admin.authentication.helper.noAuthorizationActor");
   if (account) {
@@ -191,7 +191,7 @@ export function authenticationAccountPersonTarget(
   );
 }
 
-export function authenticationActorTenantLabel(actor: AuthAccountActor, t: Translate = translateEnglish): string {
+export function authenticationActorTenantLabel(actor: AuthAccountActor, t: Translate): string {
   if (actor.scope === "GLOBAL") return t("admin.authentication.scope.applicationWide");
   const tenantName = actor.tenantName?.trim();
   const tenantId = actor.tenantId?.trim();
@@ -203,7 +203,7 @@ export function authenticationActorTenantLabel(actor: AuthAccountActor, t: Trans
 
 export function authenticationActorIdentityRows(
   actor: Pick<AuthAccountActor, "actorId" | "actorKey">,
-  t: Translate = translateEnglish,
+  t: Translate,
 ): Array<{ label: string; value: string }> {
   return [
     { label: t("common.actorId"), value: actor.actorId },
@@ -219,7 +219,7 @@ export type AuthenticationAccountIdentityBoundary = {
 
 export function authenticationAccountIdentityBoundary(
   account: AuthAccount,
-  t: Translate = translateEnglish,
+  t: Translate,
 ): AuthenticationAccountIdentityBoundary {
   const actors = account.actors ?? [];
   const tenantActors = actors.filter((actor) => actor.scope === "TENANT");

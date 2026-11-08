@@ -6,7 +6,7 @@ import type { Expense } from "../../types/expenses";
 import { receiptStatusLabel, receiptStatusTone } from "../receipts/receiptLifecycle";
 import { useCancelExpense, useExpense } from "./useExpenses";
 import { PageContextHeading, PageTitle } from "../../components/layout/PageHeading";
-import { useI18n, translateEnglish, type Translate } from "../../i18n";
+import { useI18n, type Translate } from "../../i18n";
 
 // Stable post-Bite-30 reconciliation evidence marker: Incorrect Expenses are not edited in place.
 export function ExpenseDetailPage() {
@@ -356,7 +356,7 @@ function formatExpenseAmount(expense: Expense, formatCurrency: (value: number, c
   return formatCurrency(amount, "BRL");
 }
 
-function displayExpenseCategory(expense: Expense, t: Translate = translateEnglish) {
+function displayExpenseCategory(expense: Expense, t: Translate) {
   if (expense.itemType === "CANTEEN") {
     return t("expense.canteen");
   }
@@ -379,7 +379,7 @@ function hasAuditSnapshot(expense: Expense) {
   return Boolean(expense.calculationMethod || expense.itemDescription || expense.quantity);
 }
 
-function formatCalculationMethod(value: string | undefined, t: Translate = translateEnglish) {
+function formatCalculationMethod(value: string | undefined, t: Translate) {
   if (value === "BRL_PRICE_LIST") return t("expense.methodBRL");
   if (value === "BRL_TO_GOLD_GRAM_LATEST_PRICE") return t("expense.methodGold");
   if (value === "LEGACY_DIRECT_ENTRY") return t("expense.legacyDirect");
@@ -409,7 +409,7 @@ function formatPostingAmount(value: number, unit: string | undefined, formatCurr
   return formatCurrency(value, "BRL");
 }
 
-function formatGoldPriceSource(expense: Expense, formatCurrency: (value: number, currency: string) => string, t: Translate = translateEnglish) {
+function formatGoldPriceSource(expense: Expense, formatCurrency: (value: number, currency: string) => string, t: Translate) {
   if (!expense.goldBrlPerGram) {
     return "—";
   }

@@ -5,7 +5,7 @@ import { ApiError } from "../../api/client";
 import { requestAccountReactivation } from "../../api/auth.api";
 import { authenticate } from "../../app/authStore";
 import { useAuthState } from "../../app/useAuth";
-import { useI18n, translateEnglish, type Translate } from "../../i18n";
+import { useI18n, type Translate } from "../../i18n";
 import { AuthCard, AuthField, primaryButtonClass } from "./AuthCard";
 
 export default function LoginPage() {
@@ -185,7 +185,7 @@ export function loginRequestFromForm(
   };
 }
 
-export function loginFailurePresentation(cause: unknown, t: Translate = translateEnglish): {
+export function loginFailurePresentation(cause: unknown, t: Translate): {
   code: string | null;
   message: string;
 } {
@@ -217,11 +217,15 @@ export function loginFailurePresentation(cause: unknown, t: Translate = translat
     if (cause.status === 401) {
       return { code: cause.code ?? null, message: t("auth.error.invalidCredentials") };
     }
+    if (cause.status === 400) {
+      return { code: cause.code ?? null, message: t("auth.error.validationFailed") };
+    }
   }
 
+  // Server and network messages are English-only; show the translated generic failure instead.
   return {
     code: null,
-    message: cause instanceof Error ? cause.message : t("auth.error.unableSignIn"),
+    message: t("auth.error.unableSignIn"),
   };
 }
 

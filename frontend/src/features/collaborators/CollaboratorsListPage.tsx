@@ -10,7 +10,7 @@ import {
   useSelfCollaboratorJourneys,
 } from "./useCollaborators";
 import { PageTitle } from "../../components/layout/PageHeading";
-import { translateEnglish, type Translate, useI18n } from "../../i18n";
+import { type Translate, useI18n } from "../../i18n";
 
 export function CollaboratorsListPage() {
   const { t } = useI18n();
@@ -38,9 +38,10 @@ export function CollaboratorsListPage() {
       }
       return sortCollaborators(
         hasSearch ? searchResult?.items ?? [] : allCollaborators,
+        t,
       );
     },
-    [allCollaborators, hasSearch, searchResult?.items, selfMode, selfQuery.data],
+    [allCollaborators, hasSearch, searchResult?.items, selfMode, selfQuery.data, t],
   );
   const total = selfMode
     ? selfQuery.data?.length ?? 0
@@ -324,11 +325,11 @@ const collaboratorNameCollator = new Intl.Collator(undefined, {
   numeric: true,
 });
 
-function sortCollaborators(collaborators: Collaborator[]) {
+function sortCollaborators(collaborators: Collaborator[], t: Translate) {
   return [...collaborators].sort((left, right) => {
     const displayComparison = collaboratorNameCollator.compare(
-      personDisplayName(left),
-      personDisplayName(right),
+      personDisplayName(left, t),
+      personDisplayName(right, t),
     );
     if (displayComparison !== 0) return displayComparison;
 
@@ -398,7 +399,7 @@ function CollaboratorCard({
 
 function personDisplayName(
   collaborator: Collaborator,
-  t: Translate = translateEnglish,
+  t: Translate,
 ) {
   return (
     collaborator.personNickname?.trim() ||
