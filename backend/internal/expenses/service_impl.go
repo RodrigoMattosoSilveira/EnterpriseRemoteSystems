@@ -85,14 +85,14 @@ func (s *service) Create(ctx context.Context, req CreateExpenseRequest, actorUse
 			return nil, err
 		}
 		if source.Active || source.CancelledAt == nil {
-			return nil, ValidationError{Fields: map[string]string{"recreatedFromExpenseId": "Source expense must be cancelled before it can be recreated"}}
+			return nil, fieldError("recreatedFromExpenseId", RuleSourceNotCancelled, "Source expense must be cancelled before it can be recreated")
 		}
 		alreadyRecreated, err := s.repo.ExistsRecreationFromExpenseID(ctx, sourceID)
 		if err != nil {
 			return nil, err
 		}
 		if alreadyRecreated {
-			return nil, ValidationError{Fields: map[string]string{"recreatedFromExpenseId": "Cancelled source expense has already been recreated"}}
+			return nil, fieldError("recreatedFromExpenseId", RuleSourceAlreadyRecreated, "Cancelled source expense has already been recreated")
 		}
 		recreatedFromExpenseID = &sourceID
 	}
@@ -129,22 +129,22 @@ func (s *service) Create(ctx context.Context, req CreateExpenseRequest, actorUse
 }
 
 func (s *service) CreateCanteenBatch(ctx context.Context, req CreateCanteenExpenseBatchRequest, actorUserID string) (*CreateCanteenExpenseBatchResult, error) {
-	fields := map[string]string{}
-	requireString(fields, "collaboratorId", req.CollaboratorID)
-	requireString(fields, "expenseDate", req.ExpenseDate)
+	errs := newFieldErrors()
+	requireString(errs, "collaboratorId", req.CollaboratorID)
+	requireString(errs, "expenseDate", req.ExpenseDate)
 	if strings.TrimSpace(req.ExpenseDate) != "" {
 		if _, err := parseExpenseDate(req.ExpenseDate); err != nil {
-			fields["expenseDate"] = "Expense date must be YYYY-MM-DD"
+			errs.add("expenseDate", RuleInvalidDate, "Expense date must be YYYY-MM-DD")
 		}
 	}
 	if len(req.Items) == 0 {
-		fields["items"] = "At least one Canteen item is required"
+		errs.add("items", RuleItemsRequired, "At least one Canteen item is required")
 	}
 	if len(req.Items) > 100 {
-		fields["items"] = "No more than 100 Canteen items may be recorded at once"
+		errs.add("items", RuleTooManyItems, "No more than 100 Canteen items may be recorded at once")
 	}
-	if len(fields) > 0 {
-		return nil, ValidationError{Fields: fields}
+	if err := errs.err(); err != nil {
+		return nil, err
 	}
 
 	expenseDate, err := parseExpenseDate(req.ExpenseDate)
@@ -185,9 +185,11 @@ func (s *service) CreateCanteenBatch(ctx context.Context, req CreateCanteenExpen
 			return nil, prefixBatchItemValidationError(err, index)
 		}
 		if expense.ItemType != itemTypeCanteen {
-			return nil, ValidationError{Fields: map[string]string{
-				batchItemField(index, "priceListItemId"): "Only active Canteen price-list items may be recorded in a Canteen batch",
-			}}
+			return nil, fieldError(
+				batchItemField(index, "priceListItemId"),
+				RuleCanteenItemRequired,
+				"Only active Canteen price-list items may be recorded in a Canteen batch",
+			)
 		}
 		expenses = append(expenses, expense)
 	}
@@ -216,15 +218,20 @@ func prefixBatchItemValidationError(err error, index int) error {
 		return err
 	}
 	fields := make(map[string]string, len(validationErr.Fields))
+	codes := make(map[string]string, len(validationErr.Codes))
 	for field, message := range validationErr.Fields {
+		target := field
 		switch field {
 		case "collaboratorId", "expenseDate":
-			fields[field] = message
 		default:
-			fields[batchItemField(index, field)] = message
+			target = batchItemField(index, field)
+		}
+		fields[target] = message
+		if code, ok := validationErr.Codes[field]; ok {
+			codes[target] = code
 		}
 	}
-	return ValidationError{Fields: fields}
+	return ValidationError{Fields: fields, Codes: codes}
 }
 
 func (s *service) GetByID(ctx context.Context, id string) (*ExpenseDTO, error) {
@@ -245,7 +252,7 @@ func (s *service) Update(ctx context.Context, id string, req UpdateExpenseReques
 		return nil, err
 	}
 	if !existing.Active {
-		return nil, ValidationError{Fields: map[string]string{"id": "Inactive expenses cannot be updated"}}
+		return nil, fieldError("id", RuleInactiveExpenseNotEditable, "Inactive expenses cannot be updated")
 	}
 
 	expenseDate, err := parseExpenseDate(req.ExpenseDate)
@@ -286,7 +293,7 @@ func (s *service) Update(ctx context.Context, id string, req UpdateExpenseReques
 func (s *service) Cancel(ctx context.Context, id string, req CancelExpenseRequest, actorUserID string) (*ExpenseDTO, error) {
 	reason := strings.TrimSpace(req.Reason)
 	if reason == "" {
-		return nil, ValidationError{Fields: map[string]string{"reason": "Cancellation reason is required"}}
+		return nil, fieldError("reason", RuleRequired, "Cancellation reason is required")
 	}
 
 	existing, err := s.repo.FindByID(ctx, id)
@@ -297,7 +304,7 @@ func (s *service) Cancel(ctx context.Context, id string, req CancelExpenseReques
 		if existing.CancelledAt != nil {
 			return s.expenseDTOWithPosting(ctx, *existing)
 		}
-		return nil, ValidationError{Fields: map[string]string{"id": "Inactive expense cannot be cancelled"}}
+		return nil, fieldError("id", RuleInactiveExpenseNotCancellable, "Inactive expense cannot be cancelled")
 	}
 
 	now := time.Now().UTC()
@@ -401,7 +408,7 @@ func (s *service) applyPriceListCalculation(ctx context.Context, expense *db.Exp
 	item, err := s.repo.FindActivePriceListItemByID(ctx, strings.TrimSpace(priceListItemID))
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return ValidationError{Fields: map[string]string{"priceListItemId": "Price list item must be active"}}
+			return fieldError("priceListItemId", RulePriceListItemInactive, "Price list item must be active")
 		}
 		return err
 	}
@@ -434,7 +441,7 @@ func (s *service) applyPriceListCalculation(ctx context.Context, expense *db.Exp
 		goldPrice, err := s.repo.FindLatestActiveGoldPrice(ctx)
 		if err != nil {
 			if errors.Is(err, gorm.ErrRecordNotFound) {
-				return ValidationError{Fields: map[string]string{"currencyCode": "A current gold price is required for GOLD_GRAM expenses"}}
+				return fieldError("currencyCode", RuleGoldPriceRequired, "A current gold price is required for GOLD_GRAM expenses")
 			}
 			return err
 		}
@@ -570,10 +577,10 @@ func (s *service) validateCollaborator(ctx context.Context, collaboratorID strin
 		return nil, err
 	}
 	if !isActiveCollaborator(ctx, *collaborator) {
-		return nil, ValidationError{Fields: map[string]string{"collaboratorId": "Collaborator must be active and open"}}
+		return nil, fieldError("collaboratorId", RuleCollaboratorNotActive, "Collaborator must be active and open")
 	}
 	if strings.TrimSpace(collaborator.Membership.PersonID) == "" {
-		return nil, ValidationError{Fields: map[string]string{"collaboratorId": "Collaborator must resolve to a Person–Tenant Membership"}}
+		return nil, fieldError("collaboratorId", RuleCollaboratorWithoutMembership, "Collaborator must resolve to a Person–Tenant Membership")
 	}
 	return collaborator, nil
 }
@@ -589,7 +596,7 @@ func (s *service) findActiveReference(ctx context.Context, field string, id stri
 		return row, nil
 	}
 	if errors.Is(err, gorm.ErrRecordNotFound) {
-		return nil, ValidationError{Fields: map[string]string{field: message}}
+		return nil, fieldError(field, RuleInactiveReference, message)
 	}
 	return nil, err
 }
@@ -627,14 +634,14 @@ func normalizeListFilter(filter ExpenseListFilter) (normalizedExpenseListFilter,
 	if strings.TrimSpace(filter.DateFrom) != "" {
 		value, err := parseDate(filter.DateFrom)
 		if err != nil {
-			return normalizedExpenseListFilter{}, ValidationError{Fields: map[string]string{"dateFrom": "Date from must be YYYY-MM-DD"}}
+			return normalizedExpenseListFilter{}, fieldError("dateFrom", RuleInvalidDate, "Date from must be YYYY-MM-DD")
 		}
 		out.DateFrom = &value
 	}
 	if strings.TrimSpace(filter.DateTo) != "" {
 		value, err := parseDate(filter.DateTo)
 		if err != nil {
-			return normalizedExpenseListFilter{}, ValidationError{Fields: map[string]string{"dateTo": "Date to must be YYYY-MM-DD"}}
+			return normalizedExpenseListFilter{}, fieldError("dateTo", RuleInvalidDate, "Date to must be YYYY-MM-DD")
 		}
 		out.DateTo = &value
 	}
@@ -644,7 +651,7 @@ func normalizeListFilter(filter ExpenseListFilter) (normalizedExpenseListFilter,
 func parseExpenseDate(value string) (time.Time, error) {
 	expenseDate, err := parseDate(value)
 	if err != nil {
-		return time.Time{}, ValidationError{Fields: map[string]string{"expenseDate": "Expense date must be YYYY-MM-DD"}}
+		return time.Time{}, fieldError("expenseDate", RuleInvalidDate, "Expense date must be YYYY-MM-DD")
 	}
 	return expenseDate, nil
 }
