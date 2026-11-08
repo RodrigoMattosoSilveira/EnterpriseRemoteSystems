@@ -14,7 +14,7 @@ import {
 import { PageTitle } from "../../components/layout/PageHeading";
 
 export function SecondPersonApprovalSettingsPage() {
-  const { t } = useI18n();
+  const { t, formatDateTime } = useI18n();
   const [tenantId, setTenantId] = useState(() =>
     typeof window === "undefined" ? "default" : readSelectedTenantId(window.localStorage),
   );
@@ -166,7 +166,7 @@ export function SecondPersonApprovalSettingsPage() {
             </div>
             <div>
               <dt className="font-semibold text-gray-700">{t("approval.settings.last.updated.at_4cfb2f")}</dt>
-              <dd className="mt-1 text-gray-600">{formatDateTime(policyQuery.data?.updatedAt)}</dd>
+              <dd className="mt-1 text-gray-600">{formatOptionalDateTime(policyQuery.data?.updatedAt, formatDateTime)}</dd>
             </div>
           </dl>
 
@@ -210,11 +210,11 @@ function PolicyStatus({ required, isLoading }: { required?: boolean; isLoading: 
   );
 }
 
-function formatDateTime(value: string | undefined) {
+function formatOptionalDateTime(value: string | undefined, formatDateTime: (date: Date) => string) {
   if (!value) return "—";
 
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) return value;
 
-  return parsed.toLocaleString();
+  return formatDateTime(parsed);
 }

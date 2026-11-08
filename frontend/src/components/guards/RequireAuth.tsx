@@ -1,4 +1,4 @@
-import { useI18n } from "../../i18n";
+import { describeApiError, useI18n } from "../../i18n";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { Navigate, useLocation } from "react-router-dom";
 import {
@@ -9,7 +9,7 @@ import { useAuthState } from "../../app/useAuth";
 import { PageTitle } from "../layout/PageHeading";
 
 export function RequireAuth({ children }: { children: ReactNode }) {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const auth = useAuthState();
   const location = useLocation();
   const accountId = auth.status === "authenticated" ? auth.session.accountId : "";
@@ -106,7 +106,7 @@ export function RequireAuth({ children }: { children: ReactNode }) {
       <main className="grid min-h-screen place-items-center p-6">
         <section className="max-w-md rounded-2xl border bg-white p-6">
           <PageTitle>{t("guard.unable.to.verify.your.session_187cb1")}</PageTitle>
-          <p className="mt-2 text-sm text-slate-600">{auth.error.message}</p>
+          <p className="mt-2 text-sm text-slate-600">{describeApiError(auth.error, locale, t).message}</p>
           <button
             className="mt-4 rounded-lg bg-slate-900 px-4 py-2 text-white"
             onClick={() => void initializeAuthSession()}

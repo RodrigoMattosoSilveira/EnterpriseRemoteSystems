@@ -103,20 +103,13 @@ export function validatePaymentValueInput(
 
 export function formatCollaboratorPaymentValue(
   collaborator: Collaborator,
-  formatCurrency?: (value: number, currency: string) => string,
+  formatCurrency: (value: number, currency: string) => string,
 ) {
   if (collaborator.goldCommissionPercent !== undefined) {
     return `${formatDecimal(collaborator.goldCommissionPercent, 8)}%`;
   }
 
-  if (formatCurrency) {
-    return formatCurrency(collaborator.paymentValue, "BRL");
-  }
-
-  return new Intl.NumberFormat("pt-BR", {
-    style: "currency",
-    currency: "BRL",
-  }).format(collaborator.paymentValue);
+  return formatCurrency(collaborator.paymentValue, "BRL");
 }
 
 function formatDecimal(value: number, maxDecimals: number) {

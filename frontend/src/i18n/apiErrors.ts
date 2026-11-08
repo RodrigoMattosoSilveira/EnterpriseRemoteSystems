@@ -39,8 +39,12 @@ export function describeApiError(
   t: Translate,
 ): DescribedApiError {
   if (!(error instanceof ApiError)) {
+    // Client-side Error text is English; only the server-message locale shows it.
     return {
-      message: error instanceof Error ? error.message : t("common.unexpectedError"),
+      message:
+        error instanceof Error && locale === SERVER_MESSAGE_LOCALE
+          ? error.message
+          : t("common.unexpectedError"),
       fields: [],
     };
   }
