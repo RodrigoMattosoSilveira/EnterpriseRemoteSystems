@@ -4,7 +4,25 @@ const assert=require('node:assert/strict');
 const fs=require('node:fs');
 const os=require('node:os');
 const path=require('node:path');
-const {inspect,jsxLiteralFindings,readResource}=require('./byte352-i18n-check.cjs');
+const {inspect,jsxLiteralFindings,readResource,backendErrorCodes,missingBackendErrorCodeKeys}=require('./byte352-i18n-check.cjs');
+
+test('every backend error code has an apiError.code translation (Bite 34.1)',()=>{
+ const result=inspect();
+ assert.ok(result.backendCodes>=40,`expected the backend error codes to be scanned, got ${result.backendCodes}`);
+ assert.deepEqual(result.failures.filter(x=>x.startsWith('backend error code')),[]);
+});
+test('detects a new backend error code without a translation and ignores test files',()=>{
+ const dir=fs.mkdtempSync(path.join(os.tmpdir(),'ers341-codes-'));
+ try {
+  fs.mkdirSync(path.join(dir,'widgets'));
+  fs.writeFileSync(path.join(dir,'widgets','handler.go'),'package widgets\nvar e = APIError{Code: "widget_conflict", Message: "Widget conflict"}\nvar f = APIError{Code: "forbidden", Message: "No"}\n');
+  fs.writeFileSync(path.join(dir,'widgets','handler_test.go'),'package widgets\nvar g = APIError{Code: "test_only_code"}\n');
+  const codes=backendErrorCodes(dir);
+  assert.deepEqual([...codes.keys()].sort(),['forbidden','widget_conflict']);
+  const {missing}=missingBackendErrorCodeKeys(readResource('en-US.ts'),dir);
+  assert.equal(missing.length,1);assert.ok(missing[0].startsWith('widget_conflict (widgets/handler.go:2)'));
+ }finally{fs.rmSync(dir,{recursive:true,force:true});}
+});
 
 test('English and Brazilian Portuguese catalogs have parity and interpolations',()=>{
  const result=inspect();assert.deepEqual(result.failures,[]);assert.ok(result.entries>1600);

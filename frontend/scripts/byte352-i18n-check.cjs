@@ -69,9 +69,43 @@ function jsxLiteralFindings(file) {
   visit(src);
   return findings;
 }
+// Bite 34.1 (#1056): every error code the backend can return must have an
+// `apiError.code.<code>` catalog key, so new codes cannot reach users untranslated.
+const backendRoot = path.resolve(__dirname, '..', '..', 'backend', 'internal');
+function goSourceFiles(dir, result = []) {
+  for (const entry of fs.readdirSync(dir, {withFileTypes:true})) {
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) goSourceFiles(full, result);
+    else if (entry.name.endsWith('.go') && !entry.name.endsWith('_test.go')) result.push(full);
+  }
+  return result;
+}
+function backendErrorCodes(root = backendRoot) {
+  if (!fs.existsSync(root)) return null;
+  const codes = new Map();
+  for (const file of goSourceFiles(root)) {
+    const content = fs.readFileSync(file, 'utf8');
+    for (const match of content.matchAll(/\bCode:\s*"([a-z][a-z0-9_]*)"/g)) {
+      if (!codes.has(match[1])) {
+        const line = content.slice(0, match.index).split('\n').length;
+        codes.set(match[1], `${path.relative(root, file)}:${line}`);
+      }
+    }
+  }
+  return codes;
+}
+function missingBackendErrorCodeKeys(en, root = backendRoot) {
+  const codes = backendErrorCodes(root);
+  if (codes === null) return {checked: 0, missing: []};
+  const missing = [];
+  for (const [code, where] of codes) if (!en.has(`apiError.code.${code}`)) missing.push(`${code} (${where})`);
+  return {checked: codes.size, missing};
+}
 function inspect() {
   const en=readResource('en-US.ts');const pt=readResource('pt-BR.ts');
   const failures=[];
+  const backend = missingBackendErrorCodeKeys(en);
+  for (const item of backend.missing) failures.push('backend error code without apiError.code translation: '+item);
   for(const key of en.keys()) if(!pt.has(key)) failures.push('pt-BR missing '+key);
   for(const key of pt.keys()) if(!en.has(key)) failures.push('en-US missing '+key);
   const params = s => [...new Set([...s.matchAll(/\{([a-zA-Z_][a-zA-Z_0-9]*)\}/g)].map(x=>x[1]))].sort().join(',');
@@ -93,12 +127,12 @@ function inspect() {
   const pending=[];
   const coveredSet=new Set(covered);
   for(const file of walk(sourceRoot)) if(!coveredSet.has(path.relative(sourceRoot,file))) pending.push(...jsxLiteralFindings(file));
-  return {failures, entries:en.size, guarded:covered.length, pending};
+  return {failures, entries:en.size, guarded:covered.length, pending, backendCodes:backend.checked};
 }
 if (require.main === module) {
   try {
     const result=inspect();
-    console.log(`Translation keys: ${result.entries}; guarded files: ${result.guarded}`);
+    console.log(`Translation keys: ${result.entries}; guarded files: ${result.guarded}; backend error codes checked: ${result.backendCodes}`);
     console.log(`Remaining untranslated JSX/attribute literals elsewhere: ${result.pending.length}`);
     if(process.argv.includes('--report')) for(const item of result.pending) console.log('PENDING: '+item);
     if(process.argv.includes('--require-complete') && result.pending.length) result.failures.push(`${result.pending.length} unconverted JSX/attribute literals remain`);
@@ -107,4 +141,4 @@ if (require.main === module) {
     else console.log('PASS: catalog parity and static JSX text gate (runtime/manual acceptance remains separate)');
   }catch(err){console.error('FAIL:',err.message);process.exitCode=1;}
 }
-module.exports={readResource,jsxLiteralFindings,inspect};
+module.exports={readResource,jsxLiteralFindings,inspect,backendErrorCodes,missingBackendErrorCodeKeys};
