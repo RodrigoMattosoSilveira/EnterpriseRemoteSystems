@@ -651,6 +651,7 @@ local-check:
 	$(MAKE) brazilian-demo-fixture-check
 	$(MAKE) brazilian-demo-presentation-check
 	$(MAKE) migration-rehearsal-check
+	$(MAKE) byte352-i18n-check
 	cd backend && go clean -testcache && go test ./...
 	cd frontend && npm run test:run
 	cd frontend && npx playwright test

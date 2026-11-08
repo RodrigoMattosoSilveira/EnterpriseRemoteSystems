@@ -2620,4 +2620,6 @@ export const ptBRMessages = {
   "planning.temporaryReplacementShort": "Subst.",
   "planning.replacementCandidateFor": "Candidato a substituição para {name}",
   "planning.temporaryReplacementFor": "Destino de substituição temporária para {name}",
+  "planning.selectCollaborator": "Selecionar {name}",
+  "planning.unselectCollaborator": "Desmarcar {name}",
 } satisfies Record<TranslationKey, string>;

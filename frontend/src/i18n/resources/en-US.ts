@@ -2622,6 +2622,8 @@ export const enUSMessages = {
   "planning.temporaryReplacementShort": "Repl.",
   "planning.replacementCandidateFor": "Replacement candidate for {name}",
   "planning.temporaryReplacementFor": "Temporary replacement target for {name}",
+  "planning.selectCollaborator": "Select {name}",
+  "planning.unselectCollaborator": "Unselect {name}",
 } as const;
 
 export type TranslationKey = keyof typeof enUSMessages;
