@@ -1,120 +1,193 @@
-# Byte 35.4C — Banco de treinamento fictício e determinístico (guia técnico)
+# Byte 35.4C — Provisionamento aditivo de dados fictícios de treinamento
 
-**Branch baseline:** `1055-byte-354c-deterministic-fictitious-training-database`, SHA `86d36e5873c59e2e3f86aa280b001f76116ac743`.
+**Base de implementação:** worktree `~/projects/EnterpriseRemoteSystems-35.4C`, branch `1055-byte-354c-deterministic-fictitious-training-database`, SHA inicial `b448e4e98c3c5f4bd7ffd1d7d2f029e60ec2b059`.
 
-**Responsável:** técnico LOCAL autorizado. **Objetivo:** fornecer um arquivo SQLite **novo, independente, descartável, só com dados inventados**, que torne concretos os personagens e percursos F01–F12 do [Manual completo da Entidade](byte-35-4-manual-da-entidade-pt-br.md). **Não é** inicialização de Produção (35.5), nem preparação de ambiente implantado, nem evidência dos seis controles de lançamento (35.7).
+**Princípio (Navalha de Occam):** reutilizar o esquema, as migrações já aplicadas, os geradores sintéticos do Bite 31.4, a base SQLite existente de cada ambiente e o backend normal. **Não** criar um segundo banco, serviço, mecanismo de reset, tabela de controle ou processo automático de implantação.
 
-## 1. Contrato de segurança — obrigatório
+## 1. Contrato de operação e segurança
 
-- **Somente LOCAL.** `APP_ENV=development` explícito. `APP_ENV=production`, `ENV=production` e ambiente não informado falham. Nunca copie este banco, contas ou senhas para Development/Test implantados ou Produção.
-- O construtor **não recebe banco de origem**; aplica as migrações existentes **em um novo arquivo temporário privado** e gera os dados sintéticos em memória nesse arquivo. Nenhum dado real é copiado.
-- O caminho de saída deve terminar com `byte354c-training.db` ou `byte354c-training-<identificador>.db`. O script rejeita `app.db`, arquivo já existente, link simbólico e caminho de backup/Produção. A conclusão publica o novo arquivo de forma atômica sem substituição.
-- **Proibidos** `make testdata-local-reset`, `ERS_RESET_DATABASE=true`, `rm backend/data/app.db`, restore em banco existente, migração manual no banco atual e qualquer comando `server-...` neste procedimento.
-- Credenciais impressas pelo construtor são **fictícias e públicas para uso LOCAL**, não são segredos de Produção. Não deixe o banco em host exposto e não use seus dados para operação real. A equipe técnica informa identidades aos participantes por procedimento autorizado.
-- Para recomeçar um exercício, crie **outro arquivo com nome novo**. Não substitua ou limpe uma base em uso. Não há comando de reset nesta entrega.
+- **LOCAL:** acrescentar registros fictícios ao `backend/data/app.db` do **worktree 35.4C**. O backend normal continua usando este banco; nenhum backend especial.
+- **DEV e TST:** acrescentar os mesmos registros ao `/app/data/app.db` já utilizado pelo backend **daquele ambiente**, acessando o volume Docker já montado. Não copiar, importar, restaurar ou substituir o banco.
+- **PRD:** absolutamente proibido. Rejeitar `APP_ENV=production`, nomes de caminho de Produção/backup, confirmação conflitante e ambiente ausente. Nunca executar em `/opt/EnterpriseRemoteSystems/production`.
+- **Explicitamente manual:** o provisionamento não faz parte de startup, migração nem deploy; executar apenas após autorização da pessoa responsável pelo ambiente e identificação exata do banco.
+- **Aditivo e transacional:** novos IDs usam o prefixo estável `train354c-`; duas Entidades usam `training-354c-entidade-a` e `training-354c-entidade-b`. `BEGIN IMMEDIATE` e `PRAGMA foreign_keys=ON` protegem contra inserção parcial. Nenhuma linha alheia à carga é atualizada.
+- **Idempotência conservadora:** se as duas Entidades já existem com o cenário original, **PASS: already present; no writes**. Se há apenas uma, conflito de IDs, ou registros modificados por treinamento, **STOP**: não corrigir nem desfazer automaticamente. Não existe reset de carga neste Byte.
+- **Esquema já migrado:** o comando verifica integridade, FK e o conjunto completo `schema_migrations`; não aplica migrações nem modifica o banco antes da transação de provisão.
+- **Identidades:** oito contas fictícias de Entidade; o Administrador da Aplicação é a **conta global já existente** no ambiente. Não criar uma segunda conta global privilegiada. Para DEV/TST usar somente hashes bcrypt próprios, oriundos de credenciais controladas no 1Password; os hashes públicos do demo 31.4 são permitidos apenas em LOCAL.
+- **Determinismo:** data âncora `2026-11-07`; IDs, valores, referências e checksum lógico da carga são iguais em LOCAL, DEV e TST (o checksum normaliza campos de senha e última autenticação, e ignora registros alheios). A verificação inicial após operações de treinamento pode indicar alterações; isso é esperado, mas **nunca** autoriza reescrever a carga.
+- **SOP de preservação:** não executar reset, `rm app.db`, migração ad hoc, restauração ou cópia de produção. Seguir o procedimento de backup já aprovado para o ambiente, sem inventar novas etapas de manutenção da base.
 
-## 2. Pré-verificação e construção LOCAL
+## 2. LOCAL — worktree explícito, banco existente
 
-**Terminal 1 — raiz do repositório; backend e frontend de treinamento ainda parados:**
+**Identidade:** operador técnico LOCAL; sem login ERS para este passo. **Contexto:** diretório `~/projects/EnterpriseRemoteSystems-35.4C`, não o worktree principal. Antes, confirme que `backend/data/app.db` **já existe**, está migrado e pertence ao backend LOCAL utilizado. Não substitua o arquivo.
 
 ```bash
-pwd
+cd ~/projects/EnterpriseRemoteSystems-35.4C
 git branch --show-current
 git rev-parse HEAD
 git status --short
 make byte354c-training-check
-make byte354c-training-build
-make byte354c-training-verify
+make byte354c-training-provision-local
+make byte354c-training-verify-local
 ```
 
-**Antes do patch:** o SHA deve ser `86d36e5873c59e2e3f86aa280b001f76116ac743`. **Depois do patch:** registrar o novo SHA quando o patch for commitado. `git status --short` deve ser conhecido e sem alterações inesperadas. O build cria apenas `backend/data/byte354c-training.db` (arquivo ignorado pelo Git). Se já existe, **STOP**: escolha um nome novo, por exemplo:
+**PASSOU:** os três targets finalizam com código 0; o último relata checksum lógico fixo da carga; o banco original foi preservado. Na segunda execução de `make byte354c-training-provision-local`, a resposta deve informar `already present; no writes`. **FALHOU:** duplicação, integridade/FK inválidas, conflito não resolvido, dados de outras Entidades modificados. **BLOQUEADO:** banco não existe, schema antigo, ambiente não confirmado, identidade da base desconhecida ou carga de treinamento já modificada.
+
+Para usar a interface, **não** execute `make byte354c-training-backend` (target retirado). Use os processos LOCAL habituais, em terminais dedicados **somente quando não houver sessão já ativa**:
 
 ```bash
-make byte354c-training-build BYTE354C_DB=backend/data/byte354c-training-sessao02.db
-make byte354c-training-verify BYTE354C_DB=backend/data/byte354c-training-sessao02.db
+# Terminal do backend, se necessário
+cd ~/projects/EnterpriseRemoteSystems-35.4C
+make local-backend
 ```
 
-**PASSOU:** cada comando conclui com código zero, `PASS` de integridade, ausência de violações de chave estrangeira e um SHA-256 **lógico** da carga fictícia. O checksum cobre os dados de treinamento, não promete identidade byte a byte do arquivo SQLite: os defaults de timestamps das migrações são variáveis. Duas gerações independentes devem produzir o **mesmo checksum lógico**. **FALHOU:** checksums diferentes, ausência de identidades, saldos ou referências inválidos. **BLOQUEADO:** banco já existe, não há controle do ambiente ou path não aprovado.
-
-**Importante:** `--verify-only` detecta alterações no estado original da carga (incluindo login, aceitação de recibo e edição de plano); faça a verificação **antes** do uso no navegador. Após exercícios autorizados, divergência do checksum não prova corrupção; compare o resultado do exercício com o estado inicial registrado, e use um **novo arquivo** para recomeçar.
-
-## 3. Executar a interface com o banco isolado
-
-**Verificação prévia:** se já existe backend escutando na porta 8080, **não** inicie outro nem encerre o serviço alheio. Confirme quem é o responsável por esse processo e conclua a sessão anterior usando seu procedimento normal.
-
-**Terminal 2 — raiz do repositório (somente se 8080 estiver livre):**
-
 ```bash
-make byte354c-training-backend
-```
-
-Esse alvo verifica o arquivo escolhido e inicia **somente** o backend LOCAL com `ERS_DATABASE_PATH` apontando para o arquivo fictício. Não inicia Docker nem substitui `backend/data/app.db`; o inicializador LOCAL apenas confere/aplica as migrações canônicas no **próprio arquivo fictício**, com `ERS_RESET_DATABASE=false`, sem bootstrap ou provisão de E2E Admin. Se usou outro caminho:
-
-```bash
-make byte354c-training-backend BYTE354C_DB=backend/data/byte354c-training-sessao02.db
-```
-
-**Terminal 3:**
-
-```bash
+# Terminal do frontend, se necessário
+cd ~/projects/EnterpriseRemoteSystems-35.4C
 make local-frontend
 ```
 
-**Navegador:** abra o endereço LOCAL exibido pelo frontend (normalmente `http://localhost:5173`); escolha Português (Brasil). A URL e a porta efetivas devem ser as da execução LOCAL, **nunca** as de Produção. Todas as sessões/contas mencionadas abaixo existem **somente neste banco recém-gerado**.
+A URL normalmente é `http://localhost:5173` em LOCAL; DEV/TST implantados permanecem HTTPS. A autenticação LOCAL das contas fictícias usa as senhas públicas do demo 31.4 **exclusivamente neste worktree LOCAL**; a senha de administrador fictício difere da senha de Pessoa fictícia. Nunca reutilize essas senhas em DEV/TST.
 
-## 4. Identidades: conta → Pessoa → Ator → Entidade
+## 3. DEV/TST — mesmo banco implantado, sem modificar a imagem da aplicação
 
-| Identidade | Login LOCAL fictício | Contexto e finalidade |
+**Identidade:** operador técnico com acesso aprovado ao servidor e autorização para o ambiente de destino. **Contexto:** um ambiente de cada vez: primeiro `development` e, depois de aprovar a execução, `test`. O repositório implantado deve conter o script revisado e coincidir com a revisão aprovada; confira isso antes da operação. A imagem do backend não precisa ganhar Python: um contêiner **temporário, sem rede**, com Python padrão executa o script utilizando o mesmo volume SQLite persistente e os arquivos de scripts/migrações do checkout implantado. Nenhum contêiner da aplicação é parado ou alterado.
+
+**Etapa A — Senhas (na máquina de desenvolvimento autorizada, fora do servidor):** crie duas senhas fortes e distintas **para cada ambiente** usando o procedimento aprovado de 1Password. Para obter bcrypt com custo 12 (o utilitário lê stdin e não aceita senha por argumento), execute este bloco duas vezes, uma para ADMIN e outra para Pessoa:
+
+```bash
+cd ~/projects/EnterpriseRemoteSystems-35.4C
+python3 -c 'import getpass; print(getpass.getpass("Senha de treinamento (sem eco): "))' \
+  | (cd backend && go run ../scripts/ers-byte354c-password-hash.go)
+```
+
+Armazene os hashes e senhas na coleção correspondente (`ers-development` ou `ers-test`) em 1Password. **Não** inclua senhas nem hashes em Git, capturas, relatórios, `.env` versionados ou histórico do shell. Não reutilize os hashes conhecidos do demo LOCAL. O utilitário requer o Go/toolchain e as dependências já usadas pelo backend; se indisponíveis, **BLOQUEADO**, sem instalar componentes aleatórios no servidor.
+
+**Etapa B — Verificação da configuração implantada (no host Linux autorizado):** escolha apenas um dos ambientes abaixo:
+
+```bash
+# Para DEV:
+TARGET=development
+ENV_FILE=.env.development
+BACKEND=ers-dev-backend
+VOLUME_OWNER=ers-dev
+
+# OU, para TST (substitua as quatro linhas acima):
+# TARGET=test
+# ENV_FILE=.env.test
+# BACKEND=ers-tst-backend
+# VOLUME_OWNER=ers-tst
+
+cd "/opt/EnterpriseRemoteSystems/$TARGET"
+pwd
+git rev-parse HEAD
+
+test -f "$ENV_FILE" && test -f scripts/ers-byte354c-training-db.py || exit 1
+COMPOSE_PROJECT="$(docker inspect "$BACKEND" --format '{{ index .Config.Labels "com.docker.compose.project" }}')"
+test "$COMPOSE_PROJECT" = "$VOLUME_OWNER" || { echo 'STOP: wrong Compose project'; exit 1; }
+APP_ENV="$(docker exec "$BACKEND" printenv APP_ENV)"
+case "$TARGET:$APP_ENV" in
+  development:development|test:test) echo 'PASS: backend APP_ENV matches target' ;;
+  *) echo 'STOP: backend APP_ENV does not match selected target'; exit 1 ;;
+esac
+printf 'Backend APP_ENV=%s, target=%s\n' "$APP_ENV" "$TARGET"
+VOLUME="$(docker inspect "$BACKEND" --format '{{range .Mounts}}{{if eq .Destination "/app/data"}}{{.Name}}{{end}}{{end}}')"
+test -n "$VOLUME" || { echo 'STOP: no named backend data volume'; exit 1; }
+docker volume inspect "$VOLUME" --format '{{.Name}}'
+# Confirmação humana obrigatória: o valor exibido deve pertencer ao backend do ambiente acima.
+```
+
+**PASSOU:** diretório e backend pertencem exclusivamente ao ambiente selecionado; o projeto Compose **exibido** deve corresponder a `VOLUME_OWNER` (em caso contrário STOP), `APP_ENV=development` para DEV ou `APP_ENV=test` para TST, e o volume `/app/data` é um volume persistente nomeado. Se qualquer verificação não corresponder, **STOP**. Nunca tente adivinhar volume, usar o volume de Produção ou copiar o SQLite para corrigir falhas.
+
+**Etapa C — Provisionar (mesmo host e diretório após Etapa B):** recupere **somente** os dois hashes bcrypt do cofre correspondente e cole-os nos prompts invisíveis abaixo. O bloco cria no máximo um contêiner temporário e o remove mesmo quando o comando falha; não encerra contêineres do ERS.
+
+```bash
+(
+set -euo pipefail
+read -r -s -p 'Hash bcrypt ADMIN do 1Password: ' BYTE354C_ADMIN_BCRYPT_HASH; echo
+read -r -s -p 'Hash bcrypt Pessoa do 1Password: ' BYTE354C_PERSON_BCRYPT_HASH; echo
+export BYTE354C_ADMIN_BCRYPT_HASH BYTE354C_PERSON_BCRYPT_HASH
+TRAIN_CONTAINER="ers-byte354c-${TARGET}-$$"
+cleanup_354c() {
+  # Remove ONLY the container carrying the unique label created in this session.
+  if [ "$(docker inspect "$TRAIN_CONTAINER" --format '{{ index .Config.Labels "ers.byte354c.session" }}' 2>/dev/null || true)" = "$TRAIN_CONTAINER" ]; then
+    docker rm -f "$TRAIN_CONTAINER" >/dev/null 2>&1 || true
+  fi
+  unset BYTE354C_ADMIN_BCRYPT_HASH BYTE354C_PERSON_BCRYPT_HASH
+}
+trap cleanup_354c EXIT
+
+docker run --rm --network none --name "$TRAIN_CONTAINER" \
+  --label "ers.byte354c.session=$TRAIN_CONTAINER" \
+  --mount "type=volume,source=$VOLUME,target=/work/backend/data" \
+  --mount "type=bind,source=$PWD/scripts,target=/work/scripts,readonly" \
+  --mount "type=bind,source=$PWD/backend/migrations,target=/work/backend/migrations,readonly" \
+  -e APP_ENV="$APP_ENV" \
+  -e BYTE354C_ADMIN_BCRYPT_HASH -e BYTE354C_PERSON_BCRYPT_HASH \
+  python:3.12-slim-bookworm python3 -B /work/scripts/ers-byte354c-training-db.py \
+  --database /work/backend/data/app.db --target "$TARGET" --confirm-target "$TARGET"
+
+# Verificação somente leitura: não requer hashes.
+docker run --rm --network none --name "$TRAIN_CONTAINER" \
+  --label "ers.byte354c.session=$TRAIN_CONTAINER" \
+  --mount "type=volume,source=$VOLUME,target=/work/backend/data" \
+  --mount "type=bind,source=$PWD/scripts,target=/work/scripts,readonly" \
+  --mount "type=bind,source=$PWD/backend/migrations,target=/work/backend/migrations,readonly" \
+  -e APP_ENV="$APP_ENV" \
+  python:3.12-slim-bookworm python3 -B /work/scripts/ers-byte354c-training-db.py \
+  --database /work/backend/data/app.db --target "$TARGET" \
+  --confirm-target "$TARGET" --verify-only
+
+)
+```
+
+**Atenção ao ciclo de vida:** o script `backend/build-development-db.sh` já existente **reconstrói o banco DEV durante implantação**. Um novo deploy DEV pode remover esta carga; o ensaio de restauração TST também pode substituí-la. A solução deliberadamente **não** altera essas políticas: após cada substituição aprovada, revalide e provisione de novo, sem assumir permanência dos dados de treino.
+
+**PASSOU:** `PASS: added` na primeira execução, checksum canônico no `--verify-only`, e nenhum novo banco ou serviço. Ao repetir, `PASS: ... already present; no writes`. **FALHOU:** divergência de checksum, mutação de dados não fictícios ou erro de FK. **BLOQUEADO:** imagem Python indisponível, volume não identificado, credenciais ausentes, versão de migrações divergente, ambiente não autorizado ou conflito de dados. Se o `docker run` for interrompido fora do shell padrão, inspecione exclusivamente `docker ps -a --filter label=ers.byte354c.session`; remova **somente** o contêiner registrado por este procedimento. Não execute `docker compose down` nem pare containers alheios. Se TST for restaurado posteriormente por seu processo normal de ensaio, a carga fictícia pode desaparecer; provisione novamente apenas após verificar o novo estado.
+
+## 4. Identidades e contextos de treinamento
+
+| Identidade | Login fictício | Contexto |
 |---|---|---|
-| APP | `training354c.app@example.test` | Administração global; nunca Ator comum de Entidade |
-| ADMIN-A | `training354c.admin-a@example.test` | Helena Costa, Administradora da Entidade A |
-| ADMIN-B | `training354c.admin-b@example.test` | Marina Torres, Administradora da Entidade B |
-| EARN-A | `training354c.rafael@example.test` | Carla Lima, Operadora de Ganhos da Entidade A |
-| EXP-A | `training354c.beatriz@example.test` | Davi Souza, Operador de Despesas da Entidade A |
-| COLLAB-A | `training354c.joao@example.test` | Bruno Almeida, autogestão de Pessoa / Jornada da Entidade A |
-| SHARED | `training354c.camila@example.test` | Ana Pereira, **uma Pessoa e uma conta**, mas A e B têm vínculos e Atores distintos |
-| EXTRA | `training354c.elisa@example.test`, `training354c.fabio@example.test` | Elisa Rocha e Fábio Santos; exercícios de recibos e consulta |
+| APP | **Conta global já existente** do ambiente | Administração global; não criamos outra conta APP |
+| ADMIN-A | `training354c.admin-a@example.test` | Helena Costa, administradora da Entidade A |
+| ADMIN-B | `training354c.admin-b@example.test` | Marina Torres, administradora da Entidade B |
+| EARN-A | `training354c.rafael@example.test` | Carla Lima, operadora de Ganhos da Entidade A |
+| EXP-A | `training354c.beatriz@example.test` | Davi Souza, operador de Despesas da Entidade A |
+| COLLAB-A | `training354c.joao@example.test` | Bruno Almeida, Pessoa/Jornada da Entidade A |
+| SHARED | `training354c.camila@example.test` | Ana Pereira, uma conta/Pessoa, vínculos e Atores distintos em A e B |
+| EXTRA | `training354c.elisa@example.test`, `training354c.fabio@example.test` | Elisa Rocha e Fábio Santos |
 
-Os logins utilizam as chaves técnicas históricas `joao/camila/rafael/beatriz` do gerador reaproveitado, **não são o nome de outra Pessoa**: na interface serão Bruno, Ana, Carla, Davi. As senhas fictícias são **mostradas no Terminal 1**, e não devem ser reproduzidas em relatórios. Os papéis de EARN-A e EXP-A são intencionalmente distintos; SHARED não recebe concessão delegada. A pessoa sem login na Entidade B, Gisele Nogueira, serve como caso de isolamento.
+Os sufixos técnicos históricos `joao`, `camila`, `rafael` e `beatriz` não alteram o nome fictício mostrado na UI. O usuário escolhe a Entidade autorizada antes de cada teste. Logins não conferem direitos fora da Entidade correspondente.
 
-## 5. Mapa de dados e estados determinísticos
+## 5. Cenários fixos
 
-**Data âncora fixa:** `2026-11-07`, UTC, independente da data real do treinamento. Os nomes, IDs de negócio e valores estão descritos como **fictícios**. O construtor aproveita o cenário sintético de 31.4; valores exibidos em tela nunca representam saldo, ouro ou pagamento real.
+**Âncora de datas:** 07/11/2026, UTC. São registros **fictícios**; não representam clientes, pessoas, pagamento ou ouro reais.
 
-| Registro de treino | Data | Estado | Uso dos exercícios |
-|---|---|---|---|
-| `training-354c-entidade-a` | — | Ativa | Principal Entidade A, seis Colaboradores com Jornadas ativas |
-| `training-354c-entidade-b` | — | Ativa | Entidade B, Gisele e Ana com vínculos específicos; sem histórico financeiro B |
-| `train354c-a-work-period-planning-basic` | 10/11/2026 | PLANNING | Plano limpo, seis linhas, **sem substituição**; F04-S01/S02/S06 |
-| `train354c-a-work-period-planning` | 08/11/2026 | PLANNING | Bruno → Ana (F) e Davi → Carla (L); F04-S03/S04/S05/S07 |
-| `train354c-a-work-period-completed` | 05/11/2026 | FULLY_POSTED | Ouro, Acúmulo, Conta Corrente; Bruno trabalhou em local real diferente do informado |
-| `train354c-a-work-period-next-unplanned` | 06/11/2026 | PLANNING | Mesmo código DAY, **sem plano salvo**; F04-S08 compara proposta com trabalho real de 05/11 |
-| `train354c-a-work-period-informed-results` | 04/11/2026 | INFORMED | Resultado editável de Bruno, **somente com autorização de escrita**; F06 |
-| Período histórico de Carla | 10/06/2026* | FULLY_POSTED | Jornada antiga encerrada com saldo BRL zero; F03/F09 |
-| Recibo de Elisa | 07/11/2026 | PENDING_ISSUE | Entidade → Colaboradora, **Elisa deve aceitar**; F10 leitura |
-| Recibo de Fábio | 07/11/2026 | PENDING_ISSUE | Colaborador → Entidade, **Administrador da Entidade deve aceitar**; F10 leitura |
+| Registro | Estado | Exercício |
+|---|---|---|
+| Entidade A e Entidade B | Ativas | Escopo e isolamento; Gisele exclusiva da Entidade B |
+| Plano básico em 10/11/2026 | PLANNING | Seis atribuições sem substituições |
+| Plano em 08/11/2026 | PLANNING | Bruno → Ana (Folga); Davi → Carla (Licença) |
+| Período em 05/11/2026 | FULLY_POSTED | Trabalho informado versus real; ouro, Acúmulo, Conta Corrente |
+| Período seguinte em 06/11/2026 | PLANNING | Sem atribuições; proposta de transporte do trabalho real anterior |
+| Período em 04/11/2026 | INFORMED | Resultados de Bruno, somente edição autorizada |
+| Jornada histórica de Carla | Encerrada | Saldo BRL zero e evidência histórica separada |
+| Recibo de Elisa | PENDING_ISSUE | Entidade → colaboradora; aceite pela colaboradora |
+| Recibo de Fábio | PENDING_ISSUE | Colaborador → Entidade; aceite pelo administrador |
 
-*O período histórico corresponde a `2026-11-07 − 150 dias`; confirme a data exibida na interface. Os exemplos de saldo incluem Bruno +R$230, Ana +4 g de ouro, e uma Jornada histórica de Carla com BRL zero. Elisa e Fábio têm entradas sintéticas compensadas por liquidações finais e **recibos ainda pendentes**, por isso não devem ser encerrados/aceitos sem autorização específica.
+Bruno possui saldo ilustrativo de +R$230; Ana, +4 g de ouro. Os recibos não devem ser aceitos/assinados no teste de leitura. O checksum original detecta mudanças de negócio provocadas por exercícios; **nunca** aciona reset automático.
 
-## 6. Critérios de aceite e delimitação
+## 6. Aceitação e encerramento
 
-Execute [testes manuais 35.4C (T01–T10)](byte-35-4c-manual-acceptance.md) e o conjunto funcional [35.4 F01–F12](byte-35-4-manual-acceptance.md). Todos os testes de UI são feitos com a **identidade e Entidade declaradas**; não use APP para substituir ADMIN-A ou EARN-A.
+1. Execute o teste automatizado `make byte354c-training-check` no worktree 35.4C. Os testes criam e descartam **somente** arquivos migrados temporários, com prova de isolamento e rollback.
+2. Provisione explicitamente no ambiente aprovado e **verifique antes do primeiro login**.
+3. Execute [aceitação 35.4C T01–T10](byte-35-4c-manual-acceptance.md) e [treinamento funcional F01–F12](byte-35-4-manual-acceptance.md) conforme o contexto e as autorizações do roteiro.
+4. Faça logout, encerre **somente** frontend/backend LOCAL iniciados por este roteiro, confira a porta 8080 se aplicável; em DEV/TST mantenha os serviços rodando.
+5. Registre revisão, ambiente, volume/arquivo de banco, checksum inicial, resultados e exceções sem segredos. Não apague a carga ou o banco; não faça reset. Confira `git status --short` e evite incluir `.auth`/resultados Playwright.
 
-- **PASSOU:** checks técnicos e UI correspondente à função, substituições na direção correta, saldo e histórico por Jornada, dois recibos com recebedor/aceitante correto, e nenhuma leitura transversal proibida.
-- **FALHOU:** dados duplicados, herança financeira de outra Jornada, papel indevido, alteração real da base default, vazamento de outra Entidade, ou resultado salvo sem autorização.
-- **BLOQUEADO:** credenciais ausentes, porta ocupada, confirmação de ambiente ausente, script não executado, ou cenário de escrita não aprovado.
-
-Não trate um teste apenas de leitura como prova de que uma gravação ou assinatura foi executada. A base serve à preparação funcional, **não** à evidência de backup/restore, inicialização histórica de 35.5, nem à autorização de ativação de Produção 35.7.
-
-## 7. Encerramento e limpeza segura
-
-1. Faça logout de todas as identidades e feche as abas de treinamento. Não mantenha duas contas misturadas no mesmo perfil de navegação.
-2. Interrompa **apenas** o backend iniciado pelo Terminal 2 e o frontend iniciado pelo Terminal 3 com `Ctrl+C`. Não encerre processos preexistentes.
-3. Se disponível, verifique `lsof -nP -iTCP:8080 -sTCP:LISTEN`. **PASSOU:** nenhuma porta dessa sessão permanece ocupada; se outro serviço a ocupava antes, mantenha-o intocado e documente.
-4. Este Byte não cria containers Docker: nenhum cleanup Docker é requerido. Se outro procedimento criou containers, remova **somente** os IDs que ele registrou, conforme procedimento aprovado; nunca rode `docker stop $(docker ps -q)`.
-5. Não apague o banco fictício automaticamente. Se a política LOCAL permitir descarte, o operador identifica o **caminho exclusivo criado por esta sessão**, confirma backend parado e remove apenas esse arquivo específico, jamais `app.db` ou arquivos `.db` por glob. Registre as evidências antes do descarte.
-6. Confirme `git status --short`: arquivos `backend/data/*.db` estão ignorados, e nenhum `.auth` / relatório Playwright deve ser commitado por engano.
+**PASSOU:** preservação dos dados existentes, idempotência, integridade/FK, escopo entre Entidades, identidades específicas e exercícios aceitos. **FALHOU:** duplicidade, escrita indevida, escalada de privilégio, vazamento transversal ou saldo incorreto. **BLOQUEADO:** precondição ausente. Nenhuma dessas verificações comprova gates de inicialização 35.5 ou ativação de Produção 35.7.
 
 ## Glossary impact
 
-**Termo novo (documentação de treinamento, não domínio):** *Banco de Treinamento Fictício* = arquivo SQLite não produtivo, de conteúdo controlado e checksum lógico reprodutível, cujo ciclo de vida é independente do banco operacional. **Nenhuma** alteração nos significados de Entidade/Tenant, Pessoa, Vínculo, Ator, Jornada, Acúmulo, Conta Corrente, ou recibo. Preserve as equivalências portuguesas aprovadas em 35.4B.
+Substituir *Banco de Treinamento Fictício* como banco separado pelo termo operacional **Provisionamento Aditivo de Dados Fictícios de Treinamento**: inserção transacional, idempotente e explicitamente autorizada de registros sintéticos no banco não produtivo já existente, sem redefinir Entidade, Pessoa, Vínculo, Ator, Jornada, Acúmulo, Conta Corrente ou Recibo.
