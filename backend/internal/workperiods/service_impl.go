@@ -9,6 +9,8 @@ import (
 	"enterpriseremotesystems/backend/internal/shared/ids"
 	"enterpriseremotesystems/backend/internal/shared/tenantctx"
 	"enterpriseremotesystems/backend/internal/tenants"
+
+	"enterpriseremotesystems/backend/internal/shared/fielderrors"
 )
 
 const defaultTenantID = tenants.DefaultTenantID
@@ -50,7 +52,7 @@ func (s *service) Create(ctx context.Context, req CreateWorkPeriodRequest, actor
 		return nil, err
 	}
 	if exists {
-		return nil, ValidationError{Fields: map[string]string{"workDate": "A Work Period already exists for this date and period"}}
+		return nil, fieldError("workDate", RuleWorkPeriodExists, "A Work Period already exists for this date and period")
 	}
 
 	now := time.Now().UTC()
@@ -94,7 +96,7 @@ func (s *service) Inform(ctx context.Context, id string, actorUserID string) (*W
 		return ptr(ToDTO(*existing)), nil
 	}
 	if existing.Status != StatusPlanning {
-		return nil, ValidationError{Fields: map[string]string{"status": "Only planning work periods can be informed"}}
+		return nil, fieldError("status", RuleWorkPeriodNotPlanning, "Only planning work periods can be informed")
 	}
 
 	now := time.Now().UTC()
@@ -148,14 +150,14 @@ func normalizeListFilter(filter WorkPeriodListFilter) (normalizedWorkPeriodListF
 	if strings.TrimSpace(filter.DateFrom) != "" {
 		value, err := parseDate(filter.DateFrom)
 		if err != nil {
-			return normalizedWorkPeriodListFilter{}, ValidationError{Fields: map[string]string{"dateFrom": "Date from must be YYYY-MM-DD"}}
+			return normalizedWorkPeriodListFilter{}, fieldError("dateFrom", fielderrors.InvalidDate, "Date from must be YYYY-MM-DD")
 		}
 		out.DateFrom = &value
 	}
 	if strings.TrimSpace(filter.DateTo) != "" {
 		value, err := parseDate(filter.DateTo)
 		if err != nil {
-			return normalizedWorkPeriodListFilter{}, ValidationError{Fields: map[string]string{"dateTo": "Date to must be YYYY-MM-DD"}}
+			return normalizedWorkPeriodListFilter{}, fieldError("dateTo", fielderrors.InvalidDate, "Date to must be YYYY-MM-DD")
 		}
 		out.DateTo = &value
 	}

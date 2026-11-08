@@ -97,6 +97,24 @@ describe("describeApiError", () => {
     ]);
   });
 
+  it("labels bulk-planning row fields with the row position in pt-BR", () => {
+    const error = new ApiError({
+      status: 400,
+      code: "validation_failed",
+      message: "Validation failed",
+      fields: { "rows[0].collaboratorId": "Collaborator can only appear once" },
+      fieldCodes: { "rows[0].collaboratorId": "duplicate_collaborator" },
+    });
+
+    expect(describeApiError(error, "pt-BR", tFor("pt-BR")).fields).toEqual([
+      {
+        field: "rows[0].collaboratorId",
+        label: "Item 1 — Colaborador",
+        message: "Este Colaborador aparece mais de uma vez",
+      },
+    ]);
+  });
+
   it("describes non-API errors without inventing a translation", () => {
     expect(describeApiError(new Error("Boom"), "pt-BR", tFor("pt-BR")).message).toBe("Boom");
     expect(describeApiError("not an error", "pt-BR", tFor("pt-BR")).message).toBe("Erro inesperado");

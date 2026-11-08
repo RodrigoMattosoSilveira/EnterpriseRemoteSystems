@@ -12,6 +12,8 @@ import (
 	"enterpriseremotesystems/backend/internal/shared/tenantctx"
 	"enterpriseremotesystems/backend/internal/tenants"
 	"enterpriseremotesystems/backend/internal/workperiods"
+
+	"enterpriseremotesystems/backend/internal/shared/fielderrors"
 )
 
 const defaultTenantID = tenants.DefaultTenantID
@@ -210,7 +212,7 @@ func (s *service) BulkPlan(ctx context.Context, workPeriodID string, req BulkPla
 			continue
 		}
 		if temporaryReplacementForCollaboratorID != "" && temporaryReplacementForCollaboratorID == collaboratorID {
-			return nil, ValidationError{Fields: map[string]string{"temporaryReplacementForCollaboratorId": "Replacement collaborator cannot replace themselves"}}
+			return nil, fieldError("temporaryReplacementForCollaboratorId", RuleReplacementSelf, "Replacement collaborator cannot replace themselves")
 		}
 
 		plannedStatus := PlannedStatusExcluded
@@ -308,13 +310,13 @@ func (s *service) BulkPlan(ctx context.Context, workPeriodID string, req BulkPla
 
 		replacementAssignment, ok := savedByCollaborator[collaboratorID]
 		if !ok {
-			return nil, ValidationError{Fields: map[string]string{"collaboratorId": "Replacement collaborator must be saved in this Work Period plan"}}
+			return nil, fieldError("collaboratorId", RuleReplacementNotInPlan, "Replacement collaborator must be saved in this Work Period plan")
 		}
 		if replacementAssignment.PlannedStatus != PlannedStatusIncluded {
-			return nil, ValidationError{Fields: map[string]string{"temporaryReplacementForCollaboratorId": "Replacement collaborator must be selected in this Work Period plan"}}
+			return nil, fieldError("temporaryReplacementForCollaboratorId", RuleReplacementNotSelected, "Replacement collaborator must be selected in this Work Period plan")
 		}
 		if normalizePlanningAvailability(replacementAssignment.PlanningAvailability) != PlanningAvailabilityActive {
-			return nil, ValidationError{Fields: map[string]string{"temporaryReplacementForCollaboratorId": "Replacement collaborator must be available to work"}}
+			return nil, fieldError("temporaryReplacementForCollaboratorId", RuleReplacementUnavailable, "Replacement collaborator must be available to work")
 		}
 
 		replacedAssignment, ok := savedByCollaborator[temporaryReplacementForCollaboratorID]
@@ -325,25 +327,25 @@ func (s *service) BulkPlan(ctx context.Context, workPeriodID string, req BulkPla
 			}
 		}
 		if !ok {
-			return nil, ValidationError{Fields: map[string]string{"temporaryReplacementForCollaboratorId": "Replacement target collaborator must be part of this Work Period plan"}}
+			return nil, fieldError("temporaryReplacementForCollaboratorId", RuleReplacementTargetNotInPlan, "Replacement target collaborator must be part of this Work Period plan")
 		}
 		if replacementAssignment.ID == replacedAssignment.ID {
-			return nil, ValidationError{Fields: map[string]string{"temporaryReplacementForCollaboratorId": "Replacement assignment cannot replace itself"}}
+			return nil, fieldError("temporaryReplacementForCollaboratorId", RuleReplacementSelf, "Replacement assignment cannot replace itself")
 		}
 		if replacementAssignment.WorkPeriodID != workPeriod.ID || replacedAssignment.WorkPeriodID != workPeriod.ID {
-			return nil, ValidationError{Fields: map[string]string{"temporaryReplacementForCollaboratorId": "Temporary replacements must stay within this Work Period"}}
+			return nil, fieldError("temporaryReplacementForCollaboratorId", RuleReplacementOtherWorkPeriod, "Temporary replacements must stay within this Work Period")
 		}
 		if !isTemporaryReplacementTargetAvailability(replacedAssignment.PlanningAvailability) {
-			return nil, ValidationError{Fields: map[string]string{"temporaryReplacementForCollaboratorId": "Replacement target collaborator must have DAY_OFF or LEAVE_OF_ABSENCE availability"}}
+			return nil, fieldError("temporaryReplacementForCollaboratorId", RuleReplacementTargetAvailable, "Replacement target collaborator must have DAY_OFF or LEAVE_OF_ABSENCE availability")
 		}
 		if replacedAssignment.ReplacementForAssignmentID != nil && strings.TrimSpace(*replacedAssignment.ReplacementForAssignmentID) != "" {
-			return nil, ValidationError{Fields: map[string]string{"temporaryReplacementForCollaboratorId": "Replacement target collaborator cannot also be a replacement"}}
+			return nil, fieldError("temporaryReplacementForCollaboratorId", RuleReplacementTargetIsReplacement, "Replacement target collaborator cannot also be a replacement")
 		}
 		if replacementAssignment.ReplacementForAssignmentID != nil {
 			delete(replacementOwnerByTargetAssignmentID, strings.TrimSpace(*replacementAssignment.ReplacementForAssignmentID))
 		}
 		if existingOwner, used := replacementOwnerByTargetAssignmentID[replacedAssignment.ID]; used && existingOwner != collaboratorID {
-			return nil, ValidationError{Fields: map[string]string{"temporaryReplacementForCollaboratorId": "Replacement target collaborator already has a replacement"}}
+			return nil, fieldError("temporaryReplacementForCollaboratorId", RuleReplacementTargetAlreadyReplaced, "Replacement target collaborator already has a replacement")
 		}
 
 		previousReplacementForAssignmentID := nilString(replacementAssignment.ReplacementForAssignmentID)
@@ -497,7 +499,7 @@ func (s *service) Update(ctx context.Context, id string, req UpdateWorkPeriodAss
 		return nil, err
 	}
 	if !existing.Active {
-		return nil, ValidationError{Fields: map[string]string{"id": "Inactive work period assignments cannot be updated"}}
+		return nil, fieldError("id", RuleInactiveAssignmentNotEditable, "Inactive work period assignments cannot be updated")
 	}
 	if err := ensureEditableWorkPeriod(existing.WorkPeriod); err != nil {
 		return nil, err
@@ -557,10 +559,10 @@ func (s *service) MarkActualOutcome(ctx context.Context, id string, req MarkActu
 		return nil, err
 	}
 	if !existing.Active {
-		return nil, ValidationError{Fields: map[string]string{"id": "Inactive work period assignments cannot be updated"}}
+		return nil, fieldError("id", RuleInactiveAssignmentNotEditable, "Inactive work period assignments cannot be updated")
 	}
 	if existing.PlannedStatus != PlannedStatusIncluded {
-		return nil, ValidationError{Fields: map[string]string{"plannedStatus": "Only included assignments can receive actual outcomes"}}
+		return nil, fieldError("plannedStatus", RuleAssignmentNotIncluded, "Only included assignments can receive actual outcomes")
 	}
 	if err := ensureEditableWorkPeriod(existing.WorkPeriod); err != nil {
 		return nil, err
@@ -584,7 +586,7 @@ func (s *service) MarkActualOutcome(ctx context.Context, id string, req MarkActu
 			return nil, err
 		}
 		if !valid {
-			return nil, ValidationError{Fields: map[string]string{reference.field: "Select an active reference in the current Tenant"}}
+			return nil, fieldError(reference.field, RuleInactiveReference, "Select an active reference in the current Tenant")
 		}
 	}
 	status := strings.ToUpper(strings.TrimSpace(req.ActualStatus))
@@ -649,7 +651,7 @@ func (s *service) validateCollaborator(ctx context.Context, collaboratorID strin
 		return err
 	}
 	if !isActiveCollaborator(ctx, *collaborator) {
-		return ValidationError{Fields: map[string]string{"collaboratorId": "Collaborator must be active and open"}}
+		return fieldError("collaboratorId", RuleCollaboratorNotActive, "Collaborator must be active and open")
 	}
 	return nil
 }
@@ -660,7 +662,7 @@ func (s *service) validateAvailableForWorkPeriod(ctx context.Context, workPeriod
 		return err
 	}
 	if exists {
-		return ValidationError{Fields: map[string]string{"collaboratorId": "Collaborator already has an active assignment for this work period"}}
+		return fieldError("collaboratorId", RuleCollaboratorAlreadyAssigned, "Collaborator already has an active assignment for this work period")
 	}
 	return nil
 }
@@ -670,7 +672,7 @@ func (s *service) validateReplacementAssignment(ctx context.Context, replacement
 		return nil
 	}
 	if replacementForAssignmentID == currentAssignmentID {
-		return ValidationError{Fields: map[string]string{"replacementForAssignmentId": "Assignment cannot replace itself"}}
+		return fieldError("replacementForAssignmentId", RuleReplacementSelf, "Assignment cannot replace itself")
 	}
 	if _, err := s.repo.FindReplacementAssignmentByID(ctx, strings.TrimSpace(replacementForAssignmentID)); err != nil {
 		return err
@@ -697,7 +699,7 @@ func (s *service) validateReference(ctx context.Context, field string, id string
 	if exists {
 		return nil
 	}
-	return ValidationError{Fields: map[string]string{field: message}}
+	return fieldError(field, RuleInactiveReference, message)
 }
 
 func (s *service) loadActiveCollaborator(ctx context.Context, collaboratorID string) (*db.CollaboratorJourney, error) {
@@ -706,7 +708,7 @@ func (s *service) loadActiveCollaborator(ctx context.Context, collaboratorID str
 		return nil, err
 	}
 	if !isActiveCollaborator(ctx, *collaborator) {
-		return nil, ValidationError{Fields: map[string]string{"collaboratorId": "Collaborator must be active"}}
+		return nil, fieldError("collaboratorId", RuleCollaboratorNotActive, "Collaborator must be active")
 	}
 	return collaborator, nil
 }
@@ -722,12 +724,12 @@ func effectivePlanningReferenceID(requested string, existing string, fallback st
 }
 
 func requirePlanningReferenceFallbacks(sectorID string, locationID string, taskID string) error {
-	fields := map[string]string{}
-	requireString(fields, "sectorId", sectorID)
-	requireString(fields, "locationId", locationID)
-	requireString(fields, "taskId", taskID)
-	if len(fields) > 0 {
-		return ValidationError{Fields: fields}
+	errs := fielderrors.New()
+	errs.Require("sectorId", sectorID)
+	errs.Require("locationId", locationID)
+	errs.Require("taskId", taskID)
+	if !errs.Empty() {
+		return ValidationError{Fields: errs.Fields, Codes: errs.Codes}
 	}
 	return nil
 }
@@ -762,7 +764,7 @@ func normalizeListFilter(filter WorkPeriodAssignmentListFilter) (normalizedWorkP
 
 func ensureEditableWorkPeriod(workPeriod db.WorkPeriod) error {
 	if workPeriod.Status == workperiods.StatusClosed {
-		return ValidationError{Fields: map[string]string{"workPeriodId": "Closed work periods cannot be changed"}}
+		return fieldError("workPeriodId", RuleWorkPeriodClosed, "Closed work periods cannot be changed")
 	}
 	return nil
 }

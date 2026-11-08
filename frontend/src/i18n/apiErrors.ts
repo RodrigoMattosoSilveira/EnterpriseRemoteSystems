@@ -67,15 +67,16 @@ export function describeApiError(
   };
 }
 
-// Batch payloads report indexed fields such as `items.1.priceListItemId`.
-const INDEXED_ITEM_FIELD = /^items\.(\d+)\.(.+)$/;
+// Batch payloads report indexed fields such as `items.1.priceListItemId`
+// (Canteen batch) or `rows[1].collaboratorId` (bulk Work Period planning).
+const INDEXED_ITEM_FIELD = /^(?:items\.(\d+)\.|rows\[(\d+)\]\.)(.+)$/;
 
 function fieldLabel(field: string, t: Translate): string {
   const indexed = INDEXED_ITEM_FIELD.exec(field);
   if (indexed) {
-    const [, index, innerField] = indexed;
+    const [, itemIndex, rowIndex, innerField] = indexed;
     return t("apiField.batchItem", {
-      position: Number(index) + 1,
+      position: Number(itemIndex ?? rowIndex) + 1,
       field: translateIfKnown(t, `apiField.${innerField}`) ?? innerField,
     });
   }
