@@ -78,6 +78,25 @@ describe("describeApiError", () => {
     );
   });
 
+  it("labels indexed batch fields with the item position in pt-BR", () => {
+    const error = new ApiError({
+      status: 400,
+      code: "validation_failed",
+      message: "Validation failed",
+      fields: { "items.1.priceListItemId": "Only active Canteen price-list items may be recorded in a Canteen batch" },
+      fieldCodes: { "items.1.priceListItemId": "canteen_item_required" },
+    });
+
+    expect(describeApiError(error, "pt-BR", tFor("pt-BR")).fields).toEqual([
+      {
+        field: "items.1.priceListItemId",
+        label: "Item 2 — Item da lista de preços",
+        message:
+          "Somente itens ativos da Cantina na lista de preços podem ser registrados em um lote da Cantina",
+      },
+    ]);
+  });
+
   it("describes non-API errors without inventing a translation", () => {
     expect(describeApiError(new Error("Boom"), "pt-BR", tFor("pt-BR")).message).toBe("Boom");
     expect(describeApiError("not an error", "pt-BR", tFor("pt-BR")).message).toBe("Erro inesperado");

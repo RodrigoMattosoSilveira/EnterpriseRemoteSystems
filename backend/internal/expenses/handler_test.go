@@ -32,10 +32,28 @@ const (
 type apiErrorResponse struct {
 	Data  json.RawMessage `json:"data"`
 	Error *struct {
-		Code    string            `json:"code"`
-		Message string            `json:"message"`
-		Fields  map[string]string `json:"fields"`
+		Code       string            `json:"code"`
+		Message    string            `json:"message"`
+		Fields     map[string]string `json:"fields"`
+		FieldCodes map[string]string `json:"fieldCodes"`
 	} `json:"error"`
+}
+
+// Byte 35.2 / Bite 34.1: the stable rule code expected for each English field
+// message asserted by these tests. Clients translate the code, not the text.
+var expectedFieldRuleCodes = map[string]string{
+	"Required":                         "required",
+	"Amount must be greater than zero": "must_be_positive",
+	"Expense category is derived from the price list item":                    "derived_from_price_list_item",
+	"A current gold price is required for GOLD_GRAM expenses":                 "gold_price_required",
+	"Cancellation reason is required":                                         "required",
+	"Source expense must be cancelled before it can be recreated":             "source_not_cancelled",
+	"Cancelled source expense has already been recreated":                     "source_already_recreated",
+	"Inactive expenses cannot be updated":                                     "inactive_expense_not_editable",
+	"Collaborator must be active and open":                                    "collaborator_not_active",
+	"Only active Canteen price-list items may be recorded in a Canteen batch": "canteen_item_required",
+	"Expense category must be active reference data of type expense_category": "inactive_reference",
+	"Value unit must be active reference data of type value_unit":             "inactive_reference",
 }
 
 type apiPersonResponse struct {
@@ -440,6 +458,9 @@ func TestCreateCanteenExpenseBatchRejectsNonCanteenItemWithoutPartialWrite(t *te
 	decodeJSON(t, res, &errorBody)
 	if errorBody.Error == nil || errorBody.Error.Fields["items.1.priceListItemId"] == "" {
 		t.Fatalf("expected indexed Canteen validation error, got %+v", errorBody.Error)
+	}
+	if got := errorBody.Error.FieldCodes["items.1.priceListItemId"]; got != "canteen_item_required" {
+		t.Fatalf("expected indexed rule code canteen_item_required, got %q", got)
 	}
 
 	listRes := getJSON(t, server, expensesURL+"?page=1&pageSize=20")
@@ -1739,6 +1760,13 @@ func assertValidationError(t *testing.T, res *http.Response, field string, messa
 	}
 	if body.Error.Fields[field] != message {
 		t.Fatalf("expected field %q to be %q, got %q", field, message, body.Error.Fields[field])
+	}
+	wantCode, known := expectedFieldRuleCodes[message]
+	if !known {
+		t.Fatalf("test table has no rule code for message %q", message)
+	}
+	if got := body.Error.FieldCodes[field]; got != wantCode {
+		t.Fatalf("expected field %q rule code %q, got %q", field, wantCode, got)
 	}
 }
 
