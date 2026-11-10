@@ -116,6 +116,9 @@ help:
 	@echo "  make manual-testdata-local-reset"
 	@echo "  make manual-testdata-local-seed"
 	@echo "  make manual-testdata-local-reset-with-work-periods"
+	@echo "  make byte354c-training-check"
+	@echo "  make byte354c-training-provision-local (add to existing LOCAL app.db)"
+	@echo "  make byte354c-training-verify-local (check original LOCAL fixtures)"
 	@echo "  make brazilian-demo-local-reset [BRAZILIAN_DEMO_AS_OF=YYYY-MM-DD]"
 	@echo "  make brazilian-demo-local-seed [BRAZILIAN_DEMO_AS_OF=YYYY-MM-DD]"
 	@echo "  make brazilian-demo-local-verify [BRAZILIAN_DEMO_AS_OF=YYYY-MM-DD]"
@@ -620,6 +623,10 @@ promotion-readiness-check:
 local-check:
 	$(MAKE) bite3368-core-check
 	$(MAKE) two-human-administrators-check
+	$(MAKE) byte354-readiness-check
+	$(MAKE) byte354a-training-check
+	$(MAKE) byte354b-terminology-check
+	$(MAKE) byte354c-training-check
 	$(MAKE) bite30l4-coverage-manifest-check
 	$(MAKE) bite32-release-coverage-check
 	$(MAKE) bite326-release-hardening-check
@@ -1898,3 +1905,37 @@ byte351-baseline-check:
 .PHONY: byte352-i18n-check
 byte352-i18n-check:
 	cd frontend && npm run i18n:check && npm run i18n:test
+
+# Byte 35.4 — offline documentation contract only; never attests to operational readiness.
+.PHONY: byte354-readiness-check
+byte354-readiness-check:
+	python3 -B scripts/ers-byte354-readiness-check.py
+	python3 -B scripts/test-byte354-readiness.py
+
+# Byte 35.4A — substantive customer manual and substitution training, offline only.
+.PHONY: byte354a-training-check
+byte354a-training-check:
+	python3 -B scripts/ers-byte354a-manual-check.py
+	python3 -B scripts/test-byte354a-manual.py
+
+# Byte 35.4B — presentation terminology and negative, fail-closed regression tests.
+.PHONY: byte354b-terminology-check
+byte354b-terminology-check:
+	python3 -B scripts/ers-byte354b-terminology-check.py
+	python3 -B scripts/test-byte354b-terminology.py
+
+# Byte 35.4C — additive training data in the existing non-Production databases.
+# Git's common directory belongs to the primary worktree even when make runs
+# inside a linked worktree. Both LOCAL targets therefore select the SAME app.db.
+BYTE354C_LOCAL_DB ?= $(abspath $(shell git rev-parse --git-common-dir)/../backend/data/app.db)
+.PHONY: byte354c-training-check byte354c-training-provision-local byte354c-training-verify-local
+byte354c-training-check:
+	python3 -B scripts/test-byte354c-training-db.py
+
+byte354c-training-provision-local:
+	@echo "LOCAL training database: $(BYTE354C_LOCAL_DB)"
+	APP_ENV=development python3 -B scripts/ers-byte354c-training-db.py --database "$(BYTE354C_LOCAL_DB)" --target local --confirm-target local
+
+byte354c-training-verify-local:
+	@echo "LOCAL training database: $(BYTE354C_LOCAL_DB)"
+	APP_ENV=development python3 -B scripts/ers-byte354c-training-db.py --database "$(BYTE354C_LOCAL_DB)" --target local --confirm-target local --verify-only

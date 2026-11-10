@@ -75,7 +75,7 @@ export function TenantRoleDelegationPage({ readOnly = false }: { readOnly?: bool
     setMessage("");
     try {
       await setActorActiveMutation.mutateAsync({ targetActorId, active });
-      setMessage(`Tenant Actor ${active ? "activated" : "deactivated"}.`);
+      setMessage(t(active ? "byte354b.roles.actorActivated" : "byte354b.roles.actorDeactivated"));
     } catch {
       // ApiErrorPanel renders the mutation error.
     }
@@ -89,7 +89,7 @@ export function TenantRoleDelegationPage({ readOnly = false }: { readOnly?: bool
       setSelectedRoleByActor((current) => ({ ...current, [targetActorId]: undefined }));
       setGrantMessageByActor((current) => ({
         ...current,
-        [targetActorId]: `${roleLabel(roleCode, t)} granted.`,
+        [targetActorId]: t("byte354b.roles.roleGranted", { role: roleLabel(roleCode, t) }),
       }));
     } catch {
       // ApiErrorPanel renders the mutation error.
@@ -101,7 +101,7 @@ export function TenantRoleDelegationPage({ readOnly = false }: { readOnly?: bool
     setGrantMessageByActor((current) => ({ ...current, [targetActorId]: undefined }));
     try {
       await revokeMutation.mutateAsync({ targetActorId, grantId: grant.id });
-      setMessage(`${roleLabel(grant.roleCode as TenantOperatorRoleCode, t)} revoked.`);
+      setMessage(t("byte354b.roles.roleRevoked", { role: roleLabel(grant.roleCode as TenantOperatorRoleCode, t) }));
     } catch {
       // ApiErrorPanel renders the mutation error.
     }
@@ -229,7 +229,7 @@ export function TenantRoleDelegationPage({ readOnly = false }: { readOnly?: bool
                     {t("roles.fragments.membership_53bc96")} {membershipEligible ? "ACTIVE" : "INACTIVE"}
                   </span>
                   <span className="rounded-full bg-gray-100 px-2.5 py-1 text-xs font-medium text-gray-700">
-                    {actor.collaboratorId ? "Collaborator" : "Tenant member"}
+                    {actor.collaboratorId ? t("byte354b.roles.collaborator") : t("byte354b.roles.tenantMember")}
                   </span>
                   {crossTenantAuthority && (
                     <span className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-900">
@@ -244,10 +244,10 @@ export function TenantRoleDelegationPage({ readOnly = false }: { readOnly?: bool
                   <p className="text-sm font-semibold text-gray-900">{t("admin.roles.tenant.actor.lifecycle_657028")}</p>
                   <p className="text-xs text-gray-500">
                     {actor.active
-                      ? "Deactivate only this tenant identity; the Authentication Account remains independent."
+                      ? t("byte354b.roles.lifecycleDeactivate")
                       : membershipEligible
-                        ? "Reactivate this existing Actor and restore this tenant context."
-                        : "Reactivate the Person–Tenant Membership before activating this Actor."}
+                        ? t("byte354b.roles.lifecycleReactivate")
+                        : t("byte354b.roles.lifecycleMembership")}
                   </p>
                 </div>
                 <button
@@ -255,9 +255,9 @@ export function TenantRoleDelegationPage({ readOnly = false }: { readOnly?: bool
                   disabled={readOnly || lifecycleBusy || (actor.active && isCurrentActor) || (!actor.active && !membershipEligible)}
                   onClick={() => void setActorActive(actor.id, !actor.active)}
                   className="rounded-lg border px-3 py-2 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-50"
-                  title={actor.active && isCurrentActor ? "A Tenant Administrator cannot deactivate the Actor currently authorizing this session." : undefined}
+                  title={actor.active && isCurrentActor ? t("byte354b.roles.cannotDeactivate") : undefined}
                 >
-                  {actor.active ? "Deactivate Actor" : "Activate Actor"}
+                  {actor.active ? t("byte354b.roles.deactivateActor") : t("byte354b.roles.activateActor")}
                 </button>
               </div>
 
@@ -360,7 +360,7 @@ export function TenantRoleDelegationPage({ readOnly = false }: { readOnly?: bool
                           <button
                             type="button"
                             disabled={busy || (isCurrentActor && role.code === "TENANT_ADMIN")}
-                            title={isCurrentActor && role.code === "TENANT_ADMIN" ? "A Tenant Administrator cannot remove the TENANT_ADMIN Role currently authorizing this session." : undefined}
+                            title={isCurrentActor && role.code === "TENANT_ADMIN" ? t("byte354b.roles.cannotRevoke") : undefined}
                             onClick={() => void revoke(actor.id, existingGrant)}
                             className="rounded-lg border px-3 py-2 text-sm font-semibold disabled:opacity-50"
                           >
@@ -603,7 +603,7 @@ function activeOperatorGrant(
 }
 
 function roleLabel(roleCode: TenantOperatorRoleCode, t: (key: any) => string): string {
-  if (roleCode === "TENANT_ADMIN") return "Tenant Administrator";
+  if (roleCode === "TENANT_ADMIN") return t("byte354b.roles.tenantAdministrator");
   if (roleCode === "TENANT_VIEWER") return t("authz.tenantRoleDelegation.tenantViewer");
-  return roleCode === "EARNINGS_OPERATOR" ? "Earnings Operator" : "Expenses Operator";
+  return roleCode === "EARNINGS_OPERATOR" ? t("byte354b.roles.earningsOperator") : t("byte354b.roles.expensesOperator");
 }
