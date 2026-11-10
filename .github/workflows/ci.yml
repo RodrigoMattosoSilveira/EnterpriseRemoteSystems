@@ -106,6 +106,9 @@ jobs:
       - name: Verify Byte 35.4B Portuguese Entidade terminology and negative regression suite
         run: make byte354b-terminology-check
 
+      - name: Verify Byte 35.4C additive training records and production guardrails
+        run: make byte354c-training-check
+
       - name: Verify Bite 33.6.8C release-identity and acceptance fail-closed gate
         run: make bite3368c-gate-check
 
