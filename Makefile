@@ -660,6 +660,8 @@ local-check:
 	cd frontend && npm run test:run
 	cd frontend && npx playwright test
 	cd frontend && npm run build
+	export CURRENT_TIME=$(TZ=America/Los_Angeles date '+%Y-%m-%dT%H:%M:%S')
+	printf "MAKE LOCAL-CHECK ✔︎ at ${CURRENT_TIME}\n"
 
 .PHONY: local-docker-doctor
 local-docker-doctor:
