@@ -431,7 +431,7 @@ jobs:
             --expected-baseline-last-migration '000062_tenant_administrator_cardinality.up.sql' \
             --expected-first-rehearsed-migration '000063_global_administration_control_plane.up.sql' \
             --expected-final-migration '000071_cross_tenant_delegated_role_isolation.up.sql' \
-            --expected-deployment-final-migration '000078_actual_work_location_override.up.sql' \
+            --expected-deployment-final-migration '000080_production_opening_balance.up.sql' \
             --normalized-output "${NORMALIZED_FILE}"
 
           TEST_REVISION="$(jq -r '.testRevision' "${NORMALIZED_FILE}")"

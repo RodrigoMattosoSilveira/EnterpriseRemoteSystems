@@ -627,6 +627,7 @@ local-check:
 	$(MAKE) byte354a-training-check
 	$(MAKE) byte354b-terminology-check
 	$(MAKE) byte354c-training-check
+	$(MAKE) byte355-initialization-check
 	$(MAKE) bite30l4-coverage-manifest-check
 	$(MAKE) bite32-release-coverage-check
 	$(MAKE) bite326-release-hardening-check
@@ -659,6 +660,8 @@ local-check:
 	cd frontend && npm run test:run
 	cd frontend && npx playwright test
 	cd frontend && npm run build
+	export CURRENT_TIME=$(TZ=America/Los_Angeles date '+%Y-%m-%dT%H:%M:%S')
+	printf "MAKE LOCAL-CHECK ✔︎ at ${CURRENT_TIME}\n"
 
 .PHONY: local-docker-doctor
 local-docker-doctor:
@@ -783,7 +786,7 @@ TEST_RELEASE_BASELINE_DB ?= $(SERVER_ROOT)/test/rehearsal-baselines/pre-bite30i.
 TEST_RELEASE_BASELINE_LAST_MIGRATION ?= 000062_tenant_administrator_cardinality.up.sql
 TEST_RELEASE_MIGRATION_UNDER_REHEARSAL ?= 000063_global_administration_control_plane.up.sql
 TEST_RELEASE_FINAL_MIGRATION ?= 000071_cross_tenant_delegated_role_isolation.up.sql
-DEPLOYMENT_FINAL_MIGRATION ?= 000079_work_attribution_evidence.up.sql
+DEPLOYMENT_FINAL_MIGRATION ?= 000080_production_opening_balance.up.sql
 TEST_RELEASE_REHEARSAL_MARKER_DIR ?= $(SERVER_ROOT)/test/release-rehearsal-passed
 
 .PHONY: server-test-rehearsal-capture-baseline
@@ -1939,3 +1942,8 @@ byte354c-training-provision-local:
 byte354c-training-verify-local:
 	@echo "LOCAL training database: $(BYTE354C_LOCAL_DB)"
 	APP_ENV=development python3 -B scripts/ers-byte354c-training-db.py --database "$(BYTE354C_LOCAL_DB)" --target local --confirm-target local --verify-only
+
+# Byte 35.5 — offline rehearsal ONLY; never operates on deployed databases.
+.PHONY: byte355-initialization-check
+byte355-initialization-check:
+	python3 -B scripts/test-byte355-production-initialization.py
