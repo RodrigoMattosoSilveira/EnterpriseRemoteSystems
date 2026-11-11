@@ -36,6 +36,12 @@ type AccrualItemDTO struct {
 	Status                 string   `json:"status"`
 	PendingReason          string   `json:"pendingReason,omitempty"`
 	Description            string   `json:"description,omitempty"`
+	WorkSectorID           string   `json:"workSectorId,omitempty"`
+	WorkSectorLabel        string   `json:"workSectorLabel,omitempty"`
+	WorkLocationID         string   `json:"workLocationId,omitempty"`
+	WorkLocationLabel      string   `json:"workLocationLabel,omitempty"`
+	WorkTaskID             string   `json:"workTaskId,omitempty"`
+	WorkTaskLabel          string   `json:"workTaskLabel,omitempty"`
 	CreatedAt              string   `json:"createdAt"`
 	UpdatedAt              string   `json:"updatedAt"`
 }

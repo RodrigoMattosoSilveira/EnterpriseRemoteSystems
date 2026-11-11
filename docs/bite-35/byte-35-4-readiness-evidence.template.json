@@ -1,0 +1,227 @@
+{
+  "schema_version": 1,
+  "byte": "35.4",
+  "notice": "Example only; NOT_RUN is not an acceptance result. Duplicate outside Git and fill with redacted evidence; do not store credentials, tokens, personal data or customer financial values.",
+  "environment": null,
+  "commit_sha": null,
+  "ci_run_url": null,
+  "ci_run_status": "NOT_RUN",
+  "training_customer_reviewer": null,
+  "technical_operator": null,
+  "independent_approver": null,
+  "functional_tests": [
+    {
+      "id": "F01",
+      "status": "NOT_RUN",
+      "actor": null,
+      "tenant": null,
+      "evidence_reference": null,
+      "observations": null
+    },
+    {
+      "id": "F02",
+      "status": "NOT_RUN",
+      "actor": null,
+      "tenant": null,
+      "evidence_reference": null,
+      "observations": null
+    },
+    {
+      "id": "F03",
+      "status": "NOT_RUN",
+      "actor": null,
+      "tenant": null,
+      "evidence_reference": null,
+      "observations": null
+    },
+    {
+      "id": "F04",
+      "status": "NOT_RUN",
+      "actor": null,
+      "tenant": null,
+      "evidence_reference": null,
+      "observations": null
+    },
+    {
+      "id": "F05",
+      "status": "NOT_RUN",
+      "actor": null,
+      "tenant": null,
+      "evidence_reference": null,
+      "observations": null
+    },
+    {
+      "id": "F06",
+      "status": "NOT_RUN",
+      "actor": null,
+      "tenant": null,
+      "evidence_reference": null,
+      "observations": null
+    },
+    {
+      "id": "F07",
+      "status": "NOT_RUN",
+      "actor": null,
+      "tenant": null,
+      "evidence_reference": null,
+      "observations": null
+    },
+    {
+      "id": "F08",
+      "status": "NOT_RUN",
+      "actor": null,
+      "tenant": null,
+      "evidence_reference": null,
+      "observations": null
+    },
+    {
+      "id": "F09",
+      "status": "NOT_RUN",
+      "actor": null,
+      "tenant": null,
+      "evidence_reference": null,
+      "observations": null
+    },
+    {
+      "id": "F10",
+      "status": "NOT_RUN",
+      "actor": null,
+      "tenant": null,
+      "evidence_reference": null,
+      "observations": null
+    },
+    {
+      "id": "F11",
+      "status": "NOT_RUN",
+      "actor": null,
+      "tenant": null,
+      "evidence_reference": null,
+      "observations": null
+    },
+    {
+      "id": "F12",
+      "status": "NOT_RUN",
+      "actor": null,
+      "tenant": null,
+      "evidence_reference": null,
+      "observations": null
+    }
+  ],
+  "operational_tests": [
+    {
+      "id": "O01",
+      "status": "NOT_RUN",
+      "operator": null,
+      "environment": null,
+      "evidence_reference": null,
+      "observations": null
+    },
+    {
+      "id": "O02",
+      "status": "NOT_RUN",
+      "operator": null,
+      "environment": null,
+      "evidence_reference": null,
+      "observations": null
+    },
+    {
+      "id": "O03",
+      "status": "NOT_RUN",
+      "operator": null,
+      "environment": null,
+      "evidence_reference": null,
+      "observations": null
+    },
+    {
+      "id": "O04",
+      "status": "NOT_RUN",
+      "operator": null,
+      "environment": null,
+      "evidence_reference": null,
+      "observations": null
+    },
+    {
+      "id": "O05",
+      "status": "NOT_RUN",
+      "operator": null,
+      "environment": null,
+      "evidence_reference": null,
+      "observations": null
+    },
+    {
+      "id": "O06",
+      "status": "NOT_RUN",
+      "operator": null,
+      "environment": null,
+      "evidence_reference": null,
+      "observations": null
+    },
+    {
+      "id": "O07",
+      "status": "NOT_RUN",
+      "operator": null,
+      "environment": null,
+      "evidence_reference": null,
+      "observations": null
+    },
+    {
+      "id": "O08",
+      "status": "NOT_RUN",
+      "operator": null,
+      "environment": null,
+      "evidence_reference": null,
+      "observations": null
+    },
+    {
+      "id": "O09",
+      "status": "NOT_RUN",
+      "operator": null,
+      "environment": null,
+      "evidence_reference": null,
+      "observations": null
+    }
+  ],
+  "production_launch_gates": [
+    {
+      "id": "release_integrity",
+      "status": "NOT_VERIFIED",
+      "evidence_reference": null
+    },
+    {
+      "id": "security",
+      "status": "NOT_VERIFIED",
+      "evidence_reference": null
+    },
+    {
+      "id": "data_preservation",
+      "status": "NOT_VERIFIED",
+      "evidence_reference": null
+    },
+    {
+      "id": "backup_restore",
+      "status": "NOT_VERIFIED",
+      "evidence_reference": null
+    },
+    {
+      "id": "operational_continuity",
+      "status": "NOT_VERIFIED",
+      "evidence_reference": null
+    },
+    {
+      "id": "administrator_recovery",
+      "status": "NOT_VERIFIED",
+      "evidence_reference": null
+    }
+  ],
+  "recovery_locator_1password_reconciled": "NOT_VERIFIED",
+  "byte354_functional_acceptance": "NOT_RUN",
+  "byte354_operational_acceptance": "NOT_RUN",
+  "byte354_joint_acceptance": "NOT_RUN",
+  "production_launch_authorized": false,
+  "deferred_work": [
+    "34.5",
+    "34.4",
+    "33.6.6+",
+    "33.6.8E/F"
+  ]
+}

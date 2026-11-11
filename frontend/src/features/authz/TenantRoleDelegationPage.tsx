@@ -30,8 +30,8 @@ type TenantRoleActorFilters = {
 };
 
 export function TenantRoleDelegationPage({ readOnly = false }: { readOnly?: boolean } = {}) {
-  const currentActor = useAuthorizationContext();
   const { t } = useI18n();
+  const currentActor = useAuthorizationContext();
   const requestActor: AuthzAdminRequestActor = {
     actorId: currentActor.actorRecordId || currentActor.actorKey,
     tenantId: currentActor.tenantId,
@@ -75,7 +75,7 @@ export function TenantRoleDelegationPage({ readOnly = false }: { readOnly?: bool
     setMessage("");
     try {
       await setActorActiveMutation.mutateAsync({ targetActorId, active });
-      setMessage(`Tenant Actor ${active ? "activated" : "deactivated"}.`);
+      setMessage(t(active ? "byte354b.roles.actorActivated" : "byte354b.roles.actorDeactivated"));
     } catch {
       // ApiErrorPanel renders the mutation error.
     }
@@ -89,7 +89,7 @@ export function TenantRoleDelegationPage({ readOnly = false }: { readOnly?: bool
       setSelectedRoleByActor((current) => ({ ...current, [targetActorId]: undefined }));
       setGrantMessageByActor((current) => ({
         ...current,
-        [targetActorId]: `${roleLabel(roleCode, t)} granted.`,
+        [targetActorId]: t("byte354b.roles.roleGranted", { role: roleLabel(roleCode, t) }),
       }));
     } catch {
       // ApiErrorPanel renders the mutation error.
@@ -101,7 +101,7 @@ export function TenantRoleDelegationPage({ readOnly = false }: { readOnly?: bool
     setGrantMessageByActor((current) => ({ ...current, [targetActorId]: undefined }));
     try {
       await revokeMutation.mutateAsync({ targetActorId, grantId: grant.id });
-      setMessage(`${roleLabel(grant.roleCode as TenantOperatorRoleCode, t)} revoked.`);
+      setMessage(t("byte354b.roles.roleRevoked", { role: roleLabel(grant.roleCode as TenantOperatorRoleCode, t) }));
     } catch {
       // ApiErrorPanel renders the mutation error.
     }
@@ -111,13 +111,13 @@ export function TenantRoleDelegationPage({ readOnly = false }: { readOnly?: bool
     <main className="min-h-screen bg-gray-50">
       <header className="border-b bg-white px-4 py-4">
         <div className="mx-auto max-w-5xl">
-          <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Administration</p>
-          <PageTitle>Tenant Authorization</PageTitle>
+          <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">{t("admin.roles.administration_b8be3d")}</p>
+          <PageTitle>{t("admin.roles.tenant.authorization_f4fb96")}</PageTitle>
           <p className="text-sm text-gray-600">
-            Activate or deactivate this tenant&apos;s Account-bound Actors and grant or remove Tenant Administrator, Entity Executive, Earnings Operator, and Expenses Operator authority.
+            {t("roles.fragments.activate.or.deactivate.this.tenant.apos.s.acco_218f25")}
           </p>
           <p className="mt-1 text-xs text-gray-500">
-            A missing Tenant Actor is created from the Person&apos;s Authentication section in People. Role grants require an ACTIVE Actor backed by an ACTIVE same-tenant Person–Tenant Membership.
+            {t("roles.fragments.a.missing.tenant.actor.is.created.from.the.per_b170be")}
           </p>
         </div>
       </header>
@@ -125,7 +125,7 @@ export function TenantRoleDelegationPage({ readOnly = false }: { readOnly?: bool
       <section className="mx-auto max-w-5xl space-y-4 p-4">
         <div className="flex justify-end">
           <Link to="/people" className="rounded-lg border bg-white px-3 py-2 text-sm font-semibold text-gray-800">
-            Open People
+            {t("admin.roles.open.people_91a942")}
           </Link>
         </div>
         {message && <div role="status" className="rounded-xl border border-green-200 bg-green-50 p-3 text-sm text-green-800">{message}</div>}
@@ -133,42 +133,42 @@ export function TenantRoleDelegationPage({ readOnly = false }: { readOnly?: bool
 
         <div className="grid gap-3 rounded-2xl border bg-white p-4 shadow-sm md:grid-cols-2 lg:grid-cols-[minmax(0,1fr)_12rem_12rem_auto] lg:items-end">
           <label className="grid gap-1 text-sm font-medium text-gray-800">
-            Filter People / Actors
+            {t("admin.roles.filter.people.actors_a3455c")}
             <input
               type="search"
               value={searchTerm}
               onChange={(event) => setSearchTerm(event.target.value)}
-              placeholder="Name, login, Actor ID, or Actor Key"
+              placeholder={t("roles.extra.name.login.actor.id.or.actor.key_b77bb8")}
               className="rounded-lg border px-3 py-2 font-normal text-gray-950"
             />
           </label>
 
           <label className="grid gap-1 text-sm font-medium text-gray-800">
-            Actor state
+            {t("admin.roles.actor.state_331a19")}
             <select
               value={actorStateFilter}
               onChange={(event) => setActorStateFilter(event.target.value as ActorStateFilter)}
               className="rounded-lg border bg-white px-3 py-2 font-normal text-gray-950"
             >
-              <option value="ALL">All Actors</option>
-              <option value="ACTIVE">Active Actors</option>
-              <option value="INACTIVE">Inactive Actors</option>
+              <option value="ALL">{t("admin.roles.all.actors_44e196")}</option>
+              <option value="ACTIVE">{t("admin.roles.active.actors_e153e3")}</option>
+              <option value="INACTIVE">{t("admin.roles.inactive.actors_d484d2")}</option>
             </select>
           </label>
 
           <label className="grid gap-1 text-sm font-medium text-gray-800">
-            Delegated role
+            {t("admin.roles.delegated.role_7ab2f1")}
             <select
               value={roleFilter}
               onChange={(event) => setRoleFilter(event.target.value as TenantRoleFilter)}
               className="rounded-lg border bg-white px-3 py-2 font-normal text-gray-950"
             >
-              <option value="ALL">All candidates</option>
-              <option value="NONE">No delegated role</option>
-              <option value="TENANT_ADMIN">Tenant Administrator</option>
+              <option value="ALL">{t("admin.roles.all.candidates_d9d9b8")}</option>
+              <option value="NONE">{t("admin.roles.no.delegated.role_3f11a0")}</option>
+              <option value="TENANT_ADMIN">{t("admin.roles.tenant.administrator_bdf8e2")}</option>
               <option value="TENANT_VIEWER">{t("authz.tenantRoleDelegation.tenantViewer")}</option>
-              <option value="EARNINGS_OPERATOR">Earnings Operator</option>
-              <option value="EXPENSE_OPERATOR">Expenses Operator</option>
+              <option value="EARNINGS_OPERATOR">{t("admin.roles.earnings.operator_ba5d48")}</option>
+              <option value="EXPENSE_OPERATOR">{t("admin.roles.expenses.operator_3e4bb0")}</option>
             </select>
           </label>
 
@@ -178,24 +178,24 @@ export function TenantRoleDelegationPage({ readOnly = false }: { readOnly?: bool
               checked={collaboratorsOnly}
               onChange={(event) => setCollaboratorsOnly(event.target.checked)}
             />
-            Collaborators only
+            {t("admin.roles.collaborators.only_ba4628")}
           </label>
         </div>
 
-        {actorsQuery.isPending && <p className="text-sm text-gray-600">Loading tenant Actors…</p>}
+        {actorsQuery.isPending && <p className="text-sm text-gray-600">{t("admin.roles.loading.tenant.actors_32f1d1")}</p>}
         {!actorsQuery.isPending && actors.length === 0 && (
           <div className="rounded-xl border border-dashed bg-white p-4 text-sm text-gray-600">
-            <p>No Account-bound tenant Actors are available.</p>
-            <p className="mt-1">Use People → Person → Authentication to enable Authentication and create the Person&apos;s Tenant Actor.</p>
+            <p>{t("admin.roles.no.account.bound.tenant.actors.are.available_964523")}</p>
+            <p className="mt-1">{t("roles.extra.use.people.person.authentication.to.enable.authenticati_d2a32f")}</p>
           </div>
         )}
         {!actorsQuery.isPending && actors.length > 0 && (
           <p className="text-sm text-gray-600">
-            Showing {filteredActors.length} of {actors.length} tenant Actors, including inactive Actors.
+            {t("roles.fragments.showing_163d81")} {filteredActors.length} {t("roles.fragments.of_de04fa")} {actors.length} {t("roles.fragments.tenant.actors.including.inactive.actors_52dfcd")}
           </p>
         )}
         {!actorsQuery.isPending && actors.length > 0 && filteredActors.length === 0 && (
-          <p className="rounded-xl border border-dashed bg-white p-4 text-sm text-gray-600">No candidates match these filters.</p>
+          <p className="rounded-xl border border-dashed bg-white p-4 text-sm text-gray-600">{t("admin.roles.no.candidates.match.these.filters_8b1f09")}</p>
         )}
 
         {filteredActors.map((actor) => {
@@ -211,25 +211,25 @@ export function TenantRoleDelegationPage({ readOnly = false }: { readOnly?: bool
               <div className="mb-3 flex flex-wrap items-start justify-between gap-2">
                 <div>
                   <h2 className="font-semibold text-gray-950">{actor.displayName || actor.actorKey}</h2>
-                  <p className="text-xs text-gray-500">Actor ID: {actor.id}</p>
-                  <p className="text-xs text-gray-500">Actor Key: {actor.actorKey}</p>
-                  {binding?.accountLogin && <p className="text-xs text-gray-500">Login: {binding.accountLogin}</p>}
-                  {binding?.membershipId && <p className="text-xs text-gray-500">Membership ID: {binding.membershipId}</p>}
+                  <p className="text-xs text-gray-500">{t("roles.fragments.actor.id_161fb7")} {actor.id}</p>
+                  <p className="text-xs text-gray-500">{t("roles.fragments.actor.key_aabad1")} {actor.actorKey}</p>
+                  {binding?.accountLogin && <p className="text-xs text-gray-500">{t("roles.fragments.login_7f7f74")} {binding.accountLogin}</p>}
+                  {binding?.membershipId && <p className="text-xs text-gray-500">{t("roles.fragments.membership.id_c89429")} {binding.membershipId}</p>}
                   {actor.personId && (
                     <Link to={`/people/${encodeURIComponent(actor.personId)}`} className="mt-1 inline-block text-xs font-semibold text-gray-700 underline">
-                      Open Person
+                      {t("admin.roles.open.person_b17393")}
                     </Link>
                   )}
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
                   <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${actor.active ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-900"}`}>
-                    Actor {actor.active ? "ACTIVE" : "INACTIVE"}
+                    {t("roles.fragments.actor_cbd19b")} {actor.active ? "ACTIVE" : "INACTIVE"}
                   </span>
                   <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${membershipEligible ? "bg-emerald-100 text-emerald-800" : "bg-gray-100 text-gray-700"}`}>
-                    Membership {membershipEligible ? "ACTIVE" : "INACTIVE"}
+                    {t("roles.fragments.membership_53bc96")} {membershipEligible ? "ACTIVE" : "INACTIVE"}
                   </span>
                   <span className="rounded-full bg-gray-100 px-2.5 py-1 text-xs font-medium text-gray-700">
-                    {actor.collaboratorId ? "Collaborator" : "Tenant member"}
+                    {actor.collaboratorId ? t("byte354b.roles.collaborator") : t("byte354b.roles.tenantMember")}
                   </span>
                   {crossTenantAuthority && (
                     <span className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-900">
@@ -241,13 +241,13 @@ export function TenantRoleDelegationPage({ readOnly = false }: { readOnly?: bool
 
               <div className="mb-3 flex flex-wrap items-center justify-between gap-3 rounded-xl border p-3">
                 <div>
-                  <p className="text-sm font-semibold text-gray-900">Tenant Actor lifecycle</p>
+                  <p className="text-sm font-semibold text-gray-900">{t("admin.roles.tenant.actor.lifecycle_657028")}</p>
                   <p className="text-xs text-gray-500">
                     {actor.active
-                      ? "Deactivate only this tenant identity; the Authentication Account remains independent."
+                      ? t("byte354b.roles.lifecycleDeactivate")
                       : membershipEligible
-                        ? "Reactivate this existing Actor and restore this tenant context."
-                        : "Reactivate the Person–Tenant Membership before activating this Actor."}
+                        ? t("byte354b.roles.lifecycleReactivate")
+                        : t("byte354b.roles.lifecycleMembership")}
                   </p>
                 </div>
                 <button
@@ -255,17 +255,17 @@ export function TenantRoleDelegationPage({ readOnly = false }: { readOnly?: bool
                   disabled={readOnly || lifecycleBusy || (actor.active && isCurrentActor) || (!actor.active && !membershipEligible)}
                   onClick={() => void setActorActive(actor.id, !actor.active)}
                   className="rounded-lg border px-3 py-2 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-50"
-                  title={actor.active && isCurrentActor ? "A Tenant Administrator cannot deactivate the Actor currently authorizing this session." : undefined}
+                  title={actor.active && isCurrentActor ? t("byte354b.roles.cannotDeactivate") : undefined}
                 >
-                  {actor.active ? "Deactivate Actor" : "Activate Actor"}
+                  {actor.active ? t("byte354b.roles.deactivateActor") : t("byte354b.roles.activateActor")}
                 </button>
               </div>
 
               <fieldset disabled={readOnly} className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] disabled:opacity-60">
                 <section className="rounded-xl border border-gray-200 bg-gray-50/60 p-3">
-                  <h3 className="text-sm font-semibold text-gray-950">Grant a Role</h3>
+                  <h3 className="text-sm font-semibold text-gray-950">{t("admin.roles.grant.a.role_73d1f0")}</h3>
                   <p className="mt-0.5 text-xs text-gray-600">
-                    Choose one tenant-delegable Role from the selector, then grant it to this Actor.
+                    {t("admin.roles.choose.one.tenant.delegable.role.from.the.selector.then_e4c0ba")}
                   </p>
                   <div className="mt-3">
                     <TenantOperatorRoleSelector
@@ -291,7 +291,7 @@ export function TenantRoleDelegationPage({ readOnly = false }: { readOnly?: bool
                     </p>
                   ) : !roleEligible ? (
                     <p className="mt-2 text-xs font-medium text-amber-700">
-                      Actor and same-tenant Membership must both be ACTIVE before a Role can be granted.
+                      {t("admin.roles.actor.and.same.tenant.membership.must.both.be.active.be_bb1ad7")}
                     </p>
                   ) : null}
                   {grantMessageByActor[actor.id] && (
@@ -302,7 +302,7 @@ export function TenantRoleDelegationPage({ readOnly = false }: { readOnly?: bool
                   {selectedRoleByActor[actor.id] &&
                     activeOperatorGrant(actor, selectedRoleByActor[actor.id]!) && (
                       <p className="mt-2 text-xs font-medium text-gray-600">
-                        {roleLabel(selectedRoleByActor[actor.id]!, t)} is already granted.
+                        {roleLabel(selectedRoleByActor[actor.id]!, t)} {t("roles.fragments.is.already.granted_d5425b")}
                       </p>
                     )}
                   <button
@@ -324,19 +324,19 @@ export function TenantRoleDelegationPage({ readOnly = false }: { readOnly?: bool
                     }}
                     className="mt-3 rounded-lg bg-gray-900 px-3 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
                   >
-                    Grant Role
+                    {t("admin.roles.grant.role_850973")}
                   </button>
                 </section>
 
                 <section className="rounded-xl border p-3">
-                  <h3 className="text-sm font-semibold text-gray-950">Current Role Grants</h3>
+                  <h3 className="text-sm font-semibold text-gray-950">{t("admin.roles.current.role.grants_24dd80")}</h3>
                   <p className="mt-0.5 text-xs text-gray-500">
-                    Roles already granted to this Actor are listed here and can be removed individually.
+                    {t("admin.roles.roles.already.granted.to.this.actor.are.listed.here.and_29f222")}
                   </p>
                   <div className="mt-3 space-y-2">
                     {roles.every((role) => !activeOperatorGrant(actor, role.code)) && (
                       <p className="rounded-lg border border-dashed p-3 text-sm text-gray-500">
-                        No current Tenant Role Grants.
+                        {t("admin.roles.no.current.tenant.role.grants_00f489")}
                       </p>
                     )}
                     {roles.map((role) => {
@@ -360,11 +360,11 @@ export function TenantRoleDelegationPage({ readOnly = false }: { readOnly?: bool
                           <button
                             type="button"
                             disabled={busy || (isCurrentActor && role.code === "TENANT_ADMIN")}
-                            title={isCurrentActor && role.code === "TENANT_ADMIN" ? "A Tenant Administrator cannot remove the TENANT_ADMIN Role currently authorizing this session." : undefined}
+                            title={isCurrentActor && role.code === "TENANT_ADMIN" ? t("byte354b.roles.cannotRevoke") : undefined}
                             onClick={() => void revoke(actor.id, existingGrant)}
                             className="rounded-lg border px-3 py-2 text-sm font-semibold disabled:opacity-50"
                           >
-                            Remove
+                            {t("admin.roles.remove_e96390")}
                           </button>
                         </div>
                       );
@@ -394,9 +394,10 @@ function TenantOperatorRoleSelector({
   onChange: (roleCode: TenantOperatorRoleCode) => void;
   disabled: boolean;
 }) {
+  const { t } = useI18n();
   const [open, setOpen] = useState(false);
   const [filterText, setFilterText] = useState("");
-  const rootRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
   const filterRef = useRef<HTMLInputElement>(null);
   const selectedRole = roles.find((role) => role.code === selectedRoleCode);
   const normalizedFilter = filterText.trim().toLocaleLowerCase();
@@ -414,9 +415,7 @@ function TenantOperatorRoleSelector({
     setOpen(false);
     if (restoreFocus) {
       window.requestAnimationFrame(() => {
-        rootRef.current
-          ?.querySelector<HTMLButtonElement>('button[aria-label="Role selector"]')
-          ?.focus();
+        triggerRef.current?.focus();
       });
     }
   }
@@ -430,7 +429,6 @@ function TenantOperatorRoleSelector({
 
   return (
     <div
-      ref={rootRef}
       className="relative"
       onBlur={(event) => {
         const nextTarget = event.relatedTarget;
@@ -442,10 +440,11 @@ function TenantOperatorRoleSelector({
         }
       }}
     >
-      <p className="text-sm font-semibold text-gray-800">Role</p>
+      <p className="text-sm font-semibold text-gray-800">{t("admin.roles.role_c3f104")}</p>
       <button
         type="button"
-        aria-label="Role selector"
+        ref={triggerRef}
+        aria-label={t("roles.extra.role.selector_d23819")}
         aria-haspopup="listbox"
         aria-expanded={open}
         aria-controls={open ? optionsId : undefined}
@@ -468,12 +467,12 @@ function TenantOperatorRoleSelector({
         <div className="absolute left-0 right-0 z-30 mt-1 overflow-hidden rounded-xl border border-gray-300 bg-white shadow-lg">
           <div className="border-b border-gray-200 p-2">
             <label className="grid gap-1 text-xs font-semibold text-gray-700">
-              Filter roles
+              {t("admin.roles.filter.roles_41c1af")}
               <input
                 ref={filterRef}
                 type="search"
                 role="combobox"
-                aria-label="Filter roles"
+                aria-label={t("roles.extra.filter.roles_41c1af")}
                 aria-autocomplete="list"
                 aria-controls={optionsId}
                 aria-expanded="true"
@@ -485,7 +484,7 @@ function TenantOperatorRoleSelector({
                     closeSelector({ restoreFocus: true });
                   }
                 }}
-                placeholder="Role code or name"
+                placeholder={t("roles.extra.role.code.or.name_b5fa18")}
                 className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-normal text-gray-950 outline-none focus:border-gray-500 focus:ring-2 focus:ring-gray-200"
               />
             </label>
@@ -493,11 +492,11 @@ function TenantOperatorRoleSelector({
           <div
             id={optionsId}
             role="listbox"
-            aria-label="Role choices"
+            aria-label={t("roles.extra.role.choices_855376")}
             className="max-h-48 overflow-y-auto p-1"
           >
             {visibleRoles.length === 0 ? (
-              <p className="px-3 py-4 text-sm text-gray-500">No matching Roles.</p>
+              <p className="px-3 py-4 text-sm text-gray-500">{t("admin.roles.no.matching.roles_60595e")}</p>
             ) : (
               visibleRoles.map((role) => (
                 <button
@@ -604,7 +603,7 @@ function activeOperatorGrant(
 }
 
 function roleLabel(roleCode: TenantOperatorRoleCode, t: (key: any) => string): string {
-  if (roleCode === "TENANT_ADMIN") return "Tenant Administrator";
+  if (roleCode === "TENANT_ADMIN") return t("byte354b.roles.tenantAdministrator");
   if (roleCode === "TENANT_VIEWER") return t("authz.tenantRoleDelegation.tenantViewer");
-  return roleCode === "EARNINGS_OPERATOR" ? "Earnings Operator" : "Expenses Operator";
+  return roleCode === "EARNINGS_OPERATOR" ? t("byte354b.roles.earningsOperator") : t("byte354b.roles.expensesOperator");
 }

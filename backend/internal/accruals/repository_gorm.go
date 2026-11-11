@@ -125,7 +125,14 @@ func (r *gormRepository) SummariesForRuns(ctx context.Context, runIDs []string) 
 
 func (r *gormRepository) ListAssignmentsForCalculation(ctx context.Context, workPeriodID string) ([]db.WorkPeriodAssignment, error) {
 	var rows []db.WorkPeriodAssignment
-	err := r.db.WithContext(ctx).Where("tenant_id = ? AND work_period_id = ? AND active = ? AND planned_status = ?", tenantctx.TenantID(ctx), workPeriodID, true, "INCLUDED").Preload("Collaborator.PaymentMethod").Preload("Collaborator.Membership.Person").Preload("Collaborator.Membership").Find(&rows).Error
+	err := r.db.WithContext(ctx).Where("tenant_id = ? AND work_period_id = ? AND active = ? AND planned_status = ?", tenantctx.TenantID(ctx), workPeriodID, true, "INCLUDED").Preload("Collaborator.PaymentMethod").Preload("Collaborator.Membership.Person").Preload("Collaborator.Membership").
+		Preload("Sector", "tenant_id = ? AND type = ?", tenantctx.TenantID(ctx), "sector").
+		Preload("Location", "tenant_id = ? AND type = ?", tenantctx.TenantID(ctx), "location").
+		Preload("Task", "tenant_id = ? AND type = ?", tenantctx.TenantID(ctx), "task").
+		Preload("ActualSector", "tenant_id = ? AND type = ?", tenantctx.TenantID(ctx), "sector").
+		Preload("ActualLocation", "tenant_id = ? AND type = ?", tenantctx.TenantID(ctx), "location").
+		Preload("ActualTask", "tenant_id = ? AND type = ?", tenantctx.TenantID(ctx), "task").
+		Find(&rows).Error
 	return rows, err
 }
 

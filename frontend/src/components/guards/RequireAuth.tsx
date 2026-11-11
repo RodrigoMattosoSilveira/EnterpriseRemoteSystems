@@ -1,3 +1,4 @@
+import { useI18n } from "../../i18n";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { Navigate, useLocation } from "react-router-dom";
 import {
@@ -8,6 +9,7 @@ import { useAuthState } from "../../app/useAuth";
 import { PageTitle } from "../layout/PageHeading";
 
 export function RequireAuth({ children }: { children: ReactNode }) {
+  const { t } = useI18n();
   const auth = useAuthState();
   const location = useLocation();
   const accountId = auth.status === "authenticated" ? auth.session.accountId : "";
@@ -95,7 +97,7 @@ export function RequireAuth({ children }: { children: ReactNode }) {
   if (auth.status === "unknown" || auth.status === "loading") {
     return (
       <main className="grid min-h-screen place-items-center text-slate-600">
-        Loading your session…
+        {t("guard.loading.your.session_c706bf")}
       </main>
     );
   }
@@ -103,13 +105,13 @@ export function RequireAuth({ children }: { children: ReactNode }) {
     return (
       <main className="grid min-h-screen place-items-center p-6">
         <section className="max-w-md rounded-2xl border bg-white p-6">
-          <PageTitle>Unable to verify your session</PageTitle>
+          <PageTitle>{t("guard.unable.to.verify.your.session_187cb1")}</PageTitle>
           <p className="mt-2 text-sm text-slate-600">{auth.error.message}</p>
           <button
             className="mt-4 rounded-lg bg-slate-900 px-4 py-2 text-white"
             onClick={() => void initializeAuthSession()}
           >
-            Try again
+            {t("guard.try.again_042c86")}
           </button>
         </section>
       </main>
@@ -127,7 +129,7 @@ export function RequireAuth({ children }: { children: ReactNode }) {
   if (validatedKey !== validationKey) {
     return (
       <main className="grid min-h-screen place-items-center text-slate-600">
-        Verifying your session…
+        {t("guard.verifying.your.session_8e9611")}
       </main>
     );
   }
@@ -145,7 +147,7 @@ export function RequireAuth({ children }: { children: ReactNode }) {
           role="status"
           className="fixed inset-0 z-[100] grid place-items-center bg-white/70 text-slate-700 backdrop-blur-sm"
         >
-          Verifying your session…
+          {t("guard.verifying.your.session_8e9611")}
         </div>
       )}
     </>

@@ -1,3 +1,4 @@
+import { I18nProvider } from "../../i18n";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -579,6 +580,64 @@ describe("AuthzAdminPage", () => {
     expect(roleSelectorButtonInArticle("expense-admin").textContent).toContain(
       "TENANT_ADMIN",
     );
+    // Escape must restore keyboard focus to the Role selector trigger.
+    // This also catches errors thrown asynchronously by requestAnimationFrame.
+    await vi.waitFor(() => {
+      expect(document.activeElement).toBe(roleSelectorButtonInArticle("expense-admin"));
+    });
+  });
+
+  it("restores focus to the Role selector after Escape without changing the selected Role", async () => {
+    actors.push({
+      id: "actor-expense-admin",
+      actorKey: "expense-admin",
+      displayName: "Expense Admin",
+      personId: "person-expense-admin",
+      globalPersonId: "person-expense-admin",
+      active: true,
+      roleGrants: [],
+      binding: activeTenantBinding("default"),
+    });
+    mockAuthzFetch();
+    const queuedFrames: FrameRequestCallback[] = [];
+    vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => {
+      queuedFrames.push(callback);
+      return queuedFrames.length;
+    });
+
+    renderAuthzAdminPage();
+    await waitForText("Expense Admin");
+    await openRoleSelectorInArticle("expense-admin");
+    await flushQueuedAnimationFrames(queuedFrames);
+    await chooseOpenRoleOptionInArticle("expense-admin", "TENANT_ADMIN");
+
+    const trigger = roleSelectorButtonInArticle("expense-admin");
+    await openRoleSelectorInArticle("expense-admin");
+    await flushQueuedAnimationFrames(queuedFrames);
+    const filter = controlByLabel<HTMLInputElement>(
+      articleByText("expense-admin"),
+      "Filter roles",
+      "input",
+    );
+    expect(document.activeElement).toBe(filter);
+    await setInputValue(filter, "expense");
+    expect(roleChoicesInArticle("expense-admin")).toEqual(["EXPENSE_OPERATOR"]);
+
+    await act(async () => {
+      filter.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    });
+    expect(trigger.getAttribute("aria-expanded")).toBe("false");
+    expect(trigger.textContent).toContain("TENANT_ADMIN");
+    expect(queuedFrames).toHaveLength(1);
+    await flushQueuedAnimationFrames(queuedFrames);
+    expect(document.activeElement).toBe(trigger);
+    expect(
+      fetchCalls.some(
+        (call) =>
+          call.url === "/api/v1/authz/actors/actor-expense-admin/role-grants" &&
+          call.method === "POST",
+      ),
+    ).toBe(false);
   });
 
   it("derives a tenant grant from the Actor binding instead of the application wildcard", async () => {
@@ -1081,6 +1140,7 @@ function mockAuthzFetch() {
 }
 
 function renderAuthzAdminPage() {
+  window.localStorage.setItem("ers.i18n.locale", "en-US");
   const queryClient = new QueryClient({
     defaultOptions: {
       queries: { retry: false },
@@ -1097,9 +1157,9 @@ function renderAuthzAdminPage() {
 
   act(() => {
     root?.render(
-      <QueryClientProvider client={queryClient}>
+      <I18nProvider><QueryClientProvider client={queryClient}>
         <RouterProvider router={router} />
-      </QueryClientProvider>,
+      </QueryClientProvider></I18nProvider>,
     );
   });
 }
@@ -1283,6 +1343,12 @@ async function setSelectValue(select: HTMLSelectElement, value: string) {
     valueSetter?.call(select, value);
     select.dispatchEvent(new Event("input", { bubbles: true }));
     select.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+}
+
+async function flushQueuedAnimationFrames(queuedFrames: FrameRequestCallback[]) {
+  await act(async () => {
+    for (const callback of queuedFrames.splice(0)) callback(0);
   });
 }
 

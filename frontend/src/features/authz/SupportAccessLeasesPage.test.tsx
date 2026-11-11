@@ -1,3 +1,4 @@
+import { I18nProvider } from "../../i18n";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -25,6 +26,31 @@ afterEach(async () => {
 });
 
 describe("SupportAccessLeasesPage", () => {
+  it("shows Portuguese permission descriptions in both request and lease history without altering codes", async () => {
+    mockFetch(async (url) => {
+      if (url === "/api/v1/tenants") {
+        return jsonResponse({ data: [{ id: "default", code: "DEFAULT", name: "Entidade A", active: true, operationalStatus: "ACTIVE_READY", tenantAdminCount: 1, createdAt: "", updatedAt: "" }] });
+      }
+      if (url === "/api/v1/authz/support-access-leases/eligible-permissions") {
+        return jsonResponse({ data: [{ code: "people.read", label: "Read People", description: "Read Tenant People." }] });
+      }
+      if (url.startsWith("/api/v1/authz/support-access-leases")) {
+        return jsonResponse({ data: [{ ...pendingLease, permissions: ["people.read"] }] });
+      }
+      throw new Error(`Unhandled request: ${url}`);
+    });
+    renderPage(applicationAdminContext, "pt-BR");
+    await clickButton("Solicitar acesso de suporte à Entidade");
+    await waitForText("Consultar Pessoas");
+    expect(container.textContent).toContain("Consultar os registros de Pessoas da Entidade.");
+    expect(container.textContent).toContain("people.read");
+    expect(container.textContent).not.toContain("Read Tenant People.");
+    await clickButton("Histórico de concessões");
+    await waitForText("Consultar Pessoas");
+    expect(container.textContent).toContain("Consultar os registros de Pessoas da Entidade.");
+    expect(container.textContent).toContain("people.read");
+  });
+
   it("gives the Global Application Administrator a backend-owned request catalog and retained history", async () => {
     mockFetch(async (url, init) => {
       calls.push({ url, method: init?.method?.toUpperCase() ?? "GET" });
@@ -401,7 +427,7 @@ describe("SupportAccessLeasesPage", () => {
     await waitForText("lease-pending");
 
     expect(container.querySelector("#support-access-history-panel")).not.toBeNull();
-    expect(container.textContent).toContain("PENDING");
+    expect(container.textContent).toContain("Pending");
   });
 
   it("opens with both cards collapsed and keeps only one Support access card open at a time", async () => {
@@ -527,16 +553,17 @@ const tenantAdminContext: AuthorizationContextValue = {
   selectedTenantCode: "DEFAULT",
 };
 
-function renderPage(actor: AuthorizationContextValue) {
+function renderPage(actor: AuthorizationContextValue, locale: "en-US" | "pt-BR" = "en-US") {
+  window.localStorage.setItem("ers.i18n.locale", locale);
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
   act(() => {
     root = createRoot(container);
     root.render(
-      <QueryClientProvider client={queryClient}>
+      <I18nProvider><QueryClientProvider client={queryClient}>
         <AuthorizationProvider value={actor}>
           <SupportAccessLeasesPage />
         </AuthorizationProvider>
-      </QueryClientProvider>,
+      </QueryClientProvider></I18nProvider>,
     );
   });
 }

@@ -44,6 +44,12 @@ export type LedgerEntry = {
   sourceWorkDate?: string;
   sourceWorkPeriodName?: string;
   description?: string;
+  workSectorId?: string;
+  workSectorLabel?: string;
+  workLocationId?: string;
+  workLocationLabel?: string;
+  workTaskId?: string;
+  workTaskLabel?: string;
   active: boolean;
   correctionType: string;
   relatedEntryId?: string;

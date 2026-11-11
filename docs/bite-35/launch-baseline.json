@@ -1,0 +1,54 @@
+{
+  "schema_version": 1,
+  "parent_bite": "35",
+  "title": "Mineração Carará Production Go-Live",
+  "baseline": {
+    "source_branch": "development",
+    "source_sha": "9ecd5b075d08ec19c1f368690e95bc621b984fb1",
+    "verified_tree_comparison": {
+      "target": "test",
+      "method": "git diff --quiet origin/development origin/test",
+      "observed_exit_code": 0,
+      "observation": "User-reported at Bite 35 branch creation; repeat to verify current state"
+    },
+    "working_branch": "1032-byte---351-launch-baseline-and-scope-freezeselect-stable-code-identify-deferred-work-establish-the-release-baseline"
+  },
+  "launch_scope": [
+    {"id": "35.1", "title": "Launch Baseline and Scope Freeze", "status": "in_progress"},
+    {"id": "35.2", "absorbs": "34.1", "title": "Brazilian Portuguese Translation Completion", "status": "planned"},
+    {"id": "35.3", "absorbs": "34.3", "title": "Actual Work Location Override", "status": "planned"},
+    {"id": "35.4", "absorbs": "34.2", "title": "Tenant Functional and Operational Readiness, Training Manual", "status": "planned"},
+    {"id": "35.5", "title": "Clean Database, Mineração Carará Import, Opening Balance Adjustment", "status": "planned"},
+    {"id": "35.6", "title": "Named Application Administrator and Operational Runbooks", "status": "planned"},
+    {"id": "35.7", "title": "Six Minimum Launch Gates and Controlled Activation", "status": "planned"}
+  ],
+  "non_negotiable_contracts": [
+    "Actual work overrides never change compensation based on the informed assignment. For a new same-code Work Period, the latest prior WORKED assignment supplies actual Sector, Location and Task as proposed values, with per-field informed fallback; existing assignments and Journey defaults are not rewritten.",
+    "Bite 35.4 contains separate customer-facing functional and technical operational readiness; customer training is in Brazilian Portuguese.",
+    "Initial Journeys start at zero; historical BRL and GOLD_GRAM amounts owed to or by Collaborators are introduced through an explicitly approved, auditable, one-time Opening Balance Adjustment CSV import, not Bonuses.",
+    "Initialize Production only through a guarded procedure rehearsed on Test; do not use demo/reset commands to replace the live Production database.",
+    "Named human Application Administrator enrollment uses existing controlled mechanisms; no fabricated second administrator or self-approval bypass.",
+    "1Password is the sole ERS operational credential-custody system; LastPass references are legacy and must be resolved in launch runbooks.",
+    "Preserve the existing Hetzner ERS Backups project and ers bucket; never assert advanced environment isolation was accepted.",
+    "No real customer data before the six minimum safety gates pass."
+  ],
+  "launch_gates": [
+    {"id": "release_integrity", "title": "Accepted revision, LOCAL, CI, deployed smoke"},
+    {"id": "security", "title": "HTTPS, authentication, role authorization, tenant isolation"},
+    {"id": "data_preservation", "title": "Controlled initialization, production reset safeguards, safe deployments"},
+    {"id": "backup_restore", "title": "Real off-host backup and isolated verified restore"},
+    {"id": "operational_continuity", "title": "Scheduled backups, failure visibility, documented recovery ownership"},
+    {"id": "administrator_recovery", "title": "Named administrator and tested emergency recovery"}
+  ],
+  "deferred": [
+    {"id": "34.5", "title": "Work Period Assignment Summary"},
+    {"id": "34.4", "title": "Assignment Notification and Collaborator Acceptance"},
+    {"id": "33.6.6+", "title": "Additional recovery hardening"},
+    {"id": "33.6.8E/F", "title": "Advanced shared-bucket access isolation and expanded acceptance"}
+  ],
+  "operational_assertions": {
+    "advanced_s3_isolation": "not_accepted",
+    "real_production_backup_restore": "not_verified_for_launch",
+    "production_launch_authorized": false
+  }
+}

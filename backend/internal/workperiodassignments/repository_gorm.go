@@ -56,6 +56,9 @@ func (r *gormRepository) ListActiveAssignmentsForWorkPeriod(ctx context.Context,
 		Preload("Sector").
 		Preload("Location").
 		Preload("Task").
+		Preload("ActualSector").
+		Preload("ActualLocation").
+		Preload("ActualTask").
 		Order("created_at ASC").
 		Find(&rows).Error
 	return rows, err
@@ -115,6 +118,9 @@ func (r *gormRepository) Update(ctx context.Context, assignment *db.WorkPeriodAs
 			"planned_status":                assignment.PlannedStatus,
 			"planning_availability":         normalizePlanningAvailability(assignment.PlanningAvailability),
 			"actual_status":                 assignment.ActualStatus,
+			"actual_sector_id":              assignment.ActualSectorID,
+			"actual_location_id":            assignment.ActualLocationID,
+			"actual_task_id":                assignment.ActualTaskID,
 			"replacement_for_assignment_id": assignment.ReplacementForAssignmentID,
 			"sector_id":                     assignment.SectorID,
 			"location_id":                   assignment.LocationID,

@@ -69,6 +69,9 @@ type apiAssignmentResponse struct {
 		PlannedStatus              string `json:"plannedStatus"`
 		PlanningAvailability       string `json:"planningAvailability"`
 		ActualStatus               string `json:"actualStatus"`
+		ActualSectorID             string `json:"actualSectorId"`
+		ActualLocationID           string `json:"actualLocationId"`
+		ActualTaskID               string `json:"actualTaskId"`
 		ReplacementForAssignmentID string `json:"replacementForAssignmentId"`
 		SectorID                   string `json:"sectorId"`
 		SectorLabel                string `json:"sectorLabel"`
@@ -108,8 +111,11 @@ type apiPlanningTemplateRow struct {
 	PlanningAvailability                  string `json:"planningAvailability"`
 	Selected                              bool   `json:"selected"`
 	SectorID                              string `json:"sectorId"`
+	SectorLabel                           string `json:"sectorLabel"`
 	LocationID                            string `json:"locationId"`
+	LocationLabel                         string `json:"locationLabel"`
 	TaskID                                string `json:"taskId"`
+	TaskLabel                             string `json:"taskLabel"`
 }
 
 type apiPlanningTemplateResponse struct {
@@ -829,6 +835,222 @@ func TestMarkActualOutcomeReturnsUpdatedAssignment(t *testing.T) {
 	decodeJSON(t, listRes, &listBody)
 	if listBody.Data.Total != 1 || listBody.Data.Items[0].ActualStatus != "WORKED" {
 		t.Fatalf("expected WORKED assignment in filtered list, got total=%d status=%q", listBody.Data.Total, listBody.Data.Items[0].ActualStatus)
+	}
+}
+
+func TestByte353ActualWorkOverridePreservesInformedAssignmentAndFeedsNextPlan(t *testing.T) {
+	server, cleanup := newTestServer(t)
+	defer cleanup()
+	first := createWorkPeriod(t, server, nil)
+	next := createWorkPeriod(t, server, map[string]any{"workDate": "2026-06-06", "startsAt": "2026-06-06T06:00:00Z", "endsAt": "2026-06-06T18:00:00Z"})
+	collaborator := createActiveCollaborator(t, server, 1)
+	assignment := createAssignment(t, server, first.Data.ID, validAssignmentPayload(collaborator.Data.ID, nil))
+	sector := createReferenceData(t, server, "sector", map[string]any{"code": "ACTUAL_SECTOR", "label": "Actual sector", "description": "Test actual work sector", "sortOrder": 60})
+	location := createReferenceData(t, server, "location", map[string]any{"code": "ACTUAL_LOCATION", "label": "Actual location", "description": "Test actual work location", "sortOrder": 60})
+	task := createReferenceData(t, server, "task", map[string]any{"code": "ACTUAL_TASK", "label": "Actual task", "description": "Test actual work task", "sortOrder": 60})
+	res := postJSON(t, server, http.MethodPatch, assignmentsURL+assignment.Data.ID+"/outcome", map[string]any{
+		"actualStatus": "WORKED", "actualSectorId": sector.Data.ID, "actualLocationId": location.Data.ID, "actualTaskId": task.Data.ID,
+	})
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		var e apiErrorResponse
+		decodeJSON(t, res, &e)
+		t.Fatalf("override: %d %+v", res.StatusCode, e.Error)
+	}
+	var got apiAssignmentResponse
+	decodeJSON(t, res, &got)
+	if got.Data.SectorID != assignment.Data.SectorID || got.Data.LocationID != assignment.Data.LocationID || got.Data.TaskID != assignment.Data.TaskID {
+		t.Fatalf("informed assignment changed: %+v", got.Data)
+	}
+	if got.Data.ActualSectorID != sector.Data.ID || got.Data.ActualLocationID != location.Data.ID || got.Data.ActualTaskID != task.Data.ID {
+		t.Fatalf("actual work not persisted: %+v", got.Data)
+	}
+	plan := getJSON(t, server, workPeriodsURL+next.Data.ID+"/assignments/planning-template")
+	defer plan.Body.Close()
+	var template apiPlanningTemplateResponse
+	decodeJSON(t, plan, &template)
+	row := findTemplateRow(template, collaborator.Data.ID)
+	if row == nil || row.SectorID != sector.Data.ID || row.LocationID != location.Data.ID || row.TaskID != task.Data.ID ||
+		row.SectorLabel != sector.Data.Label || row.LocationLabel != location.Data.Label || row.TaskLabel != task.Data.Label {
+		t.Fatalf("next plan must use last performed Sector/Location/Task with labels: %+v", row)
+	}
+	if template.Data.SourceWorkPeriodID != first.Data.ID || row.TemplateAssignmentID != assignment.Data.ID {
+		t.Fatalf("next plan must identify the source work period and assignment: %+v", template.Data)
+	}
+	// Saving the proposed next plan uses the inherited actual work as the new
+	// informed assignment, without rewriting the informed values of the past.
+	saved := postJSON(t, server, http.MethodPost, workPeriodsURL+next.Data.ID+"/assignments/bulk-plan", map[string]any{
+		"rows": []map[string]any{{
+			"collaboratorId": collaborator.Data.ID,
+			"selected":       true,
+			"sectorId":       row.SectorID,
+			"locationId":     row.LocationID,
+			"taskId":         row.TaskID,
+		}},
+	})
+	defer saved.Body.Close()
+	if saved.StatusCode != http.StatusOK {
+		var e apiErrorResponse
+		decodeJSON(t, saved, &e)
+		t.Fatalf("next-period bulk plan: %d %+v", saved.StatusCode, e.Error)
+	}
+	var planned apiBulkPlanResponse
+	decodeJSON(t, saved, &planned)
+	if len(planned.Data.Assignments) != 1 || planned.Data.Assignments[0].SectorID != sector.Data.ID ||
+		planned.Data.Assignments[0].LocationID != location.Data.ID || planned.Data.Assignments[0].TaskID != task.Data.ID {
+		t.Fatalf("next-period informed assignment must keep inherited actual values: %+v", planned.Data)
+	}
+	previousAfterPlan := getJSON(t, server, assignmentsURL+assignment.Data.ID)
+	defer previousAfterPlan.Body.Close()
+	if previousAfterPlan.StatusCode != http.StatusOK {
+		t.Fatalf("previous assignment retrieval: %d", previousAfterPlan.StatusCode)
+	}
+	var previous apiAssignmentResponse
+	decodeJSON(t, previousAfterPlan, &previous)
+	if previous.Data.SectorID != assignment.Data.SectorID || previous.Data.LocationID != assignment.Data.LocationID ||
+		previous.Data.TaskID != assignment.Data.TaskID || previous.Data.ActualSectorID != sector.Data.ID ||
+		previous.Data.ActualLocationID != location.Data.ID || previous.Data.ActualTaskID != task.Data.ID {
+		t.Fatalf("next-period planning must not change previous informed or performed work: %+v", previous.Data)
+	}
+}
+
+// A single recorded override carries forward independently. Historical
+// informed fields are not overwritten, and a non-WORKED result must not
+// turn its recorded references into the following period's work defaults.
+func TestByte353NextPlanUsesPerFieldActualFallbackOnlyForWorked(t *testing.T) {
+	for _, tc := range []struct {
+		name             string
+		status           string
+		includeOverride  bool
+		inheritNewSector bool
+	}{
+		{name: "worked_sector_override", status: "WORKED", includeOverride: true, inheritNewSector: true},
+		{name: "worked_without_override", status: "WORKED", includeOverride: false},
+		{name: "absent_with_recorded_sector", status: "ABSENT", includeOverride: true},
+		{name: "no_outcome", status: ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			server, cleanup := newTestServer(t)
+			defer cleanup()
+			first := createWorkPeriod(t, server, nil)
+			next := createWorkPeriod(t, server, map[string]any{
+				"workDate": "2026-06-06", "startsAt": "2026-06-06T06:00:00Z", "endsAt": "2026-06-06T18:00:00Z",
+			})
+			collaborator := createActiveCollaborator(t, server, 1)
+			assignment := createAssignment(t, server, first.Data.ID, validAssignmentPayload(collaborator.Data.ID, nil))
+			sector := createReferenceData(t, server, "sector", map[string]any{
+				"code": "ONLY_ACTUAL_SECTOR", "label": "Recorded Sector", "description": "Partial work override", "sortOrder": 63,
+			})
+			if tc.status != "" {
+				payload := map[string]any{"actualStatus": tc.status}
+				if tc.includeOverride {
+					payload["actualSectorId"] = sector.Data.ID
+				}
+				outcome := postJSON(t, server, http.MethodPatch, assignmentsURL+assignment.Data.ID+"/outcome", payload)
+				defer outcome.Body.Close()
+				if outcome.StatusCode != http.StatusOK {
+					var e apiErrorResponse
+					decodeJSON(t, outcome, &e)
+					t.Fatalf("outcome %s failed: %d %+v", tc.status, outcome.StatusCode, e.Error)
+				}
+			}
+			response := getJSON(t, server, workPeriodsURL+next.Data.ID+"/assignments/planning-template")
+			defer response.Body.Close()
+			if response.StatusCode != http.StatusOK {
+				t.Fatalf("next plan template: %d", response.StatusCode)
+			}
+			var plan apiPlanningTemplateResponse
+			decodeJSON(t, response, &plan)
+			row := findTemplateRow(plan, collaborator.Data.ID)
+			if row == nil {
+				t.Fatal("expected collaborator in next period template")
+			}
+			wantSector := assignment.Data.SectorID
+			wantLabel := assignment.Data.SectorLabel
+			if tc.inheritNewSector {
+				wantSector = sector.Data.ID
+				wantLabel = sector.Data.Label
+			}
+			if row.SectorID != wantSector || row.SectorLabel != wantLabel ||
+				row.LocationID != assignment.Data.LocationID || row.LocationLabel != assignment.Data.LocationLabel ||
+				row.TaskID != assignment.Data.TaskID || row.TaskLabel != assignment.Data.TaskLabel {
+				t.Fatalf("wrong per-field planning fallback for %s: %+v", tc.name, row)
+			}
+		})
+	}
+}
+
+func TestByte353ExistingNewPeriodPlanIsNotRewrittenByPriorActualOutcome(t *testing.T) {
+	server, cleanup := newTestServer(t)
+	defer cleanup()
+	first := createWorkPeriod(t, server, nil)
+	next := createWorkPeriod(t, server, map[string]any{
+		"workDate": "2026-06-06", "startsAt": "2026-06-06T06:00:00Z", "endsAt": "2026-06-06T18:00:00Z",
+	})
+	collaborator := createActiveCollaborator(t, server, 1)
+	previous := createAssignment(t, server, first.Data.ID, validAssignmentPayload(collaborator.Data.ID, nil))
+	sector := createReferenceData(t, server, "sector", map[string]any{
+		"code": "UNSAVED_OVERRIDE", "label": "Previous actual sector", "description": "Prior-period actual work", "sortOrder": 67,
+	})
+	changed := postJSON(t, server, http.MethodPatch, assignmentsURL+previous.Data.ID+"/outcome", map[string]any{
+		"actualStatus": "WORKED", "actualSectorId": sector.Data.ID,
+	})
+	defer changed.Body.Close()
+	if changed.StatusCode != http.StatusOK {
+		t.Fatalf("previous actual change: %d", changed.StatusCode)
+	}
+	current := createAssignment(t, server, next.Data.ID, validAssignmentPayload(collaborator.Data.ID, nil))
+	response := getJSON(t, server, workPeriodsURL+next.Data.ID+"/assignments/planning-template")
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("current plan template: %d", response.StatusCode)
+	}
+	var plan apiPlanningTemplateResponse
+	decodeJSON(t, response, &plan)
+	row := findTemplateRow(plan, collaborator.Data.ID)
+	if row == nil || row.AssignmentID != current.Data.ID || row.SectorID != current.Data.SectorID ||
+		row.LocationID != current.Data.LocationID || row.TaskID != current.Data.TaskID || plan.Data.SourceWorkPeriodID != "" {
+		t.Fatalf("saved current plan must have priority over previous actual outcomes: %+v / source=%q", row, plan.Data.SourceWorkPeriodID)
+	}
+}
+
+func TestByte353RejectsWrongTypeActualLocationWithoutChangingAssignment(t *testing.T) {
+	server, cleanup := newTestServer(t)
+	defer cleanup()
+	period := createWorkPeriod(t, server, nil)
+	collaborator := createActiveCollaborator(t, server, 1)
+	assignment := createAssignment(t, server, period.Data.ID, validAssignmentPayload(collaborator.Data.ID, nil))
+	res := postJSON(t, server, http.MethodPatch, assignmentsURL+assignment.Data.ID+"/outcome", map[string]any{
+		"actualStatus": "WORKED", "actualLocationId": "ref-sector-mining",
+	})
+	defer res.Body.Close()
+	assertValidationError(t, res, "actualLocationId", "Select an active reference in the current Tenant")
+	got := getJSON(t, server, assignmentsURL+assignment.Data.ID)
+	defer got.Body.Close()
+	var body apiAssignmentResponse
+	decodeJSON(t, got, &body)
+	if body.Data.ActualStatus != "" || body.Data.ActualLocationID != "" {
+		t.Fatalf("invalid actual override modified assignment: %+v", body.Data)
+	}
+}
+
+func TestByte353RejectsWrongTypeActualTaskWithoutChangingAssignment(t *testing.T) {
+	server, cleanup := newTestServer(t)
+	defer cleanup()
+	period := createWorkPeriod(t, server, nil)
+	collaborator := createActiveCollaborator(t, server, 1)
+	assignment := createAssignment(t, server, period.Data.ID, validAssignmentPayload(collaborator.Data.ID, nil))
+	res := postJSON(t, server, http.MethodPatch, assignmentsURL+assignment.Data.ID+"/outcome", map[string]any{
+		"actualStatus": "WORKED", "actualTaskId": "ref-sector-mining",
+	})
+	defer res.Body.Close()
+	assertValidationError(t, res, "actualTaskId", "Select an active reference in the current Tenant")
+	got := getJSON(t, server, assignmentsURL+assignment.Data.ID)
+	defer got.Body.Close()
+	var body apiAssignmentResponse
+	decodeJSON(t, got, &body)
+	if body.Data.ActualStatus != "" || body.Data.ActualTaskID != "" {
+		t.Fatalf("invalid actual task modified assignment: %+v", body.Data)
 	}
 }
 

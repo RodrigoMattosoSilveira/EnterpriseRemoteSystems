@@ -1,3 +1,5 @@
+import { useI18n } from "../../i18n";
 export default function SettingsPage() {
-  return <section><h1>Settings</h1><p>Reference data and system settings.</p></section>;
+  const { t } = useI18n();
+  return <section><h1>{t("settings.settings_c7f73b")}</h1><p>{t("settings.reference.data.and.system.settings_292fd5")}</p></section>;
 }

@@ -242,6 +242,32 @@ if [ "$bite326_final_count" = "1" ]; then
   echo "Bite 32.6 release-hardening schema verified through 000077."
 fi
 
+# Byte 35.3 schema evidence: the migration-history check above is always
+# authoritative. Also confirm that the new columns and immutability triggers
+# were really installed, rather than trusting a schema_migrations row alone.
+actual_work_migration_count="$(sqlite3 "$DB_PATH" "SELECT COUNT(*) FROM schema_migrations WHERE filename='000078_actual_work_location_override.up.sql';")"
+if [ "$actual_work_migration_count" = "1" ]; then
+  for column in actual_sector_id actual_location_id actual_task_id; do
+    require_column work_period_assignments "$column"
+  done
+  require_trigger trg_byte353_actual_references_insert
+  require_trigger trg_byte353_actual_references_update
+fi
+
+attribution_migration_count="$(sqlite3 "$DB_PATH" "SELECT COUNT(*) FROM schema_migrations WHERE filename='000079_work_attribution_evidence.up.sql';")"
+if [ "$attribution_migration_count" = "1" ]; then
+  for table in accrual_items ledger_entries; do
+    for column in \
+      work_sector_id work_sector_label \
+      work_location_id work_location_label \
+      work_task_id work_task_label; do
+      require_column "$table" "$column"
+    done
+  done
+  require_trigger trg_byte353_ledger_work_attribution_immutable
+  require_trigger trg_byte353_posted_accrual_work_attribution_immutable
+fi
+
 audit_identity_migration_count="$(sqlite3 "$DB_PATH" "SELECT COUNT(*) FROM schema_migrations WHERE filename='000067_audit_identity_lifecycle_hardening.up.sql';")"
 if [ "$audit_identity_migration_count" = "1" ]; then
   for column in \

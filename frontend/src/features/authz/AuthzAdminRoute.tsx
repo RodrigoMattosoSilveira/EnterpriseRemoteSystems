@@ -1,3 +1,4 @@
+import { useI18n } from "../../i18n";
 import { useQuery } from "@tanstack/react-query";
 import { apiFetch } from "../../api/client";
 import { shouldRetryQuery } from "../../app/queryRetryPolicy";
@@ -12,6 +13,7 @@ export const authzAdminCurrentActorQueryKey = [
 ] as const;
 
 export function AuthzAdminRoute() {
+  const { t } = useI18n();
   const currentActorQuery = useQuery({
     queryKey: authzAdminCurrentActorQueryKey,
     queryFn: () => apiFetch<AuthzCurrentActor>("/authz/current-actor"),
@@ -29,7 +31,7 @@ export function AuthzAdminRoute() {
   if (currentActorQuery.isPending || currentActorQuery.isFetching) {
     return (
       <main className="p-6">
-        <p className="text-sm text-gray-600">Checking authorization…</p>
+        <p className="text-sm text-gray-600">{t("route.authz.checking.authorization_65529c")}</p>
       </main>
     );
   }

@@ -307,6 +307,26 @@ describe("CollaboratorCurrentAccountPage", () => {
 
     expect(container.querySelector('a[href="/work-periods/wp-1"]')).not.toBeNull();
     expect(container.textContent).toContain("Open Work Period");
+    expect(container.textContent).toContain("Work performed");
+    expect(container.textContent).toContain("Actual Sector");
+    expect(container.textContent).toContain("Processing");
+    expect(container.textContent).toContain("Actual Location");
+    expect(container.textContent).toContain("North Pit");
+    expect(container.textContent).toContain("Actual Task");
+    expect(container.textContent).toContain("Drilling");
+  });
+
+  it("shows the same work attribution in Brazilian Portuguese", async () => {
+    localStorage.setItem("ers.i18n.locale", "pt-BR");
+    mockCurrentAccountFetch();
+    renderCurrentAccountPage("/collaborators/collab-1/current-account?filter=earnings");
+    await waitForText("Trabalho realizado");
+    expect(container.textContent).toContain("Setor real");
+    expect(container.textContent).toContain("Local real");
+    expect(container.textContent).toContain("Tarefa real");
+    expect(container.textContent).toContain("Processing");
+    expect(container.textContent).toContain("North Pit");
+    expect(container.textContent).toContain("Drilling");
   });
 
   it("filters to outstanding receipt ledger entries", async () => {
@@ -500,6 +520,12 @@ const earningEntry: CurrentAccountDetail["ledgerEntries"]["items"][number] = {
   sourceWorkDate: "2026-06-05",
   sourceWorkPeriodName: "06:00-18:00",
   description: "Daily BRL earning for Maria",
+  workSectorId: "sector-2",
+  workSectorLabel: "Processing",
+  workLocationId: "location-2",
+  workLocationLabel: "North Pit",
+  workTaskId: "task-2",
+  workTaskLabel: "Drilling",
   active: true,
   correctionType: "ORIGINAL",
   createdAt: "2026-06-05T00:00:00Z",
