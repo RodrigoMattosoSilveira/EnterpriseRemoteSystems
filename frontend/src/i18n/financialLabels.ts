@@ -8,6 +8,7 @@ const ledgerEntryTypeKeys = {
   PIX_REMITTANCE: "financial.entry.PIX_REMITTANCE",
   REPLACEMENT_TRANSFER: "financial.entry.REPLACEMENT_TRANSFER",
   PAYOUT: "financial.entry.PAYOUT",
+  OPENING_BALANCE: "financial.entry.OPENING_BALANCE",
   FINAL_SETTLEMENT: "financial.entry.FINAL_SETTLEMENT",
   ADJUSTMENT: "financial.entry.ADJUSTMENT",
   DEBIT: "financial.entry.DEBIT",
@@ -22,6 +23,7 @@ const directionKeys = {
 const sourceTypeKeys = {
   EXPENSE: "financial.source.EXPENSE",
   EXPENSE_REPLACEMENT: "financial.source.EXPENSE_REPLACEMENT",
+  OPENING_BALANCE: "financial.source.OPENING_BALANCE",
   JOURNEY_SETTLEMENT: "financial.source.JOURNEY_SETTLEMENT",
   LEDGER_CORRECTION: "financial.source.LEDGER_CORRECTION",
   ACCRUAL_ITEM: "financial.source.ACCRUAL_ITEM",
