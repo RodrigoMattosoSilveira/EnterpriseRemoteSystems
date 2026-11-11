@@ -318,14 +318,92 @@ For T08-A, sign in to the deployed Test app as the ordinary Test Entidade Admini
 
 ## T09 — Fail-closed negative cases, all offline
 
-**Who:** Sole Developer / Tester. **Where:** LOCAL disposable regression suite **only**. Do not corrupt a deployed Test or Production database to test failure handling.
+**Who:** Sole Developer / Tester; no independent human approval required for these fictitious regression fixtures. **Where:** LOCAL Terminal, from `~/projects/EnterpriseRemoteSystems`. **Database:** disposable SQLite files automatically created and deleted by the regression; **never** the configured LOCAL, deployed Test or Production database. **Application UI:** not applicable; these controls protect an offline importer and its SQLite migration.
 
-1. Review the `make byte355-initialization-check` PASS evidence from T01.
-2. Confirm its test cases cover: mismatched environment, wrong target/backup source, changed CSV/approval, signing public-key fingerprint mismatch, same `approved_by` and `executed_by` identifiers, missing exact `apply` confirmation, duplicate import, unauthorized direct opening-ledger entry, UPDATE/DELETE immutability, and forced mid-import failure with full rollback. Verify signature checking through successful signed fixture execution and failed tamper cases. **Do not claim a real second human signed those synthetic fixtures.**
-3. Confirm the regression checks the SQLite integrity and foreign keys, successful original BRL and GOLD_GRAM directions, and that an unrelated preexisting ledger row survives migration.
-4. No Test/Production SQL sabotage, database overwrite, fake approval or private-key exposure is permitted for T09.
+### T09 prerequisites
 
-**PASS:** negative cases fail closed and disposable regression passes, with no deployed database touched. **FAIL:** a negative case can successfully mutate a database or rollback is incomplete. **BLOCKED:** cannot inspect or run the offline evidence.
+1. Confirm the 35.5 feature is checked out in the normal ERS directory. Do not create a Git worktree or a separate application database.
+
+   ```bash
+   cd ~/projects/EnterpriseRemoteSystems
+   pwd
+   git branch --show-current
+   git rev-parse HEAD
+   git status --short
+   ```
+
+2. The branch must be `1071-355-production-database-initialization`. Record the **current** HEAD SHA, including the commit containing these revised regression tests. The original tests were reviewed against committed SHA `3701b85c69744657f2ee61e07fe7bfd9395938a5`. If unexpected changes appear in `git status`, stop and investigate before counting the evidence.
+3. Ensure the LOCAL `python3` interpreter and `openssl` command are available. No customer credentials, real approvals, private keys from 1Password, running backend, or deployed database are required. This test generates and destroys its own temporary signing key.
+
+### T09 execution and evidence capture
+
+4. From the repository root, run:
+
+   ```bash
+   set -o pipefail
+   LOG="$HOME/Downloads/byte355-T09-local.log"
+   make byte355-initialization-check 2>&1 | tee "$LOG"
+   ```
+
+   **Expected:** the command returns exit code `0`, prints one `PASS T09-XX:` line for each numbered safeguard below, and ends with exactly:
+
+   ```text
+   RESULT: Byte 35.5 T09 23 PASS / 0 FAIL; all fixtures disposable; no deployed database touched.
+   PASS: Byte 35.5 offline signed import, two-direction ledger, rollback, duplicate and tamper guards.
+   ```
+
+5. Check the number and summary of PASS lines (copy all commands):
+
+   ```bash
+   COUNT=$(grep -c '^PASS T09-[0-9][0-9]:' "$LOG" || true)
+   echo "Recorded T09 cases: $COUNT"
+   test "$COUNT" -eq 23 || { echo 'FAIL: not all 23 T09 cases passed'; exit 1; }
+   grep -Fq 'RESULT: Byte 35.5 T09 23 PASS / 0 FAIL;' "$LOG" || {
+     echo 'FAIL: required T09 summary missing'
+     exit 1
+   }
+   echo 'PASS: 23 individually reported T09 cases and summary verified'
+   ```
+
+   **Expected:** `Recorded T09 cases: 23` and `PASS: 23 individually reported T09 cases and summary verified`. The `make` command must itself have exited successfully; a log file with old PASS lines does not replace a fresh successful run.
+
+### Required individual assertions
+
+The regression must print all of these independently, with the exact failure cause checked where appropriate:
+
+| Case | Safeguard and expected observation |
+|---|---|
+| T09-01 | Production/TEST environment mismatch refused before input processing |
+| T09-02 | Targeting `backup.db` instead of existing `app.db` refused |
+| T09-03 | Wrong backup source refused even with matching manifest hash and valid fresh signature |
+| T09-04 | CSV modified after signature refused by CSV checksum |
+| T09-05 | Approval modified after signature refused cryptographically |
+| T09-06 | Corrupted signature bytes refused cryptographically |
+| T09-07 | Incorrect trusted public-key SHA-256 fingerprint refused |
+| T09-08 | Same `approved_by`/`executed_by` refused **even with a freshly valid signature**; fictitious identifiers do not count as two actual humans |
+| T09-09 | Missing exact `apply` confirmation refused |
+| T09-10 | Incorrect `apply` confirmation refused |
+| T09-11 | Missing writer-isolation confirmation refused |
+| T09-12 | Duplicate `apply` refused without a second import |
+| T09-13 | Duplicate `plan` refused after import |
+| T09-14 | Existing ledger entry, indexes/triggers, SQLite integrity and foreign keys preserved across migration |
+| T09-15 | Properly signed `plan` succeeds and posts **zero** records |
+| T09-16 | Properly signed `apply` posts two records and one audit batch, BRL credit and GOLD_GRAM debit |
+| T09-17 | Direct UPDATE of opening ledger entries refused |
+| T09-18 | Direct DELETE of opening ledger entries refused |
+| T09-19 | Direct UPDATE of opening import audit refused |
+| T09-20 | Direct DELETE of opening import audit refused |
+| T09-21 | Read-only signed `verify` reconciles records; SQLite integrity and foreign keys clean |
+| T09-22 | Direct unsigned SQL opening-ledger INSERT refused by the required import-batch trigger |
+| T09-23 | Forced failure on the second ledger row leaves **zero** opening entries and **zero** import-audit batches; exact forced failure reason verified |
+
+Every isolated refusal test also confirms that the database's opening-entry and import-audit counts remain unchanged and that SQLite integrity and foreign keys remain valid. The test verifies a successful signed import using ephemeral fictitious keys; it does **not** prove that two real people approved an operational import.
+
+### T09 result
+
+**PASS:** the newly executed `make byte355-initialization-check` exits `0`; each of the 23 individual cases prints PASS; the required final summary is present; LOCAL and deployed databases were not used. Save the log path, date and current HEAD SHA in the acceptance evidence register. **FAIL:** any case accepts a forbidden operation, returns the wrong rejection cause, writes when refused, fails to roll back, reports fewer than 23 PASS lines, or exits nonzero. **BLOCKED:** necessary LOCAL execution tools are unavailable or the test cannot be run; do not infer PASS from older aggregate-only output.
+
+No Test/Production SQL sabotage, database reset, fake operational approval or customer private-key exposure is permitted for T09. If the automated check creates no containers, none require Docker teardown.
 
 ## T10 — Three separate decisions, evidence and teardown
 

@@ -67,6 +67,169 @@ def args(d, db, approval, environment='test', action='plan', **overrides):
         a += ['--confirm',f'APPLY-OPENING-BALANCES-{environment.upper()}', '--writers-stopped','ALL_DATABASE_WRITERS_STOPPED']
     return a
 
+def t09_independent_negative_cases(directory, pristine_db, signed_approval, signing_key, public_key):
+    """Exercise each refusal against a new, independently valid disposable fixture.
+
+    Do not reuse a database with an already-broken backup or approval for a
+    different failure assertion: it can mask the very guard being tested.
+    """
+    cases_dir = directory/'t09-isolated'
+    cases_dir.mkdir()
+    base_env = dict(os.environ, APP_ENV='test', ENV='test', DEPLOY_ENV='test')
+    case_number = 0
+
+    def pass_case(title):
+        nonlocal case_number
+        case_number += 1
+        print(f'PASS T09-{case_number:02d}: {title}', flush=True)
+
+    def new_case(name):
+        case = cases_dir/name
+        case.mkdir()
+        database = case/'app.db'
+        shutil.copy2(pristine_db, database)
+        with sqlite3.connect(pristine_db) as src, sqlite3.connect(case/'backup.db') as dst:
+            src.backup(dst)
+        shutil.copy2(directory/'opening.csv', case/'opening.csv')
+        shutil.copy2(public_key, case/'approval.pub.pem')
+        backup_blob = (case/'backup.db').read_bytes()
+        manifest = {
+            'format_version': 1, 'status': 'verified', 'environment': 'test',
+            'repository': {'revision': 'a'*40, 'tree_sha': 'b'*40},
+            'source': {'container': 'disposable-test', 'database_path': str(database)},
+            'backup': {'file': 'backup.db', 'size_bytes': len(backup_blob),
+                       'sha256': hashlib.sha256(backup_blob).hexdigest()},
+            'verification': {'integrity_check': 'ok', 'foreign_key_check': 'ok'},
+        }
+        (case/'backup.db.manifest.json').write_text(json.dumps(manifest))
+        approved = dict(signed_approval)
+        approved['backup_manifest_sha256'] = hashlib.sha256(
+            (case/'backup.db.manifest.json').read_bytes()).hexdigest()
+        approved['csv_sha256'] = hashlib.sha256((case/'opening.csv').read_bytes()).hexdigest()
+        (case/'approval.json').write_text(json.dumps(approved, sort_keys=True))
+        sign(case)
+        return case
+
+    def sign(case):
+        result = run(['openssl', 'dgst', '-sha256', '-sign', str(signing_key),
+                      '-out', str(case/'approval.sig'), str(case/'approval.json')])
+        assert result.returncode == 0, result.stderr
+
+    def command(case, action='plan'):
+        return args(case, case/'app.db', case/'approval.json', action=action)
+
+    def change_option(command_args, option, value):
+        changed = list(command_args)
+        index = changed.index(option)
+        changed[index+1] = value
+        return changed
+
+    def omit_option(command_args, option):
+        changed = list(command_args)
+        index = changed.index(option)
+        del changed[index:index+2]
+        return changed
+
+    def counts(database):
+        with sqlite3.connect(database) as connection:
+            result = (
+                connection.execute("SELECT COUNT(*) FROM ledger_entries WHERE entry_type='OPENING_BALANCE'").fetchone()[0],
+                connection.execute('SELECT COUNT(*) FROM production_opening_balance_imports').fetchone()[0],
+            )
+            assert connection.execute('PRAGMA integrity_check').fetchone()[0] == 'ok'
+            assert connection.execute('PRAGMA foreign_key_check').fetchall() == []
+            return result
+
+    def rejected(title, case, invocation, expected, *, environment=base_env, prior=(0, 0)):
+        assert counts(case/'app.db') == prior, f'{title}: unexpected initial database state'
+        result = run(invocation, env=environment)
+        output = result.stderr + result.stdout
+        assert result.returncode != 0, f'{title}: accepted unexpectedly: {output}'
+        assert expected in output, f'{title}: expected rejection {expected!r}, got: {output}'
+        assert counts(case/'app.db') == prior, f'{title}: failed attempt wrote opening data'
+        pass_case(title)
+
+    case = new_case('environment')
+    rejected('APP_ENV mismatch', case, command(case),
+             'APP_ENV must explicitly match', environment=dict(base_env, APP_ENV='production'))
+
+    case = new_case('target')
+    rejected('wrong target (backup.db)', case,
+             change_option(command(case), '--db', str(case/'backup.db')),
+             'target must be the existing app.db')
+
+    case = new_case('backup-source')
+    manifest_file = case/'backup.db.manifest.json'
+    manifest = json.loads(manifest_file.read_text())
+    manifest['source']['database_path'] = str(case/'not-the-database.db')
+    manifest_file.write_text(json.dumps(manifest))
+    approved = json.loads((case/'approval.json').read_text())
+    approved['backup_manifest_sha256'] = hashlib.sha256(manifest_file.read_bytes()).hexdigest()
+    (case/'approval.json').write_text(json.dumps(approved, sort_keys=True))
+    sign(case)
+    rejected('wrong backup source with valid signature', case, command(case),
+             'verified backup manifest metadata/checksum/environment mismatch')
+
+    case = new_case('csv-tamper')
+    csv_file = case/'opening.csv'
+    csv_file.write_bytes(csv_file.read_bytes().replace(b'125.50', b'175.50'))
+    rejected('changed CSV rejected', case, command(case), 'approval csv_sha256 mismatch')
+
+    case = new_case('approval-tamper')
+    approval_file = case/'approval.json'
+    tampered = json.loads(approval_file.read_text())
+    tampered['approval_reference'] = 'TAMPERED-APPROVAL'
+    approval_file.write_text(json.dumps(tampered, sort_keys=True))
+    rejected('changed approval rejected by signature', case, command(case),
+             'cryptographic approval signature verification failed')
+
+    case = new_case('signature-tamper')
+    signature_file = case/'approval.sig'
+    signature = bytearray(signature_file.read_bytes())
+    signature[0] ^= 1
+    signature_file.write_bytes(signature)
+    rejected('corrupted signature rejected', case, command(case),
+             'cryptographic approval signature verification failed')
+
+    case = new_case('fingerprint')
+    rejected('public-key fingerprint mismatch', case,
+             change_option(command(case), '--approved-public-key-sha256', '0'*64),
+             'signing public-key fingerprint differs')
+
+    case = new_case('same-human')
+    approved = json.loads((case/'approval.json').read_text())
+    approved['approved_by'] = approved['executed_by']
+    (case/'approval.json').write_text(json.dumps(approved, sort_keys=True))
+    sign(case)
+    rejected('same approved_by and executed_by (valid signature)', case,
+             command(case), 'named independent approver and operator are required')
+
+    case = new_case('no-confirm')
+    rejected('missing apply confirmation', case,
+             omit_option(command(case, 'apply'), '--confirm'),
+             'exact apply confirmation required')
+
+    case = new_case('wrong-confirm')
+    rejected('incorrect apply confirmation', case,
+             change_option(command(case, 'apply'), '--confirm', 'WRONG'),
+             'exact apply confirmation required')
+
+    case = new_case('writers')
+    rejected('missing writer-isolation confirmation', case,
+             omit_option(command(case, 'apply'), '--writers-stopped'),
+             'database writer-isolation confirmation required')
+
+    case = new_case('duplicate')
+    first = run(command(case, 'apply'), env=base_env)
+    assert first.returncode == 0, first.stdout+first.stderr
+    assert counts(case/'app.db') == (2, 1), 'initial signed import did not post exactly two positions'
+    rejected('duplicate apply rejected', case, command(case, 'apply'),
+             'CSV checksum already imported', prior=(2, 1))
+    rejected('duplicate plan rejected', case, command(case, 'plan'),
+             'CSV checksum already imported', prior=(2, 1))
+
+    return case_number
+
 
 def main():
     with tempfile.TemporaryDirectory(prefix='ers-byte355-rehearsal-') as td:
@@ -122,6 +285,8 @@ def main():
                 raise AssertionError('unsigned direct opening ledger insert unexpectedly accepted')
             except sqlite3.IntegrityError as exc:
                 assert 'opening_balance_import_required' in str(exc), str(exc)
+            assert c.execute("SELECT COUNT(*) FROM ledger_entries WHERE entry_type='OPENING_BALANCE'").fetchone()[0] == 0
+            assert c.execute('SELECT COUNT(*) FROM production_opening_balance_imports').fetchone()[0] == 0
         seed_snapshot = db.stat().st_size
         rows=[{'tenant_id':'test-355','journey_id':'journey-355','person_id':'person-355','value_unit_code':'BRL',
                'signed_amount':'125.50','effective_date':'2026-01-01','reference':'APPROVED-355-BRL'},
@@ -152,12 +317,27 @@ def main():
         approvalfile.write_text(json.dumps(approval,sort_keys=True))
         r=run(['openssl','dgst','-sha256','-sign',str(key),'-out',str(d/'approval.sig'),str(approvalfile)])
         assert r.returncode==0, r.stderr
+        # Each negative case starts with its own valid, signed Test fixture.
+        isolated_cases = t09_independent_negative_cases(d, db, approval, key, pub)
+        result_count = isolated_cases
+        def passed(title):
+            nonlocal result_count
+            result_count += 1
+            print(f'PASS T09-{result_count:02d}: {title}', flush=True)
+
+        # The pre-35.5 migration test above also checked this original ledger
+        # entry, existing indexes/triggers, SQLite integrity, and foreign keys.
+        passed('preexisting ledger and migration structures preserved')
         env = dict(os.environ, APP_ENV='test', ENV='test', DEPLOY_ENV='test')
         def call(action='plan', approval=approvalfile, env_=env):
             return run(args(d,db,approval,action=action),env=env_)
         r=call();assert r.returncode==0, r.stderr+r.stdout
         with sqlite3.connect(db) as c:
             assert c.execute("SELECT COUNT(*) FROM ledger_entries WHERE entry_type='OPENING_BALANCE'").fetchone()[0]==0
+            assert c.execute('SELECT COUNT(*) FROM production_opening_balance_imports').fetchone()[0]==0
+        passed('valid signature accepted by read-only plan (zero writes)')
+        # Retain the original smoke check; the isolated T09-09 test additionally
+        # asserts the exact rejection reason and no database mutation.
         assert run(args(d,db,approvalfile,action='apply')[:-4],env=env).returncode != 0, 'missing confirmation accepted'
         r=call('apply');assert r.returncode==0, r.stderr+r.stdout
         print(r.stdout.strip())
@@ -166,13 +346,43 @@ def main():
             assert c.execute('PRAGMA integrity_check').fetchone()[0]=='ok'
             assert c.execute('PRAGMA foreign_key_check').fetchall()==[]
             assert c.execute("SELECT COUNT(*) FROM production_opening_balance_imports").fetchone()[0]==1
-            try:
-                c.execute("UPDATE ledger_entries SET amount=10 WHERE entry_type='OPENING_BALANCE'");raise AssertionError('immutable opening entries updated')
-            except sqlite3.IntegrityError: pass
-            try:
-                c.execute('DELETE FROM production_opening_balance_imports');raise AssertionError('audit deleted')
-            except sqlite3.IntegrityError: pass
-        assert call('verify').returncode==0, 'read-only ledger reconciliation failed'
+        passed('valid signed apply posts one immutable audit and both signed directions')
+        def sql_rejected(title, statement, expected):
+            with sqlite3.connect(db) as c:
+                before = (c.execute("SELECT COUNT(*) FROM ledger_entries WHERE entry_type='OPENING_BALANCE'").fetchone()[0],
+                          c.execute('SELECT COUNT(*) FROM production_opening_balance_imports').fetchone()[0])
+                try:
+                    c.execute(statement)
+                except sqlite3.IntegrityError as exc:
+                    assert expected in str(exc), f'{title}: wrong SQL rejection: {exc}'
+                else:
+                    raise AssertionError(f'{title}: mutation was accepted')
+                after = (c.execute("SELECT COUNT(*) FROM ledger_entries WHERE entry_type='OPENING_BALANCE'").fetchone()[0],
+                         c.execute('SELECT COUNT(*) FROM production_opening_balance_imports').fetchone()[0])
+                assert before == after == (2, 1), f'{title}: opening records changed'
+            passed(title)
+
+        sql_rejected('opening ledger UPDATE prohibited',
+                     "UPDATE ledger_entries SET amount=10 WHERE entry_type='OPENING_BALANCE'",
+                     'opening_balance_immutable')
+        sql_rejected('opening ledger DELETE prohibited',
+                     "DELETE FROM ledger_entries WHERE entry_type='OPENING_BALANCE'",
+                     'opening_balance_immutable')
+        sql_rejected('import audit UPDATE prohibited',
+                     "UPDATE production_opening_balance_imports SET expected_rows=10",
+                     'opening_balance_import_immutable')
+        sql_rejected('import audit DELETE prohibited',
+                     'DELETE FROM production_opening_balance_imports',
+                     'opening_balance_import_immutable')
+        verify_result = call('verify')
+        assert verify_result.returncode==0, verify_result.stderr+verify_result.stdout
+        with sqlite3.connect(db) as c:
+            assert c.execute('PRAGMA integrity_check').fetchone()[0]=='ok'
+            assert c.execute('PRAGMA foreign_key_check').fetchall()==[]
+        passed('read-only verify reconciles both units and SQLite integrity')
+        # The earlier SQL test rejected unsigned out-of-band inserts by the
+        # exact opening_balance_import_required trigger, before any import.
+        passed('unauthorized direct SQL opening entry rejected')
         # Changing the signed approval or CSV requires a new independent signature.
         key_mismatch = run(args(d,db,approvalfile,action='verify')[:-2] +
                            ['--approved-public-key-sha256', '0'*64], env=env)
@@ -196,24 +406,15 @@ def main():
                 BEGIN SELECT RAISE(ABORT, 'forced_test_failure'); END;''')
         failed = run(args(d,rollback_db,rollback_file,action='apply'),env=env)
         assert failed.returncode != 0, 'test trigger should reject the second entry'
+        assert 'forced_test_failure' in failed.stderr+failed.stdout, 'wrong failure masked rollback test'
         with sqlite3.connect(rollback_db) as c:
             assert c.execute("SELECT COUNT(*) FROM ledger_entries WHERE entry_type='OPENING_BALANCE'").fetchone()[0]==0
             assert c.execute('SELECT COUNT(*) FROM production_opening_balance_imports').fetchone()[0]==0
-        # Test invalid signatures, conflicting environment, changed CSV after signing,
-        # and non-mutating behavior; use a freshly copied original fixture.
-        db2=d/'other'/'app.db';db2.parent.mkdir();shutil.copy2(d/'backup.db',db2)
-        # Separate database is a deliberately different source from this backup manifest.
-        r=run(args(d,db2,approvalfile),env=env);assert r.returncode!=0
-        changed = dict(approval, approved_by='operator-355')
-        tamper=d/'tampered.json';tamper.write_text(json.dumps(changed))
-        r=run(args(d,db2,tamper),env=env);assert r.returncode!=0
-        r=run(args(d,db2,approvalfile),env=dict(env,APP_ENV='production'));assert r.returncode!=0
-        fake_csv=(d/'opening.csv').read_bytes().replace(b'125.50',b'175.50');(d/'opening.csv').write_bytes(fake_csv)
-        r=run(args(d,db2,approvalfile,action='apply'),env=env);assert r.returncode!=0
-        with sqlite3.connect(db2) as c:
-            assert c.execute('SELECT COUNT(*) FROM production_opening_balance_imports').fetchone()[0]==0
-            assert c.execute("SELECT COUNT(*) FROM ledger_entries WHERE entry_type='OPENING_BALANCE'").fetchone()[0]==0
+            assert c.execute('PRAGMA integrity_check').fetchone()[0]=='ok'
+            assert c.execute('PRAGMA foreign_key_check').fetchall()==[]
+        passed('forced second-row failure rolls back audit and both ledger rows')
         assert db.stat().st_size >= seed_snapshot
+    print(f'RESULT: Byte 35.5 T09 {result_count} PASS / 0 FAIL; all fixtures disposable; no deployed database touched.')
     print('PASS: Byte 35.5 offline signed import, two-direction ledger, rollback, duplicate and tamper guards.')
 
 if __name__=='__main__':main()
