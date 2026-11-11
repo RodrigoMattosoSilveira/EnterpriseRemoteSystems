@@ -47,15 +47,15 @@ def test_committed_access_manifest() -> None:
     expected = {
         "RECOVERY_ACCESS_FORMAT_VERSION": "1",
         "RECOVERY_OWNER_UNAVAILABLE_REQUIRED": "true",
-        "RECOVERY_SHARED_SECRETS_PROVIDER": "LastPass",
-        "RECOVERY_SHARED_COLLECTION": "ERS-Recovery",
+        "RECOVERY_SHARED_SECRETS_PROVIDER": "1Password",
+        "RECOVERY_SHARED_COLLECTION": "ers-production",
         "RECOVERY_REPOSITORY_SLUG": "RodrigoMattosoSilveira/EnterpriseRemoteSystems",
         "RECOVERY_REPOSITORY_URL": "git@github.com:RodrigoMattosoSilveira/EnterpriseRemoteSystems.git",
-        "RECOVERY_PRODUCTION_ENV_SOURCE": "lastpass-shared://ERS-Recovery/Production/.env.production",
-        "RECOVERY_S3_CREDENTIAL_SOURCE": "lastpass-shared://ERS-Recovery/Production/Hetzner-S3-ers-backup",
-        "RECOVERY_HOST_ACCESS_SOURCE": "lastpass-shared://ERS-Recovery/Production/Host-SSH",
-        "RECOVERY_HETZNER_CONSOLE_SOURCE": "lastpass-shared://ERS-Recovery/Infrastructure/Hetzner-Console",
-        "RECOVERY_DNS_SOURCE": "lastpass-shared://ERS-Recovery/Infrastructure/DNS",
+        "RECOVERY_PRODUCTION_ENV_SOURCE": "op://ers-production/recovery-production-env/document",
+        "RECOVERY_S3_CREDENTIAL_SOURCE": "op://ers-production/recovery-hetzner-s3/document",
+        "RECOVERY_HOST_ACCESS_SOURCE": "op://ers-production/recovery-host-ssh/document",
+        "RECOVERY_HETZNER_CONSOLE_SOURCE": "op://ers-production/recovery-hetzner-console/document",
+        "RECOVERY_DNS_SOURCE": "op://ers-production/recovery-dns/document",
         "RECOVERY_MFA_RECOVERY_SOURCE": "technician-controlled://independent-mfa-and-recovery-codes",
         "RECOVERY_PRODUCTION_DOMAIN": "app.enterpriseremotesystems.com",
         "RECOVERY_S3_ENDPOINT": "https://hel1.your-objectstorage.com",
@@ -139,10 +139,10 @@ def test_preflight_script_behavior() -> None:
         )
         if proc.returncode != 0:
             raise AssertionError(f"owner-unavailable preflight should pass with explicit shared sources:\n{proc.stdout}")
-        require(proc.stdout, ("Owner-unavailable recovery access preflight passed.", "lastpass-shared://ERS-Recovery/Production/.env.production"), "preflight output")
+        require(proc.stdout, ("Owner-unavailable recovery access preflight passed.", "op://ers-production/recovery-production-env/document"), "preflight output")
 
         bad = temp / "bad-recovery-access.env"
-        bad.write_text(text.replace("lastpass-shared://ERS-Recovery/Production/.env.production", "personal-vault://owner/.env.production"))
+        bad.write_text(text.replace("op://ers-production/recovery-production-env/document", "personal-vault://owner/.env.production"))
         proc = run(
             [str(script)],
             env={
@@ -152,8 +152,24 @@ def test_preflight_script_behavior() -> None:
                 "RECOVERY_ACCESS_MANIFEST_FILE": str(bad),
             },
         )
-        if proc.returncode == 0 or "lastpass-shared://" not in proc.stdout:
+        if proc.returncode == 0 or "op://" not in proc.stdout:
             raise AssertionError(f"preflight must reject personal/vague secret sources:\n{proc.stdout}")
+
+        for label, changed in (
+            ("legacy provider", text.replace("RECOVERY_SHARED_SECRETS_PROVIDER=1Password", "RECOVERY_SHARED_SECRETS_PROVIDER=LastPass")),
+            ("wrong vault", text.replace("RECOVERY_SHARED_COLLECTION=ers-production", "RECOVERY_SHARED_COLLECTION=personal")),
+            ("cross-vault locator", text.replace("op://ers-production/recovery-host-ssh/document", "op://ers-development/recovery-host-ssh/document")),
+        ):
+            bad.write_text(changed)
+            rejected = run([str(script)], env={
+                "RECOVERY_ACCESS_ENVIRONMENT": "production",
+                "RECOVERY_ACCESS_ENV_DIR": str(alias_env_dir),
+                "RECOVERY_ACCESS_ENV_FILE": ".env.production",
+                "RECOVERY_ACCESS_MANIFEST_FILE": str(bad),
+            })
+            if rejected.returncode == 0:
+                raise AssertionError(f"{label} must fail closed")
+
 
 
 def test_backup_revision_evidence_contract() -> None:
@@ -197,8 +213,8 @@ def test_runbook_and_initializer_contract() -> None:
         (
             "Owner-unavailable recovery contract",
             "ops/recovery-access.production.env",
-            "lastpass-shared://ERS-Recovery/Production/.env.production",
-            "lastpass-shared://ERS-Recovery/Production/Hetzner-S3-ers-backup",
+            "op://ers-production/recovery-production-env/document",
+            "op://ers-production/recovery-hetzner-s3/document",
             "server-owner-unavailable-recovery-preflight",
             "server-owner-unavailable-recovery-rehearsal",
             "OWNER-UNAVAILABLE-RECOVERY-ACCESS-CONFIRMED",
@@ -221,7 +237,7 @@ def test_runbook_and_initializer_contract() -> None:
             "Required access policy",
             "Configuration-change discipline",
             "Quarterly owner-unavailable access rehearsal",
-            "ERS-Recovery",
+            "ers-production",
             "Production/.env.production",
             "independent-mfa-and-recovery-codes",
             "No personal vault",
