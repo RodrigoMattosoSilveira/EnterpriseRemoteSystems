@@ -69,6 +69,13 @@ func validateByte352Input(input byte352FixtureInput) error {
 }
 
 func ensureByte352Fixtures(ctx context.Context, database *gorm.DB, input byte352FixtureInput, cost int) error {
+	return ensureByte352FixturesWithPolicy(ctx, database, input, cost, false)
+}
+
+// AllowAllFixturePasswordReconciliation is available only from the explicit
+// LOCAL developer installer. The preexisting Byte 35.2 command retains its
+// much stricter ADMIN-only rotation contract.
+func ensureByte352FixturesWithPolicy(ctx context.Context, database *gorm.DB, input byte352FixtureInput, cost int, allowAllFixturePasswordReconciliation bool) error {
 	if database == nil {
 		return fmt.Errorf("database is required")
 	}
@@ -89,7 +96,7 @@ func ensureByte352Fixtures(ctx context.Context, database *gorm.DB, input byte352
 			}
 		}
 		for _, spec := range append(append([]byte352Identity{}, byte352Administrators...), byte352Identities...) {
-			if err := ensureByte352Identity(tx, spec, input.Credentials[spec.Login], cost, input.RotateTenantAdministratorPasswords); err != nil {
+			if err := ensureByte352Identity(tx, spec, input.Credentials[spec.Login], cost, input.RotateTenantAdministratorPasswords, allowAllFixturePasswordReconciliation); err != nil {
 				return fmt.Errorf("%s: %w", spec.Login, err)
 			}
 		}
@@ -97,7 +104,7 @@ func ensureByte352Fixtures(ctx context.Context, database *gorm.DB, input byte352
 	})
 }
 
-func ensureByte352Identity(tx *gorm.DB, spec byte352Identity, password string, cost int, rotateAdministrator bool) error {
+func ensureByte352Identity(tx *gorm.DB, spec byte352Identity, password string, cost int, rotateAdministrator bool, allowAllFixturePasswordReconciliation bool) error {
 	now := time.Now().UTC()
 	personID, accountID := spec.Stem+"-person", spec.Stem+"-account"
 	var other authentication.Account
@@ -148,7 +155,7 @@ func ensureByte352Identity(tx *gorm.DB, spec byte352Identity, password string, c
 			return fmt.Errorf("fixture Account inactive: resolve manually")
 		}
 		if bcrypt.CompareHashAndPassword([]byte(account.PasswordHash), []byte(password)) != nil {
-			if !spec.Administrator || !rotateAdministrator {
+			if !allowAllFixturePasswordReconciliation && (!spec.Administrator || !rotateAdministrator) {
 				return fmt.Errorf("existing fixture password differs for %s; refusing rotation (Tenant Administrators require explicit rotateTenantAdministratorPasswords consent)", spec.Login)
 			}
 			hash, err := bcrypt.GenerateFromPassword([]byte(password), cost)
@@ -156,6 +163,9 @@ func ensureByte352Identity(tx *gorm.DB, spec byte352Identity, password string, c
 				return err
 			}
 			if err := tx.Model(&authentication.Account{}).Where("id = ? AND login = ? AND active = ?", accountID, spec.Login, true).Updates(map[string]any{"password_hash": string(hash), "password_changed_at": now, "updated_at": now}).Error; err != nil {
+				return err
+			}
+			if err := revokeLocalFixtureSessions(tx, accountID, now); err != nil {
 				return err
 			}
 		}

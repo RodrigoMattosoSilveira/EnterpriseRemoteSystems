@@ -51,6 +51,10 @@ jobs:
       - name: Run backend tests
         run: go test ./...
 
+      - name: Verify LOCAL developer fixture backup and non-Production guards
+        working-directory: .
+        run: python3 -m unittest discover -s scripts -p 'test_local_developer_fixtures.py' -v
+
   migration-rehearsal:
     name: 30I migration rehearsal
     runs-on: ubuntu-latest
@@ -125,6 +129,9 @@ jobs:
 
       - name: Verify Bite 33.6 owner-unavailable recovery readiness
         run: make owner-unavailable-recovery-readiness-check
+
+      - name: Verify Bite 35.6 administrator and 1Password recovery runbook contract
+        run: make byte356-operations-check
 
       - name: Validate promotion readiness and 1Password isolation workflow contract
         run: make promotion-readiness-check

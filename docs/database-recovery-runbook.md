@@ -24,18 +24,18 @@ The non-secret authoritative locator inventory is committed at:
 ops/recovery-access.production.env
 ```
 
-This runbook is the **single canonical human-readable recovery document**. The machine-readable non-secret locator contract remains `ops/recovery-access.production.env`. The canonical shared secret collection is `ERS-Recovery` in LastPass. The exact required source locators are:
+This runbook is the **single canonical human-readable recovery document**. The machine-readable non-secret locator contract remains `ops/recovery-access.production.env`. The canonical shared vault is `ers-production` in 1Password. These committed references identify **required** recovery items; they do not prove that the items exist or that any individual has access. The 35.6 manual acceptance must establish real independent access before Production recovery readiness can pass. The exact required source locators are:
 
 ```text
-lastpass-shared://ERS-Recovery/Production/.env.production
-lastpass-shared://ERS-Recovery/Production/Hetzner-S3-ers-backup
-lastpass-shared://ERS-Recovery/Production/Host-SSH
-lastpass-shared://ERS-Recovery/Infrastructure/Hetzner-Console
-lastpass-shared://ERS-Recovery/Infrastructure/DNS
+op://ers-production/recovery-production-env/document
+op://ers-production/recovery-hetzner-s3/document
+op://ers-production/recovery-host-ssh/document
+op://ers-production/recovery-hetzner-console/document
+op://ers-production/recovery-dns/document
 technician-controlled://independent-mfa-and-recovery-codes
 ```
 
-Repository/edge configuration is recovered from the shared GitHub repository, not from the failed host. GitHub Actions secrets are not an authoritative recovery source because secret values cannot be read back by an operator; the recoverable SSH/account material must exist in the shared LastPass collection.
+Repository/edge configuration is recovered from the shared GitHub repository, not from the failed host. GitHub Actions secrets are not an authoritative recovery source because secret values cannot be read back by an operator; the recoverable SSH/account material must exist in the shared 1Password vault.
 
 A database backup does not contain `.env.production`, S3 credentials, SSH credentials, DNS/provider credentials, or MFA recovery material. Those prerequisites must be retrieved from the exact shared sources above. **Do not generate replacement Production secrets with `init-server-env.sh` and call that recovery.**
 
@@ -55,7 +55,7 @@ ERS Production recovery must not depend on the system owner being awake, reachab
 
 The operational standard is:
 
-> A qualified designated technician, using only this runbook, pre-authorized designated-technician GitHub access, the shared LastPass recovery collection, pre-authorized Hetzner project access, and DNS administrative access, can recover the Production database and prove the recovered service without information held only in the owner's memory, computer, phone, or personal password vault.
+> A qualified designated technician, using only this runbook, pre-authorized designated-technician GitHub access, the shared 1Password recovery vault, pre-authorized Hetzner project access, and DNS administrative access, can recover the Production database and prove the recovered service without information held only in the owner's memory, computer, phone, or personal password vault.
 
 No personal vault, owner-only MFA device, owner-only SSH key, or undocumented credential source satisfies this requirement.
 
@@ -70,17 +70,17 @@ ops/recovery-access.production.env
 It contains **no secret values**. It defines the exact authoritative locator for every recovery prerequisite. The canonical shared collection name is:
 
 ```text
-ERS-Recovery
+ers-production
 ```
 
-The required LastPass/shared-access items are:
+The required 1Password/shared-access items are:
 
 ```text
-lastpass-shared://ERS-Recovery/Production/.env.production
-lastpass-shared://ERS-Recovery/Production/Hetzner-S3-ers-backup
-lastpass-shared://ERS-Recovery/Production/Host-SSH
-lastpass-shared://ERS-Recovery/Infrastructure/Hetzner-Console
-lastpass-shared://ERS-Recovery/Infrastructure/DNS
+op://ers-production/recovery-production-env/document
+op://ers-production/recovery-hetzner-s3/document
+op://ers-production/recovery-host-ssh/document
+op://ers-production/recovery-hetzner-console/document
+op://ers-production/recovery-dns/document
 technician-controlled://independent-mfa-and-recovery-codes
 ```
 
@@ -95,7 +95,7 @@ The shared items may contain the corresponding secret/file/account material, but
 | `Production/Host-SSH` | Host SSH login material or documented replacement-host SSH bootstrap material | technician SSH access |
 | `Infrastructure/Hetzner-Console` | Shared organizational Hetzner Console account/access procedure and ERS project identity | replacement-host provisioning and Object Storage inspection |
 | `Infrastructure/DNS` | Shared organizational DNS provider account/access procedure for `enterpriseremotesystems.com` | DNS recovery/change |
-| `technician-controlled://independent-mfa-and-recovery-codes` | Each designated technician maintains their own independent MFA/recovery capability for their individual LastPass/GitHub/provider account access | access continuity without owner approval |
+| `technician-controlled://independent-mfa-and-recovery-codes` | Each designated technician maintains their own independent MFA/recovery capability for their individual 1Password/GitHub/provider account access | access continuity without owner approval |
 
 Repository and edge configuration come from the shared GitHub repository:
 
@@ -110,7 +110,7 @@ edge/Caddyfile
 edge/docker-compose.edge.yml
 ```
 
-GitHub Actions secrets such as `DEPLOY_SSH_PRIVATE_KEY` are deployment inputs and are intentionally not readable back from GitHub. They are **not** an authoritative disaster-recovery source. The corresponding recoverable SSH material must exist in the shared LastPass recovery collection.
+GitHub Actions secrets such as `DEPLOY_SSH_PRIVATE_KEY` are deployment inputs and are intentionally not readable back from GitHub. They are **not** an authoritative disaster-recovery source. The corresponding recoverable SSH material must exist in the shared 1Password recovery vault.
 
 #### Canonical Production Object Storage identity
 
@@ -126,7 +126,7 @@ The active object prefix is read from the recovered canonical `.env.production`.
 
 #### Required access policy
 
-At least two qualified designated technicians should have independent access to the `ERS-Recovery` shared collection and pre-authorized GitHub/Hetzner/DNS access required by this runbook. Each technician must use an individual account where the provider supports it and maintain MFA/recovery material outside the shared vault they are trying to unlock; do not create a circular dependency where LastPass recovery material exists only inside LastPass.
+At least two qualified designated technicians should have independent access to the `ers-production` shared collection and pre-authorized GitHub/Hetzner/DNS access required by this runbook. Each technician must use an individual account where the provider supports it and maintain MFA/recovery material outside the shared vault they are trying to unlock; do not create a circular dependency where 1Password recovery material exists only inside 1Password.
 
 Access must satisfy both rules encoded in the repository manifest:
 
@@ -139,9 +139,9 @@ If a technician must call, message, or wake the owner to obtain a password, MFA 
 
 #### Configuration-change discipline
 
-Whenever `.env.production` changes, the canonical shared LastPass `Production/.env.production` item must be replaced with the deployed version as part of the same operational change. Do not treat `scripts/init-server-env.sh` or `scripts/init-prod-env.sh` as a backup of Production configuration; those initializers can generate/default values and cannot reconstruct the deployed secrets.
+Whenever `.env.production` changes, the canonical shared 1Password `Production/.env.production` item must be replaced with the deployed version as part of the same operational change. Do not treat `scripts/init-server-env.sh` or `scripts/init-prod-env.sh` as a backup of Production configuration; those initializers can generate/default values and cannot reconstruct the deployed secrets.
 
-Whenever host SSH credentials, Hetzner access, or DNS access changes, update the corresponding `ERS-Recovery` item before closing the change. Whenever a technician's MFA/recovery capability changes, that technician must restore independent access before the recovery-readiness change is considered complete.
+Whenever host SSH credentials, Hetzner access, or DNS access changes, update the corresponding `ers-production` item before closing the change. Whenever a technician's MFA/recovery capability changes, that technician must restore independent access before the recovery-readiness change is considered complete.
 
 #### Quarterly owner-unavailable access rehearsal
 
@@ -380,7 +380,7 @@ cd /opt/EnterpriseRemoteSystems/production
 git fetch origin --prune
 ```
 
-2. From `lastpass-shared://ERS-Recovery/Production/.env.production`, retrieve the canonical current `.env.production` file and install it exactly at:
+2. From `op://ers-production/recovery-production-env/document`, retrieve the canonical current `.env.production` file and install it exactly at:
 
 ```text
 /opt/EnterpriseRemoteSystems/production/.env.production
@@ -388,7 +388,7 @@ git fetch origin --prune
 
 Set mode `600`. Do **not** run `init-server-env.sh` as a substitute for retrieving the canonical Production configuration.
 
-3. From `lastpass-shared://ERS-Recovery/Production/Hetzner-S3-ers-backup`, install the S3 credential file at:
+3. From `op://ers-production/recovery-hetzner-s3/document`, install the S3 credential file at:
 
 ```text
 /opt/EnterpriseRemoteSystems/secrets/aws-credentials
@@ -396,7 +396,7 @@ Set mode `600`. Do **not** run `init-server-env.sh` as a substitute for retrievi
 
 Set mode `600`; it must contain profile `[ers-backup]`.
 
-4. Obtain host/replacement-host access from `lastpass-shared://ERS-Recovery/Production/Host-SSH`, pre-authorized Hetzner project access from `lastpass-shared://ERS-Recovery/Infrastructure/Hetzner-Console`, and DNS access from `lastpass-shared://ERS-Recovery/Infrastructure/DNS`. Use the technician's own independent MFA/recovery capability documented as `technician-controlled://independent-mfa-and-recovery-codes`; do not depend on the owner's device and do not store the only LastPass recovery factor inside LastPass itself.
+4. Obtain host/replacement-host access from `op://ers-production/recovery-host-ssh/document`, pre-authorized Hetzner project access from `op://ers-production/recovery-hetzner-console/document`, and DNS access from `op://ers-production/recovery-dns/document`. Use the technician's own independent MFA/recovery capability documented as `technician-controlled://independent-mfa-and-recovery-codes`; do not depend on the owner's device and do not store the only 1Password recovery factor inside 1Password itself.
 
 5. Verify the recovered prerequisites before touching a database:
 

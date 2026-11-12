@@ -22,7 +22,7 @@ Na interface voltada ao cliente em **Português (Brasil)**, **Tenant** é **Enti
 2. Os textos operacionais e de motivos de elegibilidade são traduzidos **ao exibir**, nunca na lógica de concessão, nas condições de bloqueio ou na persistência.
 3. No visualizador de auditoria, o rótulo da operação é traduzido, **mas o código técnico original é preservado e permanece visível**, permitindo investigação.
 4. O filtro de Entidades do histórico de suporte mantém a semântica combobox: fechado inicialmente; clique exibe todas as opções; digitação filtra; seleção fecha; Escape e perda de foco fecham; limpar a busca não altera a Entidade selecionada.
-5. O manual completo de 35.4A mudou de nome para `byte-35-4-manual-da-entidade-pt-br.md`, **sem reescrever o conteúdo de treinamento**. O cartão `Cand.`/`Repl.` e sua orientação direcional continuam idênticos.
+5. A entrega original de 35.4B renomeou o manual para `byte-35-4-manual-da-entidade-pt-br.md` sem alterar seu conteúdo. A correção posterior de i18n atualizou somente as referências do cabeçalho em português de `Repl.` para **`Subst.`**, no manual, no cartão de consulta e nas instruções de aceitação. **A direção Bruno → Ana e os procedimentos de treinamento permanecem os mesmos.** O verificador 35.4B mantém o SHA-256 do manual revisado como proteção contra alterações não analisadas.
 6. O status de testes automatizados não equivale à aceitação humana. T01–T08 são necessários antes da promoção.
 
 ## Critérios de bloqueio

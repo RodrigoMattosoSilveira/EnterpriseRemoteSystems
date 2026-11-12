@@ -58,13 +58,15 @@ prints resolved secret values. It requires the destination directory to
 already exist. Do not use scratch test output as a Production configuration.
 CI must never upload materialized files as artifacts.
 
-**Production recovery is not cut over in this phase.** The existing checked-in
-owner-unavailable manifest and runbook still use LastPass locators. Because
-those locators do not yet match the new 1Password vault contents, final Phase
-B acceptance must remain blocked until a separate coordinated change updates
-and tests the manifest, preflight, recovery tests and runbook, and an
-independent technician proves recovery from 1Password with no owner support.
-Do not treat a GitHub Service Account token as the recovery mechanism.
+**Bite 35.6 update to this historical phase note:** The canonical owner-unavailable
+manifest, preflight, regression and recovery runbook now specify 1Password-only
+locators, replacing the historical LastPass contract. **That is not an actual
+credential migration or proof of access.** Phase B/Production recovery remains
+BLOCKED until the approved 1Password recovery items exist, current materials
+are verified, independently authorized humans demonstrate owner-unavailable
+access, and an isolated recovery passes. A GitHub service-account token is
+not an owner-unavailable recovery mechanism. See
+[`docs/bite-35/byte-35-6-administrator-and-recovery-runbook.md`](bite-35/byte-35-6-administrator-and-recovery-runbook.md).
 
 Production may only be declared fully recoverable when a new off-host
 Production backup includes `repository.revision` and `repository.tree_sha`
@@ -182,4 +184,5 @@ Test offline with `make production-credential-cutover-check`; it checks
 no-write preflight, explicit approval, idempotency, 0600 output, mismatched
 JWT/AWS rejection, forbidden bootstrap and symlink/permissions failures.
 This does not prove a live 1Password token or Production service restart. The
-owner-unavailable LastPass-to-1Password recovery migration is still deferred.
+static 1Password recovery locator contract has been updated in Bite 35.6;
+actual operational 1Password custody and independent recovery remain BLOCKED.
