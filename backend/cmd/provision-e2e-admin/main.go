@@ -25,8 +25,13 @@ type provisionInput struct {
 }
 
 func main() {
+	localDeveloper := flag.Bool("local-developer-fixtures", false, "install complete LOCAL developer fixtures without database reset")
 	byte352Only := flag.Bool("byte352-fixtures-only", false, "provision Byte 35.2 non-production fixture accounts; Tenant Administrator changes require explicit consent")
 	flag.Parse()
+	if *localDeveloper {
+		runLocalDeveloperFixtures()
+		return
+	}
 	if *byte352Only {
 		runByte352Only()
 		return
@@ -52,6 +57,19 @@ func main() {
 	}
 	if sqlDB, sqlErr := database.DB(); sqlErr == nil {
 		defer sqlDB.Close()
+	}
+
+	// The older general E2E seed rotates fixture Tenant Administrator passwords.
+	// Once the LOCAL developer credential contract exists, it must not silently
+	// overwrite those individually managed 1Password credentials.
+	if localDeveloperEnvironmentAllowed(os.Getenv("APP_ENV")) {
+		var managed authentication.Account
+		if err := database.Where("id = ?", "e2e-byte352-shared-account").Limit(1).Find(&managed).Error; err != nil {
+			log.Fatalf("check managed LOCAL fixture status: %v", err)
+		}
+		if managed.ID != "" {
+			log.Fatal("managed LOCAL developer fixture credentials exist; refusing legacy E2E auto-provisioning because it can replace passwords. Restart with ERS_PROVISION_E2E_ADMIN=false")
+		}
 	}
 
 	ctx := context.Background()

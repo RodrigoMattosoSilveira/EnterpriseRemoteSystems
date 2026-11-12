@@ -102,8 +102,12 @@ done
   echo "Recovery access manifest must explicitly require owner-unavailable recovery." >&2
   exit 2
 }
-[[ "$(read_value "$RECOVERY_ACCESS_MANIFEST_FILE" RECOVERY_SHARED_SECRETS_PROVIDER)" == "LastPass" ]] || {
-  echo "Recovery access manifest must identify LastPass as the shared secret source for this ERS deployment." >&2
+[[ "$(read_value "$RECOVERY_ACCESS_MANIFEST_FILE" RECOVERY_SHARED_SECRETS_PROVIDER)" == "1Password" ]] || {
+  echo "Recovery access manifest must identify 1Password as the only shared secret source for this ERS deployment." >&2
+  exit 2
+}
+[[ "$(read_value "$RECOVERY_ACCESS_MANIFEST_FILE" RECOVERY_SHARED_COLLECTION)" == "ers-production" ]] || {
+  echo "Recovery 1Password vault must match the approved ERS Production custody contract." >&2
   exit 2
 }
 [[ "$(read_value "$RECOVERY_ACCESS_MANIFEST_FILE" RECOVERY_SHARED_ACCESS_POLICY)" == "technician-access-independent-of-owner" ]] || {
@@ -125,11 +129,17 @@ source_keys=(
 for key in "${source_keys[@]}"; do
   value="$(read_value "$RECOVERY_ACCESS_MANIFEST_FILE" "$key")"
   case "$value" in
-    lastpass-shared://*) ;;
-    *) echo "$key must identify an explicit lastpass-shared:// source; got: $value" >&2; exit 2 ;;
+    op://*) ;;
+    *) echo "$key must identify an explicit op:// source; got: $value" >&2; exit 2 ;;
   esac
+  # A scoped vault locator is not evidence that any 1Password item exists.
+  # The operator must independently verify item access and MFA continuity.
+  [[ "$value" == op://"$(read_value "$RECOVERY_ACCESS_MANIFEST_FILE" RECOVERY_SHARED_COLLECTION)"/* ]] || {
+    echo "$key must reference the approved 1Password recovery vault." >&2
+    exit 2
+  }
   lower="$(printf '%s' "$value" | tr '[:upper:]' '[:lower:]')"
-  if [[ "$lower" == *"normal-administrative"* || "$lower" == *"normal administrative"* || "$lower" == *"personal-vault"* || "$lower" == *"tbd"* || "$lower" == *"todo"* || "$value" == *"<"* || "$value" == *">"* ]]; then
+  if [[ "$lower" == *"lastpass"* || "$lower" == *"normal-administrative"* || "$lower" == *"normal administrative"* || "$lower" == *"personal-vault"* || "$lower" == *"tbd"* || "$lower" == *"todo"* || "$value" == *"<"* || "$value" == *">"* ]]; then
     echo "$key is too vague or depends on a personal/unconfigured source: $value" >&2
     exit 2
   fi

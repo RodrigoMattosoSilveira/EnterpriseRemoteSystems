@@ -129,7 +129,7 @@ export function TenantRoleDelegationPage({ readOnly = false }: { readOnly?: bool
           </Link>
         </div>
         {message && <div role="status" className="rounded-xl border border-green-200 bg-green-50 p-3 text-sm text-green-800">{message}</div>}
-        <ApiErrorPanel error={actorsQuery.error ?? setActorActiveMutation.error ?? grantMutation.error ?? revokeMutation.error} />
+        <ApiErrorPanel error={actorsQuery.error ?? setActorActiveMutation.error ?? grantMutation.error ?? revokeMutation.error} translate={t} />
 
         <div className="grid gap-3 rounded-2xl border bg-white p-4 shadow-sm md:grid-cols-2 lg:grid-cols-[minmax(0,1fr)_12rem_12rem_auto] lg:items-end">
           <label className="grid gap-1 text-sm font-medium text-gray-800">
@@ -454,7 +454,7 @@ function TenantOperatorRoleSelector({
       >
         <span>
           <span className="block font-semibold">
-            {selectedRole?.code ?? (disabled ? "Role selection unavailable" : "Select a Role")}
+            {selectedRole?.code ?? (disabled ? t("byte352.roles.selectionUnavailable") : t("byte354b.authz.selectRole"))}
           </span>
           {selectedRole && (
             <span className="block text-xs text-gray-500">{selectedRole.label}</span>

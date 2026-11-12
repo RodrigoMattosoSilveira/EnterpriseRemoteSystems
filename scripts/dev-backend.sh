@@ -157,6 +157,18 @@ cd "${BACKEND_DIR}"
 
 mkdir -p data
 
+# Managed LOCAL fixture accounts have separate 1Password passwords. The
+# legacy E2E seed would rotate them on every start: disable that step while
+# leaving the complete fixture set and all LOCAL data untouched.
+if [[ "${ERS_PROVISION_E2E_ADMIN:-false}" == "true" ]]; then
+  managed_count="$(sqlite3 -bail "${LOCAL_DATABASE_FILE}" "SELECT count(*) FROM auth_user_accounts WHERE id = 'e2e-byte352-shared-account';")"
+  if [[ "${managed_count}" == "1" ]]; then
+    echo "LOCAL developer fixtures installed: skipping legacy E2E automatic provisioning to preserve 1Password credentials."
+    export ERS_PROVISION_E2E_ADMIN=false
+  fi
+  unset managed_count
+fi
+
 if [[ "${ERS_PROVISION_E2E_ADMIN:-false}" == "true" ]]; then
   : "${E2E_ADMIN_EMAIL:?E2E_ADMIN_EMAIL is required when ERS_PROVISION_E2E_ADMIN=true}"
   : "${E2E_ADMIN_PASSWORD:?E2E_ADMIN_PASSWORD is required when ERS_PROVISION_E2E_ADMIN=true}"

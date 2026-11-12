@@ -91,7 +91,7 @@ RECOVERY_REHEARSAL_OFFHOST_BACKUP_NAME ?=
 RECOVERY_REHEARSAL_REPORT_FILE ?=
 
 # Bite 33.6 owner-unavailable recovery readiness. The committed manifest contains
-# source locators only; secret values remain in the documented shared LastPass sources.
+# source locators only; 1Password custody still requires external human verification.
 RECOVERY_ACCESS_MANIFEST_FILE ?= $(ENV_DIR)/ops/recovery-access.production.env
 RECOVERY_TECHNICIAN_ID ?=
 RECOVERY_SHARED_ACCESS_CONFIRM ?=
@@ -138,11 +138,14 @@ help:
 	@echo "  make migration-deployment-recovery-gate-check"
 	@echo "  make recovery-rehearsal-operational-runbook-check"
 	@echo "  make owner-unavailable-recovery-readiness-check"
+	@echo "  make byte356-operations-check"
 	@echo "  make bite3368-core-check"
 	@echo "  make bite3368-integrated-check"
 	@echo "  make migration-check"
 	@echo "  make migration-rehearsal-check"
 	@echo "  make local-docker-check"
+	@echo "  make local-fixtures-ensure (one-step LOCAL test identities + backup)"
+	@echo "  make local-fixtures-check (offline provisioner regression)"
 	@echo "  make local-backend"
 	@echo "  make local-frontend"
 	@echo "  make local-smoke"
@@ -378,6 +381,16 @@ migration-rehearsal-check:
 frontend-check:
 	cd frontend && npm install && npm run checkcd 
 
+# One supported, LOCAL-only developer setup for 11 canonical testing identities.
+.PHONY: local-fixtures-ensure
+local-fixtures-ensure:
+	APP_ENV=local python3 scripts/local-developer-fixtures.py
+
+.PHONY: local-fixtures-check
+local-fixtures-check:
+	cd backend && go test -count=1 -run '^TestLocalDeveloperFixtures' ./cmd/provision-e2e-admin
+	python3 -m unittest discover -s scripts -p 'test_local_developer_fixtures.py' -v
+
 .PHONY: local-backend
 local-backend:
 	chmod +x scripts/dev-backend.sh
@@ -523,6 +536,12 @@ migration-deployment-recovery-gate-check:
 recovery-rehearsal-operational-runbook-check:
 	python3 scripts/test-recovery-rehearsal-operational-runbook.py
 
+# Bite 35.6: offline operations/custody contract; never accesses 1Password or Production.
+.PHONY: byte356-operations-check
+byte356-operations-check:
+	python3 -B scripts/test-byte356-operations.py
+	python3 -B scripts/test-byte356-manual-contract.py
+
 .PHONY: owner-unavailable-recovery-readiness-check
 owner-unavailable-recovery-readiness-check:
 	python3 scripts/test-owner-unavailable-recovery-readiness.py
@@ -610,6 +629,8 @@ promotion-readiness-check:
 	$(MAKE) two-human-administrators-preflight-check
 	$(MAKE) production-environment-guardrails-check
 	$(MAKE) owner-unavailable-recovery-readiness-check
+	$(MAKE) byte356-operations-check
+	$(MAKE) local-fixtures-check
 	$(MAKE) production-bootstrap-reconciliation-check
 	$(MAKE) production-bootstrap-full-schema-check
 	$(MAKE) onepassword-materialization-check
@@ -621,6 +642,7 @@ promotion-readiness-check:
 
 .PHONY: local-check
 local-check:
+	$(MAKE) byte352-i18n-check
 	$(MAKE) bite3368-core-check
 	$(MAKE) two-human-administrators-check
 	$(MAKE) byte354-readiness-check
@@ -642,6 +664,8 @@ local-check:
 	$(MAKE) migration-deployment-recovery-gate-check
 	$(MAKE) recovery-rehearsal-operational-runbook-check
 	$(MAKE) owner-unavailable-recovery-readiness-check
+	$(MAKE) byte356-operations-check
+	$(MAKE) local-fixtures-check
 	$(MAKE) production-bootstrap-reconciliation-check
 	$(MAKE) production-bootstrap-full-schema-check
 	$(MAKE) onepassword-materialization-check
@@ -704,7 +728,7 @@ local-docker-check: local-docker-check-image
 		-e GOMODCACHE=/tmp/gomod \
 		-e NPM_CONFIG_CACHE=/tmp/npm-cache \
 		$(LOCAL_DOCKER_CHECK_IMAGE) \
-		bash -lc 'set -euo pipefail; make bite3368-core-check; make bite30l4-coverage-manifest-check; make bite32-release-coverage-check; make bite326-release-hardening-check; make deployment-migration-head-check; make post-bite30-backlog-reconciliation-check; make deployed-playwright-evidence-check; make production-release-evidence-check; make production-environment-guardrails-check; make backup-creation-retention-verification-check; make off-host-backup-protection-check; make restore-tooling-recovery-verification-check; make migration-deployment-recovery-gate-check; make recovery-rehearsal-operational-runbook-check; make owner-unavailable-recovery-readiness-check; make local-hot-reload-check; make local-auth-cookie-config-check; make server-authz-bootstrap-config-check; make legacy-identity-dependency-check; make brazilian-demo-presentation-check; make migration-rehearsal-check; cd backend && go clean -testcache && go test ./...; cd ../frontend && npm ci && npm run test:run && npx playwright install chromium && npx playwright test && npm run build'
+		bash -lc 'set -euo pipefail; make bite3368-core-check; make bite30l4-coverage-manifest-check; make bite32-release-coverage-check; make bite326-release-hardening-check; make deployment-migration-head-check; make post-bite30-backlog-reconciliation-check; make deployed-playwright-evidence-check; make production-release-evidence-check; make production-environment-guardrails-check; make backup-creation-retention-verification-check; make off-host-backup-protection-check; make restore-tooling-recovery-verification-check; make migration-deployment-recovery-gate-check; make recovery-rehearsal-operational-runbook-check; make owner-unavailable-recovery-readiness-check; make local-hot-reload-check; make local-auth-cookie-config-check; make server-authz-bootstrap-config-check; make legacy-identity-dependency-check; make brazilian-demo-presentation-check; make migration-rehearsal-check; cd backend && go clean -testcache && go test ./...; cd ../frontend && npm ci && npm run i18n:check && npm run i18n:test && npm run test:run && npx playwright install chromium && npx playwright test && npm run build'
 
 # ==============================================================================
 # Generic server environment targets

@@ -170,7 +170,7 @@ export function ReferenceDataAdminPage() {
           </div>
         )}
 
-        <ApiErrorPanel error={error ?? actionError} />
+        <ApiErrorPanel error={error ?? actionError} translate={t} />
 
         <section className="rounded-2xl border bg-white p-4 shadow-sm">
           <label className="block text-sm font-semibold text-gray-700">

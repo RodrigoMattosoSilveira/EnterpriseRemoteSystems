@@ -65,9 +65,9 @@ The trainer uses [Manual completo de treinamento e operação da Entidade](byte-
 Use o [Manual completo de treinamento e operação da Entidade](byte-35-4-manual-da-entidade-pt-br.md), **Capítulos 04 e 05**, incluindo os exercícios **F04-S01 a F04-S08**. Todos os passos a seguir são UI-first:
 
 1. Entre como **EARN-A**, selecione A → **Períodos de Trabalho** → período **editável** → **Plano**. Registre data, código, nome e estado; use **Limpar filtros** para visualizar todas as linhas.
-2. Em cada linha, explique a diferença entre **✓ (incluído)**, **Disp. A/F/L**, **Cand.** e **Repl.**. Em `pt-BR`, **F significa Folga** (o inglês usa D), e a coluna de substituição ainda exibe o cabeçalho compacto **Repl.**.
+2. Em cada linha, explique a diferença entre **✓ (incluído)**, **Disp. A/F/L**, **Cand.** e **Subst.**. Em `pt-BR`, **F significa Folga** (o inglês usa D), e a coluna de substituição exibe o cabeçalho compacto **Subst.**.
 3. Execute **F04-S01 e F04-S02** para verificar plano normal e candidato local sem vínculo salvo. Não afirme que só marcar Cand. grava substituição.
-4. Em **F04-S03**, prepare a Pessoa afastada (Ana, **F**) e a Pessoa que vai trabalhar (Bruno, **A**, **✓**, **Cand.**). Escolha **Ana em Repl. da linha de Bruno**. A substituição tem direção **Bruno → Ana**. Só salve no período descartável aprovado; reabra e comprove persistência.
+4. Em **F04-S03**, prepare a Pessoa afastada (Ana, **F**) e a Pessoa que vai trabalhar (Bruno, **A**, **✓**, **Cand.**). Escolha **Ana em Subst. da linha de Bruno**. A substituição tem direção **Bruno → Ana**. Só salve no período descartável aprovado; reabra e comprove persistência.
 5. Em exercícios separados, execute **F04-S04 a F04-S07**: alvo em Licença, proibição de alvo duplicado, ausência de alvo A e retirada de vínculo. Registre quais foram apenas lidos e quais foram efetivamente salvos.
 6. Em **F04-S08**, abra um novo período sem atribuição salva e com o **mesmo código** de um anterior. Compare atribuição informada, trabalho real de `WORKED` e campos que usam fallback; não marque a opção de atualizar **padrões futuros** apenas para verificar a proposta.
 7. Em **Informar / Imprimir**, confira a lista de afastados F/L sem substituto. Não marque a escala como informada a menos que exista aprovação de escrita específica. Registre evidência redigida por cenário.

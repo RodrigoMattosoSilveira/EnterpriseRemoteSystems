@@ -208,7 +208,7 @@ export function AuthzAdminPage() {
           </div>
         )}
 
-        <ApiErrorPanel error={queryError ?? actionError} />
+        <ApiErrorPanel error={queryError ?? actionError} translate={t} />
 
         {hasLimitedAuthorization && <LimitedAuthorizationNotice />}
 
@@ -280,7 +280,7 @@ export function AuthzAdminPage() {
             </p>
 
             {createActorForbidden ? (
-              <CardPermissionNotice cardName="Create actor" />
+              <CardPermissionNotice cardName={t("admin.authz.create.actor_877a90")} />
             ) : (
               <ActorFields
                 value={actorForm}
@@ -293,7 +293,7 @@ export function AuthzAdminPage() {
               disabled={createActorMutation.isPending || createActorForbidden || !actorForm.actorKey.trim()}
               type="submit"
             >
-              {createActorMutation.isPending ? "Creating..." : "Create Actor"}
+              {createActorMutation.isPending ? t("common.creatingDots") : t("admin.authz.create.actor_877a90")}
             </button>
           </form>
 
@@ -370,7 +370,7 @@ export function AuthzAdminPage() {
               </div>
 
               {actorsForbidden ? (
-                <CardPermissionNotice cardName="Actors" />
+                <CardPermissionNotice cardName={t("admin.authz.actors_a70d36")} />
               ) : (
                 <>
                   {actorsQuery.isLoading && <p className="mt-4 text-sm text-gray-500">{t("admin.authz.loading.actors_ddec70")}</p>}
@@ -423,7 +423,7 @@ export function AuthzAdminPage() {
               {t("admin.authz.role.bundles.available.for.actor.grants_cf0112")}
             </p>
             {rolesForbidden ? (
-              <CardPermissionNotice cardName="Roles" />
+              <CardPermissionNotice cardName={t("admin.authz.roles_47dcc2")} />
             ) : (
               <>
                 {rolesQuery.isLoading && <p className="mt-4 text-sm text-gray-500">{t("admin.authz.loading.roles_2ad48b")}</p>}
@@ -458,7 +458,7 @@ export function AuthzAdminPage() {
               {t("admin.authz.fine.grained.operations.that.roles.can.grant_70f972")}
             </p>
             {permissionsForbidden ? (
-              <CardPermissionNotice cardName="Permissions" />
+              <CardPermissionNotice cardName={t("admin.authz.permissions_d06d55")} />
             ) : (
               <>
                 {permissionsQuery.isLoading && <p className="mt-4 text-sm text-gray-500">{t("admin.authz.loading.permissions_0e89e7")}</p>}

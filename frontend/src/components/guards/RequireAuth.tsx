@@ -106,7 +106,7 @@ export function RequireAuth({ children }: { children: ReactNode }) {
       <main className="grid min-h-screen place-items-center p-6">
         <section className="max-w-md rounded-2xl border bg-white p-6">
           <PageTitle>{t("guard.unable.to.verify.your.session_187cb1")}</PageTitle>
-          <p className="mt-2 text-sm text-slate-600">{auth.error.message}</p>
+          <p className="mt-2 text-sm text-slate-600">{t("byte352.auth.sessionUnavailable")}</p>
           <button
             className="mt-4 rounded-lg bg-slate-900 px-4 py-2 text-white"
             onClick={() => void initializeAuthSession()}

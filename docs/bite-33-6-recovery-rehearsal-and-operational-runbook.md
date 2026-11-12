@@ -12,7 +12,7 @@ It adds:
 - revision/tree evidence in the migration recovery gate so a database rollback identifies the pre-deployment code revision that can be deliberately rebuilt and restarted;
 - repository revision/tree evidence in every new verified backup manifest so complete host loss still identifies the application revision compatible with the selected restore point;
 - a committed non-secret recovery-access locator manifest at `ops/recovery-access.production.env`;
-- an owner-unavailable Production preflight/rehearsal that requires shared LastPass/GitHub/Hetzner/DNS access independent of the primary owner;
+- an owner-unavailable Production preflight/rehearsal that requires shared 1Password/GitHub/Hetzner/DNS access independent of the primary owner;
 - a single canonical operator runbook in `docs/database-recovery-runbook.md`, including the owner-unavailable access package; the machine-readable locator contract remains `ops/recovery-access.production.env`.
 
 
@@ -22,7 +22,7 @@ The Production readiness use case is stricter than ordinary database recovery:
 
 > A qualified designated technician, with the system owner completely unavailable, can recover ERS and prove the recovery using only documented shared administrative sources.
 
-The non-secret locator contract is `ops/recovery-access.production.env`. It standardizes the shared LastPass collection `ERS-Recovery`, GitHub repository source, Hetzner Object Storage identity, DNS/host/MFA source locators, and canonical install paths. Secret values are never committed.
+The non-secret locator contract is `ops/recovery-access.production.env`. It standardizes the 1Password recovery vault `ers-production`, GitHub repository source, Hetzner Object Storage identity, DNS/host/MFA source locators, and canonical install paths. Secret values are never committed.
 
 Run the artifact/access preflight with:
 
@@ -174,4 +174,4 @@ It is included in `make local-check`, the containerized local check, CI, and the
 
 ## Bite 33.6.8 final integrated acceptance
 
-For the exact-release, two-human-administrator, 1Password custody, off-host rehearsal, and RPO/RTO *evidence-consistency* checks, see [Bite 33.6.8 integrated acceptance](bite-3368/implementation-and-architecture.md) and its [manual acceptance procedure](bite-3368/manual-acceptance-tests.md). These do **not** replace the existing operational recovery script. Historical owner-unavailable/LastPass examples in this Bite 33.6 document are not evidence of 1Password access under the accepted two-human launch model; the discrepancy requires documented operational reconciliation before final Production approval. Deferred Gate C is not a launch condition.
+For the exact-release, two-human-administrator, 1Password custody, off-host rehearsal, and RPO/RTO *evidence-consistency* checks, see [Bite 33.6.8 integrated acceptance](bite-3368/implementation-and-architecture.md) and its [manual acceptance procedure](bite-3368/manual-acceptance-tests.md). These do **not** replace the existing operational recovery script. The historical LastPass-based recovery locator contract was replaced in Bite 35.6 by the 1Password-only manifest. The revised contract is documentation and static validation, **not** evidence that recovery items exist or that a second person can unlock them; operational custody and isolated recovery remain BLOCKED until observed. Deferred Gate C is not a launch condition.
