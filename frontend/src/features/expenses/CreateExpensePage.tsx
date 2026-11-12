@@ -145,8 +145,8 @@ function AuthorizedCreateExpensePage() {
     () =>
       (collaboratorsQuery.data?.items ?? [])
         .filter(isActiveCollaborator)
-        .sort(compareCollaborators),
-    [collaboratorsQuery.data],
+        .sort((a, b) => compareCollaborators(a, b, t)),
+    [collaboratorsQuery.data, t],
   );
   const showCollaboratorSuggestions = Boolean(collaboratorSearch.trim());
 
@@ -154,8 +154,8 @@ function AuthorizedCreateExpensePage() {
     () =>
       (priceListItemsQuery.data ?? [])
         .filter((item) => item.active)
-        .sort(comparePriceListItems),
-    [priceListItemsQuery.data],
+        .sort((a, b) => comparePriceListItems(a, b, t)),
+    [priceListItemsQuery.data, t],
   );
   const filteredPriceListItems = useMemo(
     () => priceListItems.filter((item) => item.itemType === form.itemType),
@@ -1053,13 +1053,13 @@ function isActiveCollaborator(collaborator: Collaborator) {
   return collaborator.statusId === "ref-collaborator-status-active";
 }
 
-function compareCollaborators(a: Collaborator, b: Collaborator) {
-  return collaboratorLabel(a).localeCompare(collaboratorLabel(b));
+function compareCollaborators(a: Collaborator, b: Collaborator, t: Translate) {
+  return collaboratorLabel(a, t).localeCompare(collaboratorLabel(b, t));
 }
 
-function comparePriceListItems(a: PriceListItem, b: PriceListItem) {
+function comparePriceListItems(a: PriceListItem, b: PriceListItem, t: Translate) {
   return (
-    categoryLabel(a.itemType).localeCompare(categoryLabel(b.itemType)) ||
+    categoryLabel(a.itemType, t).localeCompare(categoryLabel(b.itemType, t)) ||
     a.sortOrder - b.sortOrder ||
     a.description.localeCompare(b.description) ||
     a.code.localeCompare(b.code)

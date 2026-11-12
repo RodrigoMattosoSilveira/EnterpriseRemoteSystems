@@ -24,9 +24,10 @@ const (
 type apiErrorResponse struct {
 	Data  json.RawMessage `json:"data"`
 	Error *struct {
-		Code    string            `json:"code"`
-		Message string            `json:"message"`
-		Fields  map[string]string `json:"fields"`
+		Code       string            `json:"code"`
+		Message    string            `json:"message"`
+		Fields     map[string]string `json:"fields"`
+		FieldCodes map[string]string `json:"fieldCodes"`
 	} `json:"error"`
 }
 
@@ -576,6 +577,67 @@ func TestGoldPriceValidation(t *testing.T) {
 	res := postJSON(t, server, http.MethodPost, goldPricesURL, map[string]any{"priceDate": "bad", "brlPerGram": 0})
 	defer res.Body.Close()
 	assertValidationError(t, res, "priceDate", "Price date must be YYYY-MM-DD")
+}
+
+// Byte 35.2: every field error carries a stable rule code for client-side
+// translation, while the English messages stay unchanged for compatibility.
+func TestPriceListValidationReturnsStableFieldRuleCodes(t *testing.T) {
+	server, cleanup := newTestServer(t)
+	defer cleanup()
+
+	res := postJSON(t, server, http.MethodPost, priceListItemsURL, map[string]any{
+		"itemType":     "",
+		"code":         "",
+		"description":  "",
+		"unitPriceBrl": 0,
+	})
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusBadRequest {
+		t.Fatalf("expected status %d, got %d", http.StatusBadRequest, res.StatusCode)
+	}
+	var body apiErrorResponse
+	decodeJSON(t, res, &body)
+	if body.Error == nil {
+		t.Fatal("expected error response")
+	}
+	wantCodes := map[string]string{
+		"itemType":     "required",
+		"code":         "required",
+		"description":  "required",
+		"unitPriceBrl": "must_be_positive",
+	}
+	for field, code := range wantCodes {
+		if got := body.Error.FieldCodes[field]; got != code {
+			t.Fatalf("expected field %q rule code %q, got %q (all codes: %v)", field, code, got, body.Error.FieldCodes)
+		}
+	}
+	if got := body.Error.Fields["unitPriceBrl"]; got != "Unit price in BRL must be greater than zero" {
+		t.Fatalf("English field message must stay unchanged, got %q", got)
+	}
+
+	invalidType := postJSON(t, server, http.MethodPost, priceListItemsURL, map[string]any{
+		"itemType":     "SNACKS",
+		"code":         "X1",
+		"description":  "Item",
+		"unitPriceBrl": 1,
+	})
+	defer invalidType.Body.Close()
+	var typeBody apiErrorResponse
+	decodeJSON(t, invalidType, &typeBody)
+	if typeBody.Error == nil || typeBody.Error.FieldCodes["itemType"] != "invalid_item_type" {
+		t.Fatalf("expected itemType rule code invalid_item_type, got %+v", typeBody.Error)
+	}
+
+	goldRes := postJSON(t, server, http.MethodPost, goldPricesURL, map[string]any{"priceDate": "bad", "brlPerGram": 0})
+	defer goldRes.Body.Close()
+	var goldBody apiErrorResponse
+	decodeJSON(t, goldRes, &goldBody)
+	if goldBody.Error == nil ||
+		goldBody.Error.FieldCodes["priceDate"] != "invalid_date" ||
+		goldBody.Error.FieldCodes["brlPerGram"] != "must_be_positive" ||
+		goldBody.Error.FieldCodes["recordedBy"] != "required" {
+		t.Fatalf("unexpected gold price rule codes: %+v", goldBody.Error)
+	}
 }
 
 func newTestServer(t *testing.T) (*fiber.App, func()) {

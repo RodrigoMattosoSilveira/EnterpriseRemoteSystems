@@ -15,6 +15,7 @@ type ApiEnvelope<T> = {
     code?: string;
     message?: string;
     fields?: Record<string, string>;
+    fieldCodes?: Record<string, string>;
   };
 };
 
@@ -22,6 +23,8 @@ export class ApiError extends Error {
   status?: number;
   code?: string;
   fields?: Record<string, string>;
+  /** Stable, locale-independent rule code per field (e.g. "required"). */
+  fieldCodes?: Record<string, string>;
   details?: unknown;
   url?: string;
 
@@ -30,6 +33,7 @@ export class ApiError extends Error {
     status?: number;
     code?: string;
     fields?: Record<string, string>;
+    fieldCodes?: Record<string, string>;
     details?: unknown;
     url?: string;
   }) {
@@ -38,6 +42,7 @@ export class ApiError extends Error {
     this.status = args.status;
     this.code = args.code;
     this.fields = args.fields;
+    this.fieldCodes = args.fieldCodes;
     this.details = args.details;
     this.url = args.url;
   }
@@ -75,6 +80,7 @@ export async function apiFetchBlob(
       code: errorCode,
       message: payload?.error?.message || `API request failed with status ${response.status}`,
       fields: payload?.error?.fields,
+      fieldCodes: payload?.error?.fieldCodes,
       details: payload,
       url,
     });
@@ -119,6 +125,7 @@ export async function apiFetch<T>(
         result.text ||
         `API request failed with status ${result.response.status}`,
       fields: result.errorFields,
+      fieldCodes: result.errorFieldCodes,
       details: result.json ?? result.text,
       url,
     });
@@ -138,6 +145,7 @@ type ApiFetchResult<T> = {
   errorCode?: string;
   errorMessage?: string;
   errorFields?: Record<string, string>;
+  errorFieldCodes?: Record<string, string>;
   authenticationInterruptionSuperseded: boolean;
 };
 
@@ -185,6 +193,7 @@ async function performApiFetch<T>(
     errorCode: envelope?.error?.code,
     errorMessage: envelope?.error?.message,
     errorFields: envelope?.error?.fields,
+    errorFieldCodes: envelope?.error?.fieldCodes,
     authenticationInterruptionSuperseded,
   };
 }

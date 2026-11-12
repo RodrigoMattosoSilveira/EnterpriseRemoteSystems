@@ -12,6 +12,10 @@ type APIError struct {
 	Code    string            `json:"code"`
 	Message string            `json:"message"`
 	Fields  map[string]string `json:"fields,omitempty"`
+	// FieldCodes holds a stable, locale-independent rule code per field
+	// (for example "required"). Clients translate these codes; Fields keeps
+	// the English message for compatibility and diagnostics.
+	FieldCodes map[string]string `json:"fieldCodes,omitempty"`
 }
 
 type APIResponse struct {
@@ -24,6 +28,12 @@ type FieldValidationError interface {
 	ValidationFields() map[string]string
 }
 
+// FieldCodeValidationError is optionally implemented by validation errors that
+// also report a stable rule code for each field.
+type FieldCodeValidationError interface {
+	ValidationFieldCodes() map[string]string
+}
+
 func WriteError(c fiber.Ctx, err error) error {
 	if err == nil {
 		return nil
@@ -31,13 +41,17 @@ func WriteError(c fiber.Ctx, err error) error {
 
 	var validationErr FieldValidationError
 	if errors.As(err, &validationErr) {
-		return c.Status(fiber.StatusBadRequest).JSON(APIResponse{
-			Error: &APIError{
-				Code:    "validation_failed",
-				Message: "Validation failed",
-				Fields:  validationErr.ValidationFields(),
-			},
-		})
+		apiErr := &APIError{
+			Code:    "validation_failed",
+			Message: "Validation failed",
+			Fields:  validationErr.ValidationFields(),
+		}
+		if coded, ok := validationErr.(FieldCodeValidationError); ok {
+			if codes := coded.ValidationFieldCodes(); len(codes) > 0 {
+				apiErr.FieldCodes = codes
+			}
+		}
+		return c.Status(fiber.StatusBadRequest).JSON(APIResponse{Error: apiErr})
 	}
 
 	if errors.Is(err, gorm.ErrRecordNotFound) {
