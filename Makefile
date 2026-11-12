@@ -641,6 +641,7 @@ promotion-readiness-check:
 
 .PHONY: local-check
 local-check:
+	$(MAKE) byte352-i18n-check
 	$(MAKE) bite3368-core-check
 	$(MAKE) two-human-administrators-check
 	$(MAKE) byte354-readiness-check
@@ -726,7 +727,7 @@ local-docker-check: local-docker-check-image
 		-e GOMODCACHE=/tmp/gomod \
 		-e NPM_CONFIG_CACHE=/tmp/npm-cache \
 		$(LOCAL_DOCKER_CHECK_IMAGE) \
-		bash -lc 'set -euo pipefail; make bite3368-core-check; make bite30l4-coverage-manifest-check; make bite32-release-coverage-check; make bite326-release-hardening-check; make deployment-migration-head-check; make post-bite30-backlog-reconciliation-check; make deployed-playwright-evidence-check; make production-release-evidence-check; make production-environment-guardrails-check; make backup-creation-retention-verification-check; make off-host-backup-protection-check; make restore-tooling-recovery-verification-check; make migration-deployment-recovery-gate-check; make recovery-rehearsal-operational-runbook-check; make owner-unavailable-recovery-readiness-check; make local-hot-reload-check; make local-auth-cookie-config-check; make server-authz-bootstrap-config-check; make legacy-identity-dependency-check; make brazilian-demo-presentation-check; make migration-rehearsal-check; cd backend && go clean -testcache && go test ./...; cd ../frontend && npm ci && npm run test:run && npx playwright install chromium && npx playwright test && npm run build'
+		bash -lc 'set -euo pipefail; make bite3368-core-check; make bite30l4-coverage-manifest-check; make bite32-release-coverage-check; make bite326-release-hardening-check; make deployment-migration-head-check; make post-bite30-backlog-reconciliation-check; make deployed-playwright-evidence-check; make production-release-evidence-check; make production-environment-guardrails-check; make backup-creation-retention-verification-check; make off-host-backup-protection-check; make restore-tooling-recovery-verification-check; make migration-deployment-recovery-gate-check; make recovery-rehearsal-operational-runbook-check; make owner-unavailable-recovery-readiness-check; make local-hot-reload-check; make local-auth-cookie-config-check; make server-authz-bootstrap-config-check; make legacy-identity-dependency-check; make brazilian-demo-presentation-check; make migration-rehearsal-check; cd backend && go clean -testcache && go test ./...; cd ../frontend && npm ci && npm run i18n:check && npm run i18n:test && npm run test:run && npx playwright install chromium && npx playwright test && npm run build'
 
 # ==============================================================================
 # Generic server environment targets

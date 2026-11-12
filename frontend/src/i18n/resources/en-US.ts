@@ -2335,6 +2335,14 @@ export const enUSMessages = {
   "byte354b.support.activeTenants": "{count} active Tenant",
   "byte354b.support.activeTenantsPlural": "{count} active Tenants",
   "byte354b.support.fixedExpiration": "Fixed expiration",
+  "byte352.audit.oneEventShown": "{count} event shown",
+  "byte352.audit.eventsShown": "{count} events shown",
+  "byte352.roles.selectionUnavailable": "Role selection unavailable",
+  "byte352.planning.selectCollaborator": "Select {collaborator}",
+  "byte352.planning.unselectCollaborator": "Unselect {collaborator}",
+  "byte352.planning.candidateShort": "Cand.",
+  "byte352.planning.replacementShort": "Repl.",
+  "byte352.auth.sessionUnavailable": "We could not verify your session. Try again.",
 } as const;
 
 export type TranslationKey = keyof typeof enUSMessages;

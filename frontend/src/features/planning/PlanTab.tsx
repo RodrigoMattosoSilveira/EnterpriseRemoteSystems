@@ -405,7 +405,7 @@ export function PlanTab(props: {
                     className="text-right"
                   />
                   <SortableHeader
-                    label="Cand."
+                    label={t("byte352.planning.candidateShort")}
                     title={t("planning.replacementCandidate")}
                     active={sort?.key === "replacementCandidate"}
                     direction={sort?.direction}
@@ -413,7 +413,7 @@ export function PlanTab(props: {
                     className="px-1 text-center whitespace-nowrap"
                   />
                   <SortableHeader
-                    label="Repl."
+                    label={t("byte352.planning.replacementShort")}
                     title={t("planning.temporaryReplacement")}
                     active={sort?.key === "temporaryReplacement"}
                     direction={sort?.direction}
@@ -486,9 +486,9 @@ export function PlanTab(props: {
                     <td className="px-2 py-3 text-right align-top">
                       <label className="inline-flex items-center justify-end">
                         <span className="sr-only">
-                          {row.selected
-                            ? `Unselect ${row.collaboratorNickname || row.collaboratorName || row.collaboratorId}`
-                            : `Select ${row.collaboratorNickname || row.collaboratorName || row.collaboratorId}`}
+                          {t(row.selected ? "byte352.planning.unselectCollaborator" : "byte352.planning.selectCollaborator", {
+                            collaborator: row.collaboratorNickname || row.collaboratorName || row.collaboratorId,
+                          })}
                         </span>
                         <input
                           type="checkbox"

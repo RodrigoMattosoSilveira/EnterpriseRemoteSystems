@@ -124,7 +124,7 @@ export function GoldPricesPage() {
           </div>
         )}
 
-        <ApiErrorPanel error={queryError ?? actionError} />
+        <ApiErrorPanel error={queryError ?? actionError} translate={t} />
 
         {latestError && !latestGoldPriceQuery.data && (
           <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">

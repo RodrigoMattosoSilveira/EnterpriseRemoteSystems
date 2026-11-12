@@ -212,7 +212,7 @@ export function SupportAccessLeasesPage() {
                 </div>
               </div>
 
-              <ApiErrorPanel error={leasesQuery.error || approveMutation.error || terminateMutation.error} />
+              <ApiErrorPanel error={leasesQuery.error || approveMutation.error || terminateMutation.error} translate={t} />
 
               {leasesQuery.isLoading && <p className="mt-4 text-sm text-slate-500">{t("admin.support.loading.support.leases_4a0745")}</p>}
               {!leasesQuery.isLoading && leases.length === 0 && (
@@ -499,7 +499,7 @@ function RequestLeasePanel({
       <p className="text-sm text-slate-600">
         {t("admin.support.choose.exactly.one.tenant.an.immutable.expiration.a.sup_be792d")}
       </p>
-      <ApiErrorPanel error={inlineError} />
+      <ApiErrorPanel error={inlineError} translate={t} />
       <form className="mt-4 space-y-5" onSubmit={handleSubmit}>
         <div className="grid gap-4 lg:grid-cols-[minmax(0,1.35fr)_minmax(16rem,0.65fr)]">
           <fieldset>
@@ -822,7 +822,7 @@ function LeaseCard({
       {auditOpen && (
         <div className="mt-4 rounded-xl border bg-white p-3">
           <h3 className="font-bold text-slate-950">{t("admin.support.lease.audit.trail_334688")}</h3>
-          <ApiErrorPanel error={auditError} />
+          <ApiErrorPanel error={auditError} translate={t} />
           {auditLoading ? (
             <p className="mt-2 text-sm text-slate-500">{t("admin.support.loading.audit.events_813d81")}</p>
           ) : auditLogs.length === 0 ? (

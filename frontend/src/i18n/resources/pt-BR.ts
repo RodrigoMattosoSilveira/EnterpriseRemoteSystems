@@ -2334,4 +2334,12 @@ export const ptBRMessages = {
   "byte354b.support.activeTenants": "{count} Entidade ativa",
   "byte354b.support.activeTenantsPlural": "{count} Entidades ativas",
   "byte354b.support.fixedExpiration": "Vencimento fixo",
+  "byte352.audit.oneEventShown": "{count} evento exibido",
+  "byte352.audit.eventsShown": "{count} eventos exibidos",
+  "byte352.roles.selectionUnavailable": "Seleção de Função indisponível",
+  "byte352.planning.selectCollaborator": "Selecionar {collaborator}",
+  "byte352.planning.unselectCollaborator": "Desmarcar {collaborator}",
+  "byte352.planning.candidateShort": "Cand.",
+  "byte352.planning.replacementShort": "Subst.",
+  "byte352.auth.sessionUnavailable": "Não foi possível verificar sua sessão. Tente novamente.",
 } satisfies Record<TranslationKey, string>;
