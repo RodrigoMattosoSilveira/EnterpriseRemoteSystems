@@ -90,9 +90,9 @@
 1. Abrir `docs/bite-35/byte-35-4-manual-da-entidade-pt-br.md` em um visualizador Markdown.
 2. Verificar os 18 capítulos, F01–F12 e exercícios F04-S01–F04-S08; localizar **Administrador da Entidade**.
 3. Abrir `docs/bite-35/byte-35-4a-cartao-substituicoes-pt-br.md`; seguir o link para o capítulo 05.
-4. Conferir que a explicação **Cand.** identifica o candidato e **Repl.** identifica quem o substituto está cobrindo, sem inverter a direção e sem salvar dados de planejamento.
+4. Conferir que a explicação **Cand.** identifica o candidato e **Subst.** identifica quem o substituto está cobrindo, sem inverter a direção e sem salvar dados de planejamento.
 
-**Esperado:** links funcionais, manual integral preservado e orientação Cand./Repl. inequívoca. **PASSOU** se completo; **FALHOU** se faltar conteúdo ou houver orientação invertida; **BLOQUEADO** se arquivos não estiverem acessíveis.
+**Esperado:** links funcionais, manual integral preservado e orientação Cand./Subst. inequívoca. **PASSOU** se completo; **FALHOU** se faltar conteúdo ou houver orientação invertida; **BLOQUEADO** se arquivos não estiverem acessíveis.
 
 ## Fechamento e promoção
 

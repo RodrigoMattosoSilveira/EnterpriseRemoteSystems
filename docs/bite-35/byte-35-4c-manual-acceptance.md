@@ -26,7 +26,7 @@
 
 ## T06 — Planejamento, substituições e cancelamento
 
-**Identidade/contexto:** EARN-A (`training354c.rafael@example.test`), Entidade A; Períodos de Trabalho. **Passos:** (1) abrir **10/11/2026 — Planejamento**, conferir seis atribuições **sem substituição**; (2) observar ✓, Cand., Repl. e Disp.; (3) abrir **08/11/2026 — Planejamento**; (4) conferir substitutos **Bruno → Ana (Folga)** e **Davi → Carla (Licença)**, onde Bruno/Davi substituem Ana/Carla, respectivamente; (5) cancelar qualquer formulário aberto **sem salvar**. **PASSOU:** relações na direção correta, nenhum lançamento novo. **FALHOU:** direção invertida, linhas duplicadas ou escrita não autorizada. **BLOQUEADO:** papel sem navegação/permissão de leitura.
+**Identidade/contexto:** EARN-A (`training354c.rafael@example.test`), Entidade A; Períodos de Trabalho. **Passos:** (1) abrir **10/11/2026 — Planejamento**, conferir seis atribuições **sem substituição**; (2) observar ✓, Cand., Subst. e Disp.; (3) abrir **08/11/2026 — Planejamento**; (4) conferir substitutos **Bruno → Ana (Folga)** e **Davi → Carla (Licença)**, onde Bruno/Davi substituem Ana/Carla, respectivamente; (5) cancelar qualquer formulário aberto **sem salvar**. **PASSOU:** relações na direção correta, nenhum lançamento novo. **FALHOU:** direção invertida, linhas duplicadas ou escrita não autorizada. **BLOQUEADO:** papel sem navegação/permissão de leitura.
 
 ## T07 — Trabalho informado e efetivo
 

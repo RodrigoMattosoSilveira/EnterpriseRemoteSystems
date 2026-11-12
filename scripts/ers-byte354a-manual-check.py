@@ -13,6 +13,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 MANUAL = Path("docs/bite-35/byte-35-4-manual-da-entidade-pt-br.md")
+CARD = Path("docs/bite-35/byte-35-4a-cartao-substituicoes-pt-br.md")
 APP_PLAN = Path("frontend/src/features/planning/PlanTab.tsx")
 APP_PERIOD = Path("frontend/src/features/planning/WorkPeriodDetailPage.tsx")
 APP_LOCALE = Path("frontend/src/i18n/resources/pt-BR.ts")
@@ -30,11 +31,12 @@ def read(root: Path, rel: Path, problems: list[str]) -> str:
 def validate(root: Path = ROOT) -> list[str]:
     problems: list[str] = []
     manual = read(root, MANUAL, problems)
+    card = read(root, CARD, problems)
     plan = read(root, APP_PLAN, problems)
     detail = read(root, APP_PERIOD, problems)
     locale = read(root, APP_LOCALE, problems)
     server = read(root, SERVER, problems)
-    if not all((manual, plan, detail, locale, server)):
+    if not all((manual, card, plan, detail, locale, server)):
         return problems
 
     # Deliberately substantive: an abbreviated index cannot masquerade as a manual.
@@ -61,7 +63,7 @@ def validate(root: Path = ROOT) -> list[str]:
 
     essential = [
         "Na linha de quem VAI TRABALHAR", "**Bruno substitui Ana**",
-        "**Repl. da linha de Bruno aponta para Ana**", "Cand. sozinho não",
+        "**Subst. da linha de Bruno aponta para Ana**", "Cand. sozinho não",
         "Salvar plano", "Sem substituição temporária", "Limpar filtros",
         "F — Folga", "L — Licença", "A — Ativo", "D — Day Off",
         "duas linhas", "mesmo Período de Trabalho", "não cria relação persistida",
@@ -69,7 +71,7 @@ def validate(root: Path = ROOT) -> list[str]:
         "informada", "realizado", "Ouro Produzido", "Conta Corrente",
         "Administrador da Entidade", "Operador de Ganhos", "Operador de Despesas",
         "produção", "F04-S03", "F04-S07", "padrões futuros",
-        "FALHOU", "PASSOU", "não", "seletor Repl. é uma lista",
+        "FALHOU", "PASSOU", "não", "seletor Subst. é uma lista",
     ]
     for phrase in essential:
         if phrase.casefold() not in manual.casefold():
@@ -85,6 +87,21 @@ def validate(root: Path = ROOT) -> list[str]:
         if phrase not in manual:
             problems.append(f"missing explicit safety/relationship explanation: {phrase}")
 
+    # The printed customer materials must describe the labels rendered in pt-BR,
+    # not the older en-US abbreviation. The one en-US mention in the manual is
+    # explicitly identified as a language comparison, not an instruction.
+    if manual.count("Repl.") != 1 or "**`Repl.`** (replacement)" not in manual:
+        problems.append("Portuguese manual must use Subst. except for its explicit en-US comparison")
+    if "Repl." in card:
+        problems.append("Portuguese substitution card must use pt-BR Subst., not en-US Repl.")
+    for phrase in [
+        "**Se Bruno substitui Ana, é Bruno quem tem Ana escolhida no seu campo Subst.**",
+        "**Subst.** | Nome do afastado substituído",
+        "**Ana ← Subst. da linha de Bruno**",
+    ]:
+        if phrase not in card:
+            problems.append(f"missing substitution-card teaching point: {phrase}")
+
     # Link validation does not fetch anything. Check all relative Markdown links.
     for destination in re.findall(r"\]\(([^)]+)\)", manual):
         path = destination.split("#", 1)[0]
@@ -97,7 +114,10 @@ def validate(root: Path = ROOT) -> list[str]:
     # Smoke-check that core terminology corresponds to the *committed* UI and
     # backend, not an obsolete manual test. This is not a complete UI audit.
     ui_anchors = [
-        ("label=\"Cand.\"", plan), ("label=\"Repl.\"", plan),
+        ('label={t("byte352.planning.candidateShort")}', plan),
+        ('label={t("byte352.planning.replacementShort")}', plan),
+        ('"byte352.planning.candidateShort": "Cand."', locale),
+        ('"byte352.planning.replacementShort": "Subst."', locale),
         ("replacementCandidate", plan), ("temporaryReplacementForCollaboratorId", plan),
         ("planning.savePlan", plan), ("planning.availability.dayOff", plan),
         ("planning.informPrint", detail), ("planning.tabOutcomes", detail),

@@ -212,7 +212,7 @@ export function PriceListPage() {
           </div>
         )}
 
-        <ApiErrorPanel error={priceListQuery.error ?? actionError} />
+        <ApiErrorPanel error={priceListQuery.error ?? actionError} translate={t} />
 
         <section className="rounded-2xl border bg-white p-4 shadow-sm">
           <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
