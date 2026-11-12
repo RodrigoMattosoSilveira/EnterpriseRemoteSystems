@@ -51,6 +51,10 @@ jobs:
       - name: Run backend tests
         run: go test ./...
 
+      - name: Verify LOCAL developer fixture backup and non-Production guards
+        working-directory: .
+        run: python3 -m unittest discover -s scripts -p 'test_local_developer_fixtures.py' -v
+
   migration-rehearsal:
     name: 30I migration rehearsal
     runs-on: ubuntu-latest

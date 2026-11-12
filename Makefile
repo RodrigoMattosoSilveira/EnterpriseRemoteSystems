@@ -144,6 +144,8 @@ help:
 	@echo "  make migration-check"
 	@echo "  make migration-rehearsal-check"
 	@echo "  make local-docker-check"
+	@echo "  make local-fixtures-ensure (one-step LOCAL test identities + backup)"
+	@echo "  make local-fixtures-check (offline provisioner regression)"
 	@echo "  make local-backend"
 	@echo "  make local-frontend"
 	@echo "  make local-smoke"
@@ -378,6 +380,16 @@ migration-rehearsal-check:
 .PHONY: frontend-check
 frontend-check:
 	cd frontend && npm install && npm run checkcd 
+
+# One supported, LOCAL-only developer setup for 11 canonical testing identities.
+.PHONY: local-fixtures-ensure
+local-fixtures-ensure:
+	APP_ENV=local python3 scripts/local-developer-fixtures.py
+
+.PHONY: local-fixtures-check
+local-fixtures-check:
+	cd backend && go test -count=1 -run '^TestLocalDeveloperFixtures' ./cmd/provision-e2e-admin
+	python3 -m unittest discover -s scripts -p 'test_local_developer_fixtures.py' -v
 
 .PHONY: local-backend
 local-backend:
@@ -617,6 +629,7 @@ promotion-readiness-check:
 	$(MAKE) production-environment-guardrails-check
 	$(MAKE) owner-unavailable-recovery-readiness-check
 	$(MAKE) byte356-operations-check
+	$(MAKE) local-fixtures-check
 	$(MAKE) production-bootstrap-reconciliation-check
 	$(MAKE) production-bootstrap-full-schema-check
 	$(MAKE) onepassword-materialization-check
@@ -650,6 +663,7 @@ local-check:
 	$(MAKE) recovery-rehearsal-operational-runbook-check
 	$(MAKE) owner-unavailable-recovery-readiness-check
 	$(MAKE) byte356-operations-check
+	$(MAKE) local-fixtures-check
 	$(MAKE) production-bootstrap-reconciliation-check
 	$(MAKE) production-bootstrap-full-schema-check
 	$(MAKE) onepassword-materialization-check

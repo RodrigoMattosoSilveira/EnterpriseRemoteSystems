@@ -134,3 +134,16 @@
 ## Glossary impact
 
 Add to the ERS glossary: **Named Human Application Administrator**, **Recovery Custody Locator**, and **Owner-Unavailable Recovery** using definitions in the linked 35.6 runbook. Preserve existing GLOBAL/Tenant Actor boundaries and backup/recovery definitions.
+
+
+## T10 — Standard LOCAL developer fixture installation (Bite 35.6 correction)
+
+**Identity/context:** Developer/tester or independent colleague; their own **LOCAL** ERS installation; no deployed Test or Production databases. This test is separate from T06–T08's actual named-human recovery conditions.
+
+1. Stop the LOCAL backend. From the repository root run `make local-fixtures-ensure`, using the eleven LOCAL passwords held in the approved 1Password vault. Do **not** manually seed an E2E Tenant, reset the database, or run the Byte 35.2 helper separately. The installer creates/verifies a backup of an existing LOCAL DB and performs the migrations and transactional identity provisioning itself.
+2. Observe `RESULT: LOCAL developer fixtures 11 PASS / 0 FAIL` and `PASS: LOCAL fixture installation and database integrity`. Record the backup path (not its contents) and exact candidate SHA.
+3. Run `make local-fixtures-check`; verify zero failures. In ordinary LOCAL browsers sign in and out with APP-ADMIN, TENANT-A, TENANT-B, EARNINGS-A/B, EXPENSES-A/B, COLLAB-A/B, SHARED and MULTI, as specified in [Standard LOCAL Developer Test Entities](byte-35-6-local-developer-fixtures.md). For each verify correct role, Tenant context and logout.
+4. Restart `make local-backend` and sign in again as TENANT-A with the *same* 1Password password. Confirm ordinary startup has not silently rotated credentials.
+5. Rerun the installer using the same eleven passwords; confirm no duplicate Accounts and the Go idempotence regression passes. No deployed environment should be touched.
+
+**PASS:** an independent developer can perform the single installer command without prerequisite E2E seeding, all eleven LOCAL logins work in their correct Tenant contexts, no restart changes credentials, backup/integrity checks pass, and tests/CI pass. **FAIL:** any wrong login, unexpected Tenant/Actor, password change without explicit installer consent, incorrect database path or unauthorized write. **BLOCKED:** missing exact 1Password fixture credentials or tooling. No new Docker containers are created by this specific installer; apply existing Docker teardown SOP only if additional Docker-backed tests run. **Glossary Impact:** None.
