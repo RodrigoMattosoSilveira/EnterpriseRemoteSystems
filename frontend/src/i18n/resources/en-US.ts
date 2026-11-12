@@ -2335,6 +2335,37 @@ export const enUSMessages = {
   "byte354b.support.activeTenants": "{count} active Tenant",
   "byte354b.support.activeTenantsPlural": "{count} active Tenants",
   "byte354b.support.fixedExpiration": "Fixed expiration",
+
+  // Byte 35.2 — server error codes and field rule codes. In en-US the server's
+  // own English text is shown; these values are the source for translations.
+  "apiError.code.validation_failed": "Some fields need attention.",
+  "apiError.code.not_found": "The record was not found.",
+  "apiError.code.internal_error": "Unexpected server error. Try again later.",
+  "apiError.code.forbidden": "You do not have permission to perform this operation.",
+  "apiError.code.authentication_required": "An authenticated session is required. Sign in again.",
+  "apiError.code.session_expired": "Your session has expired. Sign in again.",
+  "apiError.code.missing_actor": "An authorization Actor is required for this operation.",
+  "apiError.code.tenant_selection_required": "Select an authorization context for this operation.",
+  "apiError.code.tenant_inactive": "The selected Tenant is inactive; its records remain readable, but Tenant operations are blocked.",
+  "apiError.code.tenant_actor_unavailable": "Your access to the selected Tenant is not available.",
+  "apiError.code.recent_reauthentication_required": "Confirm your password again to continue.",
+  "apiError.network": "Network failure. Check your connection and try again.",
+  "apiError.httpStatus": "The request failed (status {status}).",
+  "apiError.rule.required": "Required",
+  "apiError.rule.must_be_positive": "Must be greater than zero",
+  "apiError.rule.invalid_date": "Use the date format YYYY-MM-DD",
+  "apiError.rule.invalid_item_type": "Choose Canteen or Administrative",
+  "apiError.rule.duplicate_active_code": "An active item already uses this code in this category",
+  "apiError.rule.inactive_not_editable": "Inactive items cannot be edited; reactivate the item first",
+  "apiField.id": "Record",
+  "apiField.itemType": "Category",
+  "apiField.code": "Code",
+  "apiField.description": "Description",
+  "apiField.unitPriceBrl": "BRL unit price",
+  "apiField.sortOrder": "Sort order",
+  "apiField.priceDate": "Price date",
+  "apiField.brlPerGram": "BRL per gram",
+  "apiField.recordedBy": "Recorded by",
 } as const;
 
 export type TranslationKey = keyof typeof enUSMessages;

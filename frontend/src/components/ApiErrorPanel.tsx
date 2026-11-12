@@ -1,32 +1,43 @@
 import { ApiError } from "../api/client";
-import { translateEnglish, type Translate } from "../i18n";
+import {
+  DEFAULT_LOCALE,
+  describeApiError,
+  translateEnglish,
+  useOptionalI18n,
+  type Translate,
+} from "../i18n";
 
-export function ApiErrorPanel({ error, translate = translateEnglish }: { error: unknown; translate?: Translate }) {
+export function ApiErrorPanel({ error, translate }: { error: unknown; translate?: Translate }) {
+  // Callers no longer need to pass `translate`: inside I18nProvider the active
+  // locale is used automatically. Outside it (isolated tests) English is used.
+  const i18n = useOptionalI18n();
   if (!error) return null;
 
-  const message = error instanceof Error ? error.message : translate("common.unexpectedError");
-  const authenticationHint = authenticationRecoveryHint(error, translate);
+  const t = translate ?? i18n?.t ?? translateEnglish;
+  const locale = i18n?.locale ?? DEFAULT_LOCALE;
+  const described = describeApiError(error, locale, t);
+  const authenticationHint = authenticationRecoveryHint(error, t);
 
   return (
     <div className="mb-4 rounded-2xl border border-red-200 bg-red-50 p-4 text-red-800">
-      <p className="font-semibold">{message}</p>
+      <p className="font-semibold">{described.message}</p>
 
       {error instanceof ApiError && (
         <>
           {error.url && (
-            <p className="mt-1 text-xs text-red-700">{translate("common.error.url")}: {error.url}</p>
+            <p className="mt-1 text-xs text-red-700">{t("common.error.url")}: {error.url}</p>
           )}
 
           <p className="mt-1 text-xs text-red-700">
-            {translate("common.error.status")}: {error.status ?? translate("common.error.networkFailure")}
-            {error.code ? ` · ${translate("common.error.code")}: ${error.code}` : ""}
+            {t("common.error.status")}: {error.status ?? t("common.error.networkFailure")}
+            {error.code ? ` · ${t("common.error.code")}: ${error.code}` : ""}
           </p>
 
-          {error.fields && (
+          {described.fields.length > 0 && (
             <ul className="mt-2 list-disc pl-5 text-sm">
-              {Object.entries(error.fields).map(([field, fieldMessage]) => (
+              {described.fields.map(({ field, label, message }) => (
                 <li key={field}>
-                  <span className="font-medium">{field}:</span> {fieldMessage}
+                  <span className="font-medium">{label}:</span> {message}
                 </li>
               ))}
             </ul>
@@ -43,7 +54,7 @@ export function ApiErrorPanel({ error, translate = translateEnglish }: { error: 
   );
 }
 
-function authenticationRecoveryHint(error: unknown, t: Translate = translateEnglish): string | null {
+function authenticationRecoveryHint(error: unknown, t: Translate): string | null {
   if (!(error instanceof ApiError)) return null;
 
   if (
