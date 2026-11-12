@@ -13,8 +13,10 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 MANUAL = Path("docs/bite-35/byte-35-4-manual-da-entidade-pt-br.md")
-# Preserves the exact committed 35.4A training body during the terminology rename.
-MANUAL_SHA256 = "6d67c5d1b2199b90faaed9f2a601a5a122da62b45b720b278dbed81992f39d98"
+# Fail-closed integrity pin for the reviewed pt-BR manual. Re-baselined after
+# Byte 35.2 localized the planning column header from en-US Repl. to Subst.
+# and the manual was reconciled with its displayed pt-BR UI.
+MANUAL_SHA256 = "a6f76135fffaf6f67cf1051b5982d58c38cce02c9932e91f3904d27164e2212f"
 REFERENCES = (
     "docs/bite-35/byte-35-4-manual-acceptance.md",
     "docs/bite-35/byte-35-4-operational-readiness.md",
@@ -134,7 +136,7 @@ def validate(root: Path = ROOT) -> list[str]:
     acceptance = read("docs/bite-35/byte-35-4b-manual-acceptance.md")
     if re.findall(r"^### (T\d\d)\b", acceptance, flags=re.M) != [f"T{i:02d}" for i in range(1, 9)]:
         errors.append("manual acceptance T01–T08 incomplete/out of order")
-    for fragment in ["APP", "ADMIN-A", "PASSOU", "FALHOU", "BLOQUEADO", "não", "LOCAL", "Cand.", "Repl."]:
+    for fragment in ["APP", "ADMIN-A", "PASSOU", "FALHOU", "BLOQUEADO", "não", "LOCAL", "Cand.", "Subst."]:
         if fragment not in acceptance:
             errors.append(f"manual acceptance instruction missing: {fragment}")
     makefile = read("Makefile")
@@ -154,7 +156,7 @@ def main() -> int:
         for error in errors:
             print(f"FAIL: {error}", file=sys.stderr)
         return 1
-    print("PASS: Byte 35.4B pt-BR terminology, 94-key parity, unchanged manual, references and CI contract")
+    print("PASS: Byte 35.4B pt-BR terminology, 94-key parity, integrity-pinned current pt-BR manual, references and CI contract")
     print("NOT VERIFIED: browser/UI, complete frontend suite, LOCAL environment, GitHub CI or Production")
     return 0
 

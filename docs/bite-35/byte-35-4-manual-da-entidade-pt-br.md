@@ -127,7 +127,7 @@ No estado **Encerrado**, a edição é bloqueada. Não use período encerrado pa
 |---|---|---|
 | **✓** | Esta linha participa do plano? | Marcar/desmarcar inclusão. Não significa presença efetiva. |
 | **Cand.** | Esta Pessoa está sendo preparada como substituta? | Marcar **na linha de quem vai trabalhar no lugar de alguém**. Sozinho, não cria vínculo salvo. |
-| **Repl.** | Quem será substituído por esta Pessoa? | Escolher, na **linha do substituto**, o afastado em Folga/Licença. É o destino da relação. |
+| **Subst.** | Quem será substituído por esta Pessoa? | Escolher, na **linha do substituto**, o afastado em Folga/Licença. É o destino da relação. |
 | **Apelido** | De quem é a linha? | Confirme pela Pessoa correta; o botão **Atribuição do Plano** ajusta Setor/Local/Tarefa. |
 | **Dias** | Quanto resta até o fim projetado da Jornada? | Indicador, não botão de inclusão. |
 | **Disp.** | Qual disponibilidade o planejamento considera? | **A** ativo, **F** folga, **L** licença na interface `pt-BR`. |
@@ -135,13 +135,13 @@ No estado **Encerrado**, a edição é bloqueada. Não use período encerrado pa
 | **Local** | Onde está previsto atuar? | Atribuição **informada** para este período. |
 | **Tarefa** | O que está previsto executar? | Atribuição **informada** para este período. |
 
-**Atenção às abreviações:** o cabeçalho da terceira coluna está literalmente **`Repl.`** no código atual, mesmo com a interface em português. As opções de disponibilidade exibem **A/F/L** em `pt-BR`; o código interno da Folga é `DAY_OFF` (representado como **D** em inglês). Não procure a letra “D” na interface portuguesa para indicar Folga.
+**Atenção às abreviações:** em `pt-BR`, o cabeçalho da terceira coluna é **`Subst.`** (substituição); em `en-US`, é **`Repl.`** (replacement). As opções de disponibilidade exibem **A/F/L** em `pt-BR`; o código interno da Folga é `DAY_OFF` (representado como **D** em inglês). Não procure a letra “D” na interface portuguesa para indicar Folga.
 
 ### 04.3 Três decisões independentes na mesma linha
 
-Considere Bruno, com ✓ marcado, disponibilidade A e sem substituição: **Bruno foi incluído no plano e está disponível**, mas ainda não sabemos se trabalhará de fato; isso virá em Resultados Reais. Se a coluna Cand. também estiver marcada, ele **pode ser indicado como substituto**. Se Repl. estiver em “Sem substituição temporária”, **nenhuma substituição foi ligada**, independentemente de Cand.
+Considere Bruno, com ✓ marcado, disponibilidade A e sem substituição: **Bruno foi incluído no plano e está disponível**, mas ainda não sabemos se trabalhará de fato; isso virá em Resultados Reais. Se a coluna Cand. também estiver marcada, ele **pode ser indicado como substituto**. Se Subst. estiver em “Sem substituição temporária”, **nenhuma substituição foi ligada**, independentemente de Cand.
 
-A seleção ✓ não equivale a Cand. Nem Cand. equivale a Repl. A disponibilidade F/L também não conclui, por si só, que alguém o substitui.
+A seleção ✓ não equivale a Cand. Nem Cand. equivale a Subst. A disponibilidade F/L também não conclui, por si só, que alguém o substitui.
 
 ### 04.4 Construção normal do plano, sem substituição
 
@@ -169,9 +169,9 @@ Uma substituição pode aparecer como ponto de partida num novo planejamento por
 
 ### 05.1 Uma única frase resolve a direção da relação
 
-**Na linha de quem VAI TRABALHAR, marque `✓`, marque `Cand.` e, em `Repl.`, escolha quem NÃO PODERÁ trabalhar.**
+**Na linha de quem VAI TRABALHAR, marque `✓`, marque `Cand.` e, em `Subst.`, escolha quem NÃO PODERÁ trabalhar.**
 
-Dito de outra forma: **Bruno substitui Ana** significa que o campo **Repl. da linha de Bruno aponta para Ana**. **Não** se deve abrir Repl. da linha de Ana para escolher Bruno. A linha de Ana registra seu afastamento; a linha de Bruno registra o vínculo de substituição.
+Dito de outra forma: **Bruno substitui Ana** significa que o campo **Subst. da linha de Bruno aponta para Ana**. **Não** se deve abrir Subst. da linha de Ana para escolher Bruno. A linha de Ana registra seu afastamento; a linha de Bruno registra o vínculo de substituição.
 
 O sistema guarda uma relação entre **duas atribuições do mesmo Período de Trabalho**, não uma troca de nomes nos cadastros de Pessoas/Jornadas, e não a transferência automática de salários ou de saldo.
 
@@ -179,21 +179,21 @@ O sistema guarda uma relação entre **duas atribuições do mesmo Período de T
 
 Situação didática: Ana estava prevista para o turno, mas entrou em **Folga**. Bruno poderá trabalhar no seu lugar. A escala deve mostrar que **Ana continua sendo Ana**, com afastamento; **Bruno continua sendo Bruno**, trabalhando como substituto.
 
-| Antes de decidir | ✓ | Cand. | Repl. | Disp. | Interpretação |
+| Antes de decidir | ✓ | Cand. | Subst. | Disp. | Interpretação |
 |---|---|---|---|---|---|
 | **Ana** | conforme a escala existente | não | — | A | Prevista, ainda sem folga registrada |
 | **Bruno** | conforme a escala existente | não | — | A | Pode estar disponível para ser escalado |
 
-| Depois de preparar a substituição | ✓ | Cand. | Repl. | Disp. | Interpretação |
+| Depois de preparar a substituição | ✓ | Cand. | Subst. | Disp. | Interpretação |
 |---|---|---|---|---|---|
 | **Ana (afastada)** | conservar ou ajustar conforme plano autorizado | não | — | **F** | Ana é a **substituída**; precisa de uma atribuição registrada nesse período para ser alvo válido |
-| **Bruno (trabalha)** | **sim** | **sim** | **Ana** | **A** | Bruno é o **substituto**; o elo Bruno → Ana está no campo Repl. **de Bruno** |
+| **Bruno (trabalha)** | **sim** | **sim** | **Ana** | **A** | Bruno é o **substituto**; o elo Bruno → Ana está no campo Subst. **de Bruno** |
 
 **Não confunda as colunas:** marcar Cand. na linha de Ana diria que *Ana é candidata a substituir alguém*, o contrário do caso pretendido. Marcar somente ✓ em Bruno o incluiria no plano, mas **não** associaria Bruno ao afastamento de Ana.
 
 ### 05.3 O que significam A, F e L no português do ERS
 
-| Letra mostrada em `pt-BR` | Situação | Consequência para a escolha em `Repl.` |
+| Letra mostrada em `pt-BR` | Situação | Consequência para a escolha em `Subst.` |
 |---|---|---|
 | **A — Ativo** | Colaborador disponível para trabalhar | Pode ser substituto se selecionado; **não** aparece como alvo afastado |
 | **F — Folga** | Colaborador em folga durante o planejamento | Pode aparecer como **alvo** para ser substituído |
@@ -212,9 +212,9 @@ A disponibilidade do Plano não substitui o **Resultado Real**, que é apurado p
 3. Localize **Ana** pelo Apelido/nome e confirme a linha. Na coluna **Disp.**, escolha **F — Folga** (ou **L — Licença** se esse for o caso real do exercício).
 4. Confira se a linha de Ana já integra o plano ou se a alteração de disponibilidade será salva como um registro do período. O **alvo deve existir no plano salvo**; não basta mencioná-lo visualmente como uma linha que nunca foi persistida.
 5. Localize **Bruno**. Confirme **Disp. = A** e marque a coluna **✓** de Bruno para incluí-lo.
-6. **Na linha de Bruno**, marque a caixa **Cand.**. Observe a indicação de candidato e o seletor **Repl.** habilitado nessa linha.
-7. Abra **Repl. de Bruno**. A lista começa com **Sem substituição temporária** e deve oferecer colaboradores com disponibilidade **F** ou **L**, ainda sem outro substituto designado. Encontre **Ana**; o texto da opção inclui apelido, letra de disponibilidade e situação de seleção.
-8. Selecione **Ana** no Repl. **de Bruno**. Leia em voz alta: “Bruno está substituindo Ana neste Período de Trabalho”.
+6. **Na linha de Bruno**, marque a caixa **Cand.**. Observe a indicação de candidato e o seletor **Subst.** habilitado nessa linha.
+7. Abra **Subst. de Bruno**. A lista começa com **Sem substituição temporária** e deve oferecer colaboradores com disponibilidade **F** ou **L**, ainda sem outro substituto designado. Encontre **Ana**; o texto da opção inclui apelido, letra de disponibilidade e situação de seleção.
+8. Selecione **Ana** no Subst. **de Bruno**. Leia em voz alta: “Bruno está substituindo Ana neste Período de Trabalho”.
 9. Confira o contador **substituições temporárias**. Ele deve refletir o novo vínculo em edição. Isso **ainda não confirma gravação**.
 10. Confira o Setor, Local e Tarefa de **Bruno**, pois ele executará o trabalho. Se precisar ajustá-los, use **Atribuição do Plano** **na linha de Bruno**, sem marcar padrões futuros salvo autorização expressa.
 11. Clique **Limpar filtros** outra vez, revise **ambas as linhas** e só então use **Salvar plano**. Aguarde a conclusão sem clicar novamente.
@@ -222,42 +222,42 @@ A disponibilidade do Plano não substitui o **Resultado Real**, que é apurado p
 13. Abra **Informar / Imprimir**. Confira o aviso de afastados sem substituto. Se Ana ainda aparecer como não substituída, **não conclua que o exercício passou**: revise persistência, identidades e vínculo antes de informar ou imprimir.
 14. Não clique em **Marcar como Informado** e não altere **Resultados Reais** no exercício básico, a menos que a ficha autorizada inclua essas etapas.
 
-**PASSOU:** Bruno está incluído e ativo, Ana está F/L, Repl. de Bruno aponta para Ana e a relação reaparece depois da recarga. O aviso de não substituída não lista Ana para esse período. **FALHOU:** o elo não foi salvo ou é reverso. **BLOQUEADO:** falta período editável, Colaborador elegível ou permissão.
+**PASSOU:** Bruno está incluído e ativo, Ana está F/L, Subst. de Bruno aponta para Ana e a relação reaparece depois da recarga. O aviso de não substituída não lista Ana para esse período. **FALHOU:** o elo não foi salvo ou é reverso. **BLOQUEADO:** falta período editável, Colaborador elegível ou permissão.
 
-### 05.5 Por que o seletor Repl. pode estar vazio
+### 05.5 Por que o seletor Subst. pode estar vazio
 
 A opção **Sem substituição temporária** isolada não significa necessariamente erro de sistema. Revise, **nesta ordem**:
 
-1. **Você está na linha do substituto?** O Repl. correto é o do Colaborador que irá trabalhar, não o do afastado.
-2. **Marcou Cand. nessa linha?** Sem Cand., Repl. fica indisponível.
+1. **Você está na linha do substituto?** O Subst. correto é o do Colaborador que irá trabalhar, não o do afastado.
+2. **Marcou Cand. nessa linha?** Sem Cand., Subst. fica indisponível.
 3. **O afastado está F/L?** A pessoa ainda marcada A não é alvo válido.
 4. **O alvo é outra Pessoa?** A própria Pessoa não pode substituir a si mesma.
-5. **O alvo já foi escolhido em Repl. de outra linha?** Uma pessoa afastada não pode receber dois substitutos pelo mesmo mecanismo.
+5. **O alvo já foi escolhido em Subst. de outra linha?** Uma pessoa afastada não pode receber dois substitutos pelo mesmo mecanismo.
 6. **O alvo é também substituto de outro?** Encadeamentos de substituição são rejeitados.
 7. **Você está no mesmo Período?** Substituições não vinculam atribuições de períodos diferentes.
 8. **A alteração existe apenas na tela?** O servidor exige um registro de atribuição do afastado no período. Salve uma configuração válida de acordo com o exercício aprovado; se ocorrer validação, não tente contornar as regras.
 9. **O período está editável e sua sessão autorizada?** Sem isso, os controles podem ficar desabilitados.
 10. **Algum filtro esconde a linha?** Limpar filtros mostra todas as linhas; não modifica o plano salvo.
 
-**Detalhe importante:** o seletor Repl. é uma lista de escolha. Não é o seletor genérico de busca que abre uma lista completa para digitação. Se seu navegador não oferecer filtragem digitada nesse controle, isso não é um defeito de substituição. Use a lista apresentada.
+**Detalhe importante:** o seletor Subst. é uma lista de escolha. Não é o seletor genérico de busca que abre uma lista completa para digitação. Se seu navegador não oferecer filtragem digitada nesse controle, isso não é um defeito de substituição. Use a lista apresentada.
 
 ### 05.6 Quatro coisas que parecem iguais, mas não são
 
 | Situação | O que acontece | Ainda falta |
 |---|---|---|
 | ✓ em Bruno | Bruno será incluído quando salvar | Nenhum vínculo com Ana foi criado |
-| Cand. em Bruno | A linha permite preparar substituição; há marca visual **em memória** | Escolher o alvo em Repl. e salvar; Cand. isolado não cria relação persistida |
-| Repl. de Bruno = Ana | O plano **em edição** tem a relação Bruno → Ana | Clicar em **Salvar plano** e confirmar depois de recarregar |
+| Cand. em Bruno | A linha permite preparar substituição; há marca visual **em memória** | Escolher o alvo em Subst. e salvar; Cand. isolado não cria relação persistida |
+| Subst. de Bruno = Ana | O plano **em edição** tem a relação Bruno → Ana | Clicar em **Salvar plano** e confirmar depois de recarregar |
 | Disponibilidade de Ana = F | Ana está assinalada em Folga no plano | Definir substituto, quando aplicável, e registrar resultado real depois |
 
-**Ao recarregar:** o estado de Cand. é reconstruído a partir de vínculos de substituição salvos. Uma caixa Cand. marcada sem Repl. associado não constitui uma reserva persistente de candidato; não use o contador de candidatos como prova de gravação.
+**Ao recarregar:** o estado de Cand. é reconstruído a partir de vínculos de substituição salvos. Uma caixa Cand. marcada sem Subst. associado não constitui uma reserva persistente de candidato; não use o contador de candidatos como prova de gravação.
 
 ### 05.7 Como retirar ou corrigir uma substituição antes de informar
 
-1. Em um período editável, encontre a **linha do substituto** que possui Repl. preenchido.
-2. Abra **Repl.** e selecione **Sem substituição temporária** se a substituição foi cancelada; para trocar o alvo, selecione outro afastado elegível.
+1. Em um período editável, encontre a **linha do substituto** que possui Subst. preenchido.
+2. Abra **Subst.** e selecione **Sem substituição temporária** se a substituição foi cancelada; para trocar o alvo, selecione outro afastado elegível.
 3. Se a Pessoa não será mais substituta, desmarque **Cand.**; isso também limpa o destino de substituição na edição local.
-4. Confira **✓** e **Disp.** das duas Pessoas. Caso o trabalhador deixe o plano, ajuste a inclusão explicitamente; não suponha que retirar Repl. desmarca ✓.
+4. Confira **✓** e **Disp.** das duas Pessoas. Caso o trabalhador deixe o plano, ajuste a inclusão explicitamente; não suponha que retirar Subst. desmarca ✓.
 5. Use **Salvar plano**. Reabra e confira. Se o alvo continuar listado no aviso de afastados sem substituto, é porque o elo não existe mais; decida operacionalmente se precisa de outra cobertura.
 
 **Cuidado:** mudar a disponibilidade de um alvo de F/L para A limpa a indicação local de substituição dos colegas que apontavam para ele. Examine o efeito sobre todos os envolvidos antes de salvar. Para períodos já informados, lançados ou encerrados, siga a governança da Entidade; nunca reescreva uma escala histórica sem autorização.
@@ -266,12 +266,12 @@ A opção **Sem substituição temporária** isolada não significa necessariame
 
 É possível que **Bruno → Ana** e **Davi → Carla** coexistam, desde que ambos os substitutos sejam elegíveis, ambas as Pessoas substituídas estejam F/L e não haja destino duplicado. Para operar com quatro linhas:
 
-| Pessoa | Participação | Disponibilidade | Cand. / Repl. |
+| Pessoa | Participação | Disponibilidade | Cand. / Subst. |
 |---|---|---|---|
 | Ana | afastada | F | sem destino na própria linha |
-| Bruno | substitui | A | Cand. = sim; Repl. = Ana |
+| Bruno | substitui | A | Cand. = sim; Subst. = Ana |
 | Carla | afastada | L | sem destino na própria linha |
-| Davi | substitui | A | Cand. = sim; Repl. = Carla |
+| Davi | substitui | A | Cand. = sim; Subst. = Carla |
 
 O contador de substituições deve representar **duas** relações. Se Davi tentar apontar para Ana, que já é alvo de Bruno, a escolha não deve estar disponível para uma segunda relação; o servidor também protege contra duplicidade.
 
@@ -286,7 +286,7 @@ O contador de substituições deve representar **duas** relações. Se Davi tent
 | Bruno → Ana e Ana → Carla | Encadeamento / papéis incompatíveis | Organizar relações diretas, sem cadeia |
 | Bruno no Período 1 → Ana no Período 2 | Períodos diferentes | Reorganizar dentro do mesmo Período |
 | Bruno em uma Entidade → Ana em outra | Contexto de segurança distinto | Usar somente Colaboradores da Entidade atual |
-| Repl. marcado e ✓ do substituto ausente | Substituto não participa do plano | Incluir o substituto |
+| Subst. marcado e ✓ do substituto ausente | Substituto não participa do plano | Incluir o substituto |
 | Destino F/L sem atribuição salva | O servidor não conhece o alvo no período | Salvar as linhas exigidas pelo fluxo aprovado; não usar atribuição de outro período |
 
 As validações do servidor são salvaguardas. Se algum erro aparecer, leia-o e **pare**: não experimente combinações financeiras ou referências de outra Entidade até “passar”.
@@ -321,13 +321,13 @@ A propagação de Setor/Local/Tarefa **efetivos** de quem realmente trabalhou se
 
 - **Sei dizer quem trabalhará?** Olhe ✓ e Disp. na linha do substituto.
 - **Sei dizer quem ficará ausente?** Olhe Disp. F/L na linha da Pessoa substituída.
-- **Sei dizer quem substitui quem?** Leia **Repl. na linha de quem trabalhará**.
+- **Sei dizer quem substitui quem?** Leia **Subst. na linha de quem trabalhará**.
 - **Sei dizer se foi gravado?** Reabra após Salvar plano e confira o elo.
 - **Sei dizer o que será informado?** Abra Informar / Imprimir e confira a escala e os avisos.
 - **Sei dizer o que aconteceu?** Só depois confira Resultados Reais; não deduza presença real do Plano.
 - **Sei dizer quanto será ganho?** Só depois de resultados, produção, regras e Acúmulo; não deduza do campo Cand.
 
-**Teste mental rápido:** “Elisa substitui Fábio”. **Resposta:** Elisa deve estar ✓ e A; marque Cand. **em Elisa**; Fábio deve estar F ou L; escolha Fábio no **Repl. de Elisa**; salve e confira. Se você marcou Cand. em Fábio ou escolheu Elisa no Repl. de Fábio, a relação está invertida.
+**Teste mental rápido:** “Elisa substitui Fábio”. **Resposta:** Elisa deve estar ✓ e A; marque Cand. **em Elisa**; Fábio deve estar F ou L; escolha Fábio no **Subst. de Elisa**; salve e confira. Se você marcou Cand. em Fábio ou escolheu Elisa no Subst. de Fábio, a relação está invertida.
 
 ---
 
@@ -490,7 +490,7 @@ O Colaborador trabalha dentro de sua própria identidade. A interface pode apres
 
 1. Confirmar Entidade, identidade, data, código de período e horário.
 2. Conferir disponibilidade de cada Colaborador e o responsável pela escala.
-3. Ajustar ✓, Setor/Local/Tarefa; para ausência, revisar **Cand. e Repl. no substituto**.
+3. Ajustar ✓, Setor/Local/Tarefa; para ausência, revisar **Cand. e Subst. no substituto**.
 4. Limpar filtros, revisar todas as linhas, salvar e reabrir o Plano.
 5. Verificar aviso de afastados sem substituição em Informar / Imprimir.
 6. Informar/imprimir apenas com a autorização operacional correspondente.
@@ -516,8 +516,8 @@ O Colaborador trabalha dentro de sua própria identidade. A interface pode apres
 
 | O que vejo | Interpretação provável | Como proceder sem criar novos problemas |
 |---|---|---|
-| **Repl. vazio** | Nenhum alvo F/L elegível, Cand. desmarcado ou alvo já utilizado | Volte ao capítulo 05.5; confira disponibilidade, linha e duplicidade |
-| **Cand. desapareceu após recarregar** | Era candidato local sem vínculo de substituição persistido | Escolha destino em Repl. e salve; candidato sozinho não vira cadastro |
+| **Subst. vazio** | Nenhum alvo F/L elegível, Cand. desmarcado ou alvo já utilizado | Volte ao capítulo 05.5; confira disponibilidade, linha e duplicidade |
+| **Cand. desapareceu após recarregar** | Era candidato local sem vínculo de substituição persistido | Escolha destino em Subst. e salve; candidato sozinho não vira cadastro |
 | **Aparece aviso de afastado sem substituto** | Não existe vínculo salvo para aquela atribuição afastada | Revise Plano salvo, não apenas contadores antes de salvar |
 | **F não aparece; só D** | Interface está em inglês | Escolha Português (Brasil): Folga é F; D aparece em inglês |
 | **O Período não permite editar** | Estado Encerrado, sessão sem permissão ou operação indisponível | Troque para um cenário didático editável aprovado |
@@ -550,7 +550,7 @@ Registre Entidade fictícia, identidade/papel, período/código/estado, passos r
 | **✓ Selecionado** | Incluído no planejamento do Período, não comprova trabalho realizado |
 | **Disponibilidade A/F/L** | Ativo / Folga / Licença na interface brasileira |
 | **Cand.** | Indica que a **linha do substituto** está preparada para escolher alguém a substituir |
-| **Repl.** | Seletor **na linha do substituto** que aponta para a Pessoa afastada |
+| **Subst.** | Seletor **na linha do substituto** que aponta para a Pessoa afastada |
 | **Substituição temporária** | Vínculo de atribuições dentro de um único Período de Trabalho; não troca Pessoa ou Jornada |
 | **Atribuição informada** | Setor/Local/Tarefa do Plano comunicado, preservados como base de remuneração |
 | **Trabalho realizado** | Setor/Local/Tarefa efetivamente registrados no Resultado Real, como evidência |
@@ -569,8 +569,8 @@ Uma Pessoa treinada deve ser capaz de:
 
 1. Distinguir Pessoa, Vínculo, Ator, Colaborador e Jornada sem consultar a tela de outra Entidade.
 2. Explicar a diferença entre **incluir** e **trabalhar**; selecionar não é apurar.
-3. Dizer, olhando as duas linhas, **quem substitui quem** e por que Repl. está no substituto.
-4. Explicar por que os alvos Repl. exigem F/L e por que um alvo não deve ter dois substitutos.
+3. Dizer, olhando as duas linhas, **quem substitui quem** e por que Subst. está no substituto.
+4. Explicar por que os alvos Subst. exigem F/L e por que um alvo não deve ter dois substitutos.
 5. Salvar um plano de teste e comprovar, após recarregar, que a substituição existe.
 6. Separar **atribuição informada** de **trabalho realizado** e de **padrão futuro da Jornada**.
 7. Distinguir execução de Acúmulo de lançamento financeiro.
@@ -635,11 +635,11 @@ Resultados de treinamento não autorizam entrada em Produção; a aceitação da
 
 **Identidade:** Administrador da Entidade A ou Operador de Ganhos com `planning.update`. **Contexto:** Período de Trabalho fictício em Planejamento, com dois ou mais Colaboradores elegíveis. **Ações de escrita:** somente quando o dono do cenário tiver autorizado **um período descartável específico**. Leia integralmente o capítulo 05 antes de iniciar.
 
-**Preparação para todos os cenários:** informe data, código, nome e estado; limpe filtros; anote ✓, Cand., Repl., A/F/L e atribuições das linhas envolvidas. Use casos independentes ou restaure **por procedimento aprovado** os registros descartáveis; não faça cenários contraditórios sequencialmente sobre o mesmo período sem conferir o estado.
+**Preparação para todos os cenários:** informe data, código, nome e estado; limpe filtros; anote ✓, Cand., Subst., A/F/L e atribuições das linhas envolvidas. Use casos independentes ou restaure **por procedimento aprovado** os registros descartáveis; não faça cenários contraditórios sequencialmente sobre o mesmo período sem conferir o estado.
 
 ### F04-S01 — Plano sem substituição
 
-1. Na linha de Bruno, confirme ✓ e A, sem Cand. nem Repl.
+1. Na linha de Bruno, confirme ✓ e A, sem Cand. nem Subst.
 2. Confirme Setor/Local/Tarefa; revise o contador de selecionados.
 3. Se houver escrita autorizada, salve, atualize e confira a linha.
 
@@ -647,7 +647,7 @@ Resultados de treinamento não autorizam entrada em Produção; a aceitação da
 
 ### F04-S02 — Candidato não significa substituto registrado
 
-1. Na linha de Bruno, marque Cand. **sem** escolher alvo em Repl.
+1. Na linha de Bruno, marque Cand. **sem** escolher alvo em Subst.
 2. Observe a indicação visual de candidato.
 3. Confira que o contador de substituições continua sem esse vínculo.
 4. Não use o desaparecimento da marca após recarregar como evidência de falha: Cand. sozinho não persiste relação.
@@ -658,7 +658,7 @@ Resultados de treinamento não autorizam entrada em Produção; a aceitação da
 
 1. Em **Ana**, escolha Disp. **F**; confirme que sua atribuição será registrada no período.
 2. Em **Bruno**, mantenha Disp. **A**, marque ✓ e Cand.
-3. **Em Repl. de Bruno**, escolha **Ana**.
+3. **Em Subst. de Bruno**, escolha **Ana**.
 4. Limpe filtros e confirme as **duas** linhas e o contador.
 5. Em período autorizado para escrita, clique **Salvar plano**, reabra e confira **Bruno → Ana**.
 6. Consulte o aviso em Informar / Imprimir, sem marcar o período informado.
@@ -668,23 +668,23 @@ Resultados de treinamento não autorizam entrada em Produção; a aceitação da
 ### F04-S04 — Licença também pode ser alvo
 
 1. Prepare Carla com Disp. **L** e atribuição do período conhecida.
-2. Prepare Davi ✓, **A**, Cand. e escolha Carla em **Repl. de Davi**.
+2. Prepare Davi ✓, **A**, Cand. e escolha Carla em **Subst. de Davi**.
 3. Com gravação autorizada, salve e reabra.
 
 **PASSOU:** Davi → Carla foi persistido no mesmo período. **BLOQUEADO:** faltam Colaboradores ou período.
 
 ### F04-S05 — Uma Pessoa afastada não tem dois substitutos
 
-1. Com Bruno → Ana em edição, abra Repl. de Davi, com Cand. marcado.
+1. Com Bruno → Ana em edição, abra Subst. de Davi, com Cand. marcado.
 2. Procure Ana entre destinos possíveis.
 3. Confirme que Ana já atribuída não aparece como escolha livre de Davi.
 4. **Não** tente construir requisição externa nem contornar validação do servidor.
 
 **PASSOU:** escolha duplicada indisponível; não há mutação financeira. **FALHOU:** duas relações persistidas para o mesmo alvo.
 
-### F04-S06 — Afastado A não é destino de Repl.
+### F04-S06 — Afastado A não é destino de Subst.
 
-1. Com Ana em **A**, abra Repl. de Bruno, com Cand. marcado.
+1. Com Ana em **A**, abra Subst. de Bruno, com Cand. marcado.
 2. Confirme que Ana **não** é oferecida como alvo.
 3. Mude Ana para **F** **apenas num caso descartável aprovado** e confirme que então aparece como opção.
 
@@ -693,7 +693,7 @@ Resultados de treinamento não autorizam entrada em Produção; a aceitação da
 ### F04-S07 — Cancelar uma substituição antes de informar
 
 1. Parta de um vínculo fictício e editável Bruno → Ana.
-2. Na linha de Bruno, escolha **Sem substituição temporária** em Repl.
+2. Na linha de Bruno, escolha **Sem substituição temporária** em Subst.
 3. Se a ficha permitir, salve, reabra e confira ausência do elo.
 4. Abra Informar / Imprimir e reconheça o aviso de Ana sem substituto, se ela continuar F/L.
 
