@@ -39,6 +39,53 @@ def manifest():
     return pairs
 
 
+# Every documented acceptance case must have its own executable context and
+# result criteria. Changing this list requires reviewing the manual contract.
+EXPECTED_MANUAL_CASES = [f"T{i:02d}" for i in range(1, 11)]
+
+
+def manual_contract_issues(manual: str) -> list[str]:
+    headings = list(re.finditer(r"^## (T\d\d) —", manual, flags=re.MULTILINE))
+    actual = [match.group(1) for match in headings]
+    if actual != EXPECTED_MANUAL_CASES:
+        return [f"expected T01–T10 once in order, found {actual}"]
+
+    issues = []
+    for index, heading in enumerate(headings):
+        end = headings[index + 1].start() if index + 1 < len(headings) else len(manual)
+        section = manual[heading.end():end]
+        case = heading.group(1)
+        if not re.search(r"\*\*Identit(?:y|ies)/context:\*\*", section):
+            issues.append(f"{case} missing identity/context")
+        for marker in ("**PASS", "**FAIL", "BLOCKED"):
+            if marker not in section:
+                issues.append(f"{case} missing {marker} result criteria")
+
+    # Existing operational cases remain distinct from synthetic LOCAL fixtures.
+    for case, required in (
+        ("T06", "two different natural persons"),
+        ("T07", "two approved real recovery technicians"),
+        ("T08", "isolated restore"),
+    ):
+        index = EXPECTED_MANUAL_CASES.index(case)
+        end = headings[index + 1].start() if index + 1 < len(headings) else len(manual)
+        if required not in manual[headings[index].end():end]:
+            issues.append(f"{case} missing operational safeguard: {required}")
+
+    # T10 is deliberately LOCAL-only and must not turn synthetic fixture
+    # Accounts into evidence for human recovery or Production authorization.
+    t10 = manual[headings[-1].end():]
+    for required in (
+        "make local-fixtures-ensure", "make local-fixtures-check",
+        "eleven LOCAL passwords", "1Password", "backup",
+        "APP-ADMIN", "TENANT-A", "TENANT-B", "SHARED", "MULTI",
+        "no duplicate Accounts", "Production", "T06–T08",
+    ):
+        if required not in t10:
+            issues.append(f"T10 missing fixture safeguard: {required}")
+    return issues
+
+
 def main():
     m = manifest()
     check("Production recovery provider is 1Password only",
@@ -82,10 +129,11 @@ def main():
               "one human permitted", "two **different actual humans**", "1Password-only",
               "**BLOCKED**", "RPO", "RTO", "Docker", "Glossary impact")))
     manual = text("docs/bite-35/byte-35-6-manual-acceptance.md")
-    check("manual has nine executable, identity-specific T01–T09 cases",
-          re.findall(r"^## (T\d\d) —", manual, flags=re.MULTILINE)
-          == ["T%02d" % n for n in range(1, 10)]
-          and all(word in manual for word in ("**Identity", "**PASS", "**BLOCKED", "make local-check")))
+    manual_issues = manual_contract_issues(manual)
+    if manual_issues:
+        raise AssertionError("manual acceptance contract: " + "; ".join(manual_issues))
+    check("manual has ten executable, identity-specific T01–T10 cases",
+          "make local-check" in manual)
     make = text("Makefile")
     ci = text(".github/workflows/ci.yml")
     check("LOCAL, promotion and CI run this offline contract",

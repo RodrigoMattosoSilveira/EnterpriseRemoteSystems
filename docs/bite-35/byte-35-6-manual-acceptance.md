@@ -1,4 +1,4 @@
-# Bite 35.6 — Manual Acceptance T01–T09 (single developer vs. actual humans)
+# Bite 35.6 — Manual Acceptance T01–T10 (single developer vs. actual humans)
 
 **Source:** committed candidate branch `1078-bite-356-application-administrator-and-operational-runbooks`; **working directory:** `~/projects/EnterpriseRemoteSystems` — **no other worktree**. Record the actual candidate SHA at execution.  **No password, reset token, private key, recovery document, session cookie or vault secret is recorded here.**
 
@@ -124,17 +124,12 @@
 
 **Identities/context:** release owner and authorized independent Production approver; no Production mutation. Distinguish two records explicitly:
 
-1. **Software acceptance**: record T01–T04 and, where available, T05; matching-sha LOCAL, CI, and successful regression evidence. A sole developer may mark this **PASS**.
+1. **Software acceptance**: record T01–T04 and, where available, T05; matching-sha LOCAL, CI, and successful regression evidence. A sole developer may mark this **PASS**. Track T10 LOCAL developer-onboarding acceptance separately: an outstanding independent Linux test must remain **BLOCKED** for T10, but cannot replace or fabricate T06–T08 human recovery evidence.
 2. **Operational acceptance**: record T06–T08 independently with actual Test/Production people and evidence. If any remains BLOCKED, record it verbatim and **do not** mark the Production operational gate PASS.
 3. Compare six Bite 35.7 launch gates, 35.5 independently approved financial initialization and the named administrator recovery evidence. Missing evidence must remain **BLOCKED**. This bite never initiates Production enrollment, import or activation automatically.
 4. Record final status, actual signoff people (never invented names), UTC timestamp, unresolved risks, and next responsible party. Verify no test-created Docker containers/ports remain.
 
 **PASS (software only):** T01–T04 and matching-sha CI pass, open operational gates explicitly documented. **PASS (operational):** authorized human and recovery gates actually observed and approved. **FAIL:** a false PASS, fabricated independent approval or unauthorized Production operation. **BLOCKED:** prerequisites incomplete.
-
-## Glossary impact
-
-Add to the ERS glossary: **Named Human Application Administrator**, **Recovery Custody Locator**, and **Owner-Unavailable Recovery** using definitions in the linked 35.6 runbook. Preserve existing GLOBAL/Tenant Actor boundaries and backup/recovery definitions.
-
 
 ## T10 — Standard LOCAL developer fixture installation (Bite 35.6 correction)
 
@@ -147,3 +142,7 @@ Add to the ERS glossary: **Named Human Application Administrator**, **Recovery C
 5. Rerun the installer using the same eleven passwords; confirm no duplicate Accounts and the Go idempotence regression passes. No deployed environment should be touched.
 
 **PASS:** an independent developer can perform the single installer command without prerequisite E2E seeding, all eleven LOCAL logins work in their correct Tenant contexts, no restart changes credentials, backup/integrity checks pass, and tests/CI pass. **FAIL:** any wrong login, unexpected Tenant/Actor, password change without explicit installer consent, incorrect database path or unauthorized write. **BLOCKED:** missing exact 1Password fixture credentials or tooling. No new Docker containers are created by this specific installer; apply existing Docker teardown SOP only if additional Docker-backed tests run. **Glossary Impact:** None.
+
+## Glossary impact
+
+Add to the ERS glossary: **Named Human Application Administrator**, **Recovery Custody Locator**, and **Owner-Unavailable Recovery** using definitions in the linked 35.6 runbook. Preserve existing GLOBAL/Tenant Actor boundaries and backup/recovery definitions. T10 introduces no additional domain terminology.
