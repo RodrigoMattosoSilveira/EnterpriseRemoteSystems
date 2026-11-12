@@ -1,8 +1,10 @@
 """Offline entrypoint/backup contract checks; no production or LOCAL DB touch."""
 import importlib.util
+from contextlib import closing
 import os
 from pathlib import Path
 import sqlite3
+import subprocess
 import tempfile
 import unittest
 from unittest import mock
@@ -74,6 +76,83 @@ class LocalDeveloperFixtureTests(unittest.TestCase):
                                  "committed WAL row")
             finally:
                 writer.close()
+
+    def test_offline_wal_database_integrity_reopens_rw_without_creating_new_file(self):
+        # Verify the post-Go validation path, not only the already-closed backup.
+        with tempfile.TemporaryDirectory() as folder:
+            db = Path(folder) / "app.db"
+            with closing(sqlite3.connect(db)) as writer:
+                self.assertEqual(writer.execute("PRAGMA journal_mode=WAL").fetchone()[0], "wal")
+                writer.execute("CREATE TABLE fixture_marker (value TEXT NOT NULL)")
+                writer.execute("INSERT INTO fixture_marker VALUES ('committed fixture data')")
+                writer.commit()
+            real_connect = sqlite3.connect
+            calls = []
+
+            def connect_existing(database, *args, **kwargs):
+                calls.append(database)
+                # Simulate the macOS SQLite condition: the Go writer exited,
+                # WAL sidecars are absent, and read-only mode cannot reopen.
+                if isinstance(database, str) and "?mode=ro" in database:
+                    raise sqlite3.OperationalError("unable to open database file")
+                return real_connect(database, *args, **kwargs)
+
+            with mock.patch.object(installer.sqlite3, "connect", side_effect=connect_existing):
+                installer.integrity(db, writable_existing=True)
+            self.assertEqual(calls, [db.resolve().as_uri() + "?mode=rw"])
+            with closing(sqlite3.connect(db)) as verified:
+                self.assertEqual(verified.execute("SELECT value FROM fixture_marker").fetchone()[0],
+                                 "committed fixture data")
+
+            absent = Path(folder) / "absent.db"
+            with self.assertRaises(sqlite3.OperationalError):
+                installer.integrity(absent, writable_existing=True)
+            self.assertFalse(absent.exists(), "integrity validation must never create a missing database")
+            with self.assertRaisesRegex(SystemExit, "cannot use writable mode"):
+                installer.integrity(db, immutable_snapshot=True, writable_existing=True)
+
+    def test_full_installer_checks_db_after_migrations_and_after_go_in_rw_mode(self):
+        # Regression for: Go prints 11 PASS, then the old Python post-check
+        # fails because macOS cannot reopen a sidecar-less WAL DB in mode=ro.
+        with tempfile.TemporaryDirectory() as folder:
+            db = Path(folder) / "app.db"
+            with closing(sqlite3.connect(db)) as writer:
+                writer.execute("PRAGMA journal_mode=WAL")
+                writer.execute("CREATE TABLE fixture_marker (value TEXT NOT NULL)")
+                writer.execute("INSERT INTO fixture_marker VALUES ('prior local data')")
+                writer.commit()
+            real_connect = sqlite3.connect
+            sqlite_uris = []
+
+            def fail_readonly_wal_open(database, *args, **kwargs):
+                sqlite_uris.append(database)
+                if isinstance(database, str) and "?mode=ro" in database:
+                    raise sqlite3.OperationalError("unable to open database file")
+                return real_connect(database, *args, **kwargs)
+
+            root = Path.cwd().resolve()
+            with mock.patch.dict(os.environ, {"APP_ENV": "local"}, clear=True), \
+                 mock.patch.object(installer, "ROOT", root), \
+                 mock.patch.object(installer, "DB", db), \
+                 mock.patch.object(installer, "dotenv_paths", return_value={}), \
+                 mock.patch.object(installer, "effective_path", return_value=db), \
+                 mock.patch.object(installer, "require_offline"), \
+                 mock.patch.object(installer, "backup_existing"), \
+                 mock.patch.object(installer, "prompt_credentials", return_value={"fixture": "from 1Password"}), \
+                 mock.patch("builtins.input", return_value="INSTALL-LOCAL-FIXTURES"), \
+                 mock.patch.object(installer.subprocess, "run", return_value=subprocess.CompletedProcess([], 0)) as run, \
+                 mock.patch.object(installer.sqlite3, "connect", side_effect=fail_readonly_wal_open), \
+                 mock.patch("builtins.print") as printed:
+                installer.main()
+
+            self.assertEqual(run.call_count, 2, "migrations and Go fixture transaction both ran")
+            self.assertEqual(sqlite_uris, [db.resolve().as_uri() + "?mode=rw"] * 2,
+                             "both post-migration and post-Go checks must allow SQLite WAL sidecars")
+            printed.assert_any_call("PASS: LOCAL fixture installation and database integrity")
+            with closing(sqlite3.connect(db)) as checked:
+                self.assertEqual(checked.execute("PRAGMA integrity_check").fetchone()[0], "ok")
+                self.assertEqual(checked.execute("SELECT value FROM fixture_marker").fetchone()[0],
+                                 "prior local data")
 
     def test_backup_integrity_uses_encoded_file_uri_for_local_paths(self):
         # SQLite URI queries must not interpret '#' or '?' in a path as a

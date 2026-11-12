@@ -86,13 +86,21 @@ def require_offline():
             continue
 
 
-def integrity(path, *, immutable_snapshot=False):
+def integrity(path, *, immutable_snapshot=False, writable_existing=False):
     # A newly completed SQLite backup is a standalone, closed snapshot. On some
     # SQLite/macOS builds, its inherited WAL-mode header cannot be reopened with
     # plain mode=ro unless WAL sidecar files exist. immutable=1 is safe ONLY for
-    # this closed backup; the original, potentially WAL-active DB must use mode=ro.
+    # this closed backup. Before writing, the original DB is checked mode=ro.
+    # After migrations or Go provisioning have written to the stopped LOCAL DB,
+    # use mode=rw so SQLite can recreate any needed WAL/-shm sidecars. On some
+    # macOS SQLite builds mode=ro fails after the last writer closes and removes
+    # those sidecars. mode=rw opens ONLY an existing database (never creates one).
+    if immutable_snapshot and writable_existing:
+        stop("SQLite snapshot verification cannot use writable mode")
     uri = path.resolve().as_uri() + (
-        "?mode=ro&immutable=1" if immutable_snapshot else "?mode=ro"
+        "?mode=ro&immutable=1" if immutable_snapshot
+        else "?mode=rw" if writable_existing
+        else "?mode=ro"
     )
     connection = sqlite3.connect(uri, uri=True)
     try:
@@ -172,7 +180,7 @@ def main():
     print("Applying the repository's standard SQL migrations to LOCAL...")
     env = {**os.environ, "APP_ENV": "local", "DB_PATH": str(DB), "DATABASE_PATH": str(DB), "ERS_RESET_DATABASE": "false", "ERS_PROVISION_E2E_ADMIN": "false"}
     subprocess.run(["bash", str(ROOT / "scripts" / "db-migrate.sh")], cwd=ROOT, env=env, check=True)
-    integrity(DB)
+    integrity(DB, writable_existing=True)
     credentials = prompt_credentials()
     payload = json.dumps({"databasePath": str(DB), "credentials": credentials, "allowFixtureCredentialReconciliation": True})
     # A pipe, not a CLI argument or a logged environment value. Never echo JSON.
@@ -180,7 +188,7 @@ def main():
                                input=payload, text=True, cwd=BACKEND, env=env, check=False)
     if completed.returncode:
         stop("LOCAL fixture transaction failed; existing database backup is preserved; do not reset the database")
-    integrity(DB)
+    integrity(DB, writable_existing=True)
     print("PASS: LOCAL fixture installation and database integrity")
     print("To start: make local-backend (automatic legacy E2E password rotation is blocked)")
     print("Then: make local-frontend; sign in using the LOCAL 1Password credentials")
