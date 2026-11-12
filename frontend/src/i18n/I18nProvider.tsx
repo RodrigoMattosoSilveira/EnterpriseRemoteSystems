@@ -210,3 +210,11 @@ export function useI18n(): I18nContextValue {
   }
   return context;
 }
+
+/**
+ * For shared components that may also render outside the provider (for
+ * example in isolated unit tests): returns null instead of throwing.
+ */
+export function useOptionalI18n(): I18nContextValue | null {
+  return useContext(I18nContext);
+}

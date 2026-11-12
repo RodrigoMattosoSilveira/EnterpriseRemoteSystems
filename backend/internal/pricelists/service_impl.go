@@ -19,7 +19,7 @@ func (s *service) ListItems(ctx context.Context, tenantID string, filter PriceLi
 	if itemType := strings.TrimSpace(filter.ItemType); itemType != "" {
 		normalized := normalizeItemType(itemType)
 		if normalized != ItemTypeCanteen && normalized != ItemTypeAdministrative {
-			return nil, ValidationError{Fields: map[string]string{"itemType": "Item type must be CANTEEN or ADMINISTRATIVE"}}
+			return nil, fieldError("itemType", RuleInvalidItemType, "Item type must be CANTEEN or ADMINISTRATIVE")
 		}
 		filter.ItemType = normalized
 	}
@@ -66,7 +66,7 @@ func (s *service) UpdateItem(ctx context.Context, tenantID string, id string, re
 		return nil, err
 	}
 	if !existing.Active {
-		return nil, ValidationError{Fields: map[string]string{"id": "Inactive price-list items cannot be edited; reactivate the item before editing it"}}
+		return nil, fieldError("id", RuleInactiveNotEditable, "Inactive price-list items cannot be edited; reactivate the item before editing it")
 	}
 
 	itemType := normalizeItemType(req.ItemType)
@@ -133,7 +133,7 @@ func (s *service) ensureNoActiveItemCodeConflict(ctx context.Context, tenantID s
 	if existing.ID == strings.TrimSpace(allowedID) {
 		return nil
 	}
-	return ValidationError{Fields: map[string]string{field: "An active price-list item already uses this code for this category"}}
+	return fieldError(field, RuleDuplicateActiveCode, "An active price-list item already uses this code for this category")
 }
 
 func (s *service) ListGoldPrices(ctx context.Context, tenantID string, filter GoldPriceListFilter) ([]GoldPriceDTO, error) {
@@ -150,7 +150,7 @@ func (s *service) CreateGoldPrice(ctx context.Context, tenantID string, req Crea
 	}
 	priceDate, err := parseDate(req.PriceDate)
 	if err != nil {
-		return nil, ValidationError{Fields: map[string]string{"priceDate": "Price date must be YYYY-MM-DD"}}
+		return nil, fieldError("priceDate", RuleInvalidDate, "Price date must be YYYY-MM-DD")
 	}
 	storedPriceDate := formatDate(priceDate)
 	now := time.Now().UTC()

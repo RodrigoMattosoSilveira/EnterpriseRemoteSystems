@@ -2,7 +2,62 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { ApiError } from "../api/client";
+import { I18nProvider, LOCALE_STORAGE_KEY } from "../i18n";
 import { ApiErrorPanel } from "./ApiErrorPanel";
+
+describe("ApiErrorPanel localization", () => {
+  afterEach(() => window.localStorage.removeItem(LOCALE_STORAGE_KEY));
+
+  it("uses the active pt-BR locale without an explicit translate prop", () => {
+    window.localStorage.setItem(LOCALE_STORAGE_KEY, "pt-BR");
+    act(() => {
+      root.render(
+        <I18nProvider>
+          <ApiErrorPanel
+            error={
+              new ApiError({
+                status: 400,
+                code: "validation_failed",
+                message: "Validation failed",
+                fields: { description: "Required" },
+                fieldCodes: { description: "required" },
+              })
+            }
+          />
+        </I18nProvider>,
+      );
+    });
+
+    expect(container.textContent).toContain("Alguns campos precisam de correção.");
+    expect(container.textContent).toContain("Descrição: Obrigatório");
+    expect(container.textContent).toContain("Código: validation_failed");
+    expect(container.textContent).not.toContain("Validation failed");
+  });
+
+  it("keeps the server's English text in en-US", () => {
+    window.localStorage.setItem(LOCALE_STORAGE_KEY, "en-US");
+    act(() => {
+      root.render(
+        <I18nProvider>
+          <ApiErrorPanel
+            error={
+              new ApiError({
+                status: 400,
+                code: "validation_failed",
+                message: "Validation failed",
+                fields: { description: "Required" },
+                fieldCodes: { description: "required" },
+              })
+            }
+          />
+        </I18nProvider>,
+      );
+    });
+
+    expect(container.textContent).toContain("Validation failed");
+    expect(container.textContent).toContain("description: Required");
+  });
+});
 
 let container: HTMLDivElement;
 let root: Root;

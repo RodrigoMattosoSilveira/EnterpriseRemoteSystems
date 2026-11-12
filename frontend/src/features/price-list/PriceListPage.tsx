@@ -1,4 +1,4 @@
-import { useI18n, type I18nContextValue } from "../../i18n";
+import { useI18n, type Translate, type TranslationKey } from "../../i18n";
 import { useMemo, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { ApiErrorPanel } from "../../components/ApiErrorPanel";
@@ -21,7 +21,7 @@ import { PageTitle } from "../../components/layout/PageHeading";
 type CategoryFilter = "ALL" | "CANTEEN" | "ADMINISTRATIVE";
 
 export function PriceListPage() {
-  const { t } = useI18n();
+  const { t, formatCurrency } = useI18n();
   const actor = useOptionalAuthorizationContext();
   const hasPermission = (permission: string) =>
     Boolean(actor && (actor.permissions.includes("*") || actor.permissions.includes(permission)));
@@ -61,8 +61,8 @@ export function PriceListPage() {
           item.code.toLocaleLowerCase().includes(normalizedFilter)
         );
       })
-      .sort(comparePriceListItems);
-  }, [descriptionOrCodeFilter, priceListQuery.data]);
+      .sort((a, b) => comparePriceListItems(a, b, t));
+  }, [descriptionOrCodeFilter, priceListQuery.data, t]);
   const actionError =
     createMutation.error ??
     updateMutation.error ??
@@ -81,9 +81,9 @@ export function PriceListPage() {
     createMutation.reset();
 
     const input = formValueToInput(createForm);
-    const validationError = validatePriceListItemInput(input);
-    if (validationError) {
-      setClientValidationError(translatePriceValidation(validationError, t));
+    const validationErrorKey = validatePriceListItemInput(input);
+    if (validationErrorKey) {
+      setClientValidationError(t(validationErrorKey));
       return;
     }
 
@@ -105,9 +105,9 @@ export function PriceListPage() {
     updateMutation.reset();
 
     const input = formValueToInput(editForm);
-    const validationError = validatePriceListItemInput(input);
-    if (validationError) {
-      setClientValidationError(translatePriceValidation(validationError, t));
+    const validationErrorKey = validatePriceListItemInput(input);
+    if (validationErrorKey) {
+      setClientValidationError(t(validationErrorKey));
       return;
     }
 
@@ -212,7 +212,7 @@ export function PriceListPage() {
           </div>
         )}
 
-        <ApiErrorPanel error={priceListQuery.error ?? actionError} />
+        <ApiErrorPanel error={priceListQuery.error ?? actionError} translate={t} />
 
         <section className="rounded-2xl border bg-white p-4 shadow-sm">
           <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
@@ -328,10 +328,10 @@ export function PriceListPage() {
                 <tbody className="divide-y">
                   {rows.map((item) => (
                     <tr key={item.id}>
-                      <td className="p-3">{item.itemType === "ADMINISTRATIVE" ? t("price.page.administrative_67c743") : t("price.page.canteen_65336b")}</td>
+                      <td className="p-3">{categoryLabel(item.itemType, t)}</td>
                       <td className="p-3 font-mono text-xs">{item.code}</td>
                       <td className="p-3 font-medium text-gray-950">{item.description}</td>
-                      <td className="p-3">{formatBRL(item.unitPriceBrl)}</td>
+                      <td className="p-3">{formatCurrency(item.unitPriceBrl, "BRL", { minimumFractionDigits: 2 })}</td>
                       <td className="p-3">{item.sortOrder}</td>
                       <td className="p-3">
                         <StatusBadge active={item.active} />
@@ -445,28 +445,29 @@ function priceListItemFormIsValid(value: PriceListItemFormValue) {
   return validatePriceListItemInput(formValueToInput(value)) === "";
 }
 
-function validatePriceListItemInput(input: PriceListItemInput) {
-  if (!input.itemType) return "Select a category.";
-  if (!input.code.trim()) return "Code is required.";
-  if (!input.description.trim()) return "Description is required.";
+/** Returns the translation key of the first problem, or "" when valid. */
+function validatePriceListItemInput(input: PriceListItemInput): TranslationKey | "" {
+  if (!input.itemType) return "byte352.price.validation.category";
+  if (!input.code.trim()) return "byte352.price.validation.code";
+  if (!input.description.trim()) return "byte352.price.validation.description";
   if (!Number.isFinite(input.unitPriceBrl) || input.unitPriceBrl <= 0) {
-    return "BRL unit price must be greater than zero.";
+    return "byte352.price.validation.unitPrice";
   }
-  if (!Number.isFinite(input.sortOrder)) return "Sort order must be a number.";
+  if (!Number.isFinite(input.sortOrder)) return "byte352.price.validation.sort";
   return "";
 }
 
-function comparePriceListItems(a: PriceListItem, b: PriceListItem) {
+function comparePriceListItems(a: PriceListItem, b: PriceListItem, t: Translate) {
   return (
-    categoryLabel(a.itemType).localeCompare(categoryLabel(b.itemType)) ||
+    categoryLabel(a.itemType, t).localeCompare(categoryLabel(b.itemType, t)) ||
     a.sortOrder - b.sortOrder ||
     a.description.localeCompare(b.description) ||
     a.code.localeCompare(b.code)
   );
 }
 
-function categoryLabel(value: PriceListItemType) {
-  return value === "ADMINISTRATIVE" ? "Administrative" : "Canteen";
+function categoryLabel(value: PriceListItemType, t: Translate) {
+  return value === "ADMINISTRATIVE" ? t("price.page.administrative_67c743") : t("price.page.canteen_65336b");
 }
 
 function StatusBadge({ active }: { active: boolean }) {
@@ -482,24 +483,4 @@ function StatusBadge({ active }: { active: boolean }) {
       {active ? t("byte352.common.active") : t("byte352.common.inactive")}
     </span>
   );
-}
-
-function formatBRL(value: number) {
-  return new Intl.NumberFormat("pt-BR", {
-    style: "currency",
-    currency: "BRL",
-    minimumFractionDigits: 2,
-  }).format(value);
-}
-
-// Presentation-only translation; the domain validation messages remain unchanged.
-function translatePriceValidation(message: string, t: I18nContextValue["t"]): string {
-  switch (message) {
-    case "Select a category.": return t("byte352.price.validation.category");
-    case "Code is required.": return t("byte352.price.validation.code");
-    case "Description is required.": return t("byte352.price.validation.description");
-    case "BRL unit price must be greater than zero.": return t("byte352.price.validation.unitPrice");
-    case "Sort order must be a number.": return t("byte352.price.validation.sort");
-    default: return message;
-  }
 }
