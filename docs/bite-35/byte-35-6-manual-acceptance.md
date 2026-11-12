@@ -25,16 +25,27 @@
 
 **Identity/context:** developer/tester, read-only repository inspection; *not* a 1Password login.
 
-1. Open `ops/recovery-access.production.env` in VS Code. Confirm `RECOVERY_SHARED_SECRETS_PROVIDER=1Password`, `RECOVERY_SHARED_COLLECTION=ers-production`, all five `RECOVERY_*_SOURCE` values begin `op://ers-production/`, and no secret **values** are stored there.
-2. Open `docs/database-recovery-runbook.md`; confirm its active owner-unavailable source list matches the manifest and that former LastPass paths are not presented as current sources.
-3. Execute:
+1. Open `ops/recovery-access.production.env` in VS Code. Confirm `RECOVERY_SHARED_SECRETS_PROVIDER=1Password` and `RECOVERY_SHARED_COLLECTION=ers-production`. **There are eight `RECOVERY_*_SOURCE` entries, not five; only the following five secret-custody locators must begin `op://ers-production/`:**
+   - `RECOVERY_PRODUCTION_ENV_SOURCE`
+   - `RECOVERY_S3_CREDENTIAL_SOURCE`
+   - `RECOVERY_HOST_ACCESS_SOURCE`
+   - `RECOVERY_HETZNER_CONSOLE_SOURCE`
+   - `RECOVERY_DNS_SOURCE`
+2. In the same manifest, verify the **other three source entries intentionally use different prefixes**:
+   - `RECOVERY_REPOSITORY_SOURCE=github://RodrigoMattosoSilveira/EnterpriseRemoteSystems` — source repository, not a secret-custody locator.
+   - `RECOVERY_EDGE_SOURCE=github://RodrigoMattosoSilveira/EnterpriseRemoteSystems/edge` — committed edge deployment files, not a secret-custody locator.
+   - `RECOVERY_MFA_RECOVERY_SOURCE=technician-controlled://independent-mfa-and-recovery-codes` — requirement for owner-independent MFA/recovery access, **not** proof of custody or a populated vault item.
+   Confirm that no credential, private key, MFA recovery code or other secret **value** is committed in the manifest. Do **not** require all eight sources to begin `op://` and do not rewrite the three non-1Password source entries merely to satisfy this test.
+3. Open `docs/database-recovery-runbook.md`; confirm its active owner-unavailable secret-source list agrees with the five 1Password locators, and that former LastPass paths are not presented as current sources.
+4. From the single ERS working directory, execute:
    ```bash
+   cd ~/projects/EnterpriseRemoteSystems
    make byte356-operations-check
    make owner-unavailable-recovery-readiness-check
    ```
-4. Observe the itemized contract PASS lines and final summary. Record the console output in a private non-secret evidence note; the scripts never read the actual 1Password vault.
+5. Confirm both commands exit with status `0`, the 35.6 check reports `11 PASS / 0 FAIL`, and the validator has not claimed to access the real 1Password vault. Record the non-secret output as evidence.
 
-**PASS:** both exit zero, manifest and runbook agree. **FAIL:** unresolved canonical LastPass locator, missing source, unexpected secret value, or failed check. **Operational custody status remains BLOCKED** until T07.
+**PASS:** the five scoped 1Password locators match, the other three source types are as documented, no secret values are committed, and both checks exit zero. **FAIL:** any incorrect source type, unresolved active LastPass secret locator, missing source, exposed secret value, or failed check. **Operational custody remains BLOCKED until T07 proves actual authorized access.**
 
 ## T03 — Controlled GLOBAL administrator enrollment regression (LOCAL, one human)
 
