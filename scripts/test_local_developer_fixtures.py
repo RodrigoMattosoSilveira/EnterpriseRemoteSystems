@@ -115,7 +115,15 @@ class LocalDeveloperFixtureTests(unittest.TestCase):
         # Regression for: Go prints 11 PASS, then the old Python post-check
         # fails because macOS cannot reopen a sidecar-less WAL DB in mode=ro.
         with tempfile.TemporaryDirectory() as folder:
-            db = Path(folder) / "app.db"
+            # Exercise a symlinked parent directory on every host. On macOS,
+            # TemporaryDirectory commonly starts under /var, which resolves
+            # to /private/var; the installer always compares canonical paths.
+            real_dir = Path(folder) / "real"
+            real_dir.mkdir()
+            alias_dir = Path(folder) / "alias"
+            alias_dir.symlink_to(real_dir, target_is_directory=True)
+            db = alias_dir / "app.db"
+            self.assertNotEqual(db, db.resolve())
             with closing(sqlite3.connect(db)) as writer:
                 writer.execute("PRAGMA journal_mode=WAL")
                 writer.execute("CREATE TABLE fixture_marker (value TEXT NOT NULL)")
@@ -135,7 +143,7 @@ class LocalDeveloperFixtureTests(unittest.TestCase):
                  mock.patch.object(installer, "ROOT", root), \
                  mock.patch.object(installer, "DB", db), \
                  mock.patch.object(installer, "dotenv_paths", return_value={}), \
-                 mock.patch.object(installer, "effective_path", return_value=db), \
+                 mock.patch.object(installer, "effective_path", return_value=db.resolve()), \
                  mock.patch.object(installer, "require_offline"), \
                  mock.patch.object(installer, "backup_existing"), \
                  mock.patch.object(installer, "prompt_credentials", return_value={"fixture": "from 1Password"}), \
