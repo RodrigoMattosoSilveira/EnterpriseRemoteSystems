@@ -86,13 +86,20 @@ def require_offline():
             continue
 
 
-def integrity(path):
-    connection = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
+def integrity(path, *, immutable_snapshot=False):
+    # A newly completed SQLite backup is a standalone, closed snapshot. On some
+    # SQLite/macOS builds, its inherited WAL-mode header cannot be reopened with
+    # plain mode=ro unless WAL sidecar files exist. immutable=1 is safe ONLY for
+    # this closed backup; the original, potentially WAL-active DB must use mode=ro.
+    uri = path.resolve().as_uri() + (
+        "?mode=ro&immutable=1" if immutable_snapshot else "?mode=ro"
+    )
+    connection = sqlite3.connect(uri, uri=True)
     try:
-        result = connection.execute("PRAGMA integrity_check").fetchone()[0]
+        results = connection.execute("PRAGMA integrity_check").fetchall()
     finally:
         connection.close()
-    if result != "ok":
+    if results != [("ok",)]:
         stop("SQLite integrity_check failed for " + str(path))
 
 
@@ -109,7 +116,7 @@ def backup_existing():
         stop("backup directory must not be a symbolic link")
     name = "app-before-developer-fixtures-" + datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ") + ".db"
     target = folder / name
-    source = sqlite3.connect(f"file:{DB}?mode=ro", uri=True)
+    source = sqlite3.connect(DB.resolve().as_uri() + "?mode=ro", uri=True)
     dest = sqlite3.connect(target)
     try:
         source.backup(dest)
@@ -117,7 +124,7 @@ def backup_existing():
         dest.close()
         source.close()
     target.chmod(0o600)
-    integrity(target)
+    integrity(target, immutable_snapshot=True)
     print("PASS: verified LOCAL backup:", target)
 
 
@@ -184,3 +191,5 @@ if __name__ == "__main__":
         main()
     except subprocess.CalledProcessError as exc:
         stop(f"required command failed (exit {exc.returncode}); database preserved, inspect migration output")
+    except sqlite3.Error as exc:
+        stop(f"SQLite operation failed: {exc}; do not reset the LOCAL database")
