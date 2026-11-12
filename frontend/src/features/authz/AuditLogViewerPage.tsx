@@ -120,7 +120,7 @@ export function AuditLogViewerPage() {
       </header>
 
       <section className="mx-auto max-w-7xl space-y-4 p-4">
-        <ApiErrorPanel error={auditQuery.error} />
+        <ApiErrorPanel error={auditQuery.error} translate={t} />
 
         <section className="rounded-2xl border bg-white p-4 shadow-sm">
           <h2 className="text-lg font-semibold text-gray-950">{t("admin.audit.authenticated.authorization.context_baa0e6")}</h2>
@@ -261,7 +261,7 @@ export function AuditLogViewerPage() {
             <div>
               <h2 className="text-lg font-semibold text-gray-950">{t("admin.audit.audit.events_9e7d8c")}</h2>
               <p className="text-sm text-gray-500">
-                {auditQuery.isLoading ? "Loading audit events..." : `${logs.length} event${logs.length === 1 ? "" : "s"} shown`}
+                {auditQuery.isLoading ? t("admin.support.loading.audit.events_813d81") : t(logs.length === 1 ? "byte352.audit.oneEventShown" : "byte352.audit.eventsShown", { count: logs.length })}
               </p>
             </div>
             {auditQuery.isFetching && !auditQuery.isLoading && (

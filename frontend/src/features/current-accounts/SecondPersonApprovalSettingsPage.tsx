@@ -102,7 +102,7 @@ export function SecondPersonApprovalSettingsPage() {
           </div>
         )}
 
-        <ApiErrorPanel error={queryError ?? actionError} />
+        <ApiErrorPanel error={queryError ?? actionError} translate={t} />
 
         <section className="rounded-2xl border bg-white p-4 shadow-sm">
           <h2 className="text-lg font-semibold text-gray-950">{t("approval.settings.authenticated.authorization.context_baa0e6")}</h2>

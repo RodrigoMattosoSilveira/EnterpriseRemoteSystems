@@ -21,7 +21,7 @@ The organization accepts the documented risk that simultaneous unavailability of
 
 **Other safeguards do not disappear:** Production verified local backups, Hetzner S3 replication, off-host restore, migration integrity checks, RPO ≤ 24 h, RTO ≤ 4 h, and accepted recovery rehearsals remain necessary. An offline administrator enrollment is not a substitute for an application recovery rehearsal.
 
-**Known documentation discrepancy:** Parts of the existing Bite 33.6 owner-unavailable recovery runbook and `ops/recovery-access.production.env` still refer to LastPass, while the accepted launch operating model uses 1Password. Do **not** treat an older LastPass-oriented preflight as evidence that 1Password custody is accepted. Record and resolve the discrepancy with documented 1Password access validation before Production acceptance. Never bypass existing promotion guards to conceal a discrepancy.
+**Bite 35.6 update:** The canonical recovery runbook, preflight and `ops/recovery-access.production.env` now use 1Password-only locators instead of the historical LastPass contract. This is a **static contract correction, not an operational custody migration**. Verify actual item presence, distinct human access and an isolated recovery before Production acceptance; do not bypass existing promotion guards.
 
 ## 2. Implementation and contract
 
