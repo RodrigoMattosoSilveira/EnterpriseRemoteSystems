@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"enterpriseremotesystems/backend/internal/db"
+	"enterpriseremotesystems/backend/internal/shared/fielderrors"
 	"enterpriseremotesystems/backend/internal/shared/ids"
 	"gorm.io/gorm"
 )
@@ -18,12 +19,31 @@ var tenantCodePattern = regexp.MustCompile(`^[A-Z0-9][A-Z0-9_-]{1,31}$`)
 
 var ErrTenantInactive = errors.New("tenant is inactive")
 
+// ValidationError carries English field messages plus a stable rule code per
+// field (Codes), which clients translate. See internal/shared/fielderrors.
 type ValidationError struct {
 	Fields map[string]string
+	Codes  map[string]string
 }
 
-func (e ValidationError) Error() string                       { return "validation failed" }
-func (e ValidationError) ValidationFields() map[string]string { return e.Fields }
+func (e ValidationError) Error() string                           { return "validation failed" }
+func (e ValidationError) ValidationFields() map[string]string     { return e.Fields }
+func (e ValidationError) ValidationFieldCodes() map[string]string { return e.Codes }
+
+// Stable Tenant rule codes returned as `fieldCodes` (shared ones live in
+// fielderrors). Renaming one is an API change.
+const (
+	RuleInvalidTenantCode         = "invalid_tenant_code"
+	RuleTooLong                   = "too_long"
+	RuleAlreadyExists             = "already_exists"
+	RuleTenantSelectionRequired   = "tenant_selection_required"
+	RuleTenantAdminActorNotActive = "tenant_admin_actor_not_active"
+)
+
+func fieldError(field string, rule string, message string) ValidationError {
+	fields, codes := fielderrors.Single(field, rule, message)
+	return ValidationError{Fields: fields, Codes: codes}
+}
 
 type service struct{ repo Repository }
 
@@ -59,8 +79,8 @@ func (s *service) GetCurrent(ctx context.Context, tenantID string) (*TenantDTO, 
 }
 
 func (s *service) Create(ctx context.Context, req CreateTenantRequest) (*TenantDTO, error) {
-	code, name, description, fields := normalizeAndValidate(req.Code, req.Name, req.Description)
-	if err := newValidationError(fields); err != nil {
+	code, name, description, errs := normalizeAndValidate(req.Code, req.Name, req.Description)
+	if err := newValidationError(errs); err != nil {
 		return nil, err
 	}
 	exists, err := s.repo.CodeExists(ctx, code, "")
@@ -68,7 +88,7 @@ func (s *service) Create(ctx context.Context, req CreateTenantRequest) (*TenantD
 		return nil, err
 	}
 	if exists {
-		return nil, ValidationError{Fields: map[string]string{"code": "Tenant code must be unique"}}
+		return nil, fieldError("code", RuleAlreadyExists, "Tenant code must be unique")
 	}
 
 	active := true
@@ -92,14 +112,14 @@ func (s *service) Create(ctx context.Context, req CreateTenantRequest) (*TenantD
 func (s *service) Update(ctx context.Context, id string, req UpdateTenantRequest) (*TenantDTO, error) {
 	id = strings.TrimSpace(id)
 	if id == "" {
-		return nil, ValidationError{Fields: map[string]string{"id": "Tenant ID is required"}}
+		return nil, fieldError("id", fielderrors.Required, "Tenant ID is required")
 	}
 	row, err := s.repo.FindByID(ctx, id)
 	if err != nil {
 		return nil, err
 	}
-	code, name, description, fields := normalizeAndValidate(req.Code, req.Name, req.Description)
-	if err := newValidationError(fields); err != nil {
+	code, name, description, errs := normalizeAndValidate(req.Code, req.Name, req.Description)
+	if err := newValidationError(errs); err != nil {
 		return nil, err
 	}
 	exists, err := s.repo.CodeExists(ctx, code, id)
@@ -107,7 +127,7 @@ func (s *service) Update(ctx context.Context, id string, req UpdateTenantRequest
 		return nil, err
 	}
 	if exists {
-		return nil, ValidationError{Fields: map[string]string{"code": "Tenant code must be unique"}}
+		return nil, fieldError("code", RuleAlreadyExists, "Tenant code must be unique")
 	}
 
 	tenant := row.Tenant
@@ -124,7 +144,7 @@ func (s *service) Update(ctx context.Context, id string, req UpdateTenantRequest
 func (s *service) SetActive(ctx context.Context, id string, active bool) (*TenantDTO, error) {
 	id = strings.TrimSpace(id)
 	if id == "" {
-		return nil, ValidationError{Fields: map[string]string{"id": "Tenant ID is required"}}
+		return nil, fieldError("id", fielderrors.Required, "Tenant ID is required")
 	}
 	if err := s.repo.SetActive(ctx, id, active); err != nil {
 		return nil, err
@@ -160,14 +180,7 @@ func (s *service) ListTenantAdminCandidates(ctx context.Context, tenantID string
 func (s *service) AssignTenantAdmin(ctx context.Context, tenantID string, actorID string) (*TenantDTO, error) {
 	tenantID = strings.TrimSpace(tenantID)
 	actorID = strings.TrimSpace(actorID)
-	fields := map[string]string{}
-	if tenantID == "" {
-		fields["tenantId"] = "Tenant ID is required"
-	}
-	if actorID == "" {
-		fields["actorId"] = "Actor ID is required"
-	}
-	if err := newValidationError(fields); err != nil {
+	if err := newValidationError(requireTenantAndActor(tenantID, actorID)); err != nil {
 		return nil, err
 	}
 	if err := s.repo.AssignTenantAdmin(ctx, tenantID, actorID); err != nil {
@@ -179,14 +192,7 @@ func (s *service) AssignTenantAdmin(ctx context.Context, tenantID string, actorI
 func (s *service) RevokeTenantAdmin(ctx context.Context, tenantID string, actorID string) (*TenantDTO, error) {
 	tenantID = strings.TrimSpace(tenantID)
 	actorID = strings.TrimSpace(actorID)
-	fields := map[string]string{}
-	if tenantID == "" {
-		fields["tenantId"] = "Tenant ID is required"
-	}
-	if actorID == "" {
-		fields["actorId"] = "Actor ID is required"
-	}
-	if err := newValidationError(fields); err != nil {
+	if err := newValidationError(requireTenantAndActor(tenantID, actorID)); err != nil {
 		return nil, err
 	}
 	if err := s.repo.RevokeTenantAdmin(ctx, tenantID, actorID); err != nil {
@@ -198,7 +204,7 @@ func (s *service) RevokeTenantAdmin(ctx context.Context, tenantID string, actorI
 func (s *service) RequireActive(ctx context.Context, tenantID string) error {
 	tenantID = strings.TrimSpace(tenantID)
 	if tenantID == "" || tenantID == "*" {
-		return ValidationError{Fields: map[string]string{"tenantId": "A specific tenant must be selected"}}
+		return fieldError("tenantId", RuleTenantSelectionRequired, "A specific tenant must be selected")
 	}
 	exists, err := s.repo.ExistsByID(ctx, tenantID)
 	if err != nil {
@@ -242,36 +248,41 @@ func mapTenant(row TenantRecord) TenantDTO {
 	}
 }
 
-func normalizeAndValidate(rawCode string, rawName string, rawDescription string) (string, string, string, map[string]string) {
+func normalizeAndValidate(rawCode string, rawName string, rawDescription string) (string, string, string, *fielderrors.Collector) {
 	code := strings.ToUpper(strings.TrimSpace(rawCode))
 	name := strings.TrimSpace(rawName)
 	description := strings.TrimSpace(rawDescription)
-	fields := map[string]string{}
+	errs := fielderrors.New()
 	if code == "" {
-		fields["code"] = "Tenant code is required"
+		errs.Add("code", fielderrors.Required, "Tenant code is required")
 	} else if !tenantCodePattern.MatchString(code) {
-		fields["code"] = "Use 2-32 uppercase letters, numbers, hyphens, or underscores"
+		errs.Add("code", RuleInvalidTenantCode, "Use 2-32 uppercase letters, numbers, hyphens, or underscores")
 	}
 	if name == "" {
-		fields["name"] = "Tenant name is required"
+		errs.Add("name", fielderrors.Required, "Tenant name is required")
 	} else if len(name) > 120 {
-		fields["name"] = "Tenant name must be 120 characters or fewer"
+		errs.Add("name", RuleTooLong, "Tenant name must be 120 characters or fewer")
 	}
 	if len(description) > 500 {
-		fields["description"] = "Tenant description must be 500 characters or fewer"
+		errs.Add("description", RuleTooLong, "Tenant description must be 500 characters or fewer")
 	}
-	return code, name, description, fields
+	return code, name, description, errs
 }
 
-func newValidationError(fields map[string]string) error {
-	clean := map[string]string{}
-	for field, message := range fields {
-		if strings.TrimSpace(message) != "" {
-			clean[field] = message
-		}
+func requireTenantAndActor(tenantID string, actorID string) *fielderrors.Collector {
+	errs := fielderrors.New()
+	if tenantID == "" {
+		errs.Add("tenantId", fielderrors.Required, "Tenant ID is required")
 	}
-	if len(clean) == 0 {
+	if actorID == "" {
+		errs.Add("actorId", fielderrors.Required, "Actor ID is required")
+	}
+	return errs
+}
+
+func newValidationError(errs *fielderrors.Collector) error {
+	if errs.Empty() {
 		return nil
 	}
-	return ValidationError{Fields: clean}
+	return ValidationError{Fields: errs.Fields, Codes: errs.Codes}
 }

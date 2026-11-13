@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"enterpriseremotesystems/backend/internal/db"
+
+	"enterpriseremotesystems/backend/internal/shared/fielderrors"
 )
 
 var (
@@ -26,7 +28,7 @@ func (s *service) GetPrintableReceipt(ctx context.Context, ledgerEntryID string)
 func (s *service) PrintReceipt(ctx context.Context, ledgerEntryID, printedBy string) (*PrintableReceiptDTO, error) {
 	printedBy = strings.TrimSpace(printedBy)
 	if printedBy == "" {
-		return nil, ValidationError{Fields: map[string]string{"authorizedBy": "Authorized by is required"}}
+		return nil, fieldError("authorizedBy", fielderrors.Required, "Authorized by is required")
 	}
 	receipt, err := s.repo.FindReceiptByLedgerEntryID(ctx, strings.TrimSpace(ledgerEntryID))
 	if err != nil {
@@ -42,10 +44,10 @@ func (s *service) PrintReceipt(ctx context.Context, ledgerEntryID, printedBy str
 func (s *service) ReturnReceipt(ctx context.Context, ledgerEntryID, receivedBy string, req ReturnReceiptRequest) (*PrintableReceiptDTO, error) {
 	receivedBy = strings.TrimSpace(receivedBy)
 	if receivedBy == "" {
-		return nil, ValidationError{Fields: map[string]string{"authorizedBy": "Authorized by is required"}}
+		return nil, fieldError("authorizedBy", fielderrors.Required, "Authorized by is required")
 	}
 	if strings.TrimSpace(req.SignedDocumentRef) == "" {
-		return nil, ValidationError{Fields: map[string]string{"signedDocumentRef": ErrReceiptSignedDocumentRequired.Error()}}
+		return nil, fieldError("signedDocumentRef", fielderrors.Required, ErrReceiptSignedDocumentRequired.Error())
 	}
 	receipt, err := s.repo.FindReceiptByLedgerEntryID(ctx, strings.TrimSpace(ledgerEntryID))
 	if err != nil {

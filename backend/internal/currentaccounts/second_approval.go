@@ -11,6 +11,8 @@ import (
 
 	"enterpriseremotesystems/backend/internal/db"
 	"enterpriseremotesystems/backend/internal/shared/tenantctx"
+
+	"enterpriseremotesystems/backend/internal/shared/fielderrors"
 )
 
 const SecondPersonApprovalPolicyKey = "current_accounts.require_second_person_approval_for_sensitive_operations"
@@ -89,10 +91,10 @@ func (s *service) requireSecondApprovalWhenConfigured(ctx context.Context, tenan
 	if !required {
 		return nil
 	}
-	fields := map[string]string{}
-	validateRequiredSecondApproval(fields, req, authorizedBy)
-	if len(fields) > 0 {
-		return ValidationError{Fields: fields}
+	errs := fielderrors.New()
+	validateRequiredSecondApproval(errs, req, authorizedBy)
+	if !errs.Empty() {
+		return ValidationError{Fields: errs.Fields, Codes: errs.Codes}
 	}
 	return nil
 }
