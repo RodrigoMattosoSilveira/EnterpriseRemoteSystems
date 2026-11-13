@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"enterpriseremotesystems/backend/internal/shared/fielderrors"
 	"enterpriseremotesystems/backend/internal/shared/ids"
 )
 
@@ -175,15 +176,63 @@ type AuditLogResponse struct {
 	RequestPath           string `json:"requestPath,omitempty"`
 }
 
+// ValidationError carries English field messages plus a stable rule code per
+// field, which clients translate. See internal/shared/fielderrors.
 type ValidationError struct {
 	fields map[string]string
+	codes  map[string]string
 }
 
 func (e ValidationError) Error() string { return "validation failed" }
 func (e ValidationError) ValidationFields() map[string]string {
 	return e.fields
 }
+func (e ValidationError) ValidationFieldCodes() map[string]string {
+	return e.codes
+}
 
+// Stable Authorization rule codes returned as `fieldCodes` (shared ones live in
+// fielderrors). Renaming one is an API change.
+const (
+	RuleTenantSelectionRequired      = "tenant_selection_required"
+	RuleActorNotInTenant             = "actor_not_in_tenant"
+	RuleMembershipNotActive          = "membership_not_active"
+	RuleRoleNotDelegable             = "role_not_delegable"
+	RuleGrantNotRevocable            = "grant_not_revocable"
+	RuleActorNotEligible             = "actor_not_eligible"
+	RuleLastApplicationAdmin         = "last_application_admin"
+	RuleRoleNotGrantable             = "role_not_grantable"
+	RuleApplicationRoleScope         = "application_role_scope"
+	RuleActorScopeMismatch           = "actor_scope_mismatch"
+	RuleCrossTenantRoleConflict      = "cross_tenant_role_conflict"
+	RuleTenantAdminLimit             = "tenant_admin_limit"
+	RuleTenantAdminDistinctPersons   = "tenant_admin_distinct_persons"
+	RulePersonAdministersOtherTenant = "person_administers_other_tenant"
+	RuleTenantNotActive              = "tenant_not_active"
+	RuleUnknownStatus                = "unknown_status"
+	RuleInvalidTime                  = "invalid_time"
+	RuleMustBeFuture                 = "must_be_future"
+	RulePermissionNotEligible        = "permission_not_eligible"
+	RulePermissionsRequired          = "permissions_required"
+)
+
+// newFieldError returns a single-field ValidationError with its rule code.
+func newFieldError(field string, rule string, message string) error {
+	fields, codes := fielderrors.Single(field, rule, message)
+	return ValidationError{fields: fields, codes: codes}
+}
+
+// newFieldErrors returns nil when the collector is empty.
+func newFieldErrors(errs *fielderrors.Collector) error {
+	if errs.Empty() {
+		return nil
+	}
+	return ValidationError{fields: errs.Fields, codes: errs.Codes}
+}
+
+// NewValidationError builds an uncoded ValidationError; blank messages are
+// dropped. Kept for callers outside this package. New code in this package
+// should use newFieldError/newFieldErrors so clients can translate the error.
 func NewValidationError(fields map[string]string) error {
 	cleaned := map[string]string{}
 	for field, message := range fields {
@@ -703,10 +752,10 @@ func (s *GORMStore) SetTenantActorActive(ctx context.Context, tenantID string, a
 	tenantID = strings.TrimSpace(tenantID)
 	actorID = strings.TrimSpace(actorID)
 	if tenantID == "" || tenantID == GlobalTenantScope {
-		return ActorResponse{}, NewValidationError(map[string]string{"tenantId": "A specific tenant is required"})
+		return ActorResponse{}, newFieldError("tenantId", RuleTenantSelectionRequired, "A specific tenant is required")
 	}
 	if actorID == "" {
-		return ActorResponse{}, NewValidationError(map[string]string{"actorId": "Actor ID is required"})
+		return ActorResponse{}, newFieldError("actorId", fielderrors.Required, "Actor ID is required")
 	}
 
 	bindings, err := s.tenantActorBindingsForAdministration(ctx, tenantID)
@@ -715,10 +764,10 @@ func (s *GORMStore) SetTenantActorActive(ctx context.Context, tenantID string, a
 	}
 	binding, ok := bindings[actorID]
 	if !ok || binding.ScopeType != "TENANT" || binding.TenantID != tenantID {
-		return ActorResponse{}, NewValidationError(map[string]string{"actorId": "Actor is not bound to the selected tenant"})
+		return ActorResponse{}, newFieldError("actorId", RuleActorNotInTenant, "Actor is not bound to the selected tenant")
 	}
 	if active && (!binding.MembershipActive || !binding.MembershipSameTenant) {
-		return ActorResponse{}, NewValidationError(map[string]string{"actorId": "Reactivate the Person-Tenant Membership before activating this tenant Actor"})
+		return ActorResponse{}, newFieldError("actorId", RuleMembershipNotActive, "Reactivate the Person-Tenant Membership before activating this tenant Actor")
 	}
 
 	var actor AuthzActor
@@ -751,9 +800,8 @@ func (s *GORMStore) GrantTenantOperatorRole(ctx context.Context, tenantID string
 	actorID = strings.TrimSpace(actorID)
 	roleCode = strings.TrimSpace(roleCode)
 	if !isTenantDelegableOperatorRole(roleCode) {
-		return ActorGrantResponse{}, NewValidationError(map[string]string{
-			"roleCode": "Tenant Administrators may grant only TENANT_ADMIN, TENANT_VIEWER, EARNINGS_OPERATOR, or EXPENSE_OPERATOR",
-		})
+		return ActorGrantResponse{}, newFieldError("roleCode", RuleRoleNotDelegable,
+			"Tenant Administrators may grant only TENANT_ADMIN, TENANT_VIEWER, EARNINGS_OPERATOR, or EXPENSE_OPERATOR")
 	}
 	if err := s.ensureActiveTenantMemberActor(ctx, tenantID, actorID); err != nil {
 		return ActorGrantResponse{}, err
@@ -768,11 +816,11 @@ func (s *GORMStore) RevokeTenantOperatorRoleGrant(ctx context.Context, tenantID 
 	tenantID = strings.TrimSpace(tenantID)
 	actorID = strings.TrimSpace(actorID)
 	grantID = strings.TrimSpace(grantID)
-	if err := NewValidationError(map[string]string{
-		"tenantId": requiredMessage(tenantID, "Tenant ID is required"),
-		"actorId":  requiredMessage(actorID, "Actor ID is required"),
-		"grantId":  requiredMessage(grantID, "Grant ID is required"),
-	}); err != nil {
+	errs := fielderrors.New()
+	requireField(errs, "tenantId", tenantID, "Tenant ID is required")
+	requireField(errs, "actorId", actorID, "Actor ID is required")
+	requireField(errs, "grantId", grantID, "Grant ID is required")
+	if err := newFieldErrors(errs); err != nil {
 		return ActorGrantResponse{}, err
 	}
 
@@ -787,9 +835,8 @@ func (s *GORMStore) RevokeTenantOperatorRoleGrant(ctx context.Context, tenantID 
 		return ActorGrantResponse{}, err
 	}
 	if !isTenantDelegableOperatorRole(role.Code) || role.ScopeType != string(ActorScopeTenant) {
-		return ActorGrantResponse{}, NewValidationError(map[string]string{
-			"grantId": "Tenant Administrators may revoke only Tenant Administrator, Entity Executive, Earnings Operator, or Expenses Operator grants in their tenant",
-		})
+		return ActorGrantResponse{}, newFieldError("grantId", RuleGrantNotRevocable,
+			"Tenant Administrators may revoke only Tenant Administrator, Entity Executive, Earnings Operator, or Expenses Operator grants in their tenant")
 	}
 	if grant.Active {
 		grant.Active = false
@@ -803,10 +850,10 @@ func (s *GORMStore) RevokeTenantOperatorRoleGrant(ctx context.Context, tenantID 
 
 func (s *GORMStore) ensureActiveTenantMemberActor(ctx context.Context, tenantID string, actorID string) error {
 	if strings.TrimSpace(tenantID) == "" || tenantID == GlobalTenantScope {
-		return NewValidationError(map[string]string{"tenantId": "A specific tenant is required"})
+		return newFieldError("tenantId", RuleTenantSelectionRequired, "A specific tenant is required")
 	}
 	if strings.TrimSpace(actorID) == "" {
-		return NewValidationError(map[string]string{"actorId": "Actor ID is required"})
+		return newFieldError("actorId", fielderrors.Required, "Actor ID is required")
 	}
 	if !s.hasTenantMembershipFoundation() {
 		return ErrAccountActorFoundationUnavailable
@@ -822,7 +869,7 @@ func (s *GORMStore) ensureActiveTenantMemberActor(ctx context.Context, tenantID 
 		return fmt.Errorf("check tenant member actor: %w", err)
 	}
 	if count == 0 {
-		return NewValidationError(map[string]string{"actorId": "Tenant roles may be delegated only to an active Actor with an active Membership in the selected tenant"})
+		return newFieldError("actorId", RuleActorNotEligible, "Tenant roles may be delegated only to an active Actor with an active Membership in the selected tenant")
 	}
 	return nil
 }
@@ -872,13 +919,9 @@ func (s *GORMStore) CreateActor(ctx context.Context, req CreateActorRequest) (Ac
 	if s == nil || s.database == nil {
 		return ActorResponse{}, ErrMissingActor
 	}
-	fields := map[string]string{}
 	actorKey := strings.TrimSpace(req.ActorKey)
 	if actorKey == "" {
-		fields["actorKey"] = "Actor key is required"
-	}
-	if err := NewValidationError(fields); err != nil {
-		return ActorResponse{}, err
+		return ActorResponse{}, newFieldError("actorKey", fielderrors.Required, "Actor key is required")
 	}
 
 	active := true
@@ -910,8 +953,8 @@ func (s *GORMStore) SetActorActive(ctx context.Context, actorID string, active b
 		return ActorResponse{}, ErrMissingActor
 	}
 	actorID = strings.TrimSpace(actorID)
-	if err := NewValidationError(map[string]string{"actorId": requiredMessage(actorID, "Actor ID is required")}); err != nil {
-		return ActorResponse{}, err
+	if actorID == "" {
+		return ActorResponse{}, newFieldError("actorId", fielderrors.Required, "Actor ID is required")
 	}
 
 	var actor AuthzActor
@@ -958,14 +1001,10 @@ func (s *GORMStore) GrantActorRole(ctx context.Context, actorID string, req Gran
 	actorID = strings.TrimSpace(actorID)
 	roleCode := strings.TrimSpace(req.RoleCode)
 	tenantID := strings.TrimSpace(req.TenantID)
-	fields := map[string]string{}
-	if actorID == "" {
-		fields["actorId"] = "Actor ID is required"
-	}
-	if roleCode == "" {
-		fields["roleCode"] = "Role code is required"
-	}
-	if err := NewValidationError(fields); err != nil {
+	errs := fielderrors.New()
+	requireField(errs, "actorId", actorID, "Actor ID is required")
+	requireField(errs, "roleCode", roleCode, "Role code is required")
+	if err := newFieldErrors(errs); err != nil {
 		return ActorGrantResponse{}, err
 	}
 	if tenantID == "" {
@@ -1021,10 +1060,10 @@ func (s *GORMStore) RevokeActorRoleGrant(ctx context.Context, actorID string, gr
 	}
 	actorID = strings.TrimSpace(actorID)
 	grantID = strings.TrimSpace(grantID)
-	if err := NewValidationError(map[string]string{
-		"actorId": requiredMessage(actorID, "Actor ID is required"),
-		"grantId": requiredMessage(grantID, "Grant ID is required"),
-	}); err != nil {
+	errs := fielderrors.New()
+	requireField(errs, "actorId", actorID, "Actor ID is required")
+	requireField(errs, "grantId", grantID, "Grant ID is required")
+	if err := newFieldErrors(errs); err != nil {
 		return ActorGrantResponse{}, err
 	}
 
@@ -1078,7 +1117,7 @@ func (s *GORMStore) ensureApplicationAdminRemains(ctx context.Context, actorID s
 		return fmt.Errorf("count remaining application administrators: %w", err)
 	}
 	if count == 0 {
-		return NewValidationError(map[string]string{field: "At least one active application administrator must remain"})
+		return newFieldError(field, RuleLastApplicationAdmin, "At least one active application administrator must remain")
 	}
 	return nil
 }
@@ -1163,9 +1202,10 @@ func grantResponse(grant AuthzActorRoleGrant, role AuthzRole) ActorGrantResponse
 	return ActorGrantResponse{ID: grant.ID, ActorID: grant.ActorID, RoleID: grant.RoleID, RoleCode: role.Code, TenantID: grant.TenantID, ScopeType: role.ScopeType, Active: grant.Active, LifecycleSuspended: grant.LifecycleSuspended}
 }
 
-func requiredMessage(value string, message string) string {
+// requireField records a Required failure (with the given English message)
+// when value is blank.
+func requireField(errs *fielderrors.Collector, field string, value string, message string) {
 	if strings.TrimSpace(value) == "" {
-		return message
+		errs.Add(field, fielderrors.Required, message)
 	}
-	return ""
 }

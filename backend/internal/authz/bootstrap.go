@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"enterpriseremotesystems/backend/internal/shared/fielderrors"
 	"enterpriseremotesystems/backend/internal/shared/ids"
 	"gorm.io/gorm"
 )
@@ -29,7 +30,7 @@ func (c BootstrapConfig) normalized() (BootstrapConfig, error) {
 		return c, nil
 	}
 	if c.ActorKey == "" {
-		return c, NewValidationError(map[string]string{"actorKey": "Bootstrap actor key is required when authorization bootstrap is enabled"})
+		return c, newFieldError("actorKey", fielderrors.Required, "Bootstrap actor key is required when authorization bootstrap is enabled")
 	}
 	if c.DisplayName == "" {
 		c.DisplayName = c.ActorKey
