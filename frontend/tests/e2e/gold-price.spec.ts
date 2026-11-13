@@ -60,12 +60,14 @@ test('user can navigate to gold price recording & record a new gold price', asyn
 
   // Validate individual cells in that row
   await expect(targetRow.getByRole('cell').nth(0)).toHaveText(gpDate);    // Date
-  await expect(targetRow.getByRole('cell').nth(1)).toHaveText(formatBRL(Number(goldPrice))); // Gold Price
+  // Bite 34.1: money follows the selected UI language (read from <html lang>); currency stays BRL.
+  const uiLocale = (await page.locator('html').getAttribute('lang')) || 'en-US';
+  await expect(targetRow.getByRole('cell').nth(1)).toHaveText(formatBRL(Number(goldPrice), uiLocale)); // Gold Price
   await expect(targetRow.getByRole('cell').nth(3)).toHaveText(gpNotes);   // Notes
 });
 
-function formatBRL(value: number): string {
-  return new Intl.NumberFormat("pt-BR", {
+function formatBRL(value: number, locale: string): string {
+  return new Intl.NumberFormat(locale, {
     style: "currency",
     currency: "BRL",
     minimumFractionDigits: 2,

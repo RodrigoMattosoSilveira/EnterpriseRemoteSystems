@@ -505,7 +505,7 @@ export function PlanTab(props: {
                     </td>
                     <td className="px-1 py-3 text-center align-top">
                       <ReplacementCandidateToggle
-                        label={`Replacement candidate for ${row.collaboratorNickname || row.collaboratorName || row.collaboratorId}`}
+                        label={t("planning.replacementCandidateFor", { name: row.collaboratorNickname || row.collaboratorName || row.collaboratorId })}
                         checked={Boolean(row.replacementCandidate)}
                         disabled={!props.editable || props.pending}
                         onChange={(replacementCandidate) =>
@@ -521,7 +521,7 @@ export function PlanTab(props: {
                     </td>
                     <td className="px-1 py-3 align-top">
                       <TemporaryReplacementSelect
-                        label={`Temporary replacement target for ${row.collaboratorNickname || row.collaboratorName || row.collaboratorId}`}
+                        label={t("planning.temporaryReplacementFor", { name: row.collaboratorNickname || row.collaboratorName || row.collaboratorId })}
                         value={row.temporaryReplacementForCollaboratorId || ""}
                         row={row}
                         rows={rows}

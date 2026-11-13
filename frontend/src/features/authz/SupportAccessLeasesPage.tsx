@@ -725,7 +725,7 @@ function LeaseCard({
   onTerminate: () => void;
   onToggleAudit: () => void;
 }) {
-  const { t, locale } = useI18n();
+  const { t, locale, formatDateTime } = useI18n();
   const permissionMap = useMemo(() => new Map(permissions.map((item) => [item.code, item])), [permissions]);
   const expiredPending = lease.status === "PENDING" && lease.effectiveStatus === "EXPIRED";
   const canApprove = tenantAdministrator && lease.effectiveStatus === "PENDING";
@@ -751,8 +751,8 @@ function LeaseCard({
 
       <dl className="mt-4 grid gap-3 text-sm md:grid-cols-2 xl:grid-cols-3">
         <Fact label={t("byte352.support.applicationActor")} value={lease.applicationActorId} mono />
-        <Fact label={t("byte352.support.requested")} value={formatDateTime(lease.requestedAt)} />
-        <Fact label={t("byte354b.support.fixedExpiration")} value={formatDateTime(lease.expiresAt)} />
+        <Fact label={t("byte352.support.requested")} value={formatOptionalDateTime(lease.requestedAt, formatDateTime)} />
+        <Fact label={t("byte354b.support.fixedExpiration")} value={formatOptionalDateTime(lease.expiresAt, formatDateTime)} />
         <Fact label={t("byte352.support.approvedBy")} value={lease.approvedByActorId || "—"} mono={Boolean(lease.approvedByActorId)} />
         <Fact label={t("byte352.support.terminatedBy")} value={lease.terminatedByActorId || "—"} mono={Boolean(lease.terminatedByActorId)} />
         <Fact label={t("byte352.support.terminationReason")} value={lease.terminationReason || "—"} />
@@ -842,7 +842,7 @@ function LeaseCard({
                 <tbody className="divide-y divide-slate-100">
                   {auditLogs.map((log) => (
                     <tr key={log.id}>
-                      <td className="whitespace-nowrap px-2 py-2">{formatDateTime(log.occurredAt)}</td>
+                      <td className="whitespace-nowrap px-2 py-2">{formatOptionalDateTime(log.occurredAt, formatDateTime)}</td>
                       <td className="px-2 py-2">{log.decision}</td>
                       <td className="px-2 py-2">
                         <p className="font-semibold">{log.operation}</p>
@@ -899,9 +899,9 @@ function defaultExpirationInput(): string {
   return dateTimeLocalInput(new Date(Date.now() + 60 * 60 * 1000));
 }
 
-function formatDateTime(value: string | undefined): string {
+function formatOptionalDateTime(value: string | undefined, formatDateTime: (date: Date) => string): string {
   if (!value) return "—";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
-  return date.toLocaleString();
+  return formatDateTime(date);
 }

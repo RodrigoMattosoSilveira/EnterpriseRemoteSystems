@@ -1,3 +1,5 @@
+import { translateEnglish, useOptionalI18n } from "../i18n";
+
 type ActionSuccessDialogProps = {
   message: string;
   onDismiss: () => void;
@@ -8,9 +10,12 @@ type ActionSuccessDialogProps = {
 export function ActionSuccessDialog({
   message,
   onDismiss,
-  title = "Action completed",
-  continueLabel = "Continue",
+  title,
+  continueLabel,
 }: ActionSuccessDialogProps) {
+  const t = useOptionalI18n()?.t ?? translateEnglish;
+  const heading = title ?? t("common.actionCompleted");
+  const buttonLabel = continueLabel ?? t("common.continue");
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-950/60 p-4">
       <div
@@ -21,7 +26,7 @@ export function ActionSuccessDialog({
         role="alertdialog"
       >
         <h2 id="action-success-title" className="text-xl font-bold text-green-900">
-          {title}
+          {heading}
         </h2>
         <p id="action-success-description" className="mt-3 text-base font-semibold text-gray-800">
           {message}
@@ -33,7 +38,7 @@ export function ActionSuccessDialog({
             onClick={onDismiss}
             type="button"
           >
-            {continueLabel}
+            {buttonLabel}
           </button>
         </div>
       </div>

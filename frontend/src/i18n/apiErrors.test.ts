@@ -116,7 +116,9 @@ describe("describeApiError", () => {
   });
 
   it("describes non-API errors without inventing a translation", () => {
-    expect(describeApiError(new Error("Boom"), "pt-BR", tFor("pt-BR")).message).toBe("Boom");
+    expect(describeApiError(new Error("Boom"), "en-US", tFor("en-US")).message).toBe("Boom");
+    // Client-side Error text is English, so other locales get a translated generic message.
+    expect(describeApiError(new Error("Boom"), "pt-BR", tFor("pt-BR")).message).toBe("Erro inesperado");
     expect(describeApiError("not an error", "pt-BR", tFor("pt-BR")).message).toBe("Erro inesperado");
   });
 });

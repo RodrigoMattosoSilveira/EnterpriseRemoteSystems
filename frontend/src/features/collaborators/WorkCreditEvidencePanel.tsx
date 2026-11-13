@@ -287,6 +287,7 @@ const financialSourceKeys: Record<string, TranslationKey> = {
   JOURNEY_SETTLEMENT: "financial.source.JOURNEY_SETTLEMENT",
   LEDGER_CORRECTION: "financial.source.LEDGER_CORRECTION",
   ACCRUAL_ITEM: "financial.source.ACCRUAL_ITEM",
+  JOURNEY_BONUS: "financial.source.JOURNEY_BONUS",
   WORK_PERIOD_ASSIGNMENT: "financial.source.WORK_PERIOD_ASSIGNMENT",
 };
 

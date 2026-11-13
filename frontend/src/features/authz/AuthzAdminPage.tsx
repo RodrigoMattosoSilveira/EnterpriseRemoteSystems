@@ -1,4 +1,4 @@
-import { useI18n } from "../../i18n";
+import { useI18n, type TranslationParameters } from "../../i18n";
 import type { TranslationKey } from "../../i18n/resources";
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
@@ -609,7 +609,7 @@ function ActorCard({
   const tenantAdminCardinalityBlocker =
     roleCode === "TENANT_ADMIN" && targetTenantId
       ? tenantAdministratorGrantBlocker(actor, allActors, targetTenantId)
-      : "";
+      : null;
   const alreadyGranted = Boolean(
     roleCode &&
       targetTenantId &&
@@ -994,24 +994,16 @@ function ActorBindingSummary({ actor }: { actor: AuthzActor }) {
   );
 }
 
-type TenantRoleGrantEligibility = {
-  eligible: boolean;
-  reason: string;
+// Eligibility and cardinality decisions carry a translation key, never
+// English text that is later matched back to a key.
+type AuthzReason = {
+  key: TranslationKey;
+  params?: TranslationParameters;
 };
 
-// Preserve eligibility and cardinality decisions; translate only their display text.
-const authzReasonKeys: Record<string, TranslationKey> = {
-  "Actor is inactive.": "byte354b.authz.reason.00",
-  "Authentication Account binding is required.": "byte354b.authz.reason.01",
-  "Actor is not tenant-bound.": "byte354b.authz.reason.02",
-  "A specific tenant binding is required.": "byte354b.authz.reason.03",
-  "Person–Tenant Membership is required.": "byte354b.authz.reason.04",
-  "Membership must belong to the Actor's bound tenant.": "byte354b.authz.reason.05",
-  "Person–Tenant Membership must be ACTIVE.": "byte354b.authz.reason.06",
-  "Account-bound with an ACTIVE Membership in the same tenant.": "byte354b.authz.reason.07",
-  "Tenant Administrator authority requires a tenant Actor bound to a canonical Person Membership.": "byte354b.authz.reason.08",
-  "Tenant already has the maximum of two active Tenant Administrators.": "byte354b.authz.reason.09",
-  "The second Tenant Administrator slot must belong to a different Person.": "byte354b.authz.reason.10",
+type TenantRoleGrantEligibility = {
+  eligible: boolean;
+  reason: AuthzReason;
 };
 
 
@@ -1035,66 +1027,42 @@ function localizedAdminRoleDescription(role: AuthzRole, t: ReturnType<typeof use
     : role.description;
 }
 
-function localizeAuthzReason(reason: string, t: ReturnType<typeof useI18n>["t"]): string {
-  const key = authzReasonKeys[reason];
-  if (key) return t(key);
-  const match = /^This Person already administers tenant (.*); a Person may administer only one Tenant at a time\.$/.exec(reason);
-  return match ? t("byte354b.authz.otherTenant", { tenantId: match[1] }) : reason;
+function localizeAuthzReason(reason: AuthzReason, t: ReturnType<typeof useI18n>["t"]): string {
+  return t(reason.key, reason.params);
 }
 
 function tenantRoleGrantEligibility(actor: AuthzActor): TenantRoleGrantEligibility {
   if (!actor.active) {
-    return { eligible: false, reason: "Actor is inactive." };
+    return { eligible: false, reason: { key: "byte354b.authz.reason.00" } };
   }
 
   const binding = actor.binding;
   if (!binding || !(binding.accountId ?? "").trim()) {
-    return {
-      eligible: false,
-      reason: "Authentication Account binding is required.",
-    };
+    return { eligible: false, reason: { key: "byte354b.authz.reason.01" } };
   }
 
   if (binding.scopeType.trim().toUpperCase() !== "TENANT") {
-    return {
-      eligible: false,
-      reason: "Actor is not tenant-bound.",
-    };
+    return { eligible: false, reason: { key: "byte354b.authz.reason.02" } };
   }
 
   const tenantId = binding.tenantId?.trim() ?? "";
   if (!tenantId || tenantId === "*") {
-    return {
-      eligible: false,
-      reason: "A specific tenant binding is required.",
-    };
+    return { eligible: false, reason: { key: "byte354b.authz.reason.03" } };
   }
 
   if (!binding.membershipId?.trim()) {
-    return {
-      eligible: false,
-      reason: "Person–Tenant Membership is required.",
-    };
+    return { eligible: false, reason: { key: "byte354b.authz.reason.04" } };
   }
 
   if (!binding.membershipSameTenant) {
-    return {
-      eligible: false,
-      reason: "Membership must belong to the Actor's bound tenant.",
-    };
+    return { eligible: false, reason: { key: "byte354b.authz.reason.05" } };
   }
 
   if (!binding.membershipActive) {
-    return {
-      eligible: false,
-      reason: "Person–Tenant Membership must be ACTIVE.",
-    };
+    return { eligible: false, reason: { key: "byte354b.authz.reason.06" } };
   }
 
-  return {
-    eligible: true,
-    reason: "Account-bound with an ACTIVE Membership in the same tenant.",
-  };
+  return { eligible: true, reason: { key: "byte354b.authz.reason.07" } };
 }
 
 function filterActorsByTenantRoleEligibility(
@@ -1114,10 +1082,10 @@ function tenantAdministratorGrantBlocker(
   actor: AuthzActor,
   allActors: AuthzActor[],
   targetTenantId: string,
-): string {
+): AuthzReason | null {
   const targetPersonId = actor.globalPersonId?.trim() ?? actor.binding?.globalPersonId?.trim() ?? "";
   if (!targetPersonId) {
-    return "Tenant Administrator authority requires a tenant Actor bound to a canonical Person Membership.";
+    return { key: "byte354b.authz.reason.08" };
   }
 
   const activeTenantAdminGrants = allActors.flatMap((candidateActor) =>
@@ -1132,7 +1100,7 @@ function tenantAdministratorGrantBlocker(
   if (
     otherGrants.filter(({ grant }) => grant.tenantId === targetTenantId).length >= 2
   ) {
-    return "Tenant already has the maximum of two active Tenant Administrators.";
+    return { key: "byte354b.authz.reason.09" };
   }
 
   const samePersonSameTenant = otherGrants.find(
@@ -1141,7 +1109,7 @@ function tenantAdministratorGrantBlocker(
       grant.tenantId === targetTenantId,
   );
   if (samePersonSameTenant) {
-    return "The second Tenant Administrator slot must belong to a different Person.";
+    return { key: "byte354b.authz.reason.10" };
   }
 
   const samePersonOtherTenant = activeTenantAdminGrants.find(
@@ -1150,10 +1118,10 @@ function tenantAdministratorGrantBlocker(
       grant.tenantId !== targetTenantId,
   );
   if (samePersonOtherTenant) {
-    return `This Person already administers tenant ${samePersonOtherTenant.grant.tenantId}; a Person may administer only one Tenant at a time.`;
+    return { key: "byte354b.authz.otherTenant", params: { tenantId: samePersonOtherTenant.grant.tenantId } };
   }
 
-  return "";
+  return null;
 }
 
 function tenantBindingId(actor: AuthzActor): string {

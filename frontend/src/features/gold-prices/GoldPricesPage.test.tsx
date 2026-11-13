@@ -69,7 +69,8 @@ describe("GoldPricesPage", () => {
     renderPage();
 
     await waitForText("Current Conversion Source");
-    await waitForText("500,00");
+    // Bite 34.1: money follows the selected language (en-US here); currency stays BRL.
+    await waitForText("R$500.00");
     await waitForText("BRL ÷ 500 = grams");
     await waitForText("Daily admin rate");
 

@@ -2620,6 +2620,18 @@ export const enUSMessages = {
   "apiField.leaseId": "Support Access Lease",
   "apiField.expiresAt": "Expiration",
   "apiField.permissions": "Permissions",
+
+  // Bite 34.1 (#1056) — remaining screen strings.
+  "audit.events.loading": "Loading audit events...",
+  "audit.events.shownOne": "{count} event shown",
+  "audit.events.shownMany": "{count} events shown",
+  "authz.roleSelector.unavailable": "Role selection unavailable",
+  "authz.roleSelector.placeholder": "Select a Role",
+  "authz.createActor.submit": "Create Actor",
+  "planning.replacementCandidateShort": "Cand.",
+  "planning.temporaryReplacementShort": "Repl.",
+  "planning.replacementCandidateFor": "Replacement candidate for {name}",
+  "planning.temporaryReplacementFor": "Temporary replacement target for {name}",
 } as const;
 
 export type TranslationKey = keyof typeof enUSMessages;

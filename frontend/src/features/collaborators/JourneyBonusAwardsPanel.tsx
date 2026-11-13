@@ -16,7 +16,7 @@ export function JourneyBonusAwardsPanel({
   actorId: string;
   canManage: boolean;
 }) {
-  const { t, formatCurrency, formatDate, formatDateTime } = useI18n();
+  const { t, formatCurrency, formatDate, formatDateTime, formatNumber } = useI18n();
   const awardsQuery = useJourneyBonusAwards(collaboratorId);
   const createMutation = useCreateJourneyBonusAward(collaboratorId);
   const approveMutation = useApproveJourneyBonusAward(collaboratorId);
@@ -77,7 +77,7 @@ export function JourneyBonusAwardsPanel({
         {awards.map((award) => {
           const canApprove = canManage && award.status === "PENDING_APPROVAL" && award.requestedByActorId !== actorId;
           const ownRequest = award.status === "PENDING_APPROVAL" && award.requestedByActorId === actorId;
-          const amountLabel = award.valueUnitCode === "BRL" ? formatCurrency(award.amount, "BRL") : `${award.amount.toLocaleString(undefined, { maximumFractionDigits: 8 })} g`;
+          const amountLabel = award.valueUnitCode === "BRL" ? formatCurrency(award.amount, "BRL") : `${formatNumber(award.amount, { maximumFractionDigits: 8 })} g`;
           return (
             <article key={award.id} className="rounded-xl border border-gray-200 p-4 text-sm">
               <div className="flex flex-wrap items-start justify-between gap-2">
