@@ -160,6 +160,14 @@ components:
           type: object
           additionalProperties:
             type: string
+        fieldCodes:
+          type: object
+          description: >-
+            Optional stable, locale-independent rule code per field (for example
+            `required` or `must_be_positive`). Clients translate these codes; the
+            English text in `fields` is kept for compatibility and diagnostics.
+          additionalProperties:
+            type: string
     ErrorResponse:
       type: object
       required:
