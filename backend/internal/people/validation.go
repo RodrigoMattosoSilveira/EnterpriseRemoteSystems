@@ -5,6 +5,8 @@ import (
 	"regexp"
 	"strings"
 	"unicode"
+
+	"enterpriseremotesystems/backend/internal/shared/fielderrors"
 )
 
 var (
@@ -18,104 +20,127 @@ var (
 	reCEPDigits      = regexp.MustCompile(`^[0-9]{8}$`)
 )
 
+// ValidationError carries English field messages plus a stable rule code per
+// field (Codes), which clients translate. See internal/shared/fielderrors.
 type ValidationError struct {
 	Fields map[string]string
+	Codes  map[string]string
 }
 
 func (e ValidationError) Error() string {
 	return "validation failed"
 }
 
-func ValidateCreatePerson(req CreatePersonRequest) error {
-	fields := map[string]string{}
+// Stable People rule codes returned as `fieldCodes` (shared ones live in
+// fielderrors). Renaming one is an API change.
+const (
+	RuleInvalidCPF                = "invalid_cpf"
+	RuleInvalidRG                 = "invalid_rg"
+	RuleInvalidCellular           = "invalid_cellular"
+	RuleInvalidEmail              = "invalid_email"
+	RuleInvalidCEP                = "invalid_cep"
+	RuleInvalidCountry            = "invalid_country"
+	RuleAlreadyExists             = "already_exists"
+	RuleAlreadyTenantMember       = "already_tenant_member"
+	RuleInactivePersonStatus      = "inactive_person_status"
+	RuleTenantStatusMissing       = "tenant_person_status_missing"
+	RuleOnlyInactiveReactivatable = "only_inactive_reactivatable"
+	RulePhotoInvalidType          = "photo_invalid_type"
+	RulePhotoInvalidSize          = "photo_invalid_size"
+	RulePhotoInvalidImage         = "photo_invalid_image"
+	RulePhotoTypeMismatch         = "photo_type_mismatch"
+	RulePhotoInvalidDimensions    = "photo_invalid_dimensions"
+	RulePhotoNormalizedTooLarge   = "photo_normalized_too_large"
+)
 
-	requireString(fields, "firstName", req.FirstName)
-	requireString(fields, "lastName", req.LastName)
-	requireString(fields, "nickname", req.Nickname)
-	requireString(fields, "cpf", req.CPF)
-	requireString(fields, "rg", req.RG)
-	requireString(fields, "cellular", req.Cellular)
-	requireString(fields, "email", req.Email)
-	requireString(fields, "statusId", req.StatusID)
+func validationError(errs *fielderrors.Collector) error {
+	if errs.Empty() {
+		return nil
+	}
+	return ValidationError{Fields: errs.Fields, Codes: errs.Codes}
+}
+
+func fieldError(field string, rule string, message string) ValidationError {
+	fields, codes := fielderrors.Single(field, rule, message)
+	return ValidationError{Fields: fields, Codes: codes}
+}
+
+func ValidateCreatePerson(req CreatePersonRequest) error {
+	errs := fielderrors.New()
+
+	errs.Require("firstName", req.FirstName)
+	errs.Require("lastName", req.LastName)
+	errs.Require("nickname", req.Nickname)
+	errs.Require("cpf", req.CPF)
+	errs.Require("rg", req.RG)
+	errs.Require("cellular", req.Cellular)
+	errs.Require("email", req.Email)
+	errs.Require("statusId", req.StatusID)
 
 	if req.CPF != "" && !IsValidCPF(req.CPF) {
-		fields["cpf"] = "CPF is invalid"
+		errs.Add("cpf", RuleInvalidCPF, "CPF is invalid")
 	}
 
 	if req.RG != "" && !IsValidRG(req.RG) {
-		fields["rg"] = "RG is invalid"
+		errs.Add("rg", RuleInvalidRG, "RG is invalid")
 	}
 
 	if req.Cellular != "" && !IsValidBrazilianCellular(req.Cellular) {
-		fields["cellular"] = "Cellular must be a valid Brazilian mobile number"
+		errs.Add("cellular", RuleInvalidCellular, "Cellular must be a valid Brazilian mobile number")
 	}
 
 	if req.Email != "" && !IsValidEmail(req.Email) {
-		fields["email"] = "Email is invalid"
+		errs.Add("email", RuleInvalidEmail, "Email is invalid")
 	}
 
-	if len(fields) > 0 {
-		return ValidationError{Fields: fields}
-	}
-
-	return nil
+	return validationError(errs)
 }
 
 func ValidateUpdatePerson(req UpdatePersonRequest) error {
-	fields := map[string]string{}
+	errs := fielderrors.New()
 
-	requireString(fields, "firstName", req.FirstName)
-	requireString(fields, "lastName", req.LastName)
-	requireString(fields, "nickname", req.Nickname)
-	requireString(fields, "cpf", req.CPF)
-	requireString(fields, "rg", req.RG)
-	requireString(fields, "cellular", req.Cellular)
-	requireString(fields, "email", req.Email)
-	requireString(fields, "statusId", req.StatusID)
+	errs.Require("firstName", req.FirstName)
+	errs.Require("lastName", req.LastName)
+	errs.Require("nickname", req.Nickname)
+	errs.Require("cpf", req.CPF)
+	errs.Require("rg", req.RG)
+	errs.Require("cellular", req.Cellular)
+	errs.Require("email", req.Email)
+	errs.Require("statusId", req.StatusID)
 
 	if req.CPF != "" && !IsValidCPF(req.CPF) {
-		fields["cpf"] = "CPF is invalid"
+		errs.Add("cpf", RuleInvalidCPF, "CPF is invalid")
 	}
 
 	if req.RG != "" && !IsValidRG(req.RG) {
-		fields["rg"] = "RG is invalid"
+		errs.Add("rg", RuleInvalidRG, "RG is invalid")
 	}
 
 	if req.Cellular != "" && !IsValidBrazilianCellular(req.Cellular) {
-		fields["cellular"] = "Cellular must be a valid Brazilian mobile number"
+		errs.Add("cellular", RuleInvalidCellular, "Cellular must be a valid Brazilian mobile number")
 	}
 
 	if req.Email != "" && !IsValidEmail(req.Email) {
-		fields["email"] = "Email is invalid"
+		errs.Add("email", RuleInvalidEmail, "Email is invalid")
 	}
 
 	if req.CEP != "" && !IsValidCEP(req.CEP) {
-		fields["cep"] = "CEP is invalid"
+		errs.Add("cep", RuleInvalidCEP, "CEP is invalid")
 	}
 
 	if req.EmergencyCellular != "" && !IsValidBrazilianCellular(req.EmergencyCellular) {
-		fields["emergencyCellular"] = "Emergency cellular must be a valid Brazilian mobile number"
+		errs.Add("emergencyCellular", RuleInvalidCellular, "Emergency cellular must be a valid Brazilian mobile number")
 	}
 
 	if req.EmergencyEmail != "" && !IsValidEmail(req.EmergencyEmail) {
-		fields["emergencyEmail"] = "Emergency email is invalid"
+		errs.Add("emergencyEmail", RuleInvalidEmail, "Emergency email is invalid")
 	}
 
 	if req.Country != "" && req.Country != "Brasil" {
-		fields["country"] = "Country must be Brasil"
+		errs.Add("country", RuleInvalidCountry, "Country must be Brasil")
 	}
 
-	if len(fields) > 0 {
-		return ValidationError{Fields: fields}
-	}
-
-	return nil
-}
-
-func requireString(fields map[string]string, key string, value string) {
-	if strings.TrimSpace(value) == "" {
-		fields[key] = "Required"
-	}
+	return validationError(errs)
 }
 
 func IsValidEmail(value string) bool {
@@ -263,4 +288,8 @@ func IsValidationError(err error) (ValidationError, bool) {
 
 func (e ValidationError) ValidationFields() map[string]string {
 	return e.Fields
+}
+
+func (e ValidationError) ValidationFieldCodes() map[string]string {
+	return e.Codes
 }

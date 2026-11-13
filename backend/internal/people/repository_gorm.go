@@ -267,7 +267,7 @@ func (r *gormRepository) CreateMembership(ctx context.Context, tenantID string, 
 			return err
 		}
 		if existing > 0 {
-			return ValidationError{Fields: map[string]string{"personId": "Person already belongs to this tenant"}}
+			return fieldError("personId", RuleAlreadyTenantMember, "Person already belongs to this tenant")
 		}
 
 		now := time.Now().UTC()
@@ -462,7 +462,7 @@ func personStatusCodeTx(tx *gorm.DB, tenantID string, statusID string) (string, 
 		return "", result.Error
 	}
 	if result.RowsAffected == 0 || strings.TrimSpace(code) == "" {
-		return "", ValidationError{Fields: map[string]string{"statusId": "Status must be an active person status"}}
+		return "", fieldError("statusId", RuleInactivePersonStatus, "Status must be an active person status")
 	}
 	return strings.ToUpper(strings.TrimSpace(code)), nil
 }
@@ -474,7 +474,7 @@ func personStatusIDByCodeTx(tx *gorm.DB, tenantID string, code string) (string, 
 		return "", result.Error
 	}
 	if result.RowsAffected == 0 || strings.TrimSpace(id) == "" {
-		return "", ValidationError{Fields: map[string]string{"statusId": "Tenant is missing the required " + strings.ToUpper(strings.TrimSpace(code)) + " Person status"}}
+		return "", fieldError("statusId", RuleTenantStatusMissing, "Tenant is missing the required "+strings.ToUpper(strings.TrimSpace(code))+" Person status")
 	}
 	return strings.TrimSpace(id), nil
 }
@@ -574,7 +574,7 @@ func reactivateTenantMembershipTx(tx *gorm.DB, tenantID string, membershipID str
 		return err
 	}
 	if code != "INACTIVE" {
-		return ValidationError{Fields: map[string]string{"statusId": "Only an operationally INACTIVE Person may be reactivated"}}
+		return fieldError("statusId", RuleOnlyInactiveReactivatable, "Only an operationally INACTIVE Person may be reactivated")
 	}
 	if suspended, err := personAccountSecuritySuspendedTx(tx, membership.PersonID); err != nil {
 		return err

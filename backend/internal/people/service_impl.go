@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"enterpriseremotesystems/backend/internal/db"
+	"enterpriseremotesystems/backend/internal/shared/fielderrors"
 	"enterpriseremotesystems/backend/internal/shared/ids"
 )
 
@@ -249,15 +250,11 @@ func (s *service) SearchGlobal(ctx context.Context, tenantID string, filter Glob
 
 func (s *service) CreateMembership(ctx context.Context, tenantID string, req CreatePersonMembershipRequest, actorUserID string) (*PersonDTO, error) {
 	_ = actorUserID // retained for the audit identity cutover in Bite 30I
-	fields := map[string]string{}
-	if strings.TrimSpace(req.PersonID) == "" {
-		fields["personId"] = "Required"
-	}
-	if strings.TrimSpace(req.StatusID) == "" {
-		fields["statusId"] = "Required"
-	}
-	if len(fields) > 0 {
-		return nil, ValidationError{Fields: fields}
+	errs := fielderrors.New()
+	errs.Require("personId", req.PersonID)
+	errs.Require("statusId", req.StatusID)
+	if err := validationError(errs); err != nil {
+		return nil, err
 	}
 	if err := s.validatePersonStatus(ctx, tenantID, req.StatusID); err != nil {
 		return nil, err
@@ -272,7 +269,7 @@ func (s *service) CreateMembership(ctx context.Context, tenantID string, req Cre
 func (s *service) Reactivate(ctx context.Context, tenantID string, id string, actorUserID string) (*PersonDTO, error) {
 	_ = actorUserID
 	if strings.TrimSpace(id) == "" {
-		return nil, ValidationError{Fields: map[string]string{"personId": "Required"}}
+		return nil, fieldError("personId", fielderrors.Required, "Required")
 	}
 	reactivated, err := s.repo.Reactivate(ctx, strings.TrimSpace(tenantID), strings.TrimSpace(id))
 	if err != nil {
@@ -306,15 +303,11 @@ func (s *service) validatePersonStatus(ctx context.Context, tenantID string, sta
 	if exists {
 		return nil
 	}
-	return ValidationError{
-		Fields: map[string]string{
-			"statusId": "Status must be an active person status",
-		},
-	}
+	return fieldError("statusId", RuleInactivePersonStatus, "Status must be an active person status")
 }
 
 func uniqueConflictValidationError(conflicts map[string]bool) ValidationError {
-	fields := map[string]string{}
+	errs := fielderrors.New()
 
 	messages := map[string]string{
 		"cpf":      "CPF already exists",
@@ -326,11 +319,11 @@ func uniqueConflictValidationError(conflicts map[string]bool) ValidationError {
 
 	for field, message := range messages {
 		if conflicts[field] {
-			fields[field] = message
+			errs.Add(field, RuleAlreadyExists, message)
 		}
 	}
 
-	return ValidationError{Fields: fields}
+	return ValidationError{Fields: errs.Fields, Codes: errs.Codes}
 }
 
 func stringPtrOrNil(value string) *string {
@@ -349,22 +342,22 @@ func (s *service) GetPhoto(ctx context.Context, tenantID string, id string) (*db
 
 func (s *service) SetPhoto(ctx context.Context, tenantID string, id string, contentType string, data []byte, actorUserID string) (*PersonPhotoDTO, error) {
 	if contentType != "image/jpeg" && contentType != "image/png" {
-		return nil, ValidationError{Fields: map[string]string{"photo": "Photo must be JPEG or PNG"}}
+		return nil, fieldError("photo", RulePhotoInvalidType, "Photo must be JPEG or PNG")
 	}
 	if len(data) == 0 || len(data) > maxPersonPhotoBytes {
-		return nil, ValidationError{Fields: map[string]string{"photo": "Photo must be between 1 byte and 5 MiB"}}
+		return nil, fieldError("photo", RulePhotoInvalidSize, "Photo must be between 1 byte and 5 MiB")
 	}
 	decoded, format, err := image.Decode(bytes.NewReader(data))
 	if err != nil {
-		return nil, ValidationError{Fields: map[string]string{"photo": "Photo is not a valid image"}}
+		return nil, fieldError("photo", RulePhotoInvalidImage, "Photo is not a valid image")
 	}
 	if (contentType == "image/jpeg" && format != "jpeg") || (contentType == "image/png" && format != "png") {
-		return nil, ValidationError{Fields: map[string]string{"photo": "Photo content type does not match image data"}}
+		return nil, fieldError("photo", RulePhotoTypeMismatch, "Photo content type does not match image data")
 	}
 	bounds := decoded.Bounds()
 	width, height := bounds.Dx(), bounds.Dy()
 	if width < 64 || width > 2048 || height < 64 || height > 2048 {
-		return nil, ValidationError{Fields: map[string]string{"photo": "Photo dimensions must be between 64 and 2048 pixels"}}
+		return nil, fieldError("photo", RulePhotoInvalidDimensions, "Photo dimensions must be between 64 and 2048 pixels")
 	}
 	var normalized bytes.Buffer
 	if format == "jpeg" {
@@ -376,7 +369,7 @@ func (s *service) SetPhoto(ctx context.Context, tenantID string, id string, cont
 		return nil, err
 	}
 	if normalized.Len() == 0 || normalized.Len() > maxPersonPhotoBytes {
-		return nil, ValidationError{Fields: map[string]string{"photo": "Normalized photo must be no larger than 5 MiB"}}
+		return nil, fieldError("photo", RulePhotoNormalizedTooLarge, "Normalized photo must be no larger than 5 MiB")
 	}
 	now := time.Now().UTC()
 	photo := &db.GlobalPersonPhoto{ContentType: contentType, Data: normalized.Bytes(), ByteSize: normalized.Len(), Width: width, Height: height, UpdatedBy: strings.TrimSpace(actorUserID), CreatedAt: now, UpdatedAt: now}

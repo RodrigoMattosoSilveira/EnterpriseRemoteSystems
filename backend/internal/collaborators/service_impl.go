@@ -9,6 +9,7 @@ import (
 	"enterpriseremotesystems/backend/internal/authz"
 	"enterpriseremotesystems/backend/internal/db"
 	peoplepkg "enterpriseremotesystems/backend/internal/people"
+	"enterpriseremotesystems/backend/internal/shared/fielderrors"
 	"enterpriseremotesystems/backend/internal/shared/ids"
 	"enterpriseremotesystems/backend/internal/shared/tenantctx"
 	"enterpriseremotesystems/backend/internal/tenants"
@@ -67,15 +68,15 @@ func (s *service) Create(ctx context.Context, req CreateCollaboratorRequest, act
 
 	startDate, err := parseDate(req.JourneyStartDate)
 	if err != nil {
-		return nil, ValidationError{Fields: map[string]string{"journeyStartDate": "Journey start date must be YYYY-MM-DD"}}
+		return nil, fieldError("journeyStartDate", fielderrors.InvalidDate, "Journey start date must be YYYY-MM-DD")
 	}
 
 	membership, err := s.repo.FindActiveMembershipByID(ctx, strings.TrimSpace(req.MembershipID))
 	if err != nil {
-		return nil, ValidationError{Fields: map[string]string{"membershipId": "An active Person–Tenant Membership in this tenant is required"}}
+		return nil, fieldError("membershipId", RuleMembershipNotActive, "An active Person–Tenant Membership in this tenant is required")
 	}
 	if !membership.Person.CanCreateCollaborator {
-		return nil, ValidationError{Fields: map[string]string{"membershipId": "Person profile must be complete before creating a Collaborator"}}
+		return nil, fieldError("membershipId", RulePersonProfileIncomplete, "Person profile must be complete before creating a Collaborator")
 	}
 
 	activeExists, err := s.repo.ExistsOpenJourneyForMembership(ctx, membership.ID)
@@ -83,7 +84,7 @@ func (s *service) Create(ctx context.Context, req CreateCollaboratorRequest, act
 		return nil, err
 	}
 	if activeExists {
-		return nil, ValidationError{Fields: map[string]string{"membershipId": "Membership already has an open Collaborator Journey"}}
+		return nil, fieldError("membershipId", RuleJourneyAlreadyOpen, "Membership already has an open Collaborator Journey")
 	}
 
 	paymentMethod, err := s.validatePaymentMethod(ctx, req.PaymentMethodID)
@@ -254,7 +255,7 @@ func (s *service) ExtendJourney(ctx context.Context, id string, req ExtendCollab
 		return nil, err
 	}
 	if row.ClosedAt != nil || strings.EqualFold(strings.TrimSpace(row.Status.Code), "FINISHED") {
-		return nil, ValidationError{Fields: map[string]string{"additionalDays": "Closed Journeys cannot be extended"}}
+		return nil, fieldError("additionalDays", RuleJourneyClosed, "Closed Journeys cannot be extended")
 	}
 	existing, err := s.repo.ListExtensionRequests(ctx, row.ID)
 	if err != nil {
@@ -262,7 +263,7 @@ func (s *service) ExtendJourney(ctx context.Context, id string, req ExtendCollab
 	}
 	for _, candidate := range existing {
 		if candidate.Status == "PENDING" {
-			return nil, ValidationError{Fields: map[string]string{"additionalDays": "Resolve the pending Journey extension request before creating another"}}
+			return nil, fieldError("additionalDays", RuleExtensionPending, "Resolve the pending Journey extension request before creating another")
 		}
 	}
 	now := time.Now().UTC()
@@ -324,10 +325,10 @@ func (s *service) AcceptExtensionRequest(ctx context.Context, id, requestID, act
 		return nil, err
 	}
 	if request.Status != "PENDING" {
-		return nil, ValidationError{Fields: map[string]string{"status": "Only pending Journey extension requests can be accepted"}}
+		return nil, fieldError("status", RuleExtensionNotPending, "Only pending Journey extension requests can be accepted")
 	}
 	if journey.ClosedAt != nil || strings.EqualFold(strings.TrimSpace(journey.Status.Code), "FINISHED") {
-		return nil, ValidationError{Fields: map[string]string{"status": "Closed Journeys cannot accept extensions"}}
+		return nil, fieldError("status", RuleJourneyClosed, "Closed Journeys cannot accept extensions")
 	}
 	now := time.Now().UTC()
 	request.Status = "ACCEPTED"
@@ -353,7 +354,7 @@ func (s *service) RejectExtensionRequest(ctx context.Context, id, requestID, act
 		return nil, err
 	}
 	if request.Status != "PENDING" {
-		return nil, ValidationError{Fields: map[string]string{"status": "Only pending Journey extension requests can be rejected"}}
+		return nil, fieldError("status", RuleExtensionNotPending, "Only pending Journey extension requests can be rejected")
 	}
 	now := time.Now().UTC()
 	request.Status = "REJECTED"
@@ -373,7 +374,7 @@ func (s *service) CancelExtensionRequest(ctx context.Context, id, requestID, act
 		return nil, err
 	}
 	if request.Status != "PENDING" {
-		return nil, ValidationError{Fields: map[string]string{"status": "Only pending Journey extension requests can be cancelled"}}
+		return nil, fieldError("status", RuleExtensionNotPending, "Only pending Journey extension requests can be cancelled")
 	}
 	now := time.Now().UTC()
 	request.Status = "CANCELLED"
@@ -465,7 +466,7 @@ func (s *service) validatePaymentMethod(ctx context.Context, id string) (*db.Ref
 	if err == nil {
 		return row, nil
 	}
-	return nil, ValidationError{Fields: map[string]string{"paymentMethodId": "Payment method must be active reference data of type method"}}
+	return nil, fieldError("paymentMethodId", RuleInactiveReference, "Payment method must be active reference data of type method")
 }
 
 func (s *service) validateReference(ctx context.Context, field string, id string, typ string, message string) error {
@@ -476,7 +477,7 @@ func (s *service) validateReference(ctx context.Context, field string, id string
 	if exists {
 		return nil
 	}
-	return ValidationError{Fields: map[string]string{field: message}}
+	return fieldError(field, RuleInactiveReference, message)
 }
 
 type paymentConfig struct {
@@ -501,7 +502,7 @@ func (c paymentConfig) compatibilityValue() float64 {
 }
 
 func paymentConfigFromRequest(req CreateCollaboratorRequest, paymentMethodCode string) (paymentConfig, error) {
-	fields := map[string]string{}
+	errs := fielderrors.New()
 	method := normalizePaymentMethodCode(paymentMethodCode)
 	cfg := paymentConfig{}
 
@@ -509,33 +510,33 @@ func paymentConfigFromRequest(req CreateCollaboratorRequest, paymentMethodCode s
 	case "DAILY_BRL":
 		amount, field := paymentAmountFromRequest(req.DailyBRLAmount, req.PaymentValue, "dailyBrlAmount")
 		if amount == nil {
-			fields[field] = "Daily BRL amount is required for DAILY_BRL payment method"
+			errs.Add(field, RuleAmountRequiredForMethod, "Daily BRL amount is required for DAILY_BRL payment method")
 		} else if *amount <= 0 {
-			fields[field] = "Daily BRL amount must be greater than zero"
+			errs.Add(field, fielderrors.MustBePositive, "Daily BRL amount must be greater than zero")
 		} else if !hasAtMostDecimalPlaces(*amount, brlPaymentDecimalPlaces) {
-			fields[field] = "Daily BRL amount can have at most two decimal places"
+			errs.Add(field, RuleTooManyDecimals, "Daily BRL amount can have at most two decimal places")
 		} else {
 			cfg.DailyBRLAmount = amount
 		}
 	case "FIXED_BRL":
 		amount, field := paymentAmountFromRequest(req.FixedMonthlyBRLAmount, req.PaymentValue, "fixedMonthlyBrlAmount")
 		if amount == nil {
-			fields[field] = "Fixed monthly BRL amount is required for FIXED_BRL payment method"
+			errs.Add(field, RuleAmountRequiredForMethod, "Fixed monthly BRL amount is required for FIXED_BRL payment method")
 		} else if *amount <= 0 {
-			fields[field] = "Fixed monthly BRL amount must be greater than zero"
+			errs.Add(field, fielderrors.MustBePositive, "Fixed monthly BRL amount must be greater than zero")
 		} else if !hasAtMostDecimalPlaces(*amount, brlPaymentDecimalPlaces) {
-			fields[field] = "Fixed monthly BRL amount can have at most two decimal places"
+			errs.Add(field, RuleTooManyDecimals, "Fixed monthly BRL amount can have at most two decimal places")
 		} else {
 			cfg.FixedMonthlyBRLAmount = amount
 		}
 	case "GOLD_COMMISSION":
 		percent, field := paymentAmountFromRequest(req.GoldCommissionPercent, req.PaymentValue, "goldCommissionPercent")
 		if percent == nil {
-			fields[field] = "Gold commission percent is required for GOLD_COMMISSION payment method"
+			errs.Add(field, RuleAmountRequiredForMethod, "Gold commission percent is required for GOLD_COMMISSION payment method")
 		} else if *percent <= 0 || *percent > 100 {
-			fields[field] = "Gold commission percent must be greater than zero and at most 100"
+			errs.Add(field, RulePercentOutOfRange, "Gold commission percent must be greater than zero and at most 100")
 		} else if !hasAtMostDecimalPlaces(*percent, goldCommissionDecimalPlaces) {
-			fields[field] = "Gold commission percent can have at most eight decimal places"
+			errs.Add(field, RuleTooManyDecimals, "Gold commission percent can have at most eight decimal places")
 		} else {
 			cfg.GoldCommissionPercent = percent
 		}
@@ -546,7 +547,7 @@ func paymentConfigFromRequest(req CreateCollaboratorRequest, paymentMethodCode s
 			split = &value
 		}
 		if *split <= 0 || *split >= 100 {
-			fields["timeOffGoldSplitPercent"] = "Time-off gold split percent must be greater than zero and less than 100"
+			errs.Add("timeOffGoldSplitPercent", RulePercentOutOfRange, "Time-off gold split percent must be greater than zero and less than 100")
 		} else {
 			cfg.TimeOffGoldSplitPercent = split
 		}
@@ -557,16 +558,16 @@ func paymentConfigFromRequest(req CreateCollaboratorRequest, paymentMethodCode s
 			sickDayOffGold = &value
 		}
 		if *sickDayOffGold <= 0 {
-			fields["sickDayOffReplacementGoldGrams"] = "Sick day off replacement gold grams must be greater than zero"
+			errs.Add("sickDayOffReplacementGoldGrams", fielderrors.MustBePositive, "Sick day off replacement gold grams must be greater than zero")
 		} else {
 			cfg.SickDayOffReplacementGoldGrams = sickDayOffGold
 		}
 	default:
-		fields["paymentMethodId"] = "Payment method code must be DAILY, SALARY, or COMMISSION"
+		errs.Add("paymentMethodId", RuleInvalidPaymentMethod, "Payment method code must be DAILY, SALARY, or COMMISSION")
 	}
 
-	if len(fields) > 0 {
-		return paymentConfig{}, ValidationError{Fields: fields}
+	if err := validationError(errs); err != nil {
+		return paymentConfig{}, err
 	}
 	return cfg, nil
 }
@@ -607,33 +608,33 @@ func (s *service) CreateJourneyBonusAward(ctx context.Context, id string, req Cr
 		return nil, err
 	}
 	if row.ClosedAt != nil {
-		return nil, ValidationError{Fields: map[string]string{"journeyBonus": "Journey bonus awards can only be created while the Journey is open"}}
+		return nil, fieldError("journeyBonus", RuleJourneyClosed, "Journey bonus awards can only be created while the Journey is open")
 	}
-	fields := map[string]string{}
+	errs := fielderrors.New()
 	unit := strings.ToUpper(strings.TrimSpace(req.ValueUnitCode))
 	if unit != "BRL" && unit != "GOLD_GRAM" {
-		fields["valueUnitCode"] = "Value unit must be BRL or GOLD_GRAM"
+		errs.Add("valueUnitCode", RuleInvalidValueUnit, "Value unit must be BRL or GOLD_GRAM")
 	}
 	if req.Amount <= 0 {
-		fields["amount"] = "Bonus amount must be greater than zero"
+		errs.Add("amount", fielderrors.MustBePositive, "Bonus amount must be greater than zero")
 	} else if unit == "BRL" && !hasAtMostDecimalPlaces(req.Amount, brlPaymentDecimalPlaces) {
-		fields["amount"] = "BRL bonus amount supports at most 2 decimal places"
+		errs.Add("amount", RuleTooManyDecimals, "BRL bonus amount supports at most 2 decimal places")
 	} else if unit == "GOLD_GRAM" && !hasAtMostDecimalPlaces(req.Amount, goldCommissionDecimalPlaces) {
-		fields["amount"] = "Gold bonus amount supports at most 8 decimal places"
+		errs.Add("amount", RuleTooManyDecimals, "Gold bonus amount supports at most 8 decimal places")
 	}
 	effectiveDate, dateErr := parseDate(req.EffectiveDate)
 	if dateErr != nil {
-		fields["effectiveDate"] = "Effective date must be YYYY-MM-DD"
+		errs.Add("effectiveDate", fielderrors.InvalidDate, "Effective date must be YYYY-MM-DD")
 	}
 	today := time.Now().UTC().Truncate(24 * time.Hour)
 	if dateErr == nil && (effectiveDate.Before(row.JourneyStartDate) || effectiveDate.After(today)) {
-		fields["effectiveDate"] = "Bonus effective date must be on or after the Journey start date and not in the future"
+		errs.Add("effectiveDate", RuleBonusDateOutOfRange, "Bonus effective date must be on or after the Journey start date and not in the future")
 	}
-	if len(fields) > 0 {
-		return nil, ValidationError{Fields: fields}
+	if err := validationError(errs); err != nil {
+		return nil, err
 	}
 	if _, err := s.repo.FindValueUnitByCode(ctx, unit); err != nil {
-		return nil, ValidationError{Fields: map[string]string{"valueUnitCode": "Selected bonus value unit is not active for this tenant"}}
+		return nil, fieldError("valueUnitCode", RuleInactiveReference, "Selected bonus value unit is not active for this tenant")
 	}
 	now := time.Now().UTC()
 	award := &db.JourneyBonusAward{
@@ -675,21 +676,21 @@ func (s *service) ApproveJourneyBonusAward(ctx context.Context, id, awardID, act
 		return nil, err
 	}
 	if journey.ClosedAt != nil {
-		return nil, ValidationError{Fields: map[string]string{"journeyBonus": "Journey bonus awards can only be approved while the Journey is open"}}
+		return nil, fieldError("journeyBonus", RuleJourneyClosed, "Journey bonus awards can only be approved while the Journey is open")
 	}
 	award, err := s.repo.FindJourneyBonusAward(ctx, journey.ID, awardID)
 	if err != nil {
 		return nil, err
 	}
 	if award.Status != "PENDING_APPROVAL" {
-		return nil, ValidationError{Fields: map[string]string{"journeyBonus": "Journey bonus award is no longer pending approval"}}
+		return nil, fieldError("journeyBonus", RuleBonusNotPending, "Journey bonus award is no longer pending approval")
 	}
 	actorID = strings.TrimSpace(actorID)
 	if actorID == "" {
 		return nil, authz.ErrMissingActor
 	}
 	if actorID == strings.TrimSpace(award.RequestedByActorID) {
-		return nil, ValidationError{Fields: map[string]string{"secondApprover": "A different Tenant Administrator must approve the Journey bonus award"}}
+		return nil, fieldError("secondApprover", RuleDifferentApproverRequired, "A different Tenant Administrator must approve the Journey bonus award")
 	}
 	valueUnit, err := s.repo.FindValueUnitByCode(ctx, award.ValueUnitCode)
 	if err != nil {
