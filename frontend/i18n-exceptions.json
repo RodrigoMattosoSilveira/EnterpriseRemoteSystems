@@ -1,0 +1,38 @@
+{
+  "description": "User-visible-looking literals that are intentionally not translated. Checked by scripts/byte352-i18n-check.cjs (Bite 34.1, #1056). Every entry needs a reason; entries that no longer match anything fail the check. Text uses {} for template placeholders.",
+  "global": [
+    { "text": "Enterprise Remote Systems", "reason": "Product name; identical in every language." },
+    { "text": "Pará", "reason": "Brazilian state name used as an example placeholder." }
+  ],
+  "files": [
+    { "file": "features/gold-prices/GoldPricesPage.tsx", "category": "JSX_TEXT", "text": "BRL ÷", "reason": "ISO currency code and division symbol in the conversion formula." },
+
+    { "file": "api/auth.api.ts", "text": "Authentication account {} is ready.", "reason": "Event payload; AuthenticationLookupDismissBoundary renders translated text from the feedback code." },
+    { "file": "api/auth.api.ts", "text": "Authentication account was not created. {}", "reason": "Event payload; AuthenticationLookupDismissBoundary renders translated text from the feedback code." },
+    { "file": "api/auth.api.ts", "text": "Authentication account was not created. Review the account details and try again.", "reason": "Event payload; AuthenticationLookupDismissBoundary renders translated text from the feedback code." },
+
+    { "file": "api/client.ts", "text": "API request failed with status {}", "reason": "Fallback ApiError message; describeApiError shows it only in en-US and translates it (apiError.httpStatus) elsewhere." },
+    { "file": "api/client.ts", "text": "Network request failed", "reason": "Fallback ApiError message; describeApiError shows it only in en-US and translates it (apiError.network) elsewhere." },
+
+    { "file": "app/authStore.ts", "text": "Unable to load session", "reason": "Fallback Error; describeApiError shows client Error text only in en-US." },
+    { "file": "app/authStore.ts", "text": "Unable to verify session", "reason": "Fallback Error; describeApiError shows client Error text only in en-US." },
+    { "file": "app/authStore.ts", "text": "Unable to sign in", "reason": "Fallback Error; describeApiError shows client Error text only in en-US." },
+
+    { "file": "components/layout/AuthorizationContext.tsx", "category": "UI_ERROR", "text": "Authorization context is unavailable", "reason": "Developer error for a programming mistake; never shown to users." },
+    { "file": "i18n/I18nProvider.tsx", "category": "UI_ERROR", "text": "useI18n must be used inside I18nProvider", "reason": "Developer error for a programming mistake; never shown to users." },
+    { "file": "main.tsx", "category": "UI_ERROR", "text": "Root element #root not found", "reason": "Developer error raised before the application renders." },
+
+    { "file": "features/people/PersonForm.tsx", "category": "OBJECT_PROPERTY", "text": "Active", "reason": "Fallback status option; rendered through personStatusLabel, which translates it." },
+    { "file": "features/people/PersonForm.tsx", "category": "OBJECT_PROPERTY", "text": "Inactive", "reason": "Fallback status option; rendered through personStatusLabel, which translates it." },
+    { "file": "features/people/PersonForm.tsx", "category": "OBJECT_PROPERTY", "text": "Discontinued", "reason": "Fallback status option; rendered through personStatusLabel, which translates it." },
+
+    { "file": "types/referenceData.ts", "category": "OBJECT_PROPERTY", "text": "Person Statuses", "reason": "Not rendered; the Reference Data screen uses reference.type.* keys." },
+    { "file": "types/referenceData.ts", "category": "OBJECT_PROPERTY", "text": "Collaborator Statuses", "reason": "Not rendered; the Reference Data screen uses reference.type.* keys." },
+    { "file": "types/referenceData.ts", "category": "OBJECT_PROPERTY", "text": "Payment Methods", "reason": "Not rendered; the Reference Data screen uses reference.type.* keys." },
+    { "file": "types/referenceData.ts", "category": "OBJECT_PROPERTY", "text": "Sectors", "reason": "Not rendered; the Reference Data screen uses reference.type.* keys." },
+    { "file": "types/referenceData.ts", "category": "OBJECT_PROPERTY", "text": "Locations", "reason": "Not rendered; the Reference Data screen uses reference.type.* keys." },
+    { "file": "types/referenceData.ts", "category": "OBJECT_PROPERTY", "text": "Tasks", "reason": "Not rendered; the Reference Data screen uses reference.type.* keys." },
+    { "file": "types/referenceData.ts", "category": "OBJECT_PROPERTY", "text": "Expense Categories", "reason": "Not rendered; the Reference Data screen uses reference.type.* keys." },
+    { "file": "types/referenceData.ts", "category": "OBJECT_PROPERTY", "text": "Value Units", "reason": "Not rendered; the Reference Data screen uses reference.type.* keys." }
+  ]
+}

@@ -1,6 +1,12 @@
 # Byte 35.2 — Untranslated UI Text Guard: specification
 
-**Status:** Draft for review. Nothing in this document has been implemented.
+**Status:** Implemented for Bite 34.1 (#1056), with these differences from the draft below:
+- **Checks A, C and D** run in `byte352-i18n-check` (scanner in `frontend/scripts/i18n-ui-literals.cjs`; exceptions in `frontend/i18n-exceptions.json`). Check D became a code change rather than a check: no fixed-locale formatting remains outside `src/i18n`.
+- **Check C** also covers field rule codes: every backend package that returns field errors reports `fieldCodes`, uncoded field errors in those packages fail, and every rule code needs an `apiError.rule.*` key.
+- **No known-strings list (§5.2):** every finding was fixed or excepted before the guard was switched on, so any new untranslated text fails immediately.
+- **Not implemented:** the identical-value allow-list and new-key style check (§7.1 items 3–4), and the vetted custom-component config file (§4.5); text props are listed in the scanner instead.
+
+The sections below are the original draft, kept for reference.
 **Applies to:** `frontend/scripts/byte352-i18n-check.cjs` and its CI and `make` wiring.
 **Purpose:** meet the Byte 35.2 scope item *"Automated coverage preventing new untranslated UI text"*, and make the guard's PASS mean what it appears to mean.
 
