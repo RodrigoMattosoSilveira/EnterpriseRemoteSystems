@@ -9,7 +9,7 @@ import type {
   WorkPeriodPlanningTemplate,
   WorkPeriodPlanningTemplateRow,
 } from "../../types/planning";
-import { translateEnglish, type Translate, useI18n } from "../../i18n";
+import { type Translate, useI18n } from "../../i18n";
 
 type SortKey =
   | "selected"
@@ -973,6 +973,8 @@ function CompactJourneyDaysRemaining(props: {
   const presentation = getJourneyDaysPresentation(
     props.projectedEndDate,
     new Date(),
+    "",
+    t,
   );
 
   if (!presentation) {
@@ -1319,9 +1321,10 @@ function compareForKey(left: LocalRow, right: LocalRow, key: SortKey) {
     case "nickname":
       return compareText(rowNickname(left), rowNickname(right));
     case "availability":
+      // Sort by the stable code so the order does not depend on the UI language.
       return compareText(
-        availabilityLabel(left.planningAvailability),
-        availabilityLabel(right.planningAvailability),
+        normalizePlanningAvailability(left.planningAvailability),
+        normalizePlanningAvailability(right.planningAvailability),
       );
     case "sector":
       return compareText(
@@ -1396,7 +1399,7 @@ function isTemporaryReplacementTargetAvailability(
 
 function temporaryReplacementOptionLabel(
   row: LocalRow,
-  t: Translate = translateEnglish,
+  t: Translate,
 ) {
   const availability = availabilityLabel(row.planningAvailability, t).slice(0, 1);
   const selection = row.selected ? t("planning.selectedState") : t("planning.notSelectedState");
@@ -1406,7 +1409,7 @@ function temporaryReplacementOptionLabel(
 function temporaryReplacementTargetTitle(
   value: string,
   rows: LocalRow[],
-  t: Translate = translateEnglish,
+  t: Translate,
 ) {
   const target = rows.find((row) => row.collaboratorId === value);
   return target
@@ -1429,7 +1432,7 @@ function normalizePlanningAvailability(
 
 function availabilityLabel(
   value: string | undefined,
-  t: Translate = translateEnglish,
+  t: Translate,
 ) {
   switch (normalizePlanningAvailability(value)) {
     case "DAY_OFF":

@@ -1,11 +1,11 @@
-import { translateEnglish, type Translate } from "../i18n";
+import { type Translate } from "../i18n";
 
 export type RouteErrorPresentation = {
   title: string;
   message: string;
 };
 
-export function describeRouteError(error: unknown, t: Translate = translateEnglish): RouteErrorPresentation {
+export function describeRouteError(error: unknown, t: Translate): RouteErrorPresentation {
   const status = readHttpStatus(error);
 
   if (status === 401) {

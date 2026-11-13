@@ -1,5 +1,5 @@
 import type { Collaborator } from "../../types/collaborators";
-import { translateEnglish, type Translate } from "../../i18n";
+import { type Translate } from "../../i18n";
 
 export type PaymentValueInputConfig = {
   maxDecimals: number;
@@ -26,8 +26,8 @@ export function normalizePaymentMethodCode(code?: string) {
 }
 
 export function paymentValueInputConfig(
-  paymentMethodCode?: string,
-  t: Translate = translateEnglish,
+  paymentMethodCode: string | undefined,
+  t: Translate,
 ): PaymentValueInputConfig {
   switch (normalizePaymentMethodCode(paymentMethodCode)) {
     case "GOLD_COMMISSION":
@@ -58,7 +58,7 @@ export function paymentValueInputConfig(
 export function validatePaymentValueInput(
   rawValue: string,
   config: PaymentValueInputConfig,
-  t: Translate = translateEnglish,
+  t: Translate,
 ): { valid: boolean; value: number; message: string } {
   const normalized = rawValue.trim().replace(",", ".");
 

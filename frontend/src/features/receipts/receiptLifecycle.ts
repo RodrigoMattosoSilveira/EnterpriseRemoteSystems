@@ -1,10 +1,5 @@
 import type { PrintableReceipt } from "../../types/receipts";
-import {
-  DEFAULT_LOCALE,
-  formatDateTime as formatDateTimeForLocale,
-  translateEnglish,
-  type Translate,
-} from "../../i18n";
+import { type Translate } from "../../i18n";
 
 const statusRanks: Record<string, number> = {
   PENDING_ISSUE: 0,
@@ -24,7 +19,7 @@ export type ReceiptLifecycleStep = {
 
 export function receiptStatusLabel(
   status: string,
-  t: Translate = translateEnglish,
+  t: Translate,
 ): string {
   switch (status) {
     case "PENDING_ISSUE":
@@ -75,7 +70,7 @@ export function canReturnReceipt(receipt: PrintableReceipt): boolean {
 
 export function nextReceiptAction(
   receipt: PrintableReceipt,
-  t: Translate = translateEnglish,
+  t: Translate,
 ): string {
   if (receipt.status === "RETURNED") return t("receipt.action.lifecycleComplete");
   if (receipt.status === "CANCELLED") return t("receipt.action.noneAllowed");
@@ -87,8 +82,8 @@ export function nextReceiptAction(
 
 export function receiptLifecycleSteps(
   receipt: PrintableReceipt,
-  t: Translate = translateEnglish,
-  formatDateTime: (value: string) => string = (value) => formatDateTimeForLocale(DEFAULT_LOCALE, value),
+  t: Translate,
+  formatDateTime: (value: string) => string,
 ): ReceiptLifecycleStep[] {
   return [
     {

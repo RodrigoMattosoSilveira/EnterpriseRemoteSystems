@@ -13,7 +13,7 @@ import { usePriceListItems } from "../price-list/usePriceList";
 import { receiptStatusLabel, receiptStatusTone } from "../receipts/receiptLifecycle";
 import { useExpenses } from "./useExpenses";
 import { PageTitle } from "../../components/layout/PageHeading";
-import { translateEnglish, type Translate, useI18n } from "../../i18n";
+import { type Translate, useI18n } from "../../i18n";
 
 const EXPENSE_PAGE_SIZE = 50;
 const FILTER_OPTION_PAGE_SIZE = 200;
@@ -569,7 +569,7 @@ function ExpenseReceiptStatus({ expense }: { expense: Expense }) {
   );
 }
 
-function expenseReceiptSummary(expense: Expense, t: Translate = translateEnglish) {
+function expenseReceiptSummary(expense: Expense, t: Translate) {
   const posting = expense.financialPosting;
   if (!posting) return t("expense.missingPosting");
   const label = receiptStatusLabel(posting.receiptStatus, t);
@@ -589,7 +589,7 @@ function formatExpenseAmount(
   expense: Expense,
   formatCurrency: ReturnType<typeof useI18n>["formatCurrency"],
   formatNumber: ReturnType<typeof useI18n>["formatNumber"],
-  t: Translate = translateEnglish,
+  t: Translate,
 ) {
   const amount = expense.totalAmount ?? expense.amount;
   const unitCode = `${expense.currencyCode || ""} ${expense.valueUnitId || ""} ${expense.valueUnitLabel || ""}`.toUpperCase();
@@ -632,7 +632,7 @@ function priceListItemLabel(item: PriceListItem, t: Translate) {
   return item.active ? label : t("expenses.filters.inactiveItem", { label });
 }
 
-function displayExpenseCategory(expense: Expense, t: Translate = translateEnglish) {
+function displayExpenseCategory(expense: Expense, t: Translate) {
   if (expense.itemType === "CANTEEN") {
     return t("expense.canteen");
   }

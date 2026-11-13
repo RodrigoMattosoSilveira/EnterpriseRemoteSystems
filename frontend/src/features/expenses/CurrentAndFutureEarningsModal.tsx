@@ -2,7 +2,7 @@ import { useEffect } from "react";
 import { ApiErrorPanel } from "../../components/ApiErrorPanel";
 import { JourneyDaysRemaining } from "../../components/JourneyDaysRemaining";
 import { useFinancialProjection } from "./useFinancialProjection";
-import { useI18n, translateEnglish, type Translate } from "../../i18n";
+import { useI18n, type Translate } from "../../i18n";
 
 export function CurrentAndFutureEarningsModal({
   collaboratorId,
@@ -280,7 +280,7 @@ function formatMethod(value: string) {
     .replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
-function formatWarning(value: string, t: Translate = translateEnglish) {
+function formatWarning(value: string, t: Translate) {
   if (value === "NO_GOLD_PRODUCTION_HISTORY")
     return t("earnings.warningNoGold");
   if (value === "PENDING_ACCRUAL_INPUTS")

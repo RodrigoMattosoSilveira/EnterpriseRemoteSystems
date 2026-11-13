@@ -1,5 +1,5 @@
 import type { ActualStatus, PlannedStatus, WorkPeriodStatus } from "../../types/planning";
-import { translateEnglish, type Translate, type TranslationKey } from "../../i18n";
+import { type Translate, type TranslationKey } from "../../i18n";
 
 export const WORK_PERIOD_STATUSES: WorkPeriodStatus[] = [
   "PLANNING",
@@ -57,7 +57,7 @@ const planningCodeTranslationKeys: Record<string, TranslationKey> = {
 
 export function humanizePlanningCode(
   value: string | undefined,
-  t: Translate = translateEnglish,
+  t: Translate,
 ) {
   if (!value) return t("planning.notMarked");
   const normalized = value.trim().toUpperCase();

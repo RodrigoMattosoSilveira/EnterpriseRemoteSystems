@@ -1,4 +1,4 @@
-import { translateEnglish, type Translate, useI18n } from "../i18n";
+import { type Translate, useI18n } from "../i18n";
 const millisecondsPerDay = 24 * 60 * 60 * 1000;
 
 type JourneyDaysRemainingProps = {
@@ -17,7 +17,7 @@ export function getJourneyDaysPresentation(
   projectedEndDate: string,
   now = new Date(),
   closedAt = "",
-  t: Translate = translateEnglish,
+  t: Translate,
 ): JourneyDaysPresentation | null {
   if (closedAt.trim()) {
     return {
