@@ -4,78 +4,92 @@ import (
 	"math"
 	"strings"
 	"time"
+
+	"enterpriseremotesystems/backend/internal/shared/fielderrors"
 )
 
 type ValidationError struct {
 	Fields map[string]string
+	Codes  map[string]string
 }
 
-func (e ValidationError) Error() string                       { return "validation failed" }
-func (e ValidationError) ValidationFields() map[string]string { return e.Fields }
+func (e ValidationError) Error() string                           { return "validation failed" }
+func (e ValidationError) ValidationFields() map[string]string     { return e.Fields }
+func (e ValidationError) ValidationFieldCodes() map[string]string { return e.Codes }
+
+// Stable rule codes returned as `fieldCodes` (shared ones live in
+// internal/shared/fielderrors). Renaming one is an API change.
+const (
+	RuleInactiveEntryNotEditable = "inactive_entry_not_editable"
+	RuleInactiveReference        = "inactive_reference"
+	RuleProductionDateMismatch   = "production_date_mismatch"
+	RuleProductionEntryExists    = "production_entry_exists"
+	RuleTooManyDecimals          = "too_many_decimals"
+	RuleWorkPeriodClosed         = "work_period_closed"
+)
+
+func fieldError(field string, rule string, message string) ValidationError {
+	fields, codes := fielderrors.Single(field, rule, message)
+	return ValidationError{Fields: fields, Codes: codes}
+}
 
 func ValidateCreateGoldProductionEntry(req CreateGoldProductionEntryRequest) error {
-	fields := map[string]string{}
-	requireString(fields, "locationId", req.LocationID)
-	requireString(fields, "productionDate", req.ProductionDate)
-	validateDate(fields, "productionDate", req.ProductionDate)
-	validateGoldGrams(fields, req.GoldGramsProduced)
-	if len(fields) > 0 {
-		return ValidationError{Fields: fields}
+	errs := fielderrors.New()
+	errs.Require("locationId", req.LocationID)
+	errs.Require("productionDate", req.ProductionDate)
+	validateDate(errs, "productionDate", req.ProductionDate)
+	validateGoldGrams(errs, req.GoldGramsProduced)
+	if !errs.Empty() {
+		return ValidationError{Fields: errs.Fields, Codes: errs.Codes}
 	}
 	return nil
 }
 
 func ValidateUpdateGoldProductionEntry(req UpdateGoldProductionEntryRequest) error {
-	fields := map[string]string{}
-	requireString(fields, "locationId", req.LocationID)
-	requireString(fields, "productionDate", req.ProductionDate)
-	validateDate(fields, "productionDate", req.ProductionDate)
-	validateGoldGrams(fields, req.GoldGramsProduced)
-	if len(fields) > 0 {
-		return ValidationError{Fields: fields}
+	errs := fielderrors.New()
+	errs.Require("locationId", req.LocationID)
+	errs.Require("productionDate", req.ProductionDate)
+	validateDate(errs, "productionDate", req.ProductionDate)
+	validateGoldGrams(errs, req.GoldGramsProduced)
+	if !errs.Empty() {
+		return ValidationError{Fields: errs.Fields, Codes: errs.Codes}
 	}
 	return nil
 }
 
 func ValidateListFilter(filter GoldProductionEntryListFilter) error {
-	fields := map[string]string{}
-	validateDate(fields, "dateFrom", filter.DateFrom)
-	validateDate(fields, "dateTo", filter.DateTo)
+	errs := fielderrors.New()
+	validateDate(errs, "dateFrom", filter.DateFrom)
+	validateDate(errs, "dateTo", filter.DateTo)
 	if filter.Page < 0 {
-		fields["page"] = "Page must be greater than zero"
+		errs.Add("page", fielderrors.MustBePositive, "Page must be greater than zero")
 	}
 	if filter.PageSize < 0 {
-		fields["pageSize"] = "Page size must be greater than zero"
+		errs.Add("pageSize", fielderrors.MustBePositive, "Page size must be greater than zero")
 	}
-	if len(fields) > 0 {
-		return ValidationError{Fields: fields}
+	if !errs.Empty() {
+		return ValidationError{Fields: errs.Fields, Codes: errs.Codes}
 	}
 	return nil
 }
 
-func requireString(fields map[string]string, key string, value string) {
-	if strings.TrimSpace(value) == "" {
-		fields[key] = "Required"
-	}
-}
-
-func validateDate(fields map[string]string, key string, value string) {
+func validateDate(errs *fielderrors.Collector, key string, value string) {
 	trimmed := strings.TrimSpace(value)
 	if trimmed == "" {
 		return
 	}
 	if _, err := time.Parse(dateLayout, trimmed); err != nil {
-		fields[key] = "Must be a valid date in YYYY-MM-DD format"
+		errs.Add(key, fielderrors.InvalidDate, "Must be a valid date in YYYY-MM-DD format")
 	}
 }
 
-func validateGoldGrams(fields map[string]string, value float64) {
+func validateGoldGrams(errs *fielderrors.Collector, value float64) {
 	if value <= 0 {
-		fields["goldGramsProduced"] = "Gold grams produced must be greater than zero"
+		errs.Add("goldGramsProduced", fielderrors.MustBePositive, "Gold grams produced must be greater than zero")
 		return
 	}
 	if !hasAtMostEightDecimalPlaces(value) {
-		fields["goldGramsProduced"] = "Gold grams produced supports at most 8 decimal places"
+		errs.Add("goldGramsProduced", RuleTooManyDecimals, "Gold grams produced supports at most 8 decimal places")
 	}
 }
 

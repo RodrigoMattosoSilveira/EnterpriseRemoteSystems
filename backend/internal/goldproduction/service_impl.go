@@ -9,6 +9,8 @@ import (
 	"enterpriseremotesystems/backend/internal/shared/ids"
 	"enterpriseremotesystems/backend/internal/shared/tenantctx"
 	"enterpriseremotesystems/backend/internal/tenants"
+
+	"enterpriseremotesystems/backend/internal/shared/fielderrors"
 )
 
 const defaultTenantID = tenants.DefaultTenantID
@@ -109,7 +111,7 @@ func (s *service) Update(ctx context.Context, id string, req UpdateGoldProductio
 		return nil, err
 	}
 	if !existing.Active {
-		return nil, ValidationError{Fields: map[string]string{"id": "Inactive gold production entries cannot be updated"}}
+		return nil, fieldError("id", RuleInactiveEntryNotEditable, "Inactive gold production entries cannot be updated")
 	}
 	if err := ensureEditableWorkPeriod(existing.WorkPeriod); err != nil {
 		return nil, err
@@ -181,7 +183,7 @@ func (s *service) validateLocation(ctx context.Context, locationID string) error
 		return err
 	}
 	if !exists {
-		return ValidationError{Fields: map[string]string{"locationId": "Location must be active reference data of type location"}}
+		return fieldError("locationId", RuleInactiveReference, "Location must be active reference data of type location")
 	}
 	return nil
 }
@@ -192,7 +194,7 @@ func (s *service) validateNoDuplicate(ctx context.Context, workPeriodID string, 
 		return err
 	}
 	if exists {
-		return ValidationError{Fields: map[string]string{"locationId": "An active gold production entry already exists for this work period, location, and production date"}}
+		return fieldError("locationId", RuleProductionEntryExists, "An active gold production entry already exists for this work period, location, and production date")
 	}
 	return nil
 }
@@ -242,14 +244,14 @@ func normalizeListFilter(filter GoldProductionEntryListFilter) (normalizedGoldPr
 
 func ensureEditableWorkPeriod(workPeriod db.WorkPeriod) error {
 	if workPeriod.Status == "CLOSED" {
-		return ValidationError{Fields: map[string]string{"workPeriodId": "Closed work periods cannot be changed"}}
+		return fieldError("workPeriodId", RuleWorkPeriodClosed, "Closed work periods cannot be changed")
 	}
 	return nil
 }
 
 func ensureProductionDateMatchesWorkPeriod(productionDate time.Time, workDate time.Time) error {
 	if !sameDate(productionDate, workDate) {
-		return ValidationError{Fields: map[string]string{"productionDate": "Production date must match the Work Period work date"}}
+		return fieldError("productionDate", RuleProductionDateMismatch, "Production date must match the Work Period work date")
 	}
 	return nil
 }
@@ -263,7 +265,7 @@ func sameDate(a time.Time, b time.Time) bool {
 func parseDate(value string) (time.Time, error) {
 	parsed, err := time.Parse(dateLayout, strings.TrimSpace(value))
 	if err != nil {
-		return time.Time{}, ValidationError{Fields: map[string]string{"productionDate": "Must be a valid date in YYYY-MM-DD format"}}
+		return time.Time{}, fieldError("productionDate", fielderrors.InvalidDate, "Must be a valid date in YYYY-MM-DD format")
 	}
 	return parsed, nil
 }
