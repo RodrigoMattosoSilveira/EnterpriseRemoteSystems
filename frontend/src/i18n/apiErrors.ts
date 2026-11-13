@@ -60,11 +60,26 @@ export function describeApiError(
       const rule = error.fieldCodes?.[field];
       return {
         field,
-        label: translateIfKnown(t, `apiField.${field}`) ?? field,
+        label: fieldLabel(field, t),
         message: (rule ? translateIfKnown(t, `apiError.rule.${rule}`) : null) ?? serverMessage,
       };
     }),
   };
+}
+
+// Batch payloads report indexed fields such as `items.1.priceListItemId`.
+const INDEXED_ITEM_FIELD = /^items\.(\d+)\.(.+)$/;
+
+function fieldLabel(field: string, t: Translate): string {
+  const indexed = INDEXED_ITEM_FIELD.exec(field);
+  if (indexed) {
+    const [, index, innerField] = indexed;
+    return t("apiField.batchItem", {
+      position: Number(index) + 1,
+      field: translateIfKnown(t, `apiField.${innerField}`) ?? innerField,
+    });
+  }
+  return translateIfKnown(t, `apiField.${field}`) ?? field;
 }
 
 function translatedErrorMessage(error: ApiError, t: Translate): string {

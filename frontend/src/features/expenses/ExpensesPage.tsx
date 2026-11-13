@@ -345,7 +345,7 @@ function AuthorizedExpensesPage() {
                 <option value="">{t("expenses.filters.allItems")}</option>
                 {filteredItemOptions.map((item) => (
                   <option key={item.id} value={item.id}>
-                    {priceListItemLabel(item)}
+                    {priceListItemLabel(item, t)}
                   </option>
                 ))}
               </select>
@@ -355,7 +355,7 @@ function AuthorizedExpensesPage() {
                   data-testid="selected-expense-item-filter-label"
                   className="block max-w-full break-words rounded-xl bg-gray-50 px-3 py-2 text-xs font-medium leading-snug text-gray-600"
                 >
-                  {priceListItemLabel(selectedPriceListItem)}
+                  {priceListItemLabel(selectedPriceListItem, t)}
                 </span>
               )}
             </label>
@@ -627,9 +627,9 @@ function collaboratorDisplayName(collaborator: Collaborator) {
   return nickname || legalName || collaborator.id;
 }
 
-function priceListItemLabel(item: PriceListItem) {
-  const inactiveSuffix = item.active ? "" : " (inactive)";
-  return `${item.description} · ${item.code}${inactiveSuffix}`;
+function priceListItemLabel(item: PriceListItem, t: Translate) {
+  const label = `${item.description} · ${item.code}`;
+  return item.active ? label : t("expenses.filters.inactiveItem", { label });
 }
 
 function displayExpenseCategory(expense: Expense, t: Translate = translateEnglish) {
