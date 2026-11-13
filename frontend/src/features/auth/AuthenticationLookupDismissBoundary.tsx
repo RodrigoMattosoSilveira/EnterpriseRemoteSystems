@@ -85,7 +85,7 @@ export function AuthenticationLookupDismissBoundary({
 }: {
   children: ReactNode;
 }) {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const rootRef = useRef<HTMLDivElement>(null);
   const [dismissed, setDismissed] = useState(false);
   const [feedback, setFeedback] =
@@ -189,7 +189,7 @@ export function AuthenticationLookupDismissBoundary({
           {feedback.code === "account_ready" && feedback.login
             ? t("admin.authentication.feedback.ready", { login: feedback.login })
             : feedback.code === "account_not_created"
-              ? `${t("admin.authentication.feedback.notCreated")}${feedback.detail ? ` ${feedback.detail}` : ` ${t("admin.authentication.feedback.review")}`}`
+              ? `${t("admin.authentication.feedback.notCreated")} ${locale === "en-US" && feedback.detail ? feedback.detail : t("admin.authentication.feedback.review")}`
               : feedback.message}
         </div>
       )}

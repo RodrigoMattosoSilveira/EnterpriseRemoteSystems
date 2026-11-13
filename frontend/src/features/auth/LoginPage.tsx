@@ -221,7 +221,7 @@ export function loginFailurePresentation(cause: unknown, t: Translate = translat
 
   return {
     code: null,
-    message: cause instanceof Error ? cause.message : t("auth.error.unableSignIn"),
+    message: t("auth.error.unableSignIn"),
   };
 }
 
