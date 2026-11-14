@@ -2,11 +2,13 @@
 ## Manual acceptance tests — exact committed revision
 
 **Project:** Enterprise Remote Systems (ERS)
-**Branch:** `1071-355-production-database-initialization`
-**Committed HEAD SHA:** `5eece27e422afc6096066ef397fc4f273857cea8`
+**Historical implementation branch:** `1071-355-production-database-initialization` (NOT the required branch for a later merged checkout)
+**Current acceptance branch:** record your actual committed HEAD; for this review the supplied branch is `1078-bite-356-application-administrator-and-operational-runbooks`; **obtain the current exact HEAD SHA from `git rev-parse HEAD` after committing this documentation**
 **Working directory:** `~/projects/EnterpriseRemoteSystems` — the **single normal Git checkout**, not a worktree.
 **Reference runbook:** `docs/bite-35/byte-35-5-production-database-initialization.md`
 **Status:** Two separately recorded acceptance decisions: **(A) solo-developer software acceptance** and **(B) independently authorized financial initialization**. Automated LOCAL and CI tests were reported PASS by the release owner; this document never assumes manual tests have passed. The current tester is the only human developing and testing ERS.
+
+**Start here:** [Bite 35.5–35.7 operator field guide](byte-35-operator-field-guide.md), sections A–E. It defines the actual people, maintenance period, where every command runs, and how to obtain each requested identifier/hash. **STOP/BLOCKED** if an operational input has no independently verifiable source.
 
 ---
 
@@ -87,22 +89,21 @@ For this project today, **one person may be listed as both Developer and Release
    git rev-parse HEAD^{tree}
    ```
 
-2. Confirm the branch is `1071-355-production-database-initialization`. The supplied **pre-documentation baseline** is `5eece27e422afc6096066ef397fc4f273857cea8`:
+2. Confirm the **actual approved candidate branch/SHA** in your change record; do **not** insist on the historical 1071 branch when performing acceptance on a descendant branch (such as 1078). The original **historical implementation baseline** was `5eece27e422afc6096066ef397fc4f273857cea8`:
 
-   - **Before committing this documentation-only change:** `git rev-parse HEAD` should equal that baseline; `git status --short` may show **only** `M docs/bite-35/byte-35-5-manual-acceptance.md`. Stop if other unexplained changes appear.
-   - **After committing the revised document:** HEAD will be a **new SHA**. Verify that the supplied baseline remains an ancestor, and record the new SHA and tree:
+   - **For committed acceptance:** `git rev-parse HEAD` must equal the currently supplied and approved candidate SHA. `git status --short` must be empty for a release-verification claim. If you are applying an approved documentation patch, review its expected changes separately and rerun against the newly committed SHA; do not pretend the old SHA is HEAD.
+   - **Historical traceability only (not a substitute for matching CI):** If the original 1071 SHA belongs to this branch history, this read-only command confirms ancestry; otherwise mark the ancestry check N/A with the historical branch distinction. Record the actual accepted SHA and tree:
 
      ```bash
      if git merge-base --is-ancestor 5eece27e422afc6096066ef397fc4f273857cea8 HEAD; then
        echo 'PASS: expected 35.5 baseline is an ancestor'
      else
-       echo 'FAIL: expected 35.5 baseline is not an ancestor'
-       exit 1
+       echo 'INFO: historical 35.5 baseline not confirmed in this checkout; review branch history separately'
      fi
      git status --short
      ```
 
-     Expect the PASS message and a clean status after committing. Do **not** reset or switch branches to force HEAD back to the old SHA. Record the actual software revision being accepted and the CI run associated with it.
+     If ancestry was confirmed, expect the PASS message; otherwise record the historical-reference limitation and **do not** call this a failed current-revision test merely because a previous feature SHA is absent. Expect a clean status after committing. Do **not** reset or switch branches to force HEAD back to the old SHA. Record the actual software revision being accepted and the CI run associated with it.
 3. Run each check separately; after each one record `PASS` only if the command exits `0`:
 
    ```bash
@@ -158,7 +159,7 @@ If a clean fictitious Test Journey does not exist, T03 may be **BLOCKED**; it is
 1. Open the **Test URL provided by the Release Owner**, not the Production URL. Sign in as the designated **Test Entidade Administrator**.
 2. Verify the selected context displays the intended fictitious **Entidade**. If it does not, use the existing Entidade/context selector to select it. Do not use the Application Administrator as a tenant Actor.
 3. Open **People / Pessoas**. Locate the fictitious Test Pessoa using the recorded non-sensitive test identifier. Open their details and confirm the Person is the intended global identity and has an **active Vínculo** with the selected Entidade.
-4. Open **Collaborators / Colaboradores**. Open the same Person's **open Jornada**. Record its Jornada ID from the approved fixture or normal application evidence; do not guess the identifier from the display name.
+4. Open **Collaborators / Colaboradores**. Open the same Person's **open Jornada**. Record its Jornada ID from an approved fixture or normal application evidence; do not guess from the display name. If the UI does not expose IDs, the authorized Test Database Operator may use the **read-only verified-backup ID inspection** in [field guide §D3b](byte-35-operator-field-guide.md) after the 33.2 backup; then repeat this UI identity check before approving the CSV. Until then mark this part BLOCKED.
 5. Open **Conta Corrente / Current Account** for that Jornada (or the Journey's Current Account link). Inspect the BRL and GOLD_GRAM positions and history.
 6. Confirm there are no ledger entries for this Journey and the opening positions are zero in both units. An empty history may represent the required zero starting state; do not create an entry merely to make a zero appear.
 7. Sign out or preserve the authenticated Test session for T08 under the approved Test procedure.
@@ -171,26 +172,26 @@ If a clean fictitious Test Journey does not exist, T03 may be **BLOCKED**; it is
 
 **Before any step:** If you are still the sole human available, **do not execute this test**. Record `T04 = BLOCKED — no independent Approval Holder`, document that the T01 regression covered *simulated cryptographic approval*, and skip directly to T09/T10 for software acceptance. There is no need to recruit someone simply to merge verified source code; there **is** a need for genuine independent approval before making an authorized financial import.
 
-1. The Release Owner authorizes the maintenance period; record the Test deployment revision and source database identifier.
-2. Database Operator stops **all Test database writers** using the established Test runbook. Record each affected service/container and verify writer isolation. Do not stop unrelated Docker services.
-3. Create and verify the **actual Test database backup** with the existing Bite 33.2 procedure. Record backup path, verified manifest path, manifest SHA-256, source path, integrity and foreign-key verification, and retained backup location. Do not create a substitute backup with a copy command or overwrite a working database.
-4. Independently establish the **Test-only** CSV with these seven headers, in exactly this order:
+1. **Authorize and identify the actual Test environment.** A and B complete [operator field guide §B](byte-35-operator-field-guide.md): approved Test-only change reference, UTC start/end, affected users, named Database Operator (A or another authorized human), different Independent Approval Holder (B), STOP contact and restart/recovery authority. Obtain exact deployed Test SHA/tree from the successful GitHub Test run; compare with the authorized Test host (`/opt/EnterpriseRemoteSystems/test`) using the **read-only commands** in field guide §D2. If the environment or human authorization cannot be established, **BLOCKED**.
+2. **Create the verified backup WHILE Test backend is running.** On the authorized Test server run `make server-backup ENV=test` (Bite 33.2, `docs/bite-33-2-backup-creation-retention-and-verification.md`). Copy the exact `Verified backup:` value to `BACKUP_FILE`; run `make server-backup-verify ENV=test BACKUP_FILE="$BACKUP_FILE"`. Record the printed `Backup manifest:` path; using field guide §D3, read its `environment`, `source.container`, `source.database_path`, `backup.sha256`, `verification.integrity_check`, `verification.foreign_key_check`, `repository.revision` and `repository.tree_sha`. Compute and record the **manifest-file** SHA-256. **STOP** on missing/mismatched verification; do not copy or reset SQLite yourself.
+3. **Prepare the Test-only CSV using the approved fictitious Test Journey IDs from T03.** It must have these seven exact headers:
 
    ```csv
    tenant_id,journey_id,person_id,value_unit_code,signed_amount,effective_date,reference
    ```
 
-   For the same qualifying Jornada, include at least one positive BRL and one negative GOLD_GRAM position. For example, only if approved by the fictitious Test case: `125.50` BRL and `-0.75000000` GOLD_GRAM, both with actual IDs from T03. Use an effective date no later than the current UTC date. Do not put the real customer's CSV in this test.
-5. Database Operator records CSV SHA-256 and checks that the row count, per-unit signed net totals, date, Person, Entidade, and Jornada IDs match the intended Test scenario.
-6. Independent Approval Holder authenticates the approved signer key from **1Password**, reviews the immutable CSV, actual verified backup-manifest SHA-256 and totals, prepares the exact JSON contract shown in the 35.5 technical guide, and signs its exact bytes using the **existing authorized signing procedure**. Do not expose or export the private key into Git, ChatGPT, CI, or an unattended container.
-7. Database Operator obtains the approved **public PEM key** and its trusted SHA-256 fingerprint via an independently authenticated source (1Password, not merely the received approval). Verify signature **without a private key**:
+   For the same eligible zero-ledger open Jornada, the approved fictitious scenario includes positive BRL and negative GOLD_GRAM positions (e.g. *only if approved*, `125.50` and `-0.75000000`). These are **examples, never values to submit without approval**. Dates are not later than the current UTC day. Do not include real customer data in Test.
+4. **Record the exact source values before signing.** Compute the CSV SHA-256 and row count; independently sum the **signed** `net_brl` and `net_gold_gram` using [field guide §D3c](byte-35-operator-field-guide.md), and cross-check tenant/Person/Jornada IDs, dates and references. Field guide §D explains each output and its source. The signed CSV must not change after review.
+5. **Independent B reviews and signs the actual evidence.** B inspects the final CSV, signed totals, verified backup/manifest SHA-256, signed JSON contract in `byte-35-5-production-database-initialization.md`, independently authenticated public PEM key and Test change approval. B signs the JSON's **exact bytes** through the existing **authorized** 1Password-backed signing procedure. The repository does **not** provide an approved private-key signing service. If B lacks independent approved key custody or an established signing procedure, **T04 BLOCKED** — do not create a temporary key and represent it as operational approval.
+6. **Verify without the private key.** Operator A independently obtains the trusted public PEM fingerprint through authorized 1Password custody (not just from B's attachment), sets `PUBLIC_KEY`, `APPROVAL`, `SIGNATURE` to the actual protected files, and runs:
 
    ```bash
    openssl dgst -sha256 -verify "$PUBLIC_KEY" -signature "$SIGNATURE" "$APPROVAL"
    ```
 
-   `PUBLIC_KEY`, `SIGNATURE` and `APPROVAL` must first be set to the actual protected file paths in the maintenance session. Expected: `Verified OK`. If those variables are not set, do not run the command.
-8. Confirm `approved_by` and `executed_by` represent **two different named actual humans**. Their identifiers must be valid for the importer's identifier format (no whitespace). Match the approval's `environment=test`, `tenant_id`, row count, positive/negative signed totals, CSV hash, backup-manifest hash and independent public-key hash. The Test contract uses `offhost_receipt_sha256` as the empty string when no Test off-host receipt is supplied; do not invent evidence.
+   Required output: `Verified OK`. Follow [field guide §D5](byte-35-operator-field-guide.md) to compare actual CSV hash, manifest hash, trusted public key hash, `environment=test`, `tenant_id`, totals and identifiers. `approved_by` and `executed_by` must identify **different actual authorized people**, not two logins of one person. The Test `offhost_receipt_sha256` field may be empty if no Test off-host receipt exists; never invent one.
+7. **Validate the offline runtime BEFORE any outage.** Both humans verify that the named operator has the complete signed Test package and that the approved Python/OpenSSL **offline Test maintenance runtime** can see the **real existing Test `app.db`** at exactly the absolute path in the verified manifest (often `/app/data/app.db`), plus the verified backup and other protected inputs. The backup is **not** the target DB; the runtime must not create or copy a substitute. The backend image is not guaranteed to include Python. If no separately approved offline runtime/mounting procedure exists, **BLOCKED** and leave Test running. T05 is read-only `plan`; T06 is the **only** planned controlled Test write.
+8. **Only NOW stop Test database writers.** During the approved maintenance period, on the Test deployment host execute `make server-test-down`; then run the two `docker ps` writer checks in field guide §D4, confirming no running container uses the `ers-tst_backend-data` volume, and independently verify no host/one-off writer. Do not run `server-test-down-volumes`, `docker compose down -v`, or stop unrelated containers. Record time and observed service state. Stop if any field/source is still an example or missing. **If shutdown fails, do not run T05/T06.**
 
 **PASS:** current real Test backup verified, signed approval matches exactly, independent key fingerprint authenticated, named humans differ, and all protected evidence is retained. **FAIL:** missing/tampered evidence, invalid signature, self-approval, incorrect source database, or wrong Test totals. **BLOCKED:** backup, independent human/key, or Test writer-isolation unavailable. Do not proceed to import.
 
@@ -198,7 +199,7 @@ If a clean fictitious Test Journey does not exist, T03 may be **BLOCKED**; it is
 
 All paths below must be **actual absolute paths visible in the same authorized offline Test maintenance environment** that executes the importer. In particular, the backup manifest's `source.database_path` must match `DB` exactly; the target filename must be `app.db`. The importer refuses symbolic-link paths. The values are examples of **variable names**, not valid operational defaults.
 
-Before running the next commands, the Database Operator sets each value interactively to its reviewed Test value (never paste secrets in a shared log):
+Before running the next commands, the Database Operator obtains each value from the named source in [operator field guide §D](byte-35-operator-field-guide.md) and sets each value interactively to its reviewed Test value (never paste secrets in a shared log):
 
 ```bash
 # Execute only INSIDE the approved Test offline maintenance environment.
@@ -215,7 +216,7 @@ OPERATOR_ID='actual-database-operator-id'
 APPROVED_KEY_SHA256='64-lowercase-hex-digits-from-independent-1Password-check'
 ```
 
-**STOP:** these placeholders are not valid values; do not execute T05–T07 unchanged. If your Test maintenance runtime cannot access the importer at `scripts/ers-byte355-opening-balance.py` or the approved protected files, mark **BLOCKED** rather than mounting Production volumes or inventing a new container workflow. Ensure `APP_ENV=test` and no conflicting Production environment variables. The existing Test operating runbook determines the maintenance-container launch and writer-stop commands.
+**STOP:** `BACKUP` is a real verified snapshot, never the target `DB`; the actual `DB` must exist in the authorized offline runtime at the **same absolute path** declared in the manifest. The backend image does not guarantee Python is installed; if an already-approved Test maintenance runtime and mounting plan do not exist, T05–T07 are BLOCKED. These placeholders are not valid values; do not execute T05–T07 unchanged. If your Test maintenance runtime cannot access the importer at `scripts/ers-byte355-opening-balance.py` or the approved protected files, mark **BLOCKED** rather than mounting Production volumes or inventing a new container workflow. Ensure `APP_ENV=test` and no conflicting Production environment variables. The Test writer-stop commands and backup order are reproduced in the operator field guide; the **offline Python container/mounting mechanism is not specified by the existing ERS 35.5 repository**. Do not invent a new runtime or mount the Production database to satisfy this test. Establish a separately approved and tested Test-only runtime before the signed import.
 
 ## T05 — Signed Test `plan` (read-only; no import)
 
@@ -409,7 +410,7 @@ No Test/Production SQL sabotage, database reset, fake operational approval or cu
 
 **Who:** Sole Developer / Tester acting as software Release Owner for **Decision A**. The operational Test Database Operator and independent Approval Holder participate **only when** Decision B is actually performed. **Where:** release records and protected Test evidence; no Production database write.
 
-1. Confirm the single working directory is `~/projects/EnterpriseRemoteSystems`, the branch is `1071-355-production-database-initialization`, and the supplied baseline remains in the history. Record the **actual current commit SHA** (which changes when this documentation is committed), plus LOCAL and CI PASS evidence for the code being promoted. If only documentation changed after the previously green CI run, clearly record both SHAs and obtain the normal required post-commit CI evidence. Confirm T01, T02 and T09 are **PASS** and no operational database was modified by these offline checks.
+1. Confirm the single working directory is `~/projects/EnterpriseRemoteSystems`, the actual approved candidate branch/SHA is checked out (for this review, 1078; not historical 1071), and the original 35.5 implementation has been retained. Record the **actual current commit SHA** (which changes when this documentation is committed), plus LOCAL and CI PASS evidence for the code being promoted. If only documentation changed after the previously green CI run, clearly record both SHAs and obtain the normal required post-commit CI evidence. Confirm T01, T02 and T09 are **PASS** and no operational database was modified by these offline checks.
 2. Record T03 as PASS/FAIL/BLOCKED, separately. Record **T08-A** (solo Test role/isolation check) and **T08-B** (post-import opening-balance display) as separate results. Neither T03 nor T08-A requires an independent human; they are supplementary to the software gate.
 3. If no independent Approval Holder exists, record **T04, T05, T06, T07 and T08-B = BLOCKED — independent operational approval unavailable**. Do not falsely show a successful operational Test import, `verify`, real backup approval, or approved signature based on the synthetic T01 results.
 4. Make **Decision A — SOFTWARE ACCEPTANCE**: **PASS** when T01, T02, T09 and matching-SHA LOCAL/CI PASS, with no unsafe activity or unresolved software defect. It may PASS while T04–T08-B remain BLOCKED. **FAIL** on software regression failure or security violation. **BLOCKED** if matching-revision evidence cannot be obtained. This decision may support the normal feature-branch merge/promotion of code; it is **not** a Production operational authorization.
