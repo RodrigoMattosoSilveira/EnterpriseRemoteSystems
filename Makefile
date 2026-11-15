@@ -541,6 +541,7 @@ recovery-rehearsal-operational-runbook-check:
 byte356-operations-check:
 	python3 -B scripts/test-byte356-operations.py
 	python3 -B scripts/test-byte356-manual-contract.py
+	python3 -B scripts/test-byte35-operator-instructions.py
 
 .PHONY: owner-unavailable-recovery-readiness-check
 owner-unavailable-recovery-readiness-check:
