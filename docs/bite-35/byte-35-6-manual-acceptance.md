@@ -2,6 +2,8 @@
 
 **Source:** committed candidate branch `1078-bite-356-application-administrator-and-operational-runbooks`; **working directory:** `~/projects/EnterpriseRemoteSystems` — **no other worktree**. Record the actual candidate SHA at execution.  **No password, reset token, private key, recovery document, session cookie or vault secret is recorded here.**
 
+**Before T01:** Read [Operator field guide for Bite 35.5–35.7](byte-35-operator-field-guide.md) sections A, C, E and G. The words Release Owner, Recovery Operator, Independent Reviewer, maintenance window and evidence reference describe **actual assigned people/processes**, not ERS authorization roles. Each T06–T08 external human/custody/recovery step has a named source and a BLOCKED path when unavailable.
+
 **Result conventions:** `PASS` = observed and independently evidenced; `FAIL` = observed violation; `BLOCKED` = prerequisite unavailable or missing human; `N/A` = expressly outside this stage with reason. For every case record UTC timestamp, actual identity, environment, branch/SHA, expected vs. observed outcome, evidence reference and cleanup. **One developer may sign off offline software quality; this cannot satisfy actual two-human recovery or authorize Production.**
 
 ## T01 — Candidate branch and safe working context (LOCAL, one human)
@@ -89,10 +91,10 @@
 
 **Identities/context:** Human A and Human B are **two different natural persons** with their own Test 1Password accounts, Test ERS logins, and browser profiles. Both work in Test GLOBAL Administration. Sole developer may record **BLOCKED**, not use two synthetic logins to claim this case.
 
-1. From `docs/bite-3367/production-operational-runbook.md` use Gate 2 to establish whether the two Test humans have already been enrolled. If so, **do not rerun enrollment**.
+1. Open `docs/bite-3367/production-operational-runbook.md` and follow **Gate 2 — Accepted deployed Test rehearsal** (Test host, verified backup and Test writer isolation). Record the actual named operator, Test Git SHA, backup path, source volume and command outputs as defined in [field guide §E, 35.6 T06](byte-35-operator-field-guide.md). Use Gate 2 to establish whether the two Test humans have already been enrolled. If so, **do not rerun enrollment**.
 2. Have A sign in using A's own credential/browser profile, complete the forced first change (when applicable), load **Administration → Authentication**, record A's Account ID and Actor ID, then sign out.
 3. Have B independently repeat with B's own 1Password/browser profile. Verify two distinct Account IDs, Actor IDs and named human ownership; neither becomes a Tenant Actor.
-4. Follow §6 **TC-03** of the established 33.6.7 runbook: A issues B a single-use reset through supported UI, B redeems it, then verify old credentials/sessions are invalid and the second redemption fails. Record audited issuer and recipient evidence, not the reset token.
+4. Follow §6 **TC-03** of `docs/bite-3367/production-operational-runbook.md` (Administration → Authentication → locate B account → issue single-use reset → B redeems in a fresh browser → verify old session/password/token invalid): A issues B a single-use reset through supported UI, B redeems it, then verify old credentials/sessions are invalid and the second redemption fails. Record audited issuer and recipient evidence, not the reset token.
 5. Have A and B separately verify they can sign in after recovery. Close both sessions.
 
 **PASS:** independence, scopes, password reset single use/session revocation, and audit all observed. **FAIL:** broken isolation, shared credentials, unrecoverable account or missing audit. **BLOCKED:** either actual human unavailable or prerequisites unmet. Never test against Production just to unblock Test.
@@ -101,7 +103,7 @@
 
 **Identities/context:** two approved real recovery technicians (or distinct authorized Application Administrators) and an authorized reviewer; **1Password external to ERS**, no Tenant context. Do not ask a developer to impersonate the absent human.
 
-1. Reviewer obtains approved access matrix naming the `ers-production` vault and each of the five recovery item identifiers in §3 of `byte-35-6-administrator-and-recovery-runbook.md`; separate Test/Production approvals and appropriate access are mandatory.
+1. Reviewer opens [35.6 runbook §3](byte-35-6-administrator-and-recovery-runbook.md) and reads the five literal `op://ers-production/.../document` item locators there. In the 1Password UI, select the actual approved organization and `ers-production` vault, locate each named item and verify it exists; **do not copy its contents into evidence**. Reviewer obtains the approved access matrix naming the vault and each of the five recovery item identifiers; separate Test/Production approvals and appropriate access are mandatory.
 2. Human A independently unlocks A's personal 1Password account; selects the approved organizational vault, confirms access to **every** required item title and that the material is current without revealing/copying secrets to evidence, then locks their session.
 3. Human B independently repeats with B's *different* 1Password identity, MFA and recovery path. No use of the owner's device or A's unlock session.
 4. Authorized reviewer checks actual effective vault/item access and the Production deployment service account's limited permissions, without creating or granting new permissions during a test.
@@ -113,8 +115,8 @@
 
 **Identities/context:** authorized Database/Recovery Operator and independent observer according to the approved operational runbook. Use Test or an approved isolated recovery environment; never the live Production SQLite volume.
 
-1. Follow the canonical `docs/database-recovery-runbook.md` and the existing `make server-recovery-rehearsal ENV=test ...` procedure with a verified Test off-host backup and explicit immutable receipt/manifest IDs.
-2. Require an isolated restore (no existing environment data overwritten), SQLite `PRAGMA integrity_check`, migration verification, backend health through approved HTTPS, and signed reconciliation of stored business records. Record original off-host backup source, object version, SHA, environment, revision and evidence path without secrets.
+1. From the repository root, open `docs/database-recovery-runbook.md` and locate the **isolated recovery rehearsal** procedure. On the authorized Test deployment host, obtain the verified Test off-host receipt/object identifier and follow the existing `make server-recovery-rehearsal ENV=test ...` procedure **as written there** (the required backup selector must be an actual reviewed value, not `<timestamp>`). Record exact environment, selected receipt and start UTC before executing. If no authorized recovery source, access to the host or approved rehearsal parameters exist, mark BLOCKED rather than guessing a backup.
+2. Require an isolated restore (no existing environment data overwritten), SQLite `PRAGMA integrity_check`, migration verification, backend health through approved HTTPS, and signed reconciliation of stored business records. Record original off-host backup source, **actual** object version from the 33.3 off-host receipt, backup SHA from the verified manifest, environment, deployed revision/tree from GitHub Test deploy + host checkout, and rehearsal evidence path without secrets. Field guide sections D2/D3/F explain the difference between these values.
 3. Measure and record actual RPO (maximum 24 h) and RTO (maximum 4 h). Evidence must report actual measured values, not a promised target.
 4. Stop/remove **only** containers, volumes and ports created for this isolated rehearsal. Check remaining test resources and expected port release. Do not use `server-restore-apply` on the live environment.
 

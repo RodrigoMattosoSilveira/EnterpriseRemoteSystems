@@ -66,11 +66,13 @@ The signed JSON and signature, CSV, verified backup manifest, verified off-host 
 
 ## Operator workflow — Test rehearsal, then separately authorized Production
 
+Read [Operator field guide: responsibilities, exact evidence sources, Test backup ordering and STOP conditions](byte-35-operator-field-guide.md) **before** operational Test T04. In particular, the importer requires Python/OpenSSL in an approved offline runtime and exact absolute DB path matching the verified manifest; the backend image must not be assumed to provide that runtime. If no such approved runtime or independently approved signing process exists, mark operational rehearsal BLOCKED without attempting a database write.
+
 **Precondition:** Approved Test revision/tree, completed guarded migration to `000080_production_opening_balance.up.sql`, no database writers during application, existing Test `app.db`, and ordinary UI-provisioned fictitious Test Entidade, Pessoas/Vínculos and zero-balance Journeys. Test and Production require the same exact operating sequence, each with its **own** signed approval, source backup, and environment. Never reuse Test approval on Production.
 
 1. **Technical release operator (not Application Administrator via tenant Actor):** confirm the exact Git SHA, required database migrations and availability of the approved Bite 33.5 migration/recovery gate. Rehearse applying the migration on a verified isolated copy before migrating Test. Record actual Test deployment logs; do not equate CI with deployment evidence.
 2. **Entidade Administrator, in Test UI under the fictitious Test Entidade:** create or verify each fictitious Pessoa, active Vínculo and open Jornada through the usual UI. Check identity, tenant scope, and zero Current Account balance before proceeding. Do **not** change financial or role-grant records merely to prepare training.
-3. **Database operator, Test environment:** stop **all** application/database writers, create and verify a current Test backup via established Bite 33.2 procedures, confirm the backup manifest source database path, and retain the backup. Use the established off-host procedure where enabled. Do not bypass its validation.
+3. **Database operator, Test environment:** while the Test backend is still running, **create and independently verify** the current Test backup using Bite 33.2 (`make server-backup ENV=test` then `make server-backup-verify ENV=test BACKUP_FILE=<actual printed path>`). Record the source path from its manifest. **Then**, during the approved Test maintenance period, stop **all** application/database writers and confirm isolation as described in the [operator field guide](byte-35-operator-field-guide.md). Use the established off-host procedure where enabled. Do not bypass its validation.
 4. **Independent approval owner:** authenticate the approved public signing key through 1Password; independently review the proposed CSV, counts/totals, verified backup manifest hash, and operational approval; produce the signed exact JSON and detached signature. The operator records that the signer and executor are different humans.
 5. **Operator, Test offline maintenance container:** arrange protected file access to the **same existing** `app.db` volume, backup/manifest, CSV, approval, signature, public key, and any off-host receipt. Set `APP_ENV=test`. Use the following interface, replacing every path and identifier with the actual approved values. DO NOT run the example unchanged:
 
@@ -104,7 +106,7 @@ The command uses one `BEGIN IMMEDIATE` SQLite transaction. Failure leaves no par
 
 ## Offline automated verification
 
-From the sole ERS work directory, on the stated `1071` branch and correct baseline:
+From the single ERS working directory on the **current approved candidate branch/SHA** (the historical 1071 branch is not required for later acceptance):
 
 ```bash
 cd ~/projects/EnterpriseRemoteSystems
