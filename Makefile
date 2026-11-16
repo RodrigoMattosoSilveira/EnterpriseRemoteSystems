@@ -174,7 +174,7 @@ help:
 	@echo "  make server-build ENV=development|test|production"
 	@echo "  make server-up ENV=development|test|production"
 	@echo "  make server-down ENV=development|test|production"
-	@echo "  make server-down-volumes ENV=development|test (Production is refused)"
+	@echo "  make server-down-volumes ENV=development|test (Production and Training are refused)"
 	@echo "  make server-replace-development-db ENV=development"
 	@echo "  make server-test-rehearsal-capture-baseline"
 	@echo "  make server-test-rehearsal-ensure-baseline"

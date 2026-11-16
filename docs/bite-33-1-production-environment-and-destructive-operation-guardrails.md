@@ -68,7 +68,7 @@ APP_ENV=production ERS_DATABASE_PATH=/tmp/ers-331-manual/sentinel.db make reset-
 shasum -a 256 /tmp/ers-331-manual/sentinel.db
 ```
 
-The two checksums must be identical. The expected refusal contains `Production data must not be modified by reset/demo/test tooling.`
+The two checksums must be identical. Since Training is also protected from reset/demo/test tools, the shared guard refuses both Production and Training. The expected refusal contains `Production or Training data must not be modified by reset/demo/test tooling.`
 
 ### Deployed environment-file manual probe
 
@@ -92,7 +92,7 @@ The supported manual probe for deployed Production volume deletion is:
 make server-prod-down-volumes
 ```
 
-This target intentionally delegates to the guarded `server-down-volumes` implementation with `ENV=production`. The expected result is a non-zero Make exit before Docker Compose is invoked, with a refusal containing `Production data must not be modified by reset/demo/test tooling.`
+This target intentionally delegates to the guarded `server-down-volumes` implementation with `ENV=production`. The expected result is a non-zero Make exit before Docker Compose is invoked, with a refusal containing `Production or Training data must not be modified by reset/demo/test tooling.`
 
 For Bite 33.1 Manual Test 08, **failure is the expected PASS path**: ERS must refuse the Production volume-deletion operation before `docker compose down -v` can run. The operator may compare `docker volume ls` before and after as an additional observation, but the guard itself must fire before any Docker volume deletion is attempted.
 
