@@ -19,7 +19,7 @@ DOCS = ROOT / 'docs' / 'bite-35'
 def completed():
     value = mod.template()
     value.update({
-        'environment': 'development',
+        'environment': 'training',
         'deployment_revision': 'b' * 40,
         'training_tenant_code': 'ERS_SUPPORT_TRAINING',
         'training_tenant_confirmed_synthetic': True,
@@ -53,7 +53,7 @@ class ValidationTests(unittest.TestCase):
         self.assertEqual(mod.validate(completed()), [])
 
     def test_no_production(self):
-        self.assertBlocked(lambda d: d.update(environment='production'), 'Production prohibited')
+        self.assertBlocked(lambda d: d.update(environment='production'), 'DEV, TST and Production prohibited')
 
     def test_no_fixture_tenant(self):
         self.assertBlocked(lambda d: d.update(training_tenant_code='TRAIN354C_A'), 'fixture or Production')
@@ -142,7 +142,7 @@ class ValidationTests(unittest.TestCase):
         self.assertIn('"TENANT_VIEWER"', roles)
         self.assertIn('EXPECTED_DIGEST', fixtures)
         onboard = (DOCS / 'byte-35-6s1-onboarding-operator-guide.md').read_text()
-        for word in ('TENANT_VIEWER', 'TRAIN354C_A', 'TRAIN354C_B', '1Password', 'BLOCKED', 'first-login', 'Person', 'Membership', 'support lease', 'development'):
+        for word in ('TENANT_VIEWER', 'TRAIN354C_A', 'TRAIN354C_B', '1Password', 'BLOCKED', 'first-login', 'Person', 'Membership', 'support lease', 'training'):
             self.assertIn(word, onboard)
 
 

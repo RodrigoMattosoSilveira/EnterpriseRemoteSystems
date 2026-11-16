@@ -255,3 +255,32 @@ func TestLoadConfigRejectsProductionAuthorizationBootstrap(t *testing.T) {
 		t.Fatal("Production authorization bootstrap must be refused")
 	}
 }
+
+func TestTrainingEnvironmentIsPersistentAndLockedDown(t *testing.T) {
+	t.Setenv("APP_ENV", "training")
+	t.Setenv("JWT_SECRET", "training-only-secret")
+	t.Setenv("AUTHZ_BOOTSTRAP_ENABLED", "false")
+	t.Setenv("APP_AUTO_MIGRATE", "false")
+	t.Setenv("AUTHZ_DISABLE_ROUTE_AUTHORIZATION", "false")
+	t.Setenv("AUTHZ_ACTOR_HEADER_MODE", "disabled")
+	t.Setenv("AUTH_LOCAL_SESSION_HEADER_ENABLED", "false")
+	cfg, err := LoadConfig()
+	if err != nil {
+		t.Fatalf("training config should load: %v", err)
+	}
+	if cfg.Env != "training" || !cfg.AuthSessionCookieSecure || cfg.AuthzActorHeaderMode != "disabled" || cfg.AuthzBootstrapEnabled || cfg.AutoMigrate {
+		t.Fatalf("unsafe training defaults: %#v", cfg)
+	}
+	for _, key := range []string{"AUTHZ_BOOTSTRAP_ENABLED", "APP_AUTO_MIGRATE", "AUTHZ_DISABLE_ROUTE_AUTHORIZATION", "AUTH_LOCAL_SESSION_HEADER_ENABLED"} {
+		t.Run(key, func(t *testing.T) {
+			t.Setenv(key, "true")
+			if _, err := LoadConfig(); err == nil {
+				t.Fatalf("training accepted %s=true", key)
+			}
+		})
+	}
+	t.Setenv("AUTHZ_ACTOR_HEADER_MODE", "test")
+	if _, err := LoadConfig(); err == nil {
+		t.Fatal("training accepted test actor header")
+	}
+}
