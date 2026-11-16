@@ -62,8 +62,8 @@ func verifyDatabaseFile(path string) error {
 func verifyPreconditions(env, desired, confirm, approval, operator, backup string, offline bool) error {
 	actual := strings.ToLower(strings.TrimSpace(env))
 	desired = strings.ToLower(strings.TrimSpace(desired))
-	if desired != "local" && desired != "test" && desired != "production" {
-		return errors.New("--environment must be local, test, or production")
+	if desired != "local" && desired != "test" && desired != "training" && desired != "production" {
+		return errors.New("--environment must be local, test, training, or production")
 	}
 	if actual != desired {
 		return errors.New("APP_ENV must exactly match --environment (no aliases)")
@@ -87,7 +87,7 @@ func run(args []string, stdin io.Reader, stdout io.Writer) error {
 	flags := flag.NewFlagSet("enroll-human-admins", flag.ContinueOnError)
 	flags.SetOutput(io.Discard)
 	path := flags.String("db", "", "existing migrated SQLite database")
-	environment := flags.String("environment", "", "local | test | production")
+	environment := flags.String("environment", "", "local | test | training | production")
 	approval := flags.String("approval-reference", "", "approved change reference (no secrets)")
 	operator := flags.String("operator-reference", "", "enrolling operator reference (no secrets)")
 	backup := flags.String("backup-evidence-reference", "", "verified off-host backup evidence identifier")

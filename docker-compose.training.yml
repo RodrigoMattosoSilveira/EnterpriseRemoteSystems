@@ -1,0 +1,14 @@
+# Applied ONLY with ENV=training; limits are additive to the shared application Compose file.
+services:
+  backend:
+    mem_limit: 768m
+    cpus: 1.0
+    pids_limit: 256
+  frontend:
+    mem_limit: 384m
+    cpus: 0.75
+    pids_limit: 128
+  caddy:
+    mem_limit: 128m
+    cpus: 0.25
+    pids_limit: 128

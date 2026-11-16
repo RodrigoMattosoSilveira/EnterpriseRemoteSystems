@@ -16,6 +16,8 @@ func TestEnrollmentPreconditions(t *testing.T) {
 		{"production mismatch", "test", "production", productionConfirmation, true, false},
 		{"production not offline", "production", "production", productionConfirmation, false, false},
 		{"test approved", "test", "test", "", true, true},
+		{"training approved", "training", "training", "", true, true},
+		{"training rejects prod confirmation", "training", "training", productionConfirmation, true, false},
 		{"test refuses prod confirmation", "test", "test", productionConfirmation, true, false},
 		{"missing environment", "", "local", "", true, false},
 	} {

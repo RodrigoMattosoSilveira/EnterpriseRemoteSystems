@@ -158,4 +158,6 @@ frontend/test-results/.last-run.json
 backend/data/app.db?_foreign_keys=on&_journal_mode=WAL&_busy_timeout=5000
 backend/data/app.db?_foreign_keys=on&_journal_mode=WAL&_busy_timeout=5000
 backend/imports/*.csv
-!backend/imports/people.example.csv
+!backend/imports/people.example.csv# Persistent Training environment credentials and deployment evidence.
+.env.training
+.last-training-deployment-revision
