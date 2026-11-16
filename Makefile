@@ -117,6 +117,7 @@ help:
 	@echo "  make manual-testdata-local-seed"
 	@echo "  make manual-testdata-local-reset-with-work-periods"
 	@echo "  make byte354c-training-check"
+	@echo "  make byte356s1-onboarding-check (offline support onboarding contract)"
 	@echo "  make byte354c-training-provision-local (add to existing LOCAL app.db)"
 	@echo "  make byte354c-training-verify-local (check original LOCAL fixtures)"
 	@echo "  make brazilian-demo-local-reset [BRAZILIAN_DEMO_AS_OF=YYYY-MM-DD]"
@@ -631,6 +632,7 @@ promotion-readiness-check:
 	$(MAKE) production-environment-guardrails-check
 	$(MAKE) owner-unavailable-recovery-readiness-check
 	$(MAKE) byte356-operations-check
+	$(MAKE) byte356s1-onboarding-check
 	$(MAKE) local-fixtures-check
 	$(MAKE) production-bootstrap-reconciliation-check
 	$(MAKE) production-bootstrap-full-schema-check
@@ -650,6 +652,7 @@ local-check:
 	$(MAKE) byte354a-training-check
 	$(MAKE) byte354b-terminology-check
 	$(MAKE) byte354c-training-check
+	$(MAKE) byte356s1-onboarding-check
 	$(MAKE) byte355-initialization-check
 	$(MAKE) bite30l4-coverage-manifest-check
 	$(MAKE) bite32-release-coverage-check
@@ -666,6 +669,7 @@ local-check:
 	$(MAKE) recovery-rehearsal-operational-runbook-check
 	$(MAKE) owner-unavailable-recovery-readiness-check
 	$(MAKE) byte356-operations-check
+	$(MAKE) byte356s1-onboarding-check
 	$(MAKE) local-fixtures-check
 	$(MAKE) production-bootstrap-reconciliation-check
 	$(MAKE) production-bootstrap-full-schema-check
@@ -1956,6 +1960,10 @@ byte354b-terminology-check:
 # Git's common directory belongs to the primary worktree even when make runs
 # inside a linked worktree. Both LOCAL targets therefore select the SAME app.db.
 BYTE354C_LOCAL_DB ?= $(abspath $(shell git rev-parse --git-common-dir)/../backend/data/app.db)
+.PHONY: byte356s1-onboarding-check
+byte356s1-onboarding-check:
+	python3 -B scripts/test-byte356s1-onboarding.py
+
 .PHONY: byte354c-training-check byte354c-training-provision-local byte354c-training-verify-local
 byte354c-training-check:
 	python3 -B scripts/test-byte354c-training-db.py
