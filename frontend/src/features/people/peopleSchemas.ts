@@ -1,4 +1,5 @@
 import type { UpdatePersonInput } from "../../types/people";
+import type { TranslationKey } from "../../i18n";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const RG_RE = /^[A-Za-z0-9.\-]{5,20}$/;
@@ -11,29 +12,29 @@ export function isValidUpdatePersonInput(input: UpdatePersonInput): boolean {
 
 // Returns the labels of every field that blocks saving, so the form can tell the
 // user exactly what to correct. Mirrors the backend validation rules.
-export function getUpdatePersonIssues(input: UpdatePersonInput): string[] {
-  const issues: string[] = [];
-  if (isBlank(input.firstName)) issues.push("First name");
-  if (isBlank(input.lastName)) issues.push("Last name");
-  if (isBlank(input.nickname)) issues.push("Nickname");
-  if (isBlank(input.cpf)) issues.push("CPF");
-  if (isBlank(input.rg)) issues.push("RG");
-  if (isBlank(input.cellular)) issues.push("Cellular");
-  if (isBlank(input.email)) issues.push("Email");
-  if (isBlank(input.statusId)) issues.push("Status");
+export function getUpdatePersonIssues(input: UpdatePersonInput): TranslationKey[] {
+  const issues: TranslationKey[] = [];
+  if (isBlank(input.firstName)) issues.push("people.form.issue.firstName");
+  if (isBlank(input.lastName)) issues.push("people.form.issue.lastName");
+  if (isBlank(input.nickname)) issues.push("people.form.issue.nickname");
+  if (isBlank(input.cpf)) issues.push("people.form.issue.cpf");
+  if (isBlank(input.rg)) issues.push("people.form.issue.rg");
+  if (isBlank(input.cellular)) issues.push("people.form.issue.cellular");
+  if (isBlank(input.email)) issues.push("people.form.issue.email");
+  if (isBlank(input.statusId)) issues.push("people.form.issue.status");
 
-  if (!isBlank(input.cpf) && !isValidCPF(input.cpf)) issues.push("CPF (invalid number)");
-  if (!isBlank(input.rg) && !RG_RE.test(input.rg.trim())) issues.push("RG (5-20 letters/digits)");
-  if (!isBlank(input.cellular) && !isValidBrazilianCellular(input.cellular)) issues.push("Cellular (format)");
-  if (!isBlank(input.email) && !EMAIL_RE.test(input.email.trim())) issues.push("Email (format)");
-  if (input.cep && !isValidCEP(input.cep)) issues.push("CEP (format)");
+  if (!isBlank(input.cpf) && !isValidCPF(input.cpf)) issues.push("people.form.issue.cpfInvalid");
+  if (!isBlank(input.rg) && !RG_RE.test(input.rg.trim())) issues.push("people.form.issue.rgFormat");
+  if (!isBlank(input.cellular) && !isValidBrazilianCellular(input.cellular)) issues.push("people.form.issue.cellularFormat");
+  if (!isBlank(input.email) && !EMAIL_RE.test(input.email.trim())) issues.push("people.form.issue.emailFormat");
+  if (input.cep && !isValidCEP(input.cep)) issues.push("people.form.issue.cepFormat");
   if (input.emergencyCellular && !isValidBrazilianCellular(input.emergencyCellular)) {
-    issues.push("Emergency cellular (format)");
+    issues.push("people.form.issue.emergencyCellularFormat");
   }
   if (input.emergencyEmail && !EMAIL_RE.test(input.emergencyEmail.trim())) {
-    issues.push("Emergency email (format)");
+    issues.push("people.form.issue.emergencyEmailFormat");
   }
-  if (input.country && input.country.trim() !== "Brasil") issues.push("Country");
+  if (input.country && input.country.trim() !== "Brasil") issues.push("people.form.issue.country");
   return issues;
 }
 

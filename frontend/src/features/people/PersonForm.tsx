@@ -359,7 +359,7 @@ export function PersonForm({
       <div className="fixed inset-x-0 bottom-0 z-20 border-t bg-white p-4 shadow-2xl md:sticky md:rounded-2xl md:border">
         {!isCreate && currentFingerprint !== savedFingerprint && saveBlockers.length > 0 && (
           <p className="mb-2 text-sm text-red-700">
-            Fix before saving: {saveBlockers.join(", ")}
+            {t("people.form.fixBeforeSaving")}: {saveBlockers.map((key) => t(key)).join(", ")}
           </p>
         )}
         <button
