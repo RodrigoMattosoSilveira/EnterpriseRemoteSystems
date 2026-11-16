@@ -42,6 +42,8 @@ Before any Production operation, the authorized reviewer must verify each item a
 
 **Legacy correction:** The earlier LastPass `ERS-Recovery` locator scheme has been removed from the canonical manifest, owner-unavailable preflight and active recovery runbook. Historical Bite 33 references may describe its former state but are **not** valid current credential locations. Real vault migration/access is a distinct authorized operational action and remains **BLOCKED** until observed; merely rewriting source locators does not migrate a secret.
 
+For operator-facing definitions, exact source fields, Test backup ordering and permitted Test environment commands, read [Bite 35.5–35.7 operator field guide](byte-35-operator-field-guide.md).
+
 ## 4. One-human LOCAL / CI verification (safe now)
 
 **Identity:** Developer/tester; **context:** LOCAL repository, no signed-in ERS session and no Production credentials. Run in the one existing work directory:
