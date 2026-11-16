@@ -113,6 +113,9 @@ jobs:
       - name: Verify Byte 35.4C additive training records and production guardrails
         run: make byte354c-training-check
 
+      - name: Verify Byte 35.6S.1 Customer Support onboarding and no-Production-access contracts
+        run: make byte356s1-onboarding-check
+
       - name: Verify Byte 35.5 isolated Production initialization and signed opening-balance import
         run: make byte355-initialization-check
 
