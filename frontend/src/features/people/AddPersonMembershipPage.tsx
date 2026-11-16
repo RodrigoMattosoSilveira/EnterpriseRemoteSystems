@@ -1,3 +1,4 @@
+import { PermissionGatedLink } from "../../components/layout/PermissionGatedLink";
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 
@@ -46,9 +47,9 @@ export function AddPersonMembershipPage() {
     <main className="min-h-screen bg-gray-50">
       <header className="sticky top-0 z-10 border-b bg-white/95 px-4 py-4 backdrop-blur">
         <div className="mx-auto max-w-4xl">
-          <Link className="text-sm text-gray-500 underline" to="/people">
+          <PermissionGatedLink className="text-sm text-gray-500 underline" to="/people">
             {t("people.back")}
-          </Link>
+          </PermissionGatedLink>
           <PageTitle className="mt-3">{t("people.membership.addExistingTitle")}</PageTitle>
           <p className="mt-1 text-sm text-gray-500">
             {t("people.membership.addExistingHelp")}

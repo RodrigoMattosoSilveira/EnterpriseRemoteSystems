@@ -6,37 +6,35 @@ const BRAZILIAN_CELLULAR_RE = /^\+?55?[1-9]{2}9[0-9]{8}$|^[1-9]{2}9[0-9]{8}$/;
 const CEP_SEPARATOR_RE = /[.\-‐‑‒–—−\s]/g;
 
 export function isValidUpdatePersonInput(input: UpdatePersonInput): boolean {
-  if (
-    isBlank(input.firstName) ||
-    isBlank(input.lastName) ||
-    isBlank(input.nickname) ||
-    isBlank(input.cpf) ||
-    isBlank(input.rg) ||
-    isBlank(input.cellular) ||
-    isBlank(input.email) ||
-    isBlank(input.statusId)
-  ) {
-    return false;
-  }
+  return getUpdatePersonIssues(input).length === 0;
+}
 
-  if (!isValidCPF(input.cpf)) return false;
-  if (!RG_RE.test(input.rg.trim())) return false;
-  if (!isValidBrazilianCellular(input.cellular)) return false;
-  if (!EMAIL_RE.test(input.email.trim())) return false;
+// Returns the labels of every field that blocks saving, so the form can tell the
+// user exactly what to correct. Mirrors the backend validation rules.
+export function getUpdatePersonIssues(input: UpdatePersonInput): string[] {
+  const issues: string[] = [];
+  if (isBlank(input.firstName)) issues.push("First name");
+  if (isBlank(input.lastName)) issues.push("Last name");
+  if (isBlank(input.nickname)) issues.push("Nickname");
+  if (isBlank(input.cpf)) issues.push("CPF");
+  if (isBlank(input.rg)) issues.push("RG");
+  if (isBlank(input.cellular)) issues.push("Cellular");
+  if (isBlank(input.email)) issues.push("Email");
+  if (isBlank(input.statusId)) issues.push("Status");
 
-  if (input.cep && !isValidCEP(input.cep)) return false;
-  if (
-    input.emergencyCellular &&
-    !isValidBrazilianCellular(input.emergencyCellular)
-  ) {
-    return false;
+  if (!isBlank(input.cpf) && !isValidCPF(input.cpf)) issues.push("CPF (invalid number)");
+  if (!isBlank(input.rg) && !RG_RE.test(input.rg.trim())) issues.push("RG (5-20 letters/digits)");
+  if (!isBlank(input.cellular) && !isValidBrazilianCellular(input.cellular)) issues.push("Cellular (format)");
+  if (!isBlank(input.email) && !EMAIL_RE.test(input.email.trim())) issues.push("Email (format)");
+  if (input.cep && !isValidCEP(input.cep)) issues.push("CEP (format)");
+  if (input.emergencyCellular && !isValidBrazilianCellular(input.emergencyCellular)) {
+    issues.push("Emergency cellular (format)");
   }
   if (input.emergencyEmail && !EMAIL_RE.test(input.emergencyEmail.trim())) {
-    return false;
+    issues.push("Emergency email (format)");
   }
-  if (input.country && input.country.trim() !== "Brasil") return false;
-
-  return true;
+  if (input.country && input.country.trim() !== "Brasil") issues.push("Country");
+  return issues;
 }
 
 export function updatePersonFingerprint(input: UpdatePersonInput): string {

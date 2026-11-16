@@ -1219,7 +1219,6 @@ func intrinsicSelfServicePermissions(hasCollaboratorHistory bool, activeCollabor
 	permissions := map[Permission]struct{}{
 		PermissionAuthzSelfRead:     {},
 		PermissionTenantsRead:       {},
-		PermissionReferenceDataRead: {},
 		PermissionPeopleSelfRead:    {},
 		PermissionPeopleSelfUpdate:  {},
 	}

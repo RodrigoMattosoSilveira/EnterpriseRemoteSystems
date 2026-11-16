@@ -65,7 +65,13 @@ export function PersonDetailPage() {
     ? selfCollaboratorJourneysQuery
     : membershipCollaboratorJourneysQuery;
   const mutation = useUpdatePerson(id);
-  const statusesQuery = useReferenceDataByType("person_status");
+  // Person status options are Tenant reference data. Self-service profiles hold
+  // no reference_data.read, so only load them when the actor can read them;
+  // otherwise the 403 triggers the global forbidden redirect.
+  const canReadReferenceData =
+    actor.scope === "TENANT" &&
+    (actor.permissions.includes("*") || actor.permissions.includes("reference_data.read") || actor.permissions.includes("reference_data.manage"));
+  const statusesQuery = useReferenceDataByType("person_status", canReadReferenceData);
   useEffect(() => {
     if (
       !personQuery.data ||

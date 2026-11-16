@@ -6,6 +6,7 @@ import type {
   UpdatePersonInput,
 } from "../../types/people";
 import {
+  getUpdatePersonIssues,
   isValidUpdatePersonInput,
   updatePersonFingerprint,
 } from "./peopleSchemas";
@@ -51,9 +52,10 @@ export function PersonForm({
   );
 
   const currentFingerprint = updatePersonFingerprint(form);
+  const saveBlockers = isCreate ? [] : getUpdatePersonIssues(form);
   const hasValidChange =
     isCreate ||
-    (currentFingerprint !== savedFingerprint && isValidUpdatePersonInput(form));
+    (currentFingerprint !== savedFingerprint && saveBlockers.length === 0);
 
   const missingSections = initial?.missingSections ?? [];
 
@@ -355,6 +357,11 @@ export function PersonForm({
       )}
 
       <div className="fixed inset-x-0 bottom-0 z-20 border-t bg-white p-4 shadow-2xl md:sticky md:rounded-2xl md:border">
+        {!isCreate && currentFingerprint !== savedFingerprint && saveBlockers.length > 0 && (
+          <p className="mb-2 text-sm text-red-700">
+            Fix before saving: {saveBlockers.join(", ")}
+          </p>
+        )}
         <button
           type="submit"
           disabled={submitting || (!isCreate && !hasValidChange)}
