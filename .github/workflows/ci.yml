@@ -80,6 +80,9 @@ jobs:
       - name: Verify Bite 32.6 release-hardening contract
         run: make bite326-release-hardening-check
 
+      - name: Verify TRN deployment isolation and release gating (offline)
+        run: make trn-deployment-check
+
       - name: Verify Bite 33.1 Production environment guardrails
         run: make production-environment-guardrails-check
 
@@ -112,6 +115,9 @@ jobs:
 
       - name: Verify Byte 35.4C additive training records and production guardrails
         run: make byte354c-training-check
+
+      - name: Verify Byte 35.6S.1 Customer Support onboarding and no-Production-access contracts
+        run: make byte356s1-onboarding-check
 
       - name: Verify Byte 35.5 isolated Production initialization and signed opening-balance import
         run: make byte355-initialization-check

@@ -29,6 +29,15 @@ ifeq ($(ENV),test)
   CONTAINER_PREFIX := ers-tst
 endif
 
+ifeq ($(ENV),training)
+  ENV_DIR := $(SERVER_ROOT)/training
+  ENV_FILE := .env.training
+  COMPOSE_PROJECT := ers-trn
+  BRANCH := test
+  DOMAIN := trn.enterpriseremotesystems.com
+  CONTAINER_PREFIX := ers-trn
+endif
+
 ifeq ($(ENV),production)
   ENV_DIR := $(SERVER_ROOT)/production
   ENV_FILE := .env.production
@@ -44,7 +53,10 @@ SERVER_AUTHZ_BOOTSTRAP_ENABLED ?= false
 # Safety-sensitive deployed runtime values must come from the selected env file,
 # not from an operator's ambient shell. AUTHZ_BOOTSTRAP_ENABLED remains the one
 # deliberate command-line override used for explicit recovery workflows.
-SERVER_COMPOSE = env -u APP_ENV -u APP_AUTO_MIGRATE -u AUTHZ_ACTOR_HEADER_MODE -u DEV_SEED_ADMIN AUTHZ_BOOTSTRAP_ENABLED=$(SERVER_AUTHZ_BOOTSTRAP_ENABLED) docker compose -p $(COMPOSE_PROJECT) --env-file $(ENV_FILE) -f docker-compose.server.yml
+ifeq ($(ENV),training)
+  SERVER_COMPOSE_OVERRIDE := -f docker-compose.training.yml
+endif
+SERVER_COMPOSE = env -u APP_ENV -u APP_AUTO_MIGRATE -u AUTHZ_ACTOR_HEADER_MODE -u DEV_SEED_ADMIN AUTHZ_BOOTSTRAP_ENABLED=$(SERVER_AUTHZ_BOOTSTRAP_ENABLED) docker compose -p $(COMPOSE_PROJECT) --env-file $(ENV_FILE) -f docker-compose.server.yml $(SERVER_COMPOSE_OVERRIDE)
 SERVER_COMPOSE_BUILD = BUILDX_NO_DEFAULT_ATTESTATIONS=1 $(SERVER_COMPOSE) --progress plain
 SERVER_SERVICE_CONTAINERS = $(CONTAINER_PREFIX)-backend $(CONTAINER_PREFIX)-frontend $(CONTAINER_PREFIX)-caddy
 
@@ -117,6 +129,7 @@ help:
 	@echo "  make manual-testdata-local-seed"
 	@echo "  make manual-testdata-local-reset-with-work-periods"
 	@echo "  make byte354c-training-check"
+	@echo "  make byte356s1-onboarding-check (offline support onboarding contract)"
 	@echo "  make byte354c-training-provision-local (add to existing LOCAL app.db)"
 	@echo "  make byte354c-training-verify-local (check original LOCAL fixtures)"
 	@echo "  make brazilian-demo-local-reset [BRAZILIAN_DEMO_AS_OF=YYYY-MM-DD]"
@@ -161,7 +174,7 @@ help:
 	@echo "  make server-build ENV=development|test|production"
 	@echo "  make server-up ENV=development|test|production"
 	@echo "  make server-down ENV=development|test|production"
-	@echo "  make server-down-volumes ENV=development|test (Production is refused)"
+	@echo "  make server-down-volumes ENV=development|test (Production and Training are refused)"
 	@echo "  make server-replace-development-db ENV=development"
 	@echo "  make server-test-rehearsal-capture-baseline"
 	@echo "  make server-test-rehearsal-ensure-baseline"
@@ -631,6 +644,8 @@ promotion-readiness-check:
 	$(MAKE) production-environment-guardrails-check
 	$(MAKE) owner-unavailable-recovery-readiness-check
 	$(MAKE) byte356-operations-check
+	$(MAKE) byte356s1-onboarding-check
+	$(MAKE) trn-deployment-check
 	$(MAKE) local-fixtures-check
 	$(MAKE) production-bootstrap-reconciliation-check
 	$(MAKE) production-bootstrap-full-schema-check
@@ -650,6 +665,7 @@ local-check:
 	$(MAKE) byte354a-training-check
 	$(MAKE) byte354b-terminology-check
 	$(MAKE) byte354c-training-check
+	$(MAKE) byte356s1-onboarding-check
 	$(MAKE) byte355-initialization-check
 	$(MAKE) bite30l4-coverage-manifest-check
 	$(MAKE) bite32-release-coverage-check
@@ -666,6 +682,7 @@ local-check:
 	$(MAKE) recovery-rehearsal-operational-runbook-check
 	$(MAKE) owner-unavailable-recovery-readiness-check
 	$(MAKE) byte356-operations-check
+	$(MAKE) byte356s1-onboarding-check
 	$(MAKE) local-fixtures-check
 	$(MAKE) production-bootstrap-reconciliation-check
 	$(MAKE) production-bootstrap-full-schema-check
@@ -677,6 +694,7 @@ local-check:
 	$(MAKE) server-public-smoke-script-check
 	$(MAKE) local-sqlite-reset-check
 	$(MAKE) server-authz-bootstrap-config-check
+	$(MAKE) trn-deployment-check
 	$(MAKE) legacy-identity-dependency-check
 	$(MAKE) brazilian-demo-fixture-check
 	$(MAKE) brazilian-demo-presentation-check
@@ -729,7 +747,7 @@ local-docker-check: local-docker-check-image
 		-e GOMODCACHE=/tmp/gomod \
 		-e NPM_CONFIG_CACHE=/tmp/npm-cache \
 		$(LOCAL_DOCKER_CHECK_IMAGE) \
-		bash -lc 'set -euo pipefail; make bite3368-core-check; make bite30l4-coverage-manifest-check; make bite32-release-coverage-check; make bite326-release-hardening-check; make deployment-migration-head-check; make post-bite30-backlog-reconciliation-check; make deployed-playwright-evidence-check; make production-release-evidence-check; make production-environment-guardrails-check; make backup-creation-retention-verification-check; make off-host-backup-protection-check; make restore-tooling-recovery-verification-check; make migration-deployment-recovery-gate-check; make recovery-rehearsal-operational-runbook-check; make owner-unavailable-recovery-readiness-check; make local-hot-reload-check; make local-auth-cookie-config-check; make server-authz-bootstrap-config-check; make legacy-identity-dependency-check; make brazilian-demo-presentation-check; make migration-rehearsal-check; cd backend && go clean -testcache && go test ./...; cd ../frontend && npm ci && npm run i18n:check && npm run i18n:test && npm run test:run && npx playwright install chromium && npx playwright test && npm run build'
+		bash -lc 'set -euo pipefail; make bite3368-core-check; make bite30l4-coverage-manifest-check; make bite32-release-coverage-check; make bite326-release-hardening-check; make deployment-migration-head-check; make post-bite30-backlog-reconciliation-check; make deployed-playwright-evidence-check; make production-release-evidence-check; make production-environment-guardrails-check; make backup-creation-retention-verification-check; make off-host-backup-protection-check; make restore-tooling-recovery-verification-check; make migration-deployment-recovery-gate-check; make recovery-rehearsal-operational-runbook-check; make owner-unavailable-recovery-readiness-check; make local-hot-reload-check; make local-auth-cookie-config-check; make server-authz-bootstrap-config-check; make trn-deployment-check; make legacy-identity-dependency-check; make brazilian-demo-presentation-check; make migration-rehearsal-check; cd backend && go clean -testcache && go test ./...; cd ../frontend && npm ci && npm run i18n:check && npm run i18n:test && npm run test:run && npx playwright install chromium && npx playwright test && npm run build'
 
 # ==============================================================================
 # Generic server environment targets
@@ -742,6 +760,7 @@ server-init-env:
 
 .PHONY: server-pull
 server-pull:
+	@if [[ "$(ENV)" == training ]]; then echo 'BLOCKED: TRN requires a pinned, TST-approved SHA; no branch pull.' >&2; exit 2; fi
 	cd $(ENV_DIR) && git checkout $(BRANCH) && git pull
 
 .PHONY: server-environment-identity-check
@@ -770,8 +789,8 @@ server-remove-stale-containers:
 		if docker ps -a --format '{{.Names}}' | grep -qx "$$container"; then \
 			project="$$(docker inspect "$$container" --format '{{ index .Config.Labels "com.docker.compose.project" }}' 2>/dev/null || true)"; \
 			if [[ "$$project" != "$(COMPOSE_PROJECT)" ]]; then \
-				echo "Removing stale container $$container from compose project '$$project' before starting $(COMPOSE_PROJECT)"; \
-				docker rm -f "$$container"; \
+				echo "BLOCKED: foreign container $$container belongs to project '$$project'; refusing removal" >&2; \
+				exit 2; \
 			fi; \
 		fi; \
 	done
@@ -1956,6 +1975,10 @@ byte354b-terminology-check:
 # Git's common directory belongs to the primary worktree even when make runs
 # inside a linked worktree. Both LOCAL targets therefore select the SAME app.db.
 BYTE354C_LOCAL_DB ?= $(abspath $(shell git rev-parse --git-common-dir)/../backend/data/app.db)
+.PHONY: byte356s1-onboarding-check
+byte356s1-onboarding-check:
+	python3 -B scripts/test-byte356s1-onboarding.py
+
 .PHONY: byte354c-training-check byte354c-training-provision-local byte354c-training-verify-local
 byte354c-training-check:
 	python3 -B scripts/test-byte354c-training-db.py
@@ -1972,3 +1995,26 @@ byte354c-training-verify-local:
 .PHONY: byte355-initialization-check
 byte355-initialization-check:
 	python3 -B scripts/test-byte355-production-initialization.py
+
+# Byte 35.6S.1A — isolated, persistent Training (TRN) environment.
+.PHONY: trn-deployment-check server-trn-init-env server-trn-build server-trn-up server-trn-smoke server-trn-backend-health server-trn-env-caddy-health server-trn-backup server-trn-ps server-trn-pull
+trn-deployment-check:
+	python3 -B scripts/test-trn-environment.py
+server-trn-init-env:
+	$(MAKE) server-init-env ENV=training
+server-trn-build:
+	$(MAKE) server-build ENV=training
+server-trn-up:
+	$(MAKE) server-up ENV=training
+server-trn-smoke:
+	$(MAKE) server-smoke ENV=training
+server-trn-backend-health:
+	$(MAKE) server-backend-health ENV=training
+server-trn-env-caddy-health:
+	$(MAKE) server-env-caddy-health ENV=training
+server-trn-backup:
+	$(MAKE) server-backup ENV=training
+server-trn-ps:
+	$(MAKE) server-ps ENV=training
+server-trn-pull:
+	@echo 'BLOCKED: use an approved, pinned Test commit for TRN; do not pull a mutable branch.' >&2; exit 2

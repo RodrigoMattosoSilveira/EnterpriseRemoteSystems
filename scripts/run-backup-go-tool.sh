@@ -54,6 +54,12 @@ if [[ -n "${ERS_BACKUP_ENV_DIR:-}" ]]; then
     fi
   done
 
+  extra_compose=()
+  if [[ "$ERS_BACKUP_COMPOSE_PROJECT" == "ers-trn" ]]; then
+    [[ "$ERS_BACKUP_ENV_FILE" == ".env.training" ]] || { echo 'TRN backup project requires .env.training' >&2; exit 2; }
+    [[ -f "$ERS_BACKUP_ENV_DIR/docker-compose.training.yml" ]] || { echo 'TRN limits overlay missing' >&2; exit 2; }
+    extra_compose=(-f docker-compose.training.yml)
+  fi
   cd "$ERS_BACKUP_ENV_DIR"
   exec env \
     -u APP_ENV \
@@ -64,7 +70,7 @@ if [[ -n "${ERS_BACKUP_ENV_DIR:-}" ]]; then
     docker compose \
       -p "$ERS_BACKUP_COMPOSE_PROJECT" \
       --env-file "$ERS_BACKUP_ENV_FILE" \
-      -f docker-compose.server.yml \
+      -f docker-compose.server.yml "${extra_compose[@]}" \
       run --rm --no-deps \
       "${mount_args[@]}" \
       --entrypoint "/app/$tool" \

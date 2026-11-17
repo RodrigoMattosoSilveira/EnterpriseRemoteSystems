@@ -14,6 +14,7 @@ services:
       - ers-dev_default
       - ers-tst_default
       - ers-prd_default
+      - ers-trn_default
 
 volumes:
   edge-caddy-data:
@@ -25,4 +26,6 @@ networks:
   ers-tst_default:
     external: true
   ers-prd_default:
+    external: true
+  ers-trn_default:
     external: true
