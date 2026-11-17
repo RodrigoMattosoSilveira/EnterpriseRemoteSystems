@@ -113,8 +113,10 @@ func normalizeEnvironment(raw string) (string, error) {
 		return "test", nil
 	case "production", "prod":
 		return "production", nil
+	case "training":
+		return "training", nil
 	default:
-		return "", fmt.Errorf("environment must explicitly identify development, test, or production; got %q", raw)
+		return "", fmt.Errorf("environment must explicitly identify development, test, training, or production; got %q", raw)
 	}
 }
 
@@ -285,7 +287,7 @@ func loadS3Config(config Config, values map[string]string, requireRuntimeFiles b
 	if err != nil || parsed.Host == "" || parsed.User != nil || parsed.RawQuery != "" || parsed.Fragment != "" {
 		return Config{}, errors.New("SERVER_OFFHOST_BACKUP_S3_ENDPOINT must be an absolute S3 endpoint URL without credentials, query, or fragment")
 	}
-	if parsed.Scheme != "https" && !(config.Environment != "production" && parsed.Scheme == "http") {
+	if parsed.Scheme != "https" && !(config.Environment != "production" && config.Environment != "training" && parsed.Scheme == "http") {
 		return Config{}, errors.New("SERVER_OFFHOST_BACKUP_S3_ENDPOINT must use HTTPS in Production")
 	}
 	if region == "" {
@@ -303,7 +305,7 @@ func loadS3Config(config Config, values map[string]string, requireRuntimeFiles b
 	if profile == "" {
 		return Config{}, errors.New("AWS_PROFILE is required for S3 off-host backup")
 	}
-	if config.Environment == "production" {
+	if config.Environment == "production" || config.Environment == "training" {
 		allowed := map[string]bool{"fsn1": true, "nbg1": true, "hel1": true}
 		if !allowed[region] {
 			return Config{}, errors.New("Production SERVER_OFFHOST_BACKUP_S3_REGION must be fsn1, nbg1, or hel1")

@@ -1,4 +1,4 @@
-"""Shared environment safety checks for ERS reset/demo/test data tools."""
+"""Shared safety checks for ERS reset/demo/test tools; protect Production and Training."""
 from __future__ import annotations
 
 import os
@@ -11,14 +11,14 @@ _ALLOWED_NON_PRODUCTION = {
     "testing": "test",
     "ci": "test",
 }
-_PRODUCTION = {"production", "prod"}
+_PROTECTED_ENVIRONMENTS = {"production", "prod", "training"}
 
 
 def require_non_production_data_mutation(operation: str, environment: str | None = None) -> str:
     raw = (environment if environment is not None else os.environ.get("APP_ENV", "")).strip().lower()
-    if raw in _PRODUCTION:
+    if raw in _PROTECTED_ENVIRONMENTS:
         raise SystemExit(
-            f"Refusing {operation}: Production data must not be modified by reset/demo/test tooling."
+            f"Refusing {operation}: Production or Training data must not be modified by reset/demo/test tooling."
         )
     normalized = _ALLOWED_NON_PRODUCTION.get(raw)
     if normalized is None:
