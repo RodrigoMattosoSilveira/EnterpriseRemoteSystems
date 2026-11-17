@@ -102,8 +102,10 @@ func NormalizeEnvironment(value string) (string, error) {
 		return "test", nil
 	case "prod", "production":
 		return "production", nil
+	case "training":
+		return "training", nil
 	default:
-		return "", errors.New("backup environment must explicitly identify development, test, or production")
+		return "", errors.New("backup environment must explicitly identify development, test, training, or production")
 	}
 }
 

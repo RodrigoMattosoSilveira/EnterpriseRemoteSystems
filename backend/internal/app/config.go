@@ -72,13 +72,13 @@ func LoadConfig() (Config, error) {
 	if cfg.JWTSecret == "" {
 		return Config{}, fmt.Errorf("JWT_SECRET is required")
 	}
-	if cfg.Env == "production" && cfg.AuthzBootstrapEnabled {
+	if (cfg.Env == "production" || cfg.Env == "training") && cfg.AuthzBootstrapEnabled {
 		return Config{}, fmt.Errorf("AUTHZ_BOOTSTRAP_ENABLED must be false in production")
 	}
-	if cfg.Env == "production" && cfg.AutoMigrate {
+	if (cfg.Env == "production" || cfg.Env == "training") && cfg.AutoMigrate {
 		return Config{}, fmt.Errorf("APP_AUTO_MIGRATE must be false in production")
 	}
-	if cfg.Env == "production" && cfg.DisableRouteAuthorization {
+	if (cfg.Env == "production" || cfg.Env == "training") && cfg.DisableRouteAuthorization {
 		return Config{}, fmt.Errorf("AUTHZ_DISABLE_ROUTE_AUTHORIZATION must be false in production")
 	}
 	if cfg.AuthLocalSessionHeaderEnabled && !isLocalDevelopmentEnvironment(cfg.Env) {
@@ -100,8 +100,10 @@ func normalizeAppEnvironment(env string) (string, error) {
 		return "test", nil
 	case "production", "prod":
 		return "production", nil
+	case "training":
+		return "training", nil
 	default:
-		return "", fmt.Errorf("APP_ENV must be one of local/development, test/ci, or production; got %q", env)
+		return "", fmt.Errorf("APP_ENV must be one of local/development, test/ci, training, or production; got %q", env)
 	}
 }
 
@@ -183,7 +185,7 @@ func getEnvInt(key string, fallback int) int {
 
 func authenticationCookieSecureDefault(env string) bool {
 	switch strings.ToLower(strings.TrimSpace(env)) {
-	case "production", "prod", "test", "testing":
+	case "production", "prod", "test", "testing", "training":
 		return true
 	default:
 		return false

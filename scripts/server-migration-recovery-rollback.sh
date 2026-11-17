@@ -22,7 +22,9 @@ gate_dir="$(read_state_value gate_dir)"
 recovery_backup="$(read_state_value recovery_backup)"
 
 compose() {
-  (cd "$MIGRATION_ENV_DIR" && env -u APP_ENV -u APP_AUTO_MIGRATE -u AUTHZ_ACTOR_HEADER_MODE -u DEV_SEED_ADMIN AUTHZ_BOOTSTRAP_ENABLED=false docker compose -p "$MIGRATION_COMPOSE_PROJECT" --env-file "$MIGRATION_ENV_FILE" -f docker-compose.server.yml "$@")
+  local extra=()
+  if [[ "$MIGRATION_ENVIRONMENT" == "training" ]]; then extra=(-f docker-compose.training.yml); fi
+  (cd "$MIGRATION_ENV_DIR" && env -u APP_ENV -u APP_AUTO_MIGRATE -u AUTHZ_ACTOR_HEADER_MODE -u DEV_SEED_ADMIN AUTHZ_BOOTSTRAP_ENABLED=false docker compose -p "$MIGRATION_COMPOSE_PROJECT" --env-file "$MIGRATION_ENV_FILE" -f docker-compose.server.yml "${extra[@]}" "$@")
 }
 
 echo "Stopping deployed application stack before migration rollback."

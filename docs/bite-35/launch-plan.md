@@ -69,4 +69,14 @@ The frontend keeps `en-US` and `pt-BR` as the only supported locales. Financial 
 
 ## Byte 35.6S.1 — Customer Support Specialist onboarding (separate non-Production workstream)
 
-Customer support onboarding is a **training preparation** activity and does **not** amend the frozen 35.1 go-live scope or satisfy a six-gate Production prerequisite. See the [operator onboarding guide](byte-35-6s1-onboarding-operator-guide.md), [Brazilian Portuguese support handbook](byte-35-6s1-customer-support-handbook-pt-br.md), and [manual acceptance T01–T12](byte-35-6s1-manual-acceptance.md). The offline `make byte356s1-onboarding-check` validates documentation and the evidence checker, **not** actual trainee sign-in, customer support authorization, or Production readiness. Use a dedicated approved DEV training Tenant separate from the immutable 35.4C fixtures. No database reset, migration or new ERS authorization Role is introduced. Production support identity/lease design remains deferred to **35.6S.2**.
+Customer support onboarding is a **training preparation** activity and does **not** amend the frozen 35.1 go-live scope or satisfy a six-gate Production prerequisite. See the [operator onboarding guide](byte-35-6s1-onboarding-operator-guide.md), [Brazilian Portuguese support handbook](byte-35-6s1-customer-support-handbook-pt-br.md), and [manual acceptance T01–T12](byte-35-6s1-manual-acceptance.md). The offline `make byte356s1-onboarding-check` validates documentation and the evidence checker, **not** actual trainee sign-in, customer support authorization, or Production readiness. Use a dedicated persistent TRN Training Tenant separate from DEV, TST and the immutable 35.4C fixtures. No database reset, migration or new ERS authorization Role is introduced. Production support identity/lease design remains deferred to **35.6S.2**.
+
+## Byte 35.6S.1A — Persistent Training environment
+
+TRN uses an independently approved, exact Test release-rehearsal revision and its own
+persistent Docker volume, runtime credentials, HTTPS host, container project, and off-host
+backup prefix on the existing Hetzner VM. It does **not** use automated E2E accounts,
+DEV database replacement, Test rehearsal reset, Production opening balances, or Production
+support access. See [TRN deployment and operator runbook](byte-35-6s1a-trn-deployment.md)
+and [TRN manual acceptance](byte-35-6s1a-manual-acceptance.md).
+TRN deployment is independent of Production launch authorization.
