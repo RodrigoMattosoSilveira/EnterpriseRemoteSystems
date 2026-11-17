@@ -1,0 +1,171 @@
+name: Deploy ERS Training (TRN) — approved Test candidate
+
+on:
+  workflow_dispatch:
+    inputs:
+      test_revision:
+        description: Exact 40-character SHA of latest Test deployment with passed release rehearsal
+        required: true
+        type: string
+      approval_reference:
+        description: Training change approval identifier (never a password or token)
+        required: true
+        type: string
+      confirmation:
+        description: Type DEPLOY-APPROVED-TEST-TO-TRN
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ers-training-deployment
+  cancel-in-progress: false
+
+jobs:
+  trn-deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    # A human must start this on the release-candidate branch, not a feature branch.
+    if: github.ref_name == 'test'
+    environment: training
+    env:
+      DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+      DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+      REQUESTED_REVISION: ${{ inputs.test_revision }}
+      APPROVAL_REFERENCE: ${{ inputs.approval_reference }}
+      CONFIRMATION: ${{ inputs.confirmation }}
+      OP_SERVICE_ACCOUNT_TOKEN: ${{ secrets.OP_SERVICE_ACCOUNT_TOKEN }}
+    steps:
+      - name: Verify explicit request and GitHub Test branch revision
+        id: candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$CONFIRMATION" == DEPLOY-APPROVED-TEST-TO-TRN ]] || { echo 'STOP: explicit deployment confirmation mismatch' >&2; exit 2; }
+          [[ "$REQUESTED_REVISION" =~ ^[0-9a-f]{40}$ ]] || { echo 'STOP: revision must be exact Git SHA' >&2; exit 2; }
+          [[ "$APPROVAL_REFERENCE" =~ ^[A-Za-z0-9][A-Za-z0-9._:-]{5,119}$ ]] || { echo 'STOP: approval reference must be an identifier, not arbitrary prose' >&2; exit 2; }
+          [[ "${GITHUB_REF_NAME}" == test ]] || exit 2
+          echo 'Request format verified; source and deployed Test evidence will be checked separately.'
+
+      - uses: actions/checkout@v6
+        with:
+          ref: test
+          fetch-depth: 0
+
+      - name: Pin exact Test source revision
+        id: source
+        shell: bash
+        run: |
+          set -euo pipefail
+          actual="$(git rev-parse HEAD)"
+          [[ "$actual" == "$REQUESTED_REVISION" ]] || { echo "STOP: selected revision is not the latest Test branch HEAD ($actual)" >&2; exit 2; }
+          tree="$(git rev-parse HEAD^{tree})"
+          echo "tree=$tree" >> "$GITHUB_OUTPUT"
+          python3 -B scripts/test-trn-environment.py
+
+      - name: Install 1Password CLI
+        uses: 1password/install-cli-action@v4
+
+      - name: Validate narrowly scoped 1Password references in runner scratch
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ -n "${OP_SERVICE_ACCOUNT_TOKEN:-}" ]] || { echo 'STOP: training-only 1Password token is missing' >&2; exit 2; }
+          op vault get ers-training >/dev/null
+          for forbidden in ers-development ers-test ers-production ers-deployment ers-recovery ers-automation-bootstrap; do
+            if op vault get "$forbidden" >/dev/null 2>&1; then
+              echo "STOP: training token can read forbidden vault: $forbidden" >&2; exit 2
+            fi
+          done
+          scratch="$(mktemp -d "${RUNNER_TEMP}/ers-training-secrets.XXXXXXXX")"
+          trap 'rm -rf -- "$scratch"' EXIT
+          umask 077
+          python3 scripts/ers-op-materialize.py \
+            --template ops/1password/training.env.tpl \
+            --output "$scratch/training.env" --expected-root "$scratch"
+          python3 scripts/ers-op-validate-fragments.py \
+            --environment training --fragment "$scratch/training.env"
+          echo 'Training 1Password references verified; no secrets transferred or logged.'
+
+      - name: Configure pinned SSH identity
+        shell: bash
+        env:
+          SSH_KEY: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
+          SSH_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          umask 077
+          mkdir -p ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/id_ed25519
+          printf '%s\n' "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          [[ -s ~/.ssh/id_ed25519 && -s ~/.ssh/known_hosts ]] || { echo 'STOP: training SSH configuration missing' >&2; exit 2; }
+
+      - name: Retrieve actual TST rehearsal marker (read only)
+        shell: bash
+        run: |
+          set -euo pipefail
+          marker="${RUNNER_TEMP}/test-release-rehearsal.passed"
+          ssh -o BatchMode=yes -i ~/.ssh/id_ed25519 "${DEPLOY_USER}@${DEPLOY_HOST}" \
+            "cat '/opt/EnterpriseRemoteSystems/test/release-rehearsal-passed/${{ steps.source.outputs.tree }}.passed'" > "$marker"
+          python3 -B scripts/ers-trn-preflight.py verify-test \
+            --marker "$marker" --revision "$REQUESTED_REVISION" \
+            --tree-sha '${{ steps.source.outputs.tree }}'
+
+      - name: Read-only shared Hetzner capacity and TRN directory preflight
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh -o BatchMode=yes -i ~/.ssh/id_ed25519 "${DEPLOY_USER}@${DEPLOY_HOST}" \
+            "set -euo pipefail; cd /opt/EnterpriseRemoteSystems/test; python3 -B scripts/ers-trn-preflight.py check-host --server-root /opt/EnterpriseRemoteSystems; test -d /opt/EnterpriseRemoteSystems/training; test -f /opt/EnterpriseRemoteSystems/training/.env.training; test -d /opt/EnterpriseRemoteSystems/training/.git; cd /opt/EnterpriseRemoteSystems/training; git diff --quiet; git diff --cached --quiet; make server-environment-contract-check ENV=training"
+
+      - name: Deploy pinned TST-approved revision without replacing TRN data
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh -o BatchMode=yes -i ~/.ssh/id_ed25519 "${DEPLOY_USER}@${DEPLOY_HOST}" \
+            "bash -se -- '$REQUESTED_REVISION' '${{ steps.source.outputs.tree }}'" <<'REMOTE'
+          set -euo pipefail
+          revision="$1"
+          tree="$2"
+          cd /opt/EnterpriseRemoteSystems/training
+          # The training checkout is a distinct Git repository working directory.
+          git fetch origin test
+          [[ "$(git rev-parse FETCH_HEAD)" == "$revision" ]] || { echo 'STOP: training fetch does not match the approved Test SHA' >&2; exit 2; }
+          git checkout --detach "$revision"
+          [[ "$(git rev-parse HEAD^{tree})" == "$tree" ]] || { echo 'STOP: training source tree differs from Test' >&2; exit 2; }
+          make server-environment-contract-check ENV=training
+          make server-build ENV=training
+          previous_revision="$(cat .last-training-deployment-revision 2>/dev/null || true)"
+          if [[ ! "$previous_revision" =~ ^[0-9a-f]{40}$ ]]; then previous_revision=''; fi
+          # Migration gate verifies the pre-migration backup, off-host receipt and isolated rehearsal.
+          make server-migration-recovery-gate ENV=training MIGRATION_PREVIOUS_REVISION="$previous_revision" MIGRATION_TARGET_REVISION="$revision" MIGRATION_TARGET_TREE_SHA="$tree"
+          rollback() {
+            echo 'TRN deployment verification failed; attempting only TRN migration rollback.' >&2
+            make server-migration-recovery-rollback ENV=training || true
+          }
+          if ! make server-up ENV=training || ! make server-backend-health ENV=training || ! make server-migrated-db-verify ENV=training || ! make server-env-caddy-health ENV=training; then
+            rollback
+            exit 1
+          fi
+          if ! make server-migration-recovery-commit ENV=training; then rollback; exit 1; fi
+          # After every successful rollout, create a second verified TRN backup
+          # and independent off-host receipt. This never replaces the live DB.
+          if ! make server-backup ENV=training; then
+            echo 'STOP: post-deployment TRN off-host backup failed; stopping ONLY TRN services to prevent unprotected training writes.' >&2
+            make server-down ENV=training || true
+            exit 1
+          fi
+          printf '%s\n' "$revision" > .last-training-deployment-revision
+          echo "PASS: TRN internal deployment verified for $revision. Public HTTPS and human login must be separately accepted."
+          REMOTE
+
+      - name: Record release selection without claiming human acceptance
+        shell: bash
+        run: |
+          echo "## Training deployment candidate" >> "$GITHUB_STEP_SUMMARY"
+          echo "Test SHA: $REQUESTED_REVISION" >> "$GITHUB_STEP_SUMMARY"
+          echo "Test tree: ${{ steps.source.outputs.tree }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "Approval reference: $APPROVAL_REFERENCE" >> "$GITHUB_STEP_SUMMARY"
+          echo 'Read-only Test rehearsal marker, VM headroom, TRN migration gate and internal health were checked. Public HTTPS, backup restoration, trainee sign-in and independent human approval remain manual acceptance.' >> "$GITHUB_STEP_SUMMARY"

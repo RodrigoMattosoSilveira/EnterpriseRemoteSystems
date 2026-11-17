@@ -6,7 +6,7 @@
 
 ## 1. Como começar
 
-1. Receba do Coordenador de Treinamento o endereço **HTTPS** do ambiente DEV, a Entidade de Treinamento autorizada e o acesso de leitura aos manuais. O endereço atualmente documentado é `https://dev.enterpriseremotesystems.com`; confirme o ambiente na tela antes de usar.
+1. Receba do Coordenador de Treinamento o endereço **HTTPS** do ambiente TRN, a Entidade de Treinamento autorizada e o acesso de leitura aos manuais. O endereço atualmente documentado é `https://trn.enterpriseremotesystems.com`; confirme o ambiente na tela antes de usar.
 2. Entre com **sua própria Conta de Autenticação**, não com credenciais de administradores ou contas E2E. Troque a senha temporária no primeiro acesso e guarde a senha somente na solução aprovada de 1Password.
 3. Confira o nome da Entidade selecionada. Todas as operações deste treinamento são realizadas com dados **fictícios**. Não copie nomes reais de clientes, CPFs, fotografias, saldos ou extratos do cliente para exercícios.
 4. A autorização inicial é `TENANT_VIEWER` (consulta). **Não** é uma função de suporte global. Se uma ação de gravação estiver bloqueada, isso é o comportamento esperado: acompanhe a demonstração da pessoa instrutora em uma sessão separada.
@@ -54,7 +54,7 @@ A especialista não precisa executar SQL, Docker, Git, backups ou comandos de Pr
 
 ### D01 — Não consigo entrar
 
-1. Confirme URL HTTPS e ambiente (DEV), sem pedir a senha da pessoa.
+1. Confirme URL HTTPS e ambiente (TRN), sem pedir a senha da pessoa.
 2. Pergunte apenas se aparece mensagem de senha temporária, Conta inativa, Vínculo inativo ou permissão negada; registre **texto não sensível** e contexto de Entidade.
 3. Se a própria conta de treinamento falhar, peça ao Administrador autorizado que confira no ERS a existência da Conta, do Vínculo e do Ator para a Entidade. A especialista não recebe tokens de redefinição em chamado.
 4. Encaminhe suspensão de segurança ou dúvida sobre identidade ao responsável pela Autenticação. Não desative políticas, nem compartilhe credenciais.
@@ -75,7 +75,7 @@ A especialista não precisa executar SQL, Docker, Git, backups ou comandos de Pr
 
 ### D04 — Lentidão, página indisponível ou erro do servidor
 
-1. Anote horário **com fuso**, ambiente DEV, página, ação e mensagem apresentada (sem informações pessoais).
+1. Anote horário **com fuso**, ambiente TRN, página, ação e mensagem apresentada (sem informações pessoais).
 2. Recarregue a página uma única vez se seguro, sem repetir uma operação de pagamento ou outra ação de efeito financeiro.
 3. Verifique com o operador técnico se o endpoint de saúde do ambiente está acessível. O operador decide se é incidente de infraestrutura; a especialista não acessa servidor, logs de Produção, backups ou credenciais.
 4. Escale ao canal técnico definido. Classifique o chamado como **INCIDENTE** se houver indisponibilidade, possível perda de dados ou possível exposição entre Entidades.
@@ -91,7 +91,7 @@ A especialista não precisa executar SQL, Docker, Git, backups ou comandos de Pr
 | Campo | Exemplo exclusivamente fictício |
 |---|---|
 | Identificador | `TREINO-CS-001` |
-| Ambiente / Entidade | `DEV / ERS_SUPPORT_TRAINING` |
+| Ambiente / Entidade | `TRN / ERS_SUPPORT_TRAINING` |
 | Categoria | Funcional / Acesso / Erro de UI / Financeiro / Incidente de segurança |
 | Idioma | `pt-BR` |
 | Data/hora e fuso | `2026-11-15 14:00 America/Sao_Paulo` |
@@ -116,7 +116,7 @@ A especialista não precisa executar SQL, Docker, Git, backups ou comandos de Pr
 
 A aceitação formal segue os testes **T01–T12** em `byte-35-6s1-manual-acceptance.md`, observados pelo Coordenador de Treinamento. O resultado do verificador offline é apenas **REVIEW READY**: não prova que a pessoa entrou no ERS ou que possui acesso real.
 
-Depois de cada publicação em DEV, confirme que o acesso individual, o Vínculo da Entidade de Treinamento e os dados sintéticos ainda existem. Se o banco DEV for reconstruído, informe **BLOQUEADO** até reprovisionar por processo aprovado; nunca faça reset de dados para recuperar uma conta de treinamento. Termine cada sessão saindo do ERS e mantendo documentos em canal de leitura aprovado.
+Depois de cada publicação em TRN, confirme que o acesso individual, o Vínculo da Entidade de Treinamento e os dados sintéticos foram preservados. Se houver perda de dados ou credenciais, informe **FALHA** e solicite recuperação de backup verificado; nunca reconstrua ou reinicialize o banco TRN para recuperar uma conta de treinamento. Termine cada sessão saindo do ERS e mantendo documentos em canal de leitura aprovado.
 
 ## Glossary Impact
 

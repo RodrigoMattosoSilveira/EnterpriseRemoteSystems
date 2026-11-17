@@ -14,7 +14,7 @@ import re
 import sys
 
 CASE_IDS = tuple(f"T{i:02d}" for i in range(1, 13))
-ALLOWED_ENVIRONMENTS = ("development", "test")
+ALLOWED_ENVIRONMENTS = ("training",)
 ALLOWED_ROLES = ("TENANT_VIEWER", "EARNINGS_OPERATOR", "EXPENSE_OPERATOR")
 FORBIDDEN_TENANTS = ("TRAIN354C_A", "TRAIN354C_B", "E2EAUTHZADMIN", "E2EISOLATION")
 SECRET_PATTERNS = (
@@ -27,7 +27,7 @@ SECRET_PATTERNS = (
 def template() -> dict:
     return {
         "schema_version": 1,
-        "environment": "development",
+        "environment": "training",
         "deployment_revision": "",
         "training_tenant_code": "",
         "training_tenant_confirmed_synthetic": False,
@@ -55,7 +55,7 @@ def validate(raw: object) -> list[str]:
     if raw.get("schema_version") != 1:
         errors.append("schema_version must be 1")
     if raw.get("environment") not in ALLOWED_ENVIRONMENTS:
-        errors.append("environment must be development or test; Production prohibited")
+        errors.append("environment must be training; DEV, TST and Production prohibited")
     rev = raw.get("deployment_revision")
     if not isinstance(rev, str) or not re.fullmatch(r"[a-f0-9]{40}", rev):
         errors.append("deployment_revision must be the verified 40-character Git SHA")
