@@ -4,7 +4,7 @@ set -euo pipefail
 ENV_NAME="${1:-}"
 
 if [[ -z "$ENV_NAME" ]]; then
-  echo "Usage: $0 development|test|production"
+  echo "Usage: $0 development|test|training|production"
   exit 1
 fi
 
@@ -27,6 +27,15 @@ case "$ENV_NAME" in
     DEV_ADMIN_EMAIL="admin-tst@enterpriseremotesystems.com"
     DEV_ADMIN_NAME="Test Admin"
     ;;
+  training)
+    ENV_FILE=".env.training"
+    APP_ENV="training"
+    APP_DOMAIN="trn.enterpriseremotesystems.com"
+    CONTAINER_PREFIX="ers-trn"
+    JWT_ISSUER="enterprise-remote-systems-training"
+    DEV_ADMIN_EMAIL=""
+    DEV_ADMIN_NAME=""
+    ;;
   production)
     ENV_FILE=".env.production"
     APP_ENV="production"
@@ -38,12 +47,20 @@ case "$ENV_NAME" in
     ;;
   *)
     echo "Invalid environment: $ENV_NAME"
-    echo "Usage: $0 development|test|production"
+    echo "Usage: $0 development|test|training|production"
     exit 1
     ;;
 esac
 
+# Training initialization is create-only: rerunning must never rewrite persistent
+# environment credentials, backup policy or a trained person's session state.
+if [[ "$APP_ENV" == "training" && ( -e "$ENV_FILE" || -L "$ENV_FILE" ) ]]; then
+  echo "BLOCKED: .env.training already exists; edit through an approved secrets/change procedure, not server-init-env." >&2
+  exit 2
+fi
+
 touch "$ENV_FILE"
+if [[ "$APP_ENV" == "training" ]]; then chmod 600 "$ENV_FILE"; fi
 
 set_or_update_env() {
   local key="$1"
@@ -74,8 +91,14 @@ fi
 
 set_or_update_env "JWT_ISSUER" "$JWT_ISSUER"
 set_or_update_env "JWT_EXPIRATION_MINUTES" "480"
+# Runtime key placeholders are populated exclusively from 1Password before the
+# first TRN volume is created. Never copy another environment's signing keys.
+if [[ "$APP_ENV" == "training" ]]; then
+  set_or_update_env "LEDGER_CORRECTION_KEY" ""
+  set_or_update_env "LEDGER_SETTLEMENT_KEY" ""
+fi
 
-if [[ "$APP_ENV" == "production" ]]; then
+if [[ "$APP_ENV" == "production" || "$APP_ENV" == "training" ]]; then
   set_or_update_env "DEV_SEED_ADMIN" "false"
   set_or_update_env "DEV_ADMIN_EMAIL" ""
   set_or_update_env "DEV_ADMIN_PASSWORD" ""
@@ -96,21 +119,27 @@ set_or_update_env "OPENAI_TIMEOUT_SECONDS" "20"
 set_or_update_env "CORS_ALLOW_ORIGINS" "https://${APP_DOMAIN}"
 
 set_or_update_env "AUTHZ_BOOTSTRAP_ENABLED" "false"
+if [[ "$APP_ENV" == "training" ]]; then
+  set_or_update_env "AUTHZ_DISABLE_ROUTE_AUTHORIZATION" "false"
+  set_or_update_env "AUTH_LOCAL_SESSION_HEADER_ENABLED" "false"
+  set_or_update_env "AUTH_SESSION_COOKIE_SECURE" "true"
+  set_or_update_env "AUTH_SESSION_COOKIE_NAME" "ers_trn_session"
+fi
 set_or_update_env "AUTHZ_BOOTSTRAP_ACTOR_KEY" ""
 set_or_update_env "AUTHZ_BOOTSTRAP_DISPLAY_NAME" ""
 set_or_update_env "AUTHZ_BOOTSTRAP_ROLE_CODE" "APPLICATION_ADMIN"
 set_or_update_env "AUTHZ_BOOTSTRAP_TENANT_ID" "*"
 set_or_update_env "AUTHZ_BOOTSTRAP_REQUIRE_EMPTY_ACTOR_TABLE" "false"
 
-if [[ "$APP_ENV" == "production" ]]; then
+if [[ "$APP_ENV" == "production" || "$APP_ENV" == "training" ]]; then
   set_or_update_env "SERVER_OFFHOST_BACKUP_ENABLED" "true"
   set_or_update_env "SERVER_OFFHOST_BACKUP_TRANSPORT" "s3"
   set_or_update_env "SERVER_OFFHOST_BACKUP_S3_ENDPOINT" ""
   set_or_update_env "SERVER_OFFHOST_BACKUP_S3_REGION" ""
   set_or_update_env "SERVER_OFFHOST_BACKUP_S3_BUCKET" ""
-  set_or_update_env "SERVER_OFFHOST_BACKUP_S3_PREFIX" "ers-backups"
-  set_or_update_env "AWS_SHARED_CREDENTIALS_FILE" "/opt/EnterpriseRemoteSystems/secrets/aws-credentials"
-  set_or_update_env "AWS_PROFILE" "ers-backup"
+  set_or_update_env "SERVER_OFFHOST_BACKUP_S3_PREFIX" "$([[ "$APP_ENV" == "training" ]] && echo ers-backups/training || echo ers-backups)"
+  set_or_update_env "AWS_SHARED_CREDENTIALS_FILE" "$([[ "$APP_ENV" == "training" ]] && echo /opt/EnterpriseRemoteSystems/secrets/training-aws-credentials || echo /opt/EnterpriseRemoteSystems/secrets/aws-credentials)"
+  set_or_update_env "AWS_PROFILE" "$([[ "$APP_ENV" == "training" ]] && echo ers-training-backup || echo ers-backup)"
 else
   set_or_update_env "SERVER_OFFHOST_BACKUP_ENABLED" "false"
   set_or_update_env "SERVER_OFFHOST_BACKUP_TRANSPORT" "ssh"
@@ -132,7 +161,7 @@ set_or_update_env "AUTHZ_ACTOR_HEADER_MODE" "$AUTHZ_ACTOR_HEADER_MODE"
 
 rm -f "${ENV_FILE}.bak"
 
-echo "Created/updated ${ENV_FILE}"
+echo "Created ${ENV_FILE} (create-only for training)"
 echo
 echo "IMPORTANT:"
 echo "  1. Edit ${ENV_FILE}."

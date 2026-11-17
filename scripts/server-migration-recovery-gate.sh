@@ -28,7 +28,8 @@ case "$(printf '%s' "$MIGRATION_ENVIRONMENT" | tr '[:upper:]' '[:lower:]')" in
   development|dev|local) MIGRATION_ENVIRONMENT="development" ;;
   test|testing|ci) MIGRATION_ENVIRONMENT="test" ;;
   production|prod) MIGRATION_ENVIRONMENT="production" ;;
-  *) echo "MIGRATION_ENVIRONMENT must identify development, test, or production." >&2; exit 2 ;;
+  training) MIGRATION_ENVIRONMENT="training" ;;
+  *) echo "MIGRATION_ENVIRONMENT must identify development, test, training, or production." >&2; exit 2 ;;
 esac
 
 MIGRATION_ENV_DIR="$(cd "$MIGRATION_ENV_DIR" && pwd -P)"
@@ -64,6 +65,12 @@ if [[ -f "$MIGRATION_STATE_FILE" && "$(read_state_value status "$MIGRATION_STATE
   exit 2
 fi
 
+compose_override_args=()
+if [[ "$MIGRATION_ENVIRONMENT" == "training" ]]; then
+  [[ -f "$MIGRATION_ENV_DIR/docker-compose.training.yml" ]] || { echo "Missing TRN resource limits Compose overlay" >&2; exit 2; }
+  compose_override_args=(-f docker-compose.training.yml)
+fi
+
 compose() {
   (
     cd "$MIGRATION_ENV_DIR"
@@ -77,6 +84,7 @@ compose() {
         -p "$MIGRATION_COMPOSE_PROJECT" \
         --env-file "$MIGRATION_ENV_FILE" \
         -f docker-compose.server.yml \
+        "${compose_override_args[@]}" \
         "$@"
   )
 }
@@ -219,8 +227,8 @@ fi
 
 # The repair is restricted to Production and requires the Production contract
 # (including disabled authorization bootstrap) before any reconciliation.
-if [[ "$MIGRATION_ENVIRONMENT" == "production" ]]; then
-  "$ROOT_DIR/scripts/ers-environment-guard.sh" require-server-contract production "$MIGRATION_ENV_DIR/$MIGRATION_ENV_FILE"
+if [[ "$MIGRATION_ENVIRONMENT" == "production" || "$MIGRATION_ENVIRONMENT" == "training" ]]; then
+  "$ROOT_DIR/scripts/ers-environment-guard.sh" require-server-contract "$MIGRATION_ENVIRONMENT" "$MIGRATION_ENV_DIR/$MIGRATION_ENV_FILE"
 fi
 
 reconcile_legacy_bootstrap() {

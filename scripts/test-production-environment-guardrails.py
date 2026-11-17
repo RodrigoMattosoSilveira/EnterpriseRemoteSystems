@@ -13,6 +13,7 @@ from production_environment_fixture import production_env_text
 ROOT = Path(__file__).resolve().parents[1]
 SHELL_GUARD = ROOT / "scripts" / "ers-environment-guard.sh"
 RESET_SQLITE = ROOT / "scripts" / "reset-sqlite-database.sh"
+PROTECTED_DATA_REFUSAL = "Production or Training data must not be modified by reset/demo/test tooling."
 MUTATING_PYTHON_TOOLS = (
     "reset-bite30c2-aline-authentication.py",
     "reset-bite30c2-aline-to-not-enabled.py",
@@ -55,28 +56,29 @@ def test_shared_shell_guard() -> None:
         proc = run([str(SHELL_GUARD), "require-non-production", value, "regression probe"])
         require_success(proc, f"non-Production guard for {value}")
 
-    for value in ("production", "prod"):
+    for value in ("production", "prod", "training"):
         proc = run([str(SHELL_GUARD), "require-non-production", value, "regression probe"])
-        require_failure(proc, f"Production guard for {value}", "Production data must not be modified")
+        require_failure(proc, f"protected-environment guard for {value}", PROTECTED_DATA_REFUSAL)
 
     for value in ("", "staging", "prodution"):
         proc = run([str(SHELL_GUARD), "require-non-production", value, "regression probe"])
         require_failure(proc, f"unknown guard for {value!r}", "must explicitly identify")
 
 
-def test_reset_helper_cannot_touch_production() -> None:
+def test_reset_helper_cannot_touch_protected_data() -> None:
     with tempfile.TemporaryDirectory(prefix="ers-33-1-reset-") as tmp:
         db = Path(tmp) / "app.db"
         sidecars = [db, Path(str(db) + "-wal"), Path(str(db) + "-shm"), Path(str(db) + "-journal")]
         for path in sidecars:
             path.write_text("sentinel", encoding="utf-8")
 
-        prod_env = {**os.environ, "APP_ENV": "production"}
-        proc = run([str(RESET_SQLITE), str(db)], env=prod_env)
-        require_failure(proc, "Production SQLite reset", "Production data must not be modified")
-        missing = [str(path) for path in sidecars if not path.exists()]
-        if missing:
-            raise AssertionError(f"Production refusal happened after deleting files: {missing}")
+        for protected_env in ("production", "training"):
+            env = {**os.environ, "APP_ENV": protected_env}
+            proc = run([str(RESET_SQLITE), str(db)], env=env)
+            require_failure(proc, f"{protected_env} SQLite reset", PROTECTED_DATA_REFUSAL)
+            altered = [str(path) for path in sidecars if not path.exists() or path.read_text(encoding="utf-8") != "sentinel"]
+            if altered:
+                raise AssertionError(f"{protected_env} refusal modified sentinel files: {altered}")
 
         dev_env = {**os.environ, "APP_ENV": "development"}
         proc = run([str(RESET_SQLITE), str(db)], env=dev_env)
@@ -93,16 +95,17 @@ def test_make_reset_db_target() -> None:
         for path in sidecars:
             path.write_text("sentinel", encoding="utf-8")
 
-        prod_env = {
-            **os.environ,
-            "APP_ENV": "production",
-            "ERS_DATABASE_PATH": str(db),
-        }
-        proc = run(["make", "reset-db"], env=prod_env)
-        require_failure(proc, "Production make reset-db", "Production data must not be modified")
-        changed = [str(path) for path in sidecars if not path.exists() or path.read_text(encoding="utf-8") != "sentinel"]
-        if changed:
-            raise AssertionError(f"make reset-db modified Production sentinel files before refusing: {changed}")
+        for protected_env in ("production", "training"):
+            env = {
+                **os.environ,
+                "APP_ENV": protected_env,
+                "ERS_DATABASE_PATH": str(db),
+            }
+            proc = run(["make", "reset-db"], env=env)
+            require_failure(proc, f"{protected_env} make reset-db", PROTECTED_DATA_REFUSAL)
+            changed = [str(path) for path in sidecars if not path.exists() or path.read_text(encoding="utf-8") != "sentinel"]
+            if changed:
+                raise AssertionError(f"make reset-db modified {protected_env} sentinel files before refusing: {changed}")
 
         missing_env = {**os.environ, "ERS_DATABASE_PATH": str(db)}
         missing_env.pop("APP_ENV", None)
@@ -129,17 +132,17 @@ def test_make_reset_db_target() -> None:
             raise AssertionError(f"Development make reset-db left SQLite files behind: {remaining}")
 
 
-def test_production_volume_deletion_target() -> None:
-    proc = run(["make", "server-prod-down-volumes"])
-    require_failure(
-        proc,
-        "Production server volume deletion alias",
-        "Production data must not be modified by reset/demo/test tooling.",
-    )
-    if "docker compose" in proc.stdout.lower() or " down -v" in proc.stdout.lower():
-        raise AssertionError(
-            "Production server volume deletion reached Docker Compose after the guard should have refused it."
-        )
+def test_protected_volume_deletion_targets() -> None:
+    for command, protected_env in (
+        (["make", "server-prod-down-volumes"], "production"),
+        (["make", "server-down-volumes", "ENV=training"], "training"),
+    ):
+        proc = run(command)
+        require_failure(proc, f"{protected_env} server volume deletion", PROTECTED_DATA_REFUSAL)
+        if "docker compose" in proc.stdout.lower() or " down -v" in proc.stdout.lower():
+            raise AssertionError(
+                f"{protected_env} server volume deletion reached Docker Compose after the guard should have refused it."
+            )
 
 
 def test_server_environment_contract() -> None:
@@ -218,19 +221,16 @@ def test_environment_initializers_are_production_safe() -> None:
                 raise AssertionError(f"Production env initializer missing {expected!r}")
 
 
-def test_legacy_environment_initializer_refuses_production() -> None:
+def test_legacy_environment_initializer_refuses_protected_environments() -> None:
     with tempfile.TemporaryDirectory(prefix="ers-33-1-legacy-init-") as tmp:
-        output = Path(tmp) / ".env.production"
-        proc = run(
-            [
-                str(ROOT / "scripts" / "init-env.sh"),
-                str(ROOT / "backend" / ".env.production.example"),
-                str(output),
-            ]
-        )
-        require_failure(proc, "legacy Production environment initializer", "Production data must not be modified")
-        if output.exists():
-            raise AssertionError("legacy Production initializer created a file before refusing")
+        for protected_env in ("production", "training"):
+            example = Path(tmp) / f"source-{protected_env}.env"
+            example.write_text(f"APP_ENV={protected_env}\n", encoding="utf-8")
+            output = Path(tmp) / f".env.{protected_env}"
+            proc = run([str(ROOT / "scripts" / "init-env.sh"), str(example), str(output)])
+            require_failure(proc, f"legacy {protected_env} environment initializer", PROTECTED_DATA_REFUSAL)
+            if output.exists():
+                raise AssertionError(f"legacy {protected_env} initializer created a file before refusing")
 
 
 def test_static_production_barriers() -> None:
@@ -331,24 +331,27 @@ def test_python_guard() -> None:
         normalized = require_non_production_data_mutation("regression probe", value)
         if normalized not in {"development", "test"}:
             raise AssertionError(f"unexpected normalized environment {normalized!r}")
-    for value in ("production", "prod", "", "staging"):
+    for value in ("production", "prod", "training", "", "staging"):
         try:
             require_non_production_data_mutation("regression probe", value)
-        except SystemExit:
-            pass
+        except SystemExit as exc:
+            if value in ("production", "prod", "training") and PROTECTED_DATA_REFUSAL not in str(exc):
+                raise AssertionError(f"Python guard did not explain the {value!r} refusal: {exc}")
+            if value in ("", "staging") and "must explicitly identify" not in str(exc):
+                raise AssertionError(f"Python guard did not reject unknown environment {value!r}: {exc}")
         else:
             raise AssertionError(f"Python guard unexpectedly allowed {value!r}")
 
 
 def main() -> int:
     test_shared_shell_guard()
-    test_reset_helper_cannot_touch_production()
+    test_reset_helper_cannot_touch_protected_data()
     test_make_reset_db_target()
-    test_production_volume_deletion_target()
+    test_protected_volume_deletion_targets()
     test_server_environment_contract()
     test_server_environment_contract_probe()
     test_environment_initializers_are_production_safe()
-    test_legacy_environment_initializer_refuses_production()
+    test_legacy_environment_initializer_refuses_protected_environments()
     test_static_production_barriers()
     test_brazilian_demo_local_backend_contract()
     test_python_guard()

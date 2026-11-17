@@ -7,13 +7,15 @@ from pathlib import Path
 EXPECTED = {
     'development': {'JWT_SECRET', 'LEDGER_CORRECTION_KEY', 'LEDGER_SETTLEMENT_KEY'},
     'test': {'JWT_SECRET', 'LEDGER_CORRECTION_KEY', 'LEDGER_SETTLEMENT_KEY'},
+    'training': {'JWT_SECRET', 'LEDGER_CORRECTION_KEY', 'LEDGER_SETTLEMENT_KEY'},
     'production': {'JWT_SECRET', 'LEDGER_CORRECTION_KEY', 'LEDGER_SETTLEMENT_KEY'},
 }
 
 def validate(text, environment, aws=False):
     if aws:
         lines = text.splitlines()
-        if not lines or lines[0] != '[ers-backup]':
+        expected_profile = '[ers-training-backup]' if environment == 'training' else '[ers-backup]'
+        if not lines or lines[0] != expected_profile:
             raise ValueError('invalid AWS profile')
         fields = lines[1:]
         expected = {'aws_access_key_id', 'aws_secret_access_key'}
@@ -46,9 +48,9 @@ def main():
     a = p.parse_args()
     try:
         validate(a.fragment.read_text(), a.environment)
-        if a.environment == 'production':
+        if a.environment in ('production', 'training'):
             if not a.aws_credentials:
-                raise ValueError('Production requires an AWS scratch fragment')
+                raise ValueError(f'{a.environment} requires a separate AWS scratch fragment')
             validate(a.aws_credentials.read_text(), a.environment, aws=True)
         elif a.aws_credentials:
             raise ValueError('AWS credentials are not allowed for non-Production checks')

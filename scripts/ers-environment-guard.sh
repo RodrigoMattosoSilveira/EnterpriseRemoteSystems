@@ -20,6 +20,7 @@ normalize_environment() {
     local|dev|development) printf '%s\n' development ;;
     test|testing|ci) printf '%s\n' test ;;
     production|prod) printf '%s\n' production ;;
+    training) printf '%s\n' training ;;
     '') return 2 ;;
     *) return 3 ;;
   esac
@@ -33,8 +34,8 @@ require_non_production() {
     echo "Refusing ${operation}: APP_ENV/ENV must explicitly identify local/development/test; got '${raw:-unset}'." >&2
     exit 2
   fi
-  if [[ "$normalized" == "production" ]]; then
-    echo "Refusing ${operation}: Production data must not be modified by reset/demo/test tooling." >&2
+  if [[ "$normalized" == "production" || "$normalized" == "training" ]]; then
+    echo "Refusing ${operation}: Production or Training data must not be modified by reset/demo/test tooling." >&2
     exit 2
   fi
 }
@@ -63,8 +64,8 @@ require_server_identity() {
   local expected="${1:-}"
   local env_file="${2:-}"
   case "$expected" in
-    development|test|production) ;;
-    *) echo "Environment contract violation: expected server environment must be development, test, or production; got '${expected:-unset}'." >&2; exit 2 ;;
+    development|test|production|training) ;;
+    *) echo "Environment contract violation: expected server environment must be development, test, training, or production; got '${expected:-unset}'." >&2; exit 2 ;;
   esac
   [[ -f "$env_file" ]] || { echo "Environment contract violation: missing server environment file: $env_file" >&2; exit 2; }
 
@@ -151,7 +152,7 @@ require_server_contract() {
   local env_file="${2:-}"
   require_server_identity "$expected" "$env_file"
 
-  if [[ "$expected" == "production" ]]; then
+  if [[ "$expected" == "production" || "$expected" == "training" ]]; then
     local value
     value="$(read_env_value "$env_file" APP_AUTO_MIGRATE || true)"
     if [[ -n "$value" && "$(lowercase "$value")" != "false" && "$value" != "0" ]]; then
@@ -173,7 +174,37 @@ require_server_contract() {
       echo "Production environment contract violation: AUTHZ_BOOTSTRAP_ENABLED must explicitly be false." >&2
       exit 2
     fi
-    validate_production_offhost_backup_contract "$env_file"
+    if [[ "$expected" == "production" ]]; then
+      validate_production_offhost_backup_contract "$env_file"
+    else
+      validate_production_offhost_backup_contract "$env_file"
+      for key in AUTHZ_DISABLE_ROUTE_AUTHORIZATION AUTH_LOCAL_SESSION_HEADER_ENABLED AUTH_SESSION_COOKIE_SECURE; do
+        value="$(read_env_value "$env_file" "$key" || true)"
+        case "$key:$value" in
+          AUTHZ_DISABLE_ROUTE_AUTHORIZATION:false|AUTH_LOCAL_SESSION_HEADER_ENABLED:false|AUTH_SESSION_COOKIE_SECURE:true) ;;
+          *) echo "Training contract violation: $key has an unsafe or missing value." >&2; exit 2 ;;
+        esac
+      done
+      value="$(read_env_value "$env_file" SERVER_OFFHOST_BACKUP_S3_PREFIX || true)"
+      [[ "$value" == ers-backups/training ]] || {
+        echo "Training contract violation: S3 prefix must be exclusively scoped to training." >&2; exit 2;
+      }
+      for item in "CONTAINER_PREFIX:ers-trn" "APP_DOMAIN:trn.enterpriseremotesystems.com" "JWT_ISSUER:enterprise-remote-systems-training" "AUTH_SESSION_COOKIE_NAME:ers_trn_session" "AWS_PROFILE:ers-training-backup"; do
+        key="${item%%:*}"; required="${item#*:}"
+        value="$(read_env_value "$env_file" "$key" || true)"
+        [[ "$value" == "$required" ]] || {
+          echo "Training contract violation: $key has a missing or mismatched value." >&2; exit 2;
+        }
+      done
+      value="$(read_env_value "$env_file" AWS_SHARED_CREDENTIALS_FILE || true)"
+      [[ "$value" == /opt/EnterpriseRemoteSystems/secrets/training-aws-credentials ]] || {
+        echo "Training contract violation: AWS credentials must use the separate training secrets file." >&2; exit 2;
+      }
+      value="$(read_env_value "$env_file" CORS_ALLOW_ORIGINS || true)"
+      [[ "$value" == https://trn.enterpriseremotesystems.com ]] || {
+        echo "Training contract violation: CORS origin must be exclusively TRN HTTPS." >&2; exit 2;
+      }
+    fi
   fi
 }
 
