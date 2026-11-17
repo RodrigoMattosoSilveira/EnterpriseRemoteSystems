@@ -1814,3 +1814,13 @@ func TestEligibleSupportAccessLeasePermissionCatalogExcludesControlPlane(t *test
 		}
 	}
 }
+
+func TestIntrinsicSelfServiceDoesNotGrantReferenceDataRead(t *testing.T) {
+	for _, hasHistory := range []bool{false, true} {
+		for _, active := range []bool{false, true} {
+			if _, ok := intrinsicSelfServicePermissions(hasHistory, active)[PermissionReferenceDataRead]; ok {
+				t.Fatalf("self-service identity must not carry reference_data.read (history=%t active=%t)", hasHistory, active)
+			}
+		}
+	}
+}

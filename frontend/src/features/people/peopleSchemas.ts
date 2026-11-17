@@ -1,4 +1,5 @@
 import type { UpdatePersonInput } from "../../types/people";
+import type { TranslationKey } from "../../i18n";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const RG_RE = /^[A-Za-z0-9.\-]{5,20}$/;
@@ -6,37 +7,35 @@ const BRAZILIAN_CELLULAR_RE = /^\+?55?[1-9]{2}9[0-9]{8}$|^[1-9]{2}9[0-9]{8}$/;
 const CEP_SEPARATOR_RE = /[.\-‐‑‒–—−\s]/g;
 
 export function isValidUpdatePersonInput(input: UpdatePersonInput): boolean {
-  if (
-    isBlank(input.firstName) ||
-    isBlank(input.lastName) ||
-    isBlank(input.nickname) ||
-    isBlank(input.cpf) ||
-    isBlank(input.rg) ||
-    isBlank(input.cellular) ||
-    isBlank(input.email) ||
-    isBlank(input.statusId)
-  ) {
-    return false;
-  }
+  return getUpdatePersonIssues(input).length === 0;
+}
 
-  if (!isValidCPF(input.cpf)) return false;
-  if (!RG_RE.test(input.rg.trim())) return false;
-  if (!isValidBrazilianCellular(input.cellular)) return false;
-  if (!EMAIL_RE.test(input.email.trim())) return false;
+// Returns the labels of every field that blocks saving, so the form can tell the
+// user exactly what to correct. Mirrors the backend validation rules.
+export function getUpdatePersonIssues(input: UpdatePersonInput): TranslationKey[] {
+  const issues: TranslationKey[] = [];
+  if (isBlank(input.firstName)) issues.push("people.form.issue.firstName");
+  if (isBlank(input.lastName)) issues.push("people.form.issue.lastName");
+  if (isBlank(input.nickname)) issues.push("people.form.issue.nickname");
+  if (isBlank(input.cpf)) issues.push("people.form.issue.cpf");
+  if (isBlank(input.rg)) issues.push("people.form.issue.rg");
+  if (isBlank(input.cellular)) issues.push("people.form.issue.cellular");
+  if (isBlank(input.email)) issues.push("people.form.issue.email");
+  if (isBlank(input.statusId)) issues.push("people.form.issue.status");
 
-  if (input.cep && !isValidCEP(input.cep)) return false;
-  if (
-    input.emergencyCellular &&
-    !isValidBrazilianCellular(input.emergencyCellular)
-  ) {
-    return false;
+  if (!isBlank(input.cpf) && !isValidCPF(input.cpf)) issues.push("people.form.issue.cpfInvalid");
+  if (!isBlank(input.rg) && !RG_RE.test(input.rg.trim())) issues.push("people.form.issue.rgFormat");
+  if (!isBlank(input.cellular) && !isValidBrazilianCellular(input.cellular)) issues.push("people.form.issue.cellularFormat");
+  if (!isBlank(input.email) && !EMAIL_RE.test(input.email.trim())) issues.push("people.form.issue.emailFormat");
+  if (input.cep && !isValidCEP(input.cep)) issues.push("people.form.issue.cepFormat");
+  if (input.emergencyCellular && !isValidBrazilianCellular(input.emergencyCellular)) {
+    issues.push("people.form.issue.emergencyCellularFormat");
   }
   if (input.emergencyEmail && !EMAIL_RE.test(input.emergencyEmail.trim())) {
-    return false;
+    issues.push("people.form.issue.emergencyEmailFormat");
   }
-  if (input.country && input.country.trim() !== "Brasil") return false;
-
-  return true;
+  if (input.country && input.country.trim() !== "Brasil") issues.push("people.form.issue.country");
+  return issues;
 }
 
 export function updatePersonFingerprint(input: UpdatePersonInput): string {
