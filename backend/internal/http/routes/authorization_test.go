@@ -288,6 +288,63 @@ func TestRequirePermissionOrSelfPersonRejectsDelegatedSelfPermissionWithoutIntri
 	}
 }
 
+func TestRequireTenantAdministratorOrSelfPersonAllowsOwnPhotoOnly(t *testing.T) {
+	selfActor := &authz.Actor{
+		ID:       "collaborator-actor",
+		TenantID: "default",
+		PersonID: "person-self",
+		Scope:    authz.ActorScopeTenant,
+		Permissions: map[authz.Permission]struct{}{
+			authz.PermissionPeopleSelfUpdate: {},
+		},
+		IntrinsicPermissions: map[authz.Permission]struct{}{
+			authz.PermissionPeopleSelfUpdate: {},
+		},
+	}
+	adminActor := &authz.Actor{
+		ID: "tenant-admin", TenantID: "default", Scope: authz.ActorScopeTenant,
+		RoleCodes:   []string{string(authz.RoleTenantAdmin)},
+		Permissions: map[authz.Permission]struct{}{authz.PermissionAll: {}},
+	}
+	// Tenant actor with no admin role and no self-update permission.
+	otherActor := &authz.Actor{
+		ID: "other-actor", TenantID: "default", PersonID: "person-other", Scope: authz.ActorScopeTenant,
+		Permissions: map[authz.Permission]struct{}{authz.PermissionPeopleRead: {}},
+	}
+
+	cases := []struct {
+		name       string
+		actor      *authz.Actor
+		actorID    string
+		path       string
+		wantStatus int
+	}{
+		{"collaborator uploads own photo", selfActor, "collaborator-actor", "/people/person-self/photo", fiber.StatusNoContent},
+		{"collaborator cannot change another person's photo", selfActor, "collaborator-actor", "/people/person-other/photo", fiber.StatusForbidden},
+		{"tenant administrator can change any photo", adminActor, "tenant-admin", "/people/person-other/photo", fiber.StatusNoContent},
+		{"actor without admin role or self permission is denied", otherActor, "other-actor", "/people/person-other/photo", fiber.StatusForbidden},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			store := fakeActorStore{actor: tc.actor}
+			app := fiber.New()
+			app.Put("/people/:id/photo", requireTenantAdministratorOrSelfPerson(Dependencies{ActorStore: store}, authz.PermissionPeopleSelfUpdate, "id"), func(c fiber.Ctx) error {
+				return c.SendStatus(fiber.StatusNoContent)
+			})
+			req := httptest.NewRequest(fiber.MethodPut, tc.path, nil)
+			req.Header.Set(authz.HeaderActorID, tc.actorID)
+			req.Header.Set(authz.HeaderTenantID, "default")
+			resp, err := app.Test(req)
+			if err != nil {
+				t.Fatalf("request failed: %v", err)
+			}
+			if resp.StatusCode != tc.wantStatus {
+				t.Fatalf("expected %d, got %d", tc.wantStatus, resp.StatusCode)
+			}
+		})
+	}
+}
+
 func TestRequirePermissionOrSelfPersonRejectsDifferentPerson(t *testing.T) {
 	store := fakeActorStore{actor: &authz.Actor{
 		ID:       "person-actor",

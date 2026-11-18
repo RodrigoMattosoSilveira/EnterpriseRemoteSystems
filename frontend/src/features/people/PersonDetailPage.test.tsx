@@ -601,6 +601,32 @@ describe("PersonDetailPage", () => {
     ).toBe(false);
   });
 
+  it("lets a Person upload their own photo from their profile", async () => {
+    mockFetch(async (url, init) => {
+      recordFetchCall(url, init);
+
+      if (url === `/api/v1/people/${PERSON_ID}`) {
+        return jsonResponse({ data: existingPerson });
+      }
+      if (url === "/api/v1/collaborators/self") {
+        return jsonResponse({ data: [currentCollaborator] });
+      }
+      if (url === "/api/v1/reference-data/person_status") {
+        return jsonResponse({ data: [] });
+      }
+
+      throw new Error(`Unhandled request: ${url}`);
+    });
+
+    renderPersonDetailRoute(personSelfServiceActor);
+
+    await waitForText("Journey History");
+    const photoSection = container.querySelector("#person-photo-title")?.closest("section");
+    const fileInput = photoSection?.querySelector<HTMLInputElement>('input[type="file"]');
+    expect(fileInput).toBeTruthy();
+    expect(fileInput?.disabled).toBe(false);
+  });
+
   it("keeps self-service Journey history visible when the Person has only closed Journeys", async () => {
     const closedOnlyActor: AuthzCurrentActor = {
       ...personSelfServiceActor,

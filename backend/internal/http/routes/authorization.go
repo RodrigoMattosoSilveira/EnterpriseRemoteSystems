@@ -225,6 +225,34 @@ func requireTenantAdministrator(deps Dependencies) fiber.Handler {
 	}
 }
 
+// requireTenantAdministratorOrSelfPerson lets a Tenant Administrator act on any
+// person, and lets a person act on their own record when the actor holds the
+// self permission for that person (for example a collaborator managing their own
+// photo). Anyone else is denied.
+func requireTenantAdministratorOrSelfPerson(deps Dependencies, selfPermission authz.Permission, personIDParam string) fiber.Handler {
+	return func(c fiber.Ctx) error {
+		if deps.DisableRouteAuthorization {
+			return c.Next()
+		}
+
+		actor, err := requestActor(c, deps)
+		if err != nil {
+			return writeAuthorizationError(c, err)
+		}
+		if actor.Scope == authz.ActorScopeTenant && strings.TrimSpace(actor.TenantID) != "" && actor.TenantID != authz.GlobalTenantScope {
+			for _, roleCode := range actor.RoleCodes {
+				if roleCode == string(authz.RoleTenantAdmin) {
+					return c.Next()
+				}
+			}
+		}
+		if actor.HasIntrinsicPermission(selfPermission) && actor.PersonID != "" && actor.PersonID == c.Params(personIDParam) {
+			return c.Next()
+		}
+		return writeAuthorizationError(c, authz.ErrForbidden)
+	}
+}
+
 func requireApplicationPermission(deps Dependencies, permission authz.Permission) fiber.Handler {
 	return func(c fiber.Ctx) error {
 		if deps.DisableRouteAuthorization {

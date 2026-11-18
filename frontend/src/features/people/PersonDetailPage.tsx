@@ -32,6 +32,12 @@ export function PersonDetailPage() {
   const canBrowsePeople = actor.permissions.includes("*") || actor.permissions.includes("people.read");
   const canManageTenantAuthentication =
     actor.scope === "TENANT" && actor.roleCodes.includes("TENANT_ADMIN");
+  // A Tenant Administrator can manage any person's photo. A person can also manage
+  // their own photo (replace or remove) when they hold the self-update permission.
+  const isOwnPerson = actor.personId === id || actor.globalPersonId === id;
+  const canManagePhoto =
+    canManageTenantAuthentication ||
+    (isOwnPerson && actor.permissions.includes("people.self.update"));
   const canCreateCollaboratorJourney =
     actor.scope === "TENANT" &&
     (actor.permissions.includes("*") ||
@@ -184,7 +190,7 @@ export function PersonDetailPage() {
       </header>
 
       <section className="mx-auto max-w-4xl p-4">
-        <PersonPhotoCard personId={personQuery.data.id} canManage={canManageTenantAuthentication} displayName={`${personQuery.data.firstName} ${personQuery.data.lastName}`} />
+        <PersonPhotoCard personId={personQuery.data.id} canManage={canManagePhoto} displayName={`${personQuery.data.firstName} ${personQuery.data.lastName}`} />
         {successMessage && (
           <div
             className="mb-4 rounded border border-green-300 bg-green-50 p-3 text-green-800"
