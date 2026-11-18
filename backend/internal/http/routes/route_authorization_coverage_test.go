@@ -28,6 +28,7 @@ func TestEveryRegisteredAPIRouteHasAuthorizationCoverage(t *testing.T) {
 
 	allowedGuards := map[string]struct{}{
 		"requirePermission":                   {},
+		"requireAnyPermission":                {},
 		"requireApplicationPermission":        {},
 		"requireTenantPermission":             {},
 		"requireTenantAdministrator":          {},
@@ -279,7 +280,7 @@ func TestGoldPriceAdministrationRequiresDedicatedTenantAdminPermission(t *testin
 		}
 	}
 
-	if !strings.Contains(source, `goldPrices.Get("/latest", requirePermission(deps, authz.PermissionPriceListsRead)`) {
-		t.Fatal("latest active gold price must remain readable to expense workflows without granting gold-price administration")
+	if !strings.Contains(source, `goldPrices.Get("/latest", requireAnyPermission(deps, authz.PermissionPriceListsRead, authz.PermissionGoldPricesRead)`) {
+		t.Fatal("latest active gold price must remain readable to expense workflows and view-only collaborators without granting gold-price administration")
 	}
 }

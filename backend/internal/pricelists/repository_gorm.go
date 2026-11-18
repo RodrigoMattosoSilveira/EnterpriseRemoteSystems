@@ -2,7 +2,9 @@ package pricelists
 
 import (
 	"context"
+	"errors"
 	"strings"
+	"time"
 
 	"enterpriseremotesystems/backend/internal/db"
 	"gorm.io/gorm"
@@ -113,14 +115,49 @@ func (r *gormRepository) FindActiveItemByKey(ctx context.Context, tenantID strin
 	return &row, nil
 }
 
+// goldPriceCollaboratorLookbackDays is how far back a collaborator can see gold
+// prices when their current journey started earlier than that window.
+const goldPriceCollaboratorLookbackDays = 7
+
 func (r *gormRepository) ListGoldPrices(ctx context.Context, tenantID string, filter GoldPriceListFilter) ([]db.GoldPrice, error) {
 	var rows []db.GoldPrice
 	q := r.db.WithContext(ctx).Where("tenant_id = ?", strings.TrimSpace(tenantID))
-	if !filter.IncludeInactive {
+	if !filter.IncludeInactive || filter.restricted {
 		q = q.Where("active = ?", true)
+	}
+	if filter.restricted {
+		since, err := r.goldPriceViewSince(ctx, tenantID, filter.viewerMembershipID, time.Now().UTC())
+		if err != nil {
+			return nil, err
+		}
+		q = q.Where("price_date >= ?", since)
 	}
 	err := q.Order("price_date DESC, created_at DESC").Find(&rows).Error
 	return rows, err
+}
+
+// goldPriceViewSince returns the earliest price date a collaborator may see:
+// the later of their current journey start and the lookback window.
+func (r *gormRepository) goldPriceViewSince(ctx context.Context, tenantID string, membershipID string, now time.Time) (string, error) {
+	since := now.AddDate(0, 0, -goldPriceCollaboratorLookbackDays)
+	if strings.TrimSpace(membershipID) == "" {
+		return since.Format("2006-01-02"), nil
+	}
+	var journey db.CollaboratorJourney
+	err := r.db.WithContext(ctx).
+		Where("tenant_id = ? AND membership_id = ? AND closed_at IS NULL", strings.TrimSpace(tenantID), membershipID).
+		Order("journey_start_date DESC").
+		First(&journey).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return since.Format("2006-01-02"), nil
+	}
+	if err != nil {
+		return "", err
+	}
+	if journey.JourneyStartDate.After(since) {
+		since = journey.JourneyStartDate
+	}
+	return since.Format("2006-01-02"), nil
 }
 
 func (r *gormRepository) CreateGoldPrice(ctx context.Context, price *db.GoldPrice) error {

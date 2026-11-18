@@ -57,4 +57,10 @@ type CreateGoldPriceRequest struct {
 
 type GoldPriceListFilter struct {
 	IncludeInactive bool `query:"includeInactive"`
+
+	// Set server-side from the actor, never bound from the query string.
+	// When restricted, the history is limited to active prices inside the
+	// collaborator's view window (see goldPriceViewSince).
+	restricted         bool
+	viewerMembershipID string
 }
