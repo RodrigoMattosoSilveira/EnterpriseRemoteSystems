@@ -1376,6 +1376,7 @@ export const enUSMessages = {
   'production.workPeriodRequired': 'Work Period *',
   'production.selectWorkPeriod': 'Select a Work Period',
   'production.selectHelp': 'Select a Work Period to view, record, or edit its Gold Production entries.',
+  'production.notCompleted': 'This Work Period has not been completed yet. Gold Production can be recorded after its work date has passed.',
   'production.recorded': 'Recorded Gold Production',
   'production.recordedHelp': 'These entries are the source of the read-only Gold Produced values shown in Work Period Accrual.',
   'production.loading': 'Loading production...',

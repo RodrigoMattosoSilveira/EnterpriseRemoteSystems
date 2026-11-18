@@ -462,8 +462,10 @@ function uniqueSuffix(): number {
   return uniquePersonSuffix(test.info().workerIndex);
 }
 
+// Gold production is recorded only for completed work periods, so e2e work
+// dates must be in the past. Spread them over 1900-2009 (all before today).
 function e2eWorkDate(seed: number): string {
-  const date = new Date(Date.UTC(2099, 0, 1));
+  const date = new Date(Date.UTC(1900, 0, 1));
   date.setUTCDate(date.getUTCDate() + e2eWorkDateOffset(seed));
   return date.toISOString().slice(0, 10);
 }
@@ -477,7 +479,7 @@ function e2eWorkDateOffset(seed: number): number {
     hash ^= char.charCodeAt(0);
     hash = Math.imul(hash, 16777619);
   }
-  return Math.abs(hash) % 2_500_000;
+  return Math.abs(hash) % 40_000;
 }
 
 function firstPageSortLastName(seed: number): string {
