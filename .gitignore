@@ -161,3 +161,6 @@ backend/imports/*.csv
 !backend/imports/people.example.csv# Persistent Training environment credentials and deployment evidence.
 .env.training
 .last-training-deployment-revision
+ # Python bytecode caches
+__pycache__/
+*.pyc

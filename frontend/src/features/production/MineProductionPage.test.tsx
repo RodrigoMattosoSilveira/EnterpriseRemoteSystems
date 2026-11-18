@@ -72,6 +72,20 @@ describe("MineProductionPage", () => {
     });
   });
 
+  it("blocks recording for a deep-linked work period that is not completed yet", async () => {
+    mockFetch();
+    renderPage("/gold-production?workPeriodId=wp-future");
+
+    await waitForText("This Work Period has not been completed yet.");
+    const recordButton = Array.from(container.querySelectorAll("button")).find((button) =>
+      button.textContent?.includes("Record Production"),
+    );
+    expect(recordButton?.disabled).toBe(true);
+    const gramsInput = container.querySelector<HTMLInputElement>('input[inputmode="decimal"]');
+    expect(gramsInput?.disabled).toBe(true);
+    expect(fetchCalls.some((call) => call.method === "POST")).toBe(false);
+  });
+
   it("edits an existing Gold Production entry outside the Accrual tab", async () => {
     mockFetch();
     renderPage();
@@ -104,6 +118,20 @@ function mockFetch() {
       const body = init?.body ? JSON.parse(String(init.body)) : undefined;
       fetchCalls.push({ url, method, body });
 
+      if (url === "/api/v1/work-periods/wp-future" && method === "GET") {
+        return response({
+          id: "wp-future",
+          tenantId: "default",
+          workDate: "2099-01-01",
+          periodCode: "DAY",
+          name: "06:00-18:00",
+          startsAt: "2099-01-01T06:00:00Z",
+          endsAt: "2099-01-01T18:00:00Z",
+          status: "PLANNING",
+          createdAt: "x",
+          updatedAt: "x",
+        });
+      }
       if (url.startsWith("/api/v1/work-periods?") && method === "GET") {
         return response({
           items: [
@@ -202,13 +230,13 @@ function mockFetch() {
   );
 }
 
-function renderPage() {
+function renderPage(path = "/gold-production?workPeriodId=wp-1") {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
   const router = createMemoryRouter(
     [{ path: "/gold-production", element: <MineProductionPage /> }],
-    { initialEntries: ["/gold-production?workPeriodId=wp-1"] },
+    { initialEntries: [path] },
   );
   act(() => {
     root = createRoot(container);

@@ -1378,6 +1378,7 @@ export const ptBRMessages = {
   'production.workPeriodRequired': 'Período de Trabalho *',
   'production.selectWorkPeriod': 'Selecione um Período de Trabalho',
   'production.selectHelp': 'Selecione um Período de Trabalho para visualizar, registrar ou editar suas entradas de Produção de Ouro.',
+  'production.notCompleted': 'Este Período de Trabalho ainda não foi concluído. A produção de ouro pode ser registrada após o término do período de trabalho.',
   'production.recorded': 'Produção de Ouro Registrada',
   'production.recordedHelp': 'Essas entradas são a fonte dos valores de Ouro Produzido somente leitura exibidos no Acúmulo do Período de Trabalho.',
   'production.loading': 'Carregando produção...',

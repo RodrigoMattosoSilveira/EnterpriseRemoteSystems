@@ -51,6 +51,9 @@ func (s *service) Create(ctx context.Context, workPeriodID string, req CreateGol
 	if err := ensureEditableWorkPeriod(*workPeriod); err != nil {
 		return nil, err
 	}
+	if err := ensureCompletedWorkPeriod(*workPeriod, time.Now().UTC()); err != nil {
+		return nil, err
+	}
 
 	productionDate, err := parseDate(req.ProductionDate)
 	if err != nil {
@@ -112,6 +115,9 @@ func (s *service) Update(ctx context.Context, id string, req UpdateGoldProductio
 		return nil, ValidationError{Fields: map[string]string{"id": "Inactive gold production entries cannot be updated"}}
 	}
 	if err := ensureEditableWorkPeriod(existing.WorkPeriod); err != nil {
+		return nil, err
+	}
+	if err := ensureCompletedWorkPeriod(existing.WorkPeriod, time.Now().UTC()); err != nil {
 		return nil, err
 	}
 
@@ -243,6 +249,18 @@ func normalizeListFilter(filter GoldProductionEntryListFilter) (normalizedGoldPr
 func ensureEditableWorkPeriod(workPeriod db.WorkPeriod) error {
 	if workPeriod.Status == "CLOSED" {
 		return ValidationError{Fields: map[string]string{"workPeriodId": "Closed work periods cannot be changed"}}
+	}
+	return nil
+}
+
+// ensureCompletedWorkPeriod allows gold production to be recorded only once the
+// work period has ended. "Completed" means its end instant (endsAt) is at or
+// before now. Comparing instants keeps the rule correct for any tenant timezone,
+// and a period that ended earlier today is completed. A period whose end is still
+// ahead is rejected even if the UI was bypassed.
+func ensureCompletedWorkPeriod(workPeriod db.WorkPeriod, now time.Time) error {
+	if workPeriod.EndsAt.After(now) {
+		return ValidationError{Fields: map[string]string{"workPeriodId": "Gold production can only be recorded for completed work periods"}}
 	}
 	return nil
 }

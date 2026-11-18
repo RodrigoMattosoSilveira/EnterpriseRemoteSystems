@@ -456,7 +456,9 @@ function uniqueSuffix(): number {
 
 function uniqueDate(suffix: number): string {
   const digits = String(suffix).padStart(12, "0");
-  const year = 3200 + (Number(digits.slice(-4)) % 5000);
+  // Gold production is recorded only for completed work periods: keep the
+  // date in the past (1900-1999).
+  const year = 1900 + (Number(digits.slice(-4)) % 100);
   const month = 1 + (Number(digits.slice(-6, -4)) % 12);
   const day = 1 + (Number(digits.slice(-8, -6)) % 28);
   return `${String(year).padStart(4, "0")}-${String(month).padStart(
