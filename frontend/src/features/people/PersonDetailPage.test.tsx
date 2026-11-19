@@ -785,6 +785,149 @@ describe("PersonDetailPage", () => {
   });
 });
 
+describe("Person self-service photo flow", () => {
+  const PNG_BYTES = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]);
+  type PhotoState = { hasPhoto: boolean };
+
+  beforeEach(() => {
+    const urlStatics = URL as unknown as { createObjectURL?: unknown; revokeObjectURL?: unknown };
+    if (!urlStatics.createObjectURL) urlStatics.createObjectURL = vi.fn(() => "blob:person-photo");
+    if (!urlStatics.revokeObjectURL) urlStatics.revokeObjectURL = vi.fn();
+  });
+
+  function mockSelfPhotoFetch(state: PhotoState) {
+    const calls: Array<{ url: string; method: string; contentType: string }> = [];
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === "string" ? input : input.toString();
+      const method = methodOf(init);
+      const contentType = new Headers(init?.headers).get("Content-Type") ?? "";
+      if (url === `/api/v1/people/${PERSON_ID}/photo`) {
+        calls.push({ url, method, contentType });
+        if (method === "GET") {
+          if (!state.hasPhoto) return jsonResponse({ error: { code: "not_found", message: "Record not found" } }, { status: 404 });
+          return new Response(new Blob([PNG_BYTES], { type: "image/png" }), { status: 200, headers: { "Content-Type": "image/png" } });
+        }
+        if (method === "PUT") {
+          state.hasPhoto = true;
+          return jsonResponse({ data: { contentType: contentType || "image/png", byteSize: PNG_BYTES.length, width: 100, height: 100, updatedAt: "2026-11-20T00:00:00Z" } });
+        }
+        if (method === "DELETE") {
+          state.hasPhoto = false;
+          return new Response(null, { status: 204 });
+        }
+      }
+      if (url === `/api/v1/people/${PERSON_ID}`) return jsonResponse({ data: existingPerson });
+      if (url === "/api/v1/collaborators/self") return jsonResponse({ data: [currentCollaborator] });
+      if (url === "/api/v1/reference-data/person_status") return jsonResponse({ data: [] });
+      throw new Error(`Unhandled request: ${method} ${url}`);
+    });
+    return calls;
+  }
+
+  function photoInput(): HTMLInputElement | null | undefined {
+    const section = container.querySelector("#person-photo-title")?.closest("section");
+    return section?.querySelector<HTMLInputElement>('input[type="file"]');
+  }
+
+  async function chooseFile(file: File) {
+    const input = photoInput();
+    expect(input).toBeTruthy();
+    Object.defineProperty(input!, "files", { value: [file], configurable: true });
+    await act(async () => input!.dispatchEvent(new Event("change", { bubbles: true })));
+  }
+
+  async function clickButton(text: string) {
+    await waitFor(() => Boolean(buttonByText(text)));
+    await act(async () => buttonByText(text)!.click());
+  }
+
+  it("collaborator uploads a valid photo to their own Person record", async () => {
+    const state: PhotoState = { hasPhoto: false };
+    const calls = mockSelfPhotoFetch(state);
+    renderPersonDetailRoute(personSelfServiceActor);
+    await waitForText("Journey History");
+    await waitFor(() => Boolean(textNode("Add Photo")));
+
+    await chooseFile(new File([PNG_BYTES], "me.png", { type: "image/png" }));
+    await waitFor(() => calls.some((call) => call.method === "PUT"));
+
+    const put = calls.find((call) => call.method === "PUT");
+    expect(put?.url).toBe(`/api/v1/people/${PERSON_ID}/photo`);
+    expect(put?.contentType).toBe("image/png");
+    expect(state.hasPhoto).toBe(true);
+  });
+
+  it("collaborator replaces an existing photo with a JPEG", async () => {
+    const state: PhotoState = { hasPhoto: true };
+    const calls = mockSelfPhotoFetch(state);
+    renderPersonDetailRoute(personSelfServiceActor);
+    await waitForText("Journey History");
+    await waitFor(() => Boolean(textNode("Replace Photo")));
+
+    await chooseFile(new File([PNG_BYTES], "new.jpg", { type: "image/jpeg" }));
+    await waitFor(() => calls.some((call) => call.method === "PUT"));
+
+    const put = calls.find((call) => call.method === "PUT");
+    expect(put?.url).toBe(`/api/v1/people/${PERSON_ID}/photo`);
+    expect(put?.contentType).toBe("image/jpeg");
+  });
+
+  it("collaborator removes their own photo and the placeholder returns", async () => {
+    const state: PhotoState = { hasPhoto: true };
+    const calls = mockSelfPhotoFetch(state);
+    renderPersonDetailRoute(personSelfServiceActor);
+    await waitForText("Journey History");
+    await clickButton("Remove Photo");
+    await waitFor(() => calls.some((call) => call.method === "DELETE"));
+
+    expect(calls.some((call) => call.method === "DELETE" && call.url === `/api/v1/people/${PERSON_ID}/photo`)).toBe(true);
+    expect(state.hasPhoto).toBe(false);
+  });
+
+  it("re-uploads the same file after removal", async () => {
+    const state: PhotoState = { hasPhoto: true };
+    const calls = mockSelfPhotoFetch(state);
+    renderPersonDetailRoute(personSelfServiceActor);
+    await waitForText("Journey History");
+    await clickButton("Remove Photo");
+    await waitFor(() => calls.some((call) => call.method === "DELETE"));
+
+    const file = new File([PNG_BYTES], "same.png", { type: "image/png" });
+    await waitFor(() => Boolean(textNode("Add Photo")));
+    await chooseFile(file);
+    await waitFor(() => calls.filter((call) => call.method === "PUT").length === 1);
+    expect(state.hasPhoto).toBe(true);
+  });
+
+  it("rejects a PDF renamed as JPEG without sending it and keeps the existing photo", async () => {
+    const state: PhotoState = { hasPhoto: true };
+    const calls = mockSelfPhotoFetch(state);
+    renderPersonDetailRoute(personSelfServiceActor);
+    await waitForText("Journey History");
+    await waitFor(() => Boolean(textNode("Replace Photo")));
+
+    await chooseFile(new File([new Uint8Array([37, 80, 68, 70])], "fake.jpg", { type: "application/pdf" }));
+    await waitForText("Choose a JPEG or PNG image.");
+
+    expect(calls.some((call) => call.method === "PUT")).toBe(false);
+    expect(state.hasPhoto).toBe(true);
+  });
+
+  it("rejects an oversized photo without sending it and keeps the existing photo", async () => {
+    const state: PhotoState = { hasPhoto: true };
+    const calls = mockSelfPhotoFetch(state);
+    renderPersonDetailRoute(personSelfServiceActor);
+    await waitForText("Journey History");
+    await waitFor(() => Boolean(textNode("Replace Photo")));
+
+    await chooseFile(new File([new Uint8Array(5 * 1024 * 1024 + 1)], "big.png", { type: "image/png" }));
+    await waitForText("The photo must be no larger than 5 MiB.");
+
+    expect(calls.some((call) => call.method === "PUT")).toBe(false);
+    expect(state.hasPhoto).toBe(true);
+  });
+});
+
 function renderPersonDetailRoute(
   actor: AuthzCurrentActor = authorizationActor,
 ) {
