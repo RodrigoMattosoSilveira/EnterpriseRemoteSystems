@@ -1217,10 +1217,10 @@ func (s *GORMStore) buildTenantBoundActor(ctx context.Context, binding accountAc
 
 func intrinsicSelfServicePermissions(hasCollaboratorHistory bool, activeCollaborator bool) map[Permission]struct{} {
 	permissions := map[Permission]struct{}{
-		PermissionAuthzSelfRead:     {},
-		PermissionTenantsRead:       {},
-		PermissionPeopleSelfRead:    {},
-		PermissionPeopleSelfUpdate:  {},
+		PermissionAuthzSelfRead:    {},
+		PermissionTenantsRead:      {},
+		PermissionPeopleSelfRead:   {},
+		PermissionPeopleSelfUpdate: {},
 	}
 	if hasCollaboratorHistory {
 		permissions[PermissionCollaboratorsSelfRead] = struct{}{}
@@ -1234,6 +1234,10 @@ func intrinsicSelfServicePermissions(hasCollaboratorHistory bool, activeCollabor
 			PermissionLedgerReceiptsSelfRead,
 			PermissionLedgerReceiptsSelfAccept,
 			PermissionJourneyExtensionsSelfRespond,
+			// Active collaborators may view tenant gold prices (view-only). The
+			// handler narrows their history window; recording and deactivation
+			// still require PermissionGoldPricesManage.
+			PermissionGoldPricesRead,
 		} {
 			permissions[permission] = struct{}{}
 		}

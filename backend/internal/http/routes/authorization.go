@@ -203,6 +203,31 @@ func requirePermission(deps Dependencies, permission authz.Permission) fiber.Han
 	}
 }
 
+// requireAnyPermission admits the actor when any listed permission is granted.
+func requireAnyPermission(deps Dependencies, permissions ...authz.Permission) fiber.Handler {
+	return func(c fiber.Ctx) error {
+		if deps.DisableRouteAuthorization {
+			return c.Next()
+		}
+
+		actor, err := requestActor(c, deps)
+		if err != nil {
+			return writeAuthorizationError(c, err)
+		}
+		var denied error
+		for _, permission := range permissions {
+			if err := authz.RequirePermission(actor, permission); err == nil {
+				recordSupportLeaseAuthorization(c, deps, actor, permission, authz.AuditDecisionAuthorized, "")
+				return c.Next()
+			} else {
+				denied = err
+			}
+		}
+		recordSupportLeaseAuthorization(c, deps, actor, permissions[0], authz.AuditDecisionDenied, denied.Error())
+		return writeAuthorizationError(c, denied)
+	}
+}
+
 func requireTenantAdministrator(deps Dependencies) fiber.Handler {
 	return func(c fiber.Ctx) error {
 		if deps.DisableRouteAuthorization {
