@@ -28,6 +28,7 @@ func TestEveryRegisteredAPIRouteHasAuthorizationCoverage(t *testing.T) {
 
 	allowedGuards := map[string]struct{}{
 		"requirePermission":                      {},
+		"requireAnyPermission":                   {},
 		"requireApplicationPermission":           {},
 		"requireTenantPermission":                {},
 		"requireTenantAdministrator":             {},
@@ -37,16 +38,6 @@ func TestEveryRegisteredAPIRouteHasAuthorizationCoverage(t *testing.T) {
 		"authorizationHandledByHandler":          {},
 		"authenticationPublic":                   {},
 		"requireAuthenticatedSession":            {},
-		"requirePermission":                   {},
-		"requireAnyPermission":                {},
-		"requireApplicationPermission":        {},
-		"requireTenantPermission":             {},
-		"requireTenantAdministrator":          {},
-		"requirePermissionOrSelfPerson":       {},
-		"requirePermissionOrSelfCollaborator": {},
-		"authorizationHandledByHandler":       {},
-		"authenticationPublic":                {},
-		"requireAuthenticatedSession":         {},
 	}
 	handlerAuthorizedMethods := map[string]struct{}{
 		"BackfillDebitLedgerReceipts":               {},
