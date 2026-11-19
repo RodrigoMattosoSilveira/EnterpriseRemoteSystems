@@ -71,11 +71,30 @@ func (h *Handler) ListGoldPrices(c fiber.Ctx) error {
 	if err := c.Bind().Query(&filter); err != nil {
 		return httpx.WriteError(c, err)
 	}
+	if actor, err := authz.RequestActorFromContext(c); err == nil && goldPriceViewIsRestricted(actor) {
+		filter.restricted = true
+		filter.viewerMembershipID = strings.TrimSpace(actor.MembershipID)
+	}
 	items, err := h.service.ListGoldPrices(c.Context(), requestTenantID(c), filter)
 	if err != nil {
 		return httpx.WriteError(c, err)
 	}
 	return c.JSON(httpx.APIResponse{Data: items})
+}
+
+// goldPriceViewIsRestricted reports whether the actor can only see the
+// collaborator view window: gold-price read comes from the intrinsic
+// collaborator grant, not from a delegated tenant role or manage authority.
+func goldPriceViewIsRestricted(actor *authz.Actor) bool {
+	if actor == nil {
+		return false
+	}
+	for _, permission := range []authz.Permission{authz.PermissionAll, authz.PermissionGoldPricesRead, authz.PermissionGoldPricesManage} {
+		if _, ok := actor.DelegatedPermissions[permission]; ok {
+			return false
+		}
+	}
+	return true
 }
 
 func (h *Handler) CreateGoldPrice(c fiber.Ctx) error {

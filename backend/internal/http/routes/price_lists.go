@@ -20,7 +20,9 @@ func RegisterPriceListRoutes(v1 fiber.Router, deps Dependencies) {
 	// creating GOLD_GRAM expenses, but only Tenant Administrators may browse
 	// history or change the tenant's gold-price source.
 	goldPrices.Get("/", requirePermission(deps, authz.PermissionGoldPricesRead), deps.PriceListHandler.ListGoldPrices)
-	goldPrices.Get("/latest", requirePermission(deps, authz.PermissionPriceListsRead), deps.PriceListHandler.LatestGoldPrice)
+	// Collaborators hold gold_prices.read (view-only) and need the latest
+	// conversion source; the other readers keep their existing access.
+	goldPrices.Get("/latest", requireAnyPermission(deps, authz.PermissionPriceListsRead, authz.PermissionGoldPricesRead), deps.PriceListHandler.LatestGoldPrice)
 	goldPrices.Post("/", requirePermission(deps, authz.PermissionGoldPricesManage), deps.PriceListHandler.CreateGoldPrice)
 	goldPrices.Patch("/:id/deactivate", requirePermission(deps, authz.PermissionGoldPricesManage), deps.PriceListHandler.DeactivateGoldPrice)
 }
