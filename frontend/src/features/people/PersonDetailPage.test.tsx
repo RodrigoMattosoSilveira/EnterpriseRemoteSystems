@@ -627,6 +627,68 @@ describe("PersonDetailPage", () => {
     expect(fileInput?.disabled).toBe(false);
   });
 
+  it("does not offer photo management when only globalPersonId matches the page", async () => {
+    const globalOnlyActor: AuthzCurrentActor = {
+      ...personSelfServiceActor,
+      personId: "person-other-123",
+      globalPersonId: PERSON_ID,
+    };
+
+    mockFetch(async (url, init) => {
+      recordFetchCall(url, init);
+
+      if (url === `/api/v1/people/${PERSON_ID}`) {
+        return jsonResponse({ data: existingPerson });
+      }
+      if (url === "/api/v1/collaborators/self") {
+        return jsonResponse({ data: [currentCollaborator] });
+      }
+      if (url === "/api/v1/reference-data/person_status") {
+        return jsonResponse({ data: [] });
+      }
+
+      throw new Error(`Unhandled request: ${url}`);
+    });
+
+    renderPersonDetailRoute(globalOnlyActor);
+
+    await waitForText("Journey History");
+    const photoSection = container.querySelector("#person-photo-title")?.closest("section");
+    const fileInput = photoSection?.querySelector<HTMLInputElement>('input[type="file"]');
+    expect(!fileInput || fileInput.disabled).toBe(true);
+  });
+
+  it("does not offer photo management when self-update is only role-delegated", async () => {
+    const delegatedOnlyActor: AuthzCurrentActor = {
+      ...personSelfServiceActor,
+      intrinsicPermissions: [],
+      delegatedPermissions: ["people.self.update"],
+    };
+
+    mockFetch(async (url, init) => {
+      recordFetchCall(url, init);
+
+      if (url === `/api/v1/people/${PERSON_ID}`) {
+        return jsonResponse({ data: existingPerson });
+      }
+      if (url === "/api/v1/collaborators/self") {
+        return jsonResponse({ data: [currentCollaborator] });
+      }
+      if (url === "/api/v1/reference-data/person_status") {
+        return jsonResponse({ data: [] });
+      }
+
+      throw new Error(`Unhandled request: ${url}`);
+    });
+
+    renderPersonDetailRoute(delegatedOnlyActor);
+
+    await waitForText("Journey History");
+    const photoSection = container.querySelector("#person-photo-title")?.closest("section");
+    const fileInput = photoSection?.querySelector<HTMLInputElement>('input[type="file"]');
+    expect(!fileInput || fileInput.disabled).toBe(true);
+  });
+
   it("keeps self-service Journey history visible when the Person has only closed Journeys", async () => {
     const closedOnlyActor: AuthzCurrentActor = {
       ...personSelfServiceActor,
@@ -916,3 +978,4 @@ async function submitForm() {
     form.dispatchEvent(new SubmitEvent("submit", { bubbles: true, cancelable: true }));
   });
 }
+

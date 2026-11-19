@@ -33,11 +33,14 @@ export function PersonDetailPage() {
   const canManageTenantAuthentication =
     actor.scope === "TENANT" && actor.roleCodes.includes("TENANT_ADMIN");
   // A Tenant Administrator can manage any person's photo. A person can also manage
-  // their own photo (replace or remove) when they hold the self-update permission.
-  const isOwnPerson = actor.personId === id || actor.globalPersonId === id;
+  // their own photo (replace or remove) when the self-update permission is intrinsic
+  // to their identity. Role-delegated grants do not count, matching the backend
+  // (requireTenantAdministratorOrSelfPerson uses HasIntrinsicPermission), and the
+  // ownership check compares only actor.personId, as the backend does.
+  const isOwnPerson = actor.personId === id;
   const canManagePhoto =
     canManageTenantAuthentication ||
-    (isOwnPerson && actor.permissions.includes("people.self.update"));
+    (isOwnPerson && (actor.intrinsicPermissions ?? []).includes("people.self.update"));
   const canCreateCollaboratorJourney =
     actor.scope === "TENANT" &&
     (actor.permissions.includes("*") ||
