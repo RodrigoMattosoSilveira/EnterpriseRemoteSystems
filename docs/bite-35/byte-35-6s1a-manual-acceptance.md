@@ -1,5 +1,7 @@
 # Byte 35.6S.1A — TRN Environment and Deployment: Manual Acceptance T01–T12
 
+> **SUPERSEDED — DO NOT EXECUTE THIS AS A SEPARATE PROCEDURE.** The single current operational procedure, including T01–T12, is [`byte-35-6s1a-operator-runbook-and-acceptance.md`](byte-35-6s1a-operator-runbook-and-acceptance.md). This file remains for legacy test-contract/reference compatibility only.
+
 **Baseline:** record the exact accepted release revision, selected latest TST-approved SHA, GitHub deployment run and training change approval in your private evidence record. Do not substitute the 1096 feature-branch SHA for the eventually accepted Test release SHA.
 
 **Test identities:** *Release Operator* (authorized GitHub Test and TRN deployment), *Infrastructure Operator* (approved Hetzner/1Password administrator), *Training Application Administrator A/B* (two individually controlled TRN Application Administrator accounts), *Training Tenant Administrator* (approved Tenant Actor), *Customer Support Specialist* (her own `TENANT_VIEWER` login), *Training Coordinator* (observer). Assign real responsible persons before T03; responsibility names are not application Roles.
