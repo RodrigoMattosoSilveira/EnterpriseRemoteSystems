@@ -1,5 +1,7 @@
 # Byte 35.6S.1A — Training (TRN) Environment and Deployment
 
+> **SUPERSEDED — DO NOT EXECUTE THIS AS A SEPARATE PROCEDURE.** The single current operational procedure, including T01–T12, is [`byte-35-6s1a-operator-runbook-and-acceptance.md`](byte-35-6s1a-operator-runbook-and-acceptance.md). This file remains for legacy test-contract/reference compatibility only.
+
 **Purpose:** Train an individually identified Customer Support Specialist on the most recent **TST-approved release candidate**, independently of DEV/TST test fixtures and Production customer data. TRN shares the existing Hetzner *VM*, but **never** a database, authentication session, credential, deployment schedule, or backup namespace with another environment.
 
 **Status:** Software and offline regressions are deliverables; **live TRN is BLOCKED until actual server, GitHub, 1Password, backup, DNS/HTTPS, and human acceptance evidence is collected.** Nothing in this document authorizes Production activation, provides a Production support lease, or relaxes the 35.5/35.6/35.7 gates.
