@@ -2,6 +2,7 @@ package referencedata
 
 import (
 	"context"
+	"encoding/json"
 	"strings"
 	"time"
 
@@ -53,6 +54,10 @@ func (s *service) Create(ctx context.Context, tenantID string, typ string, req C
 	if err := s.validateReferenceData(ctx, tenantID, typ, code, label, ""); err != nil {
 		return nil, err
 	}
+	metadataJSON, err := normalizeAcceptanceModeMetadata(typ, code, metadataJSON)
+	if err != nil {
+		return nil, err
+	}
 
 	now := time.Now().UTC()
 	row := &db.ReferenceData{
@@ -88,6 +93,10 @@ func (s *service) Update(ctx context.Context, tenantID string, typ string, id st
 	}
 
 	if err := s.validateReferenceData(ctx, tenantID, typ, code, label, row.ID); err != nil {
+		return nil, err
+	}
+	metadataJSON, err = normalizeAcceptanceModeMetadata(typ, code, metadataJSON)
+	if err != nil {
 		return nil, err
 	}
 
@@ -205,6 +214,38 @@ func validateTenantAndType(tenantID string, typ string) error {
 		return ValidationError{Fields: fields}
 	}
 	return nil
+}
+
+// receiptAcceptanceModeType and the modes below are read by the currentaccounts
+// package. A wrong value here would silently change how receipts are closed, so
+// the stored JSON is checked and rebuilt on every write.
+const receiptAcceptanceModeType = "receipt_acceptance_mode"
+
+var receiptAcceptanceModes = map[string]bool{"BOTH": true, "PAPER_ONLY": true, "ELECTRONIC_ONLY": true}
+
+func normalizeAcceptanceModeMetadata(typ string, code string, metadataJSON string) (string, error) {
+	if typ != receiptAcceptanceModeType {
+		return metadataJSON, nil
+	}
+	if code != "EXPENSE_DEBIT" {
+		return "", ValidationError{Fields: map[string]string{"code": "Acceptance mode code must be EXPENSE_DEBIT"}}
+	}
+	if strings.TrimSpace(metadataJSON) == "" {
+		metadataJSON = `{"mode":"BOTH"}`
+	}
+	var parsed map[string]any
+	if err := json.Unmarshal([]byte(metadataJSON), &parsed); err != nil {
+		return "", ValidationError{Fields: map[string]string{"metadataJson": "Acceptance mode metadata must be valid JSON"}}
+	}
+	mode, ok := parsed["mode"].(string)
+	if len(parsed) != 1 || !ok || !receiptAcceptanceModes[mode] {
+		return "", ValidationError{Fields: map[string]string{"metadataJson": "Acceptance mode must be BOTH, PAPER_ONLY, or ELECTRONIC_ONLY"}}
+	}
+	rebuilt, err := json.Marshal(map[string]string{"mode": mode})
+	if err != nil {
+		return "", err
+	}
+	return string(rebuilt), nil
 }
 
 func normalizeType(value string) string  { return strings.TrimSpace(value) }

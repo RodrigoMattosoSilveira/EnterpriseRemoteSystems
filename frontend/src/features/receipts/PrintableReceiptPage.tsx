@@ -58,7 +58,17 @@ export function PrintableReceiptPage() {
   const data = receipt.data;
   const finalSettlementReceipt = data.receiptPurpose === "FINAL_SETTLEMENT_TENANT_PAYMENT" || data.receiptPurpose === "FINAL_SETTLEMENT_COLLABORATOR_PAYMENT";
   const canPrint = canPrintReceipt(data) && (wildcard || actor.permissions.includes("ledger.receipts.print"));
-  const canReturn = canReturnReceipt(data) && !finalSettlementReceipt && (wildcard || actor.permissions.includes("ledger.receipts.return"));
+  const isExpenseReceipt = data.receiptPurpose === "LEDGER_DEBIT";
+  const expenseAcceptable =
+    isExpenseReceipt &&
+    data.acceptanceMode !== undefined &&
+    data.acceptanceMode !== "PAPER_ONLY" &&
+    ["ISSUED", "PRINTED", "SIGNED"].includes(data.status);
+  const canReturn =
+    canReturnReceipt(data) &&
+    !finalSettlementReceipt &&
+    data.acceptanceMode !== "ELECTRONIC_ONLY" &&
+    (wildcard || actor.permissions.includes("ledger.receipts.return"));
   const canAcceptAsCollaborator =
     data.acceptingParty === "COLLABORATOR" &&
     actor.collaboratorId === data.collaboratorId &&
@@ -67,7 +77,8 @@ export function PrintableReceiptPage() {
     data.acceptingParty === "TENANT" &&
     actor.scope === "TENANT" &&
     actor.permissions.includes("ledger.receipts.tenant.accept");
-  const canAccept = finalSettlementReceipt && !isReceiptTerminal(data.status) && (canAcceptAsCollaborator || canAcceptAsTenant);
+  const canAccept = (finalSettlementReceipt || expenseAcceptable) && !isReceiptTerminal(data.status) && (canAcceptAsCollaborator || canAcceptAsTenant);
+  const showAcceptPanel = finalSettlementReceipt || expenseAcceptable || Boolean(data.acceptedAt);
   const terminal = isReceiptTerminal(data.status);
   const cancelledReceipt = data.status === "CANCELLED";
   const signedDocumentReady = signedDocumentRef.trim().length > 0;
@@ -106,13 +117,13 @@ export function PrintableReceiptPage() {
           </div>
           ) : null}
 
-          {finalSettlementReceipt ? (
+          {showAcceptPanel ? (
             <div className="mt-4 grid gap-4 rounded-2xl border border-green-200 bg-green-50 p-4">
               <div>
                 <h2 className="text-lg font-bold">{t("receipt.acceptance")}</h2>
                 <p className="mt-1 text-sm text-gray-700">
                   {data.acceptingParty === "COLLABORATOR"
-                    ? t("receipt.acceptCollaboratorHelp")
+                    ? (isExpenseReceipt ? t("receipt.acceptExpenseHelp") : t("receipt.acceptCollaboratorHelp"))
                     : t("receipt.acceptTenantHelp")}
                 </p>
               </div>
@@ -127,7 +138,7 @@ export function PrintableReceiptPage() {
                     <textarea className="min-h-20 rounded-xl border px-3 py-2" value={notes} onChange={(e) => setNotes(e.target.value)} />
                   </label>
                   <button type="button" disabled={acceptReceipt.isPending} onClick={acceptInApp} className="rounded-xl bg-green-700 px-4 py-2 font-semibold text-white disabled:opacity-50">
-                    {acceptReceipt.isPending ? t("receipt.accepting") : t("receipt.acceptPayment")}
+                    {acceptReceipt.isPending ? t("receipt.accepting") : t(isExpenseReceipt ? "receipt.acceptExpense" : "receipt.acceptPayment")}
                   </button>
                   {acceptReceipt.error ? <ApiErrorPanel error={acceptReceipt.error} translate={t} /> : null}
                 </>
@@ -137,12 +148,12 @@ export function PrintableReceiptPage() {
             </div>
           ) : null}
 
-          {!finalSettlementReceipt && !cancelledReceipt ? (
+          {!finalSettlementReceipt && !cancelledReceipt && (canReturn || terminal || wildcard || actor.permissions.includes("ledger.receipts.return")) ? (
           <div className="mt-4 grid gap-4 rounded-2xl border p-4">
             <div>
               <h2 className="text-lg font-bold">{t("receipt.signedReturn")}</h2>
               <p className="mt-1 text-sm text-gray-600">
-                {t("receipt.returnHelp")}
+                {data.acceptanceMode === "ELECTRONIC_ONLY" ? t("receipt.returnElectronicOnly") : t("receipt.returnHelp")}
               </p>
             </div>
             {terminal ? (
@@ -201,6 +212,13 @@ export function PrintableReceiptPage() {
               <Item label={t("receipt.returnedAt")} value={data.returnedAt ? formatDateTime(data.returnedAt) : t("receipt.notReturned")} />
               <Item label={t("receipt.receivedBy")} value={data.receivedBy || t("receipt.notReturned")} />
               <Item label={t("receipt.signedDocumentLabel")} value={data.signedDocumentRef || t("receipt.notRecorded")} />
+              {data.acceptedAt ? (
+                <>
+                  <Item label={t("receipt.acceptedAt")} value={formatDateTime(data.acceptedAt)} />
+                  <Item label={t("receipt.acceptedBy")} value={data.acceptedBy || t("receipt.authorizedActor")} />
+                  <Item label={t("receipt.acceptanceMethod")} value={acceptanceMethodLabel(data.acceptanceMethod || "IN_APP", t)} />
+                </>
+              ) : null}
             </>
           )}
         </dl>

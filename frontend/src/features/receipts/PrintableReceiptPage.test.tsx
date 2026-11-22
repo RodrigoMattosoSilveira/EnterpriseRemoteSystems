@@ -187,7 +187,68 @@ describe("PrintableReceiptPage", () => {
     await clickButton("Accept payment and sign receipt");
     await waitForText("Accepted in-app by tenant-admin@example.com");
   });
+
+  it("lets the Collaborator accept an issued expense receipt electronically under BOTH", async () => {
+    authActor = collaboratorActorFixture();
+    receipt = receiptFixture({ status: "ISSUED", issuedAt: "2026-06-22T12:00:00Z", issuedBy: "expense-admin@example.com", acceptanceMode: "BOTH" });
+    mockReceiptFetch();
+    renderPage();
+
+    await waitForText("Accept expense receipt");
+    expect(buttonByText("Accept expense receipt")?.disabled).toBe(false);
+    expect(buttonByText("Record signed return")).toBeFalsy();
+
+    await clickButton("Accept expense receipt");
+    await waitForText("Accepted in-app by collaborator@example.com");
+
+    const acceptCall = fetchCalls.find((call) => call.url.endsWith("/receipt/accept"));
+    expect(acceptCall?.method).toBe("POST");
+    expect(acceptCall?.body).toEqual({ confirm: true, notes: "" });
+  });
+
+  it("hides electronic acceptance for expense receipts under PAPER_ONLY but keeps the operator return", async () => {
+    authActor = collaboratorActorFixture();
+    receipt = receiptFixture({ status: "PRINTED", issuedAt: "2026-06-22T12:00:00Z", printedAt: "2026-06-22T12:01:00Z", issuedBy: "expense-admin@example.com", acceptanceMode: "PAPER_ONLY" });
+    mockReceiptFetch();
+    renderPage();
+
+    await waitForText("Receipt lifecycle");
+    expect(buttonByText("Accept expense receipt")).toBeFalsy();
+    expect(container.textContent).not.toContain("Accept expense receipt");
+  });
+
+  it("shows the operator that paper return is disabled under ELECTRONIC_ONLY", async () => {
+    receipt = receiptFixture({ status: "PRINTED", issuedAt: "2026-06-22T12:00:00Z", printedAt: "2026-06-22T12:01:00Z", issuedBy: "expense-admin@example.com", acceptanceMode: "ELECTRONIC_ONLY" });
+    mockReceiptFetch();
+    renderPage();
+
+    await waitForText("accepts expense receipts electronically only");
+    expect((fieldControl("Signed document reference") as HTMLInputElement | null)?.disabled).toBe(true);
+    expect(buttonByText("Record signed return")?.disabled).toBe(true);
+  });
+
+  it("does not offer expense acceptance before the receipt is issued", async () => {
+    authActor = collaboratorActorFixture();
+    receipt = receiptFixture({ status: "PENDING_ISSUE", acceptanceMode: "BOTH" });
+    mockReceiptFetch();
+    renderPage();
+
+    await waitForText("Receipt lifecycle");
+    expect(buttonByText("Accept expense receipt")).toBeFalsy();
+  });
 });
+
+function collaboratorActorFixture(): AuthzCurrentActor {
+  return actorFixture({
+    actorKey: "collaborator@example.com",
+    actorRecordId: "actor-collaborator",
+    collaboratorId: "collab-20e",
+    roleCodes: [],
+    permissions: ["ledger.receipts.self.read", "ledger.receipts.self.accept"],
+    intrinsicPermissions: ["ledger.receipts.self.read", "ledger.receipts.self.accept"],
+    delegatedPermissions: [],
+  });
+}
 
 function renderPage() {
   const queryClient = new QueryClient({

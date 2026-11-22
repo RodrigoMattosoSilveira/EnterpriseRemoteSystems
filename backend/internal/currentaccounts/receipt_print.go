@@ -20,7 +20,15 @@ func (s *service) GetPrintableReceipt(ctx context.Context, ledgerEntryID string)
 	if err != nil {
 		return nil, err
 	}
-	return toPrintableReceiptDTO(*receipt), nil
+	dto := toPrintableReceiptDTO(*receipt)
+	if scope := receiptAcceptanceScope(*receipt); scope != "" {
+		mode, err := s.receiptAcceptanceMode(ctx, scope)
+		if err != nil {
+			return nil, err
+		}
+		dto.AcceptanceMode = mode
+	}
+	return dto, nil
 }
 
 func (s *service) PrintReceipt(ctx context.Context, ledgerEntryID, printedBy string) (*PrintableReceiptDTO, error) {
@@ -54,6 +62,15 @@ func (s *service) ReturnReceipt(ctx context.Context, ledgerEntryID, receivedBy s
 	purpose := strings.ToUpper(strings.TrimSpace(receipt.ReceiptPurpose))
 	if purpose == receiptPurposeFinalTenantPayment || purpose == receiptPurposeFinalCollaboratorPayment {
 		return nil, ErrReceiptRequiresInAppAcceptance
+	}
+	if scope := receiptAcceptanceScope(*receipt); scope != "" {
+		mode, err := s.receiptAcceptanceMode(ctx, scope)
+		if err != nil {
+			return nil, err
+		}
+		if mode == receiptAcceptanceModeElectronic {
+			return nil, ErrReceiptReturnModeBlocked
+		}
 	}
 	receipt, err = s.repo.MarkReceiptReturned(ctx, receipt.ID, receivedBy, req.SignedDocumentRef, req.Notes, time.Now().UTC())
 	if err != nil {

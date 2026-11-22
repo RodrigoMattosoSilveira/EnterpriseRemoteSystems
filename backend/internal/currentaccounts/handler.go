@@ -396,6 +396,9 @@ func (h *Handler) ReturnReceipt(c fiber.Ctx) error {
 		if errors.Is(err, ErrReceiptRequiresInAppAcceptance) {
 			return c.Status(fiber.StatusConflict).JSON(httpx.APIResponse{Error: &httpx.APIError{Code: "receipt_requires_in_app_acceptance", Message: err.Error()}})
 		}
+		if errors.Is(err, ErrReceiptReturnModeBlocked) {
+			return c.Status(fiber.StatusConflict).JSON(httpx.APIResponse{Error: &httpx.APIError{Code: "receipt_return_mode_blocked", Message: err.Error()}})
+		}
 		return httpx.WriteError(c, err)
 	}
 	return c.JSON(httpx.APIResponse{Data: result})
@@ -431,13 +434,28 @@ func (h *Handler) AcceptReceipt(c fiber.Ctx) error {
 		return c.Status(fiber.StatusConflict).JSON(httpx.APIResponse{Error: &httpx.APIError{Code: "receipt_acceptance_party_invalid", Message: ErrReceiptAcceptancePartyMismatch.Error()}})
 	}
 
-	result, err := h.service.AcceptReceipt(requesttenant.Context(c), c.Params("entryId"), actor.ID, expectedParty, req)
+	// Client evidence comes from the transport layer, never from the body.
+	acceptCtx := WithReceiptClientInfo(requesttenant.Context(c), ReceiptClientInfo{
+		IP:        c.IP(),
+		UserAgent: c.Get("User-Agent"),
+	})
+	result, err := h.service.AcceptReceipt(acceptCtx, c.Params("entryId"), actor.ID, expectedParty, req)
 	if err != nil {
-		if errors.Is(err, ErrReceiptAcceptancePartyMismatch) || errors.Is(err, ErrReceiptAlreadyAccepted) || errors.Is(err, ErrReceiptAlreadyReturned) || errors.Is(err, ErrReceiptCancelled) || errors.Is(err, ErrReceiptNotInAppAcceptable) {
+		if errors.Is(err, ErrReceiptAcceptancePartyMismatch) || errors.Is(err, ErrReceiptAlreadyAccepted) || errors.Is(err, ErrReceiptAlreadyReturned) || errors.Is(err, ErrReceiptCancelled) || errors.Is(err, ErrReceiptNotInAppAcceptable) || errors.Is(err, ErrReceiptNotIssued) || errors.Is(err, ErrReceiptAcceptanceModeBlocked) {
 			return c.Status(fiber.StatusConflict).JSON(httpx.APIResponse{Error: &httpx.APIError{Code: "receipt_acceptance_conflict", Message: err.Error()}})
 		}
 		return httpx.WriteError(c, err)
 	}
+	permission := authz.PermissionLedgerReceiptsSelfAccept
+	if expectedParty == receiptAcceptingPartyTenant {
+		permission = authz.PermissionLedgerReceiptsTenantAccept
+	}
+	h.recordAuthorizationAudit(
+		c, actor, actor.ID, actor.TenantID,
+		permission,
+		"ledger_receipts.accept", "ledger_entry", c.Params("entryId"),
+		authz.AuditDecisionAuthorized, "", "",
+	)
 	return c.JSON(httpx.APIResponse{Data: result})
 }
 
