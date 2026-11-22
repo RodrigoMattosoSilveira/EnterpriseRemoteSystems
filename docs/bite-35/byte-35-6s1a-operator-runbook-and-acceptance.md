@@ -1,64 +1,35 @@
 # ERS — Byte 35.6S.1A: Single Operator Runbook and Manual Acceptance (T01–T12)
 
-**Document status:** Consolidated, operator-ready procedure. This is the **one document to follow**. It replaces the operational instructions in (1) “Patch application and operator verification,” (2) “Training (TRN) Environment and Deployment,” (3) “TRN Manual Acceptance T01–T12,” and (4) “TRN protected-data guardrail correction: application and testing.” Documents 1 and 4 are **historical patch instructions**, not tasks to repeat. The two earlier operational documents are superseded by this one.
+**Purpose:** Establish a persistent, isolated Training (TRN) environment on the existing ERS Hetzner VM, then prove that it is safe for supervised training. This is the single operator procedure. Earlier TRN deployment and T01–T12 documents remain reference material, **not additional tests to repeat**.
 
-**Source verified against:** `1096-356s1a-trn-environment-and-deployment`, feature commit `71130743526092103f2e96d6654d69f394788b6a` (committed ZIP). The merged/deployed `test` commit **may differ**. The Test checkout was previously reported as `002357d6d459cae3e399d1564676c412561a62ab`; this is **an observation, not an approved release assertion**. Do not reset TEST to the feature SHA.
+**Document baseline:** `1096-356s1a-trn-environment-and-deployment` at `947b10f777b2941f48554347a33c25a754648b67`. **Do not deploy this feature SHA merely because it is printed here.** T05 selects the latest separately approved `test` revision and tree.
 
-**Selected architecture:** TRN runs on the **existing Hetzner VM**, with strict isolation and explicit capacity approval. It tracks the **latest TST-approved release candidate**, not DEV HEAD, and is deployed only on a separately approved request. TRN data and human Accounts persist across releases. External access is HTTPS only. TRN does not grant Production customer support privileges.
+## Before T01 — How to use this runbook
 
-**Current evidence already supplied:** On November 17, 2026 at 16:55:17 UTC, a read-only `check-host` run reported PASS, with 7,190,024,192 bytes available RAM, 38,907,396,096 bytes free disk, 4 CPUs, and 1-minute load 0.0. This passes the **instantaneous** host preflight; **Production resource-history review is still unconfirmed**. No live TRN deployment or GitHub approval has been demonstrated in this conversation.
+**Use one private evidence record** (your existing approved change record or private operational note). Record for each T01–T12: test ID, **PASS/FAIL/BLOCKED**, actual human identity, UTC date/time, observed result, and evidence location (GitHub run URL, non-secret screenshot, non-secret output, or approved change reference). Do not put passwords, tokens, private keys, cookies, `.env.training` contents, customer identifiers, or credentials in the evidence record.
 
-## 0. How to use this document
+**Status rules:** **PASS** = every stated acceptance observation is supported by recorded evidence; **FAIL** = actual wrong or unsafe behavior; **BLOCKED** = a required person, approval, tool or evidence is unavailable. A deliberately printed `BLOCKED` inside a negative automated test is **not** a failed test when the test command exits successfully and reports `OK`. Do not turn a BLOCKED into PASS by assuming an approval exists.
 
-**Follow phases in order.** Each numbered test is included at the point where it can actually be executed; there is no second checklist to cross-reference. Treat anything not personally observed as **BLOCKED**, not PASS.
+**Your roles in this procedure:** You may be both the **Release Operator** (GitHub/actions) and **Infrastructure and credential owner** (Hetzner/1Password). You do **not** need to contact an imaginary separate “custodian” or obtain a new approval from yourself. Where the source design requires a **different human reviewer** (GitHub deployment approval, independent PRD-capacity/recovery review, final handoff), it really requires one. If that human or actual authorization is not available, record BLOCKED at that gate. Operational roles are not ERS application Roles.
 
-| Status | Definition |
-|---|---|
-| PASS | The real command/setting/behavior was personally verified and evidence recorded |
-| FAIL | The system produced a wrong result or violated a safety requirement; STOP relevant operations |
-| BLOCKED | Missing permission, evidence, approval, tool, or environment; do not improvise a bypass |
-| NOT STARTED | No test attempted yet |
+| Location | Open/use | Identity |
+|---|---|---|
+| `LOCAL-MAC` | Your existing ERS checkout containing `Makefile` | You, Developer/Release Operator |
+| `GITHUB-WEB` | `RodrigoMattosoSilveira/EnterpriseRemoteSystems` → Settings or Actions | You as authorized repository owner; **different human** for protected deployment approval |
+| `1PASSWORD` | Authorized 1Password account with access to the appropriate vaults | You, credential owner |
+| `HETZNER-TEST` | SSH into approved shared VM; `/opt/EnterpriseRemoteSystems/test` | You, authorized Infrastructure Operator (`deploy` only if approved) |
+| `HETZNER-TRN` | Same VM; `/opt/EnterpriseRemoteSystems/training` after installation | Same Infrastructure Operator |
+| `TRN-BROWSER` | `https://trn.enterpriseremotesystems.com` | Individual TRN administrators, Training Tenant Administrator and trainee |
 
-**Terminal location legend:**
+**Non-negotiable protections:** Never reset or replace an existing LOCAL/TRN database. Never use `docker compose down -v`, `docker system prune`, `git clean`, Test/Production restore-apply, or E2E-admin provisioning as an onboarding shortcut. Never expose DEV/TST/PRD backups or keys to TRN. Preserve `/opt/EnterpriseRemoteSystems/test/{backups,recovery,release-rehearsal-passed,test.zip}`, the TRN data volume `ers-trn_backend-data`, and all unrelated containers. Public app traffic must use HTTPS. Do not use `sudo` to conceal ownership problems.
 
-- **LOCAL-MAC:** Your existing Mac Git repository root — the directory *actually containing `Makefile`*. Do **not** assume it is `~/projects/EnterpriseRemoteSystems` if your checkout lives elsewhere.
-- **HETZNER-TEST:** SSH session as the authorized `deploy` user, directory `/opt/EnterpriseRemoteSystems/test`, which already contains `Makefile`.
-- **HETZNER-TRN:** Same authorized Hetzner SSH identity, but directory `/opt/EnterpriseRemoteSystems/training` **after** cloning the repository into it. An empty `training` directory cannot run `make`.
-- **GITHUB-WEB:** GitHub repository browser, using a named person with appropriate Settings/Actions privileges.
-- **1PASSWORD:** Authorized vault-access application/CLI session; do not publish actual secret contents.
-- **TRN-BROWSER:** A browser opened at `https://trn.enterpriseremotesystems.com` after HTTPS activation.
+## Phase 1 — LOCAL software evidence (run before server changes)
 
-**Required human responsibilities (not ERS Roles):** Release Operator (selects the approved Test release and triggers the workflow); Infrastructure Operator (`deploy`/DNS/Docker/1Password technical changes); Independent GitHub Deployment Reviewer (approves the guarded environment); Training Coordinator (observes and accepts training); two different Training Application Administrators (separate personal TRN credentials); Training Tenant Administrator (valid tenant-scoped Actor); Customer Support Specialist (personal trainee Account, `TENANT_VIEWER`). Assign actual people and an approved change record. A person may hold compatible responsibilities, but required independent approvals and two distinct administrator identities must remain real.
+### T01 — Identify the source and run TRN/onboarding regressions
 
-**Never use** `sudo` to compensate for an incorrectly invoked Python script, `git clean`, database reset/replace commands, `docker compose down -v`, `docker system prune`, E2E Account passwords for a human, a Production S3 backup in TRN, or recovery-apply commands during these tests. Preserve the existing `backups/`, `recovery/`, `release-rehearsal-passed/`, and `test.zip` in the Test checkout; their untracked status does not authorize deleting them.
+**Identity/location:** You, Developer; `LOCAL-MAC`, repository root.
 
-### Evidence record — create a private operational record
-
-Create an entry in your team's approved private evidence repository or change ticket. Enter **only observed values**; use `BLOCKED` for anything missing. Do not put passwords, private keys, session cookies, customer data, or contents of `.env.training` into it.
-
-| Evidence field | What to record and where to obtain it |
-|---|---|
-| Feature commit | `71130743526092103f2e96d6654d69f394788b6a` (source ZIP) |
-| Actual TST deployed commit and tree | GitHub **Actions → Deploy Enterprise Remote Systems → successful Test run** plus read-only Git commands in T05 |
-| TST rehearsal marker verification | Output of `verify-test`, timestamp, marker SHA-256; **not** a substitute for human acceptance |
-| TRN change approval | Actual approved change/ticket identifier, approver identity and time; cannot be invented |
-| GitHub Environment review configuration | `Settings → Environments → training`; reviewer, branch rule, prevent self-review, no bypass, secrets *names* |
-| Shared-VM capacity | `check-host` JSON and independent Production capacity history (dates, peak metrics, reviewer) |
-| TRN deployment | GitHub workflow URL/run ID, requested revision and tree, approval and outcome |
-| TRN source and isolation | `git rev-parse HEAD`, Docker project/network/volume names, service health |
-| Backup and recovery | Actual absolute backup path, manifest, off-host receipt/object version, staged recovery DB path, verifier result |
-| Human administrators | Two distinct persons' Account/Actor IDs (non-secret) and individually observed logins |
-| Trainee | Individual login identifier (no password), Training Tenant ID, role and login result |
-| Persistence | Before/after non-sensitive Account, Membership, Person and Journey identifiers |
-| T01–T12 | Each test: PASS/FAIL/BLOCKED, person, UTC time, evidence reference |
-
-## Phase 1 — Confirm the software, without modifying deployed environments
-
-### T01 — LOCAL source and automated safety check (LOCAL-MAC)
-
-**Identity:** Developer/Release Operator. **Purpose:** Prove the current source contains the TRN changes. **Do not run this on the live Hetzner TEST server as a substitute for LOCAL acceptance.**
-
-Open Terminal in **your actual local ERS checkout** (one normal working directory, no additional worktrees). Navigate to it using your normal local path, then run:
+**Actions:**
 
 ```bash
 pwd -P
@@ -71,84 +42,100 @@ make trn-deployment-check
 make byte356s1-onboarding-check
 ```
 
-**Expected:** `Makefile` is present in the working directory; the actual branch and SHA are recorded (they need not equal the old feature SHA after merge); `git diff --check` exits 0; TRN tests report **23 tests / OK**, and onboarding tests **25 tests / OK**. Check exact exit status with `echo $?` immediately after each command if in doubt. **FAIL:** failing regression. **BLOCKED:** no identifiable LOCAL repository or missing dependencies. **Cleanup:** none; do not reset LOCAL data.
+**PASS:** `Makefile` exists; the actual branch and full SHA are recorded; `git diff --check` succeeds; TRN tests report **23 / OK**, onboarding tests **25 / OK**. The onboarding test's simulated `BLOCKED` evidence is expected. **FAIL:** any actual test fails or command returns nonzero. **BLOCKED:** checkout or needed local tool unavailable. **Evidence:** command output and source SHA. **Cleanup:** none; do not touch working LOCAL database.
 
-### T02 — Destructive-operation guardrails (LOCAL-MAC)
+### T02 — Verify destructive-operation guardrails
 
-**Identity:** Developer/Release Operator. **Purpose:** Verify both Production and Training are protected. The guardrail correction is already part of the source at the referenced feature commit; **do not apply its historical patch again**.
+**Identity/location:** You, Developer; `LOCAL-MAC`.
+
+**Actions:**
 
 ```bash
 make production-environment-guardrails-check
 make byte354c-training-check
 ```
 
-**Expected:** `Bite 33.1 Production environment/destructive-operation guardrails verified.` and the 35.4C fixture regression PASS. Both commands exit 0. For additional non-executing Make inspection only:
+**PASS:** both commands exit 0 and report verified Production guardrails and 35.4C Training fixture preservation. **FAIL:** a guardrail regression fails. **BLOCKED:** commands cannot run. **Evidence:** existing output for these commands on this exact code revision. **Do not** run destructive Make targets to test the guard; `make -n` is not a substitute for these regressions.
+
+### T11 — Complete the canonical LOCAL and negative-case gate
+
+**Identity/location:** You, Developer; `LOCAL-MAC`. This test is performed here to avoid returning to the Mac later.
+
+**Actions:** T01 already exercised the **23 TRN negative-case regressions** (wrong revision/marker, resource shortages, unsafe environment, isolation). Keep that result. Run the canonical check **once** for the actual candidate source revision:
 
 ```bash
-make -n server-down-volumes ENV=training
-make -n server-replace-development-db ENV=training
-```
-
-**Important:** `make -n` prints recipes; its output **does not itself prove rejection**. Rely on the regression tests and source guards. Never execute those destructive targets without `-n`. **FAIL:** any guard permits destructive Training/Production operations. **Cleanup:** none.
-
-### T11 — Additional negative-case and canonical LOCAL checks (LOCAL-MAC)
-
-**Identity:** Developer/Release Operator. **Purpose:** Run the negative cases that exercise bad Test markers, wrong environment, resource shortages and unsafe configuration. T11 can be completed now; it does not depend on live TRN.
-
-```bash
-make trn-deployment-check
 make local-check
 ```
 
-**Expected:** 23 TRN tests pass and canonical LOCAL verification exits 0. If LOCAL or CI has already passed against the exact promoted commit, record the evidence URL/output rather than changing the server to repeat tests. **FAIL:** any assertion. **BLOCKED:** unavailable toolchain (the repo requires Go 1.26.2). Do not reset your working database or clean unrelated Docker containers to repair a test.
+If you already have a successful `make local-check` result for the **same exact SHA/tree**, record that result instead of repeating it.
 
-### Promotion boundary
+**PASS:** the T01 TRN regressions and canonical `make local-check` pass on the tested source. **FAIL:** any genuine assertion fails. **BLOCKED:** no reliable matching-SHA evidence or required tools unavailable. **Evidence:** logs/CI run and SHA. Do not reset LOCAL data or stop unrelated Docker containers.
 
-The code must already be merged/promoted through the established branch path to **Test**. On the Hetzner TEST server, your previously observed HEAD was `002357d6...`; it is normal that this differs from feature commit `71130743...`. Never check out the older commit merely to satisfy a manual written before promotion.
+## Phase 2 — Authorization and approved Test release (read-only checks first)
 
-## Phase 2 — Approvals, latest approved Test candidate, and host capacity (read-only)
+### T03 — Confirm GitHub protection, existing SSH credentials and Training-only 1Password access
 
-### T03 — Real authorization, GitHub protections and 1Password custody (GITHUB-WEB + 1PASSWORD)
+**Identity/location:** You (repository owner and credential owner), `GITHUB-WEB` and `1PASSWORD`; a **different named GitHub reviewer** for later deployments. **Prerequisite:** a real authorized TRN change, recorded in your private evidence record. If none exists, **BLOCKED**; do not invent an approval identifier.
 
-**Identities:** Release Operator, **different** Independent GitHub Deployment Reviewer, Infrastructure Operator. **Prerequisite:** Written approval for creating a persistent TRN service on the existing Hetzner VM. Do not begin installation until these settings are verified.
+**A. Inventory the existing DEV/TST SSH secrets — no secret values required.**
 
-**A. Create/inspect the `training` GitHub Environment** (GitHub user with repository Settings permission):
+1. **GitHub:** Open repository → **Settings → Secrets and variables → Actions → Repository secrets**. Mark whether each name is present: `DEPLOY_HOST`, `DEPLOY_USER`, `DEPLOY_SSH_PRIVATE_KEY`, `DEPLOY_KNOWN_HOSTS`.
+2. **GitHub:** Open **Settings → Environments → development → Environment secrets**, then **test → Environment secrets**. For those same four names, record their **effective location** for DEV and TST: `Environment` overrides `Repository`; a repository secret is effective where no same-named environment secret overrides it. There is no “Organization secrets” page to locate for this personal-account repository.
+3. **GitHub:** Open **Actions → Deploy Enterprise Remote Systems**. Find **one successful DEV run** and **one successful TST run**. In each, open the deployment job and check that **Configure SSH**, **Deploy app stack**, and **Public smoke tests** succeeded. Record the run URLs and dates. Do not rerun deployments.
+4. **You, as credential owner:** In the private evidence record, write: **“I am the credential owner. I confirmed the four effective DEV/TST SSH input names/scopes and successful deployments to the existing ERS VM.”** Add your name/date and the two run URLs. This is **your documented attestation**, not a fictional third-party “custodian approval.” If you cannot confirm these are the deployment inputs you control or cannot identify a retained authorized source for values you must install in TRN, record **BLOCKED**, and do not guess or extract values from GitHub (GitHub does not reveal stored secret values). The SSH host-key pin must still be independently verified before new installation; prior green runs alone are not host-key provenance.
 
-1. Open the ERS GitHub repository, then **Settings → Environments**. If `training` does not exist, choose **New environment**, enter **exactly** `training`, and create it. Opening a workflow with `environment: training` is **not** proof that protection rules were configured.
-2. Open the `training` Environment. Under **Deployment protection rules**, enable **Required reviewers** and select the designated independent reviewer's GitHub account or an authorized review team. Enable **Prevent self-review** so the person initiating the run cannot approve it. If available, disallow administrator bypass of protection rules. Save the protection settings.
-3. Under **Deployment branches and tags**, choose **Selected branches and tags** (wording may vary), add the **branch `test`** as the only allowed deployment branch, and save. This supplements the workflow's `github.ref_name == 'test'` check.
-4. Confirm all these choices by reopening the Environment settings. Record reviewer account(s), branch policy and whether bypass is prohibited; **do not mark PASS based only on workflow YAML**.
-5. **If Required reviewers or Prevent self-review is unavailable in your GitHub account/repository plan, mark T03 BLOCKED. Do not substitute a self-approved manual deployment.** GitHub's support for protection rules varies by repository visibility and plan; do not assume your account supports them.
+**A PASS:** four effective names/scope locations recorded for both DEV and TST, both successful run URLs, and your truthful ownership attestation. **A FAIL:** evidence shows an unauthorized host or identity. **A BLOCKED:** a name is not effective for DEV/TST, or provenance genuinely unknown.
 
-Official reference for the operator to compare against the live UI: https://docs.github.com/en/actions/how-tos/deploy/configure-and-manage-deployments/manage-environments
+**B. Configure the GitHub `training` Environment — repository owner.**
 
-**B. Add exactly the five named Environment secrets required by `.github/workflows/deploy-training.yml`:**
+1. **GitHub → Settings → Environments → training.** Create it only if it does not already exist.
+2. Under **Deployment protection rules**, select **Required reviewers** and a **different actual human** authorized to approve deployment; enable **Prevent self-review**. Disable administrator bypass **if the UI offers that control**. Save and reopen the page to confirm. If required reviewer/self-review protection cannot be configured, **BLOCKED** (do not self-approve).
+3. Under **Deployment branches and tags**, choose **Selected branches and tags**, allow **`test` only**; save and reopen to confirm.
+4. Under **Environment secrets**, check these five names exist **at the training Environment scope**. If any is missing, install its value only from **existing authorized custody**; do not recreate, rotate, or overwrite an existing value simply to perform the check.
 
-On the same Environment settings page, locate **Environment secrets → Add secret** (or **Secrets and variables → Actions**, scoped to the `training` Environment). Create/verify the following **names**, sourcing their actual values from separately approved custody. Never include the values in the evidence record.
+   | Required Training secret | Where to obtain the actual value (not in this document) |
+   |---|---|
+   | `DEPLOY_HOST` | Verified shared Hetzner server inventory |
+   | `DEPLOY_USER` | Existing authorized deployment login |
+   | `DEPLOY_SSH_PRIVATE_KEY` | Existing securely retained deployment SSH private key |
+   | `DEPLOY_KNOWN_HOSTS` | Independently verified pinned SSH host-key entry for that VM |
+   | `OP_SERVICE_ACCOUNT_TOKEN` | Existing Training-only 1Password service-account token, kept in human-only custody |
 
-| Secret name | Where its approved value must come from | Meaning/check |
-|---|---|---|
-| `DEPLOY_HOST` | Verified Hetzner server inventory | Hostname/IP of the existing authorized ERS VM |
-| `DEPLOY_USER` | Approved server deployment account | Account permitted to operate the separate TRN checkout (`deploy` only if authorized) |
-| `DEPLOY_SSH_PRIVATE_KEY` | Approved deployment-key custody in 1Password | Restricted SSH private key for that account; not a Production recovery key |
-| `DEPLOY_KNOWN_HOSTS` | Independently authenticated SSH host-key inventory | Pinned known-hosts entry for the server; do not trust a first-contact `ssh-keyscan` alone |
-| `OP_SERVICE_ACCOUNT_TOKEN` | Authorized **training-only** 1Password service account | Must be able to read `ers-training`, and **not** read other ERS vaults |
+   **Only when a new or replacement `DEPLOY_KNOWN_HOSTS` value is needed:** Obtain the actual VM address from **Hetzner Cloud → Servers → approved ERS server**. In that server's **Hetzner web console** (not an ordinary SSH connection), run:
 
-**Verification:** Reopen Environment secrets list and check **all five names exist at the `training` Environment level** (not merely at repository scope). GitHub deliberately does not show secret values after creation. The workflow's 1Password check specifically rejects access by this service token to `ers-development`, `ers-test`, `ers-production`, `ers-deployment`, `ers-recovery` and `ers-automation-bootstrap`. Do not use an organization-wide token. Record only the names, scoped-access review, and who approved each secret source.
+   ```bash
+   ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub -E sha256
+   ```
 
-**C. Create the independent `ers-training` 1Password vault and source entries** (authorized vault custodian):
+   On your Mac, replace the example with the **actual approved host** and compare the fingerprint retrieved over SSH with the console fingerprint:
 
-1. In 1Password, create/verify a vault named **exactly `ers-training`**, separate from DEV/TST/PRD/recovery. Assign the minimal individual and service-account permissions needed.
-2. Create/verify item **`runtime-secrets`** with fields **`JWT_SECRET`**, **`LEDGER_CORRECTION_KEY`**, and **`LEDGER_SETTLEMENT_KEY`**. Use new training-only strong values generated under your approved credential policy; **never copy** another environment's values.
-3. Create/verify item **`backup-credentials`** with fields **`aws_access_key_id`** and **`aws_secret_access_key`**, for a training-scoped S3 credential. Its approved S3 policy must restrict it to the TRN namespace `ers-backups/training` and prohibit reading other environments' backups.
-4. Verify the field names against the committed reference templates (read these in the authorized code checkout): `ops/1password/training.env.tpl` and `ops/1password/training-aws-credentials.tpl`. Do not put 1Password reference strings or secrets in GitHub log output.
-5. Ensure the authorized Hetzner operator can run **`op`** in an approved interactive authenticated session. This capability is **not created by the deployment workflow**: that workflow authenticates on a GitHub runner with its own restricted token.
+   ```bash
+   VERIFIED_HOST='YOUR_VERIFIED_HETZNER_HOST_OR_IP'
+   ssh-keyscan -t ed25519 "$VERIFIED_HOST" 2>/dev/null | ssh-keygen -lf - -E sha256
+   ```
 
-**PASS:** two actual independent GitHub identities, effective reviewer/branch/no-bypass settings, all five environment-scoped secret names, independently scoped 1Password vault and valid source fields verified. **FAIL:** shared Production credentials, an unscoped token, or self-approval bypass. **BLOCKED:** no Settings authority, unsupported GitHub protection rules, unavailable vault/key custody, or missing approved change. **Cleanup:** close sensitive tabs; do not export secret values to the report.
+   **PASS for the host-key pin:** both SHA-256 ED25519 fingerprints match exactly. Only then retain the verified `ssh-keyscan` host-key entry in your approved 1Password custody and install it as the Training secret. **BLOCKED:** fingerprints differ, the host lacks the expected ED25519 key, or the console/approved host cannot be accessed. `ssh-keyscan` alone is **not** trusted verification. Do not publish private keys or substitute a different VM.
 
-### T04 — Shared Hetzner capacity and independent PRD review (HETZNER-TEST + approved monitoring)
+5. Record the five *names*, actual scope, reviewer, `test`-only rule and self-review setting. **Do not configure** `E2E_ADMIN_EMAIL`, `E2E_ADMIN_PASSWORD`, or a GitHub `APP_AUTO_MIGRATE` variable for TRN. `APP_AUTO_MIGRATE=false` belongs in the server's `.env.training`.
 
-**Identity:** Infrastructure Operator. **Prerequisite:** authorized read-only SSH access to the *existing* Hetzner VM.
+**B PASS:** five `training` Environment secret names; independent reviewer and prevent-self-review; `test`-only branch. **B FAIL:** a bypass or wrong credential proven. **B BLOCKED:** rule unsupported, reviewer unavailable, required value not securely available.
+
+**C. Verify 1Password Training isolation — your 1Password account.**
+
+1. Open **1Password → `ers-training` vault**. Check the existing Training Service Account has **Read Items** for **`ers-training` only**; no access to `ers-development`, `ers-test`, `ers-production`, `ers-deployment`, `ers-recovery`, or `ers-automation-bootstrap`. Check no Write/Share/Create Vault permissions. Do not make a duplicate Service Account or revoke a working token.
+2. In `ers-training`, open **`runtime-secrets`**. Confirm the fields `JWT_SECRET`, `LEDGER_CORRECTION_KEY`, `LEDGER_SETTLEMENT_KEY` exist and contain Training-only values (do not display their contents in evidence).
+3. Open **`backup-credentials`**. Confirm `aws_access_key_id`, `aws_secret_access_key` exist for the `ers-training-backup` profile. In your authorized Hetzner S3 credential/policy console, confirm this access is restricted to the **`ers-backups/training`** prefix and cannot reach DEV/TST/PRD backups; the prefix string in an env file alone is **not** access control.
+4. Compare item and field names to checked-in `ops/1password/training.env.tpl` and `ops/1password/training-aws-credentials.tpl`. Confirm you have a working authorized **interactive** `op` CLI login for the server; the GitHub service token is separate. Keep the service token securely held in the human-only bootstrap vault.
+
+**C PASS:** vault access limited to Training, both items/fields present, S3 prefix policy verified, interactive 1Password access available. **C FAIL:** forbidden vault/prefix access or shared Production runtime key confirmed. **C BLOCKED:** cannot inspect applicable access controls or no authorized S3/1Password access.
+
+**PASS:** A, B and C each PASS **and** the actual TRN change authorization is recorded. **FAIL:** any confirmed unsafe permission or unauthorized credential. **BLOCKED:** any missing prerequisite. **Do not begin installation until T03 PASS.**
+
+### T04 — Inspect shared-host capacity and Production headroom
+
+**Identity/location:** You as Infrastructure Operator, `HETZNER-TEST`; a **different real person** reviews Production resource history using your existing approved monitoring system. **Prerequisite:** authorized SSH login to the shared VM.
+
+**Actions — current host check:**
 
 ```bash
 cd /opt/EnterpriseRemoteSystems/test
@@ -157,28 +144,19 @@ python3 -B scripts/ers-trn-preflight.py check-host \
   --server-root /opt/EnterpriseRemoteSystems
 ```
 
-**Expected:** `PASS: TRN preflight (read-only); no deployment, account provisioning or approval performed`, followed by JSON; minimum 2 GiB RAM, 5 GiB disk, 2 CPUs and load below 75% of CPU count; safe Docker ownership.
+**Expected output:** `PASS: TRN preflight (read-only)` plus JSON showing at least **2 GiB MemAvailable**, **5 GiB free disk**, **2 CPUs**, and one-minute load below **75% of CPU count**, with Docker ownership clean. A historical PASS dated 2026-11-17 was recorded, but use **current evidence when authorizing a new deployment window**; do not treat the old snapshot as current capacity.
 
-**Already observed:** PASS at 2026-11-17T16:55:17 UTC (7,190,024,192 RAM bytes; 38,907,396,096 disk bytes; 4 CPUs; load 0.0). **Do not rerun solely to re-prove the same point**, unless another deployment is scheduled or the observation has become stale.
+**Actions — Production review:** A separate authorized reviewer opens the existing Production monitoring dashboard, records the **actual reviewed time span**, current and peak CPU/memory/disk measurements, service restarts and health/error events, and a clear **APPROVE** or **REJECT** decision for adding TRN to the shared VM. The source does not prescribe a historical duration: **record the one actually reviewed; do not invent one**. The TRN container ceilings are backend/frontend/Caddy **768/384/128 MiB** and **1/0.75/0.25 CPUs**. If monitoring history or a second reviewer does not exist, record BLOCKED rather than asserting that an instant host snapshot proves Production safety.
 
-**Still mandatory:** Review the actual Production workload in the authorized Hetzner VM monitoring dashboard for **current and peak** CPU/memory/disk usage, container restarts, health and error trends; record the time span and an independent operator's capacity decision. A practical review includes recent normal and peak business periods; the source code does **not** encode a fixed historical window. The Docker overlay caps TRN backend/frontend/Caddy at **768 / 384 / 128 MiB** and **1 / 0.75 / 0.25 CPUs**, respectively; limits do not replace real headroom evidence. A read-only current snapshot can support, but **not replace**, a historical review:
+**PASS:** current host preflight passes and the separate reviewer documents observed Production headroom and APPROVE. **FAIL:** resource thresholds fail or observed Production risk is unacceptable. **BLOCKED:** reviewer or monitoring history unavailable. **Evidence:** JSON and non-secret monitoring/review reference. Do not stop PRD containers.
 
-```bash
-docker ps --filter name=ers-prd --format 'table {{.Names}}\t{{.Status}}'
-docker stats --no-stream --format 'table {{.Name}}\t{{.CPUPerc}}\t{{.MemUsage}}' \
-  ers-prd-backend ers-prd-frontend ers-prd-caddy
-df -h /opt/EnterpriseRemoteSystems
-```
+### T05 — Pin the latest human-approved Test candidate
 
-**PASS:** instantaneous thresholds **and** independently approved historical PRD capacity; **FAIL:** measurable PRD risk or unexpected container owner; **BLOCKED:** absent monitoring/history/review. Never stop, restart, or prune Production containers for this check.
+**Identity/location:** You as Release Operator in `GITHUB-WEB` and `HETZNER-TEST`; the actual authorized release approver identified in existing release evidence.
 
-### T05 — Exact latest TST-approved release (GITHUB-WEB + HETZNER-TEST)
+**Actions — GitHub:** Open **Actions → Deploy Enterprise Remote Systems**. Select the **latest successful Test deployment**, then check the **Deployed Playwright E2E** job and the **Record successful Test release rehearsal** job (including its **Record rehearsal gate** step). Record the run URL, full deployed Test Git SHA, and the pre-existing human release-acceptance reference. A green run is automated evidence, not human approval. If no accepted latest candidate exists: BLOCKED, do not select an older SHA to make the procedure pass.
 
-**Identity:** Release Operator; separate release-approval owner. **Purpose:** identify the real approved Test revision, not the feature SHA.
-
-**A. GitHub UI:** Open repository → **Actions → Deploy Enterprise Remote Systems**. Inspect the *latest successful Test deployment run*, its commit, **deployed Playwright** result, and **Record successful Test release rehearsal** step. Record run URL/number and 40-character commit SHA. If the latest Test run has no approved rehearsal, STOP; a prior successful run is not automatically a suitable current candidate. Record the actual human release acceptance separately.
-
-**B. Read-only commands on the Hetzner TEST checkout:**
+**Actions — read-only Test checkout:**
 
 ```bash
 cd /opt/EnterpriseRemoteSystems/test
@@ -194,17 +172,17 @@ python3 -B scripts/ers-trn-preflight.py verify-test \
   --tree-sha "$TEST_TREE"
 ```
 
-**PASS:** GitHub's successful Test deployment SHA equals the server's `TEST_REVISION`; the Test rehearsal marker is valid for that SHA/tree; the actual authorized release owner has recorded acceptance. **BLOCKED:** marker missing/stale, GitHub/server mismatched, approval unavailable, or wrong revision. **Do not** edit the marker or check out the feature SHA to make them match. The marker is **automated evidence**, not human authorization.
+**PASS:** GitHub Test SHA equals `TEST_REVISION`; marker verifier prints PASS for exact Test SHA/tree; human release acceptance recorded. **FAIL:** tampered/invalid evidence or wrong revision intentionally selected. **BLOCKED:** SHA mismatch, marker absent or human acceptance unknown. **Evidence:** full SHA, tree, run URL and verifier output. **Never** reset Test or edit rehearsal markers.
 
-## Phase 3 — One-time TRN installation, GitHub authorization, deployment and HTTPS
+## Phase 3 — One-time installation and approved rollout
 
-**Entry gate:** T03, T04 and T05 all PASS. No TRN installation, new DNS routing, or GitHub deployment before these preconditions. The following is a change to a **shared Production-hosting VM**; the authorized change window and rollback plan must be approved.
+**Entry requirement:** T03–T05 PASS, approved change window and an available approved rollback/incident procedure. If TRN already exists, **inspect and reuse it**; do not repeat initial installation, reset Accounts, overwrite `.env.training`, or replace its data volume.
 
-### 3.3 — Create the TRN checkout, *then* initialize `.env.training` (HETZNER-TEST → HETZNER-TRN)
+### Setup S1 — Create the separate server checkout and create-only environment
 
-**Identity:** Infrastructure Operator (`deploy` if authorized). **Where:** initially `/opt/EnterpriseRemoteSystems/test` is your existing checkout; `/opt/EnterpriseRemoteSystems/training` may be **missing or empty**. Never try `make` in an empty directory. **Do not create a new LOCAL Git worktree**; this is a separate server deployment checkout.
+**Identity/location:** You as Infrastructure Operator on shared Hetzner VM; start in `/opt/EnterpriseRemoteSystems`.
 
-1. Inspect the destination without altering it:
+**Action 1 — read-only destination check:**
 
 ```bash
 cd /opt/EnterpriseRemoteSystems
@@ -215,24 +193,19 @@ if [ -d training ]; then
 fi
 ```
 
-If `training` contains a `.git` checkout, **do not clone again**; inspect its origin, branch, SHA and existing secrets before taking any action. If `training` contains unknown files but is not an existing Git checkout, **STOP**; do not delete or move them. If `training` is **absent or empty**, proceed with the approved clone.
-
-2. Run the clone **from the existing parent directory** (not from `training`):
+**Decision:** If `training/.git` exists, use the existing checkout: verify its remote points to ERS and note its SHA; **do not clone**. If `training` contains unexplained files but no repo: **BLOCKED**; do not delete anything. If `training` is absent or empty and creation was approved, run:
 
 ```bash
 cd /opt/EnterpriseRemoteSystems
 git clone --branch test git@github.com:RodrigoMattosoSilveira/EnterpriseRemoteSystems.git training
 cd /opt/EnterpriseRemoteSystems/training
 pwd -P
-git rev-parse --show-toplevel
 git remote get-url origin
 git rev-parse HEAD
 ls -l Makefile
 ```
 
-**Expected:** clone succeeds using the existing authorized deployment SSH/GitHub identity; Git root and `Makefile` are **now** `/opt/EnterpriseRemoteSystems/training`; origin is the approved repository. The HEAD must equal the Test-approved SHA from T05. If clone fails or the directory is already a checkout, STOP instead of forcing a clone. **No `sudo` is necessary** for properly assigned deployment directory ownership.
-
-3. **Only now** initialize the TRN file (one time, in the directory that contains the Makefile):
+**Action 2 — initialize only if `.env.training` is absent:**
 
 ```bash
 cd /opt/EnterpriseRemoteSystems/training
@@ -241,15 +214,13 @@ chmod 600 .env.training
 stat -c '%a %U:%G %n' .env.training
 ```
 
-**Expected:** `Created .env.training (create-only for training)`, followed by file permission **600**. The generator writes `APP_ENV=training`, TRN cookie/origin, safe disabled E2E settings, an initial temporary JWT secret and empty ledger-key placeholders. The next stage replaces the generated JWT and keys from the dedicated vault. **Do not run `make server-trn-init-env` a second time**; source code deliberately refuses when `.env.training` already exists. If the file already exists, STOP and inspect with an authorized operator; do not overwrite it.
+**PASS:** separate TRN repo from approved origin, `Makefile` present, checkout initially at T05 Test-approved SHA, `.env.training` exists as mode `600` and was not overwritten. **FAIL:** an attempted installation alters another environment. **BLOCKED:** wrong remote/SHA, unknown destination, an existing env file needing inspection, or missing server privileges. **Evidence:** non-secret origin, SHA and mode. **Do not run the initializer when `.env.training` already exists.**
 
-**PASS:** separate TRN checkout at approved SHA, Makefile found, new `.env.training` created once at mode 0600. **BLOCKED:** wrong revision, directory ownership, unresolved files, no Git access or preexisting environment file. **Do not** copy `.env.test` or `.env.production`.
+### Setup S2 — Materialize initial Training runtime and S3 credentials
 
-### 3.4 — Install separate TRN runtime, S3 configuration and GitHub protections (HETZNER-TRN + GITHUB-WEB)
+**Identity/location:** You as Infrastructure/1Password operator, `HETZNER-TRN`. **Only first installation**; requires S1 PASS and no existing TRN data volume or AWS credential file. For an existing installation, record S2 as **already installed/verified** using its existing evidence and a read-only environment contract; do not rotate secrets.
 
-**Identity:** Infrastructure Operator, vault custodian, independent GitHub reviewer. **Prerequisites:** T03 completed (Environment/reviewers/secrets/vault); 3.3 complete; `ers-trn_backend-data` **does not exist**. The runtime installer is create-only and will refuse if a TRN Docker volume is already present.
-
-**A. Confirm required tools and vault accessibility without printing secrets:**
+**Action 1 — tools and vault access (no secret values):**
 
 ```bash
 cd /opt/EnterpriseRemoteSystems/training
@@ -259,31 +230,29 @@ docker info --format '{{.ServerVersion}}'
 op vault get ers-training >/dev/null
 ```
 
-**PASS:** all commands exit 0 under the authorized non-`sudo` deployment identity, with the `op` CLI already authenticated through the approved procedure. **BLOCKED:** tool missing, Docker unavailable, vault inaccessible. Do not paste a service-token value into a shell to bypass authentication.
+**PASS checkpoint:** all commands succeed, with an authorized interactive `op` session and Docker permissions. **BLOCKED:** one fails. Never paste the GitHub service token into the server terminal.
 
-**B. Materialize the exact reference templates and install their values.** The `ops/1password/` templates contain **references only**, not secrets. The following uses a protected subshell and removes **only the scratch directory it created**, even on failure. It does not create, reset or delete a database or Docker volume.
+**Action 2 — only on an empty, approved installation:** Run this entire **Bash** block. It refuses existing TRN AWS credentials and the persistent volume and cleans **only its own** temporary scratch directory on exit.
 
 ```bash
 cd /opt/EnterpriseRemoteSystems/training
 (
   set -euo pipefail
   umask 077
-  # Existing shared secrets directory must not have its owner/mode changed here.
   if [ ! -d /opt/EnterpriseRemoteSystems/secrets ]; then
     install -d -m 0700 /opt/EnterpriseRemoteSystems/secrets
   fi
   if [ -e /opt/EnterpriseRemoteSystems/secrets/training-aws-credentials ] || \
      [ -L /opt/EnterpriseRemoteSystems/secrets/training-aws-credentials ]; then
-    echo 'BLOCKED: training AWS credentials already exist; do not overwrite' >&2
+    echo 'BLOCKED: Training AWS credentials already exist' >&2
     exit 2
   fi
   if docker volume inspect ers-trn_backend-data >/dev/null 2>&1; then
-    echo 'BLOCKED: TRN data volume already exists; no initial credential rotation' >&2
+    echo 'BLOCKED: TRN data volume already exists' >&2
     exit 2
   fi
   TRN_SCRATCH="$(mktemp -d /opt/EnterpriseRemoteSystems/secrets/trn-init.XXXXXXXX)"
   trap 'rm -rf -- "$TRN_SCRATCH"' EXIT
-
   python3 -B scripts/ers-op-materialize.py \
     --template ops/1password/training.env.tpl \
     --output "$TRN_SCRATCH/runtime.env" \
@@ -296,7 +265,6 @@ cd /opt/EnterpriseRemoteSystems/training
     --environment training \
     --fragment "$TRN_SCRATCH/runtime.env" \
     --aws-credentials "$TRN_SCRATCH/aws-credentials"
-
   python3 -B scripts/ers-trn-install-runtime-secrets.py \
     --env-file /opt/EnterpriseRemoteSystems/training/.env.training \
     --fragment "$TRN_SCRATCH/runtime.env" \
@@ -306,18 +274,25 @@ cd /opt/EnterpriseRemoteSystems/training
 )
 ```
 
-**Expected messages:** `1Password materialization completed (secret values suppressed)` (twice), `1Password scratch materialization validated for training`, `PASS: TRN runtime values installed from scoped 1Password fragment (values suppressed)`. **STOP** on any nonzero exit. Do not print the `.env.training` file or credential file. No arbitrary `chmod -R` or privilege escalation is needed.
+**PASS checkpoint:** both materializations report values suppressed, the Training fragment validator passes, runtime installer reports PASS; **no secret contents displayed**. **FAIL:** values appear in output or wrong environment/scoping is confirmed. **BLOCKED:** preexisting volume/file, missing vault entry or command failure. **Never rerun as a way of recovering a failed write**; inspect state and use the existing credential-maintenance/recovery procedure.
 
-**C. Enter the independently approved, non-secret Hetzner S3 settings** into `.env.training`. These are initially blank. Use an approved editor on the TRN host:
+**Action 3 — fill approved *non-secret* S3 endpoints; keep isolation settings:**
 
 ```bash
 cd /opt/EnterpriseRemoteSystems/training
 nano .env.training
 ```
 
-Find these three existing keys and enter their **actual** approved Hetzner values: `SERVER_OFFHOST_BACKUP_S3_ENDPOINT` (must be `https://<region>.your-objectstorage.com`), `SERVER_OFFHOST_BACKUP_S3_REGION` (one of `fsn1`, `nbg1`, `hel1`), and `SERVER_OFFHOST_BACKUP_S3_BUCKET` (actual approved bucket). **Do not invent a bucket or copy Production credentials.** Preserve `SERVER_OFFHOST_BACKUP_S3_PREFIX=ers-backups/training`, `AWS_SHARED_CREDENTIALS_FILE=/opt/EnterpriseRemoteSystems/secrets/training-aws-credentials`, and `AWS_PROFILE=ers-training-backup`. Save the file with mode 0600. The names/values for the three non-secret fields must come from the infrastructure owner's real Hetzner Object Storage configuration.
+Set existing keys `SERVER_OFFHOST_BACKUP_S3_ENDPOINT`, `SERVER_OFFHOST_BACKUP_S3_REGION`, `SERVER_OFFHOST_BACKUP_S3_BUCKET` to your actual approved Hetzner values. Confirm these existing entries remain exactly:
 
-Verify without printing secret contents:
+```text
+SERVER_OFFHOST_BACKUP_S3_PREFIX=ers-backups/training
+AWS_SHARED_CREDENTIALS_FILE=/opt/EnterpriseRemoteSystems/secrets/training-aws-credentials
+AWS_PROFILE=ers-training-backup
+APP_AUTO_MIGRATE=false
+```
+
+Check modes and server contract **without showing values**:
 
 ```bash
 cd /opt/EnterpriseRemoteSystems/training
@@ -325,24 +300,20 @@ stat -c '%a %n' .env.training /opt/EnterpriseRemoteSystems/secrets/training-aws-
 make server-environment-contract-check ENV=training
 ```
 
-**Expected:** both file modes **600**; Make exits 0 and emits no contract violation. This validates the software contract, **not** S3 access or an off-host backup. If an S3 credential/bucket is not scoped as required, stop before deployment.
+**PASS:** both files mode `600`, contract check succeeds, actual approved endpoint/region/bucket configured, and T03 S3 policy confirmed. **FAIL:** cross-environment credentials/prefix. **BLOCKED:** real Hetzner bucket, endpoint, region or scoped S3 policy unknown. **Evidence:** modes and contract result, never file contents.
 
-**D. Re-verify GitHub Environment protection before starting the workflow** (GITHUB-WEB): reopen **Settings → Environments → training** and show the independent reviewer, prevent-self-review rule, only `test` branch, and the five secret *names* to the second person. **No approvals have yet been recorded.** A named approval is made when a workflow enters the waiting state in 3.5, not by checking a box in Settings. Mark 3.4 PASS only after both the server-side contract and Github-side protection settings pass.
+### T06 — Deploy the approved Test revision through protected GitHub Actions
 
-### 3.5 / T06 — Deploy the latest approved TST candidate, without resetting TRN (GITHUB-WEB → HETZNER-TRN)
+**Identity/location:** You, Release Operator, `GITHUB-WEB`; **different human** Environment reviewer. **Before starting:** T03–T05 and S1–S2 PASS, real change approval/window, no ongoing PRD incident.
 
-**Identities:** Release Operator (starts), independent GitHub reviewer (approves). **Prerequisites:** T03–T05 and 3.3–3.4 PASS, reviewed change window, correct Test SHA/tree, no active PRD incident.
+**Actions:**
 
-**In GitHub UI:**
+1. **GitHub → Actions → Deploy ERS Training (TRN) — approved Test candidate → Run workflow.** Select branch **`test`**.
+2. Set `test_revision` = exact 40-character T05 Test SHA; `approval_reference` = existing actual change ID (6–120 characters, starts alphanumeric; then alphanumerics/`.`/`:`/`_`/`-`); `confirmation` = **`DEPLOY-APPROVED-TEST-TO-TRN`**. Start the workflow.
+3. Confirm the job **waits for the `training` Environment approval before privileged steps**. A **different named reviewer** checks the same approved SHA and approves in GitHub. Record reviewer and run URL. If no reviewer prompt appears, **FAIL/STOP**, even if the job later succeeds.
+4. Confirm the run completes successfully: pinned source/tree; Test marker; Training-only 1Password access; capacity; migration/recovery gate; internal health; post-deployment off-host backup. Do not infer public HTTPS, restore acceptance or human logins from a green job.
 
-1. Open repository → **Actions** → select workflow **Deploy ERS Training (TRN) — approved Test candidate**.
-2. Select **Run workflow** and choose branch **`test`**. If `test` is unavailable or the workflow does not exist on it, STOP; do not select a feature branch.
-3. Fill three inputs **exactly**: `test_revision` = the 40-character approved `TEST_REVISION` from T05; `approval_reference` = your **actual** approved change identifier (at least six characters, permitted letters/digits/dot/colon/underscore/hyphen, starting with alphanumeric); `confirmation` = `DEPLOY-APPROVED-TEST-TO-TRN`.
-4. Start the run. Verify that the job **waits for the `training` Environment reviewer** and is not executing privileged deployment steps before that approval.
-5. The designated **different** reviewer opens the pending GitHub deployment approval, examines the requested Test SHA, reason and evidence, then explicitly approves or rejects. Record who approved and the run URL. **If the run proceeds without a required review, STOP and mark FAIL** even if it later succeeds.
-6. Verify the workflow completes every step (source pin, TST rehearsal marker, 1Password scope check, capacity, environment contract, migration/backup gate, health, off-host backup) with a successful run conclusion. Record the run's Test revision/tree. A success does **not** certify public HTTPS or training access.
-
-**Read-only checks after successful deployment on HETZNER-TRN:**
+**Actions — read-only on `HETZNER-TRN`:**
 
 ```bash
 cd /opt/EnterpriseRemoteSystems/training
@@ -354,13 +325,13 @@ docker network inspect ers-trn_default --format '{{.Name}}'
 git rev-parse HEAD
 ```
 
-**Expected:** only TRN Compose services, `ers-trn_backend-data`, `ers-trn_default`, internal health passing, and `git rev-parse HEAD` exactly equal to the approved TST SHA. The deployed workflow builds the exact approved *source tree*; it does **not** prove byte-identical OCI image promotion. **PASS:** all results and run approval observed, other environments unaffected. **FAIL:** wrong revision, missing approval, other environment modification, or failed backup. **BLOCKED:** incomplete prerequisites. Preserve volumes/evidence; never `down -v`.
+**PASS:** reviewer approved before job ran; workflow succeeded; HEAD equals T05 SHA; TRN's own backend/Caddy healthy; isolated volume `ers-trn_backend-data` and network `ers-trn_default` exist. **FAIL:** bypass, different SHA, missing verified backup, or changed DEV/TST/PRD. **BLOCKED:** no approved run or a prerequisite unavailable. **Evidence:** approval/runs, HEAD and non-secret checks. Do not remove volumes to repair a failed deployment.
 
-### 3.6 / T12 (part 1) — Approve and activate public HTTPS (HETZNER-TRN → shared edge)
+### HTTPS edge activation — first-time shared-edge change (checkpoint for T12)
 
-**Identity:** Infrastructure Operator and separately authorized reviewer. **Prerequisites:** T06 internal deployment PASS, DNS records reviewed, approved edge change window, explicit Production rollback plan. The edge router is shared with PRD; changing it is not a routine TRN command.
+**Identity/location:** You, Infrastructure Operator, `HETZNER-TRN`; a **different authorized edge-change reviewer**. **Only after T06 PASS and approved edge change window.** The edge also serves Production.
 
-**Read-only inspection:**
+**Action 1 — inspect before changing anything:**
 
 ```bash
 cd /opt/EnterpriseRemoteSystems/training
@@ -369,9 +340,9 @@ docker network inspect ers-trn_default --format '{{.Name}}'
 make edge-diff
 ```
 
-**Important:** `make edge-diff` uses `diff ... || true`, so a zero exit status is **not** evidence that configurations match. Read the printed differences and approve the exact TRN host/network additions, confirming no unintended PRD/TST/DEV changes. Verify DNS `trn.enterpriseremotesystems.com` points to the authorized edge host and TLS certificate issuance is approved. If DNS/certificate or rollback is missing, mark BLOCKED and do not touch the edge.
+Open your authorized DNS/Hetzner control panel and confirm `trn.enterpriseremotesystems.com` resolves to the approved edge server. **Read the `make edge-diff` differences:** exit code 0 alone does not mean the changes are safe (`diff ... || true`). Record the **actual diff**, edge-reviewer approval and available existing rollback plan. If the diff changes routes beyond authorized TRN additions, **FAIL/STOP**.
 
-**Approved edge action, only within the recorded change window:**
+**Action 2 — only in the independently approved edge window:**
 
 ```bash
 cd /opt/EnterpriseRemoteSystems/training
@@ -383,24 +354,24 @@ make edge-up
 make edge-reload
 ```
 
-**STOP condition:** `edge-sync` uses `rsync --delete` and `edge-up` may affect the shared proxy. Do **not** run this block until the independent Infrastructure Operator has confirmed the changes and rollback source. Do not execute `edge-down`, delete existing external networks, or restart unrelated environments. If edge becomes unhealthy, stop TRN onboarding and follow the **approved existing edge rollback procedure**; this document does not authorize improvised edits to shared Production routing.
+`edge-sync` uses `rsync --delete`, and `edge-up` can affect the shared edge. Do not run these commands if review/rollback is missing; **BLOCKED** instead. Never run `edge-down`.
 
-**Browser checks:** open these four endpoints in separate tabs and verify successful HTTPS health responses and valid certificates:
+**Action 3 — in a browser, open each address and confirm valid HTTPS and healthy response:**
 
 - `https://trn.enterpriseremotesystems.com/api/v1/healthz`
 - `https://dev.enterpriseremotesystems.com/api/v1/healthz`
 - `https://tst.enterpriseremotesystems.com/api/v1/healthz`
 - `https://app.enterpriseremotesystems.com/api/v1/healthz`
 
-**PASS:** TRN public TLS health and unchanged DEV/TST/PRD health. **FAIL:** disrupted service, insecure public access, or unexpected route. **BLOCKED:** DNS/edge approval absent. Internal container HTTP checks are intentional and do not imply public HTTP support.
+**PASS checkpoint:** all four show healthy HTTPS with a valid certificate and no DEV/TST/PRD regression. **FAIL/STOP:** broken TLS, incorrect route, unhealthy PRD/shared services. **BLOCKED:** DNS, independent reviewer, window or rollback unavailable. **Evidence:** HTTPS status for all four after change. Use only the approved edge incident/rollback procedure on failure, not improvisation. Internal Docker HTTP health probes do not permit public HTTP.
 
-## Phase 4 — Backups, real human administrators, synthetic Training Tenant
+## Phase 4 — Real backup, human identities and persistence
 
-### T07 — Verify TRN off-host backup and isolated restore (HETZNER-TRN)
+### T07 — Verify actual TRN backup and isolated off-host restore candidate
 
-**Identities:** Infrastructure Operator and separate evidence reviewer. **Prerequisites:** T06 deployed, real TRN backup exists, verified TRN S3 custody; explicit approval to stage a recovery copy in the isolated TRN recovery directory. **No restoration to the live DB.**
+**Identity/location:** You, Infrastructure Operator, `HETZNER-TRN`; independent recovery evidence reviewer. **Prerequisite:** T06 PASS, real TRN backup/receipt, and specific approval to stage a copy (never restore it over live DB).
 
-Find actual backups:
+**Action 1 — list real Training backups:**
 
 ```bash
 cd /opt/EnterpriseRemoteSystems/training
@@ -408,16 +379,18 @@ find /opt/EnterpriseRemoteSystems/training/backups \
   -maxdepth 1 -type f -name 'app-*.db' -print | sort
 ```
 
-**Choose one real, existing absolute path from the output.** Execute the complete block below **in one terminal session**; its subshell stops immediately on a wrong path or failed verification and does not leave temporary shell variables behind.
+If none appear, **BLOCKED**. Select one existing **absolute TRN path** from the output and have the reviewer authorize an isolated staging rehearsal for that exact backup; record approval. Do not select a Test/Production backup.
+
+**Action 2 — verify and stage the approved copy.** Execute the **whole block in the same terminal**; type only the paths actually returned by the commands:
 
 ```bash
 cd /opt/EnterpriseRemoteSystems/training
 (
   set -euo pipefail
-  read -r -p 'Paste the exact absolute TRN backup .db path from the list: ' BACKUP_FILE
+  read -r -p 'Paste absolute TRN backup .db path from the list: ' BACKUP_FILE
   case "$BACKUP_FILE" in
     /opt/EnterpriseRemoteSystems/training/backups/app-*.db) ;;
-    *) echo 'BLOCKED: not an approved TRN backup path' >&2; exit 2 ;;
+    *) echo 'BLOCKED: not a TRN backup path' >&2; exit 2 ;;
   esac
   test -f "$BACKUP_FILE"
   test -f "$BACKUP_FILE.manifest.json"
@@ -425,126 +398,123 @@ cd /opt/EnterpriseRemoteSystems/training
   make server-backup-verify ENV=training BACKUP_FILE="$BACKUP_FILE"
   make server-offhost-backup-verify ENV=training BACKUP_FILE="$BACKUP_FILE"
 
-  # Only after a separately recorded approval to stage a recovery copy:
-  read -r -p 'Recovery staging approved by the independent reviewer? Type APPROVED: ' STAGE_APPROVAL
-  test "$STAGE_APPROVAL" = APPROVED || { echo 'BLOCKED: stage approval missing' >&2; exit 2; }
+  read -r -p 'Independent reviewer already approved isolated staging? Type APPROVED: ' STAGE_APPROVAL
+  test "$STAGE_APPROVAL" = APPROVED || { echo 'BLOCKED: staging not approved' >&2; exit 2; }
   RECEIPT_FILE="$BACKUP_FILE.offhost.json"
   make server-restore-materialize-offhost ENV=training RECEIPT_FILE="$RECEIPT_FILE"
-  # The command prints the new Recovery candidate directory.
   find /opt/EnterpriseRemoteSystems/training/recovery -type f -name 'app-*.db' -print
-  read -r -p 'Paste the exact newly staged recovery .db path from THAT new directory: ' RECOVERY_BACKUP_FILE
+  read -r -p 'Paste new staged TRN recovery .db path from the new directory: ' RECOVERY_BACKUP_FILE
   case "$RECOVERY_BACKUP_FILE" in
     /opt/EnterpriseRemoteSystems/training/recovery/*/app-*.db) ;;
-    *) echo 'BLOCKED: recovery DB outside TRN candidate directory' >&2; exit 2 ;;
+    *) echo 'BLOCKED: recovery path outside TRN staging' >&2; exit 2 ;;
   esac
   test -f "$RECOVERY_BACKUP_FILE"
   make server-restore-verify ENV=training RECOVERY_BACKUP_FILE="$RECOVERY_BACKUP_FILE"
 )
 ```
 
-The staging approval prompt is an **additional confirmation** and is **not itself authorization**: the reviewer must already have approved this exact isolated recovery exercise. A failure at any point means **STOP**; do not select another environment's backup or repeat staging blindly.
+**PASS:** manifest, real S3 off-host receipt/object version, newly materialized recovery DB and verifier succeed; reviewer authorization recorded. **FAIL:** checksum/integrity/isolation mismatch. **BLOCKED:** source path, receipt, S3 permission, staging approval or new destination uncertain. **Evidence:** backup/receipt/candidate paths, manifest/object version and outputs (no secrets). **Never run** `make server-restore-apply` here. Preserve recovery evidence; this procedure creates no intended persistent test containers. If any temporary container was created, identify and remove **only that test-owned container** with approved cleanup, verify it is gone and any exclusive test port released. Never stop unrelated services or remove the TRN volume.
 
-**PASS:** correct TRN backup, manifest, real S3 receipt/object version, newly staged isolated DB and read-only restore-verify all pass. Record file paths and SHA/object version without copying secrets. **FAIL:** mismatch or bad integrity. **BLOCKED:** missing stage approval or ambiguous candidate. **Cleanup:** preserve recovery evidence unless separately approved for targeted cleanup; track/remove **only** disposable containers created by the test, confirm none remain and no exclusive ports remain occupied. No Docker cleanup is needed if none were created. **Never run** `make server-restore-apply` for T07.
+### T08 — Enroll two distinct real TRN Application Administrators
 
-### T08 — Enroll two individually controlled TRN Application Administrators (HETZNER-TRN + two browsers)
+**Identity/location:** You, Infrastructure Operator, `HETZNER-TRN`; Admin A and Admin B are **two different human beings**, with two separate TRN browser profiles; enrollment must have an actual approved change. **Prerequisite:** T07 PASS, recent verified backup, separate human identities and no other TRN database writer. **This is an intentional live TRN database write.**
 
-**Identities:** Infrastructure Operator, two **distinct actual humans** (Admin A and Admin B), independent approver. **Prerequisites:** T07 complete, actual approved enrollment change, verified current TRN off-host backup, no other TRN database writers, individual credentials prepared in 1Password. This is an explicitly authorized live TRN **database write**, not part of an offline test.
-
-Run this **single guarded block** only after the two humans and independent approval are present. It will ask for identifiers, not password values; the enrollment helper collects the two passwords interactively later.
+**Action 1 — locate the actual verified backup:**
 
 ```bash
 cd /opt/EnterpriseRemoteSystems/training
 find backups -maxdepth 1 -type f -name 'app-*.db' -print | sort
+```
+
+**Action 2 — execute once with real values.** The prompts ask for **identifiers and a backup path**, not passwords. The existing helper prompts the two humans for their credentials interactively and does not put passwords in command arguments or files.
+
+```bash
+cd /opt/EnterpriseRemoteSystems/training
 (
   set -euo pipefail
-  read -r -p 'Enter the actual verified absolute TRN backup path: ' TRN_ENROLL_BACKUP_FILE
-  read -r -p 'Enter the actual approved change identifier: ' TRN_ENROLL_APPROVAL
-  read -r -p 'Enter the actual operator identifier: ' TRN_ENROLL_OPERATOR
+  read -r -p 'Paste verified absolute TRN backup path: ' TRN_ENROLL_BACKUP_FILE
+  read -r -p 'Enter actual approved enrollment change ID: ' TRN_ENROLL_APPROVAL
+  read -r -p 'Enter your actual operator ID: ' TRN_ENROLL_OPERATOR
   export TRN_ENROLL_BACKUP_FILE TRN_ENROLL_APPROVAL TRN_ENROLL_OPERATOR
   export TRN_ENROLL_CONFIRM=ENROLL-TRAINING-HUMANS-OFFLINE
   case "$TRN_ENROLL_BACKUP_FILE" in
     /opt/EnterpriseRemoteSystems/training/backups/app-*.db) ;;
     *) echo 'BLOCKED: invalid TRN backup path' >&2; exit 2 ;;
   esac
-  : "${TRN_ENROLL_APPROVAL:?Missing approved change identifier}"
-  : "${TRN_ENROLL_OPERATOR:?Missing authorized operator identifier}"
   bash scripts/ers-trn-enroll.sh
 )
 ```
 
-The script independently checks the backup and its manifest/receipt, validates the TRN contract, stops **only** `ers-trn-backend`, confirms isolation, collects passwords interactively from both humans, runs the enrollment operation once through a temporary container (`--rm`), restarts the backend and makes a new backup. **On failure, it deliberately leaves the TRN backend stopped.** Do not automatically retry, reset the database, or create E2E accounts. Identify the temporary container created by the exercise and verify it has been removed before accepting; do not touch unrelated containers.
+The source script verifies backup+off-host receipt, stops **only** `ers-trn-backend`, performs one offline enrollment in an ephemeral `--rm` container, restarts the backend and takes a new backup. **If enrollment fails, backend deliberately stays stopped:** do not repeat/reset automatically; use approved TRN-only recovery procedure. Do not touch unrelated containers.
 
-**UI verification:** In separate browser profiles, Admin A and Admin B independently sign in to **TRN**, complete mandatory first-password-change requirements, verify distinct global Application Administrator Accounts/Actors, and sign out. **PASS:** both distinct humans authenticate and new TRN backup verified. **FAIL:** shared credential, duplicate identity, wrong permissions. **BLOCKED:** any missing approval, backup, writer isolation, or second human.
+**Action 3 — browser proof:** Admin A signs in to **TRN** using own credentials and completes required first-password change; Admin B signs in separately in another browser profile. Each confirms own global `APPLICATION_ADMIN` identity and signs out. Check no E2E identity was used. Confirm the ephemeral enrollment container has been removed (the script uses `--rm`) and no unrelated containers were altered.
 
-### T09 — Create synthetic Training Tenant and trainee account (TRN-BROWSER)
+**PASS:** two distinct humans, distinct global Accounts/Actors, individual successful sign-ins, verified post-enrollment TRN backup and no leftover test container. **FAIL:** shared/duplicate identity, incorrect authority, unwanted database writes. **BLOCKED:** missing second human, authorization, backup, writer isolation or usable credentials. **Evidence:** non-secret individual identity references and outcomes.
 
-**Identities:** Training Application Administrator (global), authorized Training Tenant Administrator (tenant scope), Customer Support Specialist (personal `TENANT_VIEWER`), Training Coordinator (witness). **Prerequisites:** T08 PASS and public HTTPS confirmed.
+### T09 — Create one synthetic Training Tenant and one individual trainee
 
-1. **Global Application Administrator / TRN:** Sign in with an individual TRN global admin Account. Open **Administration → Tenants → Create Tenant**. Search existing Tenants first to avoid duplication. Create one **synthetic** Tenant (a suggested *nonreserved* code is `ERS_SUPPORT_TRAINING`, only if unused); describe it as synthetic/no customer records. Record the actual Tenant code/ID. **Do not use** `TRAIN354C_A` or `TRAIN354C_B`.
-2. **Global Application Administrator / TRN:** Open **Administration → Tenants → [the newly created Tenant] → Tenant Administrators**. The normal **Assign Tenant Administrator** candidate selector requires an **already eligible** Tenant Actor with the correct Person/Membership relationships; creating a Tenant does **not** create that Actor or Account. Select only an independently approved, eligible human candidate and confirm the Tenant reaches `ACTIVE_READY`. **If no candidate exists, STOP/BLOCKED and request the previously approved initial Tenant Administrator enrollment process from the Technical Operator.** Do not silently elevate the global administrator, create an E2E admin, edit the database, or invent an Actor.
-3. **Training Tenant Administrator / TRN / exact Training Tenant context:** Sign in with this separately authorized tenant-scoped human Account; confirm the Tenant context at the top. Open **People / Pessoas** and search for the trainee's exact authorized email before creating anything. If a Person already exists, use **Add Membership / Adicionar vínculo** for this Tenant; do not duplicate the global Person or Authentication Account. If absent and authorized, select **Create Person** and enter the required identifying fields through the UI, then verify one active Tenant Membership. **Privacy prerequisite:** The existing form may require CPF, RG, phone, and email. Do **not invent a false CPF for the actual trainee** or copy her real identifiers into public test evidence. If processing her identifiers in TRN has not been approved, STOP/BLOCKED and request an approved privacy-safe onboarding design.
-4. **Training Tenant Administrator / same Tenant:** Open the Person detail → **Authentication / Autenticação**. Check whether Authentication is already enabled; where permitted, use **Enable Authentication / Habilitar autenticação** with a **unique, one-time password** securely issued via 1Password. If this section does not permit enrollment, an authorized GLOBAL administrator may use **Administration → Authentication → Create account** only after the active Tenant Membership exists, without creating a duplicate Account. If neither supported path works, STOP; do not call hidden APIs or use SQL.
-5. **Training Tenant Administrator / same Tenant:** Open **Administration → Tenant Authorization / Delegated Roles**. Find the exact trainee login and Tenant Actor, verify active Membership, and grant the existing **`TENANT_VIEWER`** Role *for the Training Tenant only*. Do not grant `TENANT_ADMIN`, `APPLICATION_ADMIN`, a Production lease, or a standing Support Role.
-6. **Customer Support Specialist / separate browser profile:** Sign in at `https://trn.enterpriseremotesystems.com` with her own Account and one-time password. Complete mandatory initial password change, sign out, then sign in again with the changed password. Confirm the approved Training Tenant and only permitted **read-only** pages; a Journey can be inspected only if the Role actually permits it. Verify she does not see a global Administration context or any other customer Tenant.
+**Identity/location:** TRN Global Application Administrator, **separate authorized Training Tenant Administrator**, individual Customer Support Specialist (trainee), Training Coordinator witness; all use `TRN-BROWSER` with their own accounts. **Prerequisite:** T08 PASS and successful public HTTPS. Do not create a global admin/tenant actor or trainee using SQL or E2E shortcuts.
 
-**PASS:** independent personal login, correct read-only role, no E2E or global administrator privileges, synthetic training data only. **FAIL:** cross-Tenant data exposure, permanent unintended grant, missing password separation. **BLOCKED:** no eligible Tenant Administrator or supported UI operation. **Cleanup:** sign out; preserve training data.
+**Actions:**
 
-### T10 — Prove persistence under an approved redeployment (GITHUB-WEB + TRN-BROWSER)
+1. **Global Admin / TRN:** Sign in. Open **Administration → Tenants**, search for intended synthetic Training Tenant first. If absent, use **Create Tenant** with an approved clearly synthetic unique code (e.g. `ERS_SUPPORT_TRAINING` **only if unused**). Record actual Tenant ID/code. Never use `TRAIN354C_A` or `TRAIN354C_B`.
+2. **Global Admin / TRN:** In the new Tenant's administrative details, open **Tenant Administrators** and choose **Assign Tenant Administrator** for an **already eligible, separately authorized human Tenant Actor**. Confirm that Tenant becomes `ACTIVE_READY`. If no eligible candidate appears, **BLOCKED**: this runbook contains **no** authorized shortcut to manufacture an eligible actor. Do not turn the global Application Administrator into a Tenant Actor.
+3. **Tenant Admin / TRN:** Sign in as the designated human, select **exact Training Tenant context**. Open **People / Pessoas** and search trainee's exact authorized login/email. If already present, add **only the required Training Membership**. Otherwise use **Create Person** through the normal UI, with identity fields processed under the existing approved privacy policy. Verify one active Training Membership and no duplicate global Person. If the UI requires real CPF/RG/phone and their processing is not authorized, **BLOCKED**; do not invent identifiers for a real trainee.
+4. **Tenant Admin / TRN:** Open the Person page → **Authentication / Autenticação**. Enable Authentication if permitted, using a unique one-time password held in 1Password. If UI denies it, an authorized Global Admin may use the existing **Administration → Authentication → Create account** only with the active Membership and without duplication. If neither supported operation exists, **BLOCKED**; no hidden API or SQL workaround.
+5. **Tenant Admin / TRN:** Open **Administration → Tenant Authorization / Delegated Roles**. Select the exact trainee's Tenant Actor; grant **`TENANT_VIEWER` for the Training Tenant only**. Check that no `TENANT_ADMIN`, `APPLICATION_ADMIN`, global Support Role or Production Support Access Lease was granted.
+6. **Trainee / separate TRN browser profile:** Sign in with own Account, complete mandatory password change, sign out, then sign back in. Confirm selected Training Tenant and only permitted read-only pages. Confirm **no** Global Administration or unrelated Tenant information. Open a Journey only if the Viewer permission actually permits it.
 
-**Identities:** Training Coordinator, Release Operator, independent reviewer. **Prerequisites:** trainee and at least one synthetic Person/Journey already created; another explicit approved redeployment of the **current latest TST-approved SHA** or a newer approved Test candidate.
+**PASS:** synthetic Tenant and nonduplicated Person/Membership; authorized Tenant Admin; own trainee login and exact `TENANT_VIEWER` scope; no other-Tenant data; Training Coordinator witnessed. **FAIL:** cross-Tenant exposure, duplicate identities or unexpected elevated role. **BLOCKED:** eligible Tenant Admin, permitted UI path, privacy authorization or individual trainee credentials missing. **Evidence:** non-secret IDs and observed UI states. **Cleanup:** sign out; keep approved Training records.
 
-1. In TRN UI, record **non-sensitive** before-values: trainee Account login/ID, Membership/Role, synthetic Person and Journey IDs/counts, and current TRN SHA (read-only `git rev-parse HEAD` on HETZNER-TRN).
-2. In GitHub, follow **the same protected Training workflow and independent approval steps as T06** with the real approved Test revision, approval reference, and confirmation literal. Do not run DEV's database replacement target or any volume deletion.
-3. After successful internal deployment and public HTTPS verification, repeat the UI checks as the same trainee using her existing password. Confirm her Account, Membership, Person, Journey and training progress survived; check the same `ers-trn_backend-data` volume exists.
+### T10 — Prove Training data survives one approved redeployment
 
-**PASS:** all persistent records and credentials survive. **FAIL:** an Account or training record disappears, password changes unexpectedly, or a volume is replaced. **BLOCKED:** no independent approval/redeployment window. Preserve the data and backup evidence.
+**Identity/location:** You, Release Operator in `GITHUB-WEB` / `HETZNER-TRN`; different GitHub reviewer; trainee and Training Coordinator in `TRN-BROWSER`. **Prerequisite:** T09 has created a synthetic Person and Journey, and a **new authorized deployment** is allowed. T10 requires a real second rollout, even when the exact Test-approved SHA is unchanged; it is not proven by initial deployment alone.
 
-### T12 — Final independent TRN-only handoff (GITHUB-WEB + browser)
+**Action 1 — before:** As trainee/Training Coordinator in TRN, record non-sensitive Account ID/login, Membership, `TENANT_VIEWER` grant, synthetic Person and Journey IDs/counts. On `HETZNER-TRN`:
 
-**Identities:** Infrastructure Operator, independent Release Reviewer, Training Coordinator. **Prerequisites:** T01–T11 PASS, including backup restore verification, actual two-human admin login and the trainee's individual login, plus successful HTTPS checks from 3.6.
+```bash
+cd /opt/EnterpriseRemoteSystems/training
+git rev-parse HEAD
+docker volume inspect ers-trn_backend-data --format '{{.Name}}'
+```
 
-1. Recheck TRN + DEV/TST/PRD HTTPS health endpoints listed in 3.6.
-2. Compare the **GitHub TRN run SHA/tree**, Test approval and marker, TRN Git HEAD, backup receipt/object version, isolated restore verification, two human administrator observations, trainee login and T10 persistence proof.
-3. Record T01–T12 status, actual evidence references and a named **GO** (training access only) or **NO-GO** in the private operational record.
-4. On GO, the Training Coordinator may distribute the approved trainee training packet and begin supervised learning. No Production support authorization or 35.7 Production activation is granted.
+**Action 2 — deployment:** Recheck that the selected candidate still meets T05 and shared-host headroom/authorization are current. Run **the same protected workflow as T06**, with a **new real approval reference** and **different human GitHub approval**; do not delete the TRN volume.
 
-**PASS:** complete independent evidence and no impact on other environments. **FAIL:** cross-environment impact/security failure/data loss. **BLOCKED:** any unverified gate; do not admit trainees prematurely.
+**Action 3 — after:** Sign in as the **same trainee using the existing password**; compare Account, Membership, Role, Person, Journey and synthetic records with the before-values. Re-run the two read-only commands above and confirm the same persistent volume and approved deployment revision. Confirm public TRN HTTPS health.
 
-## Phase 5 — Ongoing operation, failure rules, cleanup
+**PASS:** IDs/data and authorized roles persisted; same individual credentials work; volume remains `ers-trn_backend-data`. **FAIL:** any reset, missing data, unexpected role/password change or replaced volume. **BLOCKED:** no approved new rollout/window or insufficient synthetic Journey to compare. **Evidence:** before/after IDs, GitHub run URL and review. Do not re-seed to conceal data loss.
 
-**Every future TRN release:** Repeat Test-approved marker check, a *new* documented approval, current host capacity/PRD history review, GitHub independent reviewer approval, persistent-volume migration gate, off-host backup, health/smoke and data-persistence verification. No automatic promotion from DEV/TST pushes. Version selection remains **latest approved Test candidate**, until you explicitly change policy after Production go-live.
+### T12 — Final independent cross-environment and Training handoff
 
-**On a problem:**
+**Identity/location:** You (Infrastructure/Release Operator); **different named final reviewer**; Training Coordinator; `GITHUB-WEB` and browsers. **Prerequisite:** T01–T11 PASS, approved edge HTTPS activation and all Training-only checks.
 
-- Wrong Git SHA, missing marker, missing reviewer, failed 1Password scope or missing capacity: **BLOCKED**, no deployment authorized.
-- Failed migration/health: **STOP**; existing protected TRN-only migration recovery gate determines any guarded rollback. Do not restore PRD or TEST data or attempt arbitrary database surgery.
-- Failed post-deployment backup: **STOP**; the GitHub workflow intentionally stops only TRN services; retain the persistent TRN volume and review backup error without secret disclosure.
-- Broken shared edge/PRD health: **STOP TRN** and follow the preapproved edge rollback/incident runbook.
-- Missing training data or login: **FAIL**; preserve evidence and recovery copies, do not reset/reseed.
+**Actions:**
 
-**Cleanup:** The LOCAL Python tests create no persistent Docker containers. Live TRN containers and `ers-trn_backend-data` **must remain** after successful acceptance. Temporary restore or enrollment containers/copies are handled only with specifically tracked identities and an approved, scoped cleanup. Never indiscriminately prune Docker or delete shared-VM files. Confirm any test-created containers and exclusively used ports are released; do not stop unrelated services.
+1. **Browser:** Open the four HTTPS health URLs in the edge activation step. If they were already checked **after the last deployment/edge change** and their evidence is current, reuse it; otherwise check again. Record healthy TLS for TRN/DEV/TST/PRD and no Production regression.
+2. **Independent reviewer:** Read the actual evidence record. Check T05 Test-approved SHA/tree/marker and human release acceptance; T06/T10 GitHub runs and independent reviews; T04 capacity approval; T07 real off-host receipt and staged restore; T08 two human logins; T09 individual trainee; T10 retained data. Check no T01–T11 result is FAIL or BLOCKED.
+3. **Independent reviewer:** Record **GO — supervised Training only** or **NO-GO**, with actual name, UTC timestamp and evidence reference. On GO, Training Coordinator releases the approved trainee packet and supervised TRN access. **No** Production support access, Production tenant role or Bite 35.7 launch approval is implied.
 
-## Appendix A — Where the existing commands actually come from
+**PASS:** independent GO based on complete evidence; valid public TLS; all four environments healthy; no missing prior acceptance. **FAIL:** observed cross-environment damage, insecure routing or data loss. **BLOCKED:** any missing test, review, real human identity or approval. **Evidence:** final signed/reviewed private record; no secrets.
 
-| Command or setting | Verified repository source |
+## After T12 — Recurring work and safe cleanup
+
+For every later TRN release, repeat **only release-dependent gates**: current Test candidate and approval (T05), current host/Production capacity and change authorization (T03/T04 as applicable), guarded T06 workflow with different reviewer, verified off-host backup, and post-change HTTPS/health and data persistence. **Do not** recreate vaults, training Administrators, Tenants, Accounts or the TRN volume for each release. Keep existing LOCAL regression evidence for matching SHA/tree rather than repeating it.
+
+**On failure:** Wrong SHA, marker, scope or approval → BLOCKED, do not deploy. Migration/health failure → stop and use only the existing TRN migration-recovery gate and approved rollback; never reset data. Off-host backup failure → STOP: the workflow stops only TRN services to prevent unprotected writes. Shared edge/PRD failure → STOP TRN changes, follow approved shared-edge incident/rollback. Identity/data regression → FAIL, preserve logs and backup evidence.
+
+**Cleanup:** Keep persistent TRN backend/frontend/Caddy, `ers-trn_backend-data`, its backups, Training Accounts and Journeys. Track any temporary container created during recovery/enrollment; if present, record its exact container ID and remove **only that known temporary container** after authorized cleanup. Verify it is absent and any exclusively reserved test port is free. **Never** stop unrelated containers or erase TRN/test/Production volumes. Routine T01–T02/T11 offline tests do not call for manual Docker teardown unless they created test containers.
+
+## Existing implementation references (not extra test steps)
+
+| Requirement | Committed source |
 |---|---|
-| `make server-trn-init-env` | Root `Makefile` → `server-init-env ENV=training` → `scripts/init-server-env.sh` (create-only, relative to working directory) |
-| `make server-environment-contract-check ENV=training` | Root `Makefile` → `scripts/ers-environment-guard.sh`; checks S3 metadata, cookie, environment and unsafe settings |
-| `python3 -B scripts/ers-trn-preflight.py ...` | `scripts/ers-trn-preflight.py` (Python source is not guaranteed executable; always invoke through Python) |
-| Training workflow name / inputs / five secrets | `.github/workflows/deploy-training.yml` (only `test`, job `environment: training`) |
-| Runtime/backup 1Password items | `ops/1password/training.env.tpl` and `ops/1password/training-aws-credentials.tpl` |
-| `make edge-sync`, `make edge-up`, `make edge-reload` | Root `Makefile`; shared edge, change-controlled |
-| Backup / off-host / restore verification | Root `Makefile`; `server-backup-verify`, `server-offhost-backup-verify`, `server-restore-materialize-offhost`, `server-restore-verify` |
-| Two-human enrollment | `scripts/ers-trn-enroll.sh` and `scripts/ers-two-human-admin-input.py` |
-| Negative-case verification | `scripts/test-trn-environment.py`, `scripts/test-production-environment-guardrails.py` |
+| T01/T02/T11 LOCAL checks | `Makefile` (`trn-deployment-check`, `byte356s1-onboarding-check`, `local-check`, Production/35.4C checks) |
+| T03/T06 protected Training workflow | `.github/workflows/deploy-training.yml` |
+| T04/T05 host/marker checks | `scripts/ers-trn-preflight.py` |
+| S1/S2 Training initial configuration | `scripts/init-server-env.sh`, `scripts/ers-trn-install-runtime-secrets.py`, `scripts/ers-environment-guard.sh` |
+| Training-only source values | `ops/1password/training.env.tpl`, `ops/1password/training-aws-credentials.tpl` |
+| T07 backup/isolated restore | `Makefile` (`server-backup-verify`, `server-offhost-backup-verify`, `server-restore-materialize-offhost`, `server-restore-verify`) |
+| T08 guarded enrollment | `scripts/ers-trn-enroll.sh`, `scripts/ers-two-human-admin-input.py` |
+| Edge review/deployment | `Makefile` (`edge-diff`, `edge-sync`, `edge-up`, `edge-reload`) |
 
-## Appendix B — Glossary Impact
-
-- **TRN:** Persistent non-Production Training environment on existing Hetzner VM, not an ERS Tenant or authorization Role.
-- **Training Tenant:** A synthetic Tenant inside TRN, separate from protected test fixtures.
-- **Latest TST-approved release candidate:** Latest exact Test SHA/tree with valid Test rehearsal evidence and a separately accepted human release decision.
-- **Release Operator / Infrastructure Operator / Training Coordinator / Independent Reviewer:** Human operational responsibilities, not new application Roles.
-- **Protected Training data:** Training Accounts and business records are never subject to routine destructive demo/reset operations.
-- **Training Application Administrator:** Individually controlled, application-global administrator in TRN only; no implied DEV/TST/PRD access.
-
-Existing Person, Account, Actor, Membership, Entidade, Journey, OPENING_BALANCE, and Tenant Support Access Lease semantics are unchanged.
+**Glossary Impact:** No new ERS Roles or entities. **TRN** remains an isolated persistent non-Production environment; a **Training Tenant** is a synthetic Tenant within it; **latest Test-approved candidate** is an exact Git SHA/tree with successful Test rehearsal **plus existing human release approval**. **Release Operator**, **Infrastructure Operator** and **Training Coordinator** are responsibilities, not app Roles. A different human GitHub reviewer remains required; the person who holds SSH credentials may also be the Release Operator. Global Person, Account, Actor, Membership, Journey and Tenant Support Access Lease semantics are unchanged.
