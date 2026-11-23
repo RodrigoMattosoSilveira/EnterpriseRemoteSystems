@@ -13,7 +13,13 @@ EXPECTED = {
 
 def validate(text, environment, aws=False):
     if aws:
+        # The checked-in Training AWS template starts with a comment.
+        # Comments and blank lines are valid AWS shared-credentials syntax.
+        # Ignore those only before the header; retain strict profile and
+        # assignment checks for the rest of the fragment.
         lines = text.splitlines()
+        while lines and (not lines[0].strip() or lines[0].lstrip().startswith('#')):
+            lines.pop(0)
         expected_profile = '[ers-training-backup]' if environment == 'training' else '[ers-backup]'
         if not lines or lines[0] != expected_profile:
             raise ValueError('invalid AWS profile')
