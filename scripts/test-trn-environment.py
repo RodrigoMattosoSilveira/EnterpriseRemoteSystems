@@ -158,6 +158,16 @@ CORS_ALLOW_ORIGINS=https://trn.enterpriseremotesystems.com
         aws='[ers-training-backup]\naws_access_key_id=training-only-id\naws_secret_access_key=training-only-key\n'
         mod.validate(valid,'training')
         mod.validate(aws,'training',aws=True)
+        # Actual Training template has a leading comment. Preserve support
+        # without relaxing the expected profile or credentials checks.
+        trn_aws_template=read('ops/1password/training-aws-credentials.tpl')
+        self.assertTrue(trn_aws_template.startswith('# Training-only S3 credentials.'))
+        rendered_aws=(trn_aws_template
+                      .replace('{{op://ers-training/backup-credentials/aws_access_key_id}}','training-only-id')
+                      .replace('{{op://ers-training/backup-credentials/aws_secret_access_key}}','training-only-key'))
+        mod.validate(rendered_aws,'training',aws=True)
+        with self.assertRaises(ValueError):
+            mod.validate(rendered_aws.replace('[ers-training-backup]','[ers-backup]'),'training',aws=True)
         with self.assertRaises(ValueError):mod.validate(aws,'production',aws=True)
         with self.assertRaises(ValueError):mod.validate(aws.replace('ers-training-backup','ers-backup'),'training',aws=True)
         with self.assertRaises(ValueError):mod.validate('JWT_SECRET={{op://ers-training}}\nLEDGER_CORRECTION_KEY=x\nLEDGER_SETTLEMENT_KEY=y\n','training')
@@ -165,6 +175,12 @@ CORS_ALLOW_ORIGINS=https://trn.enterpriseremotesystems.com
         self.assertIn('op vault get ers-training',flow)
         self.assertNotIn('op vault get ers-deployment >/dev/null',flow)
         self.assertIn('ers-deployment ers-recovery',flow)
+        # CI must materialize the separate Training AWS profile and pass it
+        # to the mandatory validator. Without it, every TRN workflow stops.
+        self.assertIn('--template ops/1password/training-aws-credentials.tpl',flow)
+        self.assertIn('--output "$scratch/aws-credentials" --expected-root "$scratch"',flow)
+        self.assertIn('--aws-credentials "$scratch/aws-credentials"',flow)
+        self.assertNotIn('--environment training --fragment "$scratch/training.env"\n          echo',flow)
 
     def test_training_initializer_create_only_and_scoped_defaults(self):
         with tempfile.TemporaryDirectory() as tmp:
