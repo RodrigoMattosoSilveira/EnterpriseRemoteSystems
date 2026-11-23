@@ -39,4 +39,14 @@ jobs:
           TRN_DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
         run: |
           set -euo pipefail
+          umask 077
+          # Read-only A/B: mirror the previously successful Test deploy heredoc
+          # while retaining the Training env-var method. Neither key is logged.
+          test_style_key="$(mktemp "${RUNNER_TEMP}/ers-test-style-ssh.XXXXXXXX")"
+          trap 'rm -f -- "$test_style_key"' EXIT
+          cat > "$test_style_key" <<'ERS_DIAGNOSTIC_KEY_END'
+          ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
+          ERS_DIAGNOSTIC_KEY_END
+          chmod 600 "$test_style_key"
+          export TRN_TEST_STYLE_KEY_FILE="$test_style_key"
           bash scripts/ers-trn-ssh-diagnostic.sh
