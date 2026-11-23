@@ -85,7 +85,24 @@ class CredentialClassificationTests(unittest.TestCase):
                          'PEM_ENCRYPTED_DECLARED')
 
     def test_unencrypted_corrupted_keygen_path(self):
-        self.assertEqual(module.classify(openssh_key(), ssh_keygen='/bin/false'), 'UNENCRYPTED_UNREADABLE')
+        # /bin/false is not portable to macOS. Use a real, deliberately failing
+        # executable so the classifier can distinguish rejection from ENOENT.
+        with tempfile.TemporaryDirectory() as d:
+            failing_keygen = Path(d) / 'rejecting-keygen'
+            failing_keygen.write_text('#!/bin/sh\nexit 1\n', encoding='utf-8')
+            failing_keygen.chmod(0o700)
+            self.assertEqual(
+                module.classify(openssh_key(), ssh_keygen=str(failing_keygen)),
+                'UNENCRYPTED_UNREADABLE',
+            )
+
+    def test_keygen_missing_path_is_explicit(self):
+        with tempfile.TemporaryDirectory() as d:
+            missing_keygen = Path(d) / 'missing-keygen'
+            self.assertEqual(
+                module.classify(openssh_key(), ssh_keygen=str(missing_keygen)),
+                'KEYGEN_UNAVAILABLE',
+            )
 
     def test_keygen_missing_is_explicit(self):
         self.assertEqual(module.classify(openssh_key(), ssh_keygen=''), 'KEYGEN_UNAVAILABLE')
