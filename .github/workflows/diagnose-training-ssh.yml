@@ -1,0 +1,42 @@
+name: Diagnose ERS Training SSH (read-only)
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: Type DIAGNOSE-TRAINING-SSH-ONLY (no deployment)
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ers-training-ssh-diagnostic
+  cancel-in-progress: false
+
+jobs:
+  training-ssh-diagnostic:
+    name: Verify Training secret, pinned host and read-only SSH login
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    if: github.ref_name == 'test'
+    environment: training
+    steps:
+      - name: Checkout approved Test source
+        uses: actions/checkout@v6
+        with:
+          ref: test
+          persist-credentials: false
+
+      - name: Diagnose SSH only (no deployment or remote writes)
+        shell: bash
+        env:
+          TRN_DIAGNOSTIC_CONFIRMATION: ${{ inputs.confirmation }}
+          TRN_SSH_PRIVATE_KEY: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
+          TRN_SSH_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+          TRN_DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          TRN_DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+        run: |
+          set -euo pipefail
+          bash scripts/ers-trn-ssh-diagnostic.sh
