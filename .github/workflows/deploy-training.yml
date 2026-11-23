@@ -85,8 +85,15 @@ jobs:
           python3 scripts/ers-op-materialize.py \
             --template ops/1password/training.env.tpl \
             --output "$scratch/training.env" --expected-root "$scratch"
+          # The Training fragment validator requires an independent AWS
+          # credentials fragment. Read both only into runner scratch; never
+          # upload either fragment or include its values in the logs.
+          python3 scripts/ers-op-materialize.py \
+            --template ops/1password/training-aws-credentials.tpl \
+            --output "$scratch/aws-credentials" --expected-root "$scratch"
           python3 scripts/ers-op-validate-fragments.py \
-            --environment training --fragment "$scratch/training.env"
+            --environment training --fragment "$scratch/training.env" \
+            --aws-credentials "$scratch/aws-credentials"
           echo 'Training 1Password references verified; no secrets transferred or logged.'
 
       - name: Configure pinned SSH identity
