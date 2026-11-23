@@ -11,6 +11,7 @@ blocked() {
 
 [[ "${TRN_DIAGNOSTIC_CONFIRMATION:-}" == 'DIAGNOSE-TRAINING-SSH-ONLY' ]] || blocked 'Explicit diagnostic confirmation is missing.'
 [[ -n "${TRN_SSH_PRIVATE_KEY:-}" ]] || blocked 'DEPLOY_SSH_PRIVATE_KEY is missing from the effective Training secret scope.'
+[[ -f "${TRN_TEST_STYLE_KEY_FILE:-}" ]] || blocked 'Test-style secret materialization file missing.'
 [[ -n "${TRN_SSH_KNOWN_HOSTS:-}" ]] || blocked 'DEPLOY_KNOWN_HOSTS is missing.'
 [[ -n "${TRN_DEPLOY_HOST:-}" && "${TRN_DEPLOY_HOST}" != deploy_host ]] || blocked 'DEPLOY_HOST is missing or a placeholder.'
 [[ "${TRN_DEPLOY_HOST}" =~ ^[a-zA-Z0-9][a-zA-Z0-9._:-]*$ ]] || blocked 'DEPLOY_HOST is not a plain DNS name or numeric address.'
@@ -37,12 +38,26 @@ printf '%s\n' "$TRN_SSH_PRIVATE_KEY" > "$key"
 printf '%s\n' "$TRN_SSH_KNOWN_HOSTS" > "$known_hosts"
 chmod 600 "$key" "$known_hosts"
 
-# Suppress stdout/stderr so neither the key nor derived public material appears
-# in GitHub logs. -P '' rejects passphrase-protected keys for noninteractive CI.
-if ! ssh-keygen -y -P '' -f "$key" >/dev/null 2>&1; then
-  blocked 'The effective Training DEPLOY_SSH_PRIVATE_KEY cannot be parsed without a passphrase. No SSH connection was attempted.'
+# Compare real OpenSSH parsing of the two ways GitHub workflows materialize
+# the same effective secret. Never print key contents, fingerprints, or errors.
+# The second file is created by the workflow using Test's existing heredoc syntax.
+env_ok=false
+inline_ok=false
+if ssh-keygen -y -P '' -f "$key" >/dev/null 2>&1; then env_ok=true; fi
+if ssh-keygen -y -P '' -f "$TRN_TEST_STYLE_KEY_FILE" >/dev/null 2>&1; then inline_ok=true; fi
+if [[ "$env_ok" == false && "$inline_ok" == true ]]; then
+  blocked 'Test-style heredoc key loads, but Training environment-variable key does not. No SSH connection was attempted.'
 fi
-printf 'PASS: Effective Training private key parses without a passphrase.\n'
+if [[ "$env_ok" == true && "$inline_ok" == false ]]; then
+  blocked 'Training environment-variable key loads, but Test-style heredoc key does not. No SSH connection was attempted.'
+fi
+if [[ "$env_ok" == false && "$inline_ok" == false ]]; then
+  blocked 'Both key-writing methods produce keys OpenSSH cannot load with an empty passphrase. The value may be invalid, incomplete, or encrypted. No SSH connection was attempted.'
+fi
+if ! cmp -s -- "$key" "$TRN_TEST_STYLE_KEY_FILE"; then
+  blocked 'Both keys load but their bytes differ between writing methods. No SSH connection was attempted.'
+fi
+printf 'PASS: Test-style and environment-variable SSH key files both load and are byte-identical.\n'
 
 # The pin must name the exact destination; ssh-keyscan alone is not a trusted pin.
 if ! ssh-keygen -F "$TRN_DEPLOY_HOST" -f "$known_hosts" >/dev/null 2>&1; then

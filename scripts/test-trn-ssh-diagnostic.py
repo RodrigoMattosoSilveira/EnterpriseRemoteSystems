@@ -58,14 +58,22 @@ class TrainingSshDiagnosticTests(unittest.TestCase):
             'TRN_DEPLOY_USER': 'deploy',
         }
 
-    def run_diagnostic(self, **changes):
+    def run_diagnostic(self, test_style_secret=None, **changes):
         env = {**self.env, **changes}
+        # Mirrors the existing Test workflow's quoted heredoc, including newline.
+        test_style = self.dir / 'bin' / 'test-style-key'
+        if test_style_secret is None:
+            test_style_secret = env['TRN_SSH_PRIVATE_KEY']
+        test_style.write_text(test_style_secret + '\n')
+        test_style.chmod(0o600)
+        env['TRN_TEST_STYLE_KEY_FILE'] = str(test_style)
         return subprocess.run(['bash', str(SCRIPT)], env=env, text=True,
                               capture_output=True, timeout=8)
 
     def test_read_only_success_and_clean_secret_handling(self):
         run = self.run_diagnostic()
         self.assertEqual(run.returncode, 0, run.stderr)
+        self.assertIn('PASS: Test-style and environment-variable SSH key files both load and are byte-identical', run.stdout)
         self.assertIn('PASS: Noninteractive, pinned, read-only SSH', run.stdout)
         self.assertNotIn('MOCK_VALID_PRIVATE_KEY', run.stdout + run.stderr)
         self.assertTrue(self.ssh_args.exists())
@@ -97,8 +105,58 @@ class TrainingSshDiagnosticTests(unittest.TestCase):
     def test_malformed_key_rejected_before_network(self):
         run = self.run_diagnostic(TRN_SSH_PRIVATE_KEY='NOT A PRIVATE KEY')
         self.assertEqual(run.returncode, 2)
-        self.assertIn('cannot be parsed', run.stderr)
+        self.assertIn('Both key-writing methods produce keys OpenSSH cannot load', run.stderr)
         self.assertFalse(self.ssh_args.exists())
+
+    def test_test_style_only_parses(self):
+        run = self.run_diagnostic(TRN_SSH_PRIVATE_KEY='BROKEN', test_style_secret=VALID)
+        self.assertEqual(run.returncode, 2)
+        self.assertIn('Test-style heredoc key loads', run.stderr)
+        self.assertFalse(self.ssh_args.exists())
+
+    def test_env_style_only_parses(self):
+        run = self.run_diagnostic(test_style_secret='BROKEN')
+        self.assertEqual(run.returncode, 2)
+        self.assertIn('environment-variable key loads', run.stderr)
+        self.assertFalse(self.ssh_args.exists())
+
+    def test_both_parse_but_materialization_differs(self):
+        run = self.run_diagnostic(test_style_secret=VALID + '\nANOTHER LINE')
+        self.assertEqual(run.returncode, 2)
+        self.assertIn('bytes differ', run.stderr)
+        self.assertFalse(self.ssh_args.exists())
+
+    def test_real_openssh_key_parsing_with_mock_network(self):
+        real_keygen = shutil.which('ssh-keygen')
+        if not real_keygen:
+            self.skipTest('OpenSSH ssh-keygen unavailable')
+        key = self.dir / 'real-private-key'
+        result = subprocess.run([real_keygen, '-q', '-t', 'ed25519', '-N', '',
+                                 '-f', str(key)], capture_output=True, text=True)
+        if result.returncode:
+            self.skipTest('OpenSSH Ed25519 key generation not supported')
+        realbin = self.dir / 'real-bin'
+        realbin.mkdir()
+        (realbin / 'ssh-keygen').symlink_to(real_keygen)
+        (realbin / 'ssh').symlink_to(self.dir / 'bin' / 'ssh')
+        pub_parts = key.with_suffix('.pub').read_text().split()
+        # Match both GitHub materialization methods with the *same* secret
+        # bytes. OpenSSH writes a final newline, but the workflow adds its
+        # own newline to the secret in each method.
+        secret = key.read_text().rstrip('\n')
+        env = {**self.env, 'PATH': str(realbin) + os.pathsep + os.environ['PATH'],
+               'TRN_SSH_PRIVATE_KEY': secret,
+               'TRN_SSH_KNOWN_HOSTS': f'example.test {pub_parts[0]} {pub_parts[1]}\n'}
+        direct_file = self.dir / 'bin' / 'test-style-real'
+        direct_file.write_text(secret + '\n')
+        direct_file.chmod(0o600)  # OpenSSH rejects private keys with loose modes.
+        self.assertEqual(direct_file.stat().st_mode & 0o777, 0o600)
+        env['TRN_TEST_STYLE_KEY_FILE'] = str(direct_file)
+        result = subprocess.run(['bash', str(SCRIPT)], env=env, text=True,
+                                capture_output=True, timeout=8)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn('PASS: Test-style and environment-variable SSH key files', result.stdout)
+        self.assertTrue(self.ssh_args.exists())
 
     def test_host_pin_missing_rejected_before_network(self):
         run = self.run_diagnostic(TRN_SSH_KNOWN_HOSTS='other.test ssh-ed25519 AAAATEST')
@@ -135,6 +193,8 @@ class TrainingSshDiagnosticTests(unittest.TestCase):
         self.assertIn('permissions:\n  contents: read', s)
         self.assertIn('secrets.DEPLOY_SSH_PRIVATE_KEY', s)
         self.assertIn('scripts/ers-trn-ssh-diagnostic.sh', s)
+        self.assertIn("<<'ERS_DIAGNOSTIC_KEY_END'", s)
+        self.assertIn('TRN_TEST_STYLE_KEY_FILE', s)
         self.assertNotIn('OP_SERVICE_ACCOUNT_TOKEN', s)
         for forbidden in ('deploy-training.yml', 'server-up', 'server-build',
                           'migration-recovery-gate', 'docker compose', 'ssh-keyscan'):
