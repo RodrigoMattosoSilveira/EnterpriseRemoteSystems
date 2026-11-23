@@ -1,3 +1,4 @@
+import { PermissionGatedLink } from "../../components/layout/PermissionGatedLink";
 import { useI18n } from "../../i18n";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
@@ -88,9 +89,9 @@ export function SecondPersonApprovalSettingsPage() {
             <Link className="text-sm font-semibold text-gray-700 underline" to="/admin/price-list-items">
               {t("approval.settings.price.list_760d09")}
             </Link>
-            <Link className="text-sm font-semibold text-gray-700 underline" to="/people">
+            <PermissionGatedLink className="text-sm font-semibold text-gray-700 underline" to="/people">
               {t("approval.settings.back.to.people_59f4cb")}
-            </Link>
+            </PermissionGatedLink>
           </div>
         </div>
       </header>

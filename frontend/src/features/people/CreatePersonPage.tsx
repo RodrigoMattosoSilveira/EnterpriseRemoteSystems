@@ -1,5 +1,6 @@
+import { PermissionGatedLink } from "../../components/layout/PermissionGatedLink";
 import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { PersonForm } from "./PersonForm";
 import { PersonPhotoPicker } from "./PersonPhotoPicker";
 import { setPersonPhoto } from "../../api/people.api";
@@ -34,9 +35,9 @@ export function CreatePersonPage() {
     <main className="min-h-screen bg-gray-50">
       <header className="sticky top-0 z-10 border-b bg-white/95 px-4 py-4 backdrop-blur">
         <div className="mx-auto max-w-4xl">
-          <Link className="text-sm text-gray-500 underline" to="/people">
+          <PermissionGatedLink className="text-sm text-gray-500 underline" to="/people">
             {t("common.backToPeople")}
-          </Link>
+          </PermissionGatedLink>
           <PageTitle className="mt-3">
             {t("people.new.title")}
           </PageTitle>

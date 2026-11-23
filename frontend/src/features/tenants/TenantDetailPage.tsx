@@ -1,5 +1,6 @@
+import { PermissionGatedLink } from "../../components/layout/PermissionGatedLink";
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { useParams } from "react-router-dom";
 import { ActionSuccessDialog } from "../../components/ActionSuccessDialog";
 import { ApiErrorPanel } from "../../components/ApiErrorPanel";
 import type { UpdateTenantInput } from "../../types/tenants";
@@ -126,9 +127,9 @@ export function TenantDetailPage() {
       )}
       <header className="sticky top-0 z-10 border-b bg-white/95 px-4 py-4 backdrop-blur">
         <div className="mx-auto max-w-5xl">
-          <Link className="text-sm font-semibold text-gray-600 underline" to="/admin/tenants">
+          <PermissionGatedLink className="text-sm font-semibold text-gray-600 underline" to="/admin/tenants">
             {t("admin.tenantDetail.back")}
-          </Link>
+          </PermissionGatedLink>
           <div className="mt-4">
             <PageTitle>{t("admin.tenantDetail.title")}</PageTitle>
             <PageContextHeading>{tenant?.name ?? t("admin.tenantDetail.fallbackTenant")}</PageContextHeading>

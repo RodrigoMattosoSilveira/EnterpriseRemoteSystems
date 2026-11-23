@@ -32,6 +32,15 @@ export function PersonDetailPage() {
   const canBrowsePeople = actor.permissions.includes("*") || actor.permissions.includes("people.read");
   const canManageTenantAuthentication =
     actor.scope === "TENANT" && actor.roleCodes.includes("TENANT_ADMIN");
+  // A Tenant Administrator can manage any person's photo. A person can also manage
+  // their own photo (replace or remove) when the self-update permission is intrinsic
+  // to their identity. Role-delegated grants do not count, matching the backend
+  // (requireTenantAdministratorOrSelfPerson uses HasIntrinsicPermission), and the
+  // ownership check compares only actor.personId, as the backend does.
+  const isOwnPerson = actor.personId === id;
+  const canManagePhoto =
+    canManageTenantAuthentication ||
+    (isOwnPerson && (actor.intrinsicPermissions ?? []).includes("people.self.update"));
   const canCreateCollaboratorJourney =
     actor.scope === "TENANT" &&
     (actor.permissions.includes("*") ||
@@ -65,7 +74,13 @@ export function PersonDetailPage() {
     ? selfCollaboratorJourneysQuery
     : membershipCollaboratorJourneysQuery;
   const mutation = useUpdatePerson(id);
-  const statusesQuery = useReferenceDataByType("person_status");
+  // Person status options are Tenant reference data. Self-service profiles hold
+  // no reference_data.read, so only load them when the actor can read them;
+  // otherwise the 403 triggers the global forbidden redirect.
+  const canReadReferenceData =
+    actor.scope === "TENANT" &&
+    (actor.permissions.includes("*") || actor.permissions.includes("reference_data.read") || actor.permissions.includes("reference_data.manage"));
+  const statusesQuery = useReferenceDataByType("person_status", canReadReferenceData);
   useEffect(() => {
     if (
       !personQuery.data ||
@@ -178,7 +193,7 @@ export function PersonDetailPage() {
       </header>
 
       <section className="mx-auto max-w-4xl p-4">
-        <PersonPhotoCard personId={personQuery.data.id} canManage={canManageTenantAuthentication} displayName={`${personQuery.data.firstName} ${personQuery.data.lastName}`} />
+        <PersonPhotoCard personId={personQuery.data.id} canManage={canManagePhoto} displayName={`${personQuery.data.firstName} ${personQuery.data.lastName}`} />
         {successMessage && (
           <div
             className="mb-4 rounded border border-green-300 bg-green-50 p-3 text-green-800"

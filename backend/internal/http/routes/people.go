@@ -25,8 +25,8 @@ func RegisterPeopleRoutes(v1 fiber.Router, deps Dependencies) {
 	}
 	r.Post("/", requirePermission(deps, authz.PermissionPeopleCreate), deps.PeopleHandler.Create)
 	r.Get("/:id/photo", requirePermissionOrSelfPerson(deps, authz.PermissionPeopleRead, authz.PermissionPeopleSelfRead, "id"), deps.PeopleHandler.GetPhoto)
-	r.Put("/:id/photo", requireTenantAdministrator(deps), deps.PeopleHandler.SetPhoto)
-	r.Delete("/:id/photo", requireTenantAdministrator(deps), deps.PeopleHandler.DeletePhoto)
+	r.Put("/:id/photo", requireTenantAdministratorOrSelfPerson(deps, authz.PermissionPeopleSelfUpdate, "id"), deps.PeopleHandler.SetPhoto)
+	r.Delete("/:id/photo", requireTenantAdministratorOrSelfPerson(deps, authz.PermissionPeopleSelfUpdate, "id"), deps.PeopleHandler.DeletePhoto)
 	r.Get("/:id", requirePermissionOrSelfPerson(deps, authz.PermissionPeopleRead, authz.PermissionPeopleSelfRead, "id"), deps.PeopleHandler.GetByID)
 	r.Put("/:id", requirePermissionOrSelfPerson(deps, authz.PermissionPeopleUpdate, authz.PermissionPeopleSelfUpdate, "id"), deps.PeopleHandler.Update)
 }

@@ -1,3 +1,4 @@
+import { PermissionGatedLink } from "../../components/layout/PermissionGatedLink";
 import { useI18n } from "../../i18n";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
@@ -101,18 +102,22 @@ export function GoldPricesPage() {
           </div>
 
           <div className="flex flex-wrap items-center justify-end gap-2">
-            <Link className="text-sm font-semibold text-gray-700 underline" to="/admin/authorization">
-              {t("gold.page.authorization_5e25ce")}
-            </Link>
-            <Link className="text-sm font-semibold text-gray-700 underline" to="/admin/reference-data">
-              {t("gold.page.reference.data_3d3f15")}
-            </Link>
-            <Link className="text-sm font-semibold text-gray-700 underline" to="/admin/price-list-items">
-              {t("gold.page.price.list_760d09")}
-            </Link>
-            <Link className="text-sm font-semibold text-gray-700 underline" to="/people">
+            {canManage ? (
+              <>
+                <Link className="text-sm font-semibold text-gray-700 underline" to="/admin/authorization">
+                  {t("gold.page.authorization_5e25ce")}
+                </Link>
+                <Link className="text-sm font-semibold text-gray-700 underline" to="/admin/reference-data">
+                  {t("gold.page.reference.data_3d3f15")}
+                </Link>
+                <Link className="text-sm font-semibold text-gray-700 underline" to="/admin/price-list-items">
+                  {t("gold.page.price.list_760d09")}
+                </Link>
+              </>
+            ) : null}
+            <PermissionGatedLink className="text-sm font-semibold text-gray-700 underline" to="/people">
               {t("gold.page.back.to.people_59f4cb")}
-            </Link>
+            </PermissionGatedLink>
           </div>
         </div>
       </header>
@@ -154,6 +159,7 @@ export function GoldPricesPage() {
                 {t("gold.page.the.latest.active.date.is.selected.automatically.for.new.gold.gra_c84d13")}
               </p>
             </div>
+            {canManage ? (
             <label className="flex items-center gap-2 text-sm font-semibold text-gray-700">
               <input
                 checked={includeInactive}
@@ -162,6 +168,7 @@ export function GoldPricesPage() {
               />
               {t("gold.page.include.inactive_1ccb27")}
             </label>
+            ) : null}
           </div>
 
           {goldPricesQuery.isLoading && <p className="mt-4 text-sm text-gray-500">{t("gold.page.loading.gold.prices_d80cc6")}</p>}

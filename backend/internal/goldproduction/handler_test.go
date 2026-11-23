@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"path/filepath"
 	"testing"
+	"time"
 
 	apppkg "enterpriseremotesystems/backend/internal/app"
 	"github.com/gofiber/fiber/v3"
@@ -183,6 +184,63 @@ func TestCreateGoldProductionEntryRejectsProductionDateDifferentFromWorkDate(t *
 	res := postJSON(t, server, http.MethodPost, workPeriodsURL+workPeriod.Data.ID+"/gold-production-entries", validGoldProductionPayload(map[string]any{"productionDate": "2026-06-06"}))
 	defer res.Body.Close()
 	assertValidationError(t, res, "productionDate", "Production date must match the Work Period work date")
+}
+
+func TestCreateGoldProductionEntryRejectsWorkPeriodThatIsNotCompleted(t *testing.T) {
+	server, cleanup := newTestServer(t)
+	defer cleanup()
+
+	now := time.Now().UTC()
+	today := now.Format("2006-01-02")
+	tomorrow := now.AddDate(0, 0, 1).Format("2006-01-02")
+	cases := map[string]struct {
+		workDate         string
+		startsAt, endsAt time.Time
+	}{
+		"tomorrow":         {tomorrow, now.AddDate(0, 0, 1).Add(6 * time.Hour), now.AddDate(0, 0, 1).Add(18 * time.Hour)},
+		"today, not ended": {today, now.Add(-1 * time.Hour), now.Add(3 * time.Hour)},
+	}
+	for name, window := range cases {
+		t.Run(name, func(t *testing.T) {
+			workDate := window.workDate
+			workPeriod := createWorkPeriod(t, server, workPeriodWindow(workDate, window.startsAt, window.endsAt))
+			res := postJSON(t, server, http.MethodPost, workPeriodsURL+workPeriod.Data.ID+"/gold-production-entries", validGoldProductionPayload(map[string]any{"productionDate": workDate}))
+			defer res.Body.Close()
+			assertValidationError(t, res, "workPeriodId", "Gold production can only be recorded for completed work periods")
+		})
+	}
+}
+
+func TestCreateGoldProductionEntryAcceptsCompletedWorkPeriod(t *testing.T) {
+	server, cleanup := newTestServer(t)
+	defer cleanup()
+
+	now := time.Now().UTC()
+	today := now.Format("2006-01-02")
+	yesterday := now.AddDate(0, 0, -1).Format("2006-01-02")
+	cases := map[string]struct {
+		workDate         string
+		startsAt, endsAt time.Time
+	}{
+		"yesterday":                  {yesterday, now.AddDate(0, 0, -1).Add(6 * time.Hour), now.AddDate(0, 0, -1).Add(18 * time.Hour)},
+		"today, ended earlier today": {today, now.Add(-7 * time.Hour), now.Add(-1 * time.Hour)},
+	}
+	for name, window := range cases {
+		t.Run(name, func(t *testing.T) {
+			workDate := window.workDate
+			workPeriod := createWorkPeriod(t, server, workPeriodWindow(workDate, window.startsAt, window.endsAt))
+			createGoldProductionEntry(t, server, workPeriod.Data.ID, validGoldProductionPayload(map[string]any{"productionDate": workDate}))
+		})
+	}
+}
+
+// workPeriodWindow builds a work period payload for a work date and time window.
+func workPeriodWindow(workDate string, startsAt time.Time, endsAt time.Time) map[string]any {
+	return map[string]any{
+		"workDate": workDate,
+		"startsAt": startsAt.Format(time.RFC3339),
+		"endsAt":   endsAt.Format(time.RFC3339),
+	}
 }
 
 func newTestServer(t *testing.T) (*fiber.App, func()) {

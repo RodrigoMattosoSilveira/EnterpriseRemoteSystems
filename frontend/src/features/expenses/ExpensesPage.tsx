@@ -1,3 +1,4 @@
+import { PermissionGatedLink } from "../../components/layout/PermissionGatedLink";
 import { useMemo, type ChangeEvent } from "react";
 import { Link, useLocation, useSearchParams } from "react-router-dom";
 import { ApiErrorPanel } from "../../components/ApiErrorPanel";
@@ -52,12 +53,12 @@ function ExpensesAccessDenied({
         <p className="mt-2 text-sm text-slate-600">
           {t("expenses.accessDenied.help")}
         </p>
-        <Link
+        <PermissionGatedLink
           className="mt-4 inline-block rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 shadow-sm"
           to="/people"
         >
           {t("expenses.accessDenied.return")}
-        </Link>
+        </PermissionGatedLink>
       </section>
     </main>
   );
@@ -169,12 +170,12 @@ function AuthorizedExpensesPage() {
           </div>
 
           <div className="flex flex-wrap items-center justify-end gap-2">
-            <Link
+            <PermissionGatedLink
               to="/people"
               className="rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 shadow-sm"
             >
               {t("nav.people")}
-            </Link>
+            </PermissionGatedLink>
             <Link
               to="/collaborators"
               className="rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 shadow-sm"

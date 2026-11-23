@@ -5,6 +5,9 @@ export type NavigationLink = {
   to: string;
   anyPermission?: string[];
   applicationOnly?: boolean;
+  // Hides the entry from collaborator logins unless the actor can manage the
+  // destination. Operator roles may still read reference data for their forms.
+  hideForCollaborators?: boolean;
 };
 
 export type NavigationIdentity = {
@@ -25,7 +28,7 @@ export const navigationLinks: NavigationLink[] = [
   { labelKey: "nav.authorization", to: "/admin/authorization", anyPermission: ["authz.read", "authz.tenant_role_grants.read", "authz.tenant_role_grants.manage"] },
   { labelKey: "nav.supportAccess", to: "/admin/support-access-leases", anyPermission: ["support_access_leases.read"] },
   { labelKey: "nav.auditLogs", to: "/admin/audit-logs", anyPermission: ["authz.read", "authz.tenant_audit.read"] },
-  { labelKey: "nav.referenceData", to: "/admin/reference-data", anyPermission: ["reference_data.read", "reference_data.manage"] },
+  { labelKey: "nav.referenceData", to: "/admin/reference-data", anyPermission: ["reference_data.read", "reference_data.manage"], hideForCollaborators: true },
   { labelKey: "nav.goldPrices", to: "/admin/gold-prices", anyPermission: ["gold_prices.read", "gold_prices.manage"] },
   { labelKey: "nav.priceList", to: "/admin/price-list-items", anyPermission: ["price_lists.read"] },
   { labelKey: "nav.accountSettings", to: "/admin/current-account-settings", anyPermission: ["current_accounts.settings.read"] },
@@ -40,6 +43,14 @@ export function visibleNavigationLinks(
   const wildcard = permissions.includes("*");
   return navigationLinks.flatMap((link) => {
     if (link.applicationOnly && scope !== "APPLICATION") return [];
+    if (
+      link.hideForCollaborators &&
+      identity.collaboratorId &&
+      !wildcard &&
+      !permissions.includes("reference_data.manage")
+    ) {
+      return [];
+    }
     if (link.to === "/admin/support-access-leases" && identity.supportLeaseId) return [];
     const visible =
       wildcard ||
@@ -59,6 +70,16 @@ export function visibleNavigationLinks(
     }
     return [link];
   });
+}
+
+/** True when the actor's effective permissions expose this exact path in the side menu. */
+export function canNavigateToPath(
+  permissions: string[],
+  scope: string,
+  path: string,
+  identity: NavigationIdentity = {},
+): boolean {
+  return visibleNavigationLinks(permissions, scope, identity).some((link) => link.to === path);
 }
 
 export function defaultAuthorizedRoute(
