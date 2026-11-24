@@ -12,7 +12,7 @@ BACKUP_REPOSITORY_REVISION="${BACKUP_REPOSITORY_REVISION:-}"
 BACKUP_REPOSITORY_TREE_SHA="${BACKUP_REPOSITORY_TREE_SHA:-}"
 
 if [[ -z "$BACKUP_ENVIRONMENT" ]]; then
-  echo "BACKUP_ENVIRONMENT is required (development, test, or production)." >&2
+  echo "BACKUP_ENVIRONMENT is required (development, test, training, or production)." >&2
   exit 2
 fi
 if [[ -z "$BACKUP_CONTAINER" ]]; then
@@ -29,8 +29,9 @@ case "$normalized_environment" in
   development|dev|local) BACKUP_ENVIRONMENT="development" ;;
   test|testing|ci) BACKUP_ENVIRONMENT="test" ;;
   production|prod) BACKUP_ENVIRONMENT="production" ;;
+  training) BACKUP_ENVIRONMENT="training" ;;
   *)
-    echo "BACKUP_ENVIRONMENT must explicitly identify development, test, or production." >&2
+    echo "BACKUP_ENVIRONMENT must explicitly identify development, test, training, or production." >&2
     exit 2
     ;;
 esac
