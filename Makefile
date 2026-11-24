@@ -2000,6 +2000,7 @@ byte355-initialization-check:
 .PHONY: trn-deployment-check server-trn-init-env server-trn-build server-trn-up server-trn-smoke server-trn-backend-health server-trn-env-caddy-health server-trn-backup server-trn-ps server-trn-pull
 trn-deployment-check:
 	python3 -B scripts/test-trn-environment.py
+	python3 -B scripts/test-ers-ssh-credential-classify.py
 server-trn-init-env:
 	$(MAKE) server-init-env ENV=training
 server-trn-build:
