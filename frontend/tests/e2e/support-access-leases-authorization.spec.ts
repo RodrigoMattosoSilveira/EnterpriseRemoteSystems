@@ -214,6 +214,12 @@ test.describe("Tenant Support Access Lease authorization", () => {
       await closeOpenLeases(applicationAdminApi, tenantAdminApi, SUPPORT_TENANT_ID);
       await seedBrowserApplicationAdmin(page);
       await page.goto("/");
+      // The Application Administrator home redirects to /admin/tenants only
+      // after authorization resolves. Opening the context selector before that
+      // redirect completes can unmount it during its fail-closed refresh, even
+      // when /auth/tenant-options returns successfully. Wait for the settled
+      // route before starting the selector's session-freshness assertions.
+      await expect(page).toHaveURL(/\/admin\/tenants(?:\?|$)/, { timeout: 15_000 });
 
       const selector = page.getByRole("button", {
         name: "Current administration context",
