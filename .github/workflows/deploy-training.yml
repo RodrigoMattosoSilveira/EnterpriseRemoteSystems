@@ -64,6 +64,7 @@ jobs:
           tree="$(git rev-parse HEAD^{tree})"
           echo "tree=$tree" >> "$GITHUB_OUTPUT"
           python3 -B scripts/test-trn-environment.py
+          python3 -B scripts/test-trn-stage1-deploy.py
 
       - name: Install 1Password CLI
         uses: 1password/install-cli-action@v4
@@ -127,46 +128,34 @@ jobs:
           ssh -o BatchMode=yes -i ~/.ssh/id_ed25519 "${DEPLOY_USER}@${DEPLOY_HOST}" \
             "set -euo pipefail; cd /opt/EnterpriseRemoteSystems/test; python3 -B scripts/ers-trn-preflight.py check-host --server-root /opt/EnterpriseRemoteSystems; test -d /opt/EnterpriseRemoteSystems/training; test -f /opt/EnterpriseRemoteSystems/training/.env.training; test -d /opt/EnterpriseRemoteSystems/training/.git; cd /opt/EnterpriseRemoteSystems/training; git diff --quiet; git diff --cached --quiet; make server-environment-contract-check ENV=training"
 
-      - name: Deploy pinned TST-approved revision without replacing TRN data
+      - name: Deploy pinned TST-approved revision using standard SSH command execution
         shell: bash
         run: |
           set -euo pipefail
-          ssh -o BatchMode=yes -i ~/.ssh/id_ed25519 "${DEPLOY_USER}@${DEPLOY_HOST}" \
-            "bash -se -- '$REQUESTED_REVISION' '${{ steps.source.outputs.tree }}'" <<'REMOTE'
-          set -euo pipefail
-          revision="$1"
-          tree="$2"
-          cd /opt/EnterpriseRemoteSystems/training
-          # The training checkout is a distinct Git repository working directory.
-          git fetch origin test
-          [[ "$(git rev-parse FETCH_HEAD)" == "$revision" ]] || { echo 'STOP: training fetch does not match the approved Test SHA' >&2; exit 2; }
-          git checkout --detach "$revision"
-          [[ "$(git rev-parse HEAD^{tree})" == "$tree" ]] || { echo 'STOP: training source tree differs from Test' >&2; exit 2; }
-          make server-environment-contract-check ENV=training
-          make server-build ENV=training
-          previous_revision="$(cat .last-training-deployment-revision 2>/dev/null || true)"
-          if [[ ! "$previous_revision" =~ ^[0-9a-f]{40}$ ]]; then previous_revision=''; fi
-          # Migration gate verifies the pre-migration backup, off-host receipt and isolated rehearsal.
-          make server-migration-recovery-gate ENV=training MIGRATION_PREVIOUS_REVISION="$previous_revision" MIGRATION_TARGET_REVISION="$revision" MIGRATION_TARGET_TREE_SHA="$tree"
-          rollback() {
-            echo 'TRN deployment verification failed; attempting only TRN migration rollback.' >&2
-            make server-migration-recovery-rollback ENV=training || true
-          }
-          if ! make server-up ENV=training || ! make server-backend-health ENV=training || ! make server-migrated-db-verify ENV=training || ! make server-env-caddy-health ENV=training; then
-            rollback
-            exit 1
-          fi
-          if ! make server-migration-recovery-commit ENV=training; then rollback; exit 1; fi
-          # After every successful rollout, create a second verified TRN backup
-          # and independent off-host receipt. This never replaces the live DB.
-          if ! make server-backup ENV=training; then
-            echo 'STOP: post-deployment TRN off-host backup failed; stopping ONLY TRN services to prevent unprotected training writes.' >&2
-            make server-down ENV=training || true
-            exit 1
-          fi
-          printf '%s\n' "$revision" > .last-training-deployment-revision
-          echo "PASS: TRN internal deployment verified for $revision. Public HTTPS and human login must be separately accepted."
-          REMOTE
+          # The existing DEV/TST/PRD workflow executes an SSH command, not a
+          # streamed shell program. -n also makes remote Docker invocations
+          # unable to consume the runner's deployment program as stdin.
+          deployment_log="$(mktemp "${RUNNER_TEMP}/trn-deployment.XXXXXXXX.log")"
+          trap 'rm -f -- "$deployment_log"' EXIT
+          ssh -n -o BatchMode=yes -o IdentitiesOnly=yes -i ~/.ssh/id_ed25519 \
+            "${DEPLOY_USER}@${DEPLOY_HOST}" \
+            "bash -euo pipefail -c 'cd /opt/EnterpriseRemoteSystems/training &&
+              git diff --quiet && git diff --cached --quiet &&
+              git fetch origin test &&
+              test \$(git rev-parse FETCH_HEAD) = $REQUESTED_REVISION &&
+              git checkout --detach $REQUESTED_REVISION &&
+              test \$(git rev-parse HEAD) = $REQUESTED_REVISION &&
+              test \$(git rev-parse HEAD^{tree}) = ${{ steps.source.outputs.tree }} &&
+              exec bash scripts/ers-trn-deploy-remote.sh $REQUESTED_REVISION ${{ steps.source.outputs.tree }}'" \
+            2>&1 | tee "$deployment_log"
+          # Remote exit status alone is insufficient: require the final marker
+          # emitted ONLY after internal health, gate commit and off-host backup.
+          grep -Fxq \
+            "PASS: TRN DEPLOYMENT VERIFIED revision=$REQUESTED_REVISION tree=${{ steps.source.outputs.tree }}" \
+            "$deployment_log" || {
+              echo 'STOP: Training remote deployment did not reach its final verified state' >&2
+              exit 2
+            }
 
       - name: Record release selection without claiming human acceptance
         shell: bash
@@ -175,4 +164,4 @@ jobs:
           echo "Test SHA: $REQUESTED_REVISION" >> "$GITHUB_STEP_SUMMARY"
           echo "Test tree: ${{ steps.source.outputs.tree }}" >> "$GITHUB_STEP_SUMMARY"
           echo "Approval reference: $APPROVAL_REFERENCE" >> "$GITHUB_STEP_SUMMARY"
-          echo 'Read-only Test rehearsal marker, VM headroom, TRN migration gate and internal health were checked. Public HTTPS, backup restoration, trainee sign-in and independent human approval remain manual acceptance.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'Verified TRN application startup, committed migration state, internal health and off-host backup. Public HTTPS, independent isolated backup restoration, trainee sign-in and human approval remain manual acceptance.' >> "$GITHUB_STEP_SUMMARY"
