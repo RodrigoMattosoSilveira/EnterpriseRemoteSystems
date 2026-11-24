@@ -58,11 +58,25 @@ jobs:
   migration-rehearsal:
     name: 30I migration rehearsal
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
 
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+
+      # Match the Backend Go tests job: other CI jobs do not share its module cache.
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: "1.26.2"
+          cache-dependency-path: backend/go.sum
+
+      - name: Verify Go download retry behavior (offline)
+        run: python3 scripts/test-ci-go-download-retry.py
+
+      - name: Download Go modules (bounded network retry)
+        working-directory: backend
+        run: bash ../scripts/ci-go-download-with-retry.sh
 
       - name: Install SQLite
         run: |
